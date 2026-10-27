@@ -17,6 +17,7 @@ import Pudu.Compiler.Lower.Text (lowerTextMethod)
 import Pudu.Compiler.Lower.Method (lowerMethodCall, lowerQualifiedMethod)
 import Pudu.Compiler.Lower.Generic (admitCallee)
 import Pudu.Compiler.Lower.Try (lowerTry)
+import Pudu.Compiler.Lower.For (lowerFor)
 import Pudu.Compiler.Lower.Tuple (lowerTuple, lowerTupleIndex, lowerTuplePattern)
 import Pudu.Compiler.Lower.Record (lowerField, lowerFieldAssignment, lowerRecord, lowerRecordUpdate)
 import Pudu.Compiler.Lower.Sum (lowerVariant)
@@ -425,7 +426,7 @@ lowerExpression state (Located spanValue expression) = case expression of
   IfLetExpression pattern' subject taken otherwise' ->
     lowerMatch lowerExpression (null otherwise') state spanValue subject (ifLetArms spanValue pattern' taken otherwise')
   LoopExpression label body -> lowerLoop lowerBlock spanValue label body state
-  ForExpression{} -> halt spanValue "for loops" state
+  ForExpression label binder iterated body -> lowerFor lowerExpression lowerBlock state spanValue label binder iterated body
   ComptimeForExpression{} -> halt spanValue "comptime for" state
   InvalidExpression -> halt spanValue "this expression" state
   where

@@ -1,6 +1,6 @@
 {-| @Pudu.Compiler.Lower.Match — `match`: the subject, then each arm's
     pattern, guard and body in a scope of its own. -}
-module Pudu.Compiler.Lower.Match (lowerMatch, lowerLetElse, ifLetArms, whileLetLoop) where
+module Pudu.Compiler.Lower.Match (lowerMatch, lowerLetElse, lowerPattern, ifLetArms, whileLetLoop) where
 
 import Data.Map.Strict (Map)
 import qualified Data.Map.Strict as Map

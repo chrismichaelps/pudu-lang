@@ -41,6 +41,7 @@ Dependency direction: Library → Program. Only [[Compiler Program]] reads files
 - [[Compiler Lower Method]] — implementation members and trait defaults as direct calls (#551).
 - [[Compiler Lower Generic]] — specialization of generic bodies (#552).
 - [[Compiler Lower Try]] — `?` on Result and Option (#553).
+- [[Compiler Lower For]] — `for` over ranges and sequences (#554).
 
 ## Referenced by
 

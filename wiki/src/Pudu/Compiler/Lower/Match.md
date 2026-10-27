@@ -37,6 +37,11 @@ in a scope of its own, as `CoreMatch`.
 
 Pattern update only: `CoreRecordType` has an argument list; behavior is unchanged.
 
+## Pattern export (#554)
+
+Resolved Grill Log: export `lowerPattern`, which [[Compiler Lower For]] uses for
+its binder.
+
 ## Referenced by
 
 [[Compiler Lower Body]] · [[Compiler Frame Match]] · [[src/_MOC]]

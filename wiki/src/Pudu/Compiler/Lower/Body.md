@@ -125,6 +125,10 @@ branch can drop code silently.
 
 Resolved Grill Log: `TryExpression` lowers through [[Compiler Lower Try]].
 
+## For (#554)
+
+Resolved Grill Log: `ForExpression` lowers through [[Compiler Lower For]].
+
 ## Referenced by
 
 [[src/Pudu/Compiler/_MOC]] · [[src/Pudu/_MOC]] · [[Compiler Lower]] ·

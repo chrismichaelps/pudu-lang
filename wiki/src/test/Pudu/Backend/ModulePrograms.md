@@ -33,6 +33,10 @@ Resolved Grill Log: both lists include [[Backend Generic Programs]].
 
 Resolved Grill Log: both lists include [[Backend Try Programs]].
 
+## For corpus (#554)
+
+Resolved Grill Log: both lists include [[Backend For Programs]].
+
 ## Referenced by
 
 [[Backend Native Tests]] · [[Native Emission Coverage]] · [[src/_MOC]]

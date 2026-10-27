@@ -21,7 +21,7 @@ Compile ordinary checked Pudu programs into portable C11 with interpreter-identi
 | Complete numeric families | Partial (#495, #497, #500, #507, #512) | Fixed integers, Int128/UInt128 and Float32/Float64 are admitted; BigInt and Decimal remain |
 | Text and bytes | Partial (#515, #516, #517, #518) | Owned Str values, Char values, operators, rendering, printing, entries, charAt and every Int/Bool/Str-result method (trim and case mapping included) match the interpreter; Bytes, Array/Option-result methods and print Result remain |
 | Records, tuples, sums and collections | Partial (#521, #525, #552) | Tuples, records and sums of every module, generic ones at each instantiation, and the built-in Option/Result are boxed, refcounted values with construction, field, position and payload reads, equality, ordering (tuples), rendering and run-time E7001 naming held variants; collections (Array, Map, Set, Bytes, Range) remain |
-| Pattern matching and iteration | Partial (#525, #540, #541) | `match`, `if let` (with `else if` chains) and `while let` (with labels, `break` and `continue`) lower every pattern form in order with guards, bindings, literals, ranges, tuples, constructors, records and alternatives; `let ... else` retains bindings in the enclosing block (#541); `for`, ranges as values and the iterator protocol remain |
+| Pattern matching and iteration | Partial (#525, #540, #541, #554) | `match`, `if let` (with `else if` chains) and `while let` (with labels, `break` and `continue`) lower every pattern form in order with guards, bindings, literals, ranges, tuples, constructors, records and alternatives; `let ... else` retains bindings in the enclosing block (#541); `for` walks written ranges and sequence types (#554); range values, `for` over Str, tuples and collections, and sequence patterns remain |
 | Modules and constants | Partial (#539, #543) | Calls through selective imports, aliases and qualifiers, functions of every reachable module, and records and sums by canonical identity match the interpreter; folded scalar/tuple/record/sum constants now preserve canonical solved identity; callable and unrepresented constant families remain |
 | Callables and generic code | Partial (#551, #552) | Implementation members, inherited defaults, type- and trait-qualified calls, `toText()`, generic functions and generic implementations dispatch statically, one copy per type list; closures/captures, default parameter values, higher-kinded parameters and `dynamic` values remain |
 | Accepted operations with runtime refusals | Partial (#494, #512) | Represented Unit/Bool/float operators retain E7001; remaining runtime types/operators still need equivalent coverage |
@@ -369,3 +369,11 @@ failure rebuilt at the enclosing function's result type. In `main` that type
 comes from the checked signature, kept apart from the entry's own result
 handling so print-Result bodies keep refusing. [[Backend Try Programs]] holds
 the evidence.
+
+## For (#554)
+
+[[Compiler Lower For]] lowers `for` over a range written with both ends and
+over types with `begin` and `advance`, as `evaluateFor` walks them, under an
+ordinary loop frame. Inclusive ranges stop at their last element before
+stepping, so they reach the largest `Int` without overflowing.
+[[Backend For Programs]] holds the evidence.

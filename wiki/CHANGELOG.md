@@ -5,6 +5,13 @@ tags: [changelog]
 
 # Changelog
 
+## 2026-10-26 — Native for loops (#554)
+
+[[Compiler Lower For]] lowers `for` over written ranges and sequence types,
+with labels, `break`, `continue`, refutable binders and the evaluator's order
+for ends, `begin` and `advance`. [[Backend For Programs]] passes under Clang,
+GCC 15, ASan/UBSan and both interpreter modes with counted cleanup.
+
 ## 2026-10-26 — Native try operator (#553)
 
 [[Compiler Lower Try]] lowers `?` on Result and Option as the evaluator's

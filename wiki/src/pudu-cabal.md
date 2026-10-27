@@ -111,6 +111,10 @@ Resolved Grill Log: register [[Compiler Lower Generic]]; no new dependency.
 
 Resolved Grill Log: register [[Compiler Lower Try]]; no new dependency.
 
+## For lowering (#554)
+
+Resolved Grill Log: register [[Compiler Lower For]]; no new dependency.
+
 ## Referenced by
 
 The library exposes [[Resolve Canonical]] for the scoped generated-Impl resolver

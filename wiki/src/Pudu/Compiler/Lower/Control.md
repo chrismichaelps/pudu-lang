@@ -57,6 +57,11 @@ or fabricated unit literal. Traversal remains in Body; state remains in State.
 - **Q:** Can print's unit-shaped Core escape through break? **A:** No; recursively print-valued operands refuse. Resolved; rejected Result erasure.
 - **Q:** Does every loop body's result become a loop result? **A:** No; only break values determine loop results, and every body result is evaluated then discarded. Resolved; rejected body-type inference.
 
+## Loop frames for for (#554)
+
+Resolved Grill Log: export `pushLoop` and `popLoop`, so [[Compiler Lower For]]
+opens a loop frame exactly as `loop` and `while` do.
+
 ## Referenced by
 
 [[Compiler Lower Body]] · [[Compiler Lower State]] · [[Compiler Lower]] · [[src/Pudu/Compiler/_MOC]]
