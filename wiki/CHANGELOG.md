@@ -5,6 +5,10 @@ tags: [changelog]
 
 # Changelog
 
+## 2026-10-27 — Native module-qualified function values (#641)
+
+`Lib.twice` and `L.twice` are values natively, with the same key, identity, rendering and defaults as a bare function name. See [[Compiler Lower Body]].
+
 ## 2026-10-27 — Native default parameter values (#638)
 
 - Functions with default parameter values build natively. A trailing count of supplied arguments tells the callee's prologue which defaults to run, in order, after the parameters before them. See [[Native Default Parameters]].

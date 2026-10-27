@@ -1,6 +1,6 @@
 ---
 type: handoff
-status: ACTIVE
+status: DONE
 issue: 638
 aliases: [Native Default Parameter Delivery]
 ---

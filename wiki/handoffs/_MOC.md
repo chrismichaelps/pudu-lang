@@ -255,3 +255,5 @@ tags: [moc, handoff]
 - [[Native Suite Repair Delivery]] — frame-body and float runtime suite repairs (#636).
 
 - [[Native Default Parameter Delivery]] — default parameter values (#638).
+
+- [[Native Qualified Value Delivery]] — module-qualified function values (#641).
