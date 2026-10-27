@@ -53,9 +53,10 @@ data CoreStatementShape
   = CoreDeclare !CoreLocal !CoreExpression
   | CoreAssign !CoreLocal !CoreExpression
   | CoreEvaluate !CoreExpression
-  | CoreWhile !CoreExpression !CoreBlock
   | CoreIf !CoreExpression !CoreBlock !(Maybe CoreExpression)
   | CoreReturn !(Maybe CoreExpression)
+  | CoreBreak !CoreLoopId !(Maybe CoreExpression)
+  | CoreContinue !CoreLoopId
 
 data CoreExpression = CoreExpression
   { coreExpressionSpan :: !Span
@@ -76,13 +77,16 @@ data CoreExpressionShape
   | CoreCall !Text ![CoreExpression]
   | CoreBlockValue !CoreBlock
   | CoreIfValue !CoreExpression !CoreBlock !CoreExpression
+  | CoreWhileValue !CoreLoopId !CoreExpression !CoreBlock
+  | CoreLoopValue !CoreLoopId !CoreBlock
 
 data CoreBinaryOperator
   = CoreAdd | CoreSubtract | CoreMultiply | CoreDivide | CoreRemainder
   | CoreLess | CoreLessOrEqual | CoreGreater | CoreGreaterOrEqual
   | CoreEqual | CoreNotEqual | CoreAnd | CoreOr
 
-data CoreType = CoreIntegerType !IntegerKind | CoreBoolType | CoreTextType | CoreUnitType
+newtype CoreLoopId = CoreLoopId Int
+data CoreType = CoreIntegerType !IntegerKind | CoreBoolType | CoreTextType | CoreUnitType | CoreNeverType
 coreTypeName :: CoreType -> Text
 ```
 
@@ -168,3 +172,7 @@ imports no compiler, evaluator, or frontend module; the backend boundary of
 
 [[src/Pudu/_MOC]] · [[src/Pudu/Backend/_MOC]] · [[Core IR]] · [[Compiler Lower]] ·
 [[Backend Emit]] · [[Backend]] · [[ADR-0002-compiler-pipeline]]
+
+## Resolved loop control (#489)
+
+CoreLoopId is a function-local numeric identity, resolved before emission. While and loop are expression forms; break/continue are statement transfers with explicit destinations. While is unit; loop is the supported type carried by its breaks, or Never without a local break. CoreNeverType records divergent blocks and merges with reachable branch values. Break operands retain source ordering, including nested transfers. Resolved Grill Log: explicit numeric targets preserve nested source-label shadowing and condition scope without coupling Core to C labels or parser syntax.

@@ -45,3 +45,7 @@ milestones (records, collections, ownership, fallback policy) remain open.
 ## Referenced by
 
 [[architecture/OVERVIEW]] · [[Semantics]] · [[Runtime]] · [[Tooling]] · [[Native Toolchain]]
+
+## Completion track
+
+[[Native Emission Coverage]] is the coverage ledger for complete native behavior. Issue #489 extends scalar control flow with while/loop values, labelled transfers and Never joins. Each admitted construct must retain interpreter equality and typed refusal boundaries for unimplemented runtime representations.

@@ -39,3 +39,9 @@ Uses [[Source]], [[Diagnostic Render]], [[Diagnostic Arithmetic]], [[Diagnostic 
 ## Referenced by
 
 [[Backend Emit]] · [[src/Pudu/Backend/_MOC]]
+
+## Resolved loop state (#489)
+
+State also owns the active map from numeric loop identities to optional scalar result slots, plus sets of emitted break and continue references. Loop emission restores the enclosing slot map after its lexical region; transfer-reference sets accumulate so nested loops can reference outer labels.
+
+- **Q:** May source label text identify a target? **A:** No; only lowering's resolved CoreLoopId is accepted. Rejected: name lookup during emission.

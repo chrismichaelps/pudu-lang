@@ -79,6 +79,8 @@ lowerProgram entryName parsed
       let initial =
             LowerState
               { lowerContext = emptyContext entryName table
+              , lowerNextLoop = 0
+              , lowerLoops = []
               , lowerNextLocal = 0
               , lowerScopes = []
               , lowerFunctionResult = Nothing

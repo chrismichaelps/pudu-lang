@@ -28,6 +28,7 @@ rather than a design intention.
   unit-returning functions, early returns inside called functions, recursion,
   and mutual recursion — each run both ways and compared byte for byte.
 - Regression corpus: [[Backend Function Programs]] supplies typed helpers, Unicode names, effect ordering, operand freezing, short-circuiting, recursion, mutual recursion, and exact depth-bound/reset cases.
+- Loop control: [[Backend Control Programs]] compares scalar loop results, nested and labelled transfers, repeated labels, condition reevaluation and enclosing-condition transfers, break-operand transfers, Never joins, Never scalar operands, nested unit returns, unit-valued if-without-else, print/display transfers, short circuit, and discarded-value effects and arithmetic failures.
 - Exit statuses: `0`, nonzero, values above 255, and negative results — the
   `reportResult` clamp on both sides.
 - Refusal paths: division by zero (`E7004`) and overflow for `add`,

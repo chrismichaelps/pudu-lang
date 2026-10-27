@@ -21,6 +21,7 @@ span, so the reader learns what the native backend does not support and where.
 The module is the driver: it finds the entry, decides which functions are
 reachable, validates their signatures, and settles the result;
 [[Compiler Lower Body]] owns block, statement, expression and call lowering;
+[[Compiler Lower Control]] owns loop targets, transfers and Never joins;
 [[Compiler Lower State]] owns shared state and [[Compiler Lower Signature]]
 owns callable signature admission.
 
@@ -40,7 +41,7 @@ errored program.
   first); the entry must be a plain, non-async function with no parameters, no
   type parameters, and a block body. The entry keeps milestone 1's rule: its
   declared return annotation is not consulted, its result type comes from the
-  body or its explicit returns, and that result must be `Int` or `()`.
+  body or its explicit returns, and that result must be `Int`, `()`, or Never. A Never-only entry uses the unit C ABI.
 - Only functions *reachable from the entry* are validated, lowered, and
   carried. The table of top-level functions is built in declaration order; the
   worklist starts at the entry, and every call discovered while lowering a
@@ -65,12 +66,12 @@ errored program.
   shadow outer ones exactly as the evaluator's scopes do. Assignment resolves
   to the nearest binding and lowers to `CoreAssign`.
 - Blocks lower statements left to right and the trailing expression (if any)
-  as the block result. Assignment yields unit. Resultless blocks and calls
+  as the block result. Locals may carry unit; its initializer and assignments preserve effects. Assignment yields unit. Resultless blocks and calls
   returning `()` carry unit; statement `if`/`while` discard their body values.
   A print's internal unit representation is effect-only: an entry's trailing
   print result or an explicit print-valued return refuses because the actual
   result is `Result[(), Str]`. Nested blocks and conditionals are inspected
-  recursively. A trailing `if` without else or `while` refuses as a value.
+  recursively. A trailing `if` without else is admitted when its taken value is actual unit or Never, or its condition transfers. While yields unit unless its condition transfers.
   Text locals and function results are outside the subset; standalone literal
   text or `display` in discarded statement position can still be lowered.
 - Expression types are computed while lowering: `Int` and `Bool` for values,
@@ -84,6 +85,11 @@ errored program.
 - `if` without else is a statement (`CoreIf ... Nothing`); `if` with else in
   statement position discards its value; in value position it lowers to
   `CoreIfValue`, where the else branch is a block or a chained `if`.
+  An admitted value-position if without else uses a unit-valued Core block around CoreIf.
+  Never branches join the inhabited branch type. Never operands remain Never
+  through eager scalar operations, while short-circuit right operands stay guarded.
+  Never assignments, initializers and conditions preserve their transfer. While expressions yield unit;
+  loops yield their scalar/unit break type, or Never without a local break.
 - `return` lowers to `CoreReturn` with an operand matching the function's
   result type. The entry records the first explicit Int/unit return so a
   resultless outer block cannot turn `return 1` into a void function. The
@@ -100,8 +106,7 @@ errored program.
   outside `Int`/`Bool`, default parameter values, functions without a declared
   return type or with a return type outside `Int`/`Bool`/`()`, expression
   bodies on non-entry functions, type annotations on bindings, pattern
-  bindings (`let`/`let else` with patterns), `break`, `continue`, labeled
-  loops, `match`, `try`, `await`, lambdas, ranges, tuples, arrays, sets,
+  bindings (`let`/`let else` with patterns),  `match`, `try`, `await`, lambdas, ranges, tuples, arrays, sets,
   records, member/index access, method calls, module-qualified names, borrows
   (`&`, `*`), bitwise operators, wrapping/saturating operators, non-platform
   integer kinds, floats, decimals, chars, `Text`-typed locals, and every
@@ -127,8 +132,7 @@ imports it.
 - **Q:** Why lower `while` from expression position rather than statement
   position? **A:** In the tree `while` is an expression node used as a
   statement; the evaluator admits it only there and gives it `Unit`. Lowering
-  reads it the same way so a `while` used for its value refuses instead of
-  inventing one. _Rejected:_ value-typed loops.
+  reads it the same way so a `while` yields unit as specified; numeric targets preserve loop control. _Rejected:_ fabricated scalar while results.
 - **Q:** Why one refusal per construct instead of aggregating by category?
   **A:** The reader fixes what is named; a diagnostic per span is what the
   rest of the compiler already promises, and the span is the only part of the
@@ -155,3 +159,17 @@ imports it.
 [[src/Pudu/Compiler/_MOC]] · [[src/Pudu/_MOC]] · [[Core IR]] · [[Pudu Core]] ·
 [[Compiler Lower Body]] · [[Compiler Lower State]] · [[Compiler Lower Signature]] ·
 [[Backend Emit]] · [[Diagnostic Native]] · [[Backend]]
+
+Loop-control extension: [[Compiler Lower Control]] owns scalar/unit loop results,
+labelled transfers and Never joins under [[Native Emission Coverage]].
+
+## If-without-else oracle boundary
+
+The checker assigns unit to an if without else, but the evaluator returns the
+taken block's actual trailing value. Value-position lowering therefore admits
+only unit/Never branches whose value is not print's Result carrier, or a Never
+condition that cannot reach either branch. Other branch values refuse E6001
+until the evaluator/checker discrepancy is resolved through semantic governance.
+Statement-position conditionals continue to discard branch values. Resolved
+Grill Log: preserve actual interpreter observations rather than silently assume
+that its checked unit type erases the taken block value.

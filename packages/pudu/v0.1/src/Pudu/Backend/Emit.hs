@@ -13,6 +13,7 @@ module Pudu.Backend.Emit
   ( emitProgram
   ) where
 
+import qualified Data.Map.Strict as Map
 import qualified Data.Set as Set
 import Data.Text (Text)
 import qualified Data.Text as Text
@@ -71,13 +72,6 @@ emitProgram version sources coreModule =
   entryResult = entryResultType coreModule
   entrySymbol = functionSymbolByName (coreModuleEntry coreModule)
 
-{-| Run an emission while collecting the lines it wrote, so a loop condition
-    that needs temporaries can be placed inside the loop instead of before it. -}
-capture :: EmitState -> CoreExpression -> (EmitState, [Text], Text)
-capture state expression =
-  let (after, text) = emitExpression state{emitOutput = []} expression
-   in (after{emitOutput = emitOutput state}, reverse (emitOutput after), text)
-
 emitFunction :: EmitState -> CoreFunction -> EmitState
 emitFunction state function =
   line (line afterBody returnText){emitIndent = emitIndent state} "}"
@@ -85,7 +79,7 @@ emitFunction state function =
   result = coreFunctionResult function
   opened =
     line
-      state{emitResultType = result}
+      state{emitResultType = result, emitLoopResults = Map.empty, emitBreakTargets = Set.empty, emitContinueTargets = Set.empty}
       ("static " <> returnTypeFor result <> " " <> functionSymbol function <> "(" <> parametersText <> ") {")
   inner = opened{emitIndent = emitIndent state + 1}
   withVoidUses = foldl' (\current parameter -> line current ("(void)" <> localSymbol (coreParameterLocal parameter) <> ";")) inner (coreFunctionParameters function)
@@ -93,7 +87,7 @@ emitFunction state function =
     CoreUnitType -> (emitBlockInto withVoidUses Nothing (coreFunctionBody function), "return;")
     _ ->
       let (afterTemp, temp) = freshTemp withVoidUses
-          declared = line afterTemp (declarationFor result temp <> ";")
+          declared = line afterTemp (declarationFor result temp <> " = 0;")
           filled = emitBlockInto declared (Just temp) (coreFunctionBody function)
        in (filled, "return " <> temp <> ";")
   parametersText = case coreFunctionParameters function of
@@ -122,6 +116,7 @@ emitAssign :: EmitState -> Text -> CoreExpression -> EmitState
 emitAssign state temp expression = case coreExpressionType expression of
   CoreUnitType -> emitDiscard state expression
   CoreTextType -> emitDiscard state expression
+  CoreNeverType -> emitDiscard state expression
   _ ->
     let (after, text) = emitExpression state expression
      in line after (temp <> " = " <> text <> ";")
@@ -139,10 +134,13 @@ emitDiscard state expression = case coreExpressionType expression of
 emitEffects :: EmitState -> CoreExpression -> EmitState
 emitEffects state expression = case coreExpressionShape expression of
   CoreTextLiteral _ -> state
+  CoreReadLocal _ -> state
   CoreDisplay inner -> emitDiscard state inner
   CorePrint _ ->
     let (after, text) = emitExpression state expression
      in line after (text <> ";")
+  CoreWhileValue loopId condition body -> emitLoop state loopId Nothing (Just condition) body
+  CoreLoopValue loopId body -> emitLoop state loopId Nothing Nothing body
   CoreBlockValue block -> emitBlockInto state Nothing block
   CoreIfValue condition thenBlock elseExpression -> emitIf state condition thenBlock (Just elseExpression)
   CoreCall _ _ ->
@@ -153,16 +151,28 @@ emitEffects state expression = case coreExpressionShape expression of
 emitStatement :: EmitState -> CoreStatement -> EmitState
 emitStatement state statement = case coreStatementShape statement of
   CoreDeclare local expression ->
-    let (after, text) = emitExpression state expression
+    let (after, text) = case coreLocalType local of
+          CoreUnitType -> (emitDiscard state expression, "0")
+          _ -> emitExpression state expression
      in line (line after (declaration local <> " = " <> text <> "; " <> comment local)) ("(void)" <> localSymbol local <> ";")
-  CoreAssign local expression ->
-    let (after, text) = emitExpression state expression
-     in line after (localSymbol local <> " = " <> text <> ";")
+  CoreAssign local expression -> case coreLocalType local of
+    CoreUnitType -> emitDiscard state expression
+    _ -> let (after, text) = emitExpression state expression
+          in line after (localSymbol local <> " = " <> text <> ";")
   CoreEvaluate expression -> emitDiscard state expression
-  CoreWhile condition body -> emitWhile state condition body
   CoreIf condition thenBlock elseExpression -> emitIf state condition thenBlock elseExpression
+  CoreContinue loopId ->
+    line state{emitContinueTargets = Set.insert loopId (emitContinueTargets state)} ("goto " <> loopLabel "continue" loopId <> ";")
+  CoreBreak loopId operand ->
+    let afterOperand = case operand of
+          Nothing -> state
+          Just expression -> case Map.lookup loopId (emitLoopResults state) of
+            Just (Just temp) -> emitAssign state temp expression
+            _ -> emitDiscard state expression
+     in line afterOperand{emitBreakTargets = Set.insert loopId (emitBreakTargets afterOperand)} ("goto " <> loopLabel "break" loopId <> ";")
   CoreReturn Nothing -> line state (returnWithoutValue state)
   CoreReturn (Just expression) -> case coreExpressionType expression of
+    CoreNeverType -> emitDiscard state expression
     CoreUnitType -> line (emitDiscard state expression) (returnWithoutValue state)
     _ ->
       let (after, text) = emitExpression state expression
@@ -176,21 +186,37 @@ returnWithoutValue state = case emitResultType state of
   CoreUnitType -> "return;"
   _ -> "return 0;"
 
-emitWhile :: EmitState -> CoreExpression -> CoreBlock -> EmitState
-emitWhile state condition body =
-  let (afterCondition, prelude, conditionText) = capture state condition
-   in if null prelude
-        then
-          let opened = line afterCondition ("while (" <> conditionText <> ") {")
-              filled = emitBlockInto opened Nothing body
-           in line filled "}"
-        else
-          let opened = line afterCondition "while (1) {"
-              inside = opened{emitIndent = emitIndent afterCondition + 1}
-              withPrelude = foldl' (\current text -> line current text) inside prelude
-              guarded = line withPrelude ("if (!(" <> conditionText <> ")) break;")
-              filled = emitBlockInto guarded{emitIndent = emitIndent afterCondition} Nothing body
-           in line filled "}"
+{-| Capture the region before selecting labels: only actual transfers need
+    labels, and continue must precede condition temporaries on every visit. -}
+emitLoop :: EmitState -> CoreLoopId -> Maybe Text -> Maybe CoreExpression -> CoreBlock -> EmitState
+emitLoop state loopId target condition body =
+  let opened = line state "for (;;) {"
+      inside = opened
+        { emitOutput = []
+        , emitIndent = emitIndent state + 1
+        , emitLoopResults = Map.insert loopId target (emitLoopResults state)
+        }
+      guarded = case condition of
+        Nothing -> inside
+        Just expression ->
+          let (afterCondition, text) = emitExpression inside expression
+           in line afterCondition ("if (!(" <> text <> ")) break;")
+      filled = emitBlockInto guarded Nothing body
+      continueLines =
+        [Text.replicate (emitIndent inside) " " <> loopLabel "continue" loopId <> ": ;"
+        | Set.member loopId (emitContinueTargets filled)]
+      restored = filled
+        { emitOutput = emitOutput filled <> reverse continueLines <> emitOutput opened
+        , emitIndent = emitIndent state
+        , emitLoopResults = emitLoopResults state
+        }
+      closed = line restored "}"
+   in if Set.member loopId (emitBreakTargets filled)
+        then line closed (loopLabel "break" loopId <> ": ;")
+        else closed
+
+loopLabel :: Text -> CoreLoopId -> Text
+loopLabel kind (CoreLoopId identity) = "pudu_" <> kind <> "_" <> textOfInt identity
 
 emitIf :: EmitState -> CoreExpression -> CoreBlock -> Maybe CoreExpression -> EmitState
 emitIf state condition thenBlock elseExpression =
@@ -239,22 +265,35 @@ emitExpression state expression = case coreExpressionShape expression of
             <> Text.concat [", " <> temp | temp <- argumentTemps]
             <> ")"
         )
+  CoreWhileValue loopId condition body -> (emitLoop state loopId Nothing (Just condition) body, "0")
+  CoreLoopValue loopId body -> case coreExpressionType expression of
+    CoreIntegerType _ -> loopValue loopId body
+    CoreBoolType -> loopValue loopId body
+    _ -> (emitLoop state loopId Nothing Nothing body, "0")
   CoreBlockValue block -> case coreExpressionType expression of
+    CoreNeverType -> (emitBlockInto state Nothing block, "0")
     CoreUnitType -> (emitBlockInto state Nothing block, "0")
     CoreTextType -> (emitBlockInto state Nothing block, "0")
     resultType ->
       let (afterTemp, temp) = freshTemp state
-          declared = line afterTemp (declarationFor resultType temp <> ";")
+          declared = line afterTemp (declarationFor resultType temp <> " = 0;")
           filled = emitBlockInto declared (Just temp) block
        in (filled, temp)
   CoreIfValue condition thenBlock elseExpression -> case coreExpressionType expression of
+    CoreNeverType -> (emitIf state condition thenBlock (Just elseExpression), "0")
     CoreUnitType -> (emitIf state condition thenBlock (Just elseExpression), "0")
     CoreTextType -> (emitIf state condition thenBlock (Just elseExpression), "0")
     resultType ->
       let (afterTemp, temp) = freshTemp state
-          declared = line afterTemp (declarationFor resultType temp <> ";")
+          declared = line afterTemp (declarationFor resultType temp <> " = 0;")
           filled = emitIfValueInto declared temp condition thenBlock elseExpression
        in (filled, temp)
+
+ where
+  loopValue loopId body =
+    let (allocated, temp) = freshTemp state
+        declared = line allocated (declarationFor (coreExpressionType expression) temp <> " = 0;")
+     in (emitLoop declared loopId (Just temp) Nothing body, temp)
 
 {-| Lower each argument into its own temporary, left to right, exactly as the
     evaluator evaluates them; the call then reads the temporaries in the same

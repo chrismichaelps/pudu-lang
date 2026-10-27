@@ -15,6 +15,7 @@ module Pudu.Core
   , CoreExpression (..)
   , CoreExpressionShape (..)
   , CoreFunction (..)
+  , CoreLoopId (..)
   , CoreLocal (..)
   , CoreModule (..)
   , CoreParameter (..)
@@ -77,6 +78,10 @@ data CoreStatement = CoreStatement
   }
   deriving stock (Eq, Show)
 
+{-| Function-local loop destination; lowering resolves source labels once. -}
+newtype CoreLoopId = CoreLoopId Int
+  deriving stock (Eq, Ord, Show)
+
 {-| @Core.StatementShape — the statement forms the native subset carries.
 
     `CoreIf`'s else branch is an expression so a chained `else if` stays one
@@ -86,9 +91,10 @@ data CoreStatementShape
   = CoreDeclare !CoreLocal !CoreExpression
   | CoreAssign !CoreLocal !CoreExpression
   | CoreEvaluate !CoreExpression
-  | CoreWhile !CoreExpression !CoreBlock
   | CoreIf !CoreExpression !CoreBlock !(Maybe CoreExpression)
   | CoreReturn !(Maybe CoreExpression)
+  | CoreBreak !CoreLoopId !(Maybe CoreExpression)
+  | CoreContinue !CoreLoopId
   deriving stock (Eq, Show)
 
 {-| @Core.Expression — a span, its checked type, and its shape. The type is
@@ -123,6 +129,8 @@ data CoreExpressionShape
   | CoreCall !Text ![CoreExpression]
   | CoreBlockValue !CoreBlock
   | CoreIfValue !CoreExpression !CoreBlock !CoreExpression
+  | CoreWhileValue !CoreLoopId !CoreExpression !CoreBlock
+  | CoreLoopValue !CoreLoopId !CoreBlock
   deriving stock (Eq, Show)
 
 {-| @Core.BinaryOperator — the operator vocabulary, already resolved from
@@ -143,15 +151,14 @@ data CoreBinaryOperator
   | CoreOr
   deriving stock (Eq, Show)
 
-{-| @Core.Type — the types the native subset carries. `CoreUnitType` is the
-    type of effects the interpreter also types as Unit (`print`, assignment,
-    `if` without else, `while`), so the emitter never has to guess whether a
-    discarded value was really a value. -}
+{-| Scalar runtime types and divergence. CorePrint is effect-only; its
+    surface Result must never escape as a Core unit value. -}
 data CoreType
   = CoreIntegerType !IntegerKind
   | CoreBoolType
   | CoreTextType
   | CoreUnitType
+  | CoreNeverType
   deriving stock (Eq, Show)
 
 coreTypeName :: CoreType -> Text
@@ -160,3 +167,4 @@ coreTypeName coreType = case coreType of
   CoreBoolType -> "Bool"
   CoreTextType -> "Str"
   CoreUnitType -> "Unit"
+  CoreNeverType -> "Never"

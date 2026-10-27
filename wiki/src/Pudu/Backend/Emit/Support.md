@@ -39,3 +39,9 @@ Uses [[Pudu Core]], [[Integer Literal]], and [[Backend Emit State]]. Consumed by
 ## Referenced by
 
 [[Backend Emit]] · [[src/Pudu/Backend/_MOC]]
+
+## Resolved control-flow traversal (#489)
+
+Runtime requirements visit both loop conditions and bodies and every break operand. Never is representation-free at the public function boundary and uses an initialized dummy integer only in unreachable scalar sequencing; no ownership-bearing value is admitted.
+
+- **Q:** Can breaking with a discarded checked value omit its helper? **A:** No; the runtime walk includes the operand even when no result slot exists. Rejected: visiting only value-producing consumers.

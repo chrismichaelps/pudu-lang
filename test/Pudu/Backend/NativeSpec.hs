@@ -15,6 +15,7 @@ import Control.Exception (IOException, finally, try)
 import Data.Text (Text)
 import qualified Data.Text as Text
 import qualified Data.Text.IO as TextIO
+import Pudu.Backend.ControlPrograms (controlSuccessPrograms, controlRefusalPrograms)
 import Pudu.Backend.Emit (emitProgram)
 import Pudu.Backend.FunctionPrograms (functionSuccessPrograms, functionRefusalPrograms)
 import Pudu.Backend.Toolchain
@@ -83,6 +84,8 @@ backendNativeProperties =
   [ ("native execution matches the interpreter on success programs", testSuccessConformance)
   , ("native functions match the interpreter on ordering and recursion", testFunctionConformance)
   , ("native function failures match interpreter diagnostics", testFunctionRefusals)
+  , ("native scalar loop control matches the interpreter", testControlConformance)
+  , ("native loop operand failures match interpreter diagnostics", testControlRefusals)
   , ("native execution matches the interpreter on exit statuses", testStatusConformance)
   , ("native refusals match the interpreter byte for byte", testRefusalConformance)
   , ("a compiler that cannot be found is E6002", testToolchainNotFound)
@@ -189,6 +192,12 @@ testSuccessConformance :: IO Property
 testSuccessConformance = do
   outcomes <- mapM (uncurry conformance) successPrograms
   pure (conjoin outcomes)
+
+testControlConformance :: IO Property
+testControlConformance = conjoin <$> mapM (uncurry conformance) controlSuccessPrograms
+
+testControlRefusals :: IO Property
+testControlRefusals = conjoin <$> mapM (uncurry conformance) controlRefusalPrograms
 
 testFunctionConformance :: IO Property
 testFunctionConformance = conjoin <$> mapM (uncurry conformance) functionSuccessPrograms

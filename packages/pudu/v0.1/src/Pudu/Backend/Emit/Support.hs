@@ -46,13 +46,14 @@ needStatement needs statement = case coreStatementShape statement of
   CoreDeclare _ expression -> needExpression needs expression
   CoreAssign _ expression -> needExpression needs expression
   CoreEvaluate expression -> needExpression needs expression
-  CoreWhile condition body -> needBlock (needExpression needs condition) body
   CoreIf condition thenBlock elseExpression ->
     let afterCondition = needExpression needs condition
         afterThen = needBlock afterCondition thenBlock
      in case elseExpression of
           Nothing -> afterThen
           Just expression -> needExpression afterThen expression
+  CoreContinue _ -> needs
+  CoreBreak _ result -> maybe needs (needExpression needs) result
   CoreReturn result -> case result of
     Nothing -> needs
     Just expression -> needExpression needs expression
@@ -79,6 +80,8 @@ needExpression needs expression = case coreExpressionShape expression of
     needExpression (Set.insert (printerFor argument) needs) argument
   CoreCall _ arguments -> foldl' needExpression (checked "call_depth" needs) arguments
   CoreBlockValue block -> needBlock needs block
+  CoreWhileValue _ condition body -> needBlock (needExpression needs condition) body
+  CoreLoopValue _ body -> needBlock needs body
   CoreIfValue condition thenBlock elseExpression ->
     needExpression (needBlock (needExpression needs condition) thenBlock) elseExpression
 
@@ -186,6 +189,7 @@ declarationFor coreType name = case coreType of
   CoreBoolType -> "int " <> name
   CoreTextType -> "const char *" <> name
   CoreUnitType -> "int " <> name
+  CoreNeverType -> "int " <> name
 
 localSymbol :: CoreLocal -> Text
 localSymbol local = "pudu_v" <> textOfInt (coreLocalId local)

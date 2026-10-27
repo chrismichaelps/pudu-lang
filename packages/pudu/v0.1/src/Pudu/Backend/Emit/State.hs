@@ -7,10 +7,12 @@ module Pudu.Backend.Emit.State
 
 import qualified Data.ByteString as ByteString
 import Data.Char (ord)
+import qualified Data.Map.Strict as Map
+import qualified Data.Set as Set
 import Data.Text (Text)
 import qualified Data.Text as Text
 import qualified Data.Text.Encoding as Text
-import Pudu.Core (CoreType (..))
+import Pudu.Core (CoreLoopId, CoreType (..))
 import Pudu.Diagnostic.Arithmetic (CheckedOperation, divideByZeroCode, divideByZeroMessage, overflowCode, overflowHelp, overflowMessage)
 import Pudu.Diagnostic.Evaluation (callDepthCode, callDepthHelp, callDepthMessage)
 import Pudu.Diagnostic.Render (Excerpt (..), excerptGeometry)
@@ -45,6 +47,9 @@ data EmitState = EmitState
   , emitIndent :: !Int
   , emitSources :: ![Source]
   , emitResultType :: !CoreType
+  , emitLoopResults :: !(Map.Map CoreLoopId (Maybe Text))
+  , emitBreakTargets :: !(Set.Set CoreLoopId)
+  , emitContinueTargets :: !(Set.Set CoreLoopId)
   }
 
 emptyEmitState :: [Source] -> EmitState
@@ -57,6 +62,9 @@ emptyEmitState sources =
     , emitIndent = 0
     , emitSources = sources
     , emitResultType = CoreUnitType
+    , emitLoopResults = Map.empty
+    , emitBreakTargets = Set.empty
+    , emitContinueTargets = Set.empty
     }
 
 line :: EmitState -> Text -> EmitState
