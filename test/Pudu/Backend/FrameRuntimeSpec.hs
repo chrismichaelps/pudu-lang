@@ -12,15 +12,18 @@ import Pudu.Compiler.Lower.Types (nativeTypes)
 import Pudu.Diagnostic (hasErrors)
 import Pudu.Source (SourceName (..), newSource)
 import System.Directory (findExecutable)
+import System.Environment (getEnvironment, getExecutablePath, lookupEnv)
 import System.Exit (ExitCode (..))
 import System.FilePath ((</>))
 import System.IO.Temp (withSystemTempDirectory)
-import System.Process (readProcessWithExitCode)
+import System.Process (CreateProcess (env), proc, readCreateProcessWithExitCode, readProcessWithExitCode)
 import Test.QuickCheck (Property, conjoin, counterexample, (===))
 
 frameRuntimeProperties :: [(String, IO Property)]
 frameRuntimeProperties =
   [ ("frame allocator frees normal returns and failed allocations", testAllocations)
+  , ("dynamic diagnostics release surviving payload copies", testDiagnosticCopies)
+  , ("dynamic diagnostic payload bounds and empty views preserve cleanup", testDiagnosticBounds)
   , ("aggregate joining rejects overflowing separator and label lengths", testJoinOverflow)
   , ("frame allocator unwinds source panics and rejects size overflow", testPanics)
   ]
@@ -62,6 +65,62 @@ testPanics = withCompiler $ \cc root -> do
         ]
       Left _ -> False === True
 
+testDiagnosticCopies :: IO Property
+testDiagnosticCopies = withCompiler $ \cc root -> conjoin <$> traverse (check cc root)
+  [ ("E7001", "cannot apply - to a builtin", Nothing,
+      "let invalid = -print\n print(show(invalid))")
+  , ("E7008", "a builtin cannot be a set member", Just "use a value the language can order",
+      "let invalid = setOf([print])\n print(show(invalid))")
+  , ("E7004", "slice range out of bounds", Just "it has 1 elements",
+      "let items = [1]\n let invalid = items[0..2]\n print(show(invalid))")
+  , ("E7004", "slice range out of bounds", Just "it has 2 elements",
+      "let text = \"hé\"\n let invalid = text[0..3]\n print(invalid)")
+  ]
+ where
+  check cc root (code, message, help, body) = do
+    let source = "module Main\nfn main() -> Int { print(\"before\")\n " <> body <> "\n 0 }\n"
+        path = root </> "Main.pudu"
+    TextIO.writeFile path source
+    result <- execute cc root source 0 id
+    oracle <- getExecutablePath
+    inherited <- getEnvironment
+    parity <- traverse (\engine -> do
+      let settings = [("PUDU_EVAL", engine), ("NO_COLOR", "1")]
+          process = (proc oracle ["--native-output-oracle", path])
+            {env = Just (settings <> filter (\(name, _) -> name `notElem` map fst settings) inherited)}
+      (status, output, errors) <- readCreateProcessWithExitCode process ""
+      pure $ counterexample (engine <> ": " <> show result) $
+        result === Right (status, Text.pack output, Text.pack errors)) ["compiled", "tree"]
+    pure $ conjoin (parity <> [counterexample (show result) $ case result of
+      Right (status, output, errors) -> conjoin
+        [ status === ExitFailure 1, output === "before\n"
+        , Text.isInfixOf ("error[" <> code <> "]: " <> message) errors === True
+        , maybe True (`Text.isInfixOf` errors) help === True
+        , Text.isInfixOf "leaked frame" errors === False
+        ]
+      Left _ -> False === True])
+
+testDiagnosticBounds :: IO Property
+testDiagnosticBounds = withCompiler $ \cc root -> do
+  overflow <- injected cc root
+    "pudu_fail_text_help(NULL, (pudu_text){NULL, SIZE_MAX, NULL}, (pudu_text){NULL, 1, NULL});"
+  empty <- injected cc root
+    "pudu_fail_text_help(&pudu_sites[0], (pudu_text){NULL, 0, NULL}, (pudu_text){NULL, 0, NULL});"
+  pure $ conjoin
+    [ overflow === Right (ExitFailure 1, "", "pudu: memory allocation failed\n")
+    , counterexample (show empty) $ case empty of
+        Right (status, output, errors) -> conjoin
+          [ status === ExitFailure 1, output === ""
+          , Text.isInfixOf "error[" errors === True
+          , Text.isInfixOf "   = help: \n" errors === True
+          , Text.isInfixOf "leaked frame" errors === False ]
+        Left _ -> False === True
+    ]
+ where
+  injected cc root probe = execute cc root
+    "module Main\nfn main() -> Int { let items = [1]\n print(show(items[0..2]))\n 0 }\n" 0
+    (Text.replace "int main(void) {" ("int main(void) { " <> probe))
+
 testJoinOverflow :: IO Property
 testJoinOverflow = withCompiler $ \cc root -> conjoin <$> traverse (check cc root)
   [ "pudu_text parts[2] = {{NULL, 0, NULL}, {NULL, SIZE_MAX, NULL}}; (void)pudu_text_join(\"\", NULL, parts, 2, \"\");"
@@ -76,15 +135,16 @@ testJoinOverflow = withCompiler $ \cc root -> conjoin <$> traverse (check cc roo
 
 withCompiler :: (FilePath -> FilePath -> IO Property) -> IO Property
 withCompiler action = do
-  compiler <- findExecutable "cc"
+  configured <- lookupEnv "PUDU_CC"
+  compiler <- findExecutable (maybe "cc" id configured)
   case compiler of
-    Nothing -> putStrLn "[skip] frame allocator checks: cc was not found" >> pure (True === True)
+    Nothing -> pure (counterexample "frame runtime checks require a C11 compiler" (False === True))
     Just cc -> withSystemTempDirectory "pudu-frame-runtime" (action cc)
 
 execute :: FilePath -> FilePath -> Text -> Int -> (Text -> Text)
   -> IO (Either String (ExitCode, Text, Text))
 execute cc root sourceText failAt transform = do
-  source <- newSource (SourceName "Main.pudu") sourceText
+  source <- newSource (SourceName (Text.pack (root </> "Main.pudu"))) sourceText
   checked <- runCompile source
   case (hasErrors (compileDiagnostics checked), compileModule checked) of
     (False, Just parsed) -> case lowerModule "main" (nativeTypes (compileTypes checked) (compileSchemes checked)) parsed of

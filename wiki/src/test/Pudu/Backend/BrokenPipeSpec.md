@@ -42,3 +42,10 @@ CLI probes compare both evaluators and native execution as separate evidence.
 ## Referenced by
 
 [[src/_MOC]] · [[Backend Module Map]] · [[Native Closed Pipe Delivery]]
+
+## Owned diagnostic payloads (#570)
+
+Resolved Grill Log: extend the existing stdout/stderr/both and inherited
+SIGPIPE matrix with dynamic E7001 and computed-help E7004 failures after
+prior output. Each case names its expected diagnostic code explicitly; keep
+all original status, bytes and signal-disposition assertions intact.

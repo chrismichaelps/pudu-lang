@@ -41,7 +41,7 @@ import Pudu.Diagnostic.Host (memoryFailureMessage)
 {-| The runtime contract revision baked into every generated program's header
     comment. It changes only when the runtime's behaviour or interface does. -}
 runtimeRevision :: Text
-runtimeRevision = "15"
+runtimeRevision = "16"
 
 {-| @Backend.Runtime.Part — one named, self-contained piece of the runtime.
 
@@ -133,7 +133,7 @@ failLines :: [Text]
 failLines =
   [ "/* Print the refusal and leave with the interpreter's status for one. The"
   , "   message is written by length, so a rendered value may hold any byte. */"
-  , "static void pudu_fail_report(const pudu_site *site, const char *message, size_t length, const char *help, size_t help_length) {"
+  , "static _Noreturn void pudu_fail_report(const pudu_site *site, const char *message, size_t length, const char *help, size_t help_length, void *owned_payload) {"
   , "  if (pudu_cleanup_hook != NULL) pudu_cleanup_hook();"
   , "  pudu_prepare_error_io();"
   , "  int colored = pudu_colored();"
@@ -170,12 +170,13 @@ failLines =
   , "    fputc('\\n', stderr);"
   , "  }"
   , "  fflush(stderr);"
+  , "  free(owned_payload);"
   , "  /* Exit may flush stdout again after a failed print. */"
   , "  pudu_prepare_io();"
   , "  exit(1);"
   , "}"
   , "static void pudu_fail_message(const pudu_site *site, const char *message, size_t length) {"
-  , "  pudu_fail_report(site, message, length, site->help, site->help == NULL ? 0 : strlen(site->help));"
+  , "  pudu_fail_report(site, message, length, site->help, site->help == NULL ? 0 : strlen(site->help), NULL);"
   , "}"
   , "static inline void pudu_fail(const pudu_site *site) {"
   , "  pudu_fail_message(site, site->message, strlen(site->message));"

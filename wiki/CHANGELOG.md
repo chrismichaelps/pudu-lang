@@ -5,6 +5,16 @@ tags: [changelog]
 
 # Changelog
 
+## 2026-10-27 — Owned diagnostic payloads (#570)
+
+Dynamic message/help copies now transfer to the terminating reporter, survive
+frame cleanup, and release after their final byte use. Static site strings stay
+borrowed. Combined payload lengths are checked before allocation; revision 16
+records the private signature change. Counted source failures and empty/overflow
+probes pass Clang/GCC/ASan+UBSan, with exact compiled/tree diagnostic parity.
+Expanded closed-pipe cases preserve fatal signal behavior. Full release and
+independent review remain pending. [[Native Diagnostic Ownership]].
+
 ## 2026-10-27 — First-class output builtins (#569)
 
 The four standard-stream builtins now retain their builtin identity when stored,
