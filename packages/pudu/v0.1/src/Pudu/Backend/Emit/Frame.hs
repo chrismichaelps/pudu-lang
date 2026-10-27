@@ -12,6 +12,7 @@ import Pudu.Backend.Emit.State (EmitState (..), emptyEmitState, renderSites, tex
 import Pudu.Backend.Runtime (RuntimePart (..), runtimeParts)
 import Pudu.Backend.Runtime.Frame (frameTypes, frameEngine)
 import Pudu.Backend.Runtime.Array (arrayRuntimeParts)
+import Pudu.Backend.Runtime.Text.Pieces (textPieceRuntimeParts)
 import Pudu.Backend.Runtime.Dependencies (runtimeDependencies)
 import Data.Map.Strict (Map)
 import qualified Data.Map.Strict as Map
@@ -86,7 +87,7 @@ emitFrameProgram version sources source = do
         <> ["static const pudu_function pudu_functions[] = {"]
         <> map definition indexed <> ["};"]
   pure $ Text.unlines (header <> runtime <> frameTypes wide text boxes
-    <> concat [lines' <> [""] | (name, lines') <- arrayRuntimeParts, Set.member name selected]
+    <> concat [lines' <> [""] | (name, lines') <- arrayRuntimeParts <> textPieceRuntimeParts, Set.member name selected]
     <> renderSites (reverse (emitSites emitted)) <> aggregates <> ownership <> reverse (emitOutput emitted)
     <> metadata <> frameEngine owned <> ["int main(void) {", "  pudu_prepare_io();"] <> ending <> ["}"])
   where

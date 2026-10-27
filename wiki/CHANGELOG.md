@@ -5,6 +5,14 @@ tags: [changelog]
 
 # Changelog
 
+## 2026-10-26 — Native Str methods with array and option results (#559)
+
+`split`, `lines` and `chars` answer arrays of views into the receiver
+([[Native Text Pieces]]), and `toInt` and `toFloat` read numbers exactly as
+the evaluator does, correctly rounded, with their Option built in Core
+([[Native Text Number]]). [[Backend Text Collection Programs]] passes under
+Clang, GCC 15, ASan/UBSan and the tree evaluator with counted cleanup.
+
 ## 2026-10-26 — Native sortBy, sequence patterns and range slices (#558)
 
 [[Compiler Lower Sort]] lowers `sortBy` to loops asking the comparison the

@@ -38,6 +38,15 @@ Str receiver. Methods outside the table refuse; nothing falls back.
 - **Q:** Should a Never argument still build a method? **A:** No; like calls,
   the arguments run for their effects and the expression is Never.
 
+## Arrays and options (#559)
+
+Resolved Grill Log: `split`, `lines` and `chars` are runtime calls answering
+arrays ([[Native Text Pieces]]). `toInt` and `toFloat` put the receiver in a
+local, then `TextParsesInt`/`TextParsesFloat` choose between `Some` of
+`TextIntOf`/`TextFloatOf` and `None`, built at the Option type the checker gave
+the call ([[Native Text Number]]). No C code needs to know an Option's layout.
+`toBytes` and `toDecimal` wait for Bytes and Decimal.
+
 ## Referenced by
 
 [[Compiler Lower Body]] · [[Native Text Methods]] · [[src/_MOC]]

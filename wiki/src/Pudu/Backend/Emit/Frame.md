@@ -48,6 +48,11 @@ Resolved Grill Log: the array runtime parts are written after the frame types;
 an entry returning an array prints it; text inside an array counts as text
 use.
 
+## Text pieces (#559)
+
+[[Native Text Pieces]] is emitted with the array runtime, after the frame
+types, because it builds arrays.
+
 ## Referenced by
 
 [[src/_MOC]] · [[Native Frame Pressure Repair]]

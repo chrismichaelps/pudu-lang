@@ -129,6 +129,10 @@ new dependency.
 
 Register Pudu.Compiler.Lower.Sort and Pudu.Compiler.Lower.Slice.
 
+## Text pieces and numbers (#559)
+
+Register Pudu.Backend.Runtime.Text.Number and Pudu.Backend.Runtime.Text.Pieces.
+
 ## Referenced by
 
 The library exposes [[Resolve Canonical]] for the scoped generated-Impl resolver

@@ -50,6 +50,10 @@ Resolved Grill Log: both lists include [[Backend Array Programs]].
 Includes [[Backend Array Pattern Programs]] in both the success and refusal
 lists.
 
+## Text collections (#559)
+
+Includes [[Backend Text Collection Programs]] in both lists.
+
 ## Referenced by
 
 [[Backend Native Tests]] · [[Native Emission Coverage]] · [[src/_MOC]]
