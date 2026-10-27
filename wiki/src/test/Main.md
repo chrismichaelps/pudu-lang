@@ -94,3 +94,7 @@ Register both Module Qualifier Spec and Qualified Shadow Spec in the same resolu
 Register [[Mutex Admission Spec]] explicitly with existing dependencies. Resolved Grill Log (#476): the controlled native family and real public fixture run in the complete suite.
 
 Register [[Database Challenge Spec]] explicitly with existing dependencies. Resolved Grill Log: complete-suite execution and focused execution use the same real challenge admission assertions.
+
+Register [[Native Wide Value Tests]] explicitly without new dependencies. Resolved Grill Log:
+exact value and minimal-selection properties contribute to the complete suite
+and its aggregate failure status. The release gate is unchanged.
