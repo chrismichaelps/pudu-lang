@@ -59,6 +59,7 @@ library
   autogen-modules:   Paths_pudu
   other-modules:     Paths_pudu
   exposed-modules:
+    Pudu.Core
     Pudu.Cli.Init
     Pudu.Cli.Package
     Pudu.Cli.Progress
