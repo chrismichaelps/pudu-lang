@@ -5,6 +5,11 @@ tags: [changelog]
 
 # Changelog
 
+## 2026-10-27 — Exact native wide values (#502)
+
+- [[Backend Wide Integer Values]] preserves actual signs and selectable helpers.
+- [[Native Wide Value Tests]] checks independent answers and minimal C11 selections.
+
 ## 2026-10-09 — Integrated Database graph expectations (#478)
 
 - [[Application Layer Tests]] verifies the combined challenge and capacity boundaries with exact layer diagnostics.

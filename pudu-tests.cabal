@@ -42,6 +42,7 @@ test-suite pudu-test
   else
     ghc-options:    -optl-Wl,--export-dynamic
   other-modules:
+    Pudu.Backend.WideValueSpec
     Pudu.Cli.InitSpec
     Pudu.PackageSpec
     Pudu.Cli.LintSpec
