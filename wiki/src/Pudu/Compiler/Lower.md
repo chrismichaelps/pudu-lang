@@ -234,3 +234,9 @@ products; the compatibility lowerModule passes an empty product map and
 refuses reached constants rather than re-evaluating their syntax. ModuleScope
 records each declared constant with its optional frozen value, so nonportable
 and missing products stay distinct from undeclared names. No ABI change.
+
+## Defaulted bodies (#638)
+
+A queued function with defaults lowers through [[Compiler Lower Default]]'s
+lowerDefaultedBody. Resolved Grill Log: one native function per source
+function; no per-arity copies.

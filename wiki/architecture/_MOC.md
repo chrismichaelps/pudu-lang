@@ -108,3 +108,4 @@ Pudu is a statically typed native systems language for developers who need predi
 - [[Native Rendering Callables]] — typed display/show values.
 - [[Native Collection Callables]] — charFromCode, bytesOf, mapOf and setOf values; refusals at the caller.
 - [[Native Stopping Builtins]] — panic and untyped convertInteger, direct and as values.
+- [[Native Default Parameters]] — a supplied-count parameter and a default prologue.

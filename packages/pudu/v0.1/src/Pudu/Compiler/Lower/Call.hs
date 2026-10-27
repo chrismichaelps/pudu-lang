@@ -4,6 +4,7 @@ module Pudu.Compiler.Lower.Call (lowerFunctionCall, lowerPrint, outputResult, lo
 
 import Data.Text (Text)
 import Pudu.Compiler.Lower.Control (expressionIsPrintValued)
+import Pudu.Compiler.Lower.Default (hasDefaults, suppliedArguments)
 import Pudu.Compiler.Lower.Generic (admitCallee)
 import Pudu.Compiler.Lower.Scalar (eagerType)
 import Pudu.Compiler.Lower.State (CoreSignature (..), LowerContext (..), LowerState (..), bindLocal, halt, refused)
@@ -31,7 +32,11 @@ lowerFunctionCall lower state at key callee arguments = case lookup key (context
                   [CoreStatement (coreExpressionSpan argument) (CoreEvaluate argument) | argument <- cores] Nothing)) CoreNeverType
             | otherwise ->
                 let queued = final{lowerContext = (lowerContext final){contextQueue = target : contextQueue (lowerContext final)}}
-                 in typed queued (CoreCall target cores) (eagerType (signatureResult found) cores)
+                    passed
+                      | hasDefaults (locatedValue (snd entry)) =
+                          suppliedArguments at (map (coreLocalType . coreParameterLocal) (signatureParameters found)) cores
+                      | otherwise = cores
+                 in typed queued (CoreCall target passed) (eagerType (signatureResult found) cores)
           (final, Nothing) -> refused final
  where
   typed after shape kind = (after, Just (CoreExpression at kind shape, kind))

@@ -11,7 +11,7 @@ import Pudu.Backend.Emit.State
   ( EmitState (..), cString, cStringBytes, divideByZeroSite, failureSite, operatorFailureSite, overflowSite, shiftSites, textOfInt )
 import Pudu.Backend.Emit.Aggregate (aggregateHelper, aggregateNeed, cellName, isAggregate, memberComparable, retained)
 import Pudu.Diagnostic.Evaluation (cannotApplyBinaryMessage)
-import Pudu.Backend.Emit.Support (integerHelper, integerKindText, integerLiteralText, isWideInteger)
+import Pudu.Backend.Emit.Support (integerHelper, integerKindText, integerLiteralText, isWideInteger, zeroValue)
 import Pudu.Core (CoreArrayMethodName (..), CoreBinaryOperator (..), CoreKeyedMethodName (..), CoreTextMethodName (..), CoreType (..))
 import Pudu.Backend.Emit.Range (rangeMethodCall)
 import Pudu.Backend.Emit.Bytes (bytesFunction)
@@ -40,6 +40,7 @@ frameValue state value = case frameValueShape value of
   FrameFloatLiteral _ bits -> Right (state, "UINT64_C(0x" <> Text.pack (showHex bits "") <> ")", Set.empty)
   FrameBoolLiteral flag -> done state (if flag then "1" else "0") []
   FrameUnitLiteral -> done state "0" []
+  FrameZero -> done state (zeroValue (frameValueType value)) []
   FrameTextLiteral text ->
     plain ("pudu_text_literal(" <> cString text <> ", " <> textOfInt (cStringBytes text) <> ")") ["text_literal"]
   FrameCharLiteral character -> done state ("UINT32_C(0x" <> Text.pack (showHex (fromEnum character) "") <> ")") []

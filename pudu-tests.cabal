@@ -89,6 +89,7 @@ test-suite pudu-test
     Pudu.Backend.IntegerPrograms
     Pudu.Backend.CharPrograms
     Pudu.Backend.CollectionCallablePrograms
+    Pudu.Backend.DefaultParameterPrograms
     Pudu.Backend.RecordPrograms
     Pudu.Backend.StoppingBuiltinPrograms
     Pudu.Backend.SumPrograms

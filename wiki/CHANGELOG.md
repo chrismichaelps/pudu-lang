@@ -5,6 +5,12 @@ tags: [changelog]
 
 # Changelog
 
+## 2026-10-27 — Native default parameter values (#638)
+
+- Functions with default parameter values build natively. A trailing count of supplied arguments tells the callee's prologue which defaults to run, in order, after the parameters before them. See [[Native Default Parameters]].
+- Direct calls, calls into other modules and calls through function values pass zero placeholders plus the count; a defaulted function's Core type ends with that count.
+- Defaults that fail, print or reach the depth limit behave as in the interpreter. Cross-module constant defaults wait on #639, an interpreter scoping bug found here.
+
 ## 2026-10-27 — Backend suite repairs (#636)
 
 - The frame-body spec strict-compiles the program the backend actually writes, so printing corpora with Result aggregates compile again.

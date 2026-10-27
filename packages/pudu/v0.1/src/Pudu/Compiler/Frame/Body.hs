@@ -65,6 +65,7 @@ lowerExpression expression@(CoreExpression at kind shape) = case shape of
   CoreBoolLiteral boolean -> value (FrameBoolLiteral boolean)
   CoreTextLiteral text -> value (FrameTextLiteral text)
   CoreCharLiteral character -> value (FrameCharLiteral character)
+  CoreAbsent -> value FrameZero
   CoreCharCode operand -> rendered FrameCharCode operand
   CoreIntegerFits kind' operand -> rendered (FrameIntegerFits kind') operand
   CoreCharOfCode operand -> rendered FrameCharOfCode operand

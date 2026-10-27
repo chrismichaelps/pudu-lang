@@ -13,7 +13,7 @@ import Pudu.IntegerLiteral (IntegerKind (PlatformSigned, PlatformUnsigned, Signe
 import Pudu.Source (Span)
 import Pudu.Type (TypeInfo (..), typeAt)
 import Pudu.Type.Value
-  ( NominalId (..), Scheme, Type (..), boolType, charType, nominalKey, stringType )
+  ( NominalId (..), Scheme, Type (..), boolType, charType, nominalKey, requiredCount, stringType )
 
 {-| Facts from one checked module; complete spans retain generated identity.
     The shapes are the records and sums the root module can name, by nominal
@@ -132,11 +132,14 @@ formedWith shapes seen parameters value = case value of
     formed <- formedWith shapes seen parameters member
     if nativeValueType formed then Just (CoreSetType formed) else Nothing
   -- An async function is a task-maker, which native code has no form for.
-  FunctionTypeRequiring False inputs _ result -> do
+  -- One with defaults takes how many arguments the call supplied as a last
+  -- Int, so a value of it and the function it calls agree on arity.
+  FunctionTypeRequiring False inputs required result -> do
     formedInputs <- traverse (formedWith shapes seen parameters) inputs
     formedResult <- formedWith shapes seen parameters result
+    let supplied = [CoreIntegerType PlatformSigned | requiredCount required < length inputs]
     if all nativeValueType formedInputs && (nativeValueType formedResult || formedResult == CoreNeverType)
-      then Just (CoreFunctionType formedInputs formedResult) else Nothing
+      then Just (CoreFunctionType (formedInputs <> supplied) formedResult) else Nothing
   TupleTypeValue members@(_ : _ : _) -> do
     formedMembers <- traverse (formedWith shapes seen parameters) members
     if all nativeValueType formedMembers then Just (CoreTupleType formedMembers) else Nothing

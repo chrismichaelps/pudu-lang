@@ -352,3 +352,9 @@ reached through a value build it.
 Resolved Grill Log: the interpreter names the call expression for a builtin's
 refusal, and a generated body has no span of its own for it. See
 [[Native Collection Callables]].
+
+## Absent arguments (#638)
+
+`CoreAbsent` is the zero of its expression's type, passed for a parameter
+the call left to its default. Resolved Grill Log: the callee's prologue
+replaces it before any read; every release path accepts a zero cell.

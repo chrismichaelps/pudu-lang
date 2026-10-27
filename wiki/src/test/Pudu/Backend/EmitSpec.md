@@ -250,3 +250,9 @@ The "unresolved inferred result" refusal moved to [[Backend Function Programs]]
 as a success: an open result variable now forms as unit, which is what both
 evaluators return. Resolved Grill Log: the semantic delta was inspected; the
 native output matches the interpreter byte for byte.
+
+## Default parameters (#638)
+
+The "default parameter" refusal left the table; defaulted functions lower,
+and [[Backend Default Parameter Programs]] compares them with the
+interpreter.

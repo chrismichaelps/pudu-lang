@@ -30,3 +30,9 @@ Resolved Grill Log: lowerPrint takes the builtin name, lowers its one Str argume
 ## First-class output builtins (#569)
 
 Resolved Grill Log: Export outputResult to build the existing Result from one Core Str operand and the exact provided Result type. Direct lowerPrint and intrinsic value bodies share this factory.
+
+## Defaults (#638)
+
+A direct call to a function with defaults passes suppliedArguments.
+Resolved Grill Log: the arguments still run first, left to right; the
+result type is unchanged.

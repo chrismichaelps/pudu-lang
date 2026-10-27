@@ -338,3 +338,8 @@ dependency; the release gate is unchanged.
 
 Register [[Backend Stopping Builtin Programs]]. Resolved Grill Log: no new
 dependency; the release gate is unchanged.
+
+## Default parameter corpus (#638)
+
+Register [[Backend Default Parameter Programs]]. Resolved Grill Log: no new
+dependency; the release gate is unchanged.

@@ -189,3 +189,10 @@ member of `setOf([])` or the argument of a builtin that is only compared.
 Resolved Grill Log: Pudu does not generalize let-bound values and generic
 bodies carry RigidType, so a final fact's variable is never used at two
 types. The full backend suite passes with the wider rule.
+
+## Defaulted function types (#638)
+
+A FunctionTypeRequiring whose required count is below its parameter count
+forms with a trailing Int. Resolved Grill Log: checking keeps defaulted and
+all-required function types apart, so no value of one is called as the
+other; nothing at run time reads parameter types.

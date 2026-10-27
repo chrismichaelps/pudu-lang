@@ -2,6 +2,7 @@
 module Pudu.Compiler.Lower.Signature (ensureSignature, functionLevelRefusal) where
 
 import qualified Data.Map.Strict as Map
+import Data.Maybe (isNothing)
 import Data.Set (Set)
 import qualified Data.Set as Set
 import Data.Text (Text)
@@ -25,16 +26,17 @@ ensureSignature key located state = case Map.lookup key (contextSignatures conte
   Just memo -> (state, memo)
   Nothing -> case boundFunctionRefusal (Map.keysSet (typeBindings (contextTypes context))) function of
     Just (spanValue, construct) -> memoize (refuse spanValue construct state) Nothing
-    Nothing | defaulted : _ <- defaults ->
-      memoize (refuse (locatedSpan defaulted) "default parameter values" state) Nothing
+    Nothing | misplaced : _ <- requiredAfterDefault ->
+      memoize (refuse misplaced "a default before a required parameter" state) Nothing
     Nothing -> case maybe (lookupScheme (contextTypes context) name) (Just . instanceScheme) (Map.lookup key (contextInstances context)) of
       Just Scheme{schemeParams, schemeBounds, schemeType = FunctionTypeRequiring False inputs required result}
         | all ((`Map.member` typeBindings (contextTypes context)) . fst) schemeParams
         , not (null schemeParams) || null schemeBounds
         , length inputs == length (functionParameters function)
-        , requiredCount required == length inputs ->
-            let (afterParameters, parameters) = foldl' validateParameter (state, [])
+        , requiredCount required == length inputs - length defaults ->
+            let (afterParameters, given) = foldl' validateParameter (state, [])
                   (zip3 [0 ..] (map locatedValue (functionParameters function)) inputs)
+                parameters = given <> [CoreParameter (CoreLocal (length inputs) "" intType) atName | not (null defaults)]
                 (afterReturn, resultType) = validateReturn afterParameters result
                 added = length (contextRefusals (lowerContext afterReturn))
                   - length (contextRefusals context)
@@ -48,6 +50,12 @@ ensureSignature key located state = case Map.lookup key (contextSignatures conte
     name = locatedValue (functionName function)
     atName = locatedSpan (functionName function)
     defaults = [value | parameter <- functionParameters function, Just value <- [parameterDefault (locatedValue parameter)]]
+    -- Defaults fill from the end; one followed by a required parameter could
+    -- not be told apart by a count of supplied arguments.
+    requiredAfterDefault =
+      [ locatedSpan (parameterName parameter)
+      | parameter <- map locatedValue (dropWhile (isNothing . parameterDefault . locatedValue) (functionParameters function))
+      , isNothing (parameterDefault parameter) ]
     memoize after memo =
       ( after
           { lowerContext =
@@ -58,21 +66,19 @@ ensureSignature key located state = case Map.lookup key (contextSignatures conte
       )
 
     validateParameter (current, collected) (index, parameter, parameterTypeValue) =
-      case parameterDefault parameter of
-        Just defaulted -> (refuse (locatedSpan defaulted) "default parameter values" current, collected)
-        Nothing -> case formedCoreTypeIn (contextTypes (lowerContext current)) parameterTypeValue of
-          Just coreType | nativeValueType coreType ->
-            ( current
-            , collected <> [CoreParameter
-                { coreParameterLocal = CoreLocal index (locatedValue (parameterName parameter)) coreType
-                , coreParameterSpan = locatedSpan (parameterName parameter)
-                }]
-            )
-          projected ->
-            ( refuse (maybe (locatedSpan (parameterName parameter)) locatedSpan (parameterType parameter))
-                (maybe "a parameter type outside the native subset" (("a parameter of type " <>) . coreTypeName) projected) current
-            , collected
-            )
+      case formedCoreTypeIn (contextTypes (lowerContext current)) parameterTypeValue of
+        Just coreType | nativeValueType coreType ->
+          ( current
+          , collected <> [CoreParameter
+              { coreParameterLocal = CoreLocal index (locatedValue (parameterName parameter)) coreType
+              , coreParameterSpan = locatedSpan (parameterName parameter)
+              }]
+          )
+        projected ->
+          ( refuse (maybe (locatedSpan (parameterName parameter)) locatedSpan (parameterType parameter))
+              (maybe "a parameter type outside the native subset" (("a parameter of type " <>) . coreTypeName) projected) current
+          , collected
+          )
 
     validateReturn current result = case formedCoreTypeIn (contextTypes (lowerContext current)) result of
       Just coreType | nativeValueType coreType -> (current, coreType)
