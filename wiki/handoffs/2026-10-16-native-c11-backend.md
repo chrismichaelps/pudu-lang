@@ -1,7 +1,7 @@
 ---
 type: handoff
 status: ACTIVE
-issue: 494
+issue: 496
 aliases: [Native C11 Backend Delivery]
 tags: [handoff, backend, native, c11]
 ---
@@ -343,3 +343,31 @@ Language Architect and Forensic Guardian reviews remain pending before promotion
 No subagents activated. Local macOS evidence does not claim hosted/Linux checks.
 Next native issue #495 covers remaining platform Int operators; exact next action
 is resolve its Core/runtime/diagnostic module mirrors before implementation.
+
+## README progress publishing #496
+
+User steering adds an auditable progress bar and dev-merge refresh. Delivery Owner
+→ Documentation Architect → Tooling Engineer owns README.md,
+scripts/native-progress.mjs, test/native-progress.test.mjs and
+.github/workflows/native-progress.yml plus their mirrors/navigation. Resolved
+Grill Logs exist before implementation. Branch feature/496-native-progress is stacked on committed #494; preserve
+its implementation and the unrelated dist-ticky directory.
+No agents activated. Independent review remains pending before promotion.
+The metric is complete ledger areas, currently 4/14 (28% floored); partial rows
+count zero. Publishing may only commit the generated README block to current dev;
+branch protection is currently absent. Hosted execution requires integration.
+
+### #496 validation and next action
+
+All five Node test groups pass, including CLI stale-output failure, write/check,
+malformed-input preservation, cwd independence and idempotence. YAML parses.
+The actual publishing shell passed against a temporary local bare dev remote:
+README-only commit, untouched surrounding/unrelated content, second-run no-op,
+and a concurrent dev integration causing non-fast-forward rejection followed by
+recomputation on the newer merge (5/14 = 35% in the fixture). No force push.
+The real ledger remains 4/14 = 28%. Hosted Actions credentials/permissions remain
+unverified until integration; this branch has not been pushed or merged.
+Native #494 is committed as 7d95fd54 with all 19 clean gates and 654 property
+groups passing. Independent review remains pending; no agents activated.
+Exact next action: resolve issue #495's Core/runtime/diagnostic mirrors before
+implementing the remaining platform Int operators.

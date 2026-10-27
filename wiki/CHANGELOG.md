@@ -5,6 +5,11 @@ tags: [changelog]
 
 # Changelog
 
+## 2026-10-17 — Auditable native progress publishing (#496)
+
+- [[Repository README]] shows a generated 20-cell C11 emission bar and completed/total coverage areas, currently 4/14 (28%). Partial work counts zero; this is an area measure, not a language-construct percentage.
+- [[Native Progress Generator]] and [[Native Progress Tests]] enforce deterministic counts, malformed-input refusal, preservation, idempotence and CLI behavior. [[Native Progress Workflow]] validates PRs and refreshes only README on current dev after integration, with serialized non-force push retries. Five local Node tests and actual publishing-shell checks against a local bare remote pass, including idempotence and a concurrent integration retry. Hosted workflow execution and independent review remain pending.
+
 ## 2026-10-17 — Native scalar runtime refusals (#494)
 
 - [[Compiler Lower Scalar]] separates unary/binary lowering and emits explicit Never-typed operator failures, using exact settled facts and shared interpreter vocabulary from [[Diagnostic Evaluation]]. Boolean ordering remains valid; invalid Unit/Bool operations preserve their actual E7001 messages, operand order and whole-operation spans.
