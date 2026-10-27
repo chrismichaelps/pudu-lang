@@ -5,6 +5,13 @@ tags: [changelog]
 
 # Changelog
 
+## 2026-10-27 — Binary64 matrix algebra (#660)
+
+- [[Ark Math]] adds Vec4; [[Ark Matrix]] supplies column-vector Mat3/Mat4 algebra, affine
+  composition and checked homogeneous projection under [[Ark Math Conventions]].
+- [[Ark Matrix Gate]] checks asymmetric products, projection failures, precision and nested
+  distribution; [[Ark Matrix Delivery]] records focused validation and independent review.
+
 ## 2026-10-27 — Enforced Ark dependency layers (#658)
 
 - [[Ark Dependency Layers]] classifies all fifteen engine roots and permits acyclic same-root

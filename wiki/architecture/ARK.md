@@ -62,7 +62,7 @@ their own acceptance evidence. Never substitute a host-language engine or broad 
 
 | Order | Deliverable | Current evidence |
 | --- | --- | --- |
-| 1 | Math and Core | #652: binary64 Vec3 validated and independently reviewed; other vectors/matrices/quaternions, geometry, noise, containers and Core remain open |
+| 1 | Math and Core | #652: binary64 Vec3 validated; #660: Vec4 and Mat3/Mat4 algebra/projection validated; Vec2, extended vector operations, inverses, camera conventions, quaternions, geometry, noise, containers and Core remain open |
 | 2 | Language/native foundations | Existing language features require capability audit; separate native execution target remains open |
 | 3 | Platform | OS adapters and bounded deterministic tests remain open |
 | 4 | World and simple rendering | Storage/query invariants, native window and a validated GPU frame remain open |

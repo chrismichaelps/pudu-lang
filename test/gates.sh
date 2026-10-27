@@ -58,6 +58,8 @@ run 'every committed Pudu file is formatted' \
 run 'every diagnostic code means one thing' node test/diagnostic-codes.mjs
 run 'Ark math preserves scaled geometry and refuses wrong precision' \
   node test/ark-math.mjs "$PUDU"
+run 'Ark matrices preserve composition and checked homogeneous projection' \
+  node test/ark-matrix.mjs "$PUDU"
 run 'atomic writes preserve creation and replacement permissions' \
   bash -c 'python3 test/atomic-permissions.py "$PUDU"'
 run 'only a compiler change at a new version releases' python3 test/release-plan.test.py

@@ -1,0 +1,112 @@
+module Ark.Math.Matrix
+
+import Std.Math.Float as Float
+import Ark.Math as Vector
+
+/// A binary64 linear transform stored as three columns.
+export type Mat3 = { x: Vector.Vec3, y: Vector.Vec3, z: Vector.Vec3 }
+
+/// A binary64 homogeneous transform stored as four columns.
+export type Mat4 = { x: Vector.Vec4, y: Vector.Vec4, z: Vector.Vec4, w: Vector.Vec4 }
+
+/// Construct a matrix from its columns in x/y/z order.
+export fn columns3(x: Vector.Vec3, y: Vector.Vec3, z: Vector.Vec3) -> Mat3 {
+  Mat3{x, y, z}
+}
+
+/// Construct a matrix from its columns in x/y/z/w order.
+export fn columns4(x: Vector.Vec4, y: Vector.Vec4, z: Vector.Vec4, w: Vector.Vec4) -> Mat4 {
+  Mat4{x, y, z, w}
+}
+
+/// The three-dimensional identity transform.
+export fn identity3() -> Mat3 {
+  columns3(Vector.vec3(1.0, 0.0, 0.0), Vector.vec3(0.0, 1.0, 0.0), Vector.vec3(0.0, 0.0, 1.0))
+}
+
+/// The homogeneous identity transform.
+export fn identity4() -> Mat4 {
+  columns4(
+    Vector.vec4(1.0, 0.0, 0.0, 0.0),
+    Vector.vec4(0.0, 1.0, 0.0, 0.0),
+    Vector.vec4(0.0, 0.0, 1.0, 0.0),
+    Vector.vec4(0.0, 0.0, 0.0, 1.0),
+  )
+}
+
+/// Multiply a column vector, preserving written binary64 addition order.
+export fn transform3(matrix: Mat3, value: Vector.Vec3) -> Vector.Vec3 {
+  Vector.vec3(
+    (matrix.x.x * value.x + matrix.y.x * value.y) + matrix.z.x * value.z,
+    (matrix.x.y * value.x + matrix.y.y * value.y) + matrix.z.y * value.z,
+    (matrix.x.z * value.x + matrix.y.z * value.y) + matrix.z.z * value.z,
+  )
+}
+
+/// Multiply a homogeneous column vector without perspective division.
+export fn transform4(matrix: Mat4, value: Vector.Vec4) -> Vector.Vec4 {
+  Vector.vec4(
+    ((matrix.x.x * value.x + matrix.y.x * value.y) + matrix.z.x * value.z) + matrix.w.x * value.w,
+    ((matrix.x.y * value.x + matrix.y.y * value.y) + matrix.z.y * value.z) + matrix.w.y * value.w,
+    ((matrix.x.z * value.x + matrix.y.z * value.y) + matrix.z.z * value.z) + matrix.w.z * value.w,
+    ((matrix.x.w * value.x + matrix.y.w * value.y) + matrix.z.w * value.z) + matrix.w.w * value.w,
+  )
+}
+
+/// Compose transforms by applying right first and left second.
+export fn multiply3(left: Mat3, right: Mat3) -> Mat3 {
+  columns3(transform3(left, right.x), transform3(left, right.y), transform3(left, right.z))
+}
+
+/// Compose homogeneous transforms by applying right first and left second.
+export fn multiply4(left: Mat4, right: Mat4) -> Mat4 {
+  columns4(transform4(left, right.x), transform4(left, right.y), transform4(left, right.z), transform4(left, right.w))
+}
+
+/// Exchange rows and columns without changing scalar precision.
+export fn transpose3(matrix: Mat3) -> Mat3 {
+  columns3(
+    Vector.vec3(matrix.x.x, matrix.y.x, matrix.z.x),
+    Vector.vec3(matrix.x.y, matrix.y.y, matrix.z.y),
+    Vector.vec3(matrix.x.z, matrix.y.z, matrix.z.z),
+  )
+}
+
+/// Exchange homogeneous rows and columns without perspective division.
+export fn transpose4(matrix: Mat4) -> Mat4 {
+  columns4(
+    Vector.vec4(matrix.x.x, matrix.y.x, matrix.z.x, matrix.w.x),
+    Vector.vec4(matrix.x.y, matrix.y.y, matrix.z.y, matrix.w.y),
+    Vector.vec4(matrix.x.z, matrix.y.z, matrix.z.z, matrix.w.z),
+    Vector.vec4(matrix.x.w, matrix.y.w, matrix.z.w, matrix.w.w),
+  )
+}
+
+/// Translate homogeneous points while leaving directions unchanged.
+export fn translation(offset: Vector.Vec3) -> Mat4 {
+  columns4(
+    Vector.vec4(1.0, 0.0, 0.0, 0.0),
+    Vector.vec4(0.0, 1.0, 0.0, 0.0),
+    Vector.vec4(0.0, 0.0, 1.0, 0.0),
+    Vector.vec4(offset.x, offset.y, offset.z, 1.0),
+  )
+}
+
+/// Scale the spatial axes while preserving homogeneous w.
+export fn scaling(factors: Vector.Vec3) -> Mat4 {
+  columns4(
+    Vector.vec4(factors.x, 0.0, 0.0, 0.0),
+    Vector.vec4(0.0, factors.y, 0.0, 0.0),
+    Vector.vec4(0.0, 0.0, factors.z, 0.0),
+    Vector.vec4(0.0, 0.0, 0.0, 1.0),
+  )
+}
+
+/// Project a point, or None when no finite divided coordinate can be represented.
+export fn projectPoint(matrix: Mat4, point: Vector.Vec3) -> Option[Vector.Vec3] {
+  let value = transform4(matrix, Vector.vec4(point.x, point.y, point.z, 1.0))
+  if value.w == 0.0 || !Float.isFinite(value.w) { return None }
+  if !Float.isFinite(value.x) || !Float.isFinite(value.y) || !Float.isFinite(value.z) { return None }
+  let divided = Vector.vec3(value.x / value.w, value.y / value.w, value.z / value.w)
+  if Vector.isFinite(divided) { Some(divided) } else { None }
+}

@@ -12,6 +12,9 @@ aliases: [Repository Gates]
 
 ## Purpose and interface
 
+[[Ark Matrix Gate]] follows the root math gate with algebra/projection and nested data-file
+coverage. Resolved Grill Log: fixed math regressions remain executable in ordinary gate runs.
+
 [[Ark Math Gate]] checks shipped Ark resolution, numerical regressions and wrong-width refusal
 against the same freshly built optimized compiler. Resolved Grill Log: interpreted evidence
 does not imply native engine performance.

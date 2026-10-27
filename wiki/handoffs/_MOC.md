@@ -5,6 +5,8 @@ tags: [moc, handoff]
 
 # Handoff Map
 
+- [[Ark Matrix Delivery]] — issue #660 Vec4 and matrix algebra.
+
 - [[Ark Foundation Delivery]] — issue #652 integrated engine architecture and checked vector math.
 
 - [[Ark Layer Delivery]] — issue #658 engine dependency enforcement.

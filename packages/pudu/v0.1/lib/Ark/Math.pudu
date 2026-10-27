@@ -5,6 +5,14 @@ import Std.Math.Float as Float
 /// A three-dimensional vector with binary64 components.
 export type Vec3 = { x: Float64, y: Float64, z: Float64 }
 
+/// A binary64 vector with an explicit homogeneous component.
+export type Vec4 = { x: Float64, y: Float64, z: Float64, w: Float64 }
+
+/// Construct four components without clamping or replacing IEEE values.
+export fn vec4(x: Float64, y: Float64, z: Float64, w: Float64) -> Vec4 {
+  Vec4{x, y, z, w}
+}
+
 /// Construct a vector without clamping or replacing IEEE values.
 export fn vec3(x: Float64, y: Float64, z: Float64) -> Vec3 {
   Vec3{x, y, z}

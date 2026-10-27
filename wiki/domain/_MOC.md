@@ -5,6 +5,8 @@ tags: [moc, domain]
 
 # Domain Map
 
+- [[Ark Math Conventions]] — engine matrix composition and point/direction meaning.
+
 - [[Ark Engine]] — integrated engine, gameplay and tooling library boundary.
 
 - [[Ark Dependency Layers]] — the engine's root catalog and permitted import direction.

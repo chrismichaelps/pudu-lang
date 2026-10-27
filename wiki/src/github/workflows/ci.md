@@ -9,6 +9,9 @@ aliases: [Pudu Continuous Verification]
 
 ## Purpose and interface
 
+[[Ark Math Gate]] and [[Ark Matrix Gate]] execute against the resolved optimized compiler path.
+Resolved Grill Log: binary64 algebra/projection and nested shipping regressions run in CI.
+
 [[Ark Layer Tests]] and [[Ark Layer Gate]] execute with the application graph checks before
 compiler builds. Resolved Grill Log: engine layer contracts are enforced on integration requests.
 
