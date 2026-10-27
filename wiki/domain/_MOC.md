@@ -5,6 +5,8 @@ tags: [moc, domain]
 
 # Domain Map
 
+- [[Ark Engine]] — integrated engine, gameplay and tooling library boundary.
+
 - [[Pudu Language]] — the language product and its governing purpose.
 - [[Pudu Program]] — a valid collection of source modules.
 - [[Pudu Module]] — compilation and visibility unit.

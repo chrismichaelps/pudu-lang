@@ -5,6 +5,8 @@ tags: [moc, module]
 
 # Module Map
 
+- [[src/Ark/_MOC|Ark Modules]] — engine library and focused conformance gates.
+
 - [[Derive Index Output Gate]] — checked strategy output and visibility.
 
 - [[Database Admission Fixture]] · [[Database Admission Transport]] — bounded pool ownership.
