@@ -5,6 +5,13 @@ tags: [changelog]
 
 # Changelog
 
+## 2026-10-27 — Compiler-consistent import completion (#654)
+
+- [[Lsp Module Catalog]] admits namespaces from the compiler's actual roots, retaining shipped
+  modules with installed packages and excluding package-owned shipped declarations.
+- [[Lsp Module Catalog Spec]] proves the old library omission and shared-policy agreement;
+  [[Library Catalog Delivery]] records focused validation and independent review.
+
 ## 2026-10-09 — Integrated Database graph expectations (#478)
 
 - [[Application Layer Tests]] verifies the combined challenge and capacity boundaries with exact layer diagnostics.

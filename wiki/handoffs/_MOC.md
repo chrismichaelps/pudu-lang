@@ -5,6 +5,8 @@ tags: [moc, handoff]
 
 # Handoff Map
 
+- [[Library Catalog Delivery]] — issue #654 compiler-consistent import completion roots.
+
 - [[Derive Index Delivery]] — authored strategy indexing and public metadata (#458).
 
 - [[Database Admission Delivery]] — finite pool capacity waiting (#468).
