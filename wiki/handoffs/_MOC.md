@@ -247,3 +247,5 @@ tags: [moc, handoff]
 - [[Native Diagnostic Ownership Delivery]] — counted diagnostic payload lifetimes (#570).
 
 - [[Native Rendering Callable Delivery]] — rendering intrinsic implementation and evidence.
+
+- [[Native Collection Callable Delivery]] — collection builtin values and caller-site refusals (#631).

@@ -37,3 +37,9 @@ the surrogates, and builds `Some(CoreCharOfCode code)` or `None`.
 ## Referenced by
 
 [[Compiler Lower Body]] · [[src/Pudu/Compiler/_MOC]]
+
+## Shared builder (#631)
+
+Export charFromCodeCore: the held code, the Unicode scalar test and the
+Some/None choice for an already lowered Int operand.
+Resolved Grill Log: direct calls and charFromCode values both use it.

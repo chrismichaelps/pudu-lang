@@ -96,6 +96,11 @@ formedWith :: Shapes -> [CoreType] -> Map Text CoreType -> Type -> Maybe CoreTyp
 formedWith shapes seen parameters value = case value of
   ReferenceTypeValue False target -> formedWith shapes seen parameters target
   RigidType name | Just bound <- Map.lookup name parameters -> Just bound
+  -- A variable checking left open names a type no value in the program has:
+  -- the error of an `Ok(1)` that is never `Err`, the member of `setOf([])`,
+  -- the argument of a `setOf` that is only compared. Nothing can observe how
+  -- it is represented, so it is unit.
+  VariableType _ -> Just CoreUnitType
   NominalType identity arguments
     | Just (names, fields) <- Map.lookup identity (shapeRecords shapes)
     , length names == length arguments -> do
@@ -108,19 +113,12 @@ formedWith shapes seen parameters value = case value of
   NominalType identity arguments
     | Just (names, variants) <- Map.lookup identity (shapeSums shapes)
     , length names == length arguments -> do
-        formedArguments <- traverse argument arguments
+        formedArguments <- traverse (formedWith shapes seen parameters) arguments
         let self = CoreSumType (nominalKey identity) formedArguments
             bound = Map.fromList (zip names formedArguments)
         if self `elem` seen then Just self else do
           payloads <- traverse (\(_, payload, _) -> traverse (formedWith shapes (self : seen) bound) payload) variants
           if all (all nativeValueType) payloads then Just self else Nothing
-   where
-    -- A type argument checking left unconstrained names a payload no value in
-    -- the program holds, such as the error of `Ok(1)` that is never `Err`, so
-    -- any representation of it is unobservable.
-    argument held = case held of
-      VariableType _ -> Just CoreUnitType
-      _ -> formedWith shapes seen parameters held
   NominalType (NominalId Nothing "Array") [element] -> do
     formed <- formedWith shapes seen parameters element
     if nativeValueType formed then Just (CoreArrayType formed) else Nothing

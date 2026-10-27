@@ -51,3 +51,8 @@ Resolved Grill Log: closure information passes into the frame module;
 ## Referenced by
 
 [[src/_MOC]] · [[Program Compiler Module Map]] · [[Native Frame Pressure Repair]]
+
+## Caller failures (#631)
+
+FrameFailCaller has no successor block, like FrameFailText.
+Resolved Grill Log: label reachability treats both refusals the same way.

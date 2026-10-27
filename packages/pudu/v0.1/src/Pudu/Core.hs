@@ -190,6 +190,9 @@ data CoreExpressionShape
       last operand, when there is one, is help text computed the same way and
       it replaces the written help. -}
   | CoreFailText !Text !(Maybe Text) !CoreExpression !(Maybe CoreExpression)
+  {-| Same, but pointing at the value call that entered this function. Only
+      builtin bodies use it: the interpreter blames the call, not the body. -}
+  | CoreFailCaller !Text !(Maybe Text) !CoreExpression
   {-| The name of the variant a sum value holds, as text. -}
   | CoreRuntimeKind !CoreExpression
   | CorePrint !CoreExpression

@@ -35,3 +35,12 @@ bodies keyed by full canonical CoreType; use CoreDisplay/CoreShow directly.
 Resolved Grill Log: per-tag closureSite identity survives specialization while
 function bodies/ABIs remain distinct. Preserve existing output keys, restore
 caller state and retain context products. See [[Native Rendering Callables]].
+
+## Collection callable values (#631)
+
+charFromCode, bytesOf, mapOf and setOf register bodies keyed by the full
+solved CoreFunctionType, built by the Convert, Bytes and Keyed builders their
+direct calls use. A Keyed body that may meet an unorderable key refuses at
+the caller through CoreFailCaller.
+Resolved Grill Log: one Core definition per builtin; per-tag identity; no
+synthetic source call. See [[Native Collection Callables]].

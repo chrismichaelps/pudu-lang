@@ -106,3 +106,4 @@ Pudu is a statically typed native systems language for developers who need predi
 - [[Native Diagnostic Ownership]] — surviving payload cleanup at fatal exit (#570).
 
 - [[Native Rendering Callables]] — typed display/show values.
+- [[Native Collection Callables]] — charFromCode, bytesOf, mapOf and setOf values; refusals at the caller.

@@ -4,10 +4,14 @@ module Pudu.Compiler.Lower.Intrinsic (lowerIntrinsicValue) where
 import qualified Data.Map.Strict as Map
 import Data.Text (Text)
 import qualified Data.Text as Text
+import Pudu.Compiler.Lower.Bytes (bytesFromArray)
 import Pudu.Compiler.Lower.Call (outputResult)
-import Pudu.Compiler.Lower.State (LowerContext (..), LowerState (..), halt, startFunction)
+import Pudu.Compiler.Lower.Convert (charFromCodeCore)
+import Pudu.Compiler.Lower.Keyed (keyedFromArray)
+import Pudu.Compiler.Lower.State (LowerContext (..), LowerState (..), halt, intType, startFunction)
 import Pudu.Compiler.Lower.Types (nativeValueType, typeForSpan)
 import Pudu.Core
+import Pudu.IntegerLiteral (IntegerKind (..))
 import Pudu.Source (Span)
 
 type Lowered = (LowerState, Maybe (CoreExpression, CoreType))
@@ -27,6 +31,11 @@ lowerIntrinsicValue state at name
          in register state at name key kind argument CoreTextType
               (\entered operand -> (entered, Just (CoreExpression at CoreTextType (shape operand), CoreTextType)))
       _ -> halt at "a rendering builtin without its represented callable type" state
+  | name `elem` ["charFromCode", "bytesOf", "mapOf", "setOf"] = Just $ case solved of
+      Just kind@(CoreFunctionType [argument] result)
+        | nativeValueType argument, Just build <- collectionBody at name argument result ->
+            register state at name ("$builtin:" <> name <> ":" <> Text.pack (show kind)) kind argument result build
+      _ -> halt at "a conversion builtin without its represented callable type" state
   | otherwise = Nothing
  where
   solved = typeForSpan (contextTypes (lowerContext state)) at
@@ -52,3 +61,20 @@ register state at name key kind argument result build
             (after, Nothing) -> (state{lowerContext = lowerContext after}, Nothing)
  where
   answer after = (after, Just (CoreExpression at kind (CoreClosure key []), kind))
+
+{-| The same Core the direct call builds, over the parameter. Nothing when the
+    solved signature is not one this builtin has. -}
+collectionBody :: Span -> Text -> CoreType -> CoreType -> Maybe (LowerState -> CoreExpression -> Lowered)
+collectionBody at name argument result = case (name, argument, result) of
+  ("charFromCode", _, CoreSumType _ [CoreCharType]) | argument == intType ->
+    Just (\entered operand -> charFromCodeCore entered at result operand)
+  ("bytesOf", CoreArrayType (CoreIntegerType (UnsignedKind 8)), CoreBytesType) ->
+    Just (\entered operand -> (entered, Just (bytesFromArray at operand, CoreBytesType)))
+  ("mapOf", CoreArrayType (CoreTupleType [key, value]), CoreMapType key' value')
+    | key == key' && value == value' -> keyed
+  ("setOf", CoreArrayType member, CoreSetType member') | member == member' -> keyed
+  _ -> Nothing
+ where
+  keyed = Just (\entered operand ->
+    maybe (halt at ("a " <> name <> " value without its collection type") entered) id
+      (keyedFromArray entered at name result operand))

@@ -3,7 +3,7 @@
     before the receiver. A key whose type could hold a function is tested
     before it is stored, and one that can't be ordered stops the program with
     E7008, as `comparableValue` decides. -}
-module Pudu.Compiler.Lower.Keyed (lowerKeyedBuilder, lowerSetLiteral, lowerKeyedMethod) where
+module Pudu.Compiler.Lower.Keyed (lowerKeyedBuilder, keyedFromArray, lowerSetLiteral, lowerKeyedMethod) where
 
 import Data.Text (Text)
 import Pudu.Compiler.Lower.Array (collect, stopped, stops)
@@ -22,18 +22,32 @@ type Lowered = (LowerState, Maybe (CoreExpression, CoreType))
     once all are in hand, then the tree is built. -}
 lowerKeyedBuilder :: LowerExpression -> LowerState -> Span -> Text -> [Located Expression] -> Lowered
 lowerKeyedBuilder lower state at name arguments = case (typeForSpan types at, arguments) of
-  (Just kind, [argument]) | Just (keyOf, described) <- builderOf kind -> case lower state argument of
+  (Just kind, [argument]) | Just (keyOf, described) <- builderOf at name kind -> case lower state argument of
     (after, Nothing) -> refused after
     (after, Just (core, CoreNeverType)) -> (after, Just (core, CoreNeverType))
-    (after, Just (core, CoreArrayType _)) -> built after at kind keyOf described core
+    (after, Just (core, CoreArrayType _)) -> built AtCall after at kind keyOf described core
     (after, Just _) -> halt (locatedSpan argument) ("a call to " <> name <> " with this argument") after
   _ -> halt at ("this call to " <> name) state
  where
   types = contextTypes (lowerContext state)
-  builderOf kind = case (name, kind) of
-    ("mapOf", CoreMapType key _) -> Just (\item -> CoreExpression at key (CoreTupleIndex 0 item), "map key")
-    ("setOf", CoreSetType _) -> Just (id, "set member")
-    _ -> Nothing
+
+{-| The body of a `mapOf` or `setOf` value: what the call builds, except that
+    an unorderable key is blamed on the call made through the value. Nothing
+    when the result is not that builtin's collection. -}
+keyedFromArray :: LowerState -> Span -> Text -> CoreType -> CoreExpression -> Maybe Lowered
+keyedFromArray state at name kind array = do
+  (keyOf, described) <- builderOf at name kind
+  pure (built AtCaller state at kind keyOf described array)
+
+builderOf :: Span -> Text -> CoreType -> Maybe (CoreExpression -> CoreExpression, Text)
+builderOf at name kind = case (name, kind) of
+  ("mapOf", CoreMapType key _) -> Just (\item -> CoreExpression at key (CoreTupleIndex 0 item), "map key")
+  ("setOf", CoreSetType _) -> Just (id, "set member")
+  _ -> Nothing
+
+{-| Where a key refusal points: the call itself, or the value call that
+    reached a builtin body. -}
+data Blame = AtCall | AtCaller
 
 {-| `#{a, b}`: every member runs in order, and only then are they checked. -}
 lowerSetLiteral :: LowerExpression -> LowerState -> Span -> [Located Expression] -> Lowered
@@ -43,7 +57,7 @@ lowerSetLiteral lower state at members = case typeForSpan (contextTypes (lowerCo
     (after, Just cores)
       | any stops cores -> (after, Just (stopped at cores, CoreNeverType))
       | all ((== member) . coreExpressionType) cores ->
-          built after at kind id "set member" (CoreExpression at (CoreArrayType member) (CoreArray cores))
+          built AtCall after at kind id "set member" (CoreExpression at (CoreArrayType member) (CoreArray cores))
       | otherwise -> halt at "a set literal whose members have different types" after
   _ -> halt at "a set without a native member type" state
 
@@ -120,7 +134,7 @@ lowerKeyedMethod lower state at receiver member arguments = case typeForSpan typ
             declares = [CoreStatement at (CoreDeclare local core) | (local, core) <- zip locals cores]
          in case locals of
               keyLocal : _ ->
-                let check = orderable at described (read' keyLocal)
+                let check = orderable AtCall at described (read' keyLocal)
                     target = last locals
                     stored = CoreExpression at result (CoreKeyedMethod KeyedInsert (read' target) (map read' (init locals)))
                  in (final, Just (CoreExpression at result (CoreBlockValue (CoreBlock (declares <> [check]) (Just stored))), result))
@@ -128,8 +142,8 @@ lowerKeyedMethod lower state at receiver member arguments = case typeForSpan typ
 
 {-| The array goes into a local, its keys are checked when they could need
     it, then the tree is built from it. -}
-built :: LowerState -> Span -> CoreType -> (CoreExpression -> CoreExpression) -> Text -> CoreExpression -> Lowered
-built state at kind keyOf described array
+built :: Blame -> LowerState -> Span -> CoreType -> (CoreExpression -> CoreExpression) -> Text -> CoreExpression -> Lowered
+built blame state at kind keyOf described array
   | not (mayHoldFunction types keyType) = (state, Just (expression kind (CoreKeyedMethod KeyedFromArray array []), kind))
   | otherwise =
       let (withItems, items) = bindLocal state "" (coreExpressionType array)
@@ -143,7 +157,7 @@ built state at kind keyOf described array
           loop = expression CoreUnitType (CoreWhileValue identity
             (expression CoreBoolType (CoreBinary CoreLess (reading index) (reading count)))
             (CoreBlock
-              [ orderable at described (keyOf item)
+              [ orderable blame at described (keyOf item)
               , CoreStatement at (CoreAssign index (expression intType (CoreBinary CoreAdd (reading index) (number 1)))) ] Nothing))
           statements =
             [ CoreStatement at (CoreDeclare items array)
@@ -165,8 +179,8 @@ built state at kind keyOf described array
 
 {-| `if !comparable(key) { E7008 }`, naming the key as `valueKind` does: a
     sum by the variant it holds. -}
-orderable :: Span -> Text -> CoreExpression -> CoreStatement
-orderable at described key =
+orderable :: Blame -> Span -> Text -> CoreExpression -> CoreStatement
+orderable blame at described key =
   CoreStatement at (CoreIf (expression CoreBoolType (CoreNot (expression CoreBoolType (CoreComparable key))))
     (CoreBlock [CoreStatement at (CoreEvaluate failure)] Nothing) Nothing)
  where
@@ -182,8 +196,11 @@ orderable at described key =
     CoreSetType _ -> text "set"
     CoreFunctionType _ _ -> expression CoreTextType (CoreRuntimeKind key)
     other -> text (coreTypeName other)
-  failure = expression CoreNeverType (CoreFailText "E7008" (Just "use a value the language can order, such as text, a number, or a tuple of those")
-    (joined [text "a ", kindName, text (" cannot be a " <> described)]) Nothing)
+  help = Just "use a value the language can order, such as text, a number, or a tuple of those"
+  message = joined [text "a ", kindName, text (" cannot be a " <> described)]
+  failure = expression CoreNeverType $ case blame of
+    AtCall -> CoreFailText "E7008" help message Nothing
+    AtCaller -> CoreFailCaller "E7008" help message
 
 {-| Whether a value of the type could hold a function somewhere, and so might
     not be orderable. Every other key always is, and needs no test. -}

@@ -71,6 +71,8 @@ data FrameTerminator
   | FrameOperatorFailure !Span !Text
   {-| A diagnostic with this code and help whose message is the text in the slot. -}
   | FrameFailText !Span !Text !(Maybe Text) !FrameSlot !(Maybe FrameSlot)
+  {-| Same, reported at the site of the value call that entered the frame. -}
+  | FrameFailCaller !Span !Text !(Maybe Text) !FrameSlot
   deriving stock (Eq, Show)
 
 data FrameValue = FrameValue

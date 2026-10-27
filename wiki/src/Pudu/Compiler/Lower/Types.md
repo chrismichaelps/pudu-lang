@@ -180,3 +180,12 @@ Export sharedReferenceTarget, which requires an actual shared-reference type
 at the exact complete TypeInfo span before projecting its target. Plain erased
 Core types, approximate offsets and missing facts are insufficient evidence.
 No runtime reference tag or mutable writeback is implied.
+
+## Open type variables (#631)
+
+formedWith forms any VariableType as unit, not only a sum's type argument.
+A variable left open after checking names a type no value has, such as the
+member of `setOf([])` or the argument of a builtin that is only compared.
+Resolved Grill Log: Pudu does not generalize let-bound values and generic
+bodies carry RigidType, so a final fact's variable is never used at two
+types. The full backend suite passes with the wider rule.

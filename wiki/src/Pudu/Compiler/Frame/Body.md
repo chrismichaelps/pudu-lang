@@ -135,3 +135,10 @@ Resolved Grill Log: CoreOutputError lowers its operand once into a FrameOutputEr
 ## First-class output builtins (#569)
 
 Resolved Grill Log: Project CoreRuntimeKind over one evaluated operand to FrameRuntimeKind with an owned text result.
+
+## Caller failures (#631)
+
+CoreFailCaller lowers its message to a slot, then finishes the block with
+FrameFailCaller. A message that stops stops the block first.
+Resolved Grill Log: same order as CoreFailText; no help expression, since the
+builtins that need it have constant help.

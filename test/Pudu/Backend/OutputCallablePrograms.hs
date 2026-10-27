@@ -5,11 +5,12 @@ module Pudu.Backend.OutputCallablePrograms
 
 import Data.Text (Text)
 import qualified Data.Text as Text
+import Pudu.Backend.CollectionCallablePrograms (collectionCallableSuccessPrograms, collectionCallableRefusalPrograms)
 import Pudu.Backend.RenderingCallablePrograms (renderingCallableSuccessPrograms, renderingCallableRefusalPrograms)
 import Pudu.Comptime.Limits (callDepthLimit)
 
 outputCallableSuccessPrograms :: [(String, Text, Text, Text)]
-outputCallableSuccessPrograms = renderingCallableSuccessPrograms <>
+outputCallableSuccessPrograms = renderingCallableSuccessPrograms <> collectionCallableSuccessPrograms <>
   [ ("builtin tags render and compare independently of source functions", program
       [ "fn custom(text: Str) -> Result[(), Str] { print(text) }"
       , "fn main() -> Int {"
@@ -53,7 +54,7 @@ outputCallableSuccessPrograms = renderingCallableSuccessPrograms <>
   ]
 
 outputCallableRefusalPrograms :: [(String, Text)]
-outputCallableRefusalPrograms = renderingCallableRefusalPrograms <>
+outputCallableRefusalPrograms = renderingCallableRefusalPrograms <> collectionCallableRefusalPrograms <>
   [ ("unary builtin failures use the builtin kind", program
       ["fn main() -> Int { let invalid = -print\n print(show(invalid))\n 0 }"])
   , ("mixed callable operator kinds come from their runtime values", program $ choices <>

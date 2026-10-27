@@ -300,3 +300,8 @@ No diagnostic bytes, cleanup order, warning flags or source semantics change.
 ## Diagnostic ownership (#570)
 
 Resolved Grill Log: pudu_fail_report accepts an owned_payload base pointer and frees it after the final diagnostic flush before normal fatal exit. Static sites pass NULL; retain frame cleanup and signal/output ordering. Runtime revision 16. See [[Native Diagnostic Ownership]].
+
+## Revision 17 (#631)
+
+Frames keep the site of the value call that created them, and builtin bodies
+can refuse there. See [[Native Collection Callables]].

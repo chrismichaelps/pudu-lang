@@ -37,3 +37,9 @@ Resolved Grill Log: existing registered callable conformance and allocation
 properties execute rendering values in both focused and full runs without a
 second harness or omitted cleanup checks. Historical output labels now cover
 both stream and rendering builtin values.
+
+## Collection callable values (#631)
+
+Append [[Backend Collection Callable Programs]] to success/failure exports.
+Resolved Grill Log: the existing conformance, refusal and allocation
+properties run the new cases under every toolchain without a new harness.

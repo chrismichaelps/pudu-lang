@@ -219,6 +219,7 @@ closedTargets source = conjoin (map check (frameModuleFunctions source))
             FrameReturn _ _ -> []
             FrameOperatorFailure _ _ -> []
             FrameFailText{} -> []
+            FrameFailCaller{} -> []
        in counterexample (show function) $ conjoin
             [ counterexample "missing block destination" (all (`Set.member` labels)
                 (frameFunctionEntry function : concatMap (targets . frameBlockTerminator) blocks))

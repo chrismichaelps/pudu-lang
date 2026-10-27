@@ -92,3 +92,10 @@ prints and releases the text.
 ## Named callable dispatch (#568)
 
 Resolved Grill Log: Mark FrameCallValue steps with closure_call=1, preserving closure-plus-arguments scratch cells and the original invocation site.
+
+## Caller failures (#631)
+
+FrameFailCaller writes `pudu_fail_text_caller(frame->call_site, code, help,
+message)` and returns PUDU_INVALID, needing the fail_text_caller part.
+Resolved Grill Log: the code and help are C string literals; the caller site
+contributes only where the error points.

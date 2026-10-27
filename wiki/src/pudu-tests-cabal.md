@@ -328,3 +328,8 @@ Resolved Grill Log: Register Pudu.Backend.OutputCallablePrograms using existing 
 Register [[Backend Rendering Callable Programs]] explicitly. Resolved Grill
 Log: shared intrinsic corpus registration makes all new cases compile and run
 without a new test dependency or release-gate change.
+
+## Collection callable corpus (#631)
+
+Register [[Backend Collection Callable Programs]]. Resolved Grill Log: no new
+dependency; the release gate is unchanged.

@@ -97,6 +97,12 @@ lowerExpression expression@(CoreExpression at kind shape) = case shape of
           Nothing -> fault (Just at) "a variant without every payload member"
       _ -> fault (Just at) "a variant outside its sum"
   CoreRuntimeKind operand -> rendered FrameRuntimeKind operand
+  CoreFailCaller code help message -> do
+    text <- lowerScalar message
+    case text of
+      Stopped -> pure Stopped
+      Completed Nothing -> fault (Just at) "a failure message without a value"
+      Completed (Just slot) -> finish (FrameFailCaller at code help slot) >> pure Stopped
   CoreFailText code help message computed -> do
     text <- lowerScalar message
     case text of
