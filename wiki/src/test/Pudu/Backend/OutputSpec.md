@@ -52,3 +52,7 @@ that provide it, plus multibyte text at the newline-reservation boundary.
 ## Fatal output readiness (#566)
 
 Resolved Grill Log: Reporting probes include a source E7004 after prior output, failed stderr channels, and all missing-descriptor masks. Compare prefixes for expected blocking and require the same terminal outcomes, including SIGPIPE when fatal stderr output fails.
+
+## First-class output builtins (#569)
+
+Resolved Grill Log: Run failed-handle buffer sequences through direct and first-class output calls, comparing both evaluators and native bytes/status without changing the oracle.

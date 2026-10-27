@@ -92,3 +92,7 @@ Records share the box and the helpers; their mangled name is `R_Name`.
 `show` writes `Name{x: a, y: b}` through `pudu_text_join`'s labels. Records
 never need `compare`. Zero-member aggregates get `void` parameter lists and
 no parts array.
+
+## First-class output builtins (#569)
+
+Resolved Grill Log: Callable show helpers use builtin versus function rendering from metadata; name helpers answer builtin/function for runtime diagnostics. Equality identity and non-orderability stay intact.

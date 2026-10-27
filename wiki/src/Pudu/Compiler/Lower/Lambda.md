@@ -57,3 +57,7 @@ argument goes into a temporary and the call reads them back after the callee.
 ## Named callable dispatch (#568)
 
 Resolved Grill Log: Replace named forwarders with closures naming their actual admitted target. Enqueue the target and register empty captures/name/site with closureHasEnvironment false. Lambdas keep the lifted function and set the flag true.
+
+## First-class output builtins (#569)
+
+Resolved Grill Log: Set closureIsBuiltin false for named source targets and lifted lambdas; hidden-environment behavior remains explicit.

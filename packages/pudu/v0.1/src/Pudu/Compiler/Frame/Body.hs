@@ -96,7 +96,7 @@ lowerExpression expression@(CoreExpression at kind shape) = case shape of
           Just ordered -> value (FrameConstruct index ordered)
           Nothing -> fault (Just at) "a variant without every payload member"
       _ -> fault (Just at) "a variant outside its sum"
-  CoreVariantName operand -> rendered FrameVariantName operand
+  CoreRuntimeKind operand -> rendered FrameRuntimeKind operand
   CoreFailText code help message computed -> do
     text <- lowerScalar message
     case text of

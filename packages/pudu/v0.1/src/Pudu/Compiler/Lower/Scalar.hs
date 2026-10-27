@@ -32,7 +32,7 @@ lowerUnary lower state at operator operand
         | operator == "-", integerType kind || floatType kind -> built after at (CoreNegate core) kind
         | operator == "~", integerType kind -> built after at (CoreComplement core) kind
         | operator == "!", kind == CoreBoolType -> built after at (CoreNot core) CoreBoolType
-        | sumType kind, settled after operand core ->
+        | dynamicKind kind, settled after operand core ->
             namedFailure after at (\kinds -> cannotApplyUnaryMessage operator (mconcat kinds)) [core]
         | kind `elem` [CoreUnitType, CoreBoolType, CoreTextType, CoreCharType, CoreBytesType] || floatType kind || tupleType kind || recordType kind
         , settled after operand core ->
@@ -61,7 +61,7 @@ lowerBinary lower state at left operator right
           | all nativeValueType [leftType, rightType]
           , settled after left coreLeft && settled after right coreRight
           , not (integerType leftType && integerType rightType)
-          , sumType leftType || sumType rightType ->
+          , dynamicKind leftType || dynamicKind rightType ->
               namedFailure after at (\kinds -> case kinds of
                 [leftKind, rightKind] -> cannotApplyBinaryMessage operator leftKind rightKind
                 _ -> cannotApplyUnaryMessage operator (mconcat kinds)) [coreLeft, coreRight]
@@ -134,14 +134,14 @@ runtimeKind CoreBytesType = "bytes"
 runtimeKind (CoreFunctionType _ _) = "function"
 runtimeKind kind = coreTypeName kind
 
-sumType :: CoreType -> Bool
-sumType (CoreSumType _ _) = True
-sumType _ = False
+dynamicKind :: CoreType -> Bool
+dynamicKind (CoreSumType _ _) = True
+dynamicKind (CoreFunctionType _ _) = True
+dynamicKind _ = False
 
-{-| E7001 for operands at least one of which is a sum, whose kind in the
-    message is the variant it holds, as the evaluator's `valueKind` names it.
+{-| Sums and callables get their diagnostic kind from the saved value.
     Each operand runs once, in order, into a temporary; the message is the
-    shared wording, with each sum's kind read from its temporary. -}
+    shared wording, with each dynamic kind read from its temporary. -}
 namedFailure :: LowerState -> Span -> ([Text] -> Text) -> [CoreExpression] -> (LowerState, Maybe (CoreExpression, CoreType))
 namedFailure state at render operands =
   let (after, locals) = foldl temporary (state, []) operands
@@ -149,7 +149,7 @@ namedFailure state at render operands =
       marks = [Text.pack ['\0', toEnum (48 + position)] | position <- [0 .. length held - 1]]
       pieces = splitMarks marks (render marks)
       kindOf local
-        | sumType (coreLocalType local) = expression CoreTextType (CoreVariantName (expression (coreLocalType local) (CoreReadLocal local)))
+        | dynamicKind (coreLocalType local) = expression CoreTextType (CoreRuntimeKind (expression (coreLocalType local) (CoreReadLocal local)))
         | otherwise = expression CoreTextType (CoreTextLiteral (runtimeKind (coreLocalType local)))
       joined = foldl1 (\left right -> expression CoreTextType (CoreBinary CoreAdd left right))
         (concat [ [expression CoreTextType (CoreTextLiteral text) | not (Text.null text)] <> maybe [] (pure . kindOf) local

@@ -41,7 +41,7 @@ import Pudu.Diagnostic.Host (memoryFailureMessage)
 {-| The runtime contract revision baked into every generated program's header
     comment. It changes only when the runtime's behaviour or interface does. -}
 runtimeRevision :: Text
-runtimeRevision = "14"
+runtimeRevision = "15"
 
 {-| @Backend.Runtime.Part — one named, self-contained piece of the runtime.
 
@@ -184,7 +184,7 @@ failLines =
 
 memoryFailureLines :: [Text]
 memoryFailureLines =
-  [ "static void pudu_memory_failure(void) {"
+  [ "static _Noreturn void pudu_memory_failure(void) {"
   , "  if (pudu_cleanup_hook != NULL) pudu_cleanup_hook();"
   , "  pudu_prepare_error_io();"
   , "  fputs(\"" <> Text.pack memoryFailureMessage <> "\\n\", stderr);"

@@ -92,3 +92,7 @@ a replaced destination or a discarded result through `pudu_drop_cell`.
 ## Named callable dispatch (#568)
 
 Resolved Grill Log: Add closure_call to pudu_step and environment to pudu_function. For a closure call only, skip scratch cell zero when the target has no environment. Check target and argument bounds before the offset; retain once-counted depth, invocation site, ownership and unwind paths.
+
+## First-class output builtins (#569)
+
+Resolved Grill Log: Add counted to function descriptors. Only counted target calls check/increment depth; only counted returning frames decrement. Validate target bounds before metadata access. All frames still retain/release arguments, results and unwind storage.

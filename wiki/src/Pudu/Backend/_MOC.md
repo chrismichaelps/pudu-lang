@@ -105,3 +105,5 @@ aliases: [Backend Module Map]
 - [[Backend Expression Body Programs]] — expression-body conformance and cleanup (#567).
 
 - [[Backend Named Callable Programs]] — named call depth, ownership and diagnostics (#568).
+
+- [[Backend Output Callable Programs]] — builtin values, effects and cleanup (#569).

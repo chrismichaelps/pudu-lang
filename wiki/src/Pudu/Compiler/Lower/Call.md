@@ -26,3 +26,7 @@ represented value.
 ## Output Results (#566)
 
 Resolved Grill Log: lowerPrint takes the builtin name, lowers its one Str argument once and binds a CoreOutputError outcome. Empty error text constructs Ok(()); nonempty text constructs Err(text), using the exact solved Result[(), Str] fact. All four output builtin names share this path. See [[Native Output Results]].
+
+## First-class output builtins (#569)
+
+Resolved Grill Log: Export outputResult to build the existing Result from one Core Str operand and the exact provided Result type. Direct lowerPrint and intrinsic value bodies share this factory.

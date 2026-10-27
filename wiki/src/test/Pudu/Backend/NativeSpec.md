@@ -178,3 +178,7 @@ Resolved Grill Log: Register focused named-callable explicit-output and exact di
 
 The named-callable lane also reruns the existing closure success/refusal corpus
 to protect captured lambdas, higher-order calls, ordering and rendering.
+
+## First-class output builtins (#569)
+
+Resolved Grill Log: Register focused output-callable explicit stream answers and runtime failure parity through the existing harness.

@@ -25,7 +25,7 @@ array, at the call for `insert`. Where it couldn't, no test is emitted.
 ## Resolved Grill Log
 
 - **Q:** Why test in Core rather than in C? **A:** The message needs the
-  variant name of a sum key, and Core already has `CoreVariantName` and
+  variant name of a sum key, and Core already has `CoreRuntimeKind` and
   `CoreFailText`.
 - **Q:** Does `for` over a map snapshot it? **A:** Yes, `entries()` first, as
   `walkValues` lists the entries before the body runs.
@@ -37,3 +37,7 @@ array, at the call for `insert`. Where it couldn't, no test is emitted.
 ## Referenced by
 
 [[Compiler Lower Body]] · [[Compiler Lower For]] · [[Native Maps and Sets]] · [[src/Pudu/Compiler/_MOC]]
+
+## First-class output builtins (#569)
+
+Resolved Grill Log: Use CoreRuntimeKind for callable key E7008 as well as sum variants, retaining existing comparability guards and evaluation order.

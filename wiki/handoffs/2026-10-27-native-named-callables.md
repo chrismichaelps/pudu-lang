@@ -1,6 +1,6 @@
 ---
 type: handoff
-status: ACTIVE
+status: SUPERSEDED
 issue: 568
 aliases: [Native Named Callable Delivery]
 ---
@@ -56,8 +56,11 @@ shadow and a return inside a default returns from the caller. Evidence:
 /tmp/pudu-default-probes.log. Do not implement callee prologue defaults without
 resolving those interactions against actual execution.
 
-Exact next action: commit #568, then design first-class output builtin values
-with exact builtin rendering/equality and no additional user call-depth cost.
+The named-callable repair is committed as 567eba69. Active continuation moves
+to [[Native Output Callable Delivery]].
+
+Exact next action: follow Native Output Callable Delivery for intrinsic values
+and the remaining native completion work.
 
 ## Referenced by
 

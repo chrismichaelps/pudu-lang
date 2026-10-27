@@ -241,3 +241,5 @@ tags: [moc, handoff]
 - [[Native Expression Body Delivery]] — named expression-body completion (#567).
 
 - [[Native Named Callable Delivery]] — callable dispatch parity (#568).
+
+- [[Native Output Callable Delivery]] — first-class output builtin parity (#569).

@@ -120,7 +120,13 @@ closureHelpers kind entries =
       [ "static pudu_text " <> aggregateHelper "show" kind <> "(pudu_box *box) {"
       , "  switch (box->fields[0].scalar) {" ]
       <> [ "    case " <> number identity <> ": return pudu_text_literal(" <> cString shown <> ", " <> number (cStringBytes shown) <> ");"
-         | (identity, info) <- entries, let shown = "<fn " <> closureDisplayName info <> ">" ]
+         | (identity, info) <- entries, let shown = (if closureIsBuiltin info then "<builtin " else "<fn ") <> closureDisplayName info <> ">" ]
+      <> [ "    default: return pudu_text_literal(\"\", 0);", "  }", "}" ]))
+  , (aggregateNeed "name" kind, (["text_literal"],
+      [ "static pudu_text " <> aggregateHelper "name" kind <> "(pudu_box *box) {"
+      , "  switch (box->fields[0].scalar) {" ]
+      <> [ "    case " <> number identity <> ": return pudu_text_literal(\"" <> label <> "\", " <> number (Text.length label) <> ");"
+         | (identity, info) <- entries, let label = if closureIsBuiltin info then "builtin" else "function" ]
       <> [ "    default: return pudu_text_literal(\"\", 0);", "  }", "}" ]))
   , (aggregateNeed "comparable" kind, ([],
       [ "static int " <> aggregateHelper "comparable" kind <> "(pudu_box *box) {", "  (void)box;", "  return 0;", "}" ]))

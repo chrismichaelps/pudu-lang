@@ -174,13 +174,13 @@ orderable at described key =
   text value = expression CoreTextType (CoreTextLiteral value)
   joined = foldl1 (\left right -> expression CoreTextType (CoreBinary CoreAdd left right))
   kindName = case coreExpressionType key of
-    CoreSumType _ _ -> expression CoreTextType (CoreVariantName key)
+    CoreSumType _ _ -> expression CoreTextType (CoreRuntimeKind key)
     CoreRecordType name _ -> text (displayName name)
     CoreTupleType _ -> text "tuple"
     CoreArrayType _ -> text "array"
     CoreMapType _ _ -> text "map"
     CoreSetType _ -> text "set"
-    CoreFunctionType _ _ -> text "function"
+    CoreFunctionType _ _ -> expression CoreTextType (CoreRuntimeKind key)
     other -> text (coreTypeName other)
   failure = expression CoreNeverType (CoreFailText "E7008" (Just "use a value the language can order, such as text, a number, or a tuple of those")
     (joined [text "a ", kindName, text (" cannot be a " <> described)]) Nothing)

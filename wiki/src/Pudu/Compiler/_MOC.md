@@ -70,3 +70,5 @@ Dependency direction: Library → Program. Only [[Compiler Program]] reads files
 - [[Compiler Lower Constant]] — typed projection of compiler-folded constants (#543).
 
 - [[Compiler Lower Reference]] — checked shared-reference identity lowering (#544).
+
+- [[Compiler Lower Intrinsic]] — first-class output builtin bodies (#569).

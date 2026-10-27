@@ -37,7 +37,8 @@ import Test.QuickCheck (Property, conjoin, counterexample, (===))
 
 outputProperties :: [(String, IO Property)]
 outputProperties =
-  [ ("native output failures match isolated evaluator handles", testFailures)
+  [ ("native output failures match isolated evaluator handles", testFailures False)
+  , ("native output callables match failed isolated handles", testFailures True)
   , ("native output reporting preserves failed-handle outcomes", testEntries)
   ]
 
@@ -128,8 +129,8 @@ testEntries = do
               Exited status _ _ -> (not blocked && status `elem` [ExitSuccess, ExitFailure 1, ExitFailure (-13)]) === True
               Waiting{} -> blocked === True ]) ["compiled", "tree"]
 
-testFailures :: IO Property
-testFailures
+testFailures :: Bool -> IO Property
+testFailures indirect
   | os == "mingw32" = putStrLn "[skip] output descriptor matrix requires POSIX; Windows evidence remains pending" >> pure (True === True)
   | otherwise = do
       configured <- lookupEnv "PUDU_CC"
@@ -152,7 +153,8 @@ testFailures
         channel = if errors then "err-" else "out-"
         modes = [(mode, "default") | mode <- ["healthy", "closed", "read", "tty"] <> ["full" | full]]
           <> [("pipe", inherited) | inherited <- ["default", "ignored", "blocked"]]
-    TextIO.writeFile path (failureProgram errors)
+    TextIO.writeFile path (throughValues indirect
+      (if errors then ["printError", "printErrorPart"] else ["print", "printPart"]) (failureProgram errors))
     program <- compileProgram path
     case programNativeModules program of
       Nothing -> pure (counterexample "output source produced no checked modules" (False === True))
@@ -169,7 +171,7 @@ testFailures
                 pure (conjoin results)
   checkMasks cc root runner oracle = do
     let path = root </> "Main.pudu"
-    TextIO.writeFile path maskProgram
+    TextIO.writeFile path (throughValues indirect ["printPart", "printErrorPart"] maskProgram)
     program <- compileProgram path
     case programNativeModules program of
       Nothing -> pure (counterexample "mask source produced no checked modules" (False === True))
@@ -244,6 +246,15 @@ maskProgram = Text.unlines
   , "  let out = code(printPart(\"abcdefgh\"))"
   , "  let err = code(printErrorPart(\"abcdefgh\"))"
   , "  return out + err", "}" ]
+
+throughValues :: Bool -> [Text] -> Text -> Text
+throughValues False _ source = source
+throughValues True names source =
+  let aliases = zip names ["output" <> Text.pack (show position) | position <- [0 :: Int ..]]
+      replaced = foldl' (\body (name, alias) -> Text.replace (name <> "(") (alias <> "(") body) source aliases
+      declarations = Text.concat ["\n  let " <> alias <> " = " <> name | (name, alias) <- aliases]
+      header = "fn main() -> Int {"
+   in Text.replace header (header <> declarations) replaced
 
 data Observation
   = Exited !ExitCode !Text !Text

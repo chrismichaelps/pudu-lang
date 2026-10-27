@@ -507,3 +507,7 @@ Resolved Grill Log: Register Pudu.Backend.Runtime.Output with the existing depen
 ## Missing inherited descriptor context (#566)
 
 Resolved Grill Log: Register Pudu.Backend.Runtime.Process using existing dependencies.
+
+## First-class output builtins (#569)
+
+Resolved Grill Log: Register Pudu.Compiler.Lower.Intrinsic using the existing dependencies.

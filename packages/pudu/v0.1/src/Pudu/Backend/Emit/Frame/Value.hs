@@ -81,7 +81,7 @@ frameValue state value = case frameValueShape value of
     source <- slotText held
     member <- maybe (refused "a payload member without a native representation") Right (cellMember (frameValueType value))
     uncurry plain (retained (frameValueType value) (source <> "->fields[" <> textOfInt (position + 1) <> "]." <> member))
-  FrameVariantName held -> do
+  FrameRuntimeKind held -> do
     source <- slotText held
     let kind = frameSlotType held
     plain (aggregateHelper "name" kind <> "(" <> source <> ")") [aggregateNeed "name" kind]

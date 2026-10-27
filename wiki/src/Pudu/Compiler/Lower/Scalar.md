@@ -63,7 +63,7 @@ Consumed by [[Compiler Lower Body]]; registered in [[Pudu Cabal Manifest]].
 
 - **Q:** Which record name appears in a run-time message? **A:** Its display name, as the evaluator writes it (#539).
 
-- **Q:** How does an operator failure on a sum name its operands? **A:** By the variant each holds at run time, as the evaluator's `valueKind` does. `namedFailure` runs each operand once into a temporary, then builds the shared message with each sum's kind read by `CoreVariantName` (#525).
+- **Q:** How does an operator failure on a sum name its operands? **A:** By the variant each holds at run time, as the evaluator's `valueKind` does. `namedFailure` runs each operand once into a temporary, then builds the shared message with each sum's kind read by `CoreRuntimeKind` (#525).
 
 ## Generic records (#552)
 
@@ -163,3 +163,7 @@ their contracts. Unary &mut remains refused.
 Resolved Grill Log: checked unary operations on Bytes evaluate the operand
 once and report E7001 with `valueKind`'s `bytes` wording. They must not stop
 at the native E6001 boundary when the interpreter reaches the operation.
+
+## First-class output builtins (#569)
+
+Resolved Grill Log: Use runtime kinds for callable as well as sum operand failures. Callable unary operators that checking accepts report E7001; runtime metadata selects builtin/function in unary and binary wording.

@@ -1,6 +1,6 @@
 {-| @Pudu.Compiler.Lower.Call — direct calls to module functions and the
     builtins `print`, `display` and `show`. -}
-module Pudu.Compiler.Lower.Call (lowerFunctionCall, lowerPrint, lowerRendered) where
+module Pudu.Compiler.Lower.Call (lowerFunctionCall, lowerPrint, outputResult, lowerRendered) where
 
 import Data.Text (Text)
 import Pudu.Compiler.Lower.Control (expressionIsPrintValued)
@@ -50,24 +50,28 @@ lowerPrint lower state at name arguments = case arguments of
     (after, Just (core, CoreNeverType)) -> (after, Just (core, CoreNeverType))
     (after, Just (core, CoreTextType)) -> case typeForSpan (contextTypes (lowerContext after)) at of
       Just result@(CoreSumType "Result" [CoreUnitType, CoreTextType]) ->
-        let (bound, outcome) = bindLocal after "" CoreTextType
-            expression = CoreExpression at
-            reading = expression CoreTextType (CoreReadLocal outcome)
-            empty = expression CoreTextType (CoreTextLiteral "")
-            succeeded = expression CoreBoolType (CoreBinary CoreEqual reading empty)
-            unit = expression CoreUnitType (CoreBlockValue (CoreBlock [] Nothing))
-            ok = expression result (CoreConstruct "Ok" [("0", unit)])
-            failure = expression result (CoreConstruct "Err" [("0", reading)])
-            selected = expression result (CoreIfValue succeeded (CoreBlock [] (Just ok)) failure)
-            write = expression CoreTextType (CoreOutputError
-              (name `elem` ["printError", "printErrorPart"])
-              (name `elem` ["print", "printError"]) core)
-         in (bound, Just (expression result (CoreBlockValue
-              (CoreBlock [CoreStatement at (CoreDeclare outcome write)] (Just selected))), result))
+        outputResult after at name core result
       _ -> halt at "output without a represented Result[(), Str] type" after
     (after, Just (_, kind)) -> halt at ("printing a " <> coreTypeName kind <> " value") after
     (after, Nothing) -> refused after
   _ -> halt at ("a call to " <> name <> " with this many arguments") state
+
+outputResult :: LowerState -> Span -> Text -> CoreExpression -> CoreType -> Lowered
+outputResult state at name core result =
+  let (bound, outcome) = bindLocal state "" CoreTextType
+      expression = CoreExpression at
+      reading = expression CoreTextType (CoreReadLocal outcome)
+      empty = expression CoreTextType (CoreTextLiteral "")
+      succeeded = expression CoreBoolType (CoreBinary CoreEqual reading empty)
+      unit = expression CoreUnitType (CoreBlockValue (CoreBlock [] Nothing))
+      ok = expression result (CoreConstruct "Ok" [("0", unit)])
+      failure = expression result (CoreConstruct "Err" [("0", reading)])
+      selected = expression result (CoreIfValue succeeded (CoreBlock [] (Just ok)) failure)
+      write = expression CoreTextType (CoreOutputError
+        (name `elem` ["printError", "printErrorPart"])
+        (name `elem` ["print", "printError"]) core)
+   in (bound, Just (expression result (CoreBlockValue
+        (CoreBlock [CoreStatement at (CoreDeclare outcome write)] (Just selected))), result))
 
 {-| `display(value)` or `show(value)` as text. -}
 lowerRendered :: LowerExpression -> LowerState -> Span -> Text -> (CoreExpression -> CoreExpressionShape) -> [Located Expression] -> Lowered
