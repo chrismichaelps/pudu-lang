@@ -69,3 +69,6 @@ unused static functions; no source admission or existing frame ABI change.
 fail and memory_failure also own error_io and process_io, including the
 post-diagnostic restoration needed for exit-time stdout flushing. Resolved Grill Log: real minimal
 roots must include fatal-signal preparation without an unused startup helper.
+
+fail and memory_failure list wait_writable beside error_io: callers that close
+over this table alone, like the wide runtime spec, must still reach it. (#636)
