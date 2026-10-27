@@ -14,7 +14,9 @@ const fixture = join(root, 'test-fixtures/lanes/UsesLanes.pudu');
 const bench = join(root, 'bench/LanesBench.pudu');
 const run = (...args) => execFileSync(binary, args, {env, encoding: 'utf8', timeout: 180000});
 assert.equal(run('run', fixture), 'lanes: ok\n');
-run('fmt', '--check', fixture, bench, join(library, 'Std/Lanes.pudu'));
+const raster = join(root, 'test-fixtures/lanes/UsesRaster.pudu');
+assert.equal(run('run', raster), 'raster: ok\n');
+run('fmt', '--check', fixture, raster, bench, join(library, 'Std/Lanes.pudu'));
 const scratch = mkdtempSync(join(tmpdir(), 'pudu-lanes-'));
 try {
   const typed = join(scratch, 'ArrayAsLanes.pudu');

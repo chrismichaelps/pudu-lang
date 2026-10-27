@@ -12,6 +12,7 @@ import Pudu.FloatLiteral (FloatWidth (Float64Width))
 import Pudu.LaneKernel (LaneKernel (..), laneKernelName)
 import Pudu.Runtime.FloatKernel (applyFloatUnary)
 import qualified Pudu.Runtime.Lanes as Lanes
+import qualified Pudu.Runtime.Raster as Raster
 import Pudu.Source (Span)
 
 {-| Apply a lane kernel. The checker admits only the kernel's signature, so a
@@ -19,13 +20,16 @@ import Pudu.Source (Span)
     that do not hold a whole number of binary64 values. -}
 callLaneKernel :: Span -> LaneKernel -> [Value] -> Evaluator Value
 callLaneKernel spanValue kernel values
-  | not (all wholeLanes values) =
+  | not (all wholeLanes checked) =
       abortAt (Just spanValue) "E7012" (laneKernelName kernel <> " needs lanes of whole binary64 values") Nothing
   | otherwise = maybe refused pure (apply kernel values)
   where
     refused = abortAt (Just spanValue) "E7012" (laneKernelName kernel <> " got arguments outside its signature") Nothing
     wholeLanes (BytesValue bytes) = Lanes.laneWhole bytes
     wholeLanes _ = True
+    checked = case kernel of
+      RasterTriangles -> drop 1 values
+      _ -> values
 
 apply :: LaneKernel -> [Value] -> Maybe Value
 apply kernel values = case (kernel, values) of
@@ -73,8 +77,21 @@ apply kernel values = case (kernel, values) of
     Just $ case Lanes.laneAffine3 entries xs ys zs of
       Just (rx, ry, rz) -> VariantValue "Some" [TupleValue [BytesValue rx, BytesValue ry, BytesValue rz]]
       Nothing -> VariantValue "None" []
+  (RasterFill, [IntValue _ pixels, FloatValue _ r, FloatValue _ g, FloatValue _ b, FloatValue _ a]) ->
+    Just (optionLanes (bounded pixels >>= \count -> Raster.rasterFill count r g b a))
+  (RasterTriangles, BytesValue color : BytesValue depth : IntValue _ width : IntValue _ cull : rest) -> do
+    lanes <- traverse bytesOf rest
+    Just $ case (cullOf cull, bounded width) of
+      (Just culling, Just target) | Just (painted, depths) <- Raster.rasterTriangles color depth target culling lanes ->
+        VariantValue "Some" [TupleValue [BytesValue painted, BytesValue depths]]
+      _ -> VariantValue "None" []
   _ -> Nothing
   where
+    bytesOf (BytesValue bytes) = Just bytes
+    bytesOf _ = Nothing
+    cullOf 0 = Just Raster.CullNone
+    cullOf 1 = Just Raster.CullBack
+    cullOf _ = Nothing
     within index use = bounded index >>= use
     extreme pick bytes = case Lanes.laneGet bytes 0 of
       Nothing -> Nothing
