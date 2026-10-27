@@ -69,9 +69,24 @@ against independent Integer answers. No source-language admission is implied.
 All three PRs are attached; the full release gate/workflows remain unchanged.
 The user forbids sub-agents, so independent review remains explicitly pending.
 
-Exact next action: inspect PR #572/#573 CI and publish the existing independent
-wide-carrier dependency (#502) as the next reviewable dev-targeted partition;
-retain the complete Native Emission Coverage obligations for subsequent work.
+Draft PR [#574](https://github.com/chrismichaelps/pudu-lang/pull/574) targets dev
+from feature/502-wide-value-contracts in /tmp/pudu-native-wide-values-pr
+(commit f644bf43). It publishes exact wide carriers and 16 minimal helper
+selections. The unchanged Word128 prerequisite is included so it builds before
+#573 lands; merge #573 first and retain both test registrations when reconciling.
+Forced GHC -Wall -Werror compilation, both manifest checks, new-page links and
+whitespace checks pass. Clang, GCC 15 and ASan/UBSan each pass 75 values,
+5,625 comparisons and 16 standalone selections. The PR is attached; full CI
+and independent code/architect/wiki review remain pending.
+
+Latest checked CI: #572 musl runtime, Lambda and website pass; compiler and
+Raylib jobs remain running. #573 compiler/musl jobs are running on its latest
+head. No workflow or release gate changes were made.
+
+Exact next action: extend first-class native prelude values beyond the four
+output tags, starting with display/show and pure conversion families; re-anchor
+Intrinsic/Body/Call mirrors and compare both evaluator oracles before design.
+Continue inspecting #572–#574 CI and retain every full-emission obligation.
 
 ## Referenced by
 
