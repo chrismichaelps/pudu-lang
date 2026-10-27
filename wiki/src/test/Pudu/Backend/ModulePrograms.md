@@ -101,3 +101,8 @@ executes them with their locked outputs; no unused property list counts.
 Include renderingCallableModulePrograms from [[Backend Rendering Callable Programs]].
 Resolved Grill Log: two modules' same-spelling record types require distinct
 rendering bodies, even when their builtin identity and displayed names agree.
+
+## Default parameters (#638)
+
+Register defaultParameterModulePrograms. Resolved Grill Log: literal
+defaults only until #639.

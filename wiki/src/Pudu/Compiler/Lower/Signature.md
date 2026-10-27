@@ -98,3 +98,10 @@ are admitted.
 ## Expression bodies (#567)
 
 Resolved Grill Log: Accept an existing expression body as well as a block body; leave default values, modifiers and all solved-type restrictions unchanged. See [[Native Expression Bodies]].
+
+## Defaults (#638)
+
+A signature with defaults admits all parameters plus a trailing Int count
+named "". A required parameter after a default refuses with E6001.
+Resolved Grill Log: the scheme's required count must equal the parameters
+without a default; defaults only fill from the end.

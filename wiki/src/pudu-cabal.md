@@ -515,3 +515,7 @@ Resolved Grill Log: Register Pudu.Compiler.Lower.Intrinsic using the existing de
 ## Stopping builtins (#633)
 
 Resolved Grill Log: Register Pudu.Compiler.Lower.Stop using the existing dependencies.
+
+## Default parameters (#638)
+
+Resolved Grill Log: Register Pudu.Compiler.Lower.Default using the existing dependencies.

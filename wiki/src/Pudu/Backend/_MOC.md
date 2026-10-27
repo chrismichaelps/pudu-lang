@@ -111,3 +111,4 @@ aliases: [Backend Module Map]
 - [[Backend Rendering Callable Programs]] — intrinsic signatures, identity and cleanup.
 - [[Backend Collection Callable Programs]] — collection builtin values and caller-site refusals.
 - [[Backend Stopping Builtin Programs]] — panic and untyped convertInteger parity.
+- [[Backend Default Parameter Programs]] — defaults in every combination, directly and through values.

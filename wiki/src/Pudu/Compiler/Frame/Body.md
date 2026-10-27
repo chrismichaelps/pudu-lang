@@ -142,3 +142,8 @@ CoreFailCaller lowers its message to a slot, then finishes the block with
 FrameFailCaller. A message that stops stops the block first.
 Resolved Grill Log: same order as CoreFailText; no help expression, since the
 builtins that need it have constant help.
+
+## Absent arguments (#638)
+
+CoreAbsent lowers to a FrameZero value. Resolved Grill Log: no ownership is
+created; the slot holds nothing to release.

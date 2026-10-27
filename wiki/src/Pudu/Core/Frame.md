@@ -140,3 +140,9 @@ Resolved Grill Log: Rename FrameVariantName to FrameRuntimeKind, mirroring the d
 at the frame's recorded caller site; `at` stays for faults during emission.
 Resolved Grill Log: a separate terminator keeps FrameFailText's fixed-site
 meaning intact. See [[Native Collection Callables]].
+
+## Zero values (#638)
+
+`FrameZero` stores the zero of the value's type. Resolved Grill Log: one
+shape for every type, emitted from the slot type, rather than a literal per
+carrier.

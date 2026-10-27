@@ -112,6 +112,8 @@ data FrameValueShape
   | FrameOutputError !Bool !Bool !FrameSlot
   | FrameTextMethod !CoreTextMethodName !FrameSlot ![FrameSlot]
   | FrameUnitLiteral
+  {-| The zero of the value's type: an argument left to its default. -}
+  | FrameZero
   {-| A closure over the named lifted function, holding these values. -}
   | FrameClosure !Text ![FrameSlot]
   {-| Capture number i of the closure in the slot. -}

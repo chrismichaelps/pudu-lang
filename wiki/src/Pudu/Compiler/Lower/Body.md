@@ -408,3 +408,5 @@ A binding whose value is the prelude's bare panic asks [[Compiler Lower Intrinsi
 for annotatedPanic before the usual fact check.
 Resolved Grill Log: Body stays under its size budget; the rule lives beside
 the other builtin values.
+
+Export lowerExpression for the defaulted-body prologue. (#638)

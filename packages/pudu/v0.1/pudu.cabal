@@ -154,6 +154,7 @@ library
     Pudu.Compiler.Lower.Sort
     Pudu.Compiler.Lower.Slice
     Pudu.Compiler.Lower.Convert
+    Pudu.Compiler.Lower.Default
     Pudu.Compiler.Lower.Keyed
     Pudu.Compiler.Lower.Range
     Pudu.Compiler.Lower.Bytes

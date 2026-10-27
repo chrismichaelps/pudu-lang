@@ -8,14 +8,16 @@ import qualified Data.Set as Set
 import Data.Text (Text)
 import qualified Data.Text as Text
 import Pudu.Compiler.Lower.Control (expressionIsPrintValued, printValued)
+import Pudu.Compiler.Lower.Default (suppliedArguments)
 import Pudu.Compiler.Lower.Generic (admitCallee)
 import Pudu.Compiler.Lower.State
   ( LowerContext (..), LowerState (..), bindLocal, halt, lookupLocal, refused, startFunction )
-import Pudu.Compiler.Lower.Types (typeForSpan)
+import Pudu.Compiler.Lower.Types (typeFactAt, typeForSpan)
 import Pudu.Core
 import Pudu.Eval.Capture (reachableNames)
 import Pudu.Frontend.Syntax (Block, Expression, Function (..), FunctionBody (..), Located (..), Parameter (..))
 import Pudu.Source (Span (..), spanSource, unOffset, unSourceName)
+import Pudu.Type.Value (Type (FunctionTypeRequiring), requiredCount)
 
 type LowerExpression = LowerState -> Located Expression -> (LowerState, Maybe (CoreExpression, CoreType))
 type LowerBlock = LowerState -> Located Block -> (LowerState, CoreBlock, CoreType)
@@ -94,16 +96,23 @@ lowerValueCall lower state at callee arguments = case collect state [] arguments
     (final, Just (target, kind)) -> case kind of
       _ | any stops (cores <> [target]) -> (final, Just (stopped (cores <> [target]), CoreNeverType))
       CoreFunctionType inputs result
-        | length inputs == length cores ->
-            let pushed = final{lowerScopes = [] : lowerScopes final}
-                (bound, temporaries) = foldl' hold (pushed, []) cores
-                popped = bound{lowerScopes = drop 1 (lowerScopes bound)}
-                declarations = [CoreStatement (coreExpressionSpan core) (CoreDeclare local core) | (local, core) <- zip temporaries cores]
-                temporaryReads = [CoreExpression (coreExpressionSpan core) (coreLocalType local) (CoreReadLocal local) | (local, core) <- zip temporaries cores]
-                call = CoreExpression at result (CoreCallValue target temporaryReads)
-             in (popped, Just (CoreExpression at result (CoreBlockValue (CoreBlock declarations (Just call))), result))
+        | defaulted, length cores < length inputs -> call final target result (suppliedArguments at inputs cores)
+        | length inputs == length cores -> call final target result cores
       _ -> halt at ("a call through a " <> coreTypeName kind <> " value") final
  where
+  -- A value of a function with defaults was formed with the count of supplied
+  -- arguments as its last parameter; checking says how many a call must give.
+  defaulted = case typeFactAt (contextTypes (lowerContext state)) (locatedSpan callee) of
+    Just (FunctionTypeRequiring _ inputs required _) -> requiredCount required < length inputs
+    _ -> False
+  call final target result cores =
+    let pushed = final{lowerScopes = [] : lowerScopes final}
+        (bound, temporaries) = foldl' hold (pushed, []) cores
+        popped = bound{lowerScopes = drop 1 (lowerScopes bound)}
+        declarations = [CoreStatement (coreExpressionSpan core) (CoreDeclare local core) | (local, core) <- zip temporaries cores]
+        temporaryReads = [CoreExpression (coreExpressionSpan core) (coreLocalType local) (CoreReadLocal local) | (local, core) <- zip temporaries cores]
+        invoked = CoreExpression at result (CoreCallValue target temporaryReads)
+     in (popped, Just (CoreExpression at result (CoreBlockValue (CoreBlock declarations (Just invoked))), result))
   stops core = coreExpressionType core == CoreNeverType
   stopped cores = CoreExpression at CoreNeverType (CoreBlockValue (CoreBlock
     [CoreStatement (coreExpressionSpan core) (CoreEvaluate core) | core <- cores] Nothing))

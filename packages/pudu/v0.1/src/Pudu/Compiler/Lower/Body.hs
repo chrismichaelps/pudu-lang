@@ -1,7 +1,7 @@
 {-| @Pudu.Compiler.Lower.Body — lower function bodies through lexical blocks,
     statements and expressions. State and signature admission have independent
     owners; mutual block/expression recursion stays within this traversal. -}
-module Pudu.Compiler.Lower.Body (lowerEntryBody, lowerFunctionBody) where
+module Pudu.Compiler.Lower.Body (lowerEntryBody, lowerFunctionBody, lowerExpression) where
 
 import Data.List.NonEmpty (NonEmpty (..))
 import Pudu.Compiler.Lower.Scalar (lowerUnary, lowerBinary, eagerType)

@@ -153,6 +153,9 @@ data CoreExpressionShape
   | CoreBoolLiteral !Bool
   | CoreTextLiteral !Text
   | CoreCharLiteral !Char
+  {-| The zero of the expression's type, standing for an argument the call
+      left to its default. The callee replaces it before anything reads it. -}
+  | CoreAbsent
   | CoreReadLocal !CoreLocal
   | CoreNegate !CoreExpression
   | CoreComplement !CoreExpression

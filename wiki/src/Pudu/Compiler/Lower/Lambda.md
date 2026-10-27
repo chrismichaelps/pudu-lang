@@ -61,3 +61,9 @@ Resolved Grill Log: Replace named forwarders with closures naming their actual a
 ## First-class output builtins (#569)
 
 Resolved Grill Log: Set closureIsBuiltin false for named source targets and lifted lambdas; hidden-environment behavior remains explicit.
+
+## Defaults through values (#638)
+
+A value call whose checked callee type requires fewer parameters than it has
+passes suppliedArguments. Resolved Grill Log: the formed type already ends
+with the count, so the closure and frame arity agree.
