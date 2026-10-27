@@ -52,7 +52,7 @@ CompileResult, never an errored program. Missing facts refuse at the module span
   declaration, naming the function (or "this declaration") it found there.
 - Non-entry functions are synchronous and block bodied, with no type
   parameters, constraints, `unsafe`/`comptime` modifiers or default parameter
-  values. Final monomorphic schemes carry `Int` or `Bool` parameters and
+  values. Final monomorphic schemes carry `Int`, `Bool` or unit parameters and
   `Int`, `Bool` or `()` results, including inferred and aliased types. Export visibility adds
   no native restriction. See [[Compiler Lower Signature]] for refusal spans. The signature is validated once per function and memoized, so
   a function reached through several calls refuses exactly once.
@@ -102,7 +102,7 @@ CompileResult, never an errored program. Missing facts refuse at the module span
   [[Diagnostic Native]]; a program lowers only when nothing refused.
 - Refused today, deliberately and explicitly: imports, a module with no entry
   function, parameters on the entry function, calls through local values,
-  calls to the entry function, parameter types outside `Int`/`Bool`, default
+  calls to the entry function, parameter types outside `Int`/`Bool`/unit, default
   parameter values, unresolved or polymorphic signatures, result types outside
   `Int`/`Bool`/`()`, expression bodies on non-entry functions, pattern
   bindings (`let`/`let else` with patterns),  `match`, `try`, `await`, lambdas, ranges, tuples, arrays, sets,
@@ -178,3 +178,7 @@ their own representation refusals.
 Require optional LowerTypes from the same checked module: lowerProgram :: Text -> Maybe LowerTypes -> Module -> LowerResult. Missing facts refuse E6001 at moduleSpan. Pass facts through context. Non-entry Int/Bool signatures and Int/Bool/unit results consume final monomorphic synchronous schemes, including inference and aliases; annotation spelling no longer selects ABI. Represented annotated locals are admitted using exact initializer facts. Previous annotation-only restrictions are superseded by this contract.
 
 Resolved Grill Log: consume canonical settled checker facts; preserve structural Never, print carrier refusals and existing runtime representations. Rejected: re-inference, display-name ABI selection, offset-only identity or silent fallback.
+
+## Unit scalar admission (#492)
+
+Unit literals lower as empty Core blocks and settled unit parameters retain the existing scalar sentinel slot. Argument emission executes effects before binding zero; no Result carrier is erased. General tuples and unit display/equality remain pending. Resolved Grill Log: empty tuple syntax is the single unit inhabitant, not an owned aggregate.

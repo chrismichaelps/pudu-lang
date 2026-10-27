@@ -49,3 +49,10 @@ and introduces no independent runner or skip path.
 Extend the actual differential corpus with inferred Int/Bool parameters/results, inferred unit helper, scalar aliases and annotated mutable locals, and inferred recursive helpers. Preserve printed effect ordering and do not special-case native expected outputs.
 
 Resolved Grill Log: consume canonical settled checker facts; preserve structural Never, print carrier refusals and existing runtime representations. Rejected: re-inference, display-name ABI selection, offset-only identity or silent fallback.
+
+
+## Unit literals and parameters (#492)
+
+Differential corpus covers unit literals in entry/local/return/break, aliased unit parameters, unit calls before later scalar arguments with printed order, mixed unit/scalar arguments, mutation, wrapper recursion and unit-argument arithmetic failure preventing later effects.
+
+Resolved Grill Log: preserve the single unit inhabitant and every effect without allocating a new representation. Reject void-valued C initializers, Result erasure and omitted argument evaluation. Unit display/equality and nonempty tuples remain separate pending boundaries.

@@ -10,7 +10,40 @@ import Pudu.Comptime.Limits (callDepthLimit)
 
 functionSuccessPrograms :: [(String, Text)]
 functionSuccessPrograms =
-  [ ("inferred scalar parameters and results", program
+  [ ("unit literal entry result", program
+      [ "fn main() -> () { () }" ])
+  , ("unit aliases locals returns and loop operands", program
+      [ "type Token = ()"
+      , "fn relay(value: Token) -> Token { return value }"
+      , "fn main() -> () {"
+      , "  var token: Token = ()"
+      , "  token = relay(loop { break () })"
+      , "  return token"
+      , "}"
+      ])
+  , ("unit calls freeze effects before later arguments", program
+      [ "fn mark(value: Int) -> () { print(display(value))\n return () }"
+      , "fn number(value: Int) -> Int { print(display(value))\n return value }"
+      , "fn combine(first: (), middle: Int, last: ()) -> Int { return middle }"
+      , "fn main() -> Int { return combine(mark(1), number(2), mark(3)) }"
+      ])
+  , ("unit arguments retain transfers and mutation", program
+      [ "fn accept(value: (), number: Int) -> Int { return number }"
+      , "fn main() -> Int {"
+      , "  var count = 0"
+      , "  let result = accept({ count = count + 1\n () }, count)"
+      , "  let token = loop { accept({ break () }, 99) }"
+      , "  return result"
+      , "}"
+      ])
+  , ("unit parameter recursion restores call depth", program
+      [ "fn descend(token: (), value: Int) -> () {"
+      , "  if value == 0 { return token }"
+      , "  return descend(token, value - 1)"
+      , "}"
+      , "fn main() -> () { descend((), 20)\n return descend((), 20) }"
+      ])
+  , ("inferred scalar parameters and results", program
       [ "fn add(value) { return value + 2 }"
       , "fn invert(value) { return !value }"
       , "fn announce(value) { print(display(value + 0))\n {} }"
@@ -162,7 +195,13 @@ functionSuccessPrograms =
 
 functionRefusalPrograms :: [(String, Text)]
 functionRefusalPrograms =
-  [ ("one call beyond the depth boundary", depthProgram
+  [ ("unit argument failure prevents later argument effects", program
+      [ "fn fail() -> () { 10 / 0\n return () }"
+      , "fn later() -> Int { print(\"later\")\n return 1 }"
+      , "fn accept(token: (), value: Int) -> Int { return value }"
+      , "fn main() -> Int { return accept(fail(), later()) }"
+      ])
+  , ("one call beyond the depth boundary", depthProgram
       ["  return descend(" <> depth callDepthLimit <> ")"])
   , ("checked failure inside a called helper", program
       [ "fn divide(value: Int) -> Int { return 10 / value }"

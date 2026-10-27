@@ -1,7 +1,7 @@
 ---
 type: handoff
 status: ACTIVE
-issue: 491
+issue: 492
 aliases: [Native C11 Backend Delivery]
 tags: [handoff, backend, native, c11]
 ---
@@ -239,3 +239,40 @@ architecture and wiki review remain pending before promotion under the user's
 no-subagent restriction. No remote/platform-wide CI claim is made.
 Exact next action: commit #491 and implement the resolved unit-literal/parameter
 slice in issue #492, starting with complete affected module mirrors.
+
+## #492 implementation handoff
+
+Delivery Owner → Language Architect → Backend Engineer. #491 is committed as 6a3f296b; feature/492-native-unit-values is stacked on it. The direct owner covers Lower/Body, Lower/Signature, Backend/Emit and their mirrors, the existing EmitSpec/FunctionPrograms and matching mirrors, plus coverage/changelog/handoff. Contracts and resolved Grill Logs above precede implementation. Preserve unrelated profiling output. No subagents are activated; independent review remains pending before promotion.
+
+Exact next action: implement unit literal/parameter admission and effect-first unit call temporaries, then validate success, failure, ordering and the full GHC 9.14.1 gates.
+
+## #492 validation in progress
+
+The GHC 9.14.1 clean optimized warnings-as-errors build passes. Pure unit
+signature admission, function success/order/recursion, unit-argument arithmetic
+failure and existing refusal groups pass. A real CLI smoke prints 1, 2, 3 in
+order with empty stderr and exit 2 through interpreted and native execution.
+
+The clean gate run passes 18 of 19 checks; its full-suite invocation fails with
+output discarded by the wrapper. The captured direct diagnostic rerun passes
+all 652 property groups with zero failures and exit 0. The same full Cabal test
+command is now running with its complete output preserved, before committing
+this slice. No first-run failure cause is claimed without evidence and no
+threshold or test has been weakened. Exact next action: finish the captured
+Cabal confirmation and resolve any reported failure before #492 commit.
+
+## #492 validation complete
+
+Delivery Owner → Validation Owner → Commit Owner. The captured Cabal confirmation
+passes all 652 groups and exits 0 (`/tmp/pudu-492-cabal-confirm.log`), matching
+the direct captured full-suite pass. The initial gate failure did not reproduce;
+its cause remains unknown because the wrapper discarded its output. The clean
+optimized GHC 9.14.1 warnings-as-errors build and all other 18 gates passed.
+No test or threshold changed between these runs. Focused native successes,
+unit argument failure ordering, refusal spans and real CLI parity passed as
+recorded above. No remote Linux/platform-wide evidence or independent review
+is claimed. Full native coverage remains incomplete.
+
+Exact next action: commit #492 and publish the #493 unit display/equality
+contract in all affected mirrors before implementing it. Independent reviews
+remain pending before promotion; do not activate subagents.

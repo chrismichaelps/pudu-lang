@@ -172,3 +172,10 @@ Numeric loop destinations emit as function-local C labels. Continue labels prece
 ## Unit locals (#489)
 
 Unit locals use an integer sentinel, never a C void value. Initializers and assignment operands execute for their effects before the sentinel is stored; reading or discarding a unit local has no effect. Resolved Grill Log: unit has a single inhabitant, so the sentinel carries no user-visible payload; discarded initializers must still preserve calls, diagnostics and transfers. Rejected: assigning a C void expression to an integer local.
+
+
+## Unit literals and parameters (#492)
+
+Unit call arguments execute once through emitDiscard, then bind integer zero to their temporary. Never use a void-returning helper call as an initializer. Keep source-order freezing for mixed unit/scalar arguments, transfer/error behavior and wrapper call-depth ordering. Existing C int unit parameter slots and void unit function results remain.
+
+Resolved Grill Log: preserve the single unit inhabitant and every effect without allocating a new representation. Reject void-valued C initializers, Result erasure and omitted argument evaluation. Unit display/equality and nonempty tuples remain separate pending boundaries.

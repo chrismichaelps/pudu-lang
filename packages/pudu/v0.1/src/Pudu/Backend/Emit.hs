@@ -303,7 +303,9 @@ emitCallArguments state arguments = foldl' step (state, []) arguments
  where
   step (current, temps) argument =
     let (afterTemp, temp) = freshTemp current
-        (filled, text) = emitExpression afterTemp argument
+        (filled, text) = case coreExpressionType argument of
+          CoreUnitType -> (emitDiscard afterTemp argument, "0")
+          _ -> emitExpression afterTemp argument
      in ( line filled (declarationFor (coreExpressionType argument) temp <> " = " <> text <> ";")
         , temps <> [temp]
         )

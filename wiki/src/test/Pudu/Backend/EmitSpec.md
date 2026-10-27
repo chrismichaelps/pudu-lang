@@ -77,3 +77,10 @@ Uses [[Compiler Lower]], [[Compiler Lower Body]], [[Backend Emit]],
 Every lowerProgram call supplies same-result settled facts. Previously refused inferred scalar parameter/result cases become accepted; unsupported formed types, generics and defaults still refuse at their source spans. Cover missing facts and canonical identity separately without weakening refusal expectations.
 
 Resolved Grill Log: consume canonical settled checker facts; preserve structural Never, print carrier refusals and existing runtime representations. Rejected: re-inference, display-name ABI selection, offset-only identity or silent fallback.
+
+
+## Unit literals and parameters (#492)
+
+Replace the unit-parameter refusal with positive Core admission for a unit literal, unit parameter and unit result. Keep nonempty tuple and print Result refusals independent. Pure checks assert the signature instead of merely accepting any Core.
+
+Resolved Grill Log: preserve the single unit inhabitant and every effect without allocating a new representation. Reject void-valued C initializers, Result erasure and omitted argument evaluation. Unit display/equality and nonempty tuples remain separate pending boundaries.

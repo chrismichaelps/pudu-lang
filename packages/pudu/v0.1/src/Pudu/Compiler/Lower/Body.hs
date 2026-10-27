@@ -321,6 +321,7 @@ lowerExpression state (Located spanValue expression) = case expression of
   RangeExpression{} -> halt spanValue "ranges" state
   TryExpression{} -> halt spanValue "the try operator" state
   AwaitExpression{} -> halt spanValue "await" state
+  TupleExpression [] -> value (CoreBlockValue (CoreBlock [] Nothing)) CoreUnitType
   TupleExpression{} -> halt spanValue "tuples" state
   ArrayExpression{} -> halt spanValue "arrays" state
   SetExpression{} -> halt spanValue "sets" state

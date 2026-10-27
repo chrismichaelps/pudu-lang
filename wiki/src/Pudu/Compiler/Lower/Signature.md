@@ -23,7 +23,7 @@ Validate each reachable function once, including refused signatures. Source
 modifiers, constraints, default values and body shape retain their existing
 refusals. Defaults point at their expression span. Consume the final scheme
 from [[Compiler Lower Types]]: synchronous, monomorphic, all parameters required,
-and arity equal to source parameters. Represented parameters are Int/Bool;
+and arity equal to source parameters. Represented parameters are Int/Bool/unit;
 results are Int/Bool/unit. Inferred and aliased types share this projection.
 
 Unsupported formed types point at the annotation when present, otherwise the
@@ -56,3 +56,10 @@ No host exceptions, semantic rechecking, global mutable state, or backend emissi
 Replace syntax-based type projection with final schemes from Compiler Lower Types. Reject scheme parameters/bounds, asynchronous/optional/arity-mismatched function shapes, unsupported formed parameter/result representations. Admit inferred Int/Bool parameters and inferred Int/Bool/unit results plus aliases. Source modifiers, constraints, defaults and block-body policy remain. Unsupported parameters use annotation span when present, otherwise parameter name; results use annotation or function name. Missing or nonmonomorphic scheme refuses function name. Memoization and reachable-only traversal remain.
 
 Resolved Grill Log: consume canonical settled checker facts; preserve structural Never, print carrier refusals and existing runtime representations. Rejected: re-inference, display-name ABI selection, offset-only identity or silent fallback.
+
+
+## Unit literals and parameters (#492)
+
+Admit settled CoreUnitType parameters alongside Int/Bool through canonical UnitTypeValue projection. Keep the parameter slot and ordinary source arity; aliases use the same formed identity. Defaults, generic and unsupported signatures remain refused.
+
+Resolved Grill Log: preserve the single unit inhabitant and every effect without allocating a new representation. Reject void-valued C initializers, Result erasure and omitted argument evaluation. Unit display/equality and nonempty tuples remain separate pending boundaries.
