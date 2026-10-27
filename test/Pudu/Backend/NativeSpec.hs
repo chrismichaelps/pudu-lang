@@ -158,6 +158,12 @@ successPrograms =
 
 statusPrograms :: [(String, Text)]
 statusPrograms =
+  [ ("wide entry " <> Text.unpack kind <> " " <> show value, Text.unlines ["module Main", "fn main() -> " <> kind <> " { " <> Text.pack (show value) <> " }"])
+  | let boundary = 2^(127::Int) :: Integer
+  , (kind, values) <- [("Int128", [-boundary,-1,0,1,255,256,boundary-1]), ("UInt128", [0,1,255,256,boundary,2*boundary-1])]
+  , value <- values ]
+  <> [("wide deferred positive entry", "module Main\nfn main() -> Int128 { let value = 170141183460469231731687303715884105728\n let minimum: Int128 = -value\n return value }\n")]
+  <>
   [ ("UInt maximum entry", "module Main\nfn main() -> UInt { 18446744073709551615 }\n")
   , ("UInt8 maximum entry", "module Main\nfn main() -> UInt8 { 255u8 }\n")
   , ("UInt16 zero entry", "module Main\nfn main() -> UInt16 { 0 }\n")

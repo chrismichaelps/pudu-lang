@@ -40,8 +40,8 @@ formedCoreType value
 nativeIntegerKind :: IntegerKind -> Bool
 nativeIntegerKind PlatformSigned = True
 nativeIntegerKind PlatformUnsigned = True
-nativeIntegerKind (SignedKind width) = width `elem` [8, 16, 32, 64]
-nativeIntegerKind (UnsignedKind width) = width `elem` [8, 16, 32, 64]
+nativeIntegerKind (SignedKind width) = width `elem` [8, 16, 32, 64, 128]
+nativeIntegerKind (UnsignedKind width) = width `elem` [8, 16, 32, 64, 128]
 nativeIntegerKind _ = False
 
 nativeScalarType :: CoreType -> Bool

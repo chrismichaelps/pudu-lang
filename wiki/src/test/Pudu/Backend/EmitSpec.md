@@ -153,3 +153,7 @@ Resolved Grill Log: implement [[Exact Native Integer Carriers]] without changing
 Allow the standard C signal.h header required by process IO policy. Resolved
 Grill Log: this is an inspected standard-header addition; preserve the closed
 include whitelist and all extension/source-identifier/preprocessor checks.
+
+## Wide source admission (#507)
+
+Replace the newly admitted 128-bit refusal fixtures with reachable, ordinarily checked BigInt/Float32/Float64 parameter cases and exact marker spans. Preserve all remaining unsupported-construct and hygiene checks. Resolved Grill Log: success coverage moves to real source execution; do not remove negative representation coverage. [[Native Wide Source Admission]].

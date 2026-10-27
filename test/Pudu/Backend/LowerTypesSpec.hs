@@ -39,14 +39,18 @@ testCanonical = conjoin
   , formedCoreType (NominalType "Int32" []) === Just (CoreIntegerType (SignedKind 32))
   , formedCoreType (NominalType "Int64" []) === Just (CoreIntegerType (SignedKind 64))
   , formedCoreType (NominalType (NominalId (Just (ModuleName ("User" :| []))) "Int8") []) === Nothing
-  , formedCoreType (NominalType "Int128" []) === Nothing
+  , formedCoreType (NominalType "Int128" []) === Just (CoreIntegerType (SignedKind 128))
   , formedCoreType (NominalType "UInt" []) === Just (CoreIntegerType PlatformUnsigned)
   , formedCoreType (NominalType "UInt8" []) === Just (CoreIntegerType (UnsignedKind 8))
   , formedCoreType (NominalType "UInt16" []) === Just (CoreIntegerType (UnsignedKind 16))
   , formedCoreType (NominalType "UInt32" []) === Just (CoreIntegerType (UnsignedKind 32))
   , formedCoreType (NominalType "UInt64" []) === Just (CoreIntegerType (UnsignedKind 64))
   , formedCoreType (NominalType (NominalId (Just (ModuleName ("User" :| []))) "UInt64") []) === Nothing
-  , formedCoreType (NominalType "UInt128" []) === Nothing
+  , formedCoreType (NominalType "UInt128" []) === Just (CoreIntegerType (UnsignedKind 128))
+  , formedCoreType (NominalType (NominalId (Just (ModuleName ("User" :| []))) "Int128") []) === Nothing
+  , formedCoreType (NominalType (NominalId (Just (ModuleName ("User" :| []))) "UInt128") []) === Nothing
+  , formedCoreType (NominalType "Int128" [integerType]) === Nothing
+  , formedCoreType (NominalType "UInt128" [integerType]) === Nothing
   , formedCoreType (NominalType "UInt8" [integerType]) === Nothing
   , formedCoreType (NominalType "Int8" [integerType]) === Nothing
   ]

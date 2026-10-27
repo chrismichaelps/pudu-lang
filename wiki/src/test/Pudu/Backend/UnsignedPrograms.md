@@ -9,7 +9,7 @@ aliases: [Native Unsigned Programs]
 ## Purpose and interface
 
 Export unsignedSuccessPrograms (label, source, mathematical stdout) and
-unsignedRefusalPrograms (label, checked source) for UInt and UInt8/16/32/64.
+unsignedRefusalPrograms (label, checked source) for UInt and UInt8/16/32/64/128.
 Generate independent Integer reference answers for checked arithmetic, modular
 and saturated arithmetic, bitwise/complement, logical shifts, comparison and
 zero negation over endpoints/high-bit/deterministic full-width samples. Cover
@@ -30,3 +30,7 @@ division/remainder zero, nonzero negation and invalid shift counts.
 ## Referenced by
 
 [[src/_MOC]] · [[Native Unsigned Integer Delivery]]
+
+## Wide source admission (#507)
+
+Extend the fixed family list through UInt128 while retaining platform UInt at 64 bits. Resolved Grill Log: exercise the full high domain, independent mathematical stdout, carry/underflow, shifts, aliases/inference, snapshots and runtime failure rendering. [[Native Wide Source Admission]].

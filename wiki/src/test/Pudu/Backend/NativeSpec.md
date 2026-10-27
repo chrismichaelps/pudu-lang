@@ -117,3 +117,7 @@ native must both clamp it to 255 with no extra value output. The integer corpus
 also tests helper returns and local/branch/loop propagation of this value.
 Resolved Grill Log: an internal carrier sign bit cannot reinterpret positive
 2^63 as a negative exit result. Preserve reportResult's actual value semantics.
+
+## Wide source admission (#507)
+
+Extend entry status sources for Int128/UInt128 extrema, high unsigned values, 0/1/255/256 and deferred positive 2^127. Reuse the exact stdout/stderr/status oracle with both evaluator modes and mathematical integer matrices. Resolved Grill Log: no signed narrowing or extra entry-result rendering, no relaxed diagnostic comparison and no test module above 500 lines. [[Native Wide Source Admission]].
