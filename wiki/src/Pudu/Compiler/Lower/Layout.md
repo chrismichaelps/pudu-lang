@@ -65,3 +65,7 @@ Resolved Grill Log: CoreOutputError contributes its operand types and locals dur
 ## Named callable dispatch (#568)
 
 Resolved Grill Log: Form named callable layout keys from all actual parameters and result; lifted lambda keys still use their first environment parameter. Handle zero-parameter named functions.
+
+## First-class output builtins (#569)
+
+Resolved Grill Log: Collect CoreRuntimeKind operands exactly as the prior variant-name operation; callable layouts include generated intrinsic bodies by actual parameter/result ABI.

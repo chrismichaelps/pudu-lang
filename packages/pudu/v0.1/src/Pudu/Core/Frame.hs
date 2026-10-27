@@ -104,7 +104,7 @@ data FrameValueShape
   {-| A payload member of the variant the slot is known to hold. -}
   | FramePayload !Int !FrameSlot
   {-| The held variant's name as text. -}
-  | FrameVariantName !FrameSlot
+  | FrameRuntimeKind !FrameSlot
   | FrameDisplay !FrameSlot
   | FrameShow !FrameSlot
   | FrameOutputError !Bool !Bool !FrameSlot

@@ -147,6 +147,7 @@ library
     Pudu.Compiler.Lower.Try
     Pudu.Compiler.Lower.For
     Pudu.Compiler.Lower.Lambda
+    Pudu.Compiler.Lower.Intrinsic
     Pudu.Compiler.Lower.Call
     Pudu.Compiler.Lower.Array
     Pudu.Compiler.Lower.Sort

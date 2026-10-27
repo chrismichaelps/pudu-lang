@@ -136,3 +136,13 @@ Resolved Grill Log: Add the named callable success corpus to the full owned-valu
 
 The focused named-callable cleanup lane includes the existing closure corpus,
 so hidden-environment ownership is verified beside direct named targets.
+
+## First-class output builtins (#569)
+
+Resolved Grill Log: Register focused counted output-callable programs with explicit stdout/stderr and include them in the comprehensive output cleanup lane.
+
+A reusable optional C setup runs after the allocation-check atexit hook is
+installed and before source entry. The failed-Result property replaces each
+standard output with a pipe without readers, then requires zero live
+allocations after repeated Err values. This POSIX-only boundary is explicitly
+reported as pending on Windows. Existing healthy corpora use empty setup.

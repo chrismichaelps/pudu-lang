@@ -37,3 +37,11 @@ Results now allocate text and boxes. Keep calloc failure-attempt numbering and
 all exact output/status assertions; retain strict C warnings and the zero-live
 allocation check. Refer to the malloc wrapper in the test entry so scalar-only
 probes still compile without suppressing unused-function diagnostics.
+
+## Aggregate length overflow (#569)
+
+Resolved Grill Log: production-emitted tuple programs carry text_join. Inject
+synthetic huge part lengths with separators or labels before source execution
+and require exact memory-failure status/text with zero live allocations. This
+checks rejection before byte access without allocating enormous host buffers.
+Keep all original frame failure-attempt and source-panic assertions.

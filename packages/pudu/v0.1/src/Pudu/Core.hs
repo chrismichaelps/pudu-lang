@@ -64,6 +64,7 @@ data CoreClosureInfo = CoreClosureInfo
   { closureCaptures :: ![CoreType]
   , closureDisplayName :: !Text
   , closureSite :: !Text
+  , closureIsBuiltin :: !Bool
   , closureHasEnvironment :: !Bool
   }
   deriving stock (Eq, Show)
@@ -190,7 +191,7 @@ data CoreExpressionShape
       it replaces the written help. -}
   | CoreFailText !Text !(Maybe Text) !CoreExpression !(Maybe CoreExpression)
   {-| The name of the variant a sum value holds, as text. -}
-  | CoreVariantName !CoreExpression
+  | CoreRuntimeKind !CoreExpression
   | CorePrint !CoreExpression
   {-| An ordered standard-stream write: error text, empty on success. -}
   | CoreOutputError !Bool !Bool !CoreExpression

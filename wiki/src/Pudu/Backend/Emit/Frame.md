@@ -130,3 +130,7 @@ Resolved Grill Log: Route all rendered noninteger/nonunit entry values through p
 ## Named callable dispatch (#568)
 
 Resolved Grill Log: Append explicit environment metadata from frameModuleClosures to each function descriptor; nonclosure/direct named functions have no hidden environment.
+
+## First-class output builtins (#569)
+
+Resolved Grill Log: Emit counted=0 only for builtin intrinsic bodies, otherwise 1, independently of hidden environment metadata.

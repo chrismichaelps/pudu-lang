@@ -385,3 +385,7 @@ Resolved Grill Log: The four output builtins delegate to lowerPrint with their n
 ## Expression bodies (#567)
 
 Resolved Grill Log: Normalize expression bodies to empty located blocks retaining the original trailing expression. Both entry and reachable helpers reuse lowerBlock and unchanged result selection. No extra callable or runtime call-depth increment. See [[Native Expression Bodies]].
+
+## First-class output builtins (#569)
+
+Resolved Grill Log: After local/constant/module-function value resolution, delegate standard-stream builtin names to Compiler Lower Intrinsic. Keep call and shadowing dispatch order intact.

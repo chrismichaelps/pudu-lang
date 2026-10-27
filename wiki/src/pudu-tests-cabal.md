@@ -320,3 +320,7 @@ Resolved Grill Log: Register Pudu.Backend.ExpressionBodyPrograms with existing d
 ## Named callable dispatch (#568)
 
 Resolved Grill Log: Register Pudu.Backend.NamedCallablePrograms using existing dependencies.
+
+## First-class output builtins (#569)
+
+Resolved Grill Log: Register Pudu.Backend.OutputCallablePrograms using existing dependencies.

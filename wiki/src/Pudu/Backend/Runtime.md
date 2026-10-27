@@ -285,3 +285,14 @@ Resolved Grill Log: Before fatal stderr writes, pudu_prepare_error_io waits for 
 ## Named callable dispatch (#568)
 
 Resolved Grill Log: Advance runtimeRevision to 14 for explicit callable environment/step metadata; see [[Native Named Callable Dispatch]].
+
+## First-class output builtins (#569)
+
+Resolved Grill Log: Advance runtimeRevision to 15 for counted intrinsic-call frames. Direct standard-stream output and process policies remain shared.
+
+## Fatal allocation control flow (#569)
+
+Resolved Grill Log: declare pudu_memory_failure with standard C11 _Noreturn.
+The function always exits; expose that existing control-flow contract to the
+compiler so checked size guards cannot be analyzed as returning fallthrough.
+No diagnostic bytes, cleanup order, warning flags or source semantics change.

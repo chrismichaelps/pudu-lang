@@ -5,6 +5,19 @@ tags: [changelog]
 
 # Changelog
 
+## 2026-10-27 — First-class output builtins (#569)
+
+The four standard-stream builtins now retain their builtin identity when stored,
+returned, captured or passed to generic code. Their intrinsic frames preserve
+source call depth, Result behavior and failed-handle buffers. Runtime kinds
+distinguish builtin/function in operator and key diagnostics. Revision 15
+records the private ABI. Five focused groups pass Clang/GCC/ASan+UBSan and both
+evaluators, including seven counted cleanup programs and isolated handle
+failures. Aggregate rendering now checks each size addition and its final
+delimiter bound; dedicated overflow probes and strict GCC compilation pass.
+The CLI compares exact bytes/status across a module boundary. Full-suite,
+platform and independent review remain pending. [[Native Output Callable Values]].
+
 ## 2026-10-27 — Named callable dispatch (#568)
 
 Named function values now dispatch directly to their target. The previous

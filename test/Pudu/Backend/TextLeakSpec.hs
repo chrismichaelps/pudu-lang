@@ -24,6 +24,7 @@ import Pudu.Backend.ConvertPrograms (convertSuccessPrograms)
 import Pudu.Backend.KeyedPrograms (keyedSuccessPrograms)
 import Pudu.Backend.ShapePrograms (shapeSuccessPrograms)
 import Pudu.Backend.RangePrograms (rangeSuccessPrograms)
+import Pudu.Backend.OutputCallablePrograms (outputCallableSuccessPrograms, outputCallableFailureCleanup)
 import Pudu.Backend.NamedCallablePrograms (namedCallableSuccessPrograms)
 import Pudu.Backend.ExpressionBodyPrograms (expressionBodySuccessPrograms)
 import Pudu.Backend.OutputPrograms (outputSuccessPrograms, outputStreamPrograms)
@@ -38,6 +39,7 @@ import System.Directory (findExecutable)
 import System.Environment (lookupEnv)
 import System.Exit (ExitCode (..))
 import System.FilePath ((</>))
+import System.Info (os)
 import System.IO.Temp (withSystemTempDirectory)
 import System.Process (readProcessWithExitCode)
 import Test.QuickCheck (Property, conjoin, counterexample, (===))
@@ -46,7 +48,9 @@ textLeakProperties :: [(String, IO Property)]
 textLeakProperties =
   [ ("native text programs release every allocation", testLeaks)
   , ("native output Results release every allocation", testLeaksWithStreams
-      ([(label, source, output, "") | (label, source, output) <- outputSuccessPrograms] <> outputStreamPrograms))
+      ([(label, source, output, "") | (label, source, output) <- outputSuccessPrograms] <> outputStreamPrograms <> outputCallableSuccessPrograms))
+  , ("native output callables release failed Results", testFailedOutputLeaks)
+  , ("native output callables release every allocation", testLeaksWithStreams outputCallableSuccessPrograms)
   , ("native named callables release every allocation", testLeaksFor (namedCallableSuccessPrograms <> closureSuccessPrograms))
   , ("native expression bodies release every allocation", testLeaksFor expressionBodySuccessPrograms)
   , ("native Bytes programs release every allocation", testLeaksFor bytesSuccessPrograms)
@@ -59,7 +63,22 @@ testLeaksFor :: [(String, Text, Text)] -> IO Property
 testLeaksFor programs = testLeaksWithStreams [(label, source, output, "") | (label, source, output) <- programs]
 
 testLeaksWithStreams :: [(String, Text, Text, Text)] -> IO Property
-testLeaksWithStreams programs = do
+testLeaksWithStreams = testLeaksWithSetup ""
+
+testFailedOutputLeaks :: IO Property
+testFailedOutputLeaks
+  | os == "mingw32" = putStrLn "[skip] failed output cleanup requires POSIX pipes; Windows evidence remains pending" >> pure (True === True)
+  | otherwise = testLeaksWithSetup setup outputCallableFailureCleanup
+ where
+  setup = Text.unlines
+    [ "  for (int target = 1; target <= 2; ++target) {"
+    , "    int descriptors[2];"
+    , "    if (pipe(descriptors) != 0 || close(descriptors[0]) != 0) return 96;"
+    , "    if (dup2(descriptors[1], target) < 0 || close(descriptors[1]) != 0) return 96;"
+    , "  }" ]
+
+testLeaksWithSetup :: Text -> [(String, Text, Text, Text)] -> IO Property
+testLeaksWithSetup setup programs = do
   configured <- lookupEnv "PUDU_CC"
   compiler <- findExecutable (maybe "cc" id configured)
   case compiler of
@@ -79,7 +98,7 @@ testLeaksWithStreams programs = do
           Right emitted -> do
             let path = root </> "leaks.c"
                 binary = root </> "leaks"
-            TextIO.writeFile path (instrument <> emitted <> trailer)
+            TextIO.writeFile path (instrument <> emitted <> trailer setup)
             (built, output, errors) <- readProcessWithExitCode cc
               ["-std=c11", "-pedantic", "-O2", "-Wall", "-Wextra", "-Werror", "-Wno-unused-function", path, "-o", binary] ""
             if built /= ExitSuccess || not (null output && null errors)
@@ -108,7 +127,7 @@ instrument = Text.unlines
   , "#define main pudu_test_program"
   ]
 
-trailer :: Text
-trailer = Text.unlines
+trailer :: Text -> Text
+trailer setup = Text.unlines
   [ "#undef main", "int main(void) {"
-  , "  if(atexit(test_check) != 0) abort();", "  return pudu_test_program();", "}" ]
+  , "  if(atexit(test_check) != 0) abort();", setup, "  return pudu_test_program();", "}" ]

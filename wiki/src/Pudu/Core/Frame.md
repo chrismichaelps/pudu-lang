@@ -44,7 +44,7 @@ limit, larger host stack, permanent refusal or interpreted fallback repairs
 
 ## Grill Log
 
-- **Q:** What do frames add for sums? **A:** `FrameConstruct` (variant index and payload), `FrameIsVariant`, `FramePayload` read only after the tag matched, `FrameVariantName`, the `FrameFailText` terminator, and the module's layouts (#525).
+- **Q:** What do frames add for sums? **A:** `FrameConstruct` (variant index and payload), `FrameIsVariant`, `FramePayload` read only after the tag matched, `FrameRuntimeKind`, the `FrameFailText` terminator, and the module's layouts (#525).
 
 ## Closures (#555)
 
@@ -129,3 +129,7 @@ declaration order.
 ## Output Results (#566)
 
 Resolved Grill Log: FrameOutputError mirrors CoreOutputError over one saved Str slot, preserving the ordered host effect and owned error text. See [[Native Output Results]].
+
+## First-class output builtins (#569)
+
+Resolved Grill Log: Rename FrameVariantName to FrameRuntimeKind, mirroring the dynamic sum/callable kind operation without changing operand order or ownership.

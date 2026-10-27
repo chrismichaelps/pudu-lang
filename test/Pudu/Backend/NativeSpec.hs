@@ -16,6 +16,7 @@ import Data.Text (Text)
 import qualified Data.Text as Text
 import qualified Data.Text.IO as TextIO
 import Pudu.Backend.ClosurePrograms (closureSuccessPrograms, closureRefusalPrograms)
+import Pudu.Backend.OutputCallablePrograms (outputCallableSuccessPrograms, outputCallableRefusalPrograms)
 import Pudu.Backend.NamedCallablePrograms (namedCallableSuccessPrograms, namedCallableRefusalPrograms)
 import Pudu.Backend.ExpressionBodyPrograms (expressionBodySuccessPrograms, expressionBodyRefusalPrograms)
 import Pudu.Backend.OutputPrograms (outputSuccessPrograms, outputStreamPrograms, outputRefusalPrograms)
@@ -113,6 +114,8 @@ backendNativeProperties =
   , ("native record failures retain interpreter refusals", testRecordRefusals)
   , ("native sums and match match hand-written answers and the interpreter", testSumConformance)
   , ("native sum and match failures retain interpreter refusals", testSumRefusals)
+  , ("native output callables match explicit streams and the interpreter", testOutputCallableConformance)
+  , ("native output callables retain interpreter failures", testOutputCallableRefusals)
   , ("native named callables match explicit answers and the interpreter", testNamedCallableConformance)
   , ("native named callables retain interpreter failures", testNamedCallableRefusals)
   , ("native expression bodies match explicit answers and the interpreter", testExpressionBodyConformance)
@@ -302,6 +305,14 @@ testTupleConformance = conjoin <$> mapM run tupleSuccessPrograms
 
 testTupleRefusals :: IO Property
 testTupleRefusals = conjoin <$> mapM (uncurry conformance) tupleRefusalPrograms
+
+testOutputCallableConformance :: IO Property
+testOutputCallableConformance = conjoin <$> mapM run outputCallableSuccessPrograms
+ where
+  run (label, source, output, errors) = conformanceExpecting (Just (output, errors, 0)) label source
+
+testOutputCallableRefusals :: IO Property
+testOutputCallableRefusals = conjoin <$> mapM (uncurry conformance) outputCallableRefusalPrograms
 
 testNamedCallableConformance :: IO Property
 testNamedCallableConformance = conjoin <$> mapM run (namedCallableSuccessPrograms <> closureSuccessPrograms)

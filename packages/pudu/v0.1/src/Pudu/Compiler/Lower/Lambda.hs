@@ -61,7 +61,7 @@ lowerLambda lower block state at function
                     | otherwise ->
                         let lifted = CoreFunction key (CoreParameter env at : parameters) result
                               (coreBlock{coreBlockStatements = prologue <> coreBlockStatements coreBlock})
-                            info = CoreClosureInfo (map coreLocalType captured) "<fn>" (siteOf at) True
+                            info = CoreClosureInfo (map coreLocalType captured) "<fn>" (siteOf at) False True
                             context = registered key lifted info (lowerContext afterBody)
                             captureReads = [CoreExpression at (coreLocalType local) (CoreReadLocal local) | local <- captured]
                          in (restored context, Just (CoreExpression at kind (CoreClosure key captureReads), kind))
@@ -76,7 +76,7 @@ lowerFunctionValue state at key entry = case typeForSpan (contextTypes (lowerCon
     (admitted, Just (target, _)) ->
       let name = locatedValue (functionName (locatedValue (snd entry)))
           context = lowerContext admitted
-          info = CoreClosureInfo [] name ("fn " <> target) False
+          info = CoreClosureInfo [] name ("fn " <> target) False False
           next = context
             { contextClosures = Map.insert target info (contextClosures context)
             , contextQueue = target : contextQueue context

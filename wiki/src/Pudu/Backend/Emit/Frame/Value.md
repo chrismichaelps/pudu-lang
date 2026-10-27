@@ -143,3 +143,7 @@ paths.
 ## Output Results (#566)
 
 Resolved Grill Log: FrameOutputError calls pudu_output_write with the stream/newline flags and saved text slot; it selects output_error. This frame value is an ordered host effect, not a pure arithmetic operation. See [[Native Output Results]].
+
+## First-class output builtins (#569)
+
+Resolved Grill Log: FrameRuntimeKind selects the operand aggregate name helper, for sums or callables, with unchanged saved-slot ownership.

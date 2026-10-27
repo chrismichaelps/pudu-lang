@@ -82,7 +82,7 @@ expression (CoreExpression _ kind shape) = kind : case shape of
   CoreConstruct _ fields -> concatMap (expression . snd) fields
   CoreMatch subject arms -> expression subject <> concatMap arm arms
   CoreFailText _ _ message help -> expression message <> foldMap expression help
-  CoreVariantName operand -> expression operand
+  CoreRuntimeKind operand -> expression operand
   CorePrint operand -> expression operand
   CoreOutputError _ _ operand -> expression operand
   CoreCall _ arguments -> concatMap expression arguments

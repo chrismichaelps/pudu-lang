@@ -275,3 +275,5 @@ tags: [moc, module]
 - [[Backend Expression Body Programs]] — expression-body conformance and cleanup (#567).
 
 - [[Backend Named Callable Programs]] — named call depth, ownership and diagnostics (#568).
+
+- [[Compiler Lower Intrinsic]] · [[Backend Output Callable Programs]] — first-class output builtins (#569).

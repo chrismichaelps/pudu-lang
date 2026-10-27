@@ -21,6 +21,7 @@ import Test.QuickCheck (Property, conjoin, counterexample, (===))
 frameRuntimeProperties :: [(String, IO Property)]
 frameRuntimeProperties =
   [ ("frame allocator frees normal returns and failed allocations", testAllocations)
+  , ("aggregate joining rejects overflowing separator and label lengths", testJoinOverflow)
   , ("frame allocator unwinds source panics and rejects size overflow", testPanics)
   ]
 
@@ -60,6 +61,18 @@ testPanics = withCompiler $ \cc root -> do
         , counterexample "wrong runtime failure or leaked frame" (Text.isInfixOf ("error[" <> code <> "]") errors)
         ]
       Left _ -> False === True
+
+testJoinOverflow :: IO Property
+testJoinOverflow = withCompiler $ \cc root -> conjoin <$> traverse (check cc root)
+  [ "pudu_text parts[2] = {{NULL, 0, NULL}, {NULL, SIZE_MAX, NULL}}; (void)pudu_text_join(\"\", NULL, parts, 2, \"\");"
+  , "pudu_text parts[1] = {{NULL, SIZE_MAX, NULL}}; const char *labels[1] = {\":\"}; (void)pudu_text_join(\"\", labels, parts, 1, \"\");"
+  ]
+ where
+  check cc root probe = do
+    result <- execute cc root "module Main\nfn main() -> (Int, Int) { (1, 2) }\n" 0
+      (Text.replace "int main(void) {" ("int main(void) { " <> probe))
+    pure $ counterexample (show result) $ result === Right
+      (ExitFailure 1, "", "pudu: memory allocation failed\n")
 
 withCompiler :: (FilePath -> FilePath -> IO Property) -> IO Property
 withCompiler action = do

@@ -131,3 +131,7 @@ base. `CoreField` saves `FrameMember` at the field's position.
 ## Output Results (#566)
 
 Resolved Grill Log: CoreOutputError lowers its operand once into a FrameOutputError text value. It has an ordinary owned result slot and never becomes an effect-only print. See [[Native Output Results]].
+
+## First-class output builtins (#569)
+
+Resolved Grill Log: Project CoreRuntimeKind over one evaluated operand to FrameRuntimeKind with an owned text result.

@@ -145,7 +145,7 @@ imports no compiler, evaluator, or frontend module; the backend boundary of
 
 - **Q:** Where does a type's written name come from? **A:** `displayName`, the last segment of its canonical key, which is how the evaluator renders and names it in messages (#539).
 
-- **Q:** How does Core carry sums? **A:** `CoreSumType name arguments` at concrete arguments, so `Option[Int]` and `Option[Str]` differ, with `CoreConstruct`, `CoreMatch` over `CoreArm`s and `CorePattern`s, `CoreFailText` for a message built at run time, and `CoreVariantName`. Records are named by identity only (`CoreRecordType name`), and every layout lives once in `coreModuleLayouts`, so a recursive sum is a finite type (#525).
+- **Q:** How does Core carry sums? **A:** `CoreSumType name arguments` at concrete arguments, so `Option[Int]` and `Option[Str]` differ, with `CoreConstruct`, `CoreMatch` over `CoreArm`s and `CorePattern`s, `CoreFailText` for a message built at run time, and `CoreRuntimeKind`. Records are named by identity only (`CoreRecordType name`), and every layout lives once in `coreModuleLayouts`, so a recursive sum is a finite type (#525).
 
 - **Q:** Why a new IR instead of emitting C from the checked tree? **A:** The
   tree is a parser artefact: it keeps sugar, patterns, and syntax that the
@@ -339,3 +339,7 @@ Resolved Grill Log: CoreOutputError carries the standard-error flag, newline fla
 ## Named callable dispatch (#568)
 
 Resolved Grill Log: Add closureHasEnvironment to CoreClosureInfo: true only for lifted bodies whose first parameter is their closure. Named targets use their actual ABI. See [[Native Named Callable Dispatch]].
+
+## First-class output builtins (#569)
+
+Resolved Grill Log: Add closureIsBuiltin to callable metadata. Generalize CoreVariantName to CoreRuntimeKind for dynamic sum/callable kind text. Builtin and source callables remain the same checked function type; see [[Native Output Callable Values]].

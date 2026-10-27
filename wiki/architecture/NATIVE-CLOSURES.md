@@ -37,6 +37,10 @@ variant name, then payload.
 
 ## Not yet
 
+The four output builtins retain their distinct builtin identity and use
+uncounted intrinsic frames ([[Native Output Callable Values]]). Other builtin
+values remain incomplete.
+
 Method values (`value.method` without a call), async lambdas and default
 parameter values refuse with E6001.
 
