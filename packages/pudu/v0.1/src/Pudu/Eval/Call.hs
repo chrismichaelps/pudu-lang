@@ -234,10 +234,11 @@ dispatchCall needs spanValue lent target values =
     argument's type, which is the receiver the method is being called on. -}
 
 {-| Supplied arguments bind left to right; a parameter with no argument uses its
-    default, evaluated in the environment the earlier parameters already
-    extended. -}
-bindArguments :: CallNeeds -> [Located Parameter] -> [Value] -> Maybe Span -> Evaluator [(Text, Value)]
-bindArguments needs parameters arguments callSpan = go parameters arguments []
+    default. A default belongs to the declaration, so it is evaluated where the
+    body runs (the function's own module, its captures and witnesses), with the
+    earlier parameters bound, never in the caller's scope. -}
+bindArguments :: CallNeeds -> Closure -> [Located Parameter] -> [Value] -> Maybe Span -> Evaluator [(Text, Value)]
+bindArguments needs closure parameters arguments callSpan = go parameters arguments []
  where
   go [] [] collected = pure (reverse collected)
   go [] (_ : _) collected =
@@ -248,7 +249,8 @@ bindArguments needs parameters arguments callSpan = go parameters arguments []
       go rest remaining ((locatedValue (parameterName parameter), value) : collected)
     [] -> case parameterDefault parameter of
       Just expression -> do
-        value <- withFrame (reverse collected) (callEvaluate needs expression)
+        value <- withCaptured (closureCaptured closure)
+          (withFrame (closureWitnesses closure <> reverse collected) (callEvaluate needs expression))
         go rest [] ((locatedValue (parameterName parameter), value) : collected)
       Nothing -> do
         _ <-
@@ -435,7 +437,7 @@ ordinaryClosureLending needs closure arguments lent callSpan = do
         , (Located _ parameter, Just place) <-
             take 1 (drop position (zip parameters (places <> repeat Nothing)))
         ]
-  supplied' <- bindArguments needs parameters supplied callSpan
+  supplied' <- bindArguments needs closure parameters supplied callSpan
   let bindings = closureWitnesses closure <> supplied'
   if functionAsync value
     then do
