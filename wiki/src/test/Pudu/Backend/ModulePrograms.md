@@ -62,6 +62,11 @@ Includes [[Backend Convert Programs]] in both lists.
 
 Includes [[Backend Keyed Programs]] in both lists.
 
+## Shapes (#563)
+
+Includes [[Backend Shape Programs]]' single-module programs and its
+multi-module ones.
+
 ## Referenced by
 
 [[Backend Native Tests]] · [[Native Emission Coverage]] · [[src/_MOC]]

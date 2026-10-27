@@ -5,7 +5,7 @@ module Pudu.Compiler.Lower.Body (lowerEntryBody, lowerFunctionBody) where
 
 import Data.List.NonEmpty (NonEmpty (..))
 import Pudu.Compiler.Lower.Scalar (lowerUnary, lowerBinary, eagerType)
-import Pudu.Compiler.Lower.Types (typeForSpan, nativeIntegerKind, nativeValueType)
+import Pudu.Compiler.Lower.Types (recordFields, typeForSpan, nativeIntegerKind, nativeValueType)
 import Pudu.Compiler.Lower.Control
   ( lowerWhile, lowerLoop, lowerTransfer, blockType, joinType
   , printValued, expressionIsPrintValued )
@@ -356,6 +356,10 @@ lowerExpression state (Located spanValue expression) = case expression of
       Nothing -> maybe (halt spanValue "module-qualified names" state) id
         (lowerVariant lowerExpression state spanValue (last (first : rest)) [])
   UnaryExpression operator operand -> lowerUnary lowerExpression state spanValue operator operand
+  -- An assignment's value is unit: it runs as the statement it is.
+  BinaryExpression _ "=" _ -> case lowerStatement state (Located spanValue (ExpressionStatement (Located spanValue expression))) of
+    (after, Just assigned) -> typed after (CoreBlockValue (CoreBlock [assigned] Nothing)) (blockType [assigned] Nothing)
+    (after, Nothing) -> refused after
   BinaryExpression left operator right -> lowerBinary lowerExpression state spanValue left operator right
   -- The checker has already solved a type application's copy at this call.
   CallExpression (Located _ (TypeApplication (Located _ (NameExpression ("convertInteger" :| []))) _)) arguments
@@ -372,17 +376,19 @@ lowerExpression state (Located spanValue expression) = case expression of
     | name `elem` ["mapOf", "setOf"] -> lowerKeyedBuilder lowerExpression state spanValue name arguments
     | name == "charFromCode" -> lowerCharFromCode lowerExpression state spanValue arguments
     | otherwise -> halt spanValue ("calls to '" <> name <> "'") state
-  CallExpression (Located callee (MemberExpression receiver@(Located _ (NameExpression (owner :| []))) (Located _ member))) arguments
+  CallExpression (Located callee (MemberExpression receiver@(Located _ (NameExpression (owner :| []))) named@(Located _ member))) arguments
     | isModuleQualifier state owner, Just key <- resolveFunction state [owner, member] -> lowerFunctionCall lowerExpression state spanValue key callee arguments
     | qualifier receiver, Just lowered <- lowerVariant lowerExpression state spanValue member arguments -> lowered
     | qualifier receiver, Just lowered <- lowerQualifiedMethod lowerExpression state spanValue callee owner member arguments -> lowered
     | Just lowered <- lowerMethodCall lowerExpression state spanValue callee receiver member arguments -> lowered
+    | functionField receiver member -> lowerValueCall lowerExpression state spanValue (Located callee (MemberExpression receiver named)) arguments
     | Just lowered <- lowerArrayMethod lowerExpression state spanValue receiver member arguments -> lowered
     | Just lowered <- lowerKeyedMethod lowerExpression state spanValue receiver member arguments -> lowered
     | otherwise -> lowerTextMethod lowerExpression state spanValue receiver member arguments
-  CallExpression (Located callee (MemberExpression receiver (Located _ member))) arguments
+  CallExpression (Located callee (MemberExpression receiver named@(Located _ member))) arguments
     | qualifier receiver, Just lowered <- lowerVariant lowerExpression state spanValue member arguments -> lowered
     | Just lowered <- lowerMethodCall lowerExpression state spanValue callee receiver member arguments -> lowered
+    | functionField receiver member -> lowerValueCall lowerExpression state spanValue (Located callee (MemberExpression receiver named)) arguments
     | Just lowered <- lowerArrayMethod lowerExpression state spanValue receiver member arguments -> lowered
     | Just lowered <- lowerKeyedMethod lowerExpression state spanValue receiver member arguments -> lowered
     | otherwise -> lowerTextMethod lowerExpression state spanValue receiver member arguments
@@ -457,3 +463,7 @@ lowerExpression state (Located spanValue expression) = case expression of
     -- `Shape.Circle(3)`: the receiver names a type, not a local.
     qualifier (Located _ (NameExpression (owner :| []))) = lookupLocal state owner == Nothing
     qualifier _ = False
+    -- With no method of that name, a call reads the field and calls what it holds.
+    functionField receiver member = case typeForSpan (contextTypes (lowerContext state)) (locatedSpan receiver) of
+      Just kind@(CoreRecordType _ _) | Just (CoreFunctionType _ _) <- recordFields (contextTypes (lowerContext state)) kind >>= lookup member -> True
+      _ -> False

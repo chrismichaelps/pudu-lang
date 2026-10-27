@@ -99,6 +99,14 @@ DEPTH 0.60 (MEDIUM). One surface hides formation, unification, and the checking 
 - **Q:** Should the checker return an annotated tree? **A:** Not yet; it publishes a span-keyed map. _Rationale:_ a typed IR is the right home for annotations, and inventing one before lowering exists would freeze a shape no consumer has asked for. _Rejected:_ rewriting the syntax tree with types; a parallel typed AST.
 - **Q:** Carry selections beside integer kinds through the evaluator? **A:** No; they become explicit syntax once, in [[Compiler Literals]].
 
+## Shapes with imports (#563)
+
+Resolved Grill Log: `declaredShapesWith` forms a module's records and sums
+after declaring its imports, as `checkUnit` does, so a field naming another
+module's type or alias is formed the way checking formed it. `ModuleTypes`
+carries the result lazily as `moduleShapes`; `declaredRecords` and
+`declaredSums` share its helpers.
+
 ## Referenced by
 
 [[src/Pudu/Type/_MOC]] · [[Compiler Pipeline]] · [[Pudu REPL]] · [[Semantics]]
