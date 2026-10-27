@@ -1,0 +1,106 @@
+{-| @Pudu.Backend.Runtime.Integer.Word128 — portable unsigned two-word arithmetic. -}
+module Pudu.Backend.Runtime.Integer.Word128
+  ( word128Runtime, word128RuntimeParts, word128RuntimeDependencies ) where
+
+import Data.Text (Text)
+
+word128Runtime :: [Text]
+word128Runtime = concatMap snd word128RuntimeParts
+
+word128RuntimeParts :: [(Text, [Text])]
+word128RuntimeParts =
+  [ ("word128_value",
+      [ "typedef struct { uint64_t low, high; } pudu_word128;"
+      , "typedef struct { pudu_word128 value; int carry; } pudu_word128_sum;"
+      , "typedef struct { pudu_word128 value; int overflow; } pudu_word128_product;"
+      , "typedef struct { pudu_word128 quotient, remainder; int zero; } pudu_word128_division;"
+      ])
+  , ("word128_zero",
+      [ "static inline int pudu_word128_zero(pudu_word128 a) {"
+      , "  return (a.low | a.high) == 0;"
+      , "}"
+      ])
+  , ("word128_compare",
+      [ "static inline int pudu_word128_compare(pudu_word128 a, pudu_word128 b) {"
+      , "  if (a.high != b.high) return (a.high > b.high) - (a.high < b.high);"
+      , "  return (a.low > b.low) - (a.low < b.low);"
+      , "}"
+      ])
+  , ("word128_add",
+      [ "static inline pudu_word128_sum pudu_word128_add(pudu_word128 a, pudu_word128 b) {"
+      , "  uint64_t low = a.low + b.low, high = a.high + b.high;"
+      , "  uint64_t carried = high + (low < a.low);"
+      , "  return (pudu_word128_sum){{low, carried}, high < a.high || carried < high};"
+      , "}"
+      ])
+  , ("word128_sub",
+      [ "static inline pudu_word128 pudu_word128_sub(pudu_word128 a, pudu_word128 b) {"
+      , "  return (pudu_word128){a.low - b.low, a.high - b.high - (a.low < b.low)};"
+      , "}"
+      ])
+  , ("word128_left",
+      [ "static inline pudu_word128 pudu_word128_left(pudu_word128 a, unsigned count) {"
+      , "  if (count == 0) return a;"
+      , "  if (count >= 128) return (pudu_word128){0, 0};"
+      , "  if (count >= 64) return (pudu_word128){0, a.low << (count - 64)};"
+      , "  return (pudu_word128){a.low << count, (a.high << count) | (a.low >> (64 - count))};"
+      , "}"
+      ])
+  , ("word128_right",
+      [ "static inline pudu_word128 pudu_word128_right(pudu_word128 a, unsigned count) {"
+      , "  if (count == 0) return a;"
+      , "  if (count >= 128) return (pudu_word128){0, 0};"
+      , "  if (count >= 64) return (pudu_word128){a.high >> (count - 64), 0};"
+      , "  return (pudu_word128){(a.low >> count) | (a.high << (64 - count)), a.high >> count};"
+      , "}"
+      ])
+  , ("word128_multiply",
+      [ "static inline pudu_word128_product pudu_word128_multiply(pudu_word128 a, pudu_word128 b) {"
+      , "  uint32_t left[4] = {(uint32_t)a.low, (uint32_t)(a.low >> 32), (uint32_t)a.high, (uint32_t)(a.high >> 32)};"
+      , "  uint32_t right[4] = {(uint32_t)b.low, (uint32_t)(b.low >> 32), (uint32_t)b.high, (uint32_t)(b.high >> 32)};"
+      , "  uint32_t limbs[8] = {0};"
+      , "  for (unsigned i = 0; i < 4; ++i) {"
+      , "    uint64_t carry = 0;"
+      , "    for (unsigned j = 0; j < 4; ++j) {"
+      , "      /* The product, existing limb and carry sum to at most UINT64_MAX. */"
+      , "      uint64_t next = (uint64_t)left[i] * right[j] + limbs[i + j] + carry;"
+      , "      limbs[i + j] = (uint32_t)next;"
+      , "      carry = next >> 32;"
+      , "    }"
+      , "    limbs[i + 4] = (uint32_t)carry;"
+      , "  }"
+      , "  return (pudu_word128_product){"
+      , "    {(uint64_t)limbs[0] | ((uint64_t)limbs[1] << 32),"
+      , "     (uint64_t)limbs[2] | ((uint64_t)limbs[3] << 32)},"
+      , "    (limbs[4] | limbs[5] | limbs[6] | limbs[7]) != 0};"
+      , "}"
+      ])
+  , ("word128_divide",
+      [ "static inline pudu_word128_division pudu_word128_divide(pudu_word128 a, pudu_word128 b) {"
+      , "  pudu_word128 quotient = {0, 0}, remainder = {0, 0};"
+      , "  if (pudu_word128_zero(b)) return (pudu_word128_division){quotient, remainder, 1};"
+      , "  for (unsigned remaining = 128; remaining != 0; --remaining) {"
+      , "    unsigned bit = remaining - 1;"
+      , "    uint64_t carry = remainder.high >> 63;"
+      , "    uint64_t digit = bit >= 64 ? (a.high >> (bit - 64)) & 1 : (a.low >> bit) & 1;"
+      , "    remainder = pudu_word128_left(remainder, 1);"
+      , "    remainder.low |= digit;"
+      , "    /* A carried 129th bit makes the unreduced remainder larger than b. */"
+      , "    if (carry || pudu_word128_compare(remainder, b) >= 0) {"
+      , "      remainder = pudu_word128_sub(remainder, b);"
+      , "      if (bit >= 64) quotient.high |= UINT64_C(1) << (bit - 64);"
+      , "      else quotient.low |= UINT64_C(1) << bit;"
+      , "    }"
+      , "  }"
+      , "  return (pudu_word128_division){quotient, remainder, 0};"
+      , "}"
+      ])
+  ]
+
+word128RuntimeDependencies :: Text -> [Text]
+word128RuntimeDependencies "word128_value" = []
+word128RuntimeDependencies "word128_divide" =
+  ["word128_value", "word128_zero", "word128_left", "word128_compare", "word128_sub"]
+word128RuntimeDependencies name
+  | name `elem` map fst word128RuntimeParts = ["word128_value"]
+  | otherwise = []

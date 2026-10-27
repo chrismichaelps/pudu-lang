@@ -312,6 +312,7 @@ library
     Pudu.Semantic.Scope
     Pudu.Semantic.ScopeIndex
     Pudu.Semantic.Symbol
+    Pudu.Backend.Runtime.Integer.Word128
     Pudu.Source
     Pudu.Comptime.Limits
     Pudu.Derive.State
