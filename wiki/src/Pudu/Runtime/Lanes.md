@@ -16,6 +16,7 @@ Whole-lane kernels over a ByteString of host-order binary64 values. `laneMap`, `
 exactly their result through `unsafeCreate`; no intermediate list or boxed element exists.
 `laneFill`, `laneRamp`, `laneFromList`, `laneToList`, `laneGet`, `laneSet` (one copy plus one
 store), `laneSlice`, `laneConcat`, `laneGather`, `laneScatter` (later index wins) and
+`laneWhere` (positive indices), `laneScatterAdd` (repeats accumulate in order) and
 `laneAffine3` (column-major 3x4 matrix over x/y/z lanes, written row order) complete it.
 Mismatched lengths and out-of-range indices answer `Nothing`. Folds run in index order, so
 results equal the scalar loop written the same way.

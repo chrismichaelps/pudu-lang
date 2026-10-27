@@ -48,6 +48,12 @@ data LaneKernel
   | RasterFill
   | RasterTriangles
   | LaneOverlapPairs
+  | LaneSelect
+  | LaneAbove
+  | LaneWhere
+  | LaneScatterAdd
+  | LaneFromInts
+  | LaneToInts
   deriving stock (Eq, Ord, Show, Enum, Bounded)
 
 {-| Packed lanes as Bytes, a Float64, an Int, Array[Float64], Array[Int],
@@ -94,6 +100,12 @@ laneKernelName kernel = case kernel of
   RasterFill -> "rasterFill"
   RasterTriangles -> "rasterTriangles"
   LaneOverlapPairs -> "lanesOverlapPairs"
+  LaneSelect -> "lanesSelect"
+  LaneAbove -> "lanesAbove"
+  LaneWhere -> "lanesWhere"
+  LaneScatterAdd -> "lanesScatterAdd"
+  LaneFromInts -> "lanesFromInts"
+  LaneToInts -> "lanesToInts"
 
 {-| Argument types and result type. -}
 laneKernelSignature :: LaneKernel -> ([LaneType], LaneType)
@@ -120,6 +132,12 @@ laneKernelSignature kernel = case kernel of
   LaneScatter -> ([LaneBytes, LaneInts, LaneBytes], LaneOption LaneBytes)
   LaneAffine3 -> ([LaneFloats, LaneBytes, LaneBytes, LaneBytes], LaneOption LaneTriple)
   RasterFill -> ([LaneInt, LaneFloat, LaneFloat, LaneFloat, LaneFloat], LaneOption LaneBytes)
+  LaneSelect -> ([LaneBytes, LaneBytes, LaneBytes], LaneOption LaneBytes)
+  LaneAbove -> ([LaneBytes, LaneFloat], LaneBytes)
+  LaneWhere -> ([LaneBytes], LaneInts)
+  LaneScatterAdd -> ([LaneBytes, LaneInts, LaneBytes], LaneOption LaneBytes)
+  LaneFromInts -> ([LaneInts], LaneBytes)
+  LaneToInts -> ([LaneBytes], LaneOption LaneInts)
   LaneOverlapPairs -> ([LaneBytes, LaneBytes, LaneBytes, LaneBytes, LaneBytes, LaneBytes], LaneOption LaneInts)
   RasterTriangles ->
     ( [LaneBytes, LaneBytes, LaneInt, LaneInt, LaneBytes, LaneBytes, LaneBytes, LaneBytes, LaneBytes, LaneBytes]

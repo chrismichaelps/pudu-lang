@@ -78,10 +78,22 @@ apply kernel values = case (kernel, values) of
     Just $ case Lanes.laneAffine3 entries xs ys zs of
       Just (rx, ry, rz) -> VariantValue "Some" [TupleValue [BytesValue rx, BytesValue ry, BytesValue rz]]
       Nothing -> VariantValue "None" []
+  (LaneSelect, [BytesValue mask, BytesValue a, BytesValue b]) ->
+    Just (optionLanes (Lanes.laneZip3 (\m x y -> if m > 0 then x else y) mask a b))
+  (LaneAbove, [BytesValue a, FloatValue _ threshold]) ->
+    Just (BytesValue (Lanes.laneMap (\x -> if x > threshold then 1 else 0) a))
+  (LaneWhere, [BytesValue mask]) -> Just (intArray (Lanes.laneWhere mask))
+  (LaneScatterAdd, [BytesValue a, ArrayValue indices, BytesValue fresh]) ->
+    Just (optionLanes (traverse indexOf (toList indices) >>= \is -> Lanes.laneScatterAdd a is fresh))
+  (LaneFromInts, [ArrayValue items]) -> do
+    numbers <- traverse integerOf (toList items)
+    Just (BytesValue (Lanes.laneFromList (map fromInteger numbers)))
+  (LaneToInts, [BytesValue a]) ->
+    Just (option (ArrayValue . Seq.fromList . map intOf) (traverse wholeOf (Lanes.laneToList a)))
   (LaneOverlapPairs, boxes) -> do
     lanes <- traverse bytesOf boxes
     Just $ case Broadphase.overlapPairs lanes of
-      Just pairs -> VariantValue "Some" [ArrayValue (Seq.fromList (map (intOf . toInteger) pairs))]
+      Just pairs -> VariantValue "Some" [intArray pairs]
       Nothing -> VariantValue "None" []
   (RasterFill, [IntValue _ pixels, FloatValue _ r, FloatValue _ g, FloatValue _ b, FloatValue _ a]) ->
     Just (optionLanes (bounded pixels >>= \count -> Raster.rasterFill count r g b a))
@@ -124,6 +136,23 @@ bounded n
 indexOf :: Value -> Maybe Int
 indexOf (IntValue _ n) = bounded n
 indexOf _ = Nothing
+
+integerOf :: Value -> Maybe Integer
+integerOf (IntValue _ n) = Just n
+integerOf _ = Nothing
+
+{-| An integral, finite value within the signed 64-bit range. -}
+wholeOf :: Double -> Maybe Integer
+wholeOf x
+  | isNaN x || isInfinite x = Nothing
+  | fromInteger whole /= x = Nothing
+  | whole < -9223372036854775808 || whole > 9223372036854775807 = Nothing
+  | otherwise = Just whole
+  where
+    whole = truncate x
+
+intArray :: [Int] -> Value
+intArray = ArrayValue . Seq.fromList . map (intOf . toInteger)
 
 floatOf :: Value -> Maybe Double
 floatOf (FloatValue _ x) = Just x

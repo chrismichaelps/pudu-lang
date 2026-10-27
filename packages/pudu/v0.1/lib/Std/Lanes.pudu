@@ -194,3 +194,36 @@ export fn affine3(matrix: &Array[Float64], xs: &Lanes, ys: &Lanes, zs: &Lanes) -
 export fn overlapPairs(minX: &Lanes, maxX: &Lanes, minY: &Lanes, maxY: &Lanes, minZ: &Lanes, maxZ: &Lanes) -> Option[Array[Int]] {
   lanesOverlapPairs(minX.bytes, maxX.bytes, minY.bytes, maxY.bytes, minZ.bytes, maxZ.bytes)
 }
+
+/// `a` where `mask` is positive, else `b`; a NaN mask chooses `b`. None when counts differ.
+export fn select(mask: &Lanes, a: &Lanes, b: &Lanes) -> Option[Lanes] {
+  let bytes = lanesSelect(mask.bytes, a.bytes, b.bytes) ?
+  Some(Lanes{bytes})
+}
+
+/// 1.0 where a value exceeds the threshold, else 0.0; NaN gives 0.0.
+export fn above(lanes: &Lanes, threshold: Float64) -> Lanes {
+  Lanes{bytes: lanesAbove(lanes.bytes, threshold)}
+}
+
+/// The indices whose value is positive, ascending.
+export fn positions(mask: &Lanes) -> Array[Int] {
+  lanesWhere(mask.bytes)
+}
+
+/// A copy with each value added at its index; repeats accumulate in order. None when the
+/// counts differ or an index is outside the lanes.
+export fn scatterAdd(lanes: &Lanes, indices: &Array[Int], values: &Lanes) -> Option[Lanes] {
+  let bytes = lanesScatterAdd(lanes.bytes, *indices, values.bytes) ?
+  Some(Lanes{bytes})
+}
+
+/// Each integer as the nearest binary64; exact for magnitudes up to 2^53.
+export fn fromInts(values: &Array[Int]) -> Lanes {
+  Lanes{bytes: lanesFromInts(*values)}
+}
+
+/// Each value as an integer, or None unless every value is integral, finite and within Int.
+export fn toInts(lanes: &Lanes) -> Option[Array[Int]] {
+  lanesToInts(lanes.bytes)
+}
