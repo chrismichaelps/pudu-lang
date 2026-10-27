@@ -5,6 +5,8 @@ tags: [moc, handoff]
 
 # Handoff Map
 
+- [[Game Input Delivery]] — issue #673 key release, physical codes, hover and buttons.
+
 - [[Hackage Transport Delivery]] — issue #656 configure verified HTTPS before one index update.
 
 - [[Derive Index Delivery]] — authored strategy indexing and public metadata (#458).
