@@ -33,6 +33,15 @@ lowerRangeIndex lower state receiver key@(Located at keyShape) = case (receiverK
                  in sliced after kind container low inclusive high
               [] -> refused after
           | otherwise -> halt (locatedSpan key) "a slice range whose ends are not Int" after
+  -- A range held in a value: its ends and inclusiveness are read at run time.
+  (Just kind, _)
+    | sliceable kind, typeForSpan (contextTypes (lowerContext state)) at == Just CoreRangeType ->
+        Just $ case collect lower state [receiver, key] of
+          (after, Nothing) -> refused after
+          (after, Just cores)
+            | any stops cores -> (after, Just (stopped at cores, CoreNeverType))
+            | [container, range] <- cores -> slicedBy after kind container range
+            | otherwise -> refused after
   _ -> Nothing
  where
   receiverKind = typeForSpan (contextTypes (lowerContext state)) (locatedSpan receiver)
@@ -74,6 +83,45 @@ lowerRangeIndex lower state receiver key@(Located at keyShape) = case (receiverK
           , when' (compare' CoreLess (reading stop) (reading start))
               (fail' "slice range ends before it starts" (Just "write the lower bound first") Nothing) ]
      in (s5, Just (expression kind (CoreBlockValue (CoreBlock statements (Just sliceOf))), kind))
+
+  slicedBy current kind container range =
+    let (s1, held) = hidden current kind
+        (s2, ranged) = hidden s1 CoreRangeType
+        (s3, size) = hidden s2 intType
+        (s4, start) = hidden s3 intType
+        (s5, end) = hidden s4 intType
+        (s6, stop) = hidden s5 intType
+        field name kind' = expression kind' (CoreRangeMethod name (reading ranged) [])
+        both a b = expression CoreBoolType (CoreBinary CoreAnd a b)
+        either' a b = expression CoreBoolType (CoreBinary CoreOr a b)
+        inclusive = field RangeIsInclusiveOf CoreBoolType
+        lengthOf = case kind of
+          CoreTextType -> expression intType (CoreTextMethod TextLength (reading held) [])
+          _ -> expression intType (CoreArrayMethod ArrayLengthOf (reading held) [])
+        endOutside = both (field RangeHasEnd CoreBoolType) (either' (compare' CoreLess (reading end) zero)
+          (either' (both inclusive (compare' CoreGreaterOrEqual (reading end) (reading size)))
+                   (both (expression CoreBoolType (CoreNot inclusive)) (compare' CoreGreater (reading end) (reading size)))))
+        outside = either' (either' (compare' CoreLess (reading start) zero) (compare' CoreGreater (reading start) (reading size))) endOutside
+        stopValue = expression intType (CoreIfValue (field RangeHasEnd CoreBoolType)
+          (CoreBlock [] (Just (expression intType (CoreIfValue inclusive
+            (CoreBlock [] (Just (expression intType (CoreBinary CoreAdd (reading end) one)))) (reading end)))))
+          (reading size))
+        lengthHelp = foldl1 (\a b -> expression CoreTextType (CoreBinary CoreAdd a b))
+          [ text "the range must lie within the value; it has ", expression CoreTextType (CoreDisplay (reading size)), text " elements" ]
+        sliceOf = case kind of
+          CoreTextType -> expression kind (CoreTextMethod TextSlice (reading held) [reading start, reading stop])
+          _ -> expression kind (CoreArrayMethod ArraySliceOf (reading held) [reading start, reading stop])
+        statements =
+          [ declare held container
+          , declare ranged range
+          , declare size lengthOf
+          , declare start (field RangeStartOf intType)
+          , declare end (field RangeEndOf intType)
+          , when' outside (fail' "slice range out of bounds" Nothing (Just lengthHelp))
+          , declare stop stopValue
+          , when' (compare' CoreLess (reading stop) (reading start))
+              (fail' "slice range ends before it starts" (Just "write the lower bound first") Nothing) ]
+     in (s6, Just (expression kind (CoreBlockValue (CoreBlock statements (Just sliceOf))), kind))
 
   hidden current kind = bindLocal current "" kind
   expression kind shape = CoreExpression at kind shape

@@ -13,6 +13,7 @@ import Pudu.Backend.Emit.Aggregate (aggregateHelper, aggregateNeed, cellName, is
 import Pudu.Diagnostic.Evaluation (cannotApplyBinaryMessage)
 import Pudu.Backend.Emit.Support (integerHelper, integerKindText, integerLiteralText, isWideInteger)
 import Pudu.Core (CoreArrayMethodName (..), CoreBinaryOperator (..), CoreKeyedMethodName (..), CoreTextMethodName (..), CoreType (..))
+import Pudu.Backend.Emit.Range (rangeMethodCall)
 import Pudu.Core.Frame
   ( FrameFault (..), FrameSlot (..), FrameSlotId (..), FrameUnaryOperator (..)
   , FrameValue (..), FrameValueShape (..), coreScalarOperator )
@@ -154,6 +155,16 @@ frameValue state value = case frameValueShape value of
       KeyedIntersect -> keyed "intersect"
       KeyedDifference -> keyed "difference"
       KeyedFromArray -> keyed "make"
+  FrameRangeValue low inclusive high -> do
+    lowText <- traverse slotText low
+    highText <- traverse slotText high
+    let end = maybe ("0, pudu_make(0, 0)") ("1, " <>)
+    plain ("pudu_range_make(" <> end lowText <> ", " <> (if inclusive then "1" else "0") <> ", " <> end highText <> ")") ["range"]
+  FrameRangeMethod name receiver arguments -> do
+    target <- slotText receiver
+    operands <- traverse slotText arguments
+    let (after, text, needs) = rangeMethodCall state (frameValueSpan value) name target operands
+    Right (after, text, Set.fromList needs)
   FrameComparable slot -> do
     source <- slotText slot
     uncurry plain (memberComparable (frameSlotType slot) source)

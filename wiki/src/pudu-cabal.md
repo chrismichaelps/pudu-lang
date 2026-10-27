@@ -142,6 +142,11 @@ Register Pudu.Backend.Runtime.Integer.Convert and Pudu.Compiler.Lower.Convert.
 Register Pudu.Backend.Emit.Keyed, Pudu.Backend.Runtime.Tree and
 Pudu.Compiler.Lower.Keyed.
 
+## Range values (#564)
+
+Register Pudu.Backend.Emit.Range, Pudu.Backend.Runtime.Range and
+Pudu.Compiler.Lower.Range.
+
 ## Referenced by
 
 The library exposes [[Resolve Canonical]] for the scoped generated-Impl resolver

@@ -58,6 +58,13 @@ hidden locals and hands them to [[Compiler Lower Sort]]. `text[i]` is
 arguments first, so the text goes into a local before the index runs.
 `collect`, `stops` and `stopped` are exported for [[Compiler Lower Slice]].
 
+## Loops over converted receivers (#564)
+
+Resolved Grill Log: `lowerArrayLoop` runs `map`, `filter` and `reduce` over a
+receiver that is turned into its items after the arguments and the receiver
+have run, which is how a range's values feed the same loops.
+`receiverOperands` and `arrayMethodWith` hold what the two share.
+
 ## Referenced by
 
 [[Compiler Lower Body]] · [[Compiler Lower For]] · [[Native Arrays]]

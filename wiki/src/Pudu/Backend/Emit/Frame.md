@@ -58,6 +58,11 @@ types, because it builds arrays.
 An entry returning a map or set renders it. [[Native Persistent Trees]] is
 emitted after the frame types, with the array runtime.
 
+## Range values (#564)
+
+An entry returning a range renders it; [[Native Range Runtime]] is emitted
+after the frame types.
+
 ## Referenced by
 
 [[src/_MOC]] · [[Native Frame Pressure Repair]]

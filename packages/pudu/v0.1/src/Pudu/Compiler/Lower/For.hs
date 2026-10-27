@@ -36,7 +36,6 @@ lowerFor lower block state at label binder iterated body = case locatedValue ite
         (afterEnd, Just (high, _)) | not (expressionIsPrintValued high) -> (afterEnd, Just [low, high])
         (afterEnd, _) -> (afterEnd, Nothing)
       (afterStart, _) -> (afterStart, Nothing)
-  RangeExpression{} -> halt (locatedSpan iterated) "a for loop over a range without both ends" state
   _ -> case typeForSpan (contextTypes (lowerContext state)) (locatedSpan iterated) of
     Just kind@(CoreArrayType itemKind) -> case lower state iterated of
       (after, Just (core, CoreNeverType)) -> (after, Just (core, CoreNeverType))
@@ -47,6 +46,8 @@ lowerFor lower block state at label binder iterated body = case locatedValue ite
     Just (CoreMapType key value) -> listed (CoreTupleType [key, value]) (simply (CoreTupleType [key, value]) (\core -> CoreKeyedMethod KeyedEntries core []))
     Just (CoreSetType member) -> listed member (simply member (\core -> CoreKeyedMethod KeyedKeys core []))
     Just CoreTextType -> listed CoreCharType (simply CoreCharType (\core -> CoreTextMethod TextChars core []))
+    -- A range value walks its values; one missing an end cannot be walked.
+    Just CoreRangeType -> listed intType (simply intType (\core -> CoreRangeMethod RangeIterated core []))
     Just kind@(CoreTupleType members@(first : _))
       | all (== first) members -> listed first (membersOf kind first members)
     Just kind

@@ -82,6 +82,10 @@ The E7001 failure passes no computed help.
 
 E7001 names them "map" and "set", as `valueKind` does.
 
+## Range values (#564)
+
+E7001 names a range "range", as `valueKind` does.
+
 ## Referenced by
 
 [[Compiler Lower Body]] · [[Pudu Cabal Manifest]] · [[Native Emission Coverage]]

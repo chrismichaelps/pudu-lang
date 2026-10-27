@@ -115,6 +115,10 @@ which still refuses at its call.
 `charFromCode` is native now; `readLine()` takes its place as a construct that
 still refuses at its call.
 
+## Refusal cases (#564)
+
+Range values are native; `"hi".toBytes()` takes their place.
+
 ## Referenced by
 
 [[Repository Test Runner]] · [[src/_MOC]] · [[src/Pudu/Backend/_MOC]] · [[Backend Emit]] ·

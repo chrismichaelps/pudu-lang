@@ -169,6 +169,11 @@ holds, arguments first, as `callMemberSelecting` falls back to `readMember`.
 An assignment in expression position runs as its statement and is unit (or
 Never when it cannot finish).
 
+## Range values (#564)
+
+A range expression in value position goes to [[Compiler Lower Range]], as do
+methods on a range.
+
 ## Referenced by
 
 [[src/Pudu/Compiler/_MOC]] · [[src/Pudu/_MOC]] · [[Compiler Lower]] ·

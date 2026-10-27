@@ -47,6 +47,7 @@ Dependency direction: Library → Program. Only [[Compiler Program]] reads files
 - [[Compiler Lower Sort]] · [[Compiler Lower Slice]] — sortBy and slicing by a range (#558).
 - [[Compiler Lower Convert]] — convertInteger (#560).
 - [[Compiler Lower Keyed]] — maps and sets (#561).
+- [[Compiler Lower Range]] — range values (#564).
 
 ## Referenced by
 

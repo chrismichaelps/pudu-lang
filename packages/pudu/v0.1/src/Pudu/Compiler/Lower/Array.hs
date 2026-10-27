@@ -3,7 +3,7 @@
     and `reduce` become loops calling the closure once per item, in order,
     as `callArrayMethod` does. -}
 module Pudu.Compiler.Lower.Array
-  ( lowerArrayLiteral, lowerArrayIndex, lowerArrayMethod, takeReceiver, collect, stops, stopped
+  ( lowerArrayLiteral, lowerArrayIndex, lowerArrayMethod, lowerArrayLoop, takeReceiver, collect, stops, stopped
   ) where
 
 import Data.Text (Text)
@@ -76,36 +76,69 @@ lowerArrayMethod :: LowerExpression -> LowerState -> Span -> Located Expression 
 lowerArrayMethod lower state at receiver member arguments = case receiverType of
   Just kind@(CoreArrayType element) -> case lookup member (direct kind element) of
     Just (name, parameters, result) -> Just (runtime name parameters result)
-    Nothing -> case member of
-      "map" | Just (CoreArrayType mapped) <- typeForSpan types at -> Just (looped kind element (Just mapped))
-      "filter" -> Just (looped kind element Nothing)
-      "reduce" -> Just (reduced kind element)
-      "sortBy" -> Just (sorted kind)
-      _ -> Just (halt at ("the array method '" <> member <> "'") state)
+    Nothing -> Just (arrayMethodWith lower state at receiver member arguments kind element id)
   _ -> Nothing
  where
   types = contextTypes (lowerContext state)
   receiverType = case locatedValue receiver of
     ArrayExpression members -> arrayAt state (locatedSpan receiver) members
     _ -> typeForSpan types (locatedSpan receiver)
-  -- Everything after the receiver's own evaluation reads hidden locals.
-  operands current = case collect lower current arguments of
-    (after, Nothing) -> (after, Nothing)
-    (after, Just cores) -> case lower after receiver of
-      (final, Just (core, _))
-        | expressionIsPrintValued core -> halt (locatedSpan receiver) "a Result[(), Str] method receiver" final
-        | otherwise -> (final, Just (cores, core))
-      (final, Nothing) -> (final, Nothing)
-
-  runtime name parameters result = case operands state of
+  runtime name parameters result = case receiverOperands lower state receiver arguments id of
     (after, Nothing) -> refused after
     (after, Just (cores, core))
       | any stops (cores <> [core]) -> (after, Just (stopped at (cores <> [core]), CoreNeverType))
       | map coreExpressionType cores /= parameters -> halt at ("a call to " <> member <> " with these arguments") after
       | otherwise -> (after, Just (CoreExpression at result (CoreArrayMethod name core cores), result))
+  direct kind element =
+    [ ("length", (ArrayLengthOf, [], intType))
+    , ("isEmpty", (ArrayIsEmptyOf, [], CoreBoolType))
+    , ("get", (ArrayGetAt, [intType], element))
+    , ("indexOf", (ArrayIndexOfValue, [element], intType))
+    , ("contains", (ArrayContainsValue, [element], CoreBoolType))
+    , ("push", (ArrayPushValue, [element], kind))
+    , ("pop", (ArrayPopLast, [], kind))
+    , ("insert", (ArrayInsertAt, [intType, element], kind))
+    , ("remove", (ArrayRemoveAt, [intType], kind))
+    , ("slice", (ArraySliceOf, [intType, intType], kind))
+    , ("concat", (ArrayConcatWith, [kind], kind))
+    , ("reverse", (ArrayReversed, [], kind)) ]
+    <> [("join", (ArrayJoinWith, [CoreTextType], CoreTextType)) | element `elem` [CoreTextType, CoreUnitType]]
+
+{-| `map`, `filter` and `reduce` over something that is not itself an array:
+    `toItems` turns the lowered receiver into the array of its items, run
+    after the arguments and the receiver, as the evaluator lists them. -}
+lowerArrayLoop :: LowerExpression -> LowerState -> Span -> Located Expression -> Text -> [Located Expression]
+  -> CoreType -> (CoreExpression -> CoreExpression) -> Lowered
+lowerArrayLoop lower state at receiver member arguments kind toItems = case kind of
+  CoreArrayType element -> arrayMethodWith lower state at receiver member arguments kind element toItems
+  _ -> halt at ("the method '" <> member <> "'") state
+
+-- Arguments, then the receiver; everything after reads hidden locals.
+receiverOperands :: LowerExpression -> LowerState -> Located Expression -> [Located Expression]
+  -> (CoreExpression -> CoreExpression) -> (LowerState, Maybe ([CoreExpression], CoreExpression))
+receiverOperands lower current receiver arguments toItems = case collect lower current arguments of
+  (after, Nothing) -> (after, Nothing)
+  (after, Just cores) -> case lower after receiver of
+    (final, Just (core, _))
+      | expressionIsPrintValued core -> halt (locatedSpan receiver) "a Result[(), Str] method receiver" final
+      | coreExpressionType core == CoreNeverType -> (final, Just (cores, core))
+      | otherwise -> (final, Just (cores, toItems core))
+    (final, Nothing) -> (final, Nothing)
+
+arrayMethodWith :: LowerExpression -> LowerState -> Span -> Located Expression -> Text -> [Located Expression]
+  -> CoreType -> CoreType -> (CoreExpression -> CoreExpression) -> Lowered
+arrayMethodWith lower state at receiver member arguments kind element toItems = case member of
+  "map" | Just (CoreArrayType mapped) <- typeForSpan types at -> looped (Just mapped)
+  "filter" -> looped Nothing
+  "reduce" -> reduced
+  "sortBy" -> sorted
+  _ -> halt at ("the array method '" <> member <> "'") state
+ where
+  types = contextTypes (lowerContext state)
+  operands current = receiverOperands lower current receiver arguments toItems
 
   -- map and filter: an output array built item by item.
-  looped kind element mapped = case operands state of
+  looped mapped = case operands state of
     (after, Nothing) -> refused after
     (after, Just (cores, core))
       | any stops (cores <> [core]) -> (after, Just (stopped at (cores <> [core]), CoreNeverType))
@@ -128,7 +161,7 @@ lowerArrayMethod lower state at receiver member arguments = case receiverType of
       | otherwise -> halt at ("a call to " <> member <> " with these arguments") after
 
   -- reduce: the accumulator first, then the item, as `foldM` passes them.
-  reduced kind element = case operands state of
+  reduced = case operands state of
     (after, Nothing) -> refused after
     (after, Just (cores, core))
       | any stops (cores <> [core]) -> (after, Just (stopped at (cores <> [core]), CoreNeverType))
@@ -148,7 +181,7 @@ lowerArrayMethod lower state at receiver member arguments = case receiverType of
 
   -- sortBy: the closure and the array run once, then the sort asks the
   -- closure exactly what `sortWith` asks it.
-  sorted kind = case operands state of
+  sorted = case operands state of
     (after, Nothing) -> refused after
     (after, Just (cores, core))
       | any stops (cores <> [core]) -> (after, Just (stopped at (cores <> [core]), CoreNeverType))
@@ -161,15 +194,15 @@ lowerArrayMethod lower state at receiver member arguments = case receiverType of
       | otherwise -> halt at ("a call to " <> member <> " with these arguments") after
 
   -- One turn per item, reading the length once, as traversing the sequence does.
-  walk current arrayLocal element turn =
+  walk current arrayLocal held turn =
     let (withLength, lengthLocal) = hidden current intType
         (withIndex, indexLocal) = hidden withLength intType
-        (withItem, itemLocal) = hidden withIndex element
+        (withItem, itemLocal) = hidden withIndex held
         (pushed, identity) = pushLoop Nothing withItem
         condition = expression CoreBoolType (CoreBinary CoreLess (reading indexLocal) (reading lengthLocal))
         step = statement (CoreAssign indexLocal (expression intType (CoreBinary CoreAdd (reading indexLocal) one)))
         loop = expression CoreUnitType (CoreWhileValue identity condition (CoreBlock
-          ([statement (CoreDeclare itemLocal (expression element (CoreIndex (reading arrayLocal) (reading indexLocal))))]
+          ([statement (CoreDeclare itemLocal (expression held (CoreIndex (reading arrayLocal) (reading indexLocal))))]
             <> turn itemLocal <> [step]) Nothing))
         statements =
           [ statement (CoreDeclare lengthLocal (expression intType (CoreArrayMethod ArrayLengthOf (reading arrayLocal) [])))
@@ -177,23 +210,8 @@ lowerArrayMethod lower state at receiver member arguments = case receiverType of
           , statement (CoreEvaluate loop) ]
      in (popLoop pushed, statements)
 
-  direct kind element =
-    [ ("length", (ArrayLengthOf, [], intType))
-    , ("isEmpty", (ArrayIsEmptyOf, [], CoreBoolType))
-    , ("get", (ArrayGetAt, [intType], element))
-    , ("indexOf", (ArrayIndexOfValue, [element], intType))
-    , ("contains", (ArrayContainsValue, [element], CoreBoolType))
-    , ("push", (ArrayPushValue, [element], kind))
-    , ("pop", (ArrayPopLast, [], kind))
-    , ("insert", (ArrayInsertAt, [intType, element], kind))
-    , ("remove", (ArrayRemoveAt, [intType], kind))
-    , ("slice", (ArraySliceOf, [intType, intType], kind))
-    , ("concat", (ArrayConcatWith, [kind], kind))
-    , ("reverse", (ArrayReversed, [], kind)) ]
-    <> [("join", (ArrayJoinWith, [CoreTextType], CoreTextType)) | element `elem` [CoreTextType, CoreUnitType]]
-
-  hidden current kind = bindLocal current "" kind
-  expression kind shape = CoreExpression at kind shape
+  hidden current kind' = bindLocal current "" kind'
+  expression kind' shape = CoreExpression at kind' shape
   statement shape = CoreStatement at shape
   reading local = expression (coreLocalType local) (CoreReadLocal local)
   one = expression intType (CoreIntegerLiteral PlatformSigned 1)

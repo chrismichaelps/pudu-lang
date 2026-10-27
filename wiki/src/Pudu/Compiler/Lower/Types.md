@@ -120,6 +120,10 @@ Resolved Grill Log: `Array[T]` forms when `T` does; its owner key is `Array`.
 `Map[K, V]` and `Set[T]` are native when their arguments are, and their
 methods are filed under "Map" and "Set".
 
+## Range values (#564)
+
+`Range[Int]` is `CoreRangeType`; its methods are filed under "Range".
+
 ## Referenced by
 
 [[Compiler Lower]] · [[Compiler Lower Signature]] · [[Native Emission Coverage]]

@@ -71,6 +71,10 @@ Counts cleanup for [[Backend Keyed Programs]], tree nodes included.
 
 Counts cleanup for [[Backend Shape Programs]]' single-module programs.
 
+## Range values (#564)
+
+Counts cleanup for [[Backend Range Programs]].
+
 ## Referenced by
 
 [[Backend Text Programs]] · [[Native Text Runtime]] · [[src/_MOC]]

@@ -227,6 +227,13 @@ array, and `CoreComparable` asks `comparableValue`'s question of any value.
 
 `CoreCharOfCode` reads an Int already known to be a scalar value as a Char.
 
+## Range values (#564)
+
+`CoreRangeType`, `CoreRangeValue` (the ends written, start first) and
+`CoreRangeMethod` with `CoreRangeMethodName`, whose `RangeValuesFor` carries
+the method a missing end is reported against and `RangeIterated` the `for`
+loop's E7001.
+
 ## Referenced by
 
 [[src/Pudu/_MOC]] · [[src/Pudu/Backend/_MOC]] · [[Core IR]] · [[Compiler Lower]] ·

@@ -69,6 +69,11 @@ building from an array); `isEmpty` reads the root's size directly.
 
 `FrameCharOfCode` is the code's magnitude as a `uint32_t`.
 
+## Range values (#564)
+
+`FrameRangeValue` calls `pudu_range_make`; range operations come from
+[[Backend Emit Range]] with their sites.
+
 ## Referenced by
 
 [[src/_MOC]] · [[Native Execution Frames]]

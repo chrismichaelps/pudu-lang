@@ -46,6 +46,10 @@ use; a set its member.
 
 `CoreCharOfCode` contributes its operand's locals.
 
+## Range values (#564)
+
+Range shapes contribute their operands' locals.
+
 ## Referenced by
 
 [[Compiler Lower]] · [[Core IR]] · [[src/_MOC]]

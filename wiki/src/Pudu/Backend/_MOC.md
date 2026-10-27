@@ -62,6 +62,7 @@ aliases: [Backend Module Map]
 - [[Native Integer Conversion]] · [[Backend Convert Programs]] — convertInteger between every integer kind (#560).
 - [[Native Persistent Trees]] · [[Backend Emit Keyed]] · [[Backend Keyed Programs]] — maps and sets (#561).
 - [[Backend Shape Programs]] — record shapes across modules, field calls and assignment values (#563).
+- [[Native Range Runtime]] · [[Backend Emit Range]] · [[Backend Range Programs]] — range values (#564).
 - [[Native Char Runtime]] · [[Backend Char Programs]] — native Char values and charAt.
 - [[Native Aggregate Emission]] · [[Native Aggregate Runtime]] · [[Compiler Lower Tuple]] · [[Backend Tuple Programs]] — native tuples.
 - [[Compiler Lower Record]] · [[Backend Record Programs]] — native records.

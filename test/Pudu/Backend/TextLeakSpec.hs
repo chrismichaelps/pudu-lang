@@ -23,6 +23,7 @@ import Pudu.Backend.TextCollectionPrograms (textCollectionSuccessPrograms)
 import Pudu.Backend.ConvertPrograms (convertSuccessPrograms)
 import Pudu.Backend.KeyedPrograms (keyedSuccessPrograms)
 import Pudu.Backend.ShapePrograms (shapeSuccessPrograms)
+import Pudu.Backend.RangePrograms (rangeSuccessPrograms)
 import Pudu.Backend.TextPrograms (textSuccessPrograms)
 import Pudu.Compiler (CompileResult (..), runCompile)
 import Pudu.Compiler.Frame (lowerFrames)
@@ -47,7 +48,7 @@ testLeaks = do
   case compiler of
     Nothing -> pure (counterexample "text leak checks require a C11 compiler" (False === True))
     Just cc -> withSystemTempDirectory "pudu-text-leaks" $ \root -> do
-      outcomes <- traverse (check cc root) (textSuccessPrograms <> textMethodSuccessPrograms <> charSuccessPrograms <> tupleSuccessPrograms <> recordSuccessPrograms <> sumSuccessPrograms <> constantPrograms <> referenceSuccessPrograms <> methodSuccessPrograms <> genericSuccessPrograms <> trySuccessPrograms <> forSuccessPrograms <> closureSuccessPrograms <> arraySuccessPrograms <> arrayPatternSuccessPrograms <> textCollectionSuccessPrograms <> convertSuccessPrograms <> keyedSuccessPrograms <> shapeSuccessPrograms)
+      outcomes <- traverse (check cc root) (textSuccessPrograms <> textMethodSuccessPrograms <> charSuccessPrograms <> tupleSuccessPrograms <> recordSuccessPrograms <> sumSuccessPrograms <> constantPrograms <> referenceSuccessPrograms <> methodSuccessPrograms <> genericSuccessPrograms <> trySuccessPrograms <> forSuccessPrograms <> closureSuccessPrograms <> arraySuccessPrograms <> arrayPatternSuccessPrograms <> textCollectionSuccessPrograms <> convertSuccessPrograms <> keyedSuccessPrograms <> shapeSuccessPrograms <> rangeSuccessPrograms)
       putStrLn ("[text leaks] executed " <> show (length outcomes) <> " counted programs")
       pure (conjoin outcomes)
  where

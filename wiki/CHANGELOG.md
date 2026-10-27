@@ -5,6 +5,14 @@ tags: [changelog]
 
 # Changelog
 
+## 2026-10-26 — Native range values (#564)
+
+Ranges are values natively: all fourteen methods, rendering as written,
+equality, ordering, `for` and slicing by them, with `Eval.Range`'s failures
+([[Native Range Values]]). `map`, `filter` and `reduce` reuse the array loops
+over the range's values. [[Backend Range Programs]] passes under Clang,
+GCC 15, ASan/UBSan and the tree evaluator with counted cleanup.
+
 ## 2026-10-26 — Native shapes across modules, field calls, assignment values (#563)
 
 Checking now hands lowering each module's records and sums formed with its
