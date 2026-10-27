@@ -5,6 +5,11 @@ tags: [changelog]
 
 # Changelog
 
+## 2026-10-27 — World hierarchy and events (#681)
+
+- [[Ark Hierarchy]] propagates world transforms one lane batch per depth level;
+  [[Ark Events]] adds typed double-buffered events with reader cursors.
+
 ## 2026-10-27 — Ark Render and the spinning cubes demo (#680)
 
 - [[Ark Render Device]], [[Ark Mesh]] (factory-built primitives), [[Ark Render Pipeline]] and

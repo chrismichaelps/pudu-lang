@@ -11,7 +11,8 @@ tags: [moc, ark]
 - [[Ark Render Fixture]] · [[Ark Render Gate]] · [[Spinning Cubes Demo]] — render conformance and the window demo.
 - [[Ark Input]] · [[Ark Frame Clock]] · [[Ark Window]] — action-mapped input, fixed-step timing and the window boundary.
 - [[Ark Platform Fixture]] · [[Ark Platform Gate]] — Platform conformance.
-- [[Ark World]] · [[Ark World Commands]] — archetype storage on lane columns and deferred structural changes.
+- [[Ark World]] · [[Ark World Commands]] · [[Ark Hierarchy]] · [[Ark Events]] — archetype storage on lane columns and deferred structural changes.
+- [[Ark Hierarchy Fixture]] — hierarchy and events conformance.
 - [[Ark World Fixture]] · [[Ark World Gate]] · [[Ark World Benchmark]] — World conformance and measurement.
 - [[Ark Math]] — provisional binary64 vector geometry.
 - [[Ark Planar Vector]] · [[Ark Quaternion]] · [[Ark Transform]] · [[Ark Camera]] — planar vectors, rotations, TRS and projections.

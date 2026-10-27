@@ -12,10 +12,12 @@ const library = join(root, 'packages/pudu/v0.1/lib');
 const env = {...process.env, PUDU_LIB: library};
 const fixture = join(root, 'test-fixtures/ark/UsesArkWorld.pudu');
 const bench = join(root, 'bench/WorldBench.pudu');
-const modules = ['Ark/Core/Handle.pudu', 'Ark/Core/Profile.pudu', 'Ark/World.pudu', 'Ark/World/Commands.pudu'];
+const hierarchy = join(root, 'test-fixtures/ark/UsesArkHierarchy.pudu');
+const modules = ['Ark/Core/Handle.pudu', 'Ark/Core/Profile.pudu', 'Ark/World.pudu', 'Ark/World/Commands.pudu', 'Ark/World/Hierarchy.pudu', 'Ark/World/Events.pudu'];
 const run = (...args) => execFileSync(binary, args, {env, encoding: 'utf8', timeout: 300000});
 assert.equal(run('run', fixture), 'ark world: ok\n');
-run('fmt', '--check', fixture, bench, ...modules.map(path => join(library, path)));
+assert.equal(run('run', hierarchy), 'ark hierarchy: ok\n');
+run('fmt', '--check', fixture, hierarchy, bench, ...modules.map(path => join(library, path)));
 const scratch = mkdtempSync(join(tmpdir(), 'pudu-ark-world-'));
 try {
   const typed = join(scratch, 'WorldAsView.pudu');
@@ -33,4 +35,4 @@ if (process.argv.includes('--bench')) {
   const timings = Object.fromEntries(run('run', bench).trim().split('\n').map(line => line.split(' ')).map(([name, ns]) => [name, Number(ns)]));
   console.log(JSON.stringify({entities: 100000, nanosecondsPerFrame: timings, speedup: timings.records / Math.max(timings.world, 1)}));
 }
-console.log('Ark world storage, systems, commands, refusals and distribution passed');
+console.log('Ark world storage, systems, commands, hierarchy, events, refusals and distribution passed');
