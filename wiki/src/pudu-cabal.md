@@ -14,6 +14,10 @@ cache identity; full analysis remains available independently of executable reus
 
 ## Purpose and interface
 
+Distribute `lib/Ark/*.pudu` beside Std in the existing library data root. [[Ark Math]] is
+language-distribution data, with no separate package or native dependency. Resolved Grill Log:
+source archives must contain Ark even when a checkout's library root is unavailable.
+
 Declare package metadata, compiler library modules, executable components, test components, compiler
 warnings, language defaults, dependencies, and native bridge linkage for the Cabal build.
 

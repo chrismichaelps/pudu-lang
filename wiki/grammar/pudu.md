@@ -87,7 +87,7 @@ Rules:
 - Module names match the manifest-relative file path.
 - Imports are absolute. Wildcard imports are prohibited: a reader must be able to answer "where did this name come from" from the import list alone.
 - `Core.*` is the language's own namespace and holds the implicit prelude. `Std.*` is the standard library shipped with the compiler; see [[architecture/STDLIB]] for the modules and their guarantees. Neither is implicitly imported except `Core.Prelude`.
-- A `Std.*` module resolves from the program's source root first and the compiler's library root second, so a program may shadow a standard module deliberately and visibly. There is no network step, no cache, and no version resolution.
+- A `Std.*` or `Ark.*` module resolves from the program's source root first and the compiler's library root second, so a program may shadow a shipped module deliberately and visibly. Dependency packages cannot shadow these roots. There is no network step for shipped modules. `Ark` is the explicitly imported integrated engine namespace; see [[Ark Engine]].
 - `import M` binds the module qualified, `import M as N` binds it under `N`, and `import M {a, b}` binds the named items unqualified. The three forms are the whole import vocabulary.
 - Declarations are private unless `export`.
 - `constant_ident` is an identifier composed of uppercase Unicode letters, decimal digits, and `_`, beginning with an uppercase letter or `_`; at least one uppercase letter is required.
