@@ -204,6 +204,14 @@ lowerExpression expression@(CoreExpression at kind shape) = case shape of
       Just slots -> case reverse slots of
         target : backwards -> value (FrameArrayMethod name target (reverse backwards))
         [] -> fault (Just at) "an array method without its receiver"
+  CoreKeyedMethod name receiver arguments -> do
+    operands <- lowerOperands (arguments <> [receiver])
+    case operands of
+      Nothing -> pure Stopped
+      Just slots -> case reverse slots of
+        target : backwards -> value (FrameKeyedMethod name target (reverse backwards))
+        [] -> fault (Just at) "a map or set operation without its receiver"
+  CoreComparable operand -> rendered FrameComparable operand
   CoreIndex container index -> do
     operands <- lowerOperands [container, index]
     case operands of
@@ -323,6 +331,8 @@ resultSlot at kind = case kind of
   CoreSumType _ _ -> Just <$> freshSlot at "$result" kind
   CoreFunctionType _ _ -> Just <$> freshSlot at "$result" kind
   CoreArrayType _ -> Just <$> freshSlot at "$result" kind
+  CoreMapType _ _ -> Just <$> freshSlot at "$result" kind
+  CoreSetType _ -> Just <$> freshSlot at "$result" kind
 
 lowerPrint :: Span -> CoreExpression -> Build Flow
 lowerPrint at operand = case coreExpressionShape operand of

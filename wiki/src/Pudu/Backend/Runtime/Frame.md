@@ -49,6 +49,10 @@ This scalar allocator cannot claim owned-value drop or concurrency coverage.
 Resolved Grill Log: the cell union gains `pudu_items *items` wherever boxes
 exist.
 
+## Trees (#561)
+
+The cell union gains `pudu_tree_node *tree` when a program has boxes.
+
 ## Referenced by
 
 [[src/_MOC]] · [[Native Frame Pressure Repair]]

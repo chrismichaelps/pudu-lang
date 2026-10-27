@@ -5,6 +5,16 @@ tags: [changelog]
 
 # Changelog
 
+## 2026-10-26 — Native maps and sets (#561)
+
+[[Native Maps and Sets]] carries `Map` and `Set` as shared persistent trees
+([[Native Persistent Trees]]) with every built-in method, literals, `for`,
+rendering, equality, ordering inside tuples and E7008 for keys that cannot be
+ordered ([[Compiler Lower Keyed]], [[Backend Emit Keyed]]). Tuple and record
+compare helpers no longer warn when every member is a function.
+[[Backend Keyed Programs]] passes under Clang, GCC 15, ASan/UBSan and the
+tree evaluator with counted cleanup.
+
 ## 2026-10-26 — Native type applications and convertInteger (#560)
 
 Calls with written type arguments lower as the call they wrap, and

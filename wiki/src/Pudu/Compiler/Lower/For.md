@@ -59,6 +59,10 @@ declares the next item, as walking the evaluator's item list does.
 
 The body goes through `droppedTail` from [[Compiler Lower Control]].
 
+## Maps and sets (#561)
+
+A map walks `entries()` and a set `toArray()`, listed before the body runs.
+
 ## Referenced by
 
 [[Compiler Lower Body]]

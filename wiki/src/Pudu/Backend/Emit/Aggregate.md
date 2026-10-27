@@ -68,6 +68,12 @@ by variant name and then payload. Before this they compared by pointer.
 Resolved Grill Log: array types get [[Backend Emit Array]]'s helpers; the cell
 vocabulary moved to [[Backend Emit Cell]].
 
+## Maps and sets (#561)
+
+Helpers come from [[Backend Emit Keyed]]. A tuple or record compare helper now
+marks both boxes used, since a type whose members are all functions reads
+neither and C warned about it.
+
 ## Referenced by
 
 [[Backend Frame Runtime]] · [[Backend Frame Values]] · [[Native Tuple Delivery]] · [[src/_MOC]]

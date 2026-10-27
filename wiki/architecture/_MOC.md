@@ -58,6 +58,7 @@ Pudu is a statically typed native systems language for developers who need predi
 - [[Native Generics]] — one copy per type list (#552).
 - [[Native Closures]] — function values as boxes (#555).
 - [[Native Arrays]] — arrays as owned growable buffers (#556).
+- [[Native Maps and Sets]] — maps and sets over shared persistent trees (#561).
 
 ## Referenced by
 

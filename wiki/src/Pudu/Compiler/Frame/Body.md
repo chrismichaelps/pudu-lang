@@ -71,6 +71,11 @@ the failure terminator.
 
 The conversion shapes lower their operand, then become one frame value.
 
+## Maps and sets (#561)
+
+Keyed operations lower their arguments before their receiver, as array
+methods do; a map or set result gets a slot like any box.
+
 ## Referenced by
 
 [[src/_MOC]] · [[Program Compiler Module Map]] · [[Native Frame Pressure Repair]]

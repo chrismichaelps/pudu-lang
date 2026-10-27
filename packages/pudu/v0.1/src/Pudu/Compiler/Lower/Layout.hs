@@ -25,6 +25,8 @@ moduleLayouts types closures functions = close Map.empty (concatMap functionType
     | otherwise = case kind of
         CoreTupleType members -> close found (members <> rest)
         CoreArrayType element -> close found (element : rest)
+        CoreMapType key value -> close found (key : value : CoreTupleType [key, value] : rest)
+        CoreSetType member -> close found (member : rest)
         CoreFunctionType inputs result ->
           let layout = CoreClosureLayout [entry | (owner, entry) <- lifted, owner == kind]
            in close (Map.insert kind layout found) (inputs <> [result] <> layoutTypes layout <> rest)
@@ -85,6 +87,8 @@ expression (CoreExpression _ kind shape) = kind : case shape of
   CoreCallValue callee arguments -> concatMap expression (callee : arguments)
   CoreArray members -> concatMap expression members
   CoreArrayMethod _ receiver arguments -> concatMap expression (receiver : arguments)
+  CoreKeyedMethod _ receiver arguments -> concatMap expression (receiver : arguments)
+  CoreComparable operand -> expression operand
   CoreIndex container index -> expression container <> expression index
   CoreTakeLocal local -> [coreLocalType local]
   CoreOperatorFailure _ operands -> concatMap expression operands

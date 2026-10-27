@@ -60,6 +60,7 @@ aliases: [Backend Module Map]
 - [[Native Text Case]] · [[Backend Text Case Tests]] — native trim and case mapping.
 - [[Native Text Pieces]] · [[Native Text Number]] · [[Backend Text Collection Programs]] — Str methods answering arrays and options (#559).
 - [[Native Integer Conversion]] · [[Backend Convert Programs]] — convertInteger between every integer kind (#560).
+- [[Native Persistent Trees]] · [[Backend Emit Keyed]] · [[Backend Keyed Programs]] — maps and sets (#561).
 - [[Native Char Runtime]] · [[Backend Char Programs]] — native Char values and charAt.
 - [[Native Aggregate Emission]] · [[Native Aggregate Runtime]] · [[Compiler Lower Tuple]] · [[Backend Tuple Programs]] — native tuples.
 - [[Compiler Lower Record]] · [[Backend Record Programs]] — native records.

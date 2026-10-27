@@ -12,7 +12,7 @@ import Pudu.Backend.Emit.State
 import Pudu.Backend.Emit.Aggregate (aggregateHelper, aggregateNeed, cellName, isAggregate, memberComparable, retained)
 import Pudu.Diagnostic.Evaluation (cannotApplyBinaryMessage)
 import Pudu.Backend.Emit.Support (integerHelper, integerKindText, integerLiteralText, isWideInteger)
-import Pudu.Core (CoreArrayMethodName (..), CoreBinaryOperator (..), CoreTextMethodName (..), CoreType (..))
+import Pudu.Core (CoreArrayMethodName (..), CoreBinaryOperator (..), CoreKeyedMethodName (..), CoreTextMethodName (..), CoreType (..))
 import Pudu.Core.Frame
   ( FrameFault (..), FrameSlot (..), FrameSlotId (..), FrameUnaryOperator (..)
   , FrameValue (..), FrameValueShape (..), coreScalarOperator )
@@ -131,6 +131,31 @@ frameValue state value = case frameValueShape value of
       ArrayConcatWith -> helper "concat"
       ArrayReversed -> helper "reverse"
       ArrayJoinWith -> plain ("pudu_array_join(" <> Text.intercalate ", " (target : operands) <> ")") ["array_join"]
+  FrameKeyedMethod name receiver arguments -> do
+    target <- slotText receiver
+    operands <- traverse slotText arguments
+    let kind = case name of
+          KeyedFromArray -> frameValueType value
+          _ -> frameSlotType receiver
+        keyed operation = plain (aggregateHelper operation kind <> "(" <> Text.intercalate ", " (target : operands) <> ")") [aggregateNeed operation kind]
+    case name of
+      KeyedSize -> keyed "size"
+      KeyedIsEmpty -> plain ("(pudu_tree_size(" <> target <> "->fields[0].tree) == 0)") ["tree"]
+      KeyedContains -> keyed "contains"
+      KeyedLookup -> keyed "lookup"
+      KeyedInsert -> keyed "insert"
+      KeyedRemove -> keyed "remove"
+      KeyedKeys -> keyed "keys"
+      KeyedValues -> keyed "values"
+      KeyedEntries -> keyed "entries"
+      KeyedMerge -> keyed "merge"
+      KeyedUnion -> keyed "union"
+      KeyedIntersect -> keyed "intersect"
+      KeyedDifference -> keyed "difference"
+      KeyedFromArray -> keyed "make"
+  FrameComparable slot -> do
+    source <- slotText slot
+    uncurry plain (memberComparable (frameSlotType slot) source)
   FrameDisplay slot -> rendered slot
   FrameTextMethod name receiver arguments -> do
     target <- slotText receiver

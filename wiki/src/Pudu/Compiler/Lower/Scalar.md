@@ -78,6 +78,10 @@ operator failures, as `valueKind` names them.
 
 The E7001 failure passes no computed help.
 
+## Maps and sets (#561)
+
+E7001 names them "map" and "set", as `valueKind` does.
+
 ## Referenced by
 
 [[Compiler Lower Body]] · [[Pudu Cabal Manifest]] · [[Native Emission Coverage]]

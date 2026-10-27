@@ -127,6 +127,8 @@ runtimeKind CoreCharType = "char"
 runtimeKind (CoreTupleType _) = "tuple"
 runtimeKind (CoreRecordType name _) = displayName name
 runtimeKind (CoreArrayType _) = "array"
+runtimeKind (CoreMapType _ _) = "map"
+runtimeKind (CoreSetType _) = "set"
 runtimeKind (CoreFunctionType _ _) = "function"
 runtimeKind kind = coreTypeName kind
 
