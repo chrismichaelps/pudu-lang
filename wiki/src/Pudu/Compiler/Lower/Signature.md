@@ -94,3 +94,7 @@ Parameters and results admit `nativeValueType`, so Str crosses calls.
 
 Parameter and result types form through `formedCoreTypeIn`, so record types
 are admitted.
+
+## Expression bodies (#567)
+
+Resolved Grill Log: Accept an existing expression body as well as a block body; leave default values, modifiers and all solved-type restrictions unchanged. See [[Native Expression Bodies]].

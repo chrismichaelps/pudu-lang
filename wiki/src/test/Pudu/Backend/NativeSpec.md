@@ -167,3 +167,7 @@ The full gate and multi-module corpus remain intact.
 ## Output Results (#566)
 
 Resolved Grill Log: Register output success/refusal properties using Backend Output Programs. Capture stderr along with stdout for the interpreter, then append rendered runtime diagnostics, preserving healthy source stderr as observed native output.
+
+## Expression bodies (#567)
+
+Resolved Grill Log: Register focused expression-body explicit-output and runtime diagnostic properties from Backend Expression Body Programs, using the existing differential harness.

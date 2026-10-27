@@ -15,6 +15,7 @@ import Control.Exception (IOException, finally, try)
 import Data.Text (Text)
 import qualified Data.Text as Text
 import qualified Data.Text.IO as TextIO
+import Pudu.Backend.ExpressionBodyPrograms (expressionBodySuccessPrograms, expressionBodyRefusalPrograms)
 import Pudu.Backend.OutputPrograms (outputSuccessPrograms, outputStreamPrograms, outputRefusalPrograms)
 import Pudu.Backend.BytesPrograms (bytesSuccessPrograms, bytesRefusalPrograms)
 import Pudu.Backend.ControlPrograms (controlSuccessPrograms, controlRefusalPrograms)
@@ -110,6 +111,8 @@ backendNativeProperties =
   , ("native record failures retain interpreter refusals", testRecordRefusals)
   , ("native sums and match match hand-written answers and the interpreter", testSumConformance)
   , ("native sum and match failures retain interpreter refusals", testSumRefusals)
+  , ("native expression bodies match explicit answers and the interpreter", testExpressionBodyConformance)
+  , ("native expression bodies retain interpreter failures", testExpressionBodyRefusals)
   , ("native output Results match explicit answers and the interpreter", testOutputConformance)
   , ("native output Result operators retain interpreter refusals", testOutputRefusals)
   , ("native Bytes match hand-written answers and the interpreter", testBytesConformance)
@@ -295,6 +298,14 @@ testTupleConformance = conjoin <$> mapM run tupleSuccessPrograms
 
 testTupleRefusals :: IO Property
 testTupleRefusals = conjoin <$> mapM (uncurry conformance) tupleRefusalPrograms
+
+testExpressionBodyConformance :: IO Property
+testExpressionBodyConformance = conjoin <$> mapM run expressionBodySuccessPrograms
+ where
+  run (label, source, expected) = conformanceExpecting (Just (expected, "", 0)) label source
+
+testExpressionBodyRefusals :: IO Property
+testExpressionBodyRefusals = conjoin <$> mapM (uncurry conformance) expressionBodyRefusalPrograms
 
 testOutputConformance :: IO Property
 testOutputConformance = conjoin <$> mapM run

@@ -237,3 +237,5 @@ tags: [moc, handoff]
 - [[Native Bytes Delivery]] — completion and focused boundary verification (#565).
 
 - [[Native Output Delivery]] — Result-valued output and failed-handle parity (#566).
+
+- [[Native Expression Body Delivery]] — named expression-body completion (#567).

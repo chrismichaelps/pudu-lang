@@ -278,7 +278,6 @@ refusalCases =
   , ("Decimal parameter", helperProgram "fn helper(value: Decimal) -> Int { return 1 }" "helper(1.5d)", "Decimal")
   , ("unresolved inferred result", helperProgram "fn helper(value: Int) { return }" "{ helper(1)\n 0 }", "helper(value")
   , ("default parameter", helperProgram "fn helper(value: Int = 7) -> Int { return value }" "helper(1)", "7")
-  , ("expression body", helperProgram "fn helper(value: Int) -> Int = value" "helper(1)", "value\n")
   , ("BigInt result", helperProgram "fn helper() -> BigInt { return 1 }" "{ helper()\n  0 }", "BigInt")
   , ("call to entry", statementProgram "main()", "main()\n")
   , ("environment", bindingProgram "var pairs = environment()", "environment()")

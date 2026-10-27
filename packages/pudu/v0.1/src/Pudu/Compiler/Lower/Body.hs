@@ -45,16 +45,15 @@ import Pudu.Source (Span)
 
 {-| The entry carries an admitted integer, Bool, float, Str, Char, tuple, record, sum or unit; a body that never
     returns uses the unit ABI. Integers become the exit status and every other value is
-    printed as `renderValue` writes it, the same split `pudu run` makes. Print's Result carrier must not escape through the
-    entry result. -}
+    printed as `renderValue` writes it, the same split `pudu run` makes. -}
 lowerEntryBody :: Located Function -> LowerState -> (LowerState, Maybe CoreFunction)
 lowerEntryBody located state
   | not (null (functionParameters function)) =
       halt atName "parameters on the entry function" state
   | otherwise = case functionLevelRefusal function of
       Just (spanValue, construct) -> halt spanValue construct state
-      Nothing -> case functionBody function of
-        Just (Located _ (BlockBody block)) ->
+      Nothing -> case functionBlock function of
+        Just block ->
           let (after, coreBlock, resultType) = lowerBlock state block
            in case maybe resultType id (lowerFunctionResult after) of
                 kind@(CoreIntegerType integerKind) | nativeIntegerKind integerKind -> built after coreBlock kind
@@ -103,8 +102,8 @@ lowerEntryBody located state
     has already proved result agreement; structural lowering preserves the
     signature without inferring another return type. -}
 lowerFunctionBody :: Located Function -> CoreSignature -> LowerState -> (LowerState, Maybe CoreFunction)
-lowerFunctionBody located signature state = case functionBody function of
-  Just (Located _ (BlockBody block)) ->
+lowerFunctionBody located signature state = case functionBlock function of
+  Just block ->
     let (after, coreBlock, _) = lowerBlock state block
         final
           | printValued coreBlock = refuse (locatedSpan block) "a function body returning Result[(), Str]" after
@@ -121,6 +120,13 @@ lowerFunctionBody located signature state = case functionBody function of
   _ -> refused state
   where
     function = locatedValue located
+
+functionBlock :: Function -> Maybe (Located Block)
+functionBlock function = case functionBody function of
+  Just (Located _ (BlockBody block)) -> Just block
+  Just (Located at (ExpressionBody expression)) ->
+    Just (Located at (Block [] (Just expression)))
+  Nothing -> Nothing
 
 {-| Lower one block: a fresh scope, statements in order, then the trailing
     expression as the result. The scope is popped on exit, so C block scoping

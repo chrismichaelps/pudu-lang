@@ -96,7 +96,7 @@ boundFunctionRefusal bound function
   | not (null (functionConstraints function)) && null (functionTypeParams function) = Just (atName, "function constraints")
   | otherwise = case functionBody function of
       Nothing -> Just (atName, "a function without a body")
-      Just (Located bodySpan (ExpressionBody _)) -> Just (bodySpan, "an expression-bodied function")
+      Just (Located _ (ExpressionBody _)) -> Nothing
       Just (Located _ (BlockBody _)) -> Nothing
   where
     atName = locatedSpan (functionName function)
