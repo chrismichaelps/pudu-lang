@@ -1,6 +1,6 @@
 {-| @Pudu.Compiler.Lower.Types — settled checker facts for native representation. -}
 module Pudu.Compiler.Lower.Types
-  ( LowerTypes, emptyTypes, nativeTypes, withShapes, withBindings, typeBindings, lookupScheme, typeForSpan, typeFactAt, sharedReferenceTarget
+  ( LowerTypes, emptyTypes, nativeTypes, withShapes, withBindings, withFacts, typeBindings, lookupScheme, typeForSpan, typeFactAt, sharedReferenceTarget
   , formedCoreType, formedCoreTypeIn, ownerKeyOf, layoutOf, recordFields, sumVariants, nativeIntegerKind, nativeScalarType, nativeValueType ) where
 
 import Data.Map.Strict (Map)
@@ -52,6 +52,11 @@ lookupScheme (LowerTypes _ schemes _ _) name = Map.lookup name schemes
 
 typeForSpan :: LowerTypes -> Span -> Maybe CoreType
 typeForSpan types@(LowerTypes info _ _ _) at = typeAt info at >>= formedCoreTypeIn types
+
+{-| Facts for spans a lowering made up, laid over the checked ones. -}
+withFacts :: [(Span, Type)] -> LowerTypes -> LowerTypes
+withFacts facts (LowerTypes (TypeInfo offsets entries) schemes shapes bindings) =
+  LowerTypes (TypeInfo offsets (Map.union (Map.fromList facts) entries)) schemes shapes bindings
 
 {-| The fact itself, before forming: what a generic call was instantiated at. -}
 typeFactAt :: LowerTypes -> Span -> Maybe Type

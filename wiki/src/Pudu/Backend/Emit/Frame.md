@@ -134,3 +134,9 @@ Resolved Grill Log: Append explicit environment metadata from frameModuleClosure
 ## First-class output builtins (#569)
 
 Resolved Grill Log: Emit counted=0 only for builtin intrinsic bodies, otherwise 1, independently of hidden environment metadata.
+
+## Caller-blaming functions (#644)
+
+pudu_function gains `blames`, set for method closures; method closures are
+not counted toward call depth, like builtins. Resolved Grill Log: the flag is
+what lets the reporter relocate any failure inside them.

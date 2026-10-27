@@ -317,3 +317,11 @@ Resolved Grill Log: the rule covers every dynamic message, not only panic.
 Register wait_writable right after process_io so its users come later in
 emission order. No runtime revision change: generated programs that used it
 contain the same lines in the same place.
+
+## Revision 19 (#644)
+
+cleanup declares pudu_blame_hook and depends on site. pudu_fail_report takes
+file, line, column and excerpt from the hook's site when there is one, before
+cleanup frees the frame, and code, message and help from its own. Resolved
+Grill Log: runtime helpers keep their static sites; only the report knows
+which frame is running.

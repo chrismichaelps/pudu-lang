@@ -82,3 +82,10 @@ site table, [[Backend Emit]] and [[Backend Runtime]].
 Export operatorCode E7001 and unary/binary cannot-apply plus unsupported-operator message factories. Reuse exact existing interpreter strings with no help line. Consumers are Eval Operator, Compiler Lower Scalar and Backend Emit State. Existing E7002 text remains unchanged.
 
 Resolved Grill Log: reproduce actual interpreter dispatch, canonical settled kinds, operand order and diagnostic spans; never classify print Result as unit or implement invalid operations as integer arithmetic. No syntax/inference change.
+
+## Shared wording (#633)
+
+panicCode, panicArgumentHelp, builtinArgumentCode and the convertInteger
+target message and help live here, used by both the evaluator and native
+lowering. Resolved Grill Log: each code is spelled once, which the
+diagnostic-code gate requires.

@@ -28,7 +28,7 @@ import Pudu.Backend.Emit.Keyed (mapHelpers, setHelpers)
 import Pudu.Backend.Emit.Range (rangeHelpers)
 import Pudu.Backend.Emit.Bytes (bytesHelpers)
 import Pudu.Backend.Emit.State (cString, cStringBytes)
-import Pudu.Core (CoreClosureInfo (..), CoreLayout (..), CoreType (..), CoreVariant (..), displayName)
+import Pudu.Core (CoreClosureInfo (..), CoreLayout (..), CoreType (..), CoreVariant (..), coreTypeName, displayName)
 import Pudu.Core.Frame (FrameFunction (..), FrameModule (..), FrameSlot (..))
 
 type Layouts = Map CoreType CoreLayout
@@ -120,25 +120,32 @@ closureHelpers kind entries =
       [ "static pudu_text " <> aggregateHelper "show" kind <> "(pudu_box *box) {"
       , "  switch (box->fields[0].scalar) {" ]
       <> [ "    case " <> number identity <> ": return pudu_text_literal(" <> cString shown <> ", " <> number (cStringBytes shown) <> ");"
-         | (identity, info) <- entries, let shown = (if closureIsBuiltin info then "<builtin " else "<fn ") <> closureDisplayName info <> ">" ]
+         | (identity, info) <- entries, let shown = "<" <> label info <> " " <> closureDisplayName info <> ">" ]
       <> [ "    default: return pudu_text_literal(\"\", 0);", "  }", "}" ]))
   , (aggregateNeed "name" kind, (["text_literal"],
       [ "static pudu_text " <> aggregateHelper "name" kind <> "(pudu_box *box) {"
       , "  switch (box->fields[0].scalar) {" ]
-      <> [ "    case " <> number identity <> ": return pudu_text_literal(\"" <> label <> "\", " <> number (Text.length label) <> ");"
-         | (identity, info) <- entries, let label = if closureIsBuiltin info then "builtin" else "function" ]
+      <> [ "    case " <> number identity <> ": return pudu_text_literal(\"" <> kindName <> "\", " <> number (Text.length kindName) <> ");"
+         | (identity, info) <- entries
+         , let kindName = if closureIsBuiltin info then "builtin" else maybe "function" ((<> " method") . methodKind) (closureMethod info) ]
       <> [ "    default: return pudu_text_literal(\"\", 0);", "  }", "}" ]))
   , (aggregateNeed "comparable" kind, ([],
       [ "static int " <> aggregateHelper "comparable" kind <> "(pudu_box *box) {", "  (void)box;", "  return 0;", "}" ]))
   , (aggregateNeed "compare" kind, ([],
       [ "static int " <> aggregateHelper "compare" kind <> "(pudu_box *a, pudu_box *b) {", "  (void)a; (void)b;", "  return 0;", "}" ]))
-  , (aggregateNeed "equal" kind, ([],
+  , (aggregateNeed "equal" kind, (concat [snd (memberEqual receiver "" "") | (_, info) <- entries, Just receiver <- [closureMethod info]],
       [ "static int " <> aggregateHelper "site" kind <> "(pudu_box *box) {"
       , "  switch (box->fields[0].scalar) {" ]
       <> [ "    case " <> number identity <> ": return " <> number (siteNumber info) <> ";" | (identity, info) <- entries ]
       <> [ "    default: return -1;", "  }", "}"
          , "static int " <> aggregateHelper "equal" kind <> "(pudu_box *a, pudu_box *b) {"
-         , "  return " <> aggregateHelper "site" kind <> "(a) == " <> aggregateHelper "site" kind <> "(b);", "}" ]))
+         , "  if (" <> aggregateHelper "site" kind <> "(a) != " <> aggregateHelper "site" kind <> "(b)) return 0;" ]
+      -- A method value also carries its receiver, and equal receivers are
+      -- what make two of them equal.
+      <> [ "  if (a->fields[0].scalar == " <> number identity <> ") return "
+             <> fst (memberEqual receiver (capture "a" 0 receiver) (capture "b" 0 receiver)) <> ";"
+         | (identity, info) <- entries, Just receiver <- [closureMethod info] ]
+      <> [ "  return 1;", "}" ]))
   ] <>
   [ (aggregateNeed ("closure" <> number identity) kind, (concat [snd (retained member "") | (_, member) <- captures info],
       [ "static pudu_box *" <> aggregateHelper ("closure" <> number identity) kind <> "("
@@ -150,6 +157,10 @@ closureHelpers kind entries =
   | (identity, info) <- entries ]
  where
   captures info = zip [0 :: Int ..] (closureCaptures info)
+  label info
+    | closureIsBuiltin info = "builtin"
+    | Just receiver <- closureMethod info = methodKind receiver <> " method"
+    | otherwise = "fn"
   capture box position member = box <> "->fields[" <> number (position + 1) <> "]." <> cellName member
   sites = foldr (\site found -> if site `elem` found then found else site : found) [] [closureSite info | (_, info) <- entries]
   siteNumber info = length (takeWhile (/= closureSite info) sites)
@@ -294,3 +305,15 @@ sumHelpers kind variants =
             , "(const char *const[]){" <> Text.intercalate ", " [cString (label <> ": ") | (label, _) <- coreVariantFields variant] <> "}"
             , "\"}\"" )
         | otherwise = (cString (coreVariantName variant <> "("), "NULL", "\")\"")
+
+{-| What the interpreter calls a receiver when it names a method value. -}
+methodKind :: CoreType -> Text
+methodKind receiver = case receiver of
+  CoreTextType -> "text"
+  CoreArrayType _ -> "array"
+  CoreMapType _ _ -> "map"
+  CoreSetType _ -> "set"
+  CoreRangeType -> "range"
+  CoreCharType -> "character"
+  CoreBytesType -> "byte"
+  other -> coreTypeName other

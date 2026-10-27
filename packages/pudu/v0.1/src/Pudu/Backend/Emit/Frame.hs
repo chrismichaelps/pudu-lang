@@ -2,6 +2,7 @@
 module Pudu.Backend.Emit.Frame (emitFrameProgram, frameUsesWideCells, frameUsesText, ownershipSwitch) where
 
 import Control.Monad (unless)
+import Data.Maybe (isJust)
 import qualified Data.Set as Set
 import Data.Text (Text)
 import qualified Data.Text as Text
@@ -19,7 +20,7 @@ import Pudu.Backend.Runtime.Bytes (bytesRuntimeParts)
 import Pudu.Backend.Runtime.Dependencies (runtimeDependencies)
 import Data.Map.Strict (Map)
 import qualified Data.Map.Strict as Map
-import Pudu.Core (closureIsBuiltin, closureHasEnvironment, CoreLayout (..), CoreType (..), CoreVariant (..))
+import Pudu.Core (closureIsBuiltin, closureHasEnvironment, closureMethod, CoreLayout (..), CoreType (..), CoreVariant (..))
 import Pudu.Core.Frame
   ( FrameBlock (..), FrameFault (..), FrameFunction (..), FrameLabel (..)
   , FrameModule (..), FrameSlot (..), FrameSlotId (..), FrameTerminator (..) )
@@ -141,7 +142,8 @@ emitFrameProgram version sources source = do
         <> (if null (ownedSlots function) then "NULL" else "pudu_owned_" <> textOfInt identity)
         <> ", " <> kindOf (frameFunctionResult function) <> ", "
         <> (if maybe False closureHasEnvironment info then "1" else "0") <> ", "
-        <> (if maybe False closureIsBuiltin info then "0" else "1") <> "},"
+        <> (if maybe False (\found -> closureIsBuiltin found || isJust (closureMethod found)) info then "0" else "1") <> ", "
+        <> (if maybe False (isJust . closureMethod) info then "1" else "0") <> "},"
       where info = Map.lookup (frameFunctionName function) (frameModuleClosures source)
     argumentCount function = maximum (0 :
       [length arguments | block <- frameFunctionBlocks function

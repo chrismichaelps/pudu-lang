@@ -7,6 +7,8 @@ import Data.Text (Text)
 import Pudu.Compiler.Lower.Array (collect, stopped, stops)
 import Pudu.Compiler.Lower.State (LowerState, refused)
 import Pudu.Core
+import Pudu.Diagnostic.Evaluation
+  ( builtinArgumentCode, convertIntegerTargetHelp, convertIntegerTargetMessage, panicArgumentHelp, panicCode )
 import Pudu.Frontend.Syntax (Expression, Located (..))
 import Pudu.Source (Span)
 
@@ -23,7 +25,7 @@ lowerPanic lower state at arguments = case collect lower state arguments of
     | any stops cores -> (after, Just (stopped at cores, CoreNeverType))
     | [message] <- cores, coreExpressionType message == CoreTextType ->
         (after, Just (never at (CoreFailText panicCode Nothing message Nothing), CoreNeverType))
-    | otherwise -> (after, Just (runThen at cores (CoreFailText panicCode (Just panicHelp) (text at "panic") Nothing), CoreNeverType))
+    | otherwise -> (after, Just (runThen at cores (CoreFailText panicCode (Just panicArgumentHelp) (text at "panic") Nothing), CoreNeverType))
 
 {-| `convertInteger(value)` with no type argument: the value runs, then E7012. -}
 lowerUntypedConvert :: LowerExpression -> LowerState -> Span -> [Located Expression] -> Lowered
@@ -31,7 +33,7 @@ lowerUntypedConvert lower state at arguments = case collect lower state argument
   (after, Nothing) -> refused after
   (after, Just cores)
     | any stops cores -> (after, Just (stopped at cores, CoreNeverType))
-    | otherwise -> (after, Just (runThen at cores (CoreFailText convertCode (Just convertHelp) (text at convertMessage) Nothing), CoreNeverType))
+    | otherwise -> (after, Just (runThen at cores (CoreFailText builtinArgumentCode (Just convertIntegerTargetHelp) (text at convertIntegerTargetMessage) Nothing), CoreNeverType))
 
 runThen :: Span -> [CoreExpression] -> CoreExpressionShape -> CoreExpression
 runThen at cores failure = never at (CoreBlockValue (CoreBlock
@@ -43,18 +45,11 @@ panicBody at message = never at (CoreFailCaller panicCode Nothing message)
 
 {-| A `panic` value called with anything but one Str. -}
 wrongPanicBody :: Span -> CoreExpression
-wrongPanicBody at = never at (CoreFailCaller panicCode (Just panicHelp) (text at "panic"))
+wrongPanicBody at = never at (CoreFailCaller panicCode (Just panicArgumentHelp) (text at "panic"))
 
 {-| An untyped `convertInteger` value's body. The caller already ran the value. -}
 untypedConvertBody :: Span -> CoreExpression
-untypedConvertBody at = never at (CoreFailCaller convertCode (Just convertHelp) (text at convertMessage))
-
-panicCode, panicHelp, convertCode, convertMessage, convertHelp :: Text
-panicCode = "E7007"
-panicHelp = "panic takes one string argument"
-convertCode = "E7012"
-convertMessage = "convertInteger needs the type to convert to"
-convertHelp = "write it as a type argument, as in convertInteger[UInt8](value)"
+untypedConvertBody at = never at (CoreFailCaller builtinArgumentCode (Just convertIntegerTargetHelp) (text at convertIntegerTargetMessage))
 
 never :: Span -> CoreExpressionShape -> CoreExpression
 never at = CoreExpression at CoreNeverType

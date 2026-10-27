@@ -48,7 +48,7 @@ frameTypes wide text boxes =
   , "typedef struct {"
   , "  size_t slots; size_t arguments; size_t pc; size_t parameter_count;"
   , "  const size_t *parameters; pudu_step (*body)(pudu_frame *);"
-  , "  size_t owned_count; const pudu_owned *owned; unsigned result_kind; int environment; int counted;"
+  , "  size_t owned_count; const pudu_owned *owned; unsigned result_kind; int environment; int counted; int blames;"
   , "} pudu_function;"
   ]
 
@@ -109,9 +109,15 @@ frameEngine owned =
   ] else []) <>
   [ "  return frame;"
   , "}"
+  , "/* A method taken as a value fails at the call made through the value. */"
+  , "static const pudu_site *pudu_blamed_site(void) {"
+  , "  if (pudu_active_frame == NULL || !pudu_functions[pudu_active_frame->function].blames) return NULL;"
+  , "  return pudu_active_frame->call_site;"
+  , "}"
   , "static pudu_cell pudu_run_frames(size_t entry) {"
   , "  if (pudu_active_frame != NULL) pudu_invalid_frame();"
   , "  pudu_cleanup_hook = pudu_unwind_frames;"
+  , "  pudu_blame_hook = pudu_blamed_site;"
   , "  pudu_active_frame = pudu_new_frame(entry, NULL, 0);"
   , "  pudu_frame_depth = 1;"
   , "  for (;;) {"
@@ -146,7 +152,7 @@ frameEngine owned =
   , "      pudu_active_frame = parent;"
   , "      pudu_free_frame(frame);"
   , "      if (counted) pudu_frame_depth -= 1;"
-  , "      if (parent == NULL) { pudu_cleanup_hook = NULL; return step.result; }"
+  , "      if (parent == NULL) { pudu_cleanup_hook = NULL; pudu_blame_hook = NULL; return step.result; }"
   , "    } else {"
   , "      pudu_invalid_frame();"
   , "    }"

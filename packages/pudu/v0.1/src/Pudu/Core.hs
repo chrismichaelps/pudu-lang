@@ -66,6 +66,9 @@ data CoreClosureInfo = CoreClosureInfo
   , closureSite :: !Text
   , closureIsBuiltin :: !Bool
   , closureHasEnvironment :: !Bool
+    -- | A built-in method taken as a value: the receiver's type. The receiver
+    -- is capture 0, and it takes part in equality.
+  , closureMethod :: !(Maybe CoreType)
   }
   deriving stock (Eq, Show)
 

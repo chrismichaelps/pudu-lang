@@ -420,3 +420,5 @@ included.
 Resolved Grill Log: the guard sits after module constants and before
 variants and fields, the same order calls through qualifiers already use, so
 a local named like the module still reads its field.
+
+Member expressions ask [[Compiler Lower Method Value]] before field access. (#644)

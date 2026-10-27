@@ -41,7 +41,7 @@ import Pudu.Diagnostic.Host (memoryFailureMessage)
 {-| The runtime contract revision baked into every generated program's header
     comment. It changes only when the runtime's behaviour or interface does. -}
 runtimeRevision :: Text
-runtimeRevision = "18"
+runtimeRevision = "19"
 
 {-| @Backend.Runtime.Part — one named, self-contained piece of the runtime.
 
@@ -64,7 +64,10 @@ runtimeParts =
   , RuntimePart "error_io" errorIoLines
   , RuntimePart "site" siteLines
   , RuntimePart "colored" coloredLines
-  , RuntimePart "cleanup" ["static void (*pudu_cleanup_hook)(void) = NULL;"]
+  , RuntimePart "cleanup"
+      [ "static void (*pudu_cleanup_hook)(void) = NULL;"
+      , "/* Where a failure in the running frame should point instead of its own site. */"
+      , "static const pudu_site *(*pudu_blame_hook)(void) = NULL;" ]
   , RuntimePart "fail" failLines
   , RuntimePart "memory_failure" memoryFailureLines
   , RuntimePart "call_depth" callDepthLines
@@ -135,6 +138,9 @@ failLines =
   [ "/* Print the refusal and leave with the interpreter's status for one. The"
   , "   message is written by length, so a rendered value may hold any byte. */"
   , "static _Noreturn void pudu_fail_report(const pudu_site *site, const char *message, size_t length, const char *help, size_t help_length, void *owned_payload) {"
+  , "  /* Read before cleanup: it frees the frame that knows its caller. */"
+  , "  const pudu_site *where = site;"
+  , "  if (pudu_blame_hook != NULL && pudu_blame_hook() != NULL) where = pudu_blame_hook();"
   , "  if (pudu_cleanup_hook != NULL) pudu_cleanup_hook();"
   , "  pudu_prepare_error_io();"
   , "  int colored = pudu_colored();"
@@ -147,20 +153,20 @@ failLines =
   , "  if (length != 0) fwrite(message, 1, length, stderr);"
   , "  else fprintf(stderr, \"compiler diagnostic %s\", site->code);"
   , "  fputc('\\n', stderr);"
-  , "  fprintf(stderr, \"  --> %s:%d:%d\\n\", site->file, site->line, site->column);"
-  , "  if (site->has_excerpt) {"
+  , "  fprintf(stderr, \"  --> %s:%d:%d\\n\", where->file, where->line, where->column);"
+  , "  if (where->has_excerpt) {"
   , "    char gutter[24];"
   , "    int width;"
-  , "    snprintf(gutter, sizeof gutter, \"%d\", site->line);"
+  , "    snprintf(gutter, sizeof gutter, \"%d\", where->line);"
   , "    width = (int)strlen(gutter);"
   , "    fprintf(stderr, \" %*s |\\n\", width, \"\");"
-  , "    fprintf(stderr, \" %s | %s\\n\", gutter, site->line_text);"
+  , "    fprintf(stderr, \" %s | %s\\n\", gutter, where->line_text);"
   , "    fprintf(stderr, \" %*s | \", width, \"\");"
   , "    if (colored) fputs(\"\\x1b[31m\", stderr);"
-  , "    for (index = 0; index < site->caret_indent; index += 1) fputc(' ', stderr);"
-  , "    for (index = 0; index < site->caret_width; index += 1) fputc('^', stderr);"
+  , "    for (index = 0; index < where->caret_indent; index += 1) fputc(' ', stderr);"
+  , "    for (index = 0; index < where->caret_width; index += 1) fputc('^', stderr);"
   , "    if (colored) fputs(\"\\x1b[0m\", stderr);"
-  , "    if (site->multiline) fputs(\" ...\", stderr);"
+  , "    if (where->multiline) fputs(\" ...\", stderr);"
   , "    fputc('\\n', stderr);"
   , "  }"
   , "  if (help != NULL) {"

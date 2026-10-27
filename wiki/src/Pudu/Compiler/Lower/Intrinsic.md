@@ -60,3 +60,5 @@ Never = panic` bind, reading the written annotation because checking gives
 panic no type (#634); other annotations still refuse.
 Resolved Grill Log: trusting any annotation would let calls with unchecked
 argument types through, so only panic's own signature is taken.
+
+Closure info passes closureMethod = Nothing. (#644)

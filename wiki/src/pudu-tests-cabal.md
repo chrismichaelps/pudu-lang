@@ -343,3 +343,7 @@ dependency; the release gate is unchanged.
 
 Register [[Backend Default Parameter Programs]]. Resolved Grill Log: no new
 dependency; the release gate is unchanged.
+
+## Method value corpus (#644)
+
+Register [[Backend Method Value Programs]]. Resolved Grill Log: no new dependency.
