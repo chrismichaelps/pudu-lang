@@ -1,28 +1,22 @@
 {-| @Test.Backend.FrameEmitSpec — strict C checks for suspending function bodies. -}
 module Pudu.Backend.FrameEmitSpec (frameEmitProperties) where
 
-import qualified Data.Set as Set
-import Data.Text (Text)
 import qualified Data.Text as Text
 import qualified Data.Text.IO as TextIO
 import Pudu.Backend.ControlPrograms (controlSuccessPrograms, controlRefusalPrograms)
-import Pudu.Backend.Emit.Frame (frameUsesText, frameUsesWideCells)
-import Pudu.Backend.Runtime.Frame (frameTypes)
+import Pudu.Backend.Emit.Frame (emitFrameProgram)
 import Pudu.Backend.Emit.Frame.Body (emitFrameBodies)
 import Pudu.Backend.Emit.Frame.Value (frameValue, slotText)
-import Pudu.Backend.Emit.State (EmitState (..), emptyEmitState, renderSites, textOfInt)
+import Pudu.Backend.Emit.State (EmitState (..), emptyEmitState)
 import Pudu.Backend.FunctionPrograms (functionSuccessPrograms, functionRefusalPrograms)
 import Pudu.Backend.IntegerPrograms (integerSuccessPrograms, integerRefusalPrograms)
-import Pudu.Backend.Runtime (RuntimePart (..), runtimeParts)
-import Pudu.Backend.Runtime.Dependencies (runtimeDependencies)
 import Pudu.Compiler (CompileResult (..), runCompile)
 import Pudu.Compiler.Frame (lowerFrames)
 import Pudu.Compiler.Lower (LowerResult (..), lowerModule)
 import Pudu.Compiler.Lower.Types (nativeTypes)
-import Pudu.Comptime.Limits (callDepthLimit)
 import Pudu.Core (CoreType (..))
 import Pudu.Core.Frame
-  ( FrameFault (..), FrameModule (..), FrameSlot (..), FrameSlotId (..)
+  ( FrameFault (..), FrameSlot (..), FrameSlotId (..)
   , FrameUnaryOperator (..), FrameValue (..), FrameValueShape (..) )
 import Pudu.Diagnostic (hasErrors)
 import Pudu.IntegerLiteral (IntegerKind (SignedKind))
@@ -80,25 +74,19 @@ testBodies = do
         (False, Just parsed) -> case lowerModule "main" (nativeTypes (compileTypes checked) (compileSchemes checked)) parsed of
           Lowered core -> case lowerFrames core of
             Left failure -> pure (counterexample (show failure) (False === True))
-            Right frames -> case emitFrameBodies (emptyEmitState [source]) frames of
+            -- The whole program as the backend writes it: a corpus that
+            -- prints carries Result aggregates, which need their runtime too.
+            Right frames -> case emitFrameProgram "test" [source] frames of
               Left failure -> pure (counterexample (name <> ": " <> show failure) (False === True))
-              Right (emitted, roots) -> do
+              Right generated -> do
                 let cpath = root </> "frames.c"
-                    selected = close (Set.union roots (Set.fromList (["prelude", "integer_value", "site"] <> ["wide_value" | frameUsesWideCells frames] <> ["text" | frameUsesText frames])))
-                    runtime = concat [runtimePartLines part | part <- runtimeParts, Set.member (runtimePartName part) selected]
-                    generated = runtime <> renderSites (reverse (emitSites emitted)) <> frameTypes (frameUsesWideCells frames) (frameUsesText frames) False
-                      <> reverse (emitOutput emitted) <> dispatch (length (frameModuleFunctions frames)) (Set.member "fail" selected)
-                TextIO.writeFile cpath (Text.unlines generated)
+                TextIO.writeFile cpath generated
                 (status, output, errors) <- readProcessWithExitCode cc
                   ["-std=c11", "-pedantic", "-Wall", "-Wextra", "-Werror", "-c", cpath, "-o", root </> "frames.o"] ""
                 pure $ counterexample (name <> ": " <> output <> errors) $ conjoin
                   [status === ExitSuccess, output === "", errors === ""]
           other -> pure (counterexample (name <> ": " <> show other) (False === True))
         _ -> pure (counterexample (name <> ": " <> show (compileDiagnostics checked)) (False === True))
-    close = foldl' visit Set.empty . Set.toList
-    visit found part
-      | Set.member part found = found
-      | otherwise = foldl' visit (Set.insert part found) (runtimeDependencies part)
 
 testCalls :: IO Property
 testCalls = do
@@ -121,12 +109,3 @@ testCalls = do
         Left failure -> counterexample (show failure) (False === True)
       other -> counterexample (show other) (False === True)
     _ -> counterexample (show (compileDiagnostics checked)) (False === True)
-
-dispatch :: Int -> Bool -> [Text]
-dispatch count hasFailure =
-  [ "pudu_step test_invoke(size_t function, pudu_frame *frame, size_t depth) {"
-  , "  pudu_step step;", "  (void)depth;", "  switch (function) {" ]
-  <> ["  case " <> textOfInt index <> ": step = pudu_body_" <> textOfInt index <> "(frame); break;" | index <- [0 .. count - 1]]
-  <> ["  default: return (pudu_step){.kind = PUDU_INVALID};", "  }"]
-  <> ["  if (step.kind == PUDU_CALL && depth > " <> textOfInt callDepthLimit <> ") pudu_fail(step.call_site);" | hasFailure]
-  <> ["  return step;", "}"]

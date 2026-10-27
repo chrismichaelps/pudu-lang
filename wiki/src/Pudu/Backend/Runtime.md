@@ -311,3 +311,9 @@ can refuse there. See [[Native Collection Callables]].
 pudu_fail_report prints `compiler diagnostic <code>` for an empty message,
 as `nonEmptyMessage` does. See [[Native Stopping Builtins]].
 Resolved Grill Log: the rule covers every dynamic message, not only panic.
+
+## wait_writable part (#636)
+
+Register wait_writable right after process_io so its users come later in
+emission order. No runtime revision change: generated programs that used it
+contain the same lines in the same place.

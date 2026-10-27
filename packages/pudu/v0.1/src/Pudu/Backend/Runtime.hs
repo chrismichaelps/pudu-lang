@@ -29,7 +29,7 @@ import Pudu.Backend.Runtime.Aggregate (aggregateRuntimeParts)
 import Pudu.Backend.Runtime.Char (charRuntimeParts)
 import Pudu.Backend.Runtime.Float (floatRuntimeParts)
 import Pudu.Backend.Runtime.Integer (integerRuntimeParts)
-import Pudu.Backend.Runtime.Process (processIoLines)
+import Pudu.Backend.Runtime.Process (processIoLines, waitWritableLines)
 import Pudu.Backend.Runtime.Output (outputRuntimeParts)
 import Pudu.Backend.Runtime.Text (textRuntimeParts)
 import Pudu.Backend.Runtime.Text.Case (textCaseRuntimeParts)
@@ -60,6 +60,7 @@ runtimeParts :: [RuntimePart]
 runtimeParts =
   [ RuntimePart "prelude" preludeLines
   , RuntimePart "process_io" processIoLines
+  , RuntimePart "wait_writable" waitWritableLines
   , RuntimePart "error_io" errorIoLines
   , RuntimePart "site" siteLines
   , RuntimePart "colored" coloredLines

@@ -49,3 +49,11 @@ text, and closes dependencies through [[Native Runtime Dependencies]].
 ## Box flag (#521)
 
 The body check passes `False` for boxes: its programs hold no tuples.
+
+## Whole-program strict compile (#636)
+
+testBodies compiles what emitFrameProgram writes for each corpus program,
+not a hand-picked scalar runtime.
+Resolved Grill Log: printing programs carry Result aggregates since output
+Results became values, and the hand assembly had no aggregate runtime. The
+real assembler is what users get, so it is what must compile strictly.

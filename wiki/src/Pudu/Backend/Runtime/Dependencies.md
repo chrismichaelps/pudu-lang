@@ -77,3 +77,9 @@ Resolved Grill Log: Include outputRuntimeDependencies from Native Output Runtime
 ## Fatal output readiness (#566)
 
 Resolved Grill Log: error_io and output_state require process_io because they call its descriptor-readiness helper.
+
+## wait_writable (#636)
+
+error_io needs process_io and wait_writable; wait_writable needs process_io
+for poll and errno.
+Resolved Grill Log: the dependency follows the call, not the include.

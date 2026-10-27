@@ -29,3 +29,5 @@ runner-consumed lists and named property output must be checked.
 ## Referenced by
 
 [[Native Shared References]] · [[Backend Module Programs]] · [[Backend Text Leak Tests]]
+
+A borrowed print Result keeps its printed output and reads back as Ok(()). (#636)

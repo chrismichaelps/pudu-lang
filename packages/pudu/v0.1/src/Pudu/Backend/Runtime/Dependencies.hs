@@ -24,4 +24,5 @@ runtimeDependencies name = integerRuntimeDependencies name <> floatRuntimeDepend
   <> aggregateRuntimeDependencies name <> arrayRuntimeDependencies name
   <> textNumberRuntimeDependencies name <> textPieceRuntimeDependencies name
   <> treeRuntimeDependencies name <> rangeRuntimeDependencies name <> bytesRuntimeDependencies name <> outputRuntimeDependencies name
-  <> ["process_io" | name == "error_io"]
+  <> concat [["process_io", "wait_writable"] | name == "error_io"]
+  <> ["process_io" | name == "wait_writable"]

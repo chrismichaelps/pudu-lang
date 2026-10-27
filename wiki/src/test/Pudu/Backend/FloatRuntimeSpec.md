@@ -71,3 +71,11 @@ The compatibility check also skips [[Native Char Runtime]] parts.
 ## Aggregate catalogue (#521)
 
 The compatibility check also skips [[Native Aggregate Runtime]] parts.
+
+## Integer dependency table (#636)
+
+The check that a part's dependencies equal integerRuntimeDependencies runs
+over the integer parts only.
+Resolved Grill Log: output, process and error parts have their own tables;
+the old "everything that is not float or text" filter stopped being true
+when they arrived, and the compile failure before it hid that.
