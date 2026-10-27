@@ -8,6 +8,7 @@ import qualified Data.Text as Text
 import Numeric (showHex)
 import Pudu.Backend.Emit.State
   ( EmitState, cString, cStringBytes, divideByZeroSite, failureSite, overflowSite, shiftSites, textOfInt )
+import Pudu.Backend.Emit.Aggregate (aggregateHelper, aggregateNeed, cellName, isAggregate, retained)
 import Pudu.Backend.Emit.Support (integerHelper, integerKindText, integerLiteralText, isWideInteger)
 import Pudu.Core (CoreBinaryOperator (..), CoreTextMethodName (..), CoreType (..))
 import Pudu.Core.Frame
@@ -17,13 +18,8 @@ import Pudu.Diagnostic.Arithmetic (CheckedOperation (..))
 import Pudu.FloatLiteral (FloatWidth (..))
 
 cellMember :: CoreType -> Maybe Text
-cellMember (CoreIntegerType kind) = Just (if isWideInteger kind then "wide" else "integer")
-cellMember (CoreFloatType _) = Just "floating"
-cellMember CoreBoolType = Just "scalar"
-cellMember CoreTextType = Just "text"
-cellMember CoreCharType = Just "character"
-cellMember CoreUnitType = Just "scalar"
-cellMember _ = Nothing
+cellMember CoreNeverType = Nothing
+cellMember kind = Just (cellName kind)
 
 slotText :: FrameSlot -> Either FrameFault Text
 slotText slot = case (frameSlotId slot, cellMember (frameSlotType slot)) of
@@ -41,9 +37,15 @@ frameValue state value = case frameValueShape value of
     plain ("pudu_text_literal(" <> cString text <> ", " <> textOfInt (cStringBytes text) <> ")") ["text_literal"]
   FrameCharLiteral character -> done state ("UINT32_C(0x" <> Text.pack (showHex (fromEnum character) "") <> ")") []
   FrameCharCode slot -> slotText slot >>= \scalar -> plain ("pudu_make((uint64_t)" <> scalar <> ", 0)") ["make"]
-  FrameRead slot
-    | frameSlotType slot == CoreTextType -> slotText slot >>= \text -> plain ("pudu_text_retain(" <> text <> ")") ["text_retain"]
-    | otherwise -> slotText slot >>= \text -> done state text []
+  FrameRead slot -> slotText slot >>= \text -> uncurry plain (retained (frameSlotType slot) text)
+  FrameAggregate members -> do
+    operands <- traverse slotText members
+    let kind = frameValueType value
+    plain (aggregateHelper "make" kind <> "(" <> Text.intercalate ", " operands <> ")") [aggregateNeed "make" kind]
+  FrameMember position tuple -> do
+    source <- slotText tuple
+    member <- maybe (refused "a tuple member without a native representation") Right (cellMember (frameValueType value))
+    uncurry plain (retained (frameValueType value) (source <> "->fields[" <> textOfInt position <> "]." <> member))
   FrameDisplay slot -> rendered slot
   FrameTextMethod name receiver arguments -> do
     target <- slotText receiver
@@ -79,6 +81,7 @@ frameValue state value = case frameValueShape value of
   FrameShow slot
     | frameSlotType slot == CoreTextType -> slotText slot >>= \text -> plain ("pudu_text_show(" <> text <> ")") ["text_show"]
     | frameSlotType slot == CoreCharType -> slotText slot >>= \scalar -> plain ("pudu_char_show(" <> scalar <> ")") ["char_show"]
+    | isAggregate (frameSlotType slot) -> rendered slot
     | otherwise -> rendered slot
   FrameBinary scalar left right
     | frameSlotType left == CoreTextType -> do
@@ -94,6 +97,24 @@ frameValue state value = case frameValueShape value of
           CoreGreater -> comparison ">"
           CoreGreaterOrEqual -> comparison ">="
           _ -> refused "an operator text frames do not carry"
+  FrameBinary scalar left right
+    | kind <- frameSlotType left, isAggregate kind -> do
+        lhs <- slotText left
+        rhs <- slotText right
+        let equal = aggregateHelper "equal" kind <> "(" <> lhs <> ", " <> rhs <> ")"
+            compared a b symbol = plain ("(" <> aggregateHelper "compare" kind <> "(" <> a <> ", " <> b <> ") " <> symbol <> " 0)") [aggregateNeed "compare" kind]
+        -- The evaluator orders tuples through Ord's defaults, and base writes
+        -- those in terms of <=: x < y is not (y <= x). A NaN member makes
+        -- compare answer GT both ways, so < and > are then both true; swapping
+        -- the operands here keeps that.
+        case coreScalarOperator scalar of
+          CoreEqual -> plain equal [aggregateNeed "equal" kind]
+          CoreNotEqual -> plain ("(!" <> equal <> ")") [aggregateNeed "equal" kind]
+          CoreLess -> compared rhs lhs ">"
+          CoreLessOrEqual -> compared lhs rhs "<="
+          CoreGreater -> compared lhs rhs ">"
+          CoreGreaterOrEqual -> compared rhs lhs "<="
+          _ -> refused "an operator aggregate frames do not carry"
   FrameUnary FrameNegate operand
     | CoreFloatType _ <- frameSlotType operand -> do
         text <- slotText operand
@@ -203,6 +224,7 @@ frameValue state value = case frameValueShape value of
         CoreUnitType -> plain "pudu_text_literal(\"()\", 2)" ["text_literal"]
         CoreTextType -> plain ("pudu_text_retain(" <> text <> ")") ["text_retain"]
         CoreCharType -> plain ("pudu_char_text(" <> text <> ")") ["char_text"]
+        kind | isAggregate kind -> plain (aggregateHelper "show" kind <> "(" <> text <> ")") [aggregateNeed "show" kind]
         _ -> refused "a rendered value without a native representation"
     done after text needs = Right (after, text, Set.fromList (map (integerHelper (frameValueType value)) needs))
     call helper arguments = "pudu_" <> integerHelper (frameValueType value) helper <> "(" <> Text.intercalate ", " arguments <> ")"

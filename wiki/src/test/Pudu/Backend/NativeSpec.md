@@ -142,3 +142,13 @@ and the interpreter's refusals.
 
 Two groups run [[Backend Char Programs]] against hand-written answers and
 the interpreter's refusals.
+
+## Tuple conformance (#521)
+
+Two groups run [[Backend Tuple Programs]] against hand-written answers and
+the interpreter's refusals.
+
+## Record conformance (#521)
+
+Two groups run [[Backend Record Programs]] against hand-written answers and
+the interpreter's refusals.

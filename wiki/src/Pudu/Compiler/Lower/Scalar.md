@@ -107,3 +107,15 @@ with `cannot apply`, naming the operand kind `string` as `valueKind` does.
 Two Char operands admit the six comparisons, as `comparisonOnly` does. Any
 other operator on two Chars traps with `unsupported operator X`; unary
 operators trap with `cannot apply X to a char`, the kind `valueKind` names.
+
+## Tuple operators (#521)
+
+Two tuples of one type admit `==`, `!=` and the four orderings, as `combine`
+does. Other operators trap with `cannot apply X to a tuple and a tuple`, and
+unary operators with `cannot apply X to a tuple`.
+
+## Record operators (#521)
+
+Two records of one type admit `==` and `!=`. Other operators, ordering
+included, trap with `cannot apply X to a Name and a Name`, naming the record
+as `valueKind` does; unary operators with `cannot apply X to a Name`.

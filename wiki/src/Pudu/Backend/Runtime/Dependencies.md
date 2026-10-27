@@ -44,3 +44,7 @@ The facade also delegates to [[Native Text Case]].
 ## Char prerequisites (#518)
 
 The facade also delegates to [[Native Char Runtime]].
+
+## Aggregate prerequisites (#521)
+
+The facade also delegates to [[Native Aggregate Runtime]].

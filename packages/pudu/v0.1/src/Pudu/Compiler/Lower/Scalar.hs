@@ -29,7 +29,7 @@ lowerUnary lower state at operator operand
         | operator == "-", integerType kind || floatType kind -> built after at (CoreNegate core) kind
         | operator == "~", integerType kind -> built after at (CoreComplement core) kind
         | operator == "!", kind == CoreBoolType -> built after at (CoreNot core) CoreBoolType
-        | kind `elem` [CoreUnitType, CoreBoolType, CoreTextType, CoreCharType] || floatType kind
+        | kind `elem` [CoreUnitType, CoreBoolType, CoreTextType, CoreCharType] || floatType kind || tupleType kind || recordType kind
         , settled after operand core ->
             failure after at (cannotApplyUnaryMessage operator (runtimeKind kind)) [core]
         | otherwise -> halt at ("the operator '" <> operator <> "' on a " <> coreTypeName kind <> " value") after
@@ -71,7 +71,7 @@ represented operator left right
   | integerType left, Just operation <- lookup operator arithmetic = Just (operation, left)
   | floatType left, Just operation <- lookup operator floating = Just (operation, left)
   | left == CoreTextType, operator == "+" = Just (CoreAdd, CoreTextType)
-  | integerType left || floatType left || left `elem` [CoreBoolType, CoreTextType, CoreCharType], Just operation <- lookup operator ordering = Just (operation, CoreBoolType)
+  | integerType left || floatType left || tupleType left || left `elem` [CoreBoolType, CoreTextType, CoreCharType], Just operation <- lookup operator ordering = Just (operation, CoreBoolType)
   | nativeValueType left, Just operation <- lookup operator equality = Just (operation, CoreBoolType)
   | otherwise = Nothing
  where
@@ -94,6 +94,14 @@ floatType :: CoreType -> Bool
 floatType (CoreFloatType _) = True
 floatType _ = False
 
+tupleType :: CoreType -> Bool
+tupleType (CoreTupleType _) = True
+tupleType _ = False
+
+recordType :: CoreType -> Bool
+recordType (CoreRecordType _ _) = True
+recordType _ = False
+
 settled :: LowerState -> Located Expression -> CoreExpression -> Bool
 settled state syntax core =
   typeForSpan (contextTypes (lowerContext state)) (locatedSpan syntax) == Just (coreExpressionType core)
@@ -104,6 +112,8 @@ runtimeKind CoreBoolType = "bool"
 runtimeKind (CoreFloatType _) = "float"
 runtimeKind CoreTextType = "string"
 runtimeKind CoreCharType = "char"
+runtimeKind (CoreTupleType _) = "tuple"
+runtimeKind (CoreRecordType name _) = name
 runtimeKind kind = coreTypeName kind
 
 failure :: LowerState -> Span -> Text -> [CoreExpression] -> (LowerState, Maybe (CoreExpression, CoreType))

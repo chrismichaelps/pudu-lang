@@ -5,6 +5,18 @@ tags: [changelog]
 
 # Changelog
 
+## 2026-10-20 — Total float order for keys and aggregates (#522)
+
+- NaN now equals NaN and sorts after every number in `compareValues`. A NaN tuple member no longer makes a tuple both less and greater than another, and a map keyed by such tuples keeps one entry per key. Scalar float operators keep their IEEE answers. [[Eval Float Order Tests]]; see [[architecture/SEMANTICS]].
+
+## 2026-10-20 — Records hold their declared field order (#519)
+
+- A record literal written out of declaration order no longer compares unequal to, or renders differently from, the same value written in order. Fields still evaluate as written; the tree walker, compiled bodies and loop kernel all store them in declaration order. [[Eval Record Order Tests]] covers each path. See [[architecture/SEMANTICS]].
+
+## 2026-10-20 — Native tuples (#521)
+
+- Tuples and the root module's non-generic records compile natively as refcounted boxes (records add field reads, updates, field assignment and `let {..}` patterns): literals, positions, `let` tuple patterns, equality, ordering, `show`/`display` and tuple entry results match the interpreter, including its NaN ordering. Frames track text and boxes through one owned-slot list. [[Native Aggregate Emission]], [[Backend Tuple Programs]]. Progress stays 4/14 (28%).
+
 ## 2026-10-20 — Native Char values (#518)
 
 - Char literals, comparisons, display/show, `code`, `toText`, `Str.charAt` and Char entry results compile natively through [[Native Char Runtime]]; [[Backend Char Programs]] holds them to hand-written answers and the interpreter's refusals. The #517 catalogue check now skips the case parts, which the clean gate caught. Progress stays 4/14 (28%).
@@ -737,7 +749,6 @@ tags: [changelog]
   checker, editor, diagnostic and serialization boundaries. Focused completion
   regressions and the full optimized suite pass 523 families with -Werror on
   GHC 9.10.3. Actual metadata residualization remains the next dependency layer.
-
 
 ## 2026-10-03 — Typed metadata sequences and method receivers (issue #431)
 
@@ -1606,7 +1617,6 @@ tags: [changelog]
 - The package catalog now uses an original Pudu search banner and a compact, nonduplicated project
   list. Project pages place identity, release, and install in a distinct header; the README and
   metadata have separate reading surfaces. The mobile install panel stays within the viewport.
-
 
 ## 2026-09-22 — GitHub is the package index
 
@@ -3478,7 +3488,6 @@ Expanded test fixtures `test-fixtures/stdlib/UsesBuffer.pudu` (27 assertions) an
 with 100% public API test coverage and triple-slash LSP documentation. All 7 CI quality gates passed under `-Werror`.
 
 ## 2026-09-06 — SWAR 8-slot parallel group probing in flat hash tables
-
 
 Accelerated [[Runtime SwissTable Kernels]] by implementing SIMD-within-a-register (SWAR) group probing.
 Instead of evaluating one control slot per iteration, lookups, insertions, and deletions inspect packed 64-bit

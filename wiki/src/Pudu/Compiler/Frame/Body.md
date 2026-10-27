@@ -68,3 +68,15 @@ saves one `FrameTextMethod` value.
 
 Char literals and `CoreCharCode` save one value each; a Char call or branch
 result gets a result slot like any scalar.
+
+## Tuples (#521)
+
+`CoreTuple` lowers its members as operands and saves one `FrameTuple`;
+`CoreTupleIndex` saves `FrameTupleIndex`; tuple results get a result slot.
+
+## Records (#521)
+
+`CoreRecord` lowers its written fields, then saves `FrameAggregate` with the
+slots in declaration order. `CoreRecordUpdate` lowers the base, then the
+written fields, and fills the other members with `FrameMember` reads of the
+base. `CoreField` saves `FrameMember` at the field's position.

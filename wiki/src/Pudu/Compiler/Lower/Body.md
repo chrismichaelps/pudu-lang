@@ -268,3 +268,15 @@ Str methods; every other method call still refuses.
 A character literal lowers to `CoreCharLiteral`. A Char entry result is shown
 and exits 0, like Str, because `reportResult` renders every non-integer,
 non-unit value.
+
+## Tuples (#521)
+
+Tuple literals and indexing delegate to [[Compiler Lower Tuple]], and so does
+a `let` pattern, which may lower to several statements; `foldStatements`
+splices them in. A tuple entry result is shown and exits 0.
+
+## Records (#521)
+
+Record literals, updates, field reads and field-path assignment (statement or
+trailing position) delegate to [[Compiler Lower Record]]. A record entry
+result is shown and exits 0.

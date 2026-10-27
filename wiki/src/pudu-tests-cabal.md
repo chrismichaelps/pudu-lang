@@ -238,3 +238,13 @@ Register Pudu.Backend.TextCaseSpec in other-modules.
 ## Char programs (#518)
 
 Register Pudu.Backend.CharPrograms in other-modules.
+
+## Tuple programs (#521)
+
+Register Pudu.Backend.TuplePrograms in other-modules.
+
+Register Pudu.Eval.RecordOrderSpec in other-modules (#519).
+
+Register Pudu.Eval.FloatOrderSpec in other-modules (#522).
+
+Register Pudu.Backend.RecordPrograms in other-modules (#521).

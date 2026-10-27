@@ -216,3 +216,9 @@ tags: [moc, handoff]
 - [[Native Text Case Delivery]] — native trim and case mapping (#517).
 
 - [[Native Char Delivery]] — native Char values and charAt (#518).
+
+- [[Native Tuple Delivery]] — boxed native tuples (#521).
+
+- [[Record Field Order Repair]] — records hold their declared field order (#519).
+
+- [[Total Float Order Repair]] — NaN keeps the value order total (#522).

@@ -215,3 +215,7 @@ Resolved Grill Log: prepare the discard when selecting the taken Code, then
 use normal Step sequencing. A failure must remain a failure, and the block's
 last expression must execute even when its value is discarded. The unboxed
 planner remains a separate admission boundary.
+## Declared field order (#519)
+
+A closed-region record literal reorders its fields from the Env it runs in,
+like the other evaluators.

@@ -217,3 +217,8 @@ Mark the current module frames after installing declarations and before evaluati
 Nested calls then recognize local type witnesses during folding and ordinary loading alike.
 Resolved Grill Log: one declaration-loading boundary covers root and dependency initializers;
 imports stay outside the local witness frame and effect permissions remain unchanged.
+
+## Record field order (#519)
+
+Installing a record declaration, and each record-payload variant of a sum,
+records its field order in [[Eval Env]].

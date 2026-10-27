@@ -88,7 +88,9 @@ test-suite pudu-test
     Pudu.Backend.FloatPrograms
     Pudu.Backend.IntegerPrograms
     Pudu.Backend.CharPrograms
+    Pudu.Backend.RecordPrograms
     Pudu.Backend.TextCaseSpec
+    Pudu.Backend.TuplePrograms
     Pudu.Backend.TextLeakSpec
     Pudu.Backend.TextMethodPrograms
     Pudu.Backend.TextPrograms
@@ -118,6 +120,8 @@ test-suite pudu-test
     Pudu.Foreign.SlotSpec
     Pudu.Foreign.OwnershipSpec
     Pudu.Eval.IfUnitSpec
+    Pudu.Eval.RecordOrderSpec
+    Pudu.Eval.FloatOrderSpec
     Pudu.Eval.Foreign.ResultSpec
     Pudu.Frontend.Lexer.CursorSpec
     Pudu.Frontend.ExpandSpec

@@ -99,7 +99,7 @@ Supporting judgements:
 
 - Evaluation is strict and left-to-right.
 - In `f(a, b)`, evaluate `f`, then `a`, then `b`, then call.
-- Record and collection elements evaluate in source order.
+- Record and collection elements evaluate in source order. A record value holds its fields in declaration order, so the order a literal writes them in changes when each runs but never equality or rendering.
 - A set literal evaluates every written member in source order, then constructs the existing ordered `Set` value. Duplicate members collapse only after their expressions have run, so duplication never removes an effect or changes failure order. Iteration and rendering remain key-ordered.
 - Set membership evaluates its candidate before its Set operand and performs one lookup in the ordered Set. It neither iterates user code nor defines a general collection protocol.
 - Boolean `&&` and `||` short-circuit.
@@ -183,6 +183,7 @@ drop p:                     Available → Moved
 - Wrapping and saturating operators are separate typed operations and cannot be introduced by optimization.
 - Shifts require a non-negative count smaller than the bit width in checked form; library operations provide masked variants explicitly.
 - Floating point follows the declared target IEEE behavior. Reassociation, contraction, and fast-math transformations require an explicit future compilation mode and cannot be default.
+- Float operators (`<`, `==`, ...) answer as IEEE does. The order that sorts keys and compares aggregates is total: NaN equals NaN and sorts after every number, and `-0.0` equals `0.0`.
 - `Decimal` has no semantics until its precision/rounding ADR is accepted; it is reserved but rejected by semantic analysis meanwhile.
 
 ## Async and Cancellation Semantics
@@ -268,6 +269,15 @@ These obligations require executable property/conformance tests now and mechaniz
 
 - **1.0.1-draft · 2026-10-17:** Clarified the existing unit result of an if without else across inference, contextual checking, tree and compiled evaluation, boxed loop regions, derive residualization, constant folding, and native lowering. This corrects implementation paths that leaked a non-unit branch result; conforming unit behavior and with-else values are unchanged. See [[ADR-0025-if-without-else-unit-results]].
 
+- **1.0.0-draft clarification · 2026-10-20:** A record literal's written field order no longer
+  leaks into the value: fields still run in written order, then the record holds them in
+  declaration order, so `Point{y: 2, x: 1} == Point{x: 1, y: 2}` and both render as declared
+  (#519). Programs that wrote fields in declaration order are unaffected.
+
+- **1.0.0-draft clarification · 2026-10-20:** The value order behind keys and aggregate
+  comparison is total over floats: NaN equals NaN and sorts after every number (#522). Before,
+  a NaN member made a tuple both less and greater than another, and a map could hold one key
+  twice. Float operators are unchanged.
 - **1.0.0-draft · 2026-09-19:** Corrected open-range extent semantics: `length()` on a range
   missing either end reports `E7004` instead of returning zero, while `isBounded()`, `isEmpty()`, and
   `contains()` retain distinct, consistent meanings. The evaluator also no longer admits a tuple

@@ -68,3 +68,16 @@ are selected only when some slot holds text.
 
 A Char entry is shown through `pudu_char_show`, printed and released, and
 returns 0, matching `reportResult`.
+
+## Owned slots (#521)
+
+Metadata lists every owned slot with its kind (`pudu_owned`), and
+`result_kind` replaces the text-result flag. `ownershipSwitch` writes
+`pudu_drop_cell` and `pudu_retain_cell` over the kinds present. The cell's
+text and wide members are selected when a slot holds the type directly or
+inside a tuple. A tuple entry result is shown, printed, and both references
+released.
+
+## Record entry results (#521)
+
+A record entry is shown, printed and released like a tuple entry.

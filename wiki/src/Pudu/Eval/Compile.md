@@ -85,3 +85,8 @@ an `else` exists.
 Resolved Grill Log: select the unit-discarding action while compiling the
 conditional and sequence it through the existing evaluator. Do not re-check
 syntax at execution time or catch an unwind to produce unit.
+## Declared field order (#519)
+
+Compiled record literals look up the declared order when they run, not when
+they compile, so a body compiled before every declaration is installed still
+builds records in declaration order.

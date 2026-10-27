@@ -198,6 +198,9 @@ tags: [moc, module]
 
 - [[Eval Loop Kernel]] — complete pure regions, ordered indexing and closed module functions.
 - [[Eval Loop Step]] · [[Eval Loop Step Tests]] — shared region execution without boxed intermediate result wrappers.
+- [[Eval Record Order Tests]] — records hold their declared field order in every evaluator.
+
+- [[Eval Float Order Tests]] — NaN keeps the value order total.
 - [[Eval Value]] · [[Eval MultiMap]] · [[Eval Operator Access]] · [[Eval Data Tests]] — compact persistent occurrence entries, exact integer index bounds and runtime compatibility evidence.
 
 - [[UsesMultiMapNumeric]] — numeric index and native-loop semantic compatibility.
@@ -242,6 +245,8 @@ tags: [moc, module]
 - [[Compiler Lower Text]] · [[Native Text Methods]] · [[Backend Text Method Programs]] — native Str methods.
 - [[Native Text Case]] · [[Backend Text Case Tests]] — trim and case mapping from the linked Data.Text.
 - [[Native Char Runtime]] · [[Backend Char Programs]] — Char values, code, toText and charAt.
+- [[Native Aggregate Emission]] · [[Native Aggregate Runtime]] · [[Compiler Lower Tuple]] · [[Backend Tuple Programs]] — boxed tuples.
+- [[Compiler Lower Record]] · [[Backend Record Programs]] — records in declaration order.
 
 - [[Backend Integer Value]] · [[Backend Integer Arithmetic]] · [[Backend Integer Bits]] · [[Backend Deferred Integer Programs]] — exact integer carriers and deferred-value conformance.
 

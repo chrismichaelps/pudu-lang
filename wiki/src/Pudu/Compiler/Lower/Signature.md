@@ -74,3 +74,8 @@ Resolved Grill Log: preserve the single unit inhabitant and every effect without
 ## Text signatures (#515)
 
 Parameters and results admit `nativeValueType`, so Str crosses calls.
+
+## Records (#521)
+
+Parameter and result types form through `formedCoreTypeIn`, so record types
+are admitted.

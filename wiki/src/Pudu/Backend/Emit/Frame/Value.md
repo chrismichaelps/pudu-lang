@@ -75,3 +75,22 @@ The three methods call `pudu_text_trim`, `pudu_text_to_upper` and `pudu_text_to_
 hex, comparisons are plain C comparisons, `code` is `pudu_make(c, 0)`.
 Display calls `pudu_char_text`, show calls `pudu_char_show`, and charAt calls
 `pudu_text_char_at` with its E7004 site.
+
+## Tuples (#521)
+
+`cellMember` answers `box`. Reads of any owned slot go through `retained`.
+Construction, indexing, show and equality call [[Native Aggregate Emission]]
+helpers. Ordering follows base's Ord defaults over compareValues, which are
+written with `<=`: `x < y` is `compare y x > 0`, `x <= y` is
+`compare x y <= 0`, `x > y` is `compare x y > 0`, `x >= y` is
+`compare y x <= 0`. With the total order of #522 these equal the obvious
+forms, but they stay written as base defines them so native follows the
+interpreter even if a member order is ever not antisymmetric again. Resolved
+Grill Log: before #522 a NaN member made `<` and `>` both true, and the
+swapped forms are what matched it.
+
+## Records (#521)
+
+`cellMember` now delegates to [[Native Aggregate Emission]]'s `cellName`.
+Rendering, show and equality use `isAggregate`, so records take the tuple
+paths.

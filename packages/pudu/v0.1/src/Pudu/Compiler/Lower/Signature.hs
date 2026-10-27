@@ -5,7 +5,7 @@ import qualified Data.Map.Strict as Map
 import Data.Text (Text)
 import Pudu.Compiler.Lower.State
   ( CoreSignature (..), LowerContext (..), LowerState (..), intType, refuse )
-import Pudu.Compiler.Lower.Types (formedCoreType, lookupScheme, nativeValueType)
+import Pudu.Compiler.Lower.Types (formedCoreTypeIn, lookupScheme, nativeValueType)
 import Pudu.Type.Value (Scheme (..), Type (FunctionTypeRequiring), requiredCount)
 import Pudu.Core
 import Pudu.Frontend.Syntax
@@ -51,7 +51,7 @@ ensureSignature located state = case Map.lookup name (contextSignatures context)
     validateParameter (current, collected) (index, parameter, parameterTypeValue) =
       case parameterDefault parameter of
         Just defaulted -> (refuse (locatedSpan defaulted) "default parameter values" current, collected)
-        Nothing -> case formedCoreType parameterTypeValue of
+        Nothing -> case formedCoreTypeIn (contextTypes (lowerContext current)) parameterTypeValue of
           Just coreType | nativeValueType coreType ->
             ( current
             , collected <> [CoreParameter
@@ -65,7 +65,7 @@ ensureSignature located state = case Map.lookup name (contextSignatures context)
             , collected
             )
 
-    validateReturn current result = case formedCoreType result of
+    validateReturn current result = case formedCoreTypeIn (contextTypes (lowerContext current)) result of
       Just coreType | nativeValueType coreType -> (current, coreType)
       projected ->
         ( refuse (maybe atName locatedSpan (functionReturn function))

@@ -5,6 +5,7 @@ module Pudu.Type
   , Type (..)
   , TypeInfo (..)
   , checkTypes
+  , declaredRecords
   , checkTypesDetailed
   , checkTypesWith
   , deriveDefinitionTypes
@@ -27,6 +28,8 @@ import Pudu.Frontend.Syntax.Located (Located (..))
 import Pudu.Source (Span, sameSpanSource, spanEnd, spanOrigin, spanStart, unOffset)
 import Pudu.Type.Check (checkModule)
 import qualified Pudu.Type.Check as Check
+import Pudu.Type.Env (DeclaredTypes (..), evalChecker)
+import Pudu.Type.Formation (collectDeclared)
 import Pudu.Type.Interface.Graph (ImportTypes)
 import Pudu.Type.Value (NominalId, Scheme (..), Type (..), renderType)
 import Data.Text (Text)
@@ -158,3 +161,12 @@ typeInfoFor moduleValue entries = TypeInfo authored (Map.fromList entries)
     , sameSpanSource anchor location
     , spanOrigin location == Nothing
     ]
+
+{-| Each record the module declares, with its type parameters and its fields
+    in declaration order, formed the way checking forms them. The native
+    lowerer lays records out from this rather than reading type syntax. -}
+declaredRecords :: Module -> Map NominalId ([Text], [(Text, Type)])
+declaredRecords moduleValue = evalChecker $ do
+  declared <- collectDeclared (locatedValue (moduleName moduleValue)) (moduleDeclarations moduleValue)
+  pure (Map.mapWithKey (\identity fields -> (Map.findWithDefault [] identity (declaredParams declared), fields))
+    (declaredFields declared))

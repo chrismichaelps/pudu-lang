@@ -247,3 +247,9 @@ Text cells and the frame text metadata change the ABI, so the revision is 9.
 
 The cell gains a `character` member, so the revision is 10. [[Native Char
 Runtime]] parts follow the case parts.
+
+## Runtime revision 11 (#521)
+
+Frames now own text and boxes through one owned-slot list, and the cell gains
+a box member, so the revision is 11. [[Native Aggregate Runtime]] parts follow
+the Char parts.

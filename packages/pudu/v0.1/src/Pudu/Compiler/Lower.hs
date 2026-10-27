@@ -20,7 +20,10 @@ import Data.List (sortOn)
 import qualified Data.Set as Set
 import Data.Text (Text)
 
-import Pudu.Compiler.Lower.Types (LowerTypes)
+import qualified Data.Map.Strict as Map
+import Pudu.Compiler.Lower.Types (LowerTypes, withRecords)
+import Pudu.Type (declaredRecords)
+import Pudu.Type.Value (NominalId (..))
 import Pudu.Compiler.Lower.Body (lowerEntryBody, lowerFunctionBody)
 import Pudu.Compiler.Lower.State
   ( CoreSignature (..), LowerContext (..), LowerState (..), emptyContext, startFunction )
@@ -48,7 +51,7 @@ data LowerResult
 lowerProgram :: Text -> Maybe LowerTypes -> Module -> LowerResult
 lowerProgram _ Nothing parsed =
   LowerRefused [nativeRefusal (moduleSpan parsed) "missing solved native type facts"]
-lowerProgram entryName (Just types) parsed
+lowerProgram entryName (Just checked) parsed
   | not (null (moduleImports parsed)) =
       LowerRefused [nativeRefusal (moduleSpan parsed) "imports"]
   | otherwise = case findEntry of
@@ -77,6 +80,11 @@ lowerProgram entryName (Just types) parsed
       [ (locatedValue (functionName function), Located (locatedSpan declaration) function)
       | declaration@(Located _ (FunctionDeclaration function)) <- moduleDeclarations parsed
       ]
+
+    -- Only the root module's records: imports are refused above.
+    types = withRecords
+      (Map.filterWithKey (\identity _ -> nominalModule identity == Just (locatedValue (moduleName parsed))) (declaredRecords parsed))
+      checked
 
     runWorklist entry =
       let initial =

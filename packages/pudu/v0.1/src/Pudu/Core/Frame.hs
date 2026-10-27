@@ -78,6 +78,8 @@ data FrameValueShape
   | FrameTextLiteral !Text
   | FrameCharLiteral !Char
   | FrameCharCode !FrameSlot
+  | FrameAggregate ![FrameSlot]
+  | FrameMember !Int !FrameSlot
   | FrameDisplay !FrameSlot
   | FrameShow !FrameSlot
   | FrameTextMethod !CoreTextMethodName !FrameSlot ![FrameSlot]

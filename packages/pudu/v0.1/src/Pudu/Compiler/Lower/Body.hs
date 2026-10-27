@@ -14,6 +14,8 @@ import Pudu.Compiler.Lower.State
   , bindLocal, halt, lookupLocal, refuse, refused )
 import Pudu.Compiler.Lower.Signature (ensureSignature, functionLevelRefusal)
 import Pudu.Compiler.Lower.Text (lowerTextMethod)
+import Pudu.Compiler.Lower.Tuple (lowerTuple, lowerTupleIndex, lowerTuplePattern)
+import Pudu.Compiler.Lower.Record (lowerField, lowerFieldAssignment, lowerRecord, lowerRecordUpdate)
 import Pudu.Core
 import Pudu.Frontend.Syntax
   ( BindingKind (..), Block (..), Declaration (..), Expression (..)
@@ -22,7 +24,7 @@ import GHC.Float (castDoubleToWord64)
 import Pudu.FloatLiteral (ParsedFloat (..), parseFloatLiteral)
 import Pudu.IntegerLiteral (integerKindFits)
 
-{-| The entry carries an admitted integer, Bool, float, Str, Char or unit; a body that never
+{-| The entry carries an admitted integer, Bool, float, Str, Char, tuple, record or unit; a body that never
     returns uses the unit ABI. Integers become the exit status and every other value is
     printed as `renderValue` writes it, the same split `pudu run` makes. Print's Result carrier must not escape through the
     entry result. -}
@@ -41,6 +43,8 @@ lowerEntryBody located state
                 CoreBoolType -> built after coreBlock CoreBoolType
                 CoreTextType -> built after coreBlock CoreTextType
                 CoreCharType -> built after coreBlock CoreCharType
+                kind@(CoreTupleType _) -> built after coreBlock kind
+                kind@(CoreRecordType _ _) -> built after coreBlock kind
                 CoreNeverType -> built after coreBlock CoreUnitType
                 CoreUnitType
                   | printValued coreBlock ->
@@ -112,6 +116,9 @@ lowerBlock state (Located _ block) =
     result is empty — the same reading the evaluator takes. -}
 lowerBlockResult :: LowerState -> Located Expression -> (LowerState, [CoreStatement], Maybe CoreExpression, CoreType)
 lowerBlockResult state located@(Located expressionSpan expression) = case expression of
+  BinaryExpression target@(Located _ MemberExpression{}) "=" right
+    | Just (after, assigned) <- lowerFieldAssignment lowerExpression state expressionSpan target right ->
+        (after, maybe [] pure assigned, Nothing, CoreUnitType)
   BinaryExpression (Located _ (NameExpression (name :| []))) "=" right
     | Just local <- lookupLocal state name -> case lowerExpression state right of
         (after, Just (coreRight, coreType))
@@ -138,9 +145,15 @@ foldStatements :: LowerState -> [Located Statement] -> (LowerState, [CoreStateme
 foldStatements state = go state []
   where
     go current collected [] = (current, reverse collected, False)
-    go current collected (one : rest) = case lowerStatement current one of
-      (after, Just statement) -> go after (statement : collected) rest
-      (after, Nothing) -> (after, reverse collected, True)
+    go current collected (one@(Located statementSpan statement) : rest) = case statement of
+      LetPatternStatement kind pattern annotation subject
+        | kind == CompileTime -> (refuse statementSpan "comptime bindings" current, reverse collected, True)
+        | otherwise -> case lowerTuplePattern lowerExpression current statementSpan pattern annotation subject of
+            (after, Just statements) -> go after (reverse statements <> collected) rest
+            (after, Nothing) -> (after, reverse collected, True)
+      _ -> case lowerStatement current one of
+        (after, Just lowered) -> go after (lowered : collected) rest
+        (after, Nothing) -> (after, reverse collected, True)
 
 lowerStatement :: LowerState -> Located Statement -> (LowerState, Maybe CoreStatement)
 lowerStatement state (Located statementSpan statement) = case statement of
@@ -167,6 +180,8 @@ lowerStatement state (Located statementSpan statement) = case statement of
   DeclarationStatement (Located declarationSpan _) ->
     halt declarationSpan "this declaration" state
   ExpressionStatement locatedExpression -> case locatedValue locatedExpression of
+    BinaryExpression target@(Located _ MemberExpression{}) "=" right
+      | Just lowered <- lowerFieldAssignment lowerExpression state statementSpan target right -> lowered
     BinaryExpression (Located _ (NameExpression (name :| []))) "=" right
       | Just local <- lookupLocal state name -> case lowerExpression state right of
           (after, Just (coreRight, coreType))
@@ -259,6 +274,8 @@ allowedResultType declared operand = case declared of
   Nothing -> case operand of
     CoreIntegerType kind -> nativeIntegerKind kind
     CoreFloatType _ -> True
+    CoreTupleType _ -> True
+    CoreRecordType _ _ -> True
     _ -> operand `elem` [CoreBoolType, CoreTextType, CoreCharType, CoreUnitType, CoreNeverType]
 
 lowerExpression :: LowerState -> Located Expression -> (LowerState, Maybe (CoreExpression, CoreType))
@@ -312,12 +329,13 @@ lowerExpression state (Located spanValue expression) = case expression of
   CallExpression (Located _ (MemberExpression receiver (Located _ member))) arguments ->
     lowerTextMethod lowerExpression state spanValue receiver member arguments
   CallExpression{} -> halt spanValue "this call" state
-  MemberExpression{} -> halt spanValue "member access" state
-  IndexExpression{} -> halt spanValue "indexing" state
+  MemberExpression receiver (Located _ member) -> lowerField lowerExpression state spanValue receiver member
+  IndexExpression receiver key -> lowerTupleIndex lowerExpression state spanValue receiver key
   RangeExpression{} -> halt spanValue "ranges" state
   TryExpression{} -> halt spanValue "the try operator" state
   AwaitExpression{} -> halt spanValue "await" state
   TupleExpression [] -> value (CoreBlockValue (CoreBlock [] Nothing)) CoreUnitType
+  TupleExpression members@(_ : _ : _) -> lowerTuple lowerExpression state spanValue members
   TupleExpression{} -> halt spanValue "tuples" state
   ArrayExpression{} -> halt spanValue "arrays" state
   SetExpression{} -> halt spanValue "sets" state
@@ -326,8 +344,8 @@ lowerExpression state (Located spanValue expression) = case expression of
   ScopeExpression{} -> halt spanValue "scope expressions" state
   LambdaExpression{} -> halt spanValue "lambdas" state
   TypeApplication{} -> halt spanValue "type applications" state
-  RecordExpression{} -> halt spanValue "records" state
-  RecordUpdateExpression{} -> halt spanValue "record updates" state
+  RecordExpression _ fields -> lowerRecord lowerExpression state spanValue fields
+  RecordUpdateExpression _ source fields -> lowerRecordUpdate lowerExpression state spanValue source fields
   BlockExpression block ->
     let (after, coreBlock, resultType) = lowerBlock state block
         refusalCount = length . contextRefusals . lowerContext

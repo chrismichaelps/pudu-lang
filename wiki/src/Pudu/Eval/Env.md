@@ -147,3 +147,10 @@ and failure paths; accept only ordinary optimized benchmark improvements.
 evaluation and derive residualization. Runtime loop policy and thresholds remain
 unchanged. Resolved Grill Log: one phase-neutral declaration prevents nested
 compiler expansion and ordinary constant evaluation from drifting apart.
+
+## Record field order (#519)
+
+`envRecordFields` maps a record type, or a record-payload variant, to its
+declared field names. `inDeclaredOrder` rearranges written fields into that
+order and leaves them alone unless they are exactly the declared set, since a
+name shared across modules may then belong to another type.

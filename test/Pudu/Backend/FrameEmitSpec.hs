@@ -86,7 +86,7 @@ testBodies = do
                 let cpath = root </> "frames.c"
                     selected = close (Set.union roots (Set.fromList (["prelude", "integer_value", "site"] <> ["wide_value" | frameUsesWideCells frames] <> ["text" | frameUsesText frames])))
                     runtime = concat [runtimePartLines part | part <- runtimeParts, Set.member (runtimePartName part) selected]
-                    generated = runtime <> renderSites (reverse (emitSites emitted)) <> frameTypes (frameUsesWideCells frames) (frameUsesText frames)
+                    generated = runtime <> renderSites (reverse (emitSites emitted)) <> frameTypes (frameUsesWideCells frames) (frameUsesText frames) False
                       <> reverse (emitOutput emitted) <> dispatch (length (frameModuleFunctions frames)) (Set.member "fail" selected)
                 TextIO.writeFile cpath (Text.unlines generated)
                 (status, output, errors) <- readProcessWithExitCode cc
