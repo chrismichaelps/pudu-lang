@@ -107,3 +107,5 @@ aliases: [Backend Module Map]
 - [[Backend Named Callable Programs]] — named call depth, ownership and diagnostics (#568).
 
 - [[Backend Output Callable Programs]] — builtin values, effects and cleanup (#569).
+
+- [[Backend Rendering Callable Programs]] — intrinsic signatures, identity and cleanup.

@@ -29,3 +29,11 @@ Export outputCallableFailureCleanup for an isolated counted run with both
 outputs connected to pipes without readers. Loop through all four tags and
 consume Err payloads repeatedly, including full-buffer writes. Normal status
 must be zero; failure details are independently checked by OutputSpec.
+
+## Shared intrinsic conformance corpus (#575)
+
+Append [[Backend Rendering Callable Programs]] to success/failure exports.
+Resolved Grill Log: existing registered callable conformance and allocation
+properties execute rendering values in both focused and full runs without a
+second harness or omitted cleanup checks. Historical output labels now cover
+both stream and rendering builtin values.

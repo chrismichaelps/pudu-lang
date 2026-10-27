@@ -388,4 +388,11 @@ Resolved Grill Log: Normalize expression bodies to empty located blocks retainin
 
 ## First-class output builtins (#569)
 
-Resolved Grill Log: After local/constant/module-function value resolution, delegate standard-stream builtin names to Compiler Lower Intrinsic. Keep call and shadowing dispatch order intact.
+Resolved Grill Log: After local/constant/module-function value resolution, delegate builtin names to Compiler Lower Intrinsic. Keep call and shadowing dispatch order intact.
+
+## Rendering builtin values (#575)
+
+Delegate builtin value resolution to lowerIntrinsicValue after the existing
+local/constant/module-function precedence. Resolved Grill Log: broaden only the
+intrinsic set; direct calls and shadowing order remain unchanged. See
+[[Native Rendering Callables]].

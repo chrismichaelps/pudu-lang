@@ -95,3 +95,9 @@ Resolved Grill Log: include [[Backend Shared Reference Programs]] in the actual
 modulePrograms/moduleRefusalPrograms lists, supplying no dependency files for
 these single-module programs. The existing native conformance coordinator
 executes them with their locked outputs; no unused property list counts.
+
+## Rendering intrinsic ownership (#575)
+
+Include renderingCallableModulePrograms from [[Backend Rendering Callable Programs]].
+Resolved Grill Log: two modules' same-spelling record types require distinct
+rendering bodies, even when their builtin identity and displayed names agree.
