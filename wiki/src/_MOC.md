@@ -5,6 +5,8 @@ tags: [moc, module]
 
 # Module Map
 
+- [[Ark Layer Gate]] · [[Ark Layer Model]] · [[Ark Layer Tests]] — explicit engine import contracts.
+
 - [[Derive Index Output Gate]] — checked strategy output and visibility.
 
 - [[Database Admission Fixture]] · [[Database Admission Transport]] — bounded pool ownership.
