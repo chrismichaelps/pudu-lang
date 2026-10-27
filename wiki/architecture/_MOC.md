@@ -68,3 +68,5 @@ Pudu is a statically typed native systems language for developers who need predi
 - [[Exact Native Integer Carriers]] — preserve accepted deferred magnitudes without lossy C narrowing (#498).
 
 - [[Native Execution Frames]] — explicit continuations and frame ownership for recursion-depth parity (#499).
+
+- [[Native Wide Integers]] — portable 128-bit arithmetic prerequisite.

@@ -1,6 +1,6 @@
 ---
 type: handoff
-status: ACTIVE
+status: HANDED_OFF
 issue: 500
 aliases: [Native Unsigned Integer Delivery]
 ---
@@ -30,8 +30,8 @@ Durable local evidence: ~/.codex/tmp/pudu-500/validation/. Independent
 implementation/Language Architect/Forensic Guardian review and additional
 platform evidence remain pending before promotion; no PR has been merged.
 
-Exact next action: resolve the portable Int128/UInt128 carrier architecture
-and its module mirrors before creating the next bounded implementation issue.
+Exact next action: continue [[Native Wide Integer Delivery]] for the resolved
+portable Int128/UInt128 arithmetic prerequisite #501.
 
 ## Referenced by
 

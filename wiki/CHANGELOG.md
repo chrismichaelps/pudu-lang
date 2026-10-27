@@ -5,6 +5,11 @@ tags: [changelog]
 
 # Changelog
 
+## 2026-10-18 — Portable wide-word prerequisite (#501)
+
+- [[Native Wide Integers]] resolves the portable Int128/UInt128 delivery sequence. [[Backend Word128 Kernel]] implements raw two-word arithmetic, overflow/carry evidence, total shifts and explicit zero-divisor results without compiler extensions or a new ABI.
+- [[Native Word128 Tests]] executes 1,097 independent arithmetic rows and 3,799 shift rows as strict C11. Clang, GCC 15 and ASan/UBSan runs pass, as do all 19 clean repository gates/670 groups. Both ordinary evaluators also confirm the documented deferred Int128 boundary probe. Typed admission, full-emission coverage, additional platforms and independent reviews remain pending.
+
 ## 2026-10-18 — Unsigned native admission (#500)
 
 - [[Native Unsigned Integers]] admits canonical UInt and UInt8/16/32/64 through the shared scalar predicate, retaining the existing exact carrier and runtime ABI. [[Native Unsigned Programs]] covers high bits/maxima, arithmetic policies, logical shifts, aliases/transfers, exact failures and entry statuses with independent mathematical answers.
