@@ -11,6 +11,7 @@ import Pudu.FloatKernel (FloatKernel (KernelFloor))
 import Pudu.FloatLiteral (FloatWidth (Float64Width))
 import Pudu.LaneKernel (LaneKernel (..), laneKernelName)
 import Pudu.Runtime.FloatKernel (applyFloatUnary)
+import qualified Pudu.Runtime.Broadphase as Broadphase
 import qualified Pudu.Runtime.Lanes as Lanes
 import qualified Pudu.Runtime.Raster as Raster
 import Pudu.Source (Span)
@@ -76,6 +77,11 @@ apply kernel values = case (kernel, values) of
     entries <- traverse floatOf (toList matrix)
     Just $ case Lanes.laneAffine3 entries xs ys zs of
       Just (rx, ry, rz) -> VariantValue "Some" [TupleValue [BytesValue rx, BytesValue ry, BytesValue rz]]
+      Nothing -> VariantValue "None" []
+  (LaneOverlapPairs, boxes) -> do
+    lanes <- traverse bytesOf boxes
+    Just $ case Broadphase.overlapPairs lanes of
+      Just pairs -> VariantValue "Some" [ArrayValue (Seq.fromList (map (intOf . toInteger) pairs))]
       Nothing -> VariantValue "None" []
   (RasterFill, [IntValue _ pixels, FloatValue _ r, FloatValue _ g, FloatValue _ b, FloatValue _ a]) ->
     Just (optionLanes (bounded pixels >>= \count -> Raster.rasterFill count r g b a))

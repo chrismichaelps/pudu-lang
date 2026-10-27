@@ -5,6 +5,11 @@ tags: [changelog]
 
 # Changelog
 
+## 2026-10-27 — Native broadphase (#682)
+
+- [[Runtime Broadphase]] finds overlapping box pairs by sort and sweep; [[Overlap Pairs Fixture]]
+  matches a brute-force reference in [[Lanes Gate]].
+
 ## 2026-10-27 — Native triangle rasterization (#676)
 
 - [[Runtime Raster]] fills RGBA8 targets and rasterizes depth-tested triangles with a top-left

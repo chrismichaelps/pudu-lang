@@ -47,6 +47,7 @@ data LaneKernel
   | LaneAffine3
   | RasterFill
   | RasterTriangles
+  | LaneOverlapPairs
   deriving stock (Eq, Ord, Show, Enum, Bounded)
 
 {-| Packed lanes as Bytes, a Float64, an Int, Array[Float64], Array[Int],
@@ -92,6 +93,7 @@ laneKernelName kernel = case kernel of
   LaneAffine3 -> "lanesAffine3"
   RasterFill -> "rasterFill"
   RasterTriangles -> "rasterTriangles"
+  LaneOverlapPairs -> "lanesOverlapPairs"
 
 {-| Argument types and result type. -}
 laneKernelSignature :: LaneKernel -> ([LaneType], LaneType)
@@ -118,6 +120,7 @@ laneKernelSignature kernel = case kernel of
   LaneScatter -> ([LaneBytes, LaneInts, LaneBytes], LaneOption LaneBytes)
   LaneAffine3 -> ([LaneFloats, LaneBytes, LaneBytes, LaneBytes], LaneOption LaneTriple)
   RasterFill -> ([LaneInt, LaneFloat, LaneFloat, LaneFloat, LaneFloat], LaneOption LaneBytes)
+  LaneOverlapPairs -> ([LaneBytes, LaneBytes, LaneBytes, LaneBytes, LaneBytes, LaneBytes], LaneOption LaneInts)
   RasterTriangles ->
     ( [LaneBytes, LaneBytes, LaneInt, LaneInt, LaneBytes, LaneBytes, LaneBytes, LaneBytes, LaneBytes, LaneBytes]
     , LaneOption LanePair
