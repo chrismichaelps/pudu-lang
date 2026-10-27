@@ -24,8 +24,11 @@ cabal check; diff whitespace checks pass. Logs: /tmp/pudu-word128-publication-
 {clang,gcc,asan}.log. These are macOS arm64 results; full CI/platform evidence
 and independent review remain pending. No full local release pipeline ran.
 
-Exact next action: open and attach the dev-targeted draft PR, then inspect its
-full GitHub CI before review readiness.
+Draft PR [#573](https://github.com/chrismichaelps/pudu-lang/pull/573) targets
+dev and is attached to the chat. Publication commit: d8054127.
+
+Exact next action: inspect PR #573 full GitHub CI before review readiness;
+keep independent code, architect and wiki review pending.
 
 ## Referenced by
 
