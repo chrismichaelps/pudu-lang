@@ -5,6 +5,8 @@ tags: [moc, handoff]
 
 # Handoff Map
 
+- [[Lambda Option Try Delivery]] — issue #678 `?` on Option in unannotated lambdas.
+
 - [[Raster Delivery]] — issue #676 native depth-tested triangle rasterization.
 
 - [[Ark Engine Next]] — engine branch state after Platform (#675); next action: software render device.
