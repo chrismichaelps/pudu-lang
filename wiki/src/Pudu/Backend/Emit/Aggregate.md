@@ -104,3 +104,9 @@ the interpreter's words (text, array, map, set, range, character, byte).
 Equality compares sites, then a method closure's receivers with memberEqual.
 Resolved Grill Log: two values of one method on equal receivers are equal,
 as in the interpreter.
+
+## Trait method closures (#646)
+
+Method closures whose receiver is a record or sum render as `<fn name>`
+with kind `function`; receiver equality applies only when a receiver was
+captured.

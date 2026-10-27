@@ -59,9 +59,23 @@ and kind) and then the receiver with the receiver type's equality.
 Every method family through values: rendering, equality on equal and
 different receivers, receivers with effects, owned receivers released once,
 failures at the call through the value, values in records, captures and
-generic code; both evaluators, Clang, GCC 15 and ASan/UBSan. Trait and
-user-declared methods as values are a separate obligation.
+generic code; both evaluators, Clang, GCC 15 and ASan/UBSan. Trait methods
+follow below.
 
 ## Referenced by
 
 [[architecture/_MOC]] · [[Native Emission Coverage]] · [[Compiler Lower Body]] · [[Backend Method Value Programs]]
+
+## Trait methods (#646)
+
+A record without a field of that name, or a sum, may be the receiver too: the
+lifted body's call reaches the ordinary trait-method dispatch, and the value
+renders as `<fn name>` with the `function` kind. `Bot.label` names the
+method through its type: a capture-free wrapper whose body is
+`Bot.label($1, ...)`, keyed by owner, method and signature, so every
+reference compares equal. Both wrappers are uncounted; the implementation
+keeps its own counted frame and its own spans for failures.
+
+Resolved Grill Log: the trait-qualified value `Named.label` stays refused
+with E6001: the interpreter fails it at run time with an undefined name
+(#647), so there is no behaviour to match yet.

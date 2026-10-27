@@ -363,3 +363,5 @@ replaces it before any read; every release path accepts a zero cell.
 
 CoreClosureInfo.closureMethod holds a method value's receiver type. Resolved
 Grill Log: capture 0 is the receiver and takes part in equality.
+
+closureMethod with no capture marks an unbound method named through its type. (#646)

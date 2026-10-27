@@ -26,3 +26,9 @@ allocation.
 ## Referenced by
 
 [[Native Method Values]] · [[src/Pudu/Backend/_MOC]]
+
+## Trait methods (#646)
+
+Records and sums as receivers, `Bot.label` through its type, arrays and
+record fields of method values, receiver equality, a receiver with output,
+and a division by zero inside the implementation at the body's own span.

@@ -25,3 +25,11 @@ the caller-blaming frame flag. See [[Native Method Values]].
 ## Referenced by
 
 [[Compiler Lower Body]] · [[src/Pudu/Compiler/_MOC]]
+
+## Trait methods (#646)
+
+Declared receivers qualify when the member is not a field; an unbound
+`Owner.member` qualifies when the value's first parameter is a declared type
+owned by that name. Resolved Grill Log: the unbound wrapper has no
+environment and records the first parameter as its receiver type with no
+capture, so equality compares sites only.

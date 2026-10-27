@@ -127,13 +127,16 @@ closureHelpers kind entries =
       , "  switch (box->fields[0].scalar) {" ]
       <> [ "    case " <> number identity <> ": return pudu_text_literal(\"" <> kindName <> "\", " <> number (Text.length kindName) <> ");"
          | (identity, info) <- entries
-         , let kindName = if closureIsBuiltin info then "builtin" else maybe "function" ((<> " method") . methodKind) (closureMethod info) ]
+         , let kindName = case closureMethod info of
+                 _ | closureIsBuiltin info -> "builtin"
+                 Just receiver | builtInReceiver receiver -> methodKind receiver <> " method"
+                 _ -> "function" ]
       <> [ "    default: return pudu_text_literal(\"\", 0);", "  }", "}" ]))
   , (aggregateNeed "comparable" kind, ([],
       [ "static int " <> aggregateHelper "comparable" kind <> "(pudu_box *box) {", "  (void)box;", "  return 0;", "}" ]))
   , (aggregateNeed "compare" kind, ([],
       [ "static int " <> aggregateHelper "compare" kind <> "(pudu_box *a, pudu_box *b) {", "  (void)a; (void)b;", "  return 0;", "}" ]))
-  , (aggregateNeed "equal" kind, (concat [snd (memberEqual receiver "" "") | (_, info) <- entries, Just receiver <- [closureMethod info]],
+  , (aggregateNeed "equal" kind, (concat [snd (memberEqual receiver "" "") | (_, info) <- entries, Just receiver <- [closureMethod info], not (null (closureCaptures info))],
       [ "static int " <> aggregateHelper "site" kind <> "(pudu_box *box) {"
       , "  switch (box->fields[0].scalar) {" ]
       <> [ "    case " <> number identity <> ": return " <> number (siteNumber info) <> ";" | (identity, info) <- entries ]
@@ -144,7 +147,7 @@ closureHelpers kind entries =
       -- what make two of them equal.
       <> [ "  if (a->fields[0].scalar == " <> number identity <> ") return "
              <> fst (memberEqual receiver (capture "a" 0 receiver) (capture "b" 0 receiver)) <> ";"
-         | (identity, info) <- entries, Just receiver <- [closureMethod info] ]
+         | (identity, info) <- entries, Just receiver <- [closureMethod info], not (null (closureCaptures info)) ]
       <> [ "  return 1;", "}" ]))
   ] <>
   [ (aggregateNeed ("closure" <> number identity) kind, (concat [snd (retained member "") | (_, member) <- captures info],
@@ -159,7 +162,7 @@ closureHelpers kind entries =
   captures info = zip [0 :: Int ..] (closureCaptures info)
   label info
     | closureIsBuiltin info = "builtin"
-    | Just receiver <- closureMethod info = methodKind receiver <> " method"
+    | Just receiver <- closureMethod info, builtInReceiver receiver = methodKind receiver <> " method"
     | otherwise = "fn"
   capture box position member = box <> "->fields[" <> number (position + 1) <> "]." <> cellName member
   sites = foldr (\site found -> if site `elem` found then found else site : found) [] [closureSite info | (_, info) <- entries]
@@ -305,6 +308,14 @@ sumHelpers kind variants =
             , "(const char *const[]){" <> Text.intercalate ", " [cString (label <> ": ") | (label, _) <- coreVariantFields variant] <> "}"
             , "\"}\"" )
         | otherwise = (cString (coreVariantName variant <> "("), "NULL", "\")\"")
+
+{-| A method of one of these renders by its receiver's kind; a declared
+    type's method renders as the function it is. -}
+builtInReceiver :: CoreType -> Bool
+builtInReceiver receiver = case receiver of
+  CoreRecordType _ _ -> False
+  CoreSumType _ _ -> False
+  _ -> True
 
 {-| What the interpreter calls a receiver when it names a method value. -}
 methodKind :: CoreType -> Text

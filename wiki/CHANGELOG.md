@@ -5,6 +5,10 @@ tags: [changelog]
 
 # Changelog
 
+## 2026-10-27 — Native trait method values (#646)
+
+`bot.label` and `Bot.label` are values natively: bound to their receiver or named through the type, rendered `<fn label>`, equal on the same method and an equal receiver. Failures inside the implementation keep its own spans. The trait-qualified `Named.label` value waits on #647, an interpreter failure found here. See [[Native Method Values]].
+
 ## 2026-10-27 — Native built-in method values (#644)
 
 - `text.length`, `items.push`, `m.get`, `(0..3).contains`, `'a'.code` and the other built-in methods are values natively. The receiver runs once, renders as `<kind method name>`, and equality compares method and receiver. See [[Native Method Values]].
