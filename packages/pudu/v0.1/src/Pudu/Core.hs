@@ -38,9 +38,9 @@ data CoreModule = CoreModule
   { coreModuleName :: !Text
   , coreModuleEntry :: !Text
   , coreModuleFunctions :: ![CoreFunction]
-  
+
   , coreModuleLayouts :: !(Map CoreType CoreLayout)
-  
+
   , coreModuleClosures :: !(Map Text CoreClosureInfo)
   }
   deriving stock (Eq, Show)
@@ -111,7 +111,7 @@ data CoreExpression = CoreExpression
 
 data CoreExpressionShape
   = CoreIntegerLiteral !IntegerKind !Integer
-  
+
   | CoreFloatLiteral !FloatWidth !Word64
   | CoreBoolLiteral !Bool
   | CoreTextLiteral !Text
@@ -122,64 +122,64 @@ data CoreExpressionShape
   | CoreNot !CoreExpression
   | CoreBinary !CoreBinaryOperator !CoreExpression !CoreExpression
   | CoreDisplay !CoreExpression
-  
+
   | CoreShow !CoreExpression
-  
+
   | CoreTextMethod !CoreTextMethodName !CoreExpression ![CoreExpression]
-  
+
   | CoreCharCode !CoreExpression
-  
+
   | CoreIntegerFits !IntegerKind !CoreExpression
-  
+
   | CoreCharOfCode !CoreExpression
-  
+
   | CoreIntegerConvert !IntegerKind !CoreExpression
-  
+
   | CoreTuple ![CoreExpression]
-  
+
   | CoreTupleIndex !Int !CoreExpression
-  
+
   | CoreRecord ![(Text, CoreExpression)]
-  
+
   | CoreRecordUpdate !CoreExpression ![(Text, CoreExpression)]
   | CoreField !Text !CoreExpression
-  
+
   | CoreConstruct !Text ![(Text, CoreExpression)]
-  
+
   | CoreMatch !CoreExpression ![CoreArm]
-  
+
   | CoreFailText !Text !(Maybe Text) !CoreExpression !(Maybe CoreExpression)
-  
+
   | CoreRuntimeKind !CoreExpression
   | CorePrint !CoreExpression
-  
+
   | CoreOutputError !Bool !Bool !CoreExpression
   | CoreCall !Text ![CoreExpression]
-  
+
   | CoreClosure !Text ![CoreExpression]
-  
+
   | CoreCapture !Int !CoreExpression
-  
+
   | CoreCallValue !CoreExpression ![CoreExpression]
-  
+
   | CoreArray ![CoreExpression]
-  
+
   | CoreArrayMethod !CoreArrayMethodName !CoreExpression ![CoreExpression]
-  
+
   | CoreKeyedMethod !CoreKeyedMethodName !CoreExpression ![CoreExpression]
-  
+
   | CoreComparable !CoreExpression
-  
+
   | CoreRangeValue !(Maybe CoreExpression) !Bool !(Maybe CoreExpression)
-  
+
   | CoreRangeMethod !CoreRangeMethodName !CoreExpression ![CoreExpression]
-  
+
   | CoreBytesMethod !CoreBytesMethodName !CoreExpression ![CoreExpression]
-  
+
   | CoreIndex !CoreExpression !CoreExpression
-  
+
   | CoreTakeLocal !CoreLocal
-  
+
   | CoreOperatorFailure !Text ![CoreExpression]
   | CoreBlockValue !CoreBlock
   | CoreIfValue !CoreExpression !CoreBlock !CoreExpression
@@ -247,20 +247,20 @@ data CoreType
   | CoreTextType
   | CoreCharType
   | CoreTupleType ![CoreType]
-  
+
   | CoreRecordType !Text ![CoreType]
-  
+
   | CoreSumType !Text ![CoreType]
-  
+
   | CoreArrayType !CoreType
-  
+
   | CoreMapType !CoreType !CoreType
   | CoreSetType !CoreType
-  
+
   | CoreRangeType
-  
+
   | CoreBytesType
-  
+
   | CoreFunctionType ![CoreType] !CoreType
   | CoreUnitType
   | CoreNeverType
@@ -295,7 +295,7 @@ displayName key = case Text.splitOn "." key of
 data CoreLayout
   = CoreRecordLayout ![(Text, CoreType)]
   | CoreSumLayout ![CoreVariant]
-  
+
   | CoreClosureLayout ![(Text, CoreClosureInfo)]
   deriving stock (Eq, Show)
 
@@ -323,6 +323,6 @@ data CorePattern
   | CoreRecordPattern ![CorePattern]
   | CoreVariantPattern !Text ![CorePattern]
   | CoreAlternativePattern ![CorePattern]
-  
+
   | CoreArrayPattern ![CorePattern] !(Maybe (Maybe CoreLocal)) ![CorePattern]
   deriving stock (Eq, Show)
