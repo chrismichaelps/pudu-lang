@@ -1,7 +1,7 @@
 {-| @Pudu.Compiler.Lower.Bytes — `bytesOf` and the built-in methods of a byte
     sequence, as `Eval.Bytes` answers them. Arguments run before the
     receiver. -}
-module Pudu.Compiler.Lower.Bytes (lowerBytesOf, lowerBytesMethod) where
+module Pudu.Compiler.Lower.Bytes (lowerBytesOf, lowerBytesMethod, bytesFromArray) where
 
 import Data.Text (Text)
 import Pudu.Compiler.Lower.Array (collect, stopped, stops)
@@ -25,8 +25,12 @@ lowerBytesOf lower state at arguments = case collect lower state arguments of
   (after, Just cores)
     | any stops cores -> (after, Just (stopped at cores, CoreNeverType))
     | [array] <- cores, coreExpressionType array == CoreArrayType byteType ->
-        (after, Just (CoreExpression at CoreBytesType (CoreBytesMethod BytesOfArray array []), CoreBytesType))
+        (after, Just (bytesFromArray at array, CoreBytesType))
     | otherwise -> halt at "this call to bytesOf" after
+
+{-| What `bytesOf` makes of a lowered `Array[UInt8]`. -}
+bytesFromArray :: Span -> CoreExpression -> CoreExpression
+bytesFromArray at array = CoreExpression at CoreBytesType (CoreBytesMethod BytesOfArray array [])
 
 {-| A method of a byte sequence; Nothing when the receiver is not one. -}
 lowerBytesMethod :: LowerExpression -> LowerState -> Span -> Located Expression -> Text -> [Located Expression] -> Maybe Lowered

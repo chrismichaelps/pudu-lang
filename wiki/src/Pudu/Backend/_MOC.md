@@ -109,3 +109,4 @@ aliases: [Backend Module Map]
 - [[Backend Output Callable Programs]] — builtin values, effects and cleanup (#569).
 
 - [[Backend Rendering Callable Programs]] — intrinsic signatures, identity and cleanup.
+- [[Backend Collection Callable Programs]] — collection builtin values and caller-site refusals.

@@ -143,6 +143,18 @@ textRuntimeParts =
       , "  pudu_fail_report(site, copy, message.length, site->help, site->help == NULL ? 0 : strlen(site->help), copy);"
       , "}"
       ])
+  , ("fail_text_caller",
+      [ "/* A builtin body's refusal, pointing at the value call that reached it."
+      , "   Only the code and help are its own. */"
+      , "static void pudu_fail_text_caller(const pudu_site *caller, const char *code, const char *help, pudu_text message) {"
+      , "  pudu_site site;"
+      , "  if (caller == NULL) abort();"
+      , "  site = *caller;"
+      , "  site.code = code;"
+      , "  site.help = help;"
+      , "  pudu_fail_text(&site, message);"
+      , "}"
+      ])
   , ("fail_text_help",
       [ "/* Same, with help that names something only known now, like a length. */"
       , "static void pudu_fail_text_help(const pudu_site *site, pudu_text message, pudu_text help) {"
@@ -168,6 +180,7 @@ textRuntimeDependencies :: Text -> [Text]
 textRuntimeDependencies name = maybe [] id (lookup name
   [ ("text_literal", ["text"])
   , ("fail_text", ["fail", "text", "memory_failure"])
+  , ("fail_text_caller", ["fail_text"])
   , ("fail_text_help", ["fail", "text", "memory_failure"])
   , ("text_retain", ["text"])
   , ("text_allocate", ["text", "memory_failure"])

@@ -145,6 +145,12 @@ terminator identities function (state, needs) ending = case ending of
       [ call
       , "      return (pudu_step){.kind = PUDU_INVALID};" ]
       , Set.union needs (Set.fromList ["site", "colored", "fail", maybe "fail_text" (const "fail_text_help") helpText]))
+  FrameFailCaller _ code help message -> do
+    text <- slotText message
+    pure (linesInto state
+      [ "      pudu_fail_text_caller(frame->call_site, " <> cString code <> ", " <> maybe "NULL" cString help <> ", " <> text <> ");"
+      , "      return (pudu_step){.kind = PUDU_INVALID};" ]
+      , Set.union needs (Set.fromList ["site", "colored", "fail", "fail_text", "fail_text_caller"]))
   FrameOperatorFailure at message ->
     let (after, index) = operatorFailureSite state at message
      in pure (linesInto after

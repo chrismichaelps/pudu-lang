@@ -38,3 +38,8 @@ Matches `FrameFailText{}` by record syntax, so new operands don't break it.
 ## Referenced by
 
 [[src/_MOC]] · [[Native Frame Pressure Repair]]
+
+## Caller failures (#631)
+
+Block-target reachability lists FrameFailCaller beside FrameFailText.
+Resolved Grill Log: neither refusal has a successor block.

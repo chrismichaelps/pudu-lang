@@ -33,3 +33,10 @@ methods of a byte sequence, arguments before the receiver.
 Resolved Grill Log: split the collected operands with a nonempty pattern on
 the reversed list. An empty operand list refuses at the call span; no partial
 `init` or `last` is needed to select the receiver.
+
+## Shared builder (#631)
+
+Export bytesFromArray, the CoreBytesMethod BytesOfArray node the direct call
+and the bytesOf value body both produce.
+Resolved Grill Log: a UInt8 array always fits, so the value body has no
+failure path.

@@ -1,6 +1,6 @@
 ---
 type: handoff
-status: ACTIVE
+status: DONE
 issue: 575
 aliases: [Native Rendering Callable Delivery]
 ---

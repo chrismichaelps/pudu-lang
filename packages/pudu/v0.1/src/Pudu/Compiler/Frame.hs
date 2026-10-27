@@ -37,6 +37,7 @@ lowerFrames source = do
                 FrameReturn _ _ -> []
                 FrameOperatorFailure _ _ -> []
                 FrameFailText{} -> []
+                FrameFailCaller{} -> []
               referenced = FrameLabel 0 : concatMap (targets . frameBlockTerminator) (Map.elems blocks)
           if all (`Map.member` blocks) referenced
             then Right FrameFunction

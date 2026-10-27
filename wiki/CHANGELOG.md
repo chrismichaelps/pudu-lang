@@ -5,6 +5,13 @@ tags: [changelog]
 
 # Changelog
 
+## 2026-10-27 — Native collection callable values (#631)
+
+- `charFromCode`, `bytesOf`, `mapOf` and `setOf` are first-class values whose bodies are the direct calls' own Core builders. See [[Native Collection Callables]].
+- Frames keep the site of the value call that created them, so a builtin's E7008 through a value points at that call, as in the interpreter. Runtime revision 17.
+- Type variables left open after checking form as unit everywhere, so `setOf([])`, `setOf == setOf` and `display == show` build natively.
+- [[Backend Collection Callable Programs]] covers both evaluators and counted cleanup under Clang, GCC 15 and ASan/UBSan.
+
 ## 2026-10-27 — Native rendering callable values (#575)
 
 - [[Native Rendering Callables]] specifies canonical type-specialized bodies with per-tag identity.

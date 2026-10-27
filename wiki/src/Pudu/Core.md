@@ -343,3 +343,12 @@ Resolved Grill Log: Add closureHasEnvironment to CoreClosureInfo: true only for 
 ## First-class output builtins (#569)
 
 Resolved Grill Log: Add closureIsBuiltin to callable metadata. Generalize CoreVariantName to CoreRuntimeKind for dynamic sum/callable kind text. Builtin and source callables remain the same checked function type; see [[Native Output Callable Values]].
+
+## Caller failures (#631)
+
+`CoreFailCaller code help message` refuses like CoreFailText but at the site
+of the value call that entered the current function. Only builtin bodies
+reached through a value build it.
+Resolved Grill Log: the interpreter names the call expression for a builtin's
+refusal, and a generated body has no span of its own for it. See
+[[Native Collection Callables]].

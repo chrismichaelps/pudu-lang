@@ -41,3 +41,11 @@ array, at the call for `insert`. Where it couldn't, no test is emitted.
 ## First-class output builtins (#569)
 
 Resolved Grill Log: Use CoreRuntimeKind for callable key E7008 as well as sum variants, retaining existing comparability guards and evaluation order.
+
+## Shared builder (#631)
+
+Export keyedFromArray: given the tag, solved result and lowered array it
+builds what mapOf/setOf build, or Nothing for a mismatched type. A flag
+picks whether key refusals use the call span or the caller site.
+Resolved Grill Log: the direct call and the value body share it, so key
+checks, E7008 wording and duplicate handling cannot drift.

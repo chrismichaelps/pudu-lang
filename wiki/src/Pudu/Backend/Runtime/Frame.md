@@ -96,3 +96,12 @@ Resolved Grill Log: Add closure_call to pudu_step and environment to pudu_functi
 ## First-class output builtins (#569)
 
 Resolved Grill Log: Add counted to function descriptors. Only counted target calls check/increment depth; only counted returning frames decrement. Validate target bounds before metadata access. All frames still retain/release arguments, results and unwind storage.
+
+## Caller sites (#631)
+
+pudu_frame carries `const pudu_site *call_site`. The dispatcher stores the
+step's call_site on each frame a value call creates; direct calls and the
+entry leave it NULL.
+Resolved Grill Log: a per-frame field survives nested value calls made while
+the callee's own arguments were evaluated; a global would not. Runtime
+revision 17. See [[Native Collection Callables]].

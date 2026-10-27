@@ -70,3 +70,10 @@ then reports with the help in place of the site's.
 ## Diagnostic ownership (#570)
 
 Resolved Grill Log: Transfer the copied allocation from fail_text/fail_text_help into the terminating reporter. Static help stays borrowed; computed help shares the one owned base. Check combined payload length before allocation. See [[Native Diagnostic Ownership]].
+
+## Caller failures (#631)
+
+fail_text_caller copies the caller's site, swaps in its own code and help, and
+reports through pudu_fail_text. A NULL caller aborts: no frame entered
+without a value call reaches a builtin body.
+Resolved Grill Log: the copy keeps the static site table read-only.

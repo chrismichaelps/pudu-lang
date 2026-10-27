@@ -133,3 +133,10 @@ Resolved Grill Log: FrameOutputError mirrors CoreOutputError over one saved Str 
 ## First-class output builtins (#569)
 
 Resolved Grill Log: Rename FrameVariantName to FrameRuntimeKind, mirroring the dynamic sum/callable kind operation without changing operand order or ownership.
+
+## Caller failures (#631)
+
+`FrameFailCaller at code help message` ends a block with a refusal reported
+at the frame's recorded caller site; `at` stays for faults during emission.
+Resolved Grill Log: a separate terminator keeps FrameFailText's fixed-site
+meaning intact. See [[Native Collection Callables]].
