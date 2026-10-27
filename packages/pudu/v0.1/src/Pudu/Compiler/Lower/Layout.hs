@@ -82,6 +82,7 @@ expression (CoreExpression _ kind shape) = kind : case shape of
   CoreFailText _ _ message help -> expression message <> foldMap expression help
   CoreVariantName operand -> expression operand
   CorePrint operand -> expression operand
+  CoreOutputError _ _ operand -> expression operand
   CoreCall _ arguments -> concatMap expression arguments
   CoreClosure _ captures -> concatMap expression captures
   CoreCapture _ operand -> expression operand

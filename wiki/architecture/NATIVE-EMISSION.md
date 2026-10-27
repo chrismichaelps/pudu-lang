@@ -17,9 +17,9 @@ Compile ordinary checked Pudu programs into portable C11 with interpreter-identi
 | Scalar functions, recursion, call depth | Implemented (#499) | Preserve explicit-frame lifetime, argument ordering, E7002 timing and differential evidence; promotion still requires independent review |
 | Loop control and scalar loop results | Implemented (#489) | Preserve labels, transfers, Never joins and condition-scope evidence |
 | Unit values, parameters and operations | Implemented (#492, #493) | Preserve effect-first temporaries, display/equality and #494 E7001 runtime refusals |
-| Entry result reporting | Partial (#512, #521, #525) | Integer statuses, unit silence, and Bool/Float/Str/Char/tuple/record/sum rendering match `pudu run`; an entry returning print's Result remains |
+| Entry result reporting | Partial (#512, #521, #525, #566) | Represented values, including output Results, use interpreter-identical rendering and builder buffering; complete callable forms and platform failure evidence remain |
 | Complete numeric families | Partial (#495, #497, #500, #507, #512, #560) | Fixed integers, Int128/UInt128 and Float32/Float64 are admitted, with `convertInteger` between every integer kind (#560); BigInt and Decimal remain |
-| Text and bytes | Partial (#515, #516, #517, #518, #559, #562, #565) | Owned Str values, Char values, operators, rendering, printing, entries, charAt, every Int/Bool/Str-result method (trim and case mapping included), `split`, `lines`, `chars`, `toInt`, `toFloat` and `charFromCode` match the interpreter (#559, #562); Bytes with every method, `toBytes` and `bytesOf` are native (#565); `toDecimal` and print Result remain |
+| Text and bytes | Partial (#515, #516, #517, #518, #559, #562, #565) | Owned Str values, Char values, operators, rendering, printing, entries, charAt, every Int/Bool/Str-result method (trim and case mapping included), `split`, `lines`, `chars`, `toInt`, `toFloat` and `charFromCode` match the interpreter (#559, #562); Bytes with every method, `toBytes` and `bytesOf` are native (#565); output Results are native (#566); `toDecimal` remains |
 | Records, tuples, sums and collections | Partial (#521, #525, #552, #556, #558, #561, #564) | Tuples, records and sums of every module, generic ones at each instantiation, and the built-in Option/Result are boxed, refcounted values with construction, field, position and payload reads, equality, ordering (tuples), rendering and run-time E7001 naming held variants; arrays (#556, #558), maps and sets (#561) and range values (#564) and Bytes (#565) are native; the accelerated map builtins remain |
 | Pattern matching and iteration | Partial (#525, #540, #541, #554, #558, #562, #564) | `match`, `if let` (with `else if` chains) and `while let` (with labels, `break` and `continue`) lower every pattern form in order with guards, bindings, literals, ranges, tuples, constructors, records and alternatives; `let ... else` retains bindings in the enclosing block (#541); `for` walks written ranges, range values, sequence types, arrays, maps, sets, Str, tuples and sum payloads (#554, #561, #562, #564); sequence patterns are native (#558) |
 | Modules and constants | Partial (#539, #543, #563) | Calls through selective imports, aliases and qualifiers, functions of every reachable module, and records and sums by canonical identity match the interpreter; folded scalar/tuple/record/sum constants now preserve canonical solved identity, with arbitrary Bytes constants including nested byte values (#565); records and sums whose fields name other modules' types or aliases are laid out as checking formed them (#563); callable and unrepresented constant families remain |
@@ -463,3 +463,13 @@ retention and byte entry results. The dedicated `native Bytes` success,
 failure and allocation groups provide a narrow iteration lane. Full-suite
 and independent review remain required before promotion; the area counter
 stays at 4/14 because the broader rows are incomplete. [[Native Bytes Delivery]].
+
+## Output Result continuation (#566)
+
+[[Native Output Results]] adds Result-valued direct output, failed-handle
+state, entry builder reporting and fatal diagnostic readiness. Differential
+checks cover both evaluators, all missing-standard-descriptor masks,
+closed/read-only outputs, closed pipes and hung-up terminals on this host.
+First-class output builtin values, complete platform evidence and promotion
+checks remain open. This slice does not complete the entry/text/host ledger
+rows or change the area counter.

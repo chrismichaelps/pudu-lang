@@ -57,3 +57,7 @@ Byte operations contribute their operands' locals.
 ## Referenced by
 
 [[Compiler Lower]] · [[Core IR]] · [[src/_MOC]]
+
+## Output Results (#566)
+
+Resolved Grill Log: CoreOutputError contributes its operand types and locals during layout collection, including the surrounding Result layout. See [[Native Output Results]].

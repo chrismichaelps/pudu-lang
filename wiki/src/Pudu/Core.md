@@ -331,3 +331,7 @@ bounded.
 `CoreRecordType !Text ![(Text, CoreType)]` names a root-module record and its
 fields in declaration order. `CoreRecord` carries fields as written,
 `CoreRecordUpdate` a base and written fields, `CoreField` one field read.
+
+## Output Results (#566)
+
+Resolved Grill Log: CoreOutputError carries the standard-error flag, newline flag and one Str operand; its owned Str result is empty on success and nonempty on failure. This internal outcome is converted to the checked Result in lowering. See [[Native Output Results]].

@@ -29,6 +29,8 @@ import Pudu.Backend.Runtime.Aggregate (aggregateRuntimeParts)
 import Pudu.Backend.Runtime.Char (charRuntimeParts)
 import Pudu.Backend.Runtime.Float (floatRuntimeParts)
 import Pudu.Backend.Runtime.Integer (integerRuntimeParts)
+import Pudu.Backend.Runtime.Process (processIoLines)
+import Pudu.Backend.Runtime.Output (outputRuntimeParts)
 import Pudu.Backend.Runtime.Text (textRuntimeParts)
 import Pudu.Backend.Runtime.Text.Case (textCaseRuntimeParts)
 import Pudu.Backend.Runtime.Text.Number (textNumberRuntimeParts)
@@ -39,7 +41,7 @@ import Pudu.Diagnostic.Host (memoryFailureMessage)
 {-| The runtime contract revision baked into every generated program's header
     comment. It changes only when the runtime's behaviour or interface does. -}
 runtimeRevision :: Text
-runtimeRevision = "12"
+runtimeRevision = "13"
 
 {-| @Backend.Runtime.Part — one named, self-contained piece of the runtime.
 
@@ -65,7 +67,7 @@ runtimeParts =
   , RuntimePart "fail" failLines
   , RuntimePart "memory_failure" memoryFailureLines
   , RuntimePart "call_depth" callDepthLines
-  ] <> map (uncurry RuntimePart) (integerRuntimeParts <> floatRuntimeParts <> textRuntimeParts <> textMethodRuntimeParts <> textCaseRuntimeParts <> textNumberRuntimeParts <> charRuntimeParts <> aggregateRuntimeParts) <>
+  ] <> map (uncurry RuntimePart) (integerRuntimeParts <> floatRuntimeParts <> textRuntimeParts <> textMethodRuntimeParts <> textCaseRuntimeParts <> textNumberRuntimeParts <> charRuntimeParts <> aggregateRuntimeParts <> outputRuntimeParts) <>
   [ RuntimePart "print_int" printIntLines
   , RuntimePart "print_bool" printBoolLines
   , RuntimePart "print_str" printStrLines
@@ -92,27 +94,13 @@ preludeLines =
   , "#endif"
   ]
 
-processIoLines :: [Text]
-processIoLines =
-  [ "#ifdef SIGPIPE"
-  , "static void pudu_pipe_handler(int number) {"
-  , "  /* Rearm on C implementations with one-shot signal handlers. */"
-  , "  (void)signal(number, pudu_pipe_handler);"
-  , "}"
-  , "#endif"
-  , "static inline void pudu_prepare_io(void) {"
-  , "#ifdef SIGPIPE"
-  , "  (void)signal(SIGPIPE, pudu_pipe_handler);"
-  , "#endif"
-  , "}"
-  ]
-
 errorIoLines :: [Text]
 errorIoLines =
   [ "static inline void pudu_prepare_error_io(void) {"
   , "#ifdef SIGPIPE"
   , "  (void)signal(SIGPIPE, SIG_DFL);"
   , "#endif"
+  , "  (void)pudu_wait_writable(2);"
   , "}"
   ]
 

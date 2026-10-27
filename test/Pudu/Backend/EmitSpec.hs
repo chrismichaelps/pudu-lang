@@ -156,6 +156,12 @@ testSupportedLowering = do
   isPrint statement = case coreStatementShape statement of
     CoreEvaluate expression -> case coreExpressionShape expression of
       CorePrint{} -> True
+      CoreBlockValue block -> any isOutput (coreBlockStatements block)
+      _ -> False
+    _ -> False
+  isOutput statement = case coreStatementShape statement of
+    CoreDeclare _ output -> case coreExpressionShape output of
+      CoreOutputError{} -> True
       _ -> False
     _ -> False
   isJustResult block = case coreBlockResult block of
@@ -270,22 +276,13 @@ refusalCases :: [(String, Text, Text)]
 refusalCases =
   [ ("BigInt parameter", helperProgram "fn helper(value: BigInt) -> Int { return 1 }" "helper(1)", "BigInt")
   , ("Decimal parameter", helperProgram "fn helper(value: Decimal) -> Int { return 1 }" "helper(1.5d)", "Decimal")
-  , ("unary print Result", statementProgram "-print(\"x\")", "-print")
-  , ("display of print Result", statementProgram "print(display(print(\"x\")))", "display(print")
-  , ("nested print Result display", statementProgram "print(display({ print(\"x\") }))", "display({")
-  , ("print Result equality", statementProgram "print(\"x\") == print(\"y\")", "print(\"x\")")
   , ("unresolved inferred result", helperProgram "fn helper(value: Int) { return }" "{ helper(1)\n 0 }", "helper(value")
   , ("default parameter", helperProgram "fn helper(value: Int = 7) -> Int { return value }" "helper(1)", "7")
   , ("expression body", helperProgram "fn helper(value: Int) -> Int = value" "helper(1)", "value\n")
   , ("BigInt result", helperProgram "fn helper() -> BigInt { return 1 }" "{ helper()\n  0 }", "BigInt")
   , ("call to entry", statementProgram "main()", "main()\n")
-  , ("trailing print result", Text.unlines
-      ["module Refuse", "fn main() { print(\"x\") }"], "print(")
-  , ("explicit print result", Text.unlines
-      ["module Refuse", "fn main() { return print(\"x\") }"], "print(")
   , ("environment", bindingProgram "var pairs = environment()", "environment()")
   , ("decimal values", bindingProgram "var ratio = 1.5d", "1.5d")
-  , ("ownership-bearing break result", statementProgram "loop { break print(\"x\") }", "print(")
   , ("readLine", bindingProgram "var line = readLine()", "readLine()")
   , ("temporary path", bindingProgram "var path = temporaryPath()", "temporaryPath()")
   , ("mutable borrows", Text.unlines
@@ -505,7 +502,13 @@ testHygiene = do
   includesOf value =
     [Text.strip line | line <- Text.lines value, "#include" `Text.isPrefixOf` Text.strip line]
   allowedIncludes =
-    [ "#include <inttypes.h>"
+    [ "#include <sys/event.h>"
+    , "#include <sys/epoll.h>"
+    , "#include <errno.h>"
+    , "#include <limits.h>"
+    , "#include <poll.h>"
+    , "#include <fcntl.h>"
+    , "#include <inttypes.h>"
     , "#include <stdint.h>"
     , "#include <signal.h>"
     , "#include <stdio.h>"

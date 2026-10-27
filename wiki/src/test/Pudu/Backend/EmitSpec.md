@@ -227,3 +227,11 @@ from Str to Char so they still prove unreached declarations never lower. The
 Char is native now, so the Char parameter, result and literal refusals are gone;
 `charFromCode`, which answers an Option, still refuses. The unreachable-function
 fixtures use BigInt so they keep proving unreached declarations never lower.
+
+## Output Results (#566)
+
+Resolved Grill Log: Replace obsolete source print-result refusals with still-unsupported host boundaries. Recognize source output through its Result-producing block. Permit only the guarded output adapter headers actually required for strict C11 compilation. See [[Native Output Results]].
+
+## Missing inherited descriptor context (#566)
+
+Resolved Grill Log: Allow the guarded fcntl/errno and kernel event-queue headers required by the native process adapter; all other include hygiene assertions remain.

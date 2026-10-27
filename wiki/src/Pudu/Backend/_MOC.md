@@ -95,3 +95,9 @@ aliases: [Backend Module Map]
 - [[Compiler Lower Constant]] · [[Native Folded Constants]] — represented folded-data emission (#543).
 
 - [[Native Shared References]] · [[Backend Shared Reference Programs]] — native shared references (#544).
+
+- [[Native Output Runtime]] — buffered standard-stream outcomes.
+
+- [[Native Process Context]] — process signal and inherited-descriptor projection.
+
+- [[Backend Output Programs]] · [[Native Output Tests]] — Result values, isolated descriptor failures and entry/fatal reporting (#566).

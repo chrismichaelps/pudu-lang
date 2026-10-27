@@ -121,3 +121,7 @@ through parameters/results and release every allocation on completion.
 Resolved Grill Log: the Bytes-only counted-allocation property reuses the
 existing instrumentation and explicit expected outputs, selected with
 `PUDU_TEST_MATCH="native Bytes"`. The comprehensive cleanup property remains.
+
+## Output Results (#566)
+
+Resolved Grill Log: Register focused output cleanup. Extend the reusable counted harness to accept expected stderr alongside stdout while retaining all existing corpora and assertions.

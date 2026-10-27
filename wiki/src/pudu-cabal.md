@@ -499,3 +499,11 @@ compiler, evaluator-value, text and containers modules, with no new dependency.
 
 Resolved Grill Log: register [[Compiler Lower Reference]] using existing
 compiler/type/Core dependencies. No C runtime module or ABI change.
+
+## Output Results (#566)
+
+Resolved Grill Log: Register Pudu.Backend.Runtime.Output with the existing dependencies. See [[Native Output Results]].
+
+## Missing inherited descriptor context (#566)
+
+Resolved Grill Log: Register Pudu.Backend.Runtime.Process using existing dependencies.

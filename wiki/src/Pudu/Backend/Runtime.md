@@ -269,3 +269,15 @@ Runtime]] parts follow the case parts.
 Frames now own text and boxes through one owned-slot list, and the cell gains
 a box member, so the revision is 11. [[Native Aggregate Runtime]] parts follow
 the Char parts.
+
+## Output Results (#566)
+
+Resolved Grill Log: Append Native Output Runtime after the text parts; runtime revision 13 records Result-valued source output and explicit handle-buffer behavior. Legacy printers remain available to existing isolated IR tests and entry rendering. See [[Native Output Results]].
+
+## Missing inherited descriptor context (#566)
+
+Resolved Grill Log: Move processIoLines to Native Process Context without changing its runtime-part name or startup call. It now also projects missing inherited descriptor endpoints once.
+
+## Fatal output readiness (#566)
+
+Resolved Grill Log: Before fatal stderr writes, pudu_prepare_error_io waits for stderr writability after restoring the fatal SIGPIPE policy. A missing descriptor filled by a control-pipe reader must block like the interpreter rather than silently discard a fatal diagnostic.

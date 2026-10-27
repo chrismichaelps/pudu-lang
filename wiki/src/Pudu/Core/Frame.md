@@ -125,3 +125,7 @@ rendering reuse `FrameBinary`, `FrameShow` and `FrameDisplay`.
 `FrameTuple` and `FrameTupleIndex` are renamed `FrameAggregate` and
 `FrameMember`: tuples and records share one boxed layout, members in
 declaration order.
+
+## Output Results (#566)
+
+Resolved Grill Log: FrameOutputError mirrors CoreOutputError over one saved Str slot, preserving the ordered host effect and owned error text. See [[Native Output Results]].

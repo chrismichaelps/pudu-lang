@@ -46,6 +46,7 @@ import Pudu.Backend.TextCaseSpec (textCaseProperties)
 import Pudu.Backend.BrokenPipeSpec (brokenPipeProperties)
 import Pudu.Cli.MemorySpec (memoryProperties)
 import Pudu.Backend.EmitSpec (backendEmitProperties)
+import Pudu.Backend.OutputSpec (outputProperties, runOutputOracle)
 import Pudu.Backend.NativeSpec (backendNativeProperties)
 import Pudu.Backend.ToolchainSpec (backendToolchainProperties)
 import Pudu.Compiler.LiteralsSpec (literalsProperties)
@@ -95,13 +96,20 @@ import Pudu.Source (Position (Position), Source, SourceName (SourceName), Span, 
   mergeSpans, mkSpan, newSource, offsetFromInt, offsetPosition, sourceLength, sourceName, sourceText,
   spanEnd, spanSource, spanStart, unOffset, zeroOffset, zeroWidthSpan)
 import Data.List (isInfixOf)
-import System.Environment (lookupEnv)
+import System.Environment (getArgs, lookupEnv)
 import System.Exit (exitFailure)
 import System.IO (BufferMode (LineBuffering), hSetBuffering, stdout)
 import Test.QuickCheck (Gen, Property, chooseInt, conjoin, counterexample, elements, forAll, ioProperty,
   isSuccess, listOf, property, quickCheckResult, resize, withMaxSuccess, (===))
 main :: IO ()
 main = do
+  arguments <- getArgs
+  case arguments of
+    ["--native-output-oracle", path] -> runOutputOracle path
+    _ -> runTests
+
+runTests :: IO ()
+runTests = do
   sharedFixtures <- doesDirectoryExist "../../../test-fixtures"
   when sharedFixtures (setCurrentDirectory "../../..")
   {-| A name reaches the log before the test it names runs.
@@ -138,7 +146,7 @@ main = do
   renderOutcomes <- traverse (uncurry check) renderProperties
   programOutcomes <- traverse (uncurry check) (programProperties <> authenticationProperties)
   persistOutcomes <- traverse (uncurry check) persistProperties
-  backendOutcomes <- traverse (uncurry check) (memoryProperties <> floatRuntimeProperties <> floatValueProperties <> floatFormatProperties <> floatNaturalProperties <> wideFrameProperties <> textLeakProperties <> textCaseProperties <> brokenPipeProperties <> wideRuntimeProperties <> wideOperationProperties <> wideValueProperties <> word128Properties <> frameRuntimeProperties <> frameEmitProperties <> frameProperties <> lowerTypesProperties <> backendEmitProperties <> backendNativeProperties <> backendToolchainProperties)
+  backendOutcomes <- traverse (uncurry check) (outputProperties <> memoryProperties <> floatRuntimeProperties <> floatValueProperties <> floatFormatProperties <> floatNaturalProperties <> wideFrameProperties <> textLeakProperties <> textCaseProperties <> brokenPipeProperties <> wideRuntimeProperties <> wideOperationProperties <> wideValueProperties <> word128Properties <> frameRuntimeProperties <> frameEmitProperties <> frameProperties <> lowerTypesProperties <> backendEmitProperties <> backendNativeProperties <> backendToolchainProperties)
   literalsOutcomes <- traverse (uncurry check) literalsProperties
   initOutcomes <- traverse (uncurry check) initProperties
   packageOutcomes <- traverse (uncurry check) packageProperties

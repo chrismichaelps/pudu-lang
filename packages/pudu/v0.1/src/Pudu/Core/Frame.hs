@@ -107,6 +107,7 @@ data FrameValueShape
   | FrameVariantName !FrameSlot
   | FrameDisplay !FrameSlot
   | FrameShow !FrameSlot
+  | FrameOutputError !Bool !Bool !FrameSlot
   | FrameTextMethod !CoreTextMethodName !FrameSlot ![FrameSlot]
   | FrameUnitLiteral
   {-| A closure over the named lifted function, holding these values. -}

@@ -24,6 +24,7 @@ import Pudu.Backend.ConvertPrograms (convertSuccessPrograms)
 import Pudu.Backend.KeyedPrograms (keyedSuccessPrograms)
 import Pudu.Backend.ShapePrograms (shapeSuccessPrograms)
 import Pudu.Backend.RangePrograms (rangeSuccessPrograms)
+import Pudu.Backend.OutputPrograms (outputSuccessPrograms, outputStreamPrograms)
 import Pudu.Backend.BytesPrograms (bytesSuccessPrograms)
 import Pudu.Backend.TextPrograms (textSuccessPrograms)
 import Pudu.Compiler (CompileResult (..), runCompile)
@@ -42,6 +43,8 @@ import Test.QuickCheck (Property, conjoin, counterexample, (===))
 textLeakProperties :: [(String, IO Property)]
 textLeakProperties =
   [ ("native text programs release every allocation", testLeaks)
+  , ("native output Results release every allocation", testLeaksWithStreams
+      ([(label, source, output, "") | (label, source, output) <- outputSuccessPrograms] <> outputStreamPrograms))
   , ("native Bytes programs release every allocation", testLeaksFor bytesSuccessPrograms)
   ]
 
@@ -49,7 +52,10 @@ testLeaks :: IO Property
 testLeaks = testLeaksFor (textSuccessPrograms <> textMethodSuccessPrograms <> charSuccessPrograms <> tupleSuccessPrograms <> recordSuccessPrograms <> sumSuccessPrograms <> constantPrograms <> referenceSuccessPrograms <> methodSuccessPrograms <> genericSuccessPrograms <> trySuccessPrograms <> forSuccessPrograms <> closureSuccessPrograms <> arraySuccessPrograms <> arrayPatternSuccessPrograms <> textCollectionSuccessPrograms <> convertSuccessPrograms <> keyedSuccessPrograms <> shapeSuccessPrograms <> rangeSuccessPrograms <> bytesSuccessPrograms)
 
 testLeaksFor :: [(String, Text, Text)] -> IO Property
-testLeaksFor programs = do
+testLeaksFor programs = testLeaksWithStreams [(label, source, output, "") | (label, source, output) <- programs]
+
+testLeaksWithStreams :: [(String, Text, Text, Text)] -> IO Property
+testLeaksWithStreams programs = do
   configured <- lookupEnv "PUDU_CC"
   compiler <- findExecutable (maybe "cc" id configured)
   case compiler of
@@ -59,7 +65,7 @@ testLeaksFor programs = do
       putStrLn ("[text leaks] executed " <> show (length outcomes) <> " counted programs")
       pure (conjoin outcomes)
  where
-  check cc root (label, text, expected) = do
+  check cc root (label, text, expected, expectedErrors) = do
     source <- newSource (SourceName "Main.pudu") text
     checked <- runCompile source
     case (hasErrors (compileDiagnostics checked), compileModule checked) of
@@ -77,7 +83,7 @@ testLeaksFor programs = do
               else do
                 (status, out, err) <- readProcessWithExitCode binary [] ""
                 pure $ counterexample (label <> ": " <> show (status, err)) $ conjoin
-                  [status === ExitSuccess, Text.pack out === expected, err === ""]
+                  [status === ExitSuccess, Text.pack out === expected, Text.pack err === expectedErrors]
         other -> pure (counterexample (label <> ": " <> show other) (False === True))
       _ -> pure (counterexample (label <> ": " <> show (compileDiagnostics checked)) (False === True))
 
