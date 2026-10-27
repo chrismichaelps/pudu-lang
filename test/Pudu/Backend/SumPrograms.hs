@@ -146,6 +146,62 @@ sumSuccessPrograms =
       , "  return 0"
       , "}" ]
     , "Some(Circle(8))\n")
+  , ("if let takes the pattern's block once and binds only there", program
+      [ "fn describe(shape: Shape) -> Str {"
+      , "  if let Circle(r) = shape { \"circle \" + display(r) }"
+      , "  else if let Box{w, h} = shape { \"box \" + display(w * h) }"
+      , "  else { \"other\" }"
+      , "}"
+      , "fn traced(n: Int) -> Option[Int] {"
+      , "  print(\"read \" + display(n))"
+      , "  if n > 0 { Some(n) } else { None }"
+      , "}"
+      , "fn main() -> Int {"
+      , "  print(describe(Circle(3)) + \" \" + describe(Box{w: 2, h: 5}) + \" \" + describe(Dot))"
+      , "  if let Some(n) = traced(4) { print(\"got \" + display(n)) }"
+      , "  if let Some(n) = traced(0) { print(\"never \" + display(n)) }"
+      , "  let value = if let Some(n) = traced(2) { n * 10 } else { -1 }"
+      , "  print(display(value))"
+      , "  if let Some(n) = traced(1) { n } else { 7 }"
+      , "  let none = if let Some(_) = traced(5) { 1 }"
+      , "  print(show(none))"
+      , "  let flag = if let (0, b) = (0, true) { b } else { false }"
+      , "  print(display(flag))"
+      , "  return 0"
+      , "}" ]
+    , "circle 3 box 10 other\nread 4\ngot 4\nread 0\nread 2\n20\nread 1\nread 5\n()\ntrue\n")
+  , ("while let reads its subject each turn and honours break and continue", program
+      [ "fn next(n: Int) -> Option[Int] {"
+      , "  print(\"next \" + display(n))"
+      , "  if n < 3 { Some(n + 1) } else { None }"
+      , "}"
+      , "fn main() -> Int {"
+      , "  var current = 0"
+      , "  var total = 0"
+      , "  while let Some(n) = next(current) {"
+      , "    current = n"
+      , "    if n == 2 { continue }"
+      , "    total = total + n"
+      , "  }"
+      , "  print(display(total))"
+      , "  var outer = 0"
+      , "  @rounds while let Some(n) = next(outer) {"
+      , "    outer = n"
+      , "    var inner = 0"
+      , "    while let Some(m) = next(inner) {"
+      , "      inner = m"
+      , "      if m == 2 && n == 2 { break @rounds }"
+      , "    }"
+      , "  }"
+      , "  print(display(outer))"
+      , "  let unit = while let Some(n) = next(9) { print(display(n)) }"
+      , "  print(show(unit))"
+      , "  return 0"
+      , "}" ]
+    , Text.unlines
+        [ "next 0", "next 1", "next 2", "next 3", "4"
+        , "next 0", "next 0", "next 1", "next 2", "next 3", "next 1", "next 0", "next 1", "2"
+        , "next 9", "()" ])
   ] <>
   [ ("sum entry " <> label, program (["fn main() -> " <> kind <> " {", "  " <> body, "}"]), answer <> "\n")
   | (label, kind, body, answer) <-
@@ -170,6 +226,11 @@ sumRefusalPrograms =
   | (label, expression) <-
       [ ("ordering two options", "Some(1) < None"), ("subtracting a variant", "Circle(1) - Dot")
       , ("adding results", "Ok(1) + Ok(2)") ]
+  ] <>
+  [ ("an overflow inside an if let body", program
+      [ "fn main() -> Int {", "  print(\"start\")", "  if let Some(n) = Some(9223372036854775807) { print(display(n + 1)) }", "  return 0", "}" ])
+  , ("an overflow in a while let subject", program
+      [ "fn main() -> Int {", "  var n = 9223372036854775806", "  while let Some(m) = Some(n + 1) { print(display(m))", "    n = m }", "  return 0", "}" ])
   ]
 
 program :: [Text] -> Text

@@ -17,7 +17,7 @@ import Pudu.Compiler.Lower.Text (lowerTextMethod)
 import Pudu.Compiler.Lower.Tuple (lowerTuple, lowerTupleIndex, lowerTuplePattern)
 import Pudu.Compiler.Lower.Record (lowerField, lowerFieldAssignment, lowerRecord, lowerRecordUpdate)
 import Pudu.Compiler.Lower.Sum (lowerVariant)
-import Pudu.Compiler.Lower.Match (lowerMatch)
+import Pudu.Compiler.Lower.Match (ifLetArms, lowerMatch, whileLetLoop)
 import qualified Data.List.NonEmpty as NonEmpty
 import qualified Data.Text as Text
 import Pudu.Frontend.Syntax.Name (ModuleName (..))
@@ -190,6 +190,10 @@ lowerStatement state (Located statementSpan statement) = case statement of
     MatchExpression subject arms -> case lowerMatch lowerExpression True state (locatedSpan locatedExpression) subject arms of
       (after, Just (core, _)) -> (after, Just CoreStatement{coreStatementSpan = statementSpan, coreStatementShape = CoreEvaluate core})
       (after, Nothing) -> refused after
+    IfLetExpression pattern' subject taken otherwise' ->
+      case lowerMatch lowerExpression True state (locatedSpan locatedExpression) subject (ifLetArms (locatedSpan locatedExpression) pattern' taken otherwise') of
+        (after, Just (core, _)) -> (after, Just CoreStatement{coreStatementSpan = statementSpan, coreStatementShape = CoreEvaluate core})
+        (after, Nothing) -> refused after
     BinaryExpression target@(Located _ MemberExpression{}) "=" right
       | Just lowered <- lowerFieldAssignment lowerExpression state statementSpan target right -> lowered
     BinaryExpression (Located _ (NameExpression (name :| []))) "=" right
@@ -393,8 +397,9 @@ lowerExpression state (Located spanValue expression) = case expression of
       (after, Nothing) -> refused after
   WhileExpression label condition body -> lowerWhile lowerExpression lowerBlock spanValue label condition body state
   MatchExpression subject arms -> lowerMatch lowerExpression False state spanValue subject arms
-  WhileLetExpression{} -> halt spanValue "while let" state
-  IfLetExpression{} -> halt spanValue "if let" state
+  WhileLetExpression label pattern' subject body -> lowerExpression state (whileLetLoop spanValue label pattern' subject body)
+  IfLetExpression pattern' subject taken otherwise' ->
+    lowerMatch lowerExpression (null otherwise') state spanValue subject (ifLetArms spanValue pattern' taken otherwise')
   LoopExpression label body -> lowerLoop lowerBlock spanValue label body state
   ForExpression{} -> halt spanValue "for loops" state
   ComptimeForExpression{} -> halt spanValue "comptime for" state

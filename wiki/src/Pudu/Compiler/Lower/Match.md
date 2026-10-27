@@ -23,6 +23,8 @@ in a scope of its own, as `CoreMatch`.
 
 ## Grill Log
 
+- **Q:** How do `if let` and `while let` lower? **A:** As a match, through `ifLetArms` and `whileLetLoop`. `if let P = e { A } else { B }` is the arms `case P => A` and `case _ => B`, so the subject runs once and the bindings live only in `A`. Without `else`, or as a statement, every arm's value is dropped, which is the evaluator's unit result. `while let` is a `loop`, carrying the label, whose body matches the subject read afresh each turn and whose fallback arm breaks. Rejected: dedicated Core forms, since a match already carries every pattern, scope and refusal (#540).
+
 - **Q:** How does a record pattern's written type match? **A:** Against the record's display name, since Core names it by canonical key (#539).
 
 - **Q:** Why build integer literals at the subject's kind? **A:** The
