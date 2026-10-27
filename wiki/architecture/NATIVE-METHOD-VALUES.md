@@ -59,8 +59,8 @@ and kind) and then the receiver with the receiver type's equality.
 Every method family through values: rendering, equality on equal and
 different receivers, receivers with effects, owned receivers released once,
 failures at the call through the value, values in records, captures and
-generic code; both evaluators, Clang, GCC 15 and ASan/UBSan. Trait and
-user-declared methods as values are a separate obligation.
+generic code; both evaluators, Clang, GCC 15 and ASan/UBSan. Trait methods
+follow below.
 
 ## Referenced by
 
