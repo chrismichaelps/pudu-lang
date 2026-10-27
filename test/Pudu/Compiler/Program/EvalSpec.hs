@@ -31,7 +31,11 @@ testProgramEvaluation = do
   serviceProp <- testServiceEvaluation
   runtimeProp <- testRuntimeEvaluation
   compiledProp <- testCompiledAgreement
-  pure (conjoin [dataProp, protocolProp, serviceProp, runtimeProp, compiledProp])
+  -- A default names what its own module declares, even when the caller's
+  -- module declares something by the same name.
+  defaulted <- runEntry "test-fixtures/defaultscope/Main.pudu"
+  let defaultProp = counterexample "a default reads its declaring module" (defaulted === Just "\"ab.cd!\"")
+  pure (conjoin [dataProp, protocolProp, serviceProp, runtimeProp, compiledProp, defaultProp])
 
 {-| A module is published under its path with its own declarations only.
 

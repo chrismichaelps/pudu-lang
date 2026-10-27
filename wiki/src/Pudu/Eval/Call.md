@@ -242,3 +242,13 @@ receiver discovery, preserving its invocation behavior and keeping it below 500 
 ## Lexical member admission (#471)
 
 Delegate qualified-path admission to Eval Call Path for explicit type-applied dispatch. A nearer ordinary local takes callMemberSelecting; a witness or unshadowed module retains static dispatch. Remove the capitalization-only helper, preserving arguments, lending and chosen witnesses. Resolved Grill Log: path spelling cannot override lexical scope, and prepared calls already share this coordinator.
+
+## Default scope (#639)
+
+bindArguments takes the closure and evaluates a missing default under its
+captured environment and witnesses, with the earlier parameters bound. Before,
+it ran in the caller's frames, so a default naming its own module's constant
+failed with E7001 or read a same-named constant of the caller.
+Resolved Grill Log: grammar/pudu types defaults in the declaration's
+environment; evaluation now agrees. Depth accounting is unchanged.
+See [[Program Evaluation Tests]].

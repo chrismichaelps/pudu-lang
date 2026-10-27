@@ -198,3 +198,4 @@ tags: [moc, module]
 
 - [[Mutex Admission Fixture]] — real local Database contention and recovery.
 - [[Database Challenge Spec]] · [[Database Challenge Fixture]] · [[Database Challenge Transport]]
+- [[Program Evaluation Tests]] — imported-module evaluation and default scope.
