@@ -121,6 +121,10 @@ Generic]], which names the function or its copy. A statement or result that
 stops without a recorded refusal is refused as `this construct`, so no
 branch can drop code silently.
 
+## Try (#553)
+
+Resolved Grill Log: `TryExpression` lowers through [[Compiler Lower Try]].
+
 ## Referenced by
 
 [[src/Pudu/Compiler/_MOC]] · [[src/Pudu/_MOC]] · [[Compiler Lower]] ·

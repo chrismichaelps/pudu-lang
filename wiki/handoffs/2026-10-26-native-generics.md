@@ -1,6 +1,6 @@
 ---
 type: handoff
-status: ACTIVE
+status: COMPLETE
 issue: 552
 aliases: [Native Generic Delivery]
 ---
@@ -21,7 +21,7 @@ The fixture sweep caught main lowering to an empty body after a failed
 specialization returned no result without refusing. Fixed at the source, and
 Body now refuses any construct that stops without a refusal.
 
-Exact next action: the try operator `?` on Result and Option.
+Done; #553 (`?`) follows on its own branch. Exact next action there: ranges as values and `for`.
 
 ## Referenced by
 

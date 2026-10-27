@@ -29,6 +29,10 @@ Resolved Grill Log: modulePrograms and moduleRefusalPrograms include
 
 Resolved Grill Log: both lists include [[Backend Generic Programs]].
 
+## Try corpus (#553)
+
+Resolved Grill Log: both lists include [[Backend Try Programs]].
+
 ## Referenced by
 
 [[Backend Native Tests]] · [[Native Emission Coverage]] · [[src/_MOC]]

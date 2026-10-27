@@ -29,11 +29,11 @@ import qualified Data.Map.Strict as Map
 import Pudu.Eval.Frozen (Frozen)
 import Pudu.Compiler.Lower.Layout (moduleLayouts)
 import Pudu.Compiler (CompileResult (..))
-import Pudu.Compiler.Lower.Types (LowerTypes, emptyTypes, nativeTypes, withShapes)
+import Pudu.Compiler.Lower.Types (LowerTypes, emptyTypes, formedCoreTypeIn, lookupScheme, nativeTypes, withShapes)
 import Pudu.Compiler.Lower.Method (methodTables)
 import Pudu.Compiler.Program (ProgramResult (..), rootCompileResult)
 import Pudu.Type (declaredRecords, declaredSums)
-import Pudu.Type.Value (NominalId (..), Scheme)
+import Pudu.Type.Value (NominalId (..), Scheme (..), Type (FunctionTypeRequiring))
 import Pudu.Source (Span)
 import Pudu.Compiler.Lower.Body (lowerEntryBody, lowerFunctionBody)
 import Pudu.Compiler.Lower.State
@@ -191,8 +191,10 @@ lowerProgram entryName programModules@(rootModule : _)
               , lowerNextLocal = 0
               , lowerScopes = []
               , lowerFunctionResult = Nothing
+              , lowerDeclaredResult = Nothing
               }
-          (afterEntry, entryFunction) = lowerEntryBody entry (startFunction initial [] Nothing)
+          (afterEntry, entryFunction) = lowerEntryBody entry
+            ((startFunction initial [] Nothing){lowerDeclaredResult = declaredEntryResult entry})
           marked = markVisited afterEntry entryKey
        in (drain marked, (\function -> function{coreFunctionName = entryKey}) <$> entryFunction)
 
@@ -229,6 +231,12 @@ lowerProgram entryName programModules@(rootModule : _)
       Just (owner, function) -> Just (owner, function, Map.empty)
       Nothing -> (\found -> (instanceModule found, instanceFunction found, instanceBindings found))
         <$> Map.lookup name (contextInstances (lowerContext state))
+
+    -- `?` in the entry returns at its declared type, before any `return` says so.
+    declaredEntryResult entry = case lookupScheme (maybe emptyTypes scopeTypes (Map.lookup rootName scopes)) (locatedValue (functionName (locatedValue entry))) of
+      Just Scheme{schemeParams = [], schemeType = FunctionTypeRequiring False [] _ result} ->
+        formedCoreTypeIn (maybe emptyTypes scopeTypes (Map.lookup rootName scopes)) result
+      _ -> Nothing
 
     markVisited state name =
       state

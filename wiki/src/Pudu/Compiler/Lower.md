@@ -172,6 +172,11 @@ bindings, the same way it lowers a function.
 Resolved Grill Log: the worklist finds a key in the function table or in the
 instances registered so far, which include copies made while lowering callers.
 
+## Entry result for ? (#553)
+
+Resolved Grill Log: the entry starts with its checked result in
+`lowerDeclaredResult`, formed from its scheme when it has one.
+
 ## Referenced by
 
 [[src/Pudu/Compiler/_MOC]] · [[src/Pudu/_MOC]] · [[Core IR]] · [[Pudu Core]] ·

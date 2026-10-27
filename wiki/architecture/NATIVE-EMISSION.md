@@ -25,7 +25,7 @@ Compile ordinary checked Pudu programs into portable C11 with interpreter-identi
 | Modules and constants | Partial (#539, #543) | Calls through selective imports, aliases and qualifiers, functions of every reachable module, and records and sums by canonical identity match the interpreter; folded scalar/tuple/record/sum constants now preserve canonical solved identity; callable and unrepresented constant families remain |
 | Callables and generic code | Partial (#551, #552) | Implementation members, inherited defaults, type- and trait-qualified calls, `toText()`, generic functions and generic implementations dispatch statically, one copy per type list; closures/captures, default parameter values, higher-kinded parameters and `dynamic` values remain |
 | Accepted operations with runtime refusals | Partial (#494, #512) | Represented Unit/Bool/float operators retain E7001; remaining runtime types/operators still need equivalent coverage |
-| Errors, references and resources | Partial (#544) | Shared borrows and dereference of represented values match the interpreter; Result/Option propagation, mutable loans with writeback, moves, drop and all unwind paths remain |
+| Errors, references and resources | Partial (#544, #553) | Shared borrows, dereference and `?` on Result and Option match the interpreter; mutable loans with writeback, moves, drop and all unwind paths remain |
 | Host services and concurrency | Pending | Explicit runtime adapters, FFI, tasks, scopes, cancellation and platform evidence |
 
 ## Published progress (#496)
@@ -361,3 +361,11 @@ inside a copy dispatch to the concrete method. The fixture sweep caught a
 specialization that returned no result without refusing, which compiled two
 Std programs to an empty `main`; lowering now refuses any construct that stops
 without saying why. [[Backend Generic Programs]] holds the evidence.
+
+## Try (#553)
+
+[[Compiler Lower Try]] lowers `?` to a match whose failure arm returns the
+failure rebuilt at the enclosing function's result type. In `main` that type
+comes from the checked signature, kept apart from the entry's own result
+handling so print-Result bodies keep refusing. [[Backend Try Programs]] holds
+the evidence.

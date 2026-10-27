@@ -73,6 +73,10 @@ run it.
 
 Resolved Grill Log: register [[Backend Generic Programs]].
 
+## Try corpus (#553)
+
+Resolved Grill Log: register [[Backend Try Programs]].
+
 ## Referenced by
 
 [[Derive Graph Spec]] is explicitly registered for real program elaboration,

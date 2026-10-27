@@ -86,6 +86,10 @@ data LowerState = LowerState
   , lowerNextLoop :: !Int
   , lowerLoops :: ![LoopFrame]
   , lowerFunctionResult :: !(Maybe CoreType)
+  {-| The entry's checked result, which only `?` reads: the entry's own
+      result handling still starts from nothing, so a body ending in print's
+      Result keeps refusing. -}
+  , lowerDeclaredResult :: !(Maybe CoreType)
   }
 
 {-| A lexical loop destination and the scalar type observed at its breaks.
@@ -139,6 +143,7 @@ startFunction state parameters resultType =
           ]
         ]
     , lowerFunctionResult = resultType
+    , lowerDeclaredResult = Nothing
     }
 
 refuse :: Span -> Text -> LowerState -> LowerState

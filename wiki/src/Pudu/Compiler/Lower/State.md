@@ -67,6 +67,12 @@ Resolved Grill Log: `instanceSelfAtCall` marks an inherited default of a
 generic owner, whose `Self` is the receiver's type and is only known at the
 call.
 
+## Declared entry result (#553)
+
+Resolved Grill Log: `lowerDeclaredResult` holds the entry's checked result
+for [[Compiler Lower Try]] only; every other function already knows its
+result from its signature.
+
 ## Referenced by
 
 [[src/Pudu/Compiler/_MOC]] · [[Compiler Lower]] · [[Compiler Lower Body]]
