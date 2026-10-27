@@ -5,6 +5,14 @@ tags: [changelog]
 
 # Changelog
 
+## 2026-10-27 — Completed Ark math layer (#666)
+
+- [[Ark Math]] and [[Ark Matrix]] gain vector algebra, determinants and inverses; new
+  [[Ark Planar Vector]], [[Ark Quaternion]], [[Ark Transform]], [[Ark Camera]], [[Ark Geometry]],
+  [[Ark Color]], [[Ark Random]] and [[Ark Noise]] modules.
+- [[Ark Math Extended Fixture]] and [[Ark Math Extended Gate]] run in CI;
+  [[Ark Math Completion Delivery]] records evidence.
+
 ## 2026-10-27 — Binary64 kernels behind Std.Math.Float (#661)
 
 - [[Float Kernel Identity]] and [[Runtime Float Kernels]] give the evaluator, checker and resolver

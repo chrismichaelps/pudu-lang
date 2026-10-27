@@ -1,0 +1,255 @@
+module Ark.Math.Geometry
+
+import Std.Math.Float as Float
+import Ark.Math.Matrix as Matrix
+import Ark.Math as Vector
+
+/// An axis-aligned box with ordered corners.
+export type Aabb = { min: Vector.Vec3, max: Vector.Vec3 }
+
+/// A sphere with a non-negative radius.
+export type Sphere = { center: Vector.Vec3, radius: Float64 }
+
+/// A half-line with a unit direction.
+export type Ray = { origin: Vector.Vec3, direction: Vector.Vec3 }
+
+/// The plane dot(normal, p) + distance = 0 with a unit normal; positive distance is in front.
+export type Plane = { normal: Vector.Vec3, distance: Float64 }
+
+/// Six inward-facing planes; a point inside has non-negative distance to each.
+export type Frustum = { left: Plane, right: Plane, bottom: Plane, top: Plane, near: Plane, far: Plane }
+
+/// The box spanning two corners in any order.
+export fn aabb(a: Vector.Vec3, b: Vector.Vec3) -> Aabb {
+  Aabb{min: Vector.minimum(a, b), max: Vector.maximum(a, b)}
+}
+
+/// The box with a center and non-negative half extents.
+export fn aabbAround(middle: Vector.Vec3, half: Vector.Vec3) -> Aabb {
+  Aabb{min: Vector.subtract(middle, half), max: Vector.add(middle, half)}
+}
+
+/// The box center.
+export fn center(box: Aabb) -> Vector.Vec3 {
+  Vector.scale(Vector.add(box.min, box.max), 0.5)
+}
+
+/// Half the box size along each axis.
+export fn halfExtents(box: Aabb) -> Vector.Vec3 {
+  Vector.scale(Vector.subtract(box.max, box.min), 0.5)
+}
+
+/// Whether a point lies inside or on the box.
+export fn containsPoint(box: Aabb, point: Vector.Vec3) -> Bool {
+  point.x >= box.min.x && point.x <= box.max.x
+    && point.y >= box.min.y && point.y <= box.max.y
+    && point.z >= box.min.z && point.z <= box.max.z
+}
+
+/// Whether two boxes share any point, including touching faces.
+export fn overlaps(a: Aabb, b: Aabb) -> Bool {
+  a.min.x <= b.max.x && a.max.x >= b.min.x
+    && a.min.y <= b.max.y && a.max.y >= b.min.y
+    && a.min.z <= b.max.z && a.max.z >= b.min.z
+}
+
+/// The smallest box containing both.
+export fn merge(a: Aabb, b: Aabb) -> Aabb {
+  Aabb{min: Vector.minimum(a.min, b.min), max: Vector.maximum(a.max, b.max)}
+}
+
+/// The smallest box containing the box and a point.
+export fn include(box: Aabb, point: Vector.Vec3) -> Aabb {
+  Aabb{min: Vector.minimum(box.min, point), max: Vector.maximum(box.max, point)}
+}
+
+/// The box around an affinely transformed box, from per-axis extremes of the products.
+export fn transformAabb(matrix: Matrix.Mat4, box: Aabb) -> Aabb {
+  let origin = Vector.vec3(matrix.w.x, matrix.w.y, matrix.w.z)
+  let ax = axisSpan(Vector.vec3(matrix.x.x, matrix.x.y, matrix.x.z), box.min.x, box.max.x)
+  let ay = axisSpan(Vector.vec3(matrix.y.x, matrix.y.y, matrix.y.z), box.min.y, box.max.y)
+  let az = axisSpan(Vector.vec3(matrix.z.x, matrix.z.y, matrix.z.z), box.min.z, box.max.z)
+  Aabb {
+    min: Vector.add(origin, Vector.add(Vector.add(ax.min, ay.min), az.min)),
+    max: Vector.add(origin, Vector.add(Vector.add(ax.max, ay.max), az.max)),
+  }
+}
+
+fn axisSpan(column: Vector.Vec3, low: Float64, high: Float64) -> Aabb {
+  let a = Vector.scale(column, low)
+  let b = Vector.scale(column, high)
+  Aabb{min: Vector.minimum(a, b), max: Vector.maximum(a, b)}
+}
+
+/// A sphere; a negative radius is treated as its magnitude.
+export fn sphere(position: Vector.Vec3, radius: Float64) -> Sphere {
+  Sphere{center: position, radius: Float.abs(radius)}
+}
+
+/// Whether two spheres share any point.
+export fn spheresOverlap(a: Sphere, b: Sphere) -> Bool {
+  let reach = a.radius + b.radius
+  Vector.distanceSquared(a.center, b.center) <= reach * reach
+}
+
+/// Whether a sphere and a box share any point, by the closest point of the box.
+export fn sphereOverlapsAabb(ball: Sphere, box: Aabb) -> Bool {
+  let closest = Vector.minimum(Vector.maximum(ball.center, box.min), box.max)
+  Vector.distanceSquared(closest, ball.center) <= ball.radius * ball.radius
+}
+
+/// A ray with a normalized direction, or None for a zero or non-finite direction.
+export fn ray(origin: Vector.Vec3, direction: Vector.Vec3) -> Option[Ray] {
+  let unit = Vector.normalized(direction) ?
+  Some(Ray{origin, direction: unit})
+}
+
+/// The point at a distance along a ray.
+export fn pointAt(line: Ray, distance: Float64) -> Vector.Vec3 {
+  Vector.add(line.origin, Vector.scale(line.direction, distance))
+}
+
+/// The plane through a point with a normal, or None for a zero normal.
+export fn plane(normal: Vector.Vec3, point: Vector.Vec3) -> Option[Plane] {
+  let unit = Vector.normalized(normal) ?
+  Some(Plane{normal: unit, distance: -Vector.dot(unit, point)})
+}
+
+/// The signed distance from a plane; positive in front of its normal.
+export fn signedDistance(surface: Plane, point: Vector.Vec3) -> Float64 {
+  Vector.dot(surface.normal, point) + surface.distance
+}
+
+/// The nearest non-negative entry distance into a box, or None when the ray misses it.
+export fn rayAabb(line: Ray, box: Aabb) -> Option[Float64] {
+  let x = slab(line.origin.x, line.direction.x, box.min.x, box.max.x) ?
+  let y = slab(line.origin.y, line.direction.y, box.min.y, box.max.y) ?
+  let z = slab(line.origin.z, line.direction.z, box.min.z, box.max.z) ?
+  let enter = larger(larger(x.min, y.min), larger(z.min, 0.0))
+  let exit = smaller(smaller(x.max, y.max), z.max)
+  if enter <= exit { Some(enter) } else { None }
+}
+
+type Span = { min: Float64, max: Float64 }
+
+fn larger(a: Float64, b: Float64) -> Float64 {
+  if a > b { a } else { b }
+}
+
+fn smaller(a: Float64, b: Float64) -> Float64 {
+  if a < b { a } else { b }
+}
+
+fn slab(origin: Float64, direction: Float64, low: Float64, high: Float64) -> Option[Span] {
+  if direction == 0.0 {
+    return if origin >= low && origin <= high { Some(Span{min: -1.0 / 0.0, max: 1.0 / 0.0}) } else { None }
+  }
+  let inverse = 1.0 / direction
+  let a = (low - origin) * inverse
+  let b = (high - origin) * inverse
+  Some(if a < b { Span{min: a, max: b} } else { Span{min: b, max: a} })
+}
+
+/// The nearest non-negative distance to a sphere's surface, or None when the ray misses it.
+export fn raySphere(line: Ray, ball: Sphere) -> Option[Float64] {
+  let offset = Vector.subtract(line.origin, ball.center)
+  let b = Vector.dot(offset, line.direction)
+  let c = Vector.dot(offset, offset) - ball.radius * ball.radius
+  if c > 0.0 && b > 0.0 { return None }
+  let discriminant = b * b - c
+  if discriminant < 0.0 { return None }
+  let root = Float.sqrt(discriminant) ?
+  let near = -b - root
+  Some(if near < 0.0 { 0.0 } else { near })
+}
+
+/// The non-negative distance to a plane, or None when the ray is parallel or points away.
+export fn rayPlane(line: Ray, surface: Plane) -> Option[Float64] {
+  let facing = Vector.dot(surface.normal, line.direction)
+  if facing == 0.0 { return None }
+  let distance = -signedDistance(surface, line.origin) / facing
+  if distance >= 0.0 { Some(distance) } else { None }
+}
+
+/// The distance to a triangle by the barycentric determinant test, or None on a miss or edge-on ray.
+export fn rayTriangle(line: Ray, a: Vector.Vec3, b: Vector.Vec3, c: Vector.Vec3) -> Option[Float64] {
+  let edge1 = Vector.subtract(b, a)
+  let edge2 = Vector.subtract(c, a)
+  let p = Vector.cross(line.direction, edge2)
+  let determinant = Vector.dot(edge1, p)
+  if determinant == 0.0 || !Float.isFinite(determinant) { return None }
+  let inverse = 1.0 / determinant
+  let s = Vector.subtract(line.origin, a)
+  let u = Vector.dot(s, p) * inverse
+  if u < 0.0 || u > 1.0 { return None }
+  let q = Vector.cross(s, edge1)
+  let v = Vector.dot(line.direction, q) * inverse
+  if v < 0.0 || u + v > 1.0 { return None }
+  let distance = Vector.dot(edge2, q) * inverse
+  if distance >= 0.0 { Some(distance) } else { None }
+}
+
+/// The frustum of a view-projection matrix with [0, 1] clip depth.
+export fn frustum(viewProjection: Matrix.Mat4) -> Option[Frustum] {
+  let m = viewProjection
+  let r0 = Vector.vec4(m.x.x, m.y.x, m.z.x, m.w.x)
+  let r1 = Vector.vec4(m.x.y, m.y.y, m.z.y, m.w.y)
+  let r2 = Vector.vec4(m.x.z, m.y.z, m.z.z, m.w.z)
+  let r3 = Vector.vec4(m.x.w, m.y.w, m.z.w, m.w.w)
+  Some(
+    Frustum {
+      left: clipPlane(add4(r3, r0)) ?,
+      right: clipPlane(sub4(r3, r0)) ?,
+      bottom: clipPlane(add4(r3, r1)) ?,
+      top: clipPlane(sub4(r3, r1)) ?,
+      near: clipPlane(r2) ?,
+      far: clipPlane(sub4(r3, r2)) ?,
+    },
+  )
+}
+
+fn add4(a: Vector.Vec4, b: Vector.Vec4) -> Vector.Vec4 {
+  Vector.vec4(a.x + b.x, a.y + b.y, a.z + b.z, a.w + b.w)
+}
+
+fn sub4(a: Vector.Vec4, b: Vector.Vec4) -> Vector.Vec4 {
+  Vector.vec4(a.x - b.x, a.y - b.y, a.z - b.z, a.w - b.w)
+}
+
+fn clipPlane(row: Vector.Vec4) -> Option[Plane] {
+  let normal = Vector.vec3(row.x, row.y, row.z)
+  let magnitude = Vector.length(normal) ?
+  if magnitude == 0.0 { return None }
+  Some(Plane{normal: Vector.scale(normal, 1.0 / magnitude), distance: row.w / magnitude})
+}
+
+/// Whether a point is inside or on every plane.
+export fn frustumContainsPoint(volume: Frustum, point: Vector.Vec3) -> Bool {
+  signedDistance(volume.left, point) >= 0.0 && signedDistance(volume.right, point) >= 0.0
+    && signedDistance(volume.bottom, point) >= 0.0 && signedDistance(volume.top, point) >= 0.0
+    && signedDistance(volume.near, point) >= 0.0 && signedDistance(volume.far, point) >= 0.0
+}
+
+/// Whether a sphere may be visible: false only when it lies wholly behind one plane.
+export fn frustumOverlapsSphere(volume: Frustum, ball: Sphere) -> Bool {
+  let r = -ball.radius
+  signedDistance(volume.left, ball.center) >= r && signedDistance(volume.right, ball.center) >= r
+    && signedDistance(volume.bottom, ball.center) >= r && signedDistance(volume.top, ball.center) >= r
+    && signedDistance(volume.near, ball.center) >= r && signedDistance(volume.far, ball.center) >= r
+}
+
+/// Whether a box may be visible, testing each plane against the box corner farthest along its normal.
+export fn frustumOverlapsAabb(volume: Frustum, box: Aabb) -> Bool {
+  ahead(volume.left, box) && ahead(volume.right, box) && ahead(volume.bottom, box)
+    && ahead(volume.top, box) && ahead(volume.near, box) && ahead(volume.far, box)
+}
+
+fn ahead(surface: Plane, box: Aabb) -> Bool {
+  let n = surface.normal
+  let corner = Vector.vec3(
+    if n.x >= 0.0 { box.max.x } else { box.min.x },
+    if n.y >= 0.0 { box.max.y } else { box.min.y },
+    if n.z >= 0.0 { box.max.z } else { box.min.z },
+  )
+  signedDistance(surface, corner) >= 0.0
+}

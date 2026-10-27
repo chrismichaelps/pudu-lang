@@ -110,3 +110,130 @@ export fn projectPoint(matrix: Mat4, point: Vector.Vec3) -> Option[Vector.Vec3] 
   let divided = Vector.vec3(value.x / value.w, value.y / value.w, value.z / value.w)
   if Vector.isFinite(divided) { Some(divided) } else { None }
 }
+
+/// The determinant, as the triple product of the columns.
+export fn determinant3(matrix: Mat3) -> Float64 {
+  Vector.dot(matrix.x, Vector.cross(matrix.y, matrix.z))
+}
+
+/// The inverse, or None for a singular matrix or a non-finite result.
+export fn inverse3(matrix: Mat3) -> Option[Mat3] {
+  let yz = Vector.cross(matrix.y, matrix.z)
+  let determinant = Vector.dot(matrix.x, yz)
+  if determinant == 0.0 || !Float.isFinite(determinant) { return None }
+  let factor = 1.0 / determinant
+  let rows = columns3(
+    Vector.scale(yz, factor),
+    Vector.scale(Vector.cross(matrix.z, matrix.x), factor),
+    Vector.scale(Vector.cross(matrix.x, matrix.y), factor),
+  )
+  let inverse = transpose3(rows)
+  if Vector.isFinite(inverse.x) && Vector.isFinite(inverse.y) && Vector.isFinite(inverse.z) {
+    Some(inverse)
+  } else {
+    None
+  }
+}
+
+/// The determinant by two-by-two minors of the upper and lower row pairs.
+export fn determinant4(matrix: Mat4) -> Float64 {
+  let m = minors(matrix)
+  ((m.s0 * m.c5 - m.s1 * m.c4) + (m.s2 * m.c3 + m.s3 * m.c2)) + (m.s5 * m.c0 - m.s4 * m.c1)
+}
+
+/// The inverse, or None for a singular matrix or a non-finite result.
+export fn inverse4(matrix: Mat4) -> Option[Mat4] {
+  let m = minors(matrix)
+  let determinant = ((m.s0 * m.c5 - m.s1 * m.c4) + (m.s2 * m.c3 + m.s3 * m.c2)) + (m.s5 * m.c0 - m.s4 * m.c1)
+  if determinant == 0.0 || !Float.isFinite(determinant) { return None }
+  let f = 1.0 / determinant
+  let a = matrix
+  let inverse = columns4(
+    Vector.vec4(
+      (a.y.y * m.c5 - a.z.y * m.c4 + a.w.y * m.c3) * f,
+      (-a.x.y * m.c5 + a.z.y * m.c2 - a.w.y * m.c1) * f,
+      (a.x.y * m.c4 - a.y.y * m.c2 + a.w.y * m.c0) * f,
+      (-a.x.y * m.c3 + a.y.y * m.c1 - a.z.y * m.c0) * f,
+    ),
+    Vector.vec4(
+      (-a.y.x * m.c5 + a.z.x * m.c4 - a.w.x * m.c3) * f,
+      (a.x.x * m.c5 - a.z.x * m.c2 + a.w.x * m.c1) * f,
+      (-a.x.x * m.c4 + a.y.x * m.c2 - a.w.x * m.c0) * f,
+      (a.x.x * m.c3 - a.y.x * m.c1 + a.z.x * m.c0) * f,
+    ),
+    Vector.vec4(
+      (a.y.w * m.s5 - a.z.w * m.s4 + a.w.w * m.s3) * f,
+      (-a.x.w * m.s5 + a.z.w * m.s2 - a.w.w * m.s1) * f,
+      (a.x.w * m.s4 - a.y.w * m.s2 + a.w.w * m.s0) * f,
+      (-a.x.w * m.s3 + a.y.w * m.s1 - a.z.w * m.s0) * f,
+    ),
+    Vector.vec4(
+      (-a.y.z * m.s5 + a.z.z * m.s4 - a.w.z * m.s3) * f,
+      (a.x.z * m.s5 - a.z.z * m.s2 + a.w.z * m.s1) * f,
+      (-a.x.z * m.s4 + a.y.z * m.s2 - a.w.z * m.s0) * f,
+      (a.x.z * m.s3 - a.y.z * m.s1 + a.z.z * m.s0) * f,
+    ),
+  )
+  if Vector.isFinite4(inverse.x) && Vector.isFinite4(inverse.y) && Vector.isFinite4(inverse.z) && Vector.isFinite4(inverse.w) {
+    Some(inverse)
+  } else {
+    None
+  }
+}
+
+/// Two-by-two minors of rows 0-1 (s) and rows 2-3 (c), shared by determinant4 and inverse4.
+type Minors = { s0: Float64, s1: Float64, s2: Float64, s3: Float64, s4: Float64, s5: Float64, c0: Float64, c1: Float64, c2: Float64, c3: Float64, c4: Float64, c5: Float64 }
+
+fn minors(a: Mat4) -> Minors {
+  Minors {
+    s0: a.x.x * a.y.y - a.x.y * a.y.x,
+    s1: a.x.x * a.z.y - a.x.y * a.z.x,
+    s2: a.x.x * a.w.y - a.x.y * a.w.x,
+    s3: a.y.x * a.z.y - a.y.y * a.z.x,
+    s4: a.y.x * a.w.y - a.y.y * a.w.x,
+    s5: a.z.x * a.w.y - a.z.y * a.w.x,
+    c0: a.x.z * a.y.w - a.x.w * a.y.z,
+    c1: a.x.z * a.z.w - a.x.w * a.z.z,
+    c2: a.x.z * a.w.w - a.x.w * a.w.z,
+    c3: a.y.z * a.z.w - a.y.w * a.z.z,
+    c4: a.y.z * a.w.w - a.y.w * a.w.z,
+    c5: a.z.z * a.w.w - a.z.w * a.w.z,
+  }
+}
+
+/// A homogeneous transform from a linear part and a translation.
+export fn affine(linear: Mat3, offset: Vector.Vec3) -> Mat4 {
+  columns4(
+    Vector.vec4(linear.x.x, linear.x.y, linear.x.z, 0.0),
+    Vector.vec4(linear.y.x, linear.y.y, linear.y.z, 0.0),
+    Vector.vec4(linear.z.x, linear.z.y, linear.z.z, 0.0),
+    Vector.vec4(offset.x, offset.y, offset.z, 1.0),
+  )
+}
+
+/// The upper-left linear part.
+export fn linearPart(matrix: Mat4) -> Mat3 {
+  columns3(
+    Vector.vec3(matrix.x.x, matrix.x.y, matrix.x.z),
+    Vector.vec3(matrix.y.x, matrix.y.y, matrix.y.z),
+    Vector.vec3(matrix.z.x, matrix.z.y, matrix.z.z),
+  )
+}
+
+/// Apply an affine transform to a point (w = 1) without perspective division.
+export fn transformPoint(matrix: Mat4, point: Vector.Vec3) -> Vector.Vec3 {
+  Vector.vec3(
+    ((matrix.x.x * point.x + matrix.y.x * point.y) + matrix.z.x * point.z) + matrix.w.x,
+    ((matrix.x.y * point.x + matrix.y.y * point.y) + matrix.z.y * point.z) + matrix.w.y,
+    ((matrix.x.z * point.x + matrix.y.z * point.y) + matrix.z.z * point.z) + matrix.w.z,
+  )
+}
+
+/// Apply the linear part to a direction (w = 0).
+export fn transformDirection(matrix: Mat4, direction: Vector.Vec3) -> Vector.Vec3 {
+  Vector.vec3(
+    (matrix.x.x * direction.x + matrix.y.x * direction.y) + matrix.z.x * direction.z,
+    (matrix.x.y * direction.x + matrix.y.y * direction.y) + matrix.z.y * direction.z,
+    (matrix.x.z * direction.x + matrix.y.z * direction.y) + matrix.z.z * direction.z,
+  )
+}

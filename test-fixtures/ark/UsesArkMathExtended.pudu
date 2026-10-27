@@ -1,0 +1,245 @@
+module UsesArkMathExtended
+
+import Std.Math.Float as Float
+import Std.Option as Option
+import Ark.Math.Camera as Camera
+import Ark.Math.Color as Color
+import Ark.Math.Geometry as G
+import Ark.Math.Matrix as M
+import Ark.Math.Noise as Noise
+import Ark.Math.Quat as Q
+import Ark.Math.Random as Random
+import Ark.Math.Transform as T
+import Ark.Math as V
+import Ark.Math.Vec2 as P
+
+fn require(condition: Bool, name: Str) {
+  if !condition { panic(name) }
+}
+
+fn near(a: Float64, b: Float64) -> Bool {
+  Float.abs(a - b) <= 0.000000001
+}
+
+fn near3(a: V.Vec3, b: V.Vec3) -> Bool {
+  V.approxEqual(a, b, 0.000000001)
+}
+
+fn nearMat4(a: M.Mat4, b: M.Mat4) -> Bool {
+  let points = [V.vec3(1.0, 2.0, 3.0), V.vec3(-4.0, 0.5, 9.0), V.vec3(0.0, 0.0, 0.0)]
+  var same = true
+  for point in points {
+    same = same && near3(M.transformPoint(a, point), M.transformPoint(b, point))
+  }
+  same
+}
+
+fn vectors() {
+  let a = V.vec3(1.0, -2.0, 3.0)
+  let b = V.vec3(4.0, 5.0, -6.0)
+  require(V.negate(a) == V.vec3(-1.0, 2.0, -3.0), "negate")
+  require(V.multiply(a, b) == V.vec3(4.0, -10.0, -18.0), "component product")
+  require(V.lengthSquared(a) == 14.0, "length squared")
+  require(V.distance(V.vec3(0.0, 0.0, 0.0), V.vec3(3.0, 4.0, 0.0)) == Some(5.0), "distance")
+  require(V.lerp(a, b, 0.0) == a && V.lerp(a, b, 1.0) == b, "lerp endpoints")
+  require(V.lerp(a, b, 0.5) == V.vec3(2.5, 1.5, -1.5), "lerp midpoint")
+  require(V.minimum(a, b) == V.vec3(1.0, -2.0, -6.0) && V.maximum(a, b) == V.vec3(4.0, 5.0, 3.0), "min max")
+  require(V.reflect(V.vec3(1.0, -1.0, 0.0), V.vec3(0.0, 1.0, 0.0)) == V.vec3(1.0, 1.0, 0.0), "reflect")
+  require(V.project(a, V.vec3(0.0, 0.0, 2.0)) == Some(V.vec3(0.0, 0.0, 3.0)), "project")
+  require(V.project(a, V.vec3(0.0, 0.0, 0.0)) == None, "project onto zero")
+  let p = P.vec2(3.0, 4.0)
+  require(P.length(p) == Some(5.0), "planar length")
+  require(P.length(P.vec2(1e300, 1e300)) == Some(1.4142135623730952e300), "planar length without overflow")
+  require(P.length(P.vec2(1.7e308, 1.7e308)) == None, "planar length overflow")
+  require(P.normalized(P.vec2(0.0, 0.0)) == None, "planar zero direction")
+  require(P.normalized(P.vec2(0.0, -7.0)) == Some(P.vec2(0.0, -1.0)), "planar unit")
+  require(P.perpDot(P.vec2(1.0, 0.0), P.vec2(0.0, 1.0)) == 1.0, "planar turn")
+  require(P.perpendicular(P.vec2(1.0, 2.0)) == P.vec2(-2.0, 1.0), "planar perpendicular")
+  require(P.approxEqual(P.rotate(P.vec2(1.0, 0.0), Float.pi() / 2.0), P.vec2(0.0, 1.0), 1e-15), "planar rotate")
+}
+
+fn matrices() {
+  let a = M.columns3(V.vec3(2.0, 0.0, 1.0), V.vec3(1.0, 3.0, 0.0), V.vec3(0.0, 1.0, 4.0))
+  require(M.determinant3(a) == 25.0, "determinant3")
+  let Some(inverse) = M.inverse3(a) else { panic("inverse3") }
+  let product = M.multiply3(a, inverse)
+  require(near3(product.x, V.vec3(1.0, 0.0, 0.0)) && near3(product.y, V.vec3(0.0, 1.0, 0.0)), "inverse3 identity")
+  require(M.inverse3(M.columns3(V.vec3(1.0, 2.0, 3.0), V.vec3(2.0, 4.0, 6.0), V.vec3(0.0, 0.0, 1.0))) == None, "singular3")
+  let full = M.columns4(
+    V.vec4(2.0, 0.0, 0.0, 1.0), V.vec4(0.0, 3.0, 1.0, 0.0),
+    V.vec4(1.0, 0.0, 4.0, 0.0), V.vec4(5.0, -2.0, 3.0, 1.0),
+  )
+  require(near(M.determinant4(full), -25.0), "determinant4")
+  let Some(full_inverse) = M.inverse4(full) else { panic("inverse4") }
+  require(nearMat4(M.multiply4(full, full_inverse), M.identity4()), "inverse4 identity")
+  require(nearMat4(M.multiply4(full_inverse, full), M.identity4()), "inverse4 left identity")
+  require(M.inverse4(M.scaling(V.vec3(1.0, 0.0, 1.0))) == None, "singular4")
+  let shift = M.translation(V.vec3(1.0, 2.0, 3.0))
+  require(M.transformPoint(shift, V.vec3(1.0, 1.0, 1.0)) == V.vec3(2.0, 3.0, 4.0), "affine point")
+  require(M.transformDirection(shift, V.vec3(1.0, 1.0, 1.0)) == V.vec3(1.0, 1.0, 1.0), "affine direction")
+  require(M.linearPart(M.affine(a, V.vec3(9.0, 9.0, 9.0))) == a, "affine round trip")
+}
+
+fn rotations() {
+  let quarter = Q.rotationZ(Float.pi() / 2.0)
+  require(near3(Q.rotate(quarter, V.vec3(1.0, 0.0, 0.0)), V.vec3(0.0, 1.0, 0.0)), "quarter turn")
+  require(Q.fromAxisAngle(V.vec3(0.0, 0.0, 0.0), 1.0) == None, "zero axis")
+  let Some(axis) = Q.fromAxisAngle(V.vec3(0.0, 0.0, 5.0), Float.pi() / 2.0) else { panic("axis angle") }
+  require(near(Q.dot(axis, quarter), 1.0), "axis normalized")
+  let both = Q.multiply(Q.rotationX(Float.pi() / 2.0), quarter)
+  require(near3(Q.rotate(both, V.vec3(1.0, 0.0, 0.0)), V.vec3(0.0, 0.0, 1.0)), "right applies first")
+  let matrix = Q.toMat3(both)
+  let sample = V.vec3(0.3, -1.2, 2.5)
+  require(near3(M.transform3(matrix, sample), Q.rotate(both, sample)), "matrix agrees")
+  require(Q.normalized(Q.quat(0.0, 0.0, 0.0, 0.0)) == None, "zero normalize")
+  let Some(back) = Q.inverse(both) else { panic("quat inverse") }
+  require(near3(Q.rotate(back, Q.rotate(both, sample)), sample), "inverse undoes")
+  let Some(halfway) = Q.slerp(Q.identity(), Q.rotationY(Float.pi() / 2.0), 0.5) else { panic("slerp") }
+  require(near(Q.angleBetween(Q.identity(), halfway), Float.pi() / 4.0), "slerp halves the angle")
+  let Some(start) = Q.slerp(Q.identity(), Q.rotationY(1.0), 0.0) else { panic("slerp start") }
+  require(near(Q.dot(start, Q.identity()), 1.0), "slerp start")
+  let Some(blend) = Q.nlerp(Q.identity(), Q.rotationY(0.001), 0.5) else { panic("nlerp") }
+  require(near(Q.lengthSquared(blend), 1.0), "nlerp unit")
+  let local = T.transform(V.vec3(1.0, 0.0, 0.0), quarter, V.vec3(2.0, 2.0, 2.0))
+  require(near3(T.transformPoint(local, V.vec3(1.0, 0.0, 0.0)), V.vec3(1.0, 2.0, 0.0)), "trs point")
+  require(nearMat4(T.toMat4(local), M.multiply4(M.translation(V.vec3(1.0, 0.0, 0.0)), M.multiply4(Q.toMat4(quarter), M.scaling(V.vec3(2.0, 2.0, 2.0))))), "trs matrix")
+  let child = T.transform(V.vec3(0.0, 1.0, 0.0), Q.rotationX(0.3), V.vec3(1.0, 0.5, 3.0))
+  let world = T.compose(local, child)
+  require(near3(T.transformPoint(world, sample), T.transformPoint(local, T.transformPoint(child, sample))), "compose")
+  let Some(undo) = T.inverse(local) else { panic("transform inverse") }
+  require(near3(T.transformPoint(undo, T.transformPoint(local, sample)), sample), "transform inverse")
+  require(T.inverse(child) == None, "non-uniform inverse refused")
+}
+
+fn cameras() {
+  let Some(view) = Camera.lookAt(V.vec3(0.0, 0.0, 5.0), V.vec3(0.0, 0.0, 0.0), V.vec3(0.0, 1.0, 0.0)) else { panic("look at") }
+  require(near3(M.transformPoint(view, V.vec3(0.0, 0.0, 0.0)), V.vec3(0.0, 0.0, -5.0)), "view moves target ahead")
+  require(Camera.lookAt(V.vec3(1.0, 1.0, 1.0), V.vec3(1.0, 1.0, 1.0), V.vec3(0.0, 1.0, 0.0)) == None, "degenerate view")
+  require(Camera.lookAt(V.vec3(0.0, 0.0, 0.0), V.vec3(0.0, 2.0, 0.0), V.vec3(0.0, 1.0, 0.0)) == None, "parallel up")
+  let Some(projection) = Camera.perspective(Float.pi() / 2.0, 2.0, 1.0, 100.0) else { panic("perspective") }
+  let Some(nearPoint) = M.projectPoint(projection, V.vec3(0.0, 0.0, -1.0)) else { panic("near project") }
+  let Some(farPoint) = M.projectPoint(projection, V.vec3(0.0, 0.0, -100.0)) else { panic("far project") }
+  require(near(nearPoint.z, 0.0) && near(farPoint.z, 1.0), "zero to one depth")
+  let Some(edge) = M.projectPoint(projection, V.vec3(2.0, 1.0, -1.0)) else { panic("edge project") }
+  require(near(edge.x, 1.0) && near(edge.y, 1.0), "frustum edge")
+  require(Camera.perspective(0.0, 1.0, 1.0, 10.0) == None, "zero fov")
+  require(Camera.perspective(1.0, 1.0, 10.0, 1.0) == None, "inverted planes")
+  let Some(reversed) = Camera.perspectiveReversed(1.0, 1.0, 0.5) else { panic("reversed") }
+  let Some(close) = M.projectPoint(reversed, V.vec3(0.0, 0.0, -0.5)) else { panic("reversed near") }
+  let Some(distant) = M.projectPoint(reversed, V.vec3(0.0, 0.0, -1e12)) else { panic("reversed far") }
+  require(near(close.z, 1.0) && distant.z < 1e-12, "reversed depth")
+  let Some(ortho) = Camera.orthographic(-2.0, 2.0, -1.0, 1.0, 0.0, 10.0) else { panic("ortho") }
+  require(near3(M.transformPoint(ortho, V.vec3(2.0, -1.0, -10.0)), V.vec3(1.0, -1.0, 1.0)), "ortho corner")
+  require(Camera.orthographic(1.0, 1.0, 0.0, 1.0, 0.0, 1.0) == None, "empty ortho")
+}
+
+fn geometry() {
+  let box = G.aabb(V.vec3(1.0, 1.0, 1.0), V.vec3(-1.0, -1.0, -1.0))
+  require(box.min == V.vec3(-1.0, -1.0, -1.0), "ordered corners")
+  require(G.containsPoint(box, V.vec3(1.0, 0.0, 0.0)) && !G.containsPoint(box, V.vec3(1.5, 0.0, 0.0)), "contains")
+  require(G.overlaps(box, G.aabbAround(V.vec3(2.0, 0.0, 0.0), V.vec3(1.0, 1.0, 1.0))), "touching overlap")
+  require(!G.overlaps(box, G.aabbAround(V.vec3(3.0, 0.0, 0.0), V.vec3(1.0, 1.0, 1.0))), "separate")
+  require(G.merge(box, G.aabbAround(V.vec3(5.0, 0.0, 0.0), V.vec3(1.0, 1.0, 1.0))).max.x == 6.0, "merge")
+  require(G.include(box, V.vec3(0.0, 9.0, 0.0)).max.y == 9.0, "include")
+  let turned = G.transformAabb(Q.toMat4(Q.rotationZ(Float.pi() / 4.0)), box)
+  require(near(turned.max.x, Float.sqrt2()) && near(turned.min.y, -Float.sqrt2()), "rotated bounds")
+  require(G.spheresOverlap(G.sphere(V.vec3(0.0, 0.0, 0.0), 1.0), G.sphere(V.vec3(2.0, 0.0, 0.0), 1.0)), "spheres touch")
+  require(!G.sphereOverlapsAabb(G.sphere(V.vec3(3.0, 3.0, 0.0), 2.0), box), "sphere misses corner")
+  require(G.sphereOverlapsAabb(G.sphere(V.vec3(2.0, 0.0, 0.0), 1.0), box), "sphere touches face")
+  require(G.ray(V.vec3(0.0, 0.0, 0.0), V.vec3(0.0, 0.0, 0.0)) == None, "zero ray")
+  let Some(line) = G.ray(V.vec3(-5.0, 0.0, 0.0), V.vec3(3.0, 0.0, 0.0)) else { panic("ray") }
+  require(G.rayAabb(line, box) == Some(4.0), "ray enters box")
+  require(G.raySphere(line, G.sphere(V.vec3(0.0, 0.0, 0.0), 2.0)) == Some(3.0), "ray sphere")
+  let Some(inside) = G.ray(V.vec3(0.0, 0.0, 0.0), V.vec3(0.0, 1.0, 0.0)) else { panic("inside ray") }
+  require(G.rayAabb(inside, box) == Some(0.0), "ray from inside")
+  let Some(skew) = G.ray(V.vec3(-5.0, 3.0, 0.0), V.vec3(1.0, 0.0, 0.0)) else { panic("skew ray") }
+  require(G.rayAabb(skew, box) == None && G.raySphere(skew, G.sphere(V.vec3(0.0, 0.0, 0.0), 2.0)) == None, "ray misses")
+  let Some(floor) = G.plane(V.vec3(0.0, 2.0, 0.0), V.vec3(0.0, -1.0, 0.0)) else { panic("plane") }
+  require(G.signedDistance(floor, V.vec3(0.0, 4.0, 0.0)) == 5.0, "plane distance")
+  let Some(down) = G.ray(V.vec3(0.0, 4.0, 0.0), V.vec3(0.0, -1.0, 0.0)) else { panic("down") }
+  require(G.rayPlane(down, floor) == Some(5.0) && G.rayPlane(inside, floor) == None, "ray plane")
+  let Some(forward) = G.ray(V.vec3(0.2, 0.2, 5.0), V.vec3(0.0, 0.0, -1.0)) else { panic("forward") }
+  let a = V.vec3(0.0, 0.0, 0.0)
+  let b = V.vec3(1.0, 0.0, 0.0)
+  let c = V.vec3(0.0, 1.0, 0.0)
+  require(G.rayTriangle(forward, a, b, c) == Some(5.0), "ray triangle")
+  let Some(outside) = G.ray(V.vec3(0.9, 0.9, 5.0), V.vec3(0.0, 0.0, -1.0)) else { panic("outside") }
+  require(G.rayTriangle(outside, a, b, c) == None, "triangle miss")
+  let Some(view) = Camera.lookAt(V.vec3(0.0, 0.0, 0.0), V.vec3(0.0, 0.0, -1.0), V.vec3(0.0, 1.0, 0.0)) else { panic("view") }
+  let Some(projection) = Camera.perspective(Float.pi() / 2.0, 1.0, 1.0, 50.0) else { panic("projection") }
+  let Some(volume) = G.frustum(M.multiply4(projection, view)) else { panic("frustum") }
+  require(G.frustumContainsPoint(volume, V.vec3(0.0, 0.0, -10.0)), "point in frustum")
+  require(!G.frustumContainsPoint(volume, V.vec3(0.0, 0.0, 10.0)), "point behind")
+  require(!G.frustumContainsPoint(volume, V.vec3(0.0, 0.0, -60.0)), "point beyond far")
+  require(G.frustumOverlapsSphere(volume, G.sphere(V.vec3(0.0, 0.0, -0.7), 0.6)), "sphere crosses near")
+  require(!G.frustumOverlapsSphere(volume, G.sphere(V.vec3(30.0, 0.0, -10.0), 1.0)), "sphere outside side")
+  require(G.frustumOverlapsAabb(volume, G.aabbAround(V.vec3(11.0, 0.0, -10.0), V.vec3(1.5, 1.0, 1.0))), "box crosses side")
+  require(!G.frustumOverlapsAabb(volume, G.aabbAround(V.vec3(0.0, 0.0, 5.0), V.vec3(1.0, 1.0, 1.0))), "box behind")
+}
+
+fn colors() {
+  require(Color.srgbToLinear(0.0) == 0.0 && Color.srgbToLinear(1.0) == 1.0, "srgb ends")
+  require(near(Color.linearToSrgb(Color.srgbToLinear(0.5)), 0.5), "srgb round trip")
+  require(near(Color.srgbToLinear(0.04045), 0.04045 / 12.92), "srgb knee")
+  let Some(gray) = Color.fromSrgb8(128, 128, 128, 255) else { panic("srgb8") }
+  require(Color.toSrgb8(gray) == Some(4286611584u32), "srgb8 round trip")
+  require(Color.fromSrgb8(256, 0, 0, 0) == None, "srgb8 range")
+  require(Color.toSrgb8(Color.rgba(0.0 / 0.0, 0.0, 0.0, 1.0)) == None, "nan channel")
+  require(Color.toSrgb8(Color.opaque(2.0, -1.0, 0.0)) == Some(4278190335u32), "clamped pack")
+  require(Color.premultiplied(Color.rgba(1.0, 0.5, 0.0, 0.5)) == Color.rgba(0.5, 0.25, 0.0, 0.5), "premultiply")
+}
+
+fn randomness() {
+  let (afterOne, first) = Random.next(Random.seeded(0u64))
+  require(first == 16294208416658607535u64, "splitmix reference")
+  let (_, second) = Random.next(afterOne)
+  require(second == 7960286522194355700u64, "splitmix second")
+  var rng = Random.seeded(42u64)
+  var lowest = 1.0
+  var highest = 0.0
+  var index = 0
+  while index < 2000 {
+    let (advanced, value) = Random.unit(rng)
+    rng = advanced
+    if value < lowest { lowest = value }
+    if value > highest { highest = value }
+    index = index + 1
+  }
+  require(lowest >= 0.0 && lowest < 0.01 && highest < 1.0 && highest > 0.99, "unit range")
+  let Some((_, die)) = Random.below(Random.seeded(7u64), 6) else { panic("below") }
+  require(die >= 0 && die < 6, "below range")
+  require(Random.below(Random.seeded(7u64), 0) == None, "empty range refused")
+  let (_, ranged) = Random.between(Random.seeded(9u64), -2.0, -1.0)
+  require(ranged >= -2.0 && ranged < -1.0, "between range")
+}
+
+fn noise() {
+  require(Noise.perlin3(1.0, 2.0, 3.0) == 0.0 && Noise.perlin2(-4.0, 7.0) == 0.0, "lattice zero")
+  let sample = Noise.perlin3(1.25, 2.5, 3.75)
+  require(sample == Noise.perlin3(1.25, 2.5, 3.75) && sample != 0.0, "repeatable")
+  var extreme = 0.0
+  var x = 0.0
+  while x < 8.0 {
+    let value = Float.abs(Noise.perlin3(x, x * 0.7 + 0.13, 0.31)) + Float.abs(Noise.perlin2(x * 1.3, 0.77))
+    if value > extreme { extreme = value }
+    x = x + 0.0625
+  }
+  require(extreme > 0.1 && extreme < 2.0, "bounded")
+  require(Noise.fbm3(0.5, 0.5, 0.5, 0, 2.0, 0.5) == 0.0, "no octaves")
+  require(Float.abs(Noise.fbm3(0.37, 1.21, 2.9, 5, 2.0, 0.5)) <= 1.0, "fbm normalized")
+  require(Float.isFinite(Noise.perlin3(-1000000.5, -0.25, -0.75)) && Noise.perlin3(-0.5, -0.5, -0.5) != 0.0, "negative coordinates")
+  require(Noise.perlin3(1e300, 0.5, 0.5) == Noise.perlin3(0.0, 0.5, 0.5), "unrepresentable cell wraps to zero")
+}
+
+export fn main() -> Int {
+  vectors()
+  matrices()
+  rotations()
+  cameras()
+  geometry()
+  colors()
+  randomness()
+  noise()
+  print("ark math extended: ok")
+  0
+}

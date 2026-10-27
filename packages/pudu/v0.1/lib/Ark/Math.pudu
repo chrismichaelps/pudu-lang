@@ -52,6 +52,11 @@ export fn isFinite(value: Vec3) -> Bool {
   Float.isFinite(value.x) && Float.isFinite(value.y) && Float.isFinite(value.z)
 }
 
+/// Whether every homogeneous component is finite.
+export fn isFinite4(value: Vec4) -> Bool {
+  Float.isFinite(value.x) && Float.isFinite(value.y) && Float.isFinite(value.z) && Float.isFinite(value.w)
+}
+
 /// The finite magnitude, or None for non-finite inputs or an overflowing magnitude.
 export fn length(value: Vec3) -> Option[Float64] {
   if !isFinite(value) { return None }
@@ -79,4 +84,75 @@ fn maxComponent(value: Vec3) -> Float64 {
   let z = Float.abs(value.z)
   let xy = if x > y { x } else { y }
   if xy > z { xy } else { z }
+}
+
+/// Reverse every component.
+export fn negate(value: Vec3) -> Vec3 {
+  vec3(-value.x, -value.y, -value.z)
+}
+
+/// Multiply corresponding components.
+export fn multiply(left: Vec3, right: Vec3) -> Vec3 {
+  vec3(left.x * right.x, left.y * right.y, left.z * right.z)
+}
+
+/// The squared magnitude; finite inputs may still overflow to infinity.
+export fn lengthSquared(value: Vec3) -> Float64 {
+  dot(value, value)
+}
+
+/// The distance between two points, or None when it is not representable.
+export fn distance(from: Vec3, to: Vec3) -> Option[Float64] {
+  length(subtract(to, from))
+}
+
+/// The squared distance between two points.
+export fn distanceSquared(from: Vec3, to: Vec3) -> Float64 {
+  lengthSquared(subtract(to, from))
+}
+
+/// Interpolate from `from` toward `to`; t = 0 and t = 1 return the endpoints exactly.
+export fn lerp(from: Vec3, to: Vec3, t: Float64) -> Vec3 {
+  vec3(
+    Float.fma(t, to.x - from.x, from.x),
+    Float.fma(t, to.y - from.y, from.y),
+    Float.fma(t, to.z - from.z, from.z),
+  )
+}
+
+/// The smaller value of each component.
+export fn minimum(left: Vec3, right: Vec3) -> Vec3 {
+  vec3(
+    if left.x < right.x { left.x } else { right.x },
+    if left.y < right.y { left.y } else { right.y },
+    if left.z < right.z { left.z } else { right.z },
+  )
+}
+
+/// The larger value of each component.
+export fn maximum(left: Vec3, right: Vec3) -> Vec3 {
+  vec3(
+    if left.x > right.x { left.x } else { right.x },
+    if left.y > right.y { left.y } else { right.y },
+    if left.z > right.z { left.z } else { right.z },
+  )
+}
+
+/// Reflect an incident direction about a unit normal.
+export fn reflect(incident: Vec3, normal: Vec3) -> Vec3 {
+  subtract(incident, scale(normal, 2.0 * dot(incident, normal)))
+}
+
+/// The component of `value` along `onto`, or None when `onto` is zero.
+export fn project(value: Vec3, onto: Vec3) -> Option[Vec3] {
+  let denominator = dot(onto, onto)
+  if denominator == 0.0 || !Float.isFinite(denominator) { return None }
+  Some(scale(onto, dot(value, onto) / denominator))
+}
+
+/// Whether every component differs by at most `tolerance`.
+export fn approxEqual(left: Vec3, right: Vec3, tolerance: Float64) -> Bool {
+  Float.abs(left.x - right.x) <= tolerance
+    && Float.abs(left.y - right.y) <= tolerance
+    && Float.abs(left.z - right.z) <= tolerance
 }

@@ -1,0 +1,160 @@
+module Ark.Math.Quat
+
+import Std.Math.Float as Float
+import Ark.Math.Matrix as Matrix
+import Ark.Math as Vector
+
+/// A rotation quaternion: vector part x/y/z and scalar part w.
+export type Quat = { x: Float64, y: Float64, z: Float64, w: Float64 }
+
+/// Construct a quaternion without normalizing it.
+export fn quat(x: Float64, y: Float64, z: Float64, w: Float64) -> Quat {
+  Quat{x, y, z, w}
+}
+
+/// The rotation that leaves every vector unchanged.
+export fn identity() -> Quat {
+  quat(0.0, 0.0, 0.0, 1.0)
+}
+
+/// A rotation about an axis by an angle in radians, or None for a zero or non-finite axis.
+export fn fromAxisAngle(axis: Vector.Vec3, radians: Float64) -> Option[Quat] {
+  let unit = Vector.normalized(axis) ?
+  let half = radians * 0.5
+  let s = Float.sin(half)
+  Some(quat(unit.x * s, unit.y * s, unit.z * s, Float.cos(half)))
+}
+
+/// A rotation about the x axis.
+export fn rotationX(radians: Float64) -> Quat {
+  quat(Float.sin(radians * 0.5), 0.0, 0.0, Float.cos(radians * 0.5))
+}
+
+/// A rotation about the y axis.
+export fn rotationY(radians: Float64) -> Quat {
+  quat(0.0, Float.sin(radians * 0.5), 0.0, Float.cos(radians * 0.5))
+}
+
+/// A rotation about the z axis.
+export fn rotationZ(radians: Float64) -> Quat {
+  quat(0.0, 0.0, Float.sin(radians * 0.5), Float.cos(radians * 0.5))
+}
+
+/// The Hamilton product: applying the result rotates by `right` first, then by `left`.
+export fn multiply(left: Quat, right: Quat) -> Quat {
+  quat(
+    left.w * right.x + left.x * right.w + left.y * right.z - left.z * right.y,
+    left.w * right.y - left.x * right.z + left.y * right.w + left.z * right.x,
+    left.w * right.z + left.x * right.y - left.y * right.x + left.z * right.w,
+    left.w * right.w - left.x * right.x - left.y * right.y - left.z * right.z,
+  )
+}
+
+/// The conjugate; the inverse of a unit quaternion.
+export fn conjugate(value: Quat) -> Quat {
+  quat(-value.x, -value.y, -value.z, value.w)
+}
+
+/// The four-component dot product.
+export fn dot(left: Quat, right: Quat) -> Float64 {
+  (left.x * right.x + left.y * right.y) + (left.z * right.z + left.w * right.w)
+}
+
+/// The squared norm.
+export fn lengthSquared(value: Quat) -> Float64 {
+  dot(value, value)
+}
+
+/// The unit quaternion in the same direction, or None for zero or non-finite input.
+export fn normalized(value: Quat) -> Option[Quat] {
+  let squared = dot(value, value)
+  if squared == 0.0 || !Float.isFinite(squared) { return None }
+  let reciprocal = 1.0 / (Float.sqrt(squared) ?)
+  Some(quat(value.x * reciprocal, value.y * reciprocal, value.z * reciprocal, value.w * reciprocal))
+}
+
+/// The multiplicative inverse, or None for zero or non-finite input.
+export fn inverse(value: Quat) -> Option[Quat] {
+  let squared = dot(value, value)
+  if squared == 0.0 || !Float.isFinite(squared) { return None }
+  let f = 1.0 / squared
+  Some(quat(-value.x * f, -value.y * f, -value.z * f, value.w * f))
+}
+
+/// Rotate a vector by a unit quaternion with two cross products.
+export fn rotate(rotation: Quat, value: Vector.Vec3) -> Vector.Vec3 {
+  let axis = Vector.vec3(rotation.x, rotation.y, rotation.z)
+  let t = Vector.scale(Vector.cross(axis, value), 2.0)
+  Vector.add(Vector.add(value, Vector.scale(t, rotation.w)), Vector.cross(axis, t))
+}
+
+/// Normalized linear interpolation along the shorter arc, or None when the blend is zero.
+export fn nlerp(from: Quat, to: Quat, t: Float64) -> Option[Quat] {
+  let target = if dot(from, to) < 0.0 { quat(-to.x, -to.y, -to.z, -to.w) } else { to }
+  normalized(
+    quat(
+      Float.fma(t, target.x - from.x, from.x),
+      Float.fma(t, target.y - from.y, from.y),
+      Float.fma(t, target.z - from.z, from.z),
+      Float.fma(t, target.w - from.w, from.w),
+    ),
+  )
+}
+
+/// Spherical interpolation at constant angular speed along the shorter arc of unit inputs.
+export fn slerp(from: Quat, to: Quat, t: Float64) -> Option[Quat] {
+  var cosine = dot(from, to)
+  var target = to
+  if cosine < 0.0 {
+    cosine = -cosine
+    target = quat(-to.x, -to.y, -to.z, -to.w)
+  }
+  if cosine > 0.9995 { return nlerp(from, target, t) }
+  let angle = Float.acos(cosine) ?
+  let sine = Float.sin(angle)
+  let a = Float.sin((1.0 - t) * angle) / sine
+  let b = Float.sin(t * angle) / sine
+  normalized(
+    quat(
+      a * from.x + b * target.x,
+      a * from.y + b * target.y,
+      a * from.z + b * target.z,
+      a * from.w + b * target.w,
+    ),
+  )
+}
+
+/// The rotation angle in radians between two unit rotations, in [0, pi].
+export fn angleBetween(from: Quat, to: Quat) -> Float64 {
+  let cosine = Float.clamp(Float.abs(dot(from, to)), 0.0, 1.0)
+  match Float.acos(cosine) {
+    case Some(half) => 2.0 * half
+    case None => 0.0
+  }
+}
+
+/// The rotation matrix of a unit quaternion.
+export fn toMat3(rotation: Quat) -> Matrix.Mat3 {
+  let x2 = rotation.x + rotation.x
+  let y2 = rotation.y + rotation.y
+  let z2 = rotation.z + rotation.z
+  let xx = rotation.x * x2
+  let yy = rotation.y * y2
+  let zz = rotation.z * z2
+  let xy = rotation.x * y2
+  let xz = rotation.x * z2
+  let yz = rotation.y * z2
+  let wx = rotation.w * x2
+  let wy = rotation.w * y2
+  let wz = rotation.w * z2
+  Matrix.columns3(
+    Vector.vec3(1.0 - (yy + zz), xy + wz, xz - wy),
+    Vector.vec3(xy - wz, 1.0 - (xx + zz), yz + wx),
+    Vector.vec3(xz + wy, yz - wx, 1.0 - (xx + yy)),
+  )
+}
+
+/// The homogeneous rotation matrix of a unit quaternion.
+export fn toMat4(rotation: Quat) -> Matrix.Mat4 {
+  Matrix.affine(toMat3(rotation), Vector.vec3(0.0, 0.0, 0.0))
+}

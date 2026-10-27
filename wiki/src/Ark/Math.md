@@ -22,6 +22,11 @@ it does not silently clamp. `isFinite` tests every component.
 unrepresentable magnitude. `normalized` returns Option[Vec3]: None for zero/non-finite
 inputs, otherwise a finite unit direction even if the original magnitude would overflow.
 
+Vector algebra (#666): `negate`, component `multiply`, `lengthSquared`, `distance -> Option`,
+`distanceSquared`, `lerp` (fused, exact at both endpoints), `minimum`, `maximum`, `reflect`
+about a unit normal, `project -> Option` (None onto zero) and `approxEqual(a, b, tolerance)`.
+`isFinite4` tests a Vec4. Planar vectors live in [[Ark Planar Vector]].
+
 ## Algorithm and dependencies
 
 Depends only on [[Std Math Float]] as a lower-level numeric utility. Use the maximum absolute

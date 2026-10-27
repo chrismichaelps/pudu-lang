@@ -16,6 +16,13 @@ transform each right column through the left matrix. `transpose3/4` exchange row
 `translation` and `scaling` construct affine Mat4 values. `projectPoint` transforms (x,y,z,1),
 refuses zero/non-finite w or other coordinates, divides by w, and refuses non-finite quotients.
 
+Inverses (#666): `determinant3` is the column triple product; `inverse3 -> Option` builds rows
+from column cross products. `determinant4` and `inverse4 -> Option` share twelve two-by-two
+minors of the upper and lower row pairs, so the inverse costs one minor pass and one
+reciprocal. Singular, non-finite determinants or any non-finite entry answer `None`.
+`affine(linear, offset)`, `linearPart`, `transformPoint` (w = 1, no division) and
+`transformDirection` (w = 0) serve transform and culling code.
+
 ## Dependencies and algorithm
 
 Imports [[Ark Math]] for Vec3/Vec4 and [[Std Math Float]] for finite checks. No arrays, host

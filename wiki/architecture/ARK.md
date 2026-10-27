@@ -40,8 +40,10 @@ Tools only after an explicit layer refinement, not by creating a same-layer cycl
 
 ## Performance and resource contracts
 
-Math names precision explicitly and preserves IEEE operation order; no implicit fast math or
-cross-target deterministic floating-point promise. World will group component columns into bounded
+Math names precision explicitly and preserves IEEE operation order; no implicit fast math.
+Exact kernels (sqrt, rounding, fma, bit casts, conversions) are bit-identical across IEEE
+platforms, so Random and Noise are deterministic; transcendental results may differ in the last
+bit between platform math libraries. World will group component columns into bounded
 chunks and defer structural mutation until query completion. Generational identifiers must reject
 stale access before storage reuse. Job scheduling will declare read/write sets and join owned work.
 Persistent Array storage is not evidence of packed mutable storage: the latter needs a measured
@@ -62,7 +64,7 @@ their own acceptance evidence. Never substitute a host-language engine or broad 
 
 | Order | Deliverable | Current evidence |
 | --- | --- | --- |
-| 1 | Math and Core | #652: binary64 Vec3 validated; #660: Vec4 and Mat3/Mat4 algebra/projection validated; Vec2, extended vector operations, inverses, camera conventions, quaternions, geometry, noise, containers and Core remain open |
+| 1 | Math and Core | #652 Vec3; #660 Vec4, Mat3/Mat4; #661 exact binary64 kernels; #666 Vec2, vector algebra, inverses, quaternions, TRS, cameras with [0, 1] and reversed depth, geometry and culling, color, SplitMix64 and gradient noise validated. Core remains open |
 | 2 | Language/native foundations | Existing language features require capability audit; separate native execution target remains open |
 | 3 | Platform | OS adapters and bounded deterministic tests remain open |
 | 4 | World and simple rendering | Storage/query invariants, native window and a validated GPU frame remain open |

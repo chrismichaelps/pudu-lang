@@ -5,6 +5,8 @@ tags: [moc, handoff]
 
 # Handoff Map
 
+- [[Ark Math Completion Delivery]] — issue #666 completed binary64 engine math layer.
+
 - [[Square Root Delivery]] — issue #661 binary64 kernels behind Std.Math.Float, exact square root.
 
 - [[Flat Expression List Delivery]] — issue #662 keep flat list width out of parser nesting depth.

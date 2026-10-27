@@ -1,0 +1,88 @@
+module Ark.Math.Color
+
+import Std.Math.Float as Float
+
+/// A color with linear binary64 channels and straight alpha.
+export type Rgba = { r: Float64, g: Float64, b: Float64, a: Float64 }
+
+/// Construct a color without clamping.
+export fn rgba(r: Float64, g: Float64, b: Float64, a: Float64) -> Rgba {
+  Rgba{r, g, b, a}
+}
+
+/// A fully opaque color.
+export fn opaque(r: Float64, g: Float64, b: Float64) -> Rgba {
+  Rgba{r, g, b, a: 1.0}
+}
+
+/// Interpolate every channel; t = 0 and t = 1 return the endpoints exactly.
+export fn lerp(from: Rgba, to: Rgba, t: Float64) -> Rgba {
+  rgba(
+    Float.fma(t, to.r - from.r, from.r),
+    Float.fma(t, to.g - from.g, from.g),
+    Float.fma(t, to.b - from.b, from.b),
+    Float.fma(t, to.a - from.a, from.a),
+  )
+}
+
+/// Multiply corresponding channels.
+export fn multiply(left: Rgba, right: Rgba) -> Rgba {
+  rgba(left.r * right.r, left.g * right.g, left.b * right.b, left.a * right.a)
+}
+
+/// The color channels scaled by alpha.
+export fn premultiplied(color: Rgba) -> Rgba {
+  rgba(color.r * color.a, color.g * color.a, color.b * color.a, color.a)
+}
+
+/// Decode one sRGB-encoded channel to linear light with the exact piecewise transfer.
+export fn srgbToLinear(encoded: Float64) -> Float64 {
+  if encoded <= 0.04045 {
+    encoded / 12.92
+  } else {
+    match Float.powf((encoded + 0.055) / 1.055, 2.4) {
+      case Some(value) => value
+      case None => encoded
+    }
+  }
+}
+
+/// Encode one linear channel to sRGB with the exact piecewise transfer.
+export fn linearToSrgb(linear: Float64) -> Float64 {
+  if linear <= 0.0031308 {
+    linear * 12.92
+  } else {
+    match Float.powf(linear, 1.0 / 2.4) {
+      case Some(value) => 1.055 * value - 0.055
+      case None => linear
+    }
+  }
+}
+
+/// Decode 8-bit sRGB channels with linear alpha, or None for a channel outside 0..=255.
+export fn fromSrgb8(r: Int, g: Int, b: Int, a: Int) -> Option[Rgba] {
+  if r < 0 || r > 255 || g < 0 || g > 255 || b < 0 || b > 255 || a < 0 || a > 255 { return None }
+  Some(
+    rgba(
+      srgbToLinear(Float.fromInt(r) / 255.0),
+      srgbToLinear(Float.fromInt(g) / 255.0),
+      srgbToLinear(Float.fromInt(b) / 255.0),
+      Float.fromInt(a) / 255.0,
+    ),
+  )
+}
+
+/// Encode to 8-bit sRGB packed with red in the low byte, or None for a NaN channel.
+export fn toSrgb8(color: Rgba) -> Option[UInt32] {
+  let r = quantize(linearToSrgb(Float.clamp(color.r, 0.0, 1.0))) ?
+  let g = quantize(linearToSrgb(Float.clamp(color.g, 0.0, 1.0))) ?
+  let b = quantize(linearToSrgb(Float.clamp(color.b, 0.0, 1.0))) ?
+  let a = quantize(color.a) ?
+  Some(r | (g << 8) | (b << 16) | (a << 24))
+}
+
+fn quantize(channel: Float64) -> Option[UInt32] {
+  if Float.isNan(channel) { return None }
+  let level = Float.toInt(Float.round(Float.clamp(channel, 0.0, 1.0) * 255.0)) ?
+  convertInteger[UInt32](level)
+}
