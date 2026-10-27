@@ -31,6 +31,7 @@ import Pudu.Core
   , CoreStatement (..)
   , CoreStatementShape (..)
   , CoreType (..)
+  , closureHasEnvironment
   , coreExpressionShape
   )
 import Pudu.Diagnostic
@@ -373,7 +374,9 @@ testLocalFunctionValue = do
   pure $ case (hasErrors (compileDiagnostics result), compileModule result) of
     (False, Just parsed) -> case lowerModule "main" (nativeTypes (compileTypes result) (compileSchemes result)) parsed of
       Lowered core -> conjoin
-        [ counterexample "no forwarder for helper" (Map.member "Indirect.helper#value" (coreModuleClosures core))
+        [ counterexample "named callable has the wrong target ABI"
+            (maybe False (not . closureHasEnvironment) (Map.lookup "Indirect.helper" (coreModuleClosures core)))
+        , map coreFunctionName (coreModuleFunctions core) === ["Indirect.helper", "Indirect.main"]
         , counterexample "no call through the value" ("CoreCallValue" `isInfixOf` show (coreModuleFunctions core))
         ]
       LowerRefused refusals -> counterexample ("refused: " <> show (map diagnosticMessage refusals)) False

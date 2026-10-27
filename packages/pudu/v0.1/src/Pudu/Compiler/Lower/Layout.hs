@@ -8,9 +8,8 @@ import Pudu.Compiler.Lower.Types (LowerTypes, layoutOf)
 import Data.Text (Text)
 import Pudu.Core
 
-{-| A function type lists the lifted functions whose closure parameter has
-    that type; one no closure was made for still gets its empty list, so its
-    values have helpers like any other. -}
+{-| Each function type lists its callable targets, including named functions
+    with no parameters. A type with no constructed values keeps an empty list. -}
 moduleLayouts :: LowerTypes -> Map Text CoreClosureInfo -> [CoreFunction] -> Map CoreType CoreLayout
 moduleLayouts types closures functions = close Map.empty (concatMap functionTypes functions)
  where
@@ -18,7 +17,10 @@ moduleLayouts types closures functions = close Map.empty (concatMap functionType
     [ (kind, (coreFunctionName function, info))
     | function <- functions
     , Just info <- [Map.lookup (coreFunctionName function) closures]
-    , CoreParameter (CoreLocal _ _ kind) _ : _ <- [coreFunctionParameters function] ]
+    , let parameters = map (coreLocalType . coreParameterLocal) (coreFunctionParameters function)
+    , let kind = case (closureHasEnvironment info, parameters) of
+            (True, environment : _) -> environment
+            _ -> CoreFunctionType parameters (coreFunctionResult function) ]
   close found [] = found
   close found (kind : rest)
     | Map.member kind found = close found rest

@@ -88,3 +88,7 @@ and `pudu_box_retain`. `pudu_owned` pairs a slot with its kind, and
 `pudu_function` carries `owned_count`, `owned` and `result_kind`. The engine
 retains entering arguments, releases owned slots when a frame ends, and drops
 a replaced destination or a discarded result through `pudu_drop_cell`.
+
+## Named callable dispatch (#568)
+
+Resolved Grill Log: Add closure_call to pudu_step and environment to pudu_function. For a closure call only, skip scratch cell zero when the target has no environment. Check target and argument bounds before the offset; retain once-counted depth, invocation site, ownership and unwind paths.

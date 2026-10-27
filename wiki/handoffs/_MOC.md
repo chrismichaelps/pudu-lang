@@ -239,3 +239,5 @@ tags: [moc, handoff]
 - [[Native Output Delivery]] — Result-valued output and failed-handle parity (#566).
 
 - [[Native Expression Body Delivery]] — named expression-body completion (#567).
+
+- [[Native Named Callable Delivery]] — callable dispatch parity (#568).

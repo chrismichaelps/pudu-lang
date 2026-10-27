@@ -19,7 +19,7 @@ import Pudu.Backend.Runtime.Bytes (bytesRuntimeParts)
 import Pudu.Backend.Runtime.Dependencies (runtimeDependencies)
 import Data.Map.Strict (Map)
 import qualified Data.Map.Strict as Map
-import Pudu.Core (CoreLayout (..), CoreType (..), CoreVariant (..))
+import Pudu.Core (closureHasEnvironment, CoreLayout (..), CoreType (..), CoreVariant (..))
 import Pudu.Core.Frame
   ( FrameBlock (..), FrameFault (..), FrameFunction (..), FrameLabel (..)
   , FrameModule (..), FrameSlot (..), FrameSlotId (..), FrameTerminator (..) )
@@ -139,7 +139,8 @@ emitFrameProgram version sources source = do
         <> ", pudu_body_" <> textOfInt identity
         <> ", " <> textOfInt (length (ownedSlots function)) <> ", "
         <> (if null (ownedSlots function) then "NULL" else "pudu_owned_" <> textOfInt identity)
-        <> ", " <> kindOf (frameFunctionResult function) <> "},"
+        <> ", " <> kindOf (frameFunctionResult function) <> ", "
+        <> (if maybe False closureHasEnvironment (Map.lookup (frameFunctionName function) (frameModuleClosures source)) then "1" else "0") <> "},"
     argumentCount function = maximum (0 :
       [length arguments | block <- frameFunctionBlocks function
       , arguments <- case frameBlockTerminator block of

@@ -58,14 +58,13 @@ data CoreModule = CoreModule
   }
   deriving stock (Eq, Show)
 
-{-| What a closure over a lifted function holds and how it reads: the types
-    of its captures in cell order, the name `<fn name>` renders, and the place
-    it was written. Two closures are equal when they were written in the same
-    place, as the evaluator's closures are. -}
+{-| A callable's captures, displayed name and source identity. Lifted bodies
+    also take the callable as a hidden first parameter. -}
 data CoreClosureInfo = CoreClosureInfo
   { closureCaptures :: ![CoreType]
   , closureDisplayName :: !Text
   , closureSite :: !Text
+  , closureHasEnvironment :: !Bool
   }
   deriving stock (Eq, Show)
 

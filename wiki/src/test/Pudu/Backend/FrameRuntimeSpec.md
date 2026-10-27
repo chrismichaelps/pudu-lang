@@ -29,3 +29,11 @@ change. Missing cc is visibly reported. Expected memory text/status is literal.
 ## Referenced by
 
 [[src/_MOC]] · [[Native Frame Pressure Repair]]
+
+## Owned output allocation accounting (#568)
+
+Resolved Grill Log: count malloc as well as calloc because source output
+Results now allocate text and boxes. Keep calloc failure-attempt numbering and
+all exact output/status assertions; retain strict C warnings and the zero-live
+allocation check. Refer to the malloc wrapper in the test entry so scalar-only
+probes still compile without suppressing unused-function diagnostics.

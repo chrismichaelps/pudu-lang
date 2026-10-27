@@ -15,6 +15,8 @@ import Control.Exception (IOException, finally, try)
 import Data.Text (Text)
 import qualified Data.Text as Text
 import qualified Data.Text.IO as TextIO
+import Pudu.Backend.ClosurePrograms (closureSuccessPrograms, closureRefusalPrograms)
+import Pudu.Backend.NamedCallablePrograms (namedCallableSuccessPrograms, namedCallableRefusalPrograms)
 import Pudu.Backend.ExpressionBodyPrograms (expressionBodySuccessPrograms, expressionBodyRefusalPrograms)
 import Pudu.Backend.OutputPrograms (outputSuccessPrograms, outputStreamPrograms, outputRefusalPrograms)
 import Pudu.Backend.BytesPrograms (bytesSuccessPrograms, bytesRefusalPrograms)
@@ -111,6 +113,8 @@ backendNativeProperties =
   , ("native record failures retain interpreter refusals", testRecordRefusals)
   , ("native sums and match match hand-written answers and the interpreter", testSumConformance)
   , ("native sum and match failures retain interpreter refusals", testSumRefusals)
+  , ("native named callables match explicit answers and the interpreter", testNamedCallableConformance)
+  , ("native named callables retain interpreter failures", testNamedCallableRefusals)
   , ("native expression bodies match explicit answers and the interpreter", testExpressionBodyConformance)
   , ("native expression bodies retain interpreter failures", testExpressionBodyRefusals)
   , ("native output Results match explicit answers and the interpreter", testOutputConformance)
@@ -298,6 +302,14 @@ testTupleConformance = conjoin <$> mapM run tupleSuccessPrograms
 
 testTupleRefusals :: IO Property
 testTupleRefusals = conjoin <$> mapM (uncurry conformance) tupleRefusalPrograms
+
+testNamedCallableConformance :: IO Property
+testNamedCallableConformance = conjoin <$> mapM run (namedCallableSuccessPrograms <> closureSuccessPrograms)
+ where
+  run (label, source, expected) = conformanceExpecting (Just (expected, "", 0)) label source
+
+testNamedCallableRefusals :: IO Property
+testNamedCallableRefusals = conjoin <$> mapM (uncurry conformance) (namedCallableRefusalPrograms <> closureRefusalPrograms)
 
 testExpressionBodyConformance :: IO Property
 testExpressionBodyConformance = conjoin <$> mapM run expressionBodySuccessPrograms

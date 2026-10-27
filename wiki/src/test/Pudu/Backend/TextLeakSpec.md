@@ -129,3 +129,10 @@ Resolved Grill Log: Register focused output cleanup. Extend the reusable counted
 ## Expression bodies (#567)
 
 Resolved Grill Log: Register a focused counted expression-body corpus and include it in the existing complete owned-value corpus.
+
+## Named callable dispatch (#568)
+
+Resolved Grill Log: Add the named callable success corpus to the full owned-value lane and its dedicated focused allocation property.
+
+The focused named-callable cleanup lane includes the existing closure corpus,
+so hidden-environment ownership is verified beside direct named targets.

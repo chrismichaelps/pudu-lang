@@ -5,6 +5,18 @@ tags: [changelog]
 
 # Changelog
 
+## 2026-10-27 — Named callable dispatch (#568)
+
+Named function values now dispatch directly to their target. The previous
+forwarder counted an extra call and failed before the interpreter's recursion
+boundary. Explicit environment metadata preserves lifted lambda arguments,
+owned values and the actual invocation site for E7002. Runtime revision 14
+records the private ABI change. Focused Clang/GCC/sanitizer and both-evaluator
+checks include nine counted cleanup programs and exact depth-failure provenance.
+Frame allocation/emission regressions pass; their accounting now tracks malloc
+as well as calloc. Full-suite/platform and independent review remain pending.
+[[Native Named Callable Dispatch]].
+
 ## 2026-10-26 — Native expression bodies (#567)
 
 Named expression-bodied functions now lower through the existing return path,

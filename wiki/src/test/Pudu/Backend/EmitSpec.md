@@ -239,3 +239,7 @@ Resolved Grill Log: Allow the guarded fcntl/errno and kernel event-queue headers
 ## Expression bodies (#567)
 
 Resolved Grill Log: Remove the expression-bodied-function E6001 expectation only; accepted behavior is verified in the focused expression-body corpus.
+
+## Named callable dispatch (#568)
+
+Resolved Grill Log: Assert a named closure points to its actual target with no hidden environment or forwarding function, while retaining the indirect call shape.

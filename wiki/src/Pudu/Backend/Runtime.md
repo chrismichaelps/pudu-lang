@@ -281,3 +281,7 @@ Resolved Grill Log: Move processIoLines to Native Process Context without changi
 ## Fatal output readiness (#566)
 
 Resolved Grill Log: Before fatal stderr writes, pudu_prepare_error_io waits for stderr writability after restoring the fatal SIGPIPE policy. A missing descriptor filled by a control-pipe reader must block like the interpreter rather than silently discard a fatal diagnostic.
+
+## Named callable dispatch (#568)
+
+Resolved Grill Log: Advance runtimeRevision to 14 for explicit callable environment/step metadata; see [[Native Named Callable Dispatch]].

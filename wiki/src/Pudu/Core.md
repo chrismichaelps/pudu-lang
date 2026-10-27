@@ -335,3 +335,7 @@ fields in declaration order. `CoreRecord` carries fields as written,
 ## Output Results (#566)
 
 Resolved Grill Log: CoreOutputError carries the standard-error flag, newline flag and one Str operand; its owned Str result is empty on success and nonempty on failure. This internal outcome is converted to the checked Result in lowering. See [[Native Output Results]].
+
+## Named callable dispatch (#568)
+
+Resolved Grill Log: Add closureHasEnvironment to CoreClosureInfo: true only for lifted bodies whose first parameter is their closure. Named targets use their actual ABI. See [[Native Named Callable Dispatch]].

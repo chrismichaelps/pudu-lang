@@ -1,6 +1,6 @@
 ---
 type: handoff
-status: ACTIVE
+status: SUPERSEDED
 issue: 567
 aliases: [Native Expression Body Delivery]
 ---
@@ -33,8 +33,11 @@ The original red E6001 probe is /tmp/pudu-expression-red.log.
 The full release gate and workflows are unchanged. Full-suite/platform and
 independent review evidence remain pending; no PR or promotion is claimed.
 
-Exact next action: audit and commit #567, then resolve default-argument
-execution timing and callable arity against both evaluators in the vault.
+The expression-body slice is committed as e17d9987. Active callable parity work
+continues in [[Native Named Callable Delivery]].
+
+Exact next action: follow Native Named Callable Delivery for the current
+callable dispatch repair and remaining completion work.
 
 ## Referenced by
 

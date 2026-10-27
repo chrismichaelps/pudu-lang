@@ -95,6 +95,9 @@ instrument :: Int -> [Text]
 instrument attempt =
   [ "#include <stdlib.h>", "#include <stdio.h>"
   , "static size_t test_live = 0, test_attempt = 0;"
+  , "static void *test_malloc(size_t bytes) {"
+  , "  void *answer = malloc(bytes); if (answer != NULL) ++test_live; return answer;"
+  , "}"
   , "static void *test_calloc(size_t count, size_t bytes) {"
   , "  void *answer; ++test_attempt;"
   , "  if (test_attempt == " <> Text.pack (show attempt) <> ") return NULL;"
@@ -104,10 +107,10 @@ instrument attempt =
   , "  if (pointer != NULL) { if (test_live == 0) _Exit(98); --test_live; } free(pointer);"
   , "}"
   , "static void test_check(void) { if (test_live != 0) { fputs(\"leaked frame\\n\", stderr); _Exit(97); } }"
-  , "#define calloc test_calloc", "#define free test_free", "#define main pudu_test_program"
+  , "#define malloc test_malloc", "#define calloc test_calloc", "#define free test_free", "#define main pudu_test_program"
   ]
 
 trailer :: Text
 trailer = Text.unlines
   [ "#undef main", "int main(void) {"
-  , "  if (atexit(test_check) != 0) abort(); return pudu_test_program();", "}" ]
+  , "  (void)test_malloc; if (atexit(test_check) != 0) abort(); return pudu_test_program();", "}" ]
