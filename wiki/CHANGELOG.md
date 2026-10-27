@@ -5,6 +5,13 @@ tags: [changelog]
 
 # Changelog
 
+## 2026-10-27 — Verified HTTPS CI index transport (#656)
+
+- [[Website Linux Workflow]] configures signed HTTPS Hackage access before one explicit update.
+- [[Hackage Transport Test]] checks the actual command without fetching an index; existing,
+  missing, repeated and malformed configurations are covered. [[Hackage Transport Delivery]]
+  records independent review and the outstanding CI observation.
+
 ## 2026-10-27 — Enforced Ark dependency layers (#658)
 
 - [[Ark Dependency Layers]] classifies all fifteen engine roots and permits acyclic same-root

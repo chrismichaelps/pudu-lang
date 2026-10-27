@@ -5,6 +5,8 @@ tags: [moc, module]
 
 # Module Map
 
+- [[Website Linux Workflow]] · [[Hackage Transport Test]] — configured HTTPS index transport.
+
 - [[Ark Layer Gate]] · [[Ark Layer Model]] · [[Ark Layer Tests]] — explicit engine import contracts.
 
 - [[Derive Index Output Gate]] — checked strategy output and visibility.
