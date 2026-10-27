@@ -5,6 +5,8 @@ tags: [moc, handoff]
 
 # Handoff Map
 
+- [[Monotonic Nanosecond Delivery]] — issue #670 nanosecond monotonic clock.
+
 - [[Lane Delivery]] — issue #668 packed binary64 lanes with native batch kernels.
 
 - [[Ark Math Completion Delivery]] — issue #666 completed binary64 engine math layer.

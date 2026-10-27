@@ -502,6 +502,7 @@ effectSignatures =
   , ("searchSeparator", monotype (FunctionTypeValue False [] stringType))
   , ("exit", monotype (FunctionTypeValue False [integerType] UnitTypeValue))
   , ("clock", monotype (FunctionTypeValue False [] integerType))
+  , ("clockNanos", monotype (FunctionTypeValue False [] integerType))
   , ("now", monotype (FunctionTypeValue False [] integerType))
   , ("zoneOffset", monotype (FunctionTypeValue False [] integerType))
   ,

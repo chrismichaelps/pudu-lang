@@ -5,6 +5,11 @@ tags: [changelog]
 
 # Changelog
 
+## 2026-10-27 — Nanosecond monotonic clock (#670)
+
+- `clockNanos` and [[Std Time]] `monotonicNanos` measure intervals below a millisecond;
+  [[Monotonic Nanosecond Delivery]] records evidence.
+
 ## 2026-10-27 — Packed binary64 lanes (#668)
 
 - [[Std Lanes]] holds contiguous binary64 values transformed by whole-lane native kernels from
