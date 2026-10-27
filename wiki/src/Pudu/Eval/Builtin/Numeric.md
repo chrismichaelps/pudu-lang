@@ -48,3 +48,10 @@ callCharMethod :: Span -> CharMethod -> Value -> [Value] -> Evaluator Value
 ## Grill Log
 
 - **Q:** Why group decimals, integer conversion, and character conversions into `Numeric`? **A:** These operations form the language's scalar representation and conversion boundary (~115 lines) operating between host numeric primitives, bit-widths, and Unicode codepoints.
+## Binary64 kernels
+
+`callFloatKernel` dispatches on `floatKernelShape`: one, two or three Float64 arguments to
+[[Runtime Float Kernels]], or a bit cast between Float64 and UInt64. Results are Float64. A word
+outside UInt64 or a non-float argument aborts with E7012, reachable only by an unchecked call.
+Grill Log — **Q:** keep the input width? **A:** No; every kernel is typed Float64 to Float64.
+

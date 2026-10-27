@@ -23,6 +23,12 @@ jobs:
         with:
           ghc-version: 9.10.3
           cabal-version: 3.16.1.0
+          cabal-update: false
+      - name: Configure verified HTTPS Hackage transport
+        run: |
+          hackage_configuration=$'repository hackage.haskell.org\n  url: https://hackage.haskell.org/\n  secure: True'
+          cabal user-config init --augment="$hackage_configuration" ||
+            cabal user-config update --augment="$hackage_configuration"
       - run: cabal update
       - run: cabal build exe:pudu
       - name: Build the Pudu website executable

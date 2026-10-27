@@ -86,6 +86,12 @@ against it, then evaluate each constant in declaration order.
   the exported symbol from the Pudu name.
 - **Q:** Store impl parameters separately? **A:** No; the function's parameter list is what selection binds against.
 
+## Binary64 kernels
+
+Installation binds every kernel in `floatKernels` under its `floatKernelName`, beside the
+decimal primitives. Grill Log — **Q:** list kernel names here? **A:** No; they derive from
+[[Float Kernel Identity]] so no list can drift.
+
 ## Referenced by
 
 [[src/Pudu/Eval/_MOC]] · [[Evaluator]] · [[Name Resolution]]
