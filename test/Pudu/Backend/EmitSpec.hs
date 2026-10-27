@@ -279,6 +279,9 @@ refusalCases =
   , ("Char parameter", helperProgram "fn helper(value: Char) -> Int { return 1 }" "helper('x')", "Char")
   , ("text result", helperProgram "fn helper() -> Str { return \"x\" }" "{ helper()\n  0 }", "Str")
   , ("call to entry", statementProgram "main()", "main()\n")
+  , ("module display returning Str", Text.unlines
+      [ "module Refuse", "", "fn display(value: Int) -> Str { \"mine\" }", ""
+      , "fn main() -> Int {", "  print(display(5))", "  return 0", "}" ], "Str {")
   , ("trailing print result", Text.unlines
       ["module Refuse", "fn main() { print(\"x\") }"], "print(")
   , ("explicit print result", Text.unlines

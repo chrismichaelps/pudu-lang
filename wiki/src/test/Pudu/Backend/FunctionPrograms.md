@@ -88,3 +88,9 @@ parameter-count translation limit, even with the wrapper's site pointer. It
 uses ordinary checked Pudu source and the existing differential failure harness.
 Do not reduce the language bound, skip the case, or accept a host stack crash.
 This is an explicitly failing regression until #499 repairs frame storage.
+
+## Shadowed builtins (#513)
+
+A module `fn print(value: Int) -> Int` and a module `fn display(value: Bool) -> Int`
+are called as declared, natively and in the interpreter, with the results
+observable through the exit status.

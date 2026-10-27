@@ -236,3 +236,14 @@ those values followed by a newline and exits 0, unlike integer statuses.
 Resolved Grill Log: entry rendering follows `reportResult`, not the integer
 status path. A print-valued entry (`Result[(), Str]`) still refuses; its
 failure text needs its own slice.
+
+## Call name resolution order (#513)
+
+A call by bare name resolves the way the interpreter's environment does: a
+local first, then a function the module declares, and only then the prelude
+`print`/`display`. Before this, lowering matched the builtin spelling first,
+so a module `fn display` was silently replaced by the builtin rendering.
+
+Resolved Grill Log: shadowing is the interpreter's rule, not a lowering
+choice. _Rejected:_ refusing shadowed builtin names, which would still hide
+the declared function the program asked for.

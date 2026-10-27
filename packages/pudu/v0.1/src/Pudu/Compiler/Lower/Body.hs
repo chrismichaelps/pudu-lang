@@ -284,6 +284,17 @@ lowerExpression state (Located spanValue expression) = case expression of
   UnaryExpression operator operand -> lowerUnary lowerExpression state spanValue operator operand
   BinaryExpression left operator right -> lowerBinary lowerExpression state spanValue left operator right
   CallExpression (Located _ (NameExpression (name :| []))) arguments
+    | Just _ <- lookupLocal state name -> halt spanValue "a call through a local value" state
+    | name == contextEntry (lowerContext state) -> halt spanValue "a call to the entry function" state
+    | Just target <- lookup name (contextTable (lowerContext state)) -> case ensureSignature target state of
+        (after, Nothing) -> refused after
+        (after, Just signature) -> case lowerArguments after [] arguments of
+          (final, Just coreArguments)
+            | any ((== CoreNeverType) . coreExpressionType) coreArguments ->
+                typed final (CoreBlockValue (CoreBlock
+                  [CoreStatement (coreExpressionSpan argument) (CoreEvaluate argument) | argument <- coreArguments] Nothing)) CoreNeverType
+            | otherwise -> typed (recordCall name final) (CoreCall name coreArguments) (eagerType (signatureResult signature) coreArguments)
+          (final, Nothing) -> refused final
     | name == "print" -> case arguments of
         [argument] -> case lowerExpression state argument of
           (after, Just (coreArgument, CoreNeverType)) -> (after, Just (coreArgument, CoreNeverType))
@@ -308,19 +319,7 @@ lowerExpression state (Located spanValue expression) = case expression of
                 halt spanValue ("display of a " <> coreTypeName operandType <> " value") after
           (after, Nothing) -> refused after
         _ -> halt spanValue "a call to display with this many arguments" state
-    | Just _ <- lookupLocal state name -> halt spanValue "a call through a local value" state
-    | name == contextEntry (lowerContext state) -> halt spanValue "a call to the entry function" state
-    | otherwise -> case lookup name (contextTable (lowerContext state)) of
-        Nothing -> halt spanValue ("calls to '" <> name <> "'") state
-        Just target -> case ensureSignature target state of
-          (after, Nothing) -> refused after
-          (after, Just signature) -> case lowerArguments after [] arguments of
-            (final, Just coreArguments)
-              | any ((== CoreNeverType) . coreExpressionType) coreArguments ->
-                  typed final (CoreBlockValue (CoreBlock
-                    [CoreStatement (coreExpressionSpan argument) (CoreEvaluate argument) | argument <- coreArguments] Nothing)) CoreNeverType
-              | otherwise -> typed (recordCall name final) (CoreCall name coreArguments) (eagerType (signatureResult signature) coreArguments)
-            (final, Nothing) -> refused final
+    | otherwise -> halt spanValue ("calls to '" <> name <> "'") state
   CallExpression (Located _ MemberExpression{}) _ -> halt spanValue "method calls" state
   CallExpression{} -> halt spanValue "this call" state
   MemberExpression{} -> halt spanValue "member access" state
