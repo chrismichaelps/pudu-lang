@@ -38,3 +38,14 @@ and archive extraction provide the independent evidence those properties require
 ## Referenced by
 
 [[Package Binary]] · [[src/_MOC]] · [[Backend Performance Delivery]]
+
+## Floating formatter notices (#509)
+
+Copy package-owned regular LICENSE and optional THIRD_PARTY_NOTICES files into
+the archive root; older packages without optional notices remain accepted.
+Reject symlink/nonregular notice inputs before publishing an archive. Test
+exact copied bytes, absence compatibility and refusal; also inspect real source
+and binary archives and extracted compiler behavior. Resolved Grill Log:
+notice preservation does not change strip policy, input binaries or archive
+reproducibility. [[Native Floating Notices]] is required by the current Cabal
+source package; the formatter partition must retain it in adapted C.

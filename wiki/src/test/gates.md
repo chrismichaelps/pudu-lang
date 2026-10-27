@@ -69,3 +69,11 @@ including externally observable filesystem modes that portable permission boolea
 [[Derive Index Output Gate]] runs after documentation parity against the same freshly built executable.
 
 Resolved Grill Log: local and integration delivery both exercise actual strategy output and public visibility.
+
+## Archive notice verification (#509)
+
+Run [[Package Binary Tests]] alongside the release-decision tests in local
+gates, continuous verification and the release plan job. Preserve existing
+checks and ordering. Resolved Grill Log: required archive notice/strip policy
+must not depend on a manual-only test; this introduces no publication trigger
+or compiler semantic change.

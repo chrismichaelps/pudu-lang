@@ -253,3 +253,5 @@ tags: [moc, module]
 - [[Native Wide Frame Tests]] — executed wide frame/cleanup contract (#506).
 
 - [[Native Floating Natural Kernel]] · [[Native Floating Natural Tests]] — bounded formatter arithmetic (#508).
+
+- [[Native Binary64 Formatter]] · [[Native Binary64 Formatter Tests]] · [[Native Floating Notices]].

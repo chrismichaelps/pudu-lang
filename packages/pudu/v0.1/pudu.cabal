@@ -6,7 +6,7 @@ description:        A statically typed native systems language compiler with exp
 category:           Language
 maintainer:         chrismichaelps
 license:            Apache-2.0 WITH LLVM-exception
-license-file:       LICENSE
+license-files:      LICENSE THIRD_PARTY_NOTICES
 author:             Chris M. Perez Santiago
 copyright:          (c) 2026 Chris M. Perez Santiago
 homepage:           https://github.com/chrismichaelps/pudu-lang
@@ -93,6 +93,7 @@ library
     Pudu.Backend.Runtime
     Pudu.Backend.Runtime.Frame
     Pudu.Backend.Runtime.Float.Natural
+    Pudu.Backend.Runtime.Float.Format
     Pudu.Backend.Runtime.Integer
     Pudu.Backend.Runtime.Integer.Value
     Pudu.Backend.Runtime.Integer.Word128

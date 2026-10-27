@@ -161,3 +161,11 @@ Register [[Native Floating Natural Kernel]] and [[Native Floating Natural Tests]
 as appropriate to production/test components, using existing dependencies.
 Resolved Grill Log: execute exact C11 helper evidence without admitting Float
 source, changing the active runtime ABI or adding a native dependency.
+
+## Exact binary64 formatting (#509)
+
+Register [[Native Binary64 Formatter]] and [[Native Binary64 Formatter Tests]]
+in the appropriate production/test components with existing dependencies.
+Production license-files includes [[Native Floating Notices]] alongside LICENSE.
+Resolved Grill Log: preserve the project license and upstream attribution,
+without source admission, runtime file lookup or a new native dependency.

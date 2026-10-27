@@ -82,3 +82,5 @@ Pudu is a statically typed native systems language for developers who need predi
 - [[Native Wide Source Admission]] — canonical Int128/UInt128 source conformance (#507).
 
 - [[Native Floating Point]] — exact width, rounding and decimal-output delivery.
+
+- [[Native Binary64 Formatter]] — exact locked GHC decimal text and retained notices (#509).

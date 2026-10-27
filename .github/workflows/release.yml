@@ -47,6 +47,8 @@ jobs:
           fetch-depth: 0
       - name: Test the release decision
         run: python3 test/release-plan.test.py
+      - name: Test compiler archive notices and strip policy
+        run: python3 test/package-binary.test.py
       - id: decide
         name: Decide
         env:

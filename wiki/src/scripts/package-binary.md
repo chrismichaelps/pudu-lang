@@ -66,3 +66,14 @@ archive checksum matches its `.sha256` sidecar.
 
 [[Release Workflow]] · [[Pudu Package Project]] · [[Package Binary Tests]] ·
 [[Backend Performance Delivery]] · [[Performance Constitution]]
+
+## Floating formatter notices (#509)
+
+Copy package-owned regular LICENSE and optional THIRD_PARTY_NOTICES files into
+the archive root; older packages without optional notices remain accepted.
+Reject symlink/nonregular notice inputs before publishing an archive. Test
+exact copied bytes, absence compatibility and refusal; also inspect real source
+and binary archives and extracted compiler behavior. Resolved Grill Log:
+notice preservation does not change strip policy, input binaries or archive
+reproducibility. [[Native Floating Notices]] is required by the current Cabal
+source package; the formatter partition must retain it in adapted C.
