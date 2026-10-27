@@ -83,10 +83,23 @@ Latest checked CI: #572 musl runtime, Lambda and website pass; compiler and
 Raylib jobs remain running. #573 compiler/musl jobs are running on its latest
 head. No workflow or release gate changes were made.
 
-Exact next action: extend first-class native prelude values beyond the four
-output tags, starting with display/show and pure conversion families; re-anchor
-Intrinsic/Body/Call mirrors and compare both evaluator oracles before design.
-Continue inspecting #572–#574 CI and retain every full-emission obligation.
+Next-slice oracle probes are recorded in /tmp/pudu-render-value-oracles.log.
+Both tree and compiled evaluators accept annotated display/show function
+values, render them as <builtin display>/<builtin show>, preserve show escaping
+and compare a display alias equal to its builtin. A single program can hold
+display specialized at Int and Str simultaneously. Existing native intrinsic
+keys identify only the builtin tag, so generic rendering values must key their
+generated bodies by complete canonical callable type while keeping observable
+builtin identity per tag. Closure equality already uses closureSite metadata,
+separately from the emitted function identity. These probes do not establish
+native support. Source artifacts: /tmp/pudu-render-values/{render,multiple}/Main.pudu.
+
+Exact next action: resolve and implement typed first-class display/show bodies
+in Compiler Lower Intrinsic, retaining per-tag identity, existing direct Core
+rendering, uncounted builtin depth and caller state. Add simultaneous-type,
+shadowing, failure-order, exact-depth and allocation differential tests before
+publication. Continue inspecting #572–#574 CI; every full-emission obligation
+remains active.
 
 ## Referenced by
 
