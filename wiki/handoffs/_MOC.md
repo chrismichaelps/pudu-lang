@@ -186,3 +186,5 @@ tags: [moc, handoff]
 - [[Native Wide Integer Delivery]] — portable 128-bit runtime prerequisite (#501).
 
 - [[Native Wide Operation Delivery]] — active portable typed arithmetic delivery (#503).
+
+- [[Native Wide Runtime Delivery]] — active real-runtime integration (#504).

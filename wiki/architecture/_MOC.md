@@ -72,3 +72,5 @@ Pudu is a statically typed native systems language for developers who need predi
 - [[Native Wide Integers]] — portable 128-bit arithmetic prerequisite.
 
 - [[Native Wide Operations]] — resolved typed 128-bit operation contract (#503).
+
+- [[Native Wide Runtime Integration]] — full-width printing/status and actual dependencies (#504).

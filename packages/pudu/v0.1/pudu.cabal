@@ -97,6 +97,7 @@ library
     Pudu.Backend.Runtime.Integer.Word128
     Pudu.Backend.Runtime.Integer.Wide.Value
     Pudu.Backend.Runtime.Integer.Wide.Operations
+    Pudu.Backend.Runtime.Integer.Wide.Display
     Pudu.Backend.Runtime.Integer.Arithmetic
     Pudu.Backend.Runtime.Integer.Bits
     Pudu.Backend.Toolchain

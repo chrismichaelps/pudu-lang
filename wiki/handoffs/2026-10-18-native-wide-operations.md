@@ -1,6 +1,6 @@
 ---
 type: handoff
-status: ACTIVE
+status: HANDED_OFF
 issue: 503
 aliases: [Native Wide Operation Delivery]
 ---
@@ -30,8 +30,8 @@ other full-emission ledger obligations.
 Test Engineer → Delivery Owner: 6,412 rows (1,094 refusals) and 22 minimal
 closures pass under Clang, GCC 15 and ASan/UBSan. All 19 clean gates pass with
 674 groups and 319 strict frame translations; logs: ~/.codex/tmp/pudu-503/.
-Exact next action: resolve the emitter bridge contract/mirrors for wide frame
-cells, literals, printing/status and actual runtime dependency selection.
+Exact next action: continue [[Native Wide Runtime Delivery]], then the wide
+frame/literal bridge and canonical source admission.
 
 ## Referenced by
 

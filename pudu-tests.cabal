@@ -75,6 +75,7 @@ test-suite pudu-test
     Pudu.Backend.Word128Spec
     Pudu.Backend.WideValueSpec
     Pudu.Backend.WideOperationsSpec
+    Pudu.Backend.WideRuntimeSpec
     Pudu.Cli.MemorySpec
     Pudu.Backend.NativeSpec
     Pudu.Backend.FunctionPrograms
