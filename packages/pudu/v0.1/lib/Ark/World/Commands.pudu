@@ -1,0 +1,92 @@
+module Ark.World.Commands
+
+import Std.Lanes as Lanes
+import Ark.Core.Handle as Handle
+import Ark.World as World
+
+/// One queued entity: components in the caller's order and their field values.
+export type Creation = { components: Array[Str], values: Array[Float64] }
+
+/// Structural changes waiting for one sync point.
+export type Commands = { creations: Array[Creation], removals: Array[Handle.Handle] }
+
+/// Nothing queued.
+export fn empty() -> Commands {
+  Commands{creations: [], removals: []}
+}
+
+/// Queue an entity with values in the given component order.
+export fn create(commands: Commands, components: &Array[Str], values: &Array[Float64]) -> Commands {
+  Commands{..commands, creations: commands.creations.push(Creation{components: *components, values: *values})}
+}
+
+/// Queue the removal of an entity; a handle that is stale when applied is skipped.
+export fn destroy(commands: Commands, handle: Handle.Handle) -> Commands {
+  Commands{..commands, removals: commands.removals.push(handle)}
+}
+
+/// The number of queued changes.
+export fn pending(commands: &Commands) -> Int {
+  commands.creations.length() + commands.removals.length()
+}
+
+/// Apply removals with one compaction per archetype, then creations with one append per column
+/// per component layout. Answers each creation's handle in queue order, or None when invalid.
+export fn apply(world: World.World, commands: &Commands) -> (World.World, Array[Option[Handle.Handle]]) {
+  var current = World.destroyAll(world, &commands.removals)
+  var results: Array[Option[Handle.Handle]] = []
+  var groups: Map[Str, Array[Int]] = mapOf([])
+  var order: Array[Str] = []
+  var position = 0
+  for creation in commands.creations {
+    results = results.push(None)
+    if fits(&current, &creation) {
+      let key = creation.components.join("|")
+      let members = match groups.get(key) {
+        case Some(found) => found
+        case None => {
+          order = order.push(key)
+          []
+        }
+      }
+      groups = groups.insert(key, members.push(position))
+    }
+    position = position + 1
+  }
+  for key in order {
+    let members = match groups.get(key) {
+      case Some(found) => found
+      case None => []
+    }
+    let layout = commands.creations[members[0]].components
+    let width = commands.creations[members[0]].values.length()
+    var columns: Array[Lanes.Lanes] = []
+    var field = 0
+    while field < width {
+      var values: Array[Float64] = []
+      for member in members {
+        values = values.push(commands.creations[member].values[field])
+      }
+      columns = columns.push(Lanes.fromArray(&values))
+      field = field + 1
+    }
+    if let Some((next, handles)) = World.createBatch(current, &layout, members.length(), &columns) {
+      current = next
+      var slot = 0
+      for member in members {
+        results[member] = Some(handles[slot])
+        slot = slot + 1
+      }
+    }
+  }
+  (current, results)
+}
+
+fn fits(world: &World.World, creation: &Creation) -> Bool {
+  var total = 0
+  for component in creation.components {
+    let Some(fields) = World.fieldsOf(world, component) else { return false }
+    total = total + fields
+  }
+  total == creation.values.length()
+}

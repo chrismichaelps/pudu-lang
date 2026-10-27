@@ -1,0 +1,391 @@
+module Ark.World
+
+import Std.Lanes as Lanes
+import Ark.Core.Handle as Handle
+
+/// Entities sharing one sorted component set; every component field is one lane column.
+export type Archetype = { components: Array[Str], columns: Map[Str, Lanes.Lanes], entities: Array[Handle.Handle] }
+
+/// Where a live entity's row is.
+export type Location = { archetype: Int, row: Int }
+
+/// Component schema, archetypes, entity locations and the handle pool.
+export type World = {
+  schema: Map[Str, Int],
+  archetypes: Array[Archetype],
+  byKey: Map[Str, Int],
+  locations: Map[Int, Location],
+  handles: Handle.HandlePool,
+}
+
+/// One archetype's columns as a system reads and replaces them.
+export type View = { archetype: Int, components: Array[Str], columns: Map[Str, Lanes.Lanes], entities: Array[Handle.Handle] }
+
+/// A world with no components or entities.
+export fn empty() -> World {
+  World{schema: mapOf([]), archetypes: [], byKey: mapOf([]), locations: mapOf([]), handles: Handle.empty()}
+}
+
+/// Declare a component with a number of Float64 fields; zero makes a tag.
+/// Repeating a declaration is accepted; None for a different field count, a negative count or an empty name.
+export fn register(world: World, name: Str, fields: Int) -> Option[World] {
+  if fields < 0 || name.isEmpty() || name.contains("#") || name.contains("|") { return None }
+  match world.schema.get(name) {
+    case Some(existing) => if existing == fields { Some(world) } else { None }
+    case None => Some(World{..world, schema: world.schema.insert(name, fields)})
+  }
+}
+
+/// The number of Float64 fields of a registered component.
+export fn fieldsOf(world: &World, name: Str) -> Option[Int] {
+  world.schema.get(name)
+}
+
+/// The number of live entities.
+export fn liveCount(world: &World) -> Int {
+  Handle.liveCount(&world.handles)
+}
+
+/// Create an entity with values in the given component order, each component's fields in order.
+export fn create(world: World, components: &Array[Str], values: &Array[Float64]) -> Option[(World, Handle.Handle)] {
+  let fresh = createBatch(world, components, 1, &singleColumns(values)) ?
+  let (placed, handles) = fresh
+  Some((placed, handles[0]))
+}
+
+/// Create `count` entities from one lane per component field, in the given component order.
+export fn createBatch(world: World, components: &Array[Str], count: Int, columns: &Array[Lanes.Lanes]) -> Option[(World, Array[Handle.Handle])] {
+  let sorted = canonical(components) ?
+  if count < 0 || columns.length() != fieldTotal(&world, components) ? { return None }
+  for column in *columns {
+    if Lanes.count(&column) != count { return None }
+  }
+  let (prepared, index) = archetypeFor(world, &sorted) ?
+  var handles = prepared.handles
+  var issued: Array[Handle.Handle] = []
+  var remaining = count
+  while remaining > 0 {
+    let (next, handle) = Handle.allocate(handles)
+    handles = next
+    issued = issued.push(handle)
+    remaining = remaining - 1
+  }
+  var archetype = prepared.archetypes[index]
+  var position = 0
+  for component in *components {
+    let fields = prepared.schema.get(component) ?
+    var field = 0
+    while field < fields {
+      let key = columnKey(component, field)
+      let existing = archetype.columns.get(key) ?
+      archetype = Archetype{..archetype, columns: archetype.columns.insert(key, Lanes.concat(&existing, &columns[position]))}
+      position = position + 1
+      field = field + 1
+    }
+  }
+  let start = archetype.entities.length()
+  var locations = prepared.locations
+  var row = 0
+  while row < count {
+    locations = locations.insert(issued[row].index, Location{archetype: index, row: start + row})
+    row = row + 1
+  }
+  archetype = Archetype{..archetype, entities: archetype.entities.concat(issued)}
+  var archetypes = prepared.archetypes
+  archetypes[index] = archetype
+  Some((World{..prepared, archetypes, locations, handles}, issued))
+}
+
+/// Destroy an entity by moving the archetype's last row into its place; None for a stale handle.
+export fn destroy(world: World, handle: Handle.Handle) -> Option[World] {
+  let location = locate(&world, handle) ?
+  let detached = detach(world, location) ?
+  let handles = Handle.release(detached.handles, handle) ?
+  Some(World{..detached, handles, locations: detached.locations.remove(handle.index)})
+}
+
+/// Destroy every live entity in the list with one compaction per touched archetype; stale handles are skipped.
+export fn destroyAll(world: World, handles: &Array[Handle.Handle]) -> World {
+  var doomed: Map[Int, Array[Int]] = mapOf([])
+  var pool = world.handles
+  var locations = world.locations
+  for handle in *handles {
+    if let Some(location) = locate(&World{..world, handles: pool}, handle) {
+      let rows = match doomed.get(location.archetype) {
+        case Some(found) => found
+        case None => []
+      }
+      doomed = doomed.insert(location.archetype, rows.push(location.row))
+      if let Some(released) = Handle.release(pool, handle) { pool = released }
+      locations = locations.remove(handle.index)
+    }
+  }
+  var archetypes = world.archetypes
+  for index in doomed.keys() {
+    let removed = match doomed.get(index) {
+      case Some(rows) => rows
+      case None => []
+    }
+    let archetype = archetypes[index]
+    var dropped: Set[Int] = setOf(removed)
+    var kept: Array[Int] = []
+    var row = 0
+    while row < archetype.entities.length() {
+      if !dropped.contains(row) { kept = kept.push(row) }
+      row = row + 1
+    }
+    var columns = archetype.columns
+    for key in archetype.columns.keys() {
+      if let Some(column) = columns.get(key) {
+        if let Some(compacted) = Lanes.gather(&column, &kept) { columns = columns.insert(key, compacted) }
+      }
+    }
+    var entities: Array[Handle.Handle] = []
+    var placed = 0
+    for source in kept {
+      let entity = archetype.entities[source]
+      entities = entities.push(entity)
+      locations = locations.insert(entity.index, Location{archetype: index, row: placed})
+      placed = placed + 1
+    }
+    archetypes[index] = Archetype{components: archetype.components, columns, entities}
+  }
+  World{..world, archetypes, locations, handles: pool}
+}
+
+/// Whether the handle names a live entity of this world.
+export fn isAlive(world: &World, handle: Handle.Handle) -> Bool {
+  Handle.isAlive(&world.handles, handle)
+}
+
+/// Whether a live entity has a component.
+export fn has(world: &World, handle: Handle.Handle, component: Str) -> Bool {
+  match locate(world, handle) {
+    case Some(location) => world.archetypes[location.archetype].components.contains(component)
+    case None => false
+  }
+}
+
+/// A component's field values for a live entity.
+export fn get(world: &World, handle: Handle.Handle, component: Str) -> Option[Array[Float64]] {
+  let location = locate(world, handle) ?
+  let archetype = world.archetypes[location.archetype]
+  if !archetype.components.contains(component) { return None }
+  let fields = world.schema.get(component) ?
+  var values: Array[Float64] = []
+  var field = 0
+  while field < fields {
+    let column = archetype.columns.get(columnKey(component, field)) ?
+    values = values.push(Lanes.get(&column, location.row) ?)
+    field = field + 1
+  }
+  Some(values)
+}
+
+/// Replace a component's field values for one entity; an edit that copies each field column.
+export fn set(world: World, handle: Handle.Handle, component: Str, values: &Array[Float64]) -> Option[World] {
+  let location = locate(&world, handle) ?
+  var archetype = world.archetypes[location.archetype]
+  if !archetype.components.contains(component) { return None }
+  let fields = world.schema.get(component) ?
+  if values.length() != fields { return None }
+  var field = 0
+  while field < fields {
+    let key = columnKey(component, field)
+    let column = archetype.columns.get(key) ?
+    let updated = Lanes.set(&column, location.row, values[field]) ?
+    archetype = Archetype{..archetype, columns: archetype.columns.insert(key, updated)}
+    field = field + 1
+  }
+  var archetypes = world.archetypes
+  archetypes[location.archetype] = archetype
+  Some(World{..world, archetypes})
+}
+
+/// Add a component to a live entity, moving it to the matching archetype; the handle is unchanged.
+export fn insert(world: World, handle: Handle.Handle, component: Str, values: &Array[Float64]) -> Option[World] {
+  let location = locate(&world, handle) ?
+  let source = world.archetypes[location.archetype]
+  if source.components.contains(component) { return None }
+  let fields = world.schema.get(component) ?
+  if values.length() != fields { return None }
+  var row = rowValues(&world, &source, location.row) ?
+  var field = 0
+  while field < fields {
+    row = row.insert(columnKey(component, field), values[field])
+    field = field + 1
+  }
+  relocate(world, handle, location, &source.components.push(component), &row)
+}
+
+/// Remove a component from a live entity, moving it to the matching archetype; the handle is unchanged.
+export fn remove(world: World, handle: Handle.Handle, component: Str) -> Option[World] {
+  let location = locate(&world, handle) ?
+  let source = world.archetypes[location.archetype]
+  if !source.components.contains(component) { return None }
+  let row = rowValues(&world, &source, location.row) ?
+  relocate(world, handle, location, &source.components.filter(|name| name != component), &row)
+}
+
+/// The archetypes holding every `all` component and no `none` component.
+export fn query(world: &World, all: &Array[Str], none: &Array[Str]) -> Array[Int] {
+  var matches: Array[Int] = []
+  var index = 0
+  for archetype in world.archetypes {
+    var accepted = archetype.entities.length() > 0
+    for name in *all {
+      if !archetype.components.contains(name) { accepted = false }
+    }
+    for name in *none {
+      if archetype.components.contains(name) { accepted = false }
+    }
+    if accepted { matches = matches.push(index) }
+    index = index + 1
+  }
+  matches
+}
+
+/// One archetype's columns for a system.
+export fn viewOf(world: &World, archetype: Int) -> Option[View] {
+  if archetype < 0 || archetype >= world.archetypes.length() { return None }
+  let held = world.archetypes[archetype]
+  Some(View{archetype, components: held.components, columns: held.columns, entities: held.entities})
+}
+
+/// The number of entities in a view.
+export fn rowCount(view: &View) -> Int {
+  view.entities.length()
+}
+
+/// One field column of a component in a view.
+export fn columnOf(view: &View, component: Str, field: Int) -> Option[Lanes.Lanes] {
+  view.columns.get(columnKey(component, field))
+}
+
+/// Replace one field column; None for an unknown column or a different row count.
+export fn write(view: View, component: Str, field: Int, lanes: &Lanes.Lanes) -> Option[View] {
+  let key = columnKey(component, field)
+  if !view.columns.containsKey(key) || Lanes.count(lanes) != view.entities.length() { return None }
+  Some(View{..view, columns: view.columns.insert(key, *lanes)})
+}
+
+/// Store a view's columns back into its archetype; None when the view no longer fits it.
+export fn commit(world: World, view: &View) -> Option[World] {
+  if view.archetype < 0 || view.archetype >= world.archetypes.length() { return None }
+  let held = world.archetypes[view.archetype]
+  if held.entities.length() != view.entities.length() { return None }
+  var archetypes = world.archetypes
+  archetypes[view.archetype] = Archetype{..held, columns: view.columns}
+  Some(World{..world, archetypes})
+}
+
+/// Run a system over every matching archetype and commit its columns.
+export fn each(world: World, all: &Array[Str], none: &Array[Str], system: fn(View) -> Option[View]) -> Option[World] {
+  var current = world
+  for index in query(&world, all, none) {
+    let held = viewOf(&current, index) ?
+    let changed = system(held) ?
+    current = commit(current, &changed) ?
+  }
+  Some(current)
+}
+
+fn columnKey(component: Str, field: Int) -> Str {
+  component + "#" + show(field)
+}
+
+fn canonical(components: &Array[Str]) -> Option[Array[Str]] {
+  let sorted = components.sortBy(|left, right| left < right)
+  var index = 1
+  while index < sorted.length() {
+    if sorted[index] == sorted[index - 1] { return None }
+    index = index + 1
+  }
+  Some(sorted)
+}
+
+fn fieldTotal(world: &World, components: &Array[Str]) -> Option[Int] {
+  var total = 0
+  for component in *components {
+    total = total + (world.schema.get(component) ?)
+  }
+  Some(total)
+}
+
+fn singleColumns(values: &Array[Float64]) -> Array[Lanes.Lanes] {
+  var columns: Array[Lanes.Lanes] = []
+  for value in *values {
+    columns = columns.push(Lanes.fromArray(&[value]))
+  }
+  columns
+}
+
+fn archetypeFor(world: World, sorted: &Array[Str]) -> Option[(World, Int)] {
+  let key = sorted.join("|")
+  if let Some(index) = world.byKey.get(key) { return Some((world, index)) }
+  let none = Lanes.fromArray(&[])
+  var columns: Map[Str, Lanes.Lanes] = mapOf([])
+  for component in *sorted {
+    let fields = world.schema.get(component) ?
+    var field = 0
+    while field < fields {
+      columns = columns.insert(columnKey(component, field), none)
+      field = field + 1
+    }
+  }
+  let index = world.archetypes.length()
+  let archetype = Archetype{components: *sorted, columns, entities: []}
+  Some((World{..world, archetypes: world.archetypes.push(archetype), byKey: world.byKey.insert(key, index)}, index))
+}
+
+fn locate(world: &World, handle: Handle.Handle) -> Option[Location] {
+  if !Handle.isAlive(&world.handles, handle) { return None }
+  world.locations.get(handle.index)
+}
+
+fn rowValues(world: &World, archetype: &Archetype, row: Int) -> Option[Map[Str, Float64]] {
+  var values: Map[Str, Float64] = mapOf([])
+  for key in archetype.columns.keys() {
+    let column = archetype.columns.get(key) ?
+    values = values.insert(key, Lanes.get(&column, row) ?)
+  }
+  Some(values)
+}
+
+fn detach(world: World, location: Location) -> Option[World] {
+  let archetype = world.archetypes[location.archetype]
+  let last = archetype.entities.length() - 1
+  var columns = archetype.columns
+  for key in archetype.columns.keys() {
+    let column = columns.get(key) ?
+    let moved = if location.row == last { column } else { Lanes.set(&column, location.row, Lanes.get(&column, last) ?) ? }
+    columns = columns.insert(key, Lanes.slice(&moved, 0, last) ?)
+  }
+  var entities = archetype.entities
+  var locations = world.locations
+  if location.row != last {
+    let moved = entities[last]
+    entities[location.row] = moved
+    locations = locations.insert(moved.index, location)
+  }
+  var archetypes = world.archetypes
+  archetypes[location.archetype] = Archetype{components: archetype.components, columns, entities: entities.pop()}
+  Some(World{..world, archetypes, locations})
+}
+
+fn relocate(world: World, handle: Handle.Handle, from: Location, components: &Array[Str], row: &Map[Str, Float64]) -> Option[World] {
+  let sorted = canonical(components) ?
+  let detached = detach(world, from) ?
+  let (prepared, index) = archetypeFor(detached, &sorted) ?
+  var archetype = prepared.archetypes[index]
+  for key in archetype.columns.keys() {
+    let column = archetype.columns.get(key) ?
+    let value = row.get(key) ?
+    archetype = Archetype{..archetype, columns: archetype.columns.insert(key, Lanes.concat(&column, &Lanes.fromArray(&[value])))}
+  }
+  let placed = Location{archetype: index, row: archetype.entities.length()}
+  archetype = Archetype{..archetype, entities: archetype.entities.push(handle)}
+  var archetypes = prepared.archetypes
+  archetypes[index] = archetype
+  Some(World{..prepared, archetypes, locations: prepared.locations.insert(handle.index, placed)})
+}

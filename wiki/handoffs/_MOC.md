@@ -5,6 +5,8 @@ tags: [moc, handoff]
 
 # Handoff Map
 
+- [[Ark World Delivery]] — issue #672 handles, profiling and archetype World on lanes.
+
 - [[Monotonic Nanosecond Delivery]] — issue #670 nanosecond monotonic clock.
 
 - [[Lane Delivery]] — issue #668 packed binary64 lanes with native batch kernels.

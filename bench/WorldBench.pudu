@@ -1,0 +1,67 @@
+module WorldBench
+
+import Std.Lanes as Lanes
+import Std.Time as Time
+import Ark.World as World
+
+const COUNT: Int = 100000
+const FRAMES: Int = 60
+
+type Body = { x: Float64, y: Float64, z: Float64, vx: Float64, vy: Float64, vz: Float64 }
+
+fn move(view: World.View) -> Option[World.View] {
+  var current = view
+  var axis = 0
+  while axis < 3 {
+    let position = World.columnOf(&current, "position", axis) ?
+    let velocity = World.columnOf(&current, "velocity", axis) ?
+    let advanced = Lanes.axpy(&position, 0.016, &velocity) ?
+    current = World.write(current, "position", axis, &advanced) ?
+    axis = axis + 1
+  }
+  Some(current)
+}
+
+/// Move 100,000 entities for 60 frames as an Array of records and as a lane-column World.
+export fn main() -> Int {
+  var bodies: Array[Body] = []
+  var index = 0
+  while index < COUNT {
+    bodies = bodies.push(Body{x: 0.0, y: 0.0, z: 0.0, vx: 1.0, vy: 2.0, vz: 3.0})
+    index = index + 1
+  }
+  let recordsStarted = Time.monotonicNanos()
+  var frame = 0
+  while frame < 2 {
+    var next: Array[Body] = []
+    for body in bodies {
+      next = next.push(Body{..body, x: body.x + body.vx * 0.016, y: body.y + body.vy * 0.016, z: body.z + body.vz * 0.016})
+    }
+    bodies = next
+    frame = frame + 1
+  }
+  let recordsPerFrame = (Time.monotonicNanos() - recordsStarted) / 2
+  let Some(declared) = World.register(World.empty(), "position", 3) else { panic("register") }
+  let Some(schema) = World.register(declared, "velocity", 3) else { panic("register") }
+  let Some(zero) = Lanes.filled(COUNT, 0.0) else { panic("fill") }
+  let Some(vx) = Lanes.filled(COUNT, 1.0) else { panic("fill") }
+  let Some(vy) = Lanes.filled(COUNT, 2.0) else { panic("fill") }
+  let Some(vz) = Lanes.filled(COUNT, 3.0) else { panic("fill") }
+  let Some((created, _)) = World.createBatch(schema, &["position", "velocity"], COUNT, &[zero, zero, zero, vx, vy, vz]) else { panic("batch") }
+  var world = created
+  let worldStarted = Time.monotonicNanos()
+  frame = 0
+  while frame < FRAMES {
+    let Some(next) = World.each(world, &["position", "velocity"], &[], move) else { panic("system") }
+    world = next
+    frame = frame + 1
+  }
+  let worldPerFrame = (Time.monotonicNanos() - worldStarted) / FRAMES
+  let Some(lanesView) = World.viewOf(&world, 0) else { panic("view") }
+  let Some(xs) = World.columnOf(&lanesView, "position", 0) else { panic("column") }
+  let Some(last) = Lanes.get(&xs, COUNT - 1) else { panic("read") }
+  if last < 0.95 || last > 0.97 { panic("unexpected position") }
+  print("records " + show(recordsPerFrame))
+  print("world " + show(worldPerFrame))
+  0
+}

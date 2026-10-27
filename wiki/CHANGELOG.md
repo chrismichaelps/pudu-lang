@@ -5,6 +5,13 @@ tags: [changelog]
 
 # Changelog
 
+## 2026-10-27 — Ark Core and archetype World (#672)
+
+- [[Ark Handle]] and [[Ark Profile]] add generational handles and nanosecond scopes.
+- [[Ark World]] stores component fields as lane columns; [[Ark World Commands]] batches
+  structural changes. [[Ark World Gate]] runs in CI; [[Ark World Delivery]] records 0.31 ms per
+  frame for 100,000 moving entities.
+
 ## 2026-10-27 — Nanosecond monotonic clock (#670)
 
 - `clockNanos` and [[Std Time]] `monotonicNanos` measure intervals below a millisecond;
