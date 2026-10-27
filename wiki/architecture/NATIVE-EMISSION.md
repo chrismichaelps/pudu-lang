@@ -17,13 +17,14 @@ Compile ordinary checked Pudu programs into portable C11 with interpreter-identi
 | Scalar functions, recursion, call depth | Implemented (#488, #491) | Preserve inferred/aliased signature facts, argument ordering and diagnostics |
 | Loop control and scalar loop results | Implemented (#489) | Preserve labels, transfers, Never joins and condition-scope evidence |
 | Unit values, parameters and operations | Implemented (#492, #493) | Preserve effect-first temporaries, display and equality; invalid unit operations remain a runtime-refusal obligation |
+| Entry result reporting | Partial | Int status/unit silence work; Bool and other value-result rendering still need native admission and CLI parity |
 | Complete numeric families | Pending | Widths, floats, Decimal, wrapping/saturation, bitwise rules |
 | Text and bytes | Pending | Owned representation, UTF-8, allocation, comparisons and IO failures |
 | Records, tuples, sums and collections | Pending | Layout, construction/update, access, equality, allocation and destruction |
 | Pattern matching and iteration | Pending | Exhaustive ordered decisions, guards, bindings, ranges and iterator protocol |
 | Modules and constants | Pending | Canonical linkage, qualified identities, checked folds and graph publication |
 | Callables and generic code | Pending | Closures/captures, defaults, monomorphization and trait dispatch |
-| Accepted operations with runtime refusals | Pending | Reproduce E7001 for checker-accepted invalid operand/operator combinations instead of treating E6001 as completed coverage |
+| Accepted operations with runtime refusals | Partial (#494) | Represented Unit/Bool operators now retain E7001; remaining runtime types/operators still need equivalent coverage |
 | Errors, references and resources | Pending | Result/Option propagation, borrows, moves, drop and all unwind paths |
 | Host services and concurrency | Pending | Explicit runtime adapters, FFI, tasks, scopes, cancellation and platform evidence |
 
@@ -78,7 +79,7 @@ Resolved Grill Log: facts belong to the same successful root CompileResult, exac
 
 ## Unit call representation (#492)
 
-An empty Core block represents the source unit literal. Canonical settled UnitTypeValue may occupy a parameter slot using the existing C int sentinel ABI; unit-returning functions remain void. Argument emission discards effects exactly once before binding zero, preserving left-to-right order, abrupt transfer, diagnostics and depth-check timing. No syntax or checker change is introduced. Unit display/equality and general tuple/aggregate representations remain pending.
+An empty Core block represents the source unit literal. Canonical settled UnitTypeValue may occupy a parameter slot using the existing C int sentinel ABI; unit-returning functions remain void. Argument emission discards effects exactly once before binding zero, preserving left-to-right order, abrupt transfer, diagnostics and depth-check timing. No syntax or checker change is introduced. Unit display/equality are implemented by #493; general tuple/aggregate representations remain pending.
 
 Resolved Grill Log: never put a void C call in an argument initializer or erase Result as unit. The existing wrappers retain all parameter slots and only execute after arguments complete.
 
@@ -87,3 +88,7 @@ Resolved Grill Log: never put a void C call in an argument initializer or erase 
 Lower display(unit), unit equality and inequality through the existing Core/display model. Freeze every eager unit operand through its effects and an integer-zero temporary. Inline display evaluates its operand once and prints exactly the two UTF-8 bytes (). Select the string runtime printer. Unit arithmetic/ordering remain explicit E6001 boundaries until the interpreter E7001 runtime refusal is represented; accepting those as integer operations would change behavior. No owned text representation is implied.
 
 Resolved Grill Log: effects precede constant unit representation, including calls, transfers and failures; both operands execute left to right. No syntax/checker change or Result erasure.
+
+## Explicit operator runtime failures (#494)
+
+CoreOperatorFailure carries the original operation span, ordered operands and shared E7001 message. Compiler Lower Scalar owns normal operator classification and exact fact admission. Bool ordering is valid; unit ordering/arithmetic and invalid Bool operations trap only after operand effects. Shared diagnostic factories preserve generic cannot-apply versus comparisonOnly unsupported-operator wording. Never operands preserve transfer without fabricating a trap; print Result guards remain. Valid unimplemented Int/owned operations retain explicit coverage boundaries. Resolved Grill Log: actual interpreter dispatch is authoritative, with no native arithmetic approximation or second inference pass.

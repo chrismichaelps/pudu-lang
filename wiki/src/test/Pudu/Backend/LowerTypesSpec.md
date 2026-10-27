@@ -28,3 +28,7 @@ Registered by [[Repository Test Runner]] and [[Pudu Test Cabal Manifest]].
 ## Referenced by
 
 [[Repository Test Runner]] · [[Pudu Test Cabal Manifest]] · [[Compiler Lower Types]]
+
+## Explicit operator facts (#494)
+
+Assert explicit Never-typed CoreOperatorFailure nodes, whole-operation spans, original literal diagnostic messages and operand counts from real checked Unit/Bool sources. Remove expression facts to prove trap admission refuses E6001. Resolved Grill Log: pure Core evidence does not replace native differential tests, and shared message factories cannot silently change both oracles together.

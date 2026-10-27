@@ -45,3 +45,10 @@ Uses [[Source]], [[Diagnostic Render]], [[Diagnostic Arithmetic]], [[Diagnostic 
 State also owns the active map from numeric loop identities to optional scalar result slots, plus sets of emitted break and continue references. Loop emission restores the enclosing slot map after its lexical region; transfer-reference sets accumulate so nested loops can reference outer labels.
 
 - **Q:** May source label text identify a target? **A:** No; only lowering's resolved CoreLoopId is accepted. Rejected: name lookup during emission.
+
+
+## Explicit scalar runtime refusals (#494)
+
+Export operatorFailureSite :: EmitState -> Span -> Text -> (EmitState, Int), baking shared E7001 with the supplied canonical operator message and no help. Reuse ordinary site geometry/escaping.
+
+Resolved Grill Log: reproduce actual interpreter dispatch, canonical settled kinds, operand order and diagnostic spans; never classify print Result as unit or implement invalid operations as integer arithmetic. No syntax/inference change.

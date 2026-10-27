@@ -65,3 +65,12 @@ Add differential unit display, unit helper/branch display and discarded display 
 Resolved Grill Log: unit has one value but its operands still execute. Reject skipped/repeated effects, void C initializers, wrong runtime printer selection and accidental ordered/arithmetic unit admission. Owned text representation and E7001 invalid-operation lowering remain separate obligations.
 
 #493 carrier regression: displaying a true no-else conditional that discards a print Result remains accepted and prints unit. This protects the distinction between effect-only Result carriers and actual normal unit results.
+
+
+## Explicit scalar runtime refusals (#494)
+
+Extend actual differential programs with Bool ordering, unit/Bool operator failures, exact generic-versus-comparisonOnly messages, unary failures, shifted nonintegers, mutation/printed operand order, guarded failures, and abrupt return/break/continue operands. Operands fail before later operands/traps; inspect byte-identical output/diagnostics/status.
+
+Resolved Grill Log: reproduce actual interpreter dispatch, canonical settled kinds, operand order and diagnostic spans; never classify print Result as unit or implement invalid operations as integer arithmetic. No syntax/inference change.
+
+#494 source provenance: differential operator-failure cases include expanded macros and Unicode/tabbed authored source, preserving whole-operation excerpts and scalar source columns through ordinary compiler products. Resolved Grill Log: validate actual emitted diagnostics rather than assuming shared site geometry proves generated input parity.

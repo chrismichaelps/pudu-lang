@@ -165,3 +165,10 @@ Admit display of unit alongside Int/Bool in the existing inline printer path. Ad
 Resolved Grill Log: unit has one value but its operands still execute. Reject skipped/repeated effects, void C initializers, wrong runtime printer selection and accidental ordered/arithmetic unit admission. Owned text representation and E7001 invalid-operation lowering remain separate obligations.
 
 #493 carrier audit: explicit display and equality guards reject Core print carriers, including nested blocks/conditional values, before unit admission. Refusal regressions use checked Result-valued source, so print is never silently formatted or compared as unit. Genuine no-else unit boundaries remain admitted.
+
+
+## Explicit scalar runtime refusals (#494)
+
+Delegate unary/binary operations to Compiler Lower Scalar, importing eagerType for call propagation. Keep scopes, calls, unit/display carrier guards and syntax dispatch here. Extraction prevents the body from exceeding 500 lines.
+
+Resolved Grill Log: reproduce actual interpreter dispatch, canonical settled kinds, operand order and diagnostic spans; never classify print Result as unit or implement invalid operations as integer arithmetic. No syntax/inference change.

@@ -4,6 +4,7 @@
 module Pudu.Compiler.Lower.Body (lowerEntryBody, lowerFunctionBody) where
 
 import Data.List.NonEmpty (NonEmpty (..))
+import Pudu.Compiler.Lower.Scalar (lowerUnary, lowerBinary, eagerType)
 import Pudu.Compiler.Lower.Types (typeForSpan)
 import Pudu.Compiler.Lower.Control
   ( lowerWhile, lowerLoop, lowerTransfer, blockType, joinType
@@ -265,22 +266,8 @@ lowerExpression state (Located spanValue expression) = case expression of
     Just local -> value (CoreReadLocal local) (coreLocalType local)
     Nothing -> halt spanValue ("the value '" <> name <> "'") state
   NameExpression _ -> halt spanValue "module-qualified names" state
-  UnaryExpression "-" operand -> case lowerExpression state operand of
-    (after, Just (coreOperand, operandType))
-      | operandType `elem` [intType, CoreNeverType] ->
-          typed after (CoreNegate coreOperand) (eagerType intType [coreOperand])
-      | otherwise -> halt spanValue ("negation of a " <> coreTypeName operandType <> " value") after
-    (after, Nothing) -> refused after
-  UnaryExpression "!" operand -> case lowerExpression state operand of
-    (after, Just (coreOperand, operandType))
-      | operandType `elem` [CoreBoolType, CoreNeverType] ->
-          typed after (CoreNot coreOperand) (eagerType CoreBoolType [coreOperand])
-    (after, Just (_, operandType)) ->
-      halt spanValue ("negation of a " <> coreTypeName operandType <> " value") after
-    (after, Nothing) -> refused after
-  UnaryExpression operator _ ->
-    halt spanValue ("the operator '" <> operator <> "'") state
-  BinaryExpression left operator right -> lowerBinary spanValue left operator right
+  UnaryExpression operator operand -> lowerUnary lowerExpression state spanValue operator operand
+  BinaryExpression left operator right -> lowerBinary lowerExpression state spanValue left operator right
   CallExpression (Located _ (NameExpression (name :| []))) arguments
     | name == "print" -> case arguments of
         [argument] -> case lowerExpression state argument of
@@ -386,79 +373,6 @@ lowerExpression state (Located spanValue expression) = case expression of
         }
       where
         context = lowerContext current
-
-    lowerBinary binarySpan left operator right = case operator of
-      "+" -> arithmetic CoreAdd
-      "-" -> arithmetic CoreSubtract
-      "*" -> arithmetic CoreMultiply
-      "/" -> arithmetic CoreDivide
-      "%" -> arithmetic CoreRemainder
-      "<" -> comparison CoreLess
-      "<=" -> comparison CoreLessOrEqual
-      ">" -> comparison CoreGreater
-      ">=" -> comparison CoreGreaterOrEqual
-      "==" -> equality CoreEqual
-      "!=" -> equality CoreNotEqual
-      "&&" -> logical CoreAnd
-      "||" -> logical CoreOr
-      "=" -> halt binarySpan "an assignment used as a value" state
-      _ -> halt binarySpan ("the operator '" <> operator <> "'") state
-      where
-        arithmetic coreOperator = case intPair of
-          Right (after, coreLeft, coreRight) ->
-            typed after (CoreBinary coreOperator coreLeft coreRight) (eagerType intType [coreLeft, coreRight])
-          Left after -> refused after
-        comparison coreOperator = case intPair of
-          Right (after, coreLeft, coreRight) ->
-            typed after (CoreBinary coreOperator coreLeft coreRight) (eagerType CoreBoolType [coreLeft, coreRight])
-          Left after -> refused after
-        equality coreOperator = case equalityPair of
-          Right (after, coreLeft, coreRight) ->
-            typed after (CoreBinary coreOperator coreLeft coreRight) (eagerType CoreBoolType [coreLeft, coreRight])
-          Left after -> refused after
-        logical coreOperator = case boolPair of
-          Right (after, coreLeft, coreRight) ->
-            typed after (CoreBinary coreOperator coreLeft coreRight) (eagerType CoreBoolType [coreLeft])
-          Left after -> refused after
-
-        intPair = scalarPair [intType, CoreNeverType]
-        boolPair = scalarPair [CoreBoolType, CoreNeverType]
-
-        scalarPair admitted = case lowerExpression state left of
-          (afterLeft, Just (coreLeft, leftType))
-            | leftType `elem` admitted -> case lowerExpression afterLeft right of
-                (afterRight, Just (coreRight, rightType))
-                  | rightType `elem` admitted -> Right (afterRight, coreLeft, coreRight)
-                  | otherwise ->
-                      Left (refuse (locatedSpan right) ("an operation on a " <> coreTypeName rightType <> " value") afterRight)
-                (afterRight, Nothing) -> Left afterRight
-          (afterLeft, Just (_, leftType)) ->
-            Left (refuse (locatedSpan left) ("an operation on a " <> coreTypeName leftType <> " value") afterLeft)
-          (afterLeft, Nothing) -> Left afterLeft
-
-        equalityPair = case lowerExpression state left of
-          (afterLeft, Just (coreLeft, _))
-            | expressionIsPrintValued coreLeft ->
-                Left (refuse (locatedSpan left) "comparing a Result[(), Str] value" afterLeft)
-          (afterLeft, Just (coreLeft, leftType)) -> case lowerExpression afterLeft right of
-            (afterRight, Just (coreRight, _))
-              | expressionIsPrintValued coreRight ->
-                  Left (refuse (locatedSpan right) "comparing a Result[(), Str] value" afterRight)
-            (afterRight, Just (coreRight, rightType))
-              | leftType `elem` [intType, CoreBoolType, CoreUnitType, CoreNeverType]
-              , rightType `elem` [intType, CoreBoolType, CoreUnitType, CoreNeverType]
-              , Just _ <- joinType leftType rightType ->
-                  Right (afterRight, coreLeft, coreRight)
-              | otherwise ->
-                  Left (refuse (locatedSpan right) ("an operation on a " <> coreTypeName rightType <> " value") afterRight)
-            (afterRight, Nothing) -> Left afterRight
-          (afterLeft, Nothing) -> Left afterLeft
-
-{-| Eager evaluation cannot produce a value after a diverging operand. -}
-eagerType :: CoreType -> [CoreExpression] -> CoreType
-eagerType result operands
-  | any ((== CoreNeverType) . coreExpressionType) operands = CoreNeverType
-  | otherwise = result
 
 {-| A print argument the emitter can fuse: the argument is always `Str`
     because the checker gives `print` a `Str` argument, so only a text

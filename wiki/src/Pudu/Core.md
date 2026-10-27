@@ -75,6 +75,7 @@ data CoreExpressionShape
   | CoreDisplay !CoreExpression
   | CorePrint !CoreExpression
   | CoreCall !Text ![CoreExpression]
+  | CoreOperatorFailure !Text ![CoreExpression]
   | CoreBlockValue !CoreBlock
   | CoreIfValue !CoreExpression !CoreBlock !CoreExpression
   | CoreWhileValue !CoreLoopId !CoreExpression !CoreBlock
@@ -118,13 +119,14 @@ coreTypeName :: CoreType -> Text
 - `coreModuleEntry` names the function the process enters: the emitter writes
   its C `main` from this field rather than from a hard-coded `"main"`, so the
   entry vocabulary stays the caller's decision all the way to code generation.
-- The module is deliberately silent about execution: no evaluation order, no
-  calling convention, no C. Those are [[Backend Emit]]'s contract.
+- Core preserves required operand order and control effects. Target calling
+  conventions and C statement sequencing belong to [[Backend Emit]].
 
 ## Negative Logic (Prohibited Paths)
 
 - No unresolved names, no sugar (`if let`, patterns, ranges), no implicit
-  conversions, no target types, no diagnostics, no source text beyond spans.
+  conversions, no target types or rendered diagnostic objects. Operator refusal
+  messages are semantic payload; source excerpts are carried only by spans.
 - No partial fields: a `CoreIfValue` without an else is unrepresentable, so
   the emitter cannot meet a branch it has no code for.
 
@@ -176,3 +178,10 @@ imports no compiler, evaluator, or frontend module; the backend boundary of
 ## Resolved loop control (#489)
 
 CoreLoopId is a function-local numeric identity, resolved before emission. While and loop are expression forms; break/continue are statement transfers with explicit destinations. While is unit; loop is the supported type carried by its breaks, or Never without a local break. CoreNeverType records divergent blocks and merges with reachable branch values. Break operands retain source ordering, including nested transfers. Resolved Grill Log: explicit numeric targets preserve nested source-label shadowing and condition scope without coupling Core to C labels or parser syntax.
+
+
+## Explicit scalar runtime refusals (#494)
+
+Add CoreOperatorFailure Text [CoreExpression] to CoreExpressionShape. It carries an interpreter operator-refusal message and ordered operands; its expression type is CoreNeverType. The enclosing span is the whole operation. This is an explicit semantic trap, not an emitted C error or diagnostic rendering object. No new imports or target ABI data.
+
+Resolved Grill Log: reproduce actual interpreter dispatch, canonical settled kinds, operand order and diagnostic spans; never classify print Result as unit or implement invalid operations as integer arithmetic. No syntax/inference change.

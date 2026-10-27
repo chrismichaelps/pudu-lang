@@ -52,3 +52,10 @@ Runtime requirements visit both loop conditions and bodies and every break opera
 Select print_str for CorePrint of CoreDisplay whose operand type is CoreUnitType. Continue walking operand effects and wrappers. Unit display must not select an unused integer printer or omit the string printer.
 
 Resolved Grill Log: unit has one value but its operands still execute. Reject skipped/repeated effects, void C initializers, wrong runtime printer selection and accidental ordered/arithmetic unit admission. Owned text representation and E7001 invalid-operation lowering remain separate obligations.
+
+
+## Explicit scalar runtime refusals (#494)
+
+CoreOperatorFailure visits all ordered operands and selects site, colored and fail runtime parts. Add no unused arithmetic helper or new runtime implementation.
+
+Resolved Grill Log: reproduce actual interpreter dispatch, canonical settled kinds, operand order and diagnostic spans; never classify print Result as unit or implement invalid operations as integer arithmetic. No syntax/inference change.

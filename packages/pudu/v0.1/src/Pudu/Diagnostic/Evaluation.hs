@@ -1,14 +1,7 @@
-{-| @Pudu.Diagnostic.Evaluation — the text of evaluation-phase refusals a
-    running program can surface.
-
-    One home for the call-depth refusal (`E7002`): the interpreter's
-    `descend` and the native runtime's emitted call wrappers both print these
-    exact words, so the two renderings cannot drift. The loop step-limit
-    refusals share the code but are compile-time-phase diagnostics the native
-    runtime never prints, so they stay with the evaluator.
--}
+{-| @Pudu.Diagnostic.Evaluation — shared interpreted/native refusal vocabulary. -}
 module Pudu.Diagnostic.Evaluation
-  ( callDepthCode, callDepthHelp, callDepthMessage ) where
+  ( callDepthCode, callDepthHelp, callDepthMessage
+  , operatorCode, cannotApplyUnaryMessage, cannotApplyBinaryMessage, unsupportedOperatorMessage ) where
 
 import Data.Text (Text)
 
@@ -20,3 +13,16 @@ callDepthMessage = "call depth exceeded the evaluation limit"
 
 callDepthHelp :: Text
 callDepthHelp = "the interactive evaluator bounds recursion"
+
+operatorCode :: Text
+operatorCode = "E7001"
+
+cannotApplyUnaryMessage :: Text -> Text -> Text
+cannotApplyUnaryMessage operator kind = "cannot apply " <> operator <> " to a " <> kind
+
+cannotApplyBinaryMessage :: Text -> Text -> Text -> Text
+cannotApplyBinaryMessage operator left right =
+  cannotApplyUnaryMessage operator left <> " and a " <> right
+
+unsupportedOperatorMessage :: Text -> Text
+unsupportedOperatorMessage operator = "unsupported operator " <> operator

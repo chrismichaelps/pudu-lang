@@ -102,6 +102,7 @@ library
     Pudu.Compiler.Lower.Control
     Pudu.Compiler.Lower.State
     Pudu.Compiler.Lower.Signature
+    Pudu.Compiler.Lower.Scalar
     Pudu.Compiler.Lower.Types
     Pudu.Compiler.Manifest
     Pudu.Compiler.Program

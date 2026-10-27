@@ -127,6 +127,8 @@ data CoreExpressionShape
   | CoreDisplay !CoreExpression
   | CorePrint !CoreExpression
   | CoreCall !Text ![CoreExpression]
+  {-| Operands finish in order before E7001; this expression never returns. -}
+  | CoreOperatorFailure !Text ![CoreExpression]
   | CoreBlockValue !CoreBlock
   | CoreIfValue !CoreExpression !CoreBlock !CoreExpression
   | CoreWhileValue !CoreLoopId !CoreExpression !CoreBlock

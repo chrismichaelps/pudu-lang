@@ -186,3 +186,10 @@ Resolved Grill Log: preserve the single unit inhabitant and every effect without
 emitValue freezes a unit operand by emitting its effects once then assigning zero to a temporary. Both eager binary operands and call arguments share this helper. Inline unit display emits operand effects once then pudu_print_str for the two bytes (). Preserve guarded logical operands, transfer/failure order, call-depth site timing and strict-C11 warning policy.
 
 Resolved Grill Log: unit has one value but its operands still execute. Reject skipped/repeated effects, void C initializers, wrong runtime printer selection and accidental ordered/arithmetic unit admission. Owned text representation and E7001 invalid-operation lowering remain separate obligations.
+
+
+## Explicit scalar runtime refusals (#494)
+
+Emit CoreOperatorFailure by discarding operands in their source order, baking the operation site, calling the existing non-returning pudu_fail, and returning only an unreachable scalar sentinel to the emitter traversal. No later operand or trap executes after an earlier failure/transfer.
+
+Resolved Grill Log: reproduce actual interpreter dispatch, canonical settled kinds, operand order and diagnostic spans; never classify print Result as unit or implement invalid operations as integer arithmetic. No syntax/inference change.

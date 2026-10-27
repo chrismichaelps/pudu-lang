@@ -2,7 +2,7 @@
     byte-safe strings, and interpreter-compatible diagnostic sites. -}
 module Pudu.Backend.Emit.State
   ( EmitState (..), emptyEmitState, line, freshTemp, textOfInt
-  , overflowSite, divideByZeroSite, callDepthSite, renderSites, cString, cStringBytes
+  , overflowSite, divideByZeroSite, callDepthSite, operatorFailureSite, renderSites, cString, cStringBytes
   ) where
 
 import qualified Data.ByteString as ByteString
@@ -14,7 +14,7 @@ import qualified Data.Text as Text
 import qualified Data.Text.Encoding as Text
 import Pudu.Core (CoreLoopId, CoreType (..))
 import Pudu.Diagnostic.Arithmetic (CheckedOperation, divideByZeroCode, divideByZeroMessage, overflowCode, overflowHelp, overflowMessage)
-import Pudu.Diagnostic.Evaluation (callDepthCode, callDepthHelp, callDepthMessage)
+import Pudu.Diagnostic.Evaluation (callDepthCode, callDepthHelp, callDepthMessage, operatorCode)
 import Pudu.Diagnostic.Render (Excerpt (..), excerptGeometry)
 import Pudu.IntegerLiteral (IntegerKind)
 import Pudu.Source (Position (..), Source, Span, offsetPosition, sourceName, spanSource, spanStart, unSourceName)
@@ -119,6 +119,9 @@ divideByZeroSite state spanValue =
 callDepthSite :: EmitState -> Span -> (EmitState, Int)
 callDepthSite state spanValue =
   siteAt state spanValue callDepthCode callDepthMessage (Just callDepthHelp)
+
+operatorFailureSite :: EmitState -> Span -> Text -> (EmitState, Int)
+operatorFailureSite state spanValue message = siteAt state spanValue operatorCode message Nothing
 
 renderSites :: [Site] -> [Text]
 renderSites [] = []

@@ -1,7 +1,7 @@
 ---
 type: handoff
 status: ACTIVE
-issue: 493
+issue: 494
 aliases: [Native C11 Backend Delivery]
 tags: [handoff, backend, native, c11]
 ---
@@ -326,3 +326,20 @@ Full C11 coverage remains incomplete. Exact next action: resolve issue #494's
 Core runtime-trap representation and scalar-lowering extraction in complete
 vault mirrors, using the actual interpreter E7001 text/evaluation order, then
 implement checked invalid-scalar runtime refusals with differential tests.
+
+## #494 resolved implementation handoff
+
+Delivery Owner → Language Architect → Backend Engineer. Parent #493 is committed as 53738e66; feature/494-native-operator-failures is stacked on it. Direct owner covers Core, Diagnostic/Evaluation, Eval/Operator, Lower/Scalar and Lower/Body, emitter/state/support, manifest and existing backend corpus/spec, each with complete mirrors and resolved Grill Logs before source edits. Shared diagnostics preserve interpreter wording. Bool ordering is valid; Unit failures and Bool invalid-operator wording differ. Never sequencing and print Result guards are explicit. No subagents or independent approval are claimed. Exact next action: implement this resolved Core/scalar contract and differential evidence, then run GHC 9.14.1 validation.
+
+## #494 validation and continuation
+
+Fresh optimized GHC 9.14.1 compilation with -Werror and all 19 repository gates
+pass, including all 654 property groups. The captured copy of test/gates.sh
+preserves commands and clean-build behavior while retaining per-gate output;
+aggregate /tmp/pudu-494-gates.log. Focused operator facts, refusal, native success
+and failure groups pass. Real CLI tree/compiled/native runs agree on E7001,
+status and combined stdout/stderr effect order. Independent implementation,
+Language Architect and Forensic Guardian reviews remain pending before promotion.
+No subagents activated. Local macOS evidence does not claim hosted/Linux checks.
+Next native issue #495 covers remaining platform Int operators; exact next action
+is resolve its Core/runtime/diagnostic module mirrors before implementation.
