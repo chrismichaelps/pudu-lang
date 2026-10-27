@@ -422,3 +422,11 @@ variants and fields, the same order calls through qualifiers already use, so
 a local named like the module still reads its field.
 
 Member expressions ask [[Compiler Lower Method Value]] before field access. (#644)
+
+## Place assignment (#649)
+
+Field and index targets go to [[Compiler Lower Place]]. Any other target
+refuses with E6001; expression lowering hands an assignment back to
+statements only when the statement has a case for it.
+Resolved Grill Log: the two used to call each other forever on an index
+target (#649).

@@ -42,3 +42,7 @@ Pattern update only: `CoreRecordType` has an argument list; behavior is unchange
 ## Referenced by
 
 [[Compiler Lower Body]] · [[src/_MOC]]
+
+## Place assignment (#649)
+
+lowerFieldAssignment moved to [[Compiler Lower Place]] as lowerPlaceAssignment.

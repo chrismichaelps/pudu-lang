@@ -1,6 +1,6 @@
 ---
 type: handoff
-status: ACTIVE
+status: DONE
 issue: 646
 aliases: [Native Trait Method Value Delivery]
 ---

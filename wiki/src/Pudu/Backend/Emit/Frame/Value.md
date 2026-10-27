@@ -152,3 +152,5 @@ Resolved Grill Log: FrameRuntimeKind selects the operand aggregate name helper, 
 
 FrameZero emits zeroValue of the value's type. Resolved Grill Log: the same
 zero the emitter already uses for an absent return.
+
+ArrayReplaceAt emits the replace helper with an E7004 "index out of range" site at its span. (#649)

@@ -221,7 +221,7 @@ arrayMethodWith lower state at receiver member arguments kind element toItems = 
 takeReceiver :: CoreLocal -> CoreExpression -> CoreExpression
 takeReceiver local expression = case coreExpressionShape expression of
   CoreArrayMethod name receiver arguments
-    | name `elem` [ArrayPushValue, ArrayPopLast, ArrayInsertAt, ArrayRemoveAt, ArrayConcatWith]
+    | name `elem` [ArrayPushValue, ArrayPopLast, ArrayInsertAt, ArrayRemoveAt, ArrayConcatWith, ArrayReplaceAt]
     , CoreReadLocal read' <- coreExpressionShape receiver
     , read' == local ->
         expression{coreExpressionShape = CoreArrayMethod name receiver{coreExpressionShape = CoreTakeLocal local} arguments}

@@ -117,6 +117,23 @@ arrayHelpers kind element =
       , "  turned->length = items->length;"
       , "  return result;"
       , "}" ]
+  , helper "replace" (["array", "array_reserve", "array_offset", "site", "colored", "fail", aggregateNeed "copy" kind] <> retainNeeds)
+      ([ "/* An assignment to one element: the bounds are checked before anything changes. */"
+      , "static pudu_box *" <> name "replace" <> "(pudu_box *box, pudu_int index, " <> cType element <> " value, const pudu_site *site) {"
+      , "  size_t at = pudu_array_offset(index, pudu_array_length(box));"
+      , "  pudu_box *result;"
+      , "  pudu_items *items;"
+      , "  if (at == pudu_array_length(box)) pudu_fail(site);"
+      , "  result = " <> owned "0" <> ";"
+      , "  items = result->fields[0].items;"
+      -- Retained before the old element goes: `list[0] = list[0]` may hand
+      -- back the very value being replaced.
+      , "  {"
+      , "    " <> cType element <> " fresh = " <> retain "value" <> ";" ]
+      <> [ "    " <> released element (cell "items" "at") | ownedType element ]
+      <> [ "    " <> cell "items" "at" <> " = fresh;"
+         , "  }"
+         , "  return result;", "}" ])
   , helper "get" ("array" : "array_offset" : "site" : "colored" : "fail" : retainNeeds)
       [ "static " <> cType element <> " " <> name "get" <> "(pudu_box *box, pudu_int index, const pudu_site *site) {"
       , "  size_t at = pudu_array_offset(index, pudu_array_length(box));"

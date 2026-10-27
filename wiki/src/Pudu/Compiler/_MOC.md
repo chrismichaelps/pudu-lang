@@ -72,6 +72,7 @@ Dependency direction: Library → Program. Only [[Compiler Program]] reads files
 - [[Compiler Lower Reference]] — checked shared-reference identity lowering (#544).
 
 - [[Compiler Lower Intrinsic]] — first-class output builtin bodies (#569).
+- [[Compiler Lower Place]] — field and element assignment (#649).
 - [[Compiler Lower Method Value]] — built-in methods as values (#644).
 - [[Compiler Lower Default]] — default parameter values (#638).
 - [[Compiler Lower Stop]] — panic and untyped convertInteger, direct and as values (#633).

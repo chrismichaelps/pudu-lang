@@ -1,11 +1,11 @@
 {-| @Pudu.Compiler.Lower.Record — record construction, update, field reads and
     assignment to a field path of a local. -}
-module Pudu.Compiler.Lower.Record (lowerRecord, lowerRecordUpdate, lowerField, lowerFieldAssignment) where
+module Pudu.Compiler.Lower.Record (lowerRecord, lowerRecordUpdate, lowerField) where
 
 import Data.List.NonEmpty (NonEmpty (..))
 import Data.Text (Text)
 import Pudu.Compiler.Lower.Control (expressionIsPrintValued)
-import Pudu.Compiler.Lower.State (LowerContext (..), LowerState (..), bindLocal, halt, lookupLocal, refused)
+import Pudu.Compiler.Lower.State (LowerContext (..), LowerState (..), halt, refused)
 import Pudu.Compiler.Lower.Types (recordFields, sumVariants, typeForSpan)
 import Pudu.Core
 import Pudu.Frontend.Syntax (Expression (..), FieldInit (..), Located (..))
@@ -53,51 +53,6 @@ lowerField lower state at receiver member = case lower state receiver of
     Just fieldKind -> (after, Just (CoreExpression at fieldKind (CoreField member core), fieldKind))
     Nothing -> halt at ("the member '" <> member <> "'") after
   (after, Just (_, kind)) -> halt at ("member access on " <> coreTypeName kind) after
-
-{-| `local.a.b = value`: the place is a local, so resolving it has no effect,
-    and the value runs next. The record stored is the local's value as it is
-    after the value ran (the value may itself assign the local), with that
-    path replaced; the evaluator stores the same way. -}
-lowerFieldAssignment :: LowerExpression -> LowerState -> Span -> Located Expression -> Located Expression
-  -> Maybe (LowerState, Maybe CoreStatement)
-lowerFieldAssignment lower state at target value = do
-  (root, path) <- place (locatedValue target)
-  local <- lookupLocal state root
-  let fieldsOf = recordFields (contextTypes (lowerContext state))
-      -- The type at each step of the path, ending with the assigned field's.
-      projections kind steps = case steps of
-        [] -> Just [kind]
-        field : rest -> do
-          next <- fieldsOf kind >>= lookup field
-          (kind :) <$> projections next rest
-      rebuilt held steps replacement = go (CoreExpression at (coreLocalType held) (CoreReadLocal held)) steps
-       where
-        go _ [] = replacement
-        go current (field : rest) =
-          let kind = coreExpressionType current
-              inner = case fieldsOf kind >>= lookup field of
-                Just fieldKind -> CoreExpression at fieldKind (CoreField field current)
-                Nothing -> current
-           in CoreExpression at kind (CoreRecordUpdate current [(field, go inner rest)])
-  Just $ case (projections (coreLocalType local) path, lower state value) of
-    (_, (after, Nothing)) -> refused after
-    (Nothing, (after, _)) -> halt at "this assignment target" after
-    (Just kinds, (after, Just (core, kind)))
-      | expressionIsPrintValued core -> halt at "assigning a Result[(), Str] value" after
-      | kind /= last kinds && kind /= CoreNeverType -> halt at "an assignment whose value has a different type" after
-      | otherwise ->
-          let (withHeld, held) = bindLocal after "$assigned" kind
-              value' = CoreExpression at kind (CoreReadLocal held)
-              block = CoreBlock [CoreStatement at (CoreDeclare held core)] (Just (rebuilt local path value'))
-              blockKind = if kind == CoreNeverType then CoreNeverType else coreLocalType local
-           in (withHeld, Just (CoreStatement at (CoreAssign local (CoreExpression at blockKind (CoreBlockValue block)))))
- where
-  place expression = case expression of
-    MemberExpression (Located _ inner) (Located _ field) -> do
-      (root, path) <- place inner
-      Just (root, path <> [field])
-    NameExpression (name :| []) -> Just (name, [])
-    _ -> Nothing
 
 lowerFields :: LowerExpression -> LowerState -> [Located FieldInit] -> (LowerState, Maybe [(Text, CoreExpression)])
 lowerFields lower state = go state []
