@@ -39,8 +39,19 @@ Publish reviewable dependency partitions targeting dev, preserving the active
 implementation checkout and explicitly marking pending full validation. Do
 not create one oversized aggregate PR or quietly merge unreviewed work.
 
-Exact next action: commit #570, then publish the first self-contained native
-foundation contracts partition as a draft PR to dev and attach it to this chat.
+The diagnostic ownership repair is committed as 4bff2f7f.
+
+Role transition: Forensic Guardian → Tooling/Release Engineer for publication.
+Draft PR [#571](https://github.com/chrismichaelps/pudu-lang/pull/571) is now open
+against dev from feature/486-native-core-contracts in /tmp/pudu-native-core-pr.
+It publishes only the existing Core contracts and one registered contract test,
+with 464 additions/one deletion. GHC -Werror checks, the focused property and
+both Cabal manifest checks pass. Full compiler, Raylib, musl and website CI jobs
+are running; independent review is pending. The PR is attached to this chat.
+The main implementation checkout remains clean and its commits are preserved.
+
+Exact next action: publish the independent native diagnostic vocabulary as the
+next dev-based draft partition, then inspect PR #571 CI before review readiness.
 
 ## Referenced by
 
