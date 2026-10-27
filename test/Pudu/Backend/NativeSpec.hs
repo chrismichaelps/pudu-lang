@@ -15,6 +15,7 @@ import Control.Exception (IOException, finally, try)
 import Data.Text (Text)
 import qualified Data.Text as Text
 import qualified Data.Text.IO as TextIO
+import Pudu.Backend.BytesPrograms (bytesSuccessPrograms, bytesRefusalPrograms)
 import Pudu.Backend.ControlPrograms (controlSuccessPrograms, controlRefusalPrograms)
 import Pudu.Backend.Emit (emitProgram)
 import Pudu.Compiler.Frame (lowerFrames)
@@ -108,6 +109,8 @@ backendNativeProperties =
   , ("native record failures retain interpreter refusals", testRecordRefusals)
   , ("native sums and match match hand-written answers and the interpreter", testSumConformance)
   , ("native sum and match failures retain interpreter refusals", testSumRefusals)
+  , ("native Bytes match hand-written answers and the interpreter", testBytesConformance)
+  , ("native Bytes failures retain interpreter refusals", testBytesRefusals)
   , ("native programs of several modules match hand-written answers and the interpreter", testModuleConformance)
   , ("native failures inside imported modules retain interpreter refusals", testModuleRefusals)
   , ("native functions match the interpreter on ordering and recursion", testFunctionConformance)
@@ -289,6 +292,14 @@ testTupleConformance = conjoin <$> mapM run tupleSuccessPrograms
 
 testTupleRefusals :: IO Property
 testTupleRefusals = conjoin <$> mapM (uncurry conformance) tupleRefusalPrograms
+
+testBytesConformance :: IO Property
+testBytesConformance = conjoin <$> mapM run bytesSuccessPrograms
+ where
+  run (label, source, expected) = conformanceExpecting (Just (expected, "", 0)) label source
+
+testBytesRefusals :: IO Property
+testBytesRefusals = conjoin <$> mapM (uncurry conformance) bytesRefusalPrograms
 
 testModuleConformance :: IO Property
 testModuleConformance = conjoin <$> mapM run modulePrograms

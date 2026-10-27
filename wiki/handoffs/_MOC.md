@@ -233,3 +233,5 @@ tags: [moc, handoff]
 
 - [[Native Shared Reference Delivery]] — active shared-carrier source admission (#544).
 - [[Native Array Pattern Delivery]] — #558 sortBy, sequence patterns and range slices, done.
+
+- [[Native Bytes Delivery]] — completion and focused boundary verification (#565).

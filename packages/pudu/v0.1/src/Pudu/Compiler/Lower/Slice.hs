@@ -48,6 +48,7 @@ lowerRangeIndex lower state receiver key@(Located at keyShape) = case (receiverK
   sliceable kind = case kind of
     CoreArrayType _ -> True
     CoreTextType -> True
+    CoreBytesType -> True
     _ -> False
 
   sliced current kind container low inclusive high =
@@ -58,6 +59,7 @@ lowerRangeIndex lower state receiver key@(Located at keyShape) = case (receiverK
         (s5, stop) = hidden s4 intType
         lengthOf = case kind of
           CoreTextType -> expression intType (CoreTextMethod TextLength (reading held) [])
+          CoreBytesType -> expression intType (CoreBytesMethod BytesLengthOf (reading held) [])
           _ -> expression intType (CoreArrayMethod ArrayLengthOf (reading held) [])
         startOutside = [compare' CoreLess (reading start) zero, compare' CoreGreater (reading start) (reading size)]
         endOutside = case high of
@@ -72,6 +74,7 @@ lowerRangeIndex lower state receiver key@(Located at keyShape) = case (receiverK
           [ text "the range must lie within the value; it has ", expression CoreTextType (CoreDisplay (reading size)), text " elements" ]
         sliceOf = case kind of
           CoreTextType -> expression kind (CoreTextMethod TextSlice (reading held) [reading start, reading stop])
+          CoreBytesType -> expression kind (CoreBytesMethod BytesSliceOf (reading held) [reading start, reading stop])
           _ -> expression kind (CoreArrayMethod ArraySliceOf (reading held) [reading start, reading stop])
         statements =
           [ declare held container
@@ -97,6 +100,7 @@ lowerRangeIndex lower state receiver key@(Located at keyShape) = case (receiverK
         inclusive = field RangeIsInclusiveOf CoreBoolType
         lengthOf = case kind of
           CoreTextType -> expression intType (CoreTextMethod TextLength (reading held) [])
+          CoreBytesType -> expression intType (CoreBytesMethod BytesLengthOf (reading held) [])
           _ -> expression intType (CoreArrayMethod ArrayLengthOf (reading held) [])
         endOutside = both (field RangeHasEnd CoreBoolType) (either' (compare' CoreLess (reading end) zero)
           (either' (both inclusive (compare' CoreGreaterOrEqual (reading end) (reading size)))
@@ -110,6 +114,7 @@ lowerRangeIndex lower state receiver key@(Located at keyShape) = case (receiverK
           [ text "the range must lie within the value; it has ", expression CoreTextType (CoreDisplay (reading size)), text " elements" ]
         sliceOf = case kind of
           CoreTextType -> expression kind (CoreTextMethod TextSlice (reading held) [reading start, reading stop])
+          CoreBytesType -> expression kind (CoreBytesMethod BytesSliceOf (reading held) [reading start, reading stop])
           _ -> expression kind (CoreArrayMethod ArraySliceOf (reading held) [reading start, reading stop])
         statements =
           [ declare held container

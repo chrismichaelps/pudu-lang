@@ -92,6 +92,10 @@ implementation, as `readArrayMember` does.
 Map and set methods answer before any implementation, as `readKeyedMember`
 looks there first.
 
+## Bytes (#565)
+
+Byte methods answer before any implementation.
+
 ## Referenced by
 
 [[Compiler Lower]] · [[Compiler Lower Body]] · [[Native Trait Methods]]

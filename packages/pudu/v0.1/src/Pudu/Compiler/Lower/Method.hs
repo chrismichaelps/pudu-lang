@@ -16,6 +16,7 @@ import Pudu.Compiler.Lower.Generic (specialize)
 import Pudu.Compiler.Lower.Types (formedCoreTypeIn, ownerKeyOf, typeBindings, typeFactAt, typeForSpan, nativeValueType)
 import Pudu.Core
 import Pudu.Eval.Operator.Access (arrayMethods, mapMethods, setMethods, stringMethods)
+import Pudu.Eval.Bytes (bytesMethods)
 import Pudu.Frontend.Syntax
   ( Declaration (..), Expression, Function (..), Impl (..), Located (..), Module (..), Trait (..), TypeSyntax (..) )
 import Pudu.Frontend.Syntax.Name (ModuleName (..))
@@ -92,6 +93,7 @@ lowerMethodCall lower state at callee receiver member arguments = do
     CoreArrayType _ -> member `elem` map fst arrayMethods
     CoreMapType _ _ -> member `elem` map fst mapMethods
     CoreSetType _ -> member `elem` map fst setMethods
+    CoreBytesType -> member `elem` map fst bytesMethods
     _ -> False
   rendered kind = case lower state receiver of
     (after, Nothing) -> refused after

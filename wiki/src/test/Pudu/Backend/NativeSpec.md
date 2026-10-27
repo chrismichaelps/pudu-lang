@@ -156,3 +156,10 @@ the interpreter's refusals.
 
 Two groups run [[Backend Record Programs]] against hand-written answers and
 the interpreter's refusals.
+
+## Focused byte conformance
+
+Resolved Grill Log: register dedicated Bytes success and runtime-refusal
+properties using the existing differential harness and independent answers.
+`PUDU_TEST_MATCH="native Bytes"` selects only this corpus during iteration.
+The full gate and multi-module corpus remain intact.

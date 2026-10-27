@@ -24,6 +24,7 @@ ownedType (CoreArrayType _) = True
 ownedType (CoreMapType _ _) = True
 ownedType (CoreSetType _) = True
 ownedType CoreRangeType = True
+ownedType CoreBytesType = True
 ownedType _ = False
 
 cType :: CoreType -> Text
@@ -41,6 +42,7 @@ cType kind = case kind of
   CoreMapType _ _ -> "pudu_box *"
   CoreSetType _ -> "pudu_box *"
   CoreRangeType -> "pudu_box *"
+  CoreBytesType -> "pudu_box *"
   _ -> "int"
 
 {-| A new reference to the value an expression reads, and what it needs. -}
@@ -69,6 +71,7 @@ mangle kind = case kind of
   CoreMapType key value -> "MP_" <> mangle key <> "_" <> mangle value <> "_E"
   CoreSetType member -> "ST_" <> mangle member <> "_E"
   CoreRangeType -> "RG"
+  CoreBytesType -> "BY"
   CoreFunctionType inputs result -> "F" <> Text.pack (show (length inputs)) <> "_" <> Text.intercalate "_" (map mangle (inputs <> [result])) <> "_E"
   other -> coreTypeName other
 
@@ -93,6 +96,7 @@ isAggregate kind = case kind of
   CoreMapType _ _ -> True
   CoreSetType _ -> True
   CoreRangeType -> True
+  CoreBytesType -> True
   _ -> False
 
 {-| A member rendered as `renderValue` writes it inside an aggregate. -}

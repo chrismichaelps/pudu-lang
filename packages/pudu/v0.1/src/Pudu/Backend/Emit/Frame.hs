@@ -15,6 +15,7 @@ import Pudu.Backend.Runtime.Array (arrayRuntimeParts)
 import Pudu.Backend.Runtime.Text.Pieces (textPieceRuntimeParts)
 import Pudu.Backend.Runtime.Tree (treeRuntimeParts)
 import Pudu.Backend.Runtime.Range (rangeRuntimeParts)
+import Pudu.Backend.Runtime.Bytes (bytesRuntimeParts)
 import Pudu.Backend.Runtime.Dependencies (runtimeDependencies)
 import Data.Map.Strict (Map)
 import qualified Data.Map.Strict as Map
@@ -53,6 +54,7 @@ emitFrameProgram version sources source = do
     kind@(CoreMapType _ _) -> Right (shownBox kind)
     kind@(CoreSetType _) -> Right (shownBox kind)
     CoreRangeType -> Right (shownBox CoreRangeType)
+    CoreBytesType -> Right (shownBox CoreBytesType)
     CoreCharType -> Right
       [ "  pudu_text pudu_shown = pudu_char_show(pudu_run_frames(" <> textOfInt entryId <> ").character);"
       , "  pudu_print_text(pudu_shown);"
@@ -83,6 +85,7 @@ emitFrameProgram version sources source = do
         kind@(CoreMapType _ _) -> [aggregateNeed "show" kind, "print_text"]
         kind@(CoreSetType _) -> [aggregateNeed "show" kind, "print_text"]
         CoreRangeType -> [aggregateNeed "show" CoreRangeType, "print_text"]
+        CoreBytesType -> [aggregateNeed "show" CoreBytesType, "print_text"]
         _ -> []
       identities = Map.fromList (zip (map frameFunctionName functions) [0 ..])
       (aggregates, aggregateNeeds) = aggregateSection identities (frameModuleLayouts source) tuples (Set.fromList (Set.toList roots <> entryNeeds))
@@ -95,7 +98,7 @@ emitFrameProgram version sources source = do
         <> ["static const pudu_function pudu_functions[] = {"]
         <> map definition indexed <> ["};"]
   pure $ Text.unlines (header <> runtime <> frameTypes wide text boxes
-    <> concat [lines' <> [""] | (name, lines') <- arrayRuntimeParts <> textPieceRuntimeParts <> treeRuntimeParts <> rangeRuntimeParts, Set.member name selected]
+    <> concat [lines' <> [""] | (name, lines') <- arrayRuntimeParts <> textPieceRuntimeParts <> treeRuntimeParts <> rangeRuntimeParts <> bytesRuntimeParts, Set.member name selected]
     <> renderSites (reverse (emitSites emitted)) <> aggregates <> ownership <> reverse (emitOutput emitted)
     <> metadata <> frameEngine owned <> ["int main(void) {", "  pudu_prepare_io();"] <> ending <> ["}"])
   where
@@ -152,7 +155,8 @@ frameUsesWideCells source = any usesWide (frameModuleFunctions source)
 frameUsesText :: FrameModule -> Bool
 frameUsesText source = any usesText (frameModuleFunctions source)
  where
-  usesText function = any (mentions (frameModuleLayouts source) (== CoreTextType)) (frameFunctionResult function
+  -- Bytes hold a text view, so they need the text cell too.
+  usesText function = any (mentions (frameModuleLayouts source) (`elem` [CoreTextType, CoreBytesType])) (frameFunctionResult function
     : map frameSlotType (frameFunctionParameters function <> frameFunctionSlots function))
 
 {-| A cell member is needed when a slot holds the type directly or anywhere

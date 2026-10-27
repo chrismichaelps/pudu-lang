@@ -5,6 +5,19 @@ tags: [changelog]
 
 # Changelog
 
+## 2026-10-26 — Native Bytes (#565)
+
+Byte sequences are native: `bytesOf`, `Str.toBytes`, every method, strict
+UTF-8 `toText`, `0x` rendering, ordering, map keys and range slices, with
+slices sharing storage ([[Native Bytes Runtime]], [[Compiler Lower Bytes]]).
+[[Backend Bytes Programs]] passes under Clang, GCC 15, ASan/UBSan and the
+tree evaluator with counted cleanup. Frozen byte constants now preserve
+arbitrary data, including inside records and tuples. Accepted unary byte
+operators reach the interpreter's E7001 failure instead of a native E6001
+refusal. A dedicated `native Bytes` lane checks output, diagnostic parity
+and allocation cleanup without changing the full gate; see
+[[Native Bytes Delivery]].
+
 ## 2026-10-26 — Native range values (#564)
 
 Ranges are values natively: all fourteen methods, rendering as written,

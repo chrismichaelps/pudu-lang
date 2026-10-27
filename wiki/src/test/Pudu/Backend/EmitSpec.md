@@ -119,6 +119,11 @@ still refuses at its call.
 
 Range values are native; `"hi".toBytes()` takes their place.
 
+## Refusal cases (#565)
+
+Bytes are native; `environment()` and `temporaryPath()` take the two Bytes
+cases' places as host services that still refuse.
+
 ## Referenced by
 
 [[Repository Test Runner]] · [[src/_MOC]] · [[src/Pudu/Backend/_MOC]] · [[Backend Emit]] ·

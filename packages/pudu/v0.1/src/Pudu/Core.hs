@@ -30,6 +30,7 @@ module Pudu.Core
   , CoreArrayMethodName (..)
   , CoreKeyedMethodName (..)
   , CoreRangeMethodName (..)
+  , CoreBytesMethodName (..)
   , CoreType (..)
   , coreTypeName
   , displayName
@@ -211,6 +212,8 @@ data CoreExpressionShape
   | CoreRangeValue !(Maybe CoreExpression) !Bool !(Maybe CoreExpression)
   {-| A range operation; the arguments run before the receiver. -}
   | CoreRangeMethod !CoreRangeMethodName !CoreExpression ![CoreExpression]
+  {-| A byte-sequence operation; the arguments run before the receiver. -}
+  | CoreBytesMethod !CoreBytesMethodName !CoreExpression ![CoreExpression]
   {-| `array[index]`: the array, then the index. The expression's span is the
       index's, where an index out of range reports. -}
   | CoreIndex !CoreExpression !CoreExpression
@@ -295,6 +298,28 @@ data CoreRangeMethodName
   | RangeSumOf
   deriving stock (Eq, Show)
 
+{-| What the runtime does for byte sequences. `BytesOfArray` and
+    `BytesFromText` build one from their receiver; `BytesAtIndex` and
+    `BytesAsText` read what a test has already allowed. -}
+data CoreBytesMethodName
+  = BytesOfArray
+  | BytesFromText
+  | BytesLengthOf
+  | BytesAtIndex
+  | BytesSliceOf
+  | BytesTakeOf
+  | BytesDropOf
+  | BytesConcatWith
+  | BytesIndexOfValue
+  | BytesContainsValue
+  | BytesStartsWithValue
+  | BytesEndsWithValue
+  | BytesReversed
+  | BytesToArrayOf
+  | BytesIsText
+  | BytesAsText
+  deriving stock (Eq, Show)
+
 {-| What the runtime does for maps and sets. `KeyedLookup` reads a value
     `KeyedContains` has already found; `KeyedFromArray`'s receiver is the array
     of pairs or members it builds from; a set's `toArray` is `KeyedKeys`. -}
@@ -365,6 +390,8 @@ data CoreType
   | CoreSetType !CoreType
   {-| A range of Ints: its optional ends and whether the end is included. -}
   | CoreRangeType
+  {-| A byte sequence: a box around a view of counted storage. -}
+  | CoreBytesType
   {-| A function value: a closure box whose first cell names what it runs. -}
   | CoreFunctionType ![CoreType] !CoreType
   | CoreUnitType
@@ -387,6 +414,7 @@ coreTypeName coreType = case coreType of
   CoreMapType key value -> "Map[" <> coreTypeName key <> ", " <> coreTypeName value <> "]"
   CoreSetType member -> "Set[" <> coreTypeName member <> "]"
   CoreRangeType -> "Range[Int]"
+  CoreBytesType -> "Bytes"
   CoreFunctionType inputs result -> "fn(" <> Text.intercalate ", " (map coreTypeName inputs) <> ") -> " <> coreTypeName result
   CoreUnitType -> "Unit"
   CoreNeverType -> "Never"

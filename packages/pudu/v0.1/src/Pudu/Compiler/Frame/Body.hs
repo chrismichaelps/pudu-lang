@@ -223,6 +223,13 @@ lowerExpression expression@(CoreExpression at kind shape) = case shape of
         (Nothing, Just _, [h]) -> value (FrameRangeValue Nothing inclusive (Just h))
         (Nothing, Nothing, []) -> value (FrameRangeValue Nothing inclusive Nothing)
         _ -> fault (Just at) "a range whose ends did not lower"
+  CoreBytesMethod name receiver arguments -> do
+    operands <- lowerOperands (arguments <> [receiver])
+    case operands of
+      Nothing -> pure Stopped
+      Just slots -> case reverse slots of
+        target : backwards -> value (FrameBytesMethod name target (reverse backwards))
+        [] -> fault (Just at) "a byte operation without its receiver"
   CoreRangeMethod name receiver arguments -> do
     operands <- lowerOperands (arguments <> [receiver])
     case operands of
@@ -352,6 +359,7 @@ resultSlot at kind = case kind of
   CoreMapType _ _ -> Just <$> freshSlot at "$result" kind
   CoreSetType _ -> Just <$> freshSlot at "$result" kind
   CoreRangeType -> Just <$> freshSlot at "$result" kind
+  CoreBytesType -> Just <$> freshSlot at "$result" kind
 
 lowerPrint :: Span -> CoreExpression -> Build Flow
 lowerPrint at operand = case coreExpressionShape operand of

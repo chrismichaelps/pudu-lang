@@ -75,6 +75,10 @@ Counts cleanup for [[Backend Shape Programs]]' single-module programs.
 
 Counts cleanup for [[Backend Range Programs]].
 
+## Bytes (#565)
+
+Counts cleanup for [[Backend Bytes Programs]].
+
 ## Referenced by
 
 [[Backend Text Programs]] · [[Native Text Runtime]] · [[src/_MOC]]
@@ -111,3 +115,9 @@ synthesize constants or add an interpreter fallback to the native leak test.
 Resolved Grill Log: include referenceSuccessPrograms in counted cleanup.
 Existing frame-cell ownership must retain borrowed text and aggregate carriers
 through parameters/results and release every allocation on completion.
+
+## Focused byte cleanup
+
+Resolved Grill Log: the Bytes-only counted-allocation property reuses the
+existing instrumentation and explicit expected outputs, selected with
+`PUDU_TEST_MATCH="native Bytes"`. The comprehensive cleanup property remains.

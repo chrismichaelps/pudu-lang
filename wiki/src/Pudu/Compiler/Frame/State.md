@@ -55,6 +55,10 @@ Map and set slots are owned, so stores retain and release them.
 
 Range slots are owned boxes.
 
+## Bytes (#565)
+
+Bytes slots are owned boxes.
+
 ## Referenced by
 
 [[src/_MOC]] · [[Program Compiler Module Map]] · [[Native Frame Pressure Repair]]

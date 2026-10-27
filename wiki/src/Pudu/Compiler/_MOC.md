@@ -48,6 +48,7 @@ Dependency direction: Library → Program. Only [[Compiler Program]] reads files
 - [[Compiler Lower Convert]] — convertInteger (#560).
 - [[Compiler Lower Keyed]] — maps and sets (#561).
 - [[Compiler Lower Range]] — range values (#564).
+- [[Compiler Lower Bytes]] — byte sequences (#565).
 
 ## Referenced by
 

@@ -42,6 +42,10 @@ Adds [[Native Persistent Trees]].
 
 Adds [[Native Range Runtime]].
 
+## Bytes (#565)
+
+Adds [[Native Bytes Runtime]].
+
 ## Referenced by
 
 [[src/_MOC]] · [[Backend Module Map]] · [[Native Floating Runtime Delivery]]

@@ -63,6 +63,12 @@ emitted after the frame types, with the array runtime.
 An entry returning a range renders it; [[Native Range Runtime]] is emitted
 after the frame types.
 
+## Bytes (#565)
+
+Bytes need the text cell, since their box holds a text view; an entry
+returning Bytes renders it; [[Native Bytes Runtime]] is emitted after the
+frame types.
+
 ## Referenced by
 
 [[src/_MOC]] · [[Native Frame Pressure Repair]]

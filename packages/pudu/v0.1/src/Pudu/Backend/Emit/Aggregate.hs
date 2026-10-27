@@ -26,6 +26,7 @@ import Pudu.Backend.Emit.Cell
 import Pudu.Backend.Emit.Array (arrayHelpers)
 import Pudu.Backend.Emit.Keyed (mapHelpers, setHelpers)
 import Pudu.Backend.Emit.Range (rangeHelpers)
+import Pudu.Backend.Emit.Bytes (bytesHelpers)
 import Pudu.Backend.Emit.State (cString, cStringBytes)
 import Pudu.Core (CoreClosureInfo (..), CoreLayout (..), CoreType (..), CoreVariant (..), displayName)
 import Pudu.Core.Frame (FrameFunction (..), FrameModule (..), FrameSlot (..))
@@ -95,6 +96,7 @@ helpers identities layouts kind = case (kind, Map.lookup kind layouts) of
   (CoreMapType key value, _) -> mapHelpers kind key value
   (CoreSetType member, _) -> setHelpers kind member
   (CoreRangeType, _) -> rangeHelpers kind
+  (CoreBytesType, _) -> bytesHelpers kind
   (CoreFunctionType _ _, Just (CoreClosureLayout entries)) -> closureHelpers kind
     [(identity, info) | (key, info) <- entries, Just identity <- [Map.lookup key identities]]
   _ -> []

@@ -283,11 +283,11 @@ refusalCases =
       ["module Refuse", "fn main() { print(\"x\") }"], "print(")
   , ("explicit print result", Text.unlines
       ["module Refuse", "fn main() { return print(\"x\") }"], "print(")
-  , ("bytes", bindingProgram "var raw = bytesOf([1u8, 2u8])", "bytesOf([1u8, 2u8])")
+  , ("environment", bindingProgram "var pairs = environment()", "environment()")
   , ("decimal values", bindingProgram "var ratio = 1.5d", "1.5d")
   , ("ownership-bearing break result", statementProgram "loop { break print(\"x\") }", "print(")
   , ("readLine", bindingProgram "var line = readLine()", "readLine()")
-  , ("byte literals", bindingProgram "var raw = \"hi\".toBytes()", "\"hi\".toBytes()")
+  , ("temporary path", bindingProgram "var path = temporaryPath()", "temporaryPath()")
   , ("mutable borrows", Text.unlines
       [ "module Refuse"
       , ""

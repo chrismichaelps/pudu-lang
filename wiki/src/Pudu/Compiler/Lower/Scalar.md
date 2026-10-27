@@ -86,6 +86,10 @@ E7001 names them "map" and "set", as `valueKind` does.
 
 E7001 names a range "range", as `valueKind` does.
 
+## Bytes (#565)
+
+E7001 names Bytes "bytes", as `valueKind` does.
+
 ## Referenced by
 
 [[Compiler Lower Body]] · [[Pudu Cabal Manifest]] · [[Native Emission Coverage]]
@@ -153,3 +157,9 @@ Resolved Grill Log: delegate unary & and * to [[Compiler Lower Reference]]
 before the existing arithmetic operator table. Other unary dispatch, eager
 Never rules, print-carrier guards and dynamic operator diagnostics retain
 their contracts. Unary &mut remains refused.
+
+## Byte operator refusals
+
+Resolved Grill Log: checked unary operations on Bytes evaluate the operand
+once and report E7001 with `valueKind`'s `bytes` wording. They must not stop
+at the native E6001 boundary when the interpreter reaches the operation.

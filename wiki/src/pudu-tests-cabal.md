@@ -113,6 +113,10 @@ Register Pudu.Backend.ShapePrograms ([[Backend Shape Programs]]).
 
 Register Pudu.Backend.RangePrograms ([[Backend Range Programs]]).
 
+## Bytes corpus (#565)
+
+Register Pudu.Backend.BytesPrograms ([[Backend Bytes Programs]]).
+
 ## Referenced by
 
 [[Derive Graph Spec]] is explicitly registered for real program elaboration,

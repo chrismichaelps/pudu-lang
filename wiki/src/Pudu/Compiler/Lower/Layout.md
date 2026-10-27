@@ -50,6 +50,10 @@ use; a set its member.
 
 Range shapes contribute their operands' locals.
 
+## Bytes (#565)
+
+Byte operations contribute their operands' locals.
+
 ## Referenced by
 
 [[Compiler Lower]] · [[Core IR]] · [[src/_MOC]]

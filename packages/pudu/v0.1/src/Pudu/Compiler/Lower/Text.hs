@@ -20,6 +20,8 @@ lowerTextMethod lower state at receiver member arguments = case lower state rece
   (after, Nothing) -> refused after
   (after, Just (coreReceiver, CoreTextType))
     | null arguments, Just reading <- lookup member parsers -> parsed after coreReceiver reading
+    -- The UTF-8 bytes are the text's own storage.
+    | null arguments, member == "toBytes" -> built after (CoreBytesMethod BytesFromText coreReceiver []) CoreBytesType
     | otherwise -> case lookup member methods of
     Nothing -> halt at ("the Str method '" <> member <> "'") after
     Just (name, parameters, result) -> collect after [] (zip parameters arguments)

@@ -71,6 +71,10 @@ multi-module ones.
 
 Includes [[Backend Range Programs]] in both lists.
 
+## Bytes (#565)
+
+Includes [[Backend Bytes Programs]] in both lists.
+
 ## Referenced by
 
 [[Backend Native Tests]] · [[Native Emission Coverage]] · [[src/_MOC]]

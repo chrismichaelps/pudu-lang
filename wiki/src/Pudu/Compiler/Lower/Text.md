@@ -47,6 +47,10 @@ local, then `TextParsesInt`/`TextParsesFloat` choose between `Some` of
 the call ([[Native Text Number]]). No C code needs to know an Option's layout.
 `toBytes` and `toDecimal` wait for Bytes and Decimal.
 
+## toBytes (#565)
+
+`Str.toBytes()` wraps the text's own storage as Bytes.
+
 ## Referenced by
 
 [[Compiler Lower Body]] · [[Native Text Methods]] · [[src/_MOC]]
