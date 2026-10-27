@@ -172,3 +172,5 @@ tags: [moc, handoff]
 - [[Database Authentication Delivery]] — finite Database challenge work and typed refusals.
 
 - [[Graph Integration Delivery]] — preserve both Database safeguards and exact graph output (#478).
+
+- [[Native Core Contracts Delivery]] — first dev-based native review partition (#486).

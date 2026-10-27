@@ -5,6 +5,13 @@ tags: [changelog]
 
 # Changelog
 
+## 2026-10-27 — Native Core contracts review partition (#486)
+
+Register the existing native Core data model independently of the accumulated
+implementation stack. Canonical identity remains separate from source-facing
+type rendering. This partition adds no native CLI or execution path; lowering,
+runtime, emitter and toolchain delivery remain open. [[Native Core Contracts Delivery]].
+
 ## 2026-10-09 — Integrated Database graph expectations (#478)
 
 - [[Application Layer Tests]] verifies the combined challenge and capacity boundaries with exact layer diagnostics.
