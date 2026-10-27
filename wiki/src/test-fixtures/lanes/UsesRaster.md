@@ -1,0 +1,18 @@
+---
+type: module
+path: "@root/test-fixtures/lanes/UsesRaster.pudu"
+fidelity: Active
+aliases: [Raster Fixture]
+tags: [module, test, render]
+---
+# Raster Fixture
+
+Golden pixels for [[Runtime Raster]]: fill quantization; two triangles sharing a diagonal
+covering an 8×8 target exactly once; barycentric color at a pixel center; depth order
+independent of submission order; back-face culling; out-of-range depth skipped; bounds clipped
+to the target; refusals for partial triangles, lane mismatch, unknown cull and a mis-sized
+target. Run by [[Lanes Gate]]. Prints `raster: ok`.
+
+## Referenced by
+
+[[Lanes Gate]]

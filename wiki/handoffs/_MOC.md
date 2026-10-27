@@ -5,6 +5,8 @@ tags: [moc, handoff]
 
 # Handoff Map
 
+- [[Raster Delivery]] — issue #676 native depth-tested triangle rasterization.
+
 - [[Ark Engine Next]] — engine branch state after Platform (#675); next action: software render device.
 
 - [[Game Input Delivery]] — issue #673 key release, physical codes, hover and buttons.

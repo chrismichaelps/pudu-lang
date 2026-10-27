@@ -5,6 +5,11 @@ tags: [changelog]
 
 # Changelog
 
+## 2026-10-27 — Native triangle rasterization (#676)
+
+- [[Runtime Raster]] fills RGBA8 targets and rasterizes depth-tested triangles with a top-left
+  fill rule; [[Raster Fixture]] checks golden pixels in [[Lanes Gate]].
+
 ## 2026-10-27 — Ark Platform (#675)
 
 - [[Ark Input]] decodes adapter records through a kind-to-factory table and reads action maps;

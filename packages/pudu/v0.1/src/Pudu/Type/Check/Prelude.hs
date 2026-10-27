@@ -350,6 +350,7 @@ declareBuiltinConstructors = do
     LaneFloats -> NominalType "Array" [floatType]
     LaneInts -> NominalType "Array" [integerType]
     LaneOption held -> NominalType "Option" [laneType held]
+    LanePair -> TupleTypeValue [bytesType, bytesType]
     LaneTriple -> TupleTypeValue [bytesType, bytesType, bytesType]
   kernelType shape = case shape of
     FloatArguments count -> FunctionTypeValue False (replicate count floatType) floatType
