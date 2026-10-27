@@ -277,7 +277,6 @@ refusalCases :: [(String, Text, Text)]
 refusalCases =
   [ ("BigInt parameter", helperProgram "fn helper(value: BigInt) -> Int { return 1 }" "helper(1)", "BigInt")
   , ("Decimal parameter", helperProgram "fn helper(value: Decimal) -> Int { return 1 }" "helper(1.5d)", "Decimal")
-  , ("unresolved inferred result", helperProgram "fn helper(value: Int) { return }" "{ helper(1)\n 0 }", "helper(value")
   , ("default parameter", helperProgram "fn helper(value: Int = 7) -> Int { return value }" "helper(1)", "7")
   , ("BigInt result", helperProgram "fn helper() -> BigInt { return 1 }" "{ helper()\n  0 }", "BigInt")
   , ("call to entry", statementProgram "main()", "main()\n")

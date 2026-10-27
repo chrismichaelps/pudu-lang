@@ -1,6 +1,6 @@
 ---
 type: handoff
-status: ACTIVE
+status: DONE
 issue: 631
 aliases: [Native Collection Callable Delivery]
 ---

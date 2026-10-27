@@ -249,3 +249,5 @@ tags: [moc, handoff]
 - [[Native Rendering Callable Delivery]] — rendering intrinsic implementation and evidence.
 
 - [[Native Collection Callable Delivery]] — collection builtin values and caller-site refusals (#631).
+
+- [[Native Stopping Builtin Delivery]] — panic and untyped convertInteger (#633).

@@ -77,3 +77,7 @@ fail_text_caller copies the caller's site, swaps in its own code and help, and
 reports through pudu_fail_text. A NULL caller aborts: no frame entered
 without a value call reaches a builtin body.
 Resolved Grill Log: the copy keeps the static site table read-only.
+
+An empty message skips the copy and reports with no payload.
+Resolved Grill Log: GCC 15 warned about the uninitialized one-byte copy once
+the empty text was folded; there is nothing to keep alive. (#633)

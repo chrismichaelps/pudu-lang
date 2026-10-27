@@ -41,7 +41,7 @@ import Pudu.Diagnostic.Host (memoryFailureMessage)
 {-| The runtime contract revision baked into every generated program's header
     comment. It changes only when the runtime's behaviour or interface does. -}
 runtimeRevision :: Text
-runtimeRevision = "17"
+runtimeRevision = "18"
 
 {-| @Backend.Runtime.Part — one named, self-contained piece of the runtime.
 
@@ -142,7 +142,9 @@ failLines =
   , "  fprintf(stderr, \"error[%s]\", site->code);"
   , "  if (colored) fputs(\"\\x1b[0m\", stderr);"
   , "  fputs(\": \", stderr);"
+  , "  /* An empty message reads as the interpreter's placeholder for one. */"
   , "  if (length != 0) fwrite(message, 1, length, stderr);"
+  , "  else fprintf(stderr, \"compiler diagnostic %s\", site->code);"
   , "  fputc('\\n', stderr);"
   , "  fprintf(stderr, \"  --> %s:%d:%d\\n\", site->file, site->line, site->column);"
   , "  if (site->has_excerpt) {"

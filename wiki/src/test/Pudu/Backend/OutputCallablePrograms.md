@@ -43,3 +43,9 @@ both stream and rendering builtin values.
 Append [[Backend Collection Callable Programs]] to success/failure exports.
 Resolved Grill Log: the existing conformance, refusal and allocation
 properties run the new cases under every toolchain without a new harness.
+
+## Stopping builtins (#633)
+
+Append [[Backend Stopping Builtin Programs]] to success/failure exports.
+Resolved Grill Log: the shared conformance, refusal and allocation properties
+cover them under every toolchain.

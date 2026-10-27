@@ -94,3 +94,9 @@ This is an explicitly failing regression until #499 repairs frame storage.
 A module `fn print(value: Int) -> Int` and a module `fn display(value: Bool) -> Int`
 are called as declared, natively and in the interpreter, with the results
 observable through the exit status.
+
+## Open inferred results (#633)
+
+A function whose result checking leaves open returns unit, bound, compared
+and discarded. Resolved Grill Log: moved here from the EmitSpec refusal table
+once open variables formed as unit.
