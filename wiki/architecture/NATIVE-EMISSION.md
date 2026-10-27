@@ -23,7 +23,7 @@ Compile ordinary checked Pudu programs into portable C11 with interpreter-identi
 | Records, tuples, sums and collections | Partial (#521, #525, #552, #556, #558, #561, #564) | Tuples, records and sums of every module, generic ones at each instantiation, and the built-in Option/Result are boxed, refcounted values with construction, field, position and payload reads, equality, ordering (tuples), rendering and run-time E7001 naming held variants; arrays (#556, #558), maps and sets (#561) and range values (#564) and Bytes (#565) are native; the accelerated map builtins remain |
 | Pattern matching and iteration | Partial (#525, #540, #541, #554, #558, #562, #564) | `match`, `if let` (with `else if` chains) and `while let` (with labels, `break` and `continue`) lower every pattern form in order with guards, bindings, literals, ranges, tuples, constructors, records and alternatives; `let ... else` retains bindings in the enclosing block (#541); `for` walks written ranges, range values, sequence types, arrays, maps, sets, Str, tuples and sum payloads (#554, #561, #562, #564); sequence patterns are native (#558) |
 | Modules and constants | Partial (#539, #543, #563) | Calls through selective imports, aliases and qualifiers, functions of every reachable module, and records and sums by canonical identity match the interpreter; folded scalar/tuple/record/sum constants now preserve canonical solved identity, with arbitrary Bytes constants including nested byte values (#565); records and sums whose fields name other modules' types or aliases are laid out as checking formed them (#563); callable and unrepresented constant families remain |
-| Callables and generic code | Partial (#551, #552, #555, #560) | Implementation members, inherited defaults, type- and trait-qualified calls, `toText()`, generic functions and implementations (one copy per type list) with or without written type arguments (#560), lambdas with captures, named functions as values and calls through values match the interpreter; default parameter values, method values, higher-kinded parameters and `dynamic` values remain |
+| Callables and generic code | Partial (#551, #552, #555, #560, #567) | Implementation members, inherited defaults, type- and trait-qualified calls, `toText()`, generic functions and implementations (one copy per type list) with or without written type arguments (#560), lambdas with captures, named functions as values and calls through values match the interpreter; named expression bodies, including entries, generic copies and trait defaults, use the ordinary return path (#567); default parameter values, method values, higher-kinded parameters and `dynamic` values remain |
 | Accepted operations with runtime refusals | Partial (#494, #512) | Represented Unit/Bool/float operators retain E7001; remaining runtime types/operators still need equivalent coverage |
 | Errors, references and resources | Partial (#544, #553) | Shared borrows, dereference and `?` on Result and Option match the interpreter; mutable loans with writeback, moves, drop and all unwind paths remain |
 | Host services and concurrency | Pending | Explicit runtime adapters, FFI, tasks, scopes, cancellation and platform evidence |
@@ -473,3 +473,11 @@ closed/read-only outputs, closed pipes and hung-up terminals on this host.
 First-class output builtin values, complete platform evidence and promotion
 checks remain open. This slice does not complete the entry/text/host ledger
 rows or change the area counter.
+
+## Named expression bodies (#567)
+
+[[Native Expression Bodies]] reuses existing block lowering while preserving
+original expression spans. Eight explicit-output/counting cases and three
+runtime-failure probes cover return/try, closures, generics, methods, effects
+and direct/mutual recursion through the depth boundary. The full-emission
+ledger remains Partial until all callable forms and promotion evidence exist.

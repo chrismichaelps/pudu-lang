@@ -96,3 +96,5 @@ Pudu is a statically typed native systems language for developers who need predi
 - [[Native Shared References]] — borrows as value identity in native code (#544).
 
 - [[Native Output Results]] — typed output outcomes and exact handle failures (#566).
+
+- [[Native Expression Bodies]] — named expression-body lowering (#567).

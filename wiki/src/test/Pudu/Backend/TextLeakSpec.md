@@ -125,3 +125,7 @@ existing instrumentation and explicit expected outputs, selected with
 ## Output Results (#566)
 
 Resolved Grill Log: Register focused output cleanup. Extend the reusable counted harness to accept expected stderr alongside stdout while retaining all existing corpora and assertions.
+
+## Expression bodies (#567)
+
+Resolved Grill Log: Register a focused counted expression-body corpus and include it in the existing complete owned-value corpus.

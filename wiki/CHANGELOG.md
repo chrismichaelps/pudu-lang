@@ -5,6 +5,16 @@ tags: [changelog]
 
 # Changelog
 
+## 2026-10-26 — Native expression bodies (#567)
+
+Named expression-bodied functions now lower through the existing return path,
+including entry functions, generic copies and trait defaults. Their original
+expression spans remain intact. Focused checks cover explicit answers,
+recursion depth, runtime diagnostic provenance and owned-value cleanup under
+Clang, GCC 15, ASan/UBSan and the tree evaluator. The CLI smoke compares native
+and both evaluators across an imported expression-bodied function. Full-suite
+and independent review remain pending. [[Native Expression Bodies]].
+
 ## 2026-10-26 — Native output Results (#566, in progress)
 
 Direct output builtins retain their typed Results and failed-handle buffers.

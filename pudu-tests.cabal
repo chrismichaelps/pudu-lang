@@ -105,6 +105,7 @@ test-suite pudu-test
     Pudu.Backend.ShapePrograms
     Pudu.Backend.RangePrograms
     Pudu.Backend.OutputSpec
+    Pudu.Backend.ExpressionBodyPrograms
     Pudu.Backend.OutputPrograms
     Pudu.Backend.BytesPrograms
     Pudu.Backend.TextCaseSpec

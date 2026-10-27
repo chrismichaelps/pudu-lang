@@ -381,3 +381,7 @@ constants are values and never turn into functions merely by matching a name.
 ## Output Results (#566)
 
 Resolved Grill Log: The four output builtins delegate to lowerPrint with their name. Their represented Result can escape through every ordinary sum path; the old effect-only carrier guards apply only to legacy CorePrint. See [[Native Output Results]].
+
+## Expression bodies (#567)
+
+Resolved Grill Log: Normalize expression bodies to empty located blocks retaining the original trailing expression. Both entry and reachable helpers reuse lowerBlock and unchanged result selection. No extra callable or runtime call-depth increment. See [[Native Expression Bodies]].

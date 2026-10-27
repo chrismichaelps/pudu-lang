@@ -235,3 +235,7 @@ Resolved Grill Log: Replace obsolete source print-result refusals with still-uns
 ## Missing inherited descriptor context (#566)
 
 Resolved Grill Log: Allow the guarded fcntl/errno and kernel event-queue headers required by the native process adapter; all other include hygiene assertions remain.
+
+## Expression bodies (#567)
+
+Resolved Grill Log: Remove the expression-bodied-function E6001 expectation only; accepted behavior is verified in the focused expression-body corpus.

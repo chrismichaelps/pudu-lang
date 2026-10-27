@@ -1,6 +1,6 @@
 ---
 type: handoff
-status: ACTIVE
+status: SUPERSEDED
 issue: 566
 aliases: [Native Output Delivery]
 ---
@@ -50,8 +50,11 @@ release run was performed during iteration; Linux/Windows and independent
 review remain pending. The slice exceeds the PR review-size limit and needs
 partitions before opening a PR. No review or promotion is claimed.
 
-Exact next action: commit the validated #566 slice locally, then resolve the
-next callable coverage gap in the vault before changing implementation.
+The validated output slice is committed as fcd11c0d. Continuation moves to
+[[Native Expression Body Delivery]].
+
+Exact next action: follow Native Expression Body Delivery for the active
+callable completion work.
 
 ## Referenced by
 

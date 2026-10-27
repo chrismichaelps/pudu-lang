@@ -312,3 +312,7 @@ No new dependency or Main coordinator is required.
 ## Output Results (#566)
 
 Resolved Grill Log: Register Pudu.Backend.OutputPrograms and Pudu.Backend.OutputSpec using existing dependencies.
+
+## Expression bodies (#567)
+
+Resolved Grill Log: Register Pudu.Backend.ExpressionBodyPrograms with existing dependencies.
