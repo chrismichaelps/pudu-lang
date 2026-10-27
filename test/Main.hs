@@ -15,6 +15,7 @@ import Pudu.Derive.GraphSpec (deriveGraphProperties)
 import Pudu.Derive.LibrarySpec (deriveLibraryProperties)
 import Pudu.Type.ImplementationSpec (implementationProperties)
 import Pudu.GeneratedIdentitySpec (generatedIdentityProperties)
+import Pudu.Diagnostic.NativeSpec (nativeDiagnosticProperties)
 import Pudu.DiagnosticSpec (diagnosticProperties)
 import Pudu.FormatSpec (formatProperties)
 import Pudu.Lsp.JsonSpec (jsonProperties)
@@ -107,7 +108,7 @@ main = do
   generatedOutcomes <- traverse (uncurry check) (generatedIdentityProperties <> recordResidualProperties <> catalogueProperties <> requirementProperties <> targetProperties <> deriveCacheProperties <> deriveGraphProperties <> deriveLibraryProperties <> implementationProperties)
   decimalOutcomes <- traverse (uncurry check) decimalProperties
   versionOutcomes <- traverse (uncurry check) versionProperties
-  diagnosticOutcomes <- traverse (uncurry check) diagnosticProperties
+  diagnosticOutcomes <- traverse (uncurry check) (diagnosticProperties <> nativeDiagnosticProperties)
   formatOutcomes <- traverse (uncurry check) formatProperties
   jsonOutcomes <- traverse (uncurry check) jsonProperties
   lspOutcomes <- traverse (uncurry check) (serverProperties <> implMemberProperties <> diagnosticsProperties <> methodDefinitionProperties <> deriveToolingProperties)

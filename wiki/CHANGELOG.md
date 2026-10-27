@@ -5,6 +5,13 @@ tags: [changelog]
 
 # Changelog
 
+## 2026-10-27 — Native diagnostic contract partition (#486)
+
+Register the existing native failure vocabulary independently of runtime and
+CLI integration. Code, span, help and caller details are covered by value and
+rendering checks. Native execution and the remaining partitions stay open.
+[[Native Diagnostic Contracts Delivery]].
+
 ## 2026-10-09 — Integrated Database graph expectations (#478)
 
 - [[Application Layer Tests]] verifies the combined challenge and capacity boundaries with exact layer diagnostics.
