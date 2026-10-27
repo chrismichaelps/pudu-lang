@@ -92,6 +92,8 @@ Installation binds every kernel in `floatKernels` under its `floatKernelName`, b
 decimal primitives. Grill Log — **Q:** list kernel names here? **A:** No; they derive from
 [[Float Kernel Identity]] so no list can drift.
 
+Lane kernels bind the same way from `laneKernels` under `laneKernelName`.
+
 ## Referenced by
 
 [[src/Pudu/Eval/_MOC]] · [[Evaluator]] · [[Name Resolution]]

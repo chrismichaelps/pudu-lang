@@ -111,6 +111,8 @@ constructor.
 the decimal and effect cases. Grill Log — **Q:** route kernels through effects? **A:** No; they
 are pure and must stay admissible wherever pure builtins are.
 
+`LaneKernelBuiltin` goes to [[Eval Builtin Lanes]] beside it.
+
 ## Referenced by
 
 [[src/Pudu/Eval/_MOC]] · [[Evaluator]] · [[Eval Program]] · [[Eval Loop]]

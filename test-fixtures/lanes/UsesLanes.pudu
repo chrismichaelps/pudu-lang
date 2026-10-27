@@ -1,0 +1,67 @@
+module UsesLanes
+
+import Std.Lanes as Lanes
+import Std.Math.Float as Float
+
+fn require(condition: Bool, name: Str) {
+  if !condition { panic(name) }
+}
+
+fn values(lanes: Option[Lanes.Lanes]) -> Array[Float64] {
+  match lanes {
+    case Some(found) => Lanes.toArray(&found)
+    case None => panic("expected lanes")
+  }
+}
+
+export fn main() -> Int {
+  let a = Lanes.fromArray(&[1.0, -2.0, 3.5, 0.0])
+  let b = Lanes.fromArray(&[4.0, 5.0, -6.0, 2.0])
+  let short = Lanes.fromArray(&[1.0])
+  require(Lanes.count(&a) == 4 && Lanes.toArray(&a) == [1.0, -2.0, 3.5, 0.0], "round trip")
+  require(values(Lanes.filled(3, 2.5)) == [2.5, 2.5, 2.5] && Lanes.filled(-1, 0.0) == None, "fill")
+  require(values(Lanes.ramp(4, 1.0, 0.5)) == [1.0, 1.5, 2.0, 2.5] && Lanes.ramp(-1, 0.0, 1.0) == None, "ramp")
+  require(values(Lanes.filled(0, 1.0)) == [], "empty lanes")
+  require(Lanes.get(&a, 2) == Some(3.5) && Lanes.get(&a, 4) == None && Lanes.get(&a, -1) == None, "get")
+  require(values(Lanes.set(&a, 1, 9.0)) == [1.0, 9.0, 3.5, 0.0] && Lanes.set(&a, 4, 0.0) == None, "set")
+  require(Lanes.toArray(&a) == [1.0, -2.0, 3.5, 0.0], "set leaves the original")
+  require(values(Lanes.slice(&a, 1, 2)) == [-2.0, 3.5] && Lanes.slice(&a, 3, 2) == None, "slice")
+  require(Lanes.toArray(&Lanes.concat(&a, &short)) == [1.0, -2.0, 3.5, 0.0, 1.0], "concat")
+  require(values(Lanes.add(&a, &b)) == [5.0, 3.0, -2.5, 2.0], "add")
+  require(values(Lanes.subtract(&a, &b)) == [-3.0, -7.0, 9.5, -2.0], "subtract")
+  require(values(Lanes.multiply(&a, &b)) == [4.0, -10.0, -21.0, 0.0], "multiply")
+  require(values(Lanes.divide(&a, &b)) == [0.25, -0.4, 3.5 / -6.0, 0.0], "divide")
+  require(values(Lanes.minimum(&a, &b)) == [1.0, -2.0, -6.0, 0.0], "minimum")
+  require(values(Lanes.maximum(&a, &b)) == [4.0, 5.0, 3.5, 2.0], "maximum")
+  require(Lanes.add(&a, &short) == None && Lanes.dot(&a, &short) == None, "length mismatch")
+  require(Lanes.toArray(&Lanes.addScalar(&a, 1.0)) == [2.0, -1.0, 4.5, 1.0], "add scalar")
+  require(Lanes.toArray(&Lanes.scale(&a, -2.0)) == [-2.0, 4.0, -7.0, -0.0], "scale")
+  require(Lanes.toArray(&Lanes.clamp(&a, -1.0, 2.0)) == [1.0, -1.0, 2.0, 0.0], "clamp")
+  require(values(Lanes.axpy(&a, 0.5, &b)) == [3.0, 0.5, 0.5, 1.0], "axpy")
+  require(values(Lanes.fma(&a, &b, &a)) == [5.0, -12.0, -17.5, 0.0], "fma")
+  require(Lanes.toArray(&Lanes.abs(&a)) == [1.0, 2.0, 3.5, 0.0], "abs")
+  require(Lanes.toArray(&Lanes.negate(&a)) == [-1.0, 2.0, -3.5, -0.0], "negate")
+  let roots = Lanes.toArray(&Lanes.sqrt(&Lanes.fromArray(&[4.0, 2.0, -1.0])))
+  require(roots[0] == 2.0 && roots[1] == 1.4142135623730951 && Float.isNan(roots[2]), "sqrt")
+  require(Lanes.toArray(&Lanes.floor(&Lanes.fromArray(&[-1.5, 2.7, -0.0]))) == [-2.0, 2.0, -0.0], "floor")
+  require(Lanes.sum(&a) == 2.5 && Lanes.sum(&Lanes.fromArray(&[])) == 0.0, "sum")
+  require(Lanes.dot(&a, &b) == Some(-27.0), "dot")
+  let gapped = Lanes.fromArray(&[3.0, 0.0 / 0.0, -1.0])
+  require(Lanes.smallest(&gapped) == Some(-1.0) && Lanes.largest(&gapped) == Some(3.0), "extremes skip NaN")
+  require(Lanes.smallest(&Lanes.fromArray(&[])) == None, "empty extreme")
+  require(values(Lanes.gather(&a, &[3, 0, 0])) == [0.0, 1.0, 1.0] && Lanes.gather(&a, &[4]) == None, "gather")
+  require(values(Lanes.scatter(&a, &[0, 2, 0], &Lanes.fromArray(&[7.0, 8.0, 9.0]))) == [9.0, -2.0, 8.0, 0.0], "scatter")
+  require(Lanes.scatter(&a, &[0], &b) == None && Lanes.scatter(&a, &[9], &short) == None, "scatter refusals")
+  let matrix = [0.0, 1.0, 0.0, -1.0, 0.0, 0.0, 0.0, 0.0, 2.0, 10.0, 20.0, 30.0]
+  let Some((xs, ys, zs)) = Lanes.affine3(&matrix, &a, &b, &short) else {
+    let Some((xs, ys, zs)) = Lanes.affine3(&matrix, &a, &b, &a) else { panic("affine") }
+    require(Lanes.toArray(&xs) == [6.0, 5.0, 16.0, 8.0], "affine x")
+    require(Lanes.toArray(&ys) == [21.0, 18.0, 23.5, 20.0], "affine y")
+    require(Lanes.toArray(&zs) == [32.0, 26.0, 37.0, 30.0], "affine z")
+    require(Lanes.affine3(&[1.0], &a, &a, &a) == None, "affine matrix size")
+    require(Lanes.fromBytes(bytesOf([1u8, 2u8, 3u8])) == None, "partial value refused")
+    print("lanes: ok")
+    return 0
+  }
+  panic("affine accepted mismatched lanes")
+}

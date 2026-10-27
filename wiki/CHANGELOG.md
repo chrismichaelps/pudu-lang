@@ -5,6 +5,13 @@ tags: [changelog]
 
 # Changelog
 
+## 2026-10-27 — Packed binary64 lanes (#668)
+
+- [[Std Lanes]] holds contiguous binary64 values transformed by whole-lane native kernels from
+  [[Runtime Lanes]]; [[Lane Kernel Identity]] states each name and signature once.
+- [[Lanes Gate]] checks every kernel against its scalar result in CI; [[Lane Delivery]] records
+  evidence and the measured comparison in [[Lanes Benchmark]].
+
 ## 2026-10-27 — Binary64 kernels behind Std.Math.Float (#661)
 
 - [[Float Kernel Identity]] and [[Runtime Float Kernels]] give the evaluator, checker and resolver
