@@ -80,3 +80,5 @@ aliases: [Backend Module Map]
 - [[Compiler Lower Match]] · [[Native Refutable Binding Delivery]] — enclosing-scope refutable bindings (#541).
 
 - [[Compiler Lower Constant]] · [[Native Folded Constants]] — represented folded-data emission (#543).
+
+- [[Native Shared References]] · [[Backend Shared Reference Programs]] — resolved shared-reference delivery plan (#544).

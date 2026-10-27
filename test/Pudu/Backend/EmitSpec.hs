@@ -286,15 +286,16 @@ refusalCases =
   , ("ownership-bearing break result", statementProgram "loop { break print(\"x\") }", "print(")
   , ("charFromCode", bindingProgram "var letter = charFromCode(97)", "charFromCode(97)")
   , ("range values", bindingProgram "var span = 0..3", "0..3")
-  , ("borrows", Text.unlines
+  , ("mutable borrows", Text.unlines
       [ "module Refuse"
       , ""
+      , "fn bump(value: &mut Int) -> () { *value = *value + 1 }"
       , "fn main() -> Int {"
       , "  var value = 1"
-      , "  var borrowed = &value"
+      , "  bump(&mut value)"
       , "  return value"
       , "}"
-      ], "&value")
+      ], "&mut Int")
   , ("a module without main", Text.unlines
       [ "module Refuse"
       , ""

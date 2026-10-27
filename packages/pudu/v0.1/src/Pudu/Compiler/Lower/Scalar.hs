@@ -4,6 +4,7 @@ module Pudu.Compiler.Lower.Scalar (lowerUnary, lowerBinary, eagerType) where
 import Data.Text (Text)
 import qualified Data.Text as Text
 import Pudu.Compiler.Lower.Control (expressionIsPrintValued)
+import Pudu.Compiler.Lower.Reference (lowerReference)
 import Pudu.Compiler.Lower.State
   ( LowerContext (..), LowerState (..), halt, intType, refused )
 import Pudu.Compiler.Lower.Types (typeForSpan, nativeIntegerKind, nativeValueType)
@@ -18,6 +19,7 @@ type LowerExpression = LowerState -> Located Expression -> (LowerState, Maybe (C
 
 lowerUnary :: LowerExpression -> LowerState -> Span -> Text -> Located Expression -> (LowerState, Maybe (CoreExpression, CoreType))
 lowerUnary lower state at operator operand
+  | operator `elem` ["&", "*"] = lowerReference lower state at operator operand
   | operator `notElem` ["-", "!", "~"] = halt at ("the operator '" <> operator <> "'") state
   | operator == "-"
   , LiteralExpression (ResolvedInteger kind number) <- locatedValue operand

@@ -1,6 +1,6 @@
 {-| @Pudu.Compiler.Lower.Types — settled checker facts for native representation. -}
 module Pudu.Compiler.Lower.Types
-  ( LowerTypes, emptyTypes, nativeTypes, withShapes, lookupScheme, typeForSpan, formedCoreType, formedCoreTypeIn
+  ( LowerTypes, emptyTypes, nativeTypes, withShapes, lookupScheme, typeForSpan, sharedReferenceTarget, formedCoreType, formedCoreTypeIn
   , layoutOf, recordFields, sumVariants, nativeIntegerKind, nativeScalarType, nativeValueType ) where
 
 import Data.Map.Strict (Map)
@@ -44,6 +44,11 @@ lookupScheme (LowerTypes _ schemes _) name = Map.lookup name schemes
 typeForSpan :: LowerTypes -> Span -> Maybe CoreType
 typeForSpan types@(LowerTypes info _ _) at = typeAt info at >>= formedCoreTypeIn types
 
+sharedReferenceTarget :: LowerTypes -> Span -> Maybe CoreType
+sharedReferenceTarget types@(LowerTypes info _ _) at = case typeAt info at of
+  Just (ReferenceTypeValue False target) -> formedCoreTypeIn types target
+  _ -> Nothing
+
 {-| Builtins only; no record or sum is known. -}
 formedCoreType :: Type -> Maybe CoreType
 formedCoreType = formedCoreTypeIn (LowerTypes (TypeInfo Map.empty Map.empty) Map.empty noShapes)
@@ -56,6 +61,7 @@ formedCoreTypeIn (LowerTypes _ _ shapes) = formedWith shapes [] Map.empty
 
 formedWith :: Shapes -> [CoreType] -> Map Text CoreType -> Type -> Maybe CoreType
 formedWith shapes seen parameters value = case value of
+  ReferenceTypeValue False target -> formedWith shapes seen parameters target
   RigidType name | Just bound <- Map.lookup name parameters -> Just bound
   NominalType identity []
     | Just ([], fields) <- Map.lookup identity (shapeRecords shapes) ->

@@ -7,7 +7,7 @@ import qualified Data.Map.Strict as Map
 import GHC.Float (castDoubleToWord64)
 import Pudu.Compiler (CompileResult (..), runCompile)
 import Pudu.Compiler.Lower (LowerResult (..), lowerModule, lowerModuleFolded)
-import Pudu.Compiler.Lower.Types (formedCoreType, nativeTypes, typeForSpan)
+import Pudu.Compiler.Lower.Types (formedCoreType, nativeTypes, typeForSpan, sharedReferenceTarget)
 import Pudu.Core (CoreType (..), CoreModule (..), CoreFunction (..), CoreBlock (..), CoreExpression (..), CoreExpressionShape (..))
 import Pudu.Diagnostic (diagnosticCode, diagnosticCodeText, diagnosticSpan, hasErrors)
 import Pudu.Eval.Frozen (thaw)
@@ -27,7 +27,30 @@ lowerTypesProperties =
   , ("native operator traps retain exact spans and messages", testTraps)
   , ("native operator traps require settled operand facts", testTrapFacts)
   , ("native constants require represented folded products at their use", testConstantFacts)
+  , ("native shared references retain checked fact and carrier boundaries", testReferenceFacts)
   ]
+
+testReferenceFacts :: IO Property
+testReferenceFacts = conjoin <$> traverse check
+  [ ( "fn change(value: &mut Int) -> () { *value = *value + 1 }\nfn main() -> Int { var n = 0\n change(&mut n)\n n }", False )
+  , ( "fn main() -> Int { let held = &print(\"x\")\n 0 }", False )
+  , ( "fn main() -> Int { let number = 1\n let loan = &number\n *loan }", True )
+  ]
+ where
+  check (body, removeFacts) = do
+    source <- newSource (SourceName "Main.pudu") ("module Main\n" <> body <> "\n")
+    checked <- runCompile source
+    pure $ case (hasErrors (compileDiagnostics checked), compileModule checked) of
+      (False, Just parsed) ->
+        let facts = if removeFacts then Just (TypeInfo Map.empty Map.empty) else compileTypes checked
+         in case lowerModule "main" (nativeTypes facts (compileSchemes checked)) parsed of
+              LowerRefused [diagnostic] -> conjoin
+                [ diagnosticCodeText (diagnosticCode diagnostic) === "E6001"
+                , let at = diagnosticSpan diagnostic in
+                    counterexample "a refused reference has a source span" (unOffset (spanEnd at) > unOffset (spanStart at))
+                ]
+              other -> counterexample (show other) (False === True)
+      _ -> counterexample (show (compileDiagnostics checked)) (False === True)
 
 testConstantFacts :: IO Property
 testConstantFacts = do
@@ -79,6 +102,9 @@ testConstantFacts = do
 testCanonical :: Property
 testCanonical = conjoin
   [ formedCoreType integerType === Just (CoreIntegerType PlatformSigned)
+  , formedCoreType (ReferenceTypeValue False integerType) === Just (CoreIntegerType PlatformSigned)
+  , formedCoreType (ReferenceTypeValue True integerType) === Nothing
+  , formedCoreType (ReferenceTypeValue False (NominalType "Decimal" [])) === Nothing
   , formedCoreType boolType === Just CoreBoolType
   , formedCoreType stringType === Just CoreTextType
   , formedCoreType UnitTypeValue === Just CoreUnitType
@@ -114,8 +140,9 @@ testSpans = do
       other = emptySpan second
       generated = generatedSpan 1 at other
       next = generatedSpan 2 at other
+      reference = generatedSpan 3 at other
       info = TypeInfo (Map.singleton (0, 0) integerType)
-        (Map.fromList [(at, integerType), (generated, boolType)])
+        (Map.fromList [(at, integerType), (generated, boolType), (reference, ReferenceTypeValue False integerType)])
   pure $ case nativeTypes (Just info) [] of
     Nothing -> counterexample "type facts missing" (False === True)
     Just facts -> conjoin
@@ -123,6 +150,9 @@ testSpans = do
       , typeForSpan facts generated === Just CoreBoolType
       , typeForSpan facts other === Nothing
       , typeForSpan facts next === Nothing
+      , sharedReferenceTarget facts reference === Just (CoreIntegerType PlatformSigned)
+      , sharedReferenceTarget facts generated === Nothing
+      , sharedReferenceTarget facts (generatedSpan 3 other at) === Nothing
       ]
 
 testMissing :: IO Property

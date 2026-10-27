@@ -33,3 +33,10 @@ owned tuples/records/sums, repeated reads, transfers and unused unsupported
 constants. Cross-module cases cover selected imports, aliases, transitive
 reads and same-spelling aggregate types/constants. Failure cases retain
 reference/operation source provenance after reading a folded value.
+
+## Shared reference corpus (#544)
+
+Resolved Grill Log: include [[Backend Shared Reference Programs]] in the actual
+modulePrograms/moduleRefusalPrograms lists, supplying no dependency files for
+these single-module programs. The existing native conformance coordinator
+executes them with their locked outputs; no unused property list counts.

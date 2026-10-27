@@ -39,7 +39,7 @@ code — [[Backend Native Tests]] owns execution.
   the entry are carried — a declaration the entry cannot reach does not block
   the build and does not refuse, because the interpreter never runs it; each
   unsupported construct (a module without `main`, arrays, ownership-bearing break values,
-  floats, `Str` locals, borrows, matches, function values and calls through
+  floats, `Str` locals, mutable borrows, matches, function values and calls through
   local values, calls to the entry, parameters of unsupported types, default parameter values, unresolved inferred
   results, expression-bodied non-entry functions, and trailing or explicitly
   returned print results) lowers to a refusal whose
@@ -80,6 +80,12 @@ Uses [[Compiler Lower]], [[Compiler Lower Body]], [[Backend Emit]],
 - **Q:** How can a wholly divergent entry be tested safely? **A:** Compile and lower both trailing-loop and returned-loop forms, assert the entry is carried, and never run them. Their body-derived ABI has no observable successful result.
 - **Q:** How is milestone #488 protected against C evaluation-order drift? **A:** Pure checks assert reachable function signatures and refusal spans; execution checks compare nested calls, mutable operand snapshots, short-circuit effects, recursion, and depth-bound diagnostics against the interpreter.
 - **Q:** May unsupported signatures pass because they are uncalled? **A:** Yes; reachability is the contract. A reachable unsupported signature refuses at its own construct, and an unreachable one never enters Core.
+
+## Mutable borrow refusal (#544)
+
+Shared borrows now lower, so the refusal case takes a `&mut Int` parameter
+instead of `&value`. The signature refuses at the parameter's type, which is
+the only refusal: the body is never reached.
 
 ## Referenced by
 

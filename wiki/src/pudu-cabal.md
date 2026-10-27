@@ -440,3 +440,8 @@ dependency; resolution and typing share syntax enumeration only.
 
 Resolved Grill Log: register [[Compiler Lower Constant]] using existing
 compiler, evaluator-value, text and containers modules, with no new dependency.
+
+## Shared reference lowering (#544)
+
+Resolved Grill Log: register [[Compiler Lower Reference]] using existing
+compiler/type/Core dependencies. No C runtime module or ABI change.

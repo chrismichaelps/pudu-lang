@@ -228,3 +228,5 @@ tags: [moc, handoff]
 - [[Native Refutable Binding Delivery]] — active native let … else delivery (#541).
 
 - [[Native Folded Constant Delivery]] — active compiler-folded native constant delivery (#543).
+
+- [[Native Shared Reference Delivery]] — active shared-carrier source admission (#544).
