@@ -106,3 +106,20 @@ Resolved Grill Log: reproduce actual interpreter dispatch, canonical settled kin
 Remove only obsolete platform Int bitwise/complement E6001 cases; replace with width-bearing Int8 cases so unsupported widths remain refused.
 
 Resolved Grill Log: boundary and failure matrices execute real native binaries; fixed repeated properties are not described as randomized sampling. Keep full numeric-family coverage pending.
+
+## Deferred literal no-loss guard (#498)
+
+Add checked block/local positive-2^63 programs to refusalCases and require
+located E6001 at the literal's own span. Existing integer success/refusal
+matrices protect immediate negative minimum and nonliteral negation overflow.
+
+Resolved Grill Log: the source must pass ordinary checking before native refusal
+is asserted. This pins a representation boundary without changing the oracle or
+pretending that full accepted-intermediate coverage is complete.
+
+The function-value fixture previously expected a second refusal at chosen()
+after its initializer helper had already failed. Under the resolved failed-block
+policy, require one E6001 at helper and stop before the dependent call. Rename
+the property to state that contract. The representation/unsupported-construct
+assertions stay exact, including source positions; this is an inspected native
+diagnostic recovery change, not a Pudu execution or checker change.

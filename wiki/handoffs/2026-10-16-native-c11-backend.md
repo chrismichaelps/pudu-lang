@@ -1,7 +1,7 @@
 ---
 type: handoff
 status: ACTIVE
-issue: 495
+issue: 498
 aliases: [Native C11 Backend Delivery]
 tags: [handoff, backend, native, c11]
 ---
@@ -435,3 +435,67 @@ Independent implementation, architecture and wiki reviews remain pending;
 no remote/Linux validation, PR, push, merge or subagent work is claimed.
 Full emission is incomplete. Exact next action: resolve and implement #498's
 no-loss literal admission guard, keeping its successful representation work open.
+
+## #498 hardening partition handoff
+
+Delivery Owner → Language Architect → Backend Engineer owns Lower.Body and
+Backend Emit Tests plus their mirrors, the native coverage ledger, generated
+README progress and changelog. Parent #495 is committed as 52477f88 with all
+19 clean gates and 656 groups passing. Branch feature/498-native-literal-range
+is stacked on it. Resolved module Grill Logs precede source edits. The guard
+prevents silent narrowing; issue #498 must remain open for successful exact
+intermediate representation. No subagents or independent approval claimed.
+Exact next action: add carrier admission and located refusals, then verify real
+CLI output preservation and immediate-minimum success.
+
+### Exact-carrier evidence and next implementation
+
+A reusable signed-magnitude C prototype passed 19,980 independent mathematical
+boundary/full-width cases under strict C11/UBSan, including positive 2^63.
+[[Exact Native Integer Carriers]] resolves the local production design and
+ABI/selection/Never/diagnostic obligations. No production exact carrier is
+implemented yet, and no independent review is claimed. After the guard partition
+passes validation and is committed, exact next action: publish complete mirrored
+contracts for Runtime.Integer value/arithmetic/bits modules and affected emitter
+ABI consumers, then implement revision 4 according to that architecture page.
+
+### #498 validation attempts and retained contract
+
+The first guard refusal property exposed duplicate follow-on errors. Failed
+block propagation was repaired without weakening the exact-one assertions.
+The initial full run was stopped after that known failure; its captured output
+is /tmp/pudu-498-suite-initial-aborted.log. A subsequent run found the existing
+function-value fixture expected two dependent refusals; the new first-failure
+policy intentionally reports only the refused initializer. The semantic delta
+was inspected and documented before updating its exact code/span expectation;
+that old-contract run is /tmp/pudu-498-suite-before-diagnostic-contract.log.
+The final build and focused guard/recovery properties pass. Real CLI checks
+prove both guarded source forms pass tree/compiled evaluation unchanged, native
+build gives one E6001 at the literal, and an existing output stays byte-identical.
+The immediate minimum literal still builds and prints exactly. Final full suite
+ran as session 34087 and completed successfully: all 656 property groups pass,
+zero failed markers, process exit 0. Capture: /tmp/pudu-498-suite.log.
+
+The #495 integer corpus executes 24 success and 13 refusal source programs.
+QuickCheck's fixed-property repetition is not 200 independent native executions.
+The standalone carrier prototype is an independent mathematical experiment,
+not a production backend result or completed #498 acceptance.
+
+### #498 hardening partition final validation
+
+Optimized GHC 9.14.1 -Werror build and all 656 property groups pass after the
+recovery fix and inspected diagnostic-contract update. Focused refusal and
+function recovery properties, real CLI preservation/minimum-success checks,
+diagnostic-code registry, all five progress generator tests and generated
+README check pass. The parent #495 has all 19 clean repository gates green;
+#498's final full-suite run reused those clean products and rebuilt its changed
+modules with -Werror. Do not describe that as a second clean 19-gate run.
+Sources stay below 500 lines (Body 389, EmitSpec 492); scope is below the PR
+review-size threshold. Independent implementation/architecture/wiki review and
+hosted platform validation remain pending before promotion; no agents activated.
+The scalar area is correctly Partial and the generated bar is 3/14 = 21%.
+Exact next action: publish the complete Runtime.Integer.Value/Arithmetic/Bits
+and affected ABI consumer mirror contracts, then implement the revision-4 exact
+carrier in [[Exact Native Integer Carriers]]. Keep issue #498 and the full
+100% C11-emission goal open until accepted intermediate programs execute with
+complete observable parity.
