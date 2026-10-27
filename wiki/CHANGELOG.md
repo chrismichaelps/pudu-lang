@@ -5,6 +5,11 @@ tags: [changelog]
 
 # Changelog
 
+## 2026-10-27 — Native rendering callable values (#575)
+
+- [[Native Rendering Callables]] specifies canonical type-specialized bodies with per-tag identity.
+- [[Backend Rendering Callable Programs]] covers source parity and counted ownership.
+
 ## 2026-10-27 — Owned diagnostic payloads (#570)
 
 Dynamic message/help copies now transfer to the terminating reporter, survive

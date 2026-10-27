@@ -3,6 +3,7 @@ module Pudu.Backend.ModulePrograms (modulePrograms, moduleRefusalPrograms, const
 
 import Data.Text (Text)
 import qualified Data.Text as Text
+import Pudu.Backend.RenderingCallablePrograms (renderingCallableModulePrograms)
 import Pudu.Backend.ReferencePrograms (referenceSuccessPrograms, referenceRefusalPrograms)
 import Pudu.Backend.MethodPrograms (methodSuccessPrograms, methodRefusalPrograms)
 import Pudu.Backend.GenericPrograms (genericSuccessPrograms, genericRefusalPrograms)
@@ -60,7 +61,7 @@ layout = ("Layout.pudu", Text.unlines
 
 modulePrograms :: [(String, [(FilePath, Text)], Text, Text)]
 modulePrograms =
-  [(label, [], source, answer) | (label, source, answer) <- constantPrograms <> referenceSuccessPrograms <> methodSuccessPrograms <> genericSuccessPrograms <> trySuccessPrograms <> forSuccessPrograms <> closureSuccessPrograms <> arraySuccessPrograms <> arrayPatternSuccessPrograms <> textCollectionSuccessPrograms <> convertSuccessPrograms <> keyedSuccessPrograms <> shapeSuccessPrograms <> rangeSuccessPrograms <> bytesSuccessPrograms] <> shapeModulePrograms <>
+  [(label, [], source, answer) | (label, source, answer) <- constantPrograms <> referenceSuccessPrograms <> methodSuccessPrograms <> genericSuccessPrograms <> trySuccessPrograms <> forSuccessPrograms <> closureSuccessPrograms <> arraySuccessPrograms <> arrayPatternSuccessPrograms <> textCollectionSuccessPrograms <> convertSuccessPrograms <> keyedSuccessPrograms <> shapeSuccessPrograms <> rangeSuccessPrograms <> bytesSuccessPrograms] <> renderingCallableModulePrograms <> shapeModulePrograms <>
   [ ( "calls through a selective import, an alias and a module that imports another"
     , [geometry, layout]
     , program

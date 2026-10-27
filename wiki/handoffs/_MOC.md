@@ -245,3 +245,5 @@ tags: [moc, handoff]
 - [[Native Output Callable Delivery]] — first-class output builtin parity (#569).
 
 - [[Native Diagnostic Ownership Delivery]] — counted diagnostic payload lifetimes (#570).
+
+- [[Native Rendering Callable Delivery]] — rendering intrinsic implementation and evidence.
