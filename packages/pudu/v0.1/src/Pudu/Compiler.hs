@@ -35,7 +35,7 @@ import Pudu.Semantic
   , writableReferences
   )
 import Pudu.Doc (DocIndex, buildIndex)
-import Pudu.Type (ModuleTypes (..), TypeInfo, checkTypesDetailed)
+import Pudu.Type (DeclaredShapes, ModuleTypes (..), TypeInfo, checkTypesDetailed)
 import Pudu.Type.Value (NominalId, Scheme)
 import Pudu.Type.Interface.Graph (InterfaceGraph, emptyInterfaceGraph, importsFor)
 import Data.Text (Text)
@@ -79,6 +79,9 @@ data CompileResult = CompileResult
   {-| The constants folding computed that are plain data, which linking binds
       instead of evaluating their initializers again. -}
   , compileFolded :: ~(Map Text Frozen)
+  {-| The module's records and sums formed with its imports, for native
+      lowering; nothing when checking never ran. -}
+  , compileShapes :: ~(Maybe DeclaredShapes)
   }
   deriving stock (Eq, Show)
 
@@ -108,6 +111,7 @@ rejectFrontend FrontendResult{frontendTokens, frontendModule, frontendDiagnostic
     , compileMethods = []
     , compileSchemes = []
     , compileFolded = Map.empty
+    , compileShapes = Nothing
     }
 
 {-| Run lexing, parsing, name resolution, and type checking in fixed order.
@@ -154,6 +158,7 @@ compileFrontendWithDependencies dependencyFolded dependencyKinds dependencies co
             , compileMethods = []
             , compileSchemes = []
             , compileFolded = Map.empty
+            , compileShapes = Nothing
             }
         Just original ->
           let (parsed, expansionDiagnostics) = expandModule original
@@ -194,6 +199,7 @@ compileFrontendWithDependencies dependencyFolded dependencyKinds dependencies co
                     , compileMethods = maybe [] moduleMethods typing
                     , compileSchemes = maybe [] moduleSchemes typing
                     , compileFolded = folded
+                    , compileShapes = moduleShapes <$> typing
                     }
 
 {-| Evaluate the module's constants at compile time.

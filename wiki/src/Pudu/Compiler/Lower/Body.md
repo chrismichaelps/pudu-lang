@@ -162,6 +162,13 @@ set methods go to [[Compiler Lower Keyed]]; an entry may return a map or set.
 
 `charFromCode`, when the name is the prelude's, goes to [[Compiler Lower Convert]].
 
+## Field calls and assignment values (#563)
+
+With no method of its name, `value.field(args)` calls the function the field
+holds, arguments first, as `callMemberSelecting` falls back to `readMember`.
+An assignment in expression position runs as its statement and is unit (or
+Never when it cannot finish).
+
 ## Referenced by
 
 [[src/Pudu/Compiler/_MOC]] · [[src/Pudu/_MOC]] · [[Compiler Lower]] ·

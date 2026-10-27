@@ -182,6 +182,14 @@ Resolved Grill Log: the entry starts with its checked result in
 Resolved Grill Log: each body's key is set before it is lowered, and the
 module carries the closures made while lowering.
 
+## Shapes with imports (#563)
+
+Resolved Grill Log: a native module holds the shapes checking formed with its
+imports, and lowering lays records and sums out from those, falling back to
+the module's own declarations when they are absent. Before, a field naming an
+imported type or alias had no form, so records reaching across modules, or
+holding another module's aliases, refused.
+
 ## Referenced by
 
 [[src/Pudu/Compiler/_MOC]] · [[src/Pudu/_MOC]] · [[Core IR]] · [[Pudu Core]] ·

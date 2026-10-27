@@ -32,7 +32,7 @@ import Pudu.Compiler (CompileResult (..))
 import Pudu.Compiler.Lower.Types (LowerTypes, emptyTypes, formedCoreTypeIn, lookupScheme, nativeTypes, withShapes)
 import Pudu.Compiler.Lower.Method (methodTables)
 import Pudu.Compiler.Program (ProgramResult (..), rootCompileResult)
-import Pudu.Type (declaredRecords, declaredSums)
+import Pudu.Type (DeclaredShapes, declaredRecords, declaredSums)
 import Pudu.Type.Value (NominalId (..), Scheme (..), Type (FunctionTypeRequiring))
 import Pudu.Source (Span)
 import Pudu.Compiler.Lower.Body (lowerEntryBody, lowerFunctionBody)
@@ -69,6 +69,8 @@ data NativeModule = NativeModule
   , nativeModuleConstants :: !(Map.Map Text Frozen)
   {-| The methods its own declarations provide, as checking declared them. -}
   , nativeModuleMethods :: ![(NominalId, Text, Scheme, Span)]
+  {-| Its records and sums formed with its imports, when checking gave them. -}
+  , nativeModuleShapes :: !(Maybe DeclaredShapes)
   }
 
 {-| Every module of a compiled program as native lowering reads it, the root
@@ -92,6 +94,7 @@ compiledNativeModule :: Module -> CompileResult -> NativeModule
 compiledNativeModule syntax result =
   NativeModule (moduleNameText (locatedValue (moduleName syntax))) syntax
     (nativeTypes (compileTypes result) (compileSchemes result)) (compileFolded result) (compileMethods result)
+    (compileShapes result)
 
 {-| Lower a program of one module. -}
 lowerModule :: Text -> Maybe LowerTypes -> Module -> LowerResult
@@ -101,7 +104,7 @@ lowerModule entryName types = lowerModuleFolded entryName types Map.empty
     never evaluates a constant initializer itself. -}
 lowerModuleFolded :: Text -> Maybe LowerTypes -> Map.Map Text Frozen -> Module -> LowerResult
 lowerModuleFolded entryName types constants parsed =
-  lowerProgram entryName [NativeModule (moduleNameText (locatedValue (moduleName parsed))) parsed types constants []]
+  lowerProgram entryName [NativeModule (moduleNameText (locatedValue (moduleName parsed))) parsed types constants [] Nothing]
 
 {-| Lower the root module's entry function and every function reachable from
     it, in whichever module each is declared. The root comes first. -}
@@ -150,12 +153,18 @@ lowerProgram entryName programModules@(rootModule : _)
     -- Each module's own records and sums, and the built-in sums once; a type
     -- is named by its canonical identity, so modules' types never meet.
     owns native identity = nominalModule identity == Just (locatedValue (moduleName (nativeModuleSyntax native)))
+    -- Shapes formed with the module's imports when checking gave them, so a
+    -- field naming another module's type or alias is formed; otherwise the
+    -- module's own declarations alone.
+    shapesOf native = case nativeModuleShapes native of
+      Just shapes -> shapes
+      Nothing -> (declaredRecords (nativeModuleSyntax native), declaredSums (nativeModuleSyntax native))
     records = Map.unions
-      [ Map.filterWithKey (\identity _ -> owns native identity) (declaredRecords (nativeModuleSyntax native))
+      [ Map.filterWithKey (\identity _ -> owns native identity) (fst (shapesOf native))
       | native <- programModules ]
     sums = Map.unions
       [ Map.filterWithKey (\identity _ -> owns native identity || nominalModule identity == Nothing)
-          (declaredSums (nativeModuleSyntax native))
+          (snd (shapesOf native))
       | native <- programModules ]
 
     scopes = Map.fromList

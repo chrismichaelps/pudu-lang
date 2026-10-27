@@ -14,6 +14,7 @@ import Pudu.Backend.ArrayPatternPrograms (arrayPatternSuccessPrograms, arrayPatt
 import Pudu.Backend.TextCollectionPrograms (textCollectionSuccessPrograms, textCollectionRefusalPrograms)
 import Pudu.Backend.ConvertPrograms (convertSuccessPrograms, convertRefusalPrograms)
 import Pudu.Backend.KeyedPrograms (keyedSuccessPrograms, keyedRefusalPrograms)
+import Pudu.Backend.ShapePrograms (shapeModulePrograms, shapeSuccessPrograms)
 
 geometry :: (FilePath, Text)
 geometry = ("Geometry.pudu", Text.unlines
@@ -57,7 +58,7 @@ layout = ("Layout.pudu", Text.unlines
 
 modulePrograms :: [(String, [(FilePath, Text)], Text, Text)]
 modulePrograms =
-  [(label, [], source, answer) | (label, source, answer) <- constantPrograms <> referenceSuccessPrograms <> methodSuccessPrograms <> genericSuccessPrograms <> trySuccessPrograms <> forSuccessPrograms <> closureSuccessPrograms <> arraySuccessPrograms <> arrayPatternSuccessPrograms <> textCollectionSuccessPrograms <> convertSuccessPrograms <> keyedSuccessPrograms] <>
+  [(label, [], source, answer) | (label, source, answer) <- constantPrograms <> referenceSuccessPrograms <> methodSuccessPrograms <> genericSuccessPrograms <> trySuccessPrograms <> forSuccessPrograms <> closureSuccessPrograms <> arraySuccessPrograms <> arrayPatternSuccessPrograms <> textCollectionSuccessPrograms <> convertSuccessPrograms <> keyedSuccessPrograms <> shapeSuccessPrograms] <> shapeModulePrograms <>
   [ ( "calls through a selective import, an alias and a module that imports another"
     , [geometry, layout]
     , program

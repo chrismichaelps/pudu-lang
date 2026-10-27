@@ -22,7 +22,7 @@ Compile ordinary checked Pudu programs into portable C11 with interpreter-identi
 | Text and bytes | Partial (#515, #516, #517, #518, #559, #562) | Owned Str values, Char values, operators, rendering, printing, entries, charAt, every Int/Bool/Str-result method (trim and case mapping included), `split`, `lines`, `chars`, `toInt`, `toFloat` and `charFromCode` match the interpreter (#559, #562); Bytes (`toBytes`), `toDecimal` and print Result remain |
 | Records, tuples, sums and collections | Partial (#521, #525, #552, #556, #558, #561) | Tuples, records and sums of every module, generic ones at each instantiation, and the built-in Option/Result are boxed, refcounted values with construction, field, position and payload reads, equality, ordering (tuples), rendering and run-time E7001 naming held variants; arrays (#556, #558) and maps and sets (#561) are native; Bytes, Range values and the accelerated map builtins remain |
 | Pattern matching and iteration | Partial (#525, #540, #541, #554, #558, #562) | `match`, `if let` (with `else if` chains) and `while let` (with labels, `break` and `continue`) lower every pattern form in order with guards, bindings, literals, ranges, tuples, constructors, records and alternatives; `let ... else` retains bindings in the enclosing block (#541); `for` walks written ranges, sequence types, arrays, maps, sets, Str, tuples and sum payloads (#554, #561, #562); sequence patterns are native (#558); range values remain |
-| Modules and constants | Partial (#539, #543) | Calls through selective imports, aliases and qualifiers, functions of every reachable module, and records and sums by canonical identity match the interpreter; folded scalar/tuple/record/sum constants now preserve canonical solved identity; callable and unrepresented constant families remain |
+| Modules and constants | Partial (#539, #543, #563) | Calls through selective imports, aliases and qualifiers, functions of every reachable module, and records and sums by canonical identity match the interpreter; folded scalar/tuple/record/sum constants now preserve canonical solved identity; records and sums whose fields name other modules' types or aliases are laid out as checking formed them (#563); callable and unrepresented constant families remain |
 | Callables and generic code | Partial (#551, #552, #555, #560) | Implementation members, inherited defaults, type- and trait-qualified calls, `toText()`, generic functions and implementations (one copy per type list) with or without written type arguments (#560), lambdas with captures, named functions as values and calls through values match the interpreter; default parameter values, method values, higher-kinded parameters and `dynamic` values remain |
 | Accepted operations with runtime refusals | Partial (#494, #512) | Represented Unit/Bool/float operators retain E7001; remaining runtime types/operators still need equivalent coverage |
 | Errors, references and resources | Partial (#544, #553) | Shared borrows, dereference and `?` on Result and Option match the interpreter; mutable loans with writeback, moves, drop and all unwind paths remain |
@@ -435,3 +435,10 @@ lookups and 100,000 removes run in about a third of a second natively.
 `for` walks Str, tuples and sum payloads in `evaluateFor`'s order, and
 `charFromCode` answers `Some` only for scalar values ([[Compiler Lower For]],
 [[Compiler Lower Convert]]). [[Backend For Programs]] holds the evidence.
+
+## Shapes, field calls and assignment values (#563)
+
+Lowering reads record and sum shapes formed with each module's imports, so
+types reaching across modules have a native form. Calls through
+function-valued fields and assignments used as values follow the evaluator.
+[[Backend Shape Programs]] holds the evidence.

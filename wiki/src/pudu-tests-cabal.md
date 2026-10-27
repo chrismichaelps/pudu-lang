@@ -105,6 +105,10 @@ Register Pudu.Backend.ConvertPrograms ([[Backend Convert Programs]]).
 
 Register Pudu.Backend.KeyedPrograms ([[Backend Keyed Programs]]).
 
+## Shape corpus (#563)
+
+Register Pudu.Backend.ShapePrograms ([[Backend Shape Programs]]).
+
 ## Referenced by
 
 [[Derive Graph Spec]] is explicitly registered for real program elaboration,

@@ -5,6 +5,15 @@ tags: [changelog]
 
 # Changelog
 
+## 2026-10-26 — Native shapes across modules, field calls, assignment values (#563)
+
+Checking now hands lowering each module's records and sums formed with its
+imports, so records reaching across modules or holding other modules' aliases
+lower natively ([[Compiler Lower]], [[Pudu Type]]). A call through a
+function-valued field and an assignment used as a value follow the evaluator
+([[Compiler Lower Body]]). [[Backend Shape Programs]] passes under Clang,
+GCC 15, ASan/UBSan and the tree evaluator with counted cleanup.
+
 ## 2026-10-26 — Native for over Str, tuples and payloads, and charFromCode (#562)
 
 `for` walks a Str's characters, a tuple's members and a sum's payload when it
