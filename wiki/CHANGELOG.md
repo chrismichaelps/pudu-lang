@@ -5,6 +5,14 @@ tags: [changelog]
 
 # Changelog
 
+## 2026-10-18 — Wide frame bridge (#506)
+
+- [[Native Wide Frame Bridge]] connects exact 128-bit literals, descriptors, helper selection, printing and status to optional wide frame cells. Narrow-only layout stays unchanged; runtime revision is 7. [[Native Wide Frame Tests]] adds 23 actual Core/frame programs and counted normal/error cleanup. Clang/GCC 15, ASan/UBSan, 319 strict body translations and all 19 clean gates/678 groups pass. Public source admission, independent reviews and additional platforms remain pending; completed-area progress stays 4/14 (28%).
+
+## 2026-10-18 — Closed-output process policy (#505)
+
+- [[Native Closed Pipe Semantics]] repairs a reproduced P1: generated main installs a nonterminating handler, preserving default-on-exec and fatal stderr termination while retaining intended status after exit-time stdout flush. [[Native Broken Pipe Tests]] records both red reproductions and passes 27 closed-stream/signal combinations with both compilers and sanitizers; 108 actual CLI cases agree across all engines. The clean run passed 18 gates; its sole stale signal.h whitelist assertion was corrected and recompiled under -Werror, then all 677 groups passed in the full-suite rerun. Scalar coverage returns to 4/14 (28%); reviews/platform evidence remain pending.
+
 ## 2026-10-18 — Wide runtime integration (#504)
 
 - A real closed-output pipe probe finds a pre-existing SIGPIPE divergence; both evaluators continue but native dies by signal. Scalar coverage is temporarily Partial pending shared startup repair.

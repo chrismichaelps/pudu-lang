@@ -74,3 +74,7 @@ Pudu is a statically typed native systems language for developers who need predi
 - [[Native Wide Operations]] — resolved typed 128-bit operation contract (#503).
 
 - [[Native Wide Runtime Integration]] — full-width printing/status and actual dependencies (#504).
+
+- [[Native Closed Pipe Semantics]] — P1 native process/output parity (#505).
+
+- [[Native Wide Frame Bridge]] — exact 128-bit execution-frame integration (#506).

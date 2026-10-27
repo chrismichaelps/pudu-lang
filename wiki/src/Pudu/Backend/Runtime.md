@@ -124,7 +124,8 @@ int pudu_status(pudu_int);
 
 Consumed by [[Backend Emit]], which selects and concatenates the runtime parts
 into every generated translation unit. It depends on nothing in Pudu: the C
-side includes only `<stdint.h>`, `<stdio.h>`, `<stdlib.h>`, `<string.h>`, and
+side includes only `<inttypes.h>`, `<stdint.h>`, `<signal.h>`, `<stdio.h>`,
+`<stdlib.h>`, `<string.h>`, and
 `<unistd.h>` or `<io.h>` for `isatty`. Its Haskell side imports `Data.Text`
 and [[Compile Time Limits]] plus [[Backend Runtime Integer]] — pure constants, no frontend, semantic, or
 evaluator module — so the depth bound is the evaluator's own.
@@ -198,3 +199,23 @@ int64_t and unit/Bool retain their ABI. Integer catalogue precedes printers.
 Resolved Grill Log: implement [[Exact Native Integer Carriers]] without changing the oracle. Preserve positive boundary values, exact diagnostic provenance, Never transfers, and warning-free helper selection. The internal carrier is not a public type-layout promise; full native coverage remains open.
 
 The revision-4 integer printer emits its sign, magnitude and newline in one printf call, then flushes, keeping the line within one stdio operation.
+
+## Closed-pipe process policy (#505)
+
+Add standard signal.h and process_io/pudu_prepare_io, installing a nonterminating
+rearmed SIGPIPE handler where defined at startup. Runtime revision becomes 6.
+Add error_io/pudu_prepare_error_io restoring SIG_DFL on fatal stderr paths;
+run scalar cleanup before that switch and before stderr rendering. Restore
+the startup handler after stderr flush, before exit can retry failed stdout
+buffering; failed stderr still terminates under the default disposition.
+Resolved Grill Log: match evaluator continuation/later diagnostics, preserve
+other signals and later explicit handler changes; no per-print signal reset.
+Contract: [[Native Closed Pipe Semantics]].
+
+Scalar refusal sites and their strings are static emitted data, so pre-report
+frame cleanup preserves message storage. Future owned error payloads must be
+transferred to a surviving error owner before unwinding frames.
+
+## Wide frame bridge (#506)
+
+Revision 7 records the optional wide frame ABI described by [[Native Wide Frame Bridge]]. Preserve the revision-6 process IO policy. Resolved Grill Log: changing frame payload representation requires an artifact revision; helper-only prerequisites did not admit source kinds.

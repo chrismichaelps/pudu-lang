@@ -178,3 +178,14 @@ Resolved Grill Log: execute independent mathematical/refusal and minimal-closure
 
 Register [[Native Wide Runtime Tests]] with existing test dependencies.
 Resolved Grill Log: actual production runtime selection/output/failure evidence must execute before wide-frame/source admission.
+
+## Closed-output regression (#505)
+
+Register [[Native Broken Pipe Tests]] with existing test dependencies and a conditional POSIX launcher.
+Resolved Grill Log: restore default SIGPIPE in a separate launcher so inherited evaluator policy cannot mask the native defect.
+
+## Wide frame execution (#506)
+
+Register and execute [[Native Wide Frame Tests]] with existing dependencies.
+Resolved Grill Log: the actual Core/frame C11 corpus and cleanup checks run in
+focused and complete suites; public source admission remains pending.

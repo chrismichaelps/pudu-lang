@@ -10,7 +10,7 @@ import Data.Text (Text)
 import Pudu.Backend.Emit.Frame.Value (cellMember, frameValue, slotText)
 import Pudu.Backend.Emit.State
   ( EmitState (..), callDepthSite, cString, cStringBytes, line, operatorFailureSite, textOfInt )
-import Pudu.Backend.Emit.Support (zeroValue)
+import Pudu.Backend.Emit.Support (integerHelper, zeroValue)
 import Pudu.Core (CoreType (..))
 import Pudu.Core.Frame
   ( FrameBlock (..), FrameFault (..), FrameFunction (..), FrameInstruction (..)
@@ -51,7 +51,7 @@ instruction (state, needs) operation = case operation of
   FramePrintSlot at slot -> do
     value <- slotText slot
     case frameSlotType slot of
-      CoreIntegerType _ -> printed "print_int" value
+      CoreIntegerType _ -> printed (integerHelper (frameSlotType slot) "print_int") value
       CoreBoolType -> printed "print_bool" value
       CoreUnitType -> printed "print_str" "\"()\", 2"
       _ -> Left (FrameFault (Just at) "an unrepresented frame print value")

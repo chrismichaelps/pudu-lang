@@ -188,3 +188,7 @@ tags: [moc, handoff]
 - [[Native Wide Operation Delivery]] — active portable typed arithmetic delivery (#503).
 
 - [[Native Wide Runtime Delivery]] — active real-runtime integration (#504).
+
+- [[Native Closed Pipe Delivery]] — active P1 output/startup repair (#505).
+
+- [[Native Wide Frame Delivery]] — 128-bit frame bridge after process-policy repair (#506).

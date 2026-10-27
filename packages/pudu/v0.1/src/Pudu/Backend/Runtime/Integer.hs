@@ -20,8 +20,8 @@ integerRuntimeDependencies part = maybe [] id (lookup part dependencies)
   <> wideOperationRuntimeDependencies part <> wideDisplayRuntimeDependencies part
  where
   dependencies =
-    [ ("fail", ["site", "colored", "cleanup"])
-    , ("memory_failure", ["cleanup"])
+    [ ("fail", ["site", "colored", "cleanup", "error_io", "process_io"])
+    , ("memory_failure", ["cleanup", "error_io", "process_io"])
     , ("magnitude", [])
     , ("make", [])
     , ("add_math", ["magnitude", "make"])

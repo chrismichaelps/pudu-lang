@@ -13,7 +13,7 @@ Compile ordinary checked Pudu programs into portable C11 with interpreter-identi
 
 | Area | State | Next obligation |
 | --- | --- | --- |
-| Platform Int/Bool, checked arithmetic, if/while, printing | Partial (#505) | Closed stdout pipe currently kills native output with SIGPIPE while both evaluators continue; repair startup policy before restoring completion |
+| Platform Int/Bool, checked arithmetic, if/while, printing | Implemented (#498, #505) | Preserve exact deferred magnitudes, control/output parity and closed-pipe continuation/diagnostic regressions |
 | Scalar functions, recursion, call depth | Implemented (#499) | Preserve explicit-frame lifetime, argument ordering, E7002 timing and differential evidence; promotion still requires independent review |
 | Loop control and scalar loop results | Implemented (#489) | Preserve labels, transfers, Never joins and condition-scope evidence |
 | Unit values, parameters and operations | Implemented (#492, #493) | Preserve effect-first temporaries, display/equality and #494 E7001 runtime refusals |
@@ -150,15 +150,18 @@ widths (#497), retaining the full unsigned/large/float/Decimal obligations.
 [[Backend Word128 Kernel]], [[Backend Wide Integer Values]] and
 [[Backend Wide Operations]] have independent executed corpora (#501–#503).
 [[Native Wide Runtime Integration]] adds full-width output/status and actual
-runtime dependency selection (#504, locally validated). Wide frame integration
-and full source admission/parity remain pending. These prerequisites do not
+runtime dependency selection (#504, locally validated). [[Native Wide Frame Bridge]] integrates the frame ABI (#506, all 19 clean gates/678 groups pass);
+full source admission/parity remains pending. These prerequisites do not
 change the completed-area count.
 
 ## Closed-output parity finding
 
-A checked scalar print program with a pipe whose reader is closed exits 0 with
-empty stderr in both tree and compiled evaluators; the native executable exits
-by SIGPIPE (signal 13). Local evidence: ~/.codex/tmp/pudu-504/pipe-probe.json.
-This contradicts complete output parity, so the scalar area is temporarily
-Partial. Repair the shared process startup policy before wide source admission;
-printing helpers must not terminate an ignored print-result program by signal.
+Before #505, a checked scalar print program with a closed pipe reader exits 0
+with empty stderr in both evaluators, while native exits by SIGPIPE (signal 13). Local evidence: ~/.codex/tmp/pudu-504/pipe-probe.json.
+This contradicted complete output parity. The refined #505 repair now matches
+108 CLI cases, including stderr failures and inherited blocked signals. The clean
+run passed 18 gates and exposed one stale standard-header whitelist assertion;
+after the inspected signal.h allowance recompiled under -Werror, all 677 groups
+pass in the full-suite rerun. Together these checks restore the scalar row.
+Independent review and additional supported-platform evidence remain pending.
+Printing helpers must not terminate an ignored print-result program by signal.

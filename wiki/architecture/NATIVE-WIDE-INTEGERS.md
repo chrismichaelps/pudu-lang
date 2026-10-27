@@ -35,7 +35,8 @@ so deferred positive 2^127 does not become negative. Checked/saturating/wrapping
 policies, signed division/remainder, diagnostics, decimal printing and status
 clamping remain separate consumers. Mixed programs need a wide cell member;
 programs using only existing kinds must retain their current frame layout.
-Runtime revision changes only when the production ABI is integrated. Select
+Wide-frame delivery changes the runtime revision when its production ABI is
+integrated; unrelated process-policy revisions remain independent. Select
 raw helpers and their dependency closure individually: embedding this complete
 kernel when only one helper is called triggers Clang unused-function errors.
 Do not suppress warnings or add compiler-specific unused attributes.

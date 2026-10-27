@@ -7,7 +7,7 @@ import Data.Text (Text)
 import qualified Data.Text as Text
 import Pudu.Backend.Emit.State
   ( EmitState, divideByZeroSite, overflowSite, shiftSites, textOfInt )
-import Pudu.Backend.Emit.Support (integerKindText, integerLiteralText)
+import Pudu.Backend.Emit.Support (integerHelper, integerKindText, integerLiteralText, isWideInteger)
 import Pudu.Core (CoreBinaryOperator (..), CoreType (..))
 import Pudu.Core.Frame
   ( FrameFault (..), FrameSlot (..), FrameSlotId (..), FrameUnaryOperator (..)
@@ -15,7 +15,7 @@ import Pudu.Core.Frame
 import Pudu.Diagnostic.Arithmetic (CheckedOperation (..))
 
 cellMember :: CoreType -> Maybe Text
-cellMember (CoreIntegerType _) = Just "integer"
+cellMember (CoreIntegerType kind) = Just (if isWideInteger kind then "wide" else "integer")
 cellMember CoreBoolType = Just "scalar"
 cellMember CoreUnitType = Just "scalar"
 cellMember _ = Nothing
@@ -58,7 +58,9 @@ frameValue state value = case frameValueShape value of
           let (after, negative, wide) = shiftSites state at kind
           done after (call helper [lhs, rhs, descriptor, site negative, site wide]) [helper]
         comparison symbol = case frameSlotType left of
-          CoreIntegerType _ -> done state (call "compare" [lhs, rhs] <> " " <> symbol <> " 0") ["compare"]
+          CoreIntegerType _ ->
+            let helper = integerHelper (frameSlotType left) "compare"
+             in done state (call helper [lhs, rhs] <> " " <> symbol <> " 0") [helper]
           CoreBoolType -> done state (lhs <> " " <> symbol <> " " <> rhs) []
           CoreUnitType -> done state (lhs <> " " <> symbol <> " " <> rhs) []
           _ -> refused "an unrepresented comparison operand"
@@ -102,6 +104,6 @@ frameValue state value = case frameValueShape value of
         Just descriptor -> Right (kind, descriptor)
         Nothing -> refused "an unrepresented frame integer descriptor"
       _ -> refused "an integer frame operation without an integer result"
-    done after text needs = Right (after, text, Set.fromList needs)
-    call helper arguments = "pudu_" <> helper <> "(" <> Text.intercalate ", " arguments <> ")"
+    done after text needs = Right (after, text, Set.fromList (map (integerHelper (frameValueType value)) needs))
+    call helper arguments = "pudu_" <> integerHelper (frameValueType value) helper <> "(" <> Text.intercalate ", " arguments <> ")"
     site index = "&pudu_sites[" <> textOfInt index <> "]"

@@ -31,3 +31,14 @@ come from actual emitted functions. No frontend/compiler import or inference.
 ## Referenced by
 
 [[src/_MOC]] · [[Native Frame Pressure Repair]]
+
+## Closed-pipe startup (#505)
+
+Select process_io and call pudu_prepare_io at the start of C main, before frame
+allocation for every entry-result kind. Resolved Grill Log: startup policy must
+not depend on whether entry returns Int, unit or Never, and must preserve later
+source execution after ignored print errors. [[Native Closed Pipe Semantics]].
+
+## Wide frame bridge (#506)
+
+Export frameUsesWideCells :: FrameModule -> Bool, inspecting every function result, parameter and slot type. Include wide_value and pass that flag to frameTypes when needed. Wide entry results select wide_status and the wide member; startup policy remains unchanged. Resolved Grill Log: literal-only and unused-wide slots still require ABI types, while narrow programs retain their layout. [[Native Wide Frame Bridge]].

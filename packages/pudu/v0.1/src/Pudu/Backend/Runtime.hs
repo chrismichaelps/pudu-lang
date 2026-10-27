@@ -32,7 +32,7 @@ import Pudu.Diagnostic.Host (memoryFailureMessage)
 {-| The runtime contract revision baked into every generated program's header
     comment. It changes only when the runtime's behaviour or interface does. -}
 runtimeRevision :: Text
-runtimeRevision = "5"
+runtimeRevision = "7"
 
 {-| @Backend.Runtime.Part — one named, self-contained piece of the runtime.
 
@@ -50,6 +50,8 @@ data RuntimePart = RuntimePart
 runtimeParts :: [RuntimePart]
 runtimeParts =
   [ RuntimePart "prelude" preludeLines
+  , RuntimePart "process_io" processIoLines
+  , RuntimePart "error_io" errorIoLines
   , RuntimePart "site" siteLines
   , RuntimePart "colored" coloredLines
   , RuntimePart "cleanup" ["static void (*pudu_cleanup_hook)(void) = NULL;"]
@@ -69,6 +71,7 @@ preludeLines =
   , ""
   , "#include <inttypes.h>"
   , "#include <stdint.h>"
+  , "#include <signal.h>"
   , "#include <stdio.h>"
   , "#include <stdlib.h>"
   , "#include <string.h>"
@@ -80,6 +83,30 @@ preludeLines =
   , "#include <unistd.h>"
   , "#define PUDU_ISATTY isatty"
   , "#endif"
+  ]
+
+processIoLines :: [Text]
+processIoLines =
+  [ "#ifdef SIGPIPE"
+  , "static void pudu_pipe_handler(int number) {"
+  , "  /* Rearm on C implementations with one-shot signal handlers. */"
+  , "  (void)signal(number, pudu_pipe_handler);"
+  , "}"
+  , "#endif"
+  , "static inline void pudu_prepare_io(void) {"
+  , "#ifdef SIGPIPE"
+  , "  (void)signal(SIGPIPE, pudu_pipe_handler);"
+  , "#endif"
+  , "}"
+  ]
+
+errorIoLines :: [Text]
+errorIoLines =
+  [ "static inline void pudu_prepare_error_io(void) {"
+  , "#ifdef SIGPIPE"
+  , "  (void)signal(SIGPIPE, SIG_DFL);"
+  , "#endif"
+  , "}"
   ]
 
 siteLines :: [Text]
@@ -111,6 +138,8 @@ failLines :: [Text]
 failLines =
   [ "/* Print the refusal and leave with the interpreter's status for one. */"
   , "static inline void pudu_fail(const pudu_site *site) {"
+  , "  if (pudu_cleanup_hook != NULL) pudu_cleanup_hook();"
+  , "  pudu_prepare_error_io();"
   , "  int colored = pudu_colored();"
   , "  int index;"
   , "  if (colored) fputs(\"\\x1b[31m\", stderr);"
@@ -141,7 +170,8 @@ failLines =
   , "    fprintf(stderr, \": %s\\n\", site->help);"
   , "  }"
   , "  fflush(stderr);"
-  , "  if (pudu_cleanup_hook != NULL) pudu_cleanup_hook();"
+  , "  /* Exit may flush stdout again after a failed print. */"
+  , "  pudu_prepare_io();"
   , "  exit(1);"
   , "}"
   ]
@@ -150,8 +180,10 @@ memoryFailureLines :: [Text]
 memoryFailureLines =
   [ "static void pudu_memory_failure(void) {"
   , "  if (pudu_cleanup_hook != NULL) pudu_cleanup_hook();"
+  , "  pudu_prepare_error_io();"
   , "  fputs(\"" <> Text.pack memoryFailureMessage <> "\\n\", stderr);"
   , "  fflush(stderr);"
+  , "  pudu_prepare_io();"
   , "  exit(1);"
   , "}"
   ]
