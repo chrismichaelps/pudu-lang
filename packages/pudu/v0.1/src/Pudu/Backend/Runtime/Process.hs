@@ -1,6 +1,6 @@
 {-| @Pudu.Backend.Runtime.Process — signal policy and the inherited standard
     descriptors visible to source operations. -}
-module Pudu.Backend.Runtime.Process (processIoLines) where
+module Pudu.Backend.Runtime.Process (processIoLines, waitWritableLines) where
 
 import Data.Text (Text)
 
@@ -46,20 +46,6 @@ processIoLines =
   , "#endif"
   , "}"
   , ""
-  , "static inline int pudu_wait_writable(int descriptor) {"
-  , "#if !defined(_WIN32)"
-  , "  struct pollfd writable = {descriptor, POLLOUT, 0};"
-  , "  int ready = poll(&writable, 1, 0);"
-  , "  if (ready == 0) {"
-  , "    do { ready = poll(&writable, 1, -1); } while (ready < 0 && errno == EINTR);"
-  , "    if (ready < 0) return errno;"
-  , "  }"
-  , "#else"
-  , "  (void)descriptor;"
-  , "#endif"
-  , "  return 0;"
-  , "}"
-  , ""
   , "#ifdef SIGPIPE"
   , "static void pudu_pipe_handler(int number) {"
   , "  /* Rearm on C implementations with one-shot signal handlers. */"
@@ -71,5 +57,25 @@ processIoLines =
   , "  (void)signal(SIGPIPE, pudu_pipe_handler);"
   , "#endif"
   , "  pudu_prepare_descriptors();"
+  , "}"
+  ]
+
+{-| Waits until a descriptor takes a write, so a full pipe blocks rather than
+    losing output. Its own part: only error reporting and buffered output
+    use it, and an unused static function breaks a -Werror build. -}
+waitWritableLines :: [Text]
+waitWritableLines =
+  [ "static inline int pudu_wait_writable(int descriptor) {"
+  , "#if !defined(_WIN32)"
+  , "  struct pollfd writable = {descriptor, POLLOUT, 0};"
+  , "  int ready = poll(&writable, 1, 0);"
+  , "  if (ready == 0) {"
+  , "    do { ready = poll(&writable, 1, -1); } while (ready < 0 && errno == EINTR);"
+  , "    if (ready < 0) return errno;"
+  , "  }"
+  , "#else"
+  , "  (void)descriptor;"
+  , "#endif"
+  , "  return 0;"
   , "}"
   ]

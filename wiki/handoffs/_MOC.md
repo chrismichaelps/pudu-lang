@@ -251,3 +251,5 @@ tags: [moc, handoff]
 - [[Native Collection Callable Delivery]] — collection builtin values and caller-site refusals (#631).
 
 - [[Native Stopping Builtin Delivery]] — panic and untyped convertInteger (#633).
+
+- [[Native Suite Repair Delivery]] — frame-body and float runtime suite repairs (#636).

@@ -33,3 +33,11 @@ flags belong to the process and the OS closes them on process exit.
 ## Fatal output readiness (#566)
 
 Resolved Grill Log: Expose pudu_wait_writable(descriptor) within the process_io part. Both ordinary writes and fatal stderr reporting use the locked blocking-FD readiness policy. Initial poll errors still reach the actual write; interrupted blocking waits retry.
+
+## wait_writable part (#636)
+
+Export waitWritableLines as its own part. process_io keeps the includes,
+descriptor preparation and signal policy; pudu_wait_writable moves out.
+Resolved Grill Log: a selection with process_io and no writer of errors or
+buffered output left the static inline function unused, which clang rejects
+under -Werror. Its users now pull it in.

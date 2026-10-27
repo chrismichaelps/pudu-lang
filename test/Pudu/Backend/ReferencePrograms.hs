@@ -6,7 +6,13 @@ import qualified Data.Text as Text
 
 referenceSuccessPrograms :: [(String, Text, Text)]
 referenceSuccessPrograms =
-  [ ("shared parameters and results carry scalar and record values", program
+  [ ("a borrowed print Result keeps the printed output", program
+      [ "fn main() -> Int {"
+      , "  let held = &print(\"x\")"
+      , "  print(show(*held))"
+      , "  0"
+      , "}" ], "x\nOk(())\n")
+  , ("shared parameters and results carry scalar and record values", program
       [ "type Point = { x: Int }"
       , "fn read(point: &Point) -> Int { point.x }"
       , "fn forward(value: &Int) -> &Int { value }"

@@ -10,14 +10,8 @@ import GHC.Float (castWord64ToDouble)
 import Numeric (showHex)
 import Pudu.Backend.Runtime (RuntimePart (..), runtimeParts)
 import Pudu.Backend.Runtime.Dependencies (runtimeDependencies)
-import Pudu.Backend.Runtime.Text (textRuntimeParts)
-import Pudu.Backend.Runtime.Aggregate (aggregateRuntimeParts)
-import Pudu.Backend.Runtime.Char (charRuntimeParts)
-import Pudu.Backend.Runtime.Text.Case (textCaseRuntimeParts)
-import Pudu.Backend.Runtime.Text.Methods (textMethodRuntimeParts)
-import Pudu.Backend.Runtime.Text.Number (textNumberRuntimeParts)
 import Pudu.Backend.Runtime.Float (floatRuntimeParts)
-import Pudu.Backend.Runtime.Integer (integerRuntimeDependencies)
+import Pudu.Backend.Runtime.Integer (integerRuntimeDependencies, integerRuntimeParts)
 import System.Directory (findExecutable)
 import System.Environment (lookupEnv)
 import System.Exit (ExitCode (..))
@@ -96,7 +90,6 @@ testOutput cc root = do
   putStrLn ("[floating runtime] printed "<>show (length values)<>" raw encodings")
   let names=map runtimePartName runtimeParts; known=Set.fromList names
       floating=map fst floatRuntimeParts
-      textual=map fst (textRuntimeParts <> textMethodRuntimeParts <> textCaseRuntimeParts <> textNumberRuntimeParts <> charRuntimeParts <> aggregateRuntimeParts)
       before name dependency = case (lookup dependency (zip names [0::Int ..]),lookup name (zip names [0::Int ..])) of
         (Just a,Just b) -> a<b
         _ -> False
@@ -105,7 +98,7 @@ testOutput cc root = do
     ,counterexample "bit-only output selected host arithmetic" (Set.member "float_target" (closure ["print_float"]) === False)]
     <> [counterexample (Text.unpack name) (Set.member name known === True) | name <- floating]
     <> [counterexample (show (name,dependency)) (before name dependency === True) | name <- floating, dependency <- runtimeDependencies name]
-    <> [counterexample (Text.unpack name) (runtimeDependencies name === integerRuntimeDependencies name) | name <- names, name `notElem` floating, name `notElem` textual])
+    <> [counterexample (Text.unpack name) (runtimeDependencies name === integerRuntimeDependencies name) | name <- map fst integerRuntimeParts])
 
 testRoots :: FilePath -> FilePath -> IO Property
 testRoots cc root = conjoin <$> traverse check roots

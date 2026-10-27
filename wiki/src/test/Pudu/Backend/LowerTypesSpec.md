@@ -65,3 +65,10 @@ sharedReferenceTarget facts, including a plain Bool fact that must not become
 a reference and a different source span. Compile checked mutable-loan and
 borrowed print-Result programs and require E6001; delete shared expression
 facts to require a located refusal rather than guessed identity lowering.
+
+## Reference refusal cases (#636)
+
+The borrowed print Result case left the refusal table: output Results are
+native values now, and the program builds with the interpreter's output. A
+shared reference to a Decimal, still unrepresented, takes its place.
+Resolved Grill Log: the semantic delta was inspected before the change.

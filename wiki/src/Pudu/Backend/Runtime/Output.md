@@ -50,3 +50,8 @@ source writes (output_error) and entry builders (output_report). An entry-only
 program must not emit unused source-write/buffer functions, and a source-write
 program must not pull in the entry exception reporter. Retain strict compiler
 warnings rather than suppressing unused helpers.
+
+## wait_writable (#636)
+
+output_state depends on wait_writable, which its writer calls.
+Resolved Grill Log: no output behaviour changes; only selection moved.

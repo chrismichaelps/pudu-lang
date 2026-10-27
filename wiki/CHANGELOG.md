@@ -5,6 +5,12 @@ tags: [changelog]
 
 # Changelog
 
+## 2026-10-27 — Backend suite repairs (#636)
+
+- The frame-body spec strict-compiles the program the backend actually writes, so printing corpora with Result aggregates compile again.
+- `pudu_wait_writable` is its own runtime part, pulled in by error reporting and buffered output, so minimal selections no longer carry an unused function.
+- The float runtime spec checks the integer dependency table only for integer parts. The release gate is unchanged.
+
 ## 2026-10-27 — Native panic and untyped convertInteger (#633)
 
 - `panic` builds natively: direct calls, values, non-text and missing arguments all stop as the interpreter does. See [[Native Stopping Builtins]].

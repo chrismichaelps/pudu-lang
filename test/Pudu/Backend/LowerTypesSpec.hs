@@ -33,7 +33,7 @@ lowerTypesProperties =
 testReferenceFacts :: IO Property
 testReferenceFacts = conjoin <$> traverse check
   [ ( "fn change(value: &mut Int) -> () { *value = *value + 1 }\nfn main() -> Int { var n = 0\n change(&mut n)\n n }", False )
-  , ( "fn main() -> Int { let held = &print(\"x\")\n 0 }", False )
+  , ( "fn main() -> Int { let ratio = 1.5d\n let loan = &ratio\n 0 }", False )
   , ( "fn main() -> Int { let number = 1\n let loan = &number\n *loan }", True )
   ]
  where

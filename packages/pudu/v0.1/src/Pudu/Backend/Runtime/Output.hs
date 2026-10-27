@@ -208,7 +208,7 @@ reportLines =
   ]
 
 outputRuntimeDependencies :: Text -> [Text]
-outputRuntimeDependencies "output_state" = ["process_io", "text_allocate", "memory_failure"]
+outputRuntimeDependencies "output_state" = ["process_io", "wait_writable", "text_allocate", "memory_failure"]
 outputRuntimeDependencies "output_error" = ["output_state"]
 outputRuntimeDependencies "output_report" = ["output_state", "error_io", "process_io"]
 outputRuntimeDependencies _ = []
