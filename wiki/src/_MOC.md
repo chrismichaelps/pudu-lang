@@ -251,3 +251,5 @@ tags: [moc, module]
 - [[Native Broken Pipe Tests]] — closed-output continuation and later failure (#505).
 
 - [[Native Wide Frame Tests]] — executed wide frame/cleanup contract (#506).
+
+- [[Native Floating Natural Kernel]] · [[Native Floating Natural Tests]] — bounded formatter arithmetic (#508).

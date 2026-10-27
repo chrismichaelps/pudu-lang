@@ -92,6 +92,7 @@ library
     Pudu.Backend.Emit.Support
     Pudu.Backend.Runtime
     Pudu.Backend.Runtime.Frame
+    Pudu.Backend.Runtime.Float.Natural
     Pudu.Backend.Runtime.Integer
     Pudu.Backend.Runtime.Integer.Value
     Pudu.Backend.Runtime.Integer.Word128

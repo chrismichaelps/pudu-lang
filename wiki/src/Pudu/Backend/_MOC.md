@@ -61,3 +61,5 @@ aliases: [Backend Module Map]
 - [[Native Broken Pipe Tests]] — actual emitted startup under default SIGPIPE (#505).
 
 - [[Native Wide Frame Tests]] — exact wide frame execution (#506).
+
+- [[Native Floating Natural Kernel]] · [[Native Floating Natural Tests]] — exact formatting prerequisite (#508).

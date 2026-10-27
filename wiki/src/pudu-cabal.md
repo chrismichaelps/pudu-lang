@@ -372,3 +372,10 @@ Resolved Grill Log: execute independent mathematical/refusal and minimal-closure
 
 Register [[Backend Wide Integer Display]] with existing Text dependency.
 Resolved Grill Log: actual production runtime selection/output/failure evidence must execute before wide-frame/source admission.
+
+## Floating natural prerequisite (#508)
+
+Register [[Native Floating Natural Kernel]] and [[Native Floating Natural Tests]]
+as appropriate to production/test components, using existing dependencies.
+Resolved Grill Log: execute exact C11 helper evidence without admitting Float
+source, changing the active runtime ABI or adding a native dependency.

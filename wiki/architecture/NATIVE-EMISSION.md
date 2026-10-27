@@ -165,3 +165,13 @@ after the inspected signal.h allowance recompiled under -Werror, all 677 groups
 pass in the full-suite rerun. Together these checks restore the scalar row.
 Independent review and additional supported-platform evidence remain pending.
 Printing helpers must not terminate an ignored print-result program by signal.
+
+## Floating output prerequisite (#508)
+
+[[Native Floating Point]] preserves the locked GHC show policy, including
+strict decimal margins and exact layout. [[Native Floating Natural Kernel]]
+provides checked finite-domain scratch, with 6,780 independent mathematical
+rows and seven minimal roots passing both C compilers/sanitizers; all 19 clean
+gates/680 groups pass. Exact
+formatting, typed arithmetic and source integration remain pending; this is
+not BigInt support and does not change completed-area counts.

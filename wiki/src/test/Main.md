@@ -154,3 +154,10 @@ Resolved Grill Log: restore default SIGPIPE in a separate launcher so inherited 
 Register and execute [[Native Wide Frame Tests]] with existing dependencies.
 Resolved Grill Log: the actual Core/frame C11 corpus and cleanup checks run in
 focused and complete suites; public source admission remains pending.
+
+## Floating natural prerequisite (#508)
+
+Register [[Native Floating Natural Kernel]] and [[Native Floating Natural Tests]]
+as appropriate to production/test components, using existing dependencies.
+Resolved Grill Log: execute exact C11 helper evidence without admitting Float
+source, changing the active runtime ABI or adding a native dependency.
