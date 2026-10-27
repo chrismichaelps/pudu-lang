@@ -19,7 +19,7 @@ Compile ordinary checked Pudu programs into portable C11 with interpreter-identi
 | Unit values, parameters and operations | Implemented (#492, #493) | Preserve effect-first temporaries, display/equality and #494 E7001 runtime refusals |
 | Entry result reporting | Partial (#512) | Integer statuses, unit silence and Bool/Float32/Float64 rendering match `pudu run`; print Result and aggregate value rendering remain |
 | Complete numeric families | Partial (#495, #497, #500, #507, #512) | Fixed integers, Int128/UInt128 and Float32/Float64 are admitted; BigInt and Decimal remain |
-| Text and bytes | Partial (#515, #516) | Owned Str values, operators, rendering, printing, entries and the Int/Bool/Str-result methods match the interpreter; trim/case mapping, Char, Bytes, Array/Option-result methods and print Result remain |
+| Text and bytes | Partial (#515, #516, #517) | Owned Str values, operators, rendering, printing, entries and every Int/Bool/Str-result method (trim and case mapping included) match the interpreter; Char, Bytes, Array/Option-result methods and print Result remain |
 | Records, tuples, sums and collections | Pending | Layout, construction/update, access, equality, allocation and destruction |
 | Pattern matching and iteration | Pending | Exhaustive ordered decisions, guards, bindings, ranges and iterator protocol |
 | Modules and constants | Pending | Canonical linkage, qualified identities, checked folds and graph publication |
@@ -231,3 +231,11 @@ them by scalar; drop/take/slice return views that retain the source, and
 E7004 refusals carry the evaluator's messages. Evidence: [[Backend Text
 Method Programs]] against hand-written answers and the interpreter, with
 counted-leak runs. Progress stays 4/14 (28%).
+
+## Trim and case mapping (#517)
+
+[[Native Text Case]] reads its case and whitespace tables from the text
+library linked into pudu (text-2.1.4) when C is emitted, so native follows
+the interpreter's Unicode version by construction. [[Backend Text Case
+Tests]] compares every scalar and re-checks that the linked library has no
+context rules. Progress stays 4/14 (28%).

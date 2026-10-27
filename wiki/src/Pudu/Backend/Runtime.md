@@ -238,3 +238,7 @@ Text cells and the frame text metadata change the ABI, so the revision is 9.
 ## Text methods (#516)
 
 [[Native Text Methods]] parts follow the text parts in the catalogue.
+
+## Case mapping (#517)
+
+[[Native Text Case]] parts follow the text method parts.

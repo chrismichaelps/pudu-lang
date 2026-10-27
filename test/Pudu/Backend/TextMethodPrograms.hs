@@ -35,6 +35,12 @@ textMethodSuccessPrograms =
       [ "ababab", "", "", "oll\233h", "", "b\119070a"
       , "&lt;a href=&quot;x&quot;&gt;&#39;&amp;&#39;&lt;/a&gt;", "plain"
       , "bb", "abc", "acac", "hello", "xyzw", "abc" ]
+  , printing "trim and case mapping"
+      [ "\"  \\t hi there \\n\".trim()", "\"\\u{3000}x\\u{a0}\".trim()", "\"\\u{2028}x\".trim()", "\"\".trim()", "\"   \".trim()"
+      , "\"Stra\\u{df}e \\u{fb01}\".toUpper()", "\"\\u{130}\".toLower()", "\"\\u{391}\\u{3a3}\".toLower()"
+      , "\"\\u{1c5}\".toUpper()", "\"\\u{1c5}\".toLower()", "\"\\u{390}\".toUpper()", "\"Hello World\".toLower()", "\"abc\".toUpper()" ]
+      [ "hi there", "x", "\8232x", "", "", "STRASSE FI", "i\775", "\945\963"
+      , "\452", "\454", "\921\776\769", "hello world", "ABC" ]
   , ("views outlive the text they came from", program
       [ "fn tail(text: Str) -> Str { text.drop(2) }"
       , "fn main() -> Int {"

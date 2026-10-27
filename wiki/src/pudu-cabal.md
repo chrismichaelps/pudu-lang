@@ -415,3 +415,7 @@ Register Pudu.Backend.Runtime.Text in exposed-modules beside the other runtime c
 ## Text method modules (#516)
 
 Register Pudu.Compiler.Lower.Text and Pudu.Backend.Runtime.Text.Methods in exposed-modules; no new dependency.
+
+## Case module (#517)
+
+Register Pudu.Backend.Runtime.Text.Case in exposed-modules.

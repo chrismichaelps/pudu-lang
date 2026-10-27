@@ -36,3 +36,7 @@ The facade also delegates to [[Native Text Runtime]]'s dependency table.
 ## Text method prerequisites (#516)
 
 The facade also delegates to [[Native Text Methods]].
+
+## Case prerequisites (#517)
+
+The facade also delegates to [[Native Text Case]].

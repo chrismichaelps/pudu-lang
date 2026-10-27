@@ -36,3 +36,10 @@ operands print first.
 ## Referenced by
 
 [[Backend Native Tests]] · [[Backend Text Leak Tests]] · [[Native Text Methods]] · [[src/_MOC]]
+
+## Trim and case mapping (#517)
+
+Trim of ASCII, ideographic and no-break spaces, a line separator (not a space
+for isSpace), empty and all-space text; toUpper of ß and the ﬁ ligature,
+dotted capital I lowered to two scalars, Greek capital sigma (no final form),
+the Dz titlecase digraph both ways, and ΐ, which uppercases to three scalars.

@@ -5,6 +5,10 @@ tags: [changelog]
 
 # Changelog
 
+## 2026-10-19 — Native trim and case mapping (#517)
+
+- `trim`, `toUpper` and `toLower` compile natively. [[Native Text Case]] builds its tables from the linked text-2.1.4 (not GHC's boot 2.1.3, whose tables differ by 56 rows), and [[Backend Text Case Tests]] checks all 1,112,064 scalars against Data.Text. Progress stays 4/14 (28%).
+
 ## 2026-10-19 — Native Str methods (#516)
 
 - [[Compiler Lower Text]] and [[Native Text Methods]] add the Str methods with Int, Bool and Str results, by scalar and with the evaluator's clamping, E7004 messages and argument-before-receiver order. [[Backend Text Method Programs]] checks them against hand-written answers and the interpreter, and the counted-leak run covers them; all 20 clean gates/696 groups pass. Progress stays 4/14 (28%).

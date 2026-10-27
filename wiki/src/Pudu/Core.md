@@ -242,3 +242,7 @@ separate concatenation and comparison constructors.
 the receiver and its arguments. Arguments are evaluated before the receiver,
 matching `evaluateCall` (#514). The name type is closed: only the methods
 native implements exist.
+
+## Trim and case mapping (#517)
+
+`CoreTextMethodName` gains TextTrim, TextToUpper and TextToLower.

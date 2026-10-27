@@ -230,3 +230,7 @@ Register Pudu.Backend.TextPrograms and Pudu.Backend.TextLeakSpec in other-module
 ## Text method programs (#516)
 
 Register Pudu.Backend.TextMethodPrograms in other-modules.
+
+## Text case tests (#517)
+
+Register Pudu.Backend.TextCaseSpec in other-modules.

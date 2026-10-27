@@ -28,6 +28,7 @@ import qualified Data.Text as Text
 import Pudu.Backend.Runtime.Float (floatRuntimeParts)
 import Pudu.Backend.Runtime.Integer (integerRuntimeParts)
 import Pudu.Backend.Runtime.Text (textRuntimeParts)
+import Pudu.Backend.Runtime.Text.Case (textCaseRuntimeParts)
 import Pudu.Backend.Runtime.Text.Methods (textMethodRuntimeParts)
 import Pudu.Comptime.Limits (callDepthLimit)
 import Pudu.Diagnostic.Host (memoryFailureMessage)
@@ -61,7 +62,7 @@ runtimeParts =
   , RuntimePart "fail" failLines
   , RuntimePart "memory_failure" memoryFailureLines
   , RuntimePart "call_depth" callDepthLines
-  ] <> map (uncurry RuntimePart) (integerRuntimeParts <> floatRuntimeParts <> textRuntimeParts <> textMethodRuntimeParts) <>
+  ] <> map (uncurry RuntimePart) (integerRuntimeParts <> floatRuntimeParts <> textRuntimeParts <> textMethodRuntimeParts <> textCaseRuntimeParts) <>
   [ RuntimePart "print_int" printIntLines
   , RuntimePart "print_bool" printBoolLines
   , RuntimePart "print_str" printStrLines
