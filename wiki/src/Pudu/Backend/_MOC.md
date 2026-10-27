@@ -27,6 +27,7 @@ aliases: [Backend Module Map]
 
 - [[Backend Emit Tests]] · [[Backend Native Tests]] — the two specs that hold
   lowering, emission, and native execution to their documented promises.
+- [[Backend Method Programs]] — native method dispatch and order (#551).
 
 ## Referenced by
 
@@ -81,4 +82,4 @@ aliases: [Backend Module Map]
 
 - [[Compiler Lower Constant]] · [[Native Folded Constants]] — represented folded-data emission (#543).
 
-- [[Native Shared References]] · [[Backend Shared Reference Programs]] — resolved shared-reference delivery plan (#544).
+- [[Native Shared References]] · [[Backend Shared Reference Programs]] — native shared references (#544).

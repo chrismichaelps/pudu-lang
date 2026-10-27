@@ -1,7 +1,7 @@
 {-| @Pudu.Compiler.Lower.Types — settled checker facts for native representation. -}
 module Pudu.Compiler.Lower.Types
-  ( LowerTypes, emptyTypes, nativeTypes, withShapes, lookupScheme, typeForSpan, sharedReferenceTarget, formedCoreType, formedCoreTypeIn
-  , layoutOf, recordFields, sumVariants, nativeIntegerKind, nativeScalarType, nativeValueType ) where
+  ( LowerTypes, emptyTypes, nativeTypes, withShapes, withBindings, typeBindings, lookupScheme, typeForSpan, sharedReferenceTarget
+  , formedCoreType, formedCoreTypeIn, ownerKeyOf, layoutOf, recordFields, sumVariants, nativeIntegerKind, nativeScalarType, nativeValueType ) where
 
 import Data.Map.Strict (Map)
 import qualified Data.Map.Strict as Map
@@ -9,7 +9,7 @@ import Data.Text (Text)
 import qualified Data.Text as Text
 import Pudu.Core (CoreLayout (..), CoreType (..), CoreVariant (..))
 import Pudu.FloatLiteral (FloatWidth (..))
-import Pudu.IntegerLiteral (IntegerKind (PlatformSigned, PlatformUnsigned, SignedKind, UnsignedKind), integerKindOf)
+import Pudu.IntegerLiteral (IntegerKind (PlatformSigned, PlatformUnsigned, SignedKind, UnsignedKind), integerKindName, integerKindOf)
 import Pudu.Source (Span)
 import Pudu.Type (TypeInfo (..), typeAt)
 import Pudu.Type.Value
@@ -17,8 +17,11 @@ import Pudu.Type.Value
 
 {-| Facts from one checked module; complete spans retain generated identity.
     The shapes are the records and sums the root module can name, by nominal
-    identity, as checking formed them. -}
-data LowerTypes = LowerTypes !TypeInfo !(Map Text Scheme) !Shapes
+    identity, as checking formed them. The bindings say what each rigid type
+    parameter stands for in the copy of a body being lowered: `Self` in a
+    trait's default member, say. Facts inside such a body name the parameter,
+    so every reading goes through them. -}
+data LowerTypes = LowerTypes !TypeInfo !(Map Text Scheme) !Shapes !(Map Text CoreType)
 
 data Shapes = Shapes
   { shapeRecords :: !(Map NominalId ([Text], [(Text, Type)]))
@@ -26,38 +29,59 @@ data Shapes = Shapes
   }
 
 nativeTypes :: Maybe TypeInfo -> [(Text, Scheme)] -> Maybe LowerTypes
-nativeTypes info schemes = (\types -> LowerTypes types (Map.fromList schemes) noShapes) <$> info
+nativeTypes info schemes = (\types -> LowerTypes types (Map.fromList schemes) noShapes Map.empty) <$> info
 
 {-| No facts at all, for a module the program does not reach. -}
 emptyTypes :: LowerTypes
-emptyTypes = LowerTypes (TypeInfo Map.empty Map.empty) Map.empty noShapes
+emptyTypes = LowerTypes (TypeInfo Map.empty Map.empty) Map.empty noShapes Map.empty
 
 noShapes :: Shapes
 noShapes = Shapes Map.empty Map.empty
 
 withShapes :: Map NominalId ([Text], [(Text, Type)]) -> Map NominalId ([Text], [(Text, [Type], Maybe [Text])]) -> LowerTypes -> LowerTypes
-withShapes records sums (LowerTypes info schemes _) = LowerTypes info schemes (Shapes records sums)
+withShapes records sums (LowerTypes info schemes _ bindings) = LowerTypes info schemes (Shapes records sums) bindings
+
+withBindings :: Map Text CoreType -> LowerTypes -> LowerTypes
+withBindings bindings (LowerTypes info schemes shapes _) = LowerTypes info schemes shapes bindings
+
+typeBindings :: LowerTypes -> Map Text CoreType
+typeBindings (LowerTypes _ _ _ bindings) = bindings
 
 lookupScheme :: LowerTypes -> Text -> Maybe Scheme
-lookupScheme (LowerTypes _ schemes _) name = Map.lookup name schemes
+lookupScheme (LowerTypes _ schemes _ _) name = Map.lookup name schemes
 
 typeForSpan :: LowerTypes -> Span -> Maybe CoreType
-typeForSpan types@(LowerTypes info _ _) at = typeAt info at >>= formedCoreTypeIn types
+typeForSpan types@(LowerTypes info _ _ _) at = typeAt info at >>= formedCoreTypeIn types
 
 sharedReferenceTarget :: LowerTypes -> Span -> Maybe CoreType
-sharedReferenceTarget types@(LowerTypes info _ _) at = case typeAt info at of
+sharedReferenceTarget types@(LowerTypes info _ _ _) at = case typeAt info at of
   Just (ReferenceTypeValue False target) -> formedCoreTypeIn types target
   _ -> Nothing
 
 {-| Builtins only; no record or sum is known. -}
 formedCoreType :: Type -> Maybe CoreType
-formedCoreType = formedCoreTypeIn (LowerTypes (TypeInfo Map.empty Map.empty) Map.empty noShapes)
+formedCoreType = formedCoreTypeIn emptyTypes
 
 {-| A record or sum is admitted when every member it can hold has a native
     representation. One met again inside itself is taken as admitted: it is
     held by reference, so the recursion is finite at run time. -}
 formedCoreTypeIn :: LowerTypes -> Type -> Maybe CoreType
-formedCoreTypeIn (LowerTypes _ _ shapes) = formedWith shapes [] Map.empty
+formedCoreTypeIn (LowerTypes _ _ shapes bindings) = formedWith shapes [] bindings
+
+{-| The name a value's methods are filed under: a record's or sum's canonical
+    key, a builtin's own name. Tuples have none, so only `toText` answers them. -}
+ownerKeyOf :: CoreType -> Maybe Text
+ownerKeyOf kind = case kind of
+  CoreRecordType key -> Just key
+  CoreSumType key _ -> Just key
+  CoreIntegerType integerKind -> Just (integerKindName integerKind)
+  CoreFloatType Float32Width -> Just "Float32"
+  CoreFloatType Float64Width -> Just "Float64"
+  CoreBoolType -> Just "Bool"
+  CoreTextType -> Just "Str"
+  CoreCharType -> Just "Char"
+  CoreUnitType -> Just "()"
+  _ -> Nothing
 
 formedWith :: Shapes -> [CoreType] -> Map Text CoreType -> Type -> Maybe CoreType
 formedWith shapes seen parameters value = case value of
@@ -102,7 +126,7 @@ sumVariants types kind = case layoutOf types kind of
 
 {-| How a record or sum named in Core is laid out. -}
 layoutOf :: LowerTypes -> CoreType -> Maybe CoreLayout
-layoutOf (LowerTypes _ _ shapes) kind = case kind of
+layoutOf (LowerTypes _ _ shapes _) kind = case kind of
   CoreRecordType name -> do
     (_, fields) <- named name (shapeRecords shapes)
     CoreRecordLayout <$> traverse (\(field, fieldType) -> (,) field <$> form Map.empty fieldType) fields

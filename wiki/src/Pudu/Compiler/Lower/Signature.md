@@ -55,6 +55,13 @@ No host exceptions, semantic rechecking, global mutable state, or backend emissi
 - **Q:** Why extract this responsibility? **A:** State ownership and signature admission are stable boundaries independent of mutually recursive expression/block traversal. Each remains reviewable below 500 lines. _Rejected:_ an oversized body module or a circular expression split.
 - **Q:** Can refactoring alter accepted semantics? **A:** No; only explicit corrections preventing invalid Core returns and Result erasure are permitted. Signature refusals and scope resolution retain their source provenance. _Rejected:_ backend inference or approximation.
 
+## Instance schemes (#551)
+
+Resolved Grill Log: an instance supplies its own scheme. Its rigid parameters
+must all be bound in the current facts; their bounds were proved by checking
+for those types, so bounds are accepted only then. A monomorphic scheme still
+needs no bounds.
+
 ## Referenced by
 
 [[src/Pudu/Compiler/_MOC]] · [[Compiler Lower]] · [[Compiler Lower Body]]

@@ -20,6 +20,11 @@ a sum declared in another module, including as an entry result; a record and a
 sum declared in two modules under one name. Refusal: an overflow inside an
 imported function, reported at that module's source.
 
+## Method corpus (#551)
+
+Resolved Grill Log: modulePrograms and moduleRefusalPrograms include
+[[Backend Method Programs]] the same way as the reference corpus.
+
 ## Referenced by
 
 [[Backend Native Tests]] · [[Native Emission Coverage]] · [[src/_MOC]]

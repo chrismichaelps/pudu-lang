@@ -18,7 +18,7 @@ import Pudu.Core.Frame (FrameFault (..))
 import Pudu.Diagnostic.Native (nativeRefusal)
 import Pudu.Compiler (CompileResult (..), runCompile)
 import Pudu.Compiler.Lower.Types (nativeTypes)
-import Pudu.Compiler.Lower (LowerResult (..), lowerModule)
+import Pudu.Compiler.Lower (LowerResult (..), compiledNativeModule, lowerModule, lowerProgram)
 import Pudu.Core
   ( CoreBlock (..)
   , CoreExpressionShape (..)
@@ -296,6 +296,17 @@ refusalCases =
       , "  return value"
       , "}"
       ], "&mut Int")
+  , ("methods that borrow their receiver mutably", Text.unlines
+      [ "module Refuse"
+      , "trait Bump { fn bump(self: &mut Self) -> () }"
+      , "type Count = { mut n: Int }"
+      , "impl Bump for Count { fn bump(self: &mut Self) -> () { self.n = self.n + 1 } }"
+      , "fn main() -> Int {"
+      , "  var count = Count{n: 1}"
+      , "  count.bump()"
+      , "  return count.n"
+      , "}"
+      ], "&mut Self) -> () {")
   , ("a module without main", Text.unlines
       [ "module Refuse"
       , ""
@@ -330,7 +341,7 @@ refusalOutcome (label, sourceText', marker) = do
   pure $ case (hasErrors (compileDiagnostics result), compileModule result) of
     (True, _) -> counterexample (label <> ": compile errors: " <> show (compileDiagnostics result)) False
     (_, Nothing) -> counterexample (label <> ": the program did not compile") False
-    (False, Just parsed) -> case lowerModule "main" (nativeTypes (compileTypes result) (compileSchemes result)) parsed of
+    (False, Just parsed) -> case lowerProgram "main" [compiledNativeModule parsed result] of
       Lowered _ -> counterexample (label <> ": lowered, but a refusal was expected") False
       LowerRefused refusals -> conjoin
         [ counterexample

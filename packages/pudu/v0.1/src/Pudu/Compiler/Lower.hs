@@ -14,6 +14,7 @@
 module Pudu.Compiler.Lower
   ( LowerResult (..)
   , NativeModule (..)
+  , compiledNativeModule
   , lowerModule
   , lowerModuleFolded
   , lowerProgram
@@ -29,12 +30,15 @@ import Pudu.Eval.Frozen (Frozen)
 import Pudu.Compiler.Lower.Layout (moduleLayouts)
 import Pudu.Compiler (CompileResult (..))
 import Pudu.Compiler.Lower.Types (LowerTypes, emptyTypes, nativeTypes, withShapes)
+import Pudu.Compiler.Lower.Method (methodTables)
 import Pudu.Compiler.Program (ProgramResult (..), rootCompileResult)
 import Pudu.Type (declaredRecords, declaredSums)
-import Pudu.Type.Value (NominalId (..))
+import Pudu.Type.Value (NominalId (..), Scheme)
+import Pudu.Source (Span)
 import Pudu.Compiler.Lower.Body (lowerEntryBody, lowerFunctionBody)
 import Pudu.Compiler.Lower.State
-  ( CoreSignature (..), LowerContext (..), LowerState (..), ModuleScope (..), emptyContext, inModule, startFunction )
+  ( CoreSignature (..), Instance (..), LowerContext (..), LowerState (..), ModuleScope (..)
+  , emptyContext, inModule, startFunction, withTypeBindings )
 import Pudu.Compiler.Lower.Signature (ensureSignature)
 import Pudu.Core
 import Pudu.Diagnostic (Diagnostic, sortDiagnostics)
@@ -63,6 +67,8 @@ data NativeModule = NativeModule
   , nativeModuleSyntax :: !Module
   , nativeModuleTypes :: !(Maybe LowerTypes)
   , nativeModuleConstants :: !(Map.Map Text Frozen)
+  {-| The methods its own declarations provide, as checking declared them. -}
+  , nativeModuleMethods :: ![(NominalId, Text, Scheme, Span)]
   }
 
 {-| Every module of a compiled program as native lowering reads it, the root
@@ -73,15 +79,19 @@ programNativeModules program = do
   rootResult <- rootCompileResult program
   parsed <- compileModule rootResult
   pure $
-    native (moduleNameText (locatedValue (moduleName parsed))) parsed rootResult
-      : [ native (moduleNameText name) syntax result
+    compiledNativeModule parsed rootResult
+      : [ compiledNativeModule syntax result
         | name <- programOrder program
         , Just name /= programRoot program
         , Just result <- [Map.lookup name (programModules program)]
         , Just syntax <- [compileModule result]
         ]
- where
-  native name syntax result = NativeModule name syntax (nativeTypes (compileTypes result) (compileSchemes result)) (compileFolded result)
+
+{-| One checked module as native lowering reads it. -}
+compiledNativeModule :: Module -> CompileResult -> NativeModule
+compiledNativeModule syntax result =
+  NativeModule (moduleNameText (locatedValue (moduleName syntax))) syntax
+    (nativeTypes (compileTypes result) (compileSchemes result)) (compileFolded result) (compileMethods result)
 
 {-| Lower a program of one module. -}
 lowerModule :: Text -> Maybe LowerTypes -> Module -> LowerResult
@@ -91,7 +101,7 @@ lowerModule entryName types = lowerModuleFolded entryName types Map.empty
     never evaluates a constant initializer itself. -}
 lowerModuleFolded :: Text -> Maybe LowerTypes -> Map.Map Text Frozen -> Module -> LowerResult
 lowerModuleFolded entryName types constants parsed =
-  lowerProgram entryName [NativeModule (moduleNameText (locatedValue (moduleName parsed))) parsed types constants]
+  lowerProgram entryName [NativeModule (moduleNameText (locatedValue (moduleName parsed))) parsed types constants []]
 
 {-| Lower the root module's entry function and every function reachable from
     it, in whichever module each is declared. The root comes first. -}
@@ -169,10 +179,13 @@ lowerProgram entryName programModules@(rootModule : _)
         )
       | native <- programModules ]
 
+    (instances, methods, traitMethods) = methodTables scopes
+      [ (nativeModuleName native, nativeModuleSyntax native, nativeModuleMethods native) | native <- programModules ]
+
     runWorklist entry =
       let initial =
             LowerState
-              { lowerContext = emptyContext rootName entryKey scopes table
+              { lowerContext = emptyContext rootName entryKey scopes table instances methods traitMethods
               , lowerNextLoop = 0
               , lowerLoops = []
               , lowerNextLocal = 0
@@ -190,10 +203,10 @@ lowerProgram entryName programModules@(rootModule : _)
 
     visit state name
       | Set.member name (contextVisited (lowerContext state)) = state
-      | otherwise = case lookup name table of
+      | otherwise = case target name of
           Nothing -> state
-          Just (owner, function) ->
-            case ensureSignature name function (startFunction (inModule owner state) [] Nothing) of
+          Just (owner, function, bindings) ->
+            case ensureSignature name function (startFunction (withTypeBindings bindings (inModule owner state)) [] Nothing) of
               (afterSignature, Nothing) -> markVisited afterSignature name
               (afterSignature, Just signature) ->
                 case lowerFunctionBody
@@ -210,6 +223,11 @@ lowerProgram entryName programModules@(rootModule : _)
                               }
                         }
                       name
+
+    target name = case lookup name table of
+      Just (owner, function) -> Just (owner, function, Map.empty)
+      Nothing -> (\found -> (instanceModule found, instanceFunction found, instanceBindings found))
+        <$> Map.lookup name instances
 
     markVisited state name =
       state

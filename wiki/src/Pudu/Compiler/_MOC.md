@@ -38,6 +38,7 @@ aliases: [Program Compiler Module Map]
 - [[Language Foundation Program Spec]] — function literal, capture, range, slice, and destructuring regressions.
 
 Dependency direction: Library → Program. Only [[Compiler Program]] reads files.
+- [[Compiler Lower Method]] — implementation members and trait defaults as direct calls (#551).
 
 ## Referenced by
 
@@ -58,4 +59,4 @@ Dependency direction: Library → Program. Only [[Compiler Program]] reads files
 
 - [[Compiler Lower Constant]] — typed projection of compiler-folded constants (#543).
 
-- [[Compiler Lower Reference]] — planned checked shared-reference identity lowering (#544).
+- [[Compiler Lower Reference]] — checked shared-reference identity lowering (#544).

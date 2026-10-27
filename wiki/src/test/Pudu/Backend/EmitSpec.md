@@ -87,6 +87,11 @@ Shared borrows now lower, so the refusal case takes a `&mut Int` parameter
 instead of `&value`. The signature refuses at the parameter's type, which is
 the only refusal: the body is never reached.
 
+A method taking `self: &mut Self` refuses the same way, at the parameter type
+of the implementation's member (#551).
+The refusal cases lower through `compiledNativeModule`, as the CLI does, so a
+module's methods are visible to them.
+
 ## Referenced by
 
 [[Repository Test Runner]] · [[src/_MOC]] · [[src/Pudu/Backend/_MOC]] · [[Backend Emit]] ·

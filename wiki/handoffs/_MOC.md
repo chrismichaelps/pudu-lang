@@ -164,6 +164,7 @@ tags: [moc, handoff]
 - [[2026-09-30-compiled-evaluation-plan]] — compiled function bodies, Plan A done; slot frames next.
 - [[2026-09-30-std-layer-sweep]] — Std defects found layer by layer through the import graph (#395–#420).
 - [[2026-09-16-playground-editor]] — website playground editor, language-server repair, and confined runs.
+- [[Native Trait Method Delivery]] — #551 trait methods, active.
 
 ## Referenced by
 

@@ -23,7 +23,7 @@ Compile ordinary checked Pudu programs into portable C11 with interpreter-identi
 | Records, tuples, sums and collections | Partial (#521, #525) | Tuples, the root module's non-generic records, its sums and the built-in Option/Result at concrete arguments are boxed, refcounted values with construction, field, position and payload reads, equality, ordering (tuples), rendering and run-time E7001 naming held variants; generic records and collections remain |
 | Pattern matching and iteration | Partial (#525, #540, #541) | `match`, `if let` (with `else if` chains) and `while let` (with labels, `break` and `continue`) lower every pattern form in order with guards, bindings, literals, ranges, tuples, constructors, records and alternatives; `let ... else` retains bindings in the enclosing block (#541); `for`, ranges as values and the iterator protocol remain |
 | Modules and constants | Partial (#539, #543) | Calls through selective imports, aliases and qualifiers, functions of every reachable module, and records and sums by canonical identity match the interpreter; folded scalar/tuple/record/sum constants now preserve canonical solved identity; callable and unrepresented constant families remain |
-| Callables and generic code | Pending | Closures/captures, defaults, monomorphization and trait dispatch |
+| Callables and generic code | Partial (#551) | Implementation members, inherited defaults, type- and trait-qualified calls and `toText()` dispatch statically on concrete owners; closures/captures, default parameter values, generic functions, generic implementations and `dynamic` values remain |
 | Accepted operations with runtime refusals | Partial (#494, #512) | Represented Unit/Bool/float operators retain E7001; remaining runtime types/operators still need equivalent coverage |
 | Errors, references and resources | Partial (#544) | Shared borrows and dereference of represented values match the interpreter; Result/Option propagation, mutable loans with writeback, moves, drop and all unwind paths remain |
 | Host services and concurrency | Pending | Explicit runtime adapters, FFI, tasks, scopes, cancellation and platform evidence |
@@ -343,3 +343,12 @@ operand itself, as the evaluator's identity operators do, once the exact
 checked facts show a shared reference. `&mut` keeps refusing until calls write
 places back. [[Backend Shared Reference Programs]] covers parameters, results,
 aggregates, transfers, failure provenance and borrows of reassigned variables.
+
+## Trait methods (#551)
+
+[[Native Trait Methods]] lowers every method checking declares as an instance:
+an implementation's own member, or the trait member it inherits with `Self`
+bound to the owner. A receiver's checked type picks the method; arguments run
+before the receiver, which is passed first. Str and Char keep their built-in
+members first, and `toText()` falls back to `display`. [[Backend Method
+Programs]] holds the evidence. Generic implementations and `&mut self` refuse.
