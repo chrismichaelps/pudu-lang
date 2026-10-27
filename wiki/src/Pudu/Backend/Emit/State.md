@@ -43,6 +43,10 @@ Uses [[Source]], [[Diagnostic Render]], [[Diagnostic Arithmetic]], [[Diagnostic 
 Resolved Grill Log: `emitFunctionIds` maps a function key to its frame-table
 number.
 
+## Helped sites (#564)
+
+`helpedFailureSite` makes a site with a fixed message and help.
+
 ## Referenced by
 
 [[Backend Emit]] · [[src/Pudu/Backend/_MOC]]

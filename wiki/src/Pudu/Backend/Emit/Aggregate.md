@@ -74,6 +74,10 @@ Helpers come from [[Backend Emit Keyed]]. A tuple or record compare helper now
 marks both boxes used, since a type whose members are all functions reads
 neither and C warned about it.
 
+## Range values (#564)
+
+Helpers come from [[Backend Emit Range]].
+
 ## Referenced by
 
 [[Backend Frame Runtime]] · [[Backend Frame Values]] · [[Native Tuple Delivery]] · [[src/_MOC]]

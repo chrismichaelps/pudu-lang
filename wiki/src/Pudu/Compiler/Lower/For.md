@@ -71,6 +71,12 @@ and `advance` walks the payload of the variant it holds, through a match whose
 arms answer arrays, after the sequence protocol was looked for, which is
 `evaluateFor`'s order. Each lists its items before the body runs.
 
+## Range values (#564)
+
+A range value, or a written range missing an end, walks its values through
+`RangeIterated`, which fails with E7001 "cannot iterate a range" when an end
+is missing, as `evaluateFor` does once nothing else applies.
+
 ## Referenced by
 
 [[Compiler Lower Body]]

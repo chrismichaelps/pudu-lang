@@ -109,6 +109,10 @@ Register Pudu.Backend.KeyedPrograms ([[Backend Keyed Programs]]).
 
 Register Pudu.Backend.ShapePrograms ([[Backend Shape Programs]]).
 
+## Range corpus (#564)
+
+Register Pudu.Backend.RangePrograms ([[Backend Range Programs]]).
+
 ## Referenced by
 
 [[Derive Graph Spec]] is explicitly registered for real program elaboration,

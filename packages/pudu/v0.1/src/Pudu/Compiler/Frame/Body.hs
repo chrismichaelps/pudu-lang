@@ -213,6 +213,23 @@ lowerExpression expression@(CoreExpression at kind shape) = case shape of
         target : backwards -> value (FrameKeyedMethod name target (reverse backwards))
         [] -> fault (Just at) "a map or set operation without its receiver"
   CoreComparable operand -> rendered FrameComparable operand
+  CoreRangeValue low inclusive high -> do
+    operands <- lowerOperands (foldMap pure low <> foldMap pure high)
+    case operands of
+      Nothing -> pure Stopped
+      Just slots -> case (low, high, slots) of
+        (Just _, Just _, [l, h]) -> value (FrameRangeValue (Just l) inclusive (Just h))
+        (Just _, Nothing, [l]) -> value (FrameRangeValue (Just l) inclusive Nothing)
+        (Nothing, Just _, [h]) -> value (FrameRangeValue Nothing inclusive (Just h))
+        (Nothing, Nothing, []) -> value (FrameRangeValue Nothing inclusive Nothing)
+        _ -> fault (Just at) "a range whose ends did not lower"
+  CoreRangeMethod name receiver arguments -> do
+    operands <- lowerOperands (arguments <> [receiver])
+    case operands of
+      Nothing -> pure Stopped
+      Just slots -> case reverse slots of
+        target : backwards -> value (FrameRangeMethod name target (reverse backwards))
+        [] -> fault (Just at) "a range operation without its receiver"
   CoreIndex container index -> do
     operands <- lowerOperands [container, index]
     case operands of
@@ -334,6 +351,7 @@ resultSlot at kind = case kind of
   CoreArrayType _ -> Just <$> freshSlot at "$result" kind
   CoreMapType _ _ -> Just <$> freshSlot at "$result" kind
   CoreSetType _ -> Just <$> freshSlot at "$result" kind
+  CoreRangeType -> Just <$> freshSlot at "$result" kind
 
 lowerPrint :: Span -> CoreExpression -> Build Flow
 lowerPrint at operand = case coreExpressionShape operand of

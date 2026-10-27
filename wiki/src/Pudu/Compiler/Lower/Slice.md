@@ -39,6 +39,12 @@ range.
 
 [[Compiler Lower Array]] · [[Compiler Lower State]] · [[Compiler Lower Types]] · [[Core IR]]
 
+## Range values (#564)
+
+A range held in a value is checked at run time from its fields, with the
+same messages; absent ends read as nought and the end test applies only when
+there is an end.
+
 ## Referenced by
 
 [[Compiler Lower Body]] · [[Native Arrays]] · [[src/Pudu/Compiler/_MOC]]

@@ -51,6 +51,10 @@ reads again by moving it, so a buffer built in a loop keeps one owner.
 
 Map and set slots are owned, so stores retain and release them.
 
+## Range values (#564)
+
+Range slots are owned boxes.
+
 ## Referenced by
 
 [[src/_MOC]] · [[Program Compiler Module Map]] · [[Native Frame Pressure Repair]]

@@ -38,6 +38,10 @@ Adds [[Native Text Pieces]] and [[Native Text Number]], whose
 
 Adds [[Native Persistent Trees]].
 
+## Range values (#564)
+
+Adds [[Native Range Runtime]].
+
 ## Referenced by
 
 [[src/_MOC]] · [[Backend Module Map]] · [[Native Floating Runtime Delivery]]

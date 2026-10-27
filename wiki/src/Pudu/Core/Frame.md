@@ -75,6 +75,10 @@ source slot.
 
 `FrameCharOfCode` mirrors `CoreCharOfCode`.
 
+## Range values (#564)
+
+`FrameRangeValue` and `FrameRangeMethod` mirror the Core shapes.
+
 ## Referenced by
 
 [[src/_MOC]] · [[Program Compiler Module Map]] · [[Native Frame Pressure Repair]]

@@ -13,6 +13,7 @@ import Pudu.Backend.Runtime.Text.Methods (textMethodRuntimeDependencies)
 import Pudu.Backend.Runtime.Text.Number (textNumberRuntimeDependencies)
 import Pudu.Backend.Runtime.Text.Pieces (textPieceRuntimeDependencies)
 import Pudu.Backend.Runtime.Tree (treeRuntimeDependencies)
+import Pudu.Backend.Runtime.Range (rangeRuntimeDependencies)
 
 runtimeDependencies :: Text -> [Text]
 runtimeDependencies name = integerRuntimeDependencies name <> floatRuntimeDependencies name
@@ -20,4 +21,4 @@ runtimeDependencies name = integerRuntimeDependencies name <> floatRuntimeDepend
   <> textCaseRuntimeDependencies name <> charRuntimeDependencies name
   <> aggregateRuntimeDependencies name <> arrayRuntimeDependencies name
   <> textNumberRuntimeDependencies name <> textPieceRuntimeDependencies name
-  <> treeRuntimeDependencies name
+  <> treeRuntimeDependencies name <> rangeRuntimeDependencies name

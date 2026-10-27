@@ -21,6 +21,10 @@ without a cycle.
 
 Both are owned boxes; mangled `MP_K_V_E` and `ST_T_E`.
 
+## Range values (#564)
+
+A range is an owned box, mangled `RG`.
+
 ## Referenced by
 
 [[Backend Emit Aggregate]] · [[Backend Emit Array]]

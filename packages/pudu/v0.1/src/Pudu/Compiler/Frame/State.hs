@@ -173,6 +173,7 @@ moveValue at target payload = case payload of
     CoreArrayType _ -> True
     CoreMapType _ _ -> True
     CoreSetType _ -> True
+    CoreRangeType -> True
     _ -> False
 
 storeValue :: Span -> FrameSlot -> Maybe FrameSlot -> Build ()
