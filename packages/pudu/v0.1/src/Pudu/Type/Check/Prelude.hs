@@ -12,6 +12,7 @@ module Pudu.Type.Check.Prelude
 import qualified Data.List.NonEmpty as NonEmpty
 import Data.Text (Text)
 import Pudu.FloatKernel (KernelShape (..), floatKernelName, floatKernelShape, floatKernels)
+import Pudu.LaneKernel (LaneType (..), laneKernelName, laneKernelSignature, laneKernels)
 import Pudu.Frontend.Syntax.Name (ModuleName (..))
 import Pudu.Type.Env
   ( Checker
@@ -122,6 +123,7 @@ declareBuiltinConstructors = do
         )
     )
   mapM_ (\kernel -> bindName (floatKernelName kernel) (monotype (kernelType (floatKernelShape kernel)))) floatKernels
+  mapM_ (\kernel -> bindName (laneKernelName kernel) (monotype (laneSignatureType (laneKernelSignature kernel)))) laneKernels
   {-| The effects a program may perform.
 
       Each answers with `Result[T, Str]` rather than failing: the language has
@@ -340,6 +342,15 @@ declareBuiltinConstructors = do
   bindName "xmlDecode"
     (monotype (FunctionTypeValue False [NominalType "Str" []] (NominalType "Option" [NominalType stdXmlTagId []])))
  where
+  laneSignatureType (arguments, result) = FunctionTypeValue False (map laneType arguments) (laneType result)
+  laneType lane = case lane of
+    LaneBytes -> bytesType
+    LaneFloat -> floatType
+    LaneInt -> integerType
+    LaneFloats -> NominalType "Array" [floatType]
+    LaneInts -> NominalType "Array" [integerType]
+    LaneOption held -> NominalType "Option" [laneType held]
+    LaneTriple -> TupleTypeValue [bytesType, bytesType, bytesType]
   kernelType shape = case shape of
     FloatArguments count -> FunctionTypeValue False (replicate count floatType) floatType
     FloatToWord -> FunctionTypeValue False [floatType] (NominalType "UInt64" [])

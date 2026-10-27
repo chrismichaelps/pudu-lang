@@ -5,6 +5,8 @@ tags: [moc, handoff]
 
 # Handoff Map
 
+- [[Lane Delivery]] — issue #668 packed binary64 lanes with native batch kernels.
+
 - [[Ark Math Completion Delivery]] — issue #666 completed binary64 engine math layer.
 
 - [[Square Root Delivery]] — issue #661 binary64 kernels behind Std.Math.Float, exact square root.

@@ -1,0 +1,190 @@
+module Std.Lanes
+
+/// Contiguous binary64 values in host byte order, transformed by whole-lane native kernels.
+///
+/// Every operation makes one native pass and returns new lanes; nothing mutates in place.
+/// Per-frame work belongs in whole-lane kernels: `set` copies the lanes and is an edit,
+/// not a loop primitive.
+export type Lanes = { bytes: Bytes }
+
+/// `length` copies of a value, or None for a negative length.
+export fn filled(length: Int, value: Float64) -> Option[Lanes] {
+  let bytes = lanesFill(length, value) ?
+  Some(Lanes{bytes})
+}
+
+/// `start + i * step` for i in 0..length, or None for a negative length.
+export fn ramp(length: Int, start: Float64, step: Float64) -> Option[Lanes] {
+  let bytes = lanesRamp(length, start, step) ?
+  Some(Lanes{bytes})
+}
+
+/// Lanes holding an array's values in order.
+export fn fromArray(values: &Array[Float64]) -> Lanes {
+  Lanes{bytes: lanesFromArray(*values)}
+}
+
+/// Lanes over raw host-order bytes, or None unless they hold a whole number of values.
+export fn fromBytes(bytes: Bytes) -> Option[Lanes] {
+  if bytes.length() % 8 == 0 { Some(Lanes{bytes}) } else { None }
+}
+
+/// The values in order.
+export fn toArray(lanes: &Lanes) -> Array[Float64] {
+  lanesToArray(lanes.bytes)
+}
+
+/// The raw host-order bytes.
+export fn toBytes(lanes: &Lanes) -> Bytes {
+  lanes.bytes
+}
+
+/// The number of values.
+export fn count(lanes: &Lanes) -> Int {
+  lanesCount(lanes.bytes)
+}
+
+/// The value at an index, or None outside the lanes.
+export fn get(lanes: &Lanes, index: Int) -> Option[Float64] {
+  lanesGet(lanes.bytes, index)
+}
+
+/// A copy with one value replaced, or None outside the lanes.
+export fn set(lanes: &Lanes, index: Int, value: Float64) -> Option[Lanes] {
+  let bytes = lanesSet(lanes.bytes, index, value) ?
+  Some(Lanes{bytes})
+}
+
+/// `length` values from `start`, or None when the range leaves the lanes.
+export fn slice(lanes: &Lanes, start: Int, length: Int) -> Option[Lanes] {
+  let bytes = lanesSlice(lanes.bytes, start, length) ?
+  Some(Lanes{bytes})
+}
+
+/// The values of `first` followed by those of `second`.
+export fn concat(first: &Lanes, second: &Lanes) -> Lanes {
+  Lanes{bytes: lanesConcat(first.bytes, second.bytes)}
+}
+
+/// The values at each index in order, or None for an index outside the lanes.
+export fn gather(lanes: &Lanes, indices: &Array[Int]) -> Option[Lanes] {
+  let bytes = lanesGather(lanes.bytes, *indices) ?
+  Some(Lanes{bytes})
+}
+
+/// A copy with `values[i]` written at `indices[i]`; a later index wins on repeats.
+/// None when the counts differ or an index is outside the lanes.
+export fn scatter(lanes: &Lanes, indices: &Array[Int], values: &Lanes) -> Option[Lanes] {
+  let bytes = lanesScatter(lanes.bytes, *indices, values.bytes) ?
+  Some(Lanes{bytes})
+}
+
+/// Elementwise sum, or None when the counts differ.
+export fn add(left: &Lanes, right: &Lanes) -> Option[Lanes] {
+  let bytes = lanesAdd(left.bytes, right.bytes) ?
+  Some(Lanes{bytes})
+}
+
+/// Elementwise difference, or None when the counts differ.
+export fn subtract(left: &Lanes, right: &Lanes) -> Option[Lanes] {
+  let bytes = lanesSub(left.bytes, right.bytes) ?
+  Some(Lanes{bytes})
+}
+
+/// Elementwise product, or None when the counts differ.
+export fn multiply(left: &Lanes, right: &Lanes) -> Option[Lanes] {
+  let bytes = lanesMul(left.bytes, right.bytes) ?
+  Some(Lanes{bytes})
+}
+
+/// Elementwise IEEE quotient, or None when the counts differ.
+export fn divide(left: &Lanes, right: &Lanes) -> Option[Lanes] {
+  let bytes = lanesDiv(left.bytes, right.bytes) ?
+  Some(Lanes{bytes})
+}
+
+/// Elementwise smaller value, NaN losing to a number; None when the counts differ.
+export fn minimum(left: &Lanes, right: &Lanes) -> Option[Lanes] {
+  let bytes = lanesMin(left.bytes, right.bytes) ?
+  Some(Lanes{bytes})
+}
+
+/// Elementwise larger value, NaN losing to a number; None when the counts differ.
+export fn maximum(left: &Lanes, right: &Lanes) -> Option[Lanes] {
+  let bytes = lanesMax(left.bytes, right.bytes) ?
+  Some(Lanes{bytes})
+}
+
+/// Add a scalar to every value.
+export fn addScalar(lanes: &Lanes, value: Float64) -> Lanes {
+  Lanes{bytes: lanesAddScalar(lanes.bytes, value)}
+}
+
+/// Multiply every value by a factor.
+export fn scale(lanes: &Lanes, factor: Float64) -> Lanes {
+  Lanes{bytes: lanesScale(lanes.bytes, factor)}
+}
+
+/// Limit every value to [low, high]; NaN stays NaN.
+export fn clamp(lanes: &Lanes, low: Float64, high: Float64) -> Lanes {
+  Lanes{bytes: lanesClamp(lanes.bytes, low, high)}
+}
+
+/// `y + factor * x` elementwise, or None when the counts differ.
+export fn axpy(y: &Lanes, factor: Float64, x: &Lanes) -> Option[Lanes] {
+  let bytes = lanesAxpy(y.bytes, factor, x.bytes) ?
+  Some(Lanes{bytes})
+}
+
+/// `a * b + c` elementwise with two roundings, or None when the counts differ.
+export fn fma(a: &Lanes, b: &Lanes, c: &Lanes) -> Option[Lanes] {
+  let bytes = lanesFma(a.bytes, b.bytes, c.bytes) ?
+  Some(Lanes{bytes})
+}
+
+/// The magnitude of every value.
+export fn abs(lanes: &Lanes) -> Lanes {
+  Lanes{bytes: lanesAbs(lanes.bytes)}
+}
+
+/// Every value with its sign reversed.
+export fn negate(lanes: &Lanes) -> Lanes {
+  Lanes{bytes: lanesNegate(lanes.bytes)}
+}
+
+/// The correctly rounded square root of every value; negative values become NaN.
+export fn sqrt(lanes: &Lanes) -> Lanes {
+  Lanes{bytes: lanesSqrt(lanes.bytes)}
+}
+
+/// The greatest integral value not above each value.
+export fn floor(lanes: &Lanes) -> Lanes {
+  Lanes{bytes: lanesFloor(lanes.bytes)}
+}
+
+/// The sum in index order; zero for empty lanes.
+export fn sum(lanes: &Lanes) -> Float64 {
+  lanesSum(lanes.bytes)
+}
+
+/// The dot product in index order, or None when the counts differ.
+export fn dot(left: &Lanes, right: &Lanes) -> Option[Float64] {
+  lanesDot(left.bytes, right.bytes)
+}
+
+/// The smallest value ignoring NaN, or None for empty lanes.
+export fn smallest(lanes: &Lanes) -> Option[Float64] {
+  lanesMinimum(lanes.bytes)
+}
+
+/// The largest value ignoring NaN, or None for empty lanes.
+export fn largest(lanes: &Lanes) -> Option[Float64] {
+  lanesMaximum(lanes.bytes)
+}
+
+/// Apply a column-major 3x4 affine matrix to x/y/z lanes; None unless the matrix has
+/// twelve entries and the lanes have equal counts.
+export fn affine3(matrix: &Array[Float64], xs: &Lanes, ys: &Lanes, zs: &Lanes) -> Option[(Lanes, Lanes, Lanes)] {
+  let (rx, ry, rz) = lanesAffine3(*matrix, xs.bytes, ys.bytes, zs.bytes) ?
+  Some((Lanes{bytes: rx}, Lanes{bytes: ry}, Lanes{bytes: rz}))
+}

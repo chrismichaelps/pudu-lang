@@ -177,6 +177,10 @@ jobs:
       # edge cases and domain refusals, compared bit for bit with the host.
       - name: Verify binary64 kernels round exactly across the full range
         run: python3 test/sqrt-range.py "$PUDU"
+      # Every packed lane kernel against its scalar definition, plus the
+      # length, index, type and partial-value refusals.
+      - name: Verify packed binary64 lane kernels
+        run: node test/lanes.mjs "$PUDU"
       - name: Verify documentation site browser and CLI contracts
         run: |
           cabal run -v0 pudu -- doc --html test-fixtures/stdlib/UsesAll.pudu | node test/doc-site-parity.mjs

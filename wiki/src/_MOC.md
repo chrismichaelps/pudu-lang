@@ -118,6 +118,8 @@ tags: [moc, module]
 
 - [[Runtime Word Kernels]] — native-word reductions over existing containers.
 - [[Runtime Float Kernels]] — exact and platform binary64 operations behind Std.Math.Float.
+- [[Lane Kernel Identity]] · [[Runtime Lanes]] · [[Eval Builtin Lanes]] — packed binary64 lane kernels.
+- [[Lanes Gate]] · [[Lanes Fixture]] · [[Lanes Benchmark]] — lane conformance and measurement.
 - [[Float Kernel Identity]] — names and shapes of the binary64 kernels, read by checker and runtime.
 - [[Eval Word Map]] — checked UInt64 map payload reductions for STD.
 - [[Runtime Buffer Kernels]] — unboxed contiguous byte buffer operations.

@@ -9,6 +9,8 @@ aliases: [Pudu Continuous Verification]
 
 ## Purpose and interface
 
+[[Lanes Gate]] runs after the binary64 kernel gate.
+
 [[Ark Math Gate]] and [[Ark Matrix Gate]] execute against the resolved optimized compiler path.
 Resolved Grill Log: binary64 algebra/projection and nested shipping regressions run in CI.
 

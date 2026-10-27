@@ -187,7 +187,9 @@ name wide.
 Resolved Grill Log: use one explicit constructor and total name mapping for atomic
 replacement; definitions retain no runtime policy.
 
-## Binary64 kernels
+## Binary64 and lane kernels
+
+`LaneKernelBuiltin !LaneKernel` carries every [[Lane Kernel Identity]] entry the same way.
 
 `FloatKernelBuiltin !FloatKernel` is one constructor for every [[Float Kernel Identity]] entry;
 `builtinName` delegates to `floatKernelName`, so a kernel's binding has one spelling.

@@ -222,6 +222,8 @@ arity, typing and filesystem behavior.
 Prelude value names include `map floatKernelName floatKernels`, so resolution, checking and
 evaluation agree. A module may shadow a kernel name like any prelude value.
 
+Lane kernel names are listed from `laneKernels` beside them.
+
 ## Referenced by
 
 [[src/Pudu/Semantic/_MOC]] · [[Name Resolution]] · [[grammar/pudu]]
