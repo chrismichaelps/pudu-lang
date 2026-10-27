@@ -9,6 +9,9 @@ aliases: [Pudu Continuous Verification]
 
 ## Purpose and interface
 
+[[Ark Layer Tests]] and [[Ark Layer Gate]] execute with the application graph checks before
+compiler builds. Resolved Grill Log: engine layer contracts are enforced on integration requests.
+
 Verify development and production integration requests and branch updates. Compiler checks use
 an optimized build and a shared executable path. The full suite, source formatting and acceptance,
 documentation examples, website suites, package flows, sandbox refusal, diagnostics, release

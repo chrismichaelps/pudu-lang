@@ -7,6 +7,8 @@ tags: [moc, module]
 
 - [[src/Ark/_MOC|Ark Modules]] — engine library and focused conformance gates.
 
+- [[Ark Layer Gate]] · [[Ark Layer Model]] · [[Ark Layer Tests]] — explicit engine import contracts.
+
 - [[Derive Index Output Gate]] — checked strategy output and visibility.
 
 - [[Database Admission Fixture]] · [[Database Admission Transport]] — bounded pool ownership.

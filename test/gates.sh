@@ -30,6 +30,8 @@ run() {
 printf 'gates\n'
 run 'application dependency model refuses architectural defects' node --test test/app-layers.test.mjs
 run 'application imports follow their declared dependency layers' node scripts/app-layers.mjs
+run 'Ark dependency model refuses architectural defects' node --test test/ark-layers.test.mjs
+run 'Ark imports follow their declared dependency layers' node scripts/ark-layers.mjs
 while IFS= read -r project_build_root; do
   rm -rf "${project_build_root}/opt" "${project_build_root}/noopt" \
     "${project_build_root}/x" "${project_build_root}/t"
