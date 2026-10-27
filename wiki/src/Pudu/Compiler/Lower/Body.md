@@ -286,3 +286,15 @@ splices them in. A tuple entry result is shown and exits 0.
 Record literals, updates, field reads and field-path assignment (statement or
 trailing position) delegate to [[Compiler Lower Record]]. A record entry
 result is shown and exits 0.
+
+## Refutable binding dispatch
+
+Resolved Grill Log: a LetElseStatement delegates to `lowerLetElse` in
+[[Compiler Lower Match]]. The returned CoreMatch is an evaluated statement;
+its successful pattern locals remain in this block's lowering scope. No new
+Core form, inference rule, or runtime binding failure is introduced.
+
+Resolved Grill Log (#541): when a let-else subject itself is Never, retain its
+transfer and stop lowering the unreachable suffix of that block. No pattern
+binding exists on that path, so resolving a later source read into an
+uninitialized Core local would fabricate a refusal after a completed transfer.

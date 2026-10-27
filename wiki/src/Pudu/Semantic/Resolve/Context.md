@@ -155,3 +155,9 @@ unknown-name diagnostics and ordinary lexical shadowing.
 [[Resolve State]] owns the pure state record, action instances and initial state; this module retains the abstract facade, scope primitives and sorted products. `declareModuleQualifier` introduces the ordinary ValueSpace import and records its resolved SymbolId. Plain expressions check that identity before accepting a runtime value. E2010 names the namespace and asks for an exported member; no runtime reference is recorded for it.
 
 Resolved Grill Log: track identity in invocation-owned state so selected exports and legitimate local shadows remain values. Both declaration namespaces remain intact. Reflection E2018 takes priority outside derives, with no second E2010; qualified paths still record their references. Failed loaded interfaces remain opaque. See [[Scoped Import Design]].
+
+## Pattern diagnostics
+
+Resolved Grill Log: export the existing `emit` diagnostic accumulator for the
+phase-owned [[Resolve Bindings]] helper. Its sorting, invocation ownership and
+location contracts are unchanged; no second diagnostic store is introduced.

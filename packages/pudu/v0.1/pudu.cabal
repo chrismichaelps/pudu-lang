@@ -253,6 +253,7 @@ library
     Pudu.Frontend.Syntax
     Pudu.Frontend.Syntax.Located
     Pudu.Frontend.Syntax.Name
+    Pudu.Frontend.Syntax.Pattern
     Pudu.Frontend.Syntax.Stored
     Pudu.Frontend.Syntax.Inline
     Pudu.Frontend.Syntax.Print

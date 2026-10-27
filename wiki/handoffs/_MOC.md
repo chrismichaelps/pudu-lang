@@ -224,3 +224,5 @@ tags: [moc, handoff]
 - [[Total Float Order Repair]] — NaN keeps the value order total (#522).
 
 - [[Native Sum Delivery]] — sums, Option/Result and match in native frames (#525).
+
+- [[Native Refutable Binding Delivery]] — active native let … else delivery (#541).

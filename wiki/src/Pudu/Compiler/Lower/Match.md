@@ -9,7 +9,7 @@ aliases: [Compiler Lower Match]
 
 ## Purpose and interface
 
-Export `lowerMatch`: the subject once, then each arm's pattern, guard and body
+Export `lowerMatch`, `lowerLetElse`, `ifLetArms` and `whileLetLoop`: the subject once, then each arm's pattern, guard and body
 in a scope of its own, as `CoreMatch`.
 
 - Patterns: wildcard, binding, literal, range, tuple, constructor, record
@@ -36,3 +36,17 @@ in a scope of its own, as `CoreMatch`.
 ## Referenced by
 
 [[Compiler Lower Body]] · [[Compiler Frame Match]] · [[src/_MOC]]
+
+## Refutable bindings
+
+`lowerLetElse` evaluates the subject once and lowers the fallback before
+introducing the pattern's locals. The fallback must lower to Never. The success
+arm is unit and binds into the enclosing scope, so subsequent statements may
+read those locals. The fallback is a wildcard arm and retains return, break,
+continue, effects and source spans. A Never subject is preserved directly.
+
+Resolved Grill Log: reuse CoreMatch and its existing frame pattern tests; do
+not wrap the rest of the source block in a generated syntax scope or re-read
+the subject. Lowering the fallback before binding protects shadowed outer
+names even if an earlier pattern component matched before a later one failed.
+Unsupported subject carriers and patterns retain located E6001 refusals.

@@ -63,3 +63,5 @@ only complete head matching and discharged premises establish evidence.
 ## Referenced by
 
 [[src/Pudu/_MOC]] · [[Semantics]] · [[Pudu Type]]
+
+- [[Type Check Pattern Spec]] — alternative binding type agreement (#542).

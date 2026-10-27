@@ -36,3 +36,7 @@ No implementation semantics or broad exception suppression belong in the coordin
 ## Referenced by
 
 [[src/Pudu/_MOC]] · [[Type Check Pattern Spec]]
+
+Resolved Grill Log (#542): register testAlternativeBindings explicitly in the
+typeProperties coordinator; exporting a leaf property list alone does not
+make Main execute it. The targeted run must contain its actual test label.
