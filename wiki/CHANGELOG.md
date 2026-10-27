@@ -9,7 +9,8 @@ tags: [changelog]
 
 - [[Float Kernel Identity]] and [[Runtime Float Kernels]] give the evaluator, checker and resolver
   one list of hardware and math-library operations; [[Std Math Float]] keeps every signature.
-- `sqrt` is correctly rounded across the full range; `fma`, `toBits` and `fromBits` are new.
+- `sqrt` is correctly rounded across the full range; `fma`, `toBits`, `fromBits`, `fromInt` and
+  `toInt` are new (#665). [[Std Stats]] counts with `fromInt` instead of a doubling loop.
   [[Square Root Range Gate]] checks bit-exact goldens and kernel contracts in CI.
 - [[Root Kernel Benchmark]] rejects the reciprocal-root bit estimate; [[Square Root Delivery]]
   records measurements.

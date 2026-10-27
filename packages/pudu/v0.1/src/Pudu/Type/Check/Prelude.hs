@@ -344,6 +344,8 @@ declareBuiltinConstructors = do
     FloatArguments count -> FunctionTypeValue False (replicate count floatType) floatType
     FloatToWord -> FunctionTypeValue False [floatType] (NominalType "UInt64" [])
     WordToFloat -> FunctionTypeValue False [NominalType "UInt64" []] floatType
+    IntToFloat -> FunctionTypeValue False [integerType] floatType
+    FloatToInt -> FunctionTypeValue False [floatType] (NominalType "Option" [integerType])
   wordMapType = NominalType "Map" [RigidType "K", NominalType "UInt64" []]
   byteType = NominalType "UInt8" []
   stdFlatMapId = NominalId (Just (ModuleName ("Std" NonEmpty.:| ["FlatMap"]))) "FlatMap"

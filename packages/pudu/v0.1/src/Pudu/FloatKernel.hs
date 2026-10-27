@@ -39,10 +39,13 @@ data FloatKernel
   | KernelFma
   | KernelToBits
   | KernelFromBits
+  | KernelFromInt
+  | KernelToInt
   deriving stock (Eq, Ord, Show, Enum, Bounded)
 
-{-| Float arguments taken, or a bit cast between Float64 and UInt64. -}
-data KernelShape = FloatArguments !Int | FloatToWord | WordToFloat
+{-| Float arguments taken, a bit cast between Float64 and UInt64, or a
+    numeric conversion between Int and Float64. -}
+data KernelShape = FloatArguments !Int | FloatToWord | WordToFloat | IntToFloat | FloatToInt
   deriving stock (Eq, Show)
 
 floatKernels :: [FloatKernel]
@@ -76,6 +79,8 @@ floatKernelName kernel = case kernel of
   KernelFma -> "floatFma"
   KernelToBits -> "floatToBits"
   KernelFromBits -> "floatFromBits"
+  KernelFromInt -> "floatFromInt"
+  KernelToInt -> "floatToInt"
 
 floatKernelShape :: FloatKernel -> KernelShape
 floatKernelShape kernel = case kernel of
@@ -85,4 +90,6 @@ floatKernelShape kernel = case kernel of
   KernelFma -> FloatArguments 3
   KernelToBits -> FloatToWord
   KernelFromBits -> WordToFloat
+  KernelFromInt -> IntToFloat
+  KernelToInt -> FloatToInt
   _ -> FloatArguments 1

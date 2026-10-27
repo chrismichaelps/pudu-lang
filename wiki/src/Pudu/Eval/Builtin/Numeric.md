@@ -51,7 +51,9 @@ callCharMethod :: Span -> CharMethod -> Value -> [Value] -> Evaluator Value
 ## Binary64 kernels
 
 `callFloatKernel` dispatches on `floatKernelShape`: one, two or three Float64 arguments to
-[[Runtime Float Kernels]], or a bit cast between Float64 and UInt64. Results are Float64. A word
+[[Runtime Float Kernels]], a bit cast between Float64 and UInt64, or a conversion: `IntToFloat`
+rounds to nearest with ties to even; `FloatToInt` truncates toward zero and answers `None` for
+NaN, infinities and values outside the signed 64-bit range. Results are Float64. A word
 outside UInt64 or a non-float argument aborts with E7012, reachable only by an unchecked call.
 Grill Log — **Q:** keep the input width? **A:** No; every kernel is typed Float64 to Float64.
 

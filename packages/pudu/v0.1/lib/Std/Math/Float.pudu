@@ -127,6 +127,16 @@ export fn fromBits(bits: UInt64) -> Float {
   floatFromBits(bits)
 }
 
+/// The nearest Float64 to an integer, ties to even; exact when |value| <= 2^53.
+export fn fromInt(value: Int) -> Float {
+  floatFromInt(value)
+}
+
+/// The integer part of x, truncated toward zero; None for NaN, infinities or a value outside Int.
+export fn toInt(x: Float) -> Option[Int] {
+  floatToInt(x)
+}
+
 /// Cube root. Preserves negative sign.
 export fn cbrt(x: Float) -> Float {
   floatCbrt(x)

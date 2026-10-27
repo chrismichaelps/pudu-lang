@@ -28,7 +28,8 @@ closed [[Float Kernel Identity]] enumeration drives the evaluator, checker and r
 [[Runtime Float Kernels]] implements it with the hardware root and C math library. Public
 signatures and `Option` domains are unchanged and decided in Pudu. Exact kernels (sqrt, floor,
 ceil, trunc, round, fma, bit casts) are bit-identical across IEEE platforms; platform kernels
-are documented as last-bit platform-dependent. New public functions: `fma`, `toBits`, `fromBits`.
+are documented as last-bit platform-dependent. New public functions: `fma`, `toBits`, `fromBits`, and (#665) `fromInt`/`toInt`, which replace
+the doubling loop in Std.Stats.
 Branch includes the #662 parser repair, which the golden corpus needs to parse.
 
 Evidence: 762 golden inputs (subnormals, powers and neighbours across all exponents, 1e±300,

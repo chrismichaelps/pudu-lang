@@ -80,6 +80,9 @@ export fn main() -> Int {
   print(show(Float.asin(1.5)) + " " + show(Float.ln(0.0)) + " " + show(Float.powf(-8.0, 0.5)))
   print(show(Float.powf(0.0, -1.0)) + " " + show(Float.powf(-2.0, 3.0)) + " " + show(Float.log2(8.0)))
   print(show(Float.atan2(0.0, -1.0) == Float.pi()) + " " + show(Float.hypot(3e300, 4e300)))
+  print(show(Float.fromInt(9007199254740993)) + " " + show(Float.fromInt(9007199254740995)) + " " + show(Float.fromInt(-3)))
+  print(show(Float.fromInt(9223372036854775807)) + " " + show(Float.toInt(-2.7)) + " " + show(Float.toInt(2.7)))
+  print(show(Float.toInt(9.3e18)) + " " + show(Float.toInt(-9.223372036854775808e18)) + " " + show(Float.toInt(0.0 / 0.0)))
   0
 }
 """
@@ -99,6 +102,9 @@ with tempfile.TemporaryDirectory(prefix="pudu-float-kernels-") as scratch:
         "None None None",
         "None Some(-8.0) Some(3.0)",
         "true 5.0e300",
+        "9.007199254740992e15 9.007199254740996e15 -3.0",
+        "9.223372036854776e18 Some(-2) Some(2)",
+        "None Some(-9223372036854775808) None",
     ]
     assert result.stdout.splitlines() == expected, result.stdout
     path = Path(scratch) / "Refused.pudu"
