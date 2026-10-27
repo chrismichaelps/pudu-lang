@@ -5,6 +5,11 @@ tags: [changelog]
 
 # Changelog
 
+## 2026-10-27 — Portable native word kernel (#501)
+
+- [[Backend Word128 Kernel]] supplies portable raw arithmetic and selectable dependencies.
+- [[Native Word128 Tests]] executes independent Integer answers without admitting new source types.
+
 ## 2026-10-09 — Integrated Database graph expectations (#478)
 
 - [[Application Layer Tests]] verifies the combined challenge and capacity boundaries with exact layer diagnostics.

@@ -291,3 +291,7 @@ passes the CLI and the residualizer share.
 Register [[Lsp Impl Members]] without new dependencies. Resolved Grill Log: completion and code actions share one unwritten-member computation.
 
 Register [[Resolve State]] for the private pure resolver action and state boundary. Resolved Grill Log: preserve the abstract [[Resolve Context]] facade and existing state/diagnostic ordering without a new dependency.
+
+Register [[Backend Word128 Kernel]] explicitly without new dependencies. Resolved Grill Log:
+the compiled kernel corpus runs in the complete suite and contributes to its
+aggregate failure status. The full release gate remains unchanged.

@@ -109,3 +109,7 @@ Register Qualified Shadow Spec with the existing test dependencies. Resolved Gri
 Register [[Mutex Admission Spec]] explicitly with existing dependencies. Resolved Grill Log (#476): the controlled native family and real public fixture run in the complete suite.
 
 Register [[Database Challenge Spec]] explicitly with existing dependencies. Resolved Grill Log: complete-suite execution and focused execution use the same real challenge admission assertions.
+
+Register [[Native Word128 Tests]] explicitly without new dependencies. Resolved Grill Log:
+the compiled kernel corpus runs in the complete suite and contributes to its
+aggregate failure status. The full release gate remains unchanged.
