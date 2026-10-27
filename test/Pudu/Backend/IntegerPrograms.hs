@@ -2,11 +2,12 @@
 module Pudu.Backend.IntegerPrograms (integerSuccessPrograms, integerRefusalPrograms) where
 
 import Data.Bits ((.&.), (.|.), xor, complement, shiftL, shiftR)
+import Pudu.Backend.DeferredPrograms (deferredSuccessPrograms, deferredRefusalPrograms)
 import Data.Text (Text)
 import qualified Data.Text as Text
 
 integerSuccessPrograms :: [(String, Text, Text)]
-integerSuccessPrograms = map binaryMatrix operators <> map isolatedBinary operators <> [complementMatrix]
+integerSuccessPrograms = deferredSuccessPrograms <> map binaryMatrix operators <> map isolatedBinary operators <> [complementMatrix]
   <> [("isolated complement", program ["fn main() -> Int { print(display(~0))", "  return 0 }"], "-1\n")]
   <> map shiftMatrix [("<<", shiftL), (">>", shiftR)]
   <> [("integer operands freeze before mutation", program
@@ -105,7 +106,7 @@ shiftMatrix (operator, operation) =
   pairs = [(a, count) | a <- numbers <> map fst samples, count <- [0, 1, 31, 32, 62, 63]]
 
 integerRefusalPrograms :: [(String, Text)]
-integerRefusalPrograms =
+integerRefusalPrograms = deferredRefusalPrograms <>
   [ ("invalid shift " <> Text.unpack operator <> " " <> show count, program
       [ "fn op(a: Int, b: Int) -> Int { a " <> operator <> " b }"
       , "fn main() -> Int {"

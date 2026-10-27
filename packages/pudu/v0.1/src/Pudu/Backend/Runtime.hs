@@ -27,11 +27,12 @@ import Data.Text (Text)
 import qualified Data.Text as Text
 import Pudu.Backend.Runtime.Integer (integerRuntimeParts)
 import Pudu.Comptime.Limits (callDepthLimit)
+import Pudu.Diagnostic.Host (memoryFailureMessage)
 
 {-| The runtime contract revision baked into every generated program's header
     comment. It changes only when the runtime's behaviour or interface does. -}
 runtimeRevision :: Text
-runtimeRevision = "3"
+runtimeRevision = "5"
 
 {-| @Backend.Runtime.Part — one named, self-contained piece of the runtime.
 
@@ -51,14 +52,10 @@ runtimeParts =
   [ RuntimePart "prelude" preludeLines
   , RuntimePart "site" siteLines
   , RuntimePart "colored" coloredLines
+  , RuntimePart "cleanup" ["static void (*pudu_cleanup_hook)(void) = NULL;"]
   , RuntimePart "fail" failLines
+  , RuntimePart "memory_failure" memoryFailureLines
   , RuntimePart "call_depth" callDepthLines
-  , RuntimePart "add" addLines
-  , RuntimePart "sub" subLines
-  , RuntimePart "mul" mulLines
-  , RuntimePart "div" divLines
-  , RuntimePart "rem" remLines
-  , RuntimePart "neg" negLines
   ] <> map (uncurry RuntimePart) integerRuntimeParts <>
   [ RuntimePart "print_int" printIntLines
   , RuntimePart "print_bool" printBoolLines
@@ -144,6 +141,17 @@ failLines =
   , "    fprintf(stderr, \": %s\\n\", site->help);"
   , "  }"
   , "  fflush(stderr);"
+  , "  if (pudu_cleanup_hook != NULL) pudu_cleanup_hook();"
+  , "  exit(1);"
+  , "}"
+  ]
+
+memoryFailureLines :: [Text]
+memoryFailureLines =
+  [ "static void pudu_memory_failure(void) {"
+  , "  if (pudu_cleanup_hook != NULL) pudu_cleanup_hook();"
+  , "  fputs(\"" <> Text.pack memoryFailureMessage <> "\\n\", stderr);"
+  , "  fflush(stderr);"
   , "  exit(1);"
   , "}"
   ]
@@ -163,70 +171,10 @@ callDepthLines =
   , "}"
   ]
 
-addLines :: [Text]
-addLines =
-  [ "static inline int64_t pudu_add(int64_t a, int64_t b, const pudu_site *site) {"
-  , "  if ((b > 0 && a > INT64_MAX - b) || (b < 0 && a < INT64_MIN - b)) pudu_fail(site);"
-  , "  return a + b;"
-  , "}"
-  ]
-
-subLines :: [Text]
-subLines =
-  [ "static inline int64_t pudu_sub(int64_t a, int64_t b, const pudu_site *site) {"
-  , "  if ((b < 0 && a > INT64_MAX + b) || (b > 0 && a < INT64_MIN + b)) pudu_fail(site);"
-  , "  return a - b;"
-  , "}"
-  ]
-
-mulLines :: [Text]
-mulLines =
-  [ "static inline int64_t pudu_mul(int64_t a, int64_t b, const pudu_site *site) {"
-  , "  if (a == 0 || b == 0) return 0;"
-  , "  if (a == -1 && b == INT64_MIN) pudu_fail(site);"
-  , "  if (b == -1 && a == INT64_MIN) pudu_fail(site);"
-  , "  if (a > 0) {"
-  , "    if (b > 0) { if (a > INT64_MAX / b) pudu_fail(site); }"
-  , "    else { if (b < INT64_MIN / a) pudu_fail(site); }"
-  , "  } else {"
-  , "    if (b > 0) { if (a < INT64_MIN / b) pudu_fail(site); }"
-  , "    else { if (a < INT64_MAX / b) pudu_fail(site); }"
-  , "  }"
-  , "  return a * b;"
-  , "}"
-  ]
-
-divLines :: [Text]
-divLines =
-  [ "static inline int64_t pudu_div(int64_t a, int64_t b, const pudu_site *zero, const pudu_site *overflow) {"
-  , "  if (b == 0) pudu_fail(zero);"
-  , "  if (a == INT64_MIN && b == -1) pudu_fail(overflow);"
-  , "  return a / b;"
-  , "}"
-  ]
-
-remLines :: [Text]
-remLines =
-  [ "/* `INT64_MIN % -1` is 0 in the evaluator; plain C would trap. */"
-  , "static inline int64_t pudu_rem(int64_t a, int64_t b, const pudu_site *zero) {"
-  , "  if (b == 0) pudu_fail(zero);"
-  , "  if (b == -1) return 0;"
-  , "  return a % b;"
-  , "}"
-  ]
-
-negLines :: [Text]
-negLines =
-  [ "static inline int64_t pudu_neg(int64_t a, const pudu_site *site) {"
-  , "  if (a == INT64_MIN) pudu_fail(site);"
-  , "  return -a;"
-  , "}"
-  ]
-
 printIntLines :: [Text]
 printIntLines =
-  [ "static inline void pudu_print_int(int64_t value) {"
-  , "  printf(\"%\" PRId64 \"\\n\", value);"
+  [ "static inline void pudu_print_int(pudu_int value) {"
+  , "  printf(\"%s%\" PRIu64 \"\\n\", value.negative ? \"-\" : \"\", pudu_magnitude(value));"
   , "  fflush(stdout);"
   , "}"
   ]
@@ -251,10 +199,10 @@ printStrLines =
 statusLines :: [Text]
 statusLines =
   [ "/* The interpreter's exit-status clamp: 0 stays 0, everything else is 1..255. */"
-  , "static inline int pudu_status(int64_t value) {"
-  , "  if (value == 0) return 0;"
-  , "  if (value < 1) return 1;"
-  , "  if (value > 255) return 255;"
-  , "  return (int)value;"
+  , "static inline int pudu_status(pudu_int value) {"
+  , "  if (value.bits == 0) return 0;"
+  , "  if (value.negative) return 1;"
+  , "  if (value.bits > 255) return 255;"
+  , "  return (int)value.bits;"
   , "}"
   ]

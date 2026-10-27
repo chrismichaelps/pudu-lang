@@ -17,6 +17,7 @@ import qualified Data.Text as Text
 import qualified Data.Text.IO as TextIO
 import Pudu.Backend.ControlPrograms (controlSuccessPrograms, controlRefusalPrograms)
 import Pudu.Backend.Emit (emitProgram)
+import Pudu.Compiler.Frame (lowerFrames)
 import Pudu.Backend.IntegerPrograms (integerSuccessPrograms, integerRefusalPrograms)
 import Pudu.Backend.FunctionPrograms (functionSuccessPrograms, functionRefusalPrograms)
 import Pudu.Backend.Toolchain
@@ -157,7 +158,12 @@ successPrograms =
 
 statusPrograms :: [(String, Text)]
 statusPrograms =
-  [ ("zero exits zero", programWith ["  return 0"])
+  [ ("deferred positive boundary clamps to 255", programWith
+      [ "  let value = 9223372036854775808"
+      , "  let minimum: Int = -value"
+      , "  return value"
+      ])
+  , ("zero exits zero", programWith ["  return 0"])
   , ("a small nonzero result exits as itself", programWith ["  return 3"])
   , ("a result above 255 clamps", programWith ["  return 300"])
   , ("a negative result clamps to one", programWith ["  return 0 - 5"])
@@ -349,19 +355,21 @@ buildAndRun root program = case rootCompileResult program >>= compileModule of
   Just parsed -> case lowerProgram "main" (rootCompileResult program >>= \result -> nativeTypes (compileTypes result) (compileSchemes result)) parsed of
     LowerRefused refusals ->
       pure (Left ("lowering refused: " <> show (map diagnosticMessage refusals)))
-    Lowered core -> do
-      let executable = root </> "Main.bin"
-          request =
-            ToolchainRequest
-              { toolchainSource = emitProgram versionText (programSources program) core
-              , toolchainOutput = executable
-              }
-      compiled <- compileNative request
-      case compiled of
-        Left failure -> pure (Left ("toolchain failure: " <> show failure))
-        Right warnings -> do
-          (code, out, err) <- readProcessWithExitCode executable [] ""
-          pure (Right (Text.pack out, Text.pack err, statusOf code, warnings))
+    Lowered core -> case lowerFrames core >>= emitProgram versionText (programSources program) of
+      Left failure -> pure (Left ("frame emission failed: " <> show failure))
+      Right emitted -> do
+        let executable = root </> "Main.bin"
+            request =
+              ToolchainRequest
+                { toolchainSource = emitted
+                , toolchainOutput = executable
+                }
+        compiled <- compileNative request
+        case compiled of
+          Left failure -> pure (Left ("toolchain failure: " <> show failure))
+          Right warnings -> do
+            (code, out, err) <- readProcessWithExitCode executable [] ""
+            pure (Right (Text.pack out, Text.pack err, statusOf code, warnings))
  where
   statusOf ExitSuccess = 0
   statusOf (ExitFailure number) = number

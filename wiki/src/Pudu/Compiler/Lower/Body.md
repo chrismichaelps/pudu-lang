@@ -175,19 +175,11 @@ Resolved Grill Log: reproduce actual interpreter dispatch, canonical settled kin
 
 ## Deferred Int literal carrier admission (#498, hardening partition)
 
-A ResolvedInteger PlatformSigned literal reaches Core only if its mathematical
-value fits integerKindFits PlatformSigned. Otherwise halt at the literal's
-complete source span with E6001 for an Int literal outside the native carrier
-range. The scalar lowerer's immediate pure negative-literal normalization runs
-before operand lowering, so the negative minimum spelling stays admitted.
-Blocks, inferred locals and other paths cannot silently narrow a positive 2^63
-intermediate. This is a temporary explicit coverage boundary; #498 remains open
-until those accepted programs execute natively with exact interpreter behavior.
-
-Resolved Grill Log: test the carrier bound before constructing Core, never
-truncate or change checker/interpreter semantics. Preserve successful minimum
-literal emission and runtime E7005 when a minimum value is negated via a
-parameter. Do not label a refusal as completed native support.
+The initial no-loss guard refused deferred positive-boundary literals. The
+exact-carrier integration below supersedes that temporary boundary: magnitudes
+through 2^63 are represented directly, including accepted block/local paths.
+Larger unrepresented magnitudes still refuse at the literal's complete span.
+The checker and interpreter remain unchanged.
 
 ### Failed-block diagnostic containment
 
@@ -204,3 +196,22 @@ Resolved Grill Log: recovery IR is never a successful value. Stop within the
 failed lexical scope, preserve the original located refusal, and test block
 and local cases independently rather than weakening the exact-one diagnostic
 assertion. This changes native diagnostic recovery only, not Pudu execution.
+
+## Exact integer carrier integration (#498)
+
+Admit canonical platform Int literal magnitudes through 2^63 in the exact
+carrier; keep a located refusal outside that representable domain. The accepted
+deferred positive boundary must now lower through blocks/locals without the
+interim E6001 guard. Failed-block containment stays unchanged. No checker or
+interpreter changes, new primitive kinds or ownership-bearing values.
+
+Resolved Grill Log: implement [[Exact Native Integer Carriers]] without changing the oracle. Preserve positive boundary values, exact diagnostic provenance, Never transfers, and warning-free helper selection. The internal carrier is not a public type-layout promise; full native coverage remains open.
+
+When any call argument is structurally Never, lower the eager argument sequence
+to a Never Core block and do not record/emit the call. The arguments retain
+source order; no call-depth check or callee body executes after an argument
+transfers. This avoids passing an unreachable scalar dummy to a struct integer
+parameter and keeps a callee used only by that impossible call out of emission.
+The ordinary signature checks before arguments remain unchanged.
+Resolved Grill Log: Never carries no C argument value. Sequence its effects,
+then preserve the transfer; do not invent a numeric payload or unused wrapper.

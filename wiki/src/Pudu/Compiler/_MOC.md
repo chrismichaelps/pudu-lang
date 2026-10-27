@@ -6,6 +6,9 @@ aliases: [Program Compiler Module Map]
 
 # Program Compiler Module Map
 
+- [[Compiler Frame Lowering]] · [[Compiler Frame State]] · [[Compiler Frame Body]] — structured Core to explicit continuations for #499.
+- [[Core Frame IR]] · [[Native Frame Lowering Tests]] — typed flat blocks and ordering/transfer evidence.
+
 - [[Compile-Time Dependency Closure]] — transitive source inputs of expansion
   and folding, including ordinary pure helper bodies.
 

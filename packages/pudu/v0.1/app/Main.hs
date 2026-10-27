@@ -53,6 +53,9 @@ import Pudu.Bundle
   , sharesSources
   )
 import Pudu.Compiler (CompileResult (..))
+import Pudu.Compiler.Frame (lowerFrames)
+import Pudu.Core.Frame (FrameFault (..))
+import Pudu.Cli.Memory (withMemoryFailure)
 import Pudu.Compiler.Cache (ProductCache, collectedEntries, openCollectingCache, openProductCache)
 import Pudu.Backend.Emit (emitProgram)
 import Pudu.Backend.Toolchain
@@ -123,7 +126,7 @@ import System.IO
   )
 
 main :: IO ()
-main = do
+main = withMemoryFailure $ do
   readAndWriteUtf8
   useEveryCore
   carried <- attachedBundle
@@ -755,22 +758,27 @@ buildNativeProgram style path target = do
         LowerRefused refusals -> do
           TextIO.putStrLn (renderProgramDiagnostics style program refusals)
           exitFailure
-        Lowered core -> do
-          let request =
-                ToolchainRequest
-                  { toolchainSource = emitProgram versionText (programSources program) core
-                  , toolchainOutput = target
-                  }
-          compiled <- compileNative request
-          case compiled of
-            Left failure -> do
-              TextIO.putStrLn
-                (renderProgramDiagnostics style program [toolchainDiagnostic (moduleSpan parsed) failure])
-              exitFailure
-            Right warnings -> do
-              unless (Text.null (Text.strip warnings)) $
-                TextIO.putStrLn warnings
-              TextIO.putStrLn (Text.pack target <> ": a native executable")
+        Lowered core -> case lowerFrames core >>= emitProgram versionText (programSources program) of
+          Left failure -> do
+            let at = maybe (moduleSpan parsed) id (frameFaultSpan failure)
+            TextIO.putStrLn (renderProgramDiagnostics style program [Native.nativeRefusal at (frameFaultMessage failure)])
+            exitFailure
+          Right emitted -> do
+            let request =
+                  ToolchainRequest
+                    { toolchainSource = emitted
+                    , toolchainOutput = target
+                    }
+            compiled <- compileNative request
+            case compiled of
+              Left failure -> do
+                TextIO.putStrLn
+                  (renderProgramDiagnostics style program [toolchainDiagnostic (moduleSpan parsed) failure])
+                exitFailure
+              Right warnings -> do
+                unless (Text.null (Text.strip warnings)) $
+                  TextIO.putStrLn warnings
+                TextIO.putStrLn (Text.pack target <> ": a native executable")
 
 {-| The native toolchain's failure as a diagnostic, spanned at the root module
     so the ordinary renderer shows the file being built. -}

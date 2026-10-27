@@ -11,6 +11,17 @@ aliases: [Repository Test Runner]
 
 # Repository Test Runner
 
+Register [[CLI Memory Tests]] and [[Native Frame Runtime Tests]] with the backend
+group. Resolved Grill Log (#499): host and allocator-failure checks run in the
+complete suite and through focused filters with unchanged exit aggregation.
+
+Register [[Native Frame Body Tests]] beside continuation lowering. Resolved
+Grill Log (#499): strict generated-C checks execute in focused and full suites.
+
+Register [[Native Frame Lowering Tests]] beside backend properties and aggregate
+its outcomes. Resolved Grill Log (#499): focused and complete runs execute the
+same continuation checks without claiming runtime frame repair.
+
 ## Purpose and interface
 
 Runs every registered QuickCheck property family with a visible label and fails the process if any

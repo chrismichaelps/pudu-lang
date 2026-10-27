@@ -15,6 +15,14 @@ aliases: [Pudu CLI]
 
 # Pudu CLI
 
+## Frame integration (#499)
+
+Wrap executable main with [[CLI Memory Failure]], preserving every other host
+exception. Native builds run [[Compiler Frame Lowering]] before [[Backend Emit]];
+located frame faults use existing E6001 refusal rendering and cannot reach the
+toolchain. Resolved Grill Log: no compiler import from backend, no fallback,
+no C source produced from a failed frame pass. Independent review pending.
+
 ## Bundle environment ownership (#460)
 
 `runBundled` compiles through the explicit isolated bundle entry and shares the ordinary compiled

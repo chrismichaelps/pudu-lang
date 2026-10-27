@@ -11,6 +11,18 @@ aliases: [Backend Runtime, Native Runtime]
 
 # Backend Runtime
 
+## Frame ownership (#499)
+
+Revision 5 adds a cleanup hook before fail and memory_failure parts. Both source
+failure and shared host-memory failure run the hook before exiting. The legacy
+call wrapper catalogue remains for isolated old helpers until removal; new frame
+emission uses [[Backend Frame Runtime]]. A fail part depends on cleanup; a
+memory_failure part depends on cleanup and [[Host Failure Vocabulary]]. The
+previous no-allocation claim applies only to scalar arithmetic/printing helpers;
+explicit frames allocate checked storage. Resolved Grill Log: preserve source
+diagnostic bytes and free scalar frames on all controlled exits; OS kills and
+future owned-value cleanup are not claimed.
+
 ## Purpose and interface
 
 The C runtime every natively built Pudu program carries inside it: checked
@@ -43,16 +55,16 @@ typedef struct {
 void pudu_fail(const pudu_site *site);
 static int64_t pudu_depth; /* the live call depth, entry starts at 1 */
 void pudu_enter(const pudu_site *site);
-int64_t pudu_add(int64_t, int64_t, const pudu_site *);
-int64_t pudu_sub(int64_t, int64_t, const pudu_site *);
-int64_t pudu_mul(int64_t, int64_t, const pudu_site *);
-int64_t pudu_div(int64_t, int64_t, const pudu_site *zero, const pudu_site *overflow);
-int64_t pudu_rem(int64_t, int64_t, const pudu_site *zero);
-int64_t pudu_neg(int64_t, const pudu_site *);
-void pudu_print_int(int64_t);
+pudu_int pudu_add(pudu_int, pudu_int, pudu_int_kind, const pudu_site *);
+pudu_int pudu_sub(pudu_int, pudu_int, pudu_int_kind, const pudu_site *);
+pudu_int pudu_mul(pudu_int, pudu_int, pudu_int_kind, const pudu_site *);
+pudu_int pudu_div(pudu_int, pudu_int, pudu_int_kind, const pudu_site *zero, const pudu_site *overflow);
+pudu_int pudu_rem(pudu_int, pudu_int, const pudu_site *zero);
+pudu_int pudu_neg(pudu_int, pudu_int_kind, const pudu_site *);
+void pudu_print_int(pudu_int);
 void pudu_print_bool(int);
 void pudu_print_str(const char *bytes, size_t length);
-int pudu_status(int64_t);
+int pudu_status(pudu_int);
 ```
 
 ## Algorithm and invariants
@@ -75,13 +87,12 @@ int pudu_status(int64_t);
   `callDepthLimit`, so the runtime and the evaluator cannot drift; the wrapper
   emits the decrement after a normal return, because an abort exits and never
   returns.
-- Checked arithmetic is defined for every input: `pudu_add`/`pudu_sub` compare
-  against `INT64_MAX`/`INT64_MIN` before adding; `pudu_mul` refuses the two
-  `INT64_MIN`/`-1` pairs and otherwise bounds-checks by division; `pudu_div`
-  refuses a zero divisor (`E7004`) and `INT64_MIN / -1` (`E7005`, "divide");
-  `pudu_rem` refuses only zero, so `INT64_MIN % -1` is `0` exactly as the
-  evaluator computes it; `pudu_neg` refuses `INT64_MIN`. No signed overflow or
-  division trap can execute.
+- [[Backend Runtime Integer]] supplies revision-4 sign/magnitude helpers.
+  Checked operations settle mathematical magnitude/sign against generated kind
+  limits before returning; saturation clamps and wrapping decodes unsigned bits.
+  Division/remainder use unsigned magnitudes after the zero check, preserving
+  MIN/-1 and deferred-positive-boundary behavior without signed C division.
+  No stored deferred magnitude is narrowed before use.
 - `pudu_fail` prints to standard error in the interpreter's exact layout:
   `error[CODE]: message`, `  --> file:line:col`, the gutter and expanded
   source line, the caret row (with ` ...` for a multiline span), and
@@ -101,8 +112,9 @@ int pudu_status(int64_t);
 
 - No `printf("%d", ...)` for `int64_t`, no `strlen` on user text, no locale
   dependence, no buffered output left unflushed at refusal.
-- No allocation: the runtime never calls `malloc`; it needs only the C
-  standard library and, for terminal detection, `isatty`.
+- Arithmetic, printing and diagnostic helpers do not allocate application
+  storage. [[Backend Frame Runtime]] owns checked heap allocation for frames.
+  Only the C standard library and terminal detection through `isatty` are needed.
 - No undefined behaviour on any input, including the extremes; no assumption
   that `char` is signed.
 - No C source file is read from disk at build or run time: the text is
@@ -114,7 +126,7 @@ Consumed by [[Backend Emit]], which selects and concatenates the runtime parts
 into every generated translation unit. It depends on nothing in Pudu: the C
 side includes only `<stdint.h>`, `<stdio.h>`, `<stdlib.h>`, `<string.h>`, and
 `<unistd.h>` or `<io.h>` for `isatty`. Its Haskell side imports `Data.Text`
-and [[Compile Time Limits]] — pure constants, no frontend, semantic, or
+and [[Compile Time Limits]] plus [[Backend Runtime Integer]] — pure constants, no frontend, semantic, or
 evaluator module — so the depth bound is the evaluator's own.
 
 ## Grill Log
@@ -174,3 +186,15 @@ Use the standard output descriptor `1` with `isatty`/`_isatty`, avoiding `fileno
 Catalogue [[Backend Runtime Integer]] parts after existing checked arithmetic and before printers; revision becomes 3 for the added helper ABI. RuntimePart still owns the part wrapper; the Integer module exports name/line pairs to avoid a module cycle.
 
 Resolved Grill Log: use defined unsigned bit patterns, validate counts before shifts, and prove signed arithmetic bounds before evaluation. The actual interpreter determines results, effect order and exact diagnostic vocabulary. No syntax or type-inference change.
+
+## Exact integer carrier integration (#498)
+
+Revision 4 changes the private integer ABI to pudu_int and generated limits.
+Remove the old signed checked helpers from this module; Integer.Arithmetic owns
+them. Keep diagnostic rendering/depth/IO here. print_int prints a sign and
+PRIu64 magnitude, then flushes; status clamps using magnitude/sign. Depth stays
+int64_t and unit/Bool retain their ABI. Integer catalogue precedes printers.
+
+Resolved Grill Log: implement [[Exact Native Integer Carriers]] without changing the oracle. Preserve positive boundary values, exact diagnostic provenance, Never transfers, and warning-free helper selection. The internal carrier is not a public type-layout promise; full native coverage remains open.
+
+The revision-4 integer printer emits its sign, magnitude and newline in one printf call, then flushes, keeping the line within one stdio operation.

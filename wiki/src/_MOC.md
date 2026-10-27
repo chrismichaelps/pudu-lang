@@ -5,6 +5,13 @@ tags: [moc, module]
 
 # Module Map
 
+- [[Host Failure Vocabulary]] · [[CLI Memory Failure]] · [[CLI Memory Tests]] — shared catchable host-exhaustion presentation without swallowing cancellation (#499).
+- [[Backend Frame Program]] · [[Backend Frame Runtime]] · [[Native Frame Runtime Tests]] — production frame ownership, dispatcher and controlled failure checks (#499).
+
+- [[Backend Frame Values]] · [[Backend Frame Bodies]] · [[Native Frame Body Tests]] — constant-arity generated C step bodies and strict corpus compilation (#499).
+
+- [[Core Frame IR]] · [[Compiler Frame Lowering]] · [[Compiler Frame State]] · [[Compiler Frame Body]] · [[Native Frame Lowering Tests]] — pure native continuation lowering (#499).
+
 - [[Repository README]] · [[Native Progress Generator]] · [[Native Progress Tests]] · [[Native Progress Workflow]] — auditable C11 completion publishing.
 
 - [[Derive Index Output Gate]] — checked strategy output and visibility.
@@ -226,3 +233,5 @@ tags: [moc, module]
 - [[Compiler Lower Scalar]] — represented operators and ordered runtime failures (#494).
 
 - [[Backend Runtime Integer]] · [[Backend Integer Programs]] — portable platform Int operations and independent mathematical/differential evidence.
+
+- [[Backend Integer Value]] · [[Backend Integer Arithmetic]] · [[Backend Integer Bits]] · [[Backend Deferred Integer Programs]] — exact integer carriers and deferred-value conformance.

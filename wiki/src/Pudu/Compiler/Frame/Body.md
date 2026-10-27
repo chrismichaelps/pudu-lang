@@ -1,0 +1,47 @@
+---
+type: module
+path: "@root/src/Pudu/Compiler/Frame/Body.hs"
+fidelity: Active
+aliases: [Compiler Frame Body]
+grammar: "[[grammar/haskell]]"
+---
+# Compiler Frame Body
+
+## Purpose and interface
+
+Lower every current Core statement/expression/control shape to flat blocks.
+A Flow is Stopped or Completed with an optional payload. Normal unit/text
+effects have no payload; Never is Stopped. Materialize unit only when a scalar
+consumer/argument slot needs its sentinel. Discarded text/display keeps operand
+effects without creating a fake text value; print handles literal/display
+arguments directly. Snapshot every local read before later operand effects.
+Logical operators use guarded blocks, eager operators use ordered scalar slots.
+Calls allocate a resume label and optional result slot, then terminate the block.
+Blocks, branches and loops preserve normal joins and abrupt paths. Loop targets
+use CoreLoopId, with break values assigned only after their operands complete.
+Stop after a terminator, preserving the earliest error/transfer. Do not render
+source diagnostics or allocate runtime frames here.
+
+## Invariants and failures
+
+The contract in [[Native Execution Frames]] governs ordered effects, snapshots,
+Never paths, call continuations and source provenance. The pure pass is separate
+from allocation/failure policy and the future C dispatcher. No lower depth
+limit, larger host stack, permanent refusal or interpreted fallback repairs
+#499. The known integration regression remains red until dispatch is wired.
+
+## Resolved Grill Log
+
+- **Q:** May a call remain inside an emitted value expression? **A:** No; explicit suspension and a resume block are required.
+- **Q:** Can a later argument re-read an earlier mutable operand? **A:** No; local reads produce snapshots before subsequent effects.
+- **Q:** What does a Never path return? **A:** No payload and no continuation; subsequent instructions are not emitted.
+- **Q:** Does pure control lowering choose memory-exhaustion behavior? **A:** No; that runtime boundary is resolved separately before allocator implementation.
+
+## Dependencies and consumers
+
+[[Pudu Core]] · [[Core Frame IR]] · [[Compiler Frame Lowering]] ·
+[[Compiler Frame State]] · [[Compiler Frame Body]] · [[Native Execution Frames]]
+
+## Referenced by
+
+[[src/_MOC]] · [[Program Compiler Module Map]] · [[Native Frame Pressure Repair]]

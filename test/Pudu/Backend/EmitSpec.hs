@@ -13,6 +13,9 @@ module Pudu.Backend.EmitSpec (backendEmitProperties) where
 import Data.Text (Text)
 import qualified Data.Text as Text
 import Pudu.Backend.Emit (emitProgram)
+import Pudu.Compiler.Frame (lowerFrames)
+import Pudu.Core.Frame (FrameFault (..))
+import Pudu.Diagnostic.Native (nativeRefusal)
 import Pudu.Compiler (CompileResult (..), runCompile)
 import Pudu.Compiler.Lower.Types (nativeTypes)
 import Pudu.Compiler.Lower (LowerResult (..), lowerProgram)
@@ -50,6 +53,7 @@ import Pudu.Source
   , Source
   , SourceName (SourceName)
   , newSource
+  , emptySpan
   , offsetFromInt
   , offsetPosition
   , sourceText
@@ -96,7 +100,9 @@ emitText text = do
   compiled <- compileAndLower text
   pure $ case compiled of
     Left refusals -> Left refusals
-    Right (source, core) -> Right (emitProgram versionText [source] core)
+    Right (source, core) -> case lowerFrames core >>= emitProgram versionText [source] of
+      Left failure -> Left [nativeRefusal (maybe (emptySpan source) id (frameFaultSpan failure)) (frameFaultMessage failure)]
+      Right emitted -> Right emitted
 
 supportedProgram :: Text
 supportedProgram =
@@ -261,8 +267,6 @@ testReachableFunctions = do
 refusalCases :: [(String, Text, Text)]
 refusalCases =
   [ ("pending narrow integer bitwise", statementProgram "1i8 & 2i8", "1i8")
-  , ("deferred block magnitude", statementProgram "return -{ 9223372036854775808 }", "9223372036854775808")
-  , ("deferred local magnitude", statementProgram "let value = 9223372036854775808\n  return -value", "9223372036854775808")
   , ("pending narrow integer complement", statementProgram "~1i8", "1i8")
   , ("unary print Result", statementProgram "-print(\"x\")", "-print")
   , ("display of print Result", statementProgram "print(display(print(\"x\")))", "display(print")
@@ -474,7 +478,7 @@ testHygiene = do
           (property (not (Text.isInfixOf "#line" text)))
       , counterexample "a source identifier was used as a C identifier"
           (property (not (Text.isInfixOf "int64_t total" text)))
-      , property (Text.isInfixOf "pudu_v" text)
+      , property (Text.isInfixOf "frame->slots[" text)
       , counterexample ("nonstandard includes: " <> show (includesOf text))
           (property (all (`elem` allowedIncludes) (includesOf text)))
       ]

@@ -20,7 +20,7 @@ Exports runtimeNeeds, entryResultType, functionPrototype, wrapperFor, functionSy
 
 ## Algorithm and invariants
 
-The runtime walk unions every operation requirement. All reachable non-entry functions receive wrappers; reachability guarantees each is called. Names encode every Unicode scalar as hexadecimal followed by an underscore, providing an injective ASCII spelling even for underscores and non-ASCII names. Integer constants preserve INT64_MIN. Wrappers check depth before the call and restore it after every normal result.
+The runtime walk unions every operation requirement. All reachable non-entry functions receive wrappers; reachability guarantees each is called. Names encode every Unicode scalar as hexadecimal followed by an underscore, providing an injective ASCII spelling even for underscores and non-ASCII names. Integer constants preserve exact sign and magnitude through UINT64_C compound literals. Wrappers check depth before the call and restore it after every normal result.
 
 ## Negative logic
 
@@ -65,3 +65,18 @@ Resolved Grill Log: reproduce actual interpreter dispatch, canonical settled kin
 Select bitwise/wrapping helper plus from_bits; saturation selects only its helper; shifts select from_bits plus their helper and checked site/colored/fail dependencies. CoreComplement recursively visits its operand and selects bit_not/from_bits.
 
 Resolved Grill Log: use defined unsigned bit patterns, validate counts before shifts, and prove signed arithmetic bounds before evaluation. The actual interpreter determines results, effect order and exact diagnostic vocabulary. No syntax or type-inference change.
+
+## Exact integer carrier integration (#498)
+
+Use pudu_int for integer declarations, prototypes and wrappers. Export
+zeroValue :: CoreType -> Text and integerKindText :: IntegerKind -> Maybe Text.
+Integer literals use compound literals with UINT64_C(abs value) and sign;
+limits use canonical integerKindBounds/Width/Signed facts. No signed cast.
+Close runtime part dependencies transitively with a visited set. Always carry
+the type-only integer_value ABI declarations; integer comparisons add compare.
+Do not select unused arithmetic/conversion functions. Other scalar paths stay
+unchanged; source types are not inferred here.
+
+Resolved Grill Log: implement [[Exact Native Integer Carriers]] without changing the oracle. Preserve positive boundary values, exact diagnostic provenance, Never transfers, and warning-free helper selection. The internal carrier is not a public type-layout promise; full native coverage remains open.
+
+The descriptor projection returns Nothing outside bounded widths 1..64. The emitter treats that as an internal phase-contract violation; admitted source kinds are validated in lowering, with no guessed ABI.

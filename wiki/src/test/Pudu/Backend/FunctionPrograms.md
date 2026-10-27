@@ -74,3 +74,17 @@ Extend actual differential programs with Bool ordering, unit/Bool operator failu
 Resolved Grill Log: reproduce actual interpreter dispatch, canonical settled kinds, operand order and diagnostic spans; never classify print Result as unit or implement invalid operations as integer arithmetic. No syntax/inference change.
 
 #494 source provenance: differential operator-failure cases include expanded macros and Unicode/tabbed authored source, preserving whole-operation excerpts and scalar source columns through ordinary compiler products. Resolved Grill Log: validate actual emitted diagnostics rather than assuming shared site geometry proves generated input parity.
+
+## Recursive frame-pressure regression (#499)
+
+Add a refusal program with 96 integer parameters live across a recursive call.
+Each recursive argument changes, and the returned answer chooses between two
+uses of all original parameters. This prevents trivial tail-loop replacement.
+The initial depth is callDepthLimit + 104. Both evaluators report E7002 at the
+recursive call; native execution must match its stderr and status, never signal.
+
+Resolved Grill Log: the fixture stays below C11's guaranteed minimum supported
+parameter-count translation limit, even with the wrapper's site pointer. It
+uses ordinary checked Pudu source and the existing differential failure harness.
+Do not reduce the language bound, skip the case, or accept a host stack crash.
+This is an explicitly failing regression until #499 repairs frame storage.

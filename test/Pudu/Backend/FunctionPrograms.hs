@@ -249,7 +249,8 @@ functionSuccessPrograms =
 
 functionRefusalPrograms :: [(String, Text)]
 functionRefusalPrograms = operatorRefusals <>
-  [ ("unit display failure precedes printing", program
+  [ ("wide recursive frames retain the language depth refusal", framePressureProgram)
+  , ("unit display failure precedes printing", program
       [ "fn fail() -> () { 10 / 0\n return () }"
       , "fn main() -> () { print(display(fail()))\n return () }"
       ])
@@ -312,6 +313,21 @@ operatorRefusals =
 
 program :: [Text] -> Text
 program body = Text.unlines (["module Main", ""] <> body)
+
+framePressureProgram :: Text
+framePressureProgram = program
+  [ "fn recurse(" <> Text.intercalate ", " ("n: Int" : [name <> ": Int" | name <- names]) <> ") -> Int {"
+  , "  if n == 0 { return 0 }"
+  , "  let answer = recurse(" <> Text.intercalate ", " ("n - 1" : next) <> ")"
+  , "  if (answer & 1) == 0 { return " <> Text.intercalate " &+ " names <> " }"
+  , "  return " <> Text.intercalate " &- " names
+  , "}"
+  , "fn main() -> Int { return recurse(" <> Text.intercalate ", " (depth (callDepthLimit + 104) : map depth indices) <> ") }"
+  ]
+ where
+  indices = [0 .. 95]
+  names = ["a" <> depth index | index <- indices]
+  next = ["(" <> name <> " &+ n) &+ " <> depth index | (name, index) <- zip names indices]
 
 depth :: Int -> Text
 depth = Text.pack . show
