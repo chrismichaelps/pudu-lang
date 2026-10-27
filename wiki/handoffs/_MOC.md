@@ -5,6 +5,8 @@ tags: [moc, handoff]
 
 # Handoff Map
 
+- [[Hackage Transport Delivery]] — issue #656 configure verified HTTPS before one index update.
+
 - [[Derive Index Delivery]] — authored strategy indexing and public metadata (#458).
 
 - [[Database Admission Delivery]] — finite pool capacity waiting (#468).
