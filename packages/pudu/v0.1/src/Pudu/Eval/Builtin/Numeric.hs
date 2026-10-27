@@ -153,6 +153,15 @@ callFloatKernel spanValue kernel values = case (floatKernelShape kernel, values)
   (FloatToWord, [FloatValue _ x]) -> pure (IntValue (UnsignedKind 64) (toInteger (castDoubleToWord64 x)))
   (WordToFloat, [IntValue _ word])
     | word >= 0 && word <= 18446744073709551615 -> pure (float64 (castWord64ToDouble (fromInteger word)))
+  (IntToFloat, [IntValue _ number]) -> pure (float64 (fromInteger number))
+  (FloatToInt, [FloatValue _ x])
+    | isNaN x || isInfinite x -> pure (VariantValue "None" [])
+    | otherwise ->
+        let whole = truncate x :: Integer
+         in pure $
+              if whole >= -9223372036854775808 && whole <= 9223372036854775807
+                then VariantValue "Some" [intOf whole]
+                else VariantValue "None" []
   _ -> abortAt (Just spanValue) "E7012" (floatKernelName kernel <> " expects binary64 arguments") Nothing
   where
     float64 = FloatValue Float64Width

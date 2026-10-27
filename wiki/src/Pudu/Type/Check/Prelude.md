@@ -262,7 +262,8 @@ filesystem policy remains in [[Std Fs]] and [[Eval Io]].
 ## Binary64 kernel signatures
 
 Every [[Float Kernel Identity]] entry is bound from its shape: `FloatArguments n` takes n Float64
-values to Float64; `FloatToWord` is Float64 to UInt64; `WordToFloat` is UInt64 to Float64.
+values to Float64; `FloatToWord` is Float64 to UInt64; `WordToFloat` is UInt64 to Float64;
+`IntToFloat` is Int to Float64; `FloatToInt` is Float64 to `Option[Int]`.
 Grill Log — **Q:** write each signature out? **A:** No; the shape is the one statement of arity.
 
 ## Referenced by

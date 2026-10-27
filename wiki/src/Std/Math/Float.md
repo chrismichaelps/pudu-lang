@@ -27,6 +27,8 @@ domain contract is stated here; the runtime computes, this module decides what i
 - `fract(x)`: `x - trunc(x)`.
 - `fma(x, y, z)`: `x * y + z` rounded once.
 - `toBits(x) -> UInt64`, `fromBits(bits) -> Float`: binary64 encoding reinterpretation.
+- `fromInt(n) -> Float`: nearest binary64, ties to even; exact for |n| <= 2^53.
+- `toInt(x) -> Option[Int]`: truncation toward zero; `None` for NaN, infinities or out of range.
 
 ### Platform kernels (platform math library accuracy, normally within one ULP)
 - `sin`, `cos`, `tan`, `atan`, `atan2(y, x)`, `exp`, `cbrt`, `hypot(x, y)`, `sinh`, `cosh`, `tanh`.
