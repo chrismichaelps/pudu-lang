@@ -5,6 +5,8 @@ tags: [moc, handoff]
 
 # Handoff Map
 
+- [[Hackage Transport Delivery]] — issue #656 configure verified HTTPS before one index update.
+
 - [[Ark Foundation Delivery]] — issue #652 integrated engine architecture and checked vector math.
 
 - [[Derive Index Delivery]] — authored strategy indexing and public metadata (#458).

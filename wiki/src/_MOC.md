@@ -5,6 +5,8 @@ tags: [moc, module]
 
 # Module Map
 
+- [[Website Linux Workflow]] · [[Hackage Transport Test]] — configured HTTPS index transport.
+
 - [[src/Ark/_MOC|Ark Modules]] — engine library and focused conformance gates.
 
 - [[Derive Index Output Gate]] — checked strategy output and visibility.

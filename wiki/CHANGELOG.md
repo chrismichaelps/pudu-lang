@@ -5,6 +5,13 @@ tags: [changelog]
 
 # Changelog
 
+## 2026-10-27 — Verified HTTPS CI index transport (#656)
+
+- [[Website Linux Workflow]] configures signed HTTPS Hackage access before one explicit update.
+- [[Hackage Transport Test]] checks the actual command without fetching an index; existing,
+  missing, repeated and malformed configurations are covered. [[Hackage Transport Delivery]]
+  records independent review and the outstanding CI observation.
+
 ## 2026-10-27 — Integrated Ark foundation (#652)
 
 - [[Ark Engine]] defines dependency layers and the outstanding engine/native-execution ledger.
