@@ -96,6 +96,7 @@ library
     Pudu.Compiler.Program
     Pudu.Compiler.Product
     Pudu.Diagnostic
+    Pudu.Diagnostic.Native
     Pudu.Diagnostic.Render
     Pudu.Eval
     Pudu.Eval.Array

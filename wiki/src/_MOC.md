@@ -198,3 +198,5 @@ tags: [moc, module]
 
 - [[Mutex Admission Fixture]] — real local Database contention and recovery.
 - [[Database Challenge Spec]] · [[Database Challenge Fixture]] · [[Database Challenge Transport]]
+
+- [[Native Diagnostic Contracts]] · [[Native Diagnostic Contract Tests]] — E6001–E6006 value contracts (#486).
