@@ -1,6 +1,6 @@
 ---
 type: handoff
-status: ACTIVE
+status: SUPERSEDED
 issue: 569
 aliases: [Native Output Callable Delivery]
 ---
@@ -59,8 +59,11 @@ does not free those copies. Add a counted dynamic-diagnostic regression before
 repairing that boundary. NativeSpec is also above the default source-size target;
 move corpus registration into a bounded data module before further growth.
 
-Exact next action: commit #569, then prove and repair diagnostic-copy cleanup
-with a counted E7001/computed-help failure regression.
+The output callable slice is committed as ab10eeba. Active continuation is
+[[Native Diagnostic Ownership Delivery]].
+
+Exact next action: follow Native Diagnostic Ownership Delivery for payload
+cleanup and reviewable PR delivery.
 
 ## Referenced by
 

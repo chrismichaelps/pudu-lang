@@ -50,9 +50,9 @@ never mutated after it is filled.
   moves. _Rejected:_ copying on every slice.
 - **Q:** Why plain counts instead of atomics? **A:** Native programs are single
   threaded until tasks are admitted; that slice must revisit this.
-- **Q:** Why does `print_text` ignore write errors? **A:** Same continuation
-  contract as the other printers; the Result side of print is not
-  represented yet.
+- **Q:** Why does `print_text` ignore write errors? **A:** It remains a legacy
+  printer for isolated IR paths. Source output uses the Result-valued adapter
+  in [[Native Output Results]]; entry output uses its separate builder path.
 
 ## Dependencies and consumers
 
@@ -66,3 +66,7 @@ then reports with the help in place of the site's.
 ## Referenced by
 
 [[src/_MOC]] · [[src/Pudu/Backend/_MOC]] · [[Native Emission Coverage]]
+
+## Diagnostic ownership (#570)
+
+Resolved Grill Log: Transfer the copied allocation from fail_text/fail_text_help into the terminating reporter. Static help stays borrowed; computed help shares the one owned base. Check combined payload length before allocation. See [[Native Diagnostic Ownership]].

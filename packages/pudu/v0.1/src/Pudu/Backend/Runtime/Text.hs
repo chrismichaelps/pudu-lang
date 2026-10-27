@@ -140,18 +140,19 @@ textRuntimeParts =
       , "  char *copy = malloc(message.length == 0 ? 1 : message.length);"
       , "  if (copy == NULL) pudu_memory_failure();"
       , "  if (message.length != 0) memcpy(copy, message.bytes, message.length);"
-      , "  pudu_fail_message(site, copy, message.length);"
+      , "  pudu_fail_report(site, copy, message.length, site->help, site->help == NULL ? 0 : strlen(site->help), copy);"
       , "}"
       ])
   , ("fail_text_help",
       [ "/* Same, with help that names something only known now, like a length. */"
       , "static void pudu_fail_text_help(const pudu_site *site, pudu_text message, pudu_text help) {"
+      , "  if (help.length > SIZE_MAX - message.length) pudu_memory_failure();"
       , "  size_t total = message.length + help.length;"
       , "  char *copy = malloc(total == 0 ? 1 : total);"
       , "  if (copy == NULL) pudu_memory_failure();"
       , "  if (message.length != 0) memcpy(copy, message.bytes, message.length);"
       , "  if (help.length != 0) memcpy(copy + message.length, help.bytes, help.length);"
-      , "  pudu_fail_report(site, copy, message.length, copy + message.length, help.length);"
+      , "  pudu_fail_report(site, copy, message.length, copy + message.length, help.length, copy);"
       , "}"
       ])
   , ("print_text",

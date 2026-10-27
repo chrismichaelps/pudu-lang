@@ -102,3 +102,5 @@ Pudu is a statically typed native systems language for developers who need predi
 - [[Native Named Callable Dispatch]] — direct named targets preserve depth and invocation provenance (#568).
 
 - [[Native Output Callable Values]] — builtin identity, depth and output parity (#569).
+
+- [[Native Diagnostic Ownership]] — surviving payload cleanup at fatal exit (#570).

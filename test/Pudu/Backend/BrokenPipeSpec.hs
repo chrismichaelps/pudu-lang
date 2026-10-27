@@ -38,10 +38,12 @@ testPipe
             Right runner -> conjoin <$> traverse (check cc root runner) cases
   where
     cases =
-      [("continuation", "fn main() -> Int { print(\"x\")\n print(display(42))\n print(display(true))\n print(display(()))\n return 7 }", ExitFailure 7, "x\n42\ntrue\n()\n")
-      ,("later failure", "fn main() -> Int { print(\"x\")\n return 1 / 0 }", ExitFailure 1, "x\n")
-      ,("unit entry", "fn main() -> () { print(\"x\")\n () }", ExitSuccess, "x\n")]
-    check cc root runner (label, body, expectedStatus, expectedOutput) = do
+      [("continuation", "fn main() -> Int { print(\"x\")\n print(display(42))\n print(display(true))\n print(display(()))\n return 7 }", ExitFailure 7, "x\n42\ntrue\n()\n", Nothing)
+      ,("later failure", "fn main() -> Int { print(\"x\")\n return 1 / 0 }", ExitFailure 1, "x\n", Just "E7004")
+      ,("unit entry", "fn main() -> () { print(\"x\")\n () }", ExitSuccess, "x\n", Nothing)
+      ,("dynamic failure", "fn main() -> Int { print(\"x\")\n let invalid = -print\n print(show(invalid))\n 0 }", ExitFailure 1, "x\n", Just "E7001")
+      ,("computed help", "fn main() -> Int { print(\"x\")\n let items = [1]\n print(show(items[0..2]))\n 0 }", ExitFailure 1, "x\n", Just "E7004")]
+    check cc root runner (label, body, expectedStatus, expectedOutput, expectedCode) = do
       source <- newSource (SourceName "Main.pudu") ("module Main\n" <> body <> "\n")
       checked <- runCompile source
       case (hasErrors (compileDiagnostics checked), compileModule checked) of
@@ -65,7 +67,9 @@ testPipe
                     [(channel, inherited) | channel <- ["1", "2", "3"], inherited <- ["default", "ignored", "blocked"]]
                   pure $ conjoin
                     ([ status === expectedStatus, output === expectedOutput
-                     , if expectedStatus == ExitFailure 1 then counterexample "later E7004 was lost" ("error[E7004]" `Text.isInfixOf` Text.pack errors) else errors === ""
+                     , case expectedCode of
+                         Just code -> counterexample "later diagnostic was lost" (("error[" <> code <> "]") `Text.isInfixOf` Text.pack errors)
+                         Nothing -> errors === ""
                      ] <> outcomes)
           other -> pure (counterexample (show other) (False === True))
         _ -> pure (counterexample (show (compileDiagnostics checked)) (False === True))

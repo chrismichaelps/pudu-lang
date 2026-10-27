@@ -498,3 +498,11 @@ Uncounted intrinsic frames reuse direct-output Results while source functions
 and lambdas retain their depth checks. Isolated handle sequences also run
 through aliases. Complete builtin/method families, defaults and platform/full
 promotion evidence remain open; no completion counter changes here.
+
+## Surviving diagnostic payload cleanup (#570)
+
+[[Native Diagnostic Ownership]] explicitly transfers copied dynamic message/help
+storage into the terminating reporter and releases it after rendering. Counted
+source failures, exact evaluator output, empty/overflow payloads and fatal
+stream regressions cover the boundary. This does not complete general resource,
+allocation-failure, platform or full-emission obligations.
