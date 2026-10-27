@@ -23,3 +23,10 @@ box), and copies it otherwise.
 ## Referenced by
 
 [[Backend Emit Aggregate]] · [[Native Arrays]]
+
+## Element replace (#649)
+
+`replace` checks bounds against its site before changing anything, then
+retains the new element before releasing the old one, so assigning an
+element from itself is safe; the items change in place only for a uniquely
+owned box.

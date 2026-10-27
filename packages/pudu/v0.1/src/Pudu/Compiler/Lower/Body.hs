@@ -30,7 +30,8 @@ import Pudu.Compiler.Lower.MethodValue (lowerMethodValue)
 import Pudu.Compiler.Lower.Stop (lowerPanic, lowerUntypedConvert)
 import Pudu.Compiler.Lower.Lambda (lowerFunctionValue, lowerLambda, lowerValueCall)
 import Pudu.Compiler.Lower.Tuple (lowerTuple, lowerTupleIndex, lowerTuplePattern)
-import Pudu.Compiler.Lower.Record (lowerField, lowerFieldAssignment, lowerRecord, lowerRecordUpdate)
+import Pudu.Compiler.Lower.Place (lowerPlaceAssignment)
+import Pudu.Compiler.Lower.Record (lowerField, lowerRecord, lowerRecordUpdate)
 import Pudu.Compiler.Lower.Sum (lowerVariant)
 import Pudu.Compiler.Lower.Constant (lowerConstant)
 import Pudu.Compiler.Lower.Match (ifLetArms, lowerLetElse, lowerMatch, whileLetLoop)
@@ -146,13 +147,12 @@ lowerBlock state (Located _ block) =
       Just located -> lowerBlockResult afterStatements located
     popped = afterResult{lowerScopes = drop 1 (lowerScopes afterResult)}
 
-{-| A block's trailing expression. An assignment there is an effect whose
-    value the checker gives as unit, so it becomes a statement and the block's
-    result is empty — the same reading the evaluator takes. -}
+{-| A block's trailing expression. An assignment there is a statement and the
+    block's result is empty, as the evaluator reads it. -}
 lowerBlockResult :: LowerState -> Located Expression -> (LowerState, [CoreStatement], Maybe CoreExpression, CoreType)
 lowerBlockResult state located@(Located expressionSpan expression) = case expression of
-  BinaryExpression target@(Located _ MemberExpression{}) "=" right
-    | Just (after, assigned) <- lowerFieldAssignment lowerExpression state expressionSpan target right ->
+  BinaryExpression target "=" right
+    | Just (after, assigned) <- lowerPlaceAssignment lowerExpression state expressionSpan target right ->
         (after, maybe [] pure assigned, Nothing, CoreUnitType)
   BinaryExpression (Located _ (NameExpression (name :| []))) "=" right
     | Just local <- lookupLocal state name -> case lowerExpression state right of
@@ -235,8 +235,8 @@ lowerStatement state (Located statementSpan statement) = case statement of
       case lowerMatch lowerExpression True state (locatedSpan locatedExpression) subject (ifLetArms (locatedSpan locatedExpression) pattern' taken otherwise') of
         (after, Just (core, _)) -> (after, Just CoreStatement{coreStatementSpan = statementSpan, coreStatementShape = CoreEvaluate core})
         (after, Nothing) -> refused after
-    BinaryExpression target@(Located _ MemberExpression{}) "=" right
-      | Just lowered <- lowerFieldAssignment lowerExpression state statementSpan target right -> lowered
+    BinaryExpression target "=" right
+      | Just lowered <- lowerPlaceAssignment lowerExpression state statementSpan target right -> lowered
     BinaryExpression (Located _ (NameExpression (name :| []))) "=" right
       | Just local <- lookupLocal state name -> case lowerExpression state right of
           (after, Just (coreRight, coreType))
@@ -251,6 +251,8 @@ lowerStatement state (Located statementSpan statement) = case statement of
                 )
             | otherwise -> halt statementSpan "an assignment whose value has a different type" after
           (after, Nothing) -> refused after
+    -- Expression lowering hands `=` back here; refuse rather than loop.
+    BinaryExpression _ "=" _ -> halt statementSpan "this assignment target" state
     IfExpression condition thenBlock elseExpression -> case lowerExpression state condition of
       (afterCondition, Just (coreCondition, conditionType))
         | conditionType `elem` [CoreBoolType, CoreNeverType] ->

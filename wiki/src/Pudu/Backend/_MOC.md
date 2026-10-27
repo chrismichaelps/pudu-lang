@@ -111,5 +111,6 @@ aliases: [Backend Module Map]
 - [[Backend Rendering Callable Programs]] — intrinsic signatures, identity and cleanup.
 - [[Backend Collection Callable Programs]] — collection builtin values and caller-site refusals.
 - [[Backend Stopping Builtin Programs]] — panic and untyped convertInteger parity.
+- [[Backend Place Assignment Programs]] — element and mixed path assignment.
 - [[Backend Method Value Programs]] — built-in method values of every receiver kind.
 - [[Backend Default Parameter Programs]] — defaults in every combination, directly and through values.

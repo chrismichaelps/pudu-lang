@@ -68,3 +68,5 @@ have run, which is how a range's values feed the same loops.
 ## Referenced by
 
 [[Compiler Lower Body]] · [[Compiler Lower For]] · [[Native Arrays]]
+
+takeReceiver also takes the local for ArrayReplaceAt. (#649)

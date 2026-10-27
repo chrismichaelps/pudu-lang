@@ -347,3 +347,7 @@ dependency; the release gate is unchanged.
 ## Method value corpus (#644)
 
 Register [[Backend Method Value Programs]]. Resolved Grill Log: no new dependency.
+
+## Place assignment corpus (#649)
+
+Register [[Backend Place Assignment Programs]]. Resolved Grill Log: no new dependency.

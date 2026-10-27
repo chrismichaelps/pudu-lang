@@ -277,6 +277,8 @@ data CoreArrayMethodName
   = ArrayLengthOf
   | ArrayIsEmptyOf
   | ArrayGetAt
+  {-| The array with one element replaced: index, then the new element. -}
+  | ArrayReplaceAt
   | ArrayIndexOfValue
   | ArrayContainsValue
   | ArrayPushValue

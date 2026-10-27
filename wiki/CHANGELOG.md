@@ -5,6 +5,11 @@ tags: [changelog]
 
 # Changelog
 
+## 2026-10-27 — Native element assignment (#649)
+
+- `list[1] = 9`, `grid[1][0] = 7` and `points[0].tags[0] = "z"` build natively with the interpreter's order (indices, value, bounds-checked store) and its E7004 span at the root name. See [[Native Place Assignment]].
+- Fixes a compiler stack overflow: an index target used to bounce between statement and expression lowering forever. Any target without a native form now refuses with E6001.
+
 ## 2026-10-27 — Native trait method values (#646)
 
 `bot.label` and `Bot.label` are values natively: bound to their receiver or named through the type, rendered `<fn label>`, equal on the same method and an equal receiver. Failures inside the implementation keep its own spans. The trait-qualified `Named.label` value waits on #647, an interpreter failure found here. See [[Native Method Values]].

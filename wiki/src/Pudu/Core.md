@@ -365,3 +365,8 @@ CoreClosureInfo.closureMethod holds a method value's receiver type. Resolved
 Grill Log: capture 0 is the receiver and takes part in equality.
 
 closureMethod with no capture marks an unbound method named through its type. (#646)
+
+## Element replace (#649)
+
+ArrayReplaceAt replaces one element, failing E7004 at its expression span
+when the index is out of range.

@@ -57,3 +57,7 @@ Append [[Backend Default Parameter Programs]] success/failure lists.
 ## Method values (#644)
 
 Append [[Backend Method Value Programs]] success/failure lists.
+
+## Place assignment (#649)
+
+Append [[Backend Place Assignment Programs]] success/failure lists.

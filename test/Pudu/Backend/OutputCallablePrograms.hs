@@ -8,12 +8,13 @@ import qualified Data.Text as Text
 import Pudu.Backend.CollectionCallablePrograms (collectionCallableSuccessPrograms, collectionCallableRefusalPrograms)
 import Pudu.Backend.DefaultParameterPrograms (defaultParameterSuccessPrograms, defaultParameterRefusalPrograms)
 import Pudu.Backend.MethodValuePrograms (methodValueSuccessPrograms, methodValueRefusalPrograms)
+import Pudu.Backend.PlaceAssignmentPrograms (placeAssignmentSuccessPrograms, placeAssignmentRefusalPrograms)
 import Pudu.Backend.RenderingCallablePrograms (renderingCallableSuccessPrograms, renderingCallableRefusalPrograms)
 import Pudu.Backend.StoppingBuiltinPrograms (stoppingBuiltinSuccessPrograms, stoppingBuiltinRefusalPrograms)
 import Pudu.Comptime.Limits (callDepthLimit)
 
 outputCallableSuccessPrograms :: [(String, Text, Text, Text)]
-outputCallableSuccessPrograms = renderingCallableSuccessPrograms <> collectionCallableSuccessPrograms <> stoppingBuiltinSuccessPrograms <> defaultParameterSuccessPrograms <> methodValueSuccessPrograms <>
+outputCallableSuccessPrograms = renderingCallableSuccessPrograms <> collectionCallableSuccessPrograms <> stoppingBuiltinSuccessPrograms <> defaultParameterSuccessPrograms <> methodValueSuccessPrograms <> placeAssignmentSuccessPrograms <>
   [ ("builtin tags render and compare independently of source functions", program
       [ "fn custom(text: Str) -> Result[(), Str] { print(text) }"
       , "fn main() -> Int {"
@@ -57,7 +58,7 @@ outputCallableSuccessPrograms = renderingCallableSuccessPrograms <> collectionCa
   ]
 
 outputCallableRefusalPrograms :: [(String, Text)]
-outputCallableRefusalPrograms = renderingCallableRefusalPrograms <> collectionCallableRefusalPrograms <> stoppingBuiltinRefusalPrograms <> defaultParameterRefusalPrograms <> methodValueRefusalPrograms <>
+outputCallableRefusalPrograms = renderingCallableRefusalPrograms <> collectionCallableRefusalPrograms <> stoppingBuiltinRefusalPrograms <> defaultParameterRefusalPrograms <> methodValueRefusalPrograms <> placeAssignmentRefusalPrograms <>
   [ ("unary builtin failures use the builtin kind", program
       ["fn main() -> Int { let invalid = -print\n print(show(invalid))\n 0 }"])
   , ("mixed callable operator kinds come from their runtime values", program $ choices <>

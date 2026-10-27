@@ -125,6 +125,10 @@ frameValue state value = case frameValueShape value of
         let (after, number) = failureSite state at "E7004" "index out of range"
          in Right (after, aggregateHelper "get" kind <> "(" <> Text.intercalate ", " (target : operands) <> ", &pudu_sites[" <> textOfInt number <> "])"
               , Set.fromList [aggregateNeed "get" kind])
+      ArrayReplaceAt ->
+        let (after, number) = failureSite state at "E7004" "index out of range"
+         in Right (after, aggregateHelper "replace" kind <> "(" <> Text.intercalate ", " (target : operands) <> ", &pudu_sites[" <> textOfInt number <> "])"
+              , Set.fromList [aggregateNeed "replace" kind])
       ArrayIndexOfValue -> helper "index_of"
       ArrayContainsValue -> helper "contains"
       ArrayPushValue -> helper "push"

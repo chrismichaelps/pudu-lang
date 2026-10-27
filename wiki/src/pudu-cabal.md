@@ -523,3 +523,7 @@ Resolved Grill Log: Register Pudu.Compiler.Lower.Default using the existing depe
 ## Method values (#644)
 
 Resolved Grill Log: Register Pudu.Compiler.Lower.MethodValue using the existing dependencies.
+
+## Place assignment (#649)
+
+Resolved Grill Log: Register Pudu.Compiler.Lower.Place using the existing dependencies.

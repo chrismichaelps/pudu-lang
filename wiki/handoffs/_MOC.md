@@ -261,3 +261,5 @@ tags: [moc, handoff]
 - [[Native Method Value Delivery]] — built-in method values (#644).
 
 - [[Native Trait Method Value Delivery]] — trait methods as values (#646).
+
+- [[Native Place Assignment Delivery]] — element assignment and the lowering loop fix (#649).
