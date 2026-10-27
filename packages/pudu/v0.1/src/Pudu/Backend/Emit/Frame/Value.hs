@@ -174,6 +174,10 @@ frameValue state value = case frameValueShape value of
   FrameComparable slot -> do
     source <- slotText slot
     uncurry plain (memberComparable (frameSlotType slot) source)
+  FrameOutputError errors newline slot -> do
+    source <- slotText slot
+    plain ("pudu_output_write(" <> (if errors then "2" else "1") <> ", "
+      <> (if newline then "1" else "0") <> ", " <> source <> ")") ["output_error"]
   FrameDisplay slot -> rendered slot
   FrameTextMethod name receiver arguments -> do
     target <- slotText receiver

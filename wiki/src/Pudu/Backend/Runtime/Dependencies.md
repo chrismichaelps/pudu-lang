@@ -69,3 +69,11 @@ The facade also delegates to [[Native Char Runtime]].
 ## Aggregate prerequisites (#521)
 
 The facade also delegates to [[Native Aggregate Runtime]].
+
+## Output Results (#566)
+
+Resolved Grill Log: Include outputRuntimeDependencies from Native Output Runtime; output_error requires text_allocate and memory_failure. See [[Native Output Results]].
+
+## Fatal output readiness (#566)
+
+Resolved Grill Log: error_io and output_state require process_io because they call its descriptor-readiness helper.

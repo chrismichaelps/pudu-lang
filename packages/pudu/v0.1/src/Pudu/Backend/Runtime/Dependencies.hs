@@ -7,6 +7,7 @@ import Pudu.Backend.Runtime.Array (arrayRuntimeDependencies)
 import Pudu.Backend.Runtime.Char (charRuntimeDependencies)
 import Pudu.Backend.Runtime.Float (floatRuntimeDependencies)
 import Pudu.Backend.Runtime.Integer (integerRuntimeDependencies)
+import Pudu.Backend.Runtime.Output (outputRuntimeDependencies)
 import Pudu.Backend.Runtime.Text (textRuntimeDependencies)
 import Pudu.Backend.Runtime.Text.Case (textCaseRuntimeDependencies)
 import Pudu.Backend.Runtime.Text.Methods (textMethodRuntimeDependencies)
@@ -22,4 +23,5 @@ runtimeDependencies name = integerRuntimeDependencies name <> floatRuntimeDepend
   <> textCaseRuntimeDependencies name <> charRuntimeDependencies name
   <> aggregateRuntimeDependencies name <> arrayRuntimeDependencies name
   <> textNumberRuntimeDependencies name <> textPieceRuntimeDependencies name
-  <> treeRuntimeDependencies name <> rangeRuntimeDependencies name <> bytesRuntimeDependencies name
+  <> treeRuntimeDependencies name <> rangeRuntimeDependencies name <> bytesRuntimeDependencies name <> outputRuntimeDependencies name
+  <> ["process_io" | name == "error_io"]

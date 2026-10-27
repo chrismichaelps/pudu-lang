@@ -160,6 +160,7 @@ lowerExpression expression@(CoreExpression at kind shape) = case shape of
         target : backwards -> value (FrameTextMethod name target (reverse backwards))
         [] -> fault (Just at) "a text method without its receiver"
   CorePrint operand -> lowerPrint at operand
+  CoreOutputError errors newline operand -> rendered (FrameOutputError errors newline) operand
   CoreCall name arguments -> do
     operands <- lowerOperands arguments
     case operands of

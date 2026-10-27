@@ -122,3 +122,7 @@ released.
 ## Record entry results (#521)
 
 A record entry is shown, printed and released like a tuple entry.
+
+## Entry output reporting (#566)
+
+Resolved Grill Log: Route all rendered noninteger/nonunit entry values through pudu_output_report. Rendered text and the original owned entry value are released after reporting; return the report status. Select text renderers and output_report instead of the legacy scalar printer for these entry paths.

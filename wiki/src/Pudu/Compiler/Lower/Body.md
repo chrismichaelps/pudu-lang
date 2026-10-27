@@ -377,3 +377,7 @@ Resolved Grill Log: after local reads and before variant fallback, delegate
 names and module-qualified members to [[Compiler Lower Constant]]. A member
 on a local value remains an ordinary field read. Calls keep function dispatch;
 constants are values and never turn into functions merely by matching a name.
+
+## Output Results (#566)
+
+Resolved Grill Log: The four output builtins delegate to lowerPrint with their name. Their represented Result can escape through every ordinary sum path; the old effect-only carrier guards apply only to legacy CorePrint. See [[Native Output Results]].

@@ -308,3 +308,7 @@ Resolved Grill Log: register [[Backend Shared Reference Programs]] explicitly.
 Existing ModulePrograms and TextLeakSpec consumers execute its programs, and
 LowerTypesSpec's runner-consumed list executes reference fact/refusal checks.
 No new dependency or Main coordinator is required.
+
+## Output Results (#566)
+
+Resolved Grill Log: Register Pudu.Backend.OutputPrograms and Pudu.Backend.OutputSpec using existing dependencies.

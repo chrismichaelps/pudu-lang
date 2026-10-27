@@ -5,6 +5,16 @@ tags: [changelog]
 
 # Changelog
 
+## 2026-10-26 — Native output Results (#566, in progress)
+
+Direct output builtins retain their typed Results and failed-handle buffers.
+Entry values use the locked text builder's buffering and failure behavior.
+Missing inherited descriptors project the interpreter's queue/control-pipe
+endpoints; ordinary and fatal writes preserve readiness waits. Focused
+checks compare exact bytes, status and blocked prefixes with both evaluators.
+Full-suite, platform and independent review evidence remains pending.
+[[Native Output Results]] and [[Native Output Delivery]] record the boundary.
+
 ## 2026-10-26 — Native Bytes (#565)
 
 Byte sequences are native: `bytesOf`, `Str.toBytes`, every method, strict

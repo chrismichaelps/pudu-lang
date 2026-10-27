@@ -376,7 +376,7 @@ lowerExpression state (Located spanValue expression) = case expression of
     | Just _ <- lookupLocal state name -> lowerValueCall lowerExpression state spanValue (Located callee (NameExpression (name :| []))) arguments
     | Just key <- resolveFunction state [name] -> lowerFunctionCall lowerExpression state spanValue key callee arguments
     | Just lowered <- lowerVariant lowerExpression state spanValue name arguments -> lowered
-    | name == "print" -> lowerPrint lowerExpression state spanValue arguments
+    | name `elem` ["print", "printPart", "printError", "printErrorPart"] -> lowerPrint lowerExpression state spanValue name arguments
     | name == "display" -> lowerRendered lowerExpression state spanValue name CoreDisplay arguments
     | name == "show" -> lowerRendered lowerExpression state spanValue name CoreShow arguments
     | name `elem` ["mapOf", "setOf"] -> lowerKeyedBuilder lowerExpression state spanValue name arguments

@@ -101,6 +101,8 @@ library
     Pudu.Backend.Runtime.Array
     Pudu.Backend.Runtime.Tree
     Pudu.Backend.Runtime.Range
+    Pudu.Backend.Runtime.Process
+    Pudu.Backend.Runtime.Output
     Pudu.Backend.Runtime.Bytes
     Pudu.Backend.Runtime.Char
     Pudu.Backend.Runtime.Dependencies

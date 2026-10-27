@@ -15,6 +15,7 @@ import Control.Exception (IOException, finally, try)
 import Data.Text (Text)
 import qualified Data.Text as Text
 import qualified Data.Text.IO as TextIO
+import Pudu.Backend.OutputPrograms (outputSuccessPrograms, outputStreamPrograms, outputRefusalPrograms)
 import Pudu.Backend.BytesPrograms (bytesSuccessPrograms, bytesRefusalPrograms)
 import Pudu.Backend.ControlPrograms (controlSuccessPrograms, controlRefusalPrograms)
 import Pudu.Backend.Emit (emitProgram)
@@ -85,7 +86,7 @@ import System.Directory
 import System.Environment (lookupEnv, setEnv, unsetEnv)
 import System.Exit (ExitCode (..))
 import System.FilePath ((</>))
-import System.IO (hClose, hFlush, openTempFile, stdout)
+import System.IO (Handle, hClose, hFlush, openTempFile, stdout, stderr)
 import System.IO.Temp (withSystemTempDirectory)
 import System.Process (readProcessWithExitCode)
 import Test.QuickCheck (Property, conjoin, counterexample, property, (===))
@@ -109,6 +110,8 @@ backendNativeProperties =
   , ("native record failures retain interpreter refusals", testRecordRefusals)
   , ("native sums and match match hand-written answers and the interpreter", testSumConformance)
   , ("native sum and match failures retain interpreter refusals", testSumRefusals)
+  , ("native output Results match explicit answers and the interpreter", testOutputConformance)
+  , ("native output Result operators retain interpreter refusals", testOutputRefusals)
   , ("native Bytes match hand-written answers and the interpreter", testBytesConformance)
   , ("native Bytes failures retain interpreter refusals", testBytesRefusals)
   , ("native programs of several modules match hand-written answers and the interpreter", testModuleConformance)
@@ -293,6 +296,15 @@ testTupleConformance = conjoin <$> mapM run tupleSuccessPrograms
 testTupleRefusals :: IO Property
 testTupleRefusals = conjoin <$> mapM (uncurry conformance) tupleRefusalPrograms
 
+testOutputConformance :: IO Property
+testOutputConformance = conjoin <$> mapM run
+  ([(label, source, output, "") | (label, source, output) <- outputSuccessPrograms] <> outputStreamPrograms)
+ where
+  run (label, source, output, errors) = conformanceExpecting (Just (output, errors, 0)) label source
+
+testOutputRefusals :: IO Property
+testOutputRefusals = conjoin <$> mapM (uncurry conformance) outputRefusalPrograms
+
 testBytesConformance :: IO Property
 testBytesConformance = conjoin <$> mapM run bytesSuccessPrograms
  where
@@ -401,7 +413,7 @@ interpret captureRoot program
   | otherwise = case rootCompileResult program >>= compileModule of
       Nothing -> pure (Left "the program produced no module")
       Just parsed -> do
-        (outcome, captured) <- captureStdout captureRoot $
+        ((outcome, sourceErrors), captured) <- captureStdout captureRoot $ captureHandle stderr captureRoot $
           evaluateProgramEntryFolded
             (programFolded program)
             (programIntegerKinds program)
@@ -423,7 +435,7 @@ interpret captureRoot program
                   Just (IntValue _ number) ->
                     if number == 0 then 0 else fromInteger (max 1 (min 255 number))
                   Just _ -> 0
-        pure (Right (resultText, runtimeText, status))
+        pure (Right (resultText, sourceErrors <> runtimeText, status))
  where
   diagnostics = programDiagnostics program
   isIntOrUnit value = case value of
@@ -453,11 +465,14 @@ renderLikeCli program value = case sourceFor value of
           [] -> Nothing
 
 captureStdout :: FilePath -> IO a -> IO (a, Text)
-captureStdout directory action = do
+captureStdout = captureHandle stdout
+
+captureHandle :: Handle -> FilePath -> IO a -> IO (a, Text)
+captureHandle stream directory action = do
   (path, handle) <- openTempFile directory "capture"
-  saved <- hDuplicate stdout
-  hDuplicateTo handle stdout
-  outcome <- try (action `finally` (hFlush stdout >> hDuplicateTo saved stdout))
+  saved <- hDuplicate stream
+  hDuplicateTo handle stream
+  outcome <- try (action `finally` (hFlush stream >> hDuplicateTo saved stream))
   hClose saved
   hClose handle
   case outcome of

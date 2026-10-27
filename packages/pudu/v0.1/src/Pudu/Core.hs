@@ -193,6 +193,8 @@ data CoreExpressionShape
   {-| The name of the variant a sum value holds, as text. -}
   | CoreVariantName !CoreExpression
   | CorePrint !CoreExpression
+  {-| An ordered standard-stream write: error text, empty on success. -}
+  | CoreOutputError !Bool !Bool !CoreExpression
   | CoreCall !Text ![CoreExpression]
   {-| A closure over the lifted function with this key, holding these values. -}
   | CoreClosure !Text ![CoreExpression]

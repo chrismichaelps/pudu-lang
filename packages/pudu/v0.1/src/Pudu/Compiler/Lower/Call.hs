@@ -6,8 +6,8 @@ import Data.Text (Text)
 import Pudu.Compiler.Lower.Control (expressionIsPrintValued)
 import Pudu.Compiler.Lower.Generic (admitCallee)
 import Pudu.Compiler.Lower.Scalar (eagerType)
-import Pudu.Compiler.Lower.State (CoreSignature (..), LowerContext (..), LowerState (..), halt, refused)
-import Pudu.Compiler.Lower.Types (nativeValueType)
+import Pudu.Compiler.Lower.State (CoreSignature (..), LowerContext (..), LowerState (..), bindLocal, halt, refused)
+import Pudu.Compiler.Lower.Types (nativeValueType, typeForSpan)
 import Pudu.Core
 import Pudu.Frontend.Syntax (Expression, Located (..))
 import Pudu.Source (Span)
@@ -42,15 +42,32 @@ lowerFunctionCall lower state at key callee arguments = case lookup key (context
       | otherwise -> collect after (core : done) rest
     (after, Nothing) -> (after, Nothing)
 
-{-| `print(text)`; its Result is effect-only in Core. -}
-lowerPrint :: LowerExpression -> LowerState -> Span -> [Located Expression] -> Lowered
-lowerPrint lower state at arguments = case arguments of
+{-| Standard-stream output keeps its checked Result. The internal write
+    outcome is bound once before either variant is constructed. -}
+lowerPrint :: LowerExpression -> LowerState -> Span -> Text -> [Located Expression] -> Lowered
+lowerPrint lower state at name arguments = case arguments of
   [argument] -> case lower state argument of
     (after, Just (core, CoreNeverType)) -> (after, Just (core, CoreNeverType))
-    (after, Just (core, CoreTextType)) -> (after, Just (CoreExpression at CoreUnitType (CorePrint core), CoreUnitType))
+    (after, Just (core, CoreTextType)) -> case typeForSpan (contextTypes (lowerContext after)) at of
+      Just result@(CoreSumType "Result" [CoreUnitType, CoreTextType]) ->
+        let (bound, outcome) = bindLocal after "" CoreTextType
+            expression = CoreExpression at
+            reading = expression CoreTextType (CoreReadLocal outcome)
+            empty = expression CoreTextType (CoreTextLiteral "")
+            succeeded = expression CoreBoolType (CoreBinary CoreEqual reading empty)
+            unit = expression CoreUnitType (CoreBlockValue (CoreBlock [] Nothing))
+            ok = expression result (CoreConstruct "Ok" [("0", unit)])
+            failure = expression result (CoreConstruct "Err" [("0", reading)])
+            selected = expression result (CoreIfValue succeeded (CoreBlock [] (Just ok)) failure)
+            write = expression CoreTextType (CoreOutputError
+              (name `elem` ["printError", "printErrorPart"])
+              (name `elem` ["print", "printError"]) core)
+         in (bound, Just (expression result (CoreBlockValue
+              (CoreBlock [CoreStatement at (CoreDeclare outcome write)] (Just selected))), result))
+      _ -> halt at "output without a represented Result[(), Str] type" after
     (after, Just (_, kind)) -> halt at ("printing a " <> coreTypeName kind <> " value") after
     (after, Nothing) -> refused after
-  _ -> halt at "a call to print with this many arguments" state
+  _ -> halt at ("a call to " <> name <> " with this many arguments") state
 
 {-| `display(value)` or `show(value)` as text. -}
 lowerRendered :: LowerExpression -> LowerState -> Span -> Text -> (CoreExpression -> CoreExpressionShape) -> [Located Expression] -> Lowered

@@ -196,3 +196,7 @@ Register textCaseProperties from [[Backend Text Case Tests]].
 Register [[Eval Record Order Tests]] in the evaluation group (#519).
 
 Register [[Eval Float Order Tests]] in the evaluation group (#522).
+
+## Output Results (#566)
+
+Resolved Grill Log: Dispatch --native-output-oracle PATH to Native Output Tests before the normal runner changes stdout buffering. Register outputProperties in the existing backend outcome list; ordinary invocations and aggregate failure policy are unchanged.

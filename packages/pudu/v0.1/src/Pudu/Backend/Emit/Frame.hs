@@ -37,15 +37,20 @@ emitFrameProgram version sources source = do
   ending <- case frameFunctionResult entry of
     CoreIntegerType kind -> Right ["  return pudu_" <> integerHelper (frameFunctionResult entry) "status"
       <> "(pudu_run_frames(" <> textOfInt entryId <> ")." <> (if isWideInteger kind then "wide" else "integer") <> ");"]
-    CoreFloatType _ -> Right ["  pudu_print_float(pudu_run_frames(" <> textOfInt entryId <> ").floating);", "  return 0;"]
-    CoreBoolType -> Right ["  pudu_print_bool(pudu_run_frames(" <> textOfInt entryId <> ").scalar);", "  return 0;"]
+    CoreFloatType _ -> Right
+      [ "  pudu_text pudu_shown = pudu_text_display_float(pudu_run_frames(" <> textOfInt entryId <> ").floating);"
+      , "  int pudu_report_status = pudu_output_report(pudu_shown);"
+      , "  pudu_text_release(pudu_shown);", "  return pudu_report_status;" ]
+    CoreBoolType -> Right
+      [ "  int pudu_entry = pudu_run_frames(" <> textOfInt entryId <> ").scalar;"
+      , "  return pudu_output_report(pudu_text_literal(pudu_entry ? \"true\" : \"false\", pudu_entry ? 4 : 5));" ]
     CoreTextType -> Right
       [ "  pudu_text pudu_entry = pudu_run_frames(" <> textOfInt entryId <> ").text;"
       , "  pudu_text pudu_shown = pudu_text_show(pudu_entry);"
-      , "  pudu_print_text(pudu_shown);"
+      , "  int pudu_report_status = pudu_output_report(pudu_shown);"
       , "  pudu_text_release(pudu_shown);"
       , "  pudu_text_release(pudu_entry);"
-      , "  return 0;" ]
+      , "  return pudu_report_status;" ]
     kind@(CoreTupleType _) -> Right (shownBox kind)
     kind@(CoreRecordType _ _) -> Right (shownBox kind)
     kind@(CoreSumType _ _) -> Right (shownBox kind)
@@ -57,9 +62,9 @@ emitFrameProgram version sources source = do
     CoreBytesType -> Right (shownBox CoreBytesType)
     CoreCharType -> Right
       [ "  pudu_text pudu_shown = pudu_char_show(pudu_run_frames(" <> textOfInt entryId <> ").character);"
-      , "  pudu_print_text(pudu_shown);"
+      , "  int pudu_report_status = pudu_output_report(pudu_shown);"
       , "  pudu_text_release(pudu_shown);"
-      , "  return 0;" ]
+      , "  return pudu_report_status;" ]
     CoreUnitType -> Right ["  (void)pudu_run_frames(" <> textOfInt entryId <> ");", "  return 0;"]
     CoreNeverType -> Right ["  (void)pudu_run_frames(" <> textOfInt entryId <> ");", "  return 0;"]
   (emitted, roots) <- emitFrameBodies (emptyEmitState sources) source
@@ -73,19 +78,19 @@ emitFrameProgram version sources source = do
         <> ["wide_value" | wide] <> concat [["text", "text_retain"] | text]
       entryNeeds = case frameFunctionResult entry of
         CoreIntegerType _ -> [integerHelper (frameFunctionResult entry) "status"]
-        CoreFloatType _ -> ["print_float"]
-        CoreBoolType -> ["print_bool"]
-        CoreTextType -> ["text_show", "print_text"]
-        CoreCharType -> ["char_show", "print_text"]
-        kind@(CoreTupleType _) -> [aggregateNeed "show" kind, "print_text"]
-        kind@(CoreRecordType _ _) -> [aggregateNeed "show" kind, "print_text"]
-        kind@(CoreSumType _ _) -> [aggregateNeed "show" kind, "print_text"]
-        kind@(CoreFunctionType _ _) -> [aggregateNeed "show" kind, "print_text"]
-        kind@(CoreArrayType _) -> [aggregateNeed "show" kind, "print_text"]
-        kind@(CoreMapType _ _) -> [aggregateNeed "show" kind, "print_text"]
-        kind@(CoreSetType _) -> [aggregateNeed "show" kind, "print_text"]
-        CoreRangeType -> [aggregateNeed "show" CoreRangeType, "print_text"]
-        CoreBytesType -> [aggregateNeed "show" CoreBytesType, "print_text"]
+        CoreFloatType _ -> ["text_display_float", "output_report"]
+        CoreBoolType -> ["text_literal", "output_report"]
+        CoreTextType -> ["text_show", "output_report"]
+        CoreCharType -> ["char_show", "output_report"]
+        kind@(CoreTupleType _) -> [aggregateNeed "show" kind, "output_report"]
+        kind@(CoreRecordType _ _) -> [aggregateNeed "show" kind, "output_report"]
+        kind@(CoreSumType _ _) -> [aggregateNeed "show" kind, "output_report"]
+        kind@(CoreFunctionType _ _) -> [aggregateNeed "show" kind, "output_report"]
+        kind@(CoreArrayType _) -> [aggregateNeed "show" kind, "output_report"]
+        kind@(CoreMapType _ _) -> [aggregateNeed "show" kind, "output_report"]
+        kind@(CoreSetType _) -> [aggregateNeed "show" kind, "output_report"]
+        CoreRangeType -> [aggregateNeed "show" CoreRangeType, "output_report"]
+        CoreBytesType -> [aggregateNeed "show" CoreBytesType, "output_report"]
         _ -> []
       identities = Map.fromList (zip (map frameFunctionName functions) [0 ..])
       (aggregates, aggregateNeeds) = aggregateSection identities (frameModuleLayouts source) tuples (Set.fromList (Set.toList roots <> entryNeeds))
@@ -102,14 +107,14 @@ emitFrameProgram version sources source = do
     <> renderSites (reverse (emitSites emitted)) <> aggregates <> ownership <> reverse (emitOutput emitted)
     <> metadata <> frameEngine owned <> ["int main(void) {", "  pudu_prepare_io();"] <> ending <> ["}"])
   where
-    -- reportResult renders any aggregate and exits 0.
+    -- Keep the owned entry value alive until reporting finishes.
     shownBox kind =
       [ "  pudu_box *pudu_entry = pudu_run_frames(" <> textOfInt entryId' <> ").box;"
       , "  pudu_text pudu_shown = " <> aggregateHelper "show" kind <> "(pudu_entry);"
-      , "  pudu_print_text(pudu_shown);"
+      , "  int pudu_report_status = pudu_output_report(pudu_shown);"
       , "  pudu_text_release(pudu_shown);"
       , "  " <> released kind "pudu_entry"
-      , "  return 0;" ]
+      , "  return pudu_report_status;" ]
     entryId' = case filter ((== frameModuleEntry source) . frameFunctionName . snd) (zip [0 :: Int ..] (frameModuleFunctions source)) of
       (identity, _) : _ -> identity
       [] -> 0

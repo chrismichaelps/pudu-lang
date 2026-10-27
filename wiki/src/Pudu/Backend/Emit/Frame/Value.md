@@ -139,3 +139,7 @@ swapped forms are what matched it.
 `cellMember` now delegates to [[Native Aggregate Emission]]'s `cellName`.
 Rendering, show and equality use `isAggregate`, so records take the tuple
 paths.
+
+## Output Results (#566)
+
+Resolved Grill Log: FrameOutputError calls pudu_output_write with the stream/newline flags and saved text slot; it selects output_error. This frame value is an ordered host effect, not a pure arithmetic operation. See [[Native Output Results]].

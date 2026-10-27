@@ -235,3 +235,5 @@ tags: [moc, handoff]
 - [[Native Array Pattern Delivery]] — #558 sortBy, sequence patterns and range slices, done.
 
 - [[Native Bytes Delivery]] — completion and focused boundary verification (#565).
+
+- [[Native Output Delivery]] — Result-valued output and failed-handle parity (#566).
