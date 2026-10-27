@@ -88,3 +88,7 @@ Printing a text slot calls `pudu_print_text`.
 A store into any owned slot (text or tuple) builds the new value, releases the
 old one and assigns. Returns retain owned results. Printing a tuple slot shows,
 prints and releases the text.
+
+## Named callable dispatch (#568)
+
+Resolved Grill Log: Mark FrameCallValue steps with closure_call=1, preserving closure-plus-arguments scratch cells and the original invocation site.

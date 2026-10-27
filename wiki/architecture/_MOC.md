@@ -98,3 +98,5 @@ Pudu is a statically typed native systems language for developers who need predi
 - [[Native Output Results]] — typed output outcomes and exact handle failures (#566).
 
 - [[Native Expression Bodies]] — named expression-body lowering (#567).
+
+- [[Native Named Callable Dispatch]] — direct named targets preserve depth and invocation provenance (#568).

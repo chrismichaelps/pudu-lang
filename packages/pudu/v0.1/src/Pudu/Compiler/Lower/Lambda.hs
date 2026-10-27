@@ -10,7 +10,7 @@ import qualified Data.Text as Text
 import Pudu.Compiler.Lower.Control (expressionIsPrintValued, printValued)
 import Pudu.Compiler.Lower.Generic (admitCallee)
 import Pudu.Compiler.Lower.State
-  ( CoreSignature (..), LowerContext (..), LowerState (..), bindLocal, halt, lookupLocal, refused, startFunction )
+  ( LowerContext (..), LowerState (..), bindLocal, halt, lookupLocal, refused, startFunction )
 import Pudu.Compiler.Lower.Types (typeForSpan)
 import Pudu.Core
 import Pudu.Eval.Capture (reachableNames)
@@ -61,34 +61,27 @@ lowerLambda lower block state at function
                     | otherwise ->
                         let lifted = CoreFunction key (CoreParameter env at : parameters) result
                               (coreBlock{coreBlockStatements = prologue <> coreBlockStatements coreBlock})
-                            info = CoreClosureInfo (map coreLocalType captured) "<fn>" (siteOf at)
+                            info = CoreClosureInfo (map coreLocalType captured) "<fn>" (siteOf at) True
                             context = registered key lifted info (lowerContext afterBody)
                             captureReads = [CoreExpression at (coreLocalType local) (CoreReadLocal local) | local <- captured]
                          in (restored context, Just (CoreExpression at kind (CoreClosure key captureReads), kind))
       Just other -> halt at ("a lambda of type " <> coreTypeName other) state
       Nothing -> halt at "a lambda without a native function type" state
 
-{-| A function named without being called: a closure over a function that
-    forwards its arguments to it, with nothing captured. -}
+{-| Named values keep the target's own parameter ABI and call depth. -}
 lowerFunctionValue :: LowerState -> Span -> Text -> (Text, Located Function) -> Lowered
 lowerFunctionValue state at key entry = case typeForSpan (contextTypes (lowerContext state)) at of
   Just kind@(CoreFunctionType _ _) -> case admitCallee state key at entry of
     (admitted, Nothing) -> refused admitted
-    (admitted, Just (target, CoreSignature{signatureParameters, signatureResult})) ->
-      let forwarder = target <> "#value"
-          env = CoreLocal 0 "" kind
-          parameters = [CoreParameter local{coreLocalId = index} span' | (index, CoreParameter local span') <- zip [1 ..] signatureParameters]
-          forwarded = [CoreExpression at (coreLocalType local) (CoreReadLocal local) | CoreParameter local _ <- parameters]
-          body = CoreBlock [] (Just (CoreExpression at signatureResult (CoreCall target forwarded)))
-          lifted = CoreFunction forwarder (CoreParameter env at : parameters) signatureResult body
-          name = locatedValue (functionName (locatedValue (snd entry)))
+    (admitted, Just (target, _)) ->
+      let name = locatedValue (functionName (locatedValue (snd entry)))
           context = lowerContext admitted
-          known = Map.member forwarder (contextClosures context)
-          next
-            | known = context
-            | otherwise = (registered forwarder lifted (CoreClosureInfo [] name ("fn " <> target)) context)
-                { contextQueue = target : contextQueue context }
-       in (admitted{lowerContext = next}, Just (CoreExpression at kind (CoreClosure forwarder []), kind))
+          info = CoreClosureInfo [] name ("fn " <> target) False
+          next = context
+            { contextClosures = Map.insert target info (contextClosures context)
+            , contextQueue = target : contextQueue context
+            }
+       in (admitted{lowerContext = next}, Just (CoreExpression at kind (CoreClosure target []), kind))
   _ -> halt at "a function value without a native function type" state
 
 {-| `callee(arguments)` through a value. The arguments run first, then the

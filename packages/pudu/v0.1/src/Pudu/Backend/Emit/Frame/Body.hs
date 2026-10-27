@@ -105,7 +105,7 @@ terminator identities function (state, needs) ending = case ending of
             <> ", .argument_count = " <> textOfInt (length arguments)
             <> foldMap id target <> ", .call_site = &pudu_sites[" <> textOfInt index <> "]};"
       pure (line afterResume result, Set.union needs (Set.fromList ["site", "colored", "fail"]))
-  -- The closure is the callee's first argument; its first cell names the callee.
+  -- The dispatcher passes the closure only to a lifted body.
   FrameCallValue at closure arguments destination resume -> do
     callee <- slotText closure
     copies <- traverse copyArgument (zip [0 ..] (closure : arguments))
@@ -117,7 +117,7 @@ terminator identities function (state, needs) ending = case ending of
     let (afterSite, index) = callDepthSite state at
         afterCopies = linesInto afterSite copies
         afterResume = line afterCopies ("      frame->pc = " <> labelText resume <> ";")
-        result = "      return (pudu_step){.kind = PUDU_CALL, .function = (size_t)" <> callee <> "->fields[0].scalar"
+        result = "      return (pudu_step){.kind = PUDU_CALL, .closure_call = 1, .function = (size_t)" <> callee <> "->fields[0].scalar"
           <> ", .argument_count = " <> textOfInt (1 + length arguments)
           <> foldMap id target <> ", .call_site = &pudu_sites[" <> textOfInt index <> "]};"
     pure (line afterResume result, Set.union needs (Set.fromList ["site", "colored", "fail"]))

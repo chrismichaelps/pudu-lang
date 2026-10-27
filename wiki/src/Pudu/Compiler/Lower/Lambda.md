@@ -13,8 +13,8 @@ Function values under [[Native Closures]].
 
 - `lowerLambda` lifts a lambda into a function of its own whose first
   parameter is its closure, and answers a `CoreClosure` over it.
-- `lowerFunctionValue` answers a closure over a forwarding function when a
-  module function is named without being called.
+- `lowerFunctionValue` answers a closure naming the actual module function
+  without a forwarding frame; its ABI has no environment parameter (#568).
 - `lowerValueCall` calls through any value of function type.
 
 ## Lambdas
@@ -39,9 +39,9 @@ argument goes into a temporary and the call reads them back after the callee.
 - **Q:** Copy or reference captures? **A:** Copy, as the evaluator's snapshot
   does; reassigning a captured `var` later changes nothing the lambda sees.
   Assigning a captured name inside the lambda is rejected by checking (E3076).
-- **Q:** How does a named function become a value? **A:** A forwarder named
-  `<function>#value` takes the closure plus the function's parameters and
-  calls it. It renders as `<fn name>` and is equal only to itself.
+- **Q:** How does a named function become a value? **A:** A box names its
+  actual target and owns no captures. It renders as `<fn name>` and retains
+  its source identity; dispatch does not add a forwarding call (#568).
 - Function values compare equal when written in the same place (the lambda's
   span, or the named function), as `Eq Closure` leaves captures out.
 
@@ -53,3 +53,7 @@ argument goes into a temporary and the call reads them back after the callee.
 ## Referenced by
 
 [[Compiler Lower Body]] · [[Native Closures]]
+
+## Named callable dispatch (#568)
+
+Resolved Grill Log: Replace named forwarders with closures naming their actual admitted target. Enqueue the target and register empty captures/name/site with closureHasEnvironment false. Lambdas keep the lifted function and set the flag true.

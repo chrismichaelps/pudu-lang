@@ -61,3 +61,7 @@ Byte operations contribute their operands' locals.
 ## Output Results (#566)
 
 Resolved Grill Log: CoreOutputError contributes its operand types and locals during layout collection, including the surrounding Result layout. See [[Native Output Results]].
+
+## Named callable dispatch (#568)
+
+Resolved Grill Log: Form named callable layout keys from all actual parameters and result; lifted lambda keys still use their first environment parameter. Handle zero-parameter named functions.

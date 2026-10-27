@@ -171,3 +171,10 @@ Resolved Grill Log: Register output success/refusal properties using Backend Out
 ## Expression bodies (#567)
 
 Resolved Grill Log: Register focused expression-body explicit-output and runtime diagnostic properties from Backend Expression Body Programs, using the existing differential harness.
+
+## Named callable dispatch (#568)
+
+Resolved Grill Log: Register focused named-callable explicit-output and exact diagnostic properties with the existing conformance harness.
+
+The named-callable lane also reruns the existing closure success/refusal corpus
+to protect captured lambdas, higher-order calls, ordering and rendering.

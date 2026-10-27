@@ -14,7 +14,7 @@ Compile ordinary checked Pudu programs into portable C11 with interpreter-identi
 | Area | State | Next obligation |
 | --- | --- | --- |
 | Platform Int/Bool, checked arithmetic, if/while, printing | Implemented (#498, #505) | Preserve exact deferred magnitudes, control/output parity and closed-pipe continuation/diagnostic regressions |
-| Scalar functions, recursion, call depth | Implemented (#499) | Preserve explicit-frame lifetime, argument ordering, E7002 timing and differential evidence; promotion still requires independent review |
+| Scalar functions, recursion, call depth | Implemented (#499) | Preserve explicit-frame lifetime, argument ordering, E7002 timing and differential evidence, including once-counted named-value calls (#568); promotion still requires independent review |
 | Loop control and scalar loop results | Implemented (#489) | Preserve labels, transfers, Never joins and condition-scope evidence |
 | Unit values, parameters and operations | Implemented (#492, #493) | Preserve effect-first temporaries, display/equality and #494 E7001 runtime refusals |
 | Entry result reporting | Partial (#512, #521, #525, #566) | Represented values, including output Results, use interpreter-identical rendering and builder buffering; complete callable forms and platform failure evidence remain |
@@ -481,3 +481,11 @@ original expression spans. Eight explicit-output/counting cases and three
 runtime-failure probes cover return/try, closures, generics, methods, effects
 and direct/mutual recursion through the depth boundary. The full-emission
 ledger remains Partial until all callable forms and promotion evidence exist.
+
+## Named callable depth repair (#568)
+
+[[Native Named Callable Dispatch]] removes the forwarding frame for named
+function values. Explicit hidden-environment metadata keeps lifted lambdas'
+ABI while preserving named functions' parameter ABI, depth and invocation
+provenance. The exact-limit regression failed before this change. Complete
+intrinsic/bound callable forms, defaults and promotion evidence remain open.

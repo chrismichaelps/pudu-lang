@@ -14,11 +14,13 @@ the lifted function it runs, and the captures follow in cell order.
 - **Construction.** [[Compiler Lower Lambda]] lifts each lambda into a
   function whose first parameter is the closure, and the closure copies the
   enclosing locals the lambda mentions. A named function used as a value is a
-  closure over a forwarder.
+  closure naming its actual target, with no forwarding frame (#568).
 - **Calls.** `CoreCallValue` evaluates the callee, then the arguments.
   Lowering orders the source's arguments before the callee with temporaries.
-  The frame step takes its callee from cell 0 and passes the box as argument 0,
-  so depth checks, unwinding and diagnostics are the direct call's.
+  The frame step takes its callee from cell 0. Explicit environment metadata
+  passes the box as argument 0 only to lifted lambda bodies. Named targets
+  receive their actual arguments and count one source call, with the invocation
+  site retained for E7002. See [[Native Named Callable Dispatch]].
 - **Lifetime.** Each function type has a `CoreClosureLayout` listing every
   lifted function whose closure has that type. Its drop helper switches on cell
   0 to release that function's captures by kind.
