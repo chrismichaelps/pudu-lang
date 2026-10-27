@@ -5,6 +5,13 @@ tags: [changelog]
 
 # Changelog
 
+## 2026-10-27 — Flat expression lists keep their depth (#662)
+
+- [[Parser Expression Aggregate]] and [[Parser Expression Postfix]] read array, Set and argument
+  siblings through one iterative loop; only each item's own nesting is charged.
+- [[Expression Recovery Spec]] covers 2,048-wide lists, spans, trailing commas and retained deep
+  refusals; [[Flat Expression List Delivery]] records the reproduction and evidence.
+
 ## 2026-10-27 — Verified HTTPS CI index transport (#656)
 
 - [[Website Linux Workflow]] configures signed HTTPS Hackage access before one explicit update.
