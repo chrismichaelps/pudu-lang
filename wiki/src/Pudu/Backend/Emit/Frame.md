@@ -28,6 +28,10 @@ come from actual emitted functions. No frontend/compiler import or inference.
 
 [[Core Frame IR]] · [[Backend Frame Bodies]] · [[Backend Frame Runtime]] · [[Backend Runtime]] · [[Backend Emit]]
 
+## Grill Log
+
+- **Q:** Which runtime parts does a sum pull in? **A:** Its own helpers and those of every type its layout reaches; showing a sum also needs text printing (#525).
+
 ## Referenced by
 
 [[src/_MOC]] · [[Native Frame Pressure Repair]]

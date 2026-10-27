@@ -42,6 +42,10 @@ limit, larger host stack, permanent refusal or interpreted fallback repairs
 [[Pudu Core]] · [[Core Frame IR]] · [[Compiler Frame Lowering]] ·
 [[Compiler Frame State]] · [[Compiler Frame Body]] · [[Native Execution Frames]]
 
+## Grill Log
+
+- **Q:** What do frames add for sums? **A:** `FrameConstruct` (variant index and payload), `FrameIsVariant`, `FramePayload` read only after the tag matched, `FrameVariantName`, the `FrameFailText` terminator, and the module's layouts (#525).
+
 ## Referenced by
 
 [[src/_MOC]] · [[Program Compiler Module Map]] · [[Native Frame Pressure Repair]]

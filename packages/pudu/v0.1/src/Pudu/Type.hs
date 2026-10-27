@@ -6,6 +6,7 @@ module Pudu.Type
   , TypeInfo (..)
   , checkTypes
   , declaredRecords
+  , declaredSums
   , checkTypesDetailed
   , checkTypesWith
   , deriveDefinitionTypes
@@ -170,3 +171,18 @@ declaredRecords moduleValue = evalChecker $ do
   declared <- collectDeclared (locatedValue (moduleName moduleValue)) (moduleDeclarations moduleValue)
   pure (Map.mapWithKey (\identity fields -> (Map.findWithDefault [] identity (declaredParams declared), fields))
     (declaredFields declared))
+
+{-| Each sum the module can name, its own and the built-in Option and Result:
+    its type parameters and its variants in declaration order, each with its
+    payload types and, for a record variant, its field names. -}
+declaredSums :: Module -> Map NominalId ([Text], [(Text, [Type], Maybe [Text])])
+declaredSums moduleValue = evalChecker $ do
+  declared <- collectDeclared (locatedValue (moduleName moduleValue)) (moduleDeclarations moduleValue)
+  let variantOf owner name = case Map.lookup (owner, name) (declaredOwnedVariants declared) of
+        Just (_, params, payload) -> Just (params, (name, payload, Map.lookup name (declaredVariantFields declared)))
+        Nothing -> Nothing
+      sumOf owner names = case traverse (variantOf owner) names of
+        Just found@((params, _) : _) -> Just (params, map snd found)
+        Just [] -> Just ([], [])
+        Nothing -> Nothing
+  pure (Map.mapMaybeWithKey sumOf (declaredOwners declared))

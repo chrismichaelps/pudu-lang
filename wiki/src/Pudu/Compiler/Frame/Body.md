@@ -42,6 +42,10 @@ limit, larger host stack, permanent refusal or interpreted fallback repairs
 [[Pudu Core]] · [[Core Frame IR]] · [[Compiler Frame Lowering]] ·
 [[Compiler Frame State]] · [[Compiler Frame Body]] · [[Native Execution Frames]]
 
+## Grill Log
+
+- **Q:** How are constructions and run-time failures lowered? **A:** A variant becomes `FrameConstruct` with its index and payload in declaration order; `CoreFailText` evaluates its message into a slot and ends the block with `FrameFailText`; `match` is lent to [[Compiler Frame Match]] (#525).
+
 ## Referenced by
 
 [[src/_MOC]] · [[Program Compiler Module Map]] · [[Native Frame Pressure Repair]]

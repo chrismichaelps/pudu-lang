@@ -16,8 +16,12 @@ module Pudu.Core
   , CoreExpressionShape (..)
   , CoreFunction (..)
   , CoreLoopId (..)
+  , CoreArm (..)
+  , CoreLayout (..)
   , CoreLocal (..)
   , CoreModule (..)
+  , CorePattern (..)
+  , CoreVariant (..)
   , CoreParameter (..)
   , CoreStatement (..)
   , CoreStatementShape (..)
@@ -26,6 +30,7 @@ module Pudu.Core
   , coreTypeName
   ) where
 
+import Data.Map.Strict (Map)
 import Data.Text (Text)
 import qualified Data.Text as Text
 import Data.Word (Word64)
@@ -39,6 +44,9 @@ data CoreModule = CoreModule
   { coreModuleName :: !Text
   , coreModuleEntry :: !Text
   , coreModuleFunctions :: ![CoreFunction]
+  {-| How each record and sum the functions mention is laid out. Types name
+      records and sums only by identity, so recursive ones stay finite. -}
+  , coreModuleLayouts :: !(Map CoreType CoreLayout)
   }
   deriving stock (Eq, Show)
 
@@ -148,6 +156,15 @@ data CoreExpressionShape
   {-| `base` with the written fields replaced; base runs first. -}
   | CoreRecordUpdate !CoreExpression ![(Text, CoreExpression)]
   | CoreField !Text !CoreExpression
+  {-| A variant and its payload fields as written (positional payloads are
+      named "0", "1", ...); the sum holds them in declaration order. -}
+  | CoreConstruct !Text ![(Text, CoreExpression)]
+  {-| The subject runs once, then each arm is tried in order. -}
+  | CoreMatch !CoreExpression ![CoreArm]
+  {-| Ends the program with a diagnostic whose text is only known now. -}
+  | CoreFailText !Text !(Maybe Text) !CoreExpression
+  {-| The name of the variant a sum value holds, as text. -}
+  | CoreVariantName !CoreExpression
   | CorePrint !CoreExpression
   | CoreCall !Text ![CoreExpression]
   {-| Operands finish in order before E7001; this expression never returns. -}
@@ -220,10 +237,12 @@ data CoreType
   | CoreCharType
   | CoreTupleType ![CoreType]
   {-| A record of the root module: its name and its fields in declaration order. -}
-  | CoreRecordType !Text ![(Text, CoreType)]
+  | CoreRecordType !Text
+  {-| A sum at concrete type arguments: Option[Int] and Option[Str] differ. -}
+  | CoreSumType !Text ![CoreType]
   | CoreUnitType
   | CoreNeverType
-  deriving stock (Eq, Show)
+  deriving stock (Eq, Ord, Show)
 
 coreTypeName :: CoreType -> Text
 coreTypeName coreType = case coreType of
@@ -233,6 +252,47 @@ coreTypeName coreType = case coreType of
   CoreTextType -> "Str"
   CoreCharType -> "Char"
   CoreTupleType members -> "(" <> Text.intercalate ", " (map coreTypeName members) <> ")"
-  CoreRecordType name _ -> name
+  CoreRecordType name -> name
+  CoreSumType name [] -> name
+  CoreSumType name arguments -> name <> "[" <> Text.intercalate ", " (map coreTypeName arguments) <> "]"
   CoreUnitType -> "Unit"
   CoreNeverType -> "Never"
+
+{-| A record's fields, or a sum's variants, in declaration order. -}
+data CoreLayout
+  = CoreRecordLayout ![(Text, CoreType)]
+  | CoreSumLayout ![CoreVariant]
+  deriving stock (Eq, Show)
+
+{-| One variant: its name, payload types, and whether the payload is a
+    record's fields or positions (named "0", "1", ...). -}
+data CoreVariant = CoreVariant
+  { coreVariantName :: !Text
+  , coreVariantFields :: ![(Text, CoreType)]
+  , coreVariantRecord :: !Bool
+  }
+  deriving stock (Eq, Show)
+
+{-| One `case`: its pattern, the locals the pattern binds, the guard, and the
+    arm's value. -}
+data CoreArm = CoreArm
+  { coreArmSpan :: !Span
+  , coreArmPattern :: !CorePattern
+  , coreArmGuard :: !(Maybe CoreExpression)
+  , coreArmBody :: !CoreExpression
+  }
+  deriving stock (Eq, Show)
+
+{-| Patterns against the type the checker gave the subject. A variant
+    pattern lists its payload in declaration order, filling unnamed record
+    fields with wildcards. -}
+data CorePattern
+  = CoreWildcardPattern
+  | CoreBindPattern !CoreLocal
+  | CoreLiteralPattern !CoreExpression
+  | CoreRangePattern !CoreExpression !Bool !CoreExpression
+  | CoreTuplePattern ![CorePattern]
+  | CoreRecordPattern ![CorePattern]
+  | CoreVariantPattern !Text ![CorePattern]
+  | CoreAlternativePattern ![CorePattern]
+  deriving stock (Eq, Show)

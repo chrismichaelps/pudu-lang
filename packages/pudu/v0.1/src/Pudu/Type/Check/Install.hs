@@ -51,6 +51,7 @@ import Pudu.Type.Interface
 import Pudu.Type.Value
   ( NominalId (..)
   , Required (..)
+  , nominalKey
   , Type (..)
   , monotype
   , polytype
@@ -197,6 +198,8 @@ declareConstructors declared value = case locatedValue (Tree.typeDefinition valu
           | null payload = polytype rigid [] ownerType
           | otherwise = polytype rigid [] (FunctionTypeValue False payload ownerType)
     bindName name scheme
+    -- The canonical key is what `Shape.Circle` is looked up by.
+    bindName (nominalKey owner <> "." <> name) scheme
 
 variantPayload :: DeclaredTypes -> [(Text, Int)] -> Tree.Variant -> Checker [Type]
 variantPayload declared rigid variant = case Tree.variantPayload variant of

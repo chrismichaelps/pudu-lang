@@ -27,6 +27,8 @@ layout; [[Compiler Lower Types]] forms them from [[Type Boundary]]'s
 
 ## Grill Log
 
+- **Q:** Is `Box{w: 1, h: 2}` a record or a variant? **A:** Whatever the checker typed the span as: a record type builds `CoreRecord`, a sum with a record variant of that name builds `CoreConstruct`. Field types come from the record's layout (#525).
+
 - **Q:** Why rebuild the record on field assignment instead of writing into
   the box? **A:** Records are values; another binding may share the box.
   Rebuilding is the interpreter's semantics with no aliasing question.

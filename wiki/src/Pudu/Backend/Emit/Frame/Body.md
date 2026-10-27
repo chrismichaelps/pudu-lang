@@ -38,6 +38,10 @@ uses existing byte lengths and shared helpers. All fault cases return data.
 
 [[Core Frame IR]] · [[Backend Frame Values]] · [[Backend Emit State]] · [[Native Execution Frames]]
 
+## Grill Log
+
+- **Q:** How is `FrameFailText` emitted? **A:** As `pudu_fail_text` with a site that keeps the code, help and place, and the message slot's text (#525).
+
 ## Referenced by
 
 [[src/_MOC]] · [[Native Frame Pressure Repair]]

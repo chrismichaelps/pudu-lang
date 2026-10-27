@@ -1,23 +1,28 @@
 {-| @Pudu.Backend.Emit.Aggregate — owned cells, aggregate helper names, and
-    the per-type tuple and record helpers a program actually calls.
+    the per-type tuple, record and sum helpers a program actually calls.
 
     Helper needs travel in the emitter's ordinary need set as `agg_make:X`,
-    `agg_show:X`, `agg_equal:X` and `agg_compare:X`, where X is the type's
-    mangled name. `aggregateSection` turns the ones it sees into C and
-    reports which runtime parts those helpers lean on. -}
+    `agg_show:X`, `agg_equal:X`, `agg_compare:X` and `agg_name:X`, where X is
+    the type's mangled name; a sum has one `agg_makeN:X` per variant.
+    `aggregateSection` turns the ones it sees into C and reports which
+    runtime parts those helpers lean on.
+
+    A sum's box holds the variant's index in its first cell and the payload
+    after it, so payload member i is cell i + 1. -}
 module Pudu.Backend.Emit.Aggregate
   ( ownedType, ownedKinds, retained, released, cType, cellName, memberRender, isAggregate
   , aggregateHelper, aggregateNeed, aggregateTypes, aggregateSection
   ) where
 
-import Data.List (sortOn)
+import Data.Map.Strict (Map)
+import qualified Data.Map.Strict as Map
 import Data.Set (Set)
 import qualified Data.Set as Set
 import Data.Text (Text)
 import qualified Data.Text as Text
-import Pudu.Backend.Emit.State (cString)
+import Pudu.Backend.Emit.State (cString, cStringBytes)
 import Pudu.Backend.Emit.Support (integerHelper, isWideInteger)
-import Pudu.Core (CoreType (..), coreTypeName)
+import Pudu.Core (CoreLayout (..), CoreType (..), CoreVariant (..), coreTypeName)
 import Pudu.Core.Frame (FrameFunction (..), FrameModule (..), FrameSlot (..))
 import Pudu.IntegerLiteral (integerKindName)
 import Pudu.FloatLiteral (floatWidthType)
@@ -26,7 +31,8 @@ import Pudu.FloatLiteral (floatWidthType)
 ownedType :: CoreType -> Bool
 ownedType CoreTextType = True
 ownedType (CoreTupleType _) = True
-ownedType (CoreRecordType _ _) = True
+ownedType (CoreRecordType _) = True
+ownedType (CoreSumType _ _) = True
 ownedType _ = False
 
 cType :: CoreType -> Text
@@ -37,23 +43,22 @@ cType kind = case kind of
   CoreCharType -> "uint32_t"
   CoreTextType -> "pudu_text"
   CoreTupleType _ -> "pudu_box *"
-  CoreRecordType _ _ -> "pudu_box *"
+  CoreRecordType _ -> "pudu_box *"
+  CoreSumType _ _ -> "pudu_box *"
   _ -> "int"
 
 {-| A new reference to the value an expression reads, and what it needs. -}
 retained :: CoreType -> Text -> (Text, [Text])
 retained kind expression = case kind of
   CoreTextType -> ("pudu_text_retain(" <> expression <> ")", ["text_retain"])
-  CoreTupleType _ -> ("pudu_box_retain(" <> expression <> ")", [])
-  CoreRecordType _ _ -> ("pudu_box_retain(" <> expression <> ")", [])
+  _ | isAggregate kind -> ("pudu_box_retain(" <> expression <> ")", [])
   _ -> (expression, [])
 
 {-| A statement letting one reference go. -}
 released :: CoreType -> Text -> Text
 released kind expression = case kind of
   CoreTextType -> "pudu_text_release(" <> expression <> ");"
-  CoreTupleType _ -> aggregateHelper "drop" kind <> "(" <> expression <> ");"
-  CoreRecordType _ _ -> aggregateHelper "drop" kind <> "(" <> expression <> ");"
+  _ | isAggregate kind -> aggregateHelper "drop" kind <> "(" <> expression <> ");"
   _ -> ""
 
 mangle :: CoreType -> Text
@@ -61,7 +66,8 @@ mangle kind = case kind of
   CoreIntegerType integer -> integerKindName integer
   CoreFloatType width -> floatWidthType width
   CoreTupleType members -> "T" <> Text.pack (show (length members)) <> "_" <> Text.intercalate "_" (map mangle members) <> "_E"
-  CoreRecordType name _ -> "R_" <> name
+  CoreRecordType name -> "R_" <> name
+  CoreSumType name arguments -> "S" <> Text.pack (show (length arguments)) <> "_" <> Text.intercalate "_" (name : map mangle arguments) <> "_E"
   other -> coreTypeName other
 
 aggregateHelper :: Text -> CoreType -> Text
@@ -70,27 +76,36 @@ aggregateHelper operation kind = "pudu_agg_" <> operation <> "_" <> mangle kind
 aggregateNeed :: Text -> CoreType -> Text
 aggregateNeed operation kind = "agg_" <> operation <> ":" <> mangle kind
 
-{-| Every tuple and record type a frame mentions, members before the
-    aggregates holding them. -}
+type Layouts = Map CoreType CoreLayout
+
+{-| Every aggregate type a frame mentions, in first-seen order. Recursive
+    types make "members first" impossible in general, so every helper is
+    declared before any is defined. -}
 aggregateTypes :: FrameModule -> [CoreType]
-aggregateTypes source = sortOn depth (foldr collect [] slotTypes)
+aggregateTypes source = reverse (foldl collect [] slotTypes)
  where
+  layouts = frameModuleLayouts source
   slotTypes = concat
     [ frameFunctionResult function : map frameSlotType (frameFunctionParameters function <> frameFunctionSlots function)
     | function <- frameModuleFunctions source ]
-  collect kind found = case kind of
-    _ | kind `notElem` found, Just members <- aggregateMembers kind -> foldr collect (kind : found) members
-    _ -> found
-  depth kind = maybe 0 (\members -> 1 + maximum (0 : map depth members)) (aggregateMembers kind) :: Int
+  collect found kind
+    | kind `elem` found || not (isAggregate kind) = found
+    | otherwise = foldl collect (kind : found) (aggregateMembers layouts kind)
 
 isAggregate :: CoreType -> Bool
-isAggregate = maybe False (const True) . aggregateMembers
+isAggregate kind = case kind of
+  CoreTupleType _ -> True
+  CoreRecordType _ -> True
+  CoreSumType _ _ -> True
+  _ -> False
 
-aggregateMembers :: CoreType -> Maybe [CoreType]
-aggregateMembers kind = case kind of
-  CoreTupleType members -> Just members
-  CoreRecordType _ fields -> Just (map snd fields)
-  _ -> Nothing
+{-| Everything a value of the type can hold, every variant's payload for a sum. -}
+aggregateMembers :: Layouts -> CoreType -> [CoreType]
+aggregateMembers layouts kind = case (kind, Map.lookup kind layouts) of
+  (CoreTupleType members, _) -> members
+  (_, Just (CoreRecordLayout fields)) -> map snd fields
+  (_, Just (CoreSumLayout variants)) -> concatMap (map snd . coreVariantFields) variants
+  _ -> []
 
 {-| Ownership kinds the frame engine switches on: 1 is text, then each
     aggregate type in `aggregateTypes` order. -}
@@ -114,8 +129,8 @@ memberRender kind expression = case kind of
     each comes after what it calls; and the runtime parts they use. Drop
     helpers are always written, since the frame engine releases every owned
     slot through them. -}
-aggregateSection :: [CoreType] -> Set Text -> ([Text], Set Text)
-aggregateSection tuples needs = (concat chosen, runtime)
+aggregateSection :: Layouts -> [CoreType] -> Set Text -> ([Text], Set Text)
+aggregateSection layouts tuples needs = (concat prototypes <> concat chosen, runtime)
  where
   wanted = close (Set.fromList ([aggregateNeed "drop" kind | kind <- tuples]
     <> filter ("agg_" `Text.isPrefixOf`) (Set.toList needs)))
@@ -123,19 +138,26 @@ aggregateSection tuples needs = (concat chosen, runtime)
     let next = Set.union found (Set.fromList (concat [helperNeeds name | name <- Set.toList found]))
      in if next == found then found else close next
   helperNeeds name = filter ("agg_" `Text.isPrefixOf`) (maybe [] fst (lookup name catalogue))
-  chosen = [body | operation <- ["drop", "make", "equal", "compare", "show"], kind <- tuples
-    , let name = aggregateNeed operation kind, Set.member name wanted
-    , Just (_, body) <- [lookup name catalogue]]
+  selected = [(name, body) | (name, (_, body)) <- catalogue, Set.member name wanted]
+  -- A definition's first line ending in "{" is its signature; declaring them
+  -- all first lets recursive types call each other's helpers.
+  prototypes = [[Text.dropEnd 2 header <> ";"] | (_, body) <- selected, header : _ <- [filter (" {" `Text.isSuffixOf`) body]]
+  chosen = map snd selected
   runtime = Set.fromList (concat [filter (not . ("agg_" `Text.isPrefixOf`)) (fst entry)
     | (name, entry) <- catalogue, Set.member name wanted])
-  catalogue = concat [helpers kind | kind <- tuples]
+  catalogue = concat [helpers layouts kind | kind <- tuples]
 
-helpers :: CoreType -> [(Text, ([Text], [Text]))]
-helpers kind = maybe [] (helpersOf kind) (aggregateMembers kind)
+helpers :: Layouts -> CoreType -> [(Text, ([Text], [Text]))]
+helpers layouts kind = case (kind, Map.lookup kind layouts) of
+  (CoreTupleType members, _) -> helpersOf kind (zip (map (Text.pack . show) [0 :: Int ..]) members) Nothing
+  (CoreRecordType name, Just (CoreRecordLayout fields)) -> helpersOf kind fields (Just name)
+  (CoreSumType _ _, Just (CoreSumLayout variants)) -> sumHelpers kind variants
+  _ -> []
 
-helpersOf :: CoreType -> [CoreType] -> [(Text, ([Text], [Text]))]
-helpersOf kind members =
-  [ (aggregateNeed "drop" kind, ([aggregateNeed "drop" member | member <- members, isTuple member],
+{-| Tuples and records: one shape, members in cells 0.. -}
+helpersOf :: CoreType -> [(Text, CoreType)] -> Maybe Text -> [(Text, ([Text], [Text]))]
+helpersOf kind labelled recordName =
+  [ (aggregateNeed "drop" kind, ([aggregateNeed "drop" member | member <- members, isAggregate member],
       [ "static void " <> aggregateHelper "drop" kind <> "(pudu_box *box) {"
       , "  if (box == NULL || --box->count != 0) return;" ]
       <> [ "  " <> released member (field index member) | (index, member) <- indexed, ownedType member ]
@@ -169,17 +191,17 @@ helpersOf kind members =
       <> [ "  return 0;", "}" ]))
   ]
  where
+  members = map snd labelled
   indexed = zip [0 :: Int ..] members
   -- renderValue: (a, b) for a tuple, Name{x: a, y: b} for a record.
-  (opening, labels, closing) = case kind of
-    CoreRecordType name fields ->
+  (opening, labels, closing) = case recordName of
+    Just name ->
       ( cString (name <> "{")
-      , "(const char *const[]){" <> Text.intercalate ", " [cString (label <> ": ") | (label, _) <- fields] <> "}"
+      , "(const char *const[]){" <> Text.intercalate ", " [cString (label <> ": ") | (label, _) <- labelled] <> "}"
       , "}" )
-    _ -> ("\"(\"", "NULL", ")")
+    Nothing -> ("\"(\"", "NULL", ")")
   field index member = on "box" index member
   on box index member = box <> "->fields[" <> number index <> "]." <> cellName member
-  isTuple member = ownedType member && member /= CoreTextType
 
 {-| `==` on two members, as Value's Eq instance has it. -}
 memberEqual :: CoreType -> Text -> Text -> (Text, [Text])
@@ -187,8 +209,7 @@ memberEqual kind a b = case kind of
   CoreIntegerType _ -> let helper = integerHelper kind "compare" in ("pudu_" <> helper <> "(" <> a <> ", " <> b <> ") == 0", [helper])
   CoreFloatType _ -> ("pudu_float_eq(" <> a <> ", " <> b <> ")", ["float_eq"])
   CoreTextType -> ("pudu_text_compare(" <> a <> ", " <> b <> ") == 0", ["text_compare"])
-  CoreTupleType _ -> (aggregateHelper "equal" kind <> "(" <> a <> ", " <> b <> ")", [aggregateNeed "equal" kind])
-  CoreRecordType _ _ -> (aggregateHelper "equal" kind <> "(" <> a <> ", " <> b <> ")", [aggregateNeed "equal" kind])
+  _ | isAggregate kind -> (aggregateHelper "equal" kind <> "(" <> a <> ", " <> b <> ")", [aggregateNeed "equal" kind])
   _ -> (a <> " == " <> b, [])
 
 {-| compareValues on two members as -1, 0 or 1. Floats use its total order:
@@ -209,9 +230,72 @@ cellName kind = case kind of
   CoreFloatType _ -> "floating"
   CoreCharType -> "character"
   CoreTextType -> "text"
-  CoreTupleType _ -> "box"
-  CoreRecordType _ _ -> "box"
+  _ | isAggregate kind -> "box"
   _ -> "scalar"
 
 number :: Int -> Text
 number = Text.pack . show
+
+{-| Sums: cell 0 is the variant index, the payload follows. Each variant gets
+    its own make; drop, show and equal switch on the index. -}
+sumHelpers :: CoreType -> [CoreVariant] -> [(Text, ([Text], [Text]))]
+sumHelpers kind variants =
+  [ (aggregateNeed "drop" kind, ([aggregateNeed "drop" member | member <- allMembers, isAggregate member],
+      [ "static void " <> aggregateHelper "drop" kind <> "(pudu_box *box) {"
+      , "  if (box == NULL || --box->count != 0) return;"
+      , "  switch (box->fields[0].scalar) {" ]
+      <> concat [ ["    case " <> number tag <> ":"]
+                  <> [ "      " <> released member (payload "box" position member) | (position, member) <- members variant, ownedType member ]
+                  <> ["      break;"]
+                | (tag, variant) <- tagged ]
+      <> [ "    default: break;", "  }", "  free(box);", "}" ]))
+  , (aggregateNeed "show" kind, ("text_join" : "text_literal" : concat [snd (memberRender member "") | member <- allMembers],
+      [ "static pudu_text " <> aggregateHelper "show" kind <> "(pudu_box *box) {"
+      , "  pudu_text parts[" <> number (maximum (1 : [length (coreVariantFields variant) | variant <- variants])) <> "];"
+      , "  switch (box->fields[0].scalar) {" ]
+      <> concat [ showVariant tag variant | (tag, variant) <- tagged ]
+      <> [ "    default: break;", "  }", "  (void)parts;", "  return pudu_text_literal(\"\", 0);", "}" ]))
+  , (aggregateNeed "equal" kind, (concat [snd (memberEqual member "" "") | member <- allMembers],
+      [ "static int " <> aggregateHelper "equal" kind <> "(pudu_box *a, pudu_box *b) {"
+      , "  if (a->fields[0].scalar != b->fields[0].scalar) return 0;"
+      , "  switch (a->fields[0].scalar) {" ]
+      <> concat [ [ "    case " <> number tag <> ": return " <> conjunction variant <> ";" ] | (tag, variant) <- tagged ]
+      <> [ "    default: return 1;", "  }", "}" ]))
+  , (aggregateNeed "name" kind, (["text_literal"],
+      [ "static pudu_text " <> aggregateHelper "name" kind <> "(pudu_box *box) {"
+      , "  switch (box->fields[0].scalar) {" ]
+      <> [ "    case " <> number tag <> ": return pudu_text_literal(" <> cString (coreVariantName variant) <> ", "
+             <> number (cStringBytes (coreVariantName variant)) <> ");" | (tag, variant) <- tagged ]
+      <> [ "    default: return pudu_text_literal(\"\", 0);", "  }", "}" ]))
+  ] <>
+  [ (aggregateNeed ("make" <> number tag) kind, (concat [snd (retained member "") | (_, member) <- members variant],
+      [ "static pudu_box *" <> aggregateHelper ("make" <> number tag) kind <> "("
+          <> (if null (members variant) then "void" else Text.intercalate ", " [cType member <> " m" <> number position | (position, member) <- members variant]) <> ") {"
+      , "  pudu_box *box = pudu_box_new(" <> number (1 + length (members variant)) <> ");"
+      , "  box->fields[0].scalar = " <> number tag <> ";" ]
+      <> [ "  " <> payload "box" position member <> " = " <> fst (retained member ("m" <> number position)) <> ";" | (position, member) <- members variant ]
+      <> [ "  return box;", "}" ]))
+  | (tag, variant) <- tagged ]
+ where
+  tagged = zip [0 :: Int ..] variants
+  members variant = zip [0 :: Int ..] (map snd (coreVariantFields variant))
+  allMembers = concatMap (map snd . coreVariantFields) variants
+  payload box position member = box <> "->fields[" <> number (position + 1) <> "]." <> cellName member
+  conjunction variant = case members variant of
+    [] -> "1"
+    present -> Text.intercalate " && " [fst (memberEqual member (payload "a" position member) (payload "b" position member)) | (position, member) <- present]
+  showVariant tag variant = case members variant of
+    [] -> [ "    case " <> number tag <> ": return pudu_text_literal(" <> cString (coreVariantName variant) <> ", "
+              <> number (cStringBytes (coreVariantName variant)) <> ");" ]
+    present ->
+      [ "    case " <> number tag <> ":" ]
+      <> [ "      parts[" <> number position <> "] = " <> fst (memberRender member (payload "box" position member)) <> ";" | (position, member) <- present ]
+      <> [ "      return pudu_text_join(" <> opening <> ", " <> labels <> ", parts, " <> number (length present) <> ", " <> closing <> ");" ]
+     where
+      -- renderValue: Name(a, b), or Name{x: a} for a record variant.
+      (opening, labels, closing)
+        | coreVariantRecord variant =
+            ( cString (coreVariantName variant <> "{")
+            , "(const char *const[]){" <> Text.intercalate ", " [cString (label <> ": ") | (label, _) <- coreVariantFields variant] <> "}"
+            , "\"}\"" )
+        | otherwise = (cString (coreVariantName variant <> "("), "NULL", "\")\"")

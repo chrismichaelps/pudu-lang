@@ -142,8 +142,9 @@ coloredLines =
 
 failLines :: [Text]
 failLines =
-  [ "/* Print the refusal and leave with the interpreter's status for one. */"
-  , "static inline void pudu_fail(const pudu_site *site) {"
+  [ "/* Print the refusal and leave with the interpreter's status for one. The"
+  , "   message is written by length, so a rendered value may hold any byte. */"
+  , "static void pudu_fail_message(const pudu_site *site, const char *message, size_t length) {"
   , "  if (pudu_cleanup_hook != NULL) pudu_cleanup_hook();"
   , "  pudu_prepare_error_io();"
   , "  int colored = pudu_colored();"
@@ -151,7 +152,9 @@ failLines =
   , "  if (colored) fputs(\"\\x1b[31m\", stderr);"
   , "  fprintf(stderr, \"error[%s]\", site->code);"
   , "  if (colored) fputs(\"\\x1b[0m\", stderr);"
-  , "  fprintf(stderr, \": %s\\n\", site->message);"
+  , "  fputs(\": \", stderr);"
+  , "  if (length != 0) fwrite(message, 1, length, stderr);"
+  , "  fputc('\\n', stderr);"
   , "  fprintf(stderr, \"  --> %s:%d:%d\\n\", site->file, site->line, site->column);"
   , "  if (site->has_excerpt) {"
   , "    char gutter[24];"
@@ -179,6 +182,9 @@ failLines =
   , "  /* Exit may flush stdout again after a failed print. */"
   , "  pudu_prepare_io();"
   , "  exit(1);"
+  , "}"
+  , "static inline void pudu_fail(const pudu_site *site) {"
+  , "  pudu_fail_message(site, site->message, strlen(site->message));"
   , "}"
   ]
 

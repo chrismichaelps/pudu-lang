@@ -21,8 +21,9 @@ import qualified Data.Set as Set
 import Data.Text (Text)
 
 import qualified Data.Map.Strict as Map
-import Pudu.Compiler.Lower.Types (LowerTypes, withRecords)
-import Pudu.Type (declaredRecords)
+import Pudu.Compiler.Lower.Layout (moduleLayouts)
+import Pudu.Compiler.Lower.Types (LowerTypes, withShapes)
+import Pudu.Type (declaredRecords, declaredSums)
 import Pudu.Type.Value (NominalId (..))
 import Pudu.Compiler.Lower.Body (lowerEntryBody, lowerFunctionBody)
 import Pudu.Compiler.Lower.State
@@ -81,9 +82,12 @@ lowerProgram entryName (Just checked) parsed
       | declaration@(Located _ (FunctionDeclaration function)) <- moduleDeclarations parsed
       ]
 
-    -- Only the root module's records: imports are refused above.
-    types = withRecords
-      (Map.filterWithKey (\identity _ -> nominalModule identity == Just (locatedValue (moduleName parsed))) (declaredRecords parsed))
+    -- The root module's own records and sums, plus the built-in sums; imports
+    -- are refused above.
+    root identity = nominalModule identity == Just (locatedValue (moduleName parsed))
+    types = withShapes
+      (Map.filterWithKey (\identity _ -> root identity) (declaredRecords parsed))
+      (Map.filterWithKey (\identity _ -> root identity || nominalModule identity == Nothing) (declaredSums parsed))
       checked
 
     runWorklist entry =
@@ -139,11 +143,13 @@ lowerProgram entryName (Just checked) parsed
     settle (state, entryFunction) = case sortDiagnostics (contextRefusals (lowerContext state)) of
       [] -> case entryFunction of
         Just function ->
-          Lowered
+          let functions = sortOn tableIndex (function : contextFunctions (lowerContext state))
+           in Lowered
             CoreModule
               { coreModuleName = moduleNameText (locatedValue (moduleName parsed))
               , coreModuleEntry = entryName
-              , coreModuleFunctions = sortOn tableIndex (function : contextFunctions (lowerContext state))
+              , coreModuleFunctions = functions
+              , coreModuleLayouts = moduleLayouts types functions
               }
         Nothing -> LowerRefused [nativeRefusal (moduleSpan parsed) "this program"]
       refusals -> LowerRefused refusals

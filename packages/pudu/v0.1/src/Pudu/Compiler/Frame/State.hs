@@ -8,7 +8,7 @@ module Pudu.Compiler.Frame.State
 import Data.Map.Strict (Map)
 import qualified Data.Map.Strict as Map
 import Data.Text (Text)
-import Pudu.Core (CoreFunction, CoreLocal (..), CoreLoopId, CoreType (..))
+import Pudu.Core (CoreFunction, CoreLayout, CoreLocal (..), CoreLoopId, CoreType (..))
 import Pudu.Core.Frame
   ( FrameBlock (..), FrameFault (..), FrameInstruction (..), FrameLabel (..)
   , FrameSlot (..), FrameSlotId (..), FrameTerminator, FrameValue (..), FrameValueShape (..) )
@@ -31,6 +31,7 @@ data BuildState = BuildState
   , buildBlocks :: !(Map FrameLabel FrameBlock)
   , buildLoops :: !(Map CoreLoopId LoopTarget)
   , buildFunctions :: !(Map Text CoreFunction)
+  , buildLayouts :: !(Map CoreType CoreLayout)
   }
 
 newtype Build a = Build { runBuild :: BuildState -> Either FrameFault (a, BuildState) }
@@ -52,9 +53,9 @@ instance Monad Build where
     (value, after) <- runBuild action state
     runBuild (next value) after
 
-initialState :: Map Text CoreFunction -> BuildState
-initialState functions = BuildState 0 Map.empty Map.empty 1
-  (Just (FrameLabel 0, [])) Map.empty Map.empty functions
+initialState :: Map Text CoreFunction -> Map CoreType CoreLayout -> BuildState
+initialState functions layouts = BuildState 0 Map.empty Map.empty 1
+  (Just (FrameLabel 0, [])) Map.empty Map.empty functions layouts
 
 getState :: Build BuildState
 getState = Build $ \state -> Right (state, state)

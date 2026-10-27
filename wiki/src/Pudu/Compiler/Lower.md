@@ -123,6 +123,8 @@ imports it.
 
 ## Grill Log
 
+- **Q:** Where do sum shapes come from? **A:** `declaredSums` and `declaredRecords` from the checked module become the lowering's shapes, and `moduleLayouts` closes every layout the lowered functions mention (#525).
+
 - **Q:** Why refuse `Text` locals but allow string literals? **A:** Printing a
   literal needs no runtime string representation, while a `Text`-typed local
   would force allocation, ownership, and comparison semantics into the first

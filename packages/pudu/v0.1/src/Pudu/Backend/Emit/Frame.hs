@@ -12,7 +12,9 @@ import Pudu.Backend.Emit.State (EmitState (..), emptyEmitState, renderSites, tex
 import Pudu.Backend.Runtime (RuntimePart (..), runtimeParts)
 import Pudu.Backend.Runtime.Frame (frameTypes, frameEngine)
 import Pudu.Backend.Runtime.Dependencies (runtimeDependencies)
-import Pudu.Core (CoreType (..))
+import Data.Map.Strict (Map)
+import qualified Data.Map.Strict as Map
+import Pudu.Core (CoreLayout (..), CoreType (..), CoreVariant (..))
 import Pudu.Core.Frame
   ( FrameBlock (..), FrameFault (..), FrameFunction (..), FrameLabel (..)
   , FrameModule (..), FrameSlot (..), FrameSlotId (..), FrameTerminator (..) )
@@ -40,7 +42,8 @@ emitFrameProgram version sources source = do
       , "  pudu_text_release(pudu_entry);"
       , "  return 0;" ]
     kind@(CoreTupleType _) -> Right (shownBox kind)
-    kind@(CoreRecordType _ _) -> Right (shownBox kind)
+    kind@(CoreRecordType _) -> Right (shownBox kind)
+    kind@(CoreSumType _ _) -> Right (shownBox kind)
     CoreCharType -> Right
       [ "  pudu_text pudu_shown = pudu_char_show(pudu_run_frames(" <> textOfInt entryId <> ").character);"
       , "  pudu_print_text(pudu_shown);"
@@ -64,9 +67,10 @@ emitFrameProgram version sources source = do
         CoreTextType -> ["text_show", "print_text"]
         CoreCharType -> ["char_show", "print_text"]
         kind@(CoreTupleType _) -> [aggregateNeed "show" kind, "print_text"]
-        kind@(CoreRecordType _ _) -> [aggregateNeed "show" kind, "print_text"]
+        kind@(CoreRecordType _) -> [aggregateNeed "show" kind, "print_text"]
+        kind@(CoreSumType _ _) -> [aggregateNeed "show" kind, "print_text"]
         _ -> []
-      (aggregates, aggregateNeeds) = aggregateSection tuples (Set.fromList (Set.toList roots <> entryNeeds))
+      (aggregates, aggregateNeeds) = aggregateSection (frameModuleLayouts source) tuples (Set.fromList (Set.toList roots <> entryNeeds))
       ownership = if owned then ownershipSwitch text kinds else []
       selected = foldl' visit Set.empty (filter (not . Text.isPrefixOf "agg_") (Set.toList roots <> entryNeeds)
         <> Set.toList aggregateNeeds <> base <> ["text_retain" | text])
@@ -121,7 +125,7 @@ emitFrameProgram version sources source = do
 frameUsesWideCells :: FrameModule -> Bool
 frameUsesWideCells source = any usesWide (frameModuleFunctions source)
  where
-  usesWide function = any (mentions wideType) (frameFunctionResult function
+  usesWide function = any (mentions (frameModuleLayouts source) wideType) (frameFunctionResult function
     : map frameSlotType (frameFunctionParameters function <> frameFunctionSlots function))
   wideType (CoreIntegerType kind) = isWideInteger kind
   wideType _ = False
@@ -129,14 +133,22 @@ frameUsesWideCells source = any usesWide (frameModuleFunctions source)
 frameUsesText :: FrameModule -> Bool
 frameUsesText source = any usesText (frameModuleFunctions source)
  where
-  usesText function = any (mentions (== CoreTextType)) (frameFunctionResult function
+  usesText function = any (mentions (frameModuleLayouts source) (== CoreTextType)) (frameFunctionResult function
     : map frameSlotType (frameFunctionParameters function <> frameFunctionSlots function))
 
-{-| A cell member is needed when a slot holds the type directly or inside a tuple. -}
-mentions :: (CoreType -> Bool) -> CoreType -> Bool
-mentions wanted kind = wanted kind || case kind of
-  CoreTupleType members -> any (mentions wanted) members
-  _ -> False
+{-| A cell member is needed when a slot holds the type directly or anywhere
+    inside an aggregate it holds. -}
+mentions :: Map CoreType CoreLayout -> (CoreType -> Bool) -> CoreType -> Bool
+mentions layouts wanted = go []
+ where
+  go seen kind
+    | wanted kind = True
+    | kind `elem` seen = False
+    | otherwise = case (kind, Map.lookup kind layouts) of
+        (CoreTupleType members, _) -> any (go (kind : seen)) members
+        (_, Just (CoreRecordLayout fields)) -> any (go (kind : seen) . snd) fields
+        (_, Just (CoreSumLayout variants)) -> any (go (kind : seen) . snd) (concatMap coreVariantFields variants)
+        _ -> False
 
 {-| The engine's one way to retain or release a slot, whatever it holds. -}
 ownershipSwitch :: Bool -> [(CoreType, Int)] -> [Text]

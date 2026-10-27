@@ -9,7 +9,8 @@ module Pudu.Core.Frame
 import Data.Text (Text)
 import Data.Word (Word64)
 import Pudu.FloatLiteral (FloatWidth)
-import Pudu.Core (CoreBinaryOperator (..), CoreTextMethodName, CoreType)
+import Data.Map.Strict (Map)
+import Pudu.Core (CoreBinaryOperator (..), CoreLayout, CoreTextMethodName, CoreType)
 import Pudu.IntegerLiteral (IntegerKind)
 import Pudu.Source (Span)
 
@@ -28,6 +29,7 @@ data FrameModule = FrameModule
   { frameModuleName :: !Text
   , frameModuleEntry :: !Text
   , frameModuleFunctions :: ![FrameFunction]
+  , frameModuleLayouts :: !(Map CoreType CoreLayout)
   }
   deriving stock (Eq, Show)
 
@@ -62,6 +64,8 @@ data FrameTerminator
   | FrameCall !Span !Text ![FrameSlot] !(Maybe FrameSlot) !FrameLabel
   | FrameReturn !(Maybe Span) !(Maybe FrameSlot)
   | FrameOperatorFailure !Span !Text
+  {-| A diagnostic with this code and help whose message is the text in the slot. -}
+  | FrameFailText !Span !Text !(Maybe Text) !FrameSlot
   deriving stock (Eq, Show)
 
 data FrameValue = FrameValue
@@ -80,6 +84,14 @@ data FrameValueShape
   | FrameCharCode !FrameSlot
   | FrameAggregate ![FrameSlot]
   | FrameMember !Int !FrameSlot
+  {-| A sum value: the variant's index and its payload in declaration order. -}
+  | FrameConstruct !Int ![FrameSlot]
+  {-| Whether the sum in the slot holds the variant with this index. -}
+  | FrameIsVariant !Int !FrameSlot
+  {-| A payload member of the variant the slot is known to hold. -}
+  | FramePayload !Int !FrameSlot
+  {-| The held variant's name as text. -}
+  | FrameVariantName !FrameSlot
   | FrameDisplay !FrameSlot
   | FrameShow !FrameSlot
   | FrameTextMethod !CoreTextMethodName !FrameSlot ![FrameSlot]

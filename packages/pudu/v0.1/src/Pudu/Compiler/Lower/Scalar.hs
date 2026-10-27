@@ -2,6 +2,7 @@
 module Pudu.Compiler.Lower.Scalar (lowerUnary, lowerBinary, eagerType) where
 
 import Data.Text (Text)
+import qualified Data.Text as Text
 import Pudu.Compiler.Lower.Control (expressionIsPrintValued)
 import Pudu.Compiler.Lower.State
   ( LowerContext (..), LowerState (..), halt, intType, refused )
@@ -29,6 +30,8 @@ lowerUnary lower state at operator operand
         | operator == "-", integerType kind || floatType kind -> built after at (CoreNegate core) kind
         | operator == "~", integerType kind -> built after at (CoreComplement core) kind
         | operator == "!", kind == CoreBoolType -> built after at (CoreNot core) CoreBoolType
+        | sumType kind, settled after operand core ->
+            namedFailure after at (\kinds -> cannotApplyUnaryMessage operator (mconcat kinds)) [core]
         | kind `elem` [CoreUnitType, CoreBoolType, CoreTextType, CoreCharType] || floatType kind || tupleType kind || recordType kind
         , settled after operand core ->
             failure after at (cannotApplyUnaryMessage operator (runtimeKind kind)) [core]
@@ -53,6 +56,13 @@ lowerBinary lower state at left operator right
           | expressionIsPrintValued coreRight -> halt (locatedSpan right) "comparing or operating on a Result[(), Str] value" after
           | Just (operation, result) <- represented operator leftType rightType ->
               built after at (CoreBinary operation coreLeft coreRight) result
+          | all nativeValueType [leftType, rightType]
+          , settled after left coreLeft && settled after right coreRight
+          , not (integerType leftType && integerType rightType)
+          , sumType leftType || sumType rightType ->
+              namedFailure after at (\kinds -> case kinds of
+                [leftKind, rightKind] -> cannotApplyBinaryMessage operator leftKind rightKind
+                _ -> cannotApplyUnaryMessage operator (mconcat kinds)) [coreLeft, coreRight]
           | all nativeValueType [leftType, rightType]
           , settled after left coreLeft && settled after right coreRight
           , not (integerType leftType && integerType rightType) ->
@@ -99,7 +109,7 @@ tupleType (CoreTupleType _) = True
 tupleType _ = False
 
 recordType :: CoreType -> Bool
-recordType (CoreRecordType _ _) = True
+recordType (CoreRecordType _) = True
 recordType _ = False
 
 settled :: LowerState -> Located Expression -> CoreExpression -> Bool
@@ -113,8 +123,40 @@ runtimeKind (CoreFloatType _) = "float"
 runtimeKind CoreTextType = "string"
 runtimeKind CoreCharType = "char"
 runtimeKind (CoreTupleType _) = "tuple"
-runtimeKind (CoreRecordType name _) = name
+runtimeKind (CoreRecordType name) = name
 runtimeKind kind = coreTypeName kind
+
+sumType :: CoreType -> Bool
+sumType (CoreSumType _ _) = True
+sumType _ = False
+
+{-| E7001 for operands at least one of which is a sum, whose kind in the
+    message is the variant it holds, as the evaluator's `valueKind` names it.
+    Each operand runs once, in order, into a temporary; the message is the
+    shared wording, with each sum's kind read from its temporary. -}
+namedFailure :: LowerState -> Span -> ([Text] -> Text) -> [CoreExpression] -> (LowerState, Maybe (CoreExpression, CoreType))
+namedFailure state at render operands =
+  let (after, locals) = foldl temporary (state, []) operands
+      held = reverse locals
+      marks = [Text.pack ['\0', toEnum (48 + position)] | position <- [0 .. length held - 1]]
+      pieces = splitMarks marks (render marks)
+      kindOf local
+        | sumType (coreLocalType local) = expression CoreTextType (CoreVariantName (expression (coreLocalType local) (CoreReadLocal local)))
+        | otherwise = expression CoreTextType (CoreTextLiteral (runtimeKind (coreLocalType local)))
+      joined = foldl1 (\left right -> expression CoreTextType (CoreBinary CoreAdd left right))
+        (concat [ [expression CoreTextType (CoreTextLiteral text) | not (Text.null text)] <> maybe [] (pure . kindOf) local
+                | (text, local) <- zip pieces (map Just held <> [Nothing]) ] <> [expression CoreTextType (CoreTextLiteral "") | null pieces])
+      declares = [CoreStatement (coreExpressionSpan core) (CoreDeclare local core) | (local, core) <- zip held operands]
+   in built after at (CoreBlockValue (CoreBlock declares (Just (expression CoreNeverType (CoreFailText "E7001" Nothing joined))))) CoreNeverType
+ where
+  expression = CoreExpression at
+  temporary (current, done) core =
+    let local = CoreLocal{coreLocalId = lowerNextLocal current, coreLocalName = "$operand", coreLocalType = coreExpressionType core}
+     in (current{lowerNextLocal = lowerNextLocal current + 1}, local : done)
+  splitMarks marks text = go marks text
+   where
+    go [] rest = [rest]
+    go (mark : others) rest = let (before, after) = Text.breakOn mark rest in before : go others (Text.drop (Text.length mark) after)
 
 failure :: LowerState -> Span -> Text -> [CoreExpression] -> (LowerState, Maybe (CoreExpression, CoreType))
 failure state at message operands = built state at (CoreOperatorFailure message operands) CoreNeverType

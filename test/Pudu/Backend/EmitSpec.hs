@@ -285,7 +285,7 @@ refusalCases =
   , ("decimal values", bindingProgram "var ratio = 1.5d", "1.5d")
   , ("ownership-bearing break result", statementProgram "loop { break print(\"x\") }", "print(")
   , ("charFromCode", bindingProgram "var letter = charFromCode(97)", "charFromCode(97)")
-  , ("match expressions", bindingProgram "var chosen = match 1 { case _ => 0 }", "match")
+  , ("range values", bindingProgram "var span = 0..3", "0..3")
   , ("borrows", Text.unlines
       [ "module Refuse"
       , ""

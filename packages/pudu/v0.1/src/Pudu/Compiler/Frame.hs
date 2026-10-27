@@ -21,10 +21,10 @@ lowerFrames source = do
       then Left (FrameFault Nothing "missing Core entry function")
       else do
         lowered <- traverse (lowerFunction table) functions
-        pure (FrameModule (coreModuleName source) (coreModuleEntry source) lowered)
+        pure (FrameModule (coreModuleName source) (coreModuleEntry source) lowered (coreModuleLayouts source))
   where
     lowerFunction table function = do
-      (parameters, state) <- runBuild (body function) (initialState table)
+      (parameters, state) <- runBuild (body function) (initialState table (coreModuleLayouts source))
       case buildCurrent state of
         Just _ -> Left (FrameFault Nothing "an unfinished frame block")
         Nothing -> do
@@ -35,6 +35,7 @@ lowerFrames source = do
                 FrameCall _ _ _ _ resume -> [resume]
                 FrameReturn _ _ -> []
                 FrameOperatorFailure _ _ -> []
+                FrameFailText{} -> []
               referenced = FrameLabel 0 : concatMap (targets . frameBlockTerminator) (Map.elems blocks)
           if all (`Map.member` blocks) referenced
             then Right FrameFunction

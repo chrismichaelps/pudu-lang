@@ -24,6 +24,7 @@ import Pudu.Backend.TextMethodPrograms (textMethodSuccessPrograms, textMethodRef
 import Pudu.Backend.CharPrograms (charSuccessPrograms, charRefusalPrograms)
 import Pudu.Backend.TuplePrograms (tupleSuccessPrograms, tupleRefusalPrograms)
 import Pudu.Backend.RecordPrograms (recordSuccessPrograms, recordRefusalPrograms)
+import Pudu.Backend.SumPrograms (sumSuccessPrograms, sumRefusalPrograms)
 import Pudu.Backend.TextPrograms (textSuccessPrograms, textRefusalPrograms)
 import Pudu.Backend.FunctionPrograms (functionSuccessPrograms, functionRefusalPrograms)
 import Pudu.Backend.Toolchain
@@ -105,6 +106,8 @@ backendNativeProperties =
   , ("native tuple failures retain interpreter refusals", testTupleRefusals)
   , ("native records match hand-written answers and the interpreter", testRecordConformance)
   , ("native record failures retain interpreter refusals", testRecordRefusals)
+  , ("native sums and match match hand-written answers and the interpreter", testSumConformance)
+  , ("native sum and match failures retain interpreter refusals", testSumRefusals)
   , ("native functions match the interpreter on ordering and recursion", testFunctionConformance)
   , ("native function failures match interpreter diagnostics", testFunctionRefusals)
   , ("native scalar loop control matches the interpreter", testControlConformance)
@@ -284,6 +287,14 @@ testTupleConformance = conjoin <$> mapM run tupleSuccessPrograms
 
 testTupleRefusals :: IO Property
 testTupleRefusals = conjoin <$> mapM (uncurry conformance) tupleRefusalPrograms
+
+testSumConformance :: IO Property
+testSumConformance = conjoin <$> mapM run sumSuccessPrograms
+ where
+  run (label, source, expected) = conformanceExpecting (Just (expected, "", 0)) label source
+
+testSumRefusals :: IO Property
+testSumRefusals = conjoin <$> mapM (uncurry conformance) sumRefusalPrograms
 
 testRecordConformance :: IO Property
 testRecordConformance = conjoin <$> mapM run recordSuccessPrograms

@@ -167,6 +167,8 @@ DEPTH 0.85 (DEEP). One entry point hides signature collection, scope constructio
 
 ## Grill Log
 
+- **Q:** Under which names is a variant bound? **A:** Its bare name and its type's canonical key (`M.Shape.Circle`), which is what a qualified `Shape.Circle` is looked up by. Without the canonical key a qualified variant fell through to checking `Shape` as a value, was typed as an error, and was accepted wherever any type was expected (#536).
+
 - **Q:** Discard the expression types derive-definition checking computes? **A:** Not for tooling.
   _Rationale:_ a template's metadata (`field : Field[T, F]`) is typed only there; its generated
   copies carry generated spans and request-specific types. `checkDeriveDefinitionTypes` runs the

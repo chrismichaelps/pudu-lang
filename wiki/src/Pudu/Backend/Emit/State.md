@@ -33,6 +33,8 @@ Uses [[Source]], [[Diagnostic Render]], [[Diagnostic Arithmetic]], [[Diagnostic 
 
 ## Grill Log
 
+- **Q:** What is a text failure site? **A:** A site with a code, help and place but no fixed message, for refusals whose message is built when they happen (#525).
+
 - **Q:** Why extract this responsibility? **A:** It has a stable pure interface and keeps the emitter below 500 lines. The split preserves output ordering and diagnostic geometry. Rejected: a single growing emitter.
 - **Q:** May extraction change semantics? **A:** No; eager evaluation is sequenced by the emitter, while this module supplies representation and assembly primitives. Rejected: backend inference.
 

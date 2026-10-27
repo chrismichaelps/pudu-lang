@@ -20,6 +20,8 @@ Export lowerTuple, lowerTupleIndex and lowerTuplePattern.
 
 ## Grill Log
 
+- **Q:** Where do a record pattern's field types come from now that records are named by identity? **A:** From the record's layout through `recordFields` (#525).
+
 - **Q:** Why a hidden local instead of re-reading the subject? **A:** The
   subject runs exactly once, as `matchPattern` sees one value.
 - **Q:** Why refuse a Never subject? **A:** There is no value to project and

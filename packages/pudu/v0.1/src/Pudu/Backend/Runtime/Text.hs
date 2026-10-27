@@ -132,6 +132,17 @@ textRuntimeParts =
       , "  return pudu_text_copy(buffer, count);"
       , "}"
       ])
+  , ("fail_text",
+      [ "/* A refusal whose message is only known when it happens, such as one naming"
+      , "   the variant a value turned out to be. The bytes are copied first: frame"
+      , "   cleanup runs before printing and may release the text they came from. */"
+      , "static void pudu_fail_text(const pudu_site *site, pudu_text message) {"
+      , "  char *copy = malloc(message.length == 0 ? 1 : message.length);"
+      , "  if (copy == NULL) pudu_memory_failure();"
+      , "  if (message.length != 0) memcpy(copy, message.bytes, message.length);"
+      , "  pudu_fail_message(site, copy, message.length);"
+      , "}"
+      ])
   , ("print_text",
       [ "static inline void pudu_print_text(pudu_text text) {"
       , "  if (text.length != 0) (void)fwrite(text.bytes, 1, text.length, stdout);"
@@ -144,6 +155,7 @@ textRuntimeParts =
 textRuntimeDependencies :: Text -> [Text]
 textRuntimeDependencies name = maybe [] id (lookup name
   [ ("text_literal", ["text"])
+  , ("fail_text", ["fail", "text", "memory_failure"])
   , ("text_retain", ["text"])
   , ("text_allocate", ["text", "memory_failure"])
   , ("text_concat", ["text_allocate", "text_retain"])

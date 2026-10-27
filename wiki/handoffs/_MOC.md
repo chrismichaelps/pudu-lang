@@ -222,3 +222,5 @@ tags: [moc, handoff]
 - [[Record Field Order Repair]] — records hold their declared field order (#519).
 
 - [[Total Float Order Repair]] — NaN keeps the value order total (#522).
+
+- [[Native Sum Delivery]] — sums, Option/Result and match in native frames (#525).

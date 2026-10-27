@@ -3,14 +3,16 @@ module Pudu.Compiler.Frame.Body (lowerBlock, lowerExpression) where
 
 import Control.Monad (when)
 import qualified Data.Map.Strict as Map
+import Pudu.Compiler.Frame.Match (MatchLowering (..), lowerMatch)
 import Pudu.Compiler.Frame.State
-  ( Build, BuildState (buildFunctions), Flow (..), LoopTarget (..), begin
+  ( Build, BuildState (buildFunctions, buildLayouts), Flow (..), LoopTarget (..), begin
   , bindLocal, emit, fault, findLoop, finish, freshLabel, freshSlot, getState
   , isOpen, readLocal, saveValue, storeValue, withLoop )
 import Pudu.Core
   ( CoreBinaryOperator (..), CoreBlock (..), CoreExpression (..)
-  , CoreExpressionShape (..), CoreFunction (..), CoreLocal (..), CoreParameter (..)
-  , CoreStatement (..), CoreStatementShape (..), CoreType (..) )
+  , CoreExpressionShape (..), CoreFunction (..), CoreLayout (..), CoreLocal (..), CoreParameter (..)
+  , CoreStatement (..), CoreStatementShape (..), CoreType (..), CoreVariant (..) )
+import Data.Text (Text)
 import Pudu.Core.Frame
   ( FrameInstruction (..), FrameSlot, FrameSlot (frameSlotType), FrameTerminator (..)
   , FrameUnaryOperator (..), FrameValue (..), FrameValueShape (..), scalarOperator )
@@ -70,20 +72,41 @@ lowerExpression expression@(CoreExpression at kind shape) = case shape of
   CoreTupleIndex position operand -> rendered (FrameMember position) operand
   CoreRecord written -> do
     operands <- lowerOperands (map snd written)
-    case (operands, kind) of
+    declared <- recordLayout kind
+    case (operands, declared) of
       (Nothing, _) -> pure Stopped
-      (Just slots, CoreRecordType _ declared) -> do
+      (Just slots, Just fields) -> do
         -- Written order ran; the record holds declaration order.
         let byName = zip (map fst written) slots
-        case traverse (\(name, _) -> lookup name byName) declared of
+        case traverse (\(name, _) -> lookup name byName) fields of
           Just ordered -> value (FrameAggregate ordered)
           Nothing -> fault (Just at) "a record literal without every declared field"
       _ -> fault (Just at) "a record literal without a record type"
+  CoreConstruct name written -> do
+    operands <- lowerOperands (map snd written)
+    variants <- sumLayout kind
+    case (operands, variants >>= \found -> lookup name [(coreVariantName v, (i, v)) | (i, v) <- zip [0 ..] found]) of
+      (Nothing, _) -> pure Stopped
+      (Just slots, Just (index, variant)) -> do
+        let byName = zip (map fst written) slots
+        case traverse (\(field, _) -> lookup field byName) (coreVariantFields variant) of
+          Just ordered -> value (FrameConstruct index ordered)
+          Nothing -> fault (Just at) "a variant without every payload member"
+      _ -> fault (Just at) "a variant outside its sum"
+  CoreVariantName operand -> rendered FrameVariantName operand
+  CoreFailText code help message -> do
+    text <- lowerScalar message
+    case text of
+      Stopped -> pure Stopped
+      Completed Nothing -> fault (Just at) "a failure message without a value"
+      Completed (Just slot) -> finish (FrameFailText at code help slot) >> pure Stopped
+  CoreMatch subject arms -> lowerMatch (MatchLowering lowerExpression lowerScalar resultSlot) at kind subject arms
   CoreRecordUpdate base written -> do
     held <- lowerScalar base
-    case (held, kind) of
+    declared <- recordLayout kind
+    case (held, declared) of
       (Stopped, _) -> pure Stopped
-      (Completed (Just source), CoreRecordType _ declared) -> do
+      (Completed (Just source), Just declaredFields) -> do
         operands <- lowerOperands (map snd written)
         case operands of
           Nothing -> pure Stopped
@@ -92,13 +115,14 @@ lowerExpression expression@(CoreExpression at kind shape) = case shape of
             members <- traverse (\(position, (name, fieldKind)) -> case lookup name byName of
                 Just slot -> pure slot
                 Nothing -> saveValue (FrameValue at fieldKind (FrameMember position source)))
-              (zip [0 ..] declared)
+              (zip [0 ..] declaredFields)
             value (FrameAggregate members)
       _ -> fault (Just at) "a record update without a record base"
-  CoreField name operand -> case coreExpressionType operand of
-    CoreRecordType _ declared | Just position <- lookup name (zip (map fst declared) [0 ..]) ->
-      rendered (FrameMember position) operand
-    _ -> fault (Just at) "a field read outside a record"
+  CoreField name operand -> do
+    declared <- recordLayout (coreExpressionType operand)
+    case declared >>= \fields -> lookup name (zip (map fst fields) [0 ..]) of
+      Just position -> rendered (FrameMember position) operand
+      Nothing -> fault (Just at) "a field read outside a record"
   CoreReadLocal local -> readLocal at local >>= value . FrameRead
   CoreNegate operand -> unary FrameNegate operand
   CoreComplement operand -> unary FrameComplement operand
@@ -195,6 +219,20 @@ lowerExpression expression@(CoreExpression at kind shape) = case shape of
         Completed (Just slot) -> value (FrameUnary operator slot)
         Completed Nothing -> fault (Just (coreExpressionSpan expression)) "a unary operand without a value"
 
+recordLayout :: CoreType -> Build (Maybe [(Text, CoreType)])
+recordLayout kind = do
+  layouts <- buildLayouts <$> getState
+  pure $ case Map.lookup kind layouts of
+    Just (CoreRecordLayout fields) -> Just fields
+    _ -> Nothing
+
+sumLayout :: CoreType -> Build (Maybe [CoreVariant])
+sumLayout kind = do
+  layouts <- buildLayouts <$> getState
+  pure $ case Map.lookup kind layouts of
+    Just (CoreSumLayout variants) -> Just variants
+    _ -> Nothing
+
 lowerScalar :: CoreExpression -> Build Flow
 lowerScalar expression = do
   result <- lowerExpression expression
@@ -233,7 +271,8 @@ resultSlot at kind = case kind of
   CoreTextType -> Just <$> freshSlot at "$result" kind
   CoreCharType -> Just <$> freshSlot at "$result" kind
   CoreTupleType _ -> Just <$> freshSlot at "$result" kind
-  CoreRecordType _ _ -> Just <$> freshSlot at "$result" kind
+  CoreRecordType _ -> Just <$> freshSlot at "$result" kind
+  CoreSumType _ _ -> Just <$> freshSlot at "$result" kind
 
 lowerPrint :: Span -> CoreExpression -> Build Flow
 lowerPrint at operand = case coreExpressionShape operand of
