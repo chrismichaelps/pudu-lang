@@ -5,6 +5,11 @@ tags: [changelog]
 
 # Changelog
 
+## 2026-10-27 — Native built-in method values (#644)
+
+- `text.length`, `items.push`, `m.get`, `(0..3).contains`, `'a'.code` and the other built-in methods are values natively. The receiver runs once, renders as `<kind method name>`, and equality compares method and receiver. See [[Native Method Values]].
+- Failures inside them point at the call made through the value: frames of such bodies blame their caller, and the reporter takes the location from the recorded call site. Runtime revision 19.
+
 ## 2026-10-27 — Native module-qualified function values (#641)
 
 `Lib.twice` and `L.twice` are values natively, with the same key, identity, rendering and defaults as a bare function name. See [[Compiler Lower Body]].

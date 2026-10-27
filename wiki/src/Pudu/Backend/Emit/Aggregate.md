@@ -96,3 +96,11 @@ no parts array.
 ## First-class output builtins (#569)
 
 Resolved Grill Log: Callable show helpers use builtin versus function rendering from metadata; name helpers answer builtin/function for runtime diagnostics. Equality identity and non-orderability stay intact.
+
+## Method closures (#644)
+
+Show prints `<kind method name>` and the runtime kind is `kind method`, with
+the interpreter's words (text, array, map, set, range, character, byte).
+Equality compares sites, then a method closure's receivers with memberEqual.
+Resolved Grill Log: two values of one method on equal receivers are equal,
+as in the interpreter.

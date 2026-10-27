@@ -196,3 +196,8 @@ A FunctionTypeRequiring whose required count is below its parameter count
 forms with a trailing Int. Resolved Grill Log: checking keeps defaulted and
 all-required function types apart, so no value of one is called as the
 other; nothing at run time reads parameter types.
+
+## Made-up facts (#644)
+
+withFacts lays facts for made-up spans over the checked ones. Resolved Grill
+Log: only method-value lowering uses it, and it restores the original facts.

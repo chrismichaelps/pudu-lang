@@ -105,3 +105,9 @@ entry leave it NULL.
 Resolved Grill Log: a per-frame field survives nested value calls made while
 the callee's own arguments were evaluated; a global would not. Runtime
 revision 17. See [[Native Collection Callables]].
+
+## Blame hook (#644)
+
+pudu_blamed_site answers the active frame's call_site when its function
+blames its caller; pudu_run_frames installs it as pudu_blame_hook and clears
+it on return. Runtime revision 19.

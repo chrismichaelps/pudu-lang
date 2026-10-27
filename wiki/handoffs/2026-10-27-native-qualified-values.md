@@ -1,6 +1,6 @@
 ---
 type: handoff
-status: ACTIVE
+status: DONE
 issue: 641
 aliases: [Native Qualified Value Delivery]
 ---

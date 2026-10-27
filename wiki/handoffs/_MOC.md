@@ -257,3 +257,5 @@ tags: [moc, handoff]
 - [[Native Default Parameter Delivery]] — default parameter values (#638).
 
 - [[Native Qualified Value Delivery]] — module-qualified function values (#641).
+
+- [[Native Method Value Delivery]] — built-in method values (#644).

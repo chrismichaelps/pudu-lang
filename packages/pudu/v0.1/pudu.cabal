@@ -148,6 +148,7 @@ library
     Pudu.Compiler.Lower.For
     Pudu.Compiler.Lower.Lambda
     Pudu.Compiler.Lower.Intrinsic
+    Pudu.Compiler.Lower.MethodValue
     Pudu.Compiler.Lower.Stop
     Pudu.Compiler.Lower.Call
     Pudu.Compiler.Lower.Array

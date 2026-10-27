@@ -67,3 +67,5 @@ Resolved Grill Log: Set closureIsBuiltin false for named source targets and lift
 A value call whose checked callee type requires fewer parameters than it has
 passes suppliedArguments. Resolved Grill Log: the formed type already ends
 with the count, so the closure and frame arity agree.
+
+Closure info passes closureMethod = Nothing. (#644)

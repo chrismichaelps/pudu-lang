@@ -99,7 +99,7 @@ register state at name key kind arguments result build
             (after, Just (body, _)) ->
               let function = CoreFunction key parameters result (CoreBlock [] (Just body))
                   added = lowerContext after
-                  info = CoreClosureInfo [] name ("builtin " <> name) True False
+                  info = CoreClosureInfo [] name ("builtin " <> name) True False Nothing
                   registered = added
                     { contextFunctions = function : contextFunctions added
                     , contextClosures = Map.insert key info (contextClosures added)

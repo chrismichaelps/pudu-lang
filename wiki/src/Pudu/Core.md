@@ -358,3 +358,8 @@ refusal, and a generated body has no span of its own for it. See
 `CoreAbsent` is the zero of its expression's type, passed for a parameter
 the call left to its default. Resolved Grill Log: the callee's prologue
 replaces it before any read; every release path accepts a zero cell.
+
+## Method closures (#644)
+
+CoreClosureInfo.closureMethod holds a method value's receiver type. Resolved
+Grill Log: capture 0 is the receiver and takes part in equality.
