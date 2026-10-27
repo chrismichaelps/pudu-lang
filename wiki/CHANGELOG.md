@@ -5,6 +5,10 @@ tags: [changelog]
 
 # Changelog
 
+## 2026-10-19 — Native Str values (#515)
+
+- Str is an ordinary native value: [[Native Text Runtime]] holds it as a view over static or refcounted bytes, and frames retain, hand over and release it. Concatenation, byte-order comparison, display/show of every native value, interpolation, printing any Str and quoted Str entry results match the interpreter; other text operators keep its E7001 wording. [[Backend Text Programs]] and [[Backend Text Leak Tests]] carry the evidence; all 20 clean gates/694 groups pass. Runtime revision 9; progress stays 4/14 (28%).
+
 ## 2026-10-19 — Native calls respect shadowed builtins (#513)
 
 - [[Compiler Lower Body]] resolves a bare call as local, then module function, then prelude `print`/`display`, as the interpreter does. A module `fn display` was previously replaced by the builtin rendering in native builds.

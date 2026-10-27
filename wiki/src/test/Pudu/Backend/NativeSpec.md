@@ -127,3 +127,8 @@ Extend entry status sources for Int128/UInt128 extrema, high unsigned values, 0/
 Two groups run [[Backend Float Programs]]: success programs against their IEEE
 answers and the interpreter, refusals against the interpreter's rendered
 diagnostics.
+
+## Text conformance (#515)
+
+Two groups run [[Backend Text Programs]]: success programs against their
+answers and the interpreter, refusals against the interpreter's diagnostics.

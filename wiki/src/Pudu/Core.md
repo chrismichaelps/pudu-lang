@@ -221,3 +221,17 @@ Resolved Grill Log: carry bits rather than `Double` so Core equality is
 bit equality (NaN payloads and signed zero stay distinct) and so the C side
 writes a hexadecimal constant instead of a second decimal conversion.
 _Rejected:_ a `Double` payload, and separate floating operator constructors.
+
+## Owned text (#515)
+
+`CoreTextType` is now an ordinary value type: locals, parameters, results,
+branch and loop values may carry it. `CoreDisplay` yields text for every
+native value type, and `CoreShow` yields `renderValue` text (Str gains its
+quotes and escapes; scalars render as `display` does). `CoreAdd` on two Str
+operands is concatenation, and the ordering/equality operators compare text.
+The earlier rule that text may only appear as a `CorePrint` argument is
+retired.
+
+Resolved Grill Log: text joins Core as a type rather than a new family of
+nodes, the same way floats reused the operator vocabulary. _Rejected:_
+separate concatenation and comparison constructors.

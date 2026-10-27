@@ -61,7 +61,7 @@ lowerExpression expression@(CoreExpression at kind shape) = case shape of
   CoreIntegerLiteral integerKind number -> value (FrameIntegerLiteral integerKind number)
   CoreFloatLiteral width bits -> value (FrameFloatLiteral width bits)
   CoreBoolLiteral boolean -> value (FrameBoolLiteral boolean)
-  CoreTextLiteral _ -> pure (Completed Nothing)
+  CoreTextLiteral text -> value (FrameTextLiteral text)
   CoreReadLocal local -> readLocal at local >>= value . FrameRead
   CoreNegate operand -> unary FrameNegate operand
   CoreComplement operand -> unary FrameComplement operand
@@ -76,7 +76,10 @@ lowerExpression expression@(CoreExpression at kind shape) = case shape of
             Just scalar -> value (FrameBinary scalar lhs rhs)
             Nothing -> fault (Just at) "a logical operator in an eager expression"
           Just _ -> fault (Just at) "an invalid binary operand count"
-  CoreDisplay operand -> discard <$> lowerExpression operand
+  CoreDisplay operand
+    | coreExpressionType operand == CoreTextType -> lowerExpression operand
+    | otherwise -> rendered FrameDisplay operand
+  CoreShow operand -> rendered FrameShow operand
   CorePrint operand -> lowerPrint at operand
   CoreCall name arguments -> do
     operands <- lowerOperands arguments
@@ -134,16 +137,18 @@ lowerExpression expression@(CoreExpression at kind shape) = case shape of
       pure (Completed destination)
   where
     value node = Completed . Just <$> saveValue (FrameValue at kind node)
+    rendered shapeOf operand = do
+      result <- lowerScalar operand
+      case result of
+        Stopped -> pure Stopped
+        Completed (Just slot) -> value (shapeOf slot)
+        Completed Nothing -> fault (Just at) "a rendered operand without a value"
     unary operator operand = do
       result <- lowerScalar operand
       case result of
         Stopped -> pure Stopped
         Completed (Just slot) -> value (FrameUnary operator slot)
         Completed Nothing -> fault (Just (coreExpressionSpan expression)) "a unary operand without a value"
-
-discard :: Flow -> Flow
-discard Stopped = Stopped
-discard (Completed _) = Completed Nothing
 
 lowerScalar :: CoreExpression -> Build Flow
 lowerScalar expression = do
@@ -180,12 +185,12 @@ resultSlot at kind = case kind of
   CoreBoolType -> Just <$> freshSlot at "$result" kind
   CoreUnitType -> pure Nothing
   CoreNeverType -> pure Nothing
-  CoreTextType -> fault (Just at) "a materialized text result in scalar frame IR"
+  CoreTextType -> Just <$> freshSlot at "$result" kind
 
 lowerPrint :: Span -> CoreExpression -> Build Flow
 lowerPrint at operand = case coreExpressionShape operand of
   CoreTextLiteral text -> emit (FramePrintLiteral at text) >> pure (Completed Nothing)
-  CoreDisplay inner -> do
+  CoreDisplay inner | coreExpressionType inner /= CoreTextType -> do
     result <- lowerExpression inner
     case result of
       Stopped -> pure Stopped
@@ -195,7 +200,12 @@ lowerPrint at operand = case coreExpressionShape operand of
           Nothing | coreExpressionType inner == CoreUnitType -> emit (FramePrintUnit at)
           Nothing -> fault (Just at) "a display operand without a scalar value"
         pure (Completed Nothing)
-  _ -> fault (Just at) "a print argument outside the scalar frame contract"
+  _ -> do
+    result <- lowerExpression operand
+    case result of
+      Stopped -> pure Stopped
+      Completed (Just slot) -> emit (FramePrintSlot at slot) >> pure (Completed Nothing)
+      Completed Nothing -> fault (Just at) "a print argument without a text value"
 
 lowerIf :: Span -> CoreType -> CoreExpression -> CoreBlock -> Maybe CoreExpression -> Build Flow
 lowerIf at kind condition yes no = do

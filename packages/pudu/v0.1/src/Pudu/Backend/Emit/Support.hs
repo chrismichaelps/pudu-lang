@@ -19,6 +19,7 @@ integerHelper _ name = name
 
 zeroValue :: CoreType -> Text
 zeroValue (CoreIntegerType kind) = integerLiteralText kind 0
+zeroValue CoreTextType = "(pudu_text){NULL, 0, NULL}"
 zeroValue _ = "0"
 
 integerKindText :: IntegerKind -> Maybe Text

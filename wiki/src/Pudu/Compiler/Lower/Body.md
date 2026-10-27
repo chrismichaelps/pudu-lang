@@ -247,3 +247,13 @@ so a module `fn display` was silently replaced by the builtin rendering.
 Resolved Grill Log: shadowing is the interpreter's rule, not a lowering
 choice. _Rejected:_ refusing shadowed builtin names, which would still hide
 the declared function the program asked for.
+
+## Text values (#515)
+
+Str bindings, assignments, returns and entry results lower like scalars. A
+`print` argument may be any Str expression; a literal or a display of a
+scalar still fuses into the printer without building text. `display` of Str
+is the text itself, matching `callDisplay`; `show(x)` lowers to `CoreShow`
+after the same local/module shadowing check as `print` and `display`. A Str
+entry result is shown (quoted and escaped) and exits 0, as `reportResult`
+does for any non-integer, non-unit value.

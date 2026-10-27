@@ -55,3 +55,11 @@ A Bool entry prints `true`/`false` with a newline and returns 0; a float entry
 prints through `pudu_print_float` and returns 0. Both mirror `reportResult`,
 including its silence when stdout is a closed pipe. Floating cells select
 `float_target` with their arithmetic helpers only.
+
+## Text frames (#515)
+
+Each function's metadata lists its text slots and whether its result is text,
+so the engine can retain arguments, release slots when a frame ends, and hand
+a returned text to its destination. A Str entry result is shown, printed and
+released before `main` returns 0. The text runtime and the cell's text member
+are selected only when some slot holds text.

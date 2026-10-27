@@ -8,7 +8,7 @@ module Pudu.Compiler.Lower.Control
 import Data.Text (Text)
 import Pudu.Compiler.Lower.State
   ( LowerState (..), LoopFrame (..), halt, refused )
-import Pudu.Compiler.Lower.Types (nativeScalarType)
+import Pudu.Compiler.Lower.Types (nativeValueType)
 import Pudu.Core
 import Pudu.Frontend.Syntax (Block, Expression, Located (..))
 import Pudu.Source (Span)
@@ -56,7 +56,7 @@ lowerTransfer expression spanValue label transfer state = case destination of
     Just (Just operand) -> case expression state operand of
       (after, Just (coreOperand, operandType))
         | expressionIsPrintValued coreOperand -> halt (locatedSpan operand) "breaking with a Result[(), Str] value" after
-        | nativeScalarType operandType || operandType == CoreNeverType -> observe identity after (Just coreOperand) operandType
+        | nativeValueType operandType || operandType == CoreNeverType -> observe identity after (Just coreOperand) operandType
         | otherwise -> halt (locatedSpan operand) ("breaking with a " <> coreTypeName operandType <> " value") after
       (after, Nothing) -> refused after
   where

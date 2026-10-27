@@ -1,5 +1,5 @@
 {-| @Pudu.Backend.Emit.Frame — a self-contained translation unit with explicit frames. -}
-module Pudu.Backend.Emit.Frame (emitFrameProgram, frameUsesWideCells) where
+module Pudu.Backend.Emit.Frame (emitFrameProgram, frameUsesWideCells, frameUsesText) where
 
 import Control.Monad (unless)
 import qualified Data.Set as Set
@@ -31,16 +31,25 @@ emitFrameProgram version sources source = do
       <> "(pudu_run_frames(" <> textOfInt entryId <> ")." <> (if isWideInteger kind then "wide" else "integer") <> ");"]
     CoreFloatType _ -> Right ["  pudu_print_float(pudu_run_frames(" <> textOfInt entryId <> ").floating);", "  return 0;"]
     CoreBoolType -> Right ["  pudu_print_bool(pudu_run_frames(" <> textOfInt entryId <> ").scalar);", "  return 0;"]
+    CoreTextType -> Right
+      [ "  pudu_text pudu_entry = pudu_run_frames(" <> textOfInt entryId <> ").text;"
+      , "  pudu_text pudu_shown = pudu_text_show(pudu_entry);"
+      , "  pudu_print_text(pudu_shown);"
+      , "  pudu_text_release(pudu_shown);"
+      , "  pudu_text_release(pudu_entry);"
+      , "  return 0;" ]
     CoreUnitType -> Right ["  (void)pudu_run_frames(" <> textOfInt entryId <> ");", "  return 0;"]
     CoreNeverType -> Right ["  (void)pudu_run_frames(" <> textOfInt entryId <> ");", "  return 0;"]
-    _ -> Left (FrameFault Nothing "an unrepresented frame entry result")
   (emitted, roots) <- emitFrameBodies (emptyEmitState sources) source
   let wide = frameUsesWideCells source
-      base = ["prelude", "process_io", "integer_value", "site", "colored", "cleanup", "fail", "memory_failure"] <> ["wide_value" | wide]
+      text = frameUsesText source
+      base = ["prelude", "process_io", "integer_value", "site", "colored", "cleanup", "fail", "memory_failure"]
+        <> ["wide_value" | wide] <> concat [["text", "text_retain"] | text]
       entryNeeds = case frameFunctionResult entry of
         CoreIntegerType _ -> [integerHelper (frameFunctionResult entry) "status"]
         CoreFloatType _ -> ["print_float"]
         CoreBoolType -> ["print_bool"]
+        CoreTextType -> ["text_show", "print_text"]
         _ -> []
       selected = foldl' visit Set.empty (Set.toList roots <> base <> entryNeeds)
       runtime = concat [runtimePartLines part <> [""] | part <- runtimeParts, Set.member (runtimePartName part) selected]
@@ -48,23 +57,31 @@ emitFrameProgram version sources source = do
       metadata = concatMap parameterArray indexed
         <> ["static const pudu_function pudu_functions[] = {"]
         <> map definition indexed <> ["};"]
-  pure $ Text.unlines (header <> runtime <> frameTypes wide
+  pure $ Text.unlines (header <> runtime <> frameTypes wide text
     <> renderSites (reverse (emitSites emitted)) <> reverse (emitOutput emitted)
-    <> metadata <> frameEngine <> ["int main(void) {", "  pudu_prepare_io();"] <> ending <> ["}"])
+    <> metadata <> frameEngine text <> ["int main(void) {", "  pudu_prepare_io();"] <> ending <> ["}"])
   where
     visit found part
       | Set.member part found = found
       | otherwise = foldl' visit (Set.insert part found) (runtimeDependencies part)
-    parameterArray (identity, function) = case frameFunctionParameters function of
+    parameterArray (identity, function) = (case frameFunctionParameters function of
       [] -> []
       parameters -> ["static const size_t pudu_parameters_" <> textOfInt identity <> "[] = {"
-        <> Text.intercalate ", " (map slotIndex parameters) <> "};"]
+        <> Text.intercalate ", " (map slotIndex parameters) <> "};"])
+      <> (case textSlots function of
+        [] -> []
+        slots -> ["static const size_t pudu_texts_" <> textOfInt identity <> "[] = {"
+          <> Text.intercalate ", " (map slotIndex slots) <> "};"])
+    textSlots function = [slot | slot <- frameFunctionSlots function, frameSlotType slot == CoreTextType]
     definition (identity, function) =
       "  {" <> textOfInt (length (frameFunctionSlots function)) <> ", "
         <> textOfInt (argumentCount function) <> ", " <> label (frameFunctionEntry function) <> ", "
         <> textOfInt (length (frameFunctionParameters function)) <> ", "
         <> (if null (frameFunctionParameters function) then "NULL" else "pudu_parameters_" <> textOfInt identity)
-        <> ", pudu_body_" <> textOfInt identity <> "},"
+        <> ", pudu_body_" <> textOfInt identity
+        <> ", " <> textOfInt (length (textSlots function)) <> ", "
+        <> (if null (textSlots function) then "NULL" else "pudu_texts_" <> textOfInt identity)
+        <> ", " <> (if frameFunctionResult function == CoreTextType then "1" else "0") <> "},"
     argumentCount function = maximum (0 :
       [length arguments | block <- frameFunctionBlocks function
       , FrameCall _ _ arguments _ _ <- [frameBlockTerminator block]])
@@ -78,3 +95,9 @@ frameUsesWideCells source = any usesWide (frameModuleFunctions source)
     : map frameSlotType (frameFunctionParameters function <> frameFunctionSlots function))
   wideType (CoreIntegerType kind) = isWideInteger kind
   wideType _ = False
+
+frameUsesText :: FrameModule -> Bool
+frameUsesText source = any usesText (frameModuleFunctions source)
+ where
+  usesText function = any (== CoreTextType) (frameFunctionResult function
+    : map frameSlotType (frameFunctionParameters function <> frameFunctionSlots function))

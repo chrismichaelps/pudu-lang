@@ -230,3 +230,7 @@ publication precedes Core/frame/source admission and no represented ABI changes.
 ## Runtime revision 8 (#512)
 
 The cell ABI gained a floating member, so `runtimeRevision` moves from 7 to 8.
+
+## Runtime revision 9 (#515)
+
+Text cells and the frame text metadata change the ABI, so the revision is 9.

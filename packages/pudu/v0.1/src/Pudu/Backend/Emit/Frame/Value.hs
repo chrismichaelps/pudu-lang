@@ -7,7 +7,7 @@ import Data.Text (Text)
 import qualified Data.Text as Text
 import Numeric (showHex)
 import Pudu.Backend.Emit.State
-  ( EmitState, divideByZeroSite, overflowSite, shiftSites, textOfInt )
+  ( EmitState, cString, cStringBytes, divideByZeroSite, overflowSite, shiftSites, textOfInt )
 import Pudu.Backend.Emit.Support (integerHelper, integerKindText, integerLiteralText, isWideInteger)
 import Pudu.Core (CoreBinaryOperator (..), CoreType (..))
 import Pudu.Core.Frame
@@ -20,6 +20,7 @@ cellMember :: CoreType -> Maybe Text
 cellMember (CoreIntegerType kind) = Just (if isWideInteger kind then "wide" else "integer")
 cellMember (CoreFloatType _) = Just "floating"
 cellMember CoreBoolType = Just "scalar"
+cellMember CoreTextType = Just "text"
 cellMember CoreUnitType = Just "scalar"
 cellMember _ = Nothing
 
@@ -35,7 +36,29 @@ frameValue state value = case frameValueShape value of
   FrameFloatLiteral _ bits -> Right (state, "UINT64_C(0x" <> Text.pack (showHex bits "") <> ")", Set.empty)
   FrameBoolLiteral flag -> done state (if flag then "1" else "0") []
   FrameUnitLiteral -> done state "0" []
-  FrameRead slot -> slotText slot >>= \text -> done state text []
+  FrameTextLiteral text ->
+    plain ("pudu_text_literal(" <> cString text <> ", " <> textOfInt (cStringBytes text) <> ")") ["text_literal"]
+  FrameRead slot
+    | frameSlotType slot == CoreTextType -> slotText slot >>= \text -> plain ("pudu_text_retain(" <> text <> ")") ["text_retain"]
+    | otherwise -> slotText slot >>= \text -> done state text []
+  FrameDisplay slot -> rendered slot
+  FrameShow slot
+    | frameSlotType slot == CoreTextType -> slotText slot >>= \text -> plain ("pudu_text_show(" <> text <> ")") ["text_show"]
+    | otherwise -> rendered slot
+  FrameBinary scalar left right
+    | frameSlotType left == CoreTextType -> do
+        lhs <- slotText left
+        rhs <- slotText right
+        let comparison symbol = plain ("(pudu_text_compare(" <> lhs <> ", " <> rhs <> ") " <> symbol <> " 0)") ["text_compare"]
+        case coreScalarOperator scalar of
+          CoreAdd -> plain ("pudu_text_concat(" <> lhs <> ", " <> rhs <> ")") ["text_concat"]
+          CoreEqual -> comparison "=="
+          CoreNotEqual -> comparison "!="
+          CoreLess -> comparison "<"
+          CoreLessOrEqual -> comparison "<="
+          CoreGreater -> comparison ">"
+          CoreGreaterOrEqual -> comparison ">="
+          _ -> refused "an operator text frames do not carry"
   FrameUnary FrameNegate operand
     | CoreFloatType _ <- frameSlotType operand -> do
         text <- slotText operand
@@ -132,6 +155,18 @@ frameValue state value = case frameValueShape value of
         Nothing -> refused "an unrepresented frame integer descriptor"
       _ -> refused "an integer frame operation without an integer result"
     floating text helper = Right (state, text, Set.singleton helper)
+    plain text needs = Right (state, text, Set.fromList needs)
+    rendered slot = do
+      text <- slotText slot
+      case frameSlotType slot of
+        CoreIntegerType kind
+          | isWideInteger kind -> plain ("pudu_text_display_wide(" <> text <> ")") ["text_display_wide"]
+          | otherwise -> plain ("pudu_text_display_int(" <> text <> ")") ["text_display_int"]
+        CoreFloatType _ -> plain ("pudu_text_display_float(" <> text <> ")") ["text_display_float"]
+        CoreBoolType -> plain ("(" <> text <> " ? pudu_text_literal(\"true\", 4) : pudu_text_literal(\"false\", 5))") ["text_literal"]
+        CoreUnitType -> plain "pudu_text_literal(\"()\", 2)" ["text_literal"]
+        CoreTextType -> plain ("pudu_text_retain(" <> text <> ")") ["text_retain"]
+        _ -> refused "a rendered value without a native representation"
     done after text needs = Right (after, text, Set.fromList (map (integerHelper (frameValueType value)) needs))
     call helper arguments = "pudu_" <> integerHelper (frameValueType value) helper <> "(" <> Text.intercalate ", " arguments <> ")"
     site index = "&pudu_sites[" <> textOfInt index <> "]"

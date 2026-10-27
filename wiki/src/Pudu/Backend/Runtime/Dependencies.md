@@ -28,3 +28,7 @@ parts and callers perform their existing cycle-safe visited-set closure.
 ## Referenced by
 
 [[src/_MOC]] · [[Backend Module Map]] · [[Native Floating Runtime Delivery]]
+
+## Text prerequisites (#515)
+
+The facade also delegates to [[Native Text Runtime]]'s dependency table.

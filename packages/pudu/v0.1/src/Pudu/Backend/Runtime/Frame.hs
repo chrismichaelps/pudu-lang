@@ -5,10 +5,13 @@ import Data.Text (Text)
 import qualified Data.Text as Text
 import Pudu.Comptime.Limits (callDepthLimit)
 
-frameTypes :: Bool -> [Text]
-frameTypes wide =
+{-| The cell union only carries the wide and text members a program needs, so a
+    plain integer program keeps the narrow layout. -}
+frameTypes :: Bool -> Bool -> [Text]
+frameTypes wide text =
   [ "typedef union { pudu_int integer; int scalar; uint64_t floating; "
-      <> (if wide then "pudu_wide_int wide; " else "") <> "} pudu_cell;"
+      <> (if wide then "pudu_wide_int wide; " else "")
+      <> (if text then "pudu_text text; " else "") <> "} pudu_cell;"
   , "typedef struct pudu_frame {"
   , "  size_t pc; pudu_cell *slots; pudu_cell *arguments;"
   , "  struct pudu_frame *parent; size_t function; size_t destination; int has_destination;"
@@ -22,18 +25,27 @@ frameTypes wide =
   , "typedef struct {"
   , "  size_t slots; size_t arguments; size_t pc; size_t parameter_count;"
   , "  const size_t *parameters; pudu_step (*body)(pudu_frame *);"
+  , "  size_t text_count; const size_t *texts; int text_result;"
   , "} pudu_function;"
   ]
 
-frameEngine :: [Text]
-frameEngine =
+frameEngine :: Bool -> [Text]
+frameEngine text =
   [ "static pudu_frame *pudu_active_frame = NULL;"
   , "static size_t pudu_frame_depth = 0;"
+  , "/* A frame owns the text in its slots; letting it go releases them. */"
+  , "static void pudu_free_frame(pudu_frame *frame) {"
+  ] <> (if text then
+  [ "  const pudu_function *definition = &pudu_functions[frame->function];"
+  , "  for (size_t i = 0; i < definition->text_count; ++i) pudu_text_release(frame->slots[definition->texts[i]].text);"
+  ] else []) <>
+  [ "  free(frame);"
+  , "}"
   , "static void pudu_unwind_frames(void) {"
   , "  while (pudu_active_frame != NULL) {"
   , "    pudu_frame *frame = pudu_active_frame;"
   , "    pudu_active_frame = frame->parent;"
-  , "    free(frame);"
+  , "    pudu_free_frame(frame);"
   , "  }"
   , "  pudu_frame_depth = 0;"
   , "}"
@@ -64,7 +76,11 @@ frameEngine =
   , "    if (definition->parameters[i] >= definition->slots) { free(frame); pudu_invalid_frame(); }"
   , "    frame->slots[definition->parameters[i]] = arguments[i];"
   , "  }"
-  , "  return frame;"
+  ] <> (if text then
+  [ "  /* Only parameters are set yet, so this retains exactly the arguments. */"
+  , "  for (size_t i = 0; i < definition->text_count; ++i) (void)pudu_text_retain(frame->slots[definition->texts[i]].text);"
+  ] else []) <>
+  [ "  return frame;"
   , "}"
   , "static pudu_cell pudu_run_frames(size_t entry) {"
   , "  if (pudu_active_frame != NULL) pudu_invalid_frame();"
@@ -84,9 +100,16 @@ frameEngine =
   , "      pudu_frame_depth += 1;"
   , "    } else if (step.kind == PUDU_RETURN) {"
   , "      pudu_frame *parent = frame->parent;"
-  , "      if (parent != NULL && parent->has_destination) parent->slots[parent->destination] = step.result;"
+  ] <> (if text then
+  [ "      /* A returned text arrives retained; the destination's old text goes. */"
+  , "      if (pudu_functions[frame->function].text_result && parent != NULL) {"
+  , "        if (parent->has_destination) pudu_text_release(parent->slots[parent->destination].text);"
+  , "        else pudu_text_release(step.result.text);"
+  , "      }"
+  ] else []) <>
+  [ "      if (parent != NULL && parent->has_destination) parent->slots[parent->destination] = step.result;"
   , "      pudu_active_frame = parent;"
-  , "      free(frame);"
+  , "      pudu_free_frame(frame);"
   , "      pudu_frame_depth -= 1;"
   , "      if (parent == NULL) { pudu_cleanup_hook = NULL; return step.result; }"
   , "    } else {"

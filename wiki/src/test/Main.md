@@ -183,3 +183,8 @@ Register [[Native Floating Runtime]], [[Native Runtime Dependencies]] and
 [[Native Floating Runtime Tests]] in the appropriate components with existing
 dependencies. Resolved Grill Log: execute actual catalogue/output evidence
 without changing source admission or the represented runtime ABI.
+
+## Text leak registration (#515)
+
+Register textLeakProperties from [[Backend Text Leak Tests]] beside the wide
+frame properties.

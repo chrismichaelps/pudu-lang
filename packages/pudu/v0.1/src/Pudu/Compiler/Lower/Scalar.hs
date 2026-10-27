@@ -5,7 +5,7 @@ import Data.Text (Text)
 import Pudu.Compiler.Lower.Control (expressionIsPrintValued)
 import Pudu.Compiler.Lower.State
   ( LowerContext (..), LowerState (..), halt, intType, refused )
-import Pudu.Compiler.Lower.Types (typeForSpan, nativeIntegerKind, nativeScalarType)
+import Pudu.Compiler.Lower.Types (typeForSpan, nativeIntegerKind, nativeValueType)
 import Pudu.Core
 import Pudu.Diagnostic.Evaluation
   ( cannotApplyBinaryMessage, cannotApplyUnaryMessage, unsupportedOperatorMessage )
@@ -29,7 +29,7 @@ lowerUnary lower state at operator operand
         | operator == "-", integerType kind || floatType kind -> built after at (CoreNegate core) kind
         | operator == "~", integerType kind -> built after at (CoreComplement core) kind
         | operator == "!", kind == CoreBoolType -> built after at (CoreNot core) CoreBoolType
-        | kind `elem` [CoreUnitType, CoreBoolType] || floatType kind
+        | kind `elem` [CoreUnitType, CoreBoolType, CoreTextType] || floatType kind
         , settled after operand core ->
             failure after at (cannotApplyUnaryMessage operator (runtimeKind kind)) [core]
         | otherwise -> halt at ("the operator '" <> operator <> "' on a " <> coreTypeName kind <> " value") after
@@ -53,11 +53,11 @@ lowerBinary lower state at left operator right
           | expressionIsPrintValued coreRight -> halt (locatedSpan right) "comparing or operating on a Result[(), Str] value" after
           | Just (operation, result) <- represented operator leftType rightType ->
               built after at (CoreBinary operation coreLeft coreRight) result
-          | all nativeScalarType [leftType, rightType]
+          | all nativeValueType [leftType, rightType]
           , settled after left coreLeft && settled after right coreRight
           , not (integerType leftType && integerType rightType) ->
               let message
-                    | leftType == rightType && (leftType == CoreBoolType || floatType leftType) = unsupportedOperatorMessage operator
+                    | leftType == rightType && (leftType `elem` [CoreBoolType, CoreTextType] || floatType leftType) = unsupportedOperatorMessage operator
                     | otherwise = cannotApplyBinaryMessage operator (runtimeKind leftType) (runtimeKind rightType)
                in failure after at message [coreLeft, coreRight]
           | otherwise -> halt at ("the operator '" <> operator <> "' outside the native scalar subset") after
@@ -70,8 +70,9 @@ represented operator left right
   | left /= right = Nothing
   | integerType left, Just operation <- lookup operator arithmetic = Just (operation, left)
   | floatType left, Just operation <- lookup operator floating = Just (operation, left)
-  | integerType left || floatType left || left == CoreBoolType, Just operation <- lookup operator ordering = Just (operation, CoreBoolType)
-  | nativeScalarType left, Just operation <- lookup operator equality = Just (operation, CoreBoolType)
+  | left == CoreTextType, operator == "+" = Just (CoreAdd, CoreTextType)
+  | integerType left || floatType left || left `elem` [CoreBoolType, CoreTextType], Just operation <- lookup operator ordering = Just (operation, CoreBoolType)
+  | nativeValueType left, Just operation <- lookup operator equality = Just (operation, CoreBoolType)
   | otherwise = Nothing
  where
   arithmetic =
@@ -101,6 +102,7 @@ runtimeKind :: CoreType -> Text
 runtimeKind CoreUnitType = "unit"
 runtimeKind CoreBoolType = "bool"
 runtimeKind (CoreFloatType _) = "float"
+runtimeKind CoreTextType = "string"
 runtimeKind kind = coreTypeName kind
 
 failure :: LowerState -> Span -> Text -> [CoreExpression] -> (LowerState, Maybe (CoreExpression, CoreType))

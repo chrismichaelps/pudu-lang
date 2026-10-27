@@ -222,3 +222,7 @@ without changing source admission or the represented runtime ABI.
 ## Float programs (#512)
 
 Register Pudu.Backend.FloatPrograms in other-modules beside the integer corpora; no new dependency.
+
+## Text programs (#515)
+
+Register Pudu.Backend.TextPrograms and Pudu.Backend.TextLeakSpec in other-modules; no new dependency.
