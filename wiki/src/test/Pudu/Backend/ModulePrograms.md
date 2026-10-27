@@ -106,3 +106,11 @@ rendering bodies, even when their builtin identity and displayed names agree.
 
 Register defaultParameterModulePrograms. Resolved Grill Log: literal
 defaults only until #639.
+
+## Qualified function values (#641)
+
+A module program takes `Lib.twice` and `L.twice` as values, passes one to a
+higher-order function, renders and compares them, and binds a defaulted
+qualified function. Resolved Grill Log: a local cannot share a qualifier's
+name (qualifiers are capitalized, and a capitalized let is a pattern), so no
+shadowing case is needed.

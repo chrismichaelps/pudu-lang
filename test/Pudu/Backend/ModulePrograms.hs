@@ -63,7 +63,29 @@ layout = ("Layout.pudu", Text.unlines
 modulePrograms :: [(String, [(FilePath, Text)], Text, Text)]
 modulePrograms =
   [(label, [], source, answer) | (label, source, answer) <- constantPrograms <> referenceSuccessPrograms <> methodSuccessPrograms <> genericSuccessPrograms <> trySuccessPrograms <> forSuccessPrograms <> closureSuccessPrograms <> arraySuccessPrograms <> arrayPatternSuccessPrograms <> textCollectionSuccessPrograms <> convertSuccessPrograms <> keyedSuccessPrograms <> shapeSuccessPrograms <> rangeSuccessPrograms <> bytesSuccessPrograms] <> renderingCallableModulePrograms <> defaultParameterModulePrograms <> shapeModulePrograms <>
-  [ ( "calls through a selective import, an alias and a module that imports another"
+  [ ( "module-qualified functions are values with one identity"
+    , [ ("Lib.pudu", Text.unlines
+          [ "module Lib", ""
+          , "export fn twice(value: Int) -> Int { value * 2 }"
+          , "export fn greet(name: Str, mark: Str = \"!\") -> Str { name + mark }" ]) ]
+    , program
+        [ "import Lib"
+        , "import Lib as L"
+        , ""
+        , "fn apply(f: fn(Int) -> Int, value: Int) -> Int { f(value) }"
+        , "fn main() -> Int {"
+        , "  let t = Lib.twice"
+        , "  print(display(t(4)))"
+        , "  print(display(apply(L.twice, 5)))"
+        , "  print(show(Lib.twice))"
+        , "  print(display(Lib.twice == L.twice))"
+        , "  let g = L.greet"
+        , "  print(g(\"a\") + g(\"b\", \"?\"))"
+        , "  0"
+        , "}"
+        ]
+    , "8\n10\n<fn twice>\ntrue\na!b?\n" )
+  , ( "calls through a selective import, an alias and a module that imports another"
     , [geometry, layout]
     , program
         [ "import Geometry {area, countdown, Circle, Dot}"

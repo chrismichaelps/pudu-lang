@@ -410,3 +410,13 @@ Resolved Grill Log: Body stays under its size budget; the rule lives beside
 the other builtin values.
 
 Export lowerExpression for the defaulted-body prologue. (#638)
+
+## Qualified function values (#641)
+
+`Lib.twice` or `L.twice` as a value, where the receiver is a module
+qualifier and not a local, lowers through lowerFunctionValue exactly as the
+bare name does: canonical key, admission, rendering and identity, defaults
+included.
+Resolved Grill Log: the guard sits after module constants and before
+variants and fields, the same order calls through qualifiers already use, so
+a local named like the module still reads its field.

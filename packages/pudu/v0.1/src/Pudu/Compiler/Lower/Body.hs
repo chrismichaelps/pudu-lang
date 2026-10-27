@@ -423,6 +423,9 @@ lowerExpression state (Located spanValue expression) = case expression of
   MemberExpression receiver (Located _ member)
     | Located _ (NameExpression (owner :| [])) <- receiver
     , Just lowered <- lowerConstant state spanValue [owner, member] -> lowered
+    | Located _ (NameExpression (owner :| [])) <- receiver, isModuleQualifier state owner
+    , Just key <- resolveFunction state [owner, member], Just entry <- lookup key (contextTable (lowerContext state)) ->
+        lowerFunctionValue state spanValue key entry
     | qualifier receiver, Just lowered <- lowerVariant lowerExpression state spanValue member [] -> lowered
     | otherwise -> lowerField lowerExpression state spanValue receiver member
   IndexExpression receiver key -> maybe (lowerTupleIndex lowerExpression state spanValue receiver key) id
