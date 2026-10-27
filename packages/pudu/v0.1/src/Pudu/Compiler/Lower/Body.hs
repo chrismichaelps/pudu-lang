@@ -297,8 +297,10 @@ lowerExpression state (Located spanValue expression) = case expression of
     | name == "display" -> case arguments of
         [argument] -> case lowerExpression state argument of
           (after, Just (coreArgument, CoreNeverType)) -> (after, Just (coreArgument, CoreNeverType))
+          (after, Just (coreArgument, _))
+            | expressionIsPrintValued coreArgument -> halt spanValue "display of a Result[(), Str] value" after
           (after, Just (coreArgument, operandType))
-            | operandType == intType || operandType == CoreBoolType ->
+            | operandType `elem` [intType, CoreBoolType, CoreUnitType] ->
                 typed after (CoreDisplay coreArgument) CoreTextType
             | otherwise ->
                 halt spanValue ("display of a " <> coreTypeName operandType <> " value") after
@@ -435,10 +437,16 @@ lowerExpression state (Located spanValue expression) = case expression of
           (afterLeft, Nothing) -> Left afterLeft
 
         equalityPair = case lowerExpression state left of
+          (afterLeft, Just (coreLeft, _))
+            | expressionIsPrintValued coreLeft ->
+                Left (refuse (locatedSpan left) "comparing a Result[(), Str] value" afterLeft)
           (afterLeft, Just (coreLeft, leftType)) -> case lowerExpression afterLeft right of
+            (afterRight, Just (coreRight, _))
+              | expressionIsPrintValued coreRight ->
+                  Left (refuse (locatedSpan right) "comparing a Result[(), Str] value" afterRight)
             (afterRight, Just (coreRight, rightType))
-              | leftType `elem` [intType, CoreBoolType, CoreNeverType]
-              , rightType `elem` [intType, CoreBoolType, CoreNeverType]
+              | leftType `elem` [intType, CoreBoolType, CoreUnitType, CoreNeverType]
+              , rightType `elem` [intType, CoreBoolType, CoreUnitType, CoreNeverType]
               , Just _ <- joinType leftType rightType ->
                   Right (afterRight, coreLeft, coreRight)
               | otherwise ->

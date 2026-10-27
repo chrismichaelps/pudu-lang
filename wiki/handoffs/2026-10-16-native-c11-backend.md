@@ -1,7 +1,7 @@
 ---
 type: handoff
 status: ACTIVE
-issue: 492
+issue: 493
 aliases: [Native C11 Backend Delivery]
 tags: [handoff, backend, native, c11]
 ---
@@ -276,3 +276,53 @@ is claimed. Full native coverage remains incomplete.
 Exact next action: commit #492 and publish the #493 unit display/equality
 contract in all affected mirrors before implementing it. Independent reviews
 remain pending before promotion; do not activate subagents.
+
+## #493 direct implementation handoff
+
+Delivery Owner → Language Architect → Backend Engineer. #492 is committed as f0192cfd; feature/493-native-unit-operations is stacked on it. Direct owner covers Lower/Body, Backend/Emit, Backend/Emit/Support, EmitSpec and FunctionPrograms plus their mirrors and shared coverage/changelog/handoff. Complete contracts and resolved Grill Logs precede source edits. No subagents are activated; independent reviews remain pending before promotion.
+
+Exact next action: implement shared unit operand freezing, inline unit display and equality, then run focused and full GHC 9.14.1 validation.
+
+#493 self-audit found that admitting Core unit display/equality also admitted the effect-only print Result carrier. The clean validation run was stopped before any commit; explicit recursive carrier guards and checked-source refusal regressions were added. This is a resolved self-audit finding, not an independent review approval. Exact next action: rebuild and run the new refusal and native groups before restarting clean validation.
+
+#493 current validation: the final source tree passes the fresh optimized
+GHC 9.14.1 warnings-as-errors build (clean products were removed before the
+interrupted attempt, then compilation resumed after the carrier correction).
+Final focused carrier refusals, unit signature/display/equality success, native
+effect/transfer ordering and failure groups pass. The full Cabal suite is
+running with output captured. The two dependency gates and all 15 post-build
+integration gates pass through the original commands with output retained.
+Evidence: `/tmp/pudu-493-build.log`, `/tmp/pudu-493-suite.log`,
+`/tmp/pudu-493-integration.log`. The temporary wrapper changes output retention
+only and does not delete fresh products a second time or weaken any check.
+A real CLI unit-operation comparison matches stdout, stderr and status; the
+print Result refusal preserves an existing output file.
+
+Issue #494 records the next explicit Core runtime-refusal slice for
+checker-accepted invalid scalar operators. Its design must be resolved in
+complete mirrors before source edits. The #491 commit spans 613 changed lines;
+partition its review before opening a PR under the delivery size gate, preserving
+source/wiki parity. No PR, remote CI or independent approval is claimed.
+
+## #493 final validation and commit handoff
+
+Delivery Owner → Validation Owner → Commit Owner. The final full Cabal suite
+passes all 652 property groups with zero failures and exit 0. Fresh optimized
+GHC 9.14.1 `-Werror` compilation and all 17 remaining dependency/integration
+checks pass, accounting for every standard gate without recompiling already
+fresh products again. Captured evidence is listed above. The earlier #493
+validation attempt was intentionally stopped to fix the self-audited print
+Result carrier gap; final regressions prove direct/nested Result display and
+equality refuse E6001 while genuine no-else unit display remains accepted.
+
+Unit display/equality native success, effect order, mutation, transfers and
+arithmetic failure diagnostics match the interpreter. CLI output/status parity
+and preservation of an existing output on Result refusal pass. No snapshots,
+checks or thresholds were weakened. All touched implementation/test files are
+below 500 lines. Independent implementation, architecture and wiki reviews
+remain pending before promotion; no subagents, PR, push or remote CI is claimed.
+
+Full C11 coverage remains incomplete. Exact next action: resolve issue #494's
+Core runtime-trap representation and scalar-lowering extraction in complete
+vault mirrors, using the actual interpreter E7001 text/evaluation order, then
+implement checked invalid-scalar runtime refusals with differential tests.

@@ -45,3 +45,10 @@ Uses [[Pudu Core]], [[Integer Literal]], and [[Backend Emit State]]. Consumed by
 Runtime requirements visit both loop conditions and bodies and every break operand. Never is representation-free at the public function boundary and uses an initialized dummy integer only in unreachable scalar sequencing; no ownership-bearing value is admitted.
 
 - **Q:** Can breaking with a discarded checked value omit its helper? **A:** No; the runtime walk includes the operand even when no result slot exists. Rejected: visiting only value-producing consumers.
+
+
+## Unit display and equality (#493)
+
+Select print_str for CorePrint of CoreDisplay whose operand type is CoreUnitType. Continue walking operand effects and wrappers. Unit display must not select an unused integer printer or omit the string printer.
+
+Resolved Grill Log: unit has one value but its operands still execute. Reject skipped/repeated effects, void C initializers, wrong runtime printer selection and accidental ordered/arithmetic unit admission. Owned text representation and E7001 invalid-operation lowering remain separate obligations.

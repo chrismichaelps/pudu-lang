@@ -44,7 +44,7 @@ lowerFunctionBody :: Located Function -> CoreSignature -> LowerState -> (LowerSt
   unit. This includes nested blocks and conditional branches. Discarded print
   statements and discarded print-valued branches retain their effects.
 - Supported values are platform Int, Bool, literal text and display of
-  Int/Bool. Print accepts literal text or display; text locals and function
+  Int/Bool/unit. Print accepts literal text or display; text locals and function
   results remain outside the subset. A discarded text/display expression can
   still lower. Integer syntax must already be ResolvedInteger PlatformSigned;
   unresolved integers and other numeric kinds refuse. Arithmetic, comparisons,
@@ -60,7 +60,7 @@ lowerFunctionBody :: Located Function -> CoreSignature -> LowerState -> (LowerSt
   are memoized. Arguments lower left to right; calls enqueue their callee and
   carry the settled result type. A refused signature does not duplicate its
   diagnostic at each call.
-- Printable arguments are literal text or display of Int/Bool; the emitter
+- Printable arguments are literal text or display of Int/Bool/unit; the emitter
   can fuse these without introducing text allocation or ownership semantics.
 
 ## Negative logic
@@ -155,4 +155,13 @@ Resolved Grill Log: consume canonical settled checker facts; preserve structural
 
 Lower TupleExpression [] to CoreBlockValue (CoreBlock [] Nothing) with CoreUnitType. Keep nonempty tuples refused. Unit literals then work in locals, returns, branches and break operands through existing scalar/unit paths. Print Result guards remain unchanged.
 
-Resolved Grill Log: preserve the single unit inhabitant and every effect without allocating a new representation. Reject void-valued C initializers, Result erasure and omitted argument evaluation. Unit display/equality and nonempty tuples remain separate pending boundaries.
+Resolved Grill Log: preserve the single unit inhabitant and every effect without allocating a new representation. Reject void-valued C initializers, Result erasure and omitted argument evaluation. Nonempty tuples remain pending; #493 implements unit display/equality.
+
+
+## Unit display and equality (#493)
+
+Admit display of unit alongside Int/Bool in the existing inline printer path. Admit matching unit equality/inequality and Never joins. Preserve all effect-only Result guards and continue refusing unit arithmetic/ordered comparisons rather than inventing integer semantics.
+
+Resolved Grill Log: unit has one value but its operands still execute. Reject skipped/repeated effects, void C initializers, wrong runtime printer selection and accidental ordered/arithmetic unit admission. Owned text representation and E7001 invalid-operation lowering remain separate obligations.
+
+#493 carrier audit: explicit display and equality guards reject Core print carriers, including nested blocks/conditional values, before unit admission. Refusal regressions use checked Result-valued source, so print is never silently formatted or compared as unit. Genuine no-else unit boundaries remain admitted.
