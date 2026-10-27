@@ -217,6 +217,8 @@ its atomic byte replacement effect. [[Type Check Prelude]] owns the signature an
 Resolved Grill Log: register only the primitive's name here; retain phase-owned
 arity, typing and filesystem behavior.
 
+`clockNanos` is an effect value name beside `clock` (#670).
+
 ## Referenced by
 
 [[src/Pudu/Semantic/_MOC]] · [[Name Resolution]] · [[grammar/pudu]]

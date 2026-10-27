@@ -259,6 +259,8 @@ to this runtime primitive; [[Eval Effect]] owns admission and execution.
 Resolved Grill Log: preserve explicit byte payload and typed failure, while portable
 filesystem policy remains in [[Std Fs]] and [[Eval Io]].
 
+`clockNanos` is typed `() -> Int` beside `clock` (#670).
+
 ## Referenced by
 
 [[src/Pudu/Type/_MOC]]

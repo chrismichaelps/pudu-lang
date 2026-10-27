@@ -5,6 +5,11 @@ tags: [changelog]
 
 # Changelog
 
+## 2026-10-27 — Nanosecond monotonic clock (#670)
+
+- `clockNanos` and [[Std Time]] `monotonicNanos` measure intervals below a millisecond;
+  [[Monotonic Nanosecond Delivery]] records evidence.
+
 ## 2026-10-27 — Verified HTTPS CI index transport (#656)
 
 - [[Website Linux Workflow]] configures signed HTTPS Hackage access before one explicit update.

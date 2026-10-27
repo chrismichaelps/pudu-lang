@@ -5,6 +5,8 @@ tags: [moc, handoff]
 
 # Handoff Map
 
+- [[Monotonic Nanosecond Delivery]] — issue #670 nanosecond monotonic clock.
+
 - [[Hackage Transport Delivery]] — issue #656 configure verified HTTPS before one index update.
 
 - [[Derive Index Delivery]] — authored strategy indexing and public metadata (#458).

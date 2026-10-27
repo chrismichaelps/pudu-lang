@@ -93,7 +93,7 @@ effectValueNames =
   , "audioStreamOpen", "audioStreamWrite", "audioStreamPause", "audioStreamResume"
   , "audioStreamVolume", "audioStreamSnapshot", "audioStreamClose"
   , "arguments", "environment", "temporaryPath", "userHome"
-  , "pathSeparators", "searchSeparator", "exit", "clock"
+  , "pathSeparators", "searchSeparator", "exit", "clock", "clockNanos"
   , "now", "zoneOffset", "formatTime", "parseTime", "runProgram"
   , "spawnProgramWith"
   ]
