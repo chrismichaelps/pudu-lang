@@ -241,6 +241,7 @@ tags: [moc, module]
 - [[Native Text Runtime]] · [[Backend Text Programs]] · [[Backend Text Leak Tests]] — owned Str values, conformance and counted leaks.
 - [[Compiler Lower Text]] · [[Native Text Methods]] · [[Backend Text Method Programs]] — native Str methods.
 - [[Native Text Case]] · [[Backend Text Case Tests]] — trim and case mapping from the linked Data.Text.
+- [[Native Char Runtime]] · [[Backend Char Programs]] — Char values, code, toText and charAt.
 
 - [[Backend Integer Value]] · [[Backend Integer Arithmetic]] · [[Backend Integer Bits]] · [[Backend Deferred Integer Programs]] — exact integer carriers and deferred-value conformance.
 

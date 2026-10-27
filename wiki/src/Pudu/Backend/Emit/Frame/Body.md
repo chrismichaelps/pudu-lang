@@ -57,3 +57,8 @@ A store into a text slot computes the new reference, releases the old one and
 then assigns, so `s = s + t` reads `s` before letting it go. A text return
 retains the slot it returns, because the frame releases its slots afterwards.
 Printing a text slot calls `pudu_print_text`.
+
+## Char prints (#518)
+
+`FramePrintSlot` on a Char slot (the fused `print(display(c))`) calls
+`pudu_print_char`.

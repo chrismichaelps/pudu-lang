@@ -178,3 +178,9 @@ result and character-literal cases. The unreachable-function fixtures switch
 from Str to Char so they still prove unreached declarations never lower. The
 #513 shadowed `display` returning Str now compiles and moves to
 [[Backend Text Programs]].
+
+## Char admitted (#518)
+
+Char is native now, so the Char parameter, result and literal refusals are gone;
+`charFromCode`, which answers an Option, still refuses. The unreachable-function
+fixtures use BigInt so they keep proving unreached declarations never lower.

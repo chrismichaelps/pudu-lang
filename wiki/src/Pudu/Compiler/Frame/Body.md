@@ -63,3 +63,8 @@ literal and scalar-display fusions and otherwise prints a text slot.
 
 `CoreTextMethod` lowers its arguments left to right, then its receiver, then
 saves one `FrameTextMethod` value.
+
+## Char values (#518)
+
+Char literals and `CoreCharCode` save one value each; a Char call or branch
+result gets a result slot like any scalar.

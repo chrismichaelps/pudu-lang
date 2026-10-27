@@ -45,3 +45,9 @@ Str receiver. Methods outside the table refuse; nothing falls back.
 ## Trim and case mapping (#517)
 
 `trim`, `toUpper` and `toLower` take no arguments and answer Str; [[Native Text Case]] implements them.
+
+## Char methods and charAt (#518)
+
+`charAt(Int)` joins the Str table with a Char result. A Char receiver
+answers `code` (Int, `CoreCharCode`) and `toText` (Str, `CoreDisplay`), which
+is what `readCharMember` finds before any impl; other Char members refuse.

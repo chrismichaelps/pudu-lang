@@ -137,3 +137,8 @@ answers and the interpreter, refusals against the interpreter's diagnostics.
 
 Two groups run [[Backend Text Method Programs]] against hand-written answers
 and the interpreter's refusals.
+
+## Char conformance (#518)
+
+Two groups run [[Backend Char Programs]] against hand-written answers and
+the interpreter's refusals.

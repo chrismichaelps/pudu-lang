@@ -66,3 +66,9 @@ Every text-producing value is a fresh reference; a store owns it.
 `FrameTextMethod !CoreTextMethodName !FrameSlot ![FrameSlot]` computes a
 method from already-evaluated slots. A method that can fail carries its
 failure sites in the emitted call, like checked arithmetic.
+
+## Char values (#518)
+
+`FrameCharLiteral !Char` and `FrameCharCode !FrameSlot` are the only new
+shapes. Comparisons, display, show and charAt reuse `FrameBinary`,
+`FrameDisplay`, `FrameShow` and `FrameTextMethod` on Char slots.

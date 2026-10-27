@@ -31,3 +31,8 @@ live. Output must still equal the expected answer.
 The counted run also covers [[Backend Text Method Programs]], so views that
 retain their source and the text built by repeat, reverse, escapeHtml and
 replace are all released.
+
+## Char programs (#518)
+
+The counted run also covers [[Backend Char Programs]], so the text that
+display, show and toText build from a Char is released.

@@ -40,3 +40,7 @@ The facade also delegates to [[Native Text Methods]].
 ## Case prerequisites (#517)
 
 The facade also delegates to [[Native Text Case]].
+
+## Char prerequisites (#518)
+
+The facade also delegates to [[Native Char Runtime]].

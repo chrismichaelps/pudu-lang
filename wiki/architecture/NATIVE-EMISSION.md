@@ -19,7 +19,7 @@ Compile ordinary checked Pudu programs into portable C11 with interpreter-identi
 | Unit values, parameters and operations | Implemented (#492, #493) | Preserve effect-first temporaries, display/equality and #494 E7001 runtime refusals |
 | Entry result reporting | Partial (#512) | Integer statuses, unit silence and Bool/Float32/Float64 rendering match `pudu run`; print Result and aggregate value rendering remain |
 | Complete numeric families | Partial (#495, #497, #500, #507, #512) | Fixed integers, Int128/UInt128 and Float32/Float64 are admitted; BigInt and Decimal remain |
-| Text and bytes | Partial (#515, #516, #517) | Owned Str values, operators, rendering, printing, entries and every Int/Bool/Str-result method (trim and case mapping included) match the interpreter; Char, Bytes, Array/Option-result methods and print Result remain |
+| Text and bytes | Partial (#515, #516, #517, #518) | Owned Str values, Char values, operators, rendering, printing, entries, charAt and every Int/Bool/Str-result method (trim and case mapping included) match the interpreter; Bytes, Array/Option-result methods and print Result remain |
 | Records, tuples, sums and collections | Pending | Layout, construction/update, access, equality, allocation and destruction |
 | Pattern matching and iteration | Pending | Exhaustive ordered decisions, guards, bindings, ranges and iterator protocol |
 | Modules and constants | Pending | Canonical linkage, qualified identities, checked folds and graph publication |
@@ -239,3 +239,14 @@ library linked into pudu (text-2.1.4) when C is emitted, so native follows
 the interpreter's Unicode version by construction. [[Backend Text Case
 Tests]] compares every scalar and re-checks that the linked library has no
 context rules. Progress stays 4/14 (28%).
+
+## Char values (#518)
+
+Char is a `uint32_t` scalar in its own cell member. Literals, the six
+comparisons, `display`, `show`, `code`, `toText`, `Str.charAt` and Char entry
+results follow `comparisonOnly`, `callDisplay`, `renderValue`,
+`callCharMethod` and `charAtFast`; other operators trap with the evaluator's
+E7001 wording after their operands run. [[Native Char Runtime]] holds the
+helpers; [[Backend Char Programs]] checks hand-written answers, the
+interpreter's refusals and counted leaks under Clang, GCC 15 and ASan/UBSan.
+Runtime revision 10. `charFromCode` waits on Option. Progress stays 4/14 (28%).

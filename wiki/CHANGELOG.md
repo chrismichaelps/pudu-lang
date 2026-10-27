@@ -5,6 +5,10 @@ tags: [changelog]
 
 # Changelog
 
+## 2026-10-20 — Native Char values (#518)
+
+- Char literals, comparisons, display/show, `code`, `toText`, `Str.charAt` and Char entry results compile natively through [[Native Char Runtime]]; [[Backend Char Programs]] holds them to hand-written answers and the interpreter's refusals. The #517 catalogue check now skips the case parts, which the clean gate caught. Progress stays 4/14 (28%).
+
 ## 2026-10-19 — Native trim and case mapping (#517)
 
 - `trim`, `toUpper` and `toLower` compile natively. [[Native Text Case]] builds its tables from the linked text-2.1.4 (not GHC's boot 2.1.3, whose tables differ by 56 rows), and [[Backend Text Case Tests]] checks all 1,112,064 scalars against Data.Text. Progress stays 4/14 (28%).

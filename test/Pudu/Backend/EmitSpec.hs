@@ -223,7 +223,7 @@ testEntryOnly = do
       , "  return 0"
       , "}"
       , ""
-      , "fn other(value: Char) -> Char {"
+      , "fn other(value: BigInt) -> BigInt {"
       , "  return value"
       , "}"
       ]
@@ -243,7 +243,7 @@ testReachableFunctions = do
   compiled <- compileAndLower $ Text.unlines
     [ "module Reachable"
     , "fn second(flag: Bool) -> Bool { return !flag }"
-    , "fn unused(value: Char) -> Char { return value }"
+    , "fn unused(value: BigInt) -> BigInt { return value }"
     , "fn main() -> Int { return first(9, second(false)) }"
     , "fn first(value: Int, flag: Bool) -> Int {"
     , "  if second(flag) { return 0 }"
@@ -276,8 +276,6 @@ refusalCases =
   , ("default parameter", helperProgram "fn helper(value: Int = 7) -> Int { return value }" "helper(1)", "7")
   , ("expression body", helperProgram "fn helper(value: Int) -> Int = value" "helper(1)", "value\n")
   , ("BigInt result", helperProgram "fn helper() -> BigInt { return 1 }" "{ helper()\n  0 }", "BigInt")
-  , ("Char parameter", helperProgram "fn helper(value: Char) -> Int { return 1 }" "helper('x')", "Char")
-  , ("Char result", helperProgram "fn helper() -> Char { return 'x' }" "{ helper()\n  0 }", "Char")
   , ("call to entry", statementProgram "main()", "main()\n")
   , ("trailing print result", Text.unlines
       ["module Refuse", "fn main() { print(\"x\") }"], "print(")
@@ -286,7 +284,7 @@ refusalCases =
   , ("arrays", bindingProgram "var items = [1, 2, 3]", "[1, 2, 3]")
   , ("decimal values", bindingProgram "var ratio = 1.5d", "1.5d")
   , ("ownership-bearing break result", statementProgram "loop { break print(\"x\") }", "print(")
-  , ("character literals", bindingProgram "var letter = 'a'", "'a'")
+  , ("charFromCode", bindingProgram "var letter = charFromCode(97)", "charFromCode(97)")
   , ("match expressions", bindingProgram "var chosen = match 1 { case _ => 0 }", "match")
   , ("borrows", Text.unlines
       [ "module Refuse"

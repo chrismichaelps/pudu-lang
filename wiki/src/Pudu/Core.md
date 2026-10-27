@@ -246,3 +246,10 @@ native implements exist.
 ## Trim and case mapping (#517)
 
 `CoreTextMethodName` gains TextTrim, TextToUpper and TextToLower.
+
+## Char values (#518)
+
+`CoreCharType` is a Unicode scalar. `CoreCharLiteral !Char` holds a literal,
+`CoreCharCode !CoreExpression` is `c.code()`, and `TextCharAt` is
+`Str.charAt`, which answers Char. `c.toText()` needs no node: it is
+`CoreDisplay`, exactly as `CharToText` and `callDisplay` agree.

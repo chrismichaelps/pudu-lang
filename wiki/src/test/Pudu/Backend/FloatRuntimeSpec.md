@@ -58,3 +58,7 @@ The compatibility check also skips [[Native Text Methods]] parts.
 ## Case catalogue (#517)
 
 The compatibility check also skips [[Native Text Case]] parts.
+
+## Char catalogue (#518)
+
+The compatibility check also skips [[Native Char Runtime]] parts.

@@ -11,6 +11,7 @@ import Numeric (showHex)
 import Pudu.Backend.Runtime (RuntimePart (..), runtimeParts)
 import Pudu.Backend.Runtime.Dependencies (runtimeDependencies)
 import Pudu.Backend.Runtime.Text (textRuntimeParts)
+import Pudu.Backend.Runtime.Char (charRuntimeParts)
 import Pudu.Backend.Runtime.Text.Case (textCaseRuntimeParts)
 import Pudu.Backend.Runtime.Text.Methods (textMethodRuntimeParts)
 import Pudu.Backend.Runtime.Float (floatRuntimeParts)
@@ -93,7 +94,7 @@ testOutput cc root = do
   putStrLn ("[floating runtime] printed "<>show (length values)<>" raw encodings")
   let names=map runtimePartName runtimeParts; known=Set.fromList names
       floating=map fst floatRuntimeParts
-      textual=map fst (textRuntimeParts <> textMethodRuntimeParts <> textCaseRuntimeParts)
+      textual=map fst (textRuntimeParts <> textMethodRuntimeParts <> textCaseRuntimeParts <> charRuntimeParts)
       before name dependency = case (lookup dependency (zip names [0::Int ..]),lookup name (zip names [0::Int ..])) of
         (Just a,Just b) -> a<b
         _ -> False

@@ -76,6 +76,8 @@ data FrameValueShape
   | FrameFloatLiteral !FloatWidth !Word64
   | FrameBoolLiteral !Bool
   | FrameTextLiteral !Text
+  | FrameCharLiteral !Char
+  | FrameCharCode !FrameSlot
   | FrameDisplay !FrameSlot
   | FrameShow !FrameSlot
   | FrameTextMethod !CoreTextMethodName !FrameSlot ![FrameSlot]

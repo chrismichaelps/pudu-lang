@@ -111,3 +111,9 @@ publishes. _Rejected:_ matching the alias spelling as a second route.
 `nativeValueType` is `nativeScalarType` plus `CoreTextType`. Signatures,
 bindings, breaks and display operands admit value types; places that still
 need a scalar (conditions, integer operators) keep `nativeScalarType`.
+
+## Char (#518)
+
+`formedCoreType` maps the builtin `Char` nominal to `CoreCharType`, and
+`nativeScalarType` admits it, which opens bindings, parameters, results,
+loop values and the entry result.

@@ -9,7 +9,7 @@ import Pudu.Comptime.Limits (callDepthLimit)
     plain integer program keeps the narrow layout. -}
 frameTypes :: Bool -> Bool -> [Text]
 frameTypes wide text =
-  [ "typedef union { pudu_int integer; int scalar; uint64_t floating; "
+  [ "typedef union { pudu_int integer; int scalar; uint32_t character; uint64_t floating; "
       <> (if wide then "pudu_wide_int wide; " else "")
       <> (if text then "pudu_text text; " else "") <> "} pudu_cell;"
   , "typedef struct pudu_frame {"

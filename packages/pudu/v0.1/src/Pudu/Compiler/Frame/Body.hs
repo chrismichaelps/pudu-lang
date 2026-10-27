@@ -62,6 +62,8 @@ lowerExpression expression@(CoreExpression at kind shape) = case shape of
   CoreFloatLiteral width bits -> value (FrameFloatLiteral width bits)
   CoreBoolLiteral boolean -> value (FrameBoolLiteral boolean)
   CoreTextLiteral text -> value (FrameTextLiteral text)
+  CoreCharLiteral character -> value (FrameCharLiteral character)
+  CoreCharCode operand -> rendered FrameCharCode operand
   CoreReadLocal local -> readLocal at local >>= value . FrameRead
   CoreNegate operand -> unary FrameNegate operand
   CoreComplement operand -> unary FrameComplement operand
@@ -194,6 +196,7 @@ resultSlot at kind = case kind of
   CoreUnitType -> pure Nothing
   CoreNeverType -> pure Nothing
   CoreTextType -> Just <$> freshSlot at "$result" kind
+  CoreCharType -> Just <$> freshSlot at "$result" kind
 
 lowerPrint :: Span -> CoreExpression -> Build Flow
 lowerPrint at operand = case coreExpressionShape operand of

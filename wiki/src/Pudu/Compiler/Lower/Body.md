@@ -262,3 +262,9 @@ does for any non-integer, non-unit value.
 
 A call on a member delegates to [[Compiler Lower Text]], which admits built-in
 Str methods; every other method call still refuses.
+
+## Char literals (#518)
+
+A character literal lowers to `CoreCharLiteral`. A Char entry result is shown
+and exits 0, like Str, because `reportResult` renders every non-integer,
+non-unit value.

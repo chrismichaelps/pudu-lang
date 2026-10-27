@@ -63,3 +63,8 @@ so the engine can retain arguments, release slots when a frame ends, and hand
 a returned text to its destination. A Str entry result is shown, printed and
 released before `main` returns 0. The text runtime and the cell's text member
 are selected only when some slot holds text.
+
+## Char entry results (#518)
+
+A Char entry is shown through `pudu_char_show`, printed and released, and
+returns 0, matching `reportResult`.
