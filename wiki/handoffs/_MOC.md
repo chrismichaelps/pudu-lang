@@ -5,6 +5,8 @@ tags: [moc, handoff]
 
 # Handoff Map
 
+- [[Native Unsigned Integer Delivery]] — UInt and fixed unsigned native admission (#500).
+
 - [[Native Signed Integer Delivery]] — fixed signed widths on the exact native carrier (#497).
 
 - [[Native C11 Backend Delivery]] — native C11 backend, loop control and unit-result conformance (#486, #488–#490).

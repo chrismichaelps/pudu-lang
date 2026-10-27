@@ -17,8 +17,8 @@ Compile ordinary checked Pudu programs into portable C11 with interpreter-identi
 | Scalar functions, recursion, call depth | Implemented (#499) | Preserve explicit-frame lifetime, argument ordering, E7002 timing and differential evidence; promotion still requires independent review |
 | Loop control and scalar loop results | Implemented (#489) | Preserve labels, transfers, Never joins and condition-scope evidence |
 | Unit values, parameters and operations | Implemented (#492, #493) | Preserve effect-first temporaries, display/equality and #494 E7001 runtime refusals |
-| Entry result reporting | Partial | Int status/unit silence work; Bool and other value-result rendering still need native admission and CLI parity |
-| Complete numeric families | Partial (#495, #497) | Platform Int and signed 8/16/32/64 are represented; UInt, Int128, BigInt, floats and Decimal remain |
+| Entry result reporting | Partial | Admitted integer statuses/unit silence work; Bool and other value-result rendering still need native admission and CLI parity |
+| Complete numeric families | Partial (#495, #497, #500) | Unsigned through 64-bit admission is validated; Int128, UInt128, BigInt, floats and Decimal remain |
 | Text and bytes | Pending | Owned representation, UTF-8, allocation, comparisons and IO failures |
 | Records, tuples, sums and collections | Pending | Layout, construction/update, access, equality, allocation and destruction |
 | Pattern matching and iteration | Pending | Exhaustive ordered decisions, guards, bindings, ranges and iterator protocol |

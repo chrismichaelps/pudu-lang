@@ -45,14 +45,14 @@ lowerFunctionBody :: Located Function -> CoreSignature -> LowerState -> (LowerSt
   requires an exact initializer fact matching the structural Core type, with
   represented facts preserving structural Never.
 - Return operands must match the declared non-entry result, or Int/unit for
-  the entry (including fixed signed integers). The first explicit entry return records its type. Bare returns
+  the entry (including fixed signed and unsigned integers). The first explicit entry return records its type. Bare returns
   carry no Core operand. The checker already proves return agreement.
 - Print's internal Core unit representation is effect-only. An entry's
   recursively print-valued final expression and every explicit print-valued
   return refuse E6001: print's actual Result[(), Str] must never escape as
   unit. This includes nested blocks and conditional branches. Discarded print
   statements and discarded print-valued branches retain their effects.
-- Supported values are platform/fixed signed integers, Bool, literal text and display of
+- Supported values are admitted platform/fixed integers, Bool, literal text and display of
   admitted integers/Bool/unit. Print accepts literal text or display; text locals and function
   results remain outside the subset. A discarded text/display expression can
   still lower. Integer syntax must already carry a supported ResolvedInteger kind;

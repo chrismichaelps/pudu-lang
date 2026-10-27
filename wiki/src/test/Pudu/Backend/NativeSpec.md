@@ -9,6 +9,10 @@ aliases: [Backend Native Tests, Native Conformance Tests]
 
 # Backend Native Tests
 
+Add UInt and fixed unsigned entry statuses, including the UInt64 maximum.
+Resolved Grill Log: preserve IntValue reporting without signed narrowing; use
+the existing differential status/output harness.
+
 Extend entry-status cases for fixed signed results, including negative minimum,
 positive 127 and values clamped to 255. Resolved Grill Log (#497): compare actual
 native status/output with the existing IntValue CLI policy for every admitted kind.

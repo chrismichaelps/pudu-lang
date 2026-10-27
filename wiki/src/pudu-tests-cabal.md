@@ -8,6 +8,9 @@ aliases: [Pudu Test Cabal Manifest]
 
 # Pudu Test Cabal Manifest
 
+Register Backend.UnsignedPrograms with existing dependencies. Resolved Grill
+Log: unsigned source matrices execute through the ordinary conformance runner.
+
 Register Backend.SignedPrograms with existing dependencies. Resolved Grill Log
 (#497): all signed matrices enter the ordinary native, mathematical and frame
 compilation corpora without a second test runner or new package.

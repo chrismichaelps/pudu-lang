@@ -77,6 +77,7 @@ test-suite pudu-test
     Pudu.Backend.FunctionPrograms
     Pudu.Backend.IntegerPrograms
     Pudu.Backend.SignedPrograms
+    Pudu.Backend.UnsignedPrograms
     Pudu.Backend.DeferredPrograms
     Pudu.Backend.ControlPrograms
     Pudu.Backend.ToolchainSpec

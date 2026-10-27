@@ -5,6 +5,8 @@ tags: [moc, module]
 
 # Module Map
 
+- [[Native Unsigned Programs]] — unsigned full-range mathematical and diagnostic conformance (#500).
+
 - [[Native Signed Programs]] — fixed signed-width mathematical and diagnostic conformance (#497).
 
 - [[Host Failure Vocabulary]] · [[CLI Memory Failure]] · [[CLI Memory Tests]] — shared catchable host-exhaustion presentation without swallowing cancellation (#499).

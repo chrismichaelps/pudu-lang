@@ -4,11 +4,12 @@ module Pudu.Backend.IntegerPrograms (integerSuccessPrograms, integerRefusalProgr
 import Data.Bits ((.&.), (.|.), xor, complement, shiftL, shiftR)
 import Pudu.Backend.DeferredPrograms (deferredSuccessPrograms, deferredRefusalPrograms)
 import Pudu.Backend.SignedPrograms (signedSuccessPrograms, signedRefusalPrograms)
+import Pudu.Backend.UnsignedPrograms (unsignedSuccessPrograms, unsignedRefusalPrograms)
 import Data.Text (Text)
 import qualified Data.Text as Text
 
 integerSuccessPrograms :: [(String, Text, Text)]
-integerSuccessPrograms = signedSuccessPrograms <> deferredSuccessPrograms <> map binaryMatrix operators <> map isolatedBinary operators <> [complementMatrix]
+integerSuccessPrograms = unsignedSuccessPrograms <> signedSuccessPrograms <> deferredSuccessPrograms <> map binaryMatrix operators <> map isolatedBinary operators <> [complementMatrix]
   <> [("isolated complement", program ["fn main() -> Int { print(display(~0))", "  return 0 }"], "-1\n")]
   <> map shiftMatrix [("<<", shiftL), (">>", shiftR)]
   <> [("integer operands freeze before mutation", program
@@ -107,7 +108,7 @@ shiftMatrix (operator, operation) =
   pairs = [(a, count) | a <- numbers <> map fst samples, count <- [0, 1, 31, 32, 62, 63]]
 
 integerRefusalPrograms :: [(String, Text)]
-integerRefusalPrograms = signedRefusalPrograms <> deferredRefusalPrograms <>
+integerRefusalPrograms = unsignedRefusalPrograms <> signedRefusalPrograms <> deferredRefusalPrograms <>
   [ ("invalid shift " <> Text.unpack operator <> " " <> show count, program
       [ "fn op(a: Int, b: Int) -> Int { a " <> operator <> " b }"
       , "fn main() -> Int {"

@@ -158,7 +158,12 @@ successPrograms =
 
 statusPrograms :: [(String, Text)]
 statusPrograms =
-  [ ("Int8 negative minimum entry", "module Main\nfn main() -> Int8 { -128i8 }\n")
+  [ ("UInt maximum entry", "module Main\nfn main() -> UInt { 18446744073709551615 }\n")
+  , ("UInt8 maximum entry", "module Main\nfn main() -> UInt8 { 255u8 }\n")
+  , ("UInt16 zero entry", "module Main\nfn main() -> UInt16 { 0 }\n")
+  , ("UInt32 maximum entry", "module Main\nfn main() -> UInt32 { 4294967295u32 }\n")
+  , ("UInt64 maximum entry", "module Main\nfn main() -> UInt64 { 18446744073709551615u64 }\n")
+  , ("Int8 negative minimum entry", "module Main\nfn main() -> Int8 { -128i8 }\n")
   , ("Int8 positive entry", "module Main\nfn main() -> Int8 { 127 }\n")
   , ("Int16 positive entry clamps", "module Main\nfn main() -> Int16 { 32767 }\n")
   , ("Int32 negative entry clamps", "module Main\nfn main() -> Int32 { -2147483648i32 }\n")

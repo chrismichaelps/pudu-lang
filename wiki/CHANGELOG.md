@@ -5,6 +5,11 @@ tags: [changelog]
 
 # Changelog
 
+## 2026-10-18 — Unsigned native admission (#500)
+
+- [[Native Unsigned Integers]] admits canonical UInt and UInt8/16/32/64 through the shared scalar predicate, retaining the existing exact carrier and runtime ABI. [[Native Unsigned Programs]] covers high bits/maxima, arithmetic policies, logical shifts, aliases/transfers, exact failures and entry statuses with independent mathematical answers.
+- All 19 clean gates/669 test groups and 319 strict C11 translations pass. All 20 native groups also pass against the tree evaluator under AddressSanitizer/UBSan; five unsigned entry-status probes and static rejection boundaries pass. Broader numeric coverage, independent reviews and additional platform evidence remain pending.
+
 ## 2026-10-18 — Fixed signed native admission (#497)
 
 - [[Native Signed Integers]] resolves canonical Int8/16/32/64 projection, width-preserving arithmetic and platform-Int shift counts. Lowering admits these kinds in signatures, literals, locals, display, loop results and entry status while retaining the exact carrier and existing runtime helpers.

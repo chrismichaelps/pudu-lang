@@ -31,7 +31,7 @@ modifiers, constraints, default values and body shape retain their existing
 refusals. Defaults point at their expression span. Consume the final scheme
 from [[Compiler Lower Types]]: synchronous, monomorphic, all parameters required,
 and arity equal to source parameters. Represented parameters/results are admitted
-signed integers, Bool and unit. Inferred and aliased types share this projection.
+integers, Bool and unit. Inferred and aliased types share this projection.
 
 Unsupported formed types point at the annotation when present, otherwise the
 parameter/function name. Missing or polymorphic schemes refuse at the function
