@@ -26,12 +26,18 @@ one owner.
 - **Safety.** Every update checks the box's count. Anything that might still be
   observed is copied first.
 
+- **Sorting.** `sortBy` asks its comparison exactly what `Eval.Sort.sortWith`
+  asks, in the same order ([[Compiler Lower Sort]]).
+- **Patterns and slices.** Sequence patterns test the length first, as
+  `matchPattern` does, and a bound rest is a slice. `items[a..b]` and its other
+  written shapes check the range as `rangeBounds` does and fail with the same
+  E7004 text, help included ([[Compiler Lower Slice]]). (#558)
+
 ## Not yet
 
-`sortBy` (its comparison order must be the evaluator's natural merge sort),
-sequence patterns, slicing by a range, and arrays of types without a native
-form refuse with E6001. Lambdas whose facts checking left unsolved (#557)
-refuse too.
+Arrays of types without a native form refuse with E6001. A range held in a
+variable is a range value, which is not native yet. Lambdas whose facts
+checking left unsolved (#557) refuse too.
 
 ## Resolved Grill Log
 
@@ -42,4 +48,4 @@ refuse too.
 
 ## Referenced by
 
-[[Native Emission Coverage]] · [[Compiler Lower Array]] · [[Backend Array Programs]]
+[[Native Emission Coverage]] · [[Compiler Lower Array]] · [[Backend Array Programs]] · [[Backend Array Pattern Programs]]

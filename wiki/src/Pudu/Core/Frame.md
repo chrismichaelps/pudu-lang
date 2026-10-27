@@ -58,6 +58,10 @@ Resolved Grill Log: `FrameArray`, `FrameArrayMethod`, `FrameIndex` and the
 `FrameMove` instruction, which moves one slot's value into another and leaves
 the source empty.
 
+## Computed help (#558)
+
+`FrameFailText` carries an optional slot of help text computed at run time.
+
 ## Referenced by
 
 [[src/_MOC]] · [[Program Compiler Module Map]] · [[Native Frame Pressure Repair]]

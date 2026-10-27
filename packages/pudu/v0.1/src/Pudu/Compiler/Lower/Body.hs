@@ -17,6 +17,8 @@ import Pudu.Compiler.Lower.Text (lowerTextMethod)
 import Pudu.Compiler.Lower.Method (lowerMethodCall, lowerQualifiedMethod)
 import Pudu.Compiler.Lower.Call (lowerFunctionCall, lowerPrint, lowerRendered)
 import Pudu.Compiler.Lower.Array (lowerArrayIndex, lowerArrayLiteral, lowerArrayMethod, takeReceiver)
+import Pudu.Compiler.Lower.Slice (lowerRangeIndex)
+import Control.Applicative ((<|>))
 import Pudu.Compiler.Lower.Try (lowerTry)
 import Pudu.Compiler.Lower.For (lowerFor)
 import Pudu.Compiler.Lower.Lambda (lowerFunctionValue, lowerLambda, lowerValueCall)
@@ -380,7 +382,7 @@ lowerExpression state (Located spanValue expression) = case expression of
     | qualifier receiver, Just lowered <- lowerVariant lowerExpression state spanValue member [] -> lowered
     | otherwise -> lowerField lowerExpression state spanValue receiver member
   IndexExpression receiver key -> maybe (lowerTupleIndex lowerExpression state spanValue receiver key) id
-    (lowerArrayIndex lowerExpression state spanValue receiver key)
+    (lowerRangeIndex lowerExpression state receiver key <|> lowerArrayIndex lowerExpression state spanValue receiver key)
   RangeExpression{} -> halt spanValue "ranges" state
   TryExpression operand -> lowerTry lowerExpression state spanValue operand
   AwaitExpression{} -> halt spanValue "await" state

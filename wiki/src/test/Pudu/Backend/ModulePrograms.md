@@ -45,6 +45,11 @@ Resolved Grill Log: both lists include [[Backend Closure Programs]].
 
 Resolved Grill Log: both lists include [[Backend Array Programs]].
 
+## Array patterns (#558)
+
+Includes [[Backend Array Pattern Programs]] in both the success and refusal
+lists.
+
 ## Referenced by
 
 [[Backend Native Tests]] · [[Native Emission Coverage]] · [[src/_MOC]]

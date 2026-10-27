@@ -98,6 +98,7 @@ test-suite pudu-test
     Pudu.Backend.ForPrograms
     Pudu.Backend.ClosurePrograms
     Pudu.Backend.ArrayPrograms
+    Pudu.Backend.ArrayPatternPrograms
     Pudu.Backend.TextCaseSpec
     Pudu.Backend.TuplePrograms
     Pudu.Backend.TextLeakSpec

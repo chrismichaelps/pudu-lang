@@ -42,6 +42,12 @@ Pattern update only: `CoreRecordType` has an argument list; behavior is unchange
 Resolved Grill Log: export `lowerPattern`, which [[Compiler Lower For]] uses for
 its binder.
 
+## Sequence patterns (#558)
+
+Resolved Grill Log: `[a, ..rest, z]` lowers to `CoreArrayPattern` with the
+front items, the rest (absent, skipped, or bound to a local) and the back
+items. A rest name an earlier alternative already bound reuses its local.
+
 ## Referenced by
 
 [[Compiler Lower Body]] · [[Compiler Frame Match]] · [[src/_MOC]]

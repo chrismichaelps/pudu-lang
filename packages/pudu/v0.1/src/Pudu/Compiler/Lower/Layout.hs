@@ -74,7 +74,7 @@ expression (CoreExpression _ kind shape) = kind : case shape of
   CoreField _ operand -> expression operand
   CoreConstruct _ fields -> concatMap (expression . snd) fields
   CoreMatch subject arms -> expression subject <> concatMap arm arms
-  CoreFailText _ _ message -> expression message
+  CoreFailText _ _ message help -> expression message <> foldMap expression help
   CoreVariantName operand -> expression operand
   CorePrint operand -> expression operand
   CoreCall _ arguments -> concatMap expression arguments
@@ -103,4 +103,5 @@ pattern shape = case shape of
   CoreRecordPattern members -> concatMap pattern members
   CoreVariantPattern _ members -> concatMap pattern members
   CoreAlternativePattern members -> concatMap pattern members
+  CoreArrayPattern front rest back -> concatMap pattern (front <> back) <> foldMap (foldMap (pure . coreLocalType)) rest
   CoreWildcardPattern -> []

@@ -28,6 +28,11 @@ lifted functions whose closure has that type, empty when none was made.
 Resolved Grill Log: an array type's element and the new Core shapes are
 collected.
 
+## Sequence patterns (#558)
+
+A sequence pattern contributes its items' locals and its bound rest's.
+`CoreFailText`'s computed help is walked like its message.
+
 ## Referenced by
 
 [[Compiler Lower]] · [[Core IR]] · [[src/_MOC]]

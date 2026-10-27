@@ -55,6 +55,10 @@ match skips the body, as `matchPattern` does in the evaluator.
 Resolved Grill Log: an array runs once, its length is read once, and each turn
 declares the next item, as walking the evaluator's item list does.
 
+## Body tails (#558)
+
+The body goes through `droppedTail` from [[Compiler Lower Control]].
+
 ## Referenced by
 
 [[Compiler Lower Body]]

@@ -50,6 +50,10 @@ Resolved Grill Log: include closureSuccessPrograms, so closures and their captur
 Resolved Grill Log: include arraySuccessPrograms, so moved, grown and copied
 buffers are all released.
 
+## Array patterns (#558)
+
+Counts cleanup for [[Backend Array Pattern Programs]] too.
+
 ## Referenced by
 
 [[Backend Text Programs]] · [[Native Text Runtime]] · [[src/_MOC]]

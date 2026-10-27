@@ -232,3 +232,4 @@ tags: [moc, handoff]
 - [[Native Folded Constant Delivery]] — active compiler-folded native constant delivery (#543).
 
 - [[Native Shared Reference Delivery]] — active shared-carrier source admission (#544).
+- [[Native Array Pattern Delivery]] — #558 sortBy, sequence patterns and range slices, done.

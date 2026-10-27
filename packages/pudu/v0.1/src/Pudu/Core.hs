@@ -177,8 +177,10 @@ data CoreExpressionShape
   | CoreConstruct !Text ![(Text, CoreExpression)]
   {-| The subject runs once, then each arm is tried in order. -}
   | CoreMatch !CoreExpression ![CoreArm]
-  {-| Ends the program with a diagnostic whose text is only known now. -}
-  | CoreFailText !Text !(Maybe Text) !CoreExpression
+  {-| Ends the program with a diagnostic whose text is only known now. The
+      last operand, when there is one, is help text computed the same way and
+      it replaces the written help. -}
+  | CoreFailText !Text !(Maybe Text) !CoreExpression !(Maybe CoreExpression)
   {-| The name of the variant a sum value holds, as text. -}
   | CoreVariantName !CoreExpression
   | CorePrint !CoreExpression
@@ -363,4 +365,7 @@ data CorePattern
   | CoreRecordPattern ![CorePattern]
   | CoreVariantPattern !Text ![CorePattern]
   | CoreAlternativePattern ![CorePattern]
+  {-| `[a, ..rest, z]`: items read from the front, then the rest (absent,
+      skipped, or bound to a local), then items read from the back. -}
+  | CoreArrayPattern ![CorePattern] !(Maybe (Maybe CoreLocal)) ![CorePattern]
   deriving stock (Eq, Show)

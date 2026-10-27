@@ -141,6 +141,11 @@ Resolved Grill Log: literals, indexing and array methods go to [[Compiler
 Lower Array]], and assignments pass through `takeReceiver`. Direct calls and
 `print`/`display`/`show` moved to [[Compiler Lower Call]].
 
+## Range indexing (#558)
+
+`IndexExpression` tries [[Compiler Lower Slice]] first, then array and Str
+indexing, then tuples.
+
 ## Referenced by
 
 [[src/Pudu/Compiler/_MOC]] · [[src/Pudu/_MOC]] · [[Compiler Lower]] ·

@@ -94,12 +94,19 @@ lowerExpression expression@(CoreExpression at kind shape) = case shape of
           Nothing -> fault (Just at) "a variant without every payload member"
       _ -> fault (Just at) "a variant outside its sum"
   CoreVariantName operand -> rendered FrameVariantName operand
-  CoreFailText code help message -> do
+  CoreFailText code help message computed -> do
     text <- lowerScalar message
     case text of
       Stopped -> pure Stopped
       Completed Nothing -> fault (Just at) "a failure message without a value"
-      Completed (Just slot) -> finish (FrameFailText at code help slot) >> pure Stopped
+      Completed (Just slot) -> case computed of
+        Nothing -> finish (FrameFailText at code help slot Nothing) >> pure Stopped
+        Just helpText -> do
+          lowered <- lowerScalar helpText
+          case lowered of
+            Stopped -> pure Stopped
+            Completed Nothing -> fault (Just at) "failure help without a value"
+            Completed (Just helpSlot) -> finish (FrameFailText at code help slot (Just helpSlot)) >> pure Stopped
   CoreMatch subject arms -> lowerMatch (MatchLowering lowerExpression lowerScalar resultSlot) at kind subject arms
   CoreRecordUpdate base written -> do
     held <- lowerScalar base

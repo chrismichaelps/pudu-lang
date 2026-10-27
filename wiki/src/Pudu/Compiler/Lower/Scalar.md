@@ -74,6 +74,10 @@ Pattern update only: `CoreRecordType` has an argument list; behavior is unchange
 Resolved Grill Log: arrays are `array` and function values `function` in
 operator failures, as `valueKind` names them.
 
+## Failure help (#558)
+
+The E7001 failure passes no computed help.
+
 ## Referenced by
 
 [[Compiler Lower Body]] · [[Pudu Cabal Manifest]] · [[Native Emission Coverage]]

@@ -199,6 +199,13 @@ Resolved Grill Log: `CoreArrayType`, `CoreArray`, `CoreArrayMethod` (arguments
 before the receiver), `CoreIndex` (its span is the index's) and
 `CoreTakeLocal`, a last read that leaves the local empty.
 
+## Sequence patterns and computed help (#558)
+
+Resolved Grill Log: `CoreArrayPattern` holds front patterns, an optional rest
+(skipped or bound to a local) and back patterns. `CoreFailText` takes an
+optional fourth operand, help text computed at run time, which replaces the
+written help; a slice failure needs it to name the length.
+
 ## Referenced by
 
 [[src/Pudu/_MOC]] · [[src/Pudu/Backend/_MOC]] · [[Core IR]] · [[Compiler Lower]] ·

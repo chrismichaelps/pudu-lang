@@ -31,6 +31,10 @@ inside while conditions and break operands against literal expected graphs.
 
 Resolved Grill Log: the module literal carries no closures, and a call through a value resumes like a call.
 
+## Computed help (#558)
+
+Matches `FrameFailText{}` by record syntax, so new operands don't break it.
+
 ## Referenced by
 
 [[src/_MOC]] · [[Native Frame Pressure Repair]]

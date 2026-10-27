@@ -58,6 +58,11 @@ never mutated after it is filled.
 
 [[Backend Runtime]] · [[Native Runtime Dependencies]] · [[Native Binary64 Formatter]] · [[Backend Frame Values]]
 
+## Computed help (#558)
+
+`fail_text_help` copies both the message and the help before cleanup runs,
+then reports with the help in place of the site's.
+
 ## Referenced by
 
 [[src/_MOC]] · [[src/Pudu/Backend/_MOC]] · [[Native Emission Coverage]]
