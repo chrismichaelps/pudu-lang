@@ -5,6 +5,8 @@ tags: [moc, handoff]
 
 # Handoff Map
 
+- [[Hackage Transport Delivery]] — issue #656 configure verified HTTPS before one index update.
+
 - [[Library Catalog Delivery]] — issue #654 compiler-consistent import completion roots.
 
 - [[Derive Index Delivery]] — authored strategy indexing and public metadata (#458).
