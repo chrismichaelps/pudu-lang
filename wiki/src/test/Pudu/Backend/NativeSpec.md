@@ -132,3 +132,8 @@ diagnostics.
 
 Two groups run [[Backend Text Programs]]: success programs against their
 answers and the interpreter, refusals against the interpreter's diagnostics.
+
+## Str method conformance (#516)
+
+Two groups run [[Backend Text Method Programs]] against hand-written answers
+and the interpreter's refusals.

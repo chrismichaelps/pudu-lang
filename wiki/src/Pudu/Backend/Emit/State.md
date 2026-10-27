@@ -58,3 +58,8 @@ Resolved Grill Log: reproduce actual interpreter dispatch, canonical settled kin
 Export shiftSites :: EmitState -> Span -> IntegerKind -> (EmitState, Int, Int). Append negative then oversized count sites with shared E7004 message/help and ordinary excerpt geometry.
 
 Resolved Grill Log: use defined unsigned bit patterns, validate counts before shifts, and prove signed arithmetic bounds before evaluation. The actual interpreter determines results, effect order and exact diagnostic vocabulary. No syntax or type-inference change.
+
+## General failure sites (#516)
+
+`failureSite state span code message` records a site for any runtime refusal
+whose code and message are fixed at emission, such as E7004 for text counts.

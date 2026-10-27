@@ -226,3 +226,7 @@ Register Pudu.Backend.FloatPrograms in other-modules beside the integer corpora;
 ## Text programs (#515)
 
 Register Pudu.Backend.TextPrograms and Pudu.Backend.TextLeakSpec in other-modules; no new dependency.
+
+## Text method programs (#516)
+
+Register Pudu.Backend.TextMethodPrograms in other-modules.

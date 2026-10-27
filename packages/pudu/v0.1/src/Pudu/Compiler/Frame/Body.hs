@@ -80,6 +80,14 @@ lowerExpression expression@(CoreExpression at kind shape) = case shape of
     | coreExpressionType operand == CoreTextType -> lowerExpression operand
     | otherwise -> rendered FrameDisplay operand
   CoreShow operand -> rendered FrameShow operand
+  CoreTextMethod name receiver arguments -> do
+    -- The evaluator reads the arguments before the receiver.
+    operands <- lowerOperands (arguments <> [receiver])
+    case operands of
+      Nothing -> pure Stopped
+      Just slots -> case reverse slots of
+        target : backwards -> value (FrameTextMethod name target (reverse backwards))
+        [] -> fault (Just at) "a text method without its receiver"
   CorePrint operand -> lowerPrint at operand
   CoreCall name arguments -> do
     operands <- lowerOperands arguments

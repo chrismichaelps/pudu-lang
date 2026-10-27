@@ -9,7 +9,7 @@ module Pudu.Core.Frame
 import Data.Text (Text)
 import Data.Word (Word64)
 import Pudu.FloatLiteral (FloatWidth)
-import Pudu.Core (CoreBinaryOperator (..), CoreType)
+import Pudu.Core (CoreBinaryOperator (..), CoreTextMethodName, CoreType)
 import Pudu.IntegerLiteral (IntegerKind)
 import Pudu.Source (Span)
 
@@ -78,6 +78,7 @@ data FrameValueShape
   | FrameTextLiteral !Text
   | FrameDisplay !FrameSlot
   | FrameShow !FrameSlot
+  | FrameTextMethod !CoreTextMethodName !FrameSlot ![FrameSlot]
   | FrameUnitLiteral
   | FrameRead !FrameSlot
   | FrameUnary !FrameUnaryOperator !FrameSlot

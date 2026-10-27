@@ -257,3 +257,8 @@ is the text itself, matching `callDisplay`; `show(x)` lowers to `CoreShow`
 after the same local/module shadowing check as `print` and `display`. A Str
 entry result is shown (quoted and escaped) and exits 0, as `reportResult`
 does for any non-integer, non-unit value.
+
+## Method calls (#516)
+
+A call on a member delegates to [[Compiler Lower Text]], which admits built-in
+Str methods; every other method call still refuses.

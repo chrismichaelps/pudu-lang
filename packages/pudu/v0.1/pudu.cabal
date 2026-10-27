@@ -106,6 +106,7 @@ library
     Pudu.Backend.Runtime.Integer.Arithmetic
     Pudu.Backend.Runtime.Integer.Bits
     Pudu.Backend.Runtime.Text
+    Pudu.Backend.Runtime.Text.Methods
     Pudu.Backend.Toolchain
     Pudu.Compiler
     Pudu.Compiler.Constants
@@ -122,6 +123,7 @@ library
     Pudu.Compiler.Lower.Body
     Pudu.Compiler.Lower.Control
     Pudu.Compiler.Lower.State
+    Pudu.Compiler.Lower.Text
     Pudu.Compiler.Lower.Signature
     Pudu.Compiler.Lower.Scalar
     Pudu.Compiler.Lower.Types

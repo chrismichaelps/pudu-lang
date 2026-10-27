@@ -7,9 +7,9 @@ import Data.Text (Text)
 import qualified Data.Text as Text
 import Numeric (showHex)
 import Pudu.Backend.Emit.State
-  ( EmitState, cString, cStringBytes, divideByZeroSite, overflowSite, shiftSites, textOfInt )
+  ( EmitState, cString, cStringBytes, divideByZeroSite, failureSite, overflowSite, shiftSites, textOfInt )
 import Pudu.Backend.Emit.Support (integerHelper, integerKindText, integerLiteralText, isWideInteger)
-import Pudu.Core (CoreBinaryOperator (..), CoreType (..))
+import Pudu.Core (CoreBinaryOperator (..), CoreTextMethodName (..), CoreType (..))
 import Pudu.Core.Frame
   ( FrameFault (..), FrameSlot (..), FrameSlotId (..), FrameUnaryOperator (..)
   , FrameValue (..), FrameValueShape (..), coreScalarOperator )
@@ -42,6 +42,33 @@ frameValue state value = case frameValueShape value of
     | frameSlotType slot == CoreTextType -> slotText slot >>= \text -> plain ("pudu_text_retain(" <> text <> ")") ["text_retain"]
     | otherwise -> slotText slot >>= \text -> done state text []
   FrameDisplay slot -> rendered slot
+  FrameTextMethod name receiver arguments -> do
+    target <- slotText receiver
+    operands <- traverse slotText arguments
+    let method helper extra = "pudu_" <> helper <> "(" <> Text.intercalate ", " (target : operands <> extra) <> ")"
+        simple helper = plain (method helper []) [helper]
+        counted helper message =
+          let (after, index) = failureSite state at "E7004" message
+           in Right (after, method helper [site index], Set.singleton helper)
+    case name of
+      TextLength -> simple "text_length"
+      TextIsEmpty -> simple "text_is_empty"
+      TextContains -> simple "text_contains"
+      TextStartsWith -> simple "text_starts_with"
+      TextEndsWith -> simple "text_ends_with"
+      TextIndexOf -> simple "text_index_of"
+      TextSpanOf -> plain (method "text_span" ["1"]) ["text_span"]
+      TextSpanNotOf -> plain (method "text_span" ["0"]) ["text_span"]
+      TextDrop -> counted "text_drop" "a drop count cannot be negative"
+      TextTake -> counted "text_take" "a take count cannot be negative"
+      TextSlice -> simple "text_slice"
+      TextRepeat ->
+        let (afterNegative, negative) = failureSite state at "E7004" "a repeat count cannot be negative"
+            (after, limit) = failureSite afterNegative at "E7004" "repeated text exceeds the runtime size limit"
+         in Right (after, method "text_repeat" [site negative, site limit], Set.singleton "text_repeat")
+      TextReverse -> simple "text_reverse"
+      TextEscapeHtml -> simple "text_escape_html"
+      TextReplace -> simple "text_replace"
   FrameShow slot
     | frameSlotType slot == CoreTextType -> slotText slot >>= \text -> plain ("pudu_text_show(" <> text <> ")") ["text_show"]
     | otherwise -> rendered slot

@@ -58,3 +58,8 @@ Text literals now produce a slot when used as values; `lowerPrint` keeps the
 literal and scalar-display fusions and otherwise prints a text slot.
 `CoreDisplay` of a scalar saves `FrameDisplay`, of Str reads the operand;
 `CoreShow` saves `FrameShow`.
+
+## Text methods (#516)
+
+`CoreTextMethod` lowers its arguments left to right, then its receiver, then
+saves one `FrameTextMethod` value.

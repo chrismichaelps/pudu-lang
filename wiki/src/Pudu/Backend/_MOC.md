@@ -49,6 +49,7 @@ aliases: [Backend Module Map]
 - [[Backend Runtime Integer]] · [[Backend Integer Programs]] — defined C11 bit patterns, wrapping, saturation and checked shifts.
 - [[Backend Float Programs]] — native Float32/Float64 source conformance.
 - [[Native Text Runtime]] · [[Backend Text Programs]] · [[Backend Text Leak Tests]] — owned native text.
+- [[Native Text Methods]] · [[Backend Text Method Programs]] — native Str methods.
 
 - [[Backend Integer Value]] · [[Backend Integer Arithmetic]] · [[Backend Integer Bits]] · [[Backend Deferred Integer Programs]] — exact integer carriers and deferred-value conformance.
 

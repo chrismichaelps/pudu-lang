@@ -239,6 +239,7 @@ tags: [moc, module]
 - [[Backend Runtime Integer]] · [[Backend Integer Programs]] — portable platform Int operations and independent mathematical/differential evidence.
 - [[Backend Float Programs]] — Float32/Float64 source programs with IEEE answers and interpreter refusals.
 - [[Native Text Runtime]] · [[Backend Text Programs]] · [[Backend Text Leak Tests]] — owned Str values, conformance and counted leaks.
+- [[Compiler Lower Text]] · [[Native Text Methods]] · [[Backend Text Method Programs]] — native Str methods.
 
 - [[Backend Integer Value]] · [[Backend Integer Arithmetic]] · [[Backend Integer Bits]] · [[Backend Deferred Integer Programs]] — exact integer carriers and deferred-value conformance.
 
