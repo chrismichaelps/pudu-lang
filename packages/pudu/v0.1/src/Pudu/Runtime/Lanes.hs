@@ -18,6 +18,8 @@ module Pudu.Runtime.Lanes
   , laneMap
   , laneRamp
   , laneScatter
+  , laneScatterAdd
+  , laneWhere
   , laneSet
   , laneSlice
   , laneToList
@@ -184,3 +186,23 @@ laneAffine3 matrix xs ys zs = case matrix of
     rz <- laneZip3 (\x y z -> ((m2 * x + m5 * y) + m8 * z) + m11) xs ys zs
     pure (rx, ry, rz)
   _ -> Nothing
+
+{-| Indices whose value is positive, ascending; NaN is not positive. -}
+laneWhere :: Lanes -> [Int]
+laneWhere bytes = [index | (index, value) <- zip [0 ..] (laneToList bytes), value > 0]
+
+{-| Add each value at its index in a copy; repeated indices accumulate in the
+    order given, so a sum is the same on every run. -}
+laneScatterAdd :: Lanes -> [Int] -> Lanes -> Maybe Lanes
+laneScatterAdd bytes indices values
+  | length indices /= laneCount values = Nothing
+  | any (\i -> i < 0 || i >= limit) indices = Nothing
+  | otherwise = Just $ unsafeDupablePerformIO $ reading bytes $ \source -> reading values $ \fresh ->
+      pure $ create limit $ \out -> do
+        copyBytes out source (BS.length bytes)
+        forM_ (zip [0 ..] indices) $ \(slot, index) -> do
+          held <- peekElemOff out index
+          added <- peekElemOff fresh slot
+          pokeElemOff out index (held + added)
+  where
+    limit = laneCount bytes

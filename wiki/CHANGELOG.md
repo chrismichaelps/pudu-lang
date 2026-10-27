@@ -5,6 +5,11 @@ tags: [changelog]
 
 # Changelog
 
+## 2026-10-27 — Data-parallel lane primitives (#684)
+
+- [[Std Lanes]] adds select, threshold masks, positions, accumulating scatter-add and integer
+  conversion, so branchy algorithms such as contact solving run as lane programs.
+
 ## 2026-10-27 — Native broadphase (#682)
 
 - [[Runtime Broadphase]] finds overlapping box pairs by sort and sweep; [[Overlap Pairs Fixture]]
