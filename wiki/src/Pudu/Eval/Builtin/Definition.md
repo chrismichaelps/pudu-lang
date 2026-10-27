@@ -187,6 +187,13 @@ name wide.
 Resolved Grill Log: use one explicit constructor and total name mapping for atomic
 replacement; definitions retain no runtime policy.
 
+## Binary64 kernels
+
+`FloatKernelBuiltin !FloatKernel` is one constructor for every [[Float Kernel Identity]] entry;
+`builtinName` delegates to `floatKernelName`, so a kernel's binding has one spelling.
+Grill Log — **Q:** one constructor per kernel? **A:** No; a carried enumeration keeps the
+evaluator, checker and resolver reading the same closed list.
+
 ## Referenced by
 
 [[src/Pudu/Eval/_MOC]] · [[Eval Value]] · [[Eval Builtin]] · [[Eval Effect]]

@@ -15,6 +15,7 @@ import qualified Data.Map.Strict as Map
 import Data.Maybe (fromMaybe)
 import qualified Data.Set as Set
 import Data.Text (Text)
+import Pudu.FloatKernel (floatKernelName, floatKernels)
 import Pudu.Foreign.Crossing (Crossing (NothingCrossing), RecordLayouts, crossingFor, recordLayouts)
 import Pudu.Eval.Builtin
   ( effectBuiltins
@@ -194,6 +195,7 @@ installBuiltinConstructors = do
   bind "decimalToFloat" (BuiltinValue DecimalToFloatBuiltin)
   bind "decimalDivide" (BuiltinValue DecimalDivideBuiltin)
   bind "decimalRound" (BuiltinValue DecimalRoundBuiltin)
+  mapM_ (\kernel -> bind (floatKernelName kernel) (BuiltinValue (FloatKernelBuiltin kernel))) floatKernels
   mapM_ (\builtin -> bind (builtinName builtin) (BuiltinValue builtin)) effectBuiltins
 
 installDeclaration

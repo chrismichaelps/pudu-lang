@@ -329,6 +329,8 @@ library
     Pudu.Derive.Expand
     Pudu.Derive.Inference
     Pudu.Runtime.Word
+    Pudu.Runtime.FloatKernel
+    Pudu.FloatKernel
     Pudu.Eval.MultiMap
     Pudu.Eval.Loop.Kernel
     Pudu.Eval.Loop.Step

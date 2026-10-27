@@ -5,6 +5,15 @@ tags: [changelog]
 
 # Changelog
 
+## 2026-10-27 — Binary64 kernels behind Std.Math.Float (#661)
+
+- [[Float Kernel Identity]] and [[Runtime Float Kernels]] give the evaluator, checker and resolver
+  one list of hardware and math-library operations; [[Std Math Float]] keeps every signature.
+- `sqrt` is correctly rounded across the full range; `fma`, `toBits` and `fromBits` are new.
+  [[Square Root Range Gate]] checks bit-exact goldens and kernel contracts in CI.
+- [[Root Kernel Benchmark]] rejects the reciprocal-root bit estimate; [[Square Root Delivery]]
+  records measurements.
+
 ## 2026-10-27 — Flat expression lists keep their depth (#662)
 
 - [[Parser Expression Aggregate]] and [[Parser Expression Postfix]] read array, Set and argument

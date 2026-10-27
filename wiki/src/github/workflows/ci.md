@@ -9,6 +9,10 @@ aliases: [Pudu Continuous Verification]
 
 ## Purpose and interface
 
+[[Square Root Range Gate]] runs after the residency check against the resolved compiler path; its
+optional timing mode is not a CI performance assertion. Resolved Grill Log: numeric boundary
+regressions are repeatable and bit-exact, so they belong in CI rather than a manual run.
+
 Verify development and production integration requests and branch updates. Compiler checks use
 an optimized build and a shared executable path. The full suite, source formatting and acceptance,
 documentation examples, website suites, package flows, sandbox refusal, diagnostics, release

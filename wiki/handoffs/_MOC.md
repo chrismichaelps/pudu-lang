@@ -5,6 +5,8 @@ tags: [moc, handoff]
 
 # Handoff Map
 
+- [[Square Root Delivery]] — issue #661 binary64 kernels behind Std.Math.Float, exact square root.
+
 - [[Flat Expression List Delivery]] — issue #662 keep flat list width out of parser nesting depth.
 
 - [[Hackage Transport Delivery]] — issue #656 configure verified HTTPS before one index update.

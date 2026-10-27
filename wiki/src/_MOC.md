@@ -5,6 +5,8 @@ tags: [moc, module]
 
 # Module Map
 
+- [[Square Root Range Gate]] · [[Root Kernel Benchmark]] — full-range root accuracy and measured estimates.
+
 - [[Website Linux Workflow]] · [[Hackage Transport Test]] — configured HTTPS index transport.
 
 - [[Derive Index Output Gate]] — checked strategy output and visibility.
@@ -112,6 +114,8 @@ tags: [moc, module]
 - [[Notes Web Application]] — database-backed HTML and JSON application composition.
 
 - [[Runtime Word Kernels]] — native-word reductions over existing containers.
+- [[Runtime Float Kernels]] — exact and platform binary64 operations behind Std.Math.Float.
+- [[Float Kernel Identity]] — names and shapes of the binary64 kernels, read by checker and runtime.
 - [[Eval Word Map]] — checked UInt64 map payload reductions for STD.
 - [[Runtime Buffer Kernels]] — unboxed contiguous byte buffer operations.
 - [[Eval Buffer]] — evaluator adapters for buffer builtins.

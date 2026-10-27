@@ -5,6 +5,7 @@ module Pudu.Eval.Builtin.Definition
   ) where
 
 import Data.Text (Text)
+import Pudu.FloatKernel (FloatKernel, floatKernelName)
 
 {-| A wired-in function the evaluator recognizes by name rather than by closure. -}
 data Builtin
@@ -219,6 +220,7 @@ data Builtin
   | ForgetThreadBuiltin
   | ChannelPullWithinBuiltin
   | MutexAcquireWithinBuiltin
+  | FloatKernelBuiltin !FloatKernel
   deriving stock (Eq, Show)
 
 {-| The source-level binding for a built-in tag. -}
@@ -387,6 +389,7 @@ builtinName value = case value of
   DecimalScaleBuiltin -> "decimalScale"
   DecimalToIntBuiltin -> "decimalToInt"
   DecimalToFloatBuiltin -> "decimalToFloat"
+  FloatKernelBuiltin kernel -> floatKernelName kernel
   DecimalDivideBuiltin -> "decimalDivide"
   DecimalRoundBuiltin -> "decimalRound"
   BufferAllocBuiltin -> "bufferAlloc"
