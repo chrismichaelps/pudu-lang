@@ -5,6 +5,8 @@ tags: [moc, handoff]
 
 # Handoff Map
 
+- [[Lambda Option Try Delivery]] — issue #678 `?` on Option in unannotated lambdas.
+
 - [[Hackage Transport Delivery]] — issue #656 configure verified HTTPS before one index update.
 
 - [[Derive Index Delivery]] — authored strategy indexing and public metadata (#458).

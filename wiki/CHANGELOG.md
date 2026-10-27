@@ -5,6 +5,11 @@ tags: [changelog]
 
 # Changelog
 
+## 2026-10-27 — `?` on Option inside unannotated lambdas (#678)
+
+- [[Type Check Rule]] takes an unsolved result's carrier from an operand already typed `Option`;
+  [[Lambda Option Try Delivery]] records evidence.
+
 ## 2026-10-27 — Verified HTTPS CI index transport (#656)
 
 - [[Website Linux Workflow]] configures signed HTTPS Hackage access before one explicit update.
