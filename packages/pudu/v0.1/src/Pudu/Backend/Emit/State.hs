@@ -50,6 +50,8 @@ data EmitState = EmitState
   , emitLoopResults :: !(Map.Map CoreLoopId (Maybe Text))
   , emitBreakTargets :: !(Set.Set CoreLoopId)
   , emitContinueTargets :: !(Set.Set CoreLoopId)
+  {-| Each function's number in the frame table, for closures to name. -}
+  , emitFunctionIds :: !(Map.Map Text Int)
   }
 
 emptyEmitState :: [Source] -> EmitState
@@ -65,6 +67,7 @@ emptyEmitState sources =
     , emitLoopResults = Map.empty
     , emitBreakTargets = Set.empty
     , emitContinueTargets = Set.empty
+    , emitFunctionIds = Map.empty
     }
 
 line :: EmitState -> Text -> EmitState

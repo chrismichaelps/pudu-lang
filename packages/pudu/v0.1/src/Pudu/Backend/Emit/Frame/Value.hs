@@ -6,9 +6,11 @@ import qualified Data.Set as Set
 import Data.Text (Text)
 import qualified Data.Text as Text
 import Numeric (showHex)
+import qualified Data.Map.Strict as Map
 import Pudu.Backend.Emit.State
-  ( EmitState, cString, cStringBytes, divideByZeroSite, failureSite, overflowSite, shiftSites, textOfInt )
-import Pudu.Backend.Emit.Aggregate (aggregateHelper, aggregateNeed, cellName, isAggregate, retained)
+  ( EmitState (..), cString, cStringBytes, divideByZeroSite, failureSite, operatorFailureSite, overflowSite, shiftSites, textOfInt )
+import Pudu.Backend.Emit.Aggregate (aggregateHelper, aggregateNeed, cellName, isAggregate, memberComparable, retained)
+import Pudu.Diagnostic.Evaluation (cannotApplyBinaryMessage)
 import Pudu.Backend.Emit.Support (integerHelper, integerKindText, integerLiteralText, isWideInteger)
 import Pudu.Core (CoreBinaryOperator (..), CoreTextMethodName (..), CoreType (..))
 import Pudu.Core.Frame
@@ -60,6 +62,17 @@ frameValue state value = case frameValueShape value of
     source <- slotText tuple
     member <- maybe (refused "a tuple member without a native representation") Right (cellMember (frameValueType value))
     uncurry plain (retained (frameValueType value) (source <> "->fields[" <> textOfInt position <> "]." <> member))
+  FrameClosure name members -> case Map.lookup name (emitFunctionIds state) of
+    Nothing -> refused "a closure over an unknown function"
+    Just identity -> do
+      operands <- traverse slotText members
+      let kind = frameValueType value
+          operation = "closure" <> textOfInt identity
+      plain (aggregateHelper operation kind <> "(" <> Text.intercalate ", " operands <> ")") [aggregateNeed operation kind]
+  FrameCapture position closure -> do
+    source <- slotText closure
+    member <- maybe (refused "a capture without a native representation") Right (cellMember (frameValueType value))
+    uncurry plain (retained (frameValueType value) (source <> "->fields[" <> textOfInt (position + 1) <> "]." <> member))
   FrameDisplay slot -> rendered slot
   FrameTextMethod name receiver arguments -> do
     target <- slotText receiver
@@ -116,7 +129,13 @@ frameValue state value = case frameValueShape value of
         lhs <- slotText left
         rhs <- slotText right
         let equal = aggregateHelper "equal" kind <> "(" <> lhs <> ", " <> rhs <> ")"
-            compared a b symbol = plain ("(" <> aggregateHelper "compare" kind <> "(" <> a <> ", " <> b <> ") " <> symbol <> " 0)") [aggregateNeed "compare" kind]
+            -- comparableValue first: a tuple holding a function anywhere has no order.
+            (afterSite, index) = operatorFailureSite state at (cannotApplyBinaryMessage (symbolOf (coreScalarOperator scalar)) "tuple" "tuple")
+            compared a b symbol = Right
+              ( afterSite
+              , "((" <> fst (memberComparable kind lhs) <> " && " <> fst (memberComparable kind rhs) <> ") ? ("
+                  <> aggregateHelper "compare" kind <> "(" <> a <> ", " <> b <> ") " <> symbol <> " 0) : (pudu_fail(&pudu_sites[" <> textOfInt index <> "]), 0))"
+              , Set.fromList [aggregateNeed "compare" kind, aggregateNeed "comparable" kind, "site", "colored", "fail"] )
         -- The evaluator orders tuples through Ord's defaults, and base writes
         -- those in terms of <=: x < y is not (y <= x). A NaN member makes
         -- compare answer GT both ways, so < and > are then both true; swapping
@@ -218,6 +237,11 @@ frameValue state value = case frameValueShape value of
       CoreOr -> refused "an eager logical Or in frame IR"
   where
     at = frameValueSpan value
+    symbolOf operator = case operator of
+      CoreLess -> "<"
+      CoreLessOrEqual -> "<="
+      CoreGreater -> ">"
+      _ -> ">="
     refused :: Text -> Either FrameFault a
     refused reason = Left (FrameFault (Just at) reason)
     integerKind = case frameValueType value of

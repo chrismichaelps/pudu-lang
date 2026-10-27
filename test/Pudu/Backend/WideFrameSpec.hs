@@ -74,7 +74,7 @@ programs at = snapshots <> operators <> small <> failures
     printed value = statement (CoreEvaluate (CoreExpression at CoreUnitType (CorePrint (display value))))
     binary result op left right = CoreExpression at result (CoreBinary op left right)
     mainFunction result body = CoreFunction "main" [] result body
-    moduleOf functions = CoreModule "Main" "main" functions Map.empty
+    moduleOf functions = CoreModule "Main" "main" functions Map.empty Map.empty
     status n = if n == 0 then ExitSuccess else ExitFailure (fromInteger (max 1 (min 255 n)))
     snapshots =
       [ let wide = CoreIntegerType kind

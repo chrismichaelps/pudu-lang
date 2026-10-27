@@ -42,6 +42,7 @@ Dependency direction: Library → Program. Only [[Compiler Program]] reads files
 - [[Compiler Lower Generic]] — specialization of generic bodies (#552).
 - [[Compiler Lower Try]] — `?` on Result and Option (#553).
 - [[Compiler Lower For]] — `for` over ranges and sequences (#554).
+- [[Compiler Lower Lambda]] — lambdas and function values (#555).
 
 ## Referenced by
 

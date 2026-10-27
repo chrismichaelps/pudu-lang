@@ -27,6 +27,10 @@ inside while conditions and break operands against literal expected graphs.
 [[Compiler Frame Lowering]] · [[Core Frame IR]] · [[Backend Function Programs]] ·
 [[Backend Integer Programs]] · [[Repository Test Runner]]
 
+## Closures (#555)
+
+Resolved Grill Log: the module literal carries no closures, and a call through a value resumes like a call.
+
 ## Referenced by
 
 [[src/_MOC]] · [[Native Frame Pressure Repair]]

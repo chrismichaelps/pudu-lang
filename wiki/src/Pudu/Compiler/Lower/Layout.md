@@ -18,6 +18,11 @@ mentions, closed over the layouts they reach, for `coreModuleLayouts`.
   **A:** Types name records and sums by identity only, so a recursive sum stays
   a finite type; the layout map is where each is spelled out once.
 
+## Closure layouts (#555)
+
+Resolved Grill Log: every function type met gets a `CoreClosureLayout` of the
+lifted functions whose closure has that type, empty when none was made.
+
 ## Referenced by
 
 [[Compiler Lower]] · [[Core IR]] · [[src/_MOC]]

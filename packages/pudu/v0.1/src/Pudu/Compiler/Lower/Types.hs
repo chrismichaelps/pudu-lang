@@ -116,6 +116,12 @@ formedWith shapes seen parameters value = case value of
     argument held = case held of
       VariableType _ -> Just CoreUnitType
       _ -> formedWith shapes seen parameters held
+  -- An async function is a task-maker, which native code has no form for.
+  FunctionTypeRequiring False inputs _ result -> do
+    formedInputs <- traverse (formedWith shapes seen parameters) inputs
+    formedResult <- formedWith shapes seen parameters result
+    if all nativeValueType formedInputs && (nativeValueType formedResult || formedResult == CoreNeverType)
+      then Just (CoreFunctionType formedInputs formedResult) else Nothing
   TupleTypeValue members@(_ : _ : _) -> do
     formedMembers <- traverse (formedWith shapes seen parameters) members
     if all nativeValueType formedMembers then Just (CoreTupleType formedMembers) else Nothing
@@ -191,4 +197,5 @@ nativeValueType CoreTextType = True
 nativeValueType (CoreTupleType members) = length members >= 2 && all nativeValueType members
 nativeValueType (CoreRecordType _ _) = True
 nativeValueType (CoreSumType _ _) = True
+nativeValueType (CoreFunctionType _ _) = True
 nativeValueType other = nativeScalarType other

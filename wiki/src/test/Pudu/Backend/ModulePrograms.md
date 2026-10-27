@@ -37,6 +37,10 @@ Resolved Grill Log: both lists include [[Backend Try Programs]].
 
 Resolved Grill Log: both lists include [[Backend For Programs]].
 
+## Closures (#555)
+
+Resolved Grill Log: both lists include [[Backend Closure Programs]].
+
 ## Referenced by
 
 [[Backend Native Tests]] · [[Native Emission Coverage]] · [[src/_MOC]]

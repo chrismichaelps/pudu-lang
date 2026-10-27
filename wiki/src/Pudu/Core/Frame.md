@@ -46,6 +46,12 @@ limit, larger host stack, permanent refusal or interpreted fallback repairs
 
 - **Q:** What do frames add for sums? **A:** `FrameConstruct` (variant index and payload), `FrameIsVariant`, `FramePayload` read only after the tag matched, `FrameVariantName`, the `FrameFailText` terminator, and the module's layouts (#525).
 
+## Closures (#555)
+
+Resolved Grill Log: `FrameClosure` and `FrameCapture` values, the
+`FrameCallValue` terminator (closure first, then arguments), and the module's
+closure information.
+
 ## Referenced by
 
 [[src/_MOC]] · [[Program Compiler Module Map]] · [[Native Frame Pressure Repair]]

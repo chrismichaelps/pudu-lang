@@ -184,6 +184,15 @@ Resolved Grill Log: `CoreRecordType` carries the record's type arguments,
 as `CoreSumType` does. `Box[Int]` and `Box[Str]` are different types with
 different layouts; `coreTypeName` writes the arguments after the name.
 
+## Function values (#555)
+
+Resolved Grill Log: `CoreFunctionType` is a function value's type.
+`CoreClosure` builds a closure over a lifted function, `CoreCapture` reads a
+capture from one, and `CoreCallValue` calls through one (callee first, then
+arguments). `CoreClosureLayout` lists a function type's lifted functions, and
+`coreModuleClosures` says what each closure holds, how it renders and where it
+was written.
+
 ## Referenced by
 
 [[src/Pudu/_MOC]] · [[src/Pudu/Backend/_MOC]] · [[Core IR]] · [[Compiler Lower]] ·

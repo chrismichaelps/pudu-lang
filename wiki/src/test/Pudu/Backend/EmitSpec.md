@@ -39,8 +39,7 @@ code — [[Backend Native Tests]] owns execution.
   the entry are carried — a declaration the entry cannot reach does not block
   the build and does not refuse, because the interpreter never runs it; each
   unsupported construct (a module without `main`, arrays, ownership-bearing break values,
-  floats, `Str` locals, mutable borrows, matches, function values and calls through
-  local values, calls to the entry, parameters of unsupported types, default parameter values, unresolved inferred
+  floats, `Str` locals, mutable borrows, matches, calls to the entry, parameters of unsupported types, default parameter values, unresolved inferred
   results, expression-bodied non-entry functions, and trailing or explicitly
   returned print results) lowers to a refusal whose
   code is `E6001` and whose span is the construct's own.
@@ -89,11 +88,18 @@ the only refusal: the body is never reached.
 
 A method taking `self: &mut Self` refuses the same way, at the parameter type
 of the implementation's member (#551).
-A generic call at a function type refuses at the callee; before #552 it
-lowered `main` to nothing (#552).
+A generic call at a type with no native form (Decimal, since #555 gave
+function types one) refuses at the callee; before #552 it lowered `main` to
+nothing.
 
 The refusal cases lower through `compiledNativeModule`, as the CLI does, so a
 module's methods are visible to them.
+
+## Function values lower (#555)
+
+The indirect-call case now checks the opposite of what it used to: a named
+function bound to a local and called through it lowers to a closure over the
+function's forwarder and a call through the value.
 
 ## Referenced by
 

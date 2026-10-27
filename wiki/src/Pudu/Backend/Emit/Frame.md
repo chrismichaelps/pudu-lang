@@ -36,6 +36,12 @@ come from actual emitted functions. No frontend/compiler import or inference.
 
 Pattern update only: `CoreRecordType` has an argument list.
 
+## Closures (#555)
+
+Resolved Grill Log: closure helpers learn each function's frame-table number.
+An entry returning a function prints `<fn name>`, and argument space counts a
+call through a value's closure.
+
 ## Referenced by
 
 [[src/_MOC]] · [[Native Frame Pressure Repair]]

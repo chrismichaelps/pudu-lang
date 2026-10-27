@@ -177,6 +177,11 @@ instances registered so far, which include copies made while lowering callers.
 Resolved Grill Log: the entry starts with its checked result in
 `lowerDeclaredResult`, formed from its scheme when it has one.
 
+## Closures (#555)
+
+Resolved Grill Log: each body's key is set before it is lowered, and the
+module carries the closures made while lowering.
+
 ## Referenced by
 
 [[src/Pudu/Compiler/_MOC]] · [[src/Pudu/_MOC]] · [[Core IR]] · [[Pudu Core]] ·

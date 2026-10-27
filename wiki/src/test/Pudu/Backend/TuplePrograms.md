@@ -27,6 +27,10 @@ after their operands run.
 - **Q:** Where do the NaN answers come from? **A:** From the total order #522
   defines: NaN equals NaN and sorts after every number.
 
+## Closures (#555)
+
+Resolved Grill Log: records and sums inside tuples order as compareValues does (#555 fixed a pointer comparison).
+
 ## Referenced by
 
 [[Backend Native Tests]] · [[Backend Text Leak Tests]] · [[src/_MOC]]

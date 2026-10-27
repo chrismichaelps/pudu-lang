@@ -5,16 +5,28 @@ module Pudu.Compiler.Lower.Layout (moduleLayouts) where
 import Data.Map.Strict (Map)
 import qualified Data.Map.Strict as Map
 import Pudu.Compiler.Lower.Types (LowerTypes, layoutOf)
+import Data.Text (Text)
 import Pudu.Core
 
-moduleLayouts :: LowerTypes -> [CoreFunction] -> Map CoreType CoreLayout
-moduleLayouts types functions = close Map.empty (concatMap functionTypes functions)
+{-| A function type lists the lifted functions whose closure parameter has
+    that type; one no closure was made for still gets its empty list, so its
+    values have helpers like any other. -}
+moduleLayouts :: LowerTypes -> Map Text CoreClosureInfo -> [CoreFunction] -> Map CoreType CoreLayout
+moduleLayouts types closures functions = close Map.empty (concatMap functionTypes functions)
  where
+  lifted =
+    [ (kind, (coreFunctionName function, info))
+    | function <- functions
+    , Just info <- [Map.lookup (coreFunctionName function) closures]
+    , CoreParameter (CoreLocal _ _ kind) _ : _ <- [coreFunctionParameters function] ]
   close found [] = found
   close found (kind : rest)
     | Map.member kind found = close found rest
     | otherwise = case kind of
         CoreTupleType members -> close found (members <> rest)
+        CoreFunctionType inputs result ->
+          let layout = CoreClosureLayout [entry | (owner, entry) <- lifted, owner == kind]
+           in close (Map.insert kind layout found) (inputs <> [result] <> layoutTypes layout <> rest)
         _ -> case layoutOf types kind of
           Just layout -> close (Map.insert kind layout found) (layoutTypes layout <> rest)
           Nothing -> close found rest
@@ -23,6 +35,7 @@ layoutTypes :: CoreLayout -> [CoreType]
 layoutTypes layout = case layout of
   CoreRecordLayout fields -> map snd fields
   CoreSumLayout variants -> concatMap (map snd . coreVariantFields) variants
+  CoreClosureLayout entries -> concatMap (closureCaptures . snd) entries
 
 functionTypes :: CoreFunction -> [CoreType]
 functionTypes function =
@@ -64,6 +77,9 @@ expression (CoreExpression _ kind shape) = kind : case shape of
   CoreVariantName operand -> expression operand
   CorePrint operand -> expression operand
   CoreCall _ arguments -> concatMap expression arguments
+  CoreClosure _ captures -> concatMap expression captures
+  CoreCapture _ operand -> expression operand
+  CoreCallValue callee arguments -> concatMap expression (callee : arguments)
   CoreOperatorFailure _ operands -> concatMap expression operands
   CoreBlockValue inner -> block inner
   CoreIfValue condition yes no -> expression condition <> block yes <> expression no

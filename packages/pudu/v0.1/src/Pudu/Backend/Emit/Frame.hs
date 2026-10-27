@@ -44,6 +44,7 @@ emitFrameProgram version sources source = do
     kind@(CoreTupleType _) -> Right (shownBox kind)
     kind@(CoreRecordType _ _) -> Right (shownBox kind)
     kind@(CoreSumType _ _) -> Right (shownBox kind)
+    kind@(CoreFunctionType _ _) -> Right (shownBox kind)
     CoreCharType -> Right
       [ "  pudu_text pudu_shown = pudu_char_show(pudu_run_frames(" <> textOfInt entryId <> ").character);"
       , "  pudu_print_text(pudu_shown);"
@@ -69,8 +70,10 @@ emitFrameProgram version sources source = do
         kind@(CoreTupleType _) -> [aggregateNeed "show" kind, "print_text"]
         kind@(CoreRecordType _ _) -> [aggregateNeed "show" kind, "print_text"]
         kind@(CoreSumType _ _) -> [aggregateNeed "show" kind, "print_text"]
+        kind@(CoreFunctionType _ _) -> [aggregateNeed "show" kind, "print_text"]
         _ -> []
-      (aggregates, aggregateNeeds) = aggregateSection (frameModuleLayouts source) tuples (Set.fromList (Set.toList roots <> entryNeeds))
+      identities = Map.fromList (zip (map frameFunctionName functions) [0 ..])
+      (aggregates, aggregateNeeds) = aggregateSection identities (frameModuleLayouts source) tuples (Set.fromList (Set.toList roots <> entryNeeds))
       ownership = if owned then ownershipSwitch text kinds else []
       selected = foldl' visit Set.empty (filter (not . Text.isPrefixOf "agg_") (Set.toList roots <> entryNeeds)
         <> Set.toList aggregateNeeds <> base <> ["text_retain" | text])
@@ -118,7 +121,10 @@ emitFrameProgram version sources source = do
         <> ", " <> kindOf (frameFunctionResult function) <> "},"
     argumentCount function = maximum (0 :
       [length arguments | block <- frameFunctionBlocks function
-      , FrameCall _ _ arguments _ _ <- [frameBlockTerminator block]])
+      , arguments <- case frameBlockTerminator block of
+          FrameCall _ _ given _ _ -> [given]
+          FrameCallValue _ closure given _ _ -> [closure : given]
+          _ -> []])
     slotIndex slot = case frameSlotId slot of FrameSlotId identity -> textOfInt identity
     label (FrameLabel identity) = textOfInt identity
 

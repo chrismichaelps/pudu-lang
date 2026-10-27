@@ -50,6 +50,12 @@ limit, larger host stack, permanent refusal or interpreted fallback repairs
 
 Pattern update only: `CoreRecordType` has an argument list.
 
+## Closures (#555)
+
+Resolved Grill Log: a closure's captures and a call through a value lower like
+other operands, and the call checks its argument and result types against the
+function type.
+
 ## Referenced by
 
 [[src/_MOC]] · [[Program Compiler Module Map]] · [[Native Frame Pressure Repair]]

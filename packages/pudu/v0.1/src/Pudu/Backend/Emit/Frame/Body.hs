@@ -23,7 +23,7 @@ emitFrameBodies state source = do
       identities = Map.fromList (zip (map frameFunctionName functions) [0 ..])
   if Map.size identities /= length functions
     then Left (FrameFault Nothing "duplicate frame function identities")
-    else foldM (emitFunction identities) (state, Set.empty) (zip [0 ..] functions)
+    else foldM (emitFunction identities) (state{emitFunctionIds = identities}, Set.empty) (zip [0 ..] functions)
 
 emitFunction :: Map Text Int -> (EmitState, Set Text) -> (Int, FrameFunction)
   -> Either FrameFault (EmitState, Set Text)
@@ -97,6 +97,22 @@ terminator identities function (state, needs) ending = case ending of
             <> ", .argument_count = " <> textOfInt (length arguments)
             <> foldMap id target <> ", .call_site = &pudu_sites[" <> textOfInt index <> "]};"
       pure (line afterResume result, Set.union needs (Set.fromList ["site", "colored", "fail"]))
+  -- The closure is the callee's first argument; its first cell names the callee.
+  FrameCallValue at closure arguments destination resume -> do
+    callee <- slotText closure
+    copies <- traverse copyArgument (zip [0 ..] (closure : arguments))
+    target <- case destination of
+      Nothing -> Right []
+      Just slot -> do
+        _ <- slotText slot
+        pure [", .has_destination = 1, .destination = " <> slotIndex slot]
+    let (afterSite, index) = callDepthSite state at
+        afterCopies = linesInto afterSite copies
+        afterResume = line afterCopies ("      frame->pc = " <> labelText resume <> ";")
+        result = "      return (pudu_step){.kind = PUDU_CALL, .function = (size_t)" <> callee <> "->fields[0].scalar"
+          <> ", .argument_count = " <> textOfInt (1 + length arguments)
+          <> foldMap id target <> ", .call_site = &pudu_sites[" <> textOfInt index <> "]};"
+    pure (line afterResume result, Set.union needs (Set.fromList ["site", "colored", "fail"]))
   FrameReturn _ payload -> do
     result <- case frameFunctionResult function of
       CoreUnitType -> Right Nothing

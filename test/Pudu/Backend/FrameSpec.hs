@@ -44,7 +44,7 @@ entry :: CoreBlock -> CoreFunction
 entry = CoreFunction "main" [] intType
 
 program :: CoreFunction -> [CoreFunction] -> CoreModule
-program mainFunction helpers = CoreModule "Main" "main" (mainFunction : helpers) Map.empty
+program mainFunction helpers = CoreModule "Main" "main" (mainFunction : helpers) Map.empty Map.empty
 
 site :: IO Span
 site = emptySpan <$> newSource (SourceName "frames.pudu") "frame contracts"
@@ -215,6 +215,7 @@ closedTargets source = conjoin (map check (frameModuleFunctions source))
             FrameJump _ target -> [target]
             FrameBranch _ _ yes no -> [yes, no]
             FrameCall _ _ _ _ resume -> [resume]
+            FrameCallValue _ _ _ _ resume -> [resume]
             FrameReturn _ _ -> []
             FrameOperatorFailure _ _ -> []
             FrameFailText _ _ _ _ -> []

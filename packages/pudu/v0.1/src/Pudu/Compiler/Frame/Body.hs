@@ -167,6 +167,23 @@ lowerExpression expression@(CoreExpression at kind shape) = case shape of
             finish (FrameCall at name slots destination resume)
             begin resume
             pure (Completed destination)
+  CoreClosure name captures -> do
+    operands <- lowerOperands captures
+    maybe (pure Stopped) (value . FrameClosure name) operands
+  CoreCapture position operand -> rendered (FrameCapture position) operand
+  CoreCallValue callee arguments -> do
+    operands <- lowerOperands (callee : arguments)
+    case (operands, coreExpressionType callee) of
+      (Nothing, _) -> pure Stopped
+      (Just (closure : slots), CoreFunctionType inputs result) -> do
+        when (map frameSlotType slots /= inputs || kind /= result) $
+          fault (Just at) "a call through a value with incompatible frame types"
+        destination <- resultSlot at kind
+        resume <- freshLabel
+        finish (FrameCallValue at closure slots destination resume)
+        begin resume
+        pure (Completed destination)
+      _ -> fault (Just at) "a call through a value that is not a function"
   CoreOperatorFailure message operands -> do
     flow <- effects operands
     case flow of
@@ -273,6 +290,7 @@ resultSlot at kind = case kind of
   CoreTupleType _ -> Just <$> freshSlot at "$result" kind
   CoreRecordType _ _ -> Just <$> freshSlot at "$result" kind
   CoreSumType _ _ -> Just <$> freshSlot at "$result" kind
+  CoreFunctionType _ _ -> Just <$> freshSlot at "$result" kind
 
 lowerPrint :: Span -> CoreExpression -> Build Flow
 lowerPrint at operand = case coreExpressionShape operand of

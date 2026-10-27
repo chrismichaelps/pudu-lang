@@ -79,6 +79,16 @@ tupleSuccessPrograms =
       , "  return 0"
       , "}" ]
     , "a\nb\nfirst\n4\n(1, \"two\")\n")
+  , ("records and sums inside tuples order as compareValues does", program
+      [ "type Point = { x: Int, y: Int }", "type Light = Red | Green(Int) | Amber"
+      , "fn main() -> Int {"
+      , "  let a = Point{x: 2, y: 0}", "  let b = Point{x: 1, y: 9}"
+      , "  print(display((1, a) < (1, b)) + \" \" + display((1, b) < (1, a)) + \" \" + display((1, a) >= (1, a)))"
+      , "  print(display((1, Amber) < (1, Red)) + \" \" + display((1, Green(3)) < (1, Green(2))) + \" \" + display((1, Red) >= (1, Amber)))"
+      , "  let some: Option[Int] = Some(1)", "  let none: Option[Int] = None"
+      , "  print(display((0, none) < (0, some)) + \" \" + display((0, some) < (0, Some(0))))"
+      , "  return 0", "}" ]
+    , "false true true\ntrue false true\ntrue false\n")
   ] <>
   [ ("tuple entry " <> label, program ["fn main() -> " <> kind <> " {", "  " <> body, "}"], answer <> "\n")
   | (label, kind, body, answer) <-

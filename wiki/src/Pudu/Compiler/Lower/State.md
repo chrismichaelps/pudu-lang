@@ -73,6 +73,11 @@ Resolved Grill Log: `lowerDeclaredResult` holds the entry's checked result
 for [[Compiler Lower Try]] only; every other function already knows its
 result from its signature.
 
+## Closures (#555)
+
+Resolved Grill Log: `lowerCurrentKey` names the body being lowered, and
+`contextClosures` records every closure made so far.
+
 ## Referenced by
 
 [[src/Pudu/Compiler/_MOC]] · [[Compiler Lower]] · [[Compiler Lower Body]]

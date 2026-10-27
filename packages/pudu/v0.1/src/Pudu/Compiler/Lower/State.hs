@@ -47,6 +47,8 @@ data LowerContext = LowerContext
   , contextVisited :: !(Set Text)
   , contextRefusals :: ![Diagnostic]
   , contextFunctions :: ![CoreFunction]
+  {-| Lifted lambdas and function-value forwarders made so far. -}
+  , contextClosures :: !(Map Text CoreClosureInfo)
   }
 
 {-| One body under its own key: the module its names resolve in, its
@@ -90,6 +92,8 @@ data LowerState = LowerState
       result handling still starts from nothing, so a body ending in print's
       Result keeps refusing. -}
   , lowerDeclaredResult :: !(Maybe CoreType)
+  {-| The key of the body being lowered, which names the lambdas written in it. -}
+  , lowerCurrentKey :: !Text
   }
 
 {-| A lexical loop destination and the scalar type observed at its breaks.
@@ -126,6 +130,7 @@ emptyContext root entryName modules table instances methods traitMethods =
     , contextVisited = Set.empty
     , contextRefusals = []
     , contextFunctions = []
+    , contextClosures = Map.empty
     }
 
 {-| Begin a function: a fresh scope stack with its parameters bound by name,

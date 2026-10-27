@@ -37,6 +37,13 @@ Only emitted values select helper roots; caller closes dependencies transitively
 
 - **Q:** How are tags and payloads read? **A:** `FrameIsVariant` compares the box's first cell with the variant index, `FramePayload` reads a cell after the tag, and `FrameVariantName` answers the held variant's name as text (#525).
 
+## Closures and tuple ordering (#555)
+
+Resolved Grill Log: closures use their lifted function's maker, captures read
+cells after cell 0, and tuple ordering checks both operands are comparable,
+failing with the evaluator's `cannot apply < to a tuple and a tuple`
+otherwise.
+
 ## Referenced by
 
 [[src/_MOC]] · [[Native Execution Frames]]

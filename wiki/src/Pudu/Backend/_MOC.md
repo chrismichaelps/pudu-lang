@@ -31,6 +31,7 @@ aliases: [Backend Module Map]
 - [[Backend Generic Programs]] — native generics (#552).
 - [[Backend Try Programs]] — native `?` (#553).
 - [[Backend For Programs]] — native `for` (#554).
+- [[Backend Closure Programs]] — native closures (#555).
 
 ## Referenced by
 
