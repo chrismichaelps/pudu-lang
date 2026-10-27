@@ -1,0 +1,43 @@
+module Ark.Platform.Clock
+
+import Std.Math.Float as Float
+
+/// Fixed-step timing state in monotonic nanoseconds.
+export type FrameClock = { step: Int, maxSteps: Int, accumulated: Int, previous: Int, frames: Int }
+
+/// What one frame owes the simulation: whole steps, the fraction toward the next step,
+/// the measured interval and the time dropped by the step budget.
+export type Tick = { steps: Int, alpha: Float64, elapsed: Int, dropped: Int }
+
+/// A clock with a fixed step and a per-frame step budget, or None when either is not positive.
+export fn fixed(step: Int, maxSteps: Int, now: Int) -> Option[FrameClock] {
+  if step <= 0 || maxSteps <= 0 { return None }
+  Some(FrameClock{step, maxSteps, accumulated: 0, previous: now, frames: 0})
+}
+
+/// Account the time since the last tick; a clock reading that moved backwards counts as zero.
+export fn tick(clock: FrameClock, now: Int) -> (FrameClock, Tick) {
+  let elapsed = if now > clock.previous { now - clock.previous } else { 0 }
+  let owed = clock.accumulated + elapsed
+  let wanted = owed / clock.step
+  let steps = if wanted > clock.maxSteps { clock.maxSteps } else { wanted }
+  let dropped = if wanted > clock.maxSteps { (wanted - clock.maxSteps) * clock.step } else { 0 }
+  let remainder = owed - wanted * clock.step
+  let alpha = Float.fromInt(remainder) / Float.fromInt(clock.step)
+  (
+    FrameClock{..clock, accumulated: remainder, previous: now, frames: clock.frames + 1},
+    Tick{steps, alpha, elapsed, dropped},
+  )
+}
+
+/// Nanoseconds from `now` until the next step is owed, for pacing an event pump.
+export fn untilNext(clock: &FrameClock, now: Int) -> Int {
+  let elapsed = if now > clock.previous { now - clock.previous } else { 0 }
+  let owed = clock.accumulated + elapsed
+  if owed >= clock.step { 0 } else { clock.step - owed }
+}
+
+/// The step length in seconds, for integrating with physical units.
+export fn stepSeconds(clock: &FrameClock) -> Float64 {
+  Float.fromInt(clock.step) / 1000000000.0
+}

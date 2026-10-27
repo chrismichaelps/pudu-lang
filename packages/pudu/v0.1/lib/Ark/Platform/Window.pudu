@@ -1,0 +1,76 @@
+module Ark.Platform.Window
+
+import Ark.Platform.Input as Input
+
+/// Why a window operation did not happen.
+export type PlatformError
+  = Unsupported
+  | Closed
+  | InvalidSize(Int, Int)
+  | FrameMismatch(Int, Int)
+  | Failed(Str)
+
+/// One runtime-owned platform window and the frame size it presents.
+export type Window = { token: Int, width: Int, height: Int }
+
+const RUNTIME_ERRORS: Map[Str, PlatformError] = mapOf([
+    ("desktop presentation is unsupported on this platform", Unsupported),
+    ("desktop session is closed or unknown", Closed),
+  ])
+
+/// Open a window presenting width x height RGBA8 frames.
+export fn open(title: Str, width: Int, height: Int, resizable: Bool) -> Result[Window, PlatformError] {
+  if width <= 0 || height <= 0 { return Err(InvalidSize(width, height)) }
+  match desktopOpen(title, width, height, resizable) {
+    case Ok(token) => Ok(Window{token, width, height})
+    case Err(message) => Err(classified(message))
+  }
+}
+
+/// Show one frame of width x height RGBA8 pixels, rows top to bottom.
+export fn present(window: &Window, rgba: &Bytes) -> Result[(), PlatformError] {
+  let expected = window.width * window.height * 4
+  if rgba.length() != expected { return Err(FrameMismatch(expected, rgba.length())) }
+  match desktopPresent(window.token, window.width, window.height, *rgba) {
+    case Ok(_) => Ok(())
+    case Err(message) => Err(classified(message))
+  }
+}
+
+/// Process platform events for at most `millis`; true when the person asked to close.
+export fn pump(window: &Window, millis: Int) -> Result[Bool, PlatformError] {
+  if millis < 0 { return Err(Failed("a pump duration cannot be negative")) }
+  match desktopPump(window.token, millis) {
+    case Ok(closing) => Ok(closing)
+    case Err(message) => Err(classified(message))
+  }
+}
+
+/// Every input event since the last drain, in order.
+export fn events(window: &Window) -> Result[Array[Input.Event], PlatformError] {
+  match desktopInputs(window.token) {
+    case Ok(records) => Ok(Input.decode(records))
+    case Err(message) => Err(classified(message))
+  }
+}
+
+/// The same window presenting frames of a new size, as after a resize event.
+export fn resized(window: Window, width: Int, height: Int) -> Result[Window, PlatformError] {
+  if width <= 0 || height <= 0 { return Err(InvalidSize(width, height)) }
+  Ok(Window{..window, width, height})
+}
+
+/// Release the window.
+export fn close(window: Window) -> Result[(), PlatformError] {
+  match desktopClose(window.token) {
+    case Ok(_) => Ok(())
+    case Err(message) => Err(classified(message))
+  }
+}
+
+fn classified(message: Str) -> PlatformError {
+  match RUNTIME_ERRORS.get(message) {
+    case Some(known) => known
+    case None => Failed(message)
+  }
+}

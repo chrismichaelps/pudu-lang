@@ -1,0 +1,85 @@
+module UsesArkPlatform
+
+import Ark.Platform.Clock as Clock
+import Ark.Platform.Input as Input
+import Ark.Platform.Window as Window
+
+fn require(condition: Bool, name: Str) {
+  if !condition { panic(name) }
+}
+
+fn decoding() {
+  let records = "keydown\tKeyW\t0\nkeydown\tKeyW\t1\nkeyup\tKeyW\nbutton\t1\tdown\t10\t20\nbutton\t1\tup\t11\t21\nhover\t5\t6\nscroll\t1\t2\t-3\nresize\t640\t480\ntext\thi there\nkey\tactivate\nbutton\tx\tdown\t1\t2\nhover\t1\nmystery\t1\t2"
+  let events = Input.decode(records)
+  require(events.length() == 9, "known records only")
+  require(events[0] == Input.KeyDown("KeyW", false) && events[1] == Input.KeyDown("KeyW", true), "key down and repeat")
+  require(events[2] == Input.KeyUp("KeyW"), "key up")
+  require(events[3] == Input.ButtonDown(1, 10, 20) && events[4] == Input.ButtonUp(1, 11, 21), "buttons")
+  require(events[5] == Input.Hover(5, 6) && events[6] == Input.Scroll(1, 2, -3), "pointer")
+  require(events[7] == Input.Resize(640, 480) && events[8] == Input.Typed("hi there"), "resize and text")
+}
+
+fn state() {
+  let first = Input.apply(Input.initial(), &[Input.KeyDown("KeyA", false), Input.KeyDown("KeyA", true), Input.ButtonDown(0, 3, 4)])
+  require(Input.keyHeld(&first, "KeyA") && Input.keyPressed(&first, "KeyA"), "pressed and held")
+  require(Input.buttonPressed(&first, 0) && first.pointerX == 3 && first.pointerY == 4, "button press moves pointer")
+  let second = Input.apply(Input.beginFrame(first), &[Input.KeyDown("KeyA", true), Input.Scroll(0, 0, 2), Input.Typed("x")])
+  require(Input.keyHeld(&second, "KeyA") && !Input.keyPressed(&second, "KeyA"), "repeat is not a press")
+  require(second.scroll == 2 && second.typed == "x" && Input.buttonHeld(&second, 0), "frame data")
+  let third = Input.apply(Input.beginFrame(second), &[Input.KeyUp("KeyA"), Input.KeyDown("Space", false), Input.KeyUp("Space")])
+  require(!Input.keyHeld(&third, "KeyA") && Input.keyReleased(&third, "KeyA"), "release")
+  require(Input.keyPressed(&third, "Space") && Input.keyReleased(&third, "Space") && !Input.keyHeld(&third, "Space"), "tap within a frame")
+  require(third.scroll == 0 && third.typed == "", "frame data cleared")
+  let stray = Input.apply(Input.initial(), &[Input.KeyUp("KeyQ")])
+  require(!Input.keyReleased(&stray, "KeyQ"), "release without press ignored")
+}
+
+fn actions() {
+  var map = Input.actions()
+  map = Input.bind(map, "left", Input.Key("KeyA"))
+  map = Input.bind(map, "left", Input.Key("ArrowLeft"))
+  map = Input.bind(map, "left", Input.Key("KeyA"))
+  map = Input.bind(map, "right", Input.Key("KeyD"))
+  map = Input.bind(map, "fire", Input.Button(0))
+  require(Input.bindingsOf(&map, "left") == [Input.Key("KeyA"), Input.Key("ArrowLeft")], "bindings deduplicated in order")
+  let held = Input.apply(Input.initial(), &[Input.KeyDown("ArrowLeft", false), Input.ButtonDown(0, 0, 0)])
+  require(Input.held(&map, &held, "left") && Input.pressed(&map, &held, "fire"), "actions read bindings")
+  require(Input.axis(&map, &held, "left", "right") == -1.0, "axis negative")
+  let both = Input.apply(held, &[Input.KeyDown("KeyD", false)])
+  require(Input.axis(&map, &both, "left", "right") == 0.0, "opposing cancel")
+  let rebound = Input.bind(Input.unbind(map, "left"), "left", Input.Key("KeyJ"))
+  require(!Input.held(&rebound, &held, "left") && !Input.held(&rebound, &held, "jump"), "rebinding and unknown actions")
+}
+
+fn clock() {
+  let Some(start) = Clock.fixed(10, 4, 1000) else { panic("clock") }
+  require(Clock.fixed(0, 4, 0) == None && Clock.fixed(10, 0, 0) == None, "invalid clocks")
+  let (a, first) = Clock.tick(start, 1025)
+  require(first.steps == 2 && first.alpha == 0.5 && first.elapsed == 25 && first.dropped == 0, "steps and alpha")
+  require(Clock.untilNext(&a, 1027) == 3 && Clock.untilNext(&a, 1030) == 0, "pacing")
+  let (b, second) = Clock.tick(a, 1100)
+  require(second.steps == 4 && second.dropped == 40 && second.alpha == 0.0, "step budget drops excess")
+  let (_, third) = Clock.tick(b, 1050)
+  require(third.steps == 0 && third.elapsed == 0, "backwards clock counts as zero")
+  require(Clock.stepSeconds(&start) == 0.00000001, "step seconds")
+}
+
+fn windows() {
+  require(Window.open("x", 0, 10, false) == Err(Window.InvalidSize(0, 10)), "size refused before the platform")
+  let fake = Window.Window{token: 987654, width: 2, height: 2}
+  require(Window.present(&fake, &bytesOf([1u8, 2u8, 3u8])) == Err(Window.FrameMismatch(16, 3)), "frame size refused")
+  require(Window.pump(&fake, -1) == Err(Window.Failed("a pump duration cannot be negative")), "negative pump")
+  let unknown = Window.events(&fake)
+  require(unknown == Err(Window.Closed) || unknown == Err(Window.Unsupported), "unknown window")
+  require(Window.resized(fake, 0, 1) == Err(Window.InvalidSize(0, 1)), "resize refused")
+}
+
+export fn main() -> Int {
+  decoding()
+  state()
+  actions()
+  clock()
+  windows()
+  print("ark platform: ok")
+  0
+}

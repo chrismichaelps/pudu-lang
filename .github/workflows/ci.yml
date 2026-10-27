@@ -67,6 +67,7 @@ jobs:
           node test/ark-matrix.mjs "$PUDU"
           node test/ark-math-extended.mjs "$PUDU"
           node test/ark-world.mjs "$PUDU"
+          node test/ark-platform.mjs "$PUDU"
       # A suite that stops responding should say so and end, rather than hold
       # the runner until the job's own limit. The bound is generous against the
       # observed run so an ordinary slow day is not a failure.

@@ -7,6 +7,8 @@ tags: [moc, ark]
 - [[Ark Matrix]] · [[Ark Matrix Fixture]] · [[Ark Matrix Gate]] — column-vector algebra and projection.
 
 - [[Ark Handle]] · [[Ark Profile]] — generational handles and nanosecond scopes (Core).
+- [[Ark Input]] · [[Ark Frame Clock]] · [[Ark Window]] — action-mapped input, fixed-step timing and the window boundary.
+- [[Ark Platform Fixture]] · [[Ark Platform Gate]] — Platform conformance.
 - [[Ark World]] · [[Ark World Commands]] — archetype storage on lane columns and deferred structural changes.
 - [[Ark World Fixture]] · [[Ark World Gate]] · [[Ark World Benchmark]] — World conformance and measurement.
 - [[Ark Math]] — provisional binary64 vector geometry.

@@ -5,6 +5,8 @@ tags: [moc, handoff]
 
 # Handoff Map
 
+- [[Ark Engine Next]] — engine branch state after Platform (#675); next action: software render device.
+
 - [[Game Input Delivery]] — issue #673 key release, physical codes, hover and buttons.
 
 - [[Ark World Delivery]] — issue #672 handles, profiling and archetype World on lanes.

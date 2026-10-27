@@ -5,6 +5,12 @@ tags: [changelog]
 
 # Changelog
 
+## 2026-10-27 — Ark Platform (#675)
+
+- [[Ark Input]] decodes adapter records through a kind-to-factory table and reads action maps;
+  [[Ark Frame Clock]] gives fixed steps with interpolation; [[Ark Window]] is the window boundary.
+  [[Ark Platform Gate]] runs in CI.
+
 ## 2026-10-27 — Game input records from the desktop adapter (#673)
 
 - [[pudu-desktop-adapter]] reports key down/up by physical code, pointer hover and every mouse
