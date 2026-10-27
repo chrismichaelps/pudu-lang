@@ -259,3 +259,5 @@ tags: [moc, handoff]
 - [[Native Qualified Value Delivery]] — module-qualified function values (#641).
 
 - [[Native Method Value Delivery]] — built-in method values (#644).
+
+- [[Native Trait Method Value Delivery]] — trait methods as values (#646).

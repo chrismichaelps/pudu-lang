@@ -75,6 +75,57 @@ methodValueSuccessPrograms =
       , "  0"
       , "}" ]
     , "2\n[\"1\", \"2\", \"x\"]\nNone\nello\n", "")
+  , ("trait methods are values bound to records or named through their type", program
+      [ "trait Named {"
+      , "  fn label(self, suffix: Str) -> Str"
+      , "}"
+      , "type Bot = { name: Str }"
+      , "impl Named for Bot {"
+      , "  fn label(self: Bot, suffix: Str) -> Str { self.name + suffix }"
+      , "}"
+      , "fn main() -> Int {"
+      , "  let bot = Bot{name: \"r2\"}"
+      , "  let tag = bot.label"
+      , "  print(tag(\"!\"))"
+      , "  print(show(tag))"
+      , "  print(display(tag == bot.label))"
+      , "  print(display(tag == Bot{name: \"c3\"}.label))"
+      , "  let direct = Bot.label"
+      , "  print(direct(bot, \"?\"))"
+      , "  0"
+      , "}" ]
+    , "r2!\n<fn label>\ntrue\nfalse\nr2?\n", "")
+  , ("trait methods of sums are values in arrays and records with receiver equality", program
+      [ "trait Area {"
+      , "  fn area(self) -> Int"
+      , "}"
+      , "type Shape = Square(Int) | Rect(Int, Int)"
+      , "impl Area for Shape {"
+      , "  fn area(self: Shape) -> Int {"
+      , "    match self {"
+      , "      case Square(side) => side * side"
+      , "      case Rect(w, h) => w * h"
+      , "    }"
+      , "  }"
+      , "}"
+      , "type Holder = { run: fn() -> Int }"
+      , "fn make(label: Str) -> Shape { print(\"making \" + label)"
+      , " Rect(2, 3) }"
+      , "fn main() -> Int {"
+      , "  let measure = make(\"a\").area"
+      , "  print(\"bound\")"
+      , "  print(display(measure()))"
+      , "  let fns = [Square(3).area, Rect(1, 5).area]"
+      , "  for f in fns { print(display(f())) }"
+      , "  print(display(Square(2).area == Square(2).area))"
+      , "  print(display(Square(2).area == Square(3).area))"
+      , "  let holder = Holder{run: Square(4).area}"
+      , "  let run = holder.run"
+      , "  print(display(run()))"
+      , "  print(show(holder))"
+      , "  0"
+      , "}" ]
+    , "making a\nbound\n6\n9\n5\ntrue\nfalse\n16\nHolder{run: <fn area>}\n", "")
   ]
 
 methodValueRefusalPrograms :: [(String, Text)]
@@ -107,6 +158,20 @@ methodValueRefusalPrograms =
       , "  let grow = members.insert"
       , "  print(\"before\")"
       , "  print(show(grow(inc).size()))"
+      , "  0"
+      , "}" ])
+  , ("a failure inside a trait method value keeps the method body's span", program
+      [ "trait Divide {"
+      , "  fn split(self, parts: Int) -> Int"
+      , "}"
+      , "type Pile = { size: Int }"
+      , "impl Divide for Pile {"
+      , "  fn split(self: Pile, parts: Int) -> Int { self.size / parts }"
+      , "}"
+      , "fn main() -> Int {"
+      , "  let split = Pile{size: 10}.split"
+      , "  print(display(split(2)))"
+      , "  print(display(split(0)))"
       , "  0"
       , "}" ])
   ]

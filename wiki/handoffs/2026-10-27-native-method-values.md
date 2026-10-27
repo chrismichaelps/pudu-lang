@@ -1,6 +1,6 @@
 ---
 type: handoff
-status: ACTIVE
+status: DONE
 issue: 644
 aliases: [Native Method Value Delivery]
 ---

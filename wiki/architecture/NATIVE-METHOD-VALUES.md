@@ -65,3 +65,17 @@ user-declared methods as values are a separate obligation.
 ## Referenced by
 
 [[architecture/_MOC]] · [[Native Emission Coverage]] · [[Compiler Lower Body]] · [[Backend Method Value Programs]]
+
+## Trait methods (#646)
+
+A record without a field of that name, or a sum, may be the receiver too: the
+lifted body's call reaches the ordinary trait-method dispatch, and the value
+renders as `<fn name>` with the `function` kind. `Bot.label` names the
+method through its type: a capture-free wrapper whose body is
+`Bot.label($1, ...)`, keyed by owner, method and signature, so every
+reference compares equal. Both wrappers are uncounted; the implementation
+keeps its own counted frame and its own spans for failures.
+
+Resolved Grill Log: the trait-qualified value `Named.label` stays refused
+with E6001: the interpreter fails it at run time with an undefined name
+(#647), so there is no behaviour to match yet.
