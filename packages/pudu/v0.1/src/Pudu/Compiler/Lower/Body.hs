@@ -25,7 +25,8 @@ import Pudu.Compiler.Lower.Bytes (lowerBytesMethod, lowerBytesOf)
 import Control.Applicative ((<|>))
 import Pudu.Compiler.Lower.Try (lowerTry)
 import Pudu.Compiler.Lower.For (lowerFor)
-import Pudu.Compiler.Lower.Intrinsic (lowerIntrinsicValue)
+import Pudu.Compiler.Lower.Intrinsic (annotatedPanic, lowerIntrinsicValue)
+import Pudu.Compiler.Lower.Stop (lowerPanic, lowerUntypedConvert)
 import Pudu.Compiler.Lower.Lambda (lowerFunctionValue, lowerLambda, lowerValueCall)
 import Pudu.Compiler.Lower.Tuple (lowerTuple, lowerTupleIndex, lowerTuplePattern)
 import Pudu.Compiler.Lower.Record (lowerField, lowerFieldAssignment, lowerRecord, lowerRecordUpdate)
@@ -203,10 +204,11 @@ lowerStatement :: LowerState -> Located Statement -> (LowerState, Maybe CoreStat
 lowerStatement state (Located statementSpan statement) = case statement of
   DeclarationStatement (Located declarationSpan (BindingDeclaration _ kind (Located nameSpan name) annotation value))
     | kind == CompileTime -> halt nameSpan "comptime bindings" state
-    | otherwise -> case lowerExpression state value of
+    | otherwise -> let panicked = annotatedPanic state annotation value in case maybe (lowerExpression state value) id panicked of
         (after, Just (coreValue, coreType))
           | expressionIsPrintValued coreValue -> halt declarationSpan "binding a Result[(), Str] value" after
           | Just _ <- annotation
+          , Nothing <- panicked
           , let solved = typeForSpan (contextTypes (lowerContext state)) (locatedSpan value)
           , solved == Nothing || (coreType /= CoreNeverType && solved /= Just coreType) ->
               halt declarationSpan "a binding without matching solved native type facts" after
@@ -390,6 +392,8 @@ lowerExpression state (Located spanValue expression) = case expression of
     | name `elem` ["mapOf", "setOf"] -> lowerKeyedBuilder lowerExpression state spanValue name arguments
     | name == "charFromCode" -> lowerCharFromCode lowerExpression state spanValue arguments
     | name == "bytesOf" -> lowerBytesOf lowerExpression state spanValue arguments
+    | name == "panic" -> lowerPanic lowerExpression state spanValue arguments
+    | name == "convertInteger" -> lowerUntypedConvert lowerExpression state spanValue arguments
     | otherwise -> halt spanValue ("calls to '" <> name <> "'") state
   CallExpression (Located callee (MemberExpression receiver@(Located _ (NameExpression (owner :| []))) named@(Located _ member))) arguments
     | isModuleQualifier state owner, Just key <- resolveFunction state [owner, member] -> lowerFunctionCall lowerExpression state spanValue key callee arguments

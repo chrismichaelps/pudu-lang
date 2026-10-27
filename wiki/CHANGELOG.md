@@ -5,6 +5,14 @@ tags: [changelog]
 
 # Changelog
 
+## 2026-10-27 — Native panic and untyped convertInteger (#633)
+
+- `panic` builds natively: direct calls, values, non-text and missing arguments all stop as the interpreter does. See [[Native Stopping Builtins]].
+- `convertInteger` without a type argument refuses E7012 after its argument, directly or through a value.
+- The native reporter prints `compiler diagnostic <code>` for an empty message, as every interpreter diagnostic does. Runtime revision 18.
+- A function whose result checking leaves open now builds; its result is unit. The EmitSpec refusal for it moved to the function corpus.
+- Checking leaves `panic` untyped (#634, filed); positions that would need its type refuse with E6001.
+
 ## 2026-10-27 — Native collection callable values (#631)
 
 - `charFromCode`, `bytesOf`, `mapOf` and `setOf` are first-class values whose bodies are the direct calls' own Core builders. See [[Native Collection Callables]].

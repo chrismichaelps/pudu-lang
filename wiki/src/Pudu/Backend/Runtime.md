@@ -305,3 +305,9 @@ Resolved Grill Log: pudu_fail_report accepts an owned_payload base pointer and f
 
 Frames keep the site of the value call that created them, and builtin bodies
 can refuse there. See [[Native Collection Callables]].
+
+## Revision 18 (#633)
+
+pudu_fail_report prints `compiler diagnostic <code>` for an empty message,
+as `nonEmptyMessage` does. See [[Native Stopping Builtins]].
+Resolved Grill Log: the rule covers every dynamic message, not only panic.

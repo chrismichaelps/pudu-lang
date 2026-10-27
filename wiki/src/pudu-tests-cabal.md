@@ -333,3 +333,8 @@ without a new test dependency or release-gate change.
 
 Register [[Backend Collection Callable Programs]]. Resolved Grill Log: no new
 dependency; the release gate is unchanged.
+
+## Stopping builtin corpus (#633)
+
+Register [[Backend Stopping Builtin Programs]]. Resolved Grill Log: no new
+dependency; the release gate is unchanged.

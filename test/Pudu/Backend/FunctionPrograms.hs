@@ -10,7 +10,16 @@ import Pudu.Comptime.Limits (callDepthLimit)
 
 functionSuccessPrograms :: [(String, Text)]
 functionSuccessPrograms =
-  [ ("a module print shadows the builtin", program
+  [ ("a result checking leaves open is unit", program
+      [ "fn helper(value: Int) { return }"
+      , "fn main() -> Int {"
+      , "  helper(1)"
+      , "  let kept = helper(2)"
+      , "  if kept == () { return 3 }"
+      , "  { helper(1)\n 0 }"
+      , "}"
+      ])
+  , ("a module print shadows the builtin", program
       [ "fn print(value: Int) -> Int { value + 1 }"
       , "fn main() -> Int {"
       , "  let shifted = print(41)"

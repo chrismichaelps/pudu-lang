@@ -511,3 +511,7 @@ Resolved Grill Log: Register Pudu.Backend.Runtime.Process using existing depende
 ## First-class output builtins (#569)
 
 Resolved Grill Log: Register Pudu.Compiler.Lower.Intrinsic using the existing dependencies.
+
+## Stopping builtins (#633)
+
+Resolved Grill Log: Register Pudu.Compiler.Lower.Stop using the existing dependencies.

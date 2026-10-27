@@ -243,3 +243,10 @@ Resolved Grill Log: Remove the expression-bodied-function E6001 expectation only
 ## Named callable dispatch (#568)
 
 Resolved Grill Log: Assert a named closure points to its actual target with no hidden environment or forwarding function, while retaining the indirect call shape.
+
+## Open inferred results (#633)
+
+The "unresolved inferred result" refusal moved to [[Backend Function Programs]]
+as a success: an open result variable now forms as unit, which is what both
+evaluators return. Resolved Grill Log: the semantic delta was inspected; the
+native output matches the interpreter byte for byte.

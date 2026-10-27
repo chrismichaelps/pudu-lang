@@ -44,3 +44,19 @@ direct calls use. A Keyed body that may meet an unorderable key refuses at
 the caller through CoreFailCaller.
 Resolved Grill Log: one Core definition per builtin; per-tag identity; no
 synthetic source call. See [[Native Collection Callables]].
+
+## Stopping builtin values (#633)
+
+panic and convertInteger register bodies from [[Compiler Lower Stop]] for any
+represented one-argument signature; panic needs a Str parameter.
+Resolved Grill Log: refusals point at the value call through CoreFailCaller;
+identity stays per tag. See [[Native Stopping Builtins]].
+
+## Any arity and annotated panic (#633)
+
+register takes every parameter type, numbering locals from zero and keeping
+the single-parameter name `value`. annotatedPanic lets `let stop: fn(Str) ->
+Never = panic` bind, reading the written annotation because checking gives
+panic no type (#634); other annotations still refuse.
+Resolved Grill Log: trusting any annotation would let calls with unchecked
+argument types through, so only panic's own signature is taken.

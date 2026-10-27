@@ -396,3 +396,15 @@ Delegate builtin value resolution to lowerIntrinsicValue after the existing
 local/constant/module-function precedence. Resolved Grill Log: broaden only the
 intrinsic set; direct calls and shadowing order remain unchanged. See
 [[Native Rendering Callables]].
+
+## Stopping builtins (#633)
+
+Direct calls to panic and to convertInteger without a type argument go to
+[[Compiler Lower Stop]] after nearer locals, functions and variants.
+Resolved Grill Log: dispatch order is unchanged, so source declarations named
+panic still win.
+
+A binding whose value is the prelude's bare panic asks [[Compiler Lower Intrinsic]]
+for annotatedPanic before the usual fact check.
+Resolved Grill Log: Body stays under its size budget; the rule lives beside
+the other builtin values.
