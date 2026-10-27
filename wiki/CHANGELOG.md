@@ -5,6 +5,16 @@ tags: [changelog]
 
 # Changelog
 
+## 2026-10-17 — Solved native scalar types (#491)
+
+- [[Compiler Lower Types]] carries exact checked expression facts and settled function schemes into native lowering. Inferred/aliased Int/Bool signatures and Int/Bool/unit results share canonical representation; annotated scalar locals retain effects and structural Never.
+- [[Native Solved Types Tests]] protects source/generated identity and missing-fact refusals; [[Backend Function Programs]] compares inferred calls, recursion, aliases and annotated mutable locals against the interpreter. Focused native function, fact-identity/missing-fact and existing refusal checks pass; the clean GHC 9.14.1 optimized warnings-as-errors build, full suite and all 19 gates pass. A real CLI parity check prints 13 with empty stderr and exit 13. Independent implementation review remains pending and full native coverage remains incomplete.
+
+## 2026-10-17 — No-else conditional unit contract (#490)
+
+- [[ADR-0025-if-without-else-unit-results]] clarifies normal unit results across tree/compiled/boxed evaluation, derive folding, dynamic checking, constants and native lowering; transfers, diagnostics, effects and with-else values remain unchanged.
+- [[architecture/SEMANTICS]] records 1.0.1-draft as a conformance clarification. The runtime, derive, contextual checker and native admission repairs pass focused value/output/diagnostic tests, including actual boxed regions and generated methods. The inspected derive expansion snapshot retains its literal-true no-else wrapper around the same labelled break, and its 200-run property passes. The fresh optimized warnings-as-errors build, all 648 property groups, dependency checks and remaining integration gates pass under GHC 9.14.1; [[Native C11 Backend Delivery]] records evidence and the pending independent implementation review; the full-emission goal remains active.
+
 ## 2026-10-16 — Native loop control (#489)
 
 - [[Native Emission Coverage]] defines completion against implemented language behavior and records pending native surfaces.

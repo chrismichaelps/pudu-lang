@@ -112,7 +112,9 @@ impl Decode for Expand.Line {
             let fallback = {
               Null
             }
-            break @__derive_value_2 within(Key(key), Option.decode[Str](&fallback))
+            if true {
+              break @__derive_value_2 within(Key(key), Option.decode[Str](&fallback))
+            }
             match (match consumed(&entries, key) {
                 case Ok(__derive_ok) => __derive_ok
                 case Err(__derive_err) => {

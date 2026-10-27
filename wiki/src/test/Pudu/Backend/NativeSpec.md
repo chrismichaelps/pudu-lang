@@ -77,3 +77,10 @@ coordinator.
 
 [[Repository Test Runner]] · [[src/_MOC]] · [[src/Pudu/Backend/_MOC]] · [[Backend Toolchain]] ·
 [[Backend Emit]] · [[Backend Runtime]] · [[Backend Emit Tests]]
+
+
+## Solved native type inputs (#491)
+
+Construct native facts from the root CompileResult used for the checked tree. Existing differential harness also executes inferred/aliased scalar signatures and annotated mutable locals, checking stdout, stderr, status and warning-free C.
+
+Resolved Grill Log: consume canonical settled checker facts; preserve structural Never, print carrier refusals and existing runtime representations. Rejected: re-inference, display-name ABI selection, offset-only identity or silent fallback.

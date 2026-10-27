@@ -19,18 +19,19 @@ Exports: `ensureSignature, functionLevelRefusal`.
 
 ## Algorithm and invariants
 
-Validate each reachable function once, including refused signatures. Admit explicit Int/Bool parameters without defaults and explicit Int/Bool/unit results. Reject unsupported function modifiers, constraints and bodies at their own spans; do not infer types again.
+Validate each reachable function once, including refused signatures. Source
+modifiers, constraints, default values and body shape retain their existing
+refusals. Defaults point at their expression span. Consume the final scheme
+from [[Compiler Lower Types]]: synchronous, monomorphic, all parameters required,
+and arity equal to source parameters. Represented parameters are Int/Bool;
+results are Int/Bool/unit. Inferred and aliased types share this projection.
 
-Function-level refusal stops signature admission. Otherwise parameter and
-return refusals accumulate: missing parameter annotations point at parameter
-names, unsupported annotations at the annotation, defaults at their own spans,
-and a missing result annotation at the function name. The signature memo stores
-both successful and refused answers, so multiple callers do not repeat them.
-Type syntax maps unit and unqualified Int/Bool/Str names; Str is recognized so
-its unsupported parameter/result refusal names the type accurately. Qualified,
-generic, tuple and function types are outside the subset. Export visibility is
-not inspected. Shared function admission rejects type parameters, async, unsafe,
-comptime, constraints, missing bodies and expression bodies in that order.
+Unsupported formed types point at the annotation when present, otherwise the
+parameter/function name. Missing or polymorphic schemes refuse at the function
+name. Unresolved result variables refuse rather than becoming unit: for example,
+the checker currently leaves an unannotated bare-return helper result unresolved.
+Successful and refused signatures are memoized across callers. Annotation spelling
+never selects the C representation; no second inference pass runs here.
 
 ## Negative logic
 
@@ -48,3 +49,10 @@ No host exceptions, semantic rechecking, global mutable state, or backend emissi
 ## Referenced by
 
 [[src/Pudu/Compiler/_MOC]] · [[Compiler Lower]] · [[Compiler Lower Body]]
+
+
+## Solved native type inputs (#491)
+
+Replace syntax-based type projection with final schemes from Compiler Lower Types. Reject scheme parameters/bounds, asynchronous/optional/arity-mismatched function shapes, unsupported formed parameter/result representations. Admit inferred Int/Bool parameters and inferred Int/Bool/unit results plus aliases. Source modifiers, constraints, defaults and block-body policy remain. Unsupported parameters use annotation span when present, otherwise parameter name; results use annotation or function name. Missing or nonmonomorphic scheme refuses function name. Memoization and reachable-only traversal remain.
+
+Resolved Grill Log: consume canonical settled checker facts; preserve structural Never, print carrier refusals and existing runtime representations. Rejected: re-inference, display-name ABI selection, offset-only identity or silent fallback.

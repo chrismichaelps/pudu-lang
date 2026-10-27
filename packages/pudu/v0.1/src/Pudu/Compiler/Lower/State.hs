@@ -9,6 +9,7 @@ import qualified Data.Map.Strict as Map
 import Data.Set (Set)
 import qualified Data.Set as Set
 import Data.Text (Text)
+import Pudu.Compiler.Lower.Types (LowerTypes)
 import Pudu.Core
 import Pudu.Diagnostic (Diagnostic)
 import Pudu.Diagnostic.Native (nativeRefusal)
@@ -21,7 +22,8 @@ import Pudu.Source (Span)
     reachability worklist, the visited set, the refusals collected so far, and
     the functions collected so far. -}
 data LowerContext = LowerContext
-  { contextEntry :: !Text
+  { contextTypes :: !LowerTypes
+  , contextEntry :: !Text
   , contextTable :: [(Text, Located Function)]
   , contextSignatures :: !(Map Text (Maybe CoreSignature))
   , contextQueue :: ![Text]
@@ -59,10 +61,11 @@ data CoreSignature = CoreSignature
   }
   deriving stock (Eq, Show)
 
-emptyContext :: Text -> [(Text, Located Function)] -> LowerContext
-emptyContext entryName table =
+emptyContext :: Text -> LowerTypes -> [(Text, Located Function)] -> LowerContext
+emptyContext entryName types table =
   LowerContext
-    { contextEntry = entryName
+    { contextTypes = types
+    , contextEntry = entryName
     , contextTable = table
     , contextSignatures = Map.empty
     , contextQueue = []

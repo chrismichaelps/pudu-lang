@@ -28,11 +28,13 @@ lowerFunctionBody :: Located Function -> CoreSignature -> LowerState -> (LowerSt
 - Entry functions have no parameters and obey shared function admission. Their
   result comes from the trailing body expression or observed explicit returns,
   and must be Int, unit, or Never; a Never-only entry uses the unit ABI. A resultless outer block cannot erase an explicit
-  Int return. Non-entry functions retain their validated declared result.
+  Int return. Non-entry functions retain their settled validated signature result.
 - Blocks push a lexical scope, lower statements left to right, lower their
   trailing expression and pop the scope. Locals resolve nearest-first and are
   numbered independently per function. Assignments become CoreAssign and yield
-  unit; declarations carry Int, Bool, unit, or Never and reject explicit annotations.
+  unit; declarations carry Int, Bool, unit, or Never. An explicit annotation
+  requires an exact initializer fact matching the structural Core type, with
+  represented facts preserving structural Never.
 - Return operands must match the declared non-entry result, or Int/unit for
   the entry. The first explicit entry return records its type. Bare returns
   carry no Core operand. The checker already proves return agreement.
@@ -48,7 +50,7 @@ lowerFunctionBody :: Located Function -> CoreSignature -> LowerState -> (LowerSt
   unresolved integers and other numeric kinds refuse. Arithmetic, comparisons,
   equality and short-circuit booleans retain source spans.
 - Statement if lowers with explicit blocks; an if without else in value position
-  carries unit only when its taken branch yields actual unit/Never, or Never when its condition transfers. Value if with else joins
+  discards the taken branch result and carries unit, or Never when its condition transfers. Value if with else joins
   supported branch types, joining Never with the reachable branch type. While
   yields unit and loops carry their scalar/unit break type, or Never without
   a local break. Labels, break and continue resolve through Control.
@@ -56,7 +58,7 @@ lowerFunctionBody :: Located Function -> CoreSignature -> LowerState -> (LowerSt
 - Calls resolve print/display first, then refuse local callable values and
   calls to the entry, then consult the top-level function table. Signatures
   are memoized. Arguments lower left to right; calls enqueue their callee and
-  carry the declared result type. A refused signature does not duplicate its
+  carry the settled result type. A refused signature does not duplicate its
   diagnostic at each call.
 - Printable arguments are literal text or display of Int/Bool; the emitter
   can fuse these without introducing text allocation or ownership semantics.
@@ -87,7 +89,7 @@ Requires [[Compiler Lower Control]], [[Compiler Lower State]], [[Compiler Lower 
   No; the observed explicit entry return type determines the Core function
   result. _Rejected:_ deriving unit from the absence of a trailing expression.
 - **Q:** Why are argument types not inferred here? **A:** The checker already
-  proves arity and argument compatibility; validated annotations provide the
+  proves arity and argument compatibility; settled schemes provide the
   representation. _Rejected:_ backend inference duplicating the checker.
 
 ## Referenced by
@@ -122,16 +124,16 @@ Resolved Grill Log: an admitted if without else has unit value and can be repres
 a Core block containing its conditional statement; no new literal or runtime
 representation is needed. A Never condition preserves divergence.
 
-## If-without-else oracle boundary
+## If-without-else unit boundary (#490)
 
-The checker assigns unit to an if without else, but the evaluator returns the
-taken block's actual trailing value. Value-position lowering therefore admits
-only unit/Never branches whose value is not print's Result carrier, or a Never
-condition that cannot reach either branch. Other branch values refuse E6001
-until the evaluator/checker discrepancy is resolved through semantic governance.
-Statement-position conditionals continue to discard branch values. Resolved
-Grill Log: preserve actual interpreter observations rather than silently assume
-that its checked unit type erases the taken block value.
+Resolved Grill Log: [[ADR-0025-if-without-else-unit-results]] repairs the evaluator
+oracle to return unit after normal completion. Value lowering wraps the existing
+CoreIf statement in a resultless Core block, regardless of the discarded branch
+value. Condition evaluation and branch effects run exactly once; transfers and
+runtime failures remain intact. A Never condition remains Never. Print's Result
+is discarded within this boundary and cannot escape through it. With-else
+branches retain their value and print-result admission rules. Rejected: native-only
+coercion or retaining the temporary #489 refusal after oracle agreement.
 
 ## Unit local admission (#489)
 
@@ -140,3 +142,10 @@ runs their effects before producing its unit sentinel. Unit assignments retain
 their right operand's effects. Reads retain unit type. Print-valued initializers
 and assignment operands still refuse because Result[(), Str] cannot become unit.
 Unit literals and unit-typed parameters are independent admission boundaries.
+
+
+## Solved native type inputs (#491)
+
+Admit explicit local annotations only when the initializer exact complete Span has a represented solved type compatible with structural Core type. Structural Never still propagates without retagging. Print Result escape guards remain first; missing facts refuse E6001, with no offset lookup, annotation-name expansion or second unifier. Non-entry results use the settled signature, not declared spelling.
+
+Resolved Grill Log: consume canonical settled checker facts; preserve structural Never, print carrier refusals and existing runtime representations. Rejected: re-inference, display-name ABI selection, offset-only identity or silent fallback.

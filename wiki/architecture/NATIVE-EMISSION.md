@@ -14,7 +14,7 @@ Compile ordinary checked Pudu programs into portable C11 with interpreter-identi
 | Area | State | Next obligation |
 | --- | --- | --- |
 | Platform Int/Bool, checked arithmetic, if/while, printing | Implemented | Preserve differential evidence |
-| Explicit scalar functions, recursion, call depth | Implemented (#488) | Preserve argument ordering and diagnostics |
+| Scalar functions, recursion, call depth | Implemented (#488, #491) | Preserve inferred/aliased signature facts, argument ordering and diagnostics |
 | Loop control and scalar loop results | Implemented (#489) | Preserve labels, transfers, Never joins and condition-scope evidence |
 | Complete numeric families | Pending | Widths, floats, Decimal, wrapping/saturation, bitwise rules |
 | Text and bytes | Pending | Owned representation, UTF-8, allocation, comparisons and IO failures |
@@ -46,9 +46,9 @@ The emitter places continuation targets before condition setup and break targets
 
 [[architecture/_MOC]] · [[Backend]] · [[Native C11 Backend Delivery]]
 
-## Oracle discrepancy #490
+## Unit-result conformance #490
 
-Value-position if-without-else has checked Unit type but the evaluator returns its taken branch's actual value. Native code cannot erase an Int/Bool/Result merely because the checker says Unit. Issue #490 owns the compatibility decision and parity repair. Until resolved, #489 admits genuinely Unit/Never branches and refuses other taken values explicitly; these refusals remain incomplete coverage.
+[[ADR-0025-if-without-else-unit-results]] resolves the checker/evaluator discrepancy as a correctness repair: a no-else if yields unit on both normal paths, preserving all effects, transfers, errors and cleanup. Tree, compiled and boxed-region evaluation, derive true-folding and dynamic contextual checking now agree in focused regression checks. Native lowering removes the temporary taken-value refusal and its differential cases pass. With-else values stay unchanged. This closes the #489 oracle boundary for represented branch values; unsupported syntax and runtime representations remain incomplete coverage.
 
 ## Solved type publication
 
@@ -67,3 +67,9 @@ The full-emission goal is unproven until all of the following are satisfied toge
 7. Clean supported-toolchain builds, complete regression/integration gates, platform runtime tests and independent implementation/architecture/wiki review all pass with remaining limitations stated.
 
 A passing slice or a smaller supported subset cannot satisfy this matrix. The goal remains active while any ledger row, runtime surface or verification obligation is pending.
+
+## Solved scalar signatures (#491)
+
+[[Compiler Lower Types]] projects the complete checked module facts into existing scalar Core representations. Final monomorphic synchronous schemes admit inferred and aliased Int/Bool parameters and Int/Bool/unit results; exact expression facts admit annotated scalar locals. Missing facts and unrepresented formed types retain E6001. This changes backend coverage without changing Pudu semantics.
+
+Resolved Grill Log: facts belong to the same successful root CompileResult, exact complete spans identify generated expressions, and canonical builtin identities select representation. No duplicate inference, interpreter cache expansion or new ownership representation.

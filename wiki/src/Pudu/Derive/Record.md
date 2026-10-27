@@ -52,7 +52,8 @@ syntax; each fields iteration binds a descriptor and its independently selected 
 Read name/attributes as literals, preserve strict runtime fallback evaluation
 even when an attribute is present, get as an ordinary field projection, set as an
 assignment, and nameOf as a declared-name literal. Static booleans select only the
-reachable branch; runtime conditions retain ordinary branches. Unroll fields into
+reachable branch; a true condition without else retains the conditional unit
+boundary rather than exposing its block value. Runtime conditions retain ordinary branches. Unroll fields into
 separate ordinary blocks preserving binding scope, order and transfers. All newly
 created Located nodes receive distinct generated spans with authored provenance.
 Collect each loop's field bounds for the semantic proof layer.
@@ -95,3 +96,17 @@ Retain a substituted generic owner's complete type as the target of its static m
 Resolved Grill Log: erasing owner arguments leaves a discarded collect result unconstrained;
 blindly treating owner arguments as implementation parameters breaks reordered or nested heads.
 The checker selects through the complete owner; derive expansion never selects an implementation.
+
+## If-without-else unit conformance (#490)
+
+[[ADR-0025-if-without-else-unit-results]] requires a literal-true conditional
+without else to preserve normal unit production. Residualization retains an
+IfExpression with the substituted true condition and recursively transformed
+then block. False without else remains an empty unit block. True with else
+retains the existing selected value-block fold. Generated nodes keep request
+provenance; ordinary execution still owns effects, transfers and cleanup.
+
+Resolved Grill Log: a no-else conditional cannot fold into a value-producing
+block. Retaining the conditional preserves its existing type and normal-result
+discard without changing with-else values or adding an AST constructor. Rejected:
+exposing a discarded scalar, text or Result as the containing expression result.

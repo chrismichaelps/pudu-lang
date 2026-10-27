@@ -27,13 +27,13 @@ owns callable signature admission.
 
 ```haskell
 data LowerResult = Lowered !CoreModule | LowerRefused ![Diagnostic]
-lowerProgram :: Text -> Module -> LowerResult
+lowerProgram :: Text -> Maybe LowerTypes -> Module -> LowerResult
 ```
 
 The entry name (`"main"`) is a parameter, not a constant: the caller owns the
 entry-point vocabulary exactly as the evaluator's callers do. The caller hands
-in the checked root module (`rootCompileResult >>= compileModule`), never an
-errored program.
+in the checked root module and LowerTypes constructed from the same successful
+CompileResult, never an errored program. Missing facts refuse at the module span.
 
 ## Algorithm and invariants
 
@@ -52,15 +52,15 @@ errored program.
   declaration, naming the function (or "this declaration") it found there.
 - Non-entry functions are synchronous and block bodied, with no type
   parameters, constraints, `unsafe`/`comptime` modifiers or default parameter
-  values. Parameters require explicit `Int` or `Bool` annotations; results
-  require explicit `Int`, `Bool` or `()` annotations. Export visibility adds
+  values. Final monomorphic schemes carry `Int` or `Bool` parameters and
+  `Int`, `Bool` or `()` results, including inferred and aliased types. Export visibility adds
   no native restriction. See [[Compiler Lower Signature]] for refusal spans. The signature is validated once per function and memoized, so
   a function reached through several calls refuses exactly once.
 - Carried functions are ordered by declaration, not by discovery, so the core
   module — and every artifact derived from it — is a function of the program
   alone.
 - Calls lower left to right, matching the evaluator's argument evaluation
-  order; the call's type is the callee's declared result type; recursion and
+  order; the call's type is the callee's settled result type; recursion and
   mutual recursion terminate the worklist through the visited set.
 - Locals are numbered per function; scopes are a stack, so inner declarations
   shadow outer ones exactly as the evaluator's scopes do. Assignment resolves
@@ -71,10 +71,10 @@ errored program.
   A print's internal unit representation is effect-only: an entry's trailing
   print result or an explicit print-valued return refuses because the actual
   result is `Result[(), Str]`. Nested blocks and conditionals are inspected
-  recursively. A trailing `if` without else is admitted when its taken value is actual unit or Never, or its condition transfers. While yields unit unless its condition transfers.
+  recursively. A trailing `if` without else discards any supported taken value and yields unit, or Never if its condition transfers. While yields unit unless its condition transfers.
   Text locals and function results are outside the subset; standalone literal
   text or `display` in discarded statement position can still be lowered.
-- Expression types are computed while lowering: `Int` and `Bool` for values,
+- Structural Core expression types are computed while lowering; annotated locals and signatures consume settled checker facts: `Int` and `Bool` for values,
   `Text` only for string literals and `display(...)` under `print(...)`.
   Integer literals must be `ResolvedInteger PlatformSigned`; suffixed widths
   and other kinds refuse with the kind's name.
@@ -102,10 +102,9 @@ errored program.
   [[Diagnostic Native]]; a program lowers only when nothing refused.
 - Refused today, deliberately and explicitly: imports, a module with no entry
   function, parameters on the entry function, calls through local values,
-  calls to the entry function, parameters without annotations or of types
-  outside `Int`/`Bool`, default parameter values, functions without a declared
-  return type or with a return type outside `Int`/`Bool`/`()`, expression
-  bodies on non-entry functions, type annotations on bindings, pattern
+  calls to the entry function, parameter types outside `Int`/`Bool`, default
+  parameter values, unresolved or polymorphic signatures, result types outside
+  `Int`/`Bool`/`()`, expression bodies on non-entry functions, pattern
   bindings (`let`/`let else` with patterns),  `match`, `try`, `await`, lambdas, ranges, tuples, arrays, sets,
   records, member/index access, method calls, module-qualified names, borrows
   (`&`, `*`), bitwise operators, wrapping/saturating operators, non-platform
@@ -116,7 +115,7 @@ errored program.
 
 ## Dependencies and consumers
 
-Requires [[Compiler Lower Body]], [[Compiler Lower State]],
+Requires [[Compiler Lower Types]], [[Compiler Lower Body]], [[Compiler Lower State]],
 [[Compiler Lower Signature]], [[Frontend Syntax]] trees, [[Source]] spans, [[Pudu Core]], and [[Diagnostic Native]].
 Consumed by the `pudu build --native` path in [[Pudu CLI]]. It may import
 frontend and semantic modules — that is its job — and no backend module
@@ -163,13 +162,19 @@ imports it.
 Loop-control extension: [[Compiler Lower Control]] owns scalar/unit loop results,
 labelled transfers and Never joins under [[Native Emission Coverage]].
 
-## If-without-else oracle boundary
+## If-without-else unit conformance (#490)
 
-The checker assigns unit to an if without else, but the evaluator returns the
-taken block's actual trailing value. Value-position lowering therefore admits
-only unit/Never branches whose value is not print's Result carrier, or a Never
-condition that cannot reach either branch. Other branch values refuse E6001
-until the evaluator/checker discrepancy is resolved through semantic governance.
-Statement-position conditionals continue to discard branch values. Resolved
-Grill Log: preserve actual interpreter observations rather than silently assume
-that its checked unit type erases the taken block value.
+[[ADR-0025-if-without-else-unit-results]] repairs normal unit production across
+the interpreter oracle. Value-position lowering then admits any supported then
+block and discards its result inside a resultless CoreIf wrapper. Effects,
+failures and transfers remain intact; a divergent condition remains Never.
+Resolved Grill Log: no native-specific coercion, payload leakage or temporary
+scalar refusal after evaluator agreement. Unsupported branch constructs retain
+their own representation refusals.
+
+
+## Solved native type inputs (#491)
+
+Require optional LowerTypes from the same checked module: lowerProgram :: Text -> Maybe LowerTypes -> Module -> LowerResult. Missing facts refuse E6001 at moduleSpan. Pass facts through context. Non-entry Int/Bool signatures and Int/Bool/unit results consume final monomorphic synchronous schemes, including inference and aliases; annotation spelling no longer selects ABI. Represented annotated locals are admitted using exact initializer facts. Previous annotation-only restrictions are superseded by this contract.
+
+Resolved Grill Log: consume canonical settled checker facts; preserve structural Never, print carrier refusals and existing runtime representations. Rejected: re-inference, display-name ABI selection, offset-only identity or silent fallback.

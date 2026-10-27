@@ -202,3 +202,16 @@ other workload, fixture output and suite check is unchanged. The residual is
 about 78 ns per iteration of interpreter closure dispatch, so millisecond
 parity with native code still requires native emission; no promotion is
 claimed from this cut.
+
+## Unit-valued conditionals (#490)
+
+A planned `if` without `else` evaluates its taken block completely, then
+discards only its successful value and yields `UnitValue`. The untaken path
+already yields unit. Existing Step failure propagation, expression ordering,
+whole-region admission, scratch cleanup and lexical writes remain unchanged;
+conditionals with `else` keep their selected value.
+
+Resolved Grill Log: prepare the discard when selecting the taken Code, then
+use normal Step sequencing. A failure must remain a failure, and the block's
+last expression must execute even when its value is discarded. The unboxed
+planner remains a separate admission boundary.

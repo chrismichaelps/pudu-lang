@@ -4,6 +4,7 @@
 module Pudu.Compiler.Lower.Body (lowerEntryBody, lowerFunctionBody) where
 
 import Data.List.NonEmpty (NonEmpty (..))
+import Pudu.Compiler.Lower.Types (typeForSpan)
 import Pudu.Compiler.Lower.Control
   ( lowerWhile, lowerLoop, lowerTransfer, blockType, joinType
   , printValued, expressionIsPrintValued )
@@ -58,9 +59,9 @@ lowerEntryBody located state
             }
       )
 
-{-| Lower a non-entry function against its validated signature. The checker
-    has already proved the body agrees with the declared result, so the
-    declared type is carried and the body's own result type is discarded. -}
+{-| Lower a non-entry function against its settled signature. The checker
+    has already proved result agreement; structural lowering preserves the
+    signature without inferring another return type. -}
 lowerFunctionBody :: Located Function -> CoreSignature -> LowerState -> (LowerState, Maybe CoreFunction)
 lowerFunctionBody located signature state = case functionBody function of
   Just (Located _ (BlockBody block)) ->
@@ -134,10 +135,13 @@ lowerStatement :: LowerState -> Located Statement -> (LowerState, Maybe CoreStat
 lowerStatement state (Located statementSpan statement) = case statement of
   DeclarationStatement (Located declarationSpan (BindingDeclaration _ kind (Located nameSpan name) annotation value))
     | kind == CompileTime -> halt nameSpan "comptime bindings" state
-    | Just _ <- annotation -> halt declarationSpan "type annotations on bindings" state
     | otherwise -> case lowerExpression state value of
         (after, Just (coreValue, coreType))
           | expressionIsPrintValued coreValue -> halt declarationSpan "binding a Result[(), Str] value" after
+          | Just _ <- annotation
+          , let solved = typeForSpan (contextTypes (lowerContext state)) (locatedSpan value)
+          , solved == Nothing || (coreType /= CoreNeverType && solved /= Just coreType) ->
+              halt declarationSpan "a binding without matching solved native type facts" after
           | coreType `elem` [intType, CoreBoolType, CoreUnitType, CoreNeverType] ->
               let (withLocal, local) = bindLocal after name coreType
                in ( withLocal
@@ -347,13 +351,9 @@ lowerExpression state (Located spanValue expression) = case expression of
       (afterCondition, Nothing) -> refused afterCondition
   IfExpression _ _ Nothing ->
     case lowerStatement state (Located spanValue (ExpressionStatement (Located spanValue expression))) of
-      (after, Just statement@(CoreStatement _ (CoreIf condition thenBlock _)))
-        | coreExpressionType condition == CoreNeverType
-            || (blockType (coreBlockStatements thenBlock) (coreBlockResult thenBlock) `elem` [CoreUnitType, CoreNeverType]
-                  && not (printValued thenBlock)) ->
-            let block = CoreBlock [statement] Nothing
-             in typed after (CoreBlockValue block) (blockType [statement] Nothing)
-        | otherwise -> halt spanValue "an if without else whose taken value is not unit" after
+      (after, Just statement@(CoreStatement _ CoreIf{})) ->
+        let block = CoreBlock [statement] Nothing
+         in typed after (CoreBlockValue block) (blockType [statement] Nothing)
       (after, Just _) -> halt spanValue "an if without else outside the native statement form" after
       (after, Nothing) -> refused after
   WhileExpression label condition body -> lowerWhile lowerExpression lowerBlock spanValue label condition body state

@@ -73,3 +73,15 @@ MultiMap wrapper selection. Previously the direct-call branch accepted only
 call setup despite being known module functions. Flatten member chains only for
 lookup, and admit their direct path only when the MultiMap wrapper proof succeeds.
 Other member calls retain their established dispatch.
+
+## Unit-valued conditionals (#490)
+
+For an `if` without `else`, compile the taken block normally and discard its
+value only after successful execution; both normal paths yield `UnitValue`.
+Condition evaluation, block scopes, effects, failures and control transfers
+retain their existing order and behavior. Branch values remain intact when
+an `else` exists.
+
+Resolved Grill Log: select the unit-discarding action while compiling the
+conditional and sequence it through the existing evaluator. Do not re-check
+syntax at execution time or catch an unwind to produce unit.

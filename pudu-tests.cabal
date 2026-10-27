@@ -68,6 +68,7 @@ test-suite pudu-test
     Pudu.Diagnostic.RenderSpec
     Pudu.Cache.PersistSpec
     Pudu.Backend.EmitSpec
+    Pudu.Backend.LowerTypesSpec
     Pudu.Backend.NativeSpec
     Pudu.Backend.FunctionPrograms
     Pudu.Backend.ControlPrograms
@@ -92,6 +93,7 @@ test-suite pudu-test
     Pudu.Compiler.Program.Eval.RuntimeSpec
     Pudu.Foreign.SlotSpec
     Pudu.Foreign.OwnershipSpec
+    Pudu.Eval.IfUnitSpec
     Pudu.Eval.Foreign.ResultSpec
     Pudu.Frontend.Lexer.CursorSpec
     Pudu.Frontend.ExpandSpec

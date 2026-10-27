@@ -25,13 +25,12 @@ code — [[Backend Native Tests]] owns execution.
   the build and does not refuse, because the interpreter never runs it; each
   unsupported construct (a module without `main`, arrays, ownership-bearing break values,
   floats, `Str` locals, borrows, matches, function values and calls through
-  local values, calls to the entry, parameters without annotations or of
-  unsupported types, default parameter values, functions without a declared
-  return type, expression-bodied non-entry functions, and trailing or explicitly
+  local values, calls to the entry, parameters of unsupported types, default parameter values, unresolved inferred
+  results, expression-bodied non-entry functions, and trailing or explicitly
   returned print results) lowers to a refusal whose
   code is `E6001` and whose span is the construct's own.
 - Control-flow diagnostics: invalid enclosing labels and values carried out of a while loop remain semantic errors, before native lowering; structured codes and hasErrors are checked. The supported while expression is carried in CoreEvaluate as CoreWhileValue.
-- If-without-else: value contexts with a non-unit taken-branch result refuse with `E6001` at the if expression, including a trailing print whose runtime result is a Result despite the checker assigning unit. Native lowering does not silently coerce the interpreter value.
+- If-without-else: Int, Bool and print-Result trailing branch values are accepted in unit value contexts after the interpreter correction in [[ADR-0025-if-without-else-unit-results]]. Ordinary escaped print results retain their separate explicit refusal.
 - Divergence: entry bodies ending in `loop {}` or `return loop {}` pass the ordinary checker and native lowering. These acceptance tests never execute either infinite program.
 - Emission: emitting the same core module twice yields identical text;
   emitting different sources at the same offsets does not confuse site
@@ -71,3 +70,10 @@ Uses [[Compiler Lower]], [[Compiler Lower Body]], [[Backend Emit]],
 
 [[Repository Test Runner]] · [[src/_MOC]] · [[src/Pudu/Backend/_MOC]] · [[Backend Emit]] ·
 [[Compiler Lower]] · [[Backend Native Tests]]
+
+
+## Solved native type inputs (#491)
+
+Every lowerProgram call supplies same-result settled facts. Previously refused inferred scalar parameter/result cases become accepted; unsupported formed types, generics and defaults still refuse at their source spans. Cover missing facts and canonical identity separately without weakening refusal expectations.
+
+Resolved Grill Log: consume canonical settled checker facts; preserve structural Never, print carrier refusals and existing runtime representations. Rejected: re-inference, display-name ABI selection, offset-only identity or silent fallback.

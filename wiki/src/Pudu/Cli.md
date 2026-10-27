@@ -272,3 +272,10 @@ the default path: `--native` never changes what `pudu run` does.
 Documentation includes strategy headers from [[Compiler Program]]. Public API output appends only exported strategy entries belonging to each requested root module, encoded by [[Doc Json]]. Ordinary export identity objects remain unchanged; private and dependency strategies are excluded. Failed compilation still emits no API output. [[Derive Index Output Gate]] proves these boundaries.
 
 Resolved Grill Log: metadata never creates a resolver binding or an implicit re-export. The existing large command module receives only the bounded API projection change.
+
+
+## Solved native type inputs (#491)
+
+Native build constructs LowerTypes from rootCompileResult compileTypes and compileSchemes of the exact root module being lowered. Missing compileTypes is passed as absent facts for a located E6001; no interpreter cache widening or rechecking.
+
+Resolved Grill Log: consume canonical settled checker facts; preserve structural Never, print carrier refusals and existing runtime representations. Rejected: re-inference, display-name ABI selection, offset-only identity or silent fallback.

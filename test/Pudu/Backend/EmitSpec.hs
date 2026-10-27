@@ -14,6 +14,7 @@ import Data.Text (Text)
 import qualified Data.Text as Text
 import Pudu.Backend.Emit (emitProgram)
 import Pudu.Compiler (CompileResult (..), runCompile)
+import Pudu.Compiler.Lower.Types (nativeTypes)
 import Pudu.Compiler.Lower (LowerResult (..), lowerProgram)
 import Pudu.Core
   ( CoreBlock (..)
@@ -61,6 +62,7 @@ backendEmitProperties :: [(String, IO Property)]
 backendEmitProperties =
   [ ("a supported program lowers to the expected core shapes", testSupportedLowering)
   , ("divergent entries lower without execution", testDivergentEntries)
+  , ("no-else values lower through the unit boundary", testIfUnit)
   , ("invalid loop transfers fail before lowering", testControlDiagnostics)
   , ("unreachable helpers are omitted", testEntryOnly)
   , ("transitively reachable typed functions lower once", testReachableFunctions)
@@ -84,7 +86,7 @@ compileAndLower text = do
     then Left (compileDiagnostics result)
     else case compileModule result of
       Nothing -> Left (compileDiagnostics result)
-      Just parsed -> case lowerProgram "main" parsed of
+      Just parsed -> case lowerProgram "main" (nativeTypes (compileTypes result) (compileSchemes result)) parsed of
         LowerRefused refusals -> Left refusals
         Lowered core -> Right (source, core)
 
@@ -206,6 +208,16 @@ testEntryOnly = do
       , "}"
       ]
 
+testIfUnit :: IO Property
+testIfUnit = conjoin <$> mapM check ["7", "true", "print(\"taken\")"]
+ where
+  check expression = do
+    result <- compileAndLower $ Text.unlines
+      ["module IfUnit", "fn main() { let token = if true { " <> expression <> " }\n token }"]
+    pure $ case result of
+      Left diagnostics -> counterexample (show diagnostics) False
+      Right (_, core) -> map coreFunctionResult (coreModuleFunctions core) === [CoreUnitType]
+
 testReachableFunctions :: IO Property
 testReachableFunctions = do
   compiled <- compileAndLower $ Text.unlines
@@ -234,8 +246,7 @@ testReachableFunctions = do
     construct", not as a hand-counted column. -}
 refusalCases :: [(String, Text, Text)]
 refusalCases =
-  [ ("unannotated parameter", helperProgram "fn helper(value) -> Int { return value }" "helper(1)", "value)")
-  , ("unannotated result", helperProgram "fn helper(value: Int) { return value }" "helper(1)", "helper(value")
+  [ ("unresolved inferred result", helperProgram "fn helper(value: Int) { return }" "{ helper(1)\n 0 }", "helper(value")
   , ("default parameter", helperProgram "fn helper(value: Int = 7) -> Int { return value }" "helper(1)", "7")
   , ("expression body", helperProgram "fn helper(value: Int) -> Int = value" "helper(1)", "value\n")
   , ("text parameter", helperProgram "fn helper(value: Str) -> Int { return 1 }" "helper(\"x\")", "Str")
@@ -247,8 +258,6 @@ refusalCases =
       ["module Refuse", "fn main() { print(\"x\") }"], "print(")
   , ("explicit print result", Text.unlines
       ["module Refuse", "fn main() { return print(\"x\") }"], "print(")
-  , ("non-unit if without else value", bindingProgram "let chosen = if true { 7 }", "if true")
-  , ("print-valued if without else", bindingProgram "let chosen = if true { print(\"x\") }", "if true")
   , ("arrays", bindingProgram "var items = [1, 2, 3]", "[1, 2, 3]")
   , ("floating-point values", bindingProgram "var ratio = 1.5", "1.5")
   , ("ownership-bearing break result", statementProgram "loop { break print(\"x\") }", "print(")
@@ -297,7 +306,7 @@ refusalOutcome (label, sourceText', marker) = do
   pure $ case (hasErrors (compileDiagnostics result), compileModule result) of
     (True, _) -> counterexample (label <> ": compile errors: " <> show (compileDiagnostics result)) False
     (_, Nothing) -> counterexample (label <> ": the program did not compile") False
-    (False, Just parsed) -> case lowerProgram "main" parsed of
+    (False, Just parsed) -> case lowerProgram "main" (nativeTypes (compileTypes result) (compileSchemes result)) parsed of
       Lowered _ -> counterexample (label <> ": lowered, but a refusal was expected") False
       LowerRefused refusals -> conjoin
         [ counterexample
@@ -321,7 +330,7 @@ testLocalFunctionRefusal = do
     ]
   result <- runCompile source
   pure $ case (hasErrors (compileDiagnostics result), compileModule result) of
-    (False, Just parsed) -> case lowerProgram "main" parsed of
+    (False, Just parsed) -> case lowerProgram "main" (nativeTypes (compileTypes result) (compileSchemes result)) parsed of
       Lowered _ -> counterexample "indirect call unexpectedly lowered" False
       LowerRefused refusals -> conjoin
         [ map (diagnosticCodeText . diagnosticCode) refusals === ["E6001", "E6001"]

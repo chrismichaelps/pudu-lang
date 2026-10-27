@@ -24,6 +24,7 @@ import Pudu.Backend.Toolchain
   , compileNative
   )
 import Pudu.Compiler (CompileResult (..))
+import Pudu.Compiler.Lower.Types (nativeTypes)
 import Pudu.Compiler.Lower (LowerResult (..), lowerProgram)
 import Pudu.Compiler.Program
   ( ProgramResult
@@ -329,7 +330,7 @@ captureStdout directory action = do
 buildAndRun :: FilePath -> ProgramResult -> IO (Either String (Text, Text, Int, Text))
 buildAndRun root program = case rootCompileResult program >>= compileModule of
   Nothing -> pure (Left "the program did not compile")
-  Just parsed -> case lowerProgram "main" parsed of
+  Just parsed -> case lowerProgram "main" (rootCompileResult program >>= \result -> nativeTypes (compileTypes result) (compileSchemes result)) parsed of
     LowerRefused refusals ->
       pure (Left ("lowering refused: " <> show (map diagnosticMessage refusals)))
     Lowered core -> do

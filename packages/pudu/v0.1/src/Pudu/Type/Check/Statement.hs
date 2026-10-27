@@ -253,11 +253,11 @@ checkAgainst needs declared rigid expected located@(Located spanValue expression
   if not (worthPushing resolved)
     then fallback
     else case expression of
-      IfExpression condition thenBlock elseBranch -> do
+      IfExpression condition thenBlock (Just elseBranch) -> do
         conditionType <- statementExpression needs declared rigid condition
         _ <- unify (locatedSpan condition) boolType conditionType
         _ <- checkBlockAgainst needs declared rigid resolved thenBlock
-        mapM_ (checkAgainst needs declared rigid resolved) elseBranch
+        _ <- checkAgainst needs declared rigid resolved elseBranch
         recordExpression spanValue resolved
         pure resolved
       IfLetExpression pattern' subject thenBlock (Just elseBranch) -> do

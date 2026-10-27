@@ -218,3 +218,15 @@ Assignment resolves its place through [[Eval Place]] — root and index keys fir
 
 Function literals initialize the internal MultiMap proof cache to Nothing.
 Resolved Grill Log: literal capture and body evaluation remain unchanged.
+
+## Unit-valued conditionals (#490)
+
+An ordinary `if` without `else` yields `UnitValue` on either normal path.
+Its taken block still runs completely in its existing lexical scope, including
+its final expression; only the successful value is discarded. Errors and
+`return`, `break`, `continue` or propagation unwinds keep their original values
+and source spans. An `if` with `else` still yields its selected branch value.
+
+Resolved Grill Log: discard the successful block value through evaluator
+sequencing, as the existing no-else `if let` path does. Do not skip the final
+expression, catch a control transfer, or erase a diagnostic to manufacture unit.

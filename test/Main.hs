@@ -26,6 +26,7 @@ import Pudu.Lsp.ImplMembersSpec (implMemberProperties)
 import Pudu.Lsp.MethodDefinitionSpec (methodDefinitionProperties)
 import Pudu.Diagnostic.RenderSpec (renderProperties)
 import Pudu.Cache.PersistSpec (persistProperties)
+import Pudu.Backend.LowerTypesSpec (lowerTypesProperties)
 import Pudu.Backend.EmitSpec (backendEmitProperties)
 import Pudu.Backend.NativeSpec (backendNativeProperties)
 import Pudu.Backend.ToolchainSpec (backendToolchainProperties)
@@ -38,6 +39,7 @@ import Pudu.Cli.LintSpec (lintCommandProperties)
 import Pudu.LintSpec (lintProperties)
 import Pudu.Foreign.SlotSpec (slotProperties)
 import Pudu.Foreign.OwnershipSpec (ownershipProperties)
+import Pudu.Eval.IfUnitSpec (ifUnitProperties)
 import Pudu.Eval.Foreign.ResultSpec (resultProperties)
 import Pudu.Frontend.Lexer.CursorSpec (cursorProperties)
 import Pudu.Frontend.ExpandSpec (expandProperties)
@@ -118,7 +120,7 @@ main = do
   renderOutcomes <- traverse (uncurry check) renderProperties
   programOutcomes <- traverse (uncurry check) (programProperties <> authenticationProperties)
   persistOutcomes <- traverse (uncurry check) persistProperties
-  backendOutcomes <- traverse (uncurry check) (backendEmitProperties <> backendNativeProperties <> backendToolchainProperties)
+  backendOutcomes <- traverse (uncurry check) (lowerTypesProperties <> backendEmitProperties <> backendNativeProperties <> backendToolchainProperties)
   literalsOutcomes <- traverse (uncurry check) literalsProperties
   initOutcomes <- traverse (uncurry check) initProperties
   packageOutcomes <- traverse (uncurry check) packageProperties
@@ -142,7 +144,7 @@ main = do
   parserPatternOutcomes <- traverse (uncurry check) parserPatternProperties
   parserTypeDeclarationOutcomes <- traverse (uncurry check) parserTypeDeclarationProperties
   resolveOutcomes <- traverse (uncurry check) (resolveProperties <> reflectionProperties <> qualifierProperties <> qualifiedShadowProperties)
-  evalOutcomes <- traverse (uncurry check) (evalProperties <> mutexProperties)
+  evalOutcomes <- traverse (uncurry check) (evalProperties <> mutexProperties <> ifUnitProperties)
   typeOutcomes <- traverse (uncurry check) typeProperties
   importTypeOutcomes <- traverse (uncurry check) importTypeProperties
   interfaceOutcomes <- traverse (uncurry check) interfaceProperties

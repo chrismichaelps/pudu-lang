@@ -10,7 +10,35 @@ import Pudu.Comptime.Limits (callDepthLimit)
 
 functionSuccessPrograms :: [(String, Text)]
 functionSuccessPrograms =
-  [ ("typed parameters and Bool results", program
+  [ ("inferred scalar parameters and results", program
+      [ "fn add(value) { return value + 2 }"
+      , "fn invert(value) { return !value }"
+      , "fn announce(value) { print(display(value + 0))\n {} }"
+      , "fn main() -> Int {"
+      , "  announce(add(5))"
+      , "  if invert(false) { return add(7) }"
+      , "  return 0"
+      , "}"
+      ])
+  , ("aliases and annotated mutable scalars", program
+      [ "type Score = Int"
+      , "type Enabled = Bool"
+      , "fn choose(value: Score, enabled: Enabled) -> Score {"
+      , "  var total: Score = value + 1"
+      , "  let accepted: Enabled = !enabled"
+      , "  if accepted { total = total + 2 }"
+      , "  return total"
+      , "}"
+      , "fn main() -> Int { return choose(10, false) }"
+      ])
+  , ("inferred recursive scalar result", program
+      [ "fn sum(value: Int) {"
+      , "  if value == 0 { return 0 }"
+      , "  return value + sum(value - 1)"
+      , "}"
+      , "fn main() -> Int { return sum(5) }"
+      ])
+  , ("typed parameters and Bool results", program
       [ "fn choose(value: Int, accept: Bool) -> Int {"
       , "  if accept { return value }"
       , "  return 0"

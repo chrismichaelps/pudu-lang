@@ -243,6 +243,25 @@ controlSuccessPrograms =
       , "  return token"
       , "}"
       ])
+  , ("no-else scalar results discard through unit function", program
+      [ "fn finish(flag: Bool) -> () { if flag { 7 } }"
+      , "fn main() { finish(true)\n finish(false) }"
+      ])
+  , ("no-else print Result discards through explicit return", program
+      [ "fn main() -> () { return if true { print(\"taken\") } }" ])
+  , ("no-else mutable unit local retains effects", program
+      [ "fn main() {"
+      , " var token = if true { 7 }"
+      , " token = if true { print(\"assigned\") }"
+      , " return token", "}"
+      ])
+  , ("no-else break value is unit", program
+      [ "fn main() { loop { break if true { print(\"break operand\") } } }" ])
+  , ("no-else condition runs once", mainProgram
+      [ " var count = 0"
+      , " let token = if { count = count + 1\n true } { print(\"taken\") }"
+      , " return count"
+      ])
   ] <> map scalarTransferProgram
     [ ("Never left and operand", "{ break 43 } && noteBool()")
     , ("Never right and operand", "true && { break 43 }")
@@ -292,6 +311,8 @@ controlRefusalPrograms =
       , "  loop { break 10 / 0 }"
       , "  return 0"
       ])
+  , ("arithmetic failure in no-else value", mainProgram
+      [ " let token = if true { 10 / 0 }", " return 0" ])
   , ("arithmetic failure in discarded loop body result", mainProgram
       [ "  var index = 0"
       , "  loop {"
