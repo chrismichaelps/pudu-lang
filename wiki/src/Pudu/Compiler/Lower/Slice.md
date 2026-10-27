@@ -45,6 +45,10 @@ A range held in a value is checked at run time from its fields, with the
 same messages; absent ends read as nought and the end test applies only when
 there is an end.
 
+## Bytes (#565)
+
+Bytes slice by written ranges and range values like arrays, counting bytes.
+
 ## Referenced by
 
 [[Compiler Lower Body]] · [[Native Arrays]] · [[src/Pudu/Compiler/_MOC]]

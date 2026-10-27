@@ -78,6 +78,10 @@ neither and C warned about it.
 
 Helpers come from [[Backend Emit Range]].
 
+## Bytes (#565)
+
+Helpers come from [[Backend Emit Bytes]].
+
 ## Referenced by
 
 [[Backend Frame Runtime]] · [[Backend Frame Values]] · [[Native Tuple Delivery]] · [[src/_MOC]]

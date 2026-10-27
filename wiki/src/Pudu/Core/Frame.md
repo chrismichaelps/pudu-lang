@@ -79,6 +79,10 @@ source slot.
 
 `FrameRangeValue` and `FrameRangeMethod` mirror the Core shapes.
 
+## Bytes (#565)
+
+`FrameBytesMethod` mirrors `CoreBytesMethod`.
+
 ## Referenced by
 
 [[src/_MOC]] · [[Program Compiler Module Map]] · [[Native Frame Pressure Repair]]

@@ -92,6 +92,7 @@ expression (CoreExpression _ kind shape) = kind : case shape of
   CoreComparable operand -> expression operand
   CoreRangeValue low _ high -> foldMap expression low <> foldMap expression high
   CoreRangeMethod _ receiver arguments -> concatMap expression (receiver : arguments)
+  CoreBytesMethod _ receiver arguments -> concatMap expression (receiver : arguments)
   CoreIndex container index -> expression container <> expression index
   CoreTakeLocal local -> [coreLocalType local]
   CoreOperatorFailure _ operands -> concatMap expression operands

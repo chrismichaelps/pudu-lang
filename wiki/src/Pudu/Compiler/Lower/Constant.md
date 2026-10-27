@@ -54,3 +54,11 @@ Pattern update only: `CoreRecordType` has an argument list; behavior is unchange
 ## Referenced by
 
 [[Native Folded Constants]] · [[Compiler Lower Body]]
+
+## Frozen Bytes
+
+Resolved Grill Log: project an exact frozen ByteString as a Core array of
+UInt8 literals followed by BytesOfArray. Arbitrary bytes, including invalid
+UTF-8 and NUL, must survive without decoding. This recursively covers Bytes
+inside represented tuples, records and variants; ordinary aggregate cleanup
+owns each constructed value. No initializer evaluation occurs at runtime.

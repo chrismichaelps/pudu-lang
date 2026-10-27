@@ -174,6 +174,11 @@ Never when it cannot finish).
 A range expression in value position goes to [[Compiler Lower Range]], as do
 methods on a range.
 
+## Bytes (#565)
+
+`bytesOf`, when the name is the prelude's, and byte methods go to
+[[Compiler Lower Bytes]]; an entry may return Bytes.
+
 ## Referenced by
 
 [[src/Pudu/Compiler/_MOC]] · [[src/Pudu/_MOC]] · [[Compiler Lower]] ·

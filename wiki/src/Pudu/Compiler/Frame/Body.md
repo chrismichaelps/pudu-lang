@@ -85,6 +85,10 @@ methods do; a map or set result gets a slot like any box.
 A range value lowers its present ends in order; range operations lower their
 arguments before their receiver.
 
+## Bytes (#565)
+
+Byte operations lower their arguments before their receiver.
+
 ## Referenced by
 
 [[src/_MOC]] · [[Program Compiler Module Map]] · [[Native Frame Pressure Repair]]

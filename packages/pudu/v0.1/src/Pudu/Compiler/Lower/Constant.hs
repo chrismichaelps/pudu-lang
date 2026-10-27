@@ -2,6 +2,7 @@
 module Pudu.Compiler.Lower.Constant (lowerConstant) where
 
 import Data.List (find)
+import qualified Data.ByteString as ByteString
 import qualified Data.Map.Strict as Map
 import Data.Text (Text)
 import GHC.Float (castDoubleToWord64)
@@ -10,7 +11,7 @@ import Pudu.Compiler.Lower.Types (LowerTypes, recordFields, sumVariants, typeFor
 import Pudu.Core
 import Pudu.Eval.Frozen (thaw)
 import Pudu.Eval.Value (Value (..))
-import Pudu.IntegerLiteral (integerKindFits)
+import Pudu.IntegerLiteral (IntegerKind (UnsignedKind), integerKindFits)
 import Pudu.Source (Span)
 
 lowerConstant :: LowerState -> Span -> [Text] -> Maybe (LowerState, Maybe (CoreExpression, CoreType))
@@ -38,6 +39,12 @@ project types at kind value = CoreExpression at kind <$> shape
       | expected == actual -> Just (CoreFloatLiteral expected (castDoubleToWord64 number))
     (CoreBoolType, BoolValue flag) -> Just (CoreBoolLiteral flag)
     (CoreTextType, StrValue text) -> Just (CoreTextLiteral text)
+    (CoreBytesType, BytesValue bytes) ->
+      let byteKind = UnsignedKind 8
+          array = CoreExpression at (CoreArrayType (CoreIntegerType byteKind))
+            (CoreArray [CoreExpression at (CoreIntegerType byteKind) (CoreIntegerLiteral byteKind (fromIntegral byte))
+              | byte <- ByteString.unpack bytes])
+       in Just (CoreBytesMethod BytesOfArray array [])
     (CoreCharType, CharValue character) -> Just (CoreCharLiteral character)
     (CoreUnitType, UnitValue) -> Just (CoreBlockValue (CoreBlock [] Nothing))
     (CoreTupleType kinds, TupleValue members)

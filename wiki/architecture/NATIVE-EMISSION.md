@@ -19,10 +19,10 @@ Compile ordinary checked Pudu programs into portable C11 with interpreter-identi
 | Unit values, parameters and operations | Implemented (#492, #493) | Preserve effect-first temporaries, display/equality and #494 E7001 runtime refusals |
 | Entry result reporting | Partial (#512, #521, #525) | Integer statuses, unit silence, and Bool/Float/Str/Char/tuple/record/sum rendering match `pudu run`; an entry returning print's Result remains |
 | Complete numeric families | Partial (#495, #497, #500, #507, #512, #560) | Fixed integers, Int128/UInt128 and Float32/Float64 are admitted, with `convertInteger` between every integer kind (#560); BigInt and Decimal remain |
-| Text and bytes | Partial (#515, #516, #517, #518, #559, #562) | Owned Str values, Char values, operators, rendering, printing, entries, charAt, every Int/Bool/Str-result method (trim and case mapping included), `split`, `lines`, `chars`, `toInt`, `toFloat` and `charFromCode` match the interpreter (#559, #562); Bytes (`toBytes`), `toDecimal` and print Result remain |
-| Records, tuples, sums and collections | Partial (#521, #525, #552, #556, #558, #561, #564) | Tuples, records and sums of every module, generic ones at each instantiation, and the built-in Option/Result are boxed, refcounted values with construction, field, position and payload reads, equality, ordering (tuples), rendering and run-time E7001 naming held variants; arrays (#556, #558), maps and sets (#561) and range values (#564) are native; Bytes and the accelerated map builtins remain |
+| Text and bytes | Partial (#515, #516, #517, #518, #559, #562, #565) | Owned Str values, Char values, operators, rendering, printing, entries, charAt, every Int/Bool/Str-result method (trim and case mapping included), `split`, `lines`, `chars`, `toInt`, `toFloat` and `charFromCode` match the interpreter (#559, #562); Bytes with every method, `toBytes` and `bytesOf` are native (#565); `toDecimal` and print Result remain |
+| Records, tuples, sums and collections | Partial (#521, #525, #552, #556, #558, #561, #564) | Tuples, records and sums of every module, generic ones at each instantiation, and the built-in Option/Result are boxed, refcounted values with construction, field, position and payload reads, equality, ordering (tuples), rendering and run-time E7001 naming held variants; arrays (#556, #558), maps and sets (#561) and range values (#564) and Bytes (#565) are native; the accelerated map builtins remain |
 | Pattern matching and iteration | Partial (#525, #540, #541, #554, #558, #562, #564) | `match`, `if let` (with `else if` chains) and `while let` (with labels, `break` and `continue`) lower every pattern form in order with guards, bindings, literals, ranges, tuples, constructors, records and alternatives; `let ... else` retains bindings in the enclosing block (#541); `for` walks written ranges, range values, sequence types, arrays, maps, sets, Str, tuples and sum payloads (#554, #561, #562, #564); sequence patterns are native (#558) |
-| Modules and constants | Partial (#539, #543, #563) | Calls through selective imports, aliases and qualifiers, functions of every reachable module, and records and sums by canonical identity match the interpreter; folded scalar/tuple/record/sum constants now preserve canonical solved identity; records and sums whose fields name other modules' types or aliases are laid out as checking formed them (#563); callable and unrepresented constant families remain |
+| Modules and constants | Partial (#539, #543, #563) | Calls through selective imports, aliases and qualifiers, functions of every reachable module, and records and sums by canonical identity match the interpreter; folded scalar/tuple/record/sum constants now preserve canonical solved identity, with arbitrary Bytes constants including nested byte values (#565); records and sums whose fields name other modules' types or aliases are laid out as checking formed them (#563); callable and unrepresented constant families remain |
 | Callables and generic code | Partial (#551, #552, #555, #560) | Implementation members, inherited defaults, type- and trait-qualified calls, `toText()`, generic functions and implementations (one copy per type list) with or without written type arguments (#560), lambdas with captures, named functions as values and calls through values match the interpreter; default parameter values, method values, higher-kinded parameters and `dynamic` values remain |
 | Accepted operations with runtime refusals | Partial (#494, #512) | Represented Unit/Bool/float operators retain E7001; remaining runtime types/operators still need equivalent coverage |
 | Errors, references and resources | Partial (#544, #553) | Shared borrows, dereference and `?` on Result and Option match the interpreter; mutable loans with writeback, moves, drop and all unwind paths remain |
@@ -449,3 +449,17 @@ function-valued fields and assignments used as values follow the evaluator.
 methods, rendering, equality, ordering, iteration and slicing, failing as
 `Eval.Range` does ([[Compiler Lower Range]], [[Native Range Runtime]]).
 [[Backend Range Programs]] holds the evidence.
+
+## Bytes (#565)
+
+Byte sequences are boxes around views of counted storage, so slices share it
+as `ByteString` slices do; every method, strict UTF-8 decoding, rendering,
+ordering and range slicing follow `Eval.Bytes` ([[Native Bytes Runtime]],
+[[Compiler Lower Bytes]]). [[Backend Bytes Programs]] holds the evidence.
+
+Bytes completion evidence also includes frozen arbitrary byte data, accepted
+unary-byte runtime refusals, argument effects, shared borrowing, capture
+retention and byte entry results. The dedicated `native Bytes` success,
+failure and allocation groups provide a narrow iteration lane. Full-suite
+and independent review remain required before promotion; the area counter
+stays at 4/14 because the broader rows are incomplete. [[Native Bytes Delivery]].

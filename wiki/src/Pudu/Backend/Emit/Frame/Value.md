@@ -74,6 +74,10 @@ building from an array); `isEmpty` reads the root's size directly.
 `FrameRangeValue` calls `pudu_range_make`; range operations come from
 [[Backend Emit Range]] with their sites.
 
+## Bytes (#565)
+
+Each byte operation is one runtime call named by [[Backend Emit Bytes]].
+
 ## Referenced by
 
 [[src/_MOC]] · [[Native Execution Frames]]

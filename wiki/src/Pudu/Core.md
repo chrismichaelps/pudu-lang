@@ -234,6 +234,12 @@ array, and `CoreComparable` asks `comparableValue`'s question of any value.
 the method a missing end is reported against and `RangeIterated` the `for`
 loop's E7001.
 
+## Bytes (#565)
+
+`CoreBytesType` and `CoreBytesMethod` with `CoreBytesMethodName`, whose
+`BytesOfArray` and `BytesFromText` build a sequence and `BytesAtIndex` and
+`BytesAsText` read what a test allowed.
+
 ## Referenced by
 
 [[src/Pudu/_MOC]] · [[src/Pudu/Backend/_MOC]] · [[Core IR]] · [[Compiler Lower]] ·

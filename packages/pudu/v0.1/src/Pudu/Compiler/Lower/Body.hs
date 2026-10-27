@@ -21,6 +21,7 @@ import Pudu.Compiler.Lower.Slice (lowerRangeIndex)
 import Pudu.Compiler.Lower.Convert (lowerCharFromCode, lowerConvertInteger)
 import Pudu.Compiler.Lower.Keyed (lowerKeyedBuilder, lowerKeyedMethod, lowerSetLiteral)
 import Pudu.Compiler.Lower.Range (lowerRangeMethod, lowerRangeValue)
+import Pudu.Compiler.Lower.Bytes (lowerBytesMethod, lowerBytesOf)
 import Control.Applicative ((<|>))
 import Pudu.Compiler.Lower.Try (lowerTry)
 import Pudu.Compiler.Lower.For (lowerFor)
@@ -69,6 +70,7 @@ lowerEntryBody located state
                 kind@(CoreMapType _ _) -> built after coreBlock kind
                 kind@(CoreSetType _) -> built after coreBlock kind
                 CoreRangeType -> built after coreBlock CoreRangeType
+                CoreBytesType -> built after coreBlock CoreBytesType
                 CoreNeverType -> built after coreBlock CoreUnitType
                 CoreUnitType
                   | printValued coreBlock ->
@@ -325,6 +327,7 @@ allowedResultType declared operand = case declared of
     CoreMapType _ _ -> True
     CoreSetType _ -> True
     CoreRangeType -> True
+    CoreBytesType -> True
     _ -> operand `elem` [CoreBoolType, CoreTextType, CoreCharType, CoreUnitType, CoreNeverType]
 
 lowerExpression :: LowerState -> Located Expression -> (LowerState, Maybe (CoreExpression, CoreType))
@@ -378,6 +381,7 @@ lowerExpression state (Located spanValue expression) = case expression of
     | name == "show" -> lowerRendered lowerExpression state spanValue name CoreShow arguments
     | name `elem` ["mapOf", "setOf"] -> lowerKeyedBuilder lowerExpression state spanValue name arguments
     | name == "charFromCode" -> lowerCharFromCode lowerExpression state spanValue arguments
+    | name == "bytesOf" -> lowerBytesOf lowerExpression state spanValue arguments
     | otherwise -> halt spanValue ("calls to '" <> name <> "'") state
   CallExpression (Located callee (MemberExpression receiver@(Located _ (NameExpression (owner :| []))) named@(Located _ member))) arguments
     | isModuleQualifier state owner, Just key <- resolveFunction state [owner, member] -> lowerFunctionCall lowerExpression state spanValue key callee arguments
@@ -388,6 +392,7 @@ lowerExpression state (Located spanValue expression) = case expression of
     | Just lowered <- lowerArrayMethod lowerExpression state spanValue receiver member arguments -> lowered
     | Just lowered <- lowerKeyedMethod lowerExpression state spanValue receiver member arguments -> lowered
     | Just lowered <- lowerRangeMethod lowerExpression state spanValue receiver member arguments -> lowered
+    | Just lowered <- lowerBytesMethod lowerExpression state spanValue receiver member arguments -> lowered
     | otherwise -> lowerTextMethod lowerExpression state spanValue receiver member arguments
   CallExpression (Located callee (MemberExpression receiver named@(Located _ member))) arguments
     | qualifier receiver, Just lowered <- lowerVariant lowerExpression state spanValue member arguments -> lowered
@@ -396,6 +401,7 @@ lowerExpression state (Located spanValue expression) = case expression of
     | Just lowered <- lowerArrayMethod lowerExpression state spanValue receiver member arguments -> lowered
     | Just lowered <- lowerKeyedMethod lowerExpression state spanValue receiver member arguments -> lowered
     | Just lowered <- lowerRangeMethod lowerExpression state spanValue receiver member arguments -> lowered
+    | Just lowered <- lowerBytesMethod lowerExpression state spanValue receiver member arguments -> lowered
     | otherwise -> lowerTextMethod lowerExpression state spanValue receiver member arguments
   CallExpression (Located callee (NameExpression (first :| rest@(_ : _)))) arguments
     | Just key <- resolveFunction state (first : rest) -> lowerFunctionCall lowerExpression state spanValue key callee arguments

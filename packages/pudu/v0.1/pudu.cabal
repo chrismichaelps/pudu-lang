@@ -92,6 +92,7 @@ library
     Pudu.Backend.Emit.Array
     Pudu.Backend.Emit.Keyed
     Pudu.Backend.Emit.Range
+    Pudu.Backend.Emit.Bytes
     Pudu.Backend.Emit.Frame
     Pudu.Backend.Emit.State
     Pudu.Backend.Emit.Support
@@ -100,6 +101,7 @@ library
     Pudu.Backend.Runtime.Array
     Pudu.Backend.Runtime.Tree
     Pudu.Backend.Runtime.Range
+    Pudu.Backend.Runtime.Bytes
     Pudu.Backend.Runtime.Char
     Pudu.Backend.Runtime.Dependencies
     Pudu.Backend.Runtime.Float
@@ -150,6 +152,7 @@ library
     Pudu.Compiler.Lower.Convert
     Pudu.Compiler.Lower.Keyed
     Pudu.Compiler.Lower.Range
+    Pudu.Compiler.Lower.Bytes
     Pudu.Compiler.Lower.Control
     Pudu.Compiler.Lower.State
     Pudu.Compiler.Lower.Layout

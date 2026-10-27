@@ -124,6 +124,10 @@ methods are filed under "Map" and "Set".
 
 `Range[Int]` is `CoreRangeType`; its methods are filed under "Range".
 
+## Bytes (#565)
+
+`Bytes` is `CoreBytesType`; its methods are filed under "Bytes".
+
 ## Referenced by
 
 [[Compiler Lower]] · [[Compiler Lower Signature]] · [[Native Emission Coverage]]

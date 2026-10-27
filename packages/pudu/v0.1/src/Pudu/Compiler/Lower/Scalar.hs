@@ -34,7 +34,7 @@ lowerUnary lower state at operator operand
         | operator == "!", kind == CoreBoolType -> built after at (CoreNot core) CoreBoolType
         | sumType kind, settled after operand core ->
             namedFailure after at (\kinds -> cannotApplyUnaryMessage operator (mconcat kinds)) [core]
-        | kind `elem` [CoreUnitType, CoreBoolType, CoreTextType, CoreCharType] || floatType kind || tupleType kind || recordType kind
+        | kind `elem` [CoreUnitType, CoreBoolType, CoreTextType, CoreCharType, CoreBytesType] || floatType kind || tupleType kind || recordType kind
         , settled after operand core ->
             failure after at (cannotApplyUnaryMessage operator (runtimeKind kind)) [core]
         | otherwise -> halt at ("the operator '" <> operator <> "' on a " <> coreTypeName kind <> " value") after
@@ -130,6 +130,7 @@ runtimeKind (CoreArrayType _) = "array"
 runtimeKind (CoreMapType _ _) = "map"
 runtimeKind (CoreSetType _) = "set"
 runtimeKind CoreRangeType = "range"
+runtimeKind CoreBytesType = "bytes"
 runtimeKind (CoreFunctionType _ _) = "function"
 runtimeKind kind = coreTypeName kind
 

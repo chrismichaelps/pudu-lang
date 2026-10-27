@@ -147,6 +147,11 @@ Pudu.Compiler.Lower.Keyed.
 Register Pudu.Backend.Emit.Range, Pudu.Backend.Runtime.Range and
 Pudu.Compiler.Lower.Range.
 
+## Bytes (#565)
+
+Register Pudu.Backend.Emit.Bytes, Pudu.Backend.Runtime.Bytes and
+Pudu.Compiler.Lower.Bytes.
+
 ## Referenced by
 
 The library exposes [[Resolve Canonical]] for the scoped generated-Impl resolver

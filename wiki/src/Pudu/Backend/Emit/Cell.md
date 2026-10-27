@@ -25,6 +25,10 @@ Both are owned boxes; mangled `MP_K_V_E` and `ST_T_E`.
 
 A range is an owned box, mangled `RG`.
 
+## Bytes (#565)
+
+Bytes are owned boxes, mangled `BY`.
+
 ## Referenced by
 
 [[Backend Emit Aggregate]] · [[Backend Emit Array]]
