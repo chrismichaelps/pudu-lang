@@ -1,6 +1,6 @@
 ---
 type: handoff
-status: ACTIVE
+status: HANDED_OFF
 issue: 502
 aliases: [Native Wide Integer Delivery]
 ---
@@ -37,9 +37,8 @@ corpus, Clang/GCC 15 and ASan/UBSan pass. All 19 clean gates pass with 672
 groups and 319 strict frame C11 translations. Logs: ~/.codex/tmp/pudu-502/.
 Independent implementation/architect/wiki review and more platforms remain pending.
 
-Exact next action: continue ready #503's portable arithmetic/bitwise/shift
-adapter with the resolved operation contracts. Typed frame/source admission
-and the full language objective remain incomplete.
+Exact next action: continue [[Native Wide Operation Delivery]] for ready #503.
+Typed frame/source admission and the full language objective remain incomplete.
 
 ## Referenced by
 

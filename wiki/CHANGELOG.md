@@ -5,6 +5,10 @@ tags: [changelog]
 
 # Changelog
 
+## 2026-10-18 — Wide operations (#503)
+
+- [[Backend Wide Operations]] implements checked/wrapping/saturating arithmetic, remainder/refusal routing and bitwise/shift behavior. [[Native Wide Operation Tests]] passes 6,412 mathematical/refusal rows and 22 minimal helper selections. Clang/GCC 15, ASan/UBSan and all 19 clean gates/674 groups pass. Independent review and additional platforms remain required; source admission is still pending.
+
 ## 2026-10-18 — Exact wide values (#502)
 
 - [[Backend Word128 Kernel]] now exposes named parts/dependencies while preserving its complete C text. [[Backend Wide Integer Values]] adds exact actual-sign carriers, magnitude/construction/normalization, signed/unsigned decoding, ordering and magnitude limits.

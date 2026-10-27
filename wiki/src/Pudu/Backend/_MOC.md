@@ -53,3 +53,5 @@ aliases: [Backend Module Map]
 - [[Backend Word128 Kernel]] · [[Native Word128 Tests]] — portable 128-bit arithmetic prerequisite.
 
 - [[Backend Wide Integer Values]] · [[Native Wide Value Tests]] — exact signs and selectable dependencies (#502).
+
+- [[Backend Wide Operations]] · [[Native Wide Operation Tests]] — planned typed primitive implementation (#503).

@@ -184,3 +184,5 @@ tags: [moc, handoff]
 - [[Native Frame Pressure Repair]] — active native recursion-frame parity repair (#499); the 100% emission goal remains open.
 
 - [[Native Wide Integer Delivery]] — portable 128-bit runtime prerequisite (#501).
+
+- [[Native Wide Operation Delivery]] — active portable typed arithmetic delivery (#503).
