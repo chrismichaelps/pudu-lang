@@ -1,3 +1,5 @@
+{-# LANGUAGE CPP #-}
+
 {-| @Pudu.Backend.Toolchain — the one place the compiler starts another
     process.
 
@@ -13,9 +15,9 @@ module Pudu.Backend.Toolchain
   , compileNative
   ) where
 
-import Control.Concurrent (forkIO, newEmptyMVar, putMVar, takeMVar)
+import Control.Concurrent (ThreadId, forkIOWithUnmask, killThread, newEmptyMVar, putMVar)
 import Control.Concurrent.MVar (MVar, modifyMVar_, newMVar, readMVar)
-import Control.Exception (IOException, finally, try)
+import Control.Exception (IOException, SomeException, displayException, finally, mask, onException, try)
 import Control.Monad (void)
 import Data.ByteString (ByteString)
 import qualified Data.ByteString as ByteString
@@ -33,9 +35,13 @@ import System.Process
   , StdStream (..)
   , createProcess
   , proc
+  , getPid
   , terminateProcess
   , waitForProcess
   )
+#if defined(PUDU_POSIX_SIGNALS)
+import System.Posix.Signals (sigKILL, signalProcessGroup)
+#endif
 import System.Timeout (timeout)
 import Text.Read (readMaybe)
 
@@ -71,14 +77,14 @@ compileNative request = do
  where
   output = toolchainOutput request
 
-  withTemporary executable = do
+  withTemporary executable = mask $ \restore -> do
     created <- tryIO (openTempFile (takeDirectory output) (takeFileName output <> ".pudu-tmp.c"))
     case created of
       Left problem -> pure (Left (ToolchainPublishFailed (problemText problem)))
       Right (sourcePath, sourceHandle) -> do
         let executablePath = sourcePath <> ".out"
         outcome <-
-          (do
+          restore (do
              compiled <- runCompile executable sourcePath sourceHandle executablePath
              case compiled of
                Left failure -> pure (Left failure)
@@ -88,7 +94,7 @@ compileNative request = do
                    Left problem -> Left (ToolchainPublishFailed (problemText problem))
                    Right () -> Right captured
           )
-            `finally` cleanup [sourcePath, executablePath]
+            `finally` (void (tryIO (hClose sourceHandle)) >> cleanup [sourcePath, executablePath])
         pure outcome
 
   runCompile executable sourcePath sourceHandle executablePath = do
@@ -98,39 +104,65 @@ compileNative request = do
     case written of
       Left problem -> pure (Left (ToolchainPublishFailed (problemText problem)))
       Right () -> do
-        capture <- newMVar emptyCapture
-        started <- tryIO (createProcess (proc executable (compilerFlags <> ["-o", executablePath, sourcePath]))
-          { std_in = NoStream
-          , std_out = CreatePipe
-          , std_err = CreatePipe
-          })
-        case started of
-          Left problem -> pure (Left (ToolchainInvocation (problemText problem)))
-          Right (_, maybeOut, maybeErr, processHandle) -> case (maybeOut, maybeErr) of
-            (Just outHandle, Just errHandle) -> do
-              outDone <- forkDrain capture DrainStdout outHandle
-              errDone <- forkDrain capture DrainStderr errHandle
-              seconds <- timeoutSeconds
-              waited <- timeout (seconds * 1000000) (waitForProcess processHandle)
-              case waited of
-                Nothing -> do
-                  terminateProcess processHandle
-                  void (waitForProcess processHandle)
-                  waitDrain outDone
-                  waitDrain errDone
-                  pure (Left (ToolchainTimedOut seconds))
-                Just ExitSuccess -> do
-                  waitDrain outDone
-                  waitDrain errDone
-                  Right <$> renderedCapture capture
-                Just (ExitFailure _) -> do
-                  waitDrain outDone
-                  waitDrain errDone
-                  Left . ToolchainRejected <$> renderedCapture capture
-            _ -> do
-              terminateProcess processHandle
-              void (waitForProcess processHandle)
-              pure (Left (ToolchainInvocation "the compiler's pipes could not be created"))
+        seconds <- timeoutSeconds
+        invoked <- tryIO (runCompiler executable sourcePath executablePath seconds)
+        pure $ case invoked of
+          Left problem -> Left (ToolchainInvocation (problemText problem))
+          Right result -> result
+
+-- Acquisition is masked until every process and pipe has a cleanup owner.
+runCompiler :: FilePath -> FilePath -> FilePath -> Int -> IO (Either ToolchainFailure Text)
+runCompiler executable sourcePath executablePath seconds = mask $ \restore -> do
+  capture <- newMVar emptyCapture
+  (_, maybeOut, maybeErr, processHandle) <-
+    createProcess (proc executable (compilerFlags <> ["-o", executablePath, sourcePath]))
+      { std_in = NoStream
+      , std_out = CreatePipe
+      , std_err = CreatePipe
+      , create_group = True
+      }
+  -- Keep the identity before waitForProcess reaps the group leader.
+  processId <- getPid processHandle
+  let stopProcess = do
+#if defined(PUDU_POSIX_SIGNALS)
+        case processId of
+          Just pid -> void (tryIO (signalProcessGroup sigKILL pid))
+          Nothing -> void (tryIO (terminateProcess processHandle))
+#else
+        let _ = processId
+        void (tryIO (terminateProcess processHandle))
+#endif
+        boundedCleanup (void (tryIO (waitForProcess processHandle)))
+      closePipes = mapM_ (boundedCleanup . void . tryIO . hClose) (presentHandles maybeOut maybeErr)
+  (case (maybeOut, maybeErr) of
+    (Just outHandle, Just errHandle) -> do
+      outDrain <- forkDrain capture DrainStdout outHandle
+      errDrain <- forkDrain capture DrainStderr errHandle
+        `onException` stopDrain outDrain
+      let stop = stopProcess >> stopDrain outDrain >> stopDrain errDrain
+          waitComplete = do
+            exitCode <- waitForProcess processHandle
+            outResult <- waitDrain outDrain
+            errResult <- waitDrain errDrain
+            pure (exitCode, outResult, errResult)
+      waited <- restore (timeout (seconds * 1000000) waitComplete) `onException` stop
+      case waited of
+        Nothing -> stop >> pure (Left (ToolchainTimedOut seconds))
+        Just (_, Left problem, _) -> stopProcess >> pure (Left (ToolchainInvocation (Text.pack (displayException problem))))
+        Just (_, _, Left problem) -> stopProcess >> pure (Left (ToolchainInvocation (Text.pack (displayException problem))))
+        Just (ExitSuccess, Right (), Right ()) -> Right <$> renderedCapture capture
+        Just (ExitFailure _, Right (), Right ()) -> Left . ToolchainRejected <$> renderedCapture capture
+    _ -> stopProcess >> pure (Left (ToolchainInvocation "the compiler's pipes could not be created")))
+      `onException` stopProcess
+      `finally` closePipes
+
+presentHandles :: Maybe Handle -> Maybe Handle -> [Handle]
+presentHandles out err = [handle | Just handle <- [out, err]]
+
+-- Cleanup must remain bounded even when a descendant retains a pipe or the
+-- host cannot promptly reap a killed process.
+boundedCleanup :: IO () -> IO ()
+boundedCleanup action = void (timeout 1000000 action)
 
 {-| `PUDU_CC` used as given when set, otherwise `cc` found on `PATH`. -}
 discoverCompiler :: IO (Either ToolchainFailure FilePath)
@@ -164,11 +196,18 @@ captureLimit = 64 * 1024
 
 data DrainStream = DrainStdout | DrainStderr
 
-forkDrain :: MVar Capture -> DrainStream -> Handle -> IO (MVar ())
+data Drain = Drain !ThreadId !(MVar (Either SomeException ()))
+
+forkDrain :: MVar Capture -> DrainStream -> Handle -> IO Drain
 forkDrain capture stream handle = do
   done <- newEmptyMVar
-  void (forkIO (drainLoop capture stream handle `finally` putMVar done ()))
-  pure done
+  thread <- forkIOWithUnmask $ \unmask -> do
+    result <- try (unmask (drainLoop capture stream handle))
+    putMVar done result
+  pure (Drain thread done)
+
+stopDrain :: Drain -> IO ()
+stopDrain (Drain thread done) = boundedCleanup (killThread thread >> void (readMVar done))
 
 drainLoop :: MVar Capture -> DrainStream -> Handle -> IO ()
 drainLoop capture stream handle = do
@@ -194,8 +233,8 @@ accumulate stream chunk captured
             , captureTruncated = captureTruncated captured || truncated
             }
 
-waitDrain :: MVar () -> IO ()
-waitDrain = takeMVar
+waitDrain :: Drain -> IO (Either SomeException ())
+waitDrain (Drain _ done) = readMVar done
 
 renderedCapture :: MVar Capture -> IO Text
 renderedCapture capture = do
@@ -211,7 +250,7 @@ timeoutSeconds :: IO Int
 timeoutSeconds = do
   configured <- lookupEnv "PUDU_CC_TIMEOUT"
   pure $ case configured >>= readMaybe of
-    Just seconds | seconds > 0 -> seconds
+    Just seconds | seconds > 0 -> min seconds (maxBound `div` 1000000)
     _ -> defaultTimeoutSeconds
 
 defaultTimeoutSeconds :: Int

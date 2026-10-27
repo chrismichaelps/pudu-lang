@@ -23,12 +23,20 @@ rather than a design intention.
 - Success paths: arithmetic and comparisons, `if`/`else` values, `while`
   loops with accumulating locals, early `return`, `print` of integers,
   booleans, string literals, and `display(...)`.
+- Functions: helper functions with parameters, nested and sequenced calls,
+  argument evaluation order (functions that print as they are called),
+  unit-returning functions, early returns inside called functions, recursion,
+  and mutual recursion — each run both ways and compared byte for byte.
+- Regression corpus: [[Backend Function Programs]] supplies typed helpers, Unicode names, effect ordering, operand freezing, short-circuiting, recursion, mutual recursion, and exact depth-bound/reset cases.
 - Exit statuses: `0`, nonzero, values above 255, and negative results — the
   `reportResult` clamp on both sides.
 - Refusal paths: division by zero (`E7004`) and overflow for `add`,
   `subtract`, `multiply`, `divide` (INT64_MIN / -1), and `negate` (`E7005`) —
   stdout, stderr text, and status 1 must all match, with the excerpt and
   caret rendered from the program's own source.
+- Call depth: a program whose recursion passes the evaluator's bound aborts on
+  both sides with the identical `E7002` rendering at the identical call span
+  and exit status 1.
 - Toolchain paths: missing compiler, a scripted compiler that fails to start,
   a scripted compiler that hangs past `PUDU_CC_TIMEOUT`, a scripted compiler
   that rejects the C, and an unwritable output path — each maps to its
@@ -56,7 +64,13 @@ checked at its boundaries rather than sampled.
 
 Uses [[Compiler Pipeline]], [[Evaluator]] entry evaluation, [[Diagnostic
 Render]], [[Compiler Lower]], [[Backend Emit]], [[Backend Toolchain]],
-[[Backend Runtime]], and the shared test coordinator.
+[[Backend Runtime]], [[Diagnostic Evaluation]], and the shared test
+coordinator.
+
+## Resolved Grill Log
+
+- **Q:** How is milestone #488 protected against C evaluation-order drift? **A:** Pure checks assert reachable function signatures and refusal spans; execution checks compare nested calls, mutable operand snapshots, short-circuit effects, recursion, and depth-bound diagnostics against the interpreter.
+- **Q:** May unsupported signatures pass because they are uncalled? **A:** Yes; reachability is the contract. A reachable unsupported signature refuses at its own construct, and an unreachable one never enters Core.
 
 ## Referenced by
 

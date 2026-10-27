@@ -24,11 +24,13 @@ module Pudu.Backend.Runtime
   ) where
 
 import Data.Text (Text)
+import qualified Data.Text as Text
+import Pudu.Comptime.Limits (callDepthLimit)
 
 {-| The runtime contract revision baked into every generated program's header
     comment. It changes only when the runtime's behaviour or interface does. -}
 runtimeRevision :: Text
-runtimeRevision = "1"
+runtimeRevision = "2"
 
 {-| @Backend.Runtime.Part — one named, self-contained piece of the runtime.
 
@@ -49,6 +51,7 @@ runtimeParts =
   , RuntimePart "site" siteLines
   , RuntimePart "colored" coloredLines
   , RuntimePart "fail" failLines
+  , RuntimePart "call_depth" callDepthLines
   , RuntimePart "add" addLines
   , RuntimePart "sub" subLines
   , RuntimePart "mul" mulLines
@@ -74,11 +77,9 @@ preludeLines =
   , "#if defined(_WIN32)"
   , "#include <io.h>"
   , "#define PUDU_ISATTY _isatty"
-  , "#define PUDU_FILENO _fileno"
   , "#else"
   , "#include <unistd.h>"
   , "#define PUDU_ISATTY isatty"
-  , "#define PUDU_FILENO fileno"
   , "#endif"
   ]
 
@@ -103,7 +104,7 @@ siteLines =
 coloredLines :: [Text]
 coloredLines =
   [ "static inline int pudu_colored(void) {"
-  , "  return PUDU_ISATTY(PUDU_FILENO(stdout)) && getenv(\"NO_COLOR\") == NULL;"
+  , "  return PUDU_ISATTY(1) && getenv(\"NO_COLOR\") == NULL;"
   , "}"
   ]
 
@@ -142,6 +143,21 @@ failLines =
   , "  }"
   , "  fflush(stderr);"
   , "  exit(1);"
+  , "}"
+  ]
+
+{-| The evaluator's call-depth bound, as the evaluator counts it: the entry
+    runs at depth 1, the check is `depth > limit` *before* the increment, and
+    the refusal lands on the call's own site. The bound is written from
+    [[Pudu.Comptime.Limits]] so the runtime and the evaluator cannot drift. -}
+callDepthLines :: [Text]
+callDepthLines =
+  [ "/* The evaluator's call-depth bound; the entry starts at depth 1. */"
+  , "static int64_t pudu_depth = 0;"
+  , ""
+  , "static inline void pudu_enter(const pudu_site *site) {"
+  , "  if (pudu_depth > " <> Text.pack (show callDepthLimit) <> ") pudu_fail(site);"
+  , "  pudu_depth += 1;"
   , "}"
   ]
 

@@ -87,6 +87,8 @@ library
     Pudu.Bundle
     Pudu.Cache.Persist
     Pudu.Backend.Emit
+    Pudu.Backend.Emit.State
+    Pudu.Backend.Emit.Support
     Pudu.Backend.Runtime
     Pudu.Backend.Toolchain
     Pudu.Compiler
@@ -96,12 +98,16 @@ library
     Pudu.Compiler.Literals
     Pudu.Compiler.Library
     Pudu.Compiler.Lower
+    Pudu.Compiler.Lower.Body
+    Pudu.Compiler.Lower.State
+    Pudu.Compiler.Lower.Signature
     Pudu.Compiler.Manifest
     Pudu.Compiler.Program
     Pudu.Compiler.Product
     Pudu.Core
     Pudu.Diagnostic
     Pudu.Diagnostic.Arithmetic
+    Pudu.Diagnostic.Evaluation
     Pudu.Diagnostic.Native
     Pudu.Diagnostic.Render
     Pudu.Eval

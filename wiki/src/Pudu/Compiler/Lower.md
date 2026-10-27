@@ -18,6 +18,11 @@ refuse — never guess. This is the one gate between the full language and the
 native subset: everything the emitter can represent is lowered exactly, and
 everything else becomes a typed `E6001` refusal carrying the construct's own
 span, so the reader learns what the native backend does not support and where.
+The module is the driver: it finds the entry, decides which functions are
+reachable, validates their signatures, and settles the result;
+[[Compiler Lower Body]] owns block, statement, expression and call lowering;
+[[Compiler Lower State]] owns shared state and [[Compiler Lower Signature]]
+owns callable signature admission.
 
 ```haskell
 data LowerResult = Lowered !CoreModule | LowerRefused ![Diagnostic]
@@ -32,21 +37,42 @@ errored program.
 ## Algorithm and invariants
 
 - The root module must exist and compile (the caller refuses errored programs
-  first); `main` must be a plain, non-async function with no parameters, no
-  type parameters, and a block body. Anything else refuses with the
-  declaration's span.
-- Only the entry function is lowered. A declaration the entry cannot reach is
-  not carried and does not refuse: calls are refused in this milestone, so an
-  uncalled function is unreachable and its absence cannot change behaviour. A
-  module with no entry function refuses instead, at its first declaration,
-  naming the function (or "this declaration") it found there.
-- Locals are numbered in declaration order per function; scopes are a stack,
-  so inner declarations shadow outer ones exactly as the evaluator's scopes
-  do. Assignment resolves to the nearest binding and lowers to `CoreAssign`.
+  first); the entry must be a plain, non-async function with no parameters, no
+  type parameters, and a block body. The entry keeps milestone 1's rule: its
+  declared return annotation is not consulted, its result type comes from the
+  body or its explicit returns, and that result must be `Int` or `()`.
+- Only functions *reachable from the entry* are validated, lowered, and
+  carried. The table of top-level functions is built in declaration order; the
+  worklist starts at the entry, and every call discovered while lowering a
+  reachable body enqueues its callee. An uncalled declaration — even one whose
+  body or signature the backend could not carry — is never visited, never
+  refuses, and never appears in the core module, because the interpreter never
+  runs it either. A module with no entry function refuses at its first
+  declaration, naming the function (or "this declaration") it found there.
+- Non-entry functions are synchronous and block bodied, with no type
+  parameters, constraints, `unsafe`/`comptime` modifiers or default parameter
+  values. Parameters require explicit `Int` or `Bool` annotations; results
+  require explicit `Int`, `Bool` or `()` annotations. Export visibility adds
+  no native restriction. See [[Compiler Lower Signature]] for refusal spans. The signature is validated once per function and memoized, so
+  a function reached through several calls refuses exactly once.
+- Carried functions are ordered by declaration, not by discovery, so the core
+  module — and every artifact derived from it — is a function of the program
+  alone.
+- Calls lower left to right, matching the evaluator's argument evaluation
+  order; the call's type is the callee's declared result type; recursion and
+  mutual recursion terminate the worklist through the visited set.
+- Locals are numbered per function; scopes are a stack, so inner declarations
+  shadow outer ones exactly as the evaluator's scopes do. Assignment resolves
+  to the nearest binding and lowers to `CoreAssign`.
 - Blocks lower statements left to right and the trailing expression (if any)
-  as the block result. A result of type `Int` is the program result; a
-  `Unit`-typed result (print, assignment, `if` without else, `while`) is
-  evaluated and discarded; every other result type refuses.
+  as the block result. Assignment yields unit. Resultless blocks and calls
+  returning `()` carry unit; statement `if`/`while` discard their body values.
+  A print's internal unit representation is effect-only: an entry's trailing
+  print result or an explicit print-valued return refuses because the actual
+  result is `Result[(), Str]`. Nested blocks and conditionals are inspected
+  recursively. A trailing `if` without else or `while` refuses as a value.
+  Text locals and function results are outside the subset; standalone literal
+  text or `display` in discarded statement position can still be lowered.
 - Expression types are computed while lowering: `Int` and `Bool` for values,
   `Text` only for string literals and `display(...)` under `print(...)`.
   Integer literals must be `ResolvedInteger PlatformSigned`; suffixed widths
@@ -58,31 +84,38 @@ errored program.
 - `if` without else is a statement (`CoreIf ... Nothing`); `if` with else in
   statement position discards its value; in value position it lowers to
   `CoreIfValue`, where the else branch is a block or a chained `if`.
-- `return` lowers to `CoreReturn` with an `Int` or `Unit` operand; the emitter
-  applies the same exit-status clamp as `reportResult`.
+- `return` lowers to `CoreReturn` with an operand matching the function's
+  result type. The entry records the first explicit Int/unit return so a
+  resultless outer block cannot turn `return 1` into a void function. The
+  generated C main applies `reportResult`'s exit-status clamp to the entry's
+  Int result; individual Pudu functions emit ordinary C returns.
 
 ## Failures and negative logic
 
 - One refusal per unsupported construct, with the construct's span, built by
   [[Diagnostic Native]]; a program lowers only when nothing refused.
 - Refused today, deliberately and explicitly: imports, a module with no entry
-  function, parameters, type annotations on bindings, pattern bindings
-  (`let`/`let else` with patterns), `break`, `continue`, labeled loops,
-  `match`, `try`, `await`, lambdas, ranges, tuples, arrays, sets, records,
-  member/index access, method calls, module-qualified names, borrows (`&`,
-  `*`), bitwise operators, wrapping/saturating operators, non-platform integer
-  kinds, floats, decimals, chars, `Text`-typed locals, and every statement or
-  expression form not listed above.
+  function, parameters on the entry function, calls through local values,
+  calls to the entry function, parameters without annotations or of types
+  outside `Int`/`Bool`, default parameter values, functions without a declared
+  return type or with a return type outside `Int`/`Bool`/`()`, expression
+  bodies on non-entry functions, type annotations on bindings, pattern
+  bindings (`let`/`let else` with patterns), `break`, `continue`, labeled
+  loops, `match`, `try`, `await`, lambdas, ranges, tuples, arrays, sets,
+  records, member/index access, method calls, module-qualified names, borrows
+  (`&`, `*`), bitwise operators, wrapping/saturating operators, non-platform
+  integer kinds, floats, decimals, chars, `Text`-typed locals, and every
+  statement or expression form not listed above.
 - No silent reinterpretation: an unsupported construct is never approximated,
   evaluated at compile time, or deferred to runtime.
 
 ## Dependencies and consumers
 
-Requires [[Compiler Program]] (`ProgramResult`, root module), [[Frontend
-Syntax]] trees, [[Integer Literal]] kinds, [[Source]] spans, [[Core IR]]
-module, and [[Diagnostic Native]] for refusals. Consumed by the `pudu build
---native` path in [[Pudu CLI]]. It may import frontend and semantic modules —
-that is its job — and no backend module imports it.
+Requires [[Compiler Lower Body]], [[Compiler Lower State]],
+[[Compiler Lower Signature]], [[Frontend Syntax]] trees, [[Source]] spans, [[Pudu Core]], and [[Diagnostic Native]].
+Consumed by the `pudu build --native` path in [[Pudu CLI]]. It may import
+frontend and semantic modules — that is its job — and no backend module
+imports it.
 
 ## Grill Log
 
@@ -104,8 +137,21 @@ that is its job — and no backend module imports it.
   a caller decision (`evaluateProgramEntryFolded` takes it); hard-coding
   `"main"` here would create a second source of truth for it. _Rejected:_
   a private entry constant.
+- **Q:** Why keep the entry's milestone 1 rule instead of requiring an
+  annotation like every other function? **A:** It is the shipped, tested
+  behavior for `main` — a body-derived `Int` or `()` — and tightening it would
+  break programs milestone 1 accepted for no semantic gain. The asymmetry is
+  documented, not accidental. _Rejected:_ a uniform annotation requirement
+  across the milestone boundary.
+- **Q:** Why is reachability a worklist rather than a fixpoint over all
+  declarations? **A:** A declaration the entry cannot reach is never executed,
+  so validating it would refuse programs the interpreter runs — the one
+  outcome the gate must never produce. The worklist mirrors the evaluator's
+  own reachability: start at the entry, follow calls. _Rejected:_
+  validating every declaration up front.
 
 ## Referenced by
 
 [[src/Pudu/Compiler/_MOC]] · [[src/Pudu/_MOC]] · [[Core IR]] · [[Pudu Core]] ·
+[[Compiler Lower Body]] · [[Compiler Lower State]] · [[Compiler Lower Signature]] ·
 [[Backend Emit]] · [[Diagnostic Native]] · [[Backend]]

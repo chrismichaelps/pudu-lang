@@ -48,20 +48,29 @@ under the fixed policy, non-empty when the compiler had warnings to report.
   `-std=c11 -O2 -Wall -Wextra -o <temporary> <source>`.
 - Standard output and error are drained concurrently and retained up to a
   fixed bound (64 KiB combined); beyond it, capture continues but only the
-  head is kept, marked as truncated. The process is waited for with a bounded
-  timeout (120 seconds by default, `PUDU_CC_TIMEOUT` seconds when set for
-  testing).
+  head is kept, marked as truncated. Process exit and both pipe drains share a
+  bounded timeout (120 seconds by default, `PUDU_CC_TIMEOUT` seconds when set for
+  testing, clamped so conversion to microseconds cannot overflow).
 - On success the temporary executable is renamed onto the output path — the
   same-filesystem rename that makes publication atomic — and both temporary
   files are removed. On any failure the output path is untouched and both
   temporaries are removed.
 - Failure translation: missing compiler → `ToolchainNotFound`; start failure
-  → `ToolchainInvocation`; expired wait → the process is terminated and
+  → `ToolchainInvocation`; expired process/capture deadline → the isolated compiler process group is
+  killed on POSIX (the process is terminated on other platforms), cleanup is
+  bounded, and
   `ToolchainTimedOut` carries the seconds; nonzero exit → `ToolchainRejected`
   with the captured output; rename failure → `ToolchainPublishFailed`.
 - A successful compile with warnings still succeeds; the warnings are the
   success payload returned to the caller (tests assert the generated C is
   warning-free under the fixed policy).
+
+- Process acquisition and cleanup are masked against asynchronous exceptions;
+  cancellation still propagates after cleanup. Drain failures become typed
+  invocation failures. Cleanup waits at most one second for process reaping
+  and one second per drain cancellation, so ignored TERM or inherited pipes
+  cannot keep the caller waiting indefinitely. POSIX group identity is saved
+  before waiting, because the compiler may exit while descendants retain pipes.
 
 ## Negative Logic (Prohibited Paths)
 
@@ -106,6 +115,16 @@ adapter, per [[ADR-0002-compiler-pipeline]].
   flag? **A:** It exists for tests, not users; a flag would make the timeout
   part of the build contract, while the environment override is invisible
   unless deliberately set. _Rejected:_ a `--timeout` build option.
+
+- **Q:** Does waiting only for the compiler enforce the deadline? **A:** No.
+  Compiler exit plus both pipe drains must finish inside the same deadline;
+  children can retain inherited descriptors after the compiler exits. Cleanup
+  force-kills the saved POSIX process group and bounds reaping and drain
+  cancellation. _Rejected:_ TERM followed by an unbounded process/drain wait.
+- **Q:** May cancellation leak a compiler or publish a partial executable?
+  **A:** No. Mask resource acquisition, restore interruptibility for waiting,
+  and run bounded cleanup on exceptions before propagating cancellation.
+  Publication remains after successful process and capture completion only.
 
 ## Referenced by
 

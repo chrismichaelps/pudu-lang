@@ -79,7 +79,7 @@ Environment combinators run the nested evaluator directly and normalize both `Do
 ## Edge Cases
 
 - A shape this module cannot handle produces a diagnostic naming the shape, never a default value.
-- The call depth limit is 4096, which is high enough for real recursive programs while still preventing stack overflow on infinite recursion.
+- The call depth limit is 4096, which is high enough for real recursive programs while still preventing stack overflow on infinite recursion. `descend` builds its refusal from [[Diagnostic Evaluation]], so the native runtime — which bakes the same text into every call site — and the interpreter print identical `E7002` output.
 - Aborts carry no recoverable environment; ordinary results and unwinds retain changes outside the lexical frame being removed.
 
 ## Depth
@@ -123,7 +123,7 @@ DEPTH 0.45 (MEDIUM). It keeps one concern out of [[Evaluator]], which would othe
   exit; `readSlot` and `writeSlot` are that body's code reading and writing by position.
 ## Referenced by
 
-[[src/Pudu/Eval/_MOC]] · [[Evaluator]]
+[[src/Pudu/Eval/_MOC]] · [[Evaluator]] · [[Diagnostic Evaluation]]
 
 ## MultiMap execution allocation
 

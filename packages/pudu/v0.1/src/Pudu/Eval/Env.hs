@@ -77,6 +77,7 @@ import Pudu.Diagnostic
   , mkDiagnosticCode
   , withHelp
   )
+import Pudu.Diagnostic.Evaluation (callDepthCode, callDepthHelp, callDepthMessage)
 import Pudu.Eval.Render (valueKind)
 import Pudu.Eval.Socket (SocketStore)
 import Pudu.Eval.Tls (TlsStore)
@@ -755,8 +756,7 @@ descend :: Maybe Span -> Evaluator Int
 descend callSpan = do
   depth <- currentDepth
   if depth > callLimit
-    then abortAt callSpan "E7002" "call depth exceeded the evaluation limit"
-      (Just "the interactive evaluator bounds recursion") >> pure depth
+    then abortAt callSpan callDepthCode callDepthMessage (Just callDepthHelp) >> pure depth
     else setDepth (depth + 1) >> pure depth
 
 ascend :: Int -> Evaluator ()

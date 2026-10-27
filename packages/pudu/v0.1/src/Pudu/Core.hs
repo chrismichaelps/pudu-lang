@@ -28,15 +28,17 @@ import Data.Text (Text)
 import Pudu.IntegerLiteral (IntegerKind, integerKindName)
 import Pudu.Source (Span)
 
-{-| @Core.Module — one compiled program: its module name and its functions. -}
+{-| @Core.Module — one compiled program: its name, the entry function the
+    process enters, and the functions reachable from it. -}
 data CoreModule = CoreModule
   { coreModuleName :: !Text
+  , coreModuleEntry :: !Text
   , coreModuleFunctions :: ![CoreFunction]
   }
   deriving stock (Eq, Show)
 
-{-| @Core.Function — a lowered function. Milestone 1 emits only the entry,
-    but parameters and a result type are part of the shape from the start. -}
+{-| @Core.Function — a lowered function: its name, parameters, result type,
+    and body. -}
 data CoreFunction = CoreFunction
   { coreFunctionName :: !Text
   , coreFunctionParameters :: ![CoreParameter]
@@ -104,7 +106,10 @@ data CoreExpression = CoreExpression
     `CoreTextLiteral` and `CoreDisplay` have type `CoreTextType`: a text value
     is legal only as a `CorePrint` argument or as a discarded statement
     effect; lowering enforces that, so the emitter may rely on it.
-    `CoreIfValue` requires an else branch by construction. -}
+    `CoreIfValue` requires an else branch by construction. `CoreCall` names
+    its callee and carries its arguments in source order, which is the
+    evaluator's evaluation order; C does not guarantee one, so the emitter
+    sequences the arguments itself. -}
 data CoreExpressionShape
   = CoreIntegerLiteral !IntegerKind !Integer
   | CoreBoolLiteral !Bool
@@ -115,6 +120,7 @@ data CoreExpressionShape
   | CoreBinary !CoreBinaryOperator !CoreExpression !CoreExpression
   | CoreDisplay !CoreExpression
   | CorePrint !CoreExpression
+  | CoreCall !Text ![CoreExpression]
   | CoreBlockValue !CoreBlock
   | CoreIfValue !CoreExpression !CoreBlock !CoreExpression
   deriving stock (Eq, Show)
