@@ -1,0 +1,66 @@
+module UsesArkPerspective
+
+import Std.Lanes as Lanes
+import Std.Math.Float as Float
+import Ark.Render.Device as Device
+
+fn require(condition: Bool, name: Str) {
+  if !condition { panic(name) }
+}
+
+fn batch(weights: &Array[Float64]) -> Device.ScreenBatch {
+  Device.ScreenBatch {
+    xs: Lanes.fromArray(&[0.0, 4.0, 0.0]),
+    ys: Lanes.fromArray(&[0.0, 0.0, 4.0]),
+    zs: Lanes.fromArray(&[0.5, 0.5, 0.5]),
+    ws: Lanes.fromArray(weights),
+    rs: Lanes.fromArray(&[1.0, 0.0, 0.0]),
+    gs: Lanes.fromArray(&[0.0, 1.0, 0.0]),
+    bs: Lanes.fromArray(&[0.0, 0.0, 1.0]),
+  }
+}
+
+fn pixel(surface: &Device.Target, x: Int, y: Int) -> (UInt8, UInt8, UInt8, UInt8) {
+  let bytes = Device.pixels(surface)
+  let at = (y * surface.width + x) * 4
+  let Some(r) = bytes.at(at) else { panic("r") }
+  let Some(g) = bytes.at(at + 1) else { panic("g") }
+  let Some(b) = bytes.at(at + 2) else { panic("b") }
+  let Some(a) = bytes.at(at + 3) else { panic("a") }
+  (r, g, b, a)
+}
+
+export fn main() -> Int {
+  let Some(target) = Device.target(4, 4) else { panic("target") }
+  let Some(drawn) = Device.draw(target, &batch(&[1.0, 2.0, 4.0]), Device.CullNone) else { panic("draw") }
+  require(pixel(&drawn, 0, 0) == (227u8, 19u8, 9u8, 255u8), "perspective barycentric fractions 8/9,2/27,1/27")
+  require(pixel(&drawn, 1, 0) == (177u8, 67u8, 11u8, 255u8), "perspective second pixel")
+  require(Lanes.get(&drawn.depth, 0) == Some(0.5), "depth remains affine")
+  let varying = Device.ScreenBatch{..batch(&[1.0, 2.0, 4.0]), zs: Lanes.fromArray(&[0.2, 0.6, 1.0])}
+  let Some(varyingDrawn) = Device.draw(target, &varying, Device.CullNone) else { panic("varying depth") }
+  let Some(depth) = Lanes.get(&varyingDrawn.depth, 0) else { panic("pixel depth") }
+  require(Float.abs(depth - 0.35) < 0.000000000000001, "unequal vertex depths stay affine")
+  let Some(affine) = Device.draw(target, &batch(&[1.0, 1.0, 1.0]), Device.CullNone) else { panic("affine") }
+  require(pixel(&affine, 0, 0) == (191u8, 32u8, 32u8, 255u8), "equal w retains affine color")
+  for weights in [
+    [1e-300, 2e-300, 4e-300], [1e300, 2e300, 4e300], [5e-324, 1e-323, 2e-323],
+  ] {
+    let Some(scaled) = Device.draw(target, &batch(&weights), Device.CullNone) else { panic("scaled w") }
+    require(Device.pixels(&scaled) == Device.pixels(&drawn), "uniform w scaling retains pixels")
+  }
+  let nan = Float.fromBits(0x7ff8000000000000u64)
+  let infinity = Float.fromBits(0x7ff0000000000000u64)
+  for invalid in [[0.0, 1.0, 1.0], [-1.0, 1.0, 1.0], [nan, 1.0, 1.0], [infinity, 1.0, 1.0], [1.0]] {
+    require(Device.draw(target, &batch(&invalid), Device.CullNone) == None, "invalid w refused")
+  }
+  let Some(odd) = Device.target(3, 3) else { panic("odd target") }
+  let Some(oddDrawn) = Device.draw(odd, &batch(&[1.0, 2.0, 4.0]), Device.CullNone) else { panic("RGBA8 is not a float lane") }
+  require(pixel(&oddDrawn, 0, 0) == pixel(&drawn, 0, 0), "odd target perspective pixel")
+  let edge = Device.ScreenBatch{..batch(&[1e308, 1e308, 5e-324]), ys: Lanes.fromArray(&[0.5, 0.5, 4.5])}
+  let Some(underflow) = Device.draw(target, &edge, Device.CullNone) else { panic("weight underflow") }
+  require(pixel(&underflow, 0, 0) == (0u8, 0u8, 0u8, 0u8), "unrepresentable edge retains clear color")
+  require(Lanes.get(&underflow.depth, 0) == Some(1.0), "unrepresentable edge retains clear depth")
+  require(pixel(&underflow, 0, 1) == (0u8, 0u8, 255u8, 255u8), "representable interior still draws")
+  print("ark perspective: ok")
+  0
+}

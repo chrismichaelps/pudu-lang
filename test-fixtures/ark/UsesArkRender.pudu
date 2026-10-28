@@ -88,6 +88,51 @@ fn scene() {
   require(image.length() == 13 + 64 * 64 * 3, "ppm snapshot size")
 }
 
+fn normalTransforms() {
+  let a = V.vec3(0.0, 0.0, 0.0)
+  let b = V.vec3(1.0, 0.0, -1.0)
+  let c = V.vec3(0.0, 1.0, -1.0)
+  let Some(mesh) = Mesh.fromTriangles(&[a, b, c], Color.opaque(1.0, 1.0, 1.0)) else { panic("normal triangle") }
+  let Some(sun) = Pipeline.light(V.vec3(0.0, 0.0, 1.0), Color.opaque(1.0, 1.0, 1.0), 0.0) else { panic("normal light") }
+  for linear in [
+    M.columns3(V.vec3(2.0, 0.0, 0.0), V.vec3(0.0, 3.0, 0.0), V.vec3(0.0, 0.0, 0.5)),
+    M.columns3(V.vec3(2.0, 0.0, 0.0), V.vec3(1.0, 3.0, 0.0), V.vec3(0.5, 0.25, 0.5)),
+  ] {
+    let model = M.affine(linear, V.vec3(0.0, 0.0, 0.0))
+    let Some(normal) = V.normalized(V.cross(M.transform3(linear, b), M.transform3(linear, c))) else { panic("transformed geometry") }
+    let Some(batch) = Pipeline.project(&mesh, &model, &camera(), &sun, 64, 64) else { panic("project normals") }
+    require(Lanes.count(&batch.rs) == 3, "normal test triangle remains visible")
+    for intensity in Lanes.toArray(&batch.rs) {
+      require(Float.abs(intensity - normal.z) < 0.000000000001, "normal remains perpendicular after scale and shear")
+    }
+  }
+  require(Pipeline.project(&mesh, &M.scaling(V.vec3(0.0, 1.0, 1.0)), &camera(), &sun, 64, 64) == None, "singular normal transform")
+  require(Pipeline.project(&mesh, &M.identity4(), &camera(), &sun, 0, 64) == None, "invalid projection width")
+  require(Pipeline.project(&mesh, &M.identity4(), &camera(), &sun, 64, -1) == None, "invalid projection height")
+  let nan = Float.fromBits(0x7ff8000000000000u64)
+  require(Pipeline.light(V.vec3(0.0, 0.0, 1.0), Color.opaque(1.0, 1.0, 1.0), nan) == None, "NaN ambient light")
+}
+
+fn projectedCoordinates() {
+  let points = [V.vec3(-0.25, -0.25, 0.0), V.vec3(0.4, -0.1, 0.2), V.vec3(0.0, 0.45, 0.1)]
+  let Some(mesh) = Mesh.fromTriangles(&points, Color.opaque(1.0, 1.0, 1.0)) else { panic("projection mesh") }
+  let linear = M.columns3(V.vec3(1.2, 0.15, 0.1), V.vec3(-0.2, 0.7, 0.05), V.vec3(0.3, -0.1, 1.5))
+  let model = M.affine(linear, V.vec3(0.2, 0.3, -4.0))
+  let Some(projection) = Camera.perspective(Float.pi() / 3.0, 1.7, 0.1, 20.0) else { panic("asymmetric projection") }
+  let Some(sun) = Pipeline.light(V.vec3(0.0, 0.0, 1.0), Color.opaque(1.0, 1.0, 1.0), 1.0) else { panic("projection light") }
+  let Some(batch) = Pipeline.project(&mesh, &model, &projection, &sun, 80, 60) else { panic("project coordinates") }
+  require(Lanes.count(&batch.xs) == 3, "projection keeps all vertices")
+  let mvp = M.multiply4(projection, model)
+  var index = 0
+  for point in points {
+    let p = M.transform4(mvp, V.vec4(point.x, point.y, point.z, 1.0))
+    require(Lanes.get(&batch.xs, index) == Some((p.x / p.w) * 40.0 + 40.0), "packed clip x matches scalar matrix")
+    require(Lanes.get(&batch.ys, index) == Some((p.y / p.w) * -30.0 + 30.0), "packed clip y matches scalar matrix")
+    require(Lanes.get(&batch.zs, index) == Some(p.z / p.w) && Lanes.get(&batch.ws, index) == Some(p.w), "packed clip depth and w match scalar matrix")
+    index = index + 1
+  }
+}
+
 fn graphs() {
   let paint: fn(Device.Target) -> Option[Device.Target] = |surface| Device.clear(surface, Color.opaque(1.0, 0.0, 0.0))
   let keep: fn(Device.Target) -> Option[Device.Target] = |surface| Some(surface)
@@ -113,6 +158,8 @@ fn graphs() {
 export fn main() -> Int {
   meshes()
   scene()
+  normalTransforms()
+  projectedCoordinates()
   graphs()
   print("ark render: ok")
   0

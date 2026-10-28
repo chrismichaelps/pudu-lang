@@ -6,8 +6,8 @@ import Ark.Math.Color as Color
 /// An RGBA8 color buffer and a Float64 depth lane of width x height, rows top to bottom.
 export type Target = { width: Int, height: Int, color: Bytes, depth: Lanes.Lanes }
 
-/// Screen-space vertices, three per triangle: pixel x/y, depth in [0, 1] and linear r/g/b.
-export type ScreenBatch = { xs: Lanes.Lanes, ys: Lanes.Lanes, zs: Lanes.Lanes, rs: Lanes.Lanes, gs: Lanes.Lanes, bs: Lanes.Lanes }
+/// Pixel x/y, divided depth, positive homogeneous w and lit linear r/g/b, three per triangle.
+export type ScreenBatch = { xs: Lanes.Lanes, ys: Lanes.Lanes, zs: Lanes.Lanes, ws: Lanes.Lanes, rs: Lanes.Lanes, gs: Lanes.Lanes, bs: Lanes.Lanes }
 
 /// Which faces a draw keeps; front faces wind counter-clockwise in device coordinates.
 export type Cull = CullNone | CullBack
@@ -26,13 +26,13 @@ export fn clear(surface: Target, fill: Color.Rgba) -> Option[Target] {
   Some(Target{..surface, color, depth})
 }
 
-/// Rasterize a batch in one native call; None when the batch lanes disagree.
+/// Rasterize perspective attributes; None for mismatched lanes or non-positive/non-finite w.
 export fn draw(surface: Target, batch: &ScreenBatch, cull: Cull) -> Option[Target] {
   let mode = match cull {
     case CullNone => 0
     case CullBack => 1
   }
-  let (color, depth) = rasterTriangles(
+  let (color, depth) = rasterPerspectiveTriangles(
     surface.color,
     Lanes.toBytes(&surface.depth),
     surface.width,
@@ -43,6 +43,7 @@ export fn draw(surface: Target, batch: &ScreenBatch, cull: Cull) -> Option[Targe
     Lanes.toBytes(&batch.rs),
     Lanes.toBytes(&batch.gs),
     Lanes.toBytes(&batch.bs),
+    Lanes.toBytes(&batch.ws),
   ) ?
   let lanes = Lanes.fromBytes(depth) ?
   Some(Target{..surface, color, depth: lanes})

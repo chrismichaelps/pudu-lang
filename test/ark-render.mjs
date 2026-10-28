@@ -11,11 +11,15 @@ const root = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const library = join(root, 'packages/pudu/v0.1/lib');
 const env = {...process.env, PUDU_LIB: library};
 const fixture = join(root, 'test-fixtures/ark/UsesArkRender.pudu');
+const clipFixture = join(root, 'test-fixtures/ark/UsesArkClip.pudu');
+const perspectiveFixture = join(root, 'test-fixtures/ark/UsesArkPerspective.pudu');
 const demo = join(root, 'examples/ark/SpinningCubes.pudu');
-const modules = ['Device', 'Mesh', 'Pipeline', 'Graph'].map(name => `Ark/Render/${name}.pudu`);
+const modules = ['Device', 'Mesh', 'Pipeline', 'Clip', 'Graph'].map(name => `Ark/Render/${name}.pudu`);
 const run = (...args) => execFileSync(binary, args, {env, encoding: 'utf8', timeout: 300000});
 assert.equal(run('run', fixture), 'ark render: ok\n');
-run('fmt', '--check', fixture, demo, ...modules.map(path => join(library, path)));
+assert.equal(run('run', clipFixture), 'ark depth clip: ok\n');
+assert.equal(run('run', perspectiveFixture), 'ark perspective: ok\n');
+run('fmt', '--check', fixture, clipFixture, perspectiveFixture, demo, ...modules.map(path => join(library, path)));
 run('check', demo);
 const scratch = mkdtempSync(join(tmpdir(), 'pudu-ark-render-'));
 try {

@@ -14,6 +14,17 @@ slanted plane within its expected band, geometry behind the camera skipped, the 
 cubes winning in one draw, and the snapshot size; [[Ark Frame Graph]] culling, order,
 lifetimes, execution and its three refusals. Prints `ark render: ok`.
 
+Normal-transform regressions compare lit vertex intensity with a geometric normal built from
+transformed triangle edges under non-uniform scale and shear. Singular transforms, non-positive
+target dimensions and NaN ambient light are refused.
+An asymmetric model/projection case with nonsymmetric off-diagonal linear coefficients compares projected lane coordinates and depth with scalar
+homogeneous matrix multiplication, catching column layout, translation and w-row mistakes.
+
+## Resolved Grill Log
+
+- **Q:** Derive expected lighting with another inverse transpose? **A:** No; the test constructs
+  a geometric normal from transformed tangents, providing an independent result.
+
 ## Referenced by
 
 [[Ark Render Gate]]

@@ -5,6 +5,7 @@ import Std.Math.Float as Float
 import Ark.Math.Color as Color
 import Ark.Math.Matrix as M
 import Ark.Math as V
+import Ark.Render.Clip as Clip
 import Ark.Render.Device as Device
 import Ark.Render.Mesh as Mesh
 
@@ -13,41 +14,48 @@ export type Light = { direction: V.Vec3, color: Color.Rgba, ambient: Float64 }
 
 /// A light, or None for a zero direction or an ambient floor outside [0, 1].
 export fn light(direction: V.Vec3, color: Color.Rgba, ambient: Float64) -> Option[Light] {
-  if ambient < 0.0 || ambient > 1.0 { return None }
+  if !(ambient >= 0.0 && ambient <= 1.0) { return None }
   let unit = V.normalized(direction) ?
   Some(Light{direction: unit, color, ambient})
 }
 
-/// Transform, light and map a mesh to pixel coordinates for a width x height target.
+/// Transform, light and map a mesh; None for invalid dimensions or a singular normal transform.
 export fn project(mesh: &Mesh.Mesh, model: &M.Mat4, viewProjection: &M.Mat4, sun: &Light, width: Int, height: Int) -> Option[Device.ScreenBatch] {
+  if width <= 0 || height <= 0 { return None }
+  let normal = M.transpose3(M.inverse3(M.linearPart(*model)) ?)
   let mvp = M.multiply4(*viewProjection, *model)
-  let cx = row(mvp.x.x, mvp.y.x, mvp.z.x, mvp.w.x, mesh) ?
-  let cy = row(mvp.x.y, mvp.y.y, mvp.z.y, mvp.w.y, mesh) ?
-  let cz = row(mvp.x.z, mvp.y.z, mvp.z.z, mvp.w.z, mesh) ?
+  let positions = [mvp.x.x, mvp.x.y, mvp.x.z, mvp.y.x, mvp.y.y, mvp.y.z, mvp.z.x, mvp.z.y, mvp.z.z, mvp.w.x, mvp.w.y, mvp.w.z]
+  let (cx, cy, cz) = Lanes.affine3(&positions, &mesh.px, &mesh.py, &mesh.pz) ?
   let cw = row(mvp.x.w, mvp.y.w, mvp.z.w, mvp.w.w, mesh) ?
-  let halfWidth = Float.fromInt(width) * 0.5
-  let halfHeight = Float.fromInt(height) * 0.5
-  let nx = Lanes.divide(&cx, &cw) ?
-  let ny = Lanes.divide(&cy, &cw) ?
-  let zs = Lanes.divide(&cz, &cw) ?
-  let xs = Lanes.addScalar(&Lanes.scale(&nx, halfWidth), halfWidth)
-  let ys = Lanes.addScalar(&Lanes.scale(&ny, -halfHeight), halfHeight)
-  let m = *model
-  let linear = [m.x.x, m.x.y, m.x.z, m.y.x, m.y.y, m.y.z, m.z.x, m.z.y, m.z.z, 0.0, 0.0, 0.0]
+  let linear = [normal.x.x, normal.x.y, normal.x.z, normal.y.x, normal.y.y, normal.y.z, normal.z.x, normal.z.y, normal.z.z, 0.0, 0.0, 0.0]
   let (wx, wy, wz) = Lanes.affine3(&linear, &mesh.nx, &mesh.ny, &mesh.nz) ?
   let squared = Lanes.fma(&wx, &wx, &(Lanes.fma(&wy, &wy, &(Lanes.multiply(&wz, &wz) ?)) ?)) ?
   let lengths = Lanes.sqrt(&squared)
   let toward = Lanes.axpy(&(Lanes.axpy(&Lanes.scale(&wx, sun.direction.x), sun.direction.y, &wy) ?), sun.direction.z, &wz) ?
   let facing = Lanes.clamp(&(Lanes.divide(&toward, &lengths) ?), 0.0, 1.0)
   let intensity = Lanes.addScalar(&Lanes.scale(&facing, 1.0 - sun.ambient), sun.ambient)
-  Some(
-    Device.ScreenBatch {
-      xs,
-      ys,
-      zs,
+  let clipped = Clip.depth(&Clip.Vertices {
+      xs: cx,
+      ys: cy,
+      zs: cz,
+      ws: cw,
       rs: Lanes.scale(&(Lanes.multiply(&mesh.r, &intensity) ?), sun.color.r),
       gs: Lanes.scale(&(Lanes.multiply(&mesh.g, &intensity) ?), sun.color.g),
       bs: Lanes.scale(&(Lanes.multiply(&mesh.b, &intensity) ?), sun.color.b),
+    }) ?
+  let halfWidth = Float.fromInt(width) * 0.5
+  let halfHeight = Float.fromInt(height) * 0.5
+  let nx = Lanes.divide(&clipped.xs, &clipped.ws) ?
+  let ny = Lanes.divide(&clipped.ys, &clipped.ws) ?
+  Some(
+    Device.ScreenBatch {
+      xs: Lanes.addScalar(&Lanes.scale(&nx, halfWidth), halfWidth),
+      ys: Lanes.addScalar(&Lanes.scale(&ny, -halfHeight), halfHeight),
+      zs: Lanes.divide(&clipped.zs, &clipped.ws) ?,
+      ws: clipped.ws,
+      rs: clipped.rs,
+      gs: clipped.gs,
+      bs: clipped.bs,
     },
   )
 }
@@ -58,6 +66,7 @@ export fn concat(first: &Device.ScreenBatch, second: &Device.ScreenBatch) -> Dev
     xs: Lanes.concat(&first.xs, &second.xs),
     ys: Lanes.concat(&first.ys, &second.ys),
     zs: Lanes.concat(&first.zs, &second.zs),
+    ws: Lanes.concat(&first.ws, &second.ws),
     rs: Lanes.concat(&first.rs, &second.rs),
     gs: Lanes.concat(&first.gs, &second.gs),
     bs: Lanes.concat(&first.bs, &second.bs),
@@ -67,7 +76,7 @@ export fn concat(first: &Device.ScreenBatch, second: &Device.ScreenBatch) -> Dev
 /// A batch with no triangles.
 export fn emptyBatch() -> Device.ScreenBatch {
   let none = Lanes.fromArray(&[])
-  Device.ScreenBatch{xs: none, ys: none, zs: none, rs: none, gs: none, bs: none}
+  Device.ScreenBatch{xs: none, ys: none, zs: none, ws: none, rs: none, gs: none, bs: none}
 }
 
 fn row(a: Float64, b: Float64, c: Float64, d: Float64, mesh: &Mesh.Mesh) -> Option[Lanes.Lanes] {

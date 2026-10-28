@@ -1,0 +1,120 @@
+module Ark.Render.Clip
+
+import Std.Lanes as Lanes
+import Std.Math.Float as Float
+import Ark.Math as V
+
+/// Lit homogeneous vertices, three per triangle, before perspective division.
+export type Vertices = { xs: Lanes.Lanes, ys: Lanes.Lanes, zs: Lanes.Lanes, ws: Lanes.Lanes, rs: Lanes.Lanes, gs: Lanes.Lanes, bs: Lanes.Lanes }
+
+type Vertex = { position: V.Vec4, color: V.Vec3 }
+type Plane = { distance: fn(V.Vec4) -> Float64, snap: fn(V.Vec4) -> V.Vec4 }
+
+const DEPTH_PLANES: Array[Plane] = [
+  Plane{distance: nearDistance, snap: nearSnap},
+  Plane{distance: farDistance, snap: farSnap},
+]
+
+/// Retain 0 <= z <= w with positive w; None for malformed data or unrepresentable clip arithmetic.
+export fn depth(vertices: &Vertices) -> Option[Vertices] {
+  let count = Lanes.count(&vertices.xs)
+  if count % 3 != 0 { return None }
+  // IEEE zero products retain NaN and turn infinities into NaN without overflowing finite sums.
+  let zero = Lanes.scale(&vertices.xs, 0.0)
+  var finite = zero
+  for lane in [vertices.ys, vertices.zs, vertices.ws, vertices.rs, vertices.gs, vertices.bs] {
+    finite = Lanes.fma(&lane, &zero, &finite) ?
+  }
+  if Lanes.sum(&finite) != 0.0 { return None }
+  if count == 0 { return Some(*vertices) }
+  let room = Lanes.subtract(&vertices.ws, &vertices.zs) ?
+  if Lanes.largest(&vertices.zs) ? < 0.0 || Lanes.largest(&room) ? < 0.0 { return Some(empty()) }
+  if Lanes.smallest(&vertices.zs) ? >= 0.0 && Lanes.smallest(&room) ? >= 0.0 && Lanes.smallest(&vertices.ws) ? > 0.0 {
+    return Some(*vertices)
+  }
+  let xs = Lanes.toArray(&vertices.xs)
+  let ys = Lanes.toArray(&vertices.ys)
+  let zs = Lanes.toArray(&vertices.zs)
+  let ws = Lanes.toArray(&vertices.ws)
+  let rs = Lanes.toArray(&vertices.rs)
+  let gs = Lanes.toArray(&vertices.gs)
+  let bs = Lanes.toArray(&vertices.bs)
+  var outX: Array[Float64] = []
+  var outY: Array[Float64] = []
+  var outZ: Array[Float64] = []
+  var outW: Array[Float64] = []
+  var outR: Array[Float64] = []
+  var outG: Array[Float64] = []
+  var outB: Array[Float64] = []
+  var at = 0
+  while at < count {
+    var polygon: Array[Vertex] = []
+    var corner = 0
+    while corner < 3 {
+      let index = at + corner
+      polygon = polygon.push(Vertex{position: V.vec4(xs[index], ys[index], zs[index], ws[index]), color: V.vec3(rs[index], gs[index], bs[index])})
+      corner = corner + 1
+    }
+    for plane in DEPTH_PLANES { polygon = clipped(&polygon, &plane) ? }
+    var fan = 1
+    while fan + 1 < polygon.length() {
+      for vertex in [polygon[0], polygon[fan], polygon[fan + 1]] {
+        let p = vertex.position
+        if p.w <= 0.0 { return None }
+        outX = outX.push(p.x)
+        outY = outY.push(p.y)
+        outZ = outZ.push(p.z)
+        outW = outW.push(p.w)
+        outR = outR.push(vertex.color.x)
+        outG = outG.push(vertex.color.y)
+        outB = outB.push(vertex.color.z)
+      }
+      fan = fan + 1
+    }
+    at = at + 3
+  }
+  Some(Vertices{xs: Lanes.fromArray(&outX), ys: Lanes.fromArray(&outY), zs: Lanes.fromArray(&outZ), ws: Lanes.fromArray(&outW), rs: Lanes.fromArray(&outR), gs: Lanes.fromArray(&outG), bs: Lanes.fromArray(&outB)})
+}
+
+fn clipped(polygon: &Array[Vertex], plane: &Plane) -> Option[Array[Vertex]] {
+  if polygon.isEmpty() { return Some([]) }
+  var output: Array[Vertex] = []
+  var previous = polygon[polygon.length() - 1]
+  var previousDistance = (plane.distance)(previous.position)
+  if !Float.isFinite(previousDistance) { return None }
+  for current in *polygon {
+    let distance = (plane.distance)(current.position)
+    if !Float.isFinite(distance) { return None }
+    if (distance > 0.0 && previousDistance < 0.0) || (distance < 0.0 && previousDistance > 0.0) {
+      let a = Float.abs(previousDistance)
+      let b = Float.abs(distance)
+      let largest = if a > b { a } else { b }
+      let first = previousDistance / largest
+      let second = distance / largest
+      let t = first / (first - second)
+      let position = (plane.snap)(mix4(previous.position, current.position, t))
+      let color = V.add(V.scale(previous.color, 1.0 - t), V.scale(current.color, t))
+      if !V.isFinite4(position) || !V.isFinite(color) { return None }
+      output = output.push(Vertex{position, color})
+    }
+    if distance >= 0.0 { output = output.push(current) }
+    previous = current
+    previousDistance = distance
+  }
+  Some(output)
+}
+
+fn mix4(a: V.Vec4, b: V.Vec4, t: Float64) -> V.Vec4 {
+  let s = 1.0 - t
+  V.vec4(s * a.x + t * b.x, s * a.y + t * b.y, s * a.z + t * b.z, s * a.w + t * b.w)
+}
+
+fn empty() -> Vertices {
+  let none = Lanes.fromArray(&[])
+  Vertices{xs: none, ys: none, zs: none, ws: none, rs: none, gs: none, bs: none}
+}
+
+fn nearDistance(position: V.Vec4) -> Float64 { position.z }
+fn farDistance(position: V.Vec4) -> Float64 { position.w - position.z }
+fn nearSnap(position: V.Vec4) -> V.Vec4 { V.vec4(position.x, position.y, 0.0, position.w) }
+fn farSnap(position: V.Vec4) -> V.Vec4 { V.vec4(position.x, position.y, position.w, position.w) }
