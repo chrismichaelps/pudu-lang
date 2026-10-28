@@ -22,6 +22,10 @@ once, then rasterizes every triangle (three vertices each) in place and answers 
   entry preserves its color interpolation and output. `rasterPerspectiveTriangles` appends a
   homogeneous-w lane and interpolates color as sum(lambda * color / w) / sum(lambda / w).
   Normalize weights per triangle as min(w) / w, avoiding reciprocal overflow for tiny positive w.
+- `rasterTexturedTriangles` appends u and v lanes after w, then the texture's RGBA8 bytes, width,
+  color-space code and filter code checked by [[Runtime Sampler]]. UV is interpolated
+  perspective-correctly like color; the lit color is multiplied by the sampled texel. A texel
+  whose alpha is below one half is a cutout: neither depth nor color is written.
 - Channels clamp to [0, 1] and round to eight bits; alpha is written opaque.
 - Cull 0 keeps both faces, 1 drops faces clockwise in device coordinates. Vertices with depth
   outside [0, 1] or non-finite positions skip their triangle; near-plane clipping belongs to the
@@ -30,6 +34,10 @@ once, then rasterizes every triangle (three vertices each) in place and answers 
   the width, or an unknown cull answer `None`.
 
 ## Grill Log
+
+- **Q:** Blend translucent texels? **A:** No; blending needs sorted submission the device does not
+  promise. Alpha below one half cuts the fragment out before its depth write, so cutout foliage
+  and decals depth-test correctly in any order.
 
 - **Q:** Perspective-correct the already divided depth? **A:** No; z/w is affine in screen
   space. Only vertex attributes use reciprocal-w interpolation.
@@ -45,4 +53,4 @@ once, then rasterizes every triangle (three vertices each) in place and answers 
 
 ## Referenced by
 
-[[Eval Builtin Lanes]] · [[Raster Fixture]] · [[Raster Delivery]]
+[[Eval Builtin Lanes]] · [[Runtime Sampler]] · [[Raster Fixture]] · [[Raster Delivery]]
