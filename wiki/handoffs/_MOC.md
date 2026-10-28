@@ -9,6 +9,8 @@ tags: [moc, handoff]
 
 - [[Hackage Transport Delivery]] — issue #656 configure verified HTTPS before one index update.
 
+- [[Ark Foundation Delivery]] — issue #652 integrated engine architecture and checked vector math.
+
 - [[Derive Index Delivery]] — authored strategy indexing and public metadata (#458).
 
 - [[Database Admission Delivery]] — finite pool capacity waiting (#468).
