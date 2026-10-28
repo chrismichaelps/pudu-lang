@@ -187,6 +187,20 @@ fn colors() {
   require(Color.toSrgb8(Color.rgba(0.0 / 0.0, 0.0, 0.0, 1.0)) == None, "nan channel")
   require(Color.toSrgb8(Color.opaque(2.0, -1.0, 0.0)) == Some(4278190335u32), "clamped pack")
   require(Color.premultiplied(Color.rgba(1.0, 0.5, 0.0, 0.5)) == Color.rgba(0.5, 0.25, 0.0, 0.5), "premultiply")
+  let firstNan = Float.fromBits(0x7ff8000000000042u64)
+  let lastNan = Float.fromBits(0x7ff8000000000086u64)
+  let first = Color.rgba(-0.0, 1e308, firstNan, 0.25)
+  let last = Color.rgba(1.0, -1e308, lastNan, 0.75)
+  let atStart = Color.lerp(first, last, 0.0)
+  let atEnd = Color.lerp(first, last, 1.0)
+  require(Float.toBits(atStart.r) == Float.toBits(-0.0), "color endpoint preserves signed zero")
+  require(atStart.g == first.g && Float.toBits(atStart.b) == Float.toBits(firstNan), "color start preserves bits")
+  require(atEnd.g == last.g && Float.toBits(atEnd.b) == Float.toBits(lastNan), "color end preserves bits")
+  require(Color.lerp(first, last, 0.5).g == 0.0, "opposite extreme channels have a finite midpoint")
+  require(Float.abs(Color.lerp(first, last, 0.25).g / 5e307 - 1.0) < 0.000000000000001, "opposite extreme quarter point")
+  let maximum = Float.fromBits(0x7fefffffffffffffu64)
+  let high = Color.opaque(maximum, maximum, maximum)
+  require(Color.lerp(high, high, 0.1) == high, "equal maximum channels stay finite")
 }
 
 fn randomness() {

@@ -17,6 +17,9 @@ corners; every geometry query including frustum culling of points, spheres and b
 transfer, packing and NaN refusal; SplitMix64 reference outputs and ranges; noise lattice
 zeros, repeatability, bounds and unrepresentable cells. Prints `ark math extended: ok`.
 
+Color interpolation also preserves exact endpoint bits (including signed zero and NaN payload)
+and representable interior values between opposite extreme finite channels.
+
 ## Grill Log
 
 - **Q:** Compare floating results with exact equality? **A:** Only where the operation is exact
