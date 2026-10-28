@@ -12,6 +12,11 @@ aliases: [Repository Gates]
 
 ## Purpose and interface
 
+[[Ark Assets Gate]] validates texture sampling, failure diagnostics and nested distribution data.
+
+[[Ark Physics Gate]] verifies scenarios, numeric boundaries, diagnostics and shipping against
+the optimized compiler alongside the other focused engine checks.
+
 [[Ark Matrix Gate]] follows the root math gate with algebra/projection and nested data-file
 coverage. Resolved Grill Log: fixed math regressions remain executable in ordinary gate runs.
 

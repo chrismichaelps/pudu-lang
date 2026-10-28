@@ -6,17 +6,40 @@ tags: [handoff, ark]
 ---
 # Ark Engine Next
 
-Engine branch feature/660-ark-matrix (draft PR #667) now carries Math (#660, #666), lanes
-(#668), rasterization (#676), the nanosecond clock (#670), Core and World (#672), adapter game
-input (#673), Platform (#675) and Render with the window demo (#680). Layer gate: 21 engine
-modules, no findings. Dependency PRs awaiting review: #663, #664, #669, #671, #674, #677, #679.
+Continue engine development in feature/660-ark-matrix. Current integrated modules include Math,
+Core handles/profiling, World columns/hierarchy/events, Platform input/clock/window/virtual files,
+checked CPU texture assets, translating-body physics and software rendering. The layer gate reports
+30 engine modules and zero findings. Preserve the preceding session's mesh/demo/benchmark files and
+all current implementation work; the engine checkout contains uncommitted continuation slices.
 
-Standing rule: any kind discriminator is built through a const factory table.
+[[Ark Physics Continuation]] records reviewed numeric admission, normalized constraint weights
+and disjoint high-degree contact batches. [[Ark Render Correctness]] records inverse-transpose
+normals, homogeneous near/far clipping and perspective-correct lit color with affine screen depth.
+The focused render gate includes analytic pixels, extreme homogeneous-weight cases, camera-crossing
+coverage, source layout/precision checks, offscreen output and shipping. The existing affine raster
+entry remains compatible. The optimized executable build passed -Werror; no full gates ran locally.
 
-Exact next action: World transform hierarchy and events, then perspective-correct interpolation
-and near-plane clipping in the pipeline, then Ark.Physics (rigid bodies on lane columns with a
-broadphase over [[Ark Geometry]]).
+[[Ark Texture Delivery]] records checked RGBA8 data with explicit sRGB/linear decoding, nearest and
+premultiplied bilinear sampling. [[Ark Vfs Delivery]] records real-directory and immutable memory
+mounts, typed resource reads and a real resource-to-texture integration check. Focused asset and
+Platform gates plus independent API/Forensic reviews pass. Color interpolation now preserves exact
+endpoint bits and finite opposite-extreme interior values; the focused extended math gate passes.
+
+The installed runtime resolves to the optimized engine build. A 20-frame FallingBodies run after
+correct clipping/interpolation measured 23.7 ms render and 2.37 ms per solver step. The separate
+1,000-body benchmark measured 15.1 ms per step with 1,000 mean contacts. Presentation is excluded
+from render scopes, and fixed-step counts vary per displayed frame. These are local subsystem
+measurements. Packing the three spatial projection rows reduced a consumed-result sphere-projection
+microbenchmark from about 260 to 242 microseconds (about 7%); representative full batches remain
+byte-identical, and nonsymmetric scalar-matrix assertions protect coefficient layout.
+
+Standing rule: kind discriminators use const factory tables. Keep host resource access in Platform
+and preserve descending engine imports. Resource residency, streaming, GPU device support, angular
+physics and the remaining full-engine systems retain their target obligations in [[Ark Engine]].
+
+Exact next action: implement an asset dependency catalog and staged reload over virtual resource
+reads and checked texture data.
 
 ## Referenced by
 
-[[handoffs/_MOC]] · [[Ark Engine]]
+[[handoffs/_MOC]] · [[Ark Engine]] · [[Ark Texture Delivery]] · [[Ark Vfs Delivery]]

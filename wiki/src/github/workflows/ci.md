@@ -9,6 +9,11 @@ aliases: [Pudu Continuous Verification]
 
 ## Purpose and interface
 
+[[Ark Assets Gate]] verifies checked CPU texture data and sampling before the higher engine gates.
+
+[[Ark Physics Gate]] runs after render conformance, exercising physical scenarios and numeric
+admission plus disjoint contact batching regressions against the optimized compiler.
+
 [[Lanes Gate]] runs after the binary64 kernel gate.
 
 [[Ark Math Gate]] and [[Ark Matrix Gate]] execute against the resolved optimized compiler path.

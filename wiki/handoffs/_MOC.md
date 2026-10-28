@@ -5,6 +5,16 @@ tags: [moc, handoff]
 
 # Handoff Map
 
+- [[Ark Asset Server Delivery]] — asset dependency graph, then staged reload over virtual reads.
+
+- [[Ark Vfs Delivery]] — virtual resource loading through the Platform boundary.
+
+- [[Ark Texture Delivery]] — checked RGBA8 texture data and alpha-correct filtering.
+
+- [[Ark Render Correctness]] — geometric-normal preservation under non-uniform transforms.
+
+- [[Ark Physics Continuation]] — physics boundary and solver repairs on the engine integration branch.
+
 - [[Broadphase Delivery]] — issue #682 native overlap pairs of axis-aligned boxes.
 
 - [[Lambda Option Try Delivery]] — issue #678 `?` on Option in unannotated lambdas.

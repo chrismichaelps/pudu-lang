@@ -60,6 +60,10 @@ run 'Ark math preserves scaled geometry and refuses wrong precision' \
   node test/ark-math.mjs "$PUDU"
 run 'Ark matrices preserve composition and checked homogeneous projection' \
   node test/ark-matrix.mjs "$PUDU"
+run 'Ark assets preserve linear-light sampling and checked texture storage' \
+  node test/ark-assets.mjs "$PUDU"
+run 'Ark physics preserves numeric admission and disjoint contact batches' \
+  node test/ark-physics.mjs "$PUDU"
 run 'atomic writes preserve creation and replacement permissions' \
   bash -c 'python3 test/atomic-permissions.py "$PUDU"'
 run 'only a compiler change at a new version releases' python3 test/release-plan.test.py

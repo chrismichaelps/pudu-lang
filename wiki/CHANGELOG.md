@@ -5,6 +5,62 @@ tags: [changelog]
 
 # Changelog
 
+## 2026-10-28 — Asset dependency graph (#693)
+
+- [[Ark Asset Dependencies]] validates IDs and edges, orders assets dependency-first without
+  recursion and returns each changed asset's transitive dependents once for staged reload.
+- [[Ark Asset Graph Fixture]] covers diamonds, typed declaration failures, cycles with blocked
+  descendants, forged graphs and a 1,000-node chain; [[Ark Assets Gate]] runs it.
+
+## 2026-10-27 — Virtual engine resource loading
+
+- [[Ark Virtual Files]] adds named directory and immutable memory mounts, canonical virtual paths,
+  typed failures and scoped byte reads inside Platform.
+- [[Ark Vfs Fixture]] verifies real files, contained/escaping symlinks, immutable snapshots and
+  loading texture bytes through the engine resource boundary.
+
+## 2026-10-27 — Checked texture assets and filtering
+
+- [[Ark Texture Asset]] adds immutable RGBA8 data, explicit color spaces and clamp-to-edge
+  nearest/bilinear sampling. Filtering decodes to linear light and preserves premultiplied alpha.
+- [[Ark Texture Fixture]] and [[Ark Assets Gate]] cover analytic colors, malformed records,
+  diagnostics and source-distribution inclusion without new native code.
+
+## 2026-10-27 — Preserve material color interpolation boundaries
+
+- [[Ark Color]] returns exact endpoints and avoids an overflowing difference between opposite
+  finite channels. [[Ark Math Extended Fixture]] covers signed zero, NaN payloads, extreme
+  midpoints and maximum same-sign values.
+
+## 2026-10-27 — Perspective-correct software-device attributes
+
+- [[Ark Render Device]] retains homogeneous w and interpolates lit color with normalized
+  reciprocal weights; divided depth stays affine. The existing affine driver entry is preserved.
+- [[Ark Perspective Fixture]] checks analytic pixels, extreme w scale invariance and explicit
+  invalid-weight refusal, including odd-sized color storage.
+
+## 2026-10-27 — Preserve camera-crossing triangles
+
+- [[Ark Depth Clip]] clips lit homogeneous triangles to both zero-to-one depth planes in Pudu,
+  preserving order, winding and interpolated colors before perspective division.
+- [[Ark Render Pipeline]] retains visible crossing polygons; [[Ark Depth Clip Fixture]] covers
+  analytic intersections, boundaries, invalid data and complete camera-crossing pixel coverage.
+
+## 2026-10-27 — Correct transformed render normals
+
+- [[Ark Render Pipeline]] uses the inverse transpose for mesh normals, preserving lighting under
+  non-uniform scale and shear. Singular transforms, invalid dimensions and NaN ambient are refused.
+- [[Ark Render Fixture]] compares intensity with independently transformed geometric tangents.
+
+## 2026-10-27 — Physics admission and high-degree contact repair
+
+- [[Ark Physics]] rejects invalid public shapes, unordered materials, non-finite inverse mass
+  and non-finite velocity updates. [[Ark Physics Step]] gives overflow contacts singleton batches.
+- Constraint mass weights are normalized before summing to preserve representable collision
+  responses for tiny admitted masses. [[Ark Physics Gate]] verifies scenarios and archive contents.
+- [[Ark Physics Boundary Fixture]] covers boundary refusal and elastic energy preservation beyond
+  the color mask; [[Ark Contact]] now describes the batch API used by the implementation.
+
 ## 2026-10-27 — Data-parallel lane primitives (#684)
 
 - [[Std Lanes]] adds select, threshold masks, positions, accumulating scatter-add and integer

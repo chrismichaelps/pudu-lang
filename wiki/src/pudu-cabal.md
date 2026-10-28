@@ -14,6 +14,12 @@ cache identity; full analysis remains available independently of executable reus
 
 ## Purpose and interface
 
+Distribute `lib/Ark/Assets/*.pudu`, including [[Ark Texture Asset]]. Resolved Grill Log: nested
+CPU asset modules are shipped library data and must remain present outside the checkout.
+
+Distribute `lib/Ark/Physics/*.pudu` with the root physics facade. Resolved Grill Log: the
+source archive must retain contact, step and query modules; checkout-only success is insufficient.
+
 Distribute `lib/Ark/*.pudu` and `lib/Ark/Math/*.pudu` beside Std in the existing library data
 root. [[Ark Math]] and [[Ark Matrix]] are language-distribution data, with no separate package
 or native dependency. Resolved Grill Log: source archives must contain both root and nested
