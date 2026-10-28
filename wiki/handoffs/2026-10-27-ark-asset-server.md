@@ -1,6 +1,7 @@
 ---
 type: handoff
 status: ACTIVE
+issue: 696
 aliases: [Ark Asset Server Delivery]
 tags: [handoff, ark, assets]
 ---
@@ -27,8 +28,12 @@ The pure graph (#693) now passes [[Ark Asset Graph Fixture]] through the focused
 exact diamond order, unique closures, typed declaration failures, cycles with blocked
 descendants, forged graph references and a 1,000-node chain.
 
-Exact next action: implement the asset server's importer factories, generational handles and
-staged dependency-first reload over virtual resource reads.
+The server (#696) now passes [[Ark Asset Server Fixture]]: importers run through a const table,
+handles are generational, and a real on-disk rewrite reloads a texture and its material in one
+staged publication while byte-identical rewrites and failed stages publish nothing.
+
+Exact next action: sample material textures in the render pipeline so imported assets reach
+the screen.
 
 ## Referenced by
 

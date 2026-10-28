@@ -5,6 +5,14 @@ tags: [changelog]
 
 # Changelog
 
+## 2026-10-28 — Asset server and staged hot reload (#696)
+
+- [[Ark Asset Server]] loads declared assets through virtual reads, issues generational handles
+  and reloads changed sources with their dependents dependency-first, publishing only when every
+  staged import succeeds. Byte-identical rewrites advance nothing.
+- [[Ark Asset Import]] adds a const importer table for bytes, cooked textures and materials, and
+  the cooked texture writer. [[Ark Asset Server Fixture]] covers real on-disk reload.
+
 ## 2026-10-28 — Asset dependency graph (#693)
 
 - [[Ark Asset Dependencies]] validates IDs and edges, orders assets dependency-first without

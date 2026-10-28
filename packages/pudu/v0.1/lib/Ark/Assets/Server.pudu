@@ -1,0 +1,193 @@
+module Ark.Assets.Server
+
+import Ark.Assets.Graph as Graph
+import Ark.Assets.Import as Import
+import Ark.Core.Handle as Handle
+import Ark.Platform.Vfs as Vfs
+
+/// One declared asset: logical ID, virtual source path, importer kind and consumed asset IDs.
+export type Source = { id: Str, path: Str, importer: Str, dependencies: Array[Str] }
+
+/// Declaration, read and import failures, each naming the asset concerned.
+export type Error
+  = Declaration(Graph.Error)
+  | UnknownImporter(Str, Str)
+  | ReadFailed(Str, Vfs.ResourceError)
+  | ImportFailed(Str, Str)
+  | UnknownAsset(Str)
+  | LoadedDependents(Str, Array[Str])
+  | InvalidServer(Str)
+
+/// One published asset with the exact source bytes its revision was imported from.
+export type Entry = { source: Source, handle: Handle.Handle, revision: Int, bytes: Bytes, payload: Import.Payload }
+
+/// Published state; every operation returns a new server and leaves its input unchanged.
+export type Server = { vfs: Vfs.Vfs, graph: Graph.Graph, entries: Map[Str, Entry], owners: Map[Int, Str], pool: Handle.HandlePool }
+
+/// Read and import every source dependency-first, issuing one handle per asset.
+export fn open(vfs: Vfs.Vfs, sources: &Array[Source]) -> Result[Server, Error] {
+  let graph = compileSources(sources) ?
+  var declared: Map[Str, Source] = mapOf([])
+  for source in *sources { declared = declared.insert(source.id, source) }
+  var server = Server{vfs, graph, entries: mapOf([]), owners: mapOf([]), pool: Handle.empty()}
+  for id in server.graph.order {
+    let Some(source) = declared.get(id) else { return Err(InvalidServer(id)) }
+    server = publishNew(server, source) ?
+  }
+  Ok(server)
+}
+
+/// Declare, read and import one more asset whose dependencies are already loaded.
+export fn add(server: Server, source: Source) -> Result[Server, Error] {
+  var sources = declarations(&server) ?
+  sources = sources.push(source)
+  let graph = compileSources(&sources) ?
+  publishNew(Server{..server, graph}, source)
+}
+
+/// The handle issued for an asset ID.
+export fn handle(server: &Server, id: Str) -> Option[Handle.Handle] {
+  let entry = server.entries.get(id) ?
+  Some(entry.handle)
+}
+
+/// The published payload for a live handle; None once the asset is unloaded.
+export fn payload(server: &Server, issued: Handle.Handle) -> Option[Import.Payload] {
+  if !Handle.isAlive(&server.pool, issued) { return None }
+  let id = server.owners.get(issued.index) ?
+  let entry = server.entries.get(id) ?
+  if entry.handle != issued { return None }
+  Some(entry.payload)
+}
+
+/// The number of times an asset's payload has been re-imported since it was loaded.
+export fn revision(server: &Server, id: Str) -> Option[Int] {
+  let entry = server.entries.get(id) ?
+  Some(entry.revision)
+}
+
+/// Loaded asset IDs in dependency-first order.
+export fn ids(server: &Server) -> Array[Str] {
+  server.graph.order
+}
+
+/// IDs whose current source bytes differ from the bytes of their published revision.
+export fn changed(server: &Server) -> Result[Array[Str], Error] {
+  var result: Array[Str] = []
+  for id in server.graph.order {
+    let entry = entryOf(server, id) ?
+    let bytes = readSource(&server.vfs, &entry.source) ?
+    if bytes != entry.bytes { result = result.push(id) }
+  }
+  Ok(result)
+}
+
+/// Stage the named assets and their transitive dependents, publishing only if every import succeeds.
+/// An asset re-imports when its bytes changed or a dependency advanced in this reload; the result
+/// names exactly the assets whose revision advanced.
+export fn reload(server: Server, requested: &Array[Str]) -> Result[(Server, Array[Str]), Error] {
+  var staged: Map[Str, Bool] = mapOf([])
+  for id in *requested {
+    if !server.entries.containsKey(id) { return Err(UnknownAsset(id)) }
+    let closure = match Graph.affected(&server.graph, id) {
+      case Ok(assets) => assets
+      case Err(problem) => { return Err(Declaration(problem)) }
+    }
+    for asset in closure { staged = staged.insert(asset, true) }
+  }
+  var entries = server.entries
+  var advanced: Array[Str] = []
+  var bumped: Map[Str, Bool] = mapOf([])
+  for id in server.graph.order {
+    if staged.containsKey(id) {
+      let Some(entry) = entries.get(id) else { return Err(InvalidServer(id)) }
+      let bytes = readSource(&server.vfs, &entry.source) ?
+      var upstream = false
+      for dependency in entry.source.dependencies {
+        if bumped.containsKey(dependency) { upstream = true }
+      }
+      if upstream || bytes != entry.bytes {
+        let imported = importSource(&entry.source, &bytes, &entries) ?
+        entries = entries.insert(id, Entry{..entry, revision: entry.revision + 1, bytes, payload: imported})
+        bumped = bumped.insert(id, true)
+        advanced = advanced.push(id)
+      }
+    }
+  }
+  Ok((Server{..server, entries}, advanced))
+}
+
+/// Detect changed sources and reload them with their dependents in one staged publication.
+export fn refresh(server: Server) -> Result[(Server, Array[Str]), Error] {
+  let pending = changed(&server) ?
+  if pending.isEmpty() { return Ok((server, [])) }
+  reload(server, &pending)
+}
+
+/// Remove an asset nothing loaded depends on; every copy of its handle becomes stale.
+export fn unload(server: Server, id: Str) -> Result[Server, Error] {
+  let Some(entry) = server.entries.get(id) else { return Err(UnknownAsset(id)) }
+  let Some(children) = server.graph.dependents.get(id) else { return Err(InvalidServer(id)) }
+  if !children.isEmpty() { return Err(LoadedDependents(id, children)) }
+  let Some(pool) = Handle.release(server.pool, entry.handle) else { return Err(InvalidServer(id)) }
+  var remaining: Array[Source] = []
+  for asset in server.graph.order {
+    if asset != id { remaining = remaining.push(entryOf(&server, asset) ?.source) }
+  }
+  let graph = compileSources(&remaining) ?
+  Ok(Server{..server, graph, entries: server.entries.remove(id), owners: server.owners.remove(entry.handle.index), pool})
+}
+
+fn publishNew(server: Server, source: Source) -> Result[Server, Error] {
+  let bytes = readSource(&server.vfs, &source) ?
+  let imported = importSource(&source, &bytes, &server.entries) ?
+  let (pool, issued) = Handle.allocate(server.pool)
+  let entry = Entry{source, handle: issued, revision: 0, bytes, payload: imported}
+  Ok(Server{..server, entries: server.entries.insert(source.id, entry), owners: server.owners.insert(issued.index, source.id), pool})
+}
+
+fn declarations(server: &Server) -> Result[Array[Source], Error] {
+  var sources: Array[Source] = []
+  for id in server.graph.order {
+    let entry = entryOf(server, id) ?
+    sources = sources.push(entry.source)
+  }
+  Ok(sources)
+}
+
+fn compileSources(sources: &Array[Source]) -> Result[Graph.Graph, Error] {
+  var nodes: Array[Graph.Node] = []
+  for source in *sources {
+    if !Import.known(source.importer) { return Err(UnknownImporter(source.id, source.importer)) }
+    nodes = nodes.push(Graph.Node{id: source.id, dependencies: source.dependencies})
+  }
+  match Graph.compile(&nodes) {
+    case Ok(graph) => Ok(graph)
+    case Err(problem) => Err(Declaration(problem))
+  }
+}
+
+fn entryOf(server: &Server, id: Str) -> Result[Entry, Error] {
+  let Some(entry) = server.entries.get(id) else { return Err(InvalidServer(id)) }
+  Ok(entry)
+}
+
+fn readSource(vfs: &Vfs.Vfs, source: &Source) -> Result[Bytes, Error] {
+  match Vfs.read(vfs, source.path) {
+    case Ok(bytes) => Ok(bytes)
+    case Err(problem) => Err(ReadFailed(source.id, problem))
+  }
+}
+
+fn importSource(source: &Source, bytes: &Bytes, entries: &Map[Str, Entry]) -> Result[Import.Payload, Error] {
+  if !Import.known(source.importer) { return Err(UnknownImporter(source.id, source.importer)) }
+  var inputs: Array[Import.Payload] = []
+  for dependency in source.dependencies {
+    let Some(entry) = entries.get(dependency) else { return Err(InvalidServer(dependency)) }
+    inputs = inputs.push(entry.payload)
+  }
+  match Import.run(source.importer, bytes, &inputs) {
+    case Ok(value) => Ok(value)
+    case Err(reason) => Err(ImportFailed(source.id, reason))
+  }
+}

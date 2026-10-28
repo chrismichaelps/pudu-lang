@@ -13,10 +13,13 @@ const env = {...process.env, PUDU_LIB: library};
 const modulePath = 'Ark/Assets/Texture.pudu';
 const fixture = join(root, 'test-fixtures/ark/UsesArkTexture.pudu');
 const graphFixture = join(root, 'test-fixtures/ark/UsesArkAssetGraph.pudu');
+const serverFixture = join(root, 'test-fixtures/ark/UsesArkAssetServer.pudu');
+const shipped = ['Texture', 'Graph', 'Import', 'Server'].map(name => `Ark/Assets/${name}.pudu`);
 const run = (...args) => execFileSync(binary, args, {env, encoding: 'utf8', timeout: 60000});
 assert.equal(run('run', fixture), 'ark texture: ok\n');
 assert.equal(run('run', graphFixture), 'ark asset graph: ok\n');
-run('fmt', '--check', fixture, graphFixture, join(library, modulePath), join(library, 'Ark/Assets/Graph.pudu'));
+assert.equal(run('run', serverFixture), 'ark asset server: ok\n');
+run('fmt', '--check', fixture, graphFixture, serverFixture, ...shipped.map(path => join(library, path)));
 const scratch = mkdtempSync(join(tmpdir(), 'pudu-ark-assets-'));
 try {
   const refused = join(scratch, 'InvalidUv.pudu');
@@ -28,10 +31,8 @@ try {
   execFileSync('cabal', ['sdist', 'pudu', '--output-directory=' + scratch], {cwd: root, encoding: 'utf8', timeout: 60000});
   const archive = readdirSync(scratch).find(name => /^pudu-[0-9].*\.tar\.gz$/.test(name));
   const entries = execFileSync('tar', ['-tzf', join(scratch, archive)], {encoding: 'utf8'}).split('\n');
-  for (const shipped of [modulePath, 'Ark/Assets/Graph.pudu']) {
-    assert(entries.some(entry => entry.endsWith('/lib/' + shipped)), shipped);
-  }
+  for (const path of shipped) assert(entries.some(entry => entry.endsWith('/lib/' + path)), path);
 } finally {
   rmSync(scratch, {recursive: true, force: true});
 }
-console.log('Ark asset dependency order, texture sampling, color/alpha boundaries, diagnostics and shipping passed');
+console.log('Ark asset dependency order, staged reload, importers, texture sampling, color/alpha boundaries, diagnostics and shipping passed');
