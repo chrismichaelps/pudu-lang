@@ -72,9 +72,12 @@ def main():
     ],
     check=True
   )
-  sources = sorted((package / "lib" / "Std").rglob("*.pudu"))
-  if not sources:
-    parser.error("standard library is empty")
+  sources = []
+  for namespace in ("Std", "Ark"):
+    namespace_sources = sorted((package / "lib" / namespace).rglob("*.pudu"))
+    if not namespace_sources:
+      parser.error(f"{namespace} library is empty")
+    sources.extend(namespace_sources)
   output = (root / args.output).resolve()
   output.mkdir(parents=True, exist_ok=True)
   name = f"pudu-{version}-{args.target}"
