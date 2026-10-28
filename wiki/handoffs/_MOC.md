@@ -5,6 +5,8 @@ tags: [moc, handoff]
 
 # Handoff Map
 
+- [[Optimized Refresh Delivery]] — explicit optimized runtime installation (#686).
+
 - [[Hackage Transport Delivery]] — issue #656 configure verified HTTPS before one index update.
 
 - [[Derive Index Delivery]] — authored strategy indexing and public metadata (#458).

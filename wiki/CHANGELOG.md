@@ -5,6 +5,12 @@ tags: [changelog]
 
 # Changelog
 
+## 2026-10-27 — Optimized runtime refresh (#686)
+
+- [[Refresh Pudu Installation]] explicitly selects optimization level 2 for build and install.
+- [[Refresh Installation Test]] exercises successful verification, identical and conflicting PATH
+  copies, and failure propagation without compiling or installing a real compiler.
+
 ## 2026-10-27 — Verified HTTPS CI index transport (#656)
 
 - [[Website Linux Workflow]] configures signed HTTPS Hackage access before one explicit update.

@@ -5,6 +5,8 @@ tags: [moc, module]
 
 # Module Map
 
+- [[Refresh Pudu Installation]] · [[Refresh Installation Test]] — optimized installation and exact executable verification.
+
 - [[Website Linux Workflow]] · [[Hackage Transport Test]] — configured HTTPS index transport.
 
 - [[Derive Index Output Gate]] — checked strategy output and visibility.

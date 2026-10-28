@@ -28,6 +28,7 @@ run() {
 
 
 printf 'gates\n'
+run 'refresh installs an optimized compiler and verifies PATH' python3 test/refresh-install.py
 run 'application dependency model refuses architectural defects' node --test test/app-layers.test.mjs
 run 'application imports follow their declared dependency layers' node scripts/app-layers.mjs
 while IFS= read -r project_build_root; do
