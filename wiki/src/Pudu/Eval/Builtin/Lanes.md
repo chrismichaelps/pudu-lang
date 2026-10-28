@@ -19,6 +19,11 @@ float kernel.
 
 ## Grill Log
 
+- **Q:** Alignment-check the textured entry's texels? **A:** No; like the color target they are
+  RGBA8. `rasterTexturedTriangles` exempts its first argument and its texel bytes; every vertex
+  lane, including u and v, stays checked. Texture extent and codes pass through `bounded` before
+  [[Runtime Sampler]] validates them, so an oversized Int cannot wrap into a valid code.
+
 - **Q:** Treat raster color storage as binary64? **A:** No; both raster entries exempt only
   their first RGBA8 argument from alignment checks. Depth and all vertex lanes remain checked.
   The perspective entry dispatches its extra homogeneous-w lane to the shared raster driver;
