@@ -14,6 +14,7 @@ import Pudu.Runtime.FloatKernel (applyFloatUnary)
 import qualified Pudu.Runtime.Broadphase as Broadphase
 import qualified Pudu.Runtime.Lanes as Lanes
 import qualified Pudu.Runtime.Raster as Raster
+import qualified Pudu.Runtime.Sampler as Sampler
 import Pudu.Source (Span)
 
 {-| Apply a lane kernel. The checker admits only the kernel's signature, so a
@@ -31,6 +32,7 @@ callLaneKernel spanValue kernel values
     checked = case kernel of
       RasterTriangles -> drop 1 values
       RasterPerspectiveTriangles -> drop 1 values
+      RasterTexturedTriangles -> [value | (index, value) <- zip [0 :: Int ..] values, index /= 0, index /= 13]
       _ -> values
 
 apply :: LaneKernel -> [Value] -> Maybe Value
@@ -105,6 +107,19 @@ apply kernel values = case (kernel, values) of
     Just $ case (cullOf cull, bounded width) of
       (Just culling, Just target) | Just (painted, depths) <- draw color depth target culling lanes ->
         VariantValue "Some" [TupleValue [BytesValue painted, BytesValue depths]]
+      _ -> VariantValue "None" []
+  (RasterTexturedTriangles, BytesValue color : BytesValue depth : IntValue _ width : IntValue _ cull : rest)
+    | (vertexValues, [BytesValue texels, IntValue _ texelWidth, IntValue _ space, IntValue _ filtering]) <- splitAt 9 rest -> do
+    lanes <- traverse bytesOf vertexValues
+    let checkedTexture = do
+          extent <- bounded texelWidth
+          code <- bounded space
+          mode <- bounded filtering
+          Sampler.sampler texels extent code mode
+    Just $ case (cullOf cull, bounded width, checkedTexture) of
+      (Just culling, Just target, Just texture)
+        | Just (painted, depths) <- Raster.rasterTexturedTriangles color depth target culling lanes texture ->
+            VariantValue "Some" [TupleValue [BytesValue painted, BytesValue depths]]
       _ -> VariantValue "None" []
   _ -> Nothing
   where

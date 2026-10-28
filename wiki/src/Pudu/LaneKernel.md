@@ -22,6 +22,9 @@ and [[Semantic Prelude]] lists them, so no list can drift. Depends only on `Data
 
 ## Grill Log
 
+- **Q:** Pass texture state as one record? **A:** No; kernel arguments are positional values.
+  `RasterTexturedTriangles` (`rasterTexturedTriangles`) appends u and v lanes after w, then texel
+  bytes, texture width, color-space code and filter code.
 - **Q:** Preserve the affine raster entry? **A:** Yes; add `RasterPerspectiveTriangles` named
   `rasterPerspectiveTriangles`, appending one homogeneous-w byte lane after b, with the same
   optional color/depth pair. The existing name, arity and output remain unchanged. Derived

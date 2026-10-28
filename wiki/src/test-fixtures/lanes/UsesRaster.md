@@ -14,6 +14,9 @@ to the target; refusals for partial triangles, lane mismatch, unknown cull and a
 target. The perspective entry checks perspective-correct color at a pixel center, equal
 weights matching affine interpolation, uniformly scaled subnormal weights keeping identical
 pixels, and refusal of zero, negative, NaN, infinite and mis-sized weight lanes.
+The textured entry checks nearest texels, lit-color modulation, bilinear clamping across texel
+centers, sRGB decoding, cutout fragments that write neither color nor depth, w-scale invariance
+and refusal of malformed texture storage, unknown codes and mismatched lanes.
 Run by [[Lanes Gate]]. Prints `raster: ok`.
 
 ## Referenced by

@@ -342,6 +342,7 @@ library
     Pudu.LaneKernel
     Pudu.Runtime.Lanes
     Pudu.Runtime.Raster
+    Pudu.Runtime.Sampler
     Pudu.Runtime.Broadphase
     Pudu.Eval.Builtin.Lanes
     Pudu.Eval.MultiMap
