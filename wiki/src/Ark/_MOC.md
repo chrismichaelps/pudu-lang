@@ -13,6 +13,7 @@ tags: [moc, ark]
 
 - [[Ark Depth Clip]] · [[Ark Depth Clip Fixture]] — homogeneous depth clipping before perspective division.
 - [[Ark Perspective Fixture]] — reciprocal-weight attributes and scale-invariant device pixels.
+- [[Ark Textured Fixture]] — mesh coordinates, textured and material draws from imported assets.
 
 - [[Ark Physics]] · [[Ark Contact]] · [[Ark Physics Step]] · [[Ark Physics Query]] — translating rigid bodies and spatial queries.
 - [[Ark Physics Boundary Fixture]] — numeric admission and high-degree solver regressions.

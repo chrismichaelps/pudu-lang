@@ -10,8 +10,8 @@ tags: [module, ark, render]
 
 ## Purpose and interface
 
-`Vertices` holds seven equal-length lanes: homogeneous x/y/z/w and lit linear r/g/b, three
-vertices per triangle. `depth(vertices) -> Option[Vertices]` clips triangle polygons against
+`Vertices` holds nine equal-length lanes: homogeneous x/y/z/w, lit linear r/g/b and texture u/v,
+three vertices per triangle. `depth(vertices) -> Option[Vertices]` clips triangle polygons against
 z ≥ 0 and z ≤ w before perspective division. These are the two depth boundaries for both forward
 and reversed zero-to-one depth conventions. Clipping a fully hidden batch returns empty lanes;
 an entirely admitted batch returns its original lanes. Triangle order and winding are preserved
@@ -19,7 +19,8 @@ through fan triangulation. Viewport x/y clipping remains the rasterizer's bounde
 
 Malformed lane counts, partial triangles, non-finite inputs and unrepresentable plane distances or intersections
 answer None. Retained vertices require positive w. Plane records own distance and boundary-snap
-functions in one const table. Sutherland–Hodgman clipping interpolates position and lit color in
+functions in one const table. Sutherland–Hodgman clipping interpolates position, lit color and
+texture coordinates in
 homogeneous edge parameter; intersection ratios scale distances before division to avoid a
 subtraction overflow. Snapping z to zero or w prevents a rounded intersection from escaping its
 active depth plane. This is Gouraud color clipping; the render device uses retained w for
@@ -29,7 +30,7 @@ triangles. Fully hidden depth batches are rejected before polygon materializatio
 their signed far distances overflow negatively.
 
 The common fully-admitted path checks lanes and depth bounds without unpacking vertex arrays.
-An IEEE zero-product accumulator validates all seven lanes through one final reduction: finite
+An IEEE zero-product accumulator validates all nine lanes through one final reduction: finite
 values contribute zero, while any NaN/infinity poisons its lane. Checked fused lane operations
 also enforce matching lengths, avoiding duplicate length and sum passes.
 Only batches requiring clipping enter the bounded polygon path; clipping is Pudu engine code,

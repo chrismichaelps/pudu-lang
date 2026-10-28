@@ -3,11 +3,22 @@ module Ark.Render.Clip
 import Std.Lanes as Lanes
 import Std.Math.Float as Float
 import Ark.Math as V
+import Ark.Math.Vec2 as V2
 
-/// Lit homogeneous vertices, three per triangle, before perspective division.
-export type Vertices = { xs: Lanes.Lanes, ys: Lanes.Lanes, zs: Lanes.Lanes, ws: Lanes.Lanes, rs: Lanes.Lanes, gs: Lanes.Lanes, bs: Lanes.Lanes }
+/// Lit, textured homogeneous vertices, three per triangle, before perspective division.
+export type Vertices = {
+  xs: Lanes.Lanes,
+  ys: Lanes.Lanes,
+  zs: Lanes.Lanes,
+  ws: Lanes.Lanes,
+  rs: Lanes.Lanes,
+  gs: Lanes.Lanes,
+  bs: Lanes.Lanes,
+  us: Lanes.Lanes,
+  vs: Lanes.Lanes,
+}
 
-type Vertex = { position: V.Vec4, color: V.Vec3 }
+type Vertex = { position: V.Vec4, color: V.Vec3, coordinate: V2.Vec2 }
 type Plane = { distance: fn(V.Vec4) -> Float64, snap: fn(V.Vec4) -> V.Vec4 }
 
 const DEPTH_PLANES: Array[Plane] = [
@@ -18,11 +29,11 @@ const DEPTH_PLANES: Array[Plane] = [
 /// Retain 0 <= z <= w with positive w; None for malformed data or unrepresentable clip arithmetic.
 export fn depth(vertices: &Vertices) -> Option[Vertices] {
   let count = Lanes.count(&vertices.xs)
-  if count % 3 != 0 { return None }
+  if count % 3 != 0 || Lanes.count(&vertices.us) != count || Lanes.count(&vertices.vs) != count { return None }
   // IEEE zero products retain NaN and turn infinities into NaN without overflowing finite sums.
   let zero = Lanes.scale(&vertices.xs, 0.0)
   var finite = zero
-  for lane in [vertices.ys, vertices.zs, vertices.ws, vertices.rs, vertices.gs, vertices.bs] {
+  for lane in [vertices.ys, vertices.zs, vertices.ws, vertices.rs, vertices.gs, vertices.bs, vertices.us, vertices.vs] {
     finite = Lanes.fma(&lane, &zero, &finite) ?
   }
   if Lanes.sum(&finite) != 0.0 { return None }
@@ -39,6 +50,8 @@ export fn depth(vertices: &Vertices) -> Option[Vertices] {
   let rs = Lanes.toArray(&vertices.rs)
   let gs = Lanes.toArray(&vertices.gs)
   let bs = Lanes.toArray(&vertices.bs)
+  let us = Lanes.toArray(&vertices.us)
+  let vs = Lanes.toArray(&vertices.vs)
   var outX: Array[Float64] = []
   var outY: Array[Float64] = []
   var outZ: Array[Float64] = []
@@ -46,13 +59,16 @@ export fn depth(vertices: &Vertices) -> Option[Vertices] {
   var outR: Array[Float64] = []
   var outG: Array[Float64] = []
   var outB: Array[Float64] = []
+  var outU: Array[Float64] = []
+  var outV: Array[Float64] = []
   var at = 0
   while at < count {
     var polygon: Array[Vertex] = []
     var corner = 0
     while corner < 3 {
       let index = at + corner
-      polygon = polygon.push(Vertex{position: V.vec4(xs[index], ys[index], zs[index], ws[index]), color: V.vec3(rs[index], gs[index], bs[index])})
+      let position = V.vec4(xs[index], ys[index], zs[index], ws[index])
+      polygon = polygon.push(Vertex{position, color: V.vec3(rs[index], gs[index], bs[index]), coordinate: V2.vec2(us[index], vs[index])})
       corner = corner + 1
     }
     for plane in DEPTH_PLANES { polygon = clipped(&polygon, &plane) ? }
@@ -68,12 +84,26 @@ export fn depth(vertices: &Vertices) -> Option[Vertices] {
         outR = outR.push(vertex.color.x)
         outG = outG.push(vertex.color.y)
         outB = outB.push(vertex.color.z)
+        outU = outU.push(vertex.coordinate.x)
+        outV = outV.push(vertex.coordinate.y)
       }
       fan = fan + 1
     }
     at = at + 3
   }
-  Some(Vertices{xs: Lanes.fromArray(&outX), ys: Lanes.fromArray(&outY), zs: Lanes.fromArray(&outZ), ws: Lanes.fromArray(&outW), rs: Lanes.fromArray(&outR), gs: Lanes.fromArray(&outG), bs: Lanes.fromArray(&outB)})
+  Some(
+    Vertices {
+      xs: Lanes.fromArray(&outX),
+      ys: Lanes.fromArray(&outY),
+      zs: Lanes.fromArray(&outZ),
+      ws: Lanes.fromArray(&outW),
+      rs: Lanes.fromArray(&outR),
+      gs: Lanes.fromArray(&outG),
+      bs: Lanes.fromArray(&outB),
+      us: Lanes.fromArray(&outU),
+      vs: Lanes.fromArray(&outV),
+    },
+  )
 }
 
 fn clipped(polygon: &Array[Vertex], plane: &Plane) -> Option[Array[Vertex]] {
@@ -94,8 +124,9 @@ fn clipped(polygon: &Array[Vertex], plane: &Plane) -> Option[Array[Vertex]] {
       let t = first / (first - second)
       let position = (plane.snap)(mix4(previous.position, current.position, t))
       let color = V.add(V.scale(previous.color, 1.0 - t), V.scale(current.color, t))
-      if !V.isFinite4(position) || !V.isFinite(color) { return None }
-      output = output.push(Vertex{position, color})
+      let coordinate = V2.add(V2.scale(previous.coordinate, 1.0 - t), V2.scale(current.coordinate, t))
+      if !V.isFinite4(position) || !V.isFinite(color) || !V2.isFinite(coordinate) { return None }
+      output = output.push(Vertex{position, color, coordinate})
     }
     if distance >= 0.0 { output = output.push(current) }
     previous = current
@@ -111,7 +142,7 @@ fn mix4(a: V.Vec4, b: V.Vec4, t: Float64) -> V.Vec4 {
 
 fn empty() -> Vertices {
   let none = Lanes.fromArray(&[])
-  Vertices{xs: none, ys: none, zs: none, ws: none, rs: none, gs: none, bs: none}
+  Vertices{xs: none, ys: none, zs: none, ws: none, rs: none, gs: none, bs: none, us: none, vs: none}
 }
 
 fn nearDistance(position: V.Vec4) -> Float64 { position.z }

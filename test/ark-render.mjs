@@ -13,13 +13,15 @@ const env = {...process.env, PUDU_LIB: library};
 const fixture = join(root, 'test-fixtures/ark/UsesArkRender.pudu');
 const clipFixture = join(root, 'test-fixtures/ark/UsesArkClip.pudu');
 const perspectiveFixture = join(root, 'test-fixtures/ark/UsesArkPerspective.pudu');
+const texturedFixture = join(root, 'test-fixtures/ark/UsesArkTextured.pudu');
 const demo = join(root, 'examples/ark/SpinningCubes.pudu');
 const modules = ['Device', 'Mesh', 'Pipeline', 'Clip', 'Graph'].map(name => `Ark/Render/${name}.pudu`);
 const run = (...args) => execFileSync(binary, args, {env, encoding: 'utf8', timeout: 300000});
 assert.equal(run('run', fixture), 'ark render: ok\n');
 assert.equal(run('run', clipFixture), 'ark depth clip: ok\n');
 assert.equal(run('run', perspectiveFixture), 'ark perspective: ok\n');
-run('fmt', '--check', fixture, clipFixture, perspectiveFixture, demo, ...modules.map(path => join(library, path)));
+assert.equal(run('run', texturedFixture), 'ark textured: ok\n');
+run('fmt', '--check', fixture, clipFixture, perspectiveFixture, texturedFixture, demo, ...modules.map(path => join(library, path)));
 run('check', demo);
 const scratch = mkdtempSync(join(tmpdir(), 'pudu-ark-render-'));
 try {
@@ -50,4 +52,4 @@ try {
   for (const path of modules) assert(entries.some(entry => entry.endsWith('/lib/' + path)), path);
   console.log(report.trim());
 } finally { rmSync(scratch, {recursive: true, force: true}); }
-console.log('Ark render device, pipeline, frame graph, demo snapshot, refusals and distribution passed');
+console.log('Ark render device, pipeline, texturing, frame graph, demo snapshot, refusals and distribution passed');

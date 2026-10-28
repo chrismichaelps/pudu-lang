@@ -37,7 +37,13 @@ Standing rule: kind discriminators use const factory tables. Keep host resource 
 and preserve descending engine imports. Resource residency, streaming, GPU device support, angular
 physics and the remaining full-engine systems retain their target obligations in [[Ark Engine]].
 
-Exact next action: implement an asset dependency catalog and staged reload over virtual resource
+Since then: perspective (#690) and textured (#697) native raster entries with stacked PRs, the
+asset dependency graph (#693) and server with staged hot reload (#696), and textured/material
+draws from imported assets through the Ark render path. Focused Ark gates pass on an optimized
+-Werror build of the integration branch.
+
+Exact next action: replace the per-pixel interpreted PPM snapshot loop with a whole-buffer
+operation and measure the textured demo frame at -O2.
 reads and checked texture data.
 
 ## Referenced by

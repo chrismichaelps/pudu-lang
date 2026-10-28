@@ -5,6 +5,15 @@ tags: [changelog]
 
 # Changelog
 
+## 2026-10-28 — Textured and material draws (#697)
+
+- [[Runtime Sampler]] samples RGBA8 textures natively per pixel (nearest/bilinear, sRGB table,
+  premultiplied filtering); [[Runtime Raster]] adds a textured entry with perspective-correct u/v
+  and alpha cutout before depth writes.
+- [[Ark Mesh]] carries texture coordinates on every primitive, [[Ark Depth Clip]]
+  interpolates them, and [[Ark Render Device]] adds `drawTextured` and `drawMaterial`.
+  [[Ark Textured Fixture]] draws an imported material from asset bytes to pixels.
+
 ## 2026-10-28 — Asset server and staged hot reload (#696)
 
 - [[Ark Asset Server]] loads declared assets through virtual reads, issues generational handles

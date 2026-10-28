@@ -1,16 +1,33 @@
 module Ark.Render.Device
 
 import Std.Lanes as Lanes
+import Ark.Assets.Import as Import
+import Ark.Assets.Texture as Texture
 import Ark.Math.Color as Color
 
 /// An RGBA8 color buffer and a Float64 depth lane of width x height, rows top to bottom.
 export type Target = { width: Int, height: Int, color: Bytes, depth: Lanes.Lanes }
 
-/// Pixel x/y, divided depth, positive homogeneous w and lit linear r/g/b, three per triangle.
-export type ScreenBatch = { xs: Lanes.Lanes, ys: Lanes.Lanes, zs: Lanes.Lanes, ws: Lanes.Lanes, rs: Lanes.Lanes, gs: Lanes.Lanes, bs: Lanes.Lanes }
+/// Pixel x/y, divided depth, positive homogeneous w, lit linear r/g/b and texture u/v,
+/// three per triangle.
+export type ScreenBatch = {
+  xs: Lanes.Lanes,
+  ys: Lanes.Lanes,
+  zs: Lanes.Lanes,
+  ws: Lanes.Lanes,
+  rs: Lanes.Lanes,
+  gs: Lanes.Lanes,
+  bs: Lanes.Lanes,
+  us: Lanes.Lanes,
+  vs: Lanes.Lanes,
+}
 
 /// Which faces a draw keeps; front faces wind counter-clockwise in device coordinates.
 export type Cull = CullNone | CullBack
+
+/// Driver codes for texture color spaces and filters.
+const SPACE_CODES: Map[Str, Int] = mapOf([("linear", 0), ("srgb", 1)])
+const FILTER_CODES: Map[Str, Int] = mapOf([("nearest", 0), ("bilinear", 1)])
 
 /// A target cleared to transparent black at the farthest depth, or None for an empty size.
 export fn target(width: Int, height: Int) -> Option[Target] {
@@ -28,15 +45,11 @@ export fn clear(surface: Target, fill: Color.Rgba) -> Option[Target] {
 
 /// Rasterize perspective attributes; None for mismatched lanes or non-positive/non-finite w.
 export fn draw(surface: Target, batch: &ScreenBatch, cull: Cull) -> Option[Target] {
-  let mode = match cull {
-    case CullNone => 0
-    case CullBack => 1
-  }
   let (color, depth) = rasterPerspectiveTriangles(
     surface.color,
     Lanes.toBytes(&surface.depth),
     surface.width,
-    mode,
+    cullCode(cull),
     Lanes.toBytes(&batch.xs),
     Lanes.toBytes(&batch.ys),
     Lanes.toBytes(&batch.zs),
@@ -47,6 +60,42 @@ export fn draw(surface: Target, batch: &ScreenBatch, cull: Cull) -> Option[Targe
   ) ?
   let lanes = Lanes.fromBytes(depth) ?
   Some(Target{..surface, color, depth: lanes})
+}
+
+/// Rasterize lit color multiplied by a texture sampled at perspective-correct u/v with the named
+/// filter; texels with alpha below one half are cut out. None for mismatched lanes, invalid w,
+/// an unknown filter or invalid texture storage.
+export fn drawTextured(surface: Target, batch: &ScreenBatch, cull: Cull, texture: &Texture.Texture, filter: Str) -> Option[Target] {
+  let space = SPACE_CODES.get(texture.space) ?
+  let mode = FILTER_CODES.get(filter) ?
+  let (color, depth) = rasterTexturedTriangles(
+    surface.color,
+    Lanes.toBytes(&surface.depth),
+    surface.width,
+    cullCode(cull),
+    Lanes.toBytes(&batch.xs),
+    Lanes.toBytes(&batch.ys),
+    Lanes.toBytes(&batch.zs),
+    Lanes.toBytes(&batch.rs),
+    Lanes.toBytes(&batch.gs),
+    Lanes.toBytes(&batch.bs),
+    Lanes.toBytes(&batch.ws),
+    Lanes.toBytes(&batch.us),
+    Lanes.toBytes(&batch.vs),
+    texture.pixels,
+    texture.width,
+    space,
+    mode,
+  ) ?
+  let lanes = Lanes.fromBytes(depth) ?
+  Some(Target{..surface, color, depth: lanes})
+}
+
+/// Draw with an imported material: lit color scaled by the tint, then textured by its albedo.
+export fn drawMaterial(surface: Target, batch: &ScreenBatch, cull: Cull, material: &Import.Material, filter: Str) -> Option[Target] {
+  let tint = material.tint
+  let tinted = ScreenBatch{..*batch, rs: Lanes.scale(&batch.rs, tint.r), gs: Lanes.scale(&batch.gs, tint.g), bs: Lanes.scale(&batch.bs, tint.b)}
+  drawTextured(surface, &tinted, cull, &material.albedo, filter)
 }
 
 /// The RGBA8 color buffer.
@@ -64,4 +113,11 @@ export fn snapshotPpm(surface: &Target) -> Bytes {
     at = at + 4
   }
   bytesOf(octets)
+}
+
+fn cullCode(cull: Cull) -> Int {
+  match cull {
+    case CullNone => 0
+    case CullBack => 1
+  }
 }

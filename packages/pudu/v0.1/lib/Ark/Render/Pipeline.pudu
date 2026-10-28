@@ -42,6 +42,8 @@ export fn project(mesh: &Mesh.Mesh, model: &M.Mat4, viewProjection: &M.Mat4, sun
       rs: Lanes.scale(&(Lanes.multiply(&mesh.r, &intensity) ?), sun.color.r),
       gs: Lanes.scale(&(Lanes.multiply(&mesh.g, &intensity) ?), sun.color.g),
       bs: Lanes.scale(&(Lanes.multiply(&mesh.b, &intensity) ?), sun.color.b),
+      us: mesh.u,
+      vs: mesh.v,
     }) ?
   let halfWidth = Float.fromInt(width) * 0.5
   let halfHeight = Float.fromInt(height) * 0.5
@@ -56,6 +58,8 @@ export fn project(mesh: &Mesh.Mesh, model: &M.Mat4, viewProjection: &M.Mat4, sun
       rs: clipped.rs,
       gs: clipped.gs,
       bs: clipped.bs,
+      us: clipped.us,
+      vs: clipped.vs,
     },
   )
 }
@@ -70,13 +74,15 @@ export fn concat(first: &Device.ScreenBatch, second: &Device.ScreenBatch) -> Dev
     rs: Lanes.concat(&first.rs, &second.rs),
     gs: Lanes.concat(&first.gs, &second.gs),
     bs: Lanes.concat(&first.bs, &second.bs),
+    us: Lanes.concat(&first.us, &second.us),
+    vs: Lanes.concat(&first.vs, &second.vs),
   }
 }
 
 /// A batch with no triangles.
 export fn emptyBatch() -> Device.ScreenBatch {
   let none = Lanes.fromArray(&[])
-  Device.ScreenBatch{xs: none, ys: none, zs: none, ws: none, rs: none, gs: none, bs: none}
+  Device.ScreenBatch{xs: none, ys: none, zs: none, ws: none, rs: none, gs: none, bs: none, us: none, vs: none}
 }
 
 fn row(a: Float64, b: Float64, c: Float64, d: Float64, mesh: &Mesh.Mesh) -> Option[Lanes.Lanes] {

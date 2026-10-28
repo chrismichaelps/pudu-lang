@@ -20,6 +20,7 @@ floor. [[Ark Depth Clip]] clips lit homogeneous triangles against both depth pla
 division. Geometry behind the camera is discarded, while crossing triangles retain their visible
 polygons. Batches retain clipped w for perspective-correct color interpolation in the device;
 already divided depth remains affine in screen space.
+Mesh texture coordinates pass through clipping into the batch unchanged by lighting.
 `concat` joins batches for one draw.
 
 Non-positive target dimensions and singular/non-finite normal matrices answer None. Ambient light

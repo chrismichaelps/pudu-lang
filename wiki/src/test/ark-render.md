@@ -15,7 +15,8 @@ mesh drawn without projection; confirms the modules, including [[Ark Depth Clip]
 
 [[Ark Perspective Fixture]] executes with exact output and formatting checks, exercising the
 perspective render-driver entry through public device calls. The existing affine raster fixture
-remains a compatibility check at the lower driver boundary.
+remains a compatibility check at the lower driver boundary. [[Ark Textured Fixture]] runs with
+exact output and formatting, covering mesh coordinates, textured and material draws.
 
 ## Referenced by
 

@@ -17,6 +17,8 @@ fn batch(weights: &Array[Float64]) -> Device.ScreenBatch {
     rs: Lanes.fromArray(&[1.0, 0.0, 0.0]),
     gs: Lanes.fromArray(&[0.0, 1.0, 0.0]),
     bs: Lanes.fromArray(&[0.0, 0.0, 1.0]),
+    us: Lanes.fromArray(&[0.0, 1.0, 0.0]),
+    vs: Lanes.fromArray(&[0.0, 0.0, 1.0]),
   }
 }
 
