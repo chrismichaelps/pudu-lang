@@ -12,6 +12,13 @@ tags: [changelog]
   missing, repeated and malformed configurations are covered. [[Hackage Transport Delivery]]
   records independent review and the outstanding CI observation.
 
+## 2026-10-27 — Integrated Ark foundation (#652)
+
+- [[Ark Engine]] defines dependency layers and the outstanding engine/native-execution ledger.
+- [[Ark Math]] adds provisional binary64 Vec3 arithmetic and scaled checked length/normalization.
+- [[Compiler Library]], [[Pudu Cabal Manifest]] and [[Package Binary]] include Ark in shipped libraries.
+- [[Ark Math Gate]] checks numerical extremes and precision refusal; [[Ark Foundation Delivery]] records validation and review status.
+
 ## 2026-10-09 — Integrated Database graph expectations (#478)
 
 - [[Application Layer Tests]] verifies the combined challenge and capacity boundaries with exact layer diagnostics.
