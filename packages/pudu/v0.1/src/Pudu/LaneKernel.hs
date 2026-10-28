@@ -47,6 +47,7 @@ data LaneKernel
   | LaneAffine3
   | RasterFill
   | RasterTriangles
+  | RasterPerspectiveTriangles
   | LaneOverlapPairs
   | LaneSelect
   | LaneAbove
@@ -99,6 +100,7 @@ laneKernelName kernel = case kernel of
   LaneAffine3 -> "lanesAffine3"
   RasterFill -> "rasterFill"
   RasterTriangles -> "rasterTriangles"
+  RasterPerspectiveTriangles -> "rasterPerspectiveTriangles"
   LaneOverlapPairs -> "lanesOverlapPairs"
   LaneSelect -> "lanesSelect"
   LaneAbove -> "lanesAbove"
@@ -141,6 +143,10 @@ laneKernelSignature kernel = case kernel of
   LaneOverlapPairs -> ([LaneBytes, LaneBytes, LaneBytes, LaneBytes, LaneBytes, LaneBytes], LaneOption LaneInts)
   RasterTriangles ->
     ( [LaneBytes, LaneBytes, LaneInt, LaneInt, LaneBytes, LaneBytes, LaneBytes, LaneBytes, LaneBytes, LaneBytes]
+    , LaneOption LanePair
+    )
+  RasterPerspectiveTriangles ->
+    ( [LaneBytes, LaneBytes, LaneInt, LaneInt, LaneBytes, LaneBytes, LaneBytes, LaneBytes, LaneBytes, LaneBytes, LaneBytes]
     , LaneOption LanePair
     )
   _

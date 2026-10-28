@@ -1,6 +1,7 @@
 module UsesRaster
 
 import Std.Lanes as Lanes
+import Std.Math.Float as Float
 
 fn require(condition: Bool, name: Str) {
   if !condition { panic(name) }
@@ -36,6 +37,29 @@ fn draw(cull: Int, xs: Array[Float64], ys: Array[Float64], zs: Array[Float64], r
   let Some(color) = rasterFill(64, 0.0, 0.0, 0.0, 0.0) else { panic("fill") }
   let Some(depth) = Lanes.filled(64, 1.0) else { panic("depth") }
   rasterTriangles(color, Lanes.toBytes(&depth), 8, cull, lane(xs), lane(ys), lane(zs), lane(rs), lane(gs), lane(bs))
+}
+
+fn perspectiveDraw(ws: Array[Float64]) -> Option[(Bytes, Bytes)] {
+  let Some(color) = rasterFill(16, 0.0, 0.0, 0.0, 0.0) else { panic("fill") }
+  let Some(depth) = Lanes.filled(16, 1.0) else { panic("depth") }
+  let xs = lane([0.0, 4.0, 0.0])
+  let ys = lane([0.0, 0.0, 4.0])
+  let zs = lane([0.5, 0.5, 0.5])
+  rasterPerspectiveTriangles(color, Lanes.toBytes(&depth), 4, 0, xs, ys, zs, lane([1.0, 0.0, 0.0]), lane([0.0, 1.0, 0.0]), lane([0.0, 0.0, 1.0]), lane(ws))
+}
+
+fn perspective() {
+  let Some((corrected, _)) = perspectiveDraw([1.0, 2.0, 4.0]) else { panic("perspective") }
+  require(pixel(&corrected, 4, 0, 0) == (227u8, 19u8, 9u8, 255u8), "perspective-correct color")
+  let Some((flat, _)) = perspectiveDraw([3.0, 3.0, 3.0]) else { panic("equal w") }
+  require(pixel(&flat, 4, 0, 0) == (191u8, 32u8, 32u8, 255u8), "equal w matches affine interpolation")
+  let Some((tiny, _)) = perspectiveDraw([5e-324, 1e-323, 2e-323]) else { panic("subnormal w") }
+  require(tiny == corrected, "uniformly scaled subnormal w keeps pixels")
+  let nan = Float.fromBits(0x7ff8000000000000u64)
+  let infinity = Float.fromBits(0x7ff0000000000000u64)
+  for invalid in [[0.0, 1.0, 1.0], [-1.0, 1.0, 1.0], [nan, 1.0, 1.0], [infinity, 1.0, 1.0], [1.0, 1.0]] {
+    require(perspectiveDraw(invalid) == None, "invalid w refused")
+  }
 }
 
 export fn main() -> Int {
@@ -78,6 +102,7 @@ export fn main() -> Int {
   let Some(small) = rasterFill(3, 0.0, 0.0, 0.0, 0.0) else { panic("small") }
   let Some(unit) = Lanes.filled(4, 1.0) else { panic("unit") }
   require(rasterTriangles(small, Lanes.toBytes(&unit), 2, 0, lane([]), lane([]), lane([]), lane([]), lane([]), lane([])) == None, "target size refused")
+  perspective()
   print("raster: ok")
   0
 }

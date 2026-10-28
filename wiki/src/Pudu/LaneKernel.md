@@ -22,6 +22,11 @@ and [[Semantic Prelude]] lists them, so no list can drift. Depends only on `Data
 
 ## Grill Log
 
+- **Q:** Preserve the affine raster entry? **A:** Yes; add `RasterPerspectiveTriangles` named
+  `rasterPerspectiveTriangles`, appending one homogeneous-w byte lane after b, with the same
+  optional color/depth pair. The existing name, arity and output remain unchanged. Derived
+  registration keeps checker, resolution and evaluation aligned.
+
 - **Q:** One builtin per kernel? **A:** One `LaneKernelBuiltin` carrying the enumeration, like
   [[Float Kernel Identity]], so dispatch is a single case and signatures are stated once.
 

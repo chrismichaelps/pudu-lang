@@ -19,6 +19,11 @@ float kernel.
 
 ## Grill Log
 
+- **Q:** Treat raster color storage as binary64? **A:** No; both raster entries exempt only
+  their first RGBA8 argument from alignment checks. Depth and all vertex lanes remain checked.
+  The perspective entry dispatches its extra homogeneous-w lane to the shared raster driver;
+  expected size/weight failures remain None, while malformed lane storage retains E7012.
+
 - **Q:** Return `None` for malformed bytes? **A:** No; `Std.Lanes` never builds them, and its
   checked `fromBytes` refuses them. Reaching a kernel with them is a program defect.
 
