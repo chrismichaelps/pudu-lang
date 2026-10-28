@@ -1,0 +1,109 @@
+module Ark.Platform.Vfs
+
+import Std.Fs as Fs
+import Std.Io as Io
+
+/// Resource lookup failures, retaining typed filesystem and scoped-read causes.
+export type ResourceError
+  = InvalidMountName(Str)
+  | InvalidVirtualPath(Str)
+  | DuplicateMount(Str)
+  | UnknownMount(Str)
+  | UnknownBackend(Str)
+  | InvalidDirectory(Str)
+  | NotFound(Str)
+  | FileFailure(Fs.FsError)
+  | ReadFailure(Io.IoError)
+
+/// A directory root or immutable in-memory file map, selected by its backend kind.
+export type Mount = { kind: Str, root: Str, files: Map[Str, Bytes] }
+
+/// Named mounts; memory-backed bytes remain valid in retained older snapshots.
+export type Vfs = { mounts: Map[Str, Mount] }
+
+type Reader = fn(&Mount, Str) -> Result[Bytes, ResourceError]
+
+const READERS: Map[Str, Reader] = mapOf([("directory", readDirectory), ("memory", readMemory)])
+
+/// A resource namespace with no mounts.
+export fn empty() -> Vfs { Vfs{mounts: mapOf([])} }
+
+/// Mount an existing directory under a new name; the root is canonicalized at admission.
+export fn mountDirectory(vfs: Vfs, name: Str, root: Str) -> Result[Vfs, ResourceError] {
+  available(&vfs, name) ?
+  if root == "" || root.contains("\0") { return Err(InvalidDirectory(root)) }
+  let canonical = match Fs.canonical(root) {
+    case Ok(path) => path
+    case Err(error) => { return Err(FileFailure(error)) }
+  }
+  let info = match Fs.metadata(canonical) {
+    case Ok(value) => value
+    case Err(error) => { return Err(FileFailure(error)) }
+  }
+  if !info.isDirectory { return Err(InvalidDirectory(root)) }
+  Ok(Vfs{mounts: vfs.mounts.insert(name, Mount{kind: "directory", root: canonical, files: mapOf([])})})
+}
+
+/// Mount owned immutable bytes indexed by canonical relative resource names.
+export fn mountMemory(vfs: Vfs, name: Str, files: &Map[Str, Bytes]) -> Result[Vfs, ResourceError] {
+  available(&vfs, name) ?
+  for path in files.keys() {
+    if !validRelative(path) { return Err(InvalidVirtualPath(path)) }
+  }
+  Ok(Vfs{mounts: vfs.mounts.insert(name, Mount{kind: "memory", root: "", files: *files})})
+}
+
+/// Remove a mount from a new namespace value, or None when the name is absent.
+export fn unmount(vfs: Vfs, name: Str) -> Option[Vfs] {
+  if !vfs.mounts.containsKey(name) { return None }
+  Some(Vfs{mounts: vfs.mounts.remove(name)})
+}
+
+/// Read name:/relative/path as bytes, closing any host file before returning.
+export fn read(vfs: &Vfs, path: Str) -> Result[Bytes, ResourceError] {
+  let parts = path.split(":/")
+  if parts.length() != 2 { return Err(InvalidVirtualPath(path)) }
+  let name = parts[0]
+  let relative = parts[1]
+  if !validName(name) || !validRelative(relative) { return Err(InvalidVirtualPath(path)) }
+  let Some(mount) = vfs.mounts.get(name) else { return Err(UnknownMount(name)) }
+  let Some(reader) = READERS.get(mount.kind) else { return Err(UnknownBackend(mount.kind)) }
+  reader(&mount, relative)
+}
+
+fn available(vfs: &Vfs, name: Str) -> Result[(), ResourceError] {
+  if !validName(name) { return Err(InvalidMountName(name)) }
+  if vfs.mounts.containsKey(name) { return Err(DuplicateMount(name)) }
+  Ok(())
+}
+
+fn validName(name: Str) -> Bool {
+  name != "" && name != "." && name != ".." && !name.contains("/") && !name.contains("\\") && !name.contains(":") && !name.contains("\0")
+}
+
+fn validRelative(path: Str) -> Bool {
+  if path == "" || path.contains("\\") || path.contains(":") || path.contains("\0") { return false }
+  for component in path.split("/") {
+    if component == "" || component == "." || component == ".." { return false }
+  }
+  true
+}
+
+fn readMemory(mount: &Mount, relative: Str) -> Result[Bytes, ResourceError] {
+  match mount.files.get(relative) {
+    case Some(bytes) => Ok(bytes)
+    case None => Err(NotFound(relative))
+  }
+}
+
+fn readDirectory(mount: &Mount, relative: Str) -> Result[Bytes, ResourceError] {
+  if mount.root == "" || mount.root.contains("\0") { return Err(InvalidDirectory(mount.root)) }
+  let path = match Fs.resolveInside(mount.root, relative) {
+    case Ok(value) => value
+    case Err(error) => { return Err(FileFailure(error)) }
+  }
+  match Io.readAllBytes(path) {
+    case Ok(bytes) => Ok(bytes)
+    case Err(error) => Err(ReadFailure(error))
+  }
+}

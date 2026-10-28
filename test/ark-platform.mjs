@@ -11,10 +11,12 @@ const root = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const library = join(root, 'packages/pudu/v0.1/lib');
 const env = {...process.env, PUDU_LIB: library};
 const fixture = join(root, 'test-fixtures/ark/UsesArkPlatform.pudu');
-const modules = ['Ark/Platform/Input.pudu', 'Ark/Platform/Clock.pudu', 'Ark/Platform/Window.pudu'];
+const vfsFixture = join(root, 'test-fixtures/ark/UsesArkVfs.pudu');
+const modules = ['Ark/Platform/Input.pudu', 'Ark/Platform/Clock.pudu', 'Ark/Platform/Window.pudu', 'Ark/Platform/Vfs.pudu'];
 const run = (...args) => execFileSync(binary, args, {env, encoding: 'utf8', timeout: 300000});
 assert.equal(run('run', fixture), 'ark platform: ok\n');
-run('fmt', '--check', fixture, ...modules.map(path => join(library, path)));
+assert.equal(run('run', vfsFixture), 'ark vfs: ok\n');
+run('fmt', '--check', fixture, vfsFixture, ...modules.map(path => join(library, path)));
 const scratch = mkdtempSync(join(tmpdir(), 'pudu-ark-platform-'));
 try {
   const typed = join(scratch, 'KeyAsBinding.pudu');
@@ -28,4 +30,4 @@ try {
   const entries = execFileSync('tar', ['-tzf', join(scratch, archive)], {encoding: 'utf8'}).split('\n');
   for (const path of modules) assert(entries.some(entry => entry.endsWith('/lib/' + path)), path);
 } finally { rmSync(scratch, {recursive: true, force: true}); }
-console.log('Ark platform input, actions, clock, window refusals and distribution passed');
+console.log('Ark platform input, actions, clock, windows, virtual resources and distribution passed');
