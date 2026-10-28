@@ -1,0 +1,227 @@
+module Ark.Physics.Step
+
+import Std.Lanes as Lanes
+import Std.Math.Float as Float
+import Ark.Math as V
+import Ark.Physics.Contact as Contact
+import Ark.Physics as Physics
+
+/// What one step found: broadphase pairs, generated contacts and solver batches.
+export type StepStats = { pairs: Int, contacts: Int, batches: Int }
+
+/// Per-body lanes with one extra static slot standing for every plane.
+type Extended = { vx: Lanes.Lanes, vy: Lanes.Lanes, vz: Lanes.Lanes, inverse: Lanes.Lanes, restitution: Lanes.Lanes, friction: Lanes.Lanes }
+
+/// Per-contact lanes the solver reuses every iteration.
+type Constraint = {
+  nx: Lanes.Lanes,
+  ny: Lanes.Lanes,
+  nz: Lanes.Lanes,
+  inverseA: Lanes.Lanes,
+  inverseB: Lanes.Lanes,
+  total: Lanes.Lanes,
+  bounce: Lanes.Lanes,
+  grip: Lanes.Lanes,
+}
+
+/// Penetration the position pass leaves alone, so resting contacts do not jitter.
+const SLOP: Float64 = 0.005
+
+/// The fraction of remaining penetration removed per step.
+const CORRECTION: Float64 = 0.8
+
+/// Advance the bodies by `dt` seconds with `iterations` impulse passes; None for a non-positive
+/// step or negative iterations. Every stage is a lane program: contacts are colored into
+/// batches with no repeated body and each batch is solved as one set of kernels.
+export fn step(bodies: Physics.Bodies, dt: Float64, iterations: Int) -> Option[(Physics.Bodies, StepStats)] {
+  if !(dt > 0.0 && dt < 1e300) || iterations < 0 { return None }
+  let count = Physics.count(&bodies)
+  let g = bodies.gravity
+  let pairs = Lanes.overlapPairs(
+      &(Lanes.subtract(&bodies.px, &bodies.ex) ?),
+      &(Lanes.add(&bodies.px, &bodies.ex) ?),
+      &(Lanes.subtract(&bodies.py, &bodies.ey) ?),
+      &(Lanes.add(&bodies.py, &bodies.ey) ?),
+      &(Lanes.subtract(&bodies.pz, &bodies.ez) ?),
+      &(Lanes.add(&bodies.pz, &bodies.ez) ?),
+  ) ?
+  let (firsts, seconds) = split(&pairs)
+  let touching = Contact.between(&bodies, &firsts, &seconds) ?
+  let planar = Contact.againstPlanes(&bodies, count) ?
+  let contacts = Contact.joined(&touching, &planar)
+  var state = Extended {
+    vx: extended(&(Lanes.axpy(&bodies.vx, g.x * dt, &bodies.movable) ?), 0.0),
+    vy: extended(&(Lanes.axpy(&bodies.vy, g.y * dt, &bodies.movable) ?), 0.0),
+    vz: extended(&(Lanes.axpy(&bodies.vz, g.z * dt, &bodies.movable) ?), 0.0),
+    inverse: extended(&bodies.inverseMass, 0.0),
+    restitution: extended(&bodies.restitution, 0.0),
+    friction: extended(&bodies.friction, 0.0),
+  }
+  var batches: Array[(Contact.Contacts, Constraint)] = []
+  for members in colored(&contacts.first, &contacts.second, count) {
+    let batch = Contact.subset(&contacts, &members) ?
+    batches = batches.push((batch, prepare(&state, &batch, count) ?))
+  }
+  let resting = 2.0 * (V.length(g) ?) * dt
+  var pass = 0
+  while pass < iterations {
+    for (batch, constraint) in batches {
+      state = resolve(state, &batch, &constraint, resting) ?
+    }
+    pass = pass + 1
+  }
+  let vx = Lanes.slice(&state.vx, 0, count) ?
+  let vy = Lanes.slice(&state.vy, 0, count) ?
+  let vz = Lanes.slice(&state.vz, 0, count) ?
+  var px = extended(&(Lanes.axpy(&bodies.px, dt, &vx) ?), 0.0)
+  var py = extended(&(Lanes.axpy(&bodies.py, dt, &vy) ?), 0.0)
+  var pz = extended(&(Lanes.axpy(&bodies.pz, dt, &vz) ?), 0.0)
+  for (batch, constraint) in batches {
+    let excess = Lanes.clamp(&Lanes.addScalar(&batch.depth, -SLOP), 0.0, 1e300)
+    let push = Lanes.scale(&(Lanes.divide(&excess, &constraint.total) ?), CORRECTION)
+    px = applied(&px, &batch, &constraint, &(mul(&push, &batch.nx) ?)) ?
+    py = applied(&py, &batch, &constraint, &(mul(&push, &batch.ny) ?)) ?
+    pz = applied(&pz, &batch, &constraint, &(mul(&push, &batch.nz) ?)) ?
+  }
+  let moved = Physics.Bodies {
+    ..bodies,
+    px: Lanes.slice(&px, 0, count) ?,
+    py: Lanes.slice(&py, 0, count) ?,
+    pz: Lanes.slice(&pz, 0, count) ?,
+    vx,
+    vy,
+    vz,
+  }
+  Some((moved, StepStats{pairs: firsts.length(), contacts: contacts.first.length(), batches: batches.length()}))
+}
+
+fn split(pairs: &Array[Int]) -> (Array[Int], Array[Int]) {
+  var firsts: Array[Int] = []
+  var seconds: Array[Int] = []
+  var index = 0
+  while index + 1 < pairs.length() {
+    firsts = firsts.push(pairs[index])
+    seconds = seconds.push(pairs[index + 1])
+    index = index + 2
+  }
+  (firsts, seconds)
+}
+
+/// Inverse masses and combined materials for one batch, in which no movable body repeats.
+fn prepare(state: &Extended, contacts: &Contact.Contacts, planeSlot: Int) -> Option[Constraint] {
+  let inverseA = Lanes.gather(&state.inverse, &contacts.first) ?
+  let inverseB = Lanes.gather(&state.inverse, &contacts.second) ?
+  let massScale = Lanes.maximum(&inverseA, &inverseB) ?
+  let weightA = Lanes.divide(&inverseA, &massScale) ?
+  let weightB = Lanes.divide(&inverseB, &massScale) ?
+  let planeSide = Lanes.above(&Lanes.addScalar(&Lanes.fromInts(&contacts.first), 0.5 - Float.fromInt(planeSlot)), 0.0)
+  let frictionA = Lanes.gather(&state.friction, &contacts.first) ?
+  let frictionB = Lanes.gather(&state.friction, &contacts.second) ?
+  Some(
+    Constraint {
+      nx: contacts.nx,
+      ny: contacts.ny,
+      nz: contacts.nz,
+      inverseA: weightA,
+      inverseB: weightB,
+      total: Lanes.add(&weightA, &weightB) ?,
+      bounce: Lanes.maximum(&(Lanes.gather(&state.restitution, &contacts.first) ?), &(Lanes.gather(&state.restitution, &contacts.second) ?)) ?,
+      grip: Lanes.select(&planeSide, &frictionB, &Lanes.sqrt(&(mul(&frictionA, &frictionB) ?))) ?,
+    },
+  )
+}
+
+/// Contact indices grouped so no body appears twice in a group; the plane slot may repeat
+/// because it never moves. Greedy color order is deterministic; contacts beyond the mask's
+/// capacity use singleton batches to preserve sequential updates for shared bodies.
+fn colored(first: &Array[Int], second: &Array[Int], planeSlot: Int) -> Array[Array[Int]] {
+  var used: Array[Int] = []
+  var size = 0
+  while size <= planeSlot {
+    used = used.push(0)
+    size = size + 1
+  }
+  var groups: Array[Array[Int]] = []
+  var index = 0
+  while index < first.length() {
+    let a = first[index]
+    let b = second[index]
+    let taken = (if a == planeSlot { 0 } else { used[a] }) | used[b]
+    var color = 0
+    while color < 62 && ((taken >> color) & 1) == 1 { color = color + 1 }
+    if color == 62 {
+      groups = groups.push([index])
+    } else {
+      while groups.length() <= color { groups = groups.push([]) }
+      groups[color] = groups[color].push(index)
+      if a != planeSlot { used[a] = used[a] | (1 << color) }
+      used[b] = used[b] | (1 << color)
+    }
+    index = index + 1
+  }
+  groups.filter(|group| !group.isEmpty())
+}
+
+/// One pass over a batch: every contact's normal impulse, restitution unless the approach is slower
+/// than a resting contact, and Coulomb friction bounded by that impulse, applied together.
+fn resolve(state: Extended, contacts: &Contact.Contacts, c: &Constraint, resting: Float64) -> Option[Extended] {
+  let rx = sub(&(Lanes.gather(&state.vx, &contacts.second) ?), &(Lanes.gather(&state.vx, &contacts.first) ?)) ?
+  let ry = sub(&(Lanes.gather(&state.vy, &contacts.second) ?), &(Lanes.gather(&state.vy, &contacts.first) ?)) ?
+  let rz = sub(&(Lanes.gather(&state.vz, &contacts.second) ?), &(Lanes.gather(&state.vz, &contacts.first) ?)) ?
+  let approach = dot(&rx, &ry, &rz, &c.nx, &c.ny, &c.nz) ?
+  let fast = Lanes.above(&Lanes.addScalar(&Lanes.negate(&approach), -resting), 0.0)
+  let elastic = mul(&fast, &c.bounce) ?
+  let normal = Lanes.clamp(&(Lanes.divide(&(mul(&Lanes.negate(&Lanes.addScalar(&elastic, 1.0)), &approach) ?), &c.total) ?), 0.0, 1e300)
+  let gain = mul(&normal, &c.total) ?
+  let sx = Lanes.fma(&c.nx, &gain, &rx) ?
+  let sy = Lanes.fma(&c.ny, &gain, &ry) ?
+  let sz = Lanes.fma(&c.nz, &gain, &rz) ?
+  let along = dot(&sx, &sy, &sz, &c.nx, &c.ny, &c.nz) ?
+  let tx = sub(&sx, &(mul(&c.nx, &along) ?)) ?
+  let ty = sub(&sy, &(mul(&c.ny, &along) ?)) ?
+  let tz = sub(&sz, &(mul(&c.nz, &along) ?)) ?
+  let slide = Lanes.sqrt(&(dot(&tx, &ty, &tz, &tx, &ty, &tz) ?))
+  let moving = Lanes.above(&slide, 0.000000000001)
+  let safe = Lanes.select(&moving, &slide, &(Lanes.filled(Lanes.count(&slide), 1.0) ?)) ?
+  let dx = mul(&moving, &(Lanes.divide(&tx, &safe) ?)) ?
+  let dy = mul(&moving, &(Lanes.divide(&ty, &safe) ?)) ?
+  let dz = mul(&moving, &(Lanes.divide(&tz, &safe) ?)) ?
+  let limit = mul(&c.grip, &normal) ?
+  let wanted = Lanes.divide(&Lanes.negate(&(dot(&sx, &sy, &sz, &dx, &dy, &dz) ?)), &c.total) ?
+  let tangential = Lanes.maximum(&(Lanes.minimum(&wanted, &limit) ?), &Lanes.negate(&limit)) ?
+  let impulseX = Lanes.fma(&dx, &tangential, &(mul(&c.nx, &normal) ?)) ?
+  let impulseY = Lanes.fma(&dy, &tangential, &(mul(&c.ny, &normal) ?)) ?
+  let impulseZ = Lanes.fma(&dz, &tangential, &(mul(&c.nz, &normal) ?)) ?
+  Some(
+    Extended {
+      ..state,
+      vx: applied(&state.vx, contacts, c, &impulseX) ?,
+      vy: applied(&state.vy, contacts, c, &impulseY) ?,
+      vz: applied(&state.vz, contacts, c, &impulseZ) ?,
+    },
+  )
+}
+
+/// Add each contact's impulse to the second body and subtract it from the first, scaled by
+/// inverse mass.
+fn applied(velocity: &Lanes.Lanes, contacts: &Contact.Contacts, c: &Constraint, impulse: &Lanes.Lanes) -> Option[Lanes.Lanes] {
+  let towardB = mul(impulse, &c.inverseB) ?
+  let towardA = Lanes.negate(&(mul(impulse, &c.inverseA) ?))
+  Lanes.scatterAdd(&(Lanes.scatterAdd(velocity, &contacts.second, &towardB) ?), &contacts.first, &towardA)
+}
+
+fn extended(lanes: &Lanes.Lanes, value: Float64) -> Lanes.Lanes {
+  Lanes.concat(lanes, &Lanes.fromArray(&[value]))
+}
+
+fn dot(ax: &Lanes.Lanes, ay: &Lanes.Lanes, az: &Lanes.Lanes, bx: &Lanes.Lanes, by: &Lanes.Lanes, bz: &Lanes.Lanes) -> Option[Lanes.Lanes] {
+  Lanes.fma(ax, bx, &(Lanes.fma(ay, by, &(mul(az, bz) ?)) ?))
+}
+
+fn mul(left: &Lanes.Lanes, right: &Lanes.Lanes) -> Option[Lanes.Lanes] {
+  Lanes.multiply(left, right)
+}
+
+fn sub(left: &Lanes.Lanes, right: &Lanes.Lanes) -> Option[Lanes.Lanes] {
+  Lanes.subtract(left, right)
+}

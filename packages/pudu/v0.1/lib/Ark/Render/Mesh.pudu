@@ -1,6 +1,7 @@
 module Ark.Render.Mesh
 
 import Std.Lanes as Lanes
+import Std.Math.Float as Float
 import Ark.Math.Color as Color
 import Ark.Math as V
 
@@ -25,6 +26,7 @@ const MESH_FACTORIES: Map[Str, MeshFactory] = mapOf([
     ("cube", cube),
     ("plane", plane),
     ("pyramid", pyramid),
+    ("sphere", sphere),
   ])
 
 /// A primitive by kind name, or None for an unknown kind.
@@ -59,6 +61,34 @@ export fn pyramid(color: Color.Rgba) -> Mesh {
   let d = V.vec3(-0.5, -0.5, -0.5)
   let sides = [a, b, apex, b, c, apex, c, d, apex, d, a, apex]
   flat(&sides.concat(face(V.vec3(0.0, -0.5, 0.0), V.vec3(0.0, -1.0, 0.0))), color)
+}
+
+/// A unit-diameter sphere of 16 longitude and 10 latitude bands, counter-clockwise from outside.
+export fn sphere(color: Color.Rgba) -> Mesh {
+  let bands = 10
+  let segments = 16
+  var points: Array[V.Vec3] = []
+  var ring = 0
+  while ring < bands {
+    var around = 0
+    while around < segments {
+      let a = surfacePoint(ring, around, bands, segments)
+      let b = surfacePoint(ring + 1, around, bands, segments)
+      let c = surfacePoint(ring + 1, around + 1, bands, segments)
+      let d = surfacePoint(ring, around + 1, bands, segments)
+      if ring > 0 { points = points.concat([a, b, d]) }
+      if ring < bands - 1 { points = points.concat([d, b, c]) }
+      around = around + 1
+    }
+    ring = ring + 1
+  }
+  flat(&points, color)
+}
+
+fn surfacePoint(ring: Int, around: Int, bands: Int, segments: Int) -> V.Vec3 {
+  let polar = Float.pi() * Float.fromInt(ring) / Float.fromInt(bands)
+  let azimuth = Float.tau() * Float.fromInt(around) / Float.fromInt(segments)
+  V.vec3(Float.sin(polar) * Float.cos(azimuth) * 0.5, Float.cos(polar) * 0.5, Float.sin(polar) * Float.sin(azimuth) * -0.5)
 }
 
 /// A flat-shaded mesh from triangle corners, or None unless they come in threes

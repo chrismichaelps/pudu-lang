@@ -1,0 +1,98 @@
+module UsesArkPhysicsBoundary
+
+import Std.Math.Float as Float
+import Ark.Core.Handle as Handle
+import Ark.Math as V
+import Ark.Physics as Physics
+import Ark.Physics.Step as Step
+
+fn require(condition: Bool, name: Str) {
+  if !condition { panic(name) }
+}
+
+fn description(shape: Physics.Shape) -> Physics.Body {
+  Physics.Body{position: V.vec3(0.0, 0.0, 0.0), velocity: V.vec3(0.0, 0.0, 0.0), mass: 1.0, restitution: 0.0, friction: 0.0, shape}
+}
+
+fn admission() {
+  let world = Physics.world(V.vec3(0.0, 0.0, 0.0))
+  let (pool, entity) = Handle.allocate(Handle.empty())
+  let Some(shape) = Physics.sphere(1.0) else { panic("sphere") }
+  let body = description(shape)
+  let nan = Float.fromBits(0x7ff8000000000000u64)
+  require(Physics.add(world, entity, &Physics.Body{..body, restitution: nan}) == None, "NaN restitution")
+  require(Physics.add(world, entity, &Physics.Body{..body, friction: nan}) == None, "NaN friction")
+  let infinity = Float.fromBits(0x7ff0000000000000u64)
+  require(Physics.add(world, entity, &Physics.Body{..body, restitution: infinity}) == None, "infinite restitution")
+  require(Physics.add(world, entity, &Physics.Body{..body, friction: infinity}) == None, "infinite friction")
+  require(Physics.add(world, entity, &Physics.Body{..body, mass: 5e-324}) == None, "inverse mass overflow")
+  for invalid in [
+    Physics.Shape{kind: "unknown", extent: V.vec3(1.0, 1.0, 1.0)},
+    Physics.Shape{kind: "box", extent: V.vec3(-1.0, 1.0, 1.0)},
+    Physics.Shape{kind: "sphere", extent: V.vec3(1.0, 2.0, 1.0)},
+    Physics.Shape{kind: "box", extent: V.vec3(0.0, 1.0, 1.0)},
+    Physics.Shape{kind: "box", extent: V.vec3(infinity, 1.0, 1.0)},
+  ] {
+    require(Physics.add(world, entity, &Physics.Body{..body, shape: invalid}) == None, "fabricated shape")
+  }
+  let Some(added) = Physics.add(world, entity, &body) else { panic("valid body") }
+  require(Physics.setVelocity(added, entity, V.vec3(nan, 0.0, 0.0)) == None, "non-finite velocity")
+  require(Physics.applyImpulse(added, entity, V.vec3(Float.fromBits(0x7ff0000000000000u64), 0.0, 0.0)) == None, "non-finite impulse")
+  let Some(light) = Physics.add(world, entity, &Physics.Body{..body, mass: 0.5}) else { panic("light body") }
+  require(Physics.applyImpulse(light, entity, V.vec3(1e308, 0.0, 0.0)) == None, "finite impulse overflow")
+  require(Physics.add(world, entity, &Physics.Body{..body, mass: 1e-308}) != None, "finite inverse mass")
+  require(Physics.add(world, entity, &Physics.Body{..body, restitution: 1.0, friction: 1.0}) != None, "material upper boundary")
+  let (_, fixed) = Handle.allocate(pool)
+  let Some(staticBody) = Physics.add(added, fixed, &Physics.Body{..body, mass: 0.0, velocity: V.vec3(5.0, 0.0, 0.0)}) else { panic("static") }
+  let Some(unchanged) = Physics.setVelocity(staticBody, fixed, V.vec3(9.0, 0.0, 0.0)) else { panic("static velocity") }
+  require(Physics.velocity(&unchanged, fixed) == Some(V.vec3(0.0, 0.0, 0.0)), "static stays still")
+}
+
+fn contactDegree() {
+  let Some(shape) = Physics.sphere(1.0) else { panic("sphere") }
+  var pool = Handle.empty()
+  var bodies = Physics.world(V.vec3(0.0, 0.0, 0.0))
+  var center: Option[Handle.Handle] = None
+  var index = 0
+  while index < 65 {
+    let (nextPool, entity) = Handle.allocate(pool)
+    pool = nextPool
+    if index == 0 { center = Some(entity) }
+    let x = if index == 0 { 0.0 } else if index <= 62 { -1.5 } else { 1.5 }
+    let body = Physics.Body {
+      ..description(shape),
+      position: V.vec3(x, 0.0, 0.0),
+      velocity: V.vec3(1.0, 0.0, 0.0),
+      restitution: 1.0,
+      mass: if index == 0 { 1.0 } else { 0.0 },
+    }
+    let Some(next) = Physics.add(bodies, entity, &body) else { panic("add") }
+    bodies = next
+    index = index + 1
+  }
+  let Some((stepped, stats)) = Step.step(bodies, 1.0 / 60.0, 1) else { panic("step") }
+  require(stats.contacts == 64, "all center contacts")
+  require(stats.batches == 64, "overflow contacts must stay disjoint")
+  let Some(entity) = center else { panic("center") }
+  require(Physics.velocity(&stepped, entity) == Some(V.vec3(-1.0, 0.0, 0.0)), "overflow must not inject energy")
+}
+
+fn tinyMassCollision() {
+  let Some(shape) = Physics.sphere(1.0) else { panic("sphere") }
+  let (pool, first) = Handle.allocate(Handle.empty())
+  let (_, second) = Handle.allocate(pool)
+  let body = Physics.Body{..description(shape), mass: 1e-308, restitution: 1.0}
+  let Some(a) = Physics.add(Physics.world(V.vec3(0.0, 0.0, 0.0)), first, &Physics.Body{..body, position: V.vec3(-0.5, 0.0, 0.0), velocity: V.vec3(1.0, 0.0, 0.0)}) else { panic("first") }
+  let Some(b) = Physics.add(a, second, &Physics.Body{..body, position: V.vec3(0.5, 0.0, 0.0), velocity: V.vec3(-1.0, 0.0, 0.0)}) else { panic("second") }
+  let Some((after, _)) = Step.step(b, 0.01, 1) else { panic("tiny step") }
+  require(Physics.velocity(&after, first) == Some(V.vec3(-1.0, 0.0, 0.0)), "tiny mass first response")
+  require(Physics.velocity(&after, second) == Some(V.vec3(1.0, 0.0, 0.0)), "tiny mass second response")
+}
+
+export fn main() -> Int {
+  admission()
+  contactDegree()
+  tinyMassCollision()
+  print("ark physics boundaries: ok")
+  0
+}

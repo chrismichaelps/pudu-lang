@@ -11,8 +11,8 @@ tags: [module, ark, render]
 
 Non-indexed triangle lists in object space: position, normal and color lanes per vertex.
 Primitive kinds are built by factories: the const `MESH_FACTORIES` table maps `"cube"`,
-`"plane"` and `"pyramid"` to their factory, `primitive(kind, color) -> Option[Mesh]` looks a
-kind up, and `cube`, `plane` and `pyramid` are the factories themselves. `fromTriangles(points,
+`"plane"`, `"pyramid"` and `"sphere"` (16 × 10 bands) to their factory, `primitive(kind, color) -> Option[Mesh]` looks a
+kind up, and `cube`, `plane`, `pyramid` and `sphere` are the factories themselves. `fromTriangles(points,
 color) -> Option[Mesh]` builds flat-shaded meshes from corner lists (None unless a multiple of
 three), `triangleCount`, and `merge` concatenates meshes. Front faces wind counter-clockwise
 seen from outside.
