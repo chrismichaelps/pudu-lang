@@ -5,6 +5,11 @@ tags: [changelog]
 
 # Changelog
 
+## 2026-10-27 — Complete flat-list source-span assertions (#662)
+
+- [[Expression Recovery Spec]] now verifies all three aggregate forms and both comma variants
+  with the same order and span assertions. The parser MOC lists both new test mirrors.
+
 ## 2026-10-27 — Flat expression lists keep their depth (#662)
 
 - [[Parser Expression Aggregate]] and [[Parser Expression Postfix]] read array, Set and argument
