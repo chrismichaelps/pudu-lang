@@ -15,6 +15,10 @@ aliases: [Repository Gates]
 [[Ark Layer Tests]] and [[Ark Layer Gate]] run before compilation to enforce engine import
 architecture. Resolved Grill Log: architectural defects fail independently of runtime acceptance.
 
+[[Ark Math Gate]] checks shipped Ark resolution, numerical regressions and wrong-width refusal
+against the same freshly built optimized compiler. Resolved Grill Log: interpreted evidence
+does not imply native engine performance.
+
 Run the production release checks in a fixed order and report every failing gate: warning-free
 optimized build, optimized full suite, Pudu formatting, diagnostic identities, API coverage, live
 language-server sessions, documentation parity, the generated-project workflow, a real lint

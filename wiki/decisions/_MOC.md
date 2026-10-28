@@ -5,6 +5,8 @@ tags: [moc, adr]
 
 # Decision Map
 
+- [[ADR-0025-integrated-engine-namespace]] — reserve Ark as an integrated shipped-library root.
+
 - [[ADR-0024-building-a-web-application-for-any-host]] — accepted: one build step the application
   calls, rendering its pages in parallel and writing them with the chosen host's routing.
 - [[ADR-0023-bounded-range-extent]] — accepted: a range has a measurable extent only when both ends

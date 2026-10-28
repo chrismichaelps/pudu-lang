@@ -1,0 +1,74 @@
+module Ark.Math
+
+import Std.Math.Float as Float
+
+/// A three-dimensional vector with binary64 components.
+export type Vec3 = { x: Float64, y: Float64, z: Float64 }
+
+/// Construct a vector without clamping or replacing IEEE values.
+export fn vec3(x: Float64, y: Float64, z: Float64) -> Vec3 {
+  Vec3{x, y, z}
+}
+
+/// Add corresponding components in binary64 precision.
+export fn add(left: Vec3, right: Vec3) -> Vec3 {
+  vec3(left.x + right.x, left.y + right.y, left.z + right.z)
+}
+
+/// Subtract corresponding components in binary64 precision.
+export fn subtract(left: Vec3, right: Vec3) -> Vec3 {
+  vec3(left.x - right.x, left.y - right.y, left.z - right.z)
+}
+
+/// Multiply each component by a binary64 factor.
+export fn scale(value: Vec3, factor: Float64) -> Vec3 {
+  vec3(value.x * factor, value.y * factor, value.z * factor)
+}
+
+/// Compute the dot product with the written left-to-right addition order.
+export fn dot(left: Vec3, right: Vec3) -> Float64 {
+  (left.x * right.x + left.y * right.y) + left.z * right.z
+}
+
+/// Compute the right-handed cross product.
+export fn cross(left: Vec3, right: Vec3) -> Vec3 {
+  vec3(
+    left.y * right.z - left.z * right.y,
+    left.z * right.x - left.x * right.z,
+    left.x * right.y - left.y * right.x,
+  )
+}
+
+/// Whether every component is finite.
+export fn isFinite(value: Vec3) -> Bool {
+  Float.isFinite(value.x) && Float.isFinite(value.y) && Float.isFinite(value.z)
+}
+
+/// The finite magnitude, or None for non-finite inputs or an overflowing magnitude.
+export fn length(value: Vec3) -> Option[Float64] {
+  if !isFinite(value) { return None }
+  let largest = maxComponent(value)
+  if largest == 0.0 { return Some(0.0) }
+  let scaled = vec3(value.x / largest, value.y / largest, value.z / largest)
+  let unitLength = Float.sqrt(dot(scaled, scaled)) ?
+  let magnitude = largest * unitLength
+  if Float.isFinite(magnitude) { Some(magnitude) } else { None }
+}
+
+/// A unit direction, or None for a zero vector or non-finite components.
+export fn normalized(value: Vec3) -> Option[Vec3] {
+  if !isFinite(value) { return None }
+  let largest = maxComponent(value)
+  if largest == 0.0 { return None }
+  let scaled = vec3(value.x / largest, value.y / largest, value.z / largest)
+  let unitLength = Float.sqrt(dot(scaled, scaled)) ?
+  Some(vec3(scaled.x / unitLength, scaled.y / unitLength, scaled.z / unitLength))
+}
+
+fn maxComponent(value: Vec3) -> Float64 {
+  let x = Float.abs(value.x)
+  let y = Float.abs(value.y)
+  let z = Float.abs(value.z)
+  let xy = if x > y { x } else { y }
+  if xy > z { xy } else { z }
+}

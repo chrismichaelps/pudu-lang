@@ -7,6 +7,11 @@ aliases: [Package Binary]
 ---
 # Package Binary
 
+Ship both `Std` and `Ark` source trees under the existing `lib/pudu` root. [[Ark Math]]
+uses the same regular-file, ownership, reproducibility and checksum rules. Resolved Grill Log:
+an engine import must work from an archive without a development checkout or separate package.
+Each required namespace must contain source files; adding Ark must not weaken the empty-Std refusal.
+
 Turns a built compiler into the archive [[Release Workflow]] publishes: `bin/pudu`, the standard
 library under `lib/pudu`, `LICENSE`, and a `package.json` naming the version, target, and layout,
 packed as a reproducible `tar.gz` (fixed owner, modes, and `SOURCE_DATE_EPOCH` times) beside its
