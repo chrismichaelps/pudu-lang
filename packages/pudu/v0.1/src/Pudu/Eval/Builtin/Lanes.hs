@@ -30,6 +30,7 @@ callLaneKernel spanValue kernel values
     wholeLanes _ = True
     checked = case kernel of
       RasterTriangles -> drop 1 values
+      RasterPerspectiveTriangles -> drop 1 values
       _ -> values
 
 apply :: LaneKernel -> [Value] -> Maybe Value
@@ -97,10 +98,12 @@ apply kernel values = case (kernel, values) of
       Nothing -> VariantValue "None" []
   (RasterFill, [IntValue _ pixels, FloatValue _ r, FloatValue _ g, FloatValue _ b, FloatValue _ a]) ->
     Just (optionLanes (bounded pixels >>= \count -> Raster.rasterFill count r g b a))
-  (RasterTriangles, BytesValue color : BytesValue depth : IntValue _ width : IntValue _ cull : rest) -> do
+  (raster, BytesValue color : BytesValue depth : IntValue _ width : IntValue _ cull : rest)
+    | raster `elem` [RasterTriangles, RasterPerspectiveTriangles] -> do
     lanes <- traverse bytesOf rest
+    let draw = if raster == RasterTriangles then Raster.rasterTriangles else Raster.rasterPerspectiveTriangles
     Just $ case (cullOf cull, bounded width) of
-      (Just culling, Just target) | Just (painted, depths) <- Raster.rasterTriangles color depth target culling lanes ->
+      (Just culling, Just target) | Just (painted, depths) <- draw color depth target culling lanes ->
         VariantValue "Some" [TupleValue [BytesValue painted, BytesValue depths]]
       _ -> VariantValue "None" []
   _ -> Nothing
