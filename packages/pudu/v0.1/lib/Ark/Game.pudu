@@ -6,6 +6,9 @@ import Ark.Platform.Input as Input
 import Ark.Platform.Window as Window
 import Ark.Render.Device as Device
 
+/// How long a minimized window waits for events between steps, in milliseconds.
+const IDLE_PUMP_MILLIS: Int = 16
+
 /// What one displayed frame hands the game: input this frame, its action map and timing.
 export type Frame = { input: Input.State, actions: Input.ActionMap, tick: Clock.Tick }
 
@@ -90,20 +93,26 @@ export fn draw[S](app: &App[S], target: Device.Target) -> Option[Device.Target] 
 }
 
 /// Run in a window until the game finishes, the window closes or `maxFrames` frames have shown,
-/// answering the frames presented.
+/// answering the frames presented. Frames follow the window's size and scale; a minimized window
+/// keeps stepping but neither draws nor presents.
 export fn run[S](app: App[S], window: &Window.Window, maxFrames: Int) -> Result[Int, Window.PlatformError] {
   var current = app
+  var surface = *window
   var presented = 0
   while presented < maxFrames && !finished(&current) {
-    let open = Window.pump(window, 0) ?
+    let wait = if surface.minimized { IDLE_PUMP_MILLIS } else { 0 }
+    let open = Window.pump(&surface, wait) ?
     if !open { return Ok(presented) }
-    let events = Window.events(window) ?
+    let events = Window.events(&surface) ?
+    surface = Window.observe(surface, &events) ?
     current = step(current, &events, Time.monotonicNanos())
     if finished(&current) { return Ok(presented) }
-    let Some(blank) = Device.target(window.width, window.height) else { return Ok(presented) }
-    let Some(drawn) = draw(&current, blank) else { return Ok(presented) }
-    Window.present(window, &Device.pixels(&drawn)) ?
-    presented = presented + 1
+    if !surface.minimized {
+      let Some(blank) = Device.target(surface.width, surface.height) else { return Ok(presented) }
+      let Some(drawn) = draw(&current, blank) else { return Ok(presented) }
+      Window.present(&surface, &Device.pixels(&drawn)) ?
+      presented = presented + 1
+    }
   }
   Ok(presented)
 }

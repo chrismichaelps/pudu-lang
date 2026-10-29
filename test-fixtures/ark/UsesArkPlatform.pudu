@@ -64,9 +64,59 @@ fn clock() {
   require(Clock.stepSeconds(&start) == 0.00000001, "step seconds")
 }
 
+fn detached(width: Int, height: Int) -> Window.Window {
+  Window.Window {
+    token: 987654,
+    width,
+    height,
+    logicalWidth: width,
+    logicalHeight: height,
+    scale: 1000,
+    focused: true,
+    minimized: false,
+    fullscreen: false,
+    settings: Window.windowed(),
+  }
+}
+
+fn windowState() {
+  let records = "scale\t2000\nfocus\t0\nminimize\t1\nfullscreen\t1\nscale\t0\nfocus\t2\nminimize\nfullscreen\t1\t1\nscale\tx\n"
+  require(
+    Input.decode(records) == [Input.Rescale(2000), Input.Focus(false), Input.Minimize(true), Input.Fullscreen(true)],
+    "window records decode; malformed ones are skipped",
+  )
+  let holding = Input.apply(Input.initial(), &[Input.KeyDown("KeyW", false), Input.ButtonDown(0, 4, 5)])
+  let blurred = Input.apply(Input.beginFrame(holding), &[Input.Focus(false)])
+  require(!Input.keyHeld(&blurred, "KeyW") && Input.keyReleased(&blurred, "KeyW"), "focus loss releases held keys")
+  require(!blurred.buttons.contains(0) && blurred.buttonsReleased.contains(0), "focus loss releases held buttons")
+  require(Input.apply(Input.initial(), &[Input.Focus(true)]) == Input.initial(), "focus gain changes no input")
+
+  require(Window.pixels(400, 1000) == 400 && Window.pixels(400, 2000) == 800, "whole scales")
+  require(Window.pixels(401, 1500) == 602 && Window.pixels(1, 1250) == 2, "fractional scales round up")
+  let base = detached(400, 300)
+  let Ok(observed) = Window.observe(base, &[Input.Rescale(2000), Input.Resize(500, 250), Input.Focus(false), Input.Minimize(true), Input.Fullscreen(true), Input.KeyDown("KeyA", false)]) else {
+    panic("observe")
+  }
+  require(observed.scale == 2000 && observed.logicalWidth == 500 && observed.logicalHeight == 250, "scale and content size")
+  require(observed.width == 500 && observed.height == 250, "frames stay at content size unless sharp")
+  require(!observed.focused && observed.minimized && observed.fullscreen, "state flags")
+  require(Window.observe(base, &[Input.Resize(0, 5)]) == Err(Window.InvalidSize(0, 5)), "a degenerate resize is refused")
+  let sharp = Window.Window{..base, settings: Window.Settings{..Window.windowed(), sharp: true}}
+  let rescaled = Window.observe(sharp, &[Input.Rescale(2000)])
+  require(rescaled == Err(Window.Closed) || rescaled == Err(Window.Unsupported), "a sharp rescale reapplies density through the platform")
+  require(Window.observe(sharp, &[Input.Rescale(1000)]) == Ok(sharp), "an unchanged scale touches nothing")
+  require(Window.observe(sharp, &[Input.Rescale(100)]) == Err(Window.InvalidDensity), "density out of range")
+  let limits = Window.Settings{..Window.windowed(), minWidth: 500, maxWidth: 400}
+  require(Window.configure(base, &limits) == Err(Window.InvalidLimits), "inverted limits")
+  require(Window.configure(base, &Window.Settings{..Window.windowed(), minHeight: -1}) == Err(Window.InvalidLimits), "negative limit")
+  require(Window.configure(base, &Window.Settings{..Window.windowed(), aspectWidth: 16}) == Err(Window.InvalidAspect), "half aspect")
+  let missing = Window.configure(base, &Window.Settings{..Window.windowed(), aspectWidth: 16, aspectHeight: 9, fullscreen: true})
+  require(missing == Err(Window.Closed) || missing == Err(Window.Unsupported), "valid settings reach the platform")
+}
+
 fn windows() {
   require(Window.open("x", 0, 10, false) == Err(Window.InvalidSize(0, 10)), "size refused before the platform")
-  let fake = Window.Window{token: 987654, width: 2, height: 2}
+  let fake = detached(2, 2)
   require(Window.present(&fake, &bytesOf([1u8, 2u8, 3u8])) == Err(Window.FrameMismatch(16, 3)), "frame size refused")
   require(Window.pump(&fake, -1) == Err(Window.Failed("a pump duration cannot be negative")), "negative pump")
   let unknown = Window.events(&fake)
@@ -80,6 +130,7 @@ export fn main() -> Int {
   actions()
   clock()
   windows()
+  windowState()
   print("ark platform: ok")
   0
 }

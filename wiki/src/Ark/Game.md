@@ -19,7 +19,10 @@ interpolation. Any hook answering None ends the game. `Active[S]` pairs a scene 
 `step(app, events, now)` applies [[Ark Input]] events, runs the owed fixed steps (capped by the
 step budget) and the update on the top scene only; `change` applies `Stay`, `Push`, `Pop`,
 `Replace` or `Quit`; `draw` draws the top scene; `top` and `finished` inspect the app. `run(app,
-window, maxFrames)` is the windowed loop over [[Ark Window]] with the monotonic clock.
+window, maxFrames)` is the windowed loop over [[Ark Window]] with the monotonic clock: each frame
+it folds the events into the window with `Window.observe`, so frames follow resizes and backing
+scale, and while the window is minimized it steps the game but neither draws nor presents,
+waiting for events instead of spinning.
 
 ## Invariants
 

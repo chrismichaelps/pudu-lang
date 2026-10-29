@@ -15,7 +15,7 @@ reflect by repeating the edge point. Each frame gathers the grid into a triangle
 normals from central differences; `projectSurface` and `drawShaded` light it per pixel with water's
 2% Fresnel reflectance, a sky gradient, a low sun behind the tank and tight highlights. Drops fall every 45 steps,
 Space splashes the center, Escape quits. `--snapshot <path.ppm>` renders offscreen after 90
-steps; `--frames <n>` stops a windowed run. Measured locally at -O2: about 0.4 ms per wave step
+steps; `--frames <n>` stops a windowed run; `--sharp` renders at the display's backing resolution. The windowed loop follows resizes and scale through `Window.observe`, rebuilds its target only when the frame size changes, and neither renders nor presents while minimized. Measured locally at -O2: about 0.4 ms per wave step
 and 23 ms per shaded 640×480 frame.
 
 ## Resolved Grill Log

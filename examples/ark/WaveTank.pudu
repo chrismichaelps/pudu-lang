@@ -198,14 +198,14 @@ fn sky(eye: V.Vec3) -> Device.Lighting {
   }
 }
 
-fn render(scene: &Scene, surface: Device.Target) -> Option[Device.Target] {
+fn render(scene: &Scene, surface: Device.Target, width: Int, height: Int) -> Option[Device.Target] {
   let view = Camera.lookAt(EYE, V.vec3(0.0, -0.2, 0.0), V.vec3(0.0, 1.0, 0.0)) ?
-  let projection = Camera.perspective(Float.pi() / 3.5, Float.fromInt(WIDTH) / Float.fromInt(HEIGHT), 0.1, 50.0) ?
+  let projection = Camera.perspective(Float.pi() / 3.5, Float.fromInt(width) / Float.fromInt(height), 0.1, 50.0) ?
   let viewProjection = M.multiply4(projection, view)
   let sun = Pipeline.light(V.vec3(0.4, 1.0, 0.3), Color.opaque(1.0, 0.98, 0.92), 0.35) ?
   let identity = M.identity4()
-  let (waterBatch, waterSurface) = Pipeline.projectSurface(&(water(scene) ?), &identity, &viewProjection, WIDTH, HEIGHT) ?
-  let tankBatch = Pipeline.project(&scene.tank, &identity, &viewProjection, &sun, WIDTH, HEIGHT) ?
+  let (waterBatch, waterSurface) = Pipeline.projectSurface(&(water(scene) ?), &identity, &viewProjection, width, height) ?
+  let tankBatch = Pipeline.project(&scene.tank, &identity, &viewProjection, &sun, width, height) ?
   let cleared = Device.clear(surface, Color.opaque(0.05, 0.07, 0.1)) ?
   let withTank = Device.draw(cleared, &tankBatch, Device.CullBack) ?
   Device.drawShaded(withTank, &waterBatch, &waterSurface, Device.CullNone, &sky(EYE))
@@ -218,7 +218,7 @@ fn snapshot(path: Str) -> Int {
   let simulated = (Profile.now() - started) / 90
   let Some(surface) = Device.target(WIDTH, HEIGHT) else { panic("target") }
   let renderStarted = Profile.now()
-  let Some(drawn) = render(&scene, surface) else { panic("render") }
+  let Some(drawn) = render(&scene, surface, WIDTH, HEIGHT) else { panic("render") }
   let rendered = Profile.now() - renderStarted
   match Fs.writeAtomically(path, &Device.snapshotPpm(&drawn)) {
     case Ok(_) => {
@@ -229,14 +229,19 @@ fn snapshot(path: Str) -> Int {
   }
 }
 
-fn run(limit: Int) -> Int {
-  let Ok(window) = Window.open("Ark — wave tank", WIDTH, HEIGHT, false) else {
+fn run(limit: Int, sharp: Bool) -> Int {
+  let Ok(opened) = Window.open("Ark — wave tank", WIDTH, HEIGHT, true) else {
     print("no desktop window on this platform; use --snapshot <path.ppm>")
     return 1
   }
+  let Ok(configured) = Window.configure(opened, &Window.Settings{..Window.windowed(), sharp, minWidth: 320, minHeight: 240}) else {
+    panic("configure")
+  }
+  var window = configured
   var bindings = Input.bind(Input.actions(), "quit", Input.Key("Escape"))
   bindings = Input.bind(bindings, "splash", Input.Key("Space"))
-  let Some(target) = Device.target(WIDTH, HEIGHT) else { panic("target") }
+  let Some(first) = Device.target(window.width, window.height) else { panic("target") }
+  var target = first
   let Some(started) = Clock.fixed(STEP_NANOS, 3, Profile.now()) else { panic("clock") }
   var clock = started
   var scene = setup()
@@ -246,6 +251,12 @@ fn run(limit: Int) -> Int {
   while limit < 0 || frames < limit {
     let Ok(closing) = Window.pump(&window, 1) else { break }
     let Ok(events) = Window.events(&window) else { break }
+    let Ok(observed) = Window.observe(window, &events) else { break }
+    if observed.width != window.width || observed.height != window.height {
+      let Some(resized) = Device.target(observed.width, observed.height) else { break }
+      target = resized
+    }
+    window = observed
     input = Input.apply(Input.beginFrame(input), &events)
     if closing || Input.pressed(&bindings, &input, "quit") { break }
     if Input.pressed(&bindings, &input, "splash") { scene = drop(scene, CELLS / 2, CELLS / 2, 0.18) }
@@ -256,8 +267,9 @@ fn run(limit: Int) -> Int {
       scene = advance(scene)
       profile = Profile.record(profile, "simulation", stepStarted)
     }
+    if window.minimized { continue }
     let frameStarted = Profile.now()
-    let Some(drawn) = render(&scene, target) else { break }
+    let Some(drawn) = render(&scene, target, window.width, window.height) else { break }
     profile = Profile.record(profile, "render", frameStarted)
     let Ok(_) = Window.present(&window, &Device.pixels(&drawn)) else { break }
     frames = frames + 1
@@ -272,17 +284,20 @@ fn run(limit: Int) -> Int {
 }
 
 /// Water ripples inside a glass tank; drops fall on their own, Space splashes the center, Escape quits.
-/// `--snapshot <path.ppm>` simulates 90 steps and renders offscreen; `--frames <n>` stops after n frames.
+/// `--snapshot <path.ppm>` simulates 90 steps and renders offscreen; `--frames <n>` stops after n frames;
+/// `--sharp` renders at the display's backing resolution.
 export fn main() -> Int {
   let options = arguments()
   var index = 0
   var limit = -1
+  var sharp = false
   while index < options.length() {
+    if options[index] == "--sharp" { sharp = true }
     if options[index] == "--snapshot" && index + 1 < options.length() { return snapshot(options[index + 1]) }
     if options[index] == "--frames" && index + 1 < options.length() {
       if let Some(count) = options[index + 1].toInt() { limit = count }
     }
     index = index + 1
   }
-  run(limit)
+  run(limit, sharp)
 }

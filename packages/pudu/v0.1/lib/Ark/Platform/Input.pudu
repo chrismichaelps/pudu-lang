@@ -10,6 +10,10 @@ export type Event
   | Scroll(Int, Int, Int)
   | Resize(Int, Int)
   | Typed(Str)
+  | Rescale(Int)
+  | Focus(Bool)
+  | Minimize(Bool)
+  | Fullscreen(Bool)
 
 /// Held keys and buttons, this frame's transitions, pointer position, scroll and typed text.
 export type State = {
@@ -43,6 +47,10 @@ const EVENT_FACTORIES: Map[Str, EventFactory] = mapOf([
     ("scroll", scrollEvent),
     ("resize", resizeEvent),
     ("text", typedEvent),
+    ("scale", rescaleEvent),
+    ("focus", focusEvent),
+    ("minimize", minimizeEvent),
+    ("fullscreen", fullscreenEvent),
   ])
 
 /// Events from the adapter's tab-separated records; unknown or malformed records are skipped.
@@ -97,6 +105,30 @@ fn typedEvent(fields: &Array[Str], line: Str) -> Option[Event] {
   Some(Typed(line.drop(5)))
 }
 
+fn rescaleEvent(fields: &Array[Str], line: Str) -> Option[Event] {
+  if fields.length() != 2 { return None }
+  let scale = fields[1].toInt() ?
+  if scale <= 0 { None } else { Some(Rescale(scale)) }
+}
+
+fn focusEvent(fields: &Array[Str], line: Str) -> Option[Event] {
+  Some(Focus(flagOf(fields) ?))
+}
+
+fn minimizeEvent(fields: &Array[Str], line: Str) -> Option[Event] {
+  Some(Minimize(flagOf(fields) ?))
+}
+
+fn fullscreenEvent(fields: &Array[Str], line: Str) -> Option[Event] {
+  Some(Fullscreen(flagOf(fields) ?))
+}
+
+fn flagOf(fields: &Array[Str]) -> Option[Bool] {
+  if fields.length() != 2 { return None }
+  if fields[1] == "1" { return Some(true) }
+  if fields[1] == "0" { Some(false) } else { None }
+}
+
 /// Nothing held, the pointer at the origin.
 export fn initial() -> State {
   State {
@@ -126,7 +158,20 @@ export fn beginFrame(state: State) -> State {
   }
 }
 
-/// Fold events in order into the state. A repeat is never a press.
+/// Every held key and button released, as when the window loses focus and their releases go elsewhere.
+fn releasedAll(state: State) -> State {
+  var keys = state.released
+  for code in state.held {
+    keys = keys.insert(code)
+  }
+  var buttons = state.buttonsReleased
+  for button in state.buttons {
+    buttons = buttons.insert(button)
+  }
+  State{..state, held: setOf([]), released: keys, buttons: setOf([]), buttonsReleased: buttons}
+}
+
+/// Fold events in order into the state. A repeat is never a press; losing focus releases everything held.
 export fn apply(state: State, events: &Array[Event]) -> State {
   var current = state
   for event in *events {
@@ -163,6 +208,11 @@ export fn apply(state: State, events: &Array[Event]) -> State {
       case Scroll(_, _, delta) => State{..current, scroll: current.scroll + delta}
       case Typed(text) => State{..current, typed: current.typed + text}
       case Resize(_, _) => current
+      case Focus(false) => releasedAll(current)
+      case Focus(true) => current
+      case Rescale(_) => current
+      case Minimize(_) => current
+      case Fullscreen(_) => current
     }
   }
   current

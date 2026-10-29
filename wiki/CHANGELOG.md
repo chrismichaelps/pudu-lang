@@ -5,6 +5,15 @@ tags: [changelog]
 
 # Changelog
 
+## 2026-10-29 — Sharp, resizable, state-aware engine windows (#728)
+
+- [[Ark Window]] tracks pixel and content size, backing scale, focus, minimize and full screen;
+  `configure` applies `Settings` and `observe` folds window events, re-applying density so sharp
+  frames follow the display. [[Ark Input]] decodes the window records and releases held input
+  on focus loss; [[Ark Game]] follows resizes and stops drawing while minimized.
+- [[Wave Tank Demo]] takes `--sharp`: on a 2x display the crest edges lose their stair-stepping
+  at the same window size, for 64 ms a frame against 27 ms.
+
 ## 2026-10-29 — Window density, limits, full screen and state records (#728)
 
 - [[Pudu Desktop Adapter]] reports backing scale, focus, minimize and full-screen transitions as
