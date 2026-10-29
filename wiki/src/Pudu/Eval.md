@@ -218,3 +218,8 @@ Assignment resolves its place through [[Eval Place]] — root and index keys fir
 
 Function literals initialize the internal MultiMap proof cache to Nothing.
 Resolved Grill Log: literal capture and body evaluation remain unchanged.
+
+## Trait evidence
+
+The tree walker's `callNeeds` answers `callEvidence` from [[Eval Env]] per call.
+Resolved Grill Log: the tree walker is the reference evaluator; it keeps no per-site caches.

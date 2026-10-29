@@ -187,6 +187,7 @@ instance Walk FieldDeclaration
 instance Walk Variant
 instance Walk VariantPayload
 instance Walk Trait
+instance Walk TraitEvidence
 instance Walk Impl
 instance Walk Macro
 instance Walk MacroParam

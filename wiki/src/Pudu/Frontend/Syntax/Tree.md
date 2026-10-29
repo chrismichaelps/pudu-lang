@@ -255,3 +255,21 @@ DEPTH 0.56 (MEDIUM). Breadth is inherent to the grammar; co-location is delibera
 ## Referenced by
 
 [[src/Pudu/Frontend/Syntax/_MOC]] · [[Syntax]] · [[Parser Expression]] · [[Parser Import]] · [[Parser Binding]] · [[Frontend]]
+
+## Trait evidence (#734, #735)
+
+```haskell
+data TraitEvidence = TraitEvidence
+  { evidenceAt :: !Span, evidenceTrait :: !Text, evidenceParameter :: !(Maybe Text) }
+```
+
+`moduleEvidence :: ![TraitEvidence]` is the last `Module` field. The parser leaves it empty;
+[[Compiler Pipeline]] fills it on the executable module once checking succeeds. Each entry says
+which trait, by canonical key (`Module.Trait`), resolved the callee or implementation head at
+`evidenceAt`, and which type parameter the receiver or static owner was, when it was one.
+
+Resolved Grill Log: **Q:** A new expression node per resolved call? **A:** No; every evaluator
+traversal (capture, slot layout, compilation) would have to learn it, and a wildcard that missed
+it would drop captured names silently. A span-keyed list rides the module through the product
+cache and constant folding without touching any expression consumer. _Rejected:_ a separate
+compile-result channel threaded through every entry point, the REPL and the cache.

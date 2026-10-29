@@ -20,12 +20,14 @@ instance Persist Module where
     persist source (moduleSpan value)
       <> persist source (moduleName value)
       <> persist source (moduleImports value)
+      <> persist source (moduleEvidence value)
       <> persist source (length (moduleDeclarations value))
       <> foldMap (persistDeferred source) (moduleDeclarations value)
   restore = do
     spanValue <- restore
     name <- restore
     imports <- restore
+    evidence <- restore
     count <- restore
     declarations <- deferredList (count :: Int)
     pure Module
@@ -33,12 +35,14 @@ instance Persist Module where
       , moduleName = name
       , moduleImports = imports
       , moduleDeclarations = declarations
+      , moduleEvidence = evidence
       }
    where
     deferredList remaining
       | remaining <= 0 = pure []
       | otherwise = (:) <$> restoreDeferred <*> deferredList (remaining - 1)
 instance Persist Import
+instance Persist TraitEvidence
 instance Persist Visibility
 instance Persist Capability
 instance Persist BindingKind

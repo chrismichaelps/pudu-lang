@@ -1,6 +1,7 @@
 {-| @Eval.Call.Path — dotted paths, qualified callees, and type argument syntax. -}
 module Pudu.Eval.Call.Path
-  ( flattenPath
+  ( calleeUnderTypes
+  , flattenPath
   , lastPathSegment
   , longestBinding
   , pathValue
@@ -178,6 +179,12 @@ longestBinding (first :| rest) = search (reverse (prefixes rest))
     case found of
       Just value -> pure (Just (value, remaining))
       Nothing -> search shorter
+
+{-| The callee a type application applies to, where its evidence is keyed. -}
+calleeUnderTypes :: Located Expression -> Located Expression
+calleeUnderTypes located = case locatedValue located of
+  TypeApplication inner _ -> calleeUnderTypes inner
+  _ -> located
 
 {-| The type arguments a callee carries, and the callee under them. -}
 typeArgumentNames :: Expression -> Maybe ([Text], Located Expression)

@@ -135,3 +135,29 @@ trait before shared bound-member lookup. An explicit qualifier disambiguates two
 different traits, but two applications of the same trait remain ambiguous.
 Resolved Grill Log: immediate, captured and trait-qualified generic receiver
 calls must preserve the same full trait application.
+
+## Trait evidence and shared member names (#734, #735)
+
+- `methodScheme` and `traitMethodScheme` record [[Type Env]] evidence when they resolve a member:
+  a nominal receiver's unambiguous trait provider, a `dynamic` trait, or the single bound that
+  provides the member to a rigid receiver, beside that parameter's name. An inherent method
+  records nothing.
+- Every implementation method is also bound under `traitMethodKey trait owner member`, so a
+  trait-qualified call types against that trait's own implementation even when another trait's
+  method shares the plain key.
+- An imported implementation whose plain key is already provided by a **different** trait marks
+  the key ambiguous instead of refusing the declaration. The ambiguity is reported only at an
+  unqualified concrete call, with module-qualified spellings
+  (`First.Encode.encode(&value) or Second.Encode.encode(&value)`), since both traits may share a
+  short name. A second provider of the same trait still refuses at the declaration.
+- A module's own implementation records its trait head's canonical key at the head's span, which
+  is what [[Eval Install]] installs under.
+
+Resolved Grill Log: **Q:** Relax the declaration check alone? **A:** No; tried and reverted:
+dispatch erased the trait, so a call through `T: Second.Encode` ran First's implementation and a
+function typed `Int` returned a `Str`. The refusal is relaxed only together with evidence-directed
+dispatch. **Q:** Keep the last plain-key scheme as the answer for a qualified call? **A:** No; the
+trait-specific key types `Second.Encode.encode(&1)` as `Int` whatever order the imports bound in.
+
+Every implementation notes its parameters' bound traits through `noteImplementationBounds`.
+`qualifiedForm` and `specializeBound` are exported for [[Type Check Call]] and [[Type Check Rule]].

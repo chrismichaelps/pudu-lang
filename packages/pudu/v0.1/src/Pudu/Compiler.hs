@@ -169,8 +169,9 @@ compileFrontendWithDependencies dependencyFolded dependencyKinds dependencies co
               types = moduleTypeInfo <$> typing
               typed = sortDiagnostics (resolved <> typeDiagnostics)
            in do
-                let settledSyntax = resolveLiterals (maybe Map.empty moduleIntegerKinds typing)
-                      (maybe Map.empty moduleSelections typing) parsed
+                let settledSyntax = (resolveLiterals (maybe Map.empty moduleIntegerKinds typing)
+                      (maybe Map.empty moduleSelections typing) parsed)
+                      { moduleEvidence = maybe [] moduleTraitEvidence typing }
                     ownedSyntax = if hasErrors typed then parsed else
                       resolveOwnerSelections (maybe Map.empty moduleSelections typing) parsed
                 (constantDiagnostics, folded) <-

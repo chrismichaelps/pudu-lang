@@ -83,5 +83,6 @@ Dependency direction: Builtin Definition → Value → Env → Operator/Match/Ar
 
 - [[Eval Call Argument]] — argument values and receiver lending places.
 - [[Eval Call Needs]] — evaluator callbacks shared by call dispatch and argument discovery.
+- [[Eval Call Evidence]] — runs the implementation the checker's trait evidence names.
 
 - [[Mutex Admission Spec]] — bounded admission, ownership and timer retirement.

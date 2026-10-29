@@ -26,6 +26,7 @@ import Pudu.Eval.Env
   , bind
   , recordVariantOwner
   , bindMethod
+  , traitEvidenceAt
   , markModuleScope
   )
 import Pudu.Eval.Value
@@ -48,6 +49,7 @@ import Pudu.Frontend.Syntax.Tree
   , Function (..)
   , Impl (..)
   , Trait (..)
+  , TraitEvidence (..)
   , TypeDeclarationValue (..)
   , TypeSyntax (..)
   , TypeDefinition (..)
@@ -318,24 +320,29 @@ releaseSymbolsOf library =
     ]
 
 {-| An implementation's functions are installed under a key naming the type they
-    implement for, so a member access on a value of that type finds them. -}
+    implement for, so a member access on a value of that type finds them.
+
+    The trait checking resolved the head to adds `<Module.Trait>.<Type>.<member>`,
+    the key a call with trait evidence dispatches through: the plain key holds
+    only one of two traits that give the type a member of the same name. -}
 installMethods :: Map Text [Located Function] -> Impl -> Evaluator ()
 installMethods traits value = case targetNameOf (implTarget value) of
   Nothing -> pure ()
   Just owner -> do
-    mapM_ (installMethod owner) (implFunctions value)
-    mapM_ (installMethod owner) (inheritedDefaults traits value)
+    canonical <- fmap evidenceTrait <$> traitEvidenceAt (locatedSpan (implTrait value))
+    mapM_ (installMethod canonical owner) (implFunctions value)
+    mapM_ (installMethod canonical owner) (inheritedDefaults traits value)
  where
   -- The implementation's own parameters lead the method's, the order a
   -- static selection lists the types it chose for them.
-  installMethod owner (Located _ method) = do
+  installMethod canonical owner (Located _ method) = do
     let name = locatedValue (functionName method)
         selected = method{functionTypeParams = implTypeParams value <> functionTypeParams method}
         implementation = FunctionValue (Closure name selected Nothing Nothing [] Nothing)
+        under prefix = bindMethod (prefix <> "." <> owner <> "." <> name) implementation
     bindMethod (owner <> "." <> name) implementation
-    case traitNameOf (implTrait value) of
-      Nothing -> pure ()
-      Just traitText -> bindMethod (traitText <> "." <> owner <> "." <> name) implementation
+    mapM_ under (traitNameOf (implTrait value))
+    mapM_ under canonical
 
 {-| A trait member with a body is a default the implementation inherits when it
     does not provide its own. -}

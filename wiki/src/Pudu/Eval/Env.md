@@ -147,3 +147,10 @@ and failure paths; accept only ordinary optimized benchmark improvements.
 evaluation and derive residualization. Runtime loop policy and thresholds remain
 unchanged. Resolved Grill Log: one phase-neutral declaration prevents nested
 compiler expansion and ordinary constant evaluation from drifting apart.
+
+## Trait evidence (#734, #735)
+
+`envTraitEvidence :: Map Span TraitEvidence` holds every loaded module's evidence.
+`installEvidence` adds a module's list; `traitEvidenceAt` answers one span.
+Resolved Grill Log: spans of different sources never compare equal, so one table serves every
+module, and a later load never removes an earlier module's entries.

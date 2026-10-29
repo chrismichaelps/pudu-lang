@@ -34,6 +34,7 @@ module Pudu.Frontend.Syntax.Tree
   , Pattern (..)
   , Statement (..)
   , Trait (..)
+  , TraitEvidence (..)
   , TypeDeclarationValue (..)
   , TypeDefinition (..)
   , TypeParam (..)
@@ -57,6 +58,19 @@ data Module = Module
   , moduleName :: !(Located ModuleName)
   , moduleImports :: ![Located Import]
   , moduleDeclarations :: ![Located Declaration]
+  {-| Empty after parsing; the executable module carries what checking
+      proved about each trait-resolved callee and implementation head. -}
+  , moduleEvidence :: ![TraitEvidence]
+  }
+  deriving stock (Eq, Show, Generic)
+
+{-| @Program.Syntax.TraitEvidence — the trait that resolved a callee or an
+    implementation head, by its canonical key, and the type parameter the
+    receiver or static owner was when it was one. -}
+data TraitEvidence = TraitEvidence
+  { evidenceAt :: !Span
+  , evidenceTrait :: !Text
+  , evidenceParameter :: !(Maybe Text)
   }
   deriving stock (Eq, Show, Generic)
 

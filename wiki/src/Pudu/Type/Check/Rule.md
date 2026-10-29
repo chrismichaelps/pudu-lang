@@ -204,3 +204,11 @@ Resolved Grill Log: no second identity-only rigid resolver; a captured method ke
 ## Lexical member admission (#471)
 
 localValueHead follows name/member syntax to its first lexical name through Type Env. qualifiedMemberType yields to ordinary fields/methods when that head is local; nameType folds dotted local paths through memberType. Keep full qualified lookup for unshadowed namespaces. Undotted names retain their single ordinary lookup; lexical path admission adds no second search to that common case. A selected nominal type application remains a type owner. Resolved Grill Log: query local identity before the global member spelling; do not use shared bare interface names to decide shadowing. This bounded name rule stays in the existing closed-rule table.
+
+## Witness selections (#735)
+
+`recordStaticSelection` keeps a reference's chosen types when any bound trait `needsWitness`
+([[Type Env]]): static, or implemented with a parameter bounded (transitively) by a static trait.
+The ambiguous-member help uses [[Type Check Method]]'s `qualifiedForm`. Resolved Grill Log:
+**Q:** Select for every bounded call? **A:** No; `Ord`, `Eq`, `Hash` and `Show` have parameterized
+implementations, and a witness per sort or map call costs every hot path for nothing.

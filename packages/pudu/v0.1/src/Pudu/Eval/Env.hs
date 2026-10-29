@@ -35,6 +35,8 @@ module Pudu.Eval.Env
   , effectsAdmitted
   , emptyEnv
   , integerKindAt
+  , traitEvidenceAt
+  , installEvidence
   , tally
   , withTally
   , withIntegerKinds
@@ -87,6 +89,8 @@ import Data.IORef (IORef, modifyIORef', newIORef, readIORef, writeIORef)
 import GHC.IOArray (IOArray, newIOArray, unsafeReadIOArray, unsafeWriteIOArray)
 import Data.Set (Set)
 import Pudu.Source (Span)
+import Pudu.Frontend.Syntax.Tree (TraitEvidence)
+import qualified Pudu.Frontend.Syntax.Tree as Tree
 
 {-| @Eval.Env — name-keyed frames, innermost first -}
 data Env = Env
@@ -94,6 +98,8 @@ data Env = Env
   , envMethods :: !(Map Text Value)
   , envVariantOwners :: !(Map Text Text)
   , envIntegerKinds :: !(Map Span Text)
+  {-| Every loaded module's trait evidence, by the span it was recorded at. -}
+  , envTraitEvidence :: !(Map Span TraitEvidence)
   {-| Where to tally the work, when someone asked to see it.
 
       `Nothing` is the ordinary case and costs one comparison. A tally is not
@@ -323,6 +329,7 @@ emptyEnv handles children sockets secured concurrent desktop audioStreams foreig
     , envMethods = Map.empty
     , envVariantOwners = Map.empty
     , envIntegerKinds = Map.empty
+    , envTraitEvidence = Map.empty
     , envTally = Nothing
     , envModuleDepth = 0
     , envDepth = 0
@@ -592,6 +599,19 @@ withTally (Evaluator action) =
 withIntegerKinds :: Map Span Text -> Evaluator ()
 withIntegerKinds kinds =
   Evaluator $ \env -> pure (Done () env{envIntegerKinds = kinds})
+
+{-| Add a module's trait evidence. Spans of different sources never compare
+    equal, so a later module never replaces an earlier module's entries. -}
+installEvidence :: [TraitEvidence] -> Evaluator ()
+installEvidence [] = pure ()
+installEvidence evidence =
+  Evaluator $ \env -> pure (Done () env
+    { envTraitEvidence = Map.union (Map.fromList [(Tree.evidenceAt entry, entry) | entry <- evidence])
+        (envTraitEvidence env) })
+
+traitEvidenceAt :: Span -> Evaluator (Maybe TraitEvidence)
+traitEvidenceAt spanValue =
+  Evaluator $ \env -> pure (Done (Map.lookup spanValue (envTraitEvidence env)) env)
 
 integerKindAt :: Span -> Evaluator (Maybe Text)
 integerKindAt spanValue =

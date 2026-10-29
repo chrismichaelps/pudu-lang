@@ -35,3 +35,9 @@ tree's module holds its shapes alone.
 ## Referenced by
 
 [[src/Pudu/Frontend/Syntax/_MOC]] · [[Syntax Tree]] · [[Compiler Cache]]
+
+## Trait evidence
+
+A module stores its `moduleEvidence` after its imports and before its deferred declarations;
+`TraitEvidence` stores through the generic instance. Resolved Grill Log: evidence is part of the
+checked product, so a reused product dispatches exactly like a fresh one.

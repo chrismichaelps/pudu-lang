@@ -5,6 +5,7 @@ tags: [moc, handoff]
 
 # Handoff Map
 
+- [[Trait Evidence Delivery]] — issues #734/#735 dispatch follows the trait that resolved a call.
 - [[Lane Collection Delivery]] — issue #726 lane buffers share collections so threads overlap.
 - [[Ark Asset Server Delivery]] — asset dependency graph, then staged reload over virtual reads.
 

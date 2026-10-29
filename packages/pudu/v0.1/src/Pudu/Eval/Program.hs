@@ -29,6 +29,7 @@ import qualified Data.Text as Text
 import Pudu.Eval.Env
   ( Env (..)
   , withIntegerKinds
+  , installEvidence
   , captureEnvironment
   , currentFrame
   , currentMethods
@@ -167,6 +168,7 @@ programEntry folded integerKinds dependencies entryName moduleValue = do
   pushFrame Map.empty
   installImportAliases (moduleImports moduleValue)
   inherited <- currentMethods
+  installEvidence (moduleEvidence moduleValue)
   loadModuleDeclarationsWith evaluate
     (foldedFor folded (moduleNameText (locatedValue (moduleName moduleValue))))
     (moduleDeclarations moduleValue)
@@ -210,6 +212,7 @@ evaluateInteractiveBlock reuseDeclarations integerKinds dependencies moduleValue
     pushFrame Map.empty
     installImportAliases (moduleImports moduleValue)
     inherited <- currentMethods
+    installEvidence (moduleEvidence moduleValue)
     loadModuleDeclarations evaluate (moduleDeclarations moduleValue)
     scopeRootDeclarations inherited
     markModuleScope
@@ -261,6 +264,7 @@ foldModuleWith foldedDependencies integerKinds dependencies moduleValue = do
     pushFrame builtins
     pushFrame Map.empty
     installImportAliases (moduleImports moduleValue)
+    installEvidence (moduleEvidence moduleValue)
     loadModuleDeclarations evaluate (moduleDeclarations moduleValue)
     frame <- currentFrame
     Evaluator $ \env -> do
@@ -419,6 +423,7 @@ linkDependenciesFolded folded dependencies = do
         of them before its first request. -}
     pushFrame Map.empty
     inherited <- currentMethods
+    installEvidence (moduleEvidence dependency)
     loadModuleDeclarationsWith evaluate (foldedFor folded path) (moduleDeclarations dependency)
     loaded <- currentFrame
     outer <- captureEnvironment

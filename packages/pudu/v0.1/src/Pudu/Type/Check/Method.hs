@@ -10,7 +10,10 @@ module Pudu.Type.Check.Method
   , implBounds
   , implRigid
   , methodScheme
+  , traitMethodKey
   , traitMethodScheme
+  , qualifiedForm
+  , specializeBound
   , targetName
   , traitBounds
   , traitRigid
@@ -40,7 +43,8 @@ import Control.Monad (filterM, unless, when)
 import Pudu.Source (Span)
 import Pudu.Type.Check.Prelude (declareBuiltinConstructors, effectSignatures)
 import Pudu.Type.Env
-  ( noteStaticTrait
+  ( noteImplementationBounds
+  , noteStaticTrait
   , Checker
   , DeclaredTypes (..)
   , bindImportedMethod
@@ -49,6 +53,7 @@ import Pudu.Type.Env
   , ambiguousProviders
   , markAmbiguousMethod
   , methodProvider
+  , recordEvidence
   , recordMethodProvider
   , lookupName
   , isImportedMethod
@@ -158,6 +163,16 @@ declareMethodsWith defaults declared traits value = do
   case targetName target of
     Nothing -> pure ()
     Just owner -> do
+      -- Only a module's own heads: an interface impl's span is its declarer's.
+      when (defaults == Nothing) $
+        mapM_ (\trait -> recordEvidence (locatedSpan (implTrait value)) trait Nothing)
+          (implTraitName declared value)
+      mapM_ (\trait -> noteImplementationBounds trait
+          [ bound
+          | (subject, bounds) <- implBounds declared value
+          , subject `elem` map fst (implRigid value)
+          , NominalType bound _ <- bounds ])
+        (implTraitName declared value)
       mapM_ (declareMethod (defaults /= Nothing) declared value owner) (implFunctions value)
       mapM_ (declareMethod (defaults /= Nothing) declared value owner) (inheritedDefaults defaults declared traits value)
 
@@ -192,29 +207,36 @@ declareMethod :: Bool -> DeclaredTypes -> Impl -> NominalId -> Located Function 
 declareMethod rejectCollision declared value owner (Located methodSpan method) = do
   let rigid = implRigid value <> functionRigid method
       aliases = implAliases declared value
-      key = methodKey owner (locatedValue (functionName method))
+      name = locatedValue (functionName method)
+      key = methodKey owner name
   inputs <- mapM (declaredParameterType aliases rigid) (functionParameters method)
   result <- formOptionalType aliases rigid (functionReturn method)
   existing <- lookupName key
-  importedCollision <- if rejectCollision then pure (existing /= Nothing) else isImportedMethod key
+  imported <- isImportedMethod key
   provider <- methodProvider key
   let providing = implTraitName declared value
-      localCollision =
-        not rejectCollision
-          && maybe False (\earlier -> Just earlier /= providing) provider
+      -- Two traits may each give one type a member of the same name; only a
+      -- call that cannot say which is a mistake, and it is reported there.
+      otherTrait = case (provider, providing) of
+        (Just earlier, Just current) -> earlier /= current
+        _ -> False
+      refused = not otherTrait && if rejectCollision then existing /= Nothing else imported
+      ambiguous = if rejectCollision then otherTrait && existing /= Nothing
+        else maybe False (\earlier -> Just earlier /= providing) provider
   let scheme =
         polytype rigid (implBounds declared value <> declareBoundsWith aliases (implRigid value) method)
           (FunctionTypeValue (functionAsync method) inputs result)
-  if importedCollision
+  if refused
     then do
       report "E3013" methodSpan
-        (locatedValue (functionName method) <> " is ambiguous for " <> nominalName owner)
+        (name <> " is ambiguous for " <> nominalName owner)
         (Just "import only one providing trait or use a qualified call")
       bindName key (monotype ErrorType)
     else do
-      when localCollision $
+      when ambiguous $
         markAmbiguousMethod key (maybe [] pure provider <> maybe [] pure providing)
       mapM_ (recordMethodProvider key) providing
+      mapM_ (\trait -> bindName (traitMethodKey trait owner name) scheme) providing
       if rejectCollision
         then bindImportedMethod key scheme
         else do
@@ -297,6 +319,11 @@ targetName typeValue = case typeValue of
 
 methodKey :: NominalId -> Text -> Text
 methodKey owner method = nominalKey owner <> "." <> method
+
+{-| One trait's implementation of a member for an owner, which stays
+    reachable when another trait's member shares the owner's plain key. -}
+traitMethodKey :: NominalId -> NominalId -> Text -> Text
+traitMethodKey trait owner method = nominalKey trait <> "/" <> methodKey owner method
 
 {-| Prove every trait obligation a call registered.
 
@@ -417,8 +444,9 @@ methodScheme spanValue receiver member = case receiver of
       returns `Self` is not callable through a `dynamic` — the caller would have no
       type to give the result. That is a real restriction and it is the honest
       one: the concrete type is exactly what a dynamic value does not carry. -}
-  DynamicTypeValue traitIdentity ->
-    lookupName (nominalKey traitIdentity <> "." <> member)
+  DynamicTypeValue traitIdentity -> do
+    found <- lookupName (nominalKey traitIdentity <> "." <> member)
+    traverse (\scheme -> scheme <$ recordEvidence spanValue traitIdentity Nothing) found
   NominalType owner _ -> do
     let key = nominalKey owner <> "." <> member
     providers <- ambiguousProviders key
@@ -428,15 +456,23 @@ methodScheme spanValue receiver member = case receiver of
       -- only a declared method answers for the type.
       [] | nominalModule owner == Nothing -> do
         method <- isMethodKey key
-        if method then lookupName key else pure Nothing
-      [] -> lookupName key
+        if method then provided key else pure Nothing
+      [] -> provided key
       _ -> do
         report "E3013" spanValue
           (member <> " is ambiguous for " <> nominalName owner)
-          (Just ("call it qualified: " <> Text.intercalate " or " (map qualifiedForm providers)))
+          (Just ("call it through its trait: " <> Text.intercalate " or " (map (qualifiedForm member) providers)))
         pure (Just (monotype ErrorType))
    where
-    qualifiedForm traitIdentity = nominalName traitIdentity <> "." <> member <> "(value)"
+    -- The trait that provided an unambiguous member is what dispatch follows.
+    provided key = do
+      found <- lookupName key
+      case found of
+        Nothing -> pure Nothing
+        Just scheme -> do
+          trait <- methodProvider key
+          mapM_ (\identity -> recordEvidence spanValue identity Nothing) trait
+          pure (Just scheme)
   {-| A parameter of higher kind carries its bounds on the parameter itself, so
       a receiver of type `F[A]` finds its members exactly where a receiver of
       type `F` would. The arguments say what the container holds and never which
@@ -461,6 +497,7 @@ selectBounds at receiver member bounds = do
     [] -> pure Nothing
     [bound@(NominalType owner _)] -> do
       found <- lookupName (nominalKey owner <> "." <> member)
+      mapM_ (const (recordEvidence at owner parameter)) found
       traverse (specializeBound at receiver bound) found
     _ -> do
       report "E3013" at
@@ -472,6 +509,17 @@ selectBounds at receiver member bounds = do
     found <- lookupName (nominalKey owner <> "." <> member)
     pure (case found of Nothing -> False; Just _ -> True)
   provides _ = pure False
+  -- The witness a caller selected for this parameter carries the
+  -- implementation's own arguments, which the receiver's value does not.
+  parameter = case receiver of
+    RigidType name -> Just name
+    AppliedType (RigidType name) _ -> Just name
+    _ -> Nothing
+
+{-| A member written through a module-qualified trait, the spelling that stays
+    unambiguous when two traits share a short name. -}
+qualifiedForm :: Text -> NominalId -> Text
+qualifiedForm member traitIdentity = nominalKey traitIdentity <> "." <> member <> "(&value)"
 
 specializeBound :: Span -> Type -> Type -> Scheme -> Checker Scheme
 specializeBound at receiver (NominalType owner arguments) scheme = do

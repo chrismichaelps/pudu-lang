@@ -40,3 +40,10 @@ No new capability, reference representation, arity rule or effect policy is adde
 ## Referenced by
 
 [[src/Pudu/Eval/_MOC]] · [[src/_MOC]] · [[Eval Call]]
+
+## Trait evidence
+
+`callEvidence :: Span -> Evaluator (Maybe TraitEvidence)` answers a callee's evidence. The tree
+walker looks it up per call; compiled code resolves it once when the call site compiles.
+Resolved Grill Log: a per-call `Map Span` lookup once cost 12.6% of a hot loop
+([[Compiler Literals]]), so the compiled evaluator must not pay it per call.

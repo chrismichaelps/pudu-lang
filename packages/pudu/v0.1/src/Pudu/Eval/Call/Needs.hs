@@ -7,7 +7,8 @@ import Data.Text (Text)
 import Pudu.Eval.Env (Evaluator)
 import Pudu.Eval.Value (Value)
 import Pudu.Frontend.Syntax.Located (Located)
-import Pudu.Frontend.Syntax.Tree (Block, Expression, FunctionBody)
+import Pudu.Frontend.Syntax.Tree (Block, Expression, FunctionBody, TraitEvidence)
+import Pudu.Source (Span)
 
 {-| @Eval.Call.Needs — what a call needs of the evaluator around it.
 
@@ -18,4 +19,7 @@ data CallNeeds = CallNeeds
   , callBlock :: Located Block -> Evaluator Value
   {-| A function body compiled to closures, for a run that compiles them. -}
   , callCompile :: [Text] -> FunctionBody -> Evaluator (Evaluator Value)
+  {-| The trait evidence of a callee, by its span. Compiled code answers it
+      once per call site rather than once per call. -}
+  , callEvidence :: Span -> Evaluator (Maybe TraitEvidence)
   }

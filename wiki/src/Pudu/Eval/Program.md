@@ -147,3 +147,9 @@ folding reuses it. Constructor arrays, selected constants and calls retain canon
 Resolved Grill Log: builtins reside in their own frame before aliases are installed. Loading the
 root's declarations must not reinstall them over selected imports with names such as `show` or
 `Some`; folding uses `loadModuleDeclarations`, matching runtime root loading.
+
+## Trait evidence
+
+Every module load installs its `moduleEvidence` before its declarations: the root, each linked
+dependency, constant folding and an interactive block. Resolved Grill Log: installation reads
+evidence for implementation heads, so it must be present before the first `impl` installs.

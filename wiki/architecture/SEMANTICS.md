@@ -75,6 +75,13 @@ Supporting judgements:
 - Imports never re-export implicitly.
 - Ambiguous unqualified references are errors with related spans for every candidate.
 - Trait method lookup considers inherent methods first, then in-scope traits; multiple applicable trait methods require qualification.
+- Two traits may declare a member of the same name for one type; implementing both is legal. A call
+  runs the implementation of the trait that resolved it: an unqualified concrete call with two
+  candidates is `E3013` and names module-qualified spellings, a call through a bounded parameter
+  runs the bound's trait, and `Module.Trait.member(receiver)` runs that trait. A generic
+  implementation reached through a bounded parameter takes its parameters from the caller's
+  selected types, never from the run-time value, which carries none (an empty array has no
+  element). See [[Trait Evidence Delivery]].
 - Cyclic module imports are allowed only for declaration signatures. Module-scope values are compile-time constants, so initialization cycles and module-load execution do not exist.
 
 ## Type Formation and Equality
@@ -265,6 +272,12 @@ These obligations require executable property/conformance tests now and mechaniz
 - [[CHANGELOG]] provides the chronological index; this page's `## Revision Ledger` records normative semantic revisions.
 
 ## Revision Ledger
+
+- **2.0.1-draft · 2026-10-29:** Trait members sharing a name for one type are admitted; dispatch
+  follows the trait that resolved each call, and generic implementations reached through a bound
+  take the caller's selected types. A program previously refused at the second implementation now
+  checks; a bound-directed call that silently ran another trait's same-named method now runs its
+  own. See [[Trait Evidence Delivery]].
 
 - **2.0.0-draft · 2026-10-27:** Reserve `Ark` as a shipped library root, with project-first
   lookup and exclusion of installed dependency roots. Existing package-owned Ark namespaces

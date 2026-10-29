@@ -64,3 +64,9 @@ ordinary modules with no static selections do not pay for the additional owner-o
 
 Both projections retain that distinct callee span. Resolved Grill Log: an execution product reused
 for printed expansion must retain the same explicit owner selection as an analysis product.
+
+## Trait evidence
+
+The walk passes `TraitEvidence` through unchanged; its spans key run-time facts and are never
+rewritten. Resolved Grill Log: [[Compiler Pipeline]] attaches the evidence after this rewrite, so
+no expression changes shape for it.

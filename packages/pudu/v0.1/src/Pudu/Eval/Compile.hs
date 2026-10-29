@@ -22,6 +22,7 @@ import Pudu.Eval.Env
   , lookupModule
   , lookupName
   , enterSlots
+  , traitEvidenceAt
   , readSlot
   , writeSlot
   , tally
@@ -30,7 +31,7 @@ import Pudu.Eval.Env
   , withNewFrame
   )
 import Pudu.Eval.Call (CallNeeds (..), callClosure, evaluateCall)
-import Pudu.Eval.Call.Path (flattenPath, lastPathSegment, pathValue)
+import Pudu.Eval.Call.Path (calleeUnderTypes, flattenPath, lastPathSegment, pathValue)
 import Pudu.Eval.Compile.Layout (slotLayout)
 import Pudu.Eval.Render (renderValue)
 import Pudu.Eval.Loop (LoopNeeds (..), evaluateFor, evaluateWhile)
@@ -250,12 +251,14 @@ compileCall walker spanValue callee arguments = do
     -- through the needs it is given; each is answered by its compiled code.
     let reached = callee : calleeTarget callee <> concatMap argumentParts arguments
     codes <- mapM (\part -> (,) part <$> compileExpression walker part) reached
+    evidence <- traitEvidenceAt (locatedSpan (calleeUnderTypes callee))
     let table = IntMap.fromListWith (<>) [(startOf part, [(part, code)]) | (part, code) <- codes]
         answer part = case IntMap.lookup (startOf part) table of
           Just [(candidate, code)] | locatedSpan candidate == locatedSpan part -> code
           Just several | Just code <- lookup part several -> code
           _ -> walkExpression walker part
-        needs = (walkCallNeeds walker){callEvaluate = answer}
+        -- Evidence is fixed once modules load, so the site answers it once.
+        needs = (walkCallNeeds walker){callEvaluate = answer, callEvidence = const (pure evidence)}
     pure (evaluateCall needs spanValue callee arguments)
  where
   startOf part = unOffset (spanStart (locatedSpan part))

@@ -138,3 +138,24 @@ receiver/lending and lexical shadow checks for every non-constructor.
 
 Resolved Grill Log: a call must resolve its full visible sum owner before treating an
 intermediate imported type as a runtime receiver; first-class values use the same metadata.
+
+## Trait-qualified calls by canonical path (#734)
+
+`traitQualifiedCall` accepts a trait written through its module (`Second.Encode.encode(&x)`) as
+well as a single name, resolves a concrete receiver through the trait-specific implementation key,
+and records evidence for the callee. An ambiguous `Type.member` names module-qualified traits in
+its help. Resolved Grill Log: the help for two same-named traits must name a spelling that checks
+and runs; `Encode.encode(value)` named neither.
+
+## Static calls through a type parameter (#734, #735)
+
+`T.member(...)` with `T` a type parameter in scope (not shadowed by a local value) resolves through
+`methodScheme` on the rigid `T`, so the member `T`'s bounds provide types the call and records its
+evidence. The head has no value, and before this the whole call was silently the error type: it
+was never checked against its bound, and dispatch fell back to the plain key, where two static
+traits sharing a member ran whichever installed last.
+
+`Trait.member(receiver)` whose receiver inference has not settled (an unsuffixed literal) is typed
+by the trait's own declaration with `Self` as the receiver and an obligation that it implements
+the trait, which settles it. Resolved Grill Log: the module-qualified spelling has no fallback
+through a value path, so it must type here; the obligation keeps it as strict as a bound.

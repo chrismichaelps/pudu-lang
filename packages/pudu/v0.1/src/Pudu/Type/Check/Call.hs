@@ -16,6 +16,7 @@ import qualified Data.Map.Strict as Map
 import qualified Data.Set as Set
 import Data.Text (Text)
 import qualified Data.Text as Text
+import Data.List (find)
 import Data.Maybe (mapMaybe)
 import Pudu.Type.Formation (formType)
 import Pudu.Type.Implementation (ImplementationRule (..), selectImplementationTarget)
@@ -29,6 +30,9 @@ import Pudu.Type.Env
   ( Checker
   , DeclaredTypes (..)
   , ambiguousProviders
+  , addObligation
+  , lookupTypeParams
+  , recordEvidence
   , recordSelection
   , freshVariable
   , lookupImplementations
@@ -47,6 +51,9 @@ import Pudu.Type.Check.Rule
   )
 import Pudu.Type.Check.Method
   ( methodScheme
+  , qualifiedForm
+  , specializeBound
+  , traitMethodKey
   , traitMethodScheme
   , targetName
   )
@@ -96,8 +103,10 @@ checkCalleeLending checker declared rigid located@(Located calleeSpan expression
         selected <- case variant of
           Just value -> pure (Just value)
           Nothing -> selectedStaticCallee declared rigid calleeSpan expression []
-        named <- maybe (qualifiedByName declared calleeSpan (locatedValue target) (locatedValue member))
+        bounded <- maybe (throughParameter rigid calleeSpan (locatedValue target) (locatedValue member))
           (pure . Just) selected
+        named <- maybe (qualifiedByName declared calleeSpan (locatedValue target) (locatedValue member))
+          (pure . Just) bounded
         qualified <- case named of
           Just found -> pure (Just found)
           Nothing -> qualifiedMemberType declared calleeSpan (locatedValue target) (locatedValue member)
@@ -129,6 +138,19 @@ checkCalleeLending checker declared rigid located@(Located calleeSpan expression
                 recordExpression calleeSpan applied
                 pure (applied, if changesReceiver then Just target else Nothing)
   _ -> (\found -> (found, Nothing)) <$> runCheck checker declared rigid located
+
+{-| `T.member` with `T` a type parameter in scope: the member `T`'s bounds
+    provide, as a function of every argument (a `self` member takes its
+    receiver explicitly). The parameter has no value, so without this the call
+    was typed as an error and never checked against its bound at all. -}
+throughParameter :: [(Text, Int)] -> Span -> Expression -> Text -> Checker (Maybe Type)
+throughParameter rigid at target member = case target of
+  NameExpression (name NonEmpty.:| []) | name `elem` map fst rigid -> do
+    local <- localValueHead target
+    if local then pure Nothing else do
+      found <- methodScheme at (RigidType name) member
+      traverse (instantiate at) found
+  _ -> pure Nothing
 
 {-| A complete nominal owner selects implementation parameters by its head,
     before method-local arguments instantiate the ordinary method scheme. -}
@@ -200,12 +222,7 @@ qualifiedByType declared spanValue target member = case target of
       _ : _ -> do
         report "E3013" spanValue
           (member <> " is ambiguous for " <> nominalName identity)
-          ( Just
-              ( "name the trait instead: "
-                  <> Text.intercalate " or "
-                    [nominalName provider <> "." <> member <> "(value)" | provider <- providers]
-              )
-          )
+          (Just ("call it through its trait: " <> Text.intercalate " or " (map (qualifiedForm member) providers)))
         pure (Just ErrorType)
       [] -> do
         found <- lookupName key
@@ -248,7 +265,10 @@ traitQualifiedCall checker declared rigid (Located calleeSpan callee) arguments 
           resolved <- throughBorrow =<< zonk receiverType
           case targetName resolved of
             Nothing -> do
-              found <- traitMethodScheme calleeSpan resolved traitIdentity (locatedValue member)
+              bound <- traitMethodScheme calleeSpan resolved traitIdentity (locatedValue member)
+              found <- case (bound, resolved, declaredMember) of
+                (Nothing, VariableType _, Just scheme) -> Just <$> unsettled traitIdentity resolved scheme
+                _ -> pure bound
               case found of
                 Nothing -> pure Nothing
                 Just scheme -> do
@@ -257,21 +277,42 @@ traitQualifiedCall checker declared rigid (Located calleeSpan callee) arguments 
                   restTypes <- mapM (runCheck checker declared rigid) rest
                   pure (Just (instantiated, receiverType : restTypes))
             Just owner -> do
-              found <- lookupName (nominalKey owner <> "." <> locatedValue member)
+              -- The named trait's own implementation, even where another
+              -- trait's member shares the owner's plain key.
+              own <- lookupName (traitMethodKey traitIdentity owner (locatedValue member))
+              found <- maybe (lookupName (nominalKey owner <> "." <> locatedValue member)) (pure . Just) own
               case found of
                 Nothing -> pure Nothing
                 Just scheme
                   | nominalKey owner == nominalKey traitIdentity -> pure Nothing
                   | otherwise -> do
+                      recordEvidence calleeSpan traitIdentity Nothing
                       instantiated <- instantiate calleeSpan scheme
                       recordExpression calleeSpan instantiated
                       restTypes <- mapM (runCheck checker declared rigid) rest
                       pure (Just (instantiated, receiverType : restTypes))
   _ -> pure Nothing
  where
-  namedType expression = case expression of
-    NameExpression (first NonEmpty.:| []) -> Map.lookup first (declaredNames declared)
+  -- A trait is named by its short name or through its module, the spelling
+  -- that stays unambiguous when two traits share a short name.
+  namedType expression = do
+    path <- Text.intercalate "." <$> segments expression
+    case Map.lookup path (declaredNames declared) of
+      Just identity -> Just identity
+      Nothing -> find ((== path) . nominalKey) (Set.toList (declaredTraitNames declared))
+  segments expression = case expression of
+    NameExpression names -> Just (NonEmpty.toList names)
+    MemberExpression (Located _ target) (Located _ name) -> (<> [name]) <$> segments target
     _ -> Nothing
+  -- A receiver inference has not settled (an unsuffixed literal) is typed by
+  -- the trait's own declaration and owes the trait, which settles it.
+  unsettled traitIdentity receiverType scheme = do
+    parameters <- maybe [] id <$> lookupTypeParams traitIdentity
+    arguments <- mapM (const freshVariable) parameters
+    let bound = NominalType traitIdentity arguments
+    addObligation calleeSpan receiverType bound
+    recordEvidence calleeSpan traitIdentity Nothing
+    specializeBound calleeSpan receiverType bound scheme
   takesSelf held = case held of
     FunctionTypeValue _ (first : _) _ -> isSelf first
     _ -> False

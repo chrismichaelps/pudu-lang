@@ -75,3 +75,8 @@ DEPTH 0.74 (MEDIUM). It centralizes compilation-unit structure, visibility owner
 ## Referenced by
 
 [[src/Pudu/Frontend/Parser/_MOC]] · [[Parser]] · [[Parser State]] · [[Parser Import]] · [[Parser Binding]] · [[Parser Function]] · [[Parser Block]]
+
+## Trait evidence
+
+A parsed module starts with no trait evidence (`moduleEvidence = []`). Resolved Grill Log: only
+checking can say which trait resolved a call; the parser never guesses.

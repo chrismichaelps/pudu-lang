@@ -44,3 +44,9 @@ byte scanning, source-name identity, decoder exception or whole-tree generic Eq.
 ## Referenced by
 
 [[Compiler Cache]] · [[Syntax Tree]] · [[src/Pudu/Frontend/Syntax/_MOC]]
+
+## Trait evidence
+
+`TraitEvidence` registers with the same generic walk, so an evidence span with a generated origin
+refuses the module like any other generated span. Resolved Grill Log: the cache cannot rebind a
+generated span, so evidence about derived code must not be stored.

@@ -42,3 +42,11 @@ No new capability, reference representation, arity rule or effect policy is adde
 ## Referenced by
 
 [[src/Pudu/Eval/_MOC]] · [[src/_MOC]] · [[Eval Call]]
+
+## Argument binding
+
+`bindArguments :: CallNeeds -> [Located Parameter] -> [Value] -> Maybe Span -> Evaluator [(Text, Value)]`
+binds supplied arguments left to right and evaluates an omitted parameter's default in the
+environment the earlier parameters extended; too many or too few arguments abort with `E7003`.
+Resolved Grill Log: moved here unchanged from [[Eval Call]] when evidence dispatch would have
+taken that module past 500 lines; binding is part of what a call's arguments become.

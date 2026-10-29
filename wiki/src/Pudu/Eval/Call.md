@@ -250,3 +250,12 @@ receiver discovery, preserving its invocation behavior and keeping it below 500 
 ## Lexical member admission (#471)
 
 Delegate qualified-path admission to Eval Call Path for explicit type-applied dispatch. A nearer ordinary local takes callMemberSelecting; a witness or unshadowed module retains static dispatch. Remove the capitalization-only helper, preserving arguments, lending and chosen witnesses. Resolved Grill Log: path spelling cannot override lexical scope, and prepared calls already share this coordinator.
+
+## Evidence-directed dispatch (#734, #735)
+
+`evaluateCall` asks `callEvidence` once for the callee beneath its type arguments. A member call
+with evidence asks [[Eval Call Evidence]] `evidentMethod` first, and a qualified callee asks
+`evidentCallee` before [[Eval Call Path]] `qualifiedCallee`. `bindArguments` lives in
+[[Eval Call Argument]]. Without evidence, or when evidence finds nothing, the
+receiver-owner dispatch is unchanged. Resolved Grill Log: evidence decides only which
+implementation runs; lending, argument binding and method selections apply exactly as before.

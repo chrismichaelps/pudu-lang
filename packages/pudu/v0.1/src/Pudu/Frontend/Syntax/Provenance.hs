@@ -13,7 +13,7 @@ import Pudu.Frontend.Syntax.Tree
   , Declaration, Derive, DeriveRequest, DeriveShape, Expression, FieldDeclaration
   , FieldInit, FieldPattern, Foreign, ForeignFunction, ForeignParameter, Function
   , FunctionBody, Impl, Import, Literal, Macro, MacroKind, MacroParam, MatchArm
-  , Module, Parameter, Pattern, Statement, Trait, TypeDeclarationValue
+  , Module, Parameter, Pattern, Statement, Trait, TraitEvidence, TypeDeclarationValue
   , TypeDefinition, TypeParam, TypeSyntax, Variant, VariantPayload, Visibility )
 import Pudu.IntegerLiteral (IntegerKind)
 import Pudu.Source (Source, Span, emptySpan, sameSpanSource, spanOrigin)
@@ -86,6 +86,7 @@ instance Owned FieldDeclaration
 instance Owned Variant
 instance Owned VariantPayload
 instance Owned Trait
+instance Owned TraitEvidence
 instance Owned Impl
 instance Owned Macro
 instance Owned MacroParam

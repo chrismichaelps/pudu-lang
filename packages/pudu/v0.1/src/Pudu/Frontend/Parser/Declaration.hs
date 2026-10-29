@@ -56,6 +56,7 @@ parseCompilationUnit = do
               , moduleName = name
               , moduleImports = imports
               , moduleDeclarations = declarations
+              , moduleEvidence = []
               }
         )
 

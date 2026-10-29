@@ -5,6 +5,23 @@ tags: [changelog]
 
 # Changelog
 
+## 2026-10-29 — Dispatch follows the trait that resolved a call (#734, #735)
+
+- [[Type Check Method]] and [[Type Check Call]] record each trait-resolved callee and
+  implementation head as [[Syntax Tree]] trait evidence, which the executable module carries to
+  [[Eval Install]] (`<Module.Trait>.<Type>.<member>` keys) and [[Eval Call Evidence]] in both
+  evaluators. Two traits may now give one type a member of the same name: bound-directed and
+  `Module.Trait.member(receiver)` calls run their own trait, and an unqualified concrete call is
+  `E3013` naming module-qualified spellings. A same-module pair previously ran whichever
+  implementation installed last, silently.
+- A generic implementation reached through a bounded parameter binds its parameters from the
+  caller's witness: `go(&[1, 2])`, empty and nested arrays, and two levels of generic functions
+  now run. [[Type Check Rule]] also selects types for traits whose implementations call their
+  parameters statically (`needsWitness`).
+- `T.member(...)` through a type parameter is resolved and checked against `T`'s bounds; it was
+  silently the error type. [[Trait Evidence Spec]] covers every case under both evaluators;
+  [[Eval Call Argument]] now holds argument binding. See [[Trait Evidence Delivery]].
+
 ## 2026-10-29 — Sharp, resizable, state-aware engine windows (#728)
 
 - [[Ark Window]] tracks pixel and content size, backing scale, focus, minimize and full screen;

@@ -58,6 +58,7 @@ test-suite pudu-test
     Pudu.Derive.GraphSpec
     Pudu.Derive.LibrarySpec
     Pudu.Type.ImplementationSpec
+    Pudu.Type.TraitEvidenceSpec
     Pudu.FormatSpec
     Pudu.Lsp.JsonSpec
     Pudu.Lsp.ServerSpec

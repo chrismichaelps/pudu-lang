@@ -52,9 +52,12 @@ import Control.Exception (SomeException, try)
 import Pudu.Diagnostic (diagnosticMessage)
 import Pudu.Eval.Bytes (callBytesMethod, callBytesOf)
 import Pudu.Eval.Call.Argument (argumentOf, receiverOf)
+import Pudu.Eval.Call.Argument (bindArguments)
+import Pudu.Eval.Call.Evidence (evidentCallee, evidentMethod)
 import Pudu.Eval.Call.Needs (CallNeeds (..))
 import Pudu.Eval.Call.Path
-  ( qualifiedPath
+  ( calleeUnderTypes
+  , qualifiedPath
   , lastPathSegment
   , pathValue
   , qualifiedCallee
@@ -118,6 +121,7 @@ import Pudu.Frontend.Syntax.Tree
   , Function (..)
   , FunctionBody (..)
   , Parameter (..)
+  , TraitEvidence
   )
 import Pudu.Source (Span)
 
@@ -127,8 +131,13 @@ import Pudu.Source (Span)
 evaluateCall :: CallNeeds -> Span -> Located Expression -> [Located Expression] -> Evaluator Value
 evaluateCall needs spanValue callee arguments = do
   given <- mapM (argumentOf needs) arguments
+  evidence <- callEvidence needs (locatedSpan (calleeUnderTypes callee))
   let values = map snd given
       lent = noneLent{lentArguments = map fst given}
+      qualifiedBy located = case evidence of
+        Just found -> evidentCallee found located values
+          >>= maybe (qualifiedCallee located values) (pure . Just)
+        Nothing -> qualifiedCallee located values
   {-| A type argument is not erased before the call that carries it. Types have
       no run-time form, but the *syntax* the reader wrote is still here, and a
       conversion needs to know which type it was asked for. Reading it is not
@@ -142,7 +151,7 @@ evaluateCall needs spanValue callee arguments = do
       let chosen = case locatedValue callee of
             TypeApplication _ written -> mapM witnessOf written
             _ -> pure []
-      qualified <- qualifiedCallee inner values
+      qualified <- qualifiedBy inner
       ordinaryTarget <- case locatedValue inner of
         MemberExpression target _ -> not <$> qualifiedPath (locatedValue target)
         _ -> pure False
@@ -150,7 +159,7 @@ evaluateCall needs spanValue callee arguments = do
         (Nothing, MemberExpression target (Located _ member)) | ordinaryTarget -> do
           (receiverPlace, receiver) <- receiverOf needs target
           selected <- chosen
-          callMemberSelecting (selectTypes selected) needs spanValue (locatedSpan inner)
+          callMemberSelecting evidence (selectTypes selected) needs spanValue (locatedSpan inner)
             lent{lentSelf = receiverPlace} True receiver member values
         _ -> do
           target <- maybe (callEvaluate needs inner) pure qualified
@@ -161,13 +170,14 @@ evaluateCall needs spanValue callee arguments = do
               dispatchCall needs spanValue lent (FunctionValue (selectTypes selected closure)) values
             _ -> dispatchCall needs spanValue lent target values
     Nothing -> do
-      qualified <- qualifiedCallee callee values
+      qualified <- qualifiedBy callee
       case qualified of
         Just found -> dispatchCall needs spanValue lent found values
         Nothing -> case locatedValue callee of
           MemberExpression target (Located _ member) -> do
             (receiverPlace, receiver) <- receiverOf needs target
-            callMember needs spanValue (locatedSpan callee) lent{lentSelf = receiverPlace} True receiver member values
+            callMemberSelecting evidence id needs spanValue (locatedSpan callee)
+              lent{lentSelf = receiverPlace} True receiver member values
           _ -> do
             target <- evaluateCallee needs callee
             dispatchCall needs spanValue lent target values
@@ -177,20 +187,23 @@ evaluateCall needs spanValue callee arguments = do
     itself carries. `implemented` is false only when no implementation anywhere
     declares a method of this name, which skips looking for one. -}
 callMember :: CallNeeds -> Span -> Span -> Lent -> Bool -> Value -> Text -> [Value] -> Evaluator Value
-callMember = callMemberSelecting id
+callMember = callMemberSelecting Nothing id
 
-{-| A method call whose callee carries chosen types for its parameters. -}
+{-| A method call whose callee carries chosen types for its parameters, and
+    the trait checking resolved it through, when it was one. -}
 callMemberSelecting
-  :: (Closure -> Closure) -> CallNeeds -> Span -> Span -> Lent -> Bool -> Value -> Text -> [Value]
-  -> Evaluator Value
-callMemberSelecting select needs spanValue memberSpan lent implemented receiver member values = case receiver of
+  :: Maybe TraitEvidence -> (Closure -> Closure) -> CallNeeds -> Span -> Span -> Lent -> Bool -> Value -> Text
+  -> [Value] -> Evaluator Value
+callMemberSelecting evidence select needs spanValue memberSpan lent implemented receiver member values = case receiver of
   StrValue text
     | Just direct <- callStringMethodFast spanValue member text values -> direct
   _ -> do
-    method <-
-      if implemented
-        then receiverOwners receiver >>= firstBound (\owner -> lookupMethod (owner <> "." <> member))
-        else pure Nothing
+    evident <- maybe (pure Nothing) (\found -> evidentMethod found receiver member) evidence
+    method <- case evident of
+      Just closure -> pure (Just (FunctionValue closure))
+      Nothing | implemented ->
+        receiverOwners receiver >>= firstBound (\owner -> lookupMethod (owner <> "." <> member))
+      Nothing -> pure Nothing
     calleeVal <- case method of
       Just (FunctionValue closure) -> pure (FunctionValue (select closure{closureSelf = Just receiver}))
       _ -> readMember memberSpan receiver member
@@ -236,30 +249,6 @@ dispatchCall needs spanValue lent target values =
     type that implements it, as in `Bot.label(bot)`, or by the trait that
     declares it, as in `A.label(bot)`. The trait form dispatches on the first
     argument's type, which is the receiver the method is being called on. -}
-
-{-| Supplied arguments bind left to right; a parameter with no argument uses its
-    default, evaluated in the environment the earlier parameters already
-    extended. -}
-bindArguments :: CallNeeds -> [Located Parameter] -> [Value] -> Maybe Span -> Evaluator [(Text, Value)]
-bindArguments needs parameters arguments callSpan = go parameters arguments []
- where
-  go [] [] collected = pure (reverse collected)
-  go [] (_ : _) collected =
-    abortAt callSpan "E7003" "too many arguments in call"
-      (Just "pass one argument per declared parameter") >> pure (reverse collected)
-  go (Located _ parameter : rest) supplied collected = case supplied of
-    value : remaining ->
-      go rest remaining ((locatedValue (parameterName parameter), value) : collected)
-    [] -> case parameterDefault parameter of
-      Just expression -> do
-        value <- withFrame (reverse collected) (callEvaluate needs expression)
-        go rest [] ((locatedValue (parameterName parameter), value) : collected)
-      Nothing -> do
-        _ <-
-          abortAt callSpan "E7003"
-            ("missing argument for parameter " <> locatedValue (parameterName parameter))
-            (Just "supply the argument or give the parameter a default")
-        pure (reverse collected)
 
 {-| A block evaluates its statements in order and yields its trailing
     expression, or unit when it has none. A control transfer inside it travels

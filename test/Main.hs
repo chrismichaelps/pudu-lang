@@ -14,6 +14,7 @@ import Pudu.Derive.CacheSpec (deriveCacheProperties)
 import Pudu.Derive.GraphSpec (deriveGraphProperties)
 import Pudu.Derive.LibrarySpec (deriveLibraryProperties)
 import Pudu.Type.ImplementationSpec (implementationProperties)
+import Pudu.Type.TraitEvidenceSpec (traitEvidenceProperties)
 import Pudu.GeneratedIdentitySpec (generatedIdentityProperties)
 import Pudu.DiagnosticSpec (diagnosticProperties)
 import Pudu.FormatSpec (formatProperties)
@@ -105,7 +106,7 @@ main = do
       , check "every in-bounds offset has a position" propertyValidOffsetsHavePositions
       , check "a looked-up position is the one counting gives" propertyPositionMatchesCounting
       ]
-  generatedOutcomes <- traverse (uncurry check) (generatedIdentityProperties <> recordResidualProperties <> catalogueProperties <> requirementProperties <> targetProperties <> deriveCacheProperties <> deriveGraphProperties <> deriveLibraryProperties <> implementationProperties)
+  generatedOutcomes <- traverse (uncurry check) (generatedIdentityProperties <> recordResidualProperties <> catalogueProperties <> requirementProperties <> targetProperties <> deriveCacheProperties <> deriveGraphProperties <> deriveLibraryProperties <> implementationProperties <> traitEvidenceProperties)
   decimalOutcomes <- traverse (uncurry check) decimalProperties
   versionOutcomes <- traverse (uncurry check) versionProperties
   diagnosticOutcomes <- traverse (uncurry check) diagnosticProperties

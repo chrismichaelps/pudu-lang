@@ -40,11 +40,11 @@ import qualified Data.Map.Strict as Map
 import Pudu.Type.Formation (builtinTypeNames)
 import Pudu.Type.Substitute (substituteRigid)
 import Pudu.Type.Check.Receiver (bindReceiver)
-import Pudu.Type.Check.Method (methodScheme)
+import Pudu.Type.Check.Method (methodScheme, qualifiedForm)
 import Pudu.Type.Env
   ( Checker
   , DeclaredTypes (..)
-  , isStaticTrait
+  , needsWitness
   , recordSelection
   , useCapability
   , insideUnsafe
@@ -1083,10 +1083,8 @@ ambiguous :: Span -> NominalId -> Text -> [NominalId] -> Checker Type
 ambiguous spanValue owner member providers = do
   report "E3013" spanValue
     (member <> " is ambiguous for " <> nominalName owner)
-    (Just ("call it qualified: " <> Text.intercalate " or " (map qualifiedForm providers)))
+    (Just ("call it through its trait: " <> Text.intercalate " or " (map (qualifiedForm member) providers)))
   pure ErrorType
- where
-  qualifiedForm traitIdentity = nominalName traitIdentity <> "." <> member <> "(value)"
 
 {-| The type one index into a value produces.
 
@@ -1111,14 +1109,15 @@ elementType spanValue position targetType = do
       pure ErrorType
 
 {-| A parameter bounded by a trait with a static member may be called through
-    (`A.decode(json)`), which reads no value to dispatch on. The types this
-    reference chose for every parameter are kept, in the scheme's order, so the
-    call can carry them. `Self` is a trait member's own receiver type and is
-    settled by the owner the call names. -}
+    (`A.decode(json)`), which reads no value to dispatch on, and so may one
+    whose implementation calls its own parameters that way (`needsWitness`).
+    The types this reference chose for every parameter are kept, in the
+    scheme's order, so the call can carry them. `Self` is a trait member's own
+    receiver type and is settled by the owner the call names. -}
 recordStaticSelection :: Span -> Scheme -> [(Text, Type)] -> Checker ()
 recordStaticSelection spanValue scheme replacements = do
   static <- or <$> sequence
-    [ isStaticTrait owner
+    [ needsWitness owner
     | (subject, bounds) <- schemeBounds scheme, subject /= "Self"
     , NominalType owner _ <- bounds ]
   when (static && all ((/= "Self") . fst) (schemeParams scheme)) $

@@ -61,8 +61,10 @@ module Pudu.Type.Env
   , takeUnwrittenParameters
   , recordExpression
   , recordSelection
+  , recordEvidence
   , noteStaticTrait
-  , isStaticTrait
+  , noteImplementationBounds
+  , needsWitness
   , report
   , reportedAt
   , negateIntegerLiteral
@@ -113,7 +115,7 @@ import Pudu.Diagnostic
   , withHelp
   )
 import Pudu.Frontend.Syntax.Located (Located (..))
-import Pudu.Frontend.Syntax.Tree (Capability (..))
+import Pudu.Frontend.Syntax.Tree (Capability (..), TraitEvidence (..))
 import Pudu.Source (Span)
 import Pudu.IntegerLiteral (fitsIntegerType)
 import Pudu.Type.Frontier (splitSince, splitBetween)
@@ -255,9 +257,16 @@ data CheckerState = CheckerState
       one of them may be called through statically, which needs its chosen
       type at run time. -}
   , stateStaticTraits :: !(Set NominalId)
+  {-| For each trait, the traits bounding its implementations' parameters.
+      An implementation that calls such a parameter statically needs the
+      caller's chosen type exactly as a static trait does. -}
+  , stateImplementationBounds :: !(Map NominalId (Set NominalId))
   {-| Instantiations of parameters bounded by a static trait, by the span of
       the reference that instantiated them, in the scheme's parameter order. -}
   , stateSelectionsRev :: ![(Span, [Type])]
+  {-| The trait that resolved each callee and implementation head, newest
+      first. -}
+  , stateEvidenceRev :: ![TraitEvidence]
   {-| Expressions whose value is the enclosing function's result: a body's
       tail, the tails of branches standing there, and every `return` operand.
       Marked before their subexpressions are checked, so a match learns its
@@ -293,6 +302,8 @@ data CheckerProducts = CheckerProducts
   , producedIntegerKinds :: ![(Span, Text)]
   {-| Every recorded static selection with inference settled. -}
   , producedSelections :: ![(Span, [Type])]
+  {-| What `recordEvidence` collected, in the order it was recorded. -}
+  , producedEvidence :: ![TraitEvidence]
   }
 
 newtype Checker a = Checker (CheckerState -> (a, CheckerState))
@@ -333,6 +344,7 @@ runChecker (Checker action) = case action initialState of
     , stateIntegerKinds = kinds
     , stateDeclaredMethodsRev = methods
     , stateSelectionsRev = selections
+    , stateEvidenceRev = evidence
     }) -> CheckerProducts
       { producedTypes = reverse (map (fmap (resolveFinal substitution)) types)
       , producedSchemes = finalSchemes substitution frames
@@ -340,6 +352,7 @@ runChecker (Checker action) = case action initialState of
       , producedIntegerKinds = reverse kinds
       , producedMethods = reverse methods
       , producedSelections = reverse (map (fmap (map (resolveFinal substitution))) selections)
+      , producedEvidence = reverse evidence
       }
 
 {-| The module frame as inference left it, with every variable resolved.
@@ -386,7 +399,9 @@ initialState =
     , stateDeclaredMethodsRev = []
     , stateDeclaredMethodKeys = Set.empty
     , stateStaticTraits = Set.empty
+    , stateImplementationBounds = Map.empty
     , stateSelectionsRev = []
+    , stateEvidenceRev = []
     , stateResultSpans = Set.empty
     }
 
@@ -522,12 +537,42 @@ noteStaticTrait :: NominalId -> Checker ()
 noteStaticTrait owner =
   Checker $ \state -> ((), state{stateStaticTraits = Set.insert owner (stateStaticTraits state)})
 
-isStaticTrait :: NominalId -> Checker Bool
-isStaticTrait owner = Checker $ \state -> (Set.member owner (stateStaticTraits state), state)
+noteImplementationBounds :: NominalId -> [NominalId] -> Checker ()
+noteImplementationBounds trait bounds =
+  Checker $ \state ->
+    ( ()
+    , state
+        { stateImplementationBounds =
+            Map.insertWith Set.union trait (Set.fromList bounds) (stateImplementationBounds state)
+        }
+    )
+
+{-| Whether a call through a parameter bounded by this trait must carry the
+    type it chose: the trait is static, or an implementation's parameter is
+    bounded, directly or through further implementations, by one that is.
+    Run-time values carry no element types, so only the selection can bind
+    such an implementation's parameters. -}
+needsWitness :: NominalId -> Checker Bool
+needsWitness owner = Checker $ \state ->
+  let reach seen [] = (False, seen)
+      reach seen (trait : rest)
+        | Set.member trait seen = reach seen rest
+        | Set.member trait (stateStaticTraits state) = (True, seen)
+        | otherwise =
+            reach (Set.insert trait seen)
+              (Set.toList (Map.findWithDefault Set.empty trait (stateImplementationBounds state)) <> rest)
+   in (fst (reach Set.empty [owner]), state)
 
 recordSelection :: Span -> [Type] -> Checker ()
 recordSelection spanValue chosen =
   Checker $ \state -> ((), state{stateSelectionsRev = (spanValue, chosen) : stateSelectionsRev state})
+
+{-| The canonical trait that resolved the callee or implementation head at
+    this span, and the type parameter its receiver or static owner was. -}
+recordEvidence :: Span -> NominalId -> Maybe Text -> Checker ()
+recordEvidence spanValue trait parameter =
+  Checker $ \state ->
+    ((), state{stateEvidenceRev = TraitEvidence spanValue (nominalKey trait) parameter : stateEvidenceRev state})
 
 recordIntegerKind :: Span -> Text -> Checker ()
 recordIntegerKind spanValue name =

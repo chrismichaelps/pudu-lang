@@ -230,3 +230,9 @@ Resolved Grill Log: offset-only signatures would undo generated identity.
 Function and member checking propagate full formed bounds. A trait default installs Self with its enclosing trait arguments; an implementation method forms its own bounds under implementation parameters.
 
 Resolved Grill Log: full bound evidence remains in scope until deferred obligations discharge, including trait default and derive bodies.
+
+## Trait evidence
+
+`checkModuleDetailed` returns the produced trait evidence beside the selections.
+Resolved Grill Log: evidence is published only from a module's own checking pass; interface
+methods record none, because their spans belong to the module that declared them.

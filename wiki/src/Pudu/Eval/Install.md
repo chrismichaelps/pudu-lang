@@ -225,3 +225,12 @@ Mark the current module frames after installing declarations and before evaluati
 Nested calls then recognize local type witnesses during folding and ordinary loading alike.
 Resolved Grill Log: one declaration-loading boundary covers root and dependency initializers;
 imports stay outside the local witness frame and effect permissions remain unchanged.
+
+## Canonical trait keys (#734)
+
+An implementation of a trait whose head carries evidence installs each method, inherited defaults
+included, a third time under `<Module.Trait>.<Type>.<member>`. The plain and short-trait keys stay
+for inherent methods, unresolved calls and existing qualified forms.
+Resolved Grill Log: **Q:** Drop the plain key for trait methods? **A:** No; a call the checker
+recorded nothing for (a method value read, a loop protocol) still reaches the plain key, and two
+providers there are already refused by checking at the call.

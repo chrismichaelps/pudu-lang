@@ -36,7 +36,7 @@ testRecoveryTree = do
   source <- newSource (SourceName "tree.pudu") "module App"
   let spanValue = emptySpan source
       tree = Module spanValue (Located spanValue (ModuleName ("App" :| []))) []
-        [Located spanValue InvalidDeclaration]
+        [Located spanValue InvalidDeclaration] []
   pure $ case moduleDeclarations tree of
     [Located foundSpan InvalidDeclaration] -> foundSpan === spanValue
     _ -> counterexample "recovery declaration was not retained" False

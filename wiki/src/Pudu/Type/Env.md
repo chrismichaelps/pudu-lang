@@ -230,3 +230,15 @@ Do not remove live recorded facts, defer checking itself, or drop editor answers
 ## Lexical member admission (#471)
 
 Expose lookupLocalName over nested name frames only, excluding the final module/interface frame. Reuse the ordered name search without copying maps or exposing state. Local parameters, constants, patterns and captured blocks count; shared bare dependency declarations do not. Resolved Grill Log: a qualified expression cannot consult an export before a nearer local, and hidden graph names cannot impersonate a lexical shadow. The existing state-owner length exception remains bounded to this accessor.
+
+## Trait evidence (#734, #735)
+
+`recordEvidence :: Span -> NominalId -> Maybe Text -> Checker ()` keeps, by callee or
+implementation-head span, the canonical trait that resolved it and the type parameter the receiver
+or static owner was. `runChecker` publishes them in order as `producedEvidence`.
+Resolved Grill Log: the same span may be recorded more than once (a derive body is checked per
+request); the evaluator keeps one entry per span and every recording names the same trait.
+
+`noteImplementationBounds trait bounds` records the traits bounding an implementation's
+parameters; `needsWitness` answers whether a call through a parameter bounded by a trait must
+carry its chosen type (the trait is static, or reaches a static trait through those records).

@@ -96,3 +96,12 @@ lookup tally rather than introducing a second name-resolution policy.
 ## Lexical member admission (#471)
 
 qualifiedCallee returns Nothing immediately for an ordinary local head, skipping both dotted export lookup and receiver-owner fallback. A TypeWitnessValue retains witnessed method selection and its fallback. qualifiedPath performs the same local/witness distinction for explicit type-applied call dispatch; retain uppercase filtering only after lexical admission. Resolved Grill Log: constants may qualify ordinary value members; both evaluators must honor the same local frame and restore the outer namespace on exit.
+
+## Evidence key (#734, #735)
+
+`calleeUnderTypes :: Located Expression -> Located Expression` strips type applications from a
+callee: checking records a call's trait evidence at the span of the callee beneath its type
+arguments, and both evaluators look it up there. Evidence-directed qualified calls are answered by
+[[Eval Call Evidence]] before `qualifiedCallee`, which is unchanged.
+Resolved Grill Log: a selection rewrite wraps a callee in a type application at the same span, so
+stripping it keeps one key for written and rewritten calls.

@@ -73,3 +73,8 @@ MultiMap wrapper selection. Previously the direct-call branch accepted only
 call setup despite being known module functions. Flatten member chains only for
 lookup, and admit their direct path only when the MultiMap wrapper proof succeeds.
 Other member calls retain their established dispatch.
+
+## Trait evidence
+
+`compileCall` resolves the callee's evidence once and hands compiled code a constant answer.
+Resolved Grill Log: evidence is fixed after loading; reading it per call buys nothing.

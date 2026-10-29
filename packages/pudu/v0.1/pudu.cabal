@@ -124,6 +124,7 @@ library
     Pudu.Eval.Json
     Pudu.Eval.Xml
     Pudu.Eval.Call.Argument
+    Pudu.Eval.Call.Evidence
     Pudu.Eval.Call.Needs
     Pudu.Eval.Call.Path
     Pudu.Eval.Clock

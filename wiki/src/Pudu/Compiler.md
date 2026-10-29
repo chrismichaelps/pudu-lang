@@ -185,3 +185,9 @@ Folding uses the fully settled executable syntax, including selections inside ge
 bodies, and the same tree supplies the executable product. Resolved Grill Log: resolving only
 the derived call's owner leaves a nested parameter call erased during constant evaluation; reuse
 the existing complete literal/selection projection once rather than adding a folding resolver.
+
+## Trait evidence
+
+The executable module (`compileModule`) carries the checker's trait evidence in `moduleEvidence`;
+`compileSyntax` keeps the parsed module's empty list. Resolved Grill Log: only the module that is
+run needs dispatch facts, and tooling reads authored syntax.

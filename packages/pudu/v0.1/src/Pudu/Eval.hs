@@ -21,6 +21,7 @@ import Data.Text (Text)
 import Pudu.Diagnostic (Diagnostic)
 import Pudu.Eval.Env
   ( Env (..)
+  , traitEvidenceAt
   , integerKindAt
   , tally
   , Eval (..)
@@ -205,7 +206,9 @@ scopeTo :: [Map Text Value] -> Value -> Value
 scopeTo = Call.scopeTo
 
 callNeeds :: CallNeeds
-callNeeds = CallNeeds{callEvaluate = evaluate, callBlock = evaluateBlock, callCompile = compileBody walker}
+callNeeds = CallNeeds
+  { callEvaluate = evaluate, callBlock = evaluateBlock, callCompile = compileBody walker
+  , callEvidence = traitEvidenceAt }
 
 {-| The tree walker, handed to the compiler for what it does not compile. -}
 walker :: Walker

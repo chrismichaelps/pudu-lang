@@ -73,6 +73,7 @@ tags: [moc, module]
   - [[Derive Graph Coherence]] — canonical request ownership and overlap admission.
   - [[Derive Graph]] — definition admission and conditional-head stabilization.
   - [[Derive Graph Spec]] — real loaded-program captures, conditional heads and refusals.
+  - [[Trait Evidence Spec]] — shared member names and generic implementations in both evaluators.
   - [[Lsp Impl Members Spec]] — implementation member completion and its quick fix.
   - [[Derive Library Spec]] — every shipped derive, field callbacks, static selection and the expansion snapshot in both evaluators.
   - [[Derive Field Callbacks]] · [[Derive Residual Context]] — build/collect unrolling and shared residual state.
@@ -215,6 +216,7 @@ tags: [moc, module]
 
 - [[Eval Call Argument]] — argument values and receiver lending places.
 - [[Eval Call Needs]] — evaluator callbacks shared by call dispatch and argument discovery.
+- [[Eval Call Evidence]] — runs the implementation the checker's trait evidence names.
 
 - [[Derive Expand Expected]]
 

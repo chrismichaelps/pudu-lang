@@ -115,3 +115,8 @@ Exact `typeAt` queries use the full span; offset query complexity stays unchange
 - **Q:** Collapse generated types into the hover map? **A:** No. _Rationale:_ a
   template position has different types in different instantiations. _Rejected:_
   last expansion wins or a linear rescan on every tooling query.
+
+## Trait evidence
+
+`ModuleTypes` carries `moduleTraitEvidence :: [TraitEvidence]` from [[Type Check]].
+Resolved Grill Log: kept as a list in production order; the evaluator builds its own map.

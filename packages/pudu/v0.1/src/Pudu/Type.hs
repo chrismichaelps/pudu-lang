@@ -22,7 +22,7 @@ import qualified Data.Map.Strict as Map
 import Data.Set (Set)
 import Pudu.Diagnostic (Diagnostic)
 import Pudu.Semantic (resolveModule, writableReferences)
-import Pudu.Frontend.Syntax.Tree (Module (..))
+import Pudu.Frontend.Syntax.Tree (Module (..), TraitEvidence)
 import Pudu.Frontend.Syntax.Located (Located (..))
 import Pudu.Source (Span, sameSpanSource, spanEnd, spanOrigin, spanStart, unOffset)
 import Pudu.Type.Check (checkModule)
@@ -70,18 +70,21 @@ data ModuleTypes = ModuleTypes
   {-| The types chosen for parameters bounded by a trait with a static
       member, by the span of the reference that chose them. -}
   , moduleSelections :: !(Map.Map Span [Type])
+  {-| The trait that resolved each callee and implementation head, by span. -}
+  , moduleTraitEvidence :: ![TraitEvidence]
   }
   deriving stock (Eq, Show)
 
 checkTypesDetailed :: ImportTypes -> Set Span -> Module -> (ModuleTypes, [Diagnostic])
 checkTypesDetailed imported writable moduleValue =
-  let (entries, schemes, kinds, methods, selections, diagnostics) = Check.checkModuleDetailed imported writable moduleValue
+  let (entries, schemes, kinds, methods, selections, evidence, diagnostics) = Check.checkModuleDetailed imported writable moduleValue
    in ( ModuleTypes
           { moduleTypeInfo = typeInfoFor moduleValue entries
           , moduleSchemes = schemes
           , moduleIntegerKinds = Map.fromList kinds
           , moduleMethods = methods
           , moduleSelections = Map.fromList selections
+          , moduleTraitEvidence = evidence
           }
       , diagnostics
       )
