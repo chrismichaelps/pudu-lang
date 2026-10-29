@@ -23,7 +23,9 @@ pass. `write(value)` frames the encoding as `PBIN`, a 16-bit version (1) and the
 `Float64` keeps its exact bits, so NaN payloads and signed zero survive. An `Array[Float64]` and
 `Lanes` travel as one contiguous `Reals` block: an array picks its form from its first element
 (`packMany`), and reading dispatches on the node (`unpackReals`). `Option` is `Absent` or
-`Present`, and its `missing()` is `None`, so only an `Option` field may be absent.
+`Present`; its `missing()` returns `Some(None)`, providing an absent-field default. Other
+shipped implementations inherit no default; custom Decode implementations may override
+`missing()` explicitly.
 
 A record writes its fields under their wire names (the field name, or `@binary("name")`); `@skip`
 fields are neither written nor read and take `missing()`. Reading ignores names it does not know
@@ -38,7 +40,7 @@ names and `[index]` steps, and `Corrupt(message)` for anything the native reader
 
 - **Q:** Is removing a required field compatible in both directions? **A:** No; new readers can
   ignore that field in old archives, but old readers refuse a new archive that omits it. Only
-  fields with `missing()` (Option) support absent-field compatibility.
+  fields whose `missing()` supplies a value support absent-field compatibility.
 
 - **Q:** Must the derive trait be named after its implementation method? **A:** No; the public
   derive spelling is `Binary.Encode, Binary.Decode`, while their methods remain `pack`/`unpack`.

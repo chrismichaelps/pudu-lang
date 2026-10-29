@@ -227,7 +227,7 @@ export derive Encode for T: Sum {
 }
 
 /// A record reads its fields by wire name: unknown names are ignored and an absent or `@skip`
-/// field takes its type's `missing` value, so only an `Option` may be absent.
+/// field takes its type's explicit `missing` value when one is provided.
 export derive Decode for T: Record {
   fn unpack(node: &Node) -> Result[T, BinaryError] {
     let Record(fields) = *node else { return failed(WrongKind("a record")) }
