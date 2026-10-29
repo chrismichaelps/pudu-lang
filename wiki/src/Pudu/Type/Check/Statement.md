@@ -95,6 +95,9 @@ exception.
 
 ## Grill Log
 
+- **Q:** Why mark a `return` operand before checking it? **A:** Its value is the function's
+  result, so a match there is in result position for [[Check Propagation]].
+
 - **Q:** Why does the block itself open the frame rather than each caller? **A:** Every construct
   with a block — `if`, loops, block expressions, function bodies — must discard the block's
   bindings, and a caller that forgot let an inner shadow retype the outer name. _Rationale:_ one

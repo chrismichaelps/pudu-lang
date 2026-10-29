@@ -5,6 +5,11 @@ tags: [changelog]
 
 # Changelog
 
+## 2026-10-28 — W3003 respects result position (#700)
+
+- [[Check Propagation]] counts a value-form failure arm as propagation only when the match
+  stands in result position; a match bound with `let` keeps its `None` and is no longer told to
+  use `?`, which would have returned early.
 ## 2026-10-28 — Strided byte groups (#699)
 
 - [[Eval Bytes]] and [[Std Bytes]] add `strided(offset, width, stride)`, copying a fixed-width
