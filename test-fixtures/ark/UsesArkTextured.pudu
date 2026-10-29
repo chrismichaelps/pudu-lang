@@ -94,10 +94,44 @@ fn material() {
   require(pixel(&drawn, 32, 32) == (255u8, 128u8, 0u8, 255u8), "tint multiplies the lit albedo")
 }
 
+fn lighting(ambient: Float64, fresnel: Float64) -> Device.Lighting {
+  Device.Lighting {
+    eye: V.vec3(0.0, 0.0, 3.0),
+    toward: V.vec3(0.0, 0.0, 1.0),
+    light: Color.opaque(1.0, 1.0, 1.0),
+    ambient,
+    shininess: 50.0,
+    specular: 0.0,
+    fresnel,
+    horizon: Color.opaque(0.2, 0.4, 0.6),
+    zenith: Color.opaque(0.2, 0.4, 0.6),
+    sunRadius: 0.05,
+  }
+}
+
+fn shaded() {
+  let Some(view) = Camera.lookAt(V.vec3(0.0, 0.0, 3.0), V.vec3(0.0, 0.0, 0.0), V.vec3(0.0, 1.0, 0.0)) else { panic("view") }
+  let Some(projection) = Camera.perspective(Float.pi() / 3.0, 1.0, 0.1, 100.0) else { panic("projection") }
+  let cube = Mesh.cube(Color.opaque(0.5, 0.25, 1.0))
+  let Some((batch, normals)) = Pipeline.projectSurface(&cube, &M.identity4(), &M.multiply4(projection, view), 64, 64) else { panic("surface") }
+  require(Lanes.count(&normals.nx) == Lanes.count(&batch.xs) && Lanes.count(&normals.pz) == Lanes.count(&batch.xs), "a normal and position per screen vertex")
+  require(Lanes.toArray(&batch.rs) == Lanes.toArray(&cube.r), "surface batches stay unlit")
+  let Some(target) = Device.target(64, 64) else { panic("target") }
+  let Some(matte) = Device.drawShaded(target, &batch, &normals, Device.CullBack, &lighting(0.0, 0.0)) else { panic("matte") }
+  require(pixel(&matte, 32, 32) == (128u8, 64u8, 255u8, 255u8), "head-on light gives the base color at the front face")
+  let Some(mirror) = Device.drawShaded(target, &batch, &normals, Device.CullBack, &lighting(0.0, 1.0)) else { panic("mirror") }
+  let (r, g, b, _) = pixel(&mirror, 32, 32)
+  require(r >= 51u8 && g >= 102u8 && b >= 153u8, "full reflectance shows the sky")
+  require(Device.drawShaded(target, &batch, &normals, Device.CullBack, &lighting(2.0, 0.0)) == None, "invalid lighting refused")
+  let short = Device.Surface{..normals, nx: Lanes.fromArray(&[0.0])}
+  require(Device.drawShaded(target, &batch, &short, Device.CullBack, &lighting(0.0, 0.0)) == None, "mismatched surface lanes refused")
+}
+
 export fn main() -> Int {
   coordinates()
   textured()
   material()
+  shaded()
   print("ark textured: ok")
   0
 }

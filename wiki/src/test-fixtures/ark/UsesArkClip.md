@@ -11,7 +11,7 @@ tags: [module, ark, render, test]
 ## Purpose and interface
 
 Exercise fully retained/hidden triangles, one/two near-plane vertices outside, far-plane clipping,
-exact boundary admission, homogeneous color and texture-coordinate interpolation, winding and
+exact boundary admission, homogeneous color, texture-coordinate and extra-attribute interpolation, winding and
 ordered triangle output.
 Plane-touching zero-area polygons disappear without duplicate endpoints; large near-plane values
 exercise the scaled ratio, and fully hidden extreme far values become empty.

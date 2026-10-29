@@ -1,9 +1,11 @@
 module Ark.Render.Device
 
 import Std.Lanes as Lanes
+import Std.Math.Float as Float
 import Ark.Assets.Import as Import
 import Ark.Assets.Texture as Texture
 import Ark.Math.Color as Color
+import Ark.Math as V
 
 /// An RGBA8 color buffer and a Float64 depth lane of width x height, rows top to bottom.
 export type Target = { width: Int, height: Int, color: Bytes, depth: Lanes.Lanes }
@@ -20,6 +22,25 @@ export type ScreenBatch = {
   bs: Lanes.Lanes,
   us: Lanes.Lanes,
   vs: Lanes.Lanes,
+}
+
+/// World-space normals and positions per vertex, parallel to a screen batch, for per-pixel lighting.
+export type Surface = { nx: Lanes.Lanes, ny: Lanes.Lanes, nz: Lanes.Lanes, px: Lanes.Lanes, py: Lanes.Lanes, pz: Lanes.Lanes }
+
+/// Per-pixel lighting: the eye, a direction toward the light and its color, an ambient floor,
+/// a Blinn-Phong highlight, Fresnel reflectance at normal incidence and a sky gradient with a sun
+/// disc of the given angular radius in radians.
+export type Lighting = {
+  eye: V.Vec3,
+  toward: V.Vec3,
+  light: Color.Rgba,
+  ambient: Float64,
+  shininess: Float64,
+  specular: Float64,
+  fresnel: Float64,
+  horizon: Color.Rgba,
+  zenith: Color.Rgba,
+  sunRadius: Float64,
 }
 
 /// Which faces a draw keeps; front faces wind counter-clockwise in device coordinates.
@@ -86,6 +107,39 @@ export fn drawTextured(surface: Target, batch: &ScreenBatch, cull: Cull, texture
     texture.width,
     space,
     mode,
+  ) ?
+  let lanes = Lanes.fromBytes(depth) ?
+  Some(Target{..surface, color, depth: lanes})
+}
+
+/// Rasterize unlit base colors lit per pixel from the surface's interpolated normals and
+/// positions; None for mismatched lanes, invalid w or invalid lighting.
+export fn drawShaded(surface: Target, batch: &ScreenBatch, normals: &Surface, cull: Cull, lighting: &Lighting) -> Option[Target] {
+  let l = lighting
+  let uniforms = Lanes.fromArray(&[
+      l.eye.x, l.eye.y, l.eye.z, l.toward.x, l.toward.y, l.toward.z, l.light.r, l.light.g, l.light.b,
+      l.ambient, l.shininess, l.specular, l.fresnel, l.horizon.r, l.horizon.g, l.horizon.b,
+      l.zenith.r, l.zenith.g, l.zenith.b, Float.cos(l.sunRadius),
+    ])
+  let (color, depth) = rasterShadedTriangles(
+    surface.color,
+    Lanes.toBytes(&surface.depth),
+    surface.width,
+    cullCode(cull),
+    Lanes.toBytes(&batch.xs),
+    Lanes.toBytes(&batch.ys),
+    Lanes.toBytes(&batch.zs),
+    Lanes.toBytes(&batch.rs),
+    Lanes.toBytes(&batch.gs),
+    Lanes.toBytes(&batch.bs),
+    Lanes.toBytes(&batch.ws),
+    Lanes.toBytes(&normals.nx),
+    Lanes.toBytes(&normals.ny),
+    Lanes.toBytes(&normals.nz),
+    Lanes.toBytes(&normals.px),
+    Lanes.toBytes(&normals.py),
+    Lanes.toBytes(&normals.pz),
+    Lanes.toBytes(&uniforms),
   ) ?
   let lanes = Lanes.fromBytes(depth) ?
   Some(Target{..surface, color, depth: lanes})

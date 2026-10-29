@@ -5,6 +5,12 @@ tags: [changelog]
 
 # Changelog
 
+## 2026-10-28 — Per-pixel water
+
+- [[Ark Render Pipeline]] `projectSurface`, [[Ark Depth Clip]] extra attributes and
+  [[Ark Render Device]] `drawShaded` bring per-pixel lighting to the engine; [[Wave Tank Demo]]
+  water now shows sun glints and Fresnel sky reflection at about 23 ms a frame.
+
 ## 2026-10-28 — Per-pixel shading in the raster kernel (#712)
 
 - [[Runtime Shade]] and [[Runtime Raster]] light every pixel from interpolated normals and

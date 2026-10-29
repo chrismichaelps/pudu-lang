@@ -5,7 +5,8 @@ import Std.Math.Float as Float
 import Ark.Math as V
 import Ark.Math.Vec2 as V2
 
-/// Lit, textured homogeneous vertices, three per triangle, before perspective division.
+/// Lit, textured homogeneous vertices, three per triangle, before perspective division, with any
+/// number of extra attribute lanes interpolated alongside color.
 export type Vertices = {
   xs: Lanes.Lanes,
   ys: Lanes.Lanes,
@@ -16,9 +17,10 @@ export type Vertices = {
   bs: Lanes.Lanes,
   us: Lanes.Lanes,
   vs: Lanes.Lanes,
+  extras: Array[Lanes.Lanes],
 }
 
-type Vertex = { position: V.Vec4, color: V.Vec3, coordinate: V2.Vec2 }
+type Vertex = { position: V.Vec4, color: V.Vec3, coordinate: V2.Vec2, extra: Array[Float64] }
 type Plane = { distance: fn(V.Vec4) -> Float64, snap: fn(V.Vec4) -> V.Vec4 }
 
 const DEPTH_PLANES: Array[Plane] = [
@@ -30,10 +32,13 @@ const DEPTH_PLANES: Array[Plane] = [
 export fn depth(vertices: &Vertices) -> Option[Vertices] {
   let count = Lanes.count(&vertices.xs)
   if count % 3 != 0 || Lanes.count(&vertices.us) != count || Lanes.count(&vertices.vs) != count { return None }
+  for extra in vertices.extras {
+    if Lanes.count(&extra) != count { return None }
+  }
   // IEEE zero products retain NaN and turn infinities into NaN without overflowing finite sums.
   let zero = Lanes.scale(&vertices.xs, 0.0)
   var finite = zero
-  for lane in [vertices.ys, vertices.zs, vertices.ws, vertices.rs, vertices.gs, vertices.bs, vertices.us, vertices.vs] {
+  for lane in [vertices.ys, vertices.zs, vertices.ws, vertices.rs, vertices.gs, vertices.bs, vertices.us, vertices.vs].concat(vertices.extras) {
     finite = Lanes.fma(&lane, &zero, &finite) ?
   }
   if Lanes.sum(&finite) != 0.0 { return None }
@@ -52,6 +57,10 @@ export fn depth(vertices: &Vertices) -> Option[Vertices] {
   let bs = Lanes.toArray(&vertices.bs)
   let us = Lanes.toArray(&vertices.us)
   let vs = Lanes.toArray(&vertices.vs)
+  var extraValues: Array[Array[Float64]] = []
+  for extra in vertices.extras { extraValues = extraValues.push(Lanes.toArray(&extra)) }
+  var outExtras: Array[Array[Float64]] = []
+  for _ in vertices.extras { outExtras = outExtras.push([]) }
   var outX: Array[Float64] = []
   var outY: Array[Float64] = []
   var outZ: Array[Float64] = []
@@ -68,7 +77,9 @@ export fn depth(vertices: &Vertices) -> Option[Vertices] {
     while corner < 3 {
       let index = at + corner
       let position = V.vec4(xs[index], ys[index], zs[index], ws[index])
-      polygon = polygon.push(Vertex{position, color: V.vec3(rs[index], gs[index], bs[index]), coordinate: V2.vec2(us[index], vs[index])})
+      var extra: Array[Float64] = []
+      for values in extraValues { extra = extra.push(values[index]) }
+      polygon = polygon.push(Vertex{position, color: V.vec3(rs[index], gs[index], bs[index]), coordinate: V2.vec2(us[index], vs[index]), extra})
       corner = corner + 1
     }
     for plane in DEPTH_PLANES { polygon = clipped(&polygon, &plane) ? }
@@ -86,6 +97,11 @@ export fn depth(vertices: &Vertices) -> Option[Vertices] {
         outB = outB.push(vertex.color.z)
         outU = outU.push(vertex.coordinate.x)
         outV = outV.push(vertex.coordinate.y)
+        var slot = 0
+        for value in vertex.extra {
+          outExtras[slot] = outExtras[slot].push(value)
+          slot = slot + 1
+        }
       }
       fan = fan + 1
     }
@@ -102,6 +118,7 @@ export fn depth(vertices: &Vertices) -> Option[Vertices] {
       bs: Lanes.fromArray(&outB),
       us: Lanes.fromArray(&outU),
       vs: Lanes.fromArray(&outV),
+      extras: outExtras.map(|values| Lanes.fromArray(&values)),
     },
   )
 }
@@ -126,7 +143,15 @@ fn clipped(polygon: &Array[Vertex], plane: &Plane) -> Option[Array[Vertex]] {
       let color = V.add(V.scale(previous.color, 1.0 - t), V.scale(current.color, t))
       let coordinate = V2.add(V2.scale(previous.coordinate, 1.0 - t), V2.scale(current.coordinate, t))
       if !V.isFinite4(position) || !V.isFinite(color) || !V2.isFinite(coordinate) { return None }
-      output = output.push(Vertex{position, color, coordinate})
+      var extra: Array[Float64] = []
+      var slot = 0
+      for value in previous.extra {
+        let mixed = value * (1.0 - t) + current.extra[slot] * t
+        if !Float.isFinite(mixed) { return None }
+        extra = extra.push(mixed)
+        slot = slot + 1
+      }
+      output = output.push(Vertex{position, color, coordinate, extra})
     }
     if distance >= 0.0 { output = output.push(current) }
     previous = current
@@ -142,7 +167,7 @@ fn mix4(a: V.Vec4, b: V.Vec4, t: Float64) -> V.Vec4 {
 
 fn empty() -> Vertices {
   let none = Lanes.fromArray(&[])
-  Vertices{xs: none, ys: none, zs: none, ws: none, rs: none, gs: none, bs: none, us: none, vs: none}
+  Vertices{xs: none, ys: none, zs: none, ws: none, rs: none, gs: none, bs: none, us: none, vs: none, extras: []}
 }
 
 fn nearDistance(position: V.Vec4) -> Float64 { position.z }

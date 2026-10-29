@@ -11,12 +11,12 @@ tags: [module, ark, example, render]
 Water rippling inside a glass tank. A 56×56 height field advances by the damped wave equation
 (`next = h + damping (h - previous) + courant (neighbours - 4h)`, courant 0.3 for stability) with
 neighbour index tables built once, so every step is four gathers and a few axpy kernels; walls
-reflect by repeating the edge point. Each frame gathers the grid into a smooth-shaded triangle
-mesh with normals from central differences, tints steep facets toward sky color and draws it with
-the tank through [[Ark Render Pipeline]] and [[Ark Render Device]]. Drops fall every 45 steps,
+reflect by repeating the edge point. Each frame gathers the grid into a triangle mesh with
+normals from central differences; `projectSurface` and `drawShaded` light it per pixel with water's
+2% Fresnel reflectance, a sky gradient, a low sun behind the tank and tight highlights. Drops fall every 45 steps,
 Space splashes the center, Escape quits. `--snapshot <path.ppm>` renders offscreen after 90
-steps; `--frames <n>` stops a windowed run. Measured locally at -O2: about 0.3 ms per wave step
-and 21 ms per 640×480 frame.
+steps; `--frames <n>` stops a windowed run. Measured locally at -O2: about 0.4 ms per wave step
+and 23 ms per shaded 640×480 frame.
 
 ## Resolved Grill Log
 

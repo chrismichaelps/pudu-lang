@@ -26,6 +26,7 @@ fn vertices(depths: &Array[Float64], weights: &Array[Float64]) -> Clip.Vertices 
     bs: Lanes.fromArray(&[0.0, 0.0, 1.0]),
     us: Lanes.fromArray(&[0.0, 1.0, 0.0]),
     vs: Lanes.fromArray(&[1.0, 1.0, 0.0]),
+    extras: [Lanes.fromArray(&[2.0, 4.0, 6.0])],
   }
 }
 
@@ -41,12 +42,14 @@ fn polygons() {
   require(Lanes.toArray(&near.bs) == [0.5, 0.0, 0.0, 0.5, 0.0, 1.0], "interpolated blue")
   require(Lanes.toArray(&near.us) == [0.0, 0.5, 1.0, 0.0, 1.0, 0.0], "interpolated u")
   require(Lanes.toArray(&near.vs) == [0.5, 1.0, 1.0, 0.5, 1.0, 0.0], "interpolated v")
+  require(Lanes.toArray(&near.extras[0]) == [4.0, 3.0, 4.0, 4.0, 4.0, 6.0], "interpolated extra attribute")
   let crossing = vertices(&[-1.0, 1.0, 1.0], &[1.0, 1.0, 1.0])
   let combined = Clip.Vertices {
     xs: Lanes.concat(&inside.xs, &crossing.xs), ys: Lanes.concat(&inside.ys, &crossing.ys),
     zs: Lanes.concat(&inside.zs, &crossing.zs), ws: Lanes.concat(&inside.ws, &crossing.ws),
     rs: Lanes.concat(&inside.rs, &crossing.rs), gs: Lanes.concat(&inside.gs, &crossing.gs), bs: Lanes.concat(&inside.bs, &crossing.bs),
     us: Lanes.concat(&inside.us, &crossing.us), vs: Lanes.concat(&inside.vs, &crossing.vs),
+    extras: [Lanes.concat(&inside.extras[0], &crossing.extras[0])],
   }
   let Some(ordered) = Clip.depth(&combined) else { panic("ordered batch") }
   require(Lanes.slice(&ordered.zs, 0, 3) == Some(inside.zs) && Lanes.slice(&ordered.zs, 3, 6) == Some(near.zs), "authored triangle order retained")
@@ -82,6 +85,7 @@ fn polygons() {
   require(Clip.depth(&Clip.Vertices{..inside, rs: Lanes.fromArray(&[nan, 0.0, 0.0])}) == None, "non-finite color")
   require(Clip.depth(&Clip.Vertices{..inside, vs: Lanes.fromArray(&[0.0, nan, 0.0])}) == None, "non-finite texture coordinate")
   require(Clip.depth(&Clip.Vertices{..inside, us: Lanes.fromArray(&[0.0])}) == None, "texture coordinate count")
+  require(Clip.depth(&Clip.Vertices{..inside, extras: [Lanes.fromArray(&[0.0])]}) == None, "extra attribute count")
   let infinity = Float.fromBits(0x7ff0000000000000u64)
   require(Clip.depth(&Clip.Vertices{..inside, xs: Lanes.fromArray(&[infinity, 0.0, 0.0])}) == None, "non-finite first lane")
   require(Clip.depth(&vertices(&[0.5, 0.5, 0.5], &[infinity, 1.0, 1.0])) == None, "non-finite homogeneous weight")

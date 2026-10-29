@@ -24,6 +24,11 @@ same `Target`/`draw` contract.
 
 ## Grill Log
 
+- **Q:** Light water per vertex? **A:** No; `drawShaded(target, batch, surface, cull, lighting)`
+  takes unlit colors, a `Surface` of world normals and positions per screen vertex and a `Lighting`
+  record (eye, light direction and color, ambient, shininess, specular, Fresnel f0, horizon and
+  zenith sky colors, sun radius) packed into one uniform lane for [[Runtime Shade]].
+
 - **Q:** Drop alpha for the PPM snapshot with a per-pixel loop? **A:** No; one `strided(0, 3, 4)`
   copy turns a 640×480 frame into RGB in about 1 ms, where the interpreted loop took about 1 s.
 

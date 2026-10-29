@@ -44,6 +44,7 @@ export fn project(mesh: &Mesh.Mesh, model: &M.Mat4, viewProjection: &M.Mat4, sun
       bs: Lanes.scale(&(Lanes.multiply(&mesh.b, &intensity) ?), sun.color.b),
       us: mesh.u,
       vs: mesh.v,
+      extras: [],
     }) ?
   let halfWidth = Float.fromInt(width) * 0.5
   let halfHeight = Float.fromInt(height) * 0.5
@@ -61,6 +62,43 @@ export fn project(mesh: &Mesh.Mesh, model: &M.Mat4, viewProjection: &M.Mat4, sun
       us: clipped.us,
       vs: clipped.vs,
     },
+  )
+}
+
+/// Transform and map a mesh without lighting it, also answering world-space normals and positions
+/// per screen vertex for per-pixel shading; None for invalid dimensions or a singular normal transform.
+export fn projectSurface(mesh: &Mesh.Mesh, model: &M.Mat4, viewProjection: &M.Mat4, width: Int, height: Int) -> Option[(Device.ScreenBatch, Device.Surface)] {
+  if width <= 0 || height <= 0 { return None }
+  let normal = M.transpose3(M.inverse3(M.linearPart(*model)) ?)
+  let mvp = M.multiply4(*viewProjection, *model)
+  let positions = [mvp.x.x, mvp.x.y, mvp.x.z, mvp.y.x, mvp.y.y, mvp.y.z, mvp.z.x, mvp.z.y, mvp.z.z, mvp.w.x, mvp.w.y, mvp.w.z]
+  let (cx, cy, cz) = Lanes.affine3(&positions, &mesh.px, &mesh.py, &mesh.pz) ?
+  let cw = row(mvp.x.w, mvp.y.w, mvp.z.w, mvp.w.w, mesh) ?
+  let world = [model.x.x, model.x.y, model.x.z, model.y.x, model.y.y, model.y.z, model.z.x, model.z.y, model.z.z, model.w.x, model.w.y, model.w.z]
+  let (wx, wy, wz) = Lanes.affine3(&world, &mesh.px, &mesh.py, &mesh.pz) ?
+  let linear = [normal.x.x, normal.x.y, normal.x.z, normal.y.x, normal.y.y, normal.y.z, normal.z.x, normal.z.y, normal.z.z, 0.0, 0.0, 0.0]
+  let (nx, ny, nz) = Lanes.affine3(&linear, &mesh.nx, &mesh.ny, &mesh.nz) ?
+  let clipped = Clip.depth(&Clip.Vertices{xs: cx, ys: cy, zs: cz, ws: cw, rs: mesh.r, gs: mesh.g, bs: mesh.b, us: mesh.u, vs: mesh.v, extras: [nx, ny, nz, wx, wy, wz]}) ?
+  let halfWidth = Float.fromInt(width) * 0.5
+  let halfHeight = Float.fromInt(height) * 0.5
+  let sx = Lanes.divide(&clipped.xs, &clipped.ws) ?
+  let sy = Lanes.divide(&clipped.ys, &clipped.ws) ?
+  let e = clipped.extras
+  Some(
+    (
+      Device.ScreenBatch {
+        xs: Lanes.addScalar(&Lanes.scale(&sx, halfWidth), halfWidth),
+        ys: Lanes.addScalar(&Lanes.scale(&sy, -halfHeight), halfHeight),
+        zs: Lanes.divide(&clipped.zs, &clipped.ws) ?,
+        ws: clipped.ws,
+        rs: clipped.rs,
+        gs: clipped.gs,
+        bs: clipped.bs,
+        us: clipped.us,
+        vs: clipped.vs,
+      },
+      Device.Surface{nx: e[0], ny: e[1], nz: e[2], px: e[3], py: e[4], pz: e[5]},
+    ),
   )
 }
 

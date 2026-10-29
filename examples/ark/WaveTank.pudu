@@ -29,6 +29,8 @@ const DAMPING: Float64 = 0.996
 const STEP_NANOS: Int = 16666667
 /// Steps between automatic drops.
 const DROP_EVERY: Int = 45
+/// The camera position, also the eye the water's lighting is computed for.
+const EYE: V.Vec3 = V.Vec3{x: 3.3, y: 2.6, z: 3.6}
 
 /// Neighbour and triangle index tables built once; the simulation and mesh are gathers over them.
 type Tables = { left: Array[Int], right: Array[Int], up: Array[Int], down: Array[Int], corners: Array[Int] }
@@ -75,8 +77,8 @@ fn setup() -> Scene {
   }
   let Some(flat) = Lanes.filled(CELLS * CELLS, 0.0) else { panic("grid") }
   let scene = Scene{height: flat, previous: flat, xs: Lanes.fromArray(&xs), zs: Lanes.fromArray(&zs), tables: tables(), tank: tank(), steps: 0, seed: Random.seeded(7u64)}
-  let first = drop(scene, CELLS / 2, CELLS / 3, 0.14)
-  drop(first, CELLS / 3, (2 * CELLS) / 3, -0.1)
+  let first = drop(scene, CELLS / 2, CELLS / 3, 0.08)
+  drop(first, CELLS / 3, (2 * CELLS) / 3, -0.06)
 }
 
 /// A glass tank: a pale floor, two back walls and corner posts; the front stays open to the eye.
@@ -143,7 +145,7 @@ fn advance(scene: Scene) -> Scene {
   if stepped.steps % DROP_EVERY != 0 { return stepped }
   let Some((seeded, row)) = Random.below(stepped.seed, CELLS - 8) else { return stepped }
   let Some((reseeded, column)) = Random.below(seeded, CELLS - 8) else { return stepped }
-  drop(Scene{..stepped, seed: reseeded}, row + 4, column + 4, 0.1)
+  drop(Scene{..stepped, seed: reseeded}, row + 4, column + 4, 0.06)
 }
 
 fn sum4(t: &Tables, h: &Lanes.Lanes) -> Option[Lanes.Lanes] {
@@ -152,22 +154,16 @@ fn sum4(t: &Tables, h: &Lanes.Lanes) -> Option[Lanes.Lanes] {
   Lanes.add(&horizontal, &vertical)
 }
 
-/// The water as a smooth-shaded triangle mesh: normals from central differences, and color
-/// blending deep water toward sky where the surface tilts away from the viewer's vertical.
+/// The water as a triangle mesh in one deep color with normals from central differences; lighting,
+/// highlights and sky reflection happen per pixel in the device.
 fn water(scene: &Scene) -> Option[Mesh.Mesh] {
   let t = scene.tables
   let spacing = 2.0 * SIZE / Float.fromInt(CELLS - 1)
-  let slopeX = Lanes.scale(&(Lanes.subtract(&(Lanes.gather(&scene.height, &t.right) ?), &(Lanes.gather(&scene.height, &t.left) ?)) ?), -0.5 / spacing)
-  let slopeZ = Lanes.scale(&(Lanes.subtract(&(Lanes.gather(&scene.height, &t.down) ?), &(Lanes.gather(&scene.height, &t.up) ?)) ?), -0.5 / spacing)
-  let length = Lanes.sqrt(&(Lanes.addScalar(&(Lanes.fma(&slopeX, &slopeX, &(Lanes.multiply(&slopeZ, &slopeZ) ?)) ?), 1.0)))
-  let ny = Lanes.divide(&(Lanes.filled(CELLS * CELLS, 1.0) ?), &length) ?
-  let nx = Lanes.multiply(&slopeX, &ny) ?
-  let nz = Lanes.multiply(&slopeZ, &ny) ?
-  // Fresnel-like tint: steeper facets reflect more of the bright sky.
-  let tilt = Lanes.clamp(&Lanes.scale(&Lanes.addScalar(&Lanes.negate(&ny), 1.0), 5.0), 0.0, 1.0)
-  let shade = |deep: Float64, sky: Float64| Lanes.addScalar(&Lanes.scale(&tilt, sky - deep), deep)
-  let crest = Lanes.clamp(&Lanes.scale(&scene.height, 0.8), 0.0, 0.15)
+  let nx = Lanes.scale(&(Lanes.subtract(&(Lanes.gather(&scene.height, &t.right) ?), &(Lanes.gather(&scene.height, &t.left) ?)) ?), -0.5 / spacing)
+  let nz = Lanes.scale(&(Lanes.subtract(&(Lanes.gather(&scene.height, &t.down) ?), &(Lanes.gather(&scene.height, &t.up) ?)) ?), -0.5 / spacing)
+  let ny = Lanes.filled(CELLS * CELLS, 1.0) ?
   let vertex = |lane: Lanes.Lanes| Lanes.gather(&lane, &t.corners)
+  let count = t.corners.length()
   Some(
     Mesh.Mesh {
       px: vertex(scene.xs) ?,
@@ -176,26 +172,43 @@ fn water(scene: &Scene) -> Option[Mesh.Mesh] {
       nx: vertex(nx) ?,
       ny: vertex(ny) ?,
       nz: vertex(nz) ?,
-      r: vertex(Lanes.add(&shade(0.02, 0.75), &crest) ?) ?,
-      g: vertex(Lanes.add(&shade(0.22, 0.88), &crest) ?) ?,
-      b: vertex(Lanes.add(&shade(0.42, 0.98), &crest) ?) ?,
+      r: Lanes.filled(count, 0.02) ?,
+      g: Lanes.filled(count, 0.24) ?,
+      b: Lanes.filled(count, 0.32) ?,
       u: vertex(scene.xs) ?,
       v: vertex(scene.zs) ?,
     },
   )
 }
 
+/// Water lighting: a low sun behind the tank so its glints reach the eye, water's 2% reflectance at
+/// normal incidence rising toward grazing angles, and a pale horizon under a deeper sky.
+fn sky(eye: V.Vec3) -> Device.Lighting {
+  Device.Lighting {
+    eye,
+    toward: V.vec3(-0.55, 0.45, -0.7),
+    light: Color.opaque(1.0, 0.92, 0.78),
+    ambient: 0.55,
+    shininess: 400.0,
+    specular: 1.4,
+    fresnel: 0.02,
+    horizon: Color.opaque(0.78, 0.86, 0.95),
+    zenith: Color.opaque(0.18, 0.38, 0.7),
+    sunRadius: 0.06,
+  }
+}
+
 fn render(scene: &Scene, surface: Device.Target) -> Option[Device.Target] {
-  let view = Camera.lookAt(V.vec3(3.3, 2.6, 3.6), V.vec3(0.0, -0.2, 0.0), V.vec3(0.0, 1.0, 0.0)) ?
+  let view = Camera.lookAt(EYE, V.vec3(0.0, -0.2, 0.0), V.vec3(0.0, 1.0, 0.0)) ?
   let projection = Camera.perspective(Float.pi() / 3.5, Float.fromInt(WIDTH) / Float.fromInt(HEIGHT), 0.1, 50.0) ?
   let viewProjection = M.multiply4(projection, view)
   let sun = Pipeline.light(V.vec3(0.4, 1.0, 0.3), Color.opaque(1.0, 0.98, 0.92), 0.35) ?
   let identity = M.identity4()
-  let surfaceBatch = Pipeline.project(&(water(scene) ?), &identity, &viewProjection, &sun, WIDTH, HEIGHT) ?
+  let (waterBatch, waterSurface) = Pipeline.projectSurface(&(water(scene) ?), &identity, &viewProjection, WIDTH, HEIGHT) ?
   let tankBatch = Pipeline.project(&scene.tank, &identity, &viewProjection, &sun, WIDTH, HEIGHT) ?
   let cleared = Device.clear(surface, Color.opaque(0.05, 0.07, 0.1)) ?
   let withTank = Device.draw(cleared, &tankBatch, Device.CullBack) ?
-  Device.draw(withTank, &surfaceBatch, Device.CullNone)
+  Device.drawShaded(withTank, &waterBatch, &waterSurface, Device.CullNone, &sky(EYE))
 }
 
 fn snapshot(path: Str) -> Int {

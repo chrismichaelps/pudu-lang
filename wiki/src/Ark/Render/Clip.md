@@ -15,7 +15,7 @@ three vertices per triangle. `depth(vertices) -> Option[Vertices]` clips triangl
 z ≥ 0 and z ≤ w before perspective division. These are the two depth boundaries for both forward
 and reversed zero-to-one depth conventions. Clipping a fully hidden batch returns empty lanes;
 an entirely admitted batch returns its original lanes. Triangle order and winding are preserved
-through fan triangulation. Viewport x/y clipping remains the rasterizer's bounded coverage work.
+through fan triangulation. Any number of `extras` attribute lanes are clipped and interpolated like color. Viewport x/y clipping remains the rasterizer's bounded coverage work.
 
 Malformed lane counts, partial triangles, non-finite inputs and unrepresentable plane distances or intersections
 answer None. Retained vertices require positive w. Plane records own distance and boundary-snap

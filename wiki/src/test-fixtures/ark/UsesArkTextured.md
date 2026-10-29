@@ -16,7 +16,9 @@ span, zero defaults, replacement and count refusal, merge). A lit cube projected
 face with nearest filtering and a blended seam with bilinear filtering; unknown filters, color
 spaces and coordinate-lane mismatches answer None while the vertex-color path is unchanged.
 A material loaded by [[Ark Asset Server]] from a memory mount (cooked sRGB white albedo, orange
-tint) draws through `drawMaterial` as the exact tint. Prints `ark textured: ok`.
+tint) draws through `drawMaterial` as the exact tint. Projected surfaces keep one normal and position per vertex and stay unlit; `drawShaded` gives
+the base color under head-on light, shows the sky at full reflectance and refuses invalid
+lighting and mismatched surface lanes. Prints `ark textured: ok`.
 
 ## Resolved Grill Log
 

@@ -21,6 +21,8 @@ division. Geometry behind the camera is discarded, while crossing triangles reta
 polygons. Batches retain clipped w for perspective-correct color interpolation in the device;
 already divided depth remains affine in screen space.
 Mesh texture coordinates pass through clipping into the batch unchanged by lighting.
+`projectSurface` produces the same batch unlit, with world-space positions and inverse-transpose
+normals carried through clipping for per-pixel shading.
 `concat` joins batches for one draw.
 
 Non-positive target dimensions and singular/non-finite normal matrices answer None. Ambient light
