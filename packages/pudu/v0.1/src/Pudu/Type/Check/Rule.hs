@@ -913,6 +913,7 @@ bytesMethodType spanValue member = case member of
   "startsWith" -> pure (FunctionTypeValue False [bytesType] boolType)
   "endsWith" -> pure (FunctionTypeValue False [bytesType] boolType)
   "reverse" -> pure (FunctionTypeValue False [] bytesType)
+  "strided" -> pure (FunctionTypeValue False [integerType, integerType, integerType] (optionOf bytesType))
   "toArray" -> pure (FunctionTypeValue False [] (NominalType "Array" [byteType]))
   "toText" -> pure (FunctionTypeValue False [] (optionOf stringType))
   _ -> do

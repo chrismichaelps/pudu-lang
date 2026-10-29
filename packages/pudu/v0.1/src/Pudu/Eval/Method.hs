@@ -79,6 +79,7 @@ data BytesMethod
   | BytesStartsWith
   | BytesEndsWith
   | BytesReverse
+  | BytesStrided
   | BytesToArray
   | BytesToText
   deriving stock (Eq, Show)
@@ -162,6 +163,7 @@ bytesMethodName method = case method of
   BytesStartsWith -> "startsWith"
   BytesEndsWith -> "endsWith"
   BytesReverse -> "reverse"
+  BytesStrided -> "strided"
   BytesToArray -> "toArray"
   BytesToText -> "toText"
 

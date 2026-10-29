@@ -5,6 +5,10 @@ tags: [changelog]
 
 # Changelog
 
+## 2026-10-28 — Strided byte groups (#699)
+
+- [[Eval Bytes]] and [[Std Bytes]] add `strided(offset, width, stride)`, copying a fixed-width
+  group from every stride in one native pass; packed RGBA becomes RGB without a per-pixel loop.
 ## 2026-10-27 — Optimized runtime refresh (#686)
 
 - [[Refresh Pudu Installation]] explicitly selects optimization level 2 for build and install.
