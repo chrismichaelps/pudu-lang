@@ -35,6 +35,7 @@ import Pudu.Frontend.ParserExpression.PrimarySpec
 import Pudu.Frontend.ParserExpression.RecoverySpec
   ( recoveryProperties
   , testExhaustedBudgetIsQuiet
+  , testFlatLists
   , testHostileAmbiguousTails
   , testHostileChains
   , testHostileConditionals
@@ -62,6 +63,7 @@ parserExpressionProperties =
   , ("hostile ambiguous tails share the nesting budget", testHostileAmbiguousTails)
   , ("hostile else-if chains share the nesting budget", testHostileConditionals)
   , ("an exhausted budget reports once and stops", testExhaustedBudgetIsQuiet)
+  , ("flat list width does not consume nesting depth", testFlatLists)
   , ("every precedence band binds as the grammar states", testPrecedenceBands)
   , ("an operator that cannot begin an expression continues the line above", testLineLeadingOperators)
   ]
