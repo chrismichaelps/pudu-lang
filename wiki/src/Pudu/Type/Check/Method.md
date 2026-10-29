@@ -33,6 +33,7 @@ declareBounds :: DeclaredTypes -> Function -> [(Text, [Type])]
 declareBuiltinConstructors :: Checker ()
 dischargeObligations :: Checker ()
 methodScheme :: Span -> Type -> Text -> Checker (Maybe Scheme)
+implementationMethodKey :: NominalId -> NominalId -> Text -> Text
 functionRigid :: Function -> [(Text, Int)]
 implAliases :: DeclaredTypes -> Impl -> DeclaredTypes
 traitTable :: DeclaredTypes -> [Located Declaration] -> Map NominalId [Located Function]
@@ -142,9 +143,9 @@ calls must preserve the same full trait application.
   a nominal receiver's unambiguous trait provider, a `dynamic` trait, or the single bound that
   provides the member to a rigid receiver, beside that parameter's name. An inherent method
   records nothing.
-- Every implementation method is also bound under `traitMethodKey trait owner member`, so a
-  trait-qualified call types against that trait's own implementation even when another trait's
-  method shares the plain key.
+- Every implementation method is also bound under #742's `implementationMethodKey owner trait
+  member`, which a trait-qualified call types against even when another trait's method shares the
+  plain key.
 - An imported implementation whose plain key is already provided by a **different** trait marks
   the key ambiguous instead of refusing the declaration. The ambiguity is reported only at an
   unqualified concrete call, with module-qualified spellings
@@ -161,3 +162,16 @@ trait-specific key types `Second.Encode.encode(&1)` as `Int` whatever order the 
 
 Every implementation notes its parameters' bound traits through `noteImplementationBounds`.
 `qualifiedForm` and `specializeBound` are exported for [[Type Check Call]] and [[Type Check Rule]].
+
+## Qualified provider schemes (#742)
+
+Preserve receiver schemes separately for each admitted trait provider under a canonical trait/receiver/member key,
+separate from the shared receiver/member slot used for ordinary ambiguity checks. An explicit
+trait call on a nominal receiver selects that provider-specific scheme, retaining implementation
+parameters and bounds. Rigid-bound lookup and receiver checking retain their existing paths.
+
+Resolved Grill Log: two local traits may provide the same member with different result types.
+Declaration order cannot change explicit-call typing, and a known receiver must behave like a
+literal receiver. Wrong result annotations remain E3001 at the call; plain receiver/type calls
+still refuse ambiguity. This restores the existing selected-implementation contract and does not
+repair imported declaration collision (#734) or conditional generic dispatch (#735).

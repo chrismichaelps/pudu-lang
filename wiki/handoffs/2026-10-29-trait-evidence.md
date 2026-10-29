@@ -6,7 +6,9 @@ tags: [handoff, semantics, runtime]
 ---
 # Trait Evidence Delivery
 
-Issues #734 and #735 run together on feature/734-trait-evidence from dev. Scope owns trait
+Issues #734, #735 and #743 run together on feature/734-trait-evidence from dev, with #742's PR
+#744 (`feature/742-trait-provider-schemes`) merged in: its per-provider `implementationMethodKey`
+is the scheme key this work types trait-qualified calls with, so it lands first. Scope owns trait
 evidence from checking to dispatch: [[Syntax Tree]] evidence, [[Type Env]], [[Type Check Method]],
 [[Type Check Call]], [[Compiler Pipeline]], [[Eval Env]], [[Eval Program]], [[Eval Install]],
 [[Eval Call]], [[Eval Call Path]], [[Eval Call Evidence]], [[Eval Compile]], their regressions and
@@ -21,7 +23,7 @@ silently: `shown[T: Show2](&1)`, typed `Str`, answered `7`), and a generic imple
 through a bound had no parameters bound. The native C backend is not on dev; its stack must
 consume `moduleEvidence` for trait dispatch and witnesses when it lands.
 
-Exact next action: obtain independent implementation, Language Architect and Forensic Guardian
+Exact next action: merge #744, then obtain independent implementation, Language Architect and Forensic Guardian
 reviews on the PR.
 
 ## Referenced by

@@ -142,7 +142,7 @@ intermediate imported type as a runtime receiver; first-class values use the sam
 ## Trait-qualified calls by canonical path (#734)
 
 `traitQualifiedCall` accepts a trait written through its module (`Second.Encode.encode(&x)`) as
-well as a single name, resolves a concrete receiver through the trait-specific implementation key,
+well as a single name, resolves a concrete receiver through `implementationMethodKey`,
 and records evidence for the callee. An ambiguous `Type.member` names module-qualified traits in
 its help. Resolved Grill Log: the help for two same-named traits must name a spelling that checks
 and runs; `Encode.encode(value)` named neither.
@@ -159,3 +159,21 @@ traits sharing a member ran whichever installed last.
 by the trait's own declaration with `Self` as the receiver and an obligation that it implements
 the trait, which settles it. Resolved Grill Log: the module-qualified spelling has no fallback
 through a value path, so it must type here; the obligation keeps it as strict as a bound.
+
+## Qualified provider schemes (#742)
+
+Preserve each admitted implementation scheme under a canonical trait/receiver/member key,
+separate from the shared receiver/member slot used for ordinary ambiguity checks. An explicit
+trait call on a nominal receiver selects that provider-specific scheme, retaining implementation
+parameters and bounds. Rigid-bound lookup and receiver checking retain their existing paths.
+
+Resolved Grill Log: two local traits may provide the same member with different result types.
+Declaration order cannot change explicit-call typing, and a known receiver must behave like a
+literal receiver. Wrong result annotations remain E3001 at the call; plain receiver/type calls
+still refuse ambiguity. This restores the existing selected-implementation contract and does not
+repair imported declaration collision (#734) or conditional generic dispatch (#735).
+
+Built-in receiver type names may be absent from declaredNames. Before the ordinary module/name
+fallback, consult their recorded ambiguous receiver/member slot and refuse E3013 when present.
+Keep actual module qualifiers and nearer local values on their existing higher-priority paths.
+Resolved Grill Log: Int.encode cannot silently choose where Box.encode already refuses.

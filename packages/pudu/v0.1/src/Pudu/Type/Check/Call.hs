@@ -53,7 +53,7 @@ import Pudu.Type.Check.Method
   ( methodScheme
   , qualifiedForm
   , specializeBound
-  , traitMethodKey
+  , implementationMethodKey
   , traitMethodScheme
   , targetName
   )
@@ -202,7 +202,11 @@ qualifiedByName declared spanValue target member = do
 qualifiedByType :: DeclaredTypes -> Span -> Expression -> Text -> Checker (Maybe Type)
 qualifiedByType declared spanValue target member = case target of
   NameExpression (first NonEmpty.:| []) -> case Map.lookup first (declaredNames declared) of
-    Nothing -> pure Nothing
+    Nothing -> do
+      providers <- ambiguousProviders (first <> "." <> member)
+      if null providers || Set.member first (declaredQualifiers declared)
+        then pure Nothing
+        else byType (NominalId Nothing first)
     Just identity -> do
       -- A module qualifier that exports `member` names that value, even where
       -- the module also has a type of the qualifier's spelling: `Json.encode`
@@ -277,10 +281,7 @@ traitQualifiedCall checker declared rigid (Located calleeSpan callee) arguments 
                   restTypes <- mapM (runCheck checker declared rigid) rest
                   pure (Just (instantiated, receiverType : restTypes))
             Just owner -> do
-              -- The named trait's own implementation, even where another
-              -- trait's member shares the owner's plain key.
-              own <- lookupName (traitMethodKey traitIdentity owner (locatedValue member))
-              found <- maybe (lookupName (nominalKey owner <> "." <> locatedValue member)) (pure . Just) own
+              found <- lookupName (implementationMethodKey owner traitIdentity (locatedValue member))
               case found of
                 Nothing -> pure Nothing
                 Just scheme
@@ -308,8 +309,8 @@ traitQualifiedCall checker declared rigid (Located calleeSpan callee) arguments 
   -- the trait's own declaration and owes the trait, which settles it.
   unsettled traitIdentity receiverType scheme = do
     parameters <- maybe [] id <$> lookupTypeParams traitIdentity
-    arguments <- mapM (const freshVariable) parameters
-    let bound = NominalType traitIdentity arguments
+    traitArguments <- mapM (const freshVariable) parameters
+    let bound = NominalType traitIdentity traitArguments
     addObligation calleeSpan receiverType bound
     recordEvidence calleeSpan traitIdentity Nothing
     specializeBound calleeSpan receiverType bound scheme

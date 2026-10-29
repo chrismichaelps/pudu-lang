@@ -5,7 +5,9 @@ tags: [changelog]
 
 # Changelog
 
-## 2026-10-29 — Dispatch follows the trait that resolved a call (#734, #735)
+- 2026-10-29: Explicit trait calls (#742) select canonical per-provider implementation schemes, preserving distinct return types independently of declaration order.
+
+## 2026-10-29 — Dispatch follows the trait that resolved a call (#734, #735, #743)
 
 - [[Type Check Method]] and [[Type Check Call]] record each trait-resolved callee and
   implementation head as [[Syntax Tree]] trait evidence, which the executable module carries to
