@@ -166,6 +166,9 @@ jobs:
       # as much at ten times the input, and a buffered control must not.
       - name: Verify a streaming reader holds as much at ten times the input
         run: python3 test/residency.py "$PUDU"
+      # Repeated bounded concurrency must keep live memory flat.
+      - name: Verify bounded concurrency helpers release what they create
+        run: node test/concurrent-release.mjs "$PUDU"
       - name: Verify documentation site browser and CLI contracts
         run: |
           cabal run -v0 pudu -- doc --html test-fixtures/stdlib/UsesAll.pudu | node test/doc-site-parity.mjs

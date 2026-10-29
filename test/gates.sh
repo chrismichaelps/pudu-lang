@@ -63,6 +63,8 @@ run 'the fixtures still reach as much of the library' \
   bash -c 'node test/api-coverage.mjs "$PUDU"'
 run 'a streaming reader holds as much at ten times the input' \
   bash -c 'python3 test/residency.py "$PUDU"'
+run 'bounded concurrency helpers release what they create' \
+  bash -c 'node test/concurrent-release.mjs "$PUDU"'
 run 'pudu installs and publishes packages through git and a stand-in GitHub' \
   bash -c 'python3 test/package-registry.py --pudu "$PUDU"'
 run 'pudu install adds, moves, restores, and removes packages as a terminal uses it' \
