@@ -5,6 +5,12 @@ tags: [changelog]
 
 # Changelog
 
+## 2026-10-28 — W3003 respects result position (#700)
+
+- [[Check Propagation]] counts a value-form failure arm as propagation only when the match
+  stands in result position; a match bound with `let` keeps its `None` and is no longer told to
+  use `?`, which would have returned early.
+
 ## 2026-10-27 — Verified HTTPS CI index transport (#656)
 
 - [[Website Linux Workflow]] configures signed HTTPS Hackage access before one explicit update.

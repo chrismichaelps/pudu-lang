@@ -35,6 +35,7 @@ import Pudu.Type.Env
   )
 import Pudu.Type.Check.Pattern (bindPattern)
 import Pudu.Type.Check.Place (checkAnswer, checkParameterTypes, noteUnwrittenParameters)
+import Pudu.Type.Check.Propagation (markBodyResult)
 import Pudu.Type.Check.Rule (selfName)
 import Pudu.Type.Formation (formOptionalType)
 import Pudu.Type.Unify (unify, zonk)
@@ -108,6 +109,7 @@ lambdaType checkParam checkBlock checkExpr declared rigid value =
     case functionBody value of
       Nothing -> pure ()
       Just (Located bodySpan body) -> do
+        markBodyResult body
         actual <- case body of
           BlockBody block -> checkBlock block
           ExpressionBody expression -> checkExpr expression
