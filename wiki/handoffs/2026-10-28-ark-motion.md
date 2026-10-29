@@ -36,6 +36,10 @@ includes callbacks; this is not native scene throughput. PR #719 hosted checks a
 Role transition: Runtime Engineer finished focused/full verification; Tooling/Release publishes
 the draft for independent implementation, semantic and vault review.
 
+Delivery: implementation commit `ff6a8ce8` is pushed in draft
+PR [#721](https://github.com/chrismichaelps/pudu-lang/pull/721) targeting dev.
+Hosted checks and independent reviews remain pending. No PR was merged.
+
 Exact next action: implement gravity-relative floor support and walking/falling transitions over
 validated sweep callbacks, beginning with the resolved support/landing contract in the vault.
 
