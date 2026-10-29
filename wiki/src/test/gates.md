@@ -82,6 +82,10 @@ including externally observable filesystem modes that portable permission boolea
 
 Resolved Grill Log: local and integration delivery both exercise actual strategy output and public visibility.
 
+## Character movement contract (#714)
+
+[[Ark Character Gate]] runs against the optimized compiler. Resolved Grill Log: sweeps, corner
+constraints and positioned type refusal must be exercised through the public library API.
 ## Qualified constructors (#717)
 
 [[Qualified Variant Gate]] checks real aliased/imported constructor clients and positioned

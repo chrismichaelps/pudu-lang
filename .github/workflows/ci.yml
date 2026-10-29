@@ -118,6 +118,8 @@ jobs:
           fi
       - name: Verify the Linguist submission is consistent
         run: python3 scripts/linguist.py check --pudu "$PUDU"
+      - name: Verify capsule movement and support
+        run: node test/ark-character.mjs "$PUDU"
       - name: Verify qualified constructor paths
         run: node test/qualified-variants.mjs "$PUDU"
       - name: Verify every diagnostic code means one thing

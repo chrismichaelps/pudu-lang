@@ -5,6 +5,12 @@ tags: [changelog]
 
 # Changelog
 
+## 2026-10-28 — Checked capsule movement (#714)
+
+- [[Ark Character Movement]] adds continuous convex-boundary sweeps, capsule support, corner sliding,
+  bounded residual reporting and final grounding. [[Ark Character Fixture]] covers numeric refusal,
+  high-speed stopping and corner regressions; [[Ark Character Gate]] checks diagnostics and shipping.
+- [[Ark Character Delivery]] records scoped ownership, validation and pending independent review.
 ## 2026-10-28 — Visible qualified constructors (#717)
 
 - [[Type Check Expression]] and [[Type Check Call]] share complete constructor-path admission

@@ -38,6 +38,10 @@ their existing obligations. The application graph model tests and actual library
 
 Resolved Grill Log: command serialization is verified through the actual executable rather than only encoder properties.
 
+## Character movement contract (#714)
+
+[[Ark Character Gate]] verifies capsule sweeps, final support, refusal and source shipping.
+Resolved Grill Log: the focused gate remains mandatory alongside the full compiler suite.
 ## Qualified constructors (#717)
 
 [[Qualified Variant Gate]] runs through the built compiler. Resolved Grill Log: imported path

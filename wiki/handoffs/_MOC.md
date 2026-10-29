@@ -5,6 +5,7 @@ tags: [moc, handoff]
 
 # Handoff Map
 
+- [[Ark Character Delivery]] — capsule movement, corner constraints and final support (#714).
 - [[Qualified Constructor Delivery]] — imported and local qualified sum constructors (#717).
 - [[Optimized Refresh Delivery]] — explicit optimized runtime installation (#686).
 - [[Lambda Option Try Delivery]] — issue #678 `?` on Option in unannotated lambdas.
