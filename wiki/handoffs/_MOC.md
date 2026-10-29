@@ -163,6 +163,8 @@ tags: [moc, handoff]
 - [[2026-09-30-std-layer-sweep]] — Std defects found layer by layer through the import graph (#395–#420).
 - [[2026-09-16-playground-editor]] — website playground editor, language-server repair, and confined runs.
 
+- [[Ark Ground Delivery]] — issue #722 gravity-relative support and settlement.
+
 ## Referenced by
 
 [[00-INDEX]] · [[Engineering Delivery]]

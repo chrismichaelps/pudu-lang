@@ -73,3 +73,8 @@ including externally observable filesystem modes that portable permission boolea
 [[Derive Index Output Gate]] runs after documentation parity against the same freshly built executable.
 
 Resolved Grill Log: local and integration delivery both exercise actual strategy output and public visibility.
+
+## Capsule support (#722)
+
+[[Ark Ground Gate]] validates floor support and typed refusals.
+Resolved Grill Log: verify the executable behavior and shipping before delivery.

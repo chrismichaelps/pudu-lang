@@ -5,6 +5,12 @@ tags: [changelog]
 
 # Changelog
 
+## 2026-10-29 — Capsule support (#722)
+
+[[Ark Capsule Support]] classifies floor slope and capsule witnesses, settles descending states
+and preserves rising/lost-support transitions plus typed query failures. [[Ark Ground Gate]]
+checks executable behavior and shipping. Full movement, gravity and stepping remain open.
+
 ## 2026-10-27 — Verified HTTPS CI index transport (#656)
 
 - [[Website Linux Workflow]] configures signed HTTPS Hackage access before one explicit update.

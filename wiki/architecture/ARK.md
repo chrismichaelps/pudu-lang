@@ -78,6 +78,10 @@ Net includes interest, prediction/rollback, dedicated servers and sessions; Audi
 mixing/streaming/music; Assets includes import through cooked packages; Editor includes typed
 inspectors, all content editors and collaboration foundations. These remain target obligations.
 
+[[Ark Capsule Support]] settles post-movement states using checked slope, lower-cap and inset
+footprint evidence. Rising/lost-support states become Falling; accepted support becomes Walking.
+Gravity integration, full-frame locomotion, stepping and moving bases remain open.
+
 ## Research decisions
 
 The architecture review selected chunked component storage, declared render hazards and explicit
