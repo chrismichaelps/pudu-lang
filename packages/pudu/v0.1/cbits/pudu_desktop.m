@@ -147,7 +147,9 @@ void *pudu_desktop_open(
       host.window = window;
       host.frameView = view;
       host.inputs = [NSMutableData data];
+      host.density = 1.0;
       window.delegate = host;
+      window.collectionBehavior = NSWindowCollectionBehaviorFullScreenPrimary;
       window.title = caption;
       window.releasedWhenClosed = NO;
       window.contentView = view;
@@ -155,6 +157,7 @@ void *pudu_desktop_open(
       [window center];
       [window makeKeyAndOrderFront:nil];
       [application activateIgnoringOtherApps:YES];
+      [host recordScale];
       return (__bridge_retained void *)host;
     } @catch (NSException *exception) {
       (void)exception;
@@ -186,7 +189,7 @@ int32_t pudu_desktop_present(
       host.frameView.rgba = [NSData dataWithBytes:rgba length:rgba_length];
       host.frameView.pixelWidth = width;
       host.frameView.pixelHeight = height;
-      [host.window setContentSize:NSMakeSize(width, height)];
+      [host.window setContentSize:NSMakeSize(width / host.density, height / host.density)];
       [host.frameView setNeedsDisplay:YES];
       [host.frameView displayIfNeeded];
       return 0;

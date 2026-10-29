@@ -16,11 +16,18 @@ if (process.platform !== 'darwin') {
     execFileSync('clang', ['-fobjc-arc', '-Wall', '-Wextra', '-Werror',
       '-framework', 'AppKit', '-framework', 'CoreGraphics', '-I', native,
       join(root, 'test/native/DesktopPresentation.m'),
-      ...['pudu_desktop.m', 'pudu_desktop_access.m', 'pudu_desktop_menu.m'].map(p => join(native, p)),
+      ...['pudu_desktop.m', 'pudu_desktop_access.m', 'pudu_desktop_menu.m', 'pudu_desktop_window.m'].map(p => join(native, p)),
       '-o', binary], {encoding: 'utf8', timeout: 60000});
     assert.equal(execFileSync(binary, [], {encoding: 'utf8', timeout: 30000}), 'desktop presentation: ok\n');
+    const window = join(scratch, 'window');
+    execFileSync('clang', ['-fobjc-arc', '-Wall', '-Wextra', '-Werror',
+      '-framework', 'AppKit', '-framework', 'CoreGraphics', '-I', native,
+      join(root, 'test/native/DesktopWindow.m'),
+      ...['pudu_desktop.m', 'pudu_desktop_access.m', 'pudu_desktop_menu.m', 'pudu_desktop_window.m'].map(p => join(native, p)),
+      '-o', window], {encoding: 'utf8', timeout: 60000});
+    assert.equal(execFileSync(window, [], {encoding: 'utf8', timeout: 60000}), 'desktop window: ok\n');
   } finally {
     rmSync(scratch, {recursive: true, force: true});
   }
-  console.log('Native desktop row/channel orientation, resize, backing scale and empty frame passed');
+  console.log('Native desktop row/channel orientation, resize, backing scale, empty frame, window records, configure refusals, limits and density passed');
 }

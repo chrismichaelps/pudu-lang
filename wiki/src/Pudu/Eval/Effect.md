@@ -69,7 +69,7 @@ Check that the context admits effects, dispatch on the built-in tag, perform the
 - Network connect/send/receive effects carry a millisecond operation timeout; negative retains the
   unbounded low-level primitive and non-negative expiry returns the stable host failure text that
   `Std.Net` and `Std.Tls` classify as their operation-timeout variants.
-- Desktop open/present/pump/close effects delegate to an evaluation-local [[Eval Desktop]] store.
+- Desktop open/present/pump/configure/close effects delegate to an evaluation-local [[Eval Desktop]] store.
   They accept only explicit tokens and byte payloads, and remain forbidden during constant folding.
 - Bounded device playback delegates to [[Eval Audio Device]]. The effect receives an admitted PCM
   format, exact bytes, queue bounds, and a finite deadline; it returns the acknowledged frame count

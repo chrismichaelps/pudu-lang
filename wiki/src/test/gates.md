@@ -22,6 +22,8 @@ language-server sessions, documentation parity, the generated-project workflow, 
 command whose clean and failing exit statuses plus JSON output are checked outside the test runner,
 and the peak memory of the file-streaming readers at ten times the input.
 
+[[Desktop Configure Gate]] checks each refused window setting by name and the builtin's types.
+
 ## Governance and algorithm
 
 [[Application Layer Tests]] and [[Application Layer Gate]] check the application import graph
