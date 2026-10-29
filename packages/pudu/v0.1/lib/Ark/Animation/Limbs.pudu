@@ -1,0 +1,193 @@
+module Ark.Animation.Limbs
+
+import Std.Lanes as L
+import Std.Math.Float as Float
+import Ark.Animation.Ik as Ik
+
+/// Positions or directions, one lane per axis.
+export type Points = { xs: L.Lanes, ys: L.Lanes, zs: L.Lanes }
+
+/// Quaternions, one lane per component.
+export type Turns = { xs: L.Lanes, ys: L.Lanes, zs: L.Lanes, ws: L.Lanes }
+
+/// Every limb solved: joints, ends, the turns for both bones and the distance left to each target.
+export type Solved = { joints: Points, ends: Points, rootTurns: Turns, jointTurns: Turns, shortfalls: L.Lanes }
+
+/// Squared sine below which two directions do not define a bend plane, as in the single-limb solver.
+const PARALLEL: Float64 = 0.000000000001
+
+/// Cosine below which two directions count as opposite, as in `Quat.between`.
+const OPPOSITE: Float64 = -0.999999
+
+/// Solve every limb toward its target, bending in the plane of its pole; `softness` 0 clamps hard at full reach.
+export fn solve(roots: &Points, joints: &Points, ends: &Points, targets: &Points, poles: &Points, softness: Float64) -> Result[Solved, Ik.IkError] {
+  let count = L.count(&roots.xs)
+  for points in [*roots, *joints, *ends, *targets, *poles] {
+    if L.count(&points.xs) != count || L.count(&points.ys) != count || L.count(&points.zs) != count { return Err(Ik.CountMismatch) }
+    if !finite(&points) { return Err(Ik.NonFinite) }
+  }
+  if !Float.isFinite(softness) { return Err(Ik.NonFinite) }
+  if softness < 0.0 { return Err(Ik.NegativeSoftness) }
+  if count == 0 {
+    let none = L.fromArray(&[])
+    let empty = Points{xs: none, ys: none, zs: none}
+    let still = Turns{xs: none, ys: none, zs: none, ws: none}
+    return Ok(Solved{joints: empty, ends: empty, rootTurns: still, jointTurns: still, shortfalls: none})
+  }
+  match solved(roots, joints, ends, targets, poles, softness) {
+    case Some(Ok(result)) => Ok(result)
+    case Some(Err(problem)) => Err(problem)
+    case None => Err(Ik.CountMismatch)
+  }
+}
+
+fn solved(roots: &Points, joints: &Points, ends: &Points, targets: &Points, poles: &Points, softness: Float64) -> Option[Result[Solved, Ik.IkError]] {
+  let upperOffset = minus(joints, roots) ?
+  let lowerOffset = minus(ends, joints) ?
+  let upper = L.sqrt(&(dot(&upperOffset, &upperOffset) ?))
+  let lower = L.sqrt(&(dot(&lowerOffset, &lowerOffset) ?))
+  if !positive(&upper) || !positive(&lower) { return Some(Err(Ik.ZeroLength)) }
+  let toward = minus(targets, roots) ?
+  let distance = L.sqrt(&(dot(&toward, &toward) ?))
+  let direction = reachDirection(&toward, &distance, &(minus(ends, roots) ?), &upperOffset, &upper) ?
+  let bend = bendDirection(&direction, &(minus(poles, roots) ?), &upperOffset) ?
+  let reach = reachOf(&distance, &upper, &lower, softness) ?
+  let upperSquared = L.multiply(&upper, &upper) ?
+  let numerator = L.subtract(&(L.fma(&reach, &reach, &upperSquared) ?), &(L.multiply(&lower, &lower) ?)) ?
+  let along = L.select(&L.above(&reach, 0.0), &(L.divide(&numerator, &L.scale(&reach, 2.0)) ?), &zeros(&reach) ?) ?
+  let height = L.sqrt(&(L.maximum(&(L.subtract(&upperSquared, &(L.multiply(&along, &along) ?)) ?), &zeros(&along) ?) ?))
+  let joint = plus(roots, &(plus(&(scaled(&direction, &along) ?), &(scaled(&bend, &height) ?)) ?)) ?
+  let end = plus(roots, &(scaled(&direction, &reach) ?)) ?
+  let rootTurns = turns(&upperOffset, &(minus(&joint, roots) ?)) ?
+  let jointTurns = turns(&lowerOffset, &(minus(&end, &joint) ?)) ?
+  let shortfalls = L.abs(&(L.subtract(&distance, &reach) ?))
+  Some(Ok(Solved{joints: joint, ends: end, rootTurns, jointTurns, shortfalls}))
+}
+
+fn reachOf(distance: &L.Lanes, upper: &L.Lanes, lower: &L.Lanes, softness: Float64) -> Option[L.Lanes] {
+  let longest = L.add(upper, lower) ?
+  let shortest = L.abs(&(L.subtract(upper, lower) ?))
+  let hard = L.maximum(&(L.minimum(distance, &longest) ?), &shortest) ?
+  if softness <= 0.0 { return Some(hard) }
+  let start = L.addScalar(&longest, -softness)
+  let past = L.subtract(distance, &start) ?
+  let soft = L.subtract(&longest, &(L.divide(&(L.filled(L.count(distance), softness * softness) ?), &L.addScalar(&past, softness)) ?)) ?
+  let banded = L.multiply(&L.above(&past, 0.0), &L.above(&(L.subtract(&start, &shortest) ?), -1.0e-300)) ?
+  L.select(&banded, &soft, &hard)
+}
+
+fn reachDirection(toward: &Points, distance: &L.Lanes, current: &Points, upperOffset: &Points, upper: &L.Lanes) -> Option[Points] {
+  let currentLength = L.sqrt(&(dot(current, current) ?))
+  let fallback = choose(&L.above(&currentLength, 0.0), &(divided(current, &currentLength) ?), &(divided(upperOffset, upper) ?)) ?
+  choose(&L.above(distance, 0.0), &(divided(toward, distance) ?), &fallback)
+}
+
+fn bendDirection(direction: &Points, pole: &Points, upperOffset: &Points) -> Option[Points] {
+  let count = L.count(&direction.xs)
+  let ones = L.filled(count, 1.0) ?
+  let none = zeros(&ones) ?
+  let yAxis = Points{xs: none, ys: ones, zs: none}
+  let last = unit(&(cross(&yAxis, direction) ?)) ?
+  let (fromAxis, axisValid) = across(&Points{xs: ones, ys: none, zs: none}, direction) ?
+  let third = choose(&axisValid, &fromAxis, &last) ?
+  let (fromJoint, jointValid) = across(upperOffset, direction) ?
+  let second = choose(&jointValid, &fromJoint, &third) ?
+  let (fromPole, poleValid) = across(pole, direction) ?
+  choose(&poleValid, &fromPole, &second)
+}
+
+/// The unit part of `offset` perpendicular to unit `direction`, with a mask of where it is defined.
+fn across(offset: &Points, direction: &Points) -> Option[(Points, L.Lanes)] {
+  let along = dot(offset, direction) ?
+  let perpendicular = minus(offset, &(scaled(direction, &along) ?)) ?
+  let squared = dot(&perpendicular, &perpendicular) ?
+  let limit = L.scale(&(dot(offset, offset) ?), PARALLEL)
+  let valid = L.multiply(&L.above(&(L.subtract(&squared, &limit) ?), 0.0), &L.above(&squared, 0.0)) ?
+  Some((divided(&perpendicular, &L.sqrt(&squared)) ?, valid))
+}
+
+/// The shortest-arc rotation from each `from` direction onto each `to` direction.
+fn turns(from: &Points, to: &Points) -> Option[Turns] {
+  let a = unit(from) ?
+  let b = unit(to) ?
+  let cosine = dot(&a, &b) ?
+  let axis = cross(&a, &b) ?
+  let w = L.addScalar(&cosine, 1.0)
+  let norm = L.sqrt(&(L.fma(&w, &w, &(dot(&axis, &axis) ?)) ?))
+  let half = Turns{xs: L.divide(&axis.xs, &norm) ?, ys: L.divide(&axis.ys, &norm) ?, zs: L.divide(&axis.zs, &norm) ?, ws: L.divide(&w, &norm) ?}
+  let count = L.count(&cosine)
+  let ones = L.filled(count, 1.0) ?
+  let none = zeros(&ones) ?
+  let (fromX, xValid) = perpendicularTo(&Points{xs: ones, ys: none, zs: none}, &a) ?
+  let fromY = unit(&(cross(&Points{xs: none, ys: ones, zs: none}, &a) ?)) ?
+  let flipAxis = choose(&xValid, &fromX, &fromY) ?
+  let opposite = L.above(&L.addScalar(&L.negate(&cosine), OPPOSITE), 0.0)
+  Some(
+    Turns {
+      xs: L.select(&opposite, &flipAxis.xs, &half.xs) ?,
+      ys: L.select(&opposite, &flipAxis.ys, &half.ys) ?,
+      zs: L.select(&opposite, &flipAxis.zs, &half.zs) ?,
+      ws: L.select(&opposite, &none, &half.ws) ?,
+    },
+  )
+}
+
+/// The unit cross product of `axis` with `direction`, with a mask of where it is not degenerate.
+fn perpendicularTo(axis: &Points, direction: &Points) -> Option[(Points, L.Lanes)] {
+  let crossed = cross(axis, direction) ?
+  let squared = dot(&crossed, &crossed) ?
+  Some((divided(&crossed, &L.sqrt(&squared)) ?, L.above(&squared, 0.000001)))
+}
+
+fn finite(points: &Points) -> Bool {
+  Float.isFinite(L.sum(&points.xs)) && Float.isFinite(L.sum(&points.ys)) && Float.isFinite(L.sum(&points.zs))
+}
+
+fn positive(lanes: &L.Lanes) -> Bool {
+  match L.smallest(lanes) {
+    case Some(least) => least > 0.0
+    case None => true
+  }
+}
+
+fn zeros(like: &L.Lanes) -> Option[L.Lanes] {
+  L.filled(L.count(like), 0.0)
+}
+
+fn plus(left: &Points, right: &Points) -> Option[Points] {
+  Some(Points{xs: L.add(&left.xs, &right.xs) ?, ys: L.add(&left.ys, &right.ys) ?, zs: L.add(&left.zs, &right.zs) ?})
+}
+
+fn minus(left: &Points, right: &Points) -> Option[Points] {
+  Some(Points{xs: L.subtract(&left.xs, &right.xs) ?, ys: L.subtract(&left.ys, &right.ys) ?, zs: L.subtract(&left.zs, &right.zs) ?})
+}
+
+fn scaled(points: &Points, factors: &L.Lanes) -> Option[Points] {
+  Some(Points{xs: L.multiply(&points.xs, factors) ?, ys: L.multiply(&points.ys, factors) ?, zs: L.multiply(&points.zs, factors) ?})
+}
+
+fn divided(points: &Points, divisors: &L.Lanes) -> Option[Points] {
+  Some(Points{xs: L.divide(&points.xs, divisors) ?, ys: L.divide(&points.ys, divisors) ?, zs: L.divide(&points.zs, divisors) ?})
+}
+
+fn dot(left: &Points, right: &Points) -> Option[L.Lanes] {
+  L.fma(&left.xs, &right.xs, &(L.fma(&left.ys, &right.ys, &(L.multiply(&left.zs, &right.zs) ?)) ?))
+}
+
+fn cross(left: &Points, right: &Points) -> Option[Points] {
+  Some(
+    Points {
+      xs: L.subtract(&(L.multiply(&left.ys, &right.zs) ?), &(L.multiply(&left.zs, &right.ys) ?)) ?,
+      ys: L.subtract(&(L.multiply(&left.zs, &right.xs) ?), &(L.multiply(&left.xs, &right.zs) ?)) ?,
+      zs: L.subtract(&(L.multiply(&left.xs, &right.ys) ?), &(L.multiply(&left.ys, &right.xs) ?)) ?,
+    },
+  )
+}
+
+fn unit(points: &Points) -> Option[Points] {
+  divided(points, &L.sqrt(&(dot(points, points) ?)))
+}
+
+fn choose(mask: &L.Lanes, chosen: &Points, otherwise: &Points) -> Option[Points] {
+  Some(Points{xs: L.select(mask, &chosen.xs, &otherwise.xs) ?, ys: L.select(mask, &chosen.ys, &otherwise.ys) ?, zs: L.select(mask, &chosen.zs, &otherwise.zs) ?})
+}

@@ -5,6 +5,15 @@ tags: [changelog]
 
 # Changelog
 
+## 2026-10-29 — Inverse kinematics (#746)
+
+- [[Ark Ik]] solves two-bone limbs by projection and height (no inverse trigonometry), clamps at
+  both minimum and full reach, approaches full reach through a rational soft band, and reports
+  shortest-arc bone turns and shortfall; FABRIK solves chains within a tolerance and budget.
+- [[Ark Limbs]] solves many limbs at once on lanes with identical results: about 0.8
+  microseconds per limb against 220 for one interpreted solve. [[Ark Quaternion]] gains
+  `between`.
+
 ## 2026-10-29 — Self inside trait defaults (#736)
 
 - [[Eval Call Path]] binds `Self` to the selected owner when a method is reached through a
