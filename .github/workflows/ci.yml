@@ -180,6 +180,9 @@ jobs:
       # as much at ten times the input, and a buffered control must not.
       - name: Verify a streaming reader holds as much at ten times the input
         run: python3 test/residency.py "$PUDU"
+      # Repeated bounded concurrency must keep live memory flat.
+      - name: Verify bounded concurrency helpers release what they create
+        run: node test/concurrent-release.mjs "$PUDU"
       # Golden binary64 results across the full exponent range, exact-kernel
       # edge cases and domain refusals, compared bit for bit with the host.
       - name: Verify binary64 kernels round exactly across the full range

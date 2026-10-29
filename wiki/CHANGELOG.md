@@ -5,6 +5,12 @@ tags: [changelog]
 
 # Changelog
 
+## 2026-10-29 — Bounded concurrency releases its state (#730)
+
+- [[Std Concurrent]] `parallel` and the bounded helpers join then forget their threads and
+  dispose their claim counter, failure cell and result slots; four-item `mapBounded` no longer
+  leaves about 118 KB per call. [[Concurrent Release Gate]] holds live memory flat on success,
+  failure and `parallel` paths with [[Concurrent Release Fixture]].
 ## 2026-10-29 — Window density, limits, full screen and state records (#728)
 
 - [[Pudu Desktop Adapter]] reports backing scale, focus, minimize and full-screen transitions as

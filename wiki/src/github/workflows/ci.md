@@ -28,6 +28,8 @@ their existing obligations. The application graph model tests and actual library
 - **Q:** Make architectural validation a manual-only check? **A:** No; integration executes it.
 - **Q:** Replace behavioral tests with a clean dependency graph? **A:** No; both remain mandatory.
 
+[[Concurrent Release Gate]] runs after the residency gate.
+
 ## Referenced by
 
 [[Application Layer Gate]] · [[Repository Gates]]
