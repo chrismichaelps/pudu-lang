@@ -199,6 +199,8 @@ tags: [moc, handoff]
 - [[2026-09-30-std-layer-sweep]] — Std defects found layer by layer through the import graph (#395–#420).
 - [[2026-09-16-playground-editor]] — website playground editor, language-server repair, and confined runs.
 
+- [[Desktop Presentation Delivery]] — issue #724 native frame orientation repair.
+
 ## Referenced by
 
 [[00-INDEX]] · [[Engineering Delivery]]

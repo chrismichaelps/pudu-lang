@@ -58,8 +58,7 @@ enum {
   CGContextRef context = [[NSGraphicsContext currentContext] CGContext];
   CGContextSaveGState(context);
   CGContextSetInterpolationQuality(context, kCGInterpolationNone);
-  CGContextTranslateCTM(context, 0, NSHeight(self.bounds));
-  CGContextScaleCTM(context, 1, -1);
+  /* The unflipped view already matches the image drawing coordinates. */
   CGContextDrawImage(context, NSMakeRect(0, 0, NSWidth(self.bounds), NSHeight(self.bounds)), image);
   CGContextRestoreGState(context);
 
