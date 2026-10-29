@@ -43,10 +43,7 @@ import System.FilePath (takeDirectory, (</>))
     must be a standard module the day it is written, without this file learning
     about it. -}
 isStandardModule :: ModuleName -> Bool
-isStandardModule (ModuleName segments) = NonEmpty.head segments == standardRoot
-
-standardRoot :: Text
-standardRoot = "Std"
+isStandardModule (ModuleName segments) = NonEmpty.head segments `elem` ["Std", "Ark"]
 
 {-| Filesystem work performed while constructing one resolution context. -}
 data ResolutionMetrics = ResolutionMetrics

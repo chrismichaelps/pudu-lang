@@ -6,8 +6,22 @@ tags: [moc, handoff]
 # Handoff Map
 
 - [[Monotonic Nanosecond Delivery]] — issue #670 nanosecond monotonic clock.
+- [[Broadphase Delivery]] — issue #682 native overlap pairs of axis-aligned boxes.
+
+- [[Raster Delivery]] — issue #676 native depth-tested triangle rasterization.
+- [[Lane Collection Delivery]] — issue #726 lane buffers share collections so threads overlap.
+
+- [[Lane Delivery]] — issue #668 packed binary64 lanes with native batch kernels.
+
+- [[Square Root Delivery]] — issue #661 binary64 kernels behind Std.Math.Float, exact square root.
+
+- [[Flat Expression List Delivery]] — issue #662 keep flat list width out of parser nesting depth.
 
 - [[Hackage Transport Delivery]] — issue #656 configure verified HTTPS before one index update.
+
+- [[Ark Layer Delivery]] — issue #658 engine dependency enforcement.
+
+- [[Ark Foundation Delivery]] — issue #652 integrated engine architecture and checked vector math.
 
 - [[Derive Index Delivery]] — authored strategy indexing and public metadata (#458).
 
