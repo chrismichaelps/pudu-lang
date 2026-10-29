@@ -2,8 +2,8 @@ module UsesArkSchedule
 
 import Std.Lanes as Lanes
 import Ark.Core.Handle as Handle
-import Ark.World as World
 import Ark.World.Schedule as Schedule
+import Ark.World as World
 
 fn require(condition: Bool, name: Str) {
   if !condition { panic(name) }
