@@ -82,6 +82,10 @@ including externally observable filesystem modes that portable permission boolea
 
 Resolved Grill Log: local and integration delivery both exercise actual strategy output and public visibility.
 
+## Capsule support (#722)
+
+[[Ark Ground Gate]] validates floor support and typed refusals.
+Resolved Grill Log: verify the executable behavior and shipping before delivery.
 ## Swept movement (#720)
 
 [[Ark Motion Gate]] validates query-driven sliding and typed refusals.

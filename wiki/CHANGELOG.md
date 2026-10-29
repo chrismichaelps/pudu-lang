@@ -5,6 +5,11 @@ tags: [changelog]
 
 # Changelog
 
+## 2026-10-29 — Capsule support (#722)
+
+[[Ark Capsule Support]] classifies floor slope and capsule witnesses, settles descending states
+and preserves rising/lost-support transitions plus typed query failures. [[Ark Ground Gate]]
+checks executable behavior and shipping. Full movement, gravity and stepping remain open.
 ## Query-driven swept movement (#720)
 
 Add [[Ark Swept Motion]] with checked callback contacts, preserved typed query errors,

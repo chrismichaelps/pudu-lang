@@ -38,6 +38,10 @@ their existing obligations. The application graph model tests and actual library
 
 Resolved Grill Log: command serialization is verified through the actual executable rather than only encoder properties.
 
+## Capsule support (#722)
+
+[[Ark Ground Gate]] executes after build with the shared compiler.
+Resolved Grill Log: verify the executable behavior and shipping before delivery.
 ## Swept movement (#720)
 
 [[Ark Motion Gate]] checks bounded movement, callback failure and shipping.
