@@ -47,12 +47,17 @@ fixes found on the way have their own PRs from `dev`: `Bytes.strided` (#701, sna
 1 ms) and position-aware `W3003` (#703). All fifteen focused gates, the layer gate (43 engine
 modules, 0 findings), the formatter and API coverage pass on an optimized -Werror build.
 
-Open target obligations: angular rigid-body dynamics and character controllers; lights, shadows
-and text rendering; IK and morph targets; Core serialization, allocators and a job system;
-asynchronous streaming; editor and tools.
+Since then: per-pixel shading (#712), a parallel system schedule over declared column access
+(#725, stacked PR on this branch), top-row-first native presentation (#724, PR #727), shared
+lane collections so lane work overlaps across threads (#726, PR #729, stacked on #669), and
+issue #730 for leaks in the bounded `Std.Concurrent` helpers. The window slice (#728:
+high-DPI frames, full screen, size limits, focus and minimize records) has its native adapter,
+native test and Haskell builtin on feature/728-window-modes, unpushed.
 
-Exact next action: add angular velocity and inertia to Ark.Physics bodies with lane integration
-and contact impulses that apply torque.
+Open target obligations: the Ark side of #728; lights, shadows and text rendering; IK and morph
+targets; Core serialization and allocators; asynchronous streaming; editor and tools.
+
+Exact next action: fix #730 on its own branch from dev, then finish #728.
 
 ## Referenced by
 

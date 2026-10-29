@@ -24,9 +24,10 @@ Systems: `query(world, all, none) -> Array[Int]` archetype indices; `viewOf(worl
 `columnOf(view, component, field) -> Option[Lanes]`, `write(view, component, field, lanes) ->
 Option[View]` (refuses a length change) and `commit(world, view) -> Option[World]`;
 `each(world, all, none, system)` runs a `fn(View) -> Option[View]` over every match.
-`restrict(world, view, components) -> View` keeps only the listed components' columns, and
-`commitComponents(world, view, components) -> Option[World]` stores only those columns back;
-[[Ark Schedule]] uses the pair to enforce declared access and merge parallel writes.
+`columnsOf(world, components) -> Columns` names the listed components' column keys once;
+`restrictTo(view, columns) -> View` keeps only those columns and `commitColumns(world, view,
+columns) -> Option[World]` stores only those back. [[Ark Schedule]] computes `Columns` when it
+builds, so enforcing declared access and merging parallel writes does no text work per frame.
 Unknown components, stale handles and value-count mismatches answer `None`.
 
 ## Grill Log
@@ -35,8 +36,10 @@ Unknown components, stale handles and value-count mismatches answer `None`.
   an interpreted loop. Columns of lanes make a system a handful of native passes.
 - **Q:** Remove rows by swapping the last row in? **A:** Immediate `destroy` does, touching two
   rows per column. Batched removal in [[Ark World Commands]] compacts once with `gather`.
-- **Q:** Merge a parallel system's view whole? **A:** No; `commitComponents` copies only the
+- **Q:** Merge a parallel system's view whole? **A:** No; `commitColumns` copies only the
   named columns so systems sharing an archetype in one stage keep each other's writes.
+- **Q:** Restrict by component names each frame? **A:** No; that rebuilds every column key as
+  text for every job. `Columns` holds the keys, computed once per schedule.
 - **Q:** Non-float component data? **A:** Tags and Float64 fields now; integer and reference
   columns need typed lanes and are a later slice, not an encoding inside floats.
 

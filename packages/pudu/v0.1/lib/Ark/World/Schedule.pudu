@@ -1,6 +1,7 @@
 module Ark.World.Schedule
 
 import Std.Concurrent as Concurrent
+import Std.Sync as Sync
 import Ark.World as World
 
 /// A system: the archetypes it visits, the components it may read and write, the systems it follows, and its work.
@@ -28,8 +29,8 @@ export type RunError
   | BadWorkers(Int)
   | WorkerFailed(Str)
 
-/// Validated systems packed into stages of system indices; no stage holds a conflicting pair.
-export type Schedule = { systems: Array[System], stages: Array[Array[Int]] }
+/// Validated systems packed into stages of system indices, with each system's readable and writable columns.
+export type Schedule = { systems: Array[System], stages: Array[Array[Int]], access: Array[World.Columns], written: Array[World.Columns] }
 
 type Job = { system: Int, view: World.View }
 
@@ -78,7 +79,13 @@ export fn build(world: &World.World, systems: &Array[System]) -> Result[Schedule
     stages = stages.push(members)
     level = level + 1
   }
-  Ok(Schedule{systems: *systems, stages})
+  var access: Array[World.Columns] = []
+  var written: Array[World.Columns] = []
+  for held in *systems {
+    access = access.push(World.columnsOf(world, &held.reads.concat(held.writes)))
+    written = written.push(World.columnsOf(world, &held.writes))
+  }
+  Ok(Schedule{systems: *systems, stages, access, written})
 }
 
 /// The system names of every stage, in execution order.
@@ -106,7 +113,7 @@ export fn run(world: World.World, schedule: &Schedule, workers: Int) -> Result[W
       let job = jobs[index]
       let held = schedule.systems[job.system]
       let Some(view) = results[index] else { return Err(SystemFailed(held.name, job.view.archetype)) }
-      let Some(merged) = World.commitComponents(current, &view, &held.writes) else {
+      let Some(merged) = World.commitColumns(current, &view, &schedule.written[job.system]) else {
         return Err(SystemFailed(held.name, job.view.archetype))
       }
       current = merged
@@ -120,10 +127,9 @@ fn jobsOf(world: &World.World, schedule: &Schedule, stage: &Array[Int]) -> Array
   var jobs: Array[Job] = []
   for index in *stage {
     let held = schedule.systems[index]
-    let access = held.reads.concat(held.writes)
     for archetype in World.query(world, &held.all, &held.none) {
       if let Some(view) = World.viewOf(world, archetype) {
-        jobs = jobs.push(Job{system: index, view: World.restrict(world, &view, &access)})
+        jobs = jobs.push(Job{system: index, view: World.restrictTo(&view, &schedule.access[index])})
       }
     }
   }
@@ -131,18 +137,61 @@ fn jobsOf(world: &World.World, schedule: &Schedule, stage: &Array[Int]) -> Array
 }
 
 fn execute(schedule: &Schedule, jobs: &Array[Job], workers: Int) -> Result[Array[Option[World.View]], RunError] {
-  let systems = schedule.systems
-  if workers == 1 || jobs.length() < 2 {
-    var results: Array[Option[World.View]] = []
-    for job in *jobs {
-      results = results.push((systems[job.system].run)(job.view))
+  let count = if workers < jobs.length() { workers } else { jobs.length() }
+  if count < 2 { return Ok(runBatch(schedule, jobs, 0, 1)) }
+  var cells: Array[Sync.Cell[Array[Option[World.View]]]] = []
+  var tasks: Array[Concurrent.Task] = []
+  var failure: Option[Str] = None
+  var batch = 1
+  while batch < count {
+    let empty: Array[Option[World.View]] = []
+    let slot = Sync.cell(empty)
+    let offset = batch
+    match Concurrent.start(|| {
+        let _stored = Sync.set(&slot, runBatch(schedule, jobs, offset, count))
+      })
+    {
+      case Ok(started) => { tasks = tasks.push(started) }
+      case Err(problem) => { failure = Some(show(problem)) }
     }
-    return Ok(results)
+    cells = cells.push(slot)
+    batch = batch + 1
   }
-  match Concurrent.mapBounded(jobs, workers, |job| (systems[job.system].run)(job.view)) {
-    case Ok(results) => Ok(results)
-    case Err(problem) => Err(WorkerFailed(show(problem)))
+  let local = runBatch(schedule, jobs, 0, count)
+  var batches: Array[Array[Option[World.View]]] = [local]
+  for worker in tasks {
+    if let Err(problem) = Concurrent.join(&worker) { failure = Some(show(problem)) }
+    let _forgotten = Concurrent.forget(&worker)
   }
+  for slot in cells {
+    match Sync.get(&slot) {
+      case Ok(held) => { batches = batches.push(held) }
+      case Err(problem) => { failure = Some(show(problem)) }
+    }
+    let _disposed = Sync.disposeCell(&slot)
+  }
+  if let Some(problem) = failure { return Err(WorkerFailed(problem)) }
+  var results: Array[Option[World.View]] = []
+  var index = 0
+  while index < jobs.length() {
+    let held = batches[index % count]
+    if index / count >= held.length() { return Err(WorkerFailed("a worker returned fewer results than it was given")) }
+    results = results.push(held[index / count])
+    index = index + 1
+  }
+  Ok(results)
+}
+
+/// Run every `stride`th job from `offset`, so each batch mixes the stage's systems and archetypes.
+fn runBatch(schedule: &Schedule, jobs: &Array[Job], offset: Int, stride: Int) -> Array[Option[World.View]] {
+  var results: Array[Option[World.View]] = []
+  var index = offset
+  while index < jobs.length() {
+    let job = jobs[index]
+    results = results.push((schedule.systems[job.system].run)(job.view))
+    index = index + stride
+  }
+  results
 }
 
 fn validate(world: &World.World, systems: &Array[System]) -> Result[(), ScheduleError] {

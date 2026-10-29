@@ -22,10 +22,13 @@ exactly as it is when systems run one by one. Each system lands in the earliest 
 every system it follows or conflicts with, and a stage lists its systems in that order.
 
 A stage expands into one job per (system, matching archetype). Every job reads the world as the
-stage found it, through a view `World.restrict` cut down to the system's declared columns: a
+stage found it, through a view `World.restrictTo` cut down to the system's declared columns (computed once
+at build as `World.Columns`): a
 read or write outside its declaration answers `None` and fails the run as `SystemFailed(name,
-archetype)` instead of racing. Jobs run on `Concurrent.mapBounded` with `workers` threads, or
-inline for one worker or one job; results merge in job order with `World.commitComponents`
+archetype)` instead of racing. Jobs are split into one strided batch per worker (job `i` goes
+to batch `i mod workers`, so each batch mixes systems and archetypes); the calling thread runs
+batch zero itself while started threads run the rest, then every thread is joined and forgotten
+and every result cell disposed. One worker or one job runs inline. Results merge in job order with `World.commitColumns`
 copying only declared writes. Because a stage holds no conflicting pair, the result equals
 running its systems sequentially in stage order, whatever the worker count.
 
@@ -45,10 +48,21 @@ thread cannot be started or joined.
 - **Q:** Order conflicting systems by graph discovery or name? **A:** Declaration position.
   It is the order a reader sees and the order sequential execution would use, so parallel
   stages never change a result.
+- **Q:** Hand every job to `Concurrent.mapBounded`? **A:** No; it creates a cell and a closure
+  per job and keeps them, which measured +0.47 ms a frame for twelve idle jobs. One batch per
+  worker with the caller running the first costs +0.10 ms and releases what it creates.
 - **Q:** Start threads for a stage of one job? **A:** No; a single job or a single worker runs
   inline, so a schedule never pays thread start-up where nothing overlaps.
 - **Q:** Split one archetype across workers? **A:** Not in this slice. Archetype columns are whole
   lanes processed by native kernels; row-range splitting needs a lane slice and splice contract.
+
+## Measurement
+
+[[Ark Schedule Benchmark]], best of five fresh processes on 4 performance and 4 efficiency
+cores: 200,000 entities 2.61 ms on one worker, 1.79 on two, 1.54 on four; 800,000 entities
+23.8 ms on one and about 19-20 ms on two to eight, where every kernel streams 1.6 MB buffers and
+memory bandwidth bounds the gain. Fixed scheduling cost for twelve idle jobs is 0.40 ms serial
+and 0.50 ms on four workers. Timed with the shared lane collection limit (#726) linked.
 
 ## Referenced by
 

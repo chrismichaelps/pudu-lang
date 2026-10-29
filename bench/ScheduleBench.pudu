@@ -71,8 +71,18 @@ fn timed(world: World.World, schedule: &Schedule.Schedule, workers: Int) -> (Wor
   (current, (Time.monotonicNanos() - started) / FRAMES)
 }
 
-/// Run one stage of twelve jobs over 200,000 entities with one worker and with four.
+fn workersFrom(options: &Array[Str]) -> Int {
+  if options.isEmpty() { return 1 }
+  match options[options.length() - 1].toInt() {
+    case Some(count) => count
+    case None => panic("the worker count must be a whole number")
+  }
+}
+
+/// Run one stage of twelve jobs over 200,000 entities on the worker count given as the last argument.
 export fn main() -> Int {
+  let options = arguments()
+  let workers = workersFrom(&options)
   let (world, firsts) = populated()
   let systems = [
     Schedule.System{name: "integrate", all: ["position", "velocity"], none: [], reads: ["velocity"], writes: ["position"], after: [], run: integrate},
@@ -81,16 +91,19 @@ export fn main() -> Int {
   ]
   let Ok(schedule) = Schedule.build(&world, &systems) else { panic("build") }
   if Schedule.stageNames(&schedule) != [["integrate", "fade", "cool"]] { panic("one stage") }
-  let (serial, serialNanos) = timed(world, &schedule, 1)
-  let (parallel, parallelNanos) = timed(world, &schedule, 4)
+  let (moved, nanos) = timed(world, &schedule, workers)
+  var checksum = 0.0
   for handle in firsts {
     for component in ["position", "color", "heat"] {
-      if World.get(&serial, handle, component) != World.get(&parallel, handle, component) { panic("worker results differ") }
+      let Some(values) = World.get(&moved, handle, component) else { panic("component") }
+      for value in values {
+        checksum = checksum + value
+      }
     }
   }
-  let Some(position) = World.get(&parallel, firsts[0], "position") else { panic("position") }
+  let Some(position) = World.get(&moved, firsts[0], "position") else { panic("position") }
   if position[0] < 0.47 || position[0] > 0.49 { panic("unexpected position") }
-  print("serial " + show(serialNanos))
-  print("parallel " + show(parallelNanos))
+  print("frame " + show(nanos))
+  print("checksum " + show(checksum))
   0
 }

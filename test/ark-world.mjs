@@ -43,7 +43,9 @@ try {
 if (process.argv.includes('--bench')) {
   const timings = Object.fromEntries(run('run', bench).trim().split('\n').map(line => line.split(' ')).map(([name, ns]) => [name, Number(ns)]));
   console.log(JSON.stringify({entities: 100000, nanosecondsPerFrame: timings, speedup: timings.records / Math.max(timings.world, 1)}));
-  const staged = Object.fromEntries(run('run', scheduleBench).trim().split('\n').map(line => line.split(' ')).map(([name, ns]) => [name, Number(ns)]));
-  console.log(JSON.stringify({entities: 200000, jobs: 12, nanosecondsPerFrame: staged, speedup: staged.serial / Math.max(staged.parallel, 1)}));
+  const staged = workers => Object.fromEntries(run('run', scheduleBench, String(workers)).trim().split('\n').map(line => line.split(' ')));
+  const [serial, parallel] = [staged(1), staged(4)];
+  assert.equal(parallel.checksum, serial.checksum, 'worker counts agree');
+  console.log(JSON.stringify({entities: 200000, jobs: 12, nanosecondsPerFrame: {serial: Number(serial.frame), parallel: Number(parallel.frame)}, speedup: Number(serial.frame) / Math.max(Number(parallel.frame), 1)}));
 }
 console.log('Ark world storage, systems, commands, hierarchy, events, schedules, refusals and distribution passed');

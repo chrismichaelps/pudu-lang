@@ -5,6 +5,14 @@ tags: [changelog]
 
 # Changelog
 
+## 2026-10-29 — Parallel system schedule (#725)
+
+- [[Ark Schedule]] packs systems with declared reads and writes into conflict-free stages and
+  runs each stage on bounded workers over views cut to the declared columns, merging only
+  declared writes; [[Ark World]] gains precomputed `Columns` for restricting and merging views.
+- [[Ark Schedule Fixture]] and [[Ark World Gate]] cover packing, refusals, worker equivalence and
+  access enforcement; [[Ark Schedule Benchmark]] measures 2.61 → 1.54 ms for 200,000 entities.
+
 ## 2026-10-29 — Lane work overlaps across threads (#726)
 
 - [[Pudu Cabal]] links a 32 MB large-object allocation limit, so lane kernel buffers share
