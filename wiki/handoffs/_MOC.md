@@ -5,6 +5,7 @@ tags: [moc, handoff]
 
 # Handoff Map
 
+- [[Lambda Option Try Delivery]] — issue #678 `?` on Option in unannotated lambdas.
 - [[Game Input Delivery]] — issue #673 key release, physical codes, hover and buttons.
 - [[Monotonic Nanosecond Delivery]] — issue #670 nanosecond monotonic clock.
 - [[Broadphase Delivery]] — issue #682 native overlap pairs of axis-aligned boxes.
