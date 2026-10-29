@@ -56,6 +56,8 @@ PUDU=$(cabal list-bin pudu --enable-optimization=2)
 # shell expansion that matches nothing passes this gate while checking nothing.
 run 'every committed Pudu file is formatted' \
   bash -c '"$PUDU" fmt --check packages/pudu test-fixtures examples'
+run 'capsules cast against finite boxes with checked witnesses and convergence' \
+  node test/ark-cast.mjs "$PUDU"
 run 'Ark capsules sweep, slide and classify support' \
   node test/ark-character.mjs "$PUDU"
 run 'qualified constructors preserve types, visibility and runtime values' \

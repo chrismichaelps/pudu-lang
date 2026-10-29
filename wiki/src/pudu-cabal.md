@@ -306,6 +306,10 @@ Register [[Lsp Impl Members]] without new dependencies. Resolved Grill Log: comp
 
 Register [[Resolve State]] for the private pure resolver action and state boundary. Resolved Grill Log: preserve the abstract [[Resolve Context]] facade and existing state/diagnostic ordering without a new dependency.
 
+## Capsule cast distribution (#716)
+
+Ship `lib/Ark/Math/*.pudu` and `lib/Ark/Physics/*.pudu` for [[Ark Segment Box Distance]] and
+[[Ark Capsule Box Cast]]. Resolved Grill Log: verify both nested modules in the actual archive.
 ## Capsule movement distribution (#714)
 
 Include `lib/Ark/Physics/*.pudu` as shipped library data for [[Ark Character Movement]].

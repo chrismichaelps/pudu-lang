@@ -5,6 +5,7 @@ tags: [moc, handoff]
 
 # Handoff Map
 
+- [[Ark Cast Delivery]] — checked capsule casts and finite-box closest witnesses (#716).
 - [[Ark Character Delivery]] — capsule movement, corner constraints and final support (#714).
 - [[Qualified Constructor Delivery]] — imported and local qualified sum constructors (#717).
 - [[Optimized Refresh Delivery]] — explicit optimized runtime installation (#686).

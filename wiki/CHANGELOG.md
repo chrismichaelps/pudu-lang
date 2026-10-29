@@ -5,6 +5,12 @@ tags: [changelog]
 
 # Changelog
 
+## 2026-10-28 — Finite capsule-box casts (#716)
+
+- [[Ark Segment Box Distance]] supplies bounded analytic closest witnesses.
+- [[Ark Capsule Box Cast]] advances translated capsules with explicit overlap, range and
+  convergence failures. [[Ark Cast Gate]] and [[Ark Cast Fixture]] verify geometry and shipping.
+- [[Ark Cast Delivery]] records source study, the compiler prerequisite, validation and pending review.
 ## 2026-10-28 — Checked capsule movement (#714)
 
 - [[Ark Character Movement]] adds continuous convex-boundary sweeps, capsule support, corner sliding,

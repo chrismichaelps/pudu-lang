@@ -38,6 +38,10 @@ their existing obligations. The application graph model tests and actual library
 
 Resolved Grill Log: command serialization is verified through the actual executable rather than only encoder properties.
 
+## Capsule cast contract (#716)
+
+[[Ark Cast Gate]] verifies closest witnesses, continuous casts, typed failure and shipping.
+Resolved Grill Log: focused geometric coverage supplements the full compiler suite.
 ## Character movement contract (#714)
 
 [[Ark Character Gate]] verifies capsule sweeps, final support, refusal and source shipping.

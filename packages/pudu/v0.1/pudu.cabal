@@ -18,6 +18,7 @@ extra-source-files: cbits/pudu_desktop.h
                     cbits/pudu_audio_stream.h
 data-files:         lib/Std/*.pudu
                     lib/Ark/*.pudu
+                    lib/Ark/Math/*.pudu
                     lib/Ark/Physics/*.pudu
                     lib/Std/App/*.pudu
                     lib/Std/Audio/*.pudu

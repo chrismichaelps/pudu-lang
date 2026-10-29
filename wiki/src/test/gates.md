@@ -82,6 +82,10 @@ including externally observable filesystem modes that portable permission boolea
 
 Resolved Grill Log: local and integration delivery both exercise actual strategy output and public visibility.
 
+## Capsule cast contract (#716)
+
+[[Ark Cast Gate]] runs with the optimized compiler. Resolved Grill Log: finite obstacle geometry
+and explicit convergence failure require executable public-API coverage alongside the full suite.
 ## Character movement contract (#714)
 
 [[Ark Character Gate]] runs against the optimized compiler. Resolved Grill Log: sweeps, corner
