@@ -47,6 +47,10 @@ scene throughput. The first failed gate log remains /tmp/pudu-ground-gates.log.
 Role transition: Runtime Engineer completed focused/full validation; Tooling/Release publishes the
 draft for independent implementation, Language Architect and Forensic Guardian review.
 
+Delivery: implementation commit `d6a42c09` is pushed in draft
+PR [#723](https://github.com/chrismichaelps/pudu-lang/pull/723) targeting dev.
+Hosted checks and independent reviews remain pending. Nothing was merged.
+
 Exact next action: resolve the frame-controller contract for gravity/terminal velocity, impact
 response velocity and remaining simulation time, then compose complete frame movement and support.
 
