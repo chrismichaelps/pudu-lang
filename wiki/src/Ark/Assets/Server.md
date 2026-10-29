@@ -17,7 +17,13 @@ during staging.
 
 `open(vfs, sources) -> Result[Server, Error]` compiles [[Ark Asset Dependencies]], reads and
 imports every asset dependency-first and issues one [[Ark Handle]] per asset. `add` declares and
-loads one more asset whose dependencies are loaded. `handle`,
+loads one more asset whose dependencies are loaded. Loading splits in two for [[Ark Asset
+Stream]]: `prepare(server, source) -> Result[Prepared, Error]` reads and imports against the
+server's published dependencies without changing anything, so it runs on a worker thread over a
+snapshot, and `commit(server, prepared) -> Result[Server, Error]` declares and publishes it
+without reading; an ID already loaded or a dependency no longer loaded is the same declaration
+error `add` reports. `add` is
+`prepare` then `commit`. `handle`,
 `payload`, `revision` and `ids` read published state; `payload` refuses stale handles.
 
 `changed(server)` re-reads every source and reports the IDs whose bytes differ from the bytes

@@ -21,6 +21,9 @@ export type Error
 /// One published asset with the exact source bytes its revision was imported from.
 export type Entry = { source: Source, handle: Handle.Handle, revision: Int, bytes: Bytes, payload: Import.Payload }
 
+/// An asset read and imported against a server's published dependencies, ready to commit.
+export type Prepared = { source: Source, bytes: Bytes, payload: Import.Payload }
+
 /// Published state; every operation returns a new server and leaves its input unchanged.
 export type Server = { vfs: Vfs.Vfs, graph: Graph.Graph, entries: Map[Str, Entry], owners: Map[Int, Str], pool: Handle.HandlePool }
 
@@ -32,17 +35,35 @@ export fn open(vfs: Vfs.Vfs, sources: &Array[Source]) -> Result[Server, Error] {
   var server = Server{vfs, graph, entries: mapOf([]), owners: mapOf([]), pool: Handle.empty()}
   for id in server.graph.order {
     let Some(source) = declared.get(id) else { return Err(InvalidServer(id)) }
-    server = publishNew(server, source) ?
+    server = published(server, prepare(&server, &source) ?)
   }
   Ok(server)
 }
 
 /// Declare, read and import one more asset whose dependencies are already loaded.
 export fn add(server: Server, source: Source) -> Result[Server, Error] {
-  var sources = declarations(&server) ?
-  sources = sources.push(source)
-  let graph = compileSources(&sources) ?
-  publishNew(Server{..server, graph}, source)
+  let graph = declaredWith(&server, &source) ?
+  let prepared = prepare(&server, &source) ?
+  Ok(published(Server{..server, graph}, prepared))
+}
+
+/// Read and import an asset against the published dependencies without changing the server.
+export fn prepare(server: &Server, source: &Source) -> Result[Prepared, Error] {
+  let bytes = readSource(&server.vfs, source) ?
+  let imported = importSource(source, &bytes, &server.entries) ?
+  Ok(Prepared{source: *source, bytes, payload: imported})
+}
+
+/// Declare and publish a prepared asset; a duplicate ID or a dependency no longer loaded is a declaration error.
+export fn commit(server: Server, prepared: Prepared) -> Result[Server, Error] {
+  let graph = declaredWith(&server, &prepared.source) ?
+  Ok(published(Server{..server, graph}, prepared))
+}
+
+fn declaredWith(server: &Server, source: &Source) -> Result[Graph.Graph, Error] {
+  var sources = declarations(server) ?
+  sources = sources.push(*source)
+  compileSources(&sources)
 }
 
 /// The handle issued for an asset ID.
@@ -138,12 +159,10 @@ export fn unload(server: Server, id: Str) -> Result[Server, Error] {
   Ok(Server{..server, graph, entries: server.entries.remove(id), owners: server.owners.remove(entry.handle.index), pool})
 }
 
-fn publishNew(server: Server, source: Source) -> Result[Server, Error] {
-  let bytes = readSource(&server.vfs, &source) ?
-  let imported = importSource(&source, &bytes, &server.entries) ?
+fn published(server: Server, prepared: Prepared) -> Server {
   let (pool, issued) = Handle.allocate(server.pool)
-  let entry = Entry{source, handle: issued, revision: 0, bytes, payload: imported}
-  Ok(Server{..server, entries: server.entries.insert(source.id, entry), owners: server.owners.insert(issued.index, source.id), pool})
+  let entry = Entry{source: prepared.source, handle: issued, revision: 0, bytes: prepared.bytes, payload: prepared.payload}
+  Server{..server, entries: server.entries.insert(prepared.source.id, entry), owners: server.owners.insert(issued.index, prepared.source.id), pool}
 }
 
 fn declarations(server: &Server) -> Result[Array[Source], Error] {
