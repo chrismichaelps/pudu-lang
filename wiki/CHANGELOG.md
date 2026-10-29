@@ -5,6 +5,31 @@ tags: [changelog]
 
 # Changelog
 
+## 2026-10-28 — Per-pixel shading in the raster kernel (#712)
+
+- [[Runtime Shade]] and [[Runtime Raster]] light every pixel from interpolated normals and
+  positions: Lambert with ambient, Blinn-Phong highlights and Fresnel reflection of a procedural
+  sky with a sun disc.
+
+## 2026-10-28 — Lane interleave and PCM16 output (#704)
+
+- [[Runtime Lanes]] and [[Std Lanes]] add `interleave` and `toPcm16`, so mixed Float64 audio
+  reaches 16-bit device frames in two native passes instead of a per-sample loop.
+
+## 2026-10-27 — Data-parallel lane primitives (#684)
+
+- [[Std Lanes]] adds select, threshold masks, positions, accumulating scatter-add and integer
+  conversion, so branchy algorithms such as contact solving run as lane programs.
+
+## 2026-10-27 — Native broadphase (#682)
+
+- [[Runtime Broadphase]] finds overlapping box pairs by sort and sweep; [[Overlap Pairs Fixture]]
+  matches a brute-force reference in [[Lanes Gate]].
+
+## 2026-10-27 — Native triangle rasterization (#676)
+
+- [[Runtime Raster]] fills RGBA8 targets and rasterizes depth-tested triangles with a top-left
+  fill rule; [[Raster Fixture]] checks golden pixels in [[Lanes Gate]].
 ## 2026-10-29 — Lane work overlaps across threads (#726)
 
 - [[Pudu Cabal]] links a 32 MB large-object allocation limit, so lane kernel buffers share

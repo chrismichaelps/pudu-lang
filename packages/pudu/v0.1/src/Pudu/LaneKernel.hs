@@ -45,11 +45,25 @@ data LaneKernel
   | LaneGather
   | LaneScatter
   | LaneAffine3
+  | RasterFill
+  | RasterTriangles
+  | RasterPerspectiveTriangles
+  | RasterTexturedTriangles
+  | RasterShadedTriangles
+  | LaneOverlapPairs
+  | LaneSelect
+  | LaneInterleave
+  | LaneToPcm16
+  | LaneAbove
+  | LaneWhere
+  | LaneScatterAdd
+  | LaneFromInts
+  | LaneToInts
   deriving stock (Eq, Ord, Show, Enum, Bounded)
 
 {-| Packed lanes as Bytes, a Float64, an Int, Array[Float64], Array[Int],
-    an Option of one of those, or three lanes. -}
-data LaneType = LaneBytes | LaneFloat | LaneInt | LaneFloats | LaneInts | LaneOption !LaneType | LaneTriple
+    an Option of one of those, two byte strings or three lanes. -}
+data LaneType = LaneBytes | LaneFloat | LaneInt | LaneFloats | LaneInts | LaneOption !LaneType | LanePair | LaneTriple
   deriving stock (Eq, Show)
 
 laneKernels :: [LaneKernel]
@@ -88,6 +102,20 @@ laneKernelName kernel = case kernel of
   LaneGather -> "lanesGather"
   LaneScatter -> "lanesScatter"
   LaneAffine3 -> "lanesAffine3"
+  RasterFill -> "rasterFill"
+  RasterTriangles -> "rasterTriangles"
+  RasterPerspectiveTriangles -> "rasterPerspectiveTriangles"
+  RasterTexturedTriangles -> "rasterTexturedTriangles"
+  RasterShadedTriangles -> "rasterShadedTriangles"
+  LaneOverlapPairs -> "lanesOverlapPairs"
+  LaneSelect -> "lanesSelect"
+  LaneInterleave -> "lanesInterleave"
+  LaneToPcm16 -> "lanesToPcm16"
+  LaneAbove -> "lanesAbove"
+  LaneWhere -> "lanesWhere"
+  LaneScatterAdd -> "lanesScatterAdd"
+  LaneFromInts -> "lanesFromInts"
+  LaneToInts -> "lanesToInts"
 
 {-| Argument types and result type. -}
 laneKernelSignature :: LaneKernel -> ([LaneType], LaneType)
@@ -113,6 +141,32 @@ laneKernelSignature kernel = case kernel of
   LaneGather -> ([LaneBytes, LaneInts], LaneOption LaneBytes)
   LaneScatter -> ([LaneBytes, LaneInts, LaneBytes], LaneOption LaneBytes)
   LaneAffine3 -> ([LaneFloats, LaneBytes, LaneBytes, LaneBytes], LaneOption LaneTriple)
+  RasterFill -> ([LaneInt, LaneFloat, LaneFloat, LaneFloat, LaneFloat], LaneOption LaneBytes)
+  LaneSelect -> ([LaneBytes, LaneBytes, LaneBytes], LaneOption LaneBytes)
+  LaneInterleave -> ([LaneBytes, LaneBytes], LaneOption LaneBytes)
+  LaneToPcm16 -> ([LaneBytes], LaneBytes)
+  LaneAbove -> ([LaneBytes, LaneFloat], LaneBytes)
+  LaneWhere -> ([LaneBytes], LaneInts)
+  LaneScatterAdd -> ([LaneBytes, LaneInts, LaneBytes], LaneOption LaneBytes)
+  LaneFromInts -> ([LaneInts], LaneBytes)
+  LaneToInts -> ([LaneBytes], LaneOption LaneInts)
+  LaneOverlapPairs -> ([LaneBytes, LaneBytes, LaneBytes, LaneBytes, LaneBytes, LaneBytes], LaneOption LaneInts)
+  RasterTriangles ->
+    ( [LaneBytes, LaneBytes, LaneInt, LaneInt, LaneBytes, LaneBytes, LaneBytes, LaneBytes, LaneBytes, LaneBytes]
+    , LaneOption LanePair
+    )
+  RasterPerspectiveTriangles ->
+    ( [LaneBytes, LaneBytes, LaneInt, LaneInt, LaneBytes, LaneBytes, LaneBytes, LaneBytes, LaneBytes, LaneBytes, LaneBytes]
+    , LaneOption LanePair
+    )
+  RasterTexturedTriangles ->
+    ( [LaneBytes, LaneBytes, LaneInt, LaneInt] ++ replicate 9 LaneBytes ++ [LaneBytes, LaneInt, LaneInt, LaneInt]
+    , LaneOption LanePair
+    )
+  RasterShadedTriangles ->
+    ( [LaneBytes, LaneBytes, LaneInt, LaneInt] ++ replicate 14 LaneBytes
+    , LaneOption LanePair
+    )
   _
     | kernel `elem` [LaneAdd, LaneSub, LaneMul, LaneDiv, LaneMin, LaneMax] ->
         ([LaneBytes, LaneBytes], LaneOption LaneBytes)

@@ -11,7 +11,11 @@ import Pudu.FloatKernel (FloatKernel (KernelFloor))
 import Pudu.FloatLiteral (FloatWidth (Float64Width))
 import Pudu.LaneKernel (LaneKernel (..), laneKernelName)
 import Pudu.Runtime.FloatKernel (applyFloatUnary)
+import qualified Pudu.Runtime.Broadphase as Broadphase
 import qualified Pudu.Runtime.Lanes as Lanes
+import qualified Pudu.Runtime.Raster as Raster
+import qualified Pudu.Runtime.Sampler as Sampler
+import qualified Pudu.Runtime.Shade as Shade
 import Pudu.Source (Span)
 
 {-| Apply a lane kernel. The checker admits only the kernel's signature, so a
@@ -19,13 +23,19 @@ import Pudu.Source (Span)
     that do not hold a whole number of binary64 values. -}
 callLaneKernel :: Span -> LaneKernel -> [Value] -> Evaluator Value
 callLaneKernel spanValue kernel values
-  | not (all wholeLanes values) =
+  | not (all wholeLanes checked) =
       abortAt (Just spanValue) "E7012" (laneKernelName kernel <> " needs lanes of whole binary64 values") Nothing
   | otherwise = maybe refused pure (apply kernel values)
   where
     refused = abortAt (Just spanValue) "E7012" (laneKernelName kernel <> " got arguments outside its signature") Nothing
     wholeLanes (BytesValue bytes) = Lanes.laneWhole bytes
     wholeLanes _ = True
+    checked = case kernel of
+      RasterTriangles -> drop 1 values
+      RasterPerspectiveTriangles -> drop 1 values
+      RasterShadedTriangles -> drop 1 values
+      RasterTexturedTriangles -> [value | (index, value) <- zip [0 :: Int ..] values, index /= 0, index /= 13]
+      _ -> values
 
 apply :: LaneKernel -> [Value] -> Maybe Value
 apply kernel values = case (kernel, values) of
@@ -73,8 +83,64 @@ apply kernel values = case (kernel, values) of
     Just $ case Lanes.laneAffine3 entries xs ys zs of
       Just (rx, ry, rz) -> VariantValue "Some" [TupleValue [BytesValue rx, BytesValue ry, BytesValue rz]]
       Nothing -> VariantValue "None" []
+  (LaneInterleave, [BytesValue a, BytesValue b]) -> Just (optionLanes (Lanes.laneInterleave a b))
+  (LaneToPcm16, [BytesValue a]) -> Just (BytesValue (Lanes.laneToPcm16 a))
+  (LaneSelect, [BytesValue mask, BytesValue a, BytesValue b]) ->
+    Just (optionLanes (Lanes.laneZip3 (\m x y -> if m > 0 then x else y) mask a b))
+  (LaneAbove, [BytesValue a, FloatValue _ threshold]) ->
+    Just (BytesValue (Lanes.laneMap (\x -> if x > threshold then 1 else 0) a))
+  (LaneWhere, [BytesValue mask]) -> Just (intArray (Lanes.laneWhere mask))
+  (LaneScatterAdd, [BytesValue a, ArrayValue indices, BytesValue fresh]) ->
+    Just (optionLanes (traverse indexOf (toList indices) >>= \is -> Lanes.laneScatterAdd a is fresh))
+  (LaneFromInts, [ArrayValue items]) -> do
+    numbers <- traverse integerOf (toList items)
+    Just (BytesValue (Lanes.laneFromList (map fromInteger numbers)))
+  (LaneToInts, [BytesValue a]) ->
+    Just (option (ArrayValue . Seq.fromList . map intOf) (traverse wholeOf (Lanes.laneToList a)))
+  (LaneOverlapPairs, boxes) -> do
+    lanes <- traverse bytesOf boxes
+    Just $ case Broadphase.overlapPairs lanes of
+      Just pairs -> VariantValue "Some" [intArray pairs]
+      Nothing -> VariantValue "None" []
+  (RasterFill, [IntValue _ pixels, FloatValue _ r, FloatValue _ g, FloatValue _ b, FloatValue _ a]) ->
+    Just (optionLanes (bounded pixels >>= \count -> Raster.rasterFill count r g b a))
+  (raster, BytesValue color : BytesValue depth : IntValue _ width : IntValue _ cull : rest)
+    | raster `elem` [RasterTriangles, RasterPerspectiveTriangles] -> do
+    lanes <- traverse bytesOf rest
+    let draw = if raster == RasterTriangles then Raster.rasterTriangles else Raster.rasterPerspectiveTriangles
+    Just $ case (cullOf cull, bounded width) of
+      (Just culling, Just target) | Just (painted, depths) <- draw color depth target culling lanes ->
+        VariantValue "Some" [TupleValue [BytesValue painted, BytesValue depths]]
+      _ -> VariantValue "None" []
+  (RasterShadedTriangles, BytesValue color : BytesValue depth : IntValue _ width : IntValue _ cull : rest) -> do
+    lanes <- traverse bytesOf rest
+    let (vertexLanes, uniforms) = splitAt 13 lanes
+    Just $ case (cullOf cull, bounded width, uniforms) of
+      (Just culling, Just target, [uniform])
+        | Just light <- Shade.lighting uniform
+        , Just (painted, depths) <- Raster.rasterShadedTriangles color depth target culling vertexLanes light ->
+            VariantValue "Some" [TupleValue [BytesValue painted, BytesValue depths]]
+      _ -> VariantValue "None" []
+  (RasterTexturedTriangles, BytesValue color : BytesValue depth : IntValue _ width : IntValue _ cull : rest)
+    | (vertexValues, [BytesValue texels, IntValue _ texelWidth, IntValue _ space, IntValue _ filtering]) <- splitAt 9 rest -> do
+    lanes <- traverse bytesOf vertexValues
+    let checkedTexture = do
+          extent <- bounded texelWidth
+          code <- bounded space
+          mode <- bounded filtering
+          Sampler.sampler texels extent code mode
+    Just $ case (cullOf cull, bounded width, checkedTexture) of
+      (Just culling, Just target, Just texture)
+        | Just (painted, depths) <- Raster.rasterTexturedTriangles color depth target culling lanes texture ->
+            VariantValue "Some" [TupleValue [BytesValue painted, BytesValue depths]]
+      _ -> VariantValue "None" []
   _ -> Nothing
   where
+    bytesOf (BytesValue bytes) = Just bytes
+    bytesOf _ = Nothing
+    cullOf 0 = Just Raster.CullNone
+    cullOf 1 = Just Raster.CullBack
+    cullOf _ = Nothing
     within index use = bounded index >>= use
     extreme pick bytes = case Lanes.laneGet bytes 0 of
       Nothing -> Nothing
@@ -101,6 +167,23 @@ bounded n
 indexOf :: Value -> Maybe Int
 indexOf (IntValue _ n) = bounded n
 indexOf _ = Nothing
+
+integerOf :: Value -> Maybe Integer
+integerOf (IntValue _ n) = Just n
+integerOf _ = Nothing
+
+{-| An integral, finite value within the signed 64-bit range. -}
+wholeOf :: Double -> Maybe Integer
+wholeOf x
+  | isNaN x || isInfinite x = Nothing
+  | fromInteger whole /= x = Nothing
+  | whole < -9223372036854775808 || whole > 9223372036854775807 = Nothing
+  | otherwise = Just whole
+  where
+    whole = truncate x
+
+intArray :: [Int] -> Value
+intArray = ArrayValue . Seq.fromList . map (intOf . toInteger)
 
 floatOf :: Value -> Maybe Double
 floatOf (FloatValue _ x) = Just x

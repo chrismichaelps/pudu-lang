@@ -5,6 +5,9 @@ tags: [moc, handoff]
 
 # Handoff Map
 
+- [[Broadphase Delivery]] — issue #682 native overlap pairs of axis-aligned boxes.
+
+- [[Raster Delivery]] — issue #676 native depth-tested triangle rasterization.
 - [[Lane Collection Delivery]] — issue #726 lane buffers share collections so threads overlap.
 
 - [[Lane Delivery]] — issue #668 packed binary64 lanes with native batch kernels.
