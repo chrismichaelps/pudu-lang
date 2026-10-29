@@ -26,6 +26,10 @@ updates answer None before storing lanes. Zero mass remains static with zero ini
 
 ## Grill Log
 
+- **Q:** Rotate boxes too? **A:** No; boxes are axis-aligned collision shapes, so only spheres
+  carry angular velocity (`wx/wy/wz`) and orientation (`qx..qw`) lanes, with `angularVelocity`,
+  `orientation` and `setAngularVelocity` accessors. Rotating boxes need oriented collision first.
+
 - **Q:** Trust a public shape record to have come from a factory? **A:** No; admission checks
   the factory result. Record construction is public and cannot establish the invariant.
 - **Q:** Permit an infinite inverse mass or NaN material? **A:** No; reject at admission rather

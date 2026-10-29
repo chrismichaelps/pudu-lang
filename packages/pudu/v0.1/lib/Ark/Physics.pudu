@@ -4,6 +4,7 @@ import Std.Lanes as Lanes
 import Std.Math.Float as Float
 import Ark.Core.Handle as Handle
 import Ark.Math.Geometry as G
+import Ark.Math.Quat as Q
 import Ark.Math as V
 
 /// A collision shape: its kind name and half extent (a sphere's radius in every component).
@@ -21,7 +22,8 @@ const SHAPE_FACTORIES: Map[Str, ShapeFactory] = mapOf([
 /// A body's initial state; zero mass makes it static.
 export type Body = { position: V.Vec3, velocity: V.Vec3, mass: Float64, restitution: Float64, friction: Float64, shape: Shape }
 
-/// Every body's state as lanes indexed by slot, its kind, the static planes and gravity.
+/// Every body's state as lanes indexed by slot, its kind, the static planes and gravity. Spheres
+/// carry angular velocity and an orientation quaternion; boxes stay axis-aligned and never spin.
 export type Bodies = {
   entities: Array[Handle.Handle],
   slots: Map[Int, Int],
@@ -32,6 +34,13 @@ export type Bodies = {
   vx: Lanes.Lanes,
   vy: Lanes.Lanes,
   vz: Lanes.Lanes,
+  wx: Lanes.Lanes,
+  wy: Lanes.Lanes,
+  wz: Lanes.Lanes,
+  qx: Lanes.Lanes,
+  qy: Lanes.Lanes,
+  qz: Lanes.Lanes,
+  qw: Lanes.Lanes,
   ex: Lanes.Lanes,
   ey: Lanes.Lanes,
   ez: Lanes.Lanes,
@@ -79,6 +88,13 @@ export fn world(gravity: V.Vec3) -> Bodies {
     vx: none,
     vy: none,
     vz: none,
+    wx: none,
+    wy: none,
+    wz: none,
+    qx: none,
+    qy: none,
+    qz: none,
+    qw: none,
     ex: none,
     ey: none,
     ez: none,
@@ -127,6 +143,13 @@ export fn add(bodies: Bodies, entity: Handle.Handle, body: &Body) -> Option[Bodi
       vx: appended(&bodies.vx, initial.x),
       vy: appended(&bodies.vy, initial.y),
       vz: appended(&bodies.vz, initial.z),
+      wx: appended(&bodies.wx, 0.0),
+      wy: appended(&bodies.wy, 0.0),
+      wz: appended(&bodies.wz, 0.0),
+      qx: appended(&bodies.qx, 0.0),
+      qy: appended(&bodies.qy, 0.0),
+      qz: appended(&bodies.qz, 0.0),
+      qw: appended(&bodies.qw, 1.0),
       ex: appended(&bodies.ex, body.shape.extent.x),
       ey: appended(&bodies.ey, body.shape.extent.y),
       ez: appended(&bodies.ez, body.shape.extent.z),
@@ -168,6 +191,13 @@ export fn remove(bodies: Bodies, entity: Handle.Handle) -> Option[Bodies] {
       vx: Lanes.gather(&bodies.vx, &kept) ?,
       vy: Lanes.gather(&bodies.vy, &kept) ?,
       vz: Lanes.gather(&bodies.vz, &kept) ?,
+      wx: Lanes.gather(&bodies.wx, &kept) ?,
+      wy: Lanes.gather(&bodies.wy, &kept) ?,
+      wz: Lanes.gather(&bodies.wz, &kept) ?,
+      qx: Lanes.gather(&bodies.qx, &kept) ?,
+      qy: Lanes.gather(&bodies.qy, &kept) ?,
+      qz: Lanes.gather(&bodies.qz, &kept) ?,
+      qw: Lanes.gather(&bodies.qw, &kept) ?,
       ex: Lanes.gather(&bodies.ex, &kept) ?,
       ey: Lanes.gather(&bodies.ey, &kept) ?,
       ez: Lanes.gather(&bodies.ez, &kept) ?,
@@ -209,6 +239,33 @@ export fn setVelocity(bodies: Bodies, entity: Handle.Handle, value: V.Vec3) -> O
       vx: Lanes.set(&bodies.vx, slot, value.x) ?,
       vy: Lanes.set(&bodies.vy, slot, value.y) ?,
       vz: Lanes.set(&bodies.vz, slot, value.z) ?,
+    },
+  )
+}
+
+/// An entity's body angular velocity in radians per second about each world axis.
+export fn angularVelocity(bodies: &Bodies, entity: Handle.Handle) -> Option[V.Vec3] {
+  let slot = slotOf(bodies, entity) ?
+  Some(V.vec3(Lanes.get(&bodies.wx, slot) ?, Lanes.get(&bodies.wy, slot) ?, Lanes.get(&bodies.wz, slot) ?))
+}
+
+/// An entity's body orientation as a unit quaternion; boxes keep the identity.
+export fn orientation(bodies: &Bodies, entity: Handle.Handle) -> Option[Q.Quat] {
+  let slot = slotOf(bodies, entity) ?
+  Some(Q.quat(Lanes.get(&bodies.qx, slot) ?, Lanes.get(&bodies.qy, slot) ?, Lanes.get(&bodies.qz, slot) ?, Lanes.get(&bodies.qw, slot) ?))
+}
+
+/// Replace a movable sphere's finite angular velocity; boxes and static bodies never spin.
+export fn setAngularVelocity(bodies: Bodies, entity: Handle.Handle, value: V.Vec3) -> Option[Bodies] {
+  if !V.isFinite(value) { return None }
+  let slot = slotOf(&bodies, entity) ?
+  if Lanes.get(&bodies.movable, slot) ? == 0.0 || Lanes.get(&bodies.round, slot) ? == 0.0 { return Some(bodies) }
+  Some(
+    Bodies {
+      ..bodies,
+      wx: Lanes.set(&bodies.wx, slot, value.x) ?,
+      wy: Lanes.set(&bodies.wy, slot, value.y) ?,
+      wz: Lanes.set(&bodies.wz, slot, value.z) ?,
     },
   )
 }

@@ -5,6 +5,12 @@ tags: [changelog]
 
 # Changelog
 
+## 2026-10-28 — Rolling spheres (#711)
+
+- [[Ark Physics]] spheres carry angular velocity and orientation; [[Ark Physics Step]] applies
+  friction torque with the solid-sphere inertia, reproducing the 5/7 sliding-to-rolling result in
+  [[Ark Physics Angular Fixture]].
+
 ## 2026-10-28 — Packaged content and cooking (#710)
 
 - [[Ark Pack]] writes deterministic ARKP packs (sorted index, CRC-32 per file) and decodes them

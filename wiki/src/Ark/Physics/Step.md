@@ -27,6 +27,13 @@ order; execution is deterministic for identical body insertion and plane order.
 
 ## Grill Log
 
+- **Q:** How does friction turn a sphere? **A:** Contact-point velocity subtracts
+  (leverA wA + leverB wB) x n; for a solid sphere r²/I = 5/(2m), so the tangential effective
+  inverse mass adds 2.5 times each sphere's normalized weight and the friction moment n x J is
+  scaled by 2.5 / radius. Normal impulses pass through the center and apply no torque.
+  Orientations integrate q += dt/2 (w, 0) q and renormalize. A sliding sphere settles at 5/7 of
+  its speed, rolling without slip.
+
 - **Q:** Sum raw inverse masses? **A:** No; scale the pair first. Finite admitted inverse masses
   can overflow when added, even though the collision response is representable.
 

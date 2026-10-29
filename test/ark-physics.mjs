@@ -11,10 +11,11 @@ const root = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const library = join(root, 'packages/pudu/v0.1/lib');
 const env = {...process.env, PUDU_LIB: library};
 const modules = ['Ark/Physics.pudu', ...['Contact', 'Step', 'Query'].map(name => `Ark/Physics/${name}.pudu`)];
-const fixtures = ['UsesArkPhysics', 'UsesArkPhysicsBoundary'].map(name => join(root, `test-fixtures/ark/${name}.pudu`));
+const fixtures = ['UsesArkPhysics', 'UsesArkPhysicsBoundary', 'UsesArkPhysicsAngular'].map(name => join(root, `test-fixtures/ark/${name}.pudu`));
 const run = (...args) => execFileSync(binary, args, {env, encoding: 'utf8', timeout: 120000});
 assert.equal(run('run', fixtures[0]), 'ark physics: ok\n');
 assert.equal(run('run', fixtures[1]), 'ark physics boundaries: ok\n');
+assert.equal(run('run', fixtures[2]), 'ark physics angular: ok\n');
 run('fmt', '--check', ...fixtures, ...modules.map(path => join(library, path)));
 const scratch = mkdtempSync(join(tmpdir(), 'pudu-ark-physics-'));
 try {
