@@ -28,6 +28,7 @@ run() {
 
 
 printf 'gates\n'
+run 'native desktop frames preserve row orientation' node test/desktop-presentation.mjs
 run 'application dependency model refuses architectural defects' node --test test/app-layers.test.mjs
 run 'application imports follow their declared dependency layers' node scripts/app-layers.mjs
 run 'Ark dependency model refuses architectural defects' node --test test/ark-layers.test.mjs
@@ -83,6 +84,8 @@ run 'the fixtures still reach as much of the library' \
   bash -c 'node test/api-coverage.mjs "$PUDU"'
 run 'a streaming reader holds as much at ten times the input' \
   bash -c 'python3 test/residency.py "$PUDU"'
+run 'lane kernel buffers share collections across calls' \
+  bash -c 'node test/lane-collections.mjs "$PUDU"'
 run 'pudu installs and publishes packages through git and a stand-in GitHub' \
   bash -c 'python3 test/package-registry.py --pudu "$PUDU"'
 run 'pudu install adds, moves, restores, and removes packages as a terminal uses it' \

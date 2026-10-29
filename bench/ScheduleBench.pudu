@@ -1,0 +1,109 @@
+module ScheduleBench
+
+import Std.Lanes as Lanes
+import Std.Time as Time
+import Ark.Core.Handle as Handle
+import Ark.World.Schedule as Schedule
+import Ark.World as World
+
+const PER_ARCHETYPE: Int = 50000
+const FRAMES: Int = 30
+const TAGS: Array[Str] = ["north", "south", "east", "west"]
+
+fn integrate(view: World.View) -> Option[World.View] {
+  var current = view
+  var axis = 0
+  while axis < 3 {
+    let position = World.columnOf(&current, "position", axis) ?
+    let velocity = World.columnOf(&current, "velocity", axis) ?
+    current = World.write(current, "position", axis, &(Lanes.axpy(&position, 0.016, &velocity) ?)) ?
+    axis = axis + 1
+  }
+  Some(current)
+}
+
+fn fade(view: World.View) -> Option[World.View] {
+  var current = view
+  var channel = 0
+  while channel < 3 {
+    let color = World.columnOf(&current, "color", channel) ?
+    current = World.write(current, "color", channel, &Lanes.clamp(&Lanes.scale(&color, 0.99), 0.0, 1.0)) ?
+    channel = channel + 1
+  }
+  Some(current)
+}
+
+fn cool(view: World.View) -> Option[World.View] {
+  let heat = World.columnOf(&view, "heat", 0) ?
+  let cooled = Lanes.sqrt(&Lanes.addScalar(&Lanes.scale(&heat, 0.5), 1.0))
+  World.write(view, "heat", 0, &cooled)
+}
+
+fn populated() -> (World.World, Array[Handle.Handle]) {
+  var world = World.empty()
+  for (name, fields) in [("position", 3), ("velocity", 3), ("color", 3), ("heat", 1)] {
+    let Some(next) = World.register(world, name, fields) else { panic("register") }
+    world = next
+  }
+  let Some(zero) = Lanes.filled(PER_ARCHETYPE, 0.0) else { panic("fill") }
+  let Some(one) = Lanes.filled(PER_ARCHETYPE, 1.0) else { panic("fill") }
+  let Some(warm) = Lanes.filled(PER_ARCHETYPE, 9.0) else { panic("fill") }
+  var firsts: Array[Handle.Handle] = []
+  for tag in TAGS {
+    let Some(tagged) = World.register(world, tag, 0) else { panic("tag") }
+    let columns = [zero, zero, zero, one, one, one, one, one, one, warm]
+    let Some((created, handles)) = World.createBatch(tagged, &["position", "velocity", "color", "heat", tag], PER_ARCHETYPE, &columns) else { panic("batch") }
+    world = created
+    firsts = firsts.push(handles[0])
+  }
+  (world, firsts)
+}
+
+fn timed(world: World.World, schedule: &Schedule.Schedule, workers: Int) -> (World.World, Int) {
+  var current = world
+  let started = Time.monotonicNanos()
+  var frame = 0
+  while frame < FRAMES {
+    let Ok(next) = Schedule.run(current, schedule, workers) else { panic("run") }
+    current = next
+    frame = frame + 1
+  }
+  (current, (Time.monotonicNanos() - started) / FRAMES)
+}
+
+fn workersFrom(options: &Array[Str]) -> Int {
+  if options.isEmpty() { return 1 }
+  match options[options.length() - 1].toInt() {
+    case Some(count) => count
+    case None => panic("the worker count must be a whole number")
+  }
+}
+
+/// Run one stage of twelve jobs over 200,000 entities on the worker count given as the last argument.
+export fn main() -> Int {
+  let options = arguments()
+  let workers = workersFrom(&options)
+  let (world, firsts) = populated()
+  let systems = [
+    Schedule.System{name: "integrate", all: ["position", "velocity"], none: [], reads: ["velocity"], writes: ["position"], after: [], run: integrate},
+    Schedule.System{name: "fade", all: ["color"], none: [], reads: [], writes: ["color"], after: [], run: fade},
+    Schedule.System{name: "cool", all: ["heat"], none: [], reads: [], writes: ["heat"], after: [], run: cool},
+  ]
+  let Ok(schedule) = Schedule.build(&world, &systems) else { panic("build") }
+  if Schedule.stageNames(&schedule) != [["integrate", "fade", "cool"]] { panic("one stage") }
+  let (moved, nanos) = timed(world, &schedule, workers)
+  var checksum = 0.0
+  for handle in firsts {
+    for component in ["position", "color", "heat"] {
+      let Some(values) = World.get(&moved, handle, component) else { panic("component") }
+      for value in values {
+        checksum = checksum + value
+      }
+    }
+  }
+  let Some(position) = World.get(&moved, firsts[0], "position") else { panic("position") }
+  if position[0] < 0.47 || position[0] > 0.49 { panic("unexpected position") }
+  print("frame " + show(nanos))
+  print("checksum " + show(checksum))
+  0
+}

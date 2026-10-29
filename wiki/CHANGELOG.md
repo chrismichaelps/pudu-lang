@@ -5,6 +5,27 @@ tags: [changelog]
 
 # Changelog
 
+## 2026-10-29 — Parallel system schedule (#725)
+
+- [[Ark Schedule]] packs systems with declared reads and writes into conflict-free stages and
+  runs each stage on bounded workers over views cut to the declared columns, merging only
+  declared writes; [[Ark World]] gains precomputed `Columns` for restricting and merging views.
+- [[Ark Schedule Fixture]] and [[Ark World Gate]] cover packing, refusals, worker equivalence and
+  access enforcement; [[Ark Schedule Benchmark]] measures 2.61 → 1.54 ms for 200,000 entities.
+
+## 2026-10-29 — Lane work overlaps across threads (#726)
+
+- [[Pudu Cabal]] links a 32 MB large-object allocation limit, so lane kernel buffers share
+  collections instead of forcing a stop-the-world collection per call; four workers run lane
+  work 2.1x faster with unchanged serial time and lower peak memory.
+- [[Lane Collection Gate]] counts collections on [[Lane Collection Fixture]];
+  [[Lane Parallel Benchmark]] records the throughput; [[Lane Collection Delivery]] has evidence.
+## 2026-10-29 — Native presentation orientation (#724)
+
+[[Pudu Desktop Adapter]] preserves top-to-bottom surface rows in the default native view.
+[[Desktop Presentation Test]] checks asymmetric rows/channels, logical resize and backing scale.
+[[Desktop Presentation Delivery]] records live-engine discovery and independent review obligations.
+
 ## 2026-10-28 — Per-pixel water
 
 - [[Ark Render Pipeline]] `projectSurface`, [[Ark Depth Clip]] extra attributes and

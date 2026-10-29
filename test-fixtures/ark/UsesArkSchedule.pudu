@@ -1,0 +1,189 @@
+module UsesArkSchedule
+
+import Std.Lanes as Lanes
+import Ark.Core.Handle as Handle
+import Ark.World.Schedule as Schedule
+import Ark.World as World
+
+fn require(condition: Bool, name: Str) {
+  if !condition { panic(name) }
+}
+
+fn schema() -> World.World {
+  let Some(a) = World.register(World.empty(), "position", 3) else { panic("register position") }
+  let Some(b) = World.register(a, "velocity", 3) else { panic("register velocity") }
+  let Some(c) = World.register(b, "health", 1) else { panic("register health") }
+  let Some(d) = World.register(c, "frozen", 0) else { panic("register frozen") }
+  d
+}
+
+fn integrate(view: World.View) -> Option[World.View] {
+  var current = view
+  var axis = 0
+  while axis < 3 {
+    let position = World.columnOf(&current, "position", axis) ?
+    let velocity = World.columnOf(&current, "velocity", axis) ?
+    let advanced = Lanes.axpy(&position, 0.5, &velocity) ?
+    current = World.write(current, "position", axis, &advanced) ?
+    axis = axis + 1
+  }
+  Some(current)
+}
+
+fn drag(view: World.View) -> Option[World.View] {
+  var current = view
+  var axis = 0
+  while axis < 3 {
+    let velocity = World.columnOf(&current, "velocity", axis) ?
+    current = World.write(current, "velocity", axis, &Lanes.scale(&velocity, 0.5)) ?
+    axis = axis + 1
+  }
+  Some(current)
+}
+
+fn decay(view: World.View) -> Option[World.View] {
+  let health = World.columnOf(&view, "health", 0) ?
+  World.write(view, "health", 0, &Lanes.addScalar(&health, -1.0))
+}
+
+fn heal(view: World.View) -> Option[World.View] {
+  let health = World.columnOf(&view, "health", 0) ?
+  World.write(view, "health", 0, &Lanes.scale(&health, 2.0))
+}
+
+fn observe(view: World.View) -> Option[World.View] {
+  let _position = World.columnOf(&view, "position", 0) ?
+  Some(view)
+}
+
+fn sneak(view: World.View) -> Option[World.View] {
+  let _health = World.columnOf(&view, "health", 0) ?
+  Some(view)
+}
+
+fn smuggle(view: World.View) -> Option[World.View] {
+  let health = World.columnOf(&view, "health", 0) ?
+  World.write(view, "health", 0, &Lanes.addScalar(&health, 100.0))
+}
+
+fn system(name: Str, reads: Array[Str], writes: Array[Str], after: Array[Str], run: fn(World.View) -> Option[World.View]) -> Schedule.System {
+  Schedule.System{name, all: reads.concat(writes), none: [], reads, writes, after, run}
+}
+
+fn frame() -> Array[Schedule.System] {
+  [
+    system("integrate", ["velocity"], ["position"], [], integrate),
+    system("decay", [], ["health"], [], decay),
+    system("drag", [], ["velocity"], [], drag),
+    system("observe", ["position"], [], [], observe),
+    system("heal", [], ["health"], ["drag"], heal),
+  ]
+}
+
+fn populated() -> (World.World, Array[Handle.Handle]) {
+  let base = schema()
+  let Some((w1, mover)) = World.create(base, &["position", "velocity", "health"], &[0.0, 0.0, 0.0, 2.0, 4.0, 6.0, 10.0]) else { panic("mover") }
+  let Some((w2, statue)) = World.create(w1, &["position", "health"], &[1.0, 1.0, 1.0, 5.0]) else { panic("statue") }
+  let Some((w3, ghost)) = World.create(w2, &["position", "velocity"], &[3.0, 3.0, 3.0, 1.0, 1.0, 1.0]) else { panic("ghost") }
+  let Some((w4, iced)) = World.create(w3, &["position", "velocity", "frozen"], &[7.0, 7.0, 7.0, 1.0, 1.0, 1.0]) else { panic("iced") }
+  (w4, [mover, statue, ghost, iced])
+}
+
+fn stages() {
+  let world = schema()
+  let Ok(packed) = Schedule.build(&world, &frame()) else { panic("build") }
+  require(Schedule.stageNames(&packed) == [["integrate", "decay"], ["drag", "observe"], ["heal"]], "conflict-free stages")
+  let readers = [
+    system("a", ["position"], [], [], observe),
+    system("b", ["position", "velocity"], [], [], observe),
+  ]
+  let Ok(shared) = Schedule.build(&world, &readers) else { panic("readers") }
+  require(Schedule.stageNames(&shared) == [["a", "b"]], "readers share a stage")
+  let reversed = [
+    system("late", [], ["health"], ["early"], heal),
+    system("early", [], ["health"], [], decay),
+  ]
+  let Ok(ordered) = Schedule.build(&world, &reversed) else { panic("reversed") }
+  require(Schedule.stageNames(&ordered) == [["early"], ["late"]], "after overrides declaration order")
+  let chained = [
+    system("c", [], ["position"], ["b"], integrate),
+    system("b", [], ["health"], ["a"], decay),
+    system("a", [], ["velocity"], [], drag),
+  ]
+  let Ok(chain) = Schedule.build(&world, &chained) else { panic("chain") }
+  require(Schedule.stageNames(&chain) == [["a"], ["b"], ["c"]], "explicit chain is transitive")
+  let Ok(none) = Schedule.build(&world, &[]) else { panic("empty") }
+  require(Schedule.stageNames(&none) == [], "empty schedule")
+}
+
+fn refusals() {
+  let world = schema()
+  require(Schedule.build(&world, &[system("", [], [], [], observe)]) == Err(Schedule.EmptyName), "empty name")
+  require(Schedule.build(&world, &[system("x", [], [], [], observe), system("x", [], [], [], observe)]) == Err(Schedule.DuplicateSystem("x")), "duplicate")
+  require(Schedule.build(&world, &[system("x", ["mana"], [], [], observe)]) == Err(Schedule.UnknownComponent("x", "mana")), "unknown component")
+  let filtered = Schedule.System{name: "y", all: [], none: ["ice"], reads: [], writes: [], after: [], run: observe}
+  require(Schedule.build(&world, &[filtered]) == Err(Schedule.UnknownComponent("y", "ice")), "unknown filter")
+  require(Schedule.build(&world, &[system("x", [], [], ["missing"], observe)]) == Err(Schedule.UnknownDependency("x", "missing")), "unknown dependency")
+  let cyclic = [
+    system("free", [], [], [], observe),
+    system("p", [], [], ["q"], observe),
+    system("q", [], [], ["p"], observe),
+  ]
+  require(Schedule.build(&world, &cyclic) == Err(Schedule.Cycle(["p", "q"])), "cycle names unordered systems")
+  require(Schedule.build(&world, &[system("self", [], [], ["self"], observe)]) == Err(Schedule.Cycle(["self"])), "self dependency")
+}
+
+fn execution() {
+  let (world, handles) = populated()
+  let Ok(packed) = Schedule.build(&world, &frame()) else { panic("build") }
+  require(Schedule.run(world, &packed, 0) == Err(Schedule.BadWorkers(0)), "worker count")
+  let Ok(serial) = Schedule.run(world, &packed, 1) else { panic("serial") }
+  let Ok(parallel) = Schedule.run(world, &packed, 4) else { panic("parallel") }
+  let Some(a) = World.each(world, &["position", "velocity"], &[], integrate) else { panic("each integrate") }
+  let Some(b) = World.each(a, &["health"], &[], decay) else { panic("each decay") }
+  let Some(c) = World.each(b, &["velocity"], &[], drag) else { panic("each drag") }
+  let Some(expected) = World.each(c, &["health"], &[], heal) else { panic("each heal") }
+  for handle in handles {
+    for component in ["position", "velocity", "health"] {
+      let wanted = World.get(&expected, handle, component)
+      require(World.get(&serial, handle, component) == wanted, "serial matches one-by-one " + component)
+      require(World.get(&parallel, handle, component) == wanted, "parallel matches one-by-one " + component)
+    }
+  }
+  require(World.get(&parallel, handles[0], "position") == Some([1.0, 2.0, 3.0]), "integrated")
+  require(World.get(&parallel, handles[0], "velocity") == Some([1.0, 2.0, 3.0]), "dragged after integrate")
+  require(World.get(&parallel, handles[0], "health") == Some([18.0]), "decay then heal keeps both writes")
+  require(World.get(&parallel, handles[1], "health") == Some([8.0]), "health-only archetype")
+  let frozen = [Schedule.System{name: "move", all: ["position", "velocity"], none: ["frozen"], reads: ["velocity"], writes: ["position"], after: [], run: integrate}]
+  let Ok(filtered) = Schedule.build(&world, &frozen) else { panic("filtered") }
+  let Ok(moved) = Schedule.run(world, &filtered, 3) else { panic("filtered run") }
+  require(World.get(&moved, handles[3], "position") == Some([7.0, 7.0, 7.0]), "excluded archetype untouched")
+  require(World.get(&moved, handles[2], "position") == Some([3.5, 3.5, 3.5]), "included archetype moved")
+}
+
+fn access() {
+  let (world, handles) = populated()
+  let undeclared = [system("sneak", ["position"], [], [], sneak)]
+  let Ok(reader) = Schedule.build(&world, &undeclared) else { panic("sneak build") }
+  let Some(archetype) = firstArchetype(&world, ["position"]) else { panic("archetype") }
+  require(Schedule.run(world, &reader, 2) == Err(Schedule.SystemFailed("sneak", archetype)), "undeclared read refused")
+  let readOnly = [system("smuggle", ["health"], [], [], smuggle)]
+  let Ok(writer) = Schedule.build(&world, &readOnly) else { panic("smuggle build") }
+  let Ok(unchanged) = Schedule.run(world, &writer, 2) else { panic("smuggle run") }
+  require(World.get(&unchanged, handles[0], "health") == Some([10.0]), "read-only system cannot publish writes")
+}
+
+fn firstArchetype(world: &World.World, all: Array[Str]) -> Option[Int] {
+  let matches = World.query(world, &all, &[])
+  if matches.isEmpty() { None } else { Some(matches[0]) }
+}
+
+/// Exercise stage packing, refusals, parallel equivalence and declared-access enforcement.
+export fn main() -> Int {
+  stages()
+  refusals()
+  execution()
+  access()
+  print("ark schedule: ok")
+  0
+}

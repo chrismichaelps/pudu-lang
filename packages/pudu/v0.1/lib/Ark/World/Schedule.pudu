@@ -1,0 +1,270 @@
+module Ark.World.Schedule
+
+import Std.Concurrent as Concurrent
+import Std.Sync as Sync
+import Ark.World as World
+
+/// A system: the archetypes it visits, the components it may read and write, the systems it follows, and its work.
+export type System = {
+  name: Str,
+  all: Array[Str],
+  none: Array[Str],
+  reads: Array[Str],
+  writes: Array[Str],
+  after: Array[Str],
+  run: fn(World.View) -> Option[World.View],
+}
+
+/// Why a set of systems cannot be scheduled.
+export type ScheduleError
+  = EmptyName
+  | DuplicateSystem(Str)
+  | UnknownComponent(Str, Str)
+  | UnknownDependency(Str, Str)
+  | Cycle(Array[Str])
+
+/// Why a schedule did not finish a frame.
+export type RunError
+  = SystemFailed(Str, Int)
+  | BadWorkers(Int)
+  | WorkerFailed(Str)
+
+/// Validated systems packed into stages of system indices, with each system's readable and writable columns.
+export type Schedule = { systems: Array[System], stages: Array[Array[Int]], access: Array[World.Columns], written: Array[World.Columns] }
+
+type Job = { system: Int, view: World.View }
+
+/// Validate systems against a world's components and pack them into conflict-free stages.
+export fn build(world: &World.World, systems: &Array[System]) -> Result[Schedule, ScheduleError] {
+  validate(world, systems) ?
+  let order = topological(systems) ?
+  let count = systems.length()
+  var stageOf: Array[Int] = []
+  var position: Array[Int] = []
+  var index = 0
+  while index < count {
+    stageOf = stageOf.push(0)
+    position = position.push(0)
+    index = index + 1
+  }
+  var rank = 0
+  for chosen in order {
+    position[chosen] = rank
+    rank = rank + 1
+  }
+  var deepest = 0
+  var step = 0
+  while step < count {
+    let current = order[step]
+    var stage = 0
+    var earlier = 0
+    while earlier < step {
+      let previous = order[earlier]
+      if follows(systems, current, previous) || conflicts(&systems[current], &systems[previous]) {
+        if stageOf[previous] + 1 > stage { stage = stageOf[previous] + 1 }
+      }
+      earlier = earlier + 1
+    }
+    stageOf[current] = stage
+    if stage > deepest { deepest = stage }
+    step = step + 1
+  }
+  var stages: Array[Array[Int]] = []
+  var level = 0
+  while level <= deepest && count > 0 {
+    var members: Array[Int] = []
+    for chosen in order {
+      if stageOf[chosen] == level { members = members.push(chosen) }
+    }
+    stages = stages.push(members)
+    level = level + 1
+  }
+  var access: Array[World.Columns] = []
+  var written: Array[World.Columns] = []
+  for held in *systems {
+    access = access.push(World.columnsOf(world, &held.reads.concat(held.writes)))
+    written = written.push(World.columnsOf(world, &held.writes))
+  }
+  Ok(Schedule{systems: *systems, stages, access, written})
+}
+
+/// The system names of every stage, in execution order.
+export fn stageNames(schedule: &Schedule) -> Array[Array[Str]] {
+  var named: Array[Array[Str]] = []
+  for stage in schedule.stages {
+    var names: Array[Str] = []
+    for index in stage {
+      names = names.push(schedule.systems[index].name)
+    }
+    named = named.push(names)
+  }
+  named
+}
+
+/// Run every stage; jobs of one stage run on up to `workers` threads and merge in a fixed order.
+export fn run(world: World.World, schedule: &Schedule, workers: Int) -> Result[World.World, RunError] {
+  if workers < 1 { return Err(BadWorkers(workers)) }
+  var current = world
+  for stage in schedule.stages {
+    let jobs = jobsOf(&current, schedule, &stage)
+    let results = execute(schedule, &jobs, workers) ?
+    var index = 0
+    while index < jobs.length() {
+      let job = jobs[index]
+      let held = schedule.systems[job.system]
+      let Some(view) = results[index] else { return Err(SystemFailed(held.name, job.view.archetype)) }
+      let Some(merged) = World.commitColumns(current, &view, &schedule.written[job.system]) else {
+        return Err(SystemFailed(held.name, job.view.archetype))
+      }
+      current = merged
+      index = index + 1
+    }
+  }
+  Ok(current)
+}
+
+fn jobsOf(world: &World.World, schedule: &Schedule, stage: &Array[Int]) -> Array[Job] {
+  var jobs: Array[Job] = []
+  for index in *stage {
+    let held = schedule.systems[index]
+    for archetype in World.query(world, &held.all, &held.none) {
+      if let Some(view) = World.viewOf(world, archetype) {
+        jobs = jobs.push(Job{system: index, view: World.restrictTo(&view, &schedule.access[index])})
+      }
+    }
+  }
+  jobs
+}
+
+fn execute(schedule: &Schedule, jobs: &Array[Job], workers: Int) -> Result[Array[Option[World.View]], RunError] {
+  let count = if workers < jobs.length() { workers } else { jobs.length() }
+  if count < 2 { return Ok(runBatch(schedule, jobs, 0, 1)) }
+  var cells: Array[Sync.Cell[Array[Option[World.View]]]] = []
+  var tasks: Array[Concurrent.Task] = []
+  var failure: Option[Str] = None
+  var batch = 1
+  while batch < count {
+    let empty: Array[Option[World.View]] = []
+    let slot = Sync.cell(empty)
+    let offset = batch
+    match Concurrent.start(|| {
+        let _stored = Sync.set(&slot, runBatch(schedule, jobs, offset, count))
+      })
+    {
+      case Ok(started) => { tasks = tasks.push(started) }
+      case Err(problem) => { failure = Some(show(problem)) }
+    }
+    cells = cells.push(slot)
+    batch = batch + 1
+  }
+  let local = runBatch(schedule, jobs, 0, count)
+  var batches: Array[Array[Option[World.View]]] = [local]
+  for worker in tasks {
+    if let Err(problem) = Concurrent.join(&worker) { failure = Some(show(problem)) }
+    let _forgotten = Concurrent.forget(&worker)
+  }
+  for slot in cells {
+    match Sync.get(&slot) {
+      case Ok(held) => { batches = batches.push(held) }
+      case Err(problem) => { failure = Some(show(problem)) }
+    }
+    let _disposed = Sync.disposeCell(&slot)
+  }
+  if let Some(problem) = failure { return Err(WorkerFailed(problem)) }
+  var results: Array[Option[World.View]] = []
+  var index = 0
+  while index < jobs.length() {
+    let held = batches[index % count]
+    if index / count >= held.length() { return Err(WorkerFailed("a worker returned fewer results than it was given")) }
+    results = results.push(held[index / count])
+    index = index + 1
+  }
+  Ok(results)
+}
+
+/// Run every `stride`th job from `offset`, so each batch mixes the stage's systems and archetypes.
+fn runBatch(schedule: &Schedule, jobs: &Array[Job], offset: Int, stride: Int) -> Array[Option[World.View]] {
+  var results: Array[Option[World.View]] = []
+  var index = offset
+  while index < jobs.length() {
+    let job = jobs[index]
+    results = results.push((schedule.systems[job.system].run)(job.view))
+    index = index + stride
+  }
+  results
+}
+
+fn validate(world: &World.World, systems: &Array[System]) -> Result[(), ScheduleError] {
+  var seen: Set[Str] = setOf([])
+  for held in *systems {
+    if held.name.isEmpty() { return Err(EmptyName) }
+    if seen.contains(held.name) { return Err(DuplicateSystem(held.name)) }
+    seen = seen.insert(held.name)
+    for component in held.all.concat(held.none).concat(held.reads).concat(held.writes) {
+      if World.fieldsOf(world, component) == None { return Err(UnknownComponent(held.name, component)) }
+    }
+  }
+  for held in *systems {
+    for dependency in held.after {
+      if !seen.contains(dependency) { return Err(UnknownDependency(held.name, dependency)) }
+    }
+  }
+  Ok(())
+}
+
+fn topological(systems: &Array[System]) -> Result[Array[Int], ScheduleError] {
+  let count = systems.length()
+  var placed: Array[Bool] = []
+  var index = 0
+  while index < count {
+    placed = placed.push(false)
+    index = index + 1
+  }
+  var order: Array[Int] = []
+  while order.length() < count {
+    var next = -1
+    var candidate = 0
+    while candidate < count && next < 0 {
+      if !placed[candidate] && ready(systems, &placed, candidate) { next = candidate }
+      candidate = candidate + 1
+    }
+    if next < 0 {
+      var stuck: Array[Str] = []
+      var left = 0
+      while left < count {
+        if !placed[left] { stuck = stuck.push(systems[left].name) }
+        left = left + 1
+      }
+      return Err(Cycle(stuck))
+    }
+    placed[next] = true
+    order = order.push(next)
+  }
+  Ok(order)
+}
+
+fn ready(systems: &Array[System], placed: &Array[Bool], candidate: Int) -> Bool {
+  for dependency in systems[candidate].after {
+    var index = 0
+    while index < systems.length() {
+      if systems[index].name == dependency && !placed[index] { return false }
+      index = index + 1
+    }
+  }
+  true
+}
+
+fn follows(systems: &Array[System], later: Int, earlier: Int) -> Bool {
+  systems[later].after.contains(systems[earlier].name)
+}
+
+fn conflicts(left: &System, right: &System) -> Bool {
+  touches(&left.writes, &right.reads) || touches(&left.writes, &right.writes) || touches(&right.writes, &left.reads)
+}
+
+fn touches(written: &Array[Str], used: &Array[Str]) -> Bool {
+  for component in *written {
+    if used.contains(component) { return true }
+  }
+  false
+}

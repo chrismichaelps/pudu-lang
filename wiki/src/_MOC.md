@@ -122,6 +122,7 @@ tags: [moc, module]
 - [[Runtime Broadphase]] · [[Overlap Pairs Fixture]] — sort-and-sweep box overlap pairs.
 - [[Runtime Raster]] · [[Raster Fixture]] — native triangle rasterization for the software render device.
 - [[Lanes Gate]] · [[Lanes Fixture]] · [[Lanes Benchmark]] — lane conformance and measurement.
+- [[Lane Collection Gate]] · [[Lane Collection Fixture]] · [[Lane Parallel Benchmark]] — lane buffers share collections so threads overlap.
 - [[Float Kernel Identity]] — names and shapes of the binary64 kernels, read by checker and runtime.
 - [[Eval Word Map]] — checked UInt64 map payload reductions for STD.
 - [[Runtime Buffer Kernels]] — unboxed contiguous byte buffer operations.
@@ -187,6 +188,8 @@ tags: [moc, module]
 ## Runtime benchmark fixtures
 
 - [[HTTP Benchmark Service]] — real three-route service with an explicit connection budget.
+
+- [[Desktop Presentation Test]] · [[Desktop Presentation Gate]] · [[Desktop Presentation CI]] — native row/channel conformance.
 
 ## Referenced by
 
