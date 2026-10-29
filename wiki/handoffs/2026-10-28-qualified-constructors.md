@@ -25,7 +25,8 @@ Canonical method bindings now defer to existing selection; both focused regressi
 clean optimized -Werror build, full suite and every local repository gate pass. Compiled source
 fingerprints match all three edited checker modules. Vault links and whitespace checks pass.
 
-The repair remains a draft pending the required independent reviews; nothing is merged.
+Implementation `698d29e0` is pushed in draft PR [#718](https://github.com/chrismichaelps/pudu-lang/pull/718),
+targeting dev. Hosted CI and required independent reviews remain pending; nothing is merged.
 
 Exact next action: resume engine #716 using this optimized compiler, beginning with the saved
 capsule-box fixture in the separate engine checkout.
