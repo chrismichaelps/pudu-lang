@@ -332,6 +332,15 @@ library
     Pudu.Derive.Expand
     Pudu.Derive.Inference
     Pudu.Runtime.Word
+    Pudu.Runtime.FloatKernel
+    Pudu.FloatKernel
+    Pudu.LaneKernel
+    Pudu.Runtime.Lanes
+    Pudu.Runtime.Raster
+    Pudu.Runtime.Sampler
+    Pudu.Runtime.Shade
+    Pudu.Runtime.Broadphase
+    Pudu.Eval.Builtin.Lanes
     Pudu.Eval.MultiMap
     Pudu.Eval.Loop.Kernel
     Pudu.Eval.Loop.Step
@@ -386,7 +395,7 @@ executable pudu
   import:           warnings
   hs-source-dirs:   app
   main-is:          Main.hs
-  ghc-options:      -threaded -rtsopts -with-rtsopts=-qn2
+  ghc-options:      -threaded -rtsopts "-with-rtsopts=-qn2 -AL32m"
   build-depends:
     base >=4.20 && <4.23,
     containers >=0.6 && <0.8,

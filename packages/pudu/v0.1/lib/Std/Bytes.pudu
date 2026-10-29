@@ -320,6 +320,22 @@ export fn xorWith(left: &Bytes, right: &Bytes) -> Bytes {
 /// ```
 export fn reverse(source: &Bytes) -> Bytes { source.reverse() }
 
+/// `width` bytes from every `stride`-byte group, starting at `offset`. This copies.
+///
+/// A final short group contributes what remains, so dropping alpha from packed RGBA is
+/// `strided(&pixels, 0, 3, 4)` whatever the pixel count. A negative offset or width, a stride
+/// below one, or a width wider than the stride answers None; an offset past the end answers
+/// an empty sequence.
+///
+/// ## Examples
+///
+/// ```
+/// Bytes.strided(&Bytes.fromArray(&[1u8, 2u8, 9u8, 3u8, 4u8, 9u8]), 0, 2, 3)  // Some of [1, 2, 3, 4]
+/// ```
+export fn strided(source: &Bytes, offset: Int, width: Int, stride: Int) -> Option[Bytes] {
+  source.strided(offset, width, stride)
+}
+
 /// The pieces between each appearance of a separator.
 ///
 /// An empty separator would divide nothing, so it answers with the whole sequence

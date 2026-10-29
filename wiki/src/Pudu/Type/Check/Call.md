@@ -129,3 +129,12 @@ ambiguity, and existing coherence checks still reject duplicate authored impleme
 ## Lexical member admission (#471)
 
 Qualified nominal/trait lookup must yield to localValueHead before selecting a module export or receiver-owner fallback. Ordinary receiver checking then owns fields, methods, borrowing and diagnostic identity. Complete explicit nominal type applications retain their independent type-owner selection. Resolved Grill Log: an uppercase constant can be an ordinary receiver; capitalization alone cannot prove qualification. Never recheck a receiver or erase a rigid witness.
+
+## Qualified constructors (#717)
+
+After named-field variant refusal, ask [[Type Check Pattern]]'s shared qualified constructor
+admission before static methods and ordinary member lookup. Preserve the existing explicit
+receiver/lending and lexical shadow checks for every non-constructor.
+
+Resolved Grill Log: a call must resolve its full visible sum owner before treating an
+intermediate imported type as a runtime receiver; first-class values use the same metadata.
