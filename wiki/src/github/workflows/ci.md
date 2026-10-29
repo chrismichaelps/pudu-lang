@@ -29,3 +29,8 @@ their existing obligations. The application graph model tests and actual library
 [[Derive Index Output Gate]] runs against the built executable after documentation output checks, exercising root visibility, structured metadata, standard strategies and failure output.
 
 Resolved Grill Log: command serialization is verified through the actual executable rather than only encoder properties.
+
+## Character movement contract (#714)
+
+[[Ark Character Gate]] verifies capsule sweeps, final support, refusal and source shipping.
+Resolved Grill Log: the focused gate remains mandatory alongside the full compiler suite.
