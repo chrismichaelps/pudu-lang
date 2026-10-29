@@ -30,6 +30,8 @@ one per call.
 
 ## Governance and algorithm
 
+[[Refresh Installation Test]] checks optimized installation orchestration before compiler builds.
+
 [[Application Layer Tests]] and [[Application Layer Gate]] check the application import graph
 before builds, rejecting cycles, missing identities and upward architectural dependencies.
 

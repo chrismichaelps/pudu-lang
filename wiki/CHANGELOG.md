@@ -5,6 +5,11 @@ tags: [changelog]
 
 # Changelog
 
+## 2026-10-27 — Optimized runtime refresh (#686)
+
+- [[Refresh Pudu Installation]] explicitly selects optimization level 2 for build and install.
+- [[Refresh Installation Test]] exercises successful verification, identical and conflicting PATH
+  copies, and failure propagation without compiling or installing a real compiler.
 ## 2026-10-27 — `?` on Option inside unannotated lambdas (#678)
 
 - [[Type Check Rule]] takes an unsolved result's carrier from an operand already typed `Option`;

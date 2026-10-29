@@ -5,6 +5,7 @@ tags: [moc, module]
 
 # Module Map
 
+- [[Refresh Pudu Installation]] · [[Refresh Installation Test]] — optimized installation and exact executable verification.
 - [[Square Root Range Gate]] · [[Root Kernel Benchmark]] — full-range root accuracy and measured estimates.
 
 - [[Website Linux Workflow]] · [[Hackage Transport Test]] — configured HTTPS index transport.

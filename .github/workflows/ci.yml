@@ -21,6 +21,8 @@ jobs:
       - uses: actions/setup-node@v7
         with:
           node-version: 22
+      - name: Verify optimized installation orchestration
+        run: python3 test/refresh-install.py
       - name: Verify application dependency layers
         run: |
           node --test test/app-layers.test.mjs
