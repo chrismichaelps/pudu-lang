@@ -17,6 +17,7 @@ mesh drawn without projection; confirms the modules, including [[Ark Depth Clip]
 perspective render-driver entry through public device calls. The existing affine raster fixture
 remains a compatibility check at the lower driver boundary. [[Ark Textured Fixture]] runs with
 exact output and formatting, covering mesh coordinates, textured and material draws.
+[[Wave Tank Demo]] must type-check and stay formatted.
 
 ## Referenced by
 

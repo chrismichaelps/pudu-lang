@@ -5,6 +5,12 @@ tags: [changelog]
 
 # Changelog
 
+## 2026-10-28 — Wave tank showcase
+
+- [[Wave Tank Demo]] simulates a damped wave equation on a 56×56 height field entirely with
+  gather/axpy lane kernels (about 0.3 ms a step) and renders lit, slope-tinted water in a glass
+  tank at about 21 ms a frame; drops fall on their own and Space splashes.
+
 ## 2026-10-28 — Rolling spheres (#711)
 
 - [[Ark Physics]] spheres carry angular velocity and orientation; [[Ark Physics Step]] applies

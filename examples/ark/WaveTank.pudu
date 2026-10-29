@@ -1,0 +1,275 @@
+module WaveTank
+
+import Std.Fs as Fs
+import Std.Lanes as Lanes
+import Std.Math.Float as Float
+import Ark.Core.Profile as Profile
+import Ark.Math.Camera as Camera
+import Ark.Math.Color as Color
+import Ark.Math.Matrix as M
+import Ark.Math.Random as Random
+import Ark.Math as V
+import Ark.Platform.Clock as Clock
+import Ark.Platform.Input as Input
+import Ark.Platform.Window as Window
+import Ark.Render.Device as Device
+import Ark.Render.Mesh as Mesh
+import Ark.Render.Pipeline as Pipeline
+
+const WIDTH: Int = 640
+const HEIGHT: Int = 480
+/// Grid points along each side of the water surface.
+const CELLS: Int = 56
+/// Half the tank's width in world units; the water fills [-SIZE, SIZE] in x and z.
+const SIZE: Float64 = 1.6
+/// Wave speed squared times dt² over the cell size squared; below one half keeps the scheme stable.
+const COURANT: Float64 = 0.3
+/// The fraction of wave motion each step keeps.
+const DAMPING: Float64 = 0.996
+const STEP_NANOS: Int = 16666667
+/// Steps between automatic drops.
+const DROP_EVERY: Int = 45
+
+/// Neighbour and triangle index tables built once; the simulation and mesh are gathers over them.
+type Tables = { left: Array[Int], right: Array[Int], up: Array[Int], down: Array[Int], corners: Array[Int] }
+
+/// Heights now and one step earlier, the fixed grid positions, the static tank and timing.
+type Scene = { height: Lanes.Lanes, previous: Lanes.Lanes, xs: Lanes.Lanes, zs: Lanes.Lanes, tables: Tables, tank: Mesh.Mesh, steps: Int, seed: Random.Rng }
+
+fn tables() -> Tables {
+  var left: Array[Int] = []
+  var right: Array[Int] = []
+  var up: Array[Int] = []
+  var down: Array[Int] = []
+  for row in 0..CELLS {
+    for column in 0..CELLS {
+      // Walls reflect: a missing neighbour is the point itself, so the edge slope is zero.
+      left = left.push(row * CELLS + (if column > 0 { column - 1 } else { column }))
+      right = right.push(row * CELLS + (if column < CELLS - 1 { column + 1 } else { column }))
+      up = up.push((if row > 0 { row - 1 } else { row }) * CELLS + column)
+      down = down.push((if row < CELLS - 1 { row + 1 } else { row }) * CELLS + column)
+    }
+  }
+  var corners: Array[Int] = []
+  for row in 0..(CELLS - 1) {
+    for column in 0..(CELLS - 1) {
+      let a = row * CELLS + column
+      let b = a + 1
+      let c = a + CELLS
+      let d = c + 1
+      corners = corners.concat([a, c, b, b, c, d])
+    }
+  }
+  Tables{left, right, up, down, corners}
+}
+
+fn setup() -> Scene {
+  var xs: Array[Float64] = []
+  var zs: Array[Float64] = []
+  let spacing = 2.0 * SIZE / Float.fromInt(CELLS - 1)
+  for row in 0..CELLS {
+    for column in 0..CELLS {
+      xs = xs.push(-SIZE + Float.fromInt(column) * spacing)
+      zs = zs.push(-SIZE + Float.fromInt(row) * spacing)
+    }
+  }
+  let Some(flat) = Lanes.filled(CELLS * CELLS, 0.0) else { panic("grid") }
+  let scene = Scene{height: flat, previous: flat, xs: Lanes.fromArray(&xs), zs: Lanes.fromArray(&zs), tables: tables(), tank: tank(), steps: 0, seed: Random.seeded(7u64)}
+  let first = drop(scene, CELLS / 2, CELLS / 3, 0.14)
+  drop(first, CELLS / 3, (2 * CELLS) / 3, -0.1)
+}
+
+/// A glass tank: a pale floor, two back walls and corner posts; the front stays open to the eye.
+fn tank() -> Mesh.Mesh {
+  let glass = Color.opaque(0.55, 0.7, 0.78)
+  let post = Color.opaque(0.85, 0.88, 0.9)
+  var parts: Array[Mesh.Mesh] = []
+  for (center, half, color) in [
+    (V.vec3(0.0, -0.62, 0.0), V.vec3(SIZE + 0.08, 0.04, SIZE + 0.08), Color.opaque(0.2, 0.3, 0.35)),
+    (V.vec3(0.0, -0.05, -SIZE - 0.06), V.vec3(SIZE + 0.08, 0.6, 0.02), glass),
+    (V.vec3(-SIZE - 0.06, -0.05, 0.0), V.vec3(0.02, 0.6, SIZE + 0.08), glass),
+    (V.vec3(SIZE + 0.06, -0.05, SIZE + 0.06), V.vec3(0.04, 0.6, 0.04), post),
+    (V.vec3(-SIZE - 0.06, -0.05, SIZE + 0.06), V.vec3(0.04, 0.6, 0.04), post),
+    (V.vec3(SIZE + 0.06, -0.05, -SIZE - 0.06), V.vec3(0.04, 0.6, 0.04), post),
+  ] {
+    parts = parts.push(scaled(Mesh.cube(color), center, half))
+  }
+  var merged = parts[0]
+  for part in parts.slice(1, parts.length()) { merged = Mesh.merge(&merged, &part) }
+  merged
+}
+
+fn scaled(mesh: Mesh.Mesh, center: V.Vec3, half: V.Vec3) -> Mesh.Mesh {
+  Mesh.Mesh {
+    ..mesh,
+    px: Lanes.addScalar(&Lanes.scale(&mesh.px, half.x * 2.0), center.x),
+    py: Lanes.addScalar(&Lanes.scale(&mesh.py, half.y * 2.0), center.y),
+    pz: Lanes.addScalar(&Lanes.scale(&mesh.pz, half.z * 2.0), center.z),
+  }
+}
+
+/// Add a smooth bump of `amount` around a grid point, as a drop striking the surface.
+fn drop(scene: Scene, row: Int, column: Int, amount: Float64) -> Scene {
+  var points: Array[Int] = []
+  var values: Array[Float64] = []
+  for dr in -3..4 {
+    for dc in -3..4 {
+      let r = row + dr
+      let c = column + dc
+      if r >= 1 && r < CELLS - 1 && c >= 1 && c < CELLS - 1 {
+        let distance = Float.fromInt(dr * dr + dc * dc) / 9.0
+        if distance < 1.0 {
+          points = points.push(r * CELLS + c)
+          values = values.push(amount * (1.0 - distance) * (1.0 - distance))
+        }
+      }
+    }
+  }
+  let Some(height) = Lanes.scatterAdd(&scene.height, &points, &Lanes.fromArray(&values)) else { return scene }
+  Scene{..scene, height}
+}
+
+/// One step of the damped wave equation, every grid point at once:
+/// next = h + damping (h - previous) + courant (sum of neighbours - 4 h).
+fn advance(scene: Scene) -> Scene {
+  let t = scene.tables
+  let h = scene.height
+  let Some(around) = sum4(&t, &h) else { return scene }
+  let Some(curvature) = Lanes.axpy(&around, -4.0, &h) else { return scene }
+  let Some(velocity) = Lanes.subtract(&h, &scene.previous) else { return scene }
+  let Some(carried) = Lanes.axpy(&h, DAMPING, &velocity) else { return scene }
+  let Some(next) = Lanes.axpy(&carried, COURANT, &curvature) else { return scene }
+  let stepped = Scene{..scene, height: Lanes.clamp(&next, -0.3, 0.3), previous: h, steps: scene.steps + 1}
+  if stepped.steps % DROP_EVERY != 0 { return stepped }
+  let Some((seeded, row)) = Random.below(stepped.seed, CELLS - 8) else { return stepped }
+  let Some((reseeded, column)) = Random.below(seeded, CELLS - 8) else { return stepped }
+  drop(Scene{..stepped, seed: reseeded}, row + 4, column + 4, 0.1)
+}
+
+fn sum4(t: &Tables, h: &Lanes.Lanes) -> Option[Lanes.Lanes] {
+  let horizontal = Lanes.add(&(Lanes.gather(h, &t.left) ?), &(Lanes.gather(h, &t.right) ?)) ?
+  let vertical = Lanes.add(&(Lanes.gather(h, &t.up) ?), &(Lanes.gather(h, &t.down) ?)) ?
+  Lanes.add(&horizontal, &vertical)
+}
+
+/// The water as a smooth-shaded triangle mesh: normals from central differences, and color
+/// blending deep water toward sky where the surface tilts away from the viewer's vertical.
+fn water(scene: &Scene) -> Option[Mesh.Mesh] {
+  let t = scene.tables
+  let spacing = 2.0 * SIZE / Float.fromInt(CELLS - 1)
+  let slopeX = Lanes.scale(&(Lanes.subtract(&(Lanes.gather(&scene.height, &t.right) ?), &(Lanes.gather(&scene.height, &t.left) ?)) ?), -0.5 / spacing)
+  let slopeZ = Lanes.scale(&(Lanes.subtract(&(Lanes.gather(&scene.height, &t.down) ?), &(Lanes.gather(&scene.height, &t.up) ?)) ?), -0.5 / spacing)
+  let length = Lanes.sqrt(&(Lanes.addScalar(&(Lanes.fma(&slopeX, &slopeX, &(Lanes.multiply(&slopeZ, &slopeZ) ?)) ?), 1.0)))
+  let ny = Lanes.divide(&(Lanes.filled(CELLS * CELLS, 1.0) ?), &length) ?
+  let nx = Lanes.multiply(&slopeX, &ny) ?
+  let nz = Lanes.multiply(&slopeZ, &ny) ?
+  // Fresnel-like tint: steeper facets reflect more of the bright sky.
+  let tilt = Lanes.clamp(&Lanes.scale(&Lanes.addScalar(&Lanes.negate(&ny), 1.0), 5.0), 0.0, 1.0)
+  let shade = |deep: Float64, sky: Float64| Lanes.addScalar(&Lanes.scale(&tilt, sky - deep), deep)
+  let crest = Lanes.clamp(&Lanes.scale(&scene.height, 0.8), 0.0, 0.15)
+  let vertex = |lane: Lanes.Lanes| Lanes.gather(&lane, &t.corners)
+  Some(
+    Mesh.Mesh {
+      px: vertex(scene.xs) ?,
+      py: vertex(scene.height) ?,
+      pz: vertex(scene.zs) ?,
+      nx: vertex(nx) ?,
+      ny: vertex(ny) ?,
+      nz: vertex(nz) ?,
+      r: vertex(Lanes.add(&shade(0.02, 0.75), &crest) ?) ?,
+      g: vertex(Lanes.add(&shade(0.22, 0.88), &crest) ?) ?,
+      b: vertex(Lanes.add(&shade(0.42, 0.98), &crest) ?) ?,
+      u: vertex(scene.xs) ?,
+      v: vertex(scene.zs) ?,
+    },
+  )
+}
+
+fn render(scene: &Scene, surface: Device.Target) -> Option[Device.Target] {
+  let view = Camera.lookAt(V.vec3(3.3, 2.6, 3.6), V.vec3(0.0, -0.2, 0.0), V.vec3(0.0, 1.0, 0.0)) ?
+  let projection = Camera.perspective(Float.pi() / 3.5, Float.fromInt(WIDTH) / Float.fromInt(HEIGHT), 0.1, 50.0) ?
+  let viewProjection = M.multiply4(projection, view)
+  let sun = Pipeline.light(V.vec3(0.4, 1.0, 0.3), Color.opaque(1.0, 0.98, 0.92), 0.35) ?
+  let identity = M.identity4()
+  let surfaceBatch = Pipeline.project(&(water(scene) ?), &identity, &viewProjection, &sun, WIDTH, HEIGHT) ?
+  let tankBatch = Pipeline.project(&scene.tank, &identity, &viewProjection, &sun, WIDTH, HEIGHT) ?
+  let cleared = Device.clear(surface, Color.opaque(0.05, 0.07, 0.1)) ?
+  let withTank = Device.draw(cleared, &tankBatch, Device.CullBack) ?
+  Device.draw(withTank, &surfaceBatch, Device.CullNone)
+}
+
+fn snapshot(path: Str) -> Int {
+  var scene = setup()
+  let started = Profile.now()
+  for _ in 0..90 { scene = advance(scene) }
+  let simulated = (Profile.now() - started) / 90
+  let Some(surface) = Device.target(WIDTH, HEIGHT) else { panic("target") }
+  let renderStarted = Profile.now()
+  let Some(drawn) = render(&scene, surface) else { panic("render") }
+  let rendered = Profile.now() - renderStarted
+  match Fs.writeAtomically(path, &Device.snapshotPpm(&drawn)) {
+    case Ok(_) => {
+      print("wrote " + path + "; mean step " + show(simulated / 1000) + " us; render " + show(rendered / 1000) + " us")
+      0
+    }
+    case Err(_) => 1
+  }
+}
+
+fn run(limit: Int) -> Int {
+  let Ok(window) = Window.open("Ark — wave tank", WIDTH, HEIGHT, false) else {
+    print("no desktop window on this platform; use --snapshot <path.ppm>")
+    return 1
+  }
+  var bindings = Input.bind(Input.actions(), "quit", Input.Key("Escape"))
+  bindings = Input.bind(bindings, "splash", Input.Key("Space"))
+  let Some(target) = Device.target(WIDTH, HEIGHT) else { panic("target") }
+  let Some(started) = Clock.fixed(STEP_NANOS, 3, Profile.now()) else { panic("clock") }
+  var clock = started
+  var scene = setup()
+  var input = Input.initial()
+  var profile = Profile.empty()
+  var frames = 0
+  while limit < 0 || frames < limit {
+    let Ok(closing) = Window.pump(&window, 1) else { break }
+    let Ok(events) = Window.events(&window) else { break }
+    input = Input.apply(Input.beginFrame(input), &events)
+    if closing || Input.pressed(&bindings, &input, "quit") { break }
+    if Input.pressed(&bindings, &input, "splash") { scene = drop(scene, CELLS / 2, CELLS / 2, 0.18) }
+    let (advanced, tick) = Clock.tick(clock, Profile.now())
+    clock = advanced
+    for _ in 0..tick.steps {
+      let stepStarted = Profile.now()
+      scene = advance(scene)
+      profile = Profile.record(profile, "simulation", stepStarted)
+    }
+    let frameStarted = Profile.now()
+    let Some(drawn) = render(&scene, target) else { break }
+    profile = Profile.record(profile, "render", frameStarted)
+    let Ok(_) = Window.present(&window, &Device.pixels(&drawn)) else { break }
+    frames = frames + 1
+  }
+  if let (Some(simulation), Some(drawing)) = (Profile.mean(&profile, "simulation"), Profile.mean(&profile, "render")) {
+    print("frames " + show(frames) + ", mean simulation " + show(simulation / 1000) + " us, mean render " + show(drawing / 1000) + " us")
+  }
+  match Window.close(window) {
+    case Ok(_) => 0
+    case Err(_) => 1
+  }
+}
+
+/// Water ripples inside a glass tank; drops fall on their own, Space splashes the center, Escape quits.
+/// `--snapshot <path.ppm>` simulates 90 steps and renders offscreen; `--frames <n>` stops after n frames.
+export fn main() -> Int {
+  let options = arguments()
+  var index = 0
+  var limit = -1
+  while index < options.length() {
+    if options[index] == "--snapshot" && index + 1 < options.length() { return snapshot(options[index + 1]) }
+    if options[index] == "--frames" && index + 1 < options.length() {
+      if let Some(count) = options[index + 1].toInt() { limit = count }
+    }
+    index = index + 1
+  }
+  run(limit)
+}

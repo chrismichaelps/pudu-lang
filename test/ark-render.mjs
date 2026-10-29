@@ -15,6 +15,7 @@ const clipFixture = join(root, 'test-fixtures/ark/UsesArkClip.pudu');
 const perspectiveFixture = join(root, 'test-fixtures/ark/UsesArkPerspective.pudu');
 const texturedFixture = join(root, 'test-fixtures/ark/UsesArkTextured.pudu');
 const demo = join(root, 'examples/ark/SpinningCubes.pudu');
+const waves = join(root, 'examples/ark/WaveTank.pudu');
 const modules = ['Device', 'Mesh', 'Pipeline', 'Clip', 'Graph'].map(name => `Ark/Render/${name}.pudu`);
 const run = (...args) => execFileSync(binary, args, {env, encoding: 'utf8', timeout: 300000});
 assert.equal(run('run', fixture), 'ark render: ok\n');
@@ -23,6 +24,8 @@ assert.equal(run('run', perspectiveFixture), 'ark perspective: ok\n');
 assert.equal(run('run', texturedFixture), 'ark textured: ok\n');
 run('fmt', '--check', fixture, clipFixture, perspectiveFixture, texturedFixture, demo, ...modules.map(path => join(library, path)));
 run('check', demo);
+run('check', waves);
+run('fmt', '--check', waves);
 const scratch = mkdtempSync(join(tmpdir(), 'pudu-ark-render-'));
 try {
   const image = join(scratch, 'frame.ppm');
