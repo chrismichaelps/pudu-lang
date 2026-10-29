@@ -290,6 +290,53 @@ export fn each(world: World, all: &Array[Str], none: &Array[Str], system: fn(Vie
   Some(current)
 }
 
+/// The column keys of a set of components, computed once so restricting and merging views does no text work.
+export type Columns = { keys: Array[Str] }
+
+/// The columns of the listed components; unregistered names contribute none.
+export fn columnsOf(world: &World, components: &Array[Str]) -> Columns {
+  var keys: Array[Str] = []
+  for component in *components {
+    var field = 0
+    while field < fieldCount(world, component) {
+      keys = keys.push(columnKey(component, field))
+      field = field + 1
+    }
+  }
+  Columns{keys}
+}
+
+/// A view holding only the given columns; reads and writes of any other column answer None.
+export fn restrictTo(view: &View, columns: &Columns) -> View {
+  var kept: Map[Str, Lanes.Lanes] = mapOf([])
+  for key in columns.keys {
+    if let Some(lanes) = view.columns.get(key) { kept = kept.insert(key, lanes) }
+  }
+  View{..*view, columns: kept}
+}
+
+/// Store only the given columns of a view; None when the view no longer fits its archetype.
+export fn commitColumns(world: World, view: &View, columns: &Columns) -> Option[World] {
+  if view.archetype < 0 || view.archetype >= world.archetypes.length() { return None }
+  let held = world.archetypes[view.archetype]
+  if held.entities.length() != view.entities.length() { return None }
+  var stored = held.columns
+  for key in columns.keys {
+    if stored.containsKey(key) {
+      let lanes = view.columns.get(key) ?
+      if Lanes.count(&lanes) != held.entities.length() { return None }
+      stored = stored.insert(key, lanes)
+    }
+  }
+  var archetypes = world.archetypes
+  archetypes[view.archetype] = Archetype{..held, columns: stored}
+  Some(World{..world, archetypes})
+}
+
+fn fieldCount(world: &World, component: Str) -> Int {
+  if let Some(fields) = world.schema.get(component) { fields } else { 0 }
+}
+
 fn columnKey(component: Str, field: Int) -> Str {
   component + "#" + show(field)
 }

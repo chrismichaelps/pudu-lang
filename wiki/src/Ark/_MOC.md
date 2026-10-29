@@ -42,6 +42,7 @@ tags: [moc, ark]
 - [[Ark Input]] · [[Ark Frame Clock]] · [[Ark Window]] — action-mapped input, fixed-step timing and the window boundary.
 - [[Ark Platform Fixture]] · [[Ark Platform Gate]] — Platform conformance.
 - [[Ark World]] · [[Ark World Commands]] · [[Ark Hierarchy]] · [[Ark Events]] — archetype storage on lane columns and deferred structural changes.
+- [[Ark Schedule]] · [[Ark Schedule Fixture]] · [[Ark Schedule Benchmark]] — declared-access systems packed into parallel stages.
 - [[Ark Hierarchy Fixture]] — hierarchy and events conformance.
 - [[Ark World Fixture]] · [[Ark World Gate]] · [[Ark World Benchmark]] — World conformance and measurement.
 - [[Ark Math]] — provisional binary64 vector geometry.
