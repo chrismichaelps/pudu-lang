@@ -78,7 +78,7 @@ digest builtin, preserving total naming and exhaustive dispatch.
 
 ## Desktop capability vocabulary
 
-`DesktopOpenBuiltin`, `DesktopPresentBuiltin`, `DesktopPumpBuiltin`, `DesktopInputsBuiltin`,
+`DesktopOpenBuiltin`, `DesktopPresentBuiltin`, `DesktopPumpBuiltin`, `DesktopInputsBuiltin`, `DesktopConfigureBuiltin`,
 `DesktopClipboardReadBuiltin`, `DesktopClipboardWriteBuiltin`, `DesktopAccessibilityBuiltin`,
 `DesktopAccessibilityReportBuiltin`, `DesktopMenuBuiltin`, `DesktopMenuReportBuiltin`, and
 `DesktopCloseBuiltin` name the

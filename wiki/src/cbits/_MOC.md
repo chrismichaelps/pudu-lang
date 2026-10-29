@@ -14,6 +14,7 @@ tags: [moc, module, foreign, ffi]
 - [[Pudu Desktop Adapter]] — macOS window, bitmap presentation, event pumping, and release.
 - [[Pudu Desktop Host]] — the window host and frame view shared by the adapter's translation units.
 - [[Pudu Desktop Menu]] — the application's menu bar from presented records, and the records it holds.
+- [[Pudu Desktop Window]] — window-state records and configured density, limits and full screen.
 - [[Pudu Desktop Access]] — a window's accessibility elements from a presented snapshot, and AppKit's report of them.
 - [[Pudu Audio Header]] — framework-neutral bounded device-playback ABI and stable statuses.
 - [[Pudu Audio Adapter]] — macOS Audio Queue ownership, preallocation, refill, deadline, and release.

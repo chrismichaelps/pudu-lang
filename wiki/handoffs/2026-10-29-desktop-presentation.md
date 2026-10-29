@@ -20,7 +20,14 @@ Artifacts remain under the user's Desktop stage-check folder; the issue records 
 further engine implementation. The default native view is unflipped, so its unconditional Y transform
 is redundant. Preserve ABI, pixel copying, input and accessibility behavior.
 
-Exact next action: reproduce with the native pixel test, remove the redundant transform and validate.
+The native pixel test fails on the original transform (pixel (0,0) receives the bottom row's
+color) and passes with it removed at normal size, resized bounds, 2x backing scale and an empty
+frame. An optimized engine build with the fix showed the wave tank window upright, agreeing with
+its offscreen snapshot; the engine maps NDC +y to row zero, so no portable code changed. Pointer
+records already convert to top-left coordinates and now agree with what is drawn.
+
+Exact next action: obtain independent implementation, Language Architect and Forensic Guardian
+reviews on the draft PR.
 
 ## Referenced by
 

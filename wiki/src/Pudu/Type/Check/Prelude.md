@@ -67,6 +67,7 @@ algorithm identity; no unchecked algorithm selector is admitted.
 - `desktopOpen(Str, Int, Int, Bool) -> Result[Int, Str]`
 - `desktopPresent(Int, Int, Int, Bytes) -> Result[(), Str]`
 - `desktopPump(Int, Int) -> Result[Bool, Str]`
+- `desktopConfigure(Int, Int, Int, Int, Int, Int, Int, Int, Bool) -> Result[(), Str]` — token, density in thousandths, minimum and maximum content size, aspect ratio and full screen
 - `desktopInputs(Int) -> Result[Str, Str]`
 - `desktopClipboardRead() -> Result[Str, Str]`
 - `desktopClipboardWrite(Str) -> Result[(), Str]`

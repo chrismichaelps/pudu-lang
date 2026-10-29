@@ -190,6 +190,7 @@ tags: [moc, module]
 - [[HTTP Benchmark Service]] — real three-route service with an explicit connection budget.
 
 - [[Desktop Presentation Test]] · [[Desktop Presentation Gate]] · [[Desktop Presentation CI]] — native row/channel conformance.
+- [[Desktop Window Test]] · [[Desktop Configure Gate]] · [[Desktop Configure Fixture]] — window records, density, limits and full screen.
 
 ## Referenced by
 

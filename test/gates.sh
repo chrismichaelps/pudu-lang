@@ -57,6 +57,8 @@ PUDU=$(cabal list-bin pudu --enable-optimization=2)
 run 'every committed Pudu file is formatted' \
   bash -c '"$PUDU" fmt --check packages/pudu test-fixtures examples'
 run 'every diagnostic code means one thing' node test/diagnostic-codes.mjs
+run 'desktop configure refuses each invalid setting by name' \
+  bash -c 'node test/desktop-configure.mjs "$PUDU"'
 run 'Ark math preserves scaled geometry and refuses wrong precision' \
   node test/ark-math.mjs "$PUDU"
 run 'Ark matrices preserve composition and checked homogeneous projection' \

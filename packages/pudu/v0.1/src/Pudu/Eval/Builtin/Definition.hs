@@ -104,6 +104,7 @@ data Builtin
   | DesktopPresentBuiltin
   | DesktopPumpBuiltin
   | DesktopInputsBuiltin
+  | DesktopConfigureBuiltin
   | DesktopClipboardReadBuiltin
   | DesktopClipboardWriteBuiltin
   | DesktopAccessibilityBuiltin
@@ -328,6 +329,7 @@ builtinName value = case value of
   DesktopPresentBuiltin -> "desktopPresent"
   DesktopPumpBuiltin -> "desktopPump"
   DesktopInputsBuiltin -> "desktopInputs"
+  DesktopConfigureBuiltin -> "desktopConfigure"
   DesktopClipboardReadBuiltin -> "desktopClipboardRead"
   DesktopClipboardWriteBuiltin -> "desktopClipboardWrite"
   DesktopAccessibilityBuiltin -> "desktopAccessibility"

@@ -5,6 +5,15 @@ tags: [changelog]
 
 # Changelog
 
+## 2026-10-29 — Window density, limits, full screen and state records (#728)
+
+- [[Pudu Desktop Adapter]] reports backing scale, focus, minimize and full-screen transitions as
+  input records and applies density, content limits, aspect ratio and full screen through
+  `pudu_desktop_configure`; present sizes content as frame pixels divided by density.
+- [[Eval Desktop]] validates `desktopConfigure` settings by name before the adapter.
+- [[Desktop Window Test]], [[Desktop Configure Gate]] and [[Desktop Configure Fixture]] cover
+  records, refusals, limits and density; live transitions run with `PUDU_LIVE_DESKTOP=1`.
+
 ## 2026-10-29 — Lane work overlaps across threads (#726)
 
 - [[Pudu Cabal]] links a 32 MB large-object allocation limit, so lane kernel buffers share
