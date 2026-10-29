@@ -5,6 +5,12 @@ tags: [changelog]
 
 # Changelog
 
+## 2026-10-28 — Spatial audio mixer (#706)
+
+- [[Ark Audio]] mixes handle-addressed voices on Float64 lanes through named buses, with
+  rolloff models from a const table, equal-power panning, occlusion and looping, and emits
+  stereo PCM16 blocks through the native interleave and quantize kernels.
+
 ## 2026-10-28 — W3003 respects result position (#700)
 
 - [[Check Propagation]] counts a value-form failure arm as propagation only when the match

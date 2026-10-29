@@ -20,6 +20,8 @@ tags: [moc, ark]
 - [[Ark Physics Fixture]] · [[Ark Physics Gate]] — physical scenarios, positioned refusal and shipping.
 - [[Falling Bodies Demo]] · [[Ark Physics Benchmark]] — windowed simulation and measured solver workload.
 
+- [[Ark Audio]] · [[Ark Audio Fixture]] · [[Ark Audio Gate]] — lane voice mixing, buses, rolloff, panning and PCM16 output.
+
 - [[Ark Animation]] · [[Ark Animation Machine]] · [[Ark Animation Fixture]] · [[Ark Animation Gate]] — lane pose sampling, blending and cross-fades.
 
 - [[Ark Matrix]] · [[Ark Matrix Fixture]] · [[Ark Matrix Gate]] — column-vector algebra and projection.
