@@ -1,0 +1,77 @@
+module Ark.Math.Distance
+
+import Std.Math.Float as Float
+import Ark.Math as V
+
+/// Closest witnesses on a segment and a box, with their finite Euclidean distance.
+export type Closest = { segment: V.Vec3, box: V.Vec3, distance: Float64 }
+
+/// Closest witnesses for a segment and ordered box; None for invalid input or numeric range.
+/// Point segments and boxes with zero-width axes are valid.
+export fn segmentBox(start: V.Vec3, end: V.Vec3, minimum: V.Vec3, maximum: V.Vec3) -> Option[Closest] {
+  if !V.isFinite(start) || !V.isFinite(end) || !V.isFinite(minimum) || !V.isFinite(maximum) { return None }
+  if minimum.x > maximum.x || minimum.y > maximum.y || minimum.z > maximum.z { return None }
+  let direction = V.subtract(end, start)
+  if !V.isFinite(direction) { return None }
+  if direction == V.vec3(0.0, 0.0, 0.0) { return sample(start, direction, 0.0, minimum, maximum) }
+  let axes = [(start.x, direction.x, minimum.x, maximum.x), (start.y, direction.y, minimum.y, maximum.y), (start.z, direction.z, minimum.z, maximum.z)]
+  var cuts = [0.0, 1.0]
+  for (origin, velocity, low, high) in axes {
+    if velocity != 0.0 {
+      for bound in [low, high] {
+        let difference = bound - origin
+        if !Float.isFinite(difference) { return None }
+        let time = difference / velocity
+        if time > 0.0 && time < 1.0 { cuts = cuts.push(time) }
+      }
+    }
+  }
+  let ordered = cuts.sortBy(|left, right| left < right)
+  var best = sample(start, direction, 0.0, minimum, maximum) ?
+  var interval = 0
+  while interval + 1 < ordered.length() {
+    let low = ordered[interval]
+    let high = ordered[interval + 1]
+    if high > low {
+      let middle = (low + high) * 0.5
+      var coefficients: Array[(Float64, Float64)] = []
+      var scale = 0.0
+      for (origin, velocity, lower, upper) in axes {
+        let position = origin + middle * velocity
+        let offset = if position < lower { origin - lower } else if position > upper { origin - upper } else { 0.0 }
+        let active = if position < lower || position > upper { velocity } else { 0.0 }
+        if !Float.isFinite(position) || !Float.isFinite(offset) { return None }
+        coefficients = coefficients.push((offset, active))
+        if Float.abs(active) > scale { scale = Float.abs(active) }
+      }
+      var candidate = low
+      if scale > 0.0 {
+        var numerator = 0.0
+        var denominator = 0.0
+        for (offset, active) in coefficients {
+          if active != 0.0 {
+            let a = offset / scale
+            let b = active / scale
+            if !Float.isFinite(a) { return None }
+            numerator = numerator + a * b
+            denominator = denominator + b * b
+          }
+        }
+        if !Float.isFinite(numerator) { return None }
+        candidate = Float.clamp(-numerator / denominator, low, high)
+      }
+      let found = sample(start, direction, candidate, minimum, maximum) ?
+      if found.distance < best.distance { best = found }
+    }
+    interval = interval + 1
+  }
+  Some(best)
+}
+
+fn sample(start: V.Vec3, direction: V.Vec3, time: Float64, minimum: V.Vec3, maximum: V.Vec3) -> Option[Closest] {
+  let segment = V.add(start, V.scale(direction, time))
+  if !V.isFinite(segment) { return None }
+  let point = V.vec3(Float.clamp(segment.x, minimum.x, maximum.x), Float.clamp(segment.y, minimum.y, maximum.y), Float.clamp(segment.z, minimum.z, maximum.z))
+  let distance = V.length(V.subtract(segment, point)) ?
+  Some(Closest{segment, box: point, distance})
+}

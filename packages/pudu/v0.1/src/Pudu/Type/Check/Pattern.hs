@@ -2,6 +2,7 @@
 module Pudu.Type.Check.Pattern
   ( bindPattern
   , canonicalVariant
+  , qualifiedVariantType
   , freshFor
   , recordFieldsFor
   , substituteRigid
@@ -13,9 +14,10 @@ import Data.Text (Text)
 import qualified Data.Text as Text
 import Pudu.Frontend.Syntax.Located (Located (..))
 import Pudu.Frontend.Syntax.Name (ModuleName (..), moduleNameText)
-import Pudu.Frontend.Syntax.Tree (ArrayRest (..), FieldPattern (..), Pattern (..))
+import Pudu.Frontend.Syntax.Tree (ArrayRest (..), Expression, FieldPattern (..), Pattern (..))
 import Pudu.Source (Span)
-import Pudu.Type.Check.Rule (countText, literalType)
+import Pudu.Type.Check.Rule (countText, literalType, localValueHead)
+import Pudu.Type.Check.Safety (dottedName)
 import Pudu.Type.Env
   ( Checker
   , DeclaredTypes (..)
@@ -32,7 +34,7 @@ import Pudu.Type.Env
   )
 import Pudu.Type.Unify (unify, zonk)
 import Pudu.Type.Substitute (substituteRigid)
-import Pudu.Type.Value (NominalId, Scheme (..), Type (..), monotype)
+import Pudu.Type.Value (NominalId, Scheme (..), Type (..), monotype, nominalKey)
 
 {-| The variant a pattern names, found the way an expression finds one.
 
@@ -276,3 +278,32 @@ canonicalVariant declared path = do
       let ownerType = NominalType owner (map snd replacements)
           payload = map (substituteRigid replacements) declaredPayload
       pure (Just (if null payload then ownerType else FunctionTypeValue False payload ownerType))
+
+{-| Resolve the complete visible constructor path before its intermediate type
+    owner is treated as a value. A local head keeps ordinary member semantics. -}
+qualifiedVariantType :: DeclaredTypes -> Span -> Expression -> Checker (Maybe Type)
+qualifiedVariantType declared spanValue expression = do
+  local <- localValueHead expression
+  case (local, dottedName expression) of
+    (False, Just written) -> case NonEmpty.nonEmpty (Text.splitOn "." written) of
+      Just names@(_ NonEmpty.:| (_ : _)) -> do
+        let owner = Text.intercalate "." (NonEmpty.init names)
+            member = NonEmpty.last names
+            sumOwner = Map.lookup owner (declaredNames declared)
+        case sumOwner of
+          Just identity | Map.member identity (declaredOwners declared) -> do
+            variant <- canonicalVariant declared (ModuleName names)
+            case variant of
+              Just value -> pure (Just value)
+              Nothing -> do
+                binding <- lookupName written
+                canonical <- lookupName (nominalKey identity <> "." <> member)
+                if binding /= Nothing || canonical /= Nothing
+                  then pure Nothing
+                  else do
+                    report "E3034" spanValue (owner <> " has no " <> member)
+                      (Just "check the variant name against the type declaration")
+                    pure (Just ErrorType)
+          _ -> pure Nothing
+      _ -> pure Nothing
+    _ -> pure Nothing

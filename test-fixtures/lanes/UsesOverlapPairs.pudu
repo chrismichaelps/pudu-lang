@@ -1,0 +1,92 @@
+module UsesOverlapPairs
+
+import Std.Lanes as Lanes
+import Std.Math.Float as Float
+
+fn require(condition: Bool, name: Str) {
+  if !condition { panic(name) }
+}
+
+type Boxes = { minX: Array[Float64], maxX: Array[Float64], minY: Array[Float64], maxY: Array[Float64], minZ: Array[Float64], maxZ: Array[Float64] }
+
+fn pairs(boxes: &Boxes) -> Option[Array[Int]] {
+  Lanes.overlapPairs(
+      &Lanes.fromArray(&boxes.minX), &Lanes.fromArray(&boxes.maxX),
+      &Lanes.fromArray(&boxes.minY), &Lanes.fromArray(&boxes.maxY),
+      &Lanes.fromArray(&boxes.minZ), &Lanes.fromArray(&boxes.maxZ),
+  )
+}
+
+fn random(count: Int, extent: Float64, seed: UInt64) -> Boxes {
+  var state = seed
+  var values: Array[Float64] = []
+  var index = 0
+  while index < count * 6 {
+    state = state &* 6364136223846793005u64 &+ 1442695040888963407u64
+    values = values.push(Float.fromBits(0x3ff0000000000000u64 | (state >> 12)) - 1.0)
+    index = index + 1
+  }
+  var boxes = Boxes{minX: [], maxX: [], minY: [], maxY: [], minZ: [], maxZ: []}
+  index = 0
+  while index < count {
+    let base = index * 6
+    boxes = Boxes {
+      minX: boxes.minX.push(values[base] * extent),
+      maxX: boxes.maxX.push(values[base] * extent + values[base + 3] * 4.0),
+      minY: boxes.minY.push(values[base + 1] * extent),
+      maxY: boxes.maxY.push(values[base + 1] * extent + values[base + 4] * 4.0),
+      minZ: boxes.minZ.push(values[base + 2] * extent),
+      maxZ: boxes.maxZ.push(values[base + 2] * extent + values[base + 5] * 4.0),
+    }
+    index = index + 1
+  }
+  boxes
+}
+
+fn bruteForce(boxes: &Boxes) -> Array[Int] {
+  var found: Array[Int] = []
+  var i = 0
+  while i < boxes.minX.length() {
+    var j = i + 1
+    while j < boxes.minX.length() {
+      if boxes.minX[i] <= boxes.maxX[j] && boxes.minX[j] <= boxes.maxX[i]
+        && boxes.minY[i] <= boxes.maxY[j] && boxes.minY[j] <= boxes.maxY[i]
+        && boxes.minZ[i] <= boxes.maxZ[j] && boxes.minZ[j] <= boxes.maxZ[i] {
+        found = found.push(i).push(j)
+      }
+      j = j + 1
+    }
+    i = i + 1
+  }
+  found
+}
+
+export fn main() -> Int {
+  let scattered = random(200, 40.0, 7u64)
+  let expected = bruteForce(&scattered)
+  require(expected.length() > 20, "fixture has overlaps")
+  require(pairs(&scattered) == Some(expected), "sweep matches brute force")
+  let edges = Boxes {
+    minX: [0.0, 1.0, 0.2, 5.0], maxX: [1.0, 2.0, 0.8, 6.0],
+    minY: [0.0, 0.0, 0.2, 0.0], maxY: [1.0, 1.0, 0.8, 1.0],
+    minZ: [0.0, 0.0, 0.2, 0.0], maxZ: [1.0, 1.0, 0.8, 1.0],
+  }
+  require(pairs(&edges) == Some([0, 1, 0, 2]), "touching and nested boxes, separate box excluded")
+  let none = Boxes{minX: [], maxX: [], minY: [], maxY: [], minZ: [], maxZ: []}
+  require(pairs(&none) == Some([]), "no boxes")
+  require(pairs(&Boxes{..edges, maxX: [1.0]}) == None, "count mismatch refused")
+  require(pairs(&Boxes{..edges, minY: [2.0, 0.0, 0.2, 0.0]}) == None, "inverted bounds refused")
+  require(pairs(&Boxes{..edges, minZ: [0.0 / 0.0, 0.0, 0.2, 0.0]}) == None, "NaN refused")
+  let crowd = random(10000, 400.0, 11u64)
+  let minX = Lanes.fromArray(&crowd.minX)
+  let maxX = Lanes.fromArray(&crowd.maxX)
+  let minY = Lanes.fromArray(&crowd.minY)
+  let maxY = Lanes.fromArray(&crowd.maxY)
+  let minZ = Lanes.fromArray(&crowd.minZ)
+  let maxZ = Lanes.fromArray(&crowd.maxZ)
+  let started = clock()
+  let Some(found) = Lanes.overlapPairs(&minX, &maxX, &minY, &maxY, &minZ, &maxZ) else { panic("crowd") }
+  let elapsed = clock() - started
+  print("overlap pairs: ok (" + show(found.length() / 2) + " pairs among 10000 boxes in " + show(elapsed) + " ms)")
+  0
+}

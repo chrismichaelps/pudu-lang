@@ -35,6 +35,9 @@ Exports:
 
 ## Grill Log
 
+- **Q:** Convert counts to Float by repeated doubling? **A:** No; that cost one step per bit and
+  lost exactness above 2^53. _Resolved:_ `Float.fromInt` rounds once to nearest (#665).
+
 - **Q:** Generic over numeric traits? **A:** No. _Rationale:_ a mean of integers is not an integer,
   and statistics over `Decimal` need a rounding policy `Std.Decimal.mean` already names.
   _Rejected:_ `T: Add + Div` signatures that truncate.
