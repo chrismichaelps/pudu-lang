@@ -170,6 +170,7 @@ effectBuiltins =
   , SearchSeparatorBuiltin
   , ExitBuiltin
   , ClockBuiltin
+  , ClockNanosBuiltin
   , NowBuiltin
   , FormatTimeBuiltin
   , ParseTimeBuiltin
@@ -583,6 +584,7 @@ callEffect spanValue builtin arguments = do
         ArrayValue . Seq.fromList . map StrValue <$> lift refusal (pure pathSeparators)
       (SearchSeparatorBuiltin, []) -> StrValue <$> lift refusal (pure searchPathSeparatorText)
       (ClockBuiltin, []) -> intOf <$> lift refusal monotonicMilliseconds
+      (ClockNanosBuiltin, []) -> intOf <$> lift refusal monotonicNanoseconds
       (NowBuiltin, []) -> intOf <$> lift refusal currentInstant
       (ZoneOffsetBuiltin, []) -> intOf <$> lift refusal timeZoneOffset
       (FormatTimeBuiltin, [StrValue pattern, IntValue _ milliseconds, StrValue zone]) -> do
