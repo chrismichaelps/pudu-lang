@@ -5,6 +5,11 @@ tags: [changelog]
 
 # Changelog
 
+## 2026-10-28 — Strided byte groups (#699)
+
+- [[Eval Bytes]] and [[Std Bytes]] add `strided(offset, width, stride)`, copying a fixed-width
+  group from every stride in one native pass; packed RGBA becomes RGB without a per-pixel loop.
+
 ## 2026-10-28 — Textured and material draws (#697)
 
 - [[Runtime Sampler]] samples RGBA8 textures natively per pixel (nearest/bilinear, sRGB table,
@@ -171,6 +176,7 @@ tags: [changelog]
   missing, repeated and malformed configurations are covered. [[Hackage Transport Delivery]]
   records independent review and the outstanding CI observation.
 
+
 ## 2026-10-27 — Binary64 matrix algebra (#660)
 
 - [[Ark Math]] adds Vec4; [[Ark Matrix]] supplies column-vector Mat3/Mat4 algebra, affine
@@ -184,7 +190,6 @@ tags: [changelog]
   composition with strict descent across roots and no shared-library reverse imports.
 - [[Ark Layer Gate]] and [[Ark Layer Tests]] enforce the catalog in CI and local gate registration;
   [[Ark Layer Delivery]] records focused checks and independent architecture/parity review.
-
 ## 2026-10-27 — Integrated Ark foundation (#652)
 
 - [[Ark Engine]] defines dependency layers and the outstanding engine/native-execution ledger.
