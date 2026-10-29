@@ -339,3 +339,5 @@ Ship `lib/Ark/Math/*.pudu` and `lib/Ark/Physics/*.pudu` for [[Ark Segment Box Di
 Include `lib/Ark/Physics/*.pudu` as shipped library data for [[Ark Character Movement]].
 Resolved Grill Log: validate the actual source archive; passing from a checkout alone cannot
 prove an installed client can resolve this nested module.
+
+Register [[Eval Binary]] without a new dependency. Resolved Grill Log: native wire functions are tested directly before public builtin/facade integration.
