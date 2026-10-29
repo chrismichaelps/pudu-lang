@@ -1,0 +1,300 @@
+module Std.Binary
+
+import Std.Bytes as Bytes
+import Std.Checksum as Checksum
+import Std.Lanes as Lanes
+import Std.Meta as Meta
+
+/// A value as the binary codec sees it. A derive builds one and `encode` writes it in one native
+/// pass; `decode` answers records as `Record` and variants as `Picked`, keyed by field name.
+export type Node
+  = Whole(Int)
+  | Real(Float64)
+  | Flag(Bool)
+  | Text(Str)
+  | Raw(Bytes)
+  | Reals(Bytes)
+  | Items(Array[Node])
+  | Absent
+  | Present(Node)
+  | Fields(Array[(Str, Node)])
+  | Choice(Str, Array[(Str, Node)])
+  | Record(Map[Str, Node])
+  | Picked(Str, Map[Str, Node])
+
+/// What is wrong with binary data.
+export type Problem
+  = Corrupt(Str)
+  | NotBinary
+  | UnsupportedVersion(Int)
+  | ChecksumMismatch
+  | MissingField
+  | WrongKind(Str)
+  | UnknownVariant(Str)
+
+/// Why bytes do not hold the wanted value: the problem and the field and index path leading to it.
+export type BinaryError = { path: Array[Str], problem: Problem }
+
+/// A type that writes itself as a node.
+export trait Encode {
+  /// The value as a node.
+  fn pack(self: &Self) -> Node
+
+  /// The array this value starts, as items unless the type has a contiguous form.
+  fn packMany(self: &Self, items: &Array[Self]) -> Node { packEach(items) }
+}
+
+/// A type that reads itself from a node.
+export trait Decode {
+  /// The value the node holds, or why it holds none.
+  fn unpack(node: &Node) -> Result[Self, BinaryError]
+
+  /// The value a field takes when the data does not hold it, or None when it must be present.
+  fn missing() -> Option[Self] { None }
+
+  /// The values of a contiguous block, which only types with fixed-width bits write.
+  fn unpackReals(bytes: &Bytes) -> Result[Array[Self], BinaryError] { failed(WrongKind("items")) }
+}
+
+const MAGIC: Str = "PBIN"
+const VERSION: Int = 1
+const HEADER_BYTES: Int = 10
+
+/// A node tree as bytes, in one native pass.
+export fn encode(node: &Node) -> Bytes { binaryEncode(node) }
+
+/// The node tree bytes hold; `Fields` read back as `Record` and `Choice` as `Picked`.
+export fn decode(bytes: &Bytes) -> Result[Node, BinaryError] {
+  match binaryDecode(*bytes) {
+    case Ok(node) => Ok(node)
+    case Err(message) => failed(Corrupt(message))
+  }
+}
+
+/// A value framed with the format's magic, version and the payload's CRC-32.
+export fn write[T: Encode](value: &T) -> Bytes {
+  let payload = binaryEncode(&value.pack())
+  Bytes.join(&[MAGIC.toBytes(), Bytes.putU16Le(1u16), Bytes.putU32Le(Checksum.crc32(&payload)), payload])
+}
+
+/// The value framed bytes hold, after checking their magic, version and checksum.
+export fn read[T: Decode](bytes: &Bytes) -> Result[T, BinaryError] {
+  if bytes.length() < HEADER_BYTES || !bytes.startsWith(MAGIC.toBytes()) { return failed(NotBinary) }
+  let Ok((version, afterVersion)) = Bytes.getU16Le(&bytes.drop(4)) else { return failed(NotBinary) }
+  let found = whole(convertInteger[Int](version))
+  if found != VERSION { return failed(UnsupportedVersion(found)) }
+  let Ok((checksum, payload)) = Bytes.getU32Le(&afterVersion) else { return failed(NotBinary) }
+  if Checksum.crc32(&payload) != checksum { return failed(ChecksumMismatch) }
+  T.unpack(&(decode(&payload) ?))
+}
+
+impl Encode for Int { fn pack(self: &Self) -> Node { Whole(*self) } }
+impl Encode for Bool { fn pack(self: &Self) -> Node { Flag(*self) } }
+impl Encode for Str { fn pack(self: &Self) -> Node { Text(*self) } }
+impl Encode for Bytes { fn pack(self: &Self) -> Node { Raw(*self) } }
+impl Encode for Lanes.Lanes { fn pack(self: &Self) -> Node { Reals(Lanes.toBytes(self)) } }
+
+impl Encode for Float64 {
+  fn pack(self: &Self) -> Node { Real(*self) }
+
+  fn packMany(self: &Self, items: &Array[Self]) -> Node { Reals(Lanes.toBytes(&Lanes.fromArray(items))) }
+}
+
+impl [A: Encode] Encode for Array[A] {
+  fn pack(self: &Self) -> Node {
+    if self.isEmpty() { Items([]) } else { self[0].packMany(self) }
+  }
+}
+
+/// `None` is `Absent`, so an absent field reads as `None`; `Some` is `Present`.
+impl [A: Encode] Encode for Option[A] {
+  fn pack(self: &Self) -> Node {
+    match self {
+      case Some(held) => Present(held.pack())
+      case None => Absent
+    }
+  }
+}
+
+impl Decode for Int {
+  fn unpack(node: &Node) -> Result[Self, BinaryError] {
+    match node {
+      case Whole(number) => Ok(number)
+      case _ => failed(WrongKind("a whole number"))
+    }
+  }
+}
+
+impl Decode for Bool {
+  fn unpack(node: &Node) -> Result[Self, BinaryError] {
+    match node {
+      case Flag(flag) => Ok(flag)
+      case _ => failed(WrongKind("a flag"))
+    }
+  }
+}
+
+impl Decode for Str {
+  fn unpack(node: &Node) -> Result[Self, BinaryError] {
+    match node {
+      case Text(text) => Ok(text)
+      case _ => failed(WrongKind("text"))
+    }
+  }
+}
+
+impl Decode for Bytes {
+  fn unpack(node: &Node) -> Result[Self, BinaryError] {
+    match node {
+      case Raw(bytes) => Ok(bytes)
+      case _ => failed(WrongKind("bytes"))
+    }
+  }
+}
+
+impl Decode for Lanes.Lanes {
+  fn unpack(node: &Node) -> Result[Self, BinaryError] {
+    match node {
+      case Reals(bytes) => lanesOf(&bytes)
+      case _ => failed(WrongKind("lanes"))
+    }
+  }
+}
+
+impl Decode for Float64 {
+  fn unpack(node: &Node) -> Result[Self, BinaryError] {
+    match node {
+      case Real(number) => Ok(number)
+      case _ => failed(WrongKind("a real number"))
+    }
+  }
+
+  fn unpackReals(bytes: &Bytes) -> Result[Array[Self], BinaryError] { Ok(Lanes.toArray(&(lanesOf(bytes) ?))) }
+}
+
+impl [A: Decode] Decode for Array[A] {
+  fn unpack(node: &Node) -> Result[Self, BinaryError] {
+    match node {
+      case Items(members) => {
+        var items: Array[A] = []
+        var index = 0
+        for member in members {
+          items = items.push(within("[" + show(index) + "]", A.unpack(&member)) ?)
+          index = index + 1
+        }
+        Ok(items)
+      }
+      case Reals(bytes) => A.unpackReals(&bytes)
+      case _ => failed(WrongKind("items"))
+    }
+  }
+}
+
+impl [A: Decode] Decode for Option[A] {
+  fn unpack(node: &Node) -> Result[Self, BinaryError] {
+    match node {
+      case Absent => Ok(None)
+      case Present(held) => Ok(Some(A.unpack(&held) ?))
+      case _ => failed(WrongKind("an optional value"))
+    }
+  }
+
+  fn missing() -> Option[Self] { Some(None) }
+}
+
+/// A record writes its fields under their wire names: `@binary("name")` renames one and `@skip`
+/// leaves one out.
+export derive Encode for T: Record {
+  fn pack(self: &T) -> Node {
+    Fields(Meta.collect[T](fn(member: Meta.Field[T, F]) -> Option[(Str, Node)] where F: Encode {
+          if member.has("skip") { None } else { Some((member.attributeOr("binary", member.name), member.get(self).pack())) }
+        }))
+  }
+}
+
+/// A sum writes its variant's wire name and the variant's fields.
+export derive Encode for T: Sum {
+  fn pack(self: &T) -> Node {
+    comptime for variant: Meta.Variant[T] in Meta.variants[T]() {
+      if variant.matches(self) {
+        return Choice(variant.attributeOr("binary", variant.name), variant.collect(fn(member: Meta.Field[T, F]) -> Option[(Str, Node)] where F: Encode {
+              if member.has("skip") { None } else { Some((member.attributeOr("binary", member.name), member.get(self).pack())) }
+            }))
+      }
+    }
+    Absent
+  }
+}
+
+/// A record reads its fields by wire name: unknown names are ignored and an absent or `@skip`
+/// field takes its type's `missing` value, so only an `Option` may be absent.
+export derive Decode for T: Record {
+  fn unpack(node: &Node) -> Result[T, BinaryError] {
+    let Record(fields) = *node else { return failed(WrongKind("a record")) }
+    Meta.build[T](fn(member: Meta.Field[T, F]) -> Result[F, BinaryError] where F: Decode {
+        let name = member.attributeOr("binary", member.name)
+        if member.has("skip") { return missingAt(name, F.missing()) }
+        match fields.get(name) {
+          case Some(held) => within(name, F.unpack(&held))
+          case None => missingAt(name, F.missing())
+        }
+      })
+  }
+}
+
+/// A sum reads the variant its wire name selects.
+export derive Decode for T: Sum {
+  fn unpack(node: &Node) -> Result[T, BinaryError] {
+    let Picked(chosen, fields) = *node else { return failed(WrongKind("a variant")) }
+    comptime for variant: Meta.Variant[T] in Meta.variants[T]() {
+      if chosen == variant.attributeOr("binary", variant.name) {
+        return within(chosen, variant.build(fn(member: Meta.Field[T, F]) -> Result[F, BinaryError] where F: Decode {
+              let name = member.attributeOr("binary", member.name)
+              if member.has("skip") { return missingAt(name, F.missing()) }
+              match fields.get(name) {
+                case Some(held) => within(name, F.unpack(&held))
+                case None => missingAt(name, F.missing())
+              }
+            }))
+      }
+    }
+    failed(UnknownVariant(chosen))
+  }
+}
+
+fn packEach[T: Encode](items: &Array[T]) -> Node {
+  var nodes: Array[Node] = []
+  for item in *items {
+    nodes = nodes.push(item.pack())
+  }
+  Items(nodes)
+}
+
+fn lanesOf(bytes: &Bytes) -> Result[Lanes.Lanes, BinaryError] {
+  match Lanes.fromBytes(*bytes) {
+    case Some(lanes) => Ok(lanes)
+    case None => failed(Corrupt("lanes whose length is not a multiple of eight"))
+  }
+}
+
+fn whole(value: Option[Int]) -> Int {
+  if let Some(held) = value { held } else { -1 }
+}
+
+fn failed[T](problem: Problem) -> Result[T, BinaryError] {
+  Err(BinaryError{path: [], problem})
+}
+
+fn within[T](step: Str, outcome: Result[T, BinaryError]) -> Result[T, BinaryError] {
+  match outcome {
+    case Ok(held) => Ok(held)
+    case Err(problem) => Err(BinaryError{..problem, path: [step].concat(problem.path)})
+  }
+}
+
+fn missingAt[T](name: Str, fallback: Option[T]) -> Result[T, BinaryError] {
+  match fallback {
+    case Some(held) => Ok(held)
+    case None => Err(BinaryError{path: [name], problem: MissingField})
+  }
+}

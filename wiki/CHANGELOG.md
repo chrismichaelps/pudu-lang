@@ -5,6 +5,8 @@ tags: [changelog]
 
 # Changelog
 
+- 2026-10-29: Binary facade (#739) adds Encode/Decode derives, framed typed reads, explicit builtin wiring and CLI/distribution validation.
+
 - 2026-10-29: Native binary codec (#739) adds exact-bit tree encoding, checked wire decoding and generated/truncation boundary properties. Public facade delivery remains separate.
 
 ## 2026-10-29 — Sharp, resizable, state-aware engine windows (#728)

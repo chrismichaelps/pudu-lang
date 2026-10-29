@@ -152,6 +152,8 @@ installBuiltinConstructors = do
   bind "csvRecords" (BuiltinValue CsvRecordsBuiltin)
   bind "jsonDecode" (BuiltinValue JsonDecodeBuiltin)
   bind "jsonEncode" (BuiltinValue JsonEncodeBuiltin)
+  bind "binaryEncode" (BuiltinValue BinaryEncodeBuiltin)
+  bind "binaryDecode" (BuiltinValue BinaryDecodeBuiltin)
   bind "xmlDecode" (BuiltinValue XmlDecodeBuiltin)
   bind "bufferReadI64" (BuiltinValue BufferReadI64Builtin)
   bind "bufferWriteI64" (BuiltinValue BufferWriteI64Builtin)

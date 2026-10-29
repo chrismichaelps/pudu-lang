@@ -136,3 +136,5 @@ constraints and positioned type refusal must be exercised through the public lib
 
 [[Qualified Variant Gate]] checks real aliased/imported constructor clients and positioned
 negative cases. Resolved Grill Log: a silent error type is caught by wrong-result assertions.
+
+[[Binary Facade Gate]] validates the shipped binary facade, protocol coexistence, typed refusal and archive. Resolved Grill Log: the new public library runs through the ordinary optimized CLI gate.

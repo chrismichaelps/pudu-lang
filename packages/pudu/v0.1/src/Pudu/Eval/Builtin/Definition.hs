@@ -217,6 +217,8 @@ data Builtin
   | CsvRecordsBuiltin
   | JsonDecodeBuiltin
   | JsonEncodeBuiltin
+  | BinaryEncodeBuiltin
+  | BinaryDecodeBuiltin
   | XmlDecodeBuiltin
   | CellDisposeBuiltin
   | MutexDisposeBuiltin
@@ -444,4 +446,6 @@ builtinName value = case value of
   CsvRecordsBuiltin -> "csvRecords"
   JsonDecodeBuiltin -> "jsonDecode"
   JsonEncodeBuiltin -> "jsonEncode"
+  BinaryEncodeBuiltin -> "binaryEncode"
+  BinaryDecodeBuiltin -> "binaryDecode"
   XmlDecodeBuiltin -> "xmlDecode"

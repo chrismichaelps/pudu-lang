@@ -222,3 +222,5 @@ tags: [moc, module]
 - [[Database Challenge Spec]] · [[Database Challenge Fixture]] · [[Database Challenge Transport]]
 
 - [[Eval Binary]] · [[Binary Codec Properties]] — native binary wire contract and validation.
+
+- [[Std Binary]] · [[Binary Facade Smoke]] · [[Binary Facade Gate]] — shipped binary serialization facade.
