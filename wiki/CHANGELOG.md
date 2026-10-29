@@ -5,6 +5,10 @@ tags: [changelog]
 
 # Changelog
 
+## 2026-10-27 — Nanosecond monotonic clock (#670)
+
+- `clockNanos` and [[Std Time]] `monotonicNanos` measure intervals below a millisecond;
+  [[Monotonic Nanosecond Delivery]] records evidence.
 ## 2026-10-27 — Complete flat-list source-span assertions (#662)
 
 - [[Expression Recovery Spec]] now verifies all three aggregate forms and both comma variants

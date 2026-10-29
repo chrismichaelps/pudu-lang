@@ -109,6 +109,9 @@ confinement checks run before dispatch.
 Resolved Grill Log: atomic replacement is an explicit filesystem effect, so neither
 constant folding nor confined evaluation can bypass the filesystem boundary.
 
+`ClockNanosBuiltin` answers `monotonicNanoseconds` as an Int (#670); it joins the listed effects,
+so compile-time evaluation refuses it with E7009 like `clock`.
+
 ## Referenced by
 
 [[src/Pudu/Eval/_MOC]] · [[Eval Builtin]] · [[Evaluator]] · [[ADR-0009]]

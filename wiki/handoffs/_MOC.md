@@ -5,6 +5,7 @@ tags: [moc, handoff]
 
 # Handoff Map
 
+- [[Monotonic Nanosecond Delivery]] — issue #670 nanosecond monotonic clock.
 - [[Broadphase Delivery]] — issue #682 native overlap pairs of axis-aligned boxes.
 
 - [[Raster Delivery]] — issue #676 native depth-tested triangle rasterization.

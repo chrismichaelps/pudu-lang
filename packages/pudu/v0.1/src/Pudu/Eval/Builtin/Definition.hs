@@ -157,6 +157,7 @@ data Builtin
   | SearchSeparatorBuiltin
   | ExitBuiltin
   | ClockBuiltin
+  | ClockNanosBuiltin
   | NowBuiltin
   | FormatTimeBuiltin
   | ParseTimeBuiltin
@@ -380,6 +381,7 @@ builtinName value = case value of
   SearchSeparatorBuiltin -> "searchSeparator"
   ExitBuiltin -> "exit"
   ClockBuiltin -> "clock"
+  ClockNanosBuiltin -> "clockNanos"
   NowBuiltin -> "now"
   FormatTimeBuiltin -> "formatTime"
   ParseTimeBuiltin -> "parseTime"

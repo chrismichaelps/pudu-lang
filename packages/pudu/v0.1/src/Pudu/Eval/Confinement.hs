@@ -46,6 +46,7 @@ keptWhenConfined builtin = case builtin of
   ArgumentsBuiltin -> True
   ExitBuiltin -> True
   ClockBuiltin -> True
+  ClockNanosBuiltin -> True
   NowBuiltin -> True
   FormatTimeBuiltin -> True
   ParseTimeBuiltin -> True
