@@ -5,6 +5,8 @@ tags: [changelog]
 
 # Changelog
 
+- 2026-10-29: Explicit trait calls (#742) select canonical per-provider implementation schemes, preserving distinct return types independently of declaration order.
+
 ## 2026-10-29 — Sharp, resizable, state-aware engine windows (#728)
 
 - [[Ark Window]] tracks pixel and content size, backing scale, focus, minimize and full screen;
