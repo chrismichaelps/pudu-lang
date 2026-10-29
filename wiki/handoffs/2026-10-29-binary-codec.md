@@ -21,7 +21,10 @@ Architect and Forensic Guardian reviews remain pending; no self-approval.
 This partition does not complete #739: the public Encode/Decode derives, runtime builtin wiring,
 evolution fixture, serialization benchmark and facade delivery remain required.
 
-Exact next action: publish the native partition as a draft PR to dev, then finish the separate facade/wiring delivery after its prerequisite is integrated.
+Native delivery: [PR #741](https://github.com/chrismichaelps/pudu-lang/pull/741), draft to dev,
+commit b728aa61. Local full gates pass; hosted checks and independent reviews remain pending.
+
+Exact next action: prepare the dependent public facade/wiring partition while preserving this draft PR's native scope.
 
 ## Referenced by
 
