@@ -26,11 +26,12 @@ moduleCatalog :: FilePath -> IO [Text]
 moduleCatalog sourceRoot = do
   context <- newResolutionContext sourceRoot
   let projectRoots = resolutionSearchRoots context (ModuleName (NonEmpty.singleton "Main"))
-      standardRoots =
-        drop (length projectRoots) (resolutionSearchRoots context (ModuleName (NonEmpty.singleton "Std")))
-  own <- mapM (modulesUnder (const True)) projectRoots
-  standard <- mapM (modulesUnder (== "Std")) standardRoots
-  pure (Set.toAscList (Set.fromList (concat own <> concat standard)))
+      standardRoots = resolutionSearchRoots context (ModuleName (NonEmpty.singleton "Std"))
+      roots = Set.toAscList (Set.fromList (projectRoots <> standardRoots))
+      admitted root first =
+        root `elem` resolutionSearchRoots context (ModuleName (NonEmpty.singleton first))
+  found <- mapM (\root -> modulesUnder (admitted root) root) roots
+  pure (Set.toAscList (Set.fromList (concat found)))
 
 {-| The modules whose files lie under `root`, named by their path from it:
     `root/Std/Io.pudu` is `Std.Io`.

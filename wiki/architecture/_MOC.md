@@ -18,6 +18,7 @@ Pudu is a statically typed native systems language for developers who need predi
 
 - [[Ark Dependency Layers]] — enforced engine root ownership and architectural direction.
 
+
 - [[Application Maturity]] — database correctness, measured throughput and application dependency layers.
 
 - [[Application Dependency Layers]] — enforced application source graph and explicit architectural direction.

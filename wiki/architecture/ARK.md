@@ -72,6 +72,12 @@ their own acceptance evidence. Never substitute a host-language engine or broad 
 | 5 | Assets, physics, audio and networking | #688 translating sphere/axis-aligned-box bodies, batched contacts, restitution/friction, spatial queries and a falling-body demo have focused conformance; angular dynamics, controllers/vehicles and deformables remain open. Assets has #691 checked CPU RGBA8 textures with linear-light/alpha-correct sampling and #693 a validated dependency graph with reload closure and #696 an asset server with importers, generational handles and staged hot reload; #706 a lane audio mixer with buses, rolloff, equal-power panning, occlusion and PCM16 output; #709 acknowledged packets and quantized delta replication with interest culling; asynchronous streaming, packaged content, audio effects/streaming music, prediction/rollback and sockets remain open |
 | 6 | Animation, UI and Game | #702 key-major clips, lane pose blending/layering and a cross-fading state machine validated; #707 a scene-stack game loop and follow/orbit camera rigs and #708 immediate-mode widgets with keyboard focus validated; text rendering, styling/localization, IK, morph targets, compression, AI, cinematics and save games remain open |
 | 7 | Editor, Tools and Build | #710 deterministic content packs, pack mounts and validated cook/load validated; cross-compilation, shader variants, editor and tools remain open |
+| 3 | Platform | OS adapters and bounded deterministic tests remain open |
+| 4 | World and simple rendering | Storage/query invariants, native window and a validated GPU frame remain open |
+| 5 | Assets, physics, audio and networking | #716 adds checked finite capsule-box casts and closest witnesses; scene queries, controller composition, rigid dynamics and the remaining subsystem slices remain open |
+| 5 | Assets, physics, audio and networking | #714 adds bounded capsule sweeps against convex plane boundaries; general scene collision, rigid dynamics and the remaining subsystem slices remain open |
+| 6 | Animation, UI and Game | Complete subsystem vertical slices remain open |
+| 7 | Editor, Tools and Build | Complete subsystem vertical slices remain open |
 | 8 | Advanced rendering and game-scale validation | PBR, lighting/shadows/GI, particles, terrain/water/atmosphere, LOD, multi-view/XR and virtualized geometry remain open |
 
 Each row requires success/failure/regression/output checks, measured resource behavior, full-suite
@@ -80,6 +86,14 @@ namespace or design exists. Physics includes controllers/vehicles and progressiv
 Net includes interest, prediction/rollback, dedicated servers and sessions; Audio includes spatial
 mixing/streaming/music; Assets includes import through cooked packages; Editor includes typed
 inspectors, all content editors and collaboration foundations. These remain target obligations.
+
+[[Ark Capsule Support]] settles post-movement states using checked slope, lower-cap and inset
+footprint evidence. Rising/lost-support states become Falling; accepted support becomes Walking.
+Gravity integration, full-frame locomotion, stepping and moving bases remain open.
+[[Ark Swept Motion]] provides callback-driven contact sliding with bounded residual handling;
+finite-obstacle query composition is tested separately while its dependency PR remains unmerged.
+The response and unconsumed fraction support frame velocity and budget resumption.
+Floor support and walking/falling/stepping composition remain open.
 
 ## Research decisions
 

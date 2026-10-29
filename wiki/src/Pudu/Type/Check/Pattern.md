@@ -91,3 +91,23 @@ DEPTH 0.50 (MEDIUM). It isolates the closed rules from the walk that applies the
 ## Referenced by
 
 [[src/Pudu/Type/_MOC]] · [[Type Check]]
+
+## Shared qualified constructor admission (#717)
+
+`qualifiedVariantType` resolves authored dotted expression paths through existing
+`canonicalVariant` metadata, withholding selection for nearer lexical value heads. Known sum
+owners with a missing constructor report E3034 at the complete path; a separately bound static
+member is left to ordinary access rules. Expression and callee checking consume this same result.
+Private or unknown owners retain ordinary visibility diagnostics. Fresh generic payload/result
+instantiation is shared with pattern lookup; no global bare-name fallback is added.
+
+Resolved Grill Log: constructor admission belongs beside the metadata already shared by patterns
+and generated expressions; direct calls and first-class constructor values cannot diverge.
+
+Qualified value admission first requires a visible sum-owner prefix in declared metadata.
+Resolved Grill Log: ordinary qualified function calls do not need constructor lookup, and unseen
+canonical owners cannot become reachable merely because another loaded module declared them.
+
+A missing constructor is diagnosed only after both written and canonical owner-member bindings
+miss. Resolved Grill Log: static methods on sums, including derived parse/decode functions, remain
+owned by ordinary method selection and cannot be mistaken for misspelled constructors.

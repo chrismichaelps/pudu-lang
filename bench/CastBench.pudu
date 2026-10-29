@@ -1,0 +1,29 @@
+module CastBench
+
+import Std.Time as Time
+import Ark.Math as V
+import Ark.Physics.Cast as Cast
+
+fn batch(inputs: &Array[Cast.CapsuleBox], count: Int) -> Float64 {
+  var checksum = 0.0
+  for _ in 0..count {
+    for request in *inputs {
+      let Ok(Some(hit)) = Cast.capsuleBox(&request) else { panic("cast") }
+      checksum = checksum + hit.fraction
+    }
+  }
+  checksum
+}
+
+export fn main() -> Int {
+  let face = Cast.CapsuleBox{start: V.vec3(-3.0, 0.0, 0.0), end: V.vec3(-3.0, 0.0, 0.0), displacement: V.vec3(6.0, 0.0, 0.0), radius: 0.5, minimum: V.vec3(-1.0, -1.0, -1.0), maximum: V.vec3(1.0, 1.0, 1.0), tolerance: 1e-8, maxIterations: 64}
+  let edge = Cast.CapsuleBox{..face, start: V.vec3(-3.0, 1.3, 0.0), end: V.vec3(-3.0, 1.3, 0.0)}
+  let tilted = Cast.CapsuleBox{..face, start: V.vec3(-3.0, -1.5, 0.0), end: V.vec3(-2.0, 1.5, 0.0), displacement: V.vec3(4.0, 0.0, 0.0)}
+  let inputs = [face, edge, tilted]
+  let warmup = batch(&inputs, 50)
+  let started = Time.elapsed()
+  let checksum = batch(&inputs, 500)
+  let elapsed = Time.elapsed() - started
+  print("1500 capsule casts: {elapsed} ms; checksum: {checksum}; warmup: {warmup}")
+  0
+}

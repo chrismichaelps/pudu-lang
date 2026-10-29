@@ -16,6 +16,13 @@ tags: [moc, handoff]
 
 - [[Ark Physics Continuation]] — physics boundary and solver repairs on the engine integration branch.
 
+- [[Ark Cast Delivery]] — checked capsule casts and finite-box closest witnesses (#716).
+- [[Ark Character Delivery]] — capsule movement, corner constraints and final support (#714).
+- [[Qualified Constructor Delivery]] — imported and local qualified sum constructors (#717).
+- [[Optimized Refresh Delivery]] — explicit optimized runtime installation (#686).
+- [[Lambda Option Try Delivery]] — issue #678 `?` on Option in unannotated lambdas.
+- [[Game Input Delivery]] — issue #673 key release, physical codes, hover and buttons.
+- [[Monotonic Nanosecond Delivery]] — issue #670 nanosecond monotonic clock.
 - [[Broadphase Delivery]] — issue #682 native overlap pairs of axis-aligned boxes.
 
 - [[Lambda Option Try Delivery]] — issue #678 `?` on Option in unannotated lambdas.
@@ -29,6 +36,7 @@ tags: [moc, handoff]
 - [[Ark World Delivery]] — issue #672 handles, profiling and archetype World on lanes.
 
 - [[Monotonic Nanosecond Delivery]] — issue #670 nanosecond monotonic clock.
+- [[Lane Collection Delivery]] — issue #726 lane buffers share collections so threads overlap.
 
 - [[Lane Delivery]] — issue #668 packed binary64 lanes with native batch kernels.
 
@@ -41,6 +49,8 @@ tags: [moc, handoff]
 - [[Hackage Transport Delivery]] — issue #656 configure verified HTTPS before one index update.
 
 - [[Ark Matrix Delivery]] — issue #660 Vec4 and matrix algebra.
+- [[Library Catalog Delivery]] — issue #654 compiler-consistent import completion roots.
+- [[Ark Layer Delivery]] — issue #658 engine dependency enforcement.
 
 - [[Ark Foundation Delivery]] — issue #652 integrated engine architecture and checked vector math.
 
@@ -201,6 +211,8 @@ tags: [moc, handoff]
 - [[2026-09-16-playground-editor]] — website playground editor, language-server repair, and confined runs.
 
 - [[Desktop Presentation Delivery]] — issue #724 native frame orientation repair.
+- [[Ark Ground Delivery]] — issue #722 gravity-relative support and settlement.
+- [[Ark Motion Delivery]] — issue #720 query-driven movement and finite-box composition.
 
 ## Referenced by
 
