@@ -266,6 +266,9 @@ values to Float64; `FloatToWord` is Float64 to UInt64; `WordToFloat` is UInt64 t
 `IntToFloat` is Int to Float64; `FloatToInt` is Float64 to `Option[Int]`.
 Grill Log — **Q:** write each signature out? **A:** No; the shape is the one statement of arity.
 
+Lane kernels derive their schemes from `laneKernelSignature`: bytes, Float64, Int, arrays of
+either, `Option` of one, or a tuple of three byte lanes.
+
 ## Referenced by
 
 [[src/Pudu/Type/_MOC]]

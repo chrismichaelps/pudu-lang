@@ -10,6 +10,7 @@ import Data.List.NonEmpty (NonEmpty (..))
 import qualified Data.List.NonEmpty as NonEmpty
 import Data.Text (Text)
 import Pudu.FloatKernel (floatKernelName, floatKernels)
+import Pudu.LaneKernel (laneKernelName, laneKernels)
 import Pudu.Frontend.Syntax.Name (ModuleName (..))
 
 {-| Types the compiler knows without any library: the builtin set enumerated by
@@ -62,6 +63,7 @@ preludeValueNames =
   , "Some", "None", "Ok", "Err"
   ]
     <> map floatKernelName floatKernels
+    <> map laneKernelName laneKernels
     <> effectValueNames
 
 {-| The effects the runtime provides, which are prelude values like any other:

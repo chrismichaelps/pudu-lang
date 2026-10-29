@@ -45,6 +45,7 @@ import Pudu.Eval.Builtin
   , isDecimalBuiltin
   , isHashingBuiltin
   )
+import Pudu.Eval.Builtin.Lanes (callLaneKernel)
 import Control.Concurrent (forkIO)
 import Control.Concurrent.MVar (newEmptyMVar, putMVar)
 import Control.Exception (SomeException, try)
@@ -215,6 +216,7 @@ dispatchCall needs spanValue lent target values =
     BuiltinValue DisplayBuiltin -> callDisplay spanValue values
     BuiltinValue ConvertIntegerBuiltin -> callConvertInteger spanValue [] values
     BuiltinValue (FloatKernelBuiltin kernel) -> callFloatKernel spanValue kernel values
+    BuiltinValue (LaneKernelBuiltin kernel) -> callLaneKernel spanValue kernel values
     BuiltinValue builtin
       | isDecimalBuiltin builtin -> callDecimal spanValue builtin values
     BuiltinValue effect -> callEffect spanValue effect values

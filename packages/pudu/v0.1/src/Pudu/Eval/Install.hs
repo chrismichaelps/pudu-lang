@@ -16,6 +16,7 @@ import Data.Maybe (fromMaybe)
 import qualified Data.Set as Set
 import Data.Text (Text)
 import Pudu.FloatKernel (floatKernelName, floatKernels)
+import Pudu.LaneKernel (laneKernelName, laneKernels)
 import Pudu.Foreign.Crossing (Crossing (NothingCrossing), RecordLayouts, crossingFor, recordLayouts)
 import Pudu.Eval.Builtin
   ( effectBuiltins
@@ -196,6 +197,7 @@ installBuiltinConstructors = do
   bind "decimalDivide" (BuiltinValue DecimalDivideBuiltin)
   bind "decimalRound" (BuiltinValue DecimalRoundBuiltin)
   mapM_ (\kernel -> bind (floatKernelName kernel) (BuiltinValue (FloatKernelBuiltin kernel))) floatKernels
+  mapM_ (\kernel -> bind (laneKernelName kernel) (BuiltinValue (LaneKernelBuiltin kernel))) laneKernels
   mapM_ (\builtin -> bind (builtinName builtin) (BuiltinValue builtin)) effectBuiltins
 
 installDeclaration
