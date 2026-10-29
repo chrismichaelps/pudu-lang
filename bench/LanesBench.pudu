@@ -1,0 +1,44 @@
+module LanesBench
+
+import Std.Lanes as Lanes
+
+const COUNT: Int = 100000
+const FRAMES: Int = 10
+
+fn arrayStep(positions: Array[Float64], velocities: &Array[Float64], dt: Float64) -> Array[Float64] {
+  var next = positions
+  var index = 0
+  while index < COUNT {
+    next[index] = next[index] + velocities[index] * dt
+    index = index + 1
+  }
+  next
+}
+
+/// Integrate 100,000 positions for ten frames with an Array loop and with one lane kernel per frame.
+export fn main() -> Int {
+  let Some(start) = Lanes.ramp(COUNT, 0.0, 0.001) else { panic("ramp") }
+  let Some(speed) = Lanes.ramp(COUNT, 1.0, 0.0001) else { panic("ramp") }
+  let velocities = Lanes.toArray(&speed)
+  var positions = Lanes.toArray(&start)
+  let arrayStarted = clock()
+  var frame = 0
+  while frame < FRAMES {
+    positions = arrayStep(positions, &velocities, 0.016)
+    frame = frame + 1
+  }
+  let arrayElapsed = clock() - arrayStarted
+  var lanes = start
+  let lanesStarted = clock()
+  frame = 0
+  while frame < FRAMES {
+    let Some(advanced) = Lanes.axpy(&lanes, 0.016, &speed) else { panic("axpy") }
+    lanes = advanced
+    frame = frame + 1
+  }
+  let lanesElapsed = clock() - lanesStarted
+  if Lanes.toArray(&lanes) != positions { panic("lane and array results differ") }
+  print("array " + show(arrayElapsed))
+  print("lanes " + show(lanesElapsed))
+  0
+}
