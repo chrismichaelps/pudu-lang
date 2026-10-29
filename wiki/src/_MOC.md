@@ -5,6 +5,7 @@ tags: [moc, module]
 
 # Module Map
 
+- [[Qualified Variant Gate]] — typed constructor paths and runtime regression coverage.
 - [[Refresh Pudu Installation]] · [[Refresh Installation Test]] — optimized installation and exact executable verification.
 - [[Square Root Range Gate]] · [[Root Kernel Benchmark]] — full-range root accuracy and measured estimates.
 

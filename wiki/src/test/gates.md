@@ -81,3 +81,8 @@ including externally observable filesystem modes that portable permission boolea
 [[Derive Index Output Gate]] runs after documentation parity against the same freshly built executable.
 
 Resolved Grill Log: local and integration delivery both exercise actual strategy output and public visibility.
+
+## Qualified constructors (#717)
+
+[[Qualified Variant Gate]] checks real aliased/imported constructor clients and positioned
+negative cases. Resolved Grill Log: a silent error type is caught by wrong-result assertions.

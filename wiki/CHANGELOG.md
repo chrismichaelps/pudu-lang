@@ -5,6 +5,12 @@ tags: [changelog]
 
 # Changelog
 
+## 2026-10-28 — Visible qualified constructors (#717)
+
+- [[Type Check Expression]] and [[Type Check Call]] share complete constructor-path admission
+  through [[Type Check Pattern]], preserving nominal types, visibility and lexical heads.
+- [[Qualified Variant Gate]] covers real imported/local constructors, positioned refusals and
+  runtime parity. [[Qualified Constructor Delivery]] records the engine prerequisite.
 ## 2026-10-28 — W3003 respects result position (#700)
 
 - [[Check Propagation]] counts a value-form failure arm as propagation only when the match

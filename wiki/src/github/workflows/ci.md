@@ -37,3 +37,8 @@ their existing obligations. The application graph model tests and actual library
 [[Derive Index Output Gate]] runs against the built executable after documentation output checks, exercising root visibility, structured metadata, standard strategies and failure output.
 
 Resolved Grill Log: command serialization is verified through the actual executable rather than only encoder properties.
+
+## Qualified constructors (#717)
+
+[[Qualified Variant Gate]] runs through the built compiler. Resolved Grill Log: imported path
+checking must agree with executed constructor values and preserve visibility/shadowing refusals.

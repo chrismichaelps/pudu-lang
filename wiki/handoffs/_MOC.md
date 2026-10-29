@@ -5,6 +5,7 @@ tags: [moc, handoff]
 
 # Handoff Map
 
+- [[Qualified Constructor Delivery]] — imported and local qualified sum constructors (#717).
 - [[Optimized Refresh Delivery]] — explicit optimized runtime installation (#686).
 - [[Lambda Option Try Delivery]] — issue #678 `?` on Option in unannotated lambdas.
 - [[Game Input Delivery]] — issue #673 key release, physical codes, hover and buttons.
