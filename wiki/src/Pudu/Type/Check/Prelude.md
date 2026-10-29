@@ -67,6 +67,7 @@ algorithm identity; no unchecked algorithm selector is admitted.
 - `desktopOpen(Str, Int, Int, Bool) -> Result[Int, Str]`
 - `desktopPresent(Int, Int, Int, Bytes) -> Result[(), Str]`
 - `desktopPump(Int, Int) -> Result[Bool, Str]`
+- `desktopConfigure(Int, Int, Int, Int, Int, Int, Int, Int, Bool) -> Result[(), Str]` — token, density in thousandths, minimum and maximum content size, aspect ratio and full screen
 - `desktopInputs(Int) -> Result[Str, Str]`
 - `desktopClipboardRead() -> Result[Str, Str]`
 - `desktopClipboardWrite(Str) -> Result[(), Str]`
@@ -258,6 +259,17 @@ to this runtime primitive; [[Eval Effect]] owns admission and execution.
 
 Resolved Grill Log: preserve explicit byte payload and typed failure, while portable
 filesystem policy remains in [[Std Fs]] and [[Eval Io]].
+
+`clockNanos` is typed `() -> Int` beside `clock` (#670).
+## Binary64 kernel signatures
+
+Every [[Float Kernel Identity]] entry is bound from its shape: `FloatArguments n` takes n Float64
+values to Float64; `FloatToWord` is Float64 to UInt64; `WordToFloat` is UInt64 to Float64;
+`IntToFloat` is Int to Float64; `FloatToInt` is Float64 to `Option[Int]`.
+Grill Log — **Q:** write each signature out? **A:** No; the shape is the one statement of arity.
+
+Lane kernels derive their schemes from `laneKernelSignature`: bytes, Float64, Int, arrays of
+either, `Option` of one, or a tuple of three byte lanes.
 
 ## Referenced by
 

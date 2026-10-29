@@ -7,6 +7,7 @@ module Pudu.Frontend.Parser.Expression.Postfix
 
 import Data.Char (isUpper)
 import qualified Data.Text as Text
+import Pudu.Frontend.Parser.Expression.Aggregate (parseSiblingItems)
 import Pudu.Frontend.Parser.Expression.Control (ExpressionParsers (..))
 import Pudu.Frontend.Parser.Expression.Recovery (mergedOrLeft)
 import Pudu.Frontend.Parser.State
@@ -21,7 +22,6 @@ import Pudu.Frontend.Parser.State
   , matchingBracketDistance
   , peekKind
   , peekStartsLine
-  , peekToken
   , withRecords
   , withRecursionBudget
   )
@@ -165,28 +165,14 @@ parseArguments :: ExpressionParsers -> BlockParser -> Parser ([Located Expressio
 parseArguments parsers blockParser = do
   kind <- peekKind
   if isSymbol ")" kind then advanceToken >>= \closing -> pure ([], Just closing)
-    else withRecords (expressionOf parsers blockParser) >>= \first -> parseArgumentTail parsers blockParser [first]
-
-parseArgumentTail :: ExpressionParsers -> BlockParser -> [Located Expression] -> Parser ([Located Expression], Maybe Token)
-parseArgumentTail parsers blockParser reversed = do
-  comma <- matchSymbol ","
-  case comma of
-    Nothing -> do
-      closing <- expectSymbol ")" "to close the function arguments"
-      pure (reverse reversed, Just closing)
-    Just _ -> do
-      kind <- peekKind
-      if isSymbol ")" kind
-        then advanceToken >>= \closing -> pure (reverse reversed, Just closing)
+    else do
+      first <- withRecords (expressionOf parsers blockParser)
+      (arguments, stopped) <- parseSiblingItems parsers blockParser ")" first
+      if stopped
+        then pure (arguments, Nothing)
         else do
-          bounded <- withRecursionBudget $ do
-            before <- peekToken
-            next <- withRecords (expressionOf parsers blockParser)
-            after <- peekToken
-            if before == after
-              then pure (reverse reversed, Nothing)
-              else parseArgumentTail parsers blockParser (next : reversed)
-          pure (maybe (reverse reversed, Nothing) id bounded)
+          closing <- expectSymbol ")" "to close the function arguments"
+          pure (arguments, Just closing)
 
 callRecoverySpan :: Located Expression -> [Located Expression] -> Span
 callRecoverySpan expression = foldl mergedOrLeft (locatedSpan expression) . map locatedSpan

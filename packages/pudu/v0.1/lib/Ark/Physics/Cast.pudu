@@ -1,0 +1,53 @@
+module Ark.Physics.Cast
+
+import Std.Math.Float as Float
+import Ark.Math.Distance as Distance
+import Ark.Math as V
+
+/// A translated capsule core segment and radius, a finite box, and explicit query bounds.
+export type CapsuleBox = { start: V.Vec3, end: V.Vec3, radius: Float64, displacement: V.Vec3, minimum: V.Vec3, maximum: V.Vec3, tolerance: Float64, maxIterations: Int }
+
+/// A contact fraction, outward box normal, box witness and consumed distance-query count.
+export type Hit = { fraction: Float64, normal: V.Vec3, point: V.Vec3, iterations: Int }
+
+/// Invalid requests, unrepresentable geometry, initial penetration and unresolved iteration.
+export type Error = InvalidInput | NumericRange | InitialOverlap | IterationLimit
+
+/// Sweep a fixed-orientation capsule against a finite box; convergence failure is never a miss.
+export fn capsuleBox(request: &CapsuleBox) -> Result[Option[Hit], Error] {
+  if !V.isFinite(request.start) || !V.isFinite(request.end) || !V.isFinite(request.displacement) || !V.isFinite(request.minimum) || !V.isFinite(request.maximum) { return Err(InvalidInput) }
+  if !(request.radius > 0.0 && Float.isFinite(request.radius) && request.tolerance > 0.0 && request.tolerance < request.radius) { return Err(InvalidInput) }
+  if request.maxIterations < 1 || request.maxIterations > 128 { return Err(InvalidInput) }
+  if request.minimum.x > request.maximum.x || request.minimum.y > request.maximum.y || request.minimum.z > request.maximum.z { return Err(InvalidInput) }
+  if !V.isFinite(V.add(request.start, request.displacement)) || !V.isFinite(V.add(request.end, request.displacement)) { return Err(NumericRange) }
+  var magnitude = request.radius
+  for value in [request.start, request.end, request.displacement, request.minimum, request.maximum] {
+    for component in [value.x, value.y, value.z] {
+      if Float.abs(component) > magnitude { magnitude = Float.abs(component) }
+    }
+  }
+  if request.tolerance < magnitude * (16.0 * Float.epsilon()) { return Err(NumericRange) }
+  var fraction = 0.0
+  for iteration in 0..request.maxIterations {
+    let shift = V.scale(request.displacement, fraction)
+    let Some(closest) = Distance.segmentBox(V.add(request.start, shift), V.add(request.end, shift), request.minimum, request.maximum) else { return Err(NumericRange) }
+    let separation = closest.distance - request.radius
+    if separation < -request.tolerance {
+      return Err(if fraction == 0.0 { InitialOverlap } else { NumericRange })
+    }
+    let Some(normal) = V.normalized(V.subtract(closest.segment, closest.box)) else { return Err(NumericRange) }
+    let closing = -V.dot(normal, request.displacement)
+    if !Float.isFinite(closing) { return Err(NumericRange) }
+    if fraction == 0.0 && closing <= 0.0 { return Ok(None) }
+    if separation <= request.tolerance {
+      return Ok(Some(Hit{fraction, normal, point: closest.box, iterations: iteration + 1}))
+    }
+    if closing <= 0.0 { return Ok(None) }
+    // The closest witnesses define a supporting plane: this bound cannot step past first impact.
+    let next = fraction + (separation - request.tolerance * 0.5) / closing
+    if next > 1.0 { return Ok(None) }
+    if next <= fraction { return Err(IterationLimit) }
+    fraction = next
+  }
+  Err(IterationLimit)
+}

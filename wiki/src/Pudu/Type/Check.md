@@ -167,6 +167,9 @@ DEPTH 0.85 (DEEP). One entry point hides signature collection, scope constructio
 
 ## Grill Log
 
+- **Q:** Why mark the body's result before checking it? **A:** [[Check Propagation]] decides
+  whether a value-form failure arm is propagation from that position.
+
 - **Q:** Discard the expression types derive-definition checking computes? **A:** Not for tooling.
   _Rationale:_ a template's metadata (`field : Field[T, F]`) is typed only there; its generated
   copies carry generated spans and request-specific types. `checkDeriveDefinitionTypes` runs the

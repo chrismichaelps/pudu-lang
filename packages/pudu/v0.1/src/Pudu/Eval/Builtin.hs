@@ -6,6 +6,7 @@ module Pudu.Eval.Builtin
   , callCharMethod
   , callConvertInteger
   , callDecimal
+  , callFloatKernel
   , callDisplay
   , callEffect
   , callHashing
@@ -46,6 +47,7 @@ import Pudu.Eval.Builtin.Numeric
   , callCharMethod
   , callConvertInteger
   , callDecimal
+  , callFloatKernel
   , isDecimalBuiltin
   )
 import Pudu.Eval.Builtin.String (callStringMethod, callStringMethodFast)

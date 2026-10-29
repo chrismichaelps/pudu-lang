@@ -138,3 +138,16 @@ implementation selection; the settled full selection still uses ordinary literal
 ## Lexical member admission (#471)
 
 A dotted explicit type application whose first name is a nearer local cannot select an unrelated imported function. Route it through the existing E3028 expression-application refusal and check its actual receiver. Bare local function names and explicit nominal type owners retain current behavior. Resolved Grill Log: repair the qualification bypass without silently introducing a new generic receiver-method surface.
+
+## Visible qualified constructors (#717)
+
+Authored qualified names and member chains are tested as complete constructor paths before
+recursing into their intermediate type owner as a value. Reuse [[Type Check Pattern]]'s
+`canonicalVariant` metadata and fresh parameter instantiation. A nearer lexical value head
+withholds namespace selection; ordinary functions/fields/methods retain their existing path.
+Named-field variants retain E3034 in value/call position. Generated canonical paths retain their
+existing origin-qualified admission. Result types are real nominal sums, never silent ErrorType.
+
+Resolved Grill Log: do not evaluate or type an intermediate `Module.Sum` as a value when its
+complete path names a visible constructor. Do not search the global bare variant table or bypass
+lexical shadowing, missing members, exported-type visibility or named-field construction rules.

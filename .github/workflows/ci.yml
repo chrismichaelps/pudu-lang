@@ -21,10 +21,14 @@ jobs:
       - uses: actions/setup-node@v7
         with:
           node-version: 22
+      - name: Verify optimized installation orchestration
+        run: python3 test/refresh-install.py
       - name: Verify application dependency layers
         run: |
           node --test test/app-layers.test.mjs
           node scripts/app-layers.mjs
+          node --test test/ark-layers.test.mjs
+          node scripts/ark-layers.mjs
       # Calling a library written elsewhere assembles the call at run time,
       # which needs the headers for the machine's own dynamic caller. The
       # runner has the library and not the headers.
@@ -114,6 +118,16 @@ jobs:
           fi
       - name: Verify the Linguist submission is consistent
         run: python3 scripts/linguist.py check --pudu "$PUDU"
+      - name: Verify capsule floor support
+        run: node test/ark-ground.mjs "$PUDU"
+      - name: Verify swept movement contracts
+        run: node test/ark-motion.mjs "$PUDU"
+      - name: Verify capsule box casts
+        run: node test/ark-cast.mjs "$PUDU"
+      - name: Verify capsule movement and support
+        run: node test/ark-character.mjs "$PUDU"
+      - name: Verify qualified constructor paths
+        run: node test/qualified-variants.mjs "$PUDU"
       - name: Verify every diagnostic code means one thing
         run: node test/diagnostic-codes.mjs
       # A merge that changes only documentation, the website, or the examples
@@ -169,6 +183,18 @@ jobs:
       # Repeated bounded concurrency must keep live memory flat.
       - name: Verify bounded concurrency helpers release what they create
         run: node test/concurrent-release.mjs "$PUDU"
+      # Golden binary64 results across the full exponent range, exact-kernel
+      # edge cases and domain refusals, compared bit for bit with the host.
+      - name: Verify binary64 kernels round exactly across the full range
+        run: python3 test/sqrt-range.py "$PUDU"
+      # Every packed lane kernel against its scalar definition, plus the
+      # length, index, type and partial-value refusals.
+      - name: Verify packed binary64 lane kernels
+        run: node test/lanes.mjs "$PUDU"
+      # Lane buffers share collections instead of forcing one per kernel call,
+      # which is what lets lane work on several threads overlap.
+      - name: Verify lane kernels share collections
+        run: node test/lane-collections.mjs "$PUDU"
       - name: Verify documentation site browser and CLI contracts
         run: |
           cabal run -v0 pudu -- doc --html test-fixtures/stdlib/UsesAll.pudu | node test/doc-site-parity.mjs
