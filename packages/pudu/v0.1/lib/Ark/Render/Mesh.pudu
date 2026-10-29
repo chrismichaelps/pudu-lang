@@ -1,0 +1,238 @@
+module Ark.Render.Mesh
+
+import Std.Lanes as Lanes
+import Std.Math.Float as Float
+import Ark.Math.Color as Color
+import Ark.Math as V
+import Ark.Math.Vec2 as V2
+
+/// A non-indexed triangle list: per-vertex object-space position, unit normal, linear color
+/// and texture coordinates with v growing down the texture.
+export type Mesh = {
+  px: Lanes.Lanes,
+  py: Lanes.Lanes,
+  pz: Lanes.Lanes,
+  nx: Lanes.Lanes,
+  ny: Lanes.Lanes,
+  nz: Lanes.Lanes,
+  r: Lanes.Lanes,
+  g: Lanes.Lanes,
+  b: Lanes.Lanes,
+  u: Lanes.Lanes,
+  v: Lanes.Lanes,
+}
+
+/// Builds one primitive kind in a color.
+export type MeshFactory = fn(Color.Rgba) -> Mesh
+
+/// The factory for each primitive kind.
+const MESH_FACTORIES: Map[Str, MeshFactory] = mapOf([
+    ("cube", cube),
+    ("plane", plane),
+    ("pyramid", pyramid),
+    ("sphere", sphere),
+  ])
+
+/// A primitive by kind name, or None for an unknown kind.
+export fn primitive(kind: Str, color: Color.Rgba) -> Option[Mesh] {
+  let factory = MESH_FACTORIES.get(kind) ?
+  Some(factory(color))
+}
+
+/// A unit cube centered on the origin.
+export fn cube(color: Color.Rgba) -> Mesh {
+  var points: Array[V.Vec3] = []
+  var coordinates: Array[V2.Vec2] = []
+  for normal in [
+    V.vec3(1.0, 0.0, 0.0), V.vec3(-1.0, 0.0, 0.0), V.vec3(0.0, 1.0, 0.0),
+    V.vec3(0.0, -1.0, 0.0), V.vec3(0.0, 0.0, 1.0), V.vec3(0.0, 0.0, -1.0),
+  ] {
+    points = points.concat(face(V.scale(normal, 0.5), normal))
+    coordinates = coordinates.concat(faceCoordinates())
+  }
+  flat(&points, &coordinates, color)
+}
+
+/// A unit square in the xz plane facing +y.
+export fn plane(color: Color.Rgba) -> Mesh {
+  flat(&face(V.vec3(0.0, 0.0, 0.0), V.vec3(0.0, 1.0, 0.0)), &faceCoordinates(), color)
+}
+
+/// A square pyramid of unit base and height centered on the origin, apex up.
+export fn pyramid(color: Color.Rgba) -> Mesh {
+  let apex = V.vec3(0.0, 0.5, 0.0)
+  let a = V.vec3(-0.5, -0.5, 0.5)
+  let b = V.vec3(0.5, -0.5, 0.5)
+  let c = V.vec3(0.5, -0.5, -0.5)
+  let d = V.vec3(-0.5, -0.5, -0.5)
+  let sides = [a, b, apex, b, c, apex, c, d, apex, d, a, apex]
+  var coordinates: Array[V2.Vec2] = []
+  for _ in 0..4 {
+    coordinates = coordinates.concat([V2.vec2(0.0, 1.0), V2.vec2(1.0, 1.0), V2.vec2(0.5, 0.0)])
+  }
+  flat(&sides.concat(face(V.vec3(0.0, -0.5, 0.0), V.vec3(0.0, -1.0, 0.0))), &coordinates.concat(faceCoordinates()), color)
+}
+
+/// A unit-diameter sphere of 16 longitude and 10 latitude bands, counter-clockwise from outside;
+/// u follows longitude and v latitude from the top pole.
+export fn sphere(color: Color.Rgba) -> Mesh {
+  let bands = 10
+  let segments = 16
+  var points: Array[V.Vec3] = []
+  var coordinates: Array[V2.Vec2] = []
+  var ring = 0
+  while ring < bands {
+    var around = 0
+    while around < segments {
+      let a = surfacePoint(ring, around, bands, segments)
+      let b = surfacePoint(ring + 1, around, bands, segments)
+      let c = surfacePoint(ring + 1, around + 1, bands, segments)
+      let d = surfacePoint(ring, around + 1, bands, segments)
+      let ta = surfaceCoordinate(ring, around, bands, segments)
+      let tb = surfaceCoordinate(ring + 1, around, bands, segments)
+      let tc = surfaceCoordinate(ring + 1, around + 1, bands, segments)
+      let td = surfaceCoordinate(ring, around + 1, bands, segments)
+      if ring > 0 {
+        points = points.concat([a, b, d])
+        coordinates = coordinates.concat([ta, tb, td])
+      }
+      if ring < bands - 1 {
+        points = points.concat([d, b, c])
+        coordinates = coordinates.concat([td, tb, tc])
+      }
+      around = around + 1
+    }
+    ring = ring + 1
+  }
+  flat(&points, &coordinates, color)
+}
+
+fn surfaceCoordinate(ring: Int, around: Int, bands: Int, segments: Int) -> V2.Vec2 {
+  V2.vec2(Float.fromInt(around) / Float.fromInt(segments), Float.fromInt(ring) / Float.fromInt(bands))
+}
+
+fn surfacePoint(ring: Int, around: Int, bands: Int, segments: Int) -> V.Vec3 {
+  let polar = Float.pi() * Float.fromInt(ring) / Float.fromInt(bands)
+  let azimuth = Float.tau() * Float.fromInt(around) / Float.fromInt(segments)
+  V.vec3(Float.sin(polar) * Float.cos(azimuth) * 0.5, Float.cos(polar) * 0.5, Float.sin(polar) * Float.sin(azimuth) * -0.5)
+}
+
+/// A flat-shaded mesh from triangle corners with zero texture coordinates, or None unless
+/// they come in threes with no degenerate triangle.
+export fn fromTriangles(points: &Array[V.Vec3], color: Color.Rgba) -> Option[Mesh] {
+  if points.length() % 3 != 0 { return None }
+  var index = 0
+  while index < points.length() {
+    let normal = V.cross(V.subtract(points[index + 1], points[index]), V.subtract(points[index + 2], points[index]))
+    V.normalized(normal) ?
+    index = index + 3
+  }
+  Some(flat(points, &[], color))
+}
+
+/// Replace texture coordinates, one u and v per vertex; None when either count differs.
+export fn withCoordinates(mesh: Mesh, u: Lanes.Lanes, v: Lanes.Lanes) -> Option[Mesh] {
+  let count = Lanes.count(&mesh.px)
+  if Lanes.count(&u) != count || Lanes.count(&v) != count { return None }
+  Some(Mesh{..mesh, u, v})
+}
+
+/// The number of triangles.
+export fn triangleCount(mesh: &Mesh) -> Int {
+  Lanes.count(&mesh.px) / 3
+}
+
+/// One mesh holding both triangle lists.
+export fn merge(first: &Mesh, second: &Mesh) -> Mesh {
+  Mesh {
+    px: Lanes.concat(&first.px, &second.px),
+    py: Lanes.concat(&first.py, &second.py),
+    pz: Lanes.concat(&first.pz, &second.pz),
+    nx: Lanes.concat(&first.nx, &second.nx),
+    ny: Lanes.concat(&first.ny, &second.ny),
+    nz: Lanes.concat(&first.nz, &second.nz),
+    r: Lanes.concat(&first.r, &second.r),
+    g: Lanes.concat(&first.g, &second.g),
+    b: Lanes.concat(&first.b, &second.b),
+    u: Lanes.concat(&first.u, &second.u),
+    v: Lanes.concat(&first.v, &second.v),
+  }
+}
+
+/// Two triangles of a unit square centered at `center` facing `normal`, counter-clockwise
+/// seen from the side the normal points to.
+fn face(center: V.Vec3, normal: V.Vec3) -> Array[V.Vec3] {
+  let up = if magnitude(normal.y) > 0.5 { V.vec3(0.0, 0.0, -1.0) } else { V.vec3(0.0, 1.0, 0.0) }
+  let u = V.scale(V.cross(up, normal), 0.5)
+  let v = V.scale(up, 0.5)
+  let a = V.subtract(V.subtract(center, u), v)
+  let b = V.subtract(V.add(center, u), v)
+  let c = V.add(V.add(center, u), v)
+  let d = V.add(V.subtract(center, u), v)
+  [a, b, c, a, c, d]
+}
+
+/// Texture coordinates for the corners `face` emits, with the texture upright on the face.
+fn faceCoordinates() -> Array[V2.Vec2] {
+  [V2.vec2(0.0, 1.0), V2.vec2(1.0, 1.0), V2.vec2(1.0, 0.0), V2.vec2(0.0, 1.0), V2.vec2(1.0, 0.0), V2.vec2(0.0, 0.0)]
+}
+
+fn magnitude(value: Float64) -> Float64 {
+  if value < 0.0 { -value } else { value }
+}
+
+/// Corners and parallel texture coordinates; missing coordinates are zero.
+fn flat(points: &Array[V.Vec3], coordinates: &Array[V2.Vec2], color: Color.Rgba) -> Mesh {
+  var xs: Array[Float64] = []
+  var ys: Array[Float64] = []
+  var zs: Array[Float64] = []
+  var nxs: Array[Float64] = []
+  var nys: Array[Float64] = []
+  var nzs: Array[Float64] = []
+  var us: Array[Float64] = []
+  var vs: Array[Float64] = []
+  var index = 0
+  while index + 2 < points.length() {
+    let a = points[index]
+    let b = points[index + 1]
+    let c = points[index + 2]
+    let normal = match V.normalized(V.cross(V.subtract(b, a), V.subtract(c, a))) {
+      case Some(unit) => unit
+      case None => V.vec3(0.0, 0.0, 0.0)
+    }
+    for offset in 0..3 {
+      let corner = points[index + offset]
+      let coordinate = if index + offset < coordinates.length() { coordinates[index + offset] } else { V2.vec2(0.0, 0.0) }
+      us = us.push(coordinate.x)
+      vs = vs.push(coordinate.y)
+      xs = xs.push(corner.x)
+      ys = ys.push(corner.y)
+      zs = zs.push(corner.z)
+      nxs = nxs.push(normal.x)
+      nys = nys.push(normal.y)
+      nzs = nzs.push(normal.z)
+    }
+    index = index + 3
+  }
+  let count = xs.length()
+  Mesh {
+    px: Lanes.fromArray(&xs),
+    py: Lanes.fromArray(&ys),
+    pz: Lanes.fromArray(&zs),
+    nx: Lanes.fromArray(&nxs),
+    ny: Lanes.fromArray(&nys),
+    nz: Lanes.fromArray(&nzs),
+    r: uniform(count, color.r),
+    g: uniform(count, color.g),
+    b: uniform(count, color.b),
+    u: Lanes.fromArray(&us),
+    v: Lanes.fromArray(&vs),
+  }
+}
+
+fn uniform(count: Int, value: Float64) -> Lanes.Lanes {
+  match Lanes.filled(count, value) {
+    case Some(lanes) => lanes
+    case None => Lanes.fromArray(&[])
+  }
+}

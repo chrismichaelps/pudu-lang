@@ -218,6 +218,7 @@ Resolved Grill Log: register only the primitive's name here; retain phase-owned
 arity, typing and filesystem behavior.
 
 `clockNanos` is an effect value name beside `clock` (#670).
+
 ## Binary64 kernels
 
 Prelude value names include `map floatKernelName floatKernels`, so resolution, checking and

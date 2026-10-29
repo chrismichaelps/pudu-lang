@@ -1,0 +1,47 @@
+module Ark.Math.Random
+
+import Std.Math.Float as Float
+
+/// SplitMix64 generator state; the same seed gives the same sequence on every platform.
+export type Rng = { state: UInt64 }
+
+/// A generator started from a seed.
+export fn seeded(seed: UInt64) -> Rng {
+  Rng{state: seed}
+}
+
+/// The next 64 random bits and the advanced generator.
+export fn next(rng: Rng) -> (Rng, UInt64) {
+  let state = rng.state &+ 0x9e3779b97f4a7c15u64
+  let a = (state ^ (state >> 30)) &* 0xbf58476d1ce4e5b9u64
+  let b = (a ^ (a >> 27)) &* 0x94d049bb133111ebu64
+  (Rng{state}, b ^ (b >> 31))
+}
+
+/// A uniform value in [0, 1) carrying 52 random mantissa bits.
+export fn unit(rng: Rng) -> (Rng, Float64) {
+  let (advanced, bits) = next(rng)
+  (advanced, Float.fromBits(0x3ff0000000000000u64 | (bits >> 12)) - 1.0)
+}
+
+/// A uniform value in [low, high).
+export fn between(rng: Rng, low: Float64, high: Float64) -> (Rng, Float64) {
+  let (advanced, t) = unit(rng)
+  (advanced, Float.fma(t, high - low, low))
+}
+
+/// A uniform integer in [0, bound) without modulo bias, or None for a non-positive bound.
+export fn below(rng: Rng, bound: Int) -> Option[(Rng, Int)] {
+  if bound <= 0 { return None }
+  let limit = convertInteger[UInt64](bound) ?
+  let threshold = (0u64 &- limit) % limit
+  var current = rng
+  loop {
+    let (advanced, bits) = next(current)
+    current = advanced
+    if bits >= threshold {
+      let value = convertInteger[Int](bits % limit) ?
+      return Some((current, value))
+    }
+  }
+}

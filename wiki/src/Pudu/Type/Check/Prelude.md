@@ -261,6 +261,7 @@ Resolved Grill Log: preserve explicit byte payload and typed failure, while port
 filesystem policy remains in [[Std Fs]] and [[Eval Io]].
 
 `clockNanos` is typed `() -> Int` beside `clock` (#670).
+
 ## Binary64 kernel signatures
 
 Every [[Float Kernel Identity]] entry is bound from its shape: `FloatArguments n` takes n Float64

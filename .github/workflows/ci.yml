@@ -63,6 +63,22 @@ jobs:
         run: echo "PUDU=$(cabal list-bin pudu --enable-optimization=2)" >> "$GITHUB_ENV"
       - name: Enforce scheduled API removals
         run: python3 scripts/api-lifecycle.py check --binary "$PUDU"
+      - name: Verify Ark math algebra, failure boundaries and shipping
+        run: |
+          node test/ark-math.mjs "$PUDU"
+          node test/ark-matrix.mjs "$PUDU"
+          node test/ark-math-extended.mjs "$PUDU"
+          node test/ark-assets.mjs "$PUDU"
+          node test/ark-world.mjs "$PUDU"
+          node test/ark-platform.mjs "$PUDU"
+          node test/ark-render.mjs "$PUDU"
+          node test/ark-physics.mjs "$PUDU"
+          node test/ark-animation.mjs "$PUDU"
+          node test/ark-audio.mjs "$PUDU"
+          node test/ark-game.mjs "$PUDU"
+          node test/ark-ui.mjs "$PUDU"
+          node test/ark-net.mjs "$PUDU"
+          node test/ark-build.mjs "$PUDU"
       # A suite that stops responding should say so and end, rather than hold
       # the runner until the job's own limit. The bound is generous against the
       # observed run so an ordinary slow day is not a failure.

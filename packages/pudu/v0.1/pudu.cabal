@@ -19,7 +19,15 @@ extra-source-files: cbits/pudu_desktop.h
 data-files:         lib/Std/*.pudu
                     lib/Ark/*.pudu
                     lib/Ark/Math/*.pudu
+                    lib/Ark/Core/*.pudu
+                    lib/Ark/World/*.pudu
+                    lib/Ark/Platform/*.pudu
+                    lib/Ark/Render/*.pudu
                     lib/Ark/Physics/*.pudu
+                    lib/Ark/Assets/*.pudu
+                    lib/Ark/Animation/*.pudu
+                    lib/Ark/Game/*.pudu
+                    lib/Ark/Net/*.pudu
                     lib/Std/App/*.pudu
                     lib/Std/Audio/*.pudu
                     lib/Std/Archive/*.pudu

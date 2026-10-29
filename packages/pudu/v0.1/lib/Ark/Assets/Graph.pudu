@@ -1,0 +1,95 @@
+module Ark.Assets.Graph
+
+/// One asset and the logical asset IDs it consumes.
+export type Node = { id: Str, dependencies: Array[Str] }
+
+/// Dependency declaration or traversal failures.
+export type Error
+  = InvalidId(Str)
+  | DuplicateId(Str)
+  | DuplicateDependency(Str, Str)
+  | MissingDependency(Str, Str)
+  | Cycle(Array[Str])
+  | UnknownAsset(Str)
+  | InvalidGraph(Str)
+
+/// Dependency-first order and reverse edges; construct through compile.
+export type Graph = { order: Array[Str], dependents: Map[Str, Array[Str]] }
+
+/// Validate all declarations and order iteratively; Cycle includes every unscheduled node.
+export fn compile(nodes: &Array[Node]) -> Result[Graph, Error] {
+  var degree: Map[Str, Int] = mapOf([])
+  var reverse: Map[Str, Array[Str]] = mapOf([])
+  for node in *nodes {
+    if node.id == "" || node.id.contains("\0") { return Err(InvalidId(node.id)) }
+    if degree.containsKey(node.id) { return Err(DuplicateId(node.id)) }
+    degree = degree.insert(node.id, node.dependencies.length())
+    reverse = reverse.insert(node.id, [])
+  }
+  var ready: Array[Str] = []
+  for node in *nodes {
+    var seen: Map[Str, Bool] = mapOf([])
+    for dependency in node.dependencies {
+      if seen.containsKey(dependency) { return Err(DuplicateDependency(node.id, dependency)) }
+      if !degree.containsKey(dependency) { return Err(MissingDependency(node.id, dependency)) }
+      seen = seen.insert(dependency, true)
+      let Some(children) = reverse.get(dependency) else { return Err(InvalidGraph(dependency)) }
+      reverse = reverse.insert(dependency, children.push(node.id))
+    }
+    if node.dependencies.isEmpty() { ready = ready.push(node.id) }
+  }
+  var order: Array[Str] = []
+  var cursor = 0
+  while cursor < ready.length() {
+    let id = ready[cursor]
+    cursor = cursor + 1
+    order = order.push(id)
+    let Some(children) = reverse.get(id) else { return Err(InvalidGraph(id)) }
+    for child in children {
+      let Some(before) = degree.get(child) else { return Err(InvalidGraph(child)) }
+      let remaining = before - 1
+      degree = degree.insert(child, remaining)
+      if remaining == 0 { ready = ready.push(child) }
+    }
+  }
+  if order.length() != nodes.length() {
+    var blocked: Array[Str] = []
+    for node in *nodes {
+      let Some(remaining) = degree.get(node.id) else { return Err(InvalidGraph(node.id)) }
+      if remaining > 0 { blocked = blocked.push(node.id) }
+    }
+    return Err(Cycle(blocked))
+  }
+  Ok(Graph{order, dependents: reverse})
+}
+
+/// The changed asset and transitive dependents, once each in dependency-first order.
+export fn affected(graph: &Graph, id: Str) -> Result[Array[Str], Error] {
+  if !graph.dependents.containsKey(id) { return Err(UnknownAsset(id)) }
+  var seen: Map[Str, Bool] = mapOf([(id, true)])
+  var queue = [id]
+  var cursor = 0
+  while cursor < queue.length() {
+    let parent = queue[cursor]
+    cursor = cursor + 1
+    let Some(children) = graph.dependents.get(parent) else { return Err(InvalidGraph(parent)) }
+    for child in children {
+      if !graph.dependents.containsKey(child) { return Err(InvalidGraph(child)) }
+      if !seen.containsKey(child) {
+        seen = seen.insert(child, true)
+        queue = queue.push(child)
+      }
+    }
+  }
+  var emitted: Map[Str, Bool] = mapOf([])
+  var result: Array[Str] = []
+  for asset in graph.order {
+    if seen.containsKey(asset) {
+      if emitted.containsKey(asset) { return Err(InvalidGraph(asset)) }
+      emitted = emitted.insert(asset, true)
+      result = result.push(asset)
+    }
+  }
+  if result.length() != queue.length() { return Err(InvalidGraph(id)) }
+  Ok(result)
+}

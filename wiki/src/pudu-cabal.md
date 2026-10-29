@@ -14,9 +14,25 @@ cache identity; full analysis remains available independently of executable reus
 
 ## Purpose and interface
 
-Distribute `lib/Ark/*.pudu` beside Std in the existing library data root. [[Ark Math]] is
-language-distribution data, with no separate package or native dependency. Resolved Grill Log:
-source archives must contain Ark even when a checkout's library root is unavailable.
+Distribute `lib/Ark/Assets/*.pudu`, including [[Ark Texture Asset]]. Resolved Grill Log: nested
+CPU asset modules are shipped library data and must remain present outside the checkout.
+
+Distribute `lib/Ark/Net/*.pudu` with the root net module, including [[Ark Replication]];
+[[Ark Net Gate]] checks the archive.
+
+Distribute `lib/Ark/Game/*.pudu` with the root game module, including [[Ark Game Camera]];
+[[Ark Game Gate]] checks the archive.
+
+Distribute `lib/Ark/Animation/*.pudu` with the root animation module, including [[Ark Animation
+Machine]]; [[Ark Animation Gate]] checks the archive.
+
+Distribute `lib/Ark/Physics/*.pudu` with the root physics facade. Resolved Grill Log: the
+source archive must retain contact, step and query modules; checkout-only success is insufficient.
+
+Distribute `lib/Ark/*.pudu` and `lib/Ark/Math/*.pudu` beside Std in the existing library data
+root. [[Ark Math]] and [[Ark Matrix]] are language-distribution data, with no separate package
+or native dependency. Resolved Grill Log: source archives must contain both root and nested
+Ark modules even when a checkout's library root is unavailable.
 
 Declare package metadata, compiler library modules, executable components, test components, compiler
 warnings, language defaults, dependencies, and native bridge linkage for the Cabal build.

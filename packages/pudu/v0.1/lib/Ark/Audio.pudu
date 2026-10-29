@@ -1,0 +1,197 @@
+module Ark.Audio
+
+import Std.Audio as Pcm
+import Std.Lanes as Lanes
+import Std.Math.Float as Float
+import Std.Option as Option
+import Std.Result as Result
+import Ark.Core.Handle as Handle
+import Ark.Math as V
+
+/// Mono samples in [-1, 1] at the mixer's rate.
+export type Sound = { samples: Lanes.Lanes }
+
+/// One playing sound: its read position, gain, bus, looping and optional world position.
+export type Voice = {
+  sound: Sound,
+  handle: Handle.Handle,
+  cursor: Int,
+  gain: Float64,
+  bus: Str,
+  looping: Bool,
+  position: Option[V.Vec3],
+  occlusion: Float64,
+}
+
+/// The ear: a position and the unit direction toward its right.
+export type Listener = { position: V.Vec3, right: V.Vec3 }
+
+/// How loudness falls with distance beyond `near`, reaching silence at `far` where the model has one.
+export type Rolloff = { model: Str, near: Float64, far: Float64 }
+
+/// Voices by handle slot, bus gains, the listener and the stereo output rate.
+export type Mixer = {
+  rate: Int,
+  buses: Map[Str, Float64],
+  voices: Map[Int, Voice],
+  pool: Handle.HandlePool,
+  listener: Listener,
+  rolloff: Rolloff,
+}
+
+/// One rendered block of stereo samples.
+export type Block = { left: Lanes.Lanes, right: Lanes.Lanes }
+
+type Attenuation = fn(Float64, &Rolloff) -> Float64
+
+const ROLLOFFS: Map[Str, Attenuation] = mapOf([("none", noRolloff), ("inverse", inverseRolloff), ("linear", linearRolloff)])
+
+/// The bus every voice reaches last; its gain scales the whole mix.
+const MASTER: Str = "master"
+
+/// A mixer at a sample rate with a master bus at unit gain, the listener at the origin facing -z.
+export fn create(rate: Int, rolloff: Rolloff) -> Option[Mixer] {
+  if rate <= 0 || !ROLLOFFS.containsKey(rolloff.model) { return None }
+  if !(rolloff.near > 0.0) || !(rolloff.far > rolloff.near) || !Float.isFinite(rolloff.far) { return None }
+  let listener = Listener{position: V.vec3(0.0, 0.0, 0.0), right: V.vec3(1.0, 0.0, 0.0)}
+  Some(Mixer{rate, buses: mapOf([(MASTER, 1.0)]), voices: mapOf([]), pool: Handle.empty(), listener, rolloff})
+}
+
+/// Signed 16-bit PCM decoded to mono samples in [-1, 1], averaging channels.
+export fn decode(source: &Pcm.Pcm) -> Option[Sound] {
+  let mono = if source.format.channels == 1 { *source } else { Result.ok(Pcm.downmix(source)) ? }
+  Some(Sound{samples: Lanes.scale(&Lanes.fromInts(&Pcm.samples(&mono)), 1.0 / 32767.0)})
+}
+
+/// Mono samples given directly; None unless every sample is finite.
+export fn fromSamples(samples: Lanes.Lanes) -> Option[Sound] {
+  if !Float.isFinite(Lanes.sum(&Lanes.scale(&samples, 0.0))) { return None }
+  Some(Sound{samples})
+}
+
+/// Add or retune a bus; a bus gain is non-negative and finite.
+export fn setBus(mixer: Mixer, name: Str, gain: Float64) -> Option[Mixer] {
+  if name == "" || !(gain >= 0.0) || !Float.isFinite(gain) { return None }
+  Some(Mixer{..mixer, buses: mixer.buses.insert(name, gain)})
+}
+
+/// Move the listener; `right` must have a direction.
+export fn setListener(mixer: Mixer, position: V.Vec3, right: V.Vec3) -> Option[Mixer] {
+  let unit = V.normalized(right) ?
+  if !V.isFinite(position) { return None }
+  Some(Mixer{..mixer, listener: Listener{position, right: unit}})
+}
+
+/// Start a voice on a known bus; positional voices pan and attenuate, others play centered.
+export fn play(mixer: Mixer, sound: &Sound, bus: Str, gain: Float64, looping: Bool, position: Option[V.Vec3]) -> Option[(Mixer, Handle.Handle)] {
+  if !mixer.buses.containsKey(bus) || !(gain >= 0.0) || !Float.isFinite(gain) { return None }
+  if let Some(point) = position {
+    if !V.isFinite(point) { return None }
+  }
+  let (pool, issued) = Handle.allocate(mixer.pool)
+  let voice = Voice{sound: *sound, handle: issued, cursor: 0, gain, bus, looping, position, occlusion: 1.0}
+  Some((Mixer{..mixer, pool, voices: mixer.voices.insert(issued.index, voice)}, issued))
+}
+
+/// Stop a live voice; its handle becomes stale.
+export fn stop(mixer: Mixer, voice: Handle.Handle) -> Option[Mixer] {
+  let pool = Handle.release(mixer.pool, voice) ?
+  Some(Mixer{..mixer, pool, voices: mixer.voices.remove(voice.index)})
+}
+
+/// Whether a voice is still playing.
+export fn playing(mixer: &Mixer, voice: Handle.Handle) -> Bool {
+  Handle.isAlive(&mixer.pool, voice)
+}
+
+/// Retune a live voice's gain, world position and occlusion factor in [0, 1].
+export fn update(mixer: Mixer, voice: Handle.Handle, gain: Float64, position: Option[V.Vec3], occlusion: Float64) -> Option[Mixer] {
+  if !Handle.isAlive(&mixer.pool, voice) || !(gain >= 0.0) || !Float.isFinite(gain) { return None }
+  if !(occlusion >= 0.0 && occlusion <= 1.0) { return None }
+  if let Some(point) = position {
+    if !V.isFinite(point) { return None }
+  }
+  let current = mixer.voices.get(voice.index) ?
+  Some(Mixer{..mixer, voices: mixer.voices.insert(voice.index, Voice{..current, gain, position, occlusion})})
+}
+
+/// Mix the next `frames` stereo frames of every voice and advance them; finished one-shot voices end.
+export fn render(mixer: Mixer, frames: Int) -> Option[(Mixer, Block)] {
+  if frames <= 0 { return None }
+  var left = Lanes.filled(frames, 0.0) ?
+  var right = left
+  var voices = mixer.voices
+  var pool = mixer.pool
+  let master = mixer.buses.get(MASTER) ?
+  let attenuate = ROLLOFFS.get(mixer.rolloff.model) ?
+  for slot in mixer.voices.keys() {
+    let voice = mixer.voices.get(slot) ?
+    let bus = mixer.buses.get(voice.bus) ?
+    let (block, cursor, finished) = read(&voice, frames) ?
+    let (panLeft, panRight) = spatial(&mixer, &voice, attenuate)
+    let level = master * bus * voice.gain * voice.occlusion
+    left = Lanes.axpy(&left, level * panLeft, &block) ?
+    right = Lanes.axpy(&right, level * panRight, &block) ?
+    if finished {
+      voices = voices.remove(slot)
+      pool = Handle.release(pool, voice.handle) ?
+    } else {
+      voices = voices.insert(slot, Voice{..voice, cursor})
+    }
+  }
+  Some((Mixer{..mixer, voices, pool}, Block{left, right}))
+}
+
+/// A block as interleaved signed 16-bit stereo PCM at the mixer's rate.
+export fn toPcm(mixer: &Mixer, block: &Block) -> Option[Pcm.Pcm] {
+  let format = Result.ok(Pcm.format(mixer.rate, 2)) ?
+  let frames = Lanes.interleave(&block.left, &block.right) ?
+  Some(Pcm.Pcm{format, data: Lanes.toPcm16(&frames)})
+}
+
+/// The next `frames` samples from the cursor, wrapping a looping voice and padding a finished one
+/// with silence, with the cursor after them and whether a one-shot voice has ended.
+fn read(voice: &Voice, frames: Int) -> Option[(Lanes.Lanes, Int, Bool)] {
+  let length = Lanes.count(&voice.sound.samples)
+  if length == 0 { return Some((Lanes.filled(frames, 0.0) ?, 0, !voice.looping)) }
+  var collected = Lanes.fromArray(&[])
+  var cursor = voice.cursor
+  var needed = frames
+  while needed > 0 {
+    if cursor >= length {
+      if !voice.looping {
+        return Some((Lanes.concat(&collected, &(Lanes.filled(needed, 0.0) ?)), length, true))
+      }
+      cursor = 0
+    }
+    let taken = if length - cursor < needed { length - cursor } else { needed }
+    collected = Lanes.concat(&collected, &(Lanes.slice(&voice.sound.samples, cursor, taken) ?))
+    cursor = cursor + taken
+    needed = needed - taken
+  }
+  Some((collected, cursor, !voice.looping && cursor >= length))
+}
+
+/// Equal-power left/right gains times distance attenuation; centered voices play at unit gain.
+fn spatial(mixer: &Mixer, voice: &Voice, attenuate: Attenuation) -> (Float64, Float64) {
+  let Some(point) = voice.position else { return (1.0, 1.0) }
+  let offset = V.subtract(point, mixer.listener.position)
+  let distance = Option.unwrapOr(Float.sqrt(V.dot(offset, offset)), 0.0)
+  let loudness = attenuate(distance, &mixer.rolloff)
+  let pan = match V.normalized(offset) {
+    case Some(direction) => Float.clamp(V.dot(direction, mixer.listener.right), -1.0, 1.0)
+    case None => 0.0
+  }
+  let angle = (pan + 1.0) * Float.pi() * 0.25
+  (loudness * Float.cos(angle), loudness * Float.sin(angle))
+}
+
+fn noRolloff(_distance: Float64, _rolloff: &Rolloff) -> Float64 { 1.0 }
+
+fn inverseRolloff(distance: Float64, rolloff: &Rolloff) -> Float64 {
+  if distance <= rolloff.near { 1.0 } else { rolloff.near / distance }
+}
+
+fn linearRolloff(distance: Float64, rolloff: &Rolloff) -> Float64 {
+  Float.clamp(1.0 - (distance - rolloff.near) / (rolloff.far - rolloff.near), 0.0, 1.0)
+}

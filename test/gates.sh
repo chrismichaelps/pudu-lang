@@ -72,6 +72,24 @@ run 'swept movement preserves contacts, errors and unapplied travel' \
   node test/ark-motion.mjs "$PUDU"
 run 'Ark math preserves scaled geometry and refuses wrong precision' \
   node test/ark-math.mjs "$PUDU"
+run 'Ark matrices preserve composition and checked homogeneous projection' \
+  node test/ark-matrix.mjs "$PUDU"
+run 'Ark assets preserve linear-light sampling and checked texture storage' \
+  node test/ark-assets.mjs "$PUDU"
+run 'Ark physics preserves numeric admission and disjoint contact batches' \
+  node test/ark-physics.mjs "$PUDU"
+run 'Ark animation samples, blends and cross-fades joint poses' \
+  node test/ark-animation.mjs "$PUDU"
+run 'Ark audio mixes buses, spatial voices and PCM16 blocks' \
+  node test/ark-audio.mjs "$PUDU"
+run 'Ark game loop runs fixed steps, scene stacks and camera rigs' \
+  node test/ark-game.mjs "$PUDU"
+run 'Ark UI handles pointer and keyboard focus and draws its widgets' \
+  node test/ark-ui.mjs "$PUDU"
+run 'Ark net acknowledges packets and replicates quantized deltas' \
+  node test/ark-net.mjs "$PUDU"
+run 'Ark build cooks checked packs and loads them through the asset server' \
+  node test/ark-build.mjs "$PUDU"
 run 'atomic writes preserve creation and replacement permissions' \
   bash -c 'python3 test/atomic-permissions.py "$PUDU"'
 run 'only a compiler change at a new version releases' python3 test/release-plan.test.py

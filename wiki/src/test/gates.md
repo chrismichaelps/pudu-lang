@@ -12,12 +12,39 @@ aliases: [Repository Gates]
 
 ## Purpose and interface
 
+[[Ark Assets Gate]] validates texture sampling, failure diagnostics and nested distribution data.
+
+[[Ark Build Gate]] verifies packs, pack mounts, cook/load, a positioned refusal and shipping.
+
+[[Ark Net Gate]] verifies acknowledgement windows, the header format, replication deltas, a
+positioned refusal and shipping.
+
+[[Ark UI Gate]] verifies widget interaction, focus traversal, rendering, a positioned refusal
+and shipping.
+
+[[Ark Game Gate]] verifies the fixed-step scene loop, camera rigs, a positioned refusal and
+shipping.
+
+[[Ark Audio Gate]] verifies bus mixing, spatialization, PCM output, a positioned refusal and
+shipping.
+
+[[Ark Animation Gate]] verifies clip sampling, blending, state machines, a positioned refusal and
+shipping.
+
+[[Ark Physics Gate]] verifies scenarios, numeric boundaries, diagnostics and shipping against
+the optimized compiler alongside the other focused engine checks.
+
+[[Ark Matrix Gate]] follows the root math gate with algebra/projection and nested data-file
+coverage. Resolved Grill Log: fixed math regressions remain executable in ordinary gate runs.
 [[Ark Layer Tests]] and [[Ark Layer Gate]] run before compilation to enforce engine import
 architecture. Resolved Grill Log: architectural defects fail independently of runtime acceptance.
 
 [[Ark Math Gate]] checks shipped Ark resolution, numerical regressions and wrong-width refusal
 against the same freshly built optimized compiler. Resolved Grill Log: interpreted evidence
 does not imply native engine performance.
+
+[[Ark Layer Tests]] and [[Ark Layer Gate]] run before compilation to enforce engine import
+architecture. Resolved Grill Log: architectural defects fail independently of runtime acceptance.
 
 Run the production release checks in a fixed order and report every failing gate: warning-free
 optimized build, optimized full suite, Pudu formatting, diagnostic identities, API coverage, live

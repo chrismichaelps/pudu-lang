@@ -5,15 +5,17 @@ tags: [moc, module]
 
 # Module Map
 
-- [[Qualified Variant Gate]] — typed constructor paths and runtime regression coverage.
-- [[Refresh Pudu Installation]] · [[Refresh Installation Test]] — optimized installation and exact executable verification.
+- [[src/Ark/_MOC|Ark Modules]] — engine library and focused conformance gates.
+
+- [[Ark Layer Gate]] · [[Ark Layer Model]] · [[Ark Layer Tests]] — explicit engine import contracts.
 - [[Square Root Range Gate]] · [[Root Kernel Benchmark]] — full-range root accuracy and measured estimates.
 
 - [[Website Linux Workflow]] · [[Hackage Transport Test]] — configured HTTPS index transport.
+- [[Qualified Variant Gate]] — typed constructor paths and runtime regression coverage.
+- [[Refresh Pudu Installation]] · [[Refresh Installation Test]] — optimized installation and exact executable verification.
 
-- [[Ark Layer Gate]] · [[Ark Layer Model]] · [[Ark Layer Tests]] — explicit engine import contracts.
 
-- [[src/Ark/_MOC|Ark Modules]] — engine library and focused conformance gates.
+
 
 - [[Derive Index Output Gate]] — checked strategy output and visibility.
 

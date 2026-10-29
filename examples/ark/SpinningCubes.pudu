@@ -1,0 +1,180 @@
+module SpinningCubes
+
+import Std.Fs as Fs
+import Std.Lanes as Lanes
+import Std.Math.Float as Float
+import Ark.Core.Profile as Profile
+import Ark.Math.Camera as Camera
+import Ark.Math.Color as Color
+import Ark.Math.Matrix as M
+import Ark.Math.Quat as Q
+import Ark.Math as V
+import Ark.Platform.Clock as Clock
+import Ark.Platform.Input as Input
+import Ark.Platform.Window as Window
+import Ark.Render.Device as Device
+import Ark.Render.Mesh as Mesh
+import Ark.Render.Pipeline as Pipeline
+import Ark.World as World
+
+const WIDTH: Int = 640
+const HEIGHT: Int = 480
+const GRID: Int = 5
+const STEP_NANOS: Int = 16666667
+
+/// The demo between frames: entities, camera orbit and timing.
+type Scene = { world: World.World, meshes: Array[Mesh.Mesh], ground: Mesh.Mesh, sun: Pipeline.Light, orbit: Float64, paused: Bool }
+
+fn setup() -> Scene {
+  let Some(a) = World.register(World.empty(), "position", 3) else { panic("register") }
+  let Some(b) = World.register(a, "spin", 2) else { panic("register") }
+  var world = b
+  var meshes: Array[Mesh.Mesh] = []
+  var row = 0
+  while row < GRID {
+    var column = 0
+    while column < GRID {
+      let x = Float.fromInt(column - GRID / 2) * 1.6
+      let z = Float.fromInt(row - GRID / 2) * 1.6
+      let speed = 0.6 + 0.15 * Float.fromInt((row * GRID + column) % 5)
+      let Some((next, _)) = World.create(world, &["position", "spin"], &[x, 0.0, z, 0.0, speed]) else { panic("create") }
+      world = next
+      let hue = Float.fromInt(row * GRID + column) / Float.fromInt(GRID * GRID)
+      meshes = meshes.push(Mesh.cube(Color.opaque(0.35 + 0.65 * hue, 0.4 + 0.5 * (1.0 - hue), 0.9 - 0.6 * hue)))
+      column = column + 1
+    }
+    row = row + 1
+  }
+  let Some(sun) = Pipeline.light(V.vec3(0.4, 1.0, 0.7), Color.opaque(1.0, 0.97, 0.9), 0.25) else { panic("light") }
+  let ground = Mesh.plane(Color.opaque(0.25, 0.3, 0.28))
+  Scene{world, meshes, ground, sun, orbit: 0.0, paused: false}
+}
+
+fn spin(dt: Float64) -> fn(World.View) -> Option[World.View] {
+  |view| {
+    let angle = World.columnOf(&view, "spin", 0) ?
+    let speed = World.columnOf(&view, "spin", 1) ?
+    let turned = Lanes.axpy(&angle, dt, &speed) ?
+    World.write(view, "spin", 0, &turned)
+  }
+}
+
+fn simulate(scene: Scene, input: &Input.State, bindings: &Input.ActionMap, dt: Float64) -> Scene {
+  let paused = if Input.pressed(bindings, input, "pause") { !scene.paused } else { scene.paused }
+  let orbit = scene.orbit + Input.axis(bindings, input, "orbitLeft", "orbitRight") * dt * 1.5
+  if paused { return Scene{..scene, paused, orbit} }
+  match World.each(scene.world, &["position", "spin"], &[], spin(dt)) {
+    case Some(world) => Scene{..scene, world, paused, orbit}
+    case None => Scene{..scene, paused, orbit}
+  }
+}
+
+fn render(scene: &Scene, surface: Device.Target) -> Option[Device.Target] {
+  let eye = V.vec3(Float.sin(scene.orbit) * 9.0, 5.0, Float.cos(scene.orbit) * 9.0)
+  let view = Camera.lookAt(eye, V.vec3(0.0, 0.0, 0.0), V.vec3(0.0, 1.0, 0.0)) ?
+  let projection = Camera.perspective(Float.pi() / 3.0, Float.fromInt(WIDTH) / Float.fromInt(HEIGHT), 0.1, 100.0) ?
+  let viewProjection = M.multiply4(projection, view)
+  let floor = M.multiply4(M.translation(V.vec3(0.0, -0.8, 0.0)), M.scaling(V.vec3(12.0, 1.0, 12.0)))
+  var batch = Pipeline.project(&scene.ground, &floor, &viewProjection, &scene.sun, WIDTH, HEIGHT) ?
+  let entities = World.viewOf(&scene.world, 0) ?
+  let xs = Lanes.toArray(&(World.columnOf(&entities, "position", 0) ?))
+  let zs = Lanes.toArray(&(World.columnOf(&entities, "position", 2) ?))
+  let angles = Lanes.toArray(&(World.columnOf(&entities, "spin", 0) ?))
+  var index = 0
+  while index < xs.length() {
+    let rotation = Q.multiply(Q.rotationY(angles[index]), Q.rotationX(angles[index] * 0.7))
+    let model = M.multiply4(M.translation(V.vec3(xs[index], 0.0, zs[index])), Q.toMat4(rotation))
+    let projected = Pipeline.project(&scene.meshes[index], &model, &viewProjection, &scene.sun, WIDTH, HEIGHT) ?
+    batch = Pipeline.concat(&batch, &projected)
+    index = index + 1
+  }
+  let cleared = Device.clear(surface, Color.opaque(0.05, 0.06, 0.09)) ?
+  Device.draw(cleared, &batch, Device.CullBack)
+}
+
+fn controls() -> Input.ActionMap {
+  var map = Input.actions()
+  map = Input.bind(map, "orbitLeft", Input.Key("KeyA"))
+  map = Input.bind(map, "orbitLeft", Input.Key("ArrowLeft"))
+  map = Input.bind(map, "orbitRight", Input.Key("KeyD"))
+  map = Input.bind(map, "orbitRight", Input.Key("ArrowRight"))
+  map = Input.bind(map, "pause", Input.Key("Space"))
+  map = Input.bind(map, "quit", Input.Key("Escape"))
+  map
+}
+
+fn snapshot(path: Str) -> Int {
+  var scene = setup()
+  var frame = 0
+  while frame < 30 {
+    scene = simulate(scene, &Input.initial(), &controls(), 1.0 / 60.0)
+    frame = frame + 1
+  }
+  let Some(surface) = Device.target(WIDTH, HEIGHT) else { panic("target") }
+  let started = Profile.now()
+  let Some(drawn) = render(&scene, surface) else { panic("render") }
+  let elapsed = Profile.now() - started
+  match Fs.writeAtomically(path, &Device.snapshotPpm(&drawn)) {
+    case Ok(_) => {
+      print("wrote " + path + " in " + show(elapsed / 1000) + " us")
+      0
+    }
+    case Err(_) => 1
+  }
+}
+
+fn run(limit: Int) -> Int {
+  let Ok(window) = Window.open("Ark — spinning cubes", WIDTH, HEIGHT, false) else {
+    print("no desktop window on this platform; use --snapshot <path.ppm>")
+    return 1
+  }
+  let map = controls()
+  let Some(target) = Device.target(WIDTH, HEIGHT) else { panic("target") }
+  let Some(started) = Clock.fixed(STEP_NANOS, 5, Profile.now()) else { panic("clock") }
+  var clock = started
+  var scene = setup()
+  var input = Input.initial()
+  var profile = Profile.empty()
+  var frames = 0
+  while limit < 0 || frames < limit {
+    let Ok(closing) = Window.pump(&window, 1) else { break }
+    let Ok(events) = Window.events(&window) else { break }
+    input = Input.apply(Input.beginFrame(input), &events)
+    if closing || Input.pressed(&map, &input, "quit") { break }
+    let (advanced, tick) = Clock.tick(clock, Profile.now())
+    clock = advanced
+    var step = 0
+    while step < tick.steps {
+      scene = simulate(scene, &input, &map, Clock.stepSeconds(&clock))
+      step = step + 1
+    }
+    let frameStarted = Profile.now()
+    let Some(drawn) = render(&scene, target) else { break }
+    profile = Profile.record(profile, "render", frameStarted)
+    let Ok(_) = Window.present(&window, &Device.pixels(&drawn)) else { break }
+    frames = frames + 1
+  }
+  if let Some(mean) = Profile.mean(&profile, "render") {
+    print("frames " + show(frames) + ", mean render " + show(mean / 1000) + " us")
+  }
+  match Window.close(window) {
+    case Ok(_) => 0
+    case Err(_) => 1
+  }
+}
+
+/// Spinning cubes: A/D or arrows orbit, Space pauses, Escape quits.
+/// `--snapshot <path.ppm>` renders one frame offscreen; `--frames <n>` stops after n frames.
+export fn main() -> Int {
+  let options = arguments()
+  var index = 0
+  var limit = -1
+  while index < options.length() {
+    if options[index] == "--snapshot" && index + 1 < options.length() { return snapshot(options[index + 1]) }
+    if options[index] == "--frames" && index + 1 < options.length() {
+      if let Some(count) = options[index + 1].toInt() { limit = count }
+    }
+    index = index + 1
+  }
+  run(limit)
+}

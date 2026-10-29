@@ -83,6 +83,17 @@ already skips records it does not know. Grill Log — **Q:** Reuse the interface
 No; they are intents (`activate`, `dismiss`), not keys, and depend on modifiers. Physical codes
 make bindings mean the same key on every layout.
 
+## Presentation regression (#724)
+
+[[Desktop Presentation Test]] draws the real view in a bitmap graphics context, checking exact
+asymmetric rows/channels at normal size, resized logical bounds and 2x backing scale, plus empty
+frame black fill. The original unconditional Y transform reverses rows and must fail this gate.
+[View coordinates](https://developer.apple.com/documentation/appkit/nsview/isflipped) document the
+default unflipped view. Native pixels and actual window evidence establish the implementation result.
+
+Resolved Grill Log: preserve the default view geometry and remove only the redundant bitmap
+inversion, rather than altering input/accessibility conventions or changing the portable renderer.
+
 - **Q:** Infer density from the frame size at present? **A:** No; a frame twice the content
   size is ambiguous between a sharp frame and a requested resize. The caller declares density
   once, and present stays a pure function of the declared density and frame size.

@@ -1,0 +1,104 @@
+module UsesArkAudio
+
+import Std.Audio as Pcm
+import Std.Lanes as Lanes
+import Std.Math.Float as Float
+import Ark.Audio as Audio
+import Ark.Math as V
+
+fn require(condition: Bool, name: Str) {
+  if !condition { panic(name) }
+}
+
+fn close(value: Option[Float64], expected: Float64) -> Bool {
+  match value {
+    case Some(actual) => Float.abs(actual - expected) < 0.000000001
+    case None => false
+  }
+}
+
+fn tone(values: Array[Float64]) -> Audio.Sound {
+  let Some(made) = Audio.fromSamples(Lanes.fromArray(&values)) else { panic("sound") }
+  made
+}
+
+fn fresh(model: Str) -> Audio.Mixer {
+  let Some(made) = Audio.create(48000, Audio.Rolloff{model, near: 1.0, far: 11.0}) else { panic("mixer") }
+  made
+}
+
+fn centered() {
+  let Some(withMusic) = Audio.setBus(fresh("inverse"), "music", 0.5) else { panic("bus") }
+  let Some((playing, voice)) = Audio.play(withMusic, &tone([0.5, -0.5, 0.25]), "music", 1.0, false, None) else { panic("play") }
+  require(Audio.playing(&playing, voice), "voice live")
+  let Some((after, first)) = Audio.render(playing, 2) else { panic("render") }
+  require(Lanes.toArray(&first.left) == [0.25, -0.25] && Lanes.toArray(&first.right) == [0.25, -0.25], "bus gain, centered unit pan")
+  let Some((done, second)) = Audio.render(after, 2) else { panic("tail") }
+  require(Lanes.toArray(&second.left) == [0.125, 0.0], "one-shot pads with silence")
+  require(!Audio.playing(&done, voice), "finished one-shot releases its handle")
+  require(Audio.stop(done, voice) == None, "stale stop")
+  let Some((looped, _)) = Audio.play(fresh("none"), &tone([1.0, 0.5]), "master", 1.0, true, None) else { panic("loop") }
+  let Some((_, wrapped)) = Audio.render(looped, 5) else { panic("loop render") }
+  require(Lanes.toArray(&wrapped.left) == [1.0, 0.5, 1.0, 0.5, 1.0], "looping wraps within one block")
+  let Some(quiet) = Audio.setBus(looped, "master", 0.0) else { panic("master") }
+  let Some((_, muted)) = Audio.render(quiet, 2) else { panic("muted") }
+  require(Lanes.toArray(&muted.left) == [0.0, 0.0], "master bus scales everything")
+}
+
+fn spatial() {
+  let ones = tone([1.0, 1.0, 1.0, 1.0])
+  let Some((right, _)) = Audio.play(fresh("inverse"), &ones, "master", 1.0, true, Some(V.vec3(1.0, 0.0, 0.0))) else { panic("right") }
+  let Some((_, hardRight)) = Audio.render(right, 1) else { panic("hard right") }
+  require(close(Lanes.get(&hardRight.left, 0), 0.0) && close(Lanes.get(&hardRight.right, 0), 1.0), "equal-power pan to the right")
+  let Some((ahead, _)) = Audio.play(fresh("inverse"), &ones, "master", 1.0, true, Some(V.vec3(0.0, 0.0, -4.0))) else { panic("ahead") }
+  let Some((_, front)) = Audio.render(ahead, 1) else { panic("front") }
+  let expected = 0.25 * Float.cos(Float.pi() * 0.25)
+  require(close(Lanes.get(&front.left, 0), expected) && close(Lanes.get(&front.right, 0), expected), "inverse distance, centered power")
+  let Some((far, _)) = Audio.play(fresh("linear"), &ones, "master", 1.0, true, Some(V.vec3(0.0, 0.0, -20.0))) else { panic("far") }
+  let Some((_, silent)) = Audio.render(far, 1) else { panic("silent") }
+  require(Lanes.toArray(&silent.left) == [0.0], "linear rolloff reaches silence")
+  let Some((moved, voice)) = Audio.play(fresh("none"), &ones, "master", 1.0, true, Some(V.vec3(-3.0, 0.0, 0.0))) else { panic("moved") }
+  let Some(occluded) = Audio.update(moved, voice, 0.5, Some(V.vec3(-3.0, 0.0, 0.0)), 0.5) else { panic("update") }
+  let Some((_, behind)) = Audio.render(occluded, 1) else { panic("occluded") }
+  require(close(Lanes.get(&behind.left, 0), 0.25) && close(Lanes.get(&behind.right, 0), 0.0), "gain and occlusion multiply, hard left")
+  let Some(turned) = Audio.setListener(moved, V.vec3(0.0, 0.0, 0.0), V.vec3(-1.0, 0.0, 0.0)) else { panic("turned") }
+  let Some((_, flipped)) = Audio.render(turned, 1) else { panic("flipped") }
+  require(close(Lanes.get(&flipped.right, 0), 1.0), "listener orientation decides the side")
+}
+
+fn output() {
+  let Some((playing, _)) = Audio.play(fresh("none"), &tone([1.0, -0.5]), "master", 1.0, false, None) else { panic("play") }
+  let Some((mixed, block)) = Audio.render(playing, 2) else { panic("render") }
+  let Some(pcm) = Audio.toPcm(&mixed, &block) else { panic("pcm") }
+  require(pcm.format.channels == 2 && pcm.format.sampleRate == 48000, "stereo format")
+  require(Pcm.samples(&pcm) == [32767, 32767, -16384, -16384], "interleaved signed 16-bit frames")
+  let Some(decoded) = Audio.decode(&pcm) else { panic("decode") }
+  require(Lanes.toArray(&decoded.samples) == [1.0, -16384.0 / 32767.0], "stereo decodes to mono")
+}
+
+fn refusals() {
+  require(Audio.create(0, Audio.Rolloff{model: "none", near: 1.0, far: 2.0}) == None, "rate")
+  require(Audio.create(48000, Audio.Rolloff{model: "cubic", near: 1.0, far: 2.0}) == None, "unknown rolloff")
+  require(Audio.create(48000, Audio.Rolloff{model: "inverse", near: 2.0, far: 1.0}) == None, "far beyond near")
+  let mixer = fresh("none")
+  let sound = tone([0.0])
+  require(Audio.play(mixer, &sound, "sfx", 1.0, false, None) == None, "unknown bus")
+  require(Audio.play(mixer, &sound, "master", -1.0, false, None) == None, "negative gain")
+  let nan = Float.fromBits(0x7ff8000000000000u64)
+  require(Audio.play(mixer, &sound, "master", 1.0, false, Some(V.vec3(nan, 0.0, 0.0))) == None, "non-finite position")
+  require(Audio.fromSamples(Lanes.fromArray(&[nan])) == None, "non-finite samples")
+  require(Audio.setBus(mixer, "", 1.0) == None && Audio.setBus(mixer, "sfx", nan) == None, "bus refusals")
+  require(Audio.setListener(mixer, V.vec3(0.0, 0.0, 0.0), V.vec3(0.0, 0.0, 0.0)) == None, "listener needs a right")
+  require(Audio.render(mixer, 0) == None, "empty block")
+  let Some((playing, voice)) = Audio.play(mixer, &sound, "master", 1.0, true, None) else { panic("play") }
+  require(Audio.update(playing, voice, 1.0, None, 1.5) == None, "occlusion range")
+}
+
+export fn main() -> Int {
+  centered()
+  spatial()
+  output()
+  refusals()
+  print("ark audio: ok")
+  0
+}

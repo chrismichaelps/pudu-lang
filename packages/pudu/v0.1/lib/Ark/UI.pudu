@@ -1,0 +1,225 @@
+module Ark.UI
+
+import Std.Lanes as Lanes
+import Std.Math.Float as Float
+import Ark.Math.Color as Color
+import Ark.Platform.Input as Input
+import Ark.Render.Device as Device
+
+/// A screen rectangle in pixels, y down.
+export type Rect = { x: Float64, y: Float64, width: Float64, height: Float64 }
+
+/// What a frame draws: filled rectangles back to front and text runs for a font renderer.
+export type Command = Fill(Rect, Color.Rgba) | Text(Rect, Str, Color.Rgba)
+
+/// What carries between frames: the widget held by the pointer, the keyboard focus, and the
+/// focusable widgets in the order the last frame declared them.
+export type Memory = { active: Str, focus: Str, order: Array[Str] }
+
+/// One frame in progress: input, the widget that held the press coming into this frame, the
+/// layout cursor and what has been declared so far.
+export type Ui = {
+  input: Input.State,
+  held: Str,
+  memory: Memory,
+  order: Array[Str],
+  commands: Array[Command],
+  x: Float64,
+  y: Float64,
+  width: Float64,
+  rowHeight: Float64,
+  spacing: Float64,
+}
+
+/// Colors by widget state.
+const PALETTE: Map[Str, Color.Rgba] = mapOf([
+    ("idle", Color.Rgba{r: 0.18, g: 0.2, b: 0.24, a: 1.0}),
+    ("hot", Color.Rgba{r: 0.26, g: 0.3, b: 0.36, a: 1.0}),
+    ("active", Color.Rgba{r: 0.12, g: 0.4, b: 0.7, a: 1.0}),
+    ("focus", Color.Rgba{r: 0.95, g: 0.75, b: 0.2, a: 1.0}),
+    ("text", Color.Rgba{r: 0.92, g: 0.92, b: 0.92, a: 1.0}),
+    ("fill", Color.Rgba{r: 0.2, g: 0.6, b: 0.35, a: 1.0}),
+  ])
+
+/// The primary pointer button.
+const PRIMARY: Int = 0
+
+/// Memory before any frame.
+export fn memory() -> Memory {
+  Memory{active: "", focus: "", order: []}
+}
+
+/// Begin a frame laying widgets out top-down in a column at (x, y) of the given width.
+export fn begin(previous: &Memory, input: &Input.State, x: Float64, y: Float64, width: Float64, rowHeight: Float64) -> Ui {
+  var focus = previous.focus
+  if Input.keyPressed(input, "Tab") && !previous.order.isEmpty() {
+    let backward = Input.keyHeld(input, "ShiftLeft") || Input.keyHeld(input, "ShiftRight")
+    focus = cycled(&previous.order, focus, backward)
+  }
+  let released = input.buttonsReleased.contains(PRIMARY)
+  let active = if released { "" } else { previous.active }
+  Ui{input: *input, held: previous.active, memory: Memory{..*previous, focus, active}, order: [], commands: [], x, y, width, rowHeight, spacing: 4.0}
+}
+
+/// The rectangle the next widget occupies; the cursor moves below it.
+export fn next(ui: Ui) -> (Ui, Rect) {
+  let rect = Rect{x: ui.x, y: ui.y, width: ui.width, height: ui.rowHeight}
+  (Ui{..ui, y: ui.y + ui.rowHeight + ui.spacing}, rect)
+}
+
+/// A line of text.
+export fn label(ui: Ui, text: Str) -> Ui {
+  let (moved, rect) = next(ui)
+  push(moved, Text(rect, text, tone("text")))
+}
+
+/// A push button; true on the frame it is clicked or activated from the keyboard.
+export fn button(ui: Ui, id: Str, text: Str) -> (Ui, Bool) {
+  let (moved, rect) = next(ui)
+  let (pressed, clicked) = interact(moved, id, &rect)
+  let keyed = pressed.memory.focus == id && Input.keyPressed(&pressed.input, "Enter")
+  let filled = push(pressed, Fill(rect, tone(stateOf(&pressed, id, &rect))))
+  let outlined = focusRing(filled, id, &rect)
+  (push(outlined, Text(rect, text, tone("text"))), clicked || keyed)
+}
+
+/// A labelled toggle; answers the possibly flipped value.
+export fn checkbox(ui: Ui, id: Str, text: Str, checked: Bool) -> (Ui, Bool) {
+  let (drawn, clicked) = button(ui, id, text)
+  let value = if clicked { !checked } else { checked }
+  if !value { return (drawn, value) }
+  let row = Rect{x: drawn.x, y: drawn.y - drawn.spacing - drawn.rowHeight, width: drawn.rowHeight, height: drawn.rowHeight}
+  (push(drawn, Fill(inset(&row, 4.0), tone("fill"))), value)
+}
+
+/// A horizontal slider over [low, high]; dragging sets the value from the pointer, arrow keys
+/// step it by a twentieth of the range while focused.
+export fn slider(ui: Ui, id: Str, value: Float64, low: Float64, high: Float64) -> (Ui, Float64) {
+  let (moved, rect) = next(ui)
+  let (pressed, _) = interact(moved, id, &rect)
+  var current = Float.clamp(value, low, high)
+  if pressed.memory.active == id && rect.width > 0.0 {
+    let t = Float.clamp((Float.fromInt(pressed.input.pointerX) - rect.x) / rect.width, 0.0, 1.0)
+    current = low + (high - low) * t
+  }
+  if pressed.memory.focus == id {
+    let stride = (high - low) / 20.0
+    if Input.keyPressed(&pressed.input, "ArrowRight") { current = Float.clamp(current + stride, low, high) }
+    if Input.keyPressed(&pressed.input, "ArrowLeft") { current = Float.clamp(current - stride, low, high) }
+  }
+  let fraction = if high > low { (current - low) / (high - low) } else { 0.0 }
+  let track = push(pressed, Fill(rect, tone(stateOf(&pressed, id, &rect))))
+  let filled = push(track, Fill(Rect{..rect, width: rect.width * fraction}, tone("fill")))
+  (focusRing(filled, id, &rect), current)
+}
+
+/// Finish the frame: the memory for the next one and the draw list.
+export fn end(ui: Ui) -> (Memory, Array[Command]) {
+  (Memory{..ui.memory, order: ui.order}, ui.commands)
+}
+
+/// Draw every fill as two screen-space triangles in one device call, in declaration order.
+export fn render(commands: &Array[Command], target: Device.Target) -> Option[Device.Target] {
+  var xs: Array[Float64] = []
+  var ys: Array[Float64] = []
+  var rs: Array[Float64] = []
+  var gs: Array[Float64] = []
+  var bs: Array[Float64] = []
+  var layer = 0
+  for command in *commands {
+    if let Fill(rect, color) = command {
+      let left = rect.x
+      let right = rect.x + rect.width
+      let top = rect.y
+      let bottom = rect.y + rect.height
+      xs = xs.concat([left, right, left, right, right, left])
+      ys = ys.concat([top, top, bottom, top, bottom, bottom])
+      for _ in 0..6 {
+        rs = rs.push(color.r)
+        gs = gs.push(color.g)
+        bs = bs.push(color.b)
+      }
+      layer = layer + 1
+    }
+  }
+  if layer == 0 { return Some(target) }
+  // Later fills sit nearer the viewer so declaration order decides overlap.
+  var zs: Array[Float64] = []
+  for index in 0..layer {
+    let depth = 1.0 - Float.fromInt(index + 1) / Float.fromInt(layer + 1)
+    zs = zs.concat([depth, depth, depth, depth, depth, depth])
+  }
+  let count = xs.length()
+  let ones = Lanes.filled(count, 1.0) ?
+  let zeros = Lanes.filled(count, 0.0) ?
+  let batch = Device.ScreenBatch {
+    xs: Lanes.fromArray(&xs),
+    ys: Lanes.fromArray(&ys),
+    zs: Lanes.fromArray(&zs),
+    ws: ones,
+    rs: Lanes.fromArray(&rs),
+    gs: Lanes.fromArray(&gs),
+    bs: Lanes.fromArray(&bs),
+    us: zeros,
+    vs: zeros,
+  }
+  Device.draw(target, &batch, Device.CullNone)
+}
+
+/// Whether a point lies inside a rectangle, edges included on the top and left only.
+export fn contains(rect: &Rect, x: Float64, y: Float64) -> Bool {
+  x >= rect.x && y >= rect.y && x < rect.x + rect.width && y < rect.y + rect.height
+}
+
+/// Register a focusable widget, press it on a primary press over it and report a click when the
+/// press is released over it. Pressing a widget also focuses it.
+fn interact(ui: Ui, id: Str, rect: &Rect) -> (Ui, Bool) {
+  let over = contains(rect, Float.fromInt(ui.input.pointerX), Float.fromInt(ui.input.pointerY))
+  let registered = Ui{..ui, order: ui.order.push(id)}
+  if over && ui.input.buttonsPressed.contains(PRIMARY) {
+    return (Ui{..registered, memory: Memory{..registered.memory, active: id, focus: id}}, false)
+  }
+  // `begin` already cleared the active widget on release; the click belongs to the one that held it.
+  (registered, over && ui.input.buttonsReleased.contains(PRIMARY) && ui.held == id)
+}
+
+fn stateOf(ui: &Ui, id: Str, rect: &Rect) -> Str {
+  if ui.memory.active == id { return "active" }
+  if contains(rect, Float.fromInt(ui.input.pointerX), Float.fromInt(ui.input.pointerY)) { "hot" } else { "idle" }
+}
+
+fn focusRing(ui: Ui, id: Str, rect: &Rect) -> Ui {
+  if ui.memory.focus != id { return ui }
+  let ring = tone("focus")
+  let top = push(ui, Fill(Rect{..*rect, height: 2.0}, ring))
+  push(top, Fill(Rect{..*rect, y: rect.y + rect.height - 2.0, height: 2.0}, ring))
+}
+
+fn push(ui: Ui, command: Command) -> Ui {
+  Ui{..ui, commands: ui.commands.push(command)}
+}
+
+fn tone(name: Str) -> Color.Rgba {
+  match PALETTE.get(name) {
+    case Some(color) => color
+    case None => Color.opaque(1.0, 0.0, 1.0)
+  }
+}
+
+fn inset(rect: &Rect, amount: Float64) -> Rect {
+  Rect{x: rect.x + amount, y: rect.y + amount, width: rect.width - amount * 2.0, height: rect.height - amount * 2.0}
+}
+
+/// The next (or previous) focusable widget after `current`, wrapping; the first when none has focus.
+fn cycled(order: &Array[Str], current: Str, backward: Bool) -> Str {
+  let count = order.length()
+  var index = -1
+  var at = 0
+  for id in *order {
+    if id == current { index = at }
+    at = at + 1
+  }
+  if index < 0 { return if backward { order[count - 1] } else { order[0] } }
+  let step = if backward { count - 1 } else { 1 }
+  order[(index + step) % count]
+}
