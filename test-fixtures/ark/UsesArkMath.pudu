@@ -1,0 +1,62 @@
+module UsesArkMath
+
+import Std.Math.Float as Float
+import Ark.Math as Geometry
+
+fn require(condition: Bool, name: Str) {
+  if !condition { panic(name) }
+}
+
+fn close(actual: Float64, expected: Float64) -> Bool {
+  Float.abs(actual - expected) <= 1.0e-12
+}
+
+fn unit(value: Geometry.Vec3) -> Geometry.Vec3 {
+  match Geometry.normalized(value) {
+    case Some(found) => found
+    case None => panic("missing unit direction")
+  }
+}
+
+export fn main() -> Int {
+  let x = Geometry.vec3(1.0, 0.0, 0.0)
+  let y = Geometry.vec3(0.0, 1.0, 0.0)
+  let z = Geometry.cross(x, y)
+  require(z == Geometry.vec3(0.0, 0.0, 1.0), "cross orientation")
+  require(Geometry.cross(y, x) == Geometry.scale(z, -1.0), "cross antisymmetry")
+  let a = Geometry.vec3(2.0, -3.0, 4.0)
+  let b = Geometry.vec3(-5.0, 6.0, 7.0)
+  require(Geometry.add(a, b) == Geometry.vec3(-3.0, 3.0, 11.0), "add")
+  require(Geometry.subtract(a, b) == Geometry.vec3(7.0, -9.0, -3.0), "subtract")
+  require(Geometry.scale(a, 2.0) == Geometry.vec3(4.0, -6.0, 8.0), "scale")
+  require(Geometry.dot(a, b) == 0.0 && Geometry.dot(b, a) == 0.0, "dot symmetry")
+  require(Geometry.dot(Geometry.cross(a, b), a) == 0.0, "cross perpendicular left")
+  require(Geometry.dot(Geometry.cross(a, b), b) == 0.0, "cross perpendicular right")
+  require(Geometry.length(Geometry.vec3(3.0, 4.0, 0.0)) == Some(5.0), "length")
+  require(Geometry.length(Geometry.vec3(-0.0, 0.0, 0.0)) == Some(0.0), "zero length")
+  require(Geometry.normalized(Geometry.vec3(0.0, -0.0, 0.0)) == None, "zero direction")
+  let infinity = 1.0e308 * 2.0
+  let nan = infinity - infinity
+  require(!Geometry.isFinite(Geometry.vec3(nan, 1.0, 0.0)), "nan component")
+  require(Geometry.length(Geometry.vec3(0.0, infinity, 0.0)) == None, "infinite length")
+  require(Geometry.normalized(Geometry.vec3(0.0, 0.0, -infinity)) == None, "infinite direction")
+  require(Geometry.normalized(Geometry.vec3(nan, 0.0, 0.0)) == None, "nan direction")
+  for size in [1.0e-300, 1.0, 1.0e300] {
+    let direction = unit(Geometry.vec3(3.0 * size, 4.0 * size, 0.0))
+    require(close(direction.x, 0.6) && close(direction.y, 0.8), "scaled direction")
+    match Geometry.length(Geometry.vec3(3.0 * size, 4.0 * size, 0.0)) {
+      case Some(found) => require(close(found / size, 5.0), "scaled length")
+      case None => panic("missing finite length")
+    }
+  }
+  let maximum = 1.7976931348623157e308
+  let enormous = Geometry.vec3(maximum, maximum, maximum)
+  require(Geometry.length(enormous) == None, "unrepresentable length")
+  require(Geometry.isFinite(unit(enormous)), "representable direction")
+  let diagonal = unit(enormous)
+  require(close(Geometry.dot(diagonal, diagonal), 1.0), "unit diagonal")
+  require(unit(Geometry.vec3(5.0e-324, 0.0, 0.0)) == x, "subnormal direction")
+  require(unit(Geometry.vec3(-5.0e-324, 0.0, 0.0)) == Geometry.scale(x, -1.0), "negative subnormal")
+  print("ark math: ok")
+  0
+}

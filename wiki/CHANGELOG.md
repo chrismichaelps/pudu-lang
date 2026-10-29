@@ -30,6 +30,13 @@ tags: [changelog]
 
 - [[Runtime Raster]] fills RGBA8 targets and rasterizes depth-tested triangles with a top-left
   fill rule; [[Raster Fixture]] checks golden pixels in [[Lanes Gate]].
+## 2026-10-29 — Lane work overlaps across threads (#726)
+
+- [[Pudu Cabal]] links a 32 MB large-object allocation limit, so lane kernel buffers share
+  collections instead of forcing a stop-the-world collection per call; four workers run lane
+  work 2.1x faster with unchanged serial time and lower peak memory.
+- [[Lane Collection Gate]] counts collections on [[Lane Collection Fixture]];
+  [[Lane Parallel Benchmark]] records the throughput; [[Lane Collection Delivery]] has evidence.
 
 ## 2026-10-27 — Packed binary64 lanes (#668)
 
@@ -61,6 +68,13 @@ tags: [changelog]
 - [[Hackage Transport Test]] checks the actual command without fetching an index; existing,
   missing, repeated and malformed configurations are covered. [[Hackage Transport Delivery]]
   records independent review and the outstanding CI observation.
+
+## 2026-10-27 — Integrated Ark foundation (#652)
+
+- [[Ark Engine]] defines dependency layers and the outstanding engine/native-execution ledger.
+- [[Ark Math]] adds provisional binary64 Vec3 arithmetic and scaled checked length/normalization.
+- [[Compiler Library]], [[Pudu Cabal Manifest]] and [[Package Binary]] include Ark in shipped libraries.
+- [[Ark Math Gate]] checks numerical extremes and precision refusal; [[Ark Foundation Delivery]] records validation and review status.
 
 ## 2026-10-09 — Integrated Database graph expectations (#478)
 

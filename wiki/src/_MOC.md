@@ -9,6 +9,8 @@ tags: [moc, module]
 
 - [[Website Linux Workflow]] · [[Hackage Transport Test]] — configured HTTPS index transport.
 
+- [[src/Ark/_MOC|Ark Modules]] — engine library and focused conformance gates.
+
 - [[Derive Index Output Gate]] — checked strategy output and visibility.
 
 - [[Database Admission Fixture]] · [[Database Admission Transport]] — bounded pool ownership.
@@ -119,6 +121,7 @@ tags: [moc, module]
 - [[Runtime Broadphase]] · [[Overlap Pairs Fixture]] — sort-and-sweep box overlap pairs.
 - [[Runtime Raster]] · [[Raster Fixture]] — native triangle rasterization for the software render device.
 - [[Lanes Gate]] · [[Lanes Fixture]] · [[Lanes Benchmark]] — lane conformance and measurement.
+- [[Lane Collection Gate]] · [[Lane Collection Fixture]] · [[Lane Parallel Benchmark]] — lane buffers share collections so threads overlap.
 - [[Float Kernel Identity]] — names and shapes of the binary64 kernels, read by checker and runtime.
 - [[Eval Word Map]] — checked UInt64 map payload reductions for STD.
 - [[Runtime Buffer Kernels]] — unboxed contiguous byte buffer operations.

@@ -54,6 +54,8 @@ PUDU=$(cabal list-bin pudu --enable-optimization=2)
 run 'every committed Pudu file is formatted' \
   bash -c '"$PUDU" fmt --check packages/pudu test-fixtures examples'
 run 'every diagnostic code means one thing' node test/diagnostic-codes.mjs
+run 'Ark math preserves scaled geometry and refuses wrong precision' \
+  node test/ark-math.mjs "$PUDU"
 run 'atomic writes preserve creation and replacement permissions' \
   bash -c 'python3 test/atomic-permissions.py "$PUDU"'
 run 'only a compiler change at a new version releases' python3 test/release-plan.test.py
@@ -61,6 +63,8 @@ run 'the fixtures still reach as much of the library' \
   bash -c 'node test/api-coverage.mjs "$PUDU"'
 run 'a streaming reader holds as much at ten times the input' \
   bash -c 'python3 test/residency.py "$PUDU"'
+run 'lane kernel buffers share collections across calls' \
+  bash -c 'node test/lane-collections.mjs "$PUDU"'
 run 'pudu installs and publishes packages through git and a stand-in GitHub' \
   bash -c 'python3 test/package-registry.py --pudu "$PUDU"'
 run 'pudu install adds, moves, restores, and removes packages as a terminal uses it' \

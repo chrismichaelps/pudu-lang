@@ -17,6 +17,7 @@ extra-source-files: cbits/pudu_desktop.h
                     cbits/pudu_audio.h
                     cbits/pudu_audio_stream.h
 data-files:         lib/Std/*.pudu
+                    lib/Ark/*.pudu
                     lib/Std/App/*.pudu
                     lib/Std/Audio/*.pudu
                     lib/Std/Archive/*.pudu
@@ -392,7 +393,7 @@ executable pudu
   import:           warnings
   hs-source-dirs:   app
   main-is:          Main.hs
-  ghc-options:      -threaded -rtsopts -with-rtsopts=-qn2
+  ghc-options:      -threaded -rtsopts "-with-rtsopts=-qn2 -AL32m"
   build-depends:
     base >=4.20 && <4.23,
     containers >=0.6 && <0.8,
