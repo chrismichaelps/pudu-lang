@@ -34,6 +34,7 @@ tags: [moc, ark]
 
 - [[Ark Animation]] · [[Ark Animation Machine]] · [[Ark Animation Fixture]] · [[Ark Animation Gate]] — lane pose sampling, blending and cross-fades.
 - [[Ark Ik]] · [[Ark Limbs]] · [[Ark Ik Fixture]] · [[Ark Ik Benchmark]] — two-bone and chain inverse kinematics, single and batched on lanes.
+- [[Ark Morph]] · [[Ark Morph Fixture]] · [[Ark Morph Benchmark]] — dense and sparse morph targets blended on lanes.
 
 - [[Ark Matrix]] · [[Ark Matrix Fixture]] · [[Ark Matrix Gate]] — column-vector algebra and projection.
 

@@ -62,7 +62,9 @@ fix, shared lane collections, the concurrency release fix, the physics and chara
 trait provider dispatch (#742, #743, PR #744); #734 and #735 wait on that work. The Ark archive
 (#732) builds on `Std.Binary` once it lands.
 
-Open target obligations: lights, shadows and text rendering; morph targets; Core allocators;
+Morph targets (#747) stack on the IK branch.
+
+Open target obligations: lights, shadows and text rendering; Core allocators;
 asynchronous streaming; editor and tools.
 
 Exact next action: rebase #732 onto `Std.Binary` once PR #741 merges, keeping only the engine's
