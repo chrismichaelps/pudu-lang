@@ -5,6 +5,12 @@ tags: [changelog]
 
 # Changelog
 
+## 2026-10-29 — Native presentation orientation (#724)
+
+[[Pudu Desktop Adapter]] preserves top-to-bottom surface rows in the default native view.
+[[Desktop Presentation Test]] checks asymmetric rows/channels, logical resize and backing scale.
+[[Desktop Presentation Delivery]] records live-engine discovery and independent review obligations.
+
 ## 2026-10-27 — Verified HTTPS CI index transport (#656)
 
 - [[Website Linux Workflow]] configures signed HTTPS Hackage access before one explicit update.
