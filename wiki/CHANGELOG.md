@@ -5,6 +5,11 @@ tags: [changelog]
 
 # Changelog
 
+## 2026-10-28 — Strided byte groups (#699)
+
+- [[Eval Bytes]] and [[Std Bytes]] add `strided(offset, width, stride)`, copying a fixed-width
+  group from every stride in one native pass; packed RGBA becomes RGB without a per-pixel loop.
+
 ## 2026-10-27 — Verified HTTPS CI index transport (#656)
 
 - [[Website Linux Workflow]] configures signed HTTPS Hackage access before one explicit update.

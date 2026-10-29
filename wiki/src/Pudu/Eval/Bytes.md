@@ -12,12 +12,17 @@ aliases: [Eval Bytes]
 ## Purpose
 Own the compact runtime representation and built-in operations for Pudu `Bytes` values.
 ## Interface
-Constructs bytes from text/arrays and dispatches length, slice, search, conversion, concat, and
-reverse operations as total evaluator results.
+Constructs bytes from text/arrays and dispatches length, slice, search, conversion, concat,
+reverse and strided-group operations as total evaluator results. `strided(offset, width, stride)`
+copies `width` bytes from every `stride`-byte group in one exact-size allocation; a malformed
+group shape answers `None` rather than clamping.
 ## Governance and algorithm
 Uses strict `ByteString`; bounds answer options or clamped slices according to the public contract;
 UTF-8 decoding reports failure rather than replacement text.
 ## Grill Log
+
+- **Q:** Leave channel extraction to a Pudu loop? **A:** No; removing alpha from a 640×480 frame
+  took about a second as an interpreted push loop. One native pass copies each group directly.
 - **Q:** Store bytes as evaluator arrays? **A:** No. _Rationale:_ it multiplies per-byte allocation
   and prevents cheap native slicing/search. _Rejected:_ partial indexing.
 ## Referenced by
