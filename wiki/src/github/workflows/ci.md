@@ -11,6 +11,8 @@ aliases: [Pudu Continuous Verification]
 
 [[Ark Assets Gate]] verifies checked CPU texture data and sampling before the higher engine gates.
 
+[[Ark Game Gate]] runs after audio, driving the scene-stack loop and camera rigs headlessly.
+
 [[Ark Audio Gate]] runs after animation, mixing spatial voices to PCM16.
 
 [[Ark Animation Gate]] runs after physics, sampling and cross-fading joint poses.

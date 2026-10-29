@@ -5,6 +5,12 @@ tags: [changelog]
 
 # Changelog
 
+## 2026-10-28 — Game loop and camera rigs (#707)
+
+- [[Ark Game]] runs a generic scene stack over the fixed-step clock with action-mapped input,
+  interpolation alpha and a windowed loop; every frame step is a pure, headless-testable value.
+- [[Ark Game Camera]] adds a critically damped follow rig stable for any step and a clamped orbit.
+
 ## 2026-10-28 — Spatial audio mixer (#706)
 
 - [[Ark Audio]] mixes handle-addressed voices on Float64 lanes through named buses, with
