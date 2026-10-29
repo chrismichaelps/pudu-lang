@@ -5,6 +5,12 @@ tags: [changelog]
 
 # Changelog
 
+## 2026-10-28 — Per-pixel shading in the raster kernel (#712)
+
+- [[Runtime Shade]] and [[Runtime Raster]] light every pixel from interpolated normals and
+  positions: Lambert with ambient, Blinn-Phong highlights and Fresnel reflection of a procedural
+  sky with a sun disc.
+
 ## 2026-10-28 — Wave tank showcase
 
 - [[Wave Tank Demo]] simulates a damped wave equation on a 56×56 height field entirely with

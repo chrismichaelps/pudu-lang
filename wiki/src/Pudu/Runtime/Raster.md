@@ -26,6 +26,9 @@ once, then rasterizes every triangle (three vertices each) in place and answers 
   color-space code and filter code checked by [[Runtime Sampler]]. UV is interpolated
   perspective-correctly like color; the lit color is multiplied by the sampled texel. A texel
   whose alpha is below one half is a cutout: neither depth nor color is written.
+- `rasterShadedTriangles` takes perspective lanes with unlit base colors, then world normal and
+  position lanes and a uniform lane; [[Runtime Shade]] lights every pixel from its
+  perspective-correct normal and position.
 - Channels clamp to [0, 1] and round to eight bits; alpha is written opaque.
 - Cull 0 keeps both faces, 1 drops faces clockwise in device coordinates. Vertices with depth
   outside [0, 1] or non-finite positions skip their triangle; near-plane clipping belongs to the
