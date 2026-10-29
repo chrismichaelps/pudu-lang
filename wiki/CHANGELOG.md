@@ -5,6 +5,13 @@ tags: [changelog]
 
 # Changelog
 
+## 2026-10-28 — Packaged content and cooking (#710)
+
+- [[Ark Pack]] writes deterministic ARKP packs (sorted index, CRC-32 per file) and decodes them
+  into zero-copy views; [[Ark Virtual Files]] mounts packs.
+- [[Ark Build]] cooks declared assets by importing each exactly as the runtime will, packs them
+  with a manifest, and loads a pack back into an [[Ark Asset Server]].
+
 ## 2026-10-28 — Game networking foundations (#709)
 
 - [[Ark Net]] tracks 16-bit wrapping sequences with 33-packet acknowledgement windows, smoothed

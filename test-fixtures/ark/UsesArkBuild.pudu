@@ -1,0 +1,72 @@
+module UsesArkBuild
+
+import Ark.Assets.Import as Import
+import Ark.Assets.Server as Server
+import Ark.Assets.Texture as Texture
+import Ark.Build as Build
+import Ark.Platform.Pack as Pack
+import Ark.Platform.Vfs as Vfs
+
+fn require(condition: Bool, name: Str) {
+  if !condition { panic(name) }
+}
+
+fn packs() {
+  let files = mapOf([("b/two.bin", bytesOf([2u8, 2u8])), ("a.bin", bytesOf([1u8]))])
+  let Ok(pack) = Pack.encode(&files) else { panic("encode") }
+  require(pack.take(4) == "ARKP".toBytes(), "magic")
+  let Ok(reordered) = Pack.encode(&mapOf([("a.bin", bytesOf([1u8])), ("b/two.bin", bytesOf([2u8, 2u8]))])) else { panic("again") }
+  require(pack == reordered, "deterministic regardless of insertion order")
+  require(Pack.decode(&pack) == Ok(files), "round trip")
+  let Ok(empty) = Pack.encode(&mapOf([])) else { panic("empty") }
+  require(Pack.decode(&empty) == Ok(mapOf([])), "empty pack")
+  require(Pack.decode(&"NOPE".toBytes().concat(pack.drop(4))) == Err(Pack.BadMagic), "bad magic")
+  let future = pack.take(4).concat(bytesOf([2u8, 0u8, 0u8, 0u8])).concat(pack.drop(8))
+  require(Pack.decode(&future) == Err(Pack.UnsupportedVersion(2)), "version")
+  require(Pack.decode(&pack.take(20)) == Err(Pack.Truncated), "truncated index")
+  let last = pack.length() - 1
+  let flipped = pack.take(last).concat(bytesOf([9u8]))
+  require(Pack.decode(&flipped) == Err(Pack.ChecksumMismatch("b/two.bin")), "corrupted data")
+  require(Pack.decode(&pack.take(last)) == Err(Pack.OutOfBounds("b/two.bin")), "data shorter than the index says")
+  require(Pack.encode(&mapOf([("../escape", bytesOf([]))])) == Err(Pack.InvalidPath("../escape")), "noncanonical path")
+  let Ok(single) = Pack.encode(&mapOf([("x", bytesOf([7u8]))])) else { panic("single") }
+  let twice = single.take(8).concat(bytesOf([2u8, 0u8, 0u8, 0u8])).concat(single.slice(12, 37)).concat(single.slice(12, 37)).concat(single.drop(37))
+  require(Pack.decode(&twice) == Err(Pack.DuplicatePath("x")), "duplicate path")
+  let Ok(vfs) = Vfs.mountPack(Vfs.empty(), "data", &pack) else { panic("mount") }
+  require(Vfs.read(&vfs, "data:/b/two.bin") == Ok(bytesOf([2u8, 2u8])), "pack mount reads")
+  require(Vfs.read(&vfs, "data:/missing") == Err(Vfs.NotFound("missing")), "pack mount missing file")
+  require(Vfs.mountPack(Vfs.empty(), "data", &flipped) == Err(Vfs.PackFailure(Pack.ChecksumMismatch("b/two.bin"))), "corrupt pack refused at mount")
+}
+
+fn cooking() {
+  let Some(red) = Texture.rgba8(1, 1, bytesOf([255u8, 0u8, 0u8, 255u8]), "srgb") else { panic("texture") }
+  let Some(cooked) = Import.cookTexture(&red) else { panic("cook texture") }
+  let sources = mapOf([("art/red.arkt", cooked), ("art/red.mat", bytesOf([255u8, 255u8, 255u8, 255u8])), ("text/hello.txt", "hello".toBytes())])
+  let Ok(authoring) = Vfs.mountMemory(Vfs.empty(), "src", &sources) else { panic("sources") }
+  let declared = [
+    Server.Source{id: "red", path: "src:/art/red.arkt", importer: "texture", dependencies: []},
+    Server.Source{id: "brick", path: "src:/art/red.mat", importer: "material", dependencies: ["red"]},
+    Server.Source{id: "hello", path: "src:/text/hello.txt", importer: "bytes", dependencies: []},
+  ]
+  let Ok(built) = Build.cook(authoring, &declared) else { panic("cook") }
+  require(built.assets == 3, "every asset packed")
+  let Ok(server) = Build.load(Vfs.empty(), "game", &built.pack) else { panic("load") }
+  require(Server.ids(&server) == ["red", "hello", "brick"], "manifest restores dependency order")
+  let Some(issued) = Server.handle(&server, "brick") else { panic("handle") }
+  let Some(Import.Surface(material)) = Server.payload(&server, issued) else { panic("material") }
+  require(material.albedo == red, "cooked material resolves its texture from the pack")
+  let Some(text) = Server.handle(&server, "hello") else { panic("text") }
+  require(Server.payload(&server, text) == Some(Import.Raw("hello".toBytes())), "raw bytes survive")
+  let broken = [Server.Source{id: "bad", path: "src:/text/hello.txt", importer: "texture", dependencies: []}]
+  require(Build.cook(authoring, &broken) == Err(Build.Assets(Server.ImportFailed("bad", "missing texture header"))), "cooking imports and refuses bad data")
+  let reserved = [Server.Source{id: "manifest.arkm", path: "src:/text/hello.txt", importer: "bytes", dependencies: []}]
+  require(Build.cook(authoring, &reserved) == Err(Build.Packing(Pack.InvalidPath("manifest.arkm"))), "manifest name reserved")
+  require(Build.load(Vfs.empty(), "game", &bytesOf([])) == Err(Build.Resources(Vfs.PackFailure(Pack.BadMagic))), "not a pack")
+}
+
+export fn main() -> Int {
+  packs()
+  cooking()
+  print("ark build: ok")
+  0
+}

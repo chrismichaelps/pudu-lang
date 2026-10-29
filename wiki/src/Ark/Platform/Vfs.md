@@ -17,6 +17,9 @@ Directory mounts canonicalize an existing directory and use [[Std Fs]] real-loca
 before [[Std Io]] scoped byte reads. Memory mounts hold validated relative-name/byte maps; old
 Vfs values retain their memory snapshots. A const reader table selects directory/memory backends.
 
+`mountPack(vfs, name, pack)` decodes an [[Ark Pack]] and mounts its files as views into the pack's
+bytes under the `pack` backend; corrupt packs are refused at mount as `PackFailure`.
+
 Names are nonempty and exclude slash, backslash, colon, NUL and dot-directory names. Relative
 paths use forward slashes with nonempty components, no `.`/`..`, backslash, colon or NUL. Reject
 noncanonical spellings instead of silently aliasing resource identities.
@@ -33,6 +36,9 @@ replacement. No adversarial filesystem sandbox or atomic open-relative guarantee
 The API owns no persistent file handles; each scoped read closes before it returns.
 
 ## Resolved Grill Log
+
+- **Q:** Give packs their own reader? **A:** No; `mountPack` decodes a pack into views of its own
+  bytes, so the `pack` kind reuses the memory reader through the factory table.
 
 - **Q:** Let Assets import host I/O for every format? **A:** No; Assets consumes virtual bytes
   through Platform, keeping filesystem variability at one layer boundary.

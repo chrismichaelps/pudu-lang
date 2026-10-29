@@ -74,6 +74,8 @@ run 'Ark UI handles pointer and keyboard focus and draws its widgets' \
   node test/ark-ui.mjs "$PUDU"
 run 'Ark net acknowledges packets and replicates quantized deltas' \
   node test/ark-net.mjs "$PUDU"
+run 'Ark build cooks checked packs and loads them through the asset server' \
+  node test/ark-build.mjs "$PUDU"
 run 'atomic writes preserve creation and replacement permissions' \
   bash -c 'python3 test/atomic-permissions.py "$PUDU"'
 run 'only a compiler change at a new version releases' python3 test/release-plan.test.py

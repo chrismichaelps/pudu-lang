@@ -14,6 +14,8 @@ aliases: [Repository Gates]
 
 [[Ark Assets Gate]] validates texture sampling, failure diagnostics and nested distribution data.
 
+[[Ark Build Gate]] verifies packs, pack mounts, cook/load, a positioned refusal and shipping.
+
 [[Ark Net Gate]] verifies acknowledgement windows, the header format, replication deltas, a
 positioned refusal and shipping.
 

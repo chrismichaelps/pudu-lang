@@ -20,6 +20,8 @@ tags: [moc, ark]
 - [[Ark Physics Fixture]] · [[Ark Physics Gate]] — physical scenarios, positioned refusal and shipping.
 - [[Falling Bodies Demo]] · [[Ark Physics Benchmark]] — windowed simulation and measured solver workload.
 
+- [[Ark Build]] · [[Ark Pack]] · [[Ark Build Fixture]] · [[Ark Build Gate]] — deterministic packs, pack mounts and cook/load.
+
 - [[Ark Net]] · [[Ark Replication]] · [[Ark Net Fixture]] · [[Ark Net Gate]] — acknowledged packets and quantized delta replication.
 
 - [[Ark UI]] · [[Ark UI Fixture]] · [[Ark UI Gate]] — immediate-mode widgets, focus and device-rendered draw lists.
