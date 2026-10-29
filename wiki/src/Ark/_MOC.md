@@ -20,6 +20,8 @@ tags: [moc, ark]
 - [[Ark Physics Fixture]] · [[Ark Physics Gate]] — physical scenarios, positioned refusal and shipping.
 - [[Falling Bodies Demo]] · [[Ark Physics Benchmark]] — windowed simulation and measured solver workload.
 
+- [[Ark Animation]] · [[Ark Animation Machine]] · [[Ark Animation Fixture]] · [[Ark Animation Gate]] — lane pose sampling, blending and cross-fades.
+
 - [[Ark Matrix]] · [[Ark Matrix Fixture]] · [[Ark Matrix Gate]] — column-vector algebra and projection.
 
 - [[Ark Handle]] · [[Ark Profile]] — generational handles and nanosecond scopes (Core).

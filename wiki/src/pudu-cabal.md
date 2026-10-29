@@ -17,6 +17,9 @@ cache identity; full analysis remains available independently of executable reus
 Distribute `lib/Ark/Assets/*.pudu`, including [[Ark Texture Asset]]. Resolved Grill Log: nested
 CPU asset modules are shipped library data and must remain present outside the checkout.
 
+Distribute `lib/Ark/Animation/*.pudu` with the root animation module, including [[Ark Animation
+Machine]]; [[Ark Animation Gate]] checks the archive.
+
 Distribute `lib/Ark/Physics/*.pudu` with the root physics facade. Resolved Grill Log: the
 source archive must retain contact, step and query modules; checkout-only success is insufficient.
 

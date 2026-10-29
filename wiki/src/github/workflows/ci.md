@@ -11,6 +11,8 @@ aliases: [Pudu Continuous Verification]
 
 [[Ark Assets Gate]] verifies checked CPU texture data and sampling before the higher engine gates.
 
+[[Ark Animation Gate]] runs after physics, sampling and cross-fading joint poses.
+
 [[Ark Physics Gate]] runs after render conformance, exercising physical scenarios and numeric
 admission plus disjoint contact batching regressions against the optimized compiler.
 

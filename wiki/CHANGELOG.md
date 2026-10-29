@@ -5,6 +5,14 @@ tags: [changelog]
 
 # Changelog
 
+## 2026-10-28 — Skeletal animation clips and state machine (#702)
+
+- [[Ark Animation]] samples key-major joint clips with clamp/loop wrapping and blends or layers
+  whole skeletons as lane kernels with shortest-arc rotations.
+- [[Ark Animation Machine]] drives clips with event transitions and cross-fades;
+  [[Ark Animation Fixture]] and [[Ark Animation Gate]] cover sampling, blending and refusals.
+- [[Ark Render Device]] encodes snapshot PPM with one strided copy (about 1 s to 1 ms at 640×480).
+
 ## 2026-10-28 — Strided byte groups (#699)
 
 - [[Eval Bytes]] and [[Std Bytes]] add `strided(offset, width, stride)`, copying a fixed-width

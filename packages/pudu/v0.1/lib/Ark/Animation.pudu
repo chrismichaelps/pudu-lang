@@ -1,0 +1,159 @@
+module Ark.Animation
+
+import Std.Lanes as Lanes
+import Std.Math.Float as Float
+import Ark.World.Hierarchy as Hierarchy
+
+/// Sampled joint poses: key k holds joints [k * joints, (k + 1) * joints) of every pose lane.
+export type Clip = { joints: Int, times: Array[Float64], keys: Hierarchy.Poses }
+
+/// Maps a playback time to a time inside [0, duration].
+type Wrap = fn(Float64, Float64) -> Float64
+
+const WRAPS: Map[Str, Wrap] = mapOf([("clamp", clampTime), ("loop", loopTime)])
+
+/// Unit quaternions may drift this far from length one through authoring and import.
+const UNIT_TOLERANCE: Float64 = 0.000001
+
+/// A clip from strictly increasing finite key times starting at zero and key-major pose lanes
+/// holding unit rotations; None for any other shape.
+export fn fromKeys(joints: Int, times: &Array[Float64], keys: Hierarchy.Poses) -> Option[Clip] {
+  if joints <= 0 || times.isEmpty() || times[0] != 0.0 { return None }
+  var previous = -1.0
+  for time in *times {
+    if !Float.isFinite(time) || time <= previous { return None }
+    previous = time
+  }
+  let count = times.length() * joints
+  for lane in channels(&keys) {
+    if Lanes.count(&lane) != count || !Float.isFinite(Lanes.sum(&Lanes.scale(&lane, 0.0))) { return None }
+  }
+  let lengths = squaredLength(&keys) ?
+  let low = Lanes.smallest(&lengths) ?
+  let high = Lanes.largest(&lengths) ?
+  if low < 1.0 - UNIT_TOLERANCE || high > 1.0 + UNIT_TOLERANCE { return None }
+  Some(Clip{joints, times: *times, keys})
+}
+
+/// The time of the last key.
+export fn duration(clip: &Clip) -> Float64 {
+  clip.times[clip.times.length() - 1]
+}
+
+/// Joint poses at a playback time wrapped by "clamp" or "loop"; None for an unknown wrap or a
+/// non-finite time. Translation and scale interpolate linearly; rotation takes the shorter arc.
+export fn sample(clip: &Clip, time: Float64, wrap: Str) -> Option[Hierarchy.Poses] {
+  if !Float.isFinite(time) { return None }
+  let wrapper = WRAPS.get(wrap) ?
+  let local = wrapper(time, duration(clip))
+  let last = clip.times.length() - 1
+  let key = segment(&clip.times, local)
+  let first = keyPose(clip, key) ?
+  if key == last { return Some(first) }
+  let span = clip.times[key + 1] - clip.times[key]
+  let second = keyPose(clip, key + 1) ?
+  blend(&first, &second, (local - clip.times[key]) / span)
+}
+
+/// Interpolate two equally sized poses by one weight in [0, 1].
+export fn blend(from: &Hierarchy.Poses, to: &Hierarchy.Poses, weight: Float64) -> Option[Hierarchy.Poses] {
+  if !(weight >= 0.0 && weight <= 1.0) { return None }
+  let weights = Lanes.filled(Lanes.count(&from.tx), weight) ?
+  blendEach(from, to, &weights)
+}
+
+/// Interpolate per joint, each weight in [0, 1]; a zero weight keeps the joint's `from` pose,
+/// which layers a partial-body pose over a full-body one.
+export fn blendMasked(from: &Hierarchy.Poses, to: &Hierarchy.Poses, weights: &Lanes.Lanes) -> Option[Hierarchy.Poses] {
+  let low = Lanes.smallest(weights) ?
+  let high = Lanes.largest(weights) ?
+  if !(low >= 0.0 && high <= 1.0) { return None }
+  blendEach(from, to, weights)
+}
+
+fn blendEach(from: &Hierarchy.Poses, to: &Hierarchy.Poses, weights: &Lanes.Lanes) -> Option[Hierarchy.Poses] {
+  let count = Lanes.count(weights)
+  for lane in channels(from).concat(channels(to)) {
+    if Lanes.count(&lane) != count { return None }
+  }
+  // The shorter arc: negate the target rotation wherever the two disagree in sign.
+  let agreement = sum4(&(Lanes.multiply(&from.rx, &to.rx) ?), &(Lanes.multiply(&from.ry, &to.ry) ?), &(Lanes.multiply(&from.rz, &to.rz) ?), &(Lanes.multiply(&from.rw, &to.rw) ?)) ?
+  let sign = Lanes.addScalar(&Lanes.scale(&Lanes.above(&Lanes.negate(&agreement), 0.0), -2.0), 1.0)
+  let rx = mix(&from.rx, &(Lanes.multiply(&to.rx, &sign) ?), weights) ?
+  let ry = mix(&from.ry, &(Lanes.multiply(&to.ry, &sign) ?), weights) ?
+  let rz = mix(&from.rz, &(Lanes.multiply(&to.rz, &sign) ?), weights) ?
+  let rw = mix(&from.rw, &(Lanes.multiply(&to.rw, &sign) ?), weights) ?
+  let length = Lanes.sqrt(&sum4(&(Lanes.multiply(&rx, &rx) ?), &(Lanes.multiply(&ry, &ry) ?), &(Lanes.multiply(&rz, &rz) ?), &(Lanes.multiply(&rw, &rw) ?)) ?)
+  Some(
+    Hierarchy.Poses {
+      tx: mix(&from.tx, &to.tx, weights) ?,
+      ty: mix(&from.ty, &to.ty, weights) ?,
+      tz: mix(&from.tz, &to.tz, weights) ?,
+      rx: Lanes.divide(&rx, &length) ?,
+      ry: Lanes.divide(&ry, &length) ?,
+      rz: Lanes.divide(&rz, &length) ?,
+      rw: Lanes.divide(&rw, &length) ?,
+      sx: mix(&from.sx, &to.sx, weights) ?,
+      sy: mix(&from.sy, &to.sy, weights) ?,
+      sz: mix(&from.sz, &to.sz, weights) ?,
+    },
+  )
+}
+
+/// from + weight * (to - from), exact where the weight is zero.
+fn mix(from: &Lanes.Lanes, to: &Lanes.Lanes, weights: &Lanes.Lanes) -> Option[Lanes.Lanes] {
+  Lanes.fma(weights, &(Lanes.subtract(to, from) ?), from)
+}
+
+fn sum4(a: &Lanes.Lanes, b: &Lanes.Lanes, c: &Lanes.Lanes, d: &Lanes.Lanes) -> Option[Lanes.Lanes] {
+  Lanes.add(&(Lanes.add(a, b) ?), &(Lanes.add(c, d) ?))
+}
+
+fn squaredLength(poses: &Hierarchy.Poses) -> Option[Lanes.Lanes] {
+  sum4(&(Lanes.multiply(&poses.rx, &poses.rx) ?), &(Lanes.multiply(&poses.ry, &poses.ry) ?), &(Lanes.multiply(&poses.rz, &poses.rz) ?), &(Lanes.multiply(&poses.rw, &poses.rw) ?))
+}
+
+fn keyPose(clip: &Clip, key: Int) -> Option[Hierarchy.Poses] {
+  let start = key * clip.joints
+  let k = clip.keys
+  Some(
+    Hierarchy.Poses {
+      tx: Lanes.slice(&k.tx, start, clip.joints) ?,
+      ty: Lanes.slice(&k.ty, start, clip.joints) ?,
+      tz: Lanes.slice(&k.tz, start, clip.joints) ?,
+      rx: Lanes.slice(&k.rx, start, clip.joints) ?,
+      ry: Lanes.slice(&k.ry, start, clip.joints) ?,
+      rz: Lanes.slice(&k.rz, start, clip.joints) ?,
+      rw: Lanes.slice(&k.rw, start, clip.joints) ?,
+      sx: Lanes.slice(&k.sx, start, clip.joints) ?,
+      sy: Lanes.slice(&k.sy, start, clip.joints) ?,
+      sz: Lanes.slice(&k.sz, start, clip.joints) ?,
+    },
+  )
+}
+
+fn channels(poses: &Hierarchy.Poses) -> Array[Lanes.Lanes] {
+  [poses.tx, poses.ty, poses.tz, poses.rx, poses.ry, poses.rz, poses.rw, poses.sx, poses.sy, poses.sz]
+}
+
+/// The last key whose time is at or before `time`, by bisection over the sorted key times.
+fn segment(times: &Array[Float64], time: Float64) -> Int {
+  var low = 0
+  var high = times.length() - 1
+  while low < high {
+    let middle = (low + high + 1) / 2
+    if times[middle] <= time { low = middle } else { high = middle - 1 }
+  }
+  low
+}
+
+fn clampTime(time: Float64, length: Float64) -> Float64 {
+  Float.clamp(time, 0.0, length)
+}
+
+fn loopTime(time: Float64, length: Float64) -> Float64 {
+  if length == 0.0 { return 0.0 }
+  let wrapped = time - Float.floor(time / length) * length
+  // Rounding can land exactly on the length for times just below a whole number of loops.
+  if wrapped >= length { 0.0 } else { wrapped }
+}

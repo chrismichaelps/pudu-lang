@@ -14,6 +14,9 @@ aliases: [Repository Gates]
 
 [[Ark Assets Gate]] validates texture sampling, failure diagnostics and nested distribution data.
 
+[[Ark Animation Gate]] verifies clip sampling, blending, state machines, a positioned refusal and
+shipping.
+
 [[Ark Physics Gate]] verifies scenarios, numeric boundaries, diagnostics and shipping against
 the optimized compiler alongside the other focused engine checks.
 
