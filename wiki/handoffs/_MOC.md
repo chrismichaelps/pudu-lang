@@ -21,6 +21,7 @@ tags: [moc, handoff]
 
 - [[Hackage Transport Delivery]] — issue #656 configure verified HTTPS before one index update.
 
+- [[Library Catalog Delivery]] — issue #654 compiler-consistent import completion roots.
 - [[Ark Layer Delivery]] — issue #658 engine dependency enforcement.
 
 - [[Ark Foundation Delivery]] — issue #652 integrated engine architecture and checked vector math.
