@@ -5,6 +5,12 @@ tags: [changelog]
 
 # Changelog
 
+## 2026-10-29 — Effect-free attribute fallbacks (#750)
+
+- [[Derive Record Residualizer]] keeps an `attributeOr` fallback the attribute replaces only when
+  it can have effects, so `-1.0` and other literal, name or operator fallbacks no longer report
+  W3004 at every deriving type; [[Attribute Fallback Fixture]] pins it.
+
 ## 2026-10-29 — Inverse kinematics (#746)
 
 - [[Ark Ik]] solves two-bone limbs by projection and height (no inverse trigonometry), clamps at
