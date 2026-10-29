@@ -5,6 +5,10 @@ tags: [changelog]
 
 # Changelog
 
+## 2026-10-27 — Complete flat-list source-span assertions (#662)
+
+- [[Expression Recovery Spec]] now verifies all three aggregate forms and both comma variants
+  with the same order and span assertions. The parser MOC lists both new test mirrors.
 ## 2026-10-28 — Per-pixel shading in the raster kernel (#712)
 
 - [[Runtime Shade]] and [[Runtime Raster]] light every pixel from interpolated normals and

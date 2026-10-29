@@ -16,7 +16,8 @@ Flat 520-argument calls and Sets are valid; previous E1099 expectations codified
 and are deliberately corrected. No budget limit or diagnostic identity changes.
 
 `testFlatLists` checks 2,048 distinct elements in arrays, Sets and calls, including trailing
-commas, exact count/order and source/element spans. Moderate nesting after many siblings remains
+commas in all three forms, exact constructor/count/order and enclosing source/element spans.
+One shared assertion family covers each form with and without trailing commas. Moderate nesting after many siblings remains
 valid. Malformed/missing elements and EOF retain focused baseline recovery diagnostics.
 [[Expression Parser Spec]] registers this same family in the normal suite.
 

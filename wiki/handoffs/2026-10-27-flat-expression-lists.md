@@ -26,8 +26,15 @@ library modules and the examples check without parse diagnostics. Former E1099 e
 520-wide calls and Sets, and the 1022 offset assertion, encoded the defect and are corrected.
 Deep arrays, Sets, calls and depth-after-width each still report exactly one E1099.
 
-Exact next action: restore the parked full-range root work from its stash onto
-feature/661-full-range-sqrt and finish its golden checks, then continue Ark Math/Core.
+Independent production and Language Architect review approved the parser behavior. Forensic review
+identified missing test navigation and coverage overstatement; both test mirrors are now listed
+in the parser MOC, and one assertion family verifies constructor, order, enclosing span and element
+spans for all six aggregate/trailing-comma combinations. All seven recovery property groups pass
+100 checks each when compiled with -Wall -Werror against the current parser library.
+Final independent test and Forensic Guardian review approved the shared assertions and navigation
+with no unresolved findings. Production parser code is unchanged by this follow-up.
+
+Exact next action: integrate PR #663 after its updated integration checks pass.
 
 ## Referenced by
 

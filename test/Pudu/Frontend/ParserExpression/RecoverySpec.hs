@@ -147,10 +147,20 @@ testFlatLists = do
   let width = 2048 :: Int
       items = map (Text.pack . show) [1 .. width]
       joined = Text.intercalate ", " items
-  array <- parse ("[" <> joined <> "]")
-  trailing <- parse ("[" <> joined <> ",]")
-  set <- parse ("#{" <> joined <> "}")
-  call <- parse ("f(" <> joined <> ",)")
+  wideCases <- mapM (\(kind, opening, closing, trailing) -> do
+    let input = opening <> joined <> (if trailing then "," else "") <> closing
+        offsets = take width (scanl (\at item -> at + Text.length item + 2) (Text.length opening) items)
+    result <- parse input
+    pure $ counterexample (Text.unpack kind <> " trailing=" <> show trailing) $ conjoin
+      [ codes result === []
+      , listKind result === Just kind
+      , itemTexts result === Just items
+      , itemStarts result === Just offsets
+      , itemWidths result === Just (map Text.length items)
+      , sourceBounds result === (0, Text.length input)
+      ]) [(kind, opening, closing, trailing)
+         | (kind, opening, closing) <- [("array", "[", "]"), ("Set", "#{", "}"), ("call", "f(", ")")]
+         , trailing <- [False, True]]
   nestedAfter <- parse ("[" <> joined <> ", [[[1, 2], #{3}], g(4, [5])]]")
   deepArray <- parse (Text.replicate 600 "[" <> Text.replicate 600 "]")
   deepSet <- parse (Text.replicate 600 "#{" <> "1" <> Text.replicate 600 "}")
@@ -159,17 +169,9 @@ testFlatLists = do
   missing <- parse "[1, , 2]"
   unclosed <- parse ("[" <> joined)
   missingArgument <- parse "f(1, , 2)"
-  let expected = map (Text.pack . show) [1 .. width]
-      offsets = take width (scanl (\at item -> at + Text.length item + 2) 1 items)
   pure $ conjoin
-    [ counterexample "a wide array parses cleanly" (codes array === [])
-    , counterexample "every array item in order" (arrayItems array === Just expected)
-    , counterexample "item spans match their source" (itemStarts array === Just offsets)
-    , counterexample "item spans cover their text" (itemWidths array === Just (map Text.length items))
-    , counterexample "a trailing comma closes the list" (codes trailing === [] .&&. arrayItems trailing === Just expected)
-    , counterexample "a wide Set parses every member" (codes set === [] .&&. setCount set === Just width)
-    , counterexample "a wide call parses every argument" (codes call === [] .&&. callCount call === Just width)
-    , counterexample "nesting after many siblings parses" (codes nestedAfter === [] .&&. resultKind nestedAfter === EndOfFile)
+    (wideCases ++
+    [ counterexample "nesting after many siblings parses" (codes nestedAfter === [] .&&. resultKind nestedAfter === EndOfFile)
     , counterexample "a deep array still refuses once" (codes deepArray === ["E1099"])
     , counterexample "a deep Set still refuses once" (codes deepSet === ["E1099"])
     , counterexample "a deep call still refuses once" (codes deepCall === ["E1099"])
@@ -177,7 +179,7 @@ testFlatLists = do
     , counterexample "a missing element recovers" (codes missing === ["E1001", "E1040"])
     , counterexample "an unclosed wide array reports its end" (codes unclosed === ["E1000"])
     , counterexample "a missing argument recovers" (codes missingArgument === ["E1040"])
-    ]
+    ])
 
 listItems :: (Located Expression, TokenKind, a) -> Maybe [Located Expression]
 listItems (Located _ expression, EndOfFile, _) = case expression of
@@ -187,8 +189,8 @@ listItems (Located _ expression, EndOfFile, _) = case expression of
   _ -> Nothing
 listItems _ = Nothing
 
-arrayItems :: (Located Expression, TokenKind, a) -> Maybe [Text]
-arrayItems result = traverse integerText =<< listItems result
+itemTexts :: (Located Expression, TokenKind, a) -> Maybe [Text]
+itemTexts result = traverse integerText =<< listItems result
   where
     integerText (Located _ (LiteralExpression (IntegerValue value))) = Just value
     integerText _ = Nothing
@@ -201,8 +203,14 @@ itemWidths result = map (width . locatedSpan) <$> listItems result
   where
     width spanValue = unOffset (spanEnd spanValue) - unOffset (spanStart spanValue)
 
-setCount :: (Located Expression, TokenKind, a) -> Maybe Int
-setCount result = length <$> listItems result
+listKind :: (Located Expression, TokenKind, a) -> Maybe Text
+listKind (Located _ expression, EndOfFile, _) = case expression of
+  ArrayExpression _ -> Just "array"
+  SetExpression _ -> Just "Set"
+  CallExpression _ _ -> Just "call"
+  _ -> Nothing
+listKind _ = Nothing
 
-callCount :: (Located Expression, TokenKind, a) -> Maybe Int
-callCount = setCount
+sourceBounds :: (Located Expression, TokenKind, a) -> (Int, Int)
+sourceBounds (Located spanValue _, _, _) =
+  (unOffset (spanStart spanValue), unOffset (spanEnd spanValue))
