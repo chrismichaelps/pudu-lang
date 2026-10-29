@@ -5,6 +5,23 @@ tags: [changelog]
 
 # Changelog
 
+## 2026-10-27 — Binary64 kernels behind Std.Math.Float (#661)
+
+- [[Float Kernel Identity]] and [[Runtime Float Kernels]] give the evaluator, checker and resolver
+  one list of hardware and math-library operations; [[Std Math Float]] keeps every signature.
+- `sqrt` is correctly rounded across the full range; `fma`, `toBits`, `fromBits`, `fromInt` and
+  `toInt` are new (#665). [[Std Stats]] counts with `fromInt` instead of a doubling loop.
+  [[Square Root Range Gate]] checks bit-exact goldens and kernel contracts in CI.
+- [[Root Kernel Benchmark]] rejects the reciprocal-root bit estimate; [[Square Root Delivery]]
+  records measurements.
+
+## 2026-10-27 — Flat expression lists keep their depth (#662)
+
+- [[Parser Expression Aggregate]] and [[Parser Expression Postfix]] read array, Set and argument
+  siblings through one iterative loop; only each item's own nesting is charged.
+- [[Expression Recovery Spec]] covers 2,048-wide lists, spans, trailing commas and retained deep
+  refusals; [[Flat Expression List Delivery]] records the reproduction and evidence.
+
 ## 2026-10-27 — Verified HTTPS CI index transport (#656)
 
 - [[Website Linux Workflow]] configures signed HTTPS Hackage access before one explicit update.

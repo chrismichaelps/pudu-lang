@@ -30,6 +30,7 @@ import Pudu.Eval.Builtin
   , callConvertInteger
   , callDecimal
   , callDisplay
+  , callFloatKernel
   , callEffect
   , callMapMethod
   , callMapOf
@@ -213,6 +214,7 @@ dispatchCall needs spanValue lent target values =
     BuiltinValue ShowBuiltin -> callShow spanValue values
     BuiltinValue DisplayBuiltin -> callDisplay spanValue values
     BuiltinValue ConvertIntegerBuiltin -> callConvertInteger spanValue [] values
+    BuiltinValue (FloatKernelBuiltin kernel) -> callFloatKernel spanValue kernel values
     BuiltinValue builtin
       | isDecimalBuiltin builtin -> callDecimal spanValue builtin values
     BuiltinValue effect -> callEffect spanValue effect values

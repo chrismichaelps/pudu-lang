@@ -11,6 +11,7 @@ module Pudu.Type.Check.Prelude
 
 import qualified Data.List.NonEmpty as NonEmpty
 import Data.Text (Text)
+import Pudu.FloatKernel (KernelShape (..), floatKernelName, floatKernelShape, floatKernels)
 import Pudu.Frontend.Syntax.Name (ModuleName (..))
 import Pudu.Type.Env
   ( Checker
@@ -120,6 +121,7 @@ declareBuiltinConstructors = do
             decimalType
         )
     )
+  mapM_ (\kernel -> bindName (floatKernelName kernel) (monotype (kernelType (floatKernelShape kernel)))) floatKernels
   {-| The effects a program may perform.
 
       Each answers with `Result[T, Str]` rather than failing: the language has
@@ -338,6 +340,12 @@ declareBuiltinConstructors = do
   bindName "xmlDecode"
     (monotype (FunctionTypeValue False [NominalType "Str" []] (NominalType "Option" [NominalType stdXmlTagId []])))
  where
+  kernelType shape = case shape of
+    FloatArguments count -> FunctionTypeValue False (replicate count floatType) floatType
+    FloatToWord -> FunctionTypeValue False [floatType] (NominalType "UInt64" [])
+    WordToFloat -> FunctionTypeValue False [NominalType "UInt64" []] floatType
+    IntToFloat -> FunctionTypeValue False [integerType] floatType
+    FloatToInt -> FunctionTypeValue False [floatType] (NominalType "Option" [integerType])
   wordMapType = NominalType "Map" [RigidType "K", NominalType "UInt64" []]
   byteType = NominalType "UInt8" []
   stdFlatMapId = NominalId (Just (ModuleName ("Std" NonEmpty.:| ["FlatMap"]))) "FlatMap"
