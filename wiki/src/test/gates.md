@@ -82,6 +82,10 @@ including externally observable filesystem modes that portable permission boolea
 
 Resolved Grill Log: local and integration delivery both exercise actual strategy output and public visibility.
 
+## Native presentation (#724)
+
+[[Desktop Presentation Gate]] runs before the compiler build on supported hosts.
+Resolved Grill Log: test the real view drawing boundary, reporting unsupported targets explicitly.
 ## Capsule support (#722)
 
 [[Ark Ground Gate]] validates floor support and typed refusals.

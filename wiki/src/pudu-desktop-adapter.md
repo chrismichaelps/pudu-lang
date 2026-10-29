@@ -30,6 +30,9 @@ the process and filesystem implementations.
 
 - Calls fail off the main thread.
 - Frame length equals width times height times four before any platform object reads it.
+- RGBA rows run from the top of the surface downward. PuduFrameView retains the default
+  unflipped NSView coordinates; CGContextDrawImage draws without an additional Y inversion.
+  Input/accessibility coordinate conversions remain unchanged.
 - The view owns a copy of frame bytes across asynchronous drawing.
 - Close detaches the delegate and orders the window out before release.
 - Queued input stops growing past one mebibyte until drained.
@@ -46,6 +49,16 @@ the process and filesystem implementations.
   same contract with frame-pacing and percentile gates. _Rejected:_ coupling the application API to
   the first accelerated backend.
 
+## Presentation regression (#724)
+
+[[Desktop Presentation Test]] draws the real view in a bitmap graphics context, checking exact
+asymmetric rows/channels at normal size, resized logical bounds and 2x backing scale, plus empty
+frame black fill. The original unconditional Y transform reverses rows and must fail this gate.
+[View coordinates](https://developer.apple.com/documentation/appkit/nsview/isflipped) document the
+default unflipped view. Native pixels and actual window evidence establish the implementation result.
+
+Resolved Grill Log: preserve the default view geometry and remove only the redundant bitmap
+inversion, rather than altering input/accessibility conventions or changing the portable renderer.
 ## Game input records (#673)
 
 Besides the interface records, the adapter writes a layout-independent channel for games:
