@@ -28,7 +28,7 @@ import System.IO.Unsafe (unsafeDupablePerformIO)
 
 import Pudu.Runtime.Lanes (Lanes, laneCount, laneFold)
 import Pudu.Runtime.Sampler (Pinned, Sampler, Texel (..), sample, withSampler)
-import Pudu.Runtime.Shade (Lighting, shade)
+import Pudu.Runtime.Shade (Lighting, Rgb (..), shade)
 
 {-| Which faces survive: front faces are counter-clockwise in normalized device
     coordinates, which is clockwise on a screen whose y grows downward. -}
@@ -230,8 +230,8 @@ fill (Target color depth width height) perspective texture light v0 v1 v2 = rows
               when (ta >= 0.5) $ do
                 pokeElemOff depth at z
                 let base f t = attribute f * t
-                    (red, green, blue) = case light of
-                      Nothing -> (base vr tr, base vg tg, base vb tb)
+                    Rgb red green blue = case light of
+                      Nothing -> Rgb (base vr tr) (base vg tg) (base vb tb)
                       Just lit ->
                         shade lit (attribute vnx) (attribute vny) (attribute vnz) (attribute vpx) (attribute vpy) (attribute vpz)
                           (base vr tr) (base vg tg) (base vb tb)

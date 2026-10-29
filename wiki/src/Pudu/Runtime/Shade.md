@@ -25,6 +25,10 @@ reflected ray's height and adds the light color inside a soft sun disc.
 
 ## Grill Log
 
+- **Q:** Evaluate the specular power for every pixel? **A:** No; `lighting` precomputes the
+  smallest n·h whose highlight can still change an eight-bit channel, and the power is skipped
+  below it. `shade` returns a strict RGB record and is inlined into the raster loop.
+
 - **Q:** Light per vertex as the pipeline does? **A:** Not for this entry; highlights and
   reflections are narrower than a triangle, so they are evaluated per pixel from interpolated
   normals and positions.
