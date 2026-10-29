@@ -49,6 +49,7 @@ data LaneKernel
   | RasterTriangles
   | RasterPerspectiveTriangles
   | RasterTexturedTriangles
+  | RasterShadedTriangles
   | LaneOverlapPairs
   | LaneSelect
   | LaneInterleave
@@ -105,6 +106,7 @@ laneKernelName kernel = case kernel of
   RasterTriangles -> "rasterTriangles"
   RasterPerspectiveTriangles -> "rasterPerspectiveTriangles"
   RasterTexturedTriangles -> "rasterTexturedTriangles"
+  RasterShadedTriangles -> "rasterShadedTriangles"
   LaneOverlapPairs -> "lanesOverlapPairs"
   LaneSelect -> "lanesSelect"
   LaneInterleave -> "lanesInterleave"
@@ -159,6 +161,10 @@ laneKernelSignature kernel = case kernel of
     )
   RasterTexturedTriangles ->
     ( [LaneBytes, LaneBytes, LaneInt, LaneInt] ++ replicate 9 LaneBytes ++ [LaneBytes, LaneInt, LaneInt, LaneInt]
+    , LaneOption LanePair
+    )
+  RasterShadedTriangles ->
+    ( [LaneBytes, LaneBytes, LaneInt, LaneInt] ++ replicate 14 LaneBytes
     , LaneOption LanePair
     )
   _

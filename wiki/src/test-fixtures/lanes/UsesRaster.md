@@ -17,6 +17,9 @@ pixels, and refusal of zero, negative, NaN, infinite and mis-sized weight lanes.
 The textured entry checks nearest texels, lit-color modulation, bilinear clamping across texel
 centers, sRGB decoding, cutout fragments that write neither color nor depth, w-scale invariance
 and refusal of malformed texture storage, unknown codes and mismatched lanes.
+The shaded entry checks the base color under head-on light, full Fresnel reflecting horizon and
+sun disc, back-facing normals, the specular highlight, the ambient floor under grazing light and
+refusal of malformed uniforms and normal lanes.
 Run by [[Lanes Gate]]. Prints `raster: ok`.
 
 ## Referenced by

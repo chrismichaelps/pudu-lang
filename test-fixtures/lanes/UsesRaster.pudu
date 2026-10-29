@@ -104,6 +104,38 @@ fn textured() {
   require(texturedDraw(redBlue, 2, 0, 0, 1.0, [1.0, 1.0, 1.0]) == None, "weight lane mismatch")
 }
 
+/// Camera xyz, light direction xyz, light rgb, ambient, exponent, strength, f0, horizon rgb, zenith rgb, sun cosine.
+fn uniforms(strength: Float64, f0: Float64, ambient: Float64) -> Array[Float64] {
+  [0.0, 0.0, 10.0, 0.0, 0.0, 1.0, 0.5, 0.5, 0.5, ambient, 8.0, strength, f0, 0.2, 0.3, 0.4, 0.9, 0.9, 1.0, 0.99]
+}
+
+fn shadedDraw(normalZ: Float64, values: Array[Float64], normalCount: Int) -> Option[(Bytes, Bytes)] {
+  let Some(color) = rasterFill(16, 0.0, 0.0, 0.0, 0.0) else { panic("fill") }
+  let Some(depth) = Lanes.filled(16, 1.0) else { panic("depth") }
+  let six = [1.0, 1.0, 1.0, 1.0, 1.0, 1.0]
+  let zero = lane([0.0, 0.0, 0.0, 0.0, 0.0, 0.0])
+  var normals: Array[Float64] = []
+  for _ in 0..normalCount { normals = normals.push(normalZ) }
+  rasterShadedTriangles(color, Lanes.toBytes(&depth), 4, 0, lane([0.0, 4.0, 0.0, 4.0, 4.0, 0.0]), lane([0.0, 0.0, 4.0, 0.0, 4.0, 4.0]), lane([0.5, 0.5, 0.5, 0.5, 0.5, 0.5]), lane([0.5, 0.5, 0.5, 0.5, 0.5, 0.5]), lane([0.25, 0.25, 0.25, 0.25, 0.25, 0.25]), lane(six), lane(six), zero, zero, lane(normals), zero, zero, zero, lane(values))
+}
+
+fn lighting() {
+  let Some((matte, _)) = shadedDraw(1.0, uniforms(0.0, 0.0, 0.0), 6) else { panic("matte") }
+  require(pixel(&matte, 4, 1, 1) == (128u8, 64u8, 255u8, 255u8), "head-on light, no Fresnel: the base color")
+  let Some((mirror, _)) = shadedDraw(1.0, uniforms(0.0, 1.0, 0.0), 6) else { panic("mirror") }
+  require(pixel(&mirror, 4, 2, 2) == (178u8, 204u8, 230u8, 255u8), "full Fresnel reflects the horizon and the sun disc")
+  let Some((back, _)) = shadedDraw(-1.0, uniforms(0.0, 0.0, 0.0), 6) else { panic("back") }
+  require(back == matte, "a normal facing away is turned toward the camera")
+  let Some((shiny, _)) = shadedDraw(1.0, uniforms(1.0, 0.0, 0.0), 6) else { panic("shiny") }
+  require(pixel(&shiny, 4, 1, 1) == (255u8, 191u8, 255u8, 255u8), "the highlight adds the light color")
+  let Some((dim, _)) = shadedDraw(1.0, [0.0, 0.0, 10.0, 1.0, 0.0, 0.0, 0.5, 0.5, 0.5, 0.25, 8.0, 0.0, 0.0, 0.2, 0.3, 0.4, 0.9, 0.9, 1.0, 0.99], 6) else { panic("dim") }
+  require(pixel(&dim, 4, 1, 1) == (32u8, 16u8, 64u8, 255u8), "grazing light leaves the ambient floor")
+  require(shadedDraw(1.0, uniforms(0.0, 0.0, 0.0).pop(), 6) == None, "uniform count")
+  require(shadedDraw(1.0, uniforms(0.0, 0.0, 2.0), 6) == None, "ambient range")
+  require(shadedDraw(1.0, uniforms(0.0, 2.0, 0.0), 6) == None, "f0 range")
+  require(shadedDraw(1.0, uniforms(0.0, 0.0, 0.0), 5) == None, "normal lane count")
+}
+
 export fn main() -> Int {
   let Some(cleared) = rasterFill(2, 1.0, 0.5, -1.0, 2.0) else { panic("fill") }
   require(cleared.length() == 8 && pixel(&cleared, 2, 0, 0) == (255u8, 128u8, 0u8, 255u8), "fill quantizes")
@@ -146,6 +178,7 @@ export fn main() -> Int {
   require(rasterTriangles(small, Lanes.toBytes(&unit), 2, 0, lane([]), lane([]), lane([]), lane([]), lane([]), lane([])) == None, "target size refused")
   perspective()
   textured()
+  lighting()
   print("raster: ok")
   0
 }
