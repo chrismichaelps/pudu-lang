@@ -5,6 +5,7 @@ tags: [moc, module, stdlib]
 
 # Standard Library Module Map
 
+- [[Std Lanes]] — packed binary64 values with whole-lane native kernels.
 - [[Std Db Admission]] — finite capacity wait below pool ownership.
 
 - [[Std Num]] · [[Std Order]] — primitive numeric and ordering capabilities.

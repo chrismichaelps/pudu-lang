@@ -168,6 +168,18 @@ jobs:
       # as much at ten times the input, and a buffered control must not.
       - name: Verify a streaming reader holds as much at ten times the input
         run: python3 test/residency.py "$PUDU"
+      # Golden binary64 results across the full exponent range, exact-kernel
+      # edge cases and domain refusals, compared bit for bit with the host.
+      - name: Verify binary64 kernels round exactly across the full range
+        run: python3 test/sqrt-range.py "$PUDU"
+      # Every packed lane kernel against its scalar definition, plus the
+      # length, index, type and partial-value refusals.
+      - name: Verify packed binary64 lane kernels
+        run: node test/lanes.mjs "$PUDU"
+      # Lane buffers share collections instead of forcing one per kernel call,
+      # which is what lets lane work on several threads overlap.
+      - name: Verify lane kernels share collections
+        run: node test/lane-collections.mjs "$PUDU"
       - name: Verify documentation site browser and CLI contracts
         run: |
           cabal run -v0 pudu -- doc --html test-fixtures/stdlib/UsesAll.pudu | node test/doc-site-parity.mjs
