@@ -69,6 +69,13 @@ tags: [changelog]
   missing, repeated and malformed configurations are covered. [[Hackage Transport Delivery]]
   records independent review and the outstanding CI observation.
 
+## 2026-10-27 — Enforced Ark dependency layers (#658)
+
+- [[Ark Dependency Layers]] classifies all fifteen engine roots and permits acyclic same-root
+  composition with strict descent across roots and no shared-library reverse imports.
+- [[Ark Layer Gate]] and [[Ark Layer Tests]] enforce the catalog in CI and local gate registration;
+  [[Ark Layer Delivery]] records focused checks and independent architecture/parity review.
+
 ## 2026-10-27 — Integrated Ark foundation (#652)
 
 - [[Ark Engine]] defines dependency layers and the outstanding engine/native-execution ledger.

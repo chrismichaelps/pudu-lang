@@ -9,6 +9,8 @@ aliases: [Pudu Continuous Verification]
 
 ## Purpose and interface
 
+[[Ark Layer Tests]] and [[Ark Layer Gate]] execute with the application graph checks before
+compiler builds. Resolved Grill Log: engine layer contracts are enforced on integration requests.
 [[Lanes Gate]] runs after the binary64 kernel gate, then [[Lane Collection Gate]].
 [[Square Root Range Gate]] runs after the residency check against the resolved compiler path; its
 optional timing mode is not a CI performance assertion. Resolved Grill Log: numeric boundary
