@@ -30,8 +30,9 @@ optimized interpreter runs measured 1,022, 1,032 and 1,042 ms per 1,000 moves (m
 per move), with the same consumed checksum. Boundary preparation is included; native execution
 and broad scene acceleration remain performance obligations.
 
-The staged change is below the 600-line delivery limit; it remains a draft pending the required
-independent reviews. No PR is merged.
+Implementation commit `05793025` is pushed. Draft PR [#715](https://github.com/chrismichaelps/pudu-lang/pull/715)
+targets dev; hosted checks are running and the required independent reviews remain pending.
+The complete change stays below the 600-line delivery limit. No PR is merged.
 
 Exact next action: specify finite-obstacle capsule sweep and walking/falling policy contracts
 in the vault before extending the movement implementation.
