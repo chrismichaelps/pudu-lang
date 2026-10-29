@@ -37,14 +37,22 @@ Standing rule: kind discriminators use const factory tables. Keep host resource 
 and preserve descending engine imports. Resource residency, streaming, GPU device support, angular
 physics and the remaining full-engine systems retain their target obligations in [[Ark Engine]].
 
-Since then: perspective (#690) and textured (#697) native raster entries with stacked PRs, the
-asset dependency graph (#693) and server with staged hot reload (#696), and textured/material
-draws from imported assets through the Ark render path. Focused Ark gates pass on an optimized
--Werror build of the integration branch.
+Since then, every spec layer has a validated vertical slice on this branch: perspective (#690),
+textured (#697) and PCM (#704) native kernels on stacked PRs; asset graph (#693), asset server with
+staged hot reload (#696) and textured/material draws; animation clips, pose blending and a
+cross-fading state machine (#702); a spatial lane audio mixer (#706); a scene-stack game loop and
+camera rigs (#707); immediate-mode UI with keyboard focus (#708); acknowledged packets and
+quantized delta replication (#709); deterministic packs, pack mounts and cook/load (#710). Pudu
+fixes found on the way have their own PRs from `dev`: `Bytes.strided` (#701, snapshot 1,056 ms to
+1 ms) and position-aware `W3003` (#703). All fifteen focused gates, the layer gate (43 engine
+modules, 0 findings), the formatter and API coverage pass on an optimized -Werror build.
 
-Exact next action: replace the per-pixel interpreted PPM snapshot loop with a whole-buffer
-operation and measure the textured demo frame at -O2.
-reads and checked texture data.
+Open target obligations: angular rigid-body dynamics and character controllers; lights, shadows
+and text rendering; IK and morph targets; Core serialization, allocators and a job system;
+asynchronous streaming; editor and tools.
+
+Exact next action: add angular velocity and inertia to Ark.Physics bodies with lane integration
+and contact impulses that apply torque.
 
 ## Referenced by
 
