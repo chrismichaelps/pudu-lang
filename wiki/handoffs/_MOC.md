@@ -5,6 +5,8 @@ tags: [moc, handoff]
 
 # Handoff Map
 
+- [[Qualified Constructor Delivery]] — imported and local qualified sum constructors (#717).
+
 - [[Hackage Transport Delivery]] — issue #656 configure verified HTTPS before one index update.
 
 - [[Ark Foundation Delivery]] — issue #652 integrated engine architecture and checked vector math.

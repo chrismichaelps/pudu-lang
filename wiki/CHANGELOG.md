@@ -5,6 +5,13 @@ tags: [changelog]
 
 # Changelog
 
+## 2026-10-28 — Visible qualified constructors (#717)
+
+- [[Type Check Expression]] and [[Type Check Call]] share complete constructor-path admission
+  through [[Type Check Pattern]], preserving nominal types, visibility and lexical heads.
+- [[Qualified Variant Gate]] covers real imported/local constructors, positioned refusals and
+  runtime parity. [[Qualified Constructor Delivery]] records the engine prerequisite.
+
 ## 2026-10-27 — Verified HTTPS CI index transport (#656)
 
 - [[Website Linux Workflow]] configures signed HTTPS Hackage access before one explicit update.

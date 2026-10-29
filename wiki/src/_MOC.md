@@ -5,6 +5,8 @@ tags: [moc, module]
 
 # Module Map
 
+- [[Qualified Variant Gate]] — typed constructor paths and runtime regression coverage.
+
 - [[Website Linux Workflow]] · [[Hackage Transport Test]] — configured HTTPS index transport.
 
 - [[src/Ark/_MOC|Ark Modules]] — engine library and focused conformance gates.

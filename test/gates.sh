@@ -53,6 +53,8 @@ PUDU=$(cabal list-bin pudu --enable-optimization=2)
 # shell expansion that matches nothing passes this gate while checking nothing.
 run 'every committed Pudu file is formatted' \
   bash -c '"$PUDU" fmt --check packages/pudu test-fixtures examples'
+run 'qualified constructors preserve types, visibility and runtime values' \
+  node test/qualified-variants.mjs "$PUDU"
 run 'every diagnostic code means one thing' node test/diagnostic-codes.mjs
 run 'Ark math preserves scaled geometry and refuses wrong precision' \
   node test/ark-math.mjs "$PUDU"
