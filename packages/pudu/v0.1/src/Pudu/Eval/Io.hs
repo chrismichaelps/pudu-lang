@@ -14,6 +14,7 @@ module Pudu.Eval.Io
   , isSymbolicLinkAt
   , listDirectoryAt
   , monotonicMilliseconds
+  , monotonicNanoseconds
   , pathSeparators
   , permissionsMaskAt
   , programArguments
@@ -51,7 +52,7 @@ import Data.Text (Text)
 import qualified Data.Text.Encoding as Encoding
 import qualified Data.Text as Text
 import qualified Data.Text.IO as TextIO
-import GHC.Clock (getMonotonicTime)
+import GHC.Clock (getMonotonicTime, getMonotonicTimeNSec)
 import System.Directory
   ( canonicalizePath
   , copyPermissions
@@ -367,6 +368,11 @@ searchPathSeparatorText = Text.singleton FilePath.searchPathSeparator
     clock can move backwards between the two reads. -}
 monotonicMilliseconds :: IO Integer
 monotonicMilliseconds = round . (* 1000) <$> getMonotonicTime
+
+{-| The same monotonic clock in whole nanoseconds, for frame pacing and
+    profiling where a millisecond is most of the interval being measured. -}
+monotonicNanoseconds :: IO Integer
+monotonicNanoseconds = toInteger <$> getMonotonicTimeNSec
 
 {-| Stop the program with a status.
 
