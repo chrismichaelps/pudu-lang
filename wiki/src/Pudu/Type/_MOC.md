@@ -5,6 +5,8 @@ tags: [moc, module]
 
 # Type Module Map
 
+- [[Qualified Variant Gate]] — imported and local sum constructor admission and runtime parity.
+
 - [[Type Check Bound]] — definition-time trait application and kind admission.
 - [[Type Formation Builtins]] — fixed language constructor and carrier inventory.
 - [[Type Trait Dispatch Spec]] — dispatch, generic bounds and coherence evidence.
@@ -52,7 +54,7 @@ tags: [moc, module]
 - [[Type Check Foreign]] — the type a foreign declaration gives its functions, and what its own declaration can be wrong about.
 - [[Type Check Data Spec]] — exact record, collection, constructor, and qualified-pattern regressions.
 
-Dependency direction: Value/Substitute → Implementation → Env → Formation and Proof/Match/Marker → Proof → Method → Rule/Call/Pattern/Coherence/Import → Check → Boundary.
+Dependency direction: Value/Substitute → Implementation → Env → Formation and Proof/Match/Marker → Proof → Method → Rule → Safety → Pattern → Call/Coherence/Import → Check → Boundary.
 
 Full trait applications survive Value/Scheme → scoped Env bounds → call obligations →
 Proof → method specialization. Canonical owners index candidates at the proof layer;

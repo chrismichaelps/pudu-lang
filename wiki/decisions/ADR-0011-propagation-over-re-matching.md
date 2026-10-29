@@ -69,7 +69,9 @@ pattern that cannot fail.
 
 **`W3003`** names a `match` whose every failure arm rebuilds what it received, when the enclosing
 return type carries the same shape, and gives the `?` that replaces it. A warning, not an error: it
-names a better spelling of working code rather than condemning it.
+names a better spelling of working code rather than condemning it. A failure produced as a value
+is propagation only in result position (a body or branch tail, or a `return` operand); a match
+bound or passed elsewhere keeps that value and continues, so there only `return` arms count.
 
 The two new surface nodes stay distinct through the tree, as ADR-0010 kept `IfLetExpression`, so
 `:ast`, the formatter, the REPL outline, and every diagnostic describe what the reader wrote.

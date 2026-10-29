@@ -17,6 +17,7 @@ tags: [moc, module]
 - [[src/Pudu/Frontend/Parser/Declaration/_MOC|Declaration modules]] — modular imports, bindings, blocks, functions, generics, type declarations, traits, and impls.
 - [[Parser Declaration]] — compilation-unit orchestration, `export` ownership, import ordering, and module-scope recovery.
 - [[Parser]] — the public façade returning a recovered module beside its diagnostics.
+- [[Expression Parser Spec]] · [[Expression Recovery Spec]] — registered expression properties and width/depth recovery regressions.
 
 Dependency direction avoids import cycles: State → Name/Type/Pattern → Expression → Declaration submodules → orchestrator → façade. [[Parser Block]] is the recursion fixed point: it passes itself to Expression and Binding as their block capability, so no submodule imports the orchestrator.
 

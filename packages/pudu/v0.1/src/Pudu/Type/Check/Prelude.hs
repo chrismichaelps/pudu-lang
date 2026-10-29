@@ -11,6 +11,8 @@ module Pudu.Type.Check.Prelude
 
 import qualified Data.List.NonEmpty as NonEmpty
 import Data.Text (Text)
+import Pudu.FloatKernel (KernelShape (..), floatKernelName, floatKernelShape, floatKernels)
+import Pudu.LaneKernel (LaneType (..), laneKernelName, laneKernelSignature, laneKernels)
 import Pudu.Frontend.Syntax.Name (ModuleName (..))
 import Pudu.Type.Env
   ( Checker
@@ -120,6 +122,8 @@ declareBuiltinConstructors = do
             decimalType
         )
     )
+  mapM_ (\kernel -> bindName (floatKernelName kernel) (monotype (kernelType (floatKernelShape kernel)))) floatKernels
+  mapM_ (\kernel -> bindName (laneKernelName kernel) (monotype (laneSignatureType (laneKernelSignature kernel)))) laneKernels
   {-| The effects a program may perform.
 
       Each answers with `Result[T, Str]` rather than failing: the language has
@@ -338,6 +342,22 @@ declareBuiltinConstructors = do
   bindName "xmlDecode"
     (monotype (FunctionTypeValue False [NominalType "Str" []] (NominalType "Option" [NominalType stdXmlTagId []])))
  where
+  laneSignatureType (arguments, result) = FunctionTypeValue False (map laneType arguments) (laneType result)
+  laneType lane = case lane of
+    LaneBytes -> bytesType
+    LaneFloat -> floatType
+    LaneInt -> integerType
+    LaneFloats -> NominalType "Array" [floatType]
+    LaneInts -> NominalType "Array" [integerType]
+    LaneOption held -> NominalType "Option" [laneType held]
+    LanePair -> TupleTypeValue [bytesType, bytesType]
+    LaneTriple -> TupleTypeValue [bytesType, bytesType, bytesType]
+  kernelType shape = case shape of
+    FloatArguments count -> FunctionTypeValue False (replicate count floatType) floatType
+    FloatToWord -> FunctionTypeValue False [floatType] (NominalType "UInt64" [])
+    WordToFloat -> FunctionTypeValue False [NominalType "UInt64" []] floatType
+    IntToFloat -> FunctionTypeValue False [integerType] floatType
+    FloatToInt -> FunctionTypeValue False [floatType] (NominalType "Option" [integerType])
   wordMapType = NominalType "Map" [RigidType "K", NominalType "UInt64" []]
   byteType = NominalType "UInt8" []
   stdFlatMapId = NominalId (Just (ModuleName ("Std" NonEmpty.:| ["FlatMap"]))) "FlatMap"
@@ -484,6 +504,7 @@ effectSignatures =
   , ("searchSeparator", monotype (FunctionTypeValue False [] stringType))
   , ("exit", monotype (FunctionTypeValue False [integerType] UnitTypeValue))
   , ("clock", monotype (FunctionTypeValue False [] integerType))
+  , ("clockNanos", monotype (FunctionTypeValue False [] integerType))
   , ("now", monotype (FunctionTypeValue False [] integerType))
   , ("zoneOffset", monotype (FunctionTypeValue False [] integerType))
   ,

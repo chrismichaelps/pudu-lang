@@ -152,6 +152,7 @@ void *pudu_desktop_open(
       window.collectionBehavior = NSWindowCollectionBehaviorFullScreenPrimary;
       window.title = caption;
       window.releasedWhenClosed = NO;
+      window.acceptsMouseMovedEvents = YES;
       window.contentView = view;
       [window makeFirstResponder:view];
       [window center];
@@ -198,6 +199,176 @@ int32_t pudu_desktop_present(
       return -4;
     }
   }
+}
+
+/* W3C UI Events KeyboardEvent.code names by macOS virtual key code: physical
+   positions, independent of keyboard layout, so a game binding to KeyW means
+   the same key on every layout. Codes without a standard name are NULL. */
+static const char *const pudu_key_codes[128] = {
+  [0x00] = "KeyA",
+  [0x01] = "KeyS",
+  [0x02] = "KeyD",
+  [0x03] = "KeyF",
+  [0x04] = "KeyH",
+  [0x05] = "KeyG",
+  [0x06] = "KeyZ",
+  [0x07] = "KeyX",
+  [0x08] = "KeyC",
+  [0x09] = "KeyV",
+  [0x0A] = "IntlBackslash",
+  [0x0B] = "KeyB",
+  [0x0C] = "KeyQ",
+  [0x0D] = "KeyW",
+  [0x0E] = "KeyE",
+  [0x0F] = "KeyR",
+  [0x10] = "KeyY",
+  [0x11] = "KeyT",
+  [0x12] = "Digit1",
+  [0x13] = "Digit2",
+  [0x14] = "Digit3",
+  [0x15] = "Digit4",
+  [0x16] = "Digit6",
+  [0x17] = "Digit5",
+  [0x18] = "Equal",
+  [0x19] = "Digit9",
+  [0x1A] = "Digit7",
+  [0x1B] = "Minus",
+  [0x1C] = "Digit8",
+  [0x1D] = "Digit0",
+  [0x1E] = "BracketRight",
+  [0x1F] = "KeyO",
+  [0x20] = "KeyU",
+  [0x21] = "BracketLeft",
+  [0x22] = "KeyI",
+  [0x23] = "KeyP",
+  [0x24] = "Enter",
+  [0x25] = "KeyL",
+  [0x26] = "KeyJ",
+  [0x27] = "Quote",
+  [0x28] = "KeyK",
+  [0x29] = "Semicolon",
+  [0x2A] = "Backslash",
+  [0x2B] = "Comma",
+  [0x2C] = "Slash",
+  [0x2D] = "KeyN",
+  [0x2E] = "KeyM",
+  [0x2F] = "Period",
+  [0x30] = "Tab",
+  [0x31] = "Space",
+  [0x32] = "Backquote",
+  [0x33] = "Backspace",
+  [0x34] = "NumpadEnter",
+  [0x35] = "Escape",
+  [0x36] = "MetaRight",
+  [0x37] = "MetaLeft",
+  [0x38] = "ShiftLeft",
+  [0x39] = "CapsLock",
+  [0x3A] = "AltLeft",
+  [0x3B] = "ControlLeft",
+  [0x3C] = "ShiftRight",
+  [0x3D] = "AltRight",
+  [0x3E] = "ControlRight",
+  [0x3F] = "Fn",
+  [0x40] = "F17",
+  [0x41] = "NumpadDecimal",
+  [0x43] = "NumpadMultiply",
+  [0x45] = "NumpadAdd",
+  [0x47] = "NumLock",
+  [0x48] = "AudioVolumeUp",
+  [0x49] = "AudioVolumeDown",
+  [0x4A] = "AudioVolumeMute",
+  [0x4B] = "NumpadDivide",
+  [0x4C] = "NumpadEnter",
+  [0x4E] = "NumpadSubtract",
+  [0x4F] = "F18",
+  [0x50] = "F19",
+  [0x51] = "NumpadEqual",
+  [0x52] = "Numpad0",
+  [0x53] = "Numpad1",
+  [0x54] = "Numpad2",
+  [0x55] = "Numpad3",
+  [0x56] = "Numpad4",
+  [0x57] = "Numpad5",
+  [0x58] = "Numpad6",
+  [0x59] = "Numpad7",
+  [0x5A] = "F20",
+  [0x5B] = "Numpad8",
+  [0x5C] = "Numpad9",
+  [0x5D] = "IntlYen",
+  [0x5E] = "IntlRo",
+  [0x5F] = "NumpadComma",
+  [0x60] = "F5",
+  [0x61] = "F6",
+  [0x62] = "F7",
+  [0x63] = "F3",
+  [0x64] = "F8",
+  [0x65] = "F9",
+  [0x66] = "Lang2",
+  [0x67] = "F11",
+  [0x68] = "Lang1",
+  [0x69] = "F13",
+  [0x6A] = "F16",
+  [0x6B] = "F14",
+  [0x6D] = "F10",
+  [0x6E] = "ContextMenu",
+  [0x6F] = "F12",
+  [0x71] = "F15",
+  [0x72] = "Help",
+  [0x73] = "Home",
+  [0x74] = "PageUp",
+  [0x75] = "Delete",
+  [0x76] = "F4",
+  [0x77] = "End",
+  [0x78] = "F2",
+  [0x79] = "PageDown",
+  [0x7A] = "F1",
+  [0x7B] = "ArrowLeft",
+  [0x7C] = "ArrowRight",
+  [0x7D] = "ArrowDown",
+  [0x7E] = "ArrowUp",
+};
+
+/* Device-dependent modifier bits in NSEvent.modifierFlags, which tell the
+   left and right instances of a modifier apart. */
+enum {
+  PuduDeviceControlLeft = 0x0001,
+  PuduDeviceShiftLeft = 0x0002,
+  PuduDeviceShiftRight = 0x0004,
+  PuduDeviceMetaLeft = 0x0008,
+  PuduDeviceMetaRight = 0x0010,
+  PuduDeviceAltLeft = 0x0020,
+  PuduDeviceAltRight = 0x0040,
+  PuduDeviceControlRight = 0x2000
+};
+
+static NSString *pudu_key_code(NSEvent *event) {
+  unsigned short code = event.keyCode;
+  if (code >= 128 || pudu_key_codes[code] == NULL) {
+    return nil;
+  }
+  return [NSString stringWithUTF8String:pudu_key_codes[code]];
+}
+
+/* Whether the modifier a flags-changed event names is now held. */
+static BOOL pudu_modifier_held(NSEvent *event) {
+  NSUInteger flags = event.modifierFlags;
+  switch (event.keyCode) {
+    case 0x38: return (flags & PuduDeviceShiftLeft) != 0;
+    case 0x3C: return (flags & PuduDeviceShiftRight) != 0;
+    case 0x3B: return (flags & PuduDeviceControlLeft) != 0;
+    case 0x3E: return (flags & PuduDeviceControlRight) != 0;
+    case 0x3A: return (flags & PuduDeviceAltLeft) != 0;
+    case 0x3D: return (flags & PuduDeviceAltRight) != 0;
+    case 0x37: return (flags & PuduDeviceMetaLeft) != 0;
+    case 0x36: return (flags & PuduDeviceMetaRight) != 0;
+    case 0x39: return (flags & NSEventModifierFlagCapsLock) != 0;
+    case 0x3F: return (flags & NSEventModifierFlagFunction) != 0;
+    default: return NO;
+  }
+}
+
+static void pudu_record_button(PuduWindowHost *host, long button, BOOL down, long x, long y) {
+  [host record:[NSString stringWithFormat:@"button\t%ld\t%@\t%ld\t%ld", button, down ? @"down" : @"up", x, y]];
 }
 
 static NSString *pudu_key_name(NSEvent *event) {
@@ -260,13 +431,48 @@ static BOOL pudu_record_input(PuduWindowHost *host, NSEvent *event) {
     case NSEventTypeLeftMouseDown:
       [host record:[NSString stringWithFormat:@"press\t%ld\t%ld", x, y]];
       [host record:[NSString stringWithFormat:@"down\t%ld\t%ld\t%ld", x, y, pudu_millis(event)]];
+      pudu_record_button(host, 0, YES, x, y);
       return NO;
     case NSEventTypeLeftMouseDragged:
       [host record:[NSString stringWithFormat:@"move\t%ld\t%ld\t%ld", x, y, pudu_millis(event)]];
+      [host record:[NSString stringWithFormat:@"hover\t%ld\t%ld", x, y]];
       return NO;
     case NSEventTypeLeftMouseUp:
       [host record:[NSString stringWithFormat:@"up\t%ld\t%ld\t%ld", x, y, pudu_millis(event)]];
+      pudu_record_button(host, 0, NO, x, y);
       return NO;
+    case NSEventTypeRightMouseDown:
+      pudu_record_button(host, 1, YES, x, y);
+      return NO;
+    case NSEventTypeRightMouseUp:
+      pudu_record_button(host, 1, NO, x, y);
+      return NO;
+    case NSEventTypeOtherMouseDown:
+      pudu_record_button(host, (long)event.buttonNumber, YES, x, y);
+      return NO;
+    case NSEventTypeOtherMouseUp:
+      pudu_record_button(host, (long)event.buttonNumber, NO, x, y);
+      return NO;
+    case NSEventTypeMouseMoved:
+    case NSEventTypeRightMouseDragged:
+    case NSEventTypeOtherMouseDragged:
+      [host record:[NSString stringWithFormat:@"hover\t%ld\t%ld", x, y]];
+      return NO;
+    case NSEventTypeKeyUp: {
+      NSString *code = pudu_key_code(event);
+      if (code != nil) {
+        [host record:[@"keyup\t" stringByAppendingString:code]];
+      }
+      return YES;
+    }
+    case NSEventTypeFlagsChanged: {
+      NSString *code = pudu_key_code(event);
+      if (code != nil) {
+        [host record:[(pudu_modifier_held(event) ? @"keydown\t" : @"keyup\t") stringByAppendingString:
+            (pudu_modifier_held(event) ? [code stringByAppendingString:@"\t0"] : code)]];
+      }
+      return NO;
+    }
     case NSEventTypeScrollWheel: {
       long delta = (long)event.scrollingDeltaY;
       if (delta != 0) {
@@ -275,6 +481,10 @@ static BOOL pudu_record_input(PuduWindowHost *host, NSEvent *event) {
       return NO;
     }
     case NSEventTypeKeyDown: {
+      NSString *code = pudu_key_code(event);
+      if (code != nil) {
+        [host record:[NSString stringWithFormat:@"keydown\t%@\t%d", code, event.isARepeat ? 1 : 0]];
+      }
       NSEventModifierFlags flags = event.modifierFlags;
       if (flags & (NSEventModifierFlagCommand | NSEventModifierFlagControl)) {
         NSString *chord = pudu_chord(event);
