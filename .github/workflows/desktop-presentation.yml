@@ -3,14 +3,14 @@ on:
   pull_request:
     paths:
       - 'packages/pudu/v0.1/cbits/pudu_desktop*'
-      - 'test/native/DesktopPresentation.m'
+      - 'test/native/Desktop*.m'
       - 'test/desktop-presentation.mjs'
       - '.github/workflows/desktop-presentation.yml'
   push:
     branches: [dev, 'feature/**']
     paths:
       - 'packages/pudu/v0.1/cbits/pudu_desktop*'
-      - 'test/native/DesktopPresentation.m'
+      - 'test/native/Desktop*.m'
       - 'test/desktop-presentation.mjs'
       - '.github/workflows/desktop-presentation.yml'
 permissions:

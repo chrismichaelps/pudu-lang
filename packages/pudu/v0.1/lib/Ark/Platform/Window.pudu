@@ -8,21 +8,79 @@ export type PlatformError
   | Closed
   | InvalidSize(Int, Int)
   | FrameMismatch(Int, Int)
+  | InvalidDensity
+  | InvalidLimits
+  | InvalidAspect
   | Failed(Str)
 
-/// One runtime-owned platform window and the frame size it presents.
-export type Window = { token: Int, width: Int, height: Int }
+/// What a game asks of its window: backing-resolution frames, content limits in points, an aspect ratio and full screen.
+export type Settings = {
+  sharp: Bool,
+  minWidth: Int,
+  minHeight: Int,
+  maxWidth: Int,
+  maxHeight: Int,
+  aspectWidth: Int,
+  aspectHeight: Int,
+  fullscreen: Bool,
+}
+
+/// One runtime-owned platform window: frame size in pixels, content size in points, backing scale in thousandths and state.
+export type Window = {
+  token: Int,
+  width: Int,
+  height: Int,
+  logicalWidth: Int,
+  logicalHeight: Int,
+  scale: Int,
+  focused: Bool,
+  minimized: Bool,
+  fullscreen: Bool,
+  settings: Settings,
+}
+
+const ONE_TO_ONE: Int = 1000
 
 const RUNTIME_ERRORS: Map[Str, PlatformError] = mapOf([
     ("desktop presentation is unsupported on this platform", Unsupported),
     ("desktop session is closed or unknown", Closed),
+    ("desktop density must be between 250 and 8000 thousandths", InvalidDensity),
+    ("desktop size limits cannot be negative", InvalidLimits),
+    ("desktop size limits exceed the platform limit", InvalidLimits),
+    ("desktop minimum size exceeds its maximum", InvalidLimits),
+    ("desktop aspect ratio must be positive", InvalidAspect),
+    ("desktop aspect ratio needs both terms", InvalidAspect),
   ])
+
+/// Frames at content size, no limits, windowed.
+export fn windowed() -> Settings {
+  Settings{sharp: false, minWidth: 0, minHeight: 0, maxWidth: 0, maxHeight: 0, aspectWidth: 0, aspectHeight: 0, fullscreen: false}
+}
+
+/// The pixels covering `points` at a backing scale in thousandths, rounded up.
+export fn pixels(points: Int, scale: Int) -> Int {
+  (points * scale + ONE_TO_ONE - 1) / ONE_TO_ONE
+}
 
 /// Open a window presenting width x height RGBA8 frames.
 export fn open(title: Str, width: Int, height: Int, resizable: Bool) -> Result[Window, PlatformError] {
   if width <= 0 || height <= 0 { return Err(InvalidSize(width, height)) }
   match desktopOpen(title, width, height, resizable) {
-    case Ok(token) => Ok(Window{token, width, height})
+    case Ok(token) =>
+    Ok(
+      Window {
+        token,
+        width,
+        height,
+        logicalWidth: width,
+        logicalHeight: height,
+        scale: ONE_TO_ONE,
+        focused: true,
+        minimized: false,
+        fullscreen: false,
+        settings: windowed(),
+      },
+    )
     case Err(message) => Err(classified(message))
   }
 }
@@ -54,10 +112,57 @@ export fn events(window: &Window) -> Result[Array[Input.Event], PlatformError] {
   }
 }
 
-/// The same window presenting frames of a new size, as after a resize event.
+/// The same window with content of a new size in points, as after a resize event.
 export fn resized(window: Window, width: Int, height: Int) -> Result[Window, PlatformError] {
   if width <= 0 || height <= 0 { return Err(InvalidSize(width, height)) }
-  Ok(Window{..window, width, height})
+  Ok(framed(Window{..window, logicalWidth: width, logicalHeight: height}))
+}
+
+/// Apply settings through the runtime, which refuses invalid ones before touching the window.
+export fn configure(window: Window, settings: &Settings) -> Result[Window, PlatformError] {
+  let density = if settings.sharp { window.scale } else { ONE_TO_ONE }
+  let applied = desktopConfigure(
+    window.token,
+    density,
+    settings.minWidth,
+    settings.minHeight,
+    settings.maxWidth,
+    settings.maxHeight,
+    settings.aspectWidth,
+    settings.aspectHeight,
+    settings.fullscreen,
+  )
+  match applied {
+    case Ok(_) => Ok(framed(Window{..window, settings: *settings}))
+    case Err(message) => Err(classified(message))
+  }
+}
+
+/// Fold a frame's events into the window; a new backing scale re-applies a sharp window's density.
+export fn observe(window: Window, happened: &Array[Input.Event]) -> Result[Window, PlatformError] {
+  var current = window
+  for event in *happened {
+    current = match event {
+      case Input.Resize(width, height) => resized(current, width, height) ?
+      case Input.Rescale(scale) => rescaled(current, scale) ?
+      case Input.Focus(focused) => Window{..current, focused}
+      case Input.Minimize(minimized) => Window{..current, minimized}
+      case Input.Fullscreen(fullscreen) => Window{..current, fullscreen}
+      case _ => current
+    }
+  }
+  Ok(current)
+}
+
+fn rescaled(window: Window, scale: Int) -> Result[Window, PlatformError] {
+  if scale == window.scale { return Ok(window) }
+  let changed = Window{..window, scale}
+  if changed.settings.sharp { configure(changed, &changed.settings) } else { Ok(framed(changed)) }
+}
+
+fn framed(window: Window) -> Window {
+  let density = if window.settings.sharp { window.scale } else { ONE_TO_ONE }
+  Window{..window, width: pixels(window.logicalWidth, density), height: pixels(window.logicalHeight, density)}
 }
 
 /// Release the window.

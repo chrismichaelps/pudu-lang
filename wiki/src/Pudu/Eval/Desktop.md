@@ -11,7 +11,7 @@ aliases: [Eval Desktop]
 ## Purpose and interface
 
 Own desktop window resources for one evaluator lifetime. `newDesktopStore` creates an empty token
-registry; `openDesktop`, `presentDesktop`, `pumpDesktop`, `inputsDesktop`, and `closeDesktop` validate each
+registry; `openDesktop`, `presentDesktop`, `pumpDesktop`, `inputsDesktop`, `configureDesktop` (density, content limits, aspect and full screen, refused before the adapter when out of range), and `closeDesktop` validate each
 operation against it; `closeDesktopStore` releases every remaining native window during runtime teardown.
 
 On macOS, a private adapter calls public window-server APIs. On other targets every open answers
