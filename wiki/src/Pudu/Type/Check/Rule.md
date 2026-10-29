@@ -162,6 +162,15 @@ DEPTH 0.50 (MEDIUM). It isolates the closed rules from the walk that applies the
   suggested a name the resolver then refused (#415). Only a prelude value is suggested.
 - **Q:** Record a trait member's `Self`? **A:** No; the owner the call names settles it.
 
+## Carrier of `?` in function literals (#678)
+
+`tryType` reads the carrier from the enclosing result. When that result is still an unsolved
+variable, as in a short lambda whose expected type is unified only after its body, an operand
+already typed `Option[T]` makes the result `Option[_]` and yields `T`; any other operand keeps
+the `Result` default. A declared result still decides alone. Grill Log — **Q:** Add bidirectional
+checking for literals instead? **A:** That is a larger checker change; reading an already-known
+operand carrier removes a case that could only fail, and changes no program that checked before.
+
 ## Referenced by
 
 [[src/Pudu/Type/_MOC]] · [[Type Check]]

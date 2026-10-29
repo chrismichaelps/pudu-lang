@@ -14,6 +14,9 @@ without adding dependencies or relying only on successful kernel values.
 
 ## Purpose and interface
 
+Register [[Lsp Module Catalog Spec]] with no new dependency. Resolved Grill Log: isolated
+filesystem root-policy regressions compile in the normal test package.
+
 Declare the repository-only `pudu-tests` package and its `pudu-test` exit-code suite. The package is
 rooted beside `test/` and `test-fixtures/`, depends on the production `pudu` library through
 [[Pudu Cabal Project]], and preserves every registered Haskell spec plus the C++ ownership fixture.

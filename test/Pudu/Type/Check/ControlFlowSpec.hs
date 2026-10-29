@@ -520,10 +520,46 @@ testTry = do
     , "  Ok(value)"
     , "}"
     ]
+  optionLambda <- codes
+    [ "module M"
+    , "fn make() -> fn(Int) -> Option[Int] {"
+    , "  |x| {"
+    , "    let y = Some(x)?"
+    , "    Some(y + 1)"
+    , "  }"
+    , "}"
+    , "fn bound() -> Option[Int] {"
+    , "  let step: fn(Int) -> Option[Int] = |x| { let y = Some(x)?"
+    , "    Some(y) }"
+    , "  step(1)"
+    , "}"
+    ]
+  resultLambda <- codes
+    [ "module M"
+    , "fn attempt() -> Result[Int, Str] { Ok(1) }"
+    , "fn make() -> fn(Int) -> Result[Int, Str] {"
+    , "  |x| {"
+    , "    let y = attempt()?"
+    , "    Ok(x + y)"
+    , "  }"
+    , "}"
+    ]
+  mixedLambda <- codes
+    [ "module M"
+    , "fn make() -> fn(Int) -> Result[Int, Str] {"
+    , "  |x| {"
+    , "    let y = Some(x)?"
+    , "    Ok(y)"
+    , "  }"
+    , "}"
+    ]
   pure $ conjoin
     [ admitted === []
     , counterexample "? needs a carrier return type" (wrongCarrier === ["E3011"])
     , counterexample "the failure types must agree" (wrongFailure === ["E3001"])
+    , counterexample "an unannotated lambda propagates an Option" (optionLambda === [])
+    , counterexample "an unannotated lambda still propagates a Result" (resultLambda === [])
+    , counterexample "mixing carriers in a lambda is refused" (mixedLambda /= [])
     ]
 
 testIterationTypes :: IO Property

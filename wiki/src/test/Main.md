@@ -20,6 +20,9 @@ Registers [[Derive Library Spec]].
 
 ## Governance and algorithm
 
+Register [[Lsp Module Catalog Spec]] with LSP properties. Resolved Grill Log: focused root-policy
+checks also execute through the ordinary aggregate test runner.
+
 Each spec exports named properties. The runner executes 200 cases per property, gathers every result
 rather than failing early, and exits unsuccessfully when any result failed. Registration here and in
 [[Pudu Test Cabal Manifest]] are both mandatory: one makes a property execute and the other makes

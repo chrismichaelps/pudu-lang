@@ -24,11 +24,11 @@ say() { printf '\n== %s\n' "$1"; }
 
 say "Building"
 cd "$root"
-cabal build exe:pudu
+cabal build exe:pudu --enable-optimization=2
 
 say "Installing to $install_dir"
 mkdir -p "$install_dir"
-cabal install exe:pudu --installdir="$install_dir" --overwrite-policy=always
+cabal install exe:pudu --enable-optimization=2 --installdir="$install_dir" --overwrite-policy=always
 
 # Every copy PATH can reach, not only the one just written. A second copy
 # earlier in PATH shadows the refresh and reintroduces the drift.
