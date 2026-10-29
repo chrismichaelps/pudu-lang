@@ -5,6 +5,8 @@ tags: [moc, handoff]
 
 # Handoff Map
 
+- [[Ark Cast Delivery]] — checked capsule casts and finite-box closest witnesses (#716).
+
 - [[Hackage Transport Delivery]] — issue #656 configure verified HTTPS before one index update.
 
 - [[Ark Foundation Delivery]] — issue #652 integrated engine architecture and checked vector math.

@@ -73,3 +73,8 @@ including externally observable filesystem modes that portable permission boolea
 [[Derive Index Output Gate]] runs after documentation parity against the same freshly built executable.
 
 Resolved Grill Log: local and integration delivery both exercise actual strategy output and public visibility.
+
+## Capsule cast contract (#716)
+
+[[Ark Cast Gate]] runs with the optimized compiler. Resolved Grill Log: finite obstacle geometry
+and explicit convergence failure require executable public-API coverage alongside the full suite.

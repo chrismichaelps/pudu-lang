@@ -66,7 +66,7 @@ their own acceptance evidence. Never substitute a host-language engine or broad 
 | 2 | Language/native foundations | Existing language features require capability audit; separate native execution target remains open |
 | 3 | Platform | OS adapters and bounded deterministic tests remain open |
 | 4 | World and simple rendering | Storage/query invariants, native window and a validated GPU frame remain open |
-| 5 | Assets, physics, audio and networking | Complete subsystem vertical slices remain open |
+| 5 | Assets, physics, audio and networking | #716 adds checked finite capsule-box casts and closest witnesses; scene queries, controller composition, rigid dynamics and the remaining subsystem slices remain open |
 | 6 | Animation, UI and Game | Complete subsystem vertical slices remain open |
 | 7 | Editor, Tools and Build | Complete subsystem vertical slices remain open |
 | 8 | Advanced rendering and game-scale validation | PBR, lighting/shadows/GI, particles, terrain/water/atmosphere, LOD, multi-view/XR and virtualized geometry remain open |
