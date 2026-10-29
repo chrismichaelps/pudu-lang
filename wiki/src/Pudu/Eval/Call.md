@@ -105,6 +105,14 @@ constructor.
   it through `callCompile` on the first call; a run without a cache keeps the tree walker.
 - **Q:** Keep witnesses in a dynamic stack? **A:** No; in the frame, so a function literal created inside sees the right ones.
 
+## Binary64 kernels
+
+`dispatchCall` sends `FloatKernelBuiltin` to [[Eval Builtin Numeric]]'s `callFloatKernel` before
+the decimal and effect cases. Grill Log — **Q:** route kernels through effects? **A:** No; they
+are pure and must stay admissible wherever pure builtins are.
+
+`LaneKernelBuiltin` goes to [[Eval Builtin Lanes]] beside it.
+
 ## Referenced by
 
 [[src/Pudu/Eval/_MOC]] · [[Evaluator]] · [[Eval Program]] · [[Eval Loop]]

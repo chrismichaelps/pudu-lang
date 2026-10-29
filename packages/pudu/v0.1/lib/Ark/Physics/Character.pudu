@@ -1,0 +1,143 @@
+module Ark.Physics.Character
+
+import Std.Math.Float as Float
+import Ark.Math as V
+
+/// A boundary whose allowed side satisfies normal dot position >= offset.
+export type Plane = { normal: V.Vec3, offset: Float64 }
+
+/// An oriented capsule; halfHeight includes its two hemispheres.
+export type Capsule = { position: V.Vec3, radius: Float64, halfHeight: Float64, up: V.Vec3 }
+
+/// Unconsumed motion is never applied when the sweep budget is exhausted.
+export type Movement = { position: V.Vec3, remaining: V.Vec3, grounded: Bool, contacts: Int, exhausted: Bool }
+
+type Boundary = { normal: V.Vec3, offset: Float64, reach: Float64 }
+
+/// A checked unit-normal boundary through point, or None for degenerate coefficients.
+export fn plane(normal: V.Vec3, point: V.Vec3) -> Option[Plane] {
+  if !V.isFinite(point) { return None }
+  let unit = V.normalized(normal) ?
+  let offset = V.dot(unit, point)
+  if !Float.isFinite(offset) { return None }
+  Some(Plane{normal: unit, offset})
+}
+
+/// Sweep and slide inside convex boundaries; None for invalid inputs or initial penetration.
+/// Gravity and walking policy are caller-owned; geometric sliding may ascend a ramp.
+export fn move(capsule: &Capsule, displacement: V.Vec3, planes: &Array[Plane], skin: Float64, maxSlides: Int, groundDot: Float64) -> Option[Movement] {
+  if !V.isFinite(capsule.position) || !V.isFinite(displacement) { return None }
+  if !(capsule.radius > 0.0 && capsule.halfHeight >= capsule.radius) || !Float.isFinite(capsule.halfHeight) { return None }
+  if !(skin >= 0.0 && Float.isFinite(skin) && groundDot > 0.0 && groundDot <= 1.0) { return None }
+  if maxSlides < 1 || maxSlides > 16 { return None }
+  let up = V.normalized(capsule.up) ?
+  let tolerance = 1e-9 * (if capsule.radius > 1.0 { capsule.radius } else { 1.0 })
+  var boundaries: Array[Boundary] = []
+  for surface in *planes {
+    let length = V.length(surface.normal) ?
+    if length == 0.0 || !Float.isFinite(surface.offset) { return None }
+    let normal = V.normalized(surface.normal) ?
+    let offset = surface.offset / length
+    let reach = capsule.radius + (capsule.halfHeight - capsule.radius) * Float.abs(V.dot(normal, up))
+    if !Float.isFinite(offset) || !Float.isFinite(reach + skin) { return None }
+    let boundary = Boundary{normal, offset, reach}
+    let gap = clearance(capsule.position, &boundary) ?
+    if gap < -tolerance { return None }
+    boundaries = boundaries.push(boundary)
+  }
+  var position = capsule.position
+  var remaining = displacement
+  var active: Array[V.Vec3] = []
+  var contacts = 0
+  var exhausted = true
+  for _ in 0..maxSlides {
+    var fraction = 1.0
+    var hit: Option[V.Vec3] = None
+    for boundary in boundaries {
+      let speed = V.dot(remaining, boundary.normal)
+      if !Float.isFinite(speed) { return None }
+      // Tangential projection can leave a negative ulp; use the same bound as final admission.
+      if speed < -tolerance {
+        let gap = (clearance(position, &boundary) ?) - skin
+        let time = (if gap > 0.0 { gap } else { 0.0 }) / -speed
+        if time <= fraction {
+          if time < fraction || hit == None {
+            fraction = time
+            hit = Some(boundary.normal)
+          }
+        }
+      }
+    }
+    position = V.add(position, V.scale(remaining, fraction))
+    if !V.isFinite(position) { return None }
+    let Some(normal) = hit else {
+      remaining = V.vec3(0.0, 0.0, 0.0)
+      exhausted = false
+      break
+    }
+    contacts = contacts + 1
+    active = active.push(normal)
+    remaining = constrained(V.scale(remaining, 1.0 - fraction), &active) ?
+    if remaining == V.vec3(0.0, 0.0, 0.0) {
+      exhausted = false
+      break
+    }
+  }
+  var grounded = false
+  for boundary in boundaries {
+    let gap = clearance(position, &boundary) ?
+    if gap < -tolerance { return None }
+    if gap <= skin + tolerance && V.dot(boundary.normal, up) >= groundDot { grounded = true }
+  }
+  Some(Movement{position, remaining, grounded, contacts, exhausted})
+}
+
+fn clearance(position: V.Vec3, boundary: &Boundary) -> Option[Float64] {
+  let gap = (V.dot(position, boundary.normal) - boundary.offset) - boundary.reach
+  if Float.isFinite(gap) { Some(gap) } else { None }
+}
+
+/// The closest feasible residual lies in the interior, on a face, on a crease, or at zero.
+/// Normalize before scoring so very large and very small motion use the same bounded arithmetic.
+fn constrained(displacement: V.Vec3, normals: &Array[V.Vec3]) -> Option[V.Vec3] {
+  let length = V.length(displacement) ?
+  if length == 0.0 { return Some(displacement) }
+  let unit = V.normalized(displacement) ?
+  if feasible(unit, normals) { return Some(displacement) }
+  var best = V.vec3(0.0, 0.0, 0.0)
+  var cost = V.dot(unit, unit)
+  var first = 0
+  while first < normals.length() {
+    let normal = normals[first]
+    let face = V.subtract(unit, V.scale(normal, V.dot(unit, normal)))
+    let delta = V.subtract(face, unit)
+    let score = V.dot(delta, delta)
+    if score < cost && feasible(face, normals) {
+      best = face
+      cost = score
+    }
+    var second = first + 1
+    while second < normals.length() {
+      if let Some(axis) = V.normalized(V.cross(normal, normals[second])) {
+        let crease = V.scale(axis, V.dot(unit, axis))
+        let difference = V.subtract(crease, unit)
+        let distance = V.dot(difference, difference)
+        if distance < cost && feasible(crease, normals) {
+          best = crease
+          cost = distance
+        }
+      }
+      second = second + 1
+    }
+    first = first + 1
+  }
+  let result = V.scale(best, length)
+  if V.isFinite(result) { Some(result) } else { None }
+}
+
+fn feasible(direction: V.Vec3, normals: &Array[V.Vec3]) -> Bool {
+  for normal in *normals {
+    if V.dot(direction, normal) < -1e-12 { return false }
+  }
+  true
+}
