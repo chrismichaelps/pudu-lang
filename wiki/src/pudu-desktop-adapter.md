@@ -19,7 +19,15 @@ tab-separated lines in a bounded queue that `pudu_desktop_inputs` drains, plus `
 `up` records with millisecond timestamps for the primary button, and `menu` records for commands
 chosen from the menu bar [[Pudu Desktop Menu]] installs. Closing a window that installed the bar
 clears it. `pudu_desktop_clipboard_read` and
-`pudu_desktop_clipboard_write` read and replace the general pasteboard's plain text. Key presses are consumed
+`pudu_desktop_clipboard_write` read and replace the general pasteboard's plain text. Window state arrives as records too:
+`scale\t<millis>` carries the backing scale factor times one thousand once at open and whenever
+it changes, `focus\t<0|1>`, `minimize\t<0|1>` and `fullscreen\t<0|1>` follow key, miniaturize
+and full-screen transitions. `pudu_desktop_configure(handle, density, minWidth, minHeight,
+maxWidth, maxHeight, aspectWidth, aspectHeight, fullscreen)` sets how many frame pixels make one
+point (in thousandths; 1000 is the default one-to-one), content size limits in points (zero
+means unlimited), an optional content aspect ratio (zero clears it) and the requested
+full-screen state. Present sizes the content in points as frame pixels divided by that density,
+so a caller drawing at backing resolution gets a sharp image at the same window size. Key presses are consumed
 rather than forwarded, so an unhandled key never plays the system alert. The frame view answers assistive clients with the children [[Pudu Desktop Access]] builds. The adapter is compiled only for macOS.
 
 The adapter is not a Pudu foreign-library integration: application source cannot import it, name
@@ -36,6 +44,10 @@ the process and filesystem implementations.
 - The view owns a copy of frame bytes across asynchronous drawing.
 - Close detaches the delegate and orders the window out before release.
 - Queued input stops growing past one mebibyte until drained.
+- Configure refuses a density below 250 or above 8000 thousandths, negative limits, a minimum
+  above a nonzero maximum, or a half-specified aspect ratio before touching the window, and
+  toggles full screen only when the requested state differs from the window's; the transition
+  completes asynchronously and is reported by its record, never awaited by spinning.
 - Platform exceptions are contained and returned as failure status.
 
 ## Grill Log
@@ -70,6 +82,13 @@ with 0 primary, 1 secondary, 2 middle. Existing records are unchanged, and `Std.
 already skips records it does not know. Grill Log — **Q:** Reuse the interface key names? **A:**
 No; they are intents (`activate`, `dismiss`), not keys, and depend on modifiers. Physical codes
 make bindings mean the same key on every layout.
+
+- **Q:** Infer density from the frame size at present? **A:** No; a frame twice the content
+  size is ambiguous between a sharp frame and a requested resize. The caller declares density
+  once, and present stays a pure function of the declared density and frame size.
+- **Q:** Wait for full-screen transitions inside configure? **A:** No; spinning the event loop
+  until the mode changes stalls the frame loop for the whole animation. The record reports the
+  completed state and the caller keeps presenting meanwhile.
 
 ## Referenced by
 

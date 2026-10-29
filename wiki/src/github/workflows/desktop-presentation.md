@@ -7,8 +7,8 @@ tags: [module, test, delivery, desktop]
 ---
 # Desktop Presentation CI
 
-Run [[Desktop Presentation Gate]] on macOS for changes to the native boundary, harness, runner
-or this workflow. Checkout and the existing runner toolchain suffice; no compiler dependency
+Run [[Desktop Presentation Gate]] on macOS for changes to the native boundary, native tests, runner
+or this workflow; full-screen and miniaturize transitions stay local because they need a live session. Checkout and the existing runner toolchain suffice; no compiler dependency
 build or desktop automation is required. Include PRs and pushes to dev/feature branches.
 
 ## Resolved Grill Log

@@ -93,7 +93,7 @@ effectValueNames =
   , "cellOpen", "cellGet", "cellSwap"
   , "cellDispose", "mutexDispose", "forgetThread"
   , "secureRandomBytes"
-  , "desktopOpen", "desktopPresent", "desktopPump", "desktopInputs", "desktopClipboardRead", "desktopClipboardWrite", "desktopAccessibility", "desktopAccessibilityReport", "desktopMenu", "desktopMenuReport", "desktopClose", "audioDevicePlay"
+  , "desktopOpen", "desktopPresent", "desktopPump", "desktopInputs", "desktopConfigure", "desktopClipboardRead", "desktopClipboardWrite", "desktopAccessibility", "desktopAccessibilityReport", "desktopMenu", "desktopMenuReport", "desktopClose", "audioDevicePlay"
   , "audioStreamOpen", "audioStreamWrite", "audioStreamPause", "audioStreamResume"
   , "audioStreamVolume", "audioStreamSnapshot", "audioStreamClose"
   , "arguments", "environment", "temporaryPath", "userHome"
