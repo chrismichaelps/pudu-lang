@@ -56,8 +56,10 @@ fn query(p: V.Vec3, d: V.Vec3, second: Bool) -> Result[Option[Motion.Contact], C
 export fn main() -> Int {
   let Ok(slide) = Motion.move(V.vec3(-2.0, -2.0, 0.0), V.vec3(4.0, 3.0, 0.0), 8, |p, d| query(p, d, false)) else { panic("face query") }
   if slide.exhausted || Float.abs(slide.position.x + 0.5) > 1e-7 || Float.abs(slide.position.y - 1.0) > 1e-7 { panic("face slide") }
+  if Float.abs(slide.response.x) > 1e-7 || Float.abs(slide.response.y - 3.0) > 1e-7 || slide.remainingFraction != 0.0 { panic("face response") }
   let Ok(edge) = Motion.move(V.vec3(-2.0, 10.3, 0.0), V.vec3(4.0, 0.0, 0.0), 8, |p, d| query(p, d, false)) else { panic("edge query") }
   if edge.exhausted || Float.abs(edge.position.x - 0.464) > 1e-6 || Float.abs(edge.position.y - 11.452) > 1e-6 { panic("rounded edge slide") }
+  if Float.abs(edge.response.x - 1.44) > 1e-6 || Float.abs(edge.response.y - 1.92) > 1e-6 { panic("edge response") }
   let Ok(corner) = Motion.move(V.vec3(-2.0, -2.0, 0.0), V.vec3(4.0, 4.0, 3.0), 8, |p, d| query(p, d, true)) else { panic("corner query") }
   if corner.exhausted || Float.abs(corner.position.x + 0.5) > 1e-7 || Float.abs(corner.position.y + 0.5) > 1e-7 || Float.abs(corner.position.z - 3.0) > 1e-7 { panic("corner slide") }
   let Ok(clear) = Motion.move(V.vec3(-2.0, 20.0, 0.0), V.vec3(4.0, 0.0, 0.0), 8, |p, d| query(p, d, false)) else { panic("clear query") }

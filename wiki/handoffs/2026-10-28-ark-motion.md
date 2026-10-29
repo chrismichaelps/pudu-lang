@@ -22,26 +22,35 @@ The query callback keeps the solver independent of unmerged #719. Validate actua
 a temporary overlay using that finite-box query, as well as a standalone analytic fixture.
 Walking/falling and floor support remain open; this slice provides their geometric movement seam.
 
-Focused fixture, positioned refusal, formatting/lint and actual source archive pass. The finite-box
-adapter verifies a non-point capsule against two finite obstacles, rounded-edge sliding, out-of-bounds clear travel and
-preserved initial-overlap payload. Both baseline and repaired compilers execute the standalone gate.
-The fresh clean optimized -Werror build, full compiler suite and every repository gate passed.
-The freshly built baseline compiler also passed the non-point capsule overlay integration gate.
+## Current verification and integration
 
-[[Ark Motion Benchmark]] baseline mixed two-wall moves: 552 / 568 / 554 ms per 1,000 after 100
-warmup moves. Reusing the validated near-unit normal length gives 506 / 504 / 504 ms,
-median about 9% lower, with identical checksum 5000.0 and warmup 500.0. Local interpreter timing
-includes callbacks; this is not native scene throughput. PR #719 hosted checks all passed.
+The original draft passed clean optimized full validation and hosted checks. Ground support is
+separately delivered in draft #723. Nothing is merged. Frame integration exposed missing end
+response and budget-time outputs: Architect resolved the amended contract before Runtime Engineer
+updated the same owned files. Focused Chrome source study verified that post-impact velocity and
+remaining time differ from average applied travel.
 
-Role transition: Runtime Engineer finished focused/full verification; Tooling/Release publishes
-the draft for independent implementation, semantic and vault review.
+Movement now retains response and remainingFraction; a single component-scaled projection updates
+response and derives residual by scalar time. Completed moves consume constant-motion time,
+including rest after a stop, while retaining post-contact response. This is not an event-time
+ballistic integrator. Before final-frame composition, tests cover resumption, endpoint response,
+overflowing Euclidean magnitude with finite components and explicit complete underflow refusal.
+The shallow-inward regression first exhausted the budget: incoming feasibility incorrectly used
+candidate slack. Incoming direction now uses zero slack; rounded candidates retain tolerance.
+The focused gate and actual capsule/box adapter pass with baseline and freshly built compilers.
+The fresh optimized -Werror build, full suite and every repository gate passed; evidence is in
+/tmp/pudu-motion-response-gates.log. Ground #723 hosted checks also all passed.
 
-Delivery: implementation commit `ff6a8ce8` is pushed in draft
-PR [#721](https://github.com/chrismichaelps/pudu-lang/pull/721) targeting dev.
-Hosted checks and independent reviews remain pending. No PR was merged.
+[[Ark Motion Benchmark]] prior draft: 508 / 519 / 512 ms per 1,000 two-wall moves after 100 warmup,
+median 512 ms. Quiet final runs after full validation: 410 / 409 / 422 ms, median 410 ms (about 20%
+lower), with checksum 5000.0 and warmup 500.0 unchanged. This is local interpreter timing including
+query callbacks and response validation, not native scene throughput.
 
-Exact next action: implement gravity-relative floor support and walking/falling transitions over
-validated sweep callbacks, beginning with the resolved support/landing contract in the vault.
+Delivery continues in draft PR [#721](https://github.com/chrismichaelps/pudu-lang/pull/721).
+Role transition: Runtime Engineer completed validation; Tooling/Release publishes the refinement.
+Exact next action: compose gravity/movement/support into frame-controller behavior using validated
+response and budget-time outputs. Do not merge.
+Independent implementation, Language Architect and Forensic Guardian reviews remain required.
 
 ## Referenced by
 

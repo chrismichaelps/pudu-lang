@@ -28,7 +28,7 @@ fn batch(count: Int) -> Float64 {
   var checksum = 0.0
   for _ in 0..count {
     let Ok(value) = Motion.move(V.vec3(2.0, 2.0, 2.0), V.vec3(-4.0, -4.0, 3.0), 4, query) else { panic("query failed") }
-    assert(!value.exhausted && value.queries == 3 && value.contacts == 2)
+    assert(!value.exhausted && value.queries == 3 && value.contacts == 2 && value.remainingFraction == 0.0 && value.response.z == 3.0)
     checksum = checksum + value.position.z
   }
   checksum

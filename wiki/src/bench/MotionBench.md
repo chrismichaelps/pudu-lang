@@ -8,7 +8,7 @@ tags: [module, ark, physics, benchmark]
 # Ark Motion Benchmark
 
 Warm up 100 moves, then time 1,000 moves through a two-wall analytic callback.
-Consume position, query/contact counts and completion status; fail on typed errors or exhaustion.
+Consume position, response, remaining fraction, query/contact counts and completion status; fail on typed errors or exhaustion.
 Print elapsed milliseconds and checksum. This measures the local interpreter, including
 callback work, not native scene throughput. The fixture owns correctness expectations.
 

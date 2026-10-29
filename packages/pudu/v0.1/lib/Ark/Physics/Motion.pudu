@@ -6,8 +6,8 @@ import Ark.Math as V
 /// An earliest blocking fraction and outward unit normal supplied by the shape query.
 export type Contact = { fraction: Float64, normal: V.Vec3 }
 
-/// A bounded movement result; remaining travel is unapplied when exhausted is true.
-export type Movement = { position: V.Vec3, remaining: V.Vec3, queries: Int, contacts: Int, exhausted: Bool }
+/// Remaining travel/time are unapplied on exhaustion; response retains full-call deflection.
+export type Movement = { position: V.Vec3, remaining: V.Vec3, response: V.Vec3, remainingFraction: Float64, queries: Int, contacts: Int, exhausted: Bool }
 
 /// Query failures retain their original payload; malformed contacts never become misses.
 export type Error[E] = InvalidInput | InvalidContact | NumericRange | QueryFailed(E)
@@ -18,6 +18,8 @@ export fn move[E](origin: V.Vec3, displacement: V.Vec3, maxQueries: Int, sweep: 
   if !V.isFinite(V.add(origin, displacement)) { return Err(NumericRange) }
   var position = origin
   var remaining = displacement
+  var response = displacement
+  var remainingFraction = 1.0
   var normals: Array[V.Vec3] = []
   var queries = 0
   var contacts = 0
@@ -43,38 +45,44 @@ export fn move[E](origin: V.Vec3, displacement: V.Vec3, maxQueries: Int, sweep: 
     if !V.isFinite(position) { return Err(NumericRange) }
     contacts = contacts + 1
     normals = normals.push(normal)
-    let Some(clipped) = constrained(V.scale(remaining, 1.0 - hit.fraction), &normals) else { return Err(NumericRange) }
-    remaining = clipped
+    remainingFraction = remainingFraction * (1.0 - hit.fraction)
+    let Some(clipped) = constrained(response, &normals) else { return Err(NumericRange) }
+    response = clipped
+    remaining = V.scale(response, remainingFraction)
+    if remaining == V.vec3(0.0, 0.0, 0.0) && response != remaining && remainingFraction > 0.0 { return Err(NumericRange) }
   }
-  Ok(Movement{position, remaining, queries, contacts, exhausted: remaining != V.vec3(0.0, 0.0, 0.0)})
+  let exhausted = remaining != V.vec3(0.0, 0.0, 0.0)
+  Ok(Movement{position, remaining, response, remainingFraction: if exhausted { remainingFraction } else { 0.0 }, queries, contacts, exhausted})
 }
 
 // Homogeneous contact constraints admit an interior, face, crease or zero minimizer.
-// Unit-motion scoring avoids squared-distance overflow and underflow at the caller's scale.
+// Component scaling avoids magnitude overflow; response and residual share the same projection.
 fn constrained(displacement: V.Vec3, normals: &Array[V.Vec3]) -> Option[V.Vec3] {
-  let length = V.length(displacement) ?
-  if length == 0.0 { return Some(displacement) }
-  let unit = V.normalized(displacement) ?
-  if feasible(unit, normals) { return Some(displacement) }
+  var scale = Float.abs(displacement.x)
+  if Float.abs(displacement.y) > scale { scale = Float.abs(displacement.y) }
+  if Float.abs(displacement.z) > scale { scale = Float.abs(displacement.z) }
+  if scale == 0.0 { return Some(displacement) }
+  let scaled = V.vec3(displacement.x / scale, displacement.y / scale, displacement.z / scale)
+  if feasible(scaled, normals, 0.0) { return Some(displacement) }
   var best = V.vec3(0.0, 0.0, 0.0)
-  var cost = V.dot(unit, unit)
+  var cost = V.dot(scaled, scaled)
   var first = 0
   while first < normals.length() {
     let normal = normals[first]
-    let face = V.subtract(unit, V.scale(normal, V.dot(unit, normal)))
-    let delta = V.subtract(face, unit)
+    let face = V.subtract(scaled, V.scale(normal, V.dot(scaled, normal)))
+    let delta = V.subtract(face, scaled)
     let score = V.dot(delta, delta)
-    if score < cost && feasible(face, normals) {
+    if score < cost && feasible(face, normals, 1e-12) {
       best = face
       cost = score
     }
     var second = first + 1
     while second < normals.length() {
       if let Some(axis) = V.normalized(V.cross(normal, normals[second])) {
-        let crease = V.scale(axis, V.dot(unit, axis))
-        let difference = V.subtract(crease, unit)
+        let crease = V.scale(axis, V.dot(scaled, axis))
+        let difference = V.subtract(crease, scaled)
         let distance = V.dot(difference, difference)
-        if distance < cost && feasible(crease, normals) {
+        if distance < cost && feasible(crease, normals, 1e-12) {
           best = crease
           cost = distance
         }
@@ -83,13 +91,13 @@ fn constrained(displacement: V.Vec3, normals: &Array[V.Vec3]) -> Option[V.Vec3] 
     }
     first = first + 1
   }
-  let result = V.scale(best, length)
-  if V.isFinite(result) { Some(result) } else { None }
+  let result = V.scale(best, scale)
+  if !V.isFinite(result) || (result == V.vec3(0.0, 0.0, 0.0) && best != result) { None } else { Some(result) }
 }
 
-fn feasible(direction: V.Vec3, normals: &Array[V.Vec3]) -> Bool {
+fn feasible(direction: V.Vec3, normals: &Array[V.Vec3], slack: Float64) -> Bool {
   for normal in *normals {
-    if V.dot(direction, normal) < -1e-12 { return false }
+    if V.dot(direction, normal) < -slack { return false }
   }
   true
 }

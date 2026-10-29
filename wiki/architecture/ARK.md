@@ -80,7 +80,8 @@ inspectors, all content editors and collaboration foundations. These remain targ
 
 [[Ark Swept Motion]] provides callback-driven contact sliding with bounded residual handling;
 finite-obstacle query composition is tested separately while its dependency PR remains unmerged.
-Floor support and walking/falling/stepping policy remain open.
+The response and unconsumed fraction support frame velocity and budget resumption.
+Floor support and walking/falling/stepping composition remain open.
 
 ## Research decisions
 
