@@ -290,6 +290,49 @@ export fn each(world: World, all: &Array[Str], none: &Array[Str], system: fn(Vie
   Some(current)
 }
 
+/// A view holding only the listed components' columns; reads and writes of any other column answer None.
+export fn restrict(world: &World, view: &View, components: &Array[Str]) -> View {
+  var columns: Map[Str, Lanes.Lanes] = mapOf([])
+  for component in *components {
+    let fields = fieldCount(world, component)
+    var field = 0
+    while field < fields {
+      let key = columnKey(component, field)
+      if let Some(lanes) = view.columns.get(key) { columns = columns.insert(key, lanes) }
+      field = field + 1
+    }
+  }
+  View{..*view, columns}
+}
+
+/// Store only the listed components' columns of a view; None when the view no longer fits its archetype.
+export fn commitComponents(world: World, view: &View, components: &Array[Str]) -> Option[World] {
+  if view.archetype < 0 || view.archetype >= world.archetypes.length() { return None }
+  let held = world.archetypes[view.archetype]
+  if held.entities.length() != view.entities.length() { return None }
+  var columns = held.columns
+  for component in *components {
+    let fields = fieldCount(&world, component)
+    var field = 0
+    while field < fields {
+      let key = columnKey(component, field)
+      if columns.containsKey(key) {
+        let lanes = view.columns.get(key) ?
+        if Lanes.count(&lanes) != held.entities.length() { return None }
+        columns = columns.insert(key, lanes)
+      }
+      field = field + 1
+    }
+  }
+  var archetypes = world.archetypes
+  archetypes[view.archetype] = Archetype{..held, columns}
+  Some(World{..world, archetypes})
+}
+
+fn fieldCount(world: &World, component: Str) -> Int {
+  if let Some(fields) = world.schema.get(component) { fields } else { 0 }
+}
+
 fn columnKey(component: Str, field: Int) -> Str {
   component + "#" + show(field)
 }
