@@ -29,3 +29,8 @@ their existing obligations. The application graph model tests and actual library
 [[Derive Index Output Gate]] runs against the built executable after documentation output checks, exercising root visibility, structured metadata, standard strategies and failure output.
 
 Resolved Grill Log: command serialization is verified through the actual executable rather than only encoder properties.
+
+## Swept movement (#720)
+
+[[Ark Motion Gate]] checks bounded movement, callback failure and shipping.
+Resolved Grill Log: use the same freshly built compiler as the other CLI gates.

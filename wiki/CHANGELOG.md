@@ -5,6 +5,13 @@ tags: [changelog]
 
 # Changelog
 
+## Query-driven swept movement (#720)
+
+Add [[Ark Swept Motion]] with checked callback contacts, preserved typed query errors,
+bounded face/crease contact clipping and unapplied residual on exhaustion.
+[[Ark Motion Fixture]] and [[Ark Motion Gate]] cover numeric and control-flow refusals.
+Walking/falling, support queries and native engine throughput remain open.
+
 ## 2026-10-27 — Verified HTTPS CI index transport (#656)
 
 - [[Website Linux Workflow]] configures signed HTTPS Hackage access before one explicit update.

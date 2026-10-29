@@ -1,0 +1,103 @@
+module UsesArkMotion
+
+import Std.Math.Float as Float
+import Ark.Math as V
+import Ark.Physics.Motion as Motion
+
+type Plane = { normal: V.Vec3, offset: Float64 }
+
+fn assert(condition: Bool) {
+  if !condition { panic("motion assertion failed") }
+}
+
+fn query(position: V.Vec3, displacement: V.Vec3, planes: &Array[Plane]) -> Result[Option[Motion.Contact], Str] {
+  var contact: Option[Motion.Contact] = None
+  var earliest = 1.0
+  for plane in *planes {
+    let speed = V.dot(displacement, plane.normal)
+    if speed < 0.0 {
+      let gap = V.dot(position, plane.normal) - plane.offset
+      let fraction = (if gap > 0.0 { gap } else { 0.0 }) / -speed
+      if fraction <= earliest {
+        earliest = fraction
+        contact = Some(Motion.Contact{fraction, normal: plane.normal})
+      }
+    }
+  }
+  Ok(contact)
+}
+
+fn moved(position: V.Vec3, displacement: V.Vec3, planes: Array[Plane], budget: Int) -> Motion.Movement {
+  let Ok(value) = Motion.move(position, displacement, budget, |p, d| query(p, d, &planes)) else { panic("movement failed") }
+  value
+}
+
+fn near(actual: Float64, expected: Float64) {
+  assert(Float.abs(actual - expected) < 1e-8)
+}
+
+fn invalid(contact: Motion.Contact) -> Bool {
+  let result = Motion.move(V.vec3(0.0, 0.0, 0.0), V.vec3(-1.0, 0.0, 0.0), 4, |_origin, _motion| -> Result[Option[Motion.Contact], Str] { Ok(Some(contact)) })
+  match result { case Err(Motion.InvalidContact) => true case _ => false }
+}
+
+export fn main() -> Int {
+  let zero = V.vec3(0.0, 0.0, 0.0)
+  let start = V.vec3(2.0, 2.0, 2.0)
+  let wall = Plane{normal: V.vec3(1.0, 0.0, 0.0), offset: 0.0}
+  let side = Plane{normal: V.vec3(0.0, 1.0, 0.0), offset: 0.0}
+  let floor = Plane{normal: V.vec3(0.0, 0.0, 1.0), offset: 0.0}
+  let free = moved(zero, V.vec3(3.0, 4.0, 5.0), [], 1)
+  assert(free.position == V.vec3(3.0, 4.0, 5.0) && free.queries == 1 && free.contacts == 0 && !free.exhausted)
+  let still = Motion.move(zero, zero, 1, |_origin, _motion| -> Result[Option[Motion.Contact], Str] { panic("zero travel queried") })
+  assert(match still { case Ok(value) => value.queries == 0 && !value.exhausted case _ => false })
+  let slide = moved(start, V.vec3(-4.0, 3.0, 0.0), [wall], 4)
+  near(slide.position.x, 0.0)
+  near(slide.position.y, 5.0)
+  assert(slide.queries == 2 && slide.contacts == 1 && !slide.exhausted)
+  let limited = moved(start, V.vec3(-4.0, 3.0, 0.0), [wall], 1)
+  near(limited.position.y, 3.5)
+  near(limited.remaining.y, 1.5)
+  assert(limited.exhausted && limited.queries == 1 && limited.contacts == 1)
+  for planes in [[wall, side], [side, wall]] {
+    let crease = moved(start, V.vec3(-4.0, -4.0, 3.0), planes, 4)
+    near(crease.position.x, 0.0)
+    near(crease.position.y, 0.0)
+    near(crease.position.z, 5.0)
+    assert(crease.contacts == 2 && !crease.exhausted)
+  }
+  let diagonal = Plane{normal: V.vec3(-0.6, 0.8, 0.0), offset: 0.0}
+  let oblique = moved(start, V.vec3(-4.0, -4.0, 3.0), [wall, diagonal], 8)
+  near(oblique.position.x, 0.0)
+  near(oblique.position.y, 0.0)
+  near(oblique.position.z, 5.0)
+  assert(!oblique.exhausted)
+  let duplicate = moved(start, V.vec3(-4.0, 3.0, 0.0), [wall, wall], 4)
+  near(duplicate.position.y, 5.0)
+  assert(duplicate.contacts == 1 && !duplicate.exhausted)
+  let endpoint = moved(start, V.vec3(-2.0, 0.0, 0.0), [wall], 1)
+  assert(endpoint.position == V.vec3(0.0, 2.0, 2.0) && !endpoint.exhausted)
+  let corner = moved(start, V.vec3(-4.0, -4.0, -4.0), [wall, side, floor], 4)
+  assert(corner.position == zero && corner.remaining == zero && corner.contacts == 3 && !corner.exhausted)
+  for scale in [1e-200, 1e200] {
+    let scaled = moved(V.scale(start, scale), V.vec3(-4.0 * scale, 3.0 * scale, 0.0), [wall], 4)
+    near(scaled.position.x / scale, 0.0)
+    near(scaled.position.y / scale, 5.0)
+  }
+  let failed = Motion.move(zero, start, 4, |_origin, _motion| -> Result[Option[Motion.Contact], Str] { Err("query unavailable") })
+  assert(match failed { case Err(Motion.QueryFailed(message)) => message == "query unavailable" case _ => false })
+  for fraction in [-0.1, 1.1, ((1e308 * 2.0) - (1e308 * 2.0))] { assert(invalid(Motion.Contact{fraction, normal: wall.normal})) }
+  for normal in [zero, V.vec3(2.0, 0.0, 0.0), V.vec3(-1.0, 0.0, 0.0), V.vec3(0.0, 1.0, 0.0), V.vec3((1e308 * 2.0), 0.0, 0.0)] {
+    assert(invalid(Motion.Contact{fraction: 0.0, normal}))
+  }
+  for budget in [0, 17] {
+    let bad = Motion.move(zero, zero, budget, |_origin, _motion| -> Result[Option[Motion.Contact], Str] { panic("invalid request queried") })
+    assert(match bad { case Err(Motion.InvalidInput) => true case _ => false })
+  }
+  let nonfinite = Motion.move(V.vec3(((1e308 * 2.0) - (1e308 * 2.0)), 0.0, 0.0), zero, 1, |p, d| query(p, d, &[]))
+  assert(match nonfinite { case Err(Motion.InvalidInput) => true case _ => false })
+  let overflow = Motion.move(V.vec3(1e308, 0.0, 0.0), V.vec3(1e308, 0.0, 0.0), 1, |p, d| query(p, d, &[]))
+  assert(match overflow { case Err(Motion.NumericRange) => true case _ => false })
+  print("ark motion: ok")
+  0
+}

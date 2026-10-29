@@ -78,6 +78,10 @@ Net includes interest, prediction/rollback, dedicated servers and sessions; Audi
 mixing/streaming/music; Assets includes import through cooked packages; Editor includes typed
 inspectors, all content editors and collaboration foundations. These remain target obligations.
 
+[[Ark Swept Motion]] provides callback-driven contact sliding with bounded residual handling;
+finite-obstacle query composition is tested separately while its dependency PR remains unmerged.
+Floor support and walking/falling/stepping policy remain open.
+
 ## Research decisions
 
 The architecture review selected chunked component storage, declared render hazards and explicit

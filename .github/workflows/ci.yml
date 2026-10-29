@@ -114,6 +114,8 @@ jobs:
           fi
       - name: Verify the Linguist submission is consistent
         run: python3 scripts/linguist.py check --pudu "$PUDU"
+      - name: Verify swept movement contracts
+        run: node test/ark-motion.mjs "$PUDU"
       - name: Verify every diagnostic code means one thing
         run: node test/diagnostic-codes.mjs
       # A merge that changes only documentation, the website, or the examples

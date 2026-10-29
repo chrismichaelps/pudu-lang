@@ -73,3 +73,8 @@ including externally observable filesystem modes that portable permission boolea
 [[Derive Index Output Gate]] runs after documentation parity against the same freshly built executable.
 
 Resolved Grill Log: local and integration delivery both exercise actual strategy output and public visibility.
+
+## Swept movement (#720)
+
+[[Ark Motion Gate]] validates query-driven sliding and typed refusals.
+Resolved Grill Log: execute the focused gate beside the full compiler suite.

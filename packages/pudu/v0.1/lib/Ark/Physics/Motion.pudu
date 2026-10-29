@@ -1,0 +1,95 @@
+module Ark.Physics.Motion
+
+import Std.Math.Float as Float
+import Ark.Math as V
+
+/// An earliest blocking fraction and outward unit normal supplied by the shape query.
+export type Contact = { fraction: Float64, normal: V.Vec3 }
+
+/// A bounded movement result; remaining travel is unapplied when exhausted is true.
+export type Movement = { position: V.Vec3, remaining: V.Vec3, queries: Int, contacts: Int, exhausted: Bool }
+
+/// Query failures retain their original payload; malformed contacts never become misses.
+export type Error[E] = InvalidInput | InvalidContact | NumericRange | QueryFailed(E)
+
+/// Sweep and slide a fixed shape captured by the callback; floor and overlap policy stay external.
+export fn move[E](origin: V.Vec3, displacement: V.Vec3, maxQueries: Int, sweep: fn(V.Vec3, V.Vec3) -> Result[Option[Contact], E]) -> Result[Movement, Error[E]] {
+  if !V.isFinite(origin) || !V.isFinite(displacement) || maxQueries < 1 || maxQueries > 16 { return Err(InvalidInput) }
+  if !V.isFinite(V.add(origin, displacement)) { return Err(NumericRange) }
+  var position = origin
+  var remaining = displacement
+  var normals: Array[V.Vec3] = []
+  var queries = 0
+  var contacts = 0
+  while remaining != V.vec3(0.0, 0.0, 0.0) && queries < maxQueries {
+    let found = match sweep(position, remaining) {
+      case Ok(value) => value
+      case Err(error) => { return Err(QueryFailed(error)) }
+    }
+    queries = queries + 1
+    let Some(hit) = found else {
+      position = V.add(position, remaining)
+      if !V.isFinite(position) { return Err(NumericRange) }
+      remaining = V.vec3(0.0, 0.0, 0.0)
+      break
+    }
+    if !(hit.fraction >= 0.0 && hit.fraction <= 1.0) { return Err(InvalidContact) }
+    let Some(length) = V.length(hit.normal) else { return Err(InvalidContact) }
+    if Float.abs(length - 1.0) > 1e-9 { return Err(InvalidContact) }
+    let normal = V.scale(hit.normal, 1.0 / length)
+    let Some(direction) = V.normalized(remaining) else { return Err(NumericRange) }
+    if V.dot(direction, normal) >= 0.0 { return Err(InvalidContact) }
+    position = V.add(position, V.scale(remaining, hit.fraction))
+    if !V.isFinite(position) { return Err(NumericRange) }
+    contacts = contacts + 1
+    normals = normals.push(normal)
+    let Some(clipped) = constrained(V.scale(remaining, 1.0 - hit.fraction), &normals) else { return Err(NumericRange) }
+    remaining = clipped
+  }
+  Ok(Movement{position, remaining, queries, contacts, exhausted: remaining != V.vec3(0.0, 0.0, 0.0)})
+}
+
+// Homogeneous contact constraints admit an interior, face, crease or zero minimizer.
+// Unit-motion scoring avoids squared-distance overflow and underflow at the caller's scale.
+fn constrained(displacement: V.Vec3, normals: &Array[V.Vec3]) -> Option[V.Vec3] {
+  let length = V.length(displacement) ?
+  if length == 0.0 { return Some(displacement) }
+  let unit = V.normalized(displacement) ?
+  if feasible(unit, normals) { return Some(displacement) }
+  var best = V.vec3(0.0, 0.0, 0.0)
+  var cost = V.dot(unit, unit)
+  var first = 0
+  while first < normals.length() {
+    let normal = normals[first]
+    let face = V.subtract(unit, V.scale(normal, V.dot(unit, normal)))
+    let delta = V.subtract(face, unit)
+    let score = V.dot(delta, delta)
+    if score < cost && feasible(face, normals) {
+      best = face
+      cost = score
+    }
+    var second = first + 1
+    while second < normals.length() {
+      if let Some(axis) = V.normalized(V.cross(normal, normals[second])) {
+        let crease = V.scale(axis, V.dot(unit, axis))
+        let difference = V.subtract(crease, unit)
+        let distance = V.dot(difference, difference)
+        if distance < cost && feasible(crease, normals) {
+          best = crease
+          cost = distance
+        }
+      }
+      second = second + 1
+    }
+    first = first + 1
+  }
+  let result = V.scale(best, length)
+  if V.isFinite(result) { Some(result) } else { None }
+}
+
+fn feasible(direction: V.Vec3, normals: &Array[V.Vec3]) -> Bool {
+  for normal in *normals {
+    if V.dot(direction, normal) < -1e-12 { return false }
+  }
+  true
+}
