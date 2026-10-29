@@ -1,0 +1,46 @@
+module PhysicsBench
+
+import Std.Math.Float as Float
+import Std.Time as Time
+import Ark.Core.Handle as Handle
+import Ark.Math as V
+import Ark.Physics as Physics
+import Ark.Physics.Step as Step
+
+/// Drop 1,000 spheres into a walled pit and report nanoseconds per step once they pile up.
+export fn main() -> Int {
+  let Some(floor) = Physics.addPlane(Physics.world(V.vec3(0.0, -9.81, 0.0)), V.vec3(0.0, 1.0, 0.0), V.vec3(0.0, 0.0, 0.0)) else { panic("plane") }
+  let Some(west) = Physics.addPlane(floor, V.vec3(1.0, 0.0, 0.0), V.vec3(-5.0, 0.0, 0.0)) else { panic("plane") }
+  let Some(east) = Physics.addPlane(west, V.vec3(-1.0, 0.0, 0.0), V.vec3(5.0, 0.0, 0.0)) else { panic("plane") }
+  let Some(north) = Physics.addPlane(east, V.vec3(0.0, 0.0, 1.0), V.vec3(0.0, 0.0, -5.0)) else { panic("plane") }
+  let Some(walled) = Physics.addPlane(north, V.vec3(0.0, 0.0, -1.0), V.vec3(0.0, 0.0, 5.0)) else { panic("plane") }
+  let Some(shape) = Physics.sphere(0.4) else { panic("shape") }
+  var bodies = walled
+  var pool = Handle.empty()
+  var index = 0
+  while index < 1000 {
+    let (next, entity) = Handle.allocate(pool)
+    pool = next
+    let place = V.vec3(Float.fromInt(index % 10) * 0.95 - 4.3, 0.5 + Float.fromInt(index / 100) * 0.95, Float.fromInt((index / 10) % 10) * 0.95 - 4.3)
+    let Some(added) = Physics.add(bodies, entity, &Physics.Body{position: place, velocity: V.vec3(0.0, 0.0, 0.0), mass: 1.0, restitution: 0.2, friction: 0.4, shape}) else { panic("add") }
+    bodies = added
+    index = index + 1
+  }
+  var frame = 0
+  var measured = 0
+  var contacts = 0
+  while frame < 120 {
+    let started = Time.monotonicNanos()
+    let Some((next, stats)) = Step.step(bodies, 0.016666666666666666, 4) else { panic("step") }
+    if frame >= 60 {
+      measured = measured + (Time.monotonicNanos() - started)
+      contacts = contacts + stats.contacts
+    }
+    bodies = next
+    frame = frame + 1
+  }
+  print("bodies 1000")
+  print("contacts " + show(contacts / 60))
+  print("step " + show(measured / 60))
+  0
+}

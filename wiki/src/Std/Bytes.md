@@ -26,6 +26,10 @@ at 120,000 bytes hex encoding takes about 0.42 s and base64 decoding about 0.98 
 per-byte appending and positional reads took 2.3 s and 2.0 s and grew with the square of the input.
 A bad hex digit is reported at the start of its pair and a bad base64 digit at its own position;
 trailing base64 padding is counted once from the end.
+
+`strided(source, offset, width, stride)` takes `width` bytes from every `stride`-byte group in one
+native pass, e.g. RGB from packed RGBA. Malformed group shapes answer `None`; an offset past the
+end answers empty bytes; a final short group contributes what remains.
 ## Grill Log
 - **Q:** Reuse `Array[UInt8]` as the public type? **A:** No. _Rationale:_ bytes need compact storage,
   slice semantics, and a text boundary that an ordinary array does not promise. _Rejected:_ text as
@@ -34,5 +38,7 @@ trailing base64 padding is counted once from the end.
   cost time growing with the square of the input, and attachments and uploads are large.
   _Accepted:_ gathered pieces joined once and in-order character walks. _Rejected:_ native codec
   primitives while the Pudu forms meet the linear bound.
+- **Q:** Strip a channel with a Pudu push loop? **A:** No. _Rationale:_ at about a second per
+  640×480 frame it is per-byte interpreted work. _Accepted:_ one native strided copy.
 ## Referenced by
 [[src/Std/_MOC]] · [[Eval Bytes]] · [[architecture/STDLIB]]

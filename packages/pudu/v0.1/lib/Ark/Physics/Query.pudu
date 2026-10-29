@@ -1,0 +1,62 @@
+module Ark.Physics.Query
+
+import Std.Lanes as Lanes
+import Ark.Core.Handle as Handle
+import Ark.Math.Geometry as G
+import Ark.Math as V
+import Ark.Physics as Physics
+
+/// The nearest body a ray reached: its entity, the distance along the ray and the point.
+export type Hit = { entity: Handle.Handle, distance: Float64, point: V.Vec3 }
+
+/// The nearest body within `maxDistance` along a ray, or None when nothing is reached.
+export fn raycast(bodies: &Physics.Bodies, line: &G.Ray, maxDistance: Float64) -> Option[Hit] {
+  let px = Lanes.toArray(&bodies.px)
+  let py = Lanes.toArray(&bodies.py)
+  let pz = Lanes.toArray(&bodies.pz)
+  let ex = Lanes.toArray(&bodies.ex)
+  let ey = Lanes.toArray(&bodies.ey)
+  let ez = Lanes.toArray(&bodies.ez)
+  var best: Option[Hit] = None
+  var nearest = maxDistance
+  var slot = 0
+  while slot < px.length() {
+    let center = V.vec3(px[slot], py[slot], pz[slot])
+    let reached = if bodies.kinds[slot] == "sphere" {
+      G.raySphere(*line, G.sphere(center, ex[slot]))
+    } else {
+      G.rayAabb(*line, G.aabbAround(center, V.vec3(ex[slot], ey[slot], ez[slot])))
+    }
+    if let Some(distance) = reached {
+      if distance <= nearest {
+        nearest = distance
+        best = Some(Hit{entity: bodies.entities[slot], distance, point: G.pointAt(*line, distance)})
+      }
+    }
+    slot = slot + 1
+  }
+  best
+}
+
+/// Every body whose shape contains the point, in slot order.
+export fn overlapsPoint(bodies: &Physics.Bodies, point: V.Vec3) -> Array[Handle.Handle] {
+  let px = Lanes.toArray(&bodies.px)
+  let py = Lanes.toArray(&bodies.py)
+  let pz = Lanes.toArray(&bodies.pz)
+  let ex = Lanes.toArray(&bodies.ex)
+  let ey = Lanes.toArray(&bodies.ey)
+  let ez = Lanes.toArray(&bodies.ez)
+  var found: Array[Handle.Handle] = []
+  var slot = 0
+  while slot < px.length() {
+    let center = V.vec3(px[slot], py[slot], pz[slot])
+    let inside = if bodies.kinds[slot] == "sphere" {
+      V.distanceSquared(center, point) <= ex[slot] * ex[slot]
+    } else {
+      G.containsPoint(G.aabbAround(center, V.vec3(ex[slot], ey[slot], ez[slot])), point)
+    }
+    if inside { found = found.push(bodies.entities[slot]) }
+    slot = slot + 1
+  }
+  found
+}

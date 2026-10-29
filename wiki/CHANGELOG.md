@@ -5,6 +5,356 @@ tags: [changelog]
 
 # Changelog
 
+## 2026-10-29 — Sharp, resizable, state-aware engine windows (#728)
+
+- [[Ark Window]] tracks pixel and content size, backing scale, focus, minimize and full screen;
+  `configure` applies `Settings` and `observe` folds window events, re-applying density so sharp
+  frames follow the display. [[Ark Input]] decodes the window records and releases held input
+  on focus loss; [[Ark Game]] follows resizes and stops drawing while minimized.
+- [[Wave Tank Demo]] takes `--sharp`: on a 2x display the crest edges lose their stair-stepping
+  at the same window size, for 64 ms a frame against 27 ms.
+
+## 2026-10-29 — Window density, limits, full screen and state records (#728)
+
+- [[Pudu Desktop Adapter]] reports backing scale, focus, minimize and full-screen transitions as
+  input records and applies density, content limits, aspect ratio and full screen through
+  `pudu_desktop_configure`; present sizes content as frame pixels divided by density.
+- [[Eval Desktop]] validates `desktopConfigure` settings by name before the adapter.
+- [[Desktop Window Test]], [[Desktop Configure Gate]] and [[Desktop Configure Fixture]] cover
+  records, refusals, limits and density; live transitions run with `PUDU_LIVE_DESKTOP=1`.
+## 2026-10-29 — Parallel system schedule (#725)
+
+- [[Ark Schedule]] packs systems with declared reads and writes into conflict-free stages and
+  runs each stage on bounded workers over views cut to the declared columns, merging only
+  declared writes; [[Ark World]] gains precomputed `Columns` for restricting and merging views.
+- [[Ark Schedule Fixture]] and [[Ark World Gate]] cover packing, refusals, worker equivalence and
+  access enforcement; [[Ark Schedule Benchmark]] measures 2.61 → 1.54 ms for 200,000 entities.
+
+## 2026-10-29 — Lane work overlaps across threads (#726)
+
+- [[Pudu Cabal]] links a 32 MB large-object allocation limit, so lane kernel buffers share
+  collections instead of forcing a stop-the-world collection per call; four workers run lane
+  work 2.1x faster with unchanged serial time and lower peak memory.
+- [[Lane Collection Gate]] counts collections on [[Lane Collection Fixture]];
+  [[Lane Parallel Benchmark]] records the throughput; [[Lane Collection Delivery]] has evidence.
+## 2026-10-29 — Native presentation orientation (#724)
+
+[[Pudu Desktop Adapter]] preserves top-to-bottom surface rows in the default native view.
+[[Desktop Presentation Test]] checks asymmetric rows/channels, logical resize and backing scale.
+[[Desktop Presentation Delivery]] records live-engine discovery and independent review obligations.
+
+## 2026-10-28 — Per-pixel water
+
+- [[Ark Render Pipeline]] `projectSurface`, [[Ark Depth Clip]] extra attributes and
+  [[Ark Render Device]] `drawShaded` bring per-pixel lighting to the engine; [[Wave Tank Demo]]
+  water now shows sun glints and Fresnel sky reflection at about 23 ms a frame.
+
+## 2026-10-29 — Bounded concurrency releases its state (#730)
+
+- [[Std Concurrent]] `parallel` and the bounded helpers join then forget their threads and
+  dispose their claim counter, failure cell and result slots; four-item `mapBounded` no longer
+  leaves about 118 KB per call. [[Concurrent Release Gate]] holds live memory flat on success,
+  failure and `parallel` paths with [[Concurrent Release Fixture]].
+
+
+
+## 2026-10-29 — Capsule support (#722)
+
+[[Ark Capsule Support]] classifies floor slope and capsule witnesses, settles descending states
+and preserves rising/lost-support transitions plus typed query failures. [[Ark Ground Gate]]
+checks executable behavior and shipping. Full movement, gravity and stepping remain open.
+## Query-driven swept movement (#720)
+
+Add [[Ark Swept Motion]] with checked callback contacts, preserved typed query errors,
+bounded face/crease contact clipping, full-call response and unapplied residual/time on exhaustion.
+[[Ark Motion Fixture]] and [[Ark Motion Gate]] cover numeric and control-flow refusals.
+Walking/falling, support queries and native engine throughput remain open.
+## 2026-10-28 — Finite capsule-box casts (#716)
+
+- [[Ark Segment Box Distance]] supplies bounded analytic closest witnesses.
+- [[Ark Capsule Box Cast]] advances translated capsules with explicit overlap, range and
+  convergence failures. [[Ark Cast Gate]] and [[Ark Cast Fixture]] verify geometry and shipping.
+- [[Ark Cast Delivery]] records source study, the compiler prerequisite, validation and pending review.
+## 2026-10-28 — Checked capsule movement (#714)
+
+- [[Ark Character Movement]] adds continuous convex-boundary sweeps, capsule support, corner sliding,
+  bounded residual reporting and final grounding. [[Ark Character Fixture]] covers numeric refusal,
+  high-speed stopping and corner regressions; [[Ark Character Gate]] checks diagnostics and shipping.
+- [[Ark Character Delivery]] records scoped ownership, validation and pending independent review.
+## 2026-10-28 — Visible qualified constructors (#717)
+
+- [[Type Check Expression]] and [[Type Check Call]] share complete constructor-path admission
+  through [[Type Check Pattern]], preserving nominal types, visibility and lexical heads.
+- [[Qualified Variant Gate]] covers real imported/local constructors, positioned refusals and
+  runtime parity. [[Qualified Constructor Delivery]] records the engine prerequisite.
+## 2026-10-28 — W3003 respects result position (#700)
+
+- [[Check Propagation]] counts a value-form failure arm as propagation only when the match
+  stands in result position; a match bound with `let` keeps its `None` and is no longer told to
+  use `?`, which would have returned early.
+## 2026-10-28 — Strided byte groups (#699)
+
+- [[Eval Bytes]] and [[Std Bytes]] add `strided(offset, width, stride)`, copying a fixed-width
+  group from every stride in one native pass; packed RGBA becomes RGB without a per-pixel loop.
+## 2026-10-27 — Optimized runtime refresh (#686)
+
+- [[Refresh Pudu Installation]] explicitly selects optimization level 2 for build and install.
+- [[Refresh Installation Test]] exercises successful verification, identical and conflicting PATH
+  copies, and failure propagation without compiling or installing a real compiler.
+## 2026-10-27 — `?` on Option inside unannotated lambdas (#678)
+
+- [[Type Check Rule]] takes an unsolved result's carrier from an operand already typed `Option`;
+  [[Lambda Option Try Delivery]] records evidence.
+## 2026-10-27 — Game input records from the desktop adapter (#673)
+
+- [[pudu-desktop-adapter]] reports key down/up by physical code, pointer hover and every mouse
+  button; [[Game Input Delivery]] records evidence.
+## 2026-10-27 — Nanosecond monotonic clock (#670)
+
+- `clockNanos` and [[Std Time]] `monotonicNanos` measure intervals below a millisecond;
+  [[Monotonic Nanosecond Delivery]] records evidence.
+## 2026-10-27 — Complete flat-list source-span assertions (#662)
+
+- [[Expression Recovery Spec]] now verifies all three aggregate forms and both comma variants
+  with the same order and span assertions. The parser MOC lists both new test mirrors.
+## 2026-10-28 — Per-pixel shading in the raster kernel (#712)
+
+- [[Runtime Shade]] and [[Runtime Raster]] light every pixel from interpolated normals and
+  positions: Lambert with ambient, Blinn-Phong highlights and Fresnel reflection of a procedural
+  sky with a sun disc.
+
+## 2026-10-28 — Wave tank showcase
+
+- [[Wave Tank Demo]] simulates a damped wave equation on a 56×56 height field entirely with
+  gather/axpy lane kernels (about 0.3 ms a step) and renders lit, slope-tinted water in a glass
+  tank at about 21 ms a frame; drops fall on their own and Space splashes.
+
+## 2026-10-28 — Rolling spheres (#711)
+
+- [[Ark Physics]] spheres carry angular velocity and orientation; [[Ark Physics Step]] applies
+  friction torque with the solid-sphere inertia, reproducing the 5/7 sliding-to-rolling result in
+  [[Ark Physics Angular Fixture]].
+
+## 2026-10-28 — Packaged content and cooking (#710)
+
+- [[Ark Pack]] writes deterministic ARKP packs (sorted index, CRC-32 per file) and decodes them
+  into zero-copy views; [[Ark Virtual Files]] mounts packs.
+- [[Ark Build]] cooks declared assets by importing each exactly as the runtime will, packs them
+  with a manifest, and loads a pack back into an [[Ark Asset Server]].
+
+## 2026-10-28 — Game networking foundations (#709)
+
+- [[Ark Net]] tracks 16-bit wrapping sequences with 33-packet acknowledgement windows, smoothed
+  RTT, loss and an 8-byte header. [[Ark Replication]] quantizes lane columns, culls by interest
+  radius on lanes and encodes varint deltas against an acknowledged baseline with despawns.
+
+## 2026-10-28 — Immediate-mode UI (#708)
+
+- [[Ark UI]] adds label, button, checkbox and slider widgets with hot/active/focus memory,
+  Tab/Shift-Tab traversal, Enter and arrow keys, and a draw list rendered in one device batch.
+
+## 2026-10-28 — Game loop and camera rigs (#707)
+
+- [[Ark Game]] runs a generic scene stack over the fixed-step clock with action-mapped input,
+  interpolation alpha and a windowed loop; every frame step is a pure, headless-testable value.
+- [[Ark Game Camera]] adds a critically damped follow rig stable for any step and a clamped orbit.
+
+## 2026-10-28 — Spatial audio mixer (#706)
+
+- [[Ark Audio]] mixes handle-addressed voices on Float64 lanes through named buses, with
+  rolloff models from a const table, equal-power panning, occlusion and looping, and emits
+  stereo PCM16 blocks through the native interleave and quantize kernels.
+
+## 2026-10-28 — W3003 respects result position (#700)
+
+- [[Check Propagation]] counts a value-form failure arm as propagation only when the match
+  stands in result position; a match bound with `let` keeps its `None` and is no longer told to
+  use `?`, which would have returned early.
+
+## 2026-10-28 — Lane interleave and PCM16 output (#704)
+
+- [[Runtime Lanes]] and [[Std Lanes]] add `interleave` and `toPcm16`, so mixed Float64 audio
+  reaches 16-bit device frames in two native passes instead of a per-sample loop.
+
+## 2026-10-28 — Skeletal animation clips and state machine (#702)
+
+- [[Ark Animation]] samples key-major joint clips with clamp/loop wrapping and blends or layers
+  whole skeletons as lane kernels with shortest-arc rotations.
+- [[Ark Animation Machine]] drives clips with event transitions and cross-fades;
+  [[Ark Animation Fixture]] and [[Ark Animation Gate]] cover sampling, blending and refusals.
+- [[Ark Render Device]] encodes snapshot PPM with one strided copy (about 1 s to 1 ms at 640×480).
+
+## 2026-10-28 — Strided byte groups (#699)
+
+- [[Eval Bytes]] and [[Std Bytes]] add `strided(offset, width, stride)`, copying a fixed-width
+  group from every stride in one native pass; packed RGBA becomes RGB without a per-pixel loop.
+
+## 2026-10-28 — Textured and material draws (#697)
+
+- [[Runtime Sampler]] samples RGBA8 textures natively per pixel (nearest/bilinear, sRGB table,
+  premultiplied filtering); [[Runtime Raster]] adds a textured entry with perspective-correct u/v
+  and alpha cutout before depth writes.
+- [[Ark Mesh]] carries texture coordinates on every primitive, [[Ark Depth Clip]]
+  interpolates them, and [[Ark Render Device]] adds `drawTextured` and `drawMaterial`.
+  [[Ark Textured Fixture]] draws an imported material from asset bytes to pixels.
+
+## 2026-10-28 — Asset server and staged hot reload (#696)
+
+- [[Ark Asset Server]] loads declared assets through virtual reads, issues generational handles
+  and reloads changed sources with their dependents dependency-first, publishing only when every
+  staged import succeeds. Byte-identical rewrites advance nothing.
+- [[Ark Asset Import]] adds a const importer table for bytes, cooked textures and materials, and
+  the cooked texture writer. [[Ark Asset Server Fixture]] covers real on-disk reload.
+
+## 2026-10-28 — Asset dependency graph (#693)
+
+- [[Ark Asset Dependencies]] validates IDs and edges, orders assets dependency-first without
+  recursion and returns each changed asset's transitive dependents once for staged reload.
+- [[Ark Asset Graph Fixture]] covers diamonds, typed declaration failures, cycles with blocked
+  descendants, forged graphs and a 1,000-node chain; [[Ark Assets Gate]] runs it.
+
+## 2026-10-27 — Virtual engine resource loading
+
+- [[Ark Virtual Files]] adds named directory and immutable memory mounts, canonical virtual paths,
+  typed failures and scoped byte reads inside Platform.
+- [[Ark Vfs Fixture]] verifies real files, contained/escaping symlinks, immutable snapshots and
+  loading texture bytes through the engine resource boundary.
+
+## 2026-10-27 — Checked texture assets and filtering
+
+- [[Ark Texture Asset]] adds immutable RGBA8 data, explicit color spaces and clamp-to-edge
+  nearest/bilinear sampling. Filtering decodes to linear light and preserves premultiplied alpha.
+- [[Ark Texture Fixture]] and [[Ark Assets Gate]] cover analytic colors, malformed records,
+  diagnostics and source-distribution inclusion without new native code.
+
+## 2026-10-27 — Preserve material color interpolation boundaries
+
+- [[Ark Color]] returns exact endpoints and avoids an overflowing difference between opposite
+  finite channels. [[Ark Math Extended Fixture]] covers signed zero, NaN payloads, extreme
+  midpoints and maximum same-sign values.
+
+## 2026-10-27 — Perspective-correct software-device attributes
+
+- [[Ark Render Device]] retains homogeneous w and interpolates lit color with normalized
+  reciprocal weights; divided depth stays affine. The existing affine driver entry is preserved.
+- [[Ark Perspective Fixture]] checks analytic pixels, extreme w scale invariance and explicit
+  invalid-weight refusal, including odd-sized color storage.
+
+## 2026-10-27 — Preserve camera-crossing triangles
+
+- [[Ark Depth Clip]] clips lit homogeneous triangles to both zero-to-one depth planes in Pudu,
+  preserving order, winding and interpolated colors before perspective division.
+- [[Ark Render Pipeline]] retains visible crossing polygons; [[Ark Depth Clip Fixture]] covers
+  analytic intersections, boundaries, invalid data and complete camera-crossing pixel coverage.
+
+## 2026-10-27 — Correct transformed render normals
+
+- [[Ark Render Pipeline]] uses the inverse transpose for mesh normals, preserving lighting under
+  non-uniform scale and shear. Singular transforms, invalid dimensions and NaN ambient are refused.
+- [[Ark Render Fixture]] compares intensity with independently transformed geometric tangents.
+
+## 2026-10-27 — Physics admission and high-degree contact repair
+
+- [[Ark Physics]] rejects invalid public shapes, unordered materials, non-finite inverse mass
+  and non-finite velocity updates. [[Ark Physics Step]] gives overflow contacts singleton batches.
+- Constraint mass weights are normalized before summing to preserve representable collision
+  responses for tiny admitted masses. [[Ark Physics Gate]] verifies scenarios and archive contents.
+- [[Ark Physics Boundary Fixture]] covers boundary refusal and elastic energy preservation beyond
+  the color mask; [[Ark Contact]] now describes the batch API used by the implementation.
+
+## 2026-10-27 — Data-parallel lane primitives (#684)
+
+- [[Std Lanes]] adds select, threshold masks, positions, accumulating scatter-add and integer
+  conversion, so branchy algorithms such as contact solving run as lane programs.
+
+## 2026-10-27 — Native broadphase (#682)
+
+- [[Runtime Broadphase]] finds overlapping box pairs by sort and sweep; [[Overlap Pairs Fixture]]
+  matches a brute-force reference in [[Lanes Gate]].
+
+## 2026-10-27 — World hierarchy and events (#681)
+
+- [[Ark Hierarchy]] propagates world transforms one lane batch per depth level;
+  [[Ark Events]] adds typed double-buffered events with reader cursors.
+
+## 2026-10-27 — Ark Render and the spinning cubes demo (#680)
+
+- [[Ark Render Device]], [[Ark Mesh]] (factory-built primitives), [[Ark Render Pipeline]] and
+  [[Ark Frame Graph]] render lit scenes through the native rasterizer.
+- [[Spinning Cubes Demo]] runs in a window; [[Ark Render Gate]] checks an offscreen snapshot in CI.
+
+## 2026-10-27 — `?` on Option inside unannotated lambdas (#678)
+
+- [[Type Check Rule]] takes an unsolved result's carrier from an operand already typed `Option`;
+  [[Lambda Option Try Delivery]] records evidence.
+
+## 2026-10-27 — Native triangle rasterization (#676)
+
+- [[Runtime Raster]] fills RGBA8 targets and rasterizes depth-tested triangles with a top-left
+  fill rule; [[Raster Fixture]] checks golden pixels in [[Lanes Gate]].
+
+## 2026-10-27 — Ark Platform (#675)
+
+- [[Ark Input]] decodes adapter records through a kind-to-factory table and reads action maps;
+  [[Ark Frame Clock]] gives fixed steps with interpolation; [[Ark Window]] is the window boundary.
+  [[Ark Platform Gate]] runs in CI.
+
+## 2026-10-27 — Game input records from the desktop adapter (#673)
+
+- [[pudu-desktop-adapter]] reports key down/up by physical code, pointer hover and every mouse
+  button; [[Game Input Delivery]] records evidence.
+
+## 2026-10-27 — Ark Core and archetype World (#672)
+
+- [[Ark Handle]] and [[Ark Profile]] add generational handles and nanosecond scopes.
+- [[Ark World]] stores component fields as lane columns; [[Ark World Commands]] batches
+  structural changes. [[Ark World Gate]] runs in CI; [[Ark World Delivery]] records 0.31 ms per
+  frame for 100,000 moving entities.
+
+## 2026-10-27 — Nanosecond monotonic clock (#670)
+
+- `clockNanos` and [[Std Time]] `monotonicNanos` measure intervals below a millisecond;
+  [[Monotonic Nanosecond Delivery]] records evidence.
+## 2026-10-29 — Lane work overlaps across threads (#726)
+
+- [[Pudu Cabal]] links a 32 MB large-object allocation limit, so lane kernel buffers share
+  collections instead of forcing a stop-the-world collection per call; four workers run lane
+  work 2.1x faster with unchanged serial time and lower peak memory.
+- [[Lane Collection Gate]] counts collections on [[Lane Collection Fixture]];
+  [[Lane Parallel Benchmark]] records the throughput; [[Lane Collection Delivery]] has evidence.
+
+## 2026-10-27 — Packed binary64 lanes (#668)
+
+- [[Std Lanes]] holds contiguous binary64 values transformed by whole-lane native kernels from
+  [[Runtime Lanes]]; [[Lane Kernel Identity]] states each name and signature once.
+- [[Lanes Gate]] checks every kernel against its scalar result in CI; [[Lane Delivery]] records
+  evidence and the measured comparison in [[Lanes Benchmark]].
+
+## 2026-10-27 — Completed Ark math layer (#666)
+
+- [[Ark Math]] and [[Ark Matrix]] gain vector algebra, determinants and inverses; new
+  [[Ark Planar Vector]], [[Ark Quaternion]], [[Ark Transform]], [[Ark Camera]], [[Ark Geometry]],
+  [[Ark Color]], [[Ark Random]] and [[Ark Noise]] modules.
+- [[Ark Math Extended Fixture]] and [[Ark Math Extended Gate]] run in CI;
+  [[Ark Math Completion Delivery]] records evidence.
+
+## 2026-10-27 — Binary64 kernels behind Std.Math.Float (#661)
+
+- [[Float Kernel Identity]] and [[Runtime Float Kernels]] give the evaluator, checker and resolver
+  one list of hardware and math-library operations; [[Std Math Float]] keeps every signature.
+- `sqrt` is correctly rounded across the full range; `fma`, `toBits`, `fromBits`, `fromInt` and
+  `toInt` are new (#665). [[Std Stats]] counts with `fromInt` instead of a doubling loop.
+  [[Square Root Range Gate]] checks bit-exact goldens and kernel contracts in CI.
+- [[Root Kernel Benchmark]] rejects the reciprocal-root bit estimate; [[Square Root Delivery]]
+  records measurements.
+
+## 2026-10-27 — Flat expression lists keep their depth (#662)
+
+- [[Parser Expression Aggregate]] and [[Parser Expression Postfix]] read array, Set and argument
+  siblings through one iterative loop; only each item's own nesting is charged.
+- [[Expression Recovery Spec]] covers 2,048-wide lists, spans, trailing commas and retained deep
+  refusals; [[Flat Expression List Delivery]] records the reproduction and evidence.
+
 ## 2026-10-27 — Verified HTTPS CI index transport (#656)
 
 - [[Website Linux Workflow]] configures signed HTTPS Hackage access before one explicit update.
@@ -12,6 +362,33 @@ tags: [changelog]
   missing, repeated and malformed configurations are covered. [[Hackage Transport Delivery]]
   records independent review and the outstanding CI observation.
 
+## 2026-10-27 — Compiler-consistent import completion (#654)
+
+- [[Lsp Module Catalog]] admits namespaces from the compiler's actual roots, retaining shipped
+  modules with installed packages and excluding package-owned shipped declarations.
+- [[Lsp Module Catalog Spec]] proves the old library omission and shared-policy agreement;
+  [[Library Catalog Delivery]] records focused validation and independent review.
+## 2026-10-27 — Enforced Ark dependency layers (#658)
+
+- [[Ark Dependency Layers]] classifies all fifteen engine roots and permits acyclic same-root
+  composition with strict descent across roots and no shared-library reverse imports.
+- [[Ark Layer Gate]] and [[Ark Layer Tests]] enforce the catalog in CI and local gate registration;
+  [[Ark Layer Delivery]] records focused checks and independent architecture/parity review.
+
+
+## 2026-10-27 — Binary64 matrix algebra (#660)
+
+- [[Ark Math]] adds Vec4; [[Ark Matrix]] supplies column-vector Mat3/Mat4 algebra, affine
+  composition and checked homogeneous projection under [[Ark Math Conventions]].
+- [[Ark Matrix Gate]] checks asymmetric products, projection failures, precision and nested
+  distribution; [[Ark Matrix Delivery]] records focused validation and independent review.
+
+## 2026-10-27 — Enforced Ark dependency layers (#658)
+
+- [[Ark Dependency Layers]] classifies all fifteen engine roots and permits acyclic same-root
+  composition with strict descent across roots and no shared-library reverse imports.
+- [[Ark Layer Gate]] and [[Ark Layer Tests]] enforce the catalog in CI and local gate registration;
+  [[Ark Layer Delivery]] records focused checks and independent architecture/parity review.
 ## 2026-10-27 — Integrated Ark foundation (#652)
 
 - [[Ark Engine]] defines dependency layers and the outstanding engine/native-execution ledger.

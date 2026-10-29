@@ -92,7 +92,7 @@ public wrappers while these remain language-runtime primitives.
 
 ## Desktop capability names
 
-`desktopOpen`, `desktopPresent`, `desktopPump`, `desktopInputs`, `desktopClipboardRead`, `desktopClipboardWrite`, `desktopAccessibility`, `desktopAccessibilityReport`, `desktopMenu`, `desktopMenuReport`, and `desktopClose` are discoverable effect values.
+`desktopOpen`, `desktopPresent`, `desktopPump`, `desktopInputs`, `desktopConfigure`, `desktopClipboardRead`, `desktopClipboardWrite`, `desktopAccessibility`, `desktopAccessibilityReport`, `desktopMenu`, `desktopMenuReport`, and `desktopClose` are discoverable effect values.
 Resolved Grill Log: keep the low-level names out of ordinary application documentation; the typed
 standard-library wrapper is the public contract.
 
@@ -216,6 +216,15 @@ its atomic byte replacement effect. [[Type Check Prelude]] owns the signature an
 
 Resolved Grill Log: register only the primitive's name here; retain phase-owned
 arity, typing and filesystem behavior.
+
+`clockNanos` is an effect value name beside `clock` (#670).
+
+## Binary64 kernels
+
+Prelude value names include `map floatKernelName floatKernels`, so resolution, checking and
+evaluation agree. A module may shadow a kernel name like any prelude value.
+
+Lane kernel names are listed from `laneKernels` beside them.
 
 ## Referenced by
 

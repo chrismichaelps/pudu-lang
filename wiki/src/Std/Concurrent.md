@@ -37,6 +37,17 @@ workers continue claiming work, and join reports the failure. Completion is not 
 any start/join failure. There is no cancellation, deadline or guaranteed action completion order.
 All actions execute at most once per call; these functions do not retry failures.
 
+`parallel`, `parallelBounded`, `forEachBounded`, `mapBounded` and `mapResultBounded` release
+everything they create before answering, on success and on every failure path: each started
+thread is joined in start order and then forgotten, the claim counter's mutex and cell and the
+claim-failure cell are disposed, and every result slot is read and then disposed. Calling them
+every frame or request therefore keeps live memory flat; before this, each `mapBounded` call over
+four items left about 118 KB in the runtime's stores.
+
+Resolved Grill Log: release inside the helpers rather than asking callers to, because the cells,
+counter and thread records are never visible to the caller. Futures, pools and coordination
+primitives are different: the caller holds them and they outlive the call.
+
 Resolved Grill Log: use a counter rather than a blocking producer queue so failed workers cannot
 strand a producer on queue admission. Input closures still occupy O(n) storage; concurrency and
 retained task handles are O(min(n,workers)). Workers stop through typed counter failures rather

@@ -1,0 +1,100 @@
+module Ark.Math.Vec2
+
+import Std.Math.Float as Float
+
+/// A two-dimensional vector with binary64 components.
+export type Vec2 = { x: Float64, y: Float64 }
+
+/// Construct a vector without clamping or replacing IEEE values.
+export fn vec2(x: Float64, y: Float64) -> Vec2 {
+  Vec2{x, y}
+}
+
+/// Add corresponding components.
+export fn add(left: Vec2, right: Vec2) -> Vec2 {
+  vec2(left.x + right.x, left.y + right.y)
+}
+
+/// Subtract corresponding components.
+export fn subtract(left: Vec2, right: Vec2) -> Vec2 {
+  vec2(left.x - right.x, left.y - right.y)
+}
+
+/// Multiply each component by a factor.
+export fn scale(value: Vec2, factor: Float64) -> Vec2 {
+  vec2(value.x * factor, value.y * factor)
+}
+
+/// Multiply corresponding components.
+export fn multiply(left: Vec2, right: Vec2) -> Vec2 {
+  vec2(left.x * right.x, left.y * right.y)
+}
+
+/// Reverse both components.
+export fn negate(value: Vec2) -> Vec2 {
+  vec2(-value.x, -value.y)
+}
+
+/// The dot product.
+export fn dot(left: Vec2, right: Vec2) -> Float64 {
+  left.x * right.x + left.y * right.y
+}
+
+/// The z component of the three-dimensional cross product; positive when `right` turns counter-clockwise.
+export fn perpDot(left: Vec2, right: Vec2) -> Float64 {
+  left.x * right.y - left.y * right.x
+}
+
+/// The counter-clockwise quarter turn.
+export fn perpendicular(value: Vec2) -> Vec2 {
+  vec2(-value.y, value.x)
+}
+
+/// The squared magnitude.
+export fn lengthSquared(value: Vec2) -> Float64 {
+  dot(value, value)
+}
+
+/// Whether both components are finite.
+export fn isFinite(value: Vec2) -> Bool {
+  Float.isFinite(value.x) && Float.isFinite(value.y)
+}
+
+/// The magnitude without intermediate overflow, or None when it is not representable.
+export fn length(value: Vec2) -> Option[Float64] {
+  if !isFinite(value) { return None }
+  let magnitude = Float.hypot(value.x, value.y)
+  if Float.isFinite(magnitude) { Some(magnitude) } else { None }
+}
+
+/// A unit direction, or None for a zero vector or non-finite components.
+export fn normalized(value: Vec2) -> Option[Vec2] {
+  if !isFinite(value) { return None }
+  let largest = if Float.abs(value.x) > Float.abs(value.y) { Float.abs(value.x) } else { Float.abs(value.y) }
+  if largest == 0.0 { return None }
+  let scaled = vec2(value.x / largest, value.y / largest)
+  let magnitude = Float.hypot(scaled.x, scaled.y)
+  Some(vec2(scaled.x / magnitude, scaled.y / magnitude))
+}
+
+/// The distance between two points, or None when it is not representable.
+export fn distance(from: Vec2, to: Vec2) -> Option[Float64] {
+  length(subtract(to, from))
+}
+
+/// Interpolate from `from` toward `to`; t = 0 and t = 1 return the endpoints exactly.
+export fn lerp(from: Vec2, to: Vec2, t: Float64) -> Vec2 {
+  vec2(Float.fma(t, to.x - from.x, from.x), Float.fma(t, to.y - from.y, from.y))
+}
+
+/// Rotate counter-clockwise by an angle in radians.
+export fn rotate(value: Vec2, radians: Float64) -> Vec2 {
+  let c = Float.cos(radians)
+  let s = Float.sin(radians)
+  vec2(value.x * c - value.y * s, value.x * s + value.y * c)
+}
+
+/// Whether both components differ by at most `tolerance`.
+export fn approxEqual(left: Vec2, right: Vec2, tolerance: Float64) -> Bool {
+  Float.abs(left.x - right.x) <= tolerance && Float.abs(left.y - right.y) <= tolerance
+}

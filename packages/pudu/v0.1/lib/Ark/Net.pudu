@@ -1,0 +1,141 @@
+module Ark.Net
+
+/// Packet header: this packet's sequence, the newest sequence received from the peer and a bit
+/// per earlier sequence (bit i set when ack - 1 - i arrived).
+export type Header = { sequence: Int, ack: Int, ackBits: Int }
+
+/// One side of a connection: sequences sent and received, packets awaiting acknowledgement by
+/// sequence with their send time, and a smoothed round-trip time in nanoseconds.
+export type Endpoint = { next: Int, newest: Int, received: Int, pending: Map[Int, Int], rtt: Int, lost: Int }
+
+/// Sequences wrap at 16 bits.
+const SEQUENCE_SPACE: Int = 65536
+const HALF_SPACE: Int = 32768
+/// Acknowledgement window: the newest sequence plus 32 before it.
+const WINDOW: Int = 32
+const WINDOW_MASK: Int = 4294967295
+/// Header size on the wire: u16 sequence, u16 ack, u32 ack bits.
+const HEADER_BYTES: Int = 8
+
+/// A fresh endpoint that has received nothing.
+export fn endpoint() -> Endpoint {
+  Endpoint{next: 0, newest: -1, received: 0, pending: mapOf([]), rtt: 0, lost: 0}
+}
+
+/// Whether sequence `a` is newer than `b` under 16-bit wrap-around.
+export fn newer(a: Int, b: Int) -> Bool {
+  (a > b && a - b <= HALF_SPACE) || (a < b && b - a > HALF_SPACE)
+}
+
+/// Stamp the next outgoing packet, remembering when it was sent; a packet that leaves the
+/// acknowledgement window unanswered is counted lost.
+export fn send(peer: Endpoint, now: Int) -> (Endpoint, Header) {
+  let sequence = peer.next
+  var pending = peer.pending
+  var lost = peer.lost
+  let expired = (sequence - WINDOW - 1 + SEQUENCE_SPACE) % SEQUENCE_SPACE
+  if pending.containsKey(expired) {
+    pending = pending.remove(expired)
+    lost = lost + 1
+  }
+  let header = Header{sequence, ack: if peer.newest < 0 { 0 } else { peer.newest }, ackBits: peer.received}
+  (Endpoint{..peer, next: (sequence + 1) % SEQUENCE_SPACE, pending: pending.insert(sequence, now), lost}, header)
+}
+
+/// Record a received header: track the peer's sequences for our next acks and retire every
+/// pending packet it acknowledges, answering their sequences oldest first. A duplicate or a
+/// packet older than the window answers None.
+export fn receive(peer: Endpoint, header: &Header, now: Int) -> Option[(Endpoint, Array[Int])] {
+  if !valid(header) { return None }
+  let (newest, received) = track(&peer, header.sequence) ?
+  // Newest first: the ack itself, then each sequence its bits name.
+  var named = [header.ack]
+  var bits = header.ackBits
+  for index in 0..WINDOW {
+    if bits % 2 == 1 { named = named.push((header.ack - 1 - index + SEQUENCE_SPACE) % SEQUENCE_SPACE) }
+    bits = bits / 2
+  }
+  var pending = peer.pending
+  var rtt = peer.rtt
+  var acked: Array[Int] = []
+  var at = named.length() - 1
+  while at >= 0 {
+    let sequence = named[at]
+    if let Some(sentAt) = pending.get(sequence) {
+      pending = pending.remove(sequence)
+      acked = acked.push(sequence)
+      let sample = if now > sentAt { now - sentAt } else { 0 }
+      // An exponential average weighting each new sample one eighth.
+      rtt = if rtt == 0 { sample } else { rtt + (sample - rtt) / 8 }
+    }
+    at = at - 1
+  }
+  Some((Endpoint{..peer, newest, received, pending, rtt}, acked))
+}
+
+/// Eight header bytes, little-endian; None for a field outside its width.
+export fn encode(header: &Header) -> Option[Bytes] {
+  if !valid(header) { return None }
+  let sequence = spell(header.sequence, 2) ?
+  let ack = spell(header.ack, 2) ?
+  let bits = spell(header.ackBits, 4) ?
+  Some(bytesOf(sequence.concat(ack).concat(bits)))
+}
+
+/// A header from the front of a packet and the payload after it.
+export fn decode(packet: &Bytes) -> Option[(Header, Bytes)] {
+  if packet.length() < HEADER_BYTES { return None }
+  let sequence = little(packet, 0, 2) ?
+  let ack = little(packet, 2, 2) ?
+  let ackBits = little(packet, 4, 4) ?
+  Some((Header{sequence, ack, ackBits}, packet.drop(HEADER_BYTES)))
+}
+
+/// The newest sequence and acknowledgement bits after receiving `sequence`, or None for a
+/// duplicate or a sequence too old to acknowledge.
+fn track(peer: &Endpoint, sequence: Int) -> Option[(Int, Int)] {
+  if peer.newest < 0 { return Some((sequence, 0)) }
+  if sequence == peer.newest { return None }
+  if newer(sequence, peer.newest) {
+    let gap = (sequence - peer.newest + SEQUENCE_SPACE) % SEQUENCE_SPACE
+    // The old newest becomes bit gap - 1; bits beyond the window fall away.
+    let shifted = if gap > WINDOW { 0 } else { (peer.received * power(gap) + power(gap - 1)) % (WINDOW_MASK + 1) }
+    return Some((sequence, shifted))
+  }
+  let age = (peer.newest - sequence + SEQUENCE_SPACE) % SEQUENCE_SPACE
+  if age > WINDOW { return None }
+  let bit = power(age - 1)
+  if (peer.received / bit) % 2 == 1 { return None }
+  Some((peer.newest, peer.received + bit))
+}
+
+fn valid(header: &Header) -> Bool {
+  header.sequence >= 0 && header.sequence < SEQUENCE_SPACE && header.ack >= 0 && header.ack < SEQUENCE_SPACE && header.ackBits >= 0 && header.ackBits <= WINDOW_MASK
+}
+
+fn spell(value: Int, width: Int) -> Option[Array[UInt8]] {
+  var octets: Array[UInt8] = []
+  var rest = value
+  for _ in 0..width {
+    octets = octets.push(convertInteger[UInt8](rest % 256) ?)
+    rest = rest / 256
+  }
+  Some(octets)
+}
+
+fn power(exponent: Int) -> Int {
+  var value = 1
+  for _ in 0..exponent { value = value * 2 }
+  value
+}
+
+fn little(packet: &Bytes, at: Int, width: Int) -> Option[Int] {
+  var value = 0
+  var index = width - 1
+  while index >= 0 {
+    let octet = packet.at(at + index) ?
+    value = value * 256 + (convertInteger[Int](octet) ?)
+    index = index - 1
+  }
+  Some(value)
+}

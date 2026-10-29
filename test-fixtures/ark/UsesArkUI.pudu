@@ -1,0 +1,108 @@
+module UsesArkUI
+
+import Ark.Math.Color as Color
+import Ark.Platform.Input as Input
+import Ark.Render.Device as Device
+import Ark.UI as UI
+
+fn require(condition: Bool, name: Str) {
+  if !condition { panic(name) }
+}
+
+/// Settings panel rows, 20 high with 4 between: label at y 10, button 34, checkbox 58, slider 82.
+type Panel = { clicks: Int, sound: Bool, volume: Float64 }
+
+fn frame(memory: &UI.Memory, input: &Input.State, panel: Panel) -> (UI.Memory, Array[UI.Command], Panel) {
+  let ui = UI.begin(memory, input, 10.0, 10.0, 100.0, 20.0)
+  let titled = UI.label(ui, "Settings")
+  let (afterButton, clicked) = UI.button(titled, "apply", "Apply")
+  let (afterCheck, sound) = UI.checkbox(afterButton, "sound", "Sound", panel.sound)
+  let (afterSlider, volume) = UI.slider(afterCheck, "volume", panel.volume, 0.0, 1.0)
+  let (next, commands) = UI.end(afterSlider)
+  (next, commands, Panel{clicks: panel.clicks + if clicked { 1 } else { 0 }, sound, volume})
+}
+
+fn fed(previous: &Input.State, events: Array[Input.Event]) -> Input.State {
+  Input.apply(Input.beginFrame(*previous), &events)
+}
+
+fn pointer() {
+  let start = Panel{clicks: 0, sound: false, volume: 0.5}
+  let idle = Input.initial()
+  let (m0, c0, p0) = frame(&UI.memory(), &idle, start)
+  require(m0.order == ["apply", "sound", "volume"] && p0 == start, "declaration order recorded, nothing changes")
+  require(c0.length() >= 5, "label, fills and text")
+  let down = fed(&idle, [Input.ButtonDown(0, 50, 40)])
+  let (m1, _, p1) = frame(&m0, &down, p0)
+  require(m1.active == "apply" && m1.focus == "apply" && p1.clicks == 0, "press arms the button and focuses it")
+  let up = fed(&down, [Input.ButtonUp(0, 50, 40)])
+  let (m2, _, p2) = frame(&m1, &up, p1)
+  require(p2.clicks == 1 && m2.active == "", "release over the pressed button clicks it")
+  let away = fed(&fed(&up, [Input.ButtonDown(0, 50, 40)]), [Input.ButtonUp(0, 300, 300)])
+  let (_, _, p3) = frame(&m2, &away, p2)
+  require(p3.clicks == 1, "press and release away is no click")
+  let tick = fed(&idle, [Input.ButtonDown(0, 20, 64)])
+  let (m4, _, p4) = frame(&m2, &tick, p3)
+  let toggle = fed(&tick, [Input.ButtonUp(0, 20, 64)])
+  let (_, _, p5) = frame(&m4, &toggle, p4)
+  require(p5.sound, "checkbox toggles")
+  let grab = fed(&idle, [Input.ButtonDown(0, 60, 88)])
+  let (m6, _, p6) = frame(&m2, &grab, p5)
+  require(m6.active == "volume" && p6.volume == 0.5, "slider grabbed at its middle")
+  let drag = fed(&grab, [Input.Hover(85, 88)])
+  let (m7, _, p7) = frame(&m6, &drag, p6)
+  require(p7.volume == 0.75, "dragging sets the value from the pointer")
+  let beyond = fed(&drag, [Input.Hover(500, 88)])
+  let (_, _, p8) = frame(&m7, &beyond, p7)
+  require(p8.volume == 1.0, "drag clamps to the range")
+}
+
+fn keyboard() {
+  let start = Panel{clicks: 0, sound: false, volume: 0.5}
+  let idle = Input.initial()
+  let (m0, _, _) = frame(&UI.memory(), &idle, start)
+  let tab = fed(&idle, [Input.KeyDown("Tab", false)])
+  let (m1, _, _) = frame(&m0, &tab, start)
+  require(m1.focus == "apply", "tab focuses the first widget")
+  let enter = fed(&fed(&tab, [Input.KeyUp("Tab")]), [Input.KeyDown("Enter", false)])
+  let (_, _, p2) = frame(&m1, &enter, start)
+  require(p2.clicks == 1, "enter activates the focused button")
+  let tabs = fed(&fed(&idle, [Input.KeyDown("Tab", false), Input.KeyUp("Tab")]), [Input.KeyDown("Tab", false)])
+  let (m3, _, _) = frame(&m1, &tabs, start)
+  let (m4, _, _) = frame(&m3, &fed(&idle, [Input.KeyDown("Tab", false)]), start)
+  require(m4.focus == "volume", "tab advances in declaration order")
+  let right = fed(&idle, [Input.KeyDown("ArrowRight", false)])
+  let (_, _, p5) = frame(&m4, &right, start)
+  require(p5.volume == 0.55, "arrow keys step a focused slider")
+  let wrap = fed(&idle, [Input.KeyDown("Tab", false)])
+  let (m6, _, _) = frame(&m4, &wrap, start)
+  require(m6.focus == "apply", "focus wraps")
+  let back = fed(&idle, [Input.KeyDown("ShiftLeft", false), Input.KeyDown("Tab", false)])
+  let (m7, _, _) = frame(&m6, &back, start)
+  require(m7.focus == "volume", "shift-tab goes backwards and wraps")
+}
+
+fn drawing() {
+  let (_, commands, _) = frame(&UI.memory(), &Input.initial(), Panel{clicks: 0, sound: true, volume: 1.0})
+  let Some(target) = Device.target(120, 120) else { panic("target") }
+  let Some(cleared) = Device.clear(target, Color.opaque(0.0, 0.0, 0.0)) else { panic("clear") }
+  let Some(drawn) = UI.render(&commands, cleared) else { panic("render") }
+  let pixels = Device.pixels(&drawn)
+  let at = (40 * 120 + 50) * 4
+  require(pixels.at(at) == Some(46u8) && pixels.at(at + 2) == Some(61u8), "button fill drawn in idle color")
+  let check = (64 * 120 + 18) * 4
+  require(pixels.at(check + 1) == Some(153u8), "checked box drawn over its button")
+  let full = (88 * 120 + 100) * 4
+  require(pixels.at(full + 1) == Some(153u8), "slider fill spans the full value")
+  require(pixels.at((5 * 120 + 5) * 4) == Some(0u8), "outside widgets untouched")
+  require(UI.render(&[], cleared) == Some(cleared), "nothing to draw")
+  require(UI.contains(&UI.Rect{x: 0.0, y: 0.0, width: 2.0, height: 2.0}, 0.0, 0.0) && !UI.contains(&UI.Rect{x: 0.0, y: 0.0, width: 2.0, height: 2.0}, 2.0, 1.0), "half-open rectangles")
+}
+
+export fn main() -> Int {
+  pointer()
+  keyboard()
+  drawing()
+  print("ark ui: ok")
+  0
+}

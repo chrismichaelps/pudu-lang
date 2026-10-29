@@ -12,9 +12,39 @@ aliases: [Repository Gates]
 
 ## Purpose and interface
 
+[[Ark Assets Gate]] validates texture sampling, failure diagnostics and nested distribution data.
+
+[[Ark Build Gate]] verifies packs, pack mounts, cook/load, a positioned refusal and shipping.
+
+[[Ark Net Gate]] verifies acknowledgement windows, the header format, replication deltas, a
+positioned refusal and shipping.
+
+[[Ark UI Gate]] verifies widget interaction, focus traversal, rendering, a positioned refusal
+and shipping.
+
+[[Ark Game Gate]] verifies the fixed-step scene loop, camera rigs, a positioned refusal and
+shipping.
+
+[[Ark Audio Gate]] verifies bus mixing, spatialization, PCM output, a positioned refusal and
+shipping.
+
+[[Ark Animation Gate]] verifies clip sampling, blending, state machines, a positioned refusal and
+shipping.
+
+[[Ark Physics Gate]] verifies scenarios, numeric boundaries, diagnostics and shipping against
+the optimized compiler alongside the other focused engine checks.
+
+[[Ark Matrix Gate]] follows the root math gate with algebra/projection and nested data-file
+coverage. Resolved Grill Log: fixed math regressions remain executable in ordinary gate runs.
+[[Ark Layer Tests]] and [[Ark Layer Gate]] run before compilation to enforce engine import
+architecture. Resolved Grill Log: architectural defects fail independently of runtime acceptance.
+
 [[Ark Math Gate]] checks shipped Ark resolution, numerical regressions and wrong-width refusal
 against the same freshly built optimized compiler. Resolved Grill Log: interpreted evidence
 does not imply native engine performance.
+
+[[Ark Layer Tests]] and [[Ark Layer Gate]] run before compilation to enforce engine import
+architecture. Resolved Grill Log: architectural defects fail independently of runtime acceptance.
 
 Run the production release checks in a fixed order and report every failing gate: warning-free
 optimized build, optimized full suite, Pudu formatting, diagnostic identities, API coverage, live
@@ -22,7 +52,15 @@ language-server sessions, documentation parity, the generated-project workflow, 
 command whose clean and failing exit statuses plus JSON output are checked outside the test runner,
 and the peak memory of the file-streaming readers at ten times the input.
 
+[[Concurrent Release Gate]] checks that the bounded concurrency helpers keep live memory flat
+across repeated calls.
+[[Desktop Configure Gate]] checks each refused window setting by name and the builtin's types.
+[[Lane Collection Gate]] checks that lane kernel buffers share collections rather than forcing
+one per call.
+
 ## Governance and algorithm
+
+[[Refresh Installation Test]] checks optimized installation orchestration before compiler builds.
 
 [[Application Layer Tests]] and [[Application Layer Gate]] check the application import graph
 before builds, rejecting cycles, missing identities and upward architectural dependencies.
@@ -73,3 +111,28 @@ including externally observable filesystem modes that portable permission boolea
 [[Derive Index Output Gate]] runs after documentation parity against the same freshly built executable.
 
 Resolved Grill Log: local and integration delivery both exercise actual strategy output and public visibility.
+
+## Native presentation (#724)
+
+[[Desktop Presentation Gate]] runs before the compiler build on supported hosts.
+Resolved Grill Log: test the real view drawing boundary, reporting unsupported targets explicitly.
+## Capsule support (#722)
+
+[[Ark Ground Gate]] validates floor support and typed refusals.
+Resolved Grill Log: verify the executable behavior and shipping before delivery.
+## Swept movement (#720)
+
+[[Ark Motion Gate]] validates query-driven sliding and typed refusals.
+Resolved Grill Log: execute the focused gate beside the full compiler suite.
+## Capsule cast contract (#716)
+
+[[Ark Cast Gate]] runs with the optimized compiler. Resolved Grill Log: finite obstacle geometry
+and explicit convergence failure require executable public-API coverage alongside the full suite.
+## Character movement contract (#714)
+
+[[Ark Character Gate]] runs against the optimized compiler. Resolved Grill Log: sweeps, corner
+constraints and positioned type refusal must be exercised through the public library API.
+## Qualified constructors (#717)
+
+[[Qualified Variant Gate]] checks real aliased/imported constructor clients and positioned
+negative cases. Resolved Grill Log: a silent error type is caught by wrong-result assertions.

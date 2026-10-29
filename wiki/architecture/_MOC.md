@@ -12,7 +12,12 @@ Pudu is a statically typed native systems language for developers who need predi
 
 ## Pages
 
+- [[Ark Math Conventions]] — binary64 column-vector algebra and explicit homogeneous projection.
+
 - [[Ark Engine]] — integrated Pudu game-engine layers, performance contracts and target ledger.
+
+- [[Ark Dependency Layers]] — enforced engine root ownership and architectural direction.
+
 
 - [[Application Maturity]] — database correctness, measured throughput and application dependency layers.
 

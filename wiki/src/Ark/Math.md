@@ -10,6 +10,10 @@ tags: [module, ark, math]
 ## Purpose and interface
 
 Layer-zero pure geometry for [[Ark Engine]]. `Vec3` has immutable x/y/z Float64 fields.
+`Vec4` adds an immutable binary64 w component; `vec4(x,y,z,w)` constructs it without clamping.
+[[Ark Matrix]] consumes both under [[Ark Math Conventions]]. Existing Vec3 functions retain
+their signatures and semantics. Resolved Grill Log: explicit Vec4 preserves homogeneous w;
+do not silently narrow binary64 inputs or erase point/direction distinctions.
 `vec3`, `add`, `subtract`, `scale`, `dot`, and right-handed `cross` operate on values,
 preserving written IEEE arithmetic order. Public arithmetic admits IEEE non-finite values;
 it does not silently clamp. `isFinite` tests every component.
@@ -17,6 +21,11 @@ it does not silently clamp. `isFinite` tests every component.
 `length` returns Option[Float64]: Some(0) for zero; None for non-finite components or an
 unrepresentable magnitude. `normalized` returns Option[Vec3]: None for zero/non-finite
 inputs, otherwise a finite unit direction even if the original magnitude would overflow.
+
+Vector algebra (#666): `negate`, component `multiply`, `lengthSquared`, `distance -> Option`,
+`distanceSquared`, `lerp` (fused, exact at both endpoints), `minimum`, `maximum`, `reflect`
+about a unit normal, `project -> Option` (None onto zero) and `approxEqual(a, b, tolerance)`.
+`isFinite4` tests a Vec4. Planar vectors live in [[Ark Planar Vector]].
 
 ## Algorithm and dependencies
 

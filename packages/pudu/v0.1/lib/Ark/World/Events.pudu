@@ -1,0 +1,49 @@
+module Ark.World.Events
+
+/// Events of the previous and current frame, with the id of the oldest one kept.
+export type Events[T] = { previous: Array[T], current: Array[T], oldest: Int }
+
+/// The id of the next event a consumer has not read.
+export type Reader = { next: Int }
+
+/// A queue with no events.
+export fn events[T]() -> Events[T] {
+  Events{previous: [], current: [], oldest: 0}
+}
+
+/// Queue an event for this frame.
+export fn emit[T](queue: Events[T], value: T) -> Events[T] {
+  Events{..queue, current: queue.current.push(value)}
+}
+
+/// End a frame: the previous frame's events are dropped and this frame's become previous.
+export fn update[T](queue: Events[T]) -> Events[T] {
+  Events{previous: queue.current, current: [], oldest: queue.oldest + queue.previous.length()}
+}
+
+/// A reader that sees only events emitted after it was made.
+export fn reader[T](queue: &Events[T]) -> Reader {
+  Reader{next: queue.oldest + queue.previous.length() + queue.current.length()}
+}
+
+/// A reader that sees every event still kept.
+export fn readerFromStart[T](queue: &Events[T]) -> Reader {
+  Reader{next: queue.oldest}
+}
+
+/// Every kept event the reader has not seen, oldest first, and the advanced reader.
+/// Events dropped before the reader reached them are skipped.
+export fn read[T](queue: &Events[T], cursor: Reader) -> (Reader, Array[T]) {
+  let total = queue.oldest + queue.previous.length() + queue.current.length()
+  let start = if cursor.next > queue.oldest { cursor.next } else { queue.oldest }
+  if start >= total { return (Reader{next: total}, []) }
+  let kept = queue.previous.concat(queue.current)
+  (Reader{next: total}, kept.slice(start - queue.oldest, kept.length()))
+}
+
+/// How many kept events the reader has not seen.
+export fn pending[T](queue: &Events[T], cursor: Reader) -> Int {
+  let total = queue.oldest + queue.previous.length() + queue.current.length()
+  let start = if cursor.next > queue.oldest { cursor.next } else { queue.oldest }
+  if start >= total { 0 } else { total - start }
+}

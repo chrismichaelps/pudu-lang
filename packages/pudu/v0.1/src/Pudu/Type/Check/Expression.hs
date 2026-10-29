@@ -22,6 +22,7 @@ import Pudu.Frontend.Syntax.Tree
   , Parameter
   )
 import Data.List.NonEmpty (NonEmpty (..))
+import qualified Data.List.NonEmpty as NonEmpty
 import Pudu.Frontend.Syntax.Name (ModuleName (..))
 import Pudu.Source (Span, spanOrigin)
 import Pudu.Type.Env
@@ -43,7 +44,7 @@ import Pudu.Type.Env
   , withAdditionalRigidBounds
   , withLocalObligations
   )
-import Pudu.Type.Check.Pattern (bindPattern, canonicalVariant)
+import Pudu.Type.Check.Pattern (bindPattern, canonicalVariant, qualifiedVariantType)
 import Pudu.Type.Check.Reflection
   ( checkBuildCall, checkSequenceElement, fieldCallee, reflectedParameters )
 import Pudu.Type.Check.Bound (checkBounds)
@@ -143,6 +144,15 @@ inferExpression around declared rigid spanValue expression = case expression of
     | Just _ <- spanOrigin spanValue -> do
         generated <- canonicalVariant declared (ModuleName names)
         maybe (nameType spanValue names) pure generated
+  NameExpression names@(_ :| (_ : _)) -> do
+    variant <- qualifiedVariantType declared spanValue expression
+    found <- case variant of
+      Nothing -> nameType spanValue names
+      Just value -> do
+        refused <- namedVariantAsValue spanValue (NonEmpty.last names)
+        pure (maybe value id refused)
+    checkExclusiveCapture spanValue names found
+    pure found
   NameExpression names -> do
     found <- nameType spanValue names
     checkExclusiveCapture spanValue names found
@@ -182,7 +192,11 @@ inferExpression around declared rigid spanValue expression = case expression of
     refused <- namedVariantAsValue spanValue (locatedValue member)
     qualified <- case refused of
       Just value -> pure (Just value)
-      Nothing -> qualifiedMemberType declared spanValue (locatedValue target) (locatedValue member)
+      Nothing -> do
+        variant <- qualifiedVariantType declared spanValue expression
+        case variant of
+          Just value -> pure (Just value)
+          Nothing -> qualifiedMemberType declared spanValue (locatedValue target) (locatedValue member)
     case qualified of
       Just value -> pure value
       Nothing -> do

@@ -1,0 +1,216 @@
+module UsesArkPhysics
+
+import Std.Math.Float as Float
+import Ark.Core.Handle as Handle
+import Ark.Math.Geometry as G
+import Ark.Math as V
+import Ark.Physics as Physics
+import Ark.Physics.Query as Query
+import Ark.Physics.Step as Step
+
+const DT: Float64 = 0.016666666666666666
+
+fn require(condition: Bool, name: Str) {
+  if !condition { panic(name) }
+}
+
+fn ball(radius: Float64) -> Physics.Shape {
+  match Physics.sphere(radius) {
+    case Some(shape) => shape
+    case None => panic("sphere")
+  }
+}
+
+fn block(half: V.Vec3) -> Physics.Shape {
+  match Physics.box(half) {
+    case Some(shape) => shape
+    case None => panic("box")
+  }
+}
+
+fn body(position: V.Vec3, velocity: V.Vec3, mass: Float64, restitution: Float64, friction: Float64, shape: Physics.Shape) -> Physics.Body {
+  Physics.Body{position, velocity, mass, restitution, friction, shape}
+}
+
+type Scene = { bodies: Physics.Bodies, pool: Handle.HandlePool }
+
+fn put(scene: Scene, description: Physics.Body) -> (Scene, Handle.Handle) {
+  let (pool, entity) = Handle.allocate(scene.pool)
+  let Some(bodies) = Physics.add(scene.bodies, entity, &description) else { panic("add") }
+  (Scene{bodies, pool}, entity)
+}
+
+fn run(bodies: Physics.Bodies, steps: Int) -> Physics.Bodies {
+  var current = bodies
+  var index = 0
+  while index < steps {
+    let Some((next, _)) = Step.step(current, DT, 8) else { panic("step") }
+    current = next
+    index = index + 1
+  }
+  current
+}
+
+fn at(bodies: &Physics.Bodies, entity: Handle.Handle) -> V.Vec3 {
+  match Physics.position(bodies, entity) {
+    case Some(found) => found
+    case None => panic("position")
+  }
+}
+
+fn speed(bodies: &Physics.Bodies, entity: Handle.Handle) -> V.Vec3 {
+  match Physics.velocity(bodies, entity) {
+    case Some(found) => found
+    case None => panic("velocity")
+  }
+}
+
+fn grounded() -> Scene {
+  let Some(bodies) = Physics.addPlane(Physics.world(V.vec3(0.0, -9.81, 0.0)), V.vec3(0.0, 1.0, 0.0), V.vec3(0.0, 0.0, 0.0)) else { panic("plane") }
+  Scene{bodies, pool: Handle.empty()}
+}
+
+fn shapes() {
+  require(Physics.sphere(0.0) == None && Physics.box(V.vec3(1.0, 0.0, 1.0)) == None, "invalid shapes")
+  require(Physics.shapeOf("sphere", V.vec3(2.0, 0.0, 0.0)) == Some(ball(2.0)), "sphere factory")
+  require(Physics.shapeOf("box", V.vec3(1.0, 2.0, 3.0)) == Some(block(V.vec3(1.0, 2.0, 3.0))), "box factory")
+  require(Physics.shapeOf("capsule", V.vec3(1.0, 1.0, 1.0)) == None, "unknown kind")
+}
+
+fn refusals() {
+  let (scene, first) = put(grounded(), body(V.vec3(0.0, 1.0, 0.0), V.vec3(0.0, 0.0, 0.0), 1.0, 0.0, 0.0, ball(0.5)))
+  require(Physics.add(scene.bodies, first, &body(V.vec3(0.0, 1.0, 0.0), V.vec3(0.0, 0.0, 0.0), 1.0, 0.0, 0.0, ball(0.5))) == None, "duplicate body")
+  let (_, other) = Handle.allocate(scene.pool)
+  require(Physics.add(scene.bodies, other, &body(V.vec3(0.0, 0.0, 0.0), V.vec3(0.0, 0.0, 0.0), -1.0, 0.0, 0.0, ball(0.5))) == None, "negative mass")
+  require(Physics.add(scene.bodies, other, &body(V.vec3(0.0, 0.0, 0.0), V.vec3(0.0, 0.0, 0.0), 1.0, 2.0, 0.0, ball(0.5))) == None, "restitution range")
+  require(Step.step(scene.bodies, 0.0, 4) == None && Step.step(scene.bodies, DT, -1) == None, "step arguments")
+  require(Physics.addPlane(scene.bodies, V.vec3(0.0, 0.0, 0.0), V.vec3(0.0, 0.0, 0.0)) == None, "zero plane")
+  let Some(removed) = Physics.remove(scene.bodies, first) else { panic("remove") }
+  require(Physics.count(&removed) == 0 && Physics.position(&removed, first) == None, "removed body")
+}
+
+fn freeFall() {
+  let (scene, stone) = put(Scene{bodies: Physics.world(V.vec3(0.0, -9.81, 0.0)), pool: Handle.empty()}, body(V.vec3(0.0, 10.0, 0.0), V.vec3(0.0, 0.0, 0.0), 1.0, 0.0, 0.0, ball(0.5)))
+  let after = run(scene.bodies, 60)
+  var y = 10.0
+  var vy = 0.0
+  var index = 0
+  while index < 60 {
+    vy = vy + -9.81 * DT
+    y = y + DT * vy
+    index = index + 1
+  }
+  require(at(&after, stone).y == y && speed(&after, stone).y == vy, "semi-implicit Euler exactly")
+}
+
+fn resting() {
+  let (scene, stone) = put(grounded(), body(V.vec3(0.0, 3.0, 0.0), V.vec3(0.0, 0.0, 0.0), 1.0, 0.0, 0.5, ball(0.5)))
+  let after = run(scene.bodies, 300)
+  let y = at(&after, stone).y
+  require(y > 0.48 && y < 0.51, "ball rests on the ground")
+  require(Float.abs(speed(&after, stone).y) < 0.2, "resting ball is still")
+}
+
+fn bouncing() {
+  let (scene, stone) = put(grounded(), body(V.vec3(0.0, 5.0, 0.0), V.vec3(0.0, 0.0, 0.0), 1.0, 0.9, 0.0, ball(0.5)))
+  var bodies = scene.bodies
+  var highest = 0.0
+  var falling = true
+  var index = 0
+  while index < 240 {
+    bodies = run(bodies, 1)
+    let height = at(&bodies, stone).y
+    if speed(&bodies, stone).y > 0.0 { falling = false }
+    if !falling && height > highest { highest = height }
+    index = index + 1
+  }
+  require(highest > 3.0 && highest < 5.0, "bounce keeps most energy without gaining any")
+}
+
+fn elastic() {
+  let space = Scene{bodies: Physics.world(V.vec3(0.0, 0.0, 0.0)), pool: Handle.empty()}
+  let (a, left) = put(space, body(V.vec3(-1.0, 0.0, 0.0), V.vec3(2.0, 0.0, 0.0), 1.0, 1.0, 0.0, ball(0.5)))
+  let (b, right) = put(a, body(V.vec3(1.0, 0.0, 0.0), V.vec3(-2.0, 0.0, 0.0), 1.0, 1.0, 0.0, ball(0.5)))
+  let after = run(b.bodies, 60)
+  require(Float.abs(speed(&after, left).x + 2.0) < 0.000001 && Float.abs(speed(&after, right).x - 2.0) < 0.000001, "equal masses exchange velocities")
+  let (c, heavy) = put(space, body(V.vec3(-1.0, 0.0, 0.0), V.vec3(1.0, 0.0, 0.0), 3.0, 0.0, 0.0, ball(0.5)))
+  let (d, light) = put(c, body(V.vec3(1.0, 0.0, 0.0), V.vec3(-1.0, 0.0, 0.0), 1.0, 0.0, 0.0, ball(0.5)))
+  let merged = run(d.bodies, 90)
+  require(Float.abs(speed(&merged, heavy).x - 0.5) < 0.000001 && Float.abs(speed(&merged, light).x - 0.5) < 0.000001, "inelastic collision conserves momentum")
+}
+
+fn stacking() {
+  var scene = grounded()
+  var crates: Array[Handle.Handle] = []
+  var level = 0
+  while level < 3 {
+    let (next, crate) = put(scene, body(V.vec3(0.0, 0.5 + Float.fromInt(level) * 1.0, 0.0), V.vec3(0.0, 0.0, 0.0), 1.0, 0.0, 0.6, block(V.vec3(0.5, 0.5, 0.5))))
+    scene = next
+    crates = crates.push(crate)
+    level = level + 1
+  }
+  let after = run(scene.bodies, 300)
+  var index = 0
+  for crate in crates {
+    let place = at(&after, crate)
+    require(Float.abs(place.y - (0.5 + Float.fromInt(index))) < 0.05 && Float.abs(place.x) < 0.000001, "stack stays")
+    index = index + 1
+  }
+  let (onBox, ledge) = put(Scene{bodies: Physics.world(V.vec3(0.0, -9.81, 0.0)), pool: Handle.empty()}, body(V.vec3(0.0, 0.0, 0.0), V.vec3(0.0, 0.0, 0.0), 0.0, 0.0, 0.5, block(V.vec3(2.0, 0.5, 2.0))))
+  let (withBall, marble) = put(onBox, body(V.vec3(0.3, 3.0, 0.0), V.vec3(0.0, 0.0, 0.0), 1.0, 0.0, 0.5, ball(0.25)))
+  let settled = run(withBall.bodies, 240)
+  require(Float.abs(at(&settled, marble).y - 0.75) < 0.02 && at(&settled, ledge) == V.vec3(0.0, 0.0, 0.0), "static box holds a sphere")
+}
+
+fn sliding() {
+  let (grippy, crate) = put(grounded(), body(V.vec3(0.0, 0.5, 0.0), V.vec3(5.0, 0.0, 0.0), 1.0, 0.0, 0.5, block(V.vec3(0.5, 0.5, 0.5))))
+  let stopped = run(grippy.bodies, 120)
+  require(Float.abs(speed(&stopped, crate).x) < 0.05 && at(&stopped, crate).x > 2.0 && at(&stopped, crate).x < 3.0, "friction stops a sliding box")
+  let (slick, puck) = put(grounded(), body(V.vec3(0.0, 0.5, 0.0), V.vec3(5.0, 0.0, 0.0), 1.0, 0.0, 0.0, block(V.vec3(0.5, 0.5, 0.5))))
+  let glided = run(slick.bodies, 60)
+  require(Float.abs(speed(&glided, puck).x - 5.0) < 0.000001, "no friction keeps sliding")
+}
+
+fn determinism() {
+  var scene = grounded()
+  var index = 0
+  while index < 30 {
+    let x = Float.fromInt(index % 5) * 0.9 - 1.8
+    let z = Float.fromInt(index / 5) * 0.9 - 2.2
+    let (next, _) = put(scene, body(V.vec3(x, 1.0 + Float.fromInt(index) * 0.4, z), V.vec3(0.0, 0.0, 0.0), 1.0, 0.3, 0.4, if index % 2 == 0 { ball(0.4) } else { block(V.vec3(0.35, 0.35, 0.35)) }))
+    scene = next
+    index = index + 1
+  }
+  let once = run(scene.bodies, 120)
+  let twice = run(scene.bodies, 120)
+  require(once.px == twice.px && once.py == twice.py && once.vz == twice.vz, "identical runs")
+}
+
+fn queries() {
+  let (a, near) = put(grounded(), body(V.vec3(0.0, 0.5, -3.0), V.vec3(0.0, 0.0, 0.0), 0.0, 0.0, 0.0, ball(0.5)))
+  let (b, far) = put(a, body(V.vec3(0.0, 0.5, -8.0), V.vec3(0.0, 0.0, 0.0), 0.0, 0.0, 0.0, block(V.vec3(1.0, 1.0, 1.0))))
+  let Some(line) = G.ray(V.vec3(0.0, 0.5, 0.0), V.vec3(0.0, 0.0, -1.0)) else { panic("ray") }
+  let Some(hit) = Query.raycast(&b.bodies, &line, 100.0) else { panic("raycast") }
+  require(hit.entity == near && hit.distance == 2.5, "nearest hit")
+  require(Query.raycast(&b.bodies, &line, 2.0) == None, "beyond reach")
+  let Some(side) = G.ray(V.vec3(0.0, 0.5, -8.0), V.vec3(0.0, 0.0, 1.0)) else { panic("side") }
+  require(Query.raycast(&b.bodies, &side, 100.0) != None, "starting inside")
+  require(Query.overlapsPoint(&b.bodies, V.vec3(0.5, 0.5, -8.5)) == [far], "point overlap")
+  let Some(pushed) = Physics.applyImpulse(b.bodies, near, V.vec3(1.0, 0.0, 0.0)) else { panic("impulse") }
+  require(Physics.velocity(&pushed, near) == Some(V.vec3(0.0, 0.0, 0.0)), "static ignores impulse")
+}
+
+export fn main() -> Int {
+  shapes()
+  refusals()
+  freeFall()
+  resting()
+  bouncing()
+  elastic()
+  stacking()
+  sliding()
+  determinism()
+  queries()
+  print("ark physics: ok")
+  0
+}

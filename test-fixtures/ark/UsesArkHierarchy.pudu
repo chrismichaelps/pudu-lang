@@ -1,0 +1,126 @@
+module UsesArkHierarchy
+
+import Std.Lanes as Lanes
+import Std.Math.Float as Float
+import Ark.Core.Handle as Handle
+import Ark.Math.Quat as Q
+import Ark.Math.Transform as T
+import Ark.Math as V
+import Ark.World.Events as Events
+import Ark.World.Hierarchy as H
+
+fn require(condition: Bool, name: Str) {
+  if !condition { panic(name) }
+}
+
+fn close(a: &T.Transform, b: &T.Transform) -> Bool {
+  let samples = [V.vec3(1.0, 2.0, 3.0), V.vec3(-0.5, 0.25, 4.0)]
+  var same = true
+  for point in samples {
+    same = same && V.approxEqual(T.transformPoint(*a, point), T.transformPoint(*b, point), 0.000000001)
+  }
+  same
+}
+
+type Hit = { damage: Int }
+
+fn hierarchy() {
+  let (p1, root) = Handle.allocate(Handle.empty())
+  let (p2, arm) = Handle.allocate(p1)
+  let (p3, hand) = Handle.allocate(p2)
+  let (_, other) = Handle.allocate(p3)
+  let rootPose = T.transform(V.vec3(10.0, 0.0, 0.0), Q.rotationY(Float.pi() / 2.0), V.vec3(2.0, 2.0, 2.0))
+  let armPose = T.transform(V.vec3(0.0, 1.0, 0.0), Q.rotationZ(0.3), V.vec3(1.0, 1.0, 1.0))
+  let handPose = T.transform(V.vec3(1.0, 0.0, 0.5), Q.rotationX(-0.7), V.vec3(0.5, 3.0, 1.0))
+  let otherPose = T.transform(V.vec3(0.0, 0.0, -2.0), Q.identity(), V.vec3(1.0, 1.0, 1.0))
+  let Some(a) = H.add(H.empty(), root, None, &rootPose) else { panic("root") }
+  let Some(b) = H.add(a, arm, Some(root), &armPose) else { panic("arm") }
+  let Some(c) = H.add(b, hand, Some(arm), &handPose) else { panic("hand") }
+  let Some(d) = H.add(c, other, Some(root), &otherPose) else { panic("other") }
+  require(H.add(d, hand, None, &handPose) == None, "duplicate node refused")
+  require(H.depthOf(&d, hand) == Some(2) && H.parentOf(&d, hand) == Some(arm) && H.parentOf(&d, root) == None, "structure")
+  require(H.childrenOf(&d, root) == [arm, other], "children in slot order")
+  let Some(e) = H.propagate(d) else { panic("propagate") }
+  let Some(handWorld) = H.world(&e, hand) else { panic("hand world") }
+  let expected = T.compose(T.compose(rootPose, armPose), handPose)
+  require(close(&handWorld, &expected), "three levels match scalar composition")
+  let Some(otherWorld) = H.world(&e, other) else { panic("other world") }
+  require(close(&otherWorld, &T.compose(rootPose, otherPose)), "sibling branch")
+  let Some(rootWorld) = H.world(&e, root) else { panic("root world") }
+  require(close(&rootWorld, &rootPose), "root keeps its local pose")
+  let moved = T.transform(V.vec3(0.0, 2.0, 0.0), Q.rotationZ(0.3), V.vec3(1.0, 1.0, 1.0))
+  let Some(edited) = H.setLocal(e, arm, &moved) else { panic("set local") }
+  let Some(f) = H.propagate(edited) else { panic("repropagate") }
+  let Some(updated) = H.world(&f, hand) else { panic("updated") }
+  require(close(&updated, &T.compose(T.compose(rootPose, moved), handPose)), "local edit reaches descendants")
+  require(H.reparent(f, root, Some(hand)) == None && H.reparent(f, arm, Some(arm)) == None, "cycles refused")
+  let Some(g) = H.reparent(f, hand, None) else { panic("reparent") }
+  require(H.depthOf(&g, hand) == Some(0), "reparented to root")
+  let Some(h) = H.propagate(g) else { panic("propagate reparented") }
+  let Some(free) = H.world(&h, hand) else { panic("free") }
+  require(close(&free, &handPose), "a root hand keeps its local pose")
+  let Some(back) = H.reparent(h, hand, Some(arm)) else { panic("back") }
+  let Some((pruned, removed)) = H.remove(back, arm) else { panic("remove") }
+  require(removed == [arm, hand] && H.size(&pruned) == 2, "subtree removed")
+  require(H.slotOf(&pruned, hand) == None && H.parentOf(&pruned, other) == Some(root), "survivors keep parents")
+  let Some(i) = H.propagate(pruned) else { panic("propagate pruned") }
+  let Some(stillOther) = H.world(&i, other) else { panic("still other") }
+  require(close(&stillOther, &T.compose(rootPose, otherPose)), "pruned lanes stay aligned")
+  let poses = H.localPoses(&i)
+  require(H.setLocals(i, &H.Poses{..poses, tx: Lanes.fromArray(&[1.0])}) == None, "bulk lanes must match")
+}
+
+fn deepChain() {
+  var tree = H.empty()
+  var pool = Handle.empty()
+  var previous: Option[Handle.Handle] = None
+  var expected = T.identity()
+  let step = T.transform(V.vec3(0.5, 0.0, 0.0), Q.rotationZ(0.1), V.vec3(1.0, 1.0, 1.0))
+  var last = Handle.Handle{index: 0, generation: 0}
+  var index = 0
+  while index < 50 {
+    let (next, entity) = Handle.allocate(pool)
+    pool = next
+    let Some(grown) = H.add(tree, entity, previous, &step) else { panic("chain") }
+    tree = grown
+    previous = Some(entity)
+    expected = T.compose(expected, step)
+    last = entity
+    index = index + 1
+  }
+  let Some(done) = H.propagate(tree) else { panic("chain propagate") }
+  let Some(tip) = H.world(&done, last) else { panic("tip") }
+  require(close(&tip, &expected), "fifty levels match scalar composition")
+}
+
+fn unread(queue: &Events.Events[Hit], cursor: Events.Reader) -> Array[Hit] {
+  let (_, found) = Events.read(queue, cursor)
+  found
+}
+
+fn events() {
+  var queue: Events.Events[Hit] = Events.events()
+  let early = Events.readerFromStart(&queue)
+  queue = Events.emit(queue, Hit{damage: 1})
+  let late = Events.reader(&queue)
+  queue = Events.emit(queue, Hit{damage: 2})
+  let (afterEarly, seen) = Events.read(&queue, early)
+  require(seen == [Hit{damage: 1}, Hit{damage: 2}], "reader from start sees all")
+  require(unread(&queue, late) == [Hit{damage: 2}], "reader sees only newer events")
+  require(unread(&queue, afterEarly) == [] && Events.pending(&queue, afterEarly) == 0, "read once")
+  queue = Events.update(queue)
+  queue = Events.emit(queue, Hit{damage: 3})
+  let (afterSecond, more) = Events.read(&queue, afterEarly)
+  require(more == [Hit{damage: 3}], "next frame")
+  require(Events.pending(&queue, late) == 2, "previous frame still readable")
+  queue = Events.update(Events.update(queue))
+  require(unread(&queue, afterSecond) == [] && Events.pending(&queue, late) == 0, "dropped events skipped")
+}
+
+export fn main() -> Int {
+  hierarchy()
+  deepChain()
+  events()
+  print("ark hierarchy: ok")
+  0
+}

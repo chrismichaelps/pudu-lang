@@ -1,0 +1,127 @@
+module UsesArkWorld
+
+import Std.Lanes as Lanes
+import Ark.Core.Handle as Handle
+import Ark.Core.Profile as Profile
+import Ark.World.Commands as Commands
+import Ark.World as World
+
+fn require(condition: Bool, name: Str) {
+  if !condition { panic(name) }
+}
+
+fn schema() -> World.World {
+  let Some(a) = World.register(World.empty(), "position", 3) else { panic("register position") }
+  let Some(b) = World.register(a, "velocity", 3) else { panic("register velocity") }
+  let Some(c) = World.register(b, "health", 1) else { panic("register health") }
+  let Some(d) = World.register(c, "player", 0) else { panic("register tag") }
+  d
+}
+
+fn move(view: World.View) -> Option[World.View] {
+  var current = view
+  var axis = 0
+  while axis < 3 {
+    let position = World.columnOf(&current, "position", axis) ?
+    let velocity = World.columnOf(&current, "velocity", axis) ?
+    let advanced = Lanes.axpy(&position, 0.5, &velocity) ?
+    current = World.write(current, "position", axis, &advanced) ?
+    axis = axis + 1
+  }
+  Some(current)
+}
+
+fn handles() {
+  let pool = Handle.empty()
+  let (a, first) = Handle.allocate(pool)
+  let (b, second) = Handle.allocate(a)
+  require(first.index == 0 && second.index == 1 && Handle.liveCount(&b) == 2, "allocate")
+  let Some(c) = Handle.release(b, first) else { panic("release") }
+  require(!Handle.isAlive(&c, first) && Handle.isAlive(&c, second), "stale after release")
+  require(Handle.release(c, first) == None, "double release refused")
+  let (d, reused) = Handle.allocate(c)
+  require(reused.index == 0 && reused.generation == 1 && !Handle.isAlive(&d, first), "generation guards reuse")
+  require(Handle.capacity(&d) == 2 && Handle.liveCount(&d) == 2, "capacity")
+}
+
+fn storage() {
+  let base = schema()
+  require(World.register(base, "position", 2) == None, "conflicting schema refused")
+  require(World.register(base, "bad#name", 1) == None, "reserved character refused")
+  let Some((w1, mover)) = World.create(base, &["velocity", "position"], &[1.0, 2.0, 3.0, 10.0, 20.0, 30.0]) else { panic("create") }
+  require(World.get(&w1, mover, "position") == Some([10.0, 20.0, 30.0]), "values follow caller order")
+  require(World.get(&w1, mover, "velocity") == Some([1.0, 2.0, 3.0]), "second component")
+  require(World.create(w1, &["position"], &[1.0]) == None, "value count refused")
+  require(World.create(w1, &["unknown"], &[]) == None, "unknown component refused")
+  require(World.create(w1, &["position", "position"], &[1.0, 2.0, 3.0, 1.0, 2.0, 3.0]) == None, "duplicate refused")
+  let Some((w2, rock)) = World.create(w1, &["position"], &[5.0, 5.0, 5.0]) else { panic("create rock") }
+  let Some((w3, hero)) = World.create(w2, &["position", "velocity", "player"], &[0.0, 0.0, 0.0, 2.0, 0.0, 0.0]) else { panic("hero") }
+  require(World.liveCount(&w3) == 3 && World.has(&w3, hero, "player") && !World.has(&w3, rock, "player"), "tags")
+  let Some(w4) = World.each(w3, &["position", "velocity"], &[], move) else { panic("system") }
+  require(World.get(&w4, mover, "position") == Some([10.5, 21.0, 31.5]), "system moved mover")
+  require(World.get(&w4, hero, "position") == Some([1.0, 0.0, 0.0]), "system moved hero")
+  require(World.get(&w4, rock, "position") == Some([5.0, 5.0, 5.0]), "system skipped rock")
+  require(World.query(&w4, &["position"], &["player"]).length() == 2, "query excludes")
+  let Some(w5) = World.set(w4, rock, "position", &[7.0, 8.0, 9.0]) else { panic("set") }
+  require(World.get(&w5, rock, "position") == Some([7.0, 8.0, 9.0]) && World.set(w5, rock, "velocity", &[0.0, 0.0, 0.0]) == None, "set")
+  let Some(w6) = World.insert(w5, rock, "health", &[100.0]) else { panic("insert") }
+  require(World.get(&w6, rock, "health") == Some([100.0]) && World.get(&w6, rock, "position") == Some([7.0, 8.0, 9.0]), "insert keeps values")
+  require(World.insert(w6, rock, "health", &[1.0]) == None, "insert existing refused")
+  let Some(w7) = World.remove(w6, hero, "velocity") else { panic("remove component") }
+  require(!World.has(&w7, hero, "velocity") && World.get(&w7, hero, "position") == Some([1.0, 0.0, 0.0]), "remove keeps rest")
+  require(World.get(&w7, mover, "position") == Some([10.5, 21.0, 31.5]), "moved row stays addressable")
+  let Some(w8) = World.destroy(w7, mover) else { panic("destroy") }
+  require(!World.isAlive(&w8, mover) && World.get(&w8, mover, "position") == None && World.destroy(w8, mover) == None, "stale refused")
+  require(World.liveCount(&w8) == 2 && World.get(&w8, hero, "player") == Some([]), "survivors")
+}
+
+fn batches() {
+  let Some(xs) = Lanes.ramp(1000, 0.0, 1.0) else { panic("ramp") }
+  let Some(ones) = Lanes.filled(1000, 1.0) else { panic("fill") }
+  let Some(zeros) = Lanes.filled(1000, 0.0) else { panic("fill") }
+  let Some((w1, crowd)) = World.createBatch(schema(), &["position", "velocity"], 1000, &[xs, zeros, zeros, ones, zeros, zeros]) else { panic("batch") }
+  require(World.liveCount(&w1) == 1000 && World.get(&w1, crowd[999], "position") == Some([999.0, 0.0, 0.0]), "batch create")
+  require(World.createBatch(w1, &["position"], 2, &[xs, xs, xs]) == None, "batch length refused")
+  var doomed: Array[Handle.Handle] = []
+  var index = 0
+  while index < 1000 {
+    if index % 3 == 0 { doomed = doomed.push(crowd[index]) }
+    index = index + 1
+  }
+  let w2 = World.destroyAll(w1, &doomed.push(crowd[0]))
+  require(World.liveCount(&w2) == 666, "batched removal")
+  require(World.get(&w2, crowd[1], "position") == Some([1.0, 0.0, 0.0]) && World.get(&w2, crowd[998], "position") == Some([998.0, 0.0, 0.0]), "compaction keeps order")
+  require(World.get(&w2, crowd[3], "position") == None, "removed is gone")
+  var queued = Commands.empty()
+  queued = Commands.create(queued, &["position"], &[1.0, 1.0, 1.0])
+  queued = Commands.create(queued, &["health"], &[50.0])
+  queued = Commands.create(queued, &["position"], &[2.0, 2.0, 2.0])
+  queued = Commands.create(queued, &["position"], &[1.0])
+  queued = Commands.destroy(queued, crowd[1])
+  queued = Commands.destroy(queued, crowd[0])
+  require(Commands.pending(&queued) == 6, "pending")
+  let (w3, made) = Commands.apply(w2, &queued)
+  require(made.length() == 4 && made[3] == None, "invalid creation answers none")
+  let Some(third) = made[2] else { panic("third creation") }
+  require(World.get(&w3, third, "position") == Some([2.0, 2.0, 2.0]) && World.liveCount(&w3) == 668, "commands applied")
+  require(!World.isAlive(&w3, crowd[1]), "queued removal applied")
+}
+
+fn profiling() {
+  let started = Profile.now()
+  var profile = Profile.record(Profile.empty(), "frame", started)
+  profile = Profile.sample(profile, "frame", 10)
+  profile = Profile.sample(profile, "frame", 30)
+  let Some(frame) = Profile.stats(&profile, "frame") else { panic("stats") }
+  require(frame.samples == 3 && frame.minimum <= 10 && frame.maximum >= 30, "profile stats")
+  require(Profile.stats(&profile, "missing") == None && Profile.names(&profile) == ["frame"], "profile names")
+}
+
+export fn main() -> Int {
+  handles()
+  storage()
+  batches()
+  profiling()
+  print("ark world: ok")
+  0
+}

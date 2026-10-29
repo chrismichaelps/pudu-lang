@@ -40,12 +40,15 @@ Tools only after an explicit layer refinement, not by creating a same-layer cycl
 
 ## Performance and resource contracts
 
-Math names precision explicitly and preserves IEEE operation order; no implicit fast math or
-cross-target deterministic floating-point promise. World will group component columns into bounded
+Math names precision explicitly and preserves IEEE operation order; no implicit fast math.
+Exact kernels (sqrt, rounding, fma, bit casts, conversions) are bit-identical across IEEE
+platforms, so Random and Noise are deterministic; transcendental results may differ in the last
+bit between platform math libraries. World will group component columns into bounded
 chunks and defer structural mutation until query completion. Generational identifiers must reject
 stale access before storage reuse. Job scheduling will declare read/write sets and join owned work.
-Persistent Array storage is not evidence of packed mutable storage: the latter needs a measured
-language/runtime foundation before claiming ECS throughput.
+Component fields are [[Std Lanes]] columns: persistent values transformed by native whole-lane
+kernels, so ECS throughput comes from one native pass per column rather than per-entity
+interpretation. Measured numbers are interpreter-runtime numbers, not a native engine target.
 
 Assets distinguish identity, dependencies, residency, and owned runtime handles. Reload commits a
 validated replacement generation after users of the old one finish. Render records resource reads,
@@ -62,11 +65,17 @@ their own acceptance evidence. Never substitute a host-language engine or broad 
 
 | Order | Deliverable | Current evidence |
 | --- | --- | --- |
-| 1 | Math and Core | #652: binary64 Vec3 validated and independently reviewed; other vectors/matrices/quaternions, geometry, noise, containers and Core remain open |
+| 1 | Math and Core | #652 Vec3; #660 Vec4, Mat3/Mat4; #661 exact binary64 kernels; #666 Vec2, vector algebra, inverses, quaternions, TRS, cameras with [0, 1] and reversed depth, geometry and culling, color, SplitMix64 and gradient noise validated; #672 Core handles and nanosecond profiling validated |
 | 2 | Language/native foundations | Existing language features require capability audit; separate native execution target remains open |
+| 3 | Platform | #673 adapter game input records; #675 factory-decoded input with action maps, fixed-step frame clock and window boundary validated; #692 directory/memory virtual resource reads validated; gamepads, touch, packaged/streaming VFS, jobs, dynamic loading, dialogs and multi-monitor remain open |
+| 4 | World and simple rendering | #672: archetype World on lane columns with systems, structural moves and batched commands validated (100,000 entities move in 0.31 ms per frame at -O2); #676 native rasterizer and #680 software render device, lane vertex pipeline, frame graph and a windowed demo validated; #689 inverse-transpose normals and homogeneous depth clipping and #690 perspective-correct lit color and #697 native textured/material draws with alpha cutout validated; #681 lane-propagated transform hierarchy and typed events validated; texture/material attributes, parallel scheduling and a GPU device remain open |
+| 5 | Assets, physics, audio and networking | #688 translating sphere/axis-aligned-box bodies, batched contacts, restitution/friction, spatial queries and a falling-body demo have focused conformance; angular dynamics, controllers/vehicles and deformables remain open. Assets has #691 checked CPU RGBA8 textures with linear-light/alpha-correct sampling and #693 a validated dependency graph with reload closure and #696 an asset server with importers, generational handles and staged hot reload; #706 a lane audio mixer with buses, rolloff, equal-power panning, occlusion and PCM16 output; #709 acknowledged packets and quantized delta replication with interest culling; asynchronous streaming, packaged content, audio effects/streaming music, prediction/rollback and sockets remain open |
+| 6 | Animation, UI and Game | #702 key-major clips, lane pose blending/layering and a cross-fading state machine validated; #707 a scene-stack game loop and follow/orbit camera rigs and #708 immediate-mode widgets with keyboard focus validated; text rendering, styling/localization, IK, morph targets, compression, AI, cinematics and save games remain open |
+| 7 | Editor, Tools and Build | #710 deterministic content packs, pack mounts and validated cook/load validated; cross-compilation, shader variants, editor and tools remain open |
 | 3 | Platform | OS adapters and bounded deterministic tests remain open |
 | 4 | World and simple rendering | Storage/query invariants, native window and a validated GPU frame remain open |
-| 5 | Assets, physics, audio and networking | Complete subsystem vertical slices remain open |
+| 5 | Assets, physics, audio and networking | #716 adds checked finite capsule-box casts and closest witnesses; scene queries, controller composition, rigid dynamics and the remaining subsystem slices remain open |
+| 5 | Assets, physics, audio and networking | #714 adds bounded capsule sweeps against convex plane boundaries; general scene collision, rigid dynamics and the remaining subsystem slices remain open |
 | 6 | Animation, UI and Game | Complete subsystem vertical slices remain open |
 | 7 | Editor, Tools and Build | Complete subsystem vertical slices remain open |
 | 8 | Advanced rendering and game-scale validation | PBR, lighting/shadows/GI, particles, terrain/water/atmosphere, LOD, multi-view/XR and virtualized geometry remain open |
@@ -77,6 +86,14 @@ namespace or design exists. Physics includes controllers/vehicles and progressiv
 Net includes interest, prediction/rollback, dedicated servers and sessions; Audio includes spatial
 mixing/streaming/music; Assets includes import through cooked packages; Editor includes typed
 inspectors, all content editors and collaboration foundations. These remain target obligations.
+
+[[Ark Capsule Support]] settles post-movement states using checked slope, lower-cap and inset
+footprint evidence. Rising/lost-support states become Falling; accepted support becomes Walking.
+Gravity integration, full-frame locomotion, stepping and moving bases remain open.
+[[Ark Swept Motion]] provides callback-driven contact sliding with bounded residual handling;
+finite-obstacle query composition is tested separately while its dependency PR remains unmerged.
+The response and unconsumed fraction support frame velocity and budget resumption.
+Floor support and walking/falling/stepping composition remain open.
 
 ## Research decisions
 

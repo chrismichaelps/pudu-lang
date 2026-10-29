@@ -1,0 +1,61 @@
+module Ark.Math.Transform
+
+import Std.Math.Float as Float
+import Ark.Math.Matrix as Matrix
+import Ark.Math.Quat as Quat
+import Ark.Math as Vector
+
+/// Scale, then rotation, then translation.
+export type Transform = { translation: Vector.Vec3, rotation: Quat.Quat, scale: Vector.Vec3 }
+
+/// Construct a transform from its parts.
+export fn transform(translation: Vector.Vec3, rotation: Quat.Quat, scale: Vector.Vec3) -> Transform {
+  Transform{translation, rotation, scale}
+}
+
+/// The transform that changes nothing.
+export fn identity() -> Transform {
+  transform(Vector.vec3(0.0, 0.0, 0.0), Quat.identity(), Vector.vec3(1.0, 1.0, 1.0))
+}
+
+/// The equivalent homogeneous matrix: T * R * S.
+export fn toMat4(value: Transform) -> Matrix.Mat4 {
+  let r = Quat.toMat3(value.rotation)
+  Matrix.affine(
+    Matrix.columns3(
+      Vector.scale(r.x, value.scale.x),
+      Vector.scale(r.y, value.scale.y),
+      Vector.scale(r.z, value.scale.z),
+    ),
+    value.translation,
+  )
+}
+
+/// Map a point from local space.
+export fn transformPoint(value: Transform, point: Vector.Vec3) -> Vector.Vec3 {
+  Vector.add(value.translation, Quat.rotate(value.rotation, Vector.multiply(value.scale, point)))
+}
+
+/// Map a direction from local space, ignoring translation.
+export fn transformDirection(value: Transform, direction: Vector.Vec3) -> Vector.Vec3 {
+  Quat.rotate(value.rotation, Vector.multiply(value.scale, direction))
+}
+
+/// The child's world transform under a parent; exact when the parent scale is uniform.
+export fn compose(parent: Transform, child: Transform) -> Transform {
+  transform(
+    transformPoint(parent, child.translation),
+    Quat.multiply(parent.rotation, child.rotation),
+    Vector.multiply(parent.scale, child.scale),
+  )
+}
+
+/// The inverse transform, or None for zero, non-finite or non-uniform scale.
+export fn inverse(value: Transform) -> Option[Transform] {
+  let s = value.scale.x
+  if s == 0.0 || !Float.isFinite(s) || value.scale.y != s || value.scale.z != s { return None }
+  let rotation = Quat.conjugate(Quat.normalized(value.rotation) ?)
+  let factor = 1.0 / s
+  let translation = Vector.scale(Quat.rotate(rotation, Vector.negate(value.translation)), factor)
+  Some(transform(translation, rotation, Vector.vec3(factor, factor, factor)))
+}

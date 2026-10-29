@@ -14,9 +14,25 @@ cache identity; full analysis remains available independently of executable reus
 
 ## Purpose and interface
 
-Distribute `lib/Ark/*.pudu` beside Std in the existing library data root. [[Ark Math]] is
-language-distribution data, with no separate package or native dependency. Resolved Grill Log:
-source archives must contain Ark even when a checkout's library root is unavailable.
+Distribute `lib/Ark/Assets/*.pudu`, including [[Ark Texture Asset]]. Resolved Grill Log: nested
+CPU asset modules are shipped library data and must remain present outside the checkout.
+
+Distribute `lib/Ark/Net/*.pudu` with the root net module, including [[Ark Replication]];
+[[Ark Net Gate]] checks the archive.
+
+Distribute `lib/Ark/Game/*.pudu` with the root game module, including [[Ark Game Camera]];
+[[Ark Game Gate]] checks the archive.
+
+Distribute `lib/Ark/Animation/*.pudu` with the root animation module, including [[Ark Animation
+Machine]]; [[Ark Animation Gate]] checks the archive.
+
+Distribute `lib/Ark/Physics/*.pudu` with the root physics facade. Resolved Grill Log: the
+source archive must retain contact, step and query modules; checkout-only success is insufficient.
+
+Distribute `lib/Ark/*.pudu` and `lib/Ark/Math/*.pudu` beside Std in the existing library data
+root. [[Ark Math]] and [[Ark Matrix]] are language-distribution data, with no separate package
+or native dependency. Resolved Grill Log: source archives must contain both root and nested
+Ark modules even when a checkout's library root is unavailable.
 
 Declare package metadata, compiler library modules, executable components, test components, compiler
 warnings, language defaults, dependencies, and native bridge linkage for the Cabal build.
@@ -78,6 +94,16 @@ links, which made a clean `cabal install exe:pudu` fail even though in-tree buil
   request benchmark after linking the default, rather than reporting flag-only
   experiments as delivered behavior. No library or repository-test default
   changes, additional dependency or hard-coded optimization level is introduced.
+
+- **Q:** Let lane kernel buffers count against the nursery? **A:** No; the executable also
+  links `-AL32m`. Each lane kernel allocates a whole pinned buffer, and with the default limit
+  nearly every call triggered a stop-the-world collection that waited for the other threads'
+  non-allocating kernel loops, so lane work on four workers ran no faster than on one (112 vs
+  113 ms). Raising only the large-object limit, not every capability's nursery, lets those
+  buffers accumulate up to 32 MB between collections: four workers 103 → 49 ms, one worker
+  unchanged (105 → 107 ms) and peak memory 178 → 159 MB. 128 MB made one worker 11% slower and
+  added 110 MB; 16 MB left a third of the speedup unrealised. [[Lane Collection Gate]] counts the
+  collections; [[Lane Parallel Benchmark]] records the throughput.
 
 - **Q:** Leave an extracted runtime module outside the library module list? **A:** No. Registration
   keeps source distributions and builds aware of the implementation dependency.
@@ -295,3 +321,21 @@ passes the CLI and the residualizer share.
 Register [[Lsp Impl Members]] without new dependencies. Resolved Grill Log: completion and code actions share one unwritten-member computation.
 
 Register [[Resolve State]] for the private pure resolver action and state boundary. Resolved Grill Log: preserve the abstract [[Resolve Context]] facade and existing state/diagnostic ordering without a new dependency.
+
+## Capsule support (#722)
+
+Ship `lib/Ark/Physics/*.pudu` for [[Ark Capsule Support]].
+Resolved Grill Log: verify the executable behavior and shipping before delivery.
+## Swept movement distribution (#720)
+
+Ship `lib/Ark/Physics/*.pudu` for [[Ark Swept Motion]].
+Resolved Grill Log: verify the module in the actual source archive.
+## Capsule cast distribution (#716)
+
+Ship `lib/Ark/Math/*.pudu` and `lib/Ark/Physics/*.pudu` for [[Ark Segment Box Distance]] and
+[[Ark Capsule Box Cast]]. Resolved Grill Log: verify both nested modules in the actual archive.
+## Capsule movement distribution (#714)
+
+Include `lib/Ark/Physics/*.pudu` as shipped library data for [[Ark Character Movement]].
+Resolved Grill Log: validate the actual source archive; passing from a checkout alone cannot
+prove an installed client can resolve this nested module.

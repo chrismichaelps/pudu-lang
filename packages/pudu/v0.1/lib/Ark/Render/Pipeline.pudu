@@ -1,0 +1,131 @@
+module Ark.Render.Pipeline
+
+import Std.Lanes as Lanes
+import Std.Math.Float as Float
+import Ark.Math.Color as Color
+import Ark.Math.Matrix as M
+import Ark.Math as V
+import Ark.Render.Clip as Clip
+import Ark.Render.Device as Device
+import Ark.Render.Mesh as Mesh
+
+/// A directional light: a unit direction toward the light, its color and an ambient floor in [0, 1].
+export type Light = { direction: V.Vec3, color: Color.Rgba, ambient: Float64 }
+
+/// A light, or None for a zero direction or an ambient floor outside [0, 1].
+export fn light(direction: V.Vec3, color: Color.Rgba, ambient: Float64) -> Option[Light] {
+  if !(ambient >= 0.0 && ambient <= 1.0) { return None }
+  let unit = V.normalized(direction) ?
+  Some(Light{direction: unit, color, ambient})
+}
+
+/// Transform, light and map a mesh; None for invalid dimensions or a singular normal transform.
+export fn project(mesh: &Mesh.Mesh, model: &M.Mat4, viewProjection: &M.Mat4, sun: &Light, width: Int, height: Int) -> Option[Device.ScreenBatch] {
+  if width <= 0 || height <= 0 { return None }
+  let normal = M.transpose3(M.inverse3(M.linearPart(*model)) ?)
+  let mvp = M.multiply4(*viewProjection, *model)
+  let positions = [mvp.x.x, mvp.x.y, mvp.x.z, mvp.y.x, mvp.y.y, mvp.y.z, mvp.z.x, mvp.z.y, mvp.z.z, mvp.w.x, mvp.w.y, mvp.w.z]
+  let (cx, cy, cz) = Lanes.affine3(&positions, &mesh.px, &mesh.py, &mesh.pz) ?
+  let cw = row(mvp.x.w, mvp.y.w, mvp.z.w, mvp.w.w, mesh) ?
+  let linear = [normal.x.x, normal.x.y, normal.x.z, normal.y.x, normal.y.y, normal.y.z, normal.z.x, normal.z.y, normal.z.z, 0.0, 0.0, 0.0]
+  let (wx, wy, wz) = Lanes.affine3(&linear, &mesh.nx, &mesh.ny, &mesh.nz) ?
+  let squared = Lanes.fma(&wx, &wx, &(Lanes.fma(&wy, &wy, &(Lanes.multiply(&wz, &wz) ?)) ?)) ?
+  let lengths = Lanes.sqrt(&squared)
+  let toward = Lanes.axpy(&(Lanes.axpy(&Lanes.scale(&wx, sun.direction.x), sun.direction.y, &wy) ?), sun.direction.z, &wz) ?
+  let facing = Lanes.clamp(&(Lanes.divide(&toward, &lengths) ?), 0.0, 1.0)
+  let intensity = Lanes.addScalar(&Lanes.scale(&facing, 1.0 - sun.ambient), sun.ambient)
+  let clipped = Clip.depth(&Clip.Vertices {
+      xs: cx,
+      ys: cy,
+      zs: cz,
+      ws: cw,
+      rs: Lanes.scale(&(Lanes.multiply(&mesh.r, &intensity) ?), sun.color.r),
+      gs: Lanes.scale(&(Lanes.multiply(&mesh.g, &intensity) ?), sun.color.g),
+      bs: Lanes.scale(&(Lanes.multiply(&mesh.b, &intensity) ?), sun.color.b),
+      us: mesh.u,
+      vs: mesh.v,
+      extras: [],
+    }) ?
+  let halfWidth = Float.fromInt(width) * 0.5
+  let halfHeight = Float.fromInt(height) * 0.5
+  let nx = Lanes.divide(&clipped.xs, &clipped.ws) ?
+  let ny = Lanes.divide(&clipped.ys, &clipped.ws) ?
+  Some(
+    Device.ScreenBatch {
+      xs: Lanes.addScalar(&Lanes.scale(&nx, halfWidth), halfWidth),
+      ys: Lanes.addScalar(&Lanes.scale(&ny, -halfHeight), halfHeight),
+      zs: Lanes.divide(&clipped.zs, &clipped.ws) ?,
+      ws: clipped.ws,
+      rs: clipped.rs,
+      gs: clipped.gs,
+      bs: clipped.bs,
+      us: clipped.us,
+      vs: clipped.vs,
+    },
+  )
+}
+
+/// Transform and map a mesh without lighting it, also answering world-space normals and positions
+/// per screen vertex for per-pixel shading; None for invalid dimensions or a singular normal transform.
+export fn projectSurface(mesh: &Mesh.Mesh, model: &M.Mat4, viewProjection: &M.Mat4, width: Int, height: Int) -> Option[(Device.ScreenBatch, Device.Surface)] {
+  if width <= 0 || height <= 0 { return None }
+  let normal = M.transpose3(M.inverse3(M.linearPart(*model)) ?)
+  let mvp = M.multiply4(*viewProjection, *model)
+  let positions = [mvp.x.x, mvp.x.y, mvp.x.z, mvp.y.x, mvp.y.y, mvp.y.z, mvp.z.x, mvp.z.y, mvp.z.z, mvp.w.x, mvp.w.y, mvp.w.z]
+  let (cx, cy, cz) = Lanes.affine3(&positions, &mesh.px, &mesh.py, &mesh.pz) ?
+  let cw = row(mvp.x.w, mvp.y.w, mvp.z.w, mvp.w.w, mesh) ?
+  let world = [model.x.x, model.x.y, model.x.z, model.y.x, model.y.y, model.y.z, model.z.x, model.z.y, model.z.z, model.w.x, model.w.y, model.w.z]
+  let (wx, wy, wz) = Lanes.affine3(&world, &mesh.px, &mesh.py, &mesh.pz) ?
+  let linear = [normal.x.x, normal.x.y, normal.x.z, normal.y.x, normal.y.y, normal.y.z, normal.z.x, normal.z.y, normal.z.z, 0.0, 0.0, 0.0]
+  let (nx, ny, nz) = Lanes.affine3(&linear, &mesh.nx, &mesh.ny, &mesh.nz) ?
+  let clipped = Clip.depth(&Clip.Vertices{xs: cx, ys: cy, zs: cz, ws: cw, rs: mesh.r, gs: mesh.g, bs: mesh.b, us: mesh.u, vs: mesh.v, extras: [nx, ny, nz, wx, wy, wz]}) ?
+  let halfWidth = Float.fromInt(width) * 0.5
+  let halfHeight = Float.fromInt(height) * 0.5
+  let sx = Lanes.divide(&clipped.xs, &clipped.ws) ?
+  let sy = Lanes.divide(&clipped.ys, &clipped.ws) ?
+  let e = clipped.extras
+  Some(
+    (
+      Device.ScreenBatch {
+        xs: Lanes.addScalar(&Lanes.scale(&sx, halfWidth), halfWidth),
+        ys: Lanes.addScalar(&Lanes.scale(&sy, -halfHeight), halfHeight),
+        zs: Lanes.divide(&clipped.zs, &clipped.ws) ?,
+        ws: clipped.ws,
+        rs: clipped.rs,
+        gs: clipped.gs,
+        bs: clipped.bs,
+        us: clipped.us,
+        vs: clipped.vs,
+      },
+      Device.Surface{nx: e[0], ny: e[1], nz: e[2], px: e[3], py: e[4], pz: e[5]},
+    ),
+  )
+}
+
+/// One batch holding both, for a single draw call.
+export fn concat(first: &Device.ScreenBatch, second: &Device.ScreenBatch) -> Device.ScreenBatch {
+  Device.ScreenBatch {
+    xs: Lanes.concat(&first.xs, &second.xs),
+    ys: Lanes.concat(&first.ys, &second.ys),
+    zs: Lanes.concat(&first.zs, &second.zs),
+    ws: Lanes.concat(&first.ws, &second.ws),
+    rs: Lanes.concat(&first.rs, &second.rs),
+    gs: Lanes.concat(&first.gs, &second.gs),
+    bs: Lanes.concat(&first.bs, &second.bs),
+    us: Lanes.concat(&first.us, &second.us),
+    vs: Lanes.concat(&first.vs, &second.vs),
+  }
+}
+
+/// A batch with no triangles.
+export fn emptyBatch() -> Device.ScreenBatch {
+  let none = Lanes.fromArray(&[])
+  Device.ScreenBatch{xs: none, ys: none, zs: none, ws: none, rs: none, gs: none, bs: none, us: none, vs: none}
+}
+
+fn row(a: Float64, b: Float64, c: Float64, d: Float64, mesh: &Mesh.Mesh) -> Option[Lanes.Lanes] {
+  let first = Lanes.scale(&mesh.px, a)
+  let second = Lanes.axpy(&first, b, &mesh.py) ?
+  let third = Lanes.axpy(&second, c, &mesh.pz) ?
+  Some(Lanes.addScalar(&third, d))
+}
