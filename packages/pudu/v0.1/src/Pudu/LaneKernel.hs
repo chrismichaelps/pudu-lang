@@ -51,6 +51,8 @@ data LaneKernel
   | RasterTexturedTriangles
   | LaneOverlapPairs
   | LaneSelect
+  | LaneInterleave
+  | LaneToPcm16
   | LaneAbove
   | LaneWhere
   | LaneScatterAdd
@@ -105,6 +107,8 @@ laneKernelName kernel = case kernel of
   RasterTexturedTriangles -> "rasterTexturedTriangles"
   LaneOverlapPairs -> "lanesOverlapPairs"
   LaneSelect -> "lanesSelect"
+  LaneInterleave -> "lanesInterleave"
+  LaneToPcm16 -> "lanesToPcm16"
   LaneAbove -> "lanesAbove"
   LaneWhere -> "lanesWhere"
   LaneScatterAdd -> "lanesScatterAdd"
@@ -137,6 +141,8 @@ laneKernelSignature kernel = case kernel of
   LaneAffine3 -> ([LaneFloats, LaneBytes, LaneBytes, LaneBytes], LaneOption LaneTriple)
   RasterFill -> ([LaneInt, LaneFloat, LaneFloat, LaneFloat, LaneFloat], LaneOption LaneBytes)
   LaneSelect -> ([LaneBytes, LaneBytes, LaneBytes], LaneOption LaneBytes)
+  LaneInterleave -> ([LaneBytes, LaneBytes], LaneOption LaneBytes)
+  LaneToPcm16 -> ([LaneBytes], LaneBytes)
   LaneAbove -> ([LaneBytes, LaneFloat], LaneBytes)
   LaneWhere -> ([LaneBytes], LaneInts)
   LaneScatterAdd -> ([LaneBytes, LaneInts, LaneBytes], LaneOption LaneBytes)

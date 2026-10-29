@@ -22,6 +22,8 @@ and [[Semantic Prelude]] lists them, so no list can drift. Depends only on `Data
 
 ## Grill Log
 
+- **Q:** Return PCM as lanes? **A:** No; `LaneToPcm16` (`lanesToPcm16`) answers plain bytes, the
+  device format, while `LaneInterleave` (`lanesInterleave`) answers optional lanes.
 - **Q:** Pass texture state as one record? **A:** No; kernel arguments are positional values.
   `RasterTexturedTriangles` (`rasterTexturedTriangles`) appends u and v lanes after w, then texel
   bytes, texture width, color-space code and filter code.

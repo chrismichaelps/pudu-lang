@@ -20,7 +20,9 @@ native pass: `add`, `subtract`, `multiply`, `divide`, `minimum`, `maximum` (elem
 `affine3(matrix, xs, ys, zs)` with a 12-entry column-major matrix. Data-parallel control (#684): `select(mask, a, b)`, `above(lanes, threshold)` masks,
 `positions(mask)` compresses to ascending indices, `scatterAdd` accumulates repeats in order,
 `fromInts` and `toInts` convert index data. Collision: `overlapPairs(minX, maxX, minY, maxY, minZ,
-maxZ)` from [[Runtime Broadphase]]. Host byte order; use
+maxZ)` from [[Runtime Broadphase]]. Audio output: `interleave(first, second)` alternates two
+equal lanes (stereo frames) and `toPcm16(lanes)` writes clamped, rounded little-endian 16-bit
+samples in one native pass. Host byte order; use
 [[Std Buffer]] to serialize portably.
 
 ## Grill Log
