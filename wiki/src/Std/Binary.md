@@ -27,13 +27,18 @@ pass. `write(value)` frames the encoding as `PBIN`, a 16-bit version (1) and the
 
 A record writes its fields under their wire names (the field name, or `@binary("name")`); `@skip`
 fields are neither written nor read and take `missing()`. Reading ignores names it does not know
-and gives an absent field `missing()`, refusing `MissingField` otherwise, so adding an optional
-field and removing any field keep old and new data readable both ways. A sum writes the variant's
+and gives an absent field `missing()`, refusing `MissingField` otherwise, so adding or removing an optional
+field keeps old and new data readable both ways. A reader ignores fields it does not declare;
+an archive missing a reader's required field is refused rather than given an invented value. A sum writes the variant's
 wire name; an unknown one is `UnknownVariant(name)`. `BinaryError` carries the `path` of field
 names and `[index]` steps, and `Corrupt(message)` for anything the native reader refused, or
 `WrongKind(expected)`.
 
 ## Grill Log
+
+- **Q:** Is removing a required field compatible in both directions? **A:** No; new readers can
+  ignore that field in old archives, but old readers refuse a new archive that omits it. Only
+  fields with `missing()` (Option) support absent-field compatibility.
 
 - **Q:** Must the derive trait be named after its implementation method? **A:** No; the public
   derive spelling is `Binary.Encode, Binary.Decode`, while their methods remain `pack`/`unpack`.

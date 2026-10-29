@@ -14,7 +14,8 @@ signed zero, infinities), including contiguous arrays and lane blocks, multiling
 flags and a derived record holding every field kind, including `Lanes` and a sum; golden bytes for
 a whole node and a one-field record; a renamed field and a skipped one; a skipped sum field both absent and supplied on the wire; a missing text field
 refused rather than read as empty; evolution where an added optional field reads as `None`, an
-old reader ignores a new field and a missing field reports its path through an array element;
+old reader ignores a new field, a reduced schema reads old data while its reverse refuses a
+missing required field, and a missing field reports its path through an array element;
 and refusals for truncation, trailing bytes, an unknown node tag, a name index past the table, a
 repeated field, a wrong node kind, an unknown variant, a foreign magic, a future version and a
 checksum mismatch. Answers the number of check groups, 22.

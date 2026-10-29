@@ -139,6 +139,10 @@ fn evolution() -> Int {
   require(upgraded == Ok(NewSave{name: "hero", level: 3, title: None}), "an added optional field reads as None")
   let downgraded: Result[OldSave, Binary.BinaryError] = Binary.read(&Binary.write(&NewSave{name: "hero", level: 4, title: Some("knight")}))
   require(downgraded == Ok(OldSave{name: "hero", level: 4}), "an old reader ignores a new field")
+  let reduced: Result[NameOnly, Binary.BinaryError] = Binary.read(&Binary.write(&OldSave{name: "hero", level: 3}))
+  require(reduced == Ok(NameOnly{name: "hero"}), "a reduced schema ignores removed fields in old data")
+  let required: Result[OldSave, Binary.BinaryError] = Binary.read(&Binary.write(&NameOnly{name: "hero"}))
+  require(required == Err(Binary.BinaryError{path: ["level"], problem: Binary.MissingField}), "old readers refuse removed required fields")
   let strict: Result[Party, Binary.BinaryError] = Binary.read(&Binary.write(&Loose{members: [NameOnly{name: "a"}]}))
   require(strict == Err(Binary.BinaryError{path: ["members", "[0]", "level"], problem: Binary.MissingField}), "missing field path")
   3
