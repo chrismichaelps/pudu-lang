@@ -214,6 +214,8 @@ tags: [moc, handoff]
 - [[Ark Ground Delivery]] — issue #722 gravity-relative support and settlement.
 - [[Ark Motion Delivery]] — issue #720 query-driven movement and finite-box composition.
 
+- [[Binary Validation Delivery]] — issue #739 binary contract validation.
+
 ## Referenced by
 
 [[00-INDEX]] · [[Engineering Delivery]]

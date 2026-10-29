@@ -56,4 +56,4 @@ names and `[index]` steps, and `Corrupt(message)` for anything the native reader
 
 [[src/Std/_MOC]] · [[Eval Binary]] · [[Binary Facade Smoke]]
 
-Validation: [[Binary Codec Properties]] · [[Binary Facade Gate]].
+Validation: [[Binary Codec Properties]] · [[Binary Facade Gate]] · [[Std Binary Fixture]] · [[Binary Serialization Benchmark]].

@@ -1,0 +1,171 @@
+module UsesBinary
+
+import Std.Binary as Binary
+import Std.Bytes as Bytes
+import Std.Json as Json
+import Std.Lanes as Lanes
+import Std.Math.Float as Float
+
+type Cached
+  = Stored{value: Int, @skip cache: Option[Str]}
+  | Unstored
+derives Binary.Encode, Binary.Decode
+
+type One = { a: Int } derives Binary.Encode, Binary.Decode, Json.Encode, Json.Decode
+
+type Shape
+  = Circle(Float64)
+  | Box{width: Float64, height: Float64}
+  | Empty
+derives Binary.Encode, Binary.Decode
+
+type Body = {
+  name: Str,
+  mass: Float64,
+  tags: Array[Str],
+  shape: Shape,
+  velocity: Lanes.Lanes,
+  path: Array[Float64],
+  owner: Option[Int],
+  blob: Bytes,
+  awake: Bool,
+} derives Binary.Encode, Binary.Decode
+
+type OldSave = { name: Str, level: Int } derives Binary.Encode, Binary.Decode
+
+type NewSave = { name: Str, level: Int, title: Option[Str] } derives Binary.Encode, Binary.Decode
+
+type NameOnly = { name: Str } derives Binary.Encode, Binary.Decode
+
+type Party = { members: Array[OldSave] } derives Binary.Encode, Binary.Decode
+
+type Loose = { members: Array[NameOnly] } derives Binary.Encode, Binary.Decode
+
+type Renamed = { @binary("level") stage: Int, @skip cache: Option[Str] } derives Binary.Encode, Binary.Decode
+
+fn require(condition: Bool, name: Str) {
+  if !condition { panic(name) }
+}
+
+fn sameBits(values: &Array[Float64], patterns: &Array[UInt64]) {
+  require(values.length() == patterns.length(), "float block count")
+  var index = 0
+  while index < values.length() {
+    require(Float.toBits(values[index]) == patterns[index], "float block bits survive")
+    index = index + 1
+  }
+}
+
+fn primitives() -> Int {
+  for value in [0, 1, -1, 300, 9223372036854775807, -9223372036854775807 - 1] {
+    let back: Result[Int, Binary.BinaryError] = Binary.read(&Binary.write(&value))
+    require(back == Ok(value), "int " + show(value))
+  }
+  for bits in [0x7ff8000000000123u64, 0x8000000000000000u64, 0x7ff0000000000000u64, 0xfff0000000000000u64, 1u64] {
+    let back: Result[Float64, Binary.BinaryError] = Binary.read(&Binary.write(&Float.fromBits(bits)))
+    match back {
+      case Ok(held) => require(Float.toBits(held) == bits, "float bits survive")
+      case Err(_) => panic("float decode")
+    }
+  }
+  let patterns = [0x7ff8000000000123u64, 0x8000000000000000u64, 0x7ff0000000000000u64, 1u64]
+  let floats = patterns.map(|bits| Float.fromBits(bits))
+  let arrayBack: Result[Array[Float64], Binary.BinaryError] = Binary.read(&Binary.write(&floats))
+  match arrayBack {
+    case Ok(values) => sameBits(&values, &patterns)
+    case Err(_) => panic("float block decode")
+  }
+  let lanesBack: Result[Lanes.Lanes, Binary.BinaryError] = Binary.read(&Binary.write(&Lanes.fromArray(&floats)))
+  match lanesBack {
+    case Ok(values) => sameBits(&Lanes.toArray(&values), &patterns)
+    case Err(_) => panic("lane block decode")
+  }
+  let text = "Ark · árbol · 箱 · 🎮"
+  require(Binary.read(&Binary.write(&text)) == Ok(text), "utf-8 text")
+  let nested = [[1, 2], [], [-3]]
+  require(Binary.read(&Binary.write(&nested)) == Ok(nested), "nested arrays")
+  let maybe: Array[Option[Int]] = [Some(0), None, Some(-5)]
+  require(Binary.read(&Binary.write(&maybe)) == Ok(maybe), "options")
+  let reals = [1.5, -0.25, 3.0]
+  require(Binary.read(&Binary.write(&reals)) == Ok(reals), "contiguous reals")
+  require(Binary.read(&Binary.write(&[true, false])) == Ok([true, false]), "flags")
+  5
+}
+
+fn golden() -> Int {
+  let simple = One{a: 7}
+  let binaryBack: Result[One, Binary.BinaryError] = Binary.read(&Binary.write(&simple))
+  require(binaryBack == Ok(simple), "binary derives coexist with JSON")
+  let Ok(json) = Json.decode(Json.encode(&simple.encode())) else { panic("JSON decode") }
+  require(One.decode(&json) == Ok(simple), "JSON derives coexist with binary")
+  require(Bytes.encodeHex(&Binary.encode(&Binary.Whole(1))) == "00000000000100000000000000", "whole node")
+  require(Bytes.encodeHex(&Binary.encode(&One{a: 1}.pack())) == "010000000100000061090100000000000000000100000000000000", "one-field record")
+  let twice = Binary.Fields([("a", Binary.Whole(1)), ("a", Binary.Whole(2))])
+  require(Binary.decode(&Binary.encode(&twice)) == Err(Binary.BinaryError{path: [], problem: Binary.Corrupt("the field a appears twice")}), "repeated field")
+  2
+}
+
+fn records() -> Int {
+  let cached = Stored{value: 7, cache: Some("memory")}
+  let restored: Result[Cached, Binary.BinaryError] = Binary.read(&Binary.write(&cached))
+  require(restored == Ok(Stored{value: 7, cache: None}), "skipped sum field is absent")
+  let supplied = Binary.Picked("Stored", mapOf([("value", Binary.Whole(7)), ("cache", Binary.Present(Binary.Text("wire")))]))
+  require(Cached.unpack(&supplied) == Ok(Stored{value: 7, cache: None}), "skipped sum field ignores supplied wire value")
+  let body = Body {
+    name: "crate",
+    mass: 12.5,
+    tags: ["wood", "breakable"],
+    shape: Box{width: 1.0, height: 2.0},
+    velocity: Lanes.fromArray(&[1.0, -2.5, 0.125]),
+    path: [0.0, 0.5, 1.0],
+    owner: Some(42),
+    blob: Bytes.fromArray(&[0u8, 255u8, 7u8]),
+    awake: true,
+  }
+  let back: Result[Body, Binary.BinaryError] = Binary.read(&Binary.write(&body))
+  require(back == Ok(body), "record with every field kind")
+  for shape in [Circle(0.5), Box { width: 3.0, height: 4.0 }, Empty] {
+    require(Binary.read(&Binary.write(&shape)) == Ok(shape), "sum variants")
+  }
+  let read: Result[Renamed, Binary.BinaryError] = Binary.read(&Binary.write(&Renamed{stage: 7, cache: Some("stale")}))
+  require(read == Ok(Renamed{stage: 7, cache: None}), "renamed field kept, skipped field not written")
+  let asOld: Result[OldSave, Binary.BinaryError] = Binary.read(&Binary.write(&Renamed{stage: 7, cache: None}))
+  require(asOld == Err(Binary.BinaryError{path: ["name"], problem: Binary.MissingField}), "a missing text field is refused, not empty")
+  3
+}
+
+fn evolution() -> Int {
+  let upgraded: Result[NewSave, Binary.BinaryError] = Binary.read(&Binary.write(&OldSave{name: "hero", level: 3}))
+  require(upgraded == Ok(NewSave{name: "hero", level: 3, title: None}), "an added optional field reads as None")
+  let downgraded: Result[OldSave, Binary.BinaryError] = Binary.read(&Binary.write(&NewSave{name: "hero", level: 4, title: Some("knight")}))
+  require(downgraded == Ok(OldSave{name: "hero", level: 4}), "an old reader ignores a new field")
+  let strict: Result[Party, Binary.BinaryError] = Binary.read(&Binary.write(&Loose{members: [NameOnly{name: "a"}]}))
+  require(strict == Err(Binary.BinaryError{path: ["members", "[0]", "level"], problem: Binary.MissingField}), "missing field path")
+  3
+}
+
+fn refusals() -> Int {
+  let archived = Binary.write(&OldSave{name: "hero", level: 3})
+  let payload = Binary.encode(&OldSave{name: "hero", level: 3}.pack())
+  require(Binary.decode(&payload.take(payload.length() - 2)) == Err(Binary.BinaryError{path: [], problem: Binary.Corrupt("the bytes end inside a node")}), "truncated")
+  require(Binary.decode(&payload.concat(Bytes.fromArray(&[0u8]))) == Err(Binary.BinaryError{path: [], problem: Binary.Corrupt("1 bytes follow the root node")}), "trailing")
+  require(Binary.decode(&Bytes.fromArray(&[0u8, 0u8, 0u8, 0u8, 99u8])) == Err(Binary.BinaryError{path: [], problem: Binary.Corrupt("an unknown node tag 99")}), "unknown tag")
+  let badIndex = Bytes.fromArray(&[0u8, 0u8, 0u8, 0u8, 9u8, 1u8, 0u8, 0u8, 0u8, 5u8, 0u8, 0u8, 0u8, 7u8])
+  require(Binary.decode(&badIndex) == Err(Binary.BinaryError{path: [], problem: Binary.Corrupt("a name index 5 past the name table")}), "name index")
+  let wrong: Result[Int, Binary.BinaryError] = Int.unpack(&Binary.Text("seven"))
+  require(wrong == Err(Binary.BinaryError{path: [], problem: Binary.WrongKind("a whole number")}), "wrong kind")
+  let unknown: Result[Shape, Binary.BinaryError] = Shape.unpack(&Binary.Picked("Triangle", mapOf([])))
+  require(unknown == Err(Binary.BinaryError{path: [], problem: Binary.UnknownVariant("Triangle")}), "unknown variant")
+  let foreign: Result[OldSave, Binary.BinaryError] = Binary.read(&Bytes.concat(&"PBIX".toBytes(), &archived.drop(4)))
+  require(foreign == Err(Binary.BinaryError{path: [], problem: Binary.NotBinary}), "foreign magic")
+  let future: Result[OldSave, Binary.BinaryError] = Binary.read(&Bytes.join(&["PBIN".toBytes(), Bytes.putU16Le(2u16), archived.drop(6)]))
+  require(future == Err(Binary.BinaryError{path: [], problem: Binary.UnsupportedVersion(2)}), "future version")
+  let flipped: Result[OldSave, Binary.BinaryError] = Binary.read(&Bytes.concat(&archived.take(archived.length() - 1), &Bytes.fromArray(&[255u8])))
+  require(flipped == Err(Binary.BinaryError{path: [], problem: Binary.ChecksumMismatch}), "checksum")
+  9
+}
+
+/// Counts the binary encoding checks that ran.
+export fn main() -> Int {
+  primitives() + golden() + records() + evolution() + refusals()
+}

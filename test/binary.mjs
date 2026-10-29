@@ -13,7 +13,13 @@ const env = {...process.env, PUDU_LIB: library};
 const fixture = join(root, 'test-fixtures/stdlib/BinarySmoke.pudu');
 const run = (...args) => execFileSync(binary, args, {env, encoding: 'utf8', timeout: 120000});
 assert.equal(run('run', fixture), 'binary facade: ok\n');
-run('fmt', '--check', fixture, join(library, 'Std/Binary.pudu'));
+const complete = join(root, 'test-fixtures/stdlib/UsesBinary.pudu');
+const exercised = spawnSync(binary, ['run', complete], {env, encoding: 'utf8', timeout: 120000});
+assert.equal(exercised.status, 22, exercised.stdout + exercised.stderr);
+assert.equal(exercised.stdout + exercised.stderr, '');
+const benchmark = join(root, 'bench/BinaryBench.pudu');
+assert.match(run('run', benchmark), /^binary encode \d+ decode \d+ bytes \d+\njson encode \d+ decode \d+ bytes \d+\n$/);
+run('fmt', '--check', fixture, complete, benchmark, join(library, 'Std/Binary.pudu'));
 const scratch = mkdtempSync(join(tmpdir(), 'pudu-binary-'));
 try {
   const wrong = join(scratch, 'WrongBinary.pudu');

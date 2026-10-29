@@ -12,6 +12,7 @@ testProtocolEvaluation = do
   formats <- runEntry "test-fixtures/stdlib/UsesFormats.pudu"
   realFormats <- runEntry "test-fixtures/stdlib/UsesFormats2.pudu"
   jsonStrings <- runEntry "test-fixtures/stdlib/UsesJsonStrings.pudu"
+  binaryEncoded <- runEntry "test-fixtures/stdlib/UsesBinary.pudu"
   htmlServer <- runEntry "test-fixtures/stdlib/UsesHtmlServer.pudu"
   htmlBuild <- runEntry "test-fixtures/stdlib/UsesHtmlBuild.pudu"
   httpAll <- runEntry "test-fixtures/stdlib/UsesHttpAll.pudu"
@@ -84,7 +85,8 @@ testProtocolEvaluation = do
   commandLines <- runEntry "test-fixtures/stdlib/UsesArgs.pudu"
   overflowGuards <- runEntry "test-fixtures/stdlib/UsesOverflowGuards.pudu"
   pure $ conjoin
-    [ counterexample "watched application refresh preserves ordinary responses" (appReload === Just "0")
+    [ counterexample "binary encoding round-trips, evolves and refuses by kind" (binaryEncoded === Just "22")
+    , counterexample "watched application refresh preserves ordinary responses" (appReload === Just "0")
     , counterexample "concurrent application requests retain every measurement" (appMeasurements === Just "0")
     , counterexample "explicit resource disposal preserves active owners" (disposedResources === Just "0")
     , counterexample "bounded channel waits preserve payloads and closure" (channelWait === Just "0")

@@ -221,6 +221,10 @@ tags: [moc, module]
 - [[Mutex Admission Fixture]] — real local Database contention and recovery.
 - [[Database Challenge Spec]] · [[Database Challenge Fixture]] · [[Database Challenge Transport]]
 
+- [[Binary Codec Properties]] · [[Binary Serialization Benchmark]] — binary wire laws and consumed serialization measurement.
+
 - [[Eval Binary]] · [[Binary Codec Properties]] — native binary wire contract and validation.
 
 - [[Std Binary]] · [[Binary Facade Smoke]] · [[Binary Facade Gate]] — shipped binary serialization facade.
+
+- [[Std Binary Fixture]] · [[Protocol Evaluation Spec]] — derived binary evolution and boundary conformance.

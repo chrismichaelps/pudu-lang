@@ -1,0 +1,71 @@
+module BinaryBench
+
+import Std.Binary as Binary
+import Std.Json as Json
+import Std.Math.Float as Float
+import Std.Time as Time
+
+const COUNT: Int = 1000
+const PASSES: Int = 5
+
+type Entity = {
+  name: Str,
+  position: Array[Float64],
+  velocity: Array[Float64],
+  health: Int,
+  tags: Array[Str],
+  owner: Option[Int],
+} derives Binary.Encode, Binary.Decode, Json.Encode, Json.Decode
+
+type Level = { entities: Array[Entity] } derives Binary.Encode, Binary.Decode, Json.Encode, Json.Decode
+
+fn level() -> Level {
+  var entities: Array[Entity] = []
+  var index = 0
+  while index < COUNT {
+    let at = Float.fromInt(index)
+    entities = entities.push(Entity {
+        name: "entity-" + show(index),
+        position: [at, at * 0.5, -at],
+        velocity: [1.0, 0.0, 0.25],
+        health: 100 - index % 100,
+        tags: ["enemy", "patrol"],
+        owner: if index % 3 == 0 { Some(index) } else { None },
+      })
+    index = index + 1
+  }
+  Level{entities}
+}
+
+/// Time framed binary and JSON round trips of 1,000 entities.
+export fn main() -> Int {
+  let source = level()
+  var archived = Binary.write(&source)
+  let warmedBinary: Result[Level, Binary.BinaryError] = Binary.read(&archived)
+  if warmedBinary != Ok(source) { panic("binary warmup") }
+  let archiveStarted = Time.monotonicNanos()
+  for _ in 0..PASSES { archived = Binary.write(&source) }
+  let archiveEncode = (Time.monotonicNanos() - archiveStarted) / PASSES
+  let decodeStarted = Time.monotonicNanos()
+  var restored: Result[Level, Binary.BinaryError] = Binary.read(&archived)
+  for _ in 1..PASSES { restored = Binary.read(&archived) }
+  let archiveDecode = (Time.monotonicNanos() - decodeStarted) / PASSES
+  if restored != Ok(source) { panic("archive round trip") }
+  var text = Json.encode(&source.encode())
+  let Ok(warmedTree) = Json.decode(text) else { panic("JSON warmup parse") }
+  if Level.decode(&warmedTree) != Ok(source) { panic("JSON warmup") }
+  let jsonStarted = Time.monotonicNanos()
+  for _ in 0..PASSES { text = Json.encode(&source.encode()) }
+  let jsonEncode = (Time.monotonicNanos() - jsonStarted) / PASSES
+  let parseStarted = Time.monotonicNanos()
+  var parsed: Result[Level, Json.DecodeError] = Err(Json.DecodeError{path: [], expected: "", found: ""})
+  for _ in 0..PASSES {
+    let Ok(tree) = Json.decode(text) else { panic("json parse") }
+    parsed = Level.decode(&tree)
+  }
+  let jsonDecode = (Time.monotonicNanos() - parseStarted) / PASSES
+  if parsed != Ok(source) { panic("json round trip") }
+  print("binary encode " + show(archiveEncode) + " decode " + show(archiveDecode) + " bytes " + show(archived.length()))
+  print("json encode " + show(jsonEncode) + " decode " + show(jsonDecode) + " bytes " + show(text.toBytes().length()))
+  0
+}
