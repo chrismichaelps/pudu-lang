@@ -24,6 +24,9 @@ same `Target`/`draw` contract.
 
 ## Grill Log
 
+- **Q:** Drop alpha for the PPM snapshot with a per-pixel loop? **A:** No; one `strided(0, 3, 4)`
+  copy turns a 640×480 frame into RGB in about 1 ms, where the interpreted loop took about 1 s.
+
 - **Q:** Sample textures in Pudu per pixel? **A:** No; sampling is per covered pixel, so it runs
   in the native driver. Unknown filters, spaces or texture storage answer None before drawing.
 

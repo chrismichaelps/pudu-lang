@@ -105,14 +105,11 @@ export fn pixels(surface: &Target) -> Bytes {
 
 /// The color buffer as a binary PPM image, alpha dropped, for offscreen inspection.
 export fn snapshotPpm(surface: &Target) -> Bytes {
-  var octets: Array[UInt8] = ("P6\n" + show(surface.width) + " " + show(surface.height) + "\n255\n").toBytes().toArray()
-  let rgba = surface.color.toArray()
-  var at = 0
-  while at < rgba.length() {
-    octets = octets.push(rgba[at]).push(rgba[at + 1]).push(rgba[at + 2])
-    at = at + 4
+  let header = ("P6\n" + show(surface.width) + " " + show(surface.height) + "\n255\n").toBytes()
+  match surface.color.strided(0, 3, 4) {
+    case Some(rgb) => header.concat(rgb)
+    case None => header
   }
-  bytesOf(octets)
 }
 
 fn cullCode(cull: Cull) -> Int {
