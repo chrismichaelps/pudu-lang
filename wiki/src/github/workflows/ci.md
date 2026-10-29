@@ -9,6 +9,7 @@ aliases: [Pudu Continuous Verification]
 
 ## Purpose and interface
 
+<<<<<<< HEAD
 [[Ark Assets Gate]] verifies checked CPU texture data and sampling before the higher engine gates.
 
 [[Ark Build Gate]] runs last, cooking and loading packs end to end.
@@ -33,6 +34,9 @@ Resolved Grill Log: binary64 algebra/projection and nested shipping regressions 
 
 [[Ark Layer Tests]] and [[Ark Layer Gate]] execute with the application graph checks before
 compiler builds. Resolved Grill Log: engine layer contracts are enforced on integration requests.
+=======
+[[Lanes Gate]] runs after the binary64 kernel gate, then [[Lane Collection Gate]].
+>>>>>>> feature/726-lane-parallel-gc
 [[Square Root Range Gate]] runs after the residency check against the resolved compiler path; its
 optional timing mode is not a CI performance assertion. Resolved Grill Log: numeric boundary
 regressions are repeatable and bit-exact, so they belong in CI rather than a manual run.

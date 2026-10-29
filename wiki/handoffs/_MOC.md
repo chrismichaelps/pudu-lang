@@ -5,6 +5,7 @@ tags: [moc, handoff]
 
 # Handoff Map
 
+- [[Lane Collection Delivery]] — issue #726 lane buffers share collections so threads overlap.
 - [[Ark Asset Server Delivery]] — asset dependency graph, then staged reload over virtual reads.
 
 - [[Ark Vfs Delivery]] — virtual resource loading through the Platform boundary.

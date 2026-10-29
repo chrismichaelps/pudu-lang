@@ -192,6 +192,10 @@ jobs:
       # length, index, type and partial-value refusals.
       - name: Verify packed binary64 lane kernels
         run: node test/lanes.mjs "$PUDU"
+      # Lane buffers share collections instead of forcing one per kernel call,
+      # which is what lets lane work on several threads overlap.
+      - name: Verify lane kernels share collections
+        run: node test/lane-collections.mjs "$PUDU"
       - name: Verify documentation site browser and CLI contracts
         run: |
           cabal run -v0 pudu -- doc --html test-fixtures/stdlib/UsesAll.pudu | node test/doc-site-parity.mjs
