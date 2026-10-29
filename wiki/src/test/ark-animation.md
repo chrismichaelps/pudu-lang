@@ -10,9 +10,11 @@ tags: [module, ark, animation, test]
 
 ## Purpose and interface
 
-Runs [[Ark Animation Fixture]] with exact output against an explicit compiler and the checkout
-library, checks formatting of the fixture and both Animation modules, requires a positioned
-`E3001` for a text blend weight, and confirms both modules ship in the source archive. Registered
+Runs [[Ark Animation Fixture]] and [[Ark Ik Fixture]] with exact output against an explicit
+compiler and the checkout library, checks formatting of the fixtures, [[Ark Ik Benchmark]] and
+the four Animation modules, requires positioned `E3001`s for a text blend weight and a text IK
+softness, and confirms the modules ship in the source archive. `--bench` prints nanoseconds per
+single, batched and chain solve. Registered
 in CI and the local gate.
 
 ## Resolved Grill Log
