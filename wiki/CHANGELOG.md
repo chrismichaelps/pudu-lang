@@ -5,6 +5,11 @@ tags: [changelog]
 
 # Changelog
 
+## 2026-10-28 — Immediate-mode UI (#708)
+
+- [[Ark UI]] adds label, button, checkbox and slider widgets with hot/active/focus memory,
+  Tab/Shift-Tab traversal, Enter and arrow keys, and a draw list rendered in one device batch.
+
 ## 2026-10-28 — Game loop and camera rigs (#707)
 
 - [[Ark Game]] runs a generic scene stack over the fixed-step clock with action-mapped input,

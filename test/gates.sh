@@ -70,6 +70,8 @@ run 'Ark audio mixes buses, spatial voices and PCM16 blocks' \
   node test/ark-audio.mjs "$PUDU"
 run 'Ark game loop runs fixed steps, scene stacks and camera rigs' \
   node test/ark-game.mjs "$PUDU"
+run 'Ark UI handles pointer and keyboard focus and draws its widgets' \
+  node test/ark-ui.mjs "$PUDU"
 run 'atomic writes preserve creation and replacement permissions' \
   bash -c 'python3 test/atomic-permissions.py "$PUDU"'
 run 'only a compiler change at a new version releases' python3 test/release-plan.test.py
