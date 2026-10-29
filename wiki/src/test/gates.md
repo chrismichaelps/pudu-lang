@@ -12,6 +12,9 @@ aliases: [Repository Gates]
 
 ## Purpose and interface
 
+[[Ark Layer Tests]] and [[Ark Layer Gate]] run before compilation to enforce engine import
+architecture. Resolved Grill Log: architectural defects fail independently of runtime acceptance.
+
 [[Ark Math Gate]] checks shipped Ark resolution, numerical regressions and wrong-width refusal
 against the same freshly built optimized compiler. Resolved Grill Log: interpreted evidence
 does not imply native engine performance.
@@ -22,7 +25,12 @@ language-server sessions, documentation parity, the generated-project workflow, 
 command whose clean and failing exit statuses plus JSON output are checked outside the test runner,
 and the peak memory of the file-streaming readers at ten times the input.
 
+[[Lane Collection Gate]] checks that lane kernel buffers share collections rather than forcing
+one per call.
+
 ## Governance and algorithm
+
+[[Refresh Installation Test]] checks optimized installation orchestration before compiler builds.
 
 [[Application Layer Tests]] and [[Application Layer Gate]] check the application import graph
 before builds, rejecting cycles, missing identities and upward architectural dependencies.
@@ -78,3 +86,7 @@ Resolved Grill Log: local and integration delivery both exercise actual strategy
 
 [[Ark Character Gate]] runs against the optimized compiler. Resolved Grill Log: sweeps, corner
 constraints and positioned type refusal must be exercised through the public library API.
+## Qualified constructors (#717)
+
+[[Qualified Variant Gate]] checks real aliased/imported constructor clients and positioned
+negative cases. Resolved Grill Log: a silent error type is caught by wrong-result assertions.

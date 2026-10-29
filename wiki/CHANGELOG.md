@@ -11,6 +11,98 @@ tags: [changelog]
   bounded residual reporting and final grounding. [[Ark Character Fixture]] covers numeric refusal,
   high-speed stopping and corner regressions; [[Ark Character Gate]] checks diagnostics and shipping.
 - [[Ark Character Delivery]] records scoped ownership, validation and pending independent review.
+## 2026-10-28 — Visible qualified constructors (#717)
+
+- [[Type Check Expression]] and [[Type Check Call]] share complete constructor-path admission
+  through [[Type Check Pattern]], preserving nominal types, visibility and lexical heads.
+- [[Qualified Variant Gate]] covers real imported/local constructors, positioned refusals and
+  runtime parity. [[Qualified Constructor Delivery]] records the engine prerequisite.
+## 2026-10-28 — W3003 respects result position (#700)
+
+- [[Check Propagation]] counts a value-form failure arm as propagation only when the match
+  stands in result position; a match bound with `let` keeps its `None` and is no longer told to
+  use `?`, which would have returned early.
+## 2026-10-28 — Strided byte groups (#699)
+
+- [[Eval Bytes]] and [[Std Bytes]] add `strided(offset, width, stride)`, copying a fixed-width
+  group from every stride in one native pass; packed RGBA becomes RGB without a per-pixel loop.
+## 2026-10-27 — Optimized runtime refresh (#686)
+
+- [[Refresh Pudu Installation]] explicitly selects optimization level 2 for build and install.
+- [[Refresh Installation Test]] exercises successful verification, identical and conflicting PATH
+  copies, and failure propagation without compiling or installing a real compiler.
+## 2026-10-27 — `?` on Option inside unannotated lambdas (#678)
+
+- [[Type Check Rule]] takes an unsolved result's carrier from an operand already typed `Option`;
+  [[Lambda Option Try Delivery]] records evidence.
+## 2026-10-27 — Game input records from the desktop adapter (#673)
+
+- [[pudu-desktop-adapter]] reports key down/up by physical code, pointer hover and every mouse
+  button; [[Game Input Delivery]] records evidence.
+## 2026-10-27 — Nanosecond monotonic clock (#670)
+
+- `clockNanos` and [[Std Time]] `monotonicNanos` measure intervals below a millisecond;
+  [[Monotonic Nanosecond Delivery]] records evidence.
+## 2026-10-27 — Complete flat-list source-span assertions (#662)
+
+- [[Expression Recovery Spec]] now verifies all three aggregate forms and both comma variants
+  with the same order and span assertions. The parser MOC lists both new test mirrors.
+## 2026-10-28 — Per-pixel shading in the raster kernel (#712)
+
+- [[Runtime Shade]] and [[Runtime Raster]] light every pixel from interpolated normals and
+  positions: Lambert with ambient, Blinn-Phong highlights and Fresnel reflection of a procedural
+  sky with a sun disc.
+
+## 2026-10-28 — Lane interleave and PCM16 output (#704)
+
+- [[Runtime Lanes]] and [[Std Lanes]] add `interleave` and `toPcm16`, so mixed Float64 audio
+  reaches 16-bit device frames in two native passes instead of a per-sample loop.
+
+## 2026-10-27 — Data-parallel lane primitives (#684)
+
+- [[Std Lanes]] adds select, threshold masks, positions, accumulating scatter-add and integer
+  conversion, so branchy algorithms such as contact solving run as lane programs.
+
+## 2026-10-27 — Native broadphase (#682)
+
+- [[Runtime Broadphase]] finds overlapping box pairs by sort and sweep; [[Overlap Pairs Fixture]]
+  matches a brute-force reference in [[Lanes Gate]].
+
+## 2026-10-27 — Native triangle rasterization (#676)
+
+- [[Runtime Raster]] fills RGBA8 targets and rasterizes depth-tested triangles with a top-left
+  fill rule; [[Raster Fixture]] checks golden pixels in [[Lanes Gate]].
+## 2026-10-29 — Lane work overlaps across threads (#726)
+
+- [[Pudu Cabal]] links a 32 MB large-object allocation limit, so lane kernel buffers share
+  collections instead of forcing a stop-the-world collection per call; four workers run lane
+  work 2.1x faster with unchanged serial time and lower peak memory.
+- [[Lane Collection Gate]] counts collections on [[Lane Collection Fixture]];
+  [[Lane Parallel Benchmark]] records the throughput; [[Lane Collection Delivery]] has evidence.
+
+## 2026-10-27 — Packed binary64 lanes (#668)
+
+- [[Std Lanes]] holds contiguous binary64 values transformed by whole-lane native kernels from
+  [[Runtime Lanes]]; [[Lane Kernel Identity]] states each name and signature once.
+- [[Lanes Gate]] checks every kernel against its scalar result in CI; [[Lane Delivery]] records
+  evidence and the measured comparison in [[Lanes Benchmark]].
+
+## 2026-10-27 — Binary64 kernels behind Std.Math.Float (#661)
+
+- [[Float Kernel Identity]] and [[Runtime Float Kernels]] give the evaluator, checker and resolver
+  one list of hardware and math-library operations; [[Std Math Float]] keeps every signature.
+- `sqrt` is correctly rounded across the full range; `fma`, `toBits`, `fromBits`, `fromInt` and
+  `toInt` are new (#665). [[Std Stats]] counts with `fromInt` instead of a doubling loop.
+  [[Square Root Range Gate]] checks bit-exact goldens and kernel contracts in CI.
+- [[Root Kernel Benchmark]] rejects the reciprocal-root bit estimate; [[Square Root Delivery]]
+  records measurements.
+
+## 2026-10-27 — Flat expression lists keep their depth (#662)
+
+- [[Parser Expression Aggregate]] and [[Parser Expression Postfix]] read array, Set and argument
+  siblings through one iterative loop; only each item's own nesting is charged.
+- [[Expression Recovery Spec]] covers 2,048-wide lists, spans, trailing commas and retained deep
+  refusals; [[Flat Expression List Delivery]] records the reproduction and evidence.
 
 ## 2026-10-27 — Verified HTTPS CI index transport (#656)
 
@@ -18,6 +110,19 @@ tags: [changelog]
 - [[Hackage Transport Test]] checks the actual command without fetching an index; existing,
   missing, repeated and malformed configurations are covered. [[Hackage Transport Delivery]]
   records independent review and the outstanding CI observation.
+
+## 2026-10-27 — Compiler-consistent import completion (#654)
+
+- [[Lsp Module Catalog]] admits namespaces from the compiler's actual roots, retaining shipped
+  modules with installed packages and excluding package-owned shipped declarations.
+- [[Lsp Module Catalog Spec]] proves the old library omission and shared-policy agreement;
+  [[Library Catalog Delivery]] records focused validation and independent review.
+## 2026-10-27 — Enforced Ark dependency layers (#658)
+
+- [[Ark Dependency Layers]] classifies all fifteen engine roots and permits acyclic same-root
+  composition with strict descent across roots and no shared-library reverse imports.
+- [[Ark Layer Gate]] and [[Ark Layer Tests]] enforce the catalog in CI and local gate registration;
+  [[Ark Layer Delivery]] records focused checks and independent architecture/parity review.
 
 ## 2026-10-27 — Integrated Ark foundation (#652)
 

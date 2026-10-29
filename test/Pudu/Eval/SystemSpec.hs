@@ -452,6 +452,8 @@ testEffects = do
   absent <- evaluate ("fileExists(\"" <> absentPath <> "\")")
   removed <- evaluate ("removeFile(\"" <> quoted <> "\")")
   ticking <- evaluate "clock() >= 0"
+  fineTicking <- evaluate "{ let first = clockNanos()\n  let second = clockNanos()\n  second >= first && first > 0 }"
+  nanosAtCompileTime <- codesOfConstant "clockNanos() > 0"
   atCompileTime <- codesOfConstant ("fileExists(\"" <> quoted <> "\")")
   stillThere <- doesFileExist path
   when stillThere (removeFile path)
@@ -464,5 +466,7 @@ testEffects = do
     , counterexample "an absent path is reported" (absent === "false")
     , counterexample "removing answers with success" (removed === "Ok(())")
     , counterexample "the clock moves forward" (ticking === "true")
+    , counterexample "the nanosecond clock never moves backward" (fineTicking === "true")
+    , counterexample "a constant may not read the nanosecond clock" (nanosAtCompileTime === ["E7009"])
     , counterexample "a constant may not reach the world" (atCompileTime === ["E7009"])
     ]

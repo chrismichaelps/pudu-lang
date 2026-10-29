@@ -349,8 +349,10 @@ substituteRigidType = substituteRigid
     declared result, never from the target: that is what lets one operator serve
     both `Result` and `Option` without a token to tell them apart, and it is why
     a mismatched target is an ordinary unification failure rather than a rule of
-    its own. An unannotated result is still inferred as `Result`, because the
-    `Ok` and `Err` in such a body are what will decide it. -}
+    its own. A result not yet known, as in a function literal whose expected
+    type is unified only after its body, takes the carrier the operand already
+    names when that is `Option`; otherwise it is inferred as `Result`, because
+    the `Ok` and `Err` in such a body are what will decide it. -}
 tryType :: Span -> Type -> Type -> Checker Type
 tryType spanValue targetType declaredResult = do
   resolvedResult <- zonk declaredResult
@@ -365,13 +367,18 @@ tryType spanValue targetType declaredResult = do
       _ <- unify spanValue (NominalType "Result" [success, failure]) targetType
       _ <- unify spanValue declaredFailure failure
       pure success
-    VariableType _ -> do
-      success <- freshVariable
-      failure <- freshVariable
-      _ <- unify spanValue (NominalType "Result" [success, failure]) targetType
-      resultSuccess <- freshVariable
-      _ <- unify spanValue resolvedResult (NominalType "Result" [resultSuccess, failure])
-      pure success
+    VariableType _ -> case targetType of
+      NominalType "Option" [payload] -> do
+        resultPayload <- freshVariable
+        _ <- unify spanValue resolvedResult (NominalType "Option" [resultPayload])
+        pure payload
+      _ -> do
+        success <- freshVariable
+        failure <- freshVariable
+        _ <- unify spanValue (NominalType "Result" [success, failure]) targetType
+        resultSuccess <- freshVariable
+        _ <- unify spanValue resolvedResult (NominalType "Result" [resultSuccess, failure])
+        pure success
     ErrorType -> pure ErrorType
     _ -> do
       success <- freshVariable
@@ -906,6 +913,7 @@ bytesMethodType spanValue member = case member of
   "startsWith" -> pure (FunctionTypeValue False [bytesType] boolType)
   "endsWith" -> pure (FunctionTypeValue False [bytesType] boolType)
   "reverse" -> pure (FunctionTypeValue False [] bytesType)
+  "strided" -> pure (FunctionTypeValue False [integerType, integerType, integerType] (optionOf bytesType))
   "toArray" -> pure (FunctionTypeValue False [] (NominalType "Array" [byteType]))
   "toText" -> pure (FunctionTypeValue False [] (optionOf stringType))
   _ -> do

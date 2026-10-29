@@ -312,7 +312,7 @@ testRuntimeEvaluation = do
         check that only asked one of them. -}
     , counterexample
         "every byte operation answers the bytes it says it answers"
-        (octets === Just "55")
+        (octets === Just "60")
     {-| Every export of the environment module that a running program may ask
         for. What the machine holds is not this fixture's to state, so each
         answer is checked against another answer that must agree with it: the

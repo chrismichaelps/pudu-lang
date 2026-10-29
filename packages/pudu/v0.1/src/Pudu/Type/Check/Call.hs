@@ -50,6 +50,7 @@ import Pudu.Type.Check.Method
   , traitMethodScheme
   , targetName
   )
+import Pudu.Type.Check.Pattern (qualifiedVariantType)
 import Pudu.Type.Unify (zonk)
 import Pudu.Type.Value
   ( NominalId (..)
@@ -91,7 +92,10 @@ checkCalleeLending checker declared rigid located@(Located calleeSpan expression
     case refused of
       Just value -> pure (value, Nothing)
       Nothing -> do
-        selected <- selectedStaticCallee declared rigid calleeSpan expression []
+        variant <- qualifiedVariantType declared calleeSpan expression
+        selected <- case variant of
+          Just value -> pure (Just value)
+          Nothing -> selectedStaticCallee declared rigid calleeSpan expression []
         named <- maybe (qualifiedByName declared calleeSpan (locatedValue target) (locatedValue member))
           (pure . Just) selected
         qualified <- case named of

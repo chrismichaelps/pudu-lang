@@ -79,6 +79,16 @@ links, which made a clean `cabal install exe:pudu` fail even though in-tree buil
   experiments as delivered behavior. No library or repository-test default
   changes, additional dependency or hard-coded optimization level is introduced.
 
+- **Q:** Let lane kernel buffers count against the nursery? **A:** No; the executable also
+  links `-AL32m`. Each lane kernel allocates a whole pinned buffer, and with the default limit
+  nearly every call triggered a stop-the-world collection that waited for the other threads'
+  non-allocating kernel loops, so lane work on four workers ran no faster than on one (112 vs
+  113 ms). Raising only the large-object limit, not every capability's nursery, lets those
+  buffers accumulate up to 32 MB between collections: four workers 103 → 49 ms, one worker
+  unchanged (105 → 107 ms) and peak memory 178 → 159 MB. 128 MB made one worker 11% slower and
+  added 110 MB; 16 MB left a third of the speedup unrealised. [[Lane Collection Gate]] counts the
+  collections; [[Lane Parallel Benchmark]] records the throughput.
+
 - **Q:** Leave an extracted runtime module outside the library module list? **A:** No. Registration
   keeps source distributions and builds aware of the implementation dependency.
 - **Q:** Add a dependency for ownership cleanup? **A:** No; the existing base, STM, containers, and
