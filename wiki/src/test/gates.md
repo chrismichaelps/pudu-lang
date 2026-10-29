@@ -101,3 +101,8 @@ including externally observable filesystem modes that portable permission boolea
 [[Derive Index Output Gate]] runs after documentation parity against the same freshly built executable.
 
 Resolved Grill Log: local and integration delivery both exercise actual strategy output and public visibility.
+
+## Native presentation (#724)
+
+[[Desktop Presentation Gate]] runs before the compiler build on supported hosts.
+Resolved Grill Log: test the real view drawing boundary, reporting unsupported targets explicitly.

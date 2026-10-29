@@ -1,0 +1,25 @@
+name: Desktop presentation
+on:
+  pull_request:
+    paths:
+      - 'packages/pudu/v0.1/cbits/pudu_desktop*'
+      - 'test/native/DesktopPresentation.m'
+      - 'test/desktop-presentation.mjs'
+      - '.github/workflows/desktop-presentation.yml'
+  push:
+    branches: [dev, 'feature/**']
+    paths:
+      - 'packages/pudu/v0.1/cbits/pudu_desktop*'
+      - 'test/native/DesktopPresentation.m'
+      - 'test/desktop-presentation.mjs'
+      - '.github/workflows/desktop-presentation.yml'
+permissions:
+  contents: read
+jobs:
+  native-pixels:
+    runs-on: macos-14
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - name: Verify native frame orientation
+        run: node test/desktop-presentation.mjs

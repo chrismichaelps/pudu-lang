@@ -28,6 +28,7 @@ run() {
 
 
 printf 'gates\n'
+run 'native desktop frames preserve row orientation' node test/desktop-presentation.mjs
 run 'application dependency model refuses architectural defects' node --test test/app-layers.test.mjs
 run 'application imports follow their declared dependency layers' node scripts/app-layers.mjs
 run 'Ark dependency model refuses architectural defects' node --test test/ark-layers.test.mjs

@@ -21,6 +21,8 @@ tags: [moc, module, foreign, ffi]
 - [[Pudu Audio Stream Adapter]] — macOS persistent Audio Queue sessions, bounded writes, controls,
   hardware timeline, telemetry, and release.
 
+- [[Desktop Presentation Test]] · [[Desktop Presentation Gate]] — native presentation orientation regression.
+
 ## Referenced by
 
 [[src/_MOC]] · [[Foreign Call]] · [[ADR-0018 Calling a Library Written Elsewhere]]
