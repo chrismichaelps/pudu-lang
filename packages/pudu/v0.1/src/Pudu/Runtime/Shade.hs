@@ -5,6 +5,7 @@
     Everything is linear light; the driver quantizes afterwards. -}
 module Pudu.Runtime.Shade
   ( Lighting
+  , Rgb (..)
   , lighting
   , shade
   , uniformCount
@@ -15,7 +16,8 @@ import Pudu.Runtime.Lanes (Lanes, laneCount, laneToList)
 {-| Camera position, unit direction toward the light, light color, ambient
     floor, specular exponent and strength, Fresnel reflectance at normal
     incidence, sky horizon and zenith colors and the cosine of the sun's
-    angular radius. -}
+    angular radius, then the smallest n·h whose highlight still reaches an
+    eight-bit step, below which the power is not evaluated. -}
 data Lighting = Lighting
   !Double !Double !Double
   !Double !Double !Double
@@ -23,7 +25,10 @@ data Lighting = Lighting
   !Double !Double !Double !Double
   !Double !Double !Double
   !Double !Double !Double
-  !Double
+  !Double !Double
+
+{-| A lit color in linear light. -}
+data Rgb = Rgb !Double !Double !Double
 
 {-| Values in a uniform lane, in the order 'lighting' reads them. -}
 uniformCount :: Int
@@ -43,18 +48,21 @@ lighting lane
         | ambient < 0 || ambient > 1 || f0 < 0 || f0 > 1 -> Nothing
         | power <= 0 || strength < 0 || sun <= 0 || sun >= 1 -> Nothing
         | otherwise ->
-            Just (Lighting cx cy cz (lx / size) (ly / size) (lz / size) lr lg lb ambient power strength f0 hr hg hb zr zg zb sun)
+            Just (Lighting cx cy cz (lx / size) (ly / size) (lz / size) lr lg lb ambient power strength f0 hr hg hb zr zg zb sun cutoff)
         where
           values = [cx, cy, cz, lx, ly, lz, lr, lg, lb, ambient, power, strength, f0, hr, hg, hb, zr, zg, zb, sun]
           size = sqrt (lx * lx + ly * ly + lz * lz)
+          brightest = max lr (max lg lb) * strength
+          -- strength * light * d^power < 1/512 below this d, so the highlight cannot change a channel.
+          cutoff = if brightest <= 0 then 2 else (1 / (512 * brightest)) ** (1 / power)
       _ -> Nothing
 
 {-| Shade one pixel from its interpolated normal, world position and base
     color. The normal faces the camera, so either side of a surface lights. -}
-shade :: Lighting -> Double -> Double -> Double -> Double -> Double -> Double -> Double -> Double -> Double -> (Double, Double, Double)
-shade (Lighting cx cy cz lx ly lz lr lg lb ambient power strength f0 hr hg hb zr zg zb sun) nx0 ny0 nz0 px py pz r g b
-  | normalLength <= 0 || viewLength <= 0 = (r * ambient, g * ambient, b * ambient)
-  | otherwise = (channel r lr hr zr, channel g lg hg zg, channel b lb hb zb)
+shade :: Lighting -> Double -> Double -> Double -> Double -> Double -> Double -> Double -> Double -> Double -> Rgb
+shade (Lighting cx cy cz lx ly lz lr lg lb ambient power strength f0 hr hg hb zr zg zb sun cutoff) nx0 ny0 nz0 px py pz r g b
+  | normalLength <= 0 || viewLength <= 0 = Rgb (r * ambient) (g * ambient) (b * ambient)
+  | otherwise = Rgb (channel r lr hr zr) (channel g lg hg zg) (channel b lb hb zb)
   where
     normalLength = sqrt (nx0 * nx0 + ny0 * ny0 + nz0 * nz0)
     vx0 = cx - px
@@ -75,9 +83,10 @@ shade (Lighting cx cy cz lx ly lz lr lg lb ambient power strength f0 hr hg hb zr
     hy0 = ly + vy
     hz0 = lz + vz
     halfLength = sqrt (hx0 * hx0 + hy0 * hy0 + hz0 * hz0)
+    alignment = if halfLength <= 0 then 0 else (nx * hx0 + ny * hy0 + nz * hz0) / halfLength
     highlight
-      | halfLength <= 0 = 0
-      | otherwise = strength * max 0 ((nx * hx0 + ny * hy0 + nz * hz0) / halfLength) ** power
+      | alignment <= cutoff = 0
+      | otherwise = strength * alignment ** power
     fresnel = f0 + (1 - f0) * (1 - nv) ^ (5 :: Int)
     -- The view direction mirrored about the normal, as the reflected ray.
     rx = 2 * nv * nx - vx
@@ -91,3 +100,4 @@ shade (Lighting cx cy cz lx ly lz lr lg lb ambient power strength f0 hr hg hb zr
     channel base light horizon zenith =
       let sky = horizon + (zenith - horizon) * up + light * disc
        in base * diffuse * (1 - fresnel) + sky * fresnel + light * highlight
+{-# INLINE shade #-}
