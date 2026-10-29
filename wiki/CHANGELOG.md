@@ -5,6 +5,13 @@ tags: [changelog]
 
 # Changelog
 
+## 2026-10-29 — Self inside trait defaults (#736)
+
+- [[Eval Call Path]] binds `Self` to the selected owner when a method is reached through a
+  witness or a receiver, so a trait default passing `Self` on as a type argument selects the
+  implementing type instead of failing at run time; [[Language Foundation Program Spec]] covers
+  witness, generic-implementation, inferred and receiver paths.
+
 ## 2026-10-29 — Sharp, resizable, state-aware engine windows (#728)
 
 - [[Ark Window]] tracks pixel and content size, backing scale, focus, minimize and full screen;
