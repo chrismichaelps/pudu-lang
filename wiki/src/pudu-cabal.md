@@ -17,6 +17,9 @@ cache identity; full analysis remains available independently of executable reus
 Distribute `lib/Ark/Assets/*.pudu`, including [[Ark Texture Asset]]. Resolved Grill Log: nested
 CPU asset modules are shipped library data and must remain present outside the checkout.
 
+Distribute `lib/Ark/Net/*.pudu` with the root net module, including [[Ark Replication]];
+[[Ark Net Gate]] checks the archive.
+
 Distribute `lib/Ark/Game/*.pudu` with the root game module, including [[Ark Game Camera]];
 [[Ark Game Gate]] checks the archive.
 

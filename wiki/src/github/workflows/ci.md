@@ -11,6 +11,8 @@ aliases: [Pudu Continuous Verification]
 
 [[Ark Assets Gate]] verifies checked CPU texture data and sampling before the higher engine gates.
 
+[[Ark Net Gate]] runs after UI, replaying packet loss, reordering and replication deltas.
+
 [[Ark UI Gate]] runs after the game gate, driving widgets with recorded input.
 
 [[Ark Game Gate]] runs after audio, driving the scene-stack loop and camera rigs headlessly.

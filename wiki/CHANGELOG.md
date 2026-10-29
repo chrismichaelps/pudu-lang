@@ -5,6 +5,12 @@ tags: [changelog]
 
 # Changelog
 
+## 2026-10-28 — Game networking foundations (#709)
+
+- [[Ark Net]] tracks 16-bit wrapping sequences with 33-packet acknowledgement windows, smoothed
+  RTT, loss and an 8-byte header. [[Ark Replication]] quantizes lane columns, culls by interest
+  radius on lanes and encodes varint deltas against an acknowledged baseline with despawns.
+
 ## 2026-10-28 — Immediate-mode UI (#708)
 
 - [[Ark UI]] adds label, button, checkbox and slider widgets with hot/active/focus memory,

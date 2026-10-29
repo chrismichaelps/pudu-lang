@@ -1,0 +1,94 @@
+module UsesArkNet
+
+import Std.Lanes as Lanes
+import Ark.Net as Net
+import Ark.Net.Replication as Replication
+
+fn require(condition: Bool, name: Str) {
+  if !condition { panic(name) }
+}
+
+fn sequencing() {
+  require(Net.newer(1, 0) && !Net.newer(0, 1) && Net.newer(0, 65535) && !Net.newer(65535, 0), "wrap-around order")
+  var client = Net.endpoint()
+  var server = Net.endpoint()
+  var headers: Array[Net.Header] = []
+  for time in 0..4 {
+    let (next, header) = Net.send(client, time * 1000)
+    client = next
+    headers = headers.push(header)
+  }
+  require(headers[3].sequence == 3, "sequences count up")
+  // Packet 1 is lost; 0, 2 and 3 arrive, 3 before 2.
+  for index in [0, 3, 2] {
+    let Some((next, _)) = Net.receive(server, &headers[index], 5000) else { panic("receive") }
+    server = next
+  }
+  require(Net.receive(server, &headers[2], 5000) == None, "duplicate refused")
+  let (_, reply) = Net.send(server, 6000)
+  require(reply.ack == 3 && reply.ackBits == 5, "newest acked, bits name 2 and 0 but not 1")
+  let Some((acknowledged, acked)) = Net.receive(client, &reply, 9000) else { panic("ack") }
+  require(acked == [0, 2, 3], "acknowledged oldest first")
+  require(acknowledged.pending.containsKey(1) && acknowledged.pending.keys().length() == 1, "lost packet still pending")
+  require(acknowledged.rtt > 0 && acknowledged.rtt <= 9000, "round trip measured")
+  var aging = acknowledged
+  for time in 0..33 {
+    let (next, _) = Net.send(aging, 10000 + time)
+    aging = next
+  }
+  require(aging.lost == 1 && !aging.pending.containsKey(1), "unacknowledged past the window counts as lost")
+  var far = Net.endpoint()
+  let (wrapped, _) = Net.send(Net.Endpoint{..far, next: 65535}, 0)
+  require(wrapped.next == 0, "sequence wraps")
+  let Some((late, _)) = Net.receive(far, &Net.Header{sequence: 65535, ack: 0, ackBits: 0}, 0) else { panic("first") }
+  let Some((wrappedNewest, _)) = Net.receive(late, &Net.Header{sequence: 1, ack: 0, ackBits: 0}, 0) else { panic("after wrap") }
+  require(wrappedNewest.newest == 1 && wrappedNewest.received == 2, "wrap keeps 65535 as two behind")
+  require(Net.receive(wrappedNewest, &Net.Header{sequence: 1000, ack: 0, ackBits: 0}, 0) != None, "far ahead resets the window")
+  far = wrappedNewest
+  require(Net.receive(far, &Net.Header{sequence: 65000, ack: 0, ackBits: 0}, 0) == None, "older than the window refused")
+  require(Net.receive(far, &Net.Header{sequence: 70000, ack: 0, ackBits: 0}, 0) == None, "out-of-range header refused")
+}
+
+fn wire() {
+  let header = Net.Header{sequence: 513, ack: 65535, ackBits: 4294967295}
+  let Some(encoded) = Net.encode(&header) else { panic("encode") }
+  require(encoded.toArray() == [1u8, 2u8, 255u8, 255u8, 255u8, 255u8, 255u8, 255u8], "little-endian header")
+  let packet = encoded.concat(bytesOf([42u8]))
+  require(Net.decode(&packet) == Some((header, bytesOf([42u8]))), "header and payload")
+  require(Net.decode(&bytesOf([1u8, 2u8])) == None, "short packet")
+  require(Net.encode(&Net.Header{..header, ackBits: -1}) == None, "invalid field")
+}
+
+fn replication() {
+  let schema = Replication.Schema{steps: [0.01, 0.01]}
+  let Some(first) = Replication.capture(&schema, &[7, 9, 12], &[Lanes.fromArray(&[1.0, 2.0, 50.0]), Lanes.fromArray(&[-0.004, 0.006, 3.0])]) else { panic("capture") }
+  require(first.fields == [[100, 200, 5000], [0, 1, 300]], "quantized with rounding")
+  let empty = Replication.Snapshot{ids: [], fields: [[], []]}
+  let Some(full) = Replication.delta(&empty, &first, &[0, 1, 2]) else { panic("full") }
+  require(Replication.apply(&empty, &full) == Some(first), "full state from an empty baseline")
+  let Some(second) = Replication.capture(&schema, &[7, 9, 12], &[Lanes.fromArray(&[1.0, 2.5, 50.0]), Lanes.fromArray(&[0.0, 0.01, 3.0])]) else { panic("second") }
+  let Some(changes) = Replication.delta(&first, &second, &[0, 1, 2]) else { panic("delta") }
+  require(changes.length() < full.length(), "unchanged fields are not resent")
+  require(Replication.apply(&first, &changes) == Some(second), "delta restores the new state")
+  let Some(near) = Replication.relevant(&Lanes.fromArray(&[1.0, 2.0, 50.0]), &Lanes.fromArray(&[0.0, 0.0, 0.0]), &Lanes.fromArray(&[0.0, 0.0, 0.0]), 0.0, 0.0, 0.0, 10.0) else { panic("relevant") }
+  require(near == [0, 1], "interest radius culls far entities")
+  let Some(culled) = Replication.delta(&first, &second, &near) else { panic("culled") }
+  let Some(seen) = Replication.apply(&first, &culled) else { panic("seen") }
+  require(seen.ids == [7, 9] && seen.fields == [[100, 250], [0, 1]], "culled entity despawns for the client")
+  let Some(columns) = Replication.restore(&schema, &seen) else { panic("restore") }
+  require(Lanes.toArray(&columns[0]) == [1.0, 2.5], "dequantized columns")
+  require(Replication.capture(&schema, &[1], &[Lanes.fromArray(&[0.0])]) == None, "column count")
+  require(Replication.capture(&Replication.Schema{steps: [0.0]}, &[1], &[Lanes.fromArray(&[0.0])]) == None, "step must be positive")
+  require(Replication.delta(&first, &second, &[5]) == None, "row out of range")
+  require(Replication.apply(&first, &changes.take(changes.length() - 1)) == None, "truncated delta")
+  require(Replication.apply(&first, &changes.concat(bytesOf([0u8]))) == None, "trailing bytes")
+  require(Replication.apply(&empty, &changes) == None, "partial update needs its baseline")
+}
+
+export fn main() -> Int {
+  sequencing()
+  wire()
+  replication()
+  print("ark net: ok")
+  0
+}
