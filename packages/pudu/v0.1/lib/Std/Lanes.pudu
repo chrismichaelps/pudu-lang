@@ -227,3 +227,16 @@ export fn fromInts(values: &Array[Int]) -> Lanes {
 export fn toInts(lanes: &Lanes) -> Option[Array[Int]] {
   lanesToInts(lanes.bytes)
 }
+
+/// Two equally long lanes alternated element by element, as interleaved stereo frames are.
+/// None when the counts differ.
+export fn interleave(first: &Lanes, second: &Lanes) -> Option[Lanes] {
+  let bytes = lanesInterleave(first.bytes, second.bytes) ?
+  Some(Lanes{bytes})
+}
+
+/// Signed little-endian 16-bit samples: clamped to [-1, 1], scaled by 32767 and rounded half
+/// away from zero; NaN becomes silence. Two bytes per value.
+export fn toPcm16(lanes: &Lanes) -> Bytes {
+  lanesToPcm16(lanes.bytes)
+}

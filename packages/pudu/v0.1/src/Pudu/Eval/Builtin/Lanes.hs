@@ -81,6 +81,8 @@ apply kernel values = case (kernel, values) of
     Just $ case Lanes.laneAffine3 entries xs ys zs of
       Just (rx, ry, rz) -> VariantValue "Some" [TupleValue [BytesValue rx, BytesValue ry, BytesValue rz]]
       Nothing -> VariantValue "None" []
+  (LaneInterleave, [BytesValue a, BytesValue b]) -> Just (optionLanes (Lanes.laneInterleave a b))
+  (LaneToPcm16, [BytesValue a]) -> Just (BytesValue (Lanes.laneToPcm16 a))
   (LaneSelect, [BytesValue mask, BytesValue a, BytesValue b]) ->
     Just (optionLanes (Lanes.laneZip3 (\m x y -> if m > 0 then x else y) mask a b))
   (LaneAbove, [BytesValue a, FloatValue _ threshold]) ->

@@ -5,6 +5,11 @@ tags: [changelog]
 
 # Changelog
 
+## 2026-10-28 — Lane interleave and PCM16 output (#704)
+
+- [[Runtime Lanes]] and [[Std Lanes]] add `interleave` and `toPcm16`, so mixed Float64 audio
+  reaches 16-bit device frames in two native passes instead of a per-sample loop.
+
 ## 2026-10-27 — Data-parallel lane primitives (#684)
 
 - [[Std Lanes]] adds select, threshold masks, positions, accumulating scatter-add and integer

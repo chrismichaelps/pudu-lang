@@ -70,6 +70,10 @@ export fn main() -> Int {
     require(Lanes.toArray(&Lanes.fromInts(&[3, -2, 0])) == [3.0, -2.0, 0.0], "from ints")
     require(Lanes.toInts(&Lanes.fromArray(&[3.0, -2.0, 0.0])) == Some([3, -2, 0]), "to ints")
     require(Lanes.toInts(&Lanes.fromArray(&[1.5])) == None && Lanes.toInts(&Lanes.fromArray(&[1e300])) == None, "to ints refusals")
+    require(values(Lanes.interleave(&Lanes.fromArray(&[1.0, 2.0]), &Lanes.fromArray(&[-1.0, -2.0]))) == [1.0, -1.0, 2.0, -2.0], "interleave")
+    require(Lanes.interleave(&a, &short) == None, "interleave mismatch")
+    let pcm = Lanes.toPcm16(&Lanes.fromArray(&[0.0, 1.0, -1.0, 2.0, -2.0, 0.5, -0.5, 0.0 / 0.0]))
+    require(pcm.toArray() == [0u8, 0u8, 255u8, 127u8, 1u8, 128u8, 255u8, 127u8, 1u8, 128u8, 0u8, 64u8, 0u8, 192u8, 0u8, 0u8], "PCM16 clamps, rounds and silences NaN")
     print("lanes: ok")
     return 0
   }

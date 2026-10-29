@@ -15,6 +15,7 @@ module Pudu.Runtime.Lanes
   , laneFromList
   , laneGather
   , laneGet
+  , laneInterleave
   , laneMap
   , laneRamp
   , laneScatter
@@ -23,6 +24,7 @@ module Pudu.Runtime.Lanes
   , laneSet
   , laneSlice
   , laneToList
+  , laneToPcm16
   , laneWhole
   , laneZip
   , laneZip3
@@ -34,7 +36,8 @@ import qualified Data.ByteString.Internal as BI
 import qualified Data.ByteString.Unsafe as BU
 import Foreign.Marshal.Utils (copyBytes)
 import Foreign.Ptr (Ptr, castPtr)
-import Foreign.Storable (peekElemOff, pokeElemOff)
+import Data.Word (Word8)
+import Foreign.Storable (peekElemOff, pokeByteOff, pokeElemOff)
 import System.IO.Unsafe (unsafeDupablePerformIO)
 
 type Lanes = BS.ByteString
@@ -206,3 +209,41 @@ laneScatterAdd bytes indices values
           pokeElemOff out index (held + added)
   where
     limit = laneCount bytes
+
+{-| Two equally long lanes alternated element by element: a0, b0, a1, b1, ... -}
+laneInterleave :: Lanes -> Lanes -> Maybe Lanes
+laneInterleave left right
+  | laneCount left /= laneCount right = Nothing
+  | otherwise = Just $ unsafeDupablePerformIO $ reading left $ \a -> reading right $ \b ->
+      pure $ create (count * 2) $ \out -> loop a b out 0
+  where
+    count = laneCount left
+    loop a b out !i
+      | i >= count = pure ()
+      | otherwise = do
+          peekElemOff a i >>= pokeElemOff out (i * 2)
+          peekElemOff b i >>= pokeElemOff out (i * 2 + 1)
+          loop a b out (i + 1)
+
+{-| Signed little-endian 16-bit samples: each value clamped to [-1, 1], scaled
+    by 32767 and rounded half away from zero; NaN becomes silence. -}
+laneToPcm16 :: Lanes -> BS.ByteString
+laneToPcm16 bytes = unsafeDupablePerformIO $ reading bytes $ \source ->
+  pure $ BI.unsafeCreate (count * 2) $ \out -> loop source out 0
+  where
+    count = laneCount bytes
+    loop source out !i
+      | i >= count = pure ()
+      | otherwise = do
+          x <- peekElemOff source i
+          let sample = quantize x :: Int
+              word = fromIntegral (if sample < 0 then sample + 65536 else sample) :: Int
+          pokeByteOff out (i * 2) (fromIntegral (word `rem` 256) :: Word8)
+          pokeByteOff out (i * 2 + 1) (fromIntegral (word `quot` 256) :: Word8)
+          loop source out (i + 1)
+    quantize x
+      | isNaN x = 0
+      | x >= 1 = 32767
+      | x <= -1 = -32767
+      | x >= 0 = truncate (x * 32767 + 0.5)
+      | otherwise = negate (truncate (negate x * 32767 + 0.5))
