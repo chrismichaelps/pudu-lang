@@ -5,6 +5,8 @@ tags: [moc, handoff]
 
 # Handoff Map
 
+- [[Lane Collection Delivery]] — issue #726 lane buffers share collections so threads overlap.
+
 - [[Lane Delivery]] — issue #668 packed binary64 lanes with native batch kernels.
 
 - [[Square Root Delivery]] — issue #661 binary64 kernels behind Std.Math.Float, exact square root.

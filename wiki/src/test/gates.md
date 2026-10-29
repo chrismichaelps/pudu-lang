@@ -18,6 +18,9 @@ language-server sessions, documentation parity, the generated-project workflow, 
 command whose clean and failing exit statuses plus JSON output are checked outside the test runner,
 and the peak memory of the file-streaming readers at ten times the input.
 
+[[Lane Collection Gate]] checks that lane kernel buffers share collections rather than forcing
+one per call.
+
 ## Governance and algorithm
 
 [[Application Layer Tests]] and [[Application Layer Gate]] check the application import graph

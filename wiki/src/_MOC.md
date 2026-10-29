@@ -117,6 +117,7 @@ tags: [moc, module]
 - [[Runtime Float Kernels]] — exact and platform binary64 operations behind Std.Math.Float.
 - [[Lane Kernel Identity]] · [[Runtime Lanes]] · [[Eval Builtin Lanes]] — packed binary64 lane kernels.
 - [[Lanes Gate]] · [[Lanes Fixture]] · [[Lanes Benchmark]] — lane conformance and measurement.
+- [[Lane Collection Gate]] · [[Lane Collection Fixture]] · [[Lane Parallel Benchmark]] — lane buffers share collections so threads overlap.
 - [[Float Kernel Identity]] — names and shapes of the binary64 kernels, read by checker and runtime.
 - [[Eval Word Map]] — checked UInt64 map payload reductions for STD.
 - [[Runtime Buffer Kernels]] — unboxed contiguous byte buffer operations.
