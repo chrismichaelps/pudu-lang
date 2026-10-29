@@ -277,6 +277,63 @@ testControlFlow = do
     , "  }"
     , "}"
     ]
+  keptOption <- codes
+    [ "module M"
+    , "fn step(value: Option[Int]) -> Option[Option[Int]] {"
+    , "  let kept = match value {"
+    , "    case None => None"
+    , "    case Some(found) => Some(found + 1)"
+    , "  }"
+    , "  Some(kept)"
+    , "}"
+    ]
+  boundReturn <- codes
+    [ "module M"
+    , "fn step(value: Result[Int, Str]) -> Result[Int, Str] {"
+    , "  let found = match value {"
+    , "    case Err(problem) => { return Err(problem) }"
+    , "    case Ok(held) => held"
+    , "  }"
+    , "  Ok(found + 1)"
+    , "}"
+    ]
+  branchTail <- codes
+    [ "module M"
+    , "fn step(value: Option[Int], wanted: Bool) -> Option[Int] {"
+    , "  if wanted {"
+    , "    match value {"
+    , "      case None => None"
+    , "      case Some(found) => Some(found + 1)"
+    , "    }"
+    , "  } else {"
+    , "    None"
+    , "  }"
+    , "}"
+    ]
+  returnedMatch <- codes
+    [ "module M"
+    , "fn step(value: Option[Int], wanted: Bool) -> Option[Int] {"
+    , "  if wanted {"
+    , "    return match value {"
+    , "      case None => None"
+    , "      case Some(found) => Some(found + 1)"
+    , "    }"
+    , "  }"
+    , "  None"
+    , "}"
+    ]
+  closureTail <- codes
+    [ "module M"
+    , "fn outer(values: Array[Option[Int]]) -> Int {"
+    , "  let step = fn(value: Option[Int]) -> Option[Int] {"
+    , "    match value {"
+    , "      case None => None"
+    , "      case Some(found) => Some(found + 1)"
+    , "    }"
+    , "  }"
+    , "  values.length()"
+    , "}"
+    ]
   transformingMatch <- codes
     [ "module M"
     , "fn step(value: Result[Int, Str]) -> Result[Int, Str] {"
@@ -386,6 +443,11 @@ testControlFlow = do
     , counterexample "a pass-through Err arm is a ?" (propagatingMatch === ["W3003"])
     , counterexample "a returned pass-through is the same arm" (propagatingReturn === ["W3003"])
     , counterexample "a pass-through None arm is a ?" (propagatingOption === ["W3003"])
+    , counterexample "a failure kept as a value is not propagated" (keptOption === [])
+    , counterexample "a returning arm in a binding is a ?" (boundReturn === ["W3003"])
+    , counterexample "a branch tail in result position is a ?" (branchTail === ["W3003"])
+    , counterexample "a returned match is in result position" (returnedMatch === ["W3003"])
+    , counterexample "a closure body's tail is its own result" (closureTail === ["W3003"])
     , counterexample "a transformed failure is a decision" (transformingMatch === [])
     , counterexample "a changed carrier is a decision" (crossCarrierMatch === [])
     , counterexample "a match into a plain result is a decision" (plainCarrierMatch === [])

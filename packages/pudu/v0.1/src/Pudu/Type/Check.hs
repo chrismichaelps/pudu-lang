@@ -79,6 +79,7 @@ import Pudu.Type.Check.Signature
   , selfRigid
   , traitAliases
   )
+import Pudu.Type.Check.Propagation (markBodyResult)
 import Pudu.Type.Check.Rule
   ( selfName
   )
@@ -365,6 +366,7 @@ checkFunctionWith role declared enclosing enclosingBounds selfBound value = do
             the declaration named, so the body may use those abilities without
             opening a region of its own. -}
         mapM_ (enterUnsafe . map locatedValue) (functionUnsafe value)
+        markBodyResult body
         actual <- case body of
           BlockBody block -> checkBlockAgainst declared rigid result block
           ExpressionBody expression -> checkAgainst declared rigid result expression

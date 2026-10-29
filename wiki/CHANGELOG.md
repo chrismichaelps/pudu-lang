@@ -5,6 +5,12 @@ tags: [changelog]
 
 # Changelog
 
+## 2026-10-28 — W3003 respects result position (#700)
+
+- [[Check Propagation]] counts a value-form failure arm as propagation only when the match
+  stands in result position; a match bound with `let` keeps its `None` and is no longer told to
+  use `?`, which would have returned early.
+
 ## 2026-10-28 — Lane interleave and PCM16 output (#704)
 
 - [[Runtime Lanes]] and [[Std Lanes]] add `interleave` and `toPcm16`, so mixed Float64 audio
