@@ -56,6 +56,8 @@ module Pudu.Type.Env
   , isLentArgument
   , isMutableField
   , recordUnwrittenParameter
+  , markResultSpans
+  , isResultSpan
   , takeUnwrittenParameters
   , recordExpression
   , recordSelection
@@ -256,6 +258,11 @@ data CheckerState = CheckerState
   {-| Instantiations of parameters bounded by a static trait, by the span of
       the reference that instantiated them, in the scheme's parameter order. -}
   , stateSelectionsRev :: ![(Span, [Type])]
+  {-| Expressions whose value is the enclosing function's result: a body's
+      tail, the tails of branches standing there, and every `return` operand.
+      Marked before their subexpressions are checked, so a match learns its
+      position when it is reached. -}
+  , stateResultSpans :: !(Set Span)
   }
 
 type SpanKey = Span
@@ -380,6 +387,7 @@ initialState =
     , stateDeclaredMethodKeys = Set.empty
     , stateStaticTraits = Set.empty
     , stateSelectionsRev = []
+    , stateResultSpans = Set.empty
     }
 
 {-| What installing a graph's interfaces left in the checker: the names it
@@ -1239,3 +1247,12 @@ build severity code spanValue message help = do
   validCode <- mkDiagnosticCode code
   value <- diagnostic validCode severity spanValue message
   pure (maybe value (`withHelp` value) help)
+
+{-| Record expressions whose value is the enclosing function's result. -}
+markResultSpans :: [Span] -> Checker ()
+markResultSpans spans = Checker $ \state ->
+  ((), state {stateResultSpans = foldr Set.insert (stateResultSpans state) spans})
+
+{-| Whether an expression's value is the enclosing function's result. -}
+isResultSpan :: Span -> Checker Bool
+isResultSpan spanValue = Checker $ \state -> (Set.member spanValue (stateResultSpans state), state)

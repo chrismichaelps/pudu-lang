@@ -123,6 +123,10 @@ DEPTH 0.5 (MEDIUM). It keeps one concern out of [[Type Check]], which the delive
 
 ## Grill Log
 
+- **Q:** Where does a match learn it stands in result position? **A:** `stateResultSpans`,
+  filled by [[Check Propagation]] as bodies and `return` operands are entered, read by
+  `isResultSpan` when the match is checked.
+
 - **Q:** Replace the enclosing bounds at a nested compile-time loop? **A:** Merge
   them lexically and restore them after checking. _Rationale:_ nested bodies retain
   the outer field's capabilities. _Rejected:_ replacement or leaking local bounds.

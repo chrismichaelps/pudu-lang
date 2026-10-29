@@ -41,6 +41,7 @@ import Pudu.Type.Check.Pattern (bindPattern)
 import Pudu.Type.Check.Place (checkBindingType)
 import Pudu.Type.Check.Collection (requireConcreteSetLiteral)
 import Pudu.Type.Check.Call (throughBorrow)
+import Pudu.Type.Check.Propagation (markResultSpine)
 import Pudu.Type.Check.Signature
   ( nonMutatingMethods
   )
@@ -142,6 +143,7 @@ checkStatement needs declared rigid beforeNegation (Located spanValue statement)
     reportDiscardedResult needs declared rigid expression
     reportDiscardedValue inferred beforeNegation expression
   ReturnStatement value -> do
+    mapM_ markResultSpine value
     actual <- case value of
       Nothing -> pure UnitTypeValue
       Just expression -> statementExpression needs declared rigid expression

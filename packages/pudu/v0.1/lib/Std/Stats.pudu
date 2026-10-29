@@ -194,21 +194,5 @@ fn observeAll(values: &Array[Float]) -> Running {
 }
 
 fn counted(size: Int) -> Float {
-  var total = 0.0
-  var remaining = size
-  var unit = 1.0
-  var chunk = 1
-  while chunk * 2 <= remaining {
-    chunk = chunk * 2
-    unit = unit * 2.0
-  }
-  while remaining > 0 {
-    if chunk <= remaining {
-      total = total + unit
-      remaining = remaining - chunk
-    }
-    chunk = chunk / 2
-    unit = unit / 2.0
-  }
-  total
+  Float.fromInt(size)
 }
