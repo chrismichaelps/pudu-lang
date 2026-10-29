@@ -82,6 +82,10 @@ including externally observable filesystem modes that portable permission boolea
 
 Resolved Grill Log: local and integration delivery both exercise actual strategy output and public visibility.
 
+## Swept movement (#720)
+
+[[Ark Motion Gate]] validates query-driven sliding and typed refusals.
+Resolved Grill Log: execute the focused gate beside the full compiler suite.
 ## Capsule cast contract (#716)
 
 [[Ark Cast Gate]] runs with the optimized compiler. Resolved Grill Log: finite obstacle geometry

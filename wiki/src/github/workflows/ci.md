@@ -38,6 +38,10 @@ their existing obligations. The application graph model tests and actual library
 
 Resolved Grill Log: command serialization is verified through the actual executable rather than only encoder properties.
 
+## Swept movement (#720)
+
+[[Ark Motion Gate]] checks bounded movement, callback failure and shipping.
+Resolved Grill Log: use the same freshly built compiler as the other CLI gates.
 ## Capsule cast contract (#716)
 
 [[Ark Cast Gate]] verifies closest witnesses, continuous casts, typed failure and shipping.

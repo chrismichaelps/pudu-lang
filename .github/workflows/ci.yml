@@ -118,6 +118,8 @@ jobs:
           fi
       - name: Verify the Linguist submission is consistent
         run: python3 scripts/linguist.py check --pudu "$PUDU"
+      - name: Verify swept movement contracts
+        run: node test/ark-motion.mjs "$PUDU"
       - name: Verify capsule box casts
         run: node test/ark-cast.mjs "$PUDU"
       - name: Verify capsule movement and support

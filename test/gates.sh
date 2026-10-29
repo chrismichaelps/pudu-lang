@@ -63,6 +63,8 @@ run 'Ark capsules sweep, slide and classify support' \
 run 'qualified constructors preserve types, visibility and runtime values' \
   node test/qualified-variants.mjs "$PUDU"
 run 'every diagnostic code means one thing' node test/diagnostic-codes.mjs
+run 'swept movement preserves contacts, errors and unapplied travel' \
+  node test/ark-motion.mjs "$PUDU"
 run 'Ark math preserves scaled geometry and refuses wrong precision' \
   node test/ark-math.mjs "$PUDU"
 run 'atomic writes preserve creation and replacement permissions' \

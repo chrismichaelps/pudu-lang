@@ -5,6 +5,12 @@ tags: [changelog]
 
 # Changelog
 
+## Query-driven swept movement (#720)
+
+Add [[Ark Swept Motion]] with checked callback contacts, preserved typed query errors,
+bounded face/crease contact clipping, full-call response and unapplied residual/time on exhaustion.
+[[Ark Motion Fixture]] and [[Ark Motion Gate]] cover numeric and control-flow refusals.
+Walking/falling, support queries and native engine throughput remain open.
 ## 2026-10-28 — Finite capsule-box casts (#716)
 
 - [[Ark Segment Box Distance]] supplies bounded analytic closest witnesses.
