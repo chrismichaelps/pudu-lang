@@ -179,3 +179,11 @@ retained in persistent sessions as statements after execution, preserving owners
 and control-flow history without replay. The ordinary one-shot API retains its
 existing behavior. Resolved Grill Log: runtime state and accepted source are published
 together through the context callback. Failed external effects cannot be undone.
+
+## Authored inspection boundary (#743)
+
+inspectContext returns compileSyntax only when compileModule admitted execution. The authored
+inspection tree preserves trait spelling for :instances and :info; runtime uses compileModule.
+Resolved Grill Log: executable provider resolution must not leak internal canonical names into
+interactive descriptions. Keep error admission unchanged and retain the existing output oracle.
+See [[Bound Provider Delivery]].

@@ -5,6 +5,8 @@ tags: [changelog]
 
 # Changelog
 
+- 2026-10-30: Preserve checked generic-bound trait providers in executable method symbols (#743), including retained methods and cached execution.
+
 - 2026-10-29: Explicit trait calls (#742) select canonical per-provider implementation schemes, preserving distinct return types independently of declaration order.
 ## 2026-10-29 — Glyph text and visible UI labels (#756)
 

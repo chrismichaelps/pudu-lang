@@ -53,6 +53,7 @@ run 'full suite, optimized' \
 # child shell see the same answer.
 export PUDU
 PUDU=$(cabal list-bin pudu --enable-optimization=2)
+run 'generic methods preserve checked trait providers' node test/bound-provider.mjs "$PUDU"
 # The directories are given to the formatter rather than expanded here: a
 # shell expansion that matches nothing passes this gate while checking nothing.
 run 'every committed Pudu file is formatted' \

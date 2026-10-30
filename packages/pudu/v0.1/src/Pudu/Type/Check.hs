@@ -127,7 +127,7 @@ checkModule = checkModuleWith emptyImportTypes
     already knows; see [[Check Place]]. -}
 checkModuleWith :: ImportTypes -> Set Span -> Module -> ([(Span, Type)], [Diagnostic])
 checkModuleWith imported writable moduleValue =
-  let (types, schemes, kinds, _, _, diagnostics) = checkModuleDetailed imported writable moduleValue
+  let (types, schemes, kinds, _, _, _, diagnostics) = checkModuleDetailed imported writable moduleValue
    in schemes `seq` kinds `seq` (types, diagnostics)
 
 {-| Everything one check produced: the type of each expression, the scheme the
@@ -140,7 +140,7 @@ checkModuleDetailed
   :: ImportTypes
   -> Set Span
   -> Module
-  -> ([(Span, Type)], [(Text, Scheme)], [(Span, Text)], [(NominalId, Text, Scheme, Span)], [(Span, [Type])], [Diagnostic])
+  -> ([(Span, Type)], [(Text, Scheme)], [(Span, Text)], [(NominalId, Text, Scheme, Span)], [(Span, [Type])], [(Span, NominalId)], [Diagnostic])
 checkModuleDetailed imported writable moduleValue =
   let products = runChecker (setWritableNames writable >> checkUnit WholeModule imported moduleValue)
    in ( producedTypes products
@@ -148,6 +148,7 @@ checkModuleDetailed imported writable moduleValue =
       , producedIntegerKinds products
       , producedMethods products
       , producedSelections products
+      , producedProviders products
       , producedDiagnostics products
       )
 

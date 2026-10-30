@@ -230,3 +230,12 @@ Do not remove live recorded facts, defer checking itself, or drop editor answers
 ## Lexical member admission (#471)
 
 Expose lookupLocalName over nested name frames only, excluding the final module/interface frame. Reuse the ordered name search without copying maps or exposing state. Local parameters, constants, patterns and captured blocks count; shared bare dependency declarations do not. Resolved Grill Log: a qualified expression cannot consult an export before a nearer local, and hidden graph names cannot impersonate a lexical shadow. The existing state-owner length exception remains bounded to this accessor.
+
+## Bound provider evidence (#743)
+
+recordProvider keeps canonical trait identities by complete source span, separately from static type-argument selections. CheckerProducts publishes these immutable facts; installed graph snapshots do not carry per-module use facts.
+
+Resolved Grill Log: preserve the checker-selected provider through ordinary executable symbols,
+including retained methods and receiver aliases. Do not infer a provider from declaration order,
+receiver spelling, or runtime type arguments. Existing evaluation order and lending stay intact.
+See [[Bound Provider Delivery]].
