@@ -44,3 +44,10 @@ Integration update: preserve the complete acceptance fixture and benchmark while
 current facade 9d6f22a4, its native writer-boundary repair and merged #742 prerequisite. Keep the
 full validation backlinks and new writer admission contract together. Rerun the 22-group fixture,
 CLI/distribution gate and consumed comparison against the current optimized compiler before delivery.
+
+The native codec merged in PR #741 as e26a8903d after every hosted check passed. Integrate the
+current facade b357f201 with merged #742/#743 and finite writer extents. The repeated-field
+reader fixture now assembles malformed bytes independently; the writer correctly refuses the
+invalid tree. All 22 groups, consumed benchmark, public writer refusals and distribution checks
+pass through both evaluators with the combined optimized compiler. Owner-identity defect #761
+remains required before further Ark integration; refresh full acceptance validation before delivery.

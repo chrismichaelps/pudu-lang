@@ -12,6 +12,7 @@ module Pudu.Eval.Binary
   , callBinaryEncode
   , decodeNodes
   , encodeNode
+  , wireCount
   ) where
 
 import Data.Bits (shiftL, (.|.))
@@ -74,12 +75,18 @@ maximumDepth = 512
 -- Names in first-use order with their table index, and the count so far.
 data Names = Names !(Map.Map Text Word32) !Word32
 
+{-| Refuse unsupported extents before narrowing a wire prefix. -}
+wireCount :: Integer -> Maybe Word32
+wireCount count
+  | count >= 0 && count <= toInteger (maxBound :: Word32) = Just (fromInteger count)
+  | otherwise = Nothing
+
 {-| A node tree as bytes, or nothing when the value is not a node tree. -}
 encodeNode :: Value -> Maybe ByteString.ByteString
 encodeNode root = do
   (Names table count, body) <- nodeOf 0 (Names Map.empty 0) root
-  let ordered = map fst (sortOn snd (Map.toList table))
-      header = word32 count <> foldMap textOf ordered
+  names <- traverse textOf (map fst (sortOn snd (Map.toList table)))
+  let header = word32 count <> mconcat names
   Just (LazyByteString.toStrict (Builder.toLazyByteString (header <> body)))
  where
   nodeOf depth names value
@@ -93,14 +100,20 @@ encodeNode root = do
       Just (names, Builder.word8 tagReal <> Builder.word64LE (castDoubleToWord64 number))
     VariantValue "Flag" [BoolValue flag] ->
       Just (names, Builder.word8 tagFlag <> Builder.word8 (if flag then 1 else 0))
-    VariantValue "Text" [StrValue content] -> Just (names, Builder.word8 tagText <> textOf content)
-    VariantValue "Raw" [BytesValue bytes] -> Just (names, Builder.word8 tagRaw <> bytesOf bytes)
+    VariantValue "Text" [StrValue content] -> do
+      part <- textOf content
+      Just (names, Builder.word8 tagText <> part)
+    VariantValue "Raw" [BytesValue bytes] -> do
+      part <- bytesOf bytes
+      Just (names, Builder.word8 tagRaw <> part)
     VariantValue "Reals" [BytesValue bytes]
-      | ByteString.length bytes `mod` 8 == 0 ->
-          Just (names, Builder.word8 tagReals <> word32 (fromIntegral (ByteString.length bytes `div` 8)) <> Builder.byteString bytes)
+      | ByteString.length bytes `mod` 8 == 0 -> do
+          count <- wireCount (toInteger (ByteString.length bytes `div` 8))
+          Just (names, Builder.word8 tagReals <> word32 count <> Builder.byteString bytes)
     VariantValue "Items" [ArrayValue members] -> do
+      count <- wireCount (toInteger (Seq.length members))
       (after, parts) <- many (depth + 1) names (toList members)
-      Just (after, Builder.word8 tagItems <> word32 (fromIntegral (Seq.length members)) <> parts)
+      Just (after, Builder.word8 tagItems <> word32 count <> parts)
     VariantValue "Absent" [] -> Just (names, Builder.word8 tagAbsent)
     VariantValue "Present" [held] -> do
       (after, part) <- nodeOf (depth + 1) names held
@@ -112,11 +125,11 @@ encodeNode root = do
       (after, part) <- fieldsOf depth names (mapEntries entries)
       Just (after, Builder.word8 tagFields <> part)
     VariantValue "Choice" [StrValue name, ArrayValue entries] -> do
-      let (named, index) = intern names name
+      (named, index) <- intern names name
       (after, part) <- fieldsOf depth named (toList entries)
       Just (after, Builder.word8 tagChoice <> word32 index <> part)
     VariantValue "Picked" [StrValue name, MapValue entries] -> do
-      let (named, index) = intern names name
+      (named, index) <- intern names name
       (after, part) <- fieldsOf depth named (mapEntries entries)
       Just (after, Builder.word8 tagChoice <> word32 index <> part)
     _ -> Nothing
@@ -129,13 +142,14 @@ encodeNode root = do
       Just (final, part <> parts)
 
   fieldsOf depth names entries = do
+    count <- wireCount (toInteger (length entries))
     (after, parts) <- go names Set.empty entries
-    Just (after, word32 (fromIntegral (length entries)) <> parts)
+    Just (after, word32 count <> parts)
    where
     go current seen remaining = case remaining of
       [] -> Just (current, mempty)
       TupleValue [StrValue name, held] : rest | Set.notMember name seen -> do
-        let (named, index) = intern current name
+        (named, index) <- intern current name
         (after, part) <- nodeOf (depth + 1) named held
         (final, parts) <- go after (Set.insert name seen) rest
         Just (final, word32 index <> part <> parts)
@@ -144,11 +158,15 @@ encodeNode root = do
   mapEntries entries = [TupleValue [key, held] | (OrdValue key, held) <- Map.toAscList entries]
 
   intern names@(Names table count) name = case Map.lookup name table of
-    Just index -> (names, index)
-    Nothing -> (Names (Map.insert name count table) (count + 1), count)
+    Just index -> Just (names, index)
+    Nothing -> do
+      next <- wireCount (toInteger count + 1)
+      Just (Names (Map.insert name count table) next, count)
 
   textOf content = bytesOf (Encoding.encodeUtf8 content)
-  bytesOf bytes = word32 (fromIntegral (ByteString.length bytes)) <> Builder.byteString bytes
+  bytesOf bytes = do
+    count <- wireCount (toInteger (ByteString.length bytes))
+    Just (word32 count <> Builder.byteString bytes)
   word32 = Builder.word32LE
 
 {-| The node tree bytes hold, or the first problem found in them. Every

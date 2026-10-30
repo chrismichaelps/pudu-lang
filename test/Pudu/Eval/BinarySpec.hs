@@ -9,7 +9,7 @@ import qualified Data.Sequence as Seq
 import Data.Text (Text)
 import Data.Word (Word8)
 import GHC.Float (castWord64ToDouble)
-import Pudu.Eval.Binary (decodeNodes, encodeNode)
+import Pudu.Eval.Binary (decodeNodes, encodeNode, wireCount)
 import Pudu.Eval.Value (OrdValue (..), Value (..), intOf)
 import Pudu.FloatLiteral (FloatWidth (Float64Width))
 import Test.QuickCheck (Gen, Property, arbitrary, chooseInt, conjoin, counterexample, elements, forAll, oneof, property, vectorOf, (===))
@@ -78,7 +78,8 @@ canonical node = case node of
 
 boundaries :: Property
 boundaries = conjoin
-  [ encodeNode (VariantValue "Whole" [intOf (-1)]) === Just (BS.pack ([0,0,0,0,0] <> replicate 8 255))
+  [ map wireCount [-1, 0, 4294967295, 4294967296, 18446744073709551616] === [Nothing, Just 0, Just maxBound, Nothing, Nothing]
+  , encodeNode (VariantValue "Whole" [intOf (-1)]) === Just (BS.pack ([0,0,0,0,0] <> replicate 8 255))
   , encodeNode (VariantValue "Real" [FloatValue Float64Width (castWord64ToDouble bits)]) ===
       Just (BS.pack [0,0,0,0,1,0x23,1,0,0,0,0,0xf8,0x7f])
   , decodeNodes (emptyNames <> BS.replicate 512 8 <> BS.singleton 7) `succeeds` "depth 512"

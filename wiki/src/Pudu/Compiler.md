@@ -185,3 +185,12 @@ Folding uses the fully settled executable syntax, including selections inside ge
 bodies, and the same tree supplies the executable product. Resolved Grill Log: resolving only
 the derived call's owner leaves a nested parameter call erased during constant evaluation; reuse
 the existing complete literal/selection projection once rather than adding a folding resolver.
+
+## Bound provider evidence (#743)
+
+Pass moduleProviders into the existing executable projection before folding or publication. Authored compileSyntax retains source member names and implementation trait paths.
+
+Resolved Grill Log: preserve the checker-selected provider through ordinary executable symbols,
+including retained methods and receiver aliases. Do not infer a provider from declaration order,
+receiver spelling, or runtime type arguments. Existing evaluation order and lending stay intact.
+See [[Bound Provider Delivery]].

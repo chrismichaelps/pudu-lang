@@ -69,5 +69,6 @@ Validation: [[Binary Codec Properties]] · [[Binary Facade Gate]] · [[Std Binar
 
 encode requires valid Node shapes, at most 512 levels of nesting and unique field names within
 each record or variant; invalid input reports E7001 instead of producing unreadable bytes.
-Name reuse across separate records is valid. Resolved Grill Log: keep the public writer's
+Every encoded length/count must fit its unsigned 32-bit prefix; byte/text lengths count encoded
+bytes, while real blocks count elements. Name reuse across separate records is valid. Resolved Grill Log: keep the public writer's
 preconditions explicit and execute its boundary through [[Binary Facade Gate]].

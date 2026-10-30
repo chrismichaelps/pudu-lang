@@ -61,6 +61,7 @@ module Pudu.Type.Env
   , takeUnwrittenParameters
   , recordExpression
   , recordSelection
+  , recordProvider
   , noteStaticTrait
   , isStaticTrait
   , report
@@ -258,6 +259,7 @@ data CheckerState = CheckerState
   {-| Instantiations of parameters bounded by a static trait, by the span of
       the reference that instantiated them, in the scheme's parameter order. -}
   , stateSelectionsRev :: ![(Span, [Type])]
+  , stateProvidersRev :: ![(Span, NominalId)]
   {-| Expressions whose value is the enclosing function's result: a body's
       tail, the tails of branches standing there, and every `return` operand.
       Marked before their subexpressions are checked, so a match learns its
@@ -293,6 +295,7 @@ data CheckerProducts = CheckerProducts
   , producedIntegerKinds :: ![(Span, Text)]
   {-| Every recorded static selection with inference settled. -}
   , producedSelections :: ![(Span, [Type])]
+  , producedProviders :: ![(Span, NominalId)]
   }
 
 newtype Checker a = Checker (CheckerState -> (a, CheckerState))
@@ -333,12 +336,14 @@ runChecker (Checker action) = case action initialState of
     , stateIntegerKinds = kinds
     , stateDeclaredMethodsRev = methods
     , stateSelectionsRev = selections
+    , stateProvidersRev = providers
     }) -> CheckerProducts
       { producedTypes = reverse (map (fmap (resolveFinal substitution)) types)
       , producedSchemes = finalSchemes substitution frames
       , producedDiagnostics = sortDiagnostics (reverse diagnostics)
       , producedIntegerKinds = reverse kinds
       , producedMethods = reverse methods
+      , producedProviders = reverse providers
       , producedSelections = reverse (map (fmap (map (resolveFinal substitution))) selections)
       }
 
@@ -387,6 +392,7 @@ initialState =
     , stateDeclaredMethodKeys = Set.empty
     , stateStaticTraits = Set.empty
     , stateSelectionsRev = []
+    , stateProvidersRev = []
     , stateResultSpans = Set.empty
     }
 
@@ -524,6 +530,11 @@ noteStaticTrait owner =
 
 isStaticTrait :: NominalId -> Checker Bool
 isStaticTrait owner = Checker $ \state -> (Set.member owner (stateStaticTraits state), state)
+
+{-| Canonical evidence consumed once by executable symbol resolution. -}
+recordProvider :: Span -> NominalId -> Checker ()
+recordProvider at owner = Checker $ \state ->
+  ((), state{stateProvidersRev = (at, owner) : stateProvidersRev state})
 
 recordSelection :: Span -> [Type] -> Checker ()
 recordSelection spanValue chosen =

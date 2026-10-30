@@ -21,7 +21,7 @@ JSON coexistence, formatter checks, positioned type refusal and actual archive i
 Lint and shell syntax checks pass. The unchanged facade/wiring also passed the preceding full
 clean regression gate as part of the working continuation. Only the smoke/gate was added since.
 
-Exact next action: commit/push the bounded facade partition; open its dev-targeted PR after the native prerequisite is integrated.
+Exact next action: publish the bounded facade after native integration; repair owner identity #761 before Ark archive use.
 
 ## Referenced by
 
@@ -37,3 +37,9 @@ assumption: the writer fault points to the native call inside Std.Binary, as run
 do, rather than its outer caller. Inspection confirmed the actual span; the focused gate passes
 with that established provenance retained. Merge the #742-integrated native parent e96a3c26,
 preserving both gate registrations and navigation entries, then rerun the clean full gate.
+
+The second clean current-dev gate passed every check at 9d6f22a4; that tested facade is pushed.
+Integrate native extent admission eb764a08 and retain its explicit UInt32 prefix contract in the
+public documentation. The native arithmetic boundary tests avoid multi-gigabyte allocations.
+The clean extent-admission gate passed at a845418f. Integrate native d6482ac4 and merged #743,
+then validate actual binary dispatch with both provider repairs before publication.
