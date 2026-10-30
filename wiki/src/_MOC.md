@@ -221,5 +221,6 @@ tags: [moc, module]
 - [[Mutex Admission Fixture]] — real local Database contention and recovery.
 - [[Database Challenge Spec]] · [[Database Challenge Fixture]] · [[Database Challenge Transport]]
 
+- [[Eval Binary]] · [[Binary Codec Properties]] — native binary wire contract and validation.
 - [[Bound Provider Gate]] — generic trait provider execution and cache parity.
 - [[Trait Provider Gate]] — explicit trait signatures, execution and located refusals.

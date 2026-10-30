@@ -114,6 +114,7 @@ test-suite pudu-test
     Pudu.Frontend.SyntaxSpec
     Pudu.Frontend.TokenSpec
     Pudu.EvalSpec
+    Pudu.Eval.BinarySpec
     Pudu.Eval.Common
     Pudu.Eval.ArithmeticSpec
     Pudu.Eval.BindingFlowSpec

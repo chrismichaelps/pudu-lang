@@ -123,6 +123,7 @@ library
     Pudu.Eval.Capture
     Pudu.Eval.Csv
     Pudu.Eval.Json
+    Pudu.Eval.Binary
     Pudu.Eval.Xml
     Pudu.Eval.Call.Argument
     Pudu.Eval.Call.Needs
