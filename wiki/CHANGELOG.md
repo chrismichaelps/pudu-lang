@@ -5,6 +5,13 @@ tags: [changelog]
 
 # Changelog
 
+## 2026-10-29 — Morph targets (#747)
+
+- [[Ark Morph]] validates a base shape and named dense or sparse targets once, then blends them
+  per frame on lanes: dense targets by axpy, sparse ones by scatterAdd over only the vertices they
+  move, zero weights skipped, normals renormalized. A 10,000-vertex blend with five of fifty
+  targets active takes about 0.9 ms.
+
 ## 2026-10-29 — Inverse kinematics (#746)
 
 - [[Ark Ik]] solves two-bone limbs by projection and height (no inverse trigonometry), clamps at
