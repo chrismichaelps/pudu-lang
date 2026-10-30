@@ -54,8 +54,12 @@ record constants and explicit storage/reuse checks for all four modules. All rem
 packaging, engine, streaming, editor and documentation gates also passed. Forensic Guardian
 parity audit confirms complete mirrors, private-file exclusion, bounded review size and
 unchanged diagnostic/output oracles. Independent review remains waived by the project owner.
-Exact next action: publish the record partition and require every hosted check before merge.
-#761 stays open for the sum identity audit and reconciliation with #734/#735.
+Record partition #764 merged as dev 769dbc71ed0ba28976f901b2f9567d0804edef6f after all five hosted
+checks passed on 137bbdfe. The remote branch was deleted. A same-named sum/variant reproducer
+still prints the second implementation for both owners in tree and compiled evaluation; the
+remaining proof is recorded in issue #761. Exact next action: resolve the sum-owner representation
+in complete mirrors after the qualified-method prerequisite. #761 stays open for that audit
+and reconciliation with #734/#735.
 
 ## Referenced by
 

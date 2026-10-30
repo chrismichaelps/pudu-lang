@@ -344,3 +344,9 @@ Resolved Grill Log: validate the actual source archive; passing from a checkout 
 prove an installed client can resolve this nested module.
 
 Register [[Eval Binary]] without a new dependency. Resolved Grill Log: native wire functions are tested directly before public builtin/facade integration.
+
+## Qualified concrete methods (#763)
+
+Register Type Check Qualified as a shared semantic boundary without adding dependencies.
+
+Resolved Grill Log: known concrete identity, lexical admission, module-export priority and provider ambiguity must agree for called and retained methods. See [[Qualified Record Method Delivery]].

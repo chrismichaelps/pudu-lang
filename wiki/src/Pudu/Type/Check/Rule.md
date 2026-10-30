@@ -204,3 +204,9 @@ Resolved Grill Log: no second identity-only rigid resolver; a captured method ke
 ## Lexical member admission (#471)
 
 localValueHead follows name/member syntax to its first lexical name through Type Env. qualifiedMemberType yields to ordinary fields/methods when that head is local; nameType folds dotted local paths through memberType. Keep full qualified lookup for unshadowed namespaces. Undotted names retain their single ordinary lookup; lexical path admission adds no second search to that common case. A selected nominal type application remains a type owner. Resolved Grill Log: query local identity before the global member spelling; do not use shared bare interface names to decide shadowing. This bounded name rule stays in the existing closed-rule table.
+
+## Qualified concrete methods (#763)
+
+Retained concrete type methods use Type Check Qualified before ordinary namespace/value access. A known concrete owner with no method reaches the existing namespace refusal under its full path. Traits and ordinary modules retain their prior expression path.
+
+Resolved Grill Log: known concrete identity, lexical admission, module-export priority and provider ambiguity must agree for called and retained methods. See [[Qualified Record Method Delivery]].

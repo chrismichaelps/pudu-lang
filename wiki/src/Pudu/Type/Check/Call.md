@@ -156,3 +156,12 @@ Built-in receiver type names may be absent from declaredNames. Before the ordina
 fallback, consult their recorded ambiguous receiver/member slot and refuse E3013 when present.
 Keep actual module qualifiers and nearer local values on their existing higher-priority paths.
 Resolved Grill Log: Int.encode cannot silently choose where Box.encode already refuses.
+
+## Qualified concrete methods (#763)
+
+Delegate qualified scheme lookup to Type Check Qualified after local-head admission. Both simple and module-qualified concrete owners use the same canonical method scheme; preserve explicit generic and trait-qualified call paths.
+
+Resolved Grill Log: known concrete identity, lexical admission, module-export priority and provider ambiguity must agree for called and retained methods. See [[Qualified Record Method Delivery]].
+
+Resolved Grill Log: generated complete owner applications retain their existing internal path;
+this repair changes no authored bracket grammar.

@@ -226,3 +226,5 @@ tags: [moc, module]
 - [[Trait Provider Gate]] — explicit trait signatures, execution and located refusals.
 
 - [[Canonical Owner Gate]] — same-named record dispatch and checked-product reuse.
+
+- [[Qualified Record Method Gate]] — concrete namespace, alias and capture regression.

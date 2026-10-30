@@ -12,10 +12,10 @@ import Control.Monad (when)
 import qualified Data.List.NonEmpty as NonEmpty
 import Pudu.Type.Check.Place (checkExclusiveReceiver, exclusiveInput)
 import Pudu.Type.Check.Receiver (bindReceiver)
+import Pudu.Type.Check.Qualified (qualifiedScheme)
 import qualified Data.Map.Strict as Map
 import qualified Data.Set as Set
 import Data.Text (Text)
-import qualified Data.Text as Text
 import Data.Maybe (mapMaybe)
 import Pudu.Type.Formation (formType)
 import Pudu.Type.Implementation (ImplementationRule (..), selectImplementationTarget)
@@ -28,7 +28,6 @@ import Pudu.Source (Span)
 import Pudu.Type.Env
   ( Checker
   , DeclaredTypes (..)
-  , ambiguousProviders
   , recordSelection
   , freshVariable
   , lookupImplementations
@@ -54,8 +53,7 @@ import Pudu.Type.Check.Method
 import Pudu.Type.Check.Pattern (qualifiedVariantType)
 import Pudu.Type.Unify (zonk)
 import Pudu.Type.Value
-  ( NominalId (..)
-  , Scheme (..)
+  ( Scheme (..)
   , nominalKey
   , Type (..)
   )
@@ -176,47 +174,9 @@ qualifiedByName
   :: DeclaredTypes -> Span -> Expression -> Text -> Checker (Maybe Type)
 qualifiedByName declared spanValue target member = do
   local <- localValueHead target
-  if local then pure Nothing else qualifiedByType declared spanValue target member
-
-qualifiedByType :: DeclaredTypes -> Span -> Expression -> Text -> Checker (Maybe Type)
-qualifiedByType declared spanValue target member = case target of
-  NameExpression (first NonEmpty.:| []) -> case Map.lookup first (declaredNames declared) of
-    Nothing -> do
-      providers <- ambiguousProviders (first <> "." <> member)
-      if null providers || Set.member first (declaredQualifiers declared)
-        then pure Nothing
-        else byType (NominalId Nothing first)
-    Just identity -> do
-      -- A module qualifier that exports `member` names that value, even where
-      -- the module also has a type of the qualifier's spelling: `Json.encode`
-      -- is the module's function, not the `Json` type's method.
-      exported <- if Set.member first (declaredQualifiers declared)
-        then lookupName (first <> "." <> member)
-        else pure Nothing
-      case exported of
-        Just _ -> pure Nothing
-        Nothing -> byType identity
-  _ -> pure Nothing
- where
-  byType identity = do
-    let key = nominalKey identity <> "." <> member
-    providers <- ambiguousProviders key
-    case providers of
-      _ : _ -> do
-        report "E3013" spanValue
-          (member <> " is ambiguous for " <> nominalName identity)
-          ( Just
-              ( "name the trait instead: "
-                  <> Text.intercalate " or "
-                    [nominalName provider <> "." <> member <> "(value)" | provider <- providers]
-              )
-          )
-        pure (Just ErrorType)
-      [] -> do
-        found <- lookupName key
-        case found of
-          Nothing -> pure Nothing
-          Just scheme -> Just <$> instantiate spanValue scheme
+  if local then pure Nothing else do
+    selected <- qualifiedScheme declared spanValue target member
+    traverse (instantiate spanValue . snd) selected
 
 {-| Resolve a trait-qualified call against the type its receiver actually has.
 

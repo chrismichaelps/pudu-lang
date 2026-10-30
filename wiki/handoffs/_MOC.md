@@ -234,3 +234,5 @@ tags: [moc, handoff]
 - [[Trait Provider Delivery]] — issue #742 canonical trait-provider scheme selection.
 
 - [[Canonical Runtime Owner Delivery]] — canonical record construction and dispatch, issue #761.
+
+- [[Qualified Record Method Delivery]] — qualified concrete owner admission, issue #763.

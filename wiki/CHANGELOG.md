@@ -4364,3 +4364,5 @@ No builds, tests, reviews or measurements run.
  - #476: implement finite mutex admission, recursive ownership refusal and local Database wait overrides; full local gates pass, independent review pending.
 
 - #761 record partition: preserve canonical declaration owners across construction, dispatch, folded values and native/foreign boundaries; all clean optimized repository gates pass. Sum identity and trait-evidence audits remain open.
+
+- #763: share canonical qualified-method schemes for calls and retained concrete methods, preserving aliases, captures, exported value receivers and positioned refusals; all clean optimized repository gates pass.

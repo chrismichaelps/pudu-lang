@@ -37,6 +37,8 @@ import Pudu.IntegerLiteral
   ( ParsedInteger (..), integerKindName, integerSuffixType, parseIntegerLiteral )
 import Pudu.Frontend.Syntax.Tree (Capability (..))
 import qualified Data.Map.Strict as Map
+import qualified Data.Set as Set
+import Pudu.Type.Check.Qualified (qualifiedScheme, concreteOwner)
 import Pudu.Type.Formation (builtinTypeNames)
 import Pudu.Type.Substitute (substituteRigid)
 import Pudu.Type.Check.Receiver (bindReceiver)
@@ -171,7 +173,15 @@ namespaceNameType spanValue names = do
 qualifiedMemberType :: DeclaredTypes -> Span -> Tree.Expression -> Text -> Checker (Maybe Type)
 qualifiedMemberType declared spanValue target member = do
   local <- localValueHead target
-  if local then pure Nothing else namespaceMemberType declared spanValue target member
+  if local then pure Nothing else do
+    selected <- qualifiedScheme declared spanValue target member
+    case selected of
+      Just (owner, scheme) | not (Set.member owner (declaredTraitNames declared)) ->
+        Just <$> instantiate spanValue scheme
+      _ -> do
+        concrete <- concreteOwner declared target
+        let namespace = maybe target (\(path, _) -> Tree.NameExpression (path NonEmpty.:| [])) concrete
+        namespaceMemberType declared spanValue namespace member
 
 {-| Only nested frames establish value shadowing; shared bare exports do not. -}
 localValueHead :: Tree.Expression -> Checker Bool
