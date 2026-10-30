@@ -157,3 +157,9 @@ Declaration order cannot change explicit-call typing, and a known receiver must 
 literal receiver. Wrong result annotations remain E3001 at the call; plain receiver/type calls
 still refuse ambiguity. This restores the existing selected-implementation contract and does not
 repair imported declaration collision (#734) or conditional generic dispatch (#735).
+
+## Canonical record owners (#761)
+
+Implementation target syntax records its canonical owner beside the existing canonical trait fact. Do not reduce imported or local nominal owners to their basenames.
+
+Resolved Grill Log: identity comes from the checked declaration, never import order or a basename guess. Preserve observable labels, lexical shadowing, field effects and failure provenance; no runtime filesystem lookup. See [[Canonical Runtime Owner Delivery]].

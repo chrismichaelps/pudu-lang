@@ -4362,3 +4362,5 @@ No builds, tests, reviews or measurements run.
 
  - #471: honor local value heads before qualified typing, call dispatch and compile-time metadata; preserve type owners and existing generic restrictions. Actual warm-product, lexical, diagnostic, evaluator and packaged regressions plus all 605 suite groups pass. Independent reviews remain pending; block-local import syntax remains separate.
  - #476: implement finite mutex admission, recursive ownership refusal and local Database wait overrides; full local gates pass, independent review pending.
+
+- #761 record partition: preserve canonical declaration owners across construction, dispatch, folded values and native/foreign boundaries; all clean optimized repository gates pass. Sum identity and trait-evidence audits remain open.

@@ -218,3 +218,9 @@ Assignment resolves its place through [[Eval Place]] — root and index keys fir
 
 Function literals initialize the internal MultiMap proof cache to Nothing.
 Resolved Grill Log: literal capture and body evaluation remain unchanged.
+
+## Canonical record owners (#761)
+
+Record construction uses the complete projected owner path. Fields still evaluate in written order; record updates retain their original owner.
+
+Resolved Grill Log: identity comes from the checked declaration, never import order or a basename guess. Preserve observable labels, lexical shadowing, field effects and failure provenance; no runtime filesystem lookup. See [[Canonical Runtime Owner Delivery]].

@@ -70,10 +70,10 @@ qualifiedParts expression = case expression of
   MemberExpression (Located _ (NameExpression (first :| []))) member
     | isNominalType first -> Just (first, locatedValue member)
   -- Generated code names an owner canonically, `Module.Type`; methods are
-  -- installed under the type's own name.
+  -- installed under that canonical owner.
   MemberExpression (Located at (NameExpression path@(_ :| (_ : _)))) member
     | Just _ <- spanOrigin at, isNominalType (lastSegmentOf path) ->
-        Just (lastSegmentOf path, locatedValue member)
+        Just (Text.intercalate "." (toList path), locatedValue member)
   _ -> Nothing
  where
   isNominalType name = case Text.uncons name of
@@ -222,14 +222,12 @@ selectTypes chosen closure = closure
 
 {-| The witness a written type stands for. A one-segment name bound to a
     witness is a parameter the enclosing call selected; any other nominal is
-    its own owner, named by its last segment as methods are installed. -}
+    its own owner, retaining the canonical key supplied by checking. -}
 witnessOf :: Located TypeSyntax -> Evaluator Value
 witnessOf (Located _ written) = case written of
   NamedType path@(ModuleName (first :| rest)) arguments -> do
     local <- if null rest && null arguments then lookupLocal first else pure Nothing
     case local of
       Just witness@TypeWitnessValue{} -> pure witness
-      _ -> TypeWitnessValue (lastSegmentOf (moduleNameSegments' path)) <$> mapM witnessOf arguments
+      _ -> TypeWitnessValue (moduleNameText path) <$> mapM witnessOf arguments
   _ -> pure (TypeWitnessValue Text.empty [])
- where
-  moduleNameSegments' (ModuleName segments) = segments

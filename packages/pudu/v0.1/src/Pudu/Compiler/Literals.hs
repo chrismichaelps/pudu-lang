@@ -38,19 +38,20 @@ import Pudu.Type.Value (Type (..), NominalId, nominalKey)
 
 {-| The module with every integer literal in expression position resolved to
     the kind checking gave its span. -}
-resolveLiterals :: Map Span Text -> Map Span [Type] -> Map Span NominalId -> Module -> Module
-resolveLiterals kinds selections providers = walk (Facts kinds selections providers False)
+resolveLiterals :: Map Span Text -> Map Span [Type] -> Map Span NominalId -> Map Span NominalId -> Module -> Module
+resolveLiterals kinds selections providers owners = walk (Facts kinds selections providers owners False)
 
 {-| Lower only generated owner annotations into printable ordinary applications. -}
 resolveOwnerSelections :: Map Span [Type] -> Module -> Module
 resolveOwnerSelections selections
   | Map.null selections = id
-  | otherwise = walk (Facts Map.empty selections Map.empty True)
+  | otherwise = walk (Facts Map.empty selections Map.empty Map.empty True)
 
 data Facts = Facts
   { factKinds :: !(Map Span Text)
   , factSelections :: !(Map Span [Type])
   , factProviders :: !(Map Span NominalId)
+  , factOwners :: !(Map Span NominalId)
   , factOwnersOnly :: !Bool
   }
 
@@ -130,6 +131,9 @@ instance (GWalk f, GWalk g) => GWalk (f :*: g) where
 instance (Walk a, Typeable a) => Walk (Located a) where
   walk kinds (Located spanValue value) = case eqT :: Maybe (a :~: Expression) of
     Just Refl
+      | not (factOwnersOnly kinds), RecordExpression (ModuleName path) fields <- value ->
+          let owner = maybe (NonEmpty.last path) nominalKey (Map.lookup spanValue (factOwners kinds))
+           in Located spanValue (RecordExpression (ModuleName (owner :| [])) (walk kinds fields))
       | not (factOwnersOnly kinds), LiteralExpression literal <- value ->
           Located spanValue (LiteralExpression (resolveOne (factKinds kinds) spanValue literal))
       | not (factOwnersOnly kinds) || hasSelectedOwner value
@@ -207,7 +211,16 @@ instance Walk FieldDeclaration
 instance Walk Variant
 instance Walk VariantPayload
 instance Walk Trait
-instance Walk Impl
+instance Walk Impl where
+  walk facts value = projected{implTarget = selectedTarget}
+   where
+    projected = to (gwalk facts (from value))
+    selectedTarget = case implTarget projected of
+      Located at (NamedType _ arguments)
+        | not (factOwnersOnly facts), Just owner <- Map.lookup (locatedSpan (implTarget value)) (factOwners facts)
+        , Located _ (NamedType path _) <- typeSyntax at (NominalType owner []) ->
+            Located at (NamedType path arguments)
+      other -> other
 instance Walk Macro
 instance Walk MacroParam
 instance Walk MacroKind

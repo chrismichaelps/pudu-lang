@@ -79,3 +79,9 @@ DEPTH 0.45 (MEDIUM). It keeps one concern out of [[Evaluator]], which would othe
 ## Referenced by
 
 [[src/Pudu/Eval/_MOC]] · [[Evaluator]]
+
+## Canonical record owners (#761)
+
+A checked named record pattern compares its authored final label with the final label of the retained canonical runtime owner. Record equality continues comparing complete owner identity. Named sum variants retain their existing tag checks.
+
+Resolved Grill Log: identity comes from the checked declaration, never import order or a basename guess. Preserve observable labels, lexical shadowing, field effects and failure provenance; no runtime filesystem lookup. See [[Canonical Runtime Owner Delivery]].

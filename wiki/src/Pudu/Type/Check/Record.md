@@ -81,3 +81,9 @@ field against the type it was declared with, then name what is missing.
 ## Referenced by
 
 [[src/Pudu/Type/_MOC]] · [[Type Check Expression]] · [[grammar/pudu]]
+
+## Canonical record owners (#761)
+
+Record construction records its resolved canonical declaration owner at the construction span. Named sum payloads keep their variant tags in this record partition.
+
+Resolved Grill Log: identity comes from the checked declaration, never import order or a basename guess. Preserve observable labels, lexical shadowing, field effects and failure provenance; no runtime filesystem lookup. See [[Canonical Runtime Owner Delivery]].

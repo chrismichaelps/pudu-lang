@@ -220,3 +220,9 @@ All keys/kinds/counts and public Map operations retain the existing contract.
 
 Resolved Grill Log: let generic pure storage own series proof and sparse overrides;
 Value only projects ordered entries. No evaluator proof, mutation or eager view.
+
+## Canonical record owners (#761)
+
+RecordValue retains the complete canonical record declaration key in its owner text. Existing equality and keyed ordering compare that complete identity; rendering uses the final label. Runtime representation and generic argument erasure remain otherwise unchanged.
+
+Resolved Grill Log: preserve identity through immutable data storage; do not reconstruct it from labels or import order. See [[Canonical Runtime Owner Delivery]].

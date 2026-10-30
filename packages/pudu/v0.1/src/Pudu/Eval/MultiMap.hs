@@ -28,7 +28,7 @@ import qualified Pudu.Runtime.SeriesMap as SeriesMap
     persistent, and overwrites keep the same representative as Map insertion. -}
 callMultiMapAdd :: Span -> [Value] -> Evaluator Value
 callMultiMapAdd spanValue arguments = case arguments of
-  [RecordValue _ fields, key, value]
+  [RecordValue owner fields, key, value]
     | Just (MapValue groups) <- lookup "groups" fields
     , Just occurrences <- lookup "occurrences" fields -> do
         if comparableValue key
@@ -45,7 +45,7 @@ callMultiMapAdd spanValue arguments = case arguments of
           then pure ()
           else unorderableKey spanValue pair "map key" >> pure ()
         (heldCount, counted) <- insertOccurrence spanValue occurrences key value
-        let result = pure (RecordValue "MultiMap" [("groups", MapValue added), ("occurrences", counted)])
+        let result = pure (RecordValue owner [("groups", MapValue added), ("occurrences", counted)])
         case heldCount of
           Nothing -> result
           Just (IntValue kind count)

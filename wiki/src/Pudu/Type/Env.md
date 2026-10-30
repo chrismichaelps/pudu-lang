@@ -239,3 +239,9 @@ Resolved Grill Log: preserve the checker-selected provider through ordinary exec
 including retained methods and receiver aliases. Do not infer a provider from declaration order,
 receiver spelling, or runtime type arguments. Existing evaluation order and lending stay intact.
 See [[Bound Provider Delivery]].
+
+## Canonical record owners (#761)
+
+Collect canonical concrete-owner facts separately from trait-provider facts, including when generated declarations share source anchors. Publish owners with each module check; never retain per-module facts in interface snapshots.
+
+Resolved Grill Log: separate semantic roles even at identical generated spans. No runtime span lookup, provider overwrite or shortened owner. See [[Canonical Runtime Owner Delivery]].

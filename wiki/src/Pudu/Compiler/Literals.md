@@ -14,7 +14,7 @@ aliases: [Compiler Literals]
 ---
 # Compiler Literals
 
-`resolveLiterals :: Map Span Text -> Map Span [Type] -> Map Span NominalId -> Module -> Module` rewrites every integer literal in expression
+`resolveLiterals :: Map Span Text -> Map Span [Type] -> Map Span NominalId -> Map Span NominalId -> Module -> Module` rewrites every integer literal in expression
 position into `ResolvedInteger kind value` once, after type checking. The kind is the checker's
 answer for the literal's span, else the literal's own suffix, else the platform `Int`; the value is
 the parsed number. The evaluator then builds the value directly, with no parsing and no `Map Span`
@@ -73,3 +73,15 @@ Resolved Grill Log: preserve the checker-selected provider through ordinary exec
 including retained methods and receiver aliases. Do not infer a provider from declaration order,
 receiver spelling, or runtime type arguments. Existing evaluation order and lending stay intact.
 See [[Bound Provider Delivery]].
+
+## Canonical record owners (#761)
+
+Executable record constructor paths and implementation target paths retain the canonical checker owner through the existing post-check fact projection. Tooling syntax and authored spans remain unchanged.
+
+Resolved Grill Log: identity comes from the checked declaration, never import order or a basename guess. Preserve observable labels, lexical shadowing, field effects and failure provenance; no runtime filesystem lookup. See [[Canonical Runtime Owner Delivery]].
+
+Resolved Grill Log: use an independent owner-fact map and rewrite an implementation target at its structural Impl field; trait and target may share a generated span. Generic type walking must not substitute a concrete owner for a trait provider.
+
+Resolved Grill Log: a named-field sum variant has no record-owner fact. Normalize its
+constructor path to its legacy final variant tag during executable projection; retaining an
+authored sum qualifier would change the runtime representation and break existing derives.
