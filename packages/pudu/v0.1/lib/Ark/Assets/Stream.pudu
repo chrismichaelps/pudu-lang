@@ -1,0 +1,163 @@
+module Ark.Assets.Stream
+
+import Std.Concurrent as Concurrent
+import Std.Sync as Sync
+import Ark.Assets.Server as Server
+
+/// A queued load: the source, its priority (higher launches first) and its request order.
+export type Request = { source: Server.Source, priority: Int, order: Int }
+
+/// How much a pump may do: loads running at once and commits per pump.
+export type Budget = { workers: Int, commits: Int }
+
+/// What one pump did and what remains.
+export type Progress = { committed: Array[Str], failed: Array[(Str, Server.Error)], blocked: Array[Str], waiting: Int, running: Int }
+
+/// Why a pump could not run.
+export type StreamError = BadBudget(Int, Int) | WorkerFailed(Str)
+
+/// A load on its own thread, with the cell it fills and the order it was launched in.
+export type Running = { id: Str, launched: Int, worker: Concurrent.Task, slot: Sync.Cell[Option[Result[Server.Prepared, Server.Error]]] }
+
+/// A finished load waiting for its commit.
+export type Finished = { id: Str, launched: Int, outcome: Result[Server.Prepared, Server.Error] }
+
+/// Requests waiting, loads running and finished loads not yet committed.
+export type Stream = { waiting: Array[Request], running: Array[Running], finished: Array[Finished], requests: Int, launches: Int }
+
+/// A stream with nothing queued.
+export fn stream() -> Stream {
+  Stream{waiting: [], running: [], finished: [], requests: 0, launches: 0}
+}
+
+/// Queue a load; ignored when the same ID is already waiting, running or finished.
+export fn request(queue: Stream, source: Server.Source, priority: Int) -> Stream {
+  if tracked(&queue, source.id) { return queue }
+  Stream{..queue, waiting: queue.waiting.push(Request{source, priority, order: queue.requests}), requests: queue.requests + 1}
+}
+
+/// Drop a request that has not started.
+export fn cancel(queue: Stream, id: Str) -> Stream {
+  Stream{..queue, waiting: queue.waiting.filter(|held| held.source.id != id)}
+}
+
+/// Collect finished loads, commit up to the budget in launch order, then launch waiting requests.
+export fn pump(queue: Stream, server: Server.Server, budget: &Budget) -> Result[(Stream, Server.Server, Progress), StreamError] {
+  if budget.workers < 1 || budget.commits < 1 { return Err(BadBudget(budget.workers, budget.commits)) }
+  let (collected, stillRunning) = collect(&queue.running) ?
+  let ordered = queue.finished.concat(collected).sortBy(|left, right| left.launched < right.launched)
+  var current = server
+  var committed: Array[Str] = []
+  var failed: Array[(Str, Server.Error)] = []
+  var deferred: Array[Finished] = []
+  for done in ordered {
+    if committed.length() >= budget.commits {
+      deferred = deferred.push(done)
+      continue
+    }
+    match done.outcome {
+      case Err(problem) => { failed = failed.push((done.id, problem)) }
+      case Ok(prepared) => match Server.commit(current, prepared) {
+        case Ok(next) => {
+          current = next
+          committed = committed.push(done.id)
+        }
+        case Err(problem) => { failed = failed.push((done.id, problem)) }
+      }
+    }
+  }
+  let launched = launch(Stream{..queue, running: stillRunning, finished: deferred}, &current, budget.workers) ?
+  let (started, blocked) = launched
+  Ok((started, current, Progress{committed, failed, blocked, waiting: started.waiting.length(), running: started.running.length()}))
+}
+
+fn tracked(queue: &Stream, id: Str) -> Bool {
+  for held in queue.waiting {
+    if held.source.id == id { return true }
+  }
+  for load in queue.running {
+    if load.id == id { return true }
+  }
+  for done in queue.finished {
+    if done.id == id { return true }
+  }
+  false
+}
+
+/// Finished loads with their threads joined and forgotten and their cells disposed, and the loads still running.
+fn collect(running: &Array[Running]) -> Result[(Array[Finished], Array[Running]), StreamError] {
+  var done: Array[Finished] = []
+  var still: Array[Running] = []
+  for load in *running {
+    let held = match Sync.get(&load.slot) {
+      case Ok(value) => value
+      case Err(problem) => { return Err(WorkerFailed(show(problem))) }
+    }
+    match held {
+      case None => { still = still.push(load) }
+      case Some(outcome) => {
+        if let Err(problem) = Concurrent.join(&load.worker) { return Err(WorkerFailed(show(problem))) }
+        let _forgotten = Concurrent.forget(&load.worker)
+        let _disposed = Sync.disposeCell(&load.slot)
+        done = done.push(Finished{id: load.id, launched: load.launched, outcome})
+      }
+    }
+  }
+  Ok((done, still))
+}
+
+/// Start the highest-priority waiting requests whose dependencies are loaded, up to `workers` running.
+fn launch(queue: Stream, server: &Server.Server, workers: Int) -> Result[(Stream, Array[Str]), StreamError] {
+  let ranked = queue.waiting.sortBy(|left, right| left.priority > right.priority || (left.priority == right.priority && left.order < right.order))
+  var running = queue.running
+  var launches = queue.launches
+  var waiting: Array[Request] = []
+  var blocked: Array[Str] = []
+  for held in ranked {
+    let id = held.source.id
+    if Server.handle(server, id) != None { continue }
+    if running.length() >= workers {
+      waiting = waiting.push(held)
+      continue
+    }
+    if !ready(&held.source, server) {
+      if orphaned(&held.source, server, &queue) { blocked = blocked.push(id) }
+      waiting = waiting.push(held)
+      continue
+    }
+    let empty: Option[Result[Server.Prepared, Server.Error]] = None
+    let slot = Sync.cell(empty)
+    let snapshot = *server
+    let source = held.source
+    match Concurrent.start(|| {
+        let _stored = Sync.set(&slot, Some(Server.prepare(&snapshot, &source)))
+      })
+    {
+      case Ok(worker) => {
+        running = running.push(Running{id, launched: launches, worker, slot})
+        launches = launches + 1
+      }
+      case Err(problem) => {
+        let _disposed = Sync.disposeCell(&slot)
+        return Err(WorkerFailed(show(problem)))
+      }
+    }
+  }
+  let ordered = waiting.sortBy(|left, right| left.order < right.order)
+  Ok((Stream{..queue, waiting: ordered, running, launches}, blocked))
+}
+
+fn ready(source: &Server.Source, server: &Server.Server) -> Bool {
+  for dependency in source.dependencies {
+    if Server.handle(server, dependency) == None { return false }
+  }
+  true
+}
+
+/// Whether some dependency is neither loaded nor queued, running or finished.
+fn orphaned(source: &Server.Source, server: &Server.Server, queue: &Stream) -> Bool {
+  for dependency in source.dependencies {
+    if Server.handle(server, dependency) == None && !tracked(queue, dependency) { return true }
+  }
+  false
+}

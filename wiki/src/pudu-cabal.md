@@ -20,6 +20,9 @@ CPU asset modules are shipped library data and must remain present outside the c
 Distribute `lib/Ark/Net/*.pudu` with the root net module, including [[Ark Replication]];
 [[Ark Net Gate]] checks the archive.
 
+Distribute `lib/Ark/Editor/*.pudu`, including [[Ark Inspect]]; the editor root has no module of
+its own yet, so only the nested glob ships it.
+
 Distribute `lib/Ark/Game/*.pudu` with the root game module, including [[Ark Game Camera]];
 [[Ark Game Gate]] checks the archive.
 

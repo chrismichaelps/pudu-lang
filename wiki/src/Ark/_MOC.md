@@ -8,6 +8,7 @@ tags: [moc, ark]
 
 - [[Ark Asset Dependencies]] · [[Ark Asset Graph Fixture]] — dependency-first order and reload closure.
 - [[Ark Asset Server]] · [[Ark Asset Import]] · [[Ark Asset Server Fixture]] — importers, handles and staged hot reload.
+- [[Ark Asset Stream]] · [[Ark Stream Fixture]] — prioritized loading on worker threads with per-frame commit budgets.
 
 - [[Ark Texture Asset]] · [[Ark Texture Fixture]] · [[Ark Assets Gate]] — checked CPU texture inputs and linear-light sampling.
 
@@ -27,17 +28,21 @@ tags: [moc, ark]
 - [[Ark Net]] · [[Ark Replication]] · [[Ark Net Fixture]] · [[Ark Net Gate]] — acknowledged packets and quantized delta replication.
 
 - [[Ark UI]] · [[Ark UI Fixture]] · [[Ark UI Gate]] — immediate-mode widgets, focus and device-rendered draw lists.
+- [[Ark Inspect]] · [[Ark Inspect Fixture]] — derived property inspectors, typed edits by path and a UI panel.
 
 - [[Ark Game]] · [[Ark Game Camera]] · [[Ark Game Fixture]] · [[Ark Game Gate]] — scene-stack app loop and camera rigs.
 
 - [[Ark Audio]] · [[Ark Audio Fixture]] · [[Ark Audio Gate]] — lane voice mixing, buses, rolloff, panning and PCM16 output.
 
 - [[Ark Animation]] · [[Ark Animation Machine]] · [[Ark Animation Fixture]] · [[Ark Animation Gate]] — lane pose sampling, blending and cross-fades.
+- [[Ark Ik]] · [[Ark Limbs]] · [[Ark Ik Fixture]] · [[Ark Ik Benchmark]] — two-bone and chain inverse kinematics, single and batched on lanes.
+- [[Ark Morph]] · [[Ark Morph Fixture]] · [[Ark Morph Benchmark]] — dense and sparse morph targets blended on lanes.
 
 - [[Ark Matrix]] · [[Ark Matrix Fixture]] · [[Ark Matrix Gate]] — column-vector algebra and projection.
 
 - [[Ark Handle]] · [[Ark Profile]] — generational handles and nanosecond scopes (Core).
 - [[Ark Render Device]] · [[Ark Mesh]] · [[Ark Render Pipeline]] · [[Ark Frame Graph]] — software rendering on lanes and native rasterization.
+- [[Ark Text]] · [[Ark Text Fixture]] · [[Ark Text Benchmark]] — glyph-atlas text in one draw call per batch; UI labels drawn through it.
 - [[Ark Render Fixture]] · [[Ark Render Gate]] · [[Spinning Cubes Demo]] — render conformance and the window demo.
 - [[Ark Input]] · [[Ark Frame Clock]] · [[Ark Window]] — action-mapped input, fixed-step timing and the window boundary.
 - [[Ark Platform Fixture]] · [[Ark Platform Gate]] — Platform conformance.

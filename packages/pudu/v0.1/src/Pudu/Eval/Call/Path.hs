@@ -12,6 +12,7 @@ module Pudu.Eval.Call.Path
   , typeArgumentName
   , typeArgumentNames
   , selectTypes
+  , withSelf
   , witnessOf
   ) where
 
@@ -198,9 +199,16 @@ witnessMethod witness member = case witness of
   TypeWitnessValue owner arguments -> do
     found <- lookupName (owner <> "." <> member)
     pure $ case found of
-      Just (FunctionValue closure) -> Just (FunctionValue (selectTypes arguments closure))
+      Just (FunctionValue closure) -> Just (FunctionValue (withSelf witness (selectTypes arguments closure)))
       other -> other
   _ -> pure Nothing
+
+{-| `Self` inside a method names the type it was selected for, so a body that
+    passes `Self` on as a type argument — a trait default in particular, which
+    is installed once from the trait's declaration — selects that type rather
+    than a nominal literally called `Self`. -}
+withSelf :: Value -> Closure -> Closure
+withSelf witness closure = closure{closureWitnesses = ("Self", witness) : closureWitnesses closure}
 
 {-| Bind chosen types to a closure's type parameters in declaration order;
     an installed method's parameters begin with its implementation's. -}

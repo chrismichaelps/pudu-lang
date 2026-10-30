@@ -19,7 +19,7 @@ aliases: [Eval Call Path]
 
 Resolve dotted module and member paths, qualified callees, type argument syntaxes, and longest-binding identifier prefixes during runtime evaluation.
 
-`A.member` with `A` bound to a witness reaches the witnessed owner's method, holding the owner's own arguments for its implementation's parameters (`witnessMethod`, `selectTypes`). `witnessOf` turns written type syntax into witnesses. A generated canonical owner path resolves by its type's own name, and a generated canonical variant path the defining module never imported reads as that variant's constructor.
+`A.member` with `A` bound to a witness reaches the witnessed owner's method, holding the owner's own arguments for its implementation's parameters (`witnessMethod`, `selectTypes`). `witnessOf` turns written type syntax into witnesses. `withSelf` binds `Self` to the selected owner's witness when a method is reached through a witness or a receiver, so a body — a trait default in particular, installed once from the trait's declaration — that passes `Self` on as a type argument selects the implementing type rather than a nominal named `Self`. A generated canonical owner path resolves by its type's own name, and a generated canonical variant path the defining module never imported reads as that variant's constructor.
 
 ## Interface
 
@@ -75,6 +75,9 @@ typeArgumentName :: Located TypeSyntax -> Text
   a module path, and the failing search through every module's frame cost a sixth of a record-heavy
   loop (#423). A first segment that is not local keeps the longest-binding search.
 - **Q:** Let a generated path fall back for any unbound name? **A:** No; only for generated spans, which checking proved.
+- **Q:** Substitute `Self` when installing each inherited default? **A:** No; one installed
+  closure serves every call, and the receiver or witness already names the owner at the call.
+  Binding `Self` there costs one witness per call and covers inherited and written methods alike.
 
 ## Referenced by
 

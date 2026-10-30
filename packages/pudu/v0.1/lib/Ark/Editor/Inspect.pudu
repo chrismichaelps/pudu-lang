@@ -1,0 +1,256 @@
+module Ark.Editor.Inspect
+
+import Std.Math.Float as Float
+import Std.Meta as Meta
+import Ark.Math as V
+import Ark.UI as Ui
+
+/// How a property is shown and edited.
+export type Kind = Number | Whole | Toggle | Words | Group
+
+/// One inspector row: where it is, what it shows and how it may change.
+export type Property = { path: Str, label: Str, kind: Kind, text: Str, ranged: Bool, low: Float64, high: Float64, editable: Bool, depth: Int }
+
+/// What a field's attributes say about the value it holds.
+export type Hint = { label: Str, ranged: Bool, low: Float64, high: Float64, editable: Bool, depth: Int }
+
+/// Why an edit was refused.
+export type Problem
+  = UnknownField(Str)
+  | NotEditable
+  | Unparsable(Str)
+  | OutOfRange(Float64, Float64)
+  | NotALeaf
+
+/// A refused edit and the path it was aimed at.
+export type EditError = { path: Str, problem: Problem }
+
+/// A value that lists its properties and takes an edit at a path.
+export trait Inspect {
+  /// The rows for this value at `path`, shaped by its field's `hint`.
+  fn properties(self: &Self, path: Str, hint: &Hint) -> Array[Property]
+
+  /// The value with the property at `segments` set from `text`.
+  fn change(self: &Self, segments: &Array[Str], text: Str, hint: &Hint) -> Result[Self, Problem]
+}
+
+/// A hint for a root value or a field without attributes.
+export fn plain(label: Str, depth: Int) -> Hint {
+  Hint{label, ranged: false, low: 0.0, high: 0.0, editable: true, depth}
+}
+
+/// Every property of a value from its root.
+export fn rows[T: Inspect](value: &T) -> Array[Property] {
+  value.properties("", &plain("", -1))
+}
+
+/// The value with the property at a dotted path (`[i]` for an array element) set from text.
+export fn edit[T: Inspect](value: &T, path: Str, text: Str) -> Result[T, EditError] {
+  match value.change(&segmentsOf(path), text, &plain("", -1)) {
+    case Ok(changed) => Ok(changed)
+    case Err(problem) => Err(EditError{path, problem})
+  }
+}
+
+/// Draw the rows with UI widgets and answer the value after this frame's edits.
+export fn panel[T: Inspect](ui: Ui.Ui, value: &T) -> (Ui.Ui, T) {
+  var current = ui
+  var edited = *value
+  for row in rows(value) {
+    let indent = "  ".repeat(if row.depth > 0 { row.depth } else { 0 })
+    if row.editable && row.kind == Number && row.ranged {
+      current = Ui.label(current, indent + row.label + ": " + row.text)
+      let Some(number) = row.text.toFloat() else { continue }
+      let (moved, chosen) = Ui.slider(current, row.path, number, row.low, row.high)
+      current = moved
+      if chosen != number {
+        if let Ok(next) = edit(&edited, row.path, show(chosen)) { edited = next }
+      }
+    } else if row.editable && row.kind == Toggle {
+      let flag = row.text == "true"
+      let (moved, chosen) = Ui.checkbox(current, row.path, indent + row.label, flag)
+      current = moved
+      if chosen != flag {
+        if let Ok(next) = edit(&edited, row.path, show(chosen)) { edited = next }
+      }
+    } else {
+      current = Ui.label(current, if row.kind == Group { indent + row.label } else { indent + row.label + ": " + row.text })
+    }
+  }
+  (current, edited)
+}
+
+impl Inspect for Float64 {
+  fn properties(self: &Self, path: Str, hint: &Hint) -> Array[Property] { [leaf(path, hint, Number, show(*self))] }
+
+  fn change(self: &Self, segments: &Array[Str], text: Str, hint: &Hint) -> Result[Self, Problem] {
+    writable(segments, hint) ?
+    let Some(number) = text.toFloat() else { return Err(Unparsable("a number")) }
+    within(number, hint) ?
+    Ok(number)
+  }
+}
+
+impl Inspect for Int {
+  fn properties(self: &Self, path: Str, hint: &Hint) -> Array[Property] { [leaf(path, hint, Whole, show(*self))] }
+
+  fn change(self: &Self, segments: &Array[Str], text: Str, hint: &Hint) -> Result[Self, Problem] {
+    writable(segments, hint) ?
+    let Some(number) = text.toInt() else { return Err(Unparsable("a whole number")) }
+    within(Float.fromInt(number), hint) ?
+    Ok(number)
+  }
+}
+
+impl Inspect for Bool {
+  fn properties(self: &Self, path: Str, hint: &Hint) -> Array[Property] { [leaf(path, hint, Toggle, show(*self))] }
+
+  fn change(self: &Self, segments: &Array[Str], text: Str, hint: &Hint) -> Result[Self, Problem] {
+    writable(segments, hint) ?
+    if text == "true" { return Ok(true) }
+    if text == "false" { Ok(false) } else { Err(Unparsable("true or false")) }
+  }
+}
+
+impl Inspect for Str {
+  fn properties(self: &Self, path: Str, hint: &Hint) -> Array[Property] { [leaf(path, hint, Words, *self)] }
+
+  fn change(self: &Self, segments: &Array[Str], text: Str, hint: &Hint) -> Result[Self, Problem] {
+    writable(segments, hint) ?
+    Ok(text)
+  }
+}
+
+impl Inspect for V.Vec3 {
+  fn properties(self: &Self, path: Str, hint: &Hint) -> Array[Property] {
+    let child = Hint{..*hint, depth: hint.depth + 1}
+    [
+      leaf(path, hint, Group, ""),
+      leaf(joined(path, "x"), &Hint{..child, label: "x"}, Number, show(self.x)),
+      leaf(joined(path, "y"), &Hint{..child, label: "y"}, Number, show(self.y)),
+      leaf(joined(path, "z"), &Hint{..child, label: "z"}, Number, show(self.z)),
+    ]
+  }
+
+  fn change(self: &Self, segments: &Array[Str], text: Str, hint: &Hint) -> Result[Self, Problem] {
+    if segments.length() != 1 { return Err(NotALeaf) }
+    if !hint.editable { return Err(NotEditable) }
+    let axis = segments[0]
+    let rest: Array[Str] = []
+    if axis == "x" { return Ok(V.Vec3{..*self, x: self.x.change(&rest, text, hint) ?}) }
+    if axis == "y" { return Ok(V.Vec3{..*self, y: self.y.change(&rest, text, hint) ?}) }
+    if axis == "z" { Ok(V.Vec3{..*self, z: self.z.change(&rest, text, hint) ?}) } else { Err(UnknownField(axis)) }
+  }
+}
+
+impl [A: Inspect] Inspect for Array[A] {
+  fn properties(self: &Self, path: Str, hint: &Hint) -> Array[Property] {
+    var found = [leaf(path, hint, Group, "")]
+    var index = 0
+    for item in *self {
+      let step = "[" + show(index) + "]"
+      found = found.concat(item.properties(path + step, &Hint{..*hint, label: step, depth: hint.depth + 1}))
+      index = index + 1
+    }
+    found
+  }
+
+  fn change(self: &Self, segments: &Array[Str], text: Str, hint: &Hint) -> Result[Self, Problem] {
+    if segments.isEmpty() { return Err(NotALeaf) }
+    let step = segments[0]
+    let Some(index) = indexOf(step) else { return Err(UnknownField(step)) }
+    if index >= self.length() { return Err(UnknownField(step)) }
+    var items = *self
+    items[index] = items[index].change(&segments[1..], text, hint) ?
+    Ok(items)
+  }
+}
+
+/// A record lists a group row and its fields' rows; `@label`, `@min`/`@max`, `@readonly` and `@skip` shape them.
+export derive Inspect for T: Record {
+  fn properties(self: &T, path: Str, hint: &Hint) -> Array[Property] {
+    let fields = Meta.collect[T](fn(member: Meta.Field[T, F]) -> Option[Array[Property]] where F: Inspect {
+        if member.has("skip") { return None }
+        let child = fieldHint(hint, member.attributeOr("label", member.name), member.has("min") && member.has("max"), member.attributeOr("min", 0.0), member.attributeOr("max", 0.0), !member.has("readonly"))
+        Some(member.get(self).properties(joined(path, member.name), &child))
+      })
+    var found = if hint.depth < 0 { [] } else { [leaf(path, hint, Group, "")] }
+    for group in fields {
+      found = found.concat(group)
+    }
+    found
+  }
+
+  fn change(self: &T, segments: &Array[Str], text: Str, hint: &Hint) -> Result[T, Problem] {
+    if segments.isEmpty() { return Err(NotALeaf) }
+    let head = segments[0]
+    let names = Meta.collect[T](fn(member: Meta.Field[T, F]) -> Option[Str] {
+        if member.has("skip") { None } else { Some(member.name) }
+      })
+    if !names.contains(head) { return Err(UnknownField(head)) }
+    let rest = segments[1..]
+    Meta.build[T](fn(member: Meta.Field[T, F]) -> Result[F, Problem] where F: Inspect {
+        if member.name != head { return Ok(member.get(self)) }
+        let child = fieldHint(hint, member.attributeOr("label", member.name), member.has("min") && member.has("max"), member.attributeOr("min", 0.0), member.attributeOr("max", 0.0), !member.has("readonly"))
+        member.get(self).change(&rest, text, &child)
+      })
+  }
+}
+
+fn fieldHint(parent: &Hint, label: Str, ranged: Bool, low: Float64, high: Float64, editable: Bool) -> Hint {
+  Hint{label, ranged, low, high, editable: editable && parent.editable, depth: parent.depth + 1}
+}
+
+fn leaf(path: Str, hint: &Hint, kind: Kind, text: Str) -> Property {
+  Property{path, label: hint.label, kind, text, ranged: hint.ranged, low: hint.low, high: hint.high, editable: hint.editable, depth: hint.depth}
+}
+
+fn writable(segments: &Array[Str], hint: &Hint) -> Result[(), Problem] {
+  if !segments.isEmpty() { return Err(NotALeaf) }
+  if !hint.editable { return Err(NotEditable) }
+  Ok(())
+}
+
+fn within(number: Float64, hint: &Hint) -> Result[(), Problem] {
+  if !Float.isFinite(number) { return Err(Unparsable("a finite number")) }
+  if hint.ranged && (number < hint.low || number > hint.high) { return Err(OutOfRange(hint.low, hint.high)) }
+  Ok(())
+}
+
+fn joined(path: Str, name: Str) -> Str {
+  if path.isEmpty() { name } else { path + "." + name }
+}
+
+/// Dotted segments with `[i]` split out as their own segments.
+fn segmentsOf(path: Str) -> Array[Str] {
+  var found: Array[Str] = []
+  for part in path.split(".") {
+    var rest = part
+    while !rest.isEmpty() {
+      let open = rest.indexOf("[")
+      if open < 0 {
+        found = found.push(rest)
+        rest = ""
+      } else if open > 0 {
+        found = found.push(rest.take(open))
+        rest = rest.drop(open)
+      } else {
+        let close = rest.indexOf("]")
+        if close < 0 {
+          found = found.push(rest)
+          rest = ""
+        } else {
+          found = found.push(rest.take(close + 1))
+          rest = rest.drop(close + 1)
+        }
+      }
+    }
+  }
+  found
+}
+
+fn indexOf(step: Str) -> Option[Int] {
+  if !step.startsWith("[") || !step.endsWith("]") { return None }
+  let number = step.drop(1).take(step.length() - 2).toInt() ?
+  if number < 0 { None } else { Some(number) }
+}

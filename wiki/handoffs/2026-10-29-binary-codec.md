@@ -9,7 +9,7 @@ tags: [handoff, runtime, serialization]
 Issue #739 runtime partition owns Eval.Binary, native codec properties, package/test registration
 and matching mirrors/navigation. Architect resolved the wire contract and exact-bit oracle before
 implementation; Runtime Engineer implements; Tooling/Release validates. Preserve ongoing library,
-builtin-wiring and benchmark work in this checkout. No delegated agents or merges.
+builtin-wiring and benchmark work in this checkout. No delegated agents. The current delivery instruction authorizes tested engine merges to dev.
 
 The native property families pass 200 generated canonical round trips, 200 strict-truncation
 cases, and fixed malformed/nesting/golden boundaries. The optimized warning-free build passes.
@@ -24,7 +24,11 @@ evolution fixture, serialization benchmark and facade delivery remain required.
 Native delivery: [PR #741](https://github.com/chrismichaelps/pudu-lang/pull/741), draft to dev,
 commit b728aa61. Local full gates pass; hosted checks and independent reviews remain pending.
 
-Exact next action: prepare the dependent public facade/wiring partition while preserving this draft PR's native scope.
+Integration update: merge current dev after the native partition, preserving both changelog histories.
+The previous head passed all hosted checks; rerun the clean full gate on the integrated head.
+Independent implementation, Language Architect and Forensic Guardian review is still pending.
+
+Exact next action: validate the integrated native partition before delivering the dependent facade.
 
 ## Referenced by
 
