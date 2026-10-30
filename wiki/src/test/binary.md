@@ -22,5 +22,8 @@ Registered in [[Repository Gates]] without a new dependency or wall-time perform
 [[Std Binary]] · [[Repository Gates]] · [[src/_MOC]]
 
 Writer admission coverage executes the public encode/decode path at depth 512 and checks
-positioned E7001 refusals for depth 513, duplicate Fields and duplicate Choice payloads.
+E7001 refusals at the Std.Binary native-call wrapper for depth 513, duplicate Fields and duplicate Choice payloads.
 Resolved Grill Log: native-only tests cannot prove that facade wiring exposes the same boundary.
+
+The runtime fault span belongs to binaryEncode inside the library wrapper, not its outer caller.
+Resolved Grill Log: preserve that established runtime provenance instead of inventing a caller span.

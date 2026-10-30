@@ -38,7 +38,7 @@ try {
     } else {
       assert.notEqual(result.status, 0, setup);
       assert.match(result.stdout + result.stderr, /E7001/);
-      assert.match(result.stdout + result.stderr, /WriterBinary\.pudu:\d+:\d+/);
+      assert.match(result.stdout + result.stderr, /Std\/Binary\.pudu:\d+:\d+/);
     }
   }
   execFileSync('cabal', ['sdist', 'pudu', '--output-directory=' + scratch], {cwd: root, encoding: 'utf8', timeout: 60000});
