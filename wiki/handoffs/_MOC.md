@@ -5,6 +5,8 @@ tags: [moc, handoff]
 
 # Handoff Map
 
+- [[Bound Provider Delivery]] — selected trait evidence through execution (#743).
+
 - [[Lane Collection Delivery]] — issue #726 lane buffers share collections so threads overlap.
 - [[Ark Asset Server Delivery]] — asset dependency graph, then staged reload over virtual reads.
 

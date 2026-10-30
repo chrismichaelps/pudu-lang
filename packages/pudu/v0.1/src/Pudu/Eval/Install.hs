@@ -38,7 +38,7 @@ import Pudu.Eval.Value
   , Value (..)
   )
 import Pudu.Frontend.Syntax.Located (Located (..))
-import Pudu.Frontend.Syntax.Name (ModuleName (..))
+import Pudu.Frontend.Syntax.Name (ModuleName (..), moduleNameText)
 import Pudu.Frontend.Syntax.Tree
   ( Declaration (..)
   , Expression (..)
@@ -335,12 +335,16 @@ installMethods traits value = case targetNameOf (implTarget value) of
     bindMethod (owner <> "." <> name) implementation
     case traitNameOf (implTrait value) of
       Nothing -> pure ()
-      Just traitText -> bindMethod (traitText <> "." <> owner <> "." <> name) implementation
+      Just traitText -> do
+        bindMethod (traitText <> "." <> owner <> "." <> name) implementation
+        case targetNameOf (implTrait value) of
+          Just alias -> bindMethod (alias <> "." <> owner <> "." <> name) implementation
+          Nothing -> pure ()
 
 {-| A trait member with a body is a default the implementation inherits when it
     does not provide its own. -}
 inheritedDefaults :: Map Text [Located Function] -> Impl -> [Located Function]
-inheritedDefaults traits value = case traitNameOf (implTrait value) of
+inheritedDefaults traits value = case targetNameOf (implTrait value) of
   Nothing -> []
   Just traitText ->
     [ member
@@ -352,7 +356,9 @@ inheritedDefaults traits value = case traitNameOf (implTrait value) of
   provided = map (locatedValue . functionName . locatedValue) (implFunctions value)
 
 traitNameOf :: Located TypeSyntax -> Maybe Text
-traitNameOf = targetNameOf
+traitNameOf (Located _ syntax) = case syntax of
+  NamedType path _ -> Just (moduleNameText path)
+  _ -> Nothing
 
 targetNameOf :: Located TypeSyntax -> Maybe Text
 targetNameOf (Located _ syntax) = case syntax of

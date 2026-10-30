@@ -137,6 +137,14 @@ different traits, but two applications of the same trait remain ambiguous.
 Resolved Grill Log: immediate, captured and trait-qualified generic receiver
 calls must preserve the same full trait application.
 
+## Bound provider evidence (#743)
+
+An unambiguous rigid-bound receiver member records its canonical trait at the member expression span. Explicit trait-qualified calls already carry the provider and do not record a receiver rewrite. Implementation trait syntax records its canonical identity for installation. Ambiguous or absent bounds record nothing.
+
+Resolved Grill Log: preserve the checker-selected provider through ordinary executable symbols,
+including retained methods and receiver aliases. Do not infer a provider from declaration order,
+receiver spelling, or runtime type arguments. Existing evaluation order and lending stay intact.
+See [[Bound Provider Delivery]].
 ## Qualified provider schemes (#742)
 
 Preserve receiver schemes separately for each admitted trait provider under a canonical trait/receiver/member key,

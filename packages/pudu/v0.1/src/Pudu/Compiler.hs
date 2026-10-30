@@ -170,7 +170,7 @@ compileFrontendWithDependencies dependencyFolded dependencyKinds dependencies co
               typed = sortDiagnostics (resolved <> typeDiagnostics)
            in do
                 let settledSyntax = resolveLiterals (maybe Map.empty moduleIntegerKinds typing)
-                      (maybe Map.empty moduleSelections typing) parsed
+                      (maybe Map.empty moduleSelections typing) (maybe Map.empty moduleProviders typing) parsed
                     ownedSyntax = if hasErrors typed then parsed else
                       resolveOwnerSelections (maybe Map.empty moduleSelections typing) parsed
                 (constantDiagnostics, folded) <-

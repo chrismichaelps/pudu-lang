@@ -230,3 +230,12 @@ Resolved Grill Log: offset-only signatures would undo generated identity.
 Function and member checking propagate full formed bounds. A trait default installs Self with its enclosing trait arguments; an implementation method forms its own bounds under implementation parameters.
 
 Resolved Grill Log: full bound evidence remains in scope until deferred obligations discharge, including trait default and derive bodies.
+
+## Bound provider evidence (#743)
+
+checkModuleDetailed publishes provider facts with the existing checked products. Diagnostics-only callers discard that additional product without weakening checking.
+
+Resolved Grill Log: preserve the checker-selected provider through ordinary executable symbols,
+including retained methods and receiver aliases. Do not infer a provider from declaration order,
+receiver spelling, or runtime type arguments. Existing evaluation order and lending stay intact.
+See [[Bound Provider Delivery]].

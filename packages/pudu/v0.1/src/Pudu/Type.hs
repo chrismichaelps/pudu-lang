@@ -70,18 +70,20 @@ data ModuleTypes = ModuleTypes
   {-| The types chosen for parameters bounded by a trait with a static
       member, by the span of the reference that chose them. -}
   , moduleSelections :: !(Map.Map Span [Type])
+  , moduleProviders :: !(Map.Map Span NominalId)
   }
   deriving stock (Eq, Show)
 
 checkTypesDetailed :: ImportTypes -> Set Span -> Module -> (ModuleTypes, [Diagnostic])
 checkTypesDetailed imported writable moduleValue =
-  let (entries, schemes, kinds, methods, selections, diagnostics) = Check.checkModuleDetailed imported writable moduleValue
+  let (entries, schemes, kinds, methods, selections, providers, diagnostics) = Check.checkModuleDetailed imported writable moduleValue
    in ( ModuleTypes
           { moduleTypeInfo = typeInfoFor moduleValue entries
           , moduleSchemes = schemes
           , moduleIntegerKinds = Map.fromList kinds
           , moduleMethods = methods
           , moduleSelections = Map.fromList selections
+          , moduleProviders = Map.fromList providers
           }
       , diagnostics
       )

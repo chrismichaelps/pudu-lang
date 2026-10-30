@@ -47,4 +47,5 @@ already-tested explicit-provider repair. Refresh required checks on the combined
 Extent validation update: checked wireCount conversion guards every writer length/count and
 name-table increment. Maximum UInt32 is accepted, while negative, 2^32 and 2^64 extents refuse
 without giant allocations. All native property families pass under the warning-free build.
-Refresh the full gate and required hosted checks before merging this head.
+The clean full gate passed at eb764a08. Merge dev 0a1259450 (#760) without source conflicts,
+then validate combined provider/codec behavior and required hosted checks before merge.
