@@ -379,7 +379,7 @@ expression depth context original@(Located at value) = do
     unary or binary operators over them. Any other expression may have
     effects, so the expansion still evaluates it once. -}
 effectFree :: Expression -> Bool
-effectFree expression = case expression of
+effectFree fallback = case fallback of
   LiteralExpression _ -> True
   NameExpression _ -> True
   UnaryExpression _ operand -> effectFree (locatedValue operand)
