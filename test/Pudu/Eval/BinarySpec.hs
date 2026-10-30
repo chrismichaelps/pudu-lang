@@ -86,10 +86,19 @@ boundaries = conjoin
   , conjoin [decodeNodes (emptyNames <> BS.pack bytes) === Left message | (bytes, message) <- malformed]
   , encodeNode (VariantValue "Reals" [BytesValue (BS.singleton 1)]) === Nothing
   , encodeNode (intOf 1) === Nothing
+  , encodeNode (nest 512) `writes` "writer depth 512"
+  , encodeNode (nest 513) === Nothing
+  , encodeNode (VariantValue "Fields" [duplicates]) === Nothing
+  , encodeNode (VariantValue "Choice" [StrValue "Stored", duplicates]) === Nothing
+  , encodeNode (VariantValue "Items" [ArrayValue (Seq.fromList [singleField, singleField])]) `writes` "sibling field-name reuse"
   , decodeNodes (BS.pack [1,0,0,0,1,0,0,0,97,9,2,0,0,0,0,0,0,0,7,0,0,0,0,7]) === Left "the field a appears twice"
   , decodeNodes (BS.pack [1,0,0,0,1,0,0,0,255,7]) === Left "text that is not UTF-8"
   ]
  where
+  nest count = foldr (\_ held -> VariantValue "Present" [held]) (VariantValue "Absent" []) [1 .. count :: Int]
+  singleField = VariantValue "Fields" [ArrayValue (Seq.singleton (TupleValue [StrValue "x", VariantValue "Absent" []]))]
+  duplicates = ArrayValue (Seq.fromList (replicate 2 (TupleValue [StrValue "x", VariantValue "Absent" []])))
+  writes result label = counterexample label (property (case result of Just _ -> True; Nothing -> False))
   bits = 0x7ff8000000000123
   emptyNames = BS.replicate 4 0
   malformed :: [([Word8], Text)]

@@ -5,6 +5,8 @@ tags: [changelog]
 
 # Changelog
 
+- 2026-10-30: Native binary writing refuses reader-incompatible nesting and duplicate fields (#739); sibling records retain shared names.
+
 - 2026-10-29: Native binary codec (#739) adds exact-bit tree encoding, checked wire decoding and generated/truncation boundary properties. Public facade delivery remains separate.
 ## 2026-10-29 — Glyph text and visible UI labels (#756)
 

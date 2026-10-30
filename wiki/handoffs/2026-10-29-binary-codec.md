@@ -15,8 +15,8 @@ The native property families pass 200 generated canonical round trips, 200 stric
 cases, and fixed malformed/nesting/golden boundaries. The optimized warning-free build passes.
 The clean full repository gate passed on the working continuation; the native properties also
 passed after adding deliberately reversed field order. Hosted checks must validate this isolated
-partition without the pending facade/wiring edits. Independent implementation, Language
-Architect and Forensic Guardian reviews remain pending; no self-approval.
+partition without the pending facade/wiring edits. The project owner waived independent review for this engine delivery loop on 2026-10-30;
+merge follows successful required checks.
 
 This partition does not complete #739: the public Encode/Decode derives, runtime builtin wiring,
 evolution fixture, serialization benchmark and facade delivery remain required.
@@ -26,10 +26,16 @@ commit b728aa61. Local full gates pass; hosted checks and independent reviews re
 
 Integration update: merge current dev after the native partition, preserving both changelog histories.
 The previous head passed all hosted checks; rerun the clean full gate on the integrated head.
-Independent implementation, Language Architect and Forensic Guardian review is still pending.
+Independent review is waived for this loop by the project owner.
 
 Exact next action: validate the integrated native partition before delivering the dependent facade.
 
 ## Referenced by
 
 [[handoffs/_MOC]] · [[Eval Binary]] · [[Binary Codec Properties]]
+
+Writer validation update: public facade reproduction proved successful writes could exceed the
+reader nesting limit or duplicate fields. The new native boundary test failed before repair.
+The writer now shares the reader depth limit and validates per-record field-name uniqueness;
+sibling records still share names. Revalidate native properties and the full gate before merging.
+The project owner waived independent review for this engine delivery loop on 2026-10-30.
