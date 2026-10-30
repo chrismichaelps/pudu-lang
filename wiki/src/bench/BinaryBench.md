@@ -29,8 +29,9 @@ report nanoseconds per operation and serialized byte sizes. No window, file IO o
 
 ## Measured sample
 
-Apple M1, 8 GiB RAM, optimized interpreter build, three sequential runs of five operations each:
-median binary write 27.526 ms/read 52.821 ms; JSON write 31.190 ms/read 91.472 ms. Framed binary
+2026-10-30, Apple M1, 8 GiB RAM, optimized interpreter with compiled evaluation at b357f201,
+three sequential runs of five operations each: median binary write 30.778 ms/read 54.246 ms;
+JSON write 35.392 ms/read 97.458 ms. Framed binary
 140,995 bytes versus JSON 130,012 bytes (about 8.45% larger). Both include tree construction and
 typed reconstruction; binary also checks its frame CRC. These local means do not establish
 latency distributions or cross-machine guarantees.

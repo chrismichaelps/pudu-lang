@@ -51,3 +51,7 @@ reader fixture now assembles malformed bytes independently; the writer correctly
 invalid tree. All 22 groups, consumed benchmark, public writer refusals and distribution checks
 pass through both evaluators with the combined optimized compiler. Owner-identity defect #761
 remains required before further Ark integration; refresh full acceptance validation before delivery.
+
+The refreshed consumed benchmark at compiler b357f201 measures binary write/read 30.778/54.246 ms
+and JSON 35.392/97.458 ms (three sequential five-operation run means, M1, 8 GiB). Sizes remain
+140,995/130,012 bytes. Exact raw results and compiler/program hashes are retained locally.
