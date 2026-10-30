@@ -14,9 +14,10 @@ Immediate-mode widgets over [[Ark Input]]. `begin(memory, input, x, y, width, ro
 frame with a top-down column cursor; `next` hands out row rectangles. `label`, `button(ui, id,
 text) -> (Ui, Bool)`, `checkbox(ui, id, text, checked) -> (Ui, Bool)` and `slider(ui, id, value,
 low, high) -> (Ui, Float64)` declare widgets; `end` answers the `Memory` for the next frame and the
-draw list of `Fill` and `Text` commands. `render(commands, target)` draws every fill as two
+draw list of `Fill` and `Text` commands. `render(commands, target, font)` draws every fill as two
 screen-space triangles in one [[Ark Render Device]] call, with depth assigned so later commands
-sit on top. `contains` is the half-open hit test.
+sit on top, then every text command in one [[Ark Text]] batch above all fills: inset four pixels,
+at the largest whole scale whose glyphs fit the row with two pixels to spare, centred vertically. `contains` is the half-open hit test.
 
 `Memory` carries the widget holding the primary press, the keyboard focus and the focusable ids
 in last frame's declaration order. A press over a widget makes it active and focused; a release

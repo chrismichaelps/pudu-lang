@@ -5,6 +5,13 @@ tags: [changelog]
 
 # Changelog
 
+## 2026-10-29 — Glyph text and visible UI labels (#756)
+
+- [[Ark Text]] draws the [[Std Ui Text]] face from a compile-time glyph atlas, every glyph of a
+  batch in one textured device call, with vertex expansion on lane kernels; measuring and
+  wrapping delegate to `Std.Ui.Text`, which now exports its glyph table.
+- [[Ark UI]] `render` draws its text commands above the fills, so widget labels appear.
+
 ## 2026-10-29 — Derived property inspectors (#751)
 
 - [[Ark Inspect]] gives every type that `derives Inspect.Inspect` typed property rows and edits

@@ -5,6 +5,7 @@ import Std.Math.Float as Float
 import Ark.Math.Color as Color
 import Ark.Platform.Input as Input
 import Ark.Render.Device as Device
+import Ark.Render.Text as Glyphs
 
 /// A screen rectangle in pixels, y down.
 export type Rect = { x: Float64, y: Float64, width: Float64, height: Float64 }
@@ -40,6 +41,13 @@ const PALETTE: Map[Str, Color.Rgba] = mapOf([
     ("text", Color.Rgba{r: 0.92, g: 0.92, b: 0.92, a: 1.0}),
     ("fill", Color.Rgba{r: 0.2, g: 0.6, b: 0.35, a: 1.0}),
   ])
+
+/// Pixels between a label and its rectangle's left edge, and spare pixels kept above and below it.
+const LABEL_INSET: Float64 = 4.0
+const LABEL_SLACK: Float64 = 4.0
+
+/// Rows of the glyph face, the height a label scales.
+const GLYPH_ROWS: Float64 = 7.0
 
 /// The primary pointer button.
 const PRIMARY: Int = 0
@@ -118,8 +126,39 @@ export fn end(ui: Ui) -> (Memory, Array[Command]) {
   (Memory{..ui.memory, order: ui.order}, ui.commands)
 }
 
-/// Draw every fill as two screen-space triangles in one device call, in declaration order.
-export fn render(commands: &Array[Command], target: Device.Target) -> Option[Device.Target] {
+/// Draw every fill as two screen-space triangles in one device call, in declaration order, then
+/// every text label above them in one glyph batch.
+export fn render(commands: &Array[Command], target: Device.Target, font: &Glyphs.Font) -> Option[Device.Target] {
+  let filled = fills(commands, target) ?
+  labels(commands, filled, font)
+}
+
+/// Every text command inset from its rectangle's left, centred vertically at the largest whole
+/// scale that fits, drawn nearer the viewer than any fill.
+fn labels(commands: &Array[Command], target: Device.Target, font: &Glyphs.Font) -> Option[Device.Target] {
+  var pending = Glyphs.batch()
+  var layers = 0
+  for command in *commands {
+    match command {
+      case Fill(_, _) => { layers = layers + 1 }
+      case Text(rect, text, color) => {
+        let fitted = Float.floor((rect.height - LABEL_SLACK) / GLYPH_ROWS)
+        let scale = match Float.toInt(fitted) {
+          case Some(whole) => if whole < 1 { 1 } else { whole }
+          case None => 1
+        }
+        let top = rect.y + (rect.height - GLYPH_ROWS * Float.fromInt(scale)) * 0.5
+        match Glyphs.add(pending, text, rect.x + LABEL_INSET, top, scale, color) {
+          case Ok(added) => { pending = added }
+          case Err(_) => {}
+        }
+      }
+    }
+  }
+  Glyphs.draw(target, font, &pending, 0.5 / Float.fromInt(layers + 1))
+}
+
+fn fills(commands: &Array[Command], target: Device.Target) -> Option[Device.Target] {
   var xs: Array[Float64] = []
   var ys: Array[Float64] = []
   var rs: Array[Float64] = []

@@ -64,7 +64,9 @@ trait provider dispatch (#742, #743, PR #744); #734 and #735 wait on that work. 
 
 Inverse kinematics (#749), morph targets (#752) and asset streaming (#753) are merged into dev. Derived property inspectors (#751) open Ark.Editor, and the derive fallback warning fix (#750) lands with them.
 
-Open target obligations: lights, shadows and text rendering; Core allocators; the rest of
+Glyph text and UI labels (#756) follow on their own branch.
+
+Open target obligations: lights and shadows; Core allocators; the rest of
 the editor (scene and asset views) and tools.
 
 Exact next action: rebase #732 onto `Std.Binary` once PR #741 merges, keeping only the engine's
