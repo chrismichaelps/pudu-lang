@@ -157,6 +157,7 @@ Registers `BufferAllocBuiltin`, `BufferReadU64Builtin`, `BufferWriteU64Builtin`,
 `SwissTableSizeBuiltin` in the closed builtin enumeration. `CsvRecordsBuiltin` names `csvRecords`,
 the native record scan in [[Eval Csv]], `JsonDecodeBuiltin` names `jsonDecode`, the native
 decoder, and `JsonEncodeBuiltin` names `jsonEncode`, the native encoder, both in [[Eval Json]].
+`BinaryEncodeBuiltin` and `BinaryDecodeBuiltin` name `binaryEncode` and `binaryDecode`, in [[Eval Binary]].
 `XmlDecodeBuiltin` names `xmlDecode`, the native reader in [[Eval Xml]].
 
 Resolved Grill Log: Register explicit enum tags for low-level memory buffers and flat hash tables

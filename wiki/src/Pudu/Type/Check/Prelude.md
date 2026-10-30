@@ -186,6 +186,7 @@ Wires type schemes for all 12 primitives into `preludeTypes`:
   ([[Eval Json]])
 - `jsonEncode: fn(&Std.Json.Json, Bool) -> Str`, the native encoder behind [[Std Json]]'s `encode`
   and `encodePretty`
+- `binaryEncode: fn(&Std.Binary.Node) -> Bytes` and `binaryDecode: fn(Bytes) -> Result[Std.Binary.Node, Str]`, the node codec in [[Eval Binary]]
 - `xmlDecode: fn(Str) -> Option[Std.Xml.Tag]`, the native reader [[Std Xml]] tries first
   ([[Eval Xml]])
 
@@ -291,4 +292,4 @@ Resolved Grill Log: use explicit primitives rather than recognizing a library fu
 by name. Preserve persistence, key representatives, duplicate counts, checked Int
 overflow, and E7008 for unorderable keys or values. Do not scan complete maps on every add.
 
-mutexAcquireWithin(Int, Int) -> Result[Bool, Str] is a monomorphic signature. Resolved Grill Log (#476): the boolean distinguishes admission from expiry without altering existing effects. This closed signature table has a bounded size exception at 513 lines; no checking or lifecycle policy enters it.
+mutexAcquireWithin(Int, Int) -> Result[Bool, Str] is a monomorphic signature. Resolved Grill Log (#476): the boolean distinguishes admission from expiry without altering existing effects. This closed signature table has a bounded size exception at 542 lines; no checking or lifecycle policy enters it.

@@ -337,6 +337,12 @@ declareBuiltinConstructors = do
             (NominalType "Str" [])
         )
     )
+  {-| A `Std.Binary` node tree as bytes; see `Pudu.Eval.Binary`. -}
+  bindName "binaryEncode"
+    (monotype (FunctionTypeValue False [ReferenceTypeValue False (NominalType stdBinaryNodeId [])] (NominalType "Bytes" [])))
+  {-| The node tree bytes hold, or why they hold none; see `Pudu.Eval.Binary`. -}
+  bindName "binaryDecode"
+    (monotype (FunctionTypeValue False [NominalType "Bytes" []] (NominalType "Result" [NominalType stdBinaryNodeId [], NominalType "Str" []])))
   {-| A document's root element, or nothing when the native reader leaves the
       document to `Std.Xml.decode`'s own reading; see `Pudu.Eval.Xml`. -}
   bindName "xmlDecode"
@@ -364,6 +370,7 @@ declareBuiltinConstructors = do
   stdMultiMapId = NominalId (Just (ModuleName ("Std" NonEmpty.:| ["MultiMap"]))) "MultiMap"
   multiMapType = NominalType stdMultiMapId [RigidType "K", RigidType "V"]
   stdJsonId = NominalId (Just (ModuleName ("Std" NonEmpty.:| ["Json"]))) "Json"
+  stdBinaryNodeId = NominalId (Just (ModuleName ("Std" NonEmpty.:| ["Binary"]))) "Node"
   stdXmlTagId = NominalId (Just (ModuleName ("Std" NonEmpty.:| ["Xml"]))) "Tag"
   flatMapType v = NominalType stdFlatMapId [v]
   borrowFlatMap v = ReferenceTypeValue False (flatMapType v)

@@ -231,4 +231,6 @@ tags: [moc, handoff]
 - [[Graph Integration Delivery]] — preserve both Database safeguards and exact graph output (#478).
 
 - [[Binary Codec Delivery]] — issue #739 native wire codec partition.
+
+- [[Binary Facade Delivery]] — issue #739 public derives and builtin wiring.
 - [[Trait Provider Delivery]] — issue #742 canonical trait-provider scheme selection.

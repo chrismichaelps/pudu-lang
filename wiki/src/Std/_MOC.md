@@ -237,3 +237,5 @@ STARTTLS use [[Std Tls]]. [[Std Compress Gzip]] delegates to [[Eval Compress]] a
 [[Std Http]] responses through [[Std Http Message]] and [[Std Http Server]].
 
 - [[Std Db Challenge]] — bounded authentication challenge admission.
+
+- [[Std Binary]] — derived binary encoding and framed typed decoding.

@@ -1,0 +1,31 @@
+module BinarySmoke
+
+import Std.Binary as Binary
+import Std.Json as Json
+
+type Save = { score: Int, title: Option[Str] } derives Binary.Encode, Binary.Decode, Json.Encode, Json.Decode
+
+type Cache = Stored{score: Int, @skip value: Option[Str]} | Empty derives Binary.Encode, Binary.Decode
+
+fn require(ok: Bool, message: Str) {
+  if !ok { panic(message) }
+}
+
+/// Execute both derived protocols and the public binary error boundary.
+export fn main() -> Int {
+  let source = Save{score: 7, title: Some("hero")}
+  let bytes = Binary.write(&source)
+  let restored: Result[Save, Binary.BinaryError] = Binary.read(&bytes)
+  require(restored == Ok(source), "binary record")
+  let Ok(json) = Json.decode(Json.encode(&source.encode())) else { panic("JSON parse") }
+  require(Save.decode(&json) == Ok(source), "JSON coexistence")
+  let short: Result[Save, Binary.BinaryError] = Binary.read(&bytes.take(3))
+  require(short == Err(Binary.BinaryError{path: [], problem: Binary.NotBinary}), "magic refusal")
+  let corrupt: Result[Save, Binary.BinaryError] = Binary.read(&bytes.take(bytes.length() - 1))
+  require(corrupt == Err(Binary.BinaryError{path: [], problem: Binary.ChecksumMismatch}), "CRC refusal")
+  require(Binary.decode(&Binary.encode(&Binary.Whole(-7))) == Ok(Binary.Whole(-7)), "node round trip")
+  let supplied = Binary.Picked("Stored", mapOf([("score", Binary.Whole(7)), ("value", Binary.Present(Binary.Text("wire")))]))
+  require(Cache.unpack(&supplied) == Ok(Stored{score: 7, value: None}), "skipped sum field")
+  print("binary facade: ok")
+  0
+}
