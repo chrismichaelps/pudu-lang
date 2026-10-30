@@ -236,3 +236,5 @@ tags: [moc, handoff]
 - [[Canonical Runtime Owner Delivery]] — canonical record construction and dispatch, issue #761.
 
 - [[Qualified Record Method Delivery]] — qualified concrete owner admission, issue #763.
+
+- [[Positional Sum Owner Delivery]] — positional constructor identity, issue #761.

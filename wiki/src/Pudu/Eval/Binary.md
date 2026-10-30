@@ -69,3 +69,9 @@ length/count prefix and name-table growth. Reject negative or above-UInt32 exten
 text counts encoded UTF-8 bytes, real blocks count elements, and arrays/fields count entries.
 Resolved Grill Log: conversion must not wrap 2^32 to zero. A pure extent boundary allows exact
 maximum/overflow tests without allocating multi-gigabyte buffers. Valid wire bytes stay unchanged.
+
+## Positional sum owners (#761)
+
+Native decoded node constructors carry Std.Binary.Node ownership. Outer Ok/Err retain wired Result ownership. Canonical owner metadata never appears in archive bytes, tags or the name table.
+
+Resolved Grill Log: identity comes from the declaration or native ABI, not a global short-tag registry. Keep labels, evaluation order, effects and wire bytes stable. See [[Positional Sum Owner Delivery]].

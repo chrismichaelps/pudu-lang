@@ -28,7 +28,7 @@ module Pudu.Eval.Value
   , Captured (..)
   , Frame (..)
   , Closure (..)
-  , Value (.., StrValue, MapValue)
+  , Value (.., StrValue, MapValue, VariantValue)
   , intPairMap
   , IntPairEntry (..)
   , ropeOfValue
@@ -70,17 +70,8 @@ import qualified Pudu.Runtime.SeriesMap as SeriesMap
 data IntPairEntry = PlatformIntPairEntry !Value | IntPairEntry !IntegerKind !IntegerKind !Value
   deriving stock (Show)
 
-{-| @Eval.Value.Runtime — one evaluated result.
-
-    Integers are arbitrary precision. Floats retain their source-selected width
-    beside normalized `Double` storage so binary32 operations cannot silently
-    use binary64 intermediates. -}
-{-| @Eval.Value — a value at run time.
-
-    An integer carries its kind for the same reason a float carries its width:
-    the type says `UInt8` and the value has to agree, or the type said nothing.
-    Without it `~0u8` answers `-1` and `255u8 + 1u8` answers `256`, which are
-    values those types do not have. -}
+{-| Runtime data retains integer kinds and normalized floating widths.
+    Nominal values retain declaration identity separately from display labels. -}
 data Value
   = IntValue !IntegerKind !Integer
   | FloatValue !FloatWidth !Double
@@ -106,16 +97,8 @@ data Value
       store holds no opinion about hashing or equality: those belong to the
       library, where a type's own `Eq` can be called. -}
   | BucketsValue !(IntMap Value)
-  {-| Two ends and a rule for reading them, rather than the numbers between.
-
-      `0..1000000` is three fields here and a million values if it were the
-      list it stands for, which is the difference between a loop that starts
-      and one that allocates first. Either end may be absent, which is what
-      lets `items[2..]` mean the tail of something whose length the writer
-      never had to ask for; the value that is indexed supplies what is missing.
-
-      Elements are platform integers, which is the type a range's ends are
-      checked at. -}
+  {-| Endpoints and inclusivity stay symbolic, including absent endpoints.
+      Endpoints use platform integers; no list is materialized. -}
   | RangeValue !(Maybe Integer) !Bool !(Maybe Integer)
   | CharValue !Char
   | BoolValue !Bool
@@ -128,7 +111,7 @@ data Value
   | IntPairMapValue !(IntMap (SeriesMap IntPairEntry)) ~(Map OrdValue Value)
   | SetValue !(Set OrdValue)
   | RecordValue !Text ![(Text, Value)]
-  | VariantValue !Text ![Value]
+  | SumValue !Text !Text ![Value]
   | FunctionValue !Closure
   | TaskValue !Closure ![(Text, Value)] !(Maybe Span)
   | BuiltinValue !Builtin
@@ -217,6 +200,20 @@ ropeOfValue value = case value of
   RopeText rope -> Just rope
   _ -> Nothing
 
+{-| Label/payload view; native wired builders retain their declared owners. -}
+pattern VariantValue :: Text -> [Value] -> Value
+pattern VariantValue name payload <- SumValue _ name payload
+ where
+  VariantValue name payload = SumValue (coreVariantOwner name) name payload
+
+coreVariantOwner :: Text -> Text
+coreVariantOwner name = case name of
+  "Some" -> "Option"
+  "None" -> "Option"
+  "Ok" -> "Result"
+  "Err" -> "Result"
+  _ -> ""
+
 {-# COMPLETE IntValue, FloatValue, DecimalValue, StrValue, BytesValue, BucketsValue, RangeValue, CharValue, BoolValue, NullValue, UnitValue, TupleValue, ArrayValue, MapValue, SetValue, RecordValue, VariantValue, FunctionValue, TaskValue, BuiltinValue, ArrayMethodValue, StringMethodValue, CharMethodValue, MapMethodValue, SetMethodValue, RangeMethodValue, BytesMethodValue, BucketsMethodValue, TextMethodValue, ForeignValue, ForeignHandleValue, TypeWitnessValue #-}
 
 {-| Aggregate equality follows numeric Decimal equality without changing the
@@ -242,7 +239,7 @@ instance Eq Value where
     (NullValue, NullValue) -> True
     (UnitValue, UnitValue) -> True
     (RecordValue tagA a, RecordValue tagB b) -> tagA == tagB && a == b
-    (VariantValue tagA a, VariantValue tagB b) -> tagA == tagB && a == b
+    (SumValue ownerA tagA a, SumValue ownerB tagB b) -> ownerA == ownerB && tagA == tagB && a == b
     (ArrayMethodValue tagA a, ArrayMethodValue tagB b) -> tagA == tagB && a == b
     (StringMethodValue tagA a, StringMethodValue tagB b) -> tagA == tagB && a == b
     (CharMethodValue tagA a, CharMethodValue tagB b) -> tagA == tagB && a == b
@@ -286,16 +283,6 @@ trueValue = BoolValue True
 
 falseValue :: Value
 falseValue = BoolValue False
-
-{-| Tags the built-in array method so [[Evaluator]] can apply it with the right
-    arity and semantics. The receiver is carried so `arr.push(x)` evaluates as
-    `push(arr, x)`. -}
-{-| @Eval.Value.StringMethod — one built-in text operation.
-
-    Text is a value, so every one of these answers with a new string rather than
-    changing the receiver. The set is closed for the same reason the array set
-    is: a method the compiler knows the semantics of can be typed exactly, and
-    an unknown one is reported rather than dispatched. -}
 
 {-| @Eval.Value.Frame — one level of bindings.
 
@@ -429,8 +416,8 @@ compareValues left right = case (left, right) of
   (SetValue a, SetValue b) -> compareLists (map unOrdValue (Set.toAscList a)) (map unOrdValue (Set.toAscList b))
   (RecordValue nameA a, RecordValue nameB b) ->
     compare nameA nameB <> compareFields a b
-  (VariantValue nameA a, VariantValue nameB b) ->
-    compare nameA nameB <> compareLists a b
+  (SumValue ownerA nameA a, SumValue ownerB nameB b) ->
+    compare ownerA ownerB <> compare nameA nameB <> compareLists a b
   _ -> compare (shapeRank left) (shapeRank right)
 
 compareIndexed :: [(Int, Value)] -> [(Int, Value)] -> Ordering

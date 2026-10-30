@@ -60,3 +60,9 @@ indistinguishable from one the library built.
 The native XML Tag factory uses Std.Xml.Tag as its complete record owner, matching source construction and recursive child elements.
 
 Resolved Grill Log: identity comes from the checked declaration, never import order or a basename guess. Preserve observable labels, lexical shadowing, field effects and failure provenance; no runtime filesystem lookup. See [[Canonical Runtime Owner Delivery]].
+
+## Positional sum owners (#761)
+
+Native Element and Content constructors carry Std.Xml.Node ownership, matching source constructors. Tag records keep Std.Xml.Tag ownership; outer Some/None retain wired Option ownership.
+
+Resolved Grill Log: identity comes from the declaration or native ABI, not a global short-tag registry. Keep labels, evaluation order, effects and wire bytes stable. See [[Positional Sum Owner Delivery]].

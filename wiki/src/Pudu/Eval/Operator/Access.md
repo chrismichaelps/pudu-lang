@@ -82,3 +82,9 @@ without a nominal name. A field or declared method of that name is always found 
 
 Resolved Grill Log: fall back only after the declared lookup, so a type's own rendering is never
 shadowed; `Char` and `Bytes` keep their own entries, the latter answering `Option`.
+
+## Positional sum owners (#761)
+
+Read positional sum methods through their carried canonical owner. Keep short labels in user-facing messages and variant-member access. Owned sums never fall back to another type whose basename matches a tag.
+
+Resolved Grill Log: identity comes from the declaration or native ABI, not a global short-tag registry. Keep labels, evaluation order, effects and wire bytes stable. See [[Positional Sum Owner Delivery]].

@@ -40,3 +40,12 @@ nesting or duplicate field names. Keep wire tags and valid encodings unchanged.
 wireCount boundaries pin negative, zero, maximum UInt32, 2^32 and 2^64 extents independently
 of host allocation. Resolved Grill Log: writer resource limits are wire-format arithmetic,
 not permission to allocate giant test data or silently truncate a length prefix.
+
+## Positional sum owners (#761)
+
+Construct native codec test nodes with their Std.Binary.Node owner so round trips also retain
+nominal identity. Preserve every independent wire golden and refusal oracle. Resolved Grill Log:
+owner metadata belongs to runtime data and never changes encoded bytes. See [[Positional Sum Owner Delivery]].
+
+Decoded trees recursively assert Std.Binary.Node ownership in addition to canonical-byte equality;
+metadata loss cannot hide behind a byte-identical re-encoding. This includes map-valued records.
