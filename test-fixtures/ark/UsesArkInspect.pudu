@@ -1,0 +1,105 @@
+module UsesArkInspect
+
+import Ark.Editor.Inspect as Inspect
+import Ark.Math as V
+import Ark.Platform.Input as Input
+import Ark.UI as UI
+
+type Body = {
+  @label("Mass (kg)") @min(0.1) @max(100.0) mass: Float64,
+  position: V.Vec3,
+  awake: Bool,
+  @readonly id: Int,
+  name: Str,
+  @skip cache: Int,
+} derives Inspect.Inspect
+
+type Scene = { bodies: Array[Body], gravity: V.Vec3, @min(0.0) @max(1.0) damping: Float64 } derives Inspect.Inspect
+
+type Light = { @min(0.0) @max(10.0) intensity: Float64, enabled: Bool, @readonly id: Int } derives Inspect.Inspect
+
+fn require(condition: Bool, name: Str) {
+  if !condition { panic(name) }
+}
+
+fn body(id: Int, x: Float64) -> Body {
+  Body{mass: 1.0, position: V.vec3(x, 0.0, 0.0), awake: true, id, name: "crate", cache: 9}
+}
+
+fn scene() -> Scene {
+  Scene{bodies: [body(1, 0.0), body(2, 4.0)], gravity: V.vec3(0.0, -9.8, 0.0), damping: 0.1}
+}
+
+fn find(rows: &Array[Inspect.Property], path: Str) -> Inspect.Property {
+  for row in *rows {
+    if row.path == path { return row }
+  }
+  panic("no row " + path)
+}
+
+fn rowsOf() {
+  let rows = Inspect.rows(&scene())
+  let paths = rows.map(|row| row.path)
+  require(paths.contains("bodies[1].position.y") && paths.contains("gravity.z") && paths.contains("damping"), "nested paths")
+  require(!paths.contains("bodies[0].cache"), "a skipped field has no row")
+  let mass = find(&rows, "bodies[0].mass")
+  require(mass.label == "Mass (kg)" && mass.kind == Inspect.Number && mass.ranged && mass.low == 0.1 && mass.high == 100.0, "labelled ranged number")
+  require(mass.depth == 2 && find(&rows, "bodies").depth == 0 && find(&rows, "bodies[0]").kind == Inspect.Group, "depths and groups")
+  require(!find(&rows, "bodies[0].id").editable && find(&rows, "bodies[0].id").kind == Inspect.Whole, "read-only whole number")
+  require(find(&rows, "bodies[1].position.x").text == "4.0" && find(&rows, "bodies[0].awake").kind == Inspect.Toggle, "values as text")
+  require(find(&rows, "bodies[0].name").kind == Inspect.Words && find(&rows, "bodies[0].name").text == "crate", "text field")
+}
+
+fn edits() {
+  let start = scene()
+  let Ok(moved) = Inspect.edit(&start, "bodies[1].position.y", "2.5") else { panic("vector edit") }
+  require(moved.bodies[1].position.y == 2.5 && moved.bodies[0] == start.bodies[0], "an axis inside an array element")
+  let Ok(damped) = Inspect.edit(&start, "damping", "0.5") else { panic("number edit") }
+  require(damped.damping == 0.5, "top-level number")
+  let Ok(asleep) = Inspect.edit(&start, "bodies[0].awake", "false") else { panic("flag edit") }
+  require(!asleep.bodies[0].awake, "flag")
+  let Ok(named) = Inspect.edit(&start, "bodies[0].name", "barrel") else { panic("text edit") }
+  require(named.bodies[0].name == "barrel", "text")
+  require(Inspect.edit(&start, "bodies[0].mass", "150") == Err(Inspect.EditError{path: "bodies[0].mass", problem: Inspect.OutOfRange(0.1, 100.0)}), "range")
+  require(Inspect.edit(&start, "bodies[0].id", "7") == Err(Inspect.EditError{path: "bodies[0].id", problem: Inspect.NotEditable}), "read-only")
+  require(Inspect.edit(&start, "bodies[0].awake", "maybe") == Err(Inspect.EditError{path: "bodies[0].awake", problem: Inspect.Unparsable("true or false")}), "flag text")
+  require(Inspect.edit(&start, "damping", "lots") == Err(Inspect.EditError{path: "damping", problem: Inspect.Unparsable("a number")}), "number text")
+  require(Inspect.edit(&start, "bodies[0].cache", "1") == Err(Inspect.EditError{path: "bodies[0].cache", problem: Inspect.UnknownField("cache")}), "skipped field")
+  require(Inspect.edit(&start, "bodies[5].mass", "1") == Err(Inspect.EditError{path: "bodies[5].mass", problem: Inspect.UnknownField("[5]")}), "index past the array")
+  require(Inspect.edit(&start, "gravity", "1") == Err(Inspect.EditError{path: "gravity", problem: Inspect.NotALeaf}), "a group is not a leaf")
+  require(Inspect.edit(&start, "bodies[0].name.first", "x") == Err(Inspect.EditError{path: "bodies[0].name.first", problem: Inspect.NotALeaf}), "past a leaf")
+}
+
+fn fed(previous: &Input.State, events: Array[Input.Event]) -> Input.State {
+  Input.apply(Input.beginFrame(*previous), &events)
+}
+
+fn framed(memory: &UI.Memory, input: &Input.State, light: &Light) -> (UI.Memory, Light) {
+  let (ui, changed) = Inspect.panel(UI.begin(memory, input, 10.0, 10.0, 100.0, 20.0), light)
+  let (next, _) = UI.end(ui)
+  (next, changed)
+}
+
+fn panels() {
+  let light = Light{intensity: 2.0, enabled: false, id: 3}
+  let idle = Input.initial()
+  let (m0, same) = framed(&UI.memory(), &idle, &light)
+  require(same == light && m0.order == ["intensity", "enabled"], "no input changes nothing")
+  let press = fed(&idle, [Input.ButtonDown(0, 20, 68)])
+  let (m1, pressed) = framed(&m0, &press, &light)
+  let release = fed(&press, [Input.ButtonUp(0, 20, 68)])
+  let (_, toggled) = framed(&m1, &release, &pressed)
+  require(toggled.enabled && toggled.intensity == 2.0, "a click toggles the flag")
+  let grab = fed(&idle, [Input.ButtonDown(0, 60, 44)])
+  let (_, slid) = framed(&m0, &grab, &light)
+  require(slid.intensity == 5.0 && !slid.enabled, "a slider press sets the ranged value")
+}
+
+/// Exercise derived inspectors, edits and the panel.
+export fn main() -> Int {
+  rowsOf()
+  edits()
+  panels()
+  print("ark inspect: ok")
+  0
+}

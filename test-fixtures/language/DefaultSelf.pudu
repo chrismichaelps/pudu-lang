@@ -1,0 +1,43 @@
+module DefaultSelf
+
+trait Named {
+  fn label() -> Str
+  fn twice() -> Str { doubled[Self]() }
+  fn inferred() -> Str { quoted(Self.label()) }
+  fn shout(self: &Self) -> Str { doubled[Self]() + "!" }
+}
+
+impl Named for Int {
+  fn label() -> Str { "int" }
+}
+
+impl [A: Named] Named for Array[A] {
+  fn label() -> Str { "array of " + A.label() }
+}
+
+type Point = { x: Int }
+
+impl Named for Point {
+  fn label() -> Str { "point" }
+}
+
+fn doubled[T: Named]() -> Str { T.label() + T.label() }
+
+fn quoted(text: Str) -> Str { "'" + text + "'" }
+
+fn twiceOf[T: Named]() -> Str { T.twice() }
+
+fn inferredOf[T: Named]() -> Str { T.inferred() }
+
+/// Counts the trait defaults that select their implementing type through `Self`.
+export fn main() -> Int {
+  var passed = 0
+  if twiceOf[Int]() == "intint" { passed = passed + 1 }
+  if twiceOf[Point]() == "pointpoint" { passed = passed + 1 }
+  if twiceOf[Array[Int]]() == "array of intarray of int" { passed = passed + 1 }
+  if inferredOf[Int]() == "'int'" { passed = passed + 1 }
+  if 3.shout() == "intint!" { passed = passed + 1 }
+  let point = Point{x: 1}
+  if point.shout() == "pointpoint!" { passed = passed + 1 }
+  passed
+}

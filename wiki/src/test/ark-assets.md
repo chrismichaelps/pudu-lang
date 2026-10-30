@@ -18,6 +18,9 @@ nested graph-module archive inclusion are mandatory. [[Ark Asset Server Fixture]
 output, and every Assets module (Texture, Graph, Import, Server) must be formatted and shipped.
 CI and the local gate register this focused check; no full suite is invoked by this script.
 
+[[Ark Stream Fixture]] executes with exact output too; the stream module and fixture are
+formatted and shipped, and a text worker budget must fail with a positioned E3001.
+
 ## Resolved Grill Log
 
 - **Q:** Consider a working checkout sufficient shipping evidence? **A:** No; inspect the source

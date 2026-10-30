@@ -17,7 +17,8 @@ aliases: [Language Foundation Program Spec]
 
 ## Purpose
 
-Exercise function literals, lexical capture, ranges, slices, and destructuring as coherent
+Exercise function literals, lexical capture, ranges, slices, destructuring, and trait defaults that pass
+`Self` on as a type argument (through a witness, a generic implementation and a receiver) as coherent
 full-program features, including their refusal and diagnostic contracts.
 
 ## Interface
