@@ -50,7 +50,8 @@ cannot be captured by the shape parameter or per-field binder of the template.
 Create request-owned bounded state. Substitute the shape parameter with the target
 syntax; each fields iteration binds a descriptor and its independently selected F.
 Read name/attributes as literals, preserve strict runtime fallback evaluation
-even when an attribute is present, get as an ordinary field projection, set as an
+even when an attribute is present (only for a fallback that can have effects: literals, names and
+unary or binary operators over them are dropped, so they leave no unused statement for W3004), get as an ordinary field projection, set as an
 assignment, and nameOf as a declared-name literal. Static booleans select only the
 reachable branch; runtime conditions retain ordinary branches. Unroll fields into
 separate ordinary blocks preserving binding scope, order and transfers. All newly
@@ -83,6 +84,10 @@ choose methods by runtime result values or infer a missing field capability.
   bodies serving as an expansion fallback.
 - **Q:** Emit a static call as a dotted name? **A:** No; as a member on the owner path, the shape authored `A.parse(x)` has, which checking and both evaluators already resolve.
 - **Q:** Keep callback unrolling here? **A:** No; it moved beside its construction helpers to keep both modules under 500 lines.
+
+- **Q:** Keep every non-literal fallback as a statement when the attribute supplies the value?
+  **A:** No; an effect-free fallback such as `-1.0` then becomes a dropped statement and W3004
+  warns at every deriving type. Only a fallback that can have effects is kept, once.
 
 ## Referenced by
 

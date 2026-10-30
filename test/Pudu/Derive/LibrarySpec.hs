@@ -23,6 +23,8 @@ deriveLibraryProperties :: [(String, IO Property)]
 deriveLibraryProperties =
   [ ("derived Eq, Hash and Ord agree with their laws over records, sums, generics and recursion", runs "StdOrder"
       "\"TFTFTF|FT|TFTFTF|TFT\"")
+  , ("an effect-free attribute fallback leaves no unused statement behind", runsClean "AttributeFallback"
+      "\"speed:0.5/2.0/Speed;hits:-1.0/-1.0/hits;\"")
   , ("derived Show renders names and fields in declaration order", runs "StdShow"
       "\"Point{x: 1, label: \\\"a\\\"} Box{held: Some(Point{x: 1, label: \\\"a\\\"})} Dot Circle(1.5) Rect{w: 2, h: 3} Node([Leaf, Node([])])\"")
   , ("derived JSON round-trips with renames, skips, defaults and located refusals", runs "StdJson" jsonExpected)
@@ -86,6 +88,14 @@ runs name expected = do
       pure (renderValue <$> outcomeValue outcome, map diagnosticMessage (outcomeDiagnostics outcome))) ["tree", "compiled"]
     _ -> pure [(Nothing, map diagnosticMessage (programDiagnostics program))]
   pure $ counterexample name (answers === [(Just expected, []), (Just expected, [])])
+
+{-| The program runs to this value in both evaluators and compiles with no diagnostics at all. -}
+runsClean :: String -> Text -> IO Property
+runsClean name expected = do
+  program <- compileProgram (fixture name)
+  let found = [(diagnosticCodeText (diagnosticCode found'), diagnosticMessage found') | found' <- programDiagnostics program]
+  answered <- runs name expected
+  pure $ conjoin [counterexample (name <> " diagnostics: " <> show found) (found === []), answered]
 
 {-| The program is refused with these diagnostics first, in source order. -}
 refuses :: String -> [(Text, Text)] -> IO Property
