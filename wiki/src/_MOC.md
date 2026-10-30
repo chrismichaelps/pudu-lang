@@ -224,4 +224,5 @@ tags: [moc, module]
 - [[Eval Binary]] · [[Binary Codec Properties]] — native binary wire contract and validation.
 
 - [[Std Binary]] · [[Binary Facade Smoke]] · [[Binary Facade Gate]] — shipped binary serialization facade.
+- [[Bound Provider Gate]] — generic trait provider execution and cache parity.
 - [[Trait Provider Gate]] — explicit trait signatures, execution and located refusals.

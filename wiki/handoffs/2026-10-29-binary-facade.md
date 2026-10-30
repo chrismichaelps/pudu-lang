@@ -21,7 +21,7 @@ JSON coexistence, formatter checks, positioned type refusal and actual archive i
 Lint and shell syntax checks pass. The unchanged facade/wiring also passed the preceding full
 clean regression gate as part of the working continuation. Only the smoke/gate was added since.
 
-Exact next action: commit/push the bounded facade partition; open its dev-targeted PR after the native prerequisite is integrated.
+Exact next action: publish the bounded facade after native integration; repair owner identity #761 before Ark archive use.
 
 ## Referenced by
 
@@ -41,4 +41,5 @@ preserving both gate registrations and navigation entries, then rerun the clean 
 The second clean current-dev gate passed every check at 9d6f22a4; that tested facade is pushed.
 Integrate native extent admission eb764a08 and retain its explicit UInt32 prefix contract in the
 public documentation. The native arithmetic boundary tests avoid multi-gigabyte allocations.
-Refresh focused and full validation before the dev-targeted facade PR follows native integration.
+The clean extent-admission gate passed at a845418f. Integrate native d6482ac4 and merged #743,
+then validate actual binary dispatch with both provider repairs before publication.
