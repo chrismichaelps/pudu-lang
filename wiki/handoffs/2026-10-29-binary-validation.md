@@ -6,12 +6,12 @@ tags: [handoff, stdlib, serialization]
 ---
 # Binary Validation Delivery
 
-Issue #739 acceptance partition continues on feature/739-binary-validation after native draft
-PR #741 and facade commit 231053a9 on feature/739-binary-derives. Own UsesBinary, ProtocolSpec
+Issue #739 acceptance partition continues on feature/739-binary-validation after native
+PR #741 and the facade partition on feature/739-binary-derives. Own UsesBinary, ProtocolSpec
 registration, BinaryBench, CLI gate extension and matching mirrors. Preserve predecessor scopes.
 Role transition: Architect defines exact-bit/evolution oracles; Runtime Engineer validates the
-boundary; Tooling/Release measures and publishes. No delegated agents, self-approval or merges.
-Independent implementation, Language Architect and Forensic Guardian reviews remain pending.
+boundary; Tooling/Release measures and publishes. No delegated agents. The project owner waived independent review for this engine delivery loop
+on 2026-10-30 and authorized tested merges to dev. Merge follows required checks.
 
 The API uses Binary.Encode/Binary.Decode with pack/unpack methods and coexists with JSON derives.
 The skipped sum-field regression failed before its repair. The complete fixture passes 22 asserted
@@ -26,8 +26,9 @@ lint and formatter checks pass. [[Binary Serialization Benchmark]] records the c
 workload, three-run measurements and byte-size tradeoff. Raw evidence is in the local Desktop
 stage-check folder. A bounded archive source study informed validation; no external code was copied.
 
-Delivery remains staged: #741 is draft/unmerged; the facade branch is pushed and waits for its
-native prerequisite before a dev-targeted PR. This acceptance partition then follows the facade.
+Delivery remains staged: #741 validates its writer-corrected integration; the current facade
+partition waits for that native prerequisite before a dev-targeted PR. This acceptance partition
+then follows the facade.
 Keep review diffs below 600 lines and #739 open until every partition is delivered. The complete
 engine goal and Ark archive integration (#732) remain outstanding.
 
@@ -38,3 +39,8 @@ Exact next action: advance the dev-targeted PR sequence after prerequisite integ
 ## Referenced by
 
 [[handoffs/_MOC]] · [[Std Binary]] · [[Std Binary Fixture]] · [[Protocol Evaluation Spec]] · [[Binary Serialization Benchmark]]
+
+Integration update: preserve the complete acceptance fixture and benchmark while merging the
+current facade 9d6f22a4, its native writer-boundary repair and merged #742 prerequisite. Keep the
+full validation backlinks and new writer admission contract together. Rerun the 22-group fixture,
+CLI/distribution gate and consumed comparison against the current optimized compiler before delivery.

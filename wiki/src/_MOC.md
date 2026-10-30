@@ -228,3 +228,4 @@ tags: [moc, module]
 - [[Std Binary]] · [[Binary Facade Smoke]] · [[Binary Facade Gate]] — shipped binary serialization facade.
 
 - [[Std Binary Fixture]] · [[Protocol Evaluation Spec]] — derived binary evolution and boundary conformance.
+- [[Trait Provider Gate]] — explicit trait signatures, execution and located refusals.

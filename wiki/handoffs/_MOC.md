@@ -233,3 +233,4 @@ tags: [moc, handoff]
 - [[Binary Codec Delivery]] — issue #739 native wire codec partition.
 
 - [[Binary Facade Delivery]] — issue #739 public derives and builtin wiring.
+- [[Trait Provider Delivery]] — issue #742 canonical trait-provider scheme selection.

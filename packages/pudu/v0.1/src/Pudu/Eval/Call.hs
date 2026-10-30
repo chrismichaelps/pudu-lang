@@ -61,6 +61,7 @@ import Pudu.Eval.Call.Path
   , readPath
   , selectTypes
   , typeArgumentNames
+  , withSelf
   , witnessOf
   )
 import Pudu.Eval.HashMap (callBucketsMethod, callBucketsOf)
@@ -189,12 +190,18 @@ callMemberSelecting select needs spanValue memberSpan lent implemented receiver 
   _ -> do
     method <-
       if implemented
-        then receiverOwners receiver >>= firstBound (\owner -> lookupMethod (owner <> "." <> member))
+        then receiverOwners receiver >>= firstBound (ownedMethod member)
         else pure Nothing
     calleeVal <- case method of
-      Just (FunctionValue closure) -> pure (FunctionValue (select closure{closureSelf = Just receiver}))
+      Just (owner, FunctionValue closure) ->
+        pure (FunctionValue (select (withSelf (TypeWitnessValue owner []) closure{closureSelf = Just receiver})))
       _ -> readMember memberSpan receiver member
     dispatchCall needs spanValue lent calleeVal values
+
+{-| The method an owner installs under this member, with the owner that held
+    it, so the call can name its `Self`. -}
+ownedMethod :: Text -> Text -> Evaluator (Maybe (Text, Value))
+ownedMethod member owner = fmap (\found -> (owner, found)) <$> lookupMethod (owner <> "." <> member)
 
 {-| Apply an evaluated callee to evaluated arguments. -}
 dispatchCall :: CallNeeds -> Span -> Lent -> Value -> [Value] -> Evaluator Value
@@ -270,10 +277,10 @@ evaluateCallee needs located@(Located calleeSpan expression) = case expression o
   MemberExpression target member -> do
     receiver <- callEvaluate needs target
     owners <- receiverOwners receiver
-    method <- firstBound (\owner -> lookupMethod (owner <> "." <> locatedValue member)) owners
+    method <- firstBound (ownedMethod (locatedValue member)) owners
     case method of
-      Just (FunctionValue closure) ->
-        pure (FunctionValue closure{closureSelf = Just receiver})
+      Just (owner, FunctionValue closure) ->
+        pure (FunctionValue (withSelf (TypeWitnessValue owner []) closure{closureSelf = Just receiver}))
       _ -> readMember calleeSpan receiver (locatedValue member)
   _ -> callEvaluate needs located
 

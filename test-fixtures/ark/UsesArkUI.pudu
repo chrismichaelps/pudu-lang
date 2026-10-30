@@ -3,6 +3,7 @@ module UsesArkUI
 import Ark.Math.Color as Color
 import Ark.Platform.Input as Input
 import Ark.Render.Device as Device
+import Ark.Render.Text as Glyphs
 import Ark.UI as UI
 
 fn require(condition: Bool, name: Str) {
@@ -86,7 +87,7 @@ fn drawing() {
   let (_, commands, _) = frame(&UI.memory(), &Input.initial(), Panel{clicks: 0, sound: true, volume: 1.0})
   let Some(target) = Device.target(120, 120) else { panic("target") }
   let Some(cleared) = Device.clear(target, Color.opaque(0.0, 0.0, 0.0)) else { panic("clear") }
-  let Some(drawn) = UI.render(&commands, cleared) else { panic("render") }
+  let Some(drawn) = UI.render(&commands, cleared, &Glyphs.font()) else { panic("render") }
   let pixels = Device.pixels(&drawn)
   let at = (40 * 120 + 50) * 4
   require(pixels.at(at) == Some(46u8) && pixels.at(at + 2) == Some(61u8), "button fill drawn in idle color")
@@ -95,7 +96,19 @@ fn drawing() {
   let full = (88 * 120 + 100) * 4
   require(pixels.at(full + 1) == Some(153u8), "slider fill spans the full value")
   require(pixels.at((5 * 120 + 5) * 4) == Some(0u8), "outside widgets untouched")
-  require(UI.render(&[], cleared) == Some(cleared), "nothing to draw")
+  var lit = 0
+  for y in 13..28 {
+    for x in 14..110 {
+      if pixels.at((y * 120 + x) * 4) == Some(235u8) { lit = lit + 1 }
+    }
+  }
+  require(lit > 40, "the Settings label is drawn in the text color")
+  var above = 0
+  for x in 14..110 {
+    if pixels.at((12 * 120 + x) * 4) == Some(235u8) { above = above + 1 }
+  }
+  require(above == 0, "labels stay inside their row")
+  require(UI.render(&[], cleared, &Glyphs.font()) == Some(cleared), "nothing to draw")
   require(UI.contains(&UI.Rect{x: 0.0, y: 0.0, width: 2.0, height: 2.0}, 0.0, 0.0) && !UI.contains(&UI.Rect{x: 0.0, y: 0.0, width: 2.0, height: 2.0}, 2.0, 1.0), "half-open rectangles")
 }
 

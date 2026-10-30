@@ -10,6 +10,7 @@ module Pudu.Type.Check.Method
   , implBounds
   , implRigid
   , methodScheme
+  , implementationMethodKey
   , traitMethodScheme
   , targetName
   , traitBounds
@@ -212,6 +213,7 @@ declareMethod rejectCollision declared value owner (Located methodSpan method) =
         (Just "import only one providing trait or use a qualified call")
       bindName key (monotype ErrorType)
     else do
+      mapM_ (\trait -> bindName (implementationMethodKey owner trait (locatedValue (functionName method))) scheme) providing
       when localCollision $
         markAmbiguousMethod key (maybe [] pure provider <> maybe [] pure providing)
       mapM_ (recordMethodProvider key) providing
@@ -294,6 +296,10 @@ targetName :: Type -> Maybe NominalId
 targetName typeValue = case typeValue of
   NominalType name _ -> Just name
   _ -> Nothing
+
+{-| Explicit trait selection must not read the shared receiver ambiguity slot. -}
+implementationMethodKey :: NominalId -> NominalId -> Text -> Text
+implementationMethodKey owner trait member = nominalKey trait <> "::" <> methodKey owner member
 
 methodKey :: NominalId -> Text -> Text
 methodKey owner method = nominalKey owner <> "." <> method

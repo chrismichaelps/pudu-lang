@@ -54,3 +54,10 @@ Native validation: [[Binary Codec Properties]].
 ## Referenced by
 
 [[src/Pudu/Eval/_MOC]] · [[Binary Codec Properties]] · [[Pudu Cabal Manifest]]
+
+## Writer domain agreement (#739)
+
+Writer admission shares the 512-level node nesting limit with the reader, and refuses duplicate names within Fields or Choice payloads before emitting bytes. Name sharing across independent records remains valid. Invalid writer values still return Nothing through the existing E7001 wrapper.
+
+Resolved Grill Log: a successful writer must not emit a tree the reader refuses solely for
+nesting or duplicate field names. Keep wire tags and valid encodings unchanged.

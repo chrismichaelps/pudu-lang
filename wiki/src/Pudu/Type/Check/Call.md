@@ -138,3 +138,21 @@ receiver/lending and lexical shadow checks for every non-constructor.
 
 Resolved Grill Log: a call must resolve its full visible sum owner before treating an
 intermediate imported type as a runtime receiver; first-class values use the same metadata.
+
+## Qualified provider schemes (#742)
+
+Preserve each admitted implementation scheme under a canonical trait/receiver/member key,
+separate from the shared receiver/member slot used for ordinary ambiguity checks. An explicit
+trait call on a nominal receiver selects that provider-specific scheme, retaining implementation
+parameters and bounds. Rigid-bound lookup and receiver checking retain their existing paths.
+
+Resolved Grill Log: two local traits may provide the same member with different result types.
+Declaration order cannot change explicit-call typing, and a known receiver must behave like a
+literal receiver. Wrong result annotations remain E3001 at the call; plain receiver/type calls
+still refuse ambiguity. This restores the existing selected-implementation contract and does not
+repair imported declaration collision (#734) or conditional generic dispatch (#735).
+
+Built-in receiver type names may be absent from declaredNames. Before the ordinary module/name
+fallback, consult their recorded ambiguous receiver/member slot and refuse E3013 when present.
+Keep actual module qualifiers and nearer local values on their existing higher-priority paths.
+Resolved Grill Log: Int.encode cannot silently choose where Box.encode already refuses.

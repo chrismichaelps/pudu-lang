@@ -39,4 +39,4 @@ joint, which layers an upper-body pose over a full-body one. `duration` is the l
 
 ## Referenced by
 
-[[src/Ark/_MOC]] · [[Ark Animation Machine]] · [[Ark Animation Fixture]] · [[Ark Animation Gate]]
+[[Ark Ik]] · [[Ark Limbs]] · [[Ark Morph]] · [[src/Ark/_MOC]] · [[Ark Animation Machine]] · [[Ark Animation Fixture]] · [[Ark Animation Gate]]

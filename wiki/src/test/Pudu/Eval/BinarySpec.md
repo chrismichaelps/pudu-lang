@@ -29,3 +29,10 @@ Independent golden bytes pin the little-endian integer and floating representati
 ## Referenced by
 
 [[Eval Binary]] · [[Repository Test Runner]] · [[Pudu Test Cabal Manifest]] · [[src/_MOC]]
+
+## Writer domain agreement (#739)
+
+Writer boundaries independently pin 512 accepted and 513 refused nesting, and duplicate-name refusal in Fields and Choice. Separate records may reuse the same name; name interning is not duplicate-field admission.
+
+Resolved Grill Log: a successful writer must not emit a tree the reader refuses solely for
+nesting or duplicate field names. Keep wire tags and valid encodings unchanged.

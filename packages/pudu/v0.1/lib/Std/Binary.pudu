@@ -61,6 +61,7 @@ const VERSION: Int = 1
 const HEADER_BYTES: Int = 10
 
 /// A node tree as bytes, in one native pass.
+/// Invalid shapes, duplicate fields or nesting beyond 512 levels report E7001.
 export fn encode(node: &Node) -> Bytes { binaryEncode(node) }
 
 /// The node tree bytes hold; `Fields` read back as `Record` and `Choice` as `Picked`.
