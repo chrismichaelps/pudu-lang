@@ -99,3 +99,9 @@ lookup tally rather than introducing a second name-resolution policy.
 ## Lexical member admission (#471)
 
 qualifiedCallee returns Nothing immediately for an ordinary local head, skipping both dotted export lookup and receiver-owner fallback. A TypeWitnessValue retains witnessed method selection and its fallback. qualifiedPath performs the same local/witness distinction for explicit type-applied call dispatch; retain uppercase filtering only after lexical admission. Resolved Grill Log: constants may qualify ordinary value members; both evaluators must honor the same local frame and restore the outer namespace on exit.
+
+## Canonical record owners (#761)
+
+Selected type witnesses retain their complete canonical nominal key. Generated canonical method qualifiers retain their full owner path; one-segment parameter witnesses still resolve lexically.
+
+Resolved Grill Log: identity comes from the checked declaration, never import order or a basename guess. Preserve observable labels, lexical shadowing, field effects and failure provenance; no runtime filesystem lookup. See [[Canonical Runtime Owner Delivery]].

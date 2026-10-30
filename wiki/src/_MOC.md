@@ -224,3 +224,5 @@ tags: [moc, module]
 - [[Eval Binary]] · [[Binary Codec Properties]] — native binary wire contract and validation.
 - [[Bound Provider Gate]] — generic trait provider execution and cache parity.
 - [[Trait Provider Gate]] — explicit trait signatures, execution and located refusals.
+
+- [[Canonical Owner Gate]] — same-named record dispatch and checked-product reuse.

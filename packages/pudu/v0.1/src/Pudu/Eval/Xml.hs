@@ -152,7 +152,7 @@ decodeDocument input = do
 
 tagValue :: Text -> Seq.Seq Value -> Seq.Seq Value -> Value
 tagValue name attributes children =
-  RecordValue "Tag"
+  RecordValue "Std.Xml.Tag"
     [ ("name", StrValue name)
     , ("attributes", ArrayValue attributes)
     , ("children", ArrayValue children)

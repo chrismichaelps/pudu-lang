@@ -103,3 +103,9 @@ is ignored by rendering but retained in value equality and runtime liveness chec
 ## Text method rendering (#347)
 
 A `TextMethodValue` renders as `<method toText>` and is described as a "text method".
+
+## Canonical record owners (#761)
+
+Render the final label of a canonical record owner, retaining the existing record display and diagnostic shape labels. Type witness display also keeps its final label. Full keys remain internal identity.
+
+Resolved Grill Log: identity comes from the checked declaration, never import order or a basename guess. Preserve observable labels, lexical shadowing, field effects and failure provenance; no runtime filesystem lookup. See [[Canonical Runtime Owner Delivery]].

@@ -46,7 +46,7 @@ import Pudu.Type.Env
   , DeclaredTypes (..)
   , bindImportedMethod
   , bindName
-  , recordProvider
+  , recordProvider, recordOwner
   , recordDeclaredMethod
   , ambiguousProviders
   , markAmbiguousMethod
@@ -161,6 +161,7 @@ declareMethodsWith defaults declared traits value = do
   case targetName target of
     Nothing -> pure ()
     Just owner -> do
+      recordOwner (locatedSpan (implTarget value)) owner
       mapM_ (declareMethod (defaults /= Nothing) declared value owner) (implFunctions value)
       mapM_ (declareMethod (defaults /= Nothing) declared value owner) (inheritedDefaults defaults declared traits value)
 

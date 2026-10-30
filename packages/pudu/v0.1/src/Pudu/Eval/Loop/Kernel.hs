@@ -171,7 +171,7 @@ planExpression region layout (Located spanValue expression) = case expression of
     planned <- traverse planField fields
     pure $ do
       named <- sequence planned
-      let owner = foldl (\_ name -> name) first rest
+      let owner = Text.intercalate "." (first : rest)
           labels = map fst named
           build = withArguments (map snd named)
             (\_ _ values -> pure (RecordValue owner (zip labels values)))

@@ -33,3 +33,9 @@ aliases: [Eval SwissTable]
 ## Referenced by
 
 [[src/_MOC]] · [[Backend Representation Specialization]]
+
+## Canonical record owners (#761)
+
+Native factories and admission use Std.FlatMap.FlatMap as the complete record owner, matching checked source construction.
+
+Resolved Grill Log: identity comes from the checked declaration, never import order or a basename guess. Preserve observable labels, lexical shadowing, field effects and failure provenance; no runtime filesystem lookup. See [[Canonical Runtime Owner Delivery]].

@@ -234,3 +234,11 @@ Resolved Grill Log: preserve the checker-selected provider through ordinary exec
 including retained methods and receiver aliases. Do not infer a provider from declaration order,
 receiver spelling, or runtime type arguments. Existing evaluation order and lending stay intact.
 See [[Bound Provider Delivery]].
+
+## Canonical record owners (#761)
+
+Install methods globally under the complete owner key. Bind short concrete method aliases only in the declaring module frame, where import aliases and captured module scope preserve their meaning. Keep canonical trait/owner keys. The named module loader qualifies record crossings recursively after ordinary foreign admission; raw declaration loading keeps unqualified test values.
+
+Resolved Grill Log: identity comes from the checked declaration, never import order or a basename guess. Preserve observable labels, lexical shadowing, field effects and failure provenance; no runtime filesystem lookup. See [[Canonical Runtime Owner Delivery]].
+
+Resolved Grill Log: retain legacy basename method keys for sum receivers until their separate owner representation is repaired. Canonical record dispatch never selects these aliases; local explicit aliases retain defining module captures.

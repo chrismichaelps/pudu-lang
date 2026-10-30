@@ -232,3 +232,5 @@ tags: [moc, handoff]
 
 - [[Binary Codec Delivery]] — issue #739 native wire codec partition.
 - [[Trait Provider Delivery]] — issue #742 canonical trait-provider scheme selection.
+
+- [[Canonical Runtime Owner Delivery]] — canonical record construction and dispatch, issue #761.

@@ -30,6 +30,7 @@ import Pudu.Type.Env
   , lookupVariant
   , lookupVariantFields
   , lookupTypeParams
+  , recordOwner
   , report
   )
 import Pudu.Type.Check.Pattern (freshFor, substituteRigid)
@@ -86,6 +87,7 @@ recordType checking declared rigid spanValue path fields = do
           mapM_ (checkFieldInit checking declared rigid) fields
           pure ErrorType
     Just declaredFields' -> do
+      recordOwner spanValue identity
       {-| A generic record is instantiated at every construction, exactly as a
           generic sum already was. `Boxed{value: 7}` is a `Boxed[Int]`, and the
           field is checked against `Int` rather than against the declaration's
@@ -142,6 +144,7 @@ recordUpdateType checking declared rigid spanValue path source fields = do
       mapM_ (checkFieldInit checking declared rigid) fields
       pure ErrorType
     Just declaredFields' -> do
+      recordOwner spanValue identity
       parameters <- maybe [] id <$> lookupTypeParams identity
       replacements <- freshFor parameters
       let updated = NominalType identity (map snd replacements)

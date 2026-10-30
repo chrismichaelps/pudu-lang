@@ -9,6 +9,7 @@ import Data.Foldable (toList)
 import qualified Data.Sequence as Seq
 import Data.List.NonEmpty (NonEmpty (..))
 import Data.Text (Text)
+import qualified Data.Text as Text
 import Pudu.Eval.Value (Value (..), intOf)
 import Pudu.DecimalLiteral (decimalFromInteger, parseDecimalLiteral)
 import Pudu.FloatLiteral
@@ -75,7 +76,7 @@ matchPattern (Located _ pattern') value = case pattern' of
       `case Add{left, right}` and computed a product. -}
   RecordPattern path fields _ -> case value of
     RecordValue name present
-      | maybe True (== name) (patternName path) ->
+      | maybe True (== snd (Text.breakOnEnd "." name)) (patternName path) ->
           concat <$> mapM (matchField present) fields
     _ -> Nothing
   AlternativePattern alternatives -> firstMatch alternatives

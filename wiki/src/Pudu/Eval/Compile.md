@@ -73,3 +73,9 @@ MultiMap wrapper selection. Previously the direct-call branch accepted only
 call setup despite being known module functions. Flatten member chains only for
 lookup, and admit their direct path only when the MultiMap wrapper proof succeeds.
 Other member calls retain their established dispatch.
+
+## Canonical record owners (#761)
+
+Compile the complete projected record owner once with the field codes; preserve written field evaluation order and parity with the tree walker.
+
+Resolved Grill Log: identity comes from the checked declaration, never import order or a basename guess. Preserve observable labels, lexical shadowing, field effects and failure provenance; no runtime filesystem lookup. See [[Canonical Runtime Owner Delivery]].

@@ -30,7 +30,8 @@ import Pudu.Eval.Env
   , withNewFrame
   )
 import Pudu.Eval.Call (CallNeeds (..), callClosure, evaluateCall)
-import Pudu.Eval.Call.Path (flattenPath, lastPathSegment, pathValue)
+import Pudu.Eval.Call.Path (flattenPath, pathValue)
+import Pudu.Frontend.Syntax.Name (moduleNameText)
 import Pudu.Eval.Compile.Layout (slotLayout)
 import Pudu.Eval.Render (renderValue)
 import Pudu.Eval.Loop (LoopNeeds (..), evaluateFor, evaluateWhile)
@@ -194,7 +195,7 @@ compileExpression walker located@(Located spanValue expression) = case expressio
     pure (ArrayValue . Seq.fromList <$> sequence codes)
   RecordExpression path fields -> do
     codes <- mapM (compileFieldInit walker spanValue) fields
-    let owner = lastPathSegment path
+    let owner = moduleNameText path
     pure (RecordValue owner <$> sequence codes)
   MatchExpression scrutinee arms -> do
     subject <- compileExpression walker scrutinee

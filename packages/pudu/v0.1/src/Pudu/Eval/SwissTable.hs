@@ -48,7 +48,7 @@ writeCtrlByte ctrlMap slot b =
    in IntMap.insert wordIdx (IntValue (UnsignedKind 64) (toInteger newW)) ctrlMap
 
 decodeTable :: Value -> Maybe (Int, Int, IntMap.IntMap Value, IntMap.IntMap Value)
-decodeTable (RecordValue "FlatMap" fields) = do
+decodeTable (RecordValue "Std.FlatMap.FlatMap" fields) = do
   capVal <- lookup "capacity" fields
   countVal <- lookup "count" fields
   ctrlVal <- lookup "ctrl" fields
@@ -63,7 +63,7 @@ decodeTable _ = Nothing
 encodeTable :: Int -> Int -> IntMap.IntMap Value -> IntMap.IntMap Value -> Value
 encodeTable cap count ctrl slots =
   RecordValue
-    "FlatMap"
+    "Std.FlatMap.FlatMap"
     [ ("capacity", intOf (fromIntegral cap))
     , ("count", intOf (fromIntegral count))
     , ("ctrl", BucketsValue ctrl)

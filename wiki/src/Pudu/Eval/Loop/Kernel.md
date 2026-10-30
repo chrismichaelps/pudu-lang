@@ -178,3 +178,9 @@ zero/one/two/three-argument sequencing once and invoke its consumer directly;
 larger arities retain the general ordered list path. Record field construction
 uses the same consumer boundary. Resolved Grill Log: eliminate intermediate
 argument-result wrappers, preserving complete evaluation before parameter writes.
+
+## Canonical record owners (#761)
+
+Closed record-producing kernels retain the complete projected canonical owner path, matching both general evaluators.
+
+Resolved Grill Log: separate semantic roles even at identical generated spans. No runtime span lookup, provider overwrite or shortened owner. See [[Canonical Runtime Owner Delivery]].
