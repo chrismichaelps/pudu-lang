@@ -37,3 +37,8 @@ assumption: the writer fault points to the native call inside Std.Binary, as run
 do, rather than its outer caller. Inspection confirmed the actual span; the focused gate passes
 with that established provenance retained. Merge the #742-integrated native parent e96a3c26,
 preserving both gate registrations and navigation entries, then rerun the clean full gate.
+
+The second clean current-dev gate passed every check at 9d6f22a4; that tested facade is pushed.
+Integrate native extent admission eb764a08 and retain its explicit UInt32 prefix contract in the
+public documentation. The native arithmetic boundary tests avoid multi-gigabyte allocations.
+Refresh focused and full validation before the dev-targeted facade PR follows native integration.

@@ -43,3 +43,8 @@ The project owner waived independent review for this engine delivery loop on 202
 The writer-corrected a24e0701 passed every clean local gate. PR #744 merged into dev as a6f85d584;
 merge that prerequisite while preserving both navigation/changelog entries. Code changes are the
 already-tested explicit-provider repair. Refresh required checks on the combined head before merge.
+
+Extent validation update: checked wireCount conversion guards every writer length/count and
+name-table increment. Maximum UInt32 is accepted, while negative, 2^32 and 2^64 extents refuse
+without giant allocations. All native property families pass under the warning-free build.
+Refresh the full gate and required hosted checks before merging this head.
