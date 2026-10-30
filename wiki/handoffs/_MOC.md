@@ -229,3 +229,5 @@ tags: [moc, handoff]
 - [[Database Authentication Delivery]] — finite Database challenge work and typed refusals.
 
 - [[Graph Integration Delivery]] — preserve both Database safeguards and exact graph output (#478).
+
+- [[Trait Provider Delivery]] — issue #742 canonical trait-provider scheme selection.

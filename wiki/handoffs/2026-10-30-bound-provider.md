@@ -48,3 +48,7 @@ the existing trait-evidence work for #734/#735 before further engine implementat
 ## Referenced by
 
 [[handoffs/_MOC]] · [[Compiler Literals]] · [[Type Check Method]] · [[Eval Env]]
+
+Integration update: PR #744 merged into dev as a6f85d584 after all hosted checks passed.
+Merge that prerequisite into this branch, retaining both provider mirror sections and gate entries.
+The source merges without conflict; focused and hosted full checks must validate the combined head.

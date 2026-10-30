@@ -139,3 +139,4 @@ negative cases. Resolved Grill Log: a silent error type is caught by wrong-resul
 
 [[Bound Provider Gate]] executes generic provider selection across evaluator/cache modes.
 Resolved Grill Log: selected result types and executed implementations must agree (#743).
+[[Trait Provider Gate]] pins nominal trait selection and positioned wrong-result/ambiguity diagnostics. Resolved Grill Log: distinct provider results execute through the real CLI.
