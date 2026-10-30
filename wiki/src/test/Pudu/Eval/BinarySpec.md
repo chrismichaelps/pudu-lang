@@ -36,3 +36,7 @@ Writer boundaries independently pin 512 accepted and 513 refused nesting, and du
 
 Resolved Grill Log: a successful writer must not emit a tree the reader refuses solely for
 nesting or duplicate field names. Keep wire tags and valid encodings unchanged.
+
+wireCount boundaries pin negative, zero, maximum UInt32, 2^32 and 2^64 extents independently
+of host allocation. Resolved Grill Log: writer resource limits are wire-format arithmetic,
+not permission to allocate giant test data or silently truncate a length prefix.

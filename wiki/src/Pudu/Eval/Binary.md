@@ -61,3 +61,11 @@ Writer admission shares the 512-level node nesting limit with the reader, and re
 
 Resolved Grill Log: a successful writer must not emit a tree the reader refuses solely for
 nesting or duplicate field names. Keep wire tags and valid encodings unchanged.
+
+## Finite wire extents (#739)
+
+wireCount :: Integer -> Maybe Word32 is the checked extent conversion used before every writer
+length/count prefix and name-table growth. Reject negative or above-UInt32 extents before narrowing;
+text counts encoded UTF-8 bytes, real blocks count elements, and arrays/fields count entries.
+Resolved Grill Log: conversion must not wrap 2^32 to zero. A pure extent boundary allows exact
+maximum/overflow tests without allocating multi-gigabyte buffers. Valid wire bytes stay unchanged.
