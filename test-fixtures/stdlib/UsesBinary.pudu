@@ -100,8 +100,8 @@ fn golden() -> Int {
   require(One.decode(&json) == Ok(simple), "JSON derives coexist with binary")
   require(Bytes.encodeHex(&Binary.encode(&Binary.Whole(1))) == "00000000000100000000000000", "whole node")
   require(Bytes.encodeHex(&Binary.encode(&One{a: 1}.pack())) == "010000000100000061090100000000000000000100000000000000", "one-field record")
-  let twice = Binary.Fields([("a", Binary.Whole(1)), ("a", Binary.Whole(2))])
-  require(Binary.decode(&Binary.encode(&twice)) == Err(Binary.BinaryError{path: [], problem: Binary.Corrupt("the field a appears twice")}), "repeated field")
+  let twice = Bytes.fromArray(&[1u8, 0u8, 0u8, 0u8, 1u8, 0u8, 0u8, 0u8, 97u8, 9u8, 2u8, 0u8, 0u8, 0u8, 0u8, 0u8, 0u8, 0u8, 7u8, 0u8, 0u8, 0u8, 0u8, 7u8])
+  require(Binary.decode(&twice) == Err(Binary.BinaryError{path: [], problem: Binary.Corrupt("the field a appears twice")}), "repeated field")
   2
 }
 

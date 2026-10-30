@@ -30,3 +30,7 @@ checksum mismatch. Answers the number of check groups, 22.
   typed array and lane round trips, because NaN is unequal and signed zeros compare equal.
 - **Q:** Replace evolution/refusal assertions with a count? **A:** No; each group asserts its
   full value/error/path before returning the aggregate count.
+
+- **Q:** Use the encoder to manufacture duplicate-field bytes? **A:** No; the writer now
+  refuses that invalid tree. Assemble the malformed wire bytes independently and keep the same
+  reader error assertion. Writer refusal is covered separately by [[Binary Facade Gate]].
