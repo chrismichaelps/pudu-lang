@@ -5,6 +5,15 @@ tags: [changelog]
 
 # Changelog
 
+## 2026-10-29 — Asset streaming (#748)
+
+- [[Ark Asset Server]] splits loading into `prepare` (read and import over an immutable
+  snapshot) and `commit` (declare and publish); `add` keeps its declaration-first errors.
+- [[Ark Asset Stream]] loads requests on worker threads by priority once their dependencies are
+  published, never waits in `pump`, commits within a per-frame budget in launch order, reports
+  failures and blocked requests, and releases every thread and cell; streamed payloads equal a
+  direct load.
+
 ## 2026-10-29 — Morph targets (#747)
 
 - [[Ark Morph]] validates a base shape and named dense or sparse targets once, then blends them

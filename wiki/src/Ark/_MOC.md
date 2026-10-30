@@ -8,6 +8,7 @@ tags: [moc, ark]
 
 - [[Ark Asset Dependencies]] · [[Ark Asset Graph Fixture]] — dependency-first order and reload closure.
 - [[Ark Asset Server]] · [[Ark Asset Import]] · [[Ark Asset Server Fixture]] — importers, handles and staged hot reload.
+- [[Ark Asset Stream]] · [[Ark Stream Fixture]] — prioritized loading on worker threads with per-frame commit budgets.
 
 - [[Ark Texture Asset]] · [[Ark Texture Fixture]] · [[Ark Assets Gate]] — checked CPU texture inputs and linear-light sampling.
 
