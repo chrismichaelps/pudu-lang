@@ -34,7 +34,7 @@ engine goal and Ark archive integration (#732) remain outstanding.
 
 Acceptance delivery is pushed at b151a177; required-field-removal regressions and the precise compatibility wording also pass the complete CLI gate.
 
-Exact next action: advance the dev-targeted PR sequence after prerequisite integration.
+Exact next action: integrate the tested facade after prerequisite language repairs, then open the acceptance partition against dev.
 
 ## Referenced by
 
@@ -55,3 +55,9 @@ remains required before further Ark integration; refresh full acceptance validat
 The refreshed consumed benchmark at compiler b357f201 measures binary write/read 30.778/54.246 ms
 and JSON 35.392/97.458 ms (three sequential five-operation run means, M1, 8 GiB). Sizes remain
 140,995/130,012 bytes. Exact raw results and compiler/program hashes are retained locally.
+
+Clean optimized acceptance validation passed in full at 7c7b935d on 2026-10-30, including
+the complete suite, both evaluator binary gates, writer refusals, shipping and engine layer
+checks. PR #762 now carries the facade with all five hosted checks successful; its draft
+status retains the language repair prerequisites #761/#763. This acceptance branch remains
+separate to keep the dev-targeted delivery below 600 changed lines.
