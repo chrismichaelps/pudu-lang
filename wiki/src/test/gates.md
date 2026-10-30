@@ -138,3 +138,4 @@ constraints and positioned type refusal must be exercised through the public lib
 negative cases. Resolved Grill Log: a silent error type is caught by wrong-result assertions.
 
 [[Binary Facade Gate]] validates the shipped binary facade, protocol coexistence, typed refusal and archive. Resolved Grill Log: the new public library runs through the ordinary optimized CLI gate.
+[[Trait Provider Gate]] pins nominal trait selection and positioned wrong-result/ambiguity diagnostics. Resolved Grill Log: distinct provider results execute through the real CLI.

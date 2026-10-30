@@ -65,6 +65,8 @@ run 'qualified constructors preserve types, visibility and runtime values' \
   node test/qualified-variants.mjs "$PUDU"
 run 'binary derives preserve typed round trips and refusals' \
   node test/binary.mjs "$PUDU"
+run 'explicit traits preserve their provider result schemes' \
+  node test/trait-provider.mjs "$PUDU"
 run 'every diagnostic code means one thing' node test/diagnostic-codes.mjs
 run 'desktop configure refuses each invalid setting by name' \
   bash -c 'node test/desktop-configure.mjs "$PUDU"'

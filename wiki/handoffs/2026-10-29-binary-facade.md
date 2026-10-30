@@ -31,3 +31,9 @@ Integration update: merge the current native partition and dev, preserving both 
 Bring forward accurate absent-field defaults and one-way required-field removal documentation.
 The facade gate now consumes depth 512 and refuses depth 513 and duplicate Fields/Choice names
 through positioned E7001 diagnostics; no new public API is introduced. Revalidate before delivery.
+
+The current-dev run passed its warning-free build and full suite, then exposed one wrong test
+assumption: the writer fault points to the native call inside Std.Binary, as runtime errors always
+do, rather than its outer caller. Inspection confirmed the actual span; the focused gate passes
+with that established provenance retained. Merge the #742-integrated native parent e96a3c26,
+preserving both gate registrations and navigation entries, then rerun the clean full gate.
