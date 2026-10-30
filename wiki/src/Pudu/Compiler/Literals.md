@@ -14,7 +14,7 @@ aliases: [Compiler Literals]
 ---
 # Compiler Literals
 
-`resolveLiterals :: Map Span Text -> Map Span [Type] -> Module -> Module` rewrites every integer literal in expression
+`resolveLiterals :: Map Span Text -> Map Span [Type] -> Map Span NominalId -> Module -> Module` rewrites every integer literal in expression
 position into `ResolvedInteger kind value` once, after type checking. The kind is the checker's
 answer for the literal's span, else the literal's own suffix, else the platform `Int`; the value is
 the parsed number. The evaluator then builds the value directly, with no parsing and no `Map Span`
@@ -64,3 +64,12 @@ ordinary modules with no static selections do not pay for the additional owner-o
 
 Both projections retain that distinct callee span. Resolved Grill Log: an execution product reused
 for printed expansion must retain the same explicit owner selection as an analysis product.
+
+## Bound provider evidence (#743)
+
+resolveLiterals additionally consumes Map Span NominalId provider facts. Only executable receiver member symbols become ::canonical.trait::member; implementation trait type paths become canonical. Authored tooling syntax remains unchanged. These resolved symbols survive ordinary checked-product serialization; no per-call span lookup or fake type argument is introduced.
+
+Resolved Grill Log: preserve the checker-selected provider through ordinary executable symbols,
+including retained methods and receiver aliases. Do not infer a provider from declaration order,
+receiver spelling, or runtime type arguments. Existing evaluation order and lending stay intact.
+See [[Bound Provider Delivery]].

@@ -45,6 +45,7 @@ import Pudu.Type.Env
   , DeclaredTypes (..)
   , bindImportedMethod
   , bindName
+  , recordProvider
   , recordDeclaredMethod
   , ambiguousProviders
   , markAmbiguousMethod
@@ -154,6 +155,7 @@ declareMethodsWith
   -> Impl
   -> Checker ()
 declareMethodsWith defaults declared traits value = do
+  mapM_ (recordProvider (locatedSpan (implTrait value))) (implTraitName declared value)
   target <- formType (implAliases declared value) [] (implTarget value)
   case targetName target of
     Nothing -> pure ()
@@ -442,24 +444,25 @@ methodScheme spanValue receiver member = case receiver of
       type `F` would. The arguments say what the container holds and never which
       trait provides a member. -}
   AppliedType head' _ -> methodScheme spanValue head' member
-  RigidType name -> rigidBoundsOf name >>= selectBounds spanValue receiver member
+  RigidType name -> rigidBoundsOf name >>= selectBounds True spanValue receiver member
   _ -> pure Nothing
 
 traitMethodScheme :: Span -> Type -> NominalId -> Text -> Checker (Maybe Scheme)
 traitMethodScheme at receiver owner member = case receiver of
-  RigidType name -> rigidBoundsOf name >>= selectBounds at receiver member . filter owns
-  AppliedType (RigidType name) _ -> rigidBoundsOf name >>= selectBounds at receiver member . filter owns
+  RigidType name -> rigidBoundsOf name >>= selectBounds False at receiver member . filter owns
+  AppliedType (RigidType name) _ -> rigidBoundsOf name >>= selectBounds False at receiver member . filter owns
   _ -> pure Nothing
  where
   owns (NominalType identity _) = identity == owner
   owns _ = False
 
-selectBounds :: Span -> Type -> Text -> [Type] -> Checker (Maybe Scheme)
-selectBounds at receiver member bounds = do
+selectBounds :: Bool -> Span -> Type -> Text -> [Type] -> Checker (Maybe Scheme)
+selectBounds retain at receiver member bounds = do
   providers <- filterM provides bounds
   case providers of
     [] -> pure Nothing
     [bound@(NominalType owner _)] -> do
+      when retain (recordProvider at owner)
       found <- lookupName (nominalKey owner <> "." <> member)
       traverse (specializeBound at receiver bound) found
     _ -> do

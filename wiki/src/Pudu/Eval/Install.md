@@ -225,3 +225,12 @@ Mark the current module frames after installing declarations and before evaluati
 Nested calls then recognize local type witnesses during folding and ordinary loading alike.
 Resolved Grill Log: one declaration-loading boundary covers root and dependency initializers;
 imports stay outside the local witness frame and effect permissions remain unchanged.
+
+## Bound provider evidence (#743)
+
+Install a projected canonical implementation trait path under its full identity and retain the legacy basename alias for existing explicit qualified calls. Default-member inheritance continues to look up its local trait declaration by basename. Both keys reference the same closure and defining environment.
+
+Resolved Grill Log: preserve the checker-selected provider through ordinary executable symbols,
+including retained methods and receiver aliases. Do not infer a provider from declaration order,
+receiver spelling, or runtime type arguments. Existing evaluation order and lending stay intact.
+See [[Bound Provider Delivery]].

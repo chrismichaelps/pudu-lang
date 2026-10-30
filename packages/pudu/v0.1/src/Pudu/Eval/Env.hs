@@ -64,6 +64,7 @@ module Pudu.Eval.Env
 import Data.Map.Strict (Map)
 import qualified Data.Map.Strict as Map
 import Data.Text (Text)
+import qualified Data.Text as Text
 import Pudu.Comptime.Limits (callDepthLimit)
 import Pudu.Eval.Concurrent (ConcurrentStore)
 import Pudu.Eval.AudioStream (AudioStreamStore)
@@ -518,7 +519,12 @@ lookupModule name = Evaluator $ \env -> do
     for a method dispatched a built-in type's method to whichever module some
     other file had imported under that name. -}
 lookupMethod :: Text -> Evaluator (Maybe Value)
-lookupMethod name = Evaluator $ \env -> pure (Done (Map.lookup name (envMethods env)) env)
+lookupMethod name = Evaluator $ \env -> pure (Done (Map.lookup selected (envMethods env)) env)
+ where
+  selected = case Text.splitOn "::" name of
+    [owner, provider, member] | Just receiver <- Text.stripSuffix "." owner ->
+      provider <> "." <> receiver <> "." <> member
+    _ -> name
 
 {-| Record an implementation's method, where every module can reach it. -}
 bindMethod :: Text -> Value -> Evaluator ()

@@ -115,3 +115,12 @@ Exact `typeAt` queries use the full span; offset query complexity stays unchange
 - **Q:** Collapse generated types into the hover map? **A:** No. _Rationale:_ a
   template position has different types in different instantiations. _Rejected:_
   last expansion wins or a linear rescan on every tooling query.
+
+## Bound provider evidence (#743)
+
+ModuleTypes.moduleProviders indexes canonical trait evidence by complete span for executable projection. This product does not change authored tooling types or static argument selections.
+
+Resolved Grill Log: preserve the checker-selected provider through ordinary executable symbols,
+including retained methods and receiver aliases. Do not infer a provider from declaration order,
+receiver spelling, or runtime type arguments. Existing evaluation order and lending stay intact.
+See [[Bound Provider Delivery]].
