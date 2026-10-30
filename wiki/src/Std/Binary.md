@@ -23,12 +23,15 @@ pass. `write(value)` frames the encoding as `PBIN`, a 16-bit version (1) and the
 `Float64` keeps its exact bits, so NaN payloads and signed zero survive. An `Array[Float64]` and
 `Lanes` travel as one contiguous `Reals` block: an array picks its form from its first element
 (`packMany`), and reading dispatches on the node (`unpackReals`). `Option` is `Absent` or
-`Present`, and its `missing()` is `None`, so only an `Option` field may be absent.
+`Present`; its `missing()` returns `Some(None)`, providing an absent-field default. Other
+shipped implementations inherit no default; custom Decode implementations may override
+`missing()` explicitly.
 
 A record writes its fields under their wire names (the field name, or `@binary("name")`); `@skip`
 fields are neither written nor read and take `missing()`. Reading ignores names it does not know
-and gives an absent field `missing()`, refusing `MissingField` otherwise, so adding an optional
-field and removing any field keep old and new data readable both ways. A sum writes the variant's
+and gives an absent field `missing()`, refusing `MissingField` otherwise, so adding or removing an optional
+field keeps old and new data readable both ways. A reader ignores fields it does not declare;
+an archive missing a reader's required field is refused rather than given an invented value. A sum writes the variant's
 wire name; an unknown one is `UnknownVariant(name)`. `BinaryError` carries the `path` of field
 names and `[index]` steps, and `Corrupt(message)` for anything the native reader refused, or
 `WrongKind(expected)`.
@@ -57,3 +60,10 @@ names and `[index]` steps, and `Corrupt(message)` for anything the native reader
 [[src/Std/_MOC]] · [[Eval Binary]] · [[Binary Facade Smoke]]
 
 Validation: [[Binary Codec Properties]] · [[Binary Facade Gate]].
+
+## Writer admission (#739)
+
+encode requires valid Node shapes, at most 512 levels of nesting and unique field names within
+each record or variant; invalid input reports E7001 instead of producing unreadable bytes.
+Name reuse across separate records is valid. Resolved Grill Log: keep the public writer's
+preconditions explicit and execute its boundary through [[Binary Facade Gate]].

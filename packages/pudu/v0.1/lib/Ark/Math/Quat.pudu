@@ -133,6 +133,25 @@ export fn angleBetween(from: Quat, to: Quat) -> Float64 {
   }
 }
 
+/// How close to opposite two unit directions are before `between` turns about a chosen perpendicular axis.
+const OPPOSITE: Float64 = -0.999999
+
+/// The shortest-arc rotation taking direction `from` onto direction `to`; a half turn about a
+/// perpendicular axis for opposite directions, None for a zero or non-finite direction.
+export fn between(from: Vector.Vec3, to: Vector.Vec3) -> Option[Quat] {
+  let a = Vector.normalized(from) ?
+  let b = Vector.normalized(to) ?
+  let cosine = Vector.dot(a, b)
+  if cosine < OPPOSITE {
+    let trial = Vector.cross(Vector.vec3(1.0, 0.0, 0.0), a)
+    let axis = if Vector.lengthSquared(trial) > 0.000001 { trial } else { Vector.cross(Vector.vec3(0.0, 1.0, 0.0), a) }
+    let unit = Vector.normalized(axis) ?
+    return Some(quat(unit.x, unit.y, unit.z, 0.0))
+  }
+  let axis = Vector.cross(a, b)
+  normalized(quat(axis.x, axis.y, axis.z, 1.0 + cosine))
+}
+
 /// The rotation matrix of a unit quaternion.
 export fn toMat3(rotation: Quat) -> Matrix.Mat3 {
   let x2 = rotation.x + rotation.x

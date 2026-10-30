@@ -54,10 +54,23 @@ issue #730 for leaks in the bounded `Std.Concurrent` helpers. The window slice (
 high-DPI frames, full screen, size limits, focus and minimize records) has its native adapter,
 native test and Haskell builtin on feature/728-window-modes, unpushed.
 
-Open target obligations: the Ark side of #728; lights, shadows and text rendering; IK and morph
-targets; Core serialization and allocators; asynchronous streaming; editor and tools.
+Merged into dev on 2026-10-29 without review, as the user asked: the lanes and raster kernel
+stack, the engine integration branch (schedule, window state and settings), the presentation
+fix, shared lane collections, the concurrency release fix, the physics and character slices and
+`Self` in trait defaults (#745). The full gate passed on the merged dev. Inverse kinematics
+(#746) follows on its own branch. A Codex session owns `Std.Binary` (#739, PR #741) and run-time
+trait provider dispatch (#742, #743, PR #744); #734 and #735 wait on that work. The Ark archive
+(#732) builds on `Std.Binary` once it lands.
 
-Exact next action: fix #730 on its own branch from dev, then finish #728.
+Inverse kinematics (#749), morph targets (#752) and asset streaming (#753) are merged into dev. Derived property inspectors (#751) open Ark.Editor, and the derive fallback warning fix (#750) lands with them.
+
+Glyph text and UI labels (#756) follow on their own branch.
+
+Open target obligations: lights and shadows; Core allocators; the rest of
+the editor (scene and asset views) and tools.
+
+Exact next action: rebase #732 onto `Std.Binary` once PR #741 merges, keeping only the engine's
+versioned save framing in Ark.Core.
 
 ## Referenced by
 

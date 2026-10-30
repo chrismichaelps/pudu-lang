@@ -37,7 +37,7 @@ const LINE_UNITS: Int = 9
 /// Glyph bitmaps for the printable ASCII range from space to tilde, indexed by
 /// code minus 32. Each packs seven rows of five columns, top row and leftmost
 /// column in the highest bits.
-const GLYPHS: Array[UInt64] = [
+export const GLYPHS: Array[UInt64] = [
   0u64,
   4433514500u64,
   11072962560u64,
@@ -136,7 +136,7 @@ const GLYPHS: Array[UInt64] = [
 ]
 
 /// The hollow box drawn for a character outside the table.
-const MISSING_GLYPH: UInt64 = 33874822719u64
+export const MISSING_GLYPH: UInt64 = 33874822719u64
 
 /// A face at a whole-number scale from 1 to 64.
 export fn face(scale: Int) -> Result[Face, TextError] {

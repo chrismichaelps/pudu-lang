@@ -1,0 +1,115 @@
+module UsesArkStream
+
+import Std.Concurrent as Concurrent
+import Ark.Assets.Import as Import
+import Ark.Assets.Server as Server
+import Ark.Assets.Stream as Stream
+import Ark.Assets.Texture as Texture
+import Ark.Platform.Vfs as Vfs
+
+fn require(condition: Bool, name: Str) {
+  if !condition { panic(name) }
+}
+
+fn source(id: Str, path: Str, importer: Str, dependencies: Array[Str]) -> Server.Source {
+  Server.Source{id, path, importer, dependencies}
+}
+
+fn cooked(pixels: Array[UInt8]) -> Bytes {
+  let Some(texture) = Texture.rgba8(1, 1, bytesOf(pixels), "linear") else { panic("texture") }
+  let Some(bytes) = Import.cookTexture(&texture) else { panic("cook") }
+  bytes
+}
+
+fn files() -> Vfs.Vfs {
+  let stored = mapOf([
+      ("albedo.arkt", cooked([255, 0, 0, 255])),
+      ("tint.bin", bytesOf([255, 255, 255, 255])),
+      ("notes.bin", bytesOf([1, 2, 3])),
+      ("bad.arkt", bytesOf([1, 2, 3])),
+    ])
+  let Ok(vfs) = Vfs.mountMemory(Vfs.empty(), "mem", &stored) else { panic("mount") }
+  vfs
+}
+
+fn empty() -> Server.Server {
+  let Ok(server) = Server.open(files(), &[]) else { panic("open") }
+  server
+}
+
+type Run = { server: Server.Server, committed: Array[Str], failed: Array[(Str, Server.Error)], blocked: Array[Str], widest: Int, queue: Stream.Stream }
+
+/// Pump until nothing is waiting, running or finished, or until a pump reports a blocked request.
+fn drive(queue: Stream.Stream, server: Server.Server, budget: Stream.Budget) -> Run {
+  var run = Run{server, committed: [], failed: [], blocked: [], widest: 0, queue}
+  var rounds = 0
+  while rounds < 5000 {
+    let Ok((next, published, progress)) = Stream.pump(run.queue, run.server, &budget) else { panic("pump") }
+    let widest = if progress.committed.length() > run.widest { progress.committed.length() } else { run.widest }
+    run = Run{server: published, committed: run.committed.concat(progress.committed), failed: run.failed.concat(progress.failed), blocked: progress.blocked, widest, queue: next}
+    if !progress.blocked.isEmpty() { return run }
+    if progress.waiting == 0 && progress.running == 0 && next.finished.isEmpty() { return run }
+    let _paused = Concurrent.sleep(1)
+    rounds = rounds + 1
+  }
+  panic("stream did not settle")
+}
+
+fn payloadOf(server: &Server.Server, id: Str) -> Option[Import.Payload] {
+  let issued = Server.handle(server, id) ?
+  Server.payload(server, issued)
+}
+
+fn matching() {
+  let sources = [source("albedo", "mem:/albedo.arkt", "texture", []), source("brick", "mem:/tint.bin", "material", ["albedo"]), source("notes", "mem:/notes.bin", "bytes", [])]
+  let Ok(direct) = Server.open(files(), &sources) else { panic("direct") }
+  var queue = Stream.stream()
+  for held in sources {
+    queue = Stream.request(queue, held, 0)
+  }
+  queue = Stream.request(queue, sources[0], 9)
+  require(queue.waiting.length() == 3, "a duplicate request is ignored")
+  let run = drive(queue, empty(), Stream.Budget{workers: 2, commits: 1})
+  require(run.widest == 1, "no pump commits past its budget")
+  for id in ["albedo", "brick", "notes"] {
+    require(payloadOf(&run.server, id) == payloadOf(&direct, id) && payloadOf(&run.server, id) != None, "streamed payload equals a direct load of " + id)
+  }
+  let again = Stream.request(Stream.stream(), sources[2], 0)
+  let settled = drive(again, run.server, Stream.Budget{workers: 1, commits: 4})
+  require(settled.committed.isEmpty() && settled.failed.isEmpty(), "a request for a loaded asset is dropped")
+}
+
+fn ordering() {
+  var queue = Stream.request(Stream.stream(), source("notes", "mem:/notes.bin", "bytes", []), 0)
+  queue = Stream.request(queue, source("albedo", "mem:/albedo.arkt", "texture", []), 5)
+  queue = Stream.request(queue, source("tint", "mem:/tint.bin", "bytes", []), 1)
+  queue = Stream.cancel(queue, "tint")
+  let run = drive(queue, empty(), Stream.Budget{workers: 1, commits: 1})
+  require(run.committed == ["albedo", "notes"], "higher priority first, cancelled never loads")
+  require(Server.handle(&run.server, "tint") == None, "cancelled asset absent")
+}
+
+fn failures() {
+  var queue = Stream.request(Stream.stream(), source("gone", "mem:/missing.bin", "bytes", []), 0)
+  queue = Stream.request(queue, source("bad", "mem:/bad.arkt", "texture", []), 0)
+  let run = drive(queue, empty(), Stream.Budget{workers: 2, commits: 4})
+  require(run.failed.length() == 2 && run.committed.isEmpty(), "both failures reported")
+  for (id, problem) in run.failed {
+    if id == "gone" { require(problem == Server.ReadFailed("gone", Vfs.NotFound("missing.bin")), "read failure") }
+    if id == "bad" { require(problem == Server.ImportFailed("bad", "missing texture header"), "import failure") }
+  }
+  let orphan = Stream.request(Stream.stream(), source("brick", "mem:/tint.bin", "material", ["albedo"]), 0)
+  let blocked = drive(orphan, empty(), Stream.Budget{workers: 1, commits: 1})
+  require(blocked.blocked == ["brick"] && blocked.queue.waiting.length() == 1, "blocked on an unrequested dependency")
+  require(Stream.pump(Stream.stream(), empty(), &Stream.Budget{workers: 0, commits: 1}) == Err(Stream.BadBudget(0, 1)), "worker budget")
+  require(Stream.pump(Stream.stream(), empty(), &Stream.Budget{workers: 1, commits: 0}) == Err(Stream.BadBudget(1, 0)), "commit budget")
+}
+
+/// Stream assets and compare them with a direct load.
+export fn main() -> Int {
+  matching()
+  ordering()
+  failures()
+  print("ark stream: ok")
+  0
+}

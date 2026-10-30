@@ -24,6 +24,7 @@ import Data.Int (Int64)
 import Data.List (sortOn)
 import qualified Data.Map.Strict as Map
 import qualified Data.Sequence as Seq
+import qualified Data.Set as Set
 import Data.Text (Text)
 import qualified Data.Text as Text
 import qualified Data.Text.Encoding as Encoding
@@ -65,7 +66,7 @@ tagPresent = 8
 tagFields = 9
 tagChoice = 10
 
-{-| How deep nodes may nest before reading refuses, so hostile input cannot
+{-| How deep nodes may nest before reading or writing refuses, so hostile input cannot
     exhaust the stack. -}
 maximumDepth :: Int
 maximumDepth = 512
@@ -76,12 +77,15 @@ data Names = Names !(Map.Map Text Word32) !Word32
 {-| A node tree as bytes, or nothing when the value is not a node tree. -}
 encodeNode :: Value -> Maybe ByteString.ByteString
 encodeNode root = do
-  (Names table count, body) <- nodeOf (Names Map.empty 0) root
+  (Names table count, body) <- nodeOf 0 (Names Map.empty 0) root
   let ordered = map fst (sortOn snd (Map.toList table))
       header = word32 count <> foldMap textOf ordered
   Just (LazyByteString.toStrict (Builder.toLazyByteString (header <> body)))
  where
-  nodeOf names value = case value of
+  nodeOf depth names value
+    | depth > maximumDepth = Nothing
+    | otherwise = nodeWith depth names value
+  nodeWith depth names value = case value of
     VariantValue "Whole" [IntValue _ number]
       | number >= toInteger (minBound :: Int64) && number <= toInteger (maxBound :: Int64) ->
           Just (names, Builder.word8 tagWhole <> Builder.int64LE (fromInteger number))
@@ -95,45 +99,45 @@ encodeNode root = do
       | ByteString.length bytes `mod` 8 == 0 ->
           Just (names, Builder.word8 tagReals <> word32 (fromIntegral (ByteString.length bytes `div` 8)) <> Builder.byteString bytes)
     VariantValue "Items" [ArrayValue members] -> do
-      (after, parts) <- many names (toList members)
+      (after, parts) <- many (depth + 1) names (toList members)
       Just (after, Builder.word8 tagItems <> word32 (fromIntegral (Seq.length members)) <> parts)
     VariantValue "Absent" [] -> Just (names, Builder.word8 tagAbsent)
     VariantValue "Present" [held] -> do
-      (after, part) <- nodeOf names held
+      (after, part) <- nodeOf (depth + 1) names held
       Just (after, Builder.word8 tagPresent <> part)
     VariantValue "Fields" [ArrayValue entries] -> do
-      (after, part) <- fieldsOf names (toList entries)
+      (after, part) <- fieldsOf depth names (toList entries)
       Just (after, Builder.word8 tagFields <> part)
     VariantValue "Record" [MapValue entries] -> do
-      (after, part) <- fieldsOf names (mapEntries entries)
+      (after, part) <- fieldsOf depth names (mapEntries entries)
       Just (after, Builder.word8 tagFields <> part)
     VariantValue "Choice" [StrValue name, ArrayValue entries] -> do
       let (named, index) = intern names name
-      (after, part) <- fieldsOf named (toList entries)
+      (after, part) <- fieldsOf depth named (toList entries)
       Just (after, Builder.word8 tagChoice <> word32 index <> part)
     VariantValue "Picked" [StrValue name, MapValue entries] -> do
       let (named, index) = intern names name
-      (after, part) <- fieldsOf named (mapEntries entries)
+      (after, part) <- fieldsOf depth named (mapEntries entries)
       Just (after, Builder.word8 tagChoice <> word32 index <> part)
     _ -> Nothing
 
-  many names values = case values of
+  many depth names values = case values of
     [] -> Just (names, mempty)
     value : rest -> do
-      (after, part) <- nodeOf names value
-      (final, parts) <- many after rest
+      (after, part) <- nodeOf depth names value
+      (final, parts) <- many depth after rest
       Just (final, part <> parts)
 
-  fieldsOf names entries = do
-    (after, parts) <- go names entries
+  fieldsOf depth names entries = do
+    (after, parts) <- go names Set.empty entries
     Just (after, word32 (fromIntegral (length entries)) <> parts)
    where
-    go current remaining = case remaining of
+    go current seen remaining = case remaining of
       [] -> Just (current, mempty)
-      TupleValue [StrValue name, held] : rest -> do
+      TupleValue [StrValue name, held] : rest | Set.notMember name seen -> do
         let (named, index) = intern current name
-        (after, part) <- nodeOf named held
-        (final, parts) <- go after rest
+        (after, part) <- nodeOf (depth + 1) named held
+        (final, parts) <- go after (Set.insert name seen) rest
         Just (final, word32 index <> part <> parts)
       _ -> Nothing
 

@@ -22,6 +22,25 @@ try {
   assert.notEqual(checked.status, 0);
   assert.match(checked.stdout + checked.stderr, /E3001/);
   assert.match(checked.stdout + checked.stderr, /WrongBinary\.pudu:4:/);
+  const writer = join(scratch, 'WriterBinary.pudu');
+  for (const [setup, accepted] of [
+    ['var node: Binary.Node = Binary.Absent\n  for _index in 0..512 { node = Binary.Present(node) }', true],
+    ['var node: Binary.Node = Binary.Absent\n  for _index in 0..513 { node = Binary.Present(node) }', false],
+    ['let node = Binary.Fields([("x", Binary.Absent), ("x", Binary.Absent)])', false],
+    ['let node = Binary.Choice("Stored", [("x", Binary.Absent), ("x", Binary.Absent)])', false],
+  ]) {
+    writeFileSync(writer, 'module WriterBinary\nimport Std.Binary as Binary\nexport fn main() -> Int {\n  ' + setup +
+      '\n  let bytes = Binary.encode(&node)\n  let Ok(_) = Binary.decode(&bytes) else { panic("writer emitted unreadable bytes") }\n  0\n}\n');
+    const result = spawnSync(binary, ['run', writer], {env, encoding: 'utf8', timeout: 60000});
+    if (accepted) {
+      assert.equal(result.status, 0, result.stdout + result.stderr);
+      assert.equal(result.stdout, '');
+    } else {
+      assert.notEqual(result.status, 0, setup);
+      assert.match(result.stdout + result.stderr, /E7001/);
+      assert.match(result.stdout + result.stderr, /WriterBinary\.pudu:\d+:\d+/);
+    }
+  }
   execFileSync('cabal', ['sdist', 'pudu', '--output-directory=' + scratch], {cwd: root, encoding: 'utf8', timeout: 60000});
   const archive = readdirSync(scratch).find(name => /^pudu-[0-9].*\.tar\.gz$/.test(name));
   assert(archive, 'source archive exists');

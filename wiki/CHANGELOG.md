@@ -6,8 +6,59 @@ tags: [changelog]
 # Changelog
 
 - 2026-10-29: Binary facade (#739) adds Encode/Decode derives, framed typed reads, explicit builtin wiring and CLI/distribution validation.
+- 2026-10-30: Native binary writing refuses reader-incompatible nesting and duplicate fields (#739); sibling records retain shared names.
 
 - 2026-10-29: Native binary codec (#739) adds exact-bit tree encoding, checked wire decoding and generated/truncation boundary properties. Public facade delivery remains separate.
+## 2026-10-29 — Glyph text and visible UI labels (#756)
+
+- [[Ark Text]] draws the [[Std Ui Text]] face from a compile-time glyph atlas, every glyph of a
+  batch in one textured device call, with vertex expansion on lane kernels; measuring and
+  wrapping delegate to `Std.Ui.Text`, which now exports its glyph table.
+- [[Ark UI]] `render` draws its text commands above the fills, so widget labels appear.
+
+## 2026-10-29 — Derived property inspectors (#751)
+
+- [[Ark Inspect]] gives every type that `derives Inspect.Inspect` typed property rows and edits
+  by dotted path from text, shaped by `@label`, `@min`/`@max`, `@readonly` and `@skip`, with
+  leaf support for numbers, flags, text, vectors and arrays; `panel` draws the rows with
+  [[Ark UI]] sliders, checkboxes and labels and answers the edited value.
+
+## 2026-10-29 — Effect-free attribute fallbacks (#750)
+
+- [[Derive Record Residualizer]] keeps an `attributeOr` fallback the attribute replaces only when
+  it can have effects, so `-1.0` and other literal, name or operator fallbacks no longer report
+  W3004 at every deriving type; [[Attribute Fallback Fixture]] pins it.
+## 2026-10-29 — Asset streaming (#748)
+
+- [[Ark Asset Server]] splits loading into `prepare` (read and import over an immutable
+  snapshot) and `commit` (declare and publish); `add` keeps its declaration-first errors.
+- [[Ark Asset Stream]] loads requests on worker threads by priority once their dependencies are
+  published, never waits in `pump`, commits within a per-frame budget in launch order, reports
+  failures and blocked requests, and releases every thread and cell; streamed payloads equal a
+  direct load.
+
+## 2026-10-29 — Morph targets (#747)
+
+- [[Ark Morph]] validates a base shape and named dense or sparse targets once, then blends them
+  per frame on lanes: dense targets by axpy, sparse ones by scatterAdd over only the vertices they
+  move, zero weights skipped, normals renormalized. A 10,000-vertex blend with five of fifty
+  targets active takes about 0.9 ms.
+
+## 2026-10-29 — Inverse kinematics (#746)
+
+- [[Ark Ik]] solves two-bone limbs by projection and height (no inverse trigonometry), clamps at
+  both minimum and full reach, approaches full reach through a rational soft band, and reports
+  shortest-arc bone turns and shortfall; FABRIK solves chains within a tolerance and budget.
+- [[Ark Limbs]] solves many limbs at once on lanes with identical results: about 0.8
+  microseconds per limb against 220 for one interpreted solve. [[Ark Quaternion]] gains
+  `between`.
+
+## 2026-10-29 — Self inside trait defaults (#736)
+
+- [[Eval Call Path]] binds `Self` to the selected owner when a method is reached through a
+  witness or a receiver, so a trait default passing `Self` on as a type argument selects the
+  implementing type instead of failing at run time; [[Language Foundation Program Spec]] covers
+  witness, generic-implementation, inferred and receiver paths.
 
 ## 2026-10-29 — Sharp, resizable, state-aware engine windows (#728)
 
