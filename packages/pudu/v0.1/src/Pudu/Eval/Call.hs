@@ -209,7 +209,7 @@ dispatchCall needs spanValue lent target values =
   case target of
     FunctionValue closure -> callClosureLending needs closure values lent (Just spanValue)
     ForeignValue binding -> callForeign spanValue binding values
-    VariantValue name [] -> pure (VariantValue name values)
+    SumValue owner name [] -> pure (SumValue owner name values)
     BuiltinValue PanicBuiltin -> callPanic spanValue values
     BuiltinValue CharFromCodeBuiltin -> callCharFromCode spanValue values
     BuiltinValue MapOfBuiltin -> callMapOf spanValue values
@@ -293,8 +293,8 @@ awaitTask needs spanValue task = case task of
     releaseChild task
     result <- runClosure needs closure bindings callSpan
     case result of
-      VariantValue "Ok" _ -> unwrapTry spanValue result
-      VariantValue "Err" _ -> unwrapTry spanValue result
+      SumValue "Result" "Ok" _ -> unwrapTry spanValue result
+      SumValue "Result" "Err" _ -> unwrapTry spanValue result
       _ -> pure result
   _ -> abortAt (Just spanValue) "E7008" ("cannot await a " <> valueKind task)
     (Just "await a task returned by an async function")

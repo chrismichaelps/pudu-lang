@@ -105,3 +105,9 @@ qualifiedCallee returns Nothing immediately for an ordinary local head, skipping
 Selected type witnesses retain their complete canonical nominal key. Generated canonical method qualifiers retain their full owner path; one-segment parameter witnesses still resolve lexically.
 
 Resolved Grill Log: identity comes from the checked declaration, never import order or a basename guess. Preserve observable labels, lexical shadowing, field effects and failure provenance; no runtime filesystem lookup. See [[Canonical Runtime Owner Delivery]].
+
+## Positional sum owners (#761)
+
+Generated canonical constructor references resolve through the installed canonical sum namespace. Preserve complete owner identity in the generated fallback as well; do not rebuild a checked constructor from only its final label.
+
+Resolved Grill Log: identity comes from the declaration or native ABI, not a global short-tag registry. Keep labels, evaluation order, effects and wire bytes stable. See [[Positional Sum Owner Delivery]].

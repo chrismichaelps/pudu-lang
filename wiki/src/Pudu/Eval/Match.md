@@ -85,3 +85,9 @@ DEPTH 0.45 (MEDIUM). It keeps one concern out of [[Evaluator]], which would othe
 A checked named record pattern compares its authored final label with the final label of the retained canonical runtime owner. Record equality continues comparing complete owner identity. Named sum variants retain their existing tag checks.
 
 Resolved Grill Log: identity comes from the checked declaration, never import order or a basename guess. Preserve observable labels, lexical shadowing, field effects and failure provenance; no runtime filesystem lookup. See [[Canonical Runtime Owner Delivery]].
+
+## Positional sum owners (#761)
+
+Numeric-aware aggregate equality includes positional sum owner as well as label and recursively compared payload. Canonical constructor-pattern owner checks remain required in a separate #761 checker/matcher partition; this value-representation partition preserves existing pattern behavior.
+
+Resolved Grill Log: identity comes from the declaration or native ABI, not a global short-tag registry. Keep labels, evaluation order, effects and wire bytes stable. See [[Positional Sum Owner Delivery]].

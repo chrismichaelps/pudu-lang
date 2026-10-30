@@ -149,3 +149,6 @@ Resolved Grill Log: run against the freshly built optimized compiler; preserve b
 Run the Qualified Record Method Gate against the optimized compiler after canonical owner validation.
 
 Resolved Grill Log: known concrete identity, lexical admission, module-export priority and provider ambiguity must agree for called and retained methods. See [[Qualified Record Method Delivery]].
+
+[[Sum Owner Gate]] covers positional canonical ownership after record and qualification checks.
+Resolved Grill Log: source and native values must agree in both evaluators.

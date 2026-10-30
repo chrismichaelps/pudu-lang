@@ -135,8 +135,8 @@ sameValue left right = case (left, right) of
   (IntValue _ a, IntValue _ b) -> a == b
   (TupleValue a, TupleValue b) -> sameList a b
   (ArrayValue a, ArrayValue b) -> sameList (toList a) (toList b)
-  (VariantValue leftName a, VariantValue rightName b) ->
-    leftName == rightName && sameList a b
+  (SumValue leftOwner leftName a, SumValue rightOwner rightName b) ->
+    leftOwner == rightOwner && leftName == rightName && sameList a b
   (RecordValue leftName a, RecordValue rightName b) ->
     leftName == rightName
       && map fst a == map fst b
