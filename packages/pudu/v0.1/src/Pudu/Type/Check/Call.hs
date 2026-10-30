@@ -47,6 +47,7 @@ import Pudu.Type.Check.Rule
   )
 import Pudu.Type.Check.Method
   ( methodScheme
+  , implementationMethodKey
   , traitMethodScheme
   , targetName
   )
@@ -180,7 +181,11 @@ qualifiedByName declared spanValue target member = do
 qualifiedByType :: DeclaredTypes -> Span -> Expression -> Text -> Checker (Maybe Type)
 qualifiedByType declared spanValue target member = case target of
   NameExpression (first NonEmpty.:| []) -> case Map.lookup first (declaredNames declared) of
-    Nothing -> pure Nothing
+    Nothing -> do
+      providers <- ambiguousProviders (first <> "." <> member)
+      if null providers || Set.member first (declaredQualifiers declared)
+        then pure Nothing
+        else byType (NominalId Nothing first)
     Just identity -> do
       -- A module qualifier that exports `member` names that value, even where
       -- the module also has a type of the qualifier's spelling: `Json.encode`
@@ -257,7 +262,7 @@ traitQualifiedCall checker declared rigid (Located calleeSpan callee) arguments 
                   restTypes <- mapM (runCheck checker declared rigid) rest
                   pure (Just (instantiated, receiverType : restTypes))
             Just owner -> do
-              found <- lookupName (nominalKey owner <> "." <> locatedValue member)
+              found <- lookupName (implementationMethodKey owner traitIdentity (locatedValue member))
               case found of
                 Nothing -> pure Nothing
                 Just scheme

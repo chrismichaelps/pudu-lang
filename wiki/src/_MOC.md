@@ -222,3 +222,4 @@ tags: [moc, module]
 - [[Database Challenge Spec]] · [[Database Challenge Fixture]] · [[Database Challenge Transport]]
 
 - [[Eval Binary]] · [[Binary Codec Properties]] — native binary wire contract and validation.
+- [[Trait Provider Gate]] — explicit trait signatures, execution and located refusals.

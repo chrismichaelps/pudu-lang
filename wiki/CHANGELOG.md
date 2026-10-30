@@ -8,6 +8,7 @@ tags: [changelog]
 - 2026-10-30: Native binary writing refuses reader-incompatible nesting and duplicate fields (#739); sibling records retain shared names.
 
 - 2026-10-29: Native binary codec (#739) adds exact-bit tree encoding, checked wire decoding and generated/truncation boundary properties. Public facade delivery remains separate.
+- 2026-10-29: Explicit trait calls (#742) select canonical per-provider implementation schemes, preserving distinct return types independently of declaration order.
 ## 2026-10-29 — Glyph text and visible UI labels (#756)
 
 - [[Ark Text]] draws the [[Std Ui Text]] face from a compile-time glyph atlas, every glyph of a

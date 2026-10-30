@@ -39,3 +39,7 @@ reader nesting limit or duplicate fields. The new native boundary test failed be
 The writer now shares the reader depth limit and validates per-record field-name uniqueness;
 sibling records still share names. Revalidate native properties and the full gate before merging.
 The project owner waived independent review for this engine delivery loop on 2026-10-30.
+
+The writer-corrected a24e0701 passed every clean local gate. PR #744 merged into dev as a6f85d584;
+merge that prerequisite while preserving both navigation/changelog entries. Code changes are the
+already-tested explicit-provider repair. Refresh required checks on the combined head before merge.
