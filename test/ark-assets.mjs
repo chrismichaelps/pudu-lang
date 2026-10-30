@@ -14,12 +14,14 @@ const modulePath = 'Ark/Assets/Texture.pudu';
 const fixture = join(root, 'test-fixtures/ark/UsesArkTexture.pudu');
 const graphFixture = join(root, 'test-fixtures/ark/UsesArkAssetGraph.pudu');
 const serverFixture = join(root, 'test-fixtures/ark/UsesArkAssetServer.pudu');
-const shipped = ['Texture', 'Graph', 'Import', 'Server'].map(name => `Ark/Assets/${name}.pudu`);
+const streamFixture = join(root, 'test-fixtures/ark/UsesArkStream.pudu');
+const shipped = ['Texture', 'Graph', 'Import', 'Server', 'Stream'].map(name => `Ark/Assets/${name}.pudu`);
 const run = (...args) => execFileSync(binary, args, {env, encoding: 'utf8', timeout: 60000});
 assert.equal(run('run', fixture), 'ark texture: ok\n');
 assert.equal(run('run', graphFixture), 'ark asset graph: ok\n');
 assert.equal(run('run', serverFixture), 'ark asset server: ok\n');
-run('fmt', '--check', fixture, graphFixture, serverFixture, ...shipped.map(path => join(library, path)));
+assert.equal(run('run', streamFixture), 'ark stream: ok\n');
+run('fmt', '--check', fixture, graphFixture, serverFixture, streamFixture, ...shipped.map(path => join(library, path)));
 const scratch = mkdtempSync(join(tmpdir(), 'pudu-ark-assets-'));
 try {
   const refused = join(scratch, 'InvalidUv.pudu');
@@ -28,6 +30,12 @@ try {
   assert.notEqual(checked.status, 0);
   assert.match(checked.stdout + checked.stderr, /E3001/);
   assert.match(checked.stdout + checked.stderr, /InvalidUv\.pudu:5:/);
+  const budget = join(scratch, 'BudgetAsText.pudu');
+  writeFileSync(budget, 'module BudgetAsText\nimport Ark.Assets.Stream as Stream\nexport fn main() -> Int {\n  let budget = Stream.Budget{workers: "four", commits: 1}\n  0\n}\n');
+  const typed = spawnSync(binary, ['check', budget], {env, encoding: 'utf8', timeout: 60000});
+  assert.notEqual(typed.status, 0);
+  assert.match(typed.stdout + typed.stderr, /E3001/);
+  assert.match(typed.stdout + typed.stderr, /BudgetAsText\.pudu:4:/);
   execFileSync('cabal', ['sdist', 'pudu', '--output-directory=' + scratch], {cwd: root, encoding: 'utf8', timeout: 60000});
   const archive = readdirSync(scratch).find(name => /^pudu-[0-9].*\.tar\.gz$/.test(name));
   const entries = execFileSync('tar', ['-tzf', join(scratch, archive)], {encoding: 'utf8'}).split('\n');
@@ -35,4 +43,4 @@ try {
 } finally {
   rmSync(scratch, {recursive: true, force: true});
 }
-console.log('Ark asset dependency order, staged reload, importers, texture sampling, color/alpha boundaries, diagnostics and shipping passed');
+console.log('Ark asset dependency order, staged reload, streaming, importers, texture sampling, color/alpha boundaries, diagnostics and shipping passed');

@@ -13,11 +13,14 @@ const env = {...process.env, PUDU_LIB: library};
 const fixture = join(root, 'test-fixtures/ark/UsesArkAnimation.pudu');
 const ik = join(root, 'test-fixtures/ark/UsesArkIk.pudu');
 const bench = join(root, 'bench/IkBench.pudu');
-const modules = ['Ark/Animation.pudu', 'Ark/Animation/Machine.pudu', 'Ark/Animation/Ik.pudu', 'Ark/Animation/Limbs.pudu'];
+const morph = join(root, 'test-fixtures/ark/UsesArkMorph.pudu');
+const morphBench = join(root, 'bench/MorphBench.pudu');
+const modules = ['Ark/Animation.pudu', 'Ark/Animation/Machine.pudu', 'Ark/Animation/Ik.pudu', 'Ark/Animation/Limbs.pudu', 'Ark/Animation/Morph.pudu'];
 const run = (...args) => execFileSync(binary, args, {env, encoding: 'utf8', timeout: 120000});
 assert.equal(run('run', fixture), 'ark animation: ok\n');
 assert.equal(run('run', ik), 'ark ik: ok\n');
-run('fmt', '--check', fixture, ik, bench, ...modules.map(path => join(library, path)));
+assert.equal(run('run', morph), 'ark morph: ok\n');
+run('fmt', '--check', fixture, ik, bench, morph, morphBench, ...modules.map(path => join(library, path)));
 const scratch = mkdtempSync(join(tmpdir(), 'pudu-ark-animation-'));
 try {
   const typed = join(scratch, 'WeightAsText.pudu');
@@ -40,5 +43,6 @@ try {
 if (process.argv.includes('--bench')) {
   const timings = Object.fromEntries(run('run', bench).trim().split('\n').map(line => line.split(' ')).map(([name, ns]) => [name, Number(ns)]));
   console.log(JSON.stringify({nanosecondsPerSolve: timings, batchSpeedup: timings.twoBone / Math.max(timings.twoBoneBatch, 1)}));
+  console.log(JSON.stringify({vertices: 10000, activeTargets: 5, nanosecondsPerBlend: Number(run('run', morphBench).trim().split(' ')[1])}));
 }
-console.log('Ark animation sampling, blending, layering, state machine, inverse kinematics, refusals and distribution passed');
+console.log('Ark animation sampling, blending, layering, state machine, inverse kinematics, morph targets, refusals and distribution passed');

@@ -10,6 +10,21 @@ tags: [changelog]
 - [[Derive Record Residualizer]] keeps an `attributeOr` fallback the attribute replaces only when
   it can have effects, so `-1.0` and other literal, name or operator fallbacks no longer report
   W3004 at every deriving type; [[Attribute Fallback Fixture]] pins it.
+## 2026-10-29 — Asset streaming (#748)
+
+- [[Ark Asset Server]] splits loading into `prepare` (read and import over an immutable
+  snapshot) and `commit` (declare and publish); `add` keeps its declaration-first errors.
+- [[Ark Asset Stream]] loads requests on worker threads by priority once their dependencies are
+  published, never waits in `pump`, commits within a per-frame budget in launch order, reports
+  failures and blocked requests, and releases every thread and cell; streamed payloads equal a
+  direct load.
+
+## 2026-10-29 — Morph targets (#747)
+
+- [[Ark Morph]] validates a base shape and named dense or sparse targets once, then blends them
+  per frame on lanes: dense targets by axpy, sparse ones by scatterAdd over only the vertices they
+  move, zero weights skipped, normals renormalized. A 10,000-vertex blend with five of fifty
+  targets active takes about 0.9 ms.
 
 ## 2026-10-29 — Inverse kinematics (#746)
 

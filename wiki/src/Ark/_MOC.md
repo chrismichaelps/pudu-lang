@@ -8,6 +8,7 @@ tags: [moc, ark]
 
 - [[Ark Asset Dependencies]] · [[Ark Asset Graph Fixture]] — dependency-first order and reload closure.
 - [[Ark Asset Server]] · [[Ark Asset Import]] · [[Ark Asset Server Fixture]] — importers, handles and staged hot reload.
+- [[Ark Asset Stream]] · [[Ark Stream Fixture]] — prioritized loading on worker threads with per-frame commit budgets.
 
 - [[Ark Texture Asset]] · [[Ark Texture Fixture]] · [[Ark Assets Gate]] — checked CPU texture inputs and linear-light sampling.
 
@@ -34,6 +35,7 @@ tags: [moc, ark]
 
 - [[Ark Animation]] · [[Ark Animation Machine]] · [[Ark Animation Fixture]] · [[Ark Animation Gate]] — lane pose sampling, blending and cross-fades.
 - [[Ark Ik]] · [[Ark Limbs]] · [[Ark Ik Fixture]] · [[Ark Ik Benchmark]] — two-bone and chain inverse kinematics, single and batched on lanes.
+- [[Ark Morph]] · [[Ark Morph Fixture]] · [[Ark Morph Benchmark]] — dense and sparse morph targets blended on lanes.
 
 - [[Ark Matrix]] · [[Ark Matrix Fixture]] · [[Ark Matrix Gate]] — column-vector algebra and projection.
 
