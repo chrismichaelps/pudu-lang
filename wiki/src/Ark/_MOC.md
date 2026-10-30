@@ -42,6 +42,7 @@ tags: [moc, ark]
 
 - [[Ark Handle]] · [[Ark Profile]] — generational handles and nanosecond scopes (Core).
 - [[Ark Render Device]] · [[Ark Mesh]] · [[Ark Render Pipeline]] · [[Ark Frame Graph]] — software rendering on lanes and native rasterization.
+- [[Ark Text]] · [[Ark Text Fixture]] · [[Ark Text Benchmark]] — glyph-atlas text in one draw call per batch; UI labels drawn through it.
 - [[Ark Render Fixture]] · [[Ark Render Gate]] · [[Spinning Cubes Demo]] — render conformance and the window demo.
 - [[Ark Input]] · [[Ark Frame Clock]] · [[Ark Window]] — action-mapped input, fixed-step timing and the window boundary.
 - [[Ark Platform Fixture]] · [[Ark Platform Gate]] — Platform conformance.

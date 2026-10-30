@@ -10,9 +10,11 @@ tags: [module, ark, ui, test]
 
 ## Purpose and interface
 
-Runs [[Ark UI Fixture]] and [[Ark Inspect Fixture]] with exact output, checks formatting of the
-fixtures, [[Ark UI]] and [[Ark Inspect]], requires positioned `E3001`s for a text rectangle
-width and a numeric inspector path, and confirms both modules ship in the source archive. Registered in CI and the local gate.
+Runs [[Ark UI Fixture]], [[Ark Inspect Fixture]] and [[Ark Text Fixture]] with exact output,
+checks formatting of the fixtures, [[Ark Text Benchmark]], [[Ark UI]], [[Ark Inspect]] and [[Ark
+Text]], requires positioned `E3001`s for a text rectangle width, a numeric inspector path and a
+text glyph scale, and confirms the modules ship in the source archive. `--bench` times layout and
+drawing for a screen of text. Registered in CI and the local gate.
 
 ## Resolved Grill Log
 

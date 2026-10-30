@@ -1,0 +1,45 @@
+module TextBench
+
+import Std.Time as Time
+import Ark.Math.Color as Color
+import Ark.Render.Device as Device
+import Ark.Render.Text as Text
+
+const LINES: Int = 40
+const COLUMNS: Int = 80
+const ROUNDS: Int = 10
+
+/// Time laying out and drawing a screen of text.
+export fn main() -> Int {
+  let line = "The quick brown fox jumps over the lazy dog 0123456789 #&*+-=?!@%$[]\{\}()<>/|~^_".take(COLUMNS)
+  var screen = ""
+  for index in 0..LINES {
+    screen = screen + line + if index + 1 < LINES { "\n" } else { "" }
+  }
+  let white = Color.opaque(1.0, 1.0, 1.0)
+  let font = Text.font()
+  let started = Time.monotonicNanos()
+  var pending = Text.batch()
+  for _ in 0..ROUNDS {
+    let Ok(laid) = Text.add(Text.batch(), screen, 0.0, 0.0, 1, white) else { panic("layout") }
+    pending = laid
+  }
+  let layoutNanos = (Time.monotonicNanos() - started) / ROUNDS
+  let Some(blank) = Device.target(640, 480) else { panic("target") }
+  let drawStarted = Time.monotonicNanos()
+  var shown = blank
+  for _ in 0..ROUNDS {
+    let Some(drawn) = Text.draw(blank, &font, &pending, 0.5) else { panic("draw") }
+    shown = drawn
+  }
+  let drawNanos = (Time.monotonicNanos() - drawStarted) / ROUNDS
+  var visible = 0
+  for character in line.chars() {
+    if character != ' ' { visible = visible + 1 }
+  }
+  if Text.glyphs(&pending) != visible * LINES { panic("every glyph laid out") }
+  if Device.pixels(&shown) == Device.pixels(&blank) { panic("text drawn") }
+  print("layout " + show(layoutNanos))
+  print("draw " + show(drawNanos))
+  0
+}
