@@ -62,10 +62,10 @@ fix, shared lane collections, the concurrency release fix, the physics and chara
 trait provider dispatch (#742, #743, PR #744); #734 and #735 wait on that work. The Ark archive
 (#732) builds on `Std.Binary` once it lands.
 
-Morph targets (#747) stack on the IK branch, and asset streaming (#748) on morph targets.
+Inverse kinematics (#749), morph targets (#752) and asset streaming (#753) are merged into dev. Derived property inspectors (#751) open Ark.Editor, and the derive fallback warning fix (#750) lands with them.
 
-Open target obligations: lights, shadows and text rendering; Core allocators; editor and
-tools.
+Open target obligations: lights, shadows and text rendering; Core allocators; the rest of
+the editor (scene and asset views) and tools.
 
 Exact next action: rebase #732 onto `Std.Binary` once PR #741 merges, keeping only the engine's
 versioned save framing in Ark.Core.

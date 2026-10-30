@@ -5,6 +5,13 @@ tags: [changelog]
 
 # Changelog
 
+## 2026-10-29 — Derived property inspectors (#751)
+
+- [[Ark Inspect]] gives every type that `derives Inspect.Inspect` typed property rows and edits
+  by dotted path from text, shaped by `@label`, `@min`/`@max`, `@readonly` and `@skip`, with
+  leaf support for numbers, flags, text, vectors and arrays; `panel` draws the rows with
+  [[Ark UI]] sliders, checkboxes and labels and answers the edited value.
+
 ## 2026-10-29 — Effect-free attribute fallbacks (#750)
 
 - [[Derive Record Residualizer]] keeps an `attributeOr` fallback the attribute replaces only when
