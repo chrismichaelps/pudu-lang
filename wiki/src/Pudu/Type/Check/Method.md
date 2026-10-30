@@ -33,6 +33,7 @@ declareBounds :: DeclaredTypes -> Function -> [(Text, [Type])]
 declareBuiltinConstructors :: Checker ()
 dischargeObligations :: Checker ()
 methodScheme :: Span -> Type -> Text -> Checker (Maybe Scheme)
+implementationMethodKey :: NominalId -> NominalId -> Text -> Text
 functionRigid :: Function -> [(Text, Int)]
 implAliases :: DeclaredTypes -> Impl -> DeclaredTypes
 traitTable :: DeclaredTypes -> [Located Declaration] -> Map NominalId [Located Function]
@@ -135,3 +136,16 @@ trait before shared bound-member lookup. An explicit qualifier disambiguates two
 different traits, but two applications of the same trait remain ambiguous.
 Resolved Grill Log: immediate, captured and trait-qualified generic receiver
 calls must preserve the same full trait application.
+
+## Qualified provider schemes (#742)
+
+Preserve receiver schemes separately for each admitted trait provider under a canonical trait/receiver/member key,
+separate from the shared receiver/member slot used for ordinary ambiguity checks. An explicit
+trait call on a nominal receiver selects that provider-specific scheme, retaining implementation
+parameters and bounds. Rigid-bound lookup and receiver checking retain their existing paths.
+
+Resolved Grill Log: two local traits may provide the same member with different result types.
+Declaration order cannot change explicit-call typing, and a known receiver must behave like a
+literal receiver. Wrong result annotations remain E3001 at the call; plain receiver/type calls
+still refuse ambiguity. This restores the existing selected-implementation contract and does not
+repair imported declaration collision (#734) or conditional generic dispatch (#735).

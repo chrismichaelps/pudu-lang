@@ -5,6 +5,7 @@ tags: [changelog]
 
 # Changelog
 
+- 2026-10-29: Explicit trait calls (#742) select canonical per-provider implementation schemes, preserving distinct return types independently of declaration order.
 ## 2026-10-29 — Glyph text and visible UI labels (#756)
 
 - [[Ark Text]] draws the [[Std Ui Text]] face from a compile-time glyph atlas, every glyph of a
