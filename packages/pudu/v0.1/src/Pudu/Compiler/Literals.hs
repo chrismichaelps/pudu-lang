@@ -156,6 +156,9 @@ instance (Walk a, Typeable a) => Walk (Located a) where
 selectProvider :: Facts -> Span -> Expression -> Expression
 selectProvider facts at value = case value of
   MemberExpression target (Located memberAt member)
+    | not (factOwnersOnly facts), Just owner <- Map.lookup at (factOwners facts) ->
+        MemberExpression (Located (locatedSpan target) (NameExpression (nominalKey owner :| [])))
+          (Located memberAt member)
     | not (factOwnersOnly facts), Just owner <- Map.lookup at (factProviders facts) ->
         MemberExpression target (Located memberAt ("::" <> nominalKey owner <> "::" <> member))
   _ -> value

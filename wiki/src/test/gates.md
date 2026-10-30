@@ -143,3 +143,9 @@ Resolved Grill Log: selected result types and executed implementations must agre
 
 [[Canonical Owner Gate]] checks canonical same-named record dispatch and native factory identity.
 Resolved Grill Log: run against the freshly built optimized compiler; preserve both evaluator and cache-mode coverage.
+
+## Qualified concrete methods (#763)
+
+Run the Qualified Record Method Gate against the optimized compiler after canonical owner validation.
+
+Resolved Grill Log: known concrete identity, lexical admission, module-export priority and provider ambiguity must agree for called and retained methods. See [[Qualified Record Method Delivery]].

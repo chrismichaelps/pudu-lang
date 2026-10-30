@@ -85,3 +85,9 @@ Resolved Grill Log: use an independent owner-fact map and rewrite an implementat
 Resolved Grill Log: a named-field sum variant has no record-owner fact. Normalize its
 constructor path to its legacy final variant tag during executable projection; retaining an
 authored sum qualifier would change the runtime representation and break existing derives.
+
+## Qualified concrete methods (#763)
+
+A checked concrete type-member owner fact rewrites only the executable target to one canonical name symbol, preserving member/span and existing type applications. Authored tooling syntax stays unchanged; receiver-bound provider symbols retain their existing projection.
+
+Resolved Grill Log: known concrete identity, lexical admission, module-export priority and provider ambiguity must agree for called and retained methods. See [[Qualified Record Method Delivery]].
