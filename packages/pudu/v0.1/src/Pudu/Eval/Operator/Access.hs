@@ -99,14 +99,11 @@ readMember spanValue value member = case value of
   RecordValue owner fields -> case lookup member fields of
     Just found -> pure found
     Nothing -> readMethod spanValue value owner member
-  {-| A member on a variant is looked for on the sum that owns it before the
-      variant itself. An implementation is written for the type — `impl Named
-      for Option[Int]` — and the value in hand is one of its variants, so
-      looking only at the variant found nothing and reported a type the reader
-      never wrote. The variant's own name is still tried, so a member keyed
-      there keeps working. -}
-  VariantValue name _
+  {-| Owned sums select only their canonical implementation namespace.
+      The registry remains a fallback for legacy ownerless host values. -}
+  SumValue carried name _
     | name == member -> pure value
+    | carried /= "" -> readMethodAmong spanValue value [carried] name member
     | otherwise -> do
         owner <- variantOwner name
         readMethodAmong spanValue value (maybe [name] (\found -> [found, name]) owner) name member

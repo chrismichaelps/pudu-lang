@@ -5,6 +5,8 @@ tags: [changelog]
 
 # Changelog
 
+- 2026-10-30: Positional sums retain canonical owners through dispatch, equality, frozen products and native node factories (#761); awaiting custom Ok/Err values preserves their payload wrappers. Clean full optimized gates pass. Pattern ownership and named payloads remain separate required repairs.
+
 - 2026-10-30: Native binary writing refuses reader-incompatible nesting, duplicate fields and overflowing 32-bit extents (#739); sibling records retain shared names.
 
 - 2026-10-29: Native binary codec (#739) adds exact-bit tree encoding, checked wire decoding and generated/truncation boundary properties. Public facade delivery remains separate.

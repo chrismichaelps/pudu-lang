@@ -242,3 +242,9 @@ Install methods globally under the complete owner key. Bind short concrete metho
 Resolved Grill Log: identity comes from the checked declaration, never import order or a basename guess. Preserve observable labels, lexical shadowing, field effects and failure provenance; no runtime filesystem lookup. See [[Canonical Runtime Owner Delivery]].
 
 Resolved Grill Log: retain legacy basename method keys for sum receivers until their separate owner representation is repaired. Canonical record dispatch never selects these aliases; local explicit aliases retain defining module captures.
+
+## Positional sum owners (#761)
+
+Install positional constructors with their defining module plus sum type as canonical owner. Bind both the local type namespace and its canonical namespace to the same constructor entries so generated full-owner references retain metadata. Legacy named-payload lookup records canonical sum owners; named-payload value representation remains a separate #761 partition.
+
+Resolved Grill Log: identity comes from the declaration or native ABI, not a global short-tag registry. Keep labels, evaluation order, effects and wire bytes stable. See [[Positional Sum Owner Delivery]].

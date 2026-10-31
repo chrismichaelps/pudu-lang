@@ -19,6 +19,7 @@ module Pudu.Eval.Call.Path
 import Data.Char (isUpper)
 import Data.Foldable (toList)
 import Data.List (inits)
+import qualified Data.List.NonEmpty as NonEmpty
 import Data.List.NonEmpty (NonEmpty (..))
 import Data.Text (Text)
 import qualified Data.Text as Text
@@ -118,8 +119,11 @@ readPath spanValue path@(first :| rest) = do
         Just value -> foldMember value rest
         -- A derive's construction names a variant by its canonical owner,
         -- which the defining module need not import; the checker proved the
-        -- path, and a variant value carries only its tag.
-        Nothing | Just _ <- spanOrigin spanValue -> pure (VariantValue (lastSegmentOf path) [])
+        -- path; retain its canonical owner alongside the display tag.
+        Nothing | Just _ <- spanOrigin spanValue -> pure $
+          case NonEmpty.nonEmpty (NonEmpty.init path) of
+            Just owner -> SumValue (Text.intercalate "." (toList owner)) (lastSegmentOf path) []
+            Nothing -> VariantValue (lastSegmentOf path) []
         Nothing -> abortAt (Just spanValue) "E7001" ("undefined name " <> first) Nothing
  where
   foldMember value segments = case segments of

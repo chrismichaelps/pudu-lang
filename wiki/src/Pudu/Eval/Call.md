@@ -250,3 +250,9 @@ receiver discovery, preserving its invocation behavior and keeping it below 500 
 ## Lexical member admission (#471)
 
 Delegate qualified-path admission to Eval Call Path for explicit type-applied dispatch. A nearer ordinary local takes callMemberSelecting; a witness or unshadowed module retains static dispatch. Remove the capitalization-only helper, preserving arguments, lending and chosen witnesses. Resolved Grill Log: path spelling cannot override lexical scope, and prepared calls already share this coordinator.
+
+## Positional sum owners (#761)
+
+Applying an empty positional constructor retains its canonical owner while attaching arguments. Await unwraps only wired Result-owned Ok/Err values; a custom sum using those labels remains an ordinary successful task value.
+
+Resolved Grill Log: identity comes from the declaration or native ABI, not a global short-tag registry. Keep labels, evaluation order, effects and wire bytes stable. See [[Positional Sum Owner Delivery]].

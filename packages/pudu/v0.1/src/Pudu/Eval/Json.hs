@@ -143,12 +143,12 @@ decodeDocument input = do
     | otherwise = case byteAt position of
         34 -> do
           (text, next) <- stringAt position
-          Just (VariantValue "Text" [StrValue text], next)
+          Just (SumValue "Std.Json.Json" "Text" [StrValue text], next)
         91 | depth < maxDepth -> listAt (depth + 1) position
         123 | depth < maxDepth -> objectAt (depth + 1) position
-        116 -> keyword (Char8.pack "true") (VariantValue "Boolean" [BoolValue True]) position
-        102 -> keyword (Char8.pack "false") (VariantValue "Boolean" [BoolValue False]) position
-        110 -> keyword (Char8.pack "null") (VariantValue "Null" []) position
+        116 -> keyword (Char8.pack "true") (SumValue "Std.Json.Json" "Boolean" [BoolValue True]) position
+        102 -> keyword (Char8.pack "false") (SumValue "Std.Json.Json" "Boolean" [BoolValue False]) position
+        110 -> keyword (Char8.pack "null") (SumValue "Std.Json.Json" "Null" []) position
         byte
           | byte == 45 || isDigit byte -> numberAt position
           | otherwise -> Nothing
@@ -179,13 +179,13 @@ decodeDocument input = do
         else Just afterPoint
     let numeral = ByteString.take (end - start) (ByteString.drop start input)
     if fractional || hasExponent
-      then Just (VariantValue "Fractional" [StrValue (Encoding.decodeLatin1 numeral)], end)
+      then Just (SumValue "Std.Json.Json" "Fractional" [StrValue (Encoding.decodeLatin1 numeral)], end)
       else do
         let magnitude = ByteString.foldl' (\total byte -> total * 10 + toInteger (byte - 48)) 0 (ByteString.drop (signed - start) numeral)
             number = if signed > start then negate magnitude else magnitude
         if magnitude > toInteger (maxBound :: Int)
           then Nothing
-          else Just (VariantValue "Number" [intOf number], end)
+          else Just (SumValue "Std.Json.Json" "Number" [intOf number], end)
 
   {-| The end of a non-empty run of digits beginning at `position`. -}
   digitsFrom position =
@@ -256,7 +256,7 @@ decodeDocument input = do
   listAt depth open = do
     let first = skipSpace (open + 1)
     if first < size && byteAt first == 93
-      then Just (VariantValue "List" [ArrayValue Seq.empty], first + 1)
+      then Just (SumValue "Std.Json.Json" "List" [ArrayValue Seq.empty], first + 1)
       else members first Seq.empty
    where
     members position held = do
@@ -267,13 +267,13 @@ decodeDocument input = do
         then Nothing
         else case byteAt after of
           44 -> collected `seq` members (skipSpace (after + 1)) collected
-          93 -> Just (VariantValue "List" [ArrayValue collected], after + 1)
+          93 -> Just (SumValue "Std.Json.Json" "List" [ArrayValue collected], after + 1)
           _ -> Nothing
 
   objectAt depth open = do
     let first = skipSpace (open + 1)
     if first < size && byteAt first == 125
-      then Just (VariantValue "Object" [ArrayValue Seq.empty], first + 1)
+      then Just (SumValue "Std.Json.Json" "Object" [ArrayValue Seq.empty], first + 1)
       else entries first Seq.empty
    where
     entries position held
@@ -291,7 +291,7 @@ decodeDocument input = do
                 then Nothing
                 else case byteAt after of
                   44 -> collected `seq` entries (skipSpace (after + 1)) collected
-                  125 -> Just (VariantValue "Object" [ArrayValue collected], after + 1)
+                  125 -> Just (SumValue "Std.Json.Json" "Object" [ArrayValue collected], after + 1)
                   _ -> Nothing
 
 isSpace :: Word8 -> Bool

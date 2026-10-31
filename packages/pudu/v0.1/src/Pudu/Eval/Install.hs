@@ -212,7 +212,7 @@ installDeclaration namespace traits layouts (Located _ declaration) = case decla
     bind (locatedValue (functionName value))
       (FunctionValue (Closure (locatedValue (functionName value)) value Nothing Nothing [] Nothing))
   TypeDeclaration value ->
-    installVariants (locatedValue (typeName value)) (typeDefinition value)
+    installVariants namespace (locatedValue (typeName value)) (typeDefinition value)
   ImplDeclaration value -> installMethods traits value
   ForeignDeclaration value -> mapM_ (installForeign namespace layouts value) (foreignFunctions value)
   _ -> pure ()
@@ -390,18 +390,20 @@ targetNameOf (Located _ syntax) = case syntax of
     type's name. A variant with a payload starts life as an empty constructor
     that a call fills in, so `Circle` and `Shape.Circle(3)` reach the same
     value. -}
-installVariants :: Text -> Located TypeDefinition -> Evaluator ()
-installVariants typeText (Located _ definition) = case definition of
+installVariants :: Text -> Text -> Located TypeDefinition -> Evaluator ()
+installVariants namespace typeText (Located _ definition) = case definition of
   SumDefinition variants -> do
     let entries = map variantEntry variants
     mapM_ (uncurry bind) entries
-    mapM_ (\(name, _) -> recordVariantOwner name typeText) entries
-    bind typeText (RecordValue typeText entries)
+    mapM_ (\(name, _) -> recordVariantOwner name owner) entries
+    bind typeText (RecordValue owner entries)
+    bind owner (RecordValue owner entries)
   _ -> pure ()
  where
+  owner = if namespace == "" then typeText else namespace <> "." <> typeText
   variantEntry (Located _ variant) =
     let name = locatedValue (variantName variant)
-     in (name, VariantValue name [])
+     in (name, SumValue owner name [])
 
 initializeDeclaration :: Evaluate -> Map Text Value -> Located Declaration -> Evaluator ()
 initializeDeclaration evaluateWith folded (Located _ declaration) = case declaration of

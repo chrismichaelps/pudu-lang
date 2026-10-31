@@ -226,3 +226,11 @@ Value only projects ordered entries. No evaluator proof, mutation or eager view.
 RecordValue retains the complete canonical record declaration key in its owner text. Existing equality and keyed ordering compare that complete identity; rendering uses the final label. Runtime representation and generic argument erasure remain otherwise unchanged.
 
 Resolved Grill Log: preserve identity through immutable data storage; do not reconstruct it from labels or import order. See [[Canonical Runtime Owner Delivery]].
+
+## Positional sum owners (#761)
+
+SumValue stores a canonical owner, short variant label and positional payload. A bundled bidirectional VariantValue pattern preserves existing payload readers; its builder assigns wired Option/Result owners for Some/None/Ok/Err and an empty owner only for raw host fixtures. Source and native library constructors supply explicit owners. Equality and total ordering compare owner before label/payload; public rendering keeps labels.
+
+Resolved Grill Log: identity comes from the declaration or native ABI, not a global short-tag registry. Keep labels, evaluation order, effects and wire bytes stable. See [[Positional Sum Owner Delivery]].
+
+Resolved Grill Log: keep the closed value vocabulary, pattern view and Eq/Ord together. Remove stale method headers left after their definitions moved, and condense duplicate width/range commentary while preserving those invariants; avoid a generic comparison callback module introduced solely for line count. Keep the resulting source below 500 lines.

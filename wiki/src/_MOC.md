@@ -228,3 +228,5 @@ tags: [moc, module]
 - [[Canonical Owner Gate]] — same-named record dispatch and checked-product reuse.
 
 - [[Qualified Record Method Gate]] — concrete namespace, alias and capture regression.
+
+- [[Sum Owner Gate]] — positional identity and native/task boundary regressions.
