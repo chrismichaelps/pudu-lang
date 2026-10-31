@@ -155,6 +155,11 @@ instance (Walk a, Typeable a) => Walk (Located a) where
               Located spanValue (ConstructorPattern
                 (ModuleName ((nominalKey owner <> "." <> NonEmpty.last path) :| []))
                 (walk kinds arguments))
+          | not (factOwnersOnly kinds)
+          , Just owner <- Map.lookup spanValue (factOwners kinds)
+          , RecordPattern (Just _) fields rest <- value ->
+              Located spanValue (RecordPattern (Just (ModuleName (nominalKey owner :| [])))
+                (walk kinds fields) rest)
         _ -> Located spanValue (walk kinds value)
    where
     withArguments (Located at (NamedType path _)) arguments = Located at (NamedType path arguments)

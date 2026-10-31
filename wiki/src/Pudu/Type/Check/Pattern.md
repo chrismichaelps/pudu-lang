@@ -117,3 +117,9 @@ owned by ordinary method selection and cannot be mistaken for misspelled constru
 Record resolved positional constructor owners at pattern spans through recordOwner. Export the existing variantForPath resolver for canonical usefulness keys; retain all visibility, payload and arity diagnostics.
 
 Resolved Grill Log: preserve declaration identity through checking, executable projection and usefulness; no per-match span lookup. See [[Constructor Pattern Owner Delivery]].
+
+## Record pattern identity (#761)
+
+Named sum-field patterns record a test fact. Declared ordinary record patterns instantiate and unify their canonical owner against the dereferenced subject before checking fields, record the owner fact and mark dynamic narrowing as a test. Anonymous patterns preserve existing field inference.
+
+Resolved Grill Log: canonical identity and subject-sensitive refutability must agree before evaluation. See [[Record Pattern Owner Delivery]].

@@ -63,6 +63,8 @@ module Pudu.Type.Env
   , recordSelection
   , recordProvider
   , recordOwner
+  , recordPatternTest
+  , patternTests
   , noteStaticTrait
   , isStaticTrait
   , report
@@ -262,6 +264,7 @@ data CheckerState = CheckerState
   , stateSelectionsRev :: ![(Span, [Type])]
   , stateProvidersRev :: ![(Span, NominalId)]
   , stateOwnersRev :: ![(Span, NominalId)]
+  , statePatternTests :: !(Set Span)
   {-| Expressions whose value is the enclosing function's result: a body's
       tail, the tails of branches standing there, and every `return` operand.
       Marked before their subexpressions are checked, so a match learns its
@@ -399,6 +402,7 @@ initialState =
     , stateSelectionsRev = []
     , stateProvidersRev = []
     , stateOwnersRev = []
+    , statePatternTests = Set.empty
     , stateResultSpans = Set.empty
     }
 
@@ -546,6 +550,15 @@ recordProvider at owner = Checker $ \state ->
 recordOwner :: Span -> NominalId -> Checker ()
 recordOwner at owner = Checker $ \state ->
   ((), state{stateOwnersRev = (at, owner) : stateOwnersRev state})
+
+{-| Record subject-sensitive tests without retaining checker state in products. -}
+recordPatternTest :: Span -> Checker ()
+recordPatternTest at = Checker $ \state ->
+  ((), state{statePatternTests = Set.insert at (statePatternTests state)})
+
+patternTests :: Checker (Set Span)
+patternTests = Checker $ \state -> (statePatternTests state, state)
+
 
 recordSelection :: Span -> [Type] -> Checker ()
 recordSelection spanValue chosen =

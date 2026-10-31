@@ -85,6 +85,13 @@ jobs:
       - name: Run the full suite
         timeout-minutes: 12
         run: cabal test all --enable-optimization=2 --test-show-details=direct
+      - name: Verify canonical owners and method providers
+        run: |
+          node test/bound-provider.mjs "$PUDU"
+          node test/canonical-owners.mjs "$PUDU"
+          node test/sum-owners.mjs "$PUDU"
+          node test/qualified-record-methods.mjs "$PUDU"
+          node test/trait-provider.mjs "$PUDU"
       - name: Verify every committed Pudu file is formatted
         run: cabal run -v0 pudu -- fmt --check $(find packages/pudu test-fixtures examples -name '*.pudu')
       # Formatting only parses. Nothing else compiled the standard library
