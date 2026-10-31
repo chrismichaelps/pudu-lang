@@ -238,3 +238,5 @@ tags: [moc, handoff]
 - [[Qualified Record Method Delivery]] — qualified concrete owner admission, issue #763.
 
 - [[Positional Sum Owner Delivery]] — positional constructor identity, issue #761.
+
+- [[2026-10-30-pattern-owners|Constructor Pattern Owner Delivery]]

@@ -59,6 +59,49 @@ try {
     assert.notEqual(bad.status, 0);
     assert.match(bad.stdout + bad.stderr, /E3001/);
     assert.match(bad.stdout + bad.stderr, /Main\.pudu:\d+:\d+/);
+    const narrowing = [...header,
+      'fn inspect(value: dynamic Label) -> Str {', '  match value {',
+      '    case A.Item.Chosen(99) => "partial"',
+      '    case A.Item.Chosen(_) if false => "guarded"',
+      '    case A.Item.Chosen(_) => "first"', '    case B.Item.Chosen(_) => "second"',
+      '    case A.Item.Empty => "first empty"', '    case B.Item.Empty => "second empty"',
+      '    case _ => "other"', '  }', '}',
+      'fn conditional(value: dynamic Label) -> Str {',
+      '  if let A.Item.Chosen(_) = value { "first" } else { "other" }', '}',
+      'fn fallback(value: dynamic Label) -> Str {',
+      '  let A.Item.Chosen(_) = value else { return "other" }', '  "first"', '}',
+      'fn nested(value: Option[dynamic Label]) -> Str {', '  match value {',
+      '    case Some(A.Item.Chosen(_)) => "nested first"',
+      '    case Some(B.Item.Chosen(_)) => "nested second"',
+      '    case _ => "other"', '  }', '}',
+      ...main, '  print(inspect(a))', '  print(inspect(b))',
+      '  print(inspect(A.Item.Empty))', '  print(inspect(B.Item.Empty))',
+      '  print(conditional(a))', '  print(conditional(b))',
+      '  print(fallback(a))', '  print(fallback(b))',
+      '  print(nested(Some(a)))', '  print(nested(Some(b)))', '  0', '}',
+    ];
+    writeFileSync(file, narrowing.join('\n') + '\n');
+    const checked = call('check');
+    assert.equal(checked.status, 0, checked.stdout + checked.stderr);
+    assert.doesNotMatch(checked.stdout + checked.stderr, /W5001/);
+    const narrowed = 'first\nsecond\nfirst empty\nsecond empty\nfirst\nother\nfirst\nother\nnested first\nnested second\n';
+    for (const mode of ['tree', 'compiled']) {
+      run(narrowed, mode);
+      run(narrowed, mode, cache);
+      const stored = entries();
+      run(narrowed, mode, cache);
+      assert.deepEqual(entries(), stored, 'warm patterns must retain canonical owners');
+    }
+    writeFileSync(file, ['module Main', ...imports, 'import First as Again',
+      'import Contract { Label }', 'fn repeated(value: dynamic Label) -> Str {',
+      '  match value {', '    case A.Item.Chosen(_) | A.Item.Empty => "first"',
+      '    case Again.Item.Chosen(_) => "repeated"', '    case _ => "other"', '  }', '}',
+      'export fn main() -> Int {', '  print(repeated(A.make()))', '  0', '}',
+    ].join('\n') + '\n');
+    const repeated = call('check');
+    assert.equal(repeated.status, 0, repeated.stdout + repeated.stderr);
+    assert.equal((repeated.stdout + repeated.stderr).match(/W5001/g)?.length, 1,
+      'aliases of one constructor must retain the repeated-arm warning');
   }
   writeFileSync(file, [
     'module Main', 'type MaybeValue = None | Some(Int)', 'type Choice = Ok(Int) | Err(Str)',

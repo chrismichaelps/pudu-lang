@@ -151,3 +151,9 @@ existing origin-qualified admission. Result types are real nominal sums, never s
 Resolved Grill Log: do not evaluate or type an intermediate `Module.Sum` as a value when its
 complete path names a visible constructor. Do not search the global bare variant table or bypass
 lexical shadowing, missing members, exported-type visibility or named-field construction rules.
+
+## Constructor pattern ownership (#761)
+
+Pass the current DeclaredTypes to checkExhaustive so usefulness resolves constructor identity in the same scope as pattern typing.
+
+Resolved Grill Log: preserve declaration identity through checking, executable projection and usefulness; no per-match span lookup. See [[Constructor Pattern Owner Delivery]].

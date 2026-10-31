@@ -12,8 +12,8 @@ import Pudu.Frontend.Syntax.Name (moduleNameSegments)
 import qualified Pudu.Frontend.Syntax.Tree as Tree
 import Pudu.Frontend.Syntax.Tree (MatchArm (..), Pattern (..))
 import Pudu.Source (Span)
-import Pudu.Type.Check.Pattern (substituteRigid)
-import Pudu.Type.Env (Checker, lookupOwnerVariants, lookupVariant, lookupVariantIn, report, warn)
+import Pudu.Type.Check.Pattern (substituteRigid, variantForPath)
+import Pudu.Type.Env (Checker, DeclaredTypes, lookupOwnerVariants, lookupVariant, lookupVariantIn, report, warn)
 import Pudu.Type.Unify (zonk)
 import Pudu.Type.Value (NominalId, Type (..), nominalName, renderType)
 
@@ -24,11 +24,11 @@ import Pudu.Type.Value (NominalId, Type (..), nominalName, renderType)
     is exactly the rule [[architecture/SEMANTICS]] states. Coverage is decided
     only where it is decidable — closed sums, booleans, and tuples — and an open domain
     such as `Int` is covered only by an irrefutable arm. -}
-checkExhaustive :: Span -> Type -> [Located MatchArm] -> Checker ()
-checkExhaustive spanValue subjectType arms = do
+checkExhaustive :: DeclaredTypes -> Span -> Type -> [Located MatchArm] -> Checker ()
+checkExhaustive declared spanValue subjectType arms = do
   resolved <- zonk subjectType
   isVariant <- variantNamer arms
-  reportUnreachable isVariant arms
+  reportUnreachable declared isVariant arms
   case resolved of
     ErrorType -> pure ()
     VariableType _ -> pure ()
@@ -237,7 +237,7 @@ irrefutableField isVariant (Located _ field) = case Tree.fieldPatternValue field
     could stand for, so it contributes nothing here and nothing is claimed
     about it. -}
 data Taken
-  = TakenConstructor !Text
+  = TakenConstructor !NominalId !Text
   | TakenLiteral !Tree.Literal
   deriving stock (Eq)
 
@@ -246,20 +246,21 @@ data Taken
 
     Both are the same mistake to a reader — a case that looks live and is not —
     but they are different mistakes to make, so each says which happened. -}
-reportUnreachable :: (Text -> Bool) -> [Located MatchArm] -> Checker ()
-reportUnreachable isVariant = walk False []
+reportUnreachable :: DeclaredTypes -> (Text -> Bool) -> [Located MatchArm] -> Checker ()
+reportUnreachable declared isVariant = walk False []
  where
   walk _ _ [] = pure ()
-  walk closed taken (Located armSpan arm : rest)
-    | closed = unreachable armSpan coveredHelp >> walk True taken rest
-    | subsumed = unreachable armSpan takenHelp >> walk closed taken rest
-    | otherwise = walk closed' taken' rest
-   where
-    keys = takenBy isVariant (armPattern arm)
-    unguarded = armGuard arm == Nothing
-    subsumed = not (null keys) && all (`elem` taken) keys
-    closed' = closed || (unguarded && irrefutable isVariant (armPattern arm))
-    taken' = if unguarded then keys <> taken else taken
+  walk closed taken (Located armSpan arm : rest) = do
+    keys <- takenBy declared isVariant (armPattern arm)
+    let unguarded = armGuard arm == Nothing
+        subsumed = not (null keys) && all (`elem` taken) keys
+        closed' = closed || (unguarded && irrefutable isVariant (armPattern arm))
+        taken' = if unguarded then keys <> taken else taken
+    if closed
+      then unreachable armSpan coveredHelp >> walk True taken rest
+      else if subsumed
+        then unreachable armSpan takenHelp >> walk closed taken rest
+        else walk closed' taken' rest
 
   unreachable armSpan help =
     warn "W5001" armSpan "this case can never match" (Just help)
@@ -274,16 +275,21 @@ reportUnreachable isVariant = walk False []
     so it takes nothing. An alternative takes what its branches take, and only
     when every branch is nameable — one open branch leaves the whole
     alternative open. -}
-takenBy :: (Text -> Bool) -> Located Pattern -> [Taken]
-takenBy isVariant (Located _ pattern') = case pattern' of
+takenBy :: DeclaredTypes -> (Text -> Bool) -> Located Pattern -> Checker [Taken]
+takenBy declared isVariant (Located _ pattern') = case pattern' of
   ConstructorPattern path arguments
-    | all (irrefutable isVariant) arguments ->
-        [TakenConstructor (NonEmpty.last (moduleNameSegments path))]
+    | all (irrefutable isVariant) arguments -> constructorKey path
   RecordPattern (Just path) fields _
-    | all (irrefutableField isVariant) fields ->
-        [TakenConstructor (NonEmpty.last (moduleNameSegments path))]
-  LiteralPattern literal -> [TakenLiteral literal]
-  AlternativePattern alternatives ->
-    let taken = map (takenBy isVariant) alternatives
-     in if any null taken then [] else concat taken
-  _ -> []
+    | all (irrefutableField isVariant) fields -> constructorKey path
+  LiteralPattern literal -> pure [TakenLiteral literal]
+  AlternativePattern alternatives -> do
+    taken <- mapM (takenBy declared isVariant) alternatives
+    pure (if any null taken then [] else concat taken)
+  _ -> pure []
+ where
+  constructorKey path = do
+    let name = NonEmpty.last (moduleNameSegments path)
+    found <- variantForPath declared path name
+    pure (case found of
+      Just (owner, _, _) -> [TakenConstructor owner name]
+      Nothing -> [])

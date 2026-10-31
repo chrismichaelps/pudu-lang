@@ -111,3 +111,9 @@ canonical owners cannot become reachable merely because another loaded module de
 A missing constructor is diagnosed only after both written and canonical owner-member bindings
 miss. Resolved Grill Log: static methods on sums, including derived parse/decode functions, remain
 owned by ordinary method selection and cannot be mistaken for misspelled constructors.
+
+## Constructor pattern ownership (#761)
+
+Record resolved positional constructor owners at pattern spans through recordOwner. Export the existing variantForPath resolver for canonical usefulness keys; retain all visibility, payload and arity diagnostics.
+
+Resolved Grill Log: preserve declaration identity through checking, executable projection and usefulness; no per-match span lookup. See [[Constructor Pattern Owner Delivery]].

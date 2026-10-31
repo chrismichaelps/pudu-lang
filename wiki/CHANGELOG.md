@@ -5,6 +5,8 @@ tags: [changelog]
 
 # Changelog
 
+- 2026-10-31: Executable positional constructor patterns retain canonical owners, and repeated-arm warnings distinguish declarations while recognizing aliases (#761). Dynamic narrowing, refutable bindings, nested patterns and warm products pass both evaluators and all clean optimized gates. Ordinary record narrowing and named payloads remain required repairs.
+
 - 2026-10-30: Positional sums retain canonical owners through dispatch, equality, frozen products and native node factories (#761); awaiting custom Ok/Err values preserves their payload wrappers. Clean full optimized gates pass. Pattern ownership and named payloads remain separate required repairs.
 
 - 2026-10-30: Native binary writing refuses reader-incompatible nesting, duplicate fields and overflowing 32-bit extents (#739); sibling records retain shared names.

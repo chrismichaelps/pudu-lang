@@ -24,7 +24,7 @@ Check that a match covers every value its scrutinee can take, and that no arm is
 ### Signatures
 
 ```haskell
-checkExhaustive :: Span -> Type -> [Located MatchArm] -> Checker ()
+checkExhaustive :: DeclaredTypes -> Span -> Type -> [Located MatchArm] -> Checker ()
 ```
 
 ### Governance
@@ -93,3 +93,9 @@ DEPTH 0.55 (MEDIUM). It hides refutability, guard handling, and domain classific
 ## Referenced by
 
 [[src/Pudu/Type/_MOC]] · [[Type Check]] · [[architecture/SEMANTICS]]
+
+## Constructor pattern ownership (#761)
+
+checkExhaustive receives DeclaredTypes. TakenConstructor includes canonical NominalId plus label; resolve through variantForPath so aliases agree and unrelated declarations differ. Unknown owners contribute no taken key. Preserve guards, alternatives and all correlated matrix checks.
+
+Resolved Grill Log: preserve declaration identity through checking, executable projection and usefulness; no per-match span lookup. See [[Constructor Pattern Owner Delivery]].

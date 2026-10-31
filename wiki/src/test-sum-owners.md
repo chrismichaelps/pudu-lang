@@ -23,3 +23,9 @@ owner encoding. Keep #761 open for named payloads and remaining evidence audits.
 [[src/_MOC]] · [[Positional Sum Owner Delivery]] · [[Eval Value]]
 
 The gate also checks unequal dynamic-erased values from distinct module declarations. Resolved Grill Log: erased static views do not erase runtime identity.
+
+## Constructor pattern ownership (#761)
+
+Extend the gate with dynamic constructor narrowing, repeated aliases, guards, partial payloads and refutable conditions in both evaluators; pin absence of false W5001 and continued true repeated-owner warnings.
+
+Resolved Grill Log: preserve declaration identity through checking, executable projection and usefulness; no per-match span lookup. See [[Constructor Pattern Owner Delivery]].

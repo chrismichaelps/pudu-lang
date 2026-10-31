@@ -2,6 +2,7 @@
 module Pudu.Type.Check.Pattern
   ( bindPattern
   , canonicalVariant
+  , variantForPath
   , qualifiedVariantType
   , freshFor
   , recordFieldsFor
@@ -31,6 +32,7 @@ import Pudu.Type.Env
   , lookupVariantFields
   , lookupVariantIn
   , report
+  , recordOwner
   )
 import Pudu.Type.Unify (unify, zonk)
 import Pudu.Type.Substitute (substituteRigid)
@@ -151,6 +153,7 @@ bindPattern declared rigid (Located patternSpan pattern') subjectType = case pat
         _ <- reportUnknownQualifiedConstructor declared patternSpan path
         mapM_ (\argument -> bindPattern declared rigid argument ErrorType) arguments
       Just (owner, ownerParams, declaredPayload) -> do
+        recordOwner patternSpan owner
         replacements <- freshFor ownerParams
         let ownerType = NominalType owner (map snd replacements)
             payload = map (substituteRigid replacements) declaredPayload

@@ -341,7 +341,7 @@ inferExpression around declared rigid spanValue expression = case expression of
     result <- checkArms (checkExpression around declared rigid) declared rigid spanValue subjectType arms
     finalizeIntegerLiteralsBetween subjectCheckpoint subjectEnd
     resolvedSubject <- zonk subjectType
-    checkExhaustive spanValue resolvedSubject arms
+    checkExhaustive declared spanValue resolvedSubject arms
     declaredResult <- enclosingReturnType selfName >>= zonk
     reportRedundantPropagation spanValue arms declaredResult
     zonk result
