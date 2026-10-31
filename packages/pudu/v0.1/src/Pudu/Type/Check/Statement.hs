@@ -276,7 +276,7 @@ checkAgainst needs declared rigid expected located@(Located spanValue expression
         subject <- statementExpression needs declared rigid scrutinee
         resolvedSubject <- zonk subject
         mapM_ (checkArmAgainst needs declared rigid resolved resolvedSubject) arms
-        checkExhaustive spanValue resolvedSubject arms
+        checkExhaustive declared spanValue resolvedSubject arms
         recordExpression spanValue resolved
         pure resolved
       ArrayExpression members

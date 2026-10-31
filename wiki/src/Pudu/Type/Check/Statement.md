@@ -141,3 +141,9 @@ A local binding's annotation and inferred type are checked by [[Check Place]], w
 StatementNeeds and checkMember carry full trait applications for enclosing rigid bounds.
 
 Resolved Grill Log: the recursive statement/function seam must not erase evidence preserved by declaration checking.
+
+## Constructor pattern ownership (#761)
+
+Pass the current DeclaredTypes to contextual match exhaustiveness exactly as ordinary expression checking does.
+
+Resolved Grill Log: preserve declaration identity through checking, executable projection and usefulness; no per-match span lookup. See [[Constructor Pattern Owner Delivery]].

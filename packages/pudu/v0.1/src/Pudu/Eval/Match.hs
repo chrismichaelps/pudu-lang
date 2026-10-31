@@ -63,8 +63,8 @@ matchPattern (Located _ pattern') value = case pattern' of
      where
       named = length prefix + length suffix
   ConstructorPattern (ModuleName segments) arguments -> case value of
-    VariantValue name payload
-      | name == lastSegment segments && length payload == length arguments ->
+    SumValue owner name payload
+      | constructorMatches segments owner name && length payload == length arguments ->
           concat <$> sequence (zipWith matchPattern arguments payload)
     _ -> Nothing
   {-| A record pattern that names something must match that name.
@@ -90,6 +90,11 @@ matchPattern (Located _ pattern') value = case pattern' of
   sequenceElements held = case held of
     ArrayValue members -> Just (toList members)
     _ -> Nothing
+
+  {-| Only executable projection creates a dotted single-segment constructor. -}
+  constructorMatches segments owner name = case segments of
+    symbol :| [] | Text.isInfixOf "." symbol -> symbol == owner <> "." <> name
+    _ -> name == lastSegment segments
 
   restBinding rest middle = case rest of
     Nothing -> []

@@ -147,7 +147,15 @@ instance (Walk a, Typeable a) => Walk (Located a) where
         , Just owner <- Map.lookup spanValue (factProviders kinds)
         , NamedType _ arguments <- value ->
             typeSyntax spanValue (NominalType owner []) `withArguments` walk kinds arguments
-      _ -> Located spanValue (walk kinds value)
+      _ -> case eqT :: Maybe (a :~: Pattern) of
+        Just Refl
+          | not (factOwnersOnly kinds)
+          , Just owner <- Map.lookup spanValue (factOwners kinds)
+          , ConstructorPattern (ModuleName path) arguments <- value ->
+              Located spanValue (ConstructorPattern
+                (ModuleName ((nominalKey owner <> "." <> NonEmpty.last path) :| []))
+                (walk kinds arguments))
+        _ -> Located spanValue (walk kinds value)
    where
     withArguments (Located at (NamedType path _)) arguments = Located at (NamedType path arguments)
     withArguments other _ = other

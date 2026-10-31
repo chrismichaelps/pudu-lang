@@ -91,3 +91,9 @@ authored sum qualifier would change the runtime representation and break existin
 A checked concrete type-member owner fact rewrites only the executable target to one canonical name symbol, preserving member/span and existing type applications. Authored tooling syntax stays unchanged; receiver-bound provider symbols retain their existing projection.
 
 Resolved Grill Log: known concrete identity, lexical admission, module-export priority and provider ambiguity must agree for called and retained methods. See [[Qualified Record Method Delivery]].
+
+## Constructor pattern ownership (#761)
+
+Project resolved positional ConstructorPattern owners into one internal canonical owner/tag path symbol only for executable syntax. Recurse into payload patterns; authored tooling paths and owner-only printable projections remain unchanged.
+
+Resolved Grill Log: preserve declaration identity through checking, executable projection and usefulness; no per-match span lookup. See [[Constructor Pattern Owner Delivery]].

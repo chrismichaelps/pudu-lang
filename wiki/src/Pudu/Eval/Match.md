@@ -91,3 +91,9 @@ Resolved Grill Log: identity comes from the checked declaration, never import or
 Numeric-aware aggregate equality includes positional sum owner as well as label and recursively compared payload. Canonical constructor-pattern owner checks remain required in a separate #761 checker/matcher partition; this value-representation partition preserves existing pattern behavior.
 
 Resolved Grill Log: identity comes from the declaration or native ABI, not a global short-tag registry. Keep labels, evaluation order, effects and wire bytes stable. See [[Positional Sum Owner Delivery]].
+
+## Constructor pattern ownership (#761)
+
+A projected positional constructor pattern compares its complete canonical owner/tag with SumValue before recursively matching payloads. Raw host patterns keep legacy short-tag admission. Ordinary record and named-payload patterns remain separate owner audits.
+
+Resolved Grill Log: preserve declaration identity through checking, executable projection and usefulness; no per-match span lookup. See [[Constructor Pattern Owner Delivery]].
