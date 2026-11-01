@@ -14,7 +14,7 @@ aliases: [Compiler Literals]
 ---
 # Compiler Literals
 
-`resolveLiterals :: Map Span Text -> Map Span [Type] -> Map Span NominalId -> Map Span NominalId -> Module -> Module` rewrites every integer literal in expression
+`resolveLiterals :: Map Span Text -> Map Span [Type] -> Map Span NominalId -> Map Span OwnerSelection -> Module -> Module` rewrites every integer literal in expression
 position into `ResolvedInteger kind value` once, after type checking. The kind is the checker's
 answer for the literal's span, else the literal's own suffix, else the platform `Int`; the value is
 the parsed number. The evaluator then builds the value directly, with no parsing and no `Map Span`
@@ -82,9 +82,9 @@ Resolved Grill Log: identity comes from the checked declaration, never import or
 
 Resolved Grill Log: use an independent owner-fact map and rewrite an implementation target at its structural Impl field; trait and target may share a generated span. Generic type walking must not substitute a concrete owner for a trait provider.
 
-Resolved Grill Log: a named-field sum variant has no record-owner fact. Normalize its
-constructor path to its legacy final variant tag during executable projection; retaining an
-authored sum qualifier would change the runtime representation and break existing derives.
+Resolved Grill Log: a named-field sum variant carries VariantOwner independently
+of concrete record identity. Its executable descriptor retains canonical owner,
+short variant label and declared fields; authored tooling paths stay unchanged.
 
 ## Qualified concrete methods (#763)
 
@@ -103,3 +103,9 @@ Resolved Grill Log: preserve declaration identity through checking, executable p
 Project checked ordinary RecordPattern paths with owner facts into one canonical owner symbol only in executable syntax. Preserve fields/rest/spans and recurse into nested patterns; named sum payloads without record facts retain their existing representation.
 
 Resolved Grill Log: canonical identity and subject-sensitive refutability must agree before evaluation. See [[Record Pattern Owner Delivery]].
+
+## Named sum publication (#761)
+
+Project VariantOwner constructors to ::sum::/owner/label/declared-fields and named patterns to ::sum::/owner/label. Concrete projections remain restricted to ConcreteOwner. Tooling syntax stays authored.
+
+Resolved Grill Log: carry checked owner and field order through syntax; preserve authored effects, diagnostics and cache identity. See [[Named Sum Publication]].

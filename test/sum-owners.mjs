@@ -123,12 +123,18 @@ try {
   ].join('\n') + '\n');
   for (const mode of ['tree', 'compiled']) run('native owner agrees\n', mode);
   writeFileSync(join(scratch, 'First.pudu'), [
-    'module First', 'export type Item[T] = Empty | Chosen{first: T}',
+    'module First', 'import Contract { Label }', 'export type Item[T] = Empty | Chosen{first: T}',
+    'impl[T] Label for Item[T] { fn label(self: &Self) -> Str { "first" } }',
+    'const INSTANCE: Item[Int] = Chosen{first: 1}',
     'export fn make() -> Item[Int] { Chosen{first: 1} }',
+    'export fn frozen() -> Item[Int] { INSTANCE }',
   ].join('\n') + '\n');
   writeFileSync(join(scratch, 'Second.pudu'), [
-    'module Second', 'export type Item = Empty | Chosen{second: Str}',
+    'module Second', 'import Contract { Label }', 'export type Item = Empty | Chosen{second: Str}',
+    'impl Label for Item { fn label(self: &Self) -> Str { "second" } }',
+    'const INSTANCE: Item = Chosen{second: "two"}',
     'export fn make() -> Item { Chosen{second: "two"} }',
+    'export fn frozen() -> Item { INSTANCE }',
   ].join('\n') + '\n');
   writeFileSync(join(scratch, 'Third.pudu'), [
     'module Third', 'export type Item = Empty | Chosen(Int)',
@@ -162,6 +168,35 @@ try {
       run('2\ntwo\n4\nfive\n6\n', mode, cache);
       assert.deepEqual(entries(), stored, 'warm products preserve named field shapes');
     }
+    const runtime = ['module Main', ...imports, 'import Contract { Label }',
+      'type Holder = { mut item: A.Item[Int] }',
+      'fn reset(value: &mut A.Item[Int]) -> () { *value = A.Item.Chosen{first: 8} }',
+      'fn generic[T: Label](value: &T) -> Str { value.label() }',
+      'fn inspect(value: dynamic Label) -> Str {', '  match value {',
+      '    case A.Item.Chosen{first: 99} => "partial"',
+      '    case A.Item.Chosen{first} if false => "guarded"',
+      '    case A.Item.Chosen{..} => "first"',
+      '    case B.Item.Chosen{..} => "second"', '    case _ => "other"', '  }', '}',
+      'fn borrowed(value: &A.Item[Int]) -> Int {', '  match value {',
+      '    case A.Item.Chosen{first} => first', '    case A.Item.Empty => 0', '  }', '}',
+      'export fn main() -> Int {', '  let a = A.make()', '  let b = B.make()',
+      '  print(a.label())', '  print(b.label())',
+      '  print(generic(&a))', '  print(generic(&b))',
+      '  let first = a.label', '  let second = b.label', '  print(first())', '  print(second())',
+      '  print(generic(&A.frozen()))', '  print(generic(&B.frozen()))',
+      '  print(show(borrowed(&a)))', '  print(inspect(a))', '  print(inspect(b))',
+      '  var holder = Holder{item: A.make()}', '  reset(&mut holder.item)',
+      '  print(show(borrowed(&holder.item)))', '  0', '}',
+    ];
+    writeFileSync(file, runtime.join('\n') + '\n');
+    for (const mode of ['tree', 'compiled']) {
+      const expected = 'first\nsecond\n'.repeat(4) + '1\nfirst\nsecond\n8\n';
+      run(expected, mode);
+      run(expected, mode, cache);
+      const stored = entries();
+      run(expected, mode, cache);
+      assert.deepEqual(entries(), stored, 'warm named values retain owners and patterns');
+    }
     for (const [line, code] of [
       ['  let wrong = A.Item.Chosen{second: "wrong"}', 'E3005'],
       ['  let missing = B.Item.Chosen{}', 'E3008'],
@@ -179,5 +214,36 @@ try {
       if (code === 'E3034') assert.equal(diagnostics.match(/E3034/g)?.length, 1);
     }
   }
+  writeFileSync(file, ['module Main', 'type Parts = Empty | Chosen{first: Int, second: Int}',
+    'fn mark(value: Int) -> Int {', '  print(show(value))', '  value', '}',
+    'fn closed(value: Int) -> Parts { Chosen{second: value + 1, first: value} }',
+    'fn ordered(value: Int) -> Parts { Chosen{first: value, second: value + 1} }',
+    'export fn main() -> Int {',
+    '  let a = Chosen{second: mark(2), first: mark(1)}',
+    '  let b = Chosen{first: 1, second: 2}', '  print(show(a))',
+    '  if a != b { panic("named field storage order") }',
+    '  var digits = 0', '  for part in a { digits = digits * 10 + part }', '  print(show(digits))',
+    '  var turn = 0', '  var total = 0',
+    '  while turn < 3 && closed(turn) == ordered(turn) {',
+    '    total = total + turn', '    turn = turn + 1', '  }', '  print(show(total))',
+    '  turn = 0', '  total = 0', '  while turn < 3 {',
+    '    match closed(turn) {', '      case Chosen{first, second} => total = total + first + second',
+    '      case Empty => {}', '    }', '    turn = turn + 1', '  }', '  print(show(total))', '  0', '}',
+  ].join('\n') + '\n');
+  for (const mode of ['tree', 'compiled']) run('2\n1\nChosen{first: 1, second: 2}\n12\n3\n9\n', mode);
+  writeFileSync(file, ['module Main', 'type Answer = Ok{value: Int} | Err{message: Str}',
+    'async fn kept() -> Answer { Ok{value: 7} }', 'async fn failed() -> Answer { Err{message: "kept"} }',
+    'export async fn main() -> Int {', '  print(show(kept().await))', '  print(show(failed().await))', '  0', '}',
+  ].join('\n') + '\n');
+  for (const mode of ['tree', 'compiled']) run('Ok{value: 7}\nErr{message: "kept"}\n', mode);
+  const emptyHeader = ['module Main', 'type Choice = Absent | Chosen{}',
+    'export fn main() -> Int {', '  let value = Chosen{}', '  match value {'];
+  writeFileSync(file, [...emptyHeader, '    case Chosen{} => 0', '    case Absent => 1', '  }', '}'].join('\n') + '\n');
+  for (const mode of ['tree', 'compiled']) run('', mode);
+  writeFileSync(file, [...emptyHeader, '    case Chosen() => 0', '    case Absent => 1', '  }', '}'].join('\n') + '\n');
+  const emptyPattern = call('check');
+  assert.notEqual(emptyPattern.status, 0);
+  assert.match(emptyPattern.stdout + emptyPattern.stderr, /E3034/);
+  assert.match(emptyPattern.stdout + emptyPattern.stderr, /Main\.pudu:6:10/);
 } finally { rmSync(scratch, {recursive: true, force: true}); }
-console.log('Sums retain positional owners and canonical named field shapes across calls, caches and tasks');
+console.log('Sums retain canonical owners, named storage order and patterns across calls, caches and tasks');

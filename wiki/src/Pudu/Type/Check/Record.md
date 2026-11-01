@@ -94,3 +94,9 @@ Resolved Grill Log: identity comes from the checked declaration, never import or
 Reuse Type Check Pattern namedVariantShapeFor with the complete written construction path. Remove the duplicate basename-only namedVariantShape helper; positional construction help uses variantForPath as well.
 
 Resolved Grill Log: field names and payload types come from one resolved owner/variant key. No runtime representation or field evaluation order changes in this partition. See [[Named Payload Field Delivery]].
+
+## Named sum publication (#761)
+
+Record VariantOwner with canonical owner, variant label and declaration-order field names before checking authored initializers.
+
+Resolved Grill Log: carry checked owner and field order through syntax; preserve authored effects, diagnostics and cache identity. See [[Named Sum Publication]].

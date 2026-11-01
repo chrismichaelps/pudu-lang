@@ -19,9 +19,9 @@ import Pudu.Eval.MultiMap (callMultiMapAdd, callMultiMapContains, multiMapWrappe
 import Pudu.Eval.Operator (applyUnary, checkedResult, combine, readIndex, readMember)
 import Pudu.Eval.Place (exclusiveParameters)
 import Pudu.IntegerLiteral (integerKindMeet)
+import Pudu.Eval.Record (recordConstructor)
 import Pudu.Eval.Value (Builtin (..), Closure (..), Value (..))
 import Pudu.Frontend.Syntax.Located (Located (..))
-import Pudu.Frontend.Syntax.Name (ModuleName (..))
 import Pudu.Frontend.Syntax.Tree
   ( Block (..), Expression (..), FieldInit (..), Function (..), FunctionBody (..)
   , Literal (IntegerValue), Parameter (..), Statement (..) )
@@ -167,14 +167,14 @@ planExpression region layout (Located spanValue expression) = case expression of
       let access slots env = bindResult (code slots env)
             (\value -> action env (readMember spanValue value (locatedValue member)))
       pure (joined access [inner])
-  RecordExpression (ModuleName (first :| rest)) fields | region == ClosedRegion -> do
+  RecordExpression path fields | region == ClosedRegion -> do
     planned <- traverse planField fields
     pure $ do
       named <- sequence planned
-      let owner = Text.intercalate "." (first : rest)
-          labels = map fst named
+      let labels = map fst named
+          construct = recordConstructor path labels
           build = withArguments (map snd named)
-            (\_ _ values -> pure (RecordValue owner (zip labels values)))
+            (\_ _ values -> pure (construct (zip labels values)))
       pure (joined build (map snd named))
   BlockExpression block -> planBlock region layout block
   IfExpression condition thenBlock elseBranch -> do

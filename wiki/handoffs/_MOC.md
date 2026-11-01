@@ -246,3 +246,5 @@ tags: [moc, handoff]
 - [[Named Payload Field Delivery]] — canonical named payload shape lookup, issue #761.
 
 - [[Named Sum Value Delivery]] — explicit owned named runtime values, issue #761.
+
+- [[Named Sum Publication]] — checked named constructor and pattern publication.

@@ -35,3 +35,9 @@ Resolved Grill Log: preserve declaration identity through checking, executable p
 Add same-labelled named variants with different field names/types, qualified direct construction, generic field substitution, both import orders/evaluators and cache reuse. Assert positioned E3005/E3008/E3001 and one E3034 for forbidden named constructor values/calls, while unrelated positional constructors remain callable. Existing lexical admission gates remain mandatory.
 
 Resolved Grill Log: field names and payload types come from one resolved owner/variant key. No runtime representation or field evaluation order changes in this partition. See [[Named Payload Field Delivery]].
+
+## Named sum publication (#761)
+
+Check same-labelled named dispatch, canonical dynamic patterns, folded/cache values, declaration-order storage with authored effects, lent writes, iteration and named-empty success/positioned E3034 refusal in both evaluators.
+
+Resolved Grill Log: carry checked owner and field order through syntax; preserve authored effects, diagnostics and cache identity. See [[Named Sum Publication]].

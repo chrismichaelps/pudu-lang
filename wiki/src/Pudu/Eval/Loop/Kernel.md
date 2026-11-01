@@ -184,3 +184,9 @@ argument-result wrappers, preserving complete evaluation before parameter writes
 Closed record-producing kernels retain the complete projected canonical owner path, matching both general evaluators.
 
 Resolved Grill Log: separate semantic roles even at identical generated spans. No runtime span lookup, provider overwrite or shortened owner. See [[Canonical Runtime Owner Delivery]].
+
+## Named sum publication (#761)
+
+Prepare [[Eval Record Construction]] construction once for eligible closed bodies; retain whole-region proof, parameter scratch lifetime and ordered field evaluation.
+
+Resolved Grill Log: carry checked owner and field order through syntax; preserve authored effects, diagnostics and cache identity. See [[Named Sum Publication]].

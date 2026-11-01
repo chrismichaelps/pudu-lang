@@ -245,3 +245,9 @@ See [[Bound Provider Delivery]].
 Publish concrete-owner facts as their own checked product beside provider facts and diagnostics.
 
 Resolved Grill Log: separate semantic roles even at identical generated spans. No runtime span lookup, provider overwrite or shortened owner. See [[Canonical Runtime Owner Delivery]].
+
+## Named sum publication (#761)
+
+The detailed owner product carries OwnerSelection; provider products retain NominalId.
+
+Resolved Grill Log: carry checked owner and field order through syntax; preserve authored effects, diagnostics and cache identity. See [[Named Sum Publication]].

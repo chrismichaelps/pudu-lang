@@ -63,6 +63,7 @@ module Pudu.Type.Env
   , recordSelection
   , recordProvider
   , recordOwner
+  , recordVariantOwner
   , recordPatternTest
   , patternTests
   , noteStaticTrait
@@ -123,7 +124,7 @@ import Pudu.IntegerLiteral (fitsIntegerType)
 import Pudu.Type.Frontier (splitSince, splitBetween)
 import Pudu.Type.Implementation (ImplementationRule)
 import Pudu.Type.Value
-  ( NominalId (..), Scheme (..), Type (..), TypeVar (..), integerType, nominalKey, renderType )
+  ( OwnerSelection (..), NominalId (..), Scheme (..), Type (..), TypeVar (..), integerType, nominalKey, renderType )
 
 {-| @Type.Env.Declared — what the module's declarations contribute.
 
@@ -263,7 +264,7 @@ data CheckerState = CheckerState
       the reference that instantiated them, in the scheme's parameter order. -}
   , stateSelectionsRev :: ![(Span, [Type])]
   , stateProvidersRev :: ![(Span, NominalId)]
-  , stateOwnersRev :: ![(Span, NominalId)]
+  , stateOwnersRev :: ![(Span, OwnerSelection)]
   , statePatternTests :: !(Set Span)
   {-| Expressions whose value is the enclosing function's result: a body's
       tail, the tails of branches standing there, and every `return` operand.
@@ -301,7 +302,7 @@ data CheckerProducts = CheckerProducts
   {-| Every recorded static selection with inference settled. -}
   , producedSelections :: ![(Span, [Type])]
   , producedProviders :: ![(Span, NominalId)]
-  , producedOwners :: ![(Span, NominalId)]
+  , producedOwners :: ![(Span, OwnerSelection)]
   }
 
 newtype Checker a = Checker (CheckerState -> (a, CheckerState))
@@ -549,7 +550,12 @@ recordProvider at owner = Checker $ \state ->
 {-| Concrete identity is distinct from a trait provider at the same span. -}
 recordOwner :: Span -> NominalId -> Checker ()
 recordOwner at owner = Checker $ \state ->
-  ((), state{stateOwnersRev = (at, owner) : stateOwnersRev state})
+  ((), state{stateOwnersRev = (at, ConcreteOwner owner) : stateOwnersRev state})
+
+{-| Named selections retain the declaration's field order for construction. -}
+recordVariantOwner :: Span -> NominalId -> Text -> [Text] -> Checker ()
+recordVariantOwner at owner label fields = Checker $ \state ->
+  ((), state{stateOwnersRev = (at, VariantOwner owner label fields) : stateOwnersRev state})
 
 {-| Record subject-sensitive tests without retaining checker state in products. -}
 recordPatternTest :: Span -> Checker ()
