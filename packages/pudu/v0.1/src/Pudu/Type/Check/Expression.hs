@@ -140,7 +140,7 @@ inferExpression around declared rigid spanValue expression = case expression of
   LiteralExpression literal -> literalType spanValue literal
   NameExpression names@(_ :| (_ : _))
     | Just _ <- spanOrigin spanValue -> do
-        generated <- canonicalVariant declared (ModuleName names)
+        generated <- canonicalVariant declared spanValue (ModuleName names)
         maybe (nameType spanValue names) pure generated
   NameExpression names@(_ :| (_ : _)) -> do
     variant <- qualifiedVariantType declared spanValue expression

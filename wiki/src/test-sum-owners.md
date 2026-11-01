@@ -41,3 +41,15 @@ Resolved Grill Log: field names and payload types come from one resolved owner/v
 Check same-labelled named dispatch, canonical dynamic patterns, folded/cache values, declaration-order storage with authored effects, lent writes, iteration and named-empty success/positioned E3034 refusal in both evaluators.
 
 Resolved Grill Log: carry checked owner and field order through syntax; preserve authored effects, diagnostics and cache identity. See [[Named Sum Publication]].
+
+## Variant namespaces (#766)
+
+Add same-module unit/tuple/named variant coexistence and qualified runtime owner checks in both evaluators and cache modes. Assert E2012 at ambiguous bare uses with related declaration spans, local shadow success, E2001 genuine duplicates and preserved arity/unknown refusals.
+
+Resolved Grill Log: declaration identity is owner-scoped; ambiguity belongs at an unqualified use and respects the selected lexical binding. See [[Variant Namespace Delivery]].
+
+## Qualified head identity (#766)
+
+Cover known type names that share variant labels in qualified calls and patterns; keep bare-label E2012 refusal.
+
+Resolved Grill Log: an already qualified path must not be refused as a bare variant. Only an alias yields to a known type; ordinary values and import privacy retain their lookup. See [[Variant Namespace Delivery]].

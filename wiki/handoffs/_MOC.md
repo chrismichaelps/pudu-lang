@@ -248,3 +248,5 @@ tags: [moc, handoff]
 - [[Named Sum Value Delivery]] — explicit owned named runtime values, issue #761.
 
 - [[Named Sum Publication]] — checked named constructor and pattern publication.
+
+- [[Variant Namespace Delivery]] — local variant namespace admission and positioned ambiguity.

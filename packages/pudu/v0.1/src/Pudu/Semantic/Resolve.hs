@@ -58,7 +58,6 @@ import Pudu.Semantic.Resolve.Context
   , ResolverProducts (..)
   , declareBuiltin
   , declarePreludeName
-  , markAmbiguousVariant
   , declareNamed
   , declareModuleQualifier
   , inScope
@@ -135,24 +134,7 @@ resolveUnit prepared moduleValue = do
         Just bindings -> mapM_ collectPreparedImport bindings
       setReflectionImports (moduleImports moduleValue)
       mapM_ collectDeclaration (moduleDeclarations moduleValue)
-      mapM_ markAmbiguousVariant (repeatedVariants (moduleDeclarations moduleValue))
       mapM_ walkDeclaration (moduleDeclarations moduleValue)
-
-{-| A variant spelling declared by two different types cannot be used
-    unqualified, so it is marked before any body is walked. -}
-repeatedVariants :: [Located Declaration] -> [Text]
-repeatedVariants declarations =
-  [name | (name, total) <- tally (concatMap variantNames declarations), total > (1 :: Int)]
- where
-  tally names = [(name, length (filter (== name) names)) | name <- unique names]
-  unique = foldr (\name seen -> if name `elem` seen then seen else name : seen) []
-
-variantNames :: Located Declaration -> [Text]
-variantNames (Located _ declaration) = case declaration of
-  TypeDeclaration value -> case locatedValue (typeDefinition value) of
-    SumDefinition variants -> map (locatedValue . variantName . locatedValue) variants
-    _ -> []
-  _ -> []
 
 declareWiredIn :: Resolver ()
 declareWiredIn = mapM_ (declareBuiltin TypeSpace) wiredInTypeNames
@@ -188,7 +170,7 @@ collectDeclaration (Located _ declaration) = case declaration of
     declareNamed ValueSpace ModuleOrigin (functionVisibility value) False (functionName value)
   TypeDeclaration value -> do
     declareNamed TypeSpace ModuleOrigin (typeVisibility value) False (typeName value)
-    collectVariants (typeDefinition value)
+    collectVariants (locatedValue (typeName value)) (typeDefinition value)
   TraitDeclaration value ->
     declareNamed TypeSpace ModuleOrigin (traitVisibility value) False (traitName value)
   ImplDeclaration _ -> pure ()
@@ -216,14 +198,13 @@ collectDeclaration (Located _ declaration) = case declaration of
       (foreignFunctions value)
   InvalidDeclaration -> pure ()
 
-{-| Variants live in their type's namespace, so they are recorded as symbols but
-    are not bound as unqualified names. -}
-collectVariants :: Located TypeDefinition -> Resolver ()
-collectVariants (Located _ definition) = case definition of
+{-| Record candidates under their declaring type before any body is walked. -}
+collectVariants :: Text -> Located TypeDefinition -> Resolver ()
+collectVariants owner (Located _ definition) = case definition of
   SumDefinition variants -> mapM_ recordVariant variants
   _ -> pure ()
  where
-  recordVariant (Located _ variant) = recordVariantSymbol (variantName variant)
+  recordVariant (Located _ variant) = recordVariantSymbol owner (variantName variant)
 
 walkDeclaration :: Located Declaration -> Resolver ()
 walkDeclaration (Located spanValue declaration) = case declaration of

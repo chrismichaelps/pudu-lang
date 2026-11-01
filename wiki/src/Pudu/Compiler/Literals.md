@@ -109,3 +109,9 @@ Resolved Grill Log: canonical identity and subject-sensitive refutability must a
 Project VariantOwner constructors to ::sum::/owner/label/declared-fields and named patterns to ::sum::/owner/label. Concrete projections remain restricted to ConcreteOwner. Tooling syntax stays authored.
 
 Resolved Grill Log: carry checked owner and field order through syntax; preserve authored effects, diagnostics and cache identity. See [[Named Sum Publication]].
+
+## Checked constructor values (#766)
+
+In executable syntax only, a VariantOwner fact on a NameExpression or MemberExpression becomes an empty RecordExpression with the unspellable ::constructor::/owner/label descriptor. This is an owned positional constructor value, not a namespace lookup. Preserve spans and authored tooling syntax; ordinary ConcreteOwner/provider rewrites stay separate.
+
+Resolved Grill Log: checked canonical identity must survive lowering even when a type and a bare variant share text. No runtime owner inference or source syntax change. See [[Variant Namespace Delivery]].

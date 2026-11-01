@@ -45,3 +45,9 @@ resolution. No type inference, filesystem lookup or last-segment identity.
 
 Requires [[Resolve Context]], [[Source]] and [[Syntax Name]]. Referenced by
 [[Name Resolution]] · [[Derive Design]] · [[src/_MOC]].
+
+## Qualified head identity (#766)
+
+Member heads and multi-segment constructor paths use resolveQualifierName. A one-segment constructor keeps resolveValueName, so a bare label remains ambiguous. Preserve the generated-provenance skip boundary.
+
+Resolved Grill Log: an already qualified path must not be refused as a bare variant. Only an alias yields to a known type; ordinary values and import privacy retain their lookup. See [[Variant Namespace Delivery]].

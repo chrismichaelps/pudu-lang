@@ -6,17 +6,18 @@ import Data.List.NonEmpty (NonEmpty (..))
 import Data.Text (Text)
 import Pudu.Frontend.Syntax.Name (ModuleName (..))
 import Pudu.Semantic.Resolve.Context
-  ( Resolver, canonicalTypesInScope, resolveExpressionName, resolveTypeName, resolveValueName )
+  ( Resolver, canonicalTypesInScope, resolveExpressionName, resolveQualifierName, resolveTypeName, resolveValueName )
 import Pudu.Source (Span, spanOrigin)
 
 resolveHead :: Span -> NonEmpty Text -> Resolver ()
 resolveHead = resolvePath resolveExpressionName
 
 resolveMemberHead :: Span -> NonEmpty Text -> Resolver ()
-resolveMemberHead = resolvePath resolveValueName
+resolveMemberHead = resolvePath resolveQualifierName
 
 resolveConstructorPath :: Span -> ModuleName -> Resolver ()
-resolveConstructorPath at (ModuleName path) = resolvePath resolveValueName at path
+resolveConstructorPath at (ModuleName path@(_ :| rest)) =
+  resolvePath (if null rest then resolveValueName else resolveQualifierName) at path
 
 resolveTypePath :: Span -> ModuleName -> Resolver ()
 resolveTypePath at (ModuleName path) = resolvePath resolveTypeName at path

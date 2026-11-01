@@ -94,3 +94,9 @@ Resolved Grill Log: preserve arguments in the shared Scheme contract rather than
 OwnerSelection distinguishes ConcreteOwner NominalId from VariantOwner NominalId Text [Text]; the latter carries the checked label and declared field order.
 
 Resolved Grill Log: carry checked owner and field order through syntax; preserve authored effects, diagnostics and cache identity. See [[Named Sum Publication]].
+
+## Checked constructor values (#766)
+
+VariantOwner describes checked variant selection. Named construction carries declared fields; qualified positional constructor values carry an empty list. The AST role determines whether executable projection builds a named payload or an empty positional constructor.
+
+Resolved Grill Log: checked canonical identity must survive lowering even when a type and a bare variant share text. No runtime owner inference or source syntax change. See [[Variant Namespace Delivery]].
