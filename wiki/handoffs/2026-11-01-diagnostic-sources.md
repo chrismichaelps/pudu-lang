@@ -52,12 +52,15 @@ Verification Engineer → Forensic Guardian: the new property and loaded CLI
 coordinate assertions failed before repair. Snapshot fallback and available-source
 properties now pass 200 checks each; the render-focused suite and loaded owner
 gate pass, including off/cold/warm producer coordinates. The optimized warning-clean
-build passes. The clean full optimized gate is running with no later source edits.
+build passes. Every clean full optimized gate passes at 0b85629b, including all
+properties, Ark subsystem/layer gates, formatting, packages, CLI/LSP sessions,
+documentation and derive boundaries. No source edits followed gate start.
 Existing same-source layout, tabs, summaries and interactive controls stay green.
 
-Exact next action: observe the existing full-gate process and inspect every result;
-if green, publish the bounded #777 PR. Observe #778's existing hosted runs and merge
-after green checks before further engine features. Do not restart live validation.
+Exact next action: merge #778 after its existing hosted compiler job turns green,
+then publish the bounded #777 PR with full local evidence. Require its hosted
+checks before merge, then resolve the revalidated #734 imported-provider defect
+before further engine features. Do not restart live validation.
 
 ## Referenced by
 

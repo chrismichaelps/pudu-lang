@@ -4394,3 +4394,5 @@ No builds, tests, reviews or measurements run.
 - #777 design: resolve diagnostic spans against their actual source snapshots; implementation and validation pending. See [[Diagnostic Source Delivery]].
 
 - #777 focused verification: regressions fail before repair and pass afterward; explicit source maps restore foreign note coordinates, snapshot guards prevent stale-source borrowing, and optimized build/render/loaded cache gates pass. Full validation is running.
+
+- #777 full verification: 0b85629b passes every clean optimized repository gate, including rendering, real imported-note coordinates across cache modes, and existing diagnostic/tooling controls.
