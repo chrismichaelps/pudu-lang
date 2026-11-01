@@ -66,37 +66,24 @@ controls and the exact derive output across both evaluators and off/cold/warm
 products. No source edits follow the clean full-gate start.
 
 PR #779 merged as 308130087 after full local and hosted checks passed.
-Exact next action: observe the existing clean full-gate process, then run the
-stage simulation on a clean committed tree. Publish the bounded #734 PR with
-all evidence if green; require hosted checks before merge, then revalidate #735
-before engine continuation. Do not restart live validation.
+The full gate exposed static-owner receiver annotation regressions.
+Static regressions pass after separating static scheme admission from receiver
+evidence. The stale diagnostic-only suite was stopped after capturing failures.
+Exact next action: observe full gate 43729 without restarting it; then measure
+the clean committed tree and publish #734 if every gate passes.
 
 ## Referenced by
 
 [[handoffs/_MOC]] · [[Type Check Method]] · [[Method Binding]] · [[Type Env]] · [[Type Check]] · [[Trait Provider Gate]]
 
-## Qualified imported trait calls (#734)
+## Projection boundaries
 
-Admitted trait callees retain their canonical trait qualifier as an owner fact at
-the original callee span, only after successful self-taking trait selection.
-Reuse existing member-head lowering so evaluation never reads an alias namespace
-for the qualifier. The receiver and remaining arguments still check once.
-Qualified authored trait paths resolve through the exact consumer-visible name
-map and yield to complete dotted value bindings; preserve legacy single-name and
-generated paths. Env retains that forward map beside its lazy preferred spelling
-map. Never resolve authored aliases from graph-wide hidden names.
-Resolved Grill Log: unused-import admission alone exposed E7001 at A; canonical
-trait selection must survive into executable syntax without runtime alias guesses.
-See [[Imported Provider Delivery]].
+Qualified imported trait calls retain canonical callee owners. Nominal receiver
+methods retain their selected provider after derive substitution. The matching
+Call, Method and Compiler Literals mirrors own the complete resolved contracts.
 
-Resolved nominal-provider boundary (#734): after derive substitution, a field's
-receiver is nominal and its bound-directed provider can no longer be recovered
-from its type alone. The final checker already selects an unambiguous visible
-method and retains its actual canonical provider in methodProvider. Record that
-provider at the member span whenever a registered nominal scheme is selected.
-Preserve the builtin isMethodKey guard and missing-member behavior. Reuse the
-existing provider-marker lowering; do not re-evaluate a receiver, guess from the
-scheme, change runtime registries or copy global provider order into generated
-syntax. The Wire/Json derive reproducer currently returns Json.Number to an Int
-sum in both evaluators; exact 42/JSON/1 output remains required before completion.
-See [[Imported Provider Delivery]].
+Resolved static boundary (#734): staticMethodScheme shares method admission and
+ambiguity checks without recording receiver-provider facts. A complete static
+owner selects its implementation arguments through structural head matching; it
+is never lowered to a runtime receiver. Existing static/derive suite cases cover
+Array, Option, nested and reordered heads in both evaluators.

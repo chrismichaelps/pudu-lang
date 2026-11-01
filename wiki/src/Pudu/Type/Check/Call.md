@@ -185,3 +185,9 @@ map. Never resolve authored aliases from graph-wide hidden names.
 Resolved Grill Log: unused-import admission alone exposed E7001 at A; canonical
 trait selection must survive into executable syntax without runtime alias guesses.
 See [[Imported Provider Delivery]].
+
+Resolved static boundary (#734): staticMethodScheme shares method admission and
+ambiguity checks without recording receiver-provider facts. A complete static
+owner selects its implementation arguments through structural head matching; it
+is never lowered to a runtime receiver. Existing static/derive suite cases cover
+Array, Option, nested and reordered heads in both evaluators.

@@ -10,6 +10,7 @@ module Pudu.Type.Check.Method
   , implBounds
   , implRigid
   , methodScheme
+  , staticMethodScheme
   , implementationMethodKey
   , traitMethodScheme
   , targetName
@@ -396,7 +397,14 @@ traitBounds declared value =
     caller does not fall through to `rigidMethod` and report it a second
     time. -}
 methodScheme :: Span -> Type -> Text -> Checker (Maybe Scheme)
-methodScheme spanValue receiver member = case receiver of
+methodScheme = methodSchemeWith True
+
+{-| Static owner calls carry type selections rather than receiver evidence. -}
+staticMethodScheme :: Span -> Type -> Text -> Checker (Maybe Scheme)
+staticMethodScheme = methodSchemeWith False
+
+methodSchemeWith :: Bool -> Span -> Type -> Text -> Checker (Maybe Scheme)
+methodSchemeWith retain spanValue receiver member = case receiver of
   {-| A dynamic value answers with the trait's own declaration, which is the
       only thing known about it. `Self` stays rigid there, so a member that
       returns `Self` is not callable through a `dynamic` — the caller would have no
@@ -413,8 +421,8 @@ methodScheme spanValue receiver member = case receiver of
       -- only a declared method answers for the type.
       [] | nominalModule owner == Nothing -> do
         method <- isMethodKey key
-        if method then selectedNominalScheme spanValue key else pure Nothing
-      [] -> selectedNominalScheme spanValue key
+        if method then selectedNominalScheme retain spanValue key else pure Nothing
+      [] -> selectedNominalScheme retain spanValue key
       _ -> do
         spellings <- mapM providerSpelling providers
         report "E3013" spanValue
@@ -427,16 +435,16 @@ methodScheme spanValue receiver member = case receiver of
       a receiver of type `F[A]` finds its members exactly where a receiver of
       type `F` would. The arguments say what the container holds and never which
       trait provides a member. -}
-  AppliedType head' _ -> methodScheme spanValue head' member
-  RigidType name -> rigidBoundsOf name >>= selectBounds True spanValue receiver member
+  AppliedType head' _ -> methodSchemeWith retain spanValue head' member
+  RigidType name -> rigidBoundsOf name >>= selectBounds retain spanValue receiver member
   _ -> pure Nothing
 
-selectedNominalScheme :: Span -> Text -> Checker (Maybe Scheme)
-selectedNominalScheme at key = do
+selectedNominalScheme :: Bool -> Span -> Text -> Checker (Maybe Scheme)
+selectedNominalScheme retain at key = do
   found <- lookupName key
   case found of
     Nothing -> pure ()
-    Just _ -> methodProvider key >>= mapM_ (recordProvider at)
+    Just _ -> when retain (methodProvider key >>= mapM_ (recordProvider at))
   pure found
 
 traitMethodScheme :: Span -> Type -> NominalId -> Text -> Checker (Maybe Scheme)

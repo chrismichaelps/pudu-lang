@@ -181,3 +181,9 @@ scheme, change runtime registries or copy global provider order into generated
 syntax. The Wire/Json derive reproducer currently returns Json.Number to an Int
 sum in both evaluators; exact 42/JSON/1 output remains required before completion.
 See [[Imported Provider Delivery]].
+
+Resolved static boundary (#734): staticMethodScheme shares method admission and
+ambiguity checks without recording receiver-provider facts. A complete static
+owner selects its implementation arguments through structural head matching; it
+is never lowered to a runtime receiver. Existing static/derive suite cases cover
+Array, Option, nested and reordered heads in both evaluators.

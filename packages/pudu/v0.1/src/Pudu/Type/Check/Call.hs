@@ -45,6 +45,7 @@ import Pudu.Type.Check.Rule
   )
 import Pudu.Type.Check.Method
   ( methodScheme
+  , staticMethodScheme
   , implementationMethodKey
   , traitMethodScheme
   , targetName
@@ -130,7 +131,7 @@ selectedStaticCallee declared rigid at expression written = case expression of
         selected <- formType declared rigid (Located ownerAt (NamedType (ModuleName path) arguments))
         case selected of
           NominalType identity _ -> do
-            scheme <- methodScheme at selected (locatedValue member)
+            scheme <- staticMethodScheme at selected (locatedValue member)
             provider <- methodProvider (nominalKey identity <> "." <> locatedValue member)
             case (scheme, provider) of
               (Just Scheme{schemeType = ErrorType}, _) -> pure (Just ErrorType)

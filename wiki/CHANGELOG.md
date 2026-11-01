@@ -5,6 +5,8 @@ tags: [changelog]
 
 # Changelog
 
+- 2026-11-01: Separate static-owner admission from receiver-provider annotation (#734); preserve Array/Option derive and structural static-owner selections.
+
 - 2026-10-31: Named record patterns retain canonical owners and check nominal compatibility; checked pattern facts distinguish dynamic tests from static destructuring (#761). Full optimized gates pass, and hosted CI now registers the five local owner/provider regression gates. Named payload identity remains required.
 
 - 2026-10-31: Executable positional constructor patterns retain canonical owners, and repeated-arm warnings distinguish declarations while recognizing aliases (#761). Dynamic narrowing, refutable bindings, nested patterns and warm products pass both evaluators and all clean optimized gates. Ordinary record narrowing and named payloads remain required repairs.
