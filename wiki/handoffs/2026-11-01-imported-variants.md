@@ -64,13 +64,17 @@ Verification Engineer: optimized build, positioned variant properties and the
 loaded owner gate pass. The type-head collision control includes selected First
 and C.First qualification, bare refusal and ambiguous value-field refusal. Both
 evaluators retain qualified/retained/folded owners across off/cold/warm products.
-The clean full optimized gate is running; no source changes follow its start.
+Every clean full optimized gate passes at 388a83b7, including all properties,
+Ark subsystem/layer gates, packages, CLI/LSP sessions, formatting and derive
+boundaries. No source changes followed the gate start.
 Foreign related-span CLI coordinates are separately reported as #777; structured
 source offsets are exact and retained here. Do not claim renderer repair.
 
-Exact next action: observe the existing full-gate process to completion, publish
-the bounded #775 PR after it passes, and merge #776 after hosted checks are green.
-Then resolve #777's foreign-source rendering contract before engine continuation.
+PR #776 merged into dev as e85b0100e after all required hosted checks passed.
+
+Exact next action: publish the bounded #775 PR with the full local evidence,
+require green hosted checks before merging, then resolve #777's foreign-source
+rendering contract before engine continuation.
 
 ## Referenced by
 
