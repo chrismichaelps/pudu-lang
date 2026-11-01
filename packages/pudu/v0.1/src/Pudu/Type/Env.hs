@@ -148,7 +148,7 @@ data DeclaredTypes = DeclaredTypes
       the module being checked. Keyed by owner there is no collision to
       resolve. -}
   , declaredOwnedVariants :: !(Map (NominalId, Text) (NominalId, [Text], [Type]))
-  , declaredVariantFields :: !(Map Text [Text])
+  , declaredVariantFields :: !(Map (NominalId, Text) [Text])
   , declaredOwners :: !(Map NominalId [Text])
   , declaredImpls :: !(Map (NominalId, NominalId) [ImplementationRule])
   , declaredAliases :: !(Map Text ([Text], Type))
@@ -881,9 +881,9 @@ lookupVariantIn owner name =
     pattern may say which element they mean. A variant with no names is absent
     here rather than present and empty, because writing `Circle{}` for a
     positional variant is a different mistake from leaving a field out. -}
-lookupVariantFields :: Text -> Checker (Maybe [Text])
-lookupVariantFields name =
-  Checker $ \state -> (Map.lookup name (declaredVariantFields (stateDeclared state)), state)
+lookupVariantFields :: NominalId -> Text -> Checker (Maybe [Text])
+lookupVariantFields owner name =
+  Checker $ \state -> (Map.lookup (owner, name) (declaredVariantFields (stateDeclared state)), state)
 
 {-| Record the type an expression was given, so tooling can report it. -}
 recordExpression :: Span -> Type -> Checker ()

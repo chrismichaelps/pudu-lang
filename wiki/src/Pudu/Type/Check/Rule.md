@@ -87,7 +87,7 @@ immediate calls do: self unifies before it is removed, and default arity survive
 - Floating text decodes through [[Float Literal]]. Unsuffixed/`f64` values are `Float64`, `f32` is `Float32`, and overflow reports `E3019` before an infinity can enter evaluation; no contextual narrowing is invented.
 
 - **A variant that named its payload is refused where a value was wanted** (`E3034`). Its constructor stays bound so the name still resolves — the reader gets this message rather than `undefined name` — but every use of it as a value is the mistake, whether written bare, written through its type, or stored in a binding and called later.
-- The refusal is asked once, by `namedVariantAsValue`, and applied at the two places an expression names something: a bare name here, and a qualified member in [[Type Check]]. Putting it inside qualified member typing reported a call twice, because a call reaches that typing once for its callee and once for the expression.
+- The refusal is asked once, by `namedVariantAsValue`, using the resolved binding or constructor type. Bare names and namespace bindings check here; complete qualified sum constructors check in [[Type Check Pattern]]. Callee short-circuiting preserves one E3034.
 
 - **This is over the 500-line default deliberately.** It is a table of closed rules — the operator types, the built-in method types, the literal types — thirty-seven of them, none over about forty lines, sharing nothing but the shape of the answer. Cutting it in half puts half a table in each of two files, which is harder to read than one table and no easier to change. The limit is there to stop a module holding several subjects; this one holds a list.
 
@@ -210,3 +210,9 @@ localValueHead follows name/member syntax to its first lexical name through Type
 Retained concrete type methods use Type Check Qualified before ordinary namespace/value access. A known concrete owner with no method reaches the existing namespace refusal under its full path. Traits and ordinary modules retain their prior expression path.
 
 Resolved Grill Log: known concrete identity, lexical admission, module-export priority and provider ambiguity must agree for called and retained methods. See [[Qualified Record Method Delivery]].
+
+## Named payload field ownership (#761)
+
+namedVariantAsValue accepts the already resolved binding type and queries field names under its nominal result owner. Bare names and namespace members check once before instantiating. Lexical receiver admission precedes namespace lookup; unrelated member basenames cannot trigger refusal.
+
+Resolved Grill Log: field names and payload types come from one resolved owner/variant key. No runtime representation or field evaluation order changes in this partition. See [[Named Payload Field Delivery]].

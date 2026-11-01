@@ -4372,3 +4372,5 @@ No builds, tests, reviews or measurements run.
 - #761 record partition: preserve canonical declaration owners across construction, dispatch, folded values and native/foreign boundaries; all clean optimized repository gates pass. Sum identity and trait-evidence audits remain open.
 
 - #763: share canonical qualified-method schemes for calls and retained concrete methods, preserving aliases, captures, exported value receivers and positioned refusals; all clean optimized repository gates pass.
+
+- #761: resolve named payload field names and constructor refusal under their canonical declaring owner; share qualified construction and pattern shapes. See [[Named Payload Field Delivery]].

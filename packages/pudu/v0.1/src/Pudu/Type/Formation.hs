@@ -393,7 +393,7 @@ collectOne owner declared (Located _ declaration) = case declaration of
       SumDefinition variants -> do
         entries <- mapM (formVariant declared rigid identity) variants
         let named =
-              [ (variantName', fieldNames)
+              [ ((identity, variantName'), fieldNames)
               | (variantName', _, Just fieldNames) <- entries
               ]
             payloads = [(variantName', shape) | (variantName', shape, _) <- entries]
