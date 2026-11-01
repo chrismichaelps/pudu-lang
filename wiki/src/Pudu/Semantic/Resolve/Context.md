@@ -17,7 +17,7 @@ aliases: [Resolve Context]
 
 ## Purpose
 
-Own the resolver primitives over the pure invocation-local action and state in [[Resolve State]]: scope-frame management, symbol introduction with same-frame duplicate and outer-shadow classification, ambiguous-variant marking, and the value/type name resolution that the [[Name Resolution]] facade walks.
+Own the resolver primitives over the pure invocation-local action and state in [[Resolve State]]: scope-frame management, symbol introduction with same-frame duplicate and outer-shadow classification, owner-scoped variant candidate collection, and the value/type name resolution that the [[Name Resolution]] facade walks.
 
 ## Interface
 
@@ -40,8 +40,7 @@ resolveLoopTarget :: Text -> Span -> Maybe (Located Text) -> Resolver ()
 declareBuiltin        :: Namespace -> Text -> Resolver ()
 declarePreludeName    :: Namespace -> Text -> Resolver ()
 declareNamed          :: Namespace -> SymbolOrigin -> Visibility -> Bool -> Located Text -> Resolver ()
-recordVariantSymbol   :: Located Text -> Resolver ()
-markAmbiguousVariant  :: Text -> Resolver ()
+recordVariantSymbol   :: Text -> Located Text -> Resolver ()
 resolveValueName :: Span -> Text -> Resolver ()
 resolveExpressionName :: Span -> Text -> Resolver ()
 resolveTypeName  :: Span -> Text -> Resolver ()
@@ -63,8 +62,8 @@ resolveTypeName  :: Span -> Text -> Resolver ()
 - `inScope` pushes a lexical frame for the duration of an action and pops it on exit. A nested scope's declarations cannot leak outward, which is the structural guarantee that makes `let x = x` see the outer binding.
 - `declareBuiltin` binds a wired-in name at `BuiltinOrigin` with `Private` visibility; `declarePreludeName` binds a prelude name at `PreludeOrigin`. The origin distinction is what lets a module declaration shadow a prelude name without conflict or warning while a wired-in name is never displaced.
 - `declareNamed` is the general introduction path. It delegates to `introduce`, which reports a same-frame duplicate as `E2001` with the earlier declaration attached as a related span, and an outer shadow as `W2001` only when the displaced binding is one the language warns about — a `var`, parameter, import, or type name. An immutable local shadowing another immutable local is silent and legal.
-- `recordVariantSymbol` binds a variant as a value name so an unqualified variant resolves while its spelling is unambiguous; `markAmbiguousVariant` records that two types share a spelling so a later use reports `E2012` and asks for qualification rather than resolving to whichever declaration was seen last.
-- `resolveValueName` checks ambiguity first: an ambiguous variant spelling reports `E2012` once and does not resolve. Otherwise it looks in the value namespace and falls through to the type namespace, which is how a qualified path such as `Outcome.Ok` reaches its declaring type. An unresolved value name reports `E2010`.
+- `recordVariantSymbol` records the candidate under its declaring type and installs the first bare alias. A repeated variant in that type reports E2001; a different owner adds a candidate without a duplicate-declaration error.
+- `resolveValueName` selects the lexical value first. A variant alias with multiple owner candidates reports `E2012` once with every candidate span. Other values resolve normally; an absent value falls through to the type namespace, which is how a qualified path such as `Outcome.Ok` reaches its declaring type. An unresolved value name reports `E2010`.
 - `resolveExpressionName` is the stricter value-position operation. It accepts only a value binding;
   a name found solely in the type namespace reports `E2010` with help that it is a type rather than
   recording a reference that evaluation cannot satisfy. Constructor paths keep using
@@ -80,7 +79,7 @@ resolveTypeName  :: Span -> Text -> Resolver ()
 
 ## Algorithm
 
-`ResolveState` holds four reversed accumulators — symbols, references, diagnostics, and the ambiguous-variant list — plus the scope stack and a monotonic identifier counter. Each declaration or reference call appends to the head of the relevant list; `runResolver` reverses them once at the end. Scope changes go through `modifyScopes`, which applies a `ScopeStack -> ScopeStack` transform to the state field. Name resolution reads the current stack through `lookupCurrent`, which delegates to [[Scope Model]]'s innermost-first `lookupSymbol`.
+`ResolveState` holds three reversed accumulators — symbols, references and diagnostics — plus owner-indexed variant candidates, the scope stack and a monotonic identifier counter. Each declaration or reference call appends to the head of the relevant list; `runResolver` reverses them once at the end. Scope changes go through `modifyScopes`, which applies a `ScopeStack -> ScopeStack` transform to the state field. Name resolution reads the current stack through `lookupCurrent`, which delegates to [[Scope Model]]'s innermost-first `lookupSymbol`.
 
 ## Negative Logic (Prohibited Paths)
 
@@ -91,7 +90,7 @@ resolveTypeName  :: Span -> Text -> Resolver ()
 ## Edge Cases
 
 - A duplicate in the same frame reports `E2001` with the first declaration's span as a related note; a shadow across frames warns `W2001` only for the origins [[architecture/SEMANTICS]] lists, so an immutable-over-immutable shadow is silent.
-- A variant marked ambiguous before any body is walked reports `E2012` at every use, so qualification is required consistently rather than depending on declaration order.
+- Complete candidates are collected before bodies. A selected alias with multiple owners reports E2012; a nearer value shadows it, and qualified selection remains available.
 - A value name that is also a type name resolves in the value namespace first, which is why an unqualified variant (a value) and its type (in the type namespace) do not collide.
 - A bare type name in an expression is not rescued by the value-to-type fallback used for
   constructor qualification; it is refused before typing so `check` and `run` cannot diverge.
@@ -99,7 +98,7 @@ resolveTypeName  :: Span -> Text -> Resolver ()
 
 ## Depth
 
-DEPTH 0.72 (DEEP). It hides the monad threading, the four accumulators, the duplicate-versus-shadow classification, the ambiguity gate, and the value-to-type fallthrough behind a small set of named primitives.
+DEPTH 0.72 (DEEP). It hides the monad threading, the three accumulators and candidate map, the duplicate-versus-shadow classification, the ambiguity gate, and the value-to-type fallthrough behind a small set of named primitives.
 
 ## Grill Log
 
@@ -155,3 +154,17 @@ unknown-name diagnostics and ordinary lexical shadowing.
 [[Resolve State]] owns the pure state record, action instances and initial state; this module retains the abstract facade, scope primitives and sorted products. `declareModuleQualifier` introduces the ordinary ValueSpace import and records its resolved SymbolId. Plain expressions check that identity before accepting a runtime value. E2010 names the namespace and asks for an exported member; no runtime reference is recorded for it.
 
 Resolved Grill Log: track identity in invocation-owned state so selected exports and legitimate local shadows remain values. Both declaration namespaces remain intact. Reflection E2018 takes priority outside derives, with no second E2010; qualified paths still record their references. Failed loaded interfaces remain opaque. See [[Scoped Import Design]].
+
+## Variant namespaces (#766)
+
+recordVariantSymbol :: Text -> Located Text -> Resolver (). Keep candidates by owner, diagnose same-owner duplicates, install the first bare alias only, and preserve ordinary conflicts. Resolve E2012 only for an actually selected variant alias with multiple owners; include every candidate span and permit nearer lexical values.
+
+Resolved Grill Log: declaration identity is owner-scoped; ambiguity belongs at an unqualified use and respects the selected lexical binding. See [[Variant Namespace Delivery]].
+
+Normal value uses retain one lexical lookup; candidate metadata is read only after selecting a variant alias. Resolved Grill Log: admission must not add a second scope walk to every ordinary expression.
+
+## Qualified head identity (#766)
+
+resolveQualifierName selects an actual lexical value normally; a variant alias yields to a known TypeSpace qualifier. Bare value/constructor uses keep ambiguity diagnostics. Reuse the already selected value in resolveSelectedValue.
+
+Resolved Grill Log: an already qualified path must not be refused as a bare variant. Only an alias yields to a known type; ordinary values and import privacy retain their lookup. See [[Variant Namespace Delivery]].

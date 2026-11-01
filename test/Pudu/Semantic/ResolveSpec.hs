@@ -7,11 +7,12 @@ import Pudu.Compiler (CompileResult (..), FrontendResult (..), runCompile, runFr
 import Pudu.Diagnostic (Diagnostic, diagnosticCode, diagnosticCodeText, diagnosticRelated)
 import Pudu.Semantic (Resolution (..), Symbol (..), resolveModule)
 import Pudu.Semantic.ScopeIndex (emptyScopeIndex)
+import Pudu.Semantic.VariantNamespaceSpec (variantNamespaceProperties)
 import Pudu.Source (SourceName (SourceName), newSource)
 import Test.QuickCheck (Property, conjoin, counterexample, property, (===))
 
 resolveProperties :: [(String, IO Property)]
-resolveProperties =
+resolveProperties = variantNamespaceProperties <>
   [ ("module declarations resolve regardless of order", testOrderIndependence)
   , ("wired-in types resolve without an import", testBuiltins)
   , ("the prelude is implicitly imported and explicitly replaceable", testPrelude)

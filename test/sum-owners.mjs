@@ -245,5 +245,74 @@ try {
   assert.notEqual(emptyPattern.status, 0);
   assert.match(emptyPattern.stdout + emptyPattern.stderr, /E3034/);
   assert.match(emptyPattern.stdout + emptyPattern.stderr, /Main\.pudu:6:10/);
+  const localTypes = ['type One = Empty | Chosen(Int)', 'type Two = Empty | Chosen(Int)',
+    'type NamedOne = Vacant | Held{value: Int}', 'type NamedTwo = Vacant | Held{value: Int}',
+    'type FlagOne = Off | On', 'type FlagTwo = Off | On'];
+  for (const reversed of [false, true]) {
+    const declarations = reversed ? [...localTypes].reverse() : localTypes;
+    const localHeader = ['module Main', ...declarations,
+      'trait Label { fn label(self: &Self) -> Str }',
+      ...[['One', 'one'], ['Two', 'two'], ['NamedOne', 'named one'], ['NamedTwo', 'named two']]
+        .map(([owner, label]) => `impl Label for ${owner} { fn label(self: &Self) -> Str { "${label}" } }`),
+      'fn generic[T: Label](value: &T) -> Str { value.label() }',
+      'fn inspect(value: dynamic Label) -> Str {', '  match value {',
+      '    case One.Chosen(_) => "one"', '    case Two.Chosen(_) => "two"',
+      '    case NamedOne.Held{..} => "named one"', '    case NamedTwo.Held{..} => "named two"',
+      '    case _ => "other"', '  }', '}', 'const FROZEN: One = One.Chosen(7)'];
+    writeFileSync(file, [...localHeader, 'export fn main() -> Int {',
+      '  let a = One.Chosen(1)', '  let b = Two.Chosen(2)',
+      '  let c = NamedOne.Held{value: 3}', '  let d = NamedTwo.Held{value: 4}',
+      '  print(generic(&a))', '  print(generic(&b))', '  print(generic(&c))', '  print(generic(&d))',
+      '  print(inspect(a))', '  print(inspect(b))', '  print(inspect(c))', '  print(inspect(d))',
+      '  let create = One.Chosen', '  print(show(create(3)))', '  print(generic(&FROZEN))',
+      '  match (FlagOne.On, FlagTwo.On) {', '    case (FlagOne.On, FlagTwo.On) => print("units")',
+      '    case _ => panic("unit owners")', '  }', '  0', '}',
+    ].join('\n') + '\n');
+    const expected = 'one\ntwo\nnamed one\nnamed two\n'.repeat(2) + 'Chosen(3)\none\nunits\n';
+    for (const mode of ['tree', 'compiled']) {
+      run(expected, mode);
+      run(expected, mode, cache);
+      const stored = entries();
+      run(expected, mode, cache);
+      assert.deepEqual(entries(), stored, 'warm same-module variants retain owners');
+    }
+    for (const expression of ['Chosen(1)', 'Empty', 'Held{value: 1}']) {
+      writeFileSync(file, [...localHeader, 'export fn main() -> Int {', `  let bad = ${expression}`, '  0', '}'].join('\n') + '\n');
+      const rejected = call('check');
+      assert.notEqual(rejected.status, 0);
+      const output = rejected.stdout + rejected.stderr;
+      assert.equal(output.match(/E2012/g)?.length, 1, output);
+      assert.equal(output.match(/candidate declared here/g)?.length, 2, output);
+      assert.doesNotMatch(output, /E2001/);
+    }
+    writeFileSync(file, [...localHeader, 'fn bad(value: One) -> Int {', '  match value {',
+      '    case Chosen(_) => 1', '    case _ => 0', '  }', '}', 'export fn main() -> Int { 0 }',
+    ].join('\n') + '\n');
+    const ambiguousPattern = call('check');
+    assert.notEqual(ambiguousPattern.status, 0);
+    assert.equal((ambiguousPattern.stdout + ambiguousPattern.stderr).match(/E2012/g)?.length, 1);
+    for (const [written, code] of [['One.Chosen()', 'E3003'], ['Two.Missing(1)', 'E3034']]) {
+      writeFileSync(file, [...localHeader, 'export fn main() -> Int {', `  let bad = ${written}`, '  0', '}'].join('\n') + '\n');
+      const rejected = call('check');
+      assert.notEqual(rejected.status, 0);
+      assert.match(rejected.stdout + rejected.stderr, new RegExp(code));
+      assert.match(rejected.stdout + rejected.stderr, /Main\.pudu:\d+:\d+/);
+    }
+  }
+  writeFileSync(file, ['module Main', 'type One = One | Chosen(Int)', 'type Two = One | Chosen(Int)',
+    'const SAVED: One = One.Chosen(9)', 'export fn main() -> Int {',
+    '  let construct = One.Chosen', '  let value = construct(7)', '  print(show(One.Chosen(8)))',
+    '  match value {', '    case One.Chosen(n) => print(show(n))', '    case One.One => print("one")', '  }',
+    '  match Two.One {', '    case Two.One => print("two")', '    case Two.Chosen(_) => print("chosen")', '  }',
+    '  print(show(SAVED))', '  0', '}',
+  ].join('\n') + '\n');
+  for (const mode of ['tree', 'compiled']) {
+    const expected = 'Chosen(8)\n7\ntwo\nChosen(9)\n';
+    run(expected, mode);
+    run(expected, mode, cache);
+    const stored = entries();
+    run(expected, mode, cache);
+    assert.deepEqual(entries(), stored, 'warm constructors keep the checked type qualifier');
+  }
 } finally { rmSync(scratch, {recursive: true, force: true}); }
 console.log('Sums retain canonical owners, named storage order and patterns across calls, caches and tasks');

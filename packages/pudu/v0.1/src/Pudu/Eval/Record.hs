@@ -12,6 +12,7 @@ import Pudu.Frontend.Syntax.Name (ModuleName (..), moduleNameText)
     Sorting completed fields never changes the order of their effects. -}
 recordConstructor :: ModuleName -> [Text] -> ([(Text, Value)] -> Value)
 recordConstructor path authored = case path of
+  ModuleName ("::constructor::" :| [owner, label]) -> const (SumValue owner label [])
   ModuleName ("::sum::" :| (owner : label : declared)) ->
     let arrange
           | authored == declared = id

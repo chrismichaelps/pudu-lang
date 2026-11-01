@@ -120,3 +120,9 @@ Register [[Binary Codec Properties]] explicitly. Resolved Grill Log: native roun
 Register Pudu.Eval.NamedSumSpec with existing dependencies; no separate unexecuted property list or new package.
 
 Resolved Grill Log: represent named sums independently of ordinary records and positional sums. Preserve existing field order and public labels. Source publication follows in its own tested partition. See [[Named Sum Value Delivery]].
+
+## Variant namespaces (#766)
+
+Register Pudu.Semantic.VariantNamespaceSpec using existing dependencies.
+
+Resolved Grill Log: declaration identity is owner-scoped; ambiguity belongs at an unqualified use and respects the selected lexical binding. See [[Variant Namespace Delivery]].

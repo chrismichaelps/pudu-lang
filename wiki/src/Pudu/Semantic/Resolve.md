@@ -55,7 +55,7 @@ resolveModuleWith :: ExportIndex -> Module -> (Resolution, [Diagnostic])
   `Shape.Circle` intentionally begin with a type. A bare or called type therefore reports `E2010`
   instead of passing `check` and reaching evaluation as an undefined value.
 - Imports never re-export. With no export index, `resolveModule` retains isolated-source opaque imports for compatibility. In a loaded program, `resolveModuleWith` delegates to [[Semantic Interface]]: selections bind only exported namespaces, bare/aliased imports bind one qualifier, and private or absent selections report `E2013`.
-- Variants live in their type's namespace, so an unqualified variant name does not resolve unless it was imported explicitly; `Result.Ok` resolves through its type. This follows [[architecture/SEMANTICS]] rather than adding an implicit local re-export.
+- Variants live in their declaring type namespace. A local unqualified spelling resolves while one owner offers it; multiple owners require qualification and report E2012 at the use. Qualified paths such as `Result.Ok` resolve through the type.
 - Shadowing a `var`, a parameter, an import, or a type name warns with `W2001`; an immutable local shadowing another immutable local is silent and legal. Borrow-sensitive shadowing rules belong to ownership checking.
 - Scope layering follows Haskell's shape: wired-in names from [[Semantic Prelude]] occupy the outermost frame, the implicitly imported prelude module the next, and the module's own imports and declarations the innermost. An inner layer shadows an outer one silently, so a program that imports nothing still resolves `Int64` and a module may still define its own `Drop`.
 - `Self` is bound inside a trait or implementation body only.
@@ -112,7 +112,7 @@ DEPTH 0.84 (DEEP). One entry point hides collection order, namespace policy, sco
   by declaration offset, which offered a sibling block's `let` and another arm's pattern names.
 
 - **Q:** One pass or two? **A:** Two: collect module declarations, then walk bodies. _Rationale:_ [[architecture/SEMANTICS]] requires order independence at module scope, which a single forward pass cannot provide. _Rejected:_ single-pass with forward declarations; lazy fixpoint resolution.
-- **Q:** Should an unqualified variant resolve to a locally declared variant? **A:** No. _Rationale:_ variants live in their type's namespace, and inventing a local re-export would make resolution disagree with the normative rule and with cross-module behavior. _Rejected:_ implicit variant import; ambiguity-tolerant lookup.
+- **Q:** May local sums share a variant spelling? **A:** Yes; declaration identity includes the owner. _Rationale:_ qualification is required only at ambiguous uses. _Rejected:_ declaration-time rejection, owner selection by order, or admitting ambiguous bare uses.
 - **Q:** What happens to the second and later segments of a path? **A:** They are left unresolved by design. _Rationale:_ member and variant selection needs the receiver's type; guessing here would produce errors that typing would have to contradict. _Rejected:_ resolving segments against the module table; rejecting unknown members.
 - **Q:** Should a plain expression fall through from the value namespace to the type namespace?
   **A:** No. _Rationale:_ a type produces no runtime binding, so recording it as a value reference
@@ -178,3 +178,9 @@ size; this bounded repair adds only this namespace case and leaves extraction to
 Both isolated and loaded imports use [[Semantic Interface]] binding projection and one collector. A ValueSpace qualifier enters through `declareModuleQualifier`; all other bindings keep `declareNamed`. Qualified paths and both declaration namespaces remain unchanged. Record field shorthand reads an ordinary runtime value and uses strict expression resolution.
 
 Resolved Grill Log: remove duplicate import projection from this facade; authoritative qualifier identity belongs to [[Resolve Context]], not spelling in the expression walk. Missing interfaces preserve opaque recovery. See [[Scoped Import Design]].
+
+## Variant namespaces (#766)
+
+Collect each variant with its declaring type name. Complete owner-indexed candidates before walking bodies; remove repeatedVariants spelling tally and markAmbiguousVariant pass. Qualified head-only resolution remains unchanged.
+
+Resolved Grill Log: declaration identity is owner-scoped; ambiguity belongs at an unqualified use and respects the selected lexical binding. See [[Variant Namespace Delivery]].

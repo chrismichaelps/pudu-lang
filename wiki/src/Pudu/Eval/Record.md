@@ -40,3 +40,9 @@ canonical identity and display labels remain separate. See [[Named Sum Publicati
 ## Referenced by
 
 [[src/Pudu/Eval/_MOC]] · [[Named Sum Publication]] · [[Pudu Cabal Manifest]]
+
+## Checked constructor values (#766)
+
+The exact ::constructor::/owner/label descriptor with no fields produces SumValue owner label []. All three evaluators consume the existing projected construction path without looking up a bare alias. The internal descriptor cannot be authored; normal named/ordinary record policies remain unchanged.
+
+Resolved Grill Log: checked canonical identity must survive lowering even when a type and a bare variant share text. No runtime owner inference or source syntax change. See [[Variant Namespace Delivery]].

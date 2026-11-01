@@ -5,6 +5,8 @@ module Pudu.Semantic.Resolve.State
   , initialState
   ) where
 
+import Data.Map.Strict (Map)
+import qualified Data.Map.Strict as Map
 import Data.Set (Set)
 import qualified Data.Set as Set
 import Data.Text (Text)
@@ -15,7 +17,7 @@ import Pudu.Semantic.Symbol (Namespace, Reference, Symbol, SymbolId)
 
 {-| @Semantic.Resolve.State — the resolver's private working state -}
 data ResolveState = ResolveState
-  { stateAmbiguous :: ![Text]
+  { stateVariants :: !(Map Text (Map Text Symbol))
   , stateNext :: !Int
   , stateScopes :: !ScopeStack
   , stateLoops :: ![Maybe Text]
@@ -66,7 +68,7 @@ instance Monad Resolver where
 initialState :: ResolveState
 initialState =
   ResolveState
-    { stateAmbiguous = []
+    { stateVariants = Map.empty
     , stateNext = 0
     , stateScopes = emptyStack
     , stateLoops = []

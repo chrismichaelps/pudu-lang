@@ -302,12 +302,13 @@ bindFieldPattern declared rigid expected (Located fieldSpan field) = do
     `Module.Type.Variant`, which its defining module need not import. Typed
     exactly as the constructor bound in the owner's module: the owner applied
     to fresh parameters, behind a function of the payload when it has one. -}
-canonicalVariant :: DeclaredTypes -> ModuleName -> Checker (Maybe Type)
-canonicalVariant declared path = do
+canonicalVariant :: DeclaredTypes -> Span -> ModuleName -> Checker (Maybe Type)
+canonicalVariant declared at path = do
   variant <- variantForPath declared path (NonEmpty.last (moduleNameSegments path))
   case variant of
     Nothing -> pure Nothing
     Just (owner, ownerParams, declaredPayload) -> do
+      recordVariantOwner at owner (NonEmpty.last (moduleNameSegments path)) []
       replacements <- freshFor ownerParams
       let ownerType = NominalType owner (map snd replacements)
           payload = map (substituteRigid replacements) declaredPayload
@@ -326,7 +327,7 @@ qualifiedVariantType declared spanValue expression = do
             sumOwner = Map.lookup owner (declaredNames declared)
         case sumOwner of
           Just identity | Map.member identity (declaredOwners declared) -> do
-            variant <- canonicalVariant declared (ModuleName names)
+            variant <- canonicalVariant declared spanValue (ModuleName names)
             case variant of
               Just value -> do
                 refused <- namedVariantAsValue spanValue member value
