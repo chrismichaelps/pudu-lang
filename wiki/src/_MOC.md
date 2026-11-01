@@ -230,3 +230,5 @@ tags: [moc, module]
 - [[Qualified Record Method Gate]] — concrete namespace, alias and capture regression.
 
 - [[Sum Owner Gate]] — positional identity and native/task boundary regressions.
+
+- [[Resolve Ambiguity]] — symbol-bound exported variant ambiguity.

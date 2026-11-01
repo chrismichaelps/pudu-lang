@@ -2,6 +2,7 @@
 module Pudu.Semantic.Interface
   ( ExportIndex
   , ExportedName (..)
+  , ImportedVariant (..)
   , ImportBinding (..)
   , ModuleExports
   , emptyExportIndex
@@ -49,15 +50,22 @@ data ExportedName = ExportedName
   }
   deriving stock (Eq, Show)
 
+data ImportedVariant = ImportedVariant
+  { variantDeclarations :: ![Span]
+  , variantTypeHead :: !Bool
+  }
+  deriving stock (Eq, Show)
+
 data ImportBinding = ImportBinding
   { bindingNamespace :: !Namespace
   , bindingName :: !Text
   , bindingSpan :: !Span
   , bindingModuleQualifier :: !Bool
+  , bindingVariants :: !(Map [Text] ImportedVariant)
   }
   deriving stock (Eq, Show)
 
-newtype ModuleExports = ModuleExports (Map (Namespace, Text) ExportedName)
+data ModuleExports = ModuleExports (Map (Namespace, Text) ExportedName) (Map Text [Span])
   deriving stock (Eq, Show)
 
 newtype ExportIndex = ExportIndex (Map ModuleName ModuleExports)
@@ -73,19 +81,31 @@ exportIndex modules = ExportIndex (Map.map moduleExports modules)
     nothing for a module it does not hold. -}
 exportsOf :: ExportIndex -> ModuleName -> [ExportedName]
 exportsOf (ExportIndex modules) owner = case Map.lookup owner modules of
-  Just (ModuleExports exported) -> Map.elems exported
+  Just (ModuleExports exported _) -> Map.elems exported
   Nothing -> []
 
 {-| What a module exports, by namespace and name alone. -}
 moduleExportKeys :: ModuleExports -> [(Namespace, Text)]
-moduleExportKeys (ModuleExports exported) = Map.keys exported
+moduleExportKeys (ModuleExports exported _) = Map.keys exported
 
 moduleExports :: Module -> ModuleExports
 moduleExports moduleValue =
   ModuleExports
     (Map.fromList (concatMap (declarationExports owner) (moduleDeclarations moduleValue)))
+    (Map.mapMaybe multiple variantPool)
  where
   owner = locatedValue (moduleName moduleValue)
+  variantPool = Map.fromListWith Map.union
+    [ (locatedValue name, Map.singleton (locatedValue (typeName declaration)) (locatedSpan name))
+    | Located _ (TypeDeclaration declaration) <- moduleDeclarations moduleValue
+    , typeVisibility declaration == Exported
+    , Located _ (SumDefinition variants) <- [typeDefinition declaration]
+    , Located _ variant <- variants
+    , let name = variantName variant
+    ]
+  multiple candidates
+    | Map.size candidates > 1 = Just (Map.elems candidates)
+    | otherwise = Nothing
 
 declarationExports :: ModuleName -> Located Declaration -> [((Namespace, Text), ExportedName)]
 declarationExports owner (Located _ declaration) = case declaration of
@@ -123,11 +143,19 @@ importBindings (ExportIndex modules) (Located importSpan value) =
   case Map.lookup importedModule modules of
     Nothing -> (opaqueBindings False value qualifier importSpan, [])
     Just exports -> case importItems value of
-      [] -> (qualifierBindings True qualifier importSpan, [])
+      [] -> (map (withCandidates exports) (qualifierBindings True qualifier importSpan), [])
       items -> foldMap (selectedBindings importedModule exports) items
  where
   importedModule = locatedValue (importModule value)
   qualifier = maybe (moduleQualifier importedModule) locatedValue (importAlias value)
+
+withCandidates :: ModuleExports -> ImportBinding -> ImportBinding
+withCandidates (ModuleExports names candidates) binding
+  | bindingNamespace binding == ValueSpace =
+      binding{bindingVariants = Map.fromList
+        [([name], ImportedVariant locations (Map.member (TypeSpace, name) names))
+        | (name, locations) <- Map.toList candidates]}
+  | otherwise = binding
 
 isolatedImportBindings :: Located Import -> [ImportBinding]
 isolatedImportBindings (Located at value) =
@@ -138,7 +166,7 @@ isolatedImportBindings (Located at value) =
 
 selectedBindings
   :: ModuleName -> ModuleExports -> Located Text -> ([ImportBinding], [Diagnostic])
-selectedBindings owner (ModuleExports exports) item =
+selectedBindings owner (ModuleExports exports candidates) item =
   case matches of
     [] -> ([], maybe [] pure (notExported owner item))
     _ -> (map toBinding matches, [])
@@ -150,18 +178,22 @@ selectedBindings owner (ModuleExports exports) item =
     ]
   toBinding found =
     ImportBinding (exportedNamespace found) (locatedValue item) (locatedSpan item) False
+      (if exportedNamespace found == ValueSpace
+        then maybe Map.empty (\locations -> Map.singleton [] (ImportedVariant locations False))
+          (Map.lookup (locatedValue item) candidates)
+        else Map.empty)
 
 qualifierBindings :: Bool -> Text -> Span -> [ImportBinding]
 qualifierBindings known name spanValue =
-  [ ImportBinding ValueSpace name spanValue known
-  , ImportBinding TypeSpace name spanValue known
+  [ ImportBinding ValueSpace name spanValue known Map.empty
+  , ImportBinding TypeSpace name spanValue known Map.empty
   ]
 
 opaqueBindings :: Bool -> Import -> Text -> Span -> [ImportBinding]
 opaqueBindings known value qualifier spanValue = case importItems value of
   [] -> qualifierBindings known qualifier spanValue
   items ->
-    [ ImportBinding namespace (locatedValue item) (locatedSpan item) False
+    [ ImportBinding namespace (locatedValue item) (locatedSpan item) False Map.empty
     | item <- items
     , namespace <- [ValueSpace, TypeSpace]
     ]

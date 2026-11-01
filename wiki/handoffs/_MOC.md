@@ -252,3 +252,5 @@ tags: [moc, handoff]
 - [[Variant Namespace Delivery]] — local variant namespace admission and positioned ambiguity.
 
 - [[Constructor Binding Delivery]] — typed constructor roles and exact import aliases.
+
+- [[Imported Variant Delivery]] — exported variant candidates and lexical import ambiguity.

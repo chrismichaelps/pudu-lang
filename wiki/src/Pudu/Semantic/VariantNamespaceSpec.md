@@ -44,3 +44,11 @@ observable policy independently of candidate storage. See [[Variant Namespace De
 Add a known type qualifier that is also an ambiguous variant label; qualified construction succeeds and a bare use still refuses.
 
 Resolved Grill Log: an already qualified path must not be refused as a bare variant. Only an alias yields to a known type; ordinary values and import privacy retain their lookup. See [[Variant Namespace Delivery]].
+
+## Imported variant candidates (#775)
+
+Add authoritative export-index resolution tests with exact selected/module-member E2012 use spans and all candidate spans in both declaration orders; use real resolver scopes to prove nearer values win. Keep duplicate and isolated-resolution controls.
+
+Resolved Grill Log: preserve complete declaring-owner ambiguity at uses across imports, lexical shadows and generated syntax. See [[Imported Variant Delivery]].
+
+Resolved type-head control: imported candidates retain an export-index TypeSpace flag; PathUse preserves C.First.Chosen qualification without admitting ambiguous value fields. Syntactically named member paths preserve head spans. See [[Imported Variant Delivery]].

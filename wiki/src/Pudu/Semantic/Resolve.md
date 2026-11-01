@@ -184,3 +184,11 @@ Resolved Grill Log: remove duplicate import projection from this facade; authori
 Collect each variant with its declaring type name. Complete owner-indexed candidates before walking bodies; remove repeatedVariants spelling tally and markAmbiguousVariant pass. Qualified head-only resolution remains unchanged.
 
 Resolved Grill Log: declaration identity is owner-scoped; ambiguity belongs at an unqualified use and respects the selected lexical binding. See [[Variant Namespace Delivery]].
+
+## Imported variant candidates (#775)
+
+Register prepared import candidate maps after binding introduction. Check directly named module members with their selected suffix once; nested/computed targets keep the existing recursive walk. Resolve Ambiguity owns candidate policy and source locations, with no type/runtime inference.
+
+Resolved Grill Log: preserve complete declaring-owner ambiguity at uses across imports, lexical shadows and generated syntax. See [[Imported Variant Delivery]].
+
+Resolved type-head control: imported candidates retain an export-index TypeSpace flag; PathUse preserves C.First.Chosen qualification without admitting ambiguous value fields. Syntactically named member paths preserve head spans. See [[Imported Variant Delivery]].

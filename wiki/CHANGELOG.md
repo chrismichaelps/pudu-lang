@@ -4384,3 +4384,9 @@ No builds, tests, reviews or measurements run.
 - #774: preserve declared constructor roles through checker bindings and aliases; validation pending. See [[Constructor Binding Delivery]].
 
 - #774 verification: eea3a687 passes the focused owner gate and every clean full optimized gate. Constructor roles survive interface snapshots and imports; ordinary values avoid constructor-only refusal. Export-order ambiguity is separately reported as #775.
+
+- #775 design: retain owner-indexed export candidates through lexical import binding; implementation and validation pending. See [[Imported Variant Delivery]].
+
+- #775 focused verification: optimized build, positioned variant properties and loaded owner/cache controls pass; full gate running. Foreign related-span rendering is tracked separately in #777.
+
+- #775 full verification: 388a83b7 passes every clean optimized gate. #774 delivery merged as e85b0100e after green hosted checks.

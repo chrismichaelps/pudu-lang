@@ -6,6 +6,7 @@ module Pudu.Semantic.Resolve
   ) where
 
 import Control.Monad (when)
+import qualified Data.List.NonEmpty as NonEmpty
 import Data.Text (Text)
 import Pudu.Diagnostic (Diagnostic, sortDiagnostics)
 import Pudu.Frontend.Syntax.Located (Located (..))
@@ -78,6 +79,7 @@ import Pudu.Semantic.Resolve.Context
   , runResolver
   )
 import Pudu.Semantic.Resolve.Bindings (bindPattern, bindPatternWith)
+import Pudu.Semantic.Resolve.Ambiguity (PathUse (ValuePath), recordImportedVariants, rejectImportedPath)
 import Pudu.Semantic.Resolve.Canonical (resolveHead, resolveMemberHead, resolveConstructorPath, resolveTypePath)
 import Pudu.Semantic.ScopeIndex (ScopeIndex, delimitedExtent, spanExtent, spanningExtent)
 import Pudu.Semantic.Symbol (Namespace (..), Reference, Symbol (..), SymbolOrigin (..))
@@ -154,9 +156,11 @@ importsPrelude (Located _ value) = isPreludeModule (locatedValue (importModule v
 collectPreparedImport :: [ImportBinding] -> Resolver ()
 collectPreparedImport = mapM_ declare
  where
-  declare binding
-    | bindingNamespace binding == ValueSpace && bindingModuleQualifier binding = declareModuleQualifier name
-    | otherwise = declareNamed (bindingNamespace binding) ImportOrigin Private False name
+  declare binding = do
+    if bindingNamespace binding == ValueSpace && bindingModuleQualifier binding
+      then declareModuleQualifier name
+      else declareNamed (bindingNamespace binding) ImportOrigin Private False name
+    recordImportedVariants (bindingName binding) (bindingVariants binding)
    where
     name = Located (bindingSpan binding) (bindingName binding)
 
@@ -368,7 +372,11 @@ walkExpression (Located spanValue expression) = case expression of
   UnaryExpression _ operand -> walkExpression operand
   BinaryExpression left _ right -> walkExpression left >> walkExpression right
   CallExpression callee arguments -> walkExpression callee >> mapM_ walkExpression arguments
-  MemberExpression target _ -> walkMemberTarget target
+  MemberExpression target member -> do
+    walkMemberTarget target
+    case locatedValue target of
+      NameExpression (first NonEmpty.:| []) -> rejectImportedPath ValuePath spanValue (first NonEmpty.:| [locatedValue member])
+      _ -> pure ()
   IndexExpression target index -> walkExpression target >> walkExpression index
   RangeExpression lower _ upper -> mapM_ walkExpression lower >> mapM_ walkExpression upper
   TryExpression target -> walkExpression target
@@ -465,9 +473,18 @@ walkType (Located typeSpan value) = case value of
     Computed targets use the ordinary expression walk. -}
 walkMemberTarget :: Located Expression -> Resolver ()
 walkMemberTarget target@(Located spanValue expression) = case expression of
-  NameExpression path -> resolveMemberHead spanValue path
+  NameExpression path -> resolveMemberHead spanValue spanValue path
   TypeApplication (Located ownerAt (NameExpression path)) arguments
     | Just _ <- spanOrigin spanValue -> do
         resolveTypePath ownerAt (ModuleName path)
         mapM_ walkType arguments
+  _ | Just (headAt, path) <- namedMemberPath target -> resolveMemberHead headAt spanValue path
   _ -> walkExpression target
+
+namedMemberPath :: Located Expression -> Maybe (Span, NonEmpty.NonEmpty Text)
+namedMemberPath (Located at expression) = case expression of
+  NameExpression path -> Just (at, path)
+  MemberExpression target member -> do
+    (headAt, path) <- namedMemberPath target
+    pure (headAt, path <> pure (locatedValue member))
+  _ -> Nothing
