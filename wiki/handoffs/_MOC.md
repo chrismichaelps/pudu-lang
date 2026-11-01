@@ -242,3 +242,7 @@ tags: [moc, handoff]
 - [[2026-10-30-pattern-owners|Constructor Pattern Owner Delivery]]
 
 - [[2026-10-31-record-pattern-owners|Record Pattern Owner Delivery]]
+
+- [[Named Payload Field Delivery]] — canonical named payload shape lookup, issue #761.
+
+- [[Named Sum Value Delivery]] — explicit owned named runtime values, issue #761.

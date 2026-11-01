@@ -72,3 +72,9 @@ Resolved Grill Log: preserve identity through immutable data storage; do not rec
 Persist owner, label and positional payload together. Thaw restores all three before execution; compiler executable identity invalidates incompatible predecessor products. Frozen labels and owners cannot be reconstructed from import order.
 
 Resolved Grill Log: identity comes from the declaration or native ABI, not a global short-tag registry. Keep labels, evaluation order, effects and wire bytes stable. See [[Positional Sum Owner Delivery]].
+
+## Named sum value foundation (#761)
+
+Freeze named sum data only when every field freezes. Persist kind 17 with canonical owner, label, field count and name/value pairs; restore with existing bounded counted decoding. The executable fingerprint invalidates predecessor products.
+
+Resolved Grill Log: represent named sums independently of ordinary records and positional sums. Preserve existing field order and public labels. Source publication follows in its own tested partition. See [[Named Sum Value Delivery]].

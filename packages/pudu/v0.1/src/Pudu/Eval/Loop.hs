@@ -217,6 +217,7 @@ evaluateFor needs spanValue label binder iterated body = case elements of
 
   variantElements = case iterated of
     VariantValue _ payload -> Just payload
+    NamedSumValue _ _ fields -> Just (map snd fields)
     _ -> Nothing
   step values = case values of
     [] -> pure UnitValue
@@ -330,6 +331,7 @@ data LoopTransfer
 receiverOwners :: Value -> Evaluator [Text]
 receiverOwners value = case value of
   SumValue owner _ _ | owner /= "" -> pure [owner]
+  NamedSumValue owner _ _ -> pure [owner]
   _ -> case receiverOwner value of
     Nothing -> pure []
     Just owner -> do
@@ -356,6 +358,7 @@ firstBound look names = case names of
 receiverOwner :: Value -> Maybe Text
 receiverOwner value = case value of
   RecordValue owner _ -> Just owner
+  NamedSumValue owner _ _ -> Just owner
   SumValue owner name _ -> Just (if owner == "" then name else owner)
   _ -> nominalNameOf value
 

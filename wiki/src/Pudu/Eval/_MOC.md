@@ -87,3 +87,5 @@ Dependency direction: Builtin Definition → Value → Env → Operator/Match/Ar
 - [[Mutex Admission Spec]] — bounded admission, ownership and timer retirement.
 
 - [[Eval Binary]] · [[Binary Codec Properties]] — native binary wire encoding and checked decoding.
+
+- [[Named Sum Value Properties]] — named sum identity, patterns, fields and frozen storage.

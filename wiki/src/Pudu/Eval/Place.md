@@ -68,3 +68,9 @@ a value, because values are immutable and the root is the only thing that change
 ## Referenced by
 
 [[src/Pudu/Eval/_MOC]] · [[Eval Env]]
+
+## Named sum value foundation (#761)
+
+Rebuild named sum fields during a place write while preserving canonical owner, variant label, every other field and storage order. Static lending/mutability rules stay with the checker.
+
+Resolved Grill Log: represent named sums independently of ordinary records and positional sums. Preserve existing field order and public labels. Source publication follows in its own tested partition. See [[Named Sum Value Delivery]].

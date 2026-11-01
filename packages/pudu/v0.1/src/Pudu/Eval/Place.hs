@@ -120,6 +120,11 @@ storePlace (Place spanValue root steps) value = do
             changed <- rebuild inner rest
             changed `seq`
               pure (RecordValue owner [(name, if name == field then changed else held) | (name, held) <- fields])
+      NamedSumValue owner label fields
+        | Just inner <- lookup field fields -> do
+            changed <- rebuild inner rest
+            changed `seq` pure (NamedSumValue owner label
+              [(name, if name == field then changed else held) | (name, held) <- fields])
       _ ->
         abortAt (Just spanValue) "E7001"
           ("a " <> valueKind current <> " has no field " <> field <> " to assign") Nothing

@@ -88,3 +88,9 @@ shadowed; `Char` and `Bytes` keep their own entries, the latter answering `Optio
 Read positional sum methods through their carried canonical owner. Keep short labels in user-facing messages and variant-member access. Owned sums never fall back to another type whose basename matches a tag.
 
 Resolved Grill Log: identity comes from the declaration or native ABI, not a global short-tag registry. Keep labels, evaluation order, effects and wire bytes stable. See [[Positional Sum Owner Delivery]].
+
+## Named sum value foundation (#761)
+
+Read a named sum field first, then methods only under its carried canonical owner. Universal toText remains the ordinary fallback. Do not consult the short-tag owner registry.
+
+Resolved Grill Log: represent named sums independently of ordinary records and positional sums. Preserve existing field order and public labels. Source publication follows in its own tested partition. See [[Named Sum Value Delivery]].

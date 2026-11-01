@@ -157,3 +157,9 @@ lexical shadowing, missing members, exported-type visibility or named-field cons
 Pass the current DeclaredTypes to checkExhaustive so usefulness resolves constructor identity in the same scope as pattern typing.
 
 Resolved Grill Log: preserve declaration identity through checking, executable projection and usefulness; no per-match span lookup. See [[Constructor Pattern Owner Delivery]].
+
+## Named payload field ownership (#761)
+
+Consume qualified constructor admission directly; ordinary namespace member lookup owns exported named-payload refusal. Remove the global member-basename precheck, preserving generated constructor admission.
+
+Resolved Grill Log: field names and payload types come from one resolved owner/variant key. No runtime representation or field evaluation order changes in this partition. See [[Named Payload Field Delivery]].

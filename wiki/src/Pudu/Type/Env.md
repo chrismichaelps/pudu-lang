@@ -251,3 +251,9 @@ Resolved Grill Log: separate semantic roles even at identical generated spans. N
 Add checker-local recordPatternTest :: Span -> Checker () and patternTests :: Checker (Set Span), with an initially empty set. Do not carry per-module test facts through installed interface snapshots or published executable facts.
 
 Resolved Grill Log: canonical identity and subject-sensitive refutability must agree before evaluation. See [[Record Pattern Owner Delivery]].
+
+## Named payload field ownership (#761)
+
+Key declaredVariantFields and lookupVariantFields by (NominalId, variant label), matching declaredOwnedVariants. Absence still distinguishes a positional payload from a named empty payload.
+
+Resolved Grill Log: field names and payload types come from one resolved owner/variant key. No runtime representation or field evaluation order changes in this partition. See [[Named Payload Field Delivery]].

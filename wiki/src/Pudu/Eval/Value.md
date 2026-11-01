@@ -234,3 +234,9 @@ SumValue stores a canonical owner, short variant label and positional payload. A
 Resolved Grill Log: identity comes from the declaration or native ABI, not a global short-tag registry. Keep labels, evaluation order, effects and wire bytes stable. See [[Positional Sum Owner Delivery]].
 
 Resolved Grill Log: keep the closed value vocabulary, pattern view and Eq/Ord together. Remove stale method headers left after their definitions moved, and condense duplicate width/range commentary while preserving those invariants; avoid a generic comparison callback module introduced solely for line count. Keep the resulting source below 500 lines.
+
+## Named sum value foundation (#761)
+
+Add NamedSumValue canonicalOwner shortLabel namedFields, a distinct value shape. Eq and keyed comparison include owner, label and fields; shape rank 31 is unique. Keep the value vocabulary under 500 lines without moving comparison semantics.
+
+Resolved Grill Log: represent named sums independently of ordinary records and positional sums. Preserve existing field order and public labels. Source publication follows in its own tested partition. See [[Named Sum Value Delivery]].
