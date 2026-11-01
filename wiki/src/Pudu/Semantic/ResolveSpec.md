@@ -39,3 +39,9 @@ unknown names, or equate two failed executions with correct behavior.
 ## Referenced by
 
 [[src/Pudu/Semantic/_MOC]] · [[Name Resolution]] · [[Repository Test Runner]]
+
+## Variant namespaces (#766)
+
+Register Variant Namespace Properties in resolveProperties; keep the existing long file as a coordinator for the new isolated concern.
+
+Resolved Grill Log: declaration identity is owner-scoped; ambiguity belongs at an unqualified use and respects the selected lexical binding. See [[Variant Namespace Delivery]].

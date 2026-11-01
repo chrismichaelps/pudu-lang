@@ -135,3 +135,9 @@ Resolved Grill Log: field names and payload types come from one resolved owner/v
 Record named pattern owner/label facts after canonical shape resolution. Refuse positional named-payload patterns with E3034 even when empty; retain field types and source provenance.
 
 Resolved Grill Log: carry checked owner and field order through syntax; preserve authored effects, diagnostics and cache identity. See [[Named Sum Publication]].
+
+## Checked constructor values (#766)
+
+canonicalVariant now accepts the complete use Span and records VariantOwner for a resolved canonical constructor. qualifiedVariantType and generated canonical constructor references share this fact; named-value refusal and lexical admission remain unchanged.
+
+Resolved Grill Log: checked canonical identity must survive lowering even when a type and a bare variant share text. No runtime owner inference or source syntax change. See [[Variant Namespace Delivery]].

@@ -552,7 +552,7 @@ recordOwner :: Span -> NominalId -> Checker ()
 recordOwner at owner = Checker $ \state ->
   ((), state{stateOwnersRev = (at, ConcreteOwner owner) : stateOwnersRev state})
 
-{-| Named selections retain the declaration's field order for construction. -}
+{-| Variant selections retain declared field order when the payload is named. -}
 recordVariantOwner :: Span -> NominalId -> Text -> [Text] -> Checker ()
 recordVariantOwner at owner label fields = Checker $ \state ->
   ((), state{stateOwnersRev = (at, VariantOwner owner label fields) : stateOwnersRev state})

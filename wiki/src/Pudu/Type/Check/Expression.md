@@ -163,3 +163,9 @@ Resolved Grill Log: preserve declaration identity through checking, executable p
 Consume qualified constructor admission directly; ordinary namespace member lookup owns exported named-payload refusal. Remove the global member-basename precheck, preserving generated constructor admission.
 
 Resolved Grill Log: field names and payload types come from one resolved owner/variant key. No runtime representation or field evaluation order changes in this partition. See [[Named Payload Field Delivery]].
+
+## Checked constructor values (#766)
+
+Pass the generated constructor reference span to canonicalVariant so generated full-owner references retain their checked constructor identity.
+
+Resolved Grill Log: checked canonical identity must survive lowering even when a type and a bare variant share text. No runtime owner inference or source syntax change. See [[Variant Namespace Delivery]].

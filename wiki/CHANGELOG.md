@@ -4378,3 +4378,5 @@ No builds, tests, reviews or measurements run.
 - #761: introduce distinct owned named sum runtime values with explicit identity, field access, matching, ordering and frozen storage; source publication remains pending. See [[Named Sum Value Delivery]].
 
 - #761: publish checked named owner and field-order selections through executable syntax and shared construction; focused and clean full optimized gates pass. See [[Named Sum Publication]].
+
+- #766: scope variant candidates to declaring types, retain canonical constructor values and diagnose bare ambiguity with all candidate spans; focused and clean full optimized gates pass. See [[Variant Namespace Delivery]].

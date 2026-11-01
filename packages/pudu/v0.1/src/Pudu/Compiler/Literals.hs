@@ -175,14 +175,24 @@ instance (Walk a, Typeable a) => Walk (Located a) where
 
 {-| Resolved member symbols cannot be spelled by a source identifier. -}
 selectProvider :: Facts -> Span -> Expression -> Expression
-selectProvider facts at value = case value of
-  MemberExpression target (Located memberAt member)
-    | not (factOwnersOnly facts), Just (ConcreteOwner owner) <- Map.lookup at (factOwners facts) ->
-        MemberExpression (Located (locatedSpan target) (NameExpression (nominalKey owner :| [])))
-          (Located memberAt member)
-    | not (factOwnersOnly facts), Just owner <- Map.lookup at (factProviders facts) ->
-        MemberExpression target (Located memberAt ("::" <> nominalKey owner <> "::" <> member))
-  _ -> value
+selectProvider facts at value
+  | not (factOwnersOnly facts)
+  , Just (VariantOwner owner label _) <- Map.lookup at (factOwners facts)
+  , constructorReference value =
+      RecordExpression (ModuleName ("::constructor::" :| [nominalKey owner, label])) []
+  | otherwise = selectMember value
+ where
+  constructorReference NameExpression{} = True
+  constructorReference MemberExpression{} = True
+  constructorReference _ = False
+  selectMember expression = case expression of
+    MemberExpression target (Located memberAt member)
+      | not (factOwnersOnly facts), Just (ConcreteOwner owner) <- Map.lookup at (factOwners facts) ->
+          MemberExpression (Located (locatedSpan target) (NameExpression (nominalKey owner :| [])))
+            (Located memberAt member)
+      | not (factOwnersOnly facts), Just owner <- Map.lookup at (factProviders facts) ->
+          MemberExpression target (Located memberAt ("::" <> nominalKey owner <> "::" <> member))
+    _ -> value
 
 instance Walk a => Walk (Maybe a) where
   walk kinds = fmap (walk kinds)

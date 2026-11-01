@@ -263,3 +263,9 @@ Resolved Grill Log: field names and payload types come from one resolved owner/v
 Publish OwnerSelection facts. recordOwner wraps ConcreteOwner; recordVariantOwner records a canonical named owner, label and declared fields without changing provider evidence or installed snapshots.
 
 Resolved Grill Log: carry checked owner and field order through syntax; preserve authored effects, diagnostics and cache identity. See [[Named Sum Publication]].
+
+## Checked constructor values (#766)
+
+recordVariantOwner also carries positional constructor selections with an empty field list. Record-expression facts retain named storage order; expression shape determines projection. Provider facts remain separate.
+
+Resolved Grill Log: checked canonical identity must survive lowering even when a type and a bare variant share text. No runtime owner inference or source syntax change. See [[Variant Namespace Delivery]].

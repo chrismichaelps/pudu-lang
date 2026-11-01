@@ -28,3 +28,9 @@ No source loading, global state, typing, import projection or diagnostics policy
 ## Referenced by
 
 [[Resolve Context]] · [[src/pudu-cabal|Pudu Package Manifest]] · [[src/Pudu/Semantic/_MOC]]
+
+## Variant namespaces (#766)
+
+Replace stateAmbiguous with empty invocation-local Map Text (Map Text Symbol) candidate storage, keyed by spelling then declaring type. Preserve all other state, symbol IDs and scope mechanics.
+
+Resolved Grill Log: declaration identity is owner-scoped; ambiguity belongs at an unqualified use and respects the selected lexical binding. See [[Variant Namespace Delivery]].
