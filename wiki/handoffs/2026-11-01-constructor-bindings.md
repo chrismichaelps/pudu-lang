@@ -50,8 +50,22 @@ bare and duplicate refusals; both evaluators and off/cold/warm caches. Run the
 focused source gate and clean full optimized gate. Split before 600 changed lines
 and keep the issue open if required evidence or implementation remains.
 
-Exact next action: implement binding roles and alias preservation, validate the
-reported check/run and false-refusal cases, then run focused and full gates.
+Verification Engineer → Forensic Guardian: eea3a687 passes the loaded owner gate
+and every clean full optimized gate. This includes all property families,
+positioned diagnostics, formatter, Ark subsystem/layer gates, package/CLI/LSP
+sessions, documentation and derive boundaries. Mirrors retain each owned change;
+ordinary binding lookup still exposes schemes and snapshots preserve roles.
+The bounded declaration-site update leaves Prelude's existing state-owner size
+exception unchanged. No runtime dispatch lookup or new inference variable exists.
+
+Prerequisite #773 merged into dev as e93cf5527 after all hosted checks passed.
+A separate export-candidate defect is reported as #775: selected imports can
+choose a shared variant label by export declaration order. This repair preserves
+an actually selected binding and does not claim to resolve that export ambiguity.
+
+Exact next action: publish the bounded #774 PR, require its hosted compiler gate,
+merge after green checks, then resolve #775's export/import candidate contract
+before further engine feature implementation.
 
 ## Referenced by
 

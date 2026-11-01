@@ -4382,3 +4382,5 @@ No builds, tests, reviews or measurements run.
 - #766: scope variant candidates to declaring types, retain canonical constructor values and diagnose bare ambiguity with all candidate spans; focused and clean full optimized gates pass. See [[Variant Namespace Delivery]].
 
 - #774: preserve declared constructor roles through checker bindings and aliases; validation pending. See [[Constructor Binding Delivery]].
+
+- #774 verification: eea3a687 passes the focused owner gate and every clean full optimized gate. Constructor roles survive interface snapshots and imports; ordinary values avoid constructor-only refusal. Export-order ambiguity is separately reported as #775.
