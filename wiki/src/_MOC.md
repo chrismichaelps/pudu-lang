@@ -234,3 +234,5 @@ tags: [moc, module]
 - [[Resolve Ambiguity]] — symbol-bound exported variant ambiguity.
 
 - [[Diagnostic Render Properties]] — source identity and presentation regressions.
+
+- [[Method Binding]] — canonical method registration.

@@ -289,6 +289,7 @@ library
     Pudu.Type.Check.Iteration
     Pudu.Type.Check.Safety
     Pudu.Type.Check.Method
+    Pudu.Type.Check.Method.Binding
     Pudu.Type.Check.Pattern
     Pudu.Type.Check.Place
     Pudu.Type.Check.Expression

@@ -1,6 +1,6 @@
 ---
 type: module
-path: "@root/src/Pudu/Type/Check/Call.hs"
+path: "@root/packages/pudu/v0.1/src/Pudu/Type/Check/Call.hs"
 fidelity: Active
 domain: "[[Pudu Type]]"
 subsystem: "[[Semantics]]"
@@ -171,3 +171,23 @@ this repair changes no authored bracket grammar.
 Qualified constructor admission owns named-payload refusal. Remove the unconditional member-basename refusal; ordinary qualified member typing checks exported constructor bindings, preserving one diagnostic and lexical receiver behavior.
 
 Resolved Grill Log: field names and payload types come from one resolved owner/variant key. No runtime representation or field evaluation order changes in this partition. See [[Named Payload Field Delivery]].
+
+## Qualified imported trait calls (#734)
+
+Admitted trait callees retain their canonical trait qualifier as an owner fact at
+the original callee span, only after successful self-taking trait selection.
+Reuse existing member-head lowering so evaluation never reads an alias namespace
+for the qualifier. The receiver and remaining arguments still check once.
+Qualified authored trait paths resolve through the exact consumer-visible name
+map and yield to complete dotted value bindings; preserve legacy single-name and
+generated paths. Env retains that forward map beside its lazy preferred spelling
+map. Never resolve authored aliases from graph-wide hidden names.
+Resolved Grill Log: unused-import admission alone exposed E7001 at A; canonical
+trait selection must survive into executable syntax without runtime alias guesses.
+See [[Imported Provider Delivery]].
+
+Resolved static boundary (#734): staticMethodScheme shares method admission and
+ambiguity checks without recording receiver-provider facts. A complete static
+owner selects its implementation arguments through structural head matching; it
+is never lowered to a runtime receiver. Existing static/derive suite cases cover
+Array, Option, nested and reordered heads in both evaluators.

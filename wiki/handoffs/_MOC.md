@@ -256,3 +256,5 @@ tags: [moc, handoff]
 - [[Imported Variant Delivery]] — exported variant candidates and lexical import ambiguity.
 
 - [[Diagnostic Source Delivery]] — cross-file diagnostic coordinates and snapshot identity.
+
+- [[Imported Provider Delivery]] — canonical imported method admission and actual provider spellings.

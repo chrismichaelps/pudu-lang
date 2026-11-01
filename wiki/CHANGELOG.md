@@ -5,6 +5,8 @@ tags: [changelog]
 
 # Changelog
 
+- 2026-11-01: Separate static-owner admission from receiver-provider annotation (#734); full optimized gates pass, and 1,620 stage frames preserve all three snapshots.
+
 - 2026-10-31: Named record patterns retain canonical owners and check nominal compatibility; checked pattern facts distinguish dynamic tests from static destructuring (#761). Full optimized gates pass, and hosted CI now registers the five local owner/provider regression gates. Named payload identity remains required.
 
 - 2026-10-31: Executable positional constructor patterns retain canonical owners, and repeated-arm warnings distinguish declarations while recognizing aliases (#761). Dynamic narrowing, refutable bindings, nested patterns and warm products pass both evaluators and all clean optimized gates. Ordinary record narrowing and named payloads remain required repairs.
@@ -4396,3 +4398,7 @@ No builds, tests, reviews or measurements run.
 - #777 focused verification: regressions fail before repair and pass afterward; explicit source maps restore foreign note coordinates, snapshot guards prevent stale-source borrowing, and optimized build/render/loaded cache gates pass. Full validation is running.
 
 - #777 full verification: 0b85629b passes every clean optimized repository gate, including rendering, real imported-note coordinates across cache modes, and existing diagnostic/tooling controls.
+
+- #734 design: admit distinct imported providers through a formed binding boundary; preserve call-site ambiguity and actual qualified help. Implementation/validation pending. See [[Imported Provider Delivery]].
+
+- #734 focused verification: imported admission, canonical qualified execution and nominal provider retention pass the full provider matrix, including Wire/Json derive closures. Trait properties and optimized build pass; clean full validation is running. #777 merged as 308130087.

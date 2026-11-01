@@ -362,3 +362,9 @@ Resolved Grill Log: carry checked owner and field order through syntax; preserve
 Register Resolve Ambiguity using existing dependencies only. Candidate policy is pure invocation-local resolver behavior; no new runtime or package surface is introduced.
 
 Resolved Grill Log: preserve complete declaring-owner ambiguity at uses across imports, lexical shadows and generated syntax. See [[Imported Variant Delivery]].
+
+## Imported providers (#734)
+
+Register Type.Check.Method.Binding with existing dependencies only; formed method registration is internal checker behavior.
+
+Resolved Grill Log: binding identity and admitted source spellings determine provider selection and help; registration order and schemes do not. See [[Imported Provider Delivery]].

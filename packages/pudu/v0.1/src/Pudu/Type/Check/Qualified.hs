@@ -1,5 +1,5 @@
 {-| @Type.Check.Qualified — canonical schemes for type-qualified methods. -}
-module Pudu.Type.Check.Qualified (qualifiedScheme, concreteOwner) where
+module Pudu.Type.Check.Qualified (qualifiedScheme, concreteOwner, traitOwner) where
 
 import qualified Data.List.NonEmpty as NonEmpty
 import qualified Data.Map.Strict as Map
@@ -10,7 +10,7 @@ import Pudu.Frontend.Syntax.Located (locatedValue)
 import qualified Pudu.Frontend.Syntax.Tree as Tree
 import Pudu.Source (Span)
 import Pudu.Type.Env
-  ( Checker, DeclaredTypes (..), ambiguousProviders, lookupName, recordOwner, report )
+  ( Checker, DeclaredTypes (..), ambiguousProviders, lookupName, lookupProviderName, providerSpelling, recordOwner, report )
 import Pudu.Type.Value (NominalId (..), Scheme, Type (ErrorType), monotype, nominalKey, nominalName)
 
 {-| A complete declared concrete owner, excluding ordinary qualified values. -}
@@ -23,6 +23,20 @@ concreteOwner declared target = case ownerPath target of
         Nothing -> Just (path, owner)
         Just _ -> Nothing
   _ -> pure Nothing
+
+{-| Authored trait aliases come from consumer admission, never hidden graph names. -}
+traitOwner :: DeclaredTypes -> Tree.Expression -> Checker (Maybe NominalId)
+traitOwner declared target = do
+  found <- case target of
+    Tree.NameExpression (first NonEmpty.:| []) -> pure (Map.lookup first (declaredNames declared))
+    _ -> maybe (pure Nothing) lookupProviderName (ownerPath target)
+  case found of
+    Just owner | Set.member owner (declaredTraitNames declared) -> do
+      value <- case ownerPath target of
+        Just path | Text.isInfixOf "." path -> lookupName path
+        _ -> pure Nothing
+      pure (if value == Nothing then Just owner else Nothing)
+    _ -> pure Nothing
 
 {-| Preserve legacy single-name qualification; extend only concrete owner paths. -}
 qualifiedScheme :: DeclaredTypes -> Span -> Tree.Expression -> Text -> Checker (Maybe (NominalId, Scheme))
@@ -49,9 +63,10 @@ qualifiedScheme declared at target member = case target of
     providers <- ambiguousProviders key
     case providers of
       _ : _ -> do
+        spellings <- mapM providerSpelling providers
         report "E3013" at (member <> " is ambiguous for " <> nominalName owner)
           (Just ("name the trait instead: " <> Text.intercalate " or "
-            [nominalName provider <> "." <> member <> "(value)" | provider <- providers]))
+            [spelling <> "." <> member <> "(value)" | spelling <- spellings]))
         pure (Just (owner, monotype ErrorType))
       [] -> do
         found <- lookupName key
