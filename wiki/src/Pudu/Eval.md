@@ -224,3 +224,9 @@ Resolved Grill Log: literal capture and body evaluation remain unchanged.
 Record construction uses the complete projected owner path. Fields still evaluate in written order; record updates retain their original owner.
 
 Resolved Grill Log: identity comes from the checked declaration, never import order or a basename guess. Preserve observable labels, lexical shadowing, field effects and failure provenance; no runtime filesystem lookup. See [[Canonical Runtime Owner Delivery]].
+
+## Named sum publication (#761)
+
+Evaluate authored fields left to right, then build through [[Eval Record Construction]] with the written initializer labels.
+
+Resolved Grill Log: carry checked owner and field order through syntax; preserve authored effects, diagnostics and cache identity. See [[Named Sum Publication]].

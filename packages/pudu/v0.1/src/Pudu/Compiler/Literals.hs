@@ -34,11 +34,11 @@ import Pudu.Frontend.Syntax.Name (ModuleName (..))
 import Pudu.Frontend.Syntax.Tree
 import Pudu.IntegerLiteral (IntegerKind, parseIntegerLiteral)
 import Pudu.Source (Span)
-import Pudu.Type.Value (Type (..), NominalId, nominalKey)
+import Pudu.Type.Value (Type (..), OwnerSelection (..), NominalId, nominalKey)
 
 {-| The module with every integer literal in expression position resolved to
     the kind checking gave its span. -}
-resolveLiterals :: Map Span Text -> Map Span [Type] -> Map Span NominalId -> Map Span NominalId -> Module -> Module
+resolveLiterals :: Map Span Text -> Map Span [Type] -> Map Span NominalId -> Map Span OwnerSelection -> Module -> Module
 resolveLiterals kinds selections providers owners = walk (Facts kinds selections providers owners False)
 
 {-| Lower only generated owner annotations into printable ordinary applications. -}
@@ -51,7 +51,7 @@ data Facts = Facts
   { factKinds :: !(Map Span Text)
   , factSelections :: !(Map Span [Type])
   , factProviders :: !(Map Span NominalId)
-  , factOwners :: !(Map Span NominalId)
+  , factOwners :: !(Map Span OwnerSelection)
   , factOwnersOnly :: !Bool
   }
 
@@ -132,8 +132,11 @@ instance (Walk a, Typeable a) => Walk (Located a) where
   walk kinds (Located spanValue value) = case eqT :: Maybe (a :~: Expression) of
     Just Refl
       | not (factOwnersOnly kinds), RecordExpression (ModuleName path) fields <- value ->
-          let owner = maybe (NonEmpty.last path) nominalKey (Map.lookup spanValue (factOwners kinds))
-           in Located spanValue (RecordExpression (ModuleName (owner :| [])) (walk kinds fields))
+          let selected = case Map.lookup spanValue (factOwners kinds) of
+                Just (VariantOwner owner label names) -> ModuleName ("::sum::" :| (nominalKey owner : label : names))
+                Just (ConcreteOwner owner) -> ModuleName (nominalKey owner :| [])
+                Nothing -> ModuleName (NonEmpty.last path :| [])
+           in Located spanValue (RecordExpression selected (walk kinds fields))
       | not (factOwnersOnly kinds), LiteralExpression literal <- value ->
           Located spanValue (LiteralExpression (resolveOne (factKinds kinds) spanValue literal))
       | not (factOwnersOnly kinds) || hasSelectedOwner value
@@ -150,13 +153,18 @@ instance (Walk a, Typeable a) => Walk (Located a) where
       _ -> case eqT :: Maybe (a :~: Pattern) of
         Just Refl
           | not (factOwnersOnly kinds)
-          , Just owner <- Map.lookup spanValue (factOwners kinds)
+          , Just (VariantOwner owner label _) <- Map.lookup spanValue (factOwners kinds)
+          , RecordPattern (Just _) fields rest <- value ->
+              Located spanValue (RecordPattern (Just (ModuleName ("::sum::" :| [nominalKey owner, label])))
+                (walk kinds fields) rest)
+          | not (factOwnersOnly kinds)
+          , Just (ConcreteOwner owner) <- Map.lookup spanValue (factOwners kinds)
           , ConstructorPattern (ModuleName path) arguments <- value ->
               Located spanValue (ConstructorPattern
                 (ModuleName ((nominalKey owner <> "." <> NonEmpty.last path) :| []))
                 (walk kinds arguments))
           | not (factOwnersOnly kinds)
-          , Just owner <- Map.lookup spanValue (factOwners kinds)
+          , Just (ConcreteOwner owner) <- Map.lookup spanValue (factOwners kinds)
           , RecordPattern (Just _) fields rest <- value ->
               Located spanValue (RecordPattern (Just (ModuleName (nominalKey owner :| [])))
                 (walk kinds fields) rest)
@@ -169,7 +177,7 @@ instance (Walk a, Typeable a) => Walk (Located a) where
 selectProvider :: Facts -> Span -> Expression -> Expression
 selectProvider facts at value = case value of
   MemberExpression target (Located memberAt member)
-    | not (factOwnersOnly facts), Just owner <- Map.lookup at (factOwners facts) ->
+    | not (factOwnersOnly facts), Just (ConcreteOwner owner) <- Map.lookup at (factOwners facts) ->
         MemberExpression (Located (locatedSpan target) (NameExpression (nominalKey owner :| [])))
           (Located memberAt member)
     | not (factOwnersOnly facts), Just owner <- Map.lookup at (factProviders facts) ->
@@ -233,7 +241,7 @@ instance Walk Impl where
     projected = to (gwalk facts (from value))
     selectedTarget = case implTarget projected of
       Located at (NamedType _ arguments)
-        | not (factOwnersOnly facts), Just owner <- Map.lookup (locatedSpan (implTarget value)) (factOwners facts)
+        | not (factOwnersOnly facts), Just (ConcreteOwner owner) <- Map.lookup (locatedSpan (implTarget value)) (factOwners facts)
         , Located _ (NamedType path _) <- typeSyntax at (NominalType owner []) ->
             Located at (NamedType path arguments)
       other -> other
