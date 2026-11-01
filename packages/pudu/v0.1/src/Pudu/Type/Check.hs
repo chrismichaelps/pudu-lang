@@ -36,6 +36,7 @@ import Pudu.Type.Env
   , CheckerProducts (..)
   , DeclaredTypes (..)
   , bindName
+  , bindConstructorName
   , finalizeIntegerLiterals
   , inTypeScope
   , enterUnsafe
@@ -266,7 +267,7 @@ declareConstructors declared value = case locatedValue (Tree.typeDefinition valu
         scheme
           | null payload = polytype rigid [] ownerType
           | otherwise = polytype rigid [] (FunctionTypeValue False payload ownerType)
-    bindName name scheme
+    bindConstructorName owner name scheme
 
 variantPayload :: DeclaredTypes -> [(Text, Int)] -> Tree.Variant -> Checker [Type]
 variantPayload declared rigid variant = case Tree.variantPayload variant of

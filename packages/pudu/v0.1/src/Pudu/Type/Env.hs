@@ -24,7 +24,11 @@ module Pudu.Type.Env
   , useUnsafeRegion
   , CheckerProducts (..)
   , DeclaredTypes (..)
+  , NameBinding (..)
   , bindName
+  , bindConstructorName
+  , aliasName
+  , lookupBinding
   , recordDeclaredMethod
   , bindImportedMethod
   , emptyDeclared
@@ -187,6 +191,17 @@ emptyDeclared =
     , declaredQualifiers = Set.empty
     }
 
+{-| Constructor identity follows aliases; ordinary bindings clear it on shadowing. -}
+data NameBinding
+  = ValueBinding !Scheme
+  | ConstructorBinding !NominalId !Text !Scheme
+  deriving (Eq, Show)
+
+schemeOf :: NameBinding -> Scheme
+schemeOf binding = case binding of
+  ValueBinding scheme -> scheme
+  ConstructorBinding _ _ scheme -> scheme
+
 {-| @Type.Env.State — the checker's working state.
 
     The checker keeps its own name frames rather than reusing the resolver's
@@ -195,7 +210,7 @@ emptyDeclared =
 data CheckerState = CheckerState
   { stateNext :: !Int
   , stateSubstitution :: !(IntMap Type)
-  , stateFrames :: ![Map Text Scheme]
+  , stateFrames :: ![Map Text NameBinding]
   , stateImportedMethods :: !(Set Text)
   , stateDeclared :: !DeclaredTypes
   , stateTypes :: ![(SpanKey, Type)]
@@ -362,13 +377,14 @@ runChecker (Checker action) = case action initialState of
     so an unannotated declaration still has the signature the compiler gave
     it, and an annotated one is reported exactly as the compiler understood
     it rather than as it was spelled. -}
-finalSchemes :: IntMap Type -> [Map Text Scheme] -> [(Text, Scheme)]
+finalSchemes :: IntMap Type -> [Map Text NameBinding] -> [(Text, Scheme)]
 finalSchemes substitution frames = case reverse frames of
   [] -> []
   moduleFrame : _ -> map resolveScheme (Map.toList moduleFrame)
  where
-  resolveScheme (name, scheme) =
-    (name, scheme{schemeType = resolveFinal substitution (schemeType scheme)})
+  resolveScheme (name, binding) =
+    let scheme = schemeOf binding
+    in (name, scheme{schemeType = resolveFinal substitution (schemeType scheme)})
 
 initialState :: CheckerState
 initialState =
@@ -415,7 +431,7 @@ initialState =
     what it adds. The next variable travels with it, so a variable the
     installation made can never be confused with one the consumer makes. -}
 data InstalledNames = InstalledNames
-  { installedFrame :: !(Map Text Scheme)
+  { installedFrame :: !(Map Text NameBinding)
   , installedUnsafe :: !(Map Text [Capability])
   , installedComptime :: !(Map Text Bool)
   {-| The imported traits with a member that takes no `self`, whose calls
@@ -725,10 +741,21 @@ setVariable (TypeVar identity) typeValue =
     ((), state{stateSubstitution = IntMap.insert identity typeValue (stateSubstitution state)})
 
 bindName :: Text -> Scheme -> Checker ()
-bindName name scheme =
+bindName name = bindBinding name . ValueBinding
+
+bindConstructorName :: NominalId -> Text -> Scheme -> Checker ()
+bindConstructorName owner label = bindBinding label . ConstructorBinding owner label
+
+aliasName :: Text -> Text -> Checker ()
+aliasName original alias = do
+  found <- lookupBinding original
+  maybe (pure ()) (bindBinding alias) found
+
+bindBinding :: Text -> NameBinding -> Checker ()
+bindBinding name binding =
   Checker $ \state -> case stateFrames state of
-    [] -> ((), state{stateFrames = [Map.singleton name scheme]})
-    current : rest -> ((), state{stateFrames = Map.insert name scheme current : rest})
+    [] -> ((), state{stateFrames = [Map.singleton name binding]})
+    current : rest -> ((), state{stateFrames = Map.insert name binding current : rest})
 
 bindImportedMethod :: Text -> Scheme -> Checker ()
 bindImportedMethod name scheme = do
@@ -754,18 +781,21 @@ isImportedMethod name =
   Checker $ \state -> (Set.member name (stateImportedMethods state), state)
 
 lookupName :: Text -> Checker (Maybe Scheme)
-lookupName name = Checker $ \state -> (searchName name (stateFrames state), state)
+lookupName name = fmap schemeOf <$> lookupBinding name
+
+lookupBinding :: Text -> Checker (Maybe NameBinding)
+lookupBinding name = Checker $ \state -> (searchName name (stateFrames state), state)
 
 {-| The final frame holds shared module signatures, not lexical locals. -}
 lookupLocalName :: Text -> Checker (Maybe Scheme)
-lookupLocalName name = Checker $ \state -> (searchLocal (stateFrames state), state)
+lookupLocalName name = Checker $ \state -> (schemeOf <$> searchLocal (stateFrames state), state)
  where
   searchLocal (current : rest@(_ : _)) = case Map.lookup name current of
     Just found -> Just found
     Nothing -> searchLocal rest
   searchLocal _ = Nothing
 
-searchName :: Text -> [Map Text Scheme] -> Maybe Scheme
+searchName :: Text -> [Map Text NameBinding] -> Maybe NameBinding
 searchName name frames = case frames of
   [] -> Nothing
   current : rest -> case Map.lookup name current of
