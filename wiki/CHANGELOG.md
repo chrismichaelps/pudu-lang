@@ -4376,3 +4376,5 @@ No builds, tests, reviews or measurements run.
 - #761: resolve named payload field names and constructor refusal under their canonical declaring owner; share qualified construction and pattern shapes. See [[Named Payload Field Delivery]].
 
 - #761: introduce distinct owned named sum runtime values with explicit identity, field access, matching, ordering and frozen storage; source publication remains pending. See [[Named Sum Value Delivery]].
+
+- #761: publish checked named owner and field-order selections through executable syntax and shared construction; focused and clean full optimized gates pass. See [[Named Sum Publication]].

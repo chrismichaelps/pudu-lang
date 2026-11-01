@@ -88,3 +88,9 @@ DEPTH 0.4 (MEDIUM). It keeps one concern out of [[Type Check]], which the delive
 Scheme bounds retain complete formed trait applications. Every rigid parameter occurring in an application is substituted together with the bounded subject during instantiation. Trait identity alone cannot distinguish Holds[Int] from Holds[Bool].
 
 Resolved Grill Log: preserve arguments in the shared Scheme contract rather than recovering them from method bodies or caller context.
+
+## Named sum publication (#761)
+
+OwnerSelection distinguishes ConcreteOwner NominalId from VariantOwner NominalId Text [Text]; the latter carries the checked label and declared field order.
+
+Resolved Grill Log: carry checked owner and field order through syntax; preserve authored effects, diagnostics and cache identity. See [[Named Sum Publication]].

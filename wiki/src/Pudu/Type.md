@@ -130,3 +130,9 @@ See [[Bound Provider Delivery]].
 ModuleTypes.moduleOwners indexes concrete-owner facts independently from moduleProviders; generated implementation target and trait anchors may coincide.
 
 Resolved Grill Log: separate semantic roles even at identical generated spans. No runtime span lookup, provider overwrite or shortened owner. See [[Canonical Runtime Owner Delivery]].
+
+## Named sum publication (#761)
+
+ModuleTypes.moduleOwners indexes OwnerSelection by complete Span for executable projection.
+
+Resolved Grill Log: carry checked owner and field order through syntax; preserve authored effects, diagnostics and cache identity. See [[Named Sum Publication]].

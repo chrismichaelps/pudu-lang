@@ -350,3 +350,9 @@ Register [[Eval Binary]] without a new dependency. Resolved Grill Log: native wi
 Register Type Check Qualified as a shared semantic boundary without adding dependencies.
 
 Resolved Grill Log: known concrete identity, lexical admission, module-export priority and provider ambiguity must agree for called and retained methods. See [[Qualified Record Method Delivery]].
+
+## Named sum publication (#761)
+
+Register [[Eval Record Construction]] using existing containers/text dependencies.
+
+Resolved Grill Log: carry checked owner and field order through syntax; preserve authored effects, diagnostics and cache identity. See [[Named Sum Publication]].

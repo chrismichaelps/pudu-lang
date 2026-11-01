@@ -89,3 +89,5 @@ Dependency direction: Builtin Definition → Value → Env → Operator/Match/Ar
 - [[Eval Binary]] · [[Binary Codec Properties]] — native binary wire encoding and checked decoding.
 
 - [[Named Sum Value Properties]] — named sum identity, patterns, fields and frozen storage.
+
+- [[Eval Record Construction]] — shared canonical construction and named field storage order.

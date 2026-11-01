@@ -13,7 +13,7 @@ module Pudu.Eval
   , scopeTo
   ) where
 
-import Pudu.Frontend.Syntax.Name (moduleNameText)
+import Pudu.Eval.Record (recordConstructor)
 import Data.Map.Strict (Map)
 import Data.List.NonEmpty (NonEmpty (..))
 import qualified Data.Map.Strict as Map
@@ -319,7 +319,7 @@ evaluateHere (Located spanValue expression) = case expression of
   ScopeExpression body -> evaluateScope callNeeds spanValue body
   RecordExpression path fields -> do
     values <- mapM (evaluateFieldInit spanValue) fields
-    pure (RecordValue (moduleNameText path) values)
+    pure (recordConstructor path (map (locatedValue . fieldInitName . locatedValue) fields) values)
   {-| A record that is another record with some fields different.
 
       The base is evaluated first and its fields kept in the order it declared

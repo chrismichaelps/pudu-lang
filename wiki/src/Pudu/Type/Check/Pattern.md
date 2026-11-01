@@ -129,3 +129,9 @@ Resolved Grill Log: canonical identity and subject-sensitive refutability must a
 Resolve variantForPath before looking up its field names. Export namedVariantShapeFor for construction reuse. Qualified constructor value admission checks named-payload refusal against the resolved constructor type, once.
 
 Resolved Grill Log: field names and payload types come from one resolved owner/variant key. No runtime representation or field evaluation order changes in this partition. See [[Named Payload Field Delivery]].
+
+## Named sum publication (#761)
+
+Record named pattern owner/label facts after canonical shape resolution. Refuse positional named-payload patterns with E3034 even when empty; retain field types and source provenance.
+
+Resolved Grill Log: carry checked owner and field order through syntax; preserve authored effects, diagnostics and cache identity. See [[Named Sum Publication]].

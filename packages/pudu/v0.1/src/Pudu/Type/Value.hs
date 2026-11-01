@@ -2,7 +2,8 @@
 
 {-| @Type.Value.Module — represents formed types -}
 module Pudu.Type.Value
-  ( NominalId (..)
+  ( OwnerSelection (..)
+  , NominalId (..)
   , Scheme (..)
   , canonicalNominal
   , nominalKey
@@ -40,6 +41,12 @@ import Data.String (IsString (..))
 import Data.Word (Word8)
 import Pudu.Frontend.Syntax.Name (ModuleName, moduleNameText)
 import Pudu.Frontend.Syntax.Tree (Capability (..))
+
+{-| Checked executable identity, distinct from trait-provider evidence. -}
+data OwnerSelection
+  = ConcreteOwner !NominalId
+  | VariantOwner !NominalId !Text ![Text]
+  deriving stock (Eq, Show)
 
 {-| How many of a function's parameters a call must supply.
 

@@ -28,7 +28,7 @@ import Pudu.Source (Span, sameSpanSource, spanEnd, spanOrigin, spanStart, unOffs
 import Pudu.Type.Check (checkModule)
 import qualified Pudu.Type.Check as Check
 import Pudu.Type.Interface.Graph (ImportTypes)
-import Pudu.Type.Value (NominalId, Scheme (..), Type (..), renderType)
+import Pudu.Type.Value (OwnerSelection, NominalId, Scheme (..), Type (..), renderType)
 import Data.Text (Text)
 
 {-| @Type.Info — the type each checked expression was given, keyed by the span
@@ -70,7 +70,7 @@ data ModuleTypes = ModuleTypes
   {-| The types chosen for parameters bounded by a trait with a static
       member, by the span of the reference that chose them. -}
   , moduleSelections :: !(Map.Map Span [Type])
-  , moduleOwners :: !(Map.Map Span NominalId)
+  , moduleOwners :: !(Map.Map Span OwnerSelection)
   , moduleProviders :: !(Map.Map Span NominalId)
   }
   deriving stock (Eq, Show)

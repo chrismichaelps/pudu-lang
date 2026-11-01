@@ -34,6 +34,7 @@ import Pudu.Type.Env
   , lookupVariantIn
   , report
   , recordOwner
+  , recordVariantOwner
   , recordPatternTest
   )
 import Pudu.Type.Unify (unify, zonk)
@@ -141,8 +142,7 @@ bindPattern declared rigid (Located patternSpan pattern') subjectType = case pat
       Just (owner, _, _) -> lookupVariantFields owner name
       Nothing -> pure Nothing
     case named of
-      Just names
-        | not (null arguments) ->
+      Just names ->
             report "E3034" patternSpan (name <> " names its payload")
               ( Just
                   ( "write case " <> name <> "{" <> Text.intercalate ", " names
@@ -172,6 +172,10 @@ bindPattern declared rigid (Located patternSpan pattern') subjectType = case pat
     case variantShape of
       Just (owner, ownerParams, declaredShape) -> do
         recordPatternTest patternSpan
+        case path of
+          Just written -> recordVariantOwner patternSpan owner
+            (NonEmpty.last (moduleNameSegments written)) []
+          Nothing -> pure ()
         replacements <- freshFor ownerParams
         let ownerType = NominalType owner (map snd replacements)
             expected =

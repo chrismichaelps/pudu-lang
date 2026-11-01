@@ -28,6 +28,7 @@ import Pudu.Type.Env
   , lookupField
   , lookupTypeParams
   , recordOwner
+  , recordVariantOwner
   , report
   )
 import Pudu.Type.Check.Pattern (freshFor, namedVariantShapeFor, substituteRigid, variantForPath)
@@ -171,6 +172,7 @@ variantRecordType
   -> [Located FieldInit]
   -> Checker Type
 variantRecordType checking declared rigid spanValue name owner ownerParams declaredShape fields = do
+  recordVariantOwner spanValue owner name (map fst declaredShape)
   replacements <- freshFor ownerParams
   let expected =
         [ (fieldName, substituteRigid replacements fieldType)
