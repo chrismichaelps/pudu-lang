@@ -122,5 +122,62 @@ try {
     '  print("native owner agrees")', '  0', '}',
   ].join('\n') + '\n');
   for (const mode of ['tree', 'compiled']) run('native owner agrees\n', mode);
+  writeFileSync(join(scratch, 'First.pudu'), [
+    'module First', 'export type Item[T] = Empty | Chosen{first: T}',
+    'export fn make() -> Item[Int] { Chosen{first: 1} }',
+  ].join('\n') + '\n');
+  writeFileSync(join(scratch, 'Second.pudu'), [
+    'module Second', 'export type Item = Empty | Chosen{second: Str}',
+    'export fn make() -> Item { Chosen{second: "two"} }',
+  ].join('\n') + '\n');
+  writeFileSync(join(scratch, 'Third.pudu'), [
+    'module Third', 'export type Item = Empty | Chosen(Int)',
+    'export fn make() -> Item { Chosen(3) }',
+  ].join('\n') + '\n');
+  for (const reversed of [false, true]) {
+    const imports = ['import First as A', 'import Second as B', 'import Third as C'];
+    if (reversed) imports.reverse();
+    const header = ['module Main', ...imports, 'export fn main() -> Int {'];
+    const body = [
+      '  let a = A.make()', '  let b = B.make()',
+      '  match a {', '    case A.Item.Chosen{first} => print(show(first + 1))',
+      '    case A.Item.Empty => print("empty")', '  }',
+      '  match b {', '    case B.Item.Chosen{second} => print(second)',
+      '    case B.Item.Empty => print("empty")', '  }',
+      '  let direct: A.Item[Int] = A.Item.Chosen{first: 4}',
+      '  let directB: B.Item = B.Item.Chosen{second: "five"}',
+      '  if let A.Item.Chosen{first} = direct { print(show(first)) }',
+      '  let B.Item.Chosen{second} = directB else { panic("named fields") }',
+      '  print(second)', '  let positional = C.Item.Chosen(6)',
+      '  match positional {', '    case C.Item.Chosen(value) => print(show(value))',
+      '    case C.Item.Empty => print("empty")', '  }',
+    ];
+    writeFileSync(file, [...header, ...body, '  0', '}'].join('\n') + '\n');
+    const accepted = call('check');
+    assert.equal(accepted.status, 0, accepted.stdout + accepted.stderr);
+    for (const mode of ['tree', 'compiled']) {
+      run('2\ntwo\n4\nfive\n6\n', mode);
+      run('2\ntwo\n4\nfive\n6\n', mode, cache);
+      const stored = entries();
+      run('2\ntwo\n4\nfive\n6\n', mode, cache);
+      assert.deepEqual(entries(), stored, 'warm products preserve named field shapes');
+    }
+    for (const [line, code] of [
+      ['  let wrong = A.Item.Chosen{second: "wrong"}', 'E3005'],
+      ['  let missing = B.Item.Chosen{}', 'E3008'],
+      ['  let wrong = B.Item.Chosen{second: 1}', 'E3001'],
+      ['  let called = A.Item.Chosen(1)', 'E3034'],
+      ['  let retained = B.Item.Chosen', 'E3034'],
+      ['  let exported = A.Chosen(1)', 'E3034'],
+    ]) {
+      writeFileSync(file, [...header, line, '  0', '}'].join('\n') + '\n');
+      const rejected = call('check');
+      assert.notEqual(rejected.status, 0, rejected.stdout + rejected.stderr);
+      const diagnostics = rejected.stdout + rejected.stderr;
+      assert.match(diagnostics, new RegExp(code));
+      assert.match(diagnostics, /Main\.pudu:\d+:\d+/);
+      if (code === 'E3034') assert.equal(diagnostics.match(/E3034/g)?.length, 1);
+    }
+  }
 } finally { rmSync(scratch, {recursive: true, force: true}); }
-console.log('Positional sums retain owners across calls, caches, tasks and native nodes');
+console.log('Sums retain positional owners and canonical named field shapes across calls, caches and tasks');
