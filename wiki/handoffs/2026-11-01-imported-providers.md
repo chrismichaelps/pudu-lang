@@ -1,6 +1,6 @@
 ---
 type: handoff
-status: ACTIVE
+status: COMPLETE
 aliases: [Imported Provider Delivery]
 tags: [handoff, traits, typing]
 ---
@@ -72,8 +72,8 @@ The stale diagnostic-only suite was stopped after capturing failures. All 1,620
 stage frames pass; three snapshots match the prior stage byte for byte.
 Median render means: cubes 23.157 ms, bodies 24.345 ms, waves 22.741 ms on M1;
 no speedup or 60 Hz claim. PR #780 contains the bounded delivery.
-Exact next action: require hosted checks on #780, merge to dev if green,
-then revalidate and repair #735 before continuing the Binary facade.
+PR #780 merged as 8f1a55b77 after every hosted check passed.
+Continuation: [[Implementation Witness Delivery]] owns #735 before Binary delivery.
 
 ## Referenced by
 

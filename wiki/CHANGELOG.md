@@ -5,7 +5,7 @@ tags: [changelog]
 
 # Changelog
 
-- 2026-11-01: Preserve complete checked implementation targets through executable lowering (#735 prerequisite), including reordered aliases and structural generic arguments; bounded runtime witness dispatch remains required.
+- 2026-11-01: Preserve complete checked implementation targets through executable lowering (#735 prerequisite), including reordered aliases and structural generic arguments. Every clean optimized gate passes; bounded runtime witness dispatch remains required.
 
 - 2026-11-01: Separate static-owner admission from receiver-provider annotation (#734); full optimized gates pass, and 1,620 stage frames preserve all three snapshots.
 

@@ -43,11 +43,12 @@ Verification Engineer: the original alias-shape property failed with
 Pair[A,Array[B]] before repair. The repaired property passes nested aliases,
 function/reference/tuple arguments, higher-kinded applications, dynamic traits,
 capability wrappers and Never while preserving authored heads and target spans.
-Static-selection properties also pass. The clean full gate is running as
-process session 42111, with log /tmp/pudu-735-head-full-gates.log.
-Exact next action: observe that same live gate without restarting; require
-#780 hosted checks, merge its final tested commit, then publish this bounded
-prerequisite with Refs #735 after its full gate passes. Runtime repair follows.
+Static-selection properties and every clean full optimized gate pass at
+bcb40d2d. PR #780 merged as 8f1a55b77 after all hosted checks passed;
+its dev merge is integrated without source changes.
+Exact next action: publish this bounded prerequisite with Refs #735, require
+hosted checks before merge, then implement structural runtime witness matching
+and complete bounded receiver evidence. The original E7001 remains unresolved.
 
 ## Referenced by
 
