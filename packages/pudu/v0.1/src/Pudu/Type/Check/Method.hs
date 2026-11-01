@@ -48,7 +48,7 @@ import Pudu.Type.Env
   , Checker
   , DeclaredTypes (..)
   , bindName
-  , recordProvider, recordOwner
+  , recordProvider, recordImplementationOwner
   , recordDeclaredMethod
   , ambiguousProviders
   , providerSpelling
@@ -157,11 +157,11 @@ declareMethodsWith
   -> Checker ()
 declareMethodsWith defaults declared traits value = do
   mapM_ (recordProvider (locatedSpan (implTrait value))) (implTraitName declared value)
-  target <- formType (implAliases declared value) [] (implTarget value)
+  target <- formType (implAliases declared value) (implRigid value) (implTarget value)
   case targetName target of
     Nothing -> pure ()
     Just owner -> do
-      recordOwner (locatedSpan (implTarget value)) owner
+      recordImplementationOwner (locatedSpan (implTarget value)) target
       mapM_ (declareMethod (defaults /= Nothing) declared value owner) (implFunctions value)
       mapM_ (declareMethod (defaults /= Nothing) declared value owner) (inheritedDefaults defaults declared traits value)
 

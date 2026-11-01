@@ -70,3 +70,5 @@ only complete head matching and discharged premises establish evidence.
 - [[Type Check Qualified]] — shared concrete and legacy type-qualified method schemes.
 
 - [[Method Binding]] — formed provider registration and shared-slot ambiguity.
+
+- [[Implementation Witness Delivery]] — checked implementation heads before bounded dispatch repair (#735).

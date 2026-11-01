@@ -258,3 +258,5 @@ tags: [moc, handoff]
 - [[Diagnostic Source Delivery]] — cross-file diagnostic coordinates and snapshot identity.
 
 - [[Imported Provider Delivery]] — canonical imported method admission and actual provider spellings.
+
+- [[Implementation Witness Delivery]] — checked implementation heads before bounded dispatch repair (#735).
