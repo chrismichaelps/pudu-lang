@@ -253,3 +253,9 @@ target, are refused before anything is fetched.
 Documentation includes strategy headers from [[Compiler Program]]. Public API output appends only exported strategy entries belonging to each requested root module, encoded by [[Doc Json]]. Ordinary export identity objects remain unchanged; private and dependency strategies are excluded. Failed compilation still emits no API output. [[Derive Index Output Gate]] proves these boundaries.
 
 Resolved Grill Log: metadata never creates a resolver binding or an implicit re-export. The existing large command module receives only the bounded API projection change.
+
+## Diagnostic source snapshots (#777)
+
+Build one program source index and pass it to snapshot-aware rendering; use the same index for primary lookup. Keep non-source project diagnostics unchanged. The existing large entry point receives only this bounded presentation change.
+
+Resolved Grill Log: source identity admits coordinates; names alone do not. See [[Diagnostic Source Delivery]].

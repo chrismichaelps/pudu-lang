@@ -376,15 +376,22 @@ try {
       const imports = ['module Main', 'import Choices as C'];
       if (!qualified) imports.push('import Choices { First, Empty, Chosen, Held }');
       const prefix = qualified ? 'C.' : '';
-      for (const expression of [`${prefix}First`, `${prefix}Empty`, `${prefix}Chosen(1)`, `${prefix}Held{value: 1}`, `${prefix}Held.value`]) {
+      for (const [name, expression] of [["First", `${prefix}First`], ["Empty", `${prefix}Empty`],
+        ["Chosen", `${prefix}Chosen(1)`], ["Held", `${prefix}Held{value: 1}`], ["Held", `${prefix}Held.value`]]) {
         writeFileSync(file, [...imports, 'export fn main() -> Int {', `  let bad = ${expression}`, '  0', '}'].join('\n') + '\n');
-        const rejected = call('check');
-        assert.notEqual(rejected.status, 0);
-        const output = rejected.stdout + rejected.stderr;
-        assert.equal(output.match(/E2012/g)?.length, 1, output);
-        assert.equal(output.match(/candidate declared here/g)?.length, 2, output);
-        assert.doesNotMatch(output, /E2001|E3001/);
-        assert.match(output, /Main\.pudu:\d+:\d+/);
+        for (const caching of ['off', cache, cache]) {
+          const rejected = call('check', 'compiled', caching);
+          assert.notEqual(rejected.status, 0);
+          const output = rejected.stdout + rejected.stderr;
+          assert.equal(output.match(/E2012/g)?.length, 1, output);
+          assert.equal(output.match(/candidate declared here/g)?.length, 2, output);
+          assert.doesNotMatch(output, /E2001|E3001/);
+          assert.match(output, /Main\.pudu:\d+:\d+/);
+          for (const [index, declaration] of declarations.entries()) {
+            const column = declaration.indexOf(name, declaration.indexOf('=') + 1) + 1;
+            assert(output.includes(`Choices.pudu:${index + 2}:${column})`), output);
+          }
+        }
       }
       writeFileSync(file, [...imports, 'fn inspect(value: C.First) -> Int {', '  match value {',
         `    case ${prefix}Chosen(_) => 1`, '    case _ => 0', '  }', '}',
