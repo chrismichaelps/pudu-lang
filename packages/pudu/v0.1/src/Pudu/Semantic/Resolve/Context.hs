@@ -43,6 +43,7 @@ import Pudu.Diagnostic
   )
 import Pudu.Frontend.Syntax.Located (Located (..))
 import Pudu.Frontend.Syntax.Tree (Import (..), TypeSyntax, Visibility (Private))
+import Pudu.Semantic.Resolve.Ambiguity (isVariantAlias, rejectAmbiguous)
 import Pudu.Semantic.Resolve.State (ResolveState (..), Resolver (..), initialState)
 import Pudu.Semantic.Resolve.Reflection (reflectionImports, fieldTypeParameter)
 import Pudu.Semantic.Scope
@@ -321,12 +322,15 @@ resolveQualifierName :: Span -> Text -> Resolver ()
 resolveQualifierName at name = do
   selected <- lookupCurrent ValueSpace name
   case selected of
-    Just symbol | symbolOrigin symbol == VariantOrigin -> do
-      owner <- lookupCurrent TypeSpace name
-      case owner of
-        Just declared -> recordResolvedReference at declared
-        Nothing -> resolveSelectedValue at name selected
-    _ -> resolveSelectedValue at name selected
+    Just symbol -> do
+      alias <- isVariantAlias symbol
+      if alias then do
+        owner <- lookupCurrent TypeSpace name
+        case owner of
+          Just declared -> recordResolvedReference at declared
+          Nothing -> resolveSelectedValue at name selected
+      else resolveSelectedValue at name selected
+    Nothing -> resolveSelectedValue at name selected
 
 resolveSelectedValue :: Span -> Text -> Maybe Symbol -> Resolver ()
 resolveSelectedValue at name selected = do
@@ -367,24 +371,6 @@ resolveExpressionReference at symbol = do
         else emit "E2010" Error at (symbolName symbol <> " is a module namespace, not a value")
           (Just "select an exported member with the qualifier, or import a named value")
     else recordResolvedReference at symbol
-
-{-| Only a selected variant alias can be ambiguous; lexical values win first. -}
-rejectAmbiguous :: Span -> Text -> Maybe Symbol -> Resolver Bool
-rejectAmbiguous at name selected =
-  case selected of
-    Just symbol | symbolOrigin symbol == VariantOrigin -> do
-      candidates <- Resolver $ \state -> (Map.findWithDefault Map.empty name (stateVariants state), state)
-      if Map.size candidates < 2 then pure False else do
-        case build "E2012" Error at ("ambiguous variant name " <> name)
-          (Just "qualify the variant with its type, as in Type.Variant") of
-          Nothing -> pure ()
-          Just finding -> pushDiagnostic (foldr attach finding (Map.elems candidates))
-        pure True
-    _ -> pure False
- where
-  attach symbol finding = case symbolSpan symbol of
-    Just declaredAt -> withRelated (Related declaredAt "candidate declared here") finding
-    Nothing -> finding
 
 resolveUnambiguous :: Span -> Text -> Maybe Symbol -> Resolver ()
 resolveUnambiguous spanValue name selected =

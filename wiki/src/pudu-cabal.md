@@ -356,3 +356,9 @@ Resolved Grill Log: known concrete identity, lexical admission, module-export pr
 Register [[Eval Record Construction]] using existing containers/text dependencies.
 
 Resolved Grill Log: carry checked owner and field order through syntax; preserve authored effects, diagnostics and cache identity. See [[Named Sum Publication]].
+
+## Imported variant candidates (#775)
+
+Register Resolve Ambiguity using existing dependencies only. Candidate policy is pure invocation-local resolver behavior; no new runtime or package surface is introduced.
+
+Resolved Grill Log: preserve complete declaring-owner ambiguity at uses across imports, lexical shadows and generated syntax. See [[Imported Variant Delivery]].

@@ -367,5 +367,48 @@ try {
       assert.deepEqual(entries(), stored, 'ordinary constants keep value bindings');
     }
   }
+  for (const reversed of [false, true]) {
+    const declarations = ['export type First = First | Empty | Chosen(Int) | Held{value: Int}',
+      'export type Second = First | Empty | Chosen(Int) | Held{value: Int}'];
+    if (reversed) declarations.reverse();
+    writeFileSync(join(scratch, 'Choices.pudu'), ['module Choices', ...declarations].join('\n') + '\n');
+    for (const qualified of [false, true]) {
+      const imports = ['module Main', 'import Choices as C'];
+      if (!qualified) imports.push('import Choices { First, Empty, Chosen, Held }');
+      const prefix = qualified ? 'C.' : '';
+      for (const expression of [`${prefix}First`, `${prefix}Empty`, `${prefix}Chosen(1)`, `${prefix}Held{value: 1}`, `${prefix}Held.value`]) {
+        writeFileSync(file, [...imports, 'export fn main() -> Int {', `  let bad = ${expression}`, '  0', '}'].join('\n') + '\n');
+        const rejected = call('check');
+        assert.notEqual(rejected.status, 0);
+        const output = rejected.stdout + rejected.stderr;
+        assert.equal(output.match(/E2012/g)?.length, 1, output);
+        assert.equal(output.match(/candidate declared here/g)?.length, 2, output);
+        assert.doesNotMatch(output, /E2001|E3001/);
+        assert.match(output, /Main\.pudu:\d+:\d+/);
+      }
+      writeFileSync(file, [...imports, 'fn inspect(value: C.First) -> Int {', '  match value {',
+        `    case ${prefix}Chosen(_) => 1`, '    case _ => 0', '  }', '}',
+        'export fn main() -> Int { 0 }',
+      ].join('\n') + '\n');
+      const rejected = call('check');
+      assert.notEqual(rejected.status, 0);
+      assert.equal((rejected.stdout + rejected.stderr).match(/E2012/g)?.length, 1);
+    }
+    writeFileSync(file, ['module Main', 'import Choices as C', 'import Choices { First }',
+      'const SAVED: C.Second = C.Second.Chosen(7)', 'export fn main() -> Int {',
+      '  let create = First.Chosen', '  print(show(C.First.Empty))',
+      '  print(show(create(9)))', '  print(show(C.Second.Held{value: 3}))',
+      '  print(show(SAVED))', '  0', '}',
+    ].join('\n') + '\n');
+    for (const mode of ['tree', 'compiled']) {
+      const expected = 'Empty\nChosen(9)\nHeld{value: 3}\nChosen(7)\n';
+      run(expected, mode);
+      rmSync(cache, {recursive: true, force: true});
+      run(expected, mode, cache);
+      const stored = entries();
+      run(expected, mode, cache);
+      assert.deepEqual(entries(), stored, 'qualified exports retain owners across warm products');
+    }
+  }
 } finally { rmSync(scratch, {recursive: true, force: true}); }
 console.log('Sums retain canonical owners, named storage order and patterns across calls, caches and tasks');

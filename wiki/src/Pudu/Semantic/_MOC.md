@@ -35,3 +35,5 @@ Dependency direction: Symbol → Scope → Resolve Context → Resolve, with Pre
 - [[Qualified Shadow Spec]] — exact loaded lexical precedence and evaluator agreement.
 
 - [[Variant Namespace Properties]] — canonical local constructor admission and diagnostic provenance.
+
+- [[Resolve Ambiguity]] — local/imported variant candidate policy.
