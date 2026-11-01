@@ -236,3 +236,5 @@ tags: [moc, module]
 - [[Diagnostic Render Properties]] — source identity and presentation regressions.
 
 - [[Method Binding]] — canonical method registration.
+
+- [[Runtime Implementation Head]] · [[Eval Type Witness]] — checked runtime implementation matching.

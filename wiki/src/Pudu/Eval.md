@@ -230,3 +230,15 @@ Resolved Grill Log: identity comes from the checked declaration, never import or
 Evaluate authored fields left to right, then build through [[Eval Record Construction]] with the written initializer labels.
 
 Resolved Grill Log: carry checked owner and field order through syntax; preserve authored effects, diagnostics and cache identity. See [[Named Sum Publication]].
+
+## Structural implementation witnesses (#735)
+
+Initialize closureImplementation to Nothing for ordinary functions and literals;
+retain existing captures, witnesses, proof cache and closure identity. Installed
+method metadata belongs to [[Runtime Implementation Head]] and selection to
+[[Eval Type Witness]]. Resolved Grill Log: this constructor adjustment carries
+metadata without changing ordinary function execution or the kernel fixture.
+
+Resolved retained selection: evaluating TypeApplication evaluates its target once,
+constructs selected witnesses and applies selectTypes only to function closures.
+Other values retain their existing behavior; captures and source spans stay intact.

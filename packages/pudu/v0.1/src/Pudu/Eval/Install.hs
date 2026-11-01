@@ -16,6 +16,7 @@ import qualified Data.Map.Strict as Map
 import Data.Maybe (fromMaybe)
 import qualified Data.Set as Set
 import Data.Text (Text)
+import Pudu.Eval.ImplementationHead (HeadSelection (..), ImplementationHead (..))
 import Pudu.FloatKernel (floatKernelName, floatKernels)
 import Pudu.LaneKernel (laneKernelName, laneKernels)
 import Pudu.Foreign.Crossing (Crossing (NothingCrossing, RecordCrossing), RecordLayouts, crossingFor, recordLayouts)
@@ -50,6 +51,7 @@ import Pudu.Frontend.Syntax.Tree
   , Impl (..)
   , Trait (..)
   , TypeDeclarationValue (..)
+  , TypeParam (..)
   , TypeSyntax (..)
   , TypeDefinition (..)
   , Variant (..)
@@ -210,7 +212,7 @@ installDeclaration
 installDeclaration namespace traits layouts (Located _ declaration) = case declaration of
   FunctionDeclaration value ->
     bind (locatedValue (functionName value))
-      (FunctionValue (Closure (locatedValue (functionName value)) value Nothing Nothing [] Nothing))
+      (FunctionValue (Closure (locatedValue (functionName value)) value Nothing Nothing Nothing [] Nothing))
   TypeDeclaration value ->
     installVariants namespace (locatedValue (typeName value)) (typeDefinition value)
   ImplDeclaration value -> installMethods traits value
@@ -336,12 +338,15 @@ installMethods traits value = case traitNameOf (implTarget value) of
     mapM_ (installMethod owner) (implFunctions value)
     mapM_ (installMethod owner) (inheritedDefaults traits value)
  where
+  metadata = Just (ImplementationHead
+    (map (locatedValue . typeParamName . locatedValue) (implTypeParams value))
+    (implTarget value) PendingHead)
   -- The implementation's own parameters lead the method's, the order a
   -- static selection lists the types it chose for them.
   installMethod owner (Located _ method) = do
     let name = locatedValue (functionName method)
         selected = method{functionTypeParams = implTypeParams value <> functionTypeParams method}
-        implementation = FunctionValue (Closure name selected Nothing Nothing [] Nothing)
+        implementation = FunctionValue (Closure name selected metadata Nothing Nothing [] Nothing)
     bindMethod (owner <> "." <> name) implementation
     case targetNameOf (implTarget value) of
       Just alias -> do

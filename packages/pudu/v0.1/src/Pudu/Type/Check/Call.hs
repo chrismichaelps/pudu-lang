@@ -3,6 +3,7 @@ module Pudu.Type.Check.Call
   ( CheckExpression (..)
   , checkCallee
   , selectedStaticCallee
+  , parameterStaticCallee
   , checkCalleeLending
   , throughBorrow
   , traitQualifiedCall
@@ -84,7 +85,8 @@ checkCalleeLending
   -> Checker (Type, Maybe (Located Expression))
 checkCalleeLending checker declared rigid located@(Located calleeSpan expression) = case expression of
   MemberExpression target member -> do
-    variant <- qualifiedVariantType declared calleeSpan expression
+    parameter <- parameterStaticCallee rigid calleeSpan located []
+    variant <- maybe (qualifiedVariantType declared calleeSpan expression) (pure . Just) parameter
     selected <- case variant of
       Just value -> pure (Just value)
       Nothing -> selectedStaticCallee declared rigid calleeSpan expression []
@@ -121,6 +123,22 @@ checkCalleeLending checker declared rigid located@(Located calleeSpan expression
             recordExpression calleeSpan applied
             pure (applied, if changesReceiver then Just target else Nothing)
   _ -> (\found -> (found, Nothing)) <$> runCheck checker declared rigid located
+
+{-| A rigid type qualifier selects its declared bound scheme, never a value namespace. -}
+parameterStaticCallee :: [(Text, Int)] -> Span -> Located Expression -> [Type] -> Checker (Maybe Type)
+parameterStaticCallee rigid at (Located memberAt expression) written = case expression of
+  MemberExpression target@(Located _ (NameExpression (name NonEmpty.:| []))) member
+    | name `elem` map fst rigid -> do
+        local <- localValueHead (locatedValue target)
+        if local then pure Nothing else do
+          found <- methodScheme memberAt (RigidType name) (locatedValue member)
+          case found of
+            Just scheme -> Just <$> instantiateWith at scheme written
+            Nothing -> do
+              report "E3005" memberAt (name <> " has no method " <> locatedValue member)
+                (Just "add a trait bound that declares the method")
+              pure (Just ErrorType)
+  _ -> pure Nothing
 
 {-| A complete nominal owner selects implementation parameters by its head,
     before method-local arguments instantiate the ordinary method scheme. -}

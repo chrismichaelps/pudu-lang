@@ -368,3 +368,8 @@ Resolved Grill Log: preserve complete declaring-owner ambiguity at uses across i
 Register Type.Check.Method.Binding with existing dependencies only; formed method registration is internal checker behavior.
 
 Resolved Grill Log: binding identity and admitted source spellings determine provider selection and help; registration order and schemes do not. See [[Imported Provider Delivery]].
+
+Register [[Runtime Implementation Head]] and [[Eval Type Witness]] with existing
+base/containers/text dependencies only. Resolved Grill Log: the head metadata
+depends on syntax, Value depends on it, and the witness evaluator depends on Value;
+no recursive module or new native dependency.

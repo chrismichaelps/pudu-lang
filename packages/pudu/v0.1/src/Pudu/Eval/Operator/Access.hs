@@ -22,6 +22,7 @@ import qualified Data.Sequence as Seq
 import Data.Text (Text)
 import qualified Data.Text as Text
 
+import Pudu.Eval.TypeWitness (witnessMethod)
 import Pudu.Eval.Bytes (bytesMethods)
 import Pudu.Eval.Env
   ( Evaluator
@@ -88,6 +89,9 @@ readIndex spanValue container key = case (container, key) of
     it with `value` as its first argument. -}
 readMember :: Span -> Value -> Text -> Evaluator Value
 readMember spanValue value member = case value of
+  TypeWitnessValue{} -> do
+    found <- witnessMethod spanValue value member
+    maybe (abortAt (Just spanValue) "E7001" ("selected type has no " <> member) Nothing) pure found
   ArrayValue _ -> readArrayMember spanValue value member
   StrValue _ -> readStringMember spanValue value member
   BytesValue _ -> readKeyedMember spanValue value member bytesMethods BytesMethodValue "Bytes"

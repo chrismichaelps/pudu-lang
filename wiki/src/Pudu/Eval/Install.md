@@ -248,3 +248,12 @@ Resolved Grill Log: retain legacy basename method keys for sum receivers until t
 Install positional constructors with their defining module plus sum type as canonical owner. Bind both the local type namespace and its canonical namespace to the same constructor entries so generated full-owner references retain metadata. Legacy named-payload lookup records canonical sum owners; named-payload value representation remains a separate #761 partition.
 
 Resolved Grill Log: identity comes from the declaration or native ABI, not a global short-tag registry. Keep labels, evaluation order, effects and wire bytes stable. See [[Positional Sum Owner Delivery]].
+
+## Structural implementation witnesses (#735)
+
+Share one PendingHead metadata value across each implementation's methods: its
+ordered binder names and complete checked target. Ordinary functions have no
+head. Keep impl parameters before method parameters in the original Function.
+Resolved Grill Log: installation retains checked structure without matching it,
+changing captures, copying bodies, or recovering types from program data. See
+[[Runtime Implementation Head]] and [[Eval Type Witness]].

@@ -56,6 +56,7 @@ import Pudu.Type.Check.Safety
 import Pudu.Type.Check.Call
   ( CheckExpression (..)
   , selectedStaticCallee
+  , parameterStaticCallee
   , checkCalleeLending
   , throughBorrow
   , traitQualifiedCall
@@ -182,7 +183,8 @@ inferExpression around declared rigid spanValue expression = case expression of
             checkLending calleeType receiver arguments argumentTypes
             callType spanValue calleeType argumentTypes
   MemberExpression target member -> do
-    variant <- qualifiedVariantType declared spanValue expression
+    parameter <- parameterStaticCallee rigid spanValue (Located spanValue expression) []
+    variant <- maybe (qualifiedVariantType declared spanValue expression) (pure . Just) parameter
     qualified <- case variant of
       Just value -> pure (Just value)
       Nothing -> qualifiedMemberType declared spanValue (locatedValue target) (locatedValue member)
@@ -397,7 +399,8 @@ inferExpression around declared rigid spanValue expression = case expression of
         inside the module, and a caller should not have to import a name
         unqualified to pin its type. A qualifier is written as a member access,
         so the chain is flattened back into the dotted name it stands for. -}
-    selected <- selectedStaticCallee declared rigid spanValue (locatedValue target) formed
+    parameter <- parameterStaticCallee rigid spanValue target formed
+    selected <- maybe (selectedStaticCallee declared rigid spanValue (locatedValue target) formed) (pure . Just) parameter
     local <- localValueHead (locatedValue target)
     let written = case dottedName (locatedValue target) of
           Just name | not local || not (Text.isInfixOf "." name) -> Just name

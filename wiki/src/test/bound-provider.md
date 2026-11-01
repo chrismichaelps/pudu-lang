@@ -26,3 +26,16 @@ E3013 ambiguity, E3001 wrong result and E3012 missing bound. Temporary sources a
 ## Referenced by
 
 [[Repository Gates]] · [[Bound Provider Delivery]] · [[src/_MOC]]
+
+## Structural implementation witnesses (#735, #782)
+
+Execute reordered, nested, transparent-alias and repeated-binder heads, plus
+method-local type arguments, exact outputs and positioned invalid bounds.
+Retain existing provider controls and warm inode checks across both evaluators
+and off/cold/warm products. Resolved Grill Log: swapped and double-nested output
+failed before matching; method-local witnesses must not overwrite impl binders.
+The original bounded receiver dispatch remains required before #735 closes.
+
+Explicit and retained static calls preserve method arguments; wrong result, arity,
+missing bound, repeated-head mismatch, ambiguous bounds and explicit value-shadow
+application retain positioned E3001/E3003/E3005/E3012/E3013/E3028.
