@@ -292,3 +292,9 @@ by name. Preserve persistence, key representatives, duplicate counts, checked In
 overflow, and E7008 for unorderable keys or values. Do not scan complete maps on every add.
 
 mutexAcquireWithin(Int, Int) -> Result[Bool, Str] is a monomorphic signature. Resolved Grill Log (#476): the boolean distinguishes admission from expiry without altering existing effects. This closed signature table has a bounded size exception at 513 lines; no checking or lifecycle policy enters it.
+
+## Constructor binding identity (#774)
+
+Mark only Some/None as Option constructors and Ok/Err as Result constructors. Ordinary primitive signatures retain ValueBinding.
+
+Resolved Grill Log: identity belongs to the selected binding; schemes remain type-only and ordinary shadows clear constructor roles. See [[Constructor Binding Delivery]].

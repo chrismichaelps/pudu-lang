@@ -10,9 +10,8 @@ import Pudu.Type.Check.Install (installWanted, interfaceScope)
 import Pudu.Type.Env
   ( Checker
   , DeclaredTypes (..)
-  , bindName
+  , aliasName
   , inheritRestrictions
-  , lookupName
   )
 import Pudu.Type.Interface.Graph
   ( ImportTypes (..)
@@ -69,6 +68,5 @@ declareImportedTypes declared imported = do
       module qualifier: renaming a function at the import is a change of
       spelling, not a change of what it is allowed to do. -}
   bindImportedValue (localName, canonicalName) = do
-    found <- lookupName canonicalName
-    maybe (pure ()) (bindName localName) found
+    aliasName canonicalName localName
     inheritRestrictions canonicalName localName

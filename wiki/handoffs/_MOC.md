@@ -250,3 +250,5 @@ tags: [moc, handoff]
 - [[Named Sum Publication]] — checked named constructor and pattern publication.
 
 - [[Variant Namespace Delivery]] — local variant namespace admission and positioned ambiguity.
+
+- [[Constructor Binding Delivery]] — typed constructor roles and exact import aliases.

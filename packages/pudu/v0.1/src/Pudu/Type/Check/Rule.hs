@@ -46,6 +46,9 @@ import Pudu.Type.Check.Method (methodScheme)
 import Pudu.Type.Env
   ( Checker
   , DeclaredTypes (..)
+  , NameBinding (..)
+  , lookupBinding
+  , recordVariantOwner
   , isStaticTrait
   , recordSelection
   , useCapability
@@ -139,14 +142,23 @@ nameType spanValue names@(first NonEmpty.:| remaining) = do
       foldM (memberType spanValue) value remaining
     _ -> namespaceNameType spanValue names
 
+bindingType :: Span -> NameBinding -> Checker Type
+bindingType spanValue binding = case binding of
+  ValueBinding scheme -> instantiate spanValue scheme
+  ConstructorBinding owner label scheme -> do
+    refused <- namedVariantAsValue spanValue label (schemeType scheme)
+    case refused of
+      Just value -> pure value
+      Nothing -> do
+        recordVariantOwner spanValue owner label []
+        instantiate spanValue scheme
+
 namespaceNameType :: Span -> NonEmpty.NonEmpty Text -> Checker Type
 namespaceNameType spanValue names = do
   let written = Text.intercalate "." (NonEmpty.toList names)
-  found <- lookupName written
+  found <- lookupBinding written
   case found of
-    Just scheme -> do
-      refused <- namedVariantAsValue spanValue (NonEmpty.last names) (schemeType scheme)
-      maybe (instantiate spanValue scheme) pure refused
+    Just binding -> bindingType spanValue binding
     Nothing -> do
       case NonEmpty.nonEmpty (NonEmpty.init names) of
         Nothing -> pure ()
@@ -194,11 +206,9 @@ namespaceMemberType :: DeclaredTypes -> Span -> Tree.Expression -> Text -> Check
 namespaceMemberType declared spanValue target member = case target of
   Tree.NameExpression names -> do
     let owner = Text.intercalate "." (NonEmpty.toList names)
-    found <- lookupName (owner <> "." <> member)
+    found <- lookupBinding (owner <> "." <> member)
     case found of
-      Just scheme -> do
-        refused <- namedVariantAsValue spanValue member (schemeType scheme)
-        Just <$> maybe (instantiate spanValue scheme) pure refused
+      Just binding -> Just <$> bindingType spanValue binding
       Nothing -> do
         ownsMembers <- qualifiesSomething owner
         selfIsValue <- lookupName owner
