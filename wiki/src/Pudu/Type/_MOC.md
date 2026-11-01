@@ -50,7 +50,8 @@ tags: [moc, module]
 - [[Type Check Import]] — body-free canonical interface installation and trait-scope filtering.
 - [[Type Check Prelude]] — wired-in constructors and the signatures of runtime-provided effects.
 - [[Type Check Coherence]] — nominal orphan ownership plus qualified, alpha-normalized duplicate checks over implementation syntax.
-- [[Type Check Pattern]] — checking patterns against the type they match.
+- [[Type Check Pattern]] — checking patterns against the type they match; shared canonical named variant shapes.
+- [[Type Check Record]] — construction fields checked against that same resolved variant or record owner.
 - [[Type Check Foreign]] — the type a foreign declaration gives its functions, and what its own declaration can be wrong about.
 - [[Type Check Data Spec]] — exact record, collection, constructor, and qualified-pattern regressions.
 

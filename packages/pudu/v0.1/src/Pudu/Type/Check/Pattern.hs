@@ -3,6 +3,7 @@ module Pudu.Type.Check.Pattern
   ( bindPattern
   , canonicalVariant
   , variantForPath
+  , namedVariantShapeFor
   , qualifiedVariantType
   , freshFor
   , recordFieldsFor
@@ -17,7 +18,7 @@ import Pudu.Frontend.Syntax.Located (Located (..))
 import Pudu.Frontend.Syntax.Name (ModuleName (..), moduleNameText)
 import Pudu.Frontend.Syntax.Tree (ArrayRest (..), Expression, FieldPattern (..), Pattern (..))
 import Pudu.Source (Span)
-import Pudu.Type.Check.Rule (countText, literalType, localValueHead)
+import Pudu.Type.Check.Rule (countText, literalType, localValueHead, namedVariantAsValue)
 import Pudu.Type.Check.Safety (dottedName)
 import Pudu.Type.Env
   ( Checker
@@ -33,6 +34,7 @@ import Pudu.Type.Env
   , lookupVariantIn
   , report
   , recordOwner
+  , recordPatternTest
   )
 import Pudu.Type.Unify (unify, zonk)
 import Pudu.Type.Substitute (substituteRigid)
@@ -136,7 +138,7 @@ bindPattern declared rigid (Located patternSpan pattern') subjectType = case pat
         reason it is built that way: one spelling reaches the value, so the
         other can only ever fail to match. -}
     named <- case variant of
-      Just _ -> lookupVariantFields name
+      Just (owner, _, _) -> lookupVariantFields owner name
       Nothing -> pure Nothing
     case named of
       Just names
@@ -169,6 +171,7 @@ bindPattern declared rigid (Located patternSpan pattern') subjectType = case pat
     variantShape <- namedVariantShapeFor declared path
     case variantShape of
       Just (owner, ownerParams, declaredShape) -> do
+        recordPatternTest patternSpan
         replacements <- freshFor ownerParams
         let ownerType = NominalType owner (map snd replacements)
             expected =
@@ -190,11 +193,33 @@ bindPattern declared rigid (Located patternSpan pattern') subjectType = case pat
                   ]
             mapM_ (bindFieldPattern declared rigid errorFields) fields
           else do
-            declaredFieldTypes <- recordFieldsFor declared path subjectType
+            declaredFieldTypes <- checkedRecordFields declared patternSpan path subjectType
             mapM_ (bindFieldPattern declared rigid declaredFieldTypes) fields
   AlternativePattern alternatives ->
     mapM_ (\alternative -> bindPattern declared rigid alternative subjectType) alternatives
   InvalidPattern -> pure ()
+
+{-| A named record pattern checks the declaration it names, including through
+    a dynamic view; its fields use that same instantiated owner. -}
+checkedRecordFields :: DeclaredTypes -> Span -> Maybe ModuleName -> Type -> Checker [(Text, Type)]
+checkedRecordFields declared at path subjectType =
+  case path >>= \written -> Map.lookup (moduleNameText written) (declaredNames declared) of
+    Just owner -> do
+      fields <- lookupField owner
+      case fields of
+        Just _ -> do
+          resolved <- throughReferences <$> zonk subjectType
+          parameters <- maybe [] id <$> lookupTypeParams owner
+          replacements <- freshFor parameters
+          let ownerType = NominalType owner (map snd replacements)
+          _ <- unify at resolved ownerType
+          recordOwner at owner
+          case resolved of
+            DynamicTypeValue _ -> recordPatternTest at
+            _ -> pure ()
+          recordFieldsFor declared path ownerType
+        Nothing -> recordFieldsFor declared path subjectType
+    Nothing -> recordFieldsFor declared path subjectType
 
 {-| A generic sum is instantiated at every pattern, so matching `Wrap(1)` gives
     the payload `Int` rather than the declaration's rigid parameter. -}
@@ -241,12 +266,14 @@ namedVariantShapeFor declared path = case path of
   Nothing -> pure Nothing
   Just modulePath -> do
     let name = NonEmpty.last (moduleNameSegments modulePath)
-    fieldNames <- lookupVariantFields name
     variant <- variantForPath declared modulePath name
-    pure $ case (fieldNames, variant) of
-      (Just names, Just (owner, ownerParams, payload))
-        | length names == length payload -> Just (owner, ownerParams, zip names payload)
-      _ -> Nothing
+    case variant of
+      Nothing -> pure Nothing
+      Just (owner, ownerParams, payload) -> do
+        fieldNames <- lookupVariantFields owner name
+        pure $ case fieldNames of
+          Just names | length names == length payload -> Just (owner, ownerParams, zip names payload)
+          _ -> Nothing
 
 throughReferences :: Type -> Type
 throughReferences typeValue = case typeValue of
@@ -297,7 +324,9 @@ qualifiedVariantType declared spanValue expression = do
           Just identity | Map.member identity (declaredOwners declared) -> do
             variant <- canonicalVariant declared (ModuleName names)
             case variant of
-              Just value -> pure (Just value)
+              Just value -> do
+                refused <- namedVariantAsValue spanValue member value
+                pure (Just (maybe value id refused))
               Nothing -> do
                 binding <- lookupName written
                 canonical <- lookupName (nominalKey identity <> "." <> member)

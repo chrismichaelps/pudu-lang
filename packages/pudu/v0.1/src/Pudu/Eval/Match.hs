@@ -76,7 +76,7 @@ matchPattern (Located _ pattern') value = case pattern' of
       `case Add{left, right}` and computed a product. -}
   RecordPattern path fields _ -> case value of
     RecordValue name present
-      | maybe True (== snd (Text.breakOnEnd "." name)) (patternName path) ->
+      | recordMatches path name ->
           concat <$> mapM (matchField present) fields
     _ -> Nothing
   AlternativePattern alternatives -> firstMatch alternatives
@@ -95,6 +95,10 @@ matchPattern (Located _ pattern') value = case pattern' of
   constructorMatches segments owner name = case segments of
     symbol :| [] | Text.isInfixOf "." symbol -> symbol == owner <> "." <> name
     _ -> name == lastSegment segments
+
+  recordMatches path name = case path of
+    Just (ModuleName (symbol :| [])) | Text.isInfixOf "." symbol -> symbol == name
+    _ -> maybe True (== snd (Text.breakOnEnd "." name)) (patternName path)
 
   restBinding rest middle = case rest of
     Nothing -> []

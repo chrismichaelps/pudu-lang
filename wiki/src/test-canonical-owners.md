@@ -23,3 +23,11 @@ scratch files on every exit. The baseline four-line case is known failing before
 ## Referenced by
 
 [[src/_MOC]] · [[Canonical Runtime Owner Delivery]] · [[Eval Install]]
+
+## Record pattern identity (#761)
+
+Cover dynamic record narrowing, refutable conditions, nested dynamic fields, guards/partial patterns, alias repetitions, static owner mismatch and missing dynamic fallback. Pin positioned E3001/E5001 and absence of false W5001 in both evaluators/import orders and stored-product modes.
+
+Resolved Grill Log: canonical identity and subject-sensitive refutability must agree before evaluation. See [[Record Pattern Owner Delivery]].
+
+An unrelated module declaring a named sum variant Item cannot make a static Item record pattern refutable. Resolved Grill Log: classification follows the checked declaration rather than a global basename.

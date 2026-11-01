@@ -143,11 +143,11 @@ namespaceNameType :: Span -> NonEmpty.NonEmpty Text -> Checker Type
 namespaceNameType spanValue names = do
   let written = Text.intercalate "." (NonEmpty.toList names)
   found <- lookupName written
-  named <- namedVariantAsValue spanValue (NonEmpty.last names)
-  case (found, named) of
-    (Just _, Just refused) -> pure refused
-    (Just scheme, Nothing) -> instantiate spanValue scheme
-    (Nothing, _) -> do
+  case found of
+    Just scheme -> do
+      refused <- namedVariantAsValue spanValue (NonEmpty.last names) (schemeType scheme)
+      maybe (instantiate spanValue scheme) pure refused
+    Nothing -> do
       case NonEmpty.nonEmpty (NonEmpty.init names) of
         Nothing -> pure ()
         Just qualifier -> do
@@ -196,7 +196,9 @@ namespaceMemberType declared spanValue target member = case target of
     let owner = Text.intercalate "." (NonEmpty.toList names)
     found <- lookupName (owner <> "." <> member)
     case found of
-      Just scheme -> Just <$> instantiate spanValue scheme
+      Just scheme -> do
+        refused <- namedVariantAsValue spanValue member (schemeType scheme)
+        Just <$> maybe (instantiate spanValue scheme) pure refused
       Nothing -> do
         ownsMembers <- qualifiesSomething owner
         selfIsValue <- lookupName owner
@@ -284,9 +286,12 @@ declaresVariant declared owner member = case Map.lookup owner (declaredNames dec
     and a program mixing them would type check and then find no arm at run
     time. One spelling reaches the value, so the other cannot be allowed to
     start. -}
-namedVariantAsValue :: Span -> Text -> Checker (Maybe Type)
-namedVariantAsValue spanValue name = do
-  fieldNames <- lookupVariantFields name
+namedVariantAsValue :: Span -> Text -> Type -> Checker (Maybe Type)
+namedVariantAsValue spanValue name resolved = do
+  fieldNames <- case resolved of
+    NominalType owner _ -> lookupVariantFields owner name
+    FunctionTypeValue _ _ (NominalType owner _) -> lookupVariantFields owner name
+    _ -> pure Nothing
   case fieldNames of
     Nothing -> pure Nothing
     Just names -> do

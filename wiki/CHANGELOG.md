@@ -5,6 +5,8 @@ tags: [changelog]
 
 # Changelog
 
+- 2026-10-31: Named record patterns retain canonical owners and check nominal compatibility; checked pattern facts distinguish dynamic tests from static destructuring (#761). Full optimized gates pass, and hosted CI now registers the five local owner/provider regression gates. Named payload identity remains required.
+
 - 2026-10-31: Executable positional constructor patterns retain canonical owners, and repeated-arm warnings distinguish declarations while recognizing aliases (#761). Dynamic narrowing, refutable bindings, nested patterns and warm products pass both evaluators and all clean optimized gates. Ordinary record narrowing and named payloads remain required repairs.
 
 - 2026-10-30: Positional sums retain canonical owners through dispatch, equality, frozen products and native node factories (#761); awaiting custom Ok/Err values preserves their payload wrappers. Clean full optimized gates pass. Pattern ownership and named payloads remain separate required repairs.
@@ -4370,3 +4372,5 @@ No builds, tests, reviews or measurements run.
 - #761 record partition: preserve canonical declaration owners across construction, dispatch, folded values and native/foreign boundaries; all clean optimized repository gates pass. Sum identity and trait-evidence audits remain open.
 
 - #763: share canonical qualified-method schemes for calls and retained concrete methods, preserving aliases, captures, exported value receivers and positioned refusals; all clean optimized repository gates pass.
+
+- #761: resolve named payload field names and constructor refusal under their canonical declaring owner; share qualified construction and pattern shapes. See [[Named Payload Field Delivery]].

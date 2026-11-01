@@ -29,3 +29,9 @@ The gate also checks unequal dynamic-erased values from distinct module declarat
 Extend the gate with dynamic constructor narrowing, repeated aliases, guards, partial payloads and refutable conditions in both evaluators; pin absence of false W5001 and continued true repeated-owner warnings.
 
 Resolved Grill Log: preserve declaration identity through checking, executable projection and usefulness; no per-match span lookup. See [[Constructor Pattern Owner Delivery]].
+
+## Named payload field ownership (#761)
+
+Add same-labelled named variants with different field names/types, qualified direct construction, generic field substitution, both import orders/evaluators and cache reuse. Assert positioned E3005/E3008/E3001 and one E3034 for forbidden named constructor values/calls, while unrelated positional constructors remain callable. Existing lexical admission gates remain mandatory.
+
+Resolved Grill Log: field names and payload types come from one resolved owner/variant key. No runtime representation or field evaluation order changes in this partition. See [[Named Payload Field Delivery]].

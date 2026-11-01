@@ -81,3 +81,10 @@ Resolved Grill Log: the focused gate remains mandatory alongside the full compil
 
 [[Qualified Variant Gate]] runs through the built compiler. Resolved Grill Log: imported path
 checking must agree with executed constructor values and preserve visibility/shadowing refusals.
+
+## Canonical owners and providers (#761)
+
+Run bound-provider, canonical-owner, sum-owner, qualified-record-method and trait-provider CLI
+gates against the same freshly built optimized executable. These existing local gates were absent
+from hosted CI. Resolved Grill Log: their observable dispatch, pattern and cache regressions must
+remain enforced after integration; preserve every existing workflow step. See [[Record Pattern Owner Delivery]].

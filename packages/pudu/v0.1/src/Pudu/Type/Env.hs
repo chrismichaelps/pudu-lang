@@ -63,6 +63,8 @@ module Pudu.Type.Env
   , recordSelection
   , recordProvider
   , recordOwner
+  , recordPatternTest
+  , patternTests
   , noteStaticTrait
   , isStaticTrait
   , report
@@ -146,7 +148,7 @@ data DeclaredTypes = DeclaredTypes
       the module being checked. Keyed by owner there is no collision to
       resolve. -}
   , declaredOwnedVariants :: !(Map (NominalId, Text) (NominalId, [Text], [Type]))
-  , declaredVariantFields :: !(Map Text [Text])
+  , declaredVariantFields :: !(Map (NominalId, Text) [Text])
   , declaredOwners :: !(Map NominalId [Text])
   , declaredImpls :: !(Map (NominalId, NominalId) [ImplementationRule])
   , declaredAliases :: !(Map Text ([Text], Type))
@@ -262,6 +264,7 @@ data CheckerState = CheckerState
   , stateSelectionsRev :: ![(Span, [Type])]
   , stateProvidersRev :: ![(Span, NominalId)]
   , stateOwnersRev :: ![(Span, NominalId)]
+  , statePatternTests :: !(Set Span)
   {-| Expressions whose value is the enclosing function's result: a body's
       tail, the tails of branches standing there, and every `return` operand.
       Marked before their subexpressions are checked, so a match learns its
@@ -399,6 +402,7 @@ initialState =
     , stateSelectionsRev = []
     , stateProvidersRev = []
     , stateOwnersRev = []
+    , statePatternTests = Set.empty
     , stateResultSpans = Set.empty
     }
 
@@ -546,6 +550,15 @@ recordProvider at owner = Checker $ \state ->
 recordOwner :: Span -> NominalId -> Checker ()
 recordOwner at owner = Checker $ \state ->
   ((), state{stateOwnersRev = (at, owner) : stateOwnersRev state})
+
+{-| Record subject-sensitive tests without retaining checker state in products. -}
+recordPatternTest :: Span -> Checker ()
+recordPatternTest at = Checker $ \state ->
+  ((), state{statePatternTests = Set.insert at (statePatternTests state)})
+
+patternTests :: Checker (Set Span)
+patternTests = Checker $ \state -> (statePatternTests state, state)
+
 
 recordSelection :: Span -> [Type] -> Checker ()
 recordSelection spanValue chosen =
@@ -868,9 +881,9 @@ lookupVariantIn owner name =
     pattern may say which element they mean. A variant with no names is absent
     here rather than present and empty, because writing `Circle{}` for a
     positional variant is a different mistake from leaving a field out. -}
-lookupVariantFields :: Text -> Checker (Maybe [Text])
-lookupVariantFields name =
-  Checker $ \state -> (Map.lookup name (declaredVariantFields (stateDeclared state)), state)
+lookupVariantFields :: NominalId -> Text -> Checker (Maybe [Text])
+lookupVariantFields owner name =
+  Checker $ \state -> (Map.lookup (owner, name) (declaredVariantFields (stateDeclared state)), state)
 
 {-| Record the type an expression was given, so tooling can report it. -}
 recordExpression :: Span -> Type -> Checker ()

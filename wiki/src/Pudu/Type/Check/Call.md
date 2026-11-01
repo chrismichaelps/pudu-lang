@@ -67,7 +67,7 @@ A call's arguments are expressions and an expression may be a call, so one direc
 argument rather than an import. `CheckExpression` is that direction — the same shape
 [[Parser Expression Control]] uses for the same reason.
 
-- **A variant that named its payload is refused before the callee is resolved**, and answered here rather than left to fall through. Falling through re-checks the same member as an expression, which reports one mistake twice; short-circuiting is also what reaches an imported variant, whose qualified name resolves before qualified member typing is ever consulted.
+- **A named-payload constructor is refused by its resolved owner**, through qualified constructor admission or exported namespace binding lookup. An ErrorType result answers the callee once, preserving one E3034 without consulting unrelated member basenames.
 
 ### Linkage
 
@@ -132,7 +132,7 @@ Qualified nominal/trait lookup must yield to localValueHead before selecting a m
 
 ## Qualified constructors (#717)
 
-After named-field variant refusal, ask [[Type Check Pattern]]'s shared qualified constructor
+Ask [[Type Check Pattern]]'s shared qualified constructor
 admission before static methods and ordinary member lookup. Preserve the existing explicit
 receiver/lending and lexical shadow checks for every non-constructor.
 
@@ -165,3 +165,9 @@ Resolved Grill Log: known concrete identity, lexical admission, module-export pr
 
 Resolved Grill Log: generated complete owner applications retain their existing internal path;
 this repair changes no authored bracket grammar.
+
+## Named payload field ownership (#761)
+
+Qualified constructor admission owns named-payload refusal. Remove the unconditional member-basename refusal; ordinary qualified member typing checks exported constructor bindings, preserving one diagnostic and lexical receiver behavior.
+
+Resolved Grill Log: field names and payload types come from one resolved owner/variant key. No runtime representation or field evaluation order changes in this partition. See [[Named Payload Field Delivery]].
