@@ -90,6 +90,9 @@ module Pudu.Type.Env
   , markAmbiguousMethod
   , methodProvider
   , recordMethodProvider
+  , setProviderNames
+  , providerSpelling
+  , lookupProviderName
   , addObligation
   , addDynamicObligation
   , resolveVariable
@@ -128,7 +131,7 @@ import Pudu.IntegerLiteral (fitsIntegerType)
 import Pudu.Type.Frontier (splitSince, splitBetween)
 import Pudu.Type.Implementation (ImplementationRule)
 import Pudu.Type.Value
-  ( OwnerSelection (..), NominalId (..), Scheme (..), Type (..), TypeVar (..), integerType, nominalKey, renderType )
+  ( OwnerSelection (..), NominalId (..), Scheme (..), Type (..), TypeVar (..), integerType, nominalKey, nominalName, renderType )
 
 {-| @Type.Env.Declared — what the module's declarations contribute.
 
@@ -214,6 +217,9 @@ data CheckerState = CheckerState
   , stateImportedMethods :: !(Set Text)
   , stateDeclared :: !DeclaredTypes
   , stateTypes :: ![(SpanKey, Type)]
+  , stateVisibleProviderNames :: !(Map Text NominalId)
+  {-| Preferred spellings are demanded only when ambiguity needs diagnostic help. -}
+  , stateProviderNames :: ~(Map NominalId Text)
   , stateMethodProviders :: !(Map Text NominalId)
   , stateAmbiguousMethods :: !(Map Text [NominalId])
   , stateUnsafeFrames :: ![UnsafeFrame]
@@ -395,6 +401,8 @@ initialState =
     , stateImportedMethods = Set.empty
     , stateDeclared = emptyDeclared
     , stateTypes = []
+    , stateVisibleProviderNames = Map.empty
+    , stateProviderNames = Map.empty
     , stateMethodProviders = Map.empty
     , stateAmbiguousMethods = Map.empty
     , stateUnsafeFrames = []
@@ -1036,6 +1044,23 @@ rigidSatisfies name traitText =
 {-| Which trait supplied a method binding. Two traits providing the same member
     for one type is an ambiguity the reader must resolve, and this is what lets
     the second binding notice the first. -}
+setProviderNames :: Map Text NominalId -> Checker ()
+setProviderNames names = Checker $ \state ->
+  ((), state{stateVisibleProviderNames = names,
+    stateProviderNames = Map.fromListWith prefer [(owner, name) | (name, owner) <- Map.toList names]})
+ where
+  prefer left right
+    | (Text.length left, left) <= (Text.length right, right) = left
+    | otherwise = right
+
+lookupProviderName :: Text -> Checker (Maybe NominalId)
+lookupProviderName name = Checker $ \state ->
+  (Map.lookup name (stateVisibleProviderNames state), state)
+
+providerSpelling :: NominalId -> Checker Text
+providerSpelling owner = Checker $ \state ->
+  (Map.findWithDefault (nominalName owner) owner (stateProviderNames state), state)
+
 recordMethodProvider :: Text -> NominalId -> Checker ()
 recordMethodProvider key traitIdentity =
   Checker $ \state ->
