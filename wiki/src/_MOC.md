@@ -232,3 +232,5 @@ tags: [moc, module]
 - [[Sum Owner Gate]] — positional identity and native/task boundary regressions.
 
 - [[Resolve Ambiguity]] — symbol-bound exported variant ambiguity.
+
+- [[Diagnostic Render Properties]] — source identity and presentation regressions.

@@ -67,3 +67,9 @@ Add loaded producer/consumer cases for ambiguous exported unit, positional and n
 Resolved Grill Log: preserve complete declaring-owner ambiguity at uses across imports, lexical shadows and generated syntax. See [[Imported Variant Delivery]].
 
 Resolved type-head control: imported candidates retain an export-index TypeSpace flag; PathUse preserves C.First.Chosen qualification without admitting ambiguous value fields. Syntactically named member paths preserve head spans. See [[Imported Variant Delivery]].
+
+## Diagnostic source snapshots (#777)
+
+Assert actual producer declaration line/column notes for both orders and selected/module-alias consumers, across off/cold/warm checks. These are independent of consumer source layout and complement exact structured offsets. Preserve all runtime and owner controls.
+
+Resolved Grill Log: source identity admits coordinates; names alone do not. See [[Diagnostic Source Delivery]].
