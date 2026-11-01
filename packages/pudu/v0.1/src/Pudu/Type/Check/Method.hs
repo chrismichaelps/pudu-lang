@@ -39,21 +39,20 @@ import Pudu.Frontend.Syntax.Tree
   )
 import Control.Monad (filterM, unless, when)
 import Pudu.Source (Span)
+import Pudu.Type.Check.Method.Binding
+  ( MethodOrigin (..), MethodBinding (..), bindMethod, methodKey, implementationMethodKey )
 import Pudu.Type.Check.Prelude (declareBuiltinConstructors, effectSignatures)
 import Pudu.Type.Env
   ( noteStaticTrait
   , Checker
   , DeclaredTypes (..)
-  , bindImportedMethod
   , bindName
   , recordProvider, recordOwner
   , recordDeclaredMethod
   , ambiguousProviders
-  , markAmbiguousMethod
+  , providerSpelling
   , methodProvider
-  , recordMethodProvider
   , lookupName
-  , isImportedMethod
   , isMethodKey
   , report
   , rigidBoundsOf
@@ -196,35 +195,19 @@ declareMethod :: Bool -> DeclaredTypes -> Impl -> NominalId -> Located Function 
 declareMethod rejectCollision declared value owner (Located methodSpan method) = do
   let rigid = implRigid value <> functionRigid method
       aliases = implAliases declared value
-      key = methodKey owner (locatedValue (functionName method))
   inputs <- mapM (declaredParameterType aliases rigid) (functionParameters method)
   result <- formOptionalType aliases rigid (functionReturn method)
-  existing <- lookupName key
-  importedCollision <- if rejectCollision then pure (existing /= Nothing) else isImportedMethod key
-  provider <- methodProvider key
-  let providing = implTraitName declared value
-      localCollision =
-        not rejectCollision
-          && maybe False (\earlier -> Just earlier /= providing) provider
   let scheme =
         polytype rigid (implBounds declared value <> declareBoundsWith aliases (implRigid value) method)
           (FunctionTypeValue (functionAsync method) inputs result)
-  if importedCollision
-    then do
-      report "E3013" methodSpan
-        (locatedValue (functionName method) <> " is ambiguous for " <> nominalName owner)
-        (Just "import only one providing trait or use a qualified call")
-      bindName key (monotype ErrorType)
-    else do
-      mapM_ (\trait -> bindName (implementationMethodKey owner trait (locatedValue (functionName method))) scheme) providing
-      when localCollision $
-        markAmbiguousMethod key (maybe [] pure provider <> maybe [] pure providing)
-      mapM_ (recordMethodProvider key) providing
-      if rejectCollision
-        then bindImportedMethod key scheme
-        else do
-          bindName key scheme
-          recordDeclaredMethod owner (functionName method) scheme
+  bindMethod (if rejectCollision then InterfaceMethod else SourceMethod)
+    MethodBinding
+      { bindingOwner = owner
+      , bindingProvider = implTraitName declared value
+      , bindingName = functionName method
+      , bindingSpan = methodSpan
+      , bindingScheme = scheme
+      }
 
 {-| `Self` inside an implementation is its target type, which is what lets a
     method read the fields of the value it was called on. -}
@@ -299,13 +282,6 @@ targetName :: Type -> Maybe NominalId
 targetName typeValue = case typeValue of
   NominalType name _ -> Just name
   _ -> Nothing
-
-{-| Explicit trait selection must not read the shared receiver ambiguity slot. -}
-implementationMethodKey :: NominalId -> NominalId -> Text -> Text
-implementationMethodKey owner trait member = nominalKey trait <> "::" <> methodKey owner member
-
-methodKey :: NominalId -> Text -> Text
-methodKey owner method = nominalKey owner <> "." <> method
 
 {-| Prove every trait obligation a call registered.
 
@@ -437,15 +413,16 @@ methodScheme spanValue receiver member = case receiver of
       -- only a declared method answers for the type.
       [] | nominalModule owner == Nothing -> do
         method <- isMethodKey key
-        if method then lookupName key else pure Nothing
-      [] -> lookupName key
+        if method then selectedNominalScheme spanValue key else pure Nothing
+      [] -> selectedNominalScheme spanValue key
       _ -> do
+        spellings <- mapM providerSpelling providers
         report "E3013" spanValue
           (member <> " is ambiguous for " <> nominalName owner)
-          (Just ("call it qualified: " <> Text.intercalate " or " (map qualifiedForm providers)))
+          (Just ("call it qualified: " <> Text.intercalate " or " (map qualifiedForm spellings)))
         pure (Just (monotype ErrorType))
    where
-    qualifiedForm traitIdentity = nominalName traitIdentity <> "." <> member <> "(value)"
+    qualifiedForm spelling = spelling <> "." <> member <> "(value)"
   {-| A parameter of higher kind carries its bounds on the parameter itself, so
       a receiver of type `F[A]` finds its members exactly where a receiver of
       type `F` would. The arguments say what the container holds and never which
@@ -453,6 +430,14 @@ methodScheme spanValue receiver member = case receiver of
   AppliedType head' _ -> methodScheme spanValue head' member
   RigidType name -> rigidBoundsOf name >>= selectBounds True spanValue receiver member
   _ -> pure Nothing
+
+selectedNominalScheme :: Span -> Text -> Checker (Maybe Scheme)
+selectedNominalScheme at key = do
+  found <- lookupName key
+  case found of
+    Nothing -> pure ()
+    Just _ -> methodProvider key >>= mapM_ (recordProvider at)
+  pure found
 
 traitMethodScheme :: Span -> Type -> NominalId -> Text -> Checker (Maybe Scheme)
 traitMethodScheme at receiver owner member = case receiver of

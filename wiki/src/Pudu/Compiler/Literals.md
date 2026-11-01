@@ -115,3 +115,7 @@ Resolved Grill Log: carry checked owner and field order through syntax; preserve
 In executable syntax only, a VariantOwner fact on a NameExpression or MemberExpression becomes an empty RecordExpression with the unspellable ::constructor::/owner/label descriptor. This is an owned positional constructor value, not a namespace lookup. Preserve spans and authored tooling syntax; ordinary ConcreteOwner/provider rewrites stay separate.
 
 Resolved Grill Log: checked canonical identity must survive lowering even when a type and a bare variant share text. No runtime owner inference or source syntax change. See [[Variant Namespace Delivery]].
+
+Resolved #734 qualifier contract: retain exact admitted name lookup separately from preferred diagnostic spellings; successful explicit self-taking trait calls publish their canonical qualifier through the existing member owner-fact projection. Preserve argument order and static-member behavior. See [[Imported Provider Delivery]].
+
+Resolved #734 nominal-member contract: unambiguous nominal selections also supply existing provider facts, including concrete fields after derive expansion. The unchanged marker projection must preserve their lexical provider rather than global runtime installation order. See [[Imported Provider Delivery]].

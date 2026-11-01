@@ -4396,3 +4396,7 @@ No builds, tests, reviews or measurements run.
 - #777 focused verification: regressions fail before repair and pass afterward; explicit source maps restore foreign note coordinates, snapshot guards prevent stale-source borrowing, and optimized build/render/loaded cache gates pass. Full validation is running.
 
 - #777 full verification: 0b85629b passes every clean optimized repository gate, including rendering, real imported-note coordinates across cache modes, and existing diagnostic/tooling controls.
+
+- #734 design: admit distinct imported providers through a formed binding boundary; preserve call-site ambiguity and actual qualified help. Implementation/validation pending. See [[Imported Provider Delivery]].
+
+- #734 focused verification: imported admission, canonical qualified execution and nominal provider retention pass the full provider matrix, including Wire/Json derive closures. Trait properties and optimized build pass; clean full validation is running. #777 merged as 308130087.

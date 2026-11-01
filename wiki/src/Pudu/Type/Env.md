@@ -1,6 +1,6 @@
 ---
 type: module
-path: "@root/src/Pudu/Type/Env.hs"
+path: "@root/packages/pudu/v0.1/src/Pudu/Type/Env.hs"
 fidelity: Active
 domain: "[[Pudu Type]]"
 subsystem: "[[Semantics]]"
@@ -275,3 +275,11 @@ Resolved Grill Log: checked canonical identity must survive lowering even when a
 NameBinding distinguishes ValueBinding Scheme and ConstructorBinding NominalId Text Scheme. Frames and InstalledNames retain it; bindName creates ordinary bindings, bindConstructorName marks declarations, aliasName copies complete selected bindings. lookupBinding exposes the nearest role and scheme in one lookup; lookupName/lookupLocalName/finalSchemes preserve their scheme-only interfaces.
 
 Resolved Grill Log: identity belongs to the selected binding; schemes remain type-only and ordinary shadows clear constructor roles. See [[Constructor Binding Delivery]].
+
+## Imported providers (#734)
+
+Add setProviderNames and providerSpelling with an initially empty, intentionally lazy per-consumer inverse map of admitted spellings. Choose shortest then lexical spelling from exact source imports/local traits. Demand only for diagnostic help; no installed snapshot or executable metadata changes. Preserve the existing bounded state-owner exception.
+
+Resolved Grill Log: binding identity and admitted source spellings determine provider selection and help; registration order and schemes do not. See [[Imported Provider Delivery]].
+
+Resolved #734 qualifier contract: retain exact admitted name lookup separately from preferred diagnostic spellings; successful explicit self-taking trait calls publish their canonical qualifier through the existing member owner-fact projection. Preserve argument order and static-member behavior. See [[Imported Provider Delivery]].

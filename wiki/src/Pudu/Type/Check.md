@@ -110,7 +110,7 @@ checkModuleWith :: ImportTypes -> Set Span -> Module -> ([(Span, Type)], [Diagno
   source is checked once against its metadata sequence or ordinary Array element type. A
   request carries no members and needs no checking.
 - `checkModuleWith` installs [[Type Interface]] imports as outer declared/name/method state, then collects and checks only the current module. Imported bodies and coherence are never re-run. `checkModule` delegates with empty imports.
-- Imported concrete method keys remain marked while local signatures are installed, so an imported-plus-local provider collision reports `E3013` instead of silently granting precedence to the local declaration.
+- Imported concrete method keys remain marked while local signatures are installed, so distinct imported/local providers mark the shared slot ambiguous for call-site E3013 instead of granting local precedence.
 - Every construct's rule is the one [[grammar/pudu]] states: an `if` condition is `Bool`, its reachable branches unify, `match` arms unify with each other and their patterns with the scrutinee, `while` and `for` are unit while `loop` takes the type its `break` statements carry, and `return` is checked against the enclosing function's declared result.
 - A user-defined value is iterable only when `begin` and `advance` form one coherent protocol:
   both receivers unify with the iterated type, `begin`'s result is `advance`'s input and next state,
@@ -257,3 +257,9 @@ Resolved Grill Log: carry checked owner and field order through syntax; preserve
 Declare local sum variants through bindConstructorName with the formed owner and original label. Other signatures remain ordinary bindings.
 
 Resolved Grill Log: identity belongs to the selected binding; schemes remain type-only and ordinary shadows clear constructor roles. See [[Constructor Binding Delivery]].
+
+## Imported providers (#734)
+
+After formed declarations are available, initialize per-consumer provider spellings from local trait declarations and importedNames, excluding hidden graph aliases. All checker entry points share this unit setup; no extra body pass or type inference is added.
+
+Resolved Grill Log: binding identity and admitted source spellings determine provider selection and help; registration order and schemes do not. See [[Imported Provider Delivery]].

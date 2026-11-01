@@ -23,3 +23,9 @@ removed; compiler invocation time is bounded.
 ## Referenced by
 
 [[Type Check Method]] · [[Type Check Call]] · [[Repository Gates]] · [[src/_MOC]]
+
+## Imported providers (#734)
+
+Extend real CLI controls with separate same-named trait modules, no-call import admission, exact explicit/generic/captured outputs, positioned caller refusals with admitted alias help, wrong annotations, mixed local/imported providers and derive closure bounds. Cover both orders/evaluators and off/cold/warm products; keep existing local controls.
+
+Resolved Grill Log: binding identity and admitted source spellings determine provider selection and help; registration order and schemes do not. See [[Imported Provider Delivery]].

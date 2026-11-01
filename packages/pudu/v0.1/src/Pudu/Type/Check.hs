@@ -51,6 +51,7 @@ import Pudu.Type.Env
   , withRigidBounds
   , runChecker
   , setWritableNames
+  , setProviderNames
   , withDeclared
   , installNames
   )
@@ -183,6 +184,13 @@ checkUnit scope imported moduleValue = do
     (locatedValue (moduleName moduleValue))
     (moduleDeclarations moduleValue)
   withDeclared declared
+  let localProviders = Map.fromList
+        [ (name, owner)
+        | Located _ (TraitDeclaration trait) <- moduleDeclarations moduleValue
+        , let name = locatedValue (traitName trait)
+        , Just owner <- [Map.lookup name (declaredNames declared)]
+        ]
+  setProviderNames (localProviders <> importedNames imported)
   {-| The language's constructors and every interface's shared declarations
       were installed once for the whole graph; this module starts from them. -}
   installNames (graphInstalled (importedGraph imported))

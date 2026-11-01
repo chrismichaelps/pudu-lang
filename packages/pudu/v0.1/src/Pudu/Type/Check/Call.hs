@@ -12,8 +12,7 @@ import Control.Monad (when)
 import qualified Data.List.NonEmpty as NonEmpty
 import Pudu.Type.Check.Place (checkExclusiveReceiver, exclusiveInput)
 import Pudu.Type.Check.Receiver (bindReceiver)
-import Pudu.Type.Check.Qualified (qualifiedScheme)
-import qualified Data.Map.Strict as Map
+import Pudu.Type.Check.Qualified (qualifiedScheme, traitOwner)
 import qualified Data.Set as Set
 import Data.Text (Text)
 import Data.Maybe (mapMaybe)
@@ -34,6 +33,7 @@ import Pudu.Type.Env
   , methodProvider
   , lookupName
   , recordExpression
+  , recordOwner
   , report
   )
 import Pudu.Type.Check.Rule
@@ -52,7 +52,8 @@ import Pudu.Type.Check.Method
 import Pudu.Type.Check.Pattern (qualifiedVariantType)
 import Pudu.Type.Unify (zonk)
 import Pudu.Type.Value
-  ( Scheme (..)
+  ( NominalId
+  , Scheme (..)
   , nominalKey
   , Type (..)
   )
@@ -190,9 +191,22 @@ traitQualifiedCall
   -> Located Expression
   -> [Located Expression]
   -> Checker (Maybe (Type, [Type]))
-traitQualifiedCall checker declared rigid (Located calleeSpan callee) arguments = case (callee, arguments) of
+traitQualifiedCall checker declared rigid callee@(Located at expression) arguments = do
+  selected <- case expression of
+    MemberExpression target _ -> traitOwner declared (locatedValue target)
+    _ -> pure Nothing
+  result <- checkTraitCall selected checker declared rigid callee arguments
+  case (result, selected) of
+    (Just _, Just owner) -> recordOwner at owner
+    _ -> pure ()
+  pure result
+
+checkTraitCall
+  :: Maybe NominalId -> CheckExpression -> DeclaredTypes -> [(Text, Int)]
+  -> Located Expression -> [Located Expression] -> Checker (Maybe (Type, [Type]))
+checkTraitCall selected checker declared rigid (Located calleeSpan callee) arguments = case (callee, arguments) of
   (MemberExpression target member, receiver : rest)
-    | Just traitIdentity <- namedType (locatedValue target)
+    | Just traitIdentity <- selected
     , Set.member traitIdentity (declaredTraitNames declared) -> do
       local <- localValueHead (locatedValue target)
       declaredMember <- if local then pure Nothing else
@@ -225,9 +239,6 @@ traitQualifiedCall checker declared rigid (Located calleeSpan callee) arguments 
                       pure (Just (instantiated, receiverType : restTypes))
   _ -> pure Nothing
  where
-  namedType expression = case expression of
-    NameExpression (first NonEmpty.:| []) -> Map.lookup first (declaredNames declared)
-    _ -> Nothing
   takesSelf held = case held of
     FunctionTypeValue _ (first : _) _ -> isSelf first
     _ -> False
