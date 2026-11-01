@@ -59,3 +59,17 @@ Resolved Grill Log: an already qualified path must not be refused as a bare vari
 Extend source cases for bare constructors sharing type names, selected/module-aliased imports, retained/folded values and ordinary constants matching named-variant schemes. Keep named-constructor refusals and scope/duplicate regressions in both evaluators and cache modes.
 
 Resolved Grill Log: identity belongs to the selected binding; schemes remain type-only and ordinary shadows clear constructor roles. See [[Constructor Binding Delivery]].
+
+## Imported variant candidates (#775)
+
+Add loaded producer/consumer cases for ambiguous exported unit, positional and named labels in both orders and selected/module-alias imports. Require one E2012, no order-based E3001, and both declaration notes. Qualified retained/folded constructors and unambiguous controls run through both evaluators and off/cold/warm products.
+
+Resolved Grill Log: preserve complete declaring-owner ambiguity at uses across imports, lexical shadows and generated syntax. See [[Imported Variant Delivery]].
+
+Resolved type-head control: imported candidates retain an export-index TypeSpace flag; PathUse preserves C.First.Chosen qualification without admitting ambiguous value fields. Syntactically named member paths preserve head spans. See [[Imported Variant Delivery]].
+
+## Diagnostic source snapshots (#777)
+
+Assert actual producer declaration line/column notes for both orders and selected/module-alias consumers, across off/cold/warm checks. These are independent of consumer source layout and complement exact structured offsets. Preserve all runtime and owner controls.
+
+Resolved Grill Log: source identity admits coordinates; names alone do not. See [[Diagnostic Source Delivery]].

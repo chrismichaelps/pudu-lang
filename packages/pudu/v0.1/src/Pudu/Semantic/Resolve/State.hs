@@ -11,13 +11,15 @@ import Data.Set (Set)
 import qualified Data.Set as Set
 import Data.Text (Text)
 import Pudu.Diagnostic (Diagnostic)
+import Pudu.Semantic.Interface (ImportedVariant)
 import Pudu.Semantic.Scope (ScopeStack, emptyStack)
 import Pudu.Semantic.ScopeIndex (Frame (..))
 import Pudu.Semantic.Symbol (Namespace, Reference, Symbol, SymbolId)
 
 {-| @Semantic.Resolve.State — the resolver's private working state -}
 data ResolveState = ResolveState
-  { stateVariants :: !(Map Text (Map Text Symbol))
+  { stateImportedVariants :: !(Map SymbolId (Map [Text] ImportedVariant))
+  , stateVariants :: !(Map Text (Map Text Symbol))
   , stateNext :: !Int
   , stateScopes :: !ScopeStack
   , stateLoops :: ![Maybe Text]
@@ -68,7 +70,8 @@ instance Monad Resolver where
 initialState :: ResolveState
 initialState =
   ResolveState
-    { stateVariants = Map.empty
+    { stateImportedVariants = Map.empty
+    , stateVariants = Map.empty
     , stateNext = 0
     , stateScopes = emptyStack
     , stateLoops = []

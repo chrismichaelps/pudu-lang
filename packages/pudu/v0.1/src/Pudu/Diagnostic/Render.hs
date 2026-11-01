@@ -8,9 +8,12 @@ module Pudu.Diagnostic.Render
   , renderDiagnosticWith
   , renderDiagnostics
   , renderDiagnosticsWith
+  , renderDiagnosticsWithSources
   , renderSummary
   ) where
 
+import Data.Map.Strict (Map)
+import qualified Data.Map.Strict as Map
 import Data.Text (Text)
 import qualified Data.Text as Text
 import Pudu.Diagnostic
@@ -28,9 +31,11 @@ import Pudu.Diagnostic
 import Pudu.Source
   ( Position (..)
   , Source
+  , SourceName
+  , emptySpan
+  , sameSpanSource
   , Span
   , offsetPosition
-  , sourceName
   , sourceText
   , spanEnd
   , spanSource
@@ -80,7 +85,14 @@ renderDiagnostic :: RenderStyle -> Source -> Diagnostic -> Text
 renderDiagnostic style = renderDiagnosticWith (defaultRenderConfig style)
 
 renderDiagnosticWith :: RenderConfig -> Source -> Diagnostic -> Text
-renderDiagnosticWith config source value =
+renderDiagnosticWith config = renderDiagnosticFrom config Map.empty
+
+renderDiagnosticsWithSources :: RenderConfig -> Map SourceName Source -> Source -> [Diagnostic] -> Text
+renderDiagnosticsWithSources config sources source values =
+  Text.intercalate "\n" (map (renderDiagnosticFrom config sources source) values)
+
+renderDiagnosticFrom :: RenderConfig -> Map SourceName Source -> Source -> Diagnostic -> Text
+renderDiagnosticFrom config sources source value =
   Text.intercalate "\n" (headline : locationLine : excerpt <> notes <> helpLines)
  where
   style = renderStyle config
@@ -90,23 +102,38 @@ renderDiagnosticWith config source value =
   headline =
     paint style (severityColor severity) (severityLabel severity <> "[" <> code <> "]")
       <> ": " <> diagnosticMessage value
-  locationLine = "  --> " <> locationText config source spanValue
-  excerpt = renderExcerpt config source spanValue
-  notes = map (renderRelated config source) (diagnosticRelated value)
+  locationLine = "  --> " <> location spanValue
+  excerpt = case snapshot spanValue of
+    Nothing -> []
+    Just selected -> renderExcerpt (configuration spanValue) selected spanValue
+  notes = map (renderRelated location) (diagnosticRelated value)
+  configuration at
+    | ownsSpan source at = config
+    | otherwise = defaultRenderConfig style
+  snapshot at
+    | ownsSpan source at = Just source
+    | otherwise = do
+        selected <- Map.lookup (spanSource at) sources
+        if ownsSpan selected at then Just selected else Nothing
+  location at = locationText (configuration at) selected at
+   where
+    selected = case snapshot at of
+      Just found -> found
+      Nothing -> source
   helpLines = case diagnosticHelp value of
     Nothing -> []
     Just help -> ["   = " <> paint style cyan "help" <> ": " <> help]
 
-renderRelated :: RenderConfig -> Source -> Related -> Text
-renderRelated config source related =
+renderRelated :: (Span -> Text) -> Related -> Text
+renderRelated location related =
   "   = note: " <> relatedMessage related
-    <> " (" <> locationText config source (relatedSpan related) <> ")"
+    <> " (" <> location (relatedSpan related) <> ")"
 
 {-| A span from another snapshot still reports its location, but never borrows a
     line of unrelated text to quote. -}
 renderExcerpt :: RenderConfig -> Source -> Span -> [Text]
 renderExcerpt config source spanValue
-  | spanSource spanValue /= sourceName source = []
+  | not (ownsSpan source spanValue) = []
   | otherwise = case positionsOf source spanValue of
       Nothing -> []
       Just (start, end) ->
@@ -131,23 +158,33 @@ renderExcerpt config source spanValue
   severityColorOf _ = red
 
 positionsOf :: Source -> Span -> Maybe (Position, Position)
-positionsOf source spanValue = do
-  start <- offsetPosition source (spanStart spanValue)
-  end <- offsetPosition source (spanEnd spanValue)
-  pure (start, end)
+positionsOf source spanValue
+  | not (ownsSpan source spanValue) = Nothing
+  | otherwise = do
+      start <- offsetPosition source (spanStart spanValue)
+      end <- offsetPosition source (spanEnd spanValue)
+      pure (start, end)
+
+ownsSpan :: Source -> Span -> Bool
+ownsSpan source = sameSpanSource (emptySpan source)
 
 locationText :: RenderConfig -> Source -> Span -> Text
 locationText config source spanValue =
   displayName <> ":" <> position
  where
-  displayName = case renderDisplayName config of
-    Just name -> name
-    Nothing -> unSourceName (spanSource spanValue)
-  position = case offsetPosition source (spanStart spanValue) of
-    Just found ->
-      Text.pack (show (displayLine config (positionLine found)))
-        <> ":" <> Text.pack (show (positionColumn found))
-    Nothing -> "offset " <> Text.pack (show (unOffset (spanStart spanValue)))
+  displayName
+    | ownsSpan source spanValue = case renderDisplayName config of
+        Just name -> name
+        Nothing -> unSourceName (spanSource spanValue)
+    | otherwise = unSourceName (spanSource spanValue)
+  position
+    | not (ownsSpan source spanValue) = offsetText
+    | otherwise = case offsetPosition source (spanStart spanValue) of
+        Just found ->
+          Text.pack (show (displayLine config (positionLine found)))
+            <> ":" <> Text.pack (show (positionColumn found))
+        Nothing -> offsetText
+  offsetText = "offset " <> Text.pack (show (unOffset (spanStart spanValue)))
 
 {-| Translate a buffer line into the line the reader typed. Lines before the
     entry clamp to the first line rather than going negative. -}

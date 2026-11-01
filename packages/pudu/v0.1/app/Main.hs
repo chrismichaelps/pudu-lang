@@ -82,11 +82,11 @@ import Pudu.Diagnostic (Diagnostic, diagnosticCode, diagnosticCodeText, diagnost
 import Pudu.Diagnostic.Render
   ( RenderStyle (..)
   , defaultRenderConfig
-  , renderDiagnosticsWith
+  , renderDiagnosticsWithSources
   , renderSummary
   )
 import Pudu.Repl (ReplOptions (..), runRepl)
-import Pudu.Source (Source, SourceName (..), newSource, sourceName, spanSource)
+import Pudu.Source (SourceName (..), newSource, sourceName, spanSource)
 import GHC.IO.Encoding (setLocaleEncoding)
 import System.Environment (getArgs, getEnvironment, getExecutablePath, lookupEnv, withArgs)
 import System.Process
@@ -1146,23 +1146,15 @@ renderProgramDiagnostics :: RenderStyle -> ProgramResult -> [Diagnostic] -> Text
 renderProgramDiagnostics style program =
   Text.intercalate "\n" . map renderOne
  where
-  sources = programSources program
-  renderOne value = case sourceFor value sources of
+  sources = Map.fromList [(sourceName source, source) | source <- programSources program]
+  renderOne value = case Map.lookup (spanSource (diagnosticSpan value)) sources of
     Nothing ->
       -- A diagnostic about the project rather than a module — its manifest or
       -- its lock — names a file the program never read as source. It is still
       -- a sentence the reader needs, so it is written without the excerpt.
       "error[" <> diagnosticCodeText (diagnosticCode value) <> "]: " <> diagnosticMessage value
         <> "\n  --> " <> unSourceName (spanSource (diagnosticSpan value))
-    Just source -> renderDiagnosticsWith (defaultRenderConfig style) source [value]
-
-sourceFor :: Diagnostic -> [Source] -> Maybe Source
-sourceFor value = firstMatching
- where
-  expected = spanSource (diagnosticSpan value)
-  firstMatching sources = case filter ((== expected) . sourceName) sources of
-    found : _ -> Just found
-    [] -> Nothing
+    Just source -> renderDiagnosticsWithSources (defaultRenderConfig style) sources source [value]
 
 {-| Colour is used only for an interactive terminal, and never when NO_COLOR is
     set, so piped and redirected output stays plain. -}

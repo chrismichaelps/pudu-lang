@@ -1,6 +1,6 @@
 ---
 type: module
-path: "@root/src/Pudu/Diagnostic/Render.hs"
+path: "@root/packages/pudu/v0.1/src/Pudu/Diagnostic/Render.hs"
 fidelity: Active
 domain: "[[Pudu Program]]"
 subsystem: "[[Tooling]]"
@@ -71,3 +71,9 @@ DEPTH 0.55 (MEDIUM). It hides position resolution, line slicing, caret arithmeti
 ## Referenced by
 
 [[src/Pudu/_MOC]] · [[Diagnostic Model]] · [[Source]] · [[Pudu REPL]] · [[Tooling]]
+
+## Diagnostic source snapshots (#777)
+
+Add renderDiagnosticsWithSources with an explicit source map. Existing APIs use an empty supplementary map. Resolve spans by actual snapshot identity; missing/stale foreign sources report filename/offset without excerpts. Primary display mappings never apply to foreign spans. Preserve note order, styling, tabs, summaries and same-source output.
+
+Resolved Grill Log: source identity admits coordinates; names alone do not. See [[Diagnostic Source Delivery]].

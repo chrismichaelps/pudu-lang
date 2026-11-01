@@ -168,3 +168,11 @@ Normal value uses retain one lexical lookup; candidate metadata is read only aft
 resolveQualifierName selects an actual lexical value normally; a variant alias yields to a known TypeSpace qualifier. Bare value/constructor uses keep ambiguity diagnostics. Reuse the already selected value in resolveSelectedValue.
 
 Resolved Grill Log: an already qualified path must not be refused as a bare variant. Only an alias yields to a known type; ordinary values and import privacy retain their lookup. See [[Variant Namespace Delivery]].
+
+## Imported variant candidates (#775)
+
+Delegate E2012 candidate policy to Resolve Ambiguity. Pass the already selected lexical symbol into refusal; normal single-name resolution retains one scope lookup. Imported ambiguous aliases may yield to a known type qualifier like local variants, while ordinary values retain precedence.
+
+Resolved Grill Log: preserve complete declaring-owner ambiguity at uses across imports, lexical shadows and generated syntax. See [[Imported Variant Delivery]].
+
+Resolved type-head control: imported candidates retain an export-index TypeSpace flag; PathUse preserves C.First.Chosen qualification without admitting ambiguous value fields. Syntactically named member paths preserve head spans. See [[Imported Variant Delivery]].
