@@ -125,3 +125,9 @@ Allocation now doubles with the module count (x2.0 per doubling, from x3.0–x3.
 
 [[src/Pudu/Type/_MOC]] · [[Type Interface]] · [[Type Check Import]] · [[Type Check Install]] ·
 [[Compiler Program]] · [[2026-09-21-interface-graph]]
+
+## Constructor binding identity (#774)
+
+Installed graph snapshots preserve NameBinding roles alongside schemes; consumer alias overlays copy those immutable bindings without sharing live inference state.
+
+Resolved Grill Log: identity belongs to the selected binding; schemes remain type-only and ordinary shadows clear constructor roles. See [[Constructor Binding Delivery]].

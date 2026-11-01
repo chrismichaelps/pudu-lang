@@ -216,3 +216,9 @@ Resolved Grill Log: known concrete identity, lexical admission, module-export pr
 namedVariantAsValue accepts the already resolved binding type and queries field names under its nominal result owner. Bare names and namespace members check once before instantiating. Lexical receiver admission precedes namespace lookup; unrelated member basenames cannot trigger refusal.
 
 Resolved Grill Log: field names and payload types come from one resolved owner/variant key. No runtime representation or field evaluation order changes in this partition. See [[Named Payload Field Delivery]].
+
+## Constructor binding identity (#774)
+
+Namespace name/member lookup consumes lookupBinding once. ValueBinding instantiates normally. ConstructorBinding uses its original label for named-value refusal and records the checked owner/label for executable lowering only when admitted. Never classify an ordinary value by spelling or result type.
+
+Resolved Grill Log: identity belongs to the selected binding; schemes remain type-only and ordinary shadows clear constructor roles. See [[Constructor Binding Delivery]].

@@ -251,3 +251,9 @@ Resolved Grill Log: separate semantic roles even at identical generated spans. N
 The detailed owner product carries OwnerSelection; provider products retain NominalId.
 
 Resolved Grill Log: carry checked owner and field order through syntax; preserve authored effects, diagnostics and cache identity. See [[Named Sum Publication]].
+
+## Constructor binding identity (#774)
+
+Declare local sum variants through bindConstructorName with the formed owner and original label. Other signatures remain ordinary bindings.
+
+Resolved Grill Log: identity belongs to the selected binding; schemes remain type-only and ordinary shadows clear constructor roles. See [[Constructor Binding Delivery]].

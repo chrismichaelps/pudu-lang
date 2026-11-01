@@ -17,6 +17,7 @@ import Pudu.Frontend.Syntax.Name (ModuleName (..))
 import Pudu.Type.Env
   ( Checker
   , bindName
+  , bindConstructorName
   )
 import Pudu.Type.Value
   ( NominalId (..)
@@ -38,12 +39,12 @@ import Pudu.Type.Value
     declares its own `Ok` shadows this binding rather than colliding with it. -}
 declareBuiltinConstructors :: Checker ()
 declareBuiltinConstructors = do
-  bindName "Some"
+  bindConstructorName "Option" "Some"
     (polytype [("T", 0)] [] (FunctionTypeValue False [RigidType "T"] optionOf))
-  bindName "None" (polytype [("T", 0)] [] optionOf)
-  bindName "Ok"
+  bindConstructorName "Option" "None" (polytype [("T", 0)] [] optionOf)
+  bindConstructorName "Result" "Ok"
     (polytype [("T", 0), ("E", 0)] [] (FunctionTypeValue False [RigidType "T"] resultOf))
-  bindName "Err"
+  bindConstructorName "Result" "Err"
     (polytype [("T", 0), ("E", 0)] [] (FunctionTypeValue False [RigidType "E"] resultOf))
   {-| The one conversion that cannot be written in the language: a scalar value
       is an integer, and a character is not a one-element string, so nothing in

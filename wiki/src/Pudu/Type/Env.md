@@ -269,3 +269,9 @@ Resolved Grill Log: carry checked owner and field order through syntax; preserve
 recordVariantOwner also carries positional constructor selections with an empty field list. Record-expression facts retain named storage order; expression shape determines projection. Provider facts remain separate.
 
 Resolved Grill Log: checked canonical identity must survive lowering even when a type and a bare variant share text. No runtime owner inference or source syntax change. See [[Variant Namespace Delivery]].
+
+## Constructor binding identity (#774)
+
+NameBinding distinguishes ValueBinding Scheme and ConstructorBinding NominalId Text Scheme. Frames and InstalledNames retain it; bindName creates ordinary bindings, bindConstructorName marks declarations, aliasName copies complete selected bindings. lookupBinding exposes the nearest role and scheme in one lookup; lookupName/lookupLocalName/finalSchemes preserve their scheme-only interfaces.
+
+Resolved Grill Log: identity belongs to the selected binding; schemes remain type-only and ordinary shadows clear constructor roles. See [[Constructor Binding Delivery]].

@@ -60,3 +60,9 @@ installWanted
 ## Referenced by
 
 [[src/Pudu/Type/_MOC]] · [[Type Interface Graph]] · [[Type Check Import]]
+
+## Constructor binding identity (#774)
+
+Declare interface constructors with binding identity and publish values through aliasName, preserving their role and existing restriction inheritance.
+
+Resolved Grill Log: identity belongs to the selected binding; schemes remain type-only and ordinary shadows clear constructor roles. See [[Constructor Binding Delivery]].

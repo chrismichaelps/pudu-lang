@@ -91,3 +91,9 @@ DEPTH 0.64 (MEDIUM). The module isolates canonical interface installation and ke
 ## Referenced by
 
 [[Type Check]] · [[src/Pudu/Type/_MOC]] · [[Type Interface Graph]] · [[Type Check Install]]
+
+## Constructor binding identity (#774)
+
+Consumer selected/qualified value aliases copy the complete canonical binding with aliasName; preserve restriction inheritance and visible-trait filtering.
+
+Resolved Grill Log: identity belongs to the selected binding; schemes remain type-only and ordinary shadows clear constructor roles. See [[Constructor Binding Delivery]].

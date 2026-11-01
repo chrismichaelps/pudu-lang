@@ -314,5 +314,58 @@ try {
     run(expected, mode, cache);
     assert.deepEqual(entries(), stored, 'warm constructors keep the checked type qualifier');
   }
+  writeFileSync(join(scratch, 'Model.pudu'), [
+    'module Model', 'export type Token = Token | Number(Int)',
+    'export type Event = Empty | HELD{value: Int}',
+    'export type Box = Box(Int) | Vacant',
+  ].join('\n') + '\n');
+  writeFileSync(join(scratch, 'Values.pudu'), [
+    'module Values', 'import Model as M',
+    'export const HELD: M.Event = M.Event.HELD{value: 7}',
+  ].join('\n') + '\n');
+  for (const [header, unit, tuple, owner] of [
+    [['type Token = Token | Number(Int)', 'type Box = Box(Int) | Vacant'], 'Token', 'Box', ''],
+    [['import Model { Token, Box }'], 'Token', 'Box', ''],
+    [['import Model as M'], 'M.Token', 'M.Box', 'M.'],
+  ]) {
+    writeFileSync(file, ['module Main', ...header,
+      `const SAVED: ${owner}Token = ${unit}`,
+      'export fn main() -> Int {', `  let value = ${unit}`, `  let create = ${tuple}`,
+      '  print(show(create(9)))', '  match value {',
+      `    case ${owner}Token.Token => print("unit")`,
+      `    case ${owner}Token.Number(_) => panic("unit binding")`, '  }',
+      '  print(show(SAVED))', '  0', '}',
+    ].join('\n') + '\n');
+    const checked = call('check');
+    assert.equal(checked.status, 0, checked.stdout + checked.stderr);
+    for (const mode of ['tree', 'compiled']) {
+      run('Box(9)\nunit\nToken\n', mode);
+      rmSync(cache, {recursive: true, force: true});
+      run('Box(9)\nunit\nToken\n', mode, cache);
+      const stored = entries();
+      run('Box(9)\nunit\nToken\n', mode, cache);
+      assert.deepEqual(entries(), stored, 'warm bare constructors retain selected bindings');
+    }
+  }
+  for (const [imports, expression] of [
+    [['import Model as M', 'import Values { HELD }'], 'HELD'],
+    [['import Model as M', 'import Values as V'], 'V.HELD'],
+  ]) {
+    writeFileSync(file, ['module Main', ...imports, 'export fn main() -> Int {',
+      `  let value = ${expression}`, '  print(show(value))',
+      '  match value {', '    case M.Event.HELD{value} => value - 7',
+      '    case M.Event.Empty => 1', '  }', '}',
+    ].join('\n') + '\n');
+    const checked = call('check');
+    assert.equal(checked.status, 0, checked.stdout + checked.stderr);
+    for (const mode of ['tree', 'compiled']) {
+      run('HELD{value: 7}\n', mode);
+      rmSync(cache, {recursive: true, force: true});
+      run('HELD{value: 7}\n', mode, cache);
+      const stored = entries();
+      run('HELD{value: 7}\n', mode, cache);
+      assert.deepEqual(entries(), stored, 'ordinary constants keep value bindings');
+    }
+  }
 } finally { rmSync(scratch, {recursive: true, force: true}); }
 console.log('Sums retain canonical owners, named storage order and patterns across calls, caches and tasks');

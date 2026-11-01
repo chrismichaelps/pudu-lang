@@ -53,3 +53,9 @@ Resolved Grill Log: declaration identity is owner-scoped; ambiguity belongs at a
 Cover known type names that share variant labels in qualified calls and patterns; keep bare-label E2012 refusal.
 
 Resolved Grill Log: an already qualified path must not be refused as a bare variant. Only an alias yields to a known type; ordinary values and import privacy retain their lookup. See [[Variant Namespace Delivery]].
+
+## Constructor binding identity (#774)
+
+Extend source cases for bare constructors sharing type names, selected/module-aliased imports, retained/folded values and ordinary constants matching named-variant schemes. Keep named-constructor refusals and scope/duplicate regressions in both evaluators and cache modes.
+
+Resolved Grill Log: identity belongs to the selected binding; schemes remain type-only and ordinary shadows clear constructor roles. See [[Constructor Binding Delivery]].
