@@ -68,6 +68,7 @@ module Pudu.Type.Env
   , recordProvider
   , recordOwner
   , recordVariantOwner
+  , recordImplementationOwner
   , recordPatternTest
   , patternTests
   , noteStaticTrait
@@ -570,6 +571,11 @@ isStaticTrait owner = Checker $ \state -> (Set.member owner (stateStaticTraits s
 recordProvider :: Span -> NominalId -> Checker ()
 recordProvider at owner = Checker $ \state ->
   ((), state{stateProvidersRev = (at, owner) : stateProvidersRev state})
+
+{-| A checked implementation target retains its full alias-expanded parameter shape. -}
+recordImplementationOwner :: Span -> Type -> Checker ()
+recordImplementationOwner at target = Checker $ \state ->
+  ((), state{stateOwnersRev = (at, ImplementationOwner target) : stateOwnersRev state})
 
 {-| Concrete identity is distinct from a trait provider at the same span. -}
 recordOwner :: Span -> NominalId -> Checker ()

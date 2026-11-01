@@ -46,6 +46,7 @@ import Pudu.Frontend.Syntax.Tree (Capability (..))
 data OwnerSelection
   = ConcreteOwner !NominalId
   | VariantOwner !NominalId !Text ![Text]
+  | ImplementationOwner !Type
   deriving stock (Eq, Show)
 
 {-| How many of a function's parameters a call must supply.

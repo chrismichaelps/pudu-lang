@@ -34,7 +34,7 @@ import Pudu.Frontend.Syntax.Name (ModuleName (..))
 import Pudu.Frontend.Syntax.Tree
 import Pudu.IntegerLiteral (IntegerKind, parseIntegerLiteral)
 import Pudu.Source (Span)
-import Pudu.Type.Value (Type (..), OwnerSelection (..), NominalId, nominalKey)
+import Pudu.Type.Value (Type (..), OwnerSelection (..), NominalId, nominalKey, capabilityList)
 
 {-| The module with every integer literal in expression position resolved to
     the kind checking gave its span. -}
@@ -83,6 +83,15 @@ typeSyntax spanValue held = Located spanValue $ case held of
     first : rest -> NamedType (ModuleName (first :| rest)) (map recurse arguments)
     [] -> InvalidType
   RigidType name -> NamedType (ModuleName (NonEmpty.singleton name)) []
+  AppliedType headType arguments -> case locatedValue (recurse headType) of
+    NamedType path prefix -> NamedType path (prefix <> map recurse arguments)
+    _ -> InvalidType
+  DynamicTypeValue owner -> case locatedValue (recurse (NominalType owner [])) of
+    NamedType path _ -> DynamicType path
+    _ -> InvalidType
+  FunctionTypeValue asynchronous inputs result -> FunctionType asynchronous (map recurse inputs) (recurse result)
+  RestrictedType capabilities target -> UnsafeType (map (Located spanValue) (capabilityList capabilities)) (recurse target)
+  NeverType -> NamedType (ModuleName (NonEmpty.singleton "Never")) []
   TupleTypeValue members -> TupleType (map recurse members)
   ReferenceTypeValue mutable target -> ReferenceType mutable (recurse target)
   UnitTypeValue -> UnitType
@@ -135,7 +144,7 @@ instance (Walk a, Typeable a) => Walk (Located a) where
           let selected = case Map.lookup spanValue (factOwners kinds) of
                 Just (VariantOwner owner label names) -> ModuleName ("::sum::" :| (nominalKey owner : label : names))
                 Just (ConcreteOwner owner) -> ModuleName (nominalKey owner :| [])
-                Nothing -> ModuleName (NonEmpty.last path :| [])
+                _ -> ModuleName (NonEmpty.last path :| [])
            in Located spanValue (RecordExpression selected (walk kinds fields))
       | not (factOwnersOnly kinds), LiteralExpression literal <- value ->
           Located spanValue (LiteralExpression (resolveOne (factKinds kinds) spanValue literal))
@@ -249,7 +258,11 @@ instance Walk Impl where
   walk facts value = projected{implTarget = selectedTarget}
    where
     projected = to (gwalk facts (from value))
-    selectedTarget = case implTarget projected of
+    selectedTarget = case Map.lookup (locatedSpan (implTarget value)) (factOwners facts) of
+      Just (ImplementationOwner target) | not (factOwnersOnly facts) ->
+        typeSyntax (locatedSpan (implTarget value)) target
+      _ -> legacyTarget
+    legacyTarget = case implTarget projected of
       Located at (NamedType _ arguments)
         | not (factOwnersOnly facts), Just (ConcreteOwner owner) <- Map.lookup (locatedSpan (implTarget value)) (factOwners facts)
         , Located _ (NamedType path _) <- typeSyntax at (NominalType owner []) ->
