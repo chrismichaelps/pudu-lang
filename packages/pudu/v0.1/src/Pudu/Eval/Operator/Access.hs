@@ -99,6 +99,9 @@ readMember spanValue value member = case value of
   RecordValue owner fields -> case lookup member fields of
     Just found -> pure found
     Nothing -> readMethod spanValue value owner member
+  NamedSumValue owner _ fields -> case lookup member fields of
+    Just found -> pure found
+    Nothing -> readMethod spanValue value owner member
   {-| Owned sums select only their canonical implementation namespace.
       The registry remains a fallback for legacy ownerless host values. -}
   SumValue carried name _

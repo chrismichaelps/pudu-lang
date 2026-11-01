@@ -32,8 +32,8 @@ renderValue value = case value of
   UnitValue -> "()"
   TupleValue members -> "(" <> Text.intercalate ", " (map renderValue members) <> ")"
   ArrayValue members -> "[" <> Text.intercalate ", " (map renderValue (toList members)) <> "]"
-  RecordValue name fields ->
-    snd (Text.breakOnEnd "." name) <> "{" <> Text.intercalate ", " (map renderField fields) <> "}"
+  RecordValue name fields -> renderRecord (snd (Text.breakOnEnd "." name)) fields
+  NamedSumValue _ name fields -> renderRecord name fields
   VariantValue name payload
     | null payload -> name
     | otherwise -> name <> "(" <> Text.intercalate ", " (map renderValue payload) <> ")"
@@ -84,6 +84,7 @@ renderValue value = case value of
       [Text.pack (show key) <> ": " <> renderValue held | (key, held) <- IntMap.toAscList entries]
       <> "]"
  where
+  renderRecord name fields = name <> "{" <> Text.intercalate ", " (map renderField fields) <> "}"
   renderField (name, fieldValue) = name <> ": " <> renderValue fieldValue
 
   hexPair byte =
@@ -119,6 +120,7 @@ valueKind value = case value of
   RangeMethodValue _ _ -> "range method"
   RecordValue name _ -> snd (Text.breakOnEnd "." name)
   VariantValue name _ -> name
+  NamedSumValue _ name _ -> name
   FunctionValue _ -> "function"
   TaskValue _ _ _ -> "task"
   BuiltinValue _ -> "builtin"

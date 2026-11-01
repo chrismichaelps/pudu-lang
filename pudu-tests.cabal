@@ -121,6 +121,7 @@ test-suite pudu-test
     Pudu.Eval.LoopStepSpec
     Pudu.Runtime.SeriesMapSpec
     Pudu.Eval.DataSpec
+    Pudu.Eval.NamedSumSpec
     Pudu.Eval.FunctionClosureSpec
     Pudu.Eval.SystemSpec
     Pudu.Eval.MutexSpec

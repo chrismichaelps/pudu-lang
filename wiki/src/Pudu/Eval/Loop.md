@@ -107,3 +107,9 @@ compiler expansion and ordinary constant evaluation from drifting apart.
 Owned positional sums dispatch only through the owner carried by the value. Legacy ownerless host values and named payloads retain their existing lookup path until the remaining #761 audit; a tag cannot override a carried owner.
 
 Resolved Grill Log: identity comes from the declaration or native ABI, not a global short-tag registry. Keep labels, evaluation order, effects and wire bytes stable. See [[Positional Sum Owner Delivery]].
+
+## Named sum value foundation (#761)
+
+Use carried named-sum ownership for direct and generic sequence method selection. Without a Sequence implementation, iterate stored field values under the same sum payload fallback as positional sums; declaration-order storage remains the construction caller’s invariant.
+
+Resolved Grill Log: represent named sums independently of ordinary records and positional sums. Preserve existing field order and public labels. Source publication follows in its own tested partition. See [[Named Sum Value Delivery]].

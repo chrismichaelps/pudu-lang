@@ -112,6 +112,7 @@ data Value
   | SetValue !(Set OrdValue)
   | RecordValue !Text ![(Text, Value)]
   | SumValue !Text !Text ![Value]
+  | NamedSumValue !Text !Text ![(Text, Value)]
   | FunctionValue !Closure
   | TaskValue !Closure ![(Text, Value)] !(Maybe Span)
   | BuiltinValue !Builtin
@@ -214,7 +215,7 @@ coreVariantOwner name = case name of
   "Err" -> "Result"
   _ -> ""
 
-{-# COMPLETE IntValue, FloatValue, DecimalValue, StrValue, BytesValue, BucketsValue, RangeValue, CharValue, BoolValue, NullValue, UnitValue, TupleValue, ArrayValue, MapValue, SetValue, RecordValue, VariantValue, FunctionValue, TaskValue, BuiltinValue, ArrayMethodValue, StringMethodValue, CharMethodValue, MapMethodValue, SetMethodValue, RangeMethodValue, BytesMethodValue, BucketsMethodValue, TextMethodValue, ForeignValue, ForeignHandleValue, TypeWitnessValue #-}
+{-# COMPLETE IntValue, FloatValue, DecimalValue, StrValue, BytesValue, BucketsValue, RangeValue, CharValue, BoolValue, NullValue, UnitValue, TupleValue, ArrayValue, MapValue, SetValue, RecordValue, VariantValue, NamedSumValue, FunctionValue, TaskValue, BuiltinValue, ArrayMethodValue, StringMethodValue, CharMethodValue, MapMethodValue, SetMethodValue, RangeMethodValue, BytesMethodValue, BucketsMethodValue, TextMethodValue, ForeignValue, ForeignHandleValue, TypeWitnessValue #-}
 
 {-| Aggregate equality follows numeric Decimal equality without changing the
     retained scale or the identity of closures and foreign handle claims. -}
@@ -240,6 +241,7 @@ instance Eq Value where
     (UnitValue, UnitValue) -> True
     (RecordValue tagA a, RecordValue tagB b) -> tagA == tagB && a == b
     (SumValue ownerA tagA a, SumValue ownerB tagB b) -> ownerA == ownerB && tagA == tagB && a == b
+    (NamedSumValue ownerA tagA a, NamedSumValue ownerB tagB b) -> ownerA == ownerB && tagA == tagB && a == b
     (ArrayMethodValue tagA a, ArrayMethodValue tagB b) -> tagA == tagB && a == b
     (StringMethodValue tagA a, StringMethodValue tagB b) -> tagA == tagB && a == b
     (CharMethodValue tagA a, CharMethodValue tagB b) -> tagA == tagB && a == b
@@ -418,6 +420,8 @@ compareValues left right = case (left, right) of
     compare nameA nameB <> compareFields a b
   (SumValue ownerA nameA a, SumValue ownerB nameB b) ->
     compare ownerA ownerB <> compare nameA nameB <> compareLists a b
+  (NamedSumValue ownerA nameA a, NamedSumValue ownerB nameB b) ->
+    compare ownerA ownerB <> compare nameA nameB <> compareFields a b
   _ -> compare (shapeRank left) (shapeRank right)
 
 compareIndexed :: [(Int, Value)] -> [(Int, Value)] -> Ordering
@@ -491,3 +495,4 @@ shapeRank value = case value of
   RangeMethodValue _ _ -> 28
   TextMethodValue _ -> 29
   TypeWitnessValue _ _ -> 30
+  NamedSumValue{} -> 31

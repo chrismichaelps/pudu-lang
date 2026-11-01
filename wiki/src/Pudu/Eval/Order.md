@@ -97,3 +97,9 @@ DEPTH 0.50 (MEDIUM). One total order and one honest refusal.
 ## Text method comparability (#347)
 
 `TextMethodValue` is not comparable, as no partially applied method is.
+
+## Named sum value foundation (#761)
+
+NamedSumValue is comparable exactly when every stored field value is comparable; ownership and distinct shape ordering remain in Eval Value.
+
+Resolved Grill Log: represent named sums independently of ordinary records and positional sums. Preserve existing field order and public labels. Source publication follows in its own tested partition. See [[Named Sum Value Delivery]].
