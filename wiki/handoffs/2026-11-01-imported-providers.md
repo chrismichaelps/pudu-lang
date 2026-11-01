@@ -67,10 +67,13 @@ products. No source edits follow the clean full-gate start.
 
 PR #779 merged as 308130087 after full local and hosted checks passed.
 The full gate exposed static-owner receiver annotation regressions.
-Static regressions pass after separating static scheme admission from receiver
-evidence. The stale diagnostic-only suite was stopped after capturing failures.
-Exact next action: observe full gate 43729 without restarting it; then measure
-the clean committed tree and publish #734 if every gate passes.
+Static regressions and every clean full optimized gate pass at 27608bbe.
+The stale diagnostic-only suite was stopped after capturing failures. All 1,620
+stage frames pass; three snapshots match the prior stage byte for byte.
+Median render means: cubes 23.157 ms, bodies 24.345 ms, waves 22.741 ms on M1;
+no speedup or 60 Hz claim. PR #780 contains the bounded delivery.
+Exact next action: require hosted checks on #780, merge to dev if green,
+then revalidate and repair #735 before continuing the Binary facade.
 
 ## Referenced by
 

@@ -5,7 +5,7 @@ tags: [changelog]
 
 # Changelog
 
-- 2026-11-01: Separate static-owner admission from receiver-provider annotation (#734); preserve Array/Option derive and structural static-owner selections.
+- 2026-11-01: Separate static-owner admission from receiver-provider annotation (#734); full optimized gates pass, and 1,620 stage frames preserve all three snapshots.
 
 - 2026-10-31: Named record patterns retain canonical owners and check nominal compatibility; checked pattern facts distinguish dynamic tests from static destructuring (#761). Full optimized gates pass, and hosted CI now registers the five local owner/provider regression gates. Named payload identity remains required.
 
