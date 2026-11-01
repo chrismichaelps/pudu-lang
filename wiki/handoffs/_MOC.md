@@ -240,3 +240,5 @@ tags: [moc, handoff]
 - [[Positional Sum Owner Delivery]] — positional constructor identity, issue #761.
 
 - [[2026-10-30-pattern-owners|Constructor Pattern Owner Delivery]]
+
+- [[2026-10-31-record-pattern-owners|Record Pattern Owner Delivery]]

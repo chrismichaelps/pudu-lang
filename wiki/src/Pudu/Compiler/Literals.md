@@ -97,3 +97,9 @@ Resolved Grill Log: known concrete identity, lexical admission, module-export pr
 Project resolved positional ConstructorPattern owners into one internal canonical owner/tag path symbol only for executable syntax. Recurse into payload patterns; authored tooling paths and owner-only printable projections remain unchanged.
 
 Resolved Grill Log: preserve declaration identity through checking, executable projection and usefulness; no per-match span lookup. See [[Constructor Pattern Owner Delivery]].
+
+## Record pattern identity (#761)
+
+Project checked ordinary RecordPattern paths with owner facts into one canonical owner symbol only in executable syntax. Preserve fields/rest/spans and recurse into nested patterns; named sum payloads without record facts retain their existing representation.
+
+Resolved Grill Log: canonical identity and subject-sensitive refutability must agree before evaluation. See [[Record Pattern Owner Delivery]].
