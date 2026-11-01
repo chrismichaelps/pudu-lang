@@ -51,3 +51,11 @@ Requires [[Resolve Context]], [[Source]] and [[Syntax Name]]. Referenced by
 Member heads and multi-segment constructor paths use resolveQualifierName. A one-segment constructor keeps resolveValueName, so a bare label remains ambiguous. Preserve the generated-provenance skip boundary.
 
 Resolved Grill Log: an already qualified path must not be refused as a bare variant. Only an alias yields to a known type; ordinary values and import privacy retain their lookup. See [[Variant Namespace Delivery]].
+
+## Imported variant candidates (#775)
+
+Check imported variant suffixes only in value/member/constructor paths, preserving canonical generated provenance skips. Type paths remain untouched. Reuse the existing head reference span; imported value diagnostics use the selected expression span and never duplicate empty-suffix refusals.
+
+Resolved Grill Log: preserve complete declaring-owner ambiguity at uses across imports, lexical shadows and generated syntax. See [[Imported Variant Delivery]].
+
+Resolved type-head control: imported candidates retain an export-index TypeSpace flag; PathUse preserves C.First.Chosen qualification without admitting ambiguous value fields. Syntactically named member paths preserve head spans. See [[Imported Variant Delivery]].

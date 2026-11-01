@@ -10,7 +10,7 @@ tags: [module, resolution]
 
 ## Purpose and interface
 
-Own the invocation-local ResolveState record, Resolver action constructor, pure action instances and initialState. [[Resolve Context]] retains abstract public operations and freezes products. Context is the sole consumer of mutable-in-description state mechanics; the implementation is pure explicit state threading.
+Own the invocation-local ResolveState record, Resolver action constructor, pure action instances and initialState. [[Resolve Context]] retains abstract public operations and freezes products. Context owns scope and symbol mechanics; Resolve Ambiguity owns its candidate registry and diagnostic append. The implementation is pure explicit state threading.
 
 ## Algorithm and invariants
 
@@ -34,3 +34,11 @@ No source loading, global state, typing, import projection or diagnostics policy
 Replace stateAmbiguous with empty invocation-local Map Text (Map Text Symbol) candidate storage, keyed by spelling then declaring type. Preserve all other state, symbol IDs and scope mechanics.
 
 Resolved Grill Log: declaration identity is owner-scoped; ambiguity belongs at an unqualified use and respects the selected lexical binding. See [[Variant Namespace Delivery]].
+
+## Imported variant candidates (#775)
+
+Add an empty invocation-local imported-candidate map keyed by SymbolId and suffix path. Resolve Ambiguity is a narrow peer consumer for candidate policy and diagnostic append; Context retains scope mutation, symbol allocation and final sorted products. All other state behavior remains unchanged.
+
+Resolved Grill Log: preserve complete declaring-owner ambiguity at uses across imports, lexical shadows and generated syntax. See [[Imported Variant Delivery]].
+
+Resolved type-head control: imported candidates retain an export-index TypeSpace flag; PathUse preserves C.First.Chosen qualification without admitting ambiguous value fields. Syntactically named member paths preserve head spans. See [[Imported Variant Delivery]].
