@@ -245,3 +245,9 @@ See [[Bound Provider Delivery]].
 Collect canonical concrete-owner facts separately from trait-provider facts, including when generated declarations share source anchors. Publish owners with each module check; never retain per-module facts in interface snapshots.
 
 Resolved Grill Log: separate semantic roles even at identical generated spans. No runtime span lookup, provider overwrite or shortened owner. See [[Canonical Runtime Owner Delivery]].
+
+## Record pattern identity (#761)
+
+Add checker-local recordPatternTest :: Span -> Checker () and patternTests :: Checker (Set Span), with an initially empty set. Do not carry per-module test facts through installed interface snapshots or published executable facts.
+
+Resolved Grill Log: canonical identity and subject-sensitive refutability must agree before evaluation. See [[Record Pattern Owner Delivery]].

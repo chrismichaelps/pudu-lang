@@ -38,7 +38,7 @@ checkExhaustive :: DeclaredTypes -> Span -> Type -> [Located MatchArm] -> Checke
 - Only a test whose whole extent is one name or one literal is recorded as taken. `case Ok(1)` names part of `Ok`, so it takes nothing and a later `case Ok(n)` stays reachable — the same rule that already stops `case Ok(1)` from claiming coverage.
 - An alternative takes what its branches take, and only when every branch is nameable. `case Red | Green` takes both, so a later `case Red` is dead; a later `case Green | Blue` is not, because it names something new.
 - **Naming a variant is a test, not a binding.** `case Circle{radius}` matches one variant of several, so it is refutable and covers `Circle` only when its fields bind rather than test — the rule `case Ok(1)` already followed. A record type's own `case Boxed{value}` names no variant and stays irrefutable, which is what it has always been.
-- Which names are variants is asked once per name the arms mention, rather than at every recursive step, because the answer cannot change within one match.
+- Record-pattern refutability uses checker-local complete-span facts captured once per match, preserving named-sum tests and subject-sensitive dynamic narrowing.
 - A guarded arm takes nothing, for the reason it covers nothing. It may still be reported unreachable, because an earlier unguarded arm that took its pattern leaves no value for the guard to run on.
 - Checking runs after the arms have been typed, so a scrutinee whose type failed produces no coverage complaint on top of the type error.
 - Closed sum domains are keyed by canonical `NominalId`, not the displayed basename, so imported sums with the same declaration name retain distinct constructor sets.
@@ -99,3 +99,9 @@ DEPTH 0.55 (MEDIUM). It hides refutability, guard handling, and domain classific
 checkExhaustive receives DeclaredTypes. TakenConstructor includes canonical NominalId plus label; resolve through variantForPath so aliases agree and unrelated declarations differ. Unknown owners contribute no taken key. Preserve guards, alternatives and all correlated matrix checks.
 
 Resolved Grill Log: preserve declaration identity through checking, executable projection and usefulness; no per-match span lookup. See [[Constructor Pattern Owner Delivery]].
+
+## Record pattern identity (#761)
+
+Use the captured checker-local pattern-test span set for record irrefutability, including nested fields. Remove global basename-based record classification. Ordinary record taken keys use canonical owner and an empty variant tag; sum variant keys keep canonical owner and label. Preserve correlated payload matrices, guards and alternatives.
+
+Resolved Grill Log: canonical identity and subject-sensitive refutability must agree before evaluation. See [[Record Pattern Owner Delivery]].

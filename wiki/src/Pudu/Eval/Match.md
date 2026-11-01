@@ -82,7 +82,7 @@ DEPTH 0.45 (MEDIUM). It keeps one concern out of [[Evaluator]], which would othe
 
 ## Canonical record owners (#761)
 
-A checked named record pattern compares its authored final label with the final label of the retained canonical runtime owner. Record equality continues comparing complete owner identity. Named sum variants retain their existing tag checks.
+A checked ordinary named record pattern retains and compares complete canonical owner identity. Raw host patterns keep legacy short-label checks. Record equality compares complete owner identity; named sum payload representation remains a separate repair.
 
 Resolved Grill Log: identity comes from the checked declaration, never import order or a basename guess. Preserve observable labels, lexical shadowing, field effects and failure provenance; no runtime filesystem lookup. See [[Canonical Runtime Owner Delivery]].
 
@@ -97,3 +97,9 @@ Resolved Grill Log: identity comes from the declaration or native ABI, not a glo
 A projected positional constructor pattern compares its complete canonical owner/tag with SumValue before recursively matching payloads. Raw host patterns keep legacy short-tag admission. Ordinary record and named-payload patterns remain separate owner audits.
 
 Resolved Grill Log: preserve declaration identity through checking, executable projection and usefulness; no per-match span lookup. See [[Constructor Pattern Owner Delivery]].
+
+## Record pattern identity (#761)
+
+A projected named record pattern compares its complete canonical owner with RecordValue. Anonymous patterns still test fields alone; raw host-authored patterns retain short-label compatibility. Positional sum matching stays canonical.
+
+Resolved Grill Log: canonical identity and subject-sensitive refutability must agree before evaluation. See [[Record Pattern Owner Delivery]].

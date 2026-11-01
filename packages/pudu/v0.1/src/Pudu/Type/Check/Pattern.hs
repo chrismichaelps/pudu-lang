@@ -33,6 +33,7 @@ import Pudu.Type.Env
   , lookupVariantIn
   , report
   , recordOwner
+  , recordPatternTest
   )
 import Pudu.Type.Unify (unify, zonk)
 import Pudu.Type.Substitute (substituteRigid)
@@ -169,6 +170,7 @@ bindPattern declared rigid (Located patternSpan pattern') subjectType = case pat
     variantShape <- namedVariantShapeFor declared path
     case variantShape of
       Just (owner, ownerParams, declaredShape) -> do
+        recordPatternTest patternSpan
         replacements <- freshFor ownerParams
         let ownerType = NominalType owner (map snd replacements)
             expected =
@@ -190,11 +192,33 @@ bindPattern declared rigid (Located patternSpan pattern') subjectType = case pat
                   ]
             mapM_ (bindFieldPattern declared rigid errorFields) fields
           else do
-            declaredFieldTypes <- recordFieldsFor declared path subjectType
+            declaredFieldTypes <- checkedRecordFields declared patternSpan path subjectType
             mapM_ (bindFieldPattern declared rigid declaredFieldTypes) fields
   AlternativePattern alternatives ->
     mapM_ (\alternative -> bindPattern declared rigid alternative subjectType) alternatives
   InvalidPattern -> pure ()
+
+{-| A named record pattern checks the declaration it names, including through
+    a dynamic view; its fields use that same instantiated owner. -}
+checkedRecordFields :: DeclaredTypes -> Span -> Maybe ModuleName -> Type -> Checker [(Text, Type)]
+checkedRecordFields declared at path subjectType =
+  case path >>= \written -> Map.lookup (moduleNameText written) (declaredNames declared) of
+    Just owner -> do
+      fields <- lookupField owner
+      case fields of
+        Just _ -> do
+          resolved <- throughReferences <$> zonk subjectType
+          parameters <- maybe [] id <$> lookupTypeParams owner
+          replacements <- freshFor parameters
+          let ownerType = NominalType owner (map snd replacements)
+          _ <- unify at resolved ownerType
+          recordOwner at owner
+          case resolved of
+            DynamicTypeValue _ -> recordPatternTest at
+            _ -> pure ()
+          recordFieldsFor declared path ownerType
+        Nothing -> recordFieldsFor declared path subjectType
+    Nothing -> recordFieldsFor declared path subjectType
 
 {-| A generic sum is instantiated at every pattern, so matching `Wrap(1)` gives
     the payload `Int` rather than the declaration's rigid parameter. -}

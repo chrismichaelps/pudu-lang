@@ -73,6 +73,92 @@ try {
     assert.notEqual(wrong.status, 0);
     assert.match(wrong.stdout + wrong.stderr, /E3001/);
     assert.match(wrong.stdout + wrong.stderr, /Main\.pudu:\d+:\d+/);
+    const narrowing = [...declarations, 'type Holder = { value: dynamic Label }',
+      'fn inspect(value: dynamic Label) -> Str {', '  match value {',
+      '    case A.Item{value: 99} => "partial"',
+      '    case A.Item{value: _} if false => "guarded"',
+      '    case A.Item{value: _} => "first"', '    case B.Item{value: _} => "second"',
+      '    case _ => "other"', '  }', '}',
+      'fn conditional(value: dynamic Label) -> Str {',
+      '  if let A.Item{value: _} = value { "first" } else { "other" }', '}',
+      'fn fallback(value: dynamic Label) -> Str {',
+      '  let A.Item{value: _} = value else { return "other" }', '  "first"', '}',
+      'fn nested(value: Holder) -> Str {', '  match value {',
+      '    case Holder{value: A.Item{value: _}} => "nested first"',
+      '    case Holder{value: B.Item{value: _}} => "nested second"',
+      '    case _ => "other"', '  }', '}',
+      ...main, '  print(inspect(first))', '  print(inspect(second))',
+      '  print(conditional(first))', '  print(conditional(second))',
+      '  print(fallback(first))', '  print(fallback(second))',
+      '  print(nested(Holder{value: first}))', '  print(nested(Holder{value: second}))',
+      '  0', '}',
+    ];
+    writeFileSync(file, narrowing.join('\n') + '\n');
+    const checked = call('check');
+    assert.equal(checked.status, 0, checked.stdout + checked.stderr);
+    assert.doesNotMatch(checked.stdout + checked.stderr, /W5001/);
+    for (const mode of ['tree', 'compiled']) {
+      let stored;
+      for (const caching of ['off', cache, cache]) {
+        const result = call('run', mode, caching);
+        assert.equal(result.status, 0, result.stdout + result.stderr);
+        assert.equal(result.stdout, 'first\nsecond\nfirst\nother\nfirst\nother\nnested first\nnested second\n');
+        if (caching === cache) {
+          if (stored) assert.deepEqual(entries(), stored);
+          stored = entries();
+        }
+      }
+    }
+    for (const [subject, fallback, code] of [
+      ['dynamic Label', '', 'E5001'], ['B.Item', '    case _ => "other"', 'E3001'],
+    ]) {
+      writeFileSync(file, [...declarations, `fn invalid(value: ${subject}) -> Str {`,
+        '  match value {', '    case A.Item{value: _} => "first"', fallback, '  }', '}',
+        'export fn main() -> Int { 0 }',
+      ].join('\n') + '\n');
+      const bad = call('check');
+      assert.notEqual(bad.status, 0);
+      assert.match(bad.stdout + bad.stderr, new RegExp(code));
+      assert.match(bad.stdout + bad.stderr, /Main\.pudu:\d+:\d+/);
+    }
+    writeFileSync(file, ['module Main', 'import Contract { Label }', ...imports, 'import First as Again',
+      'fn repeated(value: dynamic Label) -> Str {', '  match value {',
+      '    case A.Item{value: _} => "first"', '    case Again.Item{value: _} => "repeated"',
+      '    case _ => "other"', '  }', '}', 'export fn main() -> Int { 0 }',
+    ].join('\n') + '\n');
+    const repeated = call('check');
+    assert.equal(repeated.status, 0, repeated.stdout + repeated.stderr);
+    assert.equal((repeated.stdout + repeated.stderr).match(/W5001/g)?.length, 1);
+    writeFileSync(file, [...declarations, 'type Outsider = { value: Int }',
+      'fn forbidden(value: dynamic Label) -> Str {', '  match value {',
+      '    case Outsider{value: _} => "wrong"', '    case _ => "other"', '  }', '}',
+      'export fn main() -> Int { 0 }',
+    ].join('\n') + '\n');
+    const forbidden = call('check');
+    assert.notEqual(forbidden.status, 0);
+    assert.match(forbidden.stdout + forbidden.stderr, /E3032/);
+  }
+  writeFileSync(join(scratch, 'Second.pudu'),
+    'module Second\nexport type Other = Item{value: Int} | Vacant\n');
+  writeFileSync(file, ['module Main', 'import First as A', 'import Second as Collision',
+    'export fn main() -> Int {', '  match A.make() { case A.Item{value} => print(show(value)) }',
+    '  0', '}',
+  ].join('\n') + '\n');
+  for (const mode of ['tree', 'compiled']) {
+    const result = call('run', mode);
+    assert.equal(result.status, 0, result.stdout + result.stderr);
+    assert.doesNotMatch(result.stdout + result.stderr, /W5001/);
+    assert.equal(result.stdout, '1\n');
+  }
+  writeFileSync(file, ['module Main', 'type Box[T] = { value: T }',
+    'fn extract(value: &Box[Int]) -> Int {', '  match value { case Box{value} => value }', '}',
+    'export fn main() -> Int {', '  let boxed = Box{value: 7}',
+    '  print(show(extract(&boxed)))', '  0', '}',
+  ].join('\n') + '\n');
+  for (const mode of ['tree', 'compiled']) {
+    const result = call('run', mode);
+    assert.equal(result.status, 0, result.stdout + result.stderr);
+    assert.equal(result.stdout, '7\n');
   }
   writeFileSync(file, [
     'module Main', 'import Std.FlatMap as FlatMap', 'import Std.MultiMap as MultiMap',
