@@ -114,3 +114,9 @@ Register [[Mutex Admission Spec]] explicitly with existing dependencies. Resolve
 Register [[Database Challenge Spec]] explicitly with existing dependencies. Resolved Grill Log: complete-suite execution and focused execution use the same real challenge admission assertions.
 
 Register [[Binary Codec Properties]] explicitly. Resolved Grill Log: native round-trip, bit-pattern and malformed-input laws execute in the full suite without a new dependency.
+
+## Named sum value foundation (#761)
+
+Register Pudu.Eval.NamedSumSpec with existing dependencies; no separate unexecuted property list or new package.
+
+Resolved Grill Log: represent named sums independently of ordinary records and positional sums. Preserve existing field order and public labels. Source publication follows in its own tested partition. See [[Named Sum Value Delivery]].

@@ -103,3 +103,9 @@ Resolved Grill Log: preserve declaration identity through checking, executable p
 A projected named record pattern compares its complete canonical owner with RecordValue. Anonymous patterns still test fields alone; raw host-authored patterns retain short-label compatibility. Positional sum matching stays canonical.
 
 Resolved Grill Log: canonical identity and subject-sensitive refutability must agree before evaluation. See [[Record Pattern Owner Delivery]].
+
+## Named sum value foundation (#761)
+
+Compare named sum identity and recursive fields in sameValue. A canonical internal record-pattern descriptor (::sum::, owner, label) selects only NamedSumValue with that exact identity. Anonymous field patterns and raw host short-tag patterns preserve compatibility; executable ordinary-record owner symbols and positional patterns cannot match named sums.
+
+Resolved Grill Log: represent named sums independently of ordinary records and positional sums. Preserve existing field order and public labels. Source publication follows in its own tested partition. See [[Named Sum Value Delivery]].

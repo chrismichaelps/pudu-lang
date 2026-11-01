@@ -76,8 +76,9 @@ matchPattern (Located _ pattern') value = case pattern' of
       `case Add{left, right}` and computed a product. -}
   RecordPattern path fields _ -> case value of
     RecordValue name present
-      | recordMatches path name ->
-          concat <$> mapM (matchField present) fields
+      | recordMatches path name -> concat <$> mapM (matchField present) fields
+    NamedSumValue owner name present
+      | namedRecordMatches path owner name -> concat <$> mapM (matchField present) fields
     _ -> Nothing
   AlternativePattern alternatives -> firstMatch alternatives
   InvalidPattern -> Nothing
@@ -96,7 +97,14 @@ matchPattern (Located _ pattern') value = case pattern' of
     symbol :| [] | Text.isInfixOf "." symbol -> symbol == owner <> "." <> name
     _ -> name == lastSegment segments
 
+  namedRecordMatches path owner name = case path of
+    Just (ModuleName ("::sum::" :| [wantedOwner, wantedName])) ->
+      owner == wantedOwner && name == wantedName
+    Just (ModuleName (symbol :| [])) | Text.isInfixOf "." symbol -> False
+    _ -> maybe True (== name) (patternName path)
+
   recordMatches path name = case path of
+    Just (ModuleName ("::sum::" :| _)) -> False
     Just (ModuleName (symbol :| [])) | Text.isInfixOf "." symbol -> symbol == name
     _ -> maybe True (== snd (Text.breakOnEnd "." name)) (patternName path)
 
@@ -146,6 +154,10 @@ sameValue left right = case (left, right) of
   (ArrayValue a, ArrayValue b) -> sameList (toList a) (toList b)
   (SumValue leftOwner leftName a, SumValue rightOwner rightName b) ->
     leftOwner == rightOwner && leftName == rightName && sameList a b
+  (NamedSumValue leftOwner leftName a, NamedSumValue rightOwner rightName b) ->
+    leftOwner == rightOwner && leftName == rightName
+      && map fst a == map fst b
+      && sameList (map snd a) (map snd b)
   (RecordValue leftName a, RecordValue rightName b) ->
     leftName == rightName
       && map fst a == map fst b

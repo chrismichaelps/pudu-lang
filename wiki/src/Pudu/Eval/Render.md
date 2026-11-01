@@ -109,3 +109,9 @@ A `TextMethodValue` renders as `<method toText>` and is described as a "text met
 Render the final label of a canonical record owner, retaining the existing record display and diagnostic shape labels. Type witness display also keeps its final label. Full keys remain internal identity.
 
 Resolved Grill Log: identity comes from the checked declaration, never import order or a basename guess. Preserve observable labels, lexical shadowing, field effects and failure provenance; no runtime filesystem lookup. See [[Canonical Runtime Owner Delivery]].
+
+## Named sum value foundation (#761)
+
+Render NamedSumValue as its existing short variant label with named fields; diagnostic valueKind retains the short label. Reuse record field rendering without exposing canonical identity.
+
+Resolved Grill Log: represent named sums independently of ordinary records and positional sums. Preserve existing field order and public labels. Source publication follows in its own tested partition. See [[Named Sum Value Delivery]].

@@ -4374,3 +4374,5 @@ No builds, tests, reviews or measurements run.
 - #763: share canonical qualified-method schemes for calls and retained concrete methods, preserving aliases, captures, exported value receivers and positioned refusals; all clean optimized repository gates pass.
 
 - #761: resolve named payload field names and constructor refusal under their canonical declaring owner; share qualified construction and pattern shapes. See [[Named Payload Field Delivery]].
+
+- #761: introduce distinct owned named sum runtime values with explicit identity, field access, matching, ordering and frozen storage; source publication remains pending. See [[Named Sum Value Delivery]].
