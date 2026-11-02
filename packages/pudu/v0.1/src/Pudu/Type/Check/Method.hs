@@ -48,7 +48,7 @@ import Pudu.Type.Env
   , Checker
   , DeclaredTypes (..)
   , bindName
-  , recordProvider, recordImplementationOwner
+  , recordProvider, recordProviderSelection, recordImplementationOwner
   , recordDeclaredMethod
   , ambiguousProviders
   , providerSpelling
@@ -68,9 +68,10 @@ import Pudu.Type.Marker (isMarkerTrait)
 import Pudu.Type.Proof (TraitProof (..), implementsTrait, inferBound)
 import Pudu.Type.Substitute (substituteRigid)
 import Pudu.Type.Unify (unify, zonk)
-import Pudu.Type.Formation (declaredParameterType, formBoundFor, formOptionalType, formType)
+import Pudu.Type.Formation (declaredParameterType, formBoundType, formBoundFor, formOptionalType, formType)
 import Pudu.Type.Value
-  ( NominalId (..)
+  ( ProviderSelection (..)
+  , NominalId (..)
   , Scheme (..)
   , Type (..)
   , monotype
@@ -156,7 +157,11 @@ declareMethodsWith
   -> Impl
   -> Checker ()
 declareMethodsWith defaults declared traits value = do
-  mapM_ (recordProvider (locatedSpan (implTrait value))) (implTraitName declared value)
+  let trait = formBoundType (implAliases declared value) (implRigid value) (implTrait value)
+  case trait of
+    NominalType owner arguments -> recordProviderSelection (locatedSpan (implTrait value))
+      (ProviderSelection owner arguments Nothing)
+    _ -> pure ()
   target <- formType (implAliases declared value) (implRigid value) (implTarget value)
   case targetName target of
     Nothing -> pure ()
@@ -435,6 +440,7 @@ methodSchemeWith retain spanValue receiver member = case receiver of
       a receiver of type `F[A]` finds its members exactly where a receiver of
       type `F` would. The arguments say what the container holds and never which
       trait provides a member. -}
+  AppliedType (RigidType name) _ -> rigidBoundsOf name >>= selectBounds retain spanValue receiver member
   AppliedType head' _ -> methodSchemeWith retain spanValue head' member
   RigidType name -> rigidBoundsOf name >>= selectBounds retain spanValue receiver member
   _ -> pure Nothing
@@ -461,8 +467,8 @@ selectBounds retain at receiver member bounds = do
   providers <- filterM provides bounds
   case providers of
     [] -> pure Nothing
-    [bound@(NominalType owner _)] -> do
-      when retain (recordProvider at owner)
+    [bound@(NominalType owner arguments)] -> do
+      when retain (recordProviderSelection at (ProviderSelection owner arguments (Just receiver)))
       found <- lookupName (nominalKey owner <> "." <> member)
       traverse (specializeBound at receiver bound) found
     _ -> do

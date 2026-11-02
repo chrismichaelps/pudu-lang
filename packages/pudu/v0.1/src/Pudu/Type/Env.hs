@@ -66,6 +66,7 @@ module Pudu.Type.Env
   , recordExpression
   , recordSelection
   , recordProvider
+  , recordProviderSelection
   , recordOwner
   , recordVariantOwner
   , recordImplementationOwner
@@ -132,7 +133,7 @@ import Pudu.IntegerLiteral (fitsIntegerType)
 import Pudu.Type.Frontier (splitSince, splitBetween)
 import Pudu.Type.Implementation (ImplementationRule)
 import Pudu.Type.Value
-  ( OwnerSelection (..), NominalId (..), Scheme (..), Type (..), TypeVar (..), integerType, nominalKey, nominalName, renderType )
+  ( ProviderSelection (..), OwnerSelection (..), NominalId (..), Scheme (..), Type (..), TypeVar (..), integerType, nominalKey, nominalName, renderType )
 
 {-| @Type.Env.Declared — what the module's declarations contribute.
 
@@ -285,7 +286,7 @@ data CheckerState = CheckerState
   {-| Instantiations of parameters bounded by a static trait, by the span of
       the reference that instantiated them, in the scheme's parameter order. -}
   , stateSelectionsRev :: ![(Span, [Type])]
-  , stateProvidersRev :: ![(Span, NominalId)]
+  , stateProvidersRev :: ![(Span, ProviderSelection)]
   , stateOwnersRev :: ![(Span, OwnerSelection)]
   , statePatternTests :: !(Set Span)
   {-| Expressions whose value is the enclosing function's result: a body's
@@ -323,7 +324,7 @@ data CheckerProducts = CheckerProducts
   , producedIntegerKinds :: ![(Span, Text)]
   {-| Every recorded static selection with inference settled. -}
   , producedSelections :: ![(Span, [Type])]
-  , producedProviders :: ![(Span, NominalId)]
+  , producedProviders :: ![(Span, ProviderSelection)]
   , producedOwners :: ![(Span, OwnerSelection)]
   }
 
@@ -373,10 +374,15 @@ runChecker (Checker action) = case action initialState of
       , producedDiagnostics = sortDiagnostics (reverse diagnostics)
       , producedIntegerKinds = reverse kinds
       , producedMethods = reverse methods
-      , producedProviders = reverse providers
+      , producedProviders = reverse (map (fmap (resolveProvider substitution)) providers)
       , producedOwners = reverse owners
       , producedSelections = reverse (map (fmap (map (resolveFinal substitution))) selections)
       }
+ where
+  resolveProvider substitution selected = selected
+    { providerArguments = map (resolveFinal substitution) (providerArguments selected)
+    , providerReceiver = fmap (resolveFinal substitution) (providerReceiver selected)
+    }
 
 {-| The module frame as inference left it, with every variable resolved.
 
@@ -569,8 +575,11 @@ isStaticTrait owner = Checker $ \state -> (Set.member owner (stateStaticTraits s
 
 {-| Canonical evidence consumed once by executable symbol resolution. -}
 recordProvider :: Span -> NominalId -> Checker ()
-recordProvider at owner = Checker $ \state ->
-  ((), state{stateProvidersRev = (at, owner) : stateProvidersRev state})
+recordProvider at owner = recordProviderSelection at (ProviderSelection owner [] Nothing)
+
+recordProviderSelection :: Span -> ProviderSelection -> Checker ()
+recordProviderSelection at selected = Checker $ \state ->
+  ((), state{stateProvidersRev = (at, selected) : stateProvidersRev state})
 
 {-| A checked implementation target retains its full alias-expanded parameter shape. -}
 recordImplementationOwner :: Span -> Type -> Checker ()
