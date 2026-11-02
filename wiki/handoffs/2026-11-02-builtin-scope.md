@@ -28,14 +28,14 @@ The focused property passes in both evaluators. All 24 CLI executions pass
 across three valid entry points and a positioned refusal, cache off/cold/warm
 with unchanged warm inodes. All seven fixtures pass formatting. Reverse loads
 Table before ZGrid under normal formatter sorting, changing actual traversal.
-The first clean full run failed the existing carrier diagnostic regression: an
-unimported Result.unwrapOr got generic variant help instead of module-import
-guidance. A captured suite run identifies the exact mismatch. Qualified built-in
-sum misses must defer to ordinary namespace admission; user sum/pattern misses
-retain their variant help. The Pattern mirror records this resolved contract
-before repair. The unchanged carrier diagnostic property now passes; no full-suite
-passing claim is made until clean revalidation completes.
-Exact next action: run clean validation on this integrated tree before PR delivery.
+The first full run exposed the existing Result.unwrapOr import-help regression.
+Qualified built-in sum misses now defer to ordinary namespace diagnostics;
+user sums retain variant help. Both exact diagnostic assertions pass.
+Every clean optimized gate passes at b4edf1c6 after #787 integration, including
+full suite, formatting, engine, package, residency, editor and documentation.
+Semantic Engineer → Forensic Guardian: source/wiki parity, mirrors, navigation
+and changelog agree; the final review scope remains below 400 changed lines.
+Exact next action: publish Closes #759 and require hosted checks before merge.
 
 ## Referenced by
 
