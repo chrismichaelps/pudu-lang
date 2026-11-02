@@ -264,3 +264,5 @@ tags: [moc, handoff]
 - [[Runtime Witness Selection Delivery]] · [[Runtime Implementation Head]] · [[Eval Type Witness]] — structural implementation parameter binding (#735).
 
 - [[Water Validation Delivery]] — water test expansion with current-model limits.
+
+- [[Bound Receiver Evidence Delivery]] — complete selected bound and receiver facts for #735.

@@ -72,3 +72,5 @@ only complete head matching and discharged premises establish evidence.
 - [[Method Binding]] — formed provider registration and shared-slot ambiguity.
 
 - [[Implementation Witness Delivery]] — checked implementation heads before bounded dispatch repair (#735).
+
+- [[Bound Receiver Evidence Delivery]] — complete selected bound and receiver facts for #735.
