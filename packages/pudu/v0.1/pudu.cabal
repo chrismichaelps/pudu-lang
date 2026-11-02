@@ -177,6 +177,8 @@ library
     Pudu.Eval.Rope
     Pudu.Eval.Sort
     Pudu.Eval.Value
+    Pudu.Eval.ImplementationHead
+    Pudu.Eval.TypeWitness
     Pudu.Frontend.Expand
     Pudu.Frontend.Expand.Substitute
     Pudu.Frontend.Lexer

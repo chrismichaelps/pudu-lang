@@ -260,3 +260,5 @@ tags: [moc, handoff]
 - [[Imported Provider Delivery]] — canonical imported method admission and actual provider spellings.
 
 - [[Implementation Witness Delivery]] — checked implementation heads before bounded dispatch repair (#735).
+
+- [[Runtime Witness Selection Delivery]] · [[Runtime Implementation Head]] · [[Eval Type Witness]] — structural implementation parameter binding (#735).

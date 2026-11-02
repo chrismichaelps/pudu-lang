@@ -191,3 +191,16 @@ ambiguity checks without recording receiver-provider facts. A complete static
 owner selects its implementation arguments through structural head matching; it
 is never lowered to a runtime receiver. Existing static/derive suite cases cover
 Array, Option, nested and reordered heads in both evaluators.
+
+## Parameter-qualified methods (#782, #735)
+
+parameterStaticCallee selects a simple lexical rigid type parameter's member
+through methodScheme before namespace fallback, unless a nearer ordinary value
+head shadows it. Retain provider facts at the inner member span; instantiate
+written or inferred method parameters at the whole application span through
+instantiateWith. Missing members report positioned E3005; ambiguity and complete
+bound/result/argument checking use the shared scheme path. Expression selection
+uses the same helper for called, retained and explicitly applied members.
+Resolved Grill Log: T.member must not fall through as ErrorType or flatten to
+an unbound T.member value key. Self specializes from the bound's receiver;
+method-local parameters remain real parameters and publish ordinary selections.

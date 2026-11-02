@@ -94,3 +94,12 @@ Resolved Grill Log: identity comes from the declaration or native ABI, not a glo
 Read a named sum field first, then methods only under its carried canonical owner. Universal toText remains the ordinary fallback. Do not consult the short-tag owner registry.
 
 Resolved Grill Log: represent named sums independently of ordinary records and positional sums. Preserve existing field order and public labels. Source publication follows in its own tested partition. See [[Named Sum Value Delivery]].
+
+## Retained witnessed members (#735, #782)
+
+readMember recognizes TypeWitnessValue before ordinary data access and delegates
+to Eval Type Witness.witnessMethod. That helper owns canonical provider lookup
+and structural target matching and is shared by Path qualification. A miss is
+located E7001. Both evaluators use this access boundary; no duplicate selection
+logic or receiver re-evaluation. Resolved Grill Log: retained T.method must carry
+the same checked head and method-local witnesses as an immediate qualified call.

@@ -169,3 +169,16 @@ Resolved Grill Log: field names and payload types come from one resolved owner/v
 Pass the generated constructor reference span to canonicalVariant so generated full-owner references retain their checked constructor identity.
 
 Resolved Grill Log: checked canonical identity must survive lowering even when a type and a bare variant share text. No runtime owner inference or source syntax change. See [[Variant Namespace Delivery]].
+
+## Parameter-qualified methods (#782, #735)
+
+parameterStaticCallee selects a simple lexical rigid type parameter's member
+through methodScheme before namespace fallback, unless a nearer ordinary value
+head shadows it. Retain provider facts at the inner member span; instantiate
+written or inferred method parameters at the whole application span through
+instantiateWith. Missing members report positioned E3005; ambiguity and complete
+bound/result/argument checking use the shared scheme path. Expression selection
+uses the same helper for called, retained and explicitly applied members.
+Resolved Grill Log: T.member must not fall through as ErrorType or flatten to
+an unbound T.member value key. Self specializes from the bound's receiver;
+method-local parameters remain real parameters and publish ordinary selections.

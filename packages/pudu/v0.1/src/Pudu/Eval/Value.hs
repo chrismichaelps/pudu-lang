@@ -51,6 +51,7 @@ import Data.Set (Set)
 import Data.Text (Text)
 import Data.IORef (IORef)
 import GHC.IOArray (IOArray)
+import Pudu.Eval.ImplementationHead (ImplementationHead)
 import Pudu.Eval.Rope (Rope, ropeOf, ropeText)
 import Pudu.Eval.Method
 import Pudu.IntegerLiteral (IntegerKind, defaultIntegerKind)
@@ -322,10 +323,10 @@ data Captured = Captured
   , capturedModuleDepth :: !Int
   }
   deriving stock (Show)
-
 data Closure = Closure
   { closureName :: !Text
   , closureFunction :: !Function
+  , closureImplementation :: !(Maybe ImplementationHead)
   , closureSelf :: !(Maybe Value)
   , closureCaptured :: !(Maybe Captured)
   {-| Type witnesses bound in the body's frame beside its parameters. -}

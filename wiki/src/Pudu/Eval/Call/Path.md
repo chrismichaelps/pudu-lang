@@ -111,3 +111,11 @@ Resolved Grill Log: identity comes from the checked declaration, never import or
 Generated canonical constructor references resolve through the installed canonical sum namespace. Preserve complete owner identity in the generated fallback as well; do not rebuild a checked constructor from only its final label.
 
 Resolved Grill Log: identity comes from the declaration or native ABI, not a global short-tag registry. Keep labels, evaluation order, effects and wire bytes stable. See [[Positional Sum Owner Delivery]].
+
+## Structural implementation witnesses (#735)
+
+Delegate witness construction, ordered explicit selection, complete Self and
+witnessed method selection to [[Eval Type Witness]], preserving re-exports.
+Marked witness members normalize canonical provider keys through lookupMethod;
+unmarked legacy paths keep lookupName. Resolved Grill Log: use checked head
+matching instead of zipping owner arguments, with no duplicate path/field logic.

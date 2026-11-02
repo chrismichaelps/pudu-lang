@@ -240,3 +240,10 @@ Resolved Grill Log: keep the closed value vocabulary, pattern view and Eq/Ord to
 Add NamedSumValue canonicalOwner shortLabel namedFields, a distinct value shape. Eq and keyed comparison include owner, label and fields; shape rank 31 is unique. Keep the value vocabulary under 500 lines without moving comparison semantics.
 
 Resolved Grill Log: represent named sums independently of ordinary records and positional sums. Preserve existing field order and public labels. Source publication follows in its own tested partition. See [[Named Sum Value Delivery]].
+
+## Structural implementation witnesses (#735)
+
+Closure retains optional immutable [[Runtime Implementation Head]] metadata.
+Ordinary functions/literals initialize None; captures, witnesses, lazy proof cache
+and function equality stay unchanged. Resolved Grill Log: head matching belongs
+to [[Eval Type Witness]], not Value; keep this value owner below 500 lines.

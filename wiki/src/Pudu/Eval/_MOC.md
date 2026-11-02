@@ -91,3 +91,5 @@ Dependency direction: Builtin Definition → Value → Env → Operator/Match/Ar
 - [[Named Sum Value Properties]] — named sum identity, patterns, fields and frozen storage.
 
 - [[Eval Record Construction]] — shared canonical construction and named field storage order.
+
+- [[Runtime Witness Selection Delivery]] · [[Runtime Implementation Head]] · [[Eval Type Witness]] — structural implementation parameter binding (#735).

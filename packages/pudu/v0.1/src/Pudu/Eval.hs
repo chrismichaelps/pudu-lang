@@ -13,6 +13,7 @@ module Pudu.Eval
   , scopeTo
   ) where
 
+import Pudu.Eval.TypeWitness (selectTypes, witnessOf)
 import Pudu.Eval.Record (recordConstructor)
 import Data.Map.Strict (Map)
 import Data.List.NonEmpty (NonEmpty (..))
@@ -303,7 +304,13 @@ evaluateHere (Located spanValue expression) = case expression of
   {-| Types are erased at run time, so a type application evaluates to what it
       was applied to. It exists to tell the checker which instantiation was
       meant, and the checker has already been told by the time this runs. -}
-  TypeApplication target _ -> evaluate target
+  TypeApplication target arguments -> do
+    value <- evaluate target
+    case value of
+      FunctionValue closure -> do
+        chosen <- mapM witnessOf arguments
+        pure (FunctionValue (selectTypes chosen closure))
+      _ -> pure value
   LambdaExpression value -> do
     {-| A literal captures the environment it was written in, so calling it
         later means what it meant then. A declaration does not, and the two
@@ -315,7 +322,7 @@ evaluateHere (Located spanValue expression) = case expression of
         whole stack kept every value that happened to be in scope alive for as
         long as the literal was. -}
     captured <- capturedFrames (reachableNames value)
-    pure (FunctionValue (Closure lambdaName value Nothing (Just captured) [] Nothing))
+    pure (FunctionValue (Closure lambdaName value Nothing Nothing (Just captured) [] Nothing))
   ScopeExpression body -> evaluateScope callNeeds spanValue body
   RecordExpression path fields -> do
     values <- mapM (evaluateFieldInit spanValue) fields

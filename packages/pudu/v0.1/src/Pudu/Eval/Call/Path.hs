@@ -27,13 +27,12 @@ import Pudu.Eval.Env (Evaluator, abortAt, lookupLocal, lookupName)
 import Pudu.Eval.Install (lastSegmentOf)
 import Pudu.Eval.Loop (firstBound, receiverOwners)
 import Pudu.Eval.Operator (readMember)
-import Pudu.Eval.Value (Closure (..), Value (..))
+import Pudu.Eval.Value (Value (..))
+import Pudu.Eval.TypeWitness (witnessOf, selectTypes, withSelf, witnessMethod)
 import Pudu.Frontend.Syntax.Located (Located (..))
 import Pudu.Frontend.Syntax.Name (ModuleName (..), moduleNameText)
 import Pudu.Frontend.Syntax.Tree
   ( Expression (..)
-  , Function (..)
-  , TypeParam (..)
   , TypeSyntax (..)
   )
 import Pudu.Source (Span, spanOrigin)
@@ -43,12 +42,12 @@ import Pudu.Source (Span, spanOrigin)
     declares it, as in `A.label(bot)`. The trait form dispatches on the first
     argument's type, which is the receiver the method is being called on. -}
 qualifiedCallee :: Located Expression -> [Value] -> Evaluator (Maybe Value)
-qualifiedCallee (Located _ expression) values = case qualifiedParts expression of
+qualifiedCallee (Located at expression) values = case qualifiedParts expression of
   Nothing -> pure Nothing
   Just (first, method) -> do
     local <- lookupLocal first
     direct <- case local of
-      Just witness@TypeWitnessValue{} -> witnessMethod witness method
+      Just witness@TypeWitnessValue{} -> witnessMethod at witness method
       Just _ -> pure Nothing
       Nothing -> lookupName (first <> "." <> method)
     case direct of
@@ -107,7 +106,7 @@ readPath spanValue path@(first :| rest) = do
   local <- if null rest then pure Nothing else lookupLocal first
   linked <- case (local, rest) of
     (Just witness@TypeWitnessValue{}, [member]) -> do
-      method <- witnessMethod witness member
+      method <- witnessMethod spanValue witness member
       pure (fmap (\found -> (found, [])) method)
     (Just value, _) -> pure (Just (value, rest))
     (Nothing, _) -> longestBinding path
@@ -195,43 +194,3 @@ typeArgumentName :: Located TypeSyntax -> Text
 typeArgumentName located = case locatedValue located of
   NamedType path _ -> moduleNameText path
   _ -> Text.empty
-
-{-| The method a witnessed owner installs under this name, holding the
-    owner's own arguments for the implementation's leading parameters. -}
-witnessMethod :: Value -> Text -> Evaluator (Maybe Value)
-witnessMethod witness member = case witness of
-  TypeWitnessValue owner arguments -> do
-    found <- lookupName (owner <> "." <> member)
-    pure $ case found of
-      Just (FunctionValue closure) -> Just (FunctionValue (withSelf witness (selectTypes arguments closure)))
-      other -> other
-  _ -> pure Nothing
-
-{-| `Self` inside a method names the type it was selected for, so a body that
-    passes `Self` on as a type argument — a trait default in particular, which
-    is installed once from the trait's declaration — selects that type rather
-    than a nominal literally called `Self`. -}
-withSelf :: Value -> Closure -> Closure
-withSelf witness closure = closure{closureWitnesses = ("Self", witness) : closureWitnesses closure}
-
-{-| Bind chosen types to a closure's type parameters in declaration order;
-    an installed method's parameters begin with its implementation's. -}
-selectTypes :: [Value] -> Closure -> Closure
-selectTypes [] closure = closure
-selectTypes chosen closure = closure
-  { closureWitnesses =
-      zip (map (locatedValue . typeParamName . locatedValue) (functionTypeParams (closureFunction closure))) chosen
-        <> closureWitnesses closure
-  }
-
-{-| The witness a written type stands for. A one-segment name bound to a
-    witness is a parameter the enclosing call selected; any other nominal is
-    its own owner, retaining the canonical key supplied by checking. -}
-witnessOf :: Located TypeSyntax -> Evaluator Value
-witnessOf (Located _ written) = case written of
-  NamedType path@(ModuleName (first :| rest)) arguments -> do
-    local <- if null rest && null arguments then lookupLocal first else pure Nothing
-    case local of
-      Just witness@TypeWitnessValue{} -> pure witness
-      _ -> TypeWitnessValue (moduleNameText path) <$> mapM witnessOf arguments
-  _ -> pure (TypeWitnessValue Text.empty [])
