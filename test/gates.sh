@@ -82,6 +82,8 @@ run 'Ark matrices preserve composition and checked homogeneous projection' \
   node test/ark-matrix.mjs "$PUDU"
 run 'Ark assets preserve linear-light sampling and checked texture storage' \
   node test/ark-assets.mjs "$PUDU"
+run 'Ark water preserves discrete modes and unforced balances' \
+  node test/ark-water.mjs "$PUDU"
 run 'Ark physics preserves numeric admission and disjoint contact batches' \
   node test/ark-physics.mjs "$PUDU"
 run 'Ark animation samples, blends and cross-fades joint poses' \

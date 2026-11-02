@@ -238,3 +238,5 @@ tags: [moc, module]
 - [[Method Binding]] — canonical method registration.
 
 - [[Runtime Implementation Head]] · [[Eval Type Witness]] — checked runtime implementation matching.
+
+- [[Ark Water Gate]] — current height-field wave verification.
