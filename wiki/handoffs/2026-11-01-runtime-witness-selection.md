@@ -43,9 +43,11 @@ both evaluators and off/cold/warm products, including warm inode reuse.
 
 The original #782 reproducer passes six evaluator/cache executions; static
 properties pass. PR #781 merged as 7819898f8 after every hosted check passed
-and its identical tree is integrated. Exact next action: run the clean full
-gate on this committed source, then publish Closes #782 / Refs #735 if green.
-#735 remains open until bounded receiver calls preserve caller witnesses.
+and its identical tree is integrated. Every clean optimized gate passes at
+7c8cdee6. Direct receiver controls pass, while bounded, empty, nested and two-level
+#735 cases still reproduce undefined A in both evaluators.
+Exact next action: publish Closes #782 / Refs #735, require hosted checks, then
+carry the caller receiver witness into immediate and retained bound dispatch.
 
 ## Referenced by
 

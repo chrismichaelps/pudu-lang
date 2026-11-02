@@ -5,7 +5,7 @@ tags: [changelog]
 
 # Changelog
 
-- 2026-11-01: Match witnessed implementation targets structurally and preserve qualified method parameters (#735 prerequisite, #782); bounded receiver evidence remains required.
+- 2026-11-01: Match witnessed implementation targets structurally and preserve qualified method parameters (#735 prerequisite, #782). Every clean optimized gate passes; bounded receiver evidence remains required.
 
 - 2026-11-01: Preserve complete checked implementation targets through executable lowering (#735 prerequisite), including reordered aliases and structural generic arguments. Every clean optimized gate passes; bounded runtime witness dispatch remains required.
 
