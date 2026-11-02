@@ -88,3 +88,5 @@ Run bound-provider, canonical-owner, sum-owner, qualified-record-method and trai
 gates against the same freshly built optimized executable. These existing local gates were absent
 from hosted CI. Resolved Grill Log: their observable dispatch, pattern and cache regressions must
 remain enforced after integration; preserve every existing workflow step. See [[Record Pattern Owner Delivery]].
+
+[[Ark Water Gate]] runs with the other engine checks against the optimized compiler. Resolved Grill Log: both evaluator/cache paths and analytic wave errors remain integration requirements.

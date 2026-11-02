@@ -72,6 +72,7 @@ jobs:
           node test/ark-world.mjs "$PUDU"
           node test/ark-platform.mjs "$PUDU"
           node test/ark-render.mjs "$PUDU"
+          node test/ark-water.mjs "$PUDU"
           node test/ark-physics.mjs "$PUDU"
           node test/ark-animation.mjs "$PUDU"
           node test/ark-audio.mjs "$PUDU"

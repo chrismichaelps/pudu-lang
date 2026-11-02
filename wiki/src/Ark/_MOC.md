@@ -64,3 +64,5 @@ tags: [moc, ark]
 ## Referenced by
 
 [[src/_MOC]] · [[Ark Engine]]
+
+- [[Ark Water Gate]] — analytic production wave-update conformance.

@@ -152,3 +152,5 @@ Resolved Grill Log: known concrete identity, lexical admission, module-export pr
 
 [[Sum Owner Gate]] covers positional canonical ownership after record and qualification checks.
 Resolved Grill Log: source and native values must agree in both evaluators.
+
+[[Ark Water Gate]] runs against the optimized compiler and validates actual wave-update modes. Resolved Grill Log: numerical physics evidence is independent of render snapshots.

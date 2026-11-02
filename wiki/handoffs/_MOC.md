@@ -262,3 +262,5 @@ tags: [moc, handoff]
 - [[Implementation Witness Delivery]] — checked implementation heads before bounded dispatch repair (#735).
 
 - [[Runtime Witness Selection Delivery]] · [[Runtime Implementation Head]] · [[Eval Type Witness]] — structural implementation parameter binding (#735).
+
+- [[Water Validation Delivery]] — water test expansion with current-model limits.
