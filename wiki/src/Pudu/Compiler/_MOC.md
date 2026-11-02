@@ -35,3 +35,5 @@ Dependency direction: Library → Program. Only [[Compiler Program]] reads files
 ## Referenced by
 
 [[src/Pudu/_MOC]] · [[Compiler Pipeline]]
+
+- [[Bound Receiver Evidence Delivery]] — complete selected bound and receiver facts for #735.

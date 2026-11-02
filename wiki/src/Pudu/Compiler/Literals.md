@@ -14,7 +14,7 @@ aliases: [Compiler Literals]
 ---
 # Compiler Literals
 
-`resolveLiterals :: Map Span Text -> Map Span [Type] -> Map Span NominalId -> Map Span OwnerSelection -> Module -> Module` rewrites every integer literal in expression
+`resolveLiterals :: Map Span Text -> Map Span [Type] -> Map Span ProviderSelection -> Map Span OwnerSelection -> Module -> Module` rewrites every integer literal in expression
 position into `ResolvedInteger kind value` once, after type checking. The kind is the checker's
 answer for the literal's span, else the literal's own suffix, else the platform `Int`; the value is
 the parsed number. The evaluator then builds the value directly, with no parsing and no `Map Span`
@@ -67,7 +67,7 @@ for printed expansion must retain the same explicit owner selection as an analys
 
 ## Bound provider evidence (#743)
 
-resolveLiterals additionally consumes Map Span NominalId provider facts. Only executable receiver member symbols become ::canonical.trait::member; implementation trait type paths become canonical. Authored tooling syntax remains unchanged. These resolved symbols survive ordinary checked-product serialization; no per-call span lookup or fake type argument is introduced.
+resolveLiterals additionally consumes Map Span ProviderSelection provider facts. Only executable receiver member symbols become ::canonical.trait::member; implementation trait type paths become canonical. Authored tooling syntax remains unchanged. These resolved symbols survive ordinary checked-product serialization; no per-call span lookup or fake type argument is introduced.
 
 Resolved Grill Log: preserve the checker-selected provider through ordinary executable symbols,
 including retained methods and receiver aliases. Do not infer a provider from declaration order,
@@ -142,3 +142,26 @@ Resolved shape boundary (#735): type projection retains nominal/rigid applicatio
 references, tuples, functions, dynamic traits and capability wrappers recursively.
 Only unresolved/error types become invalid syntax; no alias argument reordering
 is reconstructed from authored syntax.
+
+## Complete provider selections (#735)
+
+ProviderSelection carries canonical trait identity, complete formed trait arguments
+and an optional complete receiver type. Existing identity-only recording keeps an
+empty argument list and no receiver. Unambiguous rigid-bound selections retain
+the selected bound arguments and actual receiver, including F[A] rather than F.
+Implementation trait facts retain formed arguments under implementation rigids.
+Final checker publication resolves inference in both arguments and receiver.
+Detailed products and ModuleTypes preserve this immutable typed evidence.
+
+Compiler Literals continues existing member-symbol projection in this partition.
+At the structural Impl trait boundary it projects the complete formed trait,
+including expanded aliases and nested canonical owners; tooling syntax stays
+authored. Runtime transport/consumption follows separately and #735 remains open.
+
+Resolved Grill Log: trait identity cannot recover a parameter present only in
+Choice[B] for Box[A]. Do not fabricate a nominal identity to hold receiver types,
+inspect container elements, overwrite target-owner facts, or drop applied receiver
+arguments while following a rigid constructor's bounds. Assert actual checker
+products, canonical implementation trait projection, authored syntax and spans;
+retain full existing dispatch, diagnostic, derive and cache gates.
+See [[Bound Receiver Evidence Delivery]].

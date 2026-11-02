@@ -21,8 +21,8 @@ Current failure baseline: Main rejects with E3001/E3001/E3005 and Selected with
 E3001/E3005; the refusal retains E3001. Keep exact original output externally.
 Acceptance includes both evaluator modes, reversed imports, selected precedence,
 positioned refusal and off/cold/warm CLI products, then every clean optimized gate.
-The separate typed provider evidence partition is PR #787; it does not repair
-bounded runtime dispatch. The richer simulation roadmap remains #786.
+Merged provider evidence #787 (0a4627b7c) is integrated before final validation.
+Bounded runtime dispatch remains open; the richer simulation roadmap is #786.
 
 The focused property passes in both evaluators. All 24 CLI executions pass
 across three valid entry points and a positioned refusal, cache off/cold/warm
@@ -35,8 +35,7 @@ sum misses must defer to ordinary namespace admission; user sum/pattern misses
 retain their variant help. The Pattern mirror records this resolved contract
 before repair. The unchanged carrier diagnostic property now passes; no full-suite
 passing claim is made until clean revalidation completes.
-Exact next action: integrate merged provider evidence from #787, then run clean
-validation before PR delivery.
+Exact next action: run clean validation on this integrated tree before PR delivery.
 
 ## Referenced by
 

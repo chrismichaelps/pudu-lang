@@ -107,7 +107,8 @@ import Pudu.Type.Formation
   )
 import Pudu.Type.Unify (unify, zonk)
 import Pudu.Type.Value
-  ( OwnerSelection
+  ( ProviderSelection
+  , OwnerSelection
   , NominalId (..)
   , Required (..)
   , Scheme (..)
@@ -143,7 +144,7 @@ checkModuleDetailed
   :: ImportTypes
   -> Set Span
   -> Module
-  -> ([(Span, Type)], [(Text, Scheme)], [(Span, Text)], [(NominalId, Text, Scheme, Span)], [(Span, [Type])], [(Span, OwnerSelection)], [(Span, NominalId)], [Diagnostic])
+  -> ([(Span, Type)], [(Text, Scheme)], [(Span, Text)], [(NominalId, Text, Scheme, Span)], [(Span, [Type])], [(Span, OwnerSelection)], [(Span, ProviderSelection)], [Diagnostic])
 checkModuleDetailed imported writable moduleValue =
   let products = runChecker (setWritableNames writable >> checkUnit WholeModule imported moduleValue)
    in ( producedTypes products
