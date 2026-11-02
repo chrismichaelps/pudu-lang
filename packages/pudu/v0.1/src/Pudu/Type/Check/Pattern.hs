@@ -39,7 +39,7 @@ import Pudu.Type.Env
   )
 import Pudu.Type.Unify (unify, zonk)
 import Pudu.Type.Substitute (substituteRigid)
-import Pudu.Type.Value (NominalId, Scheme (..), Type (..), monotype, nominalKey)
+import Pudu.Type.Value (NominalId (..), Scheme (..), Type (..), monotype, nominalKey)
 
 {-| The variant a pattern names, found the way an expression finds one.
 
@@ -335,7 +335,8 @@ qualifiedVariantType declared spanValue expression = do
               Nothing -> do
                 binding <- lookupName written
                 canonical <- lookupName (nominalKey identity <> "." <> member)
-                if binding /= Nothing || canonical /= Nothing
+                -- Built-in misses retain the namespace diagnostic's module-import guidance.
+                if binding /= Nothing || canonical /= Nothing || nominalModule identity == Nothing
                   then pure Nothing
                   else do
                     report "E3034" spanValue (owner <> " has no " <> member)

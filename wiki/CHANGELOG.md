@@ -5,6 +5,8 @@ tags: [changelog]
 
 # Changelog
 
+- 2026-11-02: Resume #759: keep built-in type names above unrelated graph declarations while preserving local and selected-import precedence. Qualified, selected and reversed-import Map clients cover both evaluators.
+
 - 2026-11-01: Add analytic conformance for the production wave tank (#784): equilibria, reflecting modes, superposition and unforced mean displacement across both evaluators and cache states.
 
 - 2026-11-01: Match witnessed implementation targets structurally and preserve qualified method parameters (#735 prerequisite, #782). Every clean optimized gate passes; bounded receiver evidence remains required.

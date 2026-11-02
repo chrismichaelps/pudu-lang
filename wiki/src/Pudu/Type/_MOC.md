@@ -72,3 +72,5 @@ only complete head matching and discharged premises establish evidence.
 - [[Method Binding]] — formed provider registration and shared-slot ambiguity.
 
 - [[Implementation Witness Delivery]] — checked implementation heads before bounded dispatch repair (#735).
+
+- [[Builtin Scope Delivery]] — resumed #759 scope isolation; [[Builtin Scope Grid]], [[Builtin Scope Main]], [[Builtin Scope Reverse]], [[Builtin Scope Selected]], [[Builtin Scope Refusal]], [[Builtin Scope Table]].
