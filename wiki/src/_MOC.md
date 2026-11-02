@@ -240,3 +240,5 @@ tags: [moc, module]
 - [[Runtime Implementation Head]] · [[Eval Type Witness]] — checked runtime implementation matching.
 
 - [[Ark Water Gate]] — current height-field wave verification.
+
+- [[Builtin Scope Delivery]] — resumed #759 scope isolation; [[Builtin Scope Grid]], [[Builtin Scope Late Grid]], [[Builtin Scope Main]], [[Builtin Scope Reverse]], [[Builtin Scope Selected]], [[Builtin Scope Refusal]], [[Builtin Scope Table]].

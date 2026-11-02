@@ -141,3 +141,15 @@ Resolved Grill Log: carry checked owner and field order through syntax; preserve
 canonicalVariant now accepts the complete use Span and records VariantOwner for a resolved canonical constructor. qualifiedVariantType and generated canonical constructor references share this fact; named-value refusal and lexical admission remain unchanged.
 
 Resolved Grill Log: checked canonical identity must survive lowering even when a type and a bare variant share text. No runtime owner inference or source syntax change. See [[Variant Namespace Delivery]].
+
+## Built-in scope diagnostics (#759)
+
+When a built-in sum's qualified expression names neither a variant nor an
+installed member, yield to ordinary namespace admission in Type Check Rule.
+It retains the established missing-module guidance for Result.unwrapOr and
+Option functions. User-declared sum misses retain their variant-name hint,
+and actual constructor patterns retain their existing diagnostics.
+
+Resolved Grill Log: adding built-ins to declaredNames must not let constructor
+admission preempt module/import guidance. Preserve exact E3034 code/help from
+the carrier regression rather than weakening its expected output. See [[Builtin Scope Delivery]].

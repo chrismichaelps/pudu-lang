@@ -7,6 +7,7 @@ module Pudu.Type.Check.Import
 import qualified Data.Map.Strict as Map
 import qualified Data.Set as Set
 import Pudu.Type.Check.Install (installWanted, interfaceScope)
+import Pudu.Type.Formation.Builtin (builtinScope)
 import Pudu.Type.Env
   ( Checker
   , DeclaredTypes (..)
@@ -24,13 +25,13 @@ import Pudu.Type.Interface.Graph
 import Pudu.Type.Value (nominalKey)
 
 {-| The declarations every imported interface collects to, overlaid with the
-    consumer's spellings for what it imported.
+    consumer's spellings for what it imported and then the built-in types.
 
     The collection itself is the graph's, formed once; see [[Type Interface Graph]]. -}
 collectImportedDeclared :: ImportTypes -> Checker DeclaredTypes
 collectImportedDeclared imported =
   pure collected
-    { declaredNames = importedNames imported <> declaredNames collected
+    { declaredNames = importedNames imported <> builtinScope <> declaredNames collected
     , declaredAliases = aliases <> declaredAliases collected
     , declaredQualifiers = importedQualifiers imported <> declaredQualifiers collected
     }
