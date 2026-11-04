@@ -5,6 +5,10 @@ tags: [changelog]
 
 # Changelog
 
+## 2026-11-04 — Native members through a type parameter (#819)
+
+- [[Compiler Lower Method]] resolves a bound type parameter in qualifier position, so `T.made()` in a generic copy calls the bound type's member natively instead of refusing `T` as a value.
+
 ## 2026-11-04 — Portable native-output gate classification (#811)
 
 - [[Native Output Tests]] measures kernel readiness after inherited-descriptor

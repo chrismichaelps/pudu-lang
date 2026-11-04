@@ -128,3 +128,23 @@ A receiver call decodes a provider-selected member and takes the
 implementation that provider gives the receiver's type, falling back to the
 owner's only method of that name. A qualified call accepts the canonical key
 checking writes for its owner, and matches a trait by its last segment.
+
+## Members through a type parameter (#819)
+
+`lowerQualifiedMethod` resolves its qualifier with `boundOwner` before
+`lowerOwnerMethod` selects an implementation. A qualifier this copy binds as a
+type parameter, as in `T.made()` or `T.scaled(1)`, names the owner key of the
+type bound to it, so the copy calls that type's member or the default it
+inherits. Any other qualifier stays as written.
+
+Resolved Grill Log:
+- *Why at the qualifier and not by reading `T` as a value?* The evaluator
+  reaches the member through the copy's type witness, and a generic copy
+  already holds every binding. Rewriting the owner before selection reuses the
+  type-qualified path, with its argument order, loans and failure spans,
+  unchanged.
+- *What if a type is declared under the parameter's name?* Inside the generic
+  body the parameter shadows it, as it does in checking and in the evaluator,
+  so the binding wins.
+- *Built-in owners?* `ownerKeyOf` gives `Int` and the other scalars their own
+  key, so `impl Sized for Int` is selected like any record's implementation.
