@@ -86,3 +86,11 @@ which still has no native form.
 ## Decimal (#802)
 
 A folded Decimal constant now lowers; the unrepresented cases use Buckets.
+
+## Frozen collection admission (#808)
+
+Arrays, maps, sets and ranges with supplied valid products now lower; missing
+products still refuse at the exact constant use. Inject a portable product
+with a mismatched nested element to require E6001 without initializer fallback.
+Resolved Grill Log: change expectations only for newly represented families;
+retain callable/Buckets refusals and compile-time initializer failures.

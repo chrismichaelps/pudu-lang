@@ -5,6 +5,16 @@ tags: [changelog]
 
 # Changelog
 
+## 2026-11-04 — Native frozen collections and ranges (#808)
+
+- [[Compiler Lower Constant]] projects already-folded arrays, maps, sets
+  and ranges recursively against complete checked types, preserving stored
+  representatives, endpoint absence and owned-value cleanup.
+- [[Backend Module Programs]] covers nested data, empty collections,
+  imported canonical owners and runtime refusal provenance; [[Native Solved
+  Types Tests]] rejects malformed products without initializer fallback.
+- [[Native Frozen Collection Delivery]] records validation and remaining scope.
+
 ## 2026-10-27 — Exact native wide values (#502)
 
 - [[Backend Wide Integer Values]] preserves actual signs and selectable helpers.

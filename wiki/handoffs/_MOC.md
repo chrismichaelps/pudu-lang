@@ -5,6 +5,8 @@ tags: [moc, handoff]
 
 # Handoff Map
 
+- [[Native Frozen Collection Delivery]] — #808 compiler-folded arrays, maps, sets and ranges.
+
 - [[Native Unsigned Integer Delivery]] — UInt and fixed unsigned native admission (#500).
 
 - [[Native Signed Integer Delivery]] — fixed signed widths on the exact native carrier (#497).

@@ -74,3 +74,17 @@ payload must list the variant's fields in declaration order.
 ## Decimal (#802)
 
 A folded Decimal projects to its literal.
+
+## Frozen collections and ranges (#808)
+
+Project ArrayValue members recursively against the solved element type.
+MapValue entries in stored ascending order become typed key/value tuples,
+then a CoreArray and KeyedFromArray; SetValue members follow the same path.
+Preserve the held representative's exact bits and nominal identity. RangeValue
+becomes CoreRangeValue with independent optional platform-Int endpoints and
+the original inclusivity flag. Every nested expression keeps the use span.
+
+Resolved Grill Log: frozen keys contain no callable/resource data, so their
+existing validity requires no new runtime key-order test. Recursively reject
+any malformed element or endpoint rather than truncating, coercing, sorting
+by rendered names, or evaluating initializers. Ordinary carriers own cleanup.
