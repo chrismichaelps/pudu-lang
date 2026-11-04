@@ -237,6 +237,7 @@ tags: [moc, handoff]
 
 - [[Graph Integration Delivery]] — preserve both Database safeguards and exact graph output (#478).
 
+- [[Native Core Contracts Delivery]] — first dev-based native review partition (#486).
 - [[Backend Performance Delivery]] — measured runtime layers, release size and conditional dev integration (#483).
 
 - [[Native Frame Pressure Repair]] — active native recursion-frame parity repair (#499); the 100% emission goal remains open.

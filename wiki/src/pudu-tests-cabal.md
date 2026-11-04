@@ -183,6 +183,9 @@ Register [[Mutex Admission Spec]] explicitly with existing dependencies. Resolve
 
 Register [[Database Challenge Spec]] explicitly with existing dependencies. Resolved Grill Log: complete-suite execution and focused execution use the same real challenge admission assertions.
 
+## Native Core contracts (#486)
+
+Resolved Grill Log: Register Pudu.CoreSpec using the existing test dependencies.
 ## Native function and process regressions (#488)
 
 Register [[Backend Function Programs]] as the native function corpus and [[Backend Toolchain Tests]] as an executed property family. Resolved Grill Log: the full suite must run independent differential and adversarial process regressions through static registration; no new test dependency.

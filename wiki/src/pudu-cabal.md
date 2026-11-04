@@ -394,6 +394,9 @@ imports no frontend or semantic module.
 
 Register [[Resolve State]] for the private pure resolver action and state boundary. Resolved Grill Log: preserve the abstract [[Resolve Context]] facade and existing state/diagnostic ordering without a new dependency.
 
+## Native Core contracts (#486)
+
+Resolved Grill Log: Register Pudu.Core with existing dependencies; this data-contract partition adds no native command.
 ## Native function hardening (#488)
 
 Register [[Backend Emit State]], [[Backend Emit Support]], [[Compiler Lower Body]], [[Compiler Lower State]], [[Compiler Lower Signature]], and [[Diagnostic Evaluation]] without new dependencies. Register the native function-program test corpus. Resolved Grill Log: these pure boundaries keep files reviewable and share the existing runtime diagnostic text; no dependency or toolchain policy changes.

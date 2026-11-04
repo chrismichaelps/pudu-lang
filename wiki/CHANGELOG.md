@@ -5,6 +5,12 @@ tags: [changelog]
 
 # Changelog
 
+## 2026-10-27 — Native Core contracts review partition (#486)
+
+Register the existing native Core data model independently of the accumulated
+implementation stack. Canonical identity remains separate from source-facing
+type rendering. This partition adds no native CLI or execution path; lowering,
+runtime, emitter and toolchain delivery remain open. [[Native Core Contracts Delivery]].
 ## 2026-11-04 — Native Decimal (#802)
 
 - Programs holding Decimal build natively: exact arithmetic and comparison across scales, division that is exact or fails with the interpreter's E7004 and E7010, the seven rounding modes, parsing, conversion to Float64 and Int, and every `Std.Decimal` primitive. See [[Native Decimal]].

@@ -238,6 +238,7 @@ tags: [moc, module]
 - [[Mutex Admission Fixture]] — real local Database contention and recovery.
 - [[Database Challenge Spec]] · [[Database Challenge Fixture]] · [[Database Challenge Transport]]
 
+- [[Pudu Core IR Module]] · [[Native Core Contract Tests]] — native IR data contracts (#486).
 ## Native function delivery (#488)
 
 - [[Backend Emit State]]
