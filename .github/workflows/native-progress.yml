@@ -1,0 +1,66 @@
+name: native-progress
+
+on:
+  pull_request:
+    branches: [dev]
+    paths:
+      - README.md
+      - wiki/architecture/NATIVE-EMISSION.md
+      - scripts/native-progress.mjs
+      - test/native-progress.test.mjs
+      - .github/workflows/native-progress.yml
+  push:
+    branches: [dev]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+      - run: node --test test/native-progress.test.mjs
+
+  publish:
+    if: github.event_name != 'pull_request'
+    needs: validate
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    concurrency:
+      group: native-progress-dev
+      cancel-in-progress: false
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: dev
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+      - name: Refresh progress on current dev
+        run: |
+          set -euo pipefail
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          for attempt in 1 2 3; do
+            git fetch origin dev
+            git checkout -B native-progress-update origin/dev
+            node --test test/native-progress.test.mjs
+            node scripts/native-progress.mjs --write
+            node scripts/native-progress.mjs --check
+            if git diff --quiet -- README.md; then
+              exit 0
+            fi
+            git add -- README.md
+            git commit -m 'docs(readme): refresh C11 emission progress refs #496'
+            if git push origin HEAD:dev; then
+              exit 0
+            fi
+          done
+          echo 'Could not publish C11 progress after three attempts' >&2
+          exit 1

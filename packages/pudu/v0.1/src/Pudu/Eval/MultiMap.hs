@@ -10,6 +10,7 @@ import Data.List.NonEmpty (NonEmpty (..))
 import qualified Data.IntMap.Strict as IntMap
 import qualified Data.Map.Strict as Map
 import qualified Data.Sequence as Seq
+import Pudu.Diagnostic.Arithmetic (CheckedOperation (..))
 import Pudu.Eval.Builtin.Collection (unorderableKey)
 import Pudu.Eval.Env (Env (..), Evaluator (..), abortAt, callLimit, descend, tally)
 import Pudu.Eval.Operator (checkedResult)
@@ -28,7 +29,7 @@ import qualified Pudu.Runtime.SeriesMap as SeriesMap
     persistent, and overwrites keep the same representative as Map insertion. -}
 callMultiMapAdd :: Span -> [Value] -> Evaluator Value
 callMultiMapAdd spanValue arguments = case arguments of
-  [RecordValue _ fields, key, value]
+  [RecordValue owner fields, key, value]
     | Just (MapValue groups) <- lookup "groups" fields
     , Just occurrences <- lookup "occurrences" fields -> do
         if comparableValue key
@@ -45,12 +46,12 @@ callMultiMapAdd spanValue arguments = case arguments of
           then pure ()
           else unorderableKey spanValue pair "map key" >> pure ()
         (heldCount, counted) <- insertOccurrence spanValue occurrences key value
-        let result = pure (RecordValue "MultiMap" [("groups", MapValue added), ("occurrences", counted)])
+        let result = pure (RecordValue owner [("groups", MapValue added), ("occurrences", counted)])
         case heldCount of
           Nothing -> result
           Just (IntValue kind count)
             | integerKindFits (integerKindMeet kind defaultIntegerKind) (count + 1) -> result
-            | otherwise -> checkedResult spanValue (integerKindMeet kind defaultIntegerKind) "add" (count + 1)
+            | otherwise -> checkedResult spanValue (integerKindMeet kind defaultIntegerKind) CheckedAdd (count + 1)
           _ -> abortAt (Just spanValue) "E7001" "multiMapAdd expects Int occurrence counts" Nothing
    where
     append _ _ (ArrayValue members) = ArrayValue (members Seq.|> value)

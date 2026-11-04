@@ -6,6 +6,7 @@ module Pudu.Frontend.Parser.Expression.Aggregate
   , parseSetLiteral
   , parseGrouped
   , parseNameOrRecord
+  , parseSiblingItems
   ) where
 
 import Data.Char (isUpper)
@@ -29,7 +30,6 @@ import Pudu.Frontend.Parser.State
   , peekToken
   , recordsAdmitted
   , withRecords
-  , withRecursionBudget
   )
 import Pudu.Frontend.Syntax.Located (Located (..))
 import Pudu.Frontend.Syntax.Tree
@@ -254,33 +254,12 @@ parseArrayLiteral parsers blockParser = do
         )
     Nothing -> do
       first <- withRecords (expressionOf parsers blockParser)
-      rest <- parseArrayTail parsers blockParser []
+      (items, _) <- parseSiblingItems parsers blockParser "]" first
       closing <- expectSymbol "]" "to close the array literal"
       pure
         ( Located (mergedOrLeft (tokenSpan opening) (tokenSpan closing))
-            (ArrayExpression (first : rest))
+            (ArrayExpression items)
         )
-
-parseArrayTail :: ExpressionParsers -> BlockParser -> [Located Expression] -> Parser [Located Expression]
-parseArrayTail parsers blockParser reversed = do
-  comma <- matchSymbol ","
-  case comma of
-    Nothing -> pure (reverse reversed)
-    Just _ -> do
-      kind <- peekKind
-      if isSymbol "]" kind
-        then pure (reverse reversed)
-        else do
-          bounded <- withRecursionBudget $ do
-            before <- peekToken
-            next <- withRecords (expressionOf parsers blockParser)
-            after <- peekToken
-            if before == after
-              then pure (reverse reversed, True)
-              else do
-                rest <- parseArrayTail parsers blockParser (next : reversed)
-                pure (rest, False)
-          pure (maybe (reverse reversed) fst bounded)
 
 {-| A Set literal `#{a, b, c}` retains every member expression in source
     order. The evaluator, not the parser, collapses duplicate values after all
@@ -298,30 +277,35 @@ parseSetLiteral parsers blockParser = do
         )
     Nothing -> do
       first <- withRecords (expressionOf parsers blockParser)
-      rest <- parseSetTail parsers blockParser []
+      (items, _) <- parseSiblingItems parsers blockParser "}" first
       closing <- expectSymbol "}" "to close the Set literal"
       pure
         ( Located (mergedOrLeft (tokenSpan hash) (tokenSpan closing))
-            (SetExpression (first : rest))
+            (SetExpression items)
         )
 
-parseSetTail :: ExpressionParsers -> BlockParser -> [Located Expression] -> Parser [Located Expression]
-parseSetTail parsers blockParser reversed = do
-  comma <- matchSymbol ","
-  case comma of
-    Nothing -> pure (reverse reversed)
-    Just _ -> do
+{-| Reads the `, item` siblings after a list's first item, up to but not
+    including the closing symbol, and returns every item in source order with
+    whether reading stopped early. Each item's expression parse charges its own
+    nesting and restores the budget before the next sibling, so list width never
+    counts as depth. Reading stops on the closing symbol, a missing comma, an
+    item that consumed nothing, or an exhausted budget. -}
+parseSiblingItems :: ExpressionParsers -> BlockParser -> Text -> Located Expression -> Parser ([Located Expression], Bool)
+parseSiblingItems parsers blockParser closing first = loop [first]
+  where
+    loop reversed = do
+      comma <- matchSymbol ","
       kind <- peekKind
-      if isSymbol "}" kind
-        then pure (reverse reversed)
-        else do
-          bounded <- withRecursionBudget $ do
-            before <- peekToken
-            next <- withRecords (expressionOf parsers blockParser)
-            after <- peekToken
-            if before == after
-              then pure (reverse reversed, True)
-              else do
-                rest <- parseSetTail parsers blockParser (next : reversed)
-                pure (rest, False)
-          pure (maybe (reverse reversed) fst bounded)
+      exhausted <- budgetExhausted
+      case comma of
+        Nothing -> pure (reverse reversed, False)
+        Just _
+          | isSymbol closing kind -> pure (reverse reversed, False)
+          | exhausted -> pure (reverse reversed, True)
+          | otherwise -> do
+              before <- peekToken
+              next <- withRecords (expressionOf parsers blockParser)
+              after <- peekToken
+              if before == after
+                then pure (reverse reversed, True)
+                else loop (next : reversed)

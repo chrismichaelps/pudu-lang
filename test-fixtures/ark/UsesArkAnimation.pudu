@@ -1,0 +1,154 @@
+module UsesArkAnimation
+
+import Std.Lanes as Lanes
+import Std.Math.Float as Float
+import Ark.Animation as Animation
+import Ark.Animation.Machine as Machine
+import Ark.World.Hierarchy as Hierarchy
+
+fn require(condition: Bool, name: Str) {
+  if !condition { panic(name) }
+}
+
+fn close(value: Option[Float64], expected: Float64) -> Bool {
+  match value {
+    case Some(actual) => Float.abs(actual - expected) < 0.000000001
+    case None => false
+  }
+}
+
+/// Key-major poses from per-key, per-joint (translation x, rotation about z) pairs.
+fn poses(keys: &Array[Array[(Float64, Float64)]]) -> Hierarchy.Poses {
+  var tx: Array[Float64] = []
+  var rz: Array[Float64] = []
+  var rw: Array[Float64] = []
+  var zeros: Array[Float64] = []
+  var ones: Array[Float64] = []
+  for key in *keys {
+    for joint in key {
+      let (x, angle) = joint
+      tx = tx.push(x)
+      rz = rz.push(Float.sin(angle * 0.5))
+      rw = rw.push(Float.cos(angle * 0.5))
+      zeros = zeros.push(0.0)
+      ones = ones.push(1.0)
+    }
+  }
+  let zero = Lanes.fromArray(&zeros)
+  let one = Lanes.fromArray(&ones)
+  Hierarchy.Poses{tx: Lanes.fromArray(&tx), ty: zero, tz: zero, rx: zero, ry: zero, rz: Lanes.fromArray(&rz), rw: Lanes.fromArray(&rw), sx: one, sy: one, sz: one}
+}
+
+fn walk() -> Animation.Clip {
+  let keys = [[(0.0, 0.0), (0.0, 0.0)], [(2.0, Float.pi() / 2.0), (4.0, 0.0)], [(0.0, 0.0), (0.0, 0.0)]]
+  let Some(clip) = Animation.fromKeys(2, &[0.0, 1.0, 2.0], poses(&keys)) else { panic("walk") }
+  clip
+}
+
+fn idle() -> Animation.Clip {
+  let Some(clip) = Animation.fromKeys(2, &[0.0], poses(&[[(10.0, 0.0), (20.0, 0.0)]])) else { panic("idle") }
+  clip
+}
+
+fn sampling() {
+  let clip = walk()
+  require(Animation.duration(&clip) == 2.0, "duration")
+  let Some(start) = Animation.sample(&clip, 0.0, "clamp") else { panic("start") }
+  require(Lanes.toArray(&start.tx) == [0.0, 0.0], "first key exact")
+  let Some(middle) = Animation.sample(&clip, 0.5, "clamp") else { panic("middle") }
+  require(Lanes.toArray(&middle.tx) == [1.0, 2.0], "linear translation per joint")
+  require(close(Lanes.get(&middle.rz, 0), Float.sin(Float.pi() / 8.0)), "normalized rotation halfway along the arc")
+  require(close(Lanes.get(&middle.rw, 0), Float.cos(Float.pi() / 8.0)), "rotation stays unit")
+  let Some(key) = Animation.sample(&clip, 1.0, "clamp") else { panic("key") }
+  require(Lanes.toArray(&key.tx) == [2.0, 4.0], "interior key exact")
+  let Some(late) = Animation.sample(&clip, 99.0, "clamp") else { panic("late") }
+  require(Lanes.toArray(&late.tx) == [0.0, 0.0], "clamp holds the last key")
+  let Some(early) = Animation.sample(&clip, -5.0, "clamp") else { panic("early") }
+  require(Lanes.toArray(&early.tx) == [0.0, 0.0], "clamp holds the first key")
+  let Some(looped) = Animation.sample(&clip, 4.5, "loop") else { panic("looped") }
+  require(Lanes.toArray(&looped.tx) == [1.0, 2.0], "loop wraps whole cycles")
+  let Some(backward) = Animation.sample(&clip, -1.5, "loop") else { panic("backward") }
+  require(Lanes.toArray(&backward.tx) == [1.0, 2.0], "loop wraps negative times")
+  require(Animation.sample(&clip, 0.5, "pingpong") == None, "unknown wrap")
+  require(Animation.sample(&clip, Float.fromBits(0x7ff8000000000000u64), "clamp") == None, "NaN time")
+  let Some(still) = Animation.sample(&idle(), 3.0, "loop") else { panic("single key") }
+  require(Lanes.toArray(&still.tx) == [10.0, 20.0], "single-key clip loops in place")
+}
+
+fn blending() {
+  let Some(a) = Animation.sample(&walk(), 1.0, "clamp") else { panic("a") }
+  let Some(b) = Animation.sample(&idle(), 0.0, "clamp") else { panic("b") }
+  let Some(half) = Animation.blend(&a, &b, 0.5) else { panic("half") }
+  require(Lanes.toArray(&half.tx) == [6.0, 12.0], "blend translation")
+  let Some(kept) = Animation.blend(&a, &b, 0.0) else { panic("zero weight") }
+  require(Lanes.toArray(&kept.tx) == Lanes.toArray(&a.tx), "zero weight keeps the source")
+  require(Animation.blend(&a, &b, 1.5) == None && Animation.blend(&a, &b, Float.fromBits(0x7ff8000000000000u64)) == None, "weight range")
+  let Some(layered) = Animation.blendMasked(&a, &b, &Lanes.fromArray(&[0.0, 1.0])) else { panic("masked") }
+  require(Lanes.toArray(&layered.tx) == [2.0, 20.0], "per-joint layer")
+  require(Animation.blendMasked(&a, &b, &Lanes.fromArray(&[0.5])) == None, "mask length")
+  require(Animation.blendMasked(&a, &b, &Lanes.fromArray(&[-0.1, 0.5])) == None, "mask range")
+  let near = poses(&[[(0.0, 0.1)]])
+  let flipped = Hierarchy.Poses{..near, rz: Lanes.negate(&near.rz), rw: Lanes.negate(&near.rw)}
+  let Some(same) = Animation.blend(&near, &flipped, 0.5) else { panic("double cover") }
+  require(close(Lanes.get(&same.rw, 0), Float.cos(0.05)), "opposite signs of one rotation take the short arc")
+}
+
+fn refusals() {
+  let keys = poses(&[[(0.0, 0.0)], [(1.0, 0.0)]])
+  require(Animation.fromKeys(1, &[0.0, 1.0], keys) != None, "valid clip")
+  require(Animation.fromKeys(0, &[0.0, 1.0], keys) == None, "no joints")
+  require(Animation.fromKeys(1, &[], keys) == None, "no keys")
+  require(Animation.fromKeys(1, &[0.5, 1.0], keys) == None, "first key at zero")
+  require(Animation.fromKeys(1, &[0.0, 0.0], keys) == None, "strictly increasing times")
+  require(Animation.fromKeys(2, &[0.0, 1.0], keys) == None, "lane count")
+  require(Animation.fromKeys(1, &[0.0, 1.0], Hierarchy.Poses{..keys, rw: Lanes.fromArray(&[2.0, 1.0])}) == None, "unit rotations")
+  let nan = Float.fromBits(0x7ff8000000000000u64)
+  require(Animation.fromKeys(1, &[0.0, 1.0], Hierarchy.Poses{..keys, tx: Lanes.fromArray(&[nan, 0.0])}) == None, "finite keys")
+}
+
+fn states() {
+  let walking = Machine.State{name: "walk", clip: walk(), wrap: "loop", speed: 1.0}
+  let resting = Machine.State{name: "idle", clip: idle(), wrap: "clamp", speed: 1.0}
+  let edges = [
+    Machine.Transition{from: "idle", event: "move", to: "walk", fade: 0.5},
+    Machine.Transition{from: "walk", event: "stop", to: "idle", fade: 0.0},
+  ]
+  let Ok(machine) = Machine.build(&[walking, resting], &edges, "idle") else { panic("machine") }
+  require(Machine.current(&machine) == "idle" && Machine.accepts(&machine, "move") && !Machine.accepts(&machine, "stop"), "initial state")
+  require(Machine.trigger(machine, "stop") == machine, "an unhandled event changes nothing")
+  let moving = Machine.trigger(machine, "move")
+  let Some(quarter) = Machine.advance(moving, 0.25) else { panic("advance") }
+  let Some(fading) = Machine.pose(&quarter) else { panic("fade pose") }
+  require(Lanes.toArray(&fading.tx) == [5.25, 10.5], "cross-fade halfway from idle into walk")
+  let Some(done) = Machine.advance(quarter, 0.5) else { panic("finish") }
+  require(done.fading == None, "fade ends")
+  let Some(walked) = Machine.pose(&done) else { panic("walk pose") }
+  require(Lanes.toArray(&walked.tx) == [1.5, 3.0], "walk clock kept running through the fade")
+  let stopped = Machine.trigger(done, "stop")
+  let Some(snap) = Machine.pose(&stopped) else { panic("snap") }
+  require(Lanes.toArray(&snap.tx) == [10.0, 20.0] && stopped.fading == None, "zero fade switches at once")
+  require(Machine.advance(done, -1.0) == None, "negative step")
+  require(Machine.build(&[walking, walking], &[], "walk") == Err(Machine.DuplicateState("walk")), "duplicate state")
+  require(Machine.build(&[walking], &[], "run") == Err(Machine.UnknownState("run")), "unknown initial")
+  require(Machine.build(&[walking], &[Machine.Transition{from: "walk", event: "go", to: "run", fade: 0.0}], "walk") == Err(Machine.UnknownState("run")), "unknown target")
+  require(Machine.build(&[walking, resting], &[edges[0], edges[0]], "idle") == Err(Machine.DuplicateTransition("idle", "move")), "duplicate transition")
+  require(Machine.build(&[walking, resting], &[Machine.Transition{..edges[0], fade: -1.0}], "idle") == Err(Machine.InvalidFade("idle", "move")), "negative fade")
+  require(Machine.build(&[Machine.State{..walking, wrap: "bounce"}], &[], "walk") == Err(Machine.InvalidState("walk")), "unknown wrap")
+  let Some(single) = Animation.fromKeys(1, &[0.0], poses(&[[(0.0, 0.0)]])) else { panic("single") }
+  require(Machine.build(&[walking, Machine.State{..resting, clip: single}], &[], "walk") == Err(Machine.JointMismatch("idle")), "joint count")
+}
+
+fn hierarchy() {
+  let Some(pose) = Animation.sample(&walk(), 1.0, "clamp") else { panic("pose") }
+  require(Lanes.count(&pose.tx) == 2 && Lanes.count(&pose.sz) == 2, "poses address joints by hierarchy slot")
+}
+
+export fn main() -> Int {
+  sampling()
+  blending()
+  refusals()
+  states()
+  hierarchy()
+  print("ark animation: ok")
+  0
+}

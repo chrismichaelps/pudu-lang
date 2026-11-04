@@ -1,0 +1,193 @@
+module Ark.Animation.Ik
+
+import Std.Math.Float as Float
+import Ark.Math.Quat as Q
+import Ark.Math as V
+
+/// A two-bone limb in world space: the root, the middle joint and the end.
+export type Limb = { root: V.Vec3, joint: V.Vec3, end: V.Vec3 }
+
+/// A solved limb: new joint and end positions, the rotations to compose onto each bone, and the distance left to the target.
+export type Reach = { joint: V.Vec3, end: V.Vec3, rootTurn: Q.Quat, jointTurn: Q.Quat, shortfall: Float64 }
+
+/// A solved chain: joint positions, iterations spent, the end's remaining distance and whether it is within tolerance.
+export type ChainSolve = { joints: Array[V.Vec3], iterations: Int, error: Float64, reached: Bool }
+
+/// Why a limb or chain cannot be solved.
+export type IkError
+  = NonFinite
+  | ZeroLength
+  | TooFewJoints(Int)
+  | NegativeSoftness
+  | BadTolerance
+  | BadBudget(Int)
+  | CountMismatch
+
+/// Directions closer to parallel than this, by squared sine, do not define a bend plane.
+const PARALLEL: Float64 = 0.000000000001
+
+/// Solve a limb toward a target, bending in the plane of `pole`; `softness` 0 clamps hard at full reach.
+export fn twoBone(limb: &Limb, target: V.Vec3, pole: V.Vec3, softness: Float64) -> Result[Reach, IkError] {
+  if !V.isFinite(limb.root) || !V.isFinite(limb.joint) || !V.isFinite(limb.end) || !V.isFinite(target) || !V.isFinite(pole) || !Float.isFinite(softness) {
+    return Err(NonFinite)
+  }
+  if softness < 0.0 { return Err(NegativeSoftness) }
+  let upper = lengthOf(V.subtract(limb.joint, limb.root)) ?
+  let lower = lengthOf(V.subtract(limb.end, limb.joint)) ?
+  let toward = V.subtract(target, limb.root)
+  let Some(distance) = Float.sqrt(V.dot(toward, toward)) else { return Err(NonFinite) }
+  let direction = reachDirection(limb, toward, distance)
+  let bend = bendDirection(limb, direction, pole)
+  let reach = reachOf(distance, upper, lower, softness)
+  let along = if reach > 0.0 { (upper * upper + reach * reach - lower * lower) / (2.0 * reach) } else { 0.0 }
+  let height = match Float.sqrt(nonNegative(upper * upper - along * along)) {
+    case Some(value) => value
+    case None => 0.0
+  }
+  let joint = V.add(limb.root, V.add(V.scale(direction, along), V.scale(bend, height)))
+  let end = V.add(limb.root, V.scale(direction, reach))
+  let rootTurn = turn(V.subtract(limb.joint, limb.root), V.subtract(joint, limb.root))
+  let jointTurn = turn(V.subtract(limb.end, limb.joint), V.subtract(end, joint))
+  Ok(Reach{joint, end, rootTurn, jointTurn, shortfall: Float.abs(distance - reach)})
+}
+
+/// Solve a chain toward a target with forward-and-backward reaching, keeping segment lengths and the root.
+export fn fabrik(joints: &Array[V.Vec3], target: V.Vec3, tolerance: Float64, budget: Int) -> Result[ChainSolve, IkError] {
+  if joints.length() < 2 { return Err(TooFewJoints(joints.length())) }
+  if !Float.isFinite(tolerance) || tolerance < 0.0 { return Err(BadTolerance) }
+  if budget < 1 { return Err(BadBudget(budget)) }
+  if !V.isFinite(target) { return Err(NonFinite) }
+  var lengths: Array[Float64] = []
+  var total = 0.0
+  var index = 1
+  while index < joints.length() {
+    if !V.isFinite(joints[index]) || !V.isFinite(joints[index - 1]) { return Err(NonFinite) }
+    let segment = lengthOf(V.subtract(joints[index], joints[index - 1])) ?
+    lengths = lengths.push(segment)
+    total = total + segment
+    index = index + 1
+  }
+  let root = joints[0]
+  let Some(span) = Float.sqrt(V.distanceSquared(root, target)) else { return Err(NonFinite) }
+  if span >= total {
+    let straight = straightened(root, target, span, &lengths)
+    return Ok(ChainSolve{joints: straight, iterations: 1, error: span - total, reached: span - total <= tolerance})
+  }
+  var current = *joints
+  var iterations = 0
+  var error = remaining(&current, target)
+  while error > tolerance && iterations < budget {
+    current = forwardPass(backwardPass(current, target, &lengths), root, &lengths)
+    iterations = iterations + 1
+    error = remaining(&current, target)
+  }
+  Ok(ChainSolve{joints: current, iterations, error, reached: error <= tolerance})
+}
+
+fn nonNegative(value: Float64) -> Float64 {
+  if value > 0.0 { value } else { 0.0 }
+}
+
+fn lengthOf(offset: V.Vec3) -> Result[Float64, IkError] {
+  match Float.sqrt(V.dot(offset, offset)) {
+    case Some(length) => if length > 0.0 { Ok(length) } else { Err(ZeroLength) }
+    case None => Err(NonFinite)
+  }
+}
+
+fn reachOf(distance: Float64, upper: Float64, lower: Float64, softness: Float64) -> Float64 {
+  let longest = upper + lower
+  let shortest = Float.abs(upper - lower)
+  let start = longest - softness
+  if softness > 0.0 && distance > start && start >= shortest {
+    return longest - softness * softness / (distance - start + softness)
+  }
+  Float.clamp(distance, shortest, longest)
+}
+
+fn reachDirection(limb: &Limb, toward: V.Vec3, distance: Float64) -> V.Vec3 {
+  if distance > 0.0 { return V.scale(toward, 1.0 / distance) }
+  match V.normalized(V.subtract(limb.end, limb.root)) {
+    case Some(current) => current
+    case None => unitOr(V.subtract(limb.joint, limb.root))
+  }
+}
+
+fn bendDirection(limb: &Limb, direction: V.Vec3, pole: V.Vec3) -> V.Vec3 {
+  if let Some(fromPole) = across(V.subtract(pole, limb.root), direction) { return fromPole }
+  if let Some(fromJoint) = across(V.subtract(limb.joint, limb.root), direction) { return fromJoint }
+  match across(V.vec3(1.0, 0.0, 0.0), direction) {
+    case Some(axis) => axis
+    case None => unitOr(V.cross(V.vec3(0.0, 1.0, 0.0), direction))
+  }
+}
+
+/// The unit part of `offset` perpendicular to unit `direction`, or None when they are parallel.
+fn across(offset: V.Vec3, direction: V.Vec3) -> Option[V.Vec3] {
+  let perpendicular = V.subtract(offset, V.scale(direction, V.dot(offset, direction)))
+  let squared = V.dot(perpendicular, perpendicular)
+  if squared <= PARALLEL * V.dot(offset, offset) || squared == 0.0 { return None }
+  V.normalized(perpendicular)
+}
+
+fn unitOr(value: V.Vec3) -> V.Vec3 {
+  match V.normalized(value) {
+    case Some(unit) => unit
+    case None => V.vec3(1.0, 0.0, 0.0)
+  }
+}
+
+fn turn(from: V.Vec3, to: V.Vec3) -> Q.Quat {
+  match Q.between(from, to) {
+    case Some(rotation) => rotation
+    case None => Q.identity()
+  }
+}
+
+fn straightened(root: V.Vec3, target: V.Vec3, span: Float64, lengths: &Array[Float64]) -> Array[V.Vec3] {
+  let direction = if span > 0.0 { V.scale(V.subtract(target, root), 1.0 / span) } else { V.vec3(1.0, 0.0, 0.0) }
+  var placed = [root]
+  var at = root
+  for segment in *lengths {
+    at = V.add(at, V.scale(direction, segment))
+    placed = placed.push(at)
+  }
+  placed
+}
+
+fn backwardPass(joints: Array[V.Vec3], target: V.Vec3, lengths: &Array[Float64]) -> Array[V.Vec3] {
+  var moved = joints
+  var index = moved.length() - 1
+  moved[index] = target
+  while index > 0 {
+    moved[index - 1] = stepToward(moved[index], moved[index - 1], lengths[index - 1])
+    index = index - 1
+  }
+  moved
+}
+
+fn forwardPass(joints: Array[V.Vec3], root: V.Vec3, lengths: &Array[Float64]) -> Array[V.Vec3] {
+  var moved = joints
+  moved[0] = root
+  var index = 1
+  while index < moved.length() {
+    moved[index] = stepToward(moved[index - 1], moved[index], lengths[index - 1])
+    index = index + 1
+  }
+  moved
+}
+
+/// The point `length` from `anchor` toward `point`; `point` itself when they coincide.
+fn stepToward(anchor: V.Vec3, point: V.Vec3, length: Float64) -> V.Vec3 {
+  match V.normalized(V.subtract(point, anchor)) {
+    case Some(unit) => V.add(anchor, V.scale(unit, length))
+    case None => point
+  }
+}
+
+fn remaining(joints: &Array[V.Vec3], target: V.Vec3) -> Float64 {
+  match Float.sqrt(V.distanceSquared(joints[joints.length() - 1], target)) {
+    case Some(distance) => distance
+    case None => 0.0
+  }
+}

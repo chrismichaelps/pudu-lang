@@ -70,6 +70,9 @@ literalIndex :: Located Expression -> Maybe Integer
 
 ## Grill Log
 
+- **Q:** Does a closure body mark its own result position? **A:** Yes; its tail answers the
+  closure, not the enclosing function, for [[Check Propagation]].
+
 - **Q:** Why pass recursive checkers (`Located Expression -> Checker Type`, etc.) rather than importing `CheckSurroundings` or `Expression`? **A:** Because `Pudu.Type.Check.Expression` imports `Control`. Passing function runners decouples control construct checking from expression coordination and prevents circular imports without `.hs-boot`.
 - **Q:** Why group match arms, lambdas, loops, and captured assignments together in `Control`? **A:** These represent the non-trivial control and scope boundaries of expressions (arms, closure scopes, loop labels/carries, and write guards). Moving them leaves `Expression.hs` as a clear, focused AST dispatcher well below 400 lines.
 

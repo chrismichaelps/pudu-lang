@@ -1,0 +1,54 @@
+module UsesArkMatrix
+
+import Ark.Math.Matrix as Matrix
+import Ark.Math as Vector
+
+fn require(condition: Bool, name: Str) {
+  if !condition { panic(name) }
+}
+
+export fn main() -> Int {
+  let a = Matrix.columns3(Vector.vec3(1.0, 0.0, 5.0), Vector.vec3(2.0, 1.0, 6.0), Vector.vec3(3.0, 4.0, 0.0))
+  let b = Matrix.columns3(Vector.vec3(-2.0, 3.0, 4.0), Vector.vec3(1.0, 0.0, 5.0), Vector.vec3(0.0, 0.0, 1.0))
+  let expected = Matrix.columns3(Vector.vec3(16.0, 19.0, 8.0), Vector.vec3(16.0, 20.0, 5.0), Vector.vec3(3.0, 4.0, 0.0))
+  require(Matrix.multiply3(a, b) == expected, "numeric matrix product")
+  require(Matrix.transform3(a, Vector.vec3(2.0, 3.0, 4.0)) == Vector.vec3(20.0, 19.0, 28.0), "column vector product")
+  require(Matrix.multiply3(a, Matrix.identity3()) == a, "right identity3")
+  require(Matrix.multiply3(Matrix.identity3(), a) == a, "left identity3")
+  require(Matrix.transpose3(Matrix.transpose3(a)) == a, "transpose3 involution")
+  require(Matrix.transpose3(a).x == Vector.vec3(1.0, 2.0, 3.0), "transpose3 columns")
+  let full = Matrix.columns4(
+    Vector.vec4(1.0, 2.0, 3.0, 4.0), Vector.vec4(5.0, 6.0, 7.0, 8.0),
+    Vector.vec4(9.0, 10.0, 11.0, 12.0), Vector.vec4(13.0, 14.0, 15.0, 17.0),
+  )
+  require(Matrix.transform4(full, Vector.vec4(2.0, 3.0, 4.0, 5.0)) == Vector.vec4(118.0, 132.0, 146.0, 165.0), "full homogeneous product")
+  require(Matrix.multiply4(full, Matrix.identity4()) == full, "right identity4")
+  require(Matrix.multiply4(Matrix.identity4(), full) == full, "left identity4")
+  require(Matrix.transpose4(Matrix.transpose4(full)) == full, "transpose4 involution")
+  require(Matrix.transpose4(full).w == Vector.vec4(4.0, 8.0, 12.0, 17.0), "transpose4 columns")
+  let shift = Matrix.translation(Vector.vec3(10.0, 20.0, 30.0))
+  let stretch = Matrix.scaling(Vector.vec3(2.0, 3.0, 4.0))
+  let point = Vector.vec3(1.0, 2.0, 3.0)
+  require(Matrix.projectPoint(Matrix.multiply4(shift, stretch), point) == Some(Vector.vec3(12.0, 26.0, 42.0)), "scale then translate")
+  require(Matrix.projectPoint(Matrix.multiply4(stretch, shift), point) == Some(Vector.vec3(22.0, 66.0, 132.0)), "translate then scale")
+  require(Matrix.transform4(shift, Vector.vec4(1.0, 2.0, 3.0, 0.0)) == Vector.vec4(1.0, 2.0, 3.0, 0.0), "direction ignores translation")
+  require(Matrix.transform4(shift, Vector.vec4(1.0, 2.0, 3.0, 1.0)) == Vector.vec4(11.0, 22.0, 33.0, 1.0), "point receives translation")
+  let perspective = Matrix.columns4(
+    Vector.vec4(1.0, 0.0, 0.0, 1.0), Vector.vec4(0.0, 1.0, 0.0, 0.0),
+    Vector.vec4(0.0, 0.0, 1.0, 0.0), Vector.vec4(0.0, 0.0, 0.0, 0.0),
+  )
+  require(Matrix.projectPoint(perspective, Vector.vec3(2.0, 4.0, 6.0)) == Some(Vector.vec3(1.0, 2.0, 3.0)), "perspective division")
+  require(Matrix.projectPoint(perspective, Vector.vec3(-2.0, -4.0, -6.0)) == Some(Vector.vec3(1.0, 2.0, 3.0)), "negative finite w retained")
+  require(Matrix.projectPoint(perspective, Vector.vec3(0.0, 4.0, 6.0)) == None, "zero w refused")
+  let infinity = 1.0e308 * 2.0
+  require(Matrix.projectPoint(Matrix.identity4(), Vector.vec3(infinity, 0.0, 0.0)) == None, "nonfinite projection refused")
+  require(Matrix.projectPoint(Matrix.translation(Vector.vec3(infinity, 0.0, 0.0)), point) == None, "nonfinite numerator refused")
+  let tinyW = Matrix.columns4(
+    Vector.vec4(1.0, 0.0, 0.0, 0.0), Vector.vec4(0.0, 1.0, 0.0, 0.0),
+    Vector.vec4(0.0, 0.0, 1.0, 0.0), Vector.vec4(0.0, 0.0, 0.0, 1.0e-300),
+  )
+  require(Matrix.projectPoint(tinyW, Vector.vec3(1.0e300, 0.0, 0.0)) == None, "division overflow refused")
+  require(Matrix.projectPoint(tinyW, Vector.vec3(1.0e-300, 0.0, 0.0)) == Some(Vector.vec3(1.0, 0.0, 0.0)), "small finite w retained")
+  print("ark matrix: ok")
+  0
+}

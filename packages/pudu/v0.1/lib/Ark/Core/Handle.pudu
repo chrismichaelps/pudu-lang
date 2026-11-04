@@ -1,0 +1,47 @@
+module Ark.Core.Handle
+
+/// A slot index and the generation it was issued under.
+export type Handle = { index: Int, generation: Int }
+
+/// One generation per slot, a stack of free slots and the number of live handles.
+export type HandlePool = { generations: Array[Int], free: Array[Int], live: Int }
+
+/// A pool with no slots.
+export fn empty() -> HandlePool {
+  HandlePool{generations: [], free: [], live: 0}
+}
+
+/// Issue a handle, reusing the most recently freed slot before growing.
+export fn allocate(pool: HandlePool) -> (HandlePool, Handle) {
+  let waiting = pool.free.length()
+  if waiting > 0 {
+    let index = pool.free[waiting - 1]
+    let issued = Handle{index, generation: pool.generations[index]}
+    return (HandlePool{generations: pool.generations, free: pool.free.pop(), live: pool.live + 1}, issued)
+  }
+  let index = pool.generations.length()
+  (HandlePool{generations: pool.generations.push(0), free: pool.free, live: pool.live + 1}, Handle{index, generation: 0})
+}
+
+/// Retire a live handle, making every copy of it stale; None for a stale or unknown handle.
+export fn release(pool: HandlePool, handle: Handle) -> Option[HandlePool] {
+  if !isAlive(&pool, handle) { return None }
+  var generations = pool.generations
+  generations[handle.index] = handle.generation + 1
+  Some(HandlePool{generations, free: pool.free.push(handle.index), live: pool.live - 1})
+}
+
+/// Whether the handle was issued by this pool and not yet released.
+export fn isAlive(pool: &HandlePool, handle: Handle) -> Bool {
+  handle.index >= 0 && handle.index < pool.generations.length() && pool.generations[handle.index] == handle.generation
+}
+
+/// The number of live handles.
+export fn liveCount(pool: &HandlePool) -> Int {
+  pool.live
+}
+
+/// The number of slots ever issued.
+export fn capacity(pool: &HandlePool) -> Int {
+  pool.generations.length()
+}

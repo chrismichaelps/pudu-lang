@@ -28,6 +28,7 @@ blockExpression   :: ExpressionParsers -> BlockParser -> Parser (Located Express
 parseNameOrRecord :: ExpressionParsers -> BlockParser -> Token -> Text -> Parser (Located Expression)
 parseGrouped      :: ExpressionParsers -> BlockParser -> Parser (Located Expression)
 parseArrayLiteral :: ExpressionParsers -> BlockParser -> Parser (Located Expression)
+parseSiblingItems :: ExpressionParsers -> BlockParser -> Text -> Located Expression -> Parser ([Located Expression], Bool)
 ```
 
 ### Governance
@@ -49,7 +50,7 @@ parseArrayLiteral :: ExpressionParsers -> BlockParser -> Parser (Located Express
 
 - **Requires:** [[Parser State]], [[Parser Name]], [[Parser Expression Control]] for the capability
   record, [[Parser Expression Recovery]], [[Syntax Tree]], [[Token]].
-- **Consumed by:** [[Parser Expression]].
+- **Consumed by:** [[Parser Expression]], [[Parser Expression Postfix]] (`parseSiblingItems`).
 
 ## Algorithm
 
@@ -58,6 +59,10 @@ reference; a `(` reads a group and promotes it to a tuple on the first top-level
 array elements until its closing bracket; and `#{` reads Set members until `}`. Array and Set lists
 share the same empty, comma, trailing-comma, progress, record-admission, and recursion-budget laws.
 Every list is read through the capability record's expression parser.
+The exported `parseSiblingItems` loop, shared by arrays, Sets and call arguments, checks progress and the exhaustion latch,
+then finishes each element's expression scope before tail-recursing over siblings. Width does
+not consume nesting depth; expressionOf already charges actual expression nesting. Array/Set
+AST order, spans and trailing-comma semantics remain intact. No Parser.State budget change.
 
 ## Negative Logic (Prohibited Paths)
 
@@ -68,6 +73,9 @@ Every list is read through the capability record's expression parser.
 - No deduplication or Set construction. The parser retains written members and their order.
 
 ## Grill Log
+
+- **Q:** Hold withRecursionBudget around recursive sibling traversal? **A:** No; that charges
+  one depth frame per comma. _Resolved:_ restore the item scope before traversing its next sibling.
 
 - **Q:** Why does record admission travel in parser state rather than as an argument? **A:** Because
   it is a property of the position, not of the call. _Rationale:_ every bracketed context inside a

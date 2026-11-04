@@ -60,6 +60,7 @@ checkedFor ExecutionProducts cache graph source frontend compile = do
         , compileMethods = []
         , compileSchemes = []
         , compileFolded = checkedFolded reused
+        , compileShapes = Nothing
         }
     Nothing -> do
       fresh <- compile

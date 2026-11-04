@@ -97,6 +97,7 @@ Pudu takes the middle position deliberately:
 | wired-in types | the compiler | no |
 | `Core.Prelude` | [[Semantic Prelude]] | shadowed by an explicit import |
 | `Std.*` | the standard library | imported explicitly, always |
+| `Ark.*` | integrated engine library, see [[Ark Engine]] | imported explicitly, always |
 | anything else | the program | — |
 
 `Core` holds what the language itself needs to describe its own semantics — the marker traits,

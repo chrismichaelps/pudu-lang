@@ -5,6 +5,30 @@ tags: [moc, module]
 
 # Module Map
 
+- [[Native Unsigned Programs]] — unsigned full-range mathematical and diagnostic conformance (#500).
+
+- [[Native Signed Programs]] — fixed signed-width mathematical and diagnostic conformance (#497).
+
+- [[Host Failure Vocabulary]] · [[CLI Memory Failure]] · [[CLI Memory Tests]] — shared catchable host-exhaustion presentation without swallowing cancellation (#499).
+- [[Backend Frame Program]] · [[Backend Frame Runtime]] · [[Native Frame Runtime Tests]] — production frame ownership, dispatcher and controlled failure checks (#499).
+
+- [[Backend Frame Values]] · [[Backend Frame Bodies]] · [[Native Frame Body Tests]] — constant-arity generated C step bodies and strict corpus compilation (#499).
+
+- [[Core Frame IR]] · [[Compiler Frame Lowering]] · [[Compiler Frame State]] · [[Compiler Frame Body]] · [[Native Frame Lowering Tests]] — pure native continuation lowering (#499).
+
+- [[Repository README]] · [[Native Progress Generator]] · [[Native Progress Tests]] · [[Native Progress Workflow]] — auditable C11 completion publishing.
+- [[src/Ark/_MOC|Ark Modules]] — engine library and focused conformance gates.
+
+- [[Ark Layer Gate]] · [[Ark Layer Model]] · [[Ark Layer Tests]] — explicit engine import contracts.
+- [[Square Root Range Gate]] · [[Root Kernel Benchmark]] — full-range root accuracy and measured estimates.
+
+- [[Website Linux Workflow]] · [[Hackage Transport Test]] — configured HTTPS index transport.
+- [[Qualified Variant Gate]] — typed constructor paths and runtime regression coverage.
+- [[Refresh Pudu Installation]] · [[Refresh Installation Test]] — optimized installation and exact executable verification.
+
+
+
+
 - [[Derive Index Output Gate]] — checked strategy output and visibility.
 
 - [[Database Admission Fixture]] · [[Database Admission Transport]] — bounded pool ownership.
@@ -110,6 +134,13 @@ tags: [moc, module]
 - [[Notes Web Application]] — database-backed HTML and JSON application composition.
 
 - [[Runtime Word Kernels]] — native-word reductions over existing containers.
+- [[Runtime Float Kernels]] — exact and platform binary64 operations behind Std.Math.Float.
+- [[Lane Kernel Identity]] · [[Runtime Lanes]] · [[Eval Builtin Lanes]] — packed binary64 lane kernels.
+- [[Runtime Broadphase]] · [[Overlap Pairs Fixture]] — sort-and-sweep box overlap pairs.
+- [[Runtime Raster]] · [[Raster Fixture]] — native triangle rasterization for the software render device.
+- [[Lanes Gate]] · [[Lanes Fixture]] · [[Lanes Benchmark]] — lane conformance and measurement.
+- [[Lane Collection Gate]] · [[Lane Collection Fixture]] · [[Lane Parallel Benchmark]] — lane buffers share collections so threads overlap.
+- [[Float Kernel Identity]] — names and shapes of the binary64 kernels, read by checker and runtime.
 - [[Eval Word Map]] — checked UInt64 map payload reductions for STD.
 - [[Runtime Buffer Kernels]] — unboxed contiguous byte buffer operations.
 - [[Eval Buffer]] — evaluator adapters for buffer builtins.
@@ -134,6 +165,8 @@ tags: [moc, module]
   the installable compiler archive while preserving the full Cabal gate.
 - [[Service Evaluation Spec]] — exact-count application, database, HTML, and UI fixture contracts.
 - [[Runtime Evaluation Spec]] — exact-count language, runtime, concurrency, filesystem, process, and cryptography fixture contracts.
+- [[Backend Emit Tests]] — lowering refusals, deterministic emission, and verbatim site text without a C compiler.
+- [[Backend Native Tests]] — byte-for-byte native-vs-interpreter conformance and the `E6002`–`E6006` toolchain paths.
 - [[Uses Ui Canvas]] — exact-pixel and typed-refusal coverage for native software rendering.
 - [[Uses Ui Layout]] — exact-frame, accessibility, and repaint-equality coverage for layout.
 - [[Uses Ui Screen]] — input routing, focus, and incremental frames equal to fresh ones.
@@ -175,6 +208,9 @@ tags: [moc, module]
 
 - [[HTTP Benchmark Service]] — real three-route service with an explicit connection budget.
 
+- [[Desktop Presentation Test]] · [[Desktop Presentation Gate]] · [[Desktop Presentation CI]] — native row/channel conformance.
+- [[Desktop Window Test]] · [[Desktop Configure Gate]] · [[Desktop Configure Fixture]] — window records, density, limits and full screen.
+
 ## Referenced by
 
 [[00-INDEX]] · [[grammar/haskell]]
@@ -183,6 +219,9 @@ tags: [moc, module]
 
 - [[Eval Loop Kernel]] — complete pure regions, ordered indexing and closed module functions.
 - [[Eval Loop Step]] · [[Eval Loop Step Tests]] — shared region execution without boxed intermediate result wrappers.
+- [[Eval Record Order Tests]] — records hold their declared field order in every evaluator.
+
+- [[Eval Float Order Tests]] — NaN keeps the value order total.
 - [[Eval Value]] · [[Eval MultiMap]] · [[Eval Operator Access]] · [[Eval Data Tests]] — compact persistent occurrence entries, exact integer index bounds and runtime compatibility evidence.
 
 - [[UsesMultiMapNumeric]] — numeric index and native-loop semantic compatibility.
@@ -200,3 +239,85 @@ tags: [moc, module]
 - [[Database Challenge Spec]] · [[Database Challenge Fixture]] · [[Database Challenge Transport]]
 
 - [[Native Diagnostic Contracts]] · [[Native Diagnostic Contract Tests]] — E6001–E6006 value contracts (#486).
+- [[Pudu Core IR Module]] · [[Native Core Contract Tests]] — native IR data contracts (#486).
+## Native function delivery (#488)
+
+- [[Backend Emit State]]
+- [[Backend Emit Support]]
+- [[Compiler Lower State]]
+- [[Compiler Lower Signature]]
+- [[Backend Function Programs]]
+- [[Backend Toolchain Tests]]
+- [[Diagnostic Evaluation]]
+
+- [[Compiler Lower Control]] — resolved scalar loop targets, transfers and divergence (#489).
+
+- [[Backend Control Programs]] — differential loop-control, divergence and transfer cases (#489).
+
+- [[Eval If Unit Tests]] — explicit no-else unit results across tree, compiled, boxed-loop and constant paths (#490).
+
+- [[Compiler Lower Types]] — same-module solved types for native lowering (#491).
+
+- [[Native Solved Types Tests]] — canonical representation and fact identity regressions.
+
+- [[Compiler Lower Scalar]] — represented operators and ordered runtime failures (#494).
+
+- [[Backend Runtime Integer]] · [[Backend Integer Programs]] — portable platform Int operations and independent mathematical/differential evidence.
+- [[Backend Float Programs]] — Float32/Float64 source programs with IEEE answers and interpreter refusals.
+- [[Native Text Runtime]] · [[Backend Text Programs]] · [[Backend Text Leak Tests]] — owned Str values, conformance and counted leaks.
+- [[Compiler Lower Text]] · [[Native Text Methods]] · [[Backend Text Method Programs]] — native Str methods.
+- [[Native Text Case]] · [[Backend Text Case Tests]] — trim and case mapping from the linked Data.Text.
+- [[Native Char Runtime]] · [[Backend Char Programs]] — Char values, code, toText and charAt.
+- [[Native Aggregate Emission]] · [[Native Aggregate Runtime]] · [[Compiler Lower Tuple]] · [[Backend Tuple Programs]] — boxed tuples.
+- [[Compiler Lower Record]] · [[Backend Record Programs]] — records in declaration order.
+
+- [[Backend Integer Value]] · [[Backend Integer Arithmetic]] · [[Backend Integer Bits]] · [[Backend Deferred Integer Programs]] — exact integer carriers and deferred-value conformance.
+
+- [[Backend Word128 Kernel]] · [[Native Word128 Tests]] — portable 128-bit arithmetic prerequisite.
+
+- [[Backend Wide Integer Values]] · [[Native Wide Value Tests]] — exact signs and selectable dependencies (#502).
+
+- [[Backend Wide Operations]] · [[Native Wide Operation Tests]] — planned typed primitive implementation (#503).
+
+- [[Backend Wide Integer Display]] · [[Native Wide Runtime Tests]] — actual wide runtime integration (#504).
+
+- [[Native Broken Pipe Tests]] — closed-output continuation and later failure (#505).
+
+- [[Native Wide Frame Tests]] — executed wide frame/cleanup contract (#506).
+
+- [[Native Floating Natural Kernel]] · [[Native Floating Natural Tests]] — bounded formatter arithmetic (#508).
+
+- [[Native Binary64 Formatter]] · [[Native Binary64 Formatter Tests]] · [[Native Floating Notices]].
+
+- [[Native Floating Values]] · [[Native Floating Value Tests]] — raw floating arithmetic (#510).
+
+- [[Native Floating Runtime]] · [[Native Runtime Dependencies]] · [[Native Floating Runtime Tests]] — selected floating output (#511).
+
+- [[Backend Output Programs]] · [[Native Output Tests]] — Result values, isolated descriptor failures and entry/fatal reporting (#566).
+
+- [[Backend Expression Body Programs]] — expression-body conformance and cleanup (#567).
+
+- [[Backend Named Callable Programs]] — named call depth, ownership and diagnostics (#568).
+
+- [[Compiler Lower Intrinsic]] · [[Backend Output Callable Programs]] — first-class output builtins (#569).
+- [[Eval Binary]] · [[Binary Codec Properties]] — native binary wire contract and validation.
+- [[Bound Provider Gate]] — generic trait provider execution and cache parity.
+- [[Trait Provider Gate]] — explicit trait signatures, execution and located refusals.
+
+- [[Canonical Owner Gate]] — same-named record dispatch and checked-product reuse.
+
+- [[Qualified Record Method Gate]] — concrete namespace, alias and capture regression.
+
+- [[Sum Owner Gate]] — positional identity and native/task boundary regressions.
+
+- [[Resolve Ambiguity]] — symbol-bound exported variant ambiguity.
+
+- [[Diagnostic Render Properties]] — source identity and presentation regressions.
+
+- [[Method Binding]] — canonical method registration.
+
+- [[Runtime Implementation Head]] · [[Eval Type Witness]] — checked runtime implementation matching.
+
+- [[Ark Water Gate]] — current height-field wave verification.
+
+- [[Builtin Scope Delivery]] — resumed #759 scope isolation; [[Builtin Scope Grid]], [[Builtin Scope Late Grid]], [[Builtin Scope Main]], [[Builtin Scope Reverse]], [[Builtin Scope Selected]], [[Builtin Scope Refusal]], [[Builtin Scope Table]].
