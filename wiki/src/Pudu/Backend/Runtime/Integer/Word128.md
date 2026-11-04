@@ -31,6 +31,11 @@ bounded quotient/remainder. No headers, IO, allocation or language admission.
 ## Referenced by
 
 [[src/_MOC]] · [[Native Wide Value Publication]]
+[[Native Word128 Kernel Contract]] · [[Native Word128 Tests]] · [[Pudu Cabal Manifest]]
+
+## Referenced by
+
+[[src/_MOC]] · [[Native Word128 Publication]]
 path: "@root/src/Pudu/Backend/Runtime/Integer/Word128.hs"
 fidelity: Active
 aliases: [Backend Word128 Kernel]

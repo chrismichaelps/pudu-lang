@@ -400,6 +400,12 @@ and its aggregate failure status. The release gate is unchanged.
 
 Register [[Backend Word128 Kernel]] as the unchanged pure prerequisite.
 Resolved Grill Log: this dev-based projection must build independently.
+Register [[Backend Word128 Kernel]] explicitly without new dependencies. Resolved Grill Log:
+the compiled kernel corpus runs in the complete suite and contributes to its
+aggregate failure status. The full release gate remains unchanged.
+## Native diagnostic contracts (#486)
+
+Resolved Grill Log: Register Pudu.Diagnostic.Native with existing dependencies, without adding CLI integration.
 ## Native Core contracts (#486)
 
 Resolved Grill Log: Register Pudu.Core with existing dependencies; this data-contract partition adds no native command.

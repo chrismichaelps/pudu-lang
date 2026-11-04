@@ -238,6 +238,8 @@ tags: [moc, handoff]
 - [[Graph Integration Delivery]] — preserve both Database safeguards and exact graph output (#478).
 
 - [[Native Wide Value Publication]] — exact wide-carrier dependency partition.
+- [[Native Word128 Publication]] — independent dev-based kernel partition.
+- [[Native Diagnostic Contracts Delivery]] — independent dev-based diagnostic partition (#486).
 - [[Native Core Contracts Delivery]] — first dev-based native review partition (#486).
 - [[Backend Performance Delivery]] — measured runtime layers, release size and conditional dev integration (#483).
 
