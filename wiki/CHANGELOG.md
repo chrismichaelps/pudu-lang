@@ -5,6 +5,10 @@ tags: [changelog]
 
 # Changelog
 
+## 2026-11-04 — Decimal.toInt range (#803)
+
+- `Decimal.toInt` answers `None` for a whole number `Int` cannot hold, instead of a `Some` that failed on first use.
+
 - 2026-11-02: Resume #759: keep built-in type names above unrelated graph declarations while preserving local and selected-import precedence. Qualified, selected and reversed-import Map clients cover both evaluators.
 
 - 2026-11-02: Retain complete selected trait arguments and bounded receiver types in checked products (#735 prerequisite), including applied constructors and final inference substitution; project canonical implementation trait arguments. Bounded runtime transport remains required.
