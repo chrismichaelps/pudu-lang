@@ -12,8 +12,7 @@ import Data.Map.Strict (Map)
 import qualified Data.Map.Strict as Map
 import qualified Data.Sequence as Seq
 import Pudu.Eval.Env
-  ( declaredFieldOrder
-  , inDeclaredOrder
+  ( declaredOrder
   , Evaluator
   , Unwind (..)
   , abortAt
@@ -32,8 +31,9 @@ import Pudu.Eval.Env
   , withNewFrame
   )
 import Pudu.Eval.Call (CallNeeds (..), callClosure, evaluateCall)
-import Pudu.Eval.Call.Path (flattenPath, lastPathSegment, pathValue)
+import Pudu.Eval.Call.Path (flattenPath, pathValue)
 import Pudu.Diagnostic.Arithmetic (CheckedOperation (..))
+import Pudu.Eval.Record (recordConstructor)
 import Pudu.Eval.Compile.Layout (slotLayout)
 import Pudu.Eval.Render (renderValue)
 import Pudu.Eval.Loop (LoopNeeds (..), evaluateFor, evaluateWhile)
@@ -200,11 +200,8 @@ compileExpression walker located@(Located spanValue expression) = case expressio
     pure (ArrayValue . Seq.fromList <$> sequence codes)
   RecordExpression path fields -> do
     codes <- mapM (compileFieldInit walker spanValue) fields
-    let owner = lastPathSegment path
-    pure $ do
-      values <- sequence codes
-      declared <- declaredFieldOrder owner
-      pure (RecordValue owner (inDeclaredOrder declared values))
+    let build = recordConstructor path (map (locatedValue . fieldInitName . locatedValue) fields)
+    pure (sequence codes >>= declaredOrder . build)
   MatchExpression scrutinee arms -> do
     subject <- compileExpression walker scrutinee
     compiled <- mapM (compileArm walker) arms

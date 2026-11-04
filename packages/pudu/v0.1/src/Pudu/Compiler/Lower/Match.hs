@@ -5,16 +5,14 @@ module Pudu.Compiler.Lower.Match (lowerMatch, lowerLetElse, lowerPattern, ifLetA
 import Data.Map.Strict (Map)
 import qualified Data.Map.Strict as Map
 import Data.List (find)
-import qualified Data.List.NonEmpty as NonEmpty
 import Pudu.Compiler.Lower.Control (expressionIsPrintValued, joinType)
 import Pudu.Compiler.Lower.State (LowerContext (..), LowerState (..), bindLocal, halt, refused)
-import Pudu.Compiler.Lower.Types (recordFields, sumVariants)
+import Pudu.Compiler.Lower.Types (recordFields, sumVariants, writtenLabel)
 import Pudu.Core
 import Pudu.Frontend.Syntax
   ( ArrayRest (..), Block (..), Expression (..), FieldPattern (..), Literal (..), Located (..), MatchArm (..), Pattern (..)
   , Statement (..) )
 import Pudu.IntegerLiteral (ParsedInteger (..), integerKindBounds, integerKindFits, parseIntegerLiteral)
-import Pudu.Frontend.Syntax.Name (ModuleName (..))
 import Pudu.Source (Span)
 import Data.Text (Text)
 
@@ -142,17 +140,17 @@ lowerPattern lower state kind bound (Located at shape) = case shape of
   TuplePattern members -> case kind of
     CoreTupleType kinds | length kinds == length members -> sequenceOf CoreTuplePattern state bound (zip kinds members)
     _ -> halt at "a tuple pattern on this value" state
-  ConstructorPattern (ModuleName segments) members -> case variantOf (NonEmpty.last segments) of
+  ConstructorPattern written members -> case variantOf (writtenLabel written) of
     Just variant
       | not (coreVariantRecord variant), length (coreVariantFields variant) == length members ->
           sequenceOf (CoreVariantPattern (coreVariantName variant)) state bound (zip (map snd (coreVariantFields variant)) members)
     _ -> halt at "this constructor pattern" state
   RecordPattern path fields _ -> case (path, recordFields types kind) of
     (Nothing, Just declared) -> recordMembers CoreRecordPattern declared fields
-    (Just (ModuleName segments), Just declared)
-      | CoreRecordType name _ <- kind, displayName name == NonEmpty.last segments -> recordMembers CoreRecordPattern declared fields
-    (Just (ModuleName segments), Nothing)
-      | Just variant <- variantOf (NonEmpty.last segments), coreVariantRecord variant ->
+    (Just written, Just declared)
+      | CoreRecordType name _ <- kind, displayName name == writtenLabel written -> recordMembers CoreRecordPattern declared fields
+    (Just written, Nothing)
+      | Just variant <- variantOf (writtenLabel written), coreVariantRecord variant ->
           recordMembers (CoreVariantPattern (coreVariantName variant)) (coreVariantFields variant) fields
     _ -> halt at "this record pattern" state
   AlternativePattern alternatives -> alternativesOf state bound [] alternatives

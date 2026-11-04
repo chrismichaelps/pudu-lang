@@ -31,6 +31,9 @@ without adding dependencies or relying only on successful kernel values.
 
 ## Purpose and interface
 
+Register [[Lsp Module Catalog Spec]] with no new dependency. Resolved Grill Log: isolated
+filesystem root-policy regressions compile in the normal test package.
+
 Declare the repository-only `pudu-tests` package and its `pudu-test` exit-code suite. The package is
 rooted beside `test/` and `test-fixtures/`, depends on the production `pudu` library through
 [[Pudu Cabal Project]], and preserves every registered Haskell spec plus the C++ ownership fixture.
@@ -355,3 +358,16 @@ Register [[Backend Place Assignment Programs]]. Resolved Grill Log: no new depen
 ## Mutable loan corpus (#651)
 
 Register [[Backend Mutable Loan Programs]]. Resolved Grill Log: no new dependency.
+Register [[Binary Codec Properties]] explicitly. Resolved Grill Log: native round-trip, bit-pattern and malformed-input laws execute in the full suite without a new dependency.
+
+## Named sum value foundation (#761)
+
+Register Pudu.Eval.NamedSumSpec with existing dependencies; no separate unexecuted property list or new package.
+
+Resolved Grill Log: represent named sums independently of ordinary records and positional sums. Preserve existing field order and public labels. Source publication follows in its own tested partition. See [[Named Sum Value Delivery]].
+
+## Variant namespaces (#766)
+
+Register Pudu.Semantic.VariantNamespaceSpec using existing dependencies.
+
+Resolved Grill Log: declaration identity is owner-scoped; ambiguity belongs at an unqualified use and respects the selected lexical binding. See [[Variant Namespace Delivery]].

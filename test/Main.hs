@@ -22,6 +22,7 @@ import Pudu.FormatSpec (formatProperties)
 import Pudu.Lsp.JsonSpec (jsonProperties)
 import Pudu.Lsp.SchedulerSpec (schedulerProperties)
 import Pudu.Lsp.ServerSpec (serverProperties)
+import Pudu.Lsp.ModuleCatalogSpec (catalogProperties)
 import Pudu.Lsp.DeriveToolingSpec (deriveToolingProperties)
 import Pudu.Lsp.DiagnosticsSpec (diagnosticsProperties)
 import Pudu.Lsp.ImplMembersSpec (implMemberProperties)
@@ -80,6 +81,7 @@ import Pudu.Frontend.ParserTypeSpec (parserTypeProperties)
 import Pudu.Frontend.SyntaxSpec (syntaxProperties)
 import Pudu.Frontend.TokenSpec (tokenProperties)
 import Pudu.EvalSpec (evalProperties)
+import Pudu.Eval.BinarySpec (binaryProperties)
 import Pudu.Eval.MutexSpec (mutexProperties)
 import Pudu.DocSpec (docProperties)
 import Pudu.Repl.AnswerSpec (answerProperties)
@@ -141,7 +143,7 @@ runTests = do
   diagnosticOutcomes <- traverse (uncurry check) diagnosticProperties
   formatOutcomes <- traverse (uncurry check) formatProperties
   jsonOutcomes <- traverse (uncurry check) jsonProperties
-  lspOutcomes <- traverse (uncurry check) (serverProperties <> implMemberProperties <> diagnosticsProperties <> methodDefinitionProperties <> deriveToolingProperties)
+  lspOutcomes <- traverse (uncurry check) (serverProperties <> catalogProperties <> implMemberProperties <> diagnosticsProperties <> methodDefinitionProperties <> deriveToolingProperties)
   schedulerOutcomes <- traverse (uncurry check) schedulerProperties
   renderOutcomes <- traverse (uncurry check) renderProperties
   programOutcomes <- traverse (uncurry check) (programProperties <> authenticationProperties)
@@ -170,7 +172,7 @@ runTests = do
   parserPatternOutcomes <- traverse (uncurry check) parserPatternProperties
   parserTypeDeclarationOutcomes <- traverse (uncurry check) parserTypeDeclarationProperties
   resolveOutcomes <- traverse (uncurry check) (resolveProperties <> reflectionProperties <> qualifierProperties <> qualifiedShadowProperties)
-  evalOutcomes <- traverse (uncurry check) (evalProperties <> mutexProperties <> ifUnitProperties <> recordOrderProperties <> floatOrderProperties)
+  evalOutcomes <- traverse (uncurry check) (evalProperties <> mutexProperties <> ifUnitProperties <> recordOrderProperties <> floatOrderProperties <> binaryProperties)
   typeOutcomes <- traverse (uncurry check) typeProperties
   importTypeOutcomes <- traverse (uncurry check) importTypeProperties
   interfaceOutcomes <- traverse (uncurry check) interfaceProperties

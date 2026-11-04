@@ -86,6 +86,10 @@ Dispatch on the built-in tag and the argument shapes, answering with a value or 
 - **Q:** Why decompose `Eval.Builtin` into child layers (`Array`, `String`, `Collection`, `Numeric`)? **A:** To scale the runtime architecture into bounded child modules strictly under 200 lines each, isolating distinct method families and scalar conversion logic while preserving the single re-exporting coordinator for zero API regression. _Rationale:_ callers retain complete source compatibility through `Pudu.Eval.Builtin`.
 
 
+## Binary64 kernels
+
+Re-exports `callFloatKernel` from [[Eval Builtin Numeric]] for [[Eval Call]]. No logic here.
+
 ## Referenced by
 
 [[src/Pudu/Eval/_MOC]] · [[Evaluator]] · [[Semantic Prelude]]

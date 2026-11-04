@@ -98,3 +98,11 @@ DEPTH 0.68 (MEDIUM). It hides export projection, namespace-aware selection, decl
 `ImportBinding` also records whether an authoritative binding is a module qualifier. `isolatedImportBindings` preserves alias/item spans and syntactically known qualifiers while selections remain opaque. Loaded missing interfaces retain unclassified recovery bindings; E2014/E2015 belongs to discovery. Selected exports are never qualifiers.
 
 Resolved Grill Log: share import binding projection with [[Name Resolution]] without erasing qualified declaration conflicts or admitting a namespace as a value. [[Scoped Import Design]] owns the distinction.
+
+## Imported variant candidates (#775)
+
+Retain owner-indexed exported variant candidates alongside the existing unique export projection. ImportBinding carries ambiguous suffixes and original spans; selected value imports use an empty suffix, module qualifiers use the exported label. Ordinary/type/opaque bindings carry none. Keep exportsOf and moduleExportKeys stable for tooling.
+
+Resolved Grill Log: preserve complete declaring-owner ambiguity at uses across imports, lexical shadows and generated syntax. See [[Imported Variant Delivery]].
+
+Resolved type-head control: imported candidates retain an export-index TypeSpace flag; PathUse preserves C.First.Chosen qualification without admitting ambiguous value fields. Syntactically named member paths preserve head spans. See [[Imported Variant Delivery]].

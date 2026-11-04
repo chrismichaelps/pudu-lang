@@ -43,6 +43,8 @@ module Pudu.Eval.Env
   , recordFieldOrder
   , declaredFieldOrder
   , inDeclaredOrder
+  , declaredOrder
+  , inDeclaredRecord
   , performEffect
   , withoutEffects
   , expectBool
@@ -67,6 +69,7 @@ module Pudu.Eval.Env
 import Data.Map.Strict (Map)
 import qualified Data.Map.Strict as Map
 import Data.Text (Text)
+import qualified Data.Text as Text
 import Pudu.Comptime.Limits (callDepthLimit)
 import Pudu.Eval.Concurrent (ConcurrentStore)
 import Pudu.Eval.AudioStream (AudioStreamStore)
@@ -528,7 +531,12 @@ lookupModule name = Evaluator $ \env -> do
     for a method dispatched a built-in type's method to whichever module some
     other file had imported under that name. -}
 lookupMethod :: Text -> Evaluator (Maybe Value)
-lookupMethod name = Evaluator $ \env -> pure (Done (Map.lookup name (envMethods env)) env)
+lookupMethod name = Evaluator $ \env -> pure (Done (Map.lookup selected (envMethods env)) env)
+ where
+  selected = case Text.splitOn "::" name of
+    [owner, provider, member] | Just receiver <- Text.stripSuffix "." owner ->
+      provider <> "." <> receiver <> "." <> member
+    _ -> name
 
 {-| Record an implementation's method, where every module can reach it. -}
 bindMethod :: Text -> Value -> Evaluator ()
@@ -620,6 +628,25 @@ declaredFieldOrder owner =
     happened in written order; only the stored order changes. Fields that are
     not exactly the declared set are left alone, since then the name found
     belongs to some other type. -}
+{-| A constructed record with its fields in declaration order, found by its
+    owner or, for a construction spelled through an alias, the owner's own
+    name. Any other value is returned as it is. -}
+declaredOrder :: Value -> Evaluator Value
+declaredOrder value = case value of
+  RecordValue owner fields -> do
+    declared <- declaredFieldOrder owner
+    found <- maybe (declaredFieldOrder (last (Text.splitOn "." owner))) (pure . Just) declared
+    pure (RecordValue owner (inDeclaredOrder found fields))
+  other -> pure other
+
+{-| `declaredOrder` against a table already read from the environment. -}
+inDeclaredRecord :: Map Text [Text] -> Value -> Value
+inDeclaredRecord table value = case value of
+  RecordValue owner fields ->
+    let found = maybe (Map.lookup (last (Text.splitOn "." owner)) table) Just (Map.lookup owner table)
+     in RecordValue owner (inDeclaredOrder found fields)
+  other -> other
+
 inDeclaredOrder :: Maybe [Text] -> [(Text, Value)] -> [(Text, Value)]
 inDeclaredOrder declared fields = case declared of
   Just order

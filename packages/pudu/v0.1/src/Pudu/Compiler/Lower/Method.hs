@@ -6,6 +6,7 @@ import Data.Map.Strict (Map)
 import qualified Data.Map.Strict as Map
 import qualified Data.List.NonEmpty as NonEmpty
 import Data.Text (Text)
+import qualified Data.Text as Text
 import Pudu.Compiler.Lower.Control (expressionIsPrintValued)
 import Pudu.Compiler.Lower.Scalar (eagerType)
 import Pudu.Compiler.Lower.Signature (ensureSignature)
@@ -14,7 +15,7 @@ import Pudu.Compiler.Lower.State
   , bindLocal, halt, inModule, refused, withTypeBindings )
 import Pudu.Compiler.Lower.Generic (specialize)
 import Pudu.Compiler.Lower.Loan (Callee (..), Operand (..), lowerLoanedOperands)
-import Pudu.Compiler.Lower.Types (formedCoreTypeIn, ownerKeyOf, typeBindings, typeFactAt, typeForSpan, nativeValueType)
+import Pudu.Compiler.Lower.Types (formedCoreTypeIn, ownerKeyOf, selectedMember, typeBindings, typeFactAt, typeForSpan, nativeValueType)
 import Pudu.Core
 import Pudu.Eval.Operator.Access (arrayMethods, mapMethods, setMethods, stringMethods)
 import Pudu.Eval.Bytes (bytesMethods)
@@ -73,16 +74,22 @@ methodTables scopes modules = (Map.fromList instances, Map.fromList calls, Map.f
     built-in members first, as the evaluator reads them; Nothing leaves the
     call to the built-in method lowering. -}
 lowerMethodCall :: LowerExpression -> LowerState -> Span -> Span -> Located Expression -> Text -> [Located Expression] -> Maybe Lowered
-lowerMethodCall lower state at callee receiver member arguments = do
+lowerMethodCall lower state at callee receiver written arguments = do
   kind <- typeForSpan (contextTypes context) (locatedSpan receiver)
   if builtinFirst kind then Nothing else
-    case ownerKeyOf kind >>= \owner -> Map.lookup (owner, member) (contextMethods context) of
+    case ownerKeyOf kind >>= chosen of
       Just key -> Just (callMethod lower state at key instantiated receiver arguments)
       Nothing
         | member == "toText", null arguments -> Just (rendered kind)
         | otherwise -> Nothing
  where
   context = lowerContext state
+  (provider, member) = selectedMember written
+  -- The implementation the checked provider gives, else the owner's only one.
+  chosen owner = case provider of
+    Just trait | Just key <- Map.lookup (lastSegment trait, owner, member) (contextTraitMethods context) -> Just key
+    _ -> Map.lookup (owner, member) (contextMethods context)
+  lastSegment = last . Text.splitOn "."
   -- The callee's fact has the receiver bound already; put it back in front.
   instantiated = do
     FunctionTypeRequiring asynchronous inputs required result <- typeFactAt (contextTypes context) callee
@@ -109,7 +116,7 @@ lowerMethodCall lower state at callee receiver member arguments = do
     arguments simply run in order. The trait form picks the implementation
     for the first argument's type, as the evaluator does. -}
 lowerQualifiedMethod :: LowerExpression -> LowerState -> Span -> Span -> Text -> Text -> [Located Expression] -> Maybe Lowered
-lowerQualifiedMethod lower state at callee owner member arguments = do
+lowerQualifiedMethod lower state at callee owner written arguments = do
   key <- byTrait `orElse` byType
   Just $ maybe (ordinary key) id $ loanedInstanceCall lower state at key (typeFactAt (contextTypes context) callee)
     (maybe [] pure receiverType) (length arguments) [(index, Argument, argument) | (index, argument) <- zip [0 ..] arguments]
@@ -122,9 +129,12 @@ lowerQualifiedMethod lower state at callee owner member arguments = do
     first : _ -> typeForSpan (contextTypes context) (locatedSpan first)
     [] -> Nothing
   receiverKey = receiverType >>= ownerKeyOf
-  byTrait = receiverKey >>= \found -> Map.lookup (owner, found, member) (contextTraitMethods context)
-  candidates = [key | ((ownerKey, name), key) <- Map.toList (contextMethods context), name == member, displayName ownerKey == owner]
-  byType = case [key | Just found <- [receiverKey], ((ownerKey, name), key) <- Map.toList (contextMethods context), name == member, ownerKey == found, displayName ownerKey == owner] of
+  member = snd (selectedMember written)
+  byTrait = receiverKey >>= \found -> Map.lookup (last (Text.splitOn "." owner), found, member) (contextTraitMethods context)
+  -- Checking names a type by its canonical key; the source by its own name.
+  names ownerKey = ownerKey == owner || displayName ownerKey == owner
+  candidates = [key | ((ownerKey, name), key) <- Map.toList (contextMethods context), name == member, names ownerKey]
+  byType = case [key | Just found <- [receiverKey], ((ownerKey, name), key) <- Map.toList (contextMethods context), name == member, ownerKey == found, names ownerKey] of
     key : _ -> Just key
     [] -> case candidates of
       [only] -> Just only

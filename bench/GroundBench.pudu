@@ -1,0 +1,32 @@
+module GroundBench
+
+import Std.Time as Time
+import Ark.Math as V
+import Ark.Physics.Ground as Ground
+
+fn query(position: V.Vec3, displacement: V.Vec3) -> Result[Option[Ground.Hit], Str] {
+  let fraction = (position.z - 2.0) / -displacement.z
+  Ok(Some(Ground.Hit{fraction, normal: V.vec3(0.0, 0.0, 1.0), point: V.vec3(position.x, position.y, 0.0)}))
+}
+
+fn batch(count: Int) -> Float64 {
+  let body = Ground.State{position: V.vec3(0.0, 0.0, 3.0), velocity: V.vec3(2.0, 0.0, -4.0), mode: Ground.Falling}
+  let config = Ground.Settings{up: V.vec3(0.0, 0.0, 1.0), radius: 0.5, halfHeight: 2.0, maxDistance: 1.0, minUpDot: 0.8, edgeInset: 0.05, contactTolerance: 1e-7}
+  var checksum = 0.0
+  for _ in 0..count {
+    let Ok(value) = Ground.settle(&body, &config, query) else { panic("support failed") }
+    let Some(support) = value.support else { panic("missing support") }
+    if value.state.mode != Ground.Walking || value.state.velocity.z != 0.0 { panic("settlement state") }
+    checksum = checksum + value.state.position.z + support.distance + value.state.velocity.x
+  }
+  checksum
+}
+
+export fn main() -> Int {
+  let warmup = batch(100)
+  let start = Time.elapsed()
+  let checksum = batch(1_000)
+  let elapsed = Time.elapsed() - start
+  print("1000 settlements: {elapsed} ms; checksum: {checksum}; warmup: {warmup}")
+  0
+}

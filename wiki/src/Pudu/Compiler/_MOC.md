@@ -77,3 +77,4 @@ Dependency direction: Library → Program. Only [[Compiler Program]] reads files
 - [[Compiler Lower Method Value]] — built-in methods as values (#644).
 - [[Compiler Lower Default]] — default parameter values (#638).
 - [[Compiler Lower Stop]] — panic and untyped convertInteger, direct and as values (#633).
+- [[Bound Receiver Evidence Delivery]] — complete selected bound and receiver facts for #735.

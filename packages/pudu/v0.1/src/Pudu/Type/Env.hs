@@ -24,7 +24,11 @@ module Pudu.Type.Env
   , useUnsafeRegion
   , CheckerProducts (..)
   , DeclaredTypes (..)
+  , NameBinding (..)
   , bindName
+  , bindConstructorName
+  , aliasName
+  , lookupBinding
   , recordDeclaredMethod
   , bindImportedMethod
   , emptyDeclared
@@ -56,9 +60,18 @@ module Pudu.Type.Env
   , isLentArgument
   , isMutableField
   , recordUnwrittenParameter
+  , markResultSpans
+  , isResultSpan
   , takeUnwrittenParameters
   , recordExpression
   , recordSelection
+  , recordProvider
+  , recordProviderSelection
+  , recordOwner
+  , recordVariantOwner
+  , recordImplementationOwner
+  , recordPatternTest
+  , patternTests
   , noteStaticTrait
   , isStaticTrait
   , report
@@ -79,6 +92,9 @@ module Pudu.Type.Env
   , markAmbiguousMethod
   , methodProvider
   , recordMethodProvider
+  , setProviderNames
+  , providerSpelling
+  , lookupProviderName
   , addObligation
   , addDynamicObligation
   , resolveVariable
@@ -117,7 +133,7 @@ import Pudu.IntegerLiteral (fitsIntegerType)
 import Pudu.Type.Frontier (splitSince, splitBetween)
 import Pudu.Type.Implementation (ImplementationRule)
 import Pudu.Type.Value
-  ( NominalId (..), Scheme (..), Type (..), TypeVar (..), integerType, nominalKey, renderType )
+  ( ProviderSelection (..), OwnerSelection (..), NominalId (..), Scheme (..), Type (..), TypeVar (..), integerType, nominalKey, nominalName, renderType )
 
 {-| @Type.Env.Declared — what the module's declarations contribute.
 
@@ -142,7 +158,7 @@ data DeclaredTypes = DeclaredTypes
       the module being checked. Keyed by owner there is no collision to
       resolve. -}
   , declaredOwnedVariants :: !(Map (NominalId, Text) (NominalId, [Text], [Type]))
-  , declaredVariantFields :: !(Map Text [Text])
+  , declaredVariantFields :: !(Map (NominalId, Text) [Text])
   , declaredOwners :: !(Map NominalId [Text])
   , declaredImpls :: !(Map (NominalId, NominalId) [ImplementationRule])
   , declaredAliases :: !(Map Text ([Text], Type))
@@ -180,6 +196,17 @@ emptyDeclared =
     , declaredQualifiers = Set.empty
     }
 
+{-| Constructor identity follows aliases; ordinary bindings clear it on shadowing. -}
+data NameBinding
+  = ValueBinding !Scheme
+  | ConstructorBinding !NominalId !Text !Scheme
+  deriving (Eq, Show)
+
+schemeOf :: NameBinding -> Scheme
+schemeOf binding = case binding of
+  ValueBinding scheme -> scheme
+  ConstructorBinding _ _ scheme -> scheme
+
 {-| @Type.Env.State — the checker's working state.
 
     The checker keeps its own name frames rather than reusing the resolver's
@@ -188,10 +215,13 @@ emptyDeclared =
 data CheckerState = CheckerState
   { stateNext :: !Int
   , stateSubstitution :: !(IntMap Type)
-  , stateFrames :: ![Map Text Scheme]
+  , stateFrames :: ![Map Text NameBinding]
   , stateImportedMethods :: !(Set Text)
   , stateDeclared :: !DeclaredTypes
   , stateTypes :: ![(SpanKey, Type)]
+  , stateVisibleProviderNames :: !(Map Text NominalId)
+  {-| Preferred spellings are demanded only when ambiguity needs diagnostic help. -}
+  , stateProviderNames :: ~(Map NominalId Text)
   , stateMethodProviders :: !(Map Text NominalId)
   , stateAmbiguousMethods :: !(Map Text [NominalId])
   , stateUnsafeFrames :: ![UnsafeFrame]
@@ -256,6 +286,14 @@ data CheckerState = CheckerState
   {-| Instantiations of parameters bounded by a static trait, by the span of
       the reference that instantiated them, in the scheme's parameter order. -}
   , stateSelectionsRev :: ![(Span, [Type])]
+  , stateProvidersRev :: ![(Span, ProviderSelection)]
+  , stateOwnersRev :: ![(Span, OwnerSelection)]
+  , statePatternTests :: !(Set Span)
+  {-| Expressions whose value is the enclosing function's result: a body's
+      tail, the tails of branches standing there, and every `return` operand.
+      Marked before their subexpressions are checked, so a match learns its
+      position when it is reached. -}
+  , stateResultSpans :: !(Set Span)
   }
 
 type SpanKey = Span
@@ -286,6 +324,8 @@ data CheckerProducts = CheckerProducts
   , producedIntegerKinds :: ![(Span, Text)]
   {-| Every recorded static selection with inference settled. -}
   , producedSelections :: ![(Span, [Type])]
+  , producedProviders :: ![(Span, ProviderSelection)]
+  , producedOwners :: ![(Span, OwnerSelection)]
   }
 
 newtype Checker a = Checker (CheckerState -> (a, CheckerState))
@@ -326,14 +366,23 @@ runChecker (Checker action) = case action initialState of
     , stateIntegerKinds = kinds
     , stateDeclaredMethodsRev = methods
     , stateSelectionsRev = selections
+    , stateProvidersRev = providers
+    , stateOwnersRev = owners
     }) -> CheckerProducts
       { producedTypes = reverse (map (fmap (resolveFinal substitution)) types)
       , producedSchemes = finalSchemes substitution frames
       , producedDiagnostics = sortDiagnostics (reverse diagnostics)
       , producedIntegerKinds = reverse kinds
       , producedMethods = reverse methods
+      , producedProviders = reverse (map (fmap (resolveProvider substitution)) providers)
+      , producedOwners = reverse owners
       , producedSelections = reverse (map (fmap (map (resolveFinal substitution))) selections)
       }
+ where
+  resolveProvider substitution selected = selected
+    { providerArguments = map (resolveFinal substitution) (providerArguments selected)
+    , providerReceiver = fmap (resolveFinal substitution) (providerReceiver selected)
+    }
 
 {-| The module frame as inference left it, with every variable resolved.
 
@@ -341,13 +390,14 @@ runChecker (Checker action) = case action initialState of
     so an unannotated declaration still has the signature the compiler gave
     it, and an annotated one is reported exactly as the compiler understood
     it rather than as it was spelled. -}
-finalSchemes :: IntMap Type -> [Map Text Scheme] -> [(Text, Scheme)]
+finalSchemes :: IntMap Type -> [Map Text NameBinding] -> [(Text, Scheme)]
 finalSchemes substitution frames = case reverse frames of
   [] -> []
   moduleFrame : _ -> map resolveScheme (Map.toList moduleFrame)
  where
-  resolveScheme (name, scheme) =
-    (name, scheme{schemeType = resolveFinal substitution (schemeType scheme)})
+  resolveScheme (name, binding) =
+    let scheme = schemeOf binding
+    in (name, scheme{schemeType = resolveFinal substitution (schemeType scheme)})
 
 initialState :: CheckerState
 initialState =
@@ -358,6 +408,8 @@ initialState =
     , stateImportedMethods = Set.empty
     , stateDeclared = emptyDeclared
     , stateTypes = []
+    , stateVisibleProviderNames = Map.empty
+    , stateProviderNames = Map.empty
     , stateMethodProviders = Map.empty
     , stateAmbiguousMethods = Map.empty
     , stateUnsafeFrames = []
@@ -380,6 +432,10 @@ initialState =
     , stateDeclaredMethodKeys = Set.empty
     , stateStaticTraits = Set.empty
     , stateSelectionsRev = []
+    , stateProvidersRev = []
+    , stateOwnersRev = []
+    , statePatternTests = Set.empty
+    , stateResultSpans = Set.empty
     }
 
 {-| What installing a graph's interfaces left in the checker: the names it
@@ -390,7 +446,7 @@ initialState =
     what it adds. The next variable travels with it, so a variable the
     installation made can never be confused with one the consumer makes. -}
 data InstalledNames = InstalledNames
-  { installedFrame :: !(Map Text Scheme)
+  { installedFrame :: !(Map Text NameBinding)
   , installedUnsafe :: !(Map Text [Capability])
   , installedComptime :: !(Map Text Bool)
   {-| The imported traits with a member that takes no `self`, whose calls
@@ -516,6 +572,38 @@ noteStaticTrait owner =
 
 isStaticTrait :: NominalId -> Checker Bool
 isStaticTrait owner = Checker $ \state -> (Set.member owner (stateStaticTraits state), state)
+
+{-| Canonical evidence consumed once by executable symbol resolution. -}
+recordProvider :: Span -> NominalId -> Checker ()
+recordProvider at owner = recordProviderSelection at (ProviderSelection owner [] Nothing)
+
+recordProviderSelection :: Span -> ProviderSelection -> Checker ()
+recordProviderSelection at selected = Checker $ \state ->
+  ((), state{stateProvidersRev = (at, selected) : stateProvidersRev state})
+
+{-| A checked implementation target retains its full alias-expanded parameter shape. -}
+recordImplementationOwner :: Span -> Type -> Checker ()
+recordImplementationOwner at target = Checker $ \state ->
+  ((), state{stateOwnersRev = (at, ImplementationOwner target) : stateOwnersRev state})
+
+{-| Concrete identity is distinct from a trait provider at the same span. -}
+recordOwner :: Span -> NominalId -> Checker ()
+recordOwner at owner = Checker $ \state ->
+  ((), state{stateOwnersRev = (at, ConcreteOwner owner) : stateOwnersRev state})
+
+{-| Variant selections retain declared field order when the payload is named. -}
+recordVariantOwner :: Span -> NominalId -> Text -> [Text] -> Checker ()
+recordVariantOwner at owner label fields = Checker $ \state ->
+  ((), state{stateOwnersRev = (at, VariantOwner owner label fields) : stateOwnersRev state})
+
+{-| Record subject-sensitive tests without retaining checker state in products. -}
+recordPatternTest :: Span -> Checker ()
+recordPatternTest at = Checker $ \state ->
+  ((), state{statePatternTests = Set.insert at (statePatternTests state)})
+
+patternTests :: Checker (Set Span)
+patternTests = Checker $ \state -> (statePatternTests state, state)
+
 
 recordSelection :: Span -> [Type] -> Checker ()
 recordSelection spanValue chosen =
@@ -676,10 +764,21 @@ setVariable (TypeVar identity) typeValue =
     ((), state{stateSubstitution = IntMap.insert identity typeValue (stateSubstitution state)})
 
 bindName :: Text -> Scheme -> Checker ()
-bindName name scheme =
+bindName name = bindBinding name . ValueBinding
+
+bindConstructorName :: NominalId -> Text -> Scheme -> Checker ()
+bindConstructorName owner label = bindBinding label . ConstructorBinding owner label
+
+aliasName :: Text -> Text -> Checker ()
+aliasName original alias = do
+  found <- lookupBinding original
+  maybe (pure ()) (bindBinding alias) found
+
+bindBinding :: Text -> NameBinding -> Checker ()
+bindBinding name binding =
   Checker $ \state -> case stateFrames state of
-    [] -> ((), state{stateFrames = [Map.singleton name scheme]})
-    current : rest -> ((), state{stateFrames = Map.insert name scheme current : rest})
+    [] -> ((), state{stateFrames = [Map.singleton name binding]})
+    current : rest -> ((), state{stateFrames = Map.insert name binding current : rest})
 
 bindImportedMethod :: Text -> Scheme -> Checker ()
 bindImportedMethod name scheme = do
@@ -705,18 +804,21 @@ isImportedMethod name =
   Checker $ \state -> (Set.member name (stateImportedMethods state), state)
 
 lookupName :: Text -> Checker (Maybe Scheme)
-lookupName name = Checker $ \state -> (searchName name (stateFrames state), state)
+lookupName name = fmap schemeOf <$> lookupBinding name
+
+lookupBinding :: Text -> Checker (Maybe NameBinding)
+lookupBinding name = Checker $ \state -> (searchName name (stateFrames state), state)
 
 {-| The final frame holds shared module signatures, not lexical locals. -}
 lookupLocalName :: Text -> Checker (Maybe Scheme)
-lookupLocalName name = Checker $ \state -> (searchLocal (stateFrames state), state)
+lookupLocalName name = Checker $ \state -> (schemeOf <$> searchLocal (stateFrames state), state)
  where
   searchLocal (current : rest@(_ : _)) = case Map.lookup name current of
     Just found -> Just found
     Nothing -> searchLocal rest
   searchLocal _ = Nothing
 
-searchName :: Text -> [Map Text Scheme] -> Maybe Scheme
+searchName :: Text -> [Map Text NameBinding] -> Maybe NameBinding
 searchName name frames = case frames of
   [] -> Nothing
   current : rest -> case Map.lookup name current of
@@ -838,9 +940,9 @@ lookupVariantIn owner name =
     pattern may say which element they mean. A variant with no names is absent
     here rather than present and empty, because writing `Circle{}` for a
     positional variant is a different mistake from leaving a field out. -}
-lookupVariantFields :: Text -> Checker (Maybe [Text])
-lookupVariantFields name =
-  Checker $ \state -> (Map.lookup name (declaredVariantFields (stateDeclared state)), state)
+lookupVariantFields :: NominalId -> Text -> Checker (Maybe [Text])
+lookupVariantFields owner name =
+  Checker $ \state -> (Map.lookup (owner, name) (declaredVariantFields (stateDeclared state)), state)
 
 {-| Record the type an expression was given, so tooling can report it. -}
 recordExpression :: Span -> Type -> Checker ()
@@ -957,6 +1059,23 @@ rigidSatisfies name traitText =
 {-| Which trait supplied a method binding. Two traits providing the same member
     for one type is an ambiguity the reader must resolve, and this is what lets
     the second binding notice the first. -}
+setProviderNames :: Map Text NominalId -> Checker ()
+setProviderNames names = Checker $ \state ->
+  ((), state{stateVisibleProviderNames = names,
+    stateProviderNames = Map.fromListWith prefer [(owner, name) | (name, owner) <- Map.toList names]})
+ where
+  prefer left right
+    | (Text.length left, left) <= (Text.length right, right) = left
+    | otherwise = right
+
+lookupProviderName :: Text -> Checker (Maybe NominalId)
+lookupProviderName name = Checker $ \state ->
+  (Map.lookup name (stateVisibleProviderNames state), state)
+
+providerSpelling :: NominalId -> Checker Text
+providerSpelling owner = Checker $ \state ->
+  (Map.findWithDefault (nominalName owner) owner (stateProviderNames state), state)
+
 recordMethodProvider :: Text -> NominalId -> Checker ()
 recordMethodProvider key traitIdentity =
   Checker $ \state ->
@@ -1239,3 +1358,12 @@ build severity code spanValue message help = do
   validCode <- mkDiagnosticCode code
   value <- diagnostic validCode severity spanValue message
   pure (maybe value (`withHelp` value) help)
+
+{-| Record expressions whose value is the enclosing function's result. -}
+markResultSpans :: [Span] -> Checker ()
+markResultSpans spans = Checker $ \state ->
+  ((), state {stateResultSpans = foldr Set.insert (stateResultSpans state) spans})
+
+{-| Whether an expression's value is the enclosing function's result. -}
+isResultSpan :: Span -> Checker Bool
+isResultSpan spanValue = Checker $ \state -> (Set.member spanValue (stateResultSpans state), state)

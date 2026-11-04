@@ -11,13 +11,13 @@ module Pudu.Semantic.Resolve.Context
   , inScopeOver
   , visibleAfter
   , insideLoop
-  , markAmbiguousVariant
   , outsideLoops
   , recordVariantSymbol
   , resolveLoopTarget
   , resolveExpressionName
   , resolveTypeName
   , resolveValueName
+  , resolveQualifierName
   , setReflectionImports
   , declareLoopTypeParameter
   , declareReflectedTypeParameter
@@ -28,6 +28,7 @@ module Pudu.Semantic.Resolve.Context
   , runResolver
   ) where
 
+import qualified Data.Map.Strict as Map
 import Data.Maybe (listToMaybe)
 import qualified Data.Set as Set
 import Data.Text (Text)
@@ -43,6 +44,7 @@ import Pudu.Diagnostic
   )
 import Pudu.Frontend.Syntax.Located (Located (..))
 import Pudu.Frontend.Syntax.Tree (Import (..), TypeSyntax, Visibility (Private))
+import Pudu.Semantic.Resolve.Ambiguity (isVariantAlias, rejectAmbiguous)
 import Pudu.Semantic.Resolve.State (ResolveState (..), Resolver (..), initialState)
 import Pudu.Semantic.Resolve.Reflection (reflectionImports, fieldTypeParameter)
 import Pudu.Semantic.Scope
@@ -261,6 +263,14 @@ declareModuleQualifier name = do
 introduce :: Namespace -> SymbolOrigin -> Visibility -> Bool -> Text -> Maybe Span -> Resolver ()
 introduce namespace origin visibility mutable name spanValue = do
   symbol <- freshSymbol namespace origin visibility mutable name spanValue
+  introduceSymbol symbol
+
+introduceSymbol :: Symbol -> Resolver ()
+introduceSymbol symbol = do
+  let namespace = symbolNamespace symbol
+      name = symbolName symbol
+      origin = symbolOrigin symbol
+      spanValue = symbolSpan symbol
   shadowed <- lookupCurrent namespace name
   previous <- insertSymbol symbol
   recordSymbol symbol
@@ -271,19 +281,20 @@ introduce namespace origin visibility mutable name spanValue = do
       (Just outer, Just here) | isShadowWarned outer -> shadowWarning name here
       _ -> pure ()
 
-{-| A variant is namespaced by its type and is additionally bound unqualified
-    while that spelling is unambiguous, which is the rule [[grammar/pudu]]
-    states: qualification is required only when two types share a variant name. -}
-recordVariantSymbol :: Located Text -> Resolver ()
-recordVariantSymbol name =
-  introduce ValueSpace VariantOrigin Private False (locatedValue name) (Just (locatedSpan name))
-
-{-| Record that a variant spelling is declared by more than one type. A use of
-    it reports `E2012` and asks for qualification instead of resolving to
-    whichever declaration happened to be seen last. -}
-markAmbiguousVariant :: Text -> Resolver ()
-markAmbiguousVariant name =
-  Resolver $ \state -> ((), state{stateAmbiguous = name : stateAmbiguous state})
+{-| Distinct owners share a spelling without redeclaring the bare alias. -}
+recordVariantSymbol :: Text -> Located Text -> Resolver ()
+recordVariantSymbol owner (Located at name) = do
+  symbol <- freshSymbol ValueSpace VariantOrigin Private False name (Just at)
+  candidates <- Resolver $ \state -> (Map.findWithDefault Map.empty name (stateVariants state), state)
+  case Map.lookup owner candidates of
+    Just earlier -> recordSymbol symbol >> duplicateDeclaration name at (symbolSpan earlier)
+    Nothing -> do
+      bound <- lookupCurrent ValueSpace name
+      case bound of
+        Just earlier | symbolOrigin earlier == VariantOrigin -> recordSymbol symbol
+        _ -> introduceSymbol symbol
+      Resolver $ \state -> ((), state{stateVariants =
+        Map.insert name (Map.insert owner symbol candidates) (stateVariants state)})
 
 freshSymbol
   :: Namespace -> SymbolOrigin -> Visibility -> Bool -> Text -> Maybe Span -> Resolver Symbol
@@ -304,12 +315,28 @@ freshSymbol namespace origin visibility mutable name spanValue = do
     qualified path such as `Outcome.Ok` reaches its declaring type. -}
 resolveValueName :: Span -> Text -> Resolver ()
 resolveValueName spanValue name = do
-  ambiguous <- isAmbiguous name
-  if ambiguous
-    then
-      emit "E2012" Error spanValue ("ambiguous variant name " <> name)
-        (Just "qualify the variant with its type, as in Type.Variant")
-    else resolveUnambiguous spanValue name
+  selected <- lookupCurrent ValueSpace name
+  resolveSelectedValue spanValue name selected
+
+{-| A known type qualifies constructors even when its spelling is a variant alias. -}
+resolveQualifierName :: Span -> Text -> Resolver ()
+resolveQualifierName at name = do
+  selected <- lookupCurrent ValueSpace name
+  case selected of
+    Just symbol -> do
+      alias <- isVariantAlias symbol
+      if alias then do
+        owner <- lookupCurrent TypeSpace name
+        case owner of
+          Just declared -> recordResolvedReference at declared
+          Nothing -> resolveSelectedValue at name selected
+      else resolveSelectedValue at name selected
+    Nothing -> resolveSelectedValue at name selected
+
+resolveSelectedValue :: Span -> Text -> Maybe Symbol -> Resolver ()
+resolveSelectedValue at name selected = do
+  ambiguous <- rejectAmbiguous at name selected
+  if ambiguous then pure () else resolveUnambiguous at name selected
 
 {-| Resolve a name that must itself produce a runtime value.
 
@@ -319,13 +346,9 @@ resolveValueName spanValue name = do
     though evaluation has no value binding to read. -}
 resolveExpressionName :: Span -> Text -> Resolver ()
 resolveExpressionName spanValue name = do
-  ambiguous <- isAmbiguous name
-  if ambiguous
-    then
-      emit "E2012" Error spanValue ("ambiguous variant name " <> name)
-        (Just "qualify the variant with its type, as in Type.Variant")
-    else do
-      value <- lookupCurrent ValueSpace name
+  value <- lookupCurrent ValueSpace name
+  ambiguous <- rejectAmbiguous spanValue name value
+  if ambiguous then pure () else do
       case value of
         Just symbol -> resolveExpressionReference spanValue symbol
         Nothing -> do
@@ -337,7 +360,6 @@ resolveExpressionName spanValue name = do
             Nothing ->
               emit "E2010" Error spanValue ("unresolved value name " <> name)
                 (Just "declare the name, import it, or check the spelling")
-
 resolveExpressionReference :: Span -> Symbol -> Resolver ()
 resolveExpressionReference at symbol = do
   qualifier <- Resolver $ \state ->
@@ -351,13 +373,9 @@ resolveExpressionReference at symbol = do
           (Just "select an exported member with the qualifier, or import a named value")
     else recordResolvedReference at symbol
 
-isAmbiguous :: Text -> Resolver Bool
-isAmbiguous name = Resolver $ \state -> (name `elem` stateAmbiguous state, state)
-
-resolveUnambiguous :: Span -> Text -> Resolver ()
-resolveUnambiguous spanValue name = do
-  value <- lookupCurrent ValueSpace name
-  case value of
+resolveUnambiguous :: Span -> Text -> Maybe Symbol -> Resolver ()
+resolveUnambiguous spanValue name selected =
+  case selected of
     Just symbol -> recordResolvedReference spanValue symbol
     Nothing -> do
       typeSymbol <- lookupCurrent TypeSpace name

@@ -138,3 +138,47 @@ implementation selection; the settled full selection still uses ordinary literal
 ## Lexical member admission (#471)
 
 A dotted explicit type application whose first name is a nearer local cannot select an unrelated imported function. Route it through the existing E3028 expression-application refusal and check its actual receiver. Bare local function names and explicit nominal type owners retain current behavior. Resolved Grill Log: repair the qualification bypass without silently introducing a new generic receiver-method surface.
+
+## Visible qualified constructors (#717)
+
+Authored qualified names and member chains are tested as complete constructor paths before
+recursing into their intermediate type owner as a value. Reuse [[Type Check Pattern]]'s
+`canonicalVariant` metadata and fresh parameter instantiation. A nearer lexical value head
+withholds namespace selection; ordinary functions/fields/methods retain their existing path.
+Named-field variants retain E3034 in value/call position. Generated canonical paths retain their
+existing origin-qualified admission. Result types are real nominal sums, never silent ErrorType.
+
+Resolved Grill Log: do not evaluate or type an intermediate `Module.Sum` as a value when its
+complete path names a visible constructor. Do not search the global bare variant table or bypass
+lexical shadowing, missing members, exported-type visibility or named-field construction rules.
+
+## Constructor pattern ownership (#761)
+
+Pass the current DeclaredTypes to checkExhaustive so usefulness resolves constructor identity in the same scope as pattern typing.
+
+Resolved Grill Log: preserve declaration identity through checking, executable projection and usefulness; no per-match span lookup. See [[Constructor Pattern Owner Delivery]].
+
+## Named payload field ownership (#761)
+
+Consume qualified constructor admission directly; ordinary namespace member lookup owns exported named-payload refusal. Remove the global member-basename precheck, preserving generated constructor admission.
+
+Resolved Grill Log: field names and payload types come from one resolved owner/variant key. No runtime representation or field evaluation order changes in this partition. See [[Named Payload Field Delivery]].
+
+## Checked constructor values (#766)
+
+Pass the generated constructor reference span to canonicalVariant so generated full-owner references retain their checked constructor identity.
+
+Resolved Grill Log: checked canonical identity must survive lowering even when a type and a bare variant share text. No runtime owner inference or source syntax change. See [[Variant Namespace Delivery]].
+
+## Parameter-qualified methods (#782, #735)
+
+parameterStaticCallee selects a simple lexical rigid type parameter's member
+through methodScheme before namespace fallback, unless a nearer ordinary value
+head shadows it. Retain provider facts at the inner member span; instantiate
+written or inferred method parameters at the whole application span through
+instantiateWith. Missing members report positioned E3005; ambiguity and complete
+bound/result/argument checking use the shared scheme path. Expression selection
+uses the same helper for called, retained and explicitly applied members.
+Resolved Grill Log: T.member must not fall through as ErrorType or flatten to
+an unbound T.member value key. Self specializes from the bound's receiver;
+method-local parameters remain real parameters and publish ordinary selections.

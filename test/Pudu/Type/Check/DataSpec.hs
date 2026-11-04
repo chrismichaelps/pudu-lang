@@ -431,6 +431,11 @@ testPreludeData = do
     [ "module M"
     , "fn run(value: Int) -> Int { Int.toInt32(value) }"
     ]
+  localResult <- compile $ Text.unlines
+    [ "module M"
+    , "type Result[T, E] = | Ok(T) | Err(E)"
+    , "fn run() -> Result[Int, Str] { Result.Missing(1) }"
+    ]
   let helpsOf compiled = map diagnosticHelp (compileDiagnostics compiled)
   pure $ conjoin
     [ counterexample "Some builds an Option" (option === "Option[Int]")
@@ -445,6 +450,9 @@ testPreludeData = do
         ( helpsOf unimported
             === [Just "Std.Result is a module; to call its functions, import it under this name: import Std.Result as Result"]
         )
+    , counterexample "a local Result sum keeps its variant help"
+        (conjoin [codesOf localResult === ["E3034"],
+          helpsOf localResult === [Just "check the variant name against the type declaration"]])
     , counterexample "a type with no module keeps the variant help"
         ( helpsOf throughType
             === [ Just

@@ -436,3 +436,9 @@ target (#649).
 Each `return`, with or without a value, is built by `loanedReturn`, which
 returns the finals of a loaned function beside the value. See
 [[Compiler Lower Loan]].
+
+## Checked constructor references (#798)
+
+A `::constructor::` record with no fields is the variant itself, and a call
+of one constructs its payload, both through [[Compiler Lower Sum]]; any
+other record expression names its type through `writtenLabel`.

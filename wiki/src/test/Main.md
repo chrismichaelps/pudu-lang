@@ -31,6 +31,9 @@ Registers [[Derive Library Spec]].
 
 ## Governance and algorithm
 
+Register [[Lsp Module Catalog Spec]] with LSP properties. Resolved Grill Log: focused root-policy
+checks also execute through the ordinary aggregate test runner.
+
 Each spec exports named properties. The runner executes 200 cases per property, gathers every result
 rather than failing early, and exits unsuccessfully when any result failed. Registration here and in
 [[Pudu Test Cabal Manifest]] are both mandatory: one makes a property execute and the other makes
@@ -200,3 +203,4 @@ Register [[Eval Float Order Tests]] in the evaluation group (#522).
 ## Output Results (#566)
 
 Resolved Grill Log: Dispatch --native-output-oracle PATH to Native Output Tests before the normal runner changes stdout buffering. Register outputProperties in the existing backend outcome list; ordinary invocations and aggregate failure policy are unchanged.
+Register [[Binary Codec Properties]] explicitly. Resolved Grill Log: native round-trip, bit-pattern and malformed-input laws execute in the full suite without a new dependency.

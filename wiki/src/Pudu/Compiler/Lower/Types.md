@@ -217,3 +217,10 @@ target, and the result becomes the tuple of the declared result and each
 final, in input order, which is the ABI a loaned function's body already
 answers. `loanedInputs` gives a function type's `&mut` positions. Resolved
 Grill Log: the outer look-through of #651 now shares `lentTarget`.
+
+## Checked paths and selected members (#798)
+
+`writtenLabel` reads the label from dev's rewritten constructor paths
+(`::constructor::`, `::sum::`, canonical keys); `selectedMember` splits a
+provider-selected member `::Main.Get::get` into the trait and the member,
+as `Eval.Env.lookupMethod` does.

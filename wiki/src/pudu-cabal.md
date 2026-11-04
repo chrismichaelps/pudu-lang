@@ -19,6 +19,29 @@ cache identity; full analysis remains available independently of executable reus
 
 ## Purpose and interface
 
+Distribute `lib/Ark/Assets/*.pudu`, including [[Ark Texture Asset]]. Resolved Grill Log: nested
+CPU asset modules are shipped library data and must remain present outside the checkout.
+
+Distribute `lib/Ark/Net/*.pudu` with the root net module, including [[Ark Replication]];
+[[Ark Net Gate]] checks the archive.
+
+Distribute `lib/Ark/Editor/*.pudu`, including [[Ark Inspect]]; the editor root has no module of
+its own yet, so only the nested glob ships it.
+
+Distribute `lib/Ark/Game/*.pudu` with the root game module, including [[Ark Game Camera]];
+[[Ark Game Gate]] checks the archive.
+
+Distribute `lib/Ark/Animation/*.pudu` with the root animation module, including [[Ark Animation
+Machine]]; [[Ark Animation Gate]] checks the archive.
+
+Distribute `lib/Ark/Physics/*.pudu` with the root physics facade. Resolved Grill Log: the
+source archive must retain contact, step and query modules; checkout-only success is insufficient.
+
+Distribute `lib/Ark/*.pudu` and `lib/Ark/Math/*.pudu` beside Std in the existing library data
+root. [[Ark Math]] and [[Ark Matrix]] are language-distribution data, with no separate package
+or native dependency. Resolved Grill Log: source archives must contain both root and nested
+Ark modules even when a checkout's library root is unavailable.
+
 Declare package metadata, compiler library modules, executable components, test components, compiler
 warnings, language defaults, dependencies, and native bridge linkage for the Cabal build.
 
@@ -79,6 +102,16 @@ links, which made a clean `cabal install exe:pudu` fail even though in-tree buil
   request benchmark after linking the default, rather than reporting flag-only
   experiments as delivered behavior. No library or repository-test default
   changes, additional dependency or hard-coded optimization level is introduced.
+
+- **Q:** Let lane kernel buffers count against the nursery? **A:** No; the executable also
+  links `-AL32m`. Each lane kernel allocates a whole pinned buffer, and with the default limit
+  nearly every call triggered a stop-the-world collection that waited for the other threads'
+  non-allocating kernel loops, so lane work on four workers ran no faster than on one (112 vs
+  113 ms). Raising only the large-object limit, not every capability's nursery, lets those
+  buffers accumulate up to 32 MB between collections: four workers 103 → 49 ms, one worker
+  unchanged (105 → 107 ms) and peak memory 178 → 159 MB. 128 MB made one worker 11% slower and
+  added 110 MB; 16 MB left a third of the speedup unrealised. [[Lane Collection Gate]] counts the
+  collections; [[Lane Parallel Benchmark]] records the throughput.
 
 - **Q:** Leave an extracted runtime module outside the library module list? **A:** No. Registration
   keeps source distributions and builds aware of the implementation dependency.
@@ -531,3 +564,51 @@ Resolved Grill Log: Register Pudu.Compiler.Lower.Place using the existing depend
 ## Mutable loans (#651)
 
 Resolved Grill Log: Register Pudu.Compiler.Lower.Loan using the existing dependencies.
+## Capsule support (#722)
+
+Ship `lib/Ark/Physics/*.pudu` for [[Ark Capsule Support]].
+Resolved Grill Log: verify the executable behavior and shipping before delivery.
+## Swept movement distribution (#720)
+
+Ship `lib/Ark/Physics/*.pudu` for [[Ark Swept Motion]].
+Resolved Grill Log: verify the module in the actual source archive.
+## Capsule cast distribution (#716)
+
+Ship `lib/Ark/Math/*.pudu` and `lib/Ark/Physics/*.pudu` for [[Ark Segment Box Distance]] and
+[[Ark Capsule Box Cast]]. Resolved Grill Log: verify both nested modules in the actual archive.
+## Capsule movement distribution (#714)
+
+Include `lib/Ark/Physics/*.pudu` as shipped library data for [[Ark Character Movement]].
+Resolved Grill Log: validate the actual source archive; passing from a checkout alone cannot
+prove an installed client can resolve this nested module.
+
+Register [[Eval Binary]] without a new dependency. Resolved Grill Log: native wire functions are tested directly before public builtin/facade integration.
+
+## Qualified concrete methods (#763)
+
+Register Type Check Qualified as a shared semantic boundary without adding dependencies.
+
+Resolved Grill Log: known concrete identity, lexical admission, module-export priority and provider ambiguity must agree for called and retained methods. See [[Qualified Record Method Delivery]].
+
+## Named sum publication (#761)
+
+Register [[Eval Record Construction]] using existing containers/text dependencies.
+
+Resolved Grill Log: carry checked owner and field order through syntax; preserve authored effects, diagnostics and cache identity. See [[Named Sum Publication]].
+
+## Imported variant candidates (#775)
+
+Register Resolve Ambiguity using existing dependencies only. Candidate policy is pure invocation-local resolver behavior; no new runtime or package surface is introduced.
+
+Resolved Grill Log: preserve complete declaring-owner ambiguity at uses across imports, lexical shadows and generated syntax. See [[Imported Variant Delivery]].
+
+## Imported providers (#734)
+
+Register Type.Check.Method.Binding with existing dependencies only; formed method registration is internal checker behavior.
+
+Resolved Grill Log: binding identity and admitted source spellings determine provider selection and help; registration order and schemes do not. See [[Imported Provider Delivery]].
+
+Register [[Runtime Implementation Head]] and [[Eval Type Witness]] with existing
+base/containers/text dependencies only. Resolved Grill Log: the head metadata
+depends on syntax, Value depends on it, and the witness evaluator depends on Value;
+no recursive module or new native dependency.

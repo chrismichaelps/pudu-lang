@@ -121,3 +121,10 @@ protocol calls still go straight to `invoke`, whose loans refuse at the
 `&mut` type. A bound method value lifts the written call, so a loaned
 method held as a value writes back to the copy of the receiver it holds, as
 the evaluator's `closureSelf` does. See [[Native Mutable Loans]].
+
+## Selected providers (#798)
+
+A receiver call decodes a provider-selected member and takes the
+implementation that provider gives the receiver's type, falling back to the
+owner's only method of that name. A qualified call accepts the canonical key
+checking writes for its owner, and matches a trait by its last segment.

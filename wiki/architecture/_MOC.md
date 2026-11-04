@@ -17,6 +17,12 @@ Pudu is a statically typed native systems language for developers who need predi
 ## Pages
 
 - [[ADR-0025-if-without-else-unit-results]] — no-else unit conformance across execution and compilation paths.
+- [[Ark Math Conventions]] — binary64 column-vector algebra and explicit homogeneous projection.
+
+- [[Ark Engine]] — integrated Pudu game-engine layers, performance contracts and target ledger.
+
+- [[Ark Dependency Layers]] — enforced engine root ownership and architectural direction.
+
 
 - [[Application Maturity]] — database correctness, measured throughput and application dependency layers.
 
@@ -112,3 +118,4 @@ Pudu is a statically typed native systems language for developers who need predi
 - [[Native Mutable Loans]] — `&mut` parameters by copy-in/copy-out with writeback on every return.
 - [[Native Method Values]] — receiver-bound built-in methods, failures at the caller.
 - [[Native Default Parameters]] — a supplied-count parameter and a default prologue.
+- [[Ark Water Validation]] — numerical wave conformance and staged fluid scenarios.

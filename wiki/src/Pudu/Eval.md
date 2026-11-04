@@ -235,3 +235,32 @@ expression, catch a control transfer, or erase a diagnostic to manufacture unit.
 A record literal evaluates its fields as written, then stores them in the order
 [[Eval Env]] has for its type. Resolved Grill Log: reordering the syntax instead
 would move effects; reordering after evaluation keeps them where they were.
+## Canonical record owners (#761)
+
+Record construction uses the complete projected owner path. Fields still evaluate in written order; record updates retain their original owner.
+
+Resolved Grill Log: identity comes from the checked declaration, never import order or a basename guess. Preserve observable labels, lexical shadowing, field effects and failure provenance; no runtime filesystem lookup. See [[Canonical Runtime Owner Delivery]].
+
+## Named sum publication (#761)
+
+Evaluate authored fields left to right, then build through [[Eval Record Construction]] with the written initializer labels.
+
+Resolved Grill Log: carry checked owner and field order through syntax; preserve authored effects, diagnostics and cache identity. See [[Named Sum Publication]].
+
+## Structural implementation witnesses (#735)
+
+Initialize closureImplementation to Nothing for ordinary functions and literals;
+retain existing captures, witnesses, proof cache and closure identity. Installed
+method metadata belongs to [[Runtime Implementation Head]] and selection to
+[[Eval Type Witness]]. Resolved Grill Log: this constructor adjustment carries
+metadata without changing ordinary function execution or the kernel fixture.
+
+Resolved retained selection: evaluating TypeApplication evaluates its target once,
+constructs selected witnesses and applies selectTypes only to function closures.
+Other values retain their existing behavior; captures and source spans stay intact.
+
+## Records after the dev merge (#798)
+
+A record expression is built by `recordConstructor` and then passed through
+`declaredOrder`, so canonical sum constructors keep dev's identity and
+plain records keep declaration order (#519).

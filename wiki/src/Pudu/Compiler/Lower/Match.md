@@ -65,3 +65,8 @@ not wrap the rest of the source block in a generated syntax scope or re-read
 the subject. Lowering the fallback before binding protects shadowed outer
 names even if an earlier pattern component matched before a later one failed.
 Unsupported subject carriers and patterns retain located E6001 refusals.
+
+## Checked paths (#798)
+
+Constructor and record patterns name their variant or record through
+`writtenLabel`, so canonical keys and `::sum::` paths from checking match.

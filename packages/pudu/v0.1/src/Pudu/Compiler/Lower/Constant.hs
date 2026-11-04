@@ -50,19 +50,32 @@ project types at kind value = CoreExpression at kind <$> shape
     (CoreTupleType kinds, TupleValue members)
       | length kinds == length members -> CoreTuple <$> sequence (zipWith member kinds members)
     (CoreRecordType name _, RecordValue actual fields)
-      | displayName name == actual
+      | actual `elem` [name, displayName name]
       , Just declared <- recordFields types kind
       , length declared == length fields
       , Map.size (Map.fromList fields) == length fields ->
           CoreRecord <$> traverse (field (Map.fromList fields)) declared
-    (CoreSumType _ _, VariantValue name payload)
+    (CoreSumType _ _, VariantValue name payload) -> positional name payload
+    -- Folding publishes a sum value under its canonical owner, which the
+    -- solved type already chose.
+    (CoreSumType _ _, SumValue _ name payload) -> positional name payload
+    (CoreSumType _ _, NamedSumValue _ name fields)
       | Just variants <- sumVariants types kind
       , Just variant <- find ((== name) . coreVariantName) variants
-      , length (coreVariantFields variant) == length payload ->
+      , coreVariantRecord variant
+      , map fst fields == map fst (coreVariantFields variant) ->
           CoreConstruct name <$> sequence
             [ (,) label <$> member fieldKind held
-            | ((label, fieldKind), held) <- zip (coreVariantFields variant) payload ]
+            | ((label, fieldKind), (_, held)) <- zip (coreVariantFields variant) fields ]
     _ -> Nothing
+  positional name payload
+    | Just variants <- sumVariants types kind
+    , Just variant <- find ((== name) . coreVariantName) variants
+    , length (coreVariantFields variant) == length payload =
+        CoreConstruct name <$> sequence
+          [ (,) label <$> member fieldKind held
+          | ((label, fieldKind), held) <- zip (coreVariantFields variant) payload ]
+    | otherwise = Nothing
   member = project types at
   field fields (name, fieldKind) = do
     held <- Map.lookup name fields

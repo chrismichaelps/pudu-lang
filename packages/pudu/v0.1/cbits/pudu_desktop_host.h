@@ -20,8 +20,19 @@
 @property(nonatomic, strong) NSMutableData *inputs;
 /* What the installed menu bar's items call, or nil when this window installed none. */
 @property(nonatomic, strong) id menuTarget;
+/* Frame pixels per content point; 1 unless configured. */
+@property(nonatomic) CGFloat density;
+/* Last reported backing scale, so an unchanged scale is not reported again. */
+@property(nonatomic) CGFloat reportedScale;
 /* Appends one input record, dropped past the queue's limit. */
 - (void)record:(NSString *)line;
+@end
+
+/* Platform-driven window transitions, recorded as `scale`, `focus`, `minimize`
+   and `fullscreen` input lines. */
+@interface PuduWindowHost (WindowState)
+/* Records the backing scale when it differs from the last one recorded. */
+- (void)recordScale;
 @end
 
 #endif

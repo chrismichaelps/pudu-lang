@@ -5,7 +5,7 @@ module Pudu.Compiler.Lower.Body (lowerEntryBody, lowerFunctionBody, lowerExpress
 
 import Data.List.NonEmpty (NonEmpty (..))
 import Pudu.Compiler.Lower.Scalar (lowerUnary, lowerBinary, eagerType)
-import Pudu.Compiler.Lower.Types (recordFields, typeForSpan, nativeIntegerKind, nativeValueType)
+import Pudu.Compiler.Lower.Types (recordFields, typeForSpan, nativeIntegerKind, nativeValueType, writtenLabel)
 import Pudu.Compiler.Lower.Control
   ( lowerWhile, lowerLoop, lowerTransfer, blockType, joinType
   , printValued, expressionIsPrintValued )
@@ -36,7 +36,6 @@ import Pudu.Compiler.Lower.Record (lowerField, lowerRecord, lowerRecordUpdate)
 import Pudu.Compiler.Lower.Sum (lowerVariant)
 import Pudu.Compiler.Lower.Constant (lowerConstant)
 import Pudu.Compiler.Lower.Match (ifLetArms, lowerLetElse, lowerMatch, whileLetLoop)
-import qualified Data.List.NonEmpty as NonEmpty
 import qualified Data.Text as Text
 import Pudu.Frontend.Syntax.Name (ModuleName (..))
 import Pudu.Core
@@ -416,6 +415,8 @@ lowerExpression state (Located spanValue expression) = case expression of
     | Just key <- resolveFunction state (first : rest) -> lowerFunctionCall lowerExpression state spanValue key callee arguments
     | Just lowered <- lowerVariant lowerExpression state spanValue (last rest) arguments -> lowered
     | otherwise -> halt spanValue ("calls to '" <> Text.intercalate "." (first : rest) <> "'") state
+  CallExpression (Located _ (RecordExpression written@(ModuleName ("::constructor::" :| _)) [])) arguments
+    | Just lowered <- lowerVariant lowerExpression state spanValue (writtenLabel written) arguments -> lowered
   CallExpression callee arguments -> lowerValueCall lowerExpression state spanValue callee arguments
   MemberExpression receiver (Located _ member)
     | Located _ (NameExpression (owner :| [])) <- receiver
@@ -441,7 +442,9 @@ lowerExpression state (Located spanValue expression) = case expression of
   ScopeExpression{} -> halt spanValue "scope expressions" state
   LambdaExpression function -> lowerLambda lowerExpression lowerBlock state spanValue function
   TypeApplication{} -> halt spanValue "type applications" state
-  RecordExpression (ModuleName segments) fields -> lowerRecord lowerExpression state spanValue (NonEmpty.last segments) fields
+  RecordExpression written@(ModuleName ("::constructor::" :| _)) [] ->
+    maybe (halt spanValue "this constructor" state) id (lowerVariant lowerExpression state spanValue (writtenLabel written) [])
+  RecordExpression written fields -> lowerRecord lowerExpression state spanValue (writtenLabel written) fields
   RecordUpdateExpression _ source fields -> lowerRecordUpdate lowerExpression state spanValue source fields
   BlockExpression block ->
     let (after, coreBlock, resultType) = lowerBlock state block

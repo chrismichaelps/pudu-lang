@@ -87,3 +87,11 @@ Dependency direction: Builtin Definition → Value → Env → Operator/Match/Ar
 - [[Eval Call Needs]] — evaluator callbacks shared by call dispatch and argument discovery.
 
 - [[Mutex Admission Spec]] — bounded admission, ownership and timer retirement.
+
+- [[Eval Binary]] · [[Binary Codec Properties]] — native binary wire encoding and checked decoding.
+
+- [[Named Sum Value Properties]] — named sum identity, patterns, fields and frozen storage.
+
+- [[Eval Record Construction]] — shared canonical construction and named field storage order.
+
+- [[Runtime Witness Selection Delivery]] · [[Runtime Implementation Head]] · [[Eval Type Witness]] — structural implementation parameter binding (#735).

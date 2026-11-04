@@ -131,3 +131,52 @@ Exact `typeAt` queries use the full span; offset query complexity stays unchange
 `declaredRecords` runs the checker's own `collectDeclared` over a module and
 returns each record's type parameters and fields in declaration order. The
 native lowerer lays records out from it instead of reading type syntax.
+## Bound provider evidence (#743)
+
+ModuleTypes.moduleProviders indexes canonical trait evidence by complete span for executable projection. This product does not change authored tooling types or static argument selections.
+
+Resolved Grill Log: preserve the checker-selected provider through ordinary executable symbols,
+including retained methods and receiver aliases. Do not infer a provider from declaration order,
+receiver spelling, or runtime type arguments. Existing evaluation order and lending stay intact.
+See [[Bound Provider Delivery]].
+
+## Canonical record owners (#761)
+
+ModuleTypes.moduleOwners indexes concrete-owner facts independently from moduleProviders; generated implementation target and trait anchors may coincide.
+
+Resolved Grill Log: separate semantic roles even at identical generated spans. No runtime span lookup, provider overwrite or shortened owner. See [[Canonical Runtime Owner Delivery]].
+
+## Named sum publication (#761)
+
+ModuleTypes.moduleOwners indexes OwnerSelection by complete Span for executable projection.
+
+Resolved Grill Log: carry checked owner and field order through syntax; preserve authored effects, diagnostics and cache identity. See [[Named Sum Publication]].
+
+## Complete provider selections (#735)
+
+ProviderSelection carries canonical trait identity, complete formed trait arguments
+and an optional complete receiver type. Existing identity-only recording keeps an
+empty argument list and no receiver. Unambiguous rigid-bound selections retain
+the selected bound arguments and actual receiver, including F[A] rather than F.
+Implementation trait facts retain formed arguments under implementation rigids.
+Final checker publication resolves inference in both arguments and receiver.
+Detailed products and ModuleTypes preserve this immutable typed evidence.
+
+Compiler Literals continues existing member-symbol projection in this partition.
+At the structural Impl trait boundary it projects the complete formed trait,
+including expanded aliases and nested canonical owners; tooling syntax stays
+authored. Runtime transport/consumption follows separately and #735 remains open.
+
+Resolved Grill Log: trait identity cannot recover a parameter present only in
+Choice[B] for Box[A]. Do not fabricate a nominal identity to hold receiver types,
+inspect container elements, overwrite target-owner facts, or drop applied receiver
+arguments while following a rigid constructor's bounds. Assert actual checker
+products, canonical implementation trait projection, authored syntax and spans;
+retain full existing dispatch, diagnostic, derive and cache gates.
+See [[Bound Receiver Evidence Delivery]].
+
+## Shapes after the dev merge (#798)
+
+The module keeps `moduleShapes` beside dev's owner and provider selections.
+A sum's record variant fields are read by `(owner, label)`, the key dev
+stores them under.

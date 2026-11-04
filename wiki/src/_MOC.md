@@ -17,6 +17,17 @@ tags: [moc, module]
 - [[Core Frame IR]] · [[Compiler Frame Lowering]] · [[Compiler Frame State]] · [[Compiler Frame Body]] · [[Native Frame Lowering Tests]] — pure native continuation lowering (#499).
 
 - [[Repository README]] · [[Native Progress Generator]] · [[Native Progress Tests]] · [[Native Progress Workflow]] — auditable C11 completion publishing.
+- [[src/Ark/_MOC|Ark Modules]] — engine library and focused conformance gates.
+
+- [[Ark Layer Gate]] · [[Ark Layer Model]] · [[Ark Layer Tests]] — explicit engine import contracts.
+- [[Square Root Range Gate]] · [[Root Kernel Benchmark]] — full-range root accuracy and measured estimates.
+
+- [[Website Linux Workflow]] · [[Hackage Transport Test]] — configured HTTPS index transport.
+- [[Qualified Variant Gate]] — typed constructor paths and runtime regression coverage.
+- [[Refresh Pudu Installation]] · [[Refresh Installation Test]] — optimized installation and exact executable verification.
+
+
+
 
 - [[Derive Index Output Gate]] — checked strategy output and visibility.
 
@@ -123,6 +134,13 @@ tags: [moc, module]
 - [[Notes Web Application]] — database-backed HTML and JSON application composition.
 
 - [[Runtime Word Kernels]] — native-word reductions over existing containers.
+- [[Runtime Float Kernels]] — exact and platform binary64 operations behind Std.Math.Float.
+- [[Lane Kernel Identity]] · [[Runtime Lanes]] · [[Eval Builtin Lanes]] — packed binary64 lane kernels.
+- [[Runtime Broadphase]] · [[Overlap Pairs Fixture]] — sort-and-sweep box overlap pairs.
+- [[Runtime Raster]] · [[Raster Fixture]] — native triangle rasterization for the software render device.
+- [[Lanes Gate]] · [[Lanes Fixture]] · [[Lanes Benchmark]] — lane conformance and measurement.
+- [[Lane Collection Gate]] · [[Lane Collection Fixture]] · [[Lane Parallel Benchmark]] — lane buffers share collections so threads overlap.
+- [[Float Kernel Identity]] — names and shapes of the binary64 kernels, read by checker and runtime.
 - [[Eval Word Map]] — checked UInt64 map payload reductions for STD.
 - [[Runtime Buffer Kernels]] — unboxed contiguous byte buffer operations.
 - [[Eval Buffer]] — evaluator adapters for buffer builtins.
@@ -189,6 +207,9 @@ tags: [moc, module]
 ## Runtime benchmark fixtures
 
 - [[HTTP Benchmark Service]] — real three-route service with an explicit connection budget.
+
+- [[Desktop Presentation Test]] · [[Desktop Presentation Gate]] · [[Desktop Presentation CI]] — native row/channel conformance.
+- [[Desktop Window Test]] · [[Desktop Configure Gate]] · [[Desktop Configure Fixture]] — window records, density, limits and full screen.
 
 ## Referenced by
 
@@ -277,3 +298,24 @@ tags: [moc, module]
 - [[Backend Named Callable Programs]] — named call depth, ownership and diagnostics (#568).
 
 - [[Compiler Lower Intrinsic]] · [[Backend Output Callable Programs]] — first-class output builtins (#569).
+- [[Eval Binary]] · [[Binary Codec Properties]] — native binary wire contract and validation.
+- [[Bound Provider Gate]] — generic trait provider execution and cache parity.
+- [[Trait Provider Gate]] — explicit trait signatures, execution and located refusals.
+
+- [[Canonical Owner Gate]] — same-named record dispatch and checked-product reuse.
+
+- [[Qualified Record Method Gate]] — concrete namespace, alias and capture regression.
+
+- [[Sum Owner Gate]] — positional identity and native/task boundary regressions.
+
+- [[Resolve Ambiguity]] — symbol-bound exported variant ambiguity.
+
+- [[Diagnostic Render Properties]] — source identity and presentation regressions.
+
+- [[Method Binding]] — canonical method registration.
+
+- [[Runtime Implementation Head]] · [[Eval Type Witness]] — checked runtime implementation matching.
+
+- [[Ark Water Gate]] — current height-field wave verification.
+
+- [[Builtin Scope Delivery]] — resumed #759 scope isolation; [[Builtin Scope Grid]], [[Builtin Scope Late Grid]], [[Builtin Scope Main]], [[Builtin Scope Reverse]], [[Builtin Scope Selected]], [[Builtin Scope Refusal]], [[Builtin Scope Table]].

@@ -289,3 +289,8 @@ Resolved Grill Log: metadata never creates a resolver binding or an implicit re-
 Native build constructs LowerTypes from rootCompileResult compileTypes and compileSchemes of the exact root module being lowered. Missing compileTypes is passed as absent facts for a located E6001; no interpreter cache widening or rechecking.
 
 Resolved Grill Log: consume canonical settled checker facts; preserve structural Never, print carrier refusals and existing runtime representations. Rejected: re-inference, display-name ABI selection, offset-only identity or silent fallback.
+## Diagnostic source snapshots (#777)
+
+Build one program source index and pass it to snapshot-aware rendering; use the same index for primary lookup. Keep non-source project diagnostics unchanged. The existing large entry point receives only this bounded presentation change.
+
+Resolved Grill Log: source identity admits coordinates; names alone do not. See [[Diagnostic Source Delivery]].

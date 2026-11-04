@@ -1,0 +1,312 @@
+module Ark.Platform.Input
+
+/// A raw input event; key codes are W3C KeyboardEvent.code names such as `KeyW`.
+export type Event
+  = KeyDown(Str, Bool)
+  | KeyUp(Str)
+  | ButtonDown(Int, Int, Int)
+  | ButtonUp(Int, Int, Int)
+  | Hover(Int, Int)
+  | Scroll(Int, Int, Int)
+  | Resize(Int, Int)
+  | Typed(Str)
+  | Rescale(Int)
+  | Focus(Bool)
+  | Minimize(Bool)
+  | Fullscreen(Bool)
+
+/// Held keys and buttons, this frame's transitions, pointer position, scroll and typed text.
+export type State = {
+  held: Set[Str],
+  pressed: Set[Str],
+  released: Set[Str],
+  buttons: Set[Int],
+  buttonsPressed: Set[Int],
+  buttonsReleased: Set[Int],
+  pointerX: Int,
+  pointerY: Int,
+  scroll: Int,
+  typed: Str,
+}
+
+/// What an action listens to.
+export type Binding = Key(Str) | Button(Int)
+
+/// Action names and their bindings.
+export type ActionMap = { bindings: Map[Str, Array[Binding]] }
+
+/// Builds one event from a record's tab-separated fields and the whole record line.
+export type EventFactory = fn(&Array[Str], Str) -> Option[Event]
+
+/// The factory for each record kind the adapter writes; a kind not listed is skipped.
+const EVENT_FACTORIES: Map[Str, EventFactory] = mapOf([
+    ("keydown", keyDownEvent),
+    ("keyup", keyUpEvent),
+    ("button", buttonEvent),
+    ("hover", hoverEvent),
+    ("scroll", scrollEvent),
+    ("resize", resizeEvent),
+    ("text", typedEvent),
+    ("scale", rescaleEvent),
+    ("focus", focusEvent),
+    ("minimize", minimizeEvent),
+    ("fullscreen", fullscreenEvent),
+  ])
+
+/// Events from the adapter's tab-separated records; unknown or malformed records are skipped.
+export fn decode(records: Str) -> Array[Event] {
+  var events: Array[Event] = []
+  for line in records.lines() {
+    let fields = line.split("\t")
+    if fields.length() < 2 { continue }
+    if let Some(factory) = EVENT_FACTORIES.get(fields[0]) {
+      if let Some(event) = factory(&fields, line) { events = events.push(event) }
+    }
+  }
+  events
+}
+
+fn keyDownEvent(fields: &Array[Str], line: Str) -> Option[Event] {
+  if fields.length() != 3 { return None }
+  Some(KeyDown(fields[1], fields[2] == "1"))
+}
+
+fn keyUpEvent(fields: &Array[Str], line: Str) -> Option[Event] {
+  if fields.length() != 2 { return None }
+  Some(KeyUp(fields[1]))
+}
+
+fn buttonEvent(fields: &Array[Str], line: Str) -> Option[Event] {
+  if fields.length() != 5 { return None }
+  let button = fields[1].toInt() ?
+  let x = fields[3].toInt() ?
+  let y = fields[4].toInt() ?
+  if fields[2] == "down" { return Some(ButtonDown(button, x, y)) }
+  if fields[2] == "up" { return Some(ButtonUp(button, x, y)) }
+  None
+}
+
+fn hoverEvent(fields: &Array[Str], line: Str) -> Option[Event] {
+  if fields.length() != 3 { return None }
+  Some(Hover(fields[1].toInt() ?, fields[2].toInt() ?))
+}
+
+fn scrollEvent(fields: &Array[Str], line: Str) -> Option[Event] {
+  if fields.length() != 4 { return None }
+  Some(Scroll(fields[1].toInt() ?, fields[2].toInt() ?, fields[3].toInt() ?))
+}
+
+fn resizeEvent(fields: &Array[Str], line: Str) -> Option[Event] {
+  if fields.length() != 3 { return None }
+  Some(Resize(fields[1].toInt() ?, fields[2].toInt() ?))
+}
+
+fn typedEvent(fields: &Array[Str], line: Str) -> Option[Event] {
+  Some(Typed(line.drop(5)))
+}
+
+fn rescaleEvent(fields: &Array[Str], line: Str) -> Option[Event] {
+  if fields.length() != 2 { return None }
+  let scale = fields[1].toInt() ?
+  if scale <= 0 { None } else { Some(Rescale(scale)) }
+}
+
+fn focusEvent(fields: &Array[Str], line: Str) -> Option[Event] {
+  Some(Focus(flagOf(fields) ?))
+}
+
+fn minimizeEvent(fields: &Array[Str], line: Str) -> Option[Event] {
+  Some(Minimize(flagOf(fields) ?))
+}
+
+fn fullscreenEvent(fields: &Array[Str], line: Str) -> Option[Event] {
+  Some(Fullscreen(flagOf(fields) ?))
+}
+
+fn flagOf(fields: &Array[Str]) -> Option[Bool] {
+  if fields.length() != 2 { return None }
+  if fields[1] == "1" { return Some(true) }
+  if fields[1] == "0" { Some(false) } else { None }
+}
+
+/// Nothing held, the pointer at the origin.
+export fn initial() -> State {
+  State {
+    held: setOf([]),
+    pressed: setOf([]),
+    released: setOf([]),
+    buttons: setOf([]),
+    buttonsPressed: setOf([]),
+    buttonsReleased: setOf([]),
+    pointerX: 0,
+    pointerY: 0,
+    scroll: 0,
+    typed: "",
+  }
+}
+
+/// Clear this frame's presses, releases, scroll and text; held keys and the pointer remain.
+export fn beginFrame(state: State) -> State {
+  State {
+    ..state,
+    pressed: setOf([]),
+    released: setOf([]),
+    buttonsPressed: setOf([]),
+    buttonsReleased: setOf([]),
+    scroll: 0,
+    typed: "",
+  }
+}
+
+/// Every held key and button released, as when the window loses focus and their releases go elsewhere.
+fn releasedAll(state: State) -> State {
+  var keys = state.released
+  for code in state.held {
+    keys = keys.insert(code)
+  }
+  var buttons = state.buttonsReleased
+  for button in state.buttons {
+    buttons = buttons.insert(button)
+  }
+  State{..state, held: setOf([]), released: keys, buttons: setOf([]), buttonsReleased: buttons}
+}
+
+/// Fold events in order into the state. A repeat is never a press; losing focus releases everything held.
+export fn apply(state: State, events: &Array[Event]) -> State {
+  var current = state
+  for event in *events {
+    current = match event {
+      case KeyDown(code, repeat) =>
+      if repeat || current.held.contains(code) {
+        current
+      } else {
+        State{..current, held: current.held.insert(code), pressed: current.pressed.insert(code)}
+      }
+      case KeyUp(code) =>
+      if current.held.contains(code) {
+        State{..current, held: current.held.remove(code), released: current.released.insert(code)}
+      } else {
+        current
+      }
+      case ButtonDown(button, x, y) =>
+      State {
+        ..current,
+        buttons: current.buttons.insert(button),
+        buttonsPressed: current.buttonsPressed.insert(button),
+        pointerX: x,
+        pointerY: y,
+      }
+      case ButtonUp(button, x, y) =>
+      State {
+        ..current,
+        buttons: current.buttons.remove(button),
+        buttonsReleased: current.buttonsReleased.insert(button),
+        pointerX: x,
+        pointerY: y,
+      }
+      case Hover(x, y) => State{..current, pointerX: x, pointerY: y}
+      case Scroll(_, _, delta) => State{..current, scroll: current.scroll + delta}
+      case Typed(text) => State{..current, typed: current.typed + text}
+      case Resize(_, _) => current
+      case Focus(false) => releasedAll(current)
+      case Focus(true) => current
+      case Rescale(_) => current
+      case Minimize(_) => current
+      case Fullscreen(_) => current
+    }
+  }
+  current
+}
+
+/// Whether a key is down.
+export fn keyHeld(state: &State, code: Str) -> Bool {
+  state.held.contains(code)
+}
+
+/// Whether a key went down this frame.
+export fn keyPressed(state: &State, code: Str) -> Bool {
+  state.pressed.contains(code)
+}
+
+/// Whether a key went up this frame.
+export fn keyReleased(state: &State, code: Str) -> Bool {
+  state.released.contains(code)
+}
+
+/// Whether a mouse button is down.
+export fn buttonHeld(state: &State, button: Int) -> Bool {
+  state.buttons.contains(button)
+}
+
+/// Whether a mouse button went down this frame.
+export fn buttonPressed(state: &State, button: Int) -> Bool {
+  state.buttonsPressed.contains(button)
+}
+
+/// Whether a mouse button went up this frame.
+export fn buttonReleased(state: &State, button: Int) -> Bool {
+  state.buttonsReleased.contains(button)
+}
+
+/// An action map with no actions.
+export fn actions() -> ActionMap {
+  ActionMap{bindings: mapOf([])}
+}
+
+/// Add a binding to an action; repeating a binding has no effect.
+export fn bind(map: ActionMap, action: Str, binding: Binding) -> ActionMap {
+  let existing = bindingsOf(&map, action)
+  if existing.contains(binding) { return map }
+  ActionMap{bindings: map.bindings.insert(action, existing.push(binding))}
+}
+
+/// Remove every binding of an action.
+export fn unbind(map: ActionMap, action: Str) -> ActionMap {
+  ActionMap{bindings: map.bindings.remove(action)}
+}
+
+/// The bindings of an action, in the order they were added.
+export fn bindingsOf(map: &ActionMap, action: Str) -> Array[Binding] {
+  match map.bindings.get(action) {
+    case Some(found) => found
+    case None => []
+  }
+}
+
+/// Whether any binding of the action is held.
+export fn held(map: &ActionMap, state: &State, action: Str) -> Bool {
+  any(&bindingsOf(map, action), |binding| match binding {
+      case Key(code) => state.held.contains(code)
+      case Button(button) => state.buttons.contains(button)
+    })
+}
+
+/// Whether any binding of the action went down this frame.
+export fn pressed(map: &ActionMap, state: &State, action: Str) -> Bool {
+  any(&bindingsOf(map, action), |binding| match binding {
+      case Key(code) => state.pressed.contains(code)
+      case Button(button) => state.buttonsPressed.contains(button)
+    })
+}
+
+/// Whether any binding of the action went up this frame.
+export fn released(map: &ActionMap, state: &State, action: Str) -> Bool {
+  any(&bindingsOf(map, action), |binding| match binding {
+      case Key(code) => state.released.contains(code)
+      case Button(button) => state.buttonsReleased.contains(button)
+    })
+}
+
+/// -1, 0 or 1 from two opposing actions; both held cancel.
+export fn axis(map: &ActionMap, state: &State, negative: Str, positive: Str) -> Float64 {
+  let low = if held(map, state, negative) { 1.0 } else { 0.0 }
+  let high = if held(map, state, positive) { 1.0 } else { 0.0 }
+  high - low
+}
+
+fn any(bindings: &Array[Binding], active: fn(Binding) -> Bool) -> Bool {
+  for binding in *bindings {
+    if active(binding) { return true }
+  }
+  false
+}

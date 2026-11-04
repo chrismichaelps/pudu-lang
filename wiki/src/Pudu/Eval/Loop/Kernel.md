@@ -219,3 +219,19 @@ planner remains a separate admission boundary.
 
 A closed-region record literal reorders its fields from the Env it runs in,
 like the other evaluators.
+## Canonical record owners (#761)
+
+Closed record-producing kernels retain the complete projected canonical owner path, matching both general evaluators.
+
+Resolved Grill Log: separate semantic roles even at identical generated spans. No runtime span lookup, provider overwrite or shortened owner. See [[Canonical Runtime Owner Delivery]].
+
+## Named sum publication (#761)
+
+Prepare [[Eval Record Construction]] construction once for eligible closed bodies; retain whole-region proof, parameter scratch lifetime and ordered field evaluation.
+
+Resolved Grill Log: carry checked owner and field order through syntax; preserve authored effects, diagnostics and cache identity. See [[Named Sum Publication]].
+
+## Records after the dev merge (#798)
+
+The kernel's record builder orders the constructed value with
+`inDeclaredRecord` against the table read from the environment.

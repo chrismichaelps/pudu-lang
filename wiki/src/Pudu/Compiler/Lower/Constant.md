@@ -62,3 +62,11 @@ UInt8 literals followed by BytesOfArray. Arbitrary bytes, including invalid
 UTF-8 and NUL, must survive without decoding. This recursively covers Bytes
 inside represented tuples, records and variants; ordinary aggregate cleanup
 owns each constructed value. No initializer evaluation occurs at runtime.
+
+## Canonical folded values (#798)
+
+Folding now publishes a record under its canonical owner and a sum value as
+`SumValue` or, for a record variant, `NamedSumValue`, each under its
+canonical owner. A record matches by its key or display name; a sum value by
+its variant label, the solved type having already chosen the owner; a named
+payload must list the variant's fields in declaration order.

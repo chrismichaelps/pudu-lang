@@ -1,0 +1,118 @@
+module Ark.Game
+
+import Std.Time as Time
+import Ark.Platform.Clock as Clock
+import Ark.Platform.Input as Input
+import Ark.Platform.Window as Window
+import Ark.Render.Device as Device
+
+/// How long a minimized window waits for events between steps, in milliseconds.
+const IDLE_PUMP_MILLIS: Int = 16
+
+/// What one displayed frame hands the game: input this frame, its action map and timing.
+export type Frame = { input: Input.State, actions: Input.ActionMap, tick: Clock.Tick }
+
+/// A scene's behaviour over its own state: fixed steps of `seconds`, one variable update per
+/// displayed frame, and drawing with the fraction of a step still owed. None ends the game.
+export type Scene[S] = {
+  fixed: fn(S, Float64) -> Option[S],
+  update: fn(S, &Frame) -> Option[S],
+  draw: fn(&S, Float64, Device.Target) -> Option[Device.Target],
+}
+
+/// A scene's behaviour paired with its state.
+export type Active[S] = { scene: Scene[S], state: S }
+
+/// The scene stack (top runs), clock, the last frame's owed step fraction, input and quit flag.
+export type App[S] = {
+  stack: Array[Active[S]],
+  clock: Clock.FrameClock,
+  alpha: Float64,
+  input: Input.State,
+  actions: Input.ActionMap,
+  quitting: Bool,
+}
+
+/// A transition a scene asks for after its update.
+export type Change[S] = Stay | Push(Active[S]) | Pop | Replace(Active[S]) | Quit
+
+/// An app running one scene with a fixed step of `stepNanos` and at most `maxSteps` steps a frame.
+export fn start[S](first: Active[S], actions: Input.ActionMap, stepNanos: Int, maxSteps: Int, now: Int) -> Option[App[S]] {
+  let clock = Clock.fixed(stepNanos, maxSteps, now) ?
+  Some(App{stack: [first], clock, alpha: 0.0, input: Input.initial(), actions, quitting: false})
+}
+
+/// The running scene's state, or None once the stack is empty.
+export fn top[S](app: &App[S]) -> Option[S] {
+  if app.stack.isEmpty() { return None }
+  Some(app.stack[app.stack.length() - 1].state)
+}
+
+/// Whether the game has asked to stop or has no scene left.
+export fn finished[S](app: &App[S]) -> Bool {
+  app.quitting || app.stack.isEmpty()
+}
+
+/// Advance one displayed frame: apply events, run owed fixed steps on the top scene, then its
+/// update. A hook answering None stops the game; the clock never runs a scene backwards.
+export fn step[S](app: App[S], events: &Array[Input.Event], now: Int) -> App[S] {
+  if finished(&app) { return app }
+  let input = Input.apply(Input.beginFrame(app.input), events)
+  let (clock, tick) = Clock.tick(app.clock, now)
+  let index = app.stack.length() - 1
+  let active = app.stack[index]
+  let seconds = Clock.stepSeconds(&clock)
+  var state = active.state
+  for _ in 0..tick.steps {
+    let Some(next) = (active.scene.fixed)(state, seconds) else { return App{..app, input, clock, alpha: tick.alpha, quitting: true} }
+    state = next
+  }
+  let frame = Frame{input, actions: app.actions, tick}
+  let Some(updated) = (active.scene.update)(state, &frame) else { return App{..app, input, clock, alpha: tick.alpha, quitting: true} }
+  var stack = app.stack
+  stack[index] = Active{..active, state: updated}
+  App{..app, stack, input, clock, alpha: tick.alpha}
+}
+
+/// Apply a scene transition: push a scene over the current one, pop back, replace or quit.
+export fn change[S](app: App[S], request: Change[S]) -> App[S] {
+  match request {
+    case Stay => app
+    case Push(next) => App{..app, stack: app.stack.push(next)}
+    case Pop => App{..app, stack: app.stack.pop()}
+    case Replace(next) => App{..app, stack: app.stack.pop().push(next)}
+    case Quit => App{..app, quitting: true}
+  }
+}
+
+/// Draw the top scene with the clock's owed fraction of a step for interpolation.
+export fn draw[S](app: &App[S], target: Device.Target) -> Option[Device.Target] {
+  if app.stack.isEmpty() { return None }
+  let active = app.stack[app.stack.length() - 1]
+  (active.scene.draw)(&active.state, app.alpha, target)
+}
+
+/// Run in a window until the game finishes, the window closes or `maxFrames` frames have shown,
+/// answering the frames presented. Frames follow the window's size and scale; a minimized window
+/// keeps stepping but neither draws nor presents.
+export fn run[S](app: App[S], window: &Window.Window, maxFrames: Int) -> Result[Int, Window.PlatformError] {
+  var current = app
+  var surface = *window
+  var presented = 0
+  while presented < maxFrames && !finished(&current) {
+    let wait = if surface.minimized { IDLE_PUMP_MILLIS } else { 0 }
+    let open = Window.pump(&surface, wait) ?
+    if !open { return Ok(presented) }
+    let events = Window.events(&surface) ?
+    surface = Window.observe(surface, &events) ?
+    current = step(current, &events, Time.monotonicNanos())
+    if finished(&current) { return Ok(presented) }
+    if !surface.minimized {
+      let Some(blank) = Device.target(surface.width, surface.height) else { return Ok(presented) }
+      let Some(drawn) = draw(&current, blank) else { return Ok(presented) }
+      Window.present(&surface, &Device.pixels(&drawn)) ?
+      presented = presented + 1
+    }
+  }
+  Ok(presented)
+}

@@ -154,3 +154,18 @@ compiler expansion and ordinary constant evaluation from drifting apart.
 declared field names. `inDeclaredOrder` rearranges written fields into that
 order and leaves them alone unless they are exactly the declared set, since a
 name shared across modules may then belong to another type.
+## Bound provider evidence (#743)
+
+lookupMethod normalizes compiler-resolved Owner.::canonical.trait::member keys into the exact canonical.trait.Owner.member implementation key. Ordinary names retain their previous lookup. Missing selected providers never fall back to the shared receiver method slot. This is symbol lookup, not runtime trait inference.
+
+Resolved Grill Log: preserve the checker-selected provider through ordinary executable symbols,
+including retained methods and receiver aliases. Do not infer a provider from declaration order,
+receiver spelling, or runtime type arguments. Existing evaluation order and lending stay intact.
+See [[Bound Provider Delivery]].
+
+## Declared order over canonical construction (#798)
+
+`declaredOrder` and `inDeclaredRecord` put a constructed record's fields in
+declaration order, found by the record's owner or, for a construction
+spelled through an alias, the owner's own name. Construction itself is
+dev's `recordConstructor`; only the stored order changes (#519).

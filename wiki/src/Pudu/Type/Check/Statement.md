@@ -98,6 +98,9 @@ exception.
 
 ## Grill Log
 
+- **Q:** Why mark a `return` operand before checking it? **A:** Its value is the function's
+  result, so a match there is in result position for [[Check Propagation]].
+
 - **Q:** Why does the block itself open the frame rather than each caller? **A:** Every construct
   with a block — `if`, loops, block expressions, function bodies — must discard the block's
   bindings, and a caller that forgot let an inner shadow retype the outer name. _Rationale:_ one
@@ -154,3 +157,8 @@ Resolved Grill Log: expected dynamic information must not select the discarded
 then-block payload or synthesize an absent result branch. With-else checking
 still visits both branches under the expected type. Rejected: accepting a
 nonunit dynamic payload from an expression whose normal result is unit.
+## Constructor pattern ownership (#761)
+
+Pass the current DeclaredTypes to contextual match exhaustiveness exactly as ordinary expression checking does.
+
+Resolved Grill Log: preserve declaration identity through checking, executable projection and usefulness; no per-match span lookup. See [[Constructor Pattern Owner Delivery]].

@@ -35,7 +35,7 @@ import Pudu.Type.Env (DeclaredTypes (..), evalChecker)
 import Pudu.Type.Check.Import (collectImportedDeclared)
 import Pudu.Type.Formation (collectDeclared, collectDeclaredFrom)
 import Pudu.Type.Interface.Graph (ImportTypes)
-import Pudu.Type.Value (NominalId, Scheme (..), Type (..), renderType)
+import Pudu.Type.Value (ProviderSelection, OwnerSelection, NominalId, Scheme (..), Type (..), renderType)
 import Data.Text (Text)
 
 {-| @Type.Info — the type each checked expression was given, keyed by the span
@@ -80,12 +80,14 @@ data ModuleTypes = ModuleTypes
   {-| The module's records and sums formed with its imports in scope, which
       native lowering lays them out from. Built only when asked for. -}
   , moduleShapes :: ~DeclaredShapes
+  , moduleOwners :: !(Map.Map Span OwnerSelection)
+  , moduleProviders :: !(Map.Map Span ProviderSelection)
   }
   deriving stock (Eq, Show)
 
 checkTypesDetailed :: ImportTypes -> Set Span -> Module -> (ModuleTypes, [Diagnostic])
 checkTypesDetailed imported writable moduleValue =
-  let (entries, schemes, kinds, methods, selections, diagnostics) = Check.checkModuleDetailed imported writable moduleValue
+  let (entries, schemes, kinds, methods, selections, owners, providers, diagnostics) = Check.checkModuleDetailed imported writable moduleValue
    in ( ModuleTypes
           { moduleTypeInfo = typeInfoFor moduleValue entries
           , moduleSchemes = schemes
@@ -93,6 +95,8 @@ checkTypesDetailed imported writable moduleValue =
           , moduleMethods = methods
           , moduleSelections = Map.fromList selections
           , moduleShapes = declaredShapesWith imported moduleValue
+          , moduleOwners = Map.fromList owners
+          , moduleProviders = Map.fromList providers
           }
       , diagnostics
       )
@@ -207,7 +211,7 @@ declaredSums moduleValue = evalChecker $
 sumsOf :: DeclaredTypes -> Map NominalId ([Text], [(Text, [Type], Maybe [Text])])
 sumsOf declared =
   let variantOf owner name = case Map.lookup (owner, name) (declaredOwnedVariants declared) of
-        Just (_, params, payload) -> Just (params, (name, payload, Map.lookup name (declaredVariantFields declared)))
+        Just (_, params, payload) -> Just (params, (name, payload, Map.lookup (owner, name) (declaredVariantFields declared)))
         Nothing -> Nothing
       sumOf owner names = case traverse (variantOf owner) names of
         Just found@((params, _) : _) -> Just (params, map snd found)

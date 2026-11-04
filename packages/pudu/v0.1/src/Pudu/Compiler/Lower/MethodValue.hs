@@ -11,7 +11,7 @@ import qualified Data.Text as Text
 import Pudu.Compiler.Lower.State
   ( LowerContext (..), LowerState (..), bindLocal, lookupLocal, refuse, refused, startFunction )
 import Pudu.Compiler.Lower.Loan (closeLoaned)
-import Pudu.Compiler.Lower.Types (ownerKeyOf, recordFields, typeFactAt, typeForSpan, withFacts)
+import Pudu.Compiler.Lower.Types (ownerKeyOf, recordFields, selectedMember, typeFactAt, typeForSpan, withFacts)
 import Pudu.Core
 import Pudu.Frontend.Syntax (Expression (..), Located (..))
 import Data.Maybe (fromMaybe, isJust, isNothing)
@@ -43,6 +43,8 @@ lowerMethodValue lower state at receiver member = case (typeForSpan types (locat
   _ -> Nothing
  where
   types = contextTypes (lowerContext state)
+  -- The member's own name, without the provider checking selected.
+  plain = snd (selectedMember member)
   builtIn kind = case kind of
     CoreTextType -> True
     CoreArrayType _ -> True
@@ -53,7 +55,7 @@ lowerMethodValue lower state at receiver member = case (typeForSpan types (locat
     CoreBytesType -> True
     _ -> False
   declared kind = case kind of
-    CoreRecordType _ _ -> isNothing (recordFields types kind >>= lookup member)
+    CoreRecordType _ _ -> isNothing (recordFields types kind >>= lookup plain)
     CoreSumType _ _ -> True
     _ -> False
   ensure current key bound kind fact
@@ -101,13 +103,13 @@ lowerMethodValue lower state at receiver member = case (typeForSpan types (locat
         before = length (contextRefusals (lowerContext current))
         -- Refusals inside point at made-up spans; one at the member says it.
         settled = if length (contextRefusals context) > before
-          then refuse at ("the method value '" <> member <> "'") current{lowerContext = context{contextRefusals = drop (length (contextRefusals context) - before) (contextRefusals context)}}
+          then refuse at ("the method value '" <> plain <> "'") current{lowerContext = context{contextRefusals = drop (length (contextRefusals context) - before) (contextRefusals context)}}
           else current{lowerContext = context}
         receiverType = maybe (case inputs of { self : _ -> self; [] -> CoreUnitType }) id bound
      in case lowered of
           Just (body, _) | length (contextRefusals context) == before ->
             let lifted = CoreFunction key (hidden <> parameters) result (snd (closeLoaned afterBody at (CoreBlock prologue (Just body))))
-                info = CoreClosureInfo [receiverType | Just _ <- [bound]] member key False (isJust bound) (Just receiverType)
+                info = CoreClosureInfo [receiverType | Just _ <- [bound]] plain key False (isJust bound) (Just receiverType)
                 registered = (lowerContext settled)
                   { contextFunctions = lifted : contextFunctions (lowerContext settled)
                   , contextClosures = Map.insert key info (contextClosures (lowerContext settled))

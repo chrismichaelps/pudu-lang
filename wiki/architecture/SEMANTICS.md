@@ -1,6 +1,7 @@
 ---
 type: architecture
 semantic_version: "1.0.1-draft"
+semantic_version: "2.0.0-draft"
 status: NORMATIVE_DRAFT
 tags: [architecture, semantics]
 aliases: [Semantic System, Pudu Semantics]
@@ -278,6 +279,10 @@ These obligations require executable property/conformance tests now and mechaniz
   comparison is total over floats: NaN equals NaN and sorts after every number (#522). Before,
   a NaN member made a tuple both less and greater than another, and a map could hold one key
   twice. Float operators are unchanged.
+- **2.0.0-draft · 2026-10-27:** Reserve `Ark` as a shipped library root, with project-first
+  lookup and exclusion of installed dependency roots. Existing package-owned Ark namespaces
+  require migration; see [[ADR-0025-integrated-engine-namespace]]. No syntax change.
+
 - **1.0.0-draft · 2026-09-19:** Corrected open-range extent semantics: `length()` on a range
   missing either end reports `E7004` instead of returning zero, while `isBounded()`, `isEmpty()`, and
   `contains()` retain distinct, consistent meanings. The evaluator also no longer admits a tuple

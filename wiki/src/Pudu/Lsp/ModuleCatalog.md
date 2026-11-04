@@ -1,6 +1,6 @@
 ---
 type: module
-path: "@root/src/Pudu/Lsp/ModuleCatalog.hs"
+path: "@root/packages/pudu/v0.1/src/Pudu/Lsp/ModuleCatalog.hs"
 fidelity: Active
 domain: "[[Compilation Artifact]]"
 subsystem: "[[Tooling]]"
@@ -27,9 +27,12 @@ modulesUnder  :: (Text -> Bool) -> FilePath -> IO [Text]
 
 ## Governance
 
-- The roots are the ones [[Compiler Library]] searches, taken from one resolution context for the
-  source root, so an offered module is one an import would find. Standard roots contribute only the
-  `Std` namespace, matching the rule that a non-standard module is never looked for in the library.
+- The roots are the distinct union of ordinary and shipped search roots from one
+  [[Compiler Library]] resolution context. For each root, admit a first namespace segment only
+  when the compiler's search roots for that segment include this root. This shared policy includes
+  every shipped namespace and excludes package-owned shipped names automatically.
+- Never subtract root-list lengths: ordinary lookup contains package roots that shipped lookup
+  excludes, so positional subtraction can discard the real library.
 - A module is named by its path from the root: `root/Std/Io.pudu` is `Std.Io`.
 - Only directories whose names can be module segments (an ASCII capital followed by letters, digits,
   or `_`) are entered, and only such entries are examined at all. A source root that is also a
@@ -48,10 +51,16 @@ modulesUnder  :: (Text -> Bool) -> FilePath -> IO [Text]
 ## Negative Logic (Prohibited Paths)
 
 - Do not descend into directories that cannot be module segments.
-- Do not offer non-`Std` names found under a library root.
+- Do not offer any namespace from a root the compiler would not search for that namespace.
 - Do not rebuild the catalog per completion request.
 
 ## Grill Log
+
+- **Q:** Hardcode the shipped namespace set again in completion? **A:** No; query compiler
+  policy for each first segment. _Resolved:_ project overrides, package exclusion and future
+  shipped namespaces all follow the same resolution decision.
+- **Q:** Assume ordinary and shipped root lists share a prefix of the same length? **A:** No;
+  enumerate their distinct union and filter by membership, retaining bounded per-root traversal.
 
 - **Q:** Why walk the filesystem at all, when the program's graph already lists its modules? **A:**
   An import is written to reach a module the program does not use yet. _Rationale:_ the graph only

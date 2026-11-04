@@ -10,6 +10,58 @@ tags: [moc, handoff]
 - [[Native Signed Integer Delivery]] — fixed signed widths on the exact native carrier (#497).
 
 - [[Native C11 Backend Delivery]] — native C11 backend, loop control and unit-result conformance (#486, #488–#490).
+- [[Bound Provider Delivery]] — selected trait evidence through execution (#743).
+
+- [[Lane Collection Delivery]] — issue #726 lane buffers share collections so threads overlap.
+- [[Ark Asset Server Delivery]] — asset dependency graph, then staged reload over virtual reads.
+
+- [[Ark Vfs Delivery]] — virtual resource loading through the Platform boundary.
+
+- [[Ark Texture Delivery]] — checked RGBA8 texture data and alpha-correct filtering.
+
+- [[Ark Render Correctness]] — geometric-normal preservation under non-uniform transforms.
+
+- [[Ark Physics Continuation]] — physics boundary and solver repairs on the engine integration branch.
+
+- [[Ark Cast Delivery]] — checked capsule casts and finite-box closest witnesses (#716).
+- [[Ark Character Delivery]] — capsule movement, corner constraints and final support (#714).
+- [[Qualified Constructor Delivery]] — imported and local qualified sum constructors (#717).
+- [[Optimized Refresh Delivery]] — explicit optimized runtime installation (#686).
+- [[Lambda Option Try Delivery]] — issue #678 `?` on Option in unannotated lambdas.
+- [[Game Input Delivery]] — issue #673 key release, physical codes, hover and buttons.
+- [[Monotonic Nanosecond Delivery]] — issue #670 nanosecond monotonic clock.
+- [[Broadphase Delivery]] — issue #682 native overlap pairs of axis-aligned boxes.
+
+- [[Lambda Option Try Delivery]] — issue #678 `?` on Option in unannotated lambdas.
+
+- [[Raster Delivery]] — issue #676 native depth-tested triangle rasterization.
+
+- [[Ark Engine Next]] — engine branch state after Platform (#675); next action: software render device.
+
+- [[Game Input Delivery]] — issue #673 key release, physical codes, hover and buttons.
+
+- [[Ark World Delivery]] — issue #672 handles, profiling and archetype World on lanes.
+
+- [[Monotonic Nanosecond Delivery]] — issue #670 nanosecond monotonic clock.
+- [[Lane Collection Delivery]] — issue #726 lane buffers share collections so threads overlap.
+
+- [[Lane Delivery]] — issue #668 packed binary64 lanes with native batch kernels.
+
+- [[Ark Math Completion Delivery]] — issue #666 completed binary64 engine math layer.
+
+- [[Square Root Delivery]] — issue #661 binary64 kernels behind Std.Math.Float, exact square root.
+
+- [[Flat Expression List Delivery]] — issue #662 keep flat list width out of parser nesting depth.
+
+- [[Hackage Transport Delivery]] — issue #656 configure verified HTTPS before one index update.
+
+- [[Ark Matrix Delivery]] — issue #660 Vec4 and matrix algebra.
+- [[Library Catalog Delivery]] — issue #654 compiler-consistent import completion roots.
+- [[Ark Layer Delivery]] — issue #658 engine dependency enforcement.
+
+- [[Ark Foundation Delivery]] — issue #652 integrated engine architecture and checked vector math.
+
+- [[Ark Layer Delivery]] — issue #658 engine dependency enforcement.
 
 - [[Derive Index Delivery]] — authored strategy indexing and public metadata (#458).
 
@@ -167,6 +219,10 @@ tags: [moc, handoff]
 - [[Native Trait Method Delivery]] — #551 trait methods, complete.
 - [[Native Generic Delivery]] — #552 generics, active.
 
+- [[Desktop Presentation Delivery]] — issue #724 native frame orientation repair.
+- [[Ark Ground Delivery]] — issue #722 gravity-relative support and settlement.
+- [[Ark Motion Delivery]] — issue #720 query-driven movement and finite-box composition.
+
 ## Referenced by
 
 [[00-INDEX]] · [[Engineering Delivery]]
@@ -267,3 +323,42 @@ tags: [moc, handoff]
 - [[Native Method Loans Delivery]] — `&mut self` and method loans (#790).
 - [[Native Blame Hook Delivery]] — the blame hook in its own runtime part (#791).
 - [[Native Value Loans Delivery]] — loans through function values, lambdas and method values (#794).
+- [[Native Dev Sync Delivery]] — the native stack on dev's checker and evaluator (#798).
+- [[Binary Codec Delivery]] — issue #739 native wire codec partition.
+- [[Trait Provider Delivery]] — issue #742 canonical trait-provider scheme selection.
+
+- [[Canonical Runtime Owner Delivery]] — canonical record construction and dispatch, issue #761.
+
+- [[Qualified Record Method Delivery]] — qualified concrete owner admission, issue #763.
+
+- [[Positional Sum Owner Delivery]] — positional constructor identity, issue #761.
+
+- [[2026-10-30-pattern-owners|Constructor Pattern Owner Delivery]]
+
+- [[2026-10-31-record-pattern-owners|Record Pattern Owner Delivery]]
+
+- [[Named Payload Field Delivery]] — canonical named payload shape lookup, issue #761.
+
+- [[Named Sum Value Delivery]] — explicit owned named runtime values, issue #761.
+
+- [[Named Sum Publication]] — checked named constructor and pattern publication.
+
+- [[Variant Namespace Delivery]] — local variant namespace admission and positioned ambiguity.
+
+- [[Constructor Binding Delivery]] — typed constructor roles and exact import aliases.
+
+- [[Imported Variant Delivery]] — exported variant candidates and lexical import ambiguity.
+
+- [[Diagnostic Source Delivery]] — cross-file diagnostic coordinates and snapshot identity.
+
+- [[Imported Provider Delivery]] — canonical imported method admission and actual provider spellings.
+
+- [[Implementation Witness Delivery]] — checked implementation heads before bounded dispatch repair (#735).
+
+- [[Runtime Witness Selection Delivery]] · [[Runtime Implementation Head]] · [[Eval Type Witness]] — structural implementation parameter binding (#735).
+
+- [[Water Validation Delivery]] — water test expansion with current-model limits.
+
+- [[Builtin Scope Delivery]] — resumed #759 scope isolation; [[Builtin Scope Grid]], [[Builtin Scope Main]], [[Builtin Scope Reverse]], [[Builtin Scope Selected]], [[Builtin Scope Refusal]], [[Builtin Scope Table]].
+
+- [[Bound Receiver Evidence Delivery]] — complete selected bound and receiver facts for #735.

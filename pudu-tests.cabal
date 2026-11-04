@@ -61,6 +61,7 @@ test-suite pudu-test
     Pudu.FormatSpec
     Pudu.Lsp.JsonSpec
     Pudu.Lsp.ServerSpec
+    Pudu.Lsp.ModuleCatalogSpec
     Pudu.Lsp.DeriveToolingSpec
     Pudu.Lsp.DiagnosticsSpec
     Pudu.Lsp.ImplMembersSpec
@@ -176,12 +177,14 @@ test-suite pudu-test
     Pudu.Frontend.SyntaxSpec
     Pudu.Frontend.TokenSpec
     Pudu.EvalSpec
+    Pudu.Eval.BinarySpec
     Pudu.Eval.Common
     Pudu.Eval.ArithmeticSpec
     Pudu.Eval.BindingFlowSpec
     Pudu.Eval.LoopStepSpec
     Pudu.Runtime.SeriesMapSpec
     Pudu.Eval.DataSpec
+    Pudu.Eval.NamedSumSpec
     Pudu.Eval.FunctionClosureSpec
     Pudu.Eval.SystemSpec
     Pudu.Eval.MutexSpec
@@ -194,6 +197,7 @@ test-suite pudu-test
     Pudu.Repl.Session.EvaluationSpec
     Pudu.Semantic.QualifiedShadowSpec
     Pudu.Semantic.ResolveSpec
+    Pudu.Semantic.VariantNamespaceSpec
     Pudu.Semantic.QualifierSpec
     Pudu.Semantic.ReflectionSpec
     Pudu.Type.CheckSpec

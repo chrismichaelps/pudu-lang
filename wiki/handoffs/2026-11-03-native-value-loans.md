@@ -1,6 +1,6 @@
 ---
 type: handoff
-status: ACTIVE
+status: DONE
 issue: 794
 aliases: [Native Value Loans Delivery]
 ---
@@ -17,8 +17,8 @@ Evidence: every corpus program matches the tree interpreter byte for byte;
 output-callable groups pass under Clang, GCC 15 and ASan/UBSan with zero
 live allocations; every backend property label passes.
 
-Exact next action: trait-qualified method values (#795): `Grow.grow` as a
-value dispatches on its first argument's type at each call.
+Exact next action: superseded by [[Native Dev Sync Delivery]]; trait-
+qualified method values are rejected by dev's checker (#795, #797 closed).
 
 ## Referenced by
 

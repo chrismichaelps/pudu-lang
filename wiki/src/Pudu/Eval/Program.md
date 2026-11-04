@@ -152,3 +152,8 @@ root's declarations must not reinstall them over selected imports with names suc
 
 Reloading declarations for an interactive block clears the record field-order
 table with the variant owners.
+## Canonical record owners (#761)
+
+Root, dependency, folding and interactive module installation supply the defining module path to the named loader. Folded records keep the same owner as runtime records.
+
+Resolved Grill Log: identity comes from the checked declaration, never import order or a basename guess. Preserve observable labels, lexical shadowing, field effects and failure provenance; no runtime filesystem lookup. See [[Canonical Runtime Owner Delivery]].

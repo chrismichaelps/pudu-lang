@@ -39,3 +39,8 @@ capture, so equality compares sites only.
 A lifted method value whose function type has `&mut` inputs lends them on
 to the written call by name and closes its body over their finals, so
 `b.steal` and `Bag.grow` used as values write back where they are called.
+
+## Selected providers (#798)
+
+A method value keeps the selected member in the call it lifts, so the call
+resolves the same provider, and names itself by the plain member.

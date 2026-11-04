@@ -1,8 +1,10 @@
 {-| @Pudu.Compiler.Lower.Types — settled checker facts for native representation. -}
 module Pudu.Compiler.Lower.Types
   ( LowerTypes, emptyTypes, nativeTypes, withShapes, withBindings, withFacts, typeBindings, lookupScheme, typeForSpan, typeFactAt, sharedReferenceTarget, referenceTarget, loanedInputs
-  , formedCoreType, formedCoreTypeIn, ownerKeyOf, layoutOf, recordFields, sumVariants, nativeIntegerKind, nativeScalarType, nativeValueType ) where
+  , writtenLabel, selectedMember, formedCoreType, formedCoreTypeIn, ownerKeyOf, layoutOf, recordFields, sumVariants, nativeIntegerKind, nativeScalarType, nativeValueType ) where
 
+import Data.List.NonEmpty (NonEmpty (..))
+import qualified Data.List.NonEmpty as NonEmpty
 import Data.Map.Strict (Map)
 import qualified Data.Map.Strict as Map
 import Data.Text (Text)
@@ -10,6 +12,7 @@ import qualified Data.Text as Text
 import Pudu.Core (CoreLayout (..), CoreType (..), CoreVariant (..))
 import Pudu.FloatLiteral (FloatWidth (..))
 import Pudu.IntegerLiteral (IntegerKind (PlatformSigned, PlatformUnsigned, SignedKind, UnsignedKind), integerKindName, integerKindOf)
+import Pudu.Frontend.Syntax.Name (ModuleName (..))
 import Pudu.Source (Span)
 import Pudu.Type (TypeInfo (..), typeAt)
 import Pudu.Type.Value
@@ -85,6 +88,24 @@ referenceTarget :: LowerTypes -> Span -> Maybe CoreType
 referenceTarget types@(LowerTypes info _ _ _) at = case typeAt info at of
   Just (ReferenceTypeValue _ target) -> formedCoreTypeIn types target
   _ -> Nothing
+
+{-| The label a checked constructor path names. Checking rewrites a variant
+    to a `::constructor::` or `::sum::` path carrying its canonical owner,
+    and a record or a constructor pattern to its canonical key; the label is
+    what the source wrote last. -}
+writtenLabel :: ModuleName -> Text
+writtenLabel (ModuleName segments) = case segments of
+  "::constructor::" :| [_, label] -> label
+  "::sum::" :| (_ : label : _) -> label
+  _ -> last (Text.splitOn "." (NonEmpty.last segments))
+
+{-| A member as checking selected it: `::Main.Get::get` names the trait that
+    provides `get`, as `Eval.Env.lookupMethod` reads it. A member checking did
+    not select is its own name. -}
+selectedMember :: Text -> (Maybe Text, Text)
+selectedMember written = case Text.splitOn "::" written of
+  ["", provider, member] -> (Just provider, member)
+  _ -> (Nothing, written)
 
 {-| Builtins only; no record or sum is known. -}
 formedCoreType :: Type -> Maybe CoreType
