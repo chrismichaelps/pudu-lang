@@ -27,6 +27,7 @@ import Pudu.Eval.Env
   ( Evaluator (..)
   , bind
   , recordVariantOwner
+  , recordFieldOrder
   , bindMethod
   , markModuleScope
   )
@@ -54,6 +55,7 @@ import Pudu.Frontend.Syntax.Tree
   , TypeParam (..)
   , TypeSyntax (..)
   , TypeDefinition (..)
+  , FieldDeclaration (..)
   , Variant (..)
   )
 
@@ -403,9 +405,15 @@ installVariants namespace typeText (Located _ definition) = case definition of
     mapM_ (\(name, _) -> recordVariantOwner name owner) entries
     bind typeText (RecordValue owner entries)
     bind owner (RecordValue owner entries)
+  -- A record's fields are stored in declaration order, whichever name the
+  -- construction reached it by.
+  RecordDefinition fields -> do
+    recordFieldOrder typeText (fieldNames fields)
+    recordFieldOrder owner (fieldNames fields)
   _ -> pure ()
  where
   owner = if namespace == "" then typeText else namespace <> "." <> typeText
+  fieldNames fields = [locatedValue (fieldName field) | Located _ field <- fields]
   variantEntry (Located _ variant) =
     let name = locatedValue (variantName variant)
      in (name, SumValue owner name [])

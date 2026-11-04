@@ -1,0 +1,376 @@
+---
+type: module
+path: "@root/src/Pudu/Core.hs"
+fidelity: Active
+domain: "[[Core IR]]"
+subsystem: "[[Backend]]"
+grammar: "[[grammar/haskell]]"
+tags: [module, backend, ir]
+aliases: [Pudu Core IR Module, Core Module]
+---
+
+# Pudu Core
+
+## Purpose and interface
+
+The concrete Haskell form of [[Core IR]]: the checked, name-resolved program
+the native backend consumes, with every statement and expression carrying the
+source span it came from. It is a domain module — no IO, no diagnostics, no
+rendering — so both [[Compiler Lower]] and [[Backend Emit]] share one
+vocabulary and neither invents its own.
+
+```haskell
+data CoreModule = CoreModule
+  { coreModuleName :: !Text
+  , coreModuleEntry :: !Text
+  , coreModuleFunctions :: ![CoreFunction]
+  }
+
+data CoreFunction = CoreFunction
+  { coreFunctionName :: !Text
+  , coreFunctionParameters :: ![CoreParameter]
+  , coreFunctionResult :: !CoreType
+  , coreFunctionBody :: !CoreBlock
+  }
+
+data CoreParameter = CoreParameter
+  { coreParameterLocal :: !CoreLocal
+  , coreParameterSpan :: !Span
+  }
+
+data CoreBlock = CoreBlock
+  { coreBlockStatements :: ![CoreStatement]
+  , coreBlockResult :: !(Maybe CoreExpression)
+  }
+
+data CoreLocal = CoreLocal
+  { coreLocalId :: !Int, coreLocalName :: !Text, coreLocalType :: !CoreType }
+
+data CoreStatement = CoreStatement
+  { coreStatementSpan :: !Span, coreStatementShape :: !CoreStatementShape }
+
+data CoreStatementShape
+  = CoreDeclare !CoreLocal !CoreExpression
+  | CoreAssign !CoreLocal !CoreExpression
+  | CoreEvaluate !CoreExpression
+  | CoreIf !CoreExpression !CoreBlock !(Maybe CoreExpression)
+  | CoreReturn !(Maybe CoreExpression)
+  | CoreBreak !CoreLoopId !(Maybe CoreExpression)
+  | CoreContinue !CoreLoopId
+
+data CoreExpression = CoreExpression
+  { coreExpressionSpan :: !Span
+  , coreExpressionType :: !CoreType
+  , coreExpressionShape :: !CoreExpressionShape
+  }
+
+data CoreExpressionShape
+  = CoreIntegerLiteral !IntegerKind !Integer
+  | CoreBoolLiteral !Bool
+  | CoreTextLiteral !Text
+  | CoreReadLocal !CoreLocal
+  | CoreNegate !CoreExpression
+  | CoreComplement !CoreExpression
+  | CoreNot !CoreExpression
+  | CoreBinary !CoreBinaryOperator !CoreExpression !CoreExpression
+  | CoreDisplay !CoreExpression
+  | CorePrint !CoreExpression
+  | CoreCall !Text ![CoreExpression]
+  | CoreOperatorFailure !Text ![CoreExpression]
+  | CoreBlockValue !CoreBlock
+  | CoreIfValue !CoreExpression !CoreBlock !CoreExpression
+  | CoreWhileValue !CoreLoopId !CoreExpression !CoreBlock
+  | CoreLoopValue !CoreLoopId !CoreBlock
+
+data CoreBinaryOperator
+  = CoreAdd | CoreSubtract | CoreMultiply | CoreDivide | CoreRemainder
+  | CoreBitAnd | CoreBitOr | CoreBitXor | CoreShiftLeft | CoreShiftRight
+  | CoreWrapAdd | CoreWrapSubtract | CoreWrapMultiply
+  | CoreSaturateAdd | CoreSaturateSubtract | CoreSaturateMultiply
+  | CoreLess | CoreLessOrEqual | CoreGreater | CoreGreaterOrEqual
+  | CoreEqual | CoreNotEqual | CoreAnd | CoreOr
+
+newtype CoreLoopId = CoreLoopId Int
+data CoreType = CoreIntegerType !IntegerKind | CoreBoolType | CoreTextType | CoreUnitType | CoreNeverType
+coreTypeName :: CoreType -> Text
+```
+
+## Governance
+
+- Positions are uniform: every statement and expression is a record whose
+  first field is its span, so no pass has to guess where a node came from and
+  no constructor is special.
+- Every expression carries its type, computed once during lowering, so helper
+  selection (checked arithmetic, printer choice) is a lookup rather than a
+  second type pass.
+- A local carries its identity, its source name, and its type together, so the
+  emitter never re-derives any of the three and shadowing is represented by
+  distinct identities rather than distinct names.
+- `CoreTextType` values (`CoreTextLiteral`, `CoreDisplay`) exist only as
+  `CorePrint` arguments; [[Compiler Lower]] refuses every other position, so
+  the emitter may rely on that discipline rather than re-check it.
+- `CoreUnitType` is the type of effects the interpreter also types as Unit —
+  assignment, `if` without else, `while` — so a discarded value is
+  typed, never guessed. `CorePrint` uses this effect representation only in discarded positions; lowering refuses its Result escaping into a native return.
+- `CoreReturn` is a statement, not an expression: a return is control flow and
+  the interpreter treats it that way, so nothing downstream has to reason
+  about a value that never arrives.
+- `CoreCall` names its callee and carries its arguments in source order:
+  argument evaluation order is the evaluator's left-to-right order, so the
+  emitter must sequence them itself rather than lean on C's unspecified order.
+  The callee is a name because function symbols are name-derived and unique per
+  module; the emitter resolves it once, the way it resolves every local.
+- `coreModuleEntry` names the function the process enters: the emitter writes
+  its C `main` from this field rather than from a hard-coded `"main"`, so the
+  entry vocabulary stays the caller's decision all the way to code generation.
+- Core preserves required operand order and control effects. Target calling
+  conventions and C statement sequencing belong to [[Backend Emit]].
+
+## Negative Logic (Prohibited Paths)
+
+- No unresolved names, no sugar (`if let`, patterns, ranges), no implicit
+  conversions, no target types or rendered diagnostic objects. Operator refusal
+  messages are semantic payload; source excerpts are carried only by spans.
+- No partial fields: a `CoreIfValue` without an else is unrepresentable, so
+  the emitter cannot meet a branch it has no code for.
+
+## Dependencies and consumers
+
+Requires [[Source]] spans, [[Integer Literal]] kinds and [[Float Literal]] widths only. Consumed by
+[[Compiler Lower]] (produces it) and [[Backend Emit]] (consumes it). It
+imports no compiler, evaluator, or frontend module; the backend boundary of
+[[ADR-0002-compiler-pipeline]] passes through it.
+
+## Grill Log
+
+- **Q:** Where does a type's written name come from? **A:** `displayName`, the last segment of its canonical key, which is how the evaluator renders and names it in messages (#539).
+
+- **Q:** How does Core carry sums? **A:** `CoreSumType name arguments` at concrete arguments, so `Option[Int]` and `Option[Str]` differ, with `CoreConstruct`, `CoreMatch` over `CoreArm`s and `CorePattern`s, `CoreFailText` for a message built at run time, and `CoreRuntimeKind`. Records are named by identity only (`CoreRecordType name`), and every layout lives once in `coreModuleLayouts`, so a recursive sum is a finite type (#525).
+
+- **Q:** Why a new IR instead of emitting C from the checked tree? **A:** The
+  tree is a parser artefact: it keeps sugar, patterns, and syntax that the
+  backend must never reinterpret, and [[ADR-0002-compiler-pipeline]] fixes
+  Core IR as the shared checked representation. Lowering is the one place
+  allowed to refuse what it cannot represent. _Rejected:_ backend imports of
+  frontend syntax, and target-shaped nodes in the tree.
+- **Q:** Why records with span-first fields instead of a `Located` wrapper?
+  **A:** [[grammar/haskell]] forbids ad-hoc position fields; a record whose
+  every node has the same first field is uniform, total, and cheap to pattern
+  match, and it keeps `Located` a frontend concern. _Rejected:_ frontend
+  `Located` reuse in the backend.
+- **Q:** Why is `CoreReturn` a statement when `if` has a value form? **A:**
+  Pudu returns from a function, not from an expression; the evaluator treats a
+  return as a terminating statement and the C emitter maps it to `return`.
+  Giving it a value type would invent a semantics the interpreter does not
+  have. _Rejected:_ expression-typed return.
+- **Q:** Why carry `CoreLocal` (id, name, type) in every read and write? **A:**
+  Names are ambiguous under shadowing and types are needed to choose checked
+  helpers; resolving once at lowering keeps the emitter a translation, not a
+  second resolver. _Rejected:_ name-keyed maps rebuilt per pass.
+- **Q:** Why is `CoreCall` a callee name rather than a function identity?
+  **A:** Function symbols are already name-derived (`pudu_fn_<encoded-name>`) and
+  module function names are unique, so a second identity space would exist
+  only to be mapped back to the name at emission. _Rejected:_ numeric function
+  ids in the IR.
+- **Q:** Why does the module carry its entry name? **A:** The emitter writes a
+  C `main` and must call something; leaving `"main"` hard-coded in emission
+  would make the entry vocabulary a code-generation constant instead of the
+  caller's decision it already is in lowering and evaluation. _Rejected:_ a
+  literal entry symbol in [[Backend Emit]].
+
+## Generic records (#552)
+
+Resolved Grill Log: `CoreRecordType` carries the record's type arguments,
+as `CoreSumType` does. `Box[Int]` and `Box[Str]` are different types with
+different layouts; `coreTypeName` writes the arguments after the name.
+
+## Function values (#555)
+
+Resolved Grill Log: `CoreFunctionType` is a function value's type.
+`CoreClosure` builds a closure over a lifted function, `CoreCapture` reads a
+capture from one, and `CoreCallValue` calls through one (callee first, then
+arguments). `CoreClosureLayout` lists a function type's lifted functions, and
+`coreModuleClosures` says what each closure holds, how it renders and where it
+was written.
+
+## Arrays (#556)
+
+Resolved Grill Log: `CoreArrayType`, `CoreArray`, `CoreArrayMethod` (arguments
+before the receiver), `CoreIndex` (its span is the index's) and
+`CoreTakeLocal`, a last read that leaves the local empty.
+
+## Sequence patterns and computed help (#558)
+
+Resolved Grill Log: `CoreArrayPattern` holds front patterns, an optional rest
+(skipped or bound to a local) and back patterns. `CoreFailText` takes an
+optional fourth operand, help text computed at run time, which replaces the
+written help; a slice failure needs it to name the length.
+
+## Str methods with collection results (#559)
+
+`TextSplit`, `TextLines` and `TextChars` answer arrays. `TextParsesInt`,
+`TextIntOf`, `TextParsesFloat` and `TextFloatOf` are the halves of `toInt` and
+`toFloat`.
+
+## Integer conversion (#560)
+
+`CoreIntegerFits` tests whether an integer fits a kind, and
+`CoreIntegerConvert` gives the same value at that kind where it does.
+
+## Maps and sets (#561)
+
+`CoreMapType` and `CoreSetType` name the two collections. `CoreKeyedMethod`
+carries every runtime operation on them, `KeyedFromArray` building one from an
+array, and `CoreComparable` asks `comparableValue`'s question of any value.
+
+## Char from a code (#562)
+
+`CoreCharOfCode` reads an Int already known to be a scalar value as a Char.
+
+## Range values (#564)
+
+`CoreRangeType`, `CoreRangeValue` (the ends written, start first) and
+`CoreRangeMethod` with `CoreRangeMethodName`, whose `RangeValuesFor` carries
+the method a missing end is reported against and `RangeIterated` the `for`
+loop's E7001.
+
+## Bytes (#565)
+
+`CoreBytesType` and `CoreBytesMethod` with `CoreBytesMethodName`, whose
+`BytesOfArray` and `BytesFromText` build a sequence and `BytesAtIndex` and
+`BytesAsText` read what a test allowed.
+
+## Referenced by
+
+[[src/Pudu/_MOC]] · [[src/Pudu/Backend/_MOC]] · [[Core IR]] · [[Compiler Lower]] ·
+[[Backend Emit]] · [[Backend]] · [[ADR-0002-compiler-pipeline]]
+
+## Resolved loop control (#489)
+
+CoreLoopId is a function-local numeric identity, resolved before emission. While and loop are expression forms; break/continue are statement transfers with explicit destinations. While is unit; loop is the supported type carried by its breaks, or Never without a local break. CoreNeverType records divergent blocks and merges with reachable branch values. Break operands retain source ordering, including nested transfers. Resolved Grill Log: explicit numeric targets preserve nested source-label shadowing and condition scope without coupling Core to C labels or parser syntax.
+
+
+## Explicit scalar runtime refusals (#494)
+
+Add CoreOperatorFailure Text [CoreExpression] to CoreExpressionShape. It carries an interpreter operator-refusal message and ordered operands; its expression type is CoreNeverType. The enclosing span is the whole operation. This is an explicit semantic trap, not an emitted C error or diagnostic rendering object. No new imports or target ABI data.
+
+Resolved Grill Log: reproduce actual interpreter dispatch, canonical settled kinds, operand order and diagnostic spans; never classify print Result as unit or implement invalid operations as integer arithmetic. No syntax/inference change.
+
+## Platform Int operators (#495)
+
+Add CoreComplement and binary CoreBitAnd/Or/Xor, CoreShiftLeft/Right, CoreWrapAdd/Subtract/Multiply, CoreSaturateAdd/Subtract/Multiply. All operate on platform Int; shifts carry the whole-operation span and can refuse E7004. Preserve the existing Bool logical operators as distinct forms.
+
+Resolved Grill Log: use defined unsigned bit patterns, validate counts before shifts, and prove signed arithmetic bounds before evaluation. The actual interpreter determines results, effect order and exact diagnostic vocabulary. No syntax or type-inference change.
+
+## Exact native integer values (#498)
+
+CoreIntegerLiteral retains its mathematical Integer payload and canonical kind;
+it is not a signed C bit pattern. Accepted deferred platform Int magnitudes
+through positive 2^63 now survive blocks/locals/calls. [[Backend Integer Value]]
+implements their private carrier; operation policies still check/wrap/clamp at
+the interpreter's boundaries. No Core type vocabulary or source kind changes.
+Resolved Grill Log: carry exact values through Core and keep target encoding
+in the backend, rather than narrowing a literal while constructing the IR.
+
+## Floating values (#512)
+
+Add `CoreFloatType !FloatWidth` and `CoreFloatLiteral !FloatWidth !Word64`.
+The payload is the binary64 encoding [[Float Literal]] produced while parsing,
+already narrowed through binary32 for `f32`, so nothing downstream reads
+decimal text again. `coreTypeName` answers `Float32`/`Float64`. Arithmetic
+reuses `CoreAdd`/`CoreSubtract`/`CoreMultiply`/`CoreDivide`, comparisons reuse
+the six ordering/equality operators and negation reuses `CoreNegate`; the
+operand type selects the floating helper, as it already selects the integer
+kind. No new operator vocabulary.
+
+Resolved Grill Log: carry bits rather than `Double` so Core equality is
+bit equality (NaN payloads and signed zero stay distinct) and so the C side
+writes a hexadecimal constant instead of a second decimal conversion.
+_Rejected:_ a `Double` payload, and separate floating operator constructors.
+
+## Owned text (#515)
+
+`CoreTextType` is now an ordinary value type: locals, parameters, results,
+branch and loop values may carry it. `CoreDisplay` yields text for every
+native value type, and `CoreShow` yields `renderValue` text (Str gains its
+quotes and escapes; scalars render as `display` does). `CoreAdd` on two Str
+operands is concatenation, and the ordering/equality operators compare text.
+The earlier rule that text may only appear as a `CorePrint` argument is
+retired.
+
+Resolved Grill Log: text joins Core as a type rather than a new family of
+nodes, the same way floats reused the operator vocabulary. _Rejected:_
+separate concatenation and comparison constructors.
+
+## Text methods (#516)
+
+`CoreTextMethod !CoreTextMethodName !CoreExpression ![CoreExpression]` carries
+the receiver and its arguments. Arguments are evaluated before the receiver,
+matching `evaluateCall` (#514). The name type is closed: only the methods
+native implements exist.
+
+## Trim and case mapping (#517)
+
+`CoreTextMethodName` gains TextTrim, TextToUpper and TextToLower.
+
+## Char values (#518)
+
+`CoreCharType` is a Unicode scalar. `CoreCharLiteral !Char` holds a literal,
+`CoreCharCode !CoreExpression` is `c.code()`, and `TextCharAt` is
+`Str.charAt`, which answers Char. `c.toText()` needs no node: it is
+`CoreDisplay`, exactly as `CharToText` and `callDisplay` agree.
+
+## Tuples (#521)
+
+`CoreTupleType ![CoreType]` has at least two members. `CoreTuple` carries the
+members in source order and `CoreTupleIndex !Int` a position the checker has
+bounded.
+
+## Records (#521)
+
+`CoreRecordType !Text ![(Text, CoreType)]` names a root-module record and its
+fields in declaration order. `CoreRecord` carries fields as written,
+`CoreRecordUpdate` a base and written fields, `CoreField` one field read.
+
+## Output Results (#566)
+
+Resolved Grill Log: CoreOutputError carries the standard-error flag, newline flag and one Str operand; its owned Str result is empty on success and nonempty on failure. This internal outcome is converted to the checked Result in lowering. See [[Native Output Results]].
+
+## Named callable dispatch (#568)
+
+Resolved Grill Log: Add closureHasEnvironment to CoreClosureInfo: true only for lifted bodies whose first parameter is their closure. Named targets use their actual ABI. See [[Native Named Callable Dispatch]].
+
+## First-class output builtins (#569)
+
+Resolved Grill Log: Add closureIsBuiltin to callable metadata. Generalize CoreVariantName to CoreRuntimeKind for dynamic sum/callable kind text. Builtin and source callables remain the same checked function type; see [[Native Output Callable Values]].
+
+## Caller failures (#631)
+
+`CoreFailCaller code help message` refuses like CoreFailText but at the site
+of the value call that entered the current function. Only builtin bodies
+reached through a value build it.
+Resolved Grill Log: the interpreter names the call expression for a builtin's
+refusal, and a generated body has no span of its own for it. See
+[[Native Collection Callables]].
+
+## Absent arguments (#638)
+
+`CoreAbsent` is the zero of its expression's type, passed for a parameter
+the call left to its default. Resolved Grill Log: the callee's prologue
+replaces it before any read; every release path accepts a zero cell.
+
+## Method closures (#644)
+
+CoreClosureInfo.closureMethod holds a method value's receiver type. Resolved
+Grill Log: capture 0 is the receiver and takes part in equality.
+
+closureMethod with no capture marks an unbound method named through its type. (#646)
+
+## Element replace (#649)
+
+ArrayReplaceAt replaces one element, failing E7004 at its expression span
+when the index is out of range.
+
+## Decimal (#802)
+
+`CoreDecimalType`, `CoreDecimalLiteral` (coefficient and scale) and `CoreDecimalMethod` over `CoreDecimalMethodName`.

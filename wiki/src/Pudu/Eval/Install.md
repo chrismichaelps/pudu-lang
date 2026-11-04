@@ -226,6 +226,10 @@ Nested calls then recognize local type witnesses during folding and ordinary loa
 Resolved Grill Log: one declaration-loading boundary covers root and dependency initializers;
 imports stay outside the local witness frame and effect permissions remain unchanged.
 
+## Record field order (#519)
+
+Installing a record declaration, and each record-payload variant of a sum,
+records its field order in [[Eval Env]].
 ## Bound provider evidence (#743)
 
 Install a projected canonical implementation trait path under its full identity and retain the legacy basename alias for existing explicit qualified calls. Default-member inheritance continues to look up its local trait declaration by basename. Both keys reference the same closure and defining environment.
@@ -257,3 +261,9 @@ head. Keep impl parameters before method parameters in the original Function.
 Resolved Grill Log: installation retains checked structure without matching it,
 changing captures, copying bodies, or recovering types from program data. See
 [[Runtime Implementation Head]] and [[Eval Type Witness]].
+
+## Field order under canonical owners (#798)
+
+A record definition records its field order under both its own name and its
+namespaced owner; dev's canonical variant owners and named sum payloads
+(`::sum::` paths) replace the per-variant order the stack kept.

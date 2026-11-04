@@ -22,7 +22,8 @@ import qualified Data.Sequence as Seq
 import Data.Text (Text)
 import Pudu.Diagnostic (Diagnostic)
 import Pudu.Eval.Env
-  ( Env (..)
+  ( declaredOrder
+  , Env (..)
   , integerKindAt
   , tally
   , Eval (..)
@@ -326,7 +327,7 @@ evaluateHere (Located spanValue expression) = case expression of
   ScopeExpression body -> evaluateScope callNeeds spanValue body
   RecordExpression path fields -> do
     values <- mapM (evaluateFieldInit spanValue) fields
-    pure (recordConstructor path (map (locatedValue . fieldInitName . locatedValue) fields) values)
+    declaredOrder (recordConstructor path (map (locatedValue . fieldInitName . locatedValue) fields) values)
   {-| A record that is another record with some fields different.
 
       The base is evaluated first and its fields kept in the order it declared
@@ -355,7 +356,9 @@ evaluateHere (Located spanValue expression) = case expression of
     test <- evaluate condition
     truth <- expectBool spanValue test
     if truth
-      then evaluateBlock thenBlock
+      then case elseBranch of
+        Nothing -> evaluateBlock thenBlock >> pure UnitValue
+        Just _ -> evaluateBlock thenBlock
       else case elseBranch of
         Nothing -> pure UnitValue
         Just branch -> evaluate branch

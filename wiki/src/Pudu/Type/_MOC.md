@@ -67,6 +67,7 @@ only complete head matching and discharged premises establish evidence.
 
 [[src/Pudu/_MOC]] · [[Semantics]] · [[Pudu Type]]
 
+- [[Type Check Pattern Spec]] — alternative binding type agreement (#542).
 - [[Type Check Qualified]] — shared concrete and legacy type-qualified method schemes.
 
 - [[Method Binding]] — formed provider registration and shared-slot ambiguity.

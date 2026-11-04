@@ -61,6 +61,13 @@ their existing obligations. The application graph model tests and actual library
 
 Resolved Grill Log: command serialization is verified through the actual executable rather than only encoder properties.
 
+## Archive notice verification (#509)
+
+Run [[Package Binary Tests]] alongside the release-decision tests in local
+gates, continuous verification and the release plan job. Preserve existing
+checks and ordering. Resolved Grill Log: required archive notice/strip policy
+must not depend on a manual-only test; this introduces no publication trigger
+or compiler semantic change.
 ## Capsule support (#722)
 
 [[Ark Ground Gate]] executes after build with the shared compiler.

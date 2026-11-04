@@ -112,6 +112,13 @@ including externally observable filesystem modes that portable permission boolea
 
 Resolved Grill Log: local and integration delivery both exercise actual strategy output and public visibility.
 
+## Archive notice verification (#509)
+
+Run [[Package Binary Tests]] alongside the release-decision tests in local
+gates, continuous verification and the release plan job. Preserve existing
+checks and ordering. Resolved Grill Log: required archive notice/strip policy
+must not depend on a manual-only test; this introduces no publication trigger
+or compiler semantic change.
 ## Native presentation (#724)
 
 [[Desktop Presentation Gate]] runs before the compiler build on supported hosts.

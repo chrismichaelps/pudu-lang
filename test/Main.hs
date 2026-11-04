@@ -5,6 +5,8 @@ import System.Directory (doesDirectoryExist, setCurrentDirectory)
 import Data.Text (Text)
 import qualified Data.Text as Text
 import Pudu.DecimalLiteralSpec (decimalProperties)
+import Pudu.Eval.RecordOrderSpec (recordOrderProperties)
+import Pudu.Eval.FloatOrderSpec (floatOrderProperties)
 import Pudu.VersionSpec (versionProperties)
 import Pudu.Derive.RecordSpec (recordResidualProperties)
 import Pudu.Derive.CatalogueSpec (catalogueProperties)
@@ -27,6 +29,27 @@ import Pudu.Lsp.ImplMembersSpec (implMemberProperties)
 import Pudu.Lsp.MethodDefinitionSpec (methodDefinitionProperties)
 import Pudu.Diagnostic.RenderSpec (renderProperties)
 import Pudu.Cache.PersistSpec (persistProperties)
+import Pudu.Backend.LowerTypesSpec (lowerTypesProperties)
+import Pudu.Backend.FrameSpec (frameProperties)
+import Pudu.Backend.FrameEmitSpec (frameEmitProperties)
+import Pudu.Backend.FrameRuntimeSpec (frameRuntimeProperties)
+import Pudu.Backend.Word128Spec (word128Properties)
+import Pudu.Backend.WideValueSpec (wideValueProperties)
+import Pudu.Backend.WideOperationsSpec (wideOperationProperties)
+import Pudu.Backend.WideRuntimeSpec (wideRuntimeProperties)
+import Pudu.Backend.FloatFormatSpec (floatFormatProperties)
+import Pudu.Backend.FloatValueSpec (floatValueProperties)
+import Pudu.Backend.FloatRuntimeSpec (floatRuntimeProperties)
+import Pudu.Backend.FloatNaturalSpec (floatNaturalProperties)
+import Pudu.Backend.WideFrameSpec (wideFrameProperties)
+import Pudu.Backend.TextLeakSpec (textLeakProperties)
+import Pudu.Backend.TextCaseSpec (textCaseProperties)
+import Pudu.Backend.BrokenPipeSpec (brokenPipeProperties)
+import Pudu.Cli.MemorySpec (memoryProperties)
+import Pudu.Backend.EmitSpec (backendEmitProperties)
+import Pudu.Backend.OutputSpec (outputProperties, runOutputOracle)
+import Pudu.Backend.NativeSpec (backendNativeProperties)
+import Pudu.Backend.ToolchainSpec (backendToolchainProperties)
 import Pudu.Compiler.LiteralsSpec (literalsProperties)
 import Pudu.Compiler.ProgramSpec (programProperties)
 import Pudu.Compiler.Program.AuthenticationSpec (authenticationProperties)
@@ -36,6 +59,7 @@ import Pudu.Cli.LintSpec (lintCommandProperties)
 import Pudu.LintSpec (lintProperties)
 import Pudu.Foreign.SlotSpec (slotProperties)
 import Pudu.Foreign.OwnershipSpec (ownershipProperties)
+import Pudu.Eval.IfUnitSpec (ifUnitProperties)
 import Pudu.Eval.Foreign.ResultSpec (resultProperties)
 import Pudu.Frontend.Lexer.CursorSpec (cursorProperties)
 import Pudu.Frontend.ExpandSpec (expandProperties)
@@ -74,13 +98,20 @@ import Pudu.Source (Position (Position), Source, SourceName (SourceName), Span, 
   mergeSpans, mkSpan, newSource, offsetFromInt, offsetPosition, sourceLength, sourceName, sourceText,
   spanEnd, spanSource, spanStart, unOffset, zeroOffset, zeroWidthSpan)
 import Data.List (isInfixOf)
-import System.Environment (lookupEnv)
+import System.Environment (getArgs, lookupEnv)
 import System.Exit (exitFailure)
 import System.IO (BufferMode (LineBuffering), hSetBuffering, stdout)
 import Test.QuickCheck (Gen, Property, chooseInt, conjoin, counterexample, elements, forAll, ioProperty,
   isSuccess, listOf, property, quickCheckResult, resize, withMaxSuccess, (===))
 main :: IO ()
 main = do
+  arguments <- getArgs
+  case arguments of
+    ["--native-output-oracle", path] -> runOutputOracle path
+    _ -> runTests
+
+runTests :: IO ()
+runTests = do
   sharedFixtures <- doesDirectoryExist "../../../test-fixtures"
   when sharedFixtures (setCurrentDirectory "../../..")
   {-| A name reaches the log before the test it names runs.
@@ -117,6 +148,7 @@ main = do
   renderOutcomes <- traverse (uncurry check) renderProperties
   programOutcomes <- traverse (uncurry check) (programProperties <> authenticationProperties)
   persistOutcomes <- traverse (uncurry check) persistProperties
+  backendOutcomes <- traverse (uncurry check) (outputProperties <> memoryProperties <> floatRuntimeProperties <> floatValueProperties <> floatFormatProperties <> floatNaturalProperties <> wideFrameProperties <> textLeakProperties <> textCaseProperties <> brokenPipeProperties <> wideRuntimeProperties <> wideOperationProperties <> wideValueProperties <> word128Properties <> frameRuntimeProperties <> frameEmitProperties <> frameProperties <> lowerTypesProperties <> backendEmitProperties <> backendNativeProperties <> backendToolchainProperties)
   literalsOutcomes <- traverse (uncurry check) literalsProperties
   initOutcomes <- traverse (uncurry check) initProperties
   packageOutcomes <- traverse (uncurry check) packageProperties
@@ -140,7 +172,7 @@ main = do
   parserPatternOutcomes <- traverse (uncurry check) parserPatternProperties
   parserTypeDeclarationOutcomes <- traverse (uncurry check) parserTypeDeclarationProperties
   resolveOutcomes <- traverse (uncurry check) (resolveProperties <> reflectionProperties <> qualifierProperties <> qualifiedShadowProperties)
-  evalOutcomes <- traverse (uncurry check) (evalProperties <> mutexProperties <> binaryProperties)
+  evalOutcomes <- traverse (uncurry check) (evalProperties <> mutexProperties <> ifUnitProperties <> recordOrderProperties <> floatOrderProperties <> binaryProperties)
   typeOutcomes <- traverse (uncurry check) typeProperties
   importTypeOutcomes <- traverse (uncurry check) importTypeProperties
   interfaceOutcomes <- traverse (uncurry check) interfaceProperties
@@ -153,7 +185,7 @@ main = do
   slotOutcomes <- traverse (uncurry check) slotProperties
   ownershipOutcomes <- traverse (uncurry check) ownershipProperties
   resultOutcomes <- traverse (uncurry check) resultProperties
-  unless (and (sourceOutcomes <> generatedOutcomes <> decimalOutcomes <> versionOutcomes <> diagnosticOutcomes <> formatOutcomes <> jsonOutcomes <> lspOutcomes <> schedulerOutcomes <> renderOutcomes <> programOutcomes <> persistOutcomes <> literalsOutcomes <> initOutcomes <> packageOutcomes <> lintCommandOutcomes <> lintOutcomes <> tokenOutcomes <> cursorOutcomes <> scannerOutcomes <> numberSymbolOutcomes <> quotedOutcomes <> lexerOutcomes <> expandOutcomes <> syntaxOutcomes <> parserStateNameOutcomes <> parserImportOutcomes <> parserBindingOutcomes <> parserBlockOutcomes <> parserFunctionOutcomes <> parserModuleOutcomes <> parserDeriveOutcomes <> parserPatternOutcomes <> parserTypeDeclarationOutcomes <> resolveOutcomes <> evalOutcomes <> typeOutcomes <> importTypeOutcomes <> interfaceOutcomes <> frontierOutcomes <> replOutcomes <> answerOutcomes <> docOutcomes <> parserTypeOutcomes <> parserExpressionOutcomes <> slotOutcomes <> ownershipOutcomes <> resultOutcomes)) exitFailure
+  unless (and (sourceOutcomes <> generatedOutcomes <> decimalOutcomes <> versionOutcomes <> diagnosticOutcomes <> formatOutcomes <> jsonOutcomes <> lspOutcomes <> schedulerOutcomes <> renderOutcomes <> programOutcomes <> persistOutcomes <> backendOutcomes <> literalsOutcomes <> initOutcomes <> packageOutcomes <> lintCommandOutcomes <> lintOutcomes <> tokenOutcomes <> cursorOutcomes <> scannerOutcomes <> numberSymbolOutcomes <> quotedOutcomes <> lexerOutcomes <> expandOutcomes <> syntaxOutcomes <> parserStateNameOutcomes <> parserImportOutcomes <> parserBindingOutcomes <> parserBlockOutcomes <> parserFunctionOutcomes <> parserModuleOutcomes <> parserDeriveOutcomes <> parserPatternOutcomes <> parserTypeDeclarationOutcomes <> resolveOutcomes <> evalOutcomes <> typeOutcomes <> importTypeOutcomes <> interfaceOutcomes <> frontierOutcomes <> replOutcomes <> answerOutcomes <> docOutcomes <> parserTypeOutcomes <> parserExpressionOutcomes <> slotOutcomes <> ownershipOutcomes <> resultOutcomes)) exitFailure
 {-| Runs one property, or skips it when `PUDU_TEST_MATCH` is set and the label
     does not contain it: a focused run of the few properties a change touches,
     without building a second suite. -}

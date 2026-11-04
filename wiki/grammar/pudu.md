@@ -237,7 +237,7 @@ From tightest to loosest: postfix calls/index/member/`?`/`.await`; unary `! - & 
 - Assignment is a statement-like expression of type `()` and requires a mutable place.
 - Function calls evaluate callee then arguments left-to-right.
 - Blocks evaluate statements left-to-right and yield the final unterminated expression. Without one, a final direct control transfer yields `Never`; any fallthrough ending yields `()`.
-- `if` and `match` are expressions; all reachable branches must unify.
+- `if` with `else` and `match` are expressions whose reachable branch values must unify. An `if` without `else` has type `()` and yields `()` on normal completion, whether its condition is true or false. The taken block still runs completely; its normal trailing value is discarded. Return, break, continue, diagnostics, and existing cleanup pass through unchanged. A contextual dynamic expectation applies to the resulting unit, never to the discarded taken value. See [[ADR-0025-if-without-else-unit-results]].
 - `return`, `break`, and `continue` have type `Never` at their valid control boundary.
 - Every `break` leaving the same `loop` must carry the same type, which is that loop's type. A `break` carrying a value may leave only a `loop`: `while` and `for` finish when their own condition does, so a value carried out of one would exist on some runs and not others, and that is `E3029`.
 - A range endpoint is evaluated exactly once, where the range is written rather than where it is used, so a range held in a binding and read twice reads its ends once each.

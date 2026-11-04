@@ -5,6 +5,530 @@ tags: [changelog]
 
 # Changelog
 
+## 2026-11-04 — Native Decimal (#802)
+
+- Programs holding Decimal build natively: exact arithmetic and comparison across scales, division that is exact or fails with the interpreter's E7004 and E7010, the seven rounding modes, parsing, conversion to Float64 and Int, and every `Std.Decimal` primitive. See [[Native Decimal]].
+- `Decimal.toInt` answers None for a whole number Int cannot hold (#803).
+
+## 2026-11-04 — Native BigInt (#800)
+
+- Programs holding BigInt build natively: exact arithmetic past every fixed width, truncating `/` and `%`, two's-complement bit operations, unbounded shifts, decimal rendering, conversions to and from every integer kind, and BigInt inside records, sums, collections and closures, with the interpreter's failures and exit statuses. See [[Native BigInt]].
+
+## 2026-11-04 — Native stack brought up to dev (#798)
+
+- The native stack now runs on dev's checker and evaluator (#640–#788). Native lowering reads dev's rewritten constructor paths, provider-selected members and canonical folded values, so parity is measured against the current interpreter. Declaration-ordered records (#519) stay on top of dev's record constructor.
+
+## 2026-11-03 — Native loans through values (#794)
+
+- `let f = bump; f(&mut n)`, parameters typed `fn(&mut Int) -> Int`, lambdas such as `|v: &mut Int| ...`, arrays and record fields of loaned functions, and method values with `&mut` inputs build natively and write back as the interpreter does. See [[Native Mutable Loans]].
+
+## 2026-11-03 — Native blame hook part (#791)
+
+- The runtime's blame hook is declared in its own part, required by failure reporting and frames, so a runtime of text helpers alone compiles warning-free under `-Werror`.
+
+## 2026-11-03 — Native method loans (#790)
+
+- `c.bump(2)` with `self: &mut Self`, `holder[0].add("r")`, `Bump.bump(&mut c, 1)` and methods taking `&mut` arguments build natively: arguments run, then the receiver, and finals are written back receiver first. Generic implementations, inherited defaults and method values follow. See [[Native Mutable Loans]].
+
+## 2026-11-03 — Native mutable loans (#651)
+
+- `fn bump(value: &mut Int)` called as `bump(&mut n)`, `bump(&mut p.x)` or `bump(&mut grid[i][j])` builds natively: the place is read where its argument stands, indices once, and the parameter's final value is written back after the trailing result, `return` or `?`, in parameter order. See [[Native Mutable Loans]].
+- Methods with `&mut` parameters and function values of loaned functions still refuse with E6001.
+
+## 2026-10-27 — Native element assignment (#649)
+
+- `list[1] = 9`, `grid[1][0] = 7` and `points[0].tags[0] = "z"` build natively with the interpreter's order (indices, value, bounds-checked store) and its E7004 span at the root name. See [[Native Place Assignment]].
+- Fixes a compiler stack overflow: an index target used to bounce between statement and expression lowering forever. Any target without a native form now refuses with E6001.
+
+## 2026-10-27 — Native trait method values (#646)
+
+`bot.label` and `Bot.label` are values natively: bound to their receiver or named through the type, rendered `<fn label>`, equal on the same method and an equal receiver. Failures inside the implementation keep its own spans. The trait-qualified `Named.label` value waits on #647, an interpreter failure found here. See [[Native Method Values]].
+
+## 2026-10-27 — Native built-in method values (#644)
+
+- `text.length`, `items.push`, `m.get`, `(0..3).contains`, `'a'.code` and the other built-in methods are values natively. The receiver runs once, renders as `<kind method name>`, and equality compares method and receiver. See [[Native Method Values]].
+- Failures inside them point at the call made through the value: frames of such bodies blame their caller, and the reporter takes the location from the recorded call site. Runtime revision 19.
+
+## 2026-10-27 — Native module-qualified function values (#641)
+
+`Lib.twice` and `L.twice` are values natively, with the same key, identity, rendering and defaults as a bare function name. See [[Compiler Lower Body]].
+
+## 2026-10-27 — Native default parameter values (#638)
+
+- Functions with default parameter values build natively. A trailing count of supplied arguments tells the callee's prologue which defaults to run, in order, after the parameters before them. See [[Native Default Parameters]].
+- Direct calls, calls into other modules and calls through function values pass zero placeholders plus the count; a defaulted function's Core type ends with that count.
+- Defaults that fail, print or reach the depth limit behave as in the interpreter. Cross-module constant defaults wait on #639, an interpreter scoping bug found here.
+
+## 2026-10-27 — Backend suite repairs (#636)
+
+- The frame-body spec strict-compiles the program the backend actually writes, so printing corpora with Result aggregates compile again.
+- `pudu_wait_writable` is its own runtime part, pulled in by error reporting and buffered output, so minimal selections no longer carry an unused function.
+- The float runtime spec checks the integer dependency table only for integer parts. The release gate is unchanged.
+
+## 2026-10-27 — Native panic and untyped convertInteger (#633)
+
+- `panic` builds natively: direct calls, values, non-text and missing arguments all stop as the interpreter does. See [[Native Stopping Builtins]].
+- `convertInteger` without a type argument refuses E7012 after its argument, directly or through a value.
+- The native reporter prints `compiler diagnostic <code>` for an empty message, as every interpreter diagnostic does. Runtime revision 18.
+- A function whose result checking leaves open now builds; its result is unit. The EmitSpec refusal for it moved to the function corpus.
+- Checking leaves `panic` untyped (#634, filed); positions that would need its type refuse with E6001.
+
+## 2026-10-27 — Native collection callable values (#631)
+
+- `charFromCode`, `bytesOf`, `mapOf` and `setOf` are first-class values whose bodies are the direct calls' own Core builders. See [[Native Collection Callables]].
+- Frames keep the site of the value call that created them, so a builtin's E7008 through a value points at that call, as in the interpreter. Runtime revision 17.
+- Type variables left open after checking form as unit everywhere, so `setOf([])`, `setOf == setOf` and `display == show` build natively.
+- [[Backend Collection Callable Programs]] covers both evaluators and counted cleanup under Clang, GCC 15 and ASan/UBSan.
+
+## 2026-10-27 — Native rendering callable values (#575)
+
+- [[Native Rendering Callables]] specifies canonical type-specialized bodies with per-tag identity.
+- [[Backend Rendering Callable Programs]] covers source parity and counted ownership.
+
+## 2026-10-27 — Owned diagnostic payloads (#570)
+
+Dynamic message/help copies now transfer to the terminating reporter, survive
+frame cleanup, and release after their final byte use. Static site strings stay
+borrowed. Combined payload lengths are checked before allocation; revision 16
+records the private signature change. Counted source failures and empty/overflow
+probes pass Clang/GCC/ASan+UBSan, with exact compiled/tree diagnostic parity.
+Expanded closed-pipe cases preserve fatal signal behavior. Full release and
+independent review remain pending. [[Native Diagnostic Ownership]].
+
+## 2026-10-27 — First-class output builtins (#569)
+
+The four standard-stream builtins now retain their builtin identity when stored,
+returned, captured or passed to generic code. Their intrinsic frames preserve
+source call depth, Result behavior and failed-handle buffers. Runtime kinds
+distinguish builtin/function in operator and key diagnostics. Revision 15
+records the private ABI. Five focused groups pass Clang/GCC/ASan+UBSan and both
+evaluators, including seven counted cleanup programs and isolated handle
+failures. Aggregate rendering now checks each size addition and its final
+delimiter bound; dedicated overflow probes and strict GCC compilation pass.
+The CLI compares exact bytes/status across a module boundary. Full-suite,
+platform and independent review remain pending. [[Native Output Callable Values]].
+
+## 2026-10-27 — Named callable dispatch (#568)
+
+Named function values now dispatch directly to their target. The previous
+forwarder counted an extra call and failed before the interpreter's recursion
+boundary. Explicit environment metadata preserves lifted lambda arguments,
+owned values and the actual invocation site for E7002. Runtime revision 14
+records the private ABI change. Focused Clang/GCC/sanitizer and both-evaluator
+checks include nine counted cleanup programs and exact depth-failure provenance.
+Frame allocation/emission regressions pass; their accounting now tracks malloc
+as well as calloc. Full-suite/platform and independent review remain pending.
+[[Native Named Callable Dispatch]].
+
+## 2026-10-26 — Native expression bodies (#567)
+
+Named expression-bodied functions now lower through the existing return path,
+including entry functions, generic copies and trait defaults. Their original
+expression spans remain intact. Focused checks cover explicit answers,
+recursion depth, runtime diagnostic provenance and owned-value cleanup under
+Clang, GCC 15, ASan/UBSan and the tree evaluator. The CLI smoke compares native
+and both evaluators across an imported expression-bodied function. Full-suite
+and independent review remain pending. [[Native Expression Bodies]].
+
+## 2026-10-26 — Native output Results (#566, in progress)
+
+Direct output builtins retain their typed Results and failed-handle buffers.
+Entry values use the locked text builder's buffering and failure behavior.
+Missing inherited descriptors project the interpreter's queue/control-pipe
+endpoints; ordinary and fatal writes preserve readiness waits. Focused
+checks compare exact bytes, status and blocked prefixes with both evaluators.
+Full-suite, platform and independent review evidence remains pending.
+[[Native Output Results]] and [[Native Output Delivery]] record the boundary.
+
+## 2026-10-26 — Native Bytes (#565)
+
+Byte sequences are native: `bytesOf`, `Str.toBytes`, every method, strict
+UTF-8 `toText`, `0x` rendering, ordering, map keys and range slices, with
+slices sharing storage ([[Native Bytes Runtime]], [[Compiler Lower Bytes]]).
+[[Backend Bytes Programs]] passes under Clang, GCC 15, ASan/UBSan and the
+tree evaluator with counted cleanup. Frozen byte constants now preserve
+arbitrary data, including inside records and tuples. Accepted unary byte
+operators reach the interpreter's E7001 failure instead of a native E6001
+refusal. A dedicated `native Bytes` lane checks output, diagnostic parity
+and allocation cleanup without changing the full gate; see
+[[Native Bytes Delivery]].
+
+## 2026-10-26 — Native range values (#564)
+
+Ranges are values natively: all fourteen methods, rendering as written,
+equality, ordering, `for` and slicing by them, with `Eval.Range`'s failures
+([[Native Range Values]]). `map`, `filter` and `reduce` reuse the array loops
+over the range's values. [[Backend Range Programs]] passes under Clang,
+GCC 15, ASan/UBSan and the tree evaluator with counted cleanup.
+
+## 2026-10-26 — Native shapes across modules, field calls, assignment values (#563)
+
+Checking now hands lowering each module's records and sums formed with its
+imports, so records reaching across modules or holding other modules' aliases
+lower natively ([[Compiler Lower]], [[Pudu Type]]). A call through a
+function-valued field and an assignment used as a value follow the evaluator
+([[Compiler Lower Body]]). [[Backend Shape Programs]] passes under Clang,
+GCC 15, ASan/UBSan and the tree evaluator with counted cleanup.
+
+## 2026-10-26 — Native for over Str, tuples and payloads, and charFromCode (#562)
+
+`for` walks a Str's characters, a tuple's members and a sum's payload when it
+has no sequence of its own, and `charFromCode` answers `Some` only for Unicode
+scalar values ([[Compiler Lower For]], [[Compiler Lower Convert]]). The
+fast-loop property list now also finds properties written through
+`withCompiler`, which surfaced a runtime-table count fixed on #559.
+
+## 2026-10-26 — Native maps and sets (#561)
+
+[[Native Maps and Sets]] carries `Map` and `Set` as shared persistent trees
+([[Native Persistent Trees]]) with every built-in method, literals, `for`,
+rendering, equality, ordering inside tuples and E7008 for keys that cannot be
+ordered ([[Compiler Lower Keyed]], [[Backend Emit Keyed]]). Tuple and record
+compare helpers no longer warn when every member is a function.
+[[Backend Keyed Programs]] passes under Clang, GCC 15, ASan/UBSan and the
+tree evaluator with counted cleanup.
+
+## 2026-10-26 — Native type applications and convertInteger (#560)
+
+Calls with written type arguments lower as the call they wrap, and
+`convertInteger` moves between every pair of integer kinds, 128-bit ones
+included, answering `None` outside the target's bounds
+([[Compiler Lower Convert]], [[Native Integer Conversion]]).
+[[Backend Convert Programs]] passes under Clang, GCC 15, ASan/UBSan and the
+tree evaluator with counted cleanup.
+
+## 2026-10-26 — Native Str methods with array and option results (#559)
+
+`split`, `lines` and `chars` answer arrays of views into the receiver
+([[Native Text Pieces]]), and `toInt` and `toFloat` read numbers exactly as
+the evaluator does, correctly rounded, with their Option built in Core
+([[Native Text Number]]). [[Backend Text Collection Programs]] passes under
+Clang, GCC 15, ASan/UBSan and the tree evaluator with counted cleanup.
+
+## 2026-10-26 — Native sortBy, sequence patterns and range slices (#558)
+
+[[Compiler Lower Sort]] lowers `sortBy` to loops asking the comparison the
+evaluator's questions in its order. Sequence patterns, slicing arrays and Str
+by a written range, and Str indexing by Int are native, with `rangeBounds`'
+E7004 text; `CoreFailText` gained computed help so the out-of-bounds help can
+name the length ([[Compiler Lower Slice]]). Loop bodies lower their tail as a
+statement. [[Backend Array Pattern Programs]] passes under Clang, GCC 15,
+ASan/UBSan and the tree evaluator with counted cleanup.
+
+## 2026-10-26 — Native arrays (#556)
+
+[[Native Arrays]] lowers array literals, indexing, `for` and the built-in
+methods with `Eval.Array`'s edge cases; `map`, `filter` and `reduce` become
+loops. Updates that replace their own variable take it, and stores move out of
+dead temporaries, so a uniquely held buffer grows in place. A million pushes run
+in about 0.3s natively. Moved [[Backend Emit Cell]] out of [[Backend Emit
+Aggregate]] and [[Compiler Lower Call]] out of [[Compiler Lower Body]]. Filed
+#557. [[Backend Array Programs]] passes under Clang, GCC 15, ASan/UBSan and
+both interpreter modes with counted cleanup.
+
+## 2026-10-26 — Native closures (#555)
+
+[[Compiler Lower Lambda]] lowers lambdas, named functions used as values and
+calls through function values. A closure is a box naming its lifted function,
+with copies of what the lambda mentions. Fixed on the way: tuples holding
+records or sums ordered those members by pointer since #521/#525. They now
+follow `compareValues`, and tuples holding functions fail ordering as
+`comparableValue` decides. [[Backend Closure Programs]] passes under Clang,
+GCC 15, ASan/UBSan and both interpreter modes with counted cleanup.
+
+## 2026-10-26 — Native for loops (#554)
+
+[[Compiler Lower For]] lowers `for` over written ranges and sequence types,
+with labels, `break`, `continue`, refutable binders and the evaluator's order
+for ends, `begin` and `advance`. [[Backend For Programs]] passes under Clang,
+GCC 15, ASan/UBSan and both interpreter modes with counted cleanup.
+
+## 2026-10-26 — Native try operator (#553)
+
+[[Compiler Lower Try]] lowers `?` on Result and Option as the evaluator's
+`unwrapTry`, rebuilding the returned failure at the function's own result
+type. [[Backend Try Programs]] passes under Clang, GCC 15, ASan/UBSan and both
+interpreter modes with counted cleanup. The refusal table caught a first
+version that admitted a `main` ending in `print(...)`.
+
+## 2026-10-26 — Native generics (#552)
+
+[[Compiler Lower Generic]] specializes generic functions and implementations
+per type list, read from the instantiation checking recorded at each callee;
+bounded calls dispatch statically and generic records carry their arguments in
+Core. Found by the fixture sweep: a failed specialization returned no result
+without refusing, so two Std programs built to an empty `main`. It refuses
+now, and [[Compiler Lower Body]] refuses any construct that stops silently.
+[[Backend Generic Programs]] passes under Clang, GCC 15, ASan/UBSan and both
+interpreter modes, with counted cleanup.
+
+## 2026-10-26 — Native trait methods (#551)
+
+[[Compiler Lower Method]] lowers implementation members and inherited trait
+defaults to direct calls chosen by the receiver's checked type, with
+type-qualified and trait-qualified calls and the universal `toText()`.
+Defaults run with `Self` bound through new rigid bindings in [[Compiler Lower
+Types]]. Arguments run before the receiver, as the evaluator does. [[Backend
+Method Programs]] passes under Clang, GCC 15, ASan/UBSan and both interpreter
+modes, with counted cleanup. Found #550: the evaluator files two modules'
+same-named types under one method slot. The callables row is now partial.
+
+## 2026-10-26 — Native shared references (#544)
+
+[[Compiler Lower Reference]] lowers `&` and `*` of represented values as the
+evaluator does, as the value itself, once the checked facts show a shared
+reference at the exact span; [[Compiler Lower Types]] projects `&T` to the
+carrier of `T`. `&mut` and borrowed print results keep refusing. Added
+[[Backend Shared Reference Programs]], counted cleanup and fact/refusal
+boundaries. Clang, GCC 15, ASan/UBSan and both interpreter modes agree. The
+references row is now partial; the area count is unchanged.
+
+## 2026-10-22 — Shared-reference native contract (#544, design)
+
+[[Native Shared References]] resolves false-only reference carrier projection
+and exact-fact identity lowering, preserving operand evaluation and diagnostic
+provenance. A checked probe agrees in both interpreter modes and demonstrates
+the native parameter refusal. Implementation remains pending under
+[[Native Shared Reference Delivery]]; this is no new coverage claim.
+
+## 2026-10-22 — Native folded module constants (#543)
+
+[[Compiler Lower Constant]] consumes actual compiler-folded products with
+solved reference types, preserving exact scalar values and canonical aggregate
+layouts. Module scopes retain declared constants separately from missing or
+nonportable folded products. Added cross-module, numeric and owned-value
+programs plus missing-product/unsupported-type boundary tests.
+All 20 clean gates pass, including 712 optimized groups. Clang, GCC 15,
+ASan/UBSan, both interpreter modes, the real CLI and 71 counted-allocation
+programs agree. See [[Native Folded Constant Delivery]].
+
+## 2026-10-22 — Shared alternative pattern bindings (#542)
+
+Resolution now declares one binding set across alternatives, checks all
+constructor paths and preserves duplicate errors within each branch. E2019
+rejects unequal name sets, and typing checks corresponding payloads at one
+compatible type. [[Syntax Pattern Bindings]] supplies shared enumeration.
+Focused success/failure and exact diagnostic properties pass. All 20 clean
+repository gates pass, including 711 optimized test groups.
+
+## 2026-10-21 — Native refutable bindings (#541)
+
+`let ... else` lowers through CoreMatch while retaining successful bindings
+in the enclosing scope. The fallback is lowered before those names enter
+scope, preserving outer references after partial pattern failure. Added
+hand-written conformance cases and runtime diagnostic comparisons in
+[[Backend Sum Programs]]. Clang, GCC 15, ASan/UBSan and both interpreter
+modes pass; 69 counted programs release every allocation, and all 20 clean
+repository gates pass.
+See [[Native Refutable Binding Delivery]].
+
+## 2026-10-21 — Native if let and while let (#540)
+
+- [[Compiler Lower Match]] lowers `if let` as a match with a wildcard fallback and `while let` as a labelled `loop` around one; [[Compiler Lower Body]] routes both there.
+- [[Backend Sum Programs]] adds chains, value-less and valued forms, subject side effects, nested labelled loops and overflow refusals.
+
+## 2026-10-21 — Native programs across modules (#539)
+
+- [[Compiler Lower]] lowers every module of the compiled program with its own checked facts; functions are keyed `Module.function` and a written callee resolves through [[Compiler Lower State]] as the evaluator links imports.
+- [[Compiler Lower Types]] names records and sums by canonical identity, [[Core Module]] renders them by `displayName`, and [[Native Aggregate Emission]] mangles keys segment by segment.
+- [[Backend Module Programs]] covers selective, aliased and transitive imports, same-named types in two modules, and a failure inside an imported function.
+
+## 2026-10-21 — Native sums, Option, Result and match (#525)
+
+- [[Native Emission Coverage]]: sums of the root module and the built-in Option and Result are boxed values whose first cell is the variant tag; `match` lowers every pattern form in order through [[Compiler Lower Match]] and [[Compiler Frame Match]].
+- [[Compiler Lower Scalar]] names held variants in run-time E7001 messages, and [[Compiler Lower Types]] gives an unconstrained sum argument an unobservable unit layout.
+- [[Backend Sum Programs]] holds the answers and refusals, passing under Clang, GCC 15 and ASan/UBSan with counted leaks.
+
+## 2026-10-21 — Qualified variants are typed as their sum (#536)
+
+- [[Type Check]] and [[Type Check Install]] bind each variant under its type's canonical key, and [[Type Check Rule]] looks a qualified member up there, so `Shape.Circle(3)` and `Shape.Dot` are `Shape` rather than an error type accepted anywhere.
+
+## 2026-10-20 — Total float order for keys and aggregates (#522)
+
+- NaN now equals NaN and sorts after every number in `compareValues`. A NaN tuple member no longer makes a tuple both less and greater than another, and a map keyed by such tuples keeps one entry per key. Scalar float operators keep their IEEE answers. [[Eval Float Order Tests]]; see [[architecture/SEMANTICS]].
+
+## 2026-10-20 — Records hold their declared field order (#519)
+
+- A record literal written out of declaration order no longer compares unequal to, or renders differently from, the same value written in order. Fields still evaluate as written; the tree walker, compiled bodies and loop kernel all store them in declaration order. [[Eval Record Order Tests]] covers each path. See [[architecture/SEMANTICS]].
+
+## 2026-10-20 — Native tuples (#521)
+
+- Tuples and the root module's non-generic records compile natively as refcounted boxes (records add field reads, updates, field assignment and `let {..}` patterns): literals, positions, `let` tuple patterns, equality, ordering, `show`/`display` and tuple entry results match the interpreter, including its NaN ordering. Frames track text and boxes through one owned-slot list. [[Native Aggregate Emission]], [[Backend Tuple Programs]]. Progress stays 4/14 (28%).
+
+## 2026-10-20 — Native Char values (#518)
+
+- Char literals, comparisons, display/show, `code`, `toText`, `Str.charAt` and Char entry results compile natively through [[Native Char Runtime]]; [[Backend Char Programs]] holds them to hand-written answers and the interpreter's refusals. The #517 catalogue check now skips the case parts, which the clean gate caught. Progress stays 4/14 (28%).
+
+## 2026-10-19 — Native trim and case mapping (#517)
+
+- `trim`, `toUpper` and `toLower` compile natively. [[Native Text Case]] builds its tables from the linked text-2.1.4 (not GHC's boot 2.1.3, whose tables differ by 56 rows), and [[Backend Text Case Tests]] checks all 1,112,064 scalars against Data.Text. Progress stays 4/14 (28%).
+
+## 2026-10-19 — Native Str methods (#516)
+
+- [[Compiler Lower Text]] and [[Native Text Methods]] add the Str methods with Int, Bool and Str results, by scalar and with the evaluator's clamping, E7004 messages and argument-before-receiver order. [[Backend Text Method Programs]] checks them against hand-written answers and the interpreter, and the counted-leak run covers them; all 20 clean gates/696 groups pass. Progress stays 4/14 (28%).
+
+## 2026-10-19 — Native Str values (#515)
+
+- Str is an ordinary native value: [[Native Text Runtime]] holds it as a view over static or refcounted bytes, and frames retain, hand over and release it. Concatenation, byte-order comparison, display/show of every native value, interpolation, printing any Str and quoted Str entry results match the interpreter; other text operators keep its E7001 wording. [[Backend Text Programs]] and [[Backend Text Leak Tests]] carry the evidence; all 20 clean gates/694 groups pass. Runtime revision 9; progress stays 4/14 (28%).
+
+## 2026-10-19 — Native calls respect shadowed builtins (#513)
+
+- [[Compiler Lower Body]] resolves a bare call as local, then module function, then prelude `print`/`display`, as the interpreter does. A module `fn display` was previously replaced by the builtin rendering in native builds.
+
+## 2026-10-19 — Native Float32/Float64 programs (#512)
+
+- Float32/Float64 programs compile natively: [[Pudu Core]] carries parsed binary64 bits, frames hold them in a floating cell, and every arithmetic operation rounds (and narrows for Float32) through the validated helpers. Unsupported float operators keep the evaluator's E7001 wording after their operands; Float and Bool entry results print and exit zero like `pudu run`. [[Backend Float Programs]] matches independent IEEE answers and the interpreter; all native groups pass under Clang and GCC 15, float groups under Clang ASan/UBSan. Unused direct-emitter helpers left over from before frames are removed from [[Backend Emit Support]]. All 20 clean gates/691 groups pass. Runtime revision 8; progress stays 4/14 (28%).
+
+## 2026-10-18 — Selected floating runtime and output (#511)
+
+- [[Native Floating Runtime]] publishes exact buffered floating output; [[Native Runtime Dependencies]] serves both runtime selectors while preserving integer compatibility. [[Native Floating Runtime Tests]] passes 1,042 raw output encodings, 19 minimal roots, six counted IO outcomes and 18 closed-pipe cases under Clang/GCC/ASan/UBSan. All 20 clean gates/689 groups pass. Source admission and the Core/frame bridge remain open; progress stays 4/14 (28%).
+
+## 2026-10-18 — Floating values and arithmetic (#510)
+
+- [[Native Floating Values]] preserves raw transport, per-operation rounding, unordered predicates and target NaN propagation without source admission. [[Native Floating Value Tests]] exercises 54,344 operand/width rows, all 15 helper roots and unsafe-policy/ABI refusals. Locked runtime normalization avoids a reproduced GHC constant-folding discrepancy; a NaN-only noncommutative path repairs observed Clang/GCC payload reordering. Clang/GCC 15 at -O2/-O0 and ASan/UBSan pass, as do all 20 clean gates/685 groups and 351 strict frame translations; completed-area progress stays 4/14 (28%).
+
+## 2026-10-18 — Exact binary64 text (#509, formatter partition)
+
+- [[Native Binary64 Formatter]] preserves locked GHC digit/layout decisions for 63,661 unique raw encodings, with boundary canaries, exact notices and three minimal roots. Clang/GCC 15 and ASan/UBSan pass; real source/binary notices, checksum/signature and extracted compiler/native/SQLite checks pass. All 20 clean gates/682 groups and 351 strict C11 body translations pass. Floating arithmetic/Core/frame/source admission remains open, with progress unchanged at 4/14 (28%).
+
+## 2026-10-18 — Floating notice packaging (#509, first partition)
+
+- [[Native Floating Notices]] retains upstream attribution/terms in source metadata and archives. [[Package Binary Tests]] covers exact copies, older-package absence and symlink/nonregular refusal, and now runs in CI/release/local gates. Seven focused tests and prototype source/binary archive, checksum/signature, extracted compiler/native UInt128 and SQLite checks pass. Exact formatter delivery and clean final-stack validation remain required; this partition does not admit floating source.
+
+## 2026-10-18 — Floating formatter scratch (#508)
+
+- [[Native Floating Point]] anchors exact future output to the locked GHC digit/layout policy. [[Native Floating Natural Kernel]] adds checked 1280-bit scratch with atomic failures and alias-safe operations; [[Native Floating Natural Tests]] passes 6,780 independent Integer rows and seven minimal helper roots under Clang/GCC 15 and ASan/UBSan. All 19 clean gates/680 groups pass. This is neither Pudu BigInt nor admitted floating source; progress stays 4/14 (28%).
+
+## 2026-10-18 — Wide source admission (#507)
+
+- [[Native Wide Source Admission]] enables canonical Int128/UInt128 through existing settled facts. Independent source matrices cover eight wide success programs/969 expected output lines and 24 failure programs, including mixed-width snapshots, cross-word deferred policies, recursive depth and unit entries. Both evaluators match native execution; 45 real CLI executions and four byte-identical static E3018 refusals pass. GCC 15 and ASan/UBSan source matrices also pass; all 19 clean gates/678 groups and 351 strict C11 body translations pass; numeric families remain Partial and progress stays 4/14 (28%).
+
+## 2026-10-18 — Wide frame bridge (#506)
+
+- [[Native Wide Frame Bridge]] connects exact 128-bit literals, descriptors, helper selection, printing and status to optional wide frame cells. Narrow-only layout stays unchanged; runtime revision is 7. [[Native Wide Frame Tests]] adds 23 actual Core/frame programs and counted normal/error cleanup. Clang/GCC 15, ASan/UBSan, 319 strict body translations and all 19 clean gates/678 groups pass. Public source admission, independent reviews and additional platforms remain pending; completed-area progress stays 4/14 (28%).
+
+## 2026-10-18 — Closed-output process policy (#505)
+
+- [[Native Closed Pipe Semantics]] repairs a reproduced P1: generated main installs a nonterminating handler, preserving default-on-exec and fatal stderr termination while retaining intended status after exit-time stdout flush. [[Native Broken Pipe Tests]] records both red reproductions and passes 27 closed-stream/signal combinations with both compilers and sanitizers; 108 actual CLI cases agree across all engines. The clean run passed 18 gates; its sole stale signal.h whitelist assertion was corrected and recompiled under -Werror, then all 677 groups passed in the full-suite rerun. Scalar coverage returns to 4/14 (28%); reviews/platform evidence remain pending.
+
+## 2026-10-18 — Wide runtime integration (#504)
+
+- A real closed-output pipe probe finds a pre-existing SIGPIPE divergence; both evaluators continue but native dies by signal. Scalar coverage is temporarily Partial pending shared startup repair.
+- [[Backend Wide Integer Display]] adds exact full-width decimal output/status. [[Backend Runtime Integer]] publishes all wide catalogues and makes the actual fail renderer own site/colour/cleanup prerequisites. [[Native Wide Runtime Tests]] passes 75 output/status values, transient zero, 24 minimal helper roots and real E7005 output/diagnostic/status; Clang/GCC 15, ASan/UBSan and all 19 clean gates/676 groups pass; wide frame/source admission remains pending.
+
+## 2026-10-18 — Wide operations (#503)
+
+- [[Backend Wide Operations]] implements checked/wrapping/saturating arithmetic, remainder/refusal routing and bitwise/shift behavior. [[Native Wide Operation Tests]] passes 6,412 mathematical/refusal rows and 22 minimal helper selections. Clang/GCC 15, ASan/UBSan and all 19 clean gates/674 groups pass. Independent review and additional platforms remain required; source admission is still pending.
+
+## 2026-10-18 — Exact wide values (#502)
+
+- [[Backend Word128 Kernel]] now exposes named parts/dependencies while preserving its complete C text. [[Backend Wide Integer Values]] adds exact actual-sign carriers, magnitude/construction/normalization, signed/unsigned decoding, ordering and magnitude limits.
+- [[Native Wide Value Tests]] passes 75 values/5,625 comparisons and all 16 single-helper selections as strict C11. Clang/GCC 15 and ASan/UBSan checks pass, as do all 19 clean repository gates/672 groups. The unchanged raw corpus and 319 strict frame C11 translations pass. Typed arithmetic/frame/source integration, additional platforms and independent review remain required.
+
+## 2026-10-18 — Portable wide-word prerequisite (#501)
+
+- [[Native Wide Integers]] resolves the portable Int128/UInt128 delivery sequence. [[Backend Word128 Kernel]] implements raw two-word arithmetic, overflow/carry evidence, total shifts and explicit zero-divisor results without compiler extensions or a new ABI.
+- [[Native Word128 Tests]] executes 1,097 independent arithmetic rows and 3,799 shift rows as strict C11. Clang, GCC 15 and ASan/UBSan runs pass, as do all 19 clean repository gates/670 groups. Both ordinary evaluators also confirm the documented deferred Int128 boundary probe. Typed admission, full-emission coverage, additional platforms and independent reviews remain pending.
+
+## 2026-10-18 — Unsigned native admission (#500)
+
+- [[Native Unsigned Integers]] admits canonical UInt and UInt8/16/32/64 through the shared scalar predicate, retaining the existing exact carrier and runtime ABI. [[Native Unsigned Programs]] covers high bits/maxima, arithmetic policies, logical shifts, aliases/transfers, exact failures and entry statuses with independent mathematical answers.
+- All 19 clean gates/669 test groups and 319 strict C11 translations pass. All 20 native groups also pass against the tree evaluator under AddressSanitizer/UBSan; five unsigned entry-status probes and static rejection boundaries pass. Broader numeric coverage, independent reviews and additional platform evidence remain pending.
+
+## 2026-10-18 — Fixed signed native admission (#497)
+
+- [[Native Signed Integers]] resolves canonical Int8/16/32/64 projection, width-preserving arithmetic and platform-Int shift counts. Lowering admits these kinds in signatures, literals, locals, display, loop results and entry status while retaining the exact carrier and existing runtime helpers.
+- [[Native Signed Programs]] adds independent mathematical matrices, aliases/control/deferred-boundary cases and precise runtime failures. All 19 clean gates/669 groups, 254 strict C11 translations, production sanitizer checks and real CLI status/loop probes pass. Numeric coverage remains Partial and independent review/additional platform evidence remain pending.
+
+## 2026-10-18 — Production native frame integration (#499)
+
+- [[Backend Frame Program]] and [[Backend Frame Runtime]] replace recursive generated calls with heap-owned slots, argument scratch, continuation steps and checked allocation. [[Pudu CLI]] and differential tests use the new compiler-to-frame boundary; source panics and controlled allocation failures unwind scalar frames.
+- [[Host Failure Vocabulary]] and [[CLI Memory Failure]] align reported allocation failure with catchable CLI HeapOverflow while preserving other asynchronous exceptions. All 19 clean gates and 669 groups pass; production native sanitizer checks pass against the tree evaluator, and real bounded-heap CLI runs match the host contract. README coverage is 4/14 complete areas (28%). Full language coverage, additional supported platforms, independent review and PR partitioning remain open.
+
+## 2026-10-17 — Native suspending C body generation (#499, in progress)
+
+- [[Backend Frame Values]] reuses exact integer helpers and shared diagnostic sites over saved slots. [[Backend Frame Bodies]] emits constant-arity call/return steps with frame-owned arguments and explicit continuations.
+- Ten focused frame groups pass, including 194 strict C11 corpus compilations. A test-only static-frame dispatcher runs the wide-pressure reproduction under AddressSanitizer/UBSan and matches both evaluators' E7002 byte for byte. Production allocation, cleanup and CLI integration remain pending in [[Native Frame Pressure Repair]]; the ordinary native emitter still has the known pressure failure.
+
+## 2026-10-17 — Pure native continuation lowering (#499, in progress)
+
+- [[Core Frame IR]] and [[Compiler Frame Lowering]] flatten structured Core into typed slots, closed blocks and explicit call/resume destinations. [[Compiler Frame State]] owns allocation identities; [[Compiler Frame Body]] preserves snapshots, ordered effects, short circuit and resolved loop transfers.
+- Seven focused [[Native Frame Lowering Tests]] groups pass with optimized GHC 9.14.1 -Werror, including checked native corpora. The runtime dispatcher is not integrated; the known frame-pressure failure remains open and full C11 coverage is incomplete. [[Native Frame Pressure Repair]] records the next action and evidence.
+
+## 2026-10-17 — Failing native frame-pressure regression (#499)
+
+- [[Backend Function Programs]] now covers 96 live integer parameters across deep recursion. Tree and compiled evaluation give E7002; the current uncommitted exact-carrier integration instead crashes natively before that bound. [[Native Frame Pressure Repair]] blocks promotion and records the explicit-frame follow-up. This is a failing test checkpoint, not a completed fix.
+
+## 2026-10-17 — Refuse lossy native literal intermediates (#498 partition)
+
+- [[Compiler Lower Body]] checks platform Int literal carrier bounds before Core construction. Checked positive-2^63 block/local intermediates now receive located E6001 instead of silently narrowing into a wrong native value. Immediate negative-minimum literals remain admitted by [[Compiler Lower Scalar]].
+- Exact successful intermediate representation remains open in #498. The discovered gap changes the scalar coverage area to Partial: generated README progress is 3/14 complete (21%), with no partial credit. Optimized GHC 9.14.1 -Werror compilation, all 656 property groups, focused code/span recovery checks, real CLI output-preservation checks and the five progress tests pass. [[Exact Native Integer Carriers]] records a prototype-backed local design for successful representation; production integration and independent review remain pending.
+
+## 2026-10-17 — Portable platform Int operators (#495)
+
+- [[Compiler Lower Scalar]] and [[Pudu Core]] represent bitwise/complement, checked shifts, wrapping and saturating Int arithmetic. [[Backend Runtime Integer]] uses unsigned bit patterns, explicit sign filling and checked bounds; [[Backend Emit]] preserves ordered operand temporaries and diagnostic sites.
+- Shared shift diagnostics preserve existing interpreter text. All 19 clean GHC 9.14.1 repository gates pass, including 656 property groups; real CLI tree/compiled/native values and merged output ordering agree. A strict C11 UBSan probe passed 67,342 independent mathematical results. Deferred out-of-range intermediates remain tracked in #498. Full numeric families and independent review remain pending.
+
+## 2026-10-17 — Auditable native progress publishing (#496)
+
+- [[Repository README]] shows a generated 20-cell C11 emission bar and completed/total coverage areas, currently 4/14 (28%). Partial work counts zero; this is an area measure, not a language-construct percentage.
+- [[Native Progress Generator]] and [[Native Progress Tests]] enforce deterministic counts, malformed-input refusal, preservation, idempotence and CLI behavior. [[Native Progress Workflow]] validates PRs and refreshes only README on current dev after integration, with serialized non-force push retries. Five local Node tests and actual publishing-shell checks against a local bare remote pass, including idempotence and a concurrent integration retry. Hosted workflow execution and independent review remain pending.
+
+## 2026-10-17 — Native scalar runtime refusals (#494)
+
+- [[Compiler Lower Scalar]] separates unary/binary lowering and emits explicit Never-typed operator failures, using exact settled facts and shared interpreter vocabulary from [[Diagnostic Evaluation]]. Boolean ordering remains valid; invalid Unit/Bool operations preserve their actual E7001 messages, operand order and whole-operation spans.
+- [[Backend Emit]] and its state/runtime-selection helpers evaluate trap operands before the existing failure renderer. Pure fact/span/message checks and native success/failure cases pass, including macros, Unicode/tabs, short circuit, abrupt operands and print Result protection. Fresh optimized GHC 9.14.1 warnings-as-errors compilation, all 654 property groups and all 19 repository gates pass. Real CLI tree/compiled/native output, status and merged stdout/stderr order agree. Independent review and full native coverage remain pending.
+
+## 2026-10-17 — Native unit display and equality (#493)
+
+- [[Compiler Lower Body]] admits unit display and equality/inequality; [[Backend Emit]] shares effect-first scalar operand freezing with call arguments. Unit display selects the string printer through [[Backend Emit Support]] and evaluates operands exactly once.
+- Focused pure, native ordering/mutation/transfer, arithmetic-failure and existing refusal cases pass under GHC 9.14.1. Unit arithmetic/ordering retain explicit incomplete boundaries. The final fresh GHC 9.14.1 warnings-as-errors build, all 652 property groups and remaining integration gates pass with captured output. A self-audit added direct/nested print Result carrier refusal regressions before commit. CLI parity and output preservation pass; full native coverage and independent review remain pending.
+
+## 2026-10-17 — Native unit values and parameters (#492)
+
+- [[Compiler Lower Body]] represents unit literals as empty Core blocks; [[Compiler Lower Signature]] admits settled unit parameters and aliases. [[Backend Emit]] evaluates unit arguments for effects before storing a zero sentinel, preserving void call validity, ordering, transfers and failures.
+- Pure signature checks, expanded native ordering/recursion and argument-failure differential cases, and existing unsupported-surface refusals pass under GHC 9.14.1. The clean GHC 9.14.1 warnings-as-errors build and 18 integration gates pass; captured direct and Cabal full-suite confirmations pass all 652 groups after an unreproduced initial suite-gate failure with discarded output. The handoff records all evidence; independent review and full-emission completion remain pending.
+
+## 2026-10-17 — Solved native scalar types (#491)
+
+- [[Compiler Lower Types]] carries exact checked expression facts and settled function schemes into native lowering. Inferred/aliased Int/Bool signatures and Int/Bool/unit results share canonical representation; annotated scalar locals retain effects and structural Never.
+- [[Native Solved Types Tests]] protects source/generated identity and missing-fact refusals; [[Backend Function Programs]] compares inferred calls, recursion, aliases and annotated mutable locals against the interpreter. Focused native function, fact-identity/missing-fact and existing refusal checks pass; the clean GHC 9.14.1 optimized warnings-as-errors build, full suite and all 19 gates pass. A real CLI parity check prints 13 with empty stderr and exit 13. Independent implementation review remains pending and full native coverage remains incomplete.
+
+## 2026-10-17 — No-else conditional unit contract (#490)
+
+- [[ADR-0025-if-without-else-unit-results]] clarifies normal unit results across tree/compiled/boxed evaluation, derive folding, dynamic checking, constants and native lowering; transfers, diagnostics, effects and with-else values remain unchanged.
+- [[architecture/SEMANTICS]] records 1.0.1-draft as a conformance clarification. The runtime, derive, contextual checker and native admission repairs pass focused value/output/diagnostic tests, including actual boxed regions and generated methods. The inspected derive expansion snapshot retains its literal-true no-else wrapper around the same labelled break, and its 200-run property passes. The fresh optimized warnings-as-errors build, all 648 property groups, dependency checks and remaining integration gates pass under GHC 9.14.1; [[Native C11 Backend Delivery]] records evidence and the pending independent implementation review; the full-emission goal remains active.
+
+## 2026-10-16 — Native loop control (#489)
+
+- [[Native Emission Coverage]] defines completion against implemented language behavior and records pending native surfaces.
+- [[Pudu Core]] resolves loop targets by identity and carries while/loop values, break/continue transfers, and Never results; [[Compiler Lower Body]] and [[Backend Emit]] preserve checked condition scope and source-ordered transfer operands.
+- Scalar loop-control differential cases, arithmetic refusals, divergent lowering and mutable unit-local effects pass; the clean optimized full gate passes on GHC 9.10.3. [[Native C11 Backend Delivery]] records independent review and the outstanding GHC 9.14.1 matrix.
+
+## 2026-10-16 — Native functions and C11 production hardening (#488)
+
+- [[Compiler Lower]] carries only reachable typed functions, including recursion and mutual recursion; [[Compiler Lower Body]], [[Compiler Lower State]], and [[Compiler Lower Signature]] separate traversal, state, and signature admission.
+- [[Backend Emit]] sequences eager operands and guards short-circuit setup, preserving mutable reads, nested comparison grouping, failure order, and argument effects. [[Backend Emit Support]] uses injective Unicode name encoding; [[Backend Emit State]] escapes C11 trigraph candidates.
+- Explicit entry returns preserve exit status; escaping print results refuse as `E6001`. [[Diagnostic Evaluation]] shares recursion-limit text with the evaluator and native runtime.
+- [[Backend Toolchain]] bounds process completion and output drains together, kills isolated POSIX process groups on timeout, and preserves existing outputs on failure.
+- [[Backend Function Programs]] and [[Backend Toolchain Tests]] extend differential output/status/diagnostic and adversarial process coverage. Validation results are recorded in [[Native C11 Backend Delivery]].
+
+## 2026-10-16 — Native C11 backend milestone 1 (#486)
+
+- [[Pudu Core]] is the concrete [[Core IR]] module: span-first statements and expressions, identified locals, and value forms for `if` and blocks.
+- [[Compiler Lower]] gates the frozen scalar subset — `Int`/`Bool` locals, `while`, `if`, `print`, checked arithmetic — with typed `E6001` refusals at each unsupported construct's own span; [[Diagnostic Native]] owns the `E6xxx` family.
+- [[Diagnostic Arithmetic]] becomes the one home of `E7004`/`E7005` refusal text, shared by the evaluator, the unboxed loop path, and the native runtime.
+- [[Backend Emit]] emits deterministic C11 with baked diagnostic sites whose excerpt geometry comes from [[Diagnostic Render]]'s exported arithmetic; [[Backend Runtime]] is a named-parts list whose checked helpers, interpreter-identical refusal rendering, and `reportResult` clamp are carried only when a module uses them, so the fixed `-Wall -Wextra` build stays warning-free.
+- [[Backend Toolchain]] is the seam's production adapter: `PUDU_CC` discovery, fixed `-std=c11 -O2 -Wall -Wextra`, concurrent bounded capture, bounded wait, atomic publication, and `E6002`–`E6006` translation.
+- [[Pudu CLI]] gains `pudu build <file> --native`; [[Backend Emit Tests]] and [[Backend Native Tests]] hold emission determinism and byte-for-byte conformance against the interpreter.
+- Native Loop (`bench/eval/Loop.pudu`, 3,000,000 iterations): 9.1–12.9 ms across five runs (median ~11 ms) against the 245/246 ms interpreter record from #483, in a 34,032-byte executable; the full 628-check suite is green.
+
+## 2026-10-16 — Machine-word loop regions measured (#483)
+
+- [[Eval Loop Unboxed]] executes a proven pure integer while-region over unboxed 64-bit slots with the boxed kernel's admission, commit and diagnostics; [[Eval Loop Kernel]] offers each planned region and demotes on any mismatch.
+- Loop workload: 560/555 ms to 245/246 ms tree/compiled and 2,334 MB to 2 MB allocated; six focused fixture checks plus the full 612-check suite pass with every other workload unchanged.
+- [[Package Binary]] real-artifact verification: stripped compiler keeps Mach-O validity, ad-hoc signature, identical dylibs, extracted execution, the dlopen'ed SQLite adapter and a 32.9% smaller attached bundle.
+- Promotion withheld: residual ~78 ns/iteration is interpreter dispatch and the 98 MB compiler does not compete with native sizes, so issue #483's commit gate stays unmet; the measured record is committed on feature/483-backend-performance and opened as a PR to dev for review.
 - 2026-11-02: Resume #759: keep built-in type names above unrelated graph declarations while preserving local and selected-import precedence. Qualified, selected and reversed-import Map clients cover both evaluators.
 
 - 2026-11-02: Retain complete selected trait arguments and bounded receiver types in checked products (#735 prerequisite), including applied constructors and final inference substitution; project canonical implementation trait arguments. Bounded runtime transport remains required.
@@ -1029,7 +1553,6 @@ Walking/falling, support queries and native engine throughput remain open.
   regressions and the full optimized suite pass 523 families with -Werror on
   GHC 9.10.3. Actual metadata residualization remains the next dependency layer.
 
-
 ## 2026-10-03 — Typed metadata sequences and method receivers (issue #431)
 
 - Declare the Std.Meta facade with owner-specific get/set/matches, name properties,
@@ -1897,7 +2420,6 @@ Walking/falling, support queries and native engine throughput remain open.
 - The package catalog now uses an original Pudu search banner and a compact, nonduplicated project
   list. Project pages place identity, release, and install in a distinct header; the README and
   metadata have separate reading surfaces. The mobile install panel stays within the viewport.
-
 
 ## 2026-09-22 — GitHub is the package index
 
@@ -3769,7 +4291,6 @@ Expanded test fixtures `test-fixtures/stdlib/UsesBuffer.pudu` (27 assertions) an
 with 100% public API test coverage and triple-slash LSP documentation. All 7 CI quality gates passed under `-Werror`.
 
 ## 2026-09-06 — SWAR 8-slot parallel group probing in flat hash tables
-
 
 Accelerated [[Runtime SwissTable Kernels]] by implementing SIMD-within-a-register (SWAR) group probing.
 Instead of evaluating one control slot per iteration, lookups, insertions, and deletions inspect packed 64-bit

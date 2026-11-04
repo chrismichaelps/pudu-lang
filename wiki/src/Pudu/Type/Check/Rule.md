@@ -138,6 +138,8 @@ DEPTH 0.50 (MEDIUM). It isolates the closed rules from the walk that applies the
 
 ## Grill Log
 
+- **Q:** How does `namespaceMemberType` find `Shape.Dot`? **A:** By the written key, and failing that by the canonical key of the type the qualifier names in this module, which is where variants are bound (#536).
+
 - **Q:** Type membership by calling `Set.contains`? **A:** No. _Rationale:_ surface operators are
   typed in the closed operator table, and a synthetic method call would give different spans and
   accidentally invite general method-based overloading. _Rejected:_ desugaring through member

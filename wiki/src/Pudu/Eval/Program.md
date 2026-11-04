@@ -148,6 +148,10 @@ Resolved Grill Log: builtins reside in their own frame before aliases are instal
 root's declarations must not reinstall them over selected imports with names such as `show` or
 `Some`; folding uses `loadModuleDeclarations`, matching runtime root loading.
 
+## Record field order (#519)
+
+Reloading declarations for an interactive block clears the record field-order
+table with the variant owners.
 ## Canonical record owners (#761)
 
 Root, dependency, folding and interactive module installation supply the defining module path to the named loader. Folded records keep the same owner as runtime records.
