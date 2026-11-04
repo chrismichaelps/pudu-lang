@@ -194,3 +194,10 @@ Run [[Backend BigInt Programs]]: successes with hand-written answers and failure
 ## Decimal (#802)
 
 Run [[Backend Decimal Programs]].
+
+## Focused folded constants (#808)
+
+Register explicit-output and runtime-refusal groups over the three constant
+corpora in [[Backend Module Programs]]. Resolved Grill Log: reuse the same
+whole-program compiler and byte-exact oracle, retaining comprehensive module
+groups rather than replacing them with this focused lane.

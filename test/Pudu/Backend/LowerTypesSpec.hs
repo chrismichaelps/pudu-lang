@@ -10,8 +10,9 @@ import Pudu.Compiler.Lower (LowerResult (..), lowerModule, lowerModuleFolded)
 import Pudu.Compiler.Lower.Types (formedCoreType, nativeTypes, typeForSpan, sharedReferenceTarget)
 import Pudu.Core (CoreType (..), CoreModule (..), CoreFunction (..), CoreBlock (..), CoreExpression (..), CoreExpressionShape (..))
 import Pudu.Diagnostic (diagnosticCode, diagnosticCodeText, diagnosticSpan, hasErrors)
-import Pudu.Eval.Frozen (thaw)
-import Pudu.Eval.Value (Value (FloatValue))
+import Pudu.Eval.Frozen (freeze, thaw)
+import Pudu.Eval.Value (Value (FloatValue, ArrayValue, StrValue, RangeValue))
+import qualified Data.Sequence as Seq
 import Pudu.Frontend.Syntax (Module (..), ModuleName (..))
 import Pudu.IntegerLiteral (IntegerKind (PlatformSigned, PlatformUnsigned, SignedKind, UnsignedKind))
 import Pudu.Source (SourceName (..), emptySpan, generatedSpan, newSource, sourceText, spanStart, spanEnd, unOffset)
@@ -54,7 +55,7 @@ testReferenceFacts = conjoin <$> traverse check
 
 testConstantFacts :: IO Property
 testConstantFacts = do
-  results <- traverse check [("7", True), ("1.5d", True), ("[1, 2]", False), ("fn() => 1", False)]
+  results <- traverse check [("7", True), ("1.5d", True), ("[1, 2]", True), ("mapOf([(1, 2)])", True), ("setOf([1, 2])", True), ("1..3", True), ("bucketsOf()", False), ("fn() => 1", False)]
   floating <- traverse checkFloat [("0.1f32", Just 0x3fb99999a0000000), ("-0.0", Just 0x8000000000000000), ("0.0 / 0.0", Nothing)]
   broken <- newSource (SourceName "Main.pudu") "module Main\nconst BAD = 1 / 0\nfn main() -> Int { 0 }\n" >>= runCompile
   pure $ conjoin (counterexample "constant failure remains a compile diagnostic"
@@ -92,6 +93,12 @@ testConstantFacts = do
               other -> counterexample (show other) (False === True)
          in conjoin
               [ refusedAtUse (lowerModule "main" facts parsed)
+              , if initializer `elem` ["[1, 2]", "1..3"] then case freeze
+                  (if initializer == "[1, 2]" then ArrayValue (Seq.singleton (StrValue "wrong element"))
+                   else RangeValue (Just (2 ^ (64 :: Int))) False Nothing) of
+                  Just mismatched -> refusedAtUse (lowerModuleFolded "main" facts (Map.singleton "HELD" mismatched) parsed)
+                  Nothing -> counterexample "the malformed typed product is still portable data" (False === True)
+                else True === True
               , if represented then case supplied of
                   Lowered _ -> True === True
                   other -> counterexample (show other) (False === True)

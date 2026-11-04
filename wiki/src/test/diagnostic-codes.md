@@ -35,6 +35,10 @@ E7010 is shared by the interpreter and native emitter for the same
 non-terminating Decimal quotient, with identical message/help. Resolved
 Grill Log: register this integration condition explicitly, as tracked in
 PR #807; do not rename or suppress a reporting site.
+`E7010` means a Decimal quotient has no exact base-ten expansion, in the
+interpreter and native frame emitter. Both retain the same message and help.
+Resolved Grill Log (#806): register this existing shared condition instead
+of assigning a backend-only code or suppressing either reporting module.
 
 ## Grill Log
 

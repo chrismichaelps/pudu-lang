@@ -10,6 +10,18 @@ aliases: [Backend Module Programs]
 Word-map algebra (#810): register successes and refusals from [[Backend Word
 Map Programs]] in the ordinary module corpora. Resolved Grill Log: focused
 groups supplement these complete gates rather than replacing existing cases.
+## Complete carried frozen data (#808)
+
+Export constantModulePrograms and constantRefusalPrograms alongside the
+single-module constantPrograms. Include all three in the ordinary module
+corpora and focused native folded-constant groups. Cover nested arrays,
+maps, sets and ranges, typed empty collections, mutation without changing
+the original constant, imported aliases and canonical record owners.
+Refusals retain indexing/range/operation provenance after reading constants.
+
+Resolved Grill Log: expected outputs are handwritten and independent of the
+evaluator and emitter. Only library-free successes enter counted cleanup;
+multi-module cases use the real compiler/module-loading harness.
 
 ## Purpose and interface
 

@@ -85,6 +85,49 @@ decimalSuccessPrograms =
       , "  0"
       , "}" ]
     , "2487.49 2 None\n51 Line{item: \"x\", price: 98.50} Some(829.16333) None\n{\"a\": 1.10, \"b\": -0.5} #{0.1, 2} 2487.49 Some(9.75)\n")
+  , ("Decimal primitive values retain signatures, identity and owned results", program
+      [ "fn apply[T, U](f: fn(T) -> U, value: T) -> U { f(value) }"
+      , "fn parser() -> fn(Str) -> Option[Decimal] {"
+      , "  let parse = decimalOf"
+      , "  |text| parse(text)"
+      , "}"
+      , "fn main() -> Int {"
+      , "  let parse = decimalOf"
+      , "  let fromInt = decimalFromInt"
+      , "  let scale = decimalScale"
+      , "  let toInt = decimalToInt"
+      , "  let toFloat = decimalToFloat"
+      , "  let divide = decimalDivide"
+      , "  let round = decimalRound"
+      , "  print(show(parse) + \" \" + show(fromInt) + \" \" + show(scale) + \" \" + show(toInt))"
+      , "  print(show(toFloat) + \" \" + show(divide) + \" \" + show(round))"
+      , "  print(display(parse == decimalOf) + \" \" + display(toInt == decimalToInt) + \" \" + display(fromInt == decimalFromInt))"
+      , "  print(show(parse(\"  1_234.500e-1  \")) + show(parse(\"not a decimal\")) + show(parser()(\"-0.125\")))"
+      , "  print(display(apply(fromInt, -42)) + \" \" + display(apply(scale, 1.2300d)) + \" \" + show(apply(toInt, -42.00d)) + show(toInt(1.5d)))"
+      , "  print(display(toFloat(0.125d)) + \" \" + show(divide(1d, 3d, 3, 6)) + show(divide(1d, 0d, 3, 6)) + \" \" + display(round(-2.5d, 0, 6)))"
+      , "  let converters = [decimalOf, parse]"
+      , "  print(show(converters[1](\"9.00\")))"
+      , "  var total = 0d"
+      , "  for index in 0..100 {"
+      , "    if let Some(value) = parse(display(index) + \".25\") { total = total + value }"
+      , "  }"
+      , "  print(display(total))"
+      , "  let decimalOf: fn(Str) -> Option[Decimal] = |text| Some(7d)"
+      , "  print(show(decimalOf(\"local\")) + \" \" + show(parse(\"8\")))"
+      , "  0"
+      , "}" ]
+    , "<builtin decimalOf> <builtin decimalFromInt> <builtin decimalScale> <builtin decimalToInt>\n<builtin decimalToFloat> <builtin decimalDivide> <builtin decimalRound>\ntrue true true\nSome(123.4500)NoneSome(-0.125)\n-42 4 Some(-42)None\n0.125 Some(0.333)None -2\nSome(9.00)\n4975.00\nSome(7) Some(8)\n")
+  , ("Decimal callable arguments run once in order and transfers stop invocation", program
+      [ "fn number(label: Str, value: Decimal) -> Decimal { print(label)\n value }"
+      , "fn integer(label: Str, value: Int) -> Int { print(label)\n value }"
+      , "fn main() -> Int {"
+      , "  let divide = decimalDivide"
+      , "  print(show(divide(number(\"left\", 1d), number(\"right\", 8d), integer(\"scale\", 3), integer(\"mode\", 6))))"
+      , "  let round = decimalRound"
+      , "  round(number(\"before transfer\", 1d), { return 0 }, integer(\"unreachable\", 6))"
+      , "  1"
+      , "}" ]
+    , "left\nright\nscale\nmode\nSome(0.125)\nbefore transfer\n")
   ]
 
 {-| The successes that need no library, which counted allocation compiles on
@@ -94,7 +137,22 @@ decimalLeakPrograms = drop 2 decimalSuccessPrograms
 
 decimalRefusalPrograms :: [(String, Text)]
 decimalRefusalPrograms =
-  [ ("decimal division by zero after an exact quotient", program
+  [ ("a Decimal builtin entry renders its tag", program
+      [ "fn main() -> fn(Str) -> Option[Decimal] { decimalOf }" ])
+  , ("a Decimal callable argument failure keeps its source and stops later arguments", program
+      [ "fn main() -> Int {"
+      , "  let divide = decimalDivide"
+      , "  print(show(divide({ print(\"left\")\n 1d }, { print(\"failure\")\n 1d / 0d }, { print(\"unreachable\")\n 2 }, 6)))"
+      , "  0"
+      , "}" ])
+  , ("ordering Decimal builtin values reports their runtime kind", program
+      [ "fn main() -> Int {"
+      , "  let left = decimalOf"
+      , "  let right = decimalOf"
+      , "  print(display(left < right))"
+      , "  0"
+      , "}" ])
+  , ("decimal division by zero after an exact quotient", program
       [ "fn main() -> Int {"
       , "  let zero = 0.00d"
       , "  print(display(1.5d / 0.5d))"

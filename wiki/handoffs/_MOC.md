@@ -6,6 +6,8 @@ tags: [moc, handoff]
 # Handoff Map
 
 - [[Native Word Map Algebra Delivery]] — #810 accelerated sparse-word algebra.
+- [[Native Frozen Collection Delivery]] — #808 compiler-folded arrays, maps, sets and ranges.
+- [[Native Decimal Callable Delivery]] — #806 first-class Decimal primitives after native stack consolidation.
 
 - [[Native Unsigned Integer Delivery]] — UInt and fixed unsigned native admission (#500).
 
