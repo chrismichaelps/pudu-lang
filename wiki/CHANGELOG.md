@@ -14,6 +14,9 @@ tags: [changelog]
   builtin identity, entry rendering, source-order effects and refusals;
   [[Backend Text Leak Tests]] counts their owned allocations.
 - [[Native Decimal Callable Delivery]] records validation and review status.
+- [[Diagnostic Code Gate]] records E7010 as the same non-terminating Decimal
+  quotient in the interpreter and native emitter, repairing an integration
+  registry omission exposed by the full gates.
 
 ## 2026-10-27 — Exact native wide values (#502)
 
