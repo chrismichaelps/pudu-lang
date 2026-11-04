@@ -9,6 +9,7 @@ import qualified Data.Text as Text
 import qualified Data.Text.IO as TextIO
 import GHC.IO.Encoding (setLocaleEncoding)
 import Pudu.Backend.Emit (emitProgram)
+import Pudu.Backend.Runtime.Process (processIoLines)
 import Pudu.Compiler (CompileResult (..))
 import Pudu.Compiler.Frame (lowerFrames)
 import Pudu.Compiler.Lower (LowerResult (..), lowerProgram, programNativeModules)
@@ -83,13 +84,17 @@ testEntries = do
       launched <- compileC cc root "launcher" launcher
       case launched of
         Left failure -> pure (counterexample failure (False === True))
-        Right runner -> conjoin <$> traverse (check cc root runner oracle)
-          (["fn main() -> Str { \"x\".repeat(" <> Text.pack (show size) <> ") }" | size <- [8186, 8187, 8192, 20000 :: Int]]
-           <> ["fn main() -> Result[(), Str] { printPart(\"x\".repeat(8190)) }"
-              , "fn main() -> Str { \"é\".repeat(4094) }"
-              , "fn main() -> Int { print(\"start\")\n 1 / 0 }"])
+        Right runner -> do
+          classified <- kernelMasks cc root
+          case classified of
+            Left failure -> pure (counterexample failure (False === True))
+            Right blocked -> conjoin <$> traverse (check cc root runner oracle blocked)
+              (["fn main() -> Str { \"x\".repeat(" <> Text.pack (show size) <> ") }" | size <- [8186, 8187, 8192, 20000 :: Int]]
+               <> ["fn main() -> Result[(), Str] { printPart(\"x\".repeat(8190)) }"
+                  , "fn main() -> Str { \"é\".repeat(4094) }"
+                  , "fn main() -> Int { print(\"start\")\n 1 / 0 }"])
  where
-  check cc root runner oracle body = do
+  check cc root runner oracle blocked body = do
     let path = root </> "Main.pudu"
     TextIO.writeFile path ("module Main\n" <> body <> "\n")
     program <- compileProgram path
@@ -105,12 +110,12 @@ testEntries = do
               Left failure -> pure (counterexample failure (False === True))
               Right binary -> do
                 full <- doesFileExist "/dev/full"
-                conjoin <$> traverse (run root runner oracle path binary body)
+                conjoin <$> traverse (run root runner oracle path binary body blocked)
                   (["out-healthy", "out-read", "out-closed", "out-pipe", "out-tty"] <> ["out-full" | full]
                     <> if "1 / 0" `Text.isInfixOf` body then ["err-read", "err-closed", "err-pipe"]
                       <> ["out-mask" <> show mask | mask <- [1 .. 7 :: Int]] else [])
-  run root runner oracle path binary body mode = do
-    let blocked = mode `elem` ["out-mask3", "out-mask5", "out-mask6", "out-mask7"]
+  run root runner oracle path binary body blockedMasks mode = do
+    let blocked = drop 4 mode `elem` blockedMasks
         limit = if blocked then 2000000 else 10000000
     environment <- getEnvironment
     let nativeProcess = (proc runner [mode, "default", binary])
@@ -144,11 +149,15 @@ testFailures indirect
             Right runner -> do
               oracle <- getExecutablePath
               full <- doesFileExist "/dev/full"
-              results <- traverse (check cc root runner oracle full) [False, True]
-              masks <- checkMasks cc root runner oracle
-              pure (conjoin (masks : results))
+              classified <- kernelMasks cc root
+              case classified of
+                Left failure -> pure (counterexample failure (False === True))
+                Right blocked -> do
+                  results <- traverse (check cc root runner oracle full blocked) [False, True]
+                  masks <- checkMasks cc root runner oracle blocked
+                  pure (conjoin (masks : results))
  where
-  check cc root runner oracle full errors = do
+  check cc root runner oracle full blocked errors = do
     let path = root </> "Main.pudu"
         channel = if errors then "err-" else "out-"
         modes = [(mode, "default") | mode <- ["healthy", "closed", "read", "tty"] <> ["full" | full]]
@@ -167,9 +176,9 @@ testFailures indirect
             case built of
               Left failure -> pure (counterexample failure (False === True))
               Right binary -> do
-                results <- traverse (run runner oracle path binary channel (Just (ExitFailure 7))) modes
+                results <- traverse (run runner oracle path binary channel (Just (ExitFailure 7)) blocked) modes
                 pure (conjoin results)
-  checkMasks cc root runner oracle = do
+  checkMasks cc root runner oracle blocked = do
     let path = root </> "Main.pudu"
     TextIO.writeFile path (throughValues indirect ["printPart", "printErrorPart"] maskProgram)
     program <- compileProgram path
@@ -184,10 +193,10 @@ testFailures indirect
             case built of
               Left failure -> pure (counterexample failure (False === True))
               Right binary -> conjoin <$> traverse
-                (run runner oracle path binary "out-" Nothing)
+                (run runner oracle path binary "out-" Nothing blocked)
                 [("mask" <> show mask, "default") | mask <- [1 .. 7 :: Int]]
-  run runner oracle path binary channel expectedStatus (mode, inherited) = do
-    let blockedMode = mode `elem` ["mask3", "mask5", "mask6", "mask7"]
+  run runner oracle path binary channel expectedStatus blockedMasks (mode, inherited) = do
+    let blockedMode = mode `elem` blockedMasks
         limit = if blockedMode then 2000000 else 10000000
     environment <- getEnvironment
     let nativeProcess = (proc runner [channel <> mode, inherited, binary])
@@ -288,6 +297,49 @@ compileC cc root name source = do
     ["-std=c11", "-pedantic", "-O2", "-Wall", "-Wextra", "-Werror", path, "-o", binary] ""
   pure $ if status == ExitSuccess && null output && null errors
     then Right binary else Left (show status <> output <> errors)
+
+{-| Measure the kernel endpoints without accepting an arbitrary child timeout
+    as expected blocking. The actual native/evaluator observations stay independent. -}
+kernelMasks :: FilePath -> FilePath -> IO (Either String [String])
+kernelMasks cc root = do
+  built <- compileC cc root "readiness" readinessProbe
+  case built of
+    Left failure -> pure (Left failure)
+    Right binary -> do
+      outcomes <- traverse (\mask -> do
+        observed <- observe root 5000000 (proc binary [show mask])
+        pure $ case observed of
+          Exited ExitSuccess "" "" -> Right (mask, False)
+          Exited (ExitFailure 1) "" "" -> Right (mask, True)
+          other -> Left ("readiness probe for mask " <> show mask <> ": " <> show other)) [0 .. 7 :: Int]
+      case sequence outcomes of
+        Left failure -> pure (Left failure)
+        Right answers | lookup 0 answers == Just False -> do
+          let blocked = ["mask" <> show mask | (mask, True) <- answers]
+          putStrLn ("[output readiness] expected blocked masks: " <> show blocked)
+          pure (Right blocked)
+        Right _ -> pure (Left "healthy output was classified as blocked")
+
+readinessProbe :: Text
+readinessProbe = Text.unlines $
+  ["#include <stdlib.h>", "#include <signal.h>", "#include <unistd.h>"] <> processIoLines <>
+  [ "int main(int argc, char **argv) {"
+  , "  if (argc != 2) return 127;"
+  , "  int mask = atoi(argv[1]), blocked = 0;"
+  , "  for (int fd = 0; fd < 3; ++fd) if ((mask & (1 << fd)) != 0 && close(fd) != 0) return 126;"
+  , "  pudu_prepare_io();"
+  , "  for (int fd = 1; fd < 3; ++fd) {"
+  , "    int flags = fcntl(fd, F_GETFL);"
+  , "    if (flags >= 0 && (flags & O_NONBLOCK) == 0) {"
+  , "      struct pollfd output = {fd, POLLOUT, 0};"
+  , "      int ready;"
+  , "      do { ready = poll(&output, 1, 0); } while (ready < 0 && errno == EINTR);"
+  , "      if (ready < 0) return 125;"
+  , "      if (ready == 0) blocked = 1;"
+  , "    }"
+  , "  }"
+  , "  return blocked;"
+  , "}" ]
 
 launcher :: Text
 launcher = Text.unlines

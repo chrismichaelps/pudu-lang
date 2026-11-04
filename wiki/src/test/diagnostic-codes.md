@@ -31,6 +31,11 @@ unchecked allow-list.
 integer result cannot be represented by the operation's declared fixed-width result type; the
 operation-specific wording does not change that identity.
 
+E7010 is shared by the interpreter and native emitter for an identical
+non-terminating Decimal quotient. Resolved Grill Log: retain the same code,
+message and help; explicitly register the sharing rather than suppressing
+either reporting site. This integration correction is also tracked by #807.
+
 ## Grill Log
 
 - **Q:** Ignore the lint modules wholesale? **A:** No. _Rationale:_ explicit per-code declarations

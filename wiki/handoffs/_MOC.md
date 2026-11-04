@@ -5,6 +5,8 @@ tags: [moc, handoff]
 
 # Handoff Map
 
+- [[Native Linux Output Gate Delivery]] — #811 measured descriptor readiness and bounded full-suite CI.
+
 - [[Native Unsigned Integer Delivery]] — UInt and fixed unsigned native admission (#500).
 
 - [[Native Signed Integer Delivery]] — fixed signed widths on the exact native carrier (#497).

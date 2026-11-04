@@ -7,6 +7,20 @@ aliases: [Native Output Tests]
 ---
 # Native Output Tests
 
+## Kernel readiness classification (#811)
+
+Before the descriptor matrix, compile an isolated C probe using the existing
+process-context projection. For healthy streams and every missing-descriptor
+mask, prepare the endpoints and poll blocking output descriptors with zero
+timeout. Measure expected blocking from kernel readiness, not an OS-name or
+Darwin mask list. The healthy control must report writable output.
+
+Resolved Grill Log: bound and reap the probe itself, reject unexpected exit
+codes/bytes, and keep exact native/evaluator Observation equality and flushed
+prefixes. Only a mask measured as blocking may accept Waiting; ordinary cases
+still require real terminal outcomes. Probe classification is not itself
+proof of parity: both evaluator modes must execute each actual case.
+
 Export outputProperties and runOutputOracle. A child invocation of the test
 binary enters runOutputOracle before runner buffering is changed, sets UTF-8
 like the CLI, and evaluates actual checked Pudu through evaluateProgramEntryFolded.

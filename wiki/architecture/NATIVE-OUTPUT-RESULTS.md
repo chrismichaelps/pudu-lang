@@ -102,8 +102,9 @@ when holes remain, the control pipe in the same order. Keep those endpoints
 process-owned. Healthy inherited descriptors are never replaced.
 
 Resolved Grill Log: this reproduces kernel endpoint types rather than
-rewriting EBADF into a guessed errno. The backend endpoint reports the OS's own queue-write error; a standard
-descriptor filled by a pipe reader follows the readiness rule below. The pipe writer retains O_NONBLOCK and both pipe
+rewriting EBADF into a guessed errno. Kernel readiness determines whether a
+backend endpoint reaches a queue-write error or waits first; a standard
+descriptor filled by a pipe reader follows the same readiness rule below. The pipe writer retains O_NONBLOCK and both pipe
 ends retain close-on-exec, matching the control adapter. Run this once at
 process entry before source code can allocate descriptors, not lazily at
 first output and not when fatal diagnostics restore signal policy.
@@ -126,6 +127,11 @@ readiness check before each raw write, not only after EAGAIN. Test this with
 bounded isolated processes and compare their already-flushed output prefixes
 as well as terminal outcomes; two timed-out processes are not sufficient
 evidence if their prefixes differ.
+
+The verification matrix measures initial output writability with an isolated
+kernel probe, including a healthy control (#811). It does not assume that
+EPoll and KQueue classify identical missing-descriptor masks. Actual native
+and both evaluator observations still have to match byte for byte.
 
 ## Entry-report output
 

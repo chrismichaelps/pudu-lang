@@ -7,6 +7,14 @@ aliases: [Pudu Continuous Verification]
 ---
 # Pudu Continuous Verification
 
+## Expanded native suite budget (#811)
+
+Bound the full-suite step at 45 minutes. The prior 12-minute deadline
+terminated an active expanded native corpus after output-mask failures.
+Resolved Grill Log: this remains a finite hang bound, not a passing result;
+all existing checks and strict descriptor observations remain mandatory.
+Actual Linux completion must be observed before claiming hosted validation.
+
 ## Purpose and interface
 
 [[Ark Assets Gate]] verifies checked CPU texture data and sampling before the higher engine gates.

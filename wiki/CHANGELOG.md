@@ -5,6 +5,14 @@ tags: [changelog]
 
 # Changelog
 
+## 2026-11-04 — Portable native-output gate classification (#811)
+
+- [[Native Output Tests]] measures kernel readiness after inherited-descriptor
+  projection, retaining exact evaluator/native observations and healthy control.
+- [[Pudu Continuous Verification]] gives the expanded full suite a finite
+  45-minute budget; this is not itself evidence of a passing run.
+- [[Native Linux Output Gate Delivery]] records local proof and Linux follow-up.
+
 ## 2026-10-27 — Exact native wide values (#502)
 
 - [[Backend Wide Integer Values]] preserves actual signs and selectable helpers.
