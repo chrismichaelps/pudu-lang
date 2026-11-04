@@ -15,6 +15,12 @@ A map or set is a box whose first cell holds the tree's root.
 
 ## Helpers
 
+Word-map algebra (#810): emit one wrapper per operation only for maps whose
+value kind is exactly UInt64. Each wrapper selects tree_word_algebra, its
+type's ops table and wrap helper. Resolved Grill Log: four closed operation
+codes select defined uint64_t bitwise operations; other map kinds gain no
+word helper. Preserve the existing map/set helper inventory.
+
 The ops table is assembled from per-type functions: the key order is
 `memberCompare` (so `compareValues`), and retaining and releasing follow the
 cell's type. Construction folds inserts over an array in order, which is what

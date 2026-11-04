@@ -11,6 +11,12 @@ aliases: [Compiler Lower Body, Native Body Lowering]
 
 # Compiler Lower Body
 
+Word-map algebra (#810): delegate recognized direct builtins after local,
+function and variant resolution to [[Compiler Lower Word Map]]. Explicit
+type applications on calls use the existing checked-call desugaring. Resolved
+Grill Log: nearer names retain precedence; this does not introduce a new
+standalone type-application value syntax.
+
 ## Fixed signed admission (#497)
 
 Use canonical admission predicates for literals, locals and display. A literal

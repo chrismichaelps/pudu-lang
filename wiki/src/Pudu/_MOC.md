@@ -5,6 +5,8 @@ tags: [moc, module]
 
 # Pudu Module Map
 
+- [[Core Keyed Operations]] — closed map/set and word-map operation tags (#810).
+
 - [[Derive Record Residualizer]] · [[Derive Residual State]] · [[Derive Reflection Facts]] · [[Compile Time Limits]] — bounded shape residualization.
 
 - [[Derive Field Callbacks]] · [[Derive Residual Context]] · [[Derive Expansion Output]] — build/collect unrolling, shared residual state and `pudu expand`.

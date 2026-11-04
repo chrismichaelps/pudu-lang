@@ -5,6 +5,8 @@ tags: [moc, handoff]
 
 # Handoff Map
 
+- [[Native Word Map Algebra Delivery]] — #810 accelerated sparse-word algebra.
+
 - [[Native Unsigned Integer Delivery]] — UInt and fixed unsigned native admission (#500).
 
 - [[Native Signed Integer Delivery]] — fixed signed widths on the exact native carrier (#497).

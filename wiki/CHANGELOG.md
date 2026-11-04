@@ -5,6 +5,16 @@ tags: [changelog]
 
 # Changelog
 
+## 2026-11-04 — Native sparse word-map algebra (#810)
+
+- [[Compiler Lower Word Map]] admits direct/callable algebra with exact
+  UInt64 maps and source-ordered snapshots. [[Core Keyed Operations]] owns
+  the extracted closed tags without changing existing import contracts.
+- [[Native Persistent Trees]] merges ascending views and builds balanced
+  results linearly; [[Backend Word Map Programs]] checks masks, key identity,
+  persistent inputs, transfers, diagnostics and counted ownership.
+- [[Native Word Map Algebra Delivery]] records validation and remaining scope.
+
 ## 2026-10-27 — Exact native wide values (#502)
 
 - [[Backend Wide Integer Values]] preserves actual signs and selectable helpers.

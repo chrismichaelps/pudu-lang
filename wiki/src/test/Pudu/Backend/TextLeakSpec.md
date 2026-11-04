@@ -7,6 +7,10 @@ aliases: [Backend Text Leak Tests]
 ---
 # Backend Text Leak Tests
 
+Word-map algebra (#810): include successes in comprehensive and focused
+counted groups. Resolved Grill Log: owned keys, input reuse, closures and
+balanced result trees must all return live allocations to zero.
+
 ## Purpose and interface
 
 Export textLeakProperties. Each [[Backend Text Programs]] success program is
