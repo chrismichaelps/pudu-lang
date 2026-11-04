@@ -75,7 +75,7 @@ emitFrameProgram version sources source = do
       boxes = not (null tuples)
       kinds = ownedKinds tuples
       owned = text || boxes
-      base = ["prelude", "process_io", "integer_value", "site", "colored", "cleanup", "fail", "memory_failure"]
+      base = ["prelude", "process_io", "integer_value", "site", "colored", "cleanup", "blame", "fail", "memory_failure"]
         <> ["wide_value" | wide] <> concat [["text", "text_retain"] | text]
       entryNeeds = case frameFunctionResult entry of
         CoreIntegerType _ -> [integerHelper (frameFunctionResult entry) "status"]

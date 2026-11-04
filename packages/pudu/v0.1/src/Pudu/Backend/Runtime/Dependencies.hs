@@ -27,3 +27,4 @@ runtimeDependencies name = integerRuntimeDependencies name <> floatRuntimeDepend
   <> concat [["process_io", "wait_writable"] | name == "error_io"]
   <> ["process_io" | name == "wait_writable"]
   <> ["site" | name == "cleanup"]
+  <> ["site" | name == "blame"]

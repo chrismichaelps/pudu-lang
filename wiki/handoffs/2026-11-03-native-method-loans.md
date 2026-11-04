@@ -1,6 +1,6 @@
 ---
 type: handoff
-status: ACTIVE
+status: DONE
 issue: 790
 aliases: [Native Method Loans Delivery]
 ---

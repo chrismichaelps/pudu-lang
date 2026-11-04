@@ -5,6 +5,10 @@ tags: [changelog]
 
 # Changelog
 
+## 2026-11-03 — Native blame hook part (#791)
+
+- The runtime's blame hook is declared in its own part, required by failure reporting and frames, so a runtime of text helpers alone compiles warning-free under `-Werror`.
+
 ## 2026-11-03 — Native method loans (#790)
 
 - `c.bump(2)` with `self: &mut Self`, `holder[0].add("r")`, `Bump.bump(&mut c, 1)` and methods taking `&mut` arguments build natively: arguments run, then the receiver, and finals are written back receiver first. Generic implementations, inherited defaults and method values follow. See [[Native Mutable Loans]].

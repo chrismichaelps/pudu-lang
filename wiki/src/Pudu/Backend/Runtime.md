@@ -325,3 +325,11 @@ file, line, column and excerpt from the hook's site when there is one, before
 cleanup frees the frame, and code, message and help from its own. Resolved
 Grill Log: runtime helpers keep their static sites; only the report knows
 which frame is running.
+
+## Blame hook part (#791)
+
+`pudu_blame_hook` has its own part, `blame`, after `cleanup`. A runtime
+holding only memory failures (text helpers alone) took `cleanup` without
+`fail`, the hook's only reader, and an unused static broke `-Werror`.
+Resolved Grill Log: the declaration lives with what needs it; no emitted
+program changes behavior.

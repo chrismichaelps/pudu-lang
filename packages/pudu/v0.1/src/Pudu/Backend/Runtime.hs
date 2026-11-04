@@ -64,9 +64,10 @@ runtimeParts =
   , RuntimePart "error_io" errorIoLines
   , RuntimePart "site" siteLines
   , RuntimePart "colored" coloredLines
-  , RuntimePart "cleanup"
-      [ "static void (*pudu_cleanup_hook)(void) = NULL;"
-      , "/* Where a failure in the running frame should point instead of its own site. */"
+  , RuntimePart "cleanup" ["static void (*pudu_cleanup_hook)(void) = NULL;"]
+  -- Apart from cleanup: only a failure reads it, and memory failures do not.
+  , RuntimePart "blame"
+      [ "/* Where a failure in the running frame should point instead of its own site. */"
       , "static const pudu_site *(*pudu_blame_hook)(void) = NULL;" ]
   , RuntimePart "fail" failLines
   , RuntimePart "memory_failure" memoryFailureLines

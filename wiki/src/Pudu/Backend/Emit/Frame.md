@@ -140,3 +140,7 @@ Resolved Grill Log: Emit counted=0 only for builtin intrinsic bodies, otherwise 
 pudu_function gains `blames`, set for method closures; method closures are
 not counted toward call depth, like builtins. Resolved Grill Log: the flag is
 what lets the reporter relocate any failure inside them.
+
+## Blame hook part (#791)
+
+The frame base parts include `blame`, which frame entry and exit assign.

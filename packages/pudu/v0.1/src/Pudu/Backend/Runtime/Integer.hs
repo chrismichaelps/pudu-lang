@@ -22,7 +22,7 @@ integerRuntimeDependencies part = maybe [] id (lookup part dependencies)
   <> integerConversionRuntimeDependencies part
  where
   dependencies =
-    [ ("fail", ["site", "colored", "cleanup", "error_io", "process_io", "wait_writable"])
+    [ ("fail", ["site", "colored", "cleanup", "blame", "error_io", "process_io", "wait_writable"])
     , ("memory_failure", ["cleanup", "error_io", "process_io", "wait_writable"])
     , ("magnitude", [])
     , ("make", [])

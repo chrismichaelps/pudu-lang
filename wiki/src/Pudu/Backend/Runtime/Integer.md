@@ -72,3 +72,7 @@ roots must include fatal-signal preparation without an unused startup helper.
 
 fail and memory_failure list wait_writable beside error_io: callers that close
 over this table alone, like the wide runtime spec, must still reach it. (#636)
+
+## Blame hook part (#791)
+
+`fail` depends on `blame`, the part declaring the hook it reads.
