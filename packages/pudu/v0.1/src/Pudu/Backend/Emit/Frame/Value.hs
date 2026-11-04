@@ -20,7 +20,7 @@ import Pudu.Core.Frame
   , FrameValue (..), FrameValueShape (..), coreScalarOperator )
 import Pudu.Diagnostic.Arithmetic (CheckedOperation (..))
 import Pudu.FloatLiteral (FloatWidth (..))
-import Pudu.IntegerLiteral (IntegerKind)
+import Pudu.IntegerLiteral (IntegerKind (UnsignedKind))
 
 slotNumber :: FrameSlot -> Text
 slotNumber slot = case frameSlotId slot of FrameSlotId identity -> textOfInt identity
@@ -166,6 +166,10 @@ frameValue state value = case frameValueShape value of
           KeyedFromArray -> frameValueType value
           _ -> frameSlotType receiver
         keyed operation = plain (aggregateHelper operation kind <> "(" <> Text.intercalate ", " (target : operands) <> ")") [aggregateNeed operation kind]
+        wordKeyed operation = case (kind, map frameSlotType arguments, frameValueType value) of
+          (CoreMapType _ (CoreIntegerType (UnsignedKind 64)), [other], result)
+            | kind == other && kind == result -> keyed operation
+          _ -> refused "a word-map operation without matching UInt64 map carriers"
     case name of
       KeyedSize -> keyed "size"
       KeyedIsEmpty -> plain ("(pudu_tree_size(" <> target <> "->fields[0].tree) == 0)") ["tree"]
@@ -181,6 +185,10 @@ frameValue state value = case frameValueShape value of
       KeyedIntersect -> keyed "intersect"
       KeyedDifference -> keyed "difference"
       KeyedFromArray -> keyed "make"
+      KeyedWordUnion -> wordKeyed "word_union"
+      KeyedWordIntersection -> wordKeyed "word_intersection"
+      KeyedWordDifference -> wordKeyed "word_difference"
+      KeyedWordSymmetricDifference -> wordKeyed "word_symmetric_difference"
   FrameRangeValue low inclusive high -> do
     lowText <- traverse slotText low
     highText <- traverse slotText high

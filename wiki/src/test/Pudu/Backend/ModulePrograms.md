@@ -7,6 +7,9 @@ aliases: [Backend Module Programs]
 ---
 # Backend Module Programs
 
+Word-map algebra (#810): register successes and refusals from [[Backend Word
+Map Programs]] in the ordinary module corpora. Resolved Grill Log: focused
+groups supplement these complete gates rather than replacing existing cases.
 ## Complete carried frozen data (#808)
 
 Export constantModulePrograms and constantRefusalPrograms alongside the

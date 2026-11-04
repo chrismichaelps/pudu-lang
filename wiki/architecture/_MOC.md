@@ -6,6 +6,8 @@ tags: [moc, architecture]
 
 # Architecture Map
 
+- [[Native Word Map Algebra]] — typed linear sparse-word tree operations.
+
 - [[Native Unsigned Integers]] — full unsigned domains through 64 bits (#500).
 
 - [[Native Signed Integers]] — canonical fixed signed-width admission and exact semantics (#497).

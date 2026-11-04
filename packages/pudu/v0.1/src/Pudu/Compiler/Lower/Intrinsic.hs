@@ -8,6 +8,7 @@ import qualified Data.Text as Text
 import Pudu.Compiler.Lower.Bytes (bytesFromArray)
 import Pudu.Compiler.Lower.Call (outputResult)
 import Pudu.Compiler.Lower.Convert (charFromCodeCore)
+import Pudu.Compiler.Lower.WordMap (wordMapCallable, wordMapMethod)
 import Pudu.Compiler.Lower.Decimal (decimalCallable)
 import Pudu.Compiler.Lower.Keyed (keyedFromArray)
 import Pudu.Compiler.Lower.State (LowerContext (..), LowerState (..), halt, intType, lookupLocal, resolveFunction, startFunction)
@@ -63,6 +64,10 @@ intrinsic state at name solved
         | nativeValueType argument, Just build <- collectionBody at name argument result ->
             register state at name ("$builtin:" <> name <> ":" <> Text.pack (show kind)) kind [argument] result (one build)
       _ -> halt at "a conversion builtin without its represented callable type" state
+  | Just _ <- wordMapMethod name = Just $ case solved of
+      Just kind@(CoreFunctionType arguments result) | Just build <- wordMapCallable name kind ->
+        register state at name ("$builtin:" <> name <> ":" <> Text.pack (show kind)) kind arguments result (\entered -> build entered at)
+      _ -> halt at "a word-map builtin without its represented callable type" state
   | Just (kind@(CoreFunctionType arguments result), build) <- decimalCallable name = Just $
       if solved == Just kind
         then register state at name ("$builtin:" <> name <> ":" <> Text.pack (show kind)) kind arguments result

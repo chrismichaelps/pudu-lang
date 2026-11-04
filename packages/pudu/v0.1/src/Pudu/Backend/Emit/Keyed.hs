@@ -9,6 +9,7 @@ import Pudu.Backend.Emit.Cell
   ( aggregateHelper, aggregateNeed, cType, cellName, isAggregate, memberCompare, memberComparable, memberEqual, memberRender
   , ownedType, released, retained )
 import Pudu.Core (CoreType (..))
+import Pudu.IntegerLiteral (IntegerKind (UnsignedKind))
 
 mapHelpers :: CoreType -> CoreType -> CoreType -> [(Text, ([Text], [Text]))]
 mapHelpers kind key value =
@@ -76,8 +77,15 @@ mapHelpers kind key value =
       , "  free(nodes);"
       , "  return shown;"
       , "}" ]
-  ]
+  ] <> wordHelpers
  where
+  wordHelpers =
+    [ helper operation ["tree_word_algebra", aggregateNeed "ops" kind, aggregateNeed "wrap" kind]
+        [ "static pudu_box *" <> name operation <> "(pudu_box *left, pudu_box *right) {"
+        , "  return " <> name "wrap" <> "(pudu_tree_word_algebra(left->fields[0].tree, right->fields[0].tree, " <> ops <> ", " <> code <> "));"
+        , "}" ]
+    | value == CoreIntegerType (UnsignedKind 64)
+    , (operation, code) <- [("word_union", "0"), ("word_intersection", "1"), ("word_difference", "2"), ("word_symmetric_difference", "3")] ]
   helper operation needs body = (aggregateNeed operation kind, (needs, body))
   name operation = aggregateHelper operation kind
   ops = name "ops" <> "()"

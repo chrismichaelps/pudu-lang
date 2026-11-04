@@ -6,6 +6,7 @@ aliases: [Backend Module Map]
 
 # Backend Module Map
 
+- [[Backend Word Map Programs]] — sparse-word algebra, persistence and ownership (#810).
 - [[Backend Module Programs]] — imported identities and folded collection/range conformance (#808).
 
 - [[Backend Frame Program]] · [[Backend Frame Runtime]] · [[Native Frame Runtime Tests]] — deterministic assembly, heap ownership and iterative calls.

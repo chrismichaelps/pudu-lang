@@ -6,6 +6,14 @@ aliases: [Backend Frame Values]
 ---
 # Backend Frame Values
 
+## Word-map helper admission (#810)
+
+The four word tags require a Map[K, UInt64] receiver, one identical map
+argument and identical map result. Reject mismatches as a located FrameFault
+before C compilation. Select the corresponding typed keyed helper root.
+Resolved Grill Log: no signed narrowing or reinterpretation of another cell
+kind; the type-specific helper is emitted only after exact carrier admission.
+
 ## Purpose and interface
 
 Export frameValue, slotText and cellMember. Translate pure FrameValue operations

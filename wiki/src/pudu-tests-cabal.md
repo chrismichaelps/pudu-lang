@@ -8,6 +8,10 @@ aliases: [Pudu Test Cabal Manifest]
 
 # Pudu Test Cabal Manifest
 
+Register Pudu.Backend.WordMapPrograms (#810). Resolved Grill Log: the existing
+native and allocation property registries execute it; no unregistered corpus
+counts as coverage and no new test dependency is needed.
+
 Register Backend.UnsignedPrograms with existing dependencies. Resolved Grill
 Log: unsigned source matrices execute through the ordinary conformance runner.
 

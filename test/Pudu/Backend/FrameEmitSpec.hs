@@ -14,12 +14,12 @@ import Pudu.Compiler (CompileResult (..), runCompile)
 import Pudu.Compiler.Frame (lowerFrames)
 import Pudu.Compiler.Lower (LowerResult (..), lowerModule)
 import Pudu.Compiler.Lower.Types (nativeTypes)
-import Pudu.Core (CoreType (..))
+import Pudu.Core (CoreType (..), CoreKeyedMethodName (KeyedWordUnion))
 import Pudu.Core.Frame
   ( FrameFault (..), FrameSlot (..), FrameSlotId (..)
   , FrameUnaryOperator (..), FrameValue (..), FrameValueShape (..) )
 import Pudu.Diagnostic (hasErrors)
-import Pudu.IntegerLiteral (IntegerKind (SignedKind))
+import Pudu.IntegerLiteral (IntegerKind (SignedKind, UnsignedKind))
 import Pudu.Source (SourceName (..), emptySpan, newSource)
 import System.Directory (findExecutable)
 import System.Exit (ExitCode (..))
@@ -31,6 +31,7 @@ import Test.QuickCheck (Property, conjoin, counterexample, (===))
 frameEmitProperties :: [(String, IO Property)]
 frameEmitProperties =
   [ ("frame body emission rejects invalid slot representations", testSlots)
+  , ("native word-map frame helpers reject mismatched carriers", testWordMapSlots)
   , ("frame body emission suspends nested calls without C recursion", testCalls)
   , ("frame body emission compiles native corpora as strict C11", testBodies)
   ]
@@ -53,6 +54,19 @@ testSlots = do
             Left failure -> frameFaultSpan failure === Just at
             Right _ -> counterexample "unsupported descriptor was emitted" (False === True)
     ]
+
+testWordMapSlots :: IO Property
+testWordMapSlots = do
+  source <- newSource (SourceName "wordmaps.pudu") "maps"
+  let at = emptySpan source
+      word = CoreMapType CoreTextType (CoreIntegerType (UnsignedKind 64))
+      signed = CoreMapType CoreTextType (CoreIntegerType (SignedKind 64))
+      slot n kind = FrameSlot (FrameSlotId n) "map" kind at
+  pure $ conjoin
+    [ case frameValue (emptyEmitState [source]) (FrameValue at result (FrameKeyedMethod KeyedWordUnion (slot 0 left) [slot 1 right])) of
+        Left failure -> frameFaultSpan failure === Just at
+        Right _ -> counterexample "a word helper reinterpreted another carrier" (False === True)
+    | (left, right, result) <- [(signed, signed, signed), (word, signed, word), (word, word, CoreBoolType)] ]
 
 testBodies :: IO Property
 testBodies = do

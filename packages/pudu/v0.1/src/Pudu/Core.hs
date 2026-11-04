@@ -44,6 +44,7 @@ import Data.Word (Word64)
 import Pudu.FloatLiteral (FloatWidth, floatWidthType)
 import Pudu.IntegerLiteral (IntegerKind, integerKindName)
 import Pudu.Source (Span)
+import Pudu.Core.Keyed (CoreKeyedMethodName (..))
 
 {-| @Core.Module — one compiled program: its name, the entry function the
     process enters, and the functions reachable from it. -}
@@ -352,26 +353,6 @@ data CoreBytesMethodName
   | BytesToArrayOf
   | BytesIsText
   | BytesAsText
-  deriving stock (Eq, Show)
-
-{-| What the runtime does for maps and sets. `KeyedLookup` reads a value
-    `KeyedContains` has already found; `KeyedFromArray`'s receiver is the array
-    of pairs or members it builds from; a set's `toArray` is `KeyedKeys`. -}
-data CoreKeyedMethodName
-  = KeyedSize
-  | KeyedIsEmpty
-  | KeyedContains
-  | KeyedLookup
-  | KeyedInsert
-  | KeyedRemove
-  | KeyedKeys
-  | KeyedValues
-  | KeyedEntries
-  | KeyedMerge
-  | KeyedUnion
-  | KeyedIntersect
-  | KeyedDifference
-  | KeyedFromArray
   deriving stock (Eq, Show)
 
 {-| @Core.BinaryOperator — the operator vocabulary, already resolved from

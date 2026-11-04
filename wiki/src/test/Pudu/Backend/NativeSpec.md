@@ -9,6 +9,10 @@ aliases: [Backend Native Tests, Native Conformance Tests]
 
 # Backend Native Tests
 
+Word-map algebra (#810): register focused explicit-output and refusal groups
+over [[Backend Word Map Programs]]. Resolved Grill Log: reuse byte-exact
+whole-program conformance, with no interpreter fallback or relaxed diagnostics.
+
 Add UInt and fixed unsigned entry statuses, including the UInt64 maximum.
 Resolved Grill Log: preserve IntValue reporting without signed narrowing; use
 the existing differential status/output harness.

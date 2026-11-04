@@ -7,6 +7,11 @@ aliases: [Pudu Core IR Module]
 ---
 # Pudu Core
 
+CoreKeyedMethodName is owned by [[Core Keyed Operations]] and reexported here
+(#810). Resolved Grill Log: domain vocabulary extraction preserves existing
+imports and constructors while keeping this module below 500 lines; word-map
+tags require exact UInt64 payloads and retain the existing frame/cell ABI.
+
 The typed, source-located data contract for native lowering and emission.
 This partition registers the model only; it adds no native command or execution
 path. It projects the existing completion branch's declarations unchanged.

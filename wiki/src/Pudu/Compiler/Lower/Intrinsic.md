@@ -7,6 +7,11 @@ aliases: [Compiler Lower Intrinsic]
 ---
 # Compiler Lower Intrinsic
 
+Word-map algebra (#810): register exact solved binary map signatures through
+wordMapCallable with ordinary per-tag uncounted builtin metadata. Resolved
+Grill Log: consume the checked callable type; no specialization is guessed
+from written type syntax. Existing name resolution retains nearer bindings.
+
 Export lowerIntrinsicValue :: LowerState -> Span -> Text -> Maybe Lowered.
 Recognize standard-stream and display/show prelude values after the caller
 resolves nearer declarations. Validate exact solved callable types, then

@@ -6,6 +6,8 @@ aliases: [Program Compiler Module Map]
 
 # Program Compiler Module Map
 
+- [[Compiler Lower Word Map]] — checked direct/value sparse-word algebra (#810).
+
 - [[Compiler Frame Lowering]] · [[Compiler Frame State]] · [[Compiler Frame Body]] — structured Core to explicit continuations for #499.
 - [[Core Frame IR]] · [[Native Frame Lowering Tests]] — typed flat blocks and ordering/transfer evidence.
 

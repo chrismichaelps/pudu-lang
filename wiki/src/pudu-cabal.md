@@ -8,6 +8,10 @@ aliases: [Pudu Cabal Manifest]
 
 # Pudu Cabal Manifest
 
+Register Pudu.Core.Keyed and Pudu.Compiler.Lower.WordMap (#810), with existing
+dependencies. Resolved Grill Log: domain tags remain backend-independent and
+lowering stays compiler-owned; no new runtime linkage or package dependency.
+
 Register Diagnostic.Host, Cli.Memory, Backend.Runtime.Frame and Backend.Emit.Frame
 using existing dependencies. Resolved Grill Log (#499): the CLI and generated
 runtime share host-failure text; frame generation stays independent of compiler

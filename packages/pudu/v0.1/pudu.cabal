@@ -175,6 +175,7 @@ library
     Pudu.Compiler.Lower.Decimal
     Pudu.Compiler.Lower.Default
     Pudu.Compiler.Lower.Keyed
+    Pudu.Compiler.Lower.WordMap
     Pudu.Compiler.Lower.Loan
     Pudu.Compiler.Lower.Range
     Pudu.Compiler.Lower.Bytes
@@ -193,6 +194,7 @@ library
     Pudu.Compiler.Program
     Pudu.Compiler.Product
     Pudu.Core
+    Pudu.Core.Keyed
     Pudu.Core.Frame
     Pudu.Diagnostic
     Pudu.Diagnostic.Host
