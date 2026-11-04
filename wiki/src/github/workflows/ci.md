@@ -105,3 +105,24 @@ from hosted CI. Resolved Grill Log: their observable dispatch, pattern and cache
 remain enforced after integration; preserve every existing workflow step. See [[Record Pattern Owner Delivery]].
 
 [[Ark Water Gate]] runs with the other engine checks against the optimized compiler. Resolved Grill Log: both evaluator/cache paths and analytic wave errors remain integration requirements.
+
+## Parallel jobs (#815)
+
+One `build` job restores the cabal store (keyed by the cabal files) and the
+build tree (keyed by commit, restored from the branch's or dev's latest),
+compiles with `-Werror`, and uploads the compiler and the test binary as one
+archive so their execute bits survive. Every other job downloads it:
+
+| Job | Runs |
+| --- | --- |
+| suite | six shards of the test binary, `PUDU_TEST_SHARD=k/6` |
+| library | layers, API removals, owners, formatting, checking, documentation, Linguist, codes, release and archive policy |
+| Ark | the Ark gates, with the toolchain for their `cabal sdist` |
+| website | the website, package discovery, playground, registry and install gates |
+| runtime | language server, watch, signals, bundles, runtime packs, foreign, service, scaffold, coverage, residency, concurrency, kernels, lanes, documentation site and derive index |
+
+Resolved Grill Log: every step that ran before runs once, unchanged except
+that `cabal run pudu` is the built compiler; a run takes as long as its
+longest job instead of the sum of all of them. Recompilation in a restored
+tree is decided by source hashes, so the cache never answers for a changed
+file.
