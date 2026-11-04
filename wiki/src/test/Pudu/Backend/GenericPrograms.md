@@ -23,3 +23,11 @@ the successes' allocations.
 ## Referenced by
 
 [[Native Generics]] · [[Backend Module Programs]] · [[Backend Text Leak Tests]]
+
+## Members through a type parameter (#819)
+
+One success program reaches static members, a default and a `Self`-returning
+member through `T` for a record, a generic owner `Box[T]` (whose own `made`
+recurses through `build`), built-in `Int` and nested generic calls. One refusal
+program divides by zero inside a member reached through `T`, which must fail at
+the member's own source, as the interpreter does.
