@@ -38,8 +38,15 @@ Author audit: introduced vault links resolve and every changed source/gate
 has a matching resolved mirror. Independent implementation/wiki-parity
 review remains required before merge and is not replaced by this self-audit.
 
-Exact next action: run the clean optimized full repository gates, then open
-the bounded PR to dev and continue the remaining emission ledger.
+The clean GHC 9.14.1 optimized warnings-as-errors build, full suite and all
+48 repository gates pass with exit 0. Formatting, diagnostics, memory bounds,
+package flows, language services and documentation checks all passed without
+weakening assertions. PR #809 targets dev and remains draft. Linux output
+mask/deadline failures observed on the native consolidation line are tracked
+by #811; final CI and independent review remain promotion obligations.
+
+Exact next action: obtain independent implementation/wiki-parity review on
+PR #809 before merging; emission implementation continues in issue #810.
 
 ## Referenced by
 
