@@ -33,9 +33,8 @@ operation-specific wording does not change that identity.
 
 `E7010` means a Decimal quotient has no exact base-ten expansion, in the
 interpreter and native frame emitter. Both retain the same message and help.
-Resolved Grill Log: share this condition explicitly; do not assign a
-backend-only code or exclude a reporting module. This integration correction
-is also tracked by PR #807.
+Resolved Grill Log (#806): register this existing shared condition instead
+of assigning a backend-only code or suppressing either reporting module.
 
 ## Grill Log
 

@@ -2,7 +2,7 @@
     `Str.toDecimal`. Arguments run in order into held locals. A primitive
     answering an Option is a test and the conversion the test allows, with
     the Option the checker gave the call, as `callDecimal` answers. -}
-module Pudu.Compiler.Lower.Decimal (decimalLiteral, lowerDecimalPrimitive, lowerTextToDecimal) where
+module Pudu.Compiler.Lower.Decimal (decimalLiteral, lowerDecimalPrimitive, lowerTextToDecimal, decimalCallable) where
 
 import Data.Text (Text)
 import Pudu.Compiler.Lower.Control (expressionIsPrintValued)
@@ -40,7 +40,19 @@ lowerDecimalPrimitive lower state at name arguments = do
 
 {-| `text.toDecimal()`, its receiver already lowered. -}
 lowerTextToDecimal :: LowerState -> Span -> CoreExpression -> Lowered
-lowerTextToDecimal state at receiver = answered state at (Optional DecimalTextParses DecimalParse CoreDecimalType) [receiver]
+lowerTextToDecimal state at receiver =
+  answered (typeForSpan (contextTypes (lowerContext state)) at) state at (Optional DecimalTextParses DecimalParse CoreDecimalType) [receiver]
+
+{-| A primitive value has the same body as a direct call, but its reference
+    span names a function type, not the result's Option layout. -}
+decimalCallable :: Text -> Maybe (CoreType, LowerState -> Span -> [CoreExpression] -> Lowered)
+decimalCallable name = do
+  (parameters, answer) <- lookup name primitives
+  let result = case answer of
+        Plain _ kind -> kind
+        Optional _ _ kind -> CoreSumType "Option" [kind]
+        Divided -> CoreSumType "Option" [CoreDecimalType]
+  pure (CoreFunctionType parameters result, \state at -> answered (Just result) state at answer)
 
 primitives :: [(Text, ([CoreType], Answer))]
 primitives =
@@ -58,7 +70,7 @@ heldCall lower state at name parameters answer arguments
   | length arguments /= length parameters = halt at ("a call to " <> name <> " with this many arguments") state
   | otherwise = go state [] (zip parameters arguments)
  where
-  go current done [] = answered current at answer (reverse done)
+  go current done [] = answered (typeForSpan (contextTypes (lowerContext current)) at) current at answer (reverse done)
   go current done ((expected, argument) : rest) = case lower current argument of
     (next, Nothing) -> refused next
     (next, Just (core, kind))
@@ -69,8 +81,8 @@ heldCall lower state at name parameters answer arguments
   stopped cores = CoreExpression at CoreNeverType (CoreBlockValue (CoreBlock
     [CoreStatement (coreExpressionSpan core) (CoreEvaluate core) | core <- cores] Nothing))
 
-answered :: LowerState -> Span -> Answer -> [CoreExpression] -> Lowered
-answered state at answer cores = case answer of
+answered :: Maybe CoreType -> LowerState -> Span -> Answer -> [CoreExpression] -> Lowered
+answered resultType state at answer cores = case answer of
   Plain name kind -> finish held kind (method name kind given)
   Optional test conversion kind -> option $ \optionType ->
     CoreIfValue (method test CoreBoolType given)
@@ -90,6 +102,6 @@ answered state at answer cores = case answer of
   some optionType value = expression optionType (CoreConstruct "Some" [("0", value)])
   none optionType = expression optionType (CoreConstruct "None" [])
   finish current kind value = (current, Just (expression kind (CoreBlockValue (CoreBlock declarations (Just value))), kind))
-  option build = case typeForSpan (contextTypes (lowerContext state)) at of
+  option build = case resultType of
     Just optionType@(CoreSumType "Option" [_]) -> finish held optionType (expression optionType (build optionType))
     _ -> halt at "an Option result without a native form" state

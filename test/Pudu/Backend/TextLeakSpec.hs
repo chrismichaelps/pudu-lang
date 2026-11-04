@@ -57,6 +57,7 @@ textLeakProperties =
   , ("native expression bodies release every allocation", testLeaksFor expressionBodySuccessPrograms)
   , ("native Bytes programs release every allocation", testLeaksFor bytesSuccessPrograms)
   , ("native folded constants release every allocation", testLeaksFor constantPrograms)
+  , ("native Decimal programs release every allocation", testLeaksFor decimalLeakPrograms)
   ]
 
 testLeaks :: IO Property
