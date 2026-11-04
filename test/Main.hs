@@ -29,6 +29,7 @@ import Pudu.Lsp.ImplMembersSpec (implMemberProperties)
 import Pudu.Lsp.MethodDefinitionSpec (methodDefinitionProperties)
 import Pudu.Diagnostic.RenderSpec (renderProperties)
 import Pudu.Cache.PersistSpec (persistProperties)
+import Pudu.Diagnostic.NativeSpec (nativeDiagnosticProperties)
 import Pudu.CoreSpec (coreProperties)
 import Pudu.Backend.LowerTypesSpec (lowerTypesProperties)
 import Pudu.Backend.FrameSpec (frameProperties)
@@ -142,7 +143,7 @@ runTests = do
   decimalOutcomes <- traverse (uncurry check) decimalProperties
   coreOutcomes <- traverse (uncurry check) coreProperties
   versionOutcomes <- traverse (uncurry check) versionProperties
-  diagnosticOutcomes <- traverse (uncurry check) diagnosticProperties
+  diagnosticOutcomes <- traverse (uncurry check) (diagnosticProperties <> nativeDiagnosticProperties)
   formatOutcomes <- traverse (uncurry check) formatProperties
   jsonOutcomes <- traverse (uncurry check) jsonProperties
   lspOutcomes <- traverse (uncurry check) (serverProperties <> catalogProperties <> implMemberProperties <> diagnosticsProperties <> methodDefinitionProperties <> deriveToolingProperties)

@@ -186,6 +186,9 @@ Register [[Database Challenge Spec]] explicitly with existing dependencies. Reso
 Register [[Native Word128 Tests]] explicitly without new dependencies. Resolved Grill Log:
 the compiled kernel corpus runs in the complete suite and contributes to its
 aggregate failure status. The full release gate remains unchanged.
+## Native diagnostic contracts (#486)
+
+Resolved Grill Log: Register Pudu.Diagnostic.NativeSpec using existing dependencies.
 ## Native Core contracts (#486)
 
 Resolved Grill Log: Register Pudu.CoreSpec using the existing test dependencies.

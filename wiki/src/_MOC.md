@@ -239,6 +239,7 @@ tags: [moc, module]
 - [[Database Challenge Spec]] · [[Database Challenge Fixture]] · [[Database Challenge Transport]]
 
 - [[Backend Word128 Kernel]] · [[Native Word128 Tests]] — compiled wide arithmetic.
+- [[Native Diagnostic Contracts]] · [[Native Diagnostic Contract Tests]] — E6001–E6006 value contracts (#486).
 - [[Pudu Core IR Module]] · [[Native Core Contract Tests]] — native IR data contracts (#486).
 ## Native function delivery (#488)
 

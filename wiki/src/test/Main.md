@@ -112,6 +112,9 @@ Register [[Database Challenge Spec]] explicitly with existing dependencies. Reso
 Register [[Native Word128 Tests]] explicitly without new dependencies. Resolved Grill Log:
 the compiled kernel corpus runs in the complete suite and contributes to its
 aggregate failure status. The full release gate remains unchanged.
+## Native diagnostic contracts (#486)
+
+Resolved Grill Log: Include nativeDiagnosticProperties in ordinary diagnostic outcomes and aggregate failures; preserve the full gate and optional focus filter.
 ## Native Core contracts (#486)
 
 Resolved Grill Log: Execute coreProperties and aggregate their results in the ordinary failure status, preserving the existing full runner and optional name filter.

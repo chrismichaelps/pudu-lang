@@ -9,6 +9,12 @@ tags: [changelog]
 
 - [[Backend Word128 Kernel]] supplies portable raw arithmetic and selectable dependencies.
 - [[Native Word128 Tests]] executes independent Integer answers without admitting new source types.
+## 2026-10-27 — Native diagnostic contract partition (#486)
+
+Register the existing native failure vocabulary independently of runtime and
+CLI integration. Code, span, help and caller details are covered by value and
+rendering checks. Native execution and the remaining partitions stay open.
+[[Native Diagnostic Contracts Delivery]].
 ## 2026-10-27 — Native Core contracts review partition (#486)
 
 Register the existing native Core data model independently of the accumulated
