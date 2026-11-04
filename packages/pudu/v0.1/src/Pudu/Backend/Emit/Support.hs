@@ -1,7 +1,7 @@
 {-| @Pudu.Backend.Emit.Support — integer descriptors, literals and helper names
     shared by the frame emitter. -}
 module Pudu.Backend.Emit.Support
-  ( isWideInteger, isBigInteger, integerHelper, zeroValue, integerKindText, integerLiteralText
+  ( isWideInteger, isBigInteger, integerHelper, zeroValue, integerKindText, integerLiteralText, limbsOf
   ) where
 
 import Data.Text (Text)
@@ -26,6 +26,7 @@ zeroValue (CoreIntegerType BigIntKind) = "NULL"
 zeroValue (CoreIntegerType kind) = integerLiteralText kind 0
 zeroValue CoreTextType = "(pudu_text){NULL, 0, NULL}"
 zeroValue (CoreTupleType _) = "NULL"
+zeroValue CoreDecimalType = "NULL"
 zeroValue _ = "0"
 
 integerKindText :: IntegerKind -> Maybe Text
@@ -61,6 +62,7 @@ integerLiteralText kind number
 textOfInteger :: Integer -> Text
 textOfInteger = Text.pack . show
 
+{-| A magnitude's 32-bit limbs, least significant first. -}
 limbsOf :: Integer -> [Integer]
 limbsOf 0 = []
 limbsOf value = value `mod` (2 ^ (32 :: Int)) : limbsOf (value `div` (2 ^ (32 :: Int)))

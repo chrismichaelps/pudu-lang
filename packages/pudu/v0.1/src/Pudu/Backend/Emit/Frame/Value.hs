@@ -8,11 +8,11 @@ import qualified Data.Text as Text
 import Numeric (showHex)
 import qualified Data.Map.Strict as Map
 import Pudu.Backend.Emit.State
-  ( EmitState (..), cString, cStringBytes, divideByZeroSite, failureSite, operatorFailureSite, overflowSite, shiftSites, textOfInt )
+  ( EmitState (..), cString, cStringBytes, divideByZeroSite, failureSite, helpedFailureSite, operatorFailureSite, overflowSite, shiftSites, textOfInt )
 import Pudu.Backend.Emit.Aggregate (aggregateHelper, aggregateNeed, cellName, isAggregate, memberComparable, retained)
 import Pudu.Diagnostic.Evaluation (cannotApplyBinaryMessage)
-import Pudu.Backend.Emit.Support (integerHelper, integerKindText, integerLiteralText, isBigInteger, isWideInteger, zeroValue)
-import Pudu.Core (CoreArrayMethodName (..), CoreBinaryOperator (..), CoreKeyedMethodName (..), CoreTextMethodName (..), CoreType (..))
+import Pudu.Backend.Emit.Support (integerHelper, integerKindText, integerLiteralText, isBigInteger, isWideInteger, limbsOf, zeroValue)
+import Pudu.Core (CoreArrayMethodName (..), CoreBinaryOperator (..), CoreDecimalMethodName (..), CoreKeyedMethodName (..), CoreTextMethodName (..), CoreType (..))
 import Pudu.Backend.Emit.Range (rangeMethodCall)
 import Pudu.Backend.Emit.Bytes (bytesFunction)
 import Pudu.Core.Frame
@@ -37,6 +37,14 @@ slotText slot = case (frameSlotId slot, cellMember (frameSlotType slot)) of
 
 frameValue :: EmitState -> FrameValue -> Either FrameFault (EmitState, Text, Set Text)
 frameValue state value = case frameValueShape value of
+  FrameDecimalLiteral coefficient scale ->
+    let limbs = limbsOf (abs coefficient)
+        listed = if null limbs then "NULL" else "(const uint32_t[]){" <> Text.intercalate ", " ["UINT32_C(" <> Text.pack (show limb) <> ")" | limb <- limbs] <> "}"
+     in plain ("pudu_dec_literal(" <> (if coefficient < 0 then "1" else "0") <> ", " <> textOfInt (length limbs) <> ", " <> listed <> ", " <> textOfInt scale <> ")") ["dec_literal"]
+  FrameDecimalMethod name arguments -> do
+    operands <- traverse slotText arguments
+    let (function, part) = decimalFunction name
+    plain (function <> "(" <> Text.intercalate ", " operands <> ")") [part]
   FrameIntegerLiteral kind number
     | isBigInteger kind -> plain (integerLiteralText kind number) ["big_from_limbs"]
     | otherwise -> done state (integerLiteralText kind number) []
@@ -278,6 +286,30 @@ frameValue state value = case frameValueShape value of
           CoreGreaterOrEqual -> compared rhs lhs "<="
           _ -> refused "an operator aggregate frames do not carry"
   FrameUnary FrameNegate operand
+    | CoreDecimalType <- frameSlotType operand -> slotText operand >>= \text -> plain ("pudu_dec_neg(" <> text <> ")") ["dec_neg"]
+  FrameBinary scalar left right
+    | CoreDecimalType <- frameSlotType left -> do
+        lhs <- slotText left
+        rhs <- slotText right
+        let arithmetic helper = plain ("pudu_" <> helper <> "(" <> lhs <> ", " <> rhs <> ")") [helper]
+            comparison symbol = plain ("(pudu_dec_compare(" <> lhs <> ", " <> rhs <> ") " <> symbol <> " 0)") ["dec_compare"]
+        case coreScalarOperator scalar of
+          CoreAdd -> arithmetic "dec_add"
+          CoreSubtract -> arithmetic "dec_sub"
+          CoreMultiply -> arithmetic "dec_mul"
+          CoreDivide ->
+            let (afterZero, zero) = failureSite state at "E7004" "decimal division by zero"
+                (after, endless) = helpedFailureSite afterZero at "E7010" "this decimal quotient has no exact base-ten expansion"
+                  "use Decimal.divide(left, right, digits, mode) to say how many fractional digits to keep and how to round the last one"
+             in Right (after, "pudu_dec_divide(" <> lhs <> ", " <> rhs <> ", " <> site zero <> ", " <> site endless <> ")", Set.fromList ["dec_divide", "site", "colored", "fail"])
+          CoreEqual -> comparison "=="
+          CoreNotEqual -> comparison "!="
+          CoreLess -> comparison "<"
+          CoreLessOrEqual -> comparison "<="
+          CoreGreater -> comparison ">"
+          CoreGreaterOrEqual -> comparison ">="
+          _ -> refused "an operator decimal frames do not carry"
+  FrameUnary FrameNegate operand
     | CoreFloatType _ <- frameSlotType operand -> do
         text <- slotText operand
         floating ("pudu_float_neg(" <> text <> ")") "float_neg"
@@ -388,6 +420,7 @@ frameValue state value = case frameValueShape value of
           | isBigInteger kind -> plain ("pudu_text_display_big(" <> text <> ")") ["text_display_big"]
           | otherwise -> plain ("pudu_text_display_int(" <> text <> ")") ["text_display_int"]
         CoreFloatType _ -> plain ("pudu_text_display_float(" <> text <> ")") ["text_display_float"]
+        CoreDecimalType -> plain ("pudu_text_display_dec(" <> text <> ")") ["text_display_dec"]
         CoreBoolType -> plain ("(" <> text <> " ? pudu_text_literal(\"true\", 4) : pudu_text_literal(\"false\", 5))") ["text_literal"]
         CoreUnitType -> plain "pudu_text_literal(\"()\", 2)" ["text_literal"]
         CoreTextType -> plain ("pudu_text_retain(" <> text <> ")") ["text_retain"]
@@ -406,3 +439,18 @@ family kind
   | isBigInteger kind = Big
   | isWideInteger kind = Wide
   | otherwise = Narrow
+
+{-| The runtime function for a Decimal primitive, and its part. -}
+decimalFunction :: CoreDecimalMethodName -> (Text, Text)
+decimalFunction name = case name of
+  DecimalParses -> ("pudu_dec_parses", "dec_parses")
+  DecimalParse -> ("pudu_dec_parse_text", "dec_parse_text")
+  DecimalTextParses -> ("pudu_dec_text_parses", "dec_text_parses")
+  DecimalFromInt -> ("pudu_dec_from_int", "dec_from_int")
+  DecimalScaleOf -> ("pudu_dec_scale", "dec_scale")
+  DecimalNamesInt -> ("pudu_dec_names_int", "dec_names_int")
+  DecimalToInt -> ("pudu_dec_to_int", "dec_to_int")
+  DecimalToFloat -> ("pudu_dec_to_float", "dec_to_float")
+  DecimalDivideWith -> ("pudu_dec_divide_to", "dec_divide_to")
+  DecimalRoundTo -> ("pudu_dec_round_to", "dec_round_to")
+  DecimalIsZero -> ("pudu_dec_is_zero", "dec_is_zero")

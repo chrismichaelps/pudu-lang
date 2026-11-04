@@ -34,7 +34,7 @@ import Pudu.Eval.Value
   , intOf
   )
 import Pudu.FloatLiteral (FloatWidth (Float64Width))
-import Pudu.IntegerLiteral (IntegerKind (UnsignedKind), integerKindFits, integerKindOf)
+import Pudu.IntegerLiteral (IntegerKind (PlatformSigned, UnsignedKind), integerKindFits, integerKindOf)
 import Pudu.FloatKernel (FloatKernel, KernelShape (..), floatKernelName, floatKernelShape)
 import Pudu.Runtime.FloatKernel (applyFloatBinary, applyFloatTernary, applyFloatUnary)
 import Pudu.Source (Span)
@@ -93,9 +93,10 @@ callDecimal spanValue builtin values = case (builtin, values) of
     pure (DecimalValue (decimalFromInteger number))
   (DecimalScaleBuiltin, [DecimalValue number]) ->
     pure (intOf (toInteger (decimalScaleOf number)))
+  -- The answer is an Option[Int]: a whole number Int cannot hold is None.
   (DecimalToIntBuiltin, [DecimalValue number]) -> pure $ case decimalToInteger number of
-    Just whole -> VariantValue "Some" [intOf whole]
-    Nothing -> VariantValue "None" []
+    Just whole | integerKindFits PlatformSigned whole -> VariantValue "Some" [intOf whole]
+    _ -> VariantValue "None" []
   (DecimalToFloatBuiltin, [DecimalValue number]) ->
     pure (FloatValue Float64Width (decimalToDouble number))
   (DecimalDivideBuiltin, [DecimalValue left, DecimalValue right, IntValue _ digits, IntValue _ mode]) ->

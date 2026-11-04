@@ -232,7 +232,7 @@ testEntryOnly = do
       , "  return 0"
       , "}"
       , ""
-      , "fn other(value: Decimal) -> Decimal {"
+      , "fn other(value: Buckets[Int]) -> Buckets[Int] {"
       , "  return value"
       , "}"
       ]
@@ -252,7 +252,7 @@ testReachableFunctions = do
   compiled <- compileAndLower $ Text.unlines
     [ "module Reachable"
     , "fn second(flag: Bool) -> Bool { return !flag }"
-    , "fn unused(value: Decimal) -> Decimal { return value }"
+    , "fn unused(value: Buckets[Int]) -> Buckets[Int] { return value }"
     , "fn main() -> Int { return first(9, second(false)) }"
     , "fn first(value: Int, flag: Bool) -> Int {"
     , "  if second(flag) { return 0 }"
@@ -275,20 +275,20 @@ testReachableFunctions = do
     construct", not as a hand-counted column. -}
 refusalCases :: [(String, Text, Text)]
 refusalCases =
-  [ ("Decimal parameter", helperProgram "fn helper(value: Decimal) -> Int { return 1 }" "helper(1.5d)", "Decimal")
+  [ ("Buckets parameter", helperProgram "fn helper(value: Buckets[Int]) -> Int { return 1 }" "helper(bucketsOf())", "Buckets[Int]")
   , ("call to entry", statementProgram "main()", "main()\n")
   , ("environment", bindingProgram "var pairs = environment()", "environment()")
-  , ("decimal values", bindingProgram "var ratio = 1.5d", "1.5d")
+  , ("buckets values", bindingProgram "var held: Buckets[Int] = bucketsOf()", "bucketsOf()")
   , ("readLine", bindingProgram "var line = readLine()", "readLine()")
   , ("temporary path", bindingProgram "var path = temporaryPath()", "temporaryPath()")
   , ("a generic call at a type without a native form", Text.unlines
       [ "module Refuse"
       , "fn keep[T](value: T) -> Int { 1 }"
       , "fn main() -> Int {"
-      , "  let kept = keep(1.5d)"
+      , "  let kept = keep(bucketsOf())"
       , "  return kept"
       , "}"
-      ], "keep(1.5d)")
+      ], "keep(bucketsOf())")
   , ("a module without main", Text.unlines
       [ "module Refuse"
       , ""

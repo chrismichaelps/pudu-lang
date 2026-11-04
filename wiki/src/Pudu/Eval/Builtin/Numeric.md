@@ -59,3 +59,9 @@ NaN, infinities and values outside the signed 64-bit range. Results are Float64.
 outside UInt64 or a non-float argument aborts with E7012, reachable only by an unchecked call.
 Grill Log — **Q:** keep the input width? **A:** No; every kernel is typed Float64 to Float64.
 
+## Whole numbers Int can hold (#803)
+
+`decimalToInt` answers `Some` only for a whole number `Int` can hold, and
+`None` otherwise, as its `Option[Int]` type promises; the same change is on
+dev through #803. Resolved Grill Log: native code cannot hold a larger
+`Int`, so both evaluators and native agree only with the check.

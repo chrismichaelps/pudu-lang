@@ -5,6 +5,11 @@ tags: [changelog]
 
 # Changelog
 
+## 2026-11-04 — Native Decimal (#802)
+
+- Programs holding Decimal build natively: exact arithmetic and comparison across scales, division that is exact or fails with the interpreter's E7004 and E7010, the seven rounding modes, parsing, conversion to Float64 and Int, and every `Std.Decimal` primitive. See [[Native Decimal]].
+- `Decimal.toInt` answers None for a whole number Int cannot hold (#803).
+
 ## 2026-11-04 — Native BigInt (#800)
 
 - Programs holding BigInt build natively: exact arithmetic past every fixed width, truncating `/` and `%`, two's-complement bit operations, unbounded shifts, decimal rendering, conversions to and from every integer kind, and BigInt inside records, sums, collections and closures, with the interpreter's failures and exit statuses. See [[Native BigInt]].

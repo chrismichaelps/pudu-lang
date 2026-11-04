@@ -32,8 +32,8 @@ lowerTypesProperties =
 
 testReferenceFacts :: IO Property
 testReferenceFacts = conjoin <$> traverse check
-  [ ( "fn change(value: &mut Decimal) -> () { *value = *value }\nfn main() -> Int { var n = 0\n let held = change\n n }", False )
-  , ( "fn main() -> Int { let ratio = 1.5d\n let loan = &ratio\n 0 }", False )
+  [ ( "fn change(value: &mut Buckets[Int]) -> () { *value = *value }\nfn main() -> Int { var n = 0\n let held = change\n n }", False )
+  , ( "fn main() -> Int { let held: Buckets[Int] = bucketsOf()\n let loan = &held\n 0 }", False )
   , ( "fn main() -> Int { let number = 1\n let loan = &number\n *loan }", True )
   ]
  where
@@ -54,7 +54,7 @@ testReferenceFacts = conjoin <$> traverse check
 
 testConstantFacts :: IO Property
 testConstantFacts = do
-  results <- traverse check [("7", True), ("1.5d", False), ("[1, 2]", False), ("fn() => 1", False)]
+  results <- traverse check [("7", True), ("1.5d", True), ("[1, 2]", False), ("fn() => 1", False)]
   floating <- traverse checkFloat [("0.1f32", Just 0x3fb99999a0000000), ("-0.0", Just 0x8000000000000000), ("0.0 / 0.0", Nothing)]
   broken <- newSource (SourceName "Main.pudu") "module Main\nconst BAD = 1 / 0\nfn main() -> Int { 0 }\n" >>= runCompile
   pure $ conjoin (counterexample "constant failure remains a compile diagnostic"
@@ -104,7 +104,7 @@ testCanonical = conjoin
   [ formedCoreType integerType === Just (CoreIntegerType PlatformSigned)
   , formedCoreType (ReferenceTypeValue False integerType) === Just (CoreIntegerType PlatformSigned)
   , formedCoreType (ReferenceTypeValue True integerType) === Nothing
-  , formedCoreType (ReferenceTypeValue False (NominalType "Decimal" [])) === Nothing
+  , formedCoreType (ReferenceTypeValue False (NominalType "Buckets" [NominalType "Int" []])) === Nothing
   , formedCoreType boolType === Just CoreBoolType
   , formedCoreType stringType === Just CoreTextType
   , formedCoreType UnitTypeValue === Just CoreUnitType

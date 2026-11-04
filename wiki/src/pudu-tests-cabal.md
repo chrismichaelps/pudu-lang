@@ -375,3 +375,7 @@ Resolved Grill Log: declaration identity is owner-scoped; ambiguity belongs at a
 ## BigInt (#800)
 
 Register [[Backend BigInt Programs]]. Resolved Grill Log: no new dependency.
+
+## Decimal (#802)
+
+Register [[Backend Decimal Programs]]. Resolved Grill Log: no new dependency.

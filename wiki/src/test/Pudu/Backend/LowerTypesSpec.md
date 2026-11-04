@@ -82,3 +82,7 @@ function as a value instead, which still refuses with E6001 at a span.
 
 A loaned function held as a value now lowers, so the case lends a Decimal,
 which still has no native form.
+
+## Decimal (#802)
+
+A folded Decimal constant now lowers; the unrepresented cases use Buckets.

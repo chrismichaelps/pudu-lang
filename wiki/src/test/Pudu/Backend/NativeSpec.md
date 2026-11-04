@@ -186,3 +186,7 @@ Resolved Grill Log: Register focused output-callable explicit stream answers and
 ## BigInt (#800)
 
 Run [[Backend BigInt Programs]]: successes with hand-written answers and failures against the interpreter.
+
+## Decimal (#802)
+
+Run [[Backend Decimal Programs]].

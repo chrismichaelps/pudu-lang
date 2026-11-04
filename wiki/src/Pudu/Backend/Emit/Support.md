@@ -113,3 +113,7 @@ growing dead code so a pattern match stays total.
 ## BigInt (#800)
 
 `isBigInteger` names BigInt; its helpers take the `big_` prefix, its zero is NULL, its descriptor is a placeholder its helpers ignore, and a literal is `pudu_big_from_limbs` over its 32-bit limbs.
+
+## Decimal (#802)
+
+Decimal's zero is NULL; `limbsOf` is shared with the frame emitter.

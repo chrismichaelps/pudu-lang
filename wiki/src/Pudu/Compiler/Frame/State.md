@@ -74,3 +74,7 @@ Bytes slots are owned boxes.
 ## BigInt (#800)
 
 A BigInt moves between slots like any other owned value.
+
+## Decimal (#802)
+
+A Decimal moves between slots like any owned value.

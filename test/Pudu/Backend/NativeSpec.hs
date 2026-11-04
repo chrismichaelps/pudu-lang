@@ -28,6 +28,7 @@ import Pudu.Backend.FloatPrograms (floatSuccessPrograms, floatRefusalPrograms)
 import Pudu.Backend.IntegerPrograms (integerSuccessPrograms, integerRefusalPrograms)
 import Pudu.Backend.TextMethodPrograms (textMethodSuccessPrograms, textMethodRefusalPrograms)
 import Pudu.Backend.BigIntPrograms (bigIntSuccessPrograms, bigIntRefusalPrograms)
+import Pudu.Backend.DecimalPrograms (decimalSuccessPrograms, decimalRefusalPrograms)
 import Pudu.Backend.CharPrograms (charSuccessPrograms, charRefusalPrograms)
 import Pudu.Backend.TuplePrograms (tupleSuccessPrograms, tupleRefusalPrograms)
 import Pudu.Backend.RecordPrograms (recordSuccessPrograms, recordRefusalPrograms)
@@ -111,6 +112,8 @@ backendNativeProperties =
   , ("native Char failures retain interpreter refusals", testCharRefusals)
   , ("native BigInt values match hand-written answers and the interpreter", testBigIntConformance)
   , ("native BigInt failures retain interpreter refusals", testBigIntRefusals)
+  , ("native Decimal values match hand-written answers and the interpreter", testDecimalConformance)
+  , ("native Decimal failures retain interpreter refusals", testDecimalRefusals)
   , ("native tuples match hand-written answers and the interpreter", testTupleConformance)
   , ("native tuple failures retain interpreter refusals", testTupleRefusals)
   , ("native records match hand-written answers and the interpreter", testRecordConformance)
@@ -305,6 +308,14 @@ testBigIntConformance = conjoin <$> mapM run bigIntSuccessPrograms
 
 testBigIntRefusals :: IO Property
 testBigIntRefusals = conjoin <$> mapM (uncurry conformance) bigIntRefusalPrograms
+
+testDecimalConformance :: IO Property
+testDecimalConformance = conjoin <$> mapM run decimalSuccessPrograms
+ where
+  run (label, source, expected) = conformanceExpecting (Just (expected, "", 0)) label source
+
+testDecimalRefusals :: IO Property
+testDecimalRefusals = conjoin <$> mapM (uncurry conformance) decimalRefusalPrograms
 
 testCharRefusals :: IO Property
 testCharRefusals = conjoin <$> mapM (uncurry conformance) charRefusalPrograms

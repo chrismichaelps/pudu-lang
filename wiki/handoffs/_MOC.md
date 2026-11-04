@@ -325,6 +325,7 @@ tags: [moc, handoff]
 - [[Native Value Loans Delivery]] — loans through function values, lambdas and method values (#794).
 - [[Native Dev Sync Delivery]] — the native stack on dev's checker and evaluator (#798).
 - [[Native BigInt Delivery]] — BigInt values (#800).
+- [[Native Decimal Delivery]] — Decimal values (#802).
 - [[Binary Codec Delivery]] — issue #739 native wire codec partition.
 - [[Trait Provider Delivery]] — issue #742 canonical trait-provider scheme selection.
 

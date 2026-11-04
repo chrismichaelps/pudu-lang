@@ -5,6 +5,8 @@ import Data.Text (Text)
 import Pudu.Backend.Runtime.Aggregate (aggregateRuntimeDependencies)
 import Pudu.Backend.Runtime.Array (arrayRuntimeDependencies)
 import Pudu.Backend.Runtime.Integer.Big.Operations (bigOperationRuntimeDependencies)
+import Pudu.Backend.Runtime.Decimal.Value (decimalValueRuntimeDependencies)
+import Pudu.Backend.Runtime.Decimal.Operations (decimalOperationRuntimeDependencies)
 import Pudu.Backend.Runtime.Char (charRuntimeDependencies)
 import Pudu.Backend.Runtime.Float (floatRuntimeDependencies)
 import Pudu.Backend.Runtime.Integer (integerRuntimeDependencies)
@@ -20,6 +22,7 @@ import Pudu.Backend.Runtime.Bytes (bytesRuntimeDependencies)
 
 runtimeDependencies :: Text -> [Text]
 runtimeDependencies name = integerRuntimeDependencies name <> floatRuntimeDependencies name <> bigOperationRuntimeDependencies name
+  <> decimalValueRuntimeDependencies name <> decimalOperationRuntimeDependencies name
   <> textRuntimeDependencies name <> textMethodRuntimeDependencies name
   <> textCaseRuntimeDependencies name <> charRuntimeDependencies name
   <> aggregateRuntimeDependencies name <> arrayRuntimeDependencies name

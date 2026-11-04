@@ -114,3 +114,7 @@ captured.
 ## BigInt (#800)
 
 `ownedKinds` gives BigInt code 2, after text; aggregates follow from 3.
+
+## Decimal (#802)
+
+`ownedKinds` gives Decimal code 3; aggregates follow from 4.

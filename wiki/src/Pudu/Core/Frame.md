@@ -146,3 +146,7 @@ meaning intact. See [[Native Collection Callables]].
 `FrameZero` stores the zero of the value's type. Resolved Grill Log: one
 shape for every type, emitted from the slot type, rather than a literal per
 carrier.
+
+## Decimal (#802)
+
+`FrameDecimalLiteral` and `FrameDecimalMethod`.

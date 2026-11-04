@@ -280,3 +280,7 @@ type's own value is made.
 ## BigInt (#800)
 
 The BigInt parameter and result refusal cases are gone; the reachability cases that skip an uncalled function now give it Decimal, still unrepresented.
+
+## Decimal (#802)
+
+Decimal now has a native form; the refusal and reachability cases name Buckets instead, which still has none.

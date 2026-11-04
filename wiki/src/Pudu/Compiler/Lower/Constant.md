@@ -70,3 +70,7 @@ Folding now publishes a record under its canonical owner and a sum value as
 canonical owner. A record matches by its key or display name; a sum value by
 its variant label, the solved type having already chosen the owner; a named
 payload must list the variant's fields in declaration order.
+
+## Decimal (#802)
+
+A folded Decimal projects to its literal.

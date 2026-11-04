@@ -115,3 +115,7 @@ it on return. Runtime revision 19.
 ## BigInt (#800)
 
 `frameTypes` takes whether BigInt cells are used and adds `pudu_big *big` to the cell union.
+
+## Decimal (#802)
+
+`frameTypes` adds `pudu_dec *decimal` when Decimal cells are used.

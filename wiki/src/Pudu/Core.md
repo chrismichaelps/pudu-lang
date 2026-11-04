@@ -370,3 +370,7 @@ closureMethod with no capture marks an unbound method named through its type. (#
 
 ArrayReplaceAt replaces one element, failing E7004 at its expression span
 when the index is out of range.
+
+## Decimal (#802)
+
+`CoreDecimalType`, `CoreDecimalLiteral` (coefficient and scale) and `CoreDecimalMethod` over `CoreDecimalMethodName`.

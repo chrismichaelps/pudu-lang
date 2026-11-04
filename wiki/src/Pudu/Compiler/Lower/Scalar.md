@@ -167,3 +167,7 @@ at the native E6001 boundary when the interpreter reaches the operation.
 ## First-class output builtins (#569)
 
 Resolved Grill Log: Use runtime kinds for callable as well as sum operand failures. Callable unary operators that checking accepts report E7001; runtime metadata selects builtin/function in unary and binary wording.
+
+## Decimal (#802)
+
+`+ - * /`, ordering, equality and negation accept Decimal; another operator fails at run time with the shared message, its kind named `decimal`.

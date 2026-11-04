@@ -7,6 +7,7 @@ import qualified Data.Text.IO as TextIO
 import Pudu.Backend.Emit (emitProgram)
 import Pudu.Backend.TextMethodPrograms (textMethodSuccessPrograms)
 import Pudu.Backend.BigIntPrograms (bigIntSuccessPrograms)
+import Pudu.Backend.DecimalPrograms (decimalLeakPrograms)
 import Pudu.Backend.CharPrograms (charSuccessPrograms)
 import Pudu.Backend.TuplePrograms (tupleSuccessPrograms)
 import Pudu.Backend.RecordPrograms (recordSuccessPrograms)
@@ -58,7 +59,7 @@ textLeakProperties =
   ]
 
 testLeaks :: IO Property
-testLeaks = testLeaksFor (namedCallableSuccessPrograms <> expressionBodySuccessPrograms <> textSuccessPrograms <> textMethodSuccessPrograms <> charSuccessPrograms <> bigIntSuccessPrograms <> tupleSuccessPrograms <> recordSuccessPrograms <> sumSuccessPrograms <> constantPrograms <> referenceSuccessPrograms <> methodSuccessPrograms <> genericSuccessPrograms <> trySuccessPrograms <> forSuccessPrograms <> closureSuccessPrograms <> arraySuccessPrograms <> arrayPatternSuccessPrograms <> textCollectionSuccessPrograms <> convertSuccessPrograms <> keyedSuccessPrograms <> shapeSuccessPrograms <> rangeSuccessPrograms <> bytesSuccessPrograms)
+testLeaks = testLeaksFor (namedCallableSuccessPrograms <> expressionBodySuccessPrograms <> textSuccessPrograms <> textMethodSuccessPrograms <> charSuccessPrograms <> bigIntSuccessPrograms <> decimalLeakPrograms <> tupleSuccessPrograms <> recordSuccessPrograms <> sumSuccessPrograms <> constantPrograms <> referenceSuccessPrograms <> methodSuccessPrograms <> genericSuccessPrograms <> trySuccessPrograms <> forSuccessPrograms <> closureSuccessPrograms <> arraySuccessPrograms <> arrayPatternSuccessPrograms <> textCollectionSuccessPrograms <> convertSuccessPrograms <> keyedSuccessPrograms <> shapeSuccessPrograms <> rangeSuccessPrograms <> bytesSuccessPrograms)
 
 testLeaksFor :: [(String, Text, Text)] -> IO Property
 testLeaksFor programs = testLeaksWithStreams [(label, source, output, "") | (label, source, output) <- programs]

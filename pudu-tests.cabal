@@ -89,6 +89,7 @@ test-suite pudu-test
     Pudu.Backend.FloatPrograms
     Pudu.Backend.IntegerPrograms
     Pudu.Backend.BigIntPrograms
+    Pudu.Backend.DecimalPrograms
     Pudu.Backend.CharPrograms
     Pudu.Backend.CollectionCallablePrograms
     Pudu.Backend.DefaultParameterPrograms

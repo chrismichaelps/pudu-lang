@@ -337,3 +337,7 @@ program changes behavior.
 ## BigInt (#800)
 
 [[Backend BigInt Operations]] parts follow the text parts, which `text_display_big` needs.
+
+## Decimal (#802)
+
+[[Backend Decimal Values]] follow the integer parts and [[Backend Decimal Operations]] the BigInt operations.

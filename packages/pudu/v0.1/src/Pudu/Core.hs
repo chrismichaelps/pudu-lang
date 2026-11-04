@@ -31,6 +31,7 @@ module Pudu.Core
   , CoreKeyedMethodName (..)
   , CoreRangeMethodName (..)
   , CoreBytesMethodName (..)
+  , CoreDecimalMethodName (..)
   , CoreType (..)
   , coreTypeName
   , displayName
@@ -153,6 +154,8 @@ data CoreExpressionShape
   = CoreIntegerLiteral !IntegerKind !Integer
   {-| The binary64 encoding the literal parsed to; Float32 is already narrowed. -}
   | CoreFloatLiteral !FloatWidth !Word64
+  {-| A Decimal: its coefficient and its non-negative scale. -}
+  | CoreDecimalLiteral !Integer !Int
   | CoreBoolLiteral !Bool
   | CoreTextLiteral !Text
   | CoreCharLiteral !Char
@@ -225,6 +228,7 @@ data CoreExpressionShape
   | CoreRangeMethod !CoreRangeMethodName !CoreExpression ![CoreExpression]
   {-| A byte-sequence operation; the arguments run before the receiver. -}
   | CoreBytesMethod !CoreBytesMethodName !CoreExpression ![CoreExpression]
+  | CoreDecimalMethod !CoreDecimalMethodName ![CoreExpression]
   {-| `array[index]`: the array, then the index. The expression's span is the
       index's, where an index out of range reports. -}
   | CoreIndex !CoreExpression !CoreExpression
@@ -314,6 +318,23 @@ data CoreRangeMethodName
 {-| What the runtime does for byte sequences. `BytesOfArray` and
     `BytesFromText` build one from their receiver; `BytesAtIndex` and
     `BytesAsText` read what a test has already allowed. -}
+{-| What the runtime does for Decimal beyond its operators. Each answers a
+    plain value; the primitives that answer an Option are built from a test
+    and a conversion the test allows, as `Std.Decimal` reads them. -}
+data CoreDecimalMethodName
+  = DecimalParses
+  | DecimalParse
+  | DecimalTextParses
+  | DecimalFromInt
+  | DecimalScaleOf
+  | DecimalNamesInt
+  | DecimalToInt
+  | DecimalToFloat
+  | DecimalDivideWith
+  | DecimalRoundTo
+  | DecimalIsZero
+  deriving stock (Eq, Show)
+
 data CoreBytesMethodName
   = BytesOfArray
   | BytesFromText
@@ -405,6 +426,7 @@ data CoreType
   | CoreRangeType
   {-| A byte sequence: a box around a view of counted storage. -}
   | CoreBytesType
+  | CoreDecimalType
   {-| A function value: a closure box whose first cell names what it runs. -}
   | CoreFunctionType ![CoreType] !CoreType
   | CoreUnitType
@@ -428,6 +450,7 @@ coreTypeName coreType = case coreType of
   CoreSetType member -> "Set[" <> coreTypeName member <> "]"
   CoreRangeType -> "Range[Int]"
   CoreBytesType -> "Bytes"
+  CoreDecimalType -> "Decimal"
   CoreFunctionType inputs result -> "fn(" <> Text.intercalate ", " (map coreTypeName inputs) <> ") -> " <> coreTypeName result
   CoreUnitType -> "Unit"
   CoreNeverType -> "Never"

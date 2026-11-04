@@ -24,6 +24,7 @@ import Pudu.Compiler.Lower.Range (lowerRangeMethod, lowerRangeValue)
 import Pudu.Compiler.Lower.Bytes (lowerBytesMethod, lowerBytesOf)
 import Control.Applicative ((<|>))
 import Pudu.Compiler.Lower.Try (lowerTry)
+import Pudu.Compiler.Lower.Decimal (decimalLiteral, lowerDecimalPrimitive)
 import Pudu.Compiler.Lower.For (lowerFor)
 import Pudu.Compiler.Lower.Intrinsic (annotatedPanic, lowerIntrinsicValue)
 import Pudu.Compiler.Lower.MethodValue (lowerMethodValue)
@@ -72,8 +73,7 @@ lowerEntryBody located state
                 kind@(CoreArrayType _) -> built after coreBlock kind
                 kind@(CoreMapType _ _) -> built after coreBlock kind
                 kind@(CoreSetType _) -> built after coreBlock kind
-                CoreRangeType -> built after coreBlock CoreRangeType
-                CoreBytesType -> built after coreBlock CoreBytesType
+                kind | kind `elem` [CoreRangeType, CoreBytesType, CoreDecimalType] -> built after coreBlock kind
                 CoreNeverType -> built after coreBlock CoreUnitType
                 CoreUnitType
                   | printValued coreBlock ->
@@ -333,7 +333,7 @@ allowedResultType declared operand = case declared of
     CoreSetType _ -> True
     CoreRangeType -> True
     CoreBytesType -> True
-    _ -> operand `elem` [CoreBoolType, CoreTextType, CoreCharType, CoreUnitType, CoreNeverType]
+    _ -> operand `elem` [CoreBoolType, CoreTextType, CoreCharType, CoreUnitType, CoreNeverType, CoreDecimalType]
 
 lowerExpression :: LowerState -> Located Expression -> (LowerState, Maybe (CoreExpression, CoreType))
 lowerExpression state (Located spanValue expression) = case expression of
@@ -352,7 +352,7 @@ lowerExpression state (Located spanValue expression) = case expression of
       Just ParsedFloat{parsedFloatValue, parsedFloatWidth, parsedFloatFits = True} ->
         value (CoreFloatLiteral parsedFloatWidth (castDoubleToWord64 parsedFloatValue)) (CoreFloatType parsedFloatWidth)
       _ -> halt spanValue "a floating literal outside its width" state
-    DecimalValue _ -> halt spanValue "decimal values" state
+    DecimalValue text -> value (decimalLiteral text) CoreDecimalType
     NullValue -> halt spanValue "null" state
   NameExpression (name :| []) -> case lookupLocal state name of
     Just local -> value (CoreReadLocal local) (coreLocalType local)
@@ -390,6 +390,7 @@ lowerExpression state (Located spanValue expression) = case expression of
     | name == "bytesOf" -> lowerBytesOf lowerExpression state spanValue arguments
     | name == "panic" -> lowerPanic lowerExpression state spanValue arguments
     | name == "convertInteger" -> lowerUntypedConvert lowerExpression state spanValue arguments
+    | Just lowered <- lowerDecimalPrimitive lowerExpression state spanValue name arguments -> lowered
     | otherwise -> halt spanValue ("calls to '" <> name <> "'") state
   CallExpression (Located callee (MemberExpression receiver@(Located _ (NameExpression (owner :| []))) named@(Located _ member))) arguments
     | isModuleQualifier state owner, Just key <- resolveFunction state [owner, member] -> lowerFunctionCall lowerExpression state spanValue key callee arguments

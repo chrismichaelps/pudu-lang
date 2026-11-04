@@ -62,6 +62,7 @@ lowerExpression :: CoreExpression -> Build Flow
 lowerExpression expression@(CoreExpression at kind shape) = case shape of
   CoreIntegerLiteral integerKind number -> value (FrameIntegerLiteral integerKind number)
   CoreFloatLiteral width bits -> value (FrameFloatLiteral width bits)
+  CoreDecimalLiteral coefficient scale -> value (FrameDecimalLiteral coefficient scale)
   CoreBoolLiteral boolean -> value (FrameBoolLiteral boolean)
   CoreTextLiteral text -> value (FrameTextLiteral text)
   CoreCharLiteral character -> value (FrameCharLiteral character)
@@ -231,6 +232,9 @@ lowerExpression expression@(CoreExpression at kind shape) = case shape of
         (Nothing, Just _, [h]) -> value (FrameRangeValue Nothing inclusive (Just h))
         (Nothing, Nothing, []) -> value (FrameRangeValue Nothing inclusive Nothing)
         _ -> fault (Just at) "a range whose ends did not lower"
+  CoreDecimalMethod name arguments -> do
+    operands <- lowerOperands arguments
+    maybe (pure Stopped) (value . FrameDecimalMethod name) operands
   CoreBytesMethod name receiver arguments -> do
     operands <- lowerOperands (arguments <> [receiver])
     case operands of
@@ -368,6 +372,7 @@ resultSlot at kind = case kind of
   CoreSetType _ -> Just <$> freshSlot at "$result" kind
   CoreRangeType -> Just <$> freshSlot at "$result" kind
   CoreBytesType -> Just <$> freshSlot at "$result" kind
+  CoreDecimalType -> Just <$> freshSlot at "$result" kind
 
 lowerPrint :: Span -> CoreExpression -> Build Flow
 lowerPrint at operand = case coreExpressionShape operand of

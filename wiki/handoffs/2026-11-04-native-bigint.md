@@ -1,6 +1,6 @@
 ---
 type: handoff
-status: ACTIVE
+status: DONE
 issue: 800
 aliases: [Native BigInt Delivery]
 ---

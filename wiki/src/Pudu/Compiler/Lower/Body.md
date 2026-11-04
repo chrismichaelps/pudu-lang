@@ -442,3 +442,7 @@ returns the finals of a loaned function beside the value. See
 A `::constructor::` record with no fields is the variant itself, and a call
 of one constructs its payload, both through [[Compiler Lower Sum]]; any
 other record expression names its type through `writtenLabel`.
+
+## Decimal (#802)
+
+A decimal literal lowers through [[Compiler Lower Decimal]], whose primitives a call by name reaches; an entry may answer a Decimal.

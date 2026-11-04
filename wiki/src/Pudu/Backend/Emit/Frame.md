@@ -148,3 +148,7 @@ The frame base parts include `blame`, which frame entry and exit assign.
 ## BigInt (#800)
 
 A program holding a BigInt anywhere gets the `big` cell member and the carrier's value, retain and release parts. The drop and retain switches release and retain every owned kind by its own code, BigInt's included; an entry BigInt is released after its exit status is read.
+
+## Decimal (#802)
+
+A program holding Decimal gets the `decimal` member, its value, retain and release parts, an ownership code, and an entry that prints and releases its Decimal.

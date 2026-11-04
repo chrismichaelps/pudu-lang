@@ -228,3 +228,7 @@ as `Eval.Env.lookupMethod` does.
 ## BigInt (#800)
 
 `nativeIntegerKind` admits BigInt.
+
+## Decimal (#802)
+
+`Decimal` forms as `CoreDecimalType`, a native value type named `Decimal`.

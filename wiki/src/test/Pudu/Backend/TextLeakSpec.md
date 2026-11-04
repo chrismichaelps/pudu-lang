@@ -150,3 +150,7 @@ reported as pending on Windows. Existing healthy corpora use empty setup.
 ## BigInt (#800)
 
 BigInt successes also run under counted allocation.
+
+## Decimal (#802)
+
+Decimal's library-free success also runs under counted allocation.

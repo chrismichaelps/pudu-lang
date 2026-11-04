@@ -44,6 +44,13 @@ emitFrameProgram version sources source = do
       , "  return pudu_status;" ]
     CoreIntegerType kind -> Right ["  return pudu_" <> integerHelper (frameFunctionResult entry) "status"
       <> "(pudu_run_frames(" <> textOfInt entryId <> ")." <> (if isWideInteger kind then "wide" else "integer") <> ");"]
+    CoreDecimalType -> Right
+      [ "  pudu_dec *pudu_entry = pudu_run_frames(" <> textOfInt entryId <> ").decimal;"
+      , "  pudu_text pudu_shown = pudu_text_display_dec(pudu_entry);"
+      , "  int pudu_report_status = pudu_output_report(pudu_shown);"
+      , "  pudu_text_release(pudu_shown);"
+      , "  pudu_dec_release(pudu_entry);"
+      , "  return pudu_report_status;" ]
     CoreFloatType _ -> Right
       [ "  pudu_text pudu_shown = pudu_text_display_float(pudu_run_frames(" <> textOfInt entryId <> ").floating);"
       , "  int pudu_report_status = pudu_output_report(pudu_shown);"
@@ -77,13 +84,14 @@ emitFrameProgram version sources source = do
   (emitted, roots) <- emitFrameBodies (emptyEmitState sources) source
   let wide = frameUsesWideCells source
       big = frameUsesBig source
+      decimal = frameUsesDecimal source
       text = frameUsesText source
       tuples = aggregateTypes source
       boxes = not (null tuples)
       kinds = ownedKinds tuples
-      owned = text || big || boxes
+      owned = text || big || decimal || boxes
       base = ["prelude", "process_io", "integer_value", "site", "colored", "cleanup", "blame", "fail", "memory_failure"]
-        <> ["wide_value" | wide] <> concat [["big_value", "big_retain", "big_release"] | big] <> concat [["text", "text_retain"] | text]
+        <> ["wide_value" | wide] <> concat [["big_value", "big_retain", "big_release"] | big] <> concat [["dec_value", "dec_retain", "dec_release"] | decimal] <> concat [["text", "text_retain"] | text]
       entryNeeds = case frameFunctionResult entry of
         CoreIntegerType _ -> [integerHelper (frameFunctionResult entry) "status"]
         CoreFloatType _ -> ["text_display_float", "output_report"]
@@ -99,10 +107,11 @@ emitFrameProgram version sources source = do
         kind@(CoreSetType _) -> [aggregateNeed "show" kind, "output_report"]
         CoreRangeType -> [aggregateNeed "show" CoreRangeType, "output_report"]
         CoreBytesType -> [aggregateNeed "show" CoreBytesType, "output_report"]
+        CoreDecimalType -> ["text_display_dec", "output_report"]
         _ -> []
       identities = Map.fromList (zip (map frameFunctionName functions) [0 ..])
       (aggregates, aggregateNeeds) = aggregateSection identities (frameModuleLayouts source) tuples (Set.fromList (Set.toList roots <> entryNeeds))
-      ownership = if owned then ownershipSwitch text big kinds else []
+      ownership = if owned then ownershipSwitch text big decimal kinds else []
       selected = foldl' visit Set.empty (filter (not . Text.isPrefixOf "agg_") (Set.toList roots <> entryNeeds)
         <> Set.toList aggregateNeeds <> base <> ["text_retain" | text])
       runtime = concat [runtimePartLines part <> [""] | part <- runtimeParts, Set.member (runtimePartName part) selected]
@@ -110,7 +119,7 @@ emitFrameProgram version sources source = do
       metadata = concatMap parameterArray indexed
         <> ["static const pudu_function pudu_functions[] = {"]
         <> map definition indexed <> ["};"]
-  pure $ Text.unlines (header <> runtime <> frameTypes wide big text boxes
+  pure $ Text.unlines (header <> runtime <> frameTypes wide big decimal text boxes
     <> concat [lines' <> [""] | (name, lines') <- arrayRuntimeParts <> textPieceRuntimeParts <> treeRuntimeParts <> rangeRuntimeParts <> bytesRuntimeParts, Set.member name selected]
     <> renderSites (reverse (emitSites emitted)) <> aggregates <> ownership <> reverse (emitOutput emitted)
     <> metadata <> frameEngine owned <> ["int main(void) {", "  pudu_prepare_io();"] <> ending <> ["}"])
@@ -177,6 +186,12 @@ frameUsesBig source = any usesBig (frameModuleFunctions source)
   bigType (CoreIntegerType kind) = isBigInteger kind
   bigType _ = False
 
+frameUsesDecimal :: FrameModule -> Bool
+frameUsesDecimal source = any usesDecimal (frameModuleFunctions source)
+ where
+  usesDecimal function = any (mentions (frameModuleLayouts source) (== CoreDecimalType)) (frameFunctionResult function
+    : map frameSlotType (frameFunctionParameters function <> frameFunctionSlots function))
+
 frameUsesText :: FrameModule -> Bool
 frameUsesText source = any usesText (frameModuleFunctions source)
  where
@@ -202,8 +217,8 @@ mentions layouts wanted = go []
         _ -> False
 
 {-| The engine's one way to retain or release a slot, whatever it holds. -}
-ownershipSwitch :: Bool -> Bool -> [(CoreType, Int)] -> [Text]
-ownershipSwitch text big kinds =
+ownershipSwitch :: Bool -> Bool -> Bool -> [(CoreType, Int)] -> [Text]
+ownershipSwitch text big decimal kinds =
   [ "static void pudu_drop_cell(pudu_cell cell, unsigned kind) {"
   , "  switch (kind) {" ]
   <> [ "    case " <> textOfInt number <> ": " <> released kind ("cell." <> cellName kind) <> " break;"
@@ -218,4 +233,5 @@ ownershipSwitch text big kinds =
   held = [entry | entry@(kind, _) <- kinds, present kind]
   present CoreTextType = text
   present (CoreIntegerType integer) = big && isBigInteger integer
+  present CoreDecimalType = decimal
   present _ = True

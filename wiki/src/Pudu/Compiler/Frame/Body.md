@@ -147,3 +147,7 @@ builtins that need it have constant help.
 
 CoreAbsent lowers to a FrameZero value. Resolved Grill Log: no ownership is
 created; the slot holds nothing to release.
+
+## Decimal (#802)
+
+Decimal literals and methods lower to their frame values; a Decimal result gets a slot.

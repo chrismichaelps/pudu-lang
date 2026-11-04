@@ -135,6 +135,7 @@ ownerKeyOf kind = case kind of
   CoreSetType _ -> Just "Set"
   CoreRangeType -> Just "Range"
   CoreBytesType -> Just "Bytes"
+  CoreDecimalType -> Just "Decimal"
   _ -> Nothing
 
 formedWith :: Shapes -> [CoreType] -> Map Text CoreType -> Type -> Maybe CoreType
@@ -173,6 +174,7 @@ formedWith shapes seen parameters value = case value of
     if all nativeValueType [formedKey, formedValue] then Just (CoreMapType formedKey formedValue) else Nothing
   NominalType (NominalId Nothing "Range") _ -> Just CoreRangeType
   NominalType (NominalId Nothing "Bytes") [] -> Just CoreBytesType
+  NominalType (NominalId Nothing "Decimal") [] -> Just CoreDecimalType
   NominalType (NominalId Nothing "Set") [member] -> do
     formed <- formedWith shapes seen parameters member
     if nativeValueType formed then Just (CoreSetType formed) else Nothing
@@ -270,4 +272,5 @@ nativeValueType (CoreMapType _ _) = True
 nativeValueType (CoreSetType _) = True
 nativeValueType CoreRangeType = True
 nativeValueType CoreBytesType = True
+nativeValueType CoreDecimalType = True
 nativeValueType other = nativeScalarType other

@@ -29,7 +29,7 @@ lowerUnary lower state at operator operand
       (after, Just (core, CoreNeverType)) -> (after, Just (core, CoreNeverType))
       (after, Just (core, kind))
         | expressionIsPrintValued core -> halt at "an operator on a Result[(), Str] value" after
-        | operator == "-", integerType kind || floatType kind -> built after at (CoreNegate core) kind
+        | operator == "-", integerType kind || floatType kind || kind == CoreDecimalType -> built after at (CoreNegate core) kind
         | operator == "~", integerType kind -> built after at (CoreComplement core) kind
         | operator == "!", kind == CoreBoolType -> built after at (CoreNot core) CoreBoolType
         | dynamicKind kind, settled after operand core ->
@@ -69,7 +69,7 @@ lowerBinary lower state at left operator right
           , settled after left coreLeft && settled after right coreRight
           , not (integerType leftType && integerType rightType) ->
               let message
-                    | leftType == rightType && (leftType `elem` [CoreBoolType, CoreTextType, CoreCharType] || floatType leftType) = unsupportedOperatorMessage operator
+                    | leftType == rightType && (leftType `elem` [CoreBoolType, CoreTextType, CoreCharType, CoreDecimalType] || floatType leftType) = unsupportedOperatorMessage operator
                     | otherwise = cannotApplyBinaryMessage operator (runtimeKind leftType) (runtimeKind rightType)
                in failure after at message [coreLeft, coreRight]
           | otherwise -> halt at ("the operator '" <> operator <> "' outside the native scalar subset") after
@@ -82,8 +82,9 @@ represented operator left right
   | left /= right = Nothing
   | integerType left, Just operation <- lookup operator arithmetic = Just (operation, left)
   | floatType left, Just operation <- lookup operator floating = Just (operation, left)
+  | left == CoreDecimalType, Just operation <- lookup operator floating = Just (operation, left)
   | left == CoreTextType, operator == "+" = Just (CoreAdd, CoreTextType)
-  | integerType left || floatType left || tupleType left || left `elem` [CoreBoolType, CoreTextType, CoreCharType], Just operation <- lookup operator ordering = Just (operation, CoreBoolType)
+  | integerType left || floatType left || tupleType left || left `elem` [CoreBoolType, CoreTextType, CoreCharType, CoreDecimalType], Just operation <- lookup operator ordering = Just (operation, CoreBoolType)
   | nativeValueType left, Just operation <- lookup operator equality = Just (operation, CoreBoolType)
   | otherwise = Nothing
  where
@@ -131,6 +132,7 @@ runtimeKind (CoreMapType _ _) = "map"
 runtimeKind (CoreSetType _) = "set"
 runtimeKind CoreRangeType = "range"
 runtimeKind CoreBytesType = "bytes"
+runtimeKind CoreDecimalType = "decimal"
 runtimeKind (CoreFunctionType _ _) = "function"
 runtimeKind kind = coreTypeName kind
 

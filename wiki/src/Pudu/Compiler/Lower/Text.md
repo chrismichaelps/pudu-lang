@@ -64,3 +64,7 @@ the call ([[Native Text Number]]). No C code needs to know an Option's layout.
 `charAt(Int)` joins the Str table with a Char result. A Char receiver
 answers `code` (Int, `CoreCharCode`) and `toText` (Str, `CoreDisplay`), which
 is what `readCharMember` finds before any impl; other Char members refuse.
+
+## Decimal (#802)
+
+`toDecimal()` lowers through [[Compiler Lower Decimal]].

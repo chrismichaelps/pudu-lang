@@ -26,6 +26,7 @@ ownedType (CoreMapType _ _) = True
 ownedType (CoreSetType _) = True
 ownedType CoreRangeType = True
 ownedType CoreBytesType = True
+ownedType CoreDecimalType = True
 ownedType _ = False
 
 cType :: CoreType -> Text
@@ -45,6 +46,7 @@ cType kind = case kind of
   CoreSetType _ -> "pudu_box *"
   CoreRangeType -> "pudu_box *"
   CoreBytesType -> "pudu_box *"
+  CoreDecimalType -> "pudu_dec *"
   _ -> "int"
 
 {-| A new reference to the value an expression reads, and what it needs. -}
@@ -52,6 +54,7 @@ retained :: CoreType -> Text -> (Text, [Text])
 retained kind expression = case kind of
   CoreTextType -> ("pudu_text_retain(" <> expression <> ")", ["text_retain"])
   CoreIntegerType integer | isBigInteger integer -> ("pudu_big_retain(" <> expression <> ")", ["big_retain"])
+  CoreDecimalType -> ("pudu_dec_retain(" <> expression <> ")", ["dec_retain"])
   _ | isAggregate kind -> ("pudu_box_retain(" <> expression <> ")", [])
   _ -> (expression, [])
 
@@ -60,6 +63,7 @@ released :: CoreType -> Text -> Text
 released kind expression = case kind of
   CoreTextType -> "pudu_text_release(" <> expression <> ");"
   CoreIntegerType integer | isBigInteger integer -> "pudu_big_release(" <> expression <> ");"
+  CoreDecimalType -> "pudu_dec_release(" <> expression <> ");"
   _ | isAggregate kind -> aggregateHelper "drop" kind <> "(" <> expression <> ");"
   _ -> ""
 
@@ -111,6 +115,7 @@ memberRender kind expression = case kind of
     | isBigInteger integer -> ("pudu_text_display_big(" <> expression <> ")", ["text_display_big"])
     | otherwise -> ("pudu_text_display_int(" <> expression <> ")", ["text_display_int"])
   CoreFloatType _ -> ("pudu_text_display_float(" <> expression <> ")", ["text_display_float"])
+  CoreDecimalType -> ("pudu_text_display_dec(" <> expression <> ")", ["text_display_dec"])
   CoreBoolType -> ("(" <> expression <> " ? pudu_text_literal(\"true\", 4) : pudu_text_literal(\"false\", 5))", ["text_literal"])
   CoreUnitType -> ("pudu_text_literal(\"()\", 2)", ["text_literal"])
   CoreCharType -> ("pudu_char_show(" <> expression <> ")", ["char_show"])
@@ -123,6 +128,7 @@ memberEqual kind a b = case kind of
   CoreIntegerType _ -> let helper = integerHelper kind "compare" in ("pudu_" <> helper <> "(" <> a <> ", " <> b <> ") == 0", [helper])
   CoreFloatType _ -> ("pudu_float_eq(" <> a <> ", " <> b <> ")", ["float_eq"])
   CoreTextType -> ("pudu_text_compare(" <> a <> ", " <> b <> ") == 0", ["text_compare"])
+  CoreDecimalType -> ("pudu_dec_compare(" <> a <> ", " <> b <> ") == 0", ["dec_compare"])
   _ | isAggregate kind -> (aggregateHelper "equal" kind <> "(" <> a <> ", " <> b <> ")", [aggregateNeed "equal" kind])
   _ -> (a <> " == " <> b, [])
 
@@ -133,6 +139,7 @@ memberCompare kind a b = case kind of
   CoreIntegerType _ -> let helper = integerHelper kind "compare" in ("pudu_" <> helper <> "(" <> a <> ", " <> b <> ")", [helper])
   CoreFloatType _ -> ("pudu_float_order(" <> a <> ", " <> b <> ")", ["float_order"])
   CoreTextType -> ("pudu_text_compare(" <> a <> ", " <> b <> ")", ["text_compare"])
+  CoreDecimalType -> ("pudu_dec_compare(" <> a <> ", " <> b <> ")", ["dec_compare"])
   CoreUnitType -> ("0", [])
   -- compareValues ranks two functions alike, so they never decide an order.
   CoreFunctionType _ _ -> ("0", [])
@@ -154,6 +161,7 @@ cellName kind = case kind of
   CoreFloatType _ -> "floating"
   CoreCharType -> "character"
   CoreTextType -> "text"
+  CoreDecimalType -> "decimal"
   _ | isAggregate kind -> "box"
   _ -> "scalar"
 

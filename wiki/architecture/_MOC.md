@@ -117,6 +117,7 @@ Pudu is a statically typed native systems language for developers who need predi
 - [[Native Place Assignment]] — field and element paths, root-span failures.
 - [[Native Mutable Loans]] — `&mut` parameters by copy-in/copy-out with writeback on every return.
 - [[Native BigInt]] — reference-counted limbs with exact arithmetic and the interpreter's failures.
+- [[Native Decimal]] — a BigInt coefficient and a scale with the interpreter's rounding and failures.
 - [[Native Method Values]] — receiver-bound built-in methods, failures at the caller.
 - [[Native Default Parameters]] — a supplied-count parameter and a default prologue.
 - [[Ark Water Validation]] — numerical wave conformance and staged fluid scenarios.

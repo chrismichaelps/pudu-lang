@@ -616,3 +616,7 @@ no recursive module or new native dependency.
 ## BigInt (#800)
 
 Resolved Grill Log: Register Pudu.Backend.Runtime.Integer.Big.Value and .Operations using the existing dependencies.
+
+## Decimal (#802)
+
+Resolved Grill Log: Register the Decimal runtime modules and Pudu.Compiler.Lower.Decimal using the existing dependencies.

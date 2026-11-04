@@ -93,3 +93,7 @@ cleanup depends on site, whose type its hook names. (#644)
 ## BigInt (#800)
 
 BigInt operation dependencies come from [[Backend BigInt Operations]].
+
+## Decimal (#802)
+
+Decimal dependencies come from both Decimal modules.

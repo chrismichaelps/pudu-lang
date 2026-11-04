@@ -3,6 +3,7 @@ module Pudu.Compiler.Lower.Text (lowerTextMethod) where
 
 import Data.Text (Text)
 import Pudu.Compiler.Lower.Control (expressionIsPrintValued)
+import Pudu.Compiler.Lower.Decimal (lowerTextToDecimal)
 import Pudu.Compiler.Lower.State (LowerContext (..), LowerState (..), bindLocal, halt, intType, refused)
 import Pudu.Compiler.Lower.Types (typeForSpan)
 import Pudu.Core
@@ -22,6 +23,7 @@ lowerTextMethod lower state at receiver member arguments = case lower state rece
     | null arguments, Just reading <- lookup member parsers -> parsed after coreReceiver reading
     -- The UTF-8 bytes are the text's own storage.
     | null arguments, member == "toBytes" -> built after (CoreBytesMethod BytesFromText coreReceiver []) CoreBytesType
+    | null arguments, member == "toDecimal" -> lowerTextToDecimal after at coreReceiver
     | otherwise -> case lookup member methods of
     Nothing -> halt at ("the Str method '" <> member <> "'") after
     Just (name, parameters, result) -> collect after [] (zip parameters arguments)

@@ -36,3 +36,7 @@ Bytes are owned boxes, mangled `BY`.
 ## BigInt (#800)
 
 A BigInt is an owned cell: C type `pudu_big *`, member `big`, retained and released by `pudu_big_retain` and `pudu_big_release`, rendered by `pudu_text_display_big`.
+
+## Decimal (#802)
+
+Decimal is an owned cell: `pudu_dec *`, member `decimal`, retained, released, rendered and ordered through its runtime.

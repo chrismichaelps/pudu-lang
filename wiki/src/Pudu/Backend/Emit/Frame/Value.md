@@ -158,3 +158,7 @@ ArrayReplaceAt emits the replace helper with an E7004 "index out of range" site 
 ## BigInt (#800)
 
 Conversions classify each side as one word, two words or BigInt. Every value fits a BigInt; a BigInt fits a fixed kind by `big_fits_int` or `big_fits_wide`. A BigInt literal needs `big_from_limbs`; display uses `text_display_big`.
+
+## Decimal (#802)
+
+Decimal literals, methods, operators with division's two failure sites, negation and display. `decimalFunction` names each method's runtime function.

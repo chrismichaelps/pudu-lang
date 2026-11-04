@@ -28,6 +28,8 @@ import qualified Data.Text as Text
 import Pudu.Backend.Runtime.Aggregate (aggregateRuntimeParts)
 import Pudu.Backend.Runtime.Char (charRuntimeParts)
 import Pudu.Backend.Runtime.Integer.Big.Operations (bigOperationRuntimeParts)
+import Pudu.Backend.Runtime.Decimal.Value (decimalValueRuntimeParts)
+import Pudu.Backend.Runtime.Decimal.Operations (decimalOperationRuntimeParts)
 import Pudu.Backend.Runtime.Float (floatRuntimeParts)
 import Pudu.Backend.Runtime.Integer (integerRuntimeParts)
 import Pudu.Backend.Runtime.Process (processIoLines, waitWritableLines)
@@ -73,7 +75,7 @@ runtimeParts =
   , RuntimePart "fail" failLines
   , RuntimePart "memory_failure" memoryFailureLines
   , RuntimePart "call_depth" callDepthLines
-  ] <> map (uncurry RuntimePart) (integerRuntimeParts <> floatRuntimeParts <> textRuntimeParts <> textMethodRuntimeParts <> textCaseRuntimeParts <> textNumberRuntimeParts <> bigOperationRuntimeParts <> charRuntimeParts <> aggregateRuntimeParts <> outputRuntimeParts) <>
+  ] <> map (uncurry RuntimePart) (integerRuntimeParts <> decimalValueRuntimeParts <> floatRuntimeParts <> textRuntimeParts <> textMethodRuntimeParts <> textCaseRuntimeParts <> textNumberRuntimeParts <> bigOperationRuntimeParts <> decimalOperationRuntimeParts <> charRuntimeParts <> aggregateRuntimeParts <> outputRuntimeParts) <>
   [ RuntimePart "print_int" printIntLines
   , RuntimePart "print_bool" printBoolLines
   , RuntimePart "print_str" printStrLines
