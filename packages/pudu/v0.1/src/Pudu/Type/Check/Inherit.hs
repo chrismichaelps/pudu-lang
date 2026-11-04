@@ -16,10 +16,9 @@ import Pudu.Type.Value (NominalId (..), Type (..))
 
 {-| The trait's defaults this implementation does not provide itself.
 
-    A local trait's default is a member with a body. An imported interface has
-    its bodies stripped, so there the interface's own record of its defaults
-    decides. -}
-inheritedMembers :: Maybe (Set (NominalId, Text)) -> NominalId -> Trait -> Impl -> [Located Function]
+    A default is a member with a body, or one an interface records as a default
+    after stripping its body. -}
+inheritedMembers :: Set (NominalId, Text) -> NominalId -> Trait -> Impl -> [Located Function]
 inheritedMembers defaults identity trait value =
   [ member
   | member@(Located _ method) <- traitMembers trait
@@ -28,9 +27,9 @@ inheritedMembers defaults identity trait value =
   ]
  where
   provided = map (locatedValue . functionName . locatedValue) (implFunctions value)
-  isDefault method = case defaults of
-    Nothing -> functionBody method /= Nothing
-    Just known -> Set.member (identity, locatedValue (functionName method)) known
+  isDefault method =
+    functionBody method /= Nothing
+      || Set.member (identity, locatedValue (functionName method)) defaults
 
 {-| Rename the parameters whose names are taken, priming each until it is free.
 
