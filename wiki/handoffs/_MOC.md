@@ -5,6 +5,8 @@ tags: [moc, handoff]
 
 # Handoff Map
 
+- [[Native Decimal Callable Delivery]] — #806 first-class Decimal primitives after native stack consolidation.
+
 - [[Native Unsigned Integer Delivery]] — UInt and fixed unsigned native admission (#500).
 
 - [[Native Signed Integer Delivery]] — fixed signed widths on the exact native carrier (#497).

@@ -56,6 +56,7 @@ textLeakProperties =
   , ("native named callables release every allocation", testLeaksFor (namedCallableSuccessPrograms <> closureSuccessPrograms))
   , ("native expression bodies release every allocation", testLeaksFor expressionBodySuccessPrograms)
   , ("native Bytes programs release every allocation", testLeaksFor bytesSuccessPrograms)
+  , ("native Decimal programs release every allocation", testLeaksFor decimalLeakPrograms)
   ]
 
 testLeaks :: IO Property

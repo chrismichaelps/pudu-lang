@@ -5,6 +5,16 @@ tags: [changelog]
 
 # Changelog
 
+## 2026-11-04 — Native Decimal callable values (#806)
+
+- [[Compiler Lower Intrinsic]] admits the seven Decimal prelude values with
+  their exact checked signatures; [[Compiler Lower Decimal]] shares their
+  bodies with direct calls and supplies Option result layouts explicitly.
+- [[Backend Decimal Programs]] covers aliases, captures, generic calls,
+  builtin identity, entry rendering, source-order effects and refusals;
+  [[Backend Text Leak Tests]] counts their owned allocations.
+- [[Native Decimal Callable Delivery]] records validation and review status.
+
 ## 2026-10-27 — Exact native wide values (#502)
 
 - [[Backend Wide Integer Values]] preserves actual signs and selectable helpers.
