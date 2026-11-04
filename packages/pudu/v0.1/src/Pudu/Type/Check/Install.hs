@@ -52,7 +52,6 @@ import Pudu.Type.Interface
 import Pudu.Type.Value
   ( NominalId (..)
   , Required (..)
-  , nominalKey
   , Type (..)
   , monotype
   , polytype

@@ -111,7 +111,6 @@ import Pudu.Type.Value
   , OwnerSelection
   , NominalId (..)
   , Required (..)
-  , nominalKey
   , Scheme (..)
   , monotype
   , polytype

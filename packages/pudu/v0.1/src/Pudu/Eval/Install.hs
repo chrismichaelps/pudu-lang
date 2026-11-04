@@ -57,7 +57,6 @@ import Pudu.Frontend.Syntax.Tree
   , TypeDefinition (..)
   , FieldDeclaration (..)
   , Variant (..)
-  , VariantPayload (..)
   )
 
 {-| @Eval.Install.Evaluate — evaluating an expression.
