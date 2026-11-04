@@ -28,10 +28,6 @@ treeRuntimeParts =
       , "  pudu_cell (*retain_value)(pudu_cell);"
       , "  void (*release_value)(pudu_cell);"
       , "} pudu_tree_ops;"
-      , "static inline pudu_tree_node *pudu_tree_retain(pudu_tree_node *node) {"
-      , "  if (node != NULL) node->count += 1;"
-      , "  return node;"
-      , "}"
       , "static void pudu_tree_release(pudu_tree_node *node, const pudu_tree_ops *ops) {"
       , "  while (node != NULL && --node->count == 0) {"
       , "    pudu_tree_node *right = node->right;"
@@ -45,7 +41,12 @@ treeRuntimeParts =
       , "static inline int pudu_tree_height(const pudu_tree_node *node) { return node == NULL ? 0 : node->height; }"
       , "static inline size_t pudu_tree_size(const pudu_tree_node *node) { return node == NULL ? 0 : node->size; }"
       ])
-  , ("tree_build",
+  , ("tree_retain",
+      [ "static inline pudu_tree_node *pudu_tree_retain(pudu_tree_node *node) {"
+      , "  if (node != NULL) node->count += 1;"
+      , "  return node;"
+      , "}" ])
+  , ("tree_node",
       [ "/* A node over two subtrees whose heights differ by two at most. */"
       , "static pudu_tree_node *pudu_tree_make(pudu_tree_node *left, pudu_cell key, pudu_cell value, pudu_tree_node *right) {"
       , "  pudu_tree_node *node = malloc(sizeof *node);"
@@ -60,7 +61,9 @@ treeRuntimeParts =
       , "  node->right = right;"
       , "  return node;"
       , "}"
-      , "/* Gives up node and hands back its parts. A node nobody else holds is taken"
+      ])
+  , ("tree_build",
+      [ "/* Gives up node and hands back its parts. A node nobody else holds is taken"
       , "   apart; a shared one stays, and its parts are retained instead. */"
       , "static void pudu_tree_open(pudu_tree_node *node, const pudu_tree_ops *ops, pudu_tree_node **left, pudu_cell *key, pudu_cell *value, pudu_tree_node **right) {"
       , "  *left = node->left;"
@@ -182,14 +185,54 @@ treeRuntimeParts =
       , "  return out;"
       , "}"
       ])
+  , ("tree_word_algebra",
+      [ "typedef struct { pudu_cell key, value; } pudu_word_pair;"
+      , "/* Consumes retained pairs; recursion is bounded by the balanced height. */"
+      , "static pudu_tree_node *pudu_word_tree(pudu_word_pair *pairs, size_t start, size_t count) {"
+      , "  if (count == 0) return NULL;"
+      , "  size_t half = count / 2, middle = start + half;"
+      , "  pudu_tree_node *left = pudu_word_tree(pairs, start, half);"
+      , "  pudu_tree_node *right = pudu_word_tree(pairs, middle + 1, count - half - 1);"
+      , "  return pudu_tree_make(left, pairs[middle].key, pairs[middle].value, right);"
+      , "}"
+      , "/* Typed callers prove UInt64 payloads and operation in 0..3. Inputs are borrowed. */"
+      , "static pudu_tree_node *pudu_tree_word_algebra(pudu_tree_node *left, pudu_tree_node *right, const pudu_tree_ops *ops, unsigned operation) {"
+      , "  size_t n = pudu_tree_size(left), m = pudu_tree_size(right), capacity;"
+      , "  size_t i = 0, j = 0, count = 0;"
+      , "  pudu_word_pair *pairs;"
+      , "  if (n > SIZE_MAX - m) pudu_memory_failure();"
+      , "  capacity = n + m;"
+      , "  if (capacity > SIZE_MAX / sizeof *pairs) pudu_memory_failure();"
+      , "  pairs = malloc((capacity == 0 ? 1 : capacity) * sizeof *pairs);"
+      , "  if (pairs == NULL) pudu_memory_failure();"
+      , "  pudu_tree_node **a = pudu_tree_nodes(left), **b = pudu_tree_nodes(right);"
+      , "  while (i < n || j < m) {"
+      , "    int order = i == n ? 1 : j == m ? -1 : ops->order(a[i]->key, b[j]->key);"
+      , "    pudu_tree_node *held = order <= 0 ? a[i] : b[j];"
+      , "    uint64_t x = 0, y = 0, word;"
+      , "    if (order <= 0) x = a[i++]->value.integer.bits;"
+      , "    if (order >= 0) y = b[j++]->value.integer.bits;"
+      , "    word = operation == 0 ? (x | y) : operation == 1 ? (x & y) : operation == 2 ? (x & ~y) : (x ^ y);"
+      , "    if (word != 0) {"
+      , "      pairs[count].key = ops->retain_key(held->key);"
+      , "      pairs[count++].value.integer = pudu_make(word, 0);"
+      , "    }"
+      , "  }"
+      , "  pudu_tree_node *result = pudu_word_tree(pairs, 0, count);"
+      , "  free(a); free(b); free(pairs);"
+      , "  return result;"
+      , "}" ])
   ]
 
 treeRuntimeDependencies :: Text -> [Text]
 treeRuntimeDependencies name = maybe [] id (lookup name
   [ ("tree", [])
-  , ("tree_build", ["tree", "memory_failure"])
+  , ("tree_retain", ["tree"])
+  , ("tree_node", ["tree", "memory_failure"])
+  , ("tree_build", ["tree_node", "tree_retain"])
   , ("tree_find", ["tree"])
   , ("tree_insert", ["tree_build"])
   , ("tree_remove", ["tree_build", "tree_find"])
   , ("tree_walk", ["tree", "memory_failure"])
+  , ("tree_word_algebra", ["tree_node", "tree_walk", "make"])
   ])

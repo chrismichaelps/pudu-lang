@@ -6,6 +6,11 @@ aliases: [Native Frame Body Tests]
 ---
 # Native Frame Body Tests
 
+Word-map admission (#810): construct malformed FrameKeyedMethod operands
+and results and require a fault at the exact frame value span. Resolved
+Grill Log: signed payloads, mismatched map operands and non-map results must
+not select a C helper whose cell reads would reinterpret another carrier.
+
 ## Purpose and interface
 
 Export frameEmitProperties. Check generated call suspension and malformed slots,

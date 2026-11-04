@@ -113,6 +113,7 @@ test-suite pudu-test
     Pudu.Backend.TextCollectionPrograms
     Pudu.Backend.ConvertPrograms
     Pudu.Backend.KeyedPrograms
+    Pudu.Backend.WordMapPrograms
     Pudu.Backend.ShapePrograms
     Pudu.Backend.RangePrograms
     Pudu.Backend.OutputSpec

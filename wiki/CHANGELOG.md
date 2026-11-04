@@ -12,6 +12,36 @@ tags: [changelog]
 - [[Pudu Continuous Verification]] gives the expanded full suite a finite
   45-minute budget; this is not itself evidence of a passing run.
 - [[Native Linux Output Gate Delivery]] records local proof and Linux follow-up.
+## 2026-11-04 — Native sparse word-map algebra (#810)
+
+- [[Compiler Lower Word Map]] admits direct/callable algebra with exact
+  UInt64 maps and source-ordered snapshots. [[Core Keyed Operations]] owns
+  the extracted closed tags without changing existing import contracts.
+- [[Native Persistent Trees]] merges ascending views and builds balanced
+  results linearly; [[Backend Word Map Programs]] checks masks, key identity,
+  persistent inputs, transfers, diagnostics and counted ownership.
+- [[Native Word Map Algebra Delivery]] records validation and remaining scope.
+## 2026-11-04 — Native frozen collections and ranges (#808)
+
+- [[Compiler Lower Constant]] projects already-folded arrays, maps, sets
+  and ranges recursively against complete checked types, preserving stored
+  representatives, endpoint absence and owned-value cleanup.
+- [[Backend Module Programs]] covers nested data, empty collections,
+  imported canonical owners and runtime refusal provenance; [[Native Solved
+  Types Tests]] rejects malformed products without initializer fallback.
+- [[Native Frozen Collection Delivery]] records validation and remaining scope.
+## 2026-11-04 — Native Decimal callable values (#806)
+
+- [[Compiler Lower Intrinsic]] admits the seven Decimal prelude values with
+  their exact checked signatures; [[Compiler Lower Decimal]] shares their
+  bodies with direct calls and supplies Option result layouts explicitly.
+- [[Backend Decimal Programs]] covers aliases, captures, generic calls,
+  builtin identity, entry rendering, source-order effects and refusals;
+  [[Backend Text Leak Tests]] counts their owned allocations.
+- [[Native Decimal Callable Delivery]] records validation and review status.
+- [[Diagnostic Code Gate]] records E7010 as the same non-terminating Decimal
+  quotient in the interpreter and native emitter, repairing an integration
+  registry omission exposed by the full gates.
 
 ## 2026-10-27 — Exact native wide values (#502)
 

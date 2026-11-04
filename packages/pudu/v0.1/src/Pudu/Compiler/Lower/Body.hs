@@ -1,6 +1,5 @@
-{-| @Pudu.Compiler.Lower.Body — lower function bodies through lexical blocks,
-    statements and expressions. State and signature admission have independent
-    owners; mutual block/expression recursion stays within this traversal. -}
+{-| @Pudu.Compiler.Lower.Body — mutually recursive block/expression traversal.
+    State and signature admission remain independently owned. -}
 module Pudu.Compiler.Lower.Body (lowerEntryBody, lowerFunctionBody, lowerExpression) where
 
 import Data.List.NonEmpty (NonEmpty (..))
@@ -27,6 +26,7 @@ import Pudu.Compiler.Lower.Try (lowerTry)
 import Pudu.Compiler.Lower.Decimal (decimalLiteral, lowerDecimalPrimitive)
 import Pudu.Compiler.Lower.For (lowerFor)
 import Pudu.Compiler.Lower.Intrinsic (annotatedPanic, lowerIntrinsicValue)
+import Pudu.Compiler.Lower.WordMap (lowerWordMapPrimitive)
 import Pudu.Compiler.Lower.MethodValue (lowerMethodValue)
 import Pudu.Compiler.Lower.Stop (lowerPanic, lowerUntypedConvert)
 import Pudu.Compiler.Lower.Lambda (lowerFunctionValue, lowerLambda, lowerValueCall)
@@ -391,6 +391,7 @@ lowerExpression state (Located spanValue expression) = case expression of
     | name == "panic" -> lowerPanic lowerExpression state spanValue arguments
     | name == "convertInteger" -> lowerUntypedConvert lowerExpression state spanValue arguments
     | Just lowered <- lowerDecimalPrimitive lowerExpression state spanValue name arguments -> lowered
+    | Just lowered <- lowerWordMapPrimitive lowerExpression state spanValue name arguments -> lowered
     | otherwise -> halt spanValue ("calls to '" <> name <> "'") state
   CallExpression (Located callee (MemberExpression receiver@(Located _ (NameExpression (owner :| []))) named@(Located _ member))) arguments
     | isModuleQualifier state owner, Just key <- resolveFunction state [owner, member] -> lowerFunctionCall lowerExpression state spanValue key callee arguments

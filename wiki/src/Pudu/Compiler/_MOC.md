@@ -6,6 +6,8 @@ aliases: [Program Compiler Module Map]
 
 # Program Compiler Module Map
 
+- [[Compiler Lower Word Map]] — checked direct/value sparse-word algebra (#810).
+
 - [[Compiler Frame Lowering]] · [[Compiler Frame State]] · [[Compiler Frame Body]] — structured Core to explicit continuations for #499.
 - [[Core Frame IR]] · [[Native Frame Lowering Tests]] — typed flat blocks and ordering/transfer evidence.
 
@@ -67,11 +69,11 @@ Dependency direction: Library → Program. Only [[Compiler Program]] reads files
 
 - [[Compiler Lower Scalar]] — represented operators and ordered runtime failures (#494).
 
-- [[Compiler Lower Constant]] — typed projection of compiler-folded constants (#543).
+- [[Compiler Lower Constant]] — typed frozen data projection, including collections and ranges (#808).
 
 - [[Compiler Lower Reference]] — checked shared-reference identity lowering (#544).
 
-- [[Compiler Lower Intrinsic]] — first-class output builtin bodies (#569).
+- [[Compiler Lower Intrinsic]] — first-class builtin bodies, including Decimal primitives (#806).
 - [[Compiler Lower Place]] — field and element assignment (#649).
 - [[Compiler Lower Loan]] — `&mut` parameters and their call sites (#651).
 - [[Compiler Lower Decimal]] — Decimal literals and primitives (#802).

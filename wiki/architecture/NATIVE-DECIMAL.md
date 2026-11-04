@@ -30,6 +30,20 @@ The primitives behind `Std.Decimal` and `Str.toDecimal` lower through
 [[Backend Decimal Programs]] under both evaluators, Clang, GCC 15 and
 ASan/UBSan, with zero live allocations; the carrier's own differential runs.
 
+## First-class primitives (#806)
+
+The seven Decimal prelude values use the existing builtin closure ABI and
+the same Core answer builder as direct calls. The checked reference type
+must equal the primitive's monomorphic signature. Option builders receive
+the callable result explicitly; a function-valued reference fact is never
+read as an Option. Rendering and equality identify the builtin tag, including
+when returned from main. No new runtime representation or inference path.
+
+Resolved Grill Log: share conversion and rounding bodies, evaluate arguments
+once in source order, retain ordinary closure cleanup, and use uncounted
+intrinsic frames. [[Native Decimal Callable Delivery]] records validation
+and pending independent review.
+
 ## Referenced by
 
 [[architecture/_MOC]] · [[Native Emission Coverage]]

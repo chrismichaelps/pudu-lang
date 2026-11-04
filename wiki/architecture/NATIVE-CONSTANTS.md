@@ -30,16 +30,24 @@ existing order after constant lookup has declined the name.
 [[Compiler Lower Constant]] projects the thawed plain data against the settled
 Core type at the complete reference span. Existing Core carriers preserve
 integer kind and exact magnitude, raw Float32/Float64 bits, text, Char, Bool,
-unit, tuples, declaration-ordered records and sum tags with ordered payloads.
+unit, tuples, declaration-ordered records and sum tags with ordered payloads,
+arrays, maps, sets and range values.
 Canonical checked types choose aggregate identity and layout; a display name
 never selects another module's representation. Owned values use the ordinary
 frame/refcount paths, including repeated reads and transfers.
 
-The current slice represents every frozen family already carried by native
-Core. BigInt, Decimal, bytes, collections, ranges and callable constants retain
-located refusals until their own native carriers exist. This is an explicit
-remaining obligation of full emission, not completion of the broad constants
-area. No native runtime ABI change is required for existing carriers.
+BigInt, Decimal and bytes use their existing literal carriers. Frozen
+collections project each nested value at its checked type (#808); map/set
+construction starts from stored ascending entries and preserves their held
+representatives. Range endpoint presence and inclusivity remain explicit.
+No native runtime ABI change is required for these carriers. Buckets/null
+and callable/resource constants still require their own carrier or portable
+product contracts; this does not complete the broad constants area.
+
+Resolved Grill Log (#808): a malformed nested element or unrepresentable
+range endpoint refuses at the constant use. No initializer is rerun and no
+runtime resource or closure is manufactured from frozen display data.
+[[Native Frozen Collection Delivery]] owns the continuation and evidence.
 
 ## Validation
 

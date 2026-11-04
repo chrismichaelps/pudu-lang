@@ -7,6 +7,11 @@ aliases: [Compiler Lower Intrinsic]
 ---
 # Compiler Lower Intrinsic
 
+Word-map algebra (#810): register exact solved binary map signatures through
+wordMapCallable with ordinary per-tag uncounted builtin metadata. Resolved
+Grill Log: consume the checked callable type; no specialization is guessed
+from written type syntax. Existing name resolution retains nearer bindings.
+
 Export lowerIntrinsicValue :: LowerState -> Span -> Text -> Maybe Lowered.
 Recognize standard-stream and display/show prelude values after the caller
 resolves nearer declarations. Validate exact solved callable types, then
@@ -62,3 +67,15 @@ Resolved Grill Log: trusting any annotation would let calls with unchecked
 argument types through, so only panic's own signature is taken.
 
 Closure info passes closureMethod = Nothing. (#644)
+
+## Decimal callable values (#806)
+
+Recognize all seven decimalCallable descriptors after nearer declarations
+resolve. Require equality with the exact checked CoreFunctionType; missing
+or mismatched facts refuse at the reference. Register the shared Decimal
+builder under the ordinary reserved builtin key and per-tag identity.
+
+Resolved Grill Log: the reference span contains a function fact, not its
+Option result. Pass the descriptor's validated result to the shared answer
+builder instead of reading that span as a result. Intrinsic frames keep
+their existing uncounted ABI, rendering, identity and ownership behavior.

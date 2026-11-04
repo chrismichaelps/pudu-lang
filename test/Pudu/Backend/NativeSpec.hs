@@ -29,11 +29,12 @@ import Pudu.Backend.IntegerPrograms (integerSuccessPrograms, integerRefusalProgr
 import Pudu.Backend.TextMethodPrograms (textMethodSuccessPrograms, textMethodRefusalPrograms)
 import Pudu.Backend.BigIntPrograms (bigIntSuccessPrograms, bigIntRefusalPrograms)
 import Pudu.Backend.DecimalPrograms (decimalSuccessPrograms, decimalRefusalPrograms)
+import Pudu.Backend.WordMapPrograms (wordMapSuccessPrograms, wordMapRefusalPrograms)
 import Pudu.Backend.CharPrograms (charSuccessPrograms, charRefusalPrograms)
 import Pudu.Backend.TuplePrograms (tupleSuccessPrograms, tupleRefusalPrograms)
 import Pudu.Backend.RecordPrograms (recordSuccessPrograms, recordRefusalPrograms)
 import Pudu.Backend.SumPrograms (sumSuccessPrograms, sumRefusalPrograms)
-import Pudu.Backend.ModulePrograms (modulePrograms, moduleRefusalPrograms)
+import Pudu.Backend.ModulePrograms (modulePrograms, moduleRefusalPrograms, constantPrograms, constantModulePrograms, constantRefusalPrograms)
 import Pudu.Backend.TextPrograms (textSuccessPrograms, textRefusalPrograms)
 import Pudu.Backend.FunctionPrograms (functionSuccessPrograms, functionRefusalPrograms)
 import Pudu.Backend.Toolchain
@@ -114,6 +115,9 @@ backendNativeProperties =
   , ("native BigInt failures retain interpreter refusals", testBigIntRefusals)
   , ("native Decimal values match hand-written answers and the interpreter", testDecimalConformance)
   , ("native Decimal failures retain interpreter refusals", testDecimalRefusals)
+  , ("native word-map algebra matches explicit answers and the interpreter", conjoin <$> mapM
+      (\(label, source, expected) -> conformanceExpecting (Just (expected, "", 0)) label source) wordMapSuccessPrograms)
+  , ("native word-map algebra retains runtime refusal provenance", conjoin <$> mapM (uncurry conformance) wordMapRefusalPrograms)
   , ("native tuples match hand-written answers and the interpreter", testTupleConformance)
   , ("native tuple failures retain interpreter refusals", testTupleRefusals)
   , ("native records match hand-written answers and the interpreter", testRecordConformance)
@@ -132,6 +136,11 @@ backendNativeProperties =
   , ("native Bytes failures retain interpreter refusals", testBytesRefusals)
   , ("native programs of several modules match hand-written answers and the interpreter", testModuleConformance)
   , ("native failures inside imported modules retain interpreter refusals", testModuleRefusals)
+  , ("native folded constants match explicit answers and the interpreter", conjoin <$> mapM
+      (\(label, modules, source, expected) -> conformanceWith modules (Just (expected, "", 0)) label source)
+      (constantModulePrograms <> [(label, [], source, expected) | (label, source, expected) <- constantPrograms]))
+  , ("native folded constants retain runtime refusal provenance", conjoin <$> mapM
+      (\(label, modules, source) -> conformanceWith modules Nothing label source) constantRefusalPrograms)
   , ("native functions match the interpreter on ordering and recursion", testFunctionConformance)
   , ("native function failures match interpreter diagnostics", testFunctionRefusals)
   , ("native scalar loop control matches the interpreter", testControlConformance)

@@ -6,6 +6,9 @@ aliases: [Backend Module Map]
 
 # Backend Module Map
 
+- [[Backend Word Map Programs]] — sparse-word algebra, persistence and ownership (#810).
+- [[Backend Module Programs]] — imported identities and folded collection/range conformance (#808).
+
 - [[Backend Frame Program]] · [[Backend Frame Runtime]] · [[Native Frame Runtime Tests]] — deterministic assembly, heap ownership and iterative calls.
 
 - [[Backend Frame Values]] · [[Backend Frame Bodies]] — pure operations and suspending bodies over typed frame cells.
@@ -116,7 +119,7 @@ aliases: [Backend Module Map]
 - [[Backend BigInt Programs]] — BigInt arithmetic, bits, conversions and failures.
 - [[Backend BigInt Values]] — the BigInt carrier.
 - [[Backend BigInt Operations]] — BigInt operators, status, display and conversions.
-- [[Backend Decimal Programs]] — Decimal arithmetic, rounding, parsing and failures.
+- [[Backend Decimal Programs]] — Decimal arithmetic, parsing, callable values and failures.
 - [[Backend Decimal Values]] — the Decimal carrier.
 - [[Backend Decimal Operations]] — Decimal parsing, binary64, division and primitives.
 - [[Backend Method Value Programs]] — built-in method values of every receiver kind.
