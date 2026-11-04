@@ -29,3 +29,11 @@ compiled evaluator; healthy programs also run under counted allocation.
 ## Referenced by
 
 [[Native Mutable Loans]] · [[src/Pudu/Backend/_MOC]]
+
+## Method loans (#790)
+
+Successes add receiver and argument loans with a qualified trait call and
+an element receiver whose index runs after the argument; generic,
+inherited and fallible methods on nested receivers; and a loaned method held
+as a value. A failure adds an element receiver out of range, reported at
+its root after the argument ran.

@@ -54,3 +54,9 @@ checker spells types (`unformed`), so calls made from a copy specialize too.
 ## Referenced by
 
 [[Compiler Lower Body]] · [[Compiler Lower Method]] · [[Native Generics]]
+
+## Mutable loans (#790)
+
+matchType looks through a reference of either kind on either side: a value
+lent to `self: &mut Self` holds its target, so a generic implementation is
+instantiated at the receiver's own type.

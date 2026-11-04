@@ -100,8 +100,10 @@ matchType pattern actual bound = case (pattern, actual) of
       | otherwise -> Nothing
   (ReferenceTypeValue mutable inner, ReferenceTypeValue other held)
     | mutable == other -> matchType inner held bound
-  (ReferenceTypeValue False inner, _) -> matchType inner actual bound
-  (_, ReferenceTypeValue False held) -> matchType pattern held bound
+  -- A reference of either kind holds its target natively, so a receiver
+  -- lent to `self: &mut Self` matches as the value it is.
+  (ReferenceTypeValue _ inner, _) -> matchType inner actual bound
+  (_, ReferenceTypeValue _ held) -> matchType pattern held bound
   (NominalType identity arguments, NominalType other held)
     | identity == other, length arguments == length held -> pairs (zip arguments held)
   (TupleTypeValue members, TupleTypeValue held)

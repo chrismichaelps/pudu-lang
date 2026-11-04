@@ -5,9 +5,9 @@
     the frame after the body. The call site holds each argument in order,
     resolving a lent place once where its argument stands, then stores each
     final through that place in parameter order, as `storePlace` does. -}
-module Pudu.Compiler.Lower.Loan (loanedReturn, loanedValue, lowerLoanedBody, lowerLoanedCall) where
+module Pudu.Compiler.Lower.Loan (Operand (..), loanedReturn, loanedValue, lowerLoanedBody, lowerLoanedCall, lowerLoanedOperands) where
 
-import Data.List (elemIndex)
+import Data.List (elemIndex, sortOn)
 import Data.List.NonEmpty (NonEmpty (..))
 import Data.Text (Text)
 import Pudu.Compiler.Lower.Control (blockType, expressionIsPrintValued)
@@ -58,31 +58,44 @@ loanedValue state at value
           tuple = CoreExpression at kind (CoreTuple (map (reading at) (local : lowerLoaned state)))
        in (held, CoreExpression at kind (CoreBlockValue (CoreBlock [CoreStatement at (CoreDeclare local value)] (Just tuple))))
 
+{-| How an operand of a loaned call is written: an argument, or the
+    receiver of a method call, which lends whatever place it names. -}
+data Operand = Argument | Receiver
+  deriving stock (Eq)
+
 {-| A call to a function with `&mut` parameters. An argument at a loaned
     position that is `&mut place`, or a local lent on, is read through its
     place and stored back after the call; any other is an ordinary value. -}
 lowerLoanedCall :: LowerExpression -> LowerState -> Span -> Text -> CoreSignature -> Bool -> [Located Expression] -> Lowered
-lowerLoanedCall lower state at target signature defaulted = go state [] []
+lowerLoanedCall lower state at target signature defaulted arguments =
+  lowerLoanedOperands lower state at target signature defaulted [(index, Argument, argument) | (index, argument) <- zip [0 ..] arguments]
+
+{-| The operands in the order they run, each with its parameter position.
+    The call passes them by position and stores the finals in parameter
+    order, so a method's receiver, which runs last, is written back first. -}
+lowerLoanedOperands :: LowerExpression -> LowerState -> Span -> Text -> CoreSignature -> Bool -> [(Int, Operand, Located Expression)] -> Lowered
+lowerLoanedOperands lower state at target signature defaulted = go state [] []
  where
   types = contextTypes . lowerContext
   loaned = signatureLoaned signature
   parameterTypes = map (coreLocalType . coreParameterLocal) (signatureParameters signature)
 
   go current statements held [] = finish current statements (reverse held)
-  go current statements held (argument : rest) = case argumentOf current (length held) argument of
+  go current statements held ((index, operand, argument) : rest) = case argumentOf current index operand argument of
     (after, Nothing) -> refused after
     (after, Just (declarations, value, kept))
       | expressionIsPrintValued value -> halt (locatedSpan argument) "a Result[(), Str] call argument" after
-      | Just found <- kept, Just expected <- lookup (length held) (zip [0 ..] parameterTypes)
+      | Just found <- kept, Just expected <- lookup index (zip [0 ..] parameterTypes)
       , heldType found /= expected -> halt (locatedSpan argument) "lending a place of a different type" after
       | otherwise ->
           let (bound, local) = bindLocal after "" (coreExpressionType value)
               declared = declarations <> [CoreStatement (locatedSpan argument) (CoreDeclare local value)]
-           in go bound (statements <> declared) ((local, kept, length held) : held) rest
+           in go bound (statements <> declared) ((local, kept, index) : held) rest
 
-  argumentOf current index argument
+  argumentOf current index operand argument
+    | index `elem` loaned, Receiver <- operand = lentFrom argument
     | index `elem` loaned = case locatedValue argument of
-        UnaryExpression "&mut" operand -> lentFrom operand
+        UnaryExpression "&mut" inner -> lentFrom inner
         NameExpression (_ :| []) -> lentFrom argument
         _ -> plain argument
     | otherwise = plain argument
@@ -90,8 +103,8 @@ lowerLoanedCall lower state at target signature defaulted = go state [] []
     plain written = case lower current written of
       (after, Just (core, _)) -> (after, Just ([], core, Nothing))
       (after, Nothing) -> (after, Nothing)
-    lentFrom operand = case holdPlace lower current (locatedSpan operand) operand of
-      Nothing -> plain operand
+    lentFrom written = case holdPlace lower current (locatedSpan written) written of
+      Nothing -> plain written
       Just (after, Nothing) -> (after, Nothing)
       Just (after, Just (declarations, found)) -> (after, Just (declarations, readHeld (types after) found, Just found))
 
@@ -99,7 +112,7 @@ lowerLoanedCall lower state at target signature defaulted = go state [] []
     | blockType statements Nothing == CoreNeverType =
         (current, Just (CoreExpression at CoreNeverType (CoreBlockValue (CoreBlock statements Nothing)), CoreNeverType))
     | otherwise =
-        let given = [reading at local | (local, _, _) <- held]
+        let given = [reading at local | (local, _, _) <- sortOn (\(_, _, index) -> index) held]
             passed = if defaulted then suppliedArguments at parameterTypes given else given
             kind = loanedType signature
             (bound, answer) = bindLocal (queued current) "" kind
@@ -108,7 +121,7 @@ lowerLoanedCall lower state at target signature defaulted = go state [] []
             stores =
               [ storeHeld (types bound) (heldSpan found) found
                   (CoreExpression (heldSpan found) (heldType found) (CoreTupleIndex (position + 1) answered))
-              | (_, Just found, index) <- held, Just position <- [elemIndex index loaned] ]
+              | (_, Just found, index) <- sortOn (\(_, _, index) -> index) held, Just position <- [elemIndex index loaned] ]
             result = CoreExpression at (signatureResult signature) (CoreTupleIndex 0 answered)
             whole = CoreBlock (statements <> [called] <> stores) (Just result)
          in (bound, Just (CoreExpression at (signatureResult signature) (CoreBlockValue whole), signatureResult signature))

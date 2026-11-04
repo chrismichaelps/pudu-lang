@@ -13,6 +13,7 @@ import Pudu.Compiler.Lower.State
   ( CoreSignature (..), Instance (..), LowerContext (..), LowerState (..), ModuleScope (..)
   , bindLocal, halt, inModule, refused, withTypeBindings )
 import Pudu.Compiler.Lower.Generic (specialize)
+import Pudu.Compiler.Lower.Loan (Operand (..), lowerLoanedOperands)
 import Pudu.Compiler.Lower.Types (formedCoreTypeIn, ownerKeyOf, typeBindings, typeFactAt, typeForSpan, nativeValueType)
 import Pudu.Core
 import Pudu.Eval.Operator.Access (arrayMethods, mapMethods, setMethods, stringMethods)
@@ -110,14 +111,17 @@ lowerMethodCall lower state at callee receiver member arguments = do
 lowerQualifiedMethod :: LowerExpression -> LowerState -> Span -> Span -> Text -> Text -> [Located Expression] -> Maybe Lowered
 lowerQualifiedMethod lower state at callee owner member arguments = do
   key <- byTrait `orElse` byType
-  Just $ case lowerAll lower state arguments of
+  Just $ maybe (ordinary key) id $ loanedInstanceCall lower state at key (typeFactAt (contextTypes context) callee)
+    (maybe [] pure receiverType) (length arguments) [(index, Argument, argument) | (index, argument) <- zip [0 ..] arguments]
+ where
+  ordinary key = case lowerAll lower state arguments of
     (after, Nothing) -> refused after
     (after, Just cores) -> invoke after at key (typeFactAt (contextTypes context) callee) cores
- where
   context = lowerContext state
-  receiverKey = case arguments of
-    first : _ -> typeForSpan (contextTypes context) (locatedSpan first) >>= ownerKeyOf
+  receiverType = case arguments of
+    first : _ -> typeForSpan (contextTypes context) (locatedSpan first)
     [] -> Nothing
+  receiverKey = receiverType >>= ownerKeyOf
   byTrait = receiverKey >>= \found -> Map.lookup (owner, found, member) (contextTraitMethods context)
   candidates = [key | ((ownerKey, name), key) <- Map.toList (contextMethods context), name == member, displayName ownerKey == owner]
   byType = case [key | Just found <- [receiverKey], ((ownerKey, name), key) <- Map.toList (contextMethods context), name == member, ownerKey == found, displayName ownerKey == owner] of
@@ -131,7 +135,14 @@ lowerQualifiedMethod lower state at callee owner member arguments = do
 {-| The arguments run before the receiver. Each argument is held in a
     temporary so the receiver can still be passed first. -}
 callMethod :: LowerExpression -> LowerState -> Span -> Text -> Maybe Type -> Located Expression -> [Located Expression] -> Lowered
-callMethod lower state at key instantiated receiver arguments = case lowerAll lower state arguments of
+callMethod lower state at key instantiated receiver arguments = maybe ordinary id $
+  loanedInstanceCall lower state at key instantiated (maybe [] pure (typeForSpan (contextTypes (lowerContext state)) (locatedSpan receiver)))
+    (length arguments + 1) ([(index, Argument, argument) | (index, argument) <- zip [1 ..] arguments] <> [(0, Receiver, receiver)])
+ where
+  ordinary = ordinaryMethodCall lower state at key instantiated receiver arguments
+
+ordinaryMethodCall :: LowerExpression -> LowerState -> Span -> Text -> Maybe Type -> Located Expression -> [Located Expression] -> Lowered
+ordinaryMethodCall lower state at key instantiated receiver arguments = case lowerAll lower state arguments of
   (after, Nothing) -> refused after
   (after, Just cores) -> case lower after receiver of
     (final, Nothing) -> refused final
@@ -164,35 +175,56 @@ callMethod lower state at key instantiated receiver arguments = case lowerAll lo
     its own bindings, then the caller's are restored. An instance with open
     parameters is specialized first, against the instantiation at the call. -}
 invoke :: LowerState -> Span -> Text -> Maybe Type -> [CoreExpression] -> Lowered
-invoke state at key instantiated cores = case Map.lookup key (contextInstances context) of
+invoke state at key instantiated cores = case instanceTarget state at key instantiated (coreExpressionType <$> take 1 cores) of
+  (back, Nothing) -> refused back
+  (back, Just (target, CoreSignature{signatureParameters, signatureResult, signatureLoaned}))
+    | position : _ <- signatureLoaned -> halt (loanSpan back target position) "a method with &mut parameters" back
+    | length signatureParameters /= length cores -> halt at "a method called with this many arguments" back
+    | otherwise ->
+        let queued = back{lowerContext = (lowerContext back){contextQueue = target : contextQueue (lowerContext back)}}
+         in (queued, Just (CoreExpression at (eagerType signatureResult cores) (CoreCall target cores), eagerType signatureResult cores))
+ where
+  -- A loan this call form cannot lend is refused where its `&mut` type is written.
+  loanSpan current target position = case Map.lookup target (contextInstances (lowerContext current)) of
+    Just found | Located _ parameter : _ <- drop position (functionParameters (locatedValue (instanceFunction found)))
+               , Just written <- parameterType parameter -> locatedSpan written
+    _ -> at
+
+{-| The instance a call reaches and its admitted signature. An instance with
+    open parameters is specialized first, against the instantiation at the
+    call; the signature is admitted in its own module under its own
+    bindings, then the caller's are restored. -}
+instanceTarget :: LowerState -> Span -> Text -> Maybe Type -> [CoreType] -> (LowerState, Maybe (Text, CoreSignature))
+instanceTarget state at key instantiated receiver = case Map.lookup key (contextInstances context) of
   Nothing -> halt at "this method" state
   Just found
     | open found -> case instantiated >>= specialize state key (instanceModule found) (instanceFunction found) (instanceScheme found) (fixed found) of
-        Just (registered, copy, _) -> invoke registered at copy Nothing cores
+        Just (registered, copy, _) -> instanceTarget registered at copy Nothing receiver
         Nothing -> halt at "a generic method without settled type arguments" state
   Just found ->
     let entered = withTypeBindings (instanceBindings found) (inModule (instanceModule found) state)
         (admitted, signature) = ensureSignature key (instanceFunction found) entered
         back = withTypeBindings (typeBindings (contextTypes context)) (inModule (contextModule context) admitted)
-     in case signature of
-          Nothing -> refused back
-          Just CoreSignature{signatureParameters, signatureResult, signatureLoaned}
-            | position : _ <- signatureLoaned -> halt (loanSpan found position) "a method with &mut parameters" back
-            | length signatureParameters /= length cores -> halt at "a method called with this many arguments" back
-            | otherwise ->
-                let queued = back{lowerContext = (lowerContext back){contextQueue = key : contextQueue (lowerContext back)}}
-                 in (queued, Just (CoreExpression at (eagerType signatureResult cores) (CoreCall key cores), eagerType signatureResult cores))
+     in (back, (,) key <$> signature)
  where
   context = lowerContext state
-  -- A method's loan is refused where its `&mut` type is written.
-  loanSpan found position = case drop position (functionParameters (locatedValue (instanceFunction found))) of
-    Located _ parameter : _ | Just written <- parameterType parameter -> locatedSpan written
-    _ -> at
   open found = instanceSelfAtCall found
     || any ((`Map.notMember` instanceBindings found) . fst) (schemeParams (instanceScheme found))
-  fixed found = case cores of
-    receiver : _ | instanceSelfAtCall found -> Map.insert "Self" (coreExpressionType receiver) (instanceBindings found)
+  fixed found = case receiver of
+    kind : _ | instanceSelfAtCall found -> Map.insert "Self" kind (instanceBindings found)
     _ -> instanceBindings found
+
+{-| A call whose instance has loaned parameters, lowered from the state
+    before the ordinary attempt: the operands run in the order given. -}
+loanedInstanceCall
+  :: LowerExpression -> LowerState -> Span -> Text -> Maybe Type -> [CoreType] -> Int
+  -> [(Int, Operand, Located Expression)] -> Maybe Lowered
+loanedInstanceCall lower state at key instantiated receiver count operands =
+  case instanceTarget state at key instantiated receiver of
+    (admitted, Just (target, signature))
+      | not (null (signatureLoaned signature)), length (signatureParameters signature) == count ->
+          Just (lowerLoanedOperands lower admitted at target signature False operands)
+    _ -> Nothing
 
 {-| A call to a method instance with lowered operands, receiver first. -}
 callInstance :: LowerState -> Span -> Text -> Maybe Type -> [CoreExpression] -> Lowered

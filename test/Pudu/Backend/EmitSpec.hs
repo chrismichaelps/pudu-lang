@@ -292,17 +292,6 @@ refusalCases =
       , "  return 0"
       , "}"
       ], "bump\n")
-  , ("methods that borrow their receiver mutably", Text.unlines
-      [ "module Refuse"
-      , "trait Bump { fn bump(self: &mut Self) -> () }"
-      , "type Count = { mut n: Int }"
-      , "impl Bump for Count { fn bump(self: &mut Self) -> () { self.n = self.n + 1 } }"
-      , "fn main() -> Int {"
-      , "  var count = Count{n: 1}"
-      , "  count.bump()"
-      , "  return count.n"
-      , "}"
-      ], "&mut Self) -> () {")
   , ("a generic call at a type without a native form", Text.unlines
       [ "module Refuse"
       , "fn keep[T](value: T) -> Int { 1 }"

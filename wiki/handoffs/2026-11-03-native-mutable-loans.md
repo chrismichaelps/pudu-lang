@@ -1,6 +1,6 @@
 ---
 type: handoff
-status: ACTIVE
+status: DONE
 issue: 651
 aliases: [Native Mutable Loans Delivery]
 ---

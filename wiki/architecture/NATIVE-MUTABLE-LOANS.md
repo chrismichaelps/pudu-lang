@@ -34,9 +34,13 @@ order, and the call's value is the tuple's first member. A failure inside
 the callee ends the program before any write, as it does in the
 interpreter.
 
-Methods with `&mut` parameters (including `self: &mut Self`) refuse at the
-`&mut` type, and a function with loans refuses as a value: neither has a
-place to write back to yet.
+Methods lend the same way (#790). A receiver call runs its arguments, then
+its receiver, which lends any place it names (an element-chosen receiver's
+indices run then); the finals are written back receiver first. A qualified
+call `Bump.bump(&mut c, 1)` lends like a function call. A bound method value
+lifts the written call, so a loaned method held as a value writes back to
+its own copy of the receiver. A function with loans still refuses as a
+value: a call through a value has no place to write back to yet.
 
 ## Resolved Grill Log
 
@@ -64,8 +68,12 @@ defaults, generic copies and shadowing; owned Str and array values lent 200
 times with zero live allocations; failures before and inside the call, call
 depth, and a stopping index. Both evaluators, Clang, GCC 15 and ASan/UBSan.
 
-Remaining: methods with `&mut` parameters and `&mut self`, and calls through
-function values with loans.
+Methods (#790): receiver and argument loans, qualified calls, generic and
+inherited members, `?`, nested and element receivers, method values, and
+an element receiver out of range after its argument.
+
+Remaining: function values and lambdas with `&mut` parameters, called
+through a value.
 
 ## Referenced by
 

@@ -106,3 +106,18 @@ An instance whose admitted signature has loaned parameters refuses at the
 first `&mut` type written in it ("a method with &mut parameters"): a method
 call lowers its operands before the instance is chosen, so it holds no place
 to write back to. See [[Native Mutable Loans]].
+
+## Method loans (#790)
+
+`instanceTarget` resolves the instance a call reaches (specialized when
+open) and admits its signature; `invoke` builds an ordinary call from it.
+A receiver call or a qualified call whose instance has loaned parameters is
+lowered again from the state before the ordinary attempt, through
+[[Compiler Lower Loan]]'s `lowerLoanedOperands`: a receiver call's arguments
+run first, then its receiver, which lends whatever place it names; a
+qualified call's operands are arguments in order. Lowering is a pure state
+function, so the discarded attempt leaves nothing behind. Only `for`-loop
+protocol calls still go straight to `invoke`, whose loans refuse at the
+`&mut` type. A bound method value lifts the written call, so a loaned
+method held as a value writes back to the copy of the receiver it holds, as
+the evaluator's `closureSelf` does. See [[Native Mutable Loans]].

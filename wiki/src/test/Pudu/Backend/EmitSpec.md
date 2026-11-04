@@ -263,3 +263,10 @@ The `&mut Int` parameter refusal case is gone: the program builds natively.
 A function with loans held as a value takes its place and refuses at the
 name. The `self: &mut Self` case still refuses at the parameter type.
 Resolved Grill Log: the semantic delta was inspected before the change.
+
+## Method loans (#790)
+
+The `self: &mut Self` refusal case is gone: the method call builds natively,
+and a loaned method held as a value builds too. A function with loans held
+as a value remains the mutable-loan refusal case. Resolved Grill Log: the
+semantic delta was inspected before the change.

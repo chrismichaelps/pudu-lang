@@ -61,3 +61,13 @@ Uses [[Compiler Lower Place]], [[Compiler Lower Default]], [[Compiler Lower Cont
 ## Referenced by
 
 [[Compiler Lower]] · [[Compiler Lower Body]] · [[Compiler Lower Try]] · [[Compiler Lower Call]] · [[Native Mutable Loans]] · [[src/Pudu/Compiler/_MOC]]
+
+## Ordered operands (#790)
+
+Also export Operand and lowerLoanedOperands: operands come in the order
+they run, each with its parameter position and whether it is an argument or
+a method receiver. A receiver at a loaned position lends any place it
+names; an argument only `&mut place` or a local lent on. The call passes
+operands by position and stores finals in parameter order, so a receiver,
+which runs last, is written back first, as `callClosureLending` lists
+`lentSelf` first. lowerLoanedCall is the case of arguments in order.

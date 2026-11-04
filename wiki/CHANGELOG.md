@@ -5,6 +5,10 @@ tags: [changelog]
 
 # Changelog
 
+## 2026-11-03 — Native method loans (#790)
+
+- `c.bump(2)` with `self: &mut Self`, `holder[0].add("r")`, `Bump.bump(&mut c, 1)` and methods taking `&mut` arguments build natively: arguments run, then the receiver, and finals are written back receiver first. Generic implementations, inherited defaults and method values follow. See [[Native Mutable Loans]].
+
 ## 2026-11-03 — Native mutable loans (#651)
 
 - `fn bump(value: &mut Int)` called as `bump(&mut n)`, `bump(&mut p.x)` or `bump(&mut grid[i][j])` builds natively: the place is read where its argument stands, indices once, and the parameter's final value is written back after the trailing result, `return` or `?`, in parameter order. See [[Native Mutable Loans]].

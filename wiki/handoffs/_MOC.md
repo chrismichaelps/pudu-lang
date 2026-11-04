@@ -264,3 +264,4 @@ tags: [moc, handoff]
 
 - [[Native Place Assignment Delivery]] — element assignment and the lowering loop fix (#649).
 - [[Native Mutable Loans Delivery]] — `&mut` parameters with writeback (#651).
+- [[Native Method Loans Delivery]] — `&mut self` and method loans (#790).
