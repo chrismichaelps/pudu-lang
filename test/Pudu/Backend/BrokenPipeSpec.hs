@@ -1,5 +1,5 @@
 {-| @Test.Backend.BrokenPipeSpec — native continuation after a closed output pipe. -}
-module Pudu.Backend.BrokenPipeSpec (brokenPipeProperties) where
+module Pudu.Backend.BrokenPipeSpec (brokenPipeProperties, brokenReportStatus) where
 
 import Data.Text (Text)
 import qualified Data.Text as Text
@@ -59,7 +59,7 @@ testPipe
                   outcomes <- traverse (\(channel, inherited) -> do
                     closed <- readProcessWithExitCode runner [binary, channel, inherited] ""
                     let failedReport = not (null errors) && channel /= "1"
-                        pipeStatus = if failedReport && inherited /= "blocked" then ExitFailure (-13) else expectedStatus
+                        pipeStatus = if failedReport && inherited /= "blocked" then brokenReportStatus else expectedStatus
                         pipeOutput = if channel == "2" then expectedOutput else ""
                         pipeErrors = if channel == "1" then errors else ""
                     pure (counterexample (label <> ": " <> channel <> "/" <> inherited <> ": normal=" <> show ordinary <> "; closed=" <> show closed)
@@ -101,3 +101,9 @@ launcher = Text.unlines
   , "  arguments[0]=argv[1]; arguments[1]=0; execv(argv[1], arguments); return 96;"
   , "}"
   ]
+
+{-| How a failure report ends when standard error is a pipe nobody reads: the
+    interpreter's own outcome on this platform. Linux keeps SIGPIPE ignored, so
+    the write fails and the program exits 1; elsewhere the signal ends it. -}
+brokenReportStatus :: ExitCode
+brokenReportStatus = if os == "linux" then ExitFailure 1 else ExitFailure (-13)
