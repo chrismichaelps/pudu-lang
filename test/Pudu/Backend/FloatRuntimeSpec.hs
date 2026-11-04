@@ -8,6 +8,7 @@ import qualified Data.Text.IO as TextIO
 import Data.Word (Word64)
 import GHC.Float (castWord64ToDouble)
 import Numeric (showHex)
+import Pudu.Backend.BrokenPipeSpec (brokenReportStatus)
 import Pudu.Backend.Runtime (RuntimePart (..), runtimeParts)
 import Pudu.Backend.Runtime.Dependencies (runtimeDependencies)
 import Pudu.Backend.Runtime.Float (floatRuntimeParts)
@@ -159,7 +160,7 @@ testPipes
         ordinary <- readProcessWithExitCode binary [] ""
         outcomes <- traverse (\(channel,inherited) -> do
           actual <- readProcessWithExitCode runner [binary,channel,inherited] ""
-          let status | fatal && channel/="1" && inherited/="blocked" = ExitFailure (-13)
+          let status | fatal && channel/="1" && inherited/="blocked" = brokenReportStatus
                      | fatal = ExitFailure 1
                      | otherwise = ExitFailure 7
               output = if channel=="2" then normalOutput else ""

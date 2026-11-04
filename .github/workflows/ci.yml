@@ -9,8 +9,12 @@ on:
 permissions:
   contents: read
 
+# The compiler is built once, with a cache of the dependency store and of the
+# build tree, and every other job runs the binaries that build produced. The
+# suite runs as parallel shards of one test binary, and the gates as parallel
+# jobs, so a run takes as long as its longest part rather than their sum.
 jobs:
-  compiler:
+  build:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
@@ -18,17 +22,6 @@ jobs:
         with:
           ghc-version: 9.14.1
           cabal-version: 3.16.1.0
-      - uses: actions/setup-node@v7
-        with:
-          node-version: 22
-      - name: Verify optimized installation orchestration
-        run: python3 test/refresh-install.py
-      - name: Verify application dependency layers
-        run: |
-          node --test test/app-layers.test.mjs
-          node scripts/app-layers.mjs
-          node --test test/ark-layers.test.mjs
-          node scripts/ark-layers.mjs
       # Calling a library written elsewhere assembles the call at run time,
       # which needs the headers for the machine's own dynamic caller. The
       # runner has the library and not the headers.
@@ -44,25 +37,196 @@ jobs:
           sudo apt-get update || echo "some package indexes could not be read; continuing to the install"
           sudo apt-get install -y libffi-dev
       - run: cabal update
+      # The store holds dependencies, keyed by what pins them; the build tree is
+      # keyed by commit and restored from this branch's or dev's latest, so a
+      # push recompiles only the modules it changed. Recompilation is decided by
+      # source hashes, so a restored tree never answers for a changed file.
+      - uses: actions/cache@v4
+        with:
+          path: ~/.local/state/cabal/store
+          key: cabal-store-${{ runner.os }}-${{ hashFiles('**/*.cabal', 'cabal.project*') }}
+          restore-keys: cabal-store-${{ runner.os }}-
+      - uses: actions/cache@v4
+        with:
+          path: dist-newstyle
+          key: dist-${{ runner.os }}-${{ github.ref }}-${{ github.sha }}
+          restore-keys: |
+            dist-${{ runner.os }}-${{ github.ref }}-
+            dist-${{ runner.os }}-refs/heads/dev-
       # A fresh checkout has nothing built, so this cannot answer "up to date"
       # without compiling — which is how a local `-Werror` run passed for a week
       # while checking nothing, and let an incomplete pattern and three dead
       # bindings through.
       - name: Verify the tree compiles with no warnings
         run: cabal build all --enable-optimization=2 --ghc-options="-Werror"
-      - run: cabal build all --enable-optimization=2
-      # Every gate below runs the executable, and `cabal list-bin` answers for
-      # the configuration it is asked about rather than the one that was built.
-      # Asked without the optimization flag it names the unoptimized path: on a
-      # fresh runner that file does not exist and the gate fails for a reason
-      # that has nothing to do with the change, and on a machine that has built
-      # both it names a binary from some earlier day — which is worse, because
-      # the gates pass and the benchmark reports a figure for the wrong build.
-      # Resolved once here so no gate can disagree with what was compiled.
-      - name: Locate the executable that was built
-        run: echo "PUDU=$(cabal list-bin pudu --enable-optimization=2)" >> "$GITHUB_ENV"
+      # -Werror changes no generated code, so the binaries the gates run are
+      # the ones that check built; a second build without the flag would be a
+      # different configuration and compile the whole tree again.
+      - name: Package the compiler and the test binary
+        run: |
+          mkdir -p built
+          cp "$(cabal list-bin pudu --enable-optimization=2 --ghc-options=-Werror)" built/pudu
+          cp "$(cabal list-bin pudu-tests:test:pudu-test --enable-optimization=2 --ghc-options=-Werror)" built/pudu-test
+          tar -cf pudu-binaries.tar built
+      - uses: actions/upload-artifact@v4
+        with:
+          name: pudu-binaries
+          path: pudu-binaries.tar
+          retention-days: 3
+
+  suite:
+    name: suite (shard ${{ matrix.shard }} of 6)
+    needs: build
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [0, 1, 2, 3, 4, 5]
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+      # Calling a library written elsewhere assembles the call at run time,
+      # which needs the headers for the machine's own dynamic caller. The
+      # runner has the library and not the headers.
+      # `apt-get update` fails as a whole when any configured repository fails,
+      # and the runner image carries third-party repositories this project does
+      # not use — a bad mirror for one of those has failed this build for a
+      # reason unrelated to the change under test. The install is the gate: if
+      # the index is too stale to resolve the package, this still fails, and it
+      # fails saying the package could not be installed rather than that some
+      # other repository could not be read.
+      - name: Install the dynamic call headers
+        run: |
+          sudo apt-get update || echo "some package indexes could not be read; continuing to the install"
+          sudo apt-get install -y libffi-dev
+      - uses: actions/download-artifact@v5
+        with:
+          name: pudu-binaries
+      # The binaries travel as one archive so their execute bits survive.
+      - name: Unpack the compiler built for this commit
+        run: |
+          tar -xf pudu-binaries.tar
+          echo "PUDU=$PWD/built/pudu" >> "$GITHUB_ENV"
+      # Each property belongs to the one shard its label hashes to, so the six
+      # shards together run every property exactly once.
+      - name: Run this shard of the full suite
+        timeout-minutes: 30
+        # The conformance matrices compile programs whose single entry body runs
+        # to thousands of C lines; a shared runner's GCC can take longer than
+        # the two minutes a user's build waits. The limit here bounds a hung
+        # compiler, not the time a correct translation needs.
+        env:
+          PUDU_CC_TIMEOUT: "600"
+        run: PUDU_TEST_SHARD=${{ matrix.shard }}/6 ./built/pudu-test
+
+  library:
+    name: library and documentation gates
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+      # Calling a library written elsewhere assembles the call at run time,
+      # which needs the headers for the machine's own dynamic caller. The
+      # runner has the library and not the headers.
+      # `apt-get update` fails as a whole when any configured repository fails,
+      # and the runner image carries third-party repositories this project does
+      # not use — a bad mirror for one of those has failed this build for a
+      # reason unrelated to the change under test. The install is the gate: if
+      # the index is too stale to resolve the package, this still fails, and it
+      # fails saying the package could not be installed rather than that some
+      # other repository could not be read.
+      - name: Install the dynamic call headers
+        run: |
+          sudo apt-get update || echo "some package indexes could not be read; continuing to the install"
+          sudo apt-get install -y libffi-dev
+      - uses: actions/download-artifact@v5
+        with:
+          name: pudu-binaries
+      # The binaries travel as one archive so their execute bits survive.
+      - name: Unpack the compiler built for this commit
+        run: |
+          tar -xf pudu-binaries.tar
+          echo "PUDU=$PWD/built/pudu" >> "$GITHUB_ENV"
+      - name: Verify optimized installation orchestration
+        run: python3 test/refresh-install.py
+      - name: Verify application dependency layers
+        run: |
+          node --test test/app-layers.test.mjs
+          node scripts/app-layers.mjs
+          node --test test/ark-layers.test.mjs
+          node scripts/ark-layers.mjs
       - name: Enforce scheduled API removals
         run: python3 scripts/api-lifecycle.py check --binary "$PUDU"
+      - name: Verify canonical owners and method providers
+        run: |
+          node test/bound-provider.mjs "$PUDU"
+          node test/canonical-owners.mjs "$PUDU"
+          node test/sum-owners.mjs "$PUDU"
+          node test/qualified-record-methods.mjs "$PUDU"
+          node test/trait-provider.mjs "$PUDU"
+      - name: Verify every committed Pudu file is formatted
+        run: $PUDU fmt --check $(find packages/pudu test-fixtures examples -name '*.pudu')
+      # Formatting only parses. Nothing else compiled the standard library
+      # itself: a module broke only where a test happened to import it, and the
+      # ones no test reaches were never checked at all. The fixtures are
+      # excluded because many of them are programs that must fail to check.
+      - name: Verify the standard library and examples compile
+        run: $PUDU check $(find packages/pudu/v0.1/lib examples -name '*.pudu')
+      # The documentation promises that every example is a complete program
+      # that runs as written, and the playground opens on its examples. A
+      # documentation edit that broke one used to reach readers unnoticed.
+      - name: Verify every documentation and playground example runs
+        run: python3 test/docs-examples.py --pudu "$PUDU" --run
+      - name: Verify every diagnostic code means one thing
+        run: node test/diagnostic-codes.mjs
+      # A merge that changes only documentation, the website, or the examples
+      # must never publish a release; the decision the release workflow asks is
+      # held to that here, where every change is checked.
+      - name: Verify only a compiler change at a new version releases
+        run: python3 test/release-plan.test.py
+      - name: Verify compiler archive notices and strip policy
+        run: python3 test/package-binary.test.py
+
+  ark:
+    name: Ark gates
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+      # Calling a library written elsewhere assembles the call at run time,
+      # which needs the headers for the machine's own dynamic caller. The
+      # runner has the library and not the headers.
+      # `apt-get update` fails as a whole when any configured repository fails,
+      # and the runner image carries third-party repositories this project does
+      # not use — a bad mirror for one of those has failed this build for a
+      # reason unrelated to the change under test. The install is the gate: if
+      # the index is too stale to resolve the package, this still fails, and it
+      # fails saying the package could not be installed rather than that some
+      # other repository could not be read.
+      - name: Install the dynamic call headers
+        run: |
+          sudo apt-get update || echo "some package indexes could not be read; continuing to the install"
+          sudo apt-get install -y libffi-dev
+      - uses: actions/download-artifact@v5
+        with:
+          name: pudu-binaries
+      # The binaries travel as one archive so their execute bits survive.
+      - name: Unpack the compiler built for this commit
+        run: |
+          tar -xf pudu-binaries.tar
+          echo "PUDU=$PWD/built/pudu" >> "$GITHUB_ENV"
+      - uses: haskell-actions/setup@v2
+        with:
+          ghc-version: 9.14.1
+          cabal-version: 3.16.1.0
       - name: Verify Ark math algebra, failure boundaries and shipping
         run: |
           node test/ark-math.mjs "$PUDU"
@@ -80,32 +244,48 @@ jobs:
           node test/ark-ui.mjs "$PUDU"
           node test/ark-net.mjs "$PUDU"
           node test/ark-build.mjs "$PUDU"
-      # A suite that stops responding should say so and end, rather than hold
-      # the runner until the job's own limit. The bound is generous against the
-      # observed run so an ordinary slow day is not a failure.
-      - name: Run the full suite
-        timeout-minutes: 45
-        run: cabal test all --enable-optimization=2 --test-show-details=direct
-      - name: Verify canonical owners and method providers
+      - name: Verify capsule floor support
+        run: node test/ark-ground.mjs "$PUDU"
+      - name: Verify swept movement contracts
+        run: node test/ark-motion.mjs "$PUDU"
+      - name: Verify capsule box casts
+        run: node test/ark-cast.mjs "$PUDU"
+      - name: Verify capsule movement and support
+        run: node test/ark-character.mjs "$PUDU"
+      - name: Verify qualified constructor paths
+        run: node test/qualified-variants.mjs "$PUDU"
+
+  website:
+    name: website and package gates
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+      # Calling a library written elsewhere assembles the call at run time,
+      # which needs the headers for the machine's own dynamic caller. The
+      # runner has the library and not the headers.
+      # `apt-get update` fails as a whole when any configured repository fails,
+      # and the runner image carries third-party repositories this project does
+      # not use — a bad mirror for one of those has failed this build for a
+      # reason unrelated to the change under test. The install is the gate: if
+      # the index is too stale to resolve the package, this still fails, and it
+      # fails saying the package could not be installed rather than that some
+      # other repository could not be read.
+      - name: Install the dynamic call headers
         run: |
-          node test/bound-provider.mjs "$PUDU"
-          node test/canonical-owners.mjs "$PUDU"
-          node test/sum-owners.mjs "$PUDU"
-          node test/qualified-record-methods.mjs "$PUDU"
-          node test/trait-provider.mjs "$PUDU"
-      - name: Verify every committed Pudu file is formatted
-        run: cabal run -v0 pudu -- fmt --check $(find packages/pudu test-fixtures examples -name '*.pudu')
-      # Formatting only parses. Nothing else compiled the standard library
-      # itself: a module broke only where a test happened to import it, and the
-      # ones no test reaches were never checked at all. The fixtures are
-      # excluded because many of them are programs that must fail to check.
-      - name: Verify the standard library and examples compile
-        run: cabal run -v0 pudu -- check $(find packages/pudu/v0.1/lib examples -name '*.pudu')
-      # The documentation promises that every example is a complete program
-      # that runs as written, and the playground opens on its examples. A
-      # documentation edit that broke one used to reach readers unnoticed.
-      - name: Verify every documentation and playground example runs
-        run: python3 test/docs-examples.py --pudu "$PUDU" --run
+          sudo apt-get update || echo "some package indexes could not be read; continuing to the install"
+          sudo apt-get install -y libffi-dev
+      - uses: actions/download-artifact@v5
+        with:
+          name: pudu-binaries
+      # The binaries travel as one archive so their execute bits survive.
+      - name: Unpack the compiler built for this commit
+        run: |
+          tar -xf pudu-binaries.tar
+          echo "PUDU=$PWD/built/pudu" >> "$GITHUB_ENV"
       # The website is a Pudu program too: nothing else compiles it, formats
       # it, or runs its suites. `PUDU` is what the playground suite's sandbox
       # runs programs with, so it exercises the compiler this job built.
@@ -115,6 +295,10 @@ jobs:
           "$PUDU" check $(find website/src -name '*.pudu')
           "$PUDU" fmt --check website/src website/playground/examples
           "$PUDU" test website/src/Test/Website.pudu website/src/Test/Application.pudu website/src/Test/Playground.pudu website/src/Test/PackageSearch.pudu website/src/Test/Markdown.pudu website/src/Test/Declarations.pudu website/src/Test/LivePackages.pudu website/src/Test/LivePages.pudu
+      # The Linguist check reads every Pudu source, the website's among them,
+      # so it runs where the website's packages are installed.
+      - name: Verify the Linguist submission is consistent
+        run: python3 scripts/linguist.py check --pudu "$PUDU"
       - name: Verify package discovery lists every topic result past the search cap
         run: node --test website/scripts/packages/discover.test.mjs
       - name: Verify the playground paints Pudu as the documentation does
@@ -140,27 +324,38 @@ jobs:
           else
             test "$status" -eq 125
           fi
-      - name: Verify the Linguist submission is consistent
-        run: python3 scripts/linguist.py check --pudu "$PUDU"
-      - name: Verify capsule floor support
-        run: node test/ark-ground.mjs "$PUDU"
-      - name: Verify swept movement contracts
-        run: node test/ark-motion.mjs "$PUDU"
-      - name: Verify capsule box casts
-        run: node test/ark-cast.mjs "$PUDU"
-      - name: Verify capsule movement and support
-        run: node test/ark-character.mjs "$PUDU"
-      - name: Verify qualified constructor paths
-        run: node test/qualified-variants.mjs "$PUDU"
-      - name: Verify every diagnostic code means one thing
-        run: node test/diagnostic-codes.mjs
-      # A merge that changes only documentation, the website, or the examples
-      # must never publish a release; the decision the release workflow asks is
-      # held to that here, where every change is checked.
-      - name: Verify only a compiler change at a new version releases
-        run: python3 test/release-plan.test.py
-      - name: Verify compiler archive notices and strip policy
-        run: python3 test/package-binary.test.py
+
+  runtime:
+    name: runtime and tooling gates
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+      # Calling a library written elsewhere assembles the call at run time,
+      # which needs the headers for the machine's own dynamic caller. The
+      # runner has the library and not the headers.
+      # `apt-get update` fails as a whole when any configured repository fails,
+      # and the runner image carries third-party repositories this project does
+      # not use — a bad mirror for one of those has failed this build for a
+      # reason unrelated to the change under test. The install is the gate: if
+      # the index is too stale to resolve the package, this still fails, and it
+      # fails saying the package could not be installed rather than that some
+      # other repository could not be read.
+      - name: Install the dynamic call headers
+        run: |
+          sudo apt-get update || echo "some package indexes could not be read; continuing to the install"
+          sudo apt-get install -y libffi-dev
+      - uses: actions/download-artifact@v5
+        with:
+          name: pudu-binaries
+      # The binaries travel as one archive so their execute bits survive.
+      - name: Unpack the compiler built for this commit
+        run: |
+          tar -xf pudu-binaries.tar
+          echo "PUDU=$PWD/built/pudu" >> "$GITHUB_ENV"
       - name: Verify the language server answers a real session
         run: node test/lsp-session.mjs "$PUDU"
       - name: Verify the language server survives what an editor sends it
@@ -223,8 +418,8 @@ jobs:
         run: node test/lane-collections.mjs "$PUDU"
       - name: Verify documentation site browser and CLI contracts
         run: |
-          cabal run -v0 pudu -- doc --html test-fixtures/stdlib/UsesAll.pudu | node test/doc-site-parity.mjs
-          ! cabal run -v0 pudu -- doc --html > /dev/null
-          ! cabal run -v0 pudu -- doc --html test-fixtures/stdlib/does-not-exist.pudu > /dev/null
+          "$PUDU" doc --html test-fixtures/stdlib/UsesAll.pudu | node test/doc-site-parity.mjs
+          ! "$PUDU" doc --html > /dev/null
+          ! "$PUDU" doc --html test-fixtures/stdlib/does-not-exist.pudu > /dev/null
       - name: Verify derive documentation and public API boundaries
         run: node test/derive-index.mjs "$PUDU"

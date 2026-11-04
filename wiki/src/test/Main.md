@@ -216,3 +216,10 @@ Register [[Eval Float Order Tests]] in the evaluation group (#522).
 
 Resolved Grill Log: Dispatch --native-output-oracle PATH to Native Output Tests before the normal runner changes stdout buffering. Register outputProperties in the existing backend outcome list; ordinary invocations and aggregate failure policy are unchanged.
 Register [[Binary Codec Properties]] explicitly. Resolved Grill Log: native round-trip, bit-pattern and malformed-input laws execute in the full suite without a new dependency.
+
+## Shards (#815)
+
+`PUDU_TEST_SHARD=k/n` runs only the properties whose label's stable hash
+modulo n is k; with `PUDU_TEST_MATCH` both must hold. A missing or malformed
+selector runs every property. The property `a test shard selector places
+every label in exactly one shard` checks the partition.

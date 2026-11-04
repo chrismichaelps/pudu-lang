@@ -39,3 +39,11 @@ generates expected answers. Fixed IO corpora execute once, not 200 binaries.
 ## Referenced by
 
 [[src/_MOC]] · [[Backend Module Map]] · [[Native Wide Integer Delivery]]
+
+## Cases run outside the setjmp frame (#815)
+
+Each matrix row runs in `run_case`, reached through a volatile function
+pointer, and `test_case` only calls `setjmp` and compares. A local of the frame
+that calls `setjmp` changed before `longjmp` is indeterminate, and GCC refuses
+the inlined arithmetic under `-Wclobbered`; the pointer keeps any compiler from
+inlining the operations back into that frame.

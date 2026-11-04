@@ -44,7 +44,7 @@ import Pudu.Diagnostic.Host (memoryFailureMessage)
 {-| The runtime contract revision baked into every generated program's header
     comment. It changes only when the runtime's behaviour or interface does. -}
 runtimeRevision :: Text
-runtimeRevision = "19"
+runtimeRevision = "20"
 
 {-| @Backend.Runtime.Part — one named, self-contained piece of the runtime.
 
@@ -102,10 +102,14 @@ preludeLines =
   , "#endif"
   ]
 
+{-| A report to a standard error nobody reads ends the way the interpreter's
+    does on the same platform. On Linux the interpreter's runtime keeps
+    SIGPIPE ignored, so its write fails and it exits 1; elsewhere the broken
+    pipe's default action ends it, and the report restores that action. -}
 errorIoLines :: [Text]
 errorIoLines =
   [ "static inline void pudu_prepare_error_io(void) {"
-  , "#ifdef SIGPIPE"
+  , "#if defined(SIGPIPE) && !defined(__linux__)"
   , "  (void)signal(SIGPIPE, SIG_DFL);"
   , "#endif"
   , "  (void)pudu_wait_writable(2);"

@@ -201,3 +201,14 @@ Register explicit-output and runtime-refusal groups over the three constant
 corpora in [[Backend Module Programs]]. Resolved Grill Log: reuse the same
 whole-program compiler and byte-exact oracle, retaining comprehensive module
 groups rather than replacing them with this focused lane.
+
+## Integer matrix shares (#815)
+
+The integer operator matrix compiles one C program per row and took twelve
+minutes on Linux as one property, longer than any shard of the rest of the
+suite. It is registered as eight properties over interleaved rows (row index
+modulo eight), so test shards spread it; together they hold every row once.
+
+Resolved Grill Log: interleaving rather than contiguous ranges keeps each
+share's mix of matrix and single-program rows alike, so no share carries all
+the large matrices.
