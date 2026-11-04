@@ -1,0 +1,275 @@
+{-# LANGUAGE BangPatterns #-}
+
+{-| @Runtime.Raster — depth-tested triangle rasterization into an RGBA8 target
+
+    The software render device's only native work. Each call copies the color
+    and depth targets once and writes every covered pixel of every triangle in
+    place. Vertex data arrives as screen-space lanes, three vertices per
+    triangle; transformation, clipping and shading inputs stay in Pudu. -}
+module Pudu.Runtime.Raster
+  ( Cull (..)
+  , rasterFill
+  , rasterTriangles
+  , rasterPerspectiveTriangles
+  , rasterTexturedTriangles
+  , rasterShadedTriangles
+  ) where
+
+import Control.Monad (when)
+import qualified Data.ByteString as BS
+import qualified Data.ByteString.Internal as BI
+import qualified Data.ByteString.Unsafe as BU
+import Data.Word (Word8)
+import Foreign.ForeignPtr (withForeignPtr)
+import Foreign.Marshal.Utils (copyBytes)
+import Foreign.Ptr (Ptr, castPtr)
+import Foreign.Storable (peekElemOff, pokeByteOff, pokeElemOff)
+import System.IO.Unsafe (unsafeDupablePerformIO)
+
+import Pudu.Runtime.Lanes (Lanes, laneCount, laneFold)
+import Pudu.Runtime.Sampler (Pinned, Sampler, Texel (..), sample, withSampler)
+import Pudu.Runtime.Shade (Lighting, Rgb (..), shade)
+
+{-| Which faces survive: front faces are counter-clockwise in normalized device
+    coordinates, which is clockwise on a screen whose y grows downward. -}
+data Cull = CullNone | CullBack
+  deriving stock (Eq, Show)
+
+{-| `pixels` RGBA8 pixels of one color, each channel clamped to [0, 1] and rounded. -}
+rasterFill :: Int -> Double -> Double -> Double -> Double -> Maybe BS.ByteString
+rasterFill pixels r g b a
+  | pixels < 0 = Nothing
+  | otherwise = Just $ BI.unsafeCreate (pixels * 4) $ \out ->
+      let loop !i
+            | i >= pixels = pure ()
+            | otherwise = do
+                pokeByteOff out (i * 4) (channel r)
+                pokeByteOff out (i * 4 + 1) (channel g)
+                pokeByteOff out (i * 4 + 2) (channel b)
+                pokeByteOff out (i * 4 + 3) (channel a)
+                loop (i + 1)
+       in loop 0
+
+{-| Rasterize triangles into copies of a color and a depth target. Answers
+    Nothing when the targets disagree with the width, the vertex lanes differ
+    in count, or the count is not a multiple of three. -}
+rasterTriangles
+  :: BS.ByteString -> Lanes -> Int -> Cull -> [Lanes] -> Maybe (BS.ByteString, Lanes)
+rasterTriangles = rasterize Nothing Nothing Nothing
+
+{-| Perspective attributes retain homogeneous w as the last lane. Positive finite
+    weights are normalized per triangle before any reciprocal is formed. -}
+rasterPerspectiveTriangles
+  :: BS.ByteString -> Lanes -> Int -> Cull -> [Lanes] -> Maybe (BS.ByteString, Lanes)
+rasterPerspectiveTriangles color depth width cull lanes = case lanes of
+  [xs, ys, zs, rs, gs, bs, ws] -> rasterize (Just ws) Nothing Nothing color depth width cull [xs, ys, zs, rs, gs, bs]
+  _ -> Nothing
+
+{-| Perspective attributes followed by u and v lanes; the lit color is
+    multiplied by the texel sampled at the perspective-correct UV, and texels
+    with alpha below one half are cut out before their depth write. -}
+rasterTexturedTriangles
+  :: BS.ByteString -> Lanes -> Int -> Cull -> [Lanes] -> Sampler -> Maybe (BS.ByteString, Lanes)
+rasterTexturedTriangles color depth width cull lanes texture = case lanes of
+  [xs, ys, zs, rs, gs, bs, ws, us, vs] ->
+    rasterize (Just ws) (Just (us, vs, texture)) Nothing color depth width cull [xs, ys, zs, rs, gs, bs]
+  _ -> Nothing
+
+{-| Perspective attributes with unlit base colors, followed by world-space
+    normal and position lanes; every pixel is lit from its interpolated normal
+    and position. -}
+rasterShadedTriangles
+  :: BS.ByteString -> Lanes -> Int -> Cull -> [Lanes] -> Lighting -> Maybe (BS.ByteString, Lanes)
+rasterShadedTriangles color depth width cull lanes light = case lanes of
+  [xs, ys, zs, rs, gs, bs, ws, nx, ny, nz, px, py, pz] ->
+    rasterize (Just ws) Nothing (Just ([nx, ny, nz, px, py, pz], light)) color depth width cull [xs, ys, zs, rs, gs, bs]
+  _ -> Nothing
+
+rasterize
+  :: Maybe Lanes -> Maybe (Lanes, Lanes, Sampler) -> Maybe ([Lanes], Lighting) -> BS.ByteString -> Lanes -> Int -> Cull
+  -> [Lanes] -> Maybe (BS.ByteString, Lanes)
+rasterize weights texture surface color depth width cull vertexLanes = case vertexLanes of
+  [xs, ys, zs, rs, gs, bs]
+    | width <= 0 || pixels `rem` width /= 0 -> Nothing
+    | BS.length color /= pixels * 4 -> Nothing
+    | any ((/= vertices) . laneCount) ([ys, zs, rs, gs, bs] ++ maybe [] (\(us, vs, _) -> [us, vs]) texture ++ maybe [] fst surface) -> Nothing
+    | maybe False ((/= 6) . length . fst) surface -> Nothing
+    | vertices `rem` 3 /= 0 -> Nothing
+    | not (maybe True validWeights weights) -> Nothing
+    | otherwise -> Just $ unsafeDupablePerformIO $ do
+        colorOut <- BI.mallocByteString (BS.length color)
+        depthOut <- BI.mallocByteString (BS.length depth)
+        withForeignPtr colorOut $ \c -> withForeignPtr depthOut $ \d ->
+          BU.unsafeUseAsCString color $ \c0 -> BU.unsafeUseAsCString depth $ \d0 ->
+            reading xs $ \px -> reading ys $ \py -> reading zs $ \pz ->
+              reading rs $ \pr -> reading gs $ \pg -> reading bs $ \pb -> optionally reading weights $ \pw ->
+                optionally texturing texture $ \textured -> optionally surfacing surface $ \surfaced -> do
+                copyBytes c (castPtr c0) (BS.length color)
+                copyBytes d (castPtr d0) (BS.length depth)
+                let target = Target c (castPtr d) width (pixels `quot` width)
+                    triangles !t
+                      | t >= vertices = pure ()
+                      | otherwise = do
+                          (q0, q1, q2) <- case pw of
+                            Nothing -> pure (1, 1, 1)
+                            Just pointer -> do
+                              w0 <- peekElemOff pointer t
+                              w1 <- peekElemOff pointer (t + 1)
+                              w2 <- peekElemOff pointer (t + 2)
+                              let smallest = min w0 (min w1 w2)
+                              pure (smallest / w0, smallest / w1, smallest / w2)
+                          let vertex i q = do
+                                x <- peekElemOff px i
+                                y <- peekElemOff py i
+                                z <- peekElemOff pz i
+                                r <- peekElemOff pr i
+                                g <- peekElemOff pg i
+                                b <- peekElemOff pb i
+                                (u, v) <- case textured of
+                                  Nothing -> pure (0, 0)
+                                  Just (pu, pv, _) -> (,) <$> peekElemOff pu i <*> peekElemOff pv i
+                                normal <- case surfaced of
+                                  Nothing -> pure [0, 0, 0, 0, 0, 0]
+                                  Just (pointers, _) -> mapM (\pointer -> (* q) <$> peekElemOff pointer i) pointers
+                                pure $ case normal of
+                                  [nx, ny, nz, wx, wy, wz] -> Vertex x y z (r * q) (g * q) (b * q) q (u * q) (v * q) nx ny nz wx wy wz
+                                  _ -> Vertex x y z (r * q) (g * q) (b * q) q (u * q) (v * q) 0 0 0 0 0 0
+                          a <- vertex t q0
+                          b <- vertex (t + 1) q1
+                          v <- vertex (t + 2) q2
+                          triangle target cull (maybe False (const True) weights) ((\(_, _, s) -> s) <$> textured) (snd <$> surfaced) a b v
+                          triangles (t + 3)
+                triangles 0
+        pure (BI.fromForeignPtr0 colorOut (BS.length color), BI.fromForeignPtr0 depthOut (BS.length depth))
+    where
+      pixels = laneCount depth
+      vertices = laneCount xs
+      validWeights lane = laneCount lane == vertices
+        && laneFold (\ok w -> if ok == 1 && w > 0 && not (isInfinite w) then 1 else 0) 1 lane == 1
+  _ -> Nothing
+
+data Target = Target !(Ptr Word8) !(Ptr Double) !Int !Int
+
+{-| Screen coordinates and affine depth, then weighted colors, their normalized
+    reciprocal weight, weighted texture coordinates and weighted world normal and
+    position. The affine entry uses unit weights; absent attributes are zero. -}
+data Vertex = Vertex
+  !Double !Double !Double !Double !Double !Double !Double !Double !Double
+  !Double !Double !Double !Double !Double !Double
+
+reading :: Lanes -> (Ptr Double -> IO a) -> IO a
+reading bytes use = BU.unsafeUseAsCString bytes (use . castPtr)
+
+surfacing :: ([Lanes], Lighting) -> (([Ptr Double], Lighting) -> IO a) -> IO a
+surfacing (lanes, light) use = go lanes []
+  where
+    go [] pointers = use (reverse pointers, light)
+    go (lane : rest) pointers = reading lane $ \pointer -> go rest (pointer : pointers)
+
+texturing :: (Lanes, Lanes, Sampler) -> ((Ptr Double, Ptr Double, Pinned) -> IO a) -> IO a
+texturing (us, vs, texture) use =
+  reading us $ \pu -> reading vs $ \pv -> withSampler texture $ \pinned -> use (pu, pv, pinned)
+
+optionally :: (a -> (b -> IO c) -> IO c) -> Maybe a -> (Maybe b -> IO c) -> IO c
+optionally _ Nothing use = use Nothing
+optionally with (Just value) use = with value (use . Just)
+
+triangle :: Target -> Cull -> Bool -> Maybe Pinned -> Maybe Lighting -> Vertex -> Vertex -> Vertex -> IO ()
+triangle target cull perspective texture light v0 v1 v2
+  | not (all usable [v0, v1, v2]) = pure ()
+  | area == 0 = pure ()
+  | cull == CullBack && area > 0 = pure ()
+  | area < 0 = fill target perspective texture light v0 v2 v1
+  | otherwise = fill target perspective texture light v0 v1 v2
+  where
+    area = edge v0 v1 (vx v2) (vy v2)
+    usable (Vertex x y z _ _ _ _ _ _ _ _ _ _ _ _) = finite x && finite y && z >= 0 && z <= 1
+    finite n = not (isNaN n || isInfinite n)
+
+{-| Fill a triangle with positive edge area, sampling pixel centers. A pixel on
+    an edge belongs to the triangle only for a top or left edge, so triangles
+    sharing an edge cover every pixel exactly once. -}
+fill :: Target -> Bool -> Maybe Pinned -> Maybe Lighting -> Vertex -> Vertex -> Vertex -> IO ()
+fill (Target color depth width height) perspective texture light v0 v1 v2 = rows lowY
+  where
+    area = edge v0 v1 (vx v2) (vy v2)
+    inverse = 1 / area
+    lowX = max 0 (floor (minimum [vx v0, vx v1, vx v2]))
+    highX = min (width - 1) (ceiling (maximum [vx v0, vx v1, vx v2]))
+    lowY = max 0 (floor (minimum [vy v0, vy v1, vy v2]))
+    highY = min (height - 1) (ceiling (maximum [vy v0, vy v1, vy v2]))
+    bias0 = topLeft v1 v2
+    bias1 = topLeft v2 v0
+    bias2 = topLeft v0 v1
+    rows !y
+      | y > highY = pure ()
+      | otherwise = columns y lowX >> rows (y + 1)
+    columns !y !x
+      | x > highX = pure ()
+      | otherwise = do
+          let sx = fromIntegral x + 0.5
+              sy = fromIntegral y + 0.5
+              w0 = edge v1 v2 sx sy
+              w1 = edge v2 v0 sx sy
+              w2 = edge v0 v1 sx sy
+          when (inside w0 bias0 && inside w1 bias1 && inside w2 bias2) $ do
+            let l0 = w0 * inverse
+                l1 = w1 * inverse
+                l2 = w2 * inverse
+                z = (l0 * vz v0 + l1 * vz v1) + l2 * vz v2
+                reciprocal = if perspective then (l0 * vq v0 + l1 * vq v1) + l2 * vq v2 else 1
+                at = y * width + x
+            held <- peekElemOff depth at
+            when (z < held && reciprocal > 0 && not (isInfinite reciprocal)) $ do
+              let attribute f =
+                    let value = (l0 * f v0 + l1 * f v1) + l2 * f v2
+                     in if perspective then value / reciprocal else value
+              Texel tr tg tb ta <- case texture of
+                Nothing -> pure (Texel 1 1 1 1)
+                Just pinned -> sample pinned (attribute vu) (attribute vv)
+              when (ta >= 0.5) $ do
+                pokeElemOff depth at z
+                let base f t = attribute f * t
+                    Rgb red green blue = case light of
+                      Nothing -> Rgb (base vr tr) (base vg tg) (base vb tb)
+                      Just lit ->
+                        shade lit (attribute vnx) (attribute vny) (attribute vnz) (attribute vpx) (attribute vpy) (attribute vpz)
+                          (base vr tr) (base vg tg) (base vb tb)
+                pokeByteOff color (at * 4) (channel red)
+                pokeByteOff color (at * 4 + 1) (channel green)
+                pokeByteOff color (at * 4 + 2) (channel blue)
+                pokeByteOff color (at * 4 + 3) (255 :: Word8)
+          columns y (x + 1)
+    inside w bias = w > 0 || (w == 0 && bias)
+
+edge :: Vertex -> Vertex -> Double -> Double -> Double
+edge a b x y = (vx b - vx a) * (y - vy a) - (vy b - vy a) * (x - vx a)
+
+topLeft :: Vertex -> Vertex -> Bool
+topLeft a b = (dy == 0 && dx > 0) || dy < 0
+  where
+    dx = vx b - vx a
+    dy = vy b - vy a
+
+channel :: Double -> Word8
+channel value
+  | isNaN value || value <= 0 = 0
+  | value >= 1 = 255
+  | otherwise = fromIntegral (round (value * 255) :: Int)
+
+vx, vy, vz, vr, vg, vb, vq, vu, vv, vnx, vny, vnz, vpx, vpy, vpz :: Vertex -> Double
+vx (Vertex x _ _ _ _ _ _ _ _ _ _ _ _ _ _) = x
+vy (Vertex _ y _ _ _ _ _ _ _ _ _ _ _ _ _) = y
+vz (Vertex _ _ z _ _ _ _ _ _ _ _ _ _ _ _) = z
+vr (Vertex _ _ _ r _ _ _ _ _ _ _ _ _ _ _) = r
+vg (Vertex _ _ _ _ g _ _ _ _ _ _ _ _ _ _) = g
+vb (Vertex _ _ _ _ _ b _ _ _ _ _ _ _ _ _) = b
+vq (Vertex _ _ _ _ _ _ q _ _ _ _ _ _ _ _) = q
+vu (Vertex _ _ _ _ _ _ _ u _ _ _ _ _ _ _) = u
+vv (Vertex _ _ _ _ _ _ _ _ v _ _ _ _ _ _) = v
+vnx (Vertex _ _ _ _ _ _ _ _ _ n _ _ _ _ _) = n
+vny (Vertex _ _ _ _ _ _ _ _ _ _ n _ _ _ _) = n
+vnz (Vertex _ _ _ _ _ _ _ _ _ _ _ n _ _ _) = n
+vpx (Vertex _ _ _ _ _ _ _ _ _ _ _ _ p _ _) = p
+vpy (Vertex _ _ _ _ _ _ _ _ _ _ _ _ _ p _) = p
+vpz (Vertex _ _ _ _ _ _ _ _ _ _ _ _ _ _ p) = p

@@ -136,7 +136,7 @@ export fn parseOr(text: Str, fallback: Decimal) -> Decimal {
 export fn scale(value: Decimal) -> Int { decimalScale(value) }
 
 /// The whole number a decimal names, when it names one exactly.
-/// Answers `None` for a value with a fractional part.
+/// Answers `None` for a value with a fractional part, or one `Int` cannot hold.
 ///
 /// ## Examples
 ///

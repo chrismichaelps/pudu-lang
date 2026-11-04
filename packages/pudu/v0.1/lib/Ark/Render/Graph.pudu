@@ -1,0 +1,120 @@
+module Ark.Render.Graph
+
+import Ark.Render.Device as Device
+
+/// One pass: the resources it reads and writes and the work it does on the target.
+export type Pass = { name: Str, reads: Array[Str], writes: Array[Str], run: fn(Device.Target) -> Option[Device.Target] }
+
+/// Passes in declaration order and the resources the frame must produce.
+export type FrameGraph = { passes: Array[Pass], exports: Set[Str] }
+
+/// The first and last live pass index touching a resource.
+export type Lifetime = { resource: Str, first: Int, last: Int }
+
+/// Live passes in execution order and every resource's lifetime among them.
+export type Compiled = { passes: Array[Pass], lifetimes: Array[Lifetime] }
+
+/// Why a graph cannot run.
+export type GraphError = DuplicatePass(Str) | ReadBeforeWrite(Str, Str) | NothingExported
+
+/// A pass declaration.
+export fn pass(name: Str, reads: &Array[Str], writes: &Array[Str], run: fn(Device.Target) -> Option[Device.Target]) -> Pass {
+  Pass{name, reads: *reads, writes: *writes, run}
+}
+
+/// A graph with no passes.
+export fn graph() -> FrameGraph {
+  FrameGraph{passes: [], exports: setOf([])}
+}
+
+/// Append a pass; later passes may read what earlier passes write.
+export fn add(frame: FrameGraph, step: Pass) -> FrameGraph {
+  FrameGraph{..frame, passes: frame.passes.push(step)}
+}
+
+/// Mark a resource the frame must produce, such as the presented image.
+export fn exported(frame: FrameGraph, resource: Str) -> FrameGraph {
+  FrameGraph{..frame, exports: frame.exports.insert(resource)}
+}
+
+/// Resolve dependencies, cull passes no export needs and compute resource lifetimes.
+export fn compile(frame: &FrameGraph) -> Result[Compiled, GraphError] {
+  if frame.exports.isEmpty() { return Err(NothingExported) }
+  var names: Set[Str] = setOf([])
+  var writer: Map[Str, Int] = mapOf([])
+  var dependencies: Array[Array[Int]] = []
+  var index = 0
+  for step in frame.passes {
+    if names.contains(step.name) { return Err(DuplicatePass(step.name)) }
+    names = names.insert(step.name)
+    var needs: Array[Int] = []
+    for resource in step.reads {
+      let Some(source) = writer.get(resource) else { return Err(ReadBeforeWrite(step.name, resource)) }
+      needs = needs.push(source)
+    }
+    dependencies = dependencies.push(needs)
+    for resource in step.writes {
+      writer = writer.insert(resource, index)
+    }
+    index = index + 1
+  }
+  var live: Set[Int] = setOf([])
+  var pending: Array[Int] = []
+  for resource in frame.exports.toArray() {
+    if let Some(source) = writer.get(resource) { pending = pending.push(source) }
+  }
+  while !pending.isEmpty() {
+    let current = pending[pending.length() - 1]
+    pending = pending.pop()
+    if !live.contains(current) {
+      live = live.insert(current)
+      pending = pending.concat(dependencies[current])
+    }
+  }
+  var kept: Array[Pass] = []
+  var position = 0
+  for step in frame.passes {
+    if live.contains(position) { kept = kept.push(step) }
+    position = position + 1
+  }
+  Ok(Compiled{passes: kept, lifetimes: lifetimesOf(&kept)})
+}
+
+/// The live pass names in execution order.
+export fn order(compiled: &Compiled) -> Array[Str] {
+  compiled.passes.map(|step| step.name)
+}
+
+/// Run every live pass in order on the target.
+export fn execute(compiled: &Compiled, surface: Device.Target) -> Option[Device.Target] {
+  var current = surface
+  for step in compiled.passes {
+    let run = step.run
+    current = run(current) ?
+  }
+  Some(current)
+}
+
+fn lifetimesOf(passes: &Array[Pass]) -> Array[Lifetime] {
+  var first: Map[Str, Int] = mapOf([])
+  var last: Map[Str, Int] = mapOf([])
+  var seen: Array[Str] = []
+  var index = 0
+  for step in *passes {
+    for resource in step.reads.concat(step.writes) {
+      if !first.containsKey(resource) {
+        first = first.insert(resource, index)
+        seen = seen.push(resource)
+      }
+      last = last.insert(resource, index)
+    }
+    index = index + 1
+  }
+  var lifetimes: Array[Lifetime] = []
+  for resource in seen {
+    if let (Some(start), Some(end)) = (first.get(resource), last.get(resource)) {
+      lifetimes = lifetimes.push(Lifetime{resource, first: start, last: end})
+    }
+  }
+  lifetimes
+}

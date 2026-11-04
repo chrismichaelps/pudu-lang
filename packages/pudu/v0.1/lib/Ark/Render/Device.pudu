@@ -1,0 +1,174 @@
+module Ark.Render.Device
+
+import Std.Lanes as Lanes
+import Std.Math.Float as Float
+import Ark.Assets.Import as Import
+import Ark.Assets.Texture as Texture
+import Ark.Math.Color as Color
+import Ark.Math as V
+
+/// An RGBA8 color buffer and a Float64 depth lane of width x height, rows top to bottom.
+export type Target = { width: Int, height: Int, color: Bytes, depth: Lanes.Lanes }
+
+/// Pixel x/y, divided depth, positive homogeneous w, lit linear r/g/b and texture u/v,
+/// three per triangle.
+export type ScreenBatch = {
+  xs: Lanes.Lanes,
+  ys: Lanes.Lanes,
+  zs: Lanes.Lanes,
+  ws: Lanes.Lanes,
+  rs: Lanes.Lanes,
+  gs: Lanes.Lanes,
+  bs: Lanes.Lanes,
+  us: Lanes.Lanes,
+  vs: Lanes.Lanes,
+}
+
+/// World-space normals and positions per vertex, parallel to a screen batch, for per-pixel lighting.
+export type Surface = { nx: Lanes.Lanes, ny: Lanes.Lanes, nz: Lanes.Lanes, px: Lanes.Lanes, py: Lanes.Lanes, pz: Lanes.Lanes }
+
+/// Per-pixel lighting: the eye, a direction toward the light and its color, an ambient floor,
+/// a Blinn-Phong highlight, Fresnel reflectance at normal incidence and a sky gradient with a sun
+/// disc of the given angular radius in radians.
+export type Lighting = {
+  eye: V.Vec3,
+  toward: V.Vec3,
+  light: Color.Rgba,
+  ambient: Float64,
+  shininess: Float64,
+  specular: Float64,
+  fresnel: Float64,
+  horizon: Color.Rgba,
+  zenith: Color.Rgba,
+  sunRadius: Float64,
+}
+
+/// Which faces a draw keeps; front faces wind counter-clockwise in device coordinates.
+export type Cull = CullNone | CullBack
+
+/// Driver codes for texture color spaces and filters.
+const SPACE_CODES: Map[Str, Int] = mapOf([("linear", 0), ("srgb", 1)])
+const FILTER_CODES: Map[Str, Int] = mapOf([("nearest", 0), ("bilinear", 1)])
+
+/// A target cleared to transparent black at the farthest depth, or None for an empty size.
+export fn target(width: Int, height: Int) -> Option[Target] {
+  if width <= 0 || height <= 0 { return None }
+  clear(Target{width, height, color: bytesOf([]), depth: Lanes.fromArray(&[])}, Color.rgba(0.0, 0.0, 0.0, 0.0))
+}
+
+/// Fill the color buffer with one color and reset every depth to 1.
+export fn clear(surface: Target, fill: Color.Rgba) -> Option[Target] {
+  let area = surface.width * surface.height
+  let color = rasterFill(area, fill.r, fill.g, fill.b, fill.a) ?
+  let depth = Lanes.filled(area, 1.0) ?
+  Some(Target{..surface, color, depth})
+}
+
+/// Rasterize perspective attributes; None for mismatched lanes or non-positive/non-finite w.
+export fn draw(surface: Target, batch: &ScreenBatch, cull: Cull) -> Option[Target] {
+  let (color, depth) = rasterPerspectiveTriangles(
+    surface.color,
+    Lanes.toBytes(&surface.depth),
+    surface.width,
+    cullCode(cull),
+    Lanes.toBytes(&batch.xs),
+    Lanes.toBytes(&batch.ys),
+    Lanes.toBytes(&batch.zs),
+    Lanes.toBytes(&batch.rs),
+    Lanes.toBytes(&batch.gs),
+    Lanes.toBytes(&batch.bs),
+    Lanes.toBytes(&batch.ws),
+  ) ?
+  let lanes = Lanes.fromBytes(depth) ?
+  Some(Target{..surface, color, depth: lanes})
+}
+
+/// Rasterize lit color multiplied by a texture sampled at perspective-correct u/v with the named
+/// filter; texels with alpha below one half are cut out. None for mismatched lanes, invalid w,
+/// an unknown filter or invalid texture storage.
+export fn drawTextured(surface: Target, batch: &ScreenBatch, cull: Cull, texture: &Texture.Texture, filter: Str) -> Option[Target] {
+  let space = SPACE_CODES.get(texture.space) ?
+  let mode = FILTER_CODES.get(filter) ?
+  let (color, depth) = rasterTexturedTriangles(
+    surface.color,
+    Lanes.toBytes(&surface.depth),
+    surface.width,
+    cullCode(cull),
+    Lanes.toBytes(&batch.xs),
+    Lanes.toBytes(&batch.ys),
+    Lanes.toBytes(&batch.zs),
+    Lanes.toBytes(&batch.rs),
+    Lanes.toBytes(&batch.gs),
+    Lanes.toBytes(&batch.bs),
+    Lanes.toBytes(&batch.ws),
+    Lanes.toBytes(&batch.us),
+    Lanes.toBytes(&batch.vs),
+    texture.pixels,
+    texture.width,
+    space,
+    mode,
+  ) ?
+  let lanes = Lanes.fromBytes(depth) ?
+  Some(Target{..surface, color, depth: lanes})
+}
+
+/// Rasterize unlit base colors lit per pixel from the surface's interpolated normals and
+/// positions; None for mismatched lanes, invalid w or invalid lighting.
+export fn drawShaded(surface: Target, batch: &ScreenBatch, normals: &Surface, cull: Cull, lighting: &Lighting) -> Option[Target] {
+  let l = lighting
+  let uniforms = Lanes.fromArray(&[
+      l.eye.x, l.eye.y, l.eye.z, l.toward.x, l.toward.y, l.toward.z, l.light.r, l.light.g, l.light.b,
+      l.ambient, l.shininess, l.specular, l.fresnel, l.horizon.r, l.horizon.g, l.horizon.b,
+      l.zenith.r, l.zenith.g, l.zenith.b, Float.cos(l.sunRadius),
+    ])
+  let (color, depth) = rasterShadedTriangles(
+    surface.color,
+    Lanes.toBytes(&surface.depth),
+    surface.width,
+    cullCode(cull),
+    Lanes.toBytes(&batch.xs),
+    Lanes.toBytes(&batch.ys),
+    Lanes.toBytes(&batch.zs),
+    Lanes.toBytes(&batch.rs),
+    Lanes.toBytes(&batch.gs),
+    Lanes.toBytes(&batch.bs),
+    Lanes.toBytes(&batch.ws),
+    Lanes.toBytes(&normals.nx),
+    Lanes.toBytes(&normals.ny),
+    Lanes.toBytes(&normals.nz),
+    Lanes.toBytes(&normals.px),
+    Lanes.toBytes(&normals.py),
+    Lanes.toBytes(&normals.pz),
+    Lanes.toBytes(&uniforms),
+  ) ?
+  let lanes = Lanes.fromBytes(depth) ?
+  Some(Target{..surface, color, depth: lanes})
+}
+
+/// Draw with an imported material: lit color scaled by the tint, then textured by its albedo.
+export fn drawMaterial(surface: Target, batch: &ScreenBatch, cull: Cull, material: &Import.Material, filter: Str) -> Option[Target] {
+  let tint = material.tint
+  let tinted = ScreenBatch{..*batch, rs: Lanes.scale(&batch.rs, tint.r), gs: Lanes.scale(&batch.gs, tint.g), bs: Lanes.scale(&batch.bs, tint.b)}
+  drawTextured(surface, &tinted, cull, &material.albedo, filter)
+}
+
+/// The RGBA8 color buffer.
+export fn pixels(surface: &Target) -> Bytes {
+  surface.color
+}
+
+/// The color buffer as a binary PPM image, alpha dropped, for offscreen inspection.
+export fn snapshotPpm(surface: &Target) -> Bytes {
+  let header = ("P6\n" + show(surface.width) + " " + show(surface.height) + "\n255\n").toBytes()
+  match surface.color.strided(0, 3, 4) {
+    case Some(rgb) => header.concat(rgb)
+    case None => header
+  }
+}
+
+fn cullCode(cull: Cull) -> Int {
+  match cull {
+    case CullNone => 0
+    case CullBack => 1
+  }
+}

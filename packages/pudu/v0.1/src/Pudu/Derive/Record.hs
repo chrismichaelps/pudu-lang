@@ -280,7 +280,11 @@ expression depth context original@(Located at value) = do
     IfExpression condition success failure -> do
       condition' <- recurse condition
       case locatedValue condition' of
-        LiteralExpression (BoolValue True) -> recurseBlock success >>= out . BlockExpression
+        LiteralExpression (BoolValue True) -> case failure of
+          Just _ -> recurseBlock success >>= out . BlockExpression
+          Nothing -> do
+            success' <- recurseBlock success
+            out (IfExpression condition' success' Nothing)
         LiteralExpression (BoolValue False) -> case failure of
           Just held -> recurse held
           Nothing -> generated at (Block [] Nothing) >>= out . BlockExpression
@@ -359,9 +363,9 @@ expression depth context original@(Located at value) = do
             result <- literal $ case locatedValue fallback' of
               LiteralExpression (StringValue _) -> writtenLiteral held
               _ -> held
-            case locatedValue fallback' of
-              LiteralExpression _ -> pure result
-              _ -> do
+            if effectFree (locatedValue fallback')
+              then pure result
+              else do
                 evaluated <- generated at (ExpressionStatement fallback')
                 preserved <- generated at (Block [evaluated] (Just result))
                 out (BlockExpression preserved)
@@ -374,6 +378,17 @@ expression depth context original@(Located at value) = do
       LiteralExpression (StringValue key) -> pure key
       _ -> refuse (locatedSpan held) "a reflected attribute name must be known at compile time"
 
+
+{-| A fallback with nothing to observe when it is skipped: literals, names, and
+    unary or binary operators over them. Any other expression may have
+    effects, so the expansion still evaluates it once. -}
+effectFree :: Expression -> Bool
+effectFree fallback = case fallback of
+  LiteralExpression _ -> True
+  NameExpression _ -> True
+  UnaryExpression _ operand -> effectFree (locatedValue operand)
+  BinaryExpression left _ right -> effectFree (locatedValue left) && effectFree (locatedValue right)
+  _ -> False
 unroll :: Int -> Context -> Span -> ComptimeFor -> Residual (Located Expression)
 unroll depth context at loop = case locatedValue (comptimeForSource loop) of
   CallExpression callee [] | reflectedName context callee == Just "fields" -> do

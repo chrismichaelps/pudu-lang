@@ -11,6 +11,17 @@ aliases: [Repository Test Runner]
 
 # Repository Test Runner
 
+Register [[CLI Memory Tests]] and [[Native Frame Runtime Tests]] with the backend
+group. Resolved Grill Log (#499): host and allocator-failure checks run in the
+complete suite and through focused filters with unchanged exit aggregation.
+
+Register [[Native Frame Body Tests]] beside continuation lowering. Resolved
+Grill Log (#499): strict generated-C checks execute in focused and full suites.
+
+Register [[Native Frame Lowering Tests]] beside backend properties and aggregate
+its outcomes. Resolved Grill Log (#499): focused and complete runs execute the
+same continuation checks without claiming runtime frame repair.
+
 ## Purpose and interface
 
 Runs every registered QuickCheck property family with a visible label and fails the process if any
@@ -19,6 +30,9 @@ family fails. Output is line-buffered so a stalled property remains identifiable
 Registers [[Derive Library Spec]].
 
 ## Governance and algorithm
+
+Register [[Lsp Module Catalog Spec]] with LSP properties. Resolved Grill Log: focused root-policy
+checks also execute through the ordinary aggregate test runner.
 
 Each spec exports named properties. The runner executes 200 cases per property, gathers every result
 rather than failing early, and exits unsuccessfully when any result failed. Registration here and in
@@ -98,3 +112,101 @@ Register [[Database Challenge Spec]] explicitly with existing dependencies. Reso
 Register [[Native Wide Value Tests]] explicitly without new dependencies. Resolved Grill Log:
 exact value and minimal-selection properties contribute to the complete suite
 and its aggregate failure status. The release gate is unchanged.
+## Native Core contracts (#486)
+
+Resolved Grill Log: Execute coreProperties and aggregate their results in the ordinary failure status, preserving the existing full runner and optional name filter.
+## Native function and process regressions (#488)
+
+Register [[Backend Function Programs]] as the native function corpus and [[Backend Toolchain Tests]] as an executed property family. Resolved Grill Log: the full suite must run independent differential and adversarial process regressions through static registration; no new test dependency.
+
+## Native control flow (#489)
+
+Register the loop-control lowering helper and native control-flow property/corpus modules through explicit module lists and the existing test aggregator. Resolved Grill Log: no new dependency or source discovery; focused and full suites execute the same control-flow evidence.
+
+## Unit conditional conformance (#490)
+
+Register [[Eval If Unit Tests]] explicitly and execute its property family alongside
+ordinary evaluator checks. Resolved Grill Log: include unit-result, contextual
+Dynamic, constant and actual boxed-kernel regressions in focused and full runs.
+
+## Native solved facts (#491)
+
+Register and run [[Native Solved Types Tests]] alongside backend properties. Resolved Grill Log: missing/colliding facts and canonical identity checks execute in the full suite.
+
+## Portable wide-word prerequisite
+
+Register and aggregate [[Native Word128 Tests]] beside native runtime properties.
+Resolved Grill Log: actual strict C11 execution must validate the prerequisite without claiming typed emission admission.
+
+## Exact wide values (#502)
+
+Execute and aggregate [[Native Wide Value Tests]] beside the raw word kernel corpus.
+Resolved Grill Log: helper-selection and exact-sign checks must execute without admitting source types early.
+
+## Typed wide operation registration (#503)
+
+Execute and aggregate [[Native Wide Operation Tests]] beside the wide value/raw word groups.
+Resolved Grill Log: execute independent mathematical/refusal and minimal-closure evidence; source admission remains a later obligation.
+
+## Wide runtime integration (#504)
+
+Execute and aggregate [[Native Wide Runtime Tests]] beside wide primitive/value groups.
+Resolved Grill Log: actual production runtime selection/output/failure evidence must execute before wide-frame/source admission.
+
+## Closed-output regression (#505)
+
+Execute and aggregate [[Native Broken Pipe Tests]] alongside native runtime conformance properties.
+Resolved Grill Log: restore default SIGPIPE in a separate launcher so inherited evaluator policy cannot mask the native defect.
+
+## Wide frame execution (#506)
+
+Register and execute [[Native Wide Frame Tests]] with existing dependencies.
+Resolved Grill Log: the actual Core/frame C11 corpus and cleanup checks run in
+focused and complete suites; public source admission remains pending.
+
+## Floating natural prerequisite (#508)
+
+Register [[Native Floating Natural Kernel]] and [[Native Floating Natural Tests]]
+as appropriate to production/test components, using existing dependencies.
+Resolved Grill Log: execute exact C11 helper evidence without admitting Float
+source, changing the active runtime ABI or adding a native dependency.
+
+## Exact binary64 formatting (#509)
+
+Register [[Native Binary64 Formatter]] and [[Native Binary64 Formatter Tests]]
+in the appropriate production/test components with existing dependencies.
+Production license-files includes [[Native Floating Notices]] alongside LICENSE.
+Resolved Grill Log: preserve the project license and upstream attribution,
+without source admission, runtime file lookup or a new native dependency.
+
+## Floating values (#510)
+
+Register [[Native Floating Values]] and [[Native Floating Value Tests]] in their
+production/test components using existing dependencies. Resolved Grill Log:
+raw-bit arithmetic evidence precedes source admission; runtime selection and
+ABI revision remain unchanged in this prerequisite.
+
+## Floating runtime selection (#511)
+
+Register [[Native Floating Runtime]], [[Native Runtime Dependencies]] and
+[[Native Floating Runtime Tests]] in the appropriate components with existing
+dependencies. Resolved Grill Log: execute actual catalogue/output evidence
+without changing source admission or the represented runtime ABI.
+
+## Text leak registration (#515)
+
+Register textLeakProperties from [[Backend Text Leak Tests]] beside the wide
+frame properties.
+
+## Text case registration (#517)
+
+Register textCaseProperties from [[Backend Text Case Tests]].
+
+Register [[Eval Record Order Tests]] in the evaluation group (#519).
+
+Register [[Eval Float Order Tests]] in the evaluation group (#522).
+
+## Output Results (#566)
+
+Resolved Grill Log: Dispatch --native-output-oracle PATH to Native Output Tests before the normal runner changes stdout buffering. Register outputProperties in the existing backend outcome list; ordinary invocations and aggregate failure policy are unchanged.
+Register [[Binary Codec Properties]] explicitly. Resolved Grill Log: native round-trip, bit-pattern and malformed-input laws execute in the full suite without a new dependency.

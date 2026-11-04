@@ -4,8 +4,10 @@
 {-| @Eval.Desktop — owns real desktop windows for one evaluation. -}
 module Pudu.Eval.Desktop
   ( DesktopStore
+  , WindowSettings (..)
   , closeDesktop
   , closeDesktopStore
+  , configureDesktop
   , exposeDesktop
   , inputsDesktop
   , installMenu
@@ -134,6 +136,63 @@ pumpDesktop store token milliseconds
       _ -> pure (IoFailed (statusMessage "pump" status))
 #else
 pumpDesktop _ _ _ = pure (IoFailed "desktop presentation is unsupported on this platform")
+#endif
+
+{-| What a caller asks of a window's geometry: frame pixels per point in
+    thousandths, content limits in points with zero meaning unlimited, an
+    aspect ratio with zero meaning none, and the requested full-screen state. -}
+data WindowSettings = WindowSettings
+  { settingsDensity :: Int
+  , settingsMinWidth :: Int
+  , settingsMinHeight :: Int
+  , settingsMaxWidth :: Int
+  , settingsMaxHeight :: Int
+  , settingsAspectWidth :: Int
+  , settingsAspectHeight :: Int
+  , settingsFullscreen :: Bool
+  }
+
+{-| Refuses settings the adapter would refuse, so the message names the
+    mistake instead of the adapter's generic invalid-argument status. -}
+settingsProblem :: WindowSettings -> Maybe Text
+settingsProblem settings
+  | density < 250 || density > 8000 = Just "desktop density must be between 250 and 8000 thousandths"
+  | any (< 0) limits = Just "desktop size limits cannot be negative"
+  | any (> limit) limits = Just "desktop size limits exceed the platform limit"
+  | inverted (settingsMinWidth settings) (settingsMaxWidth settings)
+      || inverted (settingsMinHeight settings) (settingsMaxHeight settings) =
+      Just "desktop minimum size exceeds its maximum"
+  | aspectWidth < 0 || aspectHeight < 0 || aspectWidth > limit || aspectHeight > limit =
+      Just "desktop aspect ratio must be positive"
+  | (aspectWidth == 0) /= (aspectHeight == 0) = Just "desktop aspect ratio needs both terms"
+  | otherwise = Nothing
+ where
+  density = settingsDensity settings
+  aspectWidth = settingsAspectWidth settings
+  aspectHeight = settingsAspectHeight settings
+  limits = [settingsMinWidth settings, settingsMinHeight settings, settingsMaxWidth settings, settingsMaxHeight settings]
+  inverted low high = high > 0 && low > high
+  limit = 1000000
+
+configureDesktop :: DesktopStore -> Int -> WindowSettings -> IO (IoOutcome ())
+#ifdef PUDU_DARWIN_DESKTOP
+configureDesktop store token settings = case settingsProblem settings of
+  Just problem -> pure (IoFailed problem)
+  Nothing -> withWindow store token $ \(NativeWindow pointer) -> guarded $ do
+    status <-
+      cDesktopConfigure
+        pointer
+        (fromIntegral (settingsDensity settings))
+        (fromIntegral (settingsMinWidth settings))
+        (fromIntegral (settingsMinHeight settings))
+        (fromIntegral (settingsMaxWidth settings))
+        (fromIntegral (settingsMaxHeight settings))
+        (fromIntegral (settingsAspectWidth settings))
+        (fromIntegral (settingsAspectHeight settings))
+        (if settingsFullscreen settings then 1 else 0)
+    pure (unitStatus "configure" status)
+#else
+configureDesktop _ _ settings = pure (IoFailed (maybe "desktop presentation is unsupported on this platform" id (settingsProblem settings)))
 #endif
 
 {-| Drains the input the window queued while it was pumped, as the adapter's
@@ -339,6 +398,9 @@ foreign import ccall unsafe "pudu_desktop_present"
 -- for that whole wait. A bound main thread keeps its OS thread either way.
 foreign import ccall safe "pudu_desktop_pump"
   cDesktopPump :: Ptr () -> CInt -> IO CInt
+
+foreign import ccall unsafe "pudu_desktop_configure"
+  cDesktopConfigure :: Ptr () -> CInt -> CInt -> CInt -> CInt -> CInt -> CInt -> CInt -> CInt -> IO CInt
 
 foreign import ccall unsafe "pudu_desktop_inputs"
   cDesktopInputs :: Ptr () -> Ptr Word8 -> CSize -> IO Int64

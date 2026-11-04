@@ -4,6 +4,7 @@ module Pudu.Eval.Install
   , loadDeclarations
   , loadModuleDeclarations
   , loadModuleDeclarationsWith
+  , loadNamedModuleDeclarationsWith
   , installBuiltinConstructors
   , lastSegmentOf
   , targetNameOf
@@ -15,7 +16,10 @@ import qualified Data.Map.Strict as Map
 import Data.Maybe (fromMaybe)
 import qualified Data.Set as Set
 import Data.Text (Text)
-import Pudu.Foreign.Crossing (Crossing (NothingCrossing), RecordLayouts, crossingFor, recordLayouts)
+import Pudu.Eval.ImplementationHead (HeadSelection (..), ImplementationHead (..))
+import Pudu.FloatKernel (floatKernelName, floatKernels)
+import Pudu.LaneKernel (laneKernelName, laneKernels)
+import Pudu.Foreign.Crossing (Crossing (NothingCrossing, RecordCrossing), RecordLayouts, crossingFor, recordLayouts)
 import Pudu.Eval.Builtin
   ( effectBuiltins
   )
@@ -23,6 +27,7 @@ import Pudu.Eval.Env
   ( Evaluator (..)
   , bind
   , recordVariantOwner
+  , recordFieldOrder
   , bindMethod
   , markModuleScope
   )
@@ -36,7 +41,7 @@ import Pudu.Eval.Value
   , Value (..)
   )
 import Pudu.Frontend.Syntax.Located (Located (..))
-import Pudu.Frontend.Syntax.Name (ModuleName (..))
+import Pudu.Frontend.Syntax.Name (ModuleName (..), moduleNameText)
 import Pudu.Frontend.Syntax.Tree
   ( Declaration (..)
   , Expression (..)
@@ -47,8 +52,10 @@ import Pudu.Frontend.Syntax.Tree
   , Impl (..)
   , Trait (..)
   , TypeDeclarationValue (..)
+  , TypeParam (..)
   , TypeSyntax (..)
   , TypeDefinition (..)
+  , FieldDeclaration (..)
   , Variant (..)
   )
 
@@ -74,10 +81,14 @@ loadModuleDeclarations evaluateWith = loadModuleDeclarationsWith evaluateWith Ma
     computed rather than evaluating its initializer again. A constant without a
     folded value is evaluated, in declaration order, as it always was. -}
 loadModuleDeclarationsWith :: Evaluate -> Map Text Value -> [Located Declaration] -> Evaluator ()
-loadModuleDeclarationsWith evaluateWith folded declarations = do
+loadModuleDeclarationsWith = loadNamedModuleDeclarationsWith ""
+
+{-| The defining module qualifies record identity after foreign admission. -}
+loadNamedModuleDeclarationsWith :: Text -> Evaluate -> Map Text Value -> [Located Declaration] -> Evaluator ()
+loadNamedModuleDeclarationsWith namespace evaluateWith folded declarations = do
   let traits = traitTable declarations
       layouts = recordLayouts declarations
-  mapM_ (installDeclaration traits layouts) declarations
+  mapM_ (installDeclaration namespace traits layouts) declarations
   markModuleScope
   mapM_ (initializeDeclaration evaluateWith folded) declarations
 
@@ -194,18 +205,20 @@ installBuiltinConstructors = do
   bind "decimalToFloat" (BuiltinValue DecimalToFloatBuiltin)
   bind "decimalDivide" (BuiltinValue DecimalDivideBuiltin)
   bind "decimalRound" (BuiltinValue DecimalRoundBuiltin)
+  mapM_ (\kernel -> bind (floatKernelName kernel) (BuiltinValue (FloatKernelBuiltin kernel))) floatKernels
+  mapM_ (\kernel -> bind (laneKernelName kernel) (BuiltinValue (LaneKernelBuiltin kernel))) laneKernels
   mapM_ (\builtin -> bind (builtinName builtin) (BuiltinValue builtin)) effectBuiltins
 
 installDeclaration
-  :: Map Text [Located Function] -> RecordLayouts -> Located Declaration -> Evaluator ()
-installDeclaration traits layouts (Located _ declaration) = case declaration of
+  :: Text -> Map Text [Located Function] -> RecordLayouts -> Located Declaration -> Evaluator ()
+installDeclaration namespace traits layouts (Located _ declaration) = case declaration of
   FunctionDeclaration value ->
     bind (locatedValue (functionName value))
-      (FunctionValue (Closure (locatedValue (functionName value)) value Nothing Nothing [] Nothing))
+      (FunctionValue (Closure (locatedValue (functionName value)) value Nothing Nothing Nothing [] Nothing))
   TypeDeclaration value ->
-    installVariants (locatedValue (typeName value)) (typeDefinition value)
+    installVariants namespace (locatedValue (typeName value)) (typeDefinition value)
   ImplDeclaration value -> installMethods traits value
-  ForeignDeclaration value -> mapM_ (installForeign layouts value) (foreignFunctions value)
+  ForeignDeclaration value -> mapM_ (installForeign namespace layouts value) (foreignFunctions value)
   _ -> pure ()
 
 {-| One foreign function becomes a value under its own name.
@@ -214,8 +227,8 @@ installDeclaration traits layouts (Located _ declaration) = case declaration of
     runs: the library, the symbol, and how each value crosses. A call is then a
     call, and a declaration that could not be resolved into one has already been
     reported by the checker. -}
-installForeign :: RecordLayouts -> Foreign -> Located ForeignFunction -> Evaluator ()
-installForeign layouts library (Located _ function) =
+installForeign :: Text -> RecordLayouts -> Foreign -> Located ForeignFunction -> Evaluator ()
+installForeign namespace layouts library (Located _ function) =
   bind name
     ( ForeignValue
         ForeignBinding
@@ -248,7 +261,7 @@ installForeign layouts library (Located _ function) =
               | Located _ parameter <- foreignParameters function
               ]
           , foreignBindingResult =
-              fromMaybe NothingCrossing (crossingFor handles layouts (foreignResult function))
+              qualify (fromMaybe NothingCrossing (crossingFor handles layouts (foreignResult function)))
           , foreignBindingReleasedBy = do
               named <- locatedValue <$> foreignReleasedBy function
               symbol <- Map.lookup named (releaseSymbolsOf library)
@@ -265,7 +278,12 @@ installForeign layouts library (Located _ function) =
   name = locatedValue (foreignName function)
   handles = Set.fromList (map locatedValue (foreignTypes library))
   crossingOf parameter =
-    fromMaybe NothingCrossing (foreignParameterType parameter >>= crossingFor handles layouts)
+    qualify (fromMaybe NothingCrossing (foreignParameterType parameter >>= crossingFor handles layouts))
+  qualify crossing = case crossing of
+    RecordCrossing owner fields -> RecordCrossing
+      (if namespace == "" then owner else namespace <> "." <> owner)
+      [(label, qualify held) | (label, held) <- fields]
+    other -> other
 
 {-| The functions of a block that release something.
 
@@ -316,27 +334,45 @@ releaseSymbolsOf library =
 {-| An implementation's functions are installed under a key naming the type they
     implement for, so a member access on a value of that type finds them. -}
 installMethods :: Map Text [Located Function] -> Impl -> Evaluator ()
-installMethods traits value = case targetNameOf (implTarget value) of
+installMethods traits value = case traitNameOf (implTarget value) of
   Nothing -> pure ()
   Just owner -> do
     mapM_ (installMethod owner) (implFunctions value)
     mapM_ (installMethod owner) (inheritedDefaults traits value)
  where
+  metadata = Just (ImplementationHead
+    (map (locatedValue . typeParamName . locatedValue) (implTypeParams value))
+    (implTarget value) PendingHead)
   -- The implementation's own parameters lead the method's, the order a
   -- static selection lists the types it chose for them.
   installMethod owner (Located _ method) = do
     let name = locatedValue (functionName method)
         selected = method{functionTypeParams = implTypeParams value <> functionTypeParams method}
-        implementation = FunctionValue (Closure name selected Nothing Nothing [] Nothing)
+        implementation = FunctionValue (Closure name selected metadata Nothing Nothing [] Nothing)
     bindMethod (owner <> "." <> name) implementation
+    case targetNameOf (implTarget value) of
+      Just alias -> do
+        bind (alias <> "." <> name) implementation
+        bindMethod (alias <> "." <> name) implementation
+      Nothing -> pure ()
     case traitNameOf (implTrait value) of
       Nothing -> pure ()
-      Just traitText -> bindMethod (traitText <> "." <> owner <> "." <> name) implementation
+      Just traitText -> do
+        bindMethod (traitText <> "." <> owner <> "." <> name) implementation
+        case targetNameOf (implTrait value) of
+          Just alias -> do
+            bindMethod (alias <> "." <> owner <> "." <> name) implementation
+            case targetNameOf (implTarget value) of
+              Just legacy -> do
+                bindMethod (alias <> "." <> legacy <> "." <> name) implementation
+                bindMethod (traitText <> "." <> legacy <> "." <> name) implementation
+              Nothing -> pure ()
+          Nothing -> pure ()
 
 {-| A trait member with a body is a default the implementation inherits when it
     does not provide its own. -}
 inheritedDefaults :: Map Text [Located Function] -> Impl -> [Located Function]
-inheritedDefaults traits value = case traitNameOf (implTrait value) of
+inheritedDefaults traits value = case targetNameOf (implTrait value) of
   Nothing -> []
   Just traitText ->
     [ member
@@ -348,7 +384,9 @@ inheritedDefaults traits value = case traitNameOf (implTrait value) of
   provided = map (locatedValue . functionName . locatedValue) (implFunctions value)
 
 traitNameOf :: Located TypeSyntax -> Maybe Text
-traitNameOf = targetNameOf
+traitNameOf (Located _ syntax) = case syntax of
+  NamedType path _ -> Just (moduleNameText path)
+  _ -> Nothing
 
 targetNameOf :: Located TypeSyntax -> Maybe Text
 targetNameOf (Located _ syntax) = case syntax of
@@ -359,18 +397,26 @@ targetNameOf (Located _ syntax) = case syntax of
     type's name. A variant with a payload starts life as an empty constructor
     that a call fills in, so `Circle` and `Shape.Circle(3)` reach the same
     value. -}
-installVariants :: Text -> Located TypeDefinition -> Evaluator ()
-installVariants typeText (Located _ definition) = case definition of
+installVariants :: Text -> Text -> Located TypeDefinition -> Evaluator ()
+installVariants namespace typeText (Located _ definition) = case definition of
   SumDefinition variants -> do
     let entries = map variantEntry variants
     mapM_ (uncurry bind) entries
-    mapM_ (\(name, _) -> recordVariantOwner name typeText) entries
-    bind typeText (RecordValue typeText entries)
+    mapM_ (\(name, _) -> recordVariantOwner name owner) entries
+    bind typeText (RecordValue owner entries)
+    bind owner (RecordValue owner entries)
+  -- A record's fields are stored in declaration order, whichever name the
+  -- construction reached it by.
+  RecordDefinition fields -> do
+    recordFieldOrder typeText (fieldNames fields)
+    recordFieldOrder owner (fieldNames fields)
   _ -> pure ()
  where
+  owner = if namespace == "" then typeText else namespace <> "." <> typeText
+  fieldNames fields = [locatedValue (fieldName field) | Located _ field <- fields]
   variantEntry (Located _ variant) =
     let name = locatedValue (variantName variant)
-     in (name, VariantValue name [])
+     in (name, SumValue owner name [])
 
 initializeDeclaration :: Evaluate -> Map Text Value -> Located Declaration -> Evaluator ()
 initializeDeclaration evaluateWith folded (Located _ declaration) = case declaration of

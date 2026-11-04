@@ -1,3 +1,5 @@
+{-# LANGUAGE BangPatterns #-}
+
 {-| @Eval.Bytes.Module — a sequence of bytes as one runtime value -}
 module Pudu.Eval.Bytes
   ( callBytesMethod
@@ -7,11 +9,15 @@ module Pudu.Eval.Bytes
   ) where
 
 import qualified Data.ByteString as ByteString
+import qualified Data.ByteString.Internal as Internal
+import qualified Data.ByteString.Unsafe as Unsafe
 import qualified Data.Sequence as Seq
 import Data.Text (Text)
 import qualified Data.Text as Text
 import qualified Data.Text.Encoding as Encoding
 import Data.Word (Word8)
+import Foreign.Marshal.Utils (copyBytes)
+import Foreign.Ptr (plusPtr)
 import Pudu.Eval.Env (Evaluator, abortAt)
 import Pudu.Eval.Value
   ( BytesMethod (..)
@@ -89,6 +95,7 @@ bytesMethods =
   , ("startsWith", BytesStartsWith)
   , ("endsWith", BytesEndsWith)
   , ("reverse", BytesReverse)
+  , ("strided", BytesStrided)
   , ("toArray", BytesToArray)
   , ("toText", BytesToText)
   ]
@@ -102,8 +109,8 @@ bytesMethods =
     answer names a stretch of the bytes the receiver already holds rather than
     a copy of them. That is what lets a decoder walk an input by handing the
     remainder forward at each step without the walk costing the square of the
-    input. `concat` and `reverse` are the operations that must build new
-    storage, and they are named so a reader can see where the copying is.
+    input. `concat`, `reverse` and `strided` are the operations that must build
+    new storage, and they are named so a reader can see where the copying is.
 
     Where `Str` reports an index outside the text, a byte sequence clamps.
     The two are answering different questions: an index into text is a position
@@ -139,6 +146,11 @@ callBytesMethod spanValue method receiver arguments = case receiver of
     (BytesEndsWith, [BytesValue needle]) ->
       pure (BoolValue (ByteString.isSuffixOf needle bytes))
     (BytesReverse, []) -> pure (BytesValue (ByteString.reverse bytes))
+    {-| Unlike the clamping views, a malformed group shape is a caller error
+        with no sensible short answer, so it answers `None`. -}
+    (BytesStrided, [IntValue _ offset, IntValue _ width, IntValue _ stride])
+      | offset < 0 || width < 0 || stride < 1 || width > stride -> pure noneValue
+      | otherwise -> pure (someValue (BytesValue (stridedOf bytes offset width stride)))
     (BytesToArray, []) ->
       pure (ArrayValue (Seq.fromFunction (ByteString.length bytes)
         (byteValue . ByteString.index bytes)))
@@ -171,6 +183,28 @@ callBytesMethod spanValue method receiver arguments = case receiver of
     | otherwise = fromInteger number
 
   clampCount bytes number = clampIndex (ByteString.length bytes) number
+
+  {-| `width` bytes from each `stride`-byte group starting at `offset`; a final
+      short group contributes what remains. One allocation of the exact size.
+      A bytewise loop measured slower than one copy call per group. -}
+  stridedOf bytes offset width stride
+    | offset >= fromIntegral size = ByteString.empty
+    | otherwise = Internal.unsafeCreate total $ \out ->
+        Unsafe.unsafeUseAsCString bytes $ \source ->
+          let copyGroup !group !written
+                | written >= total = pure ()
+                | otherwise = do
+                    let count = min taken (extent - group * step)
+                    copyBytes (out `plusPtr` written) (source `plusPtr` (start + group * step)) count
+                    copyGroup (group + 1) (written + count)
+           in copyGroup 0 0
+    where
+      size = ByteString.length bytes
+      start = fromInteger offset :: Int
+      extent = size - start
+      step = fromInteger (min stride (fromIntegral extent)) :: Int
+      taken = fromInteger (min width (fromIntegral step)) :: Int
+      total = (extent `quot` step) * taken + min taken (extent `rem` step)
 
   {-| The position of a sub-sequence, or `-1` when it is absent.
 

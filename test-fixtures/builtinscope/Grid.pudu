@@ -1,0 +1,7 @@
+module Grid
+
+export type Map = { size: Int }
+
+export fn make() -> Map {
+  Map{size: 1}
+}

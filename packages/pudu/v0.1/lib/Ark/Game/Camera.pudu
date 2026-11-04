@@ -1,0 +1,59 @@
+module Ark.Game.Camera
+
+import Std.Math.Float as Float
+import Ark.Math.Camera as Lens
+import Ark.Math.Matrix as M
+import Ark.Math as V
+
+/// A point that follows a target with critically damped motion: it never overshoots and closes
+/// most of the gap within `smoothing` seconds.
+export type Follow = { position: V.Vec3, velocity: V.Vec3, smoothing: Float64 }
+
+/// A camera circling a focus at a distance, with yaw about +y and pitch kept off the poles.
+export type Orbit = { focus: V.Vec3, distance: Float64, yaw: Float64, pitch: Float64 }
+
+/// Pitch stays this far from straight up or down so the view keeps a defined up direction.
+const PITCH_LIMIT: Float64 = 1.5
+
+/// A follower at rest; None for a non-positive or non-finite smoothing time.
+export fn follow(position: V.Vec3, smoothing: Float64) -> Option[Follow] {
+  if !(smoothing > 0.0) || !Float.isFinite(smoothing) || !V.isFinite(position) { return None }
+  Some(Follow{position, velocity: V.vec3(0.0, 0.0, 0.0), smoothing})
+}
+
+/// Move toward `target` over `seconds` with a critically damped spring, stable for any step.
+export fn track(rig: Follow, target: V.Vec3, seconds: Float64) -> Option[Follow] {
+  if !(seconds >= 0.0) || !Float.isFinite(seconds) || !V.isFinite(target) { return None }
+  let omega = 2.0 / rig.smoothing
+  let x = omega * seconds
+  // A rational fit of e^-x that stays positive and decreasing for every step length.
+  let decay = 1.0 / (1.0 + x + 0.48 * x * x + 0.235 * x * x * x)
+  let offset = V.subtract(rig.position, target)
+  let spring = V.scale(V.add(rig.velocity, V.scale(offset, omega)), seconds)
+  let velocity = V.scale(V.subtract(rig.velocity, V.scale(spring, omega)), decay)
+  let position = V.add(target, V.scale(V.add(offset, spring), decay))
+  Some(Follow{..rig, position, velocity})
+}
+
+/// An orbit rig with a positive finite distance.
+export fn orbit(focus: V.Vec3, distance: Float64, yaw: Float64, pitch: Float64) -> Option[Orbit] {
+  if !(distance > 0.0) || !Float.isFinite(distance) || !V.isFinite(focus) || !Float.isFinite(yaw) || !Float.isFinite(pitch) { return None }
+  Some(Orbit{focus, distance, yaw, pitch: Float.clamp(pitch, -PITCH_LIMIT, PITCH_LIMIT)})
+}
+
+/// Turn and zoom an orbit by input deltas; zoom multiplies the distance and pitch stays clamped.
+export fn steer(rig: Orbit, yawDelta: Float64, pitchDelta: Float64, zoom: Float64) -> Option[Orbit] {
+  if !(zoom > 0.0) { return None }
+  orbit(rig.focus, rig.distance * zoom, rig.yaw + yawDelta, rig.pitch + pitchDelta)
+}
+
+/// The orbit's eye position.
+export fn eye(rig: &Orbit) -> V.Vec3 {
+  let flat = Float.cos(rig.pitch) * rig.distance
+  V.add(rig.focus, V.vec3(Float.sin(rig.yaw) * flat, Float.sin(rig.pitch) * rig.distance, Float.cos(rig.yaw) * flat))
+}
+
+/// The view matrix looking from the orbit's eye at its focus with +y up.
+export fn view(rig: &Orbit) -> Option[M.Mat4] {
+  Lens.lookAt(eye(rig), rig.focus, V.vec3(0.0, 1.0, 0.0))
+}

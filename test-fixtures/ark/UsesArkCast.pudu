@@ -1,0 +1,106 @@
+module UsesArkCast
+
+import Std.Math.Float as Float
+import Ark.Math.Distance as Distance
+import Ark.Math as V
+import Ark.Physics.Cast as Cast
+
+fn require(condition: Bool, name: Str) {
+  if !condition { panic(name) }
+}
+
+fn close(actual: Float64, expected: Float64, tolerance: Float64, name: Str) {
+  require(Float.abs(actual - expected) <= tolerance, name)
+}
+
+fn request(start: V.Vec3, end: V.Vec3, displacement: V.Vec3) -> Cast.CapsuleBox {
+  Cast.CapsuleBox{start, end, displacement, radius: 0.5, minimum: V.vec3(-1.0, -1.0, -1.0), maximum: V.vec3(1.0, 1.0, 1.0), tolerance: 1e-8, maxIterations: 64}
+}
+
+fn hit(value: Cast.CapsuleBox) -> Cast.Hit {
+  let Ok(Some(found)) = Cast.capsuleBox(&value) else { panic("expected contact") }
+  require(found.fraction >= 0.0 && found.fraction <= 1.0 && found.iterations >= 1 && found.iterations <= value.maxIterations, "bounded hit")
+  close(V.dot(found.normal, found.normal), 1.0, 1e-12, "unit contact normal")
+  found
+}
+
+fn distances() {
+  let minimum = V.vec3(-1.0, -1.0, -1.0)
+  let maximum = V.vec3(1.0, 1.0, 1.0)
+  let Some(face) = Distance.segmentBox(V.vec3(3.0, -2.0, 0.0), V.vec3(3.0, 2.0, 0.0), minimum, maximum) else { panic("face distance") }
+  close(face.distance, 2.0, 1e-12, "interior segment witness")
+  require(face.segment.x == 3.0 && face.box.x == 1.0, "face witnesses")
+  let Some(crossing) = Distance.segmentBox(V.vec3(-3.0, -3.0, -3.0), V.vec3(3.0, 3.0, 3.0), minimum, maximum) else { panic("crossing") }
+  require(crossing.distance == 0.0, "duplicate slab crossings")
+  let Some(edge) = Distance.segmentBox(V.vec3(-2.0, 3.0, 0.0), V.vec3(3.0, -2.0, 0.0), V.vec3(0.0, 0.0, 0.0), V.vec3(0.0, 0.0, 0.0)) else { panic("edge") }
+  let Some(root) = Float.sqrt(0.5) else { panic("root") }
+  close(edge.distance, root, 1e-12, "quadratic minimum on segment interior")
+  close(edge.segment.x, 0.5, 1e-12, "interior x witness")
+  close(edge.segment.y, 0.5, 1e-12, "interior y witness")
+  for scale in [1e-200, 1e-150, 1.0, 1e150, 1e200] {
+    let Some(scaled) = Distance.segmentBox(V.vec3(-2.0 * scale, 3.0 * scale, 0.0), V.vec3(3.0 * scale, -2.0 * scale, 0.0), V.vec3(0.0, 0.0, 0.0), V.vec3(0.0, 0.0, 0.0)) else { panic("scaled distance") }
+    close(scaled.distance / scale, root, 1e-12, "scaled quadratic coefficients")
+  }
+  let start = V.vec3(-3.0, 2.0, 4.0)
+  let end = V.vec3(3.0, -2.0, -1.0)
+  let Some(nearest) = Distance.segmentBox(start, end, minimum, maximum) else { panic("nearest") }
+  let Some(reversed) = Distance.segmentBox(end, start, minimum, maximum) else { panic("reversed") }
+  close(nearest.distance, reversed.distance, 1e-12, "endpoint reversal preserves distance")
+  var parameter = 0.0
+  for _ in 0..101 {
+    let point = V.add(start, V.scale(V.subtract(end, start), parameter))
+    let clamped = V.vec3(Float.clamp(point.x, -1.0, 1.0), Float.clamp(point.y, -1.0, 1.0), Float.clamp(point.z, -1.0, 1.0))
+    let Some(distance) = V.length(V.subtract(point, clamped)) else { panic("sample") }
+    require(nearest.distance <= distance + 1e-12, "analytic minimum never exceeds sampled distance")
+    parameter = parameter + 0.01
+  }
+}
+
+export fn main() -> Int {
+  distances()
+  let zero = V.vec3(0.0, 0.0, 0.0)
+  let start = V.vec3(-3.0, 0.0, 0.0)
+  let face = request(start, start, V.vec3(6.0, 0.0, 0.0))
+  let first = hit(face)
+  close(first.fraction, 0.25, 2e-9, "sphere face impact")
+  require(first.normal == V.vec3(-1.0, 0.0, 0.0) && first.point == V.vec3(-1.0, 0.0, 0.0), "face witness and outward normal")
+  let fast = hit(Cast.CapsuleBox{..face, displacement: V.vec3(1000000.0, 0.0, 0.0)})
+  close(fast.fraction, 1.5e-6, 1e-12, "high speed cannot tunnel")
+  let oriented = hit(request(V.vec3(-4.0, 0.0, 0.0), V.vec3(-2.0, 0.0, 0.0), V.vec3(4.0, 0.0, 0.0)))
+  close(oriented.fraction, 0.125, 2e-9, "leading capsule endpoint hits before center")
+  let tilted = hit(request(V.vec3(-3.0, -1.5, 0.0), V.vec3(-2.0, 1.5, 0.0), V.vec3(4.0, 0.0, 0.0)))
+  let Some(root10) = Float.sqrt(10.0) else { panic("tilted root") }
+  close(tilted.fraction, (3.5 - 0.5 * root10) / 12.0, 1e-8, "tilted capsule interior hits box edge")
+  close(tilted.normal.y, 1.0 / root10, 1e-7, "tilted interior contact normal")
+  let tangentStart = V.vec3(-3.0, 1.5, 0.0)
+  let tangent = hit(request(tangentStart, tangentStart, V.vec3(6.0, 0.0, 0.0)))
+  close(tangent.fraction, 1.0 / 3.0, 5e-5, "grazing edge within spatial tolerance")
+  let endpoint = hit(Cast.CapsuleBox{..face, displacement: V.vec3(1.5, 0.0, 0.0)})
+  close(endpoint.fraction, 1.0, 1e-8, "end-of-interval contact included")
+  let edgeStart = V.vec3(-3.0, 1.3, 0.0)
+  let edge = hit(request(edgeStart, edgeStart, V.vec3(6.0, 0.0, 0.0)))
+  close(edge.fraction, 1.6 / 6.0, 1e-8, "rounded edge impact")
+  close(edge.normal.y, 0.6, 1e-7, "rounded edge normal")
+  let cornerStart = V.vec3(-3.0, 1.3, 1.3)
+  let corner = hit(request(cornerStart, cornerStart, V.vec3(6.0, 0.0, 0.0)))
+  let Some(cornerX) = Float.sqrt(0.07) else { panic("corner root") }
+  close(corner.fraction, (2.0 - cornerX) / 6.0, 1e-8, "rounded corner impact")
+  let outside = V.vec3(-3.0, 1.4, 1.4)
+  require(Cast.capsuleBox(&request(outside, outside, V.vec3(6.0, 0.0, 0.0))) == Ok(None), "expanded box corner is empty space")
+  require(Cast.capsuleBox(&Cast.CapsuleBox{..face, displacement: zero}) == Ok(None), "stationary separated capsule")
+  require(Cast.capsuleBox(&request(zero, zero, zero)) == Err(Cast.InitialOverlap), "initial penetration is explicit")
+  require(Cast.capsuleBox(&request(V.vec3(-1.5, 0.0, 0.0), V.vec3(-1.5, 0.0, 0.0), V.vec3(-2.0, 0.0, 0.0))) == Ok(None), "touching while separating is a miss")
+  require(hit(request(V.vec3(-1.5, 0.0, 0.0), V.vec3(-1.5, 0.0, 0.0), V.vec3(2.0, 0.0, 0.0))).fraction == 0.0, "touching inward hits at zero")
+  require(Cast.capsuleBox(&Cast.CapsuleBox{..face, maxIterations: 1}) == Err(Cast.IterationLimit), "budget exhaustion never becomes clear space")
+  require(Cast.capsuleBox(&Cast.CapsuleBox{..face, radius: -1.0}) == Err(Cast.InvalidInput), "negative radius refused")
+  require(Cast.capsuleBox(&Cast.CapsuleBox{..face, tolerance: 1e-30}) == Err(Cast.NumericRange), "unresolvable tolerance refused")
+  require(Cast.capsuleBox(&Cast.CapsuleBox{..face, minimum: face.maximum, maximum: face.minimum}) == Err(Cast.InvalidInput), "unordered box refused")
+  let infinity = 1e308 * 2.0
+  require(Cast.capsuleBox(&Cast.CapsuleBox{..face, displacement: V.vec3(infinity, 0.0, 0.0)}) == Err(Cast.InvalidInput), "non-finite request refused")
+  require(Cast.capsuleBox(&Cast.CapsuleBox{..face, maxIterations: 0}) == Err(Cast.InvalidInput), "zero iteration budget refused")
+  require(Cast.capsuleBox(&Cast.CapsuleBox{..face, maxIterations: 129}) == Err(Cast.InvalidInput), "unbounded iteration budget refused")
+  require(Cast.capsuleBox(&Cast.CapsuleBox{..face, start: V.vec3(1e308, 0.0, 0.0), end: V.vec3(1e308, 0.0, 0.0), displacement: V.vec3(1e308, 0.0, 0.0)}) == Err(Cast.NumericRange), "overflowing final geometry refused")
+  require(Distance.segmentBox(zero, zero, face.maximum, face.minimum) == None, "invalid distance bounds refused")
+  print("ark cast: ok")
+  0
+}

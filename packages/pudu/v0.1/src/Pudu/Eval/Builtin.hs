@@ -6,6 +6,7 @@ module Pudu.Eval.Builtin
   , callCharMethod
   , callConvertInteger
   , callDecimal
+  , callFloatKernel
   , callDisplay
   , callEffect
   , callHashing
@@ -46,6 +47,7 @@ import Pudu.Eval.Builtin.Numeric
   , callCharMethod
   , callConvertInteger
   , callDecimal
+  , callFloatKernel
   , isDecimalBuiltin
   )
 import Pudu.Eval.Builtin.String (callStringMethod, callStringMethodFast)
@@ -84,6 +86,7 @@ import Pudu.Eval.WordMap
   , callWordMapPopCount
   , callWordMapPredicate
   )
+import Pudu.Diagnostic.Evaluation (panicArgumentHelp, panicCode)
 import Pudu.Source (Span)
 
 {-| Render any value as the text a message should carry.
@@ -122,8 +125,8 @@ callShow spanValue arguments = case arguments of
 callPanic :: Span -> [Value] -> Evaluator Value
 callPanic spanValue values =
   case values of
-    [StrValue message] -> abortAt (Just spanValue) "E7007" message Nothing
-    _ -> abortAt (Just spanValue) "E7007" "panic" (Just "panic takes one string argument")
+    [StrValue message] -> abortAt (Just spanValue) panicCode message Nothing
+    _ -> abortAt (Just spanValue) panicCode "panic" (Just panicArgumentHelp)
 
 {-| The hashing the library cannot afford to write in the language.
 

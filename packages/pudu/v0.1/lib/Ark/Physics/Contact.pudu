@@ -1,0 +1,270 @@
+module Ark.Physics.Contact
+
+import Std.Lanes as Lanes
+import Std.Math.Float as Float
+import Ark.Physics as Physics
+
+/// One side of every candidate pair: centers, half extents and the sphere indicator, as lanes.
+export type Side = { px: Lanes.Lanes, py: Lanes.Lanes, pz: Lanes.Lanes, ex: Lanes.Lanes, ey: Lanes.Lanes, ez: Lanes.Lanes, round: Lanes.Lanes }
+
+/// Normals from the first body toward the second and penetration depths, one per pair;
+/// a depth that is not positive means no contact.
+export type Candidate = { nx: Lanes.Lanes, ny: Lanes.Lanes, nz: Lanes.Lanes, depth: Lanes.Lanes }
+
+/// Contacts in lanes: body slots per contact (the plane slot for a static plane), normals and depths.
+export type Contacts = { first: Array[Int], second: Array[Int], nx: Lanes.Lanes, ny: Lanes.Lanes, nz: Lanes.Lanes, depth: Lanes.Lanes }
+
+/// Computes one kind pair's contacts for every pair in lanes.
+export type ContactFactory = fn(&Side, &Side) -> Option[Candidate]
+
+/// Selects the pairs whose side has one kind, from the sphere indicator.
+export type KindIndicator = fn(&Lanes.Lanes) -> Lanes.Lanes
+
+/// The batch factory for each kind pair.
+const CONTACT_FACTORIES: Map[Str, ContactFactory] = mapOf([
+    ("sphere|sphere", sphereSphere),
+    ("sphere|box", sphereBox),
+    ("box|sphere", boxSphere),
+    ("box|box", boxBox),
+  ])
+
+/// The indicator for each kind.
+const KIND_INDICATORS: Map[Str, KindIndicator] = mapOf([
+    ("sphere", sphereIndicator),
+    ("box", boxIndicator),
+  ])
+
+/// Contacts for broadphase pairs whose total inverse mass is positive.
+export fn between(bodies: &Physics.Bodies, firsts: &Array[Int], seconds: &Array[Int]) -> Option[Contacts] {
+  let a = side(bodies, firsts) ?
+  let b = side(bodies, seconds) ?
+  let count = firsts.length()
+  var best = Candidate{nx: filled(count, 0.0) ?, ny: filled(count, 1.0) ?, nz: filled(count, 0.0) ?, depth: filled(count, -1.0) ?}
+  for key in CONTACT_FACTORIES.keys() {
+    let factory = CONTACT_FACTORIES.get(key) ?
+    let kinds = key.split("|")
+    let first = KIND_INDICATORS.get(kinds[0]) ?
+    let second = KIND_INDICATORS.get(kinds[1]) ?
+    let chosen = mul(&first(&a.round), &second(&b.round)) ?
+    let candidate = factory(&a, &b) ?
+    best = Candidate {
+      nx: Lanes.select(&chosen, &candidate.nx, &best.nx) ?,
+      ny: Lanes.select(&chosen, &candidate.ny, &best.ny) ?,
+      nz: Lanes.select(&chosen, &candidate.nz, &best.nz) ?,
+      depth: Lanes.select(&chosen, &candidate.depth, &best.depth) ?,
+    }
+  }
+  let inverseA = Lanes.gather(&bodies.inverseMass, firsts) ?
+  let inverseB = Lanes.gather(&bodies.inverseMass, seconds) ?
+  let movable = Lanes.above(&(add(&inverseA, &inverseB) ?), 0.0)
+  let keep = Lanes.positions(&(mul(&Lanes.above(&best.depth, 0.0), &movable) ?))
+  Some(
+    Contacts {
+      first: picked(firsts, &keep) ?,
+      second: picked(seconds, &keep) ?,
+      nx: Lanes.gather(&best.nx, &keep) ?,
+      ny: Lanes.gather(&best.ny, &keep) ?,
+      nz: Lanes.gather(&best.nz, &keep) ?,
+      depth: Lanes.gather(&best.depth, &keep) ?,
+    },
+  )
+}
+
+/// Contacts of movable bodies against every static plane; the plane side is `planeSlot`.
+export fn againstPlanes(bodies: &Physics.Bodies, planeSlot: Int) -> Option[Contacts] {
+  var found = Contacts{first: [], second: [], nx: none(), ny: none(), nz: none(), depth: none()}
+  for surface in bodies.planes {
+    let n = surface.normal
+    let distance = Lanes.addScalar(&(axpy3(n.x, &bodies.px, n.y, &bodies.py, n.z, &bodies.pz) ?), surface.distance)
+    let boxReach = axpy3(magnitude(n.x), &bodies.ex, magnitude(n.y), &bodies.ey, magnitude(n.z), &bodies.ez) ?
+    let reach = Lanes.select(&bodies.round, &bodies.ex, &boxReach) ?
+    let depth = Lanes.subtract(&reach, &distance) ?
+    let touching = Lanes.positions(&(mul(&Lanes.above(&depth, 0.0), &bodies.movable) ?))
+    let count = touching.length()
+    found = Contacts {
+      first: found.first.concat(Lanes.toInts(&(filled(count, Float.fromInt(planeSlot)) ?)) ?),
+      second: found.second.concat(touching),
+      nx: Lanes.concat(&found.nx, &(filled(count, n.x) ?)),
+      ny: Lanes.concat(&found.ny, &(filled(count, n.y) ?)),
+      nz: Lanes.concat(&found.nz, &(filled(count, n.z) ?)),
+      depth: Lanes.concat(&found.depth, &(Lanes.gather(&depth, &touching) ?)),
+    }
+  }
+  Some(found)
+}
+
+/// The contacts at the given indices, in that order.
+export fn subset(contacts: &Contacts, members: &Array[Int]) -> Option[Contacts] {
+  Some(
+    Contacts {
+      first: picked(&contacts.first, members) ?,
+      second: picked(&contacts.second, members) ?,
+      nx: Lanes.gather(&contacts.nx, members) ?,
+      ny: Lanes.gather(&contacts.ny, members) ?,
+      nz: Lanes.gather(&contacts.nz, members) ?,
+      depth: Lanes.gather(&contacts.depth, members) ?,
+    },
+  )
+}
+
+/// Both contact sets in order.
+export fn joined(first: &Contacts, second: &Contacts) -> Contacts {
+  Contacts {
+    first: first.first.concat(second.first),
+    second: first.second.concat(second.second),
+    nx: Lanes.concat(&first.nx, &second.nx),
+    ny: Lanes.concat(&first.ny, &second.ny),
+    nz: Lanes.concat(&first.nz, &second.nz),
+    depth: Lanes.concat(&first.depth, &second.depth),
+  }
+}
+
+fn sphereSphere(a: &Side, b: &Side) -> Option[Candidate] {
+  let dx = sub(&b.px, &a.px) ?
+  let dy = sub(&b.py, &a.py) ?
+  let dz = sub(&b.pz, &a.pz) ?
+  let distance = Lanes.sqrt(&(dot3(&dx, &dy, &dz, &dx, &dy, &dz) ?))
+  let apart = Lanes.above(&distance, 0.0)
+  let safe = Lanes.select(&apart, &distance, &ones(&distance) ?) ?
+  Some(
+    Candidate {
+      nx: Lanes.select(&apart, &(Lanes.divide(&dx, &safe) ?), &zeros(&distance) ?) ?,
+      ny: Lanes.select(&apart, &(Lanes.divide(&dy, &safe) ?), &ones(&distance) ?) ?,
+      nz: Lanes.select(&apart, &(Lanes.divide(&dz, &safe) ?), &zeros(&distance) ?) ?,
+      depth: sub(&(add(&a.ex, &b.ex) ?), &distance) ?,
+    },
+  )
+}
+
+/// The sphere is the first side; inside the box it leaves along the box's least-overlap axis.
+fn sphereBox(ball: &Side, block: &Side) -> Option[Candidate] {
+  let cx = clampTo(&ball.px, &block.px, &block.ex) ?
+  let cy = clampTo(&ball.py, &block.py, &block.ey) ?
+  let cz = clampTo(&ball.pz, &block.pz, &block.ez) ?
+  let ox = sub(&cx, &ball.px) ?
+  let oy = sub(&cy, &ball.py) ?
+  let oz = sub(&cz, &ball.pz) ?
+  let distance = Lanes.sqrt(&(dot3(&ox, &oy, &oz, &ox, &oy, &oz) ?))
+  let outside = Lanes.above(&distance, 0.0)
+  let safe = Lanes.select(&outside, &distance, &ones(&distance) ?) ?
+  let point = Side{..*ball, ex: zeros(&distance) ?, ey: zeros(&distance) ?, ez: zeros(&distance) ?}
+  let inside = boxBox(&point, block) ?
+  Some(
+    Candidate {
+      nx: Lanes.select(&outside, &(Lanes.divide(&ox, &safe) ?), &inside.nx) ?,
+      ny: Lanes.select(&outside, &(Lanes.divide(&oy, &safe) ?), &inside.ny) ?,
+      nz: Lanes.select(&outside, &(Lanes.divide(&oz, &safe) ?), &inside.nz) ?,
+      depth: Lanes.select(&outside, &(sub(&ball.ex, &distance) ?), &(add(&inside.depth, &ball.ex) ?)) ?,
+    },
+  )
+}
+
+fn boxSphere(block: &Side, ball: &Side) -> Option[Candidate] {
+  let flipped = sphereBox(ball, block) ?
+  Some(Candidate{nx: Lanes.negate(&flipped.nx), ny: Lanes.negate(&flipped.ny), nz: Lanes.negate(&flipped.nz), depth: flipped.depth})
+}
+
+/// Axis-aligned boxes separate along the axis of least overlap.
+fn boxBox(a: &Side, b: &Side) -> Option[Candidate] {
+  let dx = sub(&b.px, &a.px) ?
+  let dy = sub(&b.py, &a.py) ?
+  let dz = sub(&b.pz, &a.pz) ?
+  let ox = sub(&(add(&a.ex, &b.ex) ?), &Lanes.abs(&dx)) ?
+  let oy = sub(&(add(&a.ey, &b.ey) ?), &Lanes.abs(&dy)) ?
+  let oz = sub(&(add(&a.ez, &b.ez) ?), &Lanes.abs(&dz)) ?
+  let alongX = mul(&notAbove(&(sub(&ox, &oy) ?)), &notAbove(&(sub(&ox, &oz) ?))) ?
+  let alongY = mul(&notAbove(&alongX), &notAbove(&(sub(&oy, &oz) ?))) ?
+  let alongZ = mul(&notAbove(&alongX), &notAbove(&alongY)) ?
+  let depth = Lanes.select(&alongX, &ox, &(Lanes.select(&alongY, &oy, &oz) ?)) ?
+  let separated = Lanes.above(&(Lanes.negate(&(Lanes.minimum(&ox, &(Lanes.minimum(&oy, &oz) ?)) ?))), 0.0)
+  Some(
+    Candidate {
+      nx: mul(&alongX, &signOf(&dx)) ?,
+      ny: mul(&alongY, &signOf(&dy)) ?,
+      nz: mul(&alongZ, &signOf(&dz)) ?,
+      depth: Lanes.select(&separated, &(filled(Lanes.count(&ox), -1.0) ?), &depth) ?,
+    },
+  )
+}
+
+fn side(bodies: &Physics.Bodies, slots: &Array[Int]) -> Option[Side] {
+  Some(
+    Side {
+      px: Lanes.gather(&bodies.px, slots) ?,
+      py: Lanes.gather(&bodies.py, slots) ?,
+      pz: Lanes.gather(&bodies.pz, slots) ?,
+      ex: Lanes.gather(&bodies.ex, slots) ?,
+      ey: Lanes.gather(&bodies.ey, slots) ?,
+      ez: Lanes.gather(&bodies.ez, slots) ?,
+      round: Lanes.gather(&bodies.round, slots) ?,
+    },
+  )
+}
+
+fn sphereIndicator(round: &Lanes.Lanes) -> Lanes.Lanes {
+  *round
+}
+
+fn boxIndicator(round: &Lanes.Lanes) -> Lanes.Lanes {
+  notAbove(&Lanes.addScalar(round, -0.5))
+}
+
+fn picked(slots: &Array[Int], keep: &Array[Int]) -> Option[Array[Int]] {
+  Lanes.toInts(&(Lanes.gather(&Lanes.fromInts(slots), keep) ?))
+}
+
+fn clampTo(value: &Lanes.Lanes, center: &Lanes.Lanes, half: &Lanes.Lanes) -> Option[Lanes.Lanes] {
+  let low = sub(center, half) ?
+  let high = add(center, half) ?
+  Lanes.minimum(&(Lanes.maximum(value, &low) ?), &high)
+}
+
+/// 1 where a value is not positive, else 0.
+fn notAbove(lanes: &Lanes.Lanes) -> Lanes.Lanes {
+  Lanes.addScalar(&Lanes.scale(&Lanes.above(lanes, 0.0), -1.0), 1.0)
+}
+
+/// -1 for a negative value, else 1.
+fn signOf(lanes: &Lanes.Lanes) -> Lanes.Lanes {
+  Lanes.addScalar(&Lanes.scale(&Lanes.above(&Lanes.negate(lanes), 0.0), -2.0), 1.0)
+}
+
+fn dot3(ax: &Lanes.Lanes, ay: &Lanes.Lanes, az: &Lanes.Lanes, bx: &Lanes.Lanes, by: &Lanes.Lanes, bz: &Lanes.Lanes) -> Option[Lanes.Lanes] {
+  Lanes.fma(ax, bx, &(Lanes.fma(ay, by, &(mul(az, bz) ?)) ?))
+}
+
+fn axpy3(a: Float64, x: &Lanes.Lanes, b: Float64, y: &Lanes.Lanes, c: Float64, z: &Lanes.Lanes) -> Option[Lanes.Lanes] {
+  Lanes.axpy(&(Lanes.axpy(&Lanes.scale(x, a), b, y) ?), c, z)
+}
+
+fn mul(left: &Lanes.Lanes, right: &Lanes.Lanes) -> Option[Lanes.Lanes] {
+  Lanes.multiply(left, right)
+}
+
+fn add(left: &Lanes.Lanes, right: &Lanes.Lanes) -> Option[Lanes.Lanes] {
+  Lanes.add(left, right)
+}
+
+fn sub(left: &Lanes.Lanes, right: &Lanes.Lanes) -> Option[Lanes.Lanes] {
+  Lanes.subtract(left, right)
+}
+
+fn filled(count: Int, value: Float64) -> Option[Lanes.Lanes] {
+  Lanes.filled(count, value)
+}
+
+fn ones(like: &Lanes.Lanes) -> Option[Lanes.Lanes] {
+  Lanes.filled(Lanes.count(like), 1.0)
+}
+
+fn zeros(like: &Lanes.Lanes) -> Option[Lanes.Lanes] {
+  Lanes.filled(Lanes.count(like), 0.0)
+}
+
+fn none() -> Lanes.Lanes {
+  Lanes.fromArray(&[])
+}
+
+fn magnitude(value: Float64) -> Float64 {
+  if value < 0.0 { -value } else { value }
+}
