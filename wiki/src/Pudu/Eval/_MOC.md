@@ -95,3 +95,4 @@ Dependency direction: Builtin Definition → Value → Env → Operator/Match/Ar
 - [[Eval Record Construction]] — shared canonical construction and named field storage order.
 
 - [[Runtime Witness Selection Delivery]] · [[Runtime Implementation Head]] · [[Eval Type Witness]] — structural implementation parameter binding (#735).
+- [[Eval Declared Owner]] — method keys that keep a declared type named like a built-in apart from it (#529).

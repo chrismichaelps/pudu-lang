@@ -51,3 +51,7 @@ and structural target matching and is shared by Path qualification. A miss is
 located E7001. Both evaluators use this access boundary; no duplicate selection
 logic or receiver re-evaluation. Resolved Grill Log: retained T.method must carry
 the same checked head and method-local witnesses as an immediate qualified call.
+
+## Declared owners named like built-ins (#529)
+
+A declared type whose name a built-in value also answers to is keyed by [[Eval Declared Owner]]: `@Name` for its methods, records, sums, witnesses and qualified calls, the bare name for built-in values.
