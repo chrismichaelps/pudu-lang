@@ -10,6 +10,9 @@ tags: [changelog]
 - CI builds once with a cache and runs the suite as six parallel shards and the gates as four parallel jobs on the built compiler, so a run takes as long as its longest job.
 - Native failure reports on Linux leave SIGPIPE ignored, as the interpreter does, so a broken standard error exits 1 instead of dying of the signal (runtime revision 20). CI runs the Linguist check beside the website's installed packages and gives conformance C compiles ten minutes.
 - The integer operator matrix is eight test properties, the output suite treats a closed channel as its readiness mask (#818 records the Linux wait), and the wide-operation matrix runs outside the `setjmp` frame so GCC builds it.
+## 2026-11-04 — Native members through a type parameter (#819)
+
+- [[Compiler Lower Method]] resolves a bound type parameter in qualifier position, so `T.made()` in a generic copy calls the bound type's member natively instead of refusing `T` as a value.
 
 ## 2026-11-04 — Portable native-output gate classification (#811)
 
@@ -1058,6 +1061,15 @@ Walking/falling, support queries and native engine throughput remain open.
 - [[Ark Math]] adds provisional binary64 Vec3 arithmetic and scaled checked length/normalization.
 - [[Compiler Library]], [[Pudu Cabal Manifest]] and [[Package Binary]] include Ark in shipped libraries.
 - [[Ark Math Gate]] checks numerical extremes and precision refusal; [[Ark Foundation Delivery]] records validation and review status.
+## 2026-10-21 — Generic trait defaults take the implementation's arguments (#528)
+
+- [[Type Check Method]] forms an inherited default in the trait's terms and substitutes `Self` and the trait's parameters with what the implementation gives them, so `b.twice()` on `impl Holds[Int]` is `(Int, Int)` rather than `(T, T)`.
+- [[Type Check Inherit]] renames a default's own parameters apart from the implementation's, so `map[B]` on an `impl [S, A, B, Q] ... for Mapped[Q, A, B]` keeps two distinct `B`s.
+- The trait table carries whole `Trait` declarations through [[Type Check]], [[Type Check Install]], [[Type Check Derive]] and the interface graph.
+## 2026-10-21 — Declared types named like built-ins keep their methods apart (#529)
+
+- [[Eval Operator Access]] keys a declared `Array`, `Range`, `Str` and the other built-in value names as `@Name`, and [[Eval Install]] binds such a module's implementations there, so `[1, 2, 3].length()` stays the built-in length beside a declared `Array`.
+- [[Eval Loop]] and [[Eval Call Path]] look up record, variant, qualified and witness calls under the same keys.
 
 ## 2026-10-09 — Integrated Database graph expectations (#478)
 

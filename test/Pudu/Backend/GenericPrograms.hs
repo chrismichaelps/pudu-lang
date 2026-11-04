@@ -56,6 +56,30 @@ genericSuccessPrograms =
       , "  print(show(numbers))"
       , "  return 0", "}" ]
     , "3 1\n4 none\nCell(1, Cell(2, Cell(3, Empty)))\n")
+  , ("static members through a type parameter select the copy's type", program
+      [ "trait Sized {"
+      , "  fn size() -> Int"
+      , "  fn scaled(by: Int) -> Int { by * 10 }"
+      , "  fn made() -> Self"
+      , "}"
+      , "type Box[T] = { value: T }", "type Point = { x: Int }"
+      , "impl[T: Sized] Sized for Box[T] {"
+      , "  fn size() -> Int { 2 }", "  fn made() -> Self { Box{value: build()} }", "}"
+      , "impl Sized for Point {"
+      , "  fn size() -> Int { 3 }", "  fn scaled(by: Int) -> Int { by + 1 }"
+      , "  fn made() -> Self { Point{x: 4} }", "}"
+      , "impl Sized for Int { fn size() -> Int { 5 }", "  fn made() -> Int { 11 } }"
+      , "fn build[T: Sized]() -> T { T.made() }"
+      , "fn sizeOf[T: Sized](value: T) -> Int { T.size() + T.scaled(1) }"
+      , "fn outer[T: Sized](value: T) -> Int { sizeOf(value) * 100 + T.size() }"
+      , "fn main() -> Int {"
+      , "  print(display(sizeOf(Box{value: 1})) + \" \" + display(sizeOf(Box{value: Point{x: 0}})))"
+      , "  print(display(sizeOf(Point{x: 0})) + \" \" + display(sizeOf(7)) + \" \" + display(outer(Point{x: 1})))"
+      , "  let point: Point = build()", "  let number: Int = build()"
+      , "  let boxed: Box[Int] = build()"
+      , "  print(show(point) + \" \" + display(number) + \" \" + show(boxed))"
+      , "  return 0", "}" ]
+    , "12 12\n5 15 503\nPoint{x: 4} 11 Box{value: 11}\n")
   ]
 
 {-| Failures inside a copy report at the generic body's own source. -}
@@ -75,6 +99,13 @@ genericRefusalPrograms =
       , "fn split[R: Ratio](value: R, by: Int) -> Int { value.over(by) }"
       , "fn main() -> Int {", "  print(display(split(Holder{held: \"a\", top: 10}, 5)))"
       , "  print(display(split(Holder{held: 'b', top: 10}, 0)))", "  return 0", "}" ])
+  , ("a static member through a type parameter fails at its own source", program
+      [ "trait Parts { fn parts(count: Int) -> Int }"
+      , "type Pie = { slices: Int }"
+      , "impl Parts for Pie { fn parts(count: Int) -> Int { 12 / count } }"
+      , "fn share[T: Parts](value: T, count: Int) -> Int { T.parts(count) }"
+      , "fn main() -> Int {", "  print(display(share(Pie{slices: 1}, 3)))"
+      , "  print(display(share(Pie{slices: 1}, 0)))", "  return 0", "}" ])
   ]
 
 program :: [Text] -> Text

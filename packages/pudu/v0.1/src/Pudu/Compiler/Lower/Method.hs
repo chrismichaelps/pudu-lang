@@ -116,7 +116,17 @@ lowerMethodCall lower state at callee receiver written arguments = do
     arguments simply run in order. The trait form picks the implementation
     for the first argument's type, as the evaluator does. -}
 lowerQualifiedMethod :: LowerExpression -> LowerState -> Span -> Span -> Text -> Text -> [Located Expression] -> Maybe Lowered
-lowerQualifiedMethod lower state at callee owner written arguments = do
+lowerQualifiedMethod lower state at callee owner written arguments =
+  lowerOwnerMethod lower state at callee (boundOwner state owner) written arguments
+
+{-| A type parameter in qualifier position, `T.made()` in a generic copy,
+    names the type this copy binds it to, as the evaluator's witness does. -}
+boundOwner :: LowerState -> Text -> Text
+boundOwner state owner =
+  maybe owner id (Map.lookup owner (typeBindings (contextTypes (lowerContext state))) >>= ownerKeyOf)
+
+lowerOwnerMethod :: LowerExpression -> LowerState -> Span -> Span -> Text -> Text -> [Located Expression] -> Maybe Lowered
+lowerOwnerMethod lower state at callee owner written arguments = do
   key <- byTrait `orElse` byType
   Just $ maybe (ordinary key) id $ loanedInstanceCall lower state at key (typeFactAt (contextTypes context) callee)
     (maybe [] pure receiverType) (length arguments) [(index, Argument, argument) | (index, argument) <- zip [0 ..] arguments]

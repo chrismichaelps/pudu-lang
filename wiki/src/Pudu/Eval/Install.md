@@ -80,6 +80,8 @@ against it, then evaluate each constant in declaration order.
 
 ## Grill Log
 
+- **Q:** How is an implementation for a type named like a built-in type installed? **A:** When this module declares the type, the methods are bound under `declaredOwner` of its name (`@Range.toArray`); otherwise the name means the built-in type and is bound bare. An implementation written in another module for an imported type of such a name is bound bare, which is a known limit of name-keyed methods (#529).
+
 - **Q:** Look up a release by local name during teardown? **A:** No; resolve its native symbol while
   installing the foreign block. _Rationale:_ `symbol "MemFree"` proves local and native names may
   differ, and cleanup must call the same declaration explicit release calls. _Rejected:_ guessing
@@ -267,3 +269,7 @@ changing captures, copying bodies, or recovering types from program data. See
 A record definition records its field order under both its own name and its
 namespaced owner; dev's canonical variant owners and named sum payloads
 (`::sum::` paths) replace the per-variant order the stack kept.
+
+## Declared owners named like built-ins (#529)
+
+A declared type whose name a built-in value also answers to is keyed by [[Eval Declared Owner]]: `@Name` for its methods, records, sums, witnesses and qualified calls, the bare name for built-in values.

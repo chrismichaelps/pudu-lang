@@ -234,6 +234,7 @@ library
     Pudu.Eval.Verify
     Pudu.Eval.Signal
     Pudu.Eval.Entropy
+    Pudu.Eval.DeclaredOwner
     Pudu.Eval.Install
     Pudu.Eval.Env
     Pudu.Eval.Frozen
@@ -385,6 +386,7 @@ library
     Pudu.Type.Check.Derive
     Pudu.Type.Check.Iteration
     Pudu.Type.Check.Safety
+    Pudu.Type.Check.Inherit
     Pudu.Type.Check.Method
     Pudu.Type.Check.Method.Binding
     Pudu.Type.Check.Pattern
