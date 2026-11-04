@@ -5,6 +5,8 @@ tags: [moc, module]
 
 # Type Module Map
 
+- [[Qualified Variant Gate]] — imported and local sum constructor admission and runtime parity.
+
 - [[Type Check Bound]] — definition-time trait application and kind admission.
 - [[Type Formation Builtins]] — fixed language constructor and carrier inventory.
 - [[Type Trait Dispatch Spec]] — dispatch, generic bounds and coherence evidence.
@@ -48,11 +50,12 @@ tags: [moc, module]
 - [[Type Check Import]] — body-free canonical interface installation and trait-scope filtering.
 - [[Type Check Prelude]] — wired-in constructors and the signatures of runtime-provided effects.
 - [[Type Check Coherence]] — nominal orphan ownership plus qualified, alpha-normalized duplicate checks over implementation syntax.
-- [[Type Check Pattern]] — checking patterns against the type they match.
+- [[Type Check Pattern]] — checking patterns against the type they match; shared canonical named variant shapes.
+- [[Type Check Record]] — construction fields checked against that same resolved variant or record owner.
 - [[Type Check Foreign]] — the type a foreign declaration gives its functions, and what its own declaration can be wrong about.
 - [[Type Check Data Spec]] — exact record, collection, constructor, and qualified-pattern regressions.
 
-Dependency direction: Value/Substitute → Implementation → Env → Formation and Proof/Match/Marker → Proof → Method → Rule/Call/Pattern/Coherence/Import → Check → Boundary.
+Dependency direction: Value/Substitute → Implementation → Env → Formation and Proof/Match/Marker → Proof → Method Binding → Method → Rule → Safety → Pattern → Call/Coherence/Import → Check → Boundary.
 
 Full trait applications survive Value/Scheme → scoped Env bounds → call obligations →
 Proof → method specialization. Canonical owners index candidates at the proof layer;
@@ -63,3 +66,14 @@ only complete head matching and discharged premises establish evidence.
 ## Referenced by
 
 [[src/Pudu/_MOC]] · [[Semantics]] · [[Pudu Type]]
+
+- [[Type Check Pattern Spec]] — alternative binding type agreement (#542).
+- [[Type Check Qualified]] — shared concrete and legacy type-qualified method schemes.
+
+- [[Method Binding]] — formed provider registration and shared-slot ambiguity.
+
+- [[Implementation Witness Delivery]] — checked implementation heads before bounded dispatch repair (#735).
+
+- [[Builtin Scope Delivery]] — resumed #759 scope isolation; [[Builtin Scope Grid]], [[Builtin Scope Main]], [[Builtin Scope Reverse]], [[Builtin Scope Selected]], [[Builtin Scope Refusal]], [[Builtin Scope Table]].
+
+- [[Bound Receiver Evidence Delivery]] — complete selected bound and receiver facts for #735.

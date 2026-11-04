@@ -381,7 +381,7 @@ inspectContext session = do
   let (buffer, _) = renderBuffer session StatementEntry Text.empty
   source <- newSource interactiveName buffer
   (result, _) <- compileBuffer session session source
-  pure (compileResolution result, compileModule result, compileDiagnostics result)
+  pure (compileResolution result, compileModule result *> compileSyntax result, compileDiagnostics result)
 
 interactiveName :: SourceName
 interactiveName = SourceName "<interactive>"

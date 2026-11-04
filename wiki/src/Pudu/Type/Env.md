@@ -1,6 +1,6 @@
 ---
 type: module
-path: "@root/src/Pudu/Type/Env.hs"
+path: "@root/packages/pudu/v0.1/src/Pudu/Type/Env.hs"
 fidelity: Active
 domain: "[[Pudu Type]]"
 subsystem: "[[Semantics]]"
@@ -123,6 +123,10 @@ DEPTH 0.5 (MEDIUM). It keeps one concern out of [[Type Check]], which the delive
 
 ## Grill Log
 
+- **Q:** Where does a match learn it stands in result position? **A:** `stateResultSpans`,
+  filled by [[Check Propagation]] as bodies and `return` operands are entered, read by
+  `isResultSpan` when the match is checked.
+
 - **Q:** Replace the enclosing bounds at a nested compile-time loop? **A:** Merge
   them lexically and restore them after checking. _Rationale:_ nested bodies retain
   the outer field's capabilities. _Rejected:_ replacement or leaking local bounds.
@@ -226,3 +230,97 @@ Do not remove live recorded facts, defer checking itself, or drop editor answers
 ## Lexical member admission (#471)
 
 Expose lookupLocalName over nested name frames only, excluding the final module/interface frame. Reuse the ordered name search without copying maps or exposing state. Local parameters, constants, patterns and captured blocks count; shared bare dependency declarations do not. Resolved Grill Log: a qualified expression cannot consult an export before a nearer local, and hidden graph names cannot impersonate a lexical shadow. The existing state-owner length exception remains bounded to this accessor.
+
+## Bound provider evidence (#743)
+
+recordProvider keeps canonical trait identities by complete source span, separately from static type-argument selections. CheckerProducts publishes these immutable facts; installed graph snapshots do not carry per-module use facts.
+
+Resolved Grill Log: preserve the checker-selected provider through ordinary executable symbols,
+including retained methods and receiver aliases. Do not infer a provider from declaration order,
+receiver spelling, or runtime type arguments. Existing evaluation order and lending stay intact.
+See [[Bound Provider Delivery]].
+
+## Canonical record owners (#761)
+
+Collect canonical concrete-owner facts separately from trait-provider facts, including when generated declarations share source anchors. Publish owners with each module check; never retain per-module facts in interface snapshots.
+
+Resolved Grill Log: separate semantic roles even at identical generated spans. No runtime span lookup, provider overwrite or shortened owner. See [[Canonical Runtime Owner Delivery]].
+
+## Record pattern identity (#761)
+
+Add checker-local recordPatternTest :: Span -> Checker () and patternTests :: Checker (Set Span), with an initially empty set. Do not carry per-module test facts through installed interface snapshots or published executable facts.
+
+Resolved Grill Log: canonical identity and subject-sensitive refutability must agree before evaluation. See [[Record Pattern Owner Delivery]].
+
+## Named payload field ownership (#761)
+
+Key declaredVariantFields and lookupVariantFields by (NominalId, variant label), matching declaredOwnedVariants. Absence still distinguishes a positional payload from a named empty payload.
+
+Resolved Grill Log: field names and payload types come from one resolved owner/variant key. No runtime representation or field evaluation order changes in this partition. See [[Named Payload Field Delivery]].
+
+## Named sum publication (#761)
+
+Publish OwnerSelection facts. recordOwner wraps ConcreteOwner; recordVariantOwner records a canonical named owner, label and declared fields without changing provider evidence or installed snapshots.
+
+Resolved Grill Log: carry checked owner and field order through syntax; preserve authored effects, diagnostics and cache identity. See [[Named Sum Publication]].
+
+## Checked constructor values (#766)
+
+recordVariantOwner also carries positional constructor selections with an empty field list. Record-expression facts retain named storage order; expression shape determines projection. Provider facts remain separate.
+
+Resolved Grill Log: checked canonical identity must survive lowering even when a type and a bare variant share text. No runtime owner inference or source syntax change. See [[Variant Namespace Delivery]].
+
+## Constructor binding identity (#774)
+
+NameBinding distinguishes ValueBinding Scheme and ConstructorBinding NominalId Text Scheme. Frames and InstalledNames retain it; bindName creates ordinary bindings, bindConstructorName marks declarations, aliasName copies complete selected bindings. lookupBinding exposes the nearest role and scheme in one lookup; lookupName/lookupLocalName/finalSchemes preserve their scheme-only interfaces.
+
+Resolved Grill Log: identity belongs to the selected binding; schemes remain type-only and ordinary shadows clear constructor roles. See [[Constructor Binding Delivery]].
+
+## Imported providers (#734)
+
+Add setProviderNames and providerSpelling with an initially empty, intentionally lazy per-consumer inverse map of admitted spellings. Choose shortest then lexical spelling from exact source imports/local traits. Demand only for diagnostic help; no installed snapshot or executable metadata changes. Preserve the existing bounded state-owner exception.
+
+Resolved Grill Log: binding identity and admitted source spellings determine provider selection and help; registration order and schemes do not. See [[Imported Provider Delivery]].
+
+Resolved #734 qualifier contract: retain exact admitted name lookup separately from preferred diagnostic spellings; successful explicit self-taking trait calls publish their canonical qualifier through the existing member owner-fact projection. Preserve argument order and static-member behavior. See [[Imported Provider Delivery]].
+
+## Complete implementation heads (#735)
+
+ImplementationOwner Type is a distinct owner fact for an implementation target.
+Form its complete target with implementation rigid parameters, transparent aliases
+and canonical nested nominal identities. Env publishes this local immutable fact
+separately from provider evidence and interface snapshots. Compiler Literals reads
+it only at the structural Impl target field and projects the complete formed type
+into executable syntax; source/tooling syntax remains authored. Expression and
+pattern projections ignore this role. Preserve source spans, declared parameter
+order and the static-selection map; do not infer parameters from runtime values.
+
+Resolved Grill Log: a later runtime matcher needs Pair[Array[B], A] from an alias
+Reversed[A, Array[B]], not the authored alias arguments zipped to A/B. Keeping the
+complete checked target is a prerequisite, not the #735 dispatch repair itself.
+A focused compiler property must assert canonical executable heads, retained
+source heads and unchanged target spans. Existing static and derive regressions
+and every full gate remain required. See [[Implementation Witness Delivery]].
+
+## Complete provider selections (#735)
+
+ProviderSelection carries canonical trait identity, complete formed trait arguments
+and an optional complete receiver type. Existing identity-only recording keeps an
+empty argument list and no receiver. Unambiguous rigid-bound selections retain
+the selected bound arguments and actual receiver, including F[A] rather than F.
+Implementation trait facts retain formed arguments under implementation rigids.
+Final checker publication resolves inference in both arguments and receiver.
+Detailed products and ModuleTypes preserve this immutable typed evidence.
+
+Compiler Literals continues existing member-symbol projection in this partition.
+At the structural Impl trait boundary it projects the complete formed trait,
+including expanded aliases and nested canonical owners; tooling syntax stays
+authored. Runtime transport/consumption follows separately and #735 remains open.
+
+Resolved Grill Log: trait identity cannot recover a parameter present only in
+Choice[B] for Box[A]. Do not fabricate a nominal identity to hold receiver types,
+inspect container elements, overwrite target-owner facts, or drop applied receiver
+arguments while following a rigid constructor's bounds. Assert actual checker
+products, canonical implementation trait projection, authored syntax and spans;
+retain full existing dispatch, diagnostic, derive and cache gates.
+See [[Bound Receiver Evidence Delivery]].

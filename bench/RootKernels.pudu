@@ -1,0 +1,70 @@
+module RootKernels
+
+import Std.Math.Float as Float
+
+fn reciprocal(value: Float64) -> Float64 {
+  match Float.sqrt(value) {
+    case Some(root) => 1.0 / root
+    case None => panic("positive benchmark input has no root")
+  }
+}
+
+fn estimate(value: Float64, refinements: Int) -> Float64 {
+  let initial = Float.fromBits(0x5fe6ec85e7de30dau64 - (Float.toBits(value) >> 1))
+  var result = initial
+  var remaining = refinements
+  while remaining > 0 {
+    result = result * (1.5 - ((0.5 * value) * result) * result)
+    remaining = remaining - 1
+  }
+  result
+}
+
+fn estimate1(value: Float64) -> Float64 { estimate(value, 1) }
+fn estimate2(value: Float64) -> Float64 { estimate(value, 2) }
+
+fn consume(action: fn(Float64) -> Float64, count: Int) -> Float64 {
+  let inputs = [1.0, 1.25, 1.5, 2.0, 2.5, 3.0]
+  var total = 0.0
+  var index = 0
+  while index < count {
+    total = total + action(inputs[index % 6])
+    index = index + 1
+  }
+  total
+}
+
+fn timed(name: Str, action: fn(Float64) -> Float64) {
+  let started = clock()
+  let checksum = consume(action, 2000)
+  let elapsed = clock() - started
+  if !Float.isFinite(checksum) || checksum <= 0.0 { panic("invalid checksum") }
+  print("timing " + name + " " + show(elapsed) + " " + show(checksum))
+}
+
+/// Measure reciprocal-root candidates on positive normalization inputs.
+export fn main() -> Int {
+  var input = 1.0
+  while input <= 3.0 {
+    print("accuracy estimate1 " + show(input) + " " + show(estimate1(input)))
+    print("accuracy estimate2 " + show(input) + " " + show(estimate2(input)))
+    input = input + 0.00390625
+  }
+  if consume(reciprocal, 100) <= 0.0 || consume(estimate1, 100) <= 0.0 || consume(estimate2, 100) <= 0.0 {
+    panic("warmup failed")
+  }
+  var trial = 0
+  while trial < 5 {
+    if trial % 2 == 0 {
+      timed("root", reciprocal)
+      timed("estimate1", estimate1)
+      timed("estimate2", estimate2)
+    } else {
+      timed("estimate2", estimate2)
+      timed("estimate1", estimate1)
+      timed("root", reciprocal)
+    }
+    trial = trial + 1
+  }
+  0
+}

@@ -12,12 +12,14 @@ module Pudu.Eval.Call.Path
   , typeArgumentName
   , typeArgumentNames
   , selectTypes
+  , withSelf
   , witnessOf
   ) where
 
 import Data.Char (isUpper)
 import Data.Foldable (toList)
 import Data.List (inits)
+import qualified Data.List.NonEmpty as NonEmpty
 import Data.List.NonEmpty (NonEmpty (..))
 import Data.Text (Text)
 import qualified Data.Text as Text
@@ -25,13 +27,12 @@ import Pudu.Eval.Env (Evaluator, abortAt, lookupLocal, lookupName)
 import Pudu.Eval.Install (lastSegmentOf)
 import Pudu.Eval.Loop (firstBound, receiverOwners)
 import Pudu.Eval.Operator (readMember)
-import Pudu.Eval.Value (Closure (..), Value (..))
+import Pudu.Eval.Value (Value (..))
+import Pudu.Eval.TypeWitness (witnessOf, selectTypes, withSelf, witnessMethod)
 import Pudu.Frontend.Syntax.Located (Located (..))
 import Pudu.Frontend.Syntax.Name (ModuleName (..), moduleNameText)
 import Pudu.Frontend.Syntax.Tree
   ( Expression (..)
-  , Function (..)
-  , TypeParam (..)
   , TypeSyntax (..)
   )
 import Pudu.Source (Span, spanOrigin)
@@ -41,12 +42,12 @@ import Pudu.Source (Span, spanOrigin)
     declares it, as in `A.label(bot)`. The trait form dispatches on the first
     argument's type, which is the receiver the method is being called on. -}
 qualifiedCallee :: Located Expression -> [Value] -> Evaluator (Maybe Value)
-qualifiedCallee (Located _ expression) values = case qualifiedParts expression of
+qualifiedCallee (Located at expression) values = case qualifiedParts expression of
   Nothing -> pure Nothing
   Just (first, method) -> do
     local <- lookupLocal first
     direct <- case local of
-      Just witness@TypeWitnessValue{} -> witnessMethod witness method
+      Just witness@TypeWitnessValue{} -> witnessMethod at witness method
       Just _ -> pure Nothing
       Nothing -> lookupName (first <> "." <> method)
     case direct of
@@ -69,10 +70,10 @@ qualifiedParts expression = case expression of
   MemberExpression (Located _ (NameExpression (first :| []))) member
     | isNominalType first -> Just (first, locatedValue member)
   -- Generated code names an owner canonically, `Module.Type`; methods are
-  -- installed under the type's own name.
+  -- installed under that canonical owner.
   MemberExpression (Located at (NameExpression path@(_ :| (_ : _)))) member
     | Just _ <- spanOrigin at, isNominalType (lastSegmentOf path) ->
-        Just (lastSegmentOf path, locatedValue member)
+        Just (Text.intercalate "." (toList path), locatedValue member)
   _ -> Nothing
  where
   isNominalType name = case Text.uncons name of
@@ -105,7 +106,7 @@ readPath spanValue path@(first :| rest) = do
   local <- if null rest then pure Nothing else lookupLocal first
   linked <- case (local, rest) of
     (Just witness@TypeWitnessValue{}, [member]) -> do
-      method <- witnessMethod witness member
+      method <- witnessMethod spanValue witness member
       pure (fmap (\found -> (found, [])) method)
     (Just value, _) -> pure (Just (value, rest))
     (Nothing, _) -> longestBinding path
@@ -117,8 +118,11 @@ readPath spanValue path@(first :| rest) = do
         Just value -> foldMember value rest
         -- A derive's construction names a variant by its canonical owner,
         -- which the defining module need not import; the checker proved the
-        -- path, and a variant value carries only its tag.
-        Nothing | Just _ <- spanOrigin spanValue -> pure (VariantValue (lastSegmentOf path) [])
+        -- path; retain its canonical owner alongside the display tag.
+        Nothing | Just _ <- spanOrigin spanValue -> pure $
+          case NonEmpty.nonEmpty (NonEmpty.init path) of
+            Just owner -> SumValue (Text.intercalate "." (toList owner)) (lastSegmentOf path) []
+            Nothing -> VariantValue (lastSegmentOf path) []
         Nothing -> abortAt (Just spanValue) "E7001" ("undefined name " <> first) Nothing
  where
   foldMember value segments = case segments of
@@ -190,38 +194,3 @@ typeArgumentName :: Located TypeSyntax -> Text
 typeArgumentName located = case locatedValue located of
   NamedType path _ -> moduleNameText path
   _ -> Text.empty
-
-{-| The method a witnessed owner installs under this name, holding the
-    owner's own arguments for the implementation's leading parameters. -}
-witnessMethod :: Value -> Text -> Evaluator (Maybe Value)
-witnessMethod witness member = case witness of
-  TypeWitnessValue owner arguments -> do
-    found <- lookupName (owner <> "." <> member)
-    pure $ case found of
-      Just (FunctionValue closure) -> Just (FunctionValue (selectTypes arguments closure))
-      other -> other
-  _ -> pure Nothing
-
-{-| Bind chosen types to a closure's type parameters in declaration order;
-    an installed method's parameters begin with its implementation's. -}
-selectTypes :: [Value] -> Closure -> Closure
-selectTypes [] closure = closure
-selectTypes chosen closure = closure
-  { closureWitnesses =
-      zip (map (locatedValue . typeParamName . locatedValue) (functionTypeParams (closureFunction closure))) chosen
-        <> closureWitnesses closure
-  }
-
-{-| The witness a written type stands for. A one-segment name bound to a
-    witness is a parameter the enclosing call selected; any other nominal is
-    its own owner, named by its last segment as methods are installed. -}
-witnessOf :: Located TypeSyntax -> Evaluator Value
-witnessOf (Located _ written) = case written of
-  NamedType path@(ModuleName (first :| rest)) arguments -> do
-    local <- if null rest && null arguments then lookupLocal first else pure Nothing
-    case local of
-      Just witness@TypeWitnessValue{} -> pure witness
-      _ -> TypeWitnessValue (lastSegmentOf (moduleNameSegments' path)) <$> mapM witnessOf arguments
-  _ -> pure (TypeWitnessValue Text.empty [])
- where
-  moduleNameSegments' (ModuleName segments) = segments

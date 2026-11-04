@@ -72,7 +72,7 @@ The exported signatures are the module header's export list; [[Evaluator]] is th
 
 ### Linkage
 
-- **Requires:** [[Float Literal]], [[Eval Value]], [[Eval Order]], [[Syntax Tree]], [[Diagnostic Model]].
+- **Requires:** [[Float Literal]], [[Eval Value]], [[Eval Order]], [[Syntax Tree]], [[Diagnostic Model]], [[Diagnostic Arithmetic]] (the `E7004`/`E7005` refusal text, shared with the native runtime).
 - **Consumed by:** [[Evaluator]].
 
 ## Algorithm
@@ -188,3 +188,16 @@ and still check the result against its kind the same way the general operator pa
 ### Resolved Grill Log
 - **Q:** Give the compiled operators a check of their own? **A:** No; one check keeps the bounds and the
   `E7005` diagnostic identical in both evaluators.
+
+
+## Explicit scalar runtime refusals (#494)
+
+Use shared operatorCode and message factories from Diagnostic Evaluation at existing unary/general binary/comparisonOnly refusal paths. Preserve exact text and dispatch: Bool ordering is valid; invalid Bool/Bool operations use unsupported operator, while Unit/mixed invalid operands use cannot apply. No evaluator behavior change.
+
+Resolved Grill Log: reproduce actual interpreter dispatch, canonical settled kinds, operand order and diagnostic spans; never classify print Result as unit or implement invalid operations as integer arithmetic. No syntax/inference change.
+
+## Platform Int operators (#495)
+
+Replace only shift diagnostic code/message/help literals with shared Diagnostic Arithmetic factories. Keep count validation order and kind-specific width naming unchanged.
+
+Resolved Grill Log: use defined unsigned bit patterns, validate counts before shifts, and prove signed arithmetic bounds before evaluation. The actual interpreter determines results, effect order and exact diagnostic vocabulary. No syntax or type-inference change.

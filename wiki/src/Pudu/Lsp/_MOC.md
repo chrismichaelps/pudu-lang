@@ -5,6 +5,8 @@ tags: [moc, tooling, lsp]
 
 # Language Server Map
 
+- [[Lsp Module Catalog Spec]] — compiler-consistent namespace admission across roots.
+
 - [[Language Server]] — answers an editor's questions from the ordinary compile.
 - [[Lsp Analysis]] — one document compiled under the source root its path and module give it.
 - [[Lsp Repair Cache]] — repaired analyses reused while the documents' state holds.

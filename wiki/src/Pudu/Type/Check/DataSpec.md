@@ -53,3 +53,11 @@ DEPTH 0.66 (DEEP). One suite covers several interacting data-shape rules and gua
 ## Referenced by
 
 [[src/Pudu/Type/_MOC]] · [[Type Check Pattern]]
+
+## Built-in scope diagnostic boundary (#759)
+
+Keep exact E3034/module-import help for unimported Result functions. A locally
+declared sum named Result retains E3034/variant-name help for its missing variant.
+Resolved Grill Log: canonical declaration ownership decides this diagnostic
+boundary; a familiar basename must not trigger an unrelated import suggestion.
+See [[Builtin Scope Delivery]].

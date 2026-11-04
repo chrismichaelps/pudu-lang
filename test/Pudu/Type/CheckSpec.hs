@@ -35,6 +35,7 @@ import Pudu.Type.Check.PatternSpec
   , testTupleCoverage
   , testExhaustiveness
   , testMatchThroughBorrow
+  , testAlternativeBindings
   )
 import Pudu.Type.Check.PlaceSpec (testPlaces)
 import Pudu.Type.Check.PrimitiveSpec
@@ -81,6 +82,7 @@ import Pudu.Type.Check.TraitSpec
 typeProperties :: [(String, IO Property)]
 typeProperties =
   [ ("nested constructor coverage follows canonical module identities", testNestedConstructorNamespaces)
+  , ("alternative patterns share names at one compatible type", testAlternativeBindings)
   , ("tuple coverage retains correlated Option combinations", testTupleCoverage)
   , ("a generic alias stands for what it names", testGenericAliases)
   , ("a trait bound is satisfied by any implementation in the program", testGlobalImpls)

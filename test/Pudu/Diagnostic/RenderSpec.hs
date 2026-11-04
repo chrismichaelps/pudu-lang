@@ -1,17 +1,20 @@
 module Pudu.Diagnostic.RenderSpec (renderProperties) where
 
+import qualified Data.Map.Strict as Map
 import Data.Text (Text)
 import qualified Data.Text as Text
 import Pudu.Compiler (CompileResult (..), runCompile)
+import Pudu.Diagnostic (Diagnostic, Related (..), Severity (Error), diagnostic, mkDiagnosticCode, withRelated)
 import Pudu.Diagnostic.Render
   ( RenderStyle (..)
   , defaultRenderConfig
   , interactiveRenderConfig
   , renderDiagnostics
   , renderDiagnosticsWith
+  , renderDiagnosticsWithSources
   , renderSummary
   )
-import Pudu.Source (SourceName (SourceName), newSource)
+import Pudu.Source (Source, SourceName (SourceName), Span, mkSpan, newSource, offsetFromInt, sourceName)
 import Test.QuickCheck (Property, conjoin, counterexample, property, (===))
 
 renderProperties :: [(String, IO Property)]
@@ -22,6 +25,8 @@ renderProperties =
   , ("interactive rendering reports the typed line", testInteractive)
   , ("summaries count errors and warnings", testSummary)
   , ("tabs keep the caret aligned", testTabs)
+  , ("foreign diagnostic rendering never borrows another snapshot", testForeignFallback)
+  , ("foreign diagnostic rendering uses owning snapshots", testForeignSources)
   ]
 
 testLayout :: IO Property
@@ -119,3 +124,63 @@ render inputLines = do
   source <- newSource (SourceName "render.pudu") (Text.unlines inputLines)
   result <- runCompile source
   pure (renderDiagnosticsWith (defaultRenderConfig PlainStyle) source (compileDiagnostics result))
+
+testForeignFallback :: IO Property
+testForeignFallback = do
+  (primary, _, finding) <- foreignFinding "\n\n"
+  stale <- newSource (SourceName "main.pudu") "changed snapshot with a different layout"
+  let config = interactiveRenderConfig PlainStyle "entry" 3
+  pure $ case finding of
+    Nothing -> counterexample "valid diagnostic fixture" (property False)
+    Just value ->
+      let rendered = renderDiagnosticsWith config primary [value]
+          wrongSnapshot = renderDiagnosticsWith config stale [value]
+      in conjoin
+        [ counterexample (Text.unpack rendered) (property (Text.isInfixOf "entry:1:1" rendered))
+        , counterexample (Text.unpack rendered)
+            (property (Text.isInfixOf "candidate (producer.pudu:offset 7)" rendered))
+        , counterexample (Text.unpack wrongSnapshot)
+            (property (Text.isInfixOf "main.pudu:offset 2" wrongSnapshot))
+        , property (not (Text.isInfixOf "|" wrongSnapshot))
+        ]
+
+foreignFinding :: Text -> IO (Source, Source, Maybe Diagnostic)
+foreignFinding prefix = do
+  primary <- newSource (SourceName "main.pudu") (prefix <> "missing\n")
+  producer <- newSource (SourceName "producer.pudu") "header\ncandidate\n"
+  let finding = do
+        use <- spanAt primary (Text.length prefix) (Text.length prefix + 7)
+        declared <- spanAt producer 7 16
+        code <- mkDiagnosticCode "E2012"
+        value <- diagnostic code Error use "ambiguous value"
+        pure (withRelated (Related declared "candidate") value)
+  pure (primary, producer, finding)
+
+spanAt :: Source -> Int -> Int -> Maybe Span
+spanAt source start end = do
+  first <- offsetFromInt start
+  last' <- offsetFromInt end
+  mkSpan source first last'
+
+testForeignSources :: IO Property
+testForeignSources = conjoin <$> mapM one ["\n\n", Text.replicate 40 "\n"]
+ where
+  one prefix = do
+    (primary, producer, finding) <- foreignFinding prefix
+    stale <- newSource (sourceName producer) "another version with a different layout"
+    let config = interactiveRenderConfig PlainStyle "entry" (Text.count "\n" prefix + 1)
+    pure $ case finding of
+      Nothing -> counterexample "valid diagnostic fixture" (property False)
+      Just value ->
+        let present = renderDiagnosticsWithSources config
+              (Map.singleton (sourceName producer) producer) primary [value]
+            outdated = renderDiagnosticsWithSources config
+              (Map.singleton (sourceName stale) stale) primary [value]
+        in conjoin
+          [ counterexample (Text.unpack present)
+              (property (Text.isInfixOf "candidate (producer.pudu:2:1)" present))
+          , property (Text.isInfixOf "entry:1:1" present)
+          , countOf "= note:" present === 1
+          , counterexample (Text.unpack outdated)
+              (property (Text.isInfixOf "candidate (producer.pudu:offset 7)" outdated))
+          ]

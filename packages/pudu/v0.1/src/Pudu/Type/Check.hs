@@ -36,6 +36,7 @@ import Pudu.Type.Env
   , CheckerProducts (..)
   , DeclaredTypes (..)
   , bindName
+  , bindConstructorName
   , finalizeIntegerLiterals
   , inTypeScope
   , enterUnsafe
@@ -50,6 +51,7 @@ import Pudu.Type.Env
   , withRigidBounds
   , runChecker
   , setWritableNames
+  , setProviderNames
   , withDeclared
   , installNames
   )
@@ -79,6 +81,7 @@ import Pudu.Type.Check.Signature
   , selfRigid
   , traitAliases
   )
+import Pudu.Type.Check.Propagation (markBodyResult)
 import Pudu.Type.Check.Rule
   ( selfName
   )
@@ -104,7 +107,9 @@ import Pudu.Type.Formation
   )
 import Pudu.Type.Unify (unify, zonk)
 import Pudu.Type.Value
-  ( NominalId (..)
+  ( ProviderSelection
+  , OwnerSelection
+  , NominalId (..)
   , Required (..)
   , Scheme (..)
   , monotype
@@ -126,7 +131,7 @@ checkModule = checkModuleWith emptyImportTypes
     already knows; see [[Check Place]]. -}
 checkModuleWith :: ImportTypes -> Set Span -> Module -> ([(Span, Type)], [Diagnostic])
 checkModuleWith imported writable moduleValue =
-  let (types, schemes, kinds, _, _, diagnostics) = checkModuleDetailed imported writable moduleValue
+  let (types, schemes, kinds, _, _, _, _, diagnostics) = checkModuleDetailed imported writable moduleValue
    in schemes `seq` kinds `seq` (types, diagnostics)
 
 {-| Everything one check produced: the type of each expression, the scheme the
@@ -139,7 +144,7 @@ checkModuleDetailed
   :: ImportTypes
   -> Set Span
   -> Module
-  -> ([(Span, Type)], [(Text, Scheme)], [(Span, Text)], [(NominalId, Text, Scheme, Span)], [(Span, [Type])], [Diagnostic])
+  -> ([(Span, Type)], [(Text, Scheme)], [(Span, Text)], [(NominalId, Text, Scheme, Span)], [(Span, [Type])], [(Span, OwnerSelection)], [(Span, ProviderSelection)], [Diagnostic])
 checkModuleDetailed imported writable moduleValue =
   let products = runChecker (setWritableNames writable >> checkUnit WholeModule imported moduleValue)
    in ( producedTypes products
@@ -147,6 +152,8 @@ checkModuleDetailed imported writable moduleValue =
       , producedIntegerKinds products
       , producedMethods products
       , producedSelections products
+      , producedOwners products
+      , producedProviders products
       , producedDiagnostics products
       )
 
@@ -178,6 +185,13 @@ checkUnit scope imported moduleValue = do
     (locatedValue (moduleName moduleValue))
     (moduleDeclarations moduleValue)
   withDeclared declared
+  let localProviders = Map.fromList
+        [ (name, owner)
+        | Located _ (TraitDeclaration trait) <- moduleDeclarations moduleValue
+        , let name = locatedValue (traitName trait)
+        , Just owner <- [Map.lookup name (declaredNames declared)]
+        ]
+  setProviderNames (localProviders <> importedNames imported)
   {-| The language's constructors and every interface's shared declarations
       were installed once for the whole graph; this module starts from them. -}
   installNames (graphInstalled (importedGraph imported))
@@ -262,7 +276,7 @@ declareConstructors declared value = case locatedValue (Tree.typeDefinition valu
         scheme
           | null payload = polytype rigid [] ownerType
           | otherwise = polytype rigid [] (FunctionTypeValue False payload ownerType)
-    bindName name scheme
+    bindConstructorName owner name scheme
 
 variantPayload :: DeclaredTypes -> [(Text, Int)] -> Tree.Variant -> Checker [Type]
 variantPayload declared rigid variant = case Tree.variantPayload variant of
@@ -365,6 +379,7 @@ checkFunctionWith role declared enclosing enclosingBounds selfBound value = do
             the declaration named, so the body may use those abilities without
             opening a region of its own. -}
         mapM_ (enterUnsafe . map locatedValue) (functionUnsafe value)
+        markBodyResult body
         actual <- case body of
           BlockBody block -> checkBlockAgainst declared rigid result block
           ExpressionBody expression -> checkAgainst declared rigid result expression

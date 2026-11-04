@@ -68,6 +68,8 @@ fn conversionsRoundTrip() -> Bool {
   D.fromInt(7) == 7d &&
   D.toInt(3d) == Some(3) &&
   D.toInt(3.5d) == None &&
+  D.toInt(9223372036854775807d) == Some(9223372036854775807) &&
+  D.toInt(9223372036854775808d) == None &&
   D.parse("12.75") == Some(12.75d) &&
   D.parse("not a number") == None &&
   D.parseOr("bad", 1d) == 1d

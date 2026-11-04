@@ -143,7 +143,7 @@ decodeDocument input = do
             then Nothing
             else do
               (nested, next) <- element position (depth + 1)
-              contentAt next attributes (children Seq.|> VariantValue "Element" [nested])
+              contentAt next attributes (children Seq.|> SumValue "Std.Xml.Node" "Element" [nested])
       | otherwise =
           let textEnd = maybe size (+ position) (ByteString.elemIndex 60 (ByteString.drop position input))
               raw = textOf position textEnd
@@ -152,14 +152,14 @@ decodeDocument input = do
 
 tagValue :: Text -> Seq.Seq Value -> Seq.Seq Value -> Value
 tagValue name attributes children =
-  RecordValue "Tag"
+  RecordValue "Std.Xml.Tag"
     [ ("name", StrValue name)
     , ("attributes", ArrayValue attributes)
     , ("children", ArrayValue children)
     ]
 
 contentValue :: Text -> Value
-contentValue text = VariantValue "Content" [StrValue text]
+contentValue text = SumValue "Std.Xml.Node" "Content" [StrValue text]
 
 {-| The five entities the format defines and numeric character references.
 

@@ -19,6 +19,20 @@ int32_t pudu_desktop_present(
     size_t rgba_length);
 
 int32_t pudu_desktop_pump(void *handle, int32_t milliseconds);
+/* Applies density (frame pixels per point, in thousandths), content size
+   limits in points (zero is unlimited), an optional content aspect ratio and
+   the requested full-screen state. */
+int32_t pudu_desktop_configure(
+    void *handle,
+    int32_t density,
+    int32_t min_width,
+    int32_t min_height,
+    int32_t max_width,
+    int32_t max_height,
+    int32_t aspect_width,
+    int32_t aspect_height,
+    int32_t fullscreen);
+
 int32_t pudu_desktop_close(void *handle);
 
 /* Input queued by pump, as newline-terminated tab-separated records:

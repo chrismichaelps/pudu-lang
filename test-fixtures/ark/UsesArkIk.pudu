@@ -1,0 +1,196 @@
+module UsesArkIk
+
+import Std.Lanes as Lanes
+import Std.Math.Float as Float
+import Ark.Animation.Ik as Ik
+import Ark.Animation.Limbs as Limbs
+import Ark.Math.Quat as Q
+import Ark.Math as V
+
+fn require(condition: Bool, name: Str) {
+  if !condition { panic(name) }
+}
+
+fn near(left: V.Vec3, right: V.Vec3) -> Bool {
+  V.approxEqual(left, right, 0.000000001)
+}
+
+fn close(left: Float64, right: Float64, tolerance: Float64) -> Bool {
+  Float.abs(left - right) <= tolerance
+}
+
+fn length(value: V.Vec3) -> Float64 {
+  match V.length(value) {
+    case Some(held) => held
+    case None => -1.0
+  }
+}
+
+fn arm() -> Ik.Limb {
+  Ik.Limb{root: V.vec3(0.0, 0.0, 0.0), joint: V.vec3(1.0, 0.0, 0.0), end: V.vec3(2.0, 0.0, 0.0)}
+}
+
+fn solved(limb: &Ik.Limb, target: V.Vec3, pole: V.Vec3, softness: Float64) -> Ik.Reach {
+  match Ik.twoBone(limb, target, pole, softness) {
+    case Ok(reach) => reach
+    case Err(_) => panic("solve")
+  }
+}
+
+fn twoBone() {
+  let limb = arm()
+  let elbow = solved(&limb, V.vec3(1.0, 1.0, 0.0), V.vec3(0.0, 1.0, 0.0), 0.0)
+  require(near(elbow.joint, V.vec3(0.0, 1.0, 0.0)) && near(elbow.end, V.vec3(1.0, 1.0, 0.0)), "right-angle elbow")
+  require(elbow.shortfall < 0.000000001, "reached")
+  require(near(Q.rotate(elbow.rootTurn, V.vec3(1.0, 0.0, 0.0)), V.vec3(0.0, 1.0, 0.0)), "upper bone turn")
+  require(near(Q.rotate(elbow.jointTurn, V.vec3(1.0, 0.0, 0.0)), V.vec3(1.0, 0.0, 0.0)), "lower bone keeps its direction")
+  let flipped = solved(&limb, V.vec3(1.0, 1.0, 0.0), V.vec3(1.0, 0.0, 0.0), 0.0)
+  require(near(flipped.joint, V.vec3(1.0, 0.0, 0.0)), "pole on the other side")
+  let full = solved(&limb, V.vec3(3.0, 0.0, 0.0), V.vec3(0.0, 1.0, 0.0), 0.0)
+  require(near(full.joint, V.vec3(1.0, 0.0, 0.0)) && near(full.end, V.vec3(2.0, 0.0, 0.0)), "full extension")
+  require(close(full.shortfall, 1.0, 0.000000001), "shortfall beyond reach")
+  let uneven = Ik.Limb{root: V.vec3(0.0, 0.0, 0.0), joint: V.vec3(2.0, 0.0, 0.0), end: V.vec3(3.0, 0.0, 0.0)}
+  let folded = solved(&uneven, V.vec3(0.5, 0.0, 0.0), V.vec3(0.0, 1.0, 0.0), 0.0)
+  require(near(folded.end, V.vec3(1.0, 0.0, 0.0)) && close(folded.shortfall, 0.5, 0.000000001), "minimum reach")
+  require(close(length(V.subtract(folded.end, folded.joint)), 1.0, 0.000000001), "folded lower bone length")
+  let home = solved(&limb, V.vec3(0.0, 0.0, 0.0), V.vec3(0.0, 1.0, 0.0), 0.0)
+  require(near(home.end, V.vec3(0.0, 0.0, 0.0)) && close(length(home.joint), 1.0, 0.000000001), "target at the root")
+  for target in [V.vec3(0.3, 1.2, -0.4), V.vec3(-1.1, 0.2, 0.9), V.vec3(1.5, -0.5, 0.25)] {
+    let reach = solved(&limb, target, V.vec3(0.0, 0.0, 1.0), 0.0)
+    require(close(length(reach.joint), 1.0, 0.000000001), "upper length kept")
+    require(close(length(V.subtract(reach.end, reach.joint)), 1.0, 0.000000001), "lower length kept")
+  }
+}
+
+fn softReach() {
+  let limb = arm()
+  let start = 1.8
+  let at = length(solved(&limb, V.vec3(start, 0.0, 0.0), V.vec3(0.0, 1.0, 0.0), 0.2).end)
+  require(close(at, start, 0.000000001), "soft reach starts where the hard reach is")
+  let step = 0.000001
+  let after = length(solved(&limb, V.vec3(start + step, 0.0, 0.0), V.vec3(0.0, 1.0, 0.0), 0.2).end)
+  require(close((after - at) / step, 1.0, 0.001), "soft reach slope is continuous")
+  let band = length(solved(&limb, V.vec3(2.5, 0.0, 0.0), V.vec3(0.0, 1.0, 0.0), 0.2).end)
+  require(close(band, 2.0 - 0.04 / 0.9, 0.000000001) && band < 2.0, "soft reach approaches full extension")
+  let far = length(solved(&limb, V.vec3(50.0, 0.0, 0.0), V.vec3(0.0, 1.0, 0.0), 0.2).end)
+  require(far < 2.0 && far > 1.999, "soft reach never passes full extension")
+  let inside = length(solved(&limb, V.vec3(1.0, 0.0, 0.0), V.vec3(0.0, 1.0, 0.0), 0.2).end)
+  require(close(inside, 1.0, 0.000000001), "soft reach leaves nearer targets alone")
+}
+
+fn rotations() {
+  let x = V.vec3(1.0, 0.0, 0.0)
+  let Some(same) = Q.between(x, V.vec3(2.0, 0.0, 0.0)) else { panic("aligned") }
+  require(near(Q.rotate(same, V.vec3(0.0, 1.0, 0.0)), V.vec3(0.0, 1.0, 0.0)), "aligned is identity")
+  let Some(opposite) = Q.between(x, V.vec3(-3.0, 0.0, 0.0)) else { panic("opposite") }
+  require(near(Q.rotate(opposite, x), V.vec3(-1.0, 0.0, 0.0)), "opposite turns half way")
+  let Some(quarter) = Q.between(V.vec3(0.0, 0.0, 1.0), V.vec3(0.0, 2.0, 0.0)) else { panic("quarter") }
+  require(near(Q.rotate(quarter, V.vec3(0.0, 0.0, 1.0)), V.vec3(0.0, 1.0, 0.0)), "perpendicular")
+  require(Q.between(V.vec3(0.0, 0.0, 0.0), x) == None, "zero direction refused")
+}
+
+fn chains() {
+  let joints = [V.vec3(0.0, 0.0, 0.0), V.vec3(1.0, 0.0, 0.0), V.vec3(2.0, 0.0, 0.0), V.vec3(3.0, 0.0, 0.0)]
+  let Ok(solve) = Ik.fabrik(&joints, V.vec3(1.0, 1.5, 0.0), 0.000001, 64) else { panic("fabrik") }
+  require(solve.reached && solve.error <= 0.000001 && solve.iterations >= 1, "chain converges")
+  require(near(solve.joints[0], V.vec3(0.0, 0.0, 0.0)), "root kept")
+  var index = 1
+  while index < 4 {
+    require(close(length(V.subtract(solve.joints[index], solve.joints[index - 1])), 1.0, 0.000000001), "segment length kept")
+    index = index + 1
+  }
+  let Ok(straight) = Ik.fabrik(&joints, V.vec3(0.0, 10.0, 0.0), 0.001, 64) else { panic("straight") }
+  require(!straight.reached && straight.iterations == 1 && close(straight.error, 7.0, 0.000000001), "unreachable straightens")
+  require(near(straight.joints[3], V.vec3(0.0, 3.0, 0.0)), "straightened toward the target")
+}
+
+fn refusals() {
+  let limb = arm()
+  let up = V.vec3(0.0, 1.0, 0.0)
+  require(Ik.twoBone(&limb, V.vec3(Float.fromBits(0x7ff8000000000000u64), 0.0, 0.0), up, 0.0) == Err(Ik.NonFinite), "non-finite target")
+  let collapsed = Ik.Limb{..limb, joint: limb.root}
+  require(Ik.twoBone(&collapsed, up, up, 0.0) == Err(Ik.ZeroLength), "zero-length bone")
+  require(Ik.twoBone(&limb, up, up, -0.1) == Err(Ik.NegativeSoftness), "negative softness")
+  require(Ik.fabrik(&[V.vec3(0.0, 0.0, 0.0)], up, 0.1, 4) == Err(Ik.TooFewJoints(1)), "one joint")
+  let pair = [V.vec3(0.0, 0.0, 0.0), V.vec3(1.0, 0.0, 0.0)]
+  require(Ik.fabrik(&pair, up, -1.0, 4) == Err(Ik.BadTolerance), "negative tolerance")
+  require(Ik.fabrik(&pair, up, 0.1, 0) == Err(Ik.BadBudget(0)), "empty budget")
+  require(Ik.fabrik(&[V.vec3(0.0, 0.0, 0.0), V.vec3(0.0, 0.0, 0.0)], up, 0.1, 4) == Err(Ik.ZeroLength), "coincident chain joints")
+}
+
+fn column(points: &Array[V.Vec3]) -> Limbs.Points {
+  var xs: Array[Float64] = []
+  var ys: Array[Float64] = []
+  var zs: Array[Float64] = []
+  for point in *points {
+    xs = xs.push(point.x)
+    ys = ys.push(point.y)
+    zs = zs.push(point.z)
+  }
+  Limbs.Points{xs: Lanes.fromArray(&xs), ys: Lanes.fromArray(&ys), zs: Lanes.fromArray(&zs)}
+}
+
+fn pointAt(points: &Limbs.Points, index: Int) -> V.Vec3 {
+  let Some(x) = Lanes.get(&points.xs, index) else { panic("x") }
+  let Some(y) = Lanes.get(&points.ys, index) else { panic("y") }
+  let Some(z) = Lanes.get(&points.zs, index) else { panic("z") }
+  V.vec3(x, y, z)
+}
+
+fn turnAt(turns: &Limbs.Turns, index: Int) -> Q.Quat {
+  let Some(x) = Lanes.get(&turns.xs, index) else { panic("x") }
+  let Some(y) = Lanes.get(&turns.ys, index) else { panic("y") }
+  let Some(z) = Lanes.get(&turns.zs, index) else { panic("z") }
+  let Some(w) = Lanes.get(&turns.ws, index) else { panic("w") }
+  Q.quat(x, y, z, w)
+}
+
+fn sameTurn(left: Q.Quat, right: Q.Quat) -> Bool {
+  close(left.x, right.x, 0.000000001) && close(left.y, right.y, 0.000000001) && close(left.z, right.z, 0.000000001) && close(left.w, right.w, 0.000000001)
+}
+
+fn batches() {
+  let origin = V.vec3(0.0, 0.0, 0.0)
+  let x = V.vec3(1.0, 0.0, 0.0)
+  let up = V.vec3(0.0, 1.0, 0.0)
+  let roots = [origin, origin, origin, origin, origin, origin, V.vec3(2.0, -1.0, 0.5), origin]
+  let middles = [x, x, x, V.vec3(2.0, 0.0, 0.0), x, x, V.vec3(2.0, 0.0, 0.5), x]
+  let ends = [V.vec3(2.0, 0.0, 0.0), V.vec3(2.0, 0.0, 0.0), V.vec3(2.0, 0.0, 0.0), V.vec3(3.0, 0.0, 0.0), V.vec3(2.0, 0.0, 0.0), V.vec3(2.0, 0.0, 0.0), V.vec3(2.0, 1.5, 0.5), V.vec3(0.0, 0.0, 0.0)]
+  let targets = [V.vec3(1.0, 1.0, 0.0), V.vec3(3.0, 0.0, 0.0), origin, V.vec3(0.5, 0.0, 0.0), V.vec3(1.9, 0.0, 0.0), V.vec3(-2.0, 0.0, 0.0), V.vec3(0.0, 0.0, 0.0), V.vec3(1.0, 1.0, 1.0)]
+  let poles = [up, up, up, up, V.vec3(5.0, 0.0, 0.0), up, V.vec3(0.0, 0.0, 9.0), V.vec3(1.0, 1.0, 1.0)]
+  let Ok(batch) = Limbs.solve(&column(&roots), &column(&middles), &column(&ends), &column(&targets), &column(&poles), 0.2) else { panic("batch") }
+  var index = 0
+  while index < roots.length() {
+    let limb = Ik.Limb{root: roots[index], joint: middles[index], end: ends[index]}
+    let single = solved(&limb, targets[index], poles[index], 0.2)
+    require(near(pointAt(&batch.joints, index), single.joint), "batch joint matches the single solve")
+    require(near(pointAt(&batch.ends, index), single.end), "batch end matches the single solve")
+    require(sameTurn(turnAt(&batch.rootTurns, index), single.rootTurn), "batch root turn matches")
+    require(sameTurn(turnAt(&batch.jointTurns, index), single.jointTurn), "batch joint turn matches")
+    let Some(shortfall) = Lanes.get(&batch.shortfalls, index) else { panic("shortfall") }
+    require(close(shortfall, single.shortfall, 0.000000001), "batch shortfall matches")
+    index = index + 1
+  }
+  let one = column(&[origin])
+  let two = column(&[origin, x])
+  require(Limbs.solve(&one, &two, &one, &one, &one, 0.0) == Err(Ik.CountMismatch), "column lengths")
+  require(Limbs.solve(&one, &one, &column(&[x]), &one, &one, 0.0) == Err(Ik.ZeroLength), "zero-length bone")
+  let lost = column(&[V.vec3(Float.fromBits(0x7ff8000000000000u64), 0.0, 0.0)])
+  require(Limbs.solve(&one, &column(&[x]), &column(&[V.vec3(2.0, 0.0, 0.0)]), &lost, &one, 0.0) == Err(Ik.NonFinite), "non-finite target")
+  require(Limbs.solve(&one, &column(&[x]), &column(&[V.vec3(2.0, 0.0, 0.0)]), &one, &one, -1.0) == Err(Ik.NegativeSoftness), "negative softness")
+  let none = column(&[])
+  let Ok(empty) = Limbs.solve(&none, &none, &none, &none, &none, 0.0) else { panic("empty batch") }
+  require(Lanes.count(&empty.shortfalls) == 0, "an empty batch solves nothing")
+}
+
+/// Exercise two-bone and chain inverse kinematics.
+export fn main() -> Int {
+  twoBone()
+  softReach()
+  rotations()
+  chains()
+  refusals()
+  batches()
+  print("ark ik: ok")
+  0
+}

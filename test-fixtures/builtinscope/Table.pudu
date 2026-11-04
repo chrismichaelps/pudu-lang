@@ -1,0 +1,7 @@
+module Table
+
+const CODES: Map[Str, Int] = mapOf([("a", 1)])
+
+export fn code(name: Str) -> Option[Int] {
+  CODES.get(name)
+}

@@ -5,6 +5,7 @@ module Pudu.Compiler.Program.LanguageSpec
   , testFunctionLiterals
   , testLanguageRefusals
   , testRangesAndSlices
+  , testTraitDefaultSelf
   ) where
 
 import qualified Data.Sequence as Seq
@@ -44,6 +45,14 @@ testFunctionLiterals = do
     , counterexample "an async short literal remains a cold task until awaited"
         (asynchronous === Just "42")
     ]
+
+{-| A trait default names its implementing type as `Self`, so passing `Self`
+    on as a type argument selects that type — reached through a witness, a
+    generic implementation or a receiver alike. -}
+testTraitDefaultSelf :: IO Property
+testTraitDefaultSelf = do
+  selected <- runEntry (fixture "DefaultSelf")
+  pure (counterexample "every default selects its implementing type through Self" (selected === Just "6"))
 
 {-| A range is a value, and indexing by one is a slice.
 
