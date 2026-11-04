@@ -94,6 +94,9 @@ data LowerState = LowerState
   , lowerDeclaredResult :: !(Maybe CoreType)
   {-| The key of the body being lowered, which names the lambdas written in it. -}
   , lowerCurrentKey :: !Text
+  {-| The `&mut` parameters of the function being lowered, whose final values
+      every way out returns beside its result. -}
+  , lowerLoaned :: ![CoreLocal]
   }
 
 {-| A lexical loop destination and the scalar type observed at its breaks.
@@ -105,10 +108,12 @@ data LoopFrame = LoopFrame
   }
 
 {-| @Compiler.Lower.Signature — a validated non-entry function: its parameter
-    locals (numbered `0..n-1`) and its declared result type. -}
+    locals (numbered `0..n-1`), its declared result type, and the positions
+    of the parameters written `&mut`. -}
 data CoreSignature = CoreSignature
   { signatureParameters :: ![CoreParameter]
   , signatureResult :: !CoreType
+  , signatureLoaned :: ![Int]
   }
   deriving stock (Eq, Show)
 
@@ -149,6 +154,7 @@ startFunction state parameters resultType =
         ]
     , lowerFunctionResult = resultType
     , lowerDeclaredResult = Nothing
+    , lowerLoaned = []
     }
 
 refuse :: Span -> Text -> LowerState -> LowerState

@@ -105,3 +105,9 @@ A signature with defaults admits all parameters plus a trailing Int count
 named "". A required parameter after a default refuses with E6001.
 Resolved Grill Log: the scheme's required count must equal the parameters
 without a default; defaults only fill from the end.
+
+## Mutable loans (#651)
+
+A `&mut T` parameter is admitted as a local of type T, and its position is
+recorded in `signatureLoaned`. Resolved Grill Log: forming only the outer
+reference keeps every other `&mut` unrepresented. See [[Native Mutable Loans]].

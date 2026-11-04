@@ -31,6 +31,7 @@ import Pudu.Compiler.Lower.Stop (lowerPanic, lowerUntypedConvert)
 import Pudu.Compiler.Lower.Lambda (lowerFunctionValue, lowerLambda, lowerValueCall)
 import Pudu.Compiler.Lower.Tuple (lowerTuple, lowerTupleIndex, lowerTuplePattern)
 import Pudu.Compiler.Lower.Place (lowerPlaceAssignment)
+import Pudu.Compiler.Lower.Loan (loanedReturn)
 import Pudu.Compiler.Lower.Record (lowerField, lowerRecord, lowerRecordUpdate)
 import Pudu.Compiler.Lower.Sum (lowerVariant)
 import Pudu.Compiler.Lower.Constant (lowerConstant)
@@ -289,23 +290,16 @@ lowerStatement state (Located statementSpan statement) = case statement of
               }
         )
       (after, Nothing) -> refused after
-  ReturnStatement Nothing ->
-    ( observeReturn CoreUnitType state
-    , Just CoreStatement{coreStatementSpan = statementSpan, coreStatementShape = CoreReturn Nothing}
-    )
+  ReturnStatement Nothing -> let (after, shape) = loanedReturn state statementSpan Nothing in
+    (observeReturn CoreUnitType after, Just CoreStatement{coreStatementSpan = statementSpan, coreStatementShape = shape})
   ReturnStatement (Just located) -> case lowerExpression state located of
     (after, Just (coreValue, _))
       | expressionIsPrintValued coreValue ->
           halt (locatedSpan located) "returning a Result[(), Str] value" after
     (after, Just (coreValue, coreType))
       | allowedResultType (lowerFunctionResult state) coreType ->
-          ( observeReturn coreType after
-          , Just
-              CoreStatement
-                { coreStatementSpan = statementSpan
-                , coreStatementShape = CoreReturn (Just coreValue)
-                }
-          )
+          let (left, shape) = loanedReturn after statementSpan (Just coreValue)
+           in (observeReturn coreType left, Just CoreStatement{coreStatementSpan = statementSpan, coreStatementShape = shape})
     (after, Just (_, coreType)) ->
       halt (locatedSpan located) ("returning a " <> coreTypeName coreType <> " value") after
     (after, Nothing) -> refused after

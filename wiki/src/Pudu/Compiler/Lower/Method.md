@@ -99,3 +99,10 @@ Byte methods answer before any implementation.
 ## Referenced by
 
 [[Compiler Lower]] · [[Compiler Lower Body]] · [[Native Trait Methods]]
+
+## Mutable loans (#651)
+
+An instance whose admitted signature has loaned parameters refuses at the
+first `&mut` type written in it ("a method with &mut parameters"): a method
+call lowers its operands before the instance is chosen, so it holds no place
+to write back to. See [[Native Mutable Loans]].

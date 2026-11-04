@@ -108,3 +108,10 @@ shadow first, then an owned, selected or qualified constant through the same
 module maps as calls, returning Nothing for a nonconstant and Just Nothing for
 a declared constant with no supplied portable fold. Imports never re-export
 another module's constant. [[Compiler Lower Constant]] owns projection.
+
+## Mutable loans (#651)
+
+CoreSignature carries `signatureLoaned`, the positions of its `&mut`
+parameters, and LowerState carries `lowerLoaned`, the loaned locals of the
+function being lowered; `startFunction` clears it, so a lambda's `return`
+answers only its own value. See [[Compiler Lower Loan]].

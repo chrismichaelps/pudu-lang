@@ -256,3 +256,10 @@ native output matches the interpreter byte for byte.
 The "default parameter" refusal left the table; defaulted functions lower,
 and [[Backend Default Parameter Programs]] compares them with the
 interpreter.
+
+## Mutable loans (#651)
+
+The `&mut Int` parameter refusal case is gone: the program builds natively.
+A function with loans held as a value takes its place and refuses at the
+name. The `self: &mut Self` case still refuses at the parameter type.
+Resolved Grill Log: the semantic delta was inspected before the change.

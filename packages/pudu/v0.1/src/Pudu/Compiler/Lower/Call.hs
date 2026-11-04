@@ -6,6 +6,7 @@ import Data.Text (Text)
 import Pudu.Compiler.Lower.Control (expressionIsPrintValued)
 import Pudu.Compiler.Lower.Default (hasDefaults, suppliedArguments)
 import Pudu.Compiler.Lower.Generic (admitCallee)
+import Pudu.Compiler.Lower.Loan (lowerLoanedCall)
 import Pudu.Compiler.Lower.Scalar (eagerType)
 import Pudu.Compiler.Lower.State (CoreSignature (..), LowerContext (..), LowerState (..), bindLocal, halt, refused)
 import Pudu.Compiler.Lower.Types (nativeValueType, typeForSpan)
@@ -25,13 +26,16 @@ lowerFunctionCall lower state at key callee arguments = case lookup key (context
     | key == contextEntry (lowerContext state) -> halt at "a call to the entry function" state
     | otherwise -> case admitCallee state key callee entry of
         (back, Nothing) -> refused back
+        (back, Just (target, found))
+          | not (null (signatureLoaned found)) ->
+              lowerLoanedCall lower back at target found (hasDefaults (locatedValue (snd entry))) arguments
         (back, Just (target, found)) -> case collect back [] arguments of
           (final, Just cores)
             | any ((== CoreNeverType) . coreExpressionType) cores ->
                 typed final (CoreBlockValue (CoreBlock
                   [CoreStatement (coreExpressionSpan argument) (CoreEvaluate argument) | argument <- cores] Nothing)) CoreNeverType
             | otherwise ->
-                let queued = final{lowerContext = (lowerContext final){contextQueue = target : contextQueue (lowerContext final)}}
+                let queued = queue target final
                     passed
                       | hasDefaults (locatedValue (snd entry)) =
                           suppliedArguments at (map (coreLocalType . coreParameterLocal) (signatureParameters found)) cores
@@ -40,6 +44,7 @@ lowerFunctionCall lower state at key callee arguments = case lookup key (context
           (final, Nothing) -> refused final
  where
   typed after shape kind = (after, Just (CoreExpression at kind shape, kind))
+  queue target current = current{lowerContext = (lowerContext current){contextQueue = target : contextQueue (lowerContext current)}}
   collect current done [] = (current, Just (reverse done))
   collect current done (argument : rest) = case lower current argument of
     (after, Just (core, _))

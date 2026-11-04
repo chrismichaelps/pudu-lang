@@ -201,3 +201,11 @@ other; nothing at run time reads parameter types.
 
 withFacts lays facts for made-up spans over the checked ones. Resolved Grill
 Log: only method-value lowering uses it, and it restores the original facts.
+
+## Mutable loan targets (#651)
+
+`typeForSpan` looks through an outer `&mut T` to T: such an expression is a
+loaned parameter or a lent place, and holds a T. `referenceTarget` answers
+the target of a reference of either kind, for dereference. formedWith still
+leaves `&mut` unformed, so a function type with a loaned parameter has no
+native form. Resolved Grill Log: see [[Native Mutable Loans]].

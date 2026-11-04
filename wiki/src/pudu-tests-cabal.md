@@ -351,3 +351,7 @@ Register [[Backend Method Value Programs]]. Resolved Grill Log: no new dependenc
 ## Place assignment corpus (#649)
 
 Register [[Backend Place Assignment Programs]]. Resolved Grill Log: no new dependency.
+
+## Mutable loan corpus (#651)
+
+Register [[Backend Mutable Loan Programs]]. Resolved Grill Log: no new dependency.

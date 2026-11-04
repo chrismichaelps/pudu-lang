@@ -72,3 +72,8 @@ The borrowed print Result case left the refusal table: output Results are
 native values now, and the program builds with the interpreter's output. A
 shared reference to a Decimal, still unrepresented, takes its place.
 Resolved Grill Log: the semantic delta was inspected before the change.
+
+## Mutable loan case (#651)
+
+The checked mutable-loan program now lowers, so its case holds the loaned
+function as a value instead, which still refuses with E6001 at a span.

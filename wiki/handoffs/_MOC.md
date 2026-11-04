@@ -263,3 +263,4 @@ tags: [moc, handoff]
 - [[Native Trait Method Value Delivery]] — trait methods as values (#646).
 
 - [[Native Place Assignment Delivery]] — element assignment and the lowering loop fix (#649).
+- [[Native Mutable Loans Delivery]] — `&mut` parameters with writeback (#651).

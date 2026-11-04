@@ -37,6 +37,7 @@ import Pudu.Type.Value (NominalId (..), Scheme (..), Type (FunctionTypeRequiring
 import Pudu.Source (Span)
 import Pudu.Compiler.Lower.Body (lowerEntryBody, lowerExpression, lowerFunctionBody)
 import Pudu.Compiler.Lower.Default (hasDefaults, lowerDefaultedBody)
+import Pudu.Compiler.Lower.Loan (lowerLoanedBody)
 import Pudu.Compiler.Lower.State
   ( CoreSignature (..), Instance (..), LowerContext (..), LowerState (..), ModuleScope (..)
   , emptyContext, inModule, startFunction, withTypeBindings )
@@ -203,6 +204,7 @@ lowerProgram entryName programModules@(rootModule : _)
               , lowerFunctionResult = Nothing
               , lowerDeclaredResult = Nothing
               , lowerCurrentKey = entryKey
+              , lowerLoaned = []
               }
           (afterEntry, entryFunction) = lowerEntryBody entry
             ((startFunction initial [] Nothing){lowerDeclaredResult = declaredEntryResult entry})
@@ -222,7 +224,7 @@ lowerProgram entryName programModules@(rootModule : _)
             case ensureSignature name function ((startFunction (withTypeBindings bindings (inModule owner state)) [] Nothing){lowerCurrentKey = name}) of
               (afterSignature, Nothing) -> markVisited afterSignature name
               (afterSignature, Just signature) ->
-                case (if hasDefaults (locatedValue function) then lowerDefaultedBody lowerExpression lowerFunctionBody else lowerFunctionBody)
+                case loaned signature (if hasDefaults (locatedValue function) then lowerDefaultedBody lowerExpression lowerFunctionBody else lowerFunctionBody)
                   function
                   signature
                   (startFunction afterSignature (signatureParameters signature) (Just (signatureResult signature))) of
@@ -236,6 +238,10 @@ lowerProgram entryName programModules@(rootModule : _)
                               }
                         }
                       name
+
+    loaned signature
+      | null (signatureLoaned signature) = id
+      | otherwise = lowerLoanedBody
 
     -- Copies of generic bodies are registered while lowering their callers.
     target state name = case lookup name table of

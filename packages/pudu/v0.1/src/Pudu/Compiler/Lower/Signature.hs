@@ -9,7 +9,7 @@ import Data.Text (Text)
 import Pudu.Compiler.Lower.State
   ( CoreSignature (..), Instance (..), LowerContext (..), LowerState (..), intType, refuse )
 import Pudu.Compiler.Lower.Types (formedCoreTypeIn, lookupScheme, nativeValueType, typeBindings)
-import Pudu.Type.Value (Scheme (..), Type (FunctionTypeRequiring), requiredCount)
+import Pudu.Type.Value (Scheme (..), Type (FunctionTypeRequiring, ReferenceTypeValue), requiredCount)
 import Pudu.Core
 import Pudu.Frontend.Syntax
   ( Function (..), FunctionBody (..), Located (..), Parameter (..), TypeParam (..) )
@@ -37,11 +37,12 @@ ensureSignature key located state = case Map.lookup key (contextSignatures conte
             let (afterParameters, given) = foldl' validateParameter (state, [])
                   (zip3 [0 ..] (map locatedValue (functionParameters function)) inputs)
                 parameters = given <> [CoreParameter (CoreLocal (length inputs) "" intType) atName | not (null defaults)]
+                loaned = [index | (index, ReferenceTypeValue True _) <- zip [0 ..] inputs]
                 (afterReturn, resultType) = validateReturn afterParameters result
                 added = length (contextRefusals (lowerContext afterReturn))
                   - length (contextRefusals context)
              in if added == 0
-                  then memoize afterReturn (Just (CoreSignature parameters resultType))
+                  then memoize afterReturn (Just (CoreSignature parameters resultType loaned))
                   else memoize afterReturn Nothing
       _ -> memoize (refuse atName "a function without a supported solved monomorphic signature" state) Nothing
   where
@@ -65,8 +66,10 @@ ensureSignature key located state = case Map.lookup key (contextSignatures conte
       , memo
       )
 
+    -- A `&mut T` parameter holds a T: the call copies the place's value in
+    -- and stores the parameter's final value back.
     validateParameter (current, collected) (index, parameter, parameterTypeValue) =
-      case formedCoreTypeIn (contextTypes (lowerContext current)) parameterTypeValue of
+      case formedCoreTypeIn (contextTypes (lowerContext current)) (lent parameterTypeValue) of
         Just coreType | nativeValueType coreType ->
           ( current
           , collected <> [CoreParameter
@@ -87,6 +90,9 @@ ensureSignature key located state = case Map.lookup key (contextSignatures conte
             (maybe "a return type outside the native subset" (("a return type of " <>) . coreTypeName) projected) current
         , intType
         )
+
+    lent (ReferenceTypeValue True target) = target
+    lent other = other
 
 functionLevelRefusal :: Function -> Maybe (Span, Text)
 functionLevelRefusal = boundFunctionRefusal Set.empty

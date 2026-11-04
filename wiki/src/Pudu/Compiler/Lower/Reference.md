@@ -38,3 +38,8 @@ LowerState/optional CoreExpression-and-type result.
 ## Referenced by
 
 [[Native Shared References]] · [[Compiler Lower Scalar]]
+
+## Mutable loans (#651)
+
+`*value` accepts an operand whose fact is either kind of reference, through
+`referenceTarget`; `&` still requires a shared one. See [[Native Mutable Loans]].

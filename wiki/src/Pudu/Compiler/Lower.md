@@ -240,3 +240,10 @@ and missing products stay distinct from undeclared names. No ABI change.
 A queued function with defaults lowers through [[Compiler Lower Default]]'s
 lowerDefaultedBody. Resolved Grill Log: one native function per source
 function; no per-arity copies.
+
+## Loaned bodies (#651)
+
+A function whose signature has loaned parameters is lowered through
+`lowerLoanedBody`, around the plain or defaulted body lowerer, so defaults
+see the loans too. The initial state starts with no loans. See
+[[Native Mutable Loans]].

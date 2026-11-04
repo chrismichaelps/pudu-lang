@@ -430,3 +430,9 @@ refuses with E6001; expression lowering hands an assignment back to
 statements only when the statement has a case for it.
 Resolved Grill Log: the two used to call each other forever on an index
 target (#649).
+
+## Mutable loans (#651)
+
+Each `return`, with or without a value, is built by `loanedReturn`, which
+returns the finals of a loaned function beside the value. See
+[[Compiler Lower Loan]].

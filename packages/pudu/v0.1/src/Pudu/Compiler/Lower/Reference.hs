@@ -4,7 +4,7 @@ module Pudu.Compiler.Lower.Reference (lowerReference) where
 import Data.Text (Text)
 import Pudu.Compiler.Lower.Control (expressionIsPrintValued)
 import Pudu.Compiler.Lower.State (LowerContext (..), LowerState (..), halt, refused)
-import Pudu.Compiler.Lower.Types (sharedReferenceTarget, typeForSpan)
+import Pudu.Compiler.Lower.Types (referenceTarget, sharedReferenceTarget, typeForSpan)
 import Pudu.Core (CoreExpression, CoreType (..))
 import Pudu.Frontend.Syntax (Expression, Located (..))
 import Pudu.Source (Span)
@@ -23,7 +23,7 @@ lowerReference lower state at operator operand = case lower state operand of
     | let types = contextTypes (lowerContext after)
     , (case operator of
         "&" -> sharedReferenceTarget types at == Just kind
-        "*" -> sharedReferenceTarget types (locatedSpan operand) == Just kind
+        "*" -> referenceTarget types (locatedSpan operand) == Just kind
           && typeForSpan types at == Just kind
         _ -> False) -> (after, Just (core, kind))
     | otherwise -> halt at "a shared reference without matching solved type facts" after

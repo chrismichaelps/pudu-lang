@@ -2,6 +2,7 @@
 module Pudu.Compiler.Lower.Try (lowerTry) where
 
 import Pudu.Compiler.Lower.Control (expressionIsPrintValued)
+import Pudu.Compiler.Lower.Loan (loanedValue)
 import Pudu.Compiler.Lower.State (LowerState (..), bindLocal, halt, refused)
 import Pudu.Core
 import Pudu.Frontend.Syntax (Expression, Located (..))
@@ -40,12 +41,13 @@ lowerTry lower state at operand = case lower state operand of
         rebuilt = case (bad, failed) of
           (Just (name, _), Just local) -> CoreConstruct name [("0", reading local)]
           _ -> CoreConstruct "None" []
+        (left, returned) = loanedValue closed at (CoreExpression at result rebuilt)
         leave = CoreExpression at CoreNeverType (CoreBlockValue (CoreBlock
-          [CoreStatement at (CoreReturn (Just (CoreExpression at result rebuilt)))] Nothing))
+          [CoreStatement at (CoreReturn (Just returned))] Nothing))
         failing = case (bad, failed) of
           (Just (name, _), Just local) -> CoreVariantPattern name [CoreBindPattern local]
           _ -> CoreVariantPattern "None" []
         arms =
           [ CoreArm at (CoreVariantPattern good [CoreBindPattern value]) Nothing (reading value)
           , CoreArm at failing Nothing leave ]
-     in (closed, Just (CoreExpression at success (CoreMatch core arms), success))
+     in (left, Just (CoreExpression at success (CoreMatch core arms), success))

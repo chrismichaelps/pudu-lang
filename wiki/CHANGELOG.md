@@ -5,6 +5,11 @@ tags: [changelog]
 
 # Changelog
 
+## 2026-11-03 — Native mutable loans (#651)
+
+- `fn bump(value: &mut Int)` called as `bump(&mut n)`, `bump(&mut p.x)` or `bump(&mut grid[i][j])` builds natively: the place is read where its argument stands, indices once, and the parameter's final value is written back after the trailing result, `return` or `?`, in parameter order. See [[Native Mutable Loans]].
+- Methods with `&mut` parameters and function values of loaned functions still refuse with E6001.
+
 ## 2026-10-27 — Native element assignment (#649)
 
 - `list[1] = 9`, `grid[1][0] = 7` and `points[0].tags[0] = "z"` build natively with the interpreter's order (indices, value, bounds-checked store) and its E7004 span at the root name. See [[Native Place Assignment]].

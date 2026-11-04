@@ -92,6 +92,7 @@ test-suite pudu-test
     Pudu.Backend.DefaultParameterPrograms
     Pudu.Backend.MethodValuePrograms
     Pudu.Backend.PlaceAssignmentPrograms
+    Pudu.Backend.MutableLoanPrograms
     Pudu.Backend.RecordPrograms
     Pudu.Backend.StoppingBuiltinPrograms
     Pudu.Backend.SumPrograms

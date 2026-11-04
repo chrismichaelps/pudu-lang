@@ -18,7 +18,7 @@ import Pudu.Core
 import Pudu.Eval.Operator.Access (arrayMethods, mapMethods, setMethods, stringMethods)
 import Pudu.Eval.Bytes (bytesMethods)
 import Pudu.Frontend.Syntax
-  ( Declaration (..), Expression, Function (..), Impl (..), Located (..), Module (..), Trait (..), TypeSyntax (..) )
+  ( Declaration (..), Expression, Function (..), Impl (..), Located (..), Module (..), Parameter (..), Trait (..), TypeSyntax (..) )
 import Pudu.Frontend.Syntax.Name (ModuleName (..))
 import Pudu.Source (Span)
 import Pudu.Type.Value (NominalId, Scheme (..), Type (FunctionTypeRequiring, NominalType), nominalKey)
@@ -176,13 +176,18 @@ invoke state at key instantiated cores = case Map.lookup key (contextInstances c
         back = withTypeBindings (typeBindings (contextTypes context)) (inModule (contextModule context) admitted)
      in case signature of
           Nothing -> refused back
-          Just CoreSignature{signatureParameters, signatureResult}
+          Just CoreSignature{signatureParameters, signatureResult, signatureLoaned}
+            | position : _ <- signatureLoaned -> halt (loanSpan found position) "a method with &mut parameters" back
             | length signatureParameters /= length cores -> halt at "a method called with this many arguments" back
             | otherwise ->
                 let queued = back{lowerContext = (lowerContext back){contextQueue = key : contextQueue (lowerContext back)}}
                  in (queued, Just (CoreExpression at (eagerType signatureResult cores) (CoreCall key cores), eagerType signatureResult cores))
  where
   context = lowerContext state
+  -- A method's loan is refused where its `&mut` type is written.
+  loanSpan found position = case drop position (functionParameters (locatedValue (instanceFunction found))) of
+    Located _ parameter : _ | Just written <- parameterType parameter -> locatedSpan written
+    _ -> at
   open found = instanceSelfAtCall found
     || any ((`Map.notMember` instanceBindings found) . fst) (schemeParams (instanceScheme found))
   fixed found = case cores of

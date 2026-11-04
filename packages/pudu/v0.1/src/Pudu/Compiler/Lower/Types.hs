@@ -1,6 +1,6 @@
 {-| @Pudu.Compiler.Lower.Types — settled checker facts for native representation. -}
 module Pudu.Compiler.Lower.Types
-  ( LowerTypes, emptyTypes, nativeTypes, withShapes, withBindings, withFacts, typeBindings, lookupScheme, typeForSpan, typeFactAt, sharedReferenceTarget
+  ( LowerTypes, emptyTypes, nativeTypes, withShapes, withBindings, withFacts, typeBindings, lookupScheme, typeForSpan, typeFactAt, sharedReferenceTarget, referenceTarget
   , formedCoreType, formedCoreTypeIn, ownerKeyOf, layoutOf, recordFields, sumVariants, nativeIntegerKind, nativeScalarType, nativeValueType ) where
 
 import Data.Map.Strict (Map)
@@ -50,8 +50,13 @@ typeBindings (LowerTypes _ _ _ bindings) = bindings
 lookupScheme :: LowerTypes -> Text -> Maybe Scheme
 lookupScheme (LowerTypes _ schemes _ _) name = Map.lookup name schemes
 
+{-| An expression typed `&mut T` is a loaned parameter or a lent place, and
+    holds a T; a `&mut` anywhere deeper keeps the type unformed. -}
 typeForSpan :: LowerTypes -> Span -> Maybe CoreType
-typeForSpan types@(LowerTypes info _ _ _) at = typeAt info at >>= formedCoreTypeIn types
+typeForSpan types@(LowerTypes info _ _ _) at = typeAt info at >>= formedCoreTypeIn types . held
+ where
+  held (ReferenceTypeValue True target) = target
+  held other = other
 
 {-| Facts for spans a lowering made up, laid over the checked ones. -}
 withFacts :: [(Span, Type)] -> LowerTypes -> LowerTypes
@@ -65,6 +70,13 @@ typeFactAt (LowerTypes info _ _ _) = typeAt info
 sharedReferenceTarget :: LowerTypes -> Span -> Maybe CoreType
 sharedReferenceTarget types@(LowerTypes info _ _ _) at = case typeAt info at of
   Just (ReferenceTypeValue False target) -> formedCoreTypeIn types target
+  _ -> Nothing
+
+{-| What a reference of either kind refers to; a `&mut` parameter holds
+    its target's value, so dereferencing it reads that value. -}
+referenceTarget :: LowerTypes -> Span -> Maybe CoreType
+referenceTarget types@(LowerTypes info _ _ _) at = case typeAt info at of
+  Just (ReferenceTypeValue _ target) -> formedCoreTypeIn types target
   _ -> Nothing
 
 {-| Builtins only; no record or sum is known. -}

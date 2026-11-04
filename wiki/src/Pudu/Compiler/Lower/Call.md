@@ -36,3 +36,9 @@ Resolved Grill Log: Export outputResult to build the existing Result from one Co
 A direct call to a function with defaults passes suppliedArguments.
 Resolved Grill Log: the arguments still run first, left to right; the
 result type is unchanged.
+
+## Mutable loans (#651)
+
+A callee with loaned parameters is queued and lowered by [[Compiler Lower Loan]]'s
+`lowerLoanedCall`, which holds the arguments, makes the call and writes the
+finals back. Resolved Grill Log: the ordinary path is unchanged.

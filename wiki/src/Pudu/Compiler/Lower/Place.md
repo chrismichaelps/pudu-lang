@@ -22,3 +22,12 @@ order. See [[Native Place Assignment]].
 ## Referenced by
 
 [[Compiler Lower Body]] · [[src/Pudu/Compiler/_MOC]]
+
+## Held places (#651)
+
+Also export HeldPlace, holdPlace, readHeld and storeHeld. holdPlace resolves
+a target, `*` included, and runs its indices into held locals; readHeld reads
+it and storeHeld stores through it at the root span, reading the root as it
+is at the store. Assignment uses the same three, and `*value = x` assigns the
+local itself. A plain name still goes to [[Compiler Lower Body]]'s own case.
+Resolved Grill Log: [[Compiler Lower Loan]] lends places with them.

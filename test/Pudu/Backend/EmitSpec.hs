@@ -283,16 +283,15 @@ refusalCases =
   , ("decimal values", bindingProgram "var ratio = 1.5d", "1.5d")
   , ("readLine", bindingProgram "var line = readLine()", "readLine()")
   , ("temporary path", bindingProgram "var path = temporaryPath()", "temporaryPath()")
-  , ("mutable borrows", Text.unlines
+  , ("a function holding a mutable loan as a value", Text.unlines
       [ "module Refuse"
       , ""
       , "fn bump(value: &mut Int) -> () { *value = *value + 1 }"
       , "fn main() -> Int {"
-      , "  var value = 1"
-      , "  bump(&mut value)"
-      , "  return value"
+      , "  let held = bump"
+      , "  return 0"
       , "}"
-      ], "&mut Int")
+      ], "bump\n")
   , ("methods that borrow their receiver mutably", Text.unlines
       [ "module Refuse"
       , "trait Bump { fn bump(self: &mut Self) -> () }"

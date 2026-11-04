@@ -158,6 +158,7 @@ library
     Pudu.Compiler.Lower.Convert
     Pudu.Compiler.Lower.Default
     Pudu.Compiler.Lower.Keyed
+    Pudu.Compiler.Lower.Loan
     Pudu.Compiler.Lower.Range
     Pudu.Compiler.Lower.Bytes
     Pudu.Compiler.Lower.Control

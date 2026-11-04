@@ -35,3 +35,8 @@ evaluator's `unwrapTry`.
 ## Referenced by
 
 [[Compiler Lower Body]]
+
+## Mutable loans (#651)
+
+The failure a `?` returns passes through `loanedValue`, so a loaned function
+answers its parameters' finals beside it. See [[Compiler Lower Loan]].

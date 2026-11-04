@@ -527,3 +527,7 @@ Resolved Grill Log: Register Pudu.Compiler.Lower.MethodValue using the existing 
 ## Place assignment (#649)
 
 Resolved Grill Log: Register Pudu.Compiler.Lower.Place using the existing dependencies.
+
+## Mutable loans (#651)
+
+Resolved Grill Log: Register Pudu.Compiler.Lower.Loan using the existing dependencies.
