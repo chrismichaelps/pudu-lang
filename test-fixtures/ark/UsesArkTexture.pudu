@@ -1,0 +1,65 @@
+module UsesArkTexture
+
+import Std.Math.Float as Float
+import Ark.Assets.Texture as Texture
+import Ark.Math.Color as Color
+
+fn require(condition: Bool, name: Str) {
+  if !condition { panic(name) }
+}
+
+export fn main() -> Int {
+  let pixels = bytesOf([255, 0, 0, 255, 0, 255, 0, 255, 0, 0, 255, 255, 255, 255, 255, 255])
+  let Some(image) = Texture.rgba8(2, 2, pixels, "linear") else { panic("image") }
+  let red = Color.opaque(1.0, 0.0, 0.0)
+  let green = Color.opaque(0.0, 1.0, 0.0)
+  let blue = Color.opaque(0.0, 0.0, 1.0)
+  let white = Color.opaque(1.0, 1.0, 1.0)
+  require(Texture.texel(&image, 0, 0) == Some(red), "RGBA row order")
+  require(Texture.texel(&image, 1, 0) == Some(green), "second column")
+  require(Texture.texel(&image, 0, 1) == Some(blue), "second row")
+  require(Texture.nearest(&image, 0.25, 0.25) == Some(red), "nearest first center")
+  require(Texture.nearest(&image, 0.75, 0.25) == Some(green), "nearest second center")
+  require(Texture.bilinear(&image, 0.25, 0.75) == Some(blue), "bilinear texel center")
+  require(Texture.bilinear(&image, 0.5, 0.5) == Some(Color.opaque(0.5, 0.5, 0.5)), "bilinear midpoint")
+  require(Texture.nearest(&image, 1.0, 1.0) == Some(white), "closed upper UV boundary")
+  require(Texture.bilinear(&image, -1e308, 1e308) == Some(blue), "finite UV clamps to edges")
+  require(Texture.sample(&image, "nearest", 0.25, 0.25) == Some(red), "nearest factory")
+  require(Texture.sample(&image, "bilinear", 0.5, 0.5) == Some(Color.opaque(0.5, 0.5, 0.5)), "bilinear factory")
+  require(Texture.sample(&image, "unknown", 0.5, 0.5) == None, "unknown sampler")
+
+  let Some(encoded) = Texture.rgba8(2, 1, bytesOf([0, 0, 0, 255, 255, 255, 255, 255]), "srgb") else { panic("sRGB") }
+  require(Texture.bilinear(&encoded, 0.5, 0.5) == Some(Color.opaque(0.5, 0.5, 0.5)), "decode before linear filtering")
+  let Some(gray) = Texture.rgba8(1, 1, bytesOf([128, 128, 128, 128]), "srgb") else { panic("gray") }
+  let Some(decoded) = Texture.texel(&gray, 0, 0) else { panic("decode") }
+  require(Float.abs(decoded.r - 0.21586050011389926) < 0.000000000001, "sRGB decode")
+  require(Float.abs(decoded.a - 128.0 / 255.0) < 0.000000000000001, "alpha stays linear")
+
+  let Some(alpha) = Texture.rgba8(2, 1, bytesOf([255, 0, 0, 0, 0, 0, 255, 255]), "linear") else { panic("alpha") }
+  require(Texture.bilinear(&alpha, 0.5, 0.5) == Some(Color.rgba(0.0, 0.0, 1.0, 0.5)), "transparent red creates no fringe")
+  let Some(clear) = Texture.rgba8(1, 1, bytesOf([255, 0, 0, 0]), "linear") else { panic("clear") }
+  require(Texture.bilinear(&clear, 0.5, 0.5) == Some(Color.rgba(0.0, 0.0, 0.0, 0.0)), "zero-alpha filtering is transparent black")
+  let Some(single) = Texture.rgba8(1, 1, bytesOf([17, 23, 31, 255]), "linear") else { panic("single") }
+  require(Texture.bilinear(&single, -100.0, 100.0) == Texture.texel(&single, 0, 0), "single texel clamps")
+
+  for dimensions in [(0, 1), (1, 0), (-1, 1), (9223372036854775807, 9223372036854775807)] {
+    let (width, height) = dimensions
+    require(Texture.rgba8(width, height, bytesOf([0, 0, 0, 255]), "linear") == None, "invalid or oversized dimensions")
+  }
+  require(Texture.rgba8(1, 1, bytesOf([0, 0, 0]), "linear") == None, "short byte count")
+  require(Texture.rgba8(1, 1, bytesOf([0, 0, 0, 255, 0]), "linear") == None, "long byte count")
+  require(Texture.rgba8(1, 1, bytesOf([0, 0, 0, 255]), "unknown") == None, "unknown color space")
+  require(Texture.texel(&image, -1, 0) == None && Texture.texel(&image, 2, 0) == None, "out-of-range x")
+  require(Texture.texel(&image, 0, -1) == None && Texture.texel(&image, 0, 2) == None, "out-of-range y")
+  let fabricated = Texture.Texture{width: 9223372036854775807, height: 9223372036854775807, pixels: bytesOf([0, 0, 0, 255]), space: "linear"}
+  require(Texture.texel(&fabricated, 0, 0) == None && Texture.bilinear(&fabricated, 0.5, 0.5) == None, "fabricated storage is checked before indexing")
+  require(Texture.nearest(&Texture.Texture{..image, space: "unknown"}, 0.5, 0.5) == None, "fabricated color space")
+  let nan = Float.fromBits(0x7ff8000000000000u64)
+  let infinity = Float.fromBits(0x7ff0000000000000u64)
+  for coordinate in [nan, infinity, -infinity] {
+    require(Texture.nearest(&image, coordinate, 0.5) == None, "non-finite u")
+    require(Texture.bilinear(&image, 0.5, coordinate) == None, "non-finite v")
+  }
+  print("ark texture: ok")
+  0
+}

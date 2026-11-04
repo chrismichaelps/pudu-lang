@@ -74,8 +74,17 @@ export fn parallel(actions: &Array[fn() -> ()]) -> Result[(), ConcurrentError] {
       if let None = failure { failure = Some(reason) }
     }
   }
-  let joined = joinAll(&tasks)
+  let joined = settle(&tasks)
   if let Some(reason) = failure { Err(reason) } else { joined }
+}
+
+/// Join every task in start order, keeping the first failure, then forget each one.
+fn settle(tasks: &Array[Task]) -> Result[(), ConcurrentError] {
+  let joined = joinAll(tasks)
+  for worker in *tasks {
+    let _forgotten = forget(&worker)
+  }
+  joined
 }
 
 /// Run an action on a thread of its own and wait for it.
@@ -135,11 +144,18 @@ export fn parallelBounded(actions: &Array[fn() -> ()], workers: Int) -> Result[(
     }
     index = index + 1
   }
-  let joined = joinAll(&tasks)
+  let joined = settle(&tasks)
+  let claimed = Sync.get(&claimingFailure)
+  let _cursorLock = Sync.disposeMutex(&cursor.lock)
+  let _cursorCount = Sync.disposeCell(&cursor.holder)
+  let _claimCell = Sync.disposeCell(&claimingFailure)
   if let Some(problem) = failure { return Err(problem) }
   joined ?
-  let claimed = Result.mapErr(Sync.get(&claimingFailure), fn(problem: Sync.SyncError) -> ConcurrentError { Other(show(problem)) }) ?
-  if let Some(problem) = claimed { Err(Other(problem)) } else { Ok(()) }
+  match claimed {
+    case Ok(Some(problem)) => Err(Other(problem))
+    case Ok(None) => Ok(())
+    case Err(problem) => Err(Other(show(problem)))
+  }
 }
 
 /// Apply an action to values with bounded concurrency, without implicit retries.
@@ -174,16 +190,19 @@ export fn mapBounded[T, U](items: &Array[T], workers: Int, transform: fn(T) -> U
       })
     index = index + 1
   }
-  parallelBounded(&actions, workers) ?
+  let ran = parallelBounded(&actions, workers)
   var results: Array[U] = []
+  var problem: Option[ConcurrentError] = None
   for slot in slots {
-    let held = Result.mapErr(Sync.get(&slot), fn(problem: Sync.SyncError) -> ConcurrentError { Other(show(problem)) }) ?
-    match held {
-      case Some(value) => { results = results.push(value) }
-      case None => { return Err(Other("missing slot result")) }
+    match Sync.get(&slot) {
+      case Ok(Some(value)) => { results = results.push(value) }
+      case Ok(None) => { if let None = problem { problem = Some(Other("missing slot result")) } }
+      case Err(failure) => { if let None = problem { problem = Some(Other(show(failure))) } }
     }
+    let _disposed = Sync.disposeCell(&slot)
   }
-  Ok(results)
+  ran ?
+  if let Some(failure) = problem { Err(failure) } else { Ok(results) }
 }
 
 /// Apply a fallible transform with bounded concurrency, returning the first error in input order.

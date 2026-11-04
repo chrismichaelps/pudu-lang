@@ -1,0 +1,104 @@
+module UsesArkGame
+
+import Std.Math.Float as Float
+import Ark.Game.Camera as Camera
+import Ark.Game as Game
+import Ark.Math.Color as Color
+import Ark.Math as V
+import Ark.Platform.Input as Input
+import Ark.Render.Device as Device
+
+fn require(condition: Bool, name: Str) {
+  if !condition { panic(name) }
+}
+
+/// A counter scene: fixed steps add the step length, updates count frames and read an action.
+type Counter = { simulated: Float64, frames: Int, jumps: Int, limit: Int }
+
+fn fixed(state: Counter, seconds: Float64) -> Option[Counter] {
+  Some(Counter{..state, simulated: state.simulated + seconds})
+}
+
+fn update(state: Counter, frame: &Game.Frame) -> Option[Counter] {
+  if state.frames >= state.limit { return None }
+  let jumps = if Input.pressed(&frame.actions, &frame.input, "jump") { state.jumps + 1 } else { state.jumps }
+  Some(Counter{..state, frames: state.frames + 1, jumps})
+}
+
+fn draw(state: &Counter, alpha: Float64, target: Device.Target) -> Option[Device.Target] {
+  let shade = if alpha >= 0.0 && alpha < 1.0 { Float.fromInt(state.frames) / 10.0 } else { 0.0 }
+  Device.clear(target, Color.opaque(shade, 0.0, 0.0))
+}
+
+fn counter(limit: Int) -> Game.Active[Counter] {
+  Game.Active{scene: Game.Scene{fixed, update, draw}, state: Counter{simulated: 0.0, frames: 0, jumps: 0, limit}}
+}
+
+fn frames() {
+  let actions = Input.bind(Input.actions(), "jump", Input.Key("Space"))
+  let Some(app) = Game.start(counter(100), actions, 10000000, 4, 0) else { panic("start") }
+  require(Game.start(counter(1), actions, 0, 4, 0) == None, "step must be positive")
+  let first = Game.step(app, &[], 25000000)
+  let Some(state) = Game.top(&first) else { panic("top") }
+  require(state.simulated == 0.02 && state.frames == 1, "two owed fixed steps, one update")
+  require(first.alpha == 0.5, "owed fraction kept for drawing")
+  let pressed = Game.step(first, &[Input.KeyDown("Space", false)], 25000000)
+  let Some(jumped) = Game.top(&pressed) else { panic("jumped") }
+  require(jumped.jumps == 1 && jumped.simulated == 0.02, "actions reach the update; a stalled clock owes nothing")
+  let late = Game.step(pressed, &[], 1025000000)
+  let Some(capped) = Game.top(&late) else { panic("capped") }
+  require(Float.abs(capped.simulated - 0.06) < 0.000000001, "step budget caps catch-up")
+  let Some(blank) = Device.target(2, 2) else { panic("target") }
+  let Some(drawn) = Game.draw(&late, blank) else { panic("draw") }
+  require(Device.pixels(&drawn).length() == 16, "top scene draws")
+}
+
+fn scenes() {
+  let actions = Input.actions()
+  let Some(app) = Game.start(counter(100), actions, 10000000, 4, 0) else { panic("start") }
+  let paused = Game.change(app, Game.Push(counter(100)))
+  require(paused.stack.length() == 2, "push")
+  let stepped = Game.step(paused, &[], 10000000)
+  require(stepped.stack[0].state.frames == 0 && stepped.stack[1].state.frames == 1, "only the top scene runs")
+  let back = Game.change(stepped, Game.Pop)
+  require(back.stack.length() == 1 && Game.change(back, Game.Stay) == back, "pop and stay")
+  let swapped = Game.change(back, Game.Replace(counter(7)))
+  require(swapped.stack.length() == 1 && swapped.stack[0].state.limit == 7, "replace")
+  require(Game.finished(&Game.change(swapped, Game.Quit)), "quit")
+  require(Game.finished(&Game.change(swapped, Game.Pop)) && Game.top(&Game.change(swapped, Game.Pop)) == None, "empty stack finishes")
+  let Some(short) = Game.start(counter(1), actions, 10000000, 4, 0) else { panic("short") }
+  let once = Game.step(short, &[], 10000000)
+  let ended = Game.step(once, &[], 20000000)
+  require(Game.finished(&ended) && Game.step(ended, &[], 30000000) == ended, "a hook answering None ends the game")
+}
+
+fn cameras() {
+  let Some(rig) = Camera.follow(V.vec3(0.0, 0.0, 0.0), 0.5) else { panic("follow") }
+  var current = rig
+  var previous = 0.0
+  for _ in 0..60 {
+    let Some(next) = Camera.track(current, V.vec3(10.0, 0.0, 0.0), 1.0 / 60.0) else { panic("track") }
+    require(next.position.x >= previous && next.position.x <= 10.0, "critically damped: monotonic, no overshoot")
+    previous = next.position.x
+    current = next
+  }
+  require(current.position.x > 9.0, "closes most of the gap within the smoothing time twice over")
+  let Some(huge) = Camera.track(rig, V.vec3(10.0, 0.0, 0.0), 1000.0) else { panic("huge step") }
+  require(huge.position.x > 9.99 && huge.position.x <= 10.0, "stable for a very long step")
+  require(Camera.follow(V.vec3(0.0, 0.0, 0.0), 0.0) == None && Camera.track(rig, V.vec3(0.0, 0.0, 0.0), -1.0) == None, "follow refusals")
+  let Some(orbit) = Camera.orbit(V.vec3(0.0, 1.0, 0.0), 5.0, 0.0, 0.0) else { panic("orbit") }
+  let start = Camera.eye(&orbit)
+  require(start.x == 0.0 && start.y == 1.0 && start.z == 5.0, "orbit eye on +z at zero yaw")
+  let Some(steered) = Camera.steer(orbit, Float.pi() / 2.0, 10.0, 0.5) else { panic("steer") }
+  require(steered.distance == 2.5 && steered.pitch == 1.5, "zoom multiplies; pitch clamps short of the pole")
+  require(Camera.view(&steered) != None, "clamped pitch keeps a defined view")
+  require(Camera.steer(orbit, 0.0, 0.0, 0.0) == None && Camera.orbit(V.vec3(0.0, 0.0, 0.0), -1.0, 0.0, 0.0) == None, "orbit refusals")
+}
+
+export fn main() -> Int {
+  frames()
+  scenes()
+  cameras()
+  print("ark game: ok")
+  0
+}

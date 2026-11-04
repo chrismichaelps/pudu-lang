@@ -18,3 +18,5 @@ owned by the evaluation. Resolved Grill Log: confinement must permit cleanup of 
 Resolved Grill Log: the kept effects are an allow-list, so an effect added to the runtime is refused in a confined run until it is deliberately listed; nothing a program runs can clear the switch.
 
 mutexAcquireWithin is admitted beside ordinary acquisition. Resolved Grill Log (#476): a bounded wait grants no additional capability.
+`clockNanos` is admitted under confinement, like `clock`: reading a clock reaches nothing outside.
+

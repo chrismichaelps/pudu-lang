@@ -22,6 +22,7 @@ import qualified Data.Sequence as Seq
 import Data.Text (Text)
 import qualified Data.Text as Text
 
+import Pudu.Eval.TypeWitness (witnessMethod)
 import Pudu.Eval.Bytes (bytesMethods)
 import Pudu.Eval.Env
   ( Evaluator
@@ -88,6 +89,9 @@ readIndex spanValue container key = case (container, key) of
     it with `value` as its first argument. -}
 readMember :: Span -> Value -> Text -> Evaluator Value
 readMember spanValue value member = case value of
+  TypeWitnessValue{} -> do
+    found <- witnessMethod spanValue value member
+    maybe (abortAt (Just spanValue) "E7001" ("selected type has no " <> member) Nothing) pure found
   ArrayValue _ -> readArrayMember spanValue value member
   StrValue _ -> readStringMember spanValue value member
   BytesValue _ -> readKeyedMember spanValue value member bytesMethods BytesMethodValue "Bytes"
@@ -99,14 +103,14 @@ readMember spanValue value member = case value of
   RecordValue owner fields -> case lookup member fields of
     Just found -> pure found
     Nothing -> readMethod spanValue value owner member
-  {-| A member on a variant is looked for on the sum that owns it before the
-      variant itself. An implementation is written for the type — `impl Named
-      for Option[Int]` — and the value in hand is one of its variants, so
-      looking only at the variant found nothing and reported a type the reader
-      never wrote. The variant's own name is still tried, so a member keyed
-      there keeps working. -}
-  VariantValue name _
+  NamedSumValue owner _ fields -> case lookup member fields of
+    Just found -> pure found
+    Nothing -> readMethod spanValue value owner member
+  {-| Owned sums select only their canonical implementation namespace.
+      The registry remains a fallback for legacy ownerless host values. -}
+  SumValue carried name _
     | name == member -> pure value
+    | carried /= "" -> readMethodAmong spanValue value [carried] name member
     | otherwise -> do
         owner <- variantOwner name
         readMethodAmong spanValue value (maybe [name] (\found -> [found, name]) owner) name member

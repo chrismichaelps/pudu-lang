@@ -87,7 +87,7 @@ immediate calls do: self unifies before it is removed, and default arity survive
 - Floating text decodes through [[Float Literal]]. Unsuffixed/`f64` values are `Float64`, `f32` is `Float32`, and overflow reports `E3019` before an infinity can enter evaluation; no contextual narrowing is invented.
 
 - **A variant that named its payload is refused where a value was wanted** (`E3034`). Its constructor stays bound so the name still resolves — the reader gets this message rather than `undefined name` — but every use of it as a value is the mistake, whether written bare, written through its type, or stored in a binding and called later.
-- The refusal is asked once, by `namedVariantAsValue`, and applied at the two places an expression names something: a bare name here, and a qualified member in [[Type Check]]. Putting it inside qualified member typing reported a call twice, because a call reaches that typing once for its callee and once for the expression.
+- The refusal is asked once, by `namedVariantAsValue`, using the resolved binding or constructor type. Bare names and namespace bindings check here; complete qualified sum constructors check in [[Type Check Pattern]]. Callee short-circuiting preserves one E3034.
 
 - **This is over the 500-line default deliberately.** It is a table of closed rules — the operator types, the built-in method types, the literal types — thirty-seven of them, none over about forty lines, sharing nothing but the shape of the answer. Cutting it in half puts half a table in each of two files, which is harder to read than one table and no easier to change. The limit is there to stop a module holding several subjects; this one holds a list.
 
@@ -138,6 +138,8 @@ DEPTH 0.50 (MEDIUM). It isolates the closed rules from the walk that applies the
 
 ## Grill Log
 
+- **Q:** How does `namespaceMemberType` find `Shape.Dot`? **A:** By the written key, and failing that by the canonical key of the type the qualifier names in this module, which is where variants are bound (#536).
+
 - **Q:** Type membership by calling `Set.contains`? **A:** No. _Rationale:_ surface operators are
   typed in the closed operator table, and a synthetic method call would give different spans and
   accidentally invite general method-based overloading. _Rejected:_ desugaring through member
@@ -161,6 +163,15 @@ DEPTH 0.50 (MEDIUM). It isolates the closed rules from the walk that applies the
   checker's environment holds other modules' declarations by bare name, so `ByteSeq.sha256Hex`
   suggested a name the resolver then refused (#415). Only a prelude value is suggested.
 - **Q:** Record a trait member's `Self`? **A:** No; the owner the call names settles it.
+
+## Carrier of `?` in function literals (#678)
+
+`tryType` reads the carrier from the enclosing result. When that result is still an unsolved
+variable, as in a short lambda whose expected type is unified only after its body, an operand
+already typed `Option[T]` makes the result `Option[_]` and yields `T`; any other operand keeps
+the `Result` default. A declared result still decides alone. Grill Log — **Q:** Add bidirectional
+checking for literals instead? **A:** That is a larger checker change; reading an already-known
+operand carrier removes a case that could only fail, and changes no program that checked before.
 
 ## Referenced by
 
@@ -195,3 +206,21 @@ Resolved Grill Log: no second identity-only rigid resolver; a captured method ke
 ## Lexical member admission (#471)
 
 localValueHead follows name/member syntax to its first lexical name through Type Env. qualifiedMemberType yields to ordinary fields/methods when that head is local; nameType folds dotted local paths through memberType. Keep full qualified lookup for unshadowed namespaces. Undotted names retain their single ordinary lookup; lexical path admission adds no second search to that common case. A selected nominal type application remains a type owner. Resolved Grill Log: query local identity before the global member spelling; do not use shared bare interface names to decide shadowing. This bounded name rule stays in the existing closed-rule table.
+
+## Qualified concrete methods (#763)
+
+Retained concrete type methods use Type Check Qualified before ordinary namespace/value access. A known concrete owner with no method reaches the existing namespace refusal under its full path. Traits and ordinary modules retain their prior expression path.
+
+Resolved Grill Log: known concrete identity, lexical admission, module-export priority and provider ambiguity must agree for called and retained methods. See [[Qualified Record Method Delivery]].
+
+## Named payload field ownership (#761)
+
+namedVariantAsValue accepts the already resolved binding type and queries field names under its nominal result owner. Bare names and namespace members check once before instantiating. Lexical receiver admission precedes namespace lookup; unrelated member basenames cannot trigger refusal.
+
+Resolved Grill Log: field names and payload types come from one resolved owner/variant key. No runtime representation or field evaluation order changes in this partition. See [[Named Payload Field Delivery]].
+
+## Constructor binding identity (#774)
+
+Namespace name/member lookup consumes lookupBinding once. ValueBinding instantiates normally. ConstructorBinding uses its original label for named-value refusal and records the checked owner/label for executable lowering only when admitted. Never classify an ordinary value by spelling or result type.
+
+Resolved Grill Log: identity belongs to the selected binding; schemes remain type-only and ordinary shadows clear constructor roles. See [[Constructor Binding Delivery]].

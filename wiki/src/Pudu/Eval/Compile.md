@@ -73,3 +73,36 @@ MultiMap wrapper selection. Previously the direct-call branch accepted only
 call setup despite being known module functions. Flatten member chains only for
 lookup, and admit their direct path only when the MultiMap wrapper proof succeeds.
 Other member calls retain their established dispatch.
+
+## Unit-valued conditionals (#490)
+
+For an `if` without `else`, compile the taken block normally and discard its
+value only after successful execution; both normal paths yield `UnitValue`.
+Condition evaluation, block scopes, effects, failures and control transfers
+retain their existing order and behavior. Branch values remain intact when
+an `else` exists.
+
+Resolved Grill Log: select the unit-discarding action while compiling the
+conditional and sequence it through the existing evaluator. Do not re-check
+syntax at execution time or catch an unwind to produce unit.
+## Declared field order (#519)
+
+Compiled record literals look up the declared order when they run, not when
+they compile, so a body compiled before every declaration is installed still
+builds records in declaration order.
+## Canonical record owners (#761)
+
+Compile the complete projected record owner once with the field codes; preserve written field evaluation order and parity with the tree walker.
+
+Resolved Grill Log: identity comes from the checked declaration, never import order or a basename guess. Preserve observable labels, lexical shadowing, field effects and failure provenance; no runtime filesystem lookup. See [[Canonical Runtime Owner Delivery]].
+
+## Named sum publication (#761)
+
+Prepare [[Eval Record Construction]] constructor/order selection once beside field codes; execute field effects before storage reordering.
+
+Resolved Grill Log: carry checked owner and field order through syntax; preserve authored effects, diagnostics and cache identity. See [[Named Sum Publication]].
+
+## Records after the dev merge (#798)
+
+Compiled record construction is `recordConstructor` followed by
+`declaredOrder`, as the tree walker does.

@@ -1,0 +1,178 @@
+module FallingBodies
+
+import Std.Fs as Fs
+import Std.Lanes as Lanes
+import Std.Math.Float as Float
+import Ark.Core.Handle as Handle
+import Ark.Core.Profile as Profile
+import Ark.Math.Camera as Camera
+import Ark.Math.Color as Color
+import Ark.Math.Matrix as M
+import Ark.Math as V
+import Ark.Physics as Physics
+import Ark.Physics.Step as Step
+import Ark.Platform.Clock as Clock
+import Ark.Platform.Input as Input
+import Ark.Platform.Window as Window
+import Ark.Render.Device as Device
+import Ark.Render.Mesh as Mesh
+import Ark.Render.Pipeline as Pipeline
+
+const WIDTH: Int = 640
+const HEIGHT: Int = 480
+const BODIES: Int = 48
+const STEP_NANOS: Int = 16666667
+
+/// The mesh kind that draws each physics shape kind at unit size.
+const MESH_FOR_SHAPE: Map[Str, Str] = mapOf([("box", "cube"), ("sphere", "sphere")])
+
+/// The demo between frames: the physics world, one mesh per body and the light.
+type Scene = { bodies: Physics.Bodies, meshes: Array[Mesh.Mesh], ground: Mesh.Mesh, sun: Pipeline.Light }
+
+fn walled() -> Physics.Bodies {
+  var bodies = Physics.world(V.vec3(0.0, -9.81, 0.0))
+  for (normal, point) in [
+    (V.vec3(0.0, 1.0, 0.0), V.vec3(0.0, 0.0, 0.0)), (V.vec3(1.0, 0.0, 0.0), V.vec3(-3.0, 0.0, 0.0)),
+    (V.vec3(-1.0, 0.0, 0.0), V.vec3(3.0, 0.0, 0.0)), (V.vec3(0.0, 0.0, 1.0), V.vec3(0.0, 0.0, -3.0)),
+    (V.vec3(0.0, 0.0, -1.0), V.vec3(0.0, 0.0, 3.0)),
+  ] {
+    let Some(next) = Physics.addPlane(bodies, normal, point) else { panic("plane") }
+    bodies = next
+  }
+  bodies
+}
+
+fn setup() -> Scene {
+  var bodies = walled()
+  var pool = Handle.empty()
+  var meshes: Array[Mesh.Mesh] = []
+  var index = 0
+  while index < BODIES {
+    let (next, entity) = Handle.allocate(pool)
+    pool = next
+    let kind = if index % 3 == 0 { "box" } else { "sphere" }
+    let size = 0.25 + 0.05 * Float.fromInt(index % 4)
+    let Some(shape) = Physics.shapeOf(kind, V.vec3(size, size, size)) else { panic("shape") }
+    let place = V.vec3(Float.fromInt(index % 4) * 1.2 - 1.8 + 0.07 * Float.fromInt(index % 3), 2.0 + Float.fromInt(index / 4) * 0.9, Float.fromInt((index / 4) % 3) * 1.1 - 1.1)
+    let description = Physics.Body{position: place, velocity: V.vec3(0.0, 0.0, 0.0), mass: size * 4.0, restitution: 0.35, friction: 0.5, shape}
+    let Some(added) = Physics.add(bodies, entity, &description) else { panic("add") }
+    bodies = added
+    let hue = Float.fromInt(index) / Float.fromInt(BODIES)
+    let Some(meshKind) = MESH_FOR_SHAPE.get(kind) else { panic("mesh kind") }
+    let Some(mesh) = Mesh.primitive(meshKind, Color.opaque(0.95 - 0.5 * hue, 0.45 + 0.4 * hue, 0.3 + 0.6 * hue)) else { panic("mesh") }
+    meshes = meshes.push(mesh)
+    index = index + 1
+  }
+  let Some(sun) = Pipeline.light(V.vec3(0.5, 1.0, 0.6), Color.opaque(1.0, 0.97, 0.92), 0.25) else { panic("light") }
+  Scene{bodies, meshes, ground: Mesh.plane(Color.opaque(0.22, 0.26, 0.3)), sun}
+}
+
+fn advance(scene: Scene, dt: Float64) -> Scene {
+  match Step.step(scene.bodies, dt, 8) {
+    case Some((bodies, _)) => Scene{..scene, bodies}
+    case None => scene
+  }
+}
+
+fn render(scene: &Scene, surface: Device.Target) -> Option[Device.Target] {
+  let view = Camera.lookAt(V.vec3(6.5, 6.0, 8.5), V.vec3(0.0, 1.0, 0.0), V.vec3(0.0, 1.0, 0.0)) ?
+  let projection = Camera.perspective(Float.pi() / 3.0, Float.fromInt(WIDTH) / Float.fromInt(HEIGHT), 0.1, 100.0) ?
+  let viewProjection = M.multiply4(projection, view)
+  let floor = M.scaling(V.vec3(6.0, 1.0, 6.0))
+  var batch = Pipeline.project(&scene.ground, &floor, &viewProjection, &scene.sun, WIDTH, HEIGHT) ?
+  let px = Lanes.toArray(&scene.bodies.px)
+  let py = Lanes.toArray(&scene.bodies.py)
+  let pz = Lanes.toArray(&scene.bodies.pz)
+  let ex = Lanes.toArray(&scene.bodies.ex)
+  let ey = Lanes.toArray(&scene.bodies.ey)
+  let ez = Lanes.toArray(&scene.bodies.ez)
+  var index = 0
+  while index < px.length() {
+    let model = M.multiply4(M.translation(V.vec3(px[index], py[index], pz[index])), M.scaling(V.vec3(ex[index] * 2.0, ey[index] * 2.0, ez[index] * 2.0)))
+    let projected = Pipeline.project(&scene.meshes[index], &model, &viewProjection, &scene.sun, WIDTH, HEIGHT) ?
+    batch = Pipeline.concat(&batch, &projected)
+    index = index + 1
+  }
+  let cleared = Device.clear(surface, Color.opaque(0.04, 0.05, 0.08)) ?
+  Device.draw(cleared, &batch, Device.CullBack)
+}
+
+fn snapshot(path: Str) -> Int {
+  var scene = setup()
+  let started = Profile.now()
+  var frame = 0
+  while frame < 150 {
+    scene = advance(scene, 1.0 / 60.0)
+    frame = frame + 1
+  }
+  let simulated = (Profile.now() - started) / 150
+  let Some(surface) = Device.target(WIDTH, HEIGHT) else { panic("target") }
+  let Some(drawn) = render(&scene, surface) else { panic("render") }
+  match Fs.writeAtomically(path, &Device.snapshotPpm(&drawn)) {
+    case Ok(_) => {
+      print("wrote " + path + "; mean step " + show(simulated / 1000) + " us")
+      0
+    }
+    case Err(_) => 1
+  }
+}
+
+fn run(limit: Int) -> Int {
+  let Ok(window) = Window.open("Ark — falling bodies", WIDTH, HEIGHT, false) else {
+    print("no desktop window on this platform; use --snapshot <path.ppm>")
+    return 1
+  }
+  var bindings = Input.bind(Input.actions(), "quit", Input.Key("Escape"))
+  bindings = Input.bind(bindings, "reset", Input.Key("KeyR"))
+  let Some(target) = Device.target(WIDTH, HEIGHT) else { panic("target") }
+  let Some(started) = Clock.fixed(STEP_NANOS, 3, Profile.now()) else { panic("clock") }
+  var clock = started
+  var scene = setup()
+  var input = Input.initial()
+  var profile = Profile.empty()
+  var frames = 0
+  while limit < 0 || frames < limit {
+    let Ok(closing) = Window.pump(&window, 1) else { break }
+    let Ok(events) = Window.events(&window) else { break }
+    input = Input.apply(Input.beginFrame(input), &events)
+    if closing || Input.pressed(&bindings, &input, "quit") { break }
+    if Input.pressed(&bindings, &input, "reset") { scene = setup() }
+    let (advanced, tick) = Clock.tick(clock, Profile.now())
+    clock = advanced
+    var step = 0
+    while step < tick.steps {
+      let stepStarted = Profile.now()
+      scene = advance(scene, Clock.stepSeconds(&clock))
+      profile = Profile.record(profile, "physics", stepStarted)
+      step = step + 1
+    }
+    let frameStarted = Profile.now()
+    let Some(drawn) = render(&scene, target) else { break }
+    profile = Profile.record(profile, "render", frameStarted)
+    let Ok(_) = Window.present(&window, &Device.pixels(&drawn)) else { break }
+    frames = frames + 1
+  }
+  if let (Some(physics), Some(drawing)) = (Profile.mean(&profile, "physics"), Profile.mean(&profile, "render")) {
+    print("frames " + show(frames) + ", mean physics " + show(physics / 1000) + " us, mean render " + show(drawing / 1000) + " us")
+  }
+  match Window.close(window) {
+    case Ok(_) => 0
+    case Err(_) => 1
+  }
+}
+
+/// Spheres and boxes fall into a walled pit: R resets, Escape quits.
+/// `--snapshot <path.ppm>` simulates 150 steps and renders offscreen; `--frames <n>` stops after n frames.
+export fn main() -> Int {
+  let options = arguments()
+  var index = 0
+  var limit = -1
+  while index < options.length() {
+    if options[index] == "--snapshot" && index + 1 < options.length() { return snapshot(options[index + 1]) }
+    if options[index] == "--frames" && index + 1 < options.length() {
+      if let Some(count) = options[index + 1].toInt() { limit = count }
+    }
+    index = index + 1
+  }
+  run(limit)
+}

@@ -1,0 +1,83 @@
+module Ark.Physics.Ground
+
+import Std.Math.Float as Float
+import Ark.Math as V
+
+/// Grounded settlement stores walking velocity in the gravity-horizontal plane.
+export type Mode = Walking | Falling
+/// A post-movement capsule center, velocity and previous support mode.
+export type State = { position: V.Vec3, velocity: V.Vec3, mode: Mode }
+
+/// The capsule includes hemispheres; distances and contact tolerance use world units.
+export type Settings = { up: V.Vec3, radius: Float64, halfHeight: Float64, maxDistance: Float64, minUpDot: Float64, edgeInset: Float64, contactTolerance: Float64 }
+/// An earliest downward sweep fraction, outward normal and obstacle witness.
+export type Hit = { fraction: Float64, normal: V.Vec3, point: V.Vec3 }
+/// Accepted floor evidence at the swept capsule center.
+export type Support = { position: V.Vec3, normal: V.Vec3, point: V.Vec3, distance: Float64 }
+/// The next support state and its optional accepted floor evidence.
+export type Settlement = { state: State, support: Option[Support] }
+/// Invalid settings/contacts, numeric refusal or a preserved shape-query failure.
+export type Error[E] = InvalidInput | InvalidContact | NumericRange | QueryFailed(E)
+
+/// Settle a post-movement capsule using at most one downward shape query; rising states skip it.
+/// The callback must use the same capsule dimensions and report initial overlap as an error.
+export fn settle[E](state: &State, settings: &Settings, sweep: fn(V.Vec3, V.Vec3) -> Result[Option[Hit], E]) -> Result[Settlement, Error[E]] {
+  if !V.isFinite(state.position) || !V.isFinite(state.velocity) { return Err(InvalidInput) }
+  if !(settings.radius > 0.0 && settings.halfHeight >= settings.radius && Float.isFinite(settings.halfHeight)) { return Err(InvalidInput) }
+  if !(settings.maxDistance > 0.0 && Float.isFinite(settings.maxDistance) && settings.minUpDot > 0.0 && settings.minUpDot <= 1.0) { return Err(InvalidInput) }
+  if !(settings.edgeInset >= 0.0 && settings.edgeInset < settings.radius && settings.contactTolerance > 0.0 && settings.contactTolerance < settings.radius) { return Err(InvalidInput) }
+  let Some(up) = V.normalized(settings.up) else { return Err(InvalidInput) }
+  let magnitude = maxComponent(state.position)
+  let resolution = magnitude * (16.0 * Float.epsilon())
+  if settings.radius <= resolution || settings.maxDistance <= resolution || settings.contactTolerance <= resolution { return Err(NumericRange) }
+  let down = V.scale(up, -settings.maxDistance)
+  let axis = V.scale(up, settings.halfHeight - settings.radius)
+  let endpoint = V.add(state.position, down)
+  if !V.isFinite(V.add(endpoint, axis)) || !V.isFinite(V.subtract(endpoint, axis)) { return Err(NumericRange) }
+  if !V.isFinite(endpoint) || !V.isFinite(V.add(state.position, axis)) || !V.isFinite(V.subtract(state.position, axis)) { return Err(NumericRange) }
+  let verticalSpeed = V.dot(state.velocity, up)
+  if !Float.isFinite(verticalSpeed) { return Err(NumericRange) }
+  let airborne = Settlement{state: State{position: state.position, velocity: state.velocity, mode: Falling}, support: None}
+  // Projection residue after an oblique landing must not become a spurious jump next frame.
+  let riseError = dotError(state.velocity, up)
+  if verticalSpeed > riseError { return Ok(airborne) }
+  let found = match sweep(state.position, down) {
+    case Ok(value) => value
+    case Err(error) => { return Err(QueryFailed(error)) }
+  }
+  let Some(hit) = found else { return Ok(airborne) }
+  if !(hit.fraction >= 0.0 && hit.fraction <= 1.0) || !V.isFinite(hit.point) { return Err(InvalidContact) }
+  let Some(length) = V.length(hit.normal) else { return Err(InvalidContact) }
+  if Float.abs(length - 1.0) > 1e-9 { return Err(InvalidContact) }
+  let normal = V.scale(hit.normal, 1.0 / length)
+  let alignment = V.dot(normal, up)
+  let slopeError = dotError(normal, up)
+  if alignment <= slopeError || alignment + slopeError < settings.minUpDot { return Ok(airborne) }
+  let distance = hit.fraction * settings.maxDistance
+  let position = V.add(state.position, V.scale(up, -distance))
+  let delta = V.subtract(hit.point, position)
+  let height = V.dot(delta, up)
+  if !V.isFinite(position) || !V.isFinite(delta) || !Float.isFinite(height) { return Err(NumericRange) }
+  // Side and rim contacts do not establish a floor, even when their normal passes the slope test.
+  if height >= -(settings.halfHeight - settings.radius) { return Ok(airborne) }
+  let Some(radial) = V.length(V.subtract(delta, V.scale(up, height))) else { return Err(NumericRange) }
+  if radial >= settings.radius - settings.edgeInset { return Ok(airborne) }
+  let Some(reach) = V.length(V.add(delta, axis)) else { return Err(NumericRange) }
+  if Float.abs(reach - settings.radius) > settings.contactTolerance { return Err(InvalidContact) }
+  let velocity = V.subtract(state.velocity, V.scale(up, verticalSpeed))
+  if !V.isFinite(velocity) { return Err(NumericRange) }
+  let support = Support{position, normal, point: hit.point, distance}
+  Ok(Settlement{state: State{position, velocity, mode: Walking}, support: Some(support)})
+}
+
+fn maxComponent(value: V.Vec3) -> Float64 {
+  var largest = Float.abs(value.x)
+  if Float.abs(value.y) > largest { largest = Float.abs(value.y) }
+  if Float.abs(value.z) > largest { largest = Float.abs(value.z) }
+  largest
+}
+
+fn dotError(left: V.Vec3, right: V.Vec3) -> Float64 {
+  let factor = 16.0 * Float.epsilon()
+  (Float.abs(left.x * right.x) * factor + Float.abs(left.y * right.y) * factor) + Float.abs(left.z * right.z) * factor
+}

@@ -1,0 +1,96 @@
+module UsesArkCharacter
+
+import Ark.Math as V
+import Ark.Physics.Character as C
+
+fn require(condition: Bool, name: Str) {
+  if !condition { panic(name) }
+}
+
+fn near(actual: V.Vec3, expected: V.Vec3, name: Str) {
+  let Some(error) = V.length(V.subtract(actual, expected)) else { panic(name) }
+  require(error < 1e-8, name)
+}
+
+fn capsule() -> C.Capsule {
+  C.Capsule{position: V.vec3(2.0, 2.0, 0.0), radius: 0.5, halfHeight: 1.0, up: V.vec3(0.0, 1.0, 0.0)}
+}
+
+fn moved(body: C.Capsule, delta: V.Vec3, planes: Array[C.Plane], skin: Float64, budget: Int) -> C.Movement {
+  let Some(result) = C.move(&body, delta, &planes, skin, budget, 0.7) else { panic("movement refused") }
+  result
+}
+
+export fn main() -> Int {
+  let zero = V.vec3(0.0, 0.0, 0.0)
+  let up = V.vec3(0.0, 1.0, 0.0)
+  let Some(floor) = C.plane(up, zero) else { panic("floor") }
+  let Some(wall) = C.plane(V.vec3(1.0, 0.0, 0.0), zero) else { panic("wall") }
+  let free = moved(capsule(), V.vec3(4.0, -1.0, 2.0), [], 0.0, 4)
+  near(free.position, V.vec3(6.0, 1.0, 2.0), "free motion")
+  require(!free.grounded && !free.exhausted && free.contacts == 0, "free state")
+  let fallen = moved(capsule(), V.vec3(0.0, -1000.0, 0.0), [floor], 0.01, 4)
+  near(fallen.position, V.vec3(2.0, 1.01, 0.0), "continuous sweep and capsule support")
+  require(fallen.grounded && !fallen.exhausted, "landed")
+  let sliding = moved(capsule(), V.vec3(-10.0, -10.0, 4.0), [floor, wall], 0.0, 4)
+  near(sliding.position, V.vec3(0.5, 1.0, 4.0), "corner preserves crease motion")
+  require(sliding.grounded && !sliding.exhausted, "corner completion")
+  let limited = moved(capsule(), V.vec3(-10.0, -10.0, 4.0), [floor, wall], 0.0, 1)
+  require(limited.exhausted && limited.remaining != zero, "budget returns pending motion")
+  require(limited.position.x >= 0.5 && limited.position.y >= 1.0, "budget never applies unswept motion")
+  let away = moved(C.Capsule{..capsule(), position: fallen.position}, up, [floor], 0.01, 4)
+  require(!away.grounded, "final support clears after leaving floor")
+  let sideways = moved(C.Capsule{..capsule(), up: V.vec3(4.0, 0.0, 0.0)}, V.vec3(-5.0, 0.0, 0.0), [wall], 0.0, 4)
+  near(sideways.position, V.vec3(1.0, 2.0, 0.0), "arbitrary up and segment support")
+  require(sideways.grounded, "ground follows capsule up")
+  let scaled = C.Plane{normal: V.vec3(0.0, 2.0, 0.0), offset: 2.0}
+  let normalized = moved(capsule(), V.vec3(0.0, -4.0, 0.0), [scaled], 0.0, 4)
+  near(normalized.position, V.vec3(2.0, 2.0, 0.0), "public coefficients normalize together")
+  let sphere = C.Capsule{..capsule(), position: V.vec3(2.0, 4.0, 0.0), halfHeight: 0.5}
+  let angled = C.Plane{normal: V.vec3(-0.8, 0.6, 0.0), offset: 0.0}
+  let corner = moved(sphere, V.vec3(-4.0, -10.0, 2.0), [wall, angled], 0.0, 4)
+  near(corner.position, V.vec3(0.5, 1.5, 2.0), "acute corner never reenters the first plane")
+  let permuted = moved(sphere, V.vec3(-4.0, -10.0, 2.0), [angled, wall, angled], 0.0, 4)
+  near(permuted.position, corner.position, "duplicate and reordered boundaries")
+  let endWall = C.Plane{normal: V.vec3(0.0, 0.0, 1.0), offset: 0.0}
+  let boxed = moved(C.Capsule{..sphere, position: V.vec3(2.0, 4.0, 2.0)}, V.vec3(-4.0, -10.0, -10.0), [wall, angled, endWall], 0.0, 8)
+  near(boxed.position, V.vec3(0.5, 1.5, 0.5), "three planes block every inward direction")
+  let ceiling = C.Plane{normal: V.vec3(0.0, -1.0, 0.0), offset: -4.0}
+  let head = moved(capsule(), V.vec3(0.0, 100.0, 0.0), [ceiling], 0.0, 4)
+  near(head.position, V.vec3(2.0, 3.0, 0.0), "head support stops at ceiling")
+  require(!head.grounded, "ceiling never grounds")
+  let room = [C.Plane{normal: up, offset: -5.0}, C.Plane{normal: V.vec3(0.0, -1.0, 0.0), offset: -5.0}, C.Plane{normal: wall.normal, offset: -5.0}, C.Plane{normal: V.vec3(-1.0, 0.0, 0.0), offset: -5.0}, C.Plane{normal: endWall.normal, offset: -5.0}, C.Plane{normal: V.vec3(0.0, 0.0, -1.0), offset: -5.0}]
+  var current = C.Capsule{..capsule(), position: zero}
+  for index in 0..64 {
+    let delta = V.vec3((if index % 2 == 0 { 13.0 } else { -17.0 }), (if index % 3 == 0 { 11.0 } else { -7.0 }), (if index % 5 == 0 { -19.0 } else { 9.0 }))
+    let result = moved(current, delta, room, 0.01, 8)
+    require(!result.exhausted && result.remaining == zero, "bounded room movement completes")
+    require(result.position.x >= -4.49 - 1e-8 && result.position.x <= 4.49 + 1e-8 && result.position.y >= -3.99 - 1e-8 && result.position.y <= 3.99 + 1e-8 && result.position.z >= -4.49 - 1e-8 && result.position.z <= 4.49 + 1e-8, "repeated room sweeps stay contained")
+    let Some(travel) = V.length(V.subtract(result.position, current.position)) else { panic("travel") }
+    let Some(requested) = V.length(delta) else { panic("requested") }
+    require(travel <= requested + 1e-8, "sliding never adds travel")
+    current = C.Capsule{..current, position: result.position}
+  }
+  require(moved(C.Capsule{..capsule(), position: V.vec3(2.0, 1.0, 0.0)}, zero, [floor], 0.0, 4).grounded, "stationary support remains grounded")
+  let infinity = 1e308 * 2.0
+  let nan = infinity - infinity
+  require(C.move(&C.Capsule{..capsule(), up: zero}, zero, &[], 0.0, 4, 0.7) == None, "zero up refused")
+  require(C.move(&capsule(), zero, &[], nan, 4, 0.7) == None, "non-finite skin refused")
+  require(C.move(&capsule(), zero, &[], 0.0, 4, nan) == None, "non-finite ground threshold refused")
+  require(C.plane(up, V.vec3(nan, 0.0, 0.0)) == None, "non-finite plane point refused")
+  require(C.plane(V.vec3(infinity, 0.0, 0.0), zero) == None, "non-finite plane normal refused")
+  require(C.move(&C.Capsule{..capsule(), position: V.vec3(1e308, 0.0, 0.0)}, V.vec3(1e308, 0.0, 0.0), &[], 0.0, 4, 0.7) == None, "overflowing final position refused")
+  require(C.plane(zero, zero) == None, "zero plane normal refused")
+  require(C.move(&capsule(), zero, &[C.Plane{normal: zero, offset: 0.0}], 0.0, 4, 0.7) == None, "forged plane refused")
+  require(C.move(&capsule(), zero, &[C.Plane{normal: up, offset: nan}], 0.0, 4, 0.7) == None, "non-finite offset refused")
+  require(C.move(&capsule(), V.vec3(nan, 0.0, 0.0), &[], 0.0, 4, 0.7) == None, "non-finite motion refused")
+  require(C.move(&C.Capsule{..capsule(), radius: -1.0}, zero, &[], 0.0, 4, 0.7) == None, "negative radius refused")
+  require(C.move(&C.Capsule{..capsule(), halfHeight: 0.1}, zero, &[], 0.0, 4, 0.7) == None, "short capsule refused")
+  require(C.move(&C.Capsule{..capsule(), position: zero}, zero, &[floor], 0.0, 4, 0.7) == None, "initial penetration refused")
+  require(C.move(&capsule(), zero, &[], 0.0, 0, 0.7) == None, "zero budget refused")
+  require(C.move(&capsule(), zero, &[], 0.0, 17, 0.7) == None, "excess budget refused")
+  require(C.move(&capsule(), zero, &[], -0.1, 4, 0.7) == None, "negative skin refused")
+  require(C.move(&capsule(), zero, &[], 0.0, 4, 0.0) == None, "vertical surfaces cannot ground")
+  print("ark character: ok")
+  0
+}

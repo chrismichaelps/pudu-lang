@@ -65,6 +65,19 @@ export type TimeOfDay = { hour: Int, minute: Int, second: Int }
 /// ```
 export fn currentInstant() -> Instant { Instant{millis: now()} }
 
+/// Nanoseconds on a monotonic clock with an arbitrary origin.
+///
+/// Only differences are meaningful: subtract two readings to measure an interval
+/// too short for whole milliseconds, such as one frame or one kernel call.
+///
+/// ## Examples
+///
+/// ```
+/// let started = Time.monotonicNanos()
+/// let elapsed = Time.monotonicNanos() - started
+/// ```
+export fn monotonicNanos() -> Int { clockNanos() }
+
 /// An instant built from milliseconds since the start of 1970.
 ///
 /// The way back in from a timestamp received over a wire or read from a database.

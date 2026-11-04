@@ -60,3 +60,21 @@ thaw :: Frozen -> Value
 ## Referenced by
 
 [[src/Pudu/Eval/_MOC]] · [[Eval Program]] · [[Compiler Cache]]
+
+## Canonical record owners (#761)
+
+Freeze/thaw and checked-product persistence preserve complete record owner text. A folded record must dispatch to the same defining implementation as a fresh source construction. The existing executable fingerprint prevents reuse of products made by a different compiler.
+
+Resolved Grill Log: preserve identity through immutable data storage; do not reconstruct it from labels or import order. See [[Canonical Runtime Owner Delivery]].
+
+## Positional sum owners (#761)
+
+Persist owner, label and positional payload together. Thaw restores all three before execution; compiler executable identity invalidates incompatible predecessor products. Frozen labels and owners cannot be reconstructed from import order.
+
+Resolved Grill Log: identity comes from the declaration or native ABI, not a global short-tag registry. Keep labels, evaluation order, effects and wire bytes stable. See [[Positional Sum Owner Delivery]].
+
+## Named sum value foundation (#761)
+
+Freeze named sum data only when every field freezes. Persist kind 17 with canonical owner, label, field count and name/value pairs; restore with existing bounded counted decoding. The executable fingerprint invalidates predecessor products.
+
+Resolved Grill Log: represent named sums independently of ordinary records and positional sums. Preserve existing field order and public labels. Source publication follows in its own tested partition. See [[Named Sum Value Delivery]].

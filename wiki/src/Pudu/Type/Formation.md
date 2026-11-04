@@ -167,3 +167,9 @@ Transparent aliases share total [[Type Substitution]], including applied heads,
 unsafe wrappers and function default counts. Resolved Grill Log: declaration
 rules, member assumptions and alias applications cannot use different meanings
 for the same full generic bound.
+
+## Named payload field ownership (#761)
+
+Collect named payload fields under the canonical declaring identity and variant label alongside owned payload types. Import order cannot overwrite a different owner’s names.
+
+Resolved Grill Log: field names and payload types come from one resolved owner/variant key. No runtime representation or field evaluation order changes in this partition. See [[Named Payload Field Delivery]].

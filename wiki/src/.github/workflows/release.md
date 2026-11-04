@@ -46,3 +46,11 @@ Lambda variant (`/var/task` loader and libraries), proves a program attached to 
 products and runs, gzips each of the seven files, and uploads them with
 `pudu-runtime-linux-musl-x86_64.sha256`. `publish` waits for it, so a release carries the pack that
 `pudu build --target` fetches.
+
+## Archive notice verification (#509)
+
+Run [[Package Binary Tests]] alongside the release-decision tests in local
+gates, continuous verification and the release plan job. Preserve existing
+checks and ordering. Resolved Grill Log: required archive notice/strip policy
+must not depend on a manual-only test; this introduces no publication trigger
+or compiler semantic change.

@@ -1,0 +1,121 @@
+module UsesArkAssetServer
+
+import Std.Fs as Fs
+import Std.Path as Path
+import Ark.Assets.Graph as Graph
+import Ark.Assets.Import as Import
+import Ark.Assets.Server as Server
+import Ark.Assets.Texture as Texture
+import Ark.Math.Color as Color
+import Ark.Platform.Vfs as Vfs
+
+fn require(condition: Bool, name: Str) {
+  if !condition { panic(name) }
+}
+
+fn source(id: Str, path: Str, importer: Str, dependencies: Array[Str]) -> Server.Source {
+  Server.Source{id, path, importer, dependencies}
+}
+
+fn cooked(pixels: Array[UInt8], space: Str) -> Bytes {
+  let Some(texture) = Texture.rgba8(1, 1, bytesOf(pixels), space) else { panic("texture") }
+  let Some(bytes) = Import.cookTexture(&texture) else { panic("cook") }
+  bytes
+}
+
+fn surface(server: &Server.Server, id: Str) -> Import.Material {
+  let Some(issued) = Server.handle(server, id) else { panic("handle") }
+  match Server.payload(server, issued) {
+    case Some(Import.Surface(material)) => material
+    case _ => panic("material payload")
+  }
+}
+
+fn cooking() {
+  let red = cooked([255, 0, 0, 255], "linear")
+  require(red.length() == 17, "cooked size")
+  require(Import.run("texture", &red, &[]) == Ok(Import.Image(Texture.Texture{width: 1, height: 1, pixels: bytesOf([255, 0, 0, 255]), space: "linear"})), "cooked round trip")
+  require(Import.run("texture", &bytesOf([1, 2, 3]), &[]) == Err("missing texture header"), "short header")
+  require(Import.run("texture", &red.take(16), &[]) == Err("texture storage does not match its dimensions"), "truncated pixels")
+  let unknownSpace = red.take(12).concat(bytesOf([7])).concat(red.drop(13))
+  require(Import.run("texture", &unknownSpace, &[]) == Err("unknown texture color space"), "unknown space")
+  require(Import.run("material", &bytesOf([1, 2, 3, 4]), &[Import.Raw(red)]) == Err("material albedo must be a texture"), "material input kind")
+  require(Import.run("material", &bytesOf([1, 2, 3]), &[]) == Err("material tint must be four bytes"), "material size")
+  require(Import.run("bytes", &red, &[Import.Raw(red)]) == Err("bytes take no dependencies"), "bytes dependencies")
+  require(Import.run("unknown", &red, &[]) == Err("unknown importer unknown"), "unknown importer")
+  let oversized = Texture.Texture{width: 0, height: 1, pixels: bytesOf([]), space: "linear"}
+  require(Import.cookTexture(&oversized) == None, "unchecked texture refused")
+}
+
+fn reloading(directory: Str) -> Result[(), Fs.FsError] {
+  let root = Fs.temporaryDirectoryIn(directory, "assets-") ?
+  Fs.writeAtomically(Path.join(root, "albedo.arkt"), &cooked([255, 0, 0, 255], "linear")) ?
+  Fs.writeAtomically(Path.join(root, "tint.bin"), &bytesOf([255, 255, 255, 255])) ?
+  Fs.writeAtomically(Path.join(root, "notes.bin"), &bytesOf([1, 2, 3])) ?
+  let Ok(vfs) = Vfs.mountDirectory(Vfs.empty(), "game", root) else { panic("mount") }
+  let sources = [
+    source("brick", "game:/tint.bin", "material", ["albedo"]),
+    source("albedo", "game:/albedo.arkt", "texture", []),
+    source("notes", "game:/notes.bin", "bytes", []),
+  ]
+  let Ok(server) = Server.open(vfs, &sources) else { panic("open") }
+  require(Server.ids(&server) == ["albedo", "notes", "brick"], "dependency-first load")
+  require(surface(&server, "brick").tint == Color.rgba(1.0, 1.0, 1.0, 1.0), "material tint")
+  require(Server.changed(&server) == Ok([]), "nothing changed")
+  require(Server.refresh(server) == Ok((server, [])), "refresh without changes is identity")
+
+  Fs.writeAtomically(Path.join(root, "albedo.arkt"), &cooked([255, 0, 0, 255], "linear")) ?
+  let Ok((rewritten, same)) = Server.reload(server, &["albedo"]) else { panic("identical rewrite") }
+  require(same == [] && Server.revision(&rewritten, "brick") == Some(0), "byte-identical rewrite is a no-op")
+
+  Fs.writeAtomically(Path.join(root, "albedo.arkt"), &cooked([0, 0, 255, 255], "linear")) ?
+  require(Server.changed(&server) == Ok(["albedo"]), "changed source detected")
+  let Ok((blue, advanced)) = Server.refresh(server) else { panic("reload") }
+  require(advanced == ["albedo", "brick"], "dependent re-imports after its texture")
+  require(Server.revision(&blue, "albedo") == Some(1) && Server.revision(&blue, "notes") == Some(0), "unrelated asset keeps its revision")
+  require(Texture.texel(&surface(&blue, "brick").albedo, 0, 0) == Some(Color.opaque(0.0, 0.0, 1.0)), "material sees the new texture")
+  require(Texture.texel(&surface(&server, "brick").albedo, 0, 0) == Some(Color.opaque(1.0, 0.0, 0.0)), "old server retains its snapshot")
+
+  Fs.writeAtomically(Path.join(root, "tint.bin"), &bytesOf([1, 2])) ?
+  Fs.writeAtomically(Path.join(root, "albedo.arkt"), &cooked([0, 255, 0, 255], "linear")) ?
+  require(Server.refresh(blue) == Err(Server.ImportFailed("brick", "material tint must be four bytes")), "failed stage reports its asset")
+  require(Texture.texel(&surface(&blue, "brick").albedo, 0, 0) == Some(Color.opaque(0.0, 0.0, 1.0)), "failed stage publishes nothing")
+  Fs.writeAtomically(Path.join(root, "tint.bin"), &bytesOf([0, 0, 0, 255])) ?
+  let Ok((green, both)) = Server.refresh(blue) else { panic("recovered reload") }
+  require(both == ["albedo", "brick"] && Server.revision(&green, "brick") == Some(2), "recovery publishes both")
+
+  let Some(notes) = Server.handle(&green, "notes") else { panic("notes handle") }
+  require(Server.unload(green, "albedo") == Err(Server.LoadedDependents("albedo", ["brick"])), "dependents block unload")
+  require(Server.unload(green, "missing") == Err(Server.UnknownAsset("missing")), "unknown unload")
+  let Ok(fewer) = Server.unload(green, "notes") else { panic("unload") }
+  require(Server.payload(&fewer, notes) == None && Server.payload(&green, notes) == Some(Import.Raw(bytesOf([1, 2, 3]))), "unloaded handle is stale only in the new server")
+  require(Server.ids(&fewer) == ["albedo", "brick"], "remaining order")
+  let Ok(again) = Server.add(fewer, source("notes", "game:/notes.bin", "bytes", [])) else { panic("add") }
+  let Some(reissued) = Server.handle(&again, "notes") else { panic("reissued") }
+  require(reissued.index == notes.index && reissued != notes && Server.payload(&again, notes) == None, "reused slot rejects the old generation")
+  require(Server.reload(again, &["ghost"]) == Err(Server.UnknownAsset("ghost")), "unknown reload")
+  Ok(())
+}
+
+fn declarations() {
+  let files = mapOf([("a.bin", bytesOf([1])), ("bad.arkt", bytesOf([0]))])
+  let Ok(vfs) = Vfs.mountMemory(Vfs.empty(), "mem", &files) else { panic("memory") }
+  require(Server.open(vfs, &[source("a", "mem:/a.bin", "mystery", [])]) == Err(Server.UnknownImporter("a", "mystery")), "unknown importer kind")
+  require(Server.open(vfs, &[source("a", "mem:/a.bin", "bytes", ["a"])]) == Err(Server.Declaration(Graph.Cycle(["a"]))), "declaration cycle")
+  require(Server.open(vfs, &[source("a", "mem:/missing.bin", "bytes", [])]) == Err(Server.ReadFailed("a", Vfs.NotFound("missing.bin"))), "missing source")
+  require(Server.open(vfs, &[source("t", "mem:/bad.arkt", "texture", [])]) == Err(Server.ImportFailed("t", "missing texture header")), "bad cooked texture")
+  let Ok(single) = Server.open(vfs, &[source("a", "mem:/a.bin", "bytes", [])]) else { panic("single") }
+  require(Server.add(single, source("a", "mem:/a.bin", "bytes", [])) == Err(Server.Declaration(Graph.DuplicateId("a"))), "duplicate add")
+  require(Server.add(single, source("b", "mem:/a.bin", "bytes", ["ghost"])) == Err(Server.Declaration(Graph.MissingDependency("b", "ghost"))), "add with missing dependency")
+}
+
+export fn main() -> Int {
+  cooking()
+  declarations()
+  match Fs.withTemporaryDirectory("ark-assets-", reloading) {
+    case Ok(_) => {}
+    case Err(_) => panic("filesystem fixture")
+  }
+  print("ark asset server: ok")
+  0
+}

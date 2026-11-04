@@ -1,0 +1,12 @@
+module Selected
+
+import Grid {Map}
+import Table as Table
+
+fn main() -> Int {
+  let grid = Map{size: 2}
+  match Table.code("a") {
+    case Some(one) => grid.size - one - 1
+    case None => 1
+  }
+}

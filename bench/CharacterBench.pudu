@@ -1,0 +1,26 @@
+module CharacterBench
+
+import Std.Time as Time
+import Ark.Math as V
+import Ark.Physics.Character as C
+
+fn batch(capsule: &C.Capsule, boundaries: &Array[C.Plane], count: Int) -> Float64 {
+  var checksum = 0.0
+  for _ in 0..count {
+    let Some(result) = C.move(capsule, V.vec3(-4.0, -10.0, -10.0), boundaries, 0.01, 8, 0.7) else { panic("movement") }
+    if result.exhausted { panic("budget") }
+    checksum = checksum + result.position.x + result.position.y + result.position.z
+  }
+  checksum
+}
+
+export fn main() -> Int {
+  let capsule = C.Capsule{position: V.vec3(2.0, 4.0, 2.0), radius: 0.5, halfHeight: 0.5, up: V.vec3(0.0, 1.0, 0.0)}
+  let boundaries = [C.Plane{normal: V.vec3(1.0, 0.0, 0.0), offset: 0.0}, C.Plane{normal: V.vec3(-0.8, 0.6, 0.0), offset: 0.0}, C.Plane{normal: V.vec3(0.0, 0.0, 1.0), offset: 0.0}]
+  let warmup = batch(&capsule, &boundaries, 100)
+  let started = Time.elapsed()
+  let checksum = batch(&capsule, &boundaries, 1000)
+  let elapsed = Time.elapsed() - started
+  print("1000 capsule moves: {elapsed} ms; checksum: {checksum}; warmup: {warmup}")
+  0
+}

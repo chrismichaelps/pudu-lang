@@ -57,6 +57,7 @@ portable value = case value of
   MapValue items -> all (portable . unOrdValue) (Map.keys items) && all portable (Map.elems items)
   SetValue items -> all (portable . unOrdValue) (Set.toList items)
   RecordValue _ fields -> all (portable . snd) fields
+  NamedSumValue _ _ fields -> all (portable . snd) fields
   VariantValue _ payload -> all portable payload
   _ -> False
 
@@ -89,7 +90,10 @@ instance Persist Frozen where
       RecordValue name fields ->
         tag 15 <> persist source name <> persist source (length fields)
           <> foldMap (\(field, item) -> persist source field <> encodeValue item) fields
-      VariantValue name payload -> tag 16 <> persist source name <> many payload
+      SumValue owner name payload -> tag 16 <> persist source owner <> persist source name <> many payload
+      NamedSumValue owner name fields ->
+        tag 17 <> persist source owner <> persist source name <> persist source (length fields)
+          <> foldMap (\(field, item) -> persist source field <> encodeValue item) fields
       _ -> tag 255
     tag code = persist source (code :: Int)
     many items = persist source (length items) <> foldMap encodeValue items
@@ -128,7 +132,12 @@ instance Persist Frozen where
           name <- restore
           count <- restore
           RecordValue name <$> counted count ((,) <$> restore <*> decodeValue)
-        16 -> VariantValue <$> restore <*> restoreMany
+        16 -> SumValue <$> restore <*> restore <*> restoreMany
+        17 -> do
+          owner <- restore
+          name <- restore
+          count <- restore
+          NamedSumValue owner name <$> counted count ((,) <$> restore <*> decodeValue)
         _ -> failDecode
     restoreMany = do
       count <- restore

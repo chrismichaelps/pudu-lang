@@ -8,11 +8,39 @@ aliases: [Pudu Cabal Manifest]
 
 # Pudu Cabal Manifest
 
+Register Diagnostic.Host, Cli.Memory, Backend.Runtime.Frame and Backend.Emit.Frame
+using existing dependencies. Resolved Grill Log (#499): the CLI and generated
+runtime share host-failure text; frame generation stays independent of compiler
+and frontend modules.
+
 Register [[Compiler Product Publication]] as the bounded cache-admission and
 product-lifetime boundary. Resolved Grill Log: preserve compiler phases and
 cache identity; full analysis remains available independently of executable reuse.
 
 ## Purpose and interface
+
+Distribute `lib/Ark/Assets/*.pudu`, including [[Ark Texture Asset]]. Resolved Grill Log: nested
+CPU asset modules are shipped library data and must remain present outside the checkout.
+
+Distribute `lib/Ark/Net/*.pudu` with the root net module, including [[Ark Replication]];
+[[Ark Net Gate]] checks the archive.
+
+Distribute `lib/Ark/Editor/*.pudu`, including [[Ark Inspect]]; the editor root has no module of
+its own yet, so only the nested glob ships it.
+
+Distribute `lib/Ark/Game/*.pudu` with the root game module, including [[Ark Game Camera]];
+[[Ark Game Gate]] checks the archive.
+
+Distribute `lib/Ark/Animation/*.pudu` with the root animation module, including [[Ark Animation
+Machine]]; [[Ark Animation Gate]] checks the archive.
+
+Distribute `lib/Ark/Physics/*.pudu` with the root physics facade. Resolved Grill Log: the
+source archive must retain contact, step and query modules; checkout-only success is insufficient.
+
+Distribute `lib/Ark/*.pudu` and `lib/Ark/Math/*.pudu` beside Std in the existing library data
+root. [[Ark Math]] and [[Ark Matrix]] are language-distribution data, with no separate package
+or native dependency. Resolved Grill Log: source archives must contain both root and nested
+Ark modules even when a checkout's library root is unavailable.
 
 Declare package metadata, compiler library modules, executable components, test components, compiler
 warnings, language defaults, dependencies, and native bridge linkage for the Cabal build.
@@ -75,6 +103,16 @@ links, which made a clean `cabal install exe:pudu` fail even though in-tree buil
   experiments as delivered behavior. No library or repository-test default
   changes, additional dependency or hard-coded optimization level is introduced.
 
+- **Q:** Let lane kernel buffers count against the nursery? **A:** No; the executable also
+  links `-AL32m`. Each lane kernel allocates a whole pinned buffer, and with the default limit
+  nearly every call triggered a stop-the-world collection that waited for the other threads'
+  non-allocating kernel loops, so lane work on four workers ran no faster than on one (112 vs
+  113 ms). Raising only the large-object limit, not every capability's nursery, lets those
+  buffers accumulate up to 32 MB between collections: four workers 103 → 49 ms, one worker
+  unchanged (105 → 107 ms) and peak memory 178 → 159 MB. 128 MB made one worker 11% slower and
+  added 110 MB; 16 MB left a third of the speedup unrealised. [[Lane Collection Gate]] counts the
+  collections; [[Lane Parallel Benchmark]] records the throughput.
+
 - **Q:** Leave an extracted runtime module outside the library module list? **A:** No. Registration
   keeps source distributions and builds aware of the implementation dependency.
 - **Q:** Add a dependency for ownership cleanup? **A:** No; the existing base, STM, containers, and
@@ -92,6 +130,60 @@ links, which made a clean `cabal install exe:pudu` fail even though in-tree buil
   _Rationale:_ then filesystem safety can only be tested by spawning a separately located binary,
   and the command dispatcher retains another responsibility. _Accepted:_ one focused library module
   consumed by the thin CLI and its tests.
+
+## Method lowering (#551)
+
+Resolved Grill Log: register [[Compiler Lower Method]] with existing
+dependencies only.
+
+## Generic lowering (#552)
+
+Resolved Grill Log: register [[Compiler Lower Generic]]; no new dependency.
+
+## Try lowering (#553)
+
+Resolved Grill Log: register [[Compiler Lower Try]]; no new dependency.
+
+## For lowering (#554)
+
+Resolved Grill Log: register [[Compiler Lower For]]; no new dependency.
+
+## Lambda lowering (#555)
+
+Resolved Grill Log: register [[Compiler Lower Lambda]]; no new dependency.
+
+## Arrays (#556)
+
+Resolved Grill Log: register [[Compiler Lower Array]], [[Compiler Lower Call]],
+[[Backend Emit Array]], [[Backend Emit Cell]] and [[Backend Runtime Array]]; no
+new dependency.
+
+## Sort and slices (#558)
+
+Register Pudu.Compiler.Lower.Sort and Pudu.Compiler.Lower.Slice.
+
+## Text pieces and numbers (#559)
+
+Register Pudu.Backend.Runtime.Text.Number and Pudu.Backend.Runtime.Text.Pieces.
+
+## Conversion (#560)
+
+Register Pudu.Backend.Runtime.Integer.Convert and Pudu.Compiler.Lower.Convert.
+
+## Maps and sets (#561)
+
+Register Pudu.Backend.Emit.Keyed, Pudu.Backend.Runtime.Tree and
+Pudu.Compiler.Lower.Keyed.
+
+## Range values (#564)
+
+Register Pudu.Backend.Emit.Range, Pudu.Backend.Runtime.Range and
+Pudu.Compiler.Lower.Range.
+
+## Bytes (#565)
+
+Register Pudu.Backend.Emit.Bytes, Pudu.Backend.Runtime.Bytes and
+Pudu.Compiler.Lower.Bytes.
 
 ## Referenced by
 
@@ -290,8 +382,247 @@ passes the CLI and the residualizer share.
 
 Register [[Lsp Impl Members]] without new dependencies. Resolved Grill Log: completion and code actions share one unwritten-member computation.
 
+## Native backend modules
+
+Register [[Pudu Core]], [[Compiler Lower]], [[Backend Emit]], [[Backend Runtime]],
+[[Backend Toolchain]], [[Diagnostic Arithmetic]] and [[Diagnostic Native]] in the
+library's exposed modules; register [[Backend Emit Tests]] and [[Backend Native
+Tests]] in the test suite. Resolved Grill Log: the toolchain uses only the
+existing `process`, `directory` and `filepath` dependencies; the runtime is
+Haskell text, so no data files or extra-library linkage are added; the emitter
+imports no frontend or semantic module.
+
 Register [[Resolve State]] for the private pure resolver action and state boundary. Resolved Grill Log: preserve the abstract [[Resolve Context]] facade and existing state/diagnostic ordering without a new dependency.
 
 Register [[Backend Word128 Kernel]] explicitly without new dependencies. Resolved Grill Log:
 the compiled kernel corpus runs in the complete suite and contributes to its
 aggregate failure status. The full release gate remains unchanged.
+## Native Core contracts (#486)
+
+Resolved Grill Log: Register Pudu.Core with existing dependencies; this data-contract partition adds no native command.
+## Native function hardening (#488)
+
+Register [[Backend Emit State]], [[Backend Emit Support]], [[Compiler Lower Body]], [[Compiler Lower State]], [[Compiler Lower Signature]], and [[Diagnostic Evaluation]] without new dependencies. Register the native function-program test corpus. Resolved Grill Log: these pure boundaries keep files reviewable and share the existing runtime diagnostic text; no dependency or toolchain policy changes.
+
+## Native control flow (#489)
+
+Register the loop-control lowering helper and native control-flow property/corpus modules through explicit module lists and the existing test aggregator. Resolved Grill Log: no new dependency or source discovery; focused and full suites execute the same control-flow evidence.
+
+
+## Solved native type inputs (#491)
+
+Register Pudu.Compiler.Lower.Types explicitly beside the existing native lowering modules. Use existing type and containers dependencies; no backend dependency on semantic modules is introduced.
+
+Resolved Grill Log: consume canonical settled checker facts; preserve structural Never, print carrier refusals and existing runtime representations. Rejected: re-inference, display-name ABI selection, offset-only identity or silent fallback.
+
+
+## Explicit scalar runtime refusals (#494)
+
+Register Pudu.Compiler.Lower.Scalar explicitly with existing dependencies; no implicit module discovery or new package.
+
+Resolved Grill Log: reproduce actual interpreter dispatch, canonical settled kinds, operand order and diagnostic spans; never classify print Result as unit or implement invalid operations as integer arithmetic. No syntax/inference change.
+
+## Platform Int operators (#495)
+
+Register Backend.Runtime.Integer with existing dependencies. Register the native integer-program corpus in the test manifest; no new package.
+
+Resolved Grill Log: use defined unsigned bit patterns, validate counts before shifts, and prove signed arithmetic bounds before evaluation. The actual interpreter determines results, effect order and exact diagnostic vocabulary. No syntax or type-inference change.
+
+## Exact integer carrier integration (#498)
+
+Register Runtime.Integer.Value, Runtime.Integer.Arithmetic and
+Runtime.Integer.Bits explicitly using existing dependencies. Their Text-only
+catalogues introduce no extra native library or packaged data-file lookup.
+
+Resolved Grill Log: implement [[Exact Native Integer Carriers]] without changing the oracle. Preserve positive boundary values, exact diagnostic provenance, Never transfers, and warning-free helper selection. The internal carrier is not a public type-layout promise; full native coverage remains open.
+
+## Pure frame lowering (#499)
+
+Register Core.Frame, Compiler.Frame, Compiler.Frame.State and Compiler.Frame.Body
+using existing dependencies. Resolved Grill Log: this pure compiler partition
+does not allocate runtime frames or change the native calling convention yet.
+
+Register Backend.Emit.Frame.Value and Backend.Emit.Frame.Body with existing
+dependencies. Resolved Grill Log: generation returns typed faults and requires
+no allocator; generated bodies suspend through steps instead of recursive calls.
+
+## Portable wide-word prerequisite
+
+Register [[Backend Word128 Kernel]] with existing Text dependency; no runtime selection or ABI change yet.
+Resolved Grill Log: actual strict C11 execution must validate the prerequisite without claiming typed emission admission.
+
+## Exact wide values (#502)
+
+Register [[Backend Wide Integer Values]] using Text only.
+Resolved Grill Log: helper-selection and exact-sign checks must execute without admitting source types early.
+
+## Typed wide operation registration (#503)
+
+Register [[Backend Wide Operations]] using Text only, without selecting it for ordinary production emission before integration.
+Resolved Grill Log: execute independent mathematical/refusal and minimal-closure evidence; source admission remains a later obligation.
+
+## Wide runtime integration (#504)
+
+Register [[Backend Wide Integer Display]] with existing Text dependency.
+Resolved Grill Log: actual production runtime selection/output/failure evidence must execute before wide-frame/source admission.
+
+## Floating natural prerequisite (#508)
+
+Register [[Native Floating Natural Kernel]] and [[Native Floating Natural Tests]]
+as appropriate to production/test components, using existing dependencies.
+Resolved Grill Log: execute exact C11 helper evidence without admitting Float
+source, changing the active runtime ABI or adding a native dependency.
+
+## Third-party notice metadata (#509)
+
+Declare [[Native Floating Notices]] alongside LICENSE through license-files.
+Preserve the project license; source archives retain the complete upstream
+attribution/terms. Resolved Grill Log: notice delivery precedes the adapted
+formatter partition and adds no native dependency or source admission.
+
+## Exact binary64 formatting (#509)
+
+Register [[Native Binary64 Formatter]] and [[Native Binary64 Formatter Tests]]
+in the appropriate production/test components with existing dependencies.
+Resolved Grill Log: preserve the project license and upstream attribution,
+without source admission, runtime file lookup or a new native dependency.
+
+## Floating values (#510)
+
+Register [[Native Floating Values]] and [[Native Floating Value Tests]] in their
+production/test components using existing dependencies. Resolved Grill Log:
+raw-bit arithmetic evidence precedes source admission; runtime selection and
+ABI revision remain unchanged in this prerequisite.
+
+## Floating runtime selection (#511)
+
+Register [[Native Floating Runtime]], [[Native Runtime Dependencies]] and
+[[Native Floating Runtime Tests]] in the appropriate components with existing
+dependencies. Resolved Grill Log: execute actual catalogue/output evidence
+without changing source admission or the represented runtime ABI.
+
+## Text runtime module (#515)
+
+Register Pudu.Backend.Runtime.Text in exposed-modules beside the other runtime catalogues; no new dependency.
+
+## Text method modules (#516)
+
+Register Pudu.Compiler.Lower.Text and Pudu.Backend.Runtime.Text.Methods in exposed-modules; no new dependency.
+
+## Case module (#517)
+
+Register Pudu.Backend.Runtime.Text.Case in exposed-modules.
+
+## Char runtime (#518)
+
+Register Pudu.Backend.Runtime.Char in exposed-modules.
+
+## Tuple modules (#521)
+
+Register Pudu.Backend.Emit.Aggregate, Pudu.Backend.Runtime.Aggregate and
+Pudu.Compiler.Lower.Tuple in exposed-modules.
+
+Register Pudu.Compiler.Lower.Record in exposed-modules (#521).
+
+## Shared pattern binding enumeration
+
+Resolved Grill Log: register [[Syntax Pattern Bindings]] without a new package
+dependency; resolution and typing share syntax enumeration only.
+
+## Folded constant projection (#543)
+
+Resolved Grill Log: register [[Compiler Lower Constant]] using existing
+compiler, evaluator-value, text and containers modules, with no new dependency.
+
+## Shared reference lowering (#544)
+
+Resolved Grill Log: register [[Compiler Lower Reference]] using existing
+compiler/type/Core dependencies. No C runtime module or ABI change.
+
+## Output Results (#566)
+
+Resolved Grill Log: Register Pudu.Backend.Runtime.Output with the existing dependencies. See [[Native Output Results]].
+
+## Missing inherited descriptor context (#566)
+
+Resolved Grill Log: Register Pudu.Backend.Runtime.Process using existing dependencies.
+
+## First-class output builtins (#569)
+
+Resolved Grill Log: Register Pudu.Compiler.Lower.Intrinsic using the existing dependencies.
+
+## Stopping builtins (#633)
+
+Resolved Grill Log: Register Pudu.Compiler.Lower.Stop using the existing dependencies.
+
+## Default parameters (#638)
+
+Resolved Grill Log: Register Pudu.Compiler.Lower.Default using the existing dependencies.
+
+## Method values (#644)
+
+Resolved Grill Log: Register Pudu.Compiler.Lower.MethodValue using the existing dependencies.
+
+## Place assignment (#649)
+
+Resolved Grill Log: Register Pudu.Compiler.Lower.Place using the existing dependencies.
+
+## Mutable loans (#651)
+
+Resolved Grill Log: Register Pudu.Compiler.Lower.Loan using the existing dependencies.
+## Capsule support (#722)
+
+Ship `lib/Ark/Physics/*.pudu` for [[Ark Capsule Support]].
+Resolved Grill Log: verify the executable behavior and shipping before delivery.
+## Swept movement distribution (#720)
+
+Ship `lib/Ark/Physics/*.pudu` for [[Ark Swept Motion]].
+Resolved Grill Log: verify the module in the actual source archive.
+## Capsule cast distribution (#716)
+
+Ship `lib/Ark/Math/*.pudu` and `lib/Ark/Physics/*.pudu` for [[Ark Segment Box Distance]] and
+[[Ark Capsule Box Cast]]. Resolved Grill Log: verify both nested modules in the actual archive.
+## Capsule movement distribution (#714)
+
+Include `lib/Ark/Physics/*.pudu` as shipped library data for [[Ark Character Movement]].
+Resolved Grill Log: validate the actual source archive; passing from a checkout alone cannot
+prove an installed client can resolve this nested module.
+
+Register [[Eval Binary]] without a new dependency. Resolved Grill Log: native wire functions are tested directly before public builtin/facade integration.
+
+## Qualified concrete methods (#763)
+
+Register Type Check Qualified as a shared semantic boundary without adding dependencies.
+
+Resolved Grill Log: known concrete identity, lexical admission, module-export priority and provider ambiguity must agree for called and retained methods. See [[Qualified Record Method Delivery]].
+
+## Named sum publication (#761)
+
+Register [[Eval Record Construction]] using existing containers/text dependencies.
+
+Resolved Grill Log: carry checked owner and field order through syntax; preserve authored effects, diagnostics and cache identity. See [[Named Sum Publication]].
+
+## Imported variant candidates (#775)
+
+Register Resolve Ambiguity using existing dependencies only. Candidate policy is pure invocation-local resolver behavior; no new runtime or package surface is introduced.
+
+Resolved Grill Log: preserve complete declaring-owner ambiguity at uses across imports, lexical shadows and generated syntax. See [[Imported Variant Delivery]].
+
+## Imported providers (#734)
+
+Register Type.Check.Method.Binding with existing dependencies only; formed method registration is internal checker behavior.
+
+Resolved Grill Log: binding identity and admitted source spellings determine provider selection and help; registration order and schemes do not. See [[Imported Provider Delivery]].
+
+Register [[Runtime Implementation Head]] and [[Eval Type Witness]] with existing
+base/containers/text dependencies only. Resolved Grill Log: the head metadata
+depends on syntax, Value depends on it, and the witness evaluator depends on Value;
+no recursive module or new native dependency.
+
+## BigInt (#800)
+
+Resolved Grill Log: Register Pudu.Backend.Runtime.Integer.Big.Value and .Operations using the existing dependencies.
+
+## Decimal (#802)
+
+Resolved Grill Log: Register the Decimal runtime modules and Pudu.Compiler.Lower.Decimal using the existing dependencies.

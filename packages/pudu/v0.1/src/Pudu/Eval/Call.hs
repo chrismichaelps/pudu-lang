@@ -30,6 +30,7 @@ import Pudu.Eval.Builtin
   , callConvertInteger
   , callDecimal
   , callDisplay
+  , callFloatKernel
   , callEffect
   , callMapMethod
   , callMapOf
@@ -44,6 +45,7 @@ import Pudu.Eval.Builtin
   , isDecimalBuiltin
   , isHashingBuiltin
   )
+import Pudu.Eval.Builtin.Lanes (callLaneKernel)
 import Control.Concurrent (forkIO)
 import Control.Concurrent.MVar (newEmptyMVar, putMVar)
 import Control.Exception (SomeException, try)
@@ -59,6 +61,7 @@ import Pudu.Eval.Call.Path
   , readPath
   , selectTypes
   , typeArgumentNames
+  , withSelf
   , witnessOf
   )
 import Pudu.Eval.HashMap (callBucketsMethod, callBucketsOf)
@@ -187,12 +190,18 @@ callMemberSelecting select needs spanValue memberSpan lent implemented receiver 
   _ -> do
     method <-
       if implemented
-        then receiverOwners receiver >>= firstBound (\owner -> lookupMethod (owner <> "." <> member))
+        then receiverOwners receiver >>= firstBound (ownedMethod member)
         else pure Nothing
     calleeVal <- case method of
-      Just (FunctionValue closure) -> pure (FunctionValue (select closure{closureSelf = Just receiver}))
+      Just (owner, FunctionValue closure) ->
+        pure (FunctionValue (select (withSelf (TypeWitnessValue owner []) closure{closureSelf = Just receiver})))
       _ -> readMember memberSpan receiver member
     dispatchCall needs spanValue lent calleeVal values
+
+{-| The method an owner installs under this member, with the owner that held
+    it, so the call can name its `Self`. -}
+ownedMethod :: Text -> Text -> Evaluator (Maybe (Text, Value))
+ownedMethod member owner = fmap (\found -> (owner, found)) <$> lookupMethod (owner <> "." <> member)
 
 {-| Apply an evaluated callee to evaluated arguments. -}
 dispatchCall :: CallNeeds -> Span -> Lent -> Value -> [Value] -> Evaluator Value
@@ -200,7 +209,7 @@ dispatchCall needs spanValue lent target values =
   case target of
     FunctionValue closure -> callClosureLending needs closure values lent (Just spanValue)
     ForeignValue binding -> callForeign spanValue binding values
-    VariantValue name [] -> pure (VariantValue name values)
+    SumValue owner name [] -> pure (SumValue owner name values)
     BuiltinValue PanicBuiltin -> callPanic spanValue values
     BuiltinValue CharFromCodeBuiltin -> callCharFromCode spanValue values
     BuiltinValue MapOfBuiltin -> callMapOf spanValue values
@@ -213,6 +222,8 @@ dispatchCall needs spanValue lent target values =
     BuiltinValue ShowBuiltin -> callShow spanValue values
     BuiltinValue DisplayBuiltin -> callDisplay spanValue values
     BuiltinValue ConvertIntegerBuiltin -> callConvertInteger spanValue [] values
+    BuiltinValue (FloatKernelBuiltin kernel) -> callFloatKernel spanValue kernel values
+    BuiltinValue (LaneKernelBuiltin kernel) -> callLaneKernel spanValue kernel values
     BuiltinValue builtin
       | isDecimalBuiltin builtin -> callDecimal spanValue builtin values
     BuiltinValue effect -> callEffect spanValue effect values
@@ -266,10 +277,10 @@ evaluateCallee needs located@(Located calleeSpan expression) = case expression o
   MemberExpression target member -> do
     receiver <- callEvaluate needs target
     owners <- receiverOwners receiver
-    method <- firstBound (\owner -> lookupMethod (owner <> "." <> locatedValue member)) owners
+    method <- firstBound (ownedMethod (locatedValue member)) owners
     case method of
-      Just (FunctionValue closure) ->
-        pure (FunctionValue closure{closureSelf = Just receiver})
+      Just (owner, FunctionValue closure) ->
+        pure (FunctionValue (withSelf (TypeWitnessValue owner []) closure{closureSelf = Just receiver}))
       _ -> readMember calleeSpan receiver (locatedValue member)
   _ -> callEvaluate needs located
 
@@ -282,8 +293,8 @@ awaitTask needs spanValue task = case task of
     releaseChild task
     result <- runClosure needs closure bindings callSpan
     case result of
-      VariantValue "Ok" _ -> unwrapTry spanValue result
-      VariantValue "Err" _ -> unwrapTry spanValue result
+      SumValue "Result" "Ok" _ -> unwrapTry spanValue result
+      SumValue "Result" "Err" _ -> unwrapTry spanValue result
       _ -> pure result
   _ -> abortAt (Just spanValue) "E7008" ("cannot await a " <> valueKind task)
     (Just "await a task returned by an async function")

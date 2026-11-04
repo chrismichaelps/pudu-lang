@@ -78,7 +78,7 @@ digest builtin, preserving total naming and exhaustive dispatch.
 
 ## Desktop capability vocabulary
 
-`DesktopOpenBuiltin`, `DesktopPresentBuiltin`, `DesktopPumpBuiltin`, `DesktopInputsBuiltin`,
+`DesktopOpenBuiltin`, `DesktopPresentBuiltin`, `DesktopPumpBuiltin`, `DesktopInputsBuiltin`, `DesktopConfigureBuiltin`,
 `DesktopClipboardReadBuiltin`, `DesktopClipboardWriteBuiltin`, `DesktopAccessibilityBuiltin`,
 `DesktopAccessibilityReportBuiltin`, `DesktopMenuBuiltin`, `DesktopMenuReportBuiltin`, and
 `DesktopCloseBuiltin` name the
@@ -186,6 +186,15 @@ name wide.
 
 Resolved Grill Log: use one explicit constructor and total name mapping for atomic
 replacement; definitions retain no runtime policy.
+
+## Binary64 and lane kernels
+
+`LaneKernelBuiltin !LaneKernel` carries every [[Lane Kernel Identity]] entry the same way.
+
+`FloatKernelBuiltin !FloatKernel` is one constructor for every [[Float Kernel Identity]] entry;
+`builtinName` delegates to `floatKernelName`, so a kernel's binding has one spelling.
+Grill Log — **Q:** one constructor per kernel? **A:** No; a carried enumeration keeps the
+evaluator, checker and resolver reading the same closed list.
 
 ## Referenced by
 

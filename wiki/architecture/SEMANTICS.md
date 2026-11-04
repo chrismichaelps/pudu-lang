@@ -1,6 +1,7 @@
 ---
 type: architecture
-semantic_version: "1.0.0-draft"
+semantic_version: "1.0.1-draft"
+semantic_version: "2.0.0-draft"
 status: NORMATIVE_DRAFT
 tags: [architecture, semantics]
 aliases: [Semantic System, Pudu Semantics]
@@ -99,7 +100,7 @@ Supporting judgements:
 
 - Evaluation is strict and left-to-right.
 - In `f(a, b)`, evaluate `f`, then `a`, then `b`, then call.
-- Record and collection elements evaluate in source order.
+- Record and collection elements evaluate in source order. A record value holds its fields in declaration order, so the order a literal writes them in changes when each runs but never equality or rendering.
 - A set literal evaluates every written member in source order, then constructs the existing ordered `Set` value. Duplicate members collapse only after their expressions have run, so duplication never removes an effect or changes failure order. Iteration and rendering remain key-ordered.
 - Set membership evaluates its candidate before its Set operand and performs one lookup in the ordered Set. It neither iterates user code nor defines a general collection protocol.
 - Boolean `&&` and `||` short-circuit.
@@ -115,7 +116,7 @@ Supporting judgements:
 
 ## Control-Flow Typing
 
-- `if` conditions have `Bool`; reachable branch values unify to one result type.
+- `if` conditions have `Bool`. With `else`, reachable branch values unify to one result type. Without `else`, the expression has unit type: evaluate the condition once, run the taken block completely when true, discard only its normal result, and yield unit on either normal path. Return/break/continue unwinds, diagnostics, effects, and existing scope cleanup are preserved. Expected types, including dynamic expectations nested in aggregates, apply to unit rather than widening the discarded branch result. [[ADR-0025-if-without-else-unit-results]] records this conformance correction.
 - `if let p = e` evaluates `e` exactly once and tests `p` with the same pattern semantics as a match arm. On success its immutable bindings scope only over the then block; on failure the optional else expression runs, or the form yields unit when absent. Reachable branch values unify as for ordinary `if`. Syntactically irrefutable `p` is `E1056`, because ordinary `let` states an unconditional binding directly.
 - `match` scrutinee evaluates once. Arms are tested top-to-bottom; the first matching pattern with a true guard executes.
 - Closed sum, boolean, tuple/record, and finite literal-domain matches are statically checked for usefulness and exhaustiveness where decidable.
@@ -183,6 +184,7 @@ drop p:                     Available → Moved
 - Wrapping and saturating operators are separate typed operations and cannot be introduced by optimization.
 - Shifts require a non-negative count smaller than the bit width in checked form; library operations provide masked variants explicitly.
 - Floating point follows the declared target IEEE behavior. Reassociation, contraction, and fast-math transformations require an explicit future compilation mode and cannot be default.
+- Float operators (`<`, `==`, ...) answer as IEEE does. The order that sorts keys and compares aggregates is total: NaN equals NaN and sorts after every number, and `-0.0` equals `0.0`.
 - `Decimal` has no semantics until its precision/rounding ADR is accepted; it is reserved but rejected by semantic analysis meanwhile.
 
 ## Async and Cancellation Semantics
@@ -266,6 +268,21 @@ These obligations require executable property/conformance tests now and mechaniz
 
 ## Revision Ledger
 
+- **1.0.1-draft · 2026-10-17:** Clarified the existing unit result of an if without else across inference, contextual checking, tree and compiled evaluation, boxed loop regions, derive residualization, constant folding, and native lowering. This corrects implementation paths that leaked a non-unit branch result; conforming unit behavior and with-else values are unchanged. See [[ADR-0025-if-without-else-unit-results]].
+
+- **1.0.0-draft clarification · 2026-10-20:** A record literal's written field order no longer
+  leaks into the value: fields still run in written order, then the record holds them in
+  declaration order, so `Point{y: 2, x: 1} == Point{x: 1, y: 2}` and both render as declared
+  (#519). Programs that wrote fields in declaration order are unaffected.
+
+- **1.0.0-draft clarification · 2026-10-20:** The value order behind keys and aggregate
+  comparison is total over floats: NaN equals NaN and sorts after every number (#522). Before,
+  a NaN member made a tuple both less and greater than another, and a map could hold one key
+  twice. Float operators are unchanged.
+- **2.0.0-draft · 2026-10-27:** Reserve `Ark` as a shipped library root, with project-first
+  lookup and exclusion of installed dependency roots. Existing package-owned Ark namespaces
+  require migration; see [[ADR-0025-integrated-engine-namespace]]. No syntax change.
+
 - **1.0.0-draft · 2026-09-19:** Corrected open-range extent semantics: `length()` on a range
   missing either end reports `E7004` instead of returning zero, while `isBounded()`, `isEmpty()`, and
   `contains()` retain distinct, consistent meanings. The evaluator also no longer admits a tuple
@@ -307,6 +324,6 @@ These obligations require executable property/conformance tests now and mechaniz
 
 ## Referenced by
 
-[[architecture/_MOC]] · [[architecture/OVERVIEW]] · [[Engineering Delivery]] · [[Performance Constitution]] · [[grammar/pudu]] · [[Pudu Type]] · [[Ownership]] · [[Core IR]] · [[Semantics]] · [[ADR-0001-language-purpose-and-v1-scope]] · [[ADR-0002-compiler-pipeline]] · [[ADR-0003-ownership-and-resource-safety]] · [[ADR-0005-performance-and-low-level-optimization]] · [[CHANGELOG]] · [[2026-08-21-frontend-foundation]]
+[[architecture/_MOC]] · [[architecture/OVERVIEW]] · [[Engineering Delivery]] · [[Performance Constitution]] · [[grammar/pudu]] · [[Pudu Type]] · [[Ownership]] · [[Core IR]] · [[Semantics]] · [[ADR-0001-language-purpose-and-v1-scope]] · [[ADR-0002-compiler-pipeline]] · [[ADR-0003-ownership-and-resource-safety]] · [[ADR-0005-performance-and-low-level-optimization]] · [[CHANGELOG]] · [[ADR-0025-if-without-else-unit-results]] · [[2026-08-21-frontend-foundation]]
 
 Qualified expression paths honor a nearer local value before imported exports or nominal/trait member selection. Explicit type-owner positions retain independent type lookup. [[Qualified Shadow Delivery]] repairs #471 without introducing block-local import syntax.

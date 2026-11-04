@@ -1,0 +1,74 @@
+module UsesArkVfs
+
+import Std.Fs as Fs
+import Std.Path as Path
+import Ark.Assets.Texture as Texture
+import Ark.Math.Color as Color
+import Ark.Platform.Vfs as Vfs
+
+fn require(condition: Bool, name: Str) {
+  if !condition { panic(name) }
+}
+
+fn memory() {
+  let bytes = bytesOf([255, 0, 0, 255])
+  let files = mapOf([("textures/red.rgba", bytes)])
+  let Ok(vfs) = Vfs.mountMemory(Vfs.empty(), "game", &files) else { panic("memory mount") }
+  require(Vfs.read(&vfs, "game:/textures/red.rgba") == Ok(bytes), "memory bytes")
+  require(Vfs.mountMemory(vfs, "game", &files) == Err(Vfs.DuplicateMount("game")), "duplicate mount")
+  require(Vfs.read(&vfs, "missing:/file") == Err(Vfs.UnknownMount("missing")), "unknown mount")
+  require(Vfs.read(&vfs, "game:/missing") == Err(Vfs.NotFound("missing")), "missing memory resource")
+  require(Vfs.unmount(vfs, "missing") == None, "unknown unmount")
+  let Some(removed) = Vfs.unmount(vfs, "game") else { panic("unmount") }
+  require(Vfs.read(&removed, "game:/textures/red.rgba") == Err(Vfs.UnknownMount("game")), "unmounted namespace")
+  let replacements = mapOf([("textures/red.rgba", bytesOf([0, 0, 255, 255]))])
+  let Ok(replaced) = Vfs.mountMemory(removed, "game", &replacements) else { panic("replacement") }
+  require(Vfs.read(&replaced, "game:/textures/red.rgba") == Ok(bytesOf([0, 0, 255, 255])), "replacement snapshot")
+  require(Vfs.read(&vfs, "game:/textures/red.rgba") == Ok(bytes), "old snapshot retains bytes")
+  for invalid in ["", ".", "..", "a/b", "a\\b", "a:b", "a\0b"] {
+    require(Vfs.mountMemory(Vfs.empty(), invalid, &files) == Err(Vfs.InvalidMountName(invalid)), "invalid mount name")
+  }
+  for invalid in ["", "game:/", "game:/../file", "game:/dir/./file", "game:/dir//file", "/absolute", "game:/C:/file", "game:/a\\b", "game:/a\0b", "game://absolute", "game:relative"] {
+    require(Vfs.read(&vfs, invalid) == Err(Vfs.InvalidVirtualPath(invalid)), "invalid virtual path")
+  }
+  require(Vfs.mountMemory(Vfs.empty(), "bad", &mapOf([("../escape", bytes)])) == Err(Vfs.InvalidVirtualPath("../escape")), "noncanonical memory key")
+  let fabricated = Vfs.Vfs{mounts: mapOf([("bad", Vfs.Mount{kind: "unknown", root: "", files})])}
+  require(Vfs.read(&fabricated, "bad:/file") == Err(Vfs.UnknownBackend("unknown")), "fabricated backend")
+  let emptyRoot = Vfs.Vfs{mounts: mapOf([("bad", Vfs.Mount{kind: "directory", root: "", files})])}
+  require(Vfs.read(&emptyRoot, "bad:/file") == Err(Vfs.InvalidDirectory("")), "fabricated directory root")
+}
+
+fn filesystem(directory: Str) -> Result[(), Fs.FsError] {
+  let root = Fs.temporaryDirectoryIn(directory, "resources-") ?
+  let texturePath = Path.join(root, "texture.rgba")
+  let bytes = bytesOf([255, 0, 0, 255, 0, 0, 255, 255])
+  Fs.writeAtomically(texturePath, &bytes) ?
+  let Ok(vfs) = Vfs.mountDirectory(Vfs.empty(), "assets", root) else { panic("directory mount") }
+  let Ok(loaded) = Vfs.read(&vfs, "assets:/texture.rgba") else { panic("resource read") }
+  require(loaded == bytes, "disk byte identity")
+  let Some(texture) = Texture.rgba8(2, 1, loaded, "linear") else { panic("texture asset") }
+  require(Texture.nearest(&texture, 0.75, 0.5) == Some(Color.opaque(0.0, 0.0, 1.0)), "virtual bytes become a usable texture")
+  require(Vfs.mountDirectory(Vfs.empty(), "file", texturePath) == Err(Vfs.InvalidDirectory(texturePath)), "file is not a mount root")
+  require(Vfs.mountDirectory(Vfs.empty(), "empty", "") == Err(Vfs.InvalidDirectory("")), "empty root refused")
+  Fs.linkTo(texturePath, Path.join(root, "alias.rgba")) ?
+  require(Vfs.read(&vfs, "assets:/alias.rgba") == Ok(bytes), "contained symlink resolves")
+  let outside = Path.join(directory, "outside.rgba")
+  Fs.writeAtomically(outside, &bytes) ?
+  Fs.linkTo(outside, Path.join(root, "escape.rgba")) ?
+  require(Vfs.read(&vfs, "assets:/escape.rgba") == Err(Vfs.FileFailure(Fs.OutsideBase("escape.rgba"))), "symlink escape refused")
+  match Vfs.read(&vfs, "assets:/missing") {
+    case Err(_) => {}
+    case Ok(_) => panic("missing disk resource")
+  }
+  Ok(())
+}
+
+export fn main() -> Int {
+  memory()
+  match Fs.withTemporaryDirectory("ark-vfs-", filesystem) {
+    case Ok(_) => {}
+    case Err(_) => panic("filesystem fixture")
+  }
+  print("ark vfs: ok")
+  0
+}
