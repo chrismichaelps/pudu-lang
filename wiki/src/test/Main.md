@@ -109,6 +109,9 @@ Register [[Mutex Admission Spec]] explicitly with existing dependencies. Resolve
 
 Register [[Database Challenge Spec]] explicitly with existing dependencies. Resolved Grill Log: complete-suite execution and focused execution use the same real challenge admission assertions.
 
+## Native diagnostic contracts (#486)
+
+Resolved Grill Log: Include nativeDiagnosticProperties in ordinary diagnostic outcomes and aggregate failures; preserve the full gate and optional focus filter.
 ## Native Core contracts (#486)
 
 Resolved Grill Log: Execute coreProperties and aggregate their results in the ordinary failure status, preserving the existing full runner and optional name filter.

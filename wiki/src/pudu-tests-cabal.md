@@ -183,6 +183,9 @@ Register [[Mutex Admission Spec]] explicitly with existing dependencies. Resolve
 
 Register [[Database Challenge Spec]] explicitly with existing dependencies. Resolved Grill Log: complete-suite execution and focused execution use the same real challenge admission assertions.
 
+## Native diagnostic contracts (#486)
+
+Resolved Grill Log: Register Pudu.Diagnostic.NativeSpec using existing dependencies.
 ## Native Core contracts (#486)
 
 Resolved Grill Log: Register Pudu.CoreSpec using the existing test dependencies.
