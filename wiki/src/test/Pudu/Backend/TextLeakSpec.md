@@ -153,4 +153,12 @@ BigInt successes also run under counted allocation.
 
 ## Decimal (#802)
 
-Decimal's library-free success also runs under counted allocation.
+Decimal's library-free successes also run under counted allocation.
+
+## Decimal callable cleanup (#806)
+
+Add a focused native Decimal allocation group over decimalLeakPrograms;
+the comprehensive allocation corpus continues to include it. It covers
+owned Decimal arguments, Option payloads, closures and text parsing via
+primitive values. Resolved Grill Log: use the existing malloc/calloc/free
+instrumentation and exact output checks, with no library import or fallback.

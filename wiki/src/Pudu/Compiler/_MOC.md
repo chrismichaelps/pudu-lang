@@ -71,7 +71,7 @@ Dependency direction: Library → Program. Only [[Compiler Program]] reads files
 
 - [[Compiler Lower Reference]] — checked shared-reference identity lowering (#544).
 
-- [[Compiler Lower Intrinsic]] — first-class output builtin bodies (#569).
+- [[Compiler Lower Intrinsic]] — first-class builtin bodies, including Decimal primitives (#806).
 - [[Compiler Lower Place]] — field and element assignment (#649).
 - [[Compiler Lower Loan]] — `&mut` parameters and their call sites (#651).
 - [[Compiler Lower Decimal]] — Decimal literals and primitives (#802).

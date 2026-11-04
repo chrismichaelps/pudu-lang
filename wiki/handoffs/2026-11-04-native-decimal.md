@@ -1,6 +1,6 @@
 ---
 type: handoff
-status: ACTIVE
+status: DONE
 issue: 802
 aliases: [Native Decimal Delivery]
 ---
@@ -18,8 +18,9 @@ Evidence: every corpus program matches the tree interpreter byte for byte;
 the Decimal groups pass under Clang, GCC 15 and ASan/UBSan with zero live
 allocations; the full test binary passes (759 properties).
 
-Exact next action: consolidate the native stack into dev (oldest first),
-then entry result reporting's remaining callable forms.
+The native stack is now consolidated into dev. Callable continuation:
+[[Native Decimal Callable Delivery]] owns #806, the seven primitive values
+and their entry rendering through the existing builtin closure ABI.
 
 ## Referenced by
 

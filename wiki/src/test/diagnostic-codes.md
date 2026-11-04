@@ -31,6 +31,11 @@ unchecked allow-list.
 integer result cannot be represented by the operation's declared fixed-width result type; the
 operation-specific wording does not change that identity.
 
+`E7010` means a Decimal quotient has no exact base-ten expansion, in the
+interpreter and native frame emitter. Both retain the same message and help.
+Resolved Grill Log (#806): register this existing shared condition instead
+of assigning a backend-only code or suppressing either reporting module.
+
 ## Grill Log
 
 - **Q:** Ignore the lint modules wholesale? **A:** No. _Rationale:_ explicit per-code declarations
