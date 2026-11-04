@@ -67,7 +67,7 @@ Dependency direction: Library → Program. Only [[Compiler Program]] reads files
 
 - [[Compiler Lower Scalar]] — represented operators and ordered runtime failures (#494).
 
-- [[Compiler Lower Constant]] — typed projection of compiler-folded constants (#543).
+- [[Compiler Lower Constant]] — typed frozen data projection, including collections and ranges (#808).
 
 - [[Compiler Lower Reference]] — checked shared-reference identity lowering (#544).
 

@@ -2,8 +2,10 @@
 module Pudu.Compiler.Lower.Constant (lowerConstant) where
 
 import Data.List (find)
+import Data.Foldable (toList)
 import qualified Data.ByteString as ByteString
 import qualified Data.Map.Strict as Map
+import qualified Data.Set as Set
 import Data.Text (Text)
 import GHC.Float (castDoubleToWord64)
 import Pudu.Compiler.Lower.State (LowerContext (..), LowerState (..), halt, lookupConstant)
@@ -11,8 +13,8 @@ import Pudu.Compiler.Lower.Types (LowerTypes, recordFields, sumVariants, typeFor
 import Pudu.Core
 import Pudu.DecimalLiteral (Decimal (..))
 import Pudu.Eval.Frozen (thaw)
-import Pudu.Eval.Value (Value (..))
-import Pudu.IntegerLiteral (IntegerKind (UnsignedKind), integerKindFits)
+import Pudu.Eval.Value (Value (..), OrdValue (..))
+import Pudu.IntegerLiteral (IntegerKind (PlatformSigned, UnsignedKind), integerKindFits)
 import Pudu.Source (Span)
 
 lowerConstant :: LowerState -> Span -> [Text] -> Maybe (LowerState, Maybe (CoreExpression, CoreType))
@@ -49,6 +51,15 @@ project types at kind value = CoreExpression at kind <$> shape
     (CoreCharType, CharValue character) -> Just (CoreCharLiteral character)
     (CoreDecimalType, DecimalValue (Decimal coefficient scale)) -> Just (CoreDecimalLiteral coefficient scale)
     (CoreUnitType, UnitValue) -> Just (CoreBlockValue (CoreBlock [] Nothing))
+    (CoreArrayType element, ArrayValue members) -> CoreArray <$> traverse (member element) (toList members)
+    (CoreMapType key held, MapValue entries) -> do
+      pairs <- traverse (\(OrdValue label, stored) ->
+        member (CoreTupleType [key, held]) (TupleValue [label, stored])) (Map.toAscList entries)
+      pure (keyed (CoreTupleType [key, held]) pairs)
+    (CoreSetType element, SetValue members) ->
+      keyed element <$> traverse (member element . unOrdValue) (Set.toAscList members)
+    (CoreRangeType, RangeValue low inclusive high) ->
+      CoreRangeValue <$> traverse endpoint low <*> pure inclusive <*> traverse endpoint high
     (CoreTupleType kinds, TupleValue members)
       | length kinds == length members -> CoreTuple <$> sequence (zipWith member kinds members)
     (CoreRecordType name _, RecordValue actual fields)
@@ -79,6 +90,9 @@ project types at kind value = CoreExpression at kind <$> shape
           | ((label, fieldKind), held) <- zip (coreVariantFields variant) payload ]
     | otherwise = Nothing
   member = project types at
+  keyed element members = CoreKeyedMethod KeyedFromArray
+    (CoreExpression at (CoreArrayType element) (CoreArray members)) []
+  endpoint number = member (CoreIntegerType PlatformSigned) (IntValue PlatformSigned number)
   field fields (name, fieldKind) = do
     held <- Map.lookup name fields
     (,) name <$> member fieldKind held

@@ -1,5 +1,5 @@
 {-| @Test.Backend.ModulePrograms — programs of several modules with hand-written answers. -}
-module Pudu.Backend.ModulePrograms (modulePrograms, moduleRefusalPrograms, constantPrograms) where
+module Pudu.Backend.ModulePrograms (modulePrograms, moduleRefusalPrograms, constantPrograms, constantModulePrograms, constantRefusalPrograms) where
 
 import Data.Text (Text)
 import qualified Data.Text as Text
@@ -62,7 +62,7 @@ layout = ("Layout.pudu", Text.unlines
 
 modulePrograms :: [(String, [(FilePath, Text)], Text, Text)]
 modulePrograms =
-  [(label, [], source, answer) | (label, source, answer) <- constantPrograms <> referenceSuccessPrograms <> methodSuccessPrograms <> genericSuccessPrograms <> trySuccessPrograms <> forSuccessPrograms <> closureSuccessPrograms <> arraySuccessPrograms <> arrayPatternSuccessPrograms <> textCollectionSuccessPrograms <> convertSuccessPrograms <> keyedSuccessPrograms <> shapeSuccessPrograms <> rangeSuccessPrograms <> bytesSuccessPrograms] <> renderingCallableModulePrograms <> defaultParameterModulePrograms <> shapeModulePrograms <>
+  [(label, [], source, answer) | (label, source, answer) <- constantPrograms <> referenceSuccessPrograms <> methodSuccessPrograms <> genericSuccessPrograms <> trySuccessPrograms <> forSuccessPrograms <> closureSuccessPrograms <> arraySuccessPrograms <> arrayPatternSuccessPrograms <> textCollectionSuccessPrograms <> convertSuccessPrograms <> keyedSuccessPrograms <> shapeSuccessPrograms <> rangeSuccessPrograms <> bytesSuccessPrograms] <> constantModulePrograms <> renderingCallableModulePrograms <> defaultParameterModulePrograms <> shapeModulePrograms <>
   [ ( "module-qualified functions are values with one identity"
     , [ ("Lib.pudu", Text.unlines
           [ "module Lib", ""
@@ -178,13 +178,76 @@ constantPrograms =
         , "Some((Box{text: \"original\", number: 3}, Ok(\"payload\")))"
         , "Some((Box{text: \"original\", number: 3}, Ok(\"payload\")))"
         , "Some((Box{text: \"original\", number: 3}, Ok(\"payload\")))", "true λ ()" ])
+  , ("folded collections retain nested owned data and independent reads", program
+      [ "const NAMES = [\"a\", \"b\"]"
+      , "const TABLE = mapOf([(\"b\", [3, 4]), (\"a\", [1, 2])])"
+      , "const MARKS = setOf([\"z\", \"a\", \"z\"])"
+      , "const RANGES = (..4, 2.., 1..=3, ..)"
+      , "const HELD = Some((NAMES, TABLE, MARKS, RANGES))"
+      , "fn held() { HELD }"
+      , "fn main() -> Int {"
+      , "  var copy = NAMES"
+      , "  copy[0] = \"changed\""
+      , "  print(show(copy) + \" \" + show(NAMES))"
+      , "  print(show(TABLE) + \" \" + show(MARKS) + \" \" + show(RANGES))"
+      , "  if let Some((names, table, marks, ranges)) = held() { print(show(names) + show(marks) + show(table.get(\"a\")) + show(ranges[2])) }"
+      , "  for index in 0..30 { let value = held() }"
+      , "  0"
+      , "}" ]
+    , "[\"changed\", \"b\"] [\"a\", \"b\"]\n{\"a\": [1, 2], \"b\": [3, 4]} #{\"a\", \"z\"} (..4, 2.., 1..=3, ..)\n[\"a\", \"b\"]#{\"a\", \"z\"}Some([1, 2])1..=3\n")
+  , ("folded empty collections, ranges and floating key representatives", program
+      [ "const EMPTY: Array[Str] = []"
+      , "const MAP: Map[Str, Int] = mapOf([])"
+      , "const SET: Set[Int] = setOf([])"
+      , "const RANGES = [1..3, 1..=3, 3..1, ..2, 2..]"
+      , "const KEYS = mapOf([(-0.0, \"first\"), (0.0, \"last\")])"
+      , "const EXTREMES = (-9223372036854775808..-9223372036854775807, 9223372036854775807..=9223372036854775807)"
+      , "fn main() -> Int {"
+      , "  print(show(EMPTY) + \" \" + show(MAP) + \" \" + show(SET))"
+      , "  print(show(RANGES) + \" \" + show(KEYS))"
+      , "  print(show(EXTREMES))"
+      , "  var total = 0"
+      , "  for number in RANGES[1] { total = total + number }"
+      , "  print(display(total) + \" \" + show(EMPTY.push(\"new\")) + show(EMPTY))"
+      , "  0"
+      , "}" ]
+    , "[] {} #{}\n[1..3, 1..=3, 3..1, ..2, 2..] {-0.0: \"last\"}\n(-9223372036854775808..-9223372036854775807, 9223372036854775807..=9223372036854775807)\n6 [\"new\"][]\n")
+  , ("folded nominal sums retain collection payloads", program
+      [ "type Packet = Items(Array[Str]) | Empty"
+      , "const HELD = Items([\"a\", \"b\"])"
+      , "fn main() -> Int { print(show(HELD))\n 0 }" ]
+    , "Items([\"a\", \"b\"])\n")
   ]
+
+constantModulePrograms :: [(String, [(FilePath, Text)], Text, Text)]
+constantModulePrograms =
+  [ ("folded imported collections keep canonical nominal element owners"
+    , [("Data.pudu", Text.unlines
+        [ "module Data", "export type Item = { name: Str }"
+        , "export const ITEMS: Array[Item] = [Item{name: \"module\"}]"
+        , "export const TABLE: Map[Str, Array[Item]] = mapOf([(\"row\", ITEMS)])" ])]
+    , program
+        [ "import Data {TABLE}", "import Data as D"
+        , "type Item = { code: Int }", "const ITEMS = [Item{code: 7}]"
+        , "fn main() -> Int {"
+        , "  print(show(ITEMS) + \" \" + show(D.ITEMS) + \" \" + show(TABLE))"
+        , "  print(D.ITEMS[0].name)", "  0", "}" ]
+    , "[Item{code: 7}] [Item{name: \"module\"}] {\"row\": [Item{name: \"module\"}]}\nmodule\n") ]
+
+constantRefusalPrograms :: [(String, [(FilePath, Text)], Text)]
+constantRefusalPrograms =
+  [ ("a frozen array read retains the failing index span", [], program
+      [ "const ITEMS = [\"a\"]", "fn main() -> Int {"
+      , "  print(\"before\")", "  print(ITEMS[2])", "  0", "}" ])
+  , ("a frozen open range retains the length refusal", [], program
+      [ "const OPEN = 2..", "fn main() -> Int {"
+      , "  print(show(OPEN))", "  OPEN.length()", "}" ]) ]
 
 {-| Held to the interpreter's rendered diagnostics: a failure inside an
     imported function reports at its own module's source. -}
 moduleRefusalPrograms :: [(String, [(FilePath, Text)], Text)]
 moduleRefusalPrograms =
-  [(label, [], source) | (label, source) <- referenceRefusalPrograms <> methodRefusalPrograms <> genericRefusalPrograms <> tryRefusalPrograms <> forRefusalPrograms <> closureRefusalPrograms <> arrayRefusalPrograms <> arrayPatternRefusalPrograms <> textCollectionRefusalPrograms <> convertRefusalPrograms <> keyedRefusalPrograms <> rangeRefusalPrograms <> bytesRefusalPrograms] <>
+  constantRefusalPrograms <> [(label, [], source) | (label, source) <- referenceRefusalPrograms <> methodRefusalPrograms <> genericRefusalPrograms <> tryRefusalPrograms <> forRefusalPrograms <> closureRefusalPrograms <> arrayRefusalPrograms <> arrayPatternRefusalPrograms <> textCollectionRefusalPrograms <> convertRefusalPrograms <> keyedRefusalPrograms <> rangeRefusalPrograms <> bytesRefusalPrograms] <>
   [ ( "a constant read preserves the runtime overflow operation's span"
     , [], program
         [ "const MAX = 9223372036854775807", "fn main() -> Int {"
