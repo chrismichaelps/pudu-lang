@@ -183,6 +183,9 @@ Register [[Mutex Admission Spec]] explicitly with existing dependencies. Resolve
 
 Register [[Database Challenge Spec]] explicitly with existing dependencies. Resolved Grill Log: complete-suite execution and focused execution use the same real challenge admission assertions.
 
+Register [[Native Word128 Tests]] explicitly without new dependencies. Resolved Grill Log:
+the compiled kernel corpus runs in the complete suite and contributes to its
+aggregate failure status. The full release gate remains unchanged.
 ## Native diagnostic contracts (#486)
 
 Resolved Grill Log: Register Pudu.Diagnostic.NativeSpec using existing dependencies.

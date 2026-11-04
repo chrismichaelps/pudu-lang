@@ -5,6 +5,10 @@ tags: [changelog]
 
 # Changelog
 
+## 2026-10-27 — Portable native word kernel (#501)
+
+- [[Backend Word128 Kernel]] supplies portable raw arithmetic and selectable dependencies.
+- [[Native Word128 Tests]] executes independent Integer answers without admitting new source types.
 ## 2026-10-27 — Native diagnostic contract partition (#486)
 
 Register the existing native failure vocabulary independently of runtime and
