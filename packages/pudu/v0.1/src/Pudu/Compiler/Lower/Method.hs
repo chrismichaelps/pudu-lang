@@ -13,7 +13,7 @@ import Pudu.Compiler.Lower.State
   ( CoreSignature (..), Instance (..), LowerContext (..), LowerState (..), ModuleScope (..)
   , bindLocal, halt, inModule, refused, withTypeBindings )
 import Pudu.Compiler.Lower.Generic (specialize)
-import Pudu.Compiler.Lower.Loan (Operand (..), lowerLoanedOperands)
+import Pudu.Compiler.Lower.Loan (Callee (..), Operand (..), lowerLoanedOperands)
 import Pudu.Compiler.Lower.Types (formedCoreTypeIn, ownerKeyOf, typeBindings, typeFactAt, typeForSpan, nativeValueType)
 import Pudu.Core
 import Pudu.Eval.Operator.Access (arrayMethods, mapMethods, setMethods, stringMethods)
@@ -223,7 +223,7 @@ loanedInstanceCall lower state at key instantiated receiver count operands =
   case instanceTarget state at key instantiated receiver of
     (admitted, Just (target, signature))
       | not (null (signatureLoaned signature)), length (signatureParameters signature) == count ->
-          Just (lowerLoanedOperands lower admitted at target signature False operands)
+          Just (lowerLoanedOperands lower admitted at (Direct target) signature False operands)
     _ -> Nothing
 
 {-| A call to a method instance with lowered operands, receiver first. -}

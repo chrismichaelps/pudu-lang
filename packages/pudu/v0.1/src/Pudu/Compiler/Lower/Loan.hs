@@ -5,7 +5,9 @@
     the frame after the body. The call site holds each argument in order,
     resolving a lent place once where its argument stands, then stores each
     final through that place in parameter order, as `storePlace` does. -}
-module Pudu.Compiler.Lower.Loan (Operand (..), loanedReturn, loanedValue, lowerLoanedBody, lowerLoanedCall, lowerLoanedOperands) where
+module Pudu.Compiler.Lower.Loan
+  ( Callee (..), Operand (..), closeLoaned, loanedReturn, loanedValue, lowerLoanedBody, lowerLoanedCall, lowerLoanedOperands, valueSignature
+  ) where
 
 import Data.List (elemIndex, sortOn)
 import Data.List.NonEmpty (NonEmpty (..))
@@ -27,18 +29,20 @@ type Lowered = (LowerState, Maybe (CoreExpression, CoreType))
 lowerLoanedBody :: LowerBody -> LowerBody
 lowerLoanedBody lowerBody located signature state = case lowerBody located signature lent of
   (after, Just function) ->
-    let body = coreFunctionBody function
-        at = locatedSpan located
-        (final, result) = case coreBlockResult body of
-          Just value -> Just <$> loanedValue after (coreExpressionSpan value) value
-          Nothing
-            | blockType (coreBlockStatements body) Nothing == CoreNeverType -> (after, Nothing)
-            | otherwise -> Just <$> loanedValue after at (unitValue at)
-     in ( final{lowerLoaned = []}
-        , Just function{coreFunctionResult = loanedType signature, coreFunctionBody = body{coreBlockResult = result}} )
+    let (final, body) = closeLoaned after (locatedSpan located) (coreFunctionBody function)
+     in (final{lowerLoaned = []}, Just function{coreFunctionResult = loanedType signature, coreFunctionBody = body})
   (after, Nothing) -> (after{lowerLoaned = []}, Nothing)
  where
   lent = state{lowerLoaned = loanedLocals signature}
+
+{-| A body lowered with loans in the state, its trailing result made to
+    answer the finals too. -}
+closeLoaned :: LowerState -> Span -> CoreBlock -> (LowerState, CoreBlock)
+closeLoaned state at body = case coreBlockResult body of
+  Just value -> (\answered -> body{coreBlockResult = Just answered}) <$> loanedValue state (coreExpressionSpan value) value
+  Nothing
+    | blockType (coreBlockStatements body) Nothing == CoreNeverType -> (state, body)
+    | otherwise -> (\answered -> body{coreBlockResult = Just answered}) <$> loanedValue state at (unitValue at)
 
 {-| A `return` of the function being lowered. -}
 loanedReturn :: LowerState -> Span -> Maybe CoreExpression -> (LowerState, CoreStatementShape)
@@ -58,6 +62,17 @@ loanedValue state at value
           tuple = CoreExpression at kind (CoreTuple (map (reading at) (local : lowerLoaned state)))
        in (held, CoreExpression at kind (CoreBlockValue (CoreBlock [CoreStatement at (CoreDeclare local value)] (Just tuple))))
 
+{-| What a loaned call reaches: a function by name, or whatever function a
+    value holds, which runs after the operands, as `evaluateCall` orders a
+    call through a value. -}
+data Callee = Direct !Text | Through !(Located Expression)
+
+{-| The signature a call through a value of a function type reads: its
+    formed inputs, its declared result, and its `&mut` positions. -}
+valueSignature :: Span -> [CoreType] -> CoreType -> [Int] -> CoreSignature
+valueSignature at inputs result loaned =
+  CoreSignature [CoreParameter (CoreLocal index "" input) at | (index, input) <- zip [0 ..] inputs] result loaned
+
 {-| How an operand of a loaned call is written: an argument, or the
     receiver of a method call, which lends whatever place it names. -}
 data Operand = Argument | Receiver
@@ -68,13 +83,13 @@ data Operand = Argument | Receiver
     place and stored back after the call; any other is an ordinary value. -}
 lowerLoanedCall :: LowerExpression -> LowerState -> Span -> Text -> CoreSignature -> Bool -> [Located Expression] -> Lowered
 lowerLoanedCall lower state at target signature defaulted arguments =
-  lowerLoanedOperands lower state at target signature defaulted [(index, Argument, argument) | (index, argument) <- zip [0 ..] arguments]
+  lowerLoanedOperands lower state at (Direct target) signature defaulted [(index, Argument, argument) | (index, argument) <- zip [0 ..] arguments]
 
 {-| The operands in the order they run, each with its parameter position.
     The call passes them by position and stores the finals in parameter
     order, so a method's receiver, which runs last, is written back first. -}
-lowerLoanedOperands :: LowerExpression -> LowerState -> Span -> Text -> CoreSignature -> Bool -> [(Int, Operand, Located Expression)] -> Lowered
-lowerLoanedOperands lower state at target signature defaulted = go state [] []
+lowerLoanedOperands :: LowerExpression -> LowerState -> Span -> Callee -> CoreSignature -> Bool -> [(Int, Operand, Located Expression)] -> Lowered
+lowerLoanedOperands lower state at callee signature defaulted = go state [] []
  where
   types = contextTypes . lowerContext
   loaned = signatureLoaned signature
@@ -109,15 +124,24 @@ lowerLoanedOperands lower state at target signature defaulted = go state [] []
       Just (after, Just (declarations, found)) -> (after, Just (declarations, readHeld (types after) found, Just found))
 
   finish current statements held
-    | blockType statements Nothing == CoreNeverType =
-        (current, Just (CoreExpression at CoreNeverType (CoreBlockValue (CoreBlock statements Nothing)), CoreNeverType))
-    | otherwise =
+    | blockType statements Nothing == CoreNeverType = stopped current statements
+    | otherwise = case callee of
+        Direct target -> made (queued target current) statements held (CoreCall target)
+        Through written -> case lower current written of
+          (after, Nothing) -> refused after
+          (after, Just (target, CoreNeverType)) -> stopped after (statements <> [CoreStatement (locatedSpan written) (CoreEvaluate target)])
+          (after, Just (target, _)) -> made after statements held (CoreCallValue target)
+
+  stopped current statements =
+    (current, Just (CoreExpression at CoreNeverType (CoreBlockValue (CoreBlock statements Nothing)), CoreNeverType))
+
+  made current statements held call =
         let given = [reading at local | (local, _, _) <- sortOn (\(_, _, index) -> index) held]
             passed = if defaulted then suppliedArguments at parameterTypes given else given
             kind = loanedType signature
-            (bound, answer) = bindLocal (queued current) "" kind
+            (bound, answer) = bindLocal current "" kind
             answered = reading at answer
-            called = CoreStatement at (CoreDeclare answer (CoreExpression at kind (CoreCall target passed)))
+            called = CoreStatement at (CoreDeclare answer (CoreExpression at kind (call passed)))
             stores =
               [ storeHeld (types bound) (heldSpan found) found
                   (CoreExpression (heldSpan found) (heldType found) (CoreTupleIndex (position + 1) answered))
@@ -127,7 +151,7 @@ lowerLoanedOperands lower state at target signature defaulted = go state [] []
          in (bound, Just (CoreExpression at (signatureResult signature) (CoreBlockValue whole), signatureResult signature))
 
   -- Only a call that is made reaches its callee.
-  queued current = current{lowerContext = (lowerContext current){contextQueue = target : contextQueue (lowerContext current)}}
+  queued target current = current{lowerContext = (lowerContext current){contextQueue = target : contextQueue (lowerContext current)}}
 
 {-| The Core result of a loaned function: its own, then each final. -}
 loanedType :: CoreSignature -> CoreType

@@ -77,3 +77,8 @@ Resolved Grill Log: the semantic delta was inspected before the change.
 
 The checked mutable-loan program now lowers, so its case holds the loaned
 function as a value instead, which still refuses with E6001 at a span.
+
+## Loaned function values (#794)
+
+A loaned function held as a value now lowers, so the case lends a Decimal,
+which still has no native form.

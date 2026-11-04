@@ -37,3 +37,12 @@ an element receiver whose index runs after the argument; generic,
 inherited and fallible methods on nested receivers; and a loaned method held
 as a value. A failure adds an element receiver out of range, reported at
 its root after the argument ran.
+
+## Loans through values (#794)
+
+Successes add named functions, parameters typed `fn(&mut Int) -> Int`,
+lambdas and arrays of loaned functions; bound and type-qualified method
+values with `&mut` inputs, lambdas with `return`, `?` and captures, a callee
+that runs after an element argument, a record field, a generic
+higher-order function and a defaulted function value. A failure adds an
+element out of range lent through a value, after the callee ran.

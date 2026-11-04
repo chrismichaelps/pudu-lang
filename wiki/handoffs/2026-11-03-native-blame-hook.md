@@ -1,6 +1,6 @@
 ---
 type: handoff
-status: ACTIVE
+status: DONE
 issue: 791
 aliases: [Native Blame Hook Delivery]
 ---

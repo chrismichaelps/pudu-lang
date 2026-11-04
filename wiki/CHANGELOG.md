@@ -5,6 +5,10 @@ tags: [changelog]
 
 # Changelog
 
+## 2026-11-03 — Native loans through values (#794)
+
+- `let f = bump; f(&mut n)`, parameters typed `fn(&mut Int) -> Int`, lambdas such as `|v: &mut Int| ...`, arrays and record fields of loaned functions, and method values with `&mut` inputs build natively and write back as the interpreter does. See [[Native Mutable Loans]].
+
 ## 2026-11-03 — Native blame hook part (#791)
 
 - The runtime's blame hook is declared in its own part, required by failure reporting and frames, so a runtime of text helpers alone compiles warning-free under `-Werror`.

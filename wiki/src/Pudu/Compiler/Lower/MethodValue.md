@@ -33,3 +33,9 @@ Declared receivers qualify when the member is not a field; an unbound
 owned by that name. Resolved Grill Log: the unbound wrapper has no
 environment and records the first parameter as its receiver type with no
 capture, so equality compares sites only.
+
+## Mutable loans (#794)
+
+A lifted method value whose function type has `&mut` inputs lends them on
+to the written call by name and closes its body over their finals, so
+`b.steal` and `Bag.grow` used as values write back where they are called.

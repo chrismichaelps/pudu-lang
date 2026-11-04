@@ -10,12 +10,13 @@ import Data.Text (Text)
 import qualified Data.Text as Text
 import Pudu.Compiler.Lower.State
   ( LowerContext (..), LowerState (..), bindLocal, lookupLocal, refuse, refused, startFunction )
+import Pudu.Compiler.Lower.Loan (closeLoaned)
 import Pudu.Compiler.Lower.Types (ownerKeyOf, recordFields, typeFactAt, typeForSpan, withFacts)
 import Pudu.Core
 import Pudu.Frontend.Syntax (Expression (..), Located (..))
 import Data.Maybe (fromMaybe, isJust, isNothing)
 import Pudu.Source (Span (..), offsetFromInt, zeroOffset)
-import Pudu.Type.Value (Type (FunctionTypeRequiring))
+import Pudu.Type.Value (Type (FunctionTypeRequiring, ReferenceTypeValue))
 
 type LowerExpression = LowerState -> Located Expression -> (LowerState, Maybe (CoreExpression, CoreType))
 type Lowered = (LowerState, Maybe (CoreExpression, CoreType))
@@ -69,7 +70,14 @@ lowerMethodValue lower state at receiver member = case (typeForSpan types (locat
         offset = maybe 0 (const 1) bound
         parameters = [CoreParameter (CoreLocal (index - 1 + offset) (argumentName index) input) at | (index, input) <- zip [1 ..] inputs]
         hidden = [CoreParameter env at | Just _ <- [bound]]
-        entered = (startFunction current (hidden <> parameters) (Just result)){lowerCurrentKey = key, lowerDeclaredResult = Nothing}
+        -- `&mut` parameters are lent on to the written call, and the lifted
+        -- function answers their finals beside the call's result.
+        loaned = [index | (index, ReferenceTypeValue True _) <- zip [0 :: Int ..] inputFacts]
+        ownResult = case result of
+          CoreTupleType (own : _) | not (null loaned) -> own
+          _ -> result
+        entered = (startFunction current (hidden <> parameters) (Just ownResult))
+          {lowerCurrentKey = key, lowerDeclaredResult = Nothing, lowerLoaned = [coreParameterLocal parameter | (index, parameter) <- zip [0 ..] parameters, index `elem` loaned]}
         (withReceiver, prologue) = case bound of
           Just held' ->
             let (next, held) = bindLocal entered "$receiver" held'
@@ -98,7 +106,7 @@ lowerMethodValue lower state at receiver member = case (typeForSpan types (locat
         receiverType = maybe (case inputs of { self : _ -> self; [] -> CoreUnitType }) id bound
      in case lowered of
           Just (body, _) | length (contextRefusals context) == before ->
-            let lifted = CoreFunction key (hidden <> parameters) result (CoreBlock prologue (Just body))
+            let lifted = CoreFunction key (hidden <> parameters) result (snd (closeLoaned afterBody at (CoreBlock prologue (Just body))))
                 info = CoreClosureInfo [receiverType | Just _ <- [bound]] member key False (isJust bound) (Just receiverType)
                 registered = (lowerContext settled)
                   { contextFunctions = lifted : contextFunctions (lowerContext settled)

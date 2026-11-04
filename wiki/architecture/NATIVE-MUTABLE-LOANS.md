@@ -39,8 +39,11 @@ its receiver, which lends any place it names (an element-chosen receiver's
 indices run then); the finals are written back receiver first. A qualified
 call `Bump.bump(&mut c, 1)` lends like a function call. A bound method value
 lifts the written call, so a loaned method held as a value writes back to
-its own copy of the receiver. A function with loans still refuses as a
-value: a call through a value has no place to write back to yet.
+its own copy of the receiver. Calls through values lend too (#794). A function type with `&mut` inputs
+forms as one answering its finals beside its result; a call through such a
+value holds its operands with their places, runs the callee after them, and
+writes back. Lambdas and lifted method values with `&mut` parameters close
+every way out over their finals.
 
 ## Resolved Grill Log
 
@@ -72,8 +75,12 @@ Methods (#790): receiver and argument loans, qualified calls, generic and
 inherited members, `?`, nested and element receivers, method values, and
 an element receiver out of range after its argument.
 
-Remaining: function values and lambdas with `&mut` parameters, called
-through a value.
+Values (#794): named functions, parameters, lambdas, arrays, record
+fields, method values, generic higher-order calls, defaults, and an element
+out of range lent through a value.
+
+Nothing in this area remains refused; trait-qualified method values in
+general are tracked apart (#795).
 
 ## Referenced by
 

@@ -209,3 +209,11 @@ loaned parameter or a lent place, and holds a T. `referenceTarget` answers
 the target of a reference of either kind, for dereference. formedWith still
 leaves `&mut` unformed, so a function type with a loaned parameter has no
 native form. Resolved Grill Log: see [[Native Mutable Loans]].
+
+## Loaned function types (#794)
+
+A function type with `&mut` inputs forms natively: each such input takes its
+target, and the result becomes the tuple of the declared result and each
+final, in input order, which is the ABI a loaned function's body already
+answers. `loanedInputs` gives a function type's `&mut` positions. Resolved
+Grill Log: the outer look-through of #651 now shares `lentTarget`.

@@ -1,6 +1,6 @@
 {-| @Pudu.Compiler.Lower.Types — settled checker facts for native representation. -}
 module Pudu.Compiler.Lower.Types
-  ( LowerTypes, emptyTypes, nativeTypes, withShapes, withBindings, withFacts, typeBindings, lookupScheme, typeForSpan, typeFactAt, sharedReferenceTarget, referenceTarget
+  ( LowerTypes, emptyTypes, nativeTypes, withShapes, withBindings, withFacts, typeBindings, lookupScheme, typeForSpan, typeFactAt, sharedReferenceTarget, referenceTarget, loanedInputs
   , formedCoreType, formedCoreTypeIn, ownerKeyOf, layoutOf, recordFields, sumVariants, nativeIntegerKind, nativeScalarType, nativeValueType ) where
 
 import Data.Map.Strict (Map)
@@ -51,12 +51,19 @@ lookupScheme :: LowerTypes -> Text -> Maybe Scheme
 lookupScheme (LowerTypes _ schemes _ _) name = Map.lookup name schemes
 
 {-| An expression typed `&mut T` is a loaned parameter or a lent place, and
-    holds a T; a `&mut` anywhere deeper keeps the type unformed. -}
+    holds a T. -}
 typeForSpan :: LowerTypes -> Span -> Maybe CoreType
-typeForSpan types@(LowerTypes info _ _ _) at = typeAt info at >>= formedCoreTypeIn types . held
- where
-  held (ReferenceTypeValue True target) = target
-  held other = other
+typeForSpan types@(LowerTypes info _ _ _) at = typeAt info at >>= formedCoreTypeIn types . lentTarget
+
+lentTarget :: Type -> Type
+lentTarget (ReferenceTypeValue True target) = target
+lentTarget other = other
+
+{-| The positions of a function type's `&mut` inputs. -}
+loanedInputs :: Type -> [Int]
+loanedInputs value = case value of
+  FunctionTypeRequiring _ inputs _ _ -> [index | (index, ReferenceTypeValue True _) <- zip [0 ..] inputs]
+  _ -> []
 
 {-| Facts for spans a lowering made up, laid over the checked ones. -}
 withFacts :: [(Span, Type)] -> LowerTypes -> LowerTypes
@@ -151,12 +158,16 @@ formedWith shapes seen parameters value = case value of
   -- An async function is a task-maker, which native code has no form for.
   -- One with defaults takes how many arguments the call supplied as a last
   -- Int, so a value of it and the function it calls agree on arity.
+  -- A `&mut T` input takes a T, and a call answers each final beside the
+  -- result, as a loaned function's body does.
   FunctionTypeRequiring False inputs required result -> do
-    formedInputs <- traverse (formedWith shapes seen parameters) inputs
+    formedInputs <- traverse (formedWith shapes seen parameters . lentTarget) inputs
     formedResult <- formedWith shapes seen parameters result
     let supplied = [CoreIntegerType PlatformSigned | requiredCount required < length inputs]
+        finals = [formed | (ReferenceTypeValue True _, formed) <- zip inputs formedInputs]
+        answered = if null finals then formedResult else CoreTupleType (formedResult : finals)
     if all nativeValueType formedInputs && (nativeValueType formedResult || formedResult == CoreNeverType)
-      then Just (CoreFunctionType (formedInputs <> supplied) formedResult) else Nothing
+      then Just (CoreFunctionType (formedInputs <> supplied) answered) else Nothing
   TupleTypeValue members@(_ : _ : _) -> do
     formedMembers <- traverse (formedWith shapes seen parameters) members
     if all nativeValueType formedMembers then Just (CoreTupleType formedMembers) else Nothing

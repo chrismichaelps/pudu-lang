@@ -270,3 +270,9 @@ The `self: &mut Self` refusal case is gone: the method call builds natively,
 and a loaned method held as a value builds too. A function with loans held
 as a value remains the mutable-loan refusal case. Resolved Grill Log: the
 semantic delta was inspected before the change.
+
+## Loans through values (#794)
+
+The mutable-loan refusal case is gone: functions with loans now build as
+values, and any `&mut` of an unrepresented type is refused first where that
+type's own value is made.

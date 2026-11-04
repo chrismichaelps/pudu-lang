@@ -69,3 +69,11 @@ passes suppliedArguments. Resolved Grill Log: the formed type already ends
 with the count, so the closure and frame arity agree.
 
 Closure info passes closureMethod = Nothing. (#644)
+
+## Mutable loans (#794)
+
+A call through a value whose checked function type has `&mut` inputs goes
+to [[Compiler Lower Loan]] with the callee as `Through`. A lambda with
+`&mut` parameters lowers its body with those parameters loaned, returns
+typed at its declared result, and closes its trailing result over the
+finals.

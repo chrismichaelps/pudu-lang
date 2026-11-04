@@ -10,9 +10,10 @@ import qualified Data.Text as Text
 import Pudu.Compiler.Lower.Control (expressionIsPrintValued, printValued)
 import Pudu.Compiler.Lower.Default (suppliedArguments)
 import Pudu.Compiler.Lower.Generic (admitCallee)
+import Pudu.Compiler.Lower.Loan (Callee (..), Operand (..), closeLoaned, lowerLoanedOperands, valueSignature)
 import Pudu.Compiler.Lower.State
   ( LowerContext (..), LowerState (..), bindLocal, halt, lookupLocal, refused, startFunction )
-import Pudu.Compiler.Lower.Types (typeFactAt, typeForSpan)
+import Pudu.Compiler.Lower.Types (loanedInputs, typeFactAt, typeForSpan)
 import Pudu.Core
 import Pudu.Eval.Capture (reachableNames)
 import Pudu.Frontend.Syntax (Block, Expression, Function (..), FunctionBody (..), Located (..), Parameter (..))
@@ -40,13 +41,22 @@ lowerLambda lower block state at function
                 parameters =
                   [ CoreParameter (CoreLocal index (locatedValue (parameterName parameter)) input) (locatedSpan (parameterName parameter))
                   | (index, Located _ parameter, input) <- zip3 [1 ..] (functionParameters function) inputs ]
-                entered = (startFunction state (CoreParameter env at : parameters) (Just result)){lowerCurrentKey = key, lowerDeclaredResult = Nothing}
+                -- A lambda with `&mut` parameters answers their finals beside
+                -- its declared result on every way out.
+                loaned = maybe [] loanedInputs (typeFactAt (contextTypes (lowerContext state)) at)
+                declared = case result of
+                  CoreTupleType (own : _) | not (null loaned) -> own
+                  _ -> result
+                entered = (startFunction state (CoreParameter env at : parameters) (Just declared)){lowerCurrentKey = key, lowerDeclaredResult = Nothing}
                 (withCaptures, prologue) = foldl' capture (entered, []) (zip [0 ..] captured)
                 capture (current, done) (index, local) =
                   let (next, inner) = bindLocal current (coreLocalName local) (coreLocalType local)
                       read' = CoreExpression at kind (CoreReadLocal env)
                    in (next, done <> [CoreStatement at (CoreDeclare inner (CoreExpression at (coreLocalType local) (CoreCapture index read')))])
-                (afterBody, body) = lowered withCaptures
+                (afterLowering, loweredBody) = lowered withCaptures{lowerLoaned = [coreParameterLocal parameter | (index, parameter) <- zip [0 ..] parameters, index `elem` loaned]}
+                (afterBody, body) = case loweredBody of
+                  Just coreBlock | not (null loaned) -> Just <$> closeLoaned afterLowering at coreBlock
+                  _ -> (afterLowering, loweredBody)
                 lowered current = case functionBody function of
                   Just (Located _ (BlockBody written)) ->
                     let (next, coreBlock, _) = block current written
@@ -89,7 +99,12 @@ lowerFunctionValue state at key entry = case typeForSpan (contextTypes (lowerCon
 {-| `callee(arguments)` through a value. The arguments run first, then the
     callee, as `evaluateCall` does, so each argument is held in a temporary. -}
 lowerValueCall :: LowerExpression -> LowerState -> Span -> Located Expression -> [Located Expression] -> Lowered
-lowerValueCall lower state at callee arguments = case collect state [] arguments of
+lowerValueCall lower state at callee arguments
+  | loaned@(_ : _) <- maybe [] loanedInputs (typeFactAt (contextTypes (lowerContext state)) (locatedSpan callee))
+  , Just (CoreFunctionType inputs (CoreTupleType (result : _))) <- typeForSpan (contextTypes (lowerContext state)) (locatedSpan callee) =
+      lowerLoanedOperands lower state at (Through callee) (valueSignature at inputs result loaned) defaulted
+        [(index, Argument, argument) | (index, argument) <- zip [0 ..] arguments]
+  | otherwise = case collect state [] arguments of
   (after, Nothing) -> refused after
   (after, Just cores) -> case lower after callee of
     (final, Nothing) -> refused final

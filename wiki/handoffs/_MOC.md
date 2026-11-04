@@ -266,3 +266,4 @@ tags: [moc, handoff]
 - [[Native Mutable Loans Delivery]] — `&mut` parameters with writeback (#651).
 - [[Native Method Loans Delivery]] — `&mut self` and method loans (#790).
 - [[Native Blame Hook Delivery]] — the blame hook in its own runtime part (#791).
+- [[Native Value Loans Delivery]] — loans through function values, lambdas and method values (#794).
