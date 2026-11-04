@@ -75,6 +75,7 @@ Pudu is a statically typed native systems language for developers who need predi
 
 - [[Scoped Import Design]] — build-time lexical import proposal and resolved qualifier prerequisite.
 
+- [[Native Word128 Kernel Contract]] · [[Native Wide Value Contract]] — exact portable carriers.
 - [[Native Word128 Kernel Contract]] — portable raw unsigned arithmetic.
 - [[Native Emission Coverage]] — implemented native surfaces and remaining completion obligations.
 

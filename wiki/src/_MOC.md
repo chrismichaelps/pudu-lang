@@ -238,6 +238,7 @@ tags: [moc, module]
 - [[Mutex Admission Fixture]] — real local Database contention and recovery.
 - [[Database Challenge Spec]] · [[Database Challenge Fixture]] · [[Database Challenge Transport]]
 
+- [[Backend Word128 Kernel]] · [[Backend Wide Integer Values]] · [[Native Wide Value Tests]].
 - [[Backend Word128 Kernel]] · [[Native Word128 Tests]] — compiled wide arithmetic.
 - [[Native Diagnostic Contracts]] · [[Native Diagnostic Contract Tests]] — E6001–E6006 value contracts (#486).
 - [[Pudu Core IR Module]] · [[Native Core Contract Tests]] — native IR data contracts (#486).

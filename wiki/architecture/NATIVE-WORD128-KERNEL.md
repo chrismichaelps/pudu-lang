@@ -28,4 +28,5 @@ frame integration and behavioral parity remain subsequent delivery obligations.
 
 ## Referenced by
 
+[[architecture/_MOC]] · [[Backend Word128 Kernel]]
 [[architecture/_MOC]] · [[Backend Word128 Kernel]] · [[Native Word128 Tests]]

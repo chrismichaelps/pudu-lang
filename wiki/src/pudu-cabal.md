@@ -394,6 +394,12 @@ imports no frontend or semantic module.
 
 Register [[Resolve State]] for the private pure resolver action and state boundary. Resolved Grill Log: preserve the abstract [[Resolve Context]] facade and existing state/diagnostic ordering without a new dependency.
 
+Register [[Backend Wide Integer Values]] explicitly without new dependencies. Resolved Grill Log:
+exact value and minimal-selection properties contribute to the complete suite
+and its aggregate failure status. The release gate is unchanged.
+
+Register [[Backend Word128 Kernel]] as the unchanged pure prerequisite.
+Resolved Grill Log: this dev-based projection must build independently.
 Register [[Backend Word128 Kernel]] explicitly without new dependencies. Resolved Grill Log:
 the compiled kernel corpus runs in the complete suite and contributes to its
 aggregate failure status. The full release gate remains unchanged.

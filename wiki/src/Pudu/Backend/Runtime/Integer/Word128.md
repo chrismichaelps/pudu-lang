@@ -26,6 +26,11 @@ bounded quotient/remainder. No headers, IO, allocation or language admission.
 
 ## Dependencies and consumers
 
+[[Native Word128 Kernel Contract]] · [[Pudu Cabal Manifest]]
+
+## Referenced by
+
+[[src/_MOC]] · [[Native Wide Value Publication]]
 [[Native Word128 Kernel Contract]] · [[Native Word128 Tests]] · [[Pudu Cabal Manifest]]
 
 ## Referenced by
