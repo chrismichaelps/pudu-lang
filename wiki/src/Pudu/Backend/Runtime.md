@@ -341,3 +341,17 @@ program changes behavior.
 ## Decimal (#802)
 
 [[Backend Decimal Values]] follow the integer parts and [[Backend Decimal Operations]] the BigInt operations.
+
+## Error reports to a broken pipe (#815, revision 20)
+
+`pudu_prepare_error_io` restores SIGPIPE's default action before a failure
+report everywhere except Linux. A report to a standard error nobody reads then
+ends the program the way the interpreter ends on the same platform. On macOS
+the interpreter dies of the signal (status -13). On Linux its runtime keeps
+SIGPIPE ignored, so the write fails and it exits 1, and the native report now
+leaves the startup handler in place so its write fails the same way.
+
+Resolved Grill Log: the reference is the interpreter on the platform the
+program runs on. Linux CI run 41917512128 measured it as `Exited 1` against
+native `-13` for `err-pipe`; macOS measures `-13` for both. The revision is 20
+because emitted programs behave differently on Linux.

@@ -126,3 +126,13 @@ that `cabal run pudu` is the built compiler; a run takes as long as its
 longest job instead of the sum of all of them. Recompilation in a restored
 tree is decided by source hashes, so the cache never answers for a changed
 file.
+
+## Job placement fixes (#815)
+
+- The Linguist check reads every Pudu source, the website's included, so it
+  runs in the website job after `pudu install --locked`. In the library job
+  the website's packages were absent.
+- The suite job sets `PUDU_CC_TIMEOUT=600`. A conformance matrix's single
+  entry body runs to thousands of C lines (#821), and a shared runner's GCC
+  took longer than the two-minute default once. The limit bounds a hung
+  compiler, not a correct translation.

@@ -113,6 +113,12 @@ jobs:
       # shards together run every property exactly once.
       - name: Run this shard of the full suite
         timeout-minutes: 30
+        # The conformance matrices compile programs whose single entry body runs
+        # to thousands of C lines; a shared runner's GCC can take longer than
+        # the two minutes a user's build waits. The limit here bounds a hung
+        # compiler, not the time a correct translation needs.
+        env:
+          PUDU_CC_TIMEOUT: "600"
         run: PUDU_TEST_SHARD=${{ matrix.shard }}/6 ./built/pudu-test
 
   library:
@@ -176,8 +182,6 @@ jobs:
       # documentation edit that broke one used to reach readers unnoticed.
       - name: Verify every documentation and playground example runs
         run: python3 test/docs-examples.py --pudu "$PUDU" --run
-      - name: Verify the Linguist submission is consistent
-        run: python3 scripts/linguist.py check --pudu "$PUDU"
       - name: Verify every diagnostic code means one thing
         run: node test/diagnostic-codes.mjs
       # A merge that changes only documentation, the website, or the examples
@@ -291,6 +295,10 @@ jobs:
           "$PUDU" check $(find website/src -name '*.pudu')
           "$PUDU" fmt --check website/src website/playground/examples
           "$PUDU" test website/src/Test/Website.pudu website/src/Test/Application.pudu website/src/Test/Playground.pudu website/src/Test/PackageSearch.pudu website/src/Test/Markdown.pudu website/src/Test/Declarations.pudu website/src/Test/LivePackages.pudu website/src/Test/LivePages.pudu
+      # The Linguist check reads every Pudu source, the website's among them,
+      # so it runs where the website's packages are installed.
+      - name: Verify the Linguist submission is consistent
+        run: python3 scripts/linguist.py check --pudu "$PUDU"
       - name: Verify package discovery lists every topic result past the search cap
         run: node --test website/scripts/packages/discover.test.mjs
       - name: Verify the playground paints Pudu as the documentation does

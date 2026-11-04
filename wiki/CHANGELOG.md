@@ -8,6 +8,7 @@ tags: [changelog]
 ## 2026-11-04 — Parallel CI (#815)
 
 - CI builds once with a cache and runs the suite as six parallel shards and the gates as four parallel jobs on the built compiler, so a run takes as long as its longest job.
+- Native failure reports on Linux leave SIGPIPE ignored, as the interpreter does, so a broken standard error exits 1 instead of dying of the signal (runtime revision 20). CI runs the Linguist check beside the website's installed packages and gives conformance C compiles ten minutes.
 - The integer operator matrix is eight test properties, the output suite treats a closed channel as its readiness mask (#818 records the Linux wait), and the wide-operation matrix runs outside the `setjmp` frame so GCC builds it.
 
 ## 2026-11-04 — Portable native-output gate classification (#811)
