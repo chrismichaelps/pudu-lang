@@ -110,7 +110,7 @@ remain enforced after integration; preserve every existing workflow step. See [[
 
 One `build` job restores the cabal store (keyed by the cabal files) and the
 build tree (keyed by commit, restored from the branch's or dev's latest),
-compiles with `-Werror`, and uploads the compiler and the test binary as one
+compiles once with `-Werror` (the flag changes no generated code, so those are the binaries every job runs), and uploads the compiler and the test binary as one
 archive so their execute bits survive. Every other job downloads it:
 
 | Job | Runs |

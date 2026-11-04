@@ -59,12 +59,14 @@ jobs:
       # bindings through.
       - name: Verify the tree compiles with no warnings
         run: cabal build all --enable-optimization=2 --ghc-options="-Werror"
-      - run: cabal build all --enable-optimization=2
+      # -Werror changes no generated code, so the binaries the gates run are
+      # the ones that check built; a second build without the flag would be a
+      # different configuration and compile the whole tree again.
       - name: Package the compiler and the test binary
         run: |
           mkdir -p built
-          cp "$(cabal list-bin pudu --enable-optimization=2)" built/pudu
-          cp "$(cabal list-bin pudu-tests:test:pudu-test --enable-optimization=2)" built/pudu-test
+          cp "$(cabal list-bin pudu --enable-optimization=2 --ghc-options=-Werror)" built/pudu
+          cp "$(cabal list-bin pudu-tests:test:pudu-test --enable-optimization=2 --ghc-options=-Werror)" built/pudu-test
           tar -cf pudu-binaries.tar built
       - uses: actions/upload-artifact@v4
         with:
