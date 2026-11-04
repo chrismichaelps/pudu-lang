@@ -5,6 +5,10 @@ tags: [changelog]
 
 # Changelog
 
+## 2026-11-04 — Native BigInt (#800)
+
+- Programs holding BigInt build natively: exact arithmetic past every fixed width, truncating `/` and `%`, two's-complement bit operations, unbounded shifts, decimal rendering, conversions to and from every integer kind, and BigInt inside records, sums, collections and closures, with the interpreter's failures and exit statuses. See [[Native BigInt]].
+
 ## 2026-11-04 — Native stack brought up to dev (#798)
 
 - The native stack now runs on dev's checker and evaluator (#640–#788). Native lowering reads dev's rewritten constructor paths, provider-selected members and canonical folded values, so parity is measured against the current interpreter. Declaration-ordered records (#519) stay on top of dev's record constructor.

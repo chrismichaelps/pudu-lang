@@ -182,3 +182,7 @@ to protect captured lambdas, higher-order calls, ordering and rendering.
 ## First-class output builtins (#569)
 
 Resolved Grill Log: Register focused output-callable explicit stream answers and runtime failure parity through the existing harness.
+
+## BigInt (#800)
+
+Run [[Backend BigInt Programs]]: successes with hand-written answers and failures against the interpreter.

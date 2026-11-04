@@ -1,6 +1,6 @@
 ---
 type: handoff
-status: ACTIVE
+status: DONE
 issue: 798
 aliases: [Native Dev Sync Delivery]
 ---

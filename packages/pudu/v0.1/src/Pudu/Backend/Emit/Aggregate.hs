@@ -30,6 +30,7 @@ import Pudu.Backend.Emit.Bytes (bytesHelpers)
 import Pudu.Backend.Emit.State (cString, cStringBytes)
 import Pudu.Core (CoreClosureInfo (..), CoreLayout (..), CoreType (..), CoreVariant (..), coreTypeName, displayName)
 import Pudu.Core.Frame (FrameFunction (..), FrameModule (..), FrameSlot (..))
+import Pudu.IntegerLiteral (IntegerKind (BigIntKind))
 
 type Layouts = Map CoreType CoreLayout
 
@@ -63,7 +64,7 @@ aggregateMembers layouts kind = case (kind, Map.lookup kind layouts) of
 {-| Ownership kinds the frame engine switches on: 1 is text, then each
     aggregate type in `aggregateTypes` order. -}
 ownedKinds :: [CoreType] -> [(CoreType, Int)]
-ownedKinds tuples = (CoreTextType, 1) : zip tuples [2 ..]
+ownedKinds tuples = (CoreTextType, 1) : (CoreIntegerType BigIntKind, 2) : zip tuples [3 ..]
 
 {-| The helpers the needs name, their own needs included, in an order where
     each comes after what it calls; and the runtime parts they use. Drop

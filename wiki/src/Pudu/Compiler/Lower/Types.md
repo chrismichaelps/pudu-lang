@@ -224,3 +224,7 @@ Grill Log: the outer look-through of #651 now shares `lentTarget`.
 (`::constructor::`, `::sum::`, canonical keys); `selectedMember` splits a
 provider-selected member `::Main.Get::get` into the trait and the member,
 as `Eval.Env.lookupMethod` does.
+
+## BigInt (#800)
+
+`nativeIntegerKind` admits BigInt.

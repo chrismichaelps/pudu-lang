@@ -333,3 +333,7 @@ holding only memory failures (text helpers alone) took `cleanup` without
 `fail`, the hook's only reader, and an unused static broke `-Werror`.
 Resolved Grill Log: the declaration lives with what needs it; no emitted
 program changes behavior.
+
+## BigInt (#800)
+
+[[Backend BigInt Operations]] parts follow the text parts, which `text_display_big` needs.

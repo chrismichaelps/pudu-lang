@@ -11,7 +11,7 @@ import Pudu.Backend.Emit.State
   ( EmitState (..), cString, cStringBytes, divideByZeroSite, failureSite, operatorFailureSite, overflowSite, shiftSites, textOfInt )
 import Pudu.Backend.Emit.Aggregate (aggregateHelper, aggregateNeed, cellName, isAggregate, memberComparable, retained)
 import Pudu.Diagnostic.Evaluation (cannotApplyBinaryMessage)
-import Pudu.Backend.Emit.Support (integerHelper, integerKindText, integerLiteralText, isWideInteger, zeroValue)
+import Pudu.Backend.Emit.Support (integerHelper, integerKindText, integerLiteralText, isBigInteger, isWideInteger, zeroValue)
 import Pudu.Core (CoreArrayMethodName (..), CoreBinaryOperator (..), CoreKeyedMethodName (..), CoreTextMethodName (..), CoreType (..))
 import Pudu.Backend.Emit.Range (rangeMethodCall)
 import Pudu.Backend.Emit.Bytes (bytesFunction)
@@ -20,6 +20,7 @@ import Pudu.Core.Frame
   , FrameValue (..), FrameValueShape (..), coreScalarOperator )
 import Pudu.Diagnostic.Arithmetic (CheckedOperation (..))
 import Pudu.FloatLiteral (FloatWidth (..))
+import Pudu.IntegerLiteral (IntegerKind)
 
 slotNumber :: FrameSlot -> Text
 slotNumber slot = case frameSlotId slot of FrameSlotId identity -> textOfInt identity
@@ -36,7 +37,9 @@ slotText slot = case (frameSlotId slot, cellMember (frameSlotType slot)) of
 
 frameValue :: EmitState -> FrameValue -> Either FrameFault (EmitState, Text, Set Text)
 frameValue state value = case frameValueShape value of
-  FrameIntegerLiteral kind number -> done state (integerLiteralText kind number) []
+  FrameIntegerLiteral kind number
+    | isBigInteger kind -> plain (integerLiteralText kind number) ["big_from_limbs"]
+    | otherwise -> done state (integerLiteralText kind number) []
   FrameFloatLiteral _ bits -> Right (state, "UINT64_C(0x" <> Text.pack (showHex bits "") <> ")", Set.empty)
   FrameBoolLiteral flag -> done state (if flag then "1" else "0") []
   FrameUnitLiteral -> done state "0" []
@@ -49,23 +52,32 @@ frameValue state value = case frameValueShape value of
   FrameIntegerFits target slot -> do
     source <- slotText slot
     kind <- maybe (refused "a conversion to an unrepresented integer kind") Right (integerKindText target)
-    case (frameSlotType slot, isWideInteger target) of
-      (CoreIntegerType from, wideTarget) ->
-        let helper = case (isWideInteger from, wideTarget) of
-              (False, False) -> "int_fits"
-              (False, True) -> "int_fits_wide"
-              (True, False) -> "wide_fits_int"
-              (True, True) -> "wide_fits"
+    case frameSlotType slot of
+      -- Every value fits a BigInt.
+      CoreIntegerType _ | isBigInteger target -> done state "1" []
+      CoreIntegerType from ->
+        let helper = case (family from, isWideInteger target) of
+              (Narrow, False) -> "int_fits"
+              (Narrow, True) -> "int_fits_wide"
+              (Wide, False) -> "wide_fits_int"
+              (Wide, True) -> "wide_fits"
+              (Big, False) -> "big_fits_int"
+              (Big, True) -> "big_fits_wide"
          in plain ("pudu_" <> helper <> "(" <> source <> ", " <> kind <> ")") [helper]
       _ -> refused "a conversion from a value that is not an integer"
   FrameIntegerConvert target slot -> do
     source <- slotText slot
     case frameSlotType slot of
-      CoreIntegerType from -> case (isWideInteger from, isWideInteger target) of
-        (False, False) -> plain ("pudu_normal(" <> source <> ")") ["normal"]
-        (False, True) -> plain ("pudu_int_to_wide(" <> source <> ")") ["int_to_wide"]
-        (True, False) -> plain ("pudu_wide_to_int(" <> source <> ")") ["wide_to_int"]
-        (True, True) -> plain ("pudu_wide_normal(" <> source <> ")") ["wide_normal"]
+      CoreIntegerType from -> case (family from, family target) of
+        (Narrow, Narrow) -> plain ("pudu_normal(" <> source <> ")") ["normal"]
+        (Narrow, Wide) -> plain ("pudu_int_to_wide(" <> source <> ")") ["int_to_wide"]
+        (Wide, Narrow) -> plain ("pudu_wide_to_int(" <> source <> ")") ["wide_to_int"]
+        (Wide, Wide) -> plain ("pudu_wide_normal(" <> source <> ")") ["wide_normal"]
+        (Narrow, Big) -> plain ("pudu_int_to_big(" <> source <> ")") ["int_to_big"]
+        (Wide, Big) -> plain ("pudu_wide_to_big(" <> source <> ")") ["wide_to_big"]
+        (Big, Narrow) -> plain ("pudu_big_to_int(" <> source <> ")") ["big_to_int"]
+        (Big, Wide) -> plain ("pudu_big_to_wide(" <> source <> ")") ["big_to_wide"]
+        (Big, Big) -> plain ("pudu_big_normal(" <> source <> ")") ["big_normal"]
       _ -> refused "a conversion from a value that is not an integer"
   FrameRead slot -> slotText slot >>= \text -> uncurry plain (retained (frameSlotType slot) text)
   FrameAggregate members -> do
@@ -373,6 +385,7 @@ frameValue state value = case frameValueShape value of
       case frameSlotType slot of
         CoreIntegerType kind
           | isWideInteger kind -> plain ("pudu_text_display_wide(" <> text <> ")") ["text_display_wide"]
+          | isBigInteger kind -> plain ("pudu_text_display_big(" <> text <> ")") ["text_display_big"]
           | otherwise -> plain ("pudu_text_display_int(" <> text <> ")") ["text_display_int"]
         CoreFloatType _ -> plain ("pudu_text_display_float(" <> text <> ")") ["text_display_float"]
         CoreBoolType -> plain ("(" <> text <> " ? pudu_text_literal(\"true\", 4) : pudu_text_literal(\"false\", 5))") ["text_literal"]
@@ -384,3 +397,12 @@ frameValue state value = case frameValueShape value of
     done after text needs = Right (after, text, Set.fromList (map (integerHelper (frameValueType value)) needs))
     call helper arguments = "pudu_" <> integerHelper (frameValueType value) helper <> "(" <> Text.intercalate ", " arguments <> ")"
     site index = "&pudu_sites[" <> textOfInt index <> "]"
+
+{-| The three integer carriers: one word, two words, and BigInt's limbs. -}
+data Family = Narrow | Wide | Big
+
+family :: IntegerKind -> Family
+family kind
+  | isBigInteger kind = Big
+  | isWideInteger kind = Wide
+  | otherwise = Narrow

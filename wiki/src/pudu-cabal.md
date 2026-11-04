@@ -612,3 +612,7 @@ Register [[Runtime Implementation Head]] and [[Eval Type Witness]] with existing
 base/containers/text dependencies only. Resolved Grill Log: the head metadata
 depends on syntax, Value depends on it, and the witness evaluator depends on Value;
 no recursive module or new native dependency.
+
+## BigInt (#800)
+
+Resolved Grill Log: Register Pudu.Backend.Runtime.Integer.Big.Value and .Operations using the existing dependencies.

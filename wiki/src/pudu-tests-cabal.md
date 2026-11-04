@@ -371,3 +371,7 @@ Resolved Grill Log: represent named sums independently of ordinary records and p
 Register Pudu.Semantic.VariantNamespaceSpec using existing dependencies.
 
 Resolved Grill Log: declaration identity is owner-scoped; ambiguity belongs at an unqualified use and respects the selected lexical binding. See [[Variant Namespace Delivery]].
+
+## BigInt (#800)
+
+Register [[Backend BigInt Programs]]. Resolved Grill Log: no new dependency.

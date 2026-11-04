@@ -111,3 +111,7 @@ revision 17. See [[Native Collection Callables]].
 pudu_blamed_site answers the active frame's call_site when its function
 blames its caller; pudu_run_frames installs it as pudu_blame_hook and clears
 it on return. Runtime revision 19.
+
+## BigInt (#800)
+
+`frameTypes` takes whether BigInt cells are used and adds `pudu_big *big` to the cell union.

@@ -113,5 +113,8 @@ aliases: [Backend Module Map]
 - [[Backend Stopping Builtin Programs]] — panic and untyped convertInteger parity.
 - [[Backend Place Assignment Programs]] — element and mixed path assignment.
 - [[Backend Mutable Loan Programs]] — places lent to calls and written back.
+- [[Backend BigInt Programs]] — BigInt arithmetic, bits, conversions and failures.
+- [[Backend BigInt Values]] — the BigInt carrier.
+- [[Backend BigInt Operations]] — BigInt operators, status, display and conversions.
 - [[Backend Method Value Programs]] — built-in method values of every receiver kind.
 - [[Backend Default Parameter Programs]] — defaults in every combination, directly and through values.

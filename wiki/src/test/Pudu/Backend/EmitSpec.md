@@ -276,3 +276,7 @@ semantic delta was inspected before the change.
 The mutable-loan refusal case is gone: functions with loans now build as
 values, and any `&mut` of an unrepresented type is refused first where that
 type's own value is made.
+
+## BigInt (#800)
+
+The BigInt parameter and result refusal cases are gone; the reachability cases that skip an uncalled function now give it Decimal, still unrepresented.

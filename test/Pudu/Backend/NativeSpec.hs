@@ -27,6 +27,7 @@ import Pudu.Compiler.Frame (lowerFrames)
 import Pudu.Backend.FloatPrograms (floatSuccessPrograms, floatRefusalPrograms)
 import Pudu.Backend.IntegerPrograms (integerSuccessPrograms, integerRefusalPrograms)
 import Pudu.Backend.TextMethodPrograms (textMethodSuccessPrograms, textMethodRefusalPrograms)
+import Pudu.Backend.BigIntPrograms (bigIntSuccessPrograms, bigIntRefusalPrograms)
 import Pudu.Backend.CharPrograms (charSuccessPrograms, charRefusalPrograms)
 import Pudu.Backend.TuplePrograms (tupleSuccessPrograms, tupleRefusalPrograms)
 import Pudu.Backend.RecordPrograms (recordSuccessPrograms, recordRefusalPrograms)
@@ -108,6 +109,8 @@ backendNativeProperties =
   , ("native Str method failures retain interpreter refusals", testTextMethodRefusals)
   , ("native Char values match hand-written answers and the interpreter", testCharConformance)
   , ("native Char failures retain interpreter refusals", testCharRefusals)
+  , ("native BigInt values match hand-written answers and the interpreter", testBigIntConformance)
+  , ("native BigInt failures retain interpreter refusals", testBigIntRefusals)
   , ("native tuples match hand-written answers and the interpreter", testTupleConformance)
   , ("native tuple failures retain interpreter refusals", testTupleRefusals)
   , ("native records match hand-written answers and the interpreter", testRecordConformance)
@@ -294,6 +297,14 @@ testCharConformance :: IO Property
 testCharConformance = conjoin <$> mapM run charSuccessPrograms
  where
   run (label, source, expected) = conformanceExpecting (Just (expected, "", 0)) label source
+
+testBigIntConformance :: IO Property
+testBigIntConformance = conjoin <$> mapM run bigIntSuccessPrograms
+ where
+  run (label, source, expected) = conformanceExpecting (Just (expected, "", 0)) label source
+
+testBigIntRefusals :: IO Property
+testBigIntRefusals = conjoin <$> mapM (uncurry conformance) bigIntRefusalPrograms
 
 testCharRefusals :: IO Property
 testCharRefusals = conjoin <$> mapM (uncurry conformance) charRefusalPrograms

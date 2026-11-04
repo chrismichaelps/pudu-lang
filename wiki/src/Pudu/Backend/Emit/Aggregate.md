@@ -110,3 +110,7 @@ as in the interpreter.
 Method closures whose receiver is a record or sum render as `<fn name>`
 with kind `function`; receiver equality applies only when a receiver was
 captured.
+
+## BigInt (#800)
+
+`ownedKinds` gives BigInt code 2, after text; aggregates follow from 3.

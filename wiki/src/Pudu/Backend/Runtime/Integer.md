@@ -76,3 +76,7 @@ over this table alone, like the wide runtime spec, must still reach it. (#636)
 ## Blame hook part (#791)
 
 `fail` depends on `blame`, the part declaring the hook it reads.
+
+## BigInt (#800)
+
+[[Backend BigInt Values]] parts follow the conversion parts, with their dependencies.

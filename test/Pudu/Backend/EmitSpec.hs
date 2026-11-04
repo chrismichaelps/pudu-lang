@@ -232,7 +232,7 @@ testEntryOnly = do
       , "  return 0"
       , "}"
       , ""
-      , "fn other(value: BigInt) -> BigInt {"
+      , "fn other(value: Decimal) -> Decimal {"
       , "  return value"
       , "}"
       ]
@@ -252,7 +252,7 @@ testReachableFunctions = do
   compiled <- compileAndLower $ Text.unlines
     [ "module Reachable"
     , "fn second(flag: Bool) -> Bool { return !flag }"
-    , "fn unused(value: BigInt) -> BigInt { return value }"
+    , "fn unused(value: Decimal) -> Decimal { return value }"
     , "fn main() -> Int { return first(9, second(false)) }"
     , "fn first(value: Int, flag: Bool) -> Int {"
     , "  if second(flag) { return 0 }"
@@ -275,9 +275,7 @@ testReachableFunctions = do
     construct", not as a hand-counted column. -}
 refusalCases :: [(String, Text, Text)]
 refusalCases =
-  [ ("BigInt parameter", helperProgram "fn helper(value: BigInt) -> Int { return 1 }" "helper(1)", "BigInt")
-  , ("Decimal parameter", helperProgram "fn helper(value: Decimal) -> Int { return 1 }" "helper(1.5d)", "Decimal")
-  , ("BigInt result", helperProgram "fn helper() -> BigInt { return 1 }" "{ helper()\n  0 }", "BigInt")
+  [ ("Decimal parameter", helperProgram "fn helper(value: Decimal) -> Int { return 1 }" "helper(1.5d)", "Decimal")
   , ("call to entry", statementProgram "main()", "main()\n")
   , ("environment", bindingProgram "var pairs = environment()", "environment()")
   , ("decimal values", bindingProgram "var ratio = 1.5d", "1.5d")

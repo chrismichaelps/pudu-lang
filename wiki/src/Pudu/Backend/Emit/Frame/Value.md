@@ -154,3 +154,7 @@ FrameZero emits zeroValue of the value's type. Resolved Grill Log: the same
 zero the emitter already uses for an absent return.
 
 ArrayReplaceAt emits the replace helper with an E7004 "index out of range" site at its span. (#649)
+
+## BigInt (#800)
+
+Conversions classify each side as one word, two words or BigInt. Every value fits a BigInt; a BigInt fits a fixed kind by `big_fits_int` or `big_fits_wide`. A BigInt literal needs `big_from_limbs`; display uses `text_display_big`.

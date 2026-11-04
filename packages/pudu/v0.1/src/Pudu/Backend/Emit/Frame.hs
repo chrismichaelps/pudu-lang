@@ -6,9 +6,9 @@ import Data.Maybe (isJust)
 import qualified Data.Set as Set
 import Data.Text (Text)
 import qualified Data.Text as Text
-import Pudu.Backend.Emit.Aggregate (aggregateSection, aggregateTypes, ownedKinds, ownedType, released, aggregateHelper, aggregateNeed)
+import Pudu.Backend.Emit.Aggregate (aggregateSection, aggregateTypes, cellName, ownedKinds, ownedType, released, retained, aggregateHelper, aggregateNeed)
 import Pudu.Backend.Emit.Frame.Body (emitFrameBodies)
-import Pudu.Backend.Emit.Support (integerHelper, isWideInteger)
+import Pudu.Backend.Emit.Support (integerHelper, isBigInteger, isWideInteger)
 import Pudu.Backend.Emit.State (EmitState (..), emptyEmitState, renderSites, textOfInt)
 import Pudu.Backend.Runtime (RuntimePart (..), runtimeParts)
 import Pudu.Backend.Runtime.Frame (frameTypes, frameEngine)
@@ -36,6 +36,12 @@ emitFrameProgram version sources source = do
   unless (null (frameFunctionParameters entry)) $
     Left (FrameFault Nothing "a frame entry with parameters")
   ending <- case frameFunctionResult entry of
+    -- The entry's BigInt is let go once its status is read.
+    CoreIntegerType kind | isBigInteger kind -> Right
+      [ "  pudu_big *pudu_entry = pudu_run_frames(" <> textOfInt entryId <> ").big;"
+      , "  int pudu_status = pudu_big_status(pudu_entry);"
+      , "  pudu_big_release(pudu_entry);"
+      , "  return pudu_status;" ]
     CoreIntegerType kind -> Right ["  return pudu_" <> integerHelper (frameFunctionResult entry) "status"
       <> "(pudu_run_frames(" <> textOfInt entryId <> ")." <> (if isWideInteger kind then "wide" else "integer") <> ");"]
     CoreFloatType _ -> Right
@@ -70,13 +76,14 @@ emitFrameProgram version sources source = do
     CoreNeverType -> Right ["  (void)pudu_run_frames(" <> textOfInt entryId <> ");", "  return 0;"]
   (emitted, roots) <- emitFrameBodies (emptyEmitState sources) source
   let wide = frameUsesWideCells source
+      big = frameUsesBig source
       text = frameUsesText source
       tuples = aggregateTypes source
       boxes = not (null tuples)
       kinds = ownedKinds tuples
-      owned = text || boxes
+      owned = text || big || boxes
       base = ["prelude", "process_io", "integer_value", "site", "colored", "cleanup", "blame", "fail", "memory_failure"]
-        <> ["wide_value" | wide] <> concat [["text", "text_retain"] | text]
+        <> ["wide_value" | wide] <> concat [["big_value", "big_retain", "big_release"] | big] <> concat [["text", "text_retain"] | text]
       entryNeeds = case frameFunctionResult entry of
         CoreIntegerType _ -> [integerHelper (frameFunctionResult entry) "status"]
         CoreFloatType _ -> ["text_display_float", "output_report"]
@@ -95,7 +102,7 @@ emitFrameProgram version sources source = do
         _ -> []
       identities = Map.fromList (zip (map frameFunctionName functions) [0 ..])
       (aggregates, aggregateNeeds) = aggregateSection identities (frameModuleLayouts source) tuples (Set.fromList (Set.toList roots <> entryNeeds))
-      ownership = if owned then ownershipSwitch text kinds else []
+      ownership = if owned then ownershipSwitch text big kinds else []
       selected = foldl' visit Set.empty (filter (not . Text.isPrefixOf "agg_") (Set.toList roots <> entryNeeds)
         <> Set.toList aggregateNeeds <> base <> ["text_retain" | text])
       runtime = concat [runtimePartLines part <> [""] | part <- runtimeParts, Set.member (runtimePartName part) selected]
@@ -103,7 +110,7 @@ emitFrameProgram version sources source = do
       metadata = concatMap parameterArray indexed
         <> ["static const pudu_function pudu_functions[] = {"]
         <> map definition indexed <> ["};"]
-  pure $ Text.unlines (header <> runtime <> frameTypes wide text boxes
+  pure $ Text.unlines (header <> runtime <> frameTypes wide big text boxes
     <> concat [lines' <> [""] | (name, lines') <- arrayRuntimeParts <> textPieceRuntimeParts <> treeRuntimeParts <> rangeRuntimeParts <> bytesRuntimeParts, Set.member name selected]
     <> renderSites (reverse (emitSites emitted)) <> aggregates <> ownership <> reverse (emitOutput emitted)
     <> metadata <> frameEngine owned <> ["int main(void) {", "  pudu_prepare_io();"] <> ending <> ["}"])
@@ -162,6 +169,14 @@ frameUsesWideCells source = any usesWide (frameModuleFunctions source)
   wideType (CoreIntegerType kind) = isWideInteger kind
   wideType _ = False
 
+frameUsesBig :: FrameModule -> Bool
+frameUsesBig source = any usesBig (frameModuleFunctions source)
+ where
+  usesBig function = any (mentions (frameModuleLayouts source) bigType) (frameFunctionResult function
+    : map frameSlotType (frameFunctionParameters function <> frameFunctionSlots function))
+  bigType (CoreIntegerType kind) = isBigInteger kind
+  bigType _ = False
+
 frameUsesText :: FrameModule -> Bool
 frameUsesText source = any usesText (frameModuleFunctions source)
  where
@@ -187,18 +202,20 @@ mentions layouts wanted = go []
         _ -> False
 
 {-| The engine's one way to retain or release a slot, whatever it holds. -}
-ownershipSwitch :: Bool -> [(CoreType, Int)] -> [Text]
-ownershipSwitch text kinds =
+ownershipSwitch :: Bool -> Bool -> [(CoreType, Int)] -> [Text]
+ownershipSwitch text big kinds =
   [ "static void pudu_drop_cell(pudu_cell cell, unsigned kind) {"
   , "  switch (kind) {" ]
-  <> [ "    case " <> textOfInt number <> ": " <> released kind ("cell." <> member kind) <> " break;"
+  <> [ "    case " <> textOfInt number <> ": " <> released kind ("cell." <> cellName kind) <> " break;"
      | (kind, number) <- held ]
   <> [ "    default: break;", "  }", "}"
-     , "static void pudu_retain_cell(pudu_cell cell, unsigned kind) {" ]
-  <> [ "  if (kind == 1) (void)pudu_text_retain(cell.text);" | text ]
-  <> [ "  if (kind > 1) (void)pudu_box_retain(cell.box);" | any ((/= CoreTextType) . fst) held ]
-  <> [ "  (void)cell;", "  (void)kind;", "}" ]
+     , "static void pudu_retain_cell(pudu_cell cell, unsigned kind) {"
+     , "  switch (kind) {" ]
+  <> [ "    case " <> textOfInt number <> ": (void)" <> fst (retained kind ("cell." <> cellName kind)) <> "; break;"
+     | (kind, number) <- held ]
+  <> [ "    default: break;", "  }", "  (void)cell;", "}" ]
  where
-  held = [entry | entry@(kind, _) <- kinds, kind /= CoreTextType || text]
-  member CoreTextType = "text"
-  member _ = "box"
+  held = [entry | entry@(kind, _) <- kinds, present kind]
+  present CoreTextType = text
+  present (CoreIntegerType integer) = big && isBigInteger integer
+  present _ = True

@@ -89,3 +89,7 @@ cleanup depends on site, whose type its hook names. (#644)
 ## Blame hook part (#791)
 
 `blame` depends on `site`, whose type the hook answers.
+
+## BigInt (#800)
+
+BigInt operation dependencies come from [[Backend BigInt Operations]].

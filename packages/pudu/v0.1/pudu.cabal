@@ -129,6 +129,8 @@ library
     Pudu.Backend.Runtime.Integer.Wide.Value
     Pudu.Backend.Runtime.Integer.Wide.Operations
     Pudu.Backend.Runtime.Integer.Wide.Display
+    Pudu.Backend.Runtime.Integer.Big.Value
+    Pudu.Backend.Runtime.Integer.Big.Operations
     Pudu.Backend.Runtime.Integer.Convert
     Pudu.Backend.Runtime.Integer.Arithmetic
     Pudu.Backend.Runtime.Integer.Bits

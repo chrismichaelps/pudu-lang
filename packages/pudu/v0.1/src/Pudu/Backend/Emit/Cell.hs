@@ -8,13 +8,14 @@ module Pudu.Backend.Emit.Cell
 
 import Data.Text (Text)
 import qualified Data.Text as Text
-import Pudu.Backend.Emit.Support (integerHelper, isWideInteger)
+import Pudu.Backend.Emit.Support (integerHelper, isBigInteger, isWideInteger)
 import Pudu.Core (CoreType (..), coreTypeName)
 import Pudu.FloatLiteral (floatWidthType)
 import Pudu.IntegerLiteral (integerKindName)
 
 {-| Values a slot holds a reference to: the frame retains and releases them. -}
 ownedType :: CoreType -> Bool
+ownedType (CoreIntegerType integer) = isBigInteger integer
 ownedType CoreTextType = True
 ownedType (CoreTupleType _) = True
 ownedType (CoreRecordType _ _) = True
@@ -30,6 +31,7 @@ ownedType _ = False
 cType :: CoreType -> Text
 cType kind = case kind of
   CoreIntegerType integer | isWideInteger integer -> "pudu_wide_int"
+  CoreIntegerType integer | isBigInteger integer -> "pudu_big *"
   CoreIntegerType _ -> "pudu_int"
   CoreFloatType _ -> "uint64_t"
   CoreCharType -> "uint32_t"
@@ -49,6 +51,7 @@ cType kind = case kind of
 retained :: CoreType -> Text -> (Text, [Text])
 retained kind expression = case kind of
   CoreTextType -> ("pudu_text_retain(" <> expression <> ")", ["text_retain"])
+  CoreIntegerType integer | isBigInteger integer -> ("pudu_big_retain(" <> expression <> ")", ["big_retain"])
   _ | isAggregate kind -> ("pudu_box_retain(" <> expression <> ")", [])
   _ -> (expression, [])
 
@@ -56,6 +59,7 @@ retained kind expression = case kind of
 released :: CoreType -> Text -> Text
 released kind expression = case kind of
   CoreTextType -> "pudu_text_release(" <> expression <> ");"
+  CoreIntegerType integer | isBigInteger integer -> "pudu_big_release(" <> expression <> ");"
   _ | isAggregate kind -> aggregateHelper "drop" kind <> "(" <> expression <> ");"
   _ -> ""
 
@@ -104,6 +108,7 @@ memberRender :: CoreType -> Text -> (Text, [Text])
 memberRender kind expression = case kind of
   CoreIntegerType integer
     | isWideInteger integer -> ("pudu_text_display_wide(" <> expression <> ")", ["text_display_wide"])
+    | isBigInteger integer -> ("pudu_text_display_big(" <> expression <> ")", ["text_display_big"])
     | otherwise -> ("pudu_text_display_int(" <> expression <> ")", ["text_display_int"])
   CoreFloatType _ -> ("pudu_text_display_float(" <> expression <> ")", ["text_display_float"])
   CoreBoolType -> ("(" <> expression <> " ? pudu_text_literal(\"true\", 4) : pudu_text_literal(\"false\", 5))", ["text_literal"])
@@ -144,6 +149,7 @@ memberComparable kind expression
 cellName :: CoreType -> Text
 cellName kind = case kind of
   CoreIntegerType integer | isWideInteger integer -> "wide"
+  CoreIntegerType integer | isBigInteger integer -> "big"
   CoreIntegerType _ -> "integer"
   CoreFloatType _ -> "floating"
   CoreCharType -> "character"

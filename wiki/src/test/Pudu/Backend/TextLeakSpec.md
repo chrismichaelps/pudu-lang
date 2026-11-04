@@ -146,3 +146,7 @@ installed and before source entry. The failed-Result property replaces each
 standard output with a pipe without readers, then requires zero live
 allocations after repeated Err values. This POSIX-only boundary is explicitly
 reported as pending on Windows. Existing healthy corpora use empty setup.
+
+## BigInt (#800)
+
+BigInt successes also run under counted allocation.

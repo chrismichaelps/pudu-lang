@@ -11,7 +11,7 @@ import Data.Text (Text)
 import qualified Data.Text as Text
 import Pudu.Core (CoreLayout (..), CoreType (..), CoreVariant (..))
 import Pudu.FloatLiteral (FloatWidth (..))
-import Pudu.IntegerLiteral (IntegerKind (PlatformSigned, PlatformUnsigned, SignedKind, UnsignedKind), integerKindName, integerKindOf)
+import Pudu.IntegerLiteral (IntegerKind (BigIntKind, PlatformSigned, PlatformUnsigned, SignedKind, UnsignedKind), integerKindName, integerKindOf)
 import Pudu.Frontend.Syntax.Name (ModuleName (..))
 import Pudu.Source (Span)
 import Pudu.Type (TypeInfo (..), typeAt)
@@ -248,7 +248,7 @@ nativeIntegerKind PlatformSigned = True
 nativeIntegerKind PlatformUnsigned = True
 nativeIntegerKind (SignedKind width) = width `elem` [8, 16, 32, 64, 128]
 nativeIntegerKind (UnsignedKind width) = width `elem` [8, 16, 32, 64, 128]
-nativeIntegerKind _ = False
+nativeIntegerKind BigIntKind = True
 
 nativeScalarType :: CoreType -> Bool
 nativeScalarType (CoreIntegerType kind) = nativeIntegerKind kind

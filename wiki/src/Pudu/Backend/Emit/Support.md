@@ -109,3 +109,7 @@ growing dead code so a pattern match stays total.
 ## Tuples (#521)
 
 `zeroValue` answers `NULL` for a tuple box.
+
+## BigInt (#800)
+
+`isBigInteger` names BigInt; its helpers take the `big_` prefix, its zero is NULL, its descriptor is a placeholder its helpers ignore, and a literal is `pudu_big_from_limbs` over its 32-bit limbs.

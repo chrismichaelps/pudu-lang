@@ -12,6 +12,7 @@ import Pudu.Core (CoreFunction, CoreLayout, CoreLocal (..), CoreLoopId, CoreType
 import Pudu.Core.Frame
   ( FrameBlock (..), FrameFault (..), FrameInstruction (..), FrameLabel (..)
   , FrameSlot (..), FrameSlotId (..), FrameTerminator, FrameValue (..), FrameValueShape (..) )
+import Pudu.IntegerLiteral (IntegerKind (BigIntKind))
 import Pudu.Source (Span)
 
 data Flow = Stopped | Completed !(Maybe FrameSlot) deriving stock (Eq, Show)
@@ -165,6 +166,7 @@ moveValue at target payload = case payload of
   _ -> storeValue at target payload
  where
   ownedKind kind = case kind of
+    CoreIntegerType BigIntKind -> True
     CoreTextType -> True
     CoreTupleType _ -> True
     CoreRecordType _ _ -> True

@@ -70,3 +70,7 @@ Bytes slots are owned boxes.
 ## Text slots (#515)
 
 `freshSlot` accepts `CoreTextType`; only Never has no slot.
+
+## BigInt (#800)
+
+A BigInt moves between slots like any other owned value.

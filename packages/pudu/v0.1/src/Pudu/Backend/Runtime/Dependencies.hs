@@ -4,6 +4,7 @@ module Pudu.Backend.Runtime.Dependencies (runtimeDependencies) where
 import Data.Text (Text)
 import Pudu.Backend.Runtime.Aggregate (aggregateRuntimeDependencies)
 import Pudu.Backend.Runtime.Array (arrayRuntimeDependencies)
+import Pudu.Backend.Runtime.Integer.Big.Operations (bigOperationRuntimeDependencies)
 import Pudu.Backend.Runtime.Char (charRuntimeDependencies)
 import Pudu.Backend.Runtime.Float (floatRuntimeDependencies)
 import Pudu.Backend.Runtime.Integer (integerRuntimeDependencies)
@@ -18,7 +19,7 @@ import Pudu.Backend.Runtime.Range (rangeRuntimeDependencies)
 import Pudu.Backend.Runtime.Bytes (bytesRuntimeDependencies)
 
 runtimeDependencies :: Text -> [Text]
-runtimeDependencies name = integerRuntimeDependencies name <> floatRuntimeDependencies name
+runtimeDependencies name = integerRuntimeDependencies name <> floatRuntimeDependencies name <> bigOperationRuntimeDependencies name
   <> textRuntimeDependencies name <> textMethodRuntimeDependencies name
   <> textCaseRuntimeDependencies name <> charRuntimeDependencies name
   <> aggregateRuntimeDependencies name <> arrayRuntimeDependencies name

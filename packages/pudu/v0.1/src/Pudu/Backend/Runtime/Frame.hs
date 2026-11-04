@@ -7,13 +7,14 @@ import Pudu.Comptime.Limits (callDepthLimit)
 
 {-| The cell union only carries the wide, text and box members a program
     needs, so a plain integer program keeps the narrow layout. -}
-frameTypes :: Bool -> Bool -> Bool -> [Text]
-frameTypes wide text boxes =
+frameTypes :: Bool -> Bool -> Bool -> Bool -> [Text]
+frameTypes wide big text boxes =
   [ "typedef struct pudu_box pudu_box;" | boxes ] <>
   [ "typedef struct pudu_items pudu_items;" | boxes ] <>
   [ "typedef struct pudu_tree_node pudu_tree_node;" | boxes ] <>
   [ "typedef union { pudu_int integer; int scalar; uint32_t character; uint64_t floating; "
       <> (if wide then "pudu_wide_int wide; " else "")
+      <> (if big then "pudu_big *big; " else "")
       <> (if text then "pudu_text text; " else "")
       <> (if boxes then "pudu_box *box; pudu_items *items; pudu_tree_node *tree; " else "") <> "} pudu_cell;"
   ] <> (if boxes then
