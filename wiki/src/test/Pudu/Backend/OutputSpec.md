@@ -70,3 +70,17 @@ Resolved Grill Log: Reporting probes include a source E7004 after prior output, 
 ## First-class output builtins (#569)
 
 Resolved Grill Log: Run failed-handle buffer sequences through direct and first-class output calls, comparing both evaluators and native bytes/status without changing the oracle.
+
+## Closed modes are readiness masks (#815)
+
+Closing only the target channel is the descriptor mask with that one
+descriptor closed (2 for standard output, 4 for standard error), so `closed`
+looks up the readiness probe's answer for that mask. On Linux the startup
+descriptor fill places an event-queue handle there, which never polls
+writable, and both engines wait (#818); a waiting outcome is accepted exactly
+when the probe measured that mask as blocked, whatever status the program
+would otherwise report. The engines must still agree.
+
+Resolved Grill Log: the probe already answered for masks; treating `closed`
+as a separate mode expected an exit Linux never gives and spent the
+ten-second limit on every closed case.

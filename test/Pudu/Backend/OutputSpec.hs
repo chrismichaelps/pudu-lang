@@ -115,7 +115,7 @@ testEntries = do
                     <> if "1 / 0" `Text.isInfixOf` body then ["err-read", "err-closed", "err-pipe"]
                       <> ["out-mask" <> show mask | mask <- [1 .. 7 :: Int]] else [])
   run root runner oracle path binary body blockedMasks mode = do
-    let blocked = drop 4 mode `elem` blockedMasks
+    let blocked = readinessKey (take 4 mode) (drop 4 mode) `elem` blockedMasks
         limit = if blocked then 2000000 else 10000000
     environment <- getEnvironment
     let nativeProcess = (proc runner [mode, "default", binary])
@@ -196,7 +196,7 @@ testFailures indirect
                 (run runner oracle path binary "out-" Nothing blocked)
                 [("mask" <> show mask, "default") | mask <- [1 .. 7 :: Int]]
   run runner oracle path binary channel expectedStatus blockedMasks (mode, inherited) = do
-    let blockedMode = mode `elem` blockedMasks
+    let blockedMode = readinessKey channel mode `elem` blockedMasks
         limit = if blockedMode then 2000000 else 10000000
     environment <- getEnvironment
     let nativeProcess = (proc runner [channel <> mode, inherited, binary])
@@ -219,7 +219,7 @@ testFailures indirect
                 Nothing -> case status of
                   ExitFailure number -> (number > 0 && number <= 206 && not blockedMode) === True
                   _ -> False === True
-              Waiting _ _ -> (blockedMode && expectedStatus == Nothing) === True)
+              Waiting _ _ -> blockedMode === True)
           ]) ["compiled", "tree"]
     pure (conjoin outcomes)
   summary = take 180 . show
@@ -319,6 +319,16 @@ kernelMasks cc root = do
           putStrLn ("[output readiness] expected blocked masks: " <> show blocked)
           pure (Right blocked)
         Right _ -> pure (Left "healthy output was classified as blocked")
+
+{-| The descriptor mask a launcher mode leaves closed, which is the name the
+    readiness probe answers for. Closing only the target channel is the mask
+    with that one descriptor closed, so it blocks exactly where that mask
+    does: on Linux the startup descriptor fill places an event-queue handle
+    there, which never polls writable, in both engines. -}
+readinessKey :: String -> String -> String
+readinessKey channel mode
+  | mode == "closed" = "mask" <> show (if channel == "err-" then 4 else 2 :: Int)
+  | otherwise = mode
 
 readinessProbe :: Text
 readinessProbe = Text.unlines $
