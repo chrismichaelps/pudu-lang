@@ -20,11 +20,13 @@ cleanup executes all eight kernel programs. The public StringView facade now
 passes after integrating #825 at dev b9038686, including imported defaults,
 byte iteration, shared substrings, mutable copy and byte searches.
 
-Strict Clang, GCC 15 and ASan/UBSan run both evaluators. Complete optimized
-gates and final-head CI remain required. No independent review is claimed.
+Strict Clang, GCC 15 and ASan/UBSan pass with both evaluators. All 48 clean
+optimized gates and initial-head CI pass. PR #829 now integrates query delivery
+from dev 88829715; combined focused checks and final-head CI are next.
+No independent review is claimed.
 
-Exact next action: finish the final compiler matrix, run all clean repository
-gates, then publish the bounded PR with final-head CI and review evidence.
+Exact next action: verify the combined text/query compiler matrix and final-head
+CI, then obtain independent review or an explicit owner exception before merge.
 
 ## Referenced by
 [[handoffs/_MOC]] · [[Native Text Views]]

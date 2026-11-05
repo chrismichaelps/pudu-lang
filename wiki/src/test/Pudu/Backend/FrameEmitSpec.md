@@ -66,3 +66,9 @@ real assembler is what users get, so it is what must compile strictly.
 ## Native byte views (#827)
 
 Add located malformed byte-method receiver, arity, offset/needle/result carrier cases. Valid controls require each descriptor to select its helper; invalid shapes fault at the exact FrameValue span before any C compiler. See [[Native Text Views]].
+
+## Query contract (#814)
+
+Extend malformed keyed-carrier cases for query result widths, payloads, operand types/arities and members key kinds. Require the exact FrameValue span for every fault before any C compiler is reached.
+
+Resolved Grill Log: project existing checked semantics; no inference, fallback, unsafe cell reinterpretation or frame ABI change. Reuse granular runtime dependencies and existing numeric/array ownership kernels.

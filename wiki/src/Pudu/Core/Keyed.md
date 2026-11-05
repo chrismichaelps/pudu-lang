@@ -19,3 +19,9 @@ There is no persisted Core ordinal or change to the frame-cell layout.
 ## Referenced by
 
 [[Pudu Core IR Module]] · [[Compiler Lower Word Map]] · [[Backend Frame Values]]
+
+## Query contract (#814)
+
+Add KeyedWordSubset, KeyedWordDisjoint, KeyedWordPopCount and KeyedWordMembers. Predicates return Bool from identical UInt64-valued maps; count returns UInt128; members requires UInt64 keys and returns Array[UInt64]. No cell ABI change.
+
+Resolved Grill Log: project existing checked semantics; no inference, fallback, unsafe cell reinterpretation or frame ABI change. Reuse granular runtime dependencies and existing numeric/array ownership kernels.

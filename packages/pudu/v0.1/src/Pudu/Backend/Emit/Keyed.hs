@@ -77,8 +77,23 @@ mapHelpers kind key value =
       , "  free(nodes);"
       , "  return shown;"
       , "}" ]
-  ] <> wordHelpers
+  ] <> wordHelpers <> wordQueries
  where
+  wordQueries =
+    [ helper operation ["tree_word_predicate", aggregateNeed "ops" kind]
+        [ "static int " <> name operation <> "(pudu_box *left, pudu_box *right) {"
+        , "  return pudu_tree_word_predicate(left->fields[0].tree, right->fields[0].tree, " <> ops <> ", " <> code <> ");"
+        , "}" ]
+    | value == CoreIntegerType (UnsignedKind 64)
+    , (operation, code) <- [("word_subset", "0"), ("word_disjoint", "1")] ] <>
+    [ helper "word_count" ["tree_word_count"]
+        [ "static pudu_wide_int " <> name "word_count" <> "(pudu_box *box) {"
+        , "  return pudu_tree_word_count(box->fields[0].tree);", "}" ]
+    | value == CoreIntegerType (UnsignedKind 64) ] <>
+    [ helper "word_members" ["tree_word_members"]
+        [ "static pudu_box *" <> name "word_members" <> "(pudu_box *box) {"
+        , "  return pudu_tree_word_members(box->fields[0].tree);", "}" ]
+    | key == CoreIntegerType (UnsignedKind 64), value == key ]
   wordHelpers =
     [ helper operation ["tree_word_algebra", aggregateNeed "ops" kind, aggregateNeed "wrap" kind]
         [ "static pudu_box *" <> name operation <> "(pudu_box *left, pudu_box *right) {"
