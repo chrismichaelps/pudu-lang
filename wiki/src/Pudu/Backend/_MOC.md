@@ -124,3 +124,5 @@ aliases: [Backend Module Map]
 - [[Backend Decimal Operations]] — Decimal parsing, binary64, division and primitives.
 - [[Backend Method Value Programs]] — built-in method values of every receiver kind.
 - [[Backend Default Parameter Programs]] — defaults in every combination, directly and through values.
+
+- [[Backend Frame Text Views]] — checked byte-method carrier emission.

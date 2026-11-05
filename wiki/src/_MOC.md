@@ -328,3 +328,5 @@ tags: [moc, module]
 
 - [[Program View Spec]] · [[Text View Model Tests]]
 - [[UsesViewBoundaries]] · [[UsesStringViewSearch]] · [[UsesIterViews]]
+
+- [[Backend Text View Programs]] — native UTF-8 byte-boundary and lifetime evidence.

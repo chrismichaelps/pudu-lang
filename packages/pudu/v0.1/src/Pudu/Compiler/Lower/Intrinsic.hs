@@ -10,6 +10,7 @@ import Pudu.Compiler.Lower.Call (outputResult)
 import Pudu.Compiler.Lower.Convert (charFromCodeCore)
 import Pudu.Compiler.Lower.WordMap (wordMapCallable, wordMapMethod)
 import Pudu.Compiler.Lower.Decimal (decimalCallable)
+import Pudu.Compiler.Lower.Text (textCallable)
 import Pudu.Compiler.Lower.Keyed (keyedFromArray)
 import Pudu.Compiler.Lower.State (LowerContext (..), LowerState (..), halt, intType, lookupLocal, resolveFunction, startFunction)
 import Pudu.Compiler.Lower.Stop (panicBody, untypedConvertBody, wrongPanicBody)
@@ -68,6 +69,11 @@ intrinsic state at name solved
       Just kind@(CoreFunctionType arguments result) | Just build <- wordMapCallable name kind ->
         register state at name ("$builtin:" <> name <> ":" <> Text.pack (show kind)) kind arguments result (\entered -> build entered at)
       _ -> halt at "a word-map builtin without its represented callable type" state
+  | Just (kind@(CoreFunctionType arguments result), build) <- textCallable name = Just $
+      if solved == Just kind
+        then register state at name ("$builtin:" <> name <> ":" <> Text.pack (show kind)) kind arguments result
+          (\entered -> build entered at)
+        else halt at "a text-view builtin without its represented callable type" state
   | Just (kind@(CoreFunctionType arguments result), build) <- decimalCallable name = Just $
       if solved == Just kind
         then register state at name ("$builtin:" <> name <> ":" <> Text.pack (show kind)) kind arguments result

@@ -127,3 +127,5 @@ Pudu is a statically typed native systems language for developers who need predi
 - [[Native Method Values]] — receiver-bound built-in methods, failures at the caller.
 - [[Native Default Parameters]] — a supplied-count parameter and a default prologue.
 - [[Ark Water Validation]] — numerical wave conformance and staged fluid scenarios.
+
+- [[Native Text Views]] — byte-addressed UTF-8 reads and shared slices.

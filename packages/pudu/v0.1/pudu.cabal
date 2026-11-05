@@ -156,6 +156,7 @@ library
     Pudu.Compiler.Frame.Body
     Pudu.Compiler.Frame.Match
     Pudu.Compiler.Frame.State
+    Pudu.Backend.Emit.Frame.TextView
     Pudu.Backend.Emit.Frame.Value
     Pudu.Backend.Emit.Frame.Body
     Pudu.Compiler.Lower.Body

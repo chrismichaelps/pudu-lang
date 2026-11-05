@@ -452,3 +452,7 @@ other record expression names its type through `writtenLabel`.
 ## Decimal (#802)
 
 A decimal literal lowers through [[Compiler Lower Decimal]], whose primitives a call by name reaches; an entry may answer a Decimal.
+
+## Native byte views (#827)
+
+After nearer name/function/variant resolution, delegate the six text-view primitive calls to lowerTextPrimitive. Keep canonical builtin identity, explicit type facts and source-order transfers; no fallback or source inference. See [[Native Text Views]].
