@@ -16,6 +16,7 @@ extra-source-files: cbits/pudu_desktop.h
                     cbits/pudu_webview.h
                     cbits/pudu_webview_records.h
                     cbits/pudu_webview_macos.h
+                    cbits/pudu_webview_gtk.h
                     cbits/pudu_desktop_host.h
                     cbits/pudu_audio.h
                     cbits/pudu_audio_stream.h
@@ -58,6 +59,11 @@ data-files:         lib/Std/*.pudu
 source-repository head
   type:             git
   location:         https://github.com/chrismichaelps/pudu-lang.git
+
+flag webkitgtk
+  description: Build the Linux WebView adapter against WebKitGTK 4.1 and GTK 3
+  default:     False
+  manual:      True
 
 common warnings
   default-language: GHC2024
@@ -517,6 +523,12 @@ library
     cc-options:     -fobjc-arc
     cpp-options:    -DPUDU_DARWIN_DESKTOP -DPUDU_DARWIN_AUDIO -DPUDU_NATIVE_WEBVIEW
     frameworks:     AppKit AudioToolbox CoreGraphics WebKit
+  if os(linux) && flag(webkitgtk)
+    c-sources:      cbits/pudu_webview_records.c
+                    cbits/pudu_webview_gtk.c
+                    cbits/pudu_webview_gtk_view.c
+    pkgconfig-depends: webkit2gtk-4.1, gtk+-3.0
+    cpp-options:    -DPUDU_NATIVE_WEBVIEW
 
 executable pudu
   import:           warnings

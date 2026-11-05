@@ -1,0 +1,62 @@
+name: Desktop WebView
+on:
+  pull_request:
+    paths:
+      - 'packages/pudu/v0.1/cbits/pudu_webview*'
+      - 'test/native/Webview*.c'
+      - 'tools/pudu-js/**'
+      - '.github/workflows/desktop-webview.yml'
+  push:
+    branches: [dev, 'feature/**']
+    paths:
+      - 'packages/pudu/v0.1/cbits/pudu_webview*'
+      - 'test/native/Webview*.c'
+      - 'tools/pudu-js/**'
+      - '.github/workflows/desktop-webview.yml'
+permissions:
+  contents: read
+jobs:
+  # Each adapter is driven through the six entry points by the same harness,
+  # without building the compiler: the adapter is plain C or Objective-C.
+  webkit-macos:
+    runs-on: macos-14
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - name: Check record framing and URL patterns
+        run: |
+          cc -Wall -Wextra -Werror -I packages/pudu/v0.1/cbits packages/pudu/v0.1/cbits/pudu_webview_records.c test/native/WebviewRecords.c -o records
+          ./records
+      - name: Drive a WebKit view through the adapter
+        run: |
+          cc -fobjc-arc -Wall -Wextra -Werror -I packages/pudu/v0.1/cbits \
+            packages/pudu/v0.1/cbits/pudu_webview_records.c \
+            packages/pudu/v0.1/cbits/pudu_webview_macos.m \
+            packages/pudu/v0.1/cbits/pudu_webview_macos_view.m \
+            test/native/WebviewDrive.c -framework AppKit -framework WebKit -o drive
+          ./drive
+      - name: Test the page bridge
+        run: |
+          node --test tools/pudu-js/bridge.test.mjs
+          node scripts/desktop-bridge.mjs --check
+  webkitgtk-linux:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install WebKitGTK and a virtual display
+        run: |
+          sudo apt-get update || echo "some package indexes could not be read; continuing to the install"
+          sudo apt-get install -y libwebkit2gtk-4.1-dev xvfb
+      - name: Check record framing and URL patterns
+        run: |
+          cc -Wall -Wextra -Werror -I packages/pudu/v0.1/cbits packages/pudu/v0.1/cbits/pudu_webview_records.c test/native/WebviewRecords.c -o records
+          ./records
+      - name: Drive a WebKitGTK view through the adapter
+        run: |
+          cc -Wall -Wextra -Werror -I packages/pudu/v0.1/cbits \
+            packages/pudu/v0.1/cbits/pudu_webview_records.c \
+            packages/pudu/v0.1/cbits/pudu_webview_gtk.c \
+            packages/pudu/v0.1/cbits/pudu_webview_gtk_view.c \
+            test/native/WebviewDrive.c $(pkg-config --cflags --libs webkit2gtk-4.1 gtk+-3.0) -o drive
+          xvfb-run -a ./drive

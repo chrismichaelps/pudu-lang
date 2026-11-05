@@ -191,6 +191,14 @@ jobs:
         run: python3 test/release-plan.test.py
       - name: Verify compiler archive notices and strip policy
         run: python3 test/package-binary.test.py
+      # Desktop packages are checked by the tools that install them, so a
+      # package this framework writes is one the distribution would accept.
+      - name: Install the package tools the desktop gate checks with
+        run: |
+          sudo apt-get install -y rpm nsis
+          npm install --global typescript@5.6.3
+      - name: Verify the desktop framework
+        run: node test/desktop-webview.mjs "$PUDU"
 
   ark:
     name: Ark gates

@@ -72,6 +72,8 @@ run 'explicit traits preserve their provider result schemes' \
 run 'every diagnostic code means one thing' node test/diagnostic-codes.mjs
 run 'desktop configure refuses each invalid setting by name' \
   bash -c 'node test/desktop-configure.mjs "$PUDU"'
+run 'desktop applications: modules, bridge, updates and packages' \
+  bash -c 'node test/desktop-webview.mjs "$PUDU"'
 run 'capsule support preserves floor policy, state and typed errors' \
   node test/ark-ground.mjs "$PUDU"
 run 'swept movement preserves contacts, errors and unapplied travel' \
