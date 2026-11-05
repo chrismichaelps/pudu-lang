@@ -24,11 +24,16 @@ and ASan/UBSan in both tree and compiled evaluator modes (six configurations).
 Each executes nine counted-success programs, exact native/interpreter output,
 refusal provenance and located carrier faults. Queries preserve wrapped
 member duplicates, UInt128 arithmetic across 2^64, callable identities,
-generic keys and source-order transfers. No full-gate or final CI pass is
-claimed for this slice yet.
+generic keys and source-order transfers. The integrated implementation head f4b8d00c passes all 48 clean optimized
+repository gates and CI run 42054899186. PR #826 carries the final-head
+validation status.
 
-Exact next action: integrate current dev, run the clean optimized full gate,
-then publish the bounded query PR and verify its current-head CI.
+Test Engineer → Forensic Guardian self-audit. Source/mirror parity and private
+input boundaries are checked. No independent semantic approval is claimed;
+subagents remain prohibited.
+
+Exact next action: verify PR #826's final-head checks, then obtain independent
+review or an explicit owner review exception before merging.
 
 ## Referenced by
 
