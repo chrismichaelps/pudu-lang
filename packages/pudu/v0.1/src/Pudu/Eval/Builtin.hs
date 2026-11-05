@@ -230,6 +230,7 @@ callHashing spanValue builtin arguments = case (builtin, arguments) of
   (BufferScanU64Builtin, values) -> Buffer.callBufferScanU64 spanValue values
   (BufferCopyBuiltin, values) -> Buffer.callBufferCopy spanValue values
   (BufferSizeBuiltin, values) -> Buffer.callBufferSize spanValue values
+  (TextByteAtBuiltin, values) -> TextView.callTextByteAt spanValue values
   (TextByteSizeBuiltin, values) -> TextView.callTextByteSize spanValue values
   (TextByteSliceBuiltin, values) -> TextView.callTextByteSlice spanValue values
   (TextByteFindBuiltin, values) -> TextView.callTextByteFind spanValue values
@@ -314,6 +315,7 @@ isHashingBuiltin builtin = case builtin of
   BufferScanU64Builtin -> True
   BufferCopyBuiltin -> True
   BufferSizeBuiltin -> True
+  TextByteAtBuiltin -> True
   TextByteSizeBuiltin -> True
   TextByteSliceBuiltin -> True
   TextByteFindBuiltin -> True

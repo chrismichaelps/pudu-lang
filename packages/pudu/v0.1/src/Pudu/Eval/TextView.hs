@@ -1,6 +1,8 @@
 {-| @Eval.TextView.Module — byte-addressed reads of a Str for Std.StringView -}
 module Pudu.Eval.TextView
-  ( callTextByteSize
+  ( callTextByteAt
+  , byteAt
+  , callTextByteSize
   , callTextByteSlice
   , callTextByteFind
   , callTextByteFindLast
@@ -20,6 +22,8 @@ import Data.Text.Unsafe (Iter (..), dropWord8, iter, lengthWord8, takeWord8)
 import Pudu.Eval.Env (Evaluator, abortAt)
 import Pudu.Eval.Value (Value (..), intOf)
 import Pudu.Source (Span)
+import Data.Word (Word8)
+import Pudu.IntegerLiteral (IntegerKind (UnsignedKind))
 
 someValue :: Value -> Value
 someValue v = VariantValue "Some" [v]
@@ -33,6 +37,19 @@ isScalarBoundary (Text array offset size) at
   | at < 0 || at > toInteger size = False
   | at == toInteger size = True
   | otherwise = TextArray.unsafeIndex array (offset + fromInteger at) .&. 0xC0 /= 0x80
+
+{-| Read a UTF-8 code unit after bounding the mathematical offset. -}
+byteAt :: Text -> Integer -> Maybe Word8
+byteAt (Text array offset size) at
+  | at >= 0 && at < toInteger size = Just (TextArray.unsafeIndex array (offset + fromInteger at))
+  | otherwise = Nothing
+
+callTextByteAt :: Span -> [Value] -> Evaluator Value
+callTextByteAt spanValue arguments = case arguments of
+  [StrValue text, IntValue _ at] ->
+    pure (maybe noneValue (someValue . IntValue (UnsignedKind 8) . toInteger) (byteAt text at))
+  [_, _] -> abortAt (Just spanValue) "E7001" "textByteAt expects a Str and an Int offset" Nothing
+  _ -> abortAt (Just spanValue) "E7003" "textByteAt expects two arguments" Nothing
 
 callTextByteSize :: Span -> [Value] -> Evaluator Value
 callTextByteSize spanValue arguments = case arguments of

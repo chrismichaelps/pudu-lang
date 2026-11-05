@@ -228,6 +228,8 @@ declareBuiltinConstructors = do
     (monotype (FunctionTypeValue False [bytesType, integerType, bytesType, integerType, integerType] (NominalType "Option" [bytesType])))
   bindName "bufferSize"
     (monotype (FunctionTypeValue False [bytesType] integerType))
+  bindName "textByteAt"
+    (monotype (FunctionTypeValue False [stringType, integerType] (NominalType "Option" [NominalType "UInt8" []])))
   bindName "textByteSize"
     (monotype (FunctionTypeValue False [stringType] integerType))
   bindName "textByteSlice"

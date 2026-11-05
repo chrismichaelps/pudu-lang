@@ -180,6 +180,7 @@ installBuiltinConstructors = do
   bind "bufferScanU64" (BuiltinValue BufferScanU64Builtin)
   bind "bufferCopy" (BuiltinValue BufferCopyBuiltin)
   bind "bufferSize" (BuiltinValue BufferSizeBuiltin)
+  bind "textByteAt" (BuiltinValue TextByteAtBuiltin)
   bind "textByteSize" (BuiltinValue TextByteSizeBuiltin)
   bind "textByteSlice" (BuiltinValue TextByteSliceBuiltin)
   bind "textByteFind" (BuiltinValue TextByteFindBuiltin)

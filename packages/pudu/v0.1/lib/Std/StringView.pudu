@@ -1,6 +1,7 @@
 module Std.StringView
 
 import Std.Iter {Sequence}
+import Std.StringView.Search as Search
 
 /// A view of UTF-8 text, addressed in bytes.
 ///
@@ -109,6 +110,33 @@ export trait View {
   /// ```
   fn findLast(self: &Self, needle: Str) -> Option[Int]
 
+  /// The last match beginning at or before a byte offset.
+  fn findLastFrom(self: &Self, needle: Str, from: Int) -> Option[Int]
+
+  /// One raw UTF-8 code unit, including a continuation byte.
+  fn byteAt(self: &Self, offset: Int) -> Option[UInt8]
+
+  /// Lazy, restartable byte iteration over the shared text.
+  fn byteUnits(self: &Self) -> Search.Units
+
+  /// Lexicographic UTF-8 order as -1, 0 or 1.
+  fn compare(self: &Self, other: Str) -> Int
+
+  /// First byte appearing among the encoded bytes of choices.
+  fn findFirstOf(self: &Self, choices: Str, from: Int) -> Option[Int]
+
+  /// Last matching byte at or before from; positions past the end clamp.
+  fn findLastOf(self: &Self, choices: Str, from: Int) -> Option[Int]
+
+  /// First byte absent from the encoded choices.
+  fn findFirstNotOf(self: &Self, choices: Str, from: Int) -> Option[Int]
+
+  /// Last byte absent from the encoded choices, at or before from.
+  fn findLastNotOf(self: &Self, choices: Str, from: Int) -> Option[Int]
+
+  /// Copy at most count bytes into an existing array. Refusals write nothing.
+  fn copyInto(self: &Self, target: &mut Array[UInt8], count: Int, start: Int) -> Option[Int]
+
   /// The scalar starting at byte `offset` and how many bytes encode it, or
   /// `None` past the end or inside a scalar.
   ///
@@ -204,6 +232,26 @@ impl View for StringView {
   fn find(self: &Self, needle: Str, from: Int) -> Option[Int] { textByteFind(self.text, needle, from) }
 
   fn findLast(self: &Self, needle: Str) -> Option[Int] { textByteFindLast(self.text, needle) }
+
+  fn findLastFrom(self: &Self, needle: Str, from: Int) -> Option[Int] { Search.findLastFrom(self.text, needle, from) }
+
+  fn byteAt(self: &Self, offset: Int) -> Option[UInt8] { textByteAt(self.text, offset) }
+
+  fn byteUnits(self: &Self) -> Search.Units { Search.units(self.text) }
+
+  fn compare(self: &Self, other: Str) -> Int { Search.compare(self.text, other) }
+
+  fn findFirstOf(self: &Self, choices: Str, from: Int) -> Option[Int] { Search.findFirstOf(self.text, choices, from) }
+
+  fn findLastOf(self: &Self, choices: Str, from: Int) -> Option[Int] { Search.findLastOf(self.text, choices, from) }
+
+  fn findFirstNotOf(self: &Self, choices: Str, from: Int) -> Option[Int] { Search.findFirstNotOf(self.text, choices, from) }
+
+  fn findLastNotOf(self: &Self, choices: Str, from: Int) -> Option[Int] { Search.findLastNotOf(self.text, choices, from) }
+
+  fn copyInto(self: &Self, target: &mut Array[UInt8], count: Int, start: Int) -> Option[Int] {
+    Search.copyInto(self.text, target, count, start)
+  }
 
   fn scalarAt(self: &Self, offset: Int) -> Option[(Char, Int)] { textScalarAt(self.text, offset) }
 
