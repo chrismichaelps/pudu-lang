@@ -130,12 +130,21 @@ testMatrix cc root = do
       <> ["{" <> Text.intercalate "," [number index, if signed then "1" else "0", wideText a, wideText b,
             wideText (either (const 0) id answer), number (either id (const 0) answer)] <> "}," | (index,signed,a,b,answer) <- rows] <> ["};"]
     checks =
-      ["static int test_case(size_t i) {", "  " <> sites
+      -- The operations run in their own function, reached through a volatile
+      -- pointer so no compiler inlines them into the frame that calls setjmp:
+      -- a local of that frame changed between setjmp and longjmp is
+      -- indeterminate, and GCC refuses the program under -Wclobbered.
+      ["static int run_case(size_t i, pudu_wide_int *result) {", "  " <> sites
       , "  pudu_wide_int a=cases[i].a, b=cases[i].b; pudu_wide_kind kind={cases[i].signed_kind};"
-      , "  test_failure=0;"
-      , "  if (setjmp(test_jump) == 0) {", "    pudu_wide_int result;", "    switch(cases[i].operation) {"]
-      <> ["    case " <> number index <> ": result=" <> call <> "; break;" | (index,(_,call,_)) <- zip [0::Int ..] operations]
-      <> ["    default: return 1;", "    }"
+      , "  switch(cases[i].operation) {"]
+      <> ["  case " <> number index <> ": *result=" <> call <> "; return 0;" | (index,(_,call,_)) <- zip [0::Int ..] operations]
+      <> ["  default: return 1;", "  }", "}"
+         , "static int (*volatile run_selected)(size_t, pudu_wide_int *) = run_case;"
+         , "static int test_case(size_t i) {"
+         , "  pudu_wide_int result;"
+         , "  test_failure=0;"
+         , "  if (setjmp(test_jump) == 0) {"
+         , "    if(run_selected(i, &result)) return 1;"
          , "    if(cases[i].failure || result.bits.low!=cases[i].expected.bits.low || result.bits.high!=cases[i].expected.bits.high || result.negative!=cases[i].expected.negative) return 1;"
          , "  } else if(test_failure!=cases[i].failure) return 1;", "  return 0;", "}"
          , "int main(void) { for(size_t i=0; i<sizeof cases/sizeof cases[0]; ++i) {"

@@ -49,3 +49,11 @@ Resolved Grill Log: extend the existing stdout/stderr/both and inherited
 SIGPIPE matrix with dynamic E7001 and computed-help E7004 failures after
 prior output. Each case names its expected diagnostic code explicitly; keep
 all original status, bytes and signal-disposition assertions intact.
+
+## A failed report follows the platform (#815)
+
+`brokenReportStatus` is the status a failure report ends with when standard
+error is a pipe nobody reads: exit 1 on Linux, where the interpreter keeps
+SIGPIPE ignored and its write fails, and death by the signal elsewhere. The
+continuation matrix and the floating runtime's pipe matrix both expect it, so
+they hold the native runtime to the interpreter on the platform under test.

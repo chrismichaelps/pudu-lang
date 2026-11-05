@@ -100,9 +100,9 @@ import Test.QuickCheck (Property, conjoin, counterexample, property, (===))
 
 backendNativeProperties :: [(String, IO Property)]
 backendNativeProperties =
-  [ ("native execution matches the interpreter on success programs", testSuccessConformance)
-  , ("native integer operators match mathematical and interpreter results", testIntegerConformance)
-  , ("native integer failures retain exact interpreter refusals", testIntegerRefusals)
+  [ ("native execution matches the interpreter on success programs", testSuccessConformance) ]
+  <> integerConformanceParts <>
+  [ ("native integer failures retain exact interpreter refusals", testIntegerRefusals)
   , ("native floats match IEEE answers and the interpreter", testFloatConformance)
   , ("native float operator failures retain interpreter refusals", testFloatRefusals)
   , ("native text matches independent answers and the interpreter", testTextConformance)
@@ -285,8 +285,22 @@ testFunctionConformance = conjoin <$> mapM (uncurry conformance) functionSuccess
 testFunctionRefusals :: IO Property
 testFunctionRefusals = conjoin <$> mapM (uncurry conformance) functionRefusalPrograms
 
-testIntegerConformance :: IO Property
-testIntegerConformance = conjoin <$> mapM run integerSuccessPrograms
+{-| The integer matrix compiles one C program per row, so it is registered as
+    several properties over interleaved rows: each is one test-shard unit,
+    and together they hold every row exactly once. -}
+integerConformanceParts :: [(String, IO Property)]
+integerConformanceParts =
+  [ ( "native integer operators match mathematical and interpreter results, part "
+        <> show (part + 1) <> " of " <> show integerConformanceShares
+    , testIntegerConformance part )
+  | part <- [0 .. integerConformanceShares - 1] ]
+
+integerConformanceShares :: Int
+integerConformanceShares = 8
+
+testIntegerConformance :: Int -> IO Property
+testIntegerConformance part = conjoin <$> mapM run
+  [ row | (index, row) <- zip [0 :: Int ..] integerSuccessPrograms, index `mod` integerConformanceShares == part ]
  where
   run (label, source, expected) = conformanceExpecting (Just (expected, "", 0)) label source
 

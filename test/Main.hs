@@ -127,6 +127,7 @@ runTests = do
   sourceOutcomes <-
     sequence
       [ check "empty source position" testEmptySourcePosition
+      , check "a test shard selector places every label in exactly one shard" testShardSelection
       , check "CRLF position" testCrLfPosition
       , check "mixed newline positions" testMixedNewlinePosition
       , check "Unicode scalars define offsets and columns" testUnicodeScalarPosition
@@ -195,13 +196,41 @@ runTests = do
 check :: String -> IO Property -> IO Bool
 check label loadProperty = do
   wanted <- lookupEnv "PUDU_TEST_MATCH"
+  shard <- lookupEnv "PUDU_TEST_SHARD"
   case wanted of
     Just fragment | not (fragment `isInfixOf` label) -> pure True
+    _ | not (inShard shard label) -> pure True
     _ -> do
       putStrLn ("[test] " <> label)
       propertyValue <- loadProperty
       result <- quickCheckResult (withMaxSuccess 200 propertyValue)
       pure (isSuccess result)
+{-| Whether a property belongs to the shard `PUDU_TEST_SHARD=k/n` names: its
+    label's stable hash modulo n is k. Every label lands in exactly one shard,
+    whatever order the properties run in; an absent or unreadable selector
+    runs every property. -}
+inShard :: Maybe String -> String -> Bool
+inShard selector label = case selector >>= parseShard of
+  Just (index, count) -> labelHash label `mod` count == index
+  Nothing -> True
+ where
+  parseShard text = case break (== '/') text of
+    (index, '/' : count) | [(k, "")] <- reads index, [(n, "")] <- reads count, n > 0, k >= 0, k < n -> Just (k, n)
+    _ -> Nothing
+
+{-| A label's hash: fixed across runs and machines, unlike `hash`. -}
+labelHash :: String -> Int
+labelHash = foldl' (\total scalar -> (total * 31 + fromEnum scalar) `mod` 1000000007) 7
+
+testShardSelection :: IO Property
+testShardSelection = pure $ conjoin
+  [ forAll (listOf (elements "abc xyz-:#0123")) $ \label -> forAll (chooseInt (1, 9)) $ \count ->
+      length [index | index <- [0 .. count - 1], inShard (Just (show index <> "/" <> show count)) label] === 1
+  , inShard Nothing "any" === True
+  , inShard (Just "3/2") "any" === True
+  , inShard (Just "one/two") "any" === True
+  ]
+
 testEmptySourcePosition :: IO Property
 testEmptySourcePosition = do
   source <- newSource (SourceName "empty") Text.empty

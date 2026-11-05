@@ -79,3 +79,9 @@ over the integer parts only.
 Resolved Grill Log: output, process and error parts have their own tables;
 the old "everything that is not float or text" filter stopped being true
 when they arrived, and the compile failure before it hid that.
+
+## Closed-pipe reports (#815)
+
+A fatal probe whose report goes to a closed standard error expects
+[[Native Broken Pipe Tests]]' `brokenReportStatus`, the interpreter's outcome
+on this platform.
