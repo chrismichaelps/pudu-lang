@@ -144,6 +144,7 @@ test-suite pudu-test
     Pudu.Compiler.Program.ForeignSpec
     Pudu.Compiler.Program.LanguageSpec
     Pudu.Compiler.Program.StdlibSpec
+    Pudu.Compiler.Program.ViewSpec
     Pudu.Compiler.Program.ReflectionSpec
     Pudu.Compiler.Program.EvalSpec
     Pudu.Compiler.Program.Eval.DataSpec
@@ -193,6 +194,7 @@ test-suite pudu-test
     Pudu.Eval.FunctionClosureSpec
     Pudu.Eval.SystemSpec
     Pudu.Eval.MutexSpec
+    Pudu.Eval.TextViewSpec
     Pudu.DocSpec
     Pudu.Repl.AnswerSpec
     Pudu.Repl.SessionSpec

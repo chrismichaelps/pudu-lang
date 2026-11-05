@@ -244,6 +244,7 @@ tags: [moc, handoff]
 
 - [[Graph Integration Delivery]] — preserve both Database safeguards and exact graph output (#478).
 
+- [[Std Views Delivery]] — non-owning views, offset allocators and a chainable Std.Iter (#527).
 - [[Native Wide Value Publication]] — exact wide-carrier dependency partition.
 - [[Native Word128 Publication]] — independent dev-based kernel partition.
 - [[Native Diagnostic Contracts Delivery]] — independent dev-based diagnostic partition (#486).

@@ -81,3 +81,5 @@ Dependency direction: Library → Program. Only [[Compiler Program]] reads files
 - [[Compiler Lower Default]] — default parameter values (#638).
 - [[Compiler Lower Stop]] — panic and untyped convertInteger, direct and as values (#633).
 - [[Bound Receiver Evidence Delivery]] — complete selected bound and receiver facts for #735.
+
+- [[Program View Spec]] — public view compatibility and boundary evidence.
