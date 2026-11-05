@@ -172,25 +172,57 @@ char *pudu_field_copy(pudu_field field) {
   return copy;
 }
 
-int pudu_pattern_match(const char *pattern, const char *text) {
-  const char *star = NULL;
-  const char *resume = NULL;
-  while (*text) {
-    if (*pattern == '*') {
-      star = pattern++;
-      resume = text;
-    } else if (*pattern == *text) {
-      pattern++;
-      text++;
-    } else if (star != NULL) {
-      pattern = star + 1;
-      text = ++resume;
+/* Where the authority ends: the first '/', '?' or '#' after "://", or the
+   end of the text when it has no scheme separator. */
+static size_t pudu_authority_end(const char *text) {
+  const char *separator = strstr(text, "://");
+  if (separator == NULL) {
+    return 0;
+  }
+  size_t at = (size_t)(separator - text) + 3;
+  while (text[at] != 0 && text[at] != '/' && text[at] != '?' && text[at] != '#') {
+    at++;
+  }
+  return at;
+}
+
+static int pudu_delimits(char c) {
+  return c == '/' || c == '?' || c == '#' || c == '@';
+}
+
+/* Matches text[0..text_length) in full; when bounded, '*' cannot cross a
+   character that ends or delimits an authority. */
+static int pudu_glob(const char *pattern, size_t pattern_length, const char *text, size_t text_length, int bounded) {
+  size_t p = 0, t = 0, star = (size_t)-1, resume = 0;
+  while (t < text_length) {
+    char c = text[t];
+    if (p < pattern_length && pattern[p] == '*') {
+      star = p++;
+      resume = t;
+    } else if (p < pattern_length && pattern[p] == c) {
+      p++;
+      t++;
+    } else if (star != (size_t)-1 && !(bounded && pudu_delimits(text[resume]))) {
+      p = star + 1;
+      t = ++resume;
     } else {
       return 0;
     }
   }
-  while (*pattern == '*') {
-    pattern++;
+  while (p < pattern_length && pattern[p] == '*') {
+    p++;
   }
-  return *pattern == 0;
+  return p == pattern_length;
+}
+
+int pudu_pattern_match(const char *pattern, const char *text) {
+  size_t pattern_split = pudu_authority_end(pattern);
+  size_t text_split = pudu_authority_end(text);
+  if (pattern_split == 0 || text_split == 0) {
+    return pattern_split == text_split &&
+        pudu_glob(pattern, strlen(pattern), text, strlen(text), 1);
+  }
+  return pudu_glob(pattern, pattern_split, text, text_split, 1) &&
+      pudu_glob(pattern + pattern_split, strlen(pattern + pattern_split),
+                text + text_split, strlen(text + text_split), 0);
 }

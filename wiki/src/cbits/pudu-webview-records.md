@@ -21,8 +21,10 @@ growable buffer; `pudu_field_is`, `pudu_field_int` and `pudu_field_copy` read fi
   nineteen digits, a missing `:` or `,`, or a length past the end is malformed and reads as `-1`.
 - A record with more fields than the caller's array is malformed rather than truncated, so a command
   never runs with its trailing arguments silently dropped.
-- Patterns match the whole URL; `*` matches any run of bytes, including none. Matching is iterative
-  with one backtrack point, so a pattern cannot make it exponential.
+- Patterns match the whole URL. The scheme and authority (up to the first `/`, `?` or `#` after
+  `://`) are matched separately from the rest: there `*` cannot cross `/`, `?`, `#` or `@`, so a
+  subdomain wildcard cannot be satisfied by a path or user-info on another host; in the path `*`
+  matches any run. Matching is iterative with one backtrack point, so it cannot go exponential.
 - A buffer that cannot grow keeps its contents and answers `-1`; callers report a platform failure.
 
 ## Grill Log

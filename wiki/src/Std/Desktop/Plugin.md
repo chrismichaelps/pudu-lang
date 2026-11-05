@@ -28,8 +28,9 @@ hooks' commands for a navigation; `rulesJson` writes the platform's content-rule
   `NotGranted` naming every declared permission the application did not grant. A plugin is
   admitted whole or not at all.
 - Injected code runs only where a pattern matches `location.href`; no patterns means every page.
-  Patterns are globs where `*` matches any run of characters, translated to anchored regular
-  expressions with every other character literal.
+  Patterns are globs translated to anchored regular expressions with every other character literal;
+  `*` matches any run in the path, but in the scheme and authority it cannot cross `/`, `?`, `#` or
+  `@`, so `https://*.example.com/*` never admits `https://evil.test/x.example.com/`.
 - Styles are delivered as document-start scripts that add a `style` element where they match.
 - Rules compile to the platform's declarative format: `block`, `block-cookies`,
   `css-display-none` with a selector, and `make-https`, each with a URL filter, optional resource

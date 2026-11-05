@@ -104,17 +104,29 @@ export fn check(held: &Plugin, granted: &Array[Str]) -> Result[(), PluginError] 
   if refused.isEmpty() { Ok(()) } else { Err(NotGranted(held.name, refused)) }
 }
 
-/// A URL glob as an anchored regular expression: `*` is any run, every other character literal.
+/// Where a URL pattern's authority ends: the first `/`, `?` or `#` after `://`, or 0 without one.
+fn authorityEnd(pattern: Str) -> Int {
+  let separator = pattern.indexOf("://")
+  if separator < 0 { return 0 }
+  let rest = pattern.drop(separator + 3)
+  separator + 3 + rest.spanNotOf("/?#")
+}
+
+/// A URL glob as an anchored regular expression. Every character is literal except `*`, which
+/// matches any run in the path but cannot cross `/`, `?`, `#` or `@` in the scheme and authority.
 export fn regexOf(pattern: Str) -> Str {
+  let boundary = authorityEnd(pattern)
   var parts: Array[Str] = ["^"]
+  var index = 0
   for character in pattern.chars() {
     if character == '*' {
-      parts = parts.push(".*")
+      parts = parts.push(if index < boundary { "[^/?#@]*" } else { ".*" })
     } else if character in REGEX_SPECIAL {
       parts = parts.push("\\" + character.toText())
     } else {
       parts = parts.push(character.toText())
     }
+    index = index + 1
   }
   parts.push("$").join("")
 }

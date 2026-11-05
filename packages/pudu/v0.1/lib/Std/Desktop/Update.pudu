@@ -1,0 +1,445 @@
+module Std.Desktop.Update
+
+import Std.Archive.Tar as Tar
+import Std.Channel as Channels
+import Std.Compress.Gzip as Gzip
+import Std.Concurrent as Concurrent
+import Std.Crypto.Sign as Sign
+import Std.Desktop.Delta as Delta
+import Std.Fs as Fs
+import Std.Hex as Hex
+import Std.Http.Client as Client
+import Std.Io as Io
+import Std.Json as Json
+import Std.Path as Path
+import Std.Semver as Semver
+
+/// How early a subscriber takes releases.
+export type Track = Stable | Beta | Nightly
+
+/// A patch from an earlier version to this release's archive.
+export type Patch = { from: Str, url: Str, size: Int, sha256: Str, signature: Str }
+
+/// A release's download for one platform.
+export type Artifact = { url: Str, size: Int, sha256: Str, signature: Str, patches: Array[Patch] }
+
+/// A newer version offered for this platform.
+export type Release = { version: Str, notes: Str, published: Str, track: Track, artifact: Artifact }
+
+/// What the updater needs to know about the running application.
+export type Config = {
+  endpoints: Array[Str],
+  publicKeys: Array[Bytes],
+  track: Track,
+  current: Str,
+  target: Str,
+  arch: Str,
+  root: Str,
+  maxBytes: Int
+}
+
+/// What `startup` found.
+export type Startup = Clean | Pending(Str) | RolledBack(Str)
+
+/// What a background updater reports.
+export type Progress = Found(Release) | Ready(Release, Bytes) | UpToDate | Failed(Str)
+
+/// A background update in progress.
+export type Watcher = { reports: Channels.Channel[Progress] }
+
+/// Why an update did not happen.
+export type UpdateError
+  = Network(Str)
+  | Insecure(Str)
+  | BadManifest(Str)
+  | TooLarge(Int)
+  | SizeMismatch
+  | DigestMismatch
+  | BadSignature(Str)
+  | Unpack(Str)
+  | Install(Str)
+
+/// The track each manifest name means.
+const TRACKS: Map[Str, Track] = mapOf([("stable", Stable), ("beta", Beta), ("nightly", Nightly)])
+
+/// Hosts a plain `http` endpoint may name, for local testing.
+const LOCAL_HOSTS: Array[Str] = ["http://localhost", "http://127.0.0.1"]
+
+/// A track's name in manifests.
+export fn trackName(track: &Track) -> Str {
+  match *track {
+    case Stable => "stable"
+    case Beta => "beta"
+    case Nightly => "nightly"
+  }
+}
+
+fn rank(track: &Track) -> Int {
+  match *track {
+    case Stable => 0
+    case Beta => 1
+    case Nightly => 2
+  }
+}
+
+/// A track from its name.
+export fn trackNamed(name: Str) -> Option[Track] { TRACKS.get(name.toLower()) }
+
+/// The manifest key for a platform, such as `darwin-aarch64`.
+export fn platformKey(config: &Config) -> Str { config.target + "-" + config.arch }
+
+/// An endpoint template with its variables filled in.
+export fn endpointUrl(template: Str, config: &Config) -> Str {
+  template.replace("\{\{target\}\}", config.target).replace("\{\{arch\}\}", config.arch).replace("\{\{current_version\}\}", config.current).replace("\{\{channel\}\}", trackName(&config.track))
+}
+
+fn secure(url: Str) -> Result[(), UpdateError] {
+  if url.startsWith("https://") { return Ok(()) }
+  for host in LOCAL_HOSTS {
+    if url.startsWith(host + ":") || url.startsWith(host + "/") { return Ok(()) }
+  }
+  Err(Insecure(url))
+}
+
+fn text(json: &Json.Json, key: Str, owner: Str) -> Result[Str, UpdateError] {
+  match Json.field(json, key) {
+    case Some(Json.Text(found)) => Ok(found)
+    case _ => Err(BadManifest("{owner} needs text {key}"))
+  }
+}
+
+fn whole(json: &Json.Json, key: Str, owner: Str) -> Result[Int, UpdateError] {
+  match Json.field(json, key) {
+    case Some(Json.Number(found)) if found >= 0 => Ok(found)
+    case _ => Err(BadManifest("{owner} needs a size {key}"))
+  }
+}
+
+fn patchOf(json: &Json.Json, owner: Str) -> Result[Patch, UpdateError] {
+  Ok(Patch {
+      from: text(json, "from", owner) ?,
+      url: text(json, "url", owner) ?,
+      size: whole(json, "size", owner) ?,
+      sha256: text(json, "sha256", owner) ?,
+      signature: text(json, "signature", owner) ?
+    })
+}
+
+fn artifactOf(json: &Json.Json, owner: Str) -> Result[Artifact, UpdateError] {
+  var patches: Array[Patch] = []
+  if let Some(listed) = Json.field(json, "patches") {
+    match Json.asList(&listed) {
+      case Some(items) => { for item in items { patches = patches.push(patchOf(&item, owner + " patch") ?) } }
+      case None => { return Err(BadManifest("{owner} patches must be a list")) }
+    }
+  }
+  Ok(Artifact {
+      url: text(json, "url", owner) ?,
+      size: whole(json, "size", owner) ?,
+      sha256: text(json, "sha256", owner) ?,
+      signature: text(json, "signature", owner) ?,
+      patches: patches
+    })
+}
+
+/// The release a manifest offers this platform, when it is newer and on an accepted track.
+export fn parseManifest(source: Str, config: &Config) -> Result[Option[Release], UpdateError] {
+  let json = match Json.decode(source) {
+    case Ok(found) => found
+    case Err(problem) => { return Err(BadManifest(Json.explain(&problem))) }
+  }
+  let version = text(&json, "version", "the manifest") ?
+  let trackText = match Json.field(&json, "channel") {
+    case Some(Json.Text(found)) => found
+    case _ => "stable"
+  }
+  let track = match trackNamed(trackText) {
+    case Some(found) => found
+    case None => { return Err(BadManifest("unknown channel {trackText}")) }
+  }
+  let platforms = match Json.field(&json, "platforms") {
+    case Some(found) => match Json.asObject(&found) {
+      case Some(entries) => entries
+      case None => { return Err(BadManifest("platforms must be an object")) }
+    }
+    case None => { return Err(BadManifest("the manifest has no platforms")) }
+  }
+  var chosen: Option[Artifact] = None
+  for (key, entry) in platforms {
+    let artifact = artifactOf(&entry, key) ?
+    if key == platformKey(config) { chosen = Some(artifact) }
+  }
+  let offered = match Semver.parse(version.drop(if version.startsWith("v") { 1 } else { 0 })) {
+    case Ok(found) => found
+    case Err(problem) => { return Err(BadManifest(Semver.explain(&problem))) }
+  }
+  let running = match Semver.parse(config.current) {
+    case Ok(found) => found
+    case Err(problem) => { return Err(BadManifest("the running version: " + Semver.explain(&problem))) }
+  }
+  if !Semver.after(&offered, &running) || rank(&track) > rank(&config.track) { return Ok(None) }
+  match chosen {
+    case Some(artifact) => Ok(Some(Release {
+          version: Semver.render(&offered),
+          notes: match Json.field(&json, "notes") { case Some(Json.Text(found)) => found case _ => "" },
+          published: match Json.field(&json, "pub_date") { case Some(Json.Text(found)) => found case _ => "" },
+          track: track,
+          artifact: artifact
+        }))
+    case None => Ok(None)
+  }
+}
+
+/// Download bounds; a local address is admitted only for a URL that names one, as a test server does.
+fn limitsFor(config: &Config, url: Str) -> Client.Limits {
+  let local = LOCAL_HOSTS.filter(fn(host: Str) -> Bool { url.startsWith(host + ":") || url.startsWith(host + "/") })
+  Client.Limits{..Client.limits(), bodyBytes: config.maxBytes, permittedHosts: local.map(fn(host: Str) -> Str { host.drop(7) })}
+}
+
+fn fetched(url: Str, config: &Config) -> Result[(Int, Bytes), UpdateError] {
+  secure(url) ?
+  match Client.fetch(url, &limitsFor(config, url)) {
+    case Ok(response) => Ok((response.status.code, match response.binaryBody { case Some(found) => found case None => response.body.toBytes() }))
+    case Err(Client.TooLarge(size)) => Err(TooLarge(size))
+    case Err(problem) => Err(Network(Client.explain(&problem)))
+  }
+}
+
+/// The newest release the endpoints offer, trying each in order.
+export fn check(config: &Config) -> Result[Option[Release], UpdateError] {
+  var last = Network("no update endpoint is configured")
+  for template in config.endpoints {
+    match fetched(endpointUrl(template, config), config) {
+      case Ok((204, _)) => { return Ok(None) }
+      case Ok((status, body)) if status >= 200 && status < 300 => {
+        let source = match body.toText() {
+          case Some(found) => found
+          case None => { return Err(BadManifest("the manifest is not UTF-8")) }
+        }
+        return parseManifest(source, config)
+      }
+      case Ok((status, _)) => { last = Network("an endpoint answered {status}") }
+      case Err(problem) => { last = problem }
+    }
+  }
+  Err(last)
+}
+
+/// Whether bytes are exactly what the manifest describes and signed by a trusted key.
+export fn verify(config: &Config, payload: &Bytes, size: Int, sha256: Str, signature: Str) -> Result[(), UpdateError] {
+  if payload.length() != size { return Err(SizeMismatch) }
+  if Hex.encode(&sha256Of(*payload).toArray()) != sha256.toLower() { return Err(DigestMismatch) }
+  let (_, made) = match Sign.decodeSignature(signature) {
+    case Ok(found) => found
+    case Err(problem) => { return Err(BadSignature(Sign.explain(&problem))) }
+  }
+  for key in config.publicKeys {
+    if Sign.verify(&key, payload, &made) { return Ok(()) }
+  }
+  Err(BadSignature("no trusted key made this signature"))
+}
+
+fn cachePath(config: &Config) -> Str { config.root + ".pudu-cache.tar" }
+
+fn patched(config: &Config, release: &Release) -> Option[Bytes] {
+  let cached = match Io.readAllBytes(cachePath(config)) {
+    case Ok(found) => found
+    case Err(_) => { return None }
+  }
+  for patch in release.artifact.patches {
+    if patch.from != config.current { continue }
+    if let Ok((200, body)) = fetched(patch.url, config) {
+      if let Ok(_) = verify(config, &body, patch.size, patch.sha256, patch.signature) {
+        if let Ok(rebuilt) = Delta.apply(&cached, &body) { return Some(rebuilt) }
+      }
+    }
+  }
+  None
+}
+
+/// The release's uncompressed archive, verified, through a patch when one applies.
+export fn fetchArchive(config: &Config, release: &Release) -> Result[Bytes, UpdateError] {
+  if let Some(rebuilt) = patched(config, release) { return Ok(rebuilt) }
+  let artifact = release.artifact
+  let (status, body) = fetched(artifact.url, config) ?
+  if status != 200 { return Err(Network("the artifact answered {status}")) }
+  verify(config, &body, artifact.size, artifact.sha256, artifact.signature) ?
+  match Gzip.decompress(&body) {
+    case Ok(found) => Ok(found)
+    case Err(problem) => Err(Unpack(show(problem)))
+  }
+}
+
+fn failedWith[T](outcome: Result[T, Str], what: Str) -> Result[T, UpdateError] {
+  match outcome {
+    case Ok(value) => Ok(value)
+    case Err(why) => Err(Install("{what}: {why}"))
+  }
+}
+
+fn fsStep[T](outcome: Result[T, Fs.FsError], what: Str) -> Result[T, UpdateError] {
+  match outcome {
+    case Ok(value) => Ok(value)
+    case Err(why) => Err(Install("{what}: {show(why)}"))
+  }
+}
+
+fn unpackInto(archive: &Bytes, staging: Str) -> Result[(), UpdateError] {
+  let entries = match Tar.readArchive(archive) {
+    case Ok(found) => found
+    case Err(problem) => { return Err(Unpack(show(problem))) }
+  }
+  failedWith(Io.makeDirectory(staging), "staging") ?
+  for entry in entries {
+    if entry.path.startsWith("/") || entry.path.split("/").contains("..") { return Err(Unpack("{entry.path} leaves the archive")) }
+    let destination = Path.join(staging, entry.path)
+    if entry.typeFlag == Tar.Directory {
+      failedWith(Io.makeDirectory(destination), destination) ?
+      continue
+    }
+    failedWith(Io.makeDirectory(Path.directoryOf(destination)), destination) ?
+    match Io.writeAllBytes(destination, &entry.data) {
+      case Ok(_) => ()
+      case Err(why) => { return Err(Install("{destination}: {show(why)}")) }
+    }
+    if entry.mode % 2 == 1 {
+      fsStep(Fs.setPermissions(destination, &Fs.Permissions{readable: true, writable: true, executable: true, searchable: true}), destination) ?
+    }
+  }
+  Ok(())
+}
+
+fn clear(path: Str) -> Result[(), UpdateError] {
+  if Io.exists(path) || directoryExists(path) { fsStep(Fs.removeTree(path), path) ? }
+  Ok(())
+}
+
+/// Stage an archive beside the installation and swap it in, keeping the previous tree.
+export fn install(config: &Config, archive: &Bytes, version: Str) -> Result[(), UpdateError] {
+  let staging = config.root + ".pudu-new"
+  let previous = config.root + ".pudu-previous"
+  clear(staging) ?
+  unpackInto(archive, staging) ?
+  clear(previous) ?
+  fsStep(Fs.rename(config.root, previous), "keeping the previous version") ?
+  match Fs.rename(staging, config.root) {
+    case Ok(_) => ()
+    case Err(why) => {
+      let _ = Fs.rename(previous, config.root)
+      return Err(Install("swapping in {version}: {show(why)}"))
+    }
+  }
+  failedWith(Io.write(config.root + ".pudu-pending", version + "\n0\n"), "recording the install") ?
+  match Io.writeAllBytes(cachePath(config), archive) {
+    case Ok(_) => Ok(())
+    case Err(why) => Err(Install("caching the archive: {show(why)}"))
+  }
+}
+
+/// Finish or undo an install at start: a second start without `confirm` restores the previous version.
+export fn startup(config: &Config) -> Result[Startup, UpdateError] {
+  let marker = config.root + ".pudu-pending"
+  if !Io.exists(marker) { return Ok(Clean) }
+  let held = failedWith(Io.read(marker), "reading the install marker") ?.trim().lines()
+  let version = if held.isEmpty() { "" } else { held[0] }
+  let attempts = if held.length() > 1 { match held[1].toInt() { case Some(found) => found case None => 0 } } else { 0 }
+  if attempts == 0 {
+    failedWith(Io.write(marker, version + "\n1\n"), "counting the start") ?
+    return Ok(Pending(version))
+  }
+  let previous = config.root + ".pudu-previous"
+  if directoryExists(previous) {
+    let failed = config.root + ".pudu-failed"
+    clear(failed) ?
+    fsStep(Fs.rename(config.root, failed), "setting the failed version aside") ?
+    fsStep(Fs.rename(previous, config.root), "restoring the previous version") ?
+  }
+  failedWith(Io.remove(marker), "clearing the install marker") ?
+  Ok(RolledBack(version))
+}
+
+/// Keep the running version: forget the previous tree and the pending marker.
+export fn confirm(config: &Config) -> Result[(), UpdateError] {
+  let marker = config.root + ".pudu-pending"
+  if Io.exists(marker) { failedWith(Io.remove(marker), "clearing the install marker") ? }
+  clear(config.root + ".pudu-previous")
+}
+
+/// Check and download on a worker thread; `poll` reads what it found.
+export fn background(config: &Config) -> Result[Watcher, UpdateError] {
+  let reports: Channels.Channel[Progress] = Channels.channel(4)
+  let held = *config
+  let work = fn() -> () {
+    let report = match check(&held) {
+      case Ok(None) => UpToDate
+      case Ok(Some(release)) => {
+        let _ = Channels.send(&reports, Found(release))
+        match fetchArchive(&held, &release) {
+          case Ok(archive) => Ready(release, archive)
+          case Err(problem) => Failed(explain(&problem))
+        }
+      }
+      case Err(problem) => Failed(explain(&problem))
+    }
+    let _ = Channels.send(&reports, report)
+    let _ = Channels.close(&reports)
+  }
+  match Concurrent.start(work) {
+    case Ok(_) => Ok(Watcher{reports: reports})
+    case Err(problem) => Err(Network(show(problem)))
+  }
+}
+
+/// The next report from a background update, without waiting.
+export fn poll(watcher: &Watcher) -> Option[Progress] {
+  match Channels.receiveWithin(&watcher.reports, 0) {
+    case Ok(Channels.Received(report)) => Some(report)
+    case _ => None
+  }
+}
+
+/// A manifest platform entry for an artifact signed with `pair`.
+export fn manifestEntry(pair: &Sign.KeyPair, url: Str, artifact: &Bytes, patches: &Array[Patch]) -> Json.Json {
+  let signature = Sign.encodeSignature(&pair.public, &Sign.sign(pair, artifact))
+  Json.object(&[
+      ("url", Json.Text(url)),
+      ("size", Json.Number(artifact.length())),
+      ("sha256", Json.Text(Hex.encode(&sha256Of(*artifact).toArray()))),
+      ("signature", Json.Text(signature)),
+      ("patches", Json.list(&patches.map(fn(patch: Patch) -> Json.Json {
+              Json.object(&[
+                  ("from", Json.Text(patch.from)),
+                  ("url", Json.Text(patch.url)),
+                  ("size", Json.Number(patch.size)),
+                  ("sha256", Json.Text(patch.sha256)),
+                  ("signature", Json.Text(patch.signature))
+                ])
+            })))
+    ])
+}
+
+/// A whole manifest for one release.
+export fn manifest(version: Str, notes: Str, published: Str, track: &Track, platforms: &Array[(Str, Json.Json)]) -> Str {
+  Json.encodePretty(&Json.object(&[
+        ("version", Json.Text(version)),
+        ("notes", Json.Text(notes)),
+        ("pub_date", Json.Text(published)),
+        ("channel", Json.Text(trackName(track))),
+        ("platforms", Json.object(platforms))
+      ]))
+}
+
+/// What went wrong, for a person.
+export fn explain(problem: &UpdateError) -> Str {
+  match *problem {
+    case Network(why) => "the update server could not be reached: {why}"
+    case Insecure(url) => "{url} is not HTTPS"
+    case BadManifest(why) => "the update manifest is invalid: {why}"
+    case TooLarge(size) => "the download exceeds {size} bytes"
+    case SizeMismatch => "the download is not the size the manifest states"
+    case DigestMismatch => "the download does not match its SHA-256"
+    case BadSignature(why) => "the download's signature is not trusted: {why}"
+    case Unpack(why) => "the update cannot be unpacked: {why}"
+    case Install(why) => "the update cannot be installed: {why}"
+  }
+}
