@@ -50,6 +50,9 @@ export trait Sequence[S, T] {
   fn begin(self: &Self) -> S
   fn advance(self: &Self, state: S) -> Option[(S, T)]
 
+  /// Apply an optional adapter without walking the source.
+  fn through[B](self: &Self, adapt: fn(Self) -> B) -> B { adapt(*self) }
+
   /// Transform each item as it is produced.
   ///
   /// ## Examples

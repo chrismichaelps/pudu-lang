@@ -25,3 +25,11 @@ State is passed rather than mutated; adapters defer work until `advance`, and te
 
 ## Referenced by
 [[src/Std/_MOC]] · [[architecture/STDLIB]]
+
+## Open adapter composition (#527)
+
+Resolved Grill Log: add through[B](self: &Self, adapt: fn(Self) -> B) -> B,
+applying an ordinary function to the retained sequence value. Deep adapters
+live in [[Std Iter Views]], importing Sequence in one direction only. A caller
+uses source.through(|s| Views.chunk(s, 3)); generic receiver context determines s.
+No source walk occurs in through itself.

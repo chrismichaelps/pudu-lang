@@ -1,0 +1,91 @@
+module UsesIterViews
+
+import Std.Iter as Iter
+import Std.Iter {Sequence}
+import Std.Iter.Views as Views
+import Std.Sync as Sync
+
+fn check(ok: Bool, label: Str) -> Int {
+  if !ok { panic(label) }
+  1
+}
+
+fn chunks() -> Bool {
+  let calls = Sync.counter(0)
+  let source = Iter.range(0, 5).map(|n| { let _ = Sync.increment(&calls, 1)
+      n })
+  let grouped = source.through(|s| Views.chunk(s, 2))
+  if Sync.count(&calls) != Ok(0) || grouped.take(1).toArray() != [[0, 1]] || Sync.count(&calls) != Ok(2) { return false }
+  grouped.toArray() == [[0, 1], [2, 3], [4]]
+    && grouped.toArray() == [[0, 1], [2, 3], [4]]
+    && Views.chunk(Iter.empty[Int](), 3).toArray() == []
+    && Views.chunk(Iter.items([7]), 0).toArray() == [[7]]
+    && Views.chunk(Iter.items([7, 8]), -1).toArray() == [[7], [8]]
+}
+
+fn windows() -> Bool {
+  let calls = Sync.counter(0)
+  let source = Iter.range(0, 8).map(|n| { let _ = Sync.increment(&calls, 1)
+      n })
+  let sliding = source.through(|s| Views.slide(s, 3))
+  if Sync.count(&calls) != Ok(0) || sliding.take(2).toArray() != [[0, 1, 2], [1, 2, 3]] || Sync.count(&calls) != Ok(4) { return false }
+  Views.slide(Iter.range(0, 4), 3).toArray() == [[0, 1, 2], [1, 2, 3]]
+    && Views.slide(Iter.range(0, 2), 3).toArray() == []
+    && Views.slide(Iter.empty[Int](), 1).toArray() == []
+    && Views.slide(Iter.items([7, 8]), 0).toArray() == [[7], [8]]
+}
+
+fn groups() -> Bool {
+  let calls = Sync.counter(0)
+  let source = Iter.items([1, 1, 2, 3, 3]).map(|n| { let _ = Sync.increment(&calls, 1)
+      n })
+  let runs = Views.chunkBy(source, |a, b| a == b)
+  if runs.take(1).toArray() != [[1, 1]] || Sync.count(&calls) != Ok(3) { return false }
+  runs.toArray() == [[1, 1], [2], [3, 3]] && Sync.count(&calls) == Ok(8)
+    && Views.chunkBy(Iter.items([1, 2, 3]), |a, b| b == a + 1).toArray() == [[1, 2, 3]]
+    && Views.chunkBy(Iter.items([1]), |a, b| false).toArray() == [[1]]
+    && Views.chunkBy(Iter.empty[Int](), |a, b| true).toArray() == []
+}
+
+fn flattening() -> Bool {
+  let calls = Sync.counter(0)
+  let outer = Iter.items([Iter.items[Int]([]), Iter.items([2, 3]), Iter.items[Int]([]), Iter.items([4])])
+  let source = outer.map(|inner| { let _ = Sync.increment(&calls, 1)
+      inner })
+  let flat = source.through(|s| Views.join(s))
+  if Sync.count(&calls) != Ok(0) || flat.take(1).toArray() != [2] || Sync.count(&calls) != Ok(2) { return false }
+  flat.toArray() == [2, 3, 4] && Sync.count(&calls) == Ok(6)
+    && Views.join(Iter.items([Iter.empty[Int]()])).toArray() == []
+    && Iter.range(1, 4).map(|n| Iter.repeat(n, n)).through(|s| Views.join(s)).toArray() == [1, 2, 2, 3, 3, 3]
+}
+
+fn backwards() -> Bool {
+  let calls = Sync.counter(0)
+  let source = Iter.range(0, 4).map(|n| { let _ = Sync.increment(&calls, 1)
+      n })
+  let reversed = Views.reverse(source)
+  if reversed.take(0).count() != 0 || Sync.count(&calls) != Ok(0) { return false }
+  if reversed.take(1).toArray() != [3] || Sync.count(&calls) != Ok(4) { return false }
+  reversed.toArray() == [3, 2, 1, 0] && Sync.count(&calls) == Ok(8)
+    && Views.reverse(Iter.empty[Int]()).toArray() == []
+    && Views.reverse(Iter.items([9])).toArray() == [9]
+}
+
+fn products() -> Bool {
+  let calls = Sync.counter(0)
+  let left = Iter.items([1, 2]).map(|n| { let _ = Sync.increment(&calls, 1)
+      n })
+  let product = Views.cartesian(left, Iter.items(["a", "b"]))
+  if Sync.count(&calls) != Ok(0) || product.take(2).toArray() != [(1, "a"), (1, "b")] || Sync.count(&calls) != Ok(1) { return false }
+  product.toArray() == [(1, "a"), (1, "b"), (2, "a"), (2, "b")]
+    && Views.cartesian(Iter.empty[Int](), Iter.items([1])).toArray() == []
+    && Views.cartesian(Iter.items([1]), Iter.empty[Int]()).toArray() == []
+    && Iter.items([(1, "a"), (2, "b")]).map(|pair| pair[0]).toArray() == [1, 2]
+    && Views.slide(Iter.range(0, 4), 2).map(|pair| pair[0] + pair[1]).toArray() == [1, 3, 5]
+}
+
+export fn main() -> Int {
+  check(chunks(), "lazy chunks") + check(windows(), "sliding windows")
+    + check(groups(), "adjacent groups") + check(flattening(), "nested sequences")
+    + check(backwards(), "finite reverse") + check(products(), "Cartesian products")
+}
