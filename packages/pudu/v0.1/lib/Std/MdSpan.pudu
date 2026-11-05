@@ -1,6 +1,7 @@
 module Std.MdSpan
 
 import Std.Iter {Sequence}
+import Std.MdSpan.Layout as Layout
 
 /// Which positions of one dimension a slice keeps.
 ///
@@ -54,7 +55,7 @@ export fn rowMajor[T](values: Array[T], extents: Array[Int]) -> Option[MdSpan[T]
   var dimension = extents.length() - 1
   while dimension >= 0 {
     strides = strides.insert(0, step)
-    step = step * extents[dimension]
+    step = multiplied(step, extents[dimension]) ?
     dimension = dimension - 1
   }
   strided(values, 0, extents, strides)
@@ -74,7 +75,7 @@ export fn columnMajor[T](values: Array[T], extents: Array[Int]) -> Option[MdSpan
   var step = 1
   for extent in extents {
     strides = strides.push(step)
-    step = step * extent
+    step = multiplied(step, extent) ?
   }
   strided(values, 0, extents, strides)
 }
@@ -93,19 +94,8 @@ export fn strided[T](values: Array[T], offset: Int, extents: Array[Int], strides
   if offset < 0 || extents.length() != strides.length() {
     return None
   }
-  var reach = offset
-  var empty = false
-  var dimension = 0
-  while dimension < extents.length() {
-    let extent = extents[dimension]
-    let stride = strides[dimension]
-    if extent < 0 || stride < 0 {
-      return None
-    }
-    if extent == 0 { empty = true } else { reach = reach + (extent - 1) * stride }
-    dimension = dimension + 1
-  }
-  if empty || reach < values.length() {
+  let mapping = Layout.of(extents, strides) ?
+  if offset <= values.length() && mapping.requiredSpanSize <= values.length() - offset {
     Some(MdSpan{source: values, offset: offset, extents: extents, strides: strides})
   } else {
     None
@@ -180,6 +170,34 @@ export trait Grid[T] {
   /// (grid.slice([MdSpan.All, MdSpan.At(1)]) ?).toArray()  // [2, 5]
   /// ```
   fn slice(self: &Self, slices: Array[Slice]) -> Option[MdSpan[T]]
+
+  /// One dimension's constant stride, or None outside the rank.
+  fn stride(self: &Self, dimension: Int) -> Option[Int]
+
+  /// Checked dynamic layout metadata, independent of the source storage.
+  fn mapping(self: &Self) -> Option[Layout.Mapping]
+
+  /// The backing stretch needed by the layout, excluding the source offset.
+  fn requiredSpanSize(self: &Self) -> Option[Int]
+
+  /// True proves distinct positions; false can be inconclusive for irregular layouts.
+  fn isUnique(self: &Self) -> Bool
+
+  /// Whether the layout reaches every position in its required backing stretch.
+  fn isExhaustive(self: &Self) -> Bool
+
+  /// Whether each dimension has a constant (possibly zero) stride.
+  fn isStrided(self: &Self) -> Bool
+}
+
+const MAX_INDEX = 9223372036854775807
+
+fn added(left: Int, right: Int) -> Option[Int] {
+  if left < 0 || right < 0 || left > MAX_INDEX - right { None } else { Some(left + right) }
+}
+
+fn multiplied(left: Int, right: Int) -> Option[Int] {
+  if left < 0 || right < 0 || (right != 0 && left > MAX_INDEX / right) { None } else { Some(left * right) }
 }
 
 /// The array position of an in-range multidimensional position.
@@ -215,9 +233,44 @@ impl [T] Grid[T] for MdSpan[T] {
   }
 
   fn size(self: &Self) -> Int {
+    for extent in self.extents { if extent == 0 { return 0 } }
     var total = 1
     for extent in self.extents { total = total * extent }
     total
+  }
+
+  fn stride(self: &Self, dimension: Int) -> Option[Int] {
+    if dimension < 0 || dimension >= self.extents.length() || dimension >= self.strides.length() {
+      None
+    } else { Some(self.strides[dimension]) }
+  }
+
+  fn mapping(self: &Self) -> Option[Layout.Mapping] { Layout.of(self.extents, self.strides) }
+
+  fn requiredSpanSize(self: &Self) -> Option[Int] {
+    let layout = self.mapping() ?
+    Some(layout.requiredSpanSize)
+  }
+
+  fn isUnique(self: &Self) -> Bool {
+    match self.mapping() {
+      case Some(layout) => layout.unique
+      case None => false
+    }
+  }
+
+  fn isExhaustive(self: &Self) -> Bool {
+    match self.mapping() {
+      case Some(layout) => layout.exhaustive
+      case None => false
+    }
+  }
+
+  fn isStrided(self: &Self) -> Bool {
+    match self.mapping() {
+      case Some(_) => true
+      case None => false
+    }
   }
 
   fn get(self: &Self, indices: Array[Int]) -> Option[T] {
@@ -276,13 +329,13 @@ impl [T] Grid[T] for MdSpan[T] {
           if index < 0 || index >= extent {
             return None
           }
-          offset = offset + index * stride
+          offset = added(offset, multiplied(index, stride) ?) ?
         }
         case Within(first, last) => {
           if first < 0 || first > last || last > extent {
             return None
           }
-          offset = offset + first * stride
+          offset = added(offset, multiplied(first, stride) ?) ?
           extents = extents.push(last - first)
           strides = strides.push(stride)
         }
@@ -290,14 +343,16 @@ impl [T] Grid[T] for MdSpan[T] {
           if first < 0 || first > last || last > extent || step < 1 {
             return None
           }
-          offset = offset + first * stride
-          extents = extents.push((last - first + step - 1) / step)
-          strides = strides.push(stride * step)
+          offset = added(offset, multiplied(first, stride) ?) ?
+          let distance = last - first
+          let count = distance / step + if distance % step == 0 { 0 } else { 1 }
+          extents = extents.push(count)
+          strides = strides.push(multiplied(stride, step) ?)
         }
       }
       dimension = dimension + 1
     }
-    Some(MdSpan{source: self.source, offset: offset, extents: extents, strides: strides})
+    strided(self.source, offset, extents, strides)
   }
 }
 

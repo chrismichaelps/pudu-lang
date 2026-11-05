@@ -13,12 +13,12 @@ aliases: [Std Span]
 
 ## Purpose
 
-A non-owning window onto a stretch of an `Array[T]`: read, narrowed and walked in place.
+A read-only window retaining a shared `Array[T]` value: narrowed and walked in place. Later reassignment of the caller's array does not change the retained snapshot.
 
 ## Interface
 
 - `Span[T] = { source, offset, extent }`, `of(values)`, `within(values, offset, extent) -> Option[Span[T]]`.
-- `Window[T]`: `size`, `get(index) -> Option[T]`, `prefix(count)`, `suffix(count)`, `subspan(offset, count)`.
+- `Window[T]`: `size`, `get(index) -> Option[T]`, `prefix(count)`, `suffix(count)`, `subspan(offset, count)`, `subspanFrom(offset)`.
 - `Sequence[Int, T]`, overriding `toArray` (one structural slice), `count`, `isEmpty`, `first` and `last`, which a span answers without walking.
 
 ## Invariants
@@ -41,3 +41,9 @@ A non-owning window onto a stretch of an `Array[T]`: read, narrowed and walked i
 ## Referenced by
 
 [[src/Std/_MOC]] · [[architecture/STDLIB]]
+
+## Completion contract (#527)
+
+Checked construction compares offset and extent against the remaining source length before addition. Add `subspanFrom(offset)` for the remaining tail. Views retain their backing value as a read-only snapshot; they do not propagate later reassignment of the source variable.
+
+Resolved Grill Log: follow [[C++ Inspired View Coverage]]; add capabilities compatible with Pudu values and checked errors, without a new pointer ABI or implicit allocator state.

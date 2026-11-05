@@ -42,7 +42,7 @@ export fn of[T](values: Array[T]) -> Span[T] {
 /// Span.within([1, 2, 3], 2, 5)  // None
 /// ```
 export fn within[T](values: Array[T], offset: Int, extent: Int) -> Option[Span[T]] {
-  if offset < 0 || extent < 0 || offset + extent > values.length() {
+  if offset < 0 || extent < 0 || offset > values.length() || extent > values.length() - offset {
     None
   } else {
     Some(Span{source: values, offset: offset, extent: extent})
@@ -97,6 +97,9 @@ export trait Window[T] {
   /// Span.of([1, 2, 3, 4]).subspan(3, 10).toArray()  // [4]
   /// ```
   fn subspan(self: &Self, offset: Int, count: Int) -> Span[T]
+
+  /// The remaining tail after a clamped offset.
+  fn subspanFrom(self: &Self, offset: Int) -> Span[T]
 }
 
 /// A count clamped to `0..=limit`.
@@ -119,6 +122,8 @@ impl [T] Window[T] for Span[T] {
     let kept = clamped(count, self.extent)
     Span{..*self, offset: self.offset + self.extent - kept, extent: kept}
   }
+
+  fn subspanFrom(self: &Self, offset: Int) -> Span[T] { self.subspan(offset, self.extent) }
 
   fn subspan(self: &Self, offset: Int, count: Int) -> Span[T] {
     let start = clamped(offset, self.extent)

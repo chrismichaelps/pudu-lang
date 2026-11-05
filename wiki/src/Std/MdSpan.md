@@ -13,13 +13,13 @@ aliases: [Std MdSpan]
 
 ## Purpose
 
-A non-owning multidimensional view of an `Array[T]`, with layouts, multi-index reads and slicing that never copies.
+A read-only multidimensional view retaining a shared `Array[T]` value, with layouts, multi-index reads and shared slicing.
 
 ## Interface
 
 - `MdSpan[T] = { source, offset, extents, strides }`; `rowMajor`, `columnMajor` and `strided` constructors answer `Option`.
 - `Slice = All | At(Int) | Within(Int, Int) | Every{first, last, step}`.
-- `Grid[T]`: `rank`, `extent(dimension) -> Option[Int]`, `size`, `get(indices)`, `get2`, `get3`, `slice(slices) -> Option[MdSpan[T]]`.
+- `Grid[T]`: `rank`, `extent(dimension) -> Option[Int]`, `stride(dimension) -> Option[Int]`, `mapping`, `requiredSpanSize`, `isUnique`, `isExhaustive`, `isStrided`, `size`, `get(indices)`, `get2`, `get3`, `slice(slices) -> Option[MdSpan[T]]`.
 - `Sequence[Int, T]` in row-major order of the view, overriding `count` and `isEmpty`.
 
 ## Invariants
@@ -37,9 +37,17 @@ A non-owning multidimensional view of an `Array[T]`, with layouts, multi-index r
 
 ## Dependencies and consumers
 
-- **Requires:** [[Std Iter]].
+- **Requires:** [[Std Iter]], [[Std MdSpan Layout]].
 - **Consumed by:** programs; `test-fixtures/stdlib/UsesMdSpan.pudu`.
 
 ## Referenced by
 
 [[src/Std/_MOC]] · [[architecture/STDLIB]]
+
+## Completion contract (#527)
+
+Delegate metadata to [[Std MdSpan Layout]]. Add mapping, stride, requiredSpanSize and layout predicate observers. Option constructors/slices use checked nonnegative arithmetic; logical cardinality and every stored offset/stride must fit Int. Reject bad shape/stride input with None before arithmetic. Empty cardinality is zero regardless of dimension order. Required footprint excludes the source offset. Uniqueness is a conservative proof; exhaustive coverage is certified by sorted interval reach.
+
+Resolved Grill Log: follow [[C++ Inspired View Coverage]]; add capabilities compatible with Pudu values and checked errors, without a new pointer ABI or implicit allocator state.
+
+With Sequence also imported, qualify the layout observer as `Grid.stride(&grid, dimension)` to distinguish the sequence adapter. Constructors validate their stored metadata; direct public record construction remains the caller's responsibility.

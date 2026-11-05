@@ -39,7 +39,9 @@ export fn alignUp(value: Int, alignment: Int) -> Option[Int] {
   if value < 0 || alignment < 1 || (alignment & (alignment - 1)) != 0 {
     None
   } else {
-    Some((value + alignment - 1) & ~(alignment - 1))
+    let remainder = value % alignment
+    let padding = if remainder == 0 { 0 } else { alignment - remainder }
+    if value > 9223372036854775807 - padding { None } else { Some(value + padding) }
   }
 }
 
@@ -121,11 +123,11 @@ impl Monotonic for Arena {
 /// An allocator of equal blocks that takes them back one at a time.
 ///
 /// Block `k` starts at offset `k * blockSize`. A released block is reused before
-/// a block that was never handed out, so the blocks in use stay packed toward
-/// the start. Both allocating and releasing are a constant amount of work.
+/// a block that was never handed out, so previously issued offsets are preferred. Allocation and release use a
+/// bounded number of indexed bookkeeping operations.
 ///
-/// Releasing a block twice, or one the pool never handed out, answers `false`
-/// and changes nothing.
+/// Releasing an inactive or unissued coordinate answers `false` and changes
+/// nothing. Coordinates do not authenticate a resource or allocation generation.
 ///
 /// ## Examples
 ///
@@ -144,7 +146,8 @@ export type Pool = {
 }
 
 /// A pool of `blocks` blocks of `blockSize` units each. Counts below nought are
-/// nought.
+/// nought. A zero block size or unrepresentable total extent gives an empty
+/// pool; checkedPool distinguishes invalid configuration with None.
 ///
 /// ## Examples
 ///
@@ -152,15 +155,21 @@ export type Pool = {
 /// Memory.pool(64, 10).available()  // 10
 /// ```
 export fn pool(blockSize: Int, blocks: Int) -> Pool {
+  let width = if blockSize < 0 { 0 } else { blockSize }
   let count = if blocks < 0 { 0 } else { blocks }
-  var held = []
-  while held.length() < count { held = held.push(false) }
-  Pool {
-    blockSize: if blockSize < 0 { 0 } else { blockSize },
-    blocks: count,
-    fresh: 0,
-    free: [],
-    held: held,
+  match checkedPool(width, count) {
+    case Some(value) => value
+    case None => Pool{blockSize: width, blocks: 0, fresh: 0, free: [], held: []}
+  }
+}
+
+/// A pool with a positive block size and a representable total extent.
+/// Bookkeeping grows only when a fresh block is issued.
+export fn checkedPool(blockSize: Int, blocks: Int) -> Option[Pool] {
+  if blockSize <= 0 || blocks < 0 || blocks > 9223372036854775807 / blockSize {
+    None
+  } else {
+    Some(Pool{blockSize: blockSize, blocks: blocks, fresh: 0, free: [], held: []})
   }
 }
 
@@ -171,12 +180,16 @@ export trait Pooled {
 
   /// How many blocks are handed out now.
   fn inUse(self: &Self) -> Int
+
+  /// Forget every issued coordinate; callers must retire old blocks first.
+  fn reset(self: &mut Self) -> ()
 }
 
 impl Resource for Pool {
   /// A block of the pool's size, when `size` fits in one and `alignment`
   /// divides the block size.
   fn allocate(self: &mut Self, size: Int, alignment: Int) -> Option[Block] {
+    if self.blockSize <= 0 { return None }
     let aligned = alignUp(self.blockSize, alignment) ?
     if size < 0 || size > self.blockSize || aligned != self.blockSize {
       return None
@@ -185,6 +198,7 @@ impl Resource for Pool {
       if self.fresh >= self.blocks {
         return None
       }
+      self.held = self.held.push(false)
       self.fresh = self.fresh + 1
       self.fresh - 1
     } else {
@@ -197,7 +211,7 @@ impl Resource for Pool {
   }
 
   fn release(self: &mut Self, block: Block) -> Bool {
-    if self.blockSize == 0 || block.size != self.blockSize || block.offset % self.blockSize != 0 {
+    if self.blockSize <= 0 || block.size != self.blockSize || block.offset % self.blockSize != 0 {
       return false
     }
     let index = block.offset / self.blockSize
@@ -214,4 +228,10 @@ impl Pooled for Pool {
   fn available(self: &Self) -> Int { self.blocks - self.fresh + self.free.length() }
 
   fn inUse(self: &Self) -> Int { self.fresh - self.free.length() }
+
+  fn reset(self: &mut Self) -> () {
+    self.fresh = 0
+    self.free = []
+    self.held = []
+  }
 }
