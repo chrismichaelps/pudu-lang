@@ -49,7 +49,7 @@ checker spells types (`unformed`), so calls made from a copy specialize too.
 
 ## Dependencies and consumers
 
-[[Compiler Lower State]] · [[Compiler Lower Types]] · [[Compiler Lower Signature]] · [[Core IR]]
+[[Compiler Lower State]] · [[Compiler Lower Types]] · [[Compiler Lower Signature]] · [[Core IR]] · [[Type Substitution]]
 
 ## Referenced by
 

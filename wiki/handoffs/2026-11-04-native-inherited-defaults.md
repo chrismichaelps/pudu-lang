@@ -9,27 +9,26 @@ aliases: [Native Inherited Defaults Delivery]
 Architect → Backend Engineer → Test Engineer → Forensic Guardian self-audit.
 Branch feature/824-native-inherited-defaults; dev bbc9cdbd integrated.
 Owned: Lower/Method, Lower/Generic, Lower/State, MethodPrograms, ModulePrograms
-and their mirrors, native coverage ledger, navigation and changelog.
-Preserve unrelated work. No subagents. PR #825 targets dev.
+and matching mirrors, native ledger, navigation and history. No subagents.
 
-Pre-continuation suite: 774 properties passed, exit 0. New regressions cover
-same-spelling body/implementation parameters, derived arrays, renamed own
-parameters, body-only trait arguments and callable arguments. Final explicit
-stdout/stderr/status comparisons pass with both evaluators, Clang, GCC 15
-and Clang ASan/UBSan. The original importeddefaults fixture exits 6 with
-empty streams in both evaluators and native execution. Broader module and
-refusal conformance and 159-program counted cleanup passed before the final
-callable additions; final reruns and clean gates remain to be recorded.
+PR #825 targets dev. Final module and refusal conformance passes in both
+evaluator modes; all 159 counted programs release every allocation. Explicit
+stdout/stderr/status answers pass with Clang, GCC 15 and Clang ASan/UBSan.
+The importeddefaults fixture exits 6 with empty streams in both evaluators
+and native execution. PR #825 records final clean repository/Linux CI results;
+require passing gates and independent review before promotion.
 
-Use canonical checked implementation heads plus member schemes for body
-bindings. Settle implementation bindings, freeze the signature using matched
-checker Types (preserving callable required counts), then overlay body
-bindings. A default runs in its declaring module. A manual probe caught and
-fixed a callable regression before promotion; its first gate was stopped
-and must not be counted as a full pass.
+Checked implementation heads supply all trait arguments; member schemes
+supply renamed own parameters. Settle implementation bindings, freeze the
+signature using checker Types, then overlay body bindings in the declaring
+module. Regressions cover parameter collisions, derived arrays, body-only
+trait parameters, functions and defaulted callable required counts.
+A manual probe caught a callable regression before promotion; the interrupted
+first gate is excluded from final verification evidence.
 
-Exact next action: finish final clean gates and Linux CI for PR #825.
-Independent implementation and Forensic Guardian review remain required.
+Exact next action: obtain independent implementation, Language Architect and
+Forensic Guardian review of PR #825. Remaining C11 coverage is tracked in
+[[Native Emission Coverage]], including sparse word-map queries (#814).
 
 ## Referenced by
 
