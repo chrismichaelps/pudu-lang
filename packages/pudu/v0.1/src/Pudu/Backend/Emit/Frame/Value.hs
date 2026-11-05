@@ -170,6 +170,12 @@ frameValue state value = case frameValueShape value of
           (CoreMapType _ (CoreIntegerType (UnsignedKind 64)), [other], result)
             | kind == other && kind == result -> keyed operation
           _ -> refused "a word-map operation without matching UInt64 map carriers"
+        wordQuery operation inputs result keys = case kind of
+          CoreMapType key (CoreIntegerType (UnsignedKind 64))
+            | map frameSlotType arguments == inputs
+            , frameValueType value == result
+            , not keys || key == CoreIntegerType (UnsignedKind 64) -> keyed operation
+          _ -> refused "a word-map query without its exact operand and result carriers"
     case name of
       KeyedSize -> keyed "size"
       KeyedIsEmpty -> plain ("(pudu_tree_size(" <> target <> "->fields[0].tree) == 0)") ["tree"]
@@ -189,6 +195,10 @@ frameValue state value = case frameValueShape value of
       KeyedWordIntersection -> wordKeyed "word_intersection"
       KeyedWordDifference -> wordKeyed "word_difference"
       KeyedWordSymmetricDifference -> wordKeyed "word_symmetric_difference"
+      KeyedWordSubset -> wordQuery "word_subset" [kind] CoreBoolType False
+      KeyedWordDisjoint -> wordQuery "word_disjoint" [kind] CoreBoolType False
+      KeyedWordPopCount -> wordQuery "word_count" [] (CoreIntegerType (UnsignedKind 128)) False
+      KeyedWordMembers -> wordQuery "word_members" [] (CoreArrayType (CoreIntegerType (UnsignedKind 64))) True
   FrameRangeValue low inclusive high -> do
     lowText <- traverse slotText low
     highText <- traverse slotText high

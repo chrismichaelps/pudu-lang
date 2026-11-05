@@ -22,4 +22,8 @@ data CoreKeyedMethodName
   | KeyedWordIntersection
   | KeyedWordDifference
   | KeyedWordSymmetricDifference
+  | KeyedWordSubset
+  | KeyedWordDisjoint
+  | KeyedWordPopCount
+  | KeyedWordMembers
   deriving stock (Eq, Show)

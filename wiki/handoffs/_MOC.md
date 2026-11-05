@@ -5,6 +5,8 @@ tags: [moc, handoff]
 
 # Handoff Map
 
+- [[Native Word Map Query Delivery]] — #814 remaining sparse-word queries.
+
 - [[Native Inherited Defaults Delivery]] — #824 trait body scopes and parameter bindings.
 
 - [[Native Linux Output Gate Delivery]] — #811 measured descriptor readiness and bounded full-suite CI.

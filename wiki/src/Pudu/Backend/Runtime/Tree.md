@@ -17,9 +17,9 @@ retain and release keys and values, so the tree code is written once.
 
 | Part | Provides |
 | --- | --- |
-| tree | the node type, ops table, release, height and size |
+| tree | the node type, ops table, release and size |
 | tree_retain | retain a shared tree root |
-| tree_node | `pudu_tree_make` |
+| tree_node | height inspection and `pudu_tree_make` |
 | tree_build | shared-node opening and `pudu_tree_balance` |
 | tree_find | lookup by key |
 | tree_insert | insert, keeping or replacing an equal key |
@@ -70,3 +70,11 @@ update never changes a map someone else still holds.
 ## Referenced by
 
 [[Backend Emit Keyed]] · [[Backend Frame Program]] · [[Native Maps and Sets]] · [[src/Pudu/Backend/_MOC]]
+
+## Query contract (#814)
+
+Add separate tree_word_predicate, tree_word_count and tree_word_members parts. Predicates visit ascending left keys, look up right words with missing=0 and stop on failure. Count accumulates popcounts with word128_add and wide_make. Members counts capacity with size_t overflow checks, uses array_new, then writes UInt64 cells in chunk/bit order; shifts wrap in uint64_t and duplicates remain. Borrow inputs and free every node view on all ordinary returns.
+
+Resolved Grill Log: project existing checked semantics; no inference, fallback, unsafe cell reinterpretation or frame ABI change. Reuse granular runtime dependencies and existing numeric/array ownership kernels.
+
+Standalone query callables select tree walking without construction. Keep the height helper in tree_node, beside its first consumer, so query-only programs do not emit an unused static function. Resolved Grill Log: builtin-entry conformance must compile warning-free without suppressing warnings.

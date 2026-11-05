@@ -5,6 +5,10 @@ tags: [changelog]
 
 # Changelog
 
+## 2026-11-04 — Native sparse-word queries (#814)
+
+- [[Native Word Map Queries]] defines exact query carriers, source-order snapshots, portable count/member kernels and required validation.
+
 ## 2026-11-04 — Native inherited defaults across traits' parameters and modules (#824)
 
 - [[Compiler Lower Method]] lowers an inherited default in its declaring module and reads trait arguments from the checked implementation head, including arguments absent from the member signature.
