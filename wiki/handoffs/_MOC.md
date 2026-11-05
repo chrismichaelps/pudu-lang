@@ -5,6 +5,8 @@ tags: [moc, handoff]
 
 # Handoff Map
 
+- [[Native Word Map Query Delivery]] — #814 remaining sparse-word queries.
+
 - [[Native Linux Output Gate Delivery]] — #811 measured descriptor readiness and bounded full-suite CI.
 - [[Native Word Map Algebra Delivery]] — #810 accelerated sparse-word algebra.
 - [[Native Frozen Collection Delivery]] — #808 compiler-folded arrays, maps, sets and ranges.

@@ -6,6 +6,8 @@ tags: [moc, architecture]
 
 # Architecture Map
 
+- [[Native Word Map Queries]] — sparse word predicates, UInt128 counts and wrapped member enumeration.
+
 - [[Native Word Map Algebra]] — typed linear sparse-word tree operations.
 
 - [[Native Unsigned Integers]] — full unsigned domains through 64 bits (#500).

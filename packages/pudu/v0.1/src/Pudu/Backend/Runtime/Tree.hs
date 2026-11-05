@@ -38,7 +38,6 @@ treeRuntimeParts =
       , "    node = right;"
       , "  }"
       , "}"
-      , "static inline int pudu_tree_height(const pudu_tree_node *node) { return node == NULL ? 0 : node->height; }"
       , "static inline size_t pudu_tree_size(const pudu_tree_node *node) { return node == NULL ? 0 : node->size; }"
       ])
   , ("tree_retain",
@@ -47,7 +46,8 @@ treeRuntimeParts =
       , "  return node;"
       , "}" ])
   , ("tree_node",
-      [ "/* A node over two subtrees whose heights differ by two at most. */"
+      [ "static inline int pudu_tree_height(const pudu_tree_node *node) { return node == NULL ? 0 : node->height; }"
+      , "/* A node over two subtrees whose heights differ by two at most. */"
       , "static pudu_tree_node *pudu_tree_make(pudu_tree_node *left, pudu_cell key, pudu_cell value, pudu_tree_node *right) {"
       , "  pudu_tree_node *node = malloc(sizeof *node);"
       , "  int high_left = pudu_tree_height(left), high_right = pudu_tree_height(right);"
@@ -222,6 +222,51 @@ treeRuntimeParts =
       , "  free(a); free(b); free(pairs);"
       , "  return result;"
       , "}" ])
+  , ("tree_word_predicate",
+      [ "static int pudu_tree_word_predicate(pudu_tree_node *left, pudu_tree_node *right, const pudu_tree_ops *ops, unsigned operation) {"
+      , "  size_t count = pudu_tree_size(left);"
+      , "  pudu_tree_node **nodes = pudu_tree_nodes(left);"
+      , "  int answer = 1;"
+      , "  for (size_t i = 0; i < count; ++i) {"
+      , "    pudu_tree_node *found = pudu_tree_find(right, nodes[i]->key, ops);"
+      , "    uint64_t a = nodes[i]->value.integer.bits, b = found == NULL ? 0 : found->value.integer.bits;"
+      , "    if ((operation == 0 ? (a & ~b) : (a & b)) != 0) { answer = 0; break; }"
+      , "  }"
+      , "  free(nodes);"
+      , "  return answer;", "}" ])
+  , ("tree_word_count",
+      [ "static pudu_wide_int pudu_tree_word_count(pudu_tree_node *root) {"
+      , "  size_t count = pudu_tree_size(root);"
+      , "  pudu_tree_node **nodes = pudu_tree_nodes(root);"
+      , "  pudu_word128 total = {0, 0};"
+      , "  for (size_t i = 0; i < count; ++i) {"
+      , "    uint64_t word = nodes[i]->value.integer.bits, bits = 0;"
+      , "    while (word != 0) { word &= word - UINT64_C(1); ++bits; }"
+      , "    total = pudu_word128_add(total, (pudu_word128){bits, 0}).value;"
+      , "  }"
+      , "  free(nodes);"
+      , "  return pudu_wide_make(total, 0);", "}" ])
+  , ("tree_word_members",
+      [ "static pudu_box *pudu_tree_word_members(pudu_tree_node *root) {"
+      , "  size_t count = pudu_tree_size(root), length = 0, at = 0;"
+      , "  pudu_tree_node **nodes = pudu_tree_nodes(root);"
+      , "  for (size_t i = 0; i < count; ++i) {"
+      , "    uint64_t word = nodes[i]->value.integer.bits;"
+      , "    while (word != 0) {"
+      , "      if (length == SIZE_MAX) pudu_memory_failure();"
+      , "      ++length; word &= word - UINT64_C(1);"
+      , "    }"
+      , "  }"
+      , "  pudu_box *array = pudu_array_new(length);"
+      , "  pudu_items *items = array->fields[0].items;"
+      , "  for (size_t i = 0; i < count; ++i) {"
+      , "    uint64_t word = nodes[i]->value.integer.bits, base = nodes[i]->key.integer.bits << 6;"
+      , "    for (unsigned bit = 0; bit < 64; ++bit)"
+      , "      if ((word & (UINT64_C(1) << bit)) != 0) items->cells[at++].integer = pudu_make(base | (uint64_t)bit, 0);"
+      , "  }"
+      , "  items->length = length;"
+      , "  free(nodes);"
+      , "  return array;", "}" ])
   ]
 
 treeRuntimeDependencies :: Text -> [Text]
@@ -235,4 +280,7 @@ treeRuntimeDependencies name = maybe [] id (lookup name
   , ("tree_remove", ["tree_build", "tree_find"])
   , ("tree_walk", ["tree", "memory_failure"])
   , ("tree_word_algebra", ["tree_node", "tree_walk", "make"])
+  , ("tree_word_predicate", ["tree_walk", "tree_find"])
+  , ("tree_word_count", ["tree_walk", "word128_add", "wide_make"])
+  , ("tree_word_members", ["tree_walk", "array", "make"])
   ])

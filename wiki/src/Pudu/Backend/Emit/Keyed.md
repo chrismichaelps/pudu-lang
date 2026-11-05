@@ -50,3 +50,9 @@ does; a map or set is comparable when every key and value is.
 ## Referenced by
 
 [[Native Aggregate Emission]] · [[Native Maps and Sets]] · [[src/Pudu/Backend/_MOC]]
+
+## Query contract (#814)
+
+Emit Bool predicate and UInt128 count wrappers only for UInt64 payload maps; emit members only for UInt64 keys too. Select only the used kernel, typed key ops when comparing, and ordinary array ownership for member results. Standalone callable entries must compile without unused-helper warnings.
+
+Resolved Grill Log: project existing checked semantics; no inference, fallback, unsafe cell reinterpretation or frame ABI change. Reuse granular runtime dependencies and existing numeric/array ownership kernels.

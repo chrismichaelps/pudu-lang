@@ -5,6 +5,10 @@ tags: [changelog]
 
 # Changelog
 
+## 2026-11-04 — Native sparse-word queries (#814)
+
+- [[Native Word Map Queries]] defines exact query carriers, source-order snapshots, portable count/member kernels and required validation.
+
 ## 2026-11-04 — Parallel CI (#815)
 
 - CI builds once with a cache and runs the suite as six parallel shards and the gates as four parallel jobs on the built compiler, so a run takes as long as its longest job.
