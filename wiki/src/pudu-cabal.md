@@ -639,3 +639,12 @@ Resolved Grill Log: Register Pudu.Backend.Runtime.Integer.Big.Value and .Operati
 ## Decimal (#802)
 
 Resolved Grill Log: Register the Decimal runtime modules and Pudu.Compiler.Lower.Decimal using the existing dependencies.
+
+## Nested view modules (#527)
+
+Ship lib/Std/MdSpan/*.pudu and lib/Std/StringView/*.pudu in source and binary
+distributions, including [[Std MdSpan Layout]] and [[Std StringView Search]].
+Resolved Grill Log: checkout-only resolution is insufficient; verify the
+source archive contains each nested module. No package dependency is added.
+
+Ship lib/Std/Iter/*.pudu for [[Std Iter Views]]. Resolved Grill Log: optional adapter imports must work from the installed archive.

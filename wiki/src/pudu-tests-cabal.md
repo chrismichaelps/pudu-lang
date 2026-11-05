@@ -395,3 +395,5 @@ Register [[Backend BigInt Programs]]. Resolved Grill Log: no new dependency.
 ## Decimal (#802)
 
 Register [[Backend Decimal Programs]]. Resolved Grill Log: no new dependency.
+
+Register [[Program View Spec]] using existing dependencies. Resolved Grill Log: real standard-library view fixtures, exact results and diagnostic refusals execute in the full program suite.

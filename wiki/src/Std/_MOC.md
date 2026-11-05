@@ -5,6 +5,9 @@ tags: [moc, module, stdlib]
 
 # Standard Library Module Map
 
+- [[Std Iter Views]] — optional window, flatten, reverse and product adapters.
+- [[Std StringView Search]] — UTF-8 code-unit searches, copy and byte walking.
+
 - [[Std Lanes]] — packed binary64 values with whole-lane native kernels.
 - [[Std Db Admission]] — finite capacity wait below pool ownership.
 
@@ -157,7 +160,12 @@ tags: [moc, module, stdlib]
 - [[Std Http]] — pure HTTP protocol values and transformations.
 - [[Std Http Message]] — HTTP message parsing, rendering, length validation, and chunk decoding.
 - [[Std Result]] — recoverable-result combinators and collection traversal.
-- [[Std Iter]] — open sequence protocol, lazy adapters, and terminals.
+- [[Std Iter]] — open sequence protocol with chainable default adapters and terminals.
+- [[Std Span]] — non-owning window onto an array, narrowed and walked in place.
+- [[Std MdSpan Layout]] — checked shape metadata and layout certificates.
+- [[Std MdSpan]] — non-owning multidimensional array view with layouts and slicing.
+- [[Std StringView]] — byte-addressed UTF-8 view with constant-time size and slicing.
+- [[Std Memory]] — offset allocators: the `Resource` protocol, a monotonic arena and a block pool.
 - [[Std Option]] — optional-value combinators, conversions, and collection helpers.
 - [[Std Text Parse]] — positioned parser combinators and numeric/text readers.
 - [[Std Io]] — portable console, filesystem, directory, and path operations.
