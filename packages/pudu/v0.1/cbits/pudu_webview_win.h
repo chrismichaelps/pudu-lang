@@ -5,6 +5,7 @@
 #include <shlwapi.h>
 
 #include <functional>
+#include <cstdlib>
 #include <map>
 #include <memory>
 #include <string>
@@ -89,6 +90,8 @@ struct PuduView {
   std::vector<std::wstring> scripts;
   std::vector<PuduRule> rules;
   bool realizing = false;
+  /* The first page is loading; later commands apply directly. */
+  bool started = false;
   /* Commands sent after realize but before the controller exists. */
   std::vector<std::vector<std::string>> deferred;
   ICoreWebView2Environment *environment = nullptr;

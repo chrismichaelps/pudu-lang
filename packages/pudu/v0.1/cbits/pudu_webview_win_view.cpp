@@ -392,6 +392,25 @@ static void pudu_load_html(PuduView *view, const std::string &html) {
 
 static int32_t pudu_operate(PuduView *view, const std::vector<std::string> &fields);
 
+/* Loads the configured page and applies the commands that waited for the view. */
+static void pudu_start(int64_t id) {
+  PuduView *view = pudu_view_named(id);
+  if (view == nullptr || view->web == nullptr) {
+    return;
+  }
+  if (!view->html.empty()) {
+    pudu_load_html(view, view->html);
+  } else if (!view->url.empty()) {
+    pudu_navigate(view, view->url);
+  }
+  view->started = true;
+  std::vector<std::vector<std::string>> deferred;
+  deferred.swap(view->deferred);
+  for (const auto &fields : deferred) {
+    pudu_operate(view, fields);
+  }
+}
+
 static HRESULT pudu_on_controller(PuduView *view, ICoreWebView2Controller *controller) {
   PuduHost &host = pudu_host();
   if (controller == nullptr || host.views.count(view->id) == 0) {
@@ -481,16 +500,10 @@ static HRESULT pudu_on_controller(PuduView *view, ICoreWebView2Controller *contr
             return S_OK;
           }),
       &token);
-  for (const std::wstring &script : view->scripts) {
-    view->web->AddScriptToExecuteOnDocumentCreated(
-        script.c_str(),
-        pudu_handler<ICoreWebView2AddScriptToExecuteOnDocumentCreatedCompletedHandler, HRESULT, LPCWSTR>([](HRESULT, LPCWSTR) { return S_OK; }));
-  }
+  std::vector<std::wstring> sources = view->scripts;
   for (const PuduRule &rule : view->rules) {
     if (rule.action == "css-display-none") {
-      view->web->AddScriptToExecuteOnDocumentCreated(
-          pudu_style_script(rule.selector + "{display:none!important}").c_str(),
-          pudu_handler<ICoreWebView2AddScriptToExecuteOnDocumentCreatedCompletedHandler, HRESULT, LPCWSTR>([](HRESULT, LPCWSTR) { return S_OK; }));
+      sources.push_back(pudu_style_script(rule.selector + "{display:none!important}"));
     }
   }
   if (!view->rules.empty()) {
@@ -498,15 +511,20 @@ static HRESULT pudu_on_controller(PuduView *view, ICoreWebView2Controller *contr
   }
   pudu_fit_views(view->window);
   controller->put_IsVisible(TRUE);
-  if (!view->html.empty()) {
-    pudu_load_html(view, view->html);
-  } else if (!view->url.empty()) {
-    pudu_navigate(view, view->url);
+  /* Registration completes asynchronously; the first page waits for every script so none misses it. */
+  auto outstanding = std::make_shared<size_t>(sources.size());
+  if (sources.empty()) {
+    pudu_start(id);
   }
-  std::vector<std::vector<std::string>> deferred;
-  deferred.swap(view->deferred);
-  for (const auto &fields : deferred) {
-    pudu_operate(view, fields);
+  for (const std::wstring &source : sources) {
+    view->web->AddScriptToExecuteOnDocumentCreated(
+        source.c_str(),
+        pudu_handler<ICoreWebView2AddScriptToExecuteOnDocumentCreatedCompletedHandler, HRESULT, LPCWSTR>([id, outstanding](HRESULT, LPCWSTR) {
+          if (--*outstanding == 0) {
+            pudu_start(id);
+          }
+          return S_OK;
+        }));
   }
   return S_OK;
 }
@@ -608,7 +626,7 @@ static int32_t pudu_configure(PuduView *view, const std::vector<std::string> &fi
 }
 
 static int32_t pudu_operate(PuduView *view, const std::vector<std::string> &fields) {
-  if (view->controller == nullptr) {
+  if (view->controller == nullptr || !view->started) {
     view->deferred.push_back(fields);
     return PUDU_WEBVIEW_DONE;
   }

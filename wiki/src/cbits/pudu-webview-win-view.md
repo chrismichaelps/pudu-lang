@@ -19,7 +19,8 @@ script handlers that turn WebView2 into the record channel.
 - Each view's storage is `%LOCALAPPDATA%\<program>\webview\<digest of label>`; `ephemeral` uses
   InPrivate mode where the runtime offers it.
 - Commands sent after `realize` but before the controller exists are queued and applied in order
-  once it does; the initial page loads after scripts and rules are in place.
+  once the first page has started; that page loads only after every document-creation script
+  finished registering, so no script misses it.
 - Inline HTML is served from `pudu://app/.pudu/inline/<view>-<n>`, so it has the application's
   origin as on the other platforms.
 - Content rules are enforced by the request filter: `block` answers `403`, `block-cookies` removes
