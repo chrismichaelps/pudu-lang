@@ -49,7 +49,7 @@ checker spells types (`unformed`), so calls made from a copy specialize too.
 
 ## Dependencies and consumers
 
-[[Compiler Lower State]] · [[Compiler Lower Types]] · [[Compiler Lower Signature]] · [[Core IR]]
+[[Compiler Lower State]] · [[Compiler Lower Types]] · [[Compiler Lower Signature]] · [[Core IR]] · [[Type Substitution]]
 
 ## Referenced by
 
@@ -60,3 +60,35 @@ checker spells types (`unformed`), so calls made from a copy specialize too.
 matchType looks through a reference of either kind on either side: a value
 lent to `self: &mut Self` holds its target, so a generic implementation is
 instantiated at the receiver's own type.
+
+## Derived bindings and `matchType` (#824)
+
+`specialize` takes the instance's derived trait arguments, substitutes the
+copy's own bindings into each and forms them in the caller's facts. A copy
+binds every rigid name its body names, the trait's included. `matchType` is
+exported so method tables can recover trait arguments the same way a call
+recovers its instantiation.
+
+Resolved Grill Log (#824): derived bindings are formed against the settled
+implementation bindings, then overlay them for the body's scope. Fixed bindings
+contain `Self` only for inherited defaults. The body and implementation may
+reuse a parameter spelling without sharing its meaning. Keeping a fixed trait
+parameter before matching would erase a same-named implementation parameter.
+
+Resolved Grill Log: a registered copy stores its scheme type substituted with
+the settled implementation bindings before installing the body overlay.
+Signature admission reads that concrete scheme, while body facts read their
+own namespace. Otherwise `Box[T]` in an implementation signature could become
+`Box[Str]` merely because the trait body binds its own `T` to `Str`.
+
+Resolved Grill Log: reifying settled native collection arguments preserves
+the canonical Array/Map/Set/Range constructors and their arguments. Display
+strings such as `Array[Int]` are not nominal identities and cannot be used
+when a derived body argument is passed to another generic member.
+
+Resolved Grill Log: freeze a copy's scheme by substituting matched checker
+`Type`s, preserving callable required counts and capabilities. Reconstructing
+a semantic function type from the native carrier loses that metadata and
+regresses passing function values through ordinary generic functions. Native
+function carriers reify structurally for matching nested calls, never as
+display-text nominal identities.

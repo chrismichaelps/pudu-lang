@@ -7,6 +7,8 @@ tags: [moc, handoff]
 
 - [[Native Word Map Query Delivery]] — #814 remaining sparse-word queries.
 
+- [[Native Inherited Defaults Delivery]] — #824 trait body scopes and parameter bindings.
+
 - [[Native Linux Output Gate Delivery]] — #811 measured descriptor readiness and bounded full-suite CI.
 - [[Native Word Map Algebra Delivery]] — #810 accelerated sparse-word algebra.
 - [[Native Frozen Collection Delivery]] — #808 compiler-folded arrays, maps, sets and ranges.
