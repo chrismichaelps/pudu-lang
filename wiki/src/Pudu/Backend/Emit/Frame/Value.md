@@ -170,3 +170,7 @@ Conversions classify each side as one word, two words or BigInt. Every value fit
 ## Decimal (#802)
 
 Decimal literals, methods, operators with division's two failure sites, negation and display. `decimalFunction` names each method's runtime function.
+
+## Native byte views (#827)
+
+Delegate recognized byte-view FrameTextMethod values to [[Backend Frame Text Views]] before the unchanged scalar Str path. Pass slotText as a callback; preserve located faults and granular helper roots without importing compiler code. See [[Native Text Views]].

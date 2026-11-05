@@ -648,3 +648,7 @@ Resolved Grill Log: checkout-only resolution is insufficient; verify the
 source archive contains each nested module. No package dependency is added.
 
 Ship lib/Std/Iter/*.pudu for [[Std Iter Views]]. Resolved Grill Log: optional adapter imports must work from the installed archive.
+
+## Native byte views (#827)
+
+Register Pudu.Backend.Emit.Frame.TextView with the existing library dependencies; no new package or runtime ABI. See [[Native Text Views]].

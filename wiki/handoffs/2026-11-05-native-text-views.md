@@ -1,0 +1,35 @@
+---
+type: handoff
+status: ACTIVE
+issue: 827
+aliases: [Native Text View Delivery]
+---
+# Native Text View Delivery
+
+Architect → Backend Engineer. Fresh feature/827-native-text-views starts at
+dev 82ae132e. Own Core, Lower.Text/Body/Intrinsic, Emit.Frame.Value/TextView,
+Runtime.Text.Methods and the compiler manifest. Test ownership is
+TextViewPrograms plus NativeSpec/ModulePrograms/TextLeakSpec/FrameEmitSpec
+registry/carrier edits, test manifest and complete mirrors. Navigation,
+architecture, native ledger and history stay aligned. No subagents.
+
+Backend Engineer → Test Engineer → Forensic Guardian self-audit. All six
+primitives now share guarded lowering and runtime/frame kernels; eight explicit
+success programs, nine failures/entries and 52 frame controls pass. Counted
+cleanup executes all eight kernel programs. The public StringView facade now
+passes after integrating #825 at dev b9038686, including imported defaults,
+byte iteration, shared substrings, mutable copy and byte searches.
+
+Strict Clang, GCC 15 and ASan/UBSan run both evaluators. Complete optimized
+gates and final-head CI remain required. No independent review is claimed.
+
+Exact next action: finish the final compiler matrix, run all clean repository
+gates, then publish the bounded PR with final-head CI and review evidence.
+
+## Referenced by
+[[handoffs/_MOC]] · [[Native Text Views]]
+
+All six initial native probes now match evaluator results. The larger corpus
+exposed a pre-existing call-order contradiction, tracked in #828; the native
+ledger marks scalar-function coverage Partial until that obligation is resolved.
+The kernel slice preserves existing engine parity and does not change call semantics.

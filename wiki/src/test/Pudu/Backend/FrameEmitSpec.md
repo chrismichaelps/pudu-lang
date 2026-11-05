@@ -62,3 +62,7 @@ not a hand-picked scalar runtime.
 Resolved Grill Log: printing programs carry Result aggregates since output
 Results became values, and the hand assembly had no aggregate runtime. The
 real assembler is what users get, so it is what must compile strictly.
+
+## Native byte views (#827)
+
+Add located malformed byte-method receiver, arity, offset/needle/result carrier cases. Valid controls require each descriptor to select its helper; invalid shapes fault at the exact FrameValue span before any C compiler. See [[Native Text Views]].

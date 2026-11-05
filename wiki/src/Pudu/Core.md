@@ -415,3 +415,7 @@ when the index is out of range.
 ## Decimal (#802)
 
 `CoreDecimalType`, `CoreDecimalLiteral` (coefficient and scale) and `CoreDecimalMethod` over `CoreDecimalMethodName`.
+
+## Native byte views (#827)
+
+Add TextByteSize, TextByteIndexValid, TextByteRead, TextByteSliceValid, TextByteSlice, TextByteFind, TextByteFindLast, TextScalarRead and TextScalarWidth to CoreTextMethodName. They are internal guarded reads, not new source Str methods. Optional/layout construction stays in lowering; no persisted ordinal or cell ABI change. See [[Native Text Views]].

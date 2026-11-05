@@ -79,3 +79,7 @@ Resolved Grill Log: the reference span contains a function fact, not its
 Option result. Pass the descriptor's validated result to the shared answer
 builder instead of reading that span as a result. Intrinsic frames keep
 their existing uncounted ABI, rendering, identity and ownership behavior.
+
+## Native byte views (#827)
+
+Register the six exact monomorphic textCallable signatures through the ordinary per-tag builtin machinery. Reuse direct-call bodies and validated Option results instead of reading a function-reference span as a result layout. Preserve entry rendering, identity and call metadata. See [[Native Text Views]].

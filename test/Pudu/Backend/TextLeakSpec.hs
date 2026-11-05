@@ -6,6 +6,7 @@ import qualified Data.Text as Text
 import qualified Data.Text.IO as TextIO
 import Pudu.Backend.Emit (emitProgram)
 import Pudu.Backend.TextMethodPrograms (textMethodSuccessPrograms)
+import Pudu.Backend.TextViewPrograms (textViewSuccessPrograms)
 import Pudu.Backend.BigIntPrograms (bigIntSuccessPrograms)
 import Pudu.Backend.DecimalPrograms (decimalLeakPrograms)
 import Pudu.Backend.CharPrograms (charSuccessPrograms)
@@ -58,12 +59,13 @@ textLeakProperties =
   , ("native expression bodies release every allocation", testLeaksFor expressionBodySuccessPrograms)
   , ("native Bytes programs release every allocation", testLeaksFor bytesSuccessPrograms)
   , ("native word-map algebra releases every allocation", testLeaksFor wordMapSuccessPrograms)
+  , ("native text-view reads release every allocation", testLeaksFor textViewSuccessPrograms)
   , ("native folded constants release every allocation", testLeaksFor constantPrograms)
   , ("native Decimal programs release every allocation", testLeaksFor decimalLeakPrograms)
   ]
 
 testLeaks :: IO Property
-testLeaks = testLeaksFor (wordMapSuccessPrograms <> namedCallableSuccessPrograms <> expressionBodySuccessPrograms <> textSuccessPrograms <> textMethodSuccessPrograms <> charSuccessPrograms <> bigIntSuccessPrograms <> decimalLeakPrograms <> tupleSuccessPrograms <> recordSuccessPrograms <> sumSuccessPrograms <> constantPrograms <> referenceSuccessPrograms <> methodSuccessPrograms <> genericSuccessPrograms <> trySuccessPrograms <> forSuccessPrograms <> closureSuccessPrograms <> arraySuccessPrograms <> arrayPatternSuccessPrograms <> textCollectionSuccessPrograms <> convertSuccessPrograms <> keyedSuccessPrograms <> shapeSuccessPrograms <> rangeSuccessPrograms <> bytesSuccessPrograms)
+testLeaks = testLeaksFor (textViewSuccessPrograms <> wordMapSuccessPrograms <> namedCallableSuccessPrograms <> expressionBodySuccessPrograms <> textSuccessPrograms <> textMethodSuccessPrograms <> charSuccessPrograms <> bigIntSuccessPrograms <> decimalLeakPrograms <> tupleSuccessPrograms <> recordSuccessPrograms <> sumSuccessPrograms <> constantPrograms <> referenceSuccessPrograms <> methodSuccessPrograms <> genericSuccessPrograms <> trySuccessPrograms <> forSuccessPrograms <> closureSuccessPrograms <> arraySuccessPrograms <> arrayPatternSuccessPrograms <> textCollectionSuccessPrograms <> convertSuccessPrograms <> keyedSuccessPrograms <> shapeSuccessPrograms <> rangeSuccessPrograms <> bytesSuccessPrograms)
 
 testLeaksFor :: [(String, Text, Text)] -> IO Property
 testLeaksFor programs = testLeaksWithStreams [(label, source, output, "") | (label, source, output) <- programs]

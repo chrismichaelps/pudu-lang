@@ -5,6 +5,10 @@ tags: [changelog]
 
 # Changelog
 
+## 2026-11-05 — Native byte-addressed text contract (#827)
+
+- [[Native Text Views]] defines guarded byte/scalar reads, shared slices, search offsets, exact carriers and required evidence before native admission.
+
 ## 2026-11-04 — Native inherited defaults across traits' parameters and modules (#824)
 
 - [[Compiler Lower Method]] lowers an inherited default in its declaring module and reads trait arguments from the checked implementation head, including arguments absent from the member signature.
