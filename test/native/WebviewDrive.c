@@ -65,6 +65,7 @@ int main(void) {
   }
 
   int answered = 0, evaluated = 0, blocked = 0, sibling = 0;
+  int trace = getenv("PUDU_HARNESS_TRACE") != NULL;
   for (int turn = 0; turn < 400 && !(blocked && sibling); turn++) {
     if (pudu_webview_pump(50) < 0) {
       fprintf(stderr, "pump failed\n");
@@ -83,6 +84,12 @@ int main(void) {
     pudu_field fields[PUDU_RECORD_FIELDS];
     int count;
     while ((count = pudu_record_next(events, (size_t)size, &cursor, fields, PUDU_RECORD_FIELDS)) > 0) {
+      if (trace) {
+        for (int i = 0; i < count; i++) {
+          fprintf(stderr, "%s%.*s", i == 0 ? "event: " : " | ", (int)fields[i].length, (const char *)fields[i].data);
+        }
+        fprintf(stderr, "\n");
+      }
       if (pudu_field_is(fields[0], "request") && count == 8) {
         int64_t id = 0;
         pudu_field_int(fields[2], &id);
