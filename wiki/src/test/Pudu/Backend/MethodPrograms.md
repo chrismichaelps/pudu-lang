@@ -43,3 +43,8 @@ implementation's. Handwritten output and counted cleanup exercise each copy.
 The collision regression also calls a default returning Int whose body uses
 the trait parameter through `self.word()`. Its signature carries no trait
 argument, proving that checked implementation heads supply the body bindings.
+
+Callable regressions pass ordinary and defaulted functions through a generic
+identity function, invoke a default's function-valued trait argument, and
+check explicit answers. This prevents concrete signature freezing from
+turning a function carrier's display text into a nominal type.

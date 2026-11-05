@@ -126,13 +126,22 @@ methodSuccessPrograms =
       , "impl[T] Loud[Array[T]] for Many[T] { fn word(self: &Self) -> Array[T] { [self.inner] } }"
       , "type Tag[V] = { inner: V }"
       , "impl[V] Loud[Str] for Tag[V] { fn word(self: &Self) -> Str { \"tag\" } }"
+      , "type Func = { base: Int }"
+      , "impl Loud[fn(Int) -> Int] for Func {"
+      , "  fn word(self: &Self) -> fn(Int) -> Int { |n| n + self.base }", "}"
+      , "fn identity[T](value: T) -> T { value }"
+      , "fn inc(value: Int) -> Int { value + 1 }"
+      , "fn add(value: Int = 1) -> Int { value + 2 }"
       , "fn main() -> Int {"
       , "  print(show(Box{inner: 7}.wrapped()))"
       , "  print(show(Many{inner: 9}.wrapped()))"
       , "  print(show(Tag{inner: 3}.tagged(true)))"
       , "  Box{inner: 1}.reveal()", "  Many{inner: 2}.reveal()"
+      , "  let call = Func{base: 3}.wrapped().held", "  print(show(call(4)))"
+      , "  let next = identity(inc)", "  let defaulted = identity(add)"
+      , "  print(show(next(2)))", "  print(show(defaulted()))", "  print(show(defaulted(5)))"
       , "  return 0", "}" ]
-    , "Wrapped{held: \"held\"}\nWrapped{held: [9]}\n(\"tag\", true)\n\"held\"\n[2]\n")
+    , "Wrapped{held: \"held\"}\nWrapped{held: [9]}\n(\"tag\", true)\n\"held\"\n[2]\n7\n3\n3\n7\n")
   ]
 
 {-| Runtime failures inside a method body report at the method's own source. -}

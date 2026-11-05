@@ -7,27 +7,28 @@ aliases: [Native Inherited Defaults Delivery]
 # Native Inherited Defaults Delivery
 
 Architect → Backend Engineer → Test Engineer → Forensic Guardian self-audit.
-Continue feature/824-native-inherited-defaults from dev 94880067.
+Branch feature/824-native-inherited-defaults; dev bbc9cdbd integrated.
 Owned: Lower/Method, Lower/Generic, Lower/State, MethodPrograms, ModulePrograms
 and their mirrors, native coverage ledger, navigation and changelog.
-Preserve unrelated work. No subagents.
+Preserve unrelated work. No subagents. PR #825 targets dev.
 
-Recovered pre-continuation full-suite evidence: 774 properties passed, exit 0.
-The continuation found additional failures with same-spelling body and
-implementation parameters, derived Array arguments, renamed own parameters,
-and trait arguments absent from a member signature. Regression programs now
-compare explicit stdout, stderr and status under tree/compiled evaluation,
-Clang, GCC 15 and Clang ASan/UBSan; every matrix case passes. Imported-default
-runtime failure conformance also passes. The broader module/cleanup checks
-and final clean gates still need their final results recorded.
+Pre-continuation suite: 774 properties passed, exit 0. New regressions cover
+same-spelling body/implementation parameters, derived arrays, renamed own
+parameters, body-only trait arguments and callable arguments. Final explicit
+stdout/stderr/status comparisons pass with both evaluators, Clang, GCC 15
+and Clang ASan/UBSan. The original importeddefaults fixture exits 6 with
+empty streams in both evaluators and native execution. Broader module and
+refusal conformance and 159-program counted cleanup passed before the final
+callable additions; final reruns and clean gates remain to be recorded.
 
-Resolve all trait arguments from canonical checked implementation heads and
-own parameter renames from member schemes. Settle implementation bindings,
-freeze the copy's signature, then overlay body bindings. A default runs in
-its declaring module; no evaluator or language-semantic change is made.
+Use canonical checked implementation heads plus member schemes for body
+bindings. Settle implementation bindings, freeze the signature using matched
+checker Types (preserving callable required counts), then overlay body
+bindings. A default runs in its declaring module. A manual probe caught and
+fixed a callable regression before promotion; its first gate was stopped
+and must not be counted as a full pass.
 
-Exact next action: integrate current dev's verified CI fixes, then run clean
-repository gates and open the reviewable dev PR.
+Exact next action: finish final clean gates and Linux CI for PR #825.
 Independent implementation and Forensic Guardian review remain required.
 
 ## Referenced by

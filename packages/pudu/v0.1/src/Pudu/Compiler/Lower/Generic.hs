@@ -17,6 +17,7 @@ import Pudu.Frontend.Syntax.Name (ModuleName (..))
 import Pudu.Frontend.Syntax (Function (..), Located (..))
 import Pudu.Source (Span)
 import Pudu.Type.Value (NominalId (..), Scheme (..), Type (..))
+import Pudu.Type.Substitute (substituteRigid)
 
 {-| Admit a call's callee and answer the key the call names: the function
     itself when it is monomorphic, otherwise its copy for the types checking
@@ -49,10 +50,11 @@ specialize state key owner function scheme fixed derived actual = do
   matched <- matchType (schemeType scheme) (substitute (typeBindings (contextTypes context)) actual) Map.empty
   formed <- traverse (form matched) [name | (name, _) <- schemeParams scheme, Map.notMember name fixed]
   let own = Map.union fixed (Map.fromList formed)
-  settled <- traverse (formedCoreTypeIn (contextTypes context) . substitute own) derived
+      replacements = Map.toList (Map.union matched (Map.map unformed fixed))
+  settled <- traverse (formedCoreTypeIn (contextTypes context) . substituteRigid replacements) derived
   let bindings = Map.union settled own
       instanceKey = key <> "[" <> Text.intercalate "," [Text.pack (show kind) | kind <- Map.elems bindings] <> "]"
-      known = Instance owner function scheme{schemeType = substitute own (schemeType scheme)} bindings False Map.empty
+      known = Instance owner function scheme{schemeType = substituteRigid replacements (schemeType scheme)} bindings False Map.empty
       registered = state{lowerContext = context{contextInstances = Map.insert instanceKey known (contextInstances context)}}
   pure (registered, instanceKey, bindings)
  where
@@ -80,6 +82,7 @@ unformed :: CoreType -> Type
 unformed kind = case kind of
   CoreRecordType key arguments -> NominalType (identityOf key) (map unformed arguments)
   CoreSumType key arguments -> NominalType (identityOf key) (map unformed arguments)
+  CoreFunctionType inputs result -> FunctionTypeValue False (map unformed inputs) (unformed result)
   CoreArrayType member -> NominalType (NominalId Nothing "Array") [unformed member]
   CoreMapType key value -> NominalType (NominalId Nothing "Map") [unformed key, unformed value]
   CoreSetType member -> NominalType (NominalId Nothing "Set") [unformed member]

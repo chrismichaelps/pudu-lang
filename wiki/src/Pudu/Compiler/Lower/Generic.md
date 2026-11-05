@@ -85,3 +85,10 @@ Resolved Grill Log: reifying settled native collection arguments preserves
 the canonical Array/Map/Set/Range constructors and their arguments. Display
 strings such as `Array[Int]` are not nominal identities and cannot be used
 when a derived body argument is passed to another generic member.
+
+Resolved Grill Log: freeze a copy's scheme by substituting matched checker
+`Type`s, preserving callable required counts and capabilities. Reconstructing
+a semantic function type from the native carrier loses that metadata and
+regresses passing function values through ordinary generic functions. Native
+function carriers reify structurally for matching nested calls, never as
+display-text nominal identities.

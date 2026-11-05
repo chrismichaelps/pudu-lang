@@ -45,7 +45,7 @@ No host exceptions, semantic rechecking, global mutable state, or backend emissi
 
 ## Dependencies and consumers
 
-[[Compiler Lower]] · [[Compiler Lower Body]] · [[Compiler Lower Signature]] · [[Pudu Core]] · [[Diagnostic Native]]. Only lowering modules consume this phase-owned module.
+[[Compiler Lower]] · [[Compiler Lower Body]] · [[Compiler Lower Signature]] · [[Pudu Core]] · [[Native Diagnostic Contracts]]. Only lowering modules consume this phase-owned module.
 
 ## Grill Log
 

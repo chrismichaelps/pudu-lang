@@ -7,8 +7,7 @@ aliases: [Backend Module Programs]
 ---
 # Backend Module Programs
 
-Word-map algebra (#810): register successes and refusals from [[Backend Word
-Map Programs]] in the ordinary module corpora. Resolved Grill Log: focused
+Word-map algebra (#810): register successes and refusals from [[Backend Word Map Programs]] in the ordinary module corpora. Resolved Grill Log: focused
 groups supplement these complete gates rather than replacing existing cases.
 ## Complete carried frozen data (#808)
 
@@ -25,8 +24,7 @@ multi-module cases use the real compiler/module-loading harness.
 
 ## Purpose and interface
 
-Export modulePrograms and moduleRefusalPrograms, run by [[Backend Native
-Tests]] through `conformanceWith`, which writes each module beside the root.
+Export modulePrograms and moduleRefusalPrograms, run by [[Backend Native Tests]] through `conformanceWith`, which writes each module beside the root.
 
 ## Coverage
 
