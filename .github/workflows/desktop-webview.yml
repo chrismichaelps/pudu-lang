@@ -82,4 +82,5 @@ jobs:
         run: |
           cl /nologo /EHsc /std:c++17 /W3 /I packages\pudu\v0.1\cbits /I webview2\build\native\include packages\pudu\v0.1\cbits\pudu_webview_records.c packages\pudu\v0.1\cbits\pudu_webview_win.cpp packages\pudu\v0.1\cbits\pudu_webview_win_view.cpp test\native\WebviewDrive.c /Fe:drive.exe user32.lib ole32.lib shlwapi.lib || exit /b 1
           copy webview2\build\native\x64\WebView2Loader.dll .
+          set PUDU_HARNESS_TRACE=1
           drive.exe
