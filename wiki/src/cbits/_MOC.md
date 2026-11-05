@@ -16,6 +16,10 @@ tags: [moc, module, foreign, ffi]
 - [[Pudu Desktop Menu]] — the application's menu bar from presented records, and the records it holds.
 - [[Pudu Desktop Window]] — window-state records and configured density, limits and full screen.
 - [[Pudu Desktop Access]] — a window's accessibility elements from a presented snapshot, and AppKit's report of them.
+- [[Pudu Webview Header]] — the six-entry WebView record channel and its statuses.
+- [[Pudu Webview Records]] — length-prefixed record framing and bounded URL patterns.
+- [[Pudu Webview macOS Host]] · [[Pudu Webview macOS Adapter]] · [[Pudu Webview macOS View]] — WebKit windows, views, scheme requests and policy.
+- [[Pudu Webview GTK Adapter]] — the same contract on WebKitGTK.
 - [[Pudu Audio Header]] — framework-neutral bounded device-playback ABI and stable statuses.
 - [[Pudu Audio Adapter]] — macOS Audio Queue ownership, preallocation, refill, deadline, and release.
 - [[Pudu Audio Stream Header]] — framework-neutral persistent-output ABI, snapshot layout, and stable statuses.

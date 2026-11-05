@@ -1,7 +1,9 @@
 /* Drives a platform WebView adapter through its six entry points: a page
    posts to the pudu scheme, the harness answers, an injected script and the
    answer are read back by evaluation, and a navigation outside the allowlist
-   is refused. Runs on whichever adapter it is linked with. */
+   is refused; a content rule blocks a request before it reaches the program,
+   and the page loads only after the rule list compiled. Runs on whichever
+   adapter it is linked with. */
 #include "pudu_webview.h"
 #include "pudu_webview_records.h"
 
@@ -11,7 +13,8 @@
 
 static const char *PAGE =
     "<html><body><script>"
-    "fetch('pudu://app/.pudu/ipc/echo',{method:'POST',body:'ping'})"
+    "fetch('pudu://app/blocked').then(function(){return 'leaked'},function(){return 'blocked'})"
+    ".then(function(b){return fetch('pudu://app/.pudu/ipc/echo',{method:'POST',body:'ping:'+b})})"
     ".then(function(r){return r.text()})"
     ".then(function(t){document.title='done:'+t})"
     ".catch(function(e){document.title='error:'+e})"
@@ -40,12 +43,14 @@ int main(void) {
   const char *open[] = {"window", "1", "open", "Harness", "480", "320", "1"};
   const char *create[] = {"view", "1", "create", "1", "0", "0", "0", "0", "1"};
   const char *inject[] = {"view", "1", "script", "window.injected = 42;", "start", "main"};
+  const char *rules[] = {"view", "1", "rules", "[{\"trigger\":{\"url-filter\":\"blocked\"},\"action\":{\"type\":\"block\"}}]"};
   const char *html[] = {"view", "1", "html", PAGE};
   const char *realize[] = {"view", "1", "realize"};
   const char *show[] = {"window", "1", "show"};
   record(&commands, open, 7);
   record(&commands, create, 9);
   record(&commands, inject, 6);
+  record(&commands, rules, 4);
   record(&commands, html, 4);
   record(&commands, realize, 3);
   record(&commands, show, 3);
@@ -75,9 +80,13 @@ int main(void) {
       if (pudu_field_is(fields[0], "request") && count == 8) {
         int64_t id = 0;
         pudu_field_int(fields[2], &id);
-        uint8_t body[16] = {0};
+        uint8_t body[32] = {0};
         int64_t length = pudu_webview_body(id, body, sizeof body);
-        const char *answer = length == 4 && memcmp(body, "ping", 4) == 0 ? "pong" : "wrong-body";
+        if (fields[4].length >= 7 && memcmp(fields[4].data + fields[4].length - 7, "blocked", 7) == 0) {
+          fprintf(stderr, "a blocked request reached the program\n");
+          return 1;
+        }
+        const char *answer = length == 12 && memcmp(body, "ping:blocked", 12) == 0 ? "pong" : "wrong-body";
         const char *head = "Content-Type: text/plain";
         if (pudu_webview_respond(id, 200, (const uint8_t *)head, strlen(head), (const uint8_t *)answer, strlen(answer)) == 0) {
           answered = 1;

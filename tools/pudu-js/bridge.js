@@ -6,6 +6,9 @@
   if (window.__pudu) return;
 
   const IPC = 'pudu://app/.pudu/ipc/';
+  // The origin of the document this bridge was injected into, fixed now so a
+  // call still in flight when the view navigates cannot be credited to the next page.
+  const ORIGIN = location.protocol + '//' + location.host;
   const listeners = new Map();
   const channels = new Map();
   let nextChannel = 1;
@@ -49,7 +52,7 @@
 
   async function invoke(command, args, options) {
     const [body, type] = encode(args);
-    const headers = { 'Content-Type': type, 'Pudu-Invoke-Key': config.key };
+    const headers = { 'Content-Type': type, 'Pudu-Invoke-Key': config.key, 'Pudu-Origin': ORIGIN };
     if (options && options.channel) headers['Pudu-Channel'] = String(options.channel.id);
     let response;
     try {

@@ -280,6 +280,10 @@ fn answer(app: &App, live: &Live, request: &Webview.Pending) -> Webview.Response
         if Webview.header(request, Ipc.KEY_HEADER) != Some(live.key) {
           return Ipc.failure(name, origin, &Ipc.denied("the call did not come from this view's bridge"))
         }
+        match Ipc.callOrigin(request) {
+          case Ok(_) => ()
+          case Err(problem) => { return Ipc.failure(name, origin, &problem) }
+        }
         handler(app, live, request, &body)
       }
       case None => Ipc.dispatch(&app.commands, &app.grants, live.key, live.label, request, &body)

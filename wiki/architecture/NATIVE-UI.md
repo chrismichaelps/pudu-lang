@@ -117,6 +117,9 @@ A row marked **Absent** is queued work, not an exclusion.
 | Accessibility semantics | [[Std Ui Layout]] semantics, required names; [[Std Ui Accessible]] and [[Pudu Desktop Access]] export them | **Ready** on macOS: roles, names, frames, parents, and focus reach the platform tree with every driven frame |
 | Multiple windows, documents, settings window | multiple sessions | **Partial**: no document or settings space yet |
 
+Interfaces written in HTML, CSS and JavaScript take the WebView path of
+[[architecture/DESKTOP-WEBVIEW]] instead; both share the rule that no platform value crosses into Pudu.
+
 ## Performance and quality constitution
 
 - A frame has separate update, render, and present phases. Present targets are acquired late,

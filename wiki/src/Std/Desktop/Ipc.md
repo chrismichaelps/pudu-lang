@@ -27,6 +27,9 @@ emits. `registry(commands, events)` validates them; `dispatch` answers one bridg
   (`404`); a capability refusal is `denied` (`403`); a body that is not UTF-8 JSON, or that does not
   decode, is `invalid-arguments` (`400`) with the decoding path such as `.items[2].name`; a handler's
   own `Failure` keeps its kind (`failed` is `422`, `internal` is `500`).
+- Every call carries `Pudu-Origin`, the origin of the document its bridge was injected into;
+  `callOrigin` refuses a call whose origin is not the view's current page, so a call still in flight
+  when the view navigates is never credited to the next page's origin.
 - Every failure answers the envelope `{ kind, message, command, path }`; the bridge rethrows it as a
   `PuduError`.
 - A request from an origin other than the application's own receives

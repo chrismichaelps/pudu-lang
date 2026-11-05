@@ -34,6 +34,8 @@ typedef struct {
   gboolean devtools;
   gboolean transparent;
   double zoom;
+  guint rules_outstanding;
+  gboolean rules_failed;
 } PuduView;
 
 /* One request WebKit is waiting on. */

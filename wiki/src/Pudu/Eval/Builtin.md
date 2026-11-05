@@ -90,6 +90,12 @@ Dispatch on the built-in tag and the argument shapes, answering with a value or 
 
 Re-exports `callFloatKernel` from [[Eval Builtin Numeric]] for [[Eval Call]]. No logic here.
 
+## Ed25519 (#833)
+
+`ed25519PublicOf` and `ed25519SignWith` answer `Option[Bytes]` (none for a seed that is not 32
+bytes) and `ed25519Verify` a `Bool`, through [[Eval Sign]]; all three are pure and foldable like the
+module's other hashing builtins.
+
 ## Referenced by
 
 [[src/Pudu/Eval/_MOC]] · [[Evaluator]] · [[Semantic Prelude]]

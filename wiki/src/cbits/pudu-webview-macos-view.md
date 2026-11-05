@@ -29,14 +29,19 @@ results.
   window is refused and reported.
 - `devtools` sets the WebView inspectable and enables developer extras; `devtools-open` shows the
   inspector when the system exposes it and answers `-7` otherwise.
-- `rules` compile asynchronously; the list is attached when compilation finishes and `rules ready`
-  or `rules failed` is reported.
+- `rules` compile asynchronously and the initial page loads only after every list is attached; a list
+  that fails to compile reports `rules failed` and leaves the view empty, so no request runs without
+  the rules the program asked for.
 - `eval` reports the script's value as text: a string as itself, nothing as `null`, any other value
   as JSON.
 - Styles are injected as a document-start script that appends a `style` element when the document
   element exists, so they apply before first paint.
 
 ## Grill Log
+
+- **Q:** Load the page while rules compile, or wait? **A:** Wait. Loading first lets the page's first
+  requests through unfiltered — exactly the requests a blocker exists for — and a list that cannot
+  compile must fail closed rather than silently open.
 
 - **Q:** Why must styles go through a script? **A:** The platform's user style sheet API is newer
   than the oldest supported system; a script at document start gives the same timing everywhere.

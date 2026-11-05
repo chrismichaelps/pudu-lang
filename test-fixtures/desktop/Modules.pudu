@@ -31,7 +31,15 @@ fn add(point: Point, call: &Ipc.Call) -> Result[Total, Ipc.Failure] {
 }
 
 fn pending(command: Str, key: Str, page: Str, method: Str) -> Webview.Pending {
-  Webview.Pending{view: 1, id: 9, method: method, url: "pudu://app/.pudu/ipc/" + command, headers: [("pudu-invoke-key", key)], bodyLength: 0, page: page}
+  Webview.Pending {
+    view: 1,
+    id: 9,
+    method: method,
+    url: "pudu://app/.pudu/ipc/" + command,
+    headers: [("pudu-invoke-key", key), ("pudu-origin", Capability.originOf(page))],
+    bodyLength: 0,
+    page: page
+  }
 }
 
 fn bodyText(response: &Webview.Response) -> Str {
@@ -173,6 +181,8 @@ fn ipc(tally: Tally) -> Tally {
   t = check(t, "handler failure", call("\{\"x\":-1\}", "k", "pudu://app/", "POST").status == 422)
   t = check(t, "scope refusal", call("\{\"x\":2\}", "k", "pudu://app/", "POST").status == 403)
   t = check(t, "missing key", call("\{\"x\":1\}", "", "pudu://app/", "POST").status == 403)
+  let moved = Webview.Pending{..pending("add", "k", "pudu://app/", "POST"), page: "https://elsewhere.example/"}
+  t = check(t, "call from a page the view left", Ipc.dispatch(&registry, &grants, "k", "main", &moved, &"\{\"x\":1\}".toBytes()).status == 403)
   t = check(t, "foreign origin", call("\{\"x\":1\}", "k", "https://evil.example/", "POST").status == 403)
   t = check(t, "not JSON", call("\{", "k", "pudu://app/", "POST").status == 400)
   let preflight = call("", "", "http://localhost:5173/", "OPTIONS")

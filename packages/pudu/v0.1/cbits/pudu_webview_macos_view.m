@@ -227,7 +227,28 @@ static WKWebsiteDataStore *pudu_store(PuduWebView *view) {
   return [WKWebsiteDataStore defaultDataStore];
 }
 
+/* The page a view was configured with, loaded only once every rule list is
+   in place, so no request escapes rules that were still compiling. */
+static void pudu_load_initial(PuduWebView *view) {
+  if (view.initialHTML != nil) {
+    [view.webView loadHTMLString:view.initialHTML baseURL:[NSURL URLWithString:@"pudu://app/"]];
+  } else if (view.initialURL != nil) {
+    NSURL *url = [NSURL URLWithString:view.initialURL];
+    if (url != nil) {
+      [view.webView loadRequest:[NSURLRequest requestWithURL:url]];
+    }
+  }
+}
+
+/* Compiles every rule list, then loads the initial page; a list that fails
+   to compile leaves the view empty rather than unprotected. */
 static void pudu_compile_rules(PuduWebView *view, WKUserContentController *content) {
+  __block NSUInteger outstanding = view.ruleSources.count;
+  __block BOOL failed = NO;
+  if (outstanding == 0) {
+    pudu_load_initial(view);
+    return;
+  }
   NSUInteger index = 0;
   for (NSString *source in view.ruleSources) {
     NSString *name = [NSString stringWithFormat:@"pudu-%lld-%lu", view.identifier, (unsigned long)index++];
@@ -239,7 +260,11 @@ static void pudu_compile_rules(PuduWebView *view, WKUserContentController *conte
                               [content addContentRuleList:list];
                               [view report:@[ @"rules", view.label, @"ready", name ]];
                             } else {
+                              failed = YES;
                               [view report:@[ @"rules", view.label, @"failed", error.localizedDescription ?: name ]];
+                            }
+                            if (--outstanding == 0 && !failed && view.webView != nil) {
+                              pudu_load_initial(view);
                             }
                           }];
   }
@@ -302,16 +327,10 @@ static int32_t pudu_realize(PuduWebHost *host, PuduWebView *view) {
   NSView *container = owner.window.contentView;
   pudu_apply_bounds(view, container);
   [container addSubview:webView];
-  pudu_compile_rules(view, content);
-  if (view.initialHTML != nil) {
-    [webView loadHTMLString:view.initialHTML baseURL:[NSURL URLWithString:@"pudu://app/"]];
-  } else if (view.initialURL != nil) {
-    NSURL *url = [NSURL URLWithString:view.initialURL];
-    if (url == nil) {
-      return pudu_view_refuse(host, PUDU_WEBVIEW_INVALID, @"the view's URL is not a URL");
-    }
-    [webView loadRequest:[NSURLRequest requestWithURL:url]];
+  if (view.initialHTML == nil && view.initialURL != nil && [NSURL URLWithString:view.initialURL] == nil) {
+    return pudu_view_refuse(host, PUDU_WEBVIEW_INVALID, @"the view's URL is not a URL");
   }
+  pudu_compile_rules(view, content);
   return PUDU_WEBVIEW_DONE;
 }
 

@@ -47,6 +47,9 @@ export const RESERVED_PREFIX: Str = "pudu:"
 /// The header carrying a view's invoke key.
 export const KEY_HEADER: Str = "pudu-invoke-key"
 
+/// The header carrying the origin of the document whose bridge made the call.
+export const ORIGIN_HEADER: Str = "pudu-origin"
+
 /// The header naming the channel a streaming call was given.
 export const CHANNEL_HEADER: Str = "pudu-channel"
 
@@ -222,13 +225,23 @@ export fn failure(name: Str, origin: Str, problem: &Failure) -> Webview.Response
   Webview.Response{..base, headers: base.headers.concat(crossOrigin(origin))}
 }
 
+/// The origin a call is credited to: the view's current page, which must be the document whose
+/// bridge made the call. A view that navigated while the call was in flight is refused.
+export fn callOrigin(request: &Webview.Pending) -> Result[Str, Failure] {
+  let origin = Capability.originOf(request.page)
+  match Webview.header(request, ORIGIN_HEADER) {
+    case Some(claimed) if claimed.toLower() == origin => Ok(origin)
+    case _ => Err(denied("the call did not come from the page the view now shows"))
+  }
+}
+
 /// The answer to the cross-origin preflight a development server's page sends.
 export fn preflight(origin: Str) -> Webview.Response {
   Webview.Response {
     status: 204,
     headers: crossOrigin(origin).concat([
         ("Access-Control-Allow-Methods", "POST"),
-        ("Access-Control-Allow-Headers", "Content-Type, Pudu-Invoke-Key"),
+        ("Access-Control-Allow-Headers", "Content-Type, Pudu-Invoke-Key, Pudu-Origin, Pudu-Channel"),
         ("Access-Control-Max-Age", "600")
       ]),
     body: bytesOf([])
@@ -255,6 +268,10 @@ export fn dispatch(
   if request.method != "POST" { return failure(name, origin, &Failure{kind: InvalidArguments, message: "commands are called with POST", path: ""}) }
   if Webview.header(request, KEY_HEADER) != Some(key) {
     return failure(name, origin, &denied("the call did not come from this view's bridge"))
+  }
+  match callOrigin(request) {
+    case Ok(_) => ()
+    case Err(problem) => { return failure(name, origin, &problem) }
   }
   let held = match commands.commands.get(name) {
     case Some(found) => found

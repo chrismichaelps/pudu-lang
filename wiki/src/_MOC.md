@@ -210,6 +210,10 @@ tags: [moc, module]
 
 - [[Desktop Presentation Test]] · [[Desktop Presentation Gate]] · [[Desktop Presentation CI]] — native row/channel conformance.
 - [[Desktop Window Test]] · [[Desktop Configure Gate]] · [[Desktop Configure Fixture]] — window records, density, limits and full screen.
+- [[Desktop Webview Gate]] · [[Desktop Modules Fixture]] · [[Desktop Updates Fixture]] · [[Desktop Packages Fixture]] — desktop modules, updates over HTTP, and packages checked by their own tools.
+- [[Webview Records Test]] · [[Webview Drive Harness]] · [[Desktop Webview CI]] — record framing and both WebView adapters driven natively.
+- [[Pudu JS Bridge]] · [[Pudu JS Bridge Declarations]] · [[Pudu JS Bridge Test]] · [[Desktop Bridge Generator]] — the page bridge, its types, tests and embedding.
+- [[Notes Desktop Example]] — a complete desktop application with a live self-test.
 
 ## Referenced by
 

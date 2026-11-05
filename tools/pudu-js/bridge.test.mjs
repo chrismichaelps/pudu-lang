@@ -19,6 +19,7 @@ function page(config, answer) {
     console: { error: (...parts) => reported.push(['error', parts]), warn: () => {}, log: () => {} },
     document: { querySelectorAll: () => [] },
     URL,
+    location: { protocol: 'pudu:', host: 'app' },
     ArrayBuffer,
     JSON,
     Date,
@@ -49,6 +50,7 @@ test('invoke posts JSON with the invoke key and answers the decoded result', asy
   assert.deepEqual(await bridge.invoke('greet', { name: 'Ada' }), { text: 'hi' });
   assert.equal(sent[0].url, 'pudu://app/.pudu/ipc/greet');
   assert.equal(sent[0].init.headers['Pudu-Invoke-Key'], 'k1');
+  assert.equal(sent[0].init.headers['Pudu-Origin'], 'pudu://app');
   assert.equal(sent[0].init.body, '{"name":"Ada"}');
   assert.equal(bridge.label, '3');
 });

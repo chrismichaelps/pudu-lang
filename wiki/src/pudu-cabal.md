@@ -189,6 +189,14 @@ Pudu.Compiler.Lower.Range.
 Register Pudu.Backend.Emit.Bytes, Pudu.Backend.Runtime.Bytes and
 Pudu.Compiler.Lower.Bytes.
 
+## WebView adapters (#833)
+
+macOS compiles the WebKit adapter ([[Pudu Webview macOS Adapter]], [[Pudu Webview macOS View]],
+[[Pudu Webview Records]]), links the `WebKit` framework and defines `PUDU_NATIVE_WEBVIEW`. The manual
+`webkitgtk` flag, off by default, compiles [[Pudu Webview GTK Adapter]] on Linux against
+`webkit2gtk-4.1` and `gtk+-3.0` and defines the same symbol; without it Linux answers
+`unsupported`. `Pudu.Eval.Webview` and `Pudu.Eval.Sign` join the library.
+
 ## Referenced by
 
 The library exposes [[Resolve Canonical]] for the scoped generated-Impl resolver

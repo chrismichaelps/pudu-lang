@@ -22,13 +22,14 @@ agent, transparency, per-label website data, and script evaluation.
 - `pudu` is registered on each view's web context as a secure, CORS-enabled scheme. A request's
   method, headers and body are read when it starts; the response carries the program's status,
   headers and body.
-- A data store label maps to `<user data dir>/<program>/webview/<label>`; `ephemeral` uses an
-  ephemeral data manager.
+- A data store label maps to `<user data dir>/<program>/webview/<sha256 of label>`, so no label can
+  name a path outside the application's directory; `ephemeral` uses an ephemeral data manager.
 - Fill views track the window's configured size; fixed views keep their frame.
 - The pump iterates the default main context, blocking until a source fires or the slice's timeout
   elapses, and returns as soon as an event is queued; queuing wakes the context.
-- Content rules are compiled into a filter store under the user cache directory and attached when
-  ready, reported as `rules` events like the macOS adapter.
+- Content rules are compiled into a filter store under the user cache directory; the initial page
+  loads only after every filter is attached, and a filter that fails leaves the view empty, as on
+  macOS.
 
 ## Grill Log
 

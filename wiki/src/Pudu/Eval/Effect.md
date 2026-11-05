@@ -112,6 +112,11 @@ constant folding nor confined evaluation can bypass the filesystem boundary.
 `ClockNanosBuiltin` answers `monotonicNanoseconds` as an Int (#670); it joins the listed effects,
 so compile-time evaluation refuses it with E7009 like `clock`.
 
+## WebView and file effects (#833)
+
+Dispatches `webviewSend`, `webviewPump`, `webviewEvents`, `webviewBody` and `webviewRespond` to
+[[Eval Webview]], and `modifiedTime` and `executablePath` to [[Eval Io]]; each answers a `Result`.
+
 ## Referenced by
 
 [[src/Pudu/Eval/_MOC]] · [[Eval Builtin]] · [[Evaluator]] · [[ADR-0009]]

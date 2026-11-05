@@ -81,7 +81,7 @@ sliced exactly as the framebuffer pump is, so an interrupt is answered within a 
 ## The `pudu://` origin
 
 Every WebView loads the application from `pudu://app/` and calls the program through
-`pudu://ipc/`. Both are served by the program: the adapter turns each request into a `request`
+`pudu://app/.pudu/ipc/<command>` — the same origin, so a call needs no cross-origin preflight. Both are served by the program: the adapter turns each request into a `request`
 event and holds it until `pudu_webview_respond` finishes it. Serving through the program rather
 than through `file://` gives one origin with a stable identity, response headers the program sets
 (`Content-Security-Policy`, `Content-Type`, caching), and no path on disk that a page can name.
@@ -107,7 +107,7 @@ fn greet(args: GreetArgs, call: &Ipc.Call) -> Result[Greeting, Ipc.Failure] { �
 let commands = Ipc.commands().with(Ipc.command("greet", greet))
 ```
 
-- **Invoke.** The bridge posts JSON (or raw bytes for a binary command) to `pudu://ipc/<name>`.
+- **Invoke.** The bridge posts JSON (or raw bytes for a binary command) to `pudu://app/.pudu/ipc/<name>`.
   The program decodes, checks capability, runs the function and answers `200` with the result or an
   error status with an envelope `{ kind, message, command, path }`. `kind` is one of
   `unknown-command`, `denied`, `invalid-arguments`, `failed`, `internal`.
@@ -123,6 +123,9 @@ let commands = Ipc.commands().with(Ipc.command("greet", greet))
   `command`, the decoding `path`, and the Pudu message. Uncaught frontend errors, rejected promises
   and `console.error` are forwarded in development to the program, which prints them with their
   source URL, line and column.
+- **Call origin.** The bridge records its document's origin when it is injected and sends it with
+  every call; a call whose origin is not the view's current page is refused, so navigation cannot
+  move a call in flight to another origin's capabilities.
 - **Invoke key.** Each WebView receives a fresh random key in its injected bridge and every IPC
   request must carry it, so a page that did not receive the bridge — a frame from another origin, a
   page navigated to by mistake — cannot call the program even when the capability would allow its
@@ -152,6 +155,8 @@ without opening a window.
 - **Navigation.** A WebView may navigate only to its own origin and the patterns its configuration
   allows; any other navigation is cancelled and reported as `navigation-blocked`, and a request to
   open a new window is cancelled and reported, so the program may open it in the system browser.
+- **Rules before content.** A view's initial page loads only after its content rules compile; a
+  rule list that fails leaves the view empty rather than unfiltered.
 - **Plugins** cannot widen any of this: a plugin's permissions must be granted by the application,
   and its injected code runs in the page, never in the program.
 
@@ -189,7 +194,12 @@ executable, packs the frontend, and writes each requested format ([[Std Desktop 
 | MSI | source written directly; installer by `wix` | `signtool` or `osslsigncode` |
 
 A tool a format needs that is not installed is a typed `ToolMissing` naming it; nothing is
-skipped silently. Asset optimization packs the frontend into one gzip archive served from memory,
+skipped silently.
+
+Every package ships the runtime executable unmodified and the program beside it as
+`<executable>.pudub` (in `Contents/Resources` on macOS). A signed executable cannot carry bytes after
+its image, so the program travels as a resource the signature seals; the runtime reads the sidecar
+when nothing is attached to it ([[Pudu Bundle]]). Asset optimization packs the frontend into one gzip archive served from memory,
 drops source maps from release builds, and strips the executable's symbols.
 
 ## Updates
@@ -215,8 +225,8 @@ drops source maps from release builds, and strips the executable's symbols.
 
 | Target | Adapter | Status |
 | --- | --- | --- |
-| macOS | WebKit through AppKit | **Ready** |
-| Linux | WebKitGTK | **Partial**: adapter compiled behind the `webkitgtk` flag; live conformance pending a Linux display in CI |
+| macOS | WebKit through AppKit | **Ready**; driven live by [[Desktop Webview Gate]] and [[Desktop Webview CI]] |
+| Linux | WebKitGTK | **Ready** behind the `webkitgtk` cabal flag; [[Desktop Webview CI]] drives it under a virtual display |
 | Windows | WebView2 | **Absent**: answers `UnsupportedPlatform`; the adapter contract is the six entry points above |
 
 ## Referenced by

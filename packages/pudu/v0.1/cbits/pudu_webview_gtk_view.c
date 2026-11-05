@@ -152,6 +152,17 @@ static void pudu_on_crash(WebKitWebView *web, WebKitWebProcessTerminationReason 
   pudu_report2("crashed", data);
 }
 
+/* The page a view was configured with, loaded only once every rule list is
+   in place, so no request escapes rules that were still compiling. */
+static void pudu_load_initial(PuduView *view) {
+  WebKitWebView *web = WEBKIT_WEB_VIEW(view->web);
+  if (view->html != NULL) {
+    webkit_web_view_load_html(web, view->html, "pudu://app/");
+  } else if (view->url != NULL) {
+    webkit_web_view_load_uri(web, view->url);
+  }
+}
+
 static void pudu_on_rules(GObject *source, GAsyncResult *result, gpointer data) {
   PuduView *view = data;
   GError *error = NULL;
@@ -161,10 +172,14 @@ static void pudu_on_rules(GObject *source, GAsyncResult *result, gpointer data) 
     pudu_report3("rules", view, "ready");
     webkit_user_content_filter_unref(filter);
   } else {
+    view->rules_failed = TRUE;
     g_autofree char *id = pudu_view_label(view);
     const char *fields[] = {"rules", id, "failed", error == NULL ? "failed" : error->message};
     pudu_event(fields, 4);
     g_clear_error(&error);
+  }
+  if (--view->rules_outstanding == 0 && !view->rules_failed && view->web != NULL) {
+    pudu_load_initial(view);
   }
 }
 
@@ -173,7 +188,9 @@ static WebKitWebContext *pudu_context(PuduView *view) {
   if (view->ephemeral) {
     data = webkit_website_data_manager_new_ephemeral();
   } else {
-    const char *label = view->store == NULL ? "default" : view->store;
+    /* The directory is named by a digest of the label, so no label can name a
+       path outside the application's own data directory. */
+    g_autofree char *label = g_compute_checksum_for_string(G_CHECKSUM_SHA256, view->store == NULL ? "default" : view->store, -1);
     g_autofree char *base = g_build_filename(g_get_user_data_dir(), g_get_prgname(), "webview", label, NULL);
     g_autofree char *cache = g_build_filename(g_get_user_cache_dir(), g_get_prgname(), "webview", label, NULL);
     data = webkit_website_data_manager_new("base-data-directory", base, "base-cache-directory", cache, NULL);
@@ -222,7 +239,10 @@ static int32_t pudu_realize(PuduView *view) {
   gtk_widget_set_size_request(view->web, width, height);
   gtk_fixed_put(GTK_FIXED(owner->fixed), view->web, view->fill ? 0 : view->x, view->fill ? 0 : view->y);
   gtk_widget_show(view->web);
-  if (view->rules->len > 0) {
+  view->rules_outstanding = view->rules->len;
+  if (view->rules->len == 0) {
+    pudu_load_initial(view);
+  } else {
     g_autofree char *path = g_build_filename(g_get_user_cache_dir(), g_get_prgname(), "content-rules", NULL);
     WebKitUserContentFilterStore *store = webkit_user_content_filter_store_new(path);
     for (guint i = 0; i < view->rules->len; i++) {
@@ -233,11 +253,6 @@ static int32_t pudu_realize(PuduView *view) {
       g_bytes_unref(bytes);
     }
     g_object_unref(store);
-  }
-  if (view->html != NULL) {
-    webkit_web_view_load_html(web, view->html, "pudu://app/");
-  } else if (view->url != NULL) {
-    webkit_web_view_load_uri(web, view->url);
   }
   return PUDU_WEBVIEW_DONE;
 }
