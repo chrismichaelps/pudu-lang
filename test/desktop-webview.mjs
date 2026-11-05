@@ -114,6 +114,7 @@ await stepAsync('updates are verified, patched, installed and rolled back', asyn
     'full archive matches true',
     'patched archive matches true',
     "untrusted: the download's signature is not trusted: no trusted key made this signature",
+    'background found 1.1.0, ready',
     'installed',
     'version now Ok("1.1.0")',
     'first start Ok(Pending("1.1.0"))',

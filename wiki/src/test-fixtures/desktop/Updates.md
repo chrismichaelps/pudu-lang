@@ -10,7 +10,8 @@ tags: [module, test, desktop, updates]
 Publishes a signed beta release with a patch from the running version into `PROBE_DIR/serve`, then
 against `PROBE_PORT`: a stable subscriber sees no update, a beta subscriber finds it after an
 endpoint that answers `404`, the full and patched downloads both rebuild the release archive, a
-download signed by an untrusted key is refused, the install swaps the version, the first start is
+download signed by an untrusted key is refused, a background worker reports the release found
+and then ready with the verified archive, the install swaps the version, the first start is
 pending and the second, unconfirmed, rolls back to the previous version.
 
 ## Referenced by

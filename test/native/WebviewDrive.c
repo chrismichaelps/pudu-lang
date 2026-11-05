@@ -46,6 +46,9 @@ int main(void) {
   const char *rules[] = {"view", "1", "rules", "[{\"trigger\":{\"url-filter\":\"blocked\"},\"action\":{\"type\":\"block\"}}]"};
   const char *html[] = {"view", "1", "html", PAGE};
   const char *realize[] = {"view", "1", "realize"};
+  const char *second[] = {"view", "2", "create", "1", "0", "0", "200", "100", "0"};
+  const char *secondHtml[] = {"view", "2", "html", "<html><head><title>second</title></head></html>"};
+  const char *secondRealize[] = {"view", "2", "realize"};
   const char *show[] = {"window", "1", "show"};
   record(&commands, open, 7);
   record(&commands, create, 9);
@@ -53,13 +56,16 @@ int main(void) {
   record(&commands, rules, 4);
   record(&commands, html, 4);
   record(&commands, realize, 3);
+  record(&commands, second, 9);
+  record(&commands, secondHtml, 4);
+  record(&commands, secondRealize, 3);
   record(&commands, show, 3);
   if (send_all(&commands) != PUDU_WEBVIEW_DONE) {
     return 1;
   }
 
-  int answered = 0, evaluated = 0, blocked = 0;
-  for (int turn = 0; turn < 400 && !blocked; turn++) {
+  int answered = 0, evaluated = 0, blocked = 0, sibling = 0;
+  for (int turn = 0; turn < 400 && !(blocked && sibling); turn++) {
     if (pudu_webview_pump(50) < 0) {
       fprintf(stderr, "pump failed\n");
       return 1;
@@ -91,6 +97,9 @@ int main(void) {
         if (pudu_webview_respond(id, 200, (const uint8_t *)head, strlen(head), (const uint8_t *)answer, strlen(answer)) == 0) {
           answered = 1;
         }
+      } else if (pudu_field_is(fields[0], "title") && count == 3 && pudu_field_is(fields[1], "2") &&
+                 pudu_field_is(fields[2], "second")) {
+        sibling = 1;
       } else if (pudu_field_is(fields[0], "title") && count == 3 && fields[2].length > 5 &&
                  memcmp(fields[2].data, "done:", 5) == 0) {
         const char *eval[] = {"view", "1", "eval", "t1", "document.title + ':' + window.injected"};
@@ -116,6 +125,6 @@ int main(void) {
   record(&commands, close, 3);
   send_all(&commands);
   pudu_buffer_clear(&commands);
-  printf("answered=%d evaluated=%d blocked=%d\n", answered, evaluated, blocked);
-  return answered && evaluated && blocked ? 0 : 1;
+  printf("answered=%d evaluated=%d blocked=%d sibling=%d\n", answered, evaluated, blocked, sibling);
+  return answered && evaluated && blocked && sibling ? 0 : 1;
 }

@@ -7,8 +7,8 @@ tags: [module, test, desktop, webview]
 ---
 # Webview Drive Harness
 
-Drives whichever adapter it is linked with through the six entry points: opens a window with one
-view that injects a script and posts `ping` to the `pudu` scheme, answers `pong`, waits for the page
+Drives whichever adapter it is linked with through the six entry points: opens a window with a
+filling view and a second view at a fixed frame (which must report its own title), the first that injects a script and posts `ping` to the `pudu` scheme, answers `pong`, waits for the page
 title, evaluates `document.title` with the injected value and requires `done:pong:42`, then
 navigates outside the allowlist and requires `navigation-blocked`. A content rule blocks a fetch of
 `pudu://app/blocked` before it reaches the program, and the page reports the refusal in its call,

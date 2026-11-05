@@ -2,6 +2,7 @@ module Updates
 
 import Std.Archive.Tar as Tar
 import Std.Compress.Gzip as Gzip
+import Std.Concurrent as Concurrent
 import Std.Crypto.Sign as Sign
 import Std.Desktop.Delta as Delta
 import Std.Desktop.Update as Update
@@ -64,6 +65,22 @@ fn main() -> Result[(), Str] {
   let forged = Update.Config{..beta, publicKeys: [match Sign.generate() { case Ok(other) => other.public case Err(_) => bytesOf([]) }]}
   let _ = Io.remove(root + ".pudu-cache.tar")
   match Update.fetchArchive(&forged, &release) { case Ok(_) => say("untrusted key accepted") case Err(why) => say("untrusted: {Update.explain(&why)}") }
+  let watcher = match Update.background(&beta) { case Ok(found) => found case Err(why) => { return Err(Update.explain(&why)) } }
+  var reports: Array[Str] = []
+  var waited = 0
+  while waited < 600 && !reports.contains("ready") && !reports.contains("failed") {
+    match Update.poll(&watcher) {
+      case Some(Update.Found(found)) => { reports = reports.push("found " + found.version) }
+      case Some(Update.Ready(found, bytes)) => { reports = reports.push(if bytes == v2 { "ready" } else { "ready with other bytes" }) }
+      case Some(Update.UpToDate) => { reports = reports.push("up to date") }
+      case Some(Update.Failed(why)) => { reports = reports.push("failed " + why) }
+      case None => {
+        let _ = Concurrent.sleep(50)
+        waited = waited + 1
+      }
+    }
+  }
+  say("background " + reports.join(", "))
   match Update.install(&beta, &full, release.version) { case Ok(_) => say("installed") case Err(why) => { return Err(Update.explain(&why)) } }
   let now = Io.read(root + "/VERSION")
   say("version now {now}")

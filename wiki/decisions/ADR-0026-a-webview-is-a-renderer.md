@@ -23,7 +23,7 @@ choices leaks authority into the least-checked part of the program.
    points and length-prefixed records, instead of an entry point per feature. A new WebView feature
    is a new record, not a new ABI symbol, and each platform adapter is one implementation of one
    contract.
-3. **The program serves the origin.** `pudu://app/` and `pudu://ipc/` are answered by the program,
+3. **The program serves the origin.** `pudu://app/` and its `/.pudu/ipc/` calls are answered by the program,
    so assets, headers and calls pass the same checks, and binary bodies cross without encoding.
 4. **Types are the contract.** A command's argument and result types produce both its decoder and
    its TypeScript declaration, so the two sides cannot drift.
