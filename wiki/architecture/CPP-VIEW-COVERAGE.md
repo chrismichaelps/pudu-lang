@@ -45,7 +45,7 @@ comparison, not C++ source compatibility or an identical object ABI.
   counted, as_const, as_rvalue, ref_view, owning_view and all primarily adapt C++
   lifetime/iterator categories already represented by Pudu ordinary values.
   Unbounded iota/repeat require an explicit overflow/termination contract; bounded
-  range/repeat and empty already cover finite factories. joinWith and arbitrary
+  range/repeat and empty already cover finite factories; single is items([value]). joinWith and arbitrary
   sequence split are not claimed: text splitting has established Str semantics,
   while generic delimiter matching/empty patterns need a separate design. This
   PR does not promise one-for-one coverage of the entire C++ ranges library.
@@ -75,6 +75,10 @@ comparison, not C++ source compatibility or an identical object ABI.
 - Keep new adapters outside the existing large protocol module. A generic
   `through` method applies an ordinary function to the sequence value, so
   adapter modules import Sequence without a dependency cycle or new syntax.
+
+Index arithmetic follows the currently supported 64-bit target Int. Target
+selection is not implemented; the compiler's IntegerLiteral.targetPointerWidth
+remains the source of that platform boundary.
 
 ## Primary references
 
