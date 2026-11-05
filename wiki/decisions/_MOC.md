@@ -5,6 +5,8 @@ tags: [moc, adr]
 
 # Decision Map
 
+- [[Callee First Call Evaluation]] — accepted callee-first conformance repair; implementation pending.
+
 - [[ADR-0025-if-without-else-unit-results]] — accepted correctness clarification: no-else conditionals yield unit on both normal paths across typing, evaluation, residualization and native lowering.
 - [[ADR-0025-integrated-engine-namespace]] — reserve Ark as an integrated shipped-library root.
 

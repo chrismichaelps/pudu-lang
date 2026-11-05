@@ -1,7 +1,6 @@
 ---
 type: architecture
-semantic_version: "1.0.1-draft"
-semantic_version: "2.0.0-draft"
+semantic_version: "2.0.1-draft"
 status: NORMATIVE_DRAFT
 tags: [architecture, semantics]
 aliases: [Semantic System, Pudu Semantics]
@@ -267,6 +266,8 @@ These obligations require executable property/conformance tests now and mechaniz
 - [[CHANGELOG]] provides the chronological index; this page's `## Revision Ledger` records normative semantic revisions.
 
 ## Revision Ledger
+
+- **2.0.1-draft clarification · 2026-11-05:** Retain the existing callee-first call rule, including once-held runtime receivers before supplied arguments. Current engine repair remains pending; defaults, invocation depth and loan writeback retain their existing boundaries. See [[Callee First Call Evaluation]].
 
 - **1.0.1-draft · 2026-10-17:** Clarified the existing unit result of an if without else across inference, contextual checking, tree and compiled evaluation, boxed loop regions, derive residualization, constant folding, and native lowering. This corrects implementation paths that leaked a non-unit branch result; conforming unit behavior and with-else values are unchanged. See [[ADR-0025-if-without-else-unit-results]].
 

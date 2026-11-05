@@ -5,6 +5,10 @@ tags: [changelog]
 
 # Changelog
 
+## 2026-11-05 — Callee-first conformance decision (#828)
+
+- [[Callee First Call Evaluation]] retains the normative call order and records semantic clarification 2.0.1-draft. Engine repairs remain pending; [[Call Order Repair Delivery]] owns the exact next action.
+
 ## 2026-11-04 — Native sparse-word queries (#814)
 
 - [[Native Word Map Queries]] defines exact query carriers, source-order snapshots, portable count/member kernels and required validation.
