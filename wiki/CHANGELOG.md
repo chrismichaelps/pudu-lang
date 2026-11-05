@@ -5,6 +5,11 @@ tags: [changelog]
 
 # Changelog
 
+## 2026-11-04 — Native inherited defaults across traits' parameters and modules (#824)
+
+- [[Compiler Lower Method]] lowers an inherited default in its declaring module and reads trait arguments from the checked implementation head, including arguments absent from the member signature.
+- [[Compiler Lower Generic]] settles implementation parameters before the default body's bindings, preserving same-spelling parameters, renamed method parameters and structured collection arguments. Conformance covers both evaluator modes, explicit output, imported failure spans and counted cleanup.
+
 ## 2026-11-04 — Checked view completion and C++ coverage (#527)
 
 - [[C++ Inspired View Coverage]] records the public capability comparison and Pudu ownership boundaries.
@@ -26,6 +31,7 @@ tags: [changelog]
 - CI builds once with a cache and runs the suite as six parallel shards and the gates as four parallel jobs on the built compiler, so a run takes as long as its longest job.
 - Native failure reports on Linux leave SIGPIPE ignored, as the interpreter does, so a broken standard error exits 1 instead of dying of the signal (runtime revision 20). CI runs the Linguist check beside the website's installed packages and gives conformance C compiles ten minutes.
 - The integer operator matrix is eight test properties, the output suite treats a closed channel as its readiness mask (#818 records the Linux wait), and the wide-operation matrix runs outside the `setjmp` frame so GCC builds it.
+
 ## 2026-11-04 — Native members through a type parameter (#819)
 ## 2026-10-21 — Implementations inherit the defaults of traits they import (#530)
 

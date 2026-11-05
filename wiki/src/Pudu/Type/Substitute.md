@@ -39,4 +39,4 @@ Replacements are simultaneous, including mutually named parameters.
 
 ## Referenced by
 
-[[src/Pudu/Type/_MOC]] · [[Type Check Derive]] · [[Type Check Rule]]
+[[src/Pudu/Type/_MOC]] · [[Type Check Derive]] · [[Type Check Rule]] · [[Compiler Lower Generic]]

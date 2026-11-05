@@ -15,7 +15,7 @@ import Pudu.Core
 import Pudu.Diagnostic (Diagnostic)
 import Pudu.Diagnostic.Native (nativeRefusal)
 import Pudu.Frontend.Syntax (Function, Located)
-import Pudu.Type.Value (Scheme)
+import Pudu.Type.Value (Scheme, Type)
 import Pudu.IntegerLiteral (IntegerKind (..))
 import Pudu.Eval.Frozen (Frozen)
 import Pudu.Source (Span)
@@ -62,6 +62,10 @@ data Instance = Instance
   {-| An inherited default of a generic owner: `Self` is the receiver's type,
       known only at the call. -}
   , instanceSelfAtCall :: !Bool
+  {-| A default body's rigid names mapped into its implementation's scheme.
+      Form these after the implementation's parameters settle, then overlay
+      them for the body; same-spelling parameters may mean different types. -}
+  , instanceDerived :: !(Map Text Type)
   }
 
 {-| What one module's names mean: its checked facts, the functions it
