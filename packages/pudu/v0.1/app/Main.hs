@@ -54,6 +54,7 @@ import Pudu.Bundle
   )
 import Pudu.Compiler (CompileResult (..))
 import Pudu.Compiler.Frame (lowerFrames)
+import Pudu.Compiler.Library (libraryRoots)
 import Pudu.Core.Frame (FrameFault (..))
 import Pudu.Cli.Memory (withMemoryFailure)
 import Pudu.Compiler.Cache (ProductCache, collectedEntries, openCollectingCache, openProductCache)
@@ -417,6 +418,18 @@ bundledCache bundle =
       then Map.fromList [(Text.unpack name, bytes) | (name, bytes) <- bundleProducts bundle]
       else Map.empty
 
+{-| `pudu desktop` is a Pudu program in the standard library; the compiler
+    only finds it and hands it the arguments that follow. -}
+runDesktop :: RenderStyle -> [String] -> IO ()
+runDesktop style rest = do
+  roots <- libraryRoots
+  found <- filterM doesFileExist [root </> "Std" </> "Desktop" </> "Cli.pudu" | root <- roots]
+  case found of
+    tool : _ -> withArgs rest (runProgram style tool)
+    [] -> do
+      hPutStrLn stderr "pudu desktop: the standard library's desktop tool was not found"
+      exitFailure
+
 runCommand :: IO ()
 runCommand = do
   arguments <- getArgs
@@ -451,6 +464,7 @@ runCommand = do
         exitFailure
       Right request -> runBuild style request
     ("test" : paths) -> testPaths style paths
+    ("desktop" : rest) -> runDesktop style rest
     {-| `search` names two commands. Source paths after the query select the
         declaration search; words alone search published packages. -}
     ("search" : query : paths@(_ : _)) -> do

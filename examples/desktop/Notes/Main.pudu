@@ -53,9 +53,11 @@ fn main() -> Result[(), Str] {
     case Ok(found) => found
     case Err(problem) => { return Err(Ipc.explain(&problem)) }
   }
-  let granted = match Capability.load("capabilities/main.toml") {
-    case Ok(found) => found
-    case Err(problem) => { return Err(Capability.explain(&problem)) }
+  let granted = Capability.Capability {
+    ..Capability.capability("main"),
+    views: ["main"],
+    allow: ["save", "count", "reverse", "checkpoint"].map(fn(name: Str) -> Capability.Permission { Capability.permit(name) }),
+    deny: ["admin:*"]
   }
   let grants = match Capability.combine(&[granted]) {
     case Ok(found) => found

@@ -1,0 +1,20 @@
+[app]
+name = "Notes"
+identifier = "dev.pudu.notes"
+version = "1.0.0"
+publisher = "Pudu"
+description = "Notes written in Pudu"
+category = "Productivity"
+license = "MIT"
+
+[build]
+entry = "Main.pudu"
+frontend = "frontend"
+out = "dist"
+
+[bundle]
+targets = ["app", "dmg", "deb", "rpm"]
+
+[updater]
+endpoints = ["https://example.com/notes/{{target}}-{{arch}}.json"]
+channel = "stable"

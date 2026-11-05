@@ -1,0 +1,83 @@
+module Std.Desktop.Bundle
+
+import Std.Archive.Tar as Tar
+import Std.Desktop.Bundle.Config {BundleError}
+import Std.Desktop.Bundle.Config as Config
+import Std.Desktop.Bundle.Linux as Linux
+import Std.Desktop.Bundle.Mac as Mac
+import Std.Desktop.Bundle.Rpm as Rpm
+import Std.Desktop.Bundle.Windows as Windows
+import Std.Path as Path
+
+/// One package a run wrote.
+export type Produced = { target: Str, path: Str }
+
+/// What a builder sees: the configuration, inputs, its output directory, the build time and earlier products.
+type Builder = fn(&Config.Config, &Config.Inputs, Str, Int, &Array[Produced]) -> Result[Str, BundleError]
+
+/// The builder and output directory for each target.
+const BUILDERS: Map[Str, (Str, Builder)] = mapOf([
+    ("app", ("macos", buildApp)),
+    ("dmg", ("macos", buildDmg)),
+    ("deb", ("linux", fn(config: &Config.Config, inputs: &Config.Inputs, out: Str, time: Int, earlier: &Array[Produced]) -> Result[Str, BundleError] { Linux.deb(config, inputs, out) })),
+    ("rpm", ("linux", fn(config: &Config.Config, inputs: &Config.Inputs, out: Str, time: Int, earlier: &Array[Produced]) -> Result[Str, BundleError] { Rpm.rpm(config, inputs, out, time) })),
+    ("appimage", ("linux", fn(config: &Config.Config, inputs: &Config.Inputs, out: Str, time: Int, earlier: &Array[Produced]) -> Result[Str, BundleError] { Linux.appImage(config, inputs, out) })),
+    ("nsis", ("windows", fn(config: &Config.Config, inputs: &Config.Inputs, out: Str, time: Int, earlier: &Array[Produced]) -> Result[Str, BundleError] { Windows.nsis(config, inputs, out) })),
+    ("msi", ("windows", fn(config: &Config.Config, inputs: &Config.Inputs, out: Str, time: Int, earlier: &Array[Produced]) -> Result[Str, BundleError] { Windows.msi(config, inputs, out) })),
+  ])
+
+/// The order targets are built in, so a product is written before anything that holds it.
+const ORDER: Array[Str] = ["app", "dmg", "deb", "rpm", "appimage", "nsis", "msi"]
+
+fn buildApp(config: &Config.Config, inputs: &Config.Inputs, out: Str, time: Int, earlier: &Array[Produced]) -> Result[Str, BundleError] {
+  Mac.app(config, inputs, out)
+}
+
+fn buildDmg(config: &Config.Config, inputs: &Config.Inputs, out: Str, time: Int, earlier: &Array[Produced]) -> Result[Str, BundleError] {
+  for held in *earlier {
+    if held.target == "app" { return Mac.dmg(config, held.path, out) }
+  }
+  let written = Mac.app(config, inputs, out) ?
+  Mac.dmg(config, written, out)
+}
+
+/// Every requested format, in dependency order.
+export fn bundle(config: &Config.Config, inputs: &Config.Inputs, buildTime: Int) -> Result[Array[Produced], BundleError] {
+  var produced: Array[Produced] = []
+  for target in ORDER {
+    if !config.targets.contains(target) { continue }
+    let (platform, builder) = match BUILDERS.get(target) {
+      case Some(found) => found
+      case None => { return Err(Config.Unsupported("{target} is not a package format")) }
+    }
+    let path = builder(config, inputs, Path.join(config.out, platform), buildTime, &produced) ?
+    produced = produced.push(Produced{target: target, path: path})
+  }
+  Ok(produced)
+}
+
+fn member(path: Str, mode: Int, data: Bytes, time: Int) -> Tar.TarEntry {
+  Tar.TarEntry{..Tar.entry(path, data), mode: mode, mtime: time}
+}
+
+/// The archive an installed application is replaced with on `platform` (`darwin`, `linux` or `windows`).
+export fn updateArchive(config: &Config.Config, inputs: &Config.Inputs, platform: Str, buildTime: Int) -> Bytes {
+  let name = Config.packageName(config)
+  if platform == "darwin" {
+    return Tar.writeArchive([
+        Tar.directory("Contents"),
+        Tar.directory("Contents/MacOS"),
+        Tar.directory("Contents/Resources"),
+        member("Contents/Info.plist", 420, Mac.infoPlist(config, name).toBytes(), buildTime),
+        member("Contents/MacOS/" + name, 493, inputs.runtime, buildTime),
+        member("Contents/Resources/" + name + ".pudub", 420, inputs.program, buildTime),
+        member("Contents/Resources/app.tar.gz", 420, inputs.assets, buildTime)
+      ])
+  }
+  let executable = if platform == "windows" { name + ".exe" } else { name }
+  Tar.writeArchive([
+      member(executable, 493, inputs.runtime, buildTime),
+      member(executable + ".pudub", 420, inputs.program, buildTime),
+      member("app.tar.gz", 420, inputs.assets, buildTime)
+    ])
+}
