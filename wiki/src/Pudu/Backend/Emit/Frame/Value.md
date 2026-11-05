@@ -170,3 +170,9 @@ Conversions classify each side as one word, two words or BigInt. Every value fit
 ## Decimal (#802)
 
 Decimal literals, methods, operators with division's two failure sites, negation and display. `decimalFunction` names each method's runtime function.
+
+## Query contract (#814)
+
+Validate each query carrier and arity before selecting helpers: predicates take one identical map argument and Bool result, count has no arguments and UInt128 result, members has no arguments and Array[UInt64] result with UInt64 key/payload. Reject every mismatch as FrameFault at the query span.
+
+Resolved Grill Log: project existing checked semantics; no inference, fallback, unsafe cell reinterpretation or frame ABI change. Reuse granular runtime dependencies and existing numeric/array ownership kernels.

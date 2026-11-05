@@ -62,3 +62,9 @@ not a hand-picked scalar runtime.
 Resolved Grill Log: printing programs carry Result aggregates since output
 Results became values, and the hand assembly had no aggregate runtime. The
 real assembler is what users get, so it is what must compile strictly.
+
+## Query contract (#814)
+
+Extend malformed keyed-carrier cases for query result widths, payloads, operand types/arities and members key kinds. Require the exact FrameValue span for every fault before any C compiler is reached.
+
+Resolved Grill Log: project existing checked semantics; no inference, fallback, unsafe cell reinterpretation or frame ABI change. Reuse granular runtime dependencies and existing numeric/array ownership kernels.

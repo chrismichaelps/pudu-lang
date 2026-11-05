@@ -14,7 +14,7 @@ import Pudu.Compiler (CompileResult (..), runCompile)
 import Pudu.Compiler.Frame (lowerFrames)
 import Pudu.Compiler.Lower (LowerResult (..), lowerModule)
 import Pudu.Compiler.Lower.Types (nativeTypes)
-import Pudu.Core (CoreType (..), CoreKeyedMethodName (KeyedWordUnion))
+import Pudu.Core (CoreType (..), CoreKeyedMethodName (KeyedWordUnion, KeyedWordSubset, KeyedWordDisjoint, KeyedWordPopCount, KeyedWordMembers))
 import Pudu.Core.Frame
   ( FrameFault (..), FrameSlot (..), FrameSlotId (..)
   , FrameUnaryOperator (..), FrameValue (..), FrameValueShape (..) )
@@ -62,11 +62,31 @@ testWordMapSlots = do
       word = CoreMapType CoreTextType (CoreIntegerType (UnsignedKind 64))
       signed = CoreMapType CoreTextType (CoreIntegerType (SignedKind 64))
       slot n kind = FrameSlot (FrameSlotId n) "map" kind at
-  pure $ conjoin
-    [ case frameValue (emptyEmitState [source]) (FrameValue at result (FrameKeyedMethod KeyedWordUnion (slot 0 left) [slot 1 right])) of
-        Left failure -> frameFaultSpan failure === Just at
-        Right _ -> counterexample "a word helper reinterpreted another carrier" (False === True)
-    | (left, right, result) <- [(signed, signed, signed), (word, signed, word), (word, word, CoreBoolType)] ]
+      unsigned = CoreIntegerType (UnsignedKind 64)
+      wide = CoreIntegerType (UnsignedKind 128)
+      members = CoreArrayType unsigned
+      chunks = CoreMapType unsigned unsigned
+      rejected (name, receiver, arguments, result) =
+        case frameValue (emptyEmitState [source])
+          (FrameValue at result (FrameKeyedMethod name (slot 0 receiver) (zipWith slot [1..] arguments))) of
+          Left failure -> frameFaultSpan failure === Just at
+          Right _ -> counterexample ("a word helper reinterpreted another carrier: " <> show name) (False === True)
+  pure $ conjoin $ map rejected
+    ([(KeyedWordUnion, left, [right], result)
+     | (left, right, result) <- [(signed, signed, signed), (word, signed, word), (word, word, CoreBoolType)]] <>
+     [(name, receiver, arguments, result)
+     | name <- [KeyedWordSubset, KeyedWordDisjoint]
+     , (receiver, arguments, result) <-
+        [(signed, [signed], CoreBoolType), (word, [signed], CoreBoolType)
+        ,(word, [], CoreBoolType), (word, [word, word], CoreBoolType)
+        ,(word, [word], unsigned), (CoreBoolType, [word], CoreBoolType)]] <>
+     [(KeyedWordPopCount, receiver, arguments, result)
+     | (receiver, arguments, result) <-
+        [(signed, [], wide), (word, [word], wide), (word, [], unsigned), (CoreBoolType, [], wide)]] <>
+     [(KeyedWordMembers, receiver, arguments, result)
+     | (receiver, arguments, result) <-
+        [(word, [], members), (signed, [], members), (chunks, [chunks], members)
+        ,(chunks, [], CoreArrayType (CoreIntegerType (SignedKind 64))), (chunks, [], wide)]])
 
 testBodies :: IO Property
 testBodies = do

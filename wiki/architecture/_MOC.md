@@ -8,6 +8,8 @@ tags: [moc, architecture]
 
 - [[Callee First Call Evaluation]] — once-held callees and receivers before supplied arguments.
 
+- [[Native Word Map Queries]] — sparse word predicates, UInt128 counts and wrapped member enumeration.
+
 - [[Native Word Map Algebra]] — typed linear sparse-word tree operations.
 
 - [[Native Unsigned Integers]] — full unsigned domains through 64 bits (#500).
