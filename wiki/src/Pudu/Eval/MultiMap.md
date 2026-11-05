@@ -147,3 +147,9 @@ uses series lookup; groups remain persistent Map/Sequence storage.
 Resolved Grill Log: replace only the inner persistent storage behind the existing
 lazy Map view. Reuse touched-count validation and shared overflow diagnostics.
 Arbitrary members and old snapshots retain ordinary behavior; no input rewrite.
+
+## Canonical record owners (#761)
+
+A native update retains its input record owner instead of rebuilding an unqualified tag. Persistence, field ordering, count checks and kernel selection stay unchanged.
+
+Resolved Grill Log: identity comes from the checked declaration, never import order or a basename guess. Preserve observable labels, lexical shadowing, field effects and failure provenance; no runtime filesystem lookup. See [[Canonical Runtime Owner Delivery]].

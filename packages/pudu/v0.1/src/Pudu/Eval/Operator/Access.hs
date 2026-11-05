@@ -20,11 +20,11 @@ module Pudu.Eval.Operator.Access
 
 import qualified Data.ByteString as ByteString
 import qualified Data.Sequence as Seq
-import Data.Set (Set)
-import qualified Data.Set as Set
 import Data.Text (Text)
 import qualified Data.Text as Text
 
+import Pudu.Eval.DeclaredOwner (declaredOwner)
+import Pudu.Eval.TypeWitness (witnessMethod)
 import Pudu.Eval.Bytes (bytesMethods)
 import Pudu.Eval.Env
   ( Evaluator
@@ -91,6 +91,9 @@ readIndex spanValue container key = case (container, key) of
     it with `value` as its first argument. -}
 readMember :: Span -> Value -> Text -> Evaluator Value
 readMember spanValue value member = case value of
+  TypeWitnessValue{} -> do
+    found <- witnessMethod spanValue value member
+    maybe (abortAt (Just spanValue) "E7001" ("selected type has no " <> member) Nothing) pure found
   ArrayValue _ -> readArrayMember spanValue value member
   StrValue _ -> readStringMember spanValue value member
   BytesValue _ -> readKeyedMember spanValue value member bytesMethods BytesMethodValue "Bytes"
@@ -102,14 +105,14 @@ readMember spanValue value member = case value of
   RecordValue owner fields -> case lookup member fields of
     Just found -> pure found
     Nothing -> readMethodAmong spanValue value [declaredOwner owner] owner member
-  {-| A member on a variant is looked for on the sum that owns it before the
-      variant itself. An implementation is written for the type — `impl Named
-      for Option[Int]` — and the value in hand is one of its variants, so
-      looking only at the variant found nothing and reported a type the reader
-      never wrote. The variant's own name is still tried, so a member keyed
-      there keeps working. -}
-  VariantValue name _
+  NamedSumValue owner _ fields -> case lookup member fields of
+    Just found -> pure found
+    Nothing -> readMethodAmong spanValue value [declaredOwner owner] owner member
+  {-| Owned sums select only their canonical implementation namespace.
+      The registry remains a fallback for legacy ownerless host values. -}
+  SumValue carried name _
     | name == member -> pure value
+    | carried /= "" -> readMethodAmong spanValue value [declaredOwner carried] name member
     | otherwise -> do
         owner <- variantOwner name
         readMethodAmong spanValue value
@@ -288,27 +291,6 @@ nominalNameOf value = case value of
   SetValue _ -> Just "Set"
   TupleValue _ -> Nothing
   _ -> Nothing
-
-{-| Every name `nominalNameOf` gives a built-in value.
-
-    A program may declare a record or sum under one of these names. Its methods
-    are then keyed by `declaredOwner`, and its values look there, so a built-in
-    array never runs a method written for a declared `Array` and a declared
-    `Array` never runs one written for the built-in. -}
-builtinValueOwners :: Set Text
-builtinValueOwners = Set.fromList
-  [ "Int", "Int8", "Int16", "Int32", "Int64", "Int128"
-  , "UInt", "UInt8", "UInt16", "UInt32", "UInt64", "UInt128", "BigInt"
-  , "Float32", "Float64", "Decimal", "Str", "Bytes", "Buckets", "Char", "Bool", "()"
-  , "Array", "Range", "Map", "Set"
-  ]
-
-{-| The method-key owner for a declared type's name. `@` cannot begin a
-    written name, so the key never meets a built-in owner. -}
-declaredOwner :: Text -> Text
-declaredOwner name
-  | Set.member name builtinValueOwners = "@" <> name
-  | otherwise = name
 
 {-| Look for a member under each name in turn, reporting against the first —
     the type the reader wrote — rather than against whichever was tried last. -}

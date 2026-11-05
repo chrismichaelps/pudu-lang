@@ -54,9 +54,17 @@ installWanted
 
 ## Grill Log
 
+- **Q:** Are an imported sum's variants bound under the canonical key too? **A:** Yes, as the module's own are, so `Shape.Circle(1)` on an imported `Shape` is typed as `Shape`. A canonical key names its module, so no bare name leaks between modules (#536).
+
 - **Q:** Why a separate module? **A:** Graph preparation and per-consumer import both need the same
   declaration code, and the graph module sits below [[Type Check Import]].
 
 ## Referenced by
 
 [[src/Pudu/Type/_MOC]] · [[Type Interface Graph]] · [[Type Check Import]]
+
+## Constructor binding identity (#774)
+
+Declare interface constructors with binding identity and publish values through aliasName, preserving their role and existing restriction inheritance.
+
+Resolved Grill Log: identity belongs to the selected binding; schemes remain type-only and ordinary shadows clear constructor roles. See [[Constructor Binding Delivery]].

@@ -58,3 +58,9 @@ decoded value is indistinguishable from one the library built.
 ## Referenced by
 
 [[src/_MOC]] · [[Std Json]]
+
+## Positional sum owners (#761)
+
+Native decoded node constructors carry Std.Json.Json ownership. Outer Some/None retain wired Option ownership. Encoder output and refusal behavior remain unchanged; wire labels remain short.
+
+Resolved Grill Log: identity comes from the declaration or native ABI, not a global short-tag registry. Keep labels, evaluation order, effects and wire bytes stable. See [[Positional Sum Owner Delivery]].

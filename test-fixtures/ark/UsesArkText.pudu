@@ -1,0 +1,105 @@
+module UsesArkText
+
+import Std.Math.Float as Float
+import Std.Ui.Text as Face
+import Ark.Math.Color as Color
+import Ark.Render.Device as Device
+import Ark.Render.Text as Text
+
+fn require(condition: Bool, name: Str) {
+  if !condition { panic(name) }
+}
+
+const WIDTH: Int = 64
+const HEIGHT: Int = 40
+
+fn canvas() -> Device.Target {
+  let Some(blank) = Device.target(WIDTH, HEIGHT) else { panic("target") }
+  let Some(cleared) = Device.clear(blank, Color.opaque(0.0, 0.0, 1.0)) else { panic("clear") }
+  cleared
+}
+
+fn drawn(pending: &Text.Batch) -> Bytes {
+  let Some(target) = Text.draw(canvas(), &Text.font(), pending, 0.5) else { panic("draw") }
+  Device.pixels(&target)
+}
+
+fn added(pending: Text.Batch, text: Str, x: Int, y: Int, scale: Int, color: Color.Rgba) -> Text.Batch {
+  match Text.add(pending, text, Float.fromInt(x), Float.fromInt(y), scale, color) {
+    case Ok(next) => next
+    case Err(_) => panic("add " + text)
+  }
+}
+
+fn lit(bits: UInt64, column: Int, row: Int) -> Bool {
+  (bits >> (34 - (row * 5 + column))) & 1u64 == 1u64
+}
+
+/// Whether the glyph at a pixel origin matches its bits at a scale: lit pixels red, the rest background blue.
+fn matches(pixels: &Bytes, bits: UInt64, left: Int, top: Int, scale: Int) -> Bool {
+  var row = 0
+  while row < 7 * scale {
+    var column = 0
+    while column < 5 * scale {
+      let at = ((top + row) * WIDTH + left + column) * 4
+      let on = lit(bits, column / scale, row / scale)
+      let red = pixels.at(at) == Some(255u8) && pixels.at(at + 2) == Some(0u8)
+      let blue = pixels.at(at) == Some(0u8) && pixels.at(at + 2) == Some(255u8)
+      if on != red || on == blue { return false }
+      column = column + 1
+    }
+    row = row + 1
+  }
+  true
+}
+
+fn glyphOf(character: Char) -> UInt64 {
+  Face.GLYPHS[character.code() - 32]
+}
+
+fn exactPixels() {
+  let red = Color.opaque(1.0, 0.0, 0.0)
+  let one = drawn(&added(Text.batch(), "Ak", 2, 3, 1, red))
+  require(matches(&one, glyphOf('A'), 2, 3, 1) && matches(&one, glyphOf('k'), 8, 3, 1), "scale one matches the face")
+  let two = drawn(&added(Text.batch(), "g7", 1, 2, 2, red))
+  require(matches(&two, glyphOf('g'), 1, 2, 2) && matches(&two, glyphOf('7'), 13, 2, 2), "scale two covers squares exactly")
+  let lines = drawn(&added(Text.batch(), "a\nb c", 0, 0, 1, red))
+  require(matches(&lines, glyphOf('a'), 0, 0, 1) && matches(&lines, glyphOf('b'), 0, 9, 1) && matches(&lines, glyphOf('c'), 12, 9, 1), "newline and space")
+  let unknown = drawn(&added(Text.batch(), "é", 4, 4, 1, red))
+  require(matches(&unknown, Face.MISSING_GLYPH, 4, 4, 1), "missing-glyph box")
+  let green = Color.opaque(0.0, 1.0, 0.0)
+  let both = added(added(Text.batch(), "x", 0, 0, 1, red), "y", 30, 20, 1, green)
+  require(Text.glyphs(&both) == 2, "two strings in one batch")
+  let pixels = drawn(&both)
+  require(matches(&pixels, glyphOf('x'), 0, 0, 1), "first string drawn")
+  var greens = 0
+  for y in 20..27 {
+    for x in 30..35 {
+      if pixels.at((y * WIDTH + x) * 4 + 1) == Some(255u8) { greens = greens + 1 }
+    }
+  }
+  require(greens > 3, "second string drawn in its own color")
+  require(Text.draw(canvas(), &Text.font(), &Text.batch(), 0.5) == Some(canvas()), "an empty batch draws nothing")
+  require(Text.glyphs(&added(Text.batch(), "a b", 0, 0, 1, red)) == 2, "a space adds no glyph")
+}
+
+fn layout() {
+  let Ok(face) = Face.face(2) else { panic("face") }
+  let Ok(size) = Face.measure(&face, "ab\ncde") else { panic("measure") }
+  require(Text.measure("ab\ncde", 2) == Ok((size.width, size.height)), "measure agrees with the face")
+  require(Text.wrap("one two three", 60, 2) == Face.wrapped(&face, "one two three", 60), "wrap agrees with the face")
+  let red = Color.opaque(1.0, 0.0, 0.0)
+  require(Text.add(Text.batch(), "a", 0.0, 0.0, 0, red) == Err(Face.InvalidScale(0)), "scale zero")
+  require(Text.add(Text.batch(), "a", 0.0, 0.0, 65, red) == Err(Face.InvalidScale(65)), "scale too large")
+  require(Text.measure("a", 0) == Err(Face.InvalidScale(0)), "measure scale")
+  let long = "a".repeat(1048577)
+  require(Text.add(Text.batch(), long, 0.0, 0.0, 1, red) == Err(Face.TextTooLong(1048577)), "text past the limit")
+}
+
+/// Exercise glyph atlas text.
+export fn main() -> Int {
+  exactPixels()
+  layout()
+  print("ark text: ok")
+  0
+}

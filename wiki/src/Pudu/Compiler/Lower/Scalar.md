@@ -1,0 +1,173 @@
+---
+type: module
+path: "@root/src/Pudu/Compiler/Lower/Scalar.hs"
+fidelity: Active
+grammar: "[[grammar/haskell]]"
+tags: [module, backend, compiler]
+aliases: [Compiler Lower Scalar]
+---
+# Compiler Lower Scalar
+
+## Fixed signed admission (#497)
+
+Fold pure immediate negation for every admitted kind when the mathematical
+result fits; other negate/complement operations retain that operand kind.
+Represent same-kind integer arithmetic/comparisons. Handle shifts before the
+same-kind guard: left is admitted integer, count is platform Int, result is
+left kind. Existing supported Bool/unit failures retain settled-fact checks;
+two integer operands outside represented operators remain E6001, not a fake
+E7001 for a range. Resolved Grill Log: preserve exact type identity, operand
+order, spans and runtime-bound settlement rather than narrowing values early.
+
+## Purpose and interface
+
+Own unary/binary scalar representation and operator failure admission outside
+[[Compiler Lower Body]]. Export lowerUnary, lowerBinary and eagerType. Each
+lowering function accepts the body's expression callback and state, then the
+operator span, syntax operator and located operands. There is no recursive
+module dependency or second inference pass.
+
+## Algorithm
+
+Lower operands in source order through the callback. Logical operands remain
+Bool/Never and the right stays guarded in CoreBinary. Eager Never operands
+become an ordered Core block without an operator or fabricated failure.
+Normal operands cannot carry effect-only print Result values. Existing Int
+arithmetic/comparisons and scalar equality remain; Bool ordering is also valid
+and uses its actual false-before-true order.
+
+Unsupported normal operations on represented Unit/Bool operands become
+CoreOperatorFailure with the original whole-operation span, ordered operands
+and shared interpreter message. Require exact settled scalar facts on trap
+operands, including Int shift counts. Bool/Bool invalid operations use the
+comparison-only unsupported-operator text; unit and mixed shift operands use
+cannot-apply with canonical runtime kind labels. Unary invalid minus/complement
+on Bool/Unit uses cannot-apply-unary. Unrepresented numeric families and owned types still refuse E6001; platform
+Int operators are admitted by #495. Deferred out-of-range intermediates remain
+a separate representation gap tracked in #498.
+
+## Dependencies and consumers
+
+[[Compiler Lower State]] · [[Compiler Lower Types]] · [[Compiler Lower Control]] ·
+[[Diagnostic Evaluation]] · [[Pudu Core]] · [[Frontend Syntax]].
+Consumed by [[Compiler Lower Body]]; registered in [[Pudu Cabal Manifest]].
+
+## Resolved Grill Log
+
+- **Q:** Treat Bool ordering as failure? **A:** No; the interpreter orders Bool values. Inspect its dispatch before classifying failure.
+- **Q:** Share one failure text for Bool and Unit? **A:** No; retain comparisonOnly versus generic-combine messages through shared factories.
+- **Q:** May print's effect-only Unit select a trap? **A:** No; carrier guards and exact scalar facts reject Result erasure. A Never operand may discard completed effects because no operator can consume its values.
+- **Q:** Can a trap precede the second operand? **A:** No; both operands finish first unless an operand transfers or fails. Logical right operands remain guarded.
+
+## Grill Log
+
+- **Q:** Which record name appears in a run-time message? **A:** Its display name, as the evaluator writes it (#539).
+
+- **Q:** How does an operator failure on a sum name its operands? **A:** By the variant each holds at run time, as the evaluator's `valueKind` does. `namedFailure` runs each operand once into a temporary, then builds the shared message with each sum's kind read by `CoreRuntimeKind` (#525).
+
+## Generic records (#552)
+
+Pattern update only: `CoreRecordType` has an argument list; behavior is unchanged.
+
+## Kinds in messages (#556)
+
+Resolved Grill Log: arrays are `array` and function values `function` in
+operator failures, as `valueKind` names them.
+
+## Failure help (#558)
+
+The E7001 failure passes no computed help.
+
+## Maps and sets (#561)
+
+E7001 names them "map" and "set", as `valueKind` does.
+
+## Range values (#564)
+
+E7001 names a range "range", as `valueKind` does.
+
+## Bytes (#565)
+
+E7001 names Bytes "bytes", as `valueKind` does.
+
+## Referenced by
+
+[[Compiler Lower Body]] · [[Pudu Cabal Manifest]] · [[Native Emission Coverage]]
+
+## Platform Int operators (#495)
+
+Map every represented platform Int bitwise, shift, wrapping and saturating spelling to its dedicated Core form. Complement maps to CoreComplement. Preserve Never sequencing, Result carrier guards, Bool/Unit E7001 and unrepresented numeric E6001. Do not mark full numeric families complete.
+
+Resolved Grill Log: use defined unsigned bit patterns, validate counts before shifts, and prove signed arithmetic bounds before evaluation. The actual interpreter determines results, effect order and exact diagnostic vocabulary. No syntax or type-inference change.
+
+### Signed minimum literal admission
+
+A checked immediate negation of a supported ResolvedInteger is a literal when
+its mathematical negation fits that kind. Emit it at the whole unary span.
+The exact carrier also preserves accepted positive-boundary intermediates in
+blocks/locals/calls. Nonliteral negations and values whose negation does not
+fit retain the checked helper with their declared kind's bounds.
+
+Resolved Grill Log: fold only pure immediate canonical integer literals whose
+negated result fits the existing kind bounds. Preserve runtime overflow for
+negating the minimum value read from a local/function or outer negation.
+
+## Floating operators (#512)
+
+Equal-width float operands admit `+ - * /` (result the same width) and the
+six comparisons (Bool). Unary `-` lowers to `CoreNegate`. Every other operator
+the checker accepts traps after its operands with the evaluator's wording:
+float/float uses `unsupported operator X` (the evaluator's `comparisonOnly`
+path), mixed shapes such as `float << Int` use `cannot apply X to a float and
+a Int`, and `~` uses `cannot apply ~ to a float`. `runtimeKind` answers
+`float` for both widths, as `valueKind` does.
+
+Resolved Grill Log: dispatch mirrors `combine`/`floatOperation` exactly;
+mixed-width float pairs never reach lowering because the checker rejects them,
+and if one did it would refuse rather than compare numerically.
+
+## Text operators (#515)
+
+Two Str operands admit `+` (Str) and the six comparisons (Bool), as
+`textOperation` does. Any other accepted operator on two Str values traps
+with `unsupported operator X`; mixed operands and unary operators on Str trap
+with `cannot apply`, naming the operand kind `string` as `valueKind` does.
+
+## Char operators (#518)
+
+Two Char operands admit the six comparisons, as `comparisonOnly` does. Any
+other operator on two Chars traps with `unsupported operator X`; unary
+operators trap with `cannot apply X to a char`, the kind `valueKind` names.
+
+## Tuple operators (#521)
+
+Two tuples of one type admit `==`, `!=` and the four orderings, as `combine`
+does. Other operators trap with `cannot apply X to a tuple and a tuple`, and
+unary operators with `cannot apply X to a tuple`.
+
+## Record operators (#521)
+
+Two records of one type admit `==` and `!=`. Other operators, ordering
+included, trap with `cannot apply X to a Name and a Name`, naming the record
+as `valueKind` does; unary operators with `cannot apply X to a Name`.
+
+## Shared reference dispatch (#544)
+
+Resolved Grill Log: delegate unary & and * to [[Compiler Lower Reference]]
+before the existing arithmetic operator table. Other unary dispatch, eager
+Never rules, print-carrier guards and dynamic operator diagnostics retain
+their contracts. Unary &mut remains refused.
+
+## Byte operator refusals
+
+Resolved Grill Log: checked unary operations on Bytes evaluate the operand
+once and report E7001 with `valueKind`'s `bytes` wording. They must not stop
+at the native E6001 boundary when the interpreter reaches the operation.
+
+## First-class output builtins (#569)
+
+Resolved Grill Log: Use runtime kinds for callable as well as sum operand failures. Callable unary operators that checking accepts report E7001; runtime metadata selects builtin/function in unary and binary wording.
+
+## Decimal (#802)
+
+`+ - * /`, ordering, equality and negation accept Decimal; another operator fails at run time with the shared message, its kind named `decimal`.

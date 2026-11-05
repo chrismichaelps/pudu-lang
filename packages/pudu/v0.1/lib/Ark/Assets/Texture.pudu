@@ -1,0 +1,101 @@
+module Ark.Assets.Texture
+
+import Std.Math.Float as Float
+import Ark.Math.Color as Color
+
+/// Immutable RGBA8 texels, rows top to bottom, in the named linear or sRGB color space.
+export type Texture = { width: Int, height: Int, pixels: Bytes, space: Str }
+
+type Decoder = fn(Color.Rgba) -> Color.Rgba
+type Sampler = fn(&Texture, Float64, Float64) -> Option[Color.Rgba]
+
+const DECODERS: Map[Str, Decoder] = mapOf([("linear", linear), ("srgb", srgb)])
+const SAMPLERS: Map[Str, Sampler] = mapOf([("nearest", nearest), ("bilinear", bilinear)])
+
+/// Checked packed RGBA8 storage; None for invalid dimensions, byte count or color space.
+export fn rgba8(width: Int, height: Int, pixels: Bytes, space: Str) -> Option[Texture] {
+  let texture = Texture{width, height, pixels, space}
+  if !validStorage(&texture) || !DECODERS.containsKey(space) { return None }
+  Some(texture)
+}
+
+/// One in-bounds texel decoded to straight-alpha linear color.
+export fn texel(texture: &Texture, x: Int, y: Int) -> Option[Color.Rgba] {
+  let decode = decoderFor(texture) ?
+  if x < 0 || y < 0 || x >= texture.width || y >= texture.height { return None }
+  readTexel(texture, decode, x, y)
+}
+
+/// A clamped nearest sample at finite normalized UV; texel centers are (i + 0.5) / extent.
+export fn nearest(texture: &Texture, u: Float64, v: Float64) -> Option[Color.Rgba] {
+  if !Float.isFinite(u) || !Float.isFinite(v) { return None }
+  let decode = decoderFor(texture) ?
+  let x = Float.toInt(Float.floor(Float.clamp(u, 0.0, 1.0) * Float.fromInt(texture.width))) ?
+  let y = Float.toInt(Float.floor(Float.clamp(v, 0.0, 1.0) * Float.fromInt(texture.height))) ?
+  readTexel(texture, decode, bounded(x, texture.width), bounded(y, texture.height))
+}
+
+/// A clamped bilinear sample, filtered in premultiplied linear light and returned as straight alpha.
+export fn bilinear(texture: &Texture, u: Float64, v: Float64) -> Option[Color.Rgba] {
+  if !Float.isFinite(u) || !Float.isFinite(v) { return None }
+  let decode = decoderFor(texture) ?
+  let x = Float.clamp(u, 0.0, 1.0) * Float.fromInt(texture.width) - 0.5
+  let y = Float.clamp(v, 0.0, 1.0) * Float.fromInt(texture.height) - 0.5
+  let left = Float.toInt(Float.floor(x)) ?
+  let top = Float.toInt(Float.floor(y)) ?
+  let tx = x - Float.fromInt(left)
+  let ty = y - Float.fromInt(top)
+  let a = Color.premultiplied(readTexel(texture, decode, bounded(left, texture.width), bounded(top, texture.height)) ?)
+  let b = Color.premultiplied(readTexel(texture, decode, bounded(left + 1, texture.width), bounded(top, texture.height)) ?)
+  let c = Color.premultiplied(readTexel(texture, decode, bounded(left, texture.width), bounded(top + 1, texture.height)) ?)
+  let d = Color.premultiplied(readTexel(texture, decode, bounded(left + 1, texture.width), bounded(top + 1, texture.height)) ?)
+  let color = Color.lerp(Color.lerp(a, b, tx), Color.lerp(c, d, tx), ty)
+  if color.a == 0.0 { return Some(Color.rgba(0.0, 0.0, 0.0, 0.0)) }
+  Some(Color.rgba(color.r / color.a, color.g / color.a, color.b / color.a, color.a))
+}
+
+/// Select a named sampler; unknown names and invalid texture/UV data answer None.
+export fn sample(texture: &Texture, sampler: Str, u: Float64, v: Float64) -> Option[Color.Rgba] {
+  let selected = SAMPLERS.get(sampler) ?
+  selected(texture, u, v)
+}
+
+fn validStorage(texture: &Texture) -> Bool {
+  if texture.width <= 0 || texture.height <= 0 { return false }
+  // Quotients validate caller-controlled dimensions before any index product is formed.
+  let bytes = texture.pixels.length()
+  if bytes % 4 != 0 { return false }
+  let pixels = bytes / 4
+  pixels % texture.width == 0 && pixels / texture.width == texture.height
+}
+
+fn decoderFor(texture: &Texture) -> Option[Decoder] {
+  if !validStorage(texture) { return None }
+  DECODERS.get(texture.space)
+}
+
+fn readTexel(texture: &Texture, decode: Decoder, x: Int, y: Int) -> Option[Color.Rgba] {
+  // Validated storage and bounded coordinates keep the product inside the byte span.
+  let at = (y * texture.width + x) * 4
+  let r = channel(&texture.pixels, at) ?
+  let g = channel(&texture.pixels, at + 1) ?
+  let b = channel(&texture.pixels, at + 2) ?
+  let a = channel(&texture.pixels, at + 3) ?
+  Some(decode(Color.rgba(r, g, b, a)))
+}
+
+fn channel(pixels: &Bytes, at: Int) -> Option[Float64] {
+  let byte = pixels.at(at) ?
+  let value = convertInteger[Int](byte) ?
+  Some(Float.fromInt(value) / 255.0)
+}
+
+fn bounded(index: Int, size: Int) -> Int {
+  if index < 0 { 0 } else if index >= size { size - 1 } else { index }
+}
+
+fn linear(color: Color.Rgba) -> Color.Rgba { color }
+
+fn srgb(color: Color.Rgba) -> Color.Rgba {
+  Color.rgba(Color.srgbToLinear(color.r), Color.srgbToLinear(color.g), Color.srgbToLinear(color.b), color.a)
+}

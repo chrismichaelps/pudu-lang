@@ -1,0 +1,119 @@
+module Ark.Platform.Pack
+
+import Std.Bytes as Bytes
+import Std.Checksum as Checksum
+
+/// Why a pack could not be read or written.
+export type PackError
+  = BadMagic
+  | UnsupportedVersion(Int)
+  | Truncated
+  | InvalidPath(Str)
+  | DuplicatePath(Str)
+  | OutOfBounds(Str)
+  | ChecksumMismatch(Str)
+
+/// Magic, little-endian u32 version and entry count, then per entry a u32 path length, the
+/// UTF-8 path, u64 data offset, u64 length and CRC-32; the data follows the index.
+const MAGIC: Str = "ARKP"
+const VERSION: Int = 1
+
+/// Every file in one blob, paths in ascending order so equal inputs give identical packs.
+export fn encode(files: &Map[Str, Bytes]) -> Result[Bytes, PackError] {
+  var paths = files.keys()
+  paths = paths.sortBy(fn(a: Str, b: Str) -> Bool { a < b })
+  var index: Array[Bytes] = [MAGIC.toBytes(), Bytes.putU32Le(word(VERSION)), Bytes.putU32Le(word(paths.length()))]
+  var data: Array[Bytes] = []
+  var offset = 0
+  for path in paths {
+    if !validPath(path) { return Err(InvalidPath(path)) }
+    let Some(content) = files.get(path) else { return Err(InvalidPath(path)) }
+    let name = path.toBytes()
+    index = index.push(Bytes.putU32Le(word(name.length()))).push(name)
+    index = index.push(Bytes.putU64Le(wide(offset))).push(Bytes.putU64Le(wide(content.length())))
+    index = index.push(Bytes.putU32Le(Checksum.crc32(&content)))
+    data = data.push(content)
+    offset = offset + content.length()
+  }
+  Ok(Bytes.join(&index.concat(data)))
+}
+
+/// Every file of a pack as a view into the pack's own bytes, after checking the index, bounds
+/// and each file's checksum.
+export fn decode(pack: &Bytes) -> Result[Map[Str, Bytes], PackError] {
+  if pack.take(4) != MAGIC.toBytes() { return Err(BadMagic) }
+  let (version, afterVersion) = number(pack.drop(4), 4) ?
+  if version != VERSION { return Err(UnsupportedVersion(version)) }
+  let (count, afterCount) = number(afterVersion, 4) ?
+  var rest = afterCount
+  var entries: Array[(Str, Int, Int, Int)] = []
+  for _ in 0..count {
+    let (length, afterLength) = number(rest, 4) ?
+    if afterLength.length() < length { return Err(Truncated) }
+    let path = match afterLength.take(length).toText() {
+      case Some(text) => text
+      case None => { return Err(InvalidPath("")) }
+    }
+    let (offset, afterOffset) = number(afterLength.drop(length), 8) ?
+    let (size, afterSize) = number(afterOffset, 8) ?
+    let (crc, afterCrc) = number(afterSize, 4) ?
+    entries = entries.push((path, offset, size, crc))
+    rest = afterCrc
+  }
+  var files: Map[Str, Bytes] = mapOf([])
+  for entry in entries {
+    let (path, offset, size, crc) = entry
+    if !validPath(path) { return Err(InvalidPath(path)) }
+    if files.containsKey(path) { return Err(DuplicatePath(path)) }
+    if offset < 0 || size < 0 || offset > rest.length() || size > rest.length() - offset { return Err(OutOfBounds(path)) }
+    let content = rest.slice(offset, offset + size)
+    if word64(Checksum.crc32(&content)) != crc { return Err(ChecksumMismatch(path)) }
+    files = files.insert(path, content)
+  }
+  Ok(files)
+}
+
+/// A canonical relative path: non-empty components, no `.`/`..`, separators or NULs.
+export fn validPath(path: Str) -> Bool {
+  if path == "" || path.contains("\\") || path.contains(":") || path.contains("\0") { return false }
+  for component in path.split("/") {
+    if component == "" || component == "." || component == ".." { return false }
+  }
+  true
+}
+
+/// A little-endian unsigned number of `width` bytes and the rest after it.
+fn number(source: Bytes, width: Int) -> Result[(Int, Bytes), PackError] {
+  if source.length() < width { return Err(Truncated) }
+  var value = 0
+  var index = width - 1
+  while index >= 0 {
+    let Some(octet) = source.at(index) else { return Err(Truncated) }
+    let Some(digit) = convertInteger[Int](octet) else { return Err(Truncated) }
+    value = value * 256 + digit
+    index = index - 1
+  }
+  if value < 0 { return Err(Truncated) }
+  Ok((value, source.drop(width)))
+}
+
+fn word(value: Int) -> UInt32 {
+  match convertInteger[UInt32](value) {
+    case Some(narrow) => narrow
+    case None => 0u32
+  }
+}
+
+fn wide(value: Int) -> UInt64 {
+  match convertInteger[UInt64](value) {
+    case Some(narrow) => narrow
+    case None => 0u64
+  }
+}
+
+fn word64(value: UInt32) -> Int {
+  match convertInteger[Int](value) {
+    case Some(widened) => widened
+    case None => -1
+  }
+}

@@ -15,7 +15,10 @@ aliases: [Std Ui Text]
 
 Text for application screens with no font file and no foreign rasterizer. `face` makes a `Face` at a
 whole-number scale from 1 to 64; `metrics` gives its advance, ascent, and line height in pixels;
-`hasGlyph` says whether a character has its own glyph; `measure` sizes text with newlines; `wrapped`
+`hasGlyph` says whether a character has its own glyph; the exported constants `GLYPHS` (one
+`UInt64` per printable ASCII character from space, seven rows of five columns, top row and leftmost
+column in the highest bits) and `MISSING_GLYPH` let other renderers, such as [[Ark Text]], draw the
+same face without a second copy of it; `measure` sizes text with newlines; `wrapped`
 breaks text into lines no wider than a width; and `draw` adds the text to a [[Std Ui Canvas]] as fill
 commands. `TextError` distinguishes an invalid scale, a negative width, text beyond the character
 bound, and a drawing refusal carried from the canvas.

@@ -3,6 +3,7 @@ module Pudu.Type.Check.Call
   ( CheckExpression (..)
   , checkCallee
   , selectedStaticCallee
+  , parameterStaticCallee
   , checkCalleeLending
   , throughBorrow
   , traitQualifiedCall
@@ -12,10 +13,9 @@ import Control.Monad (when)
 import qualified Data.List.NonEmpty as NonEmpty
 import Pudu.Type.Check.Place (checkExclusiveReceiver, exclusiveInput)
 import Pudu.Type.Check.Receiver (bindReceiver)
-import qualified Data.Map.Strict as Map
+import Pudu.Type.Check.Qualified (qualifiedScheme, traitOwner)
 import qualified Data.Set as Set
 import Data.Text (Text)
-import qualified Data.Text as Text
 import Data.Maybe (mapMaybe)
 import Pudu.Type.Formation (formType)
 import Pudu.Type.Implementation (ImplementationRule (..), selectImplementationTarget)
@@ -28,31 +28,33 @@ import Pudu.Source (Span)
 import Pudu.Type.Env
   ( Checker
   , DeclaredTypes (..)
-  , ambiguousProviders
   , recordSelection
   , freshVariable
   , lookupImplementations
   , methodProvider
   , lookupName
   , recordExpression
+  , recordOwner
   , report
   )
 import Pudu.Type.Check.Rule
   ( instantiateWith
   , instantiate
   , memberType
-  , namedVariantAsValue
   , qualifiedMemberType
   , localValueHead
   )
 import Pudu.Type.Check.Method
   ( methodScheme
+  , staticMethodScheme
+  , implementationMethodKey
   , traitMethodScheme
   , targetName
   )
+import Pudu.Type.Check.Pattern (qualifiedVariantType)
 import Pudu.Type.Unify (zonk)
 import Pudu.Type.Value
-  ( NominalId (..)
+  ( NominalId
   , Scheme (..)
   , nominalKey
   , Type (..)
@@ -83,48 +85,60 @@ checkCalleeLending
   -> Checker (Type, Maybe (Located Expression))
 checkCalleeLending checker declared rigid located@(Located calleeSpan expression) = case expression of
   MemberExpression target member -> do
-    {-| A variant that named its payload is refused before the callee is
-        resolved at all, and answered here rather than left to fall through.
-        Falling through re-checks the same member as an expression, which
-        reports the one mistake twice. -}
-    refused <- namedVariantAsValue calleeSpan (locatedValue member)
-    case refused of
-      Just value -> pure (value, Nothing)
+    parameter <- parameterStaticCallee rigid calleeSpan located []
+    variant <- maybe (qualifiedVariantType declared calleeSpan expression) (pure . Just) parameter
+    selected <- case variant of
+      Just value -> pure (Just value)
+      Nothing -> selectedStaticCallee declared rigid calleeSpan expression []
+    named <- maybe (qualifiedByName declared calleeSpan (locatedValue target) (locatedValue member))
+      (pure . Just) selected
+    qualified <- case named of
+      Just found -> pure (Just found)
+      Nothing -> qualifiedMemberType declared calleeSpan (locatedValue target) (locatedValue member)
+    case qualified of
+      Just instantiated -> do
+        recordExpression calleeSpan instantiated
+        pure (instantiated, Nothing)
       Nothing -> do
-        selected <- selectedStaticCallee declared rigid calleeSpan expression []
-        named <- maybe (qualifiedByName declared calleeSpan (locatedValue target) (locatedValue member))
-          (pure . Just) selected
-        qualified <- case named of
-          Just found -> pure (Just found)
-          Nothing -> qualifiedMemberType declared calleeSpan (locatedValue target) (locatedValue member)
-        case qualified of
-          Just instantiated -> do
-            recordExpression calleeSpan instantiated
-            pure (instantiated, Nothing)
+        targetType <- runCheck checker declared rigid target
+        resolved <- throughBorrow =<< zonk targetType
+        method <- methodScheme calleeSpan resolved (locatedValue member)
+        case method of
+          {-| Not a method, so a field, typed from the receiver just checked.
+              Checking the member expression again would check the receiver
+              again, and each call in a chain would double the work and the
+              diagnostics of every call before it. -}
           Nothing -> do
-            targetType <- runCheck checker declared rigid target
-            resolved <- throughBorrow =<< zonk targetType
-            method <- methodScheme calleeSpan resolved (locatedValue member)
-            case method of
-              {-| Not a method, so a field, typed from the receiver just checked.
-                  Checking the member expression again would check the receiver
-                  again, and each call in a chain would double the work and the
-                  diagnostics of every call before it. -}
-              Nothing -> do
-                found <- memberType calleeSpan targetType (locatedValue member)
-                resolvedMember <- zonk found
-                recordExpression calleeSpan resolvedMember
-                pure (found, Nothing)
-              Just scheme -> do
-                instantiated <- instantiate calleeSpan scheme
-                changesReceiver <- case instantiated of
-                  FunctionTypeValue _ (selfInput : _) _ -> exclusiveInput selfInput
-                  _ -> pure False
-                applied <- bindReceiver calleeSpan resolved instantiated
-                when changesReceiver (checkExclusiveReceiver target)
-                recordExpression calleeSpan applied
-                pure (applied, if changesReceiver then Just target else Nothing)
+            found <- memberType calleeSpan targetType (locatedValue member)
+            resolvedMember <- zonk found
+            recordExpression calleeSpan resolvedMember
+            pure (found, Nothing)
+          Just scheme -> do
+            instantiated <- instantiate calleeSpan scheme
+            changesReceiver <- case instantiated of
+              FunctionTypeValue _ (selfInput : _) _ -> exclusiveInput selfInput
+              _ -> pure False
+            applied <- bindReceiver calleeSpan resolved instantiated
+            when changesReceiver (checkExclusiveReceiver target)
+            recordExpression calleeSpan applied
+            pure (applied, if changesReceiver then Just target else Nothing)
   _ -> (\found -> (found, Nothing)) <$> runCheck checker declared rigid located
+
+{-| A rigid type qualifier selects its declared bound scheme, never a value namespace. -}
+parameterStaticCallee :: [(Text, Int)] -> Span -> Located Expression -> [Type] -> Checker (Maybe Type)
+parameterStaticCallee rigid at (Located memberAt expression) written = case expression of
+  MemberExpression target@(Located _ (NameExpression (name NonEmpty.:| []))) member
+    | name `elem` map fst rigid -> do
+        local <- localValueHead (locatedValue target)
+        if local then pure Nothing else do
+          found <- methodScheme memberAt (RigidType name) (locatedValue member)
+          case found of
+            Just scheme -> Just <$> instantiateWith at scheme written
+            Nothing -> do
+              report "E3005" memberAt (name <> " has no method " <> locatedValue member)
+                (Just "add a trait bound that declares the method")
+              pure (Just ErrorType)
+  _ -> pure Nothing
 
 {-| A complete nominal owner selects implementation parameters by its head,
     before method-local arguments instantiate the ordinary method scheme. -}
@@ -135,7 +149,7 @@ selectedStaticCallee declared rigid at expression written = case expression of
         selected <- formType declared rigid (Located ownerAt (NamedType (ModuleName path) arguments))
         case selected of
           NominalType identity _ -> do
-            scheme <- methodScheme at selected (locatedValue member)
+            scheme <- staticMethodScheme at selected (locatedValue member)
             provider <- methodProvider (nominalKey identity <> "." <> locatedValue member)
             case (scheme, provider) of
               (Just Scheme{schemeType = ErrorType}, _) -> pure (Just ErrorType)
@@ -171,43 +185,9 @@ qualifiedByName
   :: DeclaredTypes -> Span -> Expression -> Text -> Checker (Maybe Type)
 qualifiedByName declared spanValue target member = do
   local <- localValueHead target
-  if local then pure Nothing else qualifiedByType declared spanValue target member
-
-qualifiedByType :: DeclaredTypes -> Span -> Expression -> Text -> Checker (Maybe Type)
-qualifiedByType declared spanValue target member = case target of
-  NameExpression (first NonEmpty.:| []) -> case Map.lookup first (declaredNames declared) of
-    Nothing -> pure Nothing
-    Just identity -> do
-      -- A module qualifier that exports `member` names that value, even where
-      -- the module also has a type of the qualifier's spelling: `Json.encode`
-      -- is the module's function, not the `Json` type's method.
-      exported <- if Set.member first (declaredQualifiers declared)
-        then lookupName (first <> "." <> member)
-        else pure Nothing
-      case exported of
-        Just _ -> pure Nothing
-        Nothing -> byType identity
-  _ -> pure Nothing
- where
-  byType identity = do
-    let key = nominalKey identity <> "." <> member
-    providers <- ambiguousProviders key
-    case providers of
-      _ : _ -> do
-        report "E3013" spanValue
-          (member <> " is ambiguous for " <> nominalName identity)
-          ( Just
-              ( "name the trait instead: "
-                  <> Text.intercalate " or "
-                    [nominalName provider <> "." <> member <> "(value)" | provider <- providers]
-              )
-          )
-        pure (Just ErrorType)
-      [] -> do
-        found <- lookupName key
-        case found of
-          Nothing -> pure Nothing
-          Just scheme -> Just <$> instantiate spanValue scheme
+  if local then pure Nothing else do
+    selected <- qualifiedScheme declared spanValue target member
+    traverse (instantiate spanValue . snd) selected
 
 {-| Resolve a trait-qualified call against the type its receiver actually has.
 
@@ -230,9 +210,22 @@ traitQualifiedCall
   -> Located Expression
   -> [Located Expression]
   -> Checker (Maybe (Type, [Type]))
-traitQualifiedCall checker declared rigid (Located calleeSpan callee) arguments = case (callee, arguments) of
+traitQualifiedCall checker declared rigid callee@(Located at expression) arguments = do
+  selected <- case expression of
+    MemberExpression target _ -> traitOwner declared (locatedValue target)
+    _ -> pure Nothing
+  result <- checkTraitCall selected checker declared rigid callee arguments
+  case (result, selected) of
+    (Just _, Just owner) -> recordOwner at owner
+    _ -> pure ()
+  pure result
+
+checkTraitCall
+  :: Maybe NominalId -> CheckExpression -> DeclaredTypes -> [(Text, Int)]
+  -> Located Expression -> [Located Expression] -> Checker (Maybe (Type, [Type]))
+checkTraitCall selected checker declared rigid (Located calleeSpan callee) arguments = case (callee, arguments) of
   (MemberExpression target member, receiver : rest)
-    | Just traitIdentity <- namedType (locatedValue target)
+    | Just traitIdentity <- selected
     , Set.member traitIdentity (declaredTraitNames declared) -> do
       local <- localValueHead (locatedValue target)
       declaredMember <- if local then pure Nothing else
@@ -253,7 +246,7 @@ traitQualifiedCall checker declared rigid (Located calleeSpan callee) arguments 
                   restTypes <- mapM (runCheck checker declared rigid) rest
                   pure (Just (instantiated, receiverType : restTypes))
             Just owner -> do
-              found <- lookupName (nominalKey owner <> "." <> locatedValue member)
+              found <- lookupName (implementationMethodKey owner traitIdentity (locatedValue member))
               case found of
                 Nothing -> pure Nothing
                 Just scheme
@@ -265,9 +258,6 @@ traitQualifiedCall checker declared rigid (Located calleeSpan callee) arguments 
                       pure (Just (instantiated, receiverType : restTypes))
   _ -> pure Nothing
  where
-  namedType expression = case expression of
-    NameExpression (first NonEmpty.:| []) -> Map.lookup first (declaredNames declared)
-    _ -> Nothing
   takesSelf held = case held of
     FunctionTypeValue _ (first : _) _ -> isSelf first
     _ -> False

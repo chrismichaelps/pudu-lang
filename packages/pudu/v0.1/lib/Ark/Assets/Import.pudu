@@ -1,0 +1,106 @@
+module Ark.Assets.Import
+
+import Std.Math.Float as Float
+import Ark.Assets.Texture as Texture
+import Ark.Math.Color as Color
+
+/// A texture modulated by a linear RGBA tint.
+export type Material = { albedo: Texture.Texture, tint: Color.Rgba }
+
+/// An imported asset value.
+export type Payload = Raw(Bytes) | Image(Texture.Texture) | Surface(Material)
+
+type Importer = fn(&Bytes, &Array[Payload]) -> Result[Payload, Str]
+
+const IMPORTERS: Map[Str, Importer] = mapOf([("bytes", importBytes), ("texture", importTexture), ("material", importMaterial)])
+
+/// Cooked texture color-space codes in both directions.
+const SPACES: Map[Int, Str] = mapOf([(0, "linear"), (1, "srgb")])
+const SPACE_CODES: Map[Str, Int] = mapOf([("linear", 0), ("srgb", 1)])
+
+/// Cooked texture magic, followed by little-endian u32 width and height and one color-space byte.
+const TEXTURE_MAGIC: Str = "ARKT"
+const TEXTURE_HEADER: Int = 13
+const MAX_EXTENT: Int = 4294967295
+
+/// Whether an importer kind is registered.
+export fn known(kind: Str) -> Bool {
+  IMPORTERS.containsKey(kind)
+}
+
+/// Run the named importer over source bytes and dependency payloads in declared order.
+export fn run(kind: Str, bytes: &Bytes, inputs: &Array[Payload]) -> Result[Payload, Str] {
+  let Some(importer) = IMPORTERS.get(kind) else { return Err("unknown importer " + kind) }
+  importer(bytes, inputs)
+}
+
+/// Encode a checked texture in the cooked format the texture importer reads.
+export fn cookTexture(texture: &Texture.Texture) -> Option[Bytes] {
+  let checked = Texture.rgba8(texture.width, texture.height, texture.pixels, texture.space) ?
+  let code = SPACE_CODES.get(checked.space) ?
+  let width = wordBytes(checked.width) ?
+  let height = wordBytes(checked.height) ?
+  let space = convertInteger[UInt8](code) ?
+  let header = TEXTURE_MAGIC.toBytes().concat(bytesOf(width.concat(height).push(space)))
+  Some(header.concat(checked.pixels))
+}
+
+fn importBytes(bytes: &Bytes, inputs: &Array[Payload]) -> Result[Payload, Str] {
+  if !inputs.isEmpty() { return Err("bytes take no dependencies") }
+  Ok(Raw(*bytes))
+}
+
+fn importTexture(bytes: &Bytes, inputs: &Array[Payload]) -> Result[Payload, Str] {
+  if !inputs.isEmpty() { return Err("textures take no dependencies") }
+  if bytes.length() < TEXTURE_HEADER || bytes.take(4) != TEXTURE_MAGIC.toBytes() { return Err("missing texture header") }
+  let Some(width) = word(bytes, 4) else { return Err("truncated texture header") }
+  let Some(height) = word(bytes, 8) else { return Err("truncated texture header") }
+  let Some(code) = octet(bytes, 12) else { return Err("truncated texture header") }
+  let Some(space) = SPACES.get(code) else { return Err("unknown texture color space") }
+  let Some(texture) = Texture.rgba8(width, height, bytes.drop(TEXTURE_HEADER), space) else {
+    return Err("texture storage does not match its dimensions")
+  }
+  Ok(Image(texture))
+}
+
+/// Four linear RGBA8 tint bytes over exactly one texture dependency.
+fn importMaterial(bytes: &Bytes, inputs: &Array[Payload]) -> Result[Payload, Str] {
+  if bytes.length() != 4 { return Err("material tint must be four bytes") }
+  if inputs.length() != 1 { return Err("materials take exactly one texture") }
+  let albedo = match inputs[0] {
+    case Image(texture) => texture
+    case _ => { return Err("material albedo must be a texture") }
+  }
+  var channels: Array[Float64] = []
+  for at in 0..4 {
+    let Some(value) = octet(bytes, at) else { return Err("material tint must be four bytes") }
+    channels = channels.push(Float.fromInt(value) / 255.0)
+  }
+  Ok(Surface(Material{albedo, tint: Color.rgba(channels[0], channels[1], channels[2], channels[3])}))
+}
+
+fn octet(bytes: &Bytes, at: Int) -> Option[Int] {
+  let value = bytes.at(at) ?
+  convertInteger[Int](value)
+}
+
+fn word(bytes: &Bytes, at: Int) -> Option[Int] {
+  var value = 0
+  var index = 3
+  while index >= 0 {
+    value = value * 256 + (octet(bytes, at + index) ?)
+    index = index - 1
+  }
+  Some(value)
+}
+
+fn wordBytes(value: Int) -> Option[Array[UInt8]] {
+  if value < 0 || value > MAX_EXTENT { return None }
+  var octets: Array[UInt8] = []
+  var rest = value
+  for _ in 0..4 {
+    octets = octets.push(convertInteger[UInt8](rest % 256) ?)
+    rest = rest / 256
+  }
+  Some(octets)
+}

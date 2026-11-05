@@ -79,3 +79,33 @@ DEPTH 0.45 (MEDIUM). It keeps one concern out of [[Evaluator]], which would othe
 ## Referenced by
 
 [[src/Pudu/Eval/_MOC]] · [[Evaluator]]
+
+## Canonical record owners (#761)
+
+A checked ordinary named record pattern retains and compares complete canonical owner identity. Raw host patterns keep legacy short-label checks. Record equality compares complete owner identity; named sum payload representation remains a separate repair.
+
+Resolved Grill Log: identity comes from the checked declaration, never import order or a basename guess. Preserve observable labels, lexical shadowing, field effects and failure provenance; no runtime filesystem lookup. See [[Canonical Runtime Owner Delivery]].
+
+## Positional sum owners (#761)
+
+Numeric-aware aggregate equality includes positional sum owner as well as label and recursively compared payload. Canonical constructor-pattern owner checks remain required in a separate #761 checker/matcher partition; this value-representation partition preserves existing pattern behavior.
+
+Resolved Grill Log: identity comes from the declaration or native ABI, not a global short-tag registry. Keep labels, evaluation order, effects and wire bytes stable. See [[Positional Sum Owner Delivery]].
+
+## Constructor pattern ownership (#761)
+
+A projected positional constructor pattern compares its complete canonical owner/tag with SumValue before recursively matching payloads. Raw host patterns keep legacy short-tag admission. Ordinary record and named-payload patterns remain separate owner audits.
+
+Resolved Grill Log: preserve declaration identity through checking, executable projection and usefulness; no per-match span lookup. See [[Constructor Pattern Owner Delivery]].
+
+## Record pattern identity (#761)
+
+A projected named record pattern compares its complete canonical owner with RecordValue. Anonymous patterns still test fields alone; raw host-authored patterns retain short-label compatibility. Positional sum matching stays canonical.
+
+Resolved Grill Log: canonical identity and subject-sensitive refutability must agree before evaluation. See [[Record Pattern Owner Delivery]].
+
+## Named sum value foundation (#761)
+
+Compare named sum identity and recursive fields in sameValue. A canonical internal record-pattern descriptor (::sum::, owner, label) selects only NamedSumValue with that exact identity. Anonymous field patterns and raw host short-tag patterns preserve compatibility; executable ordinary-record owner symbols and positional patterns cannot match named sums.
+
+Resolved Grill Log: represent named sums independently of ordinary records and positional sums. Preserve existing field order and public labels. Source publication follows in its own tested partition. See [[Named Sum Value Delivery]].

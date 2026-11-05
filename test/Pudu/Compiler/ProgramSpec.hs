@@ -36,6 +36,7 @@ import Pudu.Compiler.Program.LanguageSpec
   , testImportedDefaults
   , testDestructuringBindings
   , testFunctionLiterals
+  , testTraitDefaultSelf
   , testLanguageRefusals
   , testRangesAndSlices
   )
@@ -73,6 +74,7 @@ programProperties = reflectionProgramProperties <>
   , ("the standard library resolves from the distribution", testStandardLibrary)
   , ("standard-library roots refresh between invocations", testResolutionFreshness)
   , ("a function literal is a value wherever a value goes", testFunctionLiterals)
+  , ("a trait default selects its implementing type through Self", testTraitDefaultSelf)
   , ("a range counts rather than building what it counts", testRangesAndSlices)
   , ("a binding takes a record, a tuple, and a sequence apart", testDestructuringBindings)
   , ("a function literal keeps reaching what it mentions", testCapturedScope)

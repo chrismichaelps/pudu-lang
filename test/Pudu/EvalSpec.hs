@@ -2,6 +2,7 @@
 module Pudu.EvalSpec (evalProperties) where
 
 import Test.QuickCheck (Property)
+import Pudu.Eval.NamedSumSpec (namedSumProperties)
 
 import Pudu.Eval.ArithmeticSpec
   ( testArithmetic
@@ -48,7 +49,7 @@ import Pudu.Eval.TextViewSpec (testTextView)
 import Pudu.Runtime.SeriesMapSpec (testSeriesMaps)
 
 evalProperties :: [(String, IO Property)]
-evalProperties =
+evalProperties = namedSumProperties <>
   [ ("Decimal equality follows numbers inside every structure", testDecimalEquality)
   , ("Decimal implementations reach direct generic and qualified calls", testDecimalImpls)
   , ("arithmetic and comparison follow declared operators", testArithmetic)

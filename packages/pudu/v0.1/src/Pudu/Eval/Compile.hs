@@ -12,7 +12,8 @@ import Data.Map.Strict (Map)
 import qualified Data.Map.Strict as Map
 import qualified Data.Sequence as Seq
 import Pudu.Eval.Env
-  ( Evaluator
+  ( declaredOrder
+  , Evaluator
   , Unwind (..)
   , abortAt
   , bind
@@ -30,7 +31,9 @@ import Pudu.Eval.Env
   , withNewFrame
   )
 import Pudu.Eval.Call (CallNeeds (..), callClosure, evaluateCall)
-import Pudu.Eval.Call.Path (flattenPath, lastPathSegment, pathValue)
+import Pudu.Eval.Call.Path (flattenPath, pathValue)
+import Pudu.Diagnostic.Arithmetic (CheckedOperation (..))
+import Pudu.Eval.Record (recordConstructor)
 import Pudu.Eval.Compile.Layout (slotLayout)
 import Pudu.Eval.Render (renderValue)
 import Pudu.Eval.Loop (LoopNeeds (..), evaluateFor, evaluateWhile)
@@ -131,9 +134,12 @@ compileExpression walker located@(Located spanValue expression) = case expressio
     test <- compileExpression walker condition
     taken <- compileBlock walker thenBlock
     otherwise' <- traverse (compileExpression walker) elseBranch
+    let selected = case otherwise' of
+          Nothing -> taken >> pure UnitValue
+          Just _ -> taken
     pure $ do
       truth <- test >>= expectBool spanValue
-      if truth then taken else maybe (pure UnitValue) id otherwise'
+      if truth then selected else maybe (pure UnitValue) id otherwise'
   -- The loop itself is the tree walker's, so its step limit and its handling of
   -- `break` and `continue` are written once; only the condition and the body
   -- it runs are compiled.
@@ -194,8 +200,8 @@ compileExpression walker located@(Located spanValue expression) = case expressio
     pure (ArrayValue . Seq.fromList <$> sequence codes)
   RecordExpression path fields -> do
     codes <- mapM (compileFieldInit walker spanValue) fields
-    let owner = lastPathSegment path
-    pure (RecordValue owner <$> sequence codes)
+    let build = recordConstructor path (map (locatedValue . fieldInitName . locatedValue) fields)
+    pure (sequence codes >>= declaredOrder . build)
   MatchExpression scrutinee arms -> do
     subject <- compileExpression walker scrutinee
     compiled <- mapM (compileArm walker) arms
@@ -365,9 +371,9 @@ compileBinary walker located@(Located spanValue _) left operator right = case op
     `combine`'s, so the two cannot disagree. -}
 operationFor :: Span -> Text -> Value -> Value -> Evaluator Value
 operationFor spanValue operator = case operator of
-  "+" -> arithmetic "add" (+)
-  "-" -> arithmetic "subtract" (-)
-  "*" -> arithmetic "multiply" (*)
+  "+" -> arithmetic CheckedAdd (+)
+  "-" -> arithmetic CheckedSubtract (-)
+  "*" -> arithmetic CheckedMultiply (*)
   "<" -> comparing (<)
   "<=" -> comparing (<=)
   ">" -> comparing (>)
@@ -380,9 +386,9 @@ operationFor spanValue operator = case operator of
     _ -> combine spanValue operator left right
   _ -> combine spanValue operator
  where
-  arithmetic what apply left right = case (left, right) of
+  arithmetic operation apply left right = case (left, right) of
     (IntValue leftKind a, IntValue rightKind b) ->
-      checkedResult spanValue (integerKindMeet leftKind rightKind) what (apply a b)
+      checkedResult spanValue (integerKindMeet leftKind rightKind) operation (apply a b)
     _ -> combine spanValue operator left right
   comparing test left right = case (left, right) of
     (IntValue _ a, IntValue _ b) -> pure (BoolValue (test a b))

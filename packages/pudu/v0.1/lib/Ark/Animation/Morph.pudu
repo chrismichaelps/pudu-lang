@@ -1,0 +1,140 @@
+module Ark.Animation.Morph
+
+import Std.Lanes as L
+import Std.Math.Float as Float
+import Ark.Animation.Limbs as Limbs
+
+/// Vertex positions and normals, one lane per axis.
+export type Shape = { positions: Limbs.Points, normals: Limbs.Points }
+
+/// A named shape offset: every vertex when `indices` is None, else only the listed vertices in order.
+export type Target = { name: Str, indices: Option[Array[Int]], delta: Shape }
+
+/// A validated base shape and its targets, ready to blend every frame.
+export type Morph = { base: Shape, targets: Array[Target], order: Map[Str, Int] }
+
+/// Why a morph cannot be built or blended.
+export type MorphError
+  = CountMismatch(Str)
+  | NonFinite(Str)
+  | IndexOutOfRange(Str, Int)
+  | RepeatedIndex(Str, Int)
+  | DuplicateTarget(Str)
+  | WeightCount(Int, Int)
+  | NonFiniteWeight(Int)
+  | UnknownTarget(Str)
+
+/// A target that moves every vertex.
+export fn dense(name: Str, delta: Shape) -> Target {
+  Target{name, indices: None, delta}
+}
+
+/// A target that moves only the listed vertices; the delta holds one entry per index.
+export fn sparse(name: Str, indices: Array[Int], delta: Shape) -> Target {
+  Target{name, indices: Some(indices), delta}
+}
+
+/// Validate a base shape and its targets once.
+export fn morph(base: Shape, targets: Array[Target]) -> Result[Morph, MorphError] {
+  let vertices = L.count(&base.positions.xs)
+  checkShape(&base, vertices, "base") ?
+  var order: Map[Str, Int] = mapOf([])
+  var index = 0
+  for target in targets {
+    if order.containsKey(target.name) { return Err(DuplicateTarget(target.name)) }
+    order = order.insert(target.name, index)
+    match target.indices {
+      case None => checkShape(&target.delta, vertices, target.name) ?
+      case Some(listed) => {
+        checkShape(&target.delta, listed.length(), target.name) ?
+        var seen: Set[Int] = setOf([])
+        for vertex in listed {
+          if vertex < 0 || vertex >= vertices { return Err(IndexOutOfRange(target.name, vertex)) }
+          if seen.contains(vertex) { return Err(RepeatedIndex(target.name, vertex)) }
+          seen = seen.insert(vertex)
+        }
+      }
+    }
+    index = index + 1
+  }
+  Ok(Morph{base, targets, order})
+}
+
+/// The base plus each target's delta scaled by its weight, normals renormalized.
+export fn blend(rig: &Morph, weights: &Array[Float64]) -> Result[Shape, MorphError] {
+  if weights.length() != rig.targets.length() { return Err(WeightCount(rig.targets.length(), weights.length())) }
+  var index = 0
+  for weight in *weights {
+    if !Float.isFinite(weight) { return Err(NonFiniteWeight(index)) }
+    index = index + 1
+  }
+  match blended(rig, weights) {
+    case Some(shape) => Ok(shape)
+    case None => Err(CountMismatch("blend"))
+  }
+}
+
+/// Ordered weights from weights by target name; targets not named weigh zero.
+export fn weightsOf(rig: &Morph, named: &Map[Str, Float64]) -> Result[Array[Float64], MorphError] {
+  var weights: Array[Float64] = []
+  for _ in rig.targets {
+    weights = weights.push(0.0)
+  }
+  for (name, weight) in named.entries() {
+    let Some(slot) = rig.order.get(name) else { return Err(UnknownTarget(name)) }
+    weights[slot] = weight
+  }
+  Ok(weights)
+}
+
+fn blended(rig: &Morph, weights: &Array[Float64]) -> Option[Shape] {
+  var positions = rig.base.positions
+  var normals = rig.base.normals
+  var index = 0
+  for target in rig.targets {
+    let weight = weights[index]
+    if weight != 0.0 {
+      positions = applied(&positions, &target.delta.positions, &target.indices, weight) ?
+      normals = applied(&normals, &target.delta.normals, &target.indices, weight) ?
+    }
+    index = index + 1
+  }
+  Some(Shape{positions, normals: renormalized(&normals, &rig.base.normals) ?})
+}
+
+fn applied(points: &Limbs.Points, delta: &Limbs.Points, indices: &Option[Array[Int]], weight: Float64) -> Option[Limbs.Points] {
+  match indices {
+    case None => Some(Limbs.Points{xs: L.axpy(&points.xs, weight, &delta.xs) ?, ys: L.axpy(&points.ys, weight, &delta.ys) ?, zs: L.axpy(&points.zs, weight, &delta.zs) ?})
+    case Some(listed) =>
+    Some(
+      Limbs.Points {
+        xs: L.scatterAdd(&points.xs, &listed, &L.scale(&delta.xs, weight)) ?,
+        ys: L.scatterAdd(&points.ys, &listed, &L.scale(&delta.ys, weight)) ?,
+        zs: L.scatterAdd(&points.zs, &listed, &L.scale(&delta.zs, weight)) ?,
+      },
+    )
+  }
+}
+
+fn renormalized(normals: &Limbs.Points, fallback: &Limbs.Points) -> Option[Limbs.Points] {
+  let squared = L.fma(&normals.xs, &normals.xs, &(L.fma(&normals.ys, &normals.ys, &(L.multiply(&normals.zs, &normals.zs) ?)) ?)) ?
+  let lengths = L.sqrt(&squared)
+  let kept = L.above(&lengths, 0.0)
+  Some(
+    Limbs.Points {
+      xs: L.select(&kept, &(L.divide(&normals.xs, &lengths) ?), &fallback.xs) ?,
+      ys: L.select(&kept, &(L.divide(&normals.ys, &lengths) ?), &fallback.ys) ?,
+      zs: L.select(&kept, &(L.divide(&normals.zs, &lengths) ?), &fallback.zs) ?,
+    },
+  )
+}
+
+fn checkShape(shape: &Shape, count: Int, what: Str) -> Result[(), MorphError] {
+  for points in [shape.positions, shape.normals] {
+    if L.count(&points.xs) != count || L.count(&points.ys) != count || L.count(&points.zs) != count { return Err(CountMismatch(what)) }
+    if !Float.isFinite(L.sum(&points.xs)) || !Float.isFinite(L.sum(&points.ys)) || !Float.isFinite(L.sum(&points.zs)) {
+      return Err(NonFinite(what))
+    }
+  }
+  Ok(())
+}

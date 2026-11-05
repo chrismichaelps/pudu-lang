@@ -1,0 +1,464 @@
+{-| @Pudu.Backend.Emit.Frame.Value — pure operations over saved frame cells. -}
+module Pudu.Backend.Emit.Frame.Value (frameValue, slotText, cellMember) where
+
+import Data.Set (Set)
+import qualified Data.Set as Set
+import Data.Text (Text)
+import qualified Data.Text as Text
+import Numeric (showHex)
+import qualified Data.Map.Strict as Map
+import Pudu.Backend.Emit.State
+  ( EmitState (..), cString, cStringBytes, divideByZeroSite, failureSite, helpedFailureSite, operatorFailureSite, overflowSite, shiftSites, textOfInt )
+import Pudu.Backend.Emit.Aggregate (aggregateHelper, aggregateNeed, cellName, isAggregate, memberComparable, retained)
+import Pudu.Diagnostic.Evaluation (cannotApplyBinaryMessage)
+import Pudu.Backend.Emit.Support (integerHelper, integerKindText, integerLiteralText, isBigInteger, isWideInteger, limbsOf, zeroValue)
+import Pudu.Core (CoreArrayMethodName (..), CoreBinaryOperator (..), CoreDecimalMethodName (..), CoreKeyedMethodName (..), CoreTextMethodName (..), CoreType (..))
+import Pudu.Backend.Emit.Range (rangeMethodCall)
+import Pudu.Backend.Emit.Bytes (bytesFunction)
+import Pudu.Core.Frame
+  ( FrameFault (..), FrameSlot (..), FrameSlotId (..), FrameUnaryOperator (..)
+  , FrameValue (..), FrameValueShape (..), coreScalarOperator )
+import Pudu.Diagnostic.Arithmetic (CheckedOperation (..))
+import Pudu.FloatLiteral (FloatWidth (..))
+import Pudu.IntegerLiteral (IntegerKind (UnsignedKind))
+
+slotNumber :: FrameSlot -> Text
+slotNumber slot = case frameSlotId slot of FrameSlotId identity -> textOfInt identity
+
+cellMember :: CoreType -> Maybe Text
+cellMember CoreNeverType = Nothing
+cellMember kind = Just (cellName kind)
+
+slotText :: FrameSlot -> Either FrameFault Text
+slotText slot = case (frameSlotId slot, cellMember (frameSlotType slot)) of
+  (FrameSlotId identity, Just member) | identity >= 0 ->
+    Right ("frame->slots[" <> textOfInt identity <> "]." <> member)
+  _ -> Left (FrameFault (Just (frameSlotSpan slot)) "an invalid scalar frame slot")
+
+frameValue :: EmitState -> FrameValue -> Either FrameFault (EmitState, Text, Set Text)
+frameValue state value = case frameValueShape value of
+  FrameDecimalLiteral coefficient scale ->
+    let limbs = limbsOf (abs coefficient)
+        listed = if null limbs then "NULL" else "(const uint32_t[]){" <> Text.intercalate ", " ["UINT32_C(" <> Text.pack (show limb) <> ")" | limb <- limbs] <> "}"
+     in plain ("pudu_dec_literal(" <> (if coefficient < 0 then "1" else "0") <> ", " <> textOfInt (length limbs) <> ", " <> listed <> ", " <> textOfInt scale <> ")") ["dec_literal"]
+  FrameDecimalMethod name arguments -> do
+    operands <- traverse slotText arguments
+    let (function, part) = decimalFunction name
+    plain (function <> "(" <> Text.intercalate ", " operands <> ")") [part]
+  FrameIntegerLiteral kind number
+    | isBigInteger kind -> plain (integerLiteralText kind number) ["big_from_limbs"]
+    | otherwise -> done state (integerLiteralText kind number) []
+  FrameFloatLiteral _ bits -> Right (state, "UINT64_C(0x" <> Text.pack (showHex bits "") <> ")", Set.empty)
+  FrameBoolLiteral flag -> done state (if flag then "1" else "0") []
+  FrameUnitLiteral -> done state "0" []
+  FrameZero -> done state (zeroValue (frameValueType value)) []
+  FrameTextLiteral text ->
+    plain ("pudu_text_literal(" <> cString text <> ", " <> textOfInt (cStringBytes text) <> ")") ["text_literal"]
+  FrameCharLiteral character -> done state ("UINT32_C(0x" <> Text.pack (showHex (fromEnum character) "") <> ")") []
+  FrameCharCode slot -> slotText slot >>= \scalar -> plain ("pudu_make((uint64_t)" <> scalar <> ", 0)") ["make"]
+  FrameCharOfCode slot -> slotText slot >>= \code -> plain ("(uint32_t)pudu_magnitude(" <> code <> ")") ["magnitude"]
+  FrameIntegerFits target slot -> do
+    source <- slotText slot
+    kind <- maybe (refused "a conversion to an unrepresented integer kind") Right (integerKindText target)
+    case frameSlotType slot of
+      -- Every value fits a BigInt.
+      CoreIntegerType _ | isBigInteger target -> done state "1" []
+      CoreIntegerType from ->
+        let helper = case (family from, isWideInteger target) of
+              (Narrow, False) -> "int_fits"
+              (Narrow, True) -> "int_fits_wide"
+              (Wide, False) -> "wide_fits_int"
+              (Wide, True) -> "wide_fits"
+              (Big, False) -> "big_fits_int"
+              (Big, True) -> "big_fits_wide"
+         in plain ("pudu_" <> helper <> "(" <> source <> ", " <> kind <> ")") [helper]
+      _ -> refused "a conversion from a value that is not an integer"
+  FrameIntegerConvert target slot -> do
+    source <- slotText slot
+    case frameSlotType slot of
+      CoreIntegerType from -> case (family from, family target) of
+        (Narrow, Narrow) -> plain ("pudu_normal(" <> source <> ")") ["normal"]
+        (Narrow, Wide) -> plain ("pudu_int_to_wide(" <> source <> ")") ["int_to_wide"]
+        (Wide, Narrow) -> plain ("pudu_wide_to_int(" <> source <> ")") ["wide_to_int"]
+        (Wide, Wide) -> plain ("pudu_wide_normal(" <> source <> ")") ["wide_normal"]
+        (Narrow, Big) -> plain ("pudu_int_to_big(" <> source <> ")") ["int_to_big"]
+        (Wide, Big) -> plain ("pudu_wide_to_big(" <> source <> ")") ["wide_to_big"]
+        (Big, Narrow) -> plain ("pudu_big_to_int(" <> source <> ")") ["big_to_int"]
+        (Big, Wide) -> plain ("pudu_big_to_wide(" <> source <> ")") ["big_to_wide"]
+        (Big, Big) -> plain ("pudu_big_normal(" <> source <> ")") ["big_normal"]
+      _ -> refused "a conversion from a value that is not an integer"
+  FrameRead slot -> slotText slot >>= \text -> uncurry plain (retained (frameSlotType slot) text)
+  FrameAggregate members -> do
+    operands <- traverse slotText members
+    let kind = frameValueType value
+    plain (aggregateHelper "make" kind <> "(" <> Text.intercalate ", " operands <> ")") [aggregateNeed "make" kind]
+  FrameConstruct tag members -> do
+    operands <- traverse slotText members
+    let kind = frameValueType value
+        operation = "make" <> textOfInt tag
+    plain (aggregateHelper operation kind <> "(" <> Text.intercalate ", " operands <> ")") [aggregateNeed operation kind]
+  FrameIsVariant tag held -> slotText held >>= \source -> done state ("(" <> source <> "->fields[0].scalar == " <> textOfInt tag <> ")") []
+  FramePayload position held -> do
+    source <- slotText held
+    member <- maybe (refused "a payload member without a native representation") Right (cellMember (frameValueType value))
+    uncurry plain (retained (frameValueType value) (source <> "->fields[" <> textOfInt (position + 1) <> "]." <> member))
+  FrameRuntimeKind held -> do
+    source <- slotText held
+    let kind = frameSlotType held
+    plain (aggregateHelper "name" kind <> "(" <> source <> ")") [aggregateNeed "name" kind]
+  FrameMember position tuple -> do
+    source <- slotText tuple
+    member <- maybe (refused "a tuple member without a native representation") Right (cellMember (frameValueType value))
+    uncurry plain (retained (frameValueType value) (source <> "->fields[" <> textOfInt position <> "]." <> member))
+  FrameClosure name members -> case Map.lookup name (emitFunctionIds state) of
+    Nothing -> refused "a closure over an unknown function"
+    Just identity -> do
+      operands <- traverse slotText members
+      let kind = frameValueType value
+          operation = "closure" <> textOfInt identity
+      plain (aggregateHelper operation kind <> "(" <> Text.intercalate ", " operands <> ")") [aggregateNeed operation kind]
+  FrameCapture position closure -> do
+    source <- slotText closure
+    member <- maybe (refused "a capture without a native representation") Right (cellMember (frameValueType value))
+    uncurry plain (retained (frameValueType value) (source <> "->fields[" <> textOfInt (position + 1) <> "]." <> member))
+  FrameArray members -> do
+    let kind = frameValueType value
+        cells = Text.intercalate ", " ["frame->slots[" <> slotNumber member <> "]" | member <- members]
+        listed = if null members then "NULL" else "(const pudu_cell[]){" <> cells <> "}"
+    plain (aggregateHelper "make" kind <> "(" <> textOfInt (length members) <> ", " <> listed <> ")") [aggregateNeed "make" kind]
+  FrameIndex array index -> do
+    source <- slotText array
+    position <- slotText index
+    let kind = frameSlotType array
+        (after, number) = failureSite state at "E7004" "index out of range"
+    Right (after, aggregateHelper "get" kind <> "(" <> source <> ", " <> position <> ", &pudu_sites[" <> textOfInt number <> "])"
+      , Set.fromList [aggregateNeed "get" kind])
+  FrameArrayMethod name receiver arguments -> do
+    target <- slotText receiver
+    operands <- traverse slotText arguments
+    let kind = frameSlotType receiver
+        helper operation = plain (aggregateHelper operation kind <> "(" <> Text.intercalate ", " (target : operands) <> ")") [aggregateNeed operation kind]
+    case name of
+      ArrayLengthOf -> plain ("pudu_array_size(" <> target <> ")") ["array_size"]
+      ArrayIsEmptyOf -> plain ("(pudu_array_length(" <> target <> ") == 0)") ["array"]
+      ArrayGetAt ->
+        let (after, number) = failureSite state at "E7004" "index out of range"
+         in Right (after, aggregateHelper "get" kind <> "(" <> Text.intercalate ", " (target : operands) <> ", &pudu_sites[" <> textOfInt number <> "])"
+              , Set.fromList [aggregateNeed "get" kind])
+      ArrayReplaceAt ->
+        let (after, number) = failureSite state at "E7004" "index out of range"
+         in Right (after, aggregateHelper "replace" kind <> "(" <> Text.intercalate ", " (target : operands) <> ", &pudu_sites[" <> textOfInt number <> "])"
+              , Set.fromList [aggregateNeed "replace" kind])
+      ArrayIndexOfValue -> helper "index_of"
+      ArrayContainsValue -> helper "contains"
+      ArrayPushValue -> helper "push"
+      ArrayPopLast -> helper "pop"
+      ArrayInsertAt -> helper "insert"
+      ArrayRemoveAt -> helper "remove"
+      ArraySliceOf -> helper "slice"
+      ArrayConcatWith -> helper "concat"
+      ArrayReversed -> helper "reverse"
+      ArrayJoinWith -> plain ("pudu_array_join(" <> Text.intercalate ", " (target : operands) <> ")") ["array_join"]
+  FrameKeyedMethod name receiver arguments -> do
+    target <- slotText receiver
+    operands <- traverse slotText arguments
+    let kind = case name of
+          KeyedFromArray -> frameValueType value
+          _ -> frameSlotType receiver
+        keyed operation = plain (aggregateHelper operation kind <> "(" <> Text.intercalate ", " (target : operands) <> ")") [aggregateNeed operation kind]
+        wordKeyed operation = case (kind, map frameSlotType arguments, frameValueType value) of
+          (CoreMapType _ (CoreIntegerType (UnsignedKind 64)), [other], result)
+            | kind == other && kind == result -> keyed operation
+          _ -> refused "a word-map operation without matching UInt64 map carriers"
+    case name of
+      KeyedSize -> keyed "size"
+      KeyedIsEmpty -> plain ("(pudu_tree_size(" <> target <> "->fields[0].tree) == 0)") ["tree"]
+      KeyedContains -> keyed "contains"
+      KeyedLookup -> keyed "lookup"
+      KeyedInsert -> keyed "insert"
+      KeyedRemove -> keyed "remove"
+      KeyedKeys -> keyed "keys"
+      KeyedValues -> keyed "values"
+      KeyedEntries -> keyed "entries"
+      KeyedMerge -> keyed "merge"
+      KeyedUnion -> keyed "union"
+      KeyedIntersect -> keyed "intersect"
+      KeyedDifference -> keyed "difference"
+      KeyedFromArray -> keyed "make"
+      KeyedWordUnion -> wordKeyed "word_union"
+      KeyedWordIntersection -> wordKeyed "word_intersection"
+      KeyedWordDifference -> wordKeyed "word_difference"
+      KeyedWordSymmetricDifference -> wordKeyed "word_symmetric_difference"
+  FrameRangeValue low inclusive high -> do
+    lowText <- traverse slotText low
+    highText <- traverse slotText high
+    let end = maybe ("0, pudu_make(0, 0)") ("1, " <>)
+    plain ("pudu_range_make(" <> end lowText <> ", " <> (if inclusive then "1" else "0") <> ", " <> end highText <> ")") ["range"]
+  FrameRangeMethod name receiver arguments -> do
+    target <- slotText receiver
+    operands <- traverse slotText arguments
+    let (after, text, needs) = rangeMethodCall state (frameValueSpan value) name target operands
+    Right (after, text, Set.fromList needs)
+  FrameBytesMethod name receiver arguments -> do
+    target <- slotText receiver
+    operands <- traverse slotText arguments
+    let (function, part) = bytesFunction name
+    plain (function <> "(" <> Text.intercalate ", " (target : operands) <> ")") [part]
+  FrameComparable slot -> do
+    source <- slotText slot
+    uncurry plain (memberComparable (frameSlotType slot) source)
+  FrameOutputError errors newline slot -> do
+    source <- slotText slot
+    plain ("pudu_output_write(" <> (if errors then "2" else "1") <> ", "
+      <> (if newline then "1" else "0") <> ", " <> source <> ")") ["output_error"]
+  FrameDisplay slot -> rendered slot
+  FrameTextMethod name receiver arguments -> do
+    target <- slotText receiver
+    operands <- traverse slotText arguments
+    let method helper extra = "pudu_" <> helper <> "(" <> Text.intercalate ", " (target : operands <> extra) <> ")"
+        simple helper = plain (method helper []) [helper]
+        counted helper message =
+          let (after, index) = failureSite state at "E7004" message
+           in Right (after, method helper [site index], Set.singleton helper)
+    case name of
+      TextLength -> simple "text_length"
+      TextIsEmpty -> simple "text_is_empty"
+      TextContains -> simple "text_contains"
+      TextStartsWith -> simple "text_starts_with"
+      TextEndsWith -> simple "text_ends_with"
+      TextIndexOf -> simple "text_index_of"
+      TextSpanOf -> plain (method "text_span" ["1"]) ["text_span"]
+      TextSpanNotOf -> plain (method "text_span" ["0"]) ["text_span"]
+      TextDrop -> counted "text_drop" "a drop count cannot be negative"
+      TextTake -> counted "text_take" "a take count cannot be negative"
+      TextSlice -> simple "text_slice"
+      TextRepeat ->
+        let (afterNegative, negative) = failureSite state at "E7004" "a repeat count cannot be negative"
+            (after, limit) = failureSite afterNegative at "E7004" "repeated text exceeds the runtime size limit"
+         in Right (after, method "text_repeat" [site negative, site limit], Set.singleton "text_repeat")
+      TextReverse -> simple "text_reverse"
+      TextEscapeHtml -> simple "text_escape_html"
+      TextReplace -> simple "text_replace"
+      TextTrim -> simple "text_trim"
+      TextToUpper -> simple "text_to_upper"
+      TextToLower -> simple "text_to_lower"
+      TextCharAt -> counted "text_char_at" "index out of range"
+      TextSplit -> simple "text_split"
+      TextLines -> simple "text_lines"
+      TextChars -> simple "text_chars"
+      TextParsesInt -> simple "text_parses_int"
+      TextIntOf -> simple "text_int_of"
+      TextParsesFloat -> simple "text_parses_float"
+      TextFloatOf -> simple "text_float_of"
+  FrameShow slot
+    | frameSlotType slot == CoreTextType -> slotText slot >>= \text -> plain ("pudu_text_show(" <> text <> ")") ["text_show"]
+    | frameSlotType slot == CoreCharType -> slotText slot >>= \scalar -> plain ("pudu_char_show(" <> scalar <> ")") ["char_show"]
+    | isAggregate (frameSlotType slot) -> rendered slot
+    | otherwise -> rendered slot
+  FrameBinary scalar left right
+    | frameSlotType left == CoreTextType -> do
+        lhs <- slotText left
+        rhs <- slotText right
+        let comparison symbol = plain ("(pudu_text_compare(" <> lhs <> ", " <> rhs <> ") " <> symbol <> " 0)") ["text_compare"]
+        case coreScalarOperator scalar of
+          CoreAdd -> plain ("pudu_text_concat(" <> lhs <> ", " <> rhs <> ")") ["text_concat"]
+          CoreEqual -> comparison "=="
+          CoreNotEqual -> comparison "!="
+          CoreLess -> comparison "<"
+          CoreLessOrEqual -> comparison "<="
+          CoreGreater -> comparison ">"
+          CoreGreaterOrEqual -> comparison ">="
+          _ -> refused "an operator text frames do not carry"
+  FrameBinary scalar left right
+    | kind <- frameSlotType left, isAggregate kind -> do
+        lhs <- slotText left
+        rhs <- slotText right
+        let equal = aggregateHelper "equal" kind <> "(" <> lhs <> ", " <> rhs <> ")"
+            -- comparableValue first: a tuple holding a function anywhere has no order.
+            (afterSite, index) = operatorFailureSite state at (cannotApplyBinaryMessage (symbolOf (coreScalarOperator scalar)) "tuple" "tuple")
+            compared a b symbol = Right
+              ( afterSite
+              , "((" <> fst (memberComparable kind lhs) <> " && " <> fst (memberComparable kind rhs) <> ") ? ("
+                  <> aggregateHelper "compare" kind <> "(" <> a <> ", " <> b <> ") " <> symbol <> " 0) : (pudu_fail(&pudu_sites[" <> textOfInt index <> "]), 0))"
+              , Set.fromList [aggregateNeed "compare" kind, aggregateNeed "comparable" kind, "site", "colored", "fail"] )
+        -- The evaluator orders tuples through Ord's defaults, and base writes
+        -- those in terms of <=: x < y is not (y <= x). A NaN member makes
+        -- compare answer GT both ways, so < and > are then both true; swapping
+        -- the operands here keeps that.
+        case coreScalarOperator scalar of
+          CoreEqual -> plain equal [aggregateNeed "equal" kind]
+          CoreNotEqual -> plain ("(!" <> equal <> ")") [aggregateNeed "equal" kind]
+          CoreLess -> compared rhs lhs ">"
+          CoreLessOrEqual -> compared lhs rhs "<="
+          CoreGreater -> compared lhs rhs ">"
+          CoreGreaterOrEqual -> compared rhs lhs "<="
+          _ -> refused "an operator aggregate frames do not carry"
+  FrameUnary FrameNegate operand
+    | CoreDecimalType <- frameSlotType operand -> slotText operand >>= \text -> plain ("pudu_dec_neg(" <> text <> ")") ["dec_neg"]
+  FrameBinary scalar left right
+    | CoreDecimalType <- frameSlotType left -> do
+        lhs <- slotText left
+        rhs <- slotText right
+        let arithmetic helper = plain ("pudu_" <> helper <> "(" <> lhs <> ", " <> rhs <> ")") [helper]
+            comparison symbol = plain ("(pudu_dec_compare(" <> lhs <> ", " <> rhs <> ") " <> symbol <> " 0)") ["dec_compare"]
+        case coreScalarOperator scalar of
+          CoreAdd -> arithmetic "dec_add"
+          CoreSubtract -> arithmetic "dec_sub"
+          CoreMultiply -> arithmetic "dec_mul"
+          CoreDivide ->
+            let (afterZero, zero) = failureSite state at "E7004" "decimal division by zero"
+                (after, endless) = helpedFailureSite afterZero at "E7010" "this decimal quotient has no exact base-ten expansion"
+                  "use Decimal.divide(left, right, digits, mode) to say how many fractional digits to keep and how to round the last one"
+             in Right (after, "pudu_dec_divide(" <> lhs <> ", " <> rhs <> ", " <> site zero <> ", " <> site endless <> ")", Set.fromList ["dec_divide", "site", "colored", "fail"])
+          CoreEqual -> comparison "=="
+          CoreNotEqual -> comparison "!="
+          CoreLess -> comparison "<"
+          CoreLessOrEqual -> comparison "<="
+          CoreGreater -> comparison ">"
+          CoreGreaterOrEqual -> comparison ">="
+          _ -> refused "an operator decimal frames do not carry"
+  FrameUnary FrameNegate operand
+    | CoreFloatType _ <- frameSlotType operand -> do
+        text <- slotText operand
+        floating ("pudu_float_neg(" <> text <> ")") "float_neg"
+  FrameBinary scalar left right
+    | CoreFloatType width <- frameSlotType left -> do
+        lhs <- slotText left
+        rhs <- slotText right
+        let narrow = if width == Float32Width then "1" else "0"
+            arithmetic helper = floating ("pudu_" <> helper <> "(" <> lhs <> ", " <> rhs <> ", " <> narrow <> ")") helper
+            predicate helper = floating ("pudu_" <> helper <> "(" <> lhs <> ", " <> rhs <> ")") helper
+        case coreScalarOperator scalar of
+          CoreAdd -> arithmetic "float_add"
+          CoreSubtract -> arithmetic "float_sub"
+          CoreMultiply -> arithmetic "float_mul"
+          CoreDivide -> arithmetic "float_div"
+          CoreEqual -> predicate "float_eq"
+          CoreNotEqual -> predicate "float_ne"
+          CoreLess -> predicate "float_lt"
+          CoreLessOrEqual -> predicate "float_le"
+          CoreGreater -> predicate "float_gt"
+          CoreGreaterOrEqual -> predicate "float_ge"
+          _ -> refused "an operator floating frames do not carry"
+  FrameUnary operator operand -> do
+    text <- slotText operand
+    case operator of
+      FrameNot -> done state ("(!" <> text <> ")") []
+      FrameComplement -> do
+        (_, descriptor) <- integerKind
+        done state (call "bit_not" [text, descriptor]) ["bit_not"]
+      FrameNegate -> do
+        (kind, descriptor) <- integerKind
+        let (after, index) = overflowSite state at kind CheckedNegate
+        done after (call "neg" [text, descriptor, site index]) ["neg"]
+  FrameBinary scalar left right -> do
+    lhs <- slotText left
+    rhs <- slotText right
+    let checked helper operation = do
+          (kind, descriptor) <- integerKind
+          let (after, index) = overflowSite state at kind operation
+          done after (call helper [lhs, rhs, descriptor, site index]) [helper]
+        binary helper = do
+          (_, descriptor) <- integerKind
+          done state (call helper [lhs, rhs, descriptor]) [helper]
+        shift helper = do
+          (kind, descriptor) <- integerKind
+          let (after, negative, wide) = shiftSites state at kind
+          done after (call helper [lhs, rhs, descriptor, site negative, site wide]) [helper]
+        comparison symbol = case frameSlotType left of
+          CoreIntegerType _ ->
+            let helper = integerHelper (frameSlotType left) "compare"
+             in done state (call helper [lhs, rhs] <> " " <> symbol <> " 0") [helper]
+          CoreBoolType -> done state (lhs <> " " <> symbol <> " " <> rhs) []
+          CoreCharType -> done state (lhs <> " " <> symbol <> " " <> rhs) []
+          CoreUnitType -> done state (lhs <> " " <> symbol <> " " <> rhs) []
+          _ -> refused "an unrepresented comparison operand"
+    case coreScalarOperator scalar of
+      CoreAdd -> checked "add" CheckedAdd
+      CoreSubtract -> checked "sub" CheckedSubtract
+      CoreMultiply -> checked "mul" CheckedMultiply
+      CoreDivide -> do
+        (kind, descriptor) <- integerKind
+        let (afterZero, zero) = divideByZeroSite state at
+            (after, overflow) = overflowSite afterZero at kind CheckedDivide
+        done after (call "div" [lhs, rhs, descriptor, site zero, site overflow]) ["div"]
+      CoreRemainder ->
+        let (after, zero) = divideByZeroSite state at
+         in done after (call "rem" [lhs, rhs, site zero]) ["rem"]
+      CoreBitAnd -> binary "bit_and"
+      CoreBitOr -> binary "bit_or"
+      CoreBitXor -> binary "bit_xor"
+      CoreShiftLeft -> shift "shift_left"
+      CoreShiftRight -> shift "shift_right"
+      CoreWrapAdd -> binary "wrap_add"
+      CoreWrapSubtract -> binary "wrap_sub"
+      CoreWrapMultiply -> binary "wrap_mul"
+      CoreSaturateAdd -> binary "sat_add"
+      CoreSaturateSubtract -> binary "sat_sub"
+      CoreSaturateMultiply -> binary "sat_mul"
+      CoreLess -> comparison "<"
+      CoreLessOrEqual -> comparison "<="
+      CoreGreater -> comparison ">"
+      CoreGreaterOrEqual -> comparison ">="
+      CoreEqual -> comparison "=="
+      CoreNotEqual -> comparison "!="
+      CoreAnd -> refused "an eager logical And in frame IR"
+      CoreOr -> refused "an eager logical Or in frame IR"
+  where
+    at = frameValueSpan value
+    symbolOf operator = case operator of
+      CoreLess -> "<"
+      CoreLessOrEqual -> "<="
+      CoreGreater -> ">"
+      _ -> ">="
+    refused :: Text -> Either FrameFault a
+    refused reason = Left (FrameFault (Just at) reason)
+    integerKind = case frameValueType value of
+      CoreIntegerType kind -> case integerKindText kind of
+        Just descriptor -> Right (kind, descriptor)
+        Nothing -> refused "an unrepresented frame integer descriptor"
+      _ -> refused "an integer frame operation without an integer result"
+    floating text helper = Right (state, text, Set.singleton helper)
+    plain text needs = Right (state, text, Set.fromList needs)
+    rendered slot = do
+      text <- slotText slot
+      case frameSlotType slot of
+        CoreIntegerType kind
+          | isWideInteger kind -> plain ("pudu_text_display_wide(" <> text <> ")") ["text_display_wide"]
+          | isBigInteger kind -> plain ("pudu_text_display_big(" <> text <> ")") ["text_display_big"]
+          | otherwise -> plain ("pudu_text_display_int(" <> text <> ")") ["text_display_int"]
+        CoreFloatType _ -> plain ("pudu_text_display_float(" <> text <> ")") ["text_display_float"]
+        CoreDecimalType -> plain ("pudu_text_display_dec(" <> text <> ")") ["text_display_dec"]
+        CoreBoolType -> plain ("(" <> text <> " ? pudu_text_literal(\"true\", 4) : pudu_text_literal(\"false\", 5))") ["text_literal"]
+        CoreUnitType -> plain "pudu_text_literal(\"()\", 2)" ["text_literal"]
+        CoreTextType -> plain ("pudu_text_retain(" <> text <> ")") ["text_retain"]
+        CoreCharType -> plain ("pudu_char_text(" <> text <> ")") ["char_text"]
+        kind | isAggregate kind -> plain (aggregateHelper "show" kind <> "(" <> text <> ")") [aggregateNeed "show" kind]
+        _ -> refused "a rendered value without a native representation"
+    done after text needs = Right (after, text, Set.fromList (map (integerHelper (frameValueType value)) needs))
+    call helper arguments = "pudu_" <> integerHelper (frameValueType value) helper <> "(" <> Text.intercalate ", " arguments <> ")"
+    site index = "&pudu_sites[" <> textOfInt index <> "]"
+
+{-| The three integer carriers: one word, two words, and BigInt's limbs. -}
+data Family = Narrow | Wide | Big
+
+family :: IntegerKind -> Family
+family kind
+  | isBigInteger kind = Big
+  | isWideInteger kind = Wide
+  | otherwise = Narrow
+
+{-| The runtime function for a Decimal primitive, and its part. -}
+decimalFunction :: CoreDecimalMethodName -> (Text, Text)
+decimalFunction name = case name of
+  DecimalParses -> ("pudu_dec_parses", "dec_parses")
+  DecimalParse -> ("pudu_dec_parse_text", "dec_parse_text")
+  DecimalTextParses -> ("pudu_dec_text_parses", "dec_text_parses")
+  DecimalFromInt -> ("pudu_dec_from_int", "dec_from_int")
+  DecimalScaleOf -> ("pudu_dec_scale", "dec_scale")
+  DecimalNamesInt -> ("pudu_dec_names_int", "dec_names_int")
+  DecimalToInt -> ("pudu_dec_to_int", "dec_to_int")
+  DecimalToFloat -> ("pudu_dec_to_float", "dec_to_float")
+  DecimalDivideWith -> ("pudu_dec_divide_to", "dec_divide_to")
+  DecimalRoundTo -> ("pudu_dec_round_to", "dec_round_to")
+  DecimalIsZero -> ("pudu_dec_is_zero", "dec_is_zero")
