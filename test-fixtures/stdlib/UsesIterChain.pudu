@@ -1,0 +1,221 @@
+module UsesIterChain
+
+import Std.Iter as Iter
+import Std.Iter {Sequence}
+import Std.Sync as Sync
+
+/// A sequence a program declares itself. It gets every adapter and terminal
+/// from the trait without writing any of them.
+type Countdown = { from: Int }
+
+impl Sequence[Int, Int] for Countdown {
+  fn begin(self: &Self) -> Int { self.from }
+  fn advance(self: &Self, state: Int) -> Option[(Int, Int)] {
+    if state > 0 { Some((state - 1, state)) } else { None }
+  }
+}
+
+/// A sequence of one item that counts how often it is asked at its end. An
+/// adapter learns that a source has ended by asking once; asking again is
+/// work the protocol never promised to answer.
+type Once = { item: Int, ends: Sync.Counter }
+
+impl Sequence[Bool, Int] for Once {
+  fn begin(self: &Self) -> Bool { true }
+  fn advance(self: &Self, state: Bool) -> Option[(Bool, Int)] {
+    if state {
+      Some((false, self.item))
+    } else {
+      let _ = Sync.increment(&self.ends, 1)
+      None
+    }
+  }
+}
+
+fn once(item: Int) -> Once { Once{item: item, ends: Sync.counter(0)} }
+
+fn endedOnce(source: &Once) -> Bool { Sync.count(&source.ends) == Ok(1) }
+
+fn square(n: Int) -> Int { n * n }
+
+fn isEven(n: Int) -> Bool { n % 2 == 0 }
+
+fn add(total: Int, n: Int) -> Int { total + n }
+
+/// A named function, an `fn` literal and a bar literal are interchangeable
+/// wherever a stage takes a function.
+fn everyFunctionSpellingWorks() -> Bool {
+  let named = Iter.range(1, 7).map(square).filter(isEven).toArray()
+  let spelled = Iter.range(1, 7).map(fn(n: Int) -> Int => n * n).filter(fn(n: Int) -> Bool => n % 2 == 0).toArray()
+  let barred = Iter.range(1, 7).map(|n| n * n).filter(|n| n % 2 == 0).toArray()
+  named == [4, 16, 36] && spelled == named && barred == named
+    && Iter.range(1, 5).fold(0, add) == 10
+    && Iter.range(1, 5).any(isEven) && Iter.range(1, 5).find(isEven) == Some(2)
+    && Iter.toArray(&Iter.map(Iter.range(1, 4), square)) == [1, 4, 9]
+}
+
+fn pipelinesReadInOrder() -> Bool {
+  Iter.range(0, 20).map(|n| n * n).filter(|n| n % 2 == 0).take(3).toArray() == [0, 4, 16]
+}
+
+fn userTypesChain() -> Bool {
+  let down = Countdown{from: 5}
+  down.map(|n| n * 10).toArray() == [50, 40, 30, 20, 10]
+    && down.count() == 5
+    && down.first() == Some(5)
+    && down.last() == Some(1)
+}
+
+fn takeAndDropAtTheEdges() -> Bool {
+  let items = Iter.items([1, 2, 3])
+  items.take(0).toArray() == []
+    && items.take(-2).toArray() == []
+    && items.take(10).toArray() == [1, 2, 3]
+    && items.drop(0).toArray() == [1, 2, 3]
+    && items.drop(-1).toArray() == [1, 2, 3]
+    && items.drop(9).toArray() == []
+}
+
+fn whileAdapters() -> Bool {
+  let items = Iter.items([2, 4, 5, 6, 8])
+  let even = |n: Int| n % 2 == 0
+  items.takeWhile(even).toArray() == [2, 4]
+    && items.dropWhile(even).toArray() == [5, 6, 8]
+    && Iter.items([1, 3]).takeWhile(even).toArray() == []
+    && Iter.items([2, 4]).dropWhile(even).toArray() == []
+    && Iter.empty[Int]().dropWhile(even).toArray() == []
+}
+
+fn strideSteps() -> Bool {
+  let digits = Iter.range(0, 10)
+  digits.stride(3).toArray() == [0, 3, 6, 9]
+    && digits.stride(4).toArray() == [0, 4, 8]
+    && digits.stride(1).toArray() == digits.toArray()
+    && digits.stride(0).toArray() == digits.toArray()
+    && digits.stride(-5).count() == 10
+    && digits.stride(100).toArray() == [0]
+    && strideAsksTheEndOnce()
+}
+
+fn strideAsksTheEndOnce() -> Bool {
+  let source = once(7)
+  source.stride(3).toArray() == [7] && endedOnce(&source)
+}
+
+fn chainAsksEachEndOnce() -> Bool {
+  let first = once(3)
+  let second = once(4)
+  first.chain(second).toArray() == [3, 4] && endedOnce(&first) && endedOnce(&second)
+}
+
+fn chainJoins() -> Bool {
+  let left = Iter.range(0, 2)
+  left.chain(Iter.items([7, 8])).toArray() == [0, 1, 7, 8]
+    && Iter.empty[Int]().chain(Iter.items([1])).toArray() == [1]
+    && left.chain(Iter.empty[Int]()).toArray() == [0, 1]
+    && chainAsksEachEndOnce()
+    && left.chain(Countdown{from: 2}).chain(left).count() == 6
+}
+
+fn enumerateAndZip() -> Bool {
+  Iter.items(["a", "b"]).enumerate().toArray() == [(0, "a"), (1, "b")]
+    && Iter.range(0, 9).zip(Iter.items(["x", "y"])).toArray() == [(0, "x"), (1, "y")]
+    && Iter.items(["x"]).zip(Iter.range(5, 9)).toArray() == [("x", 5)]
+}
+
+fn terminals() -> Bool {
+  let numbers = Iter.range(1, 6)
+  numbers.fold(0, |total, n| total + n) == 15
+    && numbers.fold("", |text, n| text + n.toText()) == "12345"
+    && numbers.any(|n| n == 4)
+    && !numbers.any(|n| n > 9)
+    && numbers.all(|n| n > 0)
+    && !numbers.all(|n| n < 3)
+    && numbers.find(|n| n * n > 10) == Some(4)
+    && numbers.find(|n| n > 9) == None
+    && Iter.empty[Int]().all(|n| n > 99)
+    && !Iter.empty[Int]().any(|n| n > 0)
+    && Iter.empty[Int]().first() == None
+    && Iter.empty[Int]().last() == None
+    && Iter.empty[Int]().isEmpty()
+    && !numbers.isEmpty()
+}
+
+/// Every source item is produced once, whatever adapters stand over it, and
+/// a terminal that can stop early does.
+fn eachItemProducedOnce() -> Bool {
+  let calls = Sync.counter(0)
+  let counted = Iter.range(0, 10).map(|n| {
+      let _ = Sync.increment(&calls, 1)
+      n
+    })
+  let dropped = counted.dropWhile(|n| n < 4).toArray()
+  let afterDrop = Sync.count(&calls)
+  let found = counted.find(|n| n == 2)
+  let afterFind = Sync.count(&calls)
+  let anyLarge = counted.any(|n| n > 0)
+  let afterAny = Sync.count(&calls)
+  dropped == [4, 5, 6, 7, 8, 9] && afterDrop == Ok(10)
+    && found == Some(2) && afterFind == Ok(13)
+    && anyLarge && afterAny == Ok(15)
+}
+
+/// Each adapter is an ordinary value of a named type.
+fn adapterTypes() -> Bool {
+  let items = Iter.items([1, 2, 3])
+  let leading: Iter.TakenWhile[Iter.Items[Int], Int] = items.takeWhile(|n| n < 3)
+  let trailing: Iter.DroppedWhile[Iter.Items[Int], Int] = items.dropWhile(|n| n < 3)
+  let every: Iter.Strided[Iter.Items[Int], Int] = items.stride(2)
+  let joined: Iter.Chained[Iter.Items[Int], Iter.Items[Int], Int] = items.chain(items)
+  let numbered: Iter.Enumerated[Iter.Items[Int], Int] = items.enumerate()
+  let start: Iter.ChainState[Int, Int] = joined.begin()
+  leading.count() == 2 && trailing.count() == 1 && every.count() == 2
+    && joined.count() == 6 && numbered.count() == 3 && start == Iter.InFirst(0)
+}
+
+/// The free functions stay, and answer as the methods do.
+fn freeFunctionsAgree() -> Bool {
+  let source = Iter.range(0, 6)
+  Iter.toArray(&source) == source.toArray()
+    && Iter.count(&source) == source.count()
+    && Iter.isEmpty(&source) == source.isEmpty()
+    && Iter.toArray(&Iter.take(Iter.map(source, |n| n + 1), 2)) == source.map(|n| n + 1).take(2).toArray()
+}
+
+/// A walk can start again: the same value yields the same items twice.
+fn restartable() -> Bool {
+  let pipeline = Iter.range(0, 5).filter(|n| n != 2).enumerate()
+  pipeline.toArray() == pipeline.toArray()
+}
+
+fn forLoopsWalkChains() -> Bool {
+  var total = 0
+  for pair in Iter.items([3, 4]).chain(Iter.range(0, 2)).enumerate() {
+    total = total + pair[0] * pair[1]
+  }
+  total == 0 * 3 + 1 * 4 + 2 * 0 + 3 * 1
+}
+
+export fn main() -> Int {
+  let checks = [
+    everyFunctionSpellingWorks(),
+    pipelinesReadInOrder(),
+    userTypesChain(),
+    takeAndDropAtTheEdges(),
+    whileAdapters(),
+    strideSteps(),
+    chainJoins(),
+    enumerateAndZip(),
+    terminals(),
+    eachItemProducedOnce(),
+    adapterTypes(),
+    freeFunctionsAgree(),
+    restartable(),
+    forLoopsWalkChains(),
+  ]
+  var held = 0
+  for passed in checks {
+    if passed { held = held + 1 }
+  }
+  held
+}

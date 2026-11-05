@@ -10,6 +10,22 @@ tags: [changelog]
 - [[Compiler Lower Method]] lowers an inherited default in its declaring module and reads trait arguments from the checked implementation head, including arguments absent from the member signature.
 - [[Compiler Lower Generic]] settles implementation parameters before the default body's bindings, preserving same-spelling parameters, renamed method parameters and structured collection arguments. Conformance covers both evaluator modes, explicit output, imported failure spans and counted cleanup.
 
+## 2026-11-04 — Checked view completion and C++ coverage (#527)
+
+- [[C++ Inspired View Coverage]] records the public capability comparison and Pudu ownership boundaries.
+- [[Std Span]], [[Std MdSpan Layout]] and [[Std MdSpan]] refuse unrepresentable constructor/slice arithmetic; layout observers expose footprint and conservative uniqueness certificates.
+- [[Std StringView Search]] and [[Eval TextView]] add exact UInt8 code-unit reads, byte walks, bounded reverse/byte-set searches, comparison and all-or-nothing copy validation.
+- [[Std Memory]] checks alignment and pool capacity without overflow, allocates bookkeeping as blocks are issued and supports bulk reset without claiming coordinate ownership authentication.
+- [[Std Iter Views]] adds lazy chunks, windows, adjacent groups, flattening, finite buffered reversal and Cartesian products through ordinary adapter composition.
+- [[Program View Spec]] registers original fixtures plus layout-model, overflow, byte-boundary and lazy-consumption regressions in the full suite.
+
+## 2026-10-21 — Standard library views and a chainable Iter (#527)
+
+- [[Std Iter]]: adapters and terminals are default members of `Sequence`, so `source.map(f).filter(g).take(3).toArray()` reads in order for every implementor; adds `takeWhile`, `dropWhile`, `stride`, `chain`, `enumerate`, `fold`, `any`, `all`, `find`, `first` and `last`. Each source item is produced once; terminals walk with `for`.
+- [[Std Span]], [[Std MdSpan]] and [[Std StringView]] add non-owning views of arrays, multidimensional arrays and UTF-8 text; [[Std Memory]] adds offset allocators (arena and pool).
+- [[Eval TextView]] adds the byte-addressed text primitives behind `Std.StringView`, checked against a byte-level model.
+- [[Type Check Iteration]] lets `for` iterate a type parameter through its `Sequence` bound.
+
 ## 2026-11-04 — Parallel CI (#815)
 
 - CI builds once with a cache and runs the suite as six parallel shards and the gates as four parallel jobs on the built compiler, so a run takes as long as its longest job.
@@ -23,6 +39,9 @@ tags: [changelog]
 - [[Eval Install]] publishes each module's trait defaults under `#Trait.member`, scoped to that module, and an importing implementation inherits those closures.
 
 ## 2026-10-21 — Declared types named like built-ins keep their methods apart (#529)
+
+- [[Eval Operator Access]] keys a declared `Array`, `Range`, `Str` and the other built-in value names as `@Name`, and [[Eval Install]] binds such a module's implementations there, so `[1, 2, 3].length()` stays the built-in length beside a declared `Array`.
+- [[Eval Loop]] and [[Eval Call Path]] look up record, variant, qualified and witness calls under the same keys.
 
 - [[Compiler Lower Method]] resolves a bound type parameter in qualifier position, so `T.made()` in a generic copy calls the bound type's member natively instead of refusing `T` as a value.
 

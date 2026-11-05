@@ -22,6 +22,11 @@ testRuntimeEvaluation = do
   exact <- runEntry "test-fixtures/stdlib/UsesDecimal.pudu"
   generic <- runEntry "test-fixtures/stdlib/UsesGenericTraits.pudu"
   sequences <- runEntry "test-fixtures/stdlib/UsesIter.pudu"
+  chained <- runEntry "test-fixtures/stdlib/UsesIterChain.pudu"
+  spans <- runEntry "test-fixtures/stdlib/UsesSpan.pudu"
+  grids <- runEntry "test-fixtures/stdlib/UsesMdSpan.pudu"
+  textViews <- runEntry "test-fixtures/stdlib/UsesStringView.pudu"
+  allocators <- runEntry "test-fixtures/stdlib/UsesMemory.pudu"
   dynamic <- runEntry "test-fixtures/stdlib/UsesDynamic.pudu"
   registry <- runEntry "test-fixtures/stdlib/UsesRegistry.pudu"
   effectSurface <- runEntry "test-fixtures/stdlib/UsesEffects.pudu"
@@ -477,6 +482,16 @@ testRuntimeEvaluation = do
         (generic === Just "5")
     , counterexample "a user type and lazy adapters use the open sequence protocol"
         (sequences === Just "14")
+    , counterexample "every sequence chains its adapters and terminals as methods, each item produced once"
+        (chained === Just "14")
+    , counterexample "a span narrows, reads and walks an array in place"
+        (spans === Just "6")
+    , counterexample "a multidimensional view reads, slices and walks in each layout"
+        (grids === Just "8")
+    , counterexample "a text view slices by byte and refuses offsets inside a scalar"
+        (textViews === Just "8")
+    , counterexample "an arena moves forward and a pool takes back only its own blocks"
+        (allocators === Just "7")
     , counterexample "drawing and parsing keep the caller's integer type"
         (widths === Just "8")
     {-| A name belongs to the module that declared it, and that holds inside an

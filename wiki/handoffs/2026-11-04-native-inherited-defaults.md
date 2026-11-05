@@ -7,7 +7,7 @@ aliases: [Native Inherited Defaults Delivery]
 # Native Inherited Defaults Delivery
 
 Architect → Backend Engineer → Test Engineer → Forensic Guardian self-audit.
-Branch feature/824-native-inherited-defaults; dev bbc9cdbd integrated.
+Branch feature/824-native-inherited-defaults; dev 82ae132e integrated.
 Owned: Lower/Method, Lower/Generic, Lower/State, MethodPrograms, ModulePrograms
 and matching mirrors, native ledger, navigation and history. No subagents.
 
@@ -26,7 +26,7 @@ trait parameters, functions and defaulted callable required counts.
 A manual probe caught a callable regression before promotion; the interrupted
 first gate is excluded from final verification evidence.
 
-Exact next action: obtain independent implementation, Language Architect and
+Exact next action: verify integrated-head full gates and CI, then obtain independent implementation, Language Architect and
 Forensic Guardian review of PR #825. Remaining C11 coverage is tracked in
 [[Native Emission Coverage]], including sparse word-map queries (#814).
 
