@@ -41,6 +41,9 @@ data-files:         lib/Std/*.pudu
                     lib/Std/Http/Server/*.pudu
                     lib/Std/Mail/*.pudu
                     lib/Std/Math/*.pudu
+                    lib/Std/Iter/*.pudu
+                    lib/Std/MdSpan/*.pudu
+                    lib/Std/StringView/*.pudu
                     lib/Std/Net/*.pudu
                     lib/Std/Test/*.pudu
                     lib/Std/Text/*.pudu

@@ -5,6 +5,15 @@ tags: [changelog]
 
 # Changelog
 
+## 2026-11-04 — Checked view completion and C++ coverage (#527)
+
+- [[C++ Inspired View Coverage]] records the public capability comparison and Pudu ownership boundaries.
+- [[Std Span]], [[Std MdSpan Layout]] and [[Std MdSpan]] refuse unrepresentable constructor/slice arithmetic; layout observers expose footprint and conservative uniqueness certificates.
+- [[Std StringView Search]] and [[Eval TextView]] add exact UInt8 code-unit reads, byte walks, bounded reverse/byte-set searches, comparison and all-or-nothing copy validation.
+- [[Std Memory]] checks alignment and pool capacity without overflow, allocates bookkeeping as blocks are issued and supports bulk reset without claiming coordinate ownership authentication.
+- [[Std Iter Views]] adds lazy chunks, windows, adjacent groups, flattening, finite buffered reversal and Cartesian products through ordinary adapter composition.
+- [[Program View Spec]] registers original fixtures plus layout-model, overflow, byte-boundary and lazy-consumption regressions in the full suite.
+
 ## 2026-10-21 — Standard library views and a chainable Iter (#527)
 
 - [[Std Iter]]: adapters and terminals are default members of `Sequence`, so `source.map(f).filter(g).take(3).toArray()` reads in order for every implementor; adds `takeWhile`, `dropWhile`, `stride`, `chain`, `enumerate`, `fold`, `any`, `all`, `find`, `first` and `last`. Each source item is produced once; terminals walk with `for`.

@@ -66,3 +66,5 @@ DEPTH 0.2 (SHALLOW). A registry by design.
 
 Imported constant folding is registered from [[Program Cache Spec]], covering imported constructors,
 all import forms, transitive frozen products, cache equivalence and capability refusal (#373).
+
+Register [[Program View Spec]] using existing dependencies. Resolved Grill Log: real standard-library view fixtures, exact results and diagnostic refusals execute in the full program suite.

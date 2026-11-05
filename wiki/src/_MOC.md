@@ -323,3 +323,8 @@ tags: [moc, module]
 - [[Ark Water Gate]] — current height-field wave verification.
 
 - [[Builtin Scope Delivery]] — resumed #759 scope isolation; [[Builtin Scope Grid]], [[Builtin Scope Late Grid]], [[Builtin Scope Main]], [[Builtin Scope Reverse]], [[Builtin Scope Selected]], [[Builtin Scope Refusal]], [[Builtin Scope Table]].
+
+## View completion evidence (#527)
+
+- [[Program View Spec]] · [[Text View Model Tests]]
+- [[UsesViewBoundaries]] · [[UsesStringViewSearch]] · [[UsesIterViews]]

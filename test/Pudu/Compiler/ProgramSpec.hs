@@ -47,12 +47,13 @@ import Pudu.Compiler.Program.TypeBoundarySpec
   , testReplLoadContext
   , testTypeNamesAreNotValues
   )
+import Pudu.Compiler.Program.ViewSpec (viewProperties)
 import Test.QuickCheck (Property)
 
 {-| Aggregated properties covering dependency graph discovery, interfaces,
     type boundaries, foreign crossings, and standard library evaluation. -}
 programProperties :: [(String, IO Property)]
-programProperties = reflectionProgramProperties <>
+programProperties = reflectionProgramProperties <> viewProperties <>
   [ ("program compilation resolves imported trait methods", testImportedMethods)
   , ("program compilation preserves module privacy and trait scope", testImportFailures)
   , ("program discovery diagnoses missing and mismatched modules", testDiscoveryFailures)

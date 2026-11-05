@@ -225,6 +225,8 @@ claim a lifetime guarantee the evaluator does not yet enforce.
 | `Std.Db.Session` | opening a connection and carrying one message across it |
 | `Std.Db.Migrate` | schema changes, planned without a database and applied one at a time |
 
+[[C++ Inspired View Coverage]] records the checked view completion and intentional representation differences.
+
 ## What ships today
 
 Sixty modules and 1622 exported declarations are present in this recovery branch, every public
