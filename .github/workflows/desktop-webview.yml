@@ -19,7 +19,7 @@ jobs:
   # Each adapter is driven through the six entry points by the same harness,
   # without building the compiler: the adapter is plain C or Objective-C.
   webkit-macos:
-    runs-on: macos-14
+    runs-on: macos-latest
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4
