@@ -121,6 +121,29 @@ int main(void) {
     }
     free(events);
   }
+#ifdef __APPLE__
+  /* Native components beside the views: a menu bar, and a surface that takes
+     a frame of its exact size and refuses any other. */
+  const char *menu[] = {"app", "menu", "menu\t0\tFile\nitem\t1\topen\tcmd+o\tOpen\nseparator\t1"};
+  record(&commands, menu, 3);
+  int native = send_all(&commands) == PUDU_WEBVIEW_DONE;
+  const char *surface[] = {"surface", "3", "create", "1", "10", "10", "2", "1"};
+  const char *frame[] = {"surface", "3", "present", "2", "1", "/wAA/wD/AP8="};
+  record(&commands, surface, 8);
+  record(&commands, frame, 6);
+  native = native && send_all(&commands) == PUDU_WEBVIEW_DONE;
+  const char *wrong[] = {"surface", "3", "present", "3", "1", "/wAA/wD/AP8="};
+  record(&commands, wrong, 6);
+  native = native && pudu_webview_send(commands.data, commands.length) == PUDU_WEBVIEW_MALFORMED;
+  commands.length = 0;
+  const char *gone[] = {"surface", "3", "close"};
+  record(&commands, gone, 3);
+  native = native && send_all(&commands) == PUDU_WEBVIEW_DONE;
+  printf("native=%d\n", native);
+  if (!native) {
+    return 1;
+  }
+#endif
   const char *close[] = {"window", "1", "close"};
   record(&commands, close, 3);
   send_all(&commands);

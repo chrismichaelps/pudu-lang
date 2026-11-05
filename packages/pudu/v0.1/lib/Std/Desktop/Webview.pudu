@@ -81,6 +81,10 @@ export type Event
   | RulesFailed(Int, Str)
   | Crashed(Int)
   | StoreShared(Int)
+  | Chosen(Str)
+  | DialogAnswered(Str, Array[Str])
+  | DialogCancelled(Str)
+  | SurfacePressed(Int, Int, Int)
   | Unknown(Str)
 
 /// A resizable window specification.
@@ -328,6 +332,10 @@ const EVENT_FACTORIES: Map[Str, (Int, EventFactory)] = mapOf([
     ("data-store", (3, fn(fields: &Array[Str]) -> Option[Event] { Some(StoreShared(number(fields[1]))) })),
     ("eval", (5, evaluatedEvent)),
     ("rules", (4, rulesEvent)),
+    ("menu", (2, fn(fields: &Array[Str]) -> Option[Event] { Some(Chosen(fields[1])) })),
+    ("dialog-cancel", (2, fn(fields: &Array[Str]) -> Option[Event] { Some(DialogCancelled(fields[1])) })),
+    ("dialog-ok", (3, fn(fields: &Array[Str]) -> Option[Event] { Some(DialogAnswered(fields[1], fields[2].lines())) })),
+    ("surface-press", (4, fn(fields: &Array[Str]) -> Option[Event] { Some(SurfacePressed(number(fields[1]), number(fields[2]), number(fields[3]))) })),
   ])
 
 fn requestEvent(fields: &Array[Str]) -> Option[Event] {

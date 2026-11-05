@@ -524,6 +524,7 @@ library
                     cbits/pudu_webview_records.c
                     cbits/pudu_webview_macos.m
                     cbits/pudu_webview_macos_view.m
+                    cbits/pudu_webview_macos_native.m
                     cbits/pudu_audio.c
                     cbits/pudu_audio_stream.c
     cc-options:     -fobjc-arc

@@ -65,4 +65,7 @@ int32_t pudu_webview_view_command(PuduWebHost *host, pudu_field *fields, int cou
 
 NSString *pudu_field_string(pudu_field field);
 
+/* Applies one native-component record (fields[0] is "app" or "surface"). */
+int32_t pudu_webview_native_command(PuduWebHost *host, pudu_field *fields, int count);
+
 #endif

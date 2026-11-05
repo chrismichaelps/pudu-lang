@@ -32,6 +32,10 @@ pending; no self-approval.
 
 ## Open
 
+- Hybrid UI components (menu bar, dialogs, native surfaces) exist on macOS; WebKitGTK and WebView2
+  refuse them as `unsupported`. Dialog answers were not exercised automatically, since a person
+  must choose.
+
 - Windows: the WebView2 adapter is verified by the native harness in CI; a compiler built on Windows
   with the `webview2` flag has not been exercised, because CI builds the compiler on Linux only.
 - Language bugs found and filed: pudu-lang#834 (generic closure loses a forwarded type argument),

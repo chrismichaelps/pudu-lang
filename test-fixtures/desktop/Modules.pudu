@@ -6,12 +6,14 @@ import Std.Desktop.Bridge as Bridge
 import Std.Desktop.Capability as Capability
 import Std.Desktop.Delta as Delta
 import Std.Desktop.Ipc as Ipc
+import Std.Desktop.Native as Native
 import Std.Desktop.Plugin as Plugin
 import Std.Desktop.Protocol as Protocol
 import Std.Desktop.Records as Records
 import Std.Desktop.Shape as Shape
 import Std.Desktop.Webview as Webview
 import Std.Json as Json
+import Std.Ui.Canvas as Canvas
 
 type Point = { x: Int, @json("label") name: Option[Str], @skip @default("false") hidden: Bool } derives Json.Decode, Json.Encode, Shape.Describe
 type Tree = { label: Str, children: Array[Tree] } derives Shape.Describe
@@ -199,6 +201,25 @@ fn ipc(tally: Tally) -> Tally {
   t
 }
 
+fn native(tally: Tally) -> Tally {
+  var t = tally
+  let bar = Native.menuBar(&[Native.Submenu("File", [Native.Item("open", "cmd+o", "Open"), Native.Divider])])
+  t = check(t, "menu bar record", bar == Ok(["app", "menu", "menu\t0\tFile\nitem\t1\topen\tcmd+o\tOpen\nseparator\t1"]))
+  t = check(t, "duplicate menu item refused", Native.menuBar(&[Native.Item("a", "", "A"), Native.Item("a", "", "B")]) == Err(Native.DuplicateItem("a")))
+  t = check(t, "unnamed menu item refused", Native.menuBar(&[Native.Item("", "", "A")]) == Err(Native.EmptyName))
+  let frame = match Canvas.canvas(2, 1, Canvas.rgb(255u8, 0u8, 0u8)) {
+    case Ok(found) => match Canvas.render(&found) {
+      case Ok(rendered) => rendered
+      case Err(_) => { return check(t, "frame", false) }
+    }
+    case Err(_) => { return check(t, "canvas", false) }
+  }
+  t = check(t, "surface frame record", Native.present(3, &frame) == Ok(["surface", "3", "present", "2", "1", "/wAA//8AAP8="]))
+  let events = Webview.decodeEvents(&[["menu", "open"], ["dialog-ok", "t", "/a\n/b"], ["dialog-cancel", "u"], ["surface-press", "3", "4", "5"]])
+  t = check(t, "native events", events == [Webview.Chosen("open"), Webview.DialogAnswered("t", ["/a", "/b"]), Webview.DialogCancelled("u"), Webview.SurfacePressed(3, 4, 5)])
+  t
+}
+
 fn updates(tally: Tally) -> Tally {
   var t = tally
   let pair = match Sign.fromSeed(&Bytes.repeat(&bytesOf([7u8]), 32)) {
@@ -232,6 +253,7 @@ fn main() {
   tally = plugins(tally)
   tally = protocol(tally)
   tally = ipc(tally)
+  tally = native(tally)
   tally = updates(tally)
   for name in tally.failed { let _ = print("FAILED " + name) }
   let _ = print("desktop modules passed {tally.passed} failed {tally.failed.length()}")

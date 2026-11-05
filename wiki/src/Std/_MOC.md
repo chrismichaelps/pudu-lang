@@ -238,6 +238,7 @@ tags: [moc, module, stdlib]
 - [[Std Desktop Ipc]] · [[Std Desktop Shape]] · [[Std Desktop Bridge]] — typed commands, streams, events and generated TypeScript.
 - [[Std Desktop Capability]] · [[Std Desktop Plugin]] — deny-by-default grants and permissioned plugins.
 - [[Std Desktop App]] — the run loop, development reload and reserved commands.
+- [[Std Desktop Native]] — menu bars, dialogs and native surfaces beside WebViews.
 - [[Std Desktop Update]] · [[Std Desktop Delta]] · [[Std Crypto Sign]] — signed, patched, rolled-back updates.
 - [[Std Desktop Bundle]] · [[Std Desktop Bundle Config]] · [[Std Desktop Bundle Binary]] · [[Std Desktop Bundle Mac]] · [[Std Desktop Bundle Linux]] · [[Std Desktop Bundle Rpm]] · [[Std Desktop Bundle Windows]] — packages for every platform.
 - [[Std Desktop Cli]] · [[Std Desktop Cli Template]] — `pudu desktop`.

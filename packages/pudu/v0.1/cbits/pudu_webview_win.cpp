@@ -231,6 +231,8 @@ extern "C" int32_t pudu_webview_send(const uint8_t *records, size_t length) {
         texts.push_back(pudu_text(fields[i]));
       }
       status = pudu_view_command(texts);
+    } else if (pudu_field_is(fields[0], "app") || pudu_field_is(fields[0], "surface")) {
+      status = pudu_refuse(PUDU_WEBVIEW_UNSUPPORTED, "native menus, dialogs and surfaces are not available on this platform");
     } else {
       status = pudu_refuse(PUDU_WEBVIEW_MALFORMED, "a record names neither a window nor a view");
     }

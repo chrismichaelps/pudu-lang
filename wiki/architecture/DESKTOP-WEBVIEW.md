@@ -30,6 +30,7 @@ no platform value, callback or memory rule crosses into Pudu.
 | Plugins | [[Std Desktop Plugin]] | a plugin declares its permissions and is refused whole when one is not granted |
 | Developer experience | [[Std Desktop App]], [[Std Desktop Cli]] | one run loop; dev mode reloads the frontend on change and the backend through `pudu run --watch`; console errors cross back with their source position |
 | Packaging | [[Std Desktop Bundle]] and its format modules | `.app`, `.dmg`, `.deb`, `.rpm`, AppImage, NSIS and MSI from one `pudu-desktop.toml` |
+| Hybrid UI | [[Std Desktop Native]], [[Pudu Webview macOS Native]] | a menu bar, native dialogs and native pixel surfaces drawn with `Std.Ui.Canvas` share a window with WebViews |
 | Updates | [[Std Desktop Update]], [[Std Desktop Delta]], [[Std Crypto Sign]] | signed manifests, channels, background checks, block-level patches, staged installs with rollback |
 
 ## The native boundary
@@ -220,6 +221,15 @@ drops source maps from release builds, and strips the executable's symbols.
   finds a pending install that was never confirmed restores the previous version.
 - `Update.background` checks and downloads on a worker thread and reports through a channel the run
   loop polls, so the interface never blocks on the network.
+
+## Hybrid UI
+
+Native components join WebView content in the same window through the same record channel: `app
+menu` installs the menu bar, `app dialog` shows open, save and message dialogs answered by ticket,
+and `surface` records place a native pixel surface above the views and present frames rendered by
+`Std.Ui.Canvas`. Menu choices, dialog answers and surface presses arrive as events. The macOS adapter
+implements them; the WebKitGTK and WebView2 adapters refuse these records with `unsupported` until
+they gain the same components.
 
 ## Platform status
 

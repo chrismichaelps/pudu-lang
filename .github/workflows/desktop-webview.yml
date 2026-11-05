@@ -33,6 +33,7 @@ jobs:
             packages/pudu/v0.1/cbits/pudu_webview_records.c \
             packages/pudu/v0.1/cbits/pudu_webview_macos.m \
             packages/pudu/v0.1/cbits/pudu_webview_macos_view.m \
+            packages/pudu/v0.1/cbits/pudu_webview_macos_native.m \
             test/native/WebviewDrive.c -framework AppKit -framework WebKit -o drive
           ./drive
       - name: Test the page bridge

@@ -324,6 +324,8 @@ int32_t pudu_webview_send(const uint8_t *records, size_t length) {
           status = pudu_window_command(host, fields, count);
         } else if (pudu_field_is(fields[0], "view")) {
           status = pudu_webview_view_command(host, fields, count);
+        } else if (pudu_field_is(fields[0], "app") || pudu_field_is(fields[0], "surface")) {
+          status = pudu_webview_native_command(host, fields, count);
         } else {
           status = pudu_refuse(host, PUDU_WEBVIEW_MALFORMED, @"a record names neither a window nor a view");
         }
