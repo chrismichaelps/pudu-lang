@@ -64,6 +64,7 @@ class PuduOptions : public ICoreWebView2EnvironmentOptions, public ICoreWebView2
 /* The pudu scheme: secure, with an authority, callable from any origin the program admits. */
 class PuduScheme : public ICoreWebView2CustomSchemeRegistration {
  public:
+  explicit PuduScheme(std::vector<std::wstring> origins) : origins_(std::move(origins)) {}
   HRESULT STDMETHODCALLTYPE QueryInterface(REFIID riid, void **out) override {
     if (riid == IID_IUnknown || riid == __uuidof(ICoreWebView2CustomSchemeRegistration)) {
       *out = this;
@@ -92,10 +93,13 @@ class PuduScheme : public ICoreWebView2CustomSchemeRegistration {
   }
   HRESULT STDMETHODCALLTYPE put_TreatAsSecure(BOOL) override { return S_OK; }
   HRESULT STDMETHODCALLTYPE GetAllowedOrigins(UINT32 *count, LPWSTR **origins) override {
-    *origins = static_cast<LPWSTR *>(CoTaskMemAlloc(sizeof(LPWSTR)));
-    (*origins)[0] = static_cast<LPWSTR>(CoTaskMemAlloc(sizeof L"*"));
-    memcpy((*origins)[0], L"*", sizeof L"*");
-    *count = 1;
+    *origins = static_cast<LPWSTR *>(CoTaskMemAlloc(sizeof(LPWSTR) * origins_.size()));
+    for (size_t i = 0; i < origins_.size(); i++) {
+      size_t bytes = (origins_[i].size() + 1) * sizeof(wchar_t);
+      (*origins)[i] = static_cast<LPWSTR>(CoTaskMemAlloc(bytes));
+      memcpy((*origins)[i], origins_[i].c_str(), bytes);
+    }
+    *count = (UINT32)origins_.size();
     return S_OK;
   }
   HRESULT STDMETHODCALLTYPE SetAllowedOrigins(UINT32, LPCWSTR *) override { return S_OK; }
@@ -107,7 +111,29 @@ class PuduScheme : public ICoreWebView2CustomSchemeRegistration {
 
  private:
   ULONG references_ = 1;
+  std::vector<std::wstring> origins_;
 };
+
+/* The origins that may call the pudu scheme: the application's own and the
+   scheme and authority of each allowed navigation pattern. */
+static std::vector<std::wstring> pudu_scheme_origins(PuduView *view) {
+  std::vector<std::wstring> origins = {L"pudu://app"};
+  for (const std::string &pattern : view->allowed) {
+    size_t separator = pattern.find("://");
+    if (separator == std::string::npos) {
+      continue;
+    }
+    size_t end = pattern.find_first_of("/?#", separator + 3);
+    origins.push_back(pudu_wide(pattern.substr(0, end)));
+  }
+  return origins;
+}
+
+/* The view an event belongs to, or nothing once it was closed. */
+static PuduView *pudu_view_named(int64_t id) {
+  auto found = pudu_host().views.find(id);
+  return found == pudu_host().views.end() ? nullptr : found->second.get();
+}
 
 typedef HRESULT(STDAPICALLTYPE *PuduCreateEnvironment)(PCWSTR, PCWSTR, ICoreWebView2EnvironmentOptions *,
                                                         ICoreWebView2CreateCoreWebView2EnvironmentCompletedHandler *);
@@ -342,6 +368,19 @@ static HRESULT pudu_on_resource(PuduView *view, ICoreWebView2WebResourceRequeste
   return S_OK;
 }
 
+/* Navigation of the page or any of its frames: allowed targets proceed, others are cancelled and reported. */
+static HRESULT pudu_on_navigation(int64_t id, ICoreWebView2NavigationStartingEventArgs *args) {
+  LPWSTR uri = nullptr;
+  args->get_Uri(&uri);
+  std::string text = pudu_take(uri);
+  PuduView *view = pudu_view_named(id);
+  if (view == nullptr || !pudu_allows(view, text)) {
+    args->put_Cancel(TRUE);
+    pudu_event({"navigation-blocked", std::to_string(id), text});
+  }
+  return S_OK;
+}
+
 static void pudu_navigate(PuduView *view, const std::string &url) { view->web->Navigate(pudu_wide(url).c_str()); }
 
 static void pudu_load_html(PuduView *view, const std::string &html) {
@@ -382,64 +421,63 @@ static HRESULT pudu_on_controller(PuduView *view, ICoreWebView2Controller *contr
     background->Release();
   }
   EventRegistrationToken token;
+  int64_t id = view->id;
   view->web->AddWebResourceRequestedFilter(view->rules.empty() ? L"pudu:*" : L"*", COREWEBVIEW2_WEB_RESOURCE_CONTEXT_ALL);
   view->web->add_WebResourceRequested(
       pudu_handler<ICoreWebView2WebResourceRequestedEventHandler, ICoreWebView2 *, ICoreWebView2WebResourceRequestedEventArgs *>(
-          [view](ICoreWebView2 *, ICoreWebView2WebResourceRequestedEventArgs *args) { return pudu_on_resource(view, args); }),
+          [id](ICoreWebView2 *, ICoreWebView2WebResourceRequestedEventArgs *args) {
+            PuduView *live = pudu_view_named(id);
+            return live == nullptr ? S_OK : pudu_on_resource(live, args);
+          }),
       &token);
   view->web->add_NavigationStarting(
       pudu_handler<ICoreWebView2NavigationStartingEventHandler, ICoreWebView2 *, ICoreWebView2NavigationStartingEventArgs *>(
-          [view](ICoreWebView2 *, ICoreWebView2NavigationStartingEventArgs *args) {
-            LPWSTR uri = nullptr;
-            args->get_Uri(&uri);
-            std::string text = pudu_take(uri);
-            if (!pudu_allows(view, text)) {
-              args->put_Cancel(TRUE);
-              pudu_event({"navigation-blocked", pudu_label(view), text});
-            }
-            return S_OK;
-          }),
+          [id](ICoreWebView2 *, ICoreWebView2NavigationStartingEventArgs *args) { return pudu_on_navigation(id, args); }),
+      &token);
+  view->web->add_FrameNavigationStarting(
+      pudu_handler<ICoreWebView2NavigationStartingEventHandler, ICoreWebView2 *, ICoreWebView2NavigationStartingEventArgs *>(
+          [id](ICoreWebView2 *, ICoreWebView2NavigationStartingEventArgs *args) { return pudu_on_navigation(id, args); }),
       &token);
   view->web->add_NewWindowRequested(
       pudu_handler<ICoreWebView2NewWindowRequestedEventHandler, ICoreWebView2 *, ICoreWebView2NewWindowRequestedEventArgs *>(
-          [view](ICoreWebView2 *, ICoreWebView2NewWindowRequestedEventArgs *args) {
+          [id](ICoreWebView2 *, ICoreWebView2NewWindowRequestedEventArgs *args) {
             LPWSTR uri = nullptr;
             args->get_Uri(&uri);
             args->put_Handled(TRUE);
-            pudu_event({"new-window-blocked", pudu_label(view), pudu_take(uri)});
+            pudu_event({"new-window-blocked", std::to_string(id), pudu_take(uri)});
             return S_OK;
           }),
       &token);
   view->web->add_SourceChanged(
       pudu_handler<ICoreWebView2SourceChangedEventHandler, ICoreWebView2 *, ICoreWebView2SourceChangedEventArgs *>(
-          [view](ICoreWebView2 *web, ICoreWebView2SourceChangedEventArgs *) {
+          [id](ICoreWebView2 *web, ICoreWebView2SourceChangedEventArgs *) {
             LPWSTR uri = nullptr;
             web->get_Source(&uri);
-            pudu_event({"navigated", pudu_label(view), pudu_take(uri)});
+            pudu_event({"navigated", std::to_string(id), pudu_take(uri)});
             return S_OK;
           }),
       &token);
   view->web->add_NavigationCompleted(
       pudu_handler<ICoreWebView2NavigationCompletedEventHandler, ICoreWebView2 *, ICoreWebView2NavigationCompletedEventArgs *>(
-          [view](ICoreWebView2 *web, ICoreWebView2NavigationCompletedEventArgs *) {
+          [id](ICoreWebView2 *web, ICoreWebView2NavigationCompletedEventArgs *) {
             LPWSTR uri = nullptr;
             web->get_Source(&uri);
-            pudu_event({"loaded", pudu_label(view), pudu_take(uri)});
+            pudu_event({"loaded", std::to_string(id), pudu_take(uri)});
             return S_OK;
           }),
       &token);
   view->web->add_DocumentTitleChanged(
-      pudu_handler<ICoreWebView2DocumentTitleChangedEventHandler, ICoreWebView2 *, IUnknown *>([view](ICoreWebView2 *web, IUnknown *) {
+      pudu_handler<ICoreWebView2DocumentTitleChangedEventHandler, ICoreWebView2 *, IUnknown *>([id](ICoreWebView2 *web, IUnknown *) {
         LPWSTR title = nullptr;
         web->get_DocumentTitle(&title);
-        pudu_event({"title", pudu_label(view), pudu_take(title)});
+        pudu_event({"title", std::to_string(id), pudu_take(title)});
         return S_OK;
       }),
       &token);
   view->web->add_ProcessFailed(
       pudu_handler<ICoreWebView2ProcessFailedEventHandler, ICoreWebView2 *, ICoreWebView2ProcessFailedEventArgs *>(
-          [view](ICoreWebView2 *, ICoreWebView2ProcessFailedEventArgs *) {
-            pudu_event({"crashed", pudu_label(view)});
+          [id](ICoreWebView2 *, ICoreWebView2ProcessFailedEventArgs *) {
+            pudu_event({"crashed", std::to_string(id)});
             return S_OK;
           }),
       &token);
@@ -485,7 +523,7 @@ static int32_t pudu_realize(PuduView *view) {
   view->realizing = true;
   HWND hwnd = owner->second->hwnd;
   int64_t id = view->id;
-  PuduOptions *options = new PuduOptions(new PuduScheme());
+  PuduOptions *options = new PuduOptions(new PuduScheme(pudu_scheme_origins(view)));
   HRESULT created = create(
       nullptr, pudu_data_folder(view).c_str(), options,
       pudu_handler<ICoreWebView2CreateCoreWebView2EnvironmentCompletedHandler, HRESULT, ICoreWebView2Environment *>(
@@ -499,7 +537,16 @@ static int32_t pudu_realize(PuduView *view) {
             held->environment = environment;
             environment->AddRef();
             auto completed = pudu_handler<ICoreWebView2CreateCoreWebView2ControllerCompletedHandler, HRESULT, ICoreWebView2Controller *>(
-                [held](HRESULT, ICoreWebView2Controller *controller) { return pudu_on_controller(held, controller); });
+                [id](HRESULT, ICoreWebView2Controller *controller) {
+                  PuduView *live = pudu_view_named(id);
+                  if (live == nullptr) {
+                    if (controller != nullptr) {
+                      controller->Close();
+                    }
+                    return S_OK;
+                  }
+                  return pudu_on_controller(live, controller);
+                });
             ICoreWebView2Environment10 *private_ = nullptr;
             ICoreWebView2ControllerOptions *controllerOptions = nullptr;
             if (held->ephemeral && SUCCEEDED(environment->QueryInterface(__uuidof(ICoreWebView2Environment10), (void **)&private_)) &&
@@ -582,6 +629,7 @@ static int32_t pudu_operate(PuduView *view, const std::vector<std::string> &fiel
   } else if (verb == "eval" && count == 5) {
     std::string ticket = fields[3];
     std::string label = pudu_label(view);
+    /* The completion only reports by label, so it never touches a view that has since closed. */
     view->web->ExecuteScript(pudu_wide(fields[4]).c_str(),
                              pudu_handler<ICoreWebView2ExecuteScriptCompletedHandler, HRESULT, LPCWSTR>([label, ticket](HRESULT result, LPCWSTR json) {
                                if (FAILED(result)) {

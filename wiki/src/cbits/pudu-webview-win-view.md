@@ -26,6 +26,9 @@ script handlers that turn WebView2 into the record channel.
   the cookie header, `make-https` redirects, and `css-display-none` injects a hiding style. A rule
   the adapter cannot enforce — an action it does not know or an expression that does not compile —
   is refused when configured, so a view never runs with a rule silently dropped.
+- Navigations of the page and of every frame pass the same allowlist; the `pudu` scheme admits
+  calls only from the application's origin and the scheme and authority of each allowed pattern.
+- Every callback finds its view by id, so an event arriving after a view closed touches nothing.
 - Scripts limited to the main frame are wrapped to run only in the top window; scripts for the end
   of parsing wait for `DOMContentLoaded`.
 - `devtools-open` opens the inspector window; `devtools-close` answers `-7`, since the platform
