@@ -42,8 +42,8 @@ choices leaks authority into the least-checked part of the program.
   adapter enforces, with every refusal reported as an event.
 - A long-running command blocks the loop that runs it; long work runs on a `Std.Concurrent` worker
   and reports through a channel.
-- Windows support needs a WebView2 adapter for the same six entry points; until then the target
-  answers `UnsupportedPlatform`.
+- The platform without a declarative content blocker enforces rules in its request filter, and a rule
+  it cannot enforce is refused rather than dropped.
 
 ## Referenced by
 

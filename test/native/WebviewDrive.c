@@ -13,7 +13,7 @@
 
 static const char *PAGE =
     "<html><body><script>"
-    "fetch('pudu://app/blocked').then(function(){return 'leaked'},function(){return 'blocked'})"
+    "fetch('pudu://app/blocked').then(function(r){return r.ok?'leaked':'blocked'},function(){return 'blocked'})"
     ".then(function(b){return fetch('pudu://app/.pudu/ipc/echo',{method:'POST',body:'ping:'+b})})"
     ".then(function(r){return r.text()})"
     ".then(function(t){document.title='done:'+t})"

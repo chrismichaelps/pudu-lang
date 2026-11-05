@@ -11,7 +11,8 @@ For changes to the WebView adapters, their native tests, or the page bridge: on 
 [[Webview Records Test]], link [[Webview Drive Harness]] with the WebKit adapter and run it, and run
 the bridge tests with the generator check; on Ubuntu 24.04, install WebKitGTK and a virtual
 display, run the records test, and link the harness with [[Pudu Webview GTK Adapter]] under
-`xvfb-run`. No compiler build is needed: the adapters are plain native code.
+`xvfb-run`; on Windows, fetch the WebView2 SDK, run the records test, and link the harness with
+[[Pudu Webview Windows Adapter]]. No compiler build is needed: the adapters are plain native code.
 
 ## Resolved Grill Log
 

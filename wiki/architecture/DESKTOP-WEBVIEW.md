@@ -227,7 +227,7 @@ drops source maps from release builds, and strips the executable's symbols.
 | --- | --- | --- |
 | macOS | WebKit through AppKit | **Ready**; driven live by [[Desktop Webview Gate]] and [[Desktop Webview CI]] |
 | Linux | WebKitGTK | **Ready** behind the `webkitgtk` cabal flag; [[Desktop Webview CI]] drives it under a virtual display |
-| Windows | WebView2 | **Absent**: answers `UnsupportedPlatform`; the adapter contract is the six entry points above |
+| Windows | WebView2 | **Ready** behind the `webview2` cabal flag (WebView2 SDK headers on the include path, `WebView2Loader.dll` beside the program); [[Desktop Webview CI]] drives it |
 
 ## Referenced by
 

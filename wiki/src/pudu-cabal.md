@@ -195,7 +195,8 @@ macOS compiles the WebKit adapter ([[Pudu Webview macOS Adapter]], [[Pudu Webvie
 [[Pudu Webview Records]]), links the `WebKit` framework and defines `PUDU_NATIVE_WEBVIEW`. The manual
 `webkitgtk` flag, off by default, compiles [[Pudu Webview GTK Adapter]] on Linux against
 `webkit2gtk-4.1` and `gtk+-3.0` and defines the same symbol; without it Linux answers
-`unsupported`. `Pudu.Eval.Webview` and `Pudu.Eval.Sign` join the library.
+`unsupported`. The manual `webview2` flag compiles [[Pudu Webview Windows Adapter]] on Windows
+with the SDK headers supplied through `--extra-include-dirs`. `Pudu.Eval.Webview` and `Pudu.Eval.Sign` join the library.
 
 ## Referenced by
 

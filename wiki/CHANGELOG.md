@@ -7,7 +7,7 @@ tags: [changelog]
 
 ## 2026-11-05 — Pudu Desktop (#833)
 
-- [[architecture/DESKTOP-WEBVIEW]] and [[decisions/ADR-0026-a-webview-is-a-renderer]]: the Pudu program owns a WebView application through one six-entry record channel ([[Pudu Webview Header]], [[Pudu Webview Records]]), implemented by [[Pudu Webview macOS Adapter]] and [[Pudu Webview GTK Adapter]].
+- [[architecture/DESKTOP-WEBVIEW]] and [[decisions/ADR-0026-a-webview-is-a-renderer]]: the Pudu program owns a WebView application through one six-entry record channel ([[Pudu Webview Header]], [[Pudu Webview Records]]), implemented by [[Pudu Webview macOS Adapter]], [[Pudu Webview GTK Adapter]] and [[Pudu Webview Windows Adapter]].
 - [[Std Desktop Webview]], [[Std Desktop Protocol]], [[Std Desktop Ipc]], [[Std Desktop Shape]], [[Std Desktop Bridge]], [[Std Desktop Capability]], [[Std Desktop Plugin]] and [[Std Desktop App]]: windows and views, the `pudu://app/` origin, typed commands with streams, events and generated TypeScript, deny-by-default capabilities bound to the calling document's origin, permissioned plugins with declarative blocking, and a run loop with development reload.
 - [[Std Desktop Update]], [[Std Desktop Delta]] and [[Std Crypto Sign]] ([[Eval Sign]]): Ed25519-signed manifests with tracks, archive-aligned patches, background checks, staged installs and rollback.
 - [[Std Desktop Bundle]] and its formats with [[Std Desktop Cli]]: `.app`, `.dmg`, `.deb`, `.rpm`, AppImage, NSIS and MSI from `pudu-desktop.toml`; `pudu desktop` scaffolds, develops, generates types, builds, bundles, signs and publishes.

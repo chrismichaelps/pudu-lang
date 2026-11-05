@@ -32,16 +32,16 @@ pending; no self-approval.
 
 ## Open
 
-- Windows: no WebView2 adapter; the target answers `unsupported`. NSIS and MSI installers are written
-  from a Windows executable built elsewhere.
+- Windows: the WebView2 adapter is verified by the native harness in CI; a compiler built on Windows
+  with the `webview2` flag has not been exercised, because CI builds the compiler on Linux only.
 - Language bugs found and filed: pudu-lang#834 (generic closure loses a forwarded type argument),
   pudu-lang#835 (a derive cannot see a hand-written implementation from another module),
   pudu-lang#836 (trait implementations for unit are unreachable). The framework avoids each.
 
 ## Exact next action
 
-Push the branch, open the pull request to dev, and confirm [[Desktop Webview CI]] drives the
-WebKitGTK adapter green under `xvfb-run`.
+Confirm [[Desktop Webview CI]] drives all three adapters green on the pull request, then obtain the
+independent reviews.
 
 ## Referenced by
 

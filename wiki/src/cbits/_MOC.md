@@ -20,6 +20,7 @@ tags: [moc, module, foreign, ffi]
 - [[Pudu Webview Records]] — length-prefixed record framing and bounded URL patterns.
 - [[Pudu Webview macOS Host]] · [[Pudu Webview macOS Adapter]] · [[Pudu Webview macOS View]] — WebKit windows, views, scheme requests and policy.
 - [[Pudu Webview GTK Adapter]] — the same contract on WebKitGTK.
+- [[Pudu Webview Windows Host]] · [[Pudu Webview Windows Adapter]] · [[Pudu Webview Windows View]] — the same contract on WebView2.
 - [[Pudu Audio Header]] — framework-neutral bounded device-playback ABI and stable statuses.
 - [[Pudu Audio Adapter]] — macOS Audio Queue ownership, preallocation, refill, deadline, and release.
 - [[Pudu Audio Stream Header]] — framework-neutral persistent-output ABI, snapshot layout, and stable statuses.
