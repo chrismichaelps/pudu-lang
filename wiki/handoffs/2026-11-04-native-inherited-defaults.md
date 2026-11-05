@@ -26,8 +26,12 @@ trait parameters, functions and defaulted callable required counts.
 A manual probe caught a callable regression before promotion; the interrupted
 first gate is excluded from final verification evidence.
 
-Exact next action: verify integrated-head full gates and CI, then obtain independent implementation, Language Architect and
-Forensic Guardian review of PR #825. Remaining C11 coverage is tracked in
+The integrated implementation head 8815d25b passes all 48 clean optimized
+repository gates and CI run 42055229090. PR #825 maintains final-head checks.
+No independent semantic approval is claimed; subagents remain prohibited.
+
+Exact next action: verify final-head checks, then obtain independent review
+or an explicit owner review exception before merging PR #825. Remaining C11 coverage is tracked in
 [[Native Emission Coverage]], including sparse word-map queries (#814).
 
 ## Referenced by
