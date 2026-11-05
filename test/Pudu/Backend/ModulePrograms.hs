@@ -64,7 +64,33 @@ layout = ("Layout.pudu", Text.unlines
 modulePrograms :: [(String, [(FilePath, Text)], Text, Text)]
 modulePrograms =
   [(label, [], source, answer) | (label, source, answer) <- wordMapSuccessPrograms <> constantPrograms <> referenceSuccessPrograms <> methodSuccessPrograms <> genericSuccessPrograms <> trySuccessPrograms <> forSuccessPrograms <> closureSuccessPrograms <> arraySuccessPrograms <> arrayPatternSuccessPrograms <> textCollectionSuccessPrograms <> convertSuccessPrograms <> keyedSuccessPrograms <> shapeSuccessPrograms <> rangeSuccessPrograms <> bytesSuccessPrograms] <> constantModulePrograms <> renderingCallableModulePrograms <> defaultParameterModulePrograms <> shapeModulePrograms <>
-  [ ( "module-qualified functions are values with one identity"
+  [ ( "implementations inherit the defaults of an imported trait, run in the trait's module"
+    , [ ("Lib.pudu", Text.unlines
+          [ "module Lib", ""
+          , "fn shout(text: Str) -> Str { text + \"!\" }"
+          , "export type Wrapped[T] = { held: T }"
+          , "export trait Loud[T] {"
+          , "  fn word(self: &Self) -> T"
+          , "  fn loudly(self: &Self, render: fn(T) -> Str) -> Str { shout(render(self.word())) }"
+          , "  fn wrapped(self: &Self) -> Wrapped[T] { Wrapped{held: self.word()} }"
+          , "  fn twice(self: &Self) -> (T, T) { (self.word(), self.word()) }"
+          , "}" ]) ]
+    , program
+        [ "import Lib {Loud}"
+        , "type Bell = { n: Int }", "type Name = { text: Str }"
+        , "fn shout(text: Str) -> Str { \"the importer's shout\" }"
+        , "impl Loud[Int] for Bell { fn word(self: &Self) -> Int { self.n } }"
+        , "impl Loud[Str] for Name {"
+        , "  fn word(self: &Self) -> Str { self.text }"
+        , "  fn twice(self: &Self) -> (Str, Str) { (self.text, \"overridden\") }", "}"
+        , "fn main() -> Int {"
+        , "  let bell = Bell{n: 4}", "  let name = Name{text: \"pudu\"}"
+        , "  print(bell.loudly(|n| n.toText()))", "  print(Loud.loudly(&bell, |n| (n * 2).toText()))"
+        , "  print(display(bell.wrapped().held))", "  print(show(bell.twice()))"
+        , "  print(name.loudly(|text| text))", "  print(show(name.twice()))"
+        , "  return 0", "}" ]
+    , "4!\n8!\n4\n(4, 4)\npudu!\n(\"pudu\", \"overridden\")\n" )
+  , ( "module-qualified functions are values with one identity"
     , [ ("Lib.pudu", Text.unlines
           [ "module Lib", ""
           , "export fn twice(value: Int) -> Int { value * 2 }"
@@ -249,7 +275,17 @@ constantRefusalPrograms =
 moduleRefusalPrograms :: [(String, [(FilePath, Text)], Text)]
 moduleRefusalPrograms =
   constantRefusalPrograms <> [(label, [], source) | (label, source) <- wordMapRefusalPrograms <> referenceRefusalPrograms <> methodRefusalPrograms <> genericRefusalPrograms <> tryRefusalPrograms <> forRefusalPrograms <> closureRefusalPrograms <> arrayRefusalPrograms <> arrayPatternRefusalPrograms <> textCollectionRefusalPrograms <> convertRefusalPrograms <> keyedRefusalPrograms <> rangeRefusalPrograms <> bytesRefusalPrograms] <>
-  [ ( "a constant read preserves the runtime overflow operation's span"
+  [ ( "a failure in an imported inherited default names the trait module"
+    , [("Lib.pudu", Text.unlines
+        [ "module Lib", "export trait Divide {"
+        , "  fn divisor(self: &Self) -> Int"
+        , "  fn answer(self: &Self) -> Int { 12 / self.divisor() }", "}" ])]
+    , program
+        [ "import Lib {Divide}", "type Zero = { value: Int }"
+        , "impl Divide for Zero { fn divisor(self: &Self) -> Int { self.value } }"
+        , "fn main() -> Int {", "  print(\"before\")"
+        , "  Zero{value: 0}.answer()", "}" ] )
+  , ( "a constant read preserves the runtime overflow operation's span"
     , [], program
         [ "const MAX = 9223372036854775807", "fn main() -> Int {"
         , "  print(\"start\")", "  var n = MAX", "  n + 1", "}" ] )

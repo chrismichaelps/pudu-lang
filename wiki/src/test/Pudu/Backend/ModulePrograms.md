@@ -130,3 +130,14 @@ higher-order function, renders and compares them, and binds a defaulted
 qualified function. Resolved Grill Log: a local cannot share a qualifier's
 name (qualifiers are capitalized, and a capitalized let is a pattern), so no
 shadowing case is needed.
+
+## Imported trait defaults (#824)
+
+An importer inherits `loudly`, `wrapped` and `twice` from `Lib.Loud`.
+`loudly` calls `Lib`'s private `shout` while the importer declares its own
+`shout`, and one implementation overrides `twice`. Calls go through method
+syntax and the trait-qualified form.
+
+Resolved Grill Log (#824): an imported inherited default divides by a runtime
+zero from its implementation. Its refusal must retain the trait module's
+source span and output ordering in both evaluator modes and native execution.

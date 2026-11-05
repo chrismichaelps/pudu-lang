@@ -91,6 +91,48 @@ methodSuccessPrograms =
       , "  print(display(step.total()))", "  print(display(step.twice().twice().size))"
       , "  return 0", "}" ]
     , "30\n20\n")
+  , ("defaults typed by the trait's own parameters, for plain and generic implementations", program
+      [ "type Wrapped[T] = { held: T }"
+      , "trait Loud[T] {"
+      , "  fn word(self: &Self) -> T"
+      , "  fn wrapped(self: &Self) -> Wrapped[T] { Wrapped{held: self.word()} }"
+      , "  fn twice(self: &Self) -> (T, T) { (self.word(), self.word()) }"
+      , "  fn tagged[V](self: &Self, tag: V) -> (V, T) { (tag, self.word()) }"
+      , "}"
+      , "type Box[U] = { inner: U }"
+      , "impl[U] Loud[U] for Box[U] { fn word(self: &Self) -> U { self.inner } }"
+      , "type Pair = { left: Int, right: Str }"
+      , "impl Loud[Str] for Pair { fn word(self: &Self) -> Str { self.right } }"
+      , "fn main() -> Int {"
+      , "  let box = Box{inner: 7}", "  let text = Box{inner: \"t\"}"
+      , "  print(display(box.wrapped().held))", "  print(show(text.twice()))"
+      , "  print(show(box.tagged(true)))"
+      , "  let pair = Pair{left: 1, right: \"r\"}"
+      , "  print(show(pair.tagged(2.5)))", "  print(show(pair.wrapped()))"
+      , "  print(show(Loud.twice(&pair)))"
+      , "  return 0", "}" ]
+    , "7\n(\"t\", \"t\")\n(true, 7)\n(2.5, \"r\")\nWrapped{held: \"r\"}\n(\"r\", \"r\")\n")
+  , ("trait and implementation parameter spellings have separate bindings", program
+      [ "type Wrapped[T] = { held: T }"
+      , "trait Loud[T] {"
+      , "  fn word(self: &Self) -> T"
+      , "  fn wrapped(self: &Self) -> Wrapped[T] { Wrapped{held: self.word()} }"
+      , "  fn tagged[V](self: &Self, tag: V) -> (T, V) { (self.word(), tag) }"
+      , "  fn reveal(self: &Self) -> Int {"
+      , "    print(show(self.word()))", "    0", "  }", "}"
+      , "type Box[T] = { inner: T }"
+      , "impl[T] Loud[Str] for Box[T] { fn word(self: &Self) -> Str { \"held\" } }"
+      , "type Many[T] = { inner: T }"
+      , "impl[T] Loud[Array[T]] for Many[T] { fn word(self: &Self) -> Array[T] { [self.inner] } }"
+      , "type Tag[V] = { inner: V }"
+      , "impl[V] Loud[Str] for Tag[V] { fn word(self: &Self) -> Str { \"tag\" } }"
+      , "fn main() -> Int {"
+      , "  print(show(Box{inner: 7}.wrapped()))"
+      , "  print(show(Many{inner: 9}.wrapped()))"
+      , "  print(show(Tag{inner: 3}.tagged(true)))"
+      , "  Box{inner: 1}.reveal()", "  Many{inner: 2}.reveal()"
+      , "  return 0", "}" ]
+    , "Wrapped{held: \"held\"}\nWrapped{held: [9]}\n(\"tag\", true)\n\"held\"\n[2]\n")
   ]
 
 {-| Runtime failures inside a method body report at the method's own source. -}

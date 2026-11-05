@@ -5,6 +5,11 @@ tags: [changelog]
 
 # Changelog
 
+## 2026-11-04 — Native inherited defaults across traits' parameters and modules (#824)
+
+- [[Compiler Lower Method]] lowers an inherited default in its declaring module and reads trait arguments from the checked implementation head, including arguments absent from the member signature.
+- [[Compiler Lower Generic]] settles implementation parameters before the default body's bindings, preserving same-spelling parameters, renamed method parameters and structured collection arguments. Conformance covers both evaluator modes, explicit output, imported failure spans and counted cleanup.
+
 ## 2026-11-04 — Native members through a type parameter (#819)
 ## 2026-10-21 — Implementations inherit the defaults of traits they import (#530)
 

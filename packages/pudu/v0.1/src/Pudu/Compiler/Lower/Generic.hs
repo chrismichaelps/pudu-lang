@@ -1,6 +1,6 @@
 {-| @Pudu.Compiler.Lower.Generic — one copy of a generic body per type-argument
     list, read off the instantiation checking recorded at the call. -}
-module Pudu.Compiler.Lower.Generic (admitCallee, specialize) where
+module Pudu.Compiler.Lower.Generic (admitCallee, matchType, specialize) where
 
 import Control.Monad (foldM)
 import Data.Map.Strict (Map)
@@ -25,7 +25,7 @@ import Pudu.Type.Value (NominalId (..), Scheme (..), Type (..))
 admitCallee :: LowerState -> Text -> Span -> (Text, Located Function) -> (LowerState, Maybe (Text, CoreSignature))
 admitCallee state key callee (owner, function) = case scheme of
   Just found
-    | not (null (schemeParams found)) -> case typeFactAt (contextTypes context) callee >>= specialize state key owner function found Map.empty of
+    | not (null (schemeParams found)) -> case typeFactAt (contextTypes context) callee >>= specialize state key owner function found Map.empty Map.empty of
         Just (registered, instanceKey, bindings) -> admit registered instanceKey bindings
         Nothing -> halt callee "a generic call whose type arguments have no native representation" state
   _ -> admit state key Map.empty
@@ -43,14 +43,16 @@ admitCallee state key callee (owner, function) = case scheme of
     so unit stands for it. Every binding is formed in the caller's facts, so a
     caller that is itself a copy passes its own bindings through. -}
 specialize
-  :: LowerState -> Text -> Text -> Located Function -> Scheme -> Map Text CoreType -> Type
+  :: LowerState -> Text -> Text -> Located Function -> Scheme -> Map Text CoreType -> Map Text Type -> Type
   -> Maybe (LowerState, Text, Map Text CoreType)
-specialize state key owner function scheme fixed actual = do
+specialize state key owner function scheme fixed derived actual = do
   matched <- matchType (schemeType scheme) (substitute (typeBindings (contextTypes context)) actual) Map.empty
   formed <- traverse (form matched) [name | (name, _) <- schemeParams scheme, Map.notMember name fixed]
-  let bindings = Map.union fixed (Map.fromList formed)
+  let own = Map.union fixed (Map.fromList formed)
+  settled <- traverse (formedCoreTypeIn (contextTypes context) . substitute own) derived
+  let bindings = Map.union settled own
       instanceKey = key <> "[" <> Text.intercalate "," [Text.pack (show kind) | kind <- Map.elems bindings] <> "]"
-      known = Instance owner function scheme bindings False
+      known = Instance owner function scheme{schemeType = substitute own (schemeType scheme)} bindings False Map.empty
       registered = state{lowerContext = context{contextInstances = Map.insert instanceKey known (contextInstances context)}}
   pure (registered, instanceKey, bindings)
  where
@@ -78,6 +80,10 @@ unformed :: CoreType -> Type
 unformed kind = case kind of
   CoreRecordType key arguments -> NominalType (identityOf key) (map unformed arguments)
   CoreSumType key arguments -> NominalType (identityOf key) (map unformed arguments)
+  CoreArrayType member -> NominalType (NominalId Nothing "Array") [unformed member]
+  CoreMapType key value -> NominalType (NominalId Nothing "Map") [unformed key, unformed value]
+  CoreSetType member -> NominalType (NominalId Nothing "Set") [unformed member]
+  CoreRangeType -> NominalType (NominalId Nothing "Range") [NominalType (NominalId Nothing "Int") []]
   CoreTupleType members -> TupleTypeValue (map unformed members)
   CoreUnitType -> UnitTypeValue
   CoreNeverType -> NeverType

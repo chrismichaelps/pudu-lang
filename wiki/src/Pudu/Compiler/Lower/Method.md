@@ -148,3 +148,47 @@ Resolved Grill Log:
   so the binding wins.
 - *Built-in owners?* `ownerKeyOf` gives `Int` and the other scalars their own
   key, so `impl Sized for Int` is selected like any record's implementation.
+
+## Inherited defaults by their declaring module and trait arguments (#824)
+
+`methodTables` finds each method's declaration in whichever module declares
+it, by its span, and lowers it there. A default inherited from an imported
+trait therefore resolves its names in the trait's module, as the evaluator runs
+it in that module's scope, so a private helper of the trait's module is the one
+it calls.
+
+An inherited default's body was checked once with the trait's parameters
+rigid. Checked implementation heads supply those trait arguments; matching
+the declared and implemented member schemes supplies renamed own parameters.
+These become `instanceDerived` bindings in the implementation scheme's
+namespace. They are formed after the call's copy settles implementation
+parameters and then overlay those parameters for the body. Concrete and
+same-spelling arguments follow the same path.
+
+Resolved Grill Log:
+- *Why match member schemes as well as read the checked head?* The head supplies
+  all trait parameters, including ones absent from a member signature. Scheme
+  matching additionally recovers checking's renamed own method parameters.
+- *Why lower in the trait's module?* Its body's facts and names are that
+  module's. The importer may declare a same-named function, and the
+  interpreter never calls it.
+
+## Binding namespaces (#824 follow-up)
+
+Resolved Grill Log: all matched body rigid names except `Self` are retained as
+unformed derived bindings, including a default's own renamed parameters.
+Implementation scheme parameters are settled first; body bindings overlay them
+only after substitution. A trait's `T` may therefore be `Str` while the
+implementation's `T` is `Int`. A nonempty derived map requires specialization
+even for a monomorphic implementation. `Self` remains the fixed receiver.
+
+## Trait arguments absent from a member signature (#824)
+
+Resolved Grill Log: a default may use a trait parameter only in its body.
+Matching that member's signature cannot recover the argument. Read every
+trait parameter from the implementation head already canonicalized by
+[[Compiler Literals]], matched to the canonical owner and trait identities.
+Decode that checked syntax structurally, treating implementation parameters
+as rigid names; never resolve aliases or infer types again. Scheme matching
+still supplies a method's own parameters renamed by checking. Trait-head
+arguments take precedence over same-spelling method matches.

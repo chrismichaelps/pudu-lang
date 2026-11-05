@@ -115,3 +115,15 @@ CoreSignature carries `signatureLoaned`, the positions of its `&mut`
 parameters, and LowerState carries `lowerLoaned`, the loaned locals of the
 function being lowered; `startFunction` clears it, so a lambda's `return`
 answers only its own value. See [[Compiler Lower Loan]].
+
+## Derived trait arguments (#824)
+
+`Instance.instanceDerived` holds the default body's rigid names mapped to
+unformed `Type`s in the implementation scheme's namespace. `specialize` first
+settles implementation parameters, then forms the derived types and installs
+them as the body's bindings.
+
+Resolved Grill Log (#824): `instanceDerived` maps the default body's rigid names
+to types in the implementation scheme's namespace. It also carries renamed own
+method parameters and concrete trait arguments, so no same-spelling binding
+overrides an implementation parameter before specialization.

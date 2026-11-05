@@ -13,17 +13,17 @@ import Pudu.Compiler.Lower.Signature (ensureSignature)
 import Pudu.Compiler.Lower.State
   ( CoreSignature (..), Instance (..), LowerContext (..), LowerState (..), ModuleScope (..)
   , bindLocal, halt, inModule, refused, withTypeBindings )
-import Pudu.Compiler.Lower.Generic (specialize)
+import Pudu.Compiler.Lower.Generic (matchType, specialize)
 import Pudu.Compiler.Lower.Loan (Callee (..), Operand (..), lowerLoanedOperands)
-import Pudu.Compiler.Lower.Types (formedCoreTypeIn, ownerKeyOf, selectedMember, typeBindings, typeFactAt, typeForSpan, nativeValueType)
+import Pudu.Compiler.Lower.Types (formedCoreTypeIn, lookupScheme, ownerKeyOf, selectedMember, typeBindings, typeFactAt, typeForSpan, nativeValueType)
 import Pudu.Core
 import Pudu.Eval.Operator.Access (arrayMethods, mapMethods, setMethods, stringMethods)
 import Pudu.Eval.Bytes (bytesMethods)
 import Pudu.Frontend.Syntax
-  ( Declaration (..), Expression, Function (..), Impl (..), Located (..), Module (..), Parameter (..), Trait (..), TypeSyntax (..) )
+  ( Declaration (..), Expression, Function (..), Impl (..), Located (..), Module (..), Parameter (..), Trait (..), TypeParam (..), TypeSyntax (..) )
 import Pudu.Frontend.Syntax.Name (ModuleName (..))
 import Pudu.Source (Span)
-import Pudu.Type.Value (NominalId, Scheme (..), Type (FunctionTypeRequiring, NominalType), nominalKey)
+import Pudu.Type.Value (NominalId (..), Scheme (..), Type (..), nominalKey)
 
 type LowerExpression = LowerState -> Located Expression -> (LowerState, Maybe (CoreExpression, CoreType))
 
@@ -42,18 +42,88 @@ methodTables
 methodTables scopes modules = (Map.fromList instances, Map.fromList calls, Map.fromList qualified)
  where
   entries =
-    [ (key, Instance moduleName function scheme bindings (inherited && Map.null bindings), (ownerKey, name), (traitText, ownerKey, name))
+    [ (key, Instance declaring function scheme bindings (inherited && Map.null selfBinding) derived, (ownerKey, name), (traitText, ownerKey, name))
     | (moduleName, syntax, methods) <- modules
     , (owner, name, scheme, at) <- methods
-    , Just (traitText, function, inherited) <- [declaredAt (moduleDeclarations syntax) at]
+    , Just (declaring, traitText, function, inherited) <- [declaredAnywhere at]
     , let ownerKey = nominalKey owner
           key = ownerKey <> "." <> traitText <> "." <> name
-          self = Map.lookup moduleName scopes >>= \scope -> formedCoreTypeIn (scopeTypes scope) (NominalType owner [])
-    , let bindings = maybe Map.empty (Map.singleton "Self") self
+          implementing = scopeTypes <$> Map.lookup moduleName scopes
+          self = implementing >>= \types -> formedCoreTypeIn types (NominalType owner [])
+          selfBinding = maybe Map.empty (Map.singleton "Self") self
+          derived
+            | inherited = Map.union (headArguments syntax owner declaring traitText) (traitArguments declaring traitText name scheme)
+            | otherwise = Map.empty
+          bindings = selfBinding
     ]
   instances = [(key, found) | (key, found, _, _) <- entries]
   calls = [(call, key) | (key, _, call, _) <- entries]
   qualified = [(selection, key) | (key, _, _, selection) <- entries]
+
+  -- The body and implementation have separate rigid namespaces. Keep the
+  -- matched body bindings unformed until the implementation's parameters
+  -- settle, including when both scopes use the same spelling.
+  traitArguments declaring traitText name scheme = Map.fromList
+    [ (parameter, held)
+    | Just declared <- [declaredMember declaring traitText name]
+    , Just matched <- [matchType (schemeType declared) (schemeType scheme) Map.empty]
+    , (parameter, held) <- Map.toList matched
+    , parameter /= "Self"
+    ]
+
+  -- Implementation heads already carry canonical checked identities and
+  -- arguments, including parameters absent from this member's signature.
+  headArguments syntax owner declaring traitText = Map.fromList
+    [ (locatedValue (typeParamName (locatedValue parameter)), held)
+    | (_, tree, _) <- modules
+    , moduleNameOf tree == declaring
+    , Located _ (TraitDeclaration trait) <- moduleDeclarations tree
+    , locatedValue (traitName trait) == traitText
+    , Located _ (ImplDeclaration impl) <- moduleDeclarations syntax
+    , NamedType target _ <- [locatedValue (implTarget impl)]
+    , pathText target == nominalKey owner
+    , NamedType provider arguments <- [locatedValue (implTrait impl)]
+    , pathText provider == declaring <> "." <> traitText
+    , (parameter, argument) <- zip (traitTypeParams trait) arguments
+    , Just held <- [resolvedType (map (locatedValue . typeParamName . locatedValue) (implTypeParams impl)) argument]
+    ]
+  moduleNameOf = pathText . locatedValue . moduleName
+  pathText (ModuleName path) = Text.intercalate "." (NonEmpty.toList path)
+  resolvedType rigid (Located _ written) = case written of
+    NamedType path arguments -> do
+      formed <- traverse (resolvedType rigid) arguments
+      let name = pathText path
+          parts = Text.splitOn "." name
+          identity = case reverse parts of
+            member : owners -> NominalId (ModuleName <$> NonEmpty.nonEmpty (reverse owners)) member
+            [] -> NominalId Nothing name
+      pure $ if name `elem` rigid && null arguments then RigidType name
+        else if name == "Never" then NeverType else NominalType identity formed
+    TupleType members -> TupleTypeValue <$> traverse (resolvedType rigid) members
+    ReferenceType mutable held -> ReferenceTypeValue mutable <$> resolvedType rigid held
+    FunctionType asynchronous inputs result -> FunctionTypeValue asynchronous
+      <$> traverse (resolvedType rigid) inputs <*> resolvedType rigid result
+    UnitType -> Just UnitTypeValue
+    _ -> Nothing
+
+  declaredMember declaring traitText name = case
+    [ found
+    | Just scope <- [Map.lookup declaring scopes]
+    , candidate <- [declaring <> "." <> traitText <> "." <> name, traitText <> "." <> name]
+    , Just found <- [lookupScheme (scopeTypes scope) candidate] ] of
+      found : _ -> Just found
+      [] -> Nothing
+
+  -- A default inherited from an imported trait is declared in the trait's
+  -- module, so its body lowers there, where its names resolve, as the
+  -- evaluator runs it in that module's scope. Spans name their source, so one
+  -- declaration answers.
+  declaredAnywhere at = case
+    [ (moduleName, traitText, function, inherited)
+    | (moduleName, syntax, _) <- modules
+    , Just (traitText, function, inherited) <- [declaredAt (moduleDeclarations syntax) at] ] of
+      found : _ -> Just found
+      [] -> Nothing
 
   declaredAt declarations at = case
     [ (lastSegment (implTrait impl), function, False)
@@ -218,7 +288,7 @@ instanceTarget :: LowerState -> Span -> Text -> Maybe Type -> [CoreType] -> (Low
 instanceTarget state at key instantiated receiver = case Map.lookup key (contextInstances context) of
   Nothing -> halt at "this method" state
   Just found
-    | open found -> case instantiated >>= specialize state key (instanceModule found) (instanceFunction found) (instanceScheme found) (fixed found) of
+    | open found -> case instantiated >>= specialize state key (instanceModule found) (instanceFunction found) (instanceScheme found) (fixed found) (instanceDerived found) of
         Just (registered, copy, _) -> instanceTarget registered at copy Nothing receiver
         Nothing -> halt at "a generic method without settled type arguments" state
   Just found ->
@@ -229,6 +299,7 @@ instanceTarget state at key instantiated receiver = case Map.lookup key (context
  where
   context = lowerContext state
   open found = instanceSelfAtCall found
+    || not (Map.null (instanceDerived found))
     || any ((`Map.notMember` instanceBindings found) . fst) (schemeParams (instanceScheme found))
   fixed found = case receiver of
     kind : _ | instanceSelfAtCall found -> Map.insert "Self" kind (instanceBindings found)

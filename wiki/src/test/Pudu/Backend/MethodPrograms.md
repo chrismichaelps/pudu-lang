@@ -27,3 +27,19 @@ own source.
 ## Referenced by
 
 [[Native Trait Methods]] · [[Backend Module Programs]] · [[Backend Text Leak Tests]]
+
+## Defaults typed by trait parameters (#824)
+
+One program reaches defaults returning `Wrapped[T]`, `(T, T)` and `(V, T)` (a
+default with its own parameter) through a plain implementation
+(`Loud[Str] for Pair`), a generic one (`impl[U] Loud[U] for Box[U]`) at two
+types, and a trait-qualified call.
+
+Resolved Grill Log (#824): a separate regression reuses `T` in both the trait
+and implementation with different arguments, uses an aggregate derived
+argument `Array[T]`, and collides a default's own parameter with the
+implementation's. Handwritten output and counted cleanup exercise each copy.
+
+The collision regression also calls a default returning Int whose body uses
+the trait parameter through `self.word()`. Its signature carries no trait
+argument, proving that checked implementation heads supply the body bindings.
