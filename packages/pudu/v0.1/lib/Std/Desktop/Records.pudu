@@ -1,0 +1,78 @@
+module Std.Desktop.Records
+
+/// Why the adapter's bytes could not be read as records.
+///
+/// Each variant carries the byte offset where reading stopped.
+export type RecordError
+  = MissingLength(Int)
+  | LengthPastEnd(Int)
+  | MissingSeparator(Int)
+  | NotText(Int)
+  | EmptyRecord(Int)
+  | Unterminated(Int)
+
+/// One field: its UTF-8 byte length, a colon, the text, and a comma.
+export fn field(text: Str) -> Str { "{text.toBytes().length()}:{text}," }
+
+/// One record of fields, ending in a line feed.
+export fn encode(fields: &Array[Str]) -> Str {
+  var parts: Array[Str] = []
+  for text in *fields { parts = parts.push(field(text)) }
+  parts.join("") + "\n"
+}
+
+/// Several records, in order.
+export fn encodeAll(records: &Array[Array[Str]]) -> Str {
+  var parts: Array[Str] = []
+  for record in *records { parts = parts.push(encode(&record)) }
+  parts.join("")
+}
+
+/// The records in `bytes`, each an array of its fields.
+export fn decode(bytes: &Bytes) -> Result[Array[Array[Str]], RecordError] {
+  let total = bytes.length()
+  var records: Array[Array[Str]] = []
+  var current: Array[Str] = []
+  var at = 0
+  while at < total {
+    if bytes.at(at) == Some(10u8) {
+      if current.isEmpty() { return Err(EmptyRecord(at)) }
+      records = records.push(current)
+      current = []
+      at = at + 1
+      continue
+    }
+    let colon = bytes.drop(at).indexOf(bytesOf([58u8]))
+    if colon <= 0 || colon > 19 { return Err(MissingLength(at)) }
+    let digits = match bytes.slice(at, at + colon).toText() {
+      case Some(text) => text
+      case None => { return Err(MissingLength(at)) }
+    }
+    let length = match digits.toInt() {
+      case Some(value) if value >= 0 => value
+      case _ => { return Err(MissingLength(at)) }
+    }
+    let start = at + colon + 1
+    if length > total - start - 1 { return Err(LengthPastEnd(at)) }
+    if bytes.at(start + length) != Some(44u8) { return Err(MissingSeparator(start + length)) }
+    match bytes.slice(start, start + length).toText() {
+      case Some(text) => { current = current.push(text) }
+      case None => { return Err(NotText(start)) }
+    }
+    at = start + length + 1
+  }
+  if !current.isEmpty() { return Err(Unterminated(total)) }
+  Ok(records)
+}
+
+/// What went wrong, for a person.
+export fn explain(problem: &RecordError) -> Str {
+  match *problem {
+    case MissingLength(at) => "no field length at byte {at}"
+    case LengthPastEnd(at) => "the field at byte {at} runs past the end"
+    case MissingSeparator(at) => "no comma after the field ending at byte {at}"
+    case NotText(at) => "the field at byte {at} is not UTF-8"
+    case EmptyRecord(at) => "an empty record at byte {at}"
+    case Unterminated(at) => "the last record has no line feed at byte {at}"
+  }
+}

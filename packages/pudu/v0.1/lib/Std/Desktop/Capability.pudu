@@ -1,0 +1,232 @@
+module Std.Desktop.Capability
+
+import Std.Glob as Glob
+import Std.Io as Io
+import Std.Toml.Read as TomlRead
+import Std.Toml as Toml
+import Std.Url as Url
+
+/// Argument values a permission admits: some `allow` pattern matches and no `deny` pattern does.
+export type Scope = { allow: Array[Str], deny: Array[Str] }
+
+/// One command pattern a capability allows, with the arguments it may be called with.
+///
+/// A limit of `None` places no limit on the arguments.
+export type Permission = { command: Str, limit: Option[Scope] }
+
+/// What some views at some origins may call.
+export type Capability = {
+  identifier: Str,
+  views: Array[Str],
+  origins: Array[Str],
+  allow: Array[Permission],
+  deny: Array[Str]
+}
+
+/// The capabilities an application grants, validated.
+export type Grants = { capabilities: Array[Capability] }
+
+/// Whether a call may proceed, and with which argument limits.
+export type Decision = Unrestricted | Scoped(Array[Scope]) | Refused(Str)
+
+/// Why capabilities could not be read or combined.
+export type CapabilityError
+  = Unreadable(Str, Str)
+  | NotToml(Str, Str)
+  | MissingField(Str, Str)
+  | WrongType(Str, Str)
+  | Duplicate(Str)
+
+/// The origin every bundled page is served from.
+export const APP_ORIGIN: Str = "pudu://app"
+
+/// A capability for every view at the application's own origin, granting nothing yet.
+export fn capability(identifier: Str) -> Capability {
+  Capability{identifier: identifier, views: ["*"], origins: [APP_ORIGIN], allow: [], deny: []}
+}
+
+/// Allow a command pattern with any arguments.
+export fn permit(command: Str) -> Permission { Permission{command: command, limit: None} }
+
+/// Allow a command pattern for arguments matching `allow` and not `deny`.
+export fn permitWithin(command: Str, allow: &Array[Str], deny: &Array[Str]) -> Permission {
+  Permission{command: command, limit: Some(Scope{allow: *allow, deny: *deny})}
+}
+
+/// Capabilities combined into grants; identifiers must be unique.
+export fn combine(capabilities: &Array[Capability]) -> Result[Grants, CapabilityError] {
+  var seen: Set[Str] = setOf([])
+  for held in *capabilities {
+    if held.identifier in seen { return Err(Duplicate(held.identifier)) }
+    seen = seen.insert(held.identifier)
+  }
+  Ok(Grants{capabilities: *capabilities})
+}
+
+/// The origin of a page URL: scheme, host and any explicit port, or `null` when it has no host.
+export fn originOf(page: Str) -> Str {
+  match Url.parse(page) {
+    case Ok(url) => {
+      let base = url.scheme.toLower() + "://" + url.host.toLower()
+      match url.port {
+        case Some(port) => base + ":" + port.toText()
+        case None => base
+      }
+    }
+    case Err(_) => "null"
+  }
+}
+
+fn applies(held: &Capability, label: Str, origin: Str) -> Bool {
+  (held.views.contains("*") || held.views.contains(label)) && Glob.matchesAny(&held.origins, origin)
+}
+
+/// Whether `command`, called from view `label` at `origin`, may run.
+export fn decide(grants: &Grants, label: Str, origin: Str, command: Str) -> Decision {
+  var limits: Array[Scope] = []
+  var unrestricted = false
+  var granted = false
+  for held in grants.capabilities {
+    if !applies(&held, label, origin) { continue }
+    if Glob.matchesAny(&held.deny, command) { return Refused("{held.identifier} denies {command}") }
+    for permission in held.allow {
+      if Glob.matches(permission.command, command) {
+        granted = true
+        match permission.limit {
+          case Some(limit) => { limits = limits.push(limit) }
+          case None => { unrestricted = true }
+        }
+      }
+    }
+  }
+  if !granted { return Refused("no capability grants {command} to view {label} at {origin}") }
+  if unrestricted { Unrestricted } else { Scoped(limits) }
+}
+
+/// Whether a decision admits one argument value.
+export fn permits(decision: &Decision, value: Str) -> Bool {
+  match *decision {
+    case Unrestricted => true
+    case Refused(_) => false
+    case Scoped(limits) => {
+      var allowed = false
+      for limit in limits {
+        if Glob.matchesAny(&limit.deny, value) { return false }
+        if Glob.matchesAny(&limit.allow, value) { allowed = true }
+      }
+      allowed
+    }
+  }
+}
+
+fn substituted(pattern: Str, variables: &Array[(Str, Str)]) -> Str {
+  var result = pattern
+  for (name, value) in *variables { result = result.replace("$" + name, value) }
+  result
+}
+
+fn expandScope(limit: &Scope, variables: &Array[(Str, Str)]) -> Scope {
+  Scope {
+    allow: limit.allow.map(fn(pattern: Str) -> Str { substituted(pattern, variables) }),
+    deny: limit.deny.map(fn(pattern: Str) -> Str { substituted(pattern, variables) })
+  }
+}
+
+/// Grants with `$NAME` in every limit pattern replaced by its value, such as `$HOME` or `$DATA`.
+export fn expand(grants: &Grants, variables: &Array[(Str, Str)]) -> Grants {
+  Grants {
+    capabilities: grants.capabilities.map(fn(held: Capability) -> Capability {
+        Capability {
+          ..held,
+          allow: held.allow.map(fn(permission: Permission) -> Permission {
+              match permission.limit {
+                case Some(limit) => Permission{command: permission.command, limit: Some(expandScope(&limit, variables))}
+                case None => permission
+              }
+            })
+        }
+      })
+  }
+}
+
+fn texts(table: &Toml.Toml, key: Str, owner: Str, fallback: Array[Str]) -> Result[Array[Str], CapabilityError] {
+  match Toml.field(table, key) {
+    case None => Ok(fallback)
+    case Some(value) => {
+      let items = match Toml.asList(&value) {
+        case Some(items) => items
+        case None => { return Err(WrongType(owner, key)) }
+      }
+      var found: Array[Str] = []
+      for item in items {
+        match Toml.asText(&item) {
+          case Some(text) => { found = found.push(text) }
+          case None => { return Err(WrongType(owner, key)) }
+        }
+      }
+      Ok(found)
+    }
+  }
+}
+
+fn permissionOf(table: &Toml.Toml, owner: Str) -> Result[Permission, CapabilityError] {
+  let command = match Toml.field(table, "command") {
+    case Some(value) => match Toml.asText(&value) {
+      case Some(text) => text
+      case None => { return Err(WrongType(owner, "command")) }
+    }
+    case None => { return Err(MissingField(owner, "permissions.command")) }
+  }
+  let allow = texts(table, "allow", owner, []) ?
+  let deny = texts(table, "deny", owner, []) ?
+  if allow.isEmpty() && deny.isEmpty() { Ok(permit(command)) } else { Ok(permitWithin(command, &allow, &deny)) }
+}
+
+/// A capability from a parsed capability file.
+export fn parse(document: &Toml.Toml, source: Str) -> Result[Capability, CapabilityError] {
+  let identifier = match Toml.field(document, "identifier") {
+    case Some(value) => match Toml.asText(&value) {
+      case Some(text) => text
+      case None => { return Err(WrongType(source, "identifier")) }
+    }
+    case None => { return Err(MissingField(source, "identifier")) }
+  }
+  var allow: Array[Permission] = []
+  if let Some(listed) = Toml.field(document, "permissions") {
+    let tables = match Toml.asList(&listed) {
+      case Some(items) => items
+      case None => { return Err(WrongType(source, "permissions")) }
+    }
+    for table in tables { allow = allow.push(permissionOf(&table, source) ?) }
+  }
+  Ok(Capability {
+      identifier: identifier,
+      views: texts(document, "views", source, ["*"]) ?,
+      origins: texts(document, "origins", source, [APP_ORIGIN]) ?,
+      allow: allow,
+      deny: texts(document, "deny", source, []) ?
+    })
+}
+
+/// A capability read from a TOML file.
+export fn load(path: Str) -> Result[Capability, CapabilityError] {
+  let source = match Io.read(path) {
+    case Ok(text) => text
+    case Err(why) => { return Err(Unreadable(path, why)) }
+  }
+  match TomlRead.read(source) {
+    case Ok(document) => parse(&document, path)
+    case Err(problem) => Err(NotToml(path, show(problem)))
+  }
+}
+
+/// What went wrong, for a person.
+export fn explain(problem: &CapabilityError) -> Str {
+  match *problem {
+    case Unreadable(path, why) => "{path}: {why}"
+    case NotToml(path, why) => "{path} is not TOML: {why}"
+    case MissingField(path, name) => "{path} has no {name}"
+    case WrongType(path, name) => "{path}: {name} has the wrong type"
+    case Duplicate(identifier) => "two capabilities are named {identifier}"
+  }
+}

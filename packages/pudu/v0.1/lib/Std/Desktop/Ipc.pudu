@@ -1,0 +1,369 @@
+module Std.Desktop.Ipc
+
+import Std.Desktop.Bridge as Bridge
+import Std.Desktop.Capability as Capability
+import Std.Desktop.Protocol as Protocol
+import Std.Desktop.Shape {Describe}
+import Std.Desktop.Shape as Shape
+import Std.Desktop.Webview as Webview
+import Std.Json {Decode, Encode}
+import Std.Json as Json
+
+/// Why a call did not produce a value.
+export type FailureKind = UnknownCommand | Denied | InvalidArguments | Failed | Internal
+
+/// A failed call: its kind, a message for a person, and where in the arguments decoding stopped.
+export type Failure = { kind: FailureKind, message: Str, path: Str }
+
+/// The call a handler is answering: which view and origin made it, what its capabilities decided,
+/// and the frontend channel it was given, if any.
+export type Call = { view: Int, label: Str, origin: Str, command: Str, decision: Capability.Decision, channel: Option[Int] }
+
+/// One callable command and its wire shapes.
+export type Command = {
+  name: Str,
+  raw: Bool,
+  argument: Shape.Shape,
+  result: Shape.Shape,
+  message: Option[Shape.Shape],
+  run: fn(&Bytes, &Call) -> Result[Bytes, Failure]
+}
+
+/// An event the program emits, with its payload's shape.
+export type EventKind = { name: Str, payload: Shape.Shape }
+
+/// Validated commands and events.
+export type Registry = { commands: Map[Str, Command], events: Array[EventKind] }
+
+/// Why commands and events could not be registered.
+export type RegistryError = DuplicateName(Str) | EmptyName | ReservedName(Str)
+
+/// The frontend channel a streaming command posts messages of type `T` to, in order.
+export type Stream[T] = { view: Int, id: Int }
+
+/// The prefix of names the framework itself answers.
+export const RESERVED_PREFIX: Str = "pudu:"
+
+/// The header carrying a view's invoke key.
+export const KEY_HEADER: Str = "pudu-invoke-key"
+
+/// The header naming the channel a streaming call was given.
+export const CHANNEL_HEADER: Str = "pudu-channel"
+
+/// A handler's own failure, for a person.
+export fn failed(message: Str) -> Failure { Failure{kind: Failed, message: message, path: ""} }
+
+/// A refusal raised by a handler, such as an argument outside its scope.
+export fn denied(message: Str) -> Failure { Failure{kind: Denied, message: message, path: ""} }
+
+/// Whether this call's capabilities admit one scoped argument value.
+export fn allows(call: &Call, value: Str) -> Bool { Capability.permits(&call.decision, value) }
+
+/// A `Denied` failure unless this call's capabilities admit `value`.
+export fn within(call: &Call, value: Str) -> Result[(), Failure] {
+  if allows(call, value) { Ok(()) } else { Err(denied("{call.command} may not use {value}")) }
+}
+
+fn stepText(step: &Json.DecodeStep) -> Str {
+  match *step {
+    case Json.Key(name) => "." + name
+    case Json.Index(at) => "[{at}]"
+  }
+}
+
+fn argumentJson(body: &Bytes) -> Result[Json.Json, Failure] {
+  let text = match body.toText() {
+    case Some(found) => if found.isEmpty() { "null" } else { found }
+    case None => { return Err(Failure{kind: InvalidArguments, message: "the arguments are not UTF-8", path: ""}) }
+  }
+  match Json.decode(text) {
+    case Ok(found) => Ok(found)
+    case Err(problem) => Err(Failure{kind: InvalidArguments, message: Json.explain(&problem), path: ""})
+  }
+}
+
+fn decodeFailure(problem: &Json.DecodeError) -> Failure {
+  Failure {
+    kind: InvalidArguments,
+    message: Json.explainDecode(problem),
+    path: problem.path.map(fn(step: Json.DecodeStep) -> Str { stepText(&step) }).join("")
+  }
+}
+
+/// A command whose argument decodes from JSON and whose result encodes to it.
+export fn command[A: Decode + Describe, R: Encode + Describe](name: Str, handler: fn(A, &Call) -> Result[R, Failure]) -> Command {
+  Command {
+    name: name,
+    raw: false,
+    argument: A.describe(),
+    result: R.describe(),
+    message: None,
+    run: fn(body: &Bytes, call: &Call) -> Result[Bytes, Failure] {
+      let json = argumentJson(body) ?
+      let arguments = match A.decode(&json) {
+        case Ok(value) => value
+        case Err(problem) => { return Err(decodeFailure(&problem)) }
+      }
+      let answer = handler(arguments, call) ?
+      Ok(Json.encode(&answer.encode()).toBytes())
+    }
+  }
+}
+
+/// A command that receives and answers raw bytes.
+export fn rawCommand(name: Str, handler: fn(Bytes, &Call) -> Result[Bytes, Failure]) -> Command {
+  Command {
+    name: name,
+    raw: true,
+    argument: Shape.Binary,
+    result: Shape.Binary,
+    message: None,
+    run: fn(body: &Bytes, call: &Call) -> Result[Bytes, Failure] { handler(*body, call) }
+  }
+}
+
+/// A command that takes no arguments.
+export fn query[R: Encode + Describe](name: Str, handler: fn(&Call) -> Result[R, Failure]) -> Command {
+  Command {
+    name: name,
+    raw: false,
+    argument: Shape.Nothing,
+    result: R.describe(),
+    message: None,
+    run: fn(body: &Bytes, call: &Call) -> Result[Bytes, Failure] {
+      let answer = handler(call) ?
+      Ok(Json.encode(&answer.encode()).toBytes())
+    }
+  }
+}
+
+/// A command that also posts messages of type `M` to a channel the frontend passes with the call.
+export fn streamCommand[A: Decode + Describe, M: Encode + Describe, R: Encode + Describe](
+  name: Str,
+  handler: fn(A, &Stream[M], &Call) -> Result[R, Failure]
+) -> Command {
+  Command {
+    name: name,
+    raw: false,
+    argument: A.describe(),
+    result: R.describe(),
+    message: Some(M.describe()),
+    run: fn(body: &Bytes, call: &Call) -> Result[Bytes, Failure] {
+      let id = match call.channel {
+        case Some(found) => found
+        case None => { return Err(Failure{kind: InvalidArguments, message: "{call.command} streams; pass a channel", path: ""}) }
+      }
+      let json = argumentJson(body) ?
+      let arguments = match A.decode(&json) {
+        case Ok(value) => value
+        case Err(problem) => { return Err(decodeFailure(&problem)) }
+      }
+      let answer = handler(arguments, &Stream{view: call.view, id: id}, call) ?
+      Ok(Json.encode(&answer.encode()).toBytes())
+    }
+  }
+}
+
+/// An event the program emits with payloads of type `T`.
+export fn event[T: Describe](name: Str) -> EventKind { EventKind{name: name, payload: T.describe()} }
+
+fn checkedName(name: Str) -> Result[(), RegistryError] {
+  if name.isEmpty() { return Err(EmptyName) }
+  if name.startsWith(RESERVED_PREFIX) { return Err(ReservedName(name)) }
+  Ok(())
+}
+
+/// Commands and events, each name used once and none reserved.
+export fn registry(commands: &Array[Command], events: &Array[EventKind]) -> Result[Registry, RegistryError] {
+  var table: Map[Str, Command] = mapOf([])
+  for held in *commands {
+    checkedName(held.name) ?
+    if table.get(held.name) != None { return Err(DuplicateName(held.name)) }
+    table = table.insert(held.name, held)
+  }
+  var names: Set[Str] = setOf([])
+  for held in *events {
+    checkedName(held.name) ?
+    if held.name in names { return Err(DuplicateName(held.name)) }
+    names = names.insert(held.name)
+  }
+  Ok(Registry{commands: table, events: *events})
+}
+
+/// The wire name and status of each failure kind.
+fn kindWire(kind: &FailureKind) -> (Str, Int) {
+  match *kind {
+    case UnknownCommand => ("unknown-command", 404)
+    case Denied => ("denied", 403)
+    case InvalidArguments => ("invalid-arguments", 400)
+    case Failed => ("failed", 422)
+    case Internal => ("internal", 500)
+  }
+}
+
+fn crossOrigin(origin: Str) -> Array[(Str, Str)] {
+  if origin == Capability.APP_ORIGIN || origin == "null" {
+    []
+  } else {
+    [("Access-Control-Allow-Origin", origin), ("Vary", "Origin")]
+  }
+}
+
+/// The envelope answering a failed call.
+export fn failure(name: Str, origin: Str, problem: &Failure) -> Webview.Response {
+  let (wire, status) = kindWire(&problem.kind)
+  let envelope = Json.object(&[
+      ("kind", Json.Text(wire)),
+      ("message", Json.Text(problem.message)),
+      ("command", Json.Text(name)),
+      ("path", Json.Text(problem.path))
+    ])
+  let base = Protocol.json(status, &envelope)
+  Webview.Response{..base, headers: base.headers.concat(crossOrigin(origin))}
+}
+
+/// The answer to the cross-origin preflight a development server's page sends.
+export fn preflight(origin: Str) -> Webview.Response {
+  Webview.Response {
+    status: 204,
+    headers: crossOrigin(origin).concat([
+        ("Access-Control-Allow-Methods", "POST"),
+        ("Access-Control-Allow-Headers", "Content-Type, Pudu-Invoke-Key"),
+        ("Access-Control-Max-Age", "600")
+      ]),
+    body: bytesOf([])
+  }
+}
+
+/// The answer to one bridge request for a registered command.
+///
+/// `key` is the invoke key the requesting view was given and `label` its label.
+export fn dispatch(
+  commands: &Registry,
+  grants: &Capability.Grants,
+  key: Str,
+  label: Str,
+  request: &Webview.Pending,
+  body: &Bytes
+) -> Webview.Response {
+  let origin = Capability.originOf(request.page)
+  let name = match Protocol.ipcCommand(request.url) {
+    case Some(found) => found
+    case None => { return failure("", origin, &Failure{kind: UnknownCommand, message: "not a command URL", path: ""}) }
+  }
+  if request.method == "OPTIONS" { return preflight(origin) }
+  if request.method != "POST" { return failure(name, origin, &Failure{kind: InvalidArguments, message: "commands are called with POST", path: ""}) }
+  if Webview.header(request, KEY_HEADER) != Some(key) {
+    return failure(name, origin, &denied("the call did not come from this view's bridge"))
+  }
+  let held = match commands.commands.get(name) {
+    case Some(found) => found
+    case None => { return failure(name, origin, &Failure{kind: UnknownCommand, message: "no command is named {name}", path: ""}) }
+  }
+  let decision = Capability.decide(grants, label, origin, name)
+  if let Capability.Refused(why) = decision { return failure(name, origin, &denied(why)) }
+  let channel = match Webview.header(request, CHANNEL_HEADER) {
+    case Some(text) => text.toInt()
+    case None => None
+  }
+  let call = Call{view: request.view, label: label, origin: origin, command: name, decision: decision, channel: channel}
+  let run = held.run
+  match run(body, &call) {
+    case Ok(answer) => {
+      let kind = if held.raw { "application/octet-stream" } else { "application/json" }
+      Webview.Response{status: 200, headers: [("Content-Type", kind)].concat(crossOrigin(origin)), body: answer}
+    }
+    case Err(problem) => failure(name, origin, &problem)
+  }
+}
+
+/// The record delivering event `name` with `payload` to one view.
+export fn emitTo[T: Encode](view: Int, name: Str, payload: &T) -> Array[Str] {
+  let source = "window.__pudu && window.__pudu.__event({Json.encode(&Json.Text(name))}, {Json.encode(&payload.encode())}), void 0"
+  Webview.evaluate(view, "", source)
+}
+
+/// The records delivering an event to every listed view.
+export fn emit[T: Encode](views: &Array[Int], name: Str, payload: &T) -> Array[Array[Str]] {
+  views.map(fn(view: Int) -> Array[Str] { emitTo(view, name, payload) })
+}
+
+/// Send one message on a stream; messages arrive in the order they are posted.
+export fn post[T: Encode](stream: &Stream[T], message: &T) -> Result[(), Webview.WebviewError] {
+  let source = "window.__pudu && window.__pudu.__channel({stream.id}, {Json.encode(&message.encode())}), void 0"
+  Webview.send(&[Webview.evaluate(stream.view, "", source)])
+}
+
+/// Close a stream; the frontend's `onclose` runs and later messages are dropped.
+export fn finish[T](stream: &Stream[T]) -> Result[(), Webview.WebviewError] {
+  Webview.send(&[Webview.evaluate(stream.view, "", "window.__pudu && window.__pudu.__close({stream.id}), void 0")])
+}
+
+fn signature(held: &Command) -> Str {
+  let answer = Shape.typescript(&held.result)
+  let call = Json.encode(&Json.Text(held.name))
+  if held.raw {
+    return "  {Shape.key(held.name)}: (body: ArrayBuffer | ArrayBufferView): Promise<ArrayBuffer> => bridge.invoke<ArrayBuffer>({call}, body),"
+  }
+  let argument = Shape.typescript(&held.argument)
+  match (held.argument, held.message) {
+    case (_, Some(message)) => "  {Shape.key(held.name)}: (args: {argument}, channel: Channel<{Shape.typescript(&message)}>): Promise<{answer}> => bridge.invoke<{answer}>({call}, args, \{ channel \}),"
+    case (Shape.Nothing, None) => "  {Shape.key(held.name)}: (): Promise<{answer}> => bridge.invoke<{answer}>({call}),"
+    case _ => "  {Shape.key(held.name)}: (args: {argument}): Promise<{answer}> => bridge.invoke<{answer}>({call}, args),"
+  }
+}
+
+/// The frontend module for a registry: named types, typed commands, typed events and the bridge.
+export fn typescript(commands: &Registry) -> Str {
+  var shapes: Array[Shape.Shape] = []
+  var calls: Array[Str] = []
+  for (_, held) in commands.commands {
+    shapes = shapes.push(held.argument).push(held.result)
+    if let Some(message) = held.message { shapes = shapes.push(message) }
+    calls = calls.push(signature(&held))
+  }
+  var events: Array[Str] = []
+  for held in commands.events {
+    shapes = shapes.push(held.payload)
+    events = events.push("  {Shape.key(held.name)}: {Shape.typescript(&held.payload)};")
+  }
+  [
+    "// Generated by `pudu desktop types`; regenerate instead of editing.",
+    Bridge.declarations(),
+    "",
+    Shape.declarations(&shapes),
+    "",
+    "/** The events the program emits, by name. */",
+    "export interface Events \{",
+    events.join("\n"),
+    "\}",
+    "",
+    "const bridge: PuduBridge = window.__pudu;",
+    "",
+    "/** Listen for one of the program's events. */",
+    "export function listen<K extends keyof Events>(event: K, handler: (message: PuduEvent<Events[K]>) => void): () => void \{",
+    "  return bridge.listen<Events[K]>(event as string, handler);",
+    "\}",
+    "",
+    "/** Send an event to the program. */",
+    "export const emit = (event: string, payload?: unknown): Promise<null> => bridge.emit(event, payload);",
+    "",
+    "/** Create a channel to pass to a command that streams. */",
+    "export const channel = <T>(onmessage?: (message: T) => void): Channel<T> => new bridge.Channel<T>(onmessage);",
+    "",
+    "/** Every command the program answers. */",
+    "export const commands = \{",
+    calls.join("\n"),
+    "\};",
+    ""
+  ].join("\n")
+}
+
+/// What went wrong, for a person.
+export fn explain(problem: &RegistryError) -> Str {
+  match *problem {
+    case DuplicateName(name) => "{name} is registered twice"
+    case EmptyName => "a command or event has no name"
+    case ReservedName(name) => "{name} uses the reserved prefix {RESERVED_PREFIX}"
+  }
+}

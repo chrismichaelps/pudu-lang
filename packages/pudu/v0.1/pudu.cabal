@@ -13,6 +13,9 @@ homepage:           https://github.com/chrismichaelps/pudu-lang
 bug-reports:        https://github.com/chrismichaelps/pudu-lang/issues
 build-type:         Simple
 extra-source-files: cbits/pudu_desktop.h
+                    cbits/pudu_webview.h
+                    cbits/pudu_webview_records.h
+                    cbits/pudu_webview_macos.h
                     cbits/pudu_desktop_host.h
                     cbits/pudu_audio.h
                     cbits/pudu_audio_stream.h
@@ -235,6 +238,8 @@ library
     Pudu.Eval.Aead
     Pudu.Eval.Child
     Pudu.Eval.Verify
+    Pudu.Eval.Sign
+    Pudu.Eval.Webview
     Pudu.Eval.Signal
     Pudu.Eval.Entropy
     Pudu.Eval.DeclaredOwner
@@ -504,11 +509,14 @@ library
                     cbits/pudu_desktop_access.m
                     cbits/pudu_desktop_menu.m
                     cbits/pudu_desktop_window.m
+                    cbits/pudu_webview_records.c
+                    cbits/pudu_webview_macos.m
+                    cbits/pudu_webview_macos_view.m
                     cbits/pudu_audio.c
                     cbits/pudu_audio_stream.c
     cc-options:     -fobjc-arc
-    cpp-options:    -DPUDU_DARWIN_DESKTOP -DPUDU_DARWIN_AUDIO
-    frameworks:     AppKit AudioToolbox CoreGraphics
+    cpp-options:    -DPUDU_DARWIN_DESKTOP -DPUDU_DARWIN_AUDIO -DPUDU_NATIVE_WEBVIEW
+    frameworks:     AppKit AudioToolbox CoreGraphics WebKit
 
 executable pudu
   import:           warnings

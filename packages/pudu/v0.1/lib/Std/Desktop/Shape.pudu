@@ -1,0 +1,159 @@
+module Std.Desktop.Shape
+
+import Std.Json as Json
+import Std.Meta
+
+/// A value's wire form, as the frontend sees it.
+export type Shape
+  = Text
+  | Number
+  | Boolean
+  | Binary
+  | Anything
+  | Nothing
+  | List(Array[Shape])
+  | Optional(Array[Shape])
+  | Object(Array[(Str, Shape)])
+  | Tuple(Array[Shape])
+  | Variants(Array[(Str, Shape)])
+  | Applied(Str, Array[Shape])
+  | Reference(Str, fn() -> Shape)
+
+/// A type that can say what its wire form is.
+export trait Describe {
+  /// The type's wire form.
+  fn describe() -> Shape
+}
+
+impl Describe for Int { fn describe() -> Shape { Number } }
+impl Describe for Float64 { fn describe() -> Shape { Number } }
+impl Describe for Decimal { fn describe() -> Shape { Number } }
+impl Describe for Str { fn describe() -> Shape { Text } }
+impl Describe for Bool { fn describe() -> Shape { Boolean } }
+impl Describe for Bytes { fn describe() -> Shape { Binary } }
+impl Describe for Json.Json { fn describe() -> Shape { Anything } }
+impl [A: Describe] Describe for Array[A] { fn describe() -> Shape { List([A.describe()]) } }
+impl [A: Describe] Describe for Option[A] { fn describe() -> Shape { Optional([A.describe()]) } }
+
+/// A record is an object of its wire-named fields; `@skip` fields are absent.
+export derive Describe for T: Record {
+  fn describe() -> Shape {
+    Reference(Meta.nameOf[T](), fn() -> Shape {
+        Object(Meta.collect[T](fn(member: Meta.Field[T, F]) -> Option[(Str, Shape)] where F: Describe {
+              if member.has("skip") { None } else { Some((member.attributeOr("json", member.name), F.describe())) }
+            }))
+      })
+  }
+}
+
+/// A sum is a union of one-key objects, one per variant.
+export derive Describe for T: Sum {
+  fn describe() -> Shape {
+    Reference(Meta.nameOf[T](), fn() -> Shape {
+        var cases: Array[(Str, Shape)] = []
+        comptime for variant: Meta.Variant[T] in Meta.variants[T]() {
+          let payload = if variant.positional {
+            Tuple(variant.collect(fn(member: Meta.Field[T, F]) -> Option[Shape] where F: Describe {
+                  Some(F.describe())
+                }))
+          } else {
+            Object(variant.collect(fn(member: Meta.Field[T, F]) -> Option[(Str, Shape)] where F: Describe {
+                  if member.has("skip") { None } else { Some((member.attributeOr("json", member.name), F.describe())) }
+                }))
+          }
+          cases = cases.push((variant.attributeOr("json", variant.name), payload))
+        }
+        Variants(cases)
+      })
+  }
+}
+
+const IDENTIFIER_START: Str = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ_$"
+const IDENTIFIER_REST: Str = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ_$0123456789"
+
+/// A property name as written in a type: bare when it is an identifier, quoted otherwise.
+export fn key(name: Str) -> Str {
+  if !name.isEmpty() && name.take(1).spanOf(IDENTIFIER_START) == 1 && name.spanOf(IDENTIFIER_REST) == name.length() {
+    name
+  } else {
+    Json.encode(&Json.Text(name))
+  }
+}
+
+fn first(shapes: &Array[Shape]) -> Shape {
+  if shapes.isEmpty() { Anything } else { shapes[0] }
+}
+
+/// The TypeScript type expression for a shape; named types appear by name.
+export fn typescript(shape: &Shape) -> Str {
+  match *shape {
+    case Text => "string"
+    case Number => "number"
+    case Boolean => "boolean"
+    case Binary => "ArrayBuffer"
+    case Anything => "unknown"
+    case Nothing => "null"
+    case List(inner) => "Array<{typescript(&first(&inner))}>"
+    case Optional(inner) => "{typescript(&first(&inner))} | null"
+    case Object(fields) => {
+      if fields.isEmpty() { return "Record<string, never>" }
+      var parts: Array[Str] = []
+      for (name, held) in fields { parts = parts.push("{key(name)}: {typescript(&held)}") }
+      "\{ " + parts.join("; ") + " \}"
+    }
+    case Tuple(members) => {
+      var parts: Array[Str] = []
+      for held in members { parts = parts.push(typescript(&held)) }
+      "[" + parts.join(", ") + "]"
+    }
+    case Variants(cases) => {
+      if cases.isEmpty() { return "never" }
+      var parts: Array[Str] = []
+      for (name, held) in cases { parts = parts.push("\{ {key(name)}: {typescript(&held)} \}") }
+      parts.join(" | ")
+    }
+    case Applied(name, arguments) => {
+      var parts: Array[Str] = []
+      for held in arguments { parts = parts.push(typescript(&held)) }
+      name + "<" + parts.join(", ") + ">"
+    }
+    case Reference(name, _) => name
+  }
+}
+
+fn children(shape: &Shape) -> Array[Shape] {
+  match *shape {
+    case List(inner) => inner
+    case Optional(inner) => inner
+    case Object(fields) => fields.map(fn(entry: (Str, Shape)) -> Shape { let (_, held) = entry
+        held })
+    case Tuple(members) => members
+    case Applied(_, arguments) => arguments
+    case Variants(cases) => cases.map(fn(entry: (Str, Shape)) -> Shape { let (_, held) = entry
+        held })
+    case _ => []
+  }
+}
+
+/// Every named type reachable from `shapes`, each declared once as an exported alias, sorted by name.
+export fn declarations(shapes: &Array[Shape]) -> Str {
+  var pending = *shapes
+  var declared: Map[Str, Str] = mapOf([])
+  while !pending.isEmpty() {
+    let shape = pending[pending.length() - 1]
+    pending = pending.pop()
+    match shape {
+      case Reference(name, body) => {
+        if declared.get(name) == None {
+          let held = body()
+          declared = declared.insert(name, "export type {name} = {typescript(&held)};")
+          pending = pending.concat(children(&held))
+        }
+      }
+      case other => { pending = pending.concat(children(&other)) }
+    }
+  }
+  var lines: Array[Str] = []
+  for (_, line) in declared { lines = lines.push(line) }
+  lines.join("\n")
+}

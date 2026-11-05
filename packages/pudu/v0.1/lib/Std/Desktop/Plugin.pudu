@@ -1,0 +1,186 @@
+module Std.Desktop.Plugin
+
+import Std.Desktop.Webview as Webview
+import Std.Json as Json
+
+/// Something a plugin may do.
+export type PluginPermission
+  = InjectScript
+  | InjectStyle
+  | ModifyContent
+  | BlockRequests
+  | ObserveNavigation
+  | Invoke(Str)
+
+/// A script a plugin injects where `matches` (URL globs) hold; `modifies` marks one that changes loaded pages.
+export type Injection = { source: Str, matches: Array[Str], at: Webview.Injection, allFrames: Bool, modifies: Bool }
+
+/// A style sheet a plugin adds where `matches` hold.
+export type StyleInjection = { css: Str, matches: Array[Str] }
+
+/// What a blocking rule does to a matching request.
+export type RuleAction = Block | BlockCookies | HideElements(Str) | UpgradeToHttps
+
+/// One declarative request rule: a URL glob, its action, and optional resource types and domains.
+export type BlockRule = { pattern: Str, action: RuleAction, resources: Array[Str], domains: Array[Str] }
+
+/// Commands a plugin wants sent when a view navigates to a URL.
+export type NavigationHook = fn(Int, Str) -> Array[Array[Str]]
+
+/// A plugin and everything it contributes.
+export type Plugin = {
+  name: Str,
+  permissions: Array[PluginPermission],
+  scripts: Array[Injection],
+  styles: Array[StyleInjection],
+  rules: Array[BlockRule],
+  hooks: Array[NavigationHook]
+}
+
+/// Why a plugin was not admitted.
+export type PluginError = MissingPermission(Str, Str) | NotGranted(Str, Array[Str])
+
+/// Builds a permission from the text after its prefix, such as the command of `invoke:`.
+export type PermissionFactory = fn(Str) -> PluginPermission
+
+/// One factory per permission name; `invoke` takes the command after its colon.
+const PERMISSION_FACTORIES: Map[Str, PermissionFactory] = mapOf([
+    ("inject-script", fn(detail: Str) -> PluginPermission { InjectScript }),
+    ("inject-style", fn(detail: Str) -> PluginPermission { InjectStyle }),
+    ("modify-content", fn(detail: Str) -> PluginPermission { ModifyContent }),
+    ("block-requests", fn(detail: Str) -> PluginPermission { BlockRequests }),
+    ("observe-navigation", fn(detail: Str) -> PluginPermission { ObserveNavigation }),
+    ("invoke", fn(detail: Str) -> PluginPermission { Invoke(detail) }),
+  ])
+
+/// Characters a regular expression gives meaning, written literally when they appear in a pattern.
+const REGEX_SPECIAL: Set[Char] = #{'.', '+', '?', '^', '$', '{', '}', '(', ')', '|', '[', ']', '\\', '/'}
+
+/// A plugin that contributes nothing yet.
+export fn plugin(name: Str) -> Plugin {
+  Plugin{name: name, permissions: [], scripts: [], styles: [], rules: [], hooks: []}
+}
+
+/// A permission's name, as capability and plugin files write it.
+export fn permissionName(permission: &PluginPermission) -> Str {
+  match *permission {
+    case InjectScript => "inject-script"
+    case InjectStyle => "inject-style"
+    case ModifyContent => "modify-content"
+    case BlockRequests => "block-requests"
+    case ObserveNavigation => "observe-navigation"
+    case Invoke(command) => "invoke:" + command
+  }
+}
+
+/// A permission from its name, or nothing when the name is not one.
+export fn parsePermission(name: Str) -> Option[PluginPermission] {
+  let colon = name.indexOf(":")
+  let (head, detail) = if colon < 0 { (name, "") } else { (name.take(colon), name.drop(colon + 1)) }
+  if (head == "invoke") == detail.isEmpty() { return None }
+  let factory = PERMISSION_FACTORIES.get(head) ?
+  Some(factory(detail))
+}
+
+/// The permissions a plugin's contents need.
+export fn required(held: &Plugin) -> Array[PluginPermission] {
+  var needs: Array[PluginPermission] = []
+  if held.scripts.length() > 0 { needs = needs.push(InjectScript) }
+  if held.scripts.filter(fn(script: Injection) -> Bool { script.modifies }).length() > 0 { needs = needs.push(ModifyContent) }
+  if held.styles.length() > 0 { needs = needs.push(InjectStyle) }
+  if held.rules.length() > 0 { needs = needs.push(BlockRequests) }
+  if held.hooks.length() > 0 { needs = needs.push(ObserveNavigation) }
+  needs
+}
+
+/// Admit a plugin whose declared permissions cover its contents and are all granted.
+export fn check(held: &Plugin, granted: &Array[Str]) -> Result[(), PluginError] {
+  let declared = held.permissions.map(fn(permission: PluginPermission) -> Str { permissionName(&permission) })
+  for need in required(held) {
+    let name = permissionName(&need)
+    if !declared.contains(name) { return Err(MissingPermission(held.name, name)) }
+  }
+  let refused = declared.filter(fn(name: Str) -> Bool { !granted.contains(name) })
+  if refused.isEmpty() { Ok(()) } else { Err(NotGranted(held.name, refused)) }
+}
+
+/// A URL glob as an anchored regular expression: `*` is any run, every other character literal.
+export fn regexOf(pattern: Str) -> Str {
+  var parts: Array[Str] = ["^"]
+  for character in pattern.chars() {
+    if character == '*' {
+      parts = parts.push(".*")
+    } else if character in REGEX_SPECIAL {
+      parts = parts.push("\\" + character.toText())
+    } else {
+      parts = parts.push(character.toText())
+    }
+  }
+  parts.push("$").join("")
+}
+
+/// Source that runs `source` only on pages whose URL matches one of `matches`.
+export fn guarded(source: Str, matches: &Array[Str]) -> Str {
+  if matches.isEmpty() { return "(function()\{\n" + source + "\n\})();" }
+  let patterns = matches.map(fn(pattern: Str) -> Str { Json.encode(&Json.Text(regexOf(pattern))) }).join(",")
+  "(function()\{var p=[" + patterns + "];if(!p.some(function(r)\{return new RegExp(r).test(location.href)\}))return;\n" + source + "\n\})();"
+}
+
+fn styleSource(css: Str) -> Str {
+  "var s=document.createElement('style');s.textContent=" + Json.encode(&Json.Text(css)) + ";var put=function()\{(document.head||document.documentElement).appendChild(s)\};if(document.documentElement)\{put()\}else\{document.addEventListener('DOMContentLoaded',put)\}"
+}
+
+fn actionJson(action: &RuleAction) -> Json.Json {
+  match *action {
+    case Block => Json.object(&[("type", Json.Text("block"))])
+    case BlockCookies => Json.object(&[("type", Json.Text("block-cookies"))])
+    case HideElements(selector) => Json.object(&[("type", Json.Text("css-display-none")), ("selector", Json.Text(selector))])
+    case UpgradeToHttps => Json.object(&[("type", Json.Text("make-https"))])
+  }
+}
+
+fn texts(values: &Array[Str]) -> Json.Json { Json.list(&values.map(fn(value: Str) -> Json.Json { Json.Text(value) })) }
+
+/// Rules in the platform's content-rule format.
+export fn rulesJson(rules: &Array[BlockRule]) -> Str {
+  let entries = rules.map(fn(rule: BlockRule) -> Json.Json {
+      var trigger = [("url-filter", Json.Text(regexOf(rule.pattern)))]
+      if !rule.resources.isEmpty() { trigger = trigger.push(("resource-type", texts(&rule.resources))) }
+      if !rule.domains.isEmpty() { trigger = trigger.push(("if-domain", texts(&rule.domains))) }
+      Json.object(&[("trigger", Json.object(&trigger)), ("action", actionJson(&rule.action))])
+    })
+  Json.encode(&Json.list(&entries))
+}
+
+/// A view with every plugin's scripts, styles and rules added, in plugin order.
+export fn apply(spec: &Webview.ViewSpec, plugins: &Array[Plugin]) -> Webview.ViewSpec {
+  var scripts = spec.scripts
+  var rules = spec.rules
+  for held in *plugins {
+    for script in held.scripts {
+      scripts = scripts.push(Webview.Script{source: guarded(script.source, &script.matches), at: script.at, allFrames: script.allFrames})
+    }
+    for style in held.styles {
+      scripts = scripts.push(Webview.Script{source: guarded(styleSource(style.css), &style.matches), at: Webview.AtStart, allFrames: false})
+    }
+    if !held.rules.isEmpty() { rules = rules.push(rulesJson(&held.rules)) }
+  }
+  Webview.ViewSpec{..*spec, scripts: scripts, rules: rules}
+}
+
+/// The commands every plugin's hooks want for a navigation.
+export fn navigated(plugins: &Array[Plugin], view: Int, url: Str) -> Array[Array[Str]] {
+  var commands: Array[Array[Str]] = []
+  for held in *plugins {
+    for hook in held.hooks { commands = commands.concat(hook(view, url)) }
+  }
+  commands
+}
+
+/// What went wrong, for a person.
+export fn explain(problem: &PluginError) -> Str {
+  match *problem {
+    case MissingPermission(name, permission) => "plugin {name} needs {permission} but does not declare it"
+    case NotGranted(name, refused) => "plugin {name} asks for " + refused.join(", ") + ", which the application does not grant"
+  }
+}

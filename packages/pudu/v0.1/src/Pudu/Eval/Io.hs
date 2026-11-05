@@ -10,6 +10,8 @@ module Pudu.Eval.Io
   , environmentPairs
   , exitWith
   , fileSizeAt
+  , modifiedMillisAt
+  , executableLocation
   , homeDirectoryPath
   , isSymbolicLinkAt
   , listDirectoryAt
@@ -64,6 +66,7 @@ import System.Directory
   , emptyPermissions
   , executable
   , getFileSize
+  , getModificationTime
   , getPermissions
   , getTemporaryDirectory
   , listDirectory
@@ -80,7 +83,8 @@ import System.Directory
   , setPermissions
   , writable
   )
-import System.Environment (getArgs, getEnvironment, lookupEnv)
+import Data.Time.Clock.POSIX (utcTimeToPOSIXSeconds)
+import System.Environment (getArgs, getEnvironment, getExecutablePath, lookupEnv)
 import qualified System.FilePath as FilePath
 import System.Exit (ExitCode (ExitFailure), exitSuccess)
 import qualified System.Exit
@@ -312,6 +316,18 @@ canonicalPathAt path = attempt $ do
 {-| A file's size in bytes. -}
 fileSizeAt :: FilePath -> IO (IoOutcome Integer)
 fileSizeAt path = attempt (getFileSize path)
+
+{-| When a file last changed, in milliseconds since the Unix epoch. -}
+modifiedMillisAt :: FilePath -> IO (IoOutcome Integer)
+modifiedMillisAt path = attempt (millis <$> getModificationTime path)
+ where
+  millis stamp = floor (utcTimeToPOSIXSeconds stamp * 1000)
+
+{-| The file this process was started from: for a bundled program, the
+    bundle itself, which is how a packaged application finds what was
+    installed beside it. -}
+executableLocation :: IO (IoOutcome Text)
+executableLocation = attempt (Text.pack <$> getExecutablePath)
 
 programArguments :: IO [Text]
 programArguments = map Text.pack <$> getArgs

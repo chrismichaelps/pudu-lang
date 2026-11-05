@@ -48,6 +48,9 @@ data Builtin
   | InflateBuiltin
   | VerifyRsaBuiltin
   | VerifyEcdsaBuiltin
+  | Ed25519PublicBuiltin
+  | Ed25519SignBuiltin
+  | Ed25519VerifyBuiltin
   | SealBuiltin
   | OpenSealedBuiltin
   | SignalWatchStopBuiltin
@@ -112,6 +115,11 @@ data Builtin
   | DesktopMenuBuiltin
   | DesktopMenuReportBuiltin
   | DesktopCloseBuiltin
+  | WebviewSendBuiltin
+  | WebviewPumpBuiltin
+  | WebviewEventsBuiltin
+  | WebviewBodyBuiltin
+  | WebviewRespondBuiltin
   | AudioDevicePlayBuiltin
   | AudioStreamOpenBuiltin
   | AudioStreamWriteBuiltin
@@ -152,6 +160,8 @@ data Builtin
   | CreateSymbolicLinkBuiltin
   | CanonicalPathBuiltin
   | FileSizeBuiltin
+  | ModifiedTimeBuiltin
+  | ExecutablePathBuiltin
   | DirectoryExistsBuiltin
   | HomeDirectoryBuiltin
   | PathSeparatorsBuiltin
@@ -274,6 +284,9 @@ builtinName value = case value of
   InflateBuiltin -> "inflateRaw"
   VerifyRsaBuiltin -> "verifyRsaSha256"
   VerifyEcdsaBuiltin -> "verifyEcdsaSha256"
+  Ed25519PublicBuiltin -> "ed25519PublicOf"
+  Ed25519SignBuiltin -> "ed25519SignWith"
+  Ed25519VerifyBuiltin -> "ed25519Verify"
   SealBuiltin -> "sealBytes"
   OpenSealedBuiltin -> "openSealedBytes"
   SignalWatchStopBuiltin -> "signalWatchStop"
@@ -343,6 +356,11 @@ builtinName value = case value of
   DesktopMenuBuiltin -> "desktopMenu"
   DesktopMenuReportBuiltin -> "desktopMenuReport"
   DesktopCloseBuiltin -> "desktopClose"
+  WebviewSendBuiltin -> "webviewSend"
+  WebviewPumpBuiltin -> "webviewPump"
+  WebviewEventsBuiltin -> "webviewEvents"
+  WebviewBodyBuiltin -> "webviewBody"
+  WebviewRespondBuiltin -> "webviewRespond"
   AudioDevicePlayBuiltin -> "audioDevicePlay"
   AudioStreamOpenBuiltin -> "audioStreamOpen"
   AudioStreamWriteBuiltin -> "audioStreamWrite"
@@ -383,6 +401,8 @@ builtinName value = case value of
   CreateSymbolicLinkBuiltin -> "createSymbolicLink"
   CanonicalPathBuiltin -> "canonicalPath"
   FileSizeBuiltin -> "fileSize"
+  ModifiedTimeBuiltin -> "modifiedTime"
+  ExecutablePathBuiltin -> "executablePath"
   DirectoryExistsBuiltin -> "directoryExists"
   HomeDirectoryBuiltin -> "userHome"
   PathSeparatorsBuiltin -> "pathSeparators"

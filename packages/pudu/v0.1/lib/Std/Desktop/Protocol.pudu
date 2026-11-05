@@ -1,0 +1,177 @@
+module Std.Desktop.Protocol
+
+import Std.Archive.Tar as Tar
+import Std.Compress.Gzip as Gzip
+import Std.Desktop.Webview as Webview
+import Std.Io as Io
+import Std.Json as Json
+import Std.Mime as Mime
+import Std.Path as Path
+import Std.Url as Url
+
+/// Where the application's frontend comes from.
+export type Assets = Directory(Str) | Packed(Map[Str, Bytes])
+
+/// How assets are answered: the content security policy, a single-page fallback, and extra headers.
+export type Policy = { csp: Str, fallback: Option[Str], headers: Array[(Str, Str)] }
+
+/// Why an asset path or archive was refused.
+export type AssetError = Escapes(Str) | Unreadable(Str, Str) | NotArchive(Str)
+
+/// The policy pages get unless the application widens it.
+export const DEFAULT_CSP: Str = "default-src 'self' pudu:; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' pudu: data: blob:; connect-src 'self' pudu:; object-src 'none'; base-uri 'self'; frame-ancestors 'none'"
+
+/// The path prefix the bridge calls the program through.
+export const IPC_PREFIX: Str = "/.pudu/ipc/"
+
+/// Media types that are text and are served with a character set.
+const TEXT_TYPES: Set[Str] = #{"text/html", "text/css", "text/javascript", "application/json", "text/plain", "image/svg+xml", "application/xml", "text/markdown"}
+
+/// The default policy, with no single-page fallback.
+export fn policy() -> Policy { Policy{csp: DEFAULT_CSP, fallback: None, headers: []} }
+
+/// The media type a file is served with.
+export fn mimeOf(path: Str) -> Str {
+  let found = match Path.extensionOf(path) {
+    case Some(extension) => Mime.fromExtension(extension)
+    case None => "application/octet-stream"
+  }
+  if found in TEXT_TYPES { found + "; charset=utf-8" } else { found }
+}
+
+/// A URL path made into a relative asset path, or `Escapes` when it would leave the root.
+export fn resolveAsset(urlPath: Str) -> Result[Str, AssetError] {
+  let decoded = Url.decodeSegment(urlPath)
+  if decoded.contains("\\") || decoded.contains("\0") || decoded.contains(":") { return Err(Escapes(urlPath)) }
+  var parts: Array[Str] = []
+  for segment in decoded.split("/") {
+    if segment == ".." { return Err(Escapes(urlPath)) }
+    if segment != "" && segment != "." { parts = parts.push(segment) }
+  }
+  if parts.isEmpty() || decoded.endsWith("/") { parts = parts.push("index.html") }
+  Ok(parts.join("/"))
+}
+
+/// The command named by a bridge call's URL, when the URL is one.
+export fn ipcCommand(url: Str) -> Option[Str] {
+  match Url.parse(url) {
+    case Ok(parsed) if parsed.path.startsWith(IPC_PREFIX) => Some(Url.decodeComponent(parsed.path.drop(IPC_PREFIX.length())))
+    case _ => None
+  }
+}
+
+/// A response of text.
+export fn text(status: Int, body: Str) -> Webview.Response {
+  Webview.Response{status: status, headers: [("Content-Type", "text/plain; charset=utf-8")], body: body.toBytes()}
+}
+
+/// A response of JSON.
+export fn json(status: Int, value: &Json.Json) -> Webview.Response {
+  Webview.Response{status: status, headers: [("Content-Type", "application/json")], body: Json.encode(value).toBytes()}
+}
+
+/// A response of raw bytes.
+export fn bytes(status: Int, body: &Bytes) -> Webview.Response {
+  Webview.Response{status: status, headers: [("Content-Type", "application/octet-stream")], body: *body}
+}
+
+fn lookup(assets: &Assets, path: Str) -> Option[Bytes] {
+  match *assets {
+    case Packed(files) => files.get(path)
+    case Directory(root) => match Io.readAllBytes(Path.join(root, path)) {
+      case Ok(found) => Some(found)
+      case Err(_) => None
+    }
+  }
+}
+
+fn answered(status: Int, path: Str, content: Bytes, rules: &Policy, head: Bool) -> Webview.Response {
+  var headers = [
+    ("Content-Type", mimeOf(path)),
+    ("Content-Security-Policy", rules.csp),
+    ("X-Content-Type-Options", "nosniff"),
+    ("Cache-Control", "no-cache")
+  ]
+  headers = headers.concat(rules.headers)
+  Webview.Response{status: status, headers: headers, body: if head { bytesOf([]) } else { content }}
+}
+
+/// The answer to one page request for an asset.
+export fn serve(assets: &Assets, request: &Webview.Pending, rules: &Policy) -> Webview.Response {
+  let head = request.method == "HEAD"
+  if request.method != "GET" && !head { return text(405, "only GET and HEAD are served") }
+  let urlPath = match Url.parse(request.url) {
+    case Ok(parsed) => parsed.path
+    case Err(_) => { return text(400, "the request URL cannot be read") }
+  }
+  let path = match resolveAsset(urlPath) {
+    case Ok(found) => found
+    case Err(_) => { return text(403, "the path leaves the application") }
+  }
+  if let Some(content) = lookup(assets, path) { return answered(200, path, content, rules, head) }
+  if let Some(fallback) = rules.fallback {
+    if let Some(content) = lookup(assets, fallback) { return answered(200, fallback, content, rules, head) }
+  }
+  text(404, "no asset at {path}")
+}
+
+/// Every file under `root`, as paths relative to it, sorted.
+export fn walk(root: Str) -> Result[Array[Str], AssetError] {
+  var found: Array[Str] = []
+  var pending = [""]
+  while !pending.isEmpty() {
+    let relative = pending[pending.length() - 1]
+    pending = pending.pop()
+    let absolute = if relative == "" { root } else { Path.join(root, relative) }
+    let names = match Io.list(absolute) {
+      case Ok(names) => names
+      case Err(why) => { return Err(Unreadable(absolute, why)) }
+    }
+    for name in names {
+      let child = if relative == "" { name } else { relative + "/" + name }
+      if directoryExists(Path.join(root, child)) { pending = pending.push(child) } else { found = found.push(child) }
+    }
+  }
+  Ok(found.sortBy(fn(left: Str, right: Str) -> Bool { left < right }))
+}
+
+/// A frontend directory as one gzip tar archive; source maps are dropped unless `keepMaps`.
+export fn pack(root: Str, keepMaps: Bool) -> Result[Bytes, AssetError] {
+  var entries: Array[Tar.TarEntry] = []
+  for path in walk(root) ? {
+    if !keepMaps && path.endsWith(".map") { continue }
+    match Io.readAllBytes(Path.join(root, path)) {
+      case Ok(content) => { entries = entries.push(Tar.entry(path, content)) }
+      case Err(why) => { return Err(Unreadable(path, show(why))) }
+    }
+  }
+  Ok(Gzip.compress(&Tar.writeArchive(entries), &Gzip.config()))
+}
+
+/// Assets held in memory from an archive `pack` wrote.
+export fn unpack(archive: &Bytes) -> Result[Assets, AssetError] {
+  let plain = match Gzip.decompress(archive) {
+    case Ok(found) => found
+    case Err(why) => { return Err(NotArchive(show(why))) }
+  }
+  let entries = match Tar.readArchive(&plain) {
+    case Ok(found) => found
+    case Err(why) => { return Err(NotArchive(show(why))) }
+  }
+  var files: Map[Str, Bytes] = mapOf([])
+  for entry in entries {
+    if entry.typeFlag != Tar.File { continue }
+    let path = resolveAsset(entry.path) ?
+    files = files.insert(path, entry.data)
+  }
+  Ok(Packed(files))
+}
+
+/// What went wrong, for a person.
+export fn explain(problem: &AssetError) -> Str {
+  match *problem {
+    case Escapes(path) => "{path} leaves the asset root"
+    case Unreadable(path, why) => "{path} cannot be read: {why}"
+    case NotArchive(why) => "the asset archive cannot be read: {why}"
+  }
+}

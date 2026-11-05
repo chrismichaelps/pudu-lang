@@ -1,0 +1,71 @@
+module Main
+
+import Std.Desktop.App as App
+import Std.Desktop.Capability as Capability
+import Std.Desktop.Ipc as Ipc
+import Std.Desktop.Shape as Shape
+import Std.Env as Env
+import Std.Json as Json
+
+/// A note the frontend shows and edits.
+type Note = { title: Str, body: Str, words: Int } derives Json.Encode, Json.Decode, Shape.Describe
+
+/// What `save` receives.
+type Draft = { title: Str, body: Str } derives Json.Decode, Shape.Describe
+
+/// What `count` reads; it streams one message per word.
+type Counting = { text: Str } derives Json.Decode, Shape.Describe
+
+/// What `checkpoint` reports when the frontend's self-test finishes.
+type Report = { passed: Int, failed: Array[Str] } derives Json.Decode, Shape.Describe
+
+fn save(draft: Draft, call: &Ipc.Call) -> Result[Note, Ipc.Failure] {
+  if draft.title.trim().isEmpty() { return Err(Ipc.failed("a note needs a title")) }
+  Ok(Note{title: draft.title.trim(), body: draft.body, words: draft.body.split(" ").filter(fn(word: Str) -> Bool { !word.isEmpty() }).length()})
+}
+
+fn count(request: Counting, progress: &Ipc.Stream[Int], call: &Ipc.Call) -> Result[Int, Ipc.Failure] {
+  var seen = 0
+  for word in request.text.split(" ") {
+    if word.isEmpty() { continue }
+    seen = seen + 1
+    let _ = Ipc.post(progress, &seen)
+  }
+  let _ = Ipc.finish(progress)
+  Ok(seen)
+}
+
+fn reverse(body: Bytes, call: &Ipc.Call) -> Result[Bytes, Ipc.Failure] { Ok(body.reverse()) }
+
+/// The frontend's self-test result; under `NOTES_SELF_TEST` the process ends with it.
+fn checkpoint(report: Report, call: &Ipc.Call) -> Result[Bool, Ipc.Failure] {
+  let _ = print("self-test passed {report.passed} failed {report.failed.length()}")
+  for problem in report.failed { let _ = print("  " + problem) }
+  if Env.isSet("NOTES_SELF_TEST") { exit(if report.failed.isEmpty() { 0 } else { 1 }) }
+  Ok(report.failed.isEmpty())
+}
+
+fn main() -> Result[(), Str] {
+  let commands = match Ipc.registry(
+      &[Ipc.command("save", save), Ipc.streamCommand("count", count), Ipc.rawCommand("reverse", reverse), Ipc.command("checkpoint", checkpoint)],
+      &[Ipc.event[Note]("saved")]
+  ) {
+    case Ok(found) => found
+    case Err(problem) => { return Err(Ipc.explain(&problem)) }
+  }
+  let granted = match Capability.load("capabilities/main.toml") {
+    case Ok(found) => found
+    case Err(problem) => { return Err(Capability.explain(&problem)) }
+  }
+  let grants = match Capability.combine(&[granted]) {
+    case Ok(found) => found
+    case Err(problem) => { return Err(Capability.explain(&problem)) }
+  }
+  let page = if Env.isSet("NOTES_SELF_TEST") { "index.html?self-test" } else { "index.html" }
+  let shell = App.WindowPlan{..App.windowPlan("main", "Notes", 900, 640), views: [App.viewPlan("main", page)]}
+  let notes = App.App{..App.newApp("Notes", &commands, &grants), windows: [shell]}
+  match App.run(&notes) {
+    case Ok(_) => Ok(())
+    case Err(problem) => Err(App.explain(&problem))
+  }
+}

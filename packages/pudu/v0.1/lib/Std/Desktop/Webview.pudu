@@ -1,0 +1,414 @@
+module Std.Desktop.Webview
+
+import Std.Desktop.Records as Records
+
+/// Why a WebView operation did not happen.
+export type WebviewError
+  = Unsupported
+  | NotMainThread
+  | Malformed(Str)
+  | UnknownTarget(Str)
+  | RequestGone(Str)
+  | Invalid(Str)
+  | Platform(Str)
+
+/// A rectangle in a window's content, in points from its top-left corner.
+export type Frame = { x: Int, y: Int, width: Int, height: Int }
+
+/// A window to open.
+export type WindowSpec = { id: Int, title: Str, width: Int, height: Int, resizable: Bool }
+
+/// When an injected script runs: before the page's own scripts, or after the document is parsed.
+export type Injection = AtStart | AtEnd
+
+/// A script injected into every page a WebView loads.
+export type Script = { source: Str, at: Injection, allFrames: Bool }
+
+/// A WebView to create inside a window.
+///
+/// `frame` of `None` fills the window and follows its size. `zoom` is in
+/// thousandths. `dataStore` names the storage a view keeps; views naming
+/// the same store share it, and an `ephemeral` view keeps nothing.
+export type ViewSpec = {
+  id: Int,
+  window: Int,
+  frame: Option[Frame],
+  url: Option[Str],
+  html: Option[Str],
+  devtools: Bool,
+  userAgent: Option[Str],
+  zoom: Int,
+  dataStore: Option[Str],
+  ephemeral: Bool,
+  transparent: Bool,
+  allowNavigation: Array[Str],
+  scripts: Array[Script],
+  styles: Array[Str],
+  rules: Array[Str]
+}
+
+/// A request a page made to the `pudu` scheme, waiting for `respond`.
+///
+/// `page` is the URL of the page the view held when the request started; it
+/// stands in for an origin, which the platform does not send for this scheme.
+export type Pending = {
+  view: Int,
+  id: Int,
+  method: Str,
+  url: Str,
+  headers: Array[(Str, Str)],
+  bodyLength: Int,
+  page: Str
+}
+
+/// What the program answers a pending request with.
+export type Response = { status: Int, headers: Array[(Str, Str)], body: Bytes }
+
+/// Something the platform reported since the last drain.
+export type Event
+  = CloseRequested(Int)
+  | Resized(Int, Int, Int)
+  | Moved(Int, Int, Int)
+  | Focused(Int, Bool)
+  | Request(Pending)
+  | Loaded(Int, Str)
+  | Navigated(Int, Str)
+  | NavigationBlocked(Int, Str)
+  | NewWindowBlocked(Int, Str)
+  | Title(Int, Str)
+  | Evaluated(Int, Str, Result[Str, Str])
+  | RulesReady(Int, Str)
+  | RulesFailed(Int, Str)
+  | Crashed(Int)
+  | StoreShared(Int)
+  | Unknown(Str)
+
+/// A resizable window specification.
+export fn newWindow(id: Int, title: Str, width: Int, height: Int) -> WindowSpec {
+  WindowSpec{id: id, title: title, width: width, height: height, resizable: true}
+}
+
+/// A WebView filling `window`, loading the application's index page.
+export fn newView(id: Int, window: Int) -> ViewSpec {
+  ViewSpec {
+    id: id,
+    window: window,
+    frame: None,
+    url: Some("pudu://app/index.html"),
+    html: None,
+    devtools: false,
+    userAgent: None,
+    zoom: 1000,
+    dataStore: None,
+    ephemeral: false,
+    transparent: false,
+    allowNavigation: [],
+    scripts: [],
+    styles: [],
+    rules: []
+  }
+}
+
+/// A frame at `x`, `y` of the given size.
+export fn frame(x: Int, y: Int, width: Int, height: Int) -> Frame {
+  Frame{x: x, y: y, width: width, height: height}
+}
+
+fn flag(value: Bool) -> Str { if value { "1" } else { "0" } }
+
+/// The record opening a window; it stays hidden until `showWindow`.
+export fn openWindow(spec: &WindowSpec) -> Array[Str] {
+  ["window", "{spec.id}", "open", spec.title, "{spec.width}", "{spec.height}", flag(spec.resizable)]
+}
+
+/// The records creating, configuring and realizing a WebView.
+export fn createView(spec: &ViewSpec) -> Array[Array[Str]] {
+  let label = "{spec.id}"
+  let placed = match spec.frame {
+    case Some(at) => ["view", label, "create", "{spec.window}", "{at.x}", "{at.y}", "{at.width}", "{at.height}", "0"]
+    case None => ["view", label, "create", "{spec.window}", "0", "0", "0", "0", "1"]
+  }
+  var records = [placed]
+  records = records.push(["view", label, "devtools", flag(spec.devtools)])
+  if spec.zoom != 1000 { records = records.push(["view", label, "zoom", "{spec.zoom}"]) }
+  if let Some(agent) = spec.userAgent { records = records.push(["view", label, "user-agent", agent]) }
+  if let Some(store) = spec.dataStore { records = records.push(["view", label, "data-store", store]) }
+  if spec.ephemeral { records = records.push(["view", label, "ephemeral"]) }
+  if spec.transparent { records = records.push(["view", label, "transparent"]) }
+  for pattern in spec.allowNavigation { records = records.push(["view", label, "navigation-allow", pattern]) }
+  for script in spec.scripts {
+    let at = match script.at {
+      case AtStart => "start"
+      case AtEnd => "end"
+    }
+    records = records.push(["view", label, "script", script.source, at, if script.allFrames { "all" } else { "main" }])
+  }
+  for style in spec.styles { records = records.push(["view", label, "style", style]) }
+  for rule in spec.rules { records = records.push(["view", label, "rules", rule]) }
+  if let Some(content) = spec.html {
+    records = records.push(["view", label, "html", content])
+  } else if let Some(address) = spec.url {
+    records = records.push(["view", label, "url", address])
+  }
+  records.push(["view", label, "realize"])
+}
+
+/// Load `url` in a realized view.
+export fn navigate(view: Int, url: Str) -> Array[Str] { ["view", "{view}", "navigate", url] }
+
+/// Replace a realized view's page with `html` at the application's origin.
+export fn loadHtml(view: Int, html: Str) -> Array[Str] { ["view", "{view}", "html", html] }
+
+/// Run `source` in the page; its value arrives as `Evaluated(view, ticket, ...)`.
+export fn evaluate(view: Int, ticket: Str, source: Str) -> Array[Str] {
+  ["view", "{view}", "eval", ticket, source]
+}
+
+/// Reload the page.
+export fn reload(view: Int) -> Array[Str] { ["view", "{view}", "reload"] }
+
+/// Go back in the view's history.
+export fn back(view: Int) -> Array[Str] { ["view", "{view}", "back"] }
+
+/// Go forward in the view's history.
+export fn forward(view: Int) -> Array[Str] { ["view", "{view}", "forward"] }
+
+/// Stop loading.
+export fn stop(view: Int) -> Array[Str] { ["view", "{view}", "stop"] }
+
+/// Place a view at a fixed frame; it stops following the window's size.
+export fn setBounds(view: Int, at: &Frame) -> Array[Str] {
+  ["view", "{view}", "bounds", "{at.x}", "{at.y}", "{at.width}", "{at.height}"]
+}
+
+/// Page zoom in thousandths.
+export fn setZoom(view: Int, thousandths: Int) -> Array[Str] { ["view", "{view}", "zoom", "{thousandths}"] }
+
+/// The user agent the view sends.
+export fn setUserAgent(view: Int, agent: Str) -> Array[Str] { ["view", "{view}", "user-agent", agent] }
+
+/// Open the inspector for a view created with `devtools`.
+export fn openDevtools(view: Int) -> Array[Str] { ["view", "{view}", "devtools-open"] }
+
+/// Close the inspector.
+export fn closeDevtools(view: Int) -> Array[Str] { ["view", "{view}", "devtools-close"] }
+
+/// Show a hidden view.
+export fn showView(view: Int) -> Array[Str] { ["view", "{view}", "show"] }
+
+/// Hide a view without destroying it.
+export fn hideView(view: Int) -> Array[Str] { ["view", "{view}", "hide"] }
+
+/// Give a view keyboard focus.
+export fn focusView(view: Int) -> Array[Str] { ["view", "{view}", "focus"] }
+
+/// Destroy a view.
+export fn closeView(view: Int) -> Array[Str] { ["view", "{view}", "close"] }
+
+/// Retitle a window.
+export fn setTitle(window: Int, title: Str) -> Array[Str] { ["window", "{window}", "title", title] }
+
+/// Resize a window's content.
+export fn setSize(window: Int, width: Int, height: Int) -> Array[Str] {
+  ["window", "{window}", "size", "{width}", "{height}"]
+}
+
+/// The smallest content size a person may resize to.
+export fn setMinSize(window: Int, width: Int, height: Int) -> Array[Str] {
+  ["window", "{window}", "min-size", "{width}", "{height}"]
+}
+
+/// The largest content size; zero leaves a dimension unlimited.
+export fn setMaxSize(window: Int, width: Int, height: Int) -> Array[Str] {
+  ["window", "{window}", "max-size", "{width}", "{height}"]
+}
+
+/// Move a window's top-left corner to a screen position.
+export fn setPosition(window: Int, x: Int, y: Int) -> Array[Str] { ["window", "{window}", "position", "{x}", "{y}"] }
+
+/// Center a window on its screen.
+export fn center(window: Int) -> Array[Str] { ["window", "{window}", "center"] }
+
+/// Show a window and bring the application forward.
+export fn showWindow(window: Int) -> Array[Str] { ["window", "{window}", "show"] }
+
+/// Hide a window.
+export fn hideWindow(window: Int) -> Array[Str] { ["window", "{window}", "hide"] }
+
+/// Make a window the key window.
+export fn focusWindow(window: Int) -> Array[Str] { ["window", "{window}", "focus"] }
+
+/// Enter or leave full screen.
+export fn setFullscreen(window: Int, wanted: Bool) -> Array[Str] { ["window", "{window}", "fullscreen", flag(wanted)] }
+
+/// Close a window and every view in it.
+export fn closeWindow(window: Int) -> Array[Str] { ["window", "{window}", "close"] }
+
+/// Builds an error from the detail after the runtime's tag.
+export type ErrorFactory = fn(Str) -> WebviewError
+
+/// The error each runtime tag names; an unlisted tag is a platform failure.
+const ERROR_FACTORIES: Map[Str, ErrorFactory] = mapOf([
+    ("unsupported", fn(detail: Str) -> WebviewError { Unsupported }),
+    ("thread", fn(detail: Str) -> WebviewError { NotMainThread }),
+    ("malformed", fn(detail: Str) -> WebviewError { Malformed(detail) }),
+    ("unknown", fn(detail: Str) -> WebviewError { UnknownTarget(detail) }),
+    ("gone", fn(detail: Str) -> WebviewError { RequestGone(detail) }),
+    ("invalid", fn(detail: Str) -> WebviewError { Invalid(detail) }),
+  ])
+
+fn classified(message: Str) -> WebviewError {
+  let at = message.indexOf(": ")
+  if at < 0 { return Platform(message) }
+  match ERROR_FACTORIES.get(message.take(at)) {
+    case Some(factory) => factory(message.drop(at + 2))
+    case None => Platform(message.drop(at + 2))
+  }
+}
+
+/// Apply command records in order, stopping at the first the platform refuses.
+export fn send(commands: &Array[Array[Str]]) -> Result[(), WebviewError] {
+  match webviewSend(Records.encodeAll(commands)) {
+    case Ok(_) => Ok(())
+    case Err(message) => Err(classified(message))
+  }
+}
+
+/// Run the platform loop for at most `milliseconds`; `true` when events are waiting.
+export fn pump(milliseconds: Int) -> Result[Bool, WebviewError] {
+  match webviewPump(milliseconds) {
+    case Ok(waiting) => Ok(waiting)
+    case Err(message) => Err(classified(message))
+  }
+}
+
+/// Every event reported since the last drain, in order.
+export fn events() -> Result[Array[Event], WebviewError] {
+  match webviewEvents() {
+    case Ok(bytes) => match Records.decode(&bytes) {
+      case Ok(records) => Ok(decodeEvents(&records))
+      case Err(problem) => Err(Malformed(Records.explain(&problem)))
+    }
+    case Err(message) => Err(classified(message))
+  }
+}
+
+fn number(text: Str) -> Int {
+  match text.toInt() {
+    case Some(value) => value
+    case None => -1
+  }
+}
+
+fn headerLines(block: Str) -> Array[(Str, Str)] {
+  var found: Array[(Str, Str)] = []
+  for line in block.lines() {
+    let colon = line.indexOf(":")
+    if colon > 0 { found = found.push((line.take(colon).trim().toLower(), line.drop(colon + 1).trim())) }
+  }
+  found
+}
+
+/// Builds one event from a record's fields, or nothing when the fields do not fit.
+export type EventFactory = fn(&Array[Str]) -> Option[Event]
+
+/// One factory per event verb with the field count it requires.
+const EVENT_FACTORIES: Map[Str, (Int, EventFactory)] = mapOf([
+    ("request", (8, requestEvent)),
+    ("close-requested", (2, fn(fields: &Array[Str]) -> Option[Event] { Some(CloseRequested(number(fields[1]))) })),
+    ("resized", (4, fn(fields: &Array[Str]) -> Option[Event] { Some(Resized(number(fields[1]), number(fields[2]), number(fields[3]))) })),
+    ("moved", (4, fn(fields: &Array[Str]) -> Option[Event] { Some(Moved(number(fields[1]), number(fields[2]), number(fields[3]))) })),
+    ("focused", (3, fn(fields: &Array[Str]) -> Option[Event] { Some(Focused(number(fields[1]), fields[2] == "1")) })),
+    ("loaded", (3, fn(fields: &Array[Str]) -> Option[Event] { Some(Loaded(number(fields[1]), fields[2])) })),
+    ("navigated", (3, fn(fields: &Array[Str]) -> Option[Event] { Some(Navigated(number(fields[1]), fields[2])) })),
+    ("navigation-blocked", (3, fn(fields: &Array[Str]) -> Option[Event] { Some(NavigationBlocked(number(fields[1]), fields[2])) })),
+    ("new-window-blocked", (3, fn(fields: &Array[Str]) -> Option[Event] { Some(NewWindowBlocked(number(fields[1]), fields[2])) })),
+    ("title", (3, fn(fields: &Array[Str]) -> Option[Event] { Some(Title(number(fields[1]), fields[2])) })),
+    ("crashed", (2, fn(fields: &Array[Str]) -> Option[Event] { Some(Crashed(number(fields[1]))) })),
+    ("data-store", (3, fn(fields: &Array[Str]) -> Option[Event] { Some(StoreShared(number(fields[1]))) })),
+    ("eval", (5, evaluatedEvent)),
+    ("rules", (4, rulesEvent)),
+  ])
+
+fn requestEvent(fields: &Array[Str]) -> Option[Event] {
+  Some(Request(Pending {
+        view: number(fields[1]),
+        id: number(fields[2]),
+        method: fields[3],
+        url: fields[4],
+        headers: headerLines(fields[5]),
+        bodyLength: number(fields[6]),
+        page: fields[7]
+      }))
+}
+
+fn evaluatedEvent(fields: &Array[Str]) -> Option[Event] {
+  let outcome = if fields[3] == "ok" { Ok(fields[4]) } else { Err(fields[4]) }
+  Some(Evaluated(number(fields[1]), fields[2], outcome))
+}
+
+fn rulesEvent(fields: &Array[Str]) -> Option[Event] {
+  let view = number(fields[1])
+  Some(if fields[2] == "ready" { RulesReady(view, fields[3]) } else { RulesFailed(view, fields[3]) })
+}
+
+fn decodeOne(fields: &Array[Str]) -> Event {
+  let verb = fields[0]
+  match EVENT_FACTORIES.get(verb) {
+    case Some((count, factory)) if count == fields.length() => match factory(fields) {
+      case Some(event) => event
+      case None => Unknown(verb)
+    }
+    case _ => Unknown(verb)
+  }
+}
+
+/// Events from decoded records; a record this library does not know is `Unknown`.
+export fn decodeEvents(records: &Array[Array[Str]]) -> Array[Event] {
+  var found: Array[Event] = []
+  for fields in *records {
+    if !fields.isEmpty() { found = found.push(decodeOne(&fields)) }
+  }
+  found
+}
+
+/// A request header by lower-case name.
+export fn header(request: &Pending, name: Str) -> Option[Str] {
+  let wanted = name.toLower()
+  for (key, value) in request.headers {
+    if key == wanted { return Some(value) }
+  }
+  None
+}
+
+/// The body a pending request carried.
+export fn body(request: &Pending) -> Result[Bytes, WebviewError] {
+  if request.bodyLength == 0 { return Ok(bytesOf([])) }
+  match webviewBody(request.id) {
+    case Ok(bytes) => Ok(bytes)
+    case Err(message) => Err(classified(message))
+  }
+}
+
+/// Finish a pending request.
+export fn respond(request: &Pending, response: &Response) -> Result[(), WebviewError] {
+  var lines: Array[Str] = []
+  for (name, value) in response.headers { lines = lines.push("{name}: {value}") }
+  match webviewRespond(request.id, response.status, lines.join("\n"), response.body) {
+    case Ok(_) => Ok(())
+    case Err(message) => Err(classified(message))
+  }
+}
+
+/// What went wrong, for a person.
+export fn explain(problem: &WebviewError) -> Str {
+  match *problem {
+    case Unsupported => "this platform has no WebView adapter"
+    case NotMainThread => "WebView operations must run on the main thread"
+    case Malformed(why) => "a WebView record was refused: {why}"
+    case UnknownTarget(why) => "no such window or view: {why}"
+    case RequestGone(why) => "the page stopped waiting for the request: {why}"
+    case Invalid(why) => "an invalid WebView argument: {why}"
+    case Platform(why) => "the platform WebView failed: {why}"
+  }
+}
