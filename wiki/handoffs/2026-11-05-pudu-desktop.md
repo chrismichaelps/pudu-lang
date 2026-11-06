@@ -27,8 +27,12 @@ pending; no self-approval.
 - [[Desktop Webview Gate]] passes locally, including a live WebView self-test (9/9) on macOS.
 - The packaged, signed `Notes.app` launched from `/` without a library path passes the same self-test.
 - `dpkg-deb` and `rpm -K` accept the written packages (header and payload digests OK).
-- [[Webview Drive Harness]] passes against the macOS adapter: scheme requests, injected scripts,
-  evaluation, navigation refusal, content-rule blocking, and two views in one window.
+- [[Webview Drive Harness]] passes against the macOS adapter locally and in CI, and against the
+  WebKitGTK adapter in CI under `xvfb-run`: scheme requests, injected scripts, evaluation,
+  navigation refusal, content-rule blocking, two views in one window, menus and surfaces.
+- On WebView2 in CI the harness's menus, surfaces, second view and request delivery pass; a page
+  waiting on a deferred response did not see it, traced to the response body stream (fixed by using
+  a global-memory stream; awaiting the next run).
 
 ## Open
 
