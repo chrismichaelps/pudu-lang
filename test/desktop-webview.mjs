@@ -147,13 +147,13 @@ step('packages are accepted by their own tools', () => {
     assert.match(listing.output, /\/usr\/lib\/notes-app\/notes-app\.pudub/, listing.output);
   }
   if (nsisCompiles()) {
-    assert.match(output, /wrote nsis \S+setup\.exe/, output);
+    assert.match(output, /wrote nsis .+setup\.exe/, output);
   } else {
     process.stdout.write('(makensis cannot compile here; the installer script is checked in Linux CI) ');
     assert.match(output, /(missing nsis makensis|failed nsis makensis)/, output);
   }
   if (works('wix', ['--version'])) {
-    assert.match(output, /wrote msi \S+\.msi/, output);
+    assert.match(output, /wrote msi .+\.msi/, output);
   } else {
     assert.match(output, /missing msi wix/, output);
   }
