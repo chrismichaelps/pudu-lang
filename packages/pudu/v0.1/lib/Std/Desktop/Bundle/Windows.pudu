@@ -1,0 +1,190 @@
+module Std.Desktop.Bundle.Windows
+
+import Std.Desktop.Bundle.Config {BundleError}
+import Std.Desktop.Bundle.Config as Config
+import Std.Env as Env
+import Std.Fs as Fs
+import Std.Hex as Hex
+import Std.Path as Path
+import Std.Process as Process
+import Std.Semver as Semver
+
+/// Where the WebView2 runtime records its installed version.
+const WEBVIEW2_KEY: Str = "SOFTWARE\\WOW6432Node\\Microsoft\\EdgeUpdate\\Clients\\\{F3017226-FE2A-4295-8BDF-00C3A9A7E4C5\}"
+
+/// Where a person can get the WebView2 runtime.
+const WEBVIEW2_DOWNLOAD: Str = "https://developer.microsoft.com/microsoft-edge/webview2/"
+
+/// The version installers accept: major, minor, patch and `0`.
+export fn numericVersion(version: Str) -> Str {
+  match Semver.parse(version) {
+    case Ok(parsed) => "{parsed.major}.{parsed.minor}.{parsed.patch}.0"
+    case Err(_) => "0.0.0.0"
+  }
+}
+
+/// The configured upgrade code, or one derived from the identifier.
+export fn upgradeCode(config: &Config.Config) -> Str {
+  if !config.windows.upgradeCode.isEmpty() { return config.windows.upgradeCode }
+  let hex = Hex.encode(&sha256Of(config.identifier.toBytes()).take(16).toArray()).toUpper()
+  hex.slice(0, 8) + "-" + hex.slice(8, 12) + "-" + hex.slice(12, 16) + "-" + hex.slice(16, 20) + "-" + hex.slice(20, 32)
+}
+
+/// Text that NSIS reads literally: `$` doubled and quotes escaped.
+fn literal(text: Str) -> Str { text.replace("$", "$$").replace("\"", "$\\\"") }
+
+/// A quoted NSIS string of literal text.
+fn quoted(text: Str) -> Str { "\"" + literal(text) + "\"" }
+
+/// A quoted NSIS string that starts with an installer variable such as `$INSTDIR`.
+fn under(variable: Str, rest: Str) -> Str { "\"" + variable + "\\" + literal(rest) + "\"" }
+
+/// The NSIS script for an installer of `executable` and `assets`, written to `installer`.
+export fn nsisScript(config: &Config.Config, executable: Str, program: Str, assets: Str, installer: Str) -> Str {
+  let exe = Config.packageName(config) + ".exe"
+  let uninstall = "Software\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\" + config.identifier
+  [
+    "Unicode true",
+    "!include \"MUI2.nsh\"",
+    "Name " + quoted(config.name),
+    "OutFile " + quoted(installer),
+    "InstallDir " + under("$LOCALAPPDATA", "Programs\\" + config.name),
+    "RequestExecutionLevel user",
+    "VIProductVersion " + quoted(numericVersion(config.version)),
+    "VIAddVersionKey \"ProductName\" " + quoted(config.name),
+    "VIAddVersionKey \"CompanyName\" " + quoted(config.publisher),
+    "VIAddVersionKey \"FileDescription\" " + quoted(config.description),
+    "VIAddVersionKey \"FileVersion\" " + quoted(config.version),
+    "VIAddVersionKey \"LegalCopyright\" " + quoted(config.copyright),
+    "!insertmacro MUI_PAGE_DIRECTORY",
+    "!insertmacro MUI_PAGE_INSTFILES",
+    "!insertmacro MUI_UNPAGE_CONFIRM",
+    "!insertmacro MUI_UNPAGE_INSTFILES",
+    "!insertmacro MUI_LANGUAGE \"English\"",
+    "Function .onInit",
+    "  ReadRegStr $0 HKLM " + quoted(WEBVIEW2_KEY) + " \"pv\"",
+    "  StrCmp $0 \"\" 0 found",
+    "  ReadRegStr $0 HKCU " + quoted(WEBVIEW2_KEY) + " \"pv\"",
+    "  StrCmp $0 \"\" 0 found",
+    "  MessageBox MB_OK " + quoted(config.name + " needs the WebView2 runtime: " + WEBVIEW2_DOWNLOAD),
+    "  found:",
+    "FunctionEnd",
+    "Section \"Install\"",
+    "  SetOutPath \"$INSTDIR\"",
+    "  File " + quoted("/oname=" + exe) + " " + quoted(executable),
+    "  File " + quoted("/oname=" + exe + ".pudub") + " " + quoted(program),
+    "  File \"/oname=app.tar.gz\" " + quoted(assets),
+    "  WriteUninstaller \"$INSTDIR\\uninstall.exe\"",
+    "  CreateShortcut " + under("$SMPROGRAMS", config.name + ".lnk") + " " + under("$INSTDIR", exe),
+    "  WriteRegStr HKCU " + quoted(uninstall) + " \"DisplayName\" " + quoted(config.name),
+    "  WriteRegStr HKCU " + quoted(uninstall) + " \"DisplayVersion\" " + quoted(config.version),
+    "  WriteRegStr HKCU " + quoted(uninstall) + " \"Publisher\" " + quoted(config.publisher),
+    "  WriteRegStr HKCU " + quoted(uninstall) + " \"InstallLocation\" \"$INSTDIR\"",
+    "  WriteRegStr HKCU " + quoted(uninstall) + " \"UninstallString\" \"$\\\"$INSTDIR\\uninstall.exe$\\\"\"",
+    "  WriteRegDWORD HKCU " + quoted(uninstall) + " \"NoModify\" 1",
+    "  WriteRegDWORD HKCU " + quoted(uninstall) + " \"NoRepair\" 1",
+    "SectionEnd",
+    "Section \"Uninstall\"",
+    "  Delete " + under("$INSTDIR", exe),
+    "  Delete " + under("$INSTDIR", exe + ".pudub"),
+    "  Delete \"$INSTDIR\\app.tar.gz\"",
+    "  Delete \"$INSTDIR\\uninstall.exe\"",
+    "  RMDir \"$INSTDIR\"",
+    "  Delete " + under("$SMPROGRAMS", config.name + ".lnk"),
+    "  DeleteRegKey HKCU " + quoted(uninstall),
+    "SectionEnd",
+    ""
+  ].join("\n")
+}
+
+/// The WiX source for an installer of `executable` and `assets`.
+export fn wixSource(config: &Config.Config, executable: Str, program: Str, assets: Str) -> Str {
+  let exe = Config.packageName(config) + ".exe"
+  let x = fn(text: Str) -> Str { Config.xmlEscaped(text) }
+  [
+    "<Wix xmlns=\"http://wixtoolset.org/schemas/v4/wxs\">",
+    "  <Package Name=\"" + x(config.name) + "\" Manufacturer=\"" + x(config.publisher) + "\" Version=\"" + numericVersion(config.version) + "\" UpgradeCode=\"" + upgradeCode(config) + "\" Scope=\"perUser\">",
+    "    <MajorUpgrade DowngradeErrorMessage=\"A newer version of " + x(config.name) + " is already installed.\" />",
+    "    <MediaTemplate EmbedCab=\"yes\" />",
+    "    <StandardDirectory Id=\"LocalAppDataFolder\">",
+    "      <Directory Id=\"ProgramsFolder\" Name=\"Programs\">",
+    "        <Directory Id=\"INSTALLFOLDER\" Name=\"" + x(config.name) + "\" />",
+    "      </Directory>",
+    "    </StandardDirectory>",
+    "    <ComponentGroup Id=\"ApplicationFiles\" Directory=\"INSTALLFOLDER\">",
+    "      <Component>",
+    "        <File Source=\"" + x(executable) + "\" Name=\"" + x(exe) + "\" />",
+    "        <File Source=\"" + x(program) + "\" Name=\"" + x(exe) + ".pudub\" />",
+    "        <File Source=\"" + x(assets) + "\" Name=\"app.tar.gz\" />",
+    "        <RegistryValue Root=\"HKCU\" Key=\"Software\\" + x(config.identifier) + "\" Name=\"installed\" Type=\"integer\" Value=\"1\" KeyPath=\"yes\" />",
+    "        <RemoveFolder Id=\"RemoveInstallFolder\" On=\"uninstall\" />",
+    "      </Component>",
+    "    </ComponentGroup>",
+    "    <StandardDirectory Id=\"ProgramMenuFolder\">",
+    "      <Component Id=\"StartMenuShortcut\">",
+    "        <Shortcut Name=\"" + x(config.name) + "\" Target=\"[INSTALLFOLDER]" + x(exe) + "\" WorkingDirectory=\"INSTALLFOLDER\" />",
+    "        <RegistryValue Root=\"HKCU\" Key=\"Software\\" + x(config.identifier) + "\" Name=\"shortcut\" Type=\"integer\" Value=\"1\" KeyPath=\"yes\" />",
+    "      </Component>",
+    "    </StandardDirectory>",
+    "    <Feature Id=\"Main\">",
+    "      <ComponentGroupRef Id=\"ApplicationFiles\" />",
+    "      <ComponentRef Id=\"StartMenuShortcut\" />",
+    "    </Feature>",
+    "  </Package>",
+    "</Wix>",
+    ""
+  ].join("\n")
+}
+
+/// Authenticode-sign `path` with the configured certificate, when there is one.
+export fn signed(config: &Config.Config, path: Str, format: Str) -> Result[(), BundleError] {
+  let certificate = match config.windows.certificate {
+    case Some(found) => found
+    case None => { return Ok(()) }
+  }
+  let password = Env.variableOr("PUDU_DESKTOP_CERTIFICATE_PASSWORD", "")
+  if Process.isAvailable("signtool") {
+    Config.tool(format, "signtool", &["sign", "/f", certificate, "/p", password, "/fd", "sha256", "/tr", config.windows.timestampUrl, "/td", "sha256", path]) ?
+    return Ok(())
+  }
+  let output = path + ".signed"
+  Config.tool(format, "osslsigncode", &["sign", "-pkcs12", certificate, "-pass", password, "-h", "sha256", "-ts", config.windows.timestampUrl, "-in", path, "-out", output]) ?
+  match Fs.rename(output, path) {
+    case Ok(_) => Ok(())
+    case Err(why) => Err(Config.WriteFailed(path, show(why)))
+  }
+}
+
+fn staged(inputs: &Config.Inputs, out: Str) -> Result[(Str, Str, Str), BundleError] {
+  let executable = Path.join(out, ".pudu-windows/app.exe")
+  let program = Path.join(out, ".pudu-windows/app.exe.pudub")
+  let assets = Path.join(out, ".pudu-windows/app.tar.gz")
+  Config.writeFile(executable, &inputs.runtime) ?
+  Config.writeFile(program, &inputs.program) ?
+  Config.writeFile(assets, &inputs.assets) ?
+  Ok((executable, program, assets))
+}
+
+/// Write `<Name>-<version>-setup.exe` under `out`; answers its path.
+export fn nsis(config: &Config.Config, inputs: &Config.Inputs, out: Str) -> Result[Str, BundleError] {
+  let (executable, program, assets) = staged(inputs, out) ?
+  signed(config, executable, "NSIS") ?
+  let installer = Path.join(out, "{config.name}-{config.version}-setup.exe")
+  let script = Path.join(out, ".pudu-windows/installer.nsi")
+  Config.writeFile(script, &nsisScript(config, executable, program, assets, installer).toBytes()) ?
+  Config.tool("NSIS", "makensis", &["-V2", script]) ?
+  signed(config, installer, "NSIS") ?
+  Ok(installer)
+}
+
+/// Write `<Name>-<version>.msi` under `out`; answers its path.
+export fn msi(config: &Config.Config, inputs: &Config.Inputs, out: Str) -> Result[Str, BundleError] {
+  let (executable, program, assets) = staged(inputs, out) ?
+  signed(config, executable, "MSI") ?
+  let source = Path.join(out, ".pudu-windows/installer.wxs")
+  Config.writeFile(source, &wixSource(config, executable, program, assets).toBytes()) ?
+  let installer = Path.join(out, "{config.name}-{config.version}.msi")
+  Config.tool("MSI", "wix", &["build", source, "-o", installer]) ?
+  signed(config, installer, "MSI") ?
+  Ok(installer)
+}

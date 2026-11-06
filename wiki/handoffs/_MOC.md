@@ -378,3 +378,5 @@ tags: [moc, handoff]
 - [[Builtin Scope Delivery]] — resumed #759 scope isolation; [[Builtin Scope Grid]], [[Builtin Scope Main]], [[Builtin Scope Reverse]], [[Builtin Scope Selected]], [[Builtin Scope Refusal]], [[Builtin Scope Table]].
 
 - [[Bound Receiver Evidence Delivery]] — complete selected bound and receiver facts for #735.
+
+- [[handoffs/2026-11-05-pudu-desktop|Pudu Desktop Delivery]] — WebView applications, typed IPC, security, plugins, packaging and updates (#833).

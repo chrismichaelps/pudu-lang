@@ -98,6 +98,10 @@ decimal primitives. Grill Log — **Q:** list kernel names here? **A:** No; they
 
 Lane kernels bind the same way from `laneKernels` under `laneKernelName`.
 
+## Signatures (#833)
+
+Binds `ed25519PublicOf`, `ed25519SignWith` and `ed25519Verify` to their pure builtins.
+
 ## Referenced by
 
 [[src/Pudu/Eval/_MOC]] · [[Evaluator]] · [[Name Resolution]]

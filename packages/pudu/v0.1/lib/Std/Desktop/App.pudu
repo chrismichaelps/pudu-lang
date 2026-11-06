@@ -1,0 +1,438 @@
+module Std.Desktop.App
+
+import Std.Desktop.Bridge as Bridge
+import Std.Desktop.Capability as Capability
+import Std.Desktop.Ipc as Ipc
+import Std.Desktop.Plugin as Plugin
+import Std.Desktop.Protocol as Protocol
+import Std.Desktop.Webview as Webview
+import Std.Env as Env
+import Std.Fs as Fs
+import Std.Hex as Hex
+import Std.Io as Io
+import Std.Json as Json
+import Std.Path as Path
+import Std.Process as Process
+
+/// One WebView in a window: its label, the page it opens, and where it sits.
+export type ViewPlan = {
+  label: Str,
+  page: Str,
+  frame: Option[Webview.Frame],
+  ephemeral: Bool,
+  allowNavigation: Array[Str]
+}
+
+/// One window and the views it holds.
+export type WindowPlan = { label: Str, title: Str, width: Int, height: Int, resizable: Bool, views: Array[ViewPlan] }
+
+/// Code that runs when the frontend emits an event.
+export type Listener = { event: Str, handle: fn(&Ipc.Call, &Json.Json) -> () }
+
+/// What a `tick` sees each turn of the loop.
+export type Session = { dev: Bool, windows: Array[Int], views: Array[Int], now: Int }
+
+/// A desktop application.
+export type App = {
+  name: Str,
+  assets: Protocol.Assets,
+  frontend: Option[Str],
+  policy: Protocol.Policy,
+  commands: Ipc.Registry,
+  grants: Capability.Grants,
+  plugins: Array[Plugin.Plugin],
+  pluginGrants: Array[Str],
+  windows: Array[WindowPlan],
+  devUrl: Option[Str],
+  devtools: Bool,
+  openExternal: Bool,
+  listeners: Array[Listener],
+  tick: Option[fn(&Session) -> Array[Array[Str]]]
+}
+
+/// Why the application stopped.
+export type AppError
+  = Platform(Webview.WebviewError)
+  | PluginRefused(Plugin.PluginError)
+  | TypesUnwritable(Str)
+  | NoWindows
+  | KeyUnavailable(Str)
+
+/// One realized view: its window, label and invoke key.
+type Live = { window: Int, label: Str, key: Str }
+
+/// The loop's state between turns.
+type Loop = {
+  open: Set[Int],
+  views: Map[Int, Live],
+  stamps: Map[Str, Int],
+  scanned: Int
+}
+
+/// Answers a reserved command after its invoke key was accepted.
+type ReservedHandler = fn(&App, &Live, &Webview.Pending, &Bytes) -> Webview.Response
+
+/// The commands the framework answers itself, by name.
+const RESERVED_HANDLERS: Map[Str, ReservedHandler] = mapOf([
+    ("pudu:emit", emitted),
+    ("pudu:console", consoleReported),
+  ])
+
+/// How often, in milliseconds, development mode rescans the frontend.
+const SCAN_INTERVAL: Int = 300
+
+/// The longest single wait for platform events.
+const PUMP_MILLISECONDS: Int = 250
+
+/// A view of `page` filling its window.
+export fn viewPlan(label: Str, page: Str) -> ViewPlan {
+  ViewPlan{label: label, page: page, frame: None, ephemeral: false, allowNavigation: []}
+}
+
+/// A resizable window holding one view of the same label showing `index.html`.
+export fn windowPlan(label: Str, title: Str, width: Int, height: Int) -> WindowPlan {
+  WindowPlan{label: label, title: title, width: width, height: height, resizable: true, views: [viewPlan(label, "index.html")]}
+}
+
+/// An application with one window, assets from `locateAssets("frontend")`, and the default policy.
+export fn newApp(name: Str, commands: &Ipc.Registry, grants: &Capability.Grants) -> App {
+  App {
+    name: name,
+    assets: locateAssets("frontend"),
+    frontend: Some("frontend"),
+    policy: Protocol.policy(),
+    commands: *commands,
+    grants: *grants,
+    plugins: [],
+    pluginGrants: [],
+    windows: [windowPlan("main", name, 1024, 768)],
+    devUrl: None,
+    devtools: false,
+    openExternal: true,
+    listeners: [],
+    tick: None
+  }
+}
+
+/// Whether the program runs under `pudu desktop dev`.
+export fn isDev() -> Bool { Env.variable("PUDU_DESKTOP_DEV") == Some("1") }
+
+fn archiveAt(path: Str) -> Option[Protocol.Assets] {
+  if !Io.exists(path) { return None }
+  let bytes = match Io.readAllBytes(path) {
+    case Ok(found) => found
+    case Err(_) => { return None }
+  }
+  match Protocol.unpack(&bytes) {
+    case Ok(assets) => Some(assets)
+    case Err(_) => None
+  }
+}
+
+/// The installed frontend: `PUDU_DESKTOP_ASSETS` (a directory or archive), an `app.tar.gz` beside the
+/// executable or in a bundle's resources, or else `fallback` as a directory.
+export fn locateAssets(fallback: Str) -> Protocol.Assets {
+  if let Some(named) = Env.variable("PUDU_DESKTOP_ASSETS") {
+    if directoryExists(named) { return Protocol.Directory(named) }
+    if let Some(assets) = archiveAt(named) { return assets }
+  }
+  if let Ok(executable) = Env.executable() {
+    let home = Path.directoryOf(executable)
+    for candidate in [Path.join(home, "app.tar.gz"), Path.joinAll(&[home, "..", "Resources", "app.tar.gz"]), Path.joinAll(&[home, "..", "lib", "app.tar.gz"])] {
+      if let Some(assets) = archiveAt(candidate) { return assets }
+    }
+  }
+  Protocol.Directory(fallback)
+}
+
+fn freshKey() -> Result[Str, AppError] {
+  match secureRandomBytes(16) {
+    case Ok(bytes) => Ok(Hex.encode(&bytes.toArray()))
+    case Err(why) => Err(KeyUnavailable(why))
+  }
+}
+
+fn pageUrl(app: &App, page: Str, dev: Bool) -> Str {
+  match app.devUrl {
+    case Some(base) if dev => if base.endsWith("/") { base + page } else { base + "/" + page }
+    case _ => "pudu://app/" + page
+  }
+}
+
+fn viewSpec(app: &App, plan: &ViewPlan, id: Int, window: Int, key: Str, dev: Bool) -> Webview.ViewSpec {
+  var allowed = plan.allowNavigation
+  if dev {
+    if let Some(base) = app.devUrl { allowed = allowed.push(Capability.originOf(base) + "/*") }
+  }
+  let base = Webview.newView(id, window)
+  let spec = Webview.ViewSpec {
+    ..base,
+    frame: plan.frame,
+    url: Some(pageUrl(app, plan.page, dev)),
+    devtools: dev || app.devtools,
+    dataStore: Some(plan.label),
+    ephemeral: plan.ephemeral,
+    allowNavigation: allowed,
+    scripts: [Webview.Script{source: Bridge.script(key, plan.label, dev), at: Webview.AtStart, allFrames: false}]
+  }
+  Plugin.apply(&spec, &app.plugins)
+}
+
+fn send(commands: &Array[Array[Str]]) -> Result[(), AppError] {
+  if commands.isEmpty() { return Ok(()) }
+  match Webview.send(commands) {
+    case Ok(_) => Ok(())
+    case Err(problem) => Err(Platform(problem))
+  }
+}
+
+fn opened(app: &App, dev: Bool) -> Result[Loop, AppError] {
+  if app.windows.isEmpty() { return Err(NoWindows) }
+  var commands: Array[Array[Str]] = []
+  var views: Map[Int, Live] = mapOf([])
+  var open: Set[Int] = setOf([])
+  var next = 1
+  var windowId = 1
+  for plan in app.windows {
+    commands = commands.push(Webview.openWindow(&Webview.WindowSpec{id: windowId, title: plan.title, width: plan.width, height: plan.height, resizable: plan.resizable}))
+    for held in plan.views {
+      let key = freshKey() ?
+      commands = commands.concat(Webview.createView(&viewSpec(app, &held, next, windowId, key, dev)))
+      views = views.insert(next, Live{window: windowId, label: held.label, key: key})
+      next = next + 1
+    }
+    commands = commands.push(Webview.showWindow(windowId))
+    open = open.insert(windowId)
+    windowId = windowId + 1
+  }
+  send(&commands) ?
+  Ok(Loop{open: open, views: views, stamps: mapOf([]), scanned: 0})
+}
+
+fn emitted(app: &App, live: &Live, request: &Webview.Pending, body: &Bytes) -> Webview.Response {
+  let json = match body.toText() {
+    case Some(text) => match Json.decode(text) {
+      case Ok(found) => found
+      case Err(_) => { return Protocol.text(400, "an event is JSON") }
+    }
+    case None => { return Protocol.text(400, "an event is UTF-8") }
+  }
+  let name = match Json.field(&json, "event") {
+    case Some(Json.Text(found)) => found
+    case _ => { return Protocol.text(400, "an event names itself") }
+  }
+  let payload = match Json.field(&json, "payload") {
+    case Some(found) => found
+    case None => Json.Null
+  }
+  let origin = Capability.originOf(request.page)
+  let command = "event:" + name
+  let decision = Capability.decide(&app.grants, live.label, origin, command)
+  if let Capability.Refused(why) = decision {
+    return Ipc.failure(command, origin, &Ipc.denied(why))
+  }
+  let call = Ipc.Call{view: request.view, label: live.label, origin: origin, command: command, decision: decision, channel: None}
+  for listener in app.listeners {
+    if listener.event == name {
+      let handle = listener.handle
+      handle(&call, &payload)
+    }
+  }
+  Protocol.json(200, &Json.Null)
+}
+
+fn consoleReported(app: &App, live: &Live, request: &Webview.Pending, body: &Bytes) -> Webview.Response {
+  if isDev() {
+    if let Some(text) = body.toText() {
+      if let Ok(json) = Json.decode(text) {
+        let read = fn(key: Str) -> Str {
+          match Json.field(&json, key) {
+            case Some(Json.Text(found)) => found
+            case Some(Json.Number(found)) => found.toText()
+            case _ => ""
+          }
+        }
+        let level = read("level")
+        let message = read("message")
+        let source = read("source")
+        let line = read("line")
+        let column = read("column")
+        let _ = printError("[{live.label} {level}] {message} ({source}:{line}:{column})")
+        let stack = read("stack")
+        if !stack.isEmpty() { let _ = printError(stack) }
+      }
+    }
+  }
+  Webview.Response{status: 204, headers: [], body: bytesOf([])}
+}
+
+fn answer(app: &App, live: &Live, request: &Webview.Pending) -> Webview.Response {
+  let body = match Webview.body(request) {
+    case Ok(found) => found
+    case Err(_) => bytesOf([])
+  }
+  match Protocol.ipcCommand(request.url) {
+    case None => Protocol.serve(&app.assets, request, &app.policy)
+    case Some(name) => match RESERVED_HANDLERS.get(name) {
+      case Some(handler) => {
+        let origin = Capability.originOf(request.page)
+        if request.method == "OPTIONS" { return Ipc.preflight(origin) }
+        if Webview.header(request, Ipc.KEY_HEADER) != Some(live.key) {
+          return Ipc.failure(name, origin, &Ipc.denied("the call did not come from this view's bridge"))
+        }
+        match Ipc.callOrigin(request) {
+          case Ok(_) => ()
+          case Err(problem) => { return Ipc.failure(name, origin, &problem) }
+        }
+        handler(app, live, request, &body)
+      }
+      case None => Ipc.dispatch(&app.commands, &app.grants, live.key, live.label, request, &body)
+    }
+  }
+}
+
+fn responded(app: &App, state: &Loop, request: &Webview.Pending) -> Result[(), AppError] {
+  let response = match state.views.get(request.view) {
+    case Some(live) => answer(app, &live, request)
+    case None => Protocol.text(404, "no such view")
+  }
+  match Webview.respond(request, &response) {
+    case Ok(_) => Ok(())
+    case Err(Webview.RequestGone(_)) => Ok(())
+    case Err(problem) => Err(Platform(problem))
+  }
+}
+
+fn openOutside(url: Str) -> () {
+  if !(url.startsWith("https://") || url.startsWith("http://")) { return () }
+  for opener in ["open", "xdg-open"] {
+    if Process.isAvailable(opener) {
+      let _ = Process.run(opener, &[url])
+      return ()
+    }
+  }
+}
+
+fn snapshot(root: Str) -> Map[Str, Int] {
+  var stamps: Map[Str, Int] = mapOf([])
+  if let Ok(paths) = Protocol.walk(root) {
+    for path in paths {
+      if let Ok(stamp) = Fs.modifiedAt(Path.join(root, path)) { stamps = stamps.insert(path, stamp) }
+    }
+  }
+  stamps
+}
+
+/// The commands a frontend change needs: style sheets swapped in place, or every view reloaded.
+fn changed(before: &Map[Str, Int], after: &Map[Str, Int], views: &Array[Int]) -> Array[Array[Str]] {
+  var touched: Array[Str] = []
+  for (path, stamp) in *after {
+    if before.get(path) != Some(stamp) { touched = touched.push(path) }
+  }
+  for (path, _) in *before {
+    if after.get(path) == None { touched = touched.push(path) }
+  }
+  if touched.isEmpty() { return [] }
+  if touched.filter(fn(path: Str) -> Bool { !path.endsWith(".css") }).isEmpty() {
+    views.map(fn(id: Int) -> Array[Str] { Webview.evaluate(id, "", "window.__pudu && window.__pudu.__reloadStyles(), void 0") })
+  } else {
+    views.map(fn(id: Int) -> Array[Str] { Webview.reload(id) })
+  }
+}
+
+fn handled(app: &App, state: Loop, event: &Webview.Event) -> Result[Loop, AppError] {
+  match *event {
+    case Webview.Request(pending) => {
+      responded(app, &state, &pending) ?
+      Ok(state)
+    }
+    case Webview.CloseRequested(id) => {
+      send(&[Webview.closeWindow(id)]) ?
+      var views = state.views
+      for (viewId, live) in state.views {
+        if live.window == id { views = views.remove(viewId) }
+      }
+      Ok(Loop{..state, open: state.open.remove(id), views: views})
+    }
+    case Webview.Navigated(id, url) => {
+      send(&Plugin.navigated(&app.plugins, id, url)) ?
+      Ok(state)
+    }
+    case Webview.NavigationBlocked(_, url) => {
+      if app.openExternal { openOutside(url) }
+      Ok(state)
+    }
+    case Webview.NewWindowBlocked(_, url) => {
+      if app.openExternal { openOutside(url) }
+      Ok(state)
+    }
+    case Webview.Crashed(id) => {
+      send(&[Webview.reload(id)]) ?
+      Ok(state)
+    }
+    case Webview.Evaluated(_, _, Err(why)) => {
+      if isDev() { let _ = printError("[script] {why}") }
+      Ok(state)
+    }
+    case _ => Ok(state)
+  }
+}
+
+fn writeTypes(app: &App, path: Str) -> Result[(), AppError] {
+  match Io.write(path, Ipc.typescript(&app.commands)) {
+    case Ok(_) => Ok(())
+    case Err(why) => Err(TypesUnwritable(why))
+  }
+}
+
+/// Open the application's windows and serve them until the last one closes.
+export fn run(app: &App) -> Result[(), AppError] {
+  if let Some(path) = Env.variable("PUDU_DESKTOP_TYPES") { return writeTypes(app, path) }
+  let dev = isDev()
+  for held in app.plugins {
+    match Plugin.check(&held, &app.pluginGrants) {
+      case Ok(_) => ()
+      case Err(problem) => { return Err(PluginRefused(problem)) }
+    }
+  }
+  var state = opened(app, dev) ?
+  if dev {
+    if let Some(root) = app.frontend { state = Loop{..state, stamps: snapshot(root), scanned: Env.elapsedMilliseconds()} }
+  }
+  while !state.open.isEmpty() {
+    match Webview.pump(PUMP_MILLISECONDS) {
+      case Ok(_) => ()
+      case Err(problem) => { return Err(Platform(problem)) }
+    }
+    let events = match Webview.events() {
+      case Ok(found) => found
+      case Err(problem) => { return Err(Platform(problem)) }
+    }
+    for event in events { state = handled(app, state, &event) ? }
+    let now = Env.elapsedMilliseconds()
+    let ids: Array[Int] = state.views.keys()
+    if dev && now - state.scanned >= SCAN_INTERVAL {
+      if let Some(root) = app.frontend {
+        let stamps = snapshot(root)
+        send(&changed(&state.stamps, &stamps, &ids)) ?
+        state = Loop{..state, stamps: stamps, scanned: now}
+      }
+    }
+    if let Some(tick) = app.tick {
+      let windows: Array[Int] = state.open.toArray()
+      send(&tick(&Session{dev: dev, windows: windows, views: ids, now: now})) ?
+    }
+  }
+  Ok(())
+}
+
+/// What went wrong, for a person.
+export fn explain(problem: &AppError) -> Str {
+  match *problem {
+    case Platform(why) => Webview.explain(&why)
+    case PluginRefused(why) => Plugin.explain(&why)
+    case TypesUnwritable(why) => "the TypeScript module could not be written: {why}"
+    case NoWindows => "the application declares no windows"
+    case KeyUnavailable(why) => "no secure random source for invoke keys: {why}"
+  }
+}

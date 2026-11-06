@@ -57,6 +57,7 @@ import Pudu.Eval.Env (Evaluator (..), abortAt)
 import qualified Data.ByteString as ByteString
 import Pudu.Eval.Aead (openBytes, sealBytes)
 import Pudu.Eval.Verify (verifyEcdsaP256Sha256, verifyRsaSha256)
+import Pudu.Eval.Sign (ed25519PublicOf, ed25519Sign, ed25519Verify)
 import Pudu.Eval.Checksum (checksumKindOf, checksumUpdate)
 import Data.Word (Word64)
 import Pudu.IntegerLiteral (IntegerKind (UnsignedKind))
@@ -169,6 +170,11 @@ callHashing spanValue builtin arguments = case (builtin, arguments) of
     pure (BoolValue (verifyRsaSha256 modulus power message signature))
   (VerifyEcdsaBuiltin, [BytesValue x, BytesValue y, BytesValue message, BytesValue signature]) ->
     pure (BoolValue (verifyEcdsaP256Sha256 x y message signature))
+  (Ed25519PublicBuiltin, [BytesValue seed]) -> pure (optionalBytes (ed25519PublicOf seed))
+  (Ed25519SignBuiltin, [BytesValue seed, BytesValue message]) ->
+    pure (optionalBytes (ed25519Sign seed message))
+  (Ed25519VerifyBuiltin, [BytesValue public, BytesValue message, BytesValue signature]) ->
+    pure (BoolValue (ed25519Verify public message signature))
   (SealBuiltin, [BytesValue key, BytesValue nonce, BytesValue message, BytesValue associated]) ->
     pure (optionalBytes (sealBytes key nonce message associated))
   (OpenSealedBuiltin, [BytesValue key, BytesValue nonce, BytesValue sealed, BytesValue associated]) ->
@@ -291,6 +297,9 @@ isHashingBuiltin builtin = case builtin of
   ConstantTimeEqualBuiltin -> True
   VerifyRsaBuiltin -> True
   VerifyEcdsaBuiltin -> True
+  Ed25519PublicBuiltin -> True
+  Ed25519SignBuiltin -> True
+  Ed25519VerifyBuiltin -> True
   SealBuiltin -> True
   OpenSealedBuiltin -> True
   HmacBuiltin -> True

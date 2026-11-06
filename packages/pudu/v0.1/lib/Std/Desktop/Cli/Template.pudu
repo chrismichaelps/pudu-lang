@@ -1,0 +1,131 @@
+module Std.Desktop.Cli.Template
+
+import Std.Json as Json
+
+fn tomlText(text: Str) -> Str { Json.encode(&Json.Text(text)) }
+
+fn htmlText(text: Str) -> Str { text.escapeHtml() }
+
+fn manifest(name: Str, identifier: Str) -> Str {
+  [
+    "[app]",
+    "name = " + tomlText(name),
+    "identifier = " + tomlText(identifier),
+    "version = \"0.1.0\"",
+    "description = " + tomlText(name + ", a Pudu desktop application"),
+    "",
+    "[build]",
+    "entry = \"src/Main.pudu\"",
+    "frontend = \"frontend\"",
+    "out = \"dist\"",
+    "",
+    "[bundle]",
+    "targets = [\"app\", \"dmg\"]",
+    "",
+    "[updater]",
+    "endpoints = []",
+    "channel = \"stable\"",
+    ""
+  ].join("\n")
+}
+
+fn program(name: Str) -> Str {
+  [
+    "module Main",
+    "",
+    "import Std.Desktop.App as App",
+    "import Std.Desktop.Capability as Capability",
+    "import Std.Desktop.Ipc as Ipc",
+    "import Std.Desktop.Shape as Shape",
+    "import Std.Json as Json",
+    "",
+    "/// What `greet` receives from the frontend.",
+    "type Greeting = \{ name: Str \} derives Json.Decode, Shape.Describe",
+    "",
+    "/// What `greet` answers.",
+    "type Reply = \{ message: Str \} derives Json.Encode, Shape.Describe",
+    "",
+    "fn greet(greeting: Greeting, call: &Ipc.Call) -> Result[Reply, Ipc.Failure] \{",
+    "  if greeting.name.trim().isEmpty() \{ return Err(Ipc.failed(\"a name is needed\")) \}",
+    "  Ok(Reply\{message: \"Hello, \{greeting.name\}!\"\})",
+    "\}",
+    "",
+    "fn main() -> Result[(), Str] \{",
+    "  let commands = match Ipc.registry(&[Ipc.command(\"greet\", greet)], &[]) \{",
+    "    case Ok(found) => found",
+    "    case Err(problem) => \{ return Err(Ipc.explain(&problem)) \}",
+    "  \}",
+    "  let granted = Capability.Capability\{..Capability.capability(\"main\"), views: [\"main\"], allow: [Capability.permit(\"greet\")]\}",
+    "  let grants = match Capability.combine(&[granted]) \{",
+    "    case Ok(found) => found",
+    "    case Err(problem) => \{ return Err(Capability.explain(&problem)) \}",
+    "  \}",
+    "  match App.run(&App.newApp(" + Json.encode(&Json.Text(name)) + ", &commands, &grants)) \{",
+    "    case Ok(_) => Ok(())",
+    "    case Err(problem) => Err(App.explain(&problem))",
+    "  \}",
+    "\}",
+    ""
+  ].join("\n")
+}
+
+fn page(name: Str) -> Str {
+  [
+    "<!doctype html>",
+    "<html lang=\"en\">",
+    "  <head>",
+    "    <meta charset=\"utf-8\">",
+    "    <title>" + htmlText(name) + "</title>",
+    "    <link rel=\"stylesheet\" href=\"style.css\">",
+    "  </head>",
+    "  <body>",
+    "    <main>",
+    "      <h1>" + htmlText(name) + "</h1>",
+    "      <input id=\"name\" placeholder=\"Your name\">",
+    "      <button id=\"greet\">Greet</button>",
+    "      <p id=\"reply\"></p>",
+    "    </main>",
+    "    <script src=\"main.js\"></script>",
+    "  </body>",
+    "</html>",
+    ""
+  ].join("\n")
+}
+
+fn script() -> Str {
+  [
+    "const pudu = window.__pudu;",
+    "",
+    "document.getElementById('greet').addEventListener('click', async () => \{",
+    "  const reply = document.getElementById('reply');",
+    "  try \{",
+    "    const answer = await pudu.invoke('greet', \{ name: document.getElementById('name').value \});",
+    "    reply.textContent = answer.message;",
+    "  \} catch (problem) \{",
+    "    reply.textContent = `$\{problem.kind\}: $\{problem.message\}`;",
+    "  \}",
+    "\});",
+    ""
+  ].join("\n")
+}
+
+fn style() -> Str {
+  [
+    "body \{ font: 15px system-ui, sans-serif; margin: 0; background: #f6f5f2; color: #222; \}",
+    "main \{ display: grid; gap: 12px; padding: 32px; max-width: 480px; margin: auto; \}",
+    "input, button \{ font: inherit; padding: 8px 10px; border-radius: 6px; border: 1px solid #ccc; \}",
+    "button \{ justify-self: start; background: #2f5d50; color: white; border: none; \}",
+    ""
+  ].join("\n")
+}
+
+/// Every file a new project starts with, by path relative to its directory.
+export fn files(name: Str, identifier: Str) -> Array[(Str, Str)] {
+  [
+    ("pudu-desktop.toml", manifest(name, identifier)),
+    ("src/Main.pudu", program(name)),
+    ("frontend/index.html", page(name)),
+    ("frontend/main.js", script()),
+    ("frontend/style.css", style())
+  ]
+}

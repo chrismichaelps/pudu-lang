@@ -272,6 +272,13 @@ Grill Log — **Q:** write each signature out? **A:** No; the shape is the one s
 Lane kernels derive their schemes from `laneKernelSignature`: bytes, Float64, Int, arrays of
 either, `Option` of one, or a tuple of three byte lanes.
 
+## Desktop and signature names (#833)
+
+Types the Ed25519 builtins over `Bytes`, the WebView effects (`webviewSend: Str`,
+`webviewPump: Int -> Bool`, `webviewEvents: Bytes`, `webviewBody: Int -> Bytes`,
+`webviewRespond: Int, Int, Str, Bytes`), `modifiedTime: Str -> Int` and `executablePath: Str`, each
+effect answering `Result[_, Str]`.
+
 ## Referenced by
 
 [[src/Pudu/Type/_MOC]]

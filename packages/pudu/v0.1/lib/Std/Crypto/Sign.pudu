@@ -1,0 +1,102 @@
+module Std.Crypto.Sign
+
+import Std.Bytes as Bytes
+import Std.Hex as Hex
+
+/// An Ed25519 key: the 32-byte secret seed and the public key it signs for.
+export type KeyPair = { secret: Bytes, public: Bytes }
+
+/// Why a key or signature could not be made or read.
+export type SignError = BadSeed | NoEntropy(Str) | Malformed(Str)
+
+/// The first line of a secret key file.
+export const SECRET_HEADER: Str = "pudu-secret-key v1"
+
+/// The first line of a signature file.
+export const SIGNATURE_HEADER: Str = "pudu-signature v1"
+
+/// The key pair a 32-byte seed makes.
+export fn fromSeed(seed: &Bytes) -> Result[KeyPair, SignError] {
+  match ed25519PublicOf(*seed) {
+    case Some(public) => Ok(KeyPair{secret: *seed, public: public})
+    case None => Err(BadSeed)
+  }
+}
+
+/// A fresh key pair from the system's secure random source.
+export fn generate() -> Result[KeyPair, SignError] {
+  match secureRandomBytes(32) {
+    case Ok(seed) => fromSeed(&seed)
+    case Err(why) => Err(NoEntropy(why))
+  }
+}
+
+/// The 64-byte signature of `message`.
+export fn sign(pair: &KeyPair, message: &Bytes) -> Bytes {
+  match ed25519SignWith(pair.secret, *message) {
+    case Some(signature) => signature
+    case None => bytesOf([])
+  }
+}
+
+/// Whether `signature` is `public`'s signature of `message`.
+export fn verify(public: &Bytes, message: &Bytes, signature: &Bytes) -> Bool {
+  ed25519Verify(*public, *message, *signature)
+}
+
+/// A short name for a public key: the first eight bytes of its SHA-256, in hexadecimal.
+export fn keyId(public: &Bytes) -> Str { Hex.encode(&sha256Of(*public).take(8).toArray()) }
+
+fn lines(text: Str) -> Array[Str] { text.trim().lines().map(fn(line: Str) -> Str { line.trim() }) }
+
+fn decoded(text: Str, what: Str) -> Result[Bytes, SignError] {
+  match Bytes.decodeBase64(text) {
+    case Ok(found) => Ok(found)
+    case Err(_) => Err(Malformed(what + " is not base64"))
+  }
+}
+
+/// A secret key file's text.
+export fn encodeSecret(pair: &KeyPair) -> Str { SECRET_HEADER + "\n" + Bytes.encodeBase64(&pair.secret) + "\n" }
+
+/// The key pair a secret key file holds.
+export fn decodeSecret(text: Str) -> Result[KeyPair, SignError] {
+  let held = lines(text)
+  if held.length() != 2 || held[0] != SECRET_HEADER { return Err(Malformed("not a secret key file")) }
+  fromSeed(&decoded(held[1], "the seed") ?)
+}
+
+/// A public key's text.
+export fn encodePublic(public: &Bytes) -> Str { Bytes.encodeBase64(public) }
+
+/// A public key from its text.
+export fn decodePublic(text: Str) -> Result[Bytes, SignError] {
+  let key = decoded(text.trim(), "the public key") ?
+  if key.length() != 32 { return Err(Malformed("a public key is 32 bytes")) }
+  Ok(key)
+}
+
+/// A signature file's text, naming the key that made it.
+export fn encodeSignature(public: &Bytes, signature: &Bytes) -> Str {
+  SIGNATURE_HEADER + "\nkey " + keyId(public) + "\n" + Bytes.encodeBase64(signature) + "\n"
+}
+
+/// The key id and signature a signature file holds.
+export fn decodeSignature(text: Str) -> Result[(Str, Bytes), SignError] {
+  let held = lines(text)
+  if held.length() != 3 || held[0] != SIGNATURE_HEADER || !held[1].startsWith("key ") {
+    return Err(Malformed("not a signature file"))
+  }
+  let signature = decoded(held[2], "the signature") ?
+  if signature.length() != 64 { return Err(Malformed("a signature is 64 bytes")) }
+  Ok((held[1].drop(4), signature))
+}
+
+/// What went wrong, for a person.
+export fn explain(problem: &SignError) -> Str {
+  match *problem {
+    case BadSeed => "a secret key seed is 32 bytes"
+    case NoEntropy(why) => "no secure random source: {why}"
+    case Malformed(why) => why
+  }
+}

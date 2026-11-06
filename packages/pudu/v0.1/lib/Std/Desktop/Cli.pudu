@@ -1,0 +1,349 @@
+module Std.Desktop.Cli
+
+import Std.Bytes as Bytes
+import Std.Compress.Gzip as Gzip
+import Std.Concurrent as Concurrent
+import Std.Crypto.Sign as Sign
+import Std.Desktop.Bundle as Bundle
+import Std.Desktop.Bundle.Config as Config
+import Std.Desktop.Cli.Template as Template
+import Std.Desktop.Delta as Delta
+import Std.Desktop.Protocol as Protocol
+import Std.Desktop.Update as Update
+import Std.Env as Env
+import Std.Fs as Fs
+import Std.Hex as Hex
+import Std.Io as Io
+import Std.Json as Json
+import Std.Path as Path
+import Std.Process {Launching}
+import Std.Process as Process
+
+/// One `pudu desktop` command, given the arguments after its name.
+type Command = fn(&Array[Str]) -> Result[(), Str]
+
+/// Every command, by name.
+const COMMANDS: Map[Str, Command] = mapOf([
+    ("init", initCommand),
+    ("dev", devCommand),
+    ("types", typesCommand),
+    ("build", buildCommand),
+    ("bundle", bundleCommand),
+    ("keygen", keygenCommand),
+    ("sign", signCommand),
+    ("delta", deltaCommand),
+    ("manifest", manifestCommand),
+  ])
+
+/// The flags that take a value, so they are not read as positional arguments.
+const VALUED: Array[Str] = ["--config", "--out", "--key", "--executable", "--arch", "--artifact", "--url", "--patch", "--patch-url", "--from", "--notes", "--name", "--identifier", "--platform"]
+
+const USAGE: Str = "usage: pudu desktop <init|dev|types|build|bundle|keygen|sign|delta|manifest> ..."
+
+fn argument(given: &Array[Str], index: Int) -> Option[Str] {
+  if index < given.length() { Some(given[index]) } else { None }
+}
+
+fn optionOr(name: Str, fallback: Str) -> Str {
+  match Env.option(name) {
+    case Some(found) => found
+    case None => fallback
+  }
+}
+
+fn configured() -> Result[Config.Config, Str] {
+  match Config.load(optionOr("--config", "pudu-desktop.toml")) {
+    case Ok(found) => Ok(found)
+    case Err(problem) => Err(Config.explain(&problem))
+  }
+}
+
+fn compiler() -> Result[Str, Str] { Env.executable() }
+
+fn ioStep[T](outcome: Result[T, Io.IoError], what: Str) -> Result[T, Str] {
+  match outcome {
+    case Ok(value) => Ok(value)
+    case Err(why) => Err("{what}: {show(why)}")
+  }
+}
+
+fn initCommand(rest: &Array[Str]) -> Result[(), Str] {
+  let directory = match argument(rest, 0) {
+    case Some(found) => found
+    case None => { return Err("usage: pudu desktop init <directory> [--name Name] [--identifier dev.example.app]") }
+  }
+  if Io.exists(Path.join(directory, "pudu-desktop.toml")) { return Err("{directory} already holds a desktop application") }
+  let name = optionOr("--name", Path.nameOf(directory))
+  let identifier = optionOr("--identifier", "dev.pudu." + name.toLower().replace(" ", "-"))
+  for (relative, content) in Template.files(name, identifier) {
+    let path = Path.join(directory, relative)
+    Io.makeDirectory(Path.directoryOf(path)) ?
+    Io.write(path, content) ?
+  }
+  let _ = print("created {name} in {directory}; run `pudu desktop dev` there")
+  Ok(())
+}
+
+fn textOf(chunk: &Bytes) -> Str {
+  match chunk.toText() {
+    case Some(found) => found
+    case None => ""
+  }
+}
+
+fn forward(running: &Process.Started) -> () {
+  let errors = *running
+  let _ = Concurrent.start(fn() -> () {
+      while let Ok(Some(chunk)) = Process.readErrors(&errors) {
+        let _ = printErrorPart(textOf(&chunk))
+      }
+    })
+  while let Ok(Some(chunk)) = Process.read(running) {
+    let _ = printPart(textOf(&chunk))
+  }
+}
+
+fn devCommand(rest: &Array[Str]) -> Result[(), Str] {
+  let config = configured() ?
+  let plan = Process.launch(compiler() ?, &["run", "--watch", config.entry])
+    .withVariable("PUDU_DESKTOP_DEV", "1")
+    .withVariable("PUDU_DESKTOP_ASSETS", config.frontend)
+  let running = Process.begin(&plan) ?
+  forward(&running)
+  let status = Process.wait(&running) ?
+  if status == 0 { Ok(()) } else { Err("the application exited with status {status}") }
+}
+
+fn typesCommand(rest: &Array[Str]) -> Result[(), Str] {
+  let config = configured() ?
+  let target = optionOr("--out", Path.join(config.frontend, "pudu.ts"))
+  let plan = Process.launch(compiler() ?, &["run", config.entry]).withVariable("PUDU_DESKTOP_TYPES", target)
+  let finished = Process.runLaunch(&plan, "") ?
+  if finished.status != 0 { return Err(Process.describe(&finished)) }
+  let _ = print("wrote {target}")
+  Ok(())
+}
+
+/// The marker that ends a program attached to a runtime.
+const MARKER: Str = "\n--pudu-bundle--\n"
+
+/// The decimal digits of the attached program's length, before the marker.
+const LENGTH_DIGITS: Int = 16
+
+/// A built executable as its runtime and the program attached to it, which ships as the sidecar.
+fn split(whole: &Bytes) -> Result[(Bytes, Bytes), Str] {
+  let trailer = MARKER.toBytes().length() + LENGTH_DIGITS
+  if whole.length() < trailer || whole.drop(whole.length() - MARKER.toBytes().length()) != MARKER.toBytes() {
+    return Err("the executable carries no program")
+  }
+  let digits = match whole.slice(whole.length() - trailer, whole.length() - trailer + LENGTH_DIGITS).toText() {
+    case Some(found) => found
+    case None => { return Err("the program length is not text") }
+  }
+  let size = match digits.toInt() {
+    case Some(found) => found
+    case None => { return Err("the program length is not a number") }
+  }
+  let start = whole.length() - trailer - size
+  if start < 0 { return Err("the program length exceeds the executable") }
+  Ok((whole.take(start), whole.drop(start)))
+}
+
+/// The runtime with its symbol tables removed, when `strip` is installed.
+fn stripped(runtime: &Bytes, scratch: Str) -> Bytes {
+  if !Process.isAvailable("strip") { return *runtime }
+  match Io.writeAllBytes(scratch, runtime) {
+    case Ok(_) => ()
+    case Err(_) => { return *runtime }
+  }
+  let result = match Process.run("strip", &[scratch]) {
+    case Ok(finished) if finished.status == 0 => match Io.readAllBytes(scratch) {
+      case Ok(found) => found
+      case Err(_) => *runtime
+    }
+    case _ => *runtime
+  }
+  let _ = Io.remove(scratch)
+  result
+}
+
+/// Build the entry into one executable under the output directory; answers its path.
+fn built(config: &Config.Config) -> Result[Str, Str] {
+  let output = Path.join(config.out, Config.packageName(config))
+  Io.makeDirectory(config.out) ?
+  let finished = Process.run(compiler() ?, &["build", config.entry, "-o", output]) ?
+  if finished.status != 0 { return Err(Process.describe(&finished)) }
+  Ok(output)
+}
+
+fn buildCommand(rest: &Array[Str]) -> Result[(), Str] {
+  let config = configured() ?
+  let output = built(&config) ?
+  let _ = print("built {output}")
+  Ok(())
+}
+
+fn hostArch() -> Str {
+  match Process.output("uname", &["-m"]) {
+    case Ok(text) if text.trim() == "arm64" || text.trim() == "aarch64" => "aarch64"
+    case _ => "x86_64"
+  }
+}
+
+fn hostPlatform() -> Str { if directoryExists("/System/Library") { "darwin" } else { "linux" } }
+
+fn signingKey() -> Result[Option[Sign.KeyPair], Str] {
+  let path = match Env.variable("PUDU_DESKTOP_SIGNING_KEY") {
+    case Some(found) => found
+    case None => { return Ok(None) }
+  }
+  match Sign.decodeSecret(Io.read(path) ?) {
+    case Ok(pair) => Ok(Some(pair))
+    case Err(problem) => Err(Sign.explain(&problem))
+  }
+}
+
+fn bundleCommand(rest: &Array[Str]) -> Result[(), Str] {
+  let config = configured() ?
+  let executablePath = match Env.option("--executable") {
+    case Some(given) => given
+    case None => built(&config) ?
+  }
+  let (runtime, program) = split(&ioStep(Io.readAllBytes(executablePath), executablePath) ?) ?
+  let assets = match Protocol.pack(config.frontend, config.keepSourceMaps) {
+    case Ok(found) => found
+    case Err(problem) => { return Err(Protocol.explain(&problem)) }
+  }
+  let icon = match config.icon {
+    case Some(path) => Some(ioStep(Io.readAllBytes(path), path) ?)
+    case None => None
+  }
+  let inputs = Config.Inputs {
+    runtime: stripped(&runtime, Path.join(config.out, ".pudu-runtime")),
+    program: program,
+    assets: assets,
+    icon: icon,
+    iconPath: config.icon,
+    arch: optionOr("--arch", hostArch())
+  }
+  let now = clock() / 1000
+  let produced = match Bundle.bundle(&config, &inputs, now) {
+    case Ok(found) => found
+    case Err(problem) => { return Err(Config.explainBundle(&problem)) }
+  }
+  for held in produced { let _ = print("{held.target}: {held.path}") }
+  if let Some(pair) = signingKey() ? {
+    let platform = optionOr("--platform", hostPlatform())
+    let archive = Bundle.updateArchive(&config, &inputs, platform, 1700000000)
+    let packed = Path.join(Path.join(config.out, "updates"), "{Config.packageName(&config)}-{config.version}-{platform}-{inputs.arch}.tar.gz")
+    Io.makeDirectory(Path.directoryOf(packed)) ?
+    let artifact = Gzip.compress(&archive, &Gzip.config())
+    ioStep(Io.writeAllBytes(packed, &artifact), packed) ?
+    ioStep(Io.writeAllBytes(packed.replace(".tar.gz", ".tar"), &archive), packed) ?
+    Io.write(packed + ".sig", Sign.encodeSignature(&pair.public, &Sign.sign(&pair, &artifact))) ?
+    let _ = print("update: {packed}")
+  }
+  Ok(())
+}
+
+fn keygenCommand(rest: &Array[Str]) -> Result[(), Str] {
+  let target = optionOr("--out", "pudu-desktop.key")
+  if Io.exists(target) { return Err("{target} already exists; keys are never overwritten") }
+  let pair = match Sign.generate() {
+    case Ok(found) => found
+    case Err(problem) => { return Err(Sign.explain(&problem)) }
+  }
+  Io.write(target, Sign.encodeSecret(&pair)) ?
+  match Fs.setPermissions(target, &Fs.Permissions{readable: true, writable: true, executable: false, searchable: false}) {
+    case Ok(_) => ()
+    case Err(why) => { return Err(show(why)) }
+  }
+  let _ = print("secret key: {target} (keep it out of version control)")
+  let _ = print("updater.publicKey = \"{Sign.encodePublic(&pair.public)}\"")
+  Ok(())
+}
+
+fn signCommand(rest: &Array[Str]) -> Result[(), Str] {
+  let file = match argument(rest, 0) {
+    case Some(found) => found
+    case None => { return Err("usage: pudu desktop sign <file> [--key path]") }
+  }
+  let keyPath = optionOr("--key", Env.variableOr("PUDU_DESKTOP_SIGNING_KEY", "pudu-desktop.key"))
+  let pair = match Sign.decodeSecret(Io.read(keyPath) ?) {
+    case Ok(found) => found
+    case Err(problem) => { return Err(Sign.explain(&problem)) }
+  }
+  let content = ioStep(Io.readAllBytes(file), file) ?
+  Io.write(file + ".sig", Sign.encodeSignature(&pair.public, &Sign.sign(&pair, &content))) ?
+  let _ = print("signed {file}")
+  Ok(())
+}
+
+fn deltaCommand(rest: &Array[Str]) -> Result[(), Str] {
+  if rest.length() != 3 { return Err("usage: pudu desktop delta <old.tar> <new.tar> <patch>") }
+  let old = ioStep(Io.readAllBytes(rest[0]), rest[0]) ?
+  let new = ioStep(Io.readAllBytes(rest[1]), rest[1]) ?
+  let patch = Delta.diff(&old, &new)
+  ioStep(Io.writeAllBytes(rest[2], &patch), rest[2]) ?
+  let _ = print("{rest[2]}: {patch.length()} bytes for {new.length()}")
+  Ok(())
+}
+
+fn manifestCommand(rest: &Array[Str]) -> Result[(), Str] {
+  let config = configured() ?
+  let pair = match signingKey() ? {
+    case Some(found) => found
+    case None => { return Err("set PUDU_DESKTOP_SIGNING_KEY to the secret key file") }
+  }
+  let artifactPath = match Env.option("--artifact") {
+    case Some(found) => found
+    case None => { return Err("--artifact names the update archive") }
+  }
+  let url = match Env.option("--url") {
+    case Some(found) => found
+    case None => { return Err("--url names where the archive is published") }
+  }
+  let artifact = ioStep(Io.readAllBytes(artifactPath), artifactPath) ?
+  var patches: Array[Update.Patch] = []
+  if let Some(patchPath) = Env.option("--patch") {
+    let patch = ioStep(Io.readAllBytes(patchPath), patchPath) ?
+    patches = patches.push(Update.Patch {
+        from: optionOr("--from", ""),
+        url: optionOr("--patch-url", ""),
+        size: patch.length(),
+        sha256: Hex.encode(&sha256Of(patch).toArray()),
+        signature: Sign.encodeSignature(&pair.public, &Sign.sign(&pair, &patch))
+      })
+  }
+  let platform = optionOr("--platform", hostPlatform()) + "-" + optionOr("--arch", hostArch())
+  let track = match Update.trackNamed(config.updater.channel) {
+    case Some(found) => found
+    case None => Update.Stable
+  }
+  let entry = Update.manifestEntry(&pair, url, &artifact, &patches)
+  let text = Update.manifest(config.version, optionOr("--notes", ""), "", &track, &[(platform, entry)])
+  match Env.option("--out") {
+    case Some(target) => Io.write(target, text) ?
+    case None => { let _ = print(text) }
+  }
+  Ok(())
+}
+
+/// Run `pudu desktop <command>`.
+fn main() -> () {
+  let given = Env.positional(&VALUED)
+  let outcome = match argument(&given, 0) {
+    case Some(name) => match COMMANDS.get(name) {
+      case Some(command) => command(&given.slice(1, given.length()))
+      case None => Err(USAGE)
+    }
+    case None => Err(USAGE)
+  }
+  match outcome {
+    case Ok(_) => ()
+    case Err(why) => {
+      let _ = printError("pudu desktop: {why}")
+      exit(1)
+    }
+  }
+}

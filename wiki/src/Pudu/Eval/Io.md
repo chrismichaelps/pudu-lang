@@ -149,6 +149,13 @@ original failure and asynchronous exceptions remain control signals.
 `monotonicNanoseconds` reads the same monotonic clock as `monotonicMilliseconds` in whole
 nanoseconds (#670), for intervals shorter than a millisecond.
 
+## Modification time and executable path (#833)
+
+`modifiedMillisAt` answers a file's modification time in milliseconds since the epoch and
+`executableLocation` the path this process was started from; both are `IoOutcome`s like the
+module's other effects. The executable path is how an installed desktop application finds the
+frontend archive and sidecar program installed beside it.
+
 ## Referenced by
 
 [[src/Pudu/Eval/_MOC]] · [[Evaluator]] · [[Atomic Permission Gate]]

@@ -59,6 +59,12 @@ their existing obligations. The application graph model tests and actual library
 
 [[Concurrent Release Gate]] runs after the residency gate.
 
+## Desktop framework (#833)
+
+The library job installs `rpm`, `nsis` and TypeScript and runs [[Desktop Webview Gate]], so every
+package the framework writes is checked by the tool that installs it and the generated TypeScript
+module type-checks. [[Desktop Webview CI]] drives the native adapters.
+
 ## Referenced by
 
 [[Application Layer Gate]] · [[Repository Gates]]

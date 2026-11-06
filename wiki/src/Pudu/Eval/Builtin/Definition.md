@@ -196,6 +196,12 @@ replacement; definitions retain no runtime policy.
 Grill Log — **Q:** one constructor per kernel? **A:** No; a carried enumeration keeps the
 evaluator, checker and resolver reading the same closed list.
 
+## Desktop and signature builtins (#833)
+
+Adds `Ed25519PublicBuiltin`, `Ed25519SignBuiltin`, `Ed25519VerifyBuiltin`, the five
+`Webview*Builtin` effects, `ModifiedTimeBuiltin` and `ExecutablePathBuiltin`, with their prelude
+names.
+
 ## Referenced by
 
 [[src/Pudu/Eval/_MOC]] · [[Eval Value]] · [[Eval Builtin]] · [[Eval Effect]]

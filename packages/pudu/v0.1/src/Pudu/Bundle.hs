@@ -62,7 +62,7 @@ import System.Directory
   , setPermissions
   )
 import System.Environment (getExecutablePath)
-import System.FilePath (joinPath, takeDirectory, (</>))
+import System.FilePath (joinPath, takeDirectory, takeFileName, (</>))
 import System.IO
   ( IOMode (ReadMode, WriteMode)
   , SeekMode (AbsoluteSeek)
@@ -294,12 +294,42 @@ attachedSize whole trailer = do
   _ <- decode (ByteString.take size (ByteString.drop start whole))
   pure size
 
-{-| The bundle attached to the running executable, if there is one. -}
+{-| The bundle attached to the running executable, or else the one in its
+    sidecar file, if there is one.
+
+    A signed desktop package cannot carry bytes after its executable image, so
+    it ships the runtime unchanged and the program as a resource holding the
+    same encoding: `<executable>.pudub` beside it, or in the bundle's
+    `Contents/Resources` when it runs from a macOS application's
+    `Contents/MacOS`. -}
 attachedBundle :: IO (Maybe Bundle)
 attachedBundle = do
   self <- getExecutablePath
-  found <- try (readTrailer self) :: IO (Either IOException (Maybe Bundle))
-  pure (either (const Nothing) id found)
+  attached <- quietly self
+  case attached of
+    Just bundle -> pure (Just bundle)
+    Nothing -> firstSidecar (sidecarsOf self)
+ where
+  quietly path = do
+    present <- doesFileExist path
+    if not present
+      then pure Nothing
+      else do
+        found <- try (readTrailer path) :: IO (Either IOException (Maybe Bundle))
+        pure (either (const Nothing) id found)
+  firstSidecar paths = case paths of
+    [] -> pure Nothing
+    path : rest -> quietly path >>= maybe (firstSidecar rest) (pure . Just)
+
+{-| Where an executable's sidecar program may be, in the order looked for. -}
+sidecarsOf :: FilePath -> [FilePath]
+sidecarsOf self =
+  (self <> ".pudub")
+    : [ takeDirectory directory </> "Resources" </> (takeFileName self <> ".pudub")
+      | let directory = takeDirectory self
+      , takeFileName directory == "MacOS"
+      , takeFileName (takeDirectory directory) == "Contents"
+      ]
 
 readTrailer :: FilePath -> IO (Maybe Bundle)
 readTrailer self = withBinaryFile self ReadMode $ \handle -> do

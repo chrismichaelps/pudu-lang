@@ -102,6 +102,11 @@ replacement, failure output, and temporary-file cleanup on POSIX systems.
 Resolved Grill Log: every release-relevant boundary runs against the same freshly optimized binary,
 including externally observable filesystem modes that portable permission booleans cannot prove.
 
+## Desktop applications (#833)
+
+[[Desktop Webview Gate]] checks the desktop modules, the bridge, generated TypeScript, signed
+updates over HTTP and packages, and drives a live WebView on macOS when `PUDU_DESKTOP_DRIVE=1`.
+
 ## Referenced by
 
 [[architecture/DELIVERY]] · [[Diagnostic Code Gate]] · [[Generated Project Gate]] · [[Streaming Residency Gate]] · [[Atomic Permission Gate]] · [[Pudu CLI]]

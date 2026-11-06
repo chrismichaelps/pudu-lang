@@ -1,0 +1,285 @@
+module Std.Desktop.Bundle.Config
+
+import Std.Io as Io
+import Std.Path as Path
+import Std.Process as Process
+import Std.Semver as Semver
+import Std.Toml.Read as TomlRead
+import Std.Toml as Toml
+
+/// macOS settings: the oldest supported system and optional signing and notarization.
+export type MacSettings = {
+  minimumSystem: Str,
+  signingIdentity: Option[Str],
+  entitlements: Option[Str],
+  notarizeProfile: Option[Str]
+}
+
+/// Linux settings: package dependencies, the archive section, and an optional signing key.
+export type LinuxSettings = { depends: Array[Str], section: Str, gpgKey: Option[Str] }
+
+/// Windows settings: an optional signing certificate, its timestamp server, and the upgrade code.
+export type WindowsSettings = { certificate: Option[Str], timestampUrl: Str, upgradeCode: Str }
+
+/// Where updates are published.
+export type UpdaterSettings = { endpoints: Array[Str], publicKey: Option[Str], channel: Str, baseUrl: Str }
+
+/// A desktop application's packaging, as `pudu-desktop.toml` declares it.
+export type Config = {
+  name: Str,
+  identifier: Str,
+  version: Str,
+  publisher: Str,
+  description: Str,
+  copyright: Str,
+  category: Str,
+  homepage: Str,
+  license: Str,
+  icon: Option[Str],
+  entry: Str,
+  frontend: Str,
+  out: Str,
+  keepSourceMaps: Bool,
+  targets: Array[Str],
+  mac: MacSettings,
+  linux: LinuxSettings,
+  windows: WindowsSettings,
+  updater: UpdaterSettings
+}
+
+/// What every package format consumes: the runtime executable, the program it runs (shipped beside it
+/// as `<executable>.pudub`), the packed frontend, an icon, and the processor, `x86_64` or `aarch64`.
+export type Inputs = {
+  runtime: Bytes,
+  program: Bytes,
+  assets: Bytes,
+  icon: Option[Bytes],
+  iconPath: Option[Str],
+  arch: Str
+}
+
+/// Why a package could not be written.
+export type BundleError
+  = ToolMissing(Str, Str)
+  | ToolFailed(Str, Str)
+  | WriteFailed(Str, Str)
+  | Unsupported(Str)
+
+/// Why the configuration was refused.
+export type ConfigError = Unreadable(Str) | NotToml(Str) | Missing(Str) | Invalid(Str, Str)
+
+/// Every package format the bundler writes.
+export const TARGETS: Set[Str] = #{"app", "dmg", "deb", "rpm", "appimage", "nsis", "msi"}
+
+/// Release channels an update may be published on.
+const CHANNELS: Set[Str] = #{"stable", "beta", "nightly"}
+
+const LABEL_CHARACTERS: Str = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-"
+
+fn find(document: &Toml.Toml, dotted: Str) -> Option[Toml.Toml] { Toml.path(document, dotted) }
+
+fn textOr(document: &Toml.Toml, dotted: Str, fallback: Str) -> Result[Str, ConfigError] {
+  match find(document, dotted) {
+    case None => Ok(fallback)
+    case Some(value) => match Toml.asText(&value) {
+      case Some(found) => Ok(found)
+      case None => Err(Invalid(dotted, "must be text"))
+    }
+  }
+}
+
+fn optionalText(document: &Toml.Toml, dotted: Str) -> Result[Option[Str], ConfigError] {
+  match find(document, dotted) {
+    case None => Ok(None)
+    case Some(value) => match Toml.asText(&value) {
+      case Some(found) => Ok(Some(found))
+      case None => Err(Invalid(dotted, "must be text"))
+    }
+  }
+}
+
+fn required(document: &Toml.Toml, dotted: Str) -> Result[Str, ConfigError] {
+  match optionalText(document, dotted) ? {
+    case Some(found) if !found.trim().isEmpty() => Ok(found)
+    case _ => Err(Missing(dotted))
+  }
+}
+
+fn texts(document: &Toml.Toml, dotted: Str, fallback: Array[Str]) -> Result[Array[Str], ConfigError] {
+  match find(document, dotted) {
+    case None => Ok(fallback)
+    case Some(value) => {
+      let items = match Toml.asList(&value) {
+        case Some(found) => found
+        case None => { return Err(Invalid(dotted, "must be a list of text")) }
+      }
+      var found: Array[Str] = []
+      for item in items {
+        match Toml.asText(&item) {
+          case Some(text) => { found = found.push(text) }
+          case None => { return Err(Invalid(dotted, "must be a list of text")) }
+        }
+      }
+      Ok(found)
+    }
+  }
+}
+
+fn flag(document: &Toml.Toml, dotted: Str) -> Result[Bool, ConfigError] {
+  match find(document, dotted) {
+    case None => Ok(false)
+    case Some(value) => match Toml.asBoolean(&value) {
+      case Some(found) => Ok(found)
+      case None => Err(Invalid(dotted, "must be true or false"))
+    }
+  }
+}
+
+/// Whether an identifier is reverse-DNS: two or more labels of letters, digits and hyphens.
+export fn validIdentifier(identifier: Str) -> Bool {
+  let labels = identifier.split(".")
+  labels.length() >= 2 && labels.filter(fn(label: Str) -> Bool {
+      label.isEmpty() || label.spanOf(LABEL_CHARACTERS) != label.length() || label.startsWith("-")
+    }).isEmpty()
+}
+
+/// The platform's own default targets: `app` and `dmg` on macOS, the Linux packages elsewhere.
+export fn defaultTargets() -> Array[Str] {
+  if directoryExists("/System/Library") { ["app", "dmg"] } else { ["deb", "rpm", "appimage"] }
+}
+
+/// A configuration from a parsed document.
+export fn parse(document: &Toml.Toml) -> Result[Config, ConfigError] {
+  let name = required(document, "app.name") ?
+  let identifier = required(document, "app.identifier") ?
+  if !validIdentifier(identifier) { return Err(Invalid("app.identifier", "must be reverse-DNS, such as dev.example.notes")) }
+  let version = required(document, "app.version") ?
+  match Semver.parse(version) {
+    case Ok(_) => ()
+    case Err(problem) => { return Err(Invalid("app.version", Semver.explain(&problem))) }
+  }
+  let targets = texts(document, "bundle.targets", defaultTargets()) ?
+  for target in targets {
+    if !(target in TARGETS) { return Err(Invalid("bundle.targets", "{target} is not a package format")) }
+  }
+  let channel = textOr(document, "updater.channel", "stable") ?
+  if !(channel in CHANNELS) { return Err(Invalid("updater.channel", "{channel} is not stable, beta or nightly")) }
+  Ok(Config {
+      name: name,
+      identifier: identifier,
+      version: version,
+      publisher: textOr(document, "app.publisher", name) ?,
+      description: textOr(document, "app.description", name) ?,
+      copyright: textOr(document, "app.copyright", "") ?,
+      category: textOr(document, "app.category", "Utility") ?,
+      homepage: textOr(document, "app.homepage", "") ?,
+      license: textOr(document, "app.license", "Proprietary") ?,
+      icon: optionalText(document, "app.icon") ?,
+      entry: textOr(document, "build.entry", "src/Main.pudu") ?,
+      frontend: textOr(document, "build.frontend", "frontend") ?,
+      out: textOr(document, "build.out", "dist") ?,
+      keepSourceMaps: flag(document, "build.keepSourceMaps") ?,
+      targets: targets,
+      mac: MacSettings {
+        minimumSystem: textOr(document, "bundle.macos.minimumSystemVersion", "12.0") ?,
+        signingIdentity: optionalText(document, "bundle.macos.signingIdentity") ?,
+        entitlements: optionalText(document, "bundle.macos.entitlements") ?,
+        notarizeProfile: optionalText(document, "bundle.macos.notarizeProfile") ?
+      },
+      linux: LinuxSettings {
+        depends: texts(document, "bundle.linux.depends", []) ?,
+        section: textOr(document, "bundle.linux.section", "utils") ?,
+        gpgKey: optionalText(document, "bundle.linux.gpgKey") ?
+      },
+      windows: WindowsSettings {
+        certificate: optionalText(document, "bundle.windows.certificate") ?,
+        timestampUrl: textOr(document, "bundle.windows.timestampUrl", "http://timestamp.digicert.com") ?,
+        upgradeCode: textOr(document, "bundle.windows.upgradeCode", "") ?
+      },
+      updater: UpdaterSettings {
+        endpoints: texts(document, "updater.endpoints", []) ?,
+        publicKey: optionalText(document, "updater.publicKey") ?,
+        channel: channel,
+        baseUrl: textOr(document, "updater.baseUrl", "") ?
+      }
+    })
+}
+
+/// A configuration read from a file.
+export fn load(path: Str) -> Result[Config, ConfigError] {
+  let source = match Io.read(path) {
+    case Ok(found) => found
+    case Err(why) => { return Err(Unreadable("{path}: {why}")) }
+  }
+  match TomlRead.read(source) {
+    case Ok(document) => parse(&document)
+    case Err(problem) => Err(NotToml("{path}: {show(problem)}"))
+  }
+}
+
+/// The lower-case package name: letters and digits kept, every other run made one hyphen.
+export fn packageName(config: &Config) -> Str {
+  var out = ""
+  var gap = false
+  for character in config.name.toLower().chars() {
+    let text = character.toText()
+    if "abcdefghijklmnopqrstuvwxyz0123456789".contains(text) {
+      if gap && !out.isEmpty() { out = out + "-" }
+      out = out + text
+      gap = false
+    } else {
+      gap = true
+    }
+  }
+  if out.isEmpty() { "app" } else { out }
+}
+
+/// Run a tool a format needs, naming the format when it is not installed.
+export fn tool(format: Str, program: Str, arguments: &Array[Str]) -> Result[Str, BundleError] {
+  if !Process.isAvailable(program) { return Err(ToolMissing(format, program)) }
+  match Process.run(program, arguments) {
+    case Ok(finished) if finished.status == 0 => Ok(finished.output)
+    case Ok(finished) => Err(ToolFailed(program, Process.describe(&finished)))
+    case Err(why) => Err(ToolFailed(program, why))
+  }
+}
+
+/// Write bytes to a file, creating its directory.
+export fn writeFile(path: Str, contents: &Bytes) -> Result[(), BundleError] {
+  let directory = Path.directoryOf(path)
+  if !directory.isEmpty() {
+    match Io.makeDirectory(directory) {
+      case Ok(_) => ()
+      case Err(why) => { return Err(WriteFailed(directory, why)) }
+    }
+  }
+  match Io.writeAllBytes(path, contents) {
+    case Ok(_) => Ok(())
+    case Err(why) => Err(WriteFailed(path, show(why)))
+  }
+}
+
+/// Text that is safe inside XML content and attribute values.
+export fn xmlEscaped(text: Str) -> Str {
+  text.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;").replace("\"", "&quot;").replace("'", "&apos;")
+}
+
+/// What went wrong while packaging, for a person.
+export fn explainBundle(problem: &BundleError) -> Str {
+  match *problem {
+    case ToolMissing(format, program) => "{format} needs {program}, which is not installed"
+    case ToolFailed(program, why) => "{program} failed: {why}"
+    case WriteFailed(path, why) => "{path} could not be written: {why}"
+    case Unsupported(why) => why
+  }
+}
+
+/// What went wrong, for a person.
+export fn explain(problem: &ConfigError) -> Str {
+  match *problem {
+    case Unreadable(why) => why
+    case NotToml(why) => "not TOML: {why}"
+    case Missing(key) => "{key} is required"
+    case Invalid(key, why) => "{key} {why}"
+  }
+}

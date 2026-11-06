@@ -1,0 +1,143 @@
+module Std.Desktop.Bundle.Mac
+
+import Std.Desktop.Bundle.Config {BundleError}
+import Std.Desktop.Bundle.Config as Config
+import Std.Fs as Fs
+import Std.Io as Io
+import Std.Path as Path
+
+/// The icon sizes an `.icns` file carries, as `iconutil` names them.
+const ICON_SIZES: Array[(Str, Int)] = [
+  ("icon_16x16.png", 16),
+  ("icon_16x16@2x.png", 32),
+  ("icon_32x32.png", 32),
+  ("icon_32x32@2x.png", 64),
+  ("icon_128x128.png", 128),
+  ("icon_128x128@2x.png", 256),
+  ("icon_256x256.png", 256),
+  ("icon_256x256@2x.png", 512),
+  ("icon_512x512.png", 512),
+  ("icon_512x512@2x.png", 1024)
+]
+
+fn entry(key: Str, value: Str) -> Str {
+  "  <key>" + Config.xmlEscaped(key) + "</key>\n  <string>" + Config.xmlEscaped(value) + "</string>\n"
+}
+
+/// The bundle's `Info.plist`.
+export fn infoPlist(config: &Config.Config, executable: Str) -> Str {
+  var body = entry("CFBundleName", config.name)
+  body = body + entry("CFBundleDisplayName", config.name)
+  body = body + entry("CFBundleIdentifier", config.identifier)
+  body = body + entry("CFBundleVersion", config.version)
+  body = body + entry("CFBundleShortVersionString", config.version)
+  body = body + entry("CFBundleExecutable", executable)
+  body = body + entry("CFBundlePackageType", "APPL")
+  body = body + entry("CFBundleIconFile", "icon.icns")
+  body = body + entry("LSMinimumSystemVersion", config.mac.minimumSystem)
+  body = body + entry("LSApplicationCategoryType", "public.app-category." + config.category.toLower())
+  body = body + entry("NSHumanReadableCopyright", config.copyright)
+  body = body + "  <key>NSHighResolutionCapable</key>\n  <true/>\n"
+  "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<!DOCTYPE plist PUBLIC \"-//Apple//DTD PLIST 1.0//EN\" \"http://www.apple.com/DTDs/PropertyList-1.0.dtd\">\n<plist version=\"1.0\">\n<dict>\n" + body + "</dict>\n</plist>\n"
+}
+
+fn icon(inputs: &Config.Inputs, resources: Str, scratch: Str) -> Result[(), BundleError] {
+  let source = match inputs.iconPath {
+    case Some(found) => found
+    case None => { return Ok(()) }
+  }
+  let target = Path.join(resources, "icon.icns")
+  if source.endsWith(".icns") {
+    match inputs.icon {
+      case Some(bytes) => { return Config.writeFile(target, &bytes) }
+      case None => { return Ok(()) }
+    }
+  }
+  let set = Path.join(scratch, "icon.iconset")
+  match Io.makeDirectory(set) {
+    case Ok(_) => ()
+    case Err(why) => { return Err(Config.WriteFailed(set, why)) }
+  }
+  for (name, size) in ICON_SIZES {
+    Config.tool(".app icon", "sips", &["-z", "{size}", "{size}", source, "--out", Path.join(set, name)]) ?
+  }
+  Config.tool(".app icon", "iconutil", &["-c", "icns", set, "-o", target]) ?
+  Ok(())
+}
+
+fn signed(config: &Config.Config, path: Str, format: Str) -> Result[(), BundleError] {
+  match config.mac.signingIdentity {
+    case Some(identity) => {
+      var arguments = ["--force", "--deep", "--options", "runtime", "--timestamp", "--sign", identity]
+      if let Some(entitlements) = config.mac.entitlements { arguments = arguments.concat(["--entitlements", entitlements]) }
+      Config.tool(format, "codesign", &arguments.push(path)) ?
+      Ok(())
+    }
+    case None => {
+      Config.tool(format, "codesign", &["--force", "--deep", "--sign", "-", path]) ?
+      Ok(())
+    }
+  }
+}
+
+fn notarized(config: &Config.Config, bundle: Str, scratch: Str) -> Result[(), BundleError] {
+  let profile = match config.mac.notarizeProfile {
+    case Some(found) => found
+    case None => { return Ok(()) }
+  }
+  let archive = Path.join(scratch, "notarize.zip")
+  Config.tool("notarization", "ditto", &["-c", "-k", "--keepParent", bundle, archive]) ?
+  Config.tool("notarization", "xcrun", &["notarytool", "submit", archive, "--keychain-profile", profile, "--wait"]) ?
+  Config.tool("notarization", "xcrun", &["stapler", "staple", bundle]) ?
+  Ok(())
+}
+
+/// Write `<Name>.app` under `out`, signed and notarized as configured; answers its path.
+export fn app(config: &Config.Config, inputs: &Config.Inputs, out: Str) -> Result[Str, BundleError] {
+  let bundle = Path.join(out, config.name + ".app")
+  if directoryExists(bundle) {
+    match Fs.removeTree(bundle) {
+      case Ok(_) => ()
+      case Err(why) => { return Err(Config.WriteFailed(bundle, show(why))) }
+    }
+  }
+  let executable = Config.packageName(config)
+  let contents = Path.join(bundle, "Contents")
+  let binary = Path.joinAll(&[contents, "MacOS", executable])
+  Config.writeFile(binary, &inputs.runtime) ?
+  match Fs.setPermissions(binary, &Fs.Permissions{readable: true, writable: true, executable: true, searchable: true}) {
+    case Ok(_) => ()
+    case Err(why) => { return Err(Config.WriteFailed(binary, show(why))) }
+  }
+  Config.writeFile(Path.join(contents, "Info.plist"), &infoPlist(config, executable).toBytes()) ?
+  let resources = Path.join(contents, "Resources")
+  Config.writeFile(Path.join(resources, "app.tar.gz"), &inputs.assets) ?
+  Config.writeFile(Path.join(resources, executable + ".pudub"), &inputs.program) ?
+  let scratch = Path.join(out, ".pudu-mac")
+  icon(inputs, resources, scratch) ?
+  signed(config, bundle, ".app") ?
+  notarized(config, bundle, scratch) ?
+  let _ = Fs.removeTree(scratch)
+  Ok(bundle)
+}
+
+/// Write `<Name>-<version>.dmg` holding the app at `bundle`; answers its path.
+export fn dmg(config: &Config.Config, bundle: Str, out: Str) -> Result[Str, BundleError] {
+  let staging = Path.join(out, ".pudu-dmg")
+  let _ = Fs.removeTree(staging)
+  match Io.makeDirectory(staging) {
+    case Ok(_) => ()
+    case Err(why) => { return Err(Config.WriteFailed(staging, why)) }
+  }
+  Config.tool(".dmg", "ditto", &[bundle, Path.join(staging, Path.nameOf(bundle))]) ?
+  match Fs.linkTo("/Applications", Path.join(staging, "Applications")) {
+    case Ok(_) => ()
+    case Err(why) => { return Err(Config.WriteFailed(staging, show(why))) }
+  }
+  let image = Path.join(out, "{config.name}-{config.version}.dmg")
+  let _ = Io.remove(image)
+  Config.tool(".dmg", "hdiutil", &["create", "-volname", config.name, "-srcfolder", staging, "-ov", "-format", "UDZO", image]) ?
+  let _ = Fs.removeTree(staging)
+  if config.mac.signingIdentity != None { signed(config, image, ".dmg") ? }
+  Ok(image)
+}

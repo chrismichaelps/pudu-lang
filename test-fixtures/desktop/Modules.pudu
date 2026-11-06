@@ -1,0 +1,260 @@
+module Modules
+
+import Std.Bytes as Bytes
+import Std.Crypto.Sign as Sign
+import Std.Desktop.Bridge as Bridge
+import Std.Desktop.Capability as Capability
+import Std.Desktop.Delta as Delta
+import Std.Desktop.Ipc as Ipc
+import Std.Desktop.Native as Native
+import Std.Desktop.Plugin as Plugin
+import Std.Desktop.Protocol as Protocol
+import Std.Desktop.Records as Records
+import Std.Desktop.Shape as Shape
+import Std.Desktop.Webview as Webview
+import Std.Json as Json
+import Std.Ui.Canvas as Canvas
+
+type Point = { x: Int, @json("label") name: Option[Str], @skip @default("false") hidden: Bool } derives Json.Decode, Json.Encode, Shape.Describe
+type Tree = { label: Str, children: Array[Tree] } derives Shape.Describe
+type Move = Step(Int) | Jump{to: Int} | Stay derives Shape.Describe
+type Total = { total: Int } derives Json.Encode, Shape.Describe
+
+type Tally = { passed: Int, failed: Array[Str] }
+
+fn check(tally: Tally, name: Str, held: Bool) -> Tally {
+  if held { Tally{..tally, passed: tally.passed + 1} } else { Tally{..tally, failed: tally.failed.push(name)} }
+}
+
+fn add(point: Point, call: &Ipc.Call) -> Result[Total, Ipc.Failure] {
+  if point.x < 0 { return Err(Ipc.failed("x must not be negative")) }
+  Ipc.within(call, "/data/{point.x}") ?
+  Ok(Total{total: point.x + 1})
+}
+
+fn pending(command: Str, key: Str, page: Str, method: Str) -> Webview.Pending {
+  Webview.Pending {
+    view: 1,
+    id: 9,
+    method: method,
+    url: "pudu://app/.pudu/ipc/" + command,
+    headers: [("pudu-invoke-key", key), ("pudu-origin", Capability.originOf(page))],
+    bodyLength: 0,
+    page: page
+  }
+}
+
+fn bodyText(response: &Webview.Response) -> Str {
+  match response.body.toText() {
+    case Some(text) => text
+    case None => ""
+  }
+}
+
+fn records(tally: Tally) -> Tally {
+  var t = tally
+  let encoded = Records.encodeAll(&[["view", "1", "eval", "a\nb\t\{\}"], ["window", "2", "close"]])
+  t = check(t, "records round trip", Records.decode(&encoded.toBytes()) == Ok([["view", "1", "eval", "a\nb\t\{\}"], ["window", "2", "close"]]))
+  t = check(t, "records refuse a short field", Records.decode(&"5:ab,\n".toBytes()) == Err(Records.LengthPastEnd(0)))
+  t = check(t, "records refuse an empty record", Records.decode(&"\n".toBytes()) == Err(Records.EmptyRecord(0)))
+  t = check(t, "records refuse an unterminated record", Records.decode(&"1:a,".toBytes()) == Err(Records.Unterminated(4)))
+  let events = Webview.decodeEvents(&[
+      ["request", "1", "7", "POST", "pudu://app/x", "Pudu-Invoke-Key: k\nContent-Type: text/plain\n", "3", "pudu://app/index.html"],
+      ["close-requested", "2"],
+      ["eval", "1", "t", "error", "boom"],
+      ["future-verb", "1"],
+      ["loaded", "1"]
+    ])
+  t = check(t, "events decode by factory", events.length() == 5)
+  match events[0] {
+    case Webview.Request(found) => {
+      t = check(t, "request headers are lower-cased", Webview.header(&found, "PUDU-INVOKE-KEY") == Some("k"))
+      t = check(t, "request page", found.page == "pudu://app/index.html")
+    }
+    case _ => { t = check(t, "request decoded", false) }
+  }
+  t = check(t, "close request", events[1] == Webview.CloseRequested(2))
+  t = check(t, "evaluation failure", events[2] == Webview.Evaluated(1, "t", Err("boom")))
+  t = check(t, "unknown verb kept", events[3] == Webview.Unknown("future-verb"))
+  t = check(t, "wrong field count is unknown", events[4] == Webview.Unknown("loaded"))
+  let created = Webview.createView(&Webview.ViewSpec{..Webview.newView(3, 1), devtools: true, allowNavigation: ["https://docs.example.com/*"]})
+  t = check(t, "view creation ends realized", created[created.length() - 1] == ["view", "3", "realize"])
+  t = check(t, "view creation fills by default", created[0] == ["view", "3", "create", "1", "0", "0", "0", "0", "1"])
+  t
+}
+
+fn shapes(tally: Tally) -> Tally {
+  var t = tally
+  t = check(t, "record shape", Shape.declarations(&[Point.describe()]) == "export type Point = \{ x: number; label: string | null \};")
+  t = check(t, "recursive shape", Shape.declarations(&[Tree.describe()]) == "export type Tree = \{ label: string; children: Array<Tree> \};")
+  t = check(t, "sum shape", Shape.declarations(&[Move.describe()]) == "export type Move = \{ Step: [number] \} | \{ Jump: \{ to: number \} \} | \{ Stay: [] \};")
+  t = check(t, "quoted key", Shape.key("a-b") == "\"a-b\"" && Shape.key("ok_1") == "ok_1")
+  t
+}
+
+fn capabilities(tally: Tally) -> Tally {
+  var t = tally
+  let granted = Capability.Capability {
+    ..Capability.capability("main"),
+    views: ["main"],
+    allow: [Capability.permit("read"), Capability.permitWithin("fs:*", &["/data/**"], &["/data/secret/**"])],
+    deny: ["fs:remove"]
+  }
+  let grants = match Capability.combine(&[granted, Capability.capability("other")]) {
+    case Ok(found) => found
+    case Err(_) => { return check(t, "grants combine", false) }
+  }
+  t = check(t, "duplicate identifiers refused", Capability.combine(&[granted, granted]) == Err(Capability.Duplicate("main")))
+  t = check(t, "unrestricted grant", Capability.decide(&grants, "main", "pudu://app", "read") == Capability.Unrestricted)
+  let scoped = Capability.decide(&grants, "main", "pudu://app", "fs:read")
+  t = check(t, "scope admits inside", Capability.permits(&scoped, "/data/notes/a.txt"))
+  t = check(t, "scope refuses outside", !Capability.permits(&scoped, "/etc/passwd"))
+  t = check(t, "scope deny wins", !Capability.permits(&scoped, "/data/secret/key"))
+  t = check(t, "deny beats allow", Capability.decide(&grants, "main", "pudu://app", "fs:remove") == Capability.Refused("main denies fs:remove"))
+  t = check(t, "other view refused", Capability.decide(&grants, "settings", "pudu://app", "read") != Capability.Unrestricted)
+  t = check(t, "other origin refused", Capability.decide(&grants, "main", "https://evil.example", "read") != Capability.Unrestricted)
+  t = check(t, "origin of a page", Capability.originOf("HTTP://LocalHost:5173/src/x?y") == "http://localhost:5173")
+  t = check(t, "origin without a host", Capability.originOf("about:blank") == "null")
+  t
+}
+
+fn plugins(tally: Tally) -> Tally {
+  var t = tally
+  let blocker = Plugin.Plugin {
+    ..Plugin.plugin("blocker"),
+    permissions: [Plugin.BlockRequests, Plugin.InjectStyle],
+    styles: [Plugin.StyleInjection{css: ".ad \{ display: none \}", matches: ["https://*.example.com/*"]}],
+    rules: [Plugin.BlockRule{pattern: "https://ads.example.com/*", action: Plugin.Block, resources: ["script"], domains: []}]
+  }
+  t = check(t, "granted plugin admitted", Plugin.check(&blocker, &["block-requests", "inject-style"]) == Ok(()))
+  t = check(t, "ungranted plugin refused whole", Plugin.check(&blocker, &["block-requests"]) == Err(Plugin.NotGranted("blocker", ["inject-style"])))
+  let sneaky = Plugin.Plugin{..blocker, permissions: [Plugin.InjectStyle]}
+  t = check(t, "undeclared use refused", Plugin.check(&sneaky, &["block-requests", "inject-style"]) == Err(Plugin.MissingPermission("blocker", "block-requests")))
+  t = check(t, "permission names parse", Plugin.parsePermission("invoke:save") == Some(Plugin.Invoke("save")) && Plugin.parsePermission("invoke") == None && Plugin.parsePermission("teleport") == None)
+  t = check(t, "authority wildcard is bounded", Plugin.regexOf("https://*.example.com/*") == "^https:\\/\\/[^/?#@]*\\.example\\.com\\/.*$")
+  t = check(t, "rules compile", Plugin.rulesJson(&blocker.rules) == "[\{\"trigger\":\{\"url-filter\":\"^https:\\\\/\\\\/ads\\\\.example\\\\.com\\\\/.*$\",\"resource-type\":[\"script\"]\},\"action\":\{\"type\":\"block\"\}\}]")
+  let applied = Plugin.apply(&Webview.newView(1, 1), &[blocker])
+  t = check(t, "plugin contents reach the view", applied.scripts.length() == 1 && applied.rules.length() == 1)
+  t
+}
+
+fn protocol(tally: Tally) -> Tally {
+  var t = tally
+  t = check(t, "index for the root", Protocol.resolveAsset("/") == Ok("index.html"))
+  t = check(t, "directory index", Protocol.resolveAsset("/docs/") == Ok("docs/index.html"))
+  t = check(t, "parent refused", Protocol.resolveAsset("/a/../../etc/passwd") == Err(Protocol.Escapes("/a/../../etc/passwd")))
+  t = check(t, "encoded parent refused", Protocol.resolveAsset("/%2e%2e/x") == Err(Protocol.Escapes("/%2e%2e/x")))
+  t = check(t, "backslash refused", Protocol.resolveAsset("/a\\b") == Err(Protocol.Escapes("/a\\b")))
+  t = check(t, "ipc path", Protocol.ipcCommand("pudu://app/.pudu/ipc/pudu%3Aemit") == Some("pudu:emit"))
+  let assets = Protocol.Packed(mapOf([("index.html", "<p>hi</p>".toBytes()), ("app.js", "1".toBytes())]))
+  let page = Protocol.serve(&assets, &Webview.Pending{..pending("", "", "", "GET"), url: "pudu://app/"}, &Protocol.policy())
+  t = check(t, "asset served", page.status == 200 && bodyText(&page) == "<p>hi</p>")
+  t = check(t, "asset headers", page.headers.contains(("Content-Security-Policy", Protocol.DEFAULT_CSP)) && page.headers.contains(("Content-Type", "text/html; charset=utf-8")))
+  let missing = Protocol.serve(&assets, &Webview.Pending{..pending("", "", "", "GET"), url: "pudu://app/route"}, &Protocol.policy())
+  t = check(t, "missing asset", missing.status == 404)
+  let routed = Protocol.serve(&assets, &Webview.Pending{..pending("", "", "", "GET"), url: "pudu://app/route"}, &Protocol.Policy{..Protocol.policy(), fallback: Some("index.html")})
+  t = check(t, "single-page fallback", routed.status == 200)
+  let posted = Protocol.serve(&assets, &Webview.Pending{..pending("", "", "", "POST"), url: "pudu://app/"}, &Protocol.policy())
+  t = check(t, "only reads are served", posted.status == 405)
+  t
+}
+
+fn ipc(tally: Tally) -> Tally {
+  var t = tally
+  let registry = match Ipc.registry(&[Ipc.command("add", add)], &[Ipc.event[Total]("added")]) {
+    case Ok(found) => found
+    case Err(_) => { return check(t, "registry", false) }
+  }
+  t = check(t, "duplicate command refused", Ipc.registry(&[Ipc.command("add", add), Ipc.command("add", add)], &[]) == Err(Ipc.DuplicateName("add")))
+  t = check(t, "reserved command refused", Ipc.registry(&[Ipc.command("pudu:x", add)], &[]) == Err(Ipc.ReservedName("pudu:x")))
+  let scoped = Capability.Capability{..Capability.capability("main"), allow: [Capability.permitWithin("add", &["/data/1*"], &[])]}
+  let grants = match Capability.combine(&[scoped]) {
+    case Ok(found) => found
+    case Err(_) => { return check(t, "grants", false) }
+  }
+  let call = fn(json: Str, key: Str, page: Str, method: Str) -> Webview.Response {
+    Ipc.dispatch(&registry, &grants, "k", "main", &pending("add", key, page, method), &json.toBytes())
+  }
+  let ok = call("\{\"x\":1\}", "k", "pudu://app/", "POST")
+
+  t = check(t, "typed call", ok.status == 200 && bodyText(&ok) == "\{\"total\":2\}")
+  let bad = call("\{\"x\":\"1\"\}", "k", "pudu://app/", "POST")
+  t = check(t, "decode path", bad.status == 400 && bodyText(&bad).contains("\"path\":\".x\""))
+  t = check(t, "handler failure", call("\{\"x\":-1\}", "k", "pudu://app/", "POST").status == 422)
+  t = check(t, "scope refusal", call("\{\"x\":2\}", "k", "pudu://app/", "POST").status == 403)
+  t = check(t, "missing key", call("\{\"x\":1\}", "", "pudu://app/", "POST").status == 403)
+  let moved = Webview.Pending{..pending("add", "k", "pudu://app/", "POST"), page: "https://elsewhere.example/"}
+  t = check(t, "call from a page the view left", Ipc.dispatch(&registry, &grants, "k", "main", &moved, &"\{\"x\":1\}".toBytes()).status == 403)
+  t = check(t, "foreign origin", call("\{\"x\":1\}", "k", "https://evil.example/", "POST").status == 403)
+  t = check(t, "not JSON", call("\{", "k", "pudu://app/", "POST").status == 400)
+  let preflight = call("", "", "http://localhost:5173/", "OPTIONS")
+  t = check(t, "preflight", preflight.status == 204 && preflight.headers.contains(("Access-Control-Allow-Origin", "http://localhost:5173")))
+  let unknown = Ipc.dispatch(&registry, &grants, "k", "main", &pending("nope", "k", "pudu://app/", "POST"), &"null".toBytes())
+  t = check(t, "unknown command", unknown.status == 404)
+  let generated = Ipc.typescript(&registry)
+  t = check(t, "typescript commands", generated.contains("add: (args: Point): Promise<Total> => bridge.invoke<Total>(\"add\", args),"))
+  t = check(t, "typescript events", generated.contains("added: Total;"))
+  t = check(t, "typescript bridge", generated.contains("export interface PuduBridge"))
+  let emitted = Ipc.emitTo(4, "added", &Total{total: 3})
+  t = check(t, "event delivery record", emitted[0] == "view" && emitted[1] == "4" && emitted[4].contains("__event(\"added\", \{\"total\":3\})"))
+  t = check(t, "bridge configuration", Bridge.script("key\"x", "main", true).endsWith("(\{\"key\":\"key\\\"x\",\"label\":\"main\",\"dev\":true\});"))
+  t
+}
+
+fn native(tally: Tally) -> Tally {
+  var t = tally
+  let bar = Native.menuBar(&[Native.Submenu("File", [Native.Item("open", "cmd+o", "Open"), Native.Divider])])
+  t = check(t, "menu bar record", bar == Ok(["app", "menu", "menu\t0\tFile\nitem\t1\topen\tcmd+o\tOpen\nseparator\t1"]))
+  t = check(t, "duplicate menu item refused", Native.menuBar(&[Native.Item("a", "", "A"), Native.Item("a", "", "B")]) == Err(Native.DuplicateItem("a")))
+  t = check(t, "unnamed menu item refused", Native.menuBar(&[Native.Item("", "", "A")]) == Err(Native.EmptyName))
+  let frame = match Canvas.canvas(2, 1, Canvas.rgb(255u8, 0u8, 0u8)) {
+    case Ok(found) => match Canvas.render(&found) {
+      case Ok(rendered) => rendered
+      case Err(_) => { return check(t, "frame", false) }
+    }
+    case Err(_) => { return check(t, "canvas", false) }
+  }
+  t = check(t, "surface frame record", Native.present(3, &frame) == Ok(["surface", "3", "present", "2", "1", "/wAA//8AAP8="]))
+  let events = Webview.decodeEvents(&[["menu", "open"], ["dialog-ok", "t", "/a\n/b"], ["dialog-cancel", "u"], ["surface-press", "3", "4", "5"]])
+  t = check(t, "native events", events == [Webview.Chosen("open"), Webview.DialogAnswered("t", ["/a", "/b"]), Webview.DialogCancelled("u"), Webview.SurfacePressed(3, 4, 5)])
+  t
+}
+
+fn updates(tally: Tally) -> Tally {
+  var t = tally
+  let pair = match Sign.fromSeed(&Bytes.repeat(&bytesOf([7u8]), 32)) {
+    case Ok(found) => found
+    case Err(_) => { return check(t, "key from seed", false) }
+  }
+  let message = "release".toBytes()
+  let signature = Sign.sign(&pair, &message)
+  t = check(t, "signature verifies", Sign.verify(&pair.public, &message, &signature))
+  t = check(t, "tampered message refused", !Sign.verify(&pair.public, &"releasf".toBytes(), &signature))
+  t = check(t, "signature file round trip", Sign.decodeSignature(Sign.encodeSignature(&pair.public, &signature)) == Ok((Sign.keyId(&pair.public), signature)))
+  t = check(t, "secret file round trip", Sign.decodeSecret(Sign.encodeSecret(&pair)) == Ok(pair))
+  t = check(t, "short seed refused", Sign.fromSeed(&bytesOf([1u8])) == Err(Sign.BadSeed))
+  let old = Bytes.repeat(&"a".repeat(511).toBytes().concat("\n".toBytes()), 40)
+  let new = "header".repeat(85).toBytes().concat("..".toBytes()).concat(old.slice(0, 16384)).concat("tail".toBytes())
+  let aligned = Bytes.join(&[Bytes.repeat(&bytesOf([1u8]), 512), old.slice(0, 16384), "end".toBytes()])
+  let patch = Delta.diff(&old, &aligned)
+  t = check(t, "patch rebuilds", Delta.apply(&old, &patch) == Ok(aligned))
+  t = check(t, "patch is small", patch.length() < 1200)
+  t = check(t, "unaligned change still rebuilds", Delta.apply(&old, &Delta.diff(&old, &new)) == Ok(new))
+  t = check(t, "wrong base refused", Delta.apply(&aligned, &patch) == Err(Delta.BaseMismatch))
+  t = check(t, "not a patch", Delta.apply(&old, &"junk\n".toBytes()) == Err(Delta.NotPatch))
+  t
+}
+
+fn main() {
+  var tally = Tally{passed: 0, failed: []}
+  tally = records(tally)
+  tally = shapes(tally)
+  tally = capabilities(tally)
+  tally = plugins(tally)
+  tally = protocol(tally)
+  tally = ipc(tally)
+  tally = native(tally)
+  tally = updates(tally)
+  for name in tally.failed { let _ = print("FAILED " + name) }
+  let _ = print("desktop modules passed {tally.passed} failed {tally.failed.length()}")
+}

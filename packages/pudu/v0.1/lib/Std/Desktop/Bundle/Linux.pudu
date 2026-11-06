@@ -1,0 +1,191 @@
+module Std.Desktop.Bundle.Linux
+
+import Std.Archive.Tar as Tar
+import Std.Bytes as Bytes
+import Std.Compress.Gzip as Gzip
+import Std.Desktop.Bundle.Binary as Binary
+import Std.Desktop.Bundle.Config {BundleError}
+import Std.Desktop.Bundle.Config as Config
+import Std.Fs as Fs
+import Std.Io as Io
+import Std.Path as Path
+
+/// One installed file, directory or link, with an absolute path.
+export type Installed = { path: Str, mode: Int, data: Bytes, link: Option[Str], directory: Bool }
+
+/// Debian's name for each processor.
+const DEBIAN_ARCHES: Map[Str, Str] = mapOf([("x86_64", "amd64"), ("aarch64", "arm64")])
+
+/// The runtime libraries a WebView application needs on Debian systems.
+const DEBIAN_DEPENDS: Array[Str] = ["libwebkit2gtk-4.1-0", "libgtk-3-0"]
+
+/// A one-pixel transparent PNG, for an AppDir without a configured icon.
+const BLANK_PNG: Str = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg=="
+
+/// Debian's name for a processor.
+export fn debArch(arch: Str) -> Str {
+  match DEBIAN_ARCHES.get(arch) {
+    case Some(found) => found
+    case None => arch
+  }
+}
+
+/// The launcher entry for the application.
+export fn desktopEntry(config: &Config.Config) -> Str {
+  let name = Config.packageName(config)
+  [
+    "[Desktop Entry]",
+    "Type=Application",
+    "Name=" + config.name,
+    "Comment=" + config.description,
+    "Exec=" + name + " %U",
+    "Icon=" + name,
+    "Categories=" + config.category + ";",
+    "Terminal=false",
+    ""
+  ].join("\n")
+}
+
+fn file(path: Str, mode: Int, data: Bytes) -> Installed { Installed{path: path, mode: mode, data: data, link: None, directory: false} }
+
+fn folder(path: Str) -> Installed { Installed{path: path, mode: 493, data: bytesOf([]), link: None, directory: true} }
+
+/// Every installed file, parents first.
+export fn layout(config: &Config.Config, inputs: &Config.Inputs) -> Array[Installed] {
+  let name = Config.packageName(config)
+  var entries = [
+    folder("/usr"),
+    folder("/usr/bin"),
+    folder("/usr/lib"),
+    folder("/usr/lib/" + name),
+    file("/usr/lib/" + name + "/" + name, 493, inputs.runtime),
+    file("/usr/lib/" + name + "/" + name + ".pudub", 420, inputs.program),
+    file("/usr/lib/" + name + "/app.tar.gz", 420, inputs.assets),
+    Installed{path: "/usr/bin/" + name, mode: 511, data: bytesOf([]), link: Some("../lib/" + name + "/" + name), directory: false},
+    folder("/usr/share"),
+    folder("/usr/share/applications"),
+    file("/usr/share/applications/" + name + ".desktop", 420, desktopEntry(config).toBytes())
+  ]
+  if let Some(icon) = inputs.icon {
+    if let Some(path) = inputs.iconPath {
+      if path.endsWith(".png") {
+        entries = entries.concat([
+            folder("/usr/share/icons"),
+            folder("/usr/share/icons/hicolor"),
+            folder("/usr/share/icons/hicolor/256x256"),
+            folder("/usr/share/icons/hicolor/256x256/apps"),
+            file("/usr/share/icons/hicolor/256x256/apps/" + name + ".png", 420, icon)
+          ])
+      }
+    }
+  }
+  entries
+}
+
+fn tarEntry(entry: &Installed, prefix: Str) -> Tar.TarEntry {
+  let path = prefix + entry.path
+  if entry.directory { return Tar.TarEntry{..Tar.directory(path), mode: entry.mode} }
+  match entry.link {
+    case Some(target) => Tar.TarEntry{..Tar.entry(path, bytesOf([])), typeFlag: Tar.Symlink, linkName: target, mode: entry.mode, size: 0}
+    case None => Tar.TarEntry{..Tar.entry(path, entry.data), mode: entry.mode}
+  }
+}
+
+/// The Debian control file.
+export fn control(config: &Config.Config, inputs: &Config.Inputs, installedBytes: Int) -> Str {
+  var lines = [
+    "Package: " + Config.packageName(config),
+    "Version: " + config.version,
+    "Architecture: " + debArch(inputs.arch),
+    "Maintainer: " + config.publisher,
+    "Installed-Size: {(installedBytes + 1023) / 1024}",
+    "Depends: " + DEBIAN_DEPENDS.concat(config.linux.depends).join(", "),
+    "Section: " + config.linux.section,
+    "Priority: optional"
+  ]
+  if !config.homepage.isEmpty() { lines = lines.push("Homepage: " + config.homepage) }
+  lines.push("Description: " + config.description).push("").join("\n")
+}
+
+fn signedBeside(config: &Config.Config, path: Str, format: Str) -> Result[(), BundleError] {
+  match config.linux.gpgKey {
+    case Some(key) => {
+      Config.tool(format, "gpg", &["--batch", "--yes", "--armor", "--local-user", key, "--detach-sign", path]) ?
+      Ok(())
+    }
+    case None => Ok(())
+  }
+}
+
+/// Write `<pkg>_<version>_<arch>.deb` under `out`; answers its path.
+export fn deb(config: &Config.Config, inputs: &Config.Inputs, out: Str) -> Result[Str, BundleError] {
+  let entries = layout(config, inputs)
+  var size = 0
+  for entry in entries { size = size + entry.data.length() }
+  let data = Tar.writeArchive(entries.map(fn(entry: Installed) -> Tar.TarEntry { tarEntry(&entry, ".") }))
+  let controlArchive = Tar.writeArchive([Tar.TarEntry{..Tar.entry("./control", control(config, inputs, size).toBytes()), mode: 420}])
+  let package = Binary.ar(&[
+      ("debian-binary", "2.0\n".toBytes()),
+      ("control.tar.gz", Gzip.compress(&controlArchive, &Gzip.config())),
+      ("data.tar.gz", Gzip.compress(&data, &Gzip.config()))
+    ])
+  let path = Path.join(out, "{Config.packageName(config)}_{config.version}_{debArch(inputs.arch)}.deb")
+  Config.writeFile(path, &package) ?
+  signedBeside(config, path, ".deb") ?
+  Ok(path)
+}
+
+fn executableFile(path: Str) -> Result[(), BundleError] {
+  match Fs.setPermissions(path, &Fs.Permissions{readable: true, writable: true, executable: true, searchable: true}) {
+    case Ok(_) => Ok(())
+    case Err(why) => Err(Config.WriteFailed(path, show(why)))
+  }
+}
+
+/// Write `<Name>-<version>-<arch>.AppImage` under `out`; answers its path.
+export fn appImage(config: &Config.Config, inputs: &Config.Inputs, out: Str) -> Result[Str, BundleError] {
+  let name = Config.packageName(config)
+  let root = Path.join(out, ".pudu-appdir/" + name + ".AppDir")
+  let _ = Fs.removeTree(Path.join(out, ".pudu-appdir"))
+  for entry in layout(config, inputs) {
+    let target = root + entry.path
+    if entry.directory {
+      match Io.makeDirectory(target) {
+        case Ok(_) => ()
+        case Err(why) => { return Err(Config.WriteFailed(target, why)) }
+      }
+      continue
+    }
+    match entry.link {
+      case Some(link) => match Fs.linkTo(link, target) {
+        case Ok(_) => ()
+        case Err(why) => { return Err(Config.WriteFailed(target, show(why))) }
+      }
+      case None => {
+        Config.writeFile(target, &entry.data) ?
+        if entry.mode == 493 { executableFile(target) ? }
+      }
+    }
+  }
+  let run = Path.join(root, "AppRun")
+  Config.writeFile(run, &("#!/bin/sh\nHERE=\"$(dirname \"$(readlink -f \"$0\")\")\"\nexec \"$HERE/usr/lib/" + name + "/" + name + "\" \"$@\"\n").toBytes()) ?
+  executableFile(run) ?
+  Config.writeFile(Path.join(root, name + ".desktop"), &desktopEntry(config).toBytes()) ?
+  let png = match inputs.iconPath {
+    case Some(path) => path.endsWith(".png")
+    case None => false
+  }
+  let icon = match inputs.icon {
+    case Some(bytes) if png => bytes
+    case _ => match Bytes.decodeBase64(BLANK_PNG) {
+      case Ok(blank) => blank
+      case Err(_) => bytesOf([])
+    }
+  }
+  Config.writeFile(Path.join(root, name + ".png"), &icon) ?
+  let image = Path.join(out, "{config.name}-{config.version}-{inputs.arch}.AppImage")
+  Config.tool("AppImage", "env", &["ARCH=" + inputs.arch, "appimagetool", "--no-appstream", root, image]) ?
+  let _ = Fs.removeTree(Path.join(out, ".pudu-appdir"))
+  signedBeside(config, image, "AppImage") ?
+  Ok(image)
+}

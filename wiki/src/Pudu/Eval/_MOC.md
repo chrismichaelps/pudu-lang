@@ -96,3 +96,5 @@ Dependency direction: Builtin Definition → Value → Env → Operator/Match/Ar
 
 - [[Runtime Witness Selection Delivery]] · [[Runtime Implementation Head]] · [[Eval Type Witness]] — structural implementation parameter binding (#735).
 - [[Eval Declared Owner]] — method keys that keep a declared type named like a built-in apart from it (#529).
+- [[Eval Webview]] — the evaluator's end of the WebView record channel (#833).
+- [[Eval Sign]] — Ed25519 signing and verification over bytes (#833).

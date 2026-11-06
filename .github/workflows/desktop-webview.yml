@@ -1,0 +1,87 @@
+name: Desktop WebView
+on:
+  pull_request:
+    paths:
+      - 'packages/pudu/v0.1/cbits/pudu_webview*'
+      - 'test/native/Webview*.c'
+      - 'tools/pudu-js/**'
+      - '.github/workflows/desktop-webview.yml'
+  push:
+    branches: [dev, 'feature/**']
+    paths:
+      - 'packages/pudu/v0.1/cbits/pudu_webview*'
+      - 'test/native/Webview*.c'
+      - 'tools/pudu-js/**'
+      - '.github/workflows/desktop-webview.yml'
+permissions:
+  contents: read
+jobs:
+  # Each adapter is driven through the six entry points by the same harness,
+  # without building the compiler: the adapter is plain C or Objective-C.
+  webkit-macos:
+    runs-on: macos-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - name: Check record framing and URL patterns
+        run: |
+          cc -Wall -Wextra -Werror -I packages/pudu/v0.1/cbits packages/pudu/v0.1/cbits/pudu_webview_records.c test/native/WebviewRecords.c -o records
+          ./records
+      - name: Drive a WebKit view through the adapter
+        run: |
+          cc -fobjc-arc -Wall -Wextra -Werror -I packages/pudu/v0.1/cbits \
+            packages/pudu/v0.1/cbits/pudu_webview_records.c \
+            packages/pudu/v0.1/cbits/pudu_webview_macos.m \
+            packages/pudu/v0.1/cbits/pudu_webview_macos_view.m \
+            packages/pudu/v0.1/cbits/pudu_webview_macos_native.m \
+            test/native/WebviewDrive.c -framework AppKit -framework WebKit -o drive
+          ./drive
+      - name: Test the page bridge
+        run: |
+          node --test tools/pudu-js/bridge.test.mjs
+          node scripts/desktop-bridge.mjs --check
+  webkitgtk-linux:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install WebKitGTK and a virtual display
+        run: |
+          sudo apt-get update || echo "some package indexes could not be read; continuing to the install"
+          sudo apt-get install -y libwebkit2gtk-4.1-dev xvfb
+      - name: Check record framing and URL patterns
+        run: |
+          cc -Wall -Wextra -Werror -I packages/pudu/v0.1/cbits packages/pudu/v0.1/cbits/pudu_webview_records.c test/native/WebviewRecords.c -o records
+          ./records
+      - name: Drive a WebKitGTK view through the adapter
+        run: |
+          cc -Wall -Wextra -Werror -I packages/pudu/v0.1/cbits \
+            packages/pudu/v0.1/cbits/pudu_webview_records.c \
+            packages/pudu/v0.1/cbits/pudu_webview_gtk.c \
+            packages/pudu/v0.1/cbits/pudu_webview_gtk_view.c \
+            packages/pudu/v0.1/cbits/pudu_webview_gtk_native.c \
+            test/native/WebviewDrive.c $(pkg-config --cflags --libs webkit2gtk-4.1 gtk+-3.0) -o drive
+          xvfb-run -a ./drive
+  webview2-windows:
+    runs-on: windows-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ilammy/msvc-dev-cmd@v1
+      - name: Fetch the WebView2 SDK headers and loader
+        shell: pwsh
+        run: |
+          Invoke-WebRequest https://www.nuget.org/api/v2/package/Microsoft.Web.WebView2/1.0.2903.40 -OutFile webview2.zip
+          Expand-Archive webview2.zip webview2
+      - name: Check record framing and URL patterns
+        shell: cmd
+        run: |
+          cl /nologo /W3 /I packages\pudu\v0.1\cbits packages\pudu\v0.1\cbits\pudu_webview_records.c test\native\WebviewRecords.c /Fe:records.exe || exit /b 1
+          records.exe
+      - name: Drive a WebView2 view through the adapter
+        shell: cmd
+        run: |
+          cl /nologo /EHsc /std:c++17 /W3 /I packages\pudu\v0.1\cbits /I webview2\build\native\include packages\pudu\v0.1\cbits\pudu_webview_records.c packages\pudu\v0.1\cbits\pudu_webview_win.cpp packages\pudu\v0.1\cbits\pudu_webview_win_view.cpp packages\pudu\v0.1\cbits\pudu_webview_win_native.cpp test\native\WebviewDrive.c /Fe:drive.exe user32.lib ole32.lib shlwapi.lib comdlg32.lib crypt32.lib gdi32.lib || exit /b 1
+          copy webview2\build\native\x64\WebView2Loader.dll .
+          set PUDU_HARNESS_TRACE=1
+          drive.exe

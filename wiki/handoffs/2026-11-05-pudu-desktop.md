@@ -1,0 +1,59 @@
+---
+type: handoff
+status: COMPLETE
+issue: 833
+aliases: [Pudu Desktop Delivery]
+tags: [handoff, desktop, webview, ipc, packaging, updates]
+---
+# Pudu Desktop Delivery
+
+Issue #833 on `feature/833-pudu-desktop` from dev. Roles: Language Architect resolved
+[[architecture/DESKTOP-WEBVIEW]] and [[decisions/ADR-0026-a-webview-is-a-renderer]] before source;
+Runtime Engineer owns the adapters and [[Eval Webview]]; Standard Library Engineer owns
+`Std.Desktop.*` and [[Std Crypto Sign]]; Tooling/Release owns [[Std Desktop Cli]], packaging, the
+gate and CI. Independent implementation, Language Architect and Forensic Guardian reviews are
+pending; no self-approval.
+
+## Delivered
+
+- macOS WebKit adapter and WebKitGTK adapter (behind `webkitgtk`) for one six-entry record channel.
+- `Std.Desktop`: views, protocol, typed IPC with streams and events, generated TypeScript,
+  capabilities, plugins, the run loop with development reload, signed and patched updates with
+  rollback, packaging for `.app`, `.dmg`, `.deb`, `.rpm`, AppImage, NSIS and MSI, and `pudu desktop`.
+- Runtime: Ed25519, `modifiedTime`, `executablePath`, and sidecar programs for signable packages.
+
+## Validation evidence
+
+- [[Desktop Webview Gate]] passes locally, including a live WebView self-test (9/9) on macOS.
+- The packaged, signed `Notes.app` launched from `/` without a library path passes the same self-test.
+- `dpkg-deb` and `rpm -K` accept the written packages (header and payload digests OK).
+- [[Webview Drive Harness]] passes against the macOS adapter locally and in CI, and against the
+  WebKitGTK adapter in CI under `xvfb-run`: scheme requests, injected scripts, evaluation,
+  navigation refusal, content-rule blocking, two views in one window, menus and surfaces.
+- The harness passes against the WebView2 adapter in CI on `windows-latest`. A page waiting on a
+  deferred response never saw it until the body moved to a global-memory stream; the trace and probe
+  that found it stay in the harness behind `PUDU_HARNESS_TRACE`.
+
+## Open
+
+- Hybrid UI components exist on all three adapters. Dialog answers were not exercised
+  automatically, since a person must choose.
+
+- Windows: the WebView2 adapter is verified by the native harness in CI; a compiler built on Windows
+  with the `webview2` flag has not been exercised, because CI builds the compiler on Linux only.
+- Language bugs found and filed: pudu-lang#834 (generic closure loses a forwarded type argument),
+  pudu-lang#835 (a derive cannot see a hand-written implementation from another module),
+  pudu-lang#836 (trait implementations for unit are unreachable). The framework avoids each.
+
+- CI on pull request #837 is green: the Linux `-Werror` build, all suite shards, the desktop gate with
+  `dpkg-deb`, `rpm -K`, a real `makensis` build and `tsc --strict`, and [[Desktop Webview CI]] on
+  macOS, Ubuntu and Windows.
+
+## Exact next action
+
+Exercise a compiler built with the `webkitgtk` flag on Linux and the `webview2` flag on Windows
+running the Notes example, which CI does not yet build.
+
+## Referenced by
+
+[[handoffs/_MOC]] · [[architecture/DESKTOP-WEBVIEW]]

@@ -165,6 +165,10 @@ declareBuiltinConstructors = do
     (monotype (FunctionTypeValue False [bytesType, bytesType, bytesType, bytesType] boolType))
   bindName "verifyEcdsaSha256"
     (monotype (FunctionTypeValue False [bytesType, bytesType, bytesType, bytesType] boolType))
+  bindName "ed25519PublicOf" (monotype (FunctionTypeValue False [bytesType] (NominalType "Option" [bytesType])))
+  bindName "ed25519SignWith"
+    (monotype (FunctionTypeValue False [bytesType, bytesType] (NominalType "Option" [bytesType])))
+  bindName "ed25519Verify" (monotype (FunctionTypeValue False [bytesType, bytesType, bytesType] boolType))
   bindName "sealBytes"
     ( monotype
         ( FunctionTypeValue False
@@ -436,6 +440,8 @@ effectSignatures =
   , ("createSymbolicLink", monotype (FunctionTypeValue False [stringType, stringType] (resultOf unitTypeValue)))
   , ("canonicalPath", monotype (FunctionTypeValue False [stringType] (resultOf stringType)))
   , ("fileSize", monotype (FunctionTypeValue False [stringType] (resultOf integerType)))
+  , ("modifiedTime", monotype (FunctionTypeValue False [stringType] (resultOf integerType)))
+  , ("executablePath", monotype (FunctionTypeValue False [] (resultOf stringType)))
   , ("directoryExists", monotype (FunctionTypeValue False [stringType] boolType))
   , ("openReader", monotype (FunctionTypeValue False [stringType] (resultOf integerType)))
   , ("openWriter", monotype (FunctionTypeValue False [stringType] (resultOf integerType)))
@@ -502,6 +508,11 @@ effectSignatures =
   , ("desktopMenu", monotype (FunctionTypeValue False [integerType, stringType] (resultOf unitTypeValue)))
   , ("desktopMenuReport", monotype (FunctionTypeValue False [integerType] (resultOf stringType)))
   , ("desktopClose", monotype (FunctionTypeValue False [integerType] (resultOf unitTypeValue)))
+  , ("webviewSend", monotype (FunctionTypeValue False [stringType] (resultOf unitTypeValue)))
+  , ("webviewPump", monotype (FunctionTypeValue False [integerType] (resultOf boolType)))
+  , ("webviewEvents", monotype (FunctionTypeValue False [] (resultOf bytesType)))
+  , ("webviewBody", monotype (FunctionTypeValue False [integerType] (resultOf bytesType)))
+  , ("webviewRespond", monotype (FunctionTypeValue False [integerType, integerType, stringType, bytesType] (resultOf unitTypeValue)))
   , ("audioDevicePlay", monotype (FunctionTypeValue False [integerType, integerType, bytesType, integerType, integerType, integerType] (resultOf integerType)))
   , ("audioStreamOpen", monotype (FunctionTypeValue False [integerType, integerType, integerType, integerType] (resultOf (arrayOf integerType))))
   , ("audioStreamWrite", monotype (FunctionTypeValue False [integerType, integerType, integerType, bytesType, integerType] (resultOf (arrayOf integerType))))

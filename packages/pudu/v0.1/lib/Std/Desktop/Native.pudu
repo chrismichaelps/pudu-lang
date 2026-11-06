@@ -1,0 +1,95 @@
+module Std.Desktop.Native
+
+import Std.Bytes as Bytes
+import Std.Ui.Canvas as Canvas
+
+/// One entry of an application menu bar.
+///
+/// `Item` carries the name reported when it is chosen, an optional chord such as `cmd+shift+s`
+/// (modifiers in the order cmd, ctrl, alt, shift; empty for none), and its title.
+export type Entry = Submenu(Str, Array[Entry]) | Item(Str, Str, Str) | Divider
+
+/// How a message dialog presents itself.
+export type Tone = Informational | Warning | Critical
+
+/// Why native component records could not be written.
+export type NativeError = EmptyName | DuplicateItem(Str) | NotAFrame(Str)
+
+fn lines(entries: &Array[Entry], depth: Int, seen: Set[Str]) -> Result[(Array[Str], Set[Str]), NativeError] {
+  var out: Array[Str] = []
+  var names = seen
+  for entry in *entries {
+    match entry {
+      case Submenu(title, children) => {
+        out = out.push("menu\t{depth}\t{title}")
+        let (inner, after) = lines(&children, depth + 1, names) ?
+        out = out.concat(inner)
+        names = after
+      }
+      case Item(name, chord, title) => {
+        if name.isEmpty() { return Err(EmptyName) }
+        if name in names { return Err(DuplicateItem(name)) }
+        names = names.insert(name)
+        out = out.push("item\t{depth}\t{name}\t{chord}\t{title}")
+      }
+      case Divider => { out = out.push("separator\t{depth}") }
+    }
+  }
+  Ok((out, names))
+}
+
+/// The record installing an application menu bar; choosing an item reports `Chosen(name)`.
+export fn menuBar(menus: &Array[Entry]) -> Result[Array[Str], NativeError] {
+  let (written, _) = lines(menus, 0, setOf([])) ?
+  Ok(["app", "menu", written.join("\n")])
+}
+
+/// A dialog choosing existing files, or directories; answered as `DialogAnswered(ticket, paths)`.
+export fn openFiles(ticket: Str, title: Str, multiple: Bool, directories: Bool) -> Array[Str] {
+  ["app", "dialog", ticket, "open", title, if multiple { "1" } else { "0" }, if directories { "1" } else { "0" }]
+}
+
+/// A dialog choosing where to save, suggesting `name`; answered with the chosen path.
+export fn saveFile(ticket: Str, title: Str, name: Str) -> Array[Str] {
+  ["app", "dialog", ticket, "save", title, name]
+}
+
+/// A message with buttons, the first the default; answered with the chosen button's index.
+export fn message(ticket: Str, tone: Tone, title: Str, text: Str, buttons: &Array[Str]) -> Array[Str] {
+  let style = match tone {
+    case Informational => "informational"
+    case Warning => "warning"
+    case Critical => "critical"
+  }
+  ["app", "dialog", ticket, "message", style, title, text, buttons.join(",")]
+}
+
+/// A native pixel surface placed in a window above its views; presses report `SurfacePressed`.
+export fn surface(id: Int, window: Int, x: Int, y: Int, width: Int, height: Int) -> Array[Str] {
+  ["surface", "{id}", "create", "{window}", "{x}", "{y}", "{width}", "{height}"]
+}
+
+/// Replace a surface's pixels with a canvas frame.
+export fn present(id: Int, frame: &Canvas.Surface) -> Result[Array[Str], NativeError] {
+  let size = match Canvas.surfaceSize(frame) {
+    case Ok(found) => found
+    case Err(problem) => { return Err(NotAFrame(show(problem))) }
+  }
+  let pixels = match Canvas.rgbaBytes(frame) {
+    case Ok(found) => found
+    case Err(problem) => { return Err(NotAFrame(show(problem))) }
+  }
+  Ok(["surface", "{id}", "present", "{size.width}", "{size.height}", Bytes.encodeBase64(&pixels)])
+}
+
+/// Remove a surface.
+export fn closeSurface(id: Int) -> Array[Str] { ["surface", "{id}", "close"] }
+
+/// What went wrong, for a person.
+export fn explain(problem: &NativeError) -> Str {
+  match *problem {
+    case EmptyName => "a menu item has no name"
+    case DuplicateItem(name) => "two menu items are named {name}"
+    case NotAFrame(why) => "the surface frame cannot be read: {why}"
+  }
+}

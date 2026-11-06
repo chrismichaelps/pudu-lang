@@ -1,0 +1,45 @@
+module Packages
+
+import Std.Desktop.Bundle as Bundle
+import Std.Desktop.Bundle.Config as Config
+import Std.Env as Env
+import Std.Toml.Read as TomlRead
+
+/// Every format a Linux or cross-platform build can write without a display, one line each.
+fn main() -> Result[(), Str] {
+  let out = Env.variableOr("PROBE_DIR", "dist")
+  let source = "[app]\nname = \"Notes App\"\nidentifier = \"dev.pudu.notes\"\nversion = \"1.2.3\"\ndescription = \"Take notes\"\nlicense = \"MIT\"\nhomepage = \"https://pudu.dev\"\n[build]\nout = \"" + out + "\"\n[bundle]\ntargets = [\"deb\", \"rpm\", \"nsis\", \"msi\"]\n"
+  let document = match TomlRead.read(source) {
+    case Ok(found) => found
+    case Err(why) => { return Err(show(why)) }
+  }
+  let config = match Config.parse(&document) {
+    case Ok(found) => found
+    case Err(why) => { return Err(Config.explain(&why)) }
+  }
+  let inputs = Config.Inputs {
+    runtime: "#!/bin/sh\necho runtime\n".toBytes(),
+    program: "program".toBytes(),
+    assets: "assets".toBytes(),
+    icon: None,
+    iconPath: None,
+    arch: "x86_64"
+  }
+  for target in config.targets {
+    let one = Config.Config{..config, targets: [target]}
+    match Bundle.bundle(&one, &inputs, 1762300800) {
+      case Ok(produced) => { for held in produced { let _ = print("wrote {held.target} {held.path}") } }
+      case Err(Config.ToolMissing(format, program)) => { let _ = print("missing {target} {program}") }
+      case Err(problem) => { let _ = print("failed {target} {Config.explainBundle(&problem)}") }
+    }
+  }
+  let refused = TomlRead.read("[app]\nname = \"X\"\nidentifier = \"bad\"\nversion = \"1.0.0\"\n")
+  match refused {
+    case Ok(found) => match Config.parse(&found) {
+      case Err(problem) => { let _ = print("refused {Config.explain(&problem)}") }
+      case Ok(_) => { let _ = print("accepted a bad identifier") }
+    }
+    case Err(_) => ()
+  }
+  Ok(())
+}
