@@ -22,8 +22,10 @@ including the COM handler template, from [[Pudu Webview Windows Host]].
   and refits filling views; activation records `focused`.
 - The pump dispatches messages until an event is queued or the slice ends, waiting in
   `MsgWaitForMultipleObjectsEx`; queuing posts a thread message that ends the wait.
-- A response completes the request's deferral with a response built from the program's status,
-  headers (line breaks converted to CRLF) and body.
+- A response completes the request's deferral with a response built from the program's status and
+  its standard reason phrase, headers (line breaks converted to CRLF) and body. The body is held in a
+  global-memory stream: a deferred response is read after the handler returned, possibly from
+  another thread, which a plain memory stream does not support.
 
 ## Grill Log
 

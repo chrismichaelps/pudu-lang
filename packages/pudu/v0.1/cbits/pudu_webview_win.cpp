@@ -336,7 +336,25 @@ extern "C" int32_t pudu_webview_respond(int64_t request, int32_t status, const u
       crlf += c;
     }
   }
-  IStream *stream = SHCreateMemStream(body, (UINT)body_length);
+  /* A deferred response is read after the handler returned, possibly from another thread, so the
+     body lives in a global-memory stream, which supports that; a memory stream does not. */
+  IStream *stream = nullptr;
+  HGLOBAL memory = GlobalAlloc(GMEM_MOVEABLE, body_length == 0 ? 1 : body_length);
+  if (memory != nullptr) {
+    void *at = GlobalLock(memory);
+    if (body_length > 0) {
+      memcpy(at, body, body_length);
+    }
+    GlobalUnlock(memory);
+    if (FAILED(CreateStreamOnHGlobal(memory, TRUE, &stream))) {
+      GlobalFree(memory);
+      stream = nullptr;
+    } else {
+      ULARGE_INTEGER size;
+      size.QuadPart = body_length;
+      stream->SetSize(size);
+    }
+  }
   ICoreWebView2Environment *environment = nullptr;
   for (auto &entry : host.views) {
     if (entry.second->environment != nullptr) {
