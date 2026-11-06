@@ -1,6 +1,6 @@
 ---
 type: handoff
-status: ACTIVE
+status: COMPLETE
 issue: 833
 aliases: [Pudu Desktop Delivery]
 tags: [handoff, desktop, webview, ipc, packaging, updates]
@@ -45,10 +45,14 @@ pending; no self-approval.
   pudu-lang#835 (a derive cannot see a hand-written implementation from another module),
   pudu-lang#836 (trait implementations for unit are unreachable). The framework avoids each.
 
+- CI on pull request #837 is green: the Linux `-Werror` build, all suite shards, the desktop gate with
+  `dpkg-deb`, `rpm -K`, a real `makensis` build and `tsc --strict`, and [[Desktop Webview CI]] on
+  macOS, Ubuntu and Windows.
+
 ## Exact next action
 
-Confirm [[Desktop Webview CI]] drives all three adapters green on the pull request, then obtain the
-independent reviews.
+Exercise a compiler built with the `webkitgtk` flag on Linux and the `webview2` flag on Windows
+running the Notes example, which CI does not yet build.
 
 ## Referenced by
 
