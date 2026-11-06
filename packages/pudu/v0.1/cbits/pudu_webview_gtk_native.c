@@ -13,6 +13,12 @@ static GHashTable *pudu_surfaces;
 /* The menu lines last installed, given to every window opened afterwards. */
 static char *pudu_menu_lines;
 
+/* Frees an item's name when its signal handler is disconnected. */
+static void pudu_free_name(gpointer data, GClosure *closure) {
+  (void)closure;
+  g_free(data);
+}
+
 static void pudu_on_item(GtkMenuItem *item, gpointer data) {
   (void)item;
   const char *fields[] = {"menu", data};
@@ -64,7 +70,7 @@ static gboolean pudu_build_menu(PuduWindow *owner, const char *text) {
       g_ptr_array_add(open, menu);
     } else if (g_str_equal(parts[0], "item") && count == 5) {
       GtkWidget *item = gtk_menu_item_new_with_label(parts[4]);
-      g_signal_connect_data(item, "activate", G_CALLBACK(pudu_on_item), g_strdup(parts[2]), (GClosureNotify)g_free, 0);
+      g_signal_connect_data(item, "activate", G_CALLBACK(pudu_on_item), g_strdup(parts[2]), pudu_free_name, 0);
       if (*parts[3] != 0) {
         g_autofree char *accelerator = pudu_accelerator(parts[3]);
         guint key = 0;
