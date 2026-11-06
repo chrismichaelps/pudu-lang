@@ -30,9 +30,9 @@ pending; no self-approval.
 - [[Webview Drive Harness]] passes against the macOS adapter locally and in CI, and against the
   WebKitGTK adapter in CI under `xvfb-run`: scheme requests, injected scripts, evaluation,
   navigation refusal, content-rule blocking, two views in one window, menus and surfaces.
-- On WebView2 in CI the harness's menus, surfaces, second view and request delivery pass; a page
-  waiting on a deferred response did not see it, traced to the response body stream (fixed by using
-  a global-memory stream; awaiting the next run).
+- The harness passes against the WebView2 adapter in CI on `windows-latest`. A page waiting on a
+  deferred response never saw it until the body moved to a global-memory stream; the trace and probe
+  that found it stay in the harness behind `PUDU_HARNESS_TRACE`.
 
 ## Open
 
