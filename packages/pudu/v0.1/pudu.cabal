@@ -534,13 +534,15 @@ library
     c-sources:      cbits/pudu_webview_records.c
     cxx-sources:    cbits/pudu_webview_win.cpp
                     cbits/pudu_webview_win_view.cpp
+                    cbits/pudu_webview_win_native.cpp
     cxx-options:    -std=c++17
-    extra-libraries: ole32 user32 shlwapi stdc++
+    extra-libraries: ole32 user32 shlwapi comdlg32 crypt32 gdi32 stdc++
     cpp-options:    -DPUDU_NATIVE_WEBVIEW
   if os(linux) && flag(webkitgtk)
     c-sources:      cbits/pudu_webview_records.c
                     cbits/pudu_webview_gtk.c
                     cbits/pudu_webview_gtk_view.c
+                    cbits/pudu_webview_gtk_native.c
     pkgconfig-depends: webkit2gtk-4.1, gtk+-3.0
     cpp-options:    -DPUDU_NATIVE_WEBVIEW
 

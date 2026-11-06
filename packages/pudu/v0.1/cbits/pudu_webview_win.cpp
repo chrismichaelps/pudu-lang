@@ -94,6 +94,11 @@ static LRESULT CALLBACK pudu_window_proc(HWND hwnd, UINT message, WPARAM wparam,
       case WM_MOVE:
         pudu_event({"moved", id, std::to_string((short)LOWORD(lparam)), std::to_string((short)HIWORD(lparam))});
         break;
+      case WM_COMMAND:
+        if (pudu_native_menu_command(LOWORD(wparam))) {
+          return 0;
+        }
+        break;
       case WM_ACTIVATE:
         pudu_event({"focused", id, LOWORD(wparam) == WA_INACTIVE ? "0" : "1"});
         break;
@@ -152,6 +157,7 @@ static int32_t pudu_window_command(pudu_field *fields, int count) {
       return pudu_refuse(PUDU_WEBVIEW_PLATFORM, "the window could not be created");
     }
     SetWindowLongPtrW(owner->hwnd, GWLP_USERDATA, reinterpret_cast<LONG_PTR>(owner.get()));
+    pudu_native_window_opened(owner->hwnd);
     host.windows[id] = std::move(owner);
     return PUDU_WEBVIEW_DONE;
   }
@@ -232,7 +238,11 @@ extern "C" int32_t pudu_webview_send(const uint8_t *records, size_t length) {
       }
       status = pudu_view_command(texts);
     } else if (pudu_field_is(fields[0], "app") || pudu_field_is(fields[0], "surface")) {
-      status = pudu_refuse(PUDU_WEBVIEW_UNSUPPORTED, "native menus, dialogs and surfaces are not available on this platform");
+      std::vector<std::string> texts;
+      for (int i = 0; i < count; i++) {
+        texts.push_back(pudu_text(fields[i]));
+      }
+      status = pudu_native_command(texts);
     } else {
       status = pudu_refuse(PUDU_WEBVIEW_MALFORMED, "a record names neither a window nor a view");
     }
@@ -253,6 +263,9 @@ extern "C" int32_t pudu_webview_pump(int32_t milliseconds) {
   while (pudu_events.length == 0) {
     MSG message;
     while (pudu_events.length == 0 && PeekMessageW(&message, nullptr, 0, 0, PM_REMOVE)) {
+      if (pudu_native_translate(&message)) {
+        continue;
+      }
       TranslateMessage(&message);
       DispatchMessageW(&message);
     }

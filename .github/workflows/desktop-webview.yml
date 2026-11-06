@@ -59,6 +59,7 @@ jobs:
             packages/pudu/v0.1/cbits/pudu_webview_records.c \
             packages/pudu/v0.1/cbits/pudu_webview_gtk.c \
             packages/pudu/v0.1/cbits/pudu_webview_gtk_view.c \
+            packages/pudu/v0.1/cbits/pudu_webview_gtk_native.c \
             test/native/WebviewDrive.c $(pkg-config --cflags --libs webkit2gtk-4.1 gtk+-3.0) -o drive
           xvfb-run -a ./drive
   webview2-windows:
@@ -80,7 +81,7 @@ jobs:
       - name: Drive a WebView2 view through the adapter
         shell: cmd
         run: |
-          cl /nologo /EHsc /std:c++17 /W3 /I packages\pudu\v0.1\cbits /I webview2\build\native\include packages\pudu\v0.1\cbits\pudu_webview_records.c packages\pudu\v0.1\cbits\pudu_webview_win.cpp packages\pudu\v0.1\cbits\pudu_webview_win_view.cpp test\native\WebviewDrive.c /Fe:drive.exe user32.lib ole32.lib shlwapi.lib || exit /b 1
+          cl /nologo /EHsc /std:c++17 /W3 /I packages\pudu\v0.1\cbits /I webview2\build\native\include packages\pudu\v0.1\cbits\pudu_webview_records.c packages\pudu\v0.1\cbits\pudu_webview_win.cpp packages\pudu\v0.1\cbits\pudu_webview_win_view.cpp packages\pudu\v0.1\cbits\pudu_webview_win_native.cpp test\native\WebviewDrive.c /Fe:drive.exe user32.lib ole32.lib shlwapi.lib comdlg32.lib crypt32.lib gdi32.lib || exit /b 1
           copy webview2\build\native\x64\WebView2Loader.dll .
           set PUDU_HARNESS_TRACE=1
           drive.exe

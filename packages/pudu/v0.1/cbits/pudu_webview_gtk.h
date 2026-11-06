@@ -10,6 +10,10 @@
 typedef struct {
   int64_t id;
   GtkWidget *window;
+  /* The window's column: an optional menu bar above the fixed container. */
+  GtkWidget *box;
+  GtkWidget *menubar;
+  GtkAccelGroup *accelerators;
   GtkWidget *fixed;
   int width;
   int height;
@@ -54,7 +58,12 @@ void pudu_event(const char *const *fields, int count);
 char *pudu_number(int64_t value);
 int64_t *pudu_key(int64_t value);
 PuduWindow *pudu_window_named(int64_t id);
+GHashTable *pudu_window_table(void);
 /* Applies one view record (fields[0] is "view"). */
 int32_t pudu_view_command(pudu_field *fields, int count);
+/* Applies one native-component record (fields[0] is "app" or "surface"). */
+int32_t pudu_native_command(pudu_field *fields, int count);
+/* Gives a newly opened window the application's menu bar. */
+void pudu_native_window_opened(PuduWindow *owner);
 
 #endif

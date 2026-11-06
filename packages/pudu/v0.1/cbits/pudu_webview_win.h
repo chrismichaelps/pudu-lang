@@ -3,6 +3,7 @@
 
 #include <windows.h>
 #include <shlwapi.h>
+#include <wincrypt.h>
 
 #include <functional>
 #include <cstdlib>
@@ -116,6 +117,14 @@ std::string pudu_narrow(const wchar_t *text);
 std::string pudu_text(pudu_field field);
 /* Applies one view record (fields[0] is "view"). */
 int32_t pudu_view_command(const std::vector<std::string> &fields);
+/* Applies one native-component record (fields[0] is "app" or "surface"). */
+int32_t pudu_native_command(const std::vector<std::string> &fields);
+/* Gives a window the application's menu bar. */
+void pudu_native_window_opened(HWND hwnd);
+/* Reports a chosen menu command; false for a command the program did not define. */
+bool pudu_native_menu_command(WORD command);
+/* Applies the menu bar's keyboard accelerators to a message. */
+bool pudu_native_translate(MSG *message);
 /* Places every filling view of a window over its client area. */
 void pudu_fit_views(int64_t window);
 

@@ -134,7 +134,10 @@ static int32_t pudu_window_command(pudu_field *fields, int count) {
     owner->width = (int)width;
     owner->height = (int)height;
     gtk_window_set_resizable(GTK_WINDOW(owner->window), resizable != 0);
-    gtk_container_add(GTK_CONTAINER(owner->window), owner->fixed);
+    owner->box = gtk_box_new(GTK_ORIENTATION_VERTICAL, 0);
+    gtk_box_pack_end(GTK_BOX(owner->box), owner->fixed, TRUE, TRUE, 0);
+    gtk_container_add(GTK_CONTAINER(owner->window), owner->box);
+    pudu_native_window_opened(owner);
     g_signal_connect(owner->window, "delete-event", G_CALLBACK(pudu_on_delete), owner);
     g_signal_connect(owner->window, "configure-event", G_CALLBACK(pudu_on_configure), owner);
     g_signal_connect(owner->window, "focus-in-event", G_CALLBACK(pudu_on_focus), owner);
@@ -192,6 +195,8 @@ static int32_t pudu_window_command(pudu_field *fields, int count) {
   return PUDU_WEBVIEW_DONE;
 }
 
+GHashTable *pudu_window_table(void) { return pudu_windows; }
+
 PuduWindow *pudu_window_named(int64_t id) {
   return g_hash_table_lookup(pudu_windows, &id);
 }
@@ -219,7 +224,7 @@ int32_t pudu_webview_send(const uint8_t *records, size_t length) {
     } else if (pudu_field_is(fields[0], "view")) {
       status = pudu_view_command(fields, count);
     } else if (pudu_field_is(fields[0], "app") || pudu_field_is(fields[0], "surface")) {
-      status = pudu_refuse(PUDU_WEBVIEW_UNSUPPORTED, "native menus, dialogs and surfaces are not available on this platform");
+      status = pudu_native_command(fields, count);
     } else {
       status = pudu_refuse(PUDU_WEBVIEW_MALFORMED, "a record names neither a window nor a view");
     }

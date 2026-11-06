@@ -72,6 +72,11 @@ int main(void) {
       fprintf(stderr, "pump failed\n");
       return 1;
     }
+    if (trace && answered && !evaluated && turn % 40 == 0) {
+      const char *probe[] = {"view", "1", "eval", "probe", "document.title + ' / ' + (window.__probe || 'no probe')"};
+      record(&commands, probe, 5);
+      send_all(&commands);
+    }
     int64_t size = pudu_webview_events(NULL, 0);
     if (size <= 0) {
       continue;
@@ -130,13 +135,7 @@ int main(void) {
       }
     }
     free(events);
-    if (trace && answered && !evaluated && turn % 40 == 0) {
-      const char *probe[] = {"view", "1", "eval", "probe", "document.title + ' / ' + (window.__probe || 'no probe')"};
-      record(&commands, probe, 5);
-      send_all(&commands);
-    }
   }
-#ifdef __APPLE__
   /* Native components beside the views: a menu bar, and a surface that takes
      a frame of its exact size and refuses any other. */
   const char *menu[] = {"app", "menu", "menu\t0\tFile\nitem\t1\topen\tcmd+o\tOpen\nseparator\t1"};
@@ -158,7 +157,6 @@ int main(void) {
   if (!native) {
     return 1;
   }
-#endif
   const char *close[] = {"window", "1", "close"};
   record(&commands, close, 3);
   send_all(&commands);
