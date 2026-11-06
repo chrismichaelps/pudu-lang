@@ -18,6 +18,7 @@ static const char *PAGE =
     ".then(function(r){return r.text()})"
     ".then(function(t){document.title='done:'+t})"
     ".catch(function(e){document.title='error:'+e})"
+    ";window.__probe='script ran'"
     "</script></body></html>";
 
 static int send_all(pudu_buffer *buffer) {
@@ -112,6 +113,8 @@ int main(void) {
         const char *eval[] = {"view", "1", "eval", "t1", "document.title + ':' + window.injected"};
         record(&commands, eval, 5);
         send_all(&commands);
+      } else if (pudu_field_is(fields[0], "eval") && count == 5 && pudu_field_is(fields[2], "probe")) {
+        continue;
       } else if (pudu_field_is(fields[0], "eval") && count == 5) {
         if (pudu_field_is(fields[3], "ok") && pudu_field_is(fields[4], "done:pong:42")) {
           evaluated = 1;
@@ -127,6 +130,11 @@ int main(void) {
       }
     }
     free(events);
+    if (trace && answered && !evaluated && turn % 40 == 0) {
+      const char *probe[] = {"view", "1", "eval", "probe", "document.title + ' / ' + (window.__probe || 'no probe')"};
+      record(&commands, probe, 5);
+      send_all(&commands);
+    }
   }
 #ifdef __APPLE__
   /* Native components beside the views: a menu bar, and a surface that takes
