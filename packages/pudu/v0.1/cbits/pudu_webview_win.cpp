@@ -6,6 +6,18 @@ static const wchar_t *PUDU_WINDOW_CLASS = L"PuduWebviewWindow";
 
 static pudu_buffer pudu_events;
 
+/* The reason phrase for each status the program answers with. */
+static const std::map<int32_t, const wchar_t *> PUDU_REASONS = {
+    {200, L"OK"}, {201, L"Created"}, {204, L"No Content"}, {206, L"Partial Content"}, {301, L"Moved Permanently"},
+    {302, L"Found"}, {304, L"Not Modified"}, {307, L"Temporary Redirect"}, {400, L"Bad Request"}, {401, L"Unauthorized"},
+    {403, L"Forbidden"}, {404, L"Not Found"}, {405, L"Method Not Allowed"}, {409, L"Conflict"}, {413, L"Content Too Large"},
+    {422, L"Unprocessable Content"}, {429, L"Too Many Requests"}, {500, L"Internal Server Error"}, {503, L"Service Unavailable"}};
+
+static const wchar_t *pudu_reason(int32_t status) {
+  auto found = PUDU_REASONS.find(status);
+  return found == PUDU_REASONS.end() ? L"Status" : found->second;
+}
+
 PuduHost &pudu_host() {
   static PuduHost host;
   return host;
@@ -335,7 +347,7 @@ extern "C" int32_t pudu_webview_respond(int64_t request, int32_t status, const u
   int32_t answer = PUDU_WEBVIEW_GONE;
   ICoreWebView2WebResourceResponse *response = nullptr;
   if (environment != nullptr &&
-      SUCCEEDED(environment->CreateWebResourceResponse(stream, status, L"", pudu_wide(crlf).c_str(), &response))) {
+      SUCCEEDED(environment->CreateWebResourceResponse(stream, status, pudu_reason(status), pudu_wide(crlf).c_str(), &response))) {
     pending.args->put_Response(response);
     response->Release();
     answer = PUDU_WEBVIEW_DONE;

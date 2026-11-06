@@ -227,9 +227,8 @@ drops source maps from release builds, and strips the executable's symbols.
 Native components join WebView content in the same window through the same record channel: `app
 menu` installs the menu bar, `app dialog` shows open, save and message dialogs answered by ticket,
 and `surface` records place a native pixel surface above the views and present frames rendered by
-`Std.Ui.Canvas`. Menu choices, dialog answers and surface presses arrive as events. The macOS adapter
-implements them; the WebKitGTK and WebView2 adapters refuse these records with `unsupported` until
-they gain the same components.
+`Std.Ui.Canvas`. Menu choices, dialog answers and surface presses arrive as events. All three adapters implement
+them ([[Pudu Webview macOS Native]], [[Pudu Webview GTK Native]], [[Pudu Webview Windows Native]]).
 
 ## Platform status
 

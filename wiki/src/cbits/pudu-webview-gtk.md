@@ -31,6 +31,8 @@ agent, transparency, per-label website data, and script evaluation.
   loads only after every filter is attached, and a filter that fails leaves the view empty, as on
   macOS.
 
+- `app` and `surface` records go to [[Pudu Webview GTK Native]].
+
 ## Grill Log
 
 - **Q:** One web context per view? **A:** Yes: the scheme handler's user data must name its view,

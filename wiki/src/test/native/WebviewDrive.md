@@ -12,7 +12,7 @@ filling view and a second view at a fixed frame (which must report its own title
 title, evaluates `document.title` with the injected value and requires `done:pong:42`, then
 navigates outside the allowlist and requires `navigation-blocked`. A content rule blocks a fetch of
 `pudu://app/blocked` before it reaches the program, and the page reports the refusal in its call,
-which also shows the page loaded only after the rule list compiled. On macOS it also installs a
+which also shows the page loaded only after the rule list compiled. On every platform it also installs a
 menu bar and requires a native surface to accept a frame of its size, refuse one of another size,
 and close. CI links it with the macOS
 adapter and with the WebKitGTK adapter under a virtual display.

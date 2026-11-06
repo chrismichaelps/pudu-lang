@@ -26,7 +26,7 @@ answered by a ticket. `surface`, `present` and `closeSurface` place a native pix
   primitives as the framebuffer desktop and shows them next to HTML.
 - Answers arrive as [[Std Desktop Webview]] events: `Chosen(name)`, `DialogAnswered(ticket, paths)`,
   `DialogCancelled(ticket)` and `SurfacePressed(id, x, y)`.
-- Targets whose adapter has no native components refuse the records with `Unsupported`.
+- Every adapter implements these records; a target without an adapter refuses them with `Unsupported`.
 
 ## Grill Log
 
