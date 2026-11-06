@@ -9,7 +9,9 @@ tags: [module, desktop, ipc, typescript]
 
 The TypeScript surface of [[Pudu JS Bridge]]: `PuduErrorKind`, `PuduError`, `Channel<T>`,
 `PuduEvent<T>`, `PuduBridge`, and the global `window.__pudu`. Every module `pudu desktop types`
-writes begins with these declarations.
+writes begins with these declarations. A call's `channel` option asks only for the channel's `id`,
+which is all the bridge reads, so a `Channel<number>` is accepted although `Channel` is invariant in
+its message type.
 
 ## Referenced by
 

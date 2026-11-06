@@ -24,7 +24,7 @@ export interface PuduEvent<T> {
 }
 
 export interface PuduBridge {
-  invoke<T>(command: string, args?: unknown, options?: { channel?: Channel<unknown> }): Promise<T>;
+  invoke<T>(command: string, args?: unknown, options?: { channel?: { readonly id: number } }): Promise<T>;
   listen<T>(event: string, handler: (message: PuduEvent<T>) => void): () => void;
   once<T>(event: string, handler: (message: PuduEvent<T>) => void): () => void;
   emit(event: string, payload?: unknown): Promise<null>;
