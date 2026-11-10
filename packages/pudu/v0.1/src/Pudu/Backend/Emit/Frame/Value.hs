@@ -13,6 +13,7 @@ import Pudu.Backend.Emit.Aggregate (aggregateHelper, aggregateNeed, cellName, is
 import Pudu.Diagnostic.Evaluation (cannotApplyBinaryMessage)
 import Pudu.Backend.Emit.Support (integerHelper, integerKindText, integerLiteralText, isBigInteger, isWideInteger, limbsOf, zeroValue)
 import Pudu.Core (CoreArrayMethodName (..), CoreBinaryOperator (..), CoreDecimalMethodName (..), CoreKeyedMethodName (..), CoreTextMethodName (..), CoreType (..))
+import Pudu.Backend.Emit.Frame.TextView (frameTextView)
 import Pudu.Backend.Emit.Range (rangeMethodCall)
 import Pudu.Backend.Emit.Bytes (bytesFunction)
 import Pudu.Core.Frame
@@ -222,6 +223,7 @@ frameValue state value = case frameValueShape value of
     plain ("pudu_output_write(" <> (if errors then "2" else "1") <> ", "
       <> (if newline then "1" else "0") <> ", " <> source <> ")") ["output_error"]
   FrameDisplay slot -> rendered slot
+  FrameTextMethod _ _ _ | Just selected <- frameTextView slotText state value -> selected
   FrameTextMethod name receiver arguments -> do
     target <- slotText receiver
     operands <- traverse slotText arguments
@@ -260,6 +262,7 @@ frameValue state value = case frameValueShape value of
       TextIntOf -> simple "text_int_of"
       TextParsesFloat -> simple "text_parses_float"
       TextFloatOf -> simple "text_float_of"
+      _ -> refused "a text method without a native helper"
   FrameShow slot
     | frameSlotType slot == CoreTextType -> slotText slot >>= \text -> plain ("pudu_text_show(" <> text <> ")") ["text_show"]
     | frameSlotType slot == CoreCharType -> slotText slot >>= \scalar -> plain ("pudu_char_show(" <> scalar <> ")") ["char_show"]

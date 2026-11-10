@@ -5,6 +5,10 @@ tags: [changelog]
 
 # Changelog
 
+## 2026-11-05 — Native byte-addressed text contract (#827)
+
+- [[Native Text Views]] defines guarded byte/scalar reads, shared slices, search offsets, exact carriers and required evidence before native admission.
+
 ## 2026-11-04 — Native sparse-word queries (#814)
 
 - [[Native Word Map Queries]] defines exact query carriers, source-order snapshots, portable count/member kernels and required validation.

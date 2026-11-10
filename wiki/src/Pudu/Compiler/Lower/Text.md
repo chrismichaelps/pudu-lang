@@ -68,3 +68,7 @@ is what `readCharMember` finds before any impl; other Char members refuse.
 ## Decimal (#802)
 
 `toDecimal()` lowers through [[Compiler Lower Decimal]].
+
+## Native byte views (#827)
+
+Export lowerTextPrimitive and textCallable in addition to lowerTextMethod. Consume the six exact checked builtin signatures; hold operands once left-to-right and stop on Never before later arguments. Build ordinary Option/tuple values with guarded byte/scalar reads. Search once into an Int local, branch on nonnegative result, then construct Some or None. Direct calls require the solved result; callable registration supplies its validated result explicitly. Existing receiver-last Str method behavior is unchanged. See [[Native Text Views]].

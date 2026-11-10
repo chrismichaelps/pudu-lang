@@ -274,6 +274,16 @@ data CoreTextMethodName
   | TextIntOf
   | TextParsesFloat
   | TextFloatOf
+  {-| Reads require the byte guards emitted by primitive lowering. -}
+  | TextByteSize
+  | TextByteIndexValid
+  | TextByteRead
+  | TextByteSliceValid
+  | TextByteSlice
+  | TextByteFind
+  | TextByteFindLast
+  | TextScalarRead
+  | TextScalarWidth
   deriving stock (Eq, Show)
 
 {-| The array methods native implements in the runtime, named as the

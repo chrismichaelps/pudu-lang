@@ -14,6 +14,7 @@ import Pudu.Backend.ClosurePrograms (closureSuccessPrograms, closureRefusalProgr
 import Pudu.Backend.ArrayPrograms (arraySuccessPrograms, arrayRefusalPrograms)
 import Pudu.Backend.ArrayPatternPrograms (arrayPatternSuccessPrograms, arrayPatternRefusalPrograms)
 import Pudu.Backend.TextCollectionPrograms (textCollectionSuccessPrograms, textCollectionRefusalPrograms)
+import Pudu.Backend.TextViewPrograms (textViewSuccessPrograms, textViewRefusalPrograms, textViewFacadePrograms)
 import Pudu.Backend.ConvertPrograms (convertSuccessPrograms, convertRefusalPrograms)
 import Pudu.Backend.KeyedPrograms (keyedSuccessPrograms, keyedRefusalPrograms)
 import Pudu.Backend.ShapePrograms (shapeModulePrograms, shapeSuccessPrograms)
@@ -63,7 +64,7 @@ layout = ("Layout.pudu", Text.unlines
 
 modulePrograms :: [(String, [(FilePath, Text)], Text, Text)]
 modulePrograms =
-  [(label, [], source, answer) | (label, source, answer) <- wordMapSuccessPrograms <> constantPrograms <> referenceSuccessPrograms <> methodSuccessPrograms <> genericSuccessPrograms <> trySuccessPrograms <> forSuccessPrograms <> closureSuccessPrograms <> arraySuccessPrograms <> arrayPatternSuccessPrograms <> textCollectionSuccessPrograms <> convertSuccessPrograms <> keyedSuccessPrograms <> shapeSuccessPrograms <> rangeSuccessPrograms <> bytesSuccessPrograms] <> constantModulePrograms <> renderingCallableModulePrograms <> defaultParameterModulePrograms <> shapeModulePrograms <>
+  [(label, [], source, answer) | (label, source, answer) <- textViewFacadePrograms <> textViewSuccessPrograms <> wordMapSuccessPrograms <> constantPrograms <> referenceSuccessPrograms <> methodSuccessPrograms <> genericSuccessPrograms <> trySuccessPrograms <> forSuccessPrograms <> closureSuccessPrograms <> arraySuccessPrograms <> arrayPatternSuccessPrograms <> textCollectionSuccessPrograms <> convertSuccessPrograms <> keyedSuccessPrograms <> shapeSuccessPrograms <> rangeSuccessPrograms <> bytesSuccessPrograms] <> constantModulePrograms <> renderingCallableModulePrograms <> defaultParameterModulePrograms <> shapeModulePrograms <>
   [ ( "implementations inherit the defaults of an imported trait, run in the trait's module"
     , [ ("Lib.pudu", Text.unlines
           [ "module Lib", ""
@@ -274,7 +275,7 @@ constantRefusalPrograms =
     imported function reports at its own module's source. -}
 moduleRefusalPrograms :: [(String, [(FilePath, Text)], Text)]
 moduleRefusalPrograms =
-  constantRefusalPrograms <> [(label, [], source) | (label, source) <- wordMapRefusalPrograms <> referenceRefusalPrograms <> methodRefusalPrograms <> genericRefusalPrograms <> tryRefusalPrograms <> forRefusalPrograms <> closureRefusalPrograms <> arrayRefusalPrograms <> arrayPatternRefusalPrograms <> textCollectionRefusalPrograms <> convertRefusalPrograms <> keyedRefusalPrograms <> rangeRefusalPrograms <> bytesRefusalPrograms] <>
+  constantRefusalPrograms <> [(label, [], source) | (label, source) <- textViewRefusalPrograms <> wordMapRefusalPrograms <> referenceRefusalPrograms <> methodRefusalPrograms <> genericRefusalPrograms <> tryRefusalPrograms <> forRefusalPrograms <> closureRefusalPrograms <> arrayRefusalPrograms <> arrayPatternRefusalPrograms <> textCollectionRefusalPrograms <> convertRefusalPrograms <> keyedRefusalPrograms <> rangeRefusalPrograms <> bytesRefusalPrograms] <>
   [ ( "a failure in an imported inherited default names the trait module"
     , [("Lib.pudu", Text.unlines
         [ "module Lib", "export trait Divide {"
