@@ -4,7 +4,7 @@ module Pudu.Compiler.Lower.Body (lowerEntryBody, lowerFunctionBody, lowerExpress
 
 import Data.List.NonEmpty (NonEmpty (..))
 import Pudu.Compiler.Lower.Scalar (lowerUnary, lowerBinary, eagerType)
-import Pudu.Compiler.Lower.Types (recordFields, typeForSpan, nativeIntegerKind, nativeValueType, writtenLabel)
+import Pudu.Compiler.Lower.Types (recordFields, typeForSpan, nativeIntegerKind, nativeValueType, treeType, writtenLabel)
 import Pudu.Compiler.Lower.Control
   ( lowerWhile, lowerLoop, lowerTransfer, blockType, joinType
   , printValued, expressionIsPrintValued )
@@ -27,6 +27,7 @@ import Pudu.Compiler.Lower.Decimal (decimalLiteral, lowerDecimalPrimitive)
 import Pudu.Compiler.Lower.For (lowerFor)
 import Pudu.Compiler.Lower.Intrinsic (annotatedPanic, lowerIntrinsicValue)
 import Pudu.Compiler.Lower.WordMap (lowerWordMapPrimitive)
+import Pudu.Compiler.Lower.Store (lowerStorePrimitive)
 import Pudu.Compiler.Lower.MethodValue (lowerMethodValue)
 import Pudu.Compiler.Lower.Stop (lowerPanic, lowerUntypedConvert)
 import Pudu.Compiler.Lower.Lambda (lowerFunctionValue, lowerLambda, lowerValueCall)
@@ -71,8 +72,7 @@ lowerEntryBody located state
                 kind@(CoreSumType _ _) -> built after coreBlock kind
                 kind@(CoreFunctionType _ _) -> built after coreBlock kind
                 kind@(CoreArrayType _) -> built after coreBlock kind
-                kind@(CoreMapType _ _) -> built after coreBlock kind
-                kind@(CoreSetType _) -> built after coreBlock kind
+                kind | treeType kind -> built after coreBlock kind
                 kind | kind `elem` [CoreRangeType, CoreBytesType, CoreDecimalType] -> built after coreBlock kind
                 CoreNeverType -> built after coreBlock CoreUnitType
                 CoreUnitType
@@ -329,8 +329,7 @@ allowedResultType declared operand = case declared of
     CoreSumType _ _ -> True
     CoreFunctionType _ _ -> True
     CoreArrayType _ -> True
-    CoreMapType _ _ -> True
-    CoreSetType _ -> True
+    kind | treeType kind -> True
     CoreRangeType -> True
     CoreBytesType -> True
     _ -> operand `elem` [CoreBoolType, CoreTextType, CoreCharType, CoreUnitType, CoreNeverType, CoreDecimalType]
@@ -393,6 +392,7 @@ lowerExpression state (Located spanValue expression) = case expression of
     | Just lowered <- lowerTextPrimitive lowerExpression state spanValue name arguments -> lowered
     | Just lowered <- lowerDecimalPrimitive lowerExpression state spanValue name arguments -> lowered
     | Just lowered <- lowerWordMapPrimitive lowerExpression state spanValue name arguments -> lowered
+    | Just lowered <- lowerStorePrimitive lowerExpression state spanValue name arguments -> lowered
     | otherwise -> halt spanValue ("calls to '" <> name <> "'") state
   CallExpression (Located callee (MemberExpression receiver@(Located _ (NameExpression (owner :| []))) named@(Located _ member))) arguments
     | isModuleQualifier state owner, Just key <- resolveFunction state [owner, member] -> lowerFunctionCall lowerExpression state spanValue key callee arguments

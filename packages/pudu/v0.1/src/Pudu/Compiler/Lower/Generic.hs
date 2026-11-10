@@ -86,6 +86,7 @@ unformed kind = case kind of
   CoreArrayType member -> NominalType (NominalId Nothing "Array") [unformed member]
   CoreMapType key value -> NominalType (NominalId Nothing "Map") [unformed key, unformed value]
   CoreSetType member -> NominalType (NominalId Nothing "Set") [unformed member]
+  CoreStoreType held -> NominalType (NominalId Nothing "Buckets") [unformed held]
   CoreRangeType -> NominalType (NominalId Nothing "Range") [NominalType (NominalId Nothing "Int") []]
   CoreTupleType members -> TupleTypeValue (map unformed members)
   CoreUnitType -> UnitTypeValue

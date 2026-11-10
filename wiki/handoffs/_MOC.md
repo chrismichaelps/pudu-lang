@@ -380,3 +380,5 @@ tags: [moc, handoff]
 - [[Bound Receiver Evidence Delivery]] — complete selected bound and receiver facts for #735.
 
 - [[Native Text View Delivery]] — native byte primitives and source-compatible views.
+
+- [[Native Indexed Store Delivery]] — native `Buckets[V]`, hashing and MultiMap primitives (#840).

@@ -216,3 +216,7 @@ the large matrices.
 ## Native byte views (#827)
 
 Register focused native text-view explicit-output and refusal groups over [[Backend Text View Programs]] using the existing differential compiler/runner. See [[Native Text Views]].
+
+## Indexed stores (#840)
+
+Register the store success, module and refusal corpora as two properties. Resolved Grill Log: module programs run in the same expected-output conformance as single-module ones.

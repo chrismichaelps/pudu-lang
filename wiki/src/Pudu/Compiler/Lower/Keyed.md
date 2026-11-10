@@ -49,3 +49,7 @@ builds what mapOf/setOf build, or Nothing for a mismatched type. A flag
 picks whether key refusals use the call span or the caller site.
 Resolved Grill Log: the direct call and the value body share it, so key
 checks, E7008 wording and duplicate handling cannot drift.
+
+## Indexed stores (#840)
+
+lowerKeyedMethod answers the seven store methods with the map's operations at key Int. A store's key operand is wrapped in `&+ 0`, folding a deferred magnitude into the word the interpreter narrows to. Export Blame, orderable and mayHoldFunction for [[Compiler Lower Multi Map]]. Resolved Grill Log: narrowing in lowering keeps one key convention in the helpers.

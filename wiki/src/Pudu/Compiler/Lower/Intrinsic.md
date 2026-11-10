@@ -83,3 +83,7 @@ their existing uncounted ABI, rendering, identity and ownership behavior.
 ## Native byte views (#827)
 
 Register the six exact monomorphic textCallable signatures through the ordinary per-tag builtin machinery. Reuse direct-call bodies and validated Option results instead of reading a function-reference span as a result layout. Preserve entry rendering, identity and call metadata. See [[Native Text Views]].
+
+## Indexed stores (#840)
+
+The five store primitives are first-class through storeCallable with caller blame. Resolved Grill Log: exact solved signatures only; a mismatch refuses at the reference.

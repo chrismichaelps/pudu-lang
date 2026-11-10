@@ -6,6 +6,7 @@ aliases: [Backend Module Map]
 
 # Backend Module Map
 
+- [[Native Hash Mixing]] · [[Backend Store Programs]] — `hashOf`, store indexes and the indexed-store corpus (#840).
 - [[Backend Word Map Programs]] — sparse-word algebra, persistence and ownership (#810).
 - [[Backend Module Programs]] — imported identities and folded collection/range conformance (#808).
 

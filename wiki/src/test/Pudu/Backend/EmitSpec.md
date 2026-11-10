@@ -284,3 +284,7 @@ The BigInt parameter and result refusal cases are gone; the reachability cases t
 ## Decimal (#802)
 
 Decimal now has a native form; the refusal and reachability cases name Buckets instead, which still has none.
+
+## Indexed stores (#840)
+
+Buckets now has a native form; the refusal and reachability cases name `Task[Int, Never]` instead, which still has none. A Task-valued binding refuses at the async function it calls, and the case pins that position. Resolved Grill Log: each changed expectation was inspected; none was refreshed from output alone.

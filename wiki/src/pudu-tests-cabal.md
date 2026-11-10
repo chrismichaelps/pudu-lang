@@ -401,3 +401,7 @@ Register [[Program View Spec]] using existing dependencies. Resolved Grill Log: 
 ## Native byte views (#827)
 
 Register Pudu.Backend.TextViewPrograms with the existing test dependencies so focused and full gates execute the same corpus. See [[Native Text Views]].
+
+## Indexed stores (#840)
+
+Register Pudu.Backend.StorePrograms. Resolved Grill Log: existing harnesses run it.

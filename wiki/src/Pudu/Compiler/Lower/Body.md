@@ -456,3 +456,7 @@ A decimal literal lowers through [[Compiler Lower Decimal]], whose primitives a 
 ## Native byte views (#827)
 
 After nearer name/function/variant resolution, delegate the six text-view primitive calls to lowerTextPrimitive. Keep canonical builtin identity, explicit type facts and source-order transfers; no fallback or source inference. See [[Native Text Views]].
+
+## Indexed stores (#840)
+
+Dispatch `bucketsOf`, `hashOf`, `mixHash`, `multiMapAdd` and `multiMapContains` to [[Compiler Lower Store]] after the word-map primitives. Result admission uses treeType. Resolved Grill Log: local and module functions of the same name still win, as for every prelude name.

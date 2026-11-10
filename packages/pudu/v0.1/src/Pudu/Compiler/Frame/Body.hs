@@ -370,6 +370,7 @@ resultSlot at kind = case kind of
   CoreArrayType _ -> Just <$> freshSlot at "$result" kind
   CoreMapType _ _ -> Just <$> freshSlot at "$result" kind
   CoreSetType _ -> Just <$> freshSlot at "$result" kind
+  CoreStoreType _ -> Just <$> freshSlot at "$result" kind
   CoreRangeType -> Just <$> freshSlot at "$result" kind
   CoreBytesType -> Just <$> freshSlot at "$result" kind
   CoreDecimalType -> Just <$> freshSlot at "$result" kind

@@ -419,3 +419,7 @@ when the index is out of range.
 ## Native byte views (#827)
 
 Add TextByteSize, TextByteIndexValid, TextByteRead, TextByteSliceValid, TextByteSlice, TextByteFind, TextByteFindLast, TextScalarRead and TextScalarWidth to CoreTextMethodName. They are internal guarded reads, not new source Str methods. Optional/layout construction stays in lowering; no persisted ordinal or cell ABI change. See [[Native Text Views]].
+
+## Indexed stores (#840)
+
+CoreStoreType held is `Buckets[held]`: an Int-keyed store on the map's tree carrier, named `Buckets[...]` by coreTypeName. Resolved Grill Log: a distinct type, not Map[Int, held], because rendering, runtime kind and methods differ. The export list and header were tightened to keep the module under its line limit.

@@ -50,6 +50,7 @@ lowerMethodValue lower state at receiver member = case (typeForSpan types (locat
     CoreArrayType _ -> True
     CoreMapType _ _ -> True
     CoreSetType _ -> True
+    CoreStoreType _ -> True
     CoreRangeType -> True
     CoreCharType -> True
     CoreBytesType -> True

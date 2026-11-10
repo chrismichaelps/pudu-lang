@@ -9,6 +9,8 @@ data CoreKeyedMethodName
   | KeyedContains
   | KeyedLookup
   | KeyedInsert
+  {-| Insert whose key replaces the spelling of an equal held key. -}
+  | KeyedPut
   | KeyedRemove
   | KeyedKeys
   | KeyedValues
@@ -26,4 +28,8 @@ data CoreKeyedMethodName
   | KeyedWordDisjoint
   | KeyedWordPopCount
   | KeyedWordMembers
+  {-| The store index of an Int: the receiver is the Int itself. -}
+  | KeyedMixHash
+  {-| `hashOf` of text, bytes or an integer: the receiver is the value. -}
+  | KeyedHash
   deriving stock (Eq, Show)

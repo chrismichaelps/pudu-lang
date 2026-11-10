@@ -3,7 +3,8 @@
     before the receiver. A key whose type could hold a function is tested
     before it is stored, and one that can't be ordered stops the program with
     E7008, as `comparableValue` decides. -}
-module Pudu.Compiler.Lower.Keyed (lowerKeyedBuilder, keyedFromArray, lowerSetLiteral, lowerKeyedMethod) where
+module Pudu.Compiler.Lower.Keyed
+  (lowerKeyedBuilder, keyedFromArray, lowerSetLiteral, lowerKeyedMethod, Blame (..), orderable, mayHoldFunction) where
 
 import Data.Text (Text)
 import Pudu.Compiler.Lower.Array (collect, stopped, stops)
@@ -61,11 +62,14 @@ lowerSetLiteral lower state at members = case typeForSpan (contextTypes (lowerCo
       | otherwise -> halt at "a set literal whose members have different types" after
   _ -> halt at "a set without a native member type" state
 
-{-| A built-in map or set method when the receiver is one; Nothing otherwise. -}
+{-| A built-in map, set or store method when the receiver is one; Nothing
+    otherwise. A store is addressed by the Int folded into one word, which is
+    what `&+ 0` answers. -}
 lowerKeyedMethod :: LowerExpression -> LowerState -> Span -> Located Expression -> Text -> [Located Expression] -> Maybe Lowered
 lowerKeyedMethod lower state at receiver member arguments = case typeForSpan types (locatedSpan receiver) of
   Just kind@(CoreMapType key value) -> Just (dispatch kind key (mapMethods kind key value))
   Just kind@(CoreSetType key) -> Just (dispatch kind key (setMethods kind key))
+  Just kind@(CoreStoreType value) -> Just (dispatch kind intType (storeMethods kind value))
   _ -> Nothing
  where
   types = contextTypes (lowerContext state)
@@ -78,11 +82,24 @@ lowerKeyedMethod lower state at receiver member arguments = case typeForSpan typ
           (after, Just cores)
             | any stops cores -> (after, Just (stopped at cores, CoreNeverType))
             | and (zipWith (\expected core -> coreExpressionType core == expected) parameters cores) ->
-                shape after kind key cores result
+                shape after kind key (indexed kind cores) result
             | otherwise -> halt at ("a call to " <> member <> " with these arguments") after
   collectionName kind = case kind of
     CoreMapType _ _ -> "Map"
+    CoreStoreType _ -> "Buckets"
     _ -> "Set"
+  indexed kind cores = case (kind, cores) of
+    (CoreStoreType _, probe : rest@(_ : _)) -> CoreExpression (coreExpressionSpan probe) intType
+      (CoreBinary CoreWrapAdd probe (CoreExpression at intType (CoreIntegerLiteral PlatformSigned 0))) : rest
+    _ -> cores
+  storeMethods kind value =
+    [ ("size", ([], intType, plain KeyedSize))
+    , ("isEmpty", ([], CoreBoolType, plain KeyedIsEmpty))
+    , ("get", ([intType], CoreUnitType, getting))
+    , ("insert", ([intType, value], kind, plain KeyedInsert))
+    , ("remove", ([intType], kind, plain KeyedRemove))
+    , ("keys", ([], CoreArrayType intType, plain KeyedKeys))
+    , ("values", ([], CoreArrayType value, plain KeyedValues)) ]
   mapMethods kind key value =
     [ ("size", ([], intType, plain KeyedSize))
     , ("isEmpty", ([], CoreBoolType, plain KeyedIsEmpty))
@@ -114,6 +131,7 @@ lowerKeyedMethod lower state at receiver member arguments = case typeForSpan typ
           (withMap, mapLocal) = bindLocal withKey "" kind
           valueType = case kind of
             CoreMapType _ held -> held
+            CoreStoreType held -> held
             other -> other
           read' local = CoreExpression at (coreLocalType local) (CoreReadLocal local)
           found = CoreExpression at CoreBoolType (CoreKeyedMethod KeyedContains (read' mapLocal) [read' keyLocal])
@@ -194,6 +212,7 @@ orderable blame at described key =
     CoreArrayType _ -> text "array"
     CoreMapType _ _ -> text "map"
     CoreSetType _ -> text "set"
+    CoreStoreType _ -> text "store"
     CoreFunctionType _ _ -> expression CoreTextType (CoreRuntimeKind key)
     other -> text (coreTypeName other)
   help = Just "use a value the language can order, such as text, a number, or a tuple of those"
@@ -215,6 +234,7 @@ mayHoldFunction types = go []
         CoreArrayType element -> go (kind : seen) element
         CoreMapType key value -> any (go (kind : seen)) [key, value]
         CoreSetType member -> go (kind : seen) member
+        CoreStoreType held -> go (kind : seen) held
         CoreRecordType _ _ -> maybe False (any (go (kind : seen) . snd)) (recordFields types kind)
         CoreSumType _ _ -> maybe False (any (go (kind : seen) . snd) . concatMap coreVariantFields) (sumVariants types kind)
         _ -> False

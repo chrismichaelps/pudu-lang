@@ -94,3 +94,7 @@ products still refuse at the exact constant use. Inject a portable product
 with a mismatched nested element to require E6001 without initializer fallback.
 Resolved Grill Log: change expectations only for newly represented families;
 retain callable/Buckets refusals and compile-time initializer failures.
+
+## Indexed stores (#840)
+
+`&Buckets[Int]` forms as the store carrier and a folded `bucketsOf()` constant lowers; the unrepresented cases use `Task[Int, Never]` and a function-valued constant. Resolved Grill Log: the canonical-identity check keeps one positive store case and one negative Task case.

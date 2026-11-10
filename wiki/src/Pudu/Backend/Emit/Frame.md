@@ -152,3 +152,7 @@ A program holding a BigInt anywhere gets the `big` cell member and the carrier's
 ## Decimal (#802)
 
 A program holding Decimal gets the `decimal` member, its value, retain and release parts, an ownership code, and an entry that prints and releases its Decimal.
+
+## Indexed stores (#840)
+
+A store entry renders through its show helper. The hash parts join the post-frame runtime parts. A builtin taken as a value, like a method value, neither counts depth nor keeps its own failure site: `blames` is set for both. Resolved Grill Log: the interpreter reports a builtin's failure at the call made through it; explicit caller failures were already there, and sited arithmetic inside a builtin body now agrees.

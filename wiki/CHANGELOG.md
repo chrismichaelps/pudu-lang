@@ -5,6 +5,12 @@ tags: [changelog]
 
 # Changelog
 
+## 2026-11-09 — Native indexed stores, hashing and MultiMap primitives (#840)
+
+- [[Native Indexed Stores]] defines `Buckets[V]` on the tree carrier, key narrowing, deterministic `hashOf`, seeded `mixHash` and the MultiMap primitives.
+- [[Compiler Lower Store]], [[Compiler Lower Multi Map]] and [[Native Hash Mixing]] are new; [[Backend Store Programs]] carries the conformance, refusal and counted-cleanup corpus.
+- A builtin taken as a value now reports a sited failure at the call made through it ([[Backend Frame Program]]).
+
 ## 2026-11-05 — Native byte-addressed text contract (#827)
 
 - [[Native Text Views]] defines guarded byte/scalar reads, shared slices, search offsets, exact carriers and required evidence before native admission.

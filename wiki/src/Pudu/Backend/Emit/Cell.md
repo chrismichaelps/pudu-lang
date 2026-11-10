@@ -40,3 +40,7 @@ A BigInt is an owned cell: C type `pudu_big *`, member `big`, retained and relea
 ## Decimal (#802)
 
 Decimal is an owned cell: `pudu_dec *`, member `decimal`, retained, released, rendered and ordered through its runtime.
+
+## Indexed stores (#840)
+
+CoreStoreType is an owned, aggregate `pudu_box *` mangled `BK_<held>_E`. Resolved Grill Log: a distinct mangle keeps store helpers apart from Map[Int, held] helpers in one program.

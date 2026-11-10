@@ -92,3 +92,7 @@ a semantic function type from the native carrier loses that metadata and
 regresses passing function values through ordinary generic functions. Native
 function carriers reify structurally for matching nested calls, never as
 display-text nominal identities.
+
+## Indexed stores (#840)
+
+unformed spells CoreStoreType back as `Buckets[...]`. Resolved Grill Log: generic copies over stores match by the checker's own spelling.
