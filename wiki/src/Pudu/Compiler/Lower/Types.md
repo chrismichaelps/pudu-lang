@@ -232,3 +232,7 @@ as `Eval.Env.lookupMethod` does.
 ## Decimal (#802)
 
 `Decimal` forms as `CoreDecimalType`, a native value type named `Decimal`.
+
+## Indexed stores (#840)
+
+Form `Buckets[V]` as CoreStoreType when V is a native value; ownerKeyOf answers `Buckets`. Export treeType for maps, sets and stores. Resolved Grill Log: one predicate replaces repeated three-way matches in callers.

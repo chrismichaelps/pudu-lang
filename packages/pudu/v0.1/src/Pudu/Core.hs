@@ -7,8 +7,7 @@
     carry their identity, name, and type together, and the value forms of `if`
     and blocks make a branch without a result unrepresentable. Nothing here
     executes, renders, or refuses; [[Pudu.Compiler.Lower]] produces it and
-    [[Pudu.Backend.Emit]] translates it.
--}
+    [[Pudu.Backend.Emit]] translates it. -}
 module Pudu.Core
   ( CoreBinaryOperator (..)
   , CoreBlock (..)
@@ -33,8 +32,7 @@ module Pudu.Core
   , CoreBytesMethodName (..)
   , CoreDecimalMethodName (..)
   , CoreType (..)
-  , coreTypeName
-  , displayName
+  , coreTypeName, displayName
   ) where
 
 import Data.Map.Strict (Map)
@@ -410,9 +408,10 @@ data CoreType
   | CoreSumType !Text ![CoreType]
   {-| An array: a box holding a growable buffer of items of one type. -}
   | CoreArrayType !CoreType
-  {-| A map or set: a box holding the root of a shared balanced tree. -}
+  {-| A map, set or Int-keyed store: a box holding a shared balanced tree's root. -}
   | CoreMapType !CoreType !CoreType
   | CoreSetType !CoreType
+  | CoreStoreType !CoreType
   {-| A range of Ints: its optional ends and whether the end is included. -}
   | CoreRangeType
   {-| A byte sequence: a box around a view of counted storage. -}
@@ -439,6 +438,7 @@ coreTypeName coreType = case coreType of
   CoreArrayType element -> "Array[" <> coreTypeName element <> "]"
   CoreMapType key value -> "Map[" <> coreTypeName key <> ", " <> coreTypeName value <> "]"
   CoreSetType member -> "Set[" <> coreTypeName member <> "]"
+  CoreStoreType held -> "Buckets[" <> coreTypeName held <> "]"
   CoreRangeType -> "Range[Int]"
   CoreBytesType -> "Bytes"
   CoreDecimalType -> "Decimal"

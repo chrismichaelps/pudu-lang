@@ -25,3 +25,7 @@ There is no persisted Core ordinal or change to the frame-cell layout.
 Add KeyedWordSubset, KeyedWordDisjoint, KeyedWordPopCount and KeyedWordMembers. Predicates return Bool from identical UInt64-valued maps; count returns UInt128; members requires UInt64 keys and returns Array[UInt64]. No cell ABI change.
 
 Resolved Grill Log: project existing checked semantics; no inference, fallback, unsafe cell reinterpretation or frame ABI change. Reuse granular runtime dependencies and existing numeric/array ownership kernels.
+
+## Indexed stores (#840)
+
+KeyedPut inserts with the new key's spelling replacing an equal held key. KeyedMixHash and KeyedHash take the hashed value itself as the receiver and answer an Int. Resolved Grill Log: the two hashes ride the keyed family instead of adding a Core and frame shape each; the emitter validates the receiver's carrier.

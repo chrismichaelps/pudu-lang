@@ -69,3 +69,7 @@ Resolved Grill Log: Form named callable layout keys from all actual parameters a
 ## First-class output builtins (#569)
 
 Resolved Grill Log: Collect CoreRuntimeKind operands exactly as the prior variant-name operation; callable layouts include generated intrinsic bodies by actual parameter/result ABI.
+
+## Indexed stores (#840)
+
+A store closes over its held type. Resolved Grill Log: the key is always Int and needs no layout.

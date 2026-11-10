@@ -24,7 +24,7 @@ import Pudu.Backend.Emit.Cell
   ( aggregateHelper, aggregateNeed, cType, cellName, isAggregate, memberCompare, memberComparable
   , memberEqual, memberRender, number, ownedType, released, retained )
 import Pudu.Backend.Emit.Array (arrayHelpers)
-import Pudu.Backend.Emit.Keyed (mapHelpers, setHelpers)
+import Pudu.Backend.Emit.Keyed (mapHelpers, setHelpers, storeHelpers)
 import Pudu.Backend.Emit.Range (rangeHelpers)
 import Pudu.Backend.Emit.Bytes (bytesHelpers)
 import Pudu.Backend.Emit.State (cString, cStringBytes)
@@ -56,6 +56,7 @@ aggregateMembers layouts kind = case (kind, Map.lookup kind layouts) of
   -- entries() answers (key, value) tuples, so a map's helpers need theirs.
   (CoreMapType key value, _) -> [key, value, CoreTupleType [key, value]]
   (CoreSetType member, _) -> [member]
+  (CoreStoreType held, _) -> [held]
   (_, Just (CoreRecordLayout fields)) -> map snd fields
   (_, Just (CoreSumLayout variants)) -> concatMap (map snd . coreVariantFields) variants
   (_, Just (CoreClosureLayout entries)) -> concatMap (closureCaptures . snd) entries
@@ -96,6 +97,7 @@ helpers identities layouts kind = case (kind, Map.lookup kind layouts) of
   (CoreArrayType element, _) -> arrayHelpers kind element
   (CoreMapType key value, _) -> mapHelpers kind key value
   (CoreSetType member, _) -> setHelpers kind member
+  (CoreStoreType held, _) -> storeHelpers kind held
   (CoreRangeType, _) -> rangeHelpers kind
   (CoreBytesType, _) -> bytesHelpers kind
   (CoreFunctionType _ _, Just (CoreClosureLayout entries)) -> closureHelpers kind
@@ -325,6 +327,7 @@ methodKind receiver = case receiver of
   CoreArrayType _ -> "array"
   CoreMapType _ _ -> "map"
   CoreSetType _ -> "set"
+  CoreStoreType _ -> "store"
   CoreRangeType -> "range"
   CoreCharType -> "character"
   CoreBytesType -> "byte"
