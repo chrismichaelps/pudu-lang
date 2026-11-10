@@ -13,6 +13,8 @@ import Pudu.Compiler.Lower.Decimal (decimalCallable)
 import Pudu.Compiler.Lower.Text (textCallable)
 import Pudu.Compiler.Lower.Keyed (Blame (AtCaller), keyedFromArray)
 import Pudu.Compiler.Lower.Store (storeCallable, storePrimitive)
+import Pudu.Compiler.Lower.Kernel (kernelCallable)
+import Pudu.Compiler.Lower.Swiss (swissCallable, swissPrimitive)
 import Pudu.Compiler.Lower.State (LowerContext (..), LowerState (..), halt, intType, lookupLocal, resolveFunction, startFunction)
 import Pudu.Compiler.Lower.Stop (panicBody, untypedConvertBody, wrongPanicBody)
 import Pudu.Compiler.Lower.Types (nativeValueType, typeForSpan)
@@ -74,6 +76,15 @@ intrinsic state at name solved
       Just kind@(CoreFunctionType arguments result) | Just build <- storeCallable AtCaller name kind ->
         register state at name ("$builtin:" <> name <> ":" <> Text.pack (show kind)) kind arguments result (\entered -> build entered at)
       _ -> halt at "a store builtin without its represented callable type" state
+  | swissPrimitive name = Just $ case solved of
+      Just kind@(CoreFunctionType arguments result) | Just build <- swissCallable AtCaller (contextTypes (lowerContext state)) name kind ->
+        register state at name ("$builtin:" <> name <> ":" <> Text.pack (show kind)) kind arguments result (\entered -> build entered at)
+      _ -> halt at "a flat-table builtin without its represented callable type" state
+  | Just (kind@(CoreFunctionType arguments result), build) <- kernelCallable (contextTypes (lowerContext state)) name = Just $
+      if solved == Just kind
+        then register state at name ("$builtin:" <> name <> ":" <> Text.pack (show kind)) kind arguments result
+          (\entered -> build entered at)
+        else halt at "a kernel builtin without its represented callable type" state
   | Just (kind@(CoreFunctionType arguments result), build) <- textCallable name = Just $
       if solved == Just kind
         then register state at name ("$builtin:" <> name <> ":" <> Text.pack (show kind)) kind arguments result

@@ -16,6 +16,7 @@ import Pudu.Backend.Runtime.Array (arrayRuntimeParts)
 import Pudu.Backend.Runtime.Text.Pieces (textPieceRuntimeParts)
 import Pudu.Backend.Runtime.Tree (treeRuntimeParts)
 import Pudu.Backend.Runtime.Hash (hashRuntimeParts)
+import Pudu.Backend.Runtime.Kernel (kernelRuntimeParts)
 import Pudu.Backend.Runtime.Range (rangeRuntimeParts)
 import Pudu.Backend.Runtime.Bytes (bytesRuntimeParts)
 import Pudu.Backend.Runtime.Dependencies (runtimeDependencies)
@@ -123,7 +124,7 @@ emitFrameProgram version sources source = do
         <> ["static const pudu_function pudu_functions[] = {"]
         <> map definition indexed <> ["};"]
   pure $ Text.unlines (header <> runtime <> frameTypes wide big decimal text boxes
-    <> concat [lines' <> [""] | (name, lines') <- arrayRuntimeParts <> textPieceRuntimeParts <> treeRuntimeParts <> rangeRuntimeParts <> bytesRuntimeParts <> hashRuntimeParts, Set.member name selected]
+    <> concat [lines' <> [""] | (name, lines') <- arrayRuntimeParts <> textPieceRuntimeParts <> treeRuntimeParts <> rangeRuntimeParts <> bytesRuntimeParts <> hashRuntimeParts <> kernelRuntimeParts, Set.member name selected]
     <> renderSites (reverse (emitSites emitted)) <> aggregates <> ownership <> reverse (emitOutput emitted)
     <> metadata <> frameEngine owned <> ["int main(void) {", "  pudu_prepare_io();"] <> ending <> ["}"])
   where

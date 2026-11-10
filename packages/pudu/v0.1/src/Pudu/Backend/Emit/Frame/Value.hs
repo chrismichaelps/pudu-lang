@@ -16,6 +16,7 @@ import Pudu.Core (CoreArrayMethodName (..), CoreBinaryOperator (..), CoreDecimal
 import Pudu.Backend.Emit.Frame.TextView (frameTextView)
 import Pudu.Backend.Emit.Range (rangeMethodCall)
 import Pudu.Backend.Emit.Bytes (bytesFunction)
+import Pudu.Backend.Emit.Kernel (frameKernel)
 import Pudu.Core.Frame
   ( FrameFault (..), FrameSlot (..), FrameSlotId (..), FrameUnaryOperator (..)
   , FrameValue (..), FrameValueShape (..), coreScalarOperator )
@@ -225,6 +226,7 @@ frameValue state value = case frameValueShape value of
     operands <- traverse slotText arguments
     let (function, part) = bytesFunction name
     plain (function <> "(" <> Text.intercalate ", " (target : operands) <> ")") [part]
+  FrameKernel name constants arguments -> frameKernel slotText value name constants arguments >>= uncurry plain
   FrameComparable slot -> do
     source <- slotText slot
     uncurry plain (memberComparable (frameSlotType slot) source)

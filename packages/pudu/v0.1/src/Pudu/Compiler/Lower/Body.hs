@@ -12,7 +12,7 @@ import Pudu.Compiler.Lower.State
   ( CoreSignature (..), LowerContext (..), LowerState (..)
   , bindLocal, halt, isModuleQualifier, lookupLocal, refuse, refused, resolveFunction )
 import Pudu.Compiler.Lower.Signature (functionLevelRefusal)
-import Pudu.Compiler.Lower.Text (lowerTextMethod, lowerTextPrimitive)
+import Pudu.Compiler.Lower.Text (lowerTextMethod)
 import Pudu.Compiler.Lower.Method (lowerMethodCall, lowerQualifiedMethod)
 import Pudu.Compiler.Lower.Call (lowerFunctionCall, lowerPrint, lowerRendered)
 import Pudu.Compiler.Lower.Array (lowerArrayIndex, lowerArrayLiteral, lowerArrayMethod, takeReceiver)
@@ -23,11 +23,10 @@ import Pudu.Compiler.Lower.Range (lowerRangeMethod, lowerRangeValue)
 import Pudu.Compiler.Lower.Bytes (lowerBytesMethod, lowerBytesOf)
 import Control.Applicative ((<|>))
 import Pudu.Compiler.Lower.Try (lowerTry)
-import Pudu.Compiler.Lower.Decimal (decimalLiteral, lowerDecimalPrimitive)
+import Pudu.Compiler.Lower.Decimal (decimalLiteral)
 import Pudu.Compiler.Lower.For (lowerFor)
 import Pudu.Compiler.Lower.Intrinsic (annotatedPanic, lowerIntrinsicValue)
-import Pudu.Compiler.Lower.WordMap (lowerWordMapPrimitive)
-import Pudu.Compiler.Lower.Store (lowerStorePrimitive)
+import Pudu.Compiler.Lower.Primitive (lowerPrimitiveCall)
 import Pudu.Compiler.Lower.MethodValue (lowerMethodValue)
 import Pudu.Compiler.Lower.Stop (lowerPanic, lowerUntypedConvert)
 import Pudu.Compiler.Lower.Lambda (lowerFunctionValue, lowerLambda, lowerValueCall)
@@ -389,10 +388,7 @@ lowerExpression state (Located spanValue expression) = case expression of
     | name == "bytesOf" -> lowerBytesOf lowerExpression state spanValue arguments
     | name == "panic" -> lowerPanic lowerExpression state spanValue arguments
     | name == "convertInteger" -> lowerUntypedConvert lowerExpression state spanValue arguments
-    | Just lowered <- lowerTextPrimitive lowerExpression state spanValue name arguments -> lowered
-    | Just lowered <- lowerDecimalPrimitive lowerExpression state spanValue name arguments -> lowered
-    | Just lowered <- lowerWordMapPrimitive lowerExpression state spanValue name arguments -> lowered
-    | Just lowered <- lowerStorePrimitive lowerExpression state spanValue name arguments -> lowered
+    | Just lowered <- lowerPrimitiveCall lowerExpression state spanValue name arguments -> lowered
     | otherwise -> halt spanValue ("calls to '" <> name <> "'") state
   CallExpression (Located callee (MemberExpression receiver@(Located _ (NameExpression (owner :| []))) named@(Located _ member))) arguments
     | isModuleQualifier state owner, Just key <- resolveFunction state [owner, member] -> lowerFunctionCall lowerExpression state spanValue key callee arguments
