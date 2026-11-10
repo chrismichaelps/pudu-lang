@@ -25,12 +25,9 @@ module Pudu.Core
   , CoreParameter (..)
   , CoreStatement (..)
   , CoreStatementShape (..)
-  , CoreTextMethodName (..)
-  , CoreArrayMethodName (..)
-  , CoreKeyedMethodName (..)
-  , CoreRangeMethodName (..)
-  , CoreBytesMethodName (..)
-  , CoreDecimalMethodName (..)
+  , CoreTextMethodName (..), CoreArrayMethodName (..), CoreKeyedMethodName (..)
+  , CoreRangeMethodName (..), CoreBytesMethodName (..), CoreDecimalMethodName (..)
+  , CoreKernelName (..)
   , CoreType (..)
   , coreTypeName, displayName
   ) where
@@ -43,6 +40,7 @@ import Pudu.FloatLiteral (FloatWidth, floatWidthType)
 import Pudu.IntegerLiteral (IntegerKind, integerKindName)
 import Pudu.Source (Span)
 import Pudu.Core.Keyed (CoreKeyedMethodName (..))
+import Pudu.Core.Kernel (CoreKernelName (..))
 
 {-| @Core.Module — one compiled program: its name, the entry function the
     process enters, and the functions reachable from it. -}
@@ -228,6 +226,8 @@ data CoreExpressionShape
   {-| A byte-sequence operation; the arguments run before the receiver. -}
   | CoreBytesMethod !CoreBytesMethodName !CoreExpression ![CoreExpression]
   | CoreDecimalMethod !CoreDecimalMethodName ![CoreExpression]
+  {-| A runtime kernel over operands in order, then its layout integers. -}
+  | CoreKernel !CoreKernelName ![Int] ![CoreExpression]
   {-| `array[index]`: the array, then the index. The expression's span is the
       index's, where an index out of range reports. -}
   | CoreIndex !CoreExpression !CoreExpression

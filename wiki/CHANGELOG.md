@@ -5,6 +5,12 @@ tags: [changelog]
 
 # Changelog
 
+## 2026-11-10 — Native pure builtin kernels (#842)
+
+- [[Native Builtin Kernels]] emits the buffer, column, sort, flat-table, digest, keyed digest, checksum, sealing, signature, audio and codec builtins natively, direct and as values.
+- [[Core Kernel Operations]], [[Compiler Lower Kernel]], [[Compiler Lower Swiss]], [[Compiler Lower Primitive]] and [[Backend Emit Kernel]] are new; the runtime families live under [[Native Kernel Runtime]].
+- [[Backend Kernel Programs]] and [[Backend Crypto Programs]] carry the corpus; the native spec and the counted-allocation harness register both.
+
 ## 2026-11-09 — Native indexed stores, hashing and MultiMap primitives (#840)
 
 - [[Native Indexed Stores]] defines `Buckets[V]` on the tree carrier, key narrowing, deterministic `hashOf`, seeded `mixHash` and the MultiMap primitives.

@@ -7,6 +7,7 @@ tags: [moc, architecture]
 # Architecture Map
 
 - [[Native Indexed Stores]] — `Buckets[V]` on the tree carrier, hashing and MultiMap primitives.
+- [[Native Builtin Kernels]] — buffer, column, flat-table, digest, checksum, sealing, signature, audio and codec builtins.
 - [[Native Word Map Queries]] — sparse word predicates, UInt128 counts and wrapped member enumeration.
 
 - [[Native Word Map Algebra]] — typed linear sparse-word tree operations.

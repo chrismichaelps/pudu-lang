@@ -235,6 +235,9 @@ lowerExpression expression@(CoreExpression at kind shape) = case shape of
   CoreDecimalMethod name arguments -> do
     operands <- lowerOperands arguments
     maybe (pure Stopped) (value . FrameDecimalMethod name) operands
+  CoreKernel name constants arguments -> do
+    operands <- lowerOperands arguments
+    maybe (pure Stopped) (value . FrameKernel name constants) operands
   CoreBytesMethod name receiver arguments -> do
     operands <- lowerOperands (arguments <> [receiver])
     case operands of

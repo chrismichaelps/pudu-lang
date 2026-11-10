@@ -382,3 +382,5 @@ tags: [moc, handoff]
 - [[Native Text View Delivery]] — native byte primitives and source-compatible views.
 
 - [[Native Indexed Store Delivery]] — native `Buckets[V]`, hashing and MultiMap primitives (#840).
+
+- [[handoffs/2026-11-10-native-kernels]]
