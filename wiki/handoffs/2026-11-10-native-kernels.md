@@ -25,7 +25,9 @@ codec programs match the interpreter byte for byte including refusals; the
 focused groups pass 200 properties each at -O0 and the leak runs release every
 allocation. Kernel C compiles under -std=c11 -pedantic -Wall -Wextra -Werror.
 All 800 unoptimized test groups and the canonical 20-gate run (`test/gates.sh`
-at -O2) passed clean with zero warnings.
+at -O2) passed clean with zero warnings. Cross-architecture test portability
+verified: raw byte float column tests use deterministic finite floats across
+ARM64 and x86_64, resolving CI shards 1 and 4.
 
 Not done: the ledger row stays Partial until independent review; Windows
 evidence for fixed seeds is pending as before.

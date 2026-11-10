@@ -18,7 +18,10 @@ E7001 with its span, directly and through a value.
 
 Expected output is written by hand or from published vectors, never copied
 from a native run. The corpus joins the existing differential and
-counted-allocation harnesses.
+counted-allocation harnesses. Float projections and additions in differential
+byte tests use deterministic finite floats so byte representations remain
+portable across ARM64 and x86_64 architectures, while NaN arithmetic and
+filtering semantics remain verified through dedicated aggregate and filter tests.
 
 ## Referenced by
 
