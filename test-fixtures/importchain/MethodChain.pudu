@@ -1,0 +1,10 @@
+module MethodChain
+
+import MethodChain.Lib as Lib
+
+/// A trait-method chain long enough that compiling every receiver twice would
+/// take exponential time. Each link runs the same method from another module,
+/// and the entry returns the final count so the test checks the answer too.
+fn main() -> Int {
+  Lib.B{n: 0}.add(1).add(1).add(1).add(1).add(1).add(1).add(1).add(1).add(1).add(1).add(1).add(1).add(1).add(1).add(1).add(1).add(1).add(1).add(1).add(1).add(1).add(1).add(1).add(1).add(1).add(1).add(1).add(1).add(1).add(1).n
+}

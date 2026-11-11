@@ -24,10 +24,12 @@ assignment to a place that needs no evaluation, `&&` and `||`, blocks, `let`, `r
 `while` and `for` (through the tree walker's own loops, given compiled pieces), `if let`, index
 reads, field reads, tuples, arrays, record literals, `match` with guards, and calls (the call machinery's needs answer
 each callee, receiver, and argument from its compiled code, keyed by span and, where two share a
-span, by the syntax itself). Anything else runs through the tree walker for that one expression,
-so the language is always runnable while coverage grows. Compiled code depends only on the syntax
-and the program's literal kinds, never on one call's values, so one compilation serves every call
-and every thread.
+span, by the syntax itself). Each call part is compiled once: a member callee is dispatched from
+its receiver and is not itself read, and a direct call hands its compiled arguments to the general
+form instead of compiling them again. Anything else runs through the tree walker for that one
+expression, so the language is always runnable while coverage grows. Compiled code depends only on
+the syntax and the program's literal kinds, never on one call's values, so one compilation serves
+every call and every thread.
 ## Grill Log
 - **Q:** Reimplement loops and calls in the compiler? **A:** No. _Rationale:_ the tree walker's
   loop and call code take their evaluators as parameters, so handing them compiled pieces keeps the
@@ -106,3 +108,19 @@ Resolved Grill Log: carry checked owner and field order through syntax; preserve
 
 Compiled record construction is `recordConstructor` followed by
 `declaredOrder`, as the tree walker does.
+
+## Each call part compiled once (#838)
+
+A member callee is never read as an expression: the call machinery dispatches
+it from its receiver. Compiling both the callee and that receiver compiled the
+receiver's whole chain twice at every link, so compiling a chain of `n` method
+calls cost `2^n`. `compileCall` now asks `calleeParts` what the call actually
+reads and compiles the receiver, arguments, or callee exactly once. A direct
+call compiles its arguments before asking for the general form and hands those
+codes back through `compileCallKnown`, so the general form does not compile
+them again. The tree walker remains the reference for every value and
+diagnostic.
+
+Resolved Grill Log: keep the call machinery's span-keyed table and compile each
+part once per body. Rejected: a whole-body compilation memo keyed by source
+span, which would reuse code for distinct generated syntax that shares a span.
