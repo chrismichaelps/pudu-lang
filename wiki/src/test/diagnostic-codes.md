@@ -40,6 +40,14 @@ interpreter and native frame emitter. Both retain the same message and help.
 Resolved Grill Log (#806): register this existing shared condition instead
 of assigning a backend-only code or suppressing either reporting module.
 
+`E7013` means a sequence pattern's length does not match the value it was
+given, in the interpreter and native body lowering. Both retain the same
+message and help. Resolved Grill Log (#846): the native form reaches the same
+run-time condition as the tree walker, so it reports the same code rather than
+a backend-only one; the leak harness now also compiles against a piece of
+instrumentation that defines its own POSIX feature macros, which the emitted
+prelude no longer overrides.
+
 ## Grill Log
 
 - **Q:** Ignore the lint modules wholesale? **A:** No. _Rationale:_ explicit per-code declarations

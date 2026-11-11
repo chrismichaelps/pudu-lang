@@ -29,6 +29,13 @@ leaving [[Compiler Lower Body]] at 494 lines; written type-argument admission
 moved to [[Compiler Lower Generic]]. Focused and full gate results are in the
 pull request.
 
+CI on Linux caught two boundary defects the macOS suite could not: the
+emitted prelude redefined `_DEFAULT_SOURCE`/`_POSIX_C_SOURCE` inside the leak
+harness's own translation unit, and `E7013` was not registered as one shared
+meaning between the interpreter and native lowering. The prelude now defines
+each macro only when absent; the diagnostic registry names the shared
+condition. Focused leak groups and `node test/diagnostic-codes.mjs` pass.
+
 Not done: foreign functions and handles, `unsafe` raw access, sockets and
 TLS, child processes, compression, time formatting, signals, desktop, audio
 and raster kernels keep E6001; callee-first order stays with #828; ledger
