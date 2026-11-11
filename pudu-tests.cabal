@@ -116,6 +116,8 @@ test-suite pudu-test
     Pudu.Backend.WordMapPrograms
     Pudu.Backend.StorePrograms
     Pudu.Backend.KernelPrograms
+    Pudu.Backend.AbstractionPrograms
+    Pudu.Backend.HostPrograms
     Pudu.Backend.CryptoPrograms
     Pudu.Backend.ShapePrograms
     Pudu.Backend.RangePrograms

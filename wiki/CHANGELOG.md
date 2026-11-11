@@ -5,6 +5,14 @@ tags: [changelog]
 
 # Changelog
 
+## 2026-11-11 — Native tasks, host services and type abstractions (#846)
+
+- [[Native Host Services]] emits `async fn`, async lambdas, `.await` and `async with scope { ... }`, with a scope's children joined on every way out; cells, locks, channels and threads; clocks, sleeping, arguments, environment, directories and separators; whole-file I/O, links, permissions, temporary files, atomic writes and open handles; the binary64 math kernels and the packed lanes. Sockets/TLS, child processes, compression, time formatting, signals and foreign/`unsafe` access remain explicit refusals.
+- [[Native Type Abstractions]] emits `dynamic Trait` values through widening, dispatch, rendering and equality; constructor parameters (`F[_]`) plain and through a trait; static members through a type parameter (`T.label()`); generic methods whose type arguments checking left to the call; and sequence patterns in `let` at any depth, with E7013 for another length.
+- A constant folding leaves no product for, such as a table of functions, lowers its written initializer in its declaring module at the use.
+- [[Compiler Lower Function Body]] now owns entry and named-function boundaries, with the body traversal supplied as callbacks; written type-argument admission moved to [[Compiler Lower Generic]].
+- [[Backend Host Programs]] and [[Backend Abstraction Programs]] carry the corpus; the native spec and counted-allocation harness register both, and the coverage ledger records the remaining refusals.
+
 ## 2026-11-10 — HTML builder replaces repeated attributes (#839)
 
 - [[Std Html Build]] replaces an attribute already set where it sits instead of appending a second one, and `class` adds to the classes already set. A rendered element can no longer carry a repeated attribute that a browser would silently collapse to the first value.

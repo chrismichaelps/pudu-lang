@@ -30,6 +30,7 @@ import System.Environment (lookupEnv)
 import System.Exit (ExitCode (..))
 import System.FilePath (takeDirectory, takeFileName)
 import System.IO (Handle, hClose, openTempFile)
+import System.Info (os)
 import System.Process
   ( CreateProcess (..)
   , StdStream (..)
@@ -115,7 +116,7 @@ runCompiler :: FilePath -> FilePath -> FilePath -> Int -> IO (Either ToolchainFa
 runCompiler executable sourcePath executablePath seconds = mask $ \restore -> do
   capture <- newMVar emptyCapture
   (_, maybeOut, maybeErr, processHandle) <-
-    createProcess (proc executable (compilerFlags <> ["-o", executablePath, sourcePath]))
+    createProcess (proc executable (compilerFlags <> ["-o", executablePath, sourcePath] <> linkerFlags))
       { std_in = NoStream
       , std_out = CreatePipe
       , std_err = CreatePipe
@@ -178,6 +179,13 @@ discoverCompiler = do
 
 compilerFlags :: [String]
 compilerFlags = ["-std=c11", "-O2", "-Wall", "-Wextra"]
+
+{-| After the source, where a linker that reads left to right needs them: the
+    math library and the thread library the host parts call. -}
+linkerFlags :: [String]
+linkerFlags
+  | os == "mingw32" = []
+  | otherwise = ["-lm", "-pthread"]
 
 {-| @Backend.Toolchain.Capture — the bounded head of what the compiler wrote,
     with both streams counted against one combined budget. -}

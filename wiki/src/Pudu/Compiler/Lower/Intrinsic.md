@@ -87,3 +87,10 @@ Register the six exact monomorphic textCallable signatures through the ordinary 
 ## Indexed stores (#840)
 
 The five store primitives are first-class through storeCallable with caller blame. Resolved Grill Log: exact solved signatures only; a mismatch refuses at the reference.
+
+## Host callables (#846)
+
+The seven concurrent builtins are first-class through `concurrentCallable`
+after the store builtins and before SwissTable. Resolved Grill Log: exact
+solved `CoreFunctionType`s only; a mismatch refuses at the reference, and
+direct calls and callable bodies share the same builder.

@@ -7,6 +7,7 @@ import Data.Text (Text)
 import qualified Data.Text as Text
 import Pudu.Compiler.Lower.Bytes (bytesFromArray)
 import Pudu.Compiler.Lower.Call (outputResult)
+import Pudu.Compiler.Lower.Concurrent (concurrentCallable, concurrentPrimitive)
 import Pudu.Compiler.Lower.Convert (charFromCodeCore)
 import Pudu.Compiler.Lower.WordMap (wordMapCallable, wordMapMethod)
 import Pudu.Compiler.Lower.Decimal (decimalCallable)
@@ -76,6 +77,10 @@ intrinsic state at name solved
       Just kind@(CoreFunctionType arguments result) | Just build <- storeCallable AtCaller name kind ->
         register state at name ("$builtin:" <> name <> ":" <> Text.pack (show kind)) kind arguments result (\entered -> build entered at)
       _ -> halt at "a store builtin without its represented callable type" state
+  | concurrentPrimitive name = Just $ case solved of
+      Just kind@(CoreFunctionType arguments result) | Just build <- concurrentCallable name kind ->
+        register state at name ("$builtin:" <> name <> ":" <> Text.pack (show kind)) kind arguments result (\entered -> build entered at)
+      _ -> halt at "a host builtin without its represented callable type" state
   | swissPrimitive name = Just $ case solved of
       Just kind@(CoreFunctionType arguments result) | Just build <- swissCallable AtCaller (contextTypes (lowerContext state)) name kind ->
         register state at name ("$builtin:" <> name <> ":" <> Text.pack (show kind)) kind arguments result (\entered -> build entered at)

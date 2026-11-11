@@ -122,3 +122,13 @@ captured.
 ## Indexed stores (#840)
 
 Stores contribute their held type to aggregate collection and take storeHelpers; a store method value's kind is `store`. Resolved Grill Log: helpers stay demand-selected.
+
+## Tasks and dynamic values (#846)
+
+A task closure shows and names itself by the task name it carries, not as a
+function wrapper: show answers `<task name>` and its kind is `task`. Radix
+weighting and equality are the function cases. A dynamic sum, recognized by
+its `dynamic.` key, holds one value, so show renders that payload rather than
+the variant name. Resolved Grill Log: a task is a value the writer can print;
+the runtime text is the lifted function's own display name, and nothing
+changes for ordinary closures.

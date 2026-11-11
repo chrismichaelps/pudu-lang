@@ -111,3 +111,14 @@ without a default; defaults only fill from the end.
 A `&mut T` parameter is admitted as a local of type T, and its position is
 recorded in `signatureLoaned`. Resolved Grill Log: forming only the outer
 reference keeps every other `&mut` unrepresented. See [[Native Mutable Loans]].
+
+## Async functions and restrictions (#846)
+
+An async function admits the same synchronous signature and answers the task
+of its body's result; its `&mut` parameters are not lendable. A
+`RestrictedType` scheme is admitted through its inner function, because what an
+unsafe function may reach was checked at its call. Comptime and unsafe markers
+no longer refuse a signature by themselves; their bodies still refuse any
+construct the backend cannot represent. Resolved Grill Log: a task's caller
+sees a function of nothing answering the body's answer, while the lifted body
+keeps its own parameter ABI.

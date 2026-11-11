@@ -131,3 +131,10 @@ adapter, per [[ADR-0002-compiler-pipeline]].
 [[src/Pudu/Backend/_MOC]] · [[src/Pudu/_MOC]] · [[Native Toolchain]] ·
 [[Backend Emit]] · [[Compilation Artifact]] · [[Pudu CLI]] · [[Backend]] ·
 [[ADR-0002-compiler-pipeline]]
+
+## Host link libraries (#846)
+
+After the source, non-Windows compilers receive `-lm` and `-pthread`; the
+MinGW target receives neither. Resolved Grill Log: left-to-right linkers need
+the libraries after the object that uses them, and the host runtime's math and
+thread calls are the only new dependencies.

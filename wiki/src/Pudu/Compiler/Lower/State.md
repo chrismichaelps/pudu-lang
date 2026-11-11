@@ -15,7 +15,7 @@ aliases: [Compiler Lower State]
 
 Own program context, per-function scopes, local numbering and accumulated typed refusals.
 
-Exports: `LowerContext(..), LowerState(..), LoopFrame(..), CoreSignature(..), emptyContext, startFunction, refuse, refused, halt, lookupLocal, bindLocal, intType`.
+Exports: `CoreSignature(..), Head(..), Instance(..), LowerContext(..), LowerState(..), LoopFrame(..), ModuleScope(..), emptyContext, startFunction, refuse, refused, halt, lookupLocal, bindLocal, intType, resolveFunction, lookupConstant, lookupInitializer, inModule, withTypeBindings, isModuleQualifier`.
 
 ## Algorithm and invariants
 
@@ -34,7 +34,9 @@ one source-spanned native diagnostic; `halt` adds it and returns no subtree,
 while `refused` returns no subtree without adding a duplicate diagnostic.
 
 ```haskell
-emptyContext :: Text -> Text -> Map Text ModuleScope -> [(Text, (Text, Located Function))] -> LowerContext
+emptyContext :: Text -> Text -> Map Text ModuleScope -> [(Text, (Text, Located Function))]
+  -> Map Text Instance -> Map (Text, Text) Text -> Map (Text, Text, Text) Text
+  -> Map (Text, Text) Head -> LowerContext
 startFunction :: LowerState -> [CoreParameter] -> Maybe CoreType -> LowerState
 halt :: Span -> Text -> LowerState -> (LowerState, Maybe a)
 ```
@@ -127,3 +129,14 @@ Resolved Grill Log (#824): `instanceDerived` maps the default body's rigid names
 to types in the implementation scheme's namespace. It also carries renamed own
 method parameters and concrete trait arguments, so no same-spelling binding
 overrides an implementation parameter before specialization.
+
+## Host scopes, type arguments and initializers (#846)
+
+Resolved Grill Log: `lowerOpenScopes` records each open `async with scope` by
+the loops around it, so a transfer joins exactly the scopes it crosses;
+`lowerTypeArguments` carries the written type arguments of the call whose
+callee is being admitted. `ModuleScope` also keeps `scopeInitializers`, so
+[[Compiler Lower Constant]] can compile a constant folding left no product in
+its declaring module; `lookupInitializer` names that module and expression.
+`emptyContext` receives implementation `heads` for settling bound-only
+parameters.

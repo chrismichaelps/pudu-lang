@@ -42,3 +42,13 @@ result type is unchanged.
 A callee with loaned parameters is queued and lowered by [[Compiler Lower Loan]]'s
 `lowerLoanedCall`, which holds the arguments, makes the call and writes the
 finals back. Resolved Grill Log: the ordinary path is unchanged.
+
+## Dynamic parameters and open callees (#846)
+
+A direct call hands `admitCalleeGiven` the arguments' own solved types, so a
+callee whose fact checking left as an unsettled application can be specialized
+from its operands. Each operand then widens to its parameter's type, which is
+how a value of an implementing type reaches a `dynamic` parameter, defaults
+included. Resolved Grill Log: argument order and effects stay left to right;
+widening happens after every operand ran and only where the parameter expects
+the dynamic type.

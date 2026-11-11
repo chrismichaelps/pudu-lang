@@ -32,8 +32,15 @@ frameKernel readSlot value name constants arguments = do
              in Right ( call (cells <> [aggregateHelper "ops" store <> "()" | store <- stores])
                       , part : [aggregateNeed "ops" store | store <- stores] )
           _ -> refused "a flat-table kernel without its table"
+    -- A held value's box is named by the function that releases it.
+    KernelHost host | host `elem` releasesOperand, kind : _ <- reverse (map frameSlotType arguments) ->
+      Right (call (cells <> [aggregateHelper "drop" kind]), [part, aggregateNeed "drop" kind])
+    KernelHost host | host `elem` releasesAnswer ->
+      Right (call (cells <> [aggregateHelper "drop" (frameValueType value)]), [part, aggregateNeed "drop" (frameValueType value)])
     _ -> Right (call (passed cells <> map (Text.pack . show) constants <> fixed), [part])
  where
+  releasesOperand = ["cell_open", "cell_swap", "channel_push", "thread_spawn", "scope_adopt", "scope_stash"]
+  releasesAnswer = ["cell_get", "channel_pull", "channel_pull_within", "scope_stashed"]
   Entry function worded fixed = kernelEntry name
   part = Text.drop 5 function
   call operands = function <> "(" <> Text.intercalate ", " operands <> ")"
@@ -106,5 +113,8 @@ kernelEntry name = case name of
   KernelSwissFind -> plain "pudu_swiss_find"
   KernelSwissInsert -> plain "pudu_swiss_insert"
   KernelSwissDelete -> plain "pudu_swiss_delete"
+  KernelHost host -> plain ("pudu_host_" <> host)
+  KernelHostState -> plain "pudu_host_state"
+  KernelHostMessage -> plain "pudu_host_message"
  where
   plain function = Entry function [] []

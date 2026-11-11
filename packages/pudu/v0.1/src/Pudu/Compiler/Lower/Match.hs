@@ -1,14 +1,16 @@
 {-| @Pudu.Compiler.Lower.Match — `match`: the subject, then each arm's
     pattern, guard and body in a scope of its own. -}
-module Pudu.Compiler.Lower.Match (lowerMatch, lowerLetElse, lowerPattern, ifLetArms, whileLetLoop) where
+module Pudu.Compiler.Lower.Match
+  ( lowerMatch, lowerLetElse, lowerLetSequence, hasSequencePattern, lowerPattern, ifLetArms, whileLetLoop ) where
 
 import Data.Map.Strict (Map)
 import qualified Data.Map.Strict as Map
 import Data.List (find)
 import Pudu.Compiler.Lower.Control (expressionIsPrintValued, joinType)
 import Pudu.Compiler.Lower.State (LowerContext (..), LowerState (..), bindLocal, halt, refused)
-import Pudu.Compiler.Lower.Types (recordFields, sumVariants, writtenLabel)
+import Pudu.Compiler.Lower.Types (recordFields, sumVariants, typeForSpan, writtenLabel)
 import Pudu.Core
+import Pudu.Compiler.Lower.Dynamic (isDynamic, widen)
 import Pudu.Frontend.Syntax
   ( ArrayRest (..), Block (..), Expression (..), FieldPattern (..), Literal (..), Located (..), MatchArm (..), Pattern (..)
   , Statement (..) )
@@ -33,7 +35,13 @@ lowerMatch lower discarded state at subject arms = case lower state subject of
         let lowered = reverse done
          in case foldr (\arm found -> found >>= joinType (coreExpressionType (coreArmBody arm))) (Just CoreNeverType) lowered of
               Just result -> (current, Just (CoreExpression at result (CoreMatch core lowered), result))
-              Nothing -> halt at "a match whose arms have different types" current
+              -- Arms of different implementing types widen to the dynamic type the match has.
+              Nothing
+                | Just expected <- typeForSpan (contextTypes (lowerContext current)) at, isDynamic expected
+                , let widened = [arm{coreArmBody = widen (contextTypes (lowerContext current)) expected (coreArmBody arm)} | arm <- lowered]
+                , all ((`elem` [expected, CoreNeverType]) . coreExpressionType . coreArmBody) widened ->
+                    (current, Just (CoreExpression at expected (CoreMatch core widened), expected))
+                | otherwise -> halt at "a match whose arms have different types" current
       go current subjectKind done (Located armSpan (MatchArm pattern' guard' body) : rest) =
         let opened = current{lowerScopes = [] : lowerScopes current}
             close next = next{lowerScopes = drop 1 (lowerScopes next)}
@@ -79,6 +87,41 @@ lowerLetElse lower state at pattern' subject fallback = case lower state subject
         (afterFallback, Just _) -> halt (locatedSpan fallback) "a let else fallback that does not diverge" afterFallback
  where
   evaluated after core = (after, Just (CoreStatement at (CoreEvaluate core)))
+
+{-| `let [a, ..rest] = subject`, at any depth of the pattern: the one test a
+    destructuring binding can fail is a sequence's length, and it stops the
+    program at the pattern, naming what the subject is. -}
+lowerLetSequence :: LowerExpression -> LowerState -> Span -> Located Pattern -> Located Expression
+  -> (LowerState, Maybe CoreStatement)
+lowerLetSequence lower state at pattern' subject = case lower state subject of
+  (after, Nothing) -> refused after
+  (after, Just (core, CoreNeverType)) -> evaluated after core
+  (after, Just (core, kind))
+    | expressionIsPrintValued core -> halt (locatedSpan subject) "matching a Result[(), Str] value" after
+    | otherwise -> case lowerPattern lower after kind Map.empty pattern' of
+        (afterPattern, Nothing) -> refused afterPattern
+        (afterPattern, Just (matched, _)) ->
+          let here = CoreExpression (locatedSpan pattern')
+              named = case kind of
+                CoreRecordType name _ -> displayName name
+                CoreTupleType _ -> "tuple"
+                CoreArrayType _ -> "array"
+                _ -> coreTypeName kind
+              message = here CoreTextType (CoreTextLiteral ("this pattern does not match the " <> named <> " it was given"))
+              stop = here CoreNeverType (CoreFailText "E7013" (Just "check the number of elements the pattern names against the value") message Nothing)
+              unit = CoreExpression at CoreUnitType (CoreBlockValue (CoreBlock [] Nothing))
+              arms = [CoreArm (locatedSpan pattern') matched Nothing unit, CoreArm at CoreWildcardPattern Nothing stop]
+           in evaluated afterPattern (CoreExpression at CoreUnitType (CoreMatch core arms))
+ where
+  evaluated after core = (after, Just (CoreStatement at (CoreEvaluate core)))
+
+{-| Whether a pattern tests a sequence's length anywhere inside it. -}
+hasSequencePattern :: Located Pattern -> Bool
+hasSequencePattern (Located _ shape) = case shape of
+  ArrayPattern{} -> True
+  TuplePattern members -> any hasSequencePattern members
+  RecordPattern _ fields _ -> or [maybe False hasSequencePattern inner | Located _ (FieldPattern _ inner) <- fields]
+  _ -> False
 
 {-| `if let` as match arms: the pattern takes the block, anything else takes
     the `else` branch or unit. -}

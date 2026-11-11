@@ -8,6 +8,7 @@ import Pudu.Compiler.Lower.Control (expressionIsPrintValued)
 import Pudu.Compiler.Lower.State (LowerContext (..), LowerState (..), halt, refused)
 import Pudu.Compiler.Lower.Types (recordFields, sumVariants, typeForSpan)
 import Pudu.Core
+import Pudu.Compiler.Lower.Dynamic (widen)
 import Pudu.Frontend.Syntax (Expression (..), FieldInit (..), Located (..))
 import Pudu.Source (Span)
 
@@ -27,10 +28,15 @@ lowerRecord lower state at name fields = case typeForSpan types at of
  where
   types = contextTypes (lowerContext state)
   built kind shape = case lowerFields lower state fields of
-    (after, Just written)
-      | any ((== CoreNeverType) . coreExpressionType . snd) written -> (after, Just (stopped at (map snd written), CoreNeverType))
-      | otherwise -> (after, Just (CoreExpression at kind (shape written), kind))
+    (after, Just given)
+      | any ((== CoreNeverType) . coreExpressionType . snd) given -> (after, Just (stopped at (map snd given), CoreNeverType))
+      | otherwise -> (after, Just (CoreExpression at kind (shape (map (widened kind) given)), kind))
     (after, Nothing) -> refused after
+  -- A field declared dynamic holds a value of an implementing type widened.
+  widened kind (label, core) = (label, maybe core (\expected -> widen types expected core) (lookup label (declared kind)))
+  declared kind = case kind of
+    CoreRecordType _ _ -> maybe [] id (recordFields types kind)
+    _ -> concat [coreVariantFields variant | variant <- maybe [] id (sumVariants types kind), coreVariantName variant == name]
 
 {-| The base runs first, then the written fields. -}
 lowerRecordUpdate :: LowerExpression -> LowerState -> Span -> Located Expression -> [Located FieldInit]

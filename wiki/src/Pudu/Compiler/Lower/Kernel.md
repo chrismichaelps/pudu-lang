@@ -31,3 +31,13 @@ Rejected: one lowering function per builtin.
 ## Referenced by
 
 [[Compiler Lower Primitive]] · [[Compiler Lower Intrinsic]] · [[Native Builtin Kernels]]
+
+## Host, lanes and shape (#846)
+
+The kernel's host primitives are split into [[Compiler Lower Kernel Host]]
+(the binary64 math, clocks, process surroundings, files and handles),
+[[Compiler Lower Kernel Lanes]] (the packed binary64 lanes) and
+[[Compiler Lower Kernel Shape]] (the shared primitive and answer types).
+`KernelHost` answers direct calls through the same validated signature
+machinery as the other kernels. Resolved Grill Log: the split keeps each
+module focused; no host name is claimed by another family.

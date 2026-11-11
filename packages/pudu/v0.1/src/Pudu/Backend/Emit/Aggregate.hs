@@ -123,7 +123,7 @@ closureHelpers kind entries =
       [ "static pudu_text " <> aggregateHelper "show" kind <> "(pudu_box *box) {"
       , "  switch (box->fields[0].scalar) {" ]
       <> [ "    case " <> number identity <> ": return pudu_text_literal(" <> cString shown <> ", " <> number (cStringBytes shown) <> ");"
-         | (identity, info) <- entries, let shown = "<" <> label info <> " " <> closureDisplayName info <> ">" ]
+         | (identity, info) <- entries, let shown = if isTask info then closureDisplayName info else "<" <> label info <> " " <> closureDisplayName info <> ">" ]
       <> [ "    default: return pudu_text_literal(\"\", 0);", "  }", "}" ]))
   , (aggregateNeed "name" kind, (["text_literal"],
       [ "static pudu_text " <> aggregateHelper "name" kind <> "(pudu_box *box) {"
@@ -131,6 +131,7 @@ closureHelpers kind entries =
       <> [ "    case " <> number identity <> ": return pudu_text_literal(\"" <> kindName <> "\", " <> number (Text.length kindName) <> ");"
          | (identity, info) <- entries
          , let kindName = case closureMethod info of
+                 _ | isTask info -> "task"
                  _ | closureIsBuiltin info -> "builtin"
                  Just receiver | builtInReceiver receiver -> methodKind receiver <> " method"
                  _ -> "function" ]
@@ -289,6 +290,9 @@ sumHelpers kind variants =
   | (tag, variant) <- tagged ]
  where
   tagged = zip [0 :: Int ..] variants
+  dynamic = case kind of
+    CoreSumType key [] -> "dynamic." `Text.isPrefixOf` key
+    _ -> False
   nameRank variant = length [() | other <- variants, coreVariantName other < coreVariantName variant]
   members variant = zip [0 :: Int ..] (map snd (coreVariantFields variant))
   allMembers = concatMap (map snd . coreVariantFields) variants
@@ -297,6 +301,9 @@ sumHelpers kind variants =
     [] -> "1"
     present -> Text.intercalate " && " [fst (memberEqual member (payload "a" position member) (payload "b" position member)) | (position, member) <- present]
   showVariant tag variant = case members variant of
+    -- A dynamic value renders as the value it holds.
+    [(position, member)] | dynamic ->
+      [ "    case " <> number tag <> ": return " <> fst (memberRender member (payload "box" position member)) <> ";" ]
     [] -> [ "    case " <> number tag <> ": return pudu_text_literal(" <> cString (coreVariantName variant) <> ", "
               <> number (cStringBytes (coreVariantName variant)) <> ");" ]
     present ->
@@ -332,3 +339,7 @@ methodKind receiver = case receiver of
   CoreCharType -> "character"
   CoreBytesType -> "byte"
   other -> coreTypeName other
+
+{-| A task is shown under its own name, not as the function that carries it. -}
+isTask :: CoreClosureInfo -> Bool
+isTask info = "<task " `Text.isPrefixOf` closureDisplayName info

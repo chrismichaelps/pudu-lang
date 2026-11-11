@@ -98,3 +98,11 @@ retain callable/Buckets refusals and compile-time initializer failures.
 ## Indexed stores (#840)
 
 `&Buckets[Int]` forms as the store carrier and a folded `bucketsOf()` constant lowers; the unrepresented cases use `Task[Int, Never]` and a function-valued constant. Resolved Grill Log: the canonical-identity check keeps one positive store case and one negative Task case.
+
+## Tasks, constants and references (#846)
+
+`Task[Int, Never]` now forms as a function of nothing answering Int, and a
+constant whose folding left no product lowers its written initializer in its
+declaring module. The reference cases lower Task carriers and refuse only when
+facts are removed. Resolved Grill Log: each changed expectation follows the
+documented carrier or fallback; no expectation was refreshed from output alone.

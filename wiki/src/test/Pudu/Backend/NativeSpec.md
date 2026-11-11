@@ -220,3 +220,11 @@ Register focused native text-view explicit-output and refusal groups over [[Back
 ## Indexed stores (#840)
 
 Register the store success, module and refusal corpora as two properties. Resolved Grill Log: module programs run in the same expected-output conformance as single-module ones.
+
+## Host services and type abstractions (#846)
+
+Register two differential groups over [[Backend Host Programs]] and two over
+[[Backend Abstraction Programs]]: successes compare with the interpreter byte
+for byte, and runtime failures retain its diagnostics and exit status.
+Resolved Grill Log: the new corpora use the existing whole-program conformance
+runner, so a refusal or mismatch shows the same site a reader would see.

@@ -288,3 +288,11 @@ Decimal now has a native form; the refusal and reachability cases name Buckets i
 ## Indexed stores (#840)
 
 Buckets now has a native form; the refusal and reachability cases name `Task[Int, Never]` instead, which still has none. A Task-valued binding refuses at the async function it calls, and the case pins that position. Resolved Grill Log: each changed expectation was inspected; none was refreshed from output alone.
+
+## Host services and tasks (#846)
+
+Task parameters, `environment()`, async calls and `temporaryPath()` now lower,
+so their refusal cases are gone. The trimmed corpus keeps a call to the entry,
+`readLine`, `formatTime` and a module without `main`, and pins each refusal to
+the construct's own span. Resolved Grill Log: remove only the expectations the
+new native forms satisfy; inspect every retained marker against the source.

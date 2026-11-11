@@ -123,3 +123,13 @@ it on return. Runtime revision 19.
 ## Indexed stores (#840)
 
 The blamed-site comment covers builtins as well as methods taken as values. Resolved Grill Log: behavior follows the function table's flag; the runtime text only describes it.
+
+## Threads and active runs (#846)
+
+When a program starts a thread, `pudu_active_frame` and `pudu_frame_depth` are
+`_Thread_local`. `pudu_run_frames` installs cleanup and blame, calls the new
+`pudu_run_active` loop, then clears both hooks. `pudu_run_closure` validates a
+lifted closure's function index, enters it with the closure as its argument,
+and starts its depth from the depth the thread inherited. Resolved Grill Log:
+one dispatcher serves the main run and a started thread; thread state cannot be
+shared because two runs may execute at once.

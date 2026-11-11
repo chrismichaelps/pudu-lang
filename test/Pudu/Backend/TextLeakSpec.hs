@@ -35,6 +35,8 @@ import Pudu.Backend.BytesPrograms (bytesSuccessPrograms)
 import Pudu.Backend.WordMapPrograms (wordMapSuccessPrograms)
 import Pudu.Backend.StorePrograms (storeSuccessPrograms)
 import Pudu.Backend.KernelPrograms (kernelSuccessPrograms)
+import Pudu.Backend.AbstractionPrograms (abstractionSuccessPrograms)
+import Pudu.Backend.HostPrograms (hostCountedPrograms)
 import Pudu.Backend.CryptoPrograms (cryptoSuccessPrograms)
 import Pudu.Backend.TextPrograms (textSuccessPrograms)
 import Pudu.Compiler (CompileResult (..), runCompile)
@@ -64,6 +66,8 @@ textLeakProperties =
   , ("native word-map algebra releases every allocation", testLeaksFor wordMapSuccessPrograms)
   , ("native indexed stores and MultiMap primitives release every allocation", testLeaksFor storeSuccessPrograms)
   , ("native pure kernels release every allocation", testLeaksFor kernelSuccessPrograms)
+  , ("native host services, tasks and scopes release every allocation", testLeaksFor hostCountedPrograms)
+  , ("native type parameters, constructors, dynamic values and sequence bindings release every allocation", testLeaksFor abstractionSuccessPrograms)
   , ("native digests and sealing release every allocation", testLeaksFor cryptoSuccessPrograms)
   , ("native text-view reads release every allocation", testLeaksFor textViewSuccessPrograms)
   , ("native folded constants release every allocation", testLeaksFor constantPrograms)
@@ -128,7 +132,8 @@ testLeaksWithSetup setup programs = do
     at exit if any is still held. -}
 instrument :: Text
 instrument = Text.unlines
-  [ "#include <stdlib.h>", "#include <stdio.h>"
+  [ "#if defined(__linux__)", "#define _DEFAULT_SOURCE 1", "#define _POSIX_C_SOURCE 200809L", "#endif"
+  , "#include <stdlib.h>", "#include <stdio.h>"
   , "static size_t test_live = 0;"
   , "static void *test_malloc(size_t bytes) {"
   , "  void *answer = malloc(bytes); if(answer != NULL) ++test_live; return answer; }"

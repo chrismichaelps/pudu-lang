@@ -7,6 +7,8 @@ import Data.Text (Text)
 import Pudu.Compiler.Lower.Array (stopped)
 import Pudu.Compiler.Lower.Control (expressionIsPrintValued)
 import Pudu.Compiler.Lower.Keyed (Blame (..))
+import Pudu.Compiler.Lower.Kernel.Host (hostPrimitives)
+import Pudu.Compiler.Lower.Kernel.Shape
 import Pudu.Compiler.Lower.State (LowerContext (..), LowerState (..), bindLocal, halt, intType, refused)
 import Pudu.Compiler.Lower.Types (LowerTypes, recordFields, sumVariants, typeForSpan)
 import Pudu.Core
@@ -16,28 +18,6 @@ import Pudu.IntegerLiteral (IntegerKind (..))
 import Pudu.Source (Span)
 
 type Lowered = (LowerState, Maybe (CoreExpression, CoreType))
-
-{-| A kernel, its layout integers, and which held operands it reads. -}
-data Call = Call !CoreKernelName ![Int] ![Int]
-
-{-| What a builtin answers from its held operands. -}
-data Answer
-  = Plain !Call
-  {-| Some of the read when the test holds, else None. -}
-  | Optional !Call !Call
-  {-| Some of the index when it is not negative, else None. -}
-  | Searched !Call
-  {-| Some of the box when the kernel answered one, else None. -}
-  | Boxed !Call
-  | ByteLength
-
-{-| What stops a call before its answer: an operand below or above a bound,
-    or a test kernel that fails. -}
-data Refusal = Below !Int !Integer | Above !Int !Integer | Unless !Call
-
-data Guard = Guard !Refusal !Text !Text
-
-data Primitive = Primitive ![CoreType] !CoreType ![Guard] !Answer
 
 {-| A direct call: Nothing for a name that is not a kernel builtin. -}
 lowerKernelPrimitive :: (LowerState -> Located Expression -> Lowered)
@@ -80,6 +60,15 @@ answered blame (Primitive parameters result guards answer) state at cores
             found = expression intType (CoreReadLocal local)
             present = expression CoreBoolType (CoreBinary CoreGreaterOrEqual found (number 0))
          in optional (\_ -> finish after [CoreStatement at (CoreDeclare local (kernel intType call))] (choice present found))
+      Outcome call -> case result of
+        CoreSumType "Result" [payload, CoreTextType] -> attempted payload call (\found -> Just (ok found))
+        _ -> halt at "a host result without a native form" state
+      OutcomeOptional call -> case result of
+        CoreSumType "Result" [inner@(CoreSumType "Option" [payload]), CoreTextType] ->
+          attempted payload call (\found -> Just (ok (unlessAbsent inner 2 found)))
+        _ -> halt at "a host result without a native form" state
+      Absent call -> optional $ \payload -> attempted payload call (\found -> Just (unlessAbsent result 2 found))
+      Effect call -> attempted CoreUnitType call Just
       Boxed call -> optional $ \payload ->
         let (after, local) = bindLocal held "" payload
             found = expression payload (CoreReadLocal local)
@@ -95,6 +84,25 @@ answered blame (Primitive parameters result guards answer) state at cores
   kernel kind (Call name constants positions) = expression kind (CoreKernel name constants [given !! position | position <- positions])
   choice valid value = expression result (CoreIfValue valid
     (CoreBlock [] (Just (expression result (CoreConstruct "Some" [("0", value)])))) (expression result (CoreConstruct "None" [])))
+  -- A host kernel leaves its state behind: 0 done, 1 failed, 2 nothing there.
+  hostState = kernel intType (Call KernelHostState [] [])
+  stateIs level = expression CoreBoolType (CoreBinary CoreEqual hostState (number level))
+  unit = expression CoreUnitType (CoreBlockValue (CoreBlock [] Nothing))
+  ok found = expression result (CoreConstruct "Ok" [("0", found)])
+  unlessAbsent kind level found = expression kind (CoreIfValue (stateIs level)
+    (CoreBlock [] (Just (expression kind (CoreConstruct "None" [])))) (expression kind (CoreConstruct "Some" [("0", found)])))
+  -- A unit payload is carried by a Bool the kernel answers and nothing reads.
+  attempted payload call build =
+    let carried = if payload == CoreUnitType then CoreBoolType else payload
+        (after, local) = bindLocal held "" carried
+        found = if payload == CoreUnitType then unit else expression payload (CoreReadLocal local)
+        refusal = expression result (CoreConstruct "Err" [("0", kernel CoreTextType (Call KernelHostMessage [] []))])
+        run = CoreStatement at (CoreDeclare local (kernel carried call))
+     in case build found of
+          Just value | CoreSumType "Result" _ <- result ->
+            finish after [run] (expression result (CoreIfValue (stateIs 1) (CoreBlock [] (Just refusal)) value))
+          Just value -> finish after [run] value
+          Nothing -> halt at "a host result without a native form" state
   optional build = case result of
     CoreSumType "Option" [payload] -> build payload
     _ -> halt at "an Option result without a native form" state
@@ -217,7 +225,7 @@ fixedPrimitives =
   , ("csvRecords", Primitive [bytes, CoreTextType] (option (CoreTupleType [CoreArrayType (CoreArrayType CoreTextType), intType, intType]))
       [Guard (Unless (Call KernelCsvDelimiter [] [1])) "E7004" "csvRecords reads a one-byte delimiter other than a quote or a line ending"]
       (Boxed (Call KernelCsvRecords [] [0, 1])))
-  ]
+  ] <> hostPrimitives
  where
   bytes = CoreBytesType
   u64 = CoreIntegerType (UnsignedKind 64)

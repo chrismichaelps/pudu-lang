@@ -405,3 +405,10 @@ Register Pudu.Backend.TextViewPrograms with the existing test dependencies so fo
 ## Indexed stores (#840)
 
 Register Pudu.Backend.StorePrograms. Resolved Grill Log: existing harnesses run it.
+
+## Host services and type abstractions (#846)
+
+Register [[Backend Host Programs]] and [[Backend Abstraction Programs]] in the
+test suite's other-modules. Resolved Grill Log: the existing native
+conformance, counted-allocation and leak harnesses execute both corpora; no
+separate runner or new dependency is introduced.

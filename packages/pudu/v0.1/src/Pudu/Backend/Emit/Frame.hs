@@ -126,8 +126,15 @@ emitFrameProgram version sources source = do
   pure $ Text.unlines (header <> runtime <> frameTypes wide big decimal text boxes
     <> concat [lines' <> [""] | (name, lines') <- arrayRuntimeParts <> textPieceRuntimeParts <> treeRuntimeParts <> rangeRuntimeParts <> bytesRuntimeParts <> hashRuntimeParts <> kernelRuntimeParts, Set.member name selected]
     <> renderSites (reverse (emitSites emitted)) <> aggregates <> ownership <> reverse (emitOutput emitted)
-    <> metadata <> frameEngine owned <> ["int main(void) {", "  pudu_prepare_io();"] <> ending <> ["}"])
+    <> metadata <> frameEngine owned (Set.member "host_thread_spawn" selected) <> entryPoint (Set.member "host_arguments" selected) <> ending <> ["}"])
   where
+    -- Only a program that reads its arguments keeps them.
+    entryPoint False = ["int main(void) {", "  pudu_prepare_io();"]
+    entryPoint True =
+      [ "int main(int count, char **values) {"
+      , "  pudu_host_argument_count = count;"
+      , "  pudu_host_argument_values = values;"
+      , "  pudu_prepare_io();" ]
     -- Keep the owned entry value alive until reporting finishes.
     shownBox kind =
       [ "  pudu_box *pudu_entry = pudu_run_frames(" <> textOfInt entryId' <> ").box;"

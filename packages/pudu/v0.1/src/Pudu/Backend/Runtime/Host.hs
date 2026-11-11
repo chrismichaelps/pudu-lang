@@ -1,0 +1,18 @@
+{-| @Backend.Runtime.Host — every host part in emission order: what the
+    program asks of the machine it runs on. A family comes after the
+    families its parts call. -}
+module Pudu.Backend.Runtime.Host (hostRuntimeParts) where
+
+import Data.Text (Text)
+import Pudu.Backend.Runtime.Host.Concurrent (hostConcurrentParts)
+import Pudu.Backend.Runtime.Host.File (hostFileParts)
+import Pudu.Backend.Runtime.Host.Handle (hostHandleParts)
+import Pudu.Backend.Runtime.Host.Lanes (hostLaneParts)
+import Pudu.Backend.Runtime.Host.Math (hostMathParts)
+import Pudu.Backend.Runtime.Host.Process (hostProcessParts)
+import Pudu.Backend.Runtime.Host.Scope (hostScopeParts)
+import Pudu.Backend.Runtime.Host.State (hostStateParts)
+
+hostRuntimeParts :: [(Text, [Text], [Text])]
+hostRuntimeParts = hostStateParts <> hostMathParts <> hostProcessParts <> hostConcurrentParts
+  <> hostFileParts <> hostHandleParts <> hostScopeParts <> hostLaneParts
