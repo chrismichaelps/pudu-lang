@@ -53,7 +53,7 @@ testCompiledAgreement = do
     thirty-link program took longer than any test may. -}
 longMethodChain :: IO Property
 longMethodChain = do
-  ran <- timeout 10000000 (runEntry "test-fixtures/importchain/MethodChain.pudu")
+  ran <- timeout 10000000 (inMode "compiled" (runEntry "test-fixtures/importchain/MethodChain.pudu"))
   pure $ counterexample
     "a thirty-link trait-method chain compiles in time proportional to its length"
     (ran === Just (Just "30"))
