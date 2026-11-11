@@ -13,6 +13,7 @@ tags: [changelog]
 - The emitted prelude defines Linux's `_DEFAULT_SOURCE` and `_POSIX_C_SOURCE` only where the translation unit has not already chosen them, so instrumentation and embedders that set either are not overridden under `-Werror`. `E7013` is registered as one shared meaning between the interpreter and native body lowering.
 - [[Compiler Lower Function Body]] now owns entry and named-function boundaries, with the body traversal supplied as callbacks; written type-argument admission moved to [[Compiler Lower Generic]].
 - [[Backend Host Programs]] and [[Backend Abstraction Programs]] carry the corpus; the native spec and counted-allocation harness register both, and the coverage ledger records the remaining refusals.
+- The host corpus no longer carries a machine's own answer: the temporary root leaves a refusal before any window is cut from it, and the window stops at the operation, so the expectation is the same on every operating system.
 
 ## 2026-11-10 — HTML builder replaces repeated attributes (#839)
 

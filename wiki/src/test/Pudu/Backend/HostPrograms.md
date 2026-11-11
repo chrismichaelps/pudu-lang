@@ -17,6 +17,10 @@ programs pin failures inside tasks, scopes and kernels with their spans.
 
 Every expectation is what the interpreter prints for the same program.
 Programs that read the clock or the machine assert relations, never values.
+A machine's own answer cannot reach an expectation: the temporary root leaves
+the text before any window is cut from it, and a refusal is cut before the
+system's own reason, which one operating system words as a permission and
+another as an inappropriate type.
 
 ## Referenced by
 

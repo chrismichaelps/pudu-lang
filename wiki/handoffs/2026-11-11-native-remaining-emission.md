@@ -15,7 +15,10 @@ Emit Aggregate, Frame and Kernel; Runtime, Runtime Frame and the new Host
 families; Toolchain; the checker's type-application fact and its key in
 Source; HostPrograms and AbstractionPrograms (new) and the native spec and
 leak registries; mirror pages, ledger, changelog and this page. No
-sub-agents.
+sub-agents. The Linux CI repair of the host corpus was made in the Test
+Engineer role and owned only `test/Pudu/Backend/HostPrograms.hs`, its mirror
+page, the ledger, the changelog and this page: no runtime, grammar or
+semantic file changed.
 
 Resolved scope: [[Native Host Services]] and [[Native Type Abstractions]].
 
@@ -35,6 +38,17 @@ harness's own translation unit, and `E7013` was not registered as one shared
 meaning between the interpreter and native lowering. The prelude now defines
 each macro only when absent; the diagnostic registry names the shared
 condition. Focused leak groups and `node test/diagnostic-codes.mjs` pass.
+
+A third was in the corpus itself. The host program cut the refusal for
+removing a directory through `removeFile` before the temporary root left the
+text, so the cut landed inside the machine's own path: the recorded
+expectation carried the author's own macOS temporary directory, and the
+property failed on any machine whose temporary path was a different length.
+The root now leaves the text first, and the window stops at the operation
+name, because the system's own reason is a permission on one operating system
+and an inappropriate type on another. The expectation is the same on every
+machine, and the focused groups pass under a short temporary directory and a
+long one alike.
 
 Not done: foreign functions and handles, `unsafe` raw access, sockets and
 TLS, child processes, compression, time formatting, signals, desktop, audio
