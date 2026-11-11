@@ -1,0 +1,10 @@
+module MethodChain
+
+import MethodChain.Lib as Lib
+
+/// A trait-method chain long enough that compiling every receiver twice would
+/// take exponential time. Each link runs the same method from another module.
+fn main() -> Int {
+  let _o = print(show(Lib.B{n: 0}.add(1).add(1).add(1).add(1).add(1).add(1).add(1).add(1).add(1).add(1).add(1).add(1).add(1).add(1).add(1).add(1).add(1).add(1).add(1).add(1).add(1).add(1).add(1).add(1).add(1).add(1).add(1).add(1).add(1).add(1).n))
+  0
+}

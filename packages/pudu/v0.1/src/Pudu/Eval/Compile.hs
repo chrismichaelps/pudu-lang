@@ -219,7 +219,7 @@ compileExpression walker located@(Located spanValue expression) = case expressio
             | null (exclusiveParameters (closureFunction closure))
             , directCallee callee closure -> do
                 codes <- mapM (compileExpression walker) arguments
-                general <- compileCall walker spanValue callee arguments
+                general <- compileCallKnown walker spanValue callee arguments (zip arguments codes)
                 let invoke = maybe (\callSpan values -> callClosure (walkCallNeeds walker) closure values callSpan) id (multiMapWrapper closure)
                 pure $ do
                   local <- lookupLocal first
@@ -251,12 +251,24 @@ lendsExclusively (Located _ expression) = case expression of
     compiled code, found by where it starts and, where two start together, by
     the syntax itself. -}
 compileCall :: Walker -> Span -> Located Expression -> [Located Expression] -> Evaluator Code
-compileCall walker spanValue callee arguments = do
-    -- The call machinery reaches the callee, its receiver, and each argument
-    -- through the needs it is given; each is answered by its compiled code.
-    let reached = callee : calleeTarget callee <> concatMap argumentParts arguments
-    codes <- mapM (\part -> (,) part <$> compileExpression walker part) reached
-    let table = IntMap.fromListWith (<>) [(startOf part, [(part, code)]) | (part, code) <- codes]
+compileCall walker spanValue callee arguments =
+  compileCallKnown walker spanValue callee arguments []
+
+{-| A call whose parts are already compiled, such as the arguments a direct
+    call compiled before asking for its general form, are not compiled again.
+    Every part is compiled once per body; without that, a call nested in its
+    own argument cost twice as much at every level. -}
+compileCallKnown
+  :: Walker -> Span -> Located Expression -> [Located Expression]
+  -> [(Located Expression, Code)] -> Evaluator Code
+compileCallKnown walker spanValue callee arguments known = do
+    let reached = callParts callee arguments
+        knownSpans = Map.fromList [(locatedSpan part, code) | (part, code) <- known]
+        pending = filter (\part -> not (Map.member (locatedSpan part) knownSpans)) reached
+    codes <- mapM (\part -> (,) part <$> compileExpression walker part) pending
+    let table = IntMap.fromListWith (<>) $
+          [(startOf part, [(part, code)]) | (part, code) <- known]
+            <> [(startOf part, [(part, code)]) | (part, code) <- codes]
         answer part = case IntMap.lookup (startOf part) table of
           Just [(candidate, code)] | locatedSpan candidate == locatedSpan part -> code
           Just several | Just code <- lookup part several -> code
@@ -266,12 +278,21 @@ compileCall walker spanValue callee arguments = do
  where
   startOf part = unOffset (spanStart (locatedSpan part))
 
-{-| The receiver a member callee is called on. -}
-calleeTarget :: Located Expression -> [Located Expression]
-calleeTarget (Located _ expression) = case expression of
+{-| The syntax the call machinery reads through `callEvaluate`: a member
+    callee's receiver, or the callee itself, but never both. Compiling a member
+    callee as well as its receiver compiled the receiver chain twice at every
+    link, so a chain of n calls cost 2^n. -}
+callParts :: Located Expression -> [Located Expression] -> [Located Expression]
+callParts callee arguments = calleeParts callee <> concatMap argumentParts arguments
+
+{-| The part of a callee the call machinery evaluates. A member callee is
+    dispatched from its receiver and is never read as an expression; a type
+    application is read through its inner callee. -}
+calleeParts :: Located Expression -> [Located Expression]
+calleeParts callee@(Located _ expression) = case expression of
   MemberExpression target _ -> [target]
-  TypeApplication inner _ -> calleeTarget inner
-  _ -> []
+  TypeApplication inner _ -> calleeParts inner
+  _ -> [callee]
 
 {-| An argument, and what it lends when it is written `&` or `&mut`. -}
 argumentParts :: Located Expression -> [Located Expression]

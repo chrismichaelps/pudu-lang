@@ -9,6 +9,10 @@ tags: [changelog]
 
 - [[Std Html Build]] replaces an attribute already set where it sits instead of appending a second one, and `class` adds to the classes already set. A rendered element can no longer carry a repeated attribute that a browser would silently collapse to the first value.
 
+## 2026-11-10 — Trait-method chains compile in linear time (#838)
+
+- [[Eval Compile]] compiles each call part once: a member callee is dispatched from its receiver rather than compiled beside it, and a direct call hands its compiled arguments to the general form. A thirty-link trait-method chain dropped from exponential compilation to milliseconds; [[Compiled Evaluation]] remains the oracle.
+
 ## 2026-11-10 — Native pure builtin kernels (#842)
 
 - [[Native Builtin Kernels]] emits the buffer, column, sort, flat-table, digest, keyed digest, checksum, sealing, signature, audio and codec builtins natively, direct and as values.
