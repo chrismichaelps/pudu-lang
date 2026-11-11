@@ -5,6 +5,10 @@ tags: [changelog]
 
 # Changelog
 
+## 2026-11-10 — HTML builder replaces repeated attributes (#839)
+
+- [[Std Html Build]] replaces an attribute already set where it sits instead of appending a second one, and `class` adds to the classes already set. A rendered element can no longer carry a repeated attribute that a browser would silently collapse to the first value.
+
 ## 2026-11-10 — Native pure builtin kernels (#842)
 
 - [[Native Builtin Kernels]] emits the buffer, column, sort, flat-table, digest, keyed digest, checksum, sealing, signature, audio and codec builtins natively, direct and as values.
