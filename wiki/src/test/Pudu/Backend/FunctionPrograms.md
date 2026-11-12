@@ -39,6 +39,8 @@ and introduces no independent runner or skip path.
 - **Q:** Are depth constants duplicated? **A:** No; source recursion arguments derive from `callDepthLimit`, so a limit change still tests the boundary and its successor.
 - **Q:** Can ordering be tested by final values alone? **A:** No; printed helper effects and mutable operand snapshots make sequencing visible to byte-for-byte comparison.
 
+Named, blanket and nested `unsafe` regions run their bodies, and capability-typed functions travel as values and through parameters (#858).
+
 ## Referenced by
 
 [[Backend Native Tests]] · [[src/_MOC]] · [[src/Pudu/Backend/_MOC]]

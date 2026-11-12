@@ -9,6 +9,10 @@ tags: [changelog]
 
 - [[Native Host Raster]] emits `rasterFill` and the plain, perspective, textured and shaded triangle kernels, keeping the interpreter's floating order, fill rule, sampling and shading; [[Compiler Lower Kernel Lanes]] leaves the RGBA targets and texels unguarded as the interpreter does.
 
+## 2026-11-12 — Native unsafe regions (#858)
+
+- [[Native Emission Coverage]] records that `unsafe` regions and capability-typed function values are native, and that `null` never reaches lowering; a differential program covers named, blanket and nested regions.
+
 ## 2026-11-12 — Native corpus gaps closed (#846)
 
 - A sweep of every entry program found the in-scope refusals left; each is now native and matches the interpreter: `lanesOverlapPairs` ([[Native Host Lanes]]), `Bytes.strided` ([[Core Byte Operations]]), calls through function constants ([[Compiler Lower Body]]), `toText` taken as a value from a type that declares none ([[Core Closure Identities]]), and an empty array compared with an array whose element a generic solved ([[Compiler Lower Scalar]]).
