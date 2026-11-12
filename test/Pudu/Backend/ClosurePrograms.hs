@@ -40,6 +40,14 @@ closureSuccessPrograms =
       , "  print(show(named) + \" \" + show(pair[1]) + \" \" + display(double))"
       , "  return 0", "}" ]
     , "6\n42 12\n<fn double> <fn <fn>> <fn double>\n")
+  , ("a sum holding a function compares before the function type is seen", program
+      [ "type Rule =", "  | Plain(Int)", "  | Judged(Str, fn(Int) -> Bool)"
+      , "fn same(a: Rule, b: Rule) -> Bool { a == b }"
+      , "fn main() -> Int {"
+      , "  let a = Judged(\"big\", |x| x > 1)"
+      , "  print(display(same(a, a)) + \" \" + display(same(a, Plain(1))) + \" \" + display(same(a, Judged(\"big\", |x| x > 1))))"
+      , "  return 0", "}" ]
+    , "true false false\n")
   , ("function values are equal when written in the same place", program
       [ "fn double(n: Int) -> Int { n * 2 }"
       , "fn make(by: Int) -> fn(Int) -> Int { |n| n + by }"

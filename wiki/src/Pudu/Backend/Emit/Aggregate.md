@@ -122,3 +122,17 @@ captured.
 ## Indexed stores (#840)
 
 Stores contribute their held type to aggregate collection and take storeHelpers; a store method value's kind is `store`. Resolved Grill Log: helpers stay demand-selected.
+
+## Every helper signature declared (#848)
+
+A helper body may define more than one C function: the closure `equal` entry
+defines `site` and then `equal`. Every line of a selected body that starts at
+column zero with `static `, ends in ` {` and is not a table initializer
+(` = {`) is a signature, and each one is declared ahead of every definition.
+
+Resolved Grill Log: declare each signature rather than reorder the catalogue.
+_Rationale:_ a sum or record whose type is seen before the function type it
+holds calls that function type's `equal` from an earlier definition, and
+recursive types make a members-first order impossible in general. _Rejected:_
+splitting `site` into its own catalogue entry (every other multi-function body
+would carry the same trap).

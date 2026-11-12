@@ -5,6 +5,10 @@ tags: [changelog]
 
 # Changelog
 
+## 2026-11-12 — Native helper signatures declared ahead (#848)
+
+- [[Native Aggregate Emission]] declares every helper signature a body defines, so equality on a sum or record holding a function compiles whatever order the types were first seen in.
+
 ## 2026-11-12 — Callee-first function values (#828)
 
 - [[Eval Call]], [[Compiler Lower Lambda]] and [[Compiler Lower Loan]] prepare ordinary function values before supplied arguments and preserve the selected value across argument mutation.
