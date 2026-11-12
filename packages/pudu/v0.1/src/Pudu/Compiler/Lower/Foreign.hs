@@ -25,12 +25,16 @@ lowerForeignCall lower state at name arguments = do
       | any stops cores -> (after, Just (stopped at cores, CoreNeverType))
       | otherwise -> case typeForSpan (contextTypes (lowerContext after)) at of
           Just result
-            | all scalarCrossing parameters, scalarCrossing result || result == CoreUnitType ->
+            | all parameterCrossing parameters, scalarCrossing result || result `elem` [CoreUnitType, CoreTextType] ->
                 let declared = CoreForeign (targetLibrary target) (targetVersion target) (targetSymbol target) parameters result
                  in (after, Just (CoreExpression at result (CoreForeignCall declared cores), result))
-          _ -> halt at "a foreign call crossing more than numbers and Bool" after
+          _ -> halt at "a foreign call crossing records, handles or slots" after
       where
         parameters = map coreExpressionType cores
+
+{-| A parameter crosses as a number, Bool, text or a lent run of bytes. -}
+parameterCrossing :: CoreType -> Bool
+parameterCrossing kind = scalarCrossing kind || kind `elem` [CoreTextType, CoreBytesType]
 
 {-| The numeric and Bool crossings: fixed-width integers, both float widths
     and Bool. -}

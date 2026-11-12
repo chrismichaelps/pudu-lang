@@ -18,6 +18,8 @@ exist, so it runs on any machine without building a library; every crossing
 width, both float widths, Bool and a unit result were checked against a built
 library by hand ([[Native Foreign Call Sites]]).
 
+Text and lent bytes cross to the C library (`strlen`, `strchr`, `strnlen`, `memcmp`, `strerror`), and text holding a nought (E7017) and a missing text result (E7024) stop as the bridge does (#851).
+
 ## Referenced by
 
 [[Backend Native Tests]] · [[Native Foreign Call Sites]]

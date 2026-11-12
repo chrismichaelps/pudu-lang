@@ -27,6 +27,10 @@ interpreter's words.
 - `foreignLoaderMarker` tells [[Backend Toolchain]] to link the dynamic loader
   where the platform keeps it apart from the C library.
 
+## Text and bytes (#851)
+
+`host_foreign_text` copies a text argument with a closing nought, refusing text that holds one (E7017), and copies a text result out of storage the library keeps, refusing none (E7024) and bytes that are not UTF-8 (E7025). `host_foreign_bytes` lends a run's storage, an empty run still passing an address as the interpreter's bridge does.
+
 ## Referenced by
 
 [[Native Host Runtime]] · [[Backend Emit Foreign]]

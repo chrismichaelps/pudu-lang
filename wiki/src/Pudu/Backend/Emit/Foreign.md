@@ -29,6 +29,10 @@ back to its cell.
   loader answers `void (*)(void)` and the wrapper converts between function
   pointer types, which ISO C allows.
 
+## Text and bytes (#851)
+
+A wrapper taking text receives an E7017 site and copies each `Str` with a closing nought before resolving the function, releasing the copies after the call. A wrapper answering text receives E7024 and E7025 sites, built with the interpreter's words for the declaration's symbol, and copies the answer out before releasing the argument copies, since it may point into one. `Bytes` cross as the lent address of their storage.
+
 ## Referenced by
 
 [[Backend Frame Program]] · [[Native Foreign Call Sites]]

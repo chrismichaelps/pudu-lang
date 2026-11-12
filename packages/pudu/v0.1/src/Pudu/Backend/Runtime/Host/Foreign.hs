@@ -90,4 +90,33 @@ hostForeignParts =
       , "  return function;"
       , "}"
       ])
+  , ("host_foreign_text", ["host_optional", "fail", "memory_failure", "text_copy", "utf8_valid"],
+      [ "/* A text argument as the library reads it: a copy with a closing nought,"
+      , "   released after the call. Text holding a nought stops first. */"
+      , "PUDU_OPTIONAL static char *pudu_foreign_text_in(const pudu_site *noughts, pudu_text text) {"
+      , "  char *copy;"
+      , "  if (text.length != 0 && memchr(text.bytes, 0, text.length) != NULL) pudu_fail(noughts);"
+      , "  copy = malloc(text.length + 1);"
+      , "  if (copy == NULL) pudu_memory_failure();"
+      , "  if (text.length != 0) memcpy(copy, text.bytes, text.length);"
+      , "  copy[text.length] = 0;"
+      , "  return copy;"
+      , "}"
+      , "/* A text result copied out of storage the library keeps; none, or bytes"
+      , "   that are not UTF-8, stop the program. */"
+      , "PUDU_OPTIONAL static pudu_text pudu_foreign_text_out(const pudu_site *missing, const pudu_site *invalid, const char *answer) {"
+      , "  size_t length;"
+      , "  if (answer == NULL) { pudu_fail(missing); return pudu_text_copy(\"\", 0); }"
+      , "  length = strlen(answer);"
+      , "  if (!pudu_utf8_valid((const unsigned char *)answer, length)) pudu_fail(invalid);"
+      , "  return pudu_text_copy(answer, length);"
+      , "}"
+      ])
+  , ("host_foreign_bytes", [],
+      [ "/* A run of bytes lent for the call; an empty run is still an address. */"
+      , "static const void *pudu_foreign_bytes_in(pudu_box *box) {"
+      , "  static const unsigned char none = 0;"
+      , "  return box->fields[0].text.bytes != NULL ? (const void *)box->fields[0].text.bytes : (const void *)&none;"
+      , "}"
+      ])
   ]

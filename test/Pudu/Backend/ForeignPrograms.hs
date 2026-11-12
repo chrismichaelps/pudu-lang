@@ -24,11 +24,45 @@ foreignSuccessPrograms =
       , "  }"
       , "  0"
       , "}" ])
+  , ("text and lent bytes cross to the C library and text comes back", program
+      [ "foreign \"c\" {"
+      , "  fn strlen(text: Str) -> Int64"
+      , "  fn strchr(text: Str, code: Int32) -> Str"
+      , "  fn strnlen(data: Bytes, most: Int64) -> Int64"
+      , "  fn memcmp(left: Bytes, right: Bytes, length: Int64) -> Int32"
+      , "  fn strerror(code: Int32) -> Str"
+      , "}"
+      , "fn main() -> Int {"
+      , "  unsafe {"
+      , "    print(display(strlen(\"héllo\")) + \" \" + display(strlen(\"\")) + \" \" + strchr(\"pudu-lang\", 45i32) + \" \" + display(strerror(2i32).length() > 0))"
+      , "    let data = bytesOf([104u8, 105u8, 0u8, 9u8])"
+      , "    print(display(strnlen(data, 4i64)) + \" \" + display(strnlen(bytesOf([]), 0i64)) + \" \" + display(memcmp(data, data, 4i64)) + \" \" + display(memcmp(bytesOf([1u8]), bytesOf([2u8]), 1i64) < 0i32))"
+      , "  }"
+      , "  0"
+      , "}" ])
   ]
 
 foreignRefusalPrograms :: [(String, Text)]
 foreignRefusalPrograms =
-  [ ("a library that does not open stops at the call with every name tried", program
+  [ ("text holding a nought stops before the call", program
+      [ "foreign \"c\" {"
+      , "  fn strlen(text: Str) -> Int64"
+      , "}"
+      , "fn main() -> Int {"
+      , "  print(\"before\")"
+      , "  unsafe { print(display(strlen(\"a\\u{0}b\"))) }"
+      , "  0"
+      , "}" ])
+  , ("a text result the library does not give stops after the call", program
+      [ "foreign \"c\" {"
+      , "  fn getenv(name: Str) -> Str"
+      , "}"
+      , "fn main() -> Int {"
+      , "  print(\"before\")"
+      , "  unsafe { print(getenv(\"PUDU_NATIVE_SURELY_UNSET_VARIABLE\")) }"
+      , "  0"
+      , "}" ])
+  , ("a library that does not open stops at the call with every name tried", program
       [ "foreign \"puduabsentlibrary\" version \"3\" {"
       , "  fn nothing(value: Int32) -> Int32"
       , "}"
