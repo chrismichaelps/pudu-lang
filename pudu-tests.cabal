@@ -114,6 +114,9 @@ test-suite pudu-test
     Pudu.Backend.ConvertPrograms
     Pudu.Backend.KeyedPrograms
     Pudu.Backend.WordMapPrograms
+    Pudu.Backend.StorePrograms
+    Pudu.Backend.KernelPrograms
+    Pudu.Backend.CryptoPrograms
     Pudu.Backend.ShapePrograms
     Pudu.Backend.RangePrograms
     Pudu.Backend.OutputSpec
@@ -126,6 +129,7 @@ test-suite pudu-test
     Pudu.Backend.TextCaseSpec
     Pudu.Backend.TuplePrograms
     Pudu.Backend.TextLeakSpec
+    Pudu.Backend.TextViewPrograms
     Pudu.Backend.TextMethodPrograms
     Pudu.Backend.TextPrograms
     Pudu.Backend.SignedPrograms

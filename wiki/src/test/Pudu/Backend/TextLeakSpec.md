@@ -173,3 +173,11 @@ the comprehensive allocation corpus continues to include it. It covers
 owned Decimal arguments, Option payloads, closures and text parsing via
 primitive values. Resolved Grill Log: use the existing malloc/calloc/free
 instrumentation and exact output checks, with no library import or fallback.
+
+## Native byte views (#827)
+
+Include [[Backend Text View Programs]] in full and focused counted cleanup. Shared slices, Option payloads, closures and scalar tuples must return every allocation to zero. See [[Native Text Views]].
+
+## Indexed stores (#840)
+
+Count allocations over storeSuccessPrograms. Resolved Grill Log: the harness compiles one module, so library-importing programs are covered by differential runs only.

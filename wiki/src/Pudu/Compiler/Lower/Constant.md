@@ -88,3 +88,7 @@ Resolved Grill Log: frozen keys contain no callable/resource data, so their
 existing validity requires no new runtime key-order test. Recursively reject
 any malformed element or endpoint rather than truncating, coercing, sorting
 by rendered names, or evaluating initializers. Ordinary carriers own cleanup.
+
+## Indexed stores (#840)
+
+A folded store projects as the from-array builder over its (Int, value) pairs in key order. Resolved Grill Log: reuse the map projection; keys are already narrowed.

@@ -171,3 +171,7 @@ Resolved Grill Log: Use runtime kinds for callable as well as sum operand failur
 ## Decimal (#802)
 
 `+ - * /`, ordering, equality and negation accept Decimal; another operator fails at run time with the shared message, its kind named `decimal`.
+
+## Indexed stores (#840)
+
+runtimeKind names a store `store`, as the evaluator's operator refusals do. Resolved Grill Log: ordering operators on stores stay a runtime E7001.

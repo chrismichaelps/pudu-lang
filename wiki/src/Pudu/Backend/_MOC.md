@@ -6,6 +6,7 @@ aliases: [Backend Module Map]
 
 # Backend Module Map
 
+- [[Native Hash Mixing]] · [[Backend Store Programs]] — `hashOf`, store indexes and the indexed-store corpus (#840).
 - [[Backend Word Map Programs]] — sparse-word algebra, persistence and ownership (#810).
 - [[Backend Module Programs]] — imported identities and folded collection/range conformance (#808).
 
@@ -124,3 +125,5 @@ aliases: [Backend Module Map]
 - [[Backend Decimal Operations]] — Decimal parsing, binary64, division and primitives.
 - [[Backend Method Value Programs]] — built-in method values of every receiver kind.
 - [[Backend Default Parameter Programs]] — defaults in every combination, directly and through values.
+
+- [[Backend Frame Text Views]] — checked byte-method carrier emission.

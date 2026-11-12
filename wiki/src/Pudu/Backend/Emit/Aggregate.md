@@ -118,3 +118,7 @@ captured.
 ## Decimal (#802)
 
 `ownedKinds` gives Decimal code 3; aggregates follow from 4.
+
+## Indexed stores (#840)
+
+Stores contribute their held type to aggregate collection and take storeHelpers; a store method value's kind is `store`. Resolved Grill Log: helpers stay demand-selected.

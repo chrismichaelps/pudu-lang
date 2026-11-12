@@ -20,7 +20,9 @@ can be reused without shared mutation.
 
 `Node` stores one tag name, ordered attributes, and ordered `Html` children. `Building` supplies the
 general attribute, flag, text, trusted-markup, child, conditional-child, and conversion operations,
-plus named methods for common attributes. Tag constructors cover document structure, text content,
+plus named methods for common attributes. Setting an attribute the node already has replaces its
+value where it sits, so an element never renders the same attribute twice; `class` is the exception,
+adding a class to the ones already set. Tag constructors cover document structure, text content,
 forms, tables, media, and common semantic elements. `render` emits a fragment; `document` emits the
 builder-specific compact `<!DOCTYPE html>` prefix followed by the root node.
 `whenBuilt(condition, builder: fn() -> Node)` is additive beside eager `when`. False returns the
@@ -37,7 +39,9 @@ final backstop for values built through unchecked compatibility paths.
 
 ## Algorithm and boundaries
 
-Node methods append to persistent arrays and never render eagerly. `html` converts an ordinary node
+Node methods build persistent arrays and never render eagerly. An attribute already present is
+replaced where it sits, so the first position and the reader's order survive without a duplicate;
+`class` appends to that value instead. `html` converts an ordinary node
 to `Html.Element`; the empty-name nodes produced by `words` and `nothing` convert to fragments.
 `holding` preserves source order while converting child nodes. Rendering delegates to `Std.Html`, so
 escaping, void-element spelling, handler blocking, iterative traversal, and trusted-markup behavior
@@ -88,6 +92,16 @@ it with typed shell elements and child slots.
   True invokes the callback exactly once and uses the same `holds(child.html())` path as eager input.
 - **Q:** Mutate the earlier builder value? **A:** No; both outcomes return a new or existing
   persistent `Node`, so aliases to the receiver retain their original children.
+- **Q:** Append a repeated attribute? **A:** No; `at` replaces the earlier value where it sits and
+  `class` adds to the classes already set. _Rationale:_ a repeated attribute is invalid HTML, and a
+  browser keeps only the first, so appending silently loses the later value (#839). Replacement keeps
+  the order the reader wrote and the setter signatures unchanged. _Rejected:_ reporting a duplicate
+  through a new `Result` return, which would change every compatibility setter to diagnose a mistake
+  the builder can resolve.
+- **Q:** Merge every repeated attribute? **A:** No; only `class` composes. _Rationale:_ class
+  values are a list, while a second `type`, `id`, or `data-` name means the later value; `style`
+  would need declaration-level parsing and a separator rule this builder does not own. _Rejected:_
+  concatenating arbitrary values, which produces invalid or ambiguous attributes.
 
 ## Referenced by
 

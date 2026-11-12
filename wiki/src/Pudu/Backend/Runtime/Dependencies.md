@@ -97,3 +97,7 @@ BigInt operation dependencies come from [[Backend BigInt Operations]].
 ## Decimal (#802)
 
 Decimal dependencies come from both Decimal modules.
+
+## Indexed stores (#840)
+
+Include hashRuntimeDependencies. Resolved Grill Log: hash parts name their integer and text prerequisites like every other family.

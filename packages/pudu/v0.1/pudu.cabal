@@ -106,6 +106,7 @@ library
     Pudu.Backend.Emit.Cell
     Pudu.Backend.Emit.Array
     Pudu.Backend.Emit.Keyed
+    Pudu.Backend.Emit.Kernel
     Pudu.Backend.Emit.Range
     Pudu.Backend.Emit.Bytes
     Pudu.Backend.Emit.Frame
@@ -115,6 +116,25 @@ library
     Pudu.Backend.Runtime.Aggregate
     Pudu.Backend.Runtime.Array
     Pudu.Backend.Runtime.Tree
+    Pudu.Backend.Runtime.Hash
+    Pudu.Backend.Runtime.Kernel
+    Pudu.Backend.Runtime.Kernel.Audio
+    Pudu.Backend.Runtime.Kernel.Blake2
+    Pudu.Backend.Runtime.Kernel.Buffer
+    Pudu.Backend.Runtime.Kernel.Bytes
+    Pudu.Backend.Runtime.Kernel.Checksum
+    Pudu.Backend.Runtime.Kernel.Column
+    Pudu.Backend.Runtime.Kernel.Csv
+    Pudu.Backend.Runtime.Kernel.Json
+    Pudu.Backend.Runtime.Kernel.Mac
+    Pudu.Backend.Runtime.Kernel.Natural
+    Pudu.Backend.Runtime.Kernel.Seal
+    Pudu.Backend.Runtime.Kernel.Sha2
+    Pudu.Backend.Runtime.Kernel.Sha3
+    Pudu.Backend.Runtime.Kernel.Sort
+    Pudu.Backend.Runtime.Kernel.Swiss
+    Pudu.Backend.Runtime.Kernel.Verify
+    Pudu.Backend.Runtime.Kernel.Xml
     Pudu.Backend.Runtime.Range
     Pudu.Backend.Runtime.Process
     Pudu.Backend.Runtime.Output
@@ -156,6 +176,7 @@ library
     Pudu.Compiler.Frame.Body
     Pudu.Compiler.Frame.Match
     Pudu.Compiler.Frame.State
+    Pudu.Backend.Emit.Frame.TextView
     Pudu.Backend.Emit.Frame.Value
     Pudu.Backend.Emit.Frame.Body
     Pudu.Compiler.Lower.Body
@@ -179,6 +200,11 @@ library
     Pudu.Compiler.Lower.Default
     Pudu.Compiler.Lower.Keyed
     Pudu.Compiler.Lower.WordMap
+    Pudu.Compiler.Lower.Store
+    Pudu.Compiler.Lower.Swiss
+    Pudu.Compiler.Lower.Kernel
+    Pudu.Compiler.Lower.Primitive
+    Pudu.Compiler.Lower.MultiMap
     Pudu.Compiler.Lower.Loan
     Pudu.Compiler.Lower.Range
     Pudu.Compiler.Lower.Bytes
@@ -198,6 +224,7 @@ library
     Pudu.Compiler.Product
     Pudu.Core
     Pudu.Core.Keyed
+    Pudu.Core.Kernel
     Pudu.Core.Frame
     Pudu.Diagnostic
     Pudu.Diagnostic.Host

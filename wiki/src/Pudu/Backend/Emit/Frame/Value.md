@@ -171,8 +171,16 @@ Conversions classify each side as one word, two words or BigInt. Every value fit
 
 Decimal literals, methods, operators with division's two failure sites, negation and display. `decimalFunction` names each method's runtime function.
 
+## Native byte views (#827)
+
+Delegate recognized byte-view FrameTextMethod values to [[Backend Frame Text Views]] before the unchanged scalar Str path. Pass slotText as a callback; preserve located faults and granular helper roots without importing compiler code. See [[Native Text Views]].
+
 ## Query contract (#814)
 
 Validate each query carrier and arity before selecting helpers: predicates take one identical map argument and Bool result, count has no arguments and UInt128 result, members has no arguments and Array[UInt64] result with UInt64 key/payload. Reject every mismatch as FrameFault at the query span.
 
 Resolved Grill Log: project existing checked semantics; no inference, fallback, unsafe cell reinterpretation or frame ABI change. Reuse granular runtime dependencies and existing numeric/array ownership kernels.
+
+## Indexed stores (#840)
+
+Emit KeyedPut as the `put` helper, KeyedMixHash as `pudu_mix_hash`, and KeyedHash by receiver carrier: text, bytes, word integer, wide integer or BigInt; any other carrier refuses. Resolved Grill Log: lowering shows other values as text first, so emission never guesses a rendering.

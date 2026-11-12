@@ -111,7 +111,7 @@ frameEngine owned =
   ] else []) <>
   [ "  return frame;"
   , "}"
-  , "/* A method taken as a value fails at the call made through the value. */"
+  , "/* A method or builtin taken as a value fails at the call made through it. */"
   , "static const pudu_site *pudu_blamed_site(void) {"
   , "  if (pudu_active_frame == NULL || !pudu_functions[pudu_active_frame->function].blames) return NULL;"
   , "  return pudu_active_frame->call_site;"

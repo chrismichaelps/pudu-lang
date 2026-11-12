@@ -1,6 +1,7 @@
 {-| @Test.Backend.FrameEmitSpec — strict C checks for suspending function bodies. -}
 module Pudu.Backend.FrameEmitSpec (frameEmitProperties) where
 
+import qualified Data.Set as Set
 import qualified Data.Text as Text
 import qualified Data.Text.IO as TextIO
 import Pudu.Backend.ControlPrograms (controlSuccessPrograms, controlRefusalPrograms)
@@ -15,11 +16,12 @@ import Pudu.Compiler.Frame (lowerFrames)
 import Pudu.Compiler.Lower (LowerResult (..), lowerModule)
 import Pudu.Compiler.Lower.Types (nativeTypes)
 import Pudu.Core (CoreType (..), CoreKeyedMethodName (KeyedWordUnion, KeyedWordSubset, KeyedWordDisjoint, KeyedWordPopCount, KeyedWordMembers))
+import Pudu.Core (CoreTextMethodName (..))
 import Pudu.Core.Frame
   ( FrameFault (..), FrameSlot (..), FrameSlotId (..)
   , FrameUnaryOperator (..), FrameValue (..), FrameValueShape (..) )
 import Pudu.Diagnostic (hasErrors)
-import Pudu.IntegerLiteral (IntegerKind (SignedKind, UnsignedKind))
+import Pudu.IntegerLiteral (IntegerKind (PlatformSigned, SignedKind, UnsignedKind))
 import Pudu.Source (SourceName (..), emptySpan, newSource)
 import System.Directory (findExecutable)
 import System.Exit (ExitCode (..))
@@ -32,6 +34,7 @@ frameEmitProperties :: [(String, IO Property)]
 frameEmitProperties =
   [ ("frame body emission rejects invalid slot representations", testSlots)
   , ("native word-map frame helpers reject mismatched carriers", testWordMapSlots)
+  , ("native text-view methods reject mismatched carriers", testTextViewSlots)
   , ("frame body emission suspends nested calls without C recursion", testCalls)
   , ("frame body emission compiles native corpora as strict C11", testBodies)
   ]
@@ -143,3 +146,39 @@ testCalls = do
         Left failure -> counterexample (show failure) (False === True)
       other -> counterexample (show other) (False === True)
     _ -> counterexample (show (compileDiagnostics checked)) (False === True)
+
+
+{-| Valid descriptors select exactly one root; malformed carriers never reach C. -}
+testTextViewSlots :: IO Property
+testTextViewSlots = do
+  source <- newSource (SourceName "text-views.pudu") "views"
+  let at = emptySpan source
+      number = CoreIntegerType PlatformSigned
+      slot n kind = FrameSlot (FrameSlotId n) "operand" kind at
+      emitted name receiver arguments result = frameValue (emptyEmitState [source])
+        (FrameValue at result (FrameTextMethod name (slot 0 receiver) (zipWith slot [1..] arguments)))
+      refused name receiver arguments result = case emitted name receiver arguments result of
+        Left failure -> frameFaultSpan failure === Just at
+        Right _ -> counterexample ("invalid text-view carrier: " <> show name) (False === True)
+      descriptors =
+        [(TextByteSize, [], number, "text_byte_size")
+        ,(TextByteIndexValid, [number], CoreBoolType, "text_byte_index_valid")
+        ,(TextByteRead, [number], CoreIntegerType (UnsignedKind 8), "text_byte_at")
+        ,(TextByteSliceValid, [number, number], CoreBoolType, "text_byte_slice_valid")
+        ,(TextByteSlice, [number, number], CoreTextType, "text_byte_slice")
+        ,(TextByteFind, [CoreTextType, number], number, "text_byte_find")
+        ,(TextByteFindLast, [CoreTextType], number, "text_byte_find_last")
+        ,(TextScalarRead, [number], CoreCharType, "text_scalar_at")
+        ,(TextScalarWidth, [number], number, "text_scalar_width")]
+      valid = [case emitted name CoreTextType arguments result of
+          Right (_, _, roots) -> roots === Set.singleton helper
+          Left failure -> counterexample (show failure) (False === True)
+        | (name, arguments, result, helper) <- descriptors]
+      invalid = [refused name receiver arguments result
+        | (name, parameters, output, _) <- descriptors
+        , (receiver, arguments, result) <-
+          [(CoreBoolType, parameters, output), (CoreTextType, parameters, CoreUnitType)
+          ,(CoreTextType, parameters <> [number], output)] <>
+          [(CoreTextType, drop 1 parameters, output) | not (null parameters)] <>
+          [(CoreTextType, CoreBoolType : drop 1 parameters, output) | not (null parameters)]]
+  pure (conjoin (valid <> invalid))

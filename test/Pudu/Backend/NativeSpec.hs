@@ -27,9 +27,13 @@ import Pudu.Compiler.Frame (lowerFrames)
 import Pudu.Backend.FloatPrograms (floatSuccessPrograms, floatRefusalPrograms)
 import Pudu.Backend.IntegerPrograms (integerSuccessPrograms, integerRefusalPrograms)
 import Pudu.Backend.TextMethodPrograms (textMethodSuccessPrograms, textMethodRefusalPrograms)
+import Pudu.Backend.TextViewPrograms (textViewSuccessPrograms, textViewRefusalPrograms, textViewFacadePrograms)
 import Pudu.Backend.BigIntPrograms (bigIntSuccessPrograms, bigIntRefusalPrograms)
 import Pudu.Backend.DecimalPrograms (decimalSuccessPrograms, decimalRefusalPrograms)
 import Pudu.Backend.WordMapPrograms (wordMapSuccessPrograms, wordMapRefusalPrograms)
+import Pudu.Backend.StorePrograms (storeSuccessPrograms, storeModulePrograms, storeRefusalPrograms)
+import Pudu.Backend.KernelPrograms (kernelSuccessPrograms, kernelRefusalPrograms)
+import Pudu.Backend.CryptoPrograms (cryptoSuccessPrograms)
 import Pudu.Backend.CharPrograms (charSuccessPrograms, charRefusalPrograms)
 import Pudu.Backend.TuplePrograms (tupleSuccessPrograms, tupleRefusalPrograms)
 import Pudu.Backend.RecordPrograms (recordSuccessPrograms, recordRefusalPrograms)
@@ -107,6 +111,11 @@ backendNativeProperties =
   , ("native float operator failures retain interpreter refusals", testFloatRefusals)
   , ("native text matches independent answers and the interpreter", testTextConformance)
   , ("native text operator failures retain interpreter refusals", testTextRefusals)
+  , ("native text-view reads match explicit answers and the interpreter", conjoin <$> mapM
+      (\(label, source, expected) -> conformanceExpecting (Just (expected, "", 0)) label source) textViewSuccessPrograms)
+  , ("native text-view failures retain runtime provenance", conjoin <$> mapM (uncurry conformance) textViewRefusalPrograms)
+  , ("native text-view public facade integrates across modules", conjoin <$> mapM
+      (\(label, source, expected) -> conformanceWith [] (Just (expected, "", 0)) label source) textViewFacadePrograms)
   , ("native Str methods match hand-written answers and the interpreter", testTextMethodConformance)
   , ("native Str method failures retain interpreter refusals", testTextMethodRefusals)
   , ("native Char values match hand-written answers and the interpreter", testCharConformance)
@@ -118,6 +127,14 @@ backendNativeProperties =
   , ("native word-map algebra matches explicit answers and the interpreter", conjoin <$> mapM
       (\(label, source, expected) -> conformanceExpecting (Just (expected, "", 0)) label source) wordMapSuccessPrograms)
   , ("native word-map algebra retains runtime refusal provenance", conjoin <$> mapM (uncurry conformance) wordMapRefusalPrograms)
+  , ("native indexed stores, hashing and MultiMap primitives match explicit answers and the interpreter", conjoin <$> mapM
+      (\(label, source, expected) -> conformanceExpecting (Just (expected, "", 0)) label source) (storeSuccessPrograms <> storeModulePrograms))
+  , ("native indexed stores and MultiMap primitives retain interpreter refusals", conjoin <$> mapM (uncurry conformance) storeRefusalPrograms)
+  , ("native pure kernels match hand-written answers and the interpreter", conjoin <$> mapM
+      (\(label, source, expected) -> conformanceExpecting (Just (expected, "", 0)) label source) kernelSuccessPrograms)
+  , ("native pure kernels retain interpreter refusals", conjoin <$> mapM (uncurry conformance) kernelRefusalPrograms)
+  , ("native digests, keyed digests, checksums, sealing and audio match published vectors and the interpreter", conjoin <$> mapM
+      (\(label, source, expected) -> conformanceExpecting (Just (expected, "", 0)) label source) cryptoSuccessPrograms)
   , ("native tuples match hand-written answers and the interpreter", testTupleConformance)
   , ("native tuple failures retain interpreter refusals", testTupleRefusals)
   , ("native records match hand-written answers and the interpreter", testRecordConformance)
