@@ -44,6 +44,8 @@ expected output, including growth past the initial buffer, embedded zero,
 multibyte text, truncated encoding, and repeated refusal or end of input.
 The native conformance harness supplies each byte stream to both engines.
 
+Instants of magnitude 2^64 or more, from epoch seconds or a sixteen-digit year, refuse alike in both engines; zero-padded fields and long fractions read alike (#846).
+
 ## Referenced by
 
 [[Backend Native Tests]] · [[Native Host Services]] · [[Native Emission Coverage]]

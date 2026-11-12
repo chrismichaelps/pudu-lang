@@ -39,7 +39,7 @@ formed kind = case kind of
   LaneTriple -> CoreTupleType [CoreBytesType, CoreBytesType, CoreBytesType]
 
 {-| The runtime part behind a kernel and the integers that pick what it
-    does. The raster and broad-phase kernels have no native part. -}
+    does. The raster kernels have no native part. -}
 lanePart :: LaneKernel -> Maybe (Text, [Int])
 lanePart kernel = case kernel of
   LaneFill -> Just ("lanes_fill", [])
@@ -81,4 +81,5 @@ lanePart kernel = case kernel of
   LaneToPcm16 -> Just ("lanes_to_pcm16", [])
   LaneWhere -> Just ("lanes_where", [])
   LaneToInts -> Just ("lanes_to_ints", [])
+  LaneOverlapPairs -> Just ("lanes_overlap_pairs", [])
   _ -> Nothing

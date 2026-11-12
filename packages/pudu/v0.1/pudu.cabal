@@ -247,6 +247,8 @@ library
     Pudu.Compiler.Program
     Pudu.Compiler.Product
     Pudu.Core
+    Pudu.Core.Bytes
+    Pudu.Core.Closure
     Pudu.Core.Keyed
     Pudu.Core.Kernel
     Pudu.Core.Frame

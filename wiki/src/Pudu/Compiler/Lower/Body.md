@@ -188,6 +188,15 @@ methods on a range.
 `bytesOf`, when the name is the prelude's, and byte methods go to
 [[Compiler Lower Bytes]]; an entry may return Bytes.
 
+## Calls through constants (#846)
+
+A call whose callee names a module constant, bare or qualified, is a call
+through a value: the constant is read as [[Compiler Lower Constant]] reads it
+(its folded value or its written initializer) and called with the arguments.
+
+Resolved Grill Log: route through `lowerValueCall` rather than a constant-only
+call path, so ordering, defaults and loans match every other value call.
+
 ## Referenced by
 
 [[src/Pudu/Compiler/_MOC]] · [[src/Pudu/_MOC]] · [[Compiler Lower]] ·

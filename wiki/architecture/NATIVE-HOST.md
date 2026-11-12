@@ -74,8 +74,9 @@ kept out of every expectation:
 The native time reader checks the final rounded magnitude against its integer carrier.
 Epoch seconds can produce any instant in the carrier. A larger instant or a
 calendar numeric field whose magnitude exceeds fifteen decimal digits receives
-the parse refusal.
-The interpreter can return instants beyond that boundary.
+the parse refusal. The interpreter refuses an instant of magnitude 2^64 or more
+the same way ([[Eval Clock]]), so both engines answer every text alike; a
+field beyond fifteen digits always names an instant past that bound.
 A wait gives up the run gate, so a thread serving an endpoint and a thread
 connecting to it take turns as channel waits do.
 

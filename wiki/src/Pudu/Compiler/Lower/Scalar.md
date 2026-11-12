@@ -90,6 +90,13 @@ E7001 names a range "range", as `valueKind` does.
 
 E7001 names Bytes "bytes", as `valueKind` does.
 
+## Empty array operands (#846)
+
+An empty array literal operand of a binary operator takes the other operand's
+array type. Checking can leave the literal's element open, defaulting it to
+Unit, when the other side's element came from solving a generic; an empty
+array holds no element, so the retyped literal is the same value.
+
 ## Referenced by
 
 [[Compiler Lower Body]] · [[Pudu Cabal Manifest]] · [[Native Emission Coverage]]

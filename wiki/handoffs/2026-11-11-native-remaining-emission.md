@@ -130,8 +130,27 @@ review found and verified the readiness fix for inherited nonblocking input.
 Delayed lines, split multibyte sequences, malformed input and EOF matched the
 interpreter on those pipes.
 
-Exact next action: resolve native representation for host results whose
-integer magnitude exceeds the existing carrier.
+Architect → Backend Engineer → Test Engineer. The corpus-gap slice owns
+[[Compiler Lower Method Value]], [[Native Aggregate Emission]],
+[[Compiler Lower Body]], [[Compiler Lower Scalar]], [[Compiler Lower Bytes]],
+[[Backend Emit Bytes]], the byte runtime, the lane kernel table and
+[[Native Host Lanes]], the new [[Core Byte Operations]] and
+[[Core Closure Identities]], [[Eval Clock]], their tests and mirrors, the ledger,
+changelog and this handoff. Every entry program in examples, test-fixtures and
+the library was built natively: 330 of 446 built, and 40 compared programs
+matched the interpreter byte for byte. Of the refusals, those in scope are now
+native; the rest are foreign functions and handles, desktop, audio and raster
+devices, SQLite through its foreign library, and two editor fixtures whose
+entry takes parameters. Two programs failed in the C compiler on a missing
+helper declaration; that defect is #848, fixed on its own branch from dev.
+
+The host-result carrier question resolved without widening: `parseTime`
+answers `Int`, so the interpreter now refuses an instant no `Int` carries,
+exactly where the native reader does.
+
+Exact next action: merge dev (with #848) into this branch, rerun the full
+native sweep and the suite, then record the independent review that promotes
+the ledger rows this branch completes.
 
 ## Referenced by
 

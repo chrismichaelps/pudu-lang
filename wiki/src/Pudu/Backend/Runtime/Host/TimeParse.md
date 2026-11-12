@@ -41,6 +41,18 @@ Text read as an instant with a pattern, as `Pudu.Eval.Clock` answers it, over th
 
 - How is the refusal text built? The shared [[Native Text Runtime]] joins a fixed prefix and the borrowed pattern with checked size arithmetic. Construct the owned result before replacing the previous host message.
 
+## Long fields (#846)
+
+A field of forty or more characters keeps what its reading uses: a fraction its
+first digits (only twelve are read), a whole number its sign and value without
+leading zeros. A field still too long after that is past every field bound and
+refuses, as before.
+
+Resolved Grill Log: normalise in the part recorder rather than enlarge the
+part. _Rationale:_ the interpreter reads zero-padded fields and long fractions,
+and their value, not their spelling, decides the instant. _Rejected:_ a heap
+buffer per part (the reader backtracks through many parts).
+
 ## Referenced by
 
 [[Native Host Runtime]] · [[Native Host Services]]

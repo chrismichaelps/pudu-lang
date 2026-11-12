@@ -13,6 +13,7 @@ import Pudu.Compiler.Lower.State
 import Pudu.Compiler.Lower.Loan (closeLoaned)
 import Pudu.Compiler.Lower.Types (ownerKeyOf, recordFields, selectedMember, typeFactAt, typeForSpan, withFacts)
 import Pudu.Core
+import Pudu.Core.Closure (textMethodPrefix)
 import Pudu.Frontend.Syntax (Expression (..), Located (..))
 import Data.Maybe (fromMaybe, isJust, isNothing)
 import Pudu.Source (Span (..), offsetFromInt, zeroOffset)
@@ -28,11 +29,11 @@ type Lowered = (LowerState, Maybe (CoreExpression, CoreType))
 lowerMethodValue :: LowerExpression -> LowerState -> Span -> Located Expression -> Text -> Maybe Lowered
 lowerMethodValue lower state at receiver member = case (typeForSpan types (locatedSpan receiver), typeForSpan types at, typeFactAt types at) of
   (Just receiverType, Just kind@(CoreFunctionType inputs _), Just fact@(FunctionTypeRequiring _ inputFacts _ _))
-    | builtIn receiverType || declared receiverType, length inputs == length inputFacts -> Just $ case lower state receiver of
+    | builtIn receiverType || declared receiverType || textual receiverType, length inputs == length inputFacts -> Just $ case lower state receiver of
         (after, Nothing) -> refused after
         (after, Just (core, CoreNeverType)) -> (after, Just (core, CoreNeverType))
         (after, Just (core, _)) ->
-          let key = "$method:" <> member <> ":" <> Text.pack (show receiverType) <> ":" <> Text.pack (show kind)
+          let key = (if textual receiverType then textMethodPrefix else "$method:") <> member <> ":" <> Text.pack (show receiverType) <> ":" <> Text.pack (show kind)
            in (ensure after key (Just receiverType) kind fact, Just (CoreExpression at kind (CoreClosure key [core]), kind))
   (Nothing, Just kind@(CoreFunctionType inputs@(self : _) _), Just fact@(FunctionTypeRequiring _ inputFacts _ _))
     | Located _ (NameExpression (owner :| [])) <- receiver, Nothing <- lookupLocal state owner
@@ -55,6 +56,10 @@ lowerMethodValue lower state at receiver member = case (typeForSpan types (locat
     CoreCharType -> True
     CoreBytesType -> True
     _ -> False
+  -- `toText` on a type that declares none renders the receiver; the
+  -- interpreter names that value a text method.
+  textual kind = plain == "toText" && not (builtIn kind)
+    && isNothing (ownerKeyOf kind >>= \owner -> Map.lookup (owner, plain) (contextMethods (lowerContext state)))
   declared kind = case kind of
     CoreRecordType _ _ -> isNothing (recordFields types kind >>= lookup plain)
     CoreSumType _ _ -> True

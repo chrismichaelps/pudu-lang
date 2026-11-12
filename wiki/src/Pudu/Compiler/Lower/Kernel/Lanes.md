@@ -17,6 +17,11 @@ as the interpreter checks them.
 The lane list is shared with checking so the two cannot drift. A kernel whose
 operands lie outside what it takes answers None through the host state.
 
+## Broad phase (#846)
+
+`lanesOverlapPairs` maps to `lanes_overlap_pairs`. Only the raster kernels keep
+no native part.
+
 ## Referenced by
 
 [[Compiler Lower Kernel]] · [[Native Host Lanes]] · [[Native Host Services]]

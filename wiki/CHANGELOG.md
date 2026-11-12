@@ -5,6 +5,12 @@ tags: [changelog]
 
 # Changelog
 
+## 2026-11-12 — Native corpus gaps closed (#846)
+
+- A sweep of every entry program found the in-scope refusals left; each is now native and matches the interpreter: `lanesOverlapPairs` ([[Native Host Lanes]]), `Bytes.strided` ([[Core Byte Operations]]), calls through function constants ([[Compiler Lower Body]]), `toText` taken as a value from a type that declares none ([[Core Closure Identities]]), and an empty array compared with an array whose element a generic solved ([[Compiler Lower Scalar]]).
+- [[Eval Clock]] refuses an instant whose magnitude no `Int` carries, so `parseTime` answers alike in both engines.
+- A record or tuple of Unit members emits a warning-free show helper.
+
 ## 2026-11-12 — Native standard input (#846)
 
 - [[Native Host Input]] emits standard-input line reads, including calls through a builtin value, end of input, and persistent decoding refusals.

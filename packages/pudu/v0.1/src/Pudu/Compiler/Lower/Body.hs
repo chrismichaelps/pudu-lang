@@ -10,7 +10,7 @@ import Pudu.Compiler.Lower.Control
   , expressionIsPrintValued )
 import Pudu.Compiler.Lower.State
   ( CoreSignature (..), LowerContext (..), LowerState (..)
-  , bindLocal, halt, isModuleQualifier, lookupLocal, refuse, refused, resolveFunction )
+  , bindLocal, halt, isModuleQualifier, lookupConstant, lookupLocal, refuse, refused, resolveFunction )
 import Pudu.Compiler.Lower.Text (lowerTextMethod)
 import Pudu.Compiler.Lower.Method (lowerMethodCall, lowerOwnedMethod, lowerQualifiedMethod)
 import Pudu.Compiler.Lower.Call (lowerFunctionCall, lowerPrint, lowerRendered)
@@ -349,6 +349,7 @@ lowerExpression state (Located spanValue expression) = case expression of
     lowerExpression (writtenTypeArguments state application inner written) (Located spanValue (CallExpression inner arguments))
   CallExpression (Located callee (NameExpression (name :| []))) arguments
     | Just _ <- lookupLocal state name -> lowerValueCall lowerExpression state spanValue (Located callee (NameExpression (name :| []))) arguments
+    | Just _ <- lookupConstant state [name] -> lowerValueCall lowerExpression state spanValue (Located callee (NameExpression (name :| []))) arguments
     | Just key <- resolveFunction state [name] -> lowerFunctionCall lowerExpression state spanValue key callee arguments
     | Just lowered <- lowerVariant lowerExpression state spanValue name arguments -> lowered
     | name `elem` ["print", "printPart", "printError", "printErrorPart"] -> lowerPrint lowerExpression state spanValue name arguments
@@ -388,9 +389,10 @@ lowerExpression state (Located spanValue expression) = case expression of
     | Just lowered <- lowerRangeMethod lowerExpression clean spanValue receiver member arguments -> lowered
     | Just lowered <- lowerBytesMethod lowerExpression clean spanValue receiver member arguments -> lowered
     | otherwise -> lowerTextMethod lowerExpression clean spanValue receiver member arguments
-  CallExpression (Located callee (NameExpression (first :| rest@(_ : _)))) arguments
+  CallExpression callee'@(Located callee (NameExpression (first :| rest@(_ : _)))) arguments
     | Just key <- resolveFunction state (first : rest) -> lowerFunctionCall lowerExpression state spanValue key callee arguments
     | Just lowered <- lowerVariant lowerExpression state spanValue (last rest) arguments -> lowered
+    | Just _ <- lookupConstant state (first : rest) -> lowerValueCall lowerExpression state spanValue callee' arguments
     | otherwise -> halt spanValue ("calls to '" <> Text.intercalate "." (first : rest) <> "'") state
   CallExpression (Located _ (RecordExpression written@(ModuleName ("::constructor::" :| _)) [])) arguments
     | Just lowered <- lowerVariant lowerExpression state spanValue (writtenLabel written) arguments -> lowered

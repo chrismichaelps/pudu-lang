@@ -43,6 +43,8 @@ lowerBytesMethod lower state at receiver member arguments = case typeForSpan typ
           ("isEmpty", [bytes]) -> built after CoreBoolType (CoreBinary CoreEqual (method intType BytesLengthOf bytes []) (number 0))
           ("at", [index, bytes]) | coreExpressionType index == intType -> at' after index bytes
           ("toText", [bytes]) -> asText after bytes
+          ("strided", [offset, width, stride, bytes])
+            | all ((== intType) . coreExpressionType) [offset, width, stride] -> strided after (offset, width, stride) bytes
           _ -> case (lookup member direct, reverse cores) of
             (Just (name, parameters, result), bytes : reversed)
               | let operands = reverse reversed
@@ -83,6 +85,25 @@ lowerBytesMethod lower state at receiver member arguments = case typeForSpan typ
        in (withBytes, Just (CoreExpression at option (CoreBlockValue (CoreBlock
             [CoreStatement at (CoreDeclare indexLocal index), CoreStatement at (CoreDeclare bytesLocal bytes)] (Just choice))), option))
     _ -> halt at "an Option result of at without a native form" current
+  -- strided: None for a negative offset or width, a stride below one or a
+  -- width wider than the stride; otherwise Some of the gathered groups.
+  strided current (offsetCore, widthCore, strideCore) bytes = case optionAt of
+    Just option@(CoreSumType _ _) ->
+      let (withOffset, offsetLocal) = bindLocal current "" intType
+          (withWidth, widthLocal) = bindLocal withOffset "" intType
+          (withStride, strideLocal) = bindLocal withWidth "" intType
+          (withBytes, bytesLocal) = bindLocal withStride "" CoreBytesType
+          (offset, width, stride) = (reading offsetLocal, reading widthLocal, reading strideLocal)
+          shaped = foldr1 (compare' CoreAnd)
+            [ compare' CoreGreaterOrEqual offset (number 0), compare' CoreGreaterOrEqual width (number 0)
+            , compare' CoreGreaterOrEqual stride (number 1), compare' CoreLessOrEqual width stride ]
+          some = CoreExpression at option (CoreConstruct "Some" [("0", method CoreBytesType BytesStridedOf (reading bytesLocal) [offset, width, stride])])
+          none = CoreExpression at option (CoreConstruct "None" [])
+          choice = CoreExpression at option (CoreIfValue shaped (CoreBlock [] (Just some)) none)
+          declared = [CoreStatement at (CoreDeclare local operand)
+            | (local, operand) <- [(offsetLocal, offsetCore), (widthLocal, widthCore), (strideLocal, strideCore), (bytesLocal, bytes)]]
+       in (withBytes, Just (CoreExpression at option (CoreBlockValue (CoreBlock declared (Just choice))), option))
+    _ -> halt at "an Option result of strided without a native form" current
   -- toText: Some of the same storage when it is valid UTF-8, None otherwise.
   asText current bytes = case optionAt of
     Just option@(CoreSumType _ _) ->

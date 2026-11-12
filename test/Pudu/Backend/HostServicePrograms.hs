@@ -156,14 +156,23 @@ hostServicePrograms =
       , "  print(show(parseTime(\"%-Y-%m-%d %s%Q\", \"900000000000000-02-29 -1.9995\")))"
       , "  print(show(parseTime(\"%-Y-%m-%d\", \"300000000-02-30\")))"
       , "  print(show(parseTime(\"%-Y-%m-%d %H:%M:%S%Q %z\", \"300000000-01-01 00:00:00.0015 +0001\")))"
-      , "  print(show(match parseTime(\"%-Y-%m-%d %H:%M:%S%Q\", \"584556019-04-03 14:25:51.6155\") {"
-      , "    case Ok(value) => show(value) == \"18446744073709551616\""
-      , "    case Err(message) => message == \"the text does not fit the pattern %-Y-%m-%d %H:%M:%S%Q\""
-      , "  }))"
+      , "  print(show(parseTime(\"%-Y-%m-%d %H:%M:%S%Q\", \"584556019-04-03 14:25:51.6155\")))"
       , "  0"
       , "}"
       ]
-    , "Ok(9467023432780800000)\nOk(-9467147767219200000)\nOk(18446744073709551615)\nOk(0)\nErr(\"the text does not fit the pattern %-Y-%m-%d\")\nOk(9467023432780740002)\ntrue\n" )
+    , "Ok(9467023432780800000)\nOk(-9467147767219200000)\nOk(18446744073709551615)\nOk(0)\nErr(\"the text does not fit the pattern %-Y-%m-%d\")\nOk(9467023432780740002)\nErr(\"the text does not fit the pattern %-Y-%m-%d %H:%M:%S%Q\")\n" )
+  , ( "long time fields keep a padded value and a fraction's leading digits", program
+      [ "fn main() -> Int {"
+      , "  print(show(parseTime(\"%Y\", \"0000000000000000000000000000000000000002023\")))"
+      , "  print(show(parseTime(\"%-Y\", \"-0000000000000000000000000000000000000000001\")))"
+      , "  print(show(parseTime(\"%s%Q\", \"1.000000000000000000000000000000000000000000001\")))"
+      , "  print(show(parseTime(\"%s\", \"00000000000000000000000000000000000000000000086400\")))"
+      , "  print(show(parseTime(\"%Y-%m-%d\", \"2023-000000000000000000000000000000000000000011-14\")))"
+      , "  print(show(parseTime(\"%-Y\", \"1000000000000000000000000000000000000000000000000\")))"
+      , "  0"
+      , "}"
+      ]
+    , "Ok(1672531200000)\nOk(-62198755200000)\nOk(1000)\nOk(86400000)\nErr(\"the text does not fit the pattern %Y-%m-%d\")\nErr(\"the text does not fit the pattern %-Y\")\n" )
   , ( "wide instants round-trip through time rendering", program
       [ "fn roundTrip(pattern: Str, text: Str) -> () {"
       , "  match parseTime(pattern, text) {"
@@ -183,21 +192,16 @@ hostServicePrograms =
       ]
     , "Ok(\"584556019-04-03 14:25:51.615 | 18446744073709551\")\nOk(\"-300000000-01-01 00:00:00.001 | -9467147767219200\")\nOk(\"-292275055-05-16 16:47:04.192 | -9223372036854776\")\nOk(\"1969-12-31 23:59:59.999 | -1\")\n" )
   , ( "epoch seconds reach both limits of the native millisecond carrier", program
-      [ "fn atBoundary(text: Str, exact: Str) -> Bool {"
-      , "  match parseTime(\"%s%Q\", text) {"
-      , "    case Ok(value) => show(value) == exact"
-      , "    case Err(message) => message == \"the text does not fit the pattern %s%Q\""
-      , "  }"
-      , "}"
-      , "fn main() -> Int {"
+      [ "fn main() -> Int {"
       , "  print(show(parseTime(\"%s%Q\", \"18446744073709551.615\")))"
       , "  print(show(parseTime(\"%s%Q\", \"-18446744073709552.385\")))"
-      , "  print(show(atBoundary(\"18446744073709551.6155\", \"18446744073709551616\")))"
-      , "  print(show(atBoundary(\"-18446744073709552.3845\", \"-18446744073709551616\")))"
+      , "  print(show(parseTime(\"%s%Q\", \"18446744073709551.6155\")))"
+      , "  print(show(parseTime(\"%s%Q\", \"-18446744073709552.3845\")))"
+      , "  print(show(parseTime(\"%-Y\", \"9000000000000000\")))"
       , "  0"
       , "}"
       ]
-    , "Ok(18446744073709551615)\nOk(-18446744073709551615)\ntrue\ntrue\n" )
+    , "Ok(18446744073709551615)\nOk(-18446744073709551615)\nErr(\"the text does not fit the pattern %s%Q\")\nErr(\"the text does not fit the pattern %s%Q\")\nErr(\"the text does not fit the pattern %-Y\")\n" )
   , ( "secured connections: closed tokens, budgets and far ends that never prove themselves", program
       [ "fn hangUp(listener: Int) -> () {"
       , "  match tcpAccept(listener) { case Ok(peer) => {"

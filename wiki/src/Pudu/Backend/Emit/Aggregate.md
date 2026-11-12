@@ -82,6 +82,14 @@ Helpers come from [[Backend Emit Range]].
 
 Helpers come from [[Backend Emit Bytes]].
 
+## Text methods and Unit members (#846)
+
+A closure that `isTextMethod` ([[Core Closure Identities]]) renders as
+`<method toText>` and is named `text method`, as the interpreter's text method
+value is; its equality still compares receivers. A record or tuple whose
+members are all Unit renders without reading its box, so its show helper marks
+the box used and the generated C stays free of warnings.
+
 ## Referenced by
 
 [[Backend Frame Runtime]] · [[Backend Frame Values]] · [[Native Tuple Delivery]] · [[src/_MOC]]
