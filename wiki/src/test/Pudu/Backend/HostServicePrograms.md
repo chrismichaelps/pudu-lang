@@ -25,6 +25,12 @@ by hand against public hosts and recorded in [[Native Remaining Emission
 Delivery]], not a property. Programs here are not counted for allocations:
 the counted harness links no system library.
 
+The time-reading cases check both signs beyond the signed millisecond boundary, the largest
+admitted magnitude, an invalid date, a large calendar date overridden by epoch seconds,
+and offset adjustment with ties-to-even rounding. At the first instant outside the
+carrier, require either the interpreter's exact wider value or the documented native
+refusal. A truncated or saturated value cannot satisfy either outcome.
+
 ## Referenced by
 
 [[Backend Native Tests]] · [[Native Host Services]] · [[Native Emission Coverage]]

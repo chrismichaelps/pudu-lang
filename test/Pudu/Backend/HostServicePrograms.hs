@@ -145,6 +145,22 @@ hostServicePrograms =
       , "}"
       ]
     , "Ok(\"2023-11-14T22:13:20Z\")Ok(\"Tue Tuesday Nov November 14 14 318 23 20 2023 46 2 2\")\nOk(\"10 10 PM pm 13 20 123000000000 1700000000 UTC +0000 % \\n\\t|11/14/23|2023-11-14|22:13:20|22:13|Tue Nov 14 22:13:20 UTC 2023\")Ok(\"1\")Ok(\".123\")\nOk(\"2023\")Ok(\"plain\")Ok(\"%\")Ok(\"10000-01-01\")\nOk(1700000000000)Ok(-86400000)Ok(983776080000)Ok(86400000)\nErr(\"the text does not fit the pattern %Y-%m-%d\")Err(\"the text does not fit the pattern %Y\")Err(\"the text does not fit the pattern %Y-%m-%d\")Ok(84600000)Ok(1735603200000)\n<builtin formatTime><builtin parseTime>Ok(\"01\")Ok(0)\nfalsetruetruefalse\n" )
+  , ( "time reading retains signed magnitudes and rounds after applying the offset", program
+      [ "fn main() -> Int {"
+      , "  print(show(parseTime(\"%-Y\", \"300000000\")))"
+      , "  print(show(parseTime(\"%-Y\", \"-300000000\")))"
+      , "  print(show(parseTime(\"%-Y-%m-%d %H:%M:%S%Q\", \"584556019-04-03 14:25:51.615\")))"
+      , "  print(show(parseTime(\"%-Y-%m-%d %s%Q\", \"900000000000000-02-29 -1.9995\")))"
+      , "  print(show(parseTime(\"%-Y-%m-%d\", \"300000000-02-30\")))"
+      , "  print(show(parseTime(\"%-Y-%m-%d %H:%M:%S%Q %z\", \"300000000-01-01 00:00:00.0015 +0001\")))"
+      , "  print(show(match parseTime(\"%-Y-%m-%d %H:%M:%S%Q\", \"584556019-04-03 14:25:51.6155\") {"
+      , "    case Ok(value) => show(value) == \"18446744073709551616\""
+      , "    case Err(message) => message == \"the text does not fit the pattern %-Y-%m-%d %H:%M:%S%Q\""
+      , "  }))"
+      , "  0"
+      , "}"
+      ]
+    , "Ok(9467023432780800000)\nOk(-9467147767219200000)\nOk(18446744073709551615)\nOk(0)\nErr(\"the text does not fit the pattern %-Y-%m-%d\")\nOk(9467023432780740002)\ntrue\n" )
   , ( "secured connections: closed tokens, budgets and far ends that never prove themselves", program
       [ "fn hangUp(listener: Int) -> () {"
       , "  match tcpAccept(listener) { case Ok(peer) => {"

@@ -25,7 +25,15 @@ Text read as an instant with a pattern, as `Pudu.Eval.Clock` answers it, over th
 - Seconds since 1970 in the text? They replace the date, time and zone and keep the fraction.
 - A half millisecond? Rounded to the even millisecond.
 - Leading spaces in the text? Skipped first; read as written only when no reading starts after them, as a pattern that itself begins with a space needs.
-- A number past fifteen digits? Refused here. The interpreter answers an integer wider than 64 bits for such a year; a host answer is a 64-bit integer, so the two differ on that text and the difference is recorded in [[Native Host Services]].
+- How does a valid reading become an instant? Reduce the calendar by whole 400-year cycles, then
+  add the displaced cycles using [[Backend Wide Operations]]. A cycle has a whole number of
+  weeks, so the reduction also preserves weekday and week-date validation. Epoch seconds replace
+  the entire date contribution after validation. The admitted field widths bound the wide
+  intermediate. Round before testing the final magnitude.
+- Where does the native result stop? The existing integer carrier holds either sign through a
+  magnitude of `18446744073709551615`. Use the existing parse refusal beyond that magnitude
+  without wrapping. The interpreter can return larger integers, and the native reader still
+  refuses numeric fields whose magnitude exceeds fifteen decimal digits.
 - The refusal? It names the pattern, which is the caller's, not the text.
 
 - How is the refusal text built? The shared [[Native Text Runtime]] joins a fixed prefix and the borrowed pattern with checked size arithmetic. Construct the owned result before replacing the previous host message.

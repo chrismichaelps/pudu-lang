@@ -92,9 +92,18 @@ negative result for `parseTime("%-Y", "300000000")`. The signed multiplication
 to milliseconds overflows before the result reaches its integer carrier.
 This also affects years within the existing fifteen-digit admission limit.
 
-Exact next action: resolve the native instant carrier contract and add a
-differential regression for the signed millisecond boundary before changing
-the time reader.
+Architect → Backend Engineer → Test Engineer. The continuation owns the time
+reader, [[Backend Service Programs]], both mirrors, the host architecture page,
+coverage ledger, changelog and this handoff. It keeps the established integer
+carrier and uses the wide arithmetic kernel only while building an instant.
+It refuses results beyond the carrier after rounding. The differential group
+passes under a warning-as-error build. An instrumented native probe covers
+the first millisecond outside the carrier and an extreme admitted year
+without reporting undefined behavior. Independent implementation and
+wiki-parity review found no blocking issues.
+
+Exact next action: resolve native representation for host results whose
+integer magnitude exceeds the existing carrier.
 
 ## Referenced by
 
