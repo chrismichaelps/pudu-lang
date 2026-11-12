@@ -71,7 +71,9 @@ kept out of every expectation:
 | The last bit of a library float kernel between machines | the machine's math library owns it; on one machine both engines call that library, and [[Native Host Math]] keeps a compiler from working the call out itself |
 
 The native time reader checks the final rounded magnitude against its integer carrier.
-A larger instant or a numeric field whose magnitude exceeds fifteen decimal digits receives the parse refusal.
+Epoch seconds can produce any instant in the carrier. A larger instant or a
+calendar numeric field whose magnitude exceeds fifteen decimal digits receives
+the parse refusal.
 The interpreter can return instants beyond that boundary.
 A wait gives up the run gate, so a thread serving an endpoint and a thread
 connecting to it take turns as channel waits do.

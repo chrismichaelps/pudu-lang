@@ -109,6 +109,15 @@ service group, formatter-only build and instrumented round trip with a fixed
 nonzero local offset pass. Independent review checked the day decomposition
 and confirmed that the formatter declares its magnitude dependency.
 
+Architect → Backend Engineer → Test Engineer. The epoch-seconds continuation
+owns the time reader, [[Backend Service Programs]], their mirrors, the host
+architecture page, changelog and this handoff. The seconds field covers the
+full carrier and rounds its fractional part before testing the result.
+Independent review found a negative-zero path when a fraction rounded to
+the epoch. Canonicalization at the carrier boundary restores `Ok(0)`.
+The focused service group and instrumented native checks pass at both
+limits, one millisecond beyond each, and at the decimal accumulation limit.
+
 Exact next action: resolve native representation for host results whose
 integer magnitude exceeds the existing carrier.
 

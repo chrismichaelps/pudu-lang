@@ -35,6 +35,10 @@ A parse-and-format program checks the maximum positive magnitude, large negative
 instants, the minimum signed millisecond and a negative subsecond. Both the
 civil time and floor-rounded epoch seconds must match the interpreter.
 
+The epoch-seconds probe checks both carrier limits, including the negative second
+whose fraction returns it to range, and the next rounded millisecond beyond
+each limit.
+
 ## Referenced by
 
 [[Backend Native Tests]] · [[Native Host Services]] · [[Native Emission Coverage]]

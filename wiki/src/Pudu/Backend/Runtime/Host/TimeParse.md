@@ -28,12 +28,15 @@ Text read as an instant with a pattern, as `Pudu.Eval.Clock` answers it, over th
 - How does a valid reading become an instant? Reduce the calendar by whole 400-year cycles, then
   add the displaced cycles using [[Backend Wide Operations]]. A cycle has a whole number of
   weeks, so the reduction also preserves weekday and week-date validation. Epoch seconds replace
-  the entire date contribution after validation. The admitted field widths bound the wide
-  intermediate. Round before testing the final magnitude.
+  the entire date contribution after validation. Admit the full signed seconds magnitude
+  needed by the carrier, including the extra negative second a fraction can bring back
+  into range. Bound decimal accumulation before multiplication and scale the seconds in
+  the same wide intermediate as calendar cycles. A fractional second that rounds
+  to the epoch produces canonical zero. Round before testing the final magnitude.
 - Where does the native result stop? The existing integer carrier holds either sign through a
   magnitude of `18446744073709551615`. Use the existing parse refusal beyond that magnitude
   without wrapping. The interpreter can return larger integers, and the native reader still
-  refuses numeric fields whose magnitude exceeds fifteen decimal digits.
+  refuses calendar numeric fields whose magnitude exceeds fifteen decimal digits.
 - The refusal? It names the pattern, which is the caller's, not the text.
 
 - How is the refusal text built? The shared [[Native Text Runtime]] joins a fixed prefix and the borrowed pattern with checked size arithmetic. Construct the owned result before replacing the previous host message.

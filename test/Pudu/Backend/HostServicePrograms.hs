@@ -179,6 +179,22 @@ hostServicePrograms =
       , "}"
       ]
     , "Ok(\"584556019-04-03 14:25:51.615 | 18446744073709551\")\nOk(\"-300000000-01-01 00:00:00.001 | -9467147767219200\")\nOk(\"-292275055-05-16 16:47:04.192 | -9223372036854776\")\nOk(\"1969-12-31 23:59:59.999 | -1\")\n" )
+  , ( "epoch seconds reach both limits of the native millisecond carrier", program
+      [ "fn atBoundary(text: Str, exact: Str) -> Bool {"
+      , "  match parseTime(\"%s%Q\", text) {"
+      , "    case Ok(value) => show(value) == exact"
+      , "    case Err(message) => message == \"the text does not fit the pattern %s%Q\""
+      , "  }"
+      , "}"
+      , "fn main() -> Int {"
+      , "  print(show(parseTime(\"%s%Q\", \"18446744073709551.615\")))"
+      , "  print(show(parseTime(\"%s%Q\", \"-18446744073709552.385\")))"
+      , "  print(show(atBoundary(\"18446744073709551.6155\", \"18446744073709551616\")))"
+      , "  print(show(atBoundary(\"-18446744073709552.3845\", \"-18446744073709551616\")))"
+      , "  0"
+      , "}"
+      ]
+    , "Ok(18446744073709551615)\nOk(-18446744073709551615)\ntrue\ntrue\n" )
   , ( "secured connections: closed tokens, budgets and far ends that never prove themselves", program
       [ "fn hangUp(listener: Int) -> () {"
       , "  match tcpAccept(listener) { case Ok(peer) => {"
