@@ -31,6 +31,10 @@ and offset adjustment with ties-to-even rounding. At the first instant outside t
 carrier, require either the interpreter's exact wider value or the documented native
 refusal. A truncated or saturated value cannot satisfy either outcome.
 
+A parse-and-format program checks the maximum positive magnitude, large negative
+instants, the minimum signed millisecond and a negative subsecond. Both the
+civil time and floor-rounded epoch seconds must match the interpreter.
+
 ## Referenced by
 
 [[Backend Native Tests]] · [[Native Host Services]] · [[Native Emission Coverage]]

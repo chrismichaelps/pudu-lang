@@ -102,6 +102,13 @@ the first millisecond outside the carrier and an extreme admitted year
 without reporting undefined behavior. Independent implementation and
 wiki-parity review found no blocking issues.
 
+Backend Engineer → Test Engineer. The round-trip follow-up also owns the
+formatter and its mirror. Parsed instants cross directly into the formatter
+without interpreting the magnitude as a signed millisecond count. The focused
+service group, formatter-only build and instrumented round trip with a fixed
+nonzero local offset pass. Independent review checked the day decomposition
+and confirmed that the formatter declares its magnitude dependency.
+
 Exact next action: resolve native representation for host results whose
 integer magnitude exceeds the existing carrier.
 

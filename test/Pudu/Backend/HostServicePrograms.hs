@@ -161,6 +161,24 @@ hostServicePrograms =
       , "}"
       ]
     , "Ok(9467023432780800000)\nOk(-9467147767219200000)\nOk(18446744073709551615)\nOk(0)\nErr(\"the text does not fit the pattern %-Y-%m-%d\")\nOk(9467023432780740002)\ntrue\n" )
+  , ( "wide instants round-trip through time rendering", program
+      [ "fn roundTrip(pattern: Str, text: Str) -> () {"
+      , "  match parseTime(pattern, text) {"
+      , "    case Ok(value) => {"
+      , "      let _ = print(show(formatTime(\"%Y-%m-%d %H:%M:%S%Q | %s\", value, \"utc\")))"
+      , "    }"
+      , "    case Err(message) => { let _ = print(message) }"
+      , "  }"
+      , "}"
+      , "fn main() -> Int {"
+      , "  roundTrip(\"%-Y-%m-%d %H:%M:%S%Q\", \"584556019-04-03 14:25:51.615\")"
+      , "  roundTrip(\"%-Y-%m-%d %H:%M:%S%Q\", \"-300000000-01-01 00:00:00.001\")"
+      , "  roundTrip(\"%-Y-%m-%d %H:%M:%S%Q\", \"-292275055-05-16 16:47:04.192\")"
+      , "  roundTrip(\"%s%Q\", \"-1.999\")"
+      , "  0"
+      , "}"
+      ]
+    , "Ok(\"584556019-04-03 14:25:51.615 | 18446744073709551\")\nOk(\"-300000000-01-01 00:00:00.001 | -9467147767219200\")\nOk(\"-292275055-05-16 16:47:04.192 | -9223372036854776\")\nOk(\"1969-12-31 23:59:59.999 | -1\")\n" )
   , ( "secured connections: closed tokens, budgets and far ends that never prove themselves", program
       [ "fn hangUp(listener: Int) -> () {"
       , "  match tcpAccept(listener) { case Ok(peer) => {"
