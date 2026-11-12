@@ -31,9 +31,8 @@ lambda.
 
 ## Calls through values
 
-An ordinary callee runs before supplied arguments. The frame retains each
-value in evaluation order. A member callee still uses the earlier receiver
-sequence until the member-call partition lands.
+A callee runs before supplied arguments. The frame retains each value in
+evaluation order, including a callable selected from a field.
 
 ## Resolved Grill Log
 
@@ -51,10 +50,9 @@ sequence until the member-call partition lands.
 [[Compiler Lower State]] · [[Compiler Lower Types]] · [[Compiler Lower Generic]] ·
 [[Compiler Lower Control]] · [[Core IR]]
 
-Resolved Grill Log (#828): an ordinary value call lowers the target first.
-Frame operands hold the target in its own slot before arguments. A stopping
-target emits no argument effects. Member receiver ordering remains in the
-next partition.
+Resolved Grill Log (#828): value calls lower the target first, including
+function-valued members. The frame retains that target before reading any
+argument. A Never target emits no argument effects.
 
 ## Referenced by
 

@@ -21,3 +21,5 @@ callback.
 ## Referenced by
 
 [[Native Arrays]] · [[Backend Module Programs]] · [[Backend Text Leak Tests]]
+
+Resolved Grill Log (#828): Check same-binding reads, receiver snapshots across reassignment, and receiver-before-callback preparation.

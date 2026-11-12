@@ -20,6 +20,10 @@ order. The refusals are E7008 for a function-holding key in `mapOf`, in a
 literal (named by its variant), and in `insert` for record and array keys, and
 E7001 for ordering tuples holding maps of functions.
 
+Resolved Grill Log (#828): guarded lookup retains a map across argument
+rebinding. Guarded insertion checks the key after receiver, key and value
+effects finish in that order.
+
 ## Referenced by
 
 [[Native Maps and Sets]] · [[Backend Module Programs]] · [[Backend Text Leak Tests]]

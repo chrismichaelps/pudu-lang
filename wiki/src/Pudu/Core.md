@@ -236,8 +236,8 @@ was written.
 
 ## Arrays (#556)
 
-Resolved Grill Log: `CoreArrayType`, `CoreArray`, `CoreArrayMethod` (arguments
-before the receiver), `CoreIndex` (its span is the index's) and
+Resolved Grill Log: `CoreArrayType`, `CoreArray`, `CoreArrayMethod` (receiver before
+arguments), `CoreIndex` (its span is the index's) and
 `CoreTakeLocal`, a last read that leaves the local empty.
 
 ## Sequence patterns and computed help (#558)
@@ -346,8 +346,8 @@ separate concatenation and comparison constructors.
 ## Text methods (#516)
 
 `CoreTextMethod !CoreTextMethodName !CoreExpression ![CoreExpression]` carries
-the receiver and its arguments. Arguments are evaluated before the receiver,
-matching `evaluateCall` (#514). The name type is closed: only the methods
+the receiver and its arguments. The receiver runs first under
+[[Callee First Call Evaluation]]. The name type is closed: only the methods
 native implements exist.
 
 ## Trim and case mapping (#517)

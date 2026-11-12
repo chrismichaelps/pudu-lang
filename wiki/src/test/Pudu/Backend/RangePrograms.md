@@ -21,3 +21,5 @@ steps, iterating an unbounded range, and slices out of bounds or reversed.
 ## Referenced by
 
 [[Native Range Values]] · [[Backend Module Programs]] · [[Backend Text Leak Tests]]
+
+Resolved Grill Log (#828): An unbounded range still prepares a supplied callback before rejecting conversion to items.

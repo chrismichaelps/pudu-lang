@@ -15,9 +15,9 @@ records and sums, a default calling the implementation's override,
 type-qualified, trait-qualified and static members, implementations on `Int`
 and `Str` beside Str's built-in methods, `toText()` on every kind of value
 with a type's own `toText` winning, and recursion and `Self` results. Order
-cases check that arguments print before the receiver, that an argument
-reassigning the receiver's variable is seen, and that a returning argument
-stops the call before the receiver runs. The refusals are runtime failures
+cases check receiver effects before supplied arguments, the retained receiver
+after its binding changes, and a transfer after receiver effects that skips
+invocation. The refusals are runtime failures
 inside a method and inside an inherited default, which must report at their
 own source.
 

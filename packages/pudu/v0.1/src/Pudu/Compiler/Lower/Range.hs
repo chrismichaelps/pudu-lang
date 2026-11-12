@@ -1,6 +1,6 @@
 {-| @Pudu.Compiler.Lower.Range — ranges as values: built from the ends
-    written, and their methods, as `Eval.Range` answers them. Arguments run
-    before the receiver. -}
+    written, and their methods, as `Eval.Range` answers them. The receiver
+    runs before arguments. -}
 module Pudu.Compiler.Lower.Range (lowerRangeValue, lowerRangeMethod) where
 
 import Data.Text (Text)
@@ -55,13 +55,14 @@ lowerRangeMethod lower state at receiver member arguments = case typeForSpan typ
     , ("reverse", (RangeReversedOf, [], numbers))
     , ("step", (RangeStepBy, [intType], numbers))
     , ("sum", (RangeSumOf, [], intType)) ]
-  operands = collect lower state (arguments <> [receiver])
+  operands = collect lower state (receiver : arguments)
   plain name parameters result = case operands of
     (after, Nothing) -> refused after
     (after, Just cores)
       | any stops cores -> (after, Just (stopped at cores, CoreNeverType))
-      | map coreExpressionType (init cores) /= parameters -> halt at ("a call to " <> member <> " with these arguments") after
-      | otherwise -> (after, Just (CoreExpression at result (CoreRangeMethod name (last cores) (init cores)), result))
+      | target : rest <- cores, map coreExpressionType rest == parameters ->
+          (after, Just (CoreExpression at result (CoreRangeMethod name target rest), result))
+      | otherwise -> halt at ("a call to " <> member <> " with these arguments") after
   -- start and end: Some of the end when the range has it, None otherwise.
   optional has value = case (typeForSpan types at, operands) of
     (_, (after, Nothing)) -> refused after

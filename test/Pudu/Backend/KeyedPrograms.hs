@@ -37,6 +37,15 @@ keyedSuccessPrograms =
       , "  let copies = [two.stock, two.stock.remove(\"apple\"), two.stock]", "  print(show(copies))", "  counts(\"the cat and the hat and the bat\".split(\" \"))"
       , "}" ]
     , "Inventory{name: \"shop\", stock: {}, tags: #{}} Inventory{name: \"shop\", stock: {\"apple\": 3}, tags: #{\"apple\"}} Inventory{name: \"shop\", stock: {\"apple\": 7, \"pear\": 2}, tags: #{\"apple\", \"pear\"}}\n9 false true\n[{\"apple\": 7, \"pear\": 2}, {\"pear\": 2}, {\"apple\": 7, \"pear\": 2}]\n{\"and\": 2, \"bat\": 1, \"cat\": 1, \"hat\": 1, \"the\": 3}\n")
+  , ("guarded map methods retain the receiver before supplied operands", program
+      [ "fn main() -> Int {"
+      , "  var held = mapOf([(1, \"old\")])"
+      , "  print(show(held.get({ held = mapOf([(1, \"new\")])\n 1 })))"
+      , "  print(show(held.get(1)))"
+      , "  let empty: Map[Array[fn() -> Int], Int] = mapOf([])"
+      , "  print(show({ print(\"map\")\n empty }.insert({ print(\"key\")\n [] }, { print(\"value\")\n 7 }).get([])))"
+      , "  0", "}" ]
+    , "Some(\"old\")\nSome(\"new\")\nmap\nkey\nvalue\nSome(7)\n")
   , ("thousands of inserts and removes keep the order and the counts", program
       [ "fn main() -> Int {", "  var m: Map[Int, Str] = mapOf([])", "  var i = 0"
       , "  while i < 3000 {", "    m = m.insert((i * 7919) % 3001, display(i))", "    i = i + 1"

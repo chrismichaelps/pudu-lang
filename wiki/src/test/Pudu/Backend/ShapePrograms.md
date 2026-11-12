@@ -18,3 +18,5 @@ module's aliases; and assignments as match-arm, `if let` and binding values.
 ## Referenced by
 
 [[Backend Module Programs]] · [[Backend Text Leak Tests]]
+
+Resolved Grill Log (#828): Pin method precedence and capture a function-valued field before an argument rebinds its record.

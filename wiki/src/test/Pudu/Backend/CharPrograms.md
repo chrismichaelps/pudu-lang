@@ -25,10 +25,10 @@ Refusals: charAt past the end, at the length, negative, on empty text, with
 operands that print first; Char arithmetic (`+`, `*`, `-`, `%`) and unary
 `-`, each after its operands run.
 
-## Grill Log
+## Resolved Grill Log
 
 - **Q:** Where do the answers come from? **A:** Written by hand, so the
-  interpreter and native cannot agree on a shared mistake.
+  exact trace pins text receiver effects before the index expression.
 
 ## Referenced by
 

@@ -160,12 +160,11 @@ lowerExpression expression@(CoreExpression at kind shape) = case shape of
     | otherwise -> rendered FrameDisplay operand
   CoreShow operand -> rendered FrameShow operand
   CoreTextMethod name receiver arguments -> do
-    -- The evaluator reads the arguments before the receiver.
-    operands <- lowerOperands (arguments <> [receiver])
+    operands <- lowerOperands (receiver : arguments)
     case operands of
       Nothing -> pure Stopped
-      Just slots -> case reverse slots of
-        target : backwards -> value (FrameTextMethod name target (reverse backwards))
+      Just slots -> case slots of
+        target : rest -> value (FrameTextMethod name target rest)
         [] -> fault (Just at) "a text method without its receiver"
   CorePrint operand -> lowerPrint at operand
   CoreOutputError errors newline operand -> rendered (FrameOutputError errors newline) operand
@@ -207,19 +206,18 @@ lowerExpression expression@(CoreExpression at kind shape) = case shape of
     operands <- lowerOperands members
     maybe (pure Stopped) (value . FrameArray) operands
   CoreArrayMethod name receiver arguments -> do
-    -- The evaluator reads the arguments before the receiver.
-    operands <- lowerOperands (arguments <> [receiver])
+    operands <- lowerOperands (receiver : arguments)
     case operands of
       Nothing -> pure Stopped
-      Just slots -> case reverse slots of
-        target : backwards -> value (FrameArrayMethod name target (reverse backwards))
+      Just slots -> case slots of
+        target : rest -> value (FrameArrayMethod name target rest)
         [] -> fault (Just at) "an array method without its receiver"
   CoreKeyedMethod name receiver arguments -> do
-    operands <- lowerOperands (arguments <> [receiver])
+    operands <- lowerOperands (receiver : arguments)
     case operands of
       Nothing -> pure Stopped
-      Just slots -> case reverse slots of
-        target : backwards -> value (FrameKeyedMethod name target (reverse backwards))
+      Just slots -> case slots of
+        target : rest -> value (FrameKeyedMethod name target rest)
         [] -> fault (Just at) "a map or set operation without its receiver"
   CoreComparable operand -> rendered FrameComparable operand
   CoreRangeValue low inclusive high -> do
@@ -239,18 +237,18 @@ lowerExpression expression@(CoreExpression at kind shape) = case shape of
     operands <- lowerOperands arguments
     maybe (pure Stopped) (value . FrameKernel name constants) operands
   CoreBytesMethod name receiver arguments -> do
-    operands <- lowerOperands (arguments <> [receiver])
+    operands <- lowerOperands (receiver : arguments)
     case operands of
       Nothing -> pure Stopped
-      Just slots -> case reverse slots of
-        target : backwards -> value (FrameBytesMethod name target (reverse backwards))
+      Just slots -> case slots of
+        target : rest -> value (FrameBytesMethod name target rest)
         [] -> fault (Just at) "a byte operation without its receiver"
   CoreRangeMethod name receiver arguments -> do
-    operands <- lowerOperands (arguments <> [receiver])
+    operands <- lowerOperands (receiver : arguments)
     case operands of
       Nothing -> pure Stopped
-      Just slots -> case reverse slots of
-        target : backwards -> value (FrameRangeMethod name target (reverse backwards))
+      Just slots -> case slots of
+        target : rest -> value (FrameRangeMethod name target rest)
         [] -> fault (Just at) "a range operation without its receiver"
   CoreIndex container index -> do
     operands <- lowerOperands [container, index]

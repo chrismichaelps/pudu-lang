@@ -58,10 +58,9 @@ See [[Native Mutable Loans]].
 
 Uses [[Compiler Lower Place]], [[Compiler Lower Default]], [[Compiler Lower Control]] and [[Compiler Lower State]]. Used by [[Compiler Lower]], [[Compiler Lower Body]], [[Compiler Lower Try]] and [[Compiler Lower Call]].
 
-Resolved Grill Log (#828): snapshot an ordinary value callee before reading
-arguments or their lent places. A stopping callee leaves no operand or call.
-Writeback remains in parameter order. The member-receiver partition retains
-ownership of member timing.
+Resolved Grill Log (#828): snapshot every value callee before preparing
+any operand. A direct receiver call prepares parameter zero first and
+retains its lent place. Writeback follows parameter position after invocation.
 
 ## Referenced by
 
@@ -73,8 +72,8 @@ Also export Operand and lowerLoanedOperands: operands come in the order
 they run, each with its parameter position and whether it is an argument or
 a method receiver. A receiver at a loaned position lends any place it
 names; an argument only `&mut place` or a local lent on. The call passes
-operands by position and stores finals in parameter order, so a receiver,
-which runs last, is written back first, as `callClosureLending` lists
+operands by position and stores finals in parameter order, so a receiver
+is written back first, as `callClosureLending` lists
 `lentSelf` first. lowerLoanedCall is the case of arguments in order.
 
 ## Calls through values (#794)

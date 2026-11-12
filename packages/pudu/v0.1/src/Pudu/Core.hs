@@ -167,7 +167,7 @@ data CoreExpressionShape
   | CoreDisplay !CoreExpression
   {-| `renderValue` text: Str gains quotes and escapes, scalars read as display. -}
   | CoreShow !CoreExpression
-  {-| A built-in Str method; the arguments run before the receiver. -}
+  {-| A built-in Str method; the receiver runs before the arguments. -}
   | CoreTextMethod !CoreTextMethodName !CoreExpression ![CoreExpression]
   {-| `c.code()`: the scalar as an Int. -}
   | CoreCharCode !CoreExpression
@@ -213,17 +213,17 @@ data CoreExpressionShape
   | CoreCallValue !CoreExpression ![CoreExpression]
   {-| Members in source order, which is the order they run. -}
   | CoreArray ![CoreExpression]
-  {-| A built-in array method; the arguments run before the receiver. -}
+  {-| A built-in array method; the receiver runs before the arguments. -}
   | CoreArrayMethod !CoreArrayMethodName !CoreExpression ![CoreExpression]
-  {-| A map or set operation; the arguments run before the receiver. -}
+  {-| A map or set operation; the receiver runs before the arguments. -}
   | CoreKeyedMethod !CoreKeyedMethodName !CoreExpression ![CoreExpression]
   {-| Whether a value can be ordered, as `comparableValue` answers. -}
   | CoreComparable !CoreExpression
   {-| A range from the ends written, the start running first. -}
   | CoreRangeValue !(Maybe CoreExpression) !Bool !(Maybe CoreExpression)
-  {-| A range operation; the arguments run before the receiver. -}
+  {-| A range operation; the receiver runs before the arguments. -}
   | CoreRangeMethod !CoreRangeMethodName !CoreExpression ![CoreExpression]
-  {-| A byte-sequence operation; the arguments run before the receiver. -}
+  {-| A byte-sequence operation; the receiver runs before the arguments. -}
   | CoreBytesMethod !CoreBytesMethodName !CoreExpression ![CoreExpression]
   | CoreDecimalMethod !CoreDecimalMethodName ![CoreExpression]
   {-| A runtime kernel over operands in order, then its layout integers. -}

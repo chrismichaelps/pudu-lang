@@ -12,7 +12,7 @@ import Pudu.Compiler.Lower.Scalar (eagerType)
 import Pudu.Compiler.Lower.Signature (ensureSignature)
 import Pudu.Compiler.Lower.State
   ( CoreSignature (..), Instance (..), LowerContext (..), LowerState (..), ModuleScope (..)
-  , bindLocal, halt, inModule, refused, withTypeBindings )
+  , halt, inModule, refused, withTypeBindings )
 import Pudu.Compiler.Lower.Generic (matchType, specialize)
 import Pudu.Compiler.Lower.Loan (Callee (..), Operand (..), lowerLoanedOperands)
 import Pudu.Compiler.Lower.Types (formedCoreTypeIn, lookupScheme, ownerKeyOf, selectedMember, typeBindings, typeFactAt, typeForSpan, nativeValueType)
@@ -224,42 +224,27 @@ lowerOwnerMethod lower state at callee owner written arguments = do
   orElse (Just found) _ = Just found
   orElse Nothing other = other
 
-{-| The arguments run before the receiver. Each argument is held in a
-    temporary so the receiver can still be passed first. -}
+{-| The receiver is the first evaluated operand, including when it lends a place. -}
 callMethod :: LowerExpression -> LowerState -> Span -> Text -> Maybe Type -> Located Expression -> [Located Expression] -> Lowered
 callMethod lower state at key instantiated receiver arguments = maybe ordinary id $
   loanedInstanceCall lower state at key instantiated (maybe [] pure (typeForSpan (contextTypes (lowerContext state)) (locatedSpan receiver)))
-    (length arguments + 1) ([(index, Argument, argument) | (index, argument) <- zip [1 ..] arguments] <> [(0, Receiver, receiver)])
+    (length arguments + 1) ((0, Receiver, receiver) : [(index, Argument, argument) | (index, argument) <- zip [1 ..] arguments])
  where
   ordinary = ordinaryMethodCall lower state at key instantiated receiver arguments
 
 ordinaryMethodCall :: LowerExpression -> LowerState -> Span -> Text -> Maybe Type -> Located Expression -> [Located Expression] -> Lowered
-ordinaryMethodCall lower state at key instantiated receiver arguments = case lowerAll lower state arguments of
+ordinaryMethodCall lower state at key instantiated receiver arguments = case lower state receiver of
   (after, Nothing) -> refused after
-  (after, Just cores) -> case lower after receiver of
-    (final, Nothing) -> refused final
-    (final, Just (coreReceiver, _))
-      | expressionIsPrintValued coreReceiver -> halt (locatedSpan receiver) "a Result[(), Str] method receiver" final
-      | any stops (cores <> [coreReceiver]) -> (final, Just (stopped (cores <> [coreReceiver]), CoreNeverType))
-      | null cores -> invoke final at key instantiated [coreReceiver]
-      | otherwise ->
-          let pushed = final{lowerScopes = [] : lowerScopes final}
-              (bound, temporaries) = foldl' hold (pushed, []) cores
-              popped = bound{lowerScopes = drop 1 (lowerScopes bound)}
-              declarations =
-                [ CoreStatement (coreExpressionSpan core) (CoreDeclare local core)
-                | (local, core) <- zip temporaries cores ]
-              temporaryReads = [CoreExpression (coreExpressionSpan core) (coreLocalType local) (CoreReadLocal local) | (local, core) <- zip temporaries cores]
-           in case invoke popped at key instantiated (coreReceiver : temporaryReads) of
-                (done, Just (call, kind)) ->
-                  (done, Just (CoreExpression at kind (CoreBlockValue (CoreBlock declarations (Just call))), kind))
-                other -> other
+  (after, Just (core, CoreNeverType)) -> (after, Just (core, CoreNeverType))
+  (after, Just (core, _))
+    | expressionIsPrintValued core -> halt (locatedSpan receiver) "a Result[(), Str] method receiver" after
+    | otherwise -> case lowerAll lower after arguments of
+        (final, Nothing) -> refused final
+        (final, Just cores)
+          | any ((== CoreNeverType) . coreExpressionType) cores ->
+              (final, Just (stopped (core : cores), CoreNeverType))
+          | otherwise -> invoke final at key instantiated (core : cores)
  where
-  stops core = coreExpressionType core == CoreNeverType
-  -- An empty name cannot be written, so no source name ever finds it.
-  hold (current, held) core =
-    let (next, local) = bindLocal current "" (coreExpressionType core)
-     in (next, held <> [local])
   stopped cores = CoreExpression at CoreNeverType (CoreBlockValue (CoreBlock
     [CoreStatement (coreExpressionSpan core) (CoreEvaluate core) | core <- cores] Nothing))
 

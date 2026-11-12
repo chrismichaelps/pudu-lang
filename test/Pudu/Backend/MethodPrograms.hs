@@ -42,7 +42,7 @@ methodSuccessPrograms =
       , "  print(Point.origin().name())", "  print(show(Point.origin()))"
       , "  return 0", "}" ]
     , "point 5\npoint 5\nshape greets q\npoint 0\nPoint{x: 0, y: 0}\n")
-  , ("arguments run before the receiver and may change it", program $ named <>
+  , ("the receiver is retained before an argument rebinds it", program $ named <>
       [ "fn tag(label: Str) -> Str {", "  print(label)", "  label", "}"
       , "fn make(x: Int) -> Point {", "  print(\"receiver\")", "  Point{x: x, y: 0}", "}"
       , "fn main() -> Int {"
@@ -50,12 +50,12 @@ methodSuccessPrograms =
       , "  var p = Point{x: 1, y: 1}"
       , "  print(p.greet({ p = Point{x: 9, y: 9}", "    \"z\" }))"
       , "  return 0", "}" ]
-    , "arg\nreceiver\nhi arg from point 4\nhi z from point 9\n")
-  , ("an argument that returns stops the call before the receiver", program $ named <>
-      [ "fn make() -> Point {", "  print(\"never\")", "  Point{x: 0, y: 0}", "}"
+    , "receiver\narg\nhi arg from point 4\nhi z from point 1\n")
+  , ("an argument that returns runs after the receiver", program $ named <>
+      [ "fn make() -> Point {", "  print(\"held\")", "  Point{x: 0, y: 0}", "}"
       , "fn early() -> Str {", "  make().greet({ return \"early\" })", "}"
       , "fn main() -> Int {", "  print(early())", "  return 0", "}" ]
-    , "early\n")
+    , "held\nearly\n")
   , ("builtin types take implementations and every value answers toText", program
       [ "trait Describe { fn describe(self: &Self) -> Str }"
       , "impl Describe for Int { fn describe(self: &Self) -> Str { \"int \" + display(*self) } }"

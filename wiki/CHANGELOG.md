@@ -9,6 +9,10 @@ tags: [changelog]
 
 - [[Eval Call]], [[Compiler Lower Lambda]] and [[Compiler Lower Loan]] prepare ordinary function values before supplied arguments and preserve the selected value across argument mutation.
 
+- [[Eval Call]] and [[Eval Builtin String]] select a member before its arguments run; `callMember` and `callStringMethodFast` keep their exported signatures over that preparation.
+
+- Receiver calls retain the receiver and any selected function field before supplied arguments. [[Compiler Lower Method]], [[Compiler Frame Body]] and the built-in lowerings preserve that order through native execution. Array updates share the receiver when taking it could affect an argument.
+
 ## 2026-11-10 — HTML builder replaces repeated attributes (#839)
 
 - [[Std Html Build]] replaces an attribute already set where it sits instead of appending a second one, and `class` adds to the classes already set. A rendered element can no longer carry a repeated attribute that a browser would silently collapse to the first value.

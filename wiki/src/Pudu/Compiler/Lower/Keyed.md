@@ -14,7 +14,7 @@ and sets under [[Native Maps and Sets]].
 
 ## Order and failures
 
-Arguments run before the receiver, as every method call's do. `get` puts the
+The receiver runs before the supplied arguments. `get` puts the
 key in a local and builds `Some` or `None` in Core from a containment test and
 a lookup, so no C code needs an Option's layout. Where the key type could hold
 a function, every key is tested before it is stored, and one that cannot be

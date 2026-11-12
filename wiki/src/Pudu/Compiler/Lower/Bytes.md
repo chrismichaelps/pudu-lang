@@ -10,7 +10,7 @@ aliases: [Compiler Lower Bytes]
 ## Purpose and interface
 
 `lowerBytesOf` lowers `bytesOf(array)` and `lowerBytesMethod` the built-in
-methods of a byte sequence, arguments before the receiver.
+methods of a byte sequence, receiver before arguments.
 
 ## Resolved Grill Log
 
@@ -30,8 +30,8 @@ methods of a byte sequence, arguments before the receiver.
 
 ## Total operand selection
 
-Resolved Grill Log: split the collected operands with a nonempty pattern on
-the reversed list. An empty operand list refuses at the call span; no partial
+Resolved Grill Log: split the collected operands with a nonempty pattern
+headed by the receiver. An empty operand list refuses at the call span; no partial
 `init` or `last` is needed to select the receiver.
 
 ## Shared builder (#631)

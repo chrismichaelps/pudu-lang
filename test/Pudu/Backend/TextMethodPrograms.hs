@@ -55,7 +55,7 @@ textMethodSuccessPrograms =
       , "  return 0"
       , "}" ]
     , "bcd\nzw\ntwo!\n\n")
-  , ("arguments run before the receiver", program
+  , ("the receiver runs before the supplied arguments", program
       [ "fn main() -> Int {"
       , "  let found = { print(\"receiver\")"
       , "    \"abc\" }.contains({ print(\"argument\")"
@@ -68,18 +68,26 @@ textMethodSuccessPrograms =
       , "  print(piece)"
       , "  return 0"
       , "}" ]
-    , "argument\nreceiver\ntrue\nfrom\nto\ntext\nel\n")
-  , ("a Never argument stops before the receiver", program
+    , "receiver\nargument\ntrue\ntext\nfrom\nto\nel\n")
+  , ("transfers stop the rest of a method call", program
       [ "fn early() -> Int {"
       , "  let n = { print(\"receiver\")"
       , "    \"abc\" }.drop({ return 7 })"
       , "  return n.length()"
       , "}"
+      , "fn stopReceiver() -> Int {"
+      , "  let held = { print(\"receiver stops\")"
+      , "    if true { return 8 }"
+      , "    \"abc\" }.drop({ print(\"unreachable argument\")"
+      , "    1 })"
+      , "  held.length()"
+      , "}"
       , "fn main() -> Int {"
       , "  print(display(early()))"
+      , "  print(display(stopReceiver()))"
       , "  return 0"
       , "}" ]
-    , "7\n")
+    , "receiver\n7\nreceiver stops\n8\n")
   ]
  where
   printing label expressions answers =

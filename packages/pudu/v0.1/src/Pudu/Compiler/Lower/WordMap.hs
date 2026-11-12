@@ -47,7 +47,6 @@ wordMapCallable name signature = do
             let hold (current, collected, snapshots) core =
                   let (after, local) = bindLocal current "" kind
                    in (after, collected <> [CoreStatement at (CoreDeclare local core)], snapshots <> [CoreExpression at kind (CoreReadLocal local)])
-                -- Frame methods read arguments before their receiver.
                 (held, statements, readings) = foldl' hold (state, [], []) arguments
              in case readings of
                   receiver : operands ->

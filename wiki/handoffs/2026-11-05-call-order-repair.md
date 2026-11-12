@@ -12,38 +12,53 @@ Fresh feature/828-callee-first starts at dev b9038686. Preserve unrelated
 untracked build artifacts in this checkout; no subagents.
 
 [[Callee First Call Evaluation]] retains the existing normative callee-first rule.
-Eval.Call currently prepares arguments first, and Lower.Lambda/Loan explicitly
-mirror that behavior. Member receivers require the same once-held preparation;
-qualified trait selection may depend purely on the first supplied value. Inspect
-all call planners before changing source, including compiled and loop paths.
+The original evaluator and lowering prepared arguments first. Runtime callees
+and receivers must be held once. Qualified trait selection may depend on the
+first supplied value when the selection is pure.
 
-The semantic header contained two versions; retain one 2.0.1-draft clarification
-after the existing 2.0.0-draft namespace revision. Implementation is still pending,
-and the native ledger's #828 obligation must remain Partial until evidence exists.
+The semantic header retains one 2.0.1-draft clarification after the existing
+2.0.0-draft namespace revision. The native ledger's #828 obligation stays
+Partial until the complete evidence and reviews are recorded.
 
 Inventory findings: Eval.Compile's general path delegates to Eval.Call; closed
 module calls and loop kernels cache immutable targets only under lexical/callee-
 prefix admission proofs. Eval.Call.Path.qualifiedCallee uses the first argument
 to disambiguate declared/builtin owners, so moving it before arguments with an
 empty list would change dispatch. Separate runtime preparation from pure selection.
-Lower.Lambda and Loan.Through explicitly run their target after operands.
-Lower.Method runs argument declarations before receivers; lower built-in methods
-also rely on receiver-last Core sequencing, and Array's map/filter/reduce/sortBy
-expansions explicitly declare callbacks before receivers. Audit every expansion;
-changing only one frame operation would leave these paths inconsistent.
+The original plans ordered receiver, arguments and invocation independently
+in declared methods, built-in frame operations and array callback expansions.
+The receiver worktree changes all three.
 
-Architect → Runtime Engineer → Backend Engineer → Test Engineer. The first
-partition owns [[Eval Call]], [[Compiler Lower Lambda]], [[Compiler Lower Loan]],
-[[Backend Closure Programs]], [[Backend Mutable Loan Programs]],
-[[Backend Text View Programs]] and their
-mirrors. Ordinary runtime function values are prepared before arguments in
-both evaluators and native lowering. Member and qualified dispatch remain
-outside this partition.
+Architect → Runtime Engineer → Backend Engineer → Test Engineer. The published
+function-value partition owns [[Eval Call]], [[Compiler Lower Lambda]],
+[[Compiler Lower Loan]], [[Backend Closure Programs]],
+[[Backend Mutable Loan Programs]] and [[Backend Text View Programs]].
 
-Exact next action: prepare member receivers and their callable selections
-before arguments across evaluator and native method paths, including builtin
-expansions and loaned places. Establish when the array receiver may be moved
-without changing an argument that reads its binding.
+Architect → Runtime Engineer. [[Eval Call]] and [[Eval Builtin String]] separate
+member selection from invocation. The preparation partition preserves the
+existing member order while making the selected invocation reusable.
+
+Architect → Backend Engineer → Test Engineer. The receiver partition advances
+member preparation before arguments and owns [[Compiler Lower Method]],
+[[Compiler Lower Lambda]], [[Compiler Lower Loan]], [[Core IR]],
+[[Compiler Frame Body]], the built-in lowerings and the backend fixtures.
+It preserves loan writeback order and runs conversions after operand effects.
+An array move requires arguments that cannot observe the cleared binding or
+transfer past the assignment.
+
+Seven explicit receiver traces and diagnostics matched in both evaluators
+and native executables. The optimized build and module corpus passed.
+The six local shards are in progress.
+
+The preparation partition keeps both exported runtime entry points with their
+published signatures: `callMember` prepares and then invokes, keeping its skip of
+the owner lookup, and `callStringMethodFast` applies the selection that
+`prepareStringMethodFast` makes. Only the internal call path uses the new
+preparation directly. The warning-as-error build, the full suite and both format
+checks pass on the combined tree.
+
+Exact next action: obtain independent review of the preparation and receiver
+partitions on #830, then mark the native ledger's #828 obligation complete.
 
 ## Referenced by
 [[handoffs/_MOC]] · [[Callee First Call Evaluation]]

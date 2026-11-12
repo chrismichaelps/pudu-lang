@@ -35,10 +35,12 @@ Frozen-byte cases cover invalid UTF-8, NUL, empty bytes, repeated reads,
 slicing and Bytes nested in tuples and records. Runtime reconstruction uses
 the same counted cleanup checks as ordinary byte values.
 
-Argument-order and capture cases hold arguments before the receiver, check
+Argument-order and capture cases hold the receiver before arguments, check
 that a closure retains a copied byte value after reassignment, and return a
 shared byte reference as an owned result. Expected output records each effect.
 
 Trailing and explicit Bytes entry returns print their hexadecimal value and
 exit zero. Direct ordered operators retain E7001 even though Bytes order by
 content inside tuples and ordered collection keys.
+
+Resolved Grill Log (#828): Check receiver-first traces for direct operations and the guarded Option builder for at.

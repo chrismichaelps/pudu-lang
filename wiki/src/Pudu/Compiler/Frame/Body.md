@@ -73,7 +73,7 @@ The conversion shapes lower their operand, then become one frame value.
 
 ## Maps and sets (#561)
 
-Keyed operations lower their arguments before their receiver, as array
+Keyed operations lower their receiver before arguments, as array
 methods do; a map or set result gets a slot like any box.
 
 ## Char from a code (#562)
@@ -83,11 +83,11 @@ methods do; a map or set result gets a slot like any box.
 ## Range values (#564)
 
 A range value lowers its present ends in order; range operations lower their
-arguments before their receiver.
+receiver before arguments.
 
 ## Bytes (#565)
 
-Byte operations lower their arguments before their receiver.
+Byte operations lower their receiver before arguments.
 
 ## Referenced by
 
@@ -108,7 +108,7 @@ literal and scalar-display fusions and otherwise prints a text slot.
 
 ## Text methods (#516)
 
-`CoreTextMethod` lowers its arguments left to right, then its receiver, then
+`CoreTextMethod` lowers its receiver and then its arguments left to right, then
 saves one `FrameTextMethod` value.
 
 ## Char values (#518)

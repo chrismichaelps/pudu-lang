@@ -14,7 +14,7 @@ aliases: [Compiler Lower Range]
 
 ## Methods
 
-Arguments run before the receiver. `start` and `end` answer `Some` or `None`
+The receiver runs before arguments. `start` and `end` answer `Some` or `None`
 in Core from the range's fields. `map`, `filter` and `reduce` reuse the array
 loops of [[Compiler Lower Array]] over the range's values, which are listed
 after the arguments and the range have run and fail, when an end is missing,

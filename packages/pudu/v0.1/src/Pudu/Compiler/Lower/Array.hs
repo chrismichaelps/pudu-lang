@@ -70,8 +70,7 @@ lowerArrayIndex lower state _ receiver key = case typeForSpan (contextTypes (low
     (after, Just _) -> halt (locatedSpan key) "a Str index that is not an Int" after
   _ -> Nothing
 
-{-| A built-in method when the receiver is an array; Nothing otherwise. The
-    arguments run before the receiver, as every method call's do. -}
+{-| A built-in method when the receiver is an array. -}
 lowerArrayMethod :: LowerExpression -> LowerState -> Span -> Located Expression -> Text -> [Located Expression] -> Maybe Lowered
 lowerArrayMethod lower state at receiver member arguments = case receiverType of
   Just kind@(CoreArrayType element) -> case lookup member (direct kind element) of
@@ -83,10 +82,10 @@ lowerArrayMethod lower state at receiver member arguments = case receiverType of
   receiverType = case locatedValue receiver of
     ArrayExpression members -> arrayAt state (locatedSpan receiver) members
     _ -> typeForSpan types (locatedSpan receiver)
-  runtime name parameters result = case receiverOperands lower state receiver arguments id of
+  runtime name parameters result = case receiverOperands lower state receiver arguments of
     (after, Nothing) -> refused after
     (after, Just (cores, core))
-      | any stops (cores <> [core]) -> (after, Just (stopped at (cores <> [core]), CoreNeverType))
+      | any stops (core : cores) -> (after, Just (stopped at (core : cores), CoreNeverType))
       | map coreExpressionType cores /= parameters -> halt at ("a call to " <> member <> " with these arguments") after
       | otherwise -> (after, Just (CoreExpression at result (CoreArrayMethod name core cores), result))
   direct kind element =
@@ -105,25 +104,23 @@ lowerArrayMethod lower state at receiver member arguments = case receiverType of
     <> [("join", (ArrayJoinWith, [CoreTextType], CoreTextType)) | element `elem` [CoreTextType, CoreUnitType]]
 
 {-| `map`, `filter` and `reduce` over something that is not itself an array:
-    `toItems` turns the lowered receiver into the array of its items, run
-    after the arguments and the receiver, as the evaluator lists them. -}
+    `toItems` converts the retained receiver after all supplied operands run. -}
 lowerArrayLoop :: LowerExpression -> LowerState -> Span -> Located Expression -> Text -> [Located Expression]
   -> CoreType -> (CoreExpression -> CoreExpression) -> Lowered
 lowerArrayLoop lower state at receiver member arguments kind toItems = case kind of
   CoreArrayType element -> arrayMethodWith lower state at receiver member arguments kind element toItems
   _ -> halt at ("the method '" <> member <> "'") state
 
--- Arguments, then the receiver; everything after reads hidden locals.
 receiverOperands :: LowerExpression -> LowerState -> Located Expression -> [Located Expression]
-  -> (CoreExpression -> CoreExpression) -> (LowerState, Maybe ([CoreExpression], CoreExpression))
-receiverOperands lower current receiver arguments toItems = case collect lower current arguments of
+  -> (LowerState, Maybe ([CoreExpression], CoreExpression))
+receiverOperands lower current receiver arguments = case lower current receiver of
   (after, Nothing) -> (after, Nothing)
-  (after, Just cores) -> case lower after receiver of
-    (final, Just (core, _))
-      | expressionIsPrintValued core -> halt (locatedSpan receiver) "a Result[(), Str] method receiver" final
-      | coreExpressionType core == CoreNeverType -> (final, Just (cores, core))
-      | otherwise -> (final, Just (cores, toItems core))
-    (final, Nothing) -> (final, Nothing)
+  (after, Just (core, kind))
+    | expressionIsPrintValued core -> halt (locatedSpan receiver) "a Result[(), Str] method receiver" after
+    | kind == CoreNeverType -> (after, Just ([], core))
+    | otherwise -> case collect lower after arguments of
+        (final, Nothing) -> (final, Nothing)
+        (final, Just cores) -> (final, Just (cores, core))
 
 arrayMethodWith :: LowerExpression -> LowerState -> Span -> Located Expression -> Text -> [Located Expression]
   -> CoreType -> CoreType -> (CoreExpression -> CoreExpression) -> Lowered
@@ -135,17 +132,17 @@ arrayMethodWith lower state at receiver member arguments kind element toItems = 
   _ -> halt at ("the array method '" <> member <> "'") state
  where
   types = contextTypes (lowerContext state)
-  operands current = receiverOperands lower current receiver arguments toItems
+  operands current = receiverOperands lower current receiver arguments
 
   -- map and filter: an output array built item by item.
   looped mapped = case operands state of
     (after, Nothing) -> refused after
     (after, Just (cores, core))
-      | any stops (cores <> [core]) -> (after, Just (stopped at (cores <> [core]), CoreNeverType))
+      | any stops (core : cores) -> (after, Just (stopped at (core : cores), CoreNeverType))
       | [function] <- cores ->
           let outputKind = maybe kind CoreArrayType mapped
               (withFunction, functionLocal) = hidden after (coreExpressionType function)
-              (withArray, arrayLocal) = hidden withFunction kind
+              (withArray, arrayLocal, prefixArray, convertArray) = holdArray withFunction core
               (withOutput, outputLocal) = hidden withArray outputKind
               (body, loop) = walk withOutput arrayLocal element $ \item ->
                 let applied = expression (maybe CoreBoolType id mapped) (CoreCallValue (reading functionLocal) [reading item])
@@ -155,8 +152,8 @@ arrayMethodWith lower state at receiver member arguments kind element toItems = 
                       Just _ -> [pushed applied]
                       Nothing -> [statement (CoreIf applied (CoreBlock [pushed (reading item)] Nothing) Nothing)]
               prefix =
-                [ statement (CoreDeclare functionLocal function), statement (CoreDeclare arrayLocal core)
-                , statement (CoreDeclare outputLocal (expression outputKind (CoreArray []))) ]
+                prefixArray <> [statement (CoreDeclare functionLocal function)] <> convertArray <>
+                [statement (CoreDeclare outputLocal (expression outputKind (CoreArray [])))]
            in (body, Just (expression outputKind (CoreBlockValue (CoreBlock (prefix <> loop) (Just (reading outputLocal)))), outputKind))
       | otherwise -> halt at ("a call to " <> member <> " with these arguments") after
 
@@ -164,34 +161,43 @@ arrayMethodWith lower state at receiver member arguments kind element toItems = 
   reduced = case operands state of
     (after, Nothing) -> refused after
     (after, Just (cores, core))
-      | any stops (cores <> [core]) -> (after, Just (stopped at (cores <> [core]), CoreNeverType))
+      | any stops (core : cores) -> (after, Just (stopped at (core : cores), CoreNeverType))
       | [function, initial] <- cores ->
           let accumulated = coreExpressionType initial
               (withFunction, functionLocal) = hidden after (coreExpressionType function)
               (withInitial, accumulatorLocal) = hidden withFunction accumulated
-              (withArray, arrayLocal) = hidden withInitial kind
+              (withArray, arrayLocal, prefixArray, convertArray) = holdArray withInitial core
               (body, loop) = walk withArray arrayLocal element $ \item ->
                 [ statement (CoreAssign accumulatorLocal (expression accumulated
                     (CoreCallValue (reading functionLocal) [reading accumulatorLocal, reading item]))) ]
               prefix =
-                [ statement (CoreDeclare functionLocal function), statement (CoreDeclare accumulatorLocal initial)
-                , statement (CoreDeclare arrayLocal core) ]
+                prefixArray <> [statement (CoreDeclare functionLocal function), statement (CoreDeclare accumulatorLocal initial)] <>
+                convertArray
            in (body, Just (expression accumulated (CoreBlockValue (CoreBlock (prefix <> loop) (Just (reading accumulatorLocal)))), accumulated))
       | otherwise -> halt at ("a call to " <> member <> " with these arguments") after
 
-  -- sortBy: the closure and the array run once, then the sort asks the
+  -- sortBy: the array and the closure run once, then the sort asks the
   -- closure exactly what `sortWith` asks it.
   sorted = case operands state of
     (after, Nothing) -> refused after
     (after, Just (cores, core))
-      | any stops (cores <> [core]) -> (after, Just (stopped at (cores <> [core]), CoreNeverType))
+      | any stops (core : cores) -> (after, Just (stopped at (core : cores), CoreNeverType))
       | [function] <- cores ->
           let (withFunction, functionLocal) = hidden after (coreExpressionType function)
-              (withArray, arrayLocal) = hidden withFunction kind
+              (withArray, arrayLocal, prefixArray, convertArray) = holdArray withFunction core
               (final, statements, result) = sortStatements withArray at arrayLocal functionLocal
-              prefix = [statement (CoreDeclare functionLocal function), statement (CoreDeclare arrayLocal core)]
+              prefix = prefixArray <> [statement (CoreDeclare functionLocal function)] <> convertArray
            in (final, Just (expression kind (CoreBlockValue (CoreBlock (prefix <> statements) (Just (reading result)))), kind))
       | otherwise -> halt at ("a call to " <> member <> " with these arguments") after
+
+  holdArray current core =
+    let (held, original) = hidden current (coreExpressionType core)
+        declaration = [statement (CoreDeclare original core)]
+     in if coreExpressionType core == kind
+          then (held, original, declaration, [])
+          else
+            let (converted, array) = hidden held kind
+             in (converted, array, declaration, [statement (CoreDeclare array (toItems (reading original)))])
 
   -- One turn per item, reading the length once, as traversing the sequence does.
   walk current arrayLocal held turn =
@@ -216,16 +222,27 @@ arrayMethodWith lower state at receiver member arguments kind element toItems = 
   reading local = expression (coreLocalType local) (CoreReadLocal local)
   one = expression intType (CoreIntegerLiteral PlatformSigned 1)
 
-{-| `x = x.push(...)` and the like read `x` last, then replace it, so the
-    receiver can be taken rather than shared and the buffer stays unique. -}
+{-| Take a replacement receiver only when every argument can finish without
+    observing the cleared binding or transferring past the assignment. -}
 takeReceiver :: CoreLocal -> CoreExpression -> CoreExpression
 takeReceiver local expression = case coreExpressionShape expression of
   CoreArrayMethod name receiver arguments
     | name `elem` [ArrayPushValue, ArrayPopLast, ArrayInsertAt, ArrayRemoveAt, ArrayConcatWith, ArrayReplaceAt]
     , CoreReadLocal read' <- coreExpressionShape receiver
-    , read' == local ->
+    , read' == local
+    , all independent arguments ->
         expression{coreExpressionShape = CoreArrayMethod name receiver{coreExpressionShape = CoreTakeLocal local} arguments}
   _ -> expression
+ where
+  independent operand = case coreExpressionShape operand of
+    CoreReadLocal other -> other /= local
+    CoreIntegerLiteral{} -> True
+    CoreFloatLiteral{} -> True
+    CoreDecimalLiteral{} -> True
+    CoreBoolLiteral{} -> True
+    CoreTextLiteral{} -> True
+    CoreCharLiteral{} -> True
+    _ -> False
 
 collect :: LowerExpression -> LowerState -> [Located Expression] -> (LowerState, Maybe [CoreExpression])
 collect lower = go []

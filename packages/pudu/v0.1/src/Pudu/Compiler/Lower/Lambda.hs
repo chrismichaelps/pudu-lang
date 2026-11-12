@@ -10,7 +10,7 @@ import qualified Data.Text as Text
 import Pudu.Compiler.Lower.Control (expressionIsPrintValued, printValued)
 import Pudu.Compiler.Lower.Default (suppliedArguments)
 import Pudu.Compiler.Lower.Generic (admitCallee)
-import Pudu.Compiler.Lower.Loan (Callee (..), Operand (..), closeLoaned, lowerLoanedOperands, preparesValueCallee, valueSignature)
+import Pudu.Compiler.Lower.Loan (Callee (..), Operand (..), closeLoaned, lowerLoanedOperands, valueSignature)
 import Pudu.Compiler.Lower.State
   ( LowerContext (..), LowerState (..), bindLocal, halt, lookupLocal, refused, startFunction )
 import Pudu.Compiler.Lower.Types (loanedInputs, typeFactAt, typeForSpan)
@@ -96,53 +96,36 @@ lowerFunctionValue state at key entry = case typeForSpan (contextTypes (lowerCon
        in (admitted{lowerContext = next}, Just (CoreExpression at kind (CoreClosure target []), kind))
   _ -> halt at "a function value without a native function type" state
 
-{-| A call through an ordinary value holds its target before supplied operands.
-    Member order remains with the receiver-order partition. -}
+{-| A call through a value holds its target before supplied operands. -}
 lowerValueCall :: LowerExpression -> LowerState -> Span -> Located Expression -> [Located Expression] -> Lowered
 lowerValueCall lower state at callee arguments
   | loaned@(_ : _) <- maybe [] loanedInputs (typeFactAt (contextTypes (lowerContext state)) (locatedSpan callee))
   , Just (CoreFunctionType inputs (CoreTupleType (result : _))) <- typeForSpan (contextTypes (lowerContext state)) (locatedSpan callee) =
       lowerLoanedOperands lower state at (Through callee) (valueSignature at inputs result loaned) defaulted
         [(index, Argument, argument) | (index, argument) <- zip [0 ..] arguments]
-  | preparesValueCallee callee = case lower state callee of
+  | otherwise = case lower state callee of
       (after, Nothing) -> refused after
       (after, Just (target, CoreNeverType)) -> (after, Just (target, CoreNeverType))
       (after, Just (target, kind)) -> case collect after [] arguments of
         (final, Nothing) -> refused final
-        (final, Just cores) -> invoke direct final target kind cores (target : cores)
-  | otherwise = case collect state [] arguments of
-      (after, Nothing) -> refused after
-      (after, Just cores) -> case lower after callee of
-        (final, Nothing) -> refused final
-        (final, Just (target, kind)) -> invoke member final target kind cores (cores <> [target])
+        (final, Just cores) -> invoke final target kind cores
  where
   -- A value of a function with defaults was formed with the count of supplied
   -- arguments as its last parameter; checking says how many a call must give.
   defaulted = case typeFactAt (contextTypes (lowerContext state)) (locatedSpan callee) of
     Just (FunctionTypeRequiring _ inputs required _) -> requiredCount required < length inputs
     _ -> False
-  invoke make final target kind cores effects
-    | any stops effects = (final, Just (stopped effects, CoreNeverType))
+  invoke final target kind cores
+    | any stops cores = (final, Just (stopped (target : cores), CoreNeverType))
     | CoreFunctionType inputs result <- kind
-    , defaulted, length cores < length inputs = make final target result (suppliedArguments at inputs cores)
+    , defaulted, length cores < length inputs = called final target result (suppliedArguments at inputs cores)
     | CoreFunctionType inputs result <- kind
-    , length inputs == length cores = make final target result cores
+    , length inputs == length cores = called final target result cores
     | otherwise = halt at ("a call through a " <> coreTypeName kind <> " value") final
-  direct final target result cores = (final, Just (CoreExpression at result (CoreCallValue target cores), result))
-  member final target result cores =
-    let pushed = final{lowerScopes = [] : lowerScopes final}
-        (bound, temporaries) = foldl' hold (pushed, []) cores
-        popped = bound{lowerScopes = drop 1 (lowerScopes bound)}
-        declarations = [CoreStatement (coreExpressionSpan core) (CoreDeclare local core) | (local, core) <- zip temporaries cores]
-        temporaryReads = [CoreExpression (coreExpressionSpan core) (coreLocalType local) (CoreReadLocal local) | (local, core) <- zip temporaries cores]
-        invoked = CoreExpression at result (CoreCallValue target temporaryReads)
-     in (popped, Just (CoreExpression at result (CoreBlockValue (CoreBlock declarations (Just invoked))), result))
+  called final target result cores = (final, Just (CoreExpression at result (CoreCallValue target cores), result))
   stops core = coreExpressionType core == CoreNeverType
   stopped cores = CoreExpression at CoreNeverType (CoreBlockValue (CoreBlock
     [CoreStatement (coreExpressionSpan core) (CoreEvaluate core) | core <- cores] Nothing))
-  hold (current, held) core =
-    let (next, local) = bindLocal current "" (coreExpressionType core)
-     in (next, held <> [local])
   collect current done [] = (current, Just (reverse done))
   collect current done (argument : rest) = case lower current argument of
     (next, Just (core, _))
