@@ -1,6 +1,8 @@
 {-| @Core.Kernel — the runtime kernels a `CoreKernel` expression names. -}
 module Pudu.Core.Kernel (CoreKernelName (..)) where
 
+import Data.Text (Text)
+
 {-| Each kernel reads held operands and answers one value. A test kernel
     answers whether the read beside it may run. -}
 data CoreKernelName
@@ -83,4 +85,11 @@ data CoreKernelName
   | KernelSwissFind
   | KernelSwissInsert
   | KernelSwissDelete
+  {-| A host kernel, named by the runtime part that defines it. -}
+  | KernelHost !Text
+  {-| What the last host kernel on this thread left: 0 done, 1 failed,
+      2 nothing there, 3 ended. -}
+  | KernelHostState
+  {-| What the host said when it failed; read once. -}
+  | KernelHostMessage
   deriving stock (Eq, Show)

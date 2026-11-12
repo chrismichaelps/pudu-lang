@@ -69,3 +69,10 @@ all operands, which is how a range's values feed the same loops.
 [[Compiler Lower Body]] · [[Compiler Lower For]] · [[Native Arrays]]
 
 takeReceiver also takes the local for ArrayReplaceAt. (#649)
+
+## Dynamic items (#846)
+
+An array literal whose expected element is `dynamic` widens each item of an
+implementing type before the equality check, so a homogeneous dynamic array is
+admitted. Resolved Grill Log: widening happens after every item ran and keeps
+the literal's element type.

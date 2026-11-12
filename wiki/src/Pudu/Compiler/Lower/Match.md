@@ -70,3 +70,13 @@ Unsupported subject carriers and patterns retain located E6001 refusals.
 
 Constructor and record patterns name their variant or record through
 `writtenLabel`, so canonical keys and `::sum::` paths from checking match.
+
+## Sequence patterns in `let` (#846)
+
+`let [a, ..rest] = subject`, nested in tuples or records at any depth, tests
+only the sequence's length. The subject runs once, then the pattern binds on a
+match arm whose wildcard stops with E7013 at the pattern, naming the record,
+tuple or array it was given. `hasSequencePattern` finds the test anywhere
+inside, and `lowerLetSequence` leaves an ordinary `let` untouched. Resolved
+Grill Log: reuse CoreMatch rather than generate a comparison per element; the
+interpreter's E7013 message and hint are preserved.

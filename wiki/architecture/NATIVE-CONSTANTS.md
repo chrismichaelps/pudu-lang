@@ -7,17 +7,20 @@ aliases: [Native Folded Constants]
 # Native Folded Constants
 
 A module constant is the value the compiler already folded with effects denied.
-Native lowering consumes that same immutable product from CompileResult;
-it never evaluates an initializer, repeats a comptime call, or reads source
-spelling to reconstruct an answer. [[Native Emission Coverage]] remains the
-full completion contract.
+When folding published a portable product, native lowering consumes that
+immutable product from CompileResult. When folding leaves no product, such as
+for a table of functions, lowering compiles the written initializer in the
+constant's own module at the use. It never evaluates an initializer at
+runtime, repeats a comptime call, or reads source spelling to reconstruct an
+answer. [[Native Emission Coverage]] remains the full completion contract.
 
 ## Data and name boundary
 
 NativeModule carries each module's compileFolded map beside its checked syntax
 and solved facts. ModuleScope records every declared constant, with its frozen
-value when available. A declared constant lacking a portable product is a
-located E6001 refusal when reached, not a request to run its initializer.
+value when available and its written initializer otherwise. A declared
+constant lacking a portable product is lowered from that initializer in its
+declaring module when reached, never in the reader's local scope.
 
 Locals resolve first. A module's own constant or a selectively imported one
 resolves unqualified; aliases and module qualifiers resolve only constants
@@ -40,9 +43,11 @@ BigInt, Decimal and bytes use their existing literal carriers. Frozen
 collections project each nested value at its checked type (#808); map/set
 construction starts from stored ascending entries and preserves their held
 representatives. Range endpoint presence and inclusivity remain explicit.
-No native runtime ABI change is required for these carriers. Buckets/null
-and callable/resource constants still require their own carrier or portable
-product contracts; this does not complete the broad constants area.
+No native runtime ABI change is required for these carriers. Buckets project
+through their indexed-store carrier; a callable constant whose folding left
+no product lowers its initializer, so a table of functions is native too.
+Resources that cannot be written as an effect-free initializer remain
+refusals at their use.
 
 Resolved Grill Log (#808): a malformed nested element or unrepresentable
 range endpoint refuses at the constant use. No initializer is rerun and no
@@ -67,10 +72,26 @@ cleanup and full repository gates.
 - Name spelling alone cannot select a constant's type or aggregate layout;
   use exact solved expression facts and canonical shapes.
 - Pure single-module lowering cannot fabricate compiler products. Provide a
-  folded-aware entry for CompileResult consumers and retain an explicit
-  refusal when a declared constant has no supplied folded value.
+  folded-aware entry for CompileResult consumers, and lower the written
+  initializer only when folding supplied no product.
 - A frozen value owns no external handle or captured environment; do not
   manufacture a runtime resource or function from its printed form.
+
+## Initializer fallback (#846)
+
+Folding admits no effect, so a constant without a portable product still has
+one answer. Lowering compiles that initializer where the constant is read: in
+its declaring module, with the reader's lexical scopes, loops and loans
+cleared, then restores the reader's context. A callable constant such as
+`const STEPS: Array[fn(Int) -> Int] = [...]` therefore runs natively, as does a
+table built by a comptime call. The lowered expression keeps the use's source
+provenance, and a refused initializer refuses at the use.
+
+Resolved Grill Log: compiling the initializer is not evaluating it at
+runtime; each read answers the one folded evaluation because folding denied
+effects. The reader's locals never leak into the initializer. A supplied
+product is still preferred, and a malformed supplied product refuses rather
+than falling back silently.
 
 ## Referenced by
 

@@ -1,7 +1,7 @@
 {-| @Pudu.Compiler.Lower.Types — settled checker facts for native representation. -}
 module Pudu.Compiler.Lower.Types
   ( LowerTypes, emptyTypes, nativeTypes, withShapes, withBindings, withFacts, typeBindings, lookupScheme, typeForSpan, typeFactAt, sharedReferenceTarget, referenceTarget, loanedInputs
-  , writtenLabel, selectedMember, formedCoreType, formedCoreTypeIn, ownerKeyOf, layoutOf, recordFields, sumVariants, nativeIntegerKind, nativeScalarType, nativeValueType, treeType ) where
+  , dynamicIdentity, isDynamic, unformed, writtenLabel, selectedMember, formedCoreType, formedCoreTypeIn, ownerKeyOf, layoutOf, recordFields, sumVariants, nativeIntegerKind, nativeScalarType, nativeValueType, treeType ) where
 
 import Data.List.NonEmpty (NonEmpty (..))
 import qualified Data.List.NonEmpty as NonEmpty
@@ -9,7 +9,7 @@ import Data.Map.Strict (Map)
 import qualified Data.Map.Strict as Map
 import Data.Text (Text)
 import qualified Data.Text as Text
-import Pudu.Core (CoreLayout (..), CoreType (..), CoreVariant (..))
+import Pudu.Core (CoreLayout (..), CoreType (..), CoreVariant (..), coreTypeName)
 import Pudu.FloatLiteral (FloatWidth (..))
 import Pudu.IntegerLiteral (IntegerKind (BigIntKind, PlatformSigned, PlatformUnsigned, SignedKind, UnsignedKind), integerKindName, integerKindOf)
 import Pudu.Frontend.Syntax.Name (ModuleName (..))
@@ -142,7 +142,19 @@ ownerKeyOf kind = case kind of
 formedWith :: Shapes -> [CoreType] -> Map Text CoreType -> Type -> Maybe CoreType
 formedWith shapes seen parameters value = case value of
   ReferenceTypeValue False target -> formedWith shapes seen parameters target
+  -- A restriction says what a caller must hold, not how the value is laid out.
+  RestrictedType _ inner -> formedWith shapes seen parameters inner
   RigidType name | Just bound <- Map.lookup name parameters -> Just bound
+  -- A constructor parameter applied: the constructor it is bound to takes
+  -- the arguments it already has, then these.
+  AppliedType (RigidType name) arguments
+    | Just (key, prefix) <- Map.lookup name parameters >>= constructorOf -> do
+        formed <- traverse (formedWith shapes seen parameters) arguments
+        formedWith shapes seen parameters (NominalType (keyIdentity key) (map unformed (prefix <> formed)))
+  -- A dynamic value holds one of the trait's implementing types.
+  DynamicTypeValue identity
+    | Map.member (dynamicIdentity identity) (shapeSums shapes) ->
+        formedWith shapes seen parameters (NominalType (dynamicIdentity identity) [])
   -- A variable checking left open names a type no value in the program has:
   -- the error of an `Ok(1)` that is never `Err`, the member of `setOf([])`,
   -- the argument of a `setOf` that is only compared. Nothing can observe how
@@ -182,7 +194,21 @@ formedWith shapes seen parameters value = case value of
   NominalType (NominalId Nothing "Set") [member] -> do
     formed <- formedWith shapes seen parameters member
     if nativeValueType formed then Just (CoreSetType formed) else Nothing
-  -- An async function is a task-maker, which native code has no form for.
+  -- A task is the body it has not run yet: a function of nothing answering
+  -- what the body answers, a Result when the task can fail.
+  NominalType (NominalId Nothing "Task") [success, failure] -> do
+    answered <- case failure of
+      NeverType -> formedWith shapes seen parameters success
+      _ -> formedWith shapes seen parameters (NominalType (NominalId Nothing "Result") [success, failure])
+    if nativeValueType answered then Just (CoreFunctionType [] answered) else Nothing
+  -- An async function answers the task of its body, and lends nothing.
+  FunctionTypeRequiring True inputs required result
+    | all (not . isLoan) inputs -> do
+        formedInputs <- traverse (formedWith shapes seen parameters) inputs
+        formedResult <- formedWith shapes seen parameters result
+        let supplied = [CoreIntegerType PlatformSigned | requiredCount required < length inputs]
+        if all nativeValueType (formedResult : formedInputs)
+          then Just (CoreFunctionType (formedInputs <> supplied) (CoreFunctionType [] formedResult)) else Nothing
   -- One with defaults takes how many arguments the call supplied as a last
   -- Int, so a value of it and the function it calls agree on arity.
   -- A `&mut T` input takes a T, and a call answers each final beside the
@@ -199,6 +225,20 @@ formedWith shapes seen parameters value = case value of
     formedMembers <- traverse (formedWith shapes seen parameters) members
     if all nativeValueType formedMembers then Just (CoreTupleType formedMembers) else Nothing
   _ -> builtin value
+
+{-| The sum a trait's dynamic type forms to: the trait's own identity under
+    a `dynamic` module no program can declare. -}
+dynamicIdentity :: NominalId -> NominalId
+dynamicIdentity (NominalId owner name) = NominalId (Just (ModuleName ("dynamic" :| maybe [] (\(ModuleName path) -> NonEmpty.toList path) owner))) name
+
+isDynamic :: CoreType -> Bool
+isDynamic kind = case kind of
+  CoreSumType key [] -> "dynamic." `Text.isPrefixOf` key
+  _ -> False
+
+isLoan :: Type -> Bool
+isLoan (ReferenceTypeValue True _) = True
+isLoan _ = False
 
 recordFields :: LowerTypes -> CoreType -> Maybe [(Text, CoreType)]
 recordFields types kind = case layoutOf types kind of
@@ -287,3 +327,37 @@ nativeValueType CoreRangeType = True
 nativeValueType CoreBytesType = True
 nativeValueType CoreDecimalType = True
 nativeValueType other = nativeScalarType other
+
+{-| The checker's spelling of a formed type: the identity `nominalKey` was
+    made from, builtins by their own name. -}
+unformed :: CoreType -> Type
+unformed kind = case kind of
+  CoreRecordType key arguments -> NominalType (identityOf key) (map unformed arguments)
+  CoreSumType key arguments -> NominalType (identityOf key) (map unformed arguments)
+  CoreFunctionType inputs result -> FunctionTypeValue False (map unformed inputs) (unformed result)
+  CoreArrayType member -> NominalType (NominalId Nothing "Array") [unformed member]
+  CoreMapType key value -> NominalType (NominalId Nothing "Map") [unformed key, unformed value]
+  CoreSetType member -> NominalType (NominalId Nothing "Set") [unformed member]
+  CoreStoreType held -> NominalType (NominalId Nothing "Buckets") [unformed held]
+  CoreRangeType -> NominalType (NominalId Nothing "Range") [NominalType (NominalId Nothing "Int") []]
+  CoreTupleType members -> TupleTypeValue (map unformed members)
+  CoreUnitType -> UnitTypeValue
+  CoreNeverType -> NeverType
+  other -> NominalType (NominalId Nothing (coreTypeName other)) []
+ where
+  identityOf = keyIdentity
+
+{-| The identity a canonical key was made from. -}
+keyIdentity :: Text -> NominalId
+keyIdentity key = case NonEmpty.nonEmpty (Text.splitOn "." key) of
+  Just segments | length segments > 1 ->
+    NominalId (Just (ModuleName (NonEmpty.fromList (NonEmpty.init segments)))) (NonEmpty.last segments)
+  _ -> NominalId Nothing key
+
+{-| A constructor a higher-kinded parameter is bound to: its key and the
+    arguments it already has. -}
+constructorOf :: CoreType -> Maybe (Text, [CoreType])
+constructorOf kind = case kind of
+  CoreRecordType key prefix -> Just (key, prefix)
+  CoreSumType key prefix -> Just (key, prefix)
+  _ -> Nothing

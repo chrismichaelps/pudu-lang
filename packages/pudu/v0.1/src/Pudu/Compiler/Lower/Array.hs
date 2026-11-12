@@ -12,6 +12,7 @@ import Pudu.Compiler.Lower.State (LowerContext (..), LowerState (..), bindLocal,
 import Pudu.Compiler.Lower.Sort (sortStatements)
 import Pudu.Compiler.Lower.Types (typeFactAt, typeForSpan)
 import Pudu.Core
+import Pudu.Compiler.Lower.Dynamic (widen)
 import Pudu.Frontend.Syntax (Expression (..), Located (..))
 import Pudu.IntegerLiteral (IntegerKind (..))
 import Pudu.Source (Span)
@@ -25,10 +26,13 @@ lowerArrayLiteral :: LowerExpression -> LowerState -> Span -> [Located Expressio
 lowerArrayLiteral lower state at members = case arrayAt state at members of
   Just kind@(CoreArrayType element) -> case collect lower state members of
     (after, Nothing) -> refused after
-    (after, Just cores)
+    (after, Just written)
       | any stops cores -> (after, Just (stopped at cores, CoreNeverType))
       | all ((== element) . coreExpressionType) cores -> (after, Just (CoreExpression at kind (CoreArray cores), kind))
       | otherwise -> halt at "an array literal whose items have different types" after
+     where
+      -- An item of an implementing type widens where the array holds dynamic ones.
+      cores = map (widen (contextTypes (lowerContext after)) element) written
   _ -> halt at "an array without a native element type" state
 
 {-| The array type at a literal. `[]` with nothing to settle its element

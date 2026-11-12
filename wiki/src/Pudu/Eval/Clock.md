@@ -92,6 +92,18 @@ DEPTH 0.40 (SHALLOW by intent). It is a boundary, not a calendar.
   injection bug named after it. The program and its arguments are separate because that is what
   makes them unambiguous. _Rejected:_ a single command string.
 
+## Instants an Int carries (#846)
+
+`parseInstant` refuses an instant whose millisecond magnitude is 2^64 or more
+with the same message as a text that does not fit. An `Int` carries magnitudes
+below 2^64 (deferred out-of-range values included); the native reader has the
+same bound, so both engines answer every text alike.
+
+Resolved Grill Log: bound the interpreter rather than widen native instants to
+a BigInt. _Rationale:_ `parseTime` answers `Int`, and no `Int` holds a larger
+magnitude. _Rejected:_ keeping the interpreter's unbounded answer (an `Int` no
+other operation can carry).
+
 ## Referenced by
 
 [[src/Pudu/Eval/_MOC]] · [[Evaluator]] · [[Eval Io]]

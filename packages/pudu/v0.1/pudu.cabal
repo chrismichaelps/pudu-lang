@@ -135,6 +135,23 @@ library
     Pudu.Backend.Runtime.Kernel.Swiss
     Pudu.Backend.Runtime.Kernel.Verify
     Pudu.Backend.Runtime.Kernel.Xml
+    Pudu.Backend.Runtime.Host
+    Pudu.Backend.Runtime.Host.Child
+    Pudu.Backend.Runtime.Host.Compress
+    Pudu.Backend.Runtime.Host.Concurrent
+    Pudu.Backend.Runtime.Host.File
+    Pudu.Backend.Runtime.Host.Handle
+    Pudu.Backend.Runtime.Host.Input
+    Pudu.Backend.Runtime.Host.Lanes
+    Pudu.Backend.Runtime.Host.Math
+    Pudu.Backend.Runtime.Host.Net
+    Pudu.Backend.Runtime.Host.Process
+    Pudu.Backend.Runtime.Host.Scope
+    Pudu.Backend.Runtime.Host.Signal
+    Pudu.Backend.Runtime.Host.State
+    Pudu.Backend.Runtime.Host.Time
+    Pudu.Backend.Runtime.Host.TimeParse
+    Pudu.Backend.Runtime.Host.Tls
     Pudu.Backend.Runtime.Range
     Pudu.Backend.Runtime.Process
     Pudu.Backend.Runtime.Output
@@ -180,6 +197,7 @@ library
     Pudu.Backend.Emit.Frame.Value
     Pudu.Backend.Emit.Frame.Body
     Pudu.Compiler.Lower.Body
+    Pudu.Compiler.Lower.FunctionBody
     Pudu.Compiler.Lower.Constant
     Pudu.Compiler.Lower.Reference
     Pudu.Compiler.Lower.Method
@@ -197,12 +215,18 @@ library
     Pudu.Compiler.Lower.Slice
     Pudu.Compiler.Lower.Convert
     Pudu.Compiler.Lower.Decimal
+    Pudu.Compiler.Lower.Dynamic
     Pudu.Compiler.Lower.Default
     Pudu.Compiler.Lower.Keyed
     Pudu.Compiler.Lower.WordMap
     Pudu.Compiler.Lower.Store
     Pudu.Compiler.Lower.Swiss
     Pudu.Compiler.Lower.Kernel
+    Pudu.Compiler.Lower.Kernel.Host
+    Pudu.Compiler.Lower.Kernel.Lanes
+    Pudu.Compiler.Lower.Kernel.Shape
+    Pudu.Compiler.Lower.Concurrent
+    Pudu.Compiler.Lower.Scope
     Pudu.Compiler.Lower.Primitive
     Pudu.Compiler.Lower.MultiMap
     Pudu.Compiler.Lower.Loan
@@ -223,6 +247,8 @@ library
     Pudu.Compiler.Program
     Pudu.Compiler.Product
     Pudu.Core
+    Pudu.Core.Bytes
+    Pudu.Core.Closure
     Pudu.Core.Keyed
     Pudu.Core.Kernel
     Pudu.Core.Frame

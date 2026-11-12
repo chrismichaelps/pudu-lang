@@ -9,7 +9,8 @@ import qualified Data.Map.Strict as Map
 import qualified Data.Set as Set
 import Data.Text (Text)
 import GHC.Float (castDoubleToWord64)
-import Pudu.Compiler.Lower.State (LowerContext (..), LowerState (..), halt, lookupConstant)
+import Pudu.Compiler.Lower.State (LowerContext (..), LowerState (..), halt, inModule, lookupConstant, lookupInitializer)
+import Pudu.Frontend.Syntax (Expression, Located)
 import Pudu.Compiler.Lower.Types (LowerTypes, recordFields, sumVariants, typeForSpan)
 import Pudu.Core
 import Pudu.DecimalLiteral (Decimal (..))
@@ -18,11 +19,28 @@ import Pudu.Eval.Value (Value (..), OrdValue (..))
 import Pudu.IntegerLiteral (IntegerKind (PlatformSigned, UnsignedKind), integerKindFits)
 import Pudu.Source (Span)
 
-lowerConstant :: LowerState -> Span -> [Text] -> Maybe (LowerState, Maybe (CoreExpression, CoreType))
-lowerConstant state at path = lower <$> lookupConstant state path
+{-| A constant folding left no product for, such as a table of functions,
+    runs its initializer where it is read: in its own module, seeing no
+    local of the reader. Folding admits no effect, so each read answers what
+    the one evaluation would. -}
+lowerConstant :: (LowerState -> Located Expression -> (LowerState, Maybe (CoreExpression, CoreType)))
+  -> LowerState -> Span -> [Text] -> Maybe (LowerState, Maybe (CoreExpression, CoreType))
+lowerConstant lowerExpression state at path = lower <$> lookupConstant state path
  where
   types = contextTypes (lowerContext state)
-  lower Nothing = halt at "a constant without a portable folded value" state
+  lower Nothing = case lookupInitializer state path of
+    Just (owner, initial) ->
+      let entered = (inModule owner state){lowerScopes = [], lowerLoops = [], lowerLoaned = []}
+          (after, lowered) = lowerExpression entered initial
+          context = lowerContext after
+          restored = after
+            { lowerScopes = lowerScopes state, lowerLoops = lowerLoops state, lowerLoaned = lowerLoaned state
+            , lowerContext = context{contextModule = contextModule (lowerContext state), contextTypes = types} }
+       in case lowered of
+            Just (core, kind) | maybe True (== kind) (typeForSpan types at) -> (restored, Just (core, kind))
+            Just _ -> halt at "a constant whose initializer has another type" restored
+            Nothing -> (restored, Nothing)
+    Nothing -> halt at "a constant without a portable folded value" state
   lower (Just frozen) = case typeForSpan types at of
     Nothing -> halt at "a constant without represented solved native type facts" state
     Just kind -> case project types at kind (thaw frozen) of

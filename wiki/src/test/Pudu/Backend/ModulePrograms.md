@@ -89,6 +89,8 @@ Includes [[Backend Range Programs]] in both lists.
 
 Includes [[Backend Bytes Programs]] in both lists.
 
+A function constant and an array of them are called through their values (#846).
+
 ## Referenced by
 
 [[Backend Native Tests]] · [[Native Emission Coverage]] · [[src/_MOC]]

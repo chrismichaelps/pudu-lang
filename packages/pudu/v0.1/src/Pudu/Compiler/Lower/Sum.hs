@@ -13,6 +13,7 @@ import Pudu.Compiler.Lower.Control (expressionIsPrintValued)
 import Pudu.Compiler.Lower.State (LowerContext (..), LowerState (..), halt, refused)
 import Pudu.Compiler.Lower.Types (sumVariants, typeForSpan)
 import Pudu.Core
+import Pudu.Compiler.Lower.Dynamic (widen)
 import Pudu.Frontend.Syntax (Expression, Located (..))
 import Pudu.Source (Span)
 
@@ -33,19 +34,19 @@ variantAt state at name arity = do
 lowerVariant :: LowerExpression -> LowerState -> Span -> Text -> [Located Expression]
   -> Maybe (LowerState, Maybe (CoreExpression, CoreType))
 lowerVariant lower state at name arguments = do
-  (kind, _) <- variantAt state at name (Just (length arguments))
-  Just (go kind state [] arguments)
+  (kind, variant) <- variantAt state at name (Just (length arguments))
+  Just (go (map snd (coreVariantFields variant)) kind state [] arguments)
  where
-  go kind current done [] =
-    let members = reverse done
+  go expected kind current done [] =
+    let members = zipWith (widen (contextTypes (lowerContext current))) expected (reverse done)
      in if any ((== CoreNeverType) . coreExpressionType) members
           then (current, Just (CoreExpression at CoreNeverType (CoreBlockValue (CoreBlock
                  [CoreStatement (coreExpressionSpan member) (CoreEvaluate member) | member <- members] Nothing)), CoreNeverType))
           else (current, Just (CoreExpression at kind (CoreConstruct name (zip labels members)), kind))
-  go kind current done (argument : rest) = case lower current argument of
+  go expected kind current done (argument : rest) = case lower current argument of
     (next, Nothing) -> refused next
     (next, Just (core, _))
       | expressionIsPrintValued core -> halt (locatedSpan argument) "a Result[(), Str] payload" next
-      | coreExpressionType core == CoreNeverType -> go kind next (core : done) []
-      | otherwise -> go kind next (core : done) rest
+      | coreExpressionType core == CoreNeverType -> go (take (length done + 1) expected) kind next (core : done) []
+      | otherwise -> go expected kind next (core : done) rest
   labels = map (Text.pack . show) [0 :: Int ..]

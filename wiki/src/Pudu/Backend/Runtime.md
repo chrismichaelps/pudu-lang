@@ -355,3 +355,14 @@ Resolved Grill Log: the reference is the interpreter on the platform the
 program runs on. Linux CI run 41917512128 measured it as `Exited 1` against
 native `-13` for `err-pipe`; macOS measures `-13` for both. The revision is 20
 because emitted programs behave differently on Linux.
+
+## Host services (#846, revision 21)
+
+The prelude asks for the POSIX declarations Linux hides by default
+(`_DEFAULT_SOURCE`, `_POSIX_C_SOURCE 200809L`) only where the translation
+unit has not already chosen them, so a harness or embedder that defines either
+before its own headers is not overridden; the host parts follow the codec
+families ([[Native Host Runtime]]). `pudu_trap_hook` runs before blame and cleanup: a started
+thread installs it so a failure unwinds that thread and is stashed for the
+scope rather than ending the process. The revision is 21 because emitted
+programs gain host behavior and the thread hook.

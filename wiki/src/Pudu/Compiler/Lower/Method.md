@@ -95,6 +95,12 @@ looks there first.
 
 Byte methods answer before any implementation.
 
+## Dynamic receivers first (#828, #846)
+
+A method of a dynamic value holds its receiver, then its arguments, in locals
+before matching on the type the receiver holds, as every other receiver call
+runs under [[Callee First Call Evaluation]].
+
 ## Referenced by
 
 [[Compiler Lower]] · [[Compiler Lower Body]] · [[Native Trait Methods]]
@@ -195,3 +201,19 @@ arguments take precedence over same-spelling method matches.
 ## Indexed stores (#840)
 
 Built-in dispatch precedes trait lookup for the store's seven methods, read from the evaluator's table. Resolved Grill Log: one method list for both engines.
+
+## Dynamic dispatch, written type arguments and constructor parameters (#846)
+
+A method on a `dynamic Trait` value runs its arguments first, then its
+receiver, and matches the held type against the trait's closed sum; each arm
+calls the implementation selected for that type. The result type is the first
+arm's, and an empty sum refuses where the call is written.
+
+A qualifier naming a type parameter in a generic copy resolves through the
+copy's bindings before selection. A qualified call carries what it wrote: an
+owned receiver type (`Option[Str].decode`), the type arguments written on the
+call, and the instantiation checking inferred. `invoke` widens each operand to
+its parameter's type, so a constructor parameter (`F[_]`) works plain and
+through a trait. Resolved Grill Log: dynamic dispatch is a match over the
+program's implementations, not a table of addresses; written, elaborated and
+inferred arguments all select the same instance.

@@ -178,7 +178,14 @@ modulePrograms =
 
 constantPrograms :: [(String, Text, Text)]
 constantPrograms =
-  [ ("folded numeric constants keep widths and compile-time answers", program
+  [ ("a function constant is called through its value", program
+      [ "const STEP: fn(Int) -> Int = |value| value + 1"
+      , "const TABLE: Array[fn(Int) -> Int] = [|n| n * 2, |n| n - 1]"
+      , "fn main() -> Int {"
+      , "  print(display(STEP(41)) + \" \" + display(TABLE[0](5)) + \" \" + display(TABLE[1](5)) + \" \" + display(STEP(STEP(0))))"
+      , "  0", "}" ]
+    , "42 10 4 2\n")
+  , ("folded numeric constants keep widths and compile-time answers", program
       [ "comptime fn square(n: Int) -> Int { n * n }"
       , "type Small = Int8", "const BASE = 7", "const ANSWER = square(BASE)"
       , "const SMALL: Small = 127i8"

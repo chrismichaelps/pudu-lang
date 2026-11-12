@@ -12,6 +12,9 @@ CoreKeyedMethodName is owned by [[Core Keyed Operations]] and reexported here
 imports and constructors while keeping this module below 500 lines; word-map
 tags require exact UInt64 payloads and retain the existing frame/cell ABI.
 
+CoreBytesMethodName is owned by [[Core Byte Operations]] and reexported here
+unchanged, keeping this module below 500 lines (#846).
+
 The typed, source-located data contract for native lowering and emission.
 This partition registers the model only; it adds no native command or execution
 path. It projects the existing completion branch's declarations unchanged.

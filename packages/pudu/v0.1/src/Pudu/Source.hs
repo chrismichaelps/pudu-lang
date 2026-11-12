@@ -1,6 +1,7 @@
 {-| @Source.Text.Module — preserves stable source locations -}
 module Pudu.Source
-  ( Offset
+  ( typeArgumentsKey
+  , Offset
   , Position (..)
   , Source
   , SourceName (..)
@@ -269,3 +270,9 @@ lineStartsOf textValue = Map.fromDistinctAscList ((0, 1) : walk 0 1 False textVa
 
 sourceLength :: Source -> Offset
 sourceLength = Offset . sourceScalarLength
+
+{-| Where a type application's written arguments are recorded: its own span
+    with the ends exchanged, which covers no offset, so no reader pointing at
+    the source ever finds it. -}
+typeArgumentsKey :: Span -> Span
+typeArgumentsKey at = at{spanStart = spanEnd at, spanEnd = spanStart at}

@@ -9,6 +9,8 @@ tags: [moc, architecture]
 - [[Callee First Call Evaluation]] — once-held callees and receivers before supplied arguments.
 - [[Native Indexed Stores]] — `Buckets[V]` on the tree carrier, hashing and MultiMap primitives.
 - [[Native Builtin Kernels]] — buffer, column, flat-table, digest, checksum, sealing, signature, audio and codec builtins.
+- [[Native Host Services]] — tasks, scopes, host services and concurrency (#846).
+- [[Native Type Abstractions]] — dynamic values, constructor parameters, sequence bindings and type-parameter members (#846).
 - [[Native Word Map Queries]] — sparse word predicates, UInt128 counts and wrapped member enumeration.
 
 - [[Native Word Map Algebra]] — typed linear sparse-word tree operations.

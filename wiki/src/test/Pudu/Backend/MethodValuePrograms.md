@@ -23,6 +23,8 @@ allocation.
 
 [[Backend Output Callable Programs]] · [[Backend Native Tests]] · [[Backend Text Leak Tests]] · [[Pudu Test Cabal Manifest]]
 
+`toText` taken as a value from Int, Float, Bool, Decimal, UInt8, tuples, records and sums renders `<method toText>`, calls render the receiver and equality compares receivers (#846).
+
 ## Referenced by
 
 [[Native Method Values]] · [[src/Pudu/Backend/_MOC]]

@@ -22,6 +22,10 @@ operation.
 
 [[Backend Emit Cell]] · [[Native Bytes Runtime]]
 
+## strided (#846)
+
+`BytesStridedOf` calls `pudu_bytes_strided` from the `bytes_strided` part.
+
 ## Referenced by
 
 [[Native Aggregate Emission]] · [[Backend Frame Values]] · [[src/Pudu/Backend/_MOC]]

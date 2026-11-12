@@ -181,3 +181,10 @@ Include [[Backend Text View Programs]] in full and focused counted cleanup. Shar
 ## Indexed stores (#840)
 
 Count allocations over storeSuccessPrograms. Resolved Grill Log: the harness compiles one module, so library-importing programs are covered by differential runs only.
+
+## Host services and type abstractions (#846)
+
+Count allocations over `hostCountedPrograms` and abstraction successes.
+Resolved Grill Log: task, scope, file and thread programs that own resources
+run only through the counted harness; programs that would wait or touch the
+network stay out of it.

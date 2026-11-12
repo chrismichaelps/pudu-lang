@@ -156,3 +156,20 @@ A program holding Decimal gets the `decimal` member, its value, retain and relea
 ## Indexed stores (#840)
 
 A store entry renders through its show helper. The hash parts join the post-frame runtime parts. A builtin taken as a value, like a method value, neither counts depth nor keeps its own failure site: `blames` is set for both. Resolved Grill Log: the interpreter reports a builtin's failure at the call made through it; explicit caller failures were already there, and sited arithmetic inside a builtin body now agrees.
+
+## Threads, arguments and active runs (#846)
+
+`frameEngine` takes whether the program starts a thread and whether it reads
+its arguments. With threads, the active frame and its depth are
+`_Thread_local`, and `pudu_run_closure` starts a lifted closure at the depth
+its thread was created from. `pudu_run_frames` now installs the hooks, calls
+`pudu_run_active` and clears the hooks; a started thread's failure ends that
+thread rather than the program, through the runtime's trap hook.
+
+A program that reads its arguments is entered as
+`int main(int count, char **values)` and stores the vector in the host runtime
+before preparing I/O; every other program keeps `int main(void)`.
+
+Resolved Grill Log: thread state is per-thread and the hooks are per-run; the
+entry shape is chosen only when the argument kernel is selected, so no program
+pays for a parameter it cannot read.

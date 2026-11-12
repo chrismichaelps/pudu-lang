@@ -8,7 +8,26 @@ import qualified Data.Text as Text
 
 methodValueSuccessPrograms :: [(String, Text, Text, Text)]
 methodValueSuccessPrograms =
-  [ ("text, array and map methods are values bound to their receivers", program
+  [ ("toText on a type that declares none is a text method bound to its receiver", program
+      [ "type Point = { x: Int, y: Int }"
+      , "type Shade = Light | Dark(Int)"
+      , "fn main() -> Int {"
+      , "  let count = 42"
+      , "  let render = count.toText"
+      , "  let ratio = 1.5"
+      , "  let pair = (1, \"a\")"
+      , "  let point = Point{x: 1, y: 2}"
+      , "  let flag = true"
+      , "  let price = 2.5d"
+      , "  let small = 3u8"
+      , "  print(render() + \" \" + ratio.toText() + \" \" + flag.toText() + \" \" + price.toText() + \" \" + small.toText())"
+      , "  let shown = [render, ratio.toText, pair.toText, point.toText, Dark(3).toText]"
+      , "  for each in shown { print(each() + \" \" + show(each)) }"
+      , "  print(display(render == count.toText) + \" \" + display(render == 7.toText) + \" \" + display(point.toText == point.toText))"
+      , "  0"
+      , "}" ]
+    , "42 1.5 true 2.5 3\n42 <method toText>\n1.5 <method toText>\n(1, \"a\") <method toText>\nPoint{x: 1, y: 2} <method toText>\nDark(3) <method toText>\ntrue false true\n", "")
+  , ("text, array and map methods are values bound to their receivers", program
       [ "fn main() -> Int {"
       , "  let text = \"hello\""
       , "  let size = text.length"

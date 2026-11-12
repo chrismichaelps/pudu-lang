@@ -22,3 +22,14 @@ already holds; nothing is converted here.
 ## Referenced by
 
 [[Backend Frame Values]] · [[Native Builtin Kernels]]
+
+## Host kernels (#846)
+
+`KernelHost host` emits `pudu_host_<host>`, `KernelHostState` emits
+`pudu_host_state` and `KernelHostMessage` emits `pudu_host_message`. A kernel
+that releases a held operand (`cell_open`, `cell_swap`, `channel_push`,
+`thread_spawn`, `scope_adopt`, `scope_stash`) also names the drop helper of
+that operand's type; one that answers held data (`cell_get`, `channel_pull`,
+`channel_pull_within`, `scope_stashed`) names the drop helper of its value.
+Resolved Grill Log: the box is released as its own type through the standard
+drop helper, so the host never guesses a carrier.

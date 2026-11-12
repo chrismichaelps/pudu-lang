@@ -56,10 +56,10 @@ frameTypes wide big decimal text boxes =
 
 {-| With owned slots, `pudu_drop_cell` and `pudu_retain_cell` must already be
     written; [[Native Aggregate Emission]] writes them. -}
-frameEngine :: Bool -> [Text]
-frameEngine owned =
-  [ "static pudu_frame *pudu_active_frame = NULL;"
-  , "static size_t pudu_frame_depth = 0;"
+frameEngine :: Bool -> Bool -> [Text]
+frameEngine owned threads =
+  [ "static " <> local <> "pudu_frame *pudu_active_frame = NULL;"
+  , "static " <> local <> "size_t pudu_frame_depth = 0;"
   , "/* A frame owns the references in its slots; letting it go releases them. */"
   , "static void pudu_free_frame(pudu_frame *frame) {"
   ] <> (if owned then
@@ -116,12 +116,8 @@ frameEngine owned =
   , "  if (pudu_active_frame == NULL || !pudu_functions[pudu_active_frame->function].blames) return NULL;"
   , "  return pudu_active_frame->call_site;"
   , "}"
-  , "static pudu_cell pudu_run_frames(size_t entry) {"
-  , "  if (pudu_active_frame != NULL) pudu_invalid_frame();"
-  , "  pudu_cleanup_hook = pudu_unwind_frames;"
-  , "  pudu_blame_hook = pudu_blamed_site;"
-  , "  pudu_active_frame = pudu_new_frame(entry, NULL, 0);"
-  , "  pudu_frame_depth = 1;"
+  , "/* Runs the active frame and everything it calls until it returns. */"
+  , "static pudu_cell pudu_run_active(void) {"
   , "  for (;;) {"
   , "    pudu_frame *frame = pudu_active_frame;"
   , "    pudu_step step = pudu_functions[frame->function].body(frame);"
@@ -154,10 +150,35 @@ frameEngine owned =
   , "      pudu_active_frame = parent;"
   , "      pudu_free_frame(frame);"
   , "      if (counted) pudu_frame_depth -= 1;"
-  , "      if (parent == NULL) { pudu_cleanup_hook = NULL; pudu_blame_hook = NULL; return step.result; }"
+  , "      if (parent == NULL) return step.result;"
   , "    } else {"
   , "      pudu_invalid_frame();"
   , "    }"
   , "  }"
   , "}"
-  ]
+  , "static pudu_cell pudu_run_frames(size_t entry) {"
+  , "  pudu_cell result;"
+  , "  if (pudu_active_frame != NULL) pudu_invalid_frame();"
+  , "  pudu_cleanup_hook = pudu_unwind_frames;"
+  , "  pudu_blame_hook = pudu_blamed_site;"
+  , "  pudu_active_frame = pudu_new_frame(entry, NULL, 0);"
+  , "  pudu_frame_depth = 1;"
+  , "  result = pudu_run_active();"
+  , "  pudu_cleanup_hook = NULL;"
+  , "  pudu_blame_hook = NULL;"
+  , "  return result;"
+  , "}"
+  ] <> (if threads then
+  [ "/* A function value run on a thread of its own, from the depth it was started at. */"
+  , "static pudu_cell pudu_run_closure(pudu_box *closure, size_t depth) {"
+  , "  size_t function = (size_t)closure->fields[0].scalar;"
+  , "  pudu_cell argument;"
+  , "  if (pudu_active_frame != NULL || function >= sizeof pudu_functions / sizeof pudu_functions[0]) pudu_invalid_frame();"
+  , "  argument.box = closure;"
+  , "  pudu_active_frame = pudu_new_frame(function, &argument, pudu_functions[function].environment ? 1 : 0);"
+  , "  pudu_frame_depth = depth + (pudu_functions[function].counted ? 1 : 0);"
+  , "  return pudu_run_active();"
+  , "}"
+  ] else [])
+ where
+  local = if threads then "_Thread_local " else ""

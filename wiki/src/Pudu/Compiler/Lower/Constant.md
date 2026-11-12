@@ -10,11 +10,13 @@ aliases: [Compiler Lower Constant]
 ## Purpose and interface
 
 Own native projection of module-folded plain data under [[Native Folded
-Constants]]. `lowerConstant` takes LowerState, the complete reference Span
-and a written name path. It declines names that are not constants, or returns
-the ordinary lowering result with either exact Core data or a located refusal.
-State owns lexical/module lookup; Types owns settled facts and canonical
-layouts. No backend module imports this compiler-owned boundary.
+Constants]]. `lowerConstant` takes the expression lowerer, LowerState, the
+complete reference Span and a written name path. The callback lets a constant
+without a product compile its initializer in its own module. It declines names
+that are not constants, or returns the ordinary lowering result with either
+exact Core data or a located refusal. State owns lexical/module lookup; Types
+owns settled facts and canonical layouts. No backend module imports this
+compiler-owned boundary.
 
 ## Projection and failure
 
@@ -27,10 +29,12 @@ by their expected sum's declared tag and payload types. Validate carrier,
 field and payload shape before building Core; no partial indexing or invented
 inhabitants. Every nested expression keeps the use's source provenance.
 
-Unsupported frozen kinds, unavailable products, missing facts and mismatched
-shapes return E6001 at the constant reference. Unused unsupported constants
-need no native representation. Do not parse show output, evaluate syntax,
-resolve aliases again, or change Core/runtime ABI.
+Unsupported frozen kinds, missing facts and mismatched shapes return E6001 at
+the constant reference. A declared constant whose folding left no portable
+product compiles its written initializer there instead, in the declaring
+module. Unused unsupported constants need no native representation. Do not
+parse show output, evaluate syntax at runtime, resolve aliases again, or
+change Core/runtime ABI.
 
 ## Resolved Grill Log
 
@@ -40,7 +44,8 @@ resolve aliases again, or change Core/runtime ABI.
   must follow the same cleanup and transfer paths as source literals.
 - All fields/payloads are validated against the chosen canonical layout.
   A missing/extra member never truncates a zip into a different valid value.
-- Missing folded products refuse; they do not silently execute the initializer.
+- Missing folded products compile their written initializer in the declaring
+  module; they do not run it at runtime or read the reader's locals.
 
 ## Dependencies and consumers
 
@@ -92,3 +97,18 @@ by rendered names, or evaluating initializers. Ordinary carriers own cleanup.
 ## Indexed stores (#840)
 
 A folded store projects as the from-array builder over its (Int, value) pairs in key order. Resolved Grill Log: reuse the map projection; keys are already narrowed.
+
+## Initializer fallback (#846)
+
+When folding leaves no product, `lookupInitializer` finds the declaring module
+and its written expression. Lowering enters that module, clears the reader's
+lexical scopes, loops and loans, compiles the expression there, and restores
+the reader's module, facts, scopes, loops and loans. The Core data keeps the
+use span. A supplied product is preferred; a malformed supplied product still
+refuses rather than falling back. A callable table such as
+`Array[fn(Int) -> Int]` therefore becomes ordinary closures.
+
+Resolved Grill Log: compiling an initializer at its use is not evaluating it
+at runtime. Folding already denied effects, so every read answers the same
+value the one evaluation would, and the reader's locals never become visible
+to the initializer.

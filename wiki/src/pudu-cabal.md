@@ -21,6 +21,8 @@ Register [[Compiler Product Publication]] as the bounded cache-admission and
 product-lifetime boundary. Resolved Grill Log: preserve compiler phases and
 cache identity; full analysis remains available independently of executable reuse.
 
+Register [[Native Host Input]] alongside the other host families. Resolved Grill Log: standard-input lowering and whole-file decoding use the existing host boundary with no new package dependency.
+
 ## Purpose and interface
 
 Distribute `lib/Ark/Assets/*.pudu`, including [[Ark Texture Asset]]. Resolved Grill Log: nested
@@ -656,3 +658,16 @@ Register Pudu.Backend.Emit.Frame.TextView with the existing library dependencies
 ## Indexed stores (#840)
 
 Register Pudu.Compiler.Lower.Store, Pudu.Compiler.Lower.MultiMap and Pudu.Backend.Runtime.Hash. Resolved Grill Log: no new dependency.
+
+## Host services and type abstractions (#846)
+
+Register Pudu.Backend.Runtime.Host and its Concurrent, File, Handle, Lanes,
+Math, Process, Scope and State parts in exposed-modules, after the kernel
+families. Register Pudu.Compiler.Lower.Dynamic, Concurrent, Scope,
+FunctionBody and the Kernel Host, Lanes and Shape parts beside their existing
+families.
+
+Resolved Grill Log: the host runtime is one more self-contained family after
+the codecs; the compiler modules stay compiler-owned. Generated programs link
+`-lm` and `-pthread` through [[Native Toolchain]]; the Haskell package gains no
+dependency.

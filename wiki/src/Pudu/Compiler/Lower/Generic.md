@@ -96,3 +96,26 @@ display-text nominal identities.
 ## Indexed stores (#840)
 
 unformed spells CoreStoreType back as `Buckets[...]`. Resolved Grill Log: generic copies over stores match by the checker's own spelling.
+
+## Open applications and constructor parameters (#846)
+
+`admitCalleeGiven` receives the arguments' own types. When checking left the
+callee's fact as an application it never settled, the operands fill the
+scheme's inputs and the result stays open; a constructor parameter applied to
+arguments matches against the actual type's constructor and the arguments the
+application does not supply. Written type arguments fill the scheme's
+parameters in declared order.
+
+`throughBounds` settles parameters named only by a bound: the implementation
+head providing that bound supplies the bound's arguments, and those matches may
+settle further parameters, with fuel against cycles. `instantiationOf` does the
+same for a call checking recorded no fact for, as a `for` asking a sequence for
+`begin` does. `writtenCoreType` forms a call's written types when no fact
+exists. Resolved Grill Log: only checking's recorded instantiation and the
+operands' solved facts select a copy; nothing is inferred from spelling alone.
+
+Written type arguments are admitted through `writtenTypeArguments`, moved here
+from [[Compiler Lower Body]]: it reads checking's recorded tuple at
+`typeArgumentsKey` first, then forms what the call wrote. Resolved Grill Log:
+the application's written arguments belong with the specialization they feed,
+and keeping them here leaves the body module below the size target.

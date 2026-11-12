@@ -29,9 +29,12 @@ and scopes; no narrowing at transfers, calls or stored values.
 ## Purpose and interface
 
 Lower the reachable function bodies selected by [[Compiler Lower]]. Exports
-`lowerEntryBody` and `lowerFunctionBody`, both returning accumulated state and
-an optional Core function. [[Compiler Lower State]] owns scopes, local numbering
-and program context; [[Compiler Lower Signature]] owns signature validation.
+`lowerEntryBody`, `lowerFunctionBody` and `lowerExpression`. The two body
+boundaries delegate to [[Compiler Lower Function Body]], supplying the block
+and expression callbacks; this module keeps the mutually recursive block,
+statement, expression and call traversal. [[Compiler Lower State]] owns scopes,
+local numbering and program context; [[Compiler Lower Signature]] owns
+signature validation.
 
 ```haskell
 lowerEntryBody :: Located Function -> LowerState -> (LowerState, Maybe CoreFunction)
@@ -184,6 +187,15 @@ methods on a range.
 
 `bytesOf`, when the name is the prelude's, and byte methods go to
 [[Compiler Lower Bytes]]; an entry may return Bytes.
+
+## Calls through constants (#846)
+
+A call whose callee names a module constant, bare or qualified, is a call
+through a value: the constant is read as [[Compiler Lower Constant]] reads it
+(its folded value or its written initializer) and called with the arguments.
+
+Resolved Grill Log: route through `lowerValueCall` rather than a constant-only
+call path, so ordering, defaults and loans match every other value call.
 
 ## Referenced by
 
@@ -460,3 +472,31 @@ After nearer name/function/variant resolution, delegate the six text-view primit
 ## Indexed stores (#840)
 
 Dispatch `bucketsOf`, `hashOf`, `mixHash`, `multiMapAdd` and `multiMapContains` to [[Compiler Lower Store]] after the word-map primitives. Result admission uses treeType. Resolved Grill Log: local and module functions of the same name still win, as for every prelude name.
+
+## Host services, tasks and dynamic values (#846)
+
+An async function answers the task of its body: its Core body is the lifted
+task, and nothing runs until an await. An async entry is awaited immediately,
+with a Result unwrapped into the entry's own answer and a failure printed or
+turned into the exit status. `async with scope` delegates to [[Compiler Lower
+Scope]], and every `return`, failure, `break` and `continue` joins the scopes
+it leaves.
+
+Values widen to a `dynamic` expectation at every place a literal or operand is
+built: bindings, assignments, call arguments, array items, record fields, sum
+payloads and `match` arms. A static member on a written type such as
+`Option[Str].decode(json)` goes to [[Compiler Lower Method]] as an owned
+method. A `let` whose pattern tests a sequence length, at any depth, goes to
+[[Compiler Lower Match]]'s `lowerLetSequence` and stops with E7013 when the
+length differs. Constants dispatch through [[Compiler Lower Constant]], whose
+callback lets an unrepresented initializer lower where it is read.
+
+## Function-boundary split (#846)
+
+The entry and named-function shaping now live in [[Compiler Lower Function
+Body]]; this module passes `lowerExpression` and `lowerBlock` to it and keeps
+the single block/expression traversal. Resolved Grill Log: the traversal and
+the function boundary are separate responsibilities, so the split removes
+dispatch growth from this module instead of adding another concern. The module
+stays under the 500-line target. Written type-argument facts moved to
+[[Compiler Lower Generic]] with `writtenTypeArguments`.

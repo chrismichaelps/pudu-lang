@@ -20,3 +20,11 @@ unused static function is written.
 ## Referenced by
 
 [[Backend Frame Program]] · [[Native Runtime Dependencies]] · [[Native Builtin Kernels]]
+
+## Host families (#846)
+
+`hostRuntimeParts` is appended after the CSV family, so host functions may call
+the codecs and every earlier family but none may call them. Resolved Grill
+Log: a family comes after what it uses; the host parts need only prelude and
+cell types, and their place at the end preserves the existing dependency
+order.

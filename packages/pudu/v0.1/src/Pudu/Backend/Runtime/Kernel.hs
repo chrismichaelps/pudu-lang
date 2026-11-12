@@ -22,13 +22,14 @@ import Pudu.Backend.Runtime.Kernel.Sort (sortKernelParts)
 import Pudu.Backend.Runtime.Kernel.Swiss (swissKernelParts)
 import Pudu.Backend.Runtime.Kernel.Verify (verifyKernelParts)
 import Pudu.Backend.Runtime.Kernel.Xml (xmlKernelParts)
+import Pudu.Backend.Runtime.Host (hostRuntimeParts)
 
 {-| A family comes after the families its parts call. -}
 families :: [(Text, [Text], [Text])]
 families = bytesKernelParts <> bufferKernelParts <> columnKernelParts <> sortKernelParts <> swissKernelParts
   <> sha2KernelParts <> sha3KernelParts <> blake2KernelParts <> macKernelParts <> checksumKernelParts
   <> sealKernelParts <> naturalKernelParts <> verifyKernelParts <> audioKernelParts
-  <> jsonKernelParts <> xmlKernelParts <> csvKernelParts
+  <> jsonKernelParts <> xmlKernelParts <> csvKernelParts <> hostRuntimeParts
 
 kernelRuntimeParts :: [(Text, [Text])]
 kernelRuntimeParts = [(name, body) | (name, _, body) <- families]

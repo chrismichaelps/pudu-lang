@@ -11,7 +11,7 @@ import Pudu.Compiler.Lower.Types (typeForSpan, nativeIntegerKind, nativeValueTyp
 import Pudu.Core
 import Pudu.Diagnostic.Evaluation
   ( cannotApplyBinaryMessage, cannotApplyUnaryMessage, unsupportedOperatorMessage )
-import Pudu.Frontend.Syntax (Expression (LiteralExpression), Literal (ResolvedInteger), Located (..))
+import Pudu.Frontend.Syntax (Expression (ArrayExpression, LiteralExpression), Literal (ResolvedInteger), Located (..))
 import Pudu.IntegerLiteral (integerKindFits)
 import Pudu.Source (Span)
 
@@ -43,8 +43,8 @@ lowerUnary lower state at operator operand
 lowerBinary :: LowerExpression -> LowerState -> Span -> Located Expression -> Text -> Located Expression -> (LowerState, Maybe (CoreExpression, CoreType))
 lowerBinary lower state at left operator right
   | operator == "=" = halt at "an assignment used as a value" state
-  | otherwise = case lower state left of
-      (afterLeft, Just (coreLeft, leftType)) -> case lower afterLeft right of
+  | otherwise = case lowerLeft of
+      (afterLeft, Just (coreLeft, leftType)) -> case lowerOperand afterLeft right (Just leftType) of
         (after, Just (coreRight, rightType))
           | operator `elem` ["&&", "||"] ->
               if all (`elem` [CoreBoolType, CoreNeverType]) [leftType, rightType]
@@ -75,6 +75,17 @@ lowerBinary lower state at left operator right
           | otherwise -> halt at ("the operator '" <> operator <> "' outside the native scalar subset") after
         (after, Nothing) -> refused after
       (after, Nothing) -> refused after
+ where
+  -- An empty array literal holds no element, so it takes the other
+  -- operand's array type where checking left its element open.
+  lowerOperand current (Located spanValue (ArrayExpression [])) (Just kind@(CoreArrayType _)) =
+    (current, Just (CoreExpression spanValue kind (CoreArray []), kind))
+  lowerOperand current operand _ = lower current operand
+  -- An empty literal on the left runs nothing, so the right operand's
+  -- lowered type can settle it without changing what runs first.
+  lowerLeft = case locatedValue left of
+    ArrayExpression [] | (_, Just (_, kind@(CoreArrayType _))) <- lower state right -> lowerOperand state left (Just kind)
+    _ -> lower state left
 
 represented :: Text -> CoreType -> CoreType -> Maybe (CoreBinaryOperator, CoreType)
 represented operator left right

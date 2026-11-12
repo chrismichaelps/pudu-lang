@@ -39,6 +39,7 @@ import Data.Word (Word64)
 import Pudu.FloatLiteral (FloatWidth, floatWidthType)
 import Pudu.IntegerLiteral (IntegerKind, integerKindName)
 import Pudu.Source (Span)
+import Pudu.Core.Bytes (CoreBytesMethodName (..))
 import Pudu.Core.Keyed (CoreKeyedMethodName (..))
 import Pudu.Core.Kernel (CoreKernelName (..))
 
@@ -342,25 +343,6 @@ data CoreDecimalMethodName
   | DecimalDivideWith
   | DecimalRoundTo
   | DecimalIsZero
-  deriving stock (Eq, Show)
-
-data CoreBytesMethodName
-  = BytesOfArray
-  | BytesFromText
-  | BytesLengthOf
-  | BytesAtIndex
-  | BytesSliceOf
-  | BytesTakeOf
-  | BytesDropOf
-  | BytesConcatWith
-  | BytesIndexOfValue
-  | BytesContainsValue
-  | BytesStartsWithValue
-  | BytesEndsWithValue
-  | BytesReversed
-  | BytesToArrayOf
-  | BytesIsText
-  | BytesAsText
   deriving stock (Eq, Show)
 
 {-| @Core.BinaryOperator — the operator vocabulary, already resolved from

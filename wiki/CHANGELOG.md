@@ -5,6 +5,34 @@ tags: [changelog]
 
 # Changelog
 
+## 2026-11-12 — Native corpus gaps closed (#846)
+
+- A sweep of every entry program found the in-scope refusals left; each is now native and matches the interpreter: `lanesOverlapPairs` ([[Native Host Lanes]]), `Bytes.strided` ([[Core Byte Operations]]), calls through function constants ([[Compiler Lower Body]]), `toText` taken as a value from a type that declares none ([[Core Closure Identities]]), and an empty array compared with an array whose element a generic solved ([[Compiler Lower Scalar]]).
+- [[Eval Clock]] refuses an instant whose magnitude no `Int` carries, so `parseTime` answers alike in both engines.
+- A record or tuple of Unit members emits a warning-free show helper.
+
+## 2026-11-12 — Native standard input (#846)
+
+- [[Native Host Input]] emits standard-input line reads, including calls through a builtin value, end of input, and persistent decoding refusals.
+
+## 2026-11-11 — Native tasks, host services and type abstractions (#846)
+
+- [[Native Host Services]] emits `async fn`, async lambdas, `.await` and `async with scope { ... }`, with a scope's children joined on every way out; cells, locks, channels and threads; clocks, sleeping, arguments, environment, directories and separators; whole-file I/O, links, permissions, temporary files, atomic writes and open handles; the binary64 math kernels and the packed lanes. Foreign and `unsafe` access, and the desktop, audio and raster devices, remain explicit refusals.
+- Stream endpoints ([[Native Host Sockets]]), child programs and `runProgram` ([[Native Host Child Programs]]), gzip and bare streams through the system's zlib ([[Native Host Compression]]), time rendering and reading ([[Native Host Time]], [[Native Host Time Reading]]) and stop requests ([[Native Host Signals]]) are native, each answering as the interpreter's own module does, refusals included.
+- [[Native Host TLS]] emits verified connections through the system TLS library: connecting and upgrading under one budget, sending, receiving a record, the proven name and closing. Verification cannot be turned off; the interpreter's own refusal words are kept, and a verdict of the library carries that library's reason. [[Backend Toolchain]] links zlib and the TLS library only for a program whose C includes their headers.
+- [[Native Host Math]] reads the operands of the library-accuracy kernels through volatile storage, so the C compiler cannot work a call with written operands out itself: `floatCbrt(27.0)` printed `3.0` natively and `3.0000000000000004` in the interpreter on glibc. [[Backend Host Programs]] states that kernel through a relation and prints the library kernels in full in a group compared with the interpreter alone.
+- [[Native Host Time]] renders the full native integer carrier, including dates returned by time reading beyond the signed millisecond boundary.
+- [[Native Host Time Reading]] accepts epoch seconds through both limits of the native millisecond carrier, including a fractional negative instant at the boundary.
+- [[Native Host Time Reading]] preserves both signs across the signed millisecond boundary and refuses magnitudes outside the native integer carrier.
+- [[Native Host Time Reading]] builds refusal text through checked text concatenation, preserving the supplied pattern and avoiding wrapped allocation sizes.
+- [[Backend Service Programs]] carries the corpus for endpoints, secured connections, compression, child programs, time and stop requests.
+- [[Native Type Abstractions]] emits `dynamic Trait` values through widening, dispatch, rendering and equality; constructor parameters (`F[_]`) plain and through a trait; static members through a type parameter (`T.label()`); generic methods whose type arguments checking left to the call; and sequence patterns in `let` at any depth, with E7013 for another length.
+- A constant folding leaves no product for, such as a table of functions, lowers its written initializer in its declaring module at the use.
+- The emitted prelude defines Linux's `_DEFAULT_SOURCE` and `_POSIX_C_SOURCE` only where the translation unit has not already chosen them, so instrumentation and embedders that set either are not overridden under `-Werror`. `E7013` is registered as one shared meaning between the interpreter and native body lowering.
+- [[Compiler Lower Function Body]] now owns entry and named-function boundaries, with the body traversal supplied as callbacks; written type-argument admission moved to [[Compiler Lower Generic]].
+- [[Backend Host Programs]] and [[Backend Abstraction Programs]] carry the corpus; the native spec and counted-allocation harness register both, and the coverage ledger records the remaining refusals.
+- The host corpus no longer carries a machine's own answer: the temporary root leaves a refusal before any window is cut from it, and the window stops at the operation, so the expectation is the same on every operating system.
+
 ## 2026-11-12 — Native helper signatures declared ahead (#848)
 
 - [[Native Aggregate Emission]] declares every helper signature a body defines, so equality on a sum or record holding a function compiles whatever order the types were first seen in.

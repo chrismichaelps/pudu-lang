@@ -46,3 +46,10 @@ Pattern update only: `CoreRecordType` has an argument list; behavior is unchange
 ## Place assignment (#649)
 
 lowerFieldAssignment moved to [[Compiler Lower Place]] as lowerPlaceAssignment.
+
+## Dynamic fields (#846)
+
+A record or record variant whose declared field is `dynamic` widens the
+written value of an implementing type to the declared type before building the
+Core record. Resolved Grill Log: the declaration's field type, not the
+initializer's, chooses the widening.

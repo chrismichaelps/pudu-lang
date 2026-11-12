@@ -27,25 +27,27 @@ lowerTypesProperties =
   , ("native lowering refuses missing analysis facts", testMissing)
   , ("native operator traps retain exact spans and messages", testTraps)
   , ("native operator traps require settled operand facts", testTrapFacts)
-  , ("native constants require represented folded products at their use", testConstantFacts)
+  , ("native constants lower their folded product or initializer at their use", testConstantFacts)
   , ("native shared references retain checked fact and carrier boundaries", testReferenceFacts)
   ]
 
 testReferenceFacts :: IO Property
 testReferenceFacts = conjoin <$> traverse check
-  [ ( "fn change(value: &mut Task[Int, Never]) -> () { *value = *value }\nfn main() -> Int { var n = 0\n let held = change\n n }", False )
-  , ( "async fn job() -> Int { 1 }\nfn main() -> Int { let held: Task[Int, Never] = job()\n let loan = &held\n 0 }", False )
-  , ( "fn main() -> Int { let number = 1\n let loan = &number\n *loan }", True )
+  [ ( "fn change(value: &mut Task[Int, Never]) -> () { *value = *value }\nfn main() -> Int { var n = 0\n let held = change\n n }", False, True )
+  , ( "async fn job() -> Int { 1 }\nfn main() -> Int { let held: Task[Int, Never] = job()\n let loan = &held\n 0 }", False, True )
+  , ( "fn main() -> Int { let number = 1\n let loan = &number\n *loan }", False, True )
+  , ( "fn main() -> Int { let number = 1\n let loan = &number\n *loan }", True, False )
   ]
  where
-  check (body, removeFacts) = do
+  check (body, removeFacts, lowers) = do
     source <- newSource (SourceName "Main.pudu") ("module Main\n" <> body <> "\n")
     checked <- runCompile source
     pure $ case (hasErrors (compileDiagnostics checked), compileModule checked) of
       (False, Just parsed) ->
         let facts = if removeFacts then Just (TypeInfo Map.empty Map.empty) else compileTypes checked
          in case lowerModule "main" (nativeTypes facts (compileSchemes checked)) parsed of
-              LowerRefused [diagnostic] -> conjoin
+              Lowered _ | lowers -> True === True
+              LowerRefused [diagnostic] | not lowers -> conjoin
                 [ diagnosticCodeText (diagnosticCode diagnostic) === "E6001"
                 , let at = diagnosticSpan diagnostic in
                     counterexample "a refused reference has a source span" (unOffset (spanEnd at) > unOffset (spanStart at))
@@ -82,7 +84,9 @@ testConstantFacts = do
     pure $ case (hasErrors (compileDiagnostics checked), compileModule checked) of
       (False, Just parsed) ->
         let facts = nativeTypes (compileTypes checked) (compileSchemes checked)
-            supplied = lowerModuleFolded "main" facts (compileFolded checked) parsed
+            loweredAtUse result = case result of
+              Lowered _ -> True === True
+              other -> counterexample (show other) (False === True)
             refusedAtUse result = case result of
               LowerRefused [diagnostic] -> conjoin
                 [ diagnosticCodeText (diagnosticCode diagnostic) === "E6001"
@@ -91,18 +95,20 @@ testConstantFacts = do
                       (Text.drop (unOffset (spanStart at)) (sourceText source)) === "HELD"
                 ]
               other -> counterexample (show other) (False === True)
+            supplied = lowerModuleFolded "main" facts (compileFolded checked) parsed
          in conjoin
-              [ refusedAtUse (lowerModule "main" facts parsed)
+              [ counterexample "a constant with no supplied product lowers its initializer"
+                  (loweredAtUse (lowerModule "main" facts parsed))
+              , counterexample "a constant with a supplied product lowers it or its initializer"
+                  (loweredAtUse supplied)
+              , counterexample "the corpus matches folding's product"
+                  (Map.member "HELD" (compileFolded checked) === represented)
               , if initializer `elem` ["[1, 2]", "1..3"] then case freeze
                   (if initializer == "[1, 2]" then ArrayValue (Seq.singleton (StrValue "wrong element"))
                    else RangeValue (Just (2 ^ (64 :: Int))) False Nothing) of
                   Just mismatched -> refusedAtUse (lowerModuleFolded "main" facts (Map.singleton "HELD" mismatched) parsed)
                   Nothing -> counterexample "the malformed typed product is still portable data" (False === True)
                 else True === True
-              , if represented then case supplied of
-                  Lowered _ -> True === True
-                  other -> counterexample (show other) (False === True)
-                else refusedAtUse supplied
               ]
       _ -> counterexample (show (compileDiagnostics checked)) (False === True)
 
@@ -112,7 +118,7 @@ testCanonical = conjoin
   , formedCoreType (ReferenceTypeValue False integerType) === Just (CoreIntegerType PlatformSigned)
   , formedCoreType (ReferenceTypeValue True integerType) === Nothing
   , formedCoreType (ReferenceTypeValue False (NominalType "Buckets" [NominalType "Int" []])) === Just (CoreStoreType (CoreIntegerType PlatformSigned))
-  , formedCoreType (ReferenceTypeValue False (NominalType "Task" [NominalType "Int" [], NeverType])) === Nothing
+  , formedCoreType (ReferenceTypeValue False (NominalType "Task" [NominalType "Int" [], NeverType])) === Just (CoreFunctionType [] (CoreIntegerType PlatformSigned))
   , formedCoreType boolType === Just CoreBoolType
   , formedCoreType stringType === Just CoreTextType
   , formedCoreType UnitTypeValue === Just CoreUnitType

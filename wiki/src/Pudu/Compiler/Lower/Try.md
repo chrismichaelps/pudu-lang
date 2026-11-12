@@ -40,3 +40,10 @@ evaluator's `unwrapTry`.
 
 The failure a `?` returns passes through `loanedValue`, so a loaned function
 answers its parameters' finals beside it. See [[Compiler Lower Loan]].
+
+## Await failures (#846)
+
+`.await` shares `unwrapOrLeave` with `?`: a task answering `Err` leaves the
+awaiting function with that failure, joining every scope open around it. The
+failure is in hand before the joins run. Resolved Grill Log: one unwrap path
+keeps `?` and await failure spans, loaned finals and scope joins identical.

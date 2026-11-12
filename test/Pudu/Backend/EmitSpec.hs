@@ -275,21 +275,8 @@ testReachableFunctions = do
     construct", not as a hand-counted column. -}
 refusalCases :: [(String, Text, Text)]
 refusalCases =
-  [ ("Task parameter", helperProgram "async fn job() -> Int { 1 }\nfn helper(value: Task[Int, Never]) -> Int { return 1 }" "helper(job())", "Task[Int, Never]")
-  , ("call to entry", statementProgram "main()", "main()\n")
-  , ("environment", bindingProgram "var pairs = environment()", "environment()")
-  , ("a call to an async function", bindingProgram "var held: Task[Int, Never] = job()" <> "async fn job() -> Int { 1 }\n", "job() -> Int")
-  , ("readLine", bindingProgram "var line = readLine()", "readLine()")
-  , ("temporary path", bindingProgram "var path = temporaryPath()", "temporaryPath()")
-  , ("a generic call at a type without a native form", Text.unlines
-      [ "module Refuse"
-      , "fn keep[T](value: T) -> Int { 1 }"
-      , "fn main() -> Int {"
-      , "  let kept = keep(job())"
-      , "  return kept"
-      , "}"
-      , "async fn job() -> Int { 1 }"
-      ], "keep(job())")
+  [ ("call to entry", statementProgram "main()", "main()\n")
+  , ("desktopOpen", bindingProgram "var opened = desktopOpen(\"\", 1, 1, false)", "desktopOpen")
   , ("a module without main", Text.unlines
       [ "module Refuse"
       , ""
@@ -299,8 +286,6 @@ refusalCases =
       ], "other")
       ]
  where
-  helperProgram helper call = Text.unlines
-    ["module Refuse", helper, "fn main() -> Int {", "  return " <> call, "}"]
   bindingProgram binding = statementProgram binding
   statementProgram statement =
     Text.unlines

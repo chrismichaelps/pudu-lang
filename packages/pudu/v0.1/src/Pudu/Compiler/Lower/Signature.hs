@@ -9,7 +9,7 @@ import Data.Text (Text)
 import Pudu.Compiler.Lower.State
   ( CoreSignature (..), Instance (..), LowerContext (..), LowerState (..), intType, refuse )
 import Pudu.Compiler.Lower.Types (formedCoreTypeIn, lookupScheme, nativeValueType, typeBindings)
-import Pudu.Type.Value (Scheme (..), Type (FunctionTypeRequiring, ReferenceTypeValue), requiredCount)
+import Pudu.Type.Value (Scheme (..), Type (FunctionTypeRequiring, ReferenceTypeValue, RestrictedType), requiredCount)
 import Pudu.Core
 import Pudu.Frontend.Syntax
   ( Function (..), FunctionBody (..), Located (..), Parameter (..), TypeParam (..) )
@@ -28,9 +28,10 @@ ensureSignature key located state = case Map.lookup key (contextSignatures conte
     Just (spanValue, construct) -> memoize (refuse spanValue construct state) Nothing
     Nothing | misplaced : _ <- requiredAfterDefault ->
       memoize (refuse misplaced "a default before a required parameter" state) Nothing
-    Nothing -> case maybe (lookupScheme (contextTypes context) name) (Just . instanceScheme) (Map.lookup key (contextInstances context)) of
-      Just Scheme{schemeParams, schemeBounds, schemeType = FunctionTypeRequiring False inputs required result}
+    Nothing -> case unrestricted <$> maybe (lookupScheme (contextTypes context) name) (Just . instanceScheme) (Map.lookup key (contextInstances context)) of
+      Just Scheme{schemeParams, schemeBounds, schemeType = FunctionTypeRequiring asynchronous inputs required result}
         | all ((`Map.member` typeBindings (contextTypes context)) . fst) schemeParams
+        , not asynchronous || null [() | ReferenceTypeValue True _ <- inputs]
         , not (null schemeParams) || null schemeBounds
         , length inputs == length (functionParameters function)
         , requiredCount required == length inputs - length defaults ->
@@ -38,7 +39,9 @@ ensureSignature key located state = case Map.lookup key (contextSignatures conte
                   (zip3 [0 ..] (map locatedValue (functionParameters function)) inputs)
                 parameters = given <> [CoreParameter (CoreLocal (length inputs) "" intType) atName | not (null defaults)]
                 loaned = [index | (index, ReferenceTypeValue True _) <- zip [0 ..] inputs]
-                (afterReturn, resultType) = validateReturn afterParameters result
+                (afterReturn, answered) = validateReturn afterParameters result
+                -- An async function answers the task of its body.
+                resultType = if asynchronous then CoreFunctionType [] answered else answered
                 added = length (contextRefusals (lowerContext afterReturn))
                   - length (contextRefusals context)
              in if added == 0
@@ -94,6 +97,12 @@ ensureSignature key located state = case Map.lookup key (contextSignatures conte
     lent (ReferenceTypeValue True target) = target
     lent other = other
 
+    -- What an unsafe function may reach was checked where it is called; the
+    -- function under the restriction is what runs.
+    unrestricted scheme = case schemeType scheme of
+      RestrictedType _ inner -> scheme{schemeType = inner}
+      _ -> scheme
+
 functionLevelRefusal :: Function -> Maybe (Span, Text)
 functionLevelRefusal = boundFunctionRefusal Set.empty
 
@@ -102,9 +111,6 @@ functionLevelRefusal = boundFunctionRefusal Set.empty
 boundFunctionRefusal :: Set Text -> Function -> Maybe (Span, Text)
 boundFunctionRefusal bound function
   | not specialized = Just (atName, "type parameters")
-  | functionAsync function = Just (atName, "async functions")
-  | Just _ <- functionUnsafe function = Just (atName, "unsafe functions")
-  | functionComptime function = Just (atName, "comptime functions")
   | not (null (functionConstraints function)) && null (functionTypeParams function) = Just (atName, "function constraints")
   | otherwise = case functionBody function of
       Nothing -> Just (atName, "a function without a body")

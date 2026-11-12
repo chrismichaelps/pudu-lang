@@ -57,8 +57,13 @@ the owner lookup, and `callStringMethodFast` applies the selection that
 preparation directly. The warning-as-error build, the full suite and both format
 checks pass on the combined tree.
 
+Integration with dev after #847: the method-call and byte lowerings take the
+receiver-first order, and #846's dynamic receiver call now holds its receiver
+before its arguments. The warning-as-error build, 810 suite properties and the
+format check pass on the merged tree.
+
 Exact next action: obtain independent review of the preparation and receiver
-partitions on #830, then mark the native ledger's #828 obligation complete.
+partitions on #830 and record it before promoting the ledger row.
 
 ## Referenced by
 [[handoffs/_MOC]] · [[Callee First Call Evaluation]]

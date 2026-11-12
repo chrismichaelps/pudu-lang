@@ -81,3 +81,13 @@ to [[Compiler Lower Loan]] with the callee as `Through`. A lambda with
 `&mut` parameters lowers its body with those parameters loaned, returns
 typed at its declared result, and closes its trailing result over the
 finals.
+
+## Tasks and async lambdas (#846)
+
+An async body lifts as a task: a function of nothing over the names it
+mentions, registered beside the body it was written in and shown under the
+task's name. An async lambda's body is the task it answers. Making a task
+inside an `async with scope` offers it to the innermost scope and the scope's
+joiner, which runs it and stashes a failure for the scope's function. Resolved
+Grill Log: one lifted function serves a written lambda and its async form; a
+task lends no `&mut` parameters and runs only when awaited or joined.
