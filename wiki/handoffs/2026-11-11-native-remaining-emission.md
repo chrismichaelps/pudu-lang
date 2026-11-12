@@ -82,8 +82,19 @@ in [[Backend Service Programs]] requires warning-free emission and preserves the
 exact refusal text. The time reader now delegates message construction to the
 shared checked text concatenation path.
 
-Exact next action: request the independent implementation and wiki-parity
-review of #846.
+The refusal-message follow-up passed the focused service group with two
+compilers and the previously failing suite shard locally. Hosted CI passed
+the build, all six suite shards, and the runtime and tooling gates on
+`c61d9fc2`. Independent implementation and wiki-parity review found no
+blocking issues in the follow-up. The coverage ledger still has four complete
+areas out of fourteen. A separate differential probe reproduced an incorrect
+negative result for `parseTime("%-Y", "300000000")`. The signed multiplication
+to milliseconds overflows before the result reaches its integer carrier.
+This also affects years within the existing fifteen-digit admission limit.
+
+Exact next action: resolve the native instant carrier contract and add a
+differential regression for the signed millisecond boundary before changing
+the time reader.
 
 ## Referenced by
 
