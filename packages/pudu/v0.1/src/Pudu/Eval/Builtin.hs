@@ -21,6 +21,7 @@ module Pudu.Eval.Builtin
   , effectBuiltins
   , isDecimalBuiltin
   , isHashingBuiltin
+  , prepareStringMethodFast
   ) where
 
 import qualified Data.Text as Text
@@ -51,7 +52,7 @@ import Pudu.Eval.Builtin.Numeric
   , callFloatKernel
   , isDecimalBuiltin
   )
-import Pudu.Eval.Builtin.String (callStringMethod, callStringMethodFast)
+import Pudu.Eval.Builtin.String (callStringMethod, callStringMethodFast, prepareStringMethodFast)
 import Pudu.Eval.Effect (callEffect, effectBuiltins)
 import Pudu.Eval.Env (Evaluator (..), abortAt)
 import qualified Data.ByteString as ByteString

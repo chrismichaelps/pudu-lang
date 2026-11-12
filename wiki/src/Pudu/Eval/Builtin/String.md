@@ -24,6 +24,7 @@ Implement built-in methods on text values, including scalar slicing, character l
 ```haskell
 callStringMethod :: Span -> StringMethod -> Value -> [Value] -> Evaluator Value
 callStringMethodFast :: Span -> Text -> Text -> [Value] -> Maybe (Evaluator Value)
+prepareStringMethodFast :: Span -> Text -> Text -> Maybe ([Value] -> Evaluator Value)
 drop1Text :: Text -> Text
 dropText :: Int -> Text -> Text
 indexOfText :: Text -> Text -> Integer
@@ -74,3 +75,12 @@ characterMember :: Text -> Char -> Bool
 
 `toInt`, `toFloat`, and `toDecimal` dispatch (and take the direct path) to [[Eval Builtin TextNumber]]
 and answer `Some` or `None`.
+
+## Resolved Grill Log for member preparation
+
+Choose the direct text operation from the retained receiver and member name.
+The returned invocation consumes the supplied arguments once they have run.
+The same operation validates their count and reports at the original call span.
+`prepareStringMethodFast` owns that selection. The exported `callStringMethodFast`
+keeps its signature and applies the prepared operation to arguments already
+supplied, so existing callers see no change.
