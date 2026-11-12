@@ -9,8 +9,8 @@ aliases: [Native Host Runtime]
 
 Export hostRuntimeParts: every host part in emission order, what the program
 asks of the machine it runs on. A family comes after the families its parts
-call: state, math, process, concurrency, input, files, handles, scopes, lanes,
-signals, sockets, compression, child programs, and time rendering and reading.
+call: state, math, process, concurrency, input, files, handles, scopes, lanes, raster
+([[Native Host Raster]]), signals, sockets, compression, child programs, and time rendering and reading.
 
 ## Resolved Grill Log
 

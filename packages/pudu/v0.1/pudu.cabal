@@ -145,6 +145,7 @@ library
     Pudu.Backend.Runtime.Host.Input
     Pudu.Backend.Runtime.Host.Foreign
     Pudu.Backend.Runtime.Host.Lanes
+    Pudu.Backend.Runtime.Host.Raster
     Pudu.Backend.Runtime.Host.Math
     Pudu.Backend.Runtime.Host.Net
     Pudu.Backend.Runtime.Host.Process

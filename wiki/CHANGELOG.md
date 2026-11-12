@@ -5,6 +5,14 @@ tags: [changelog]
 
 # Changelog
 
+## 2026-11-12 — Native raster kernels (#855)
+
+- [[Native Host Raster]] emits `rasterFill` and the plain, perspective, textured and shaded triangle kernels, keeping the interpreter's floating order, fill rule, sampling and shading; [[Compiler Lower Kernel Lanes]] leaves the RGBA targets and texels unguarded as the interpreter does.
+
+## 2026-11-12 — Native unsafe regions (#858)
+
+- [[Native Emission Coverage]] records that `unsafe` regions and capability-typed function values are native, and that `null` never reaches lowering; a differential program covers named, blanket and nested regions.
+
 ## 2026-11-12 — Native foreign calls (#850)
 
 - [[Native Foreign Call Sites]]: a foreign call with fixed-width integer, float and Bool crossings compiles to a call through a pointer of its declared C type, resolved once with the interpreter's library candidates and symbol, and stops with the interpreter's E7015 when the library or symbol is missing ([[Compiler Lower Foreign]], [[Backend Emit Foreign]], [[Native Host Foreign]]).

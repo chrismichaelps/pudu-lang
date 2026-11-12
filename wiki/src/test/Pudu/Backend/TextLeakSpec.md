@@ -83,6 +83,8 @@ Counts cleanup for [[Backend Range Programs]].
 
 Counts cleanup for [[Backend Bytes Programs]].
 
+The counted programs link the math library, which the raster kernels call and which Linux keeps apart from the C library (#855).
+
 ## Referenced by
 
 [[Backend Text Programs]] · [[Native Text Runtime]] · [[src/_MOC]]
