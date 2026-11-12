@@ -1,5 +1,5 @@
 {-| @Test.Backend.KernelPrograms — pure builtin kernels: buffers, columns, sort indices, the flat table and the codecs; success programs carry interpreter output checked against stdlib references. -}
-module Pudu.Backend.KernelPrograms (kernelSuccessPrograms, kernelRefusalPrograms) where
+module Pudu.Backend.KernelPrograms (kernelSuccessPrograms, kernelLibraryPrograms, kernelRefusalPrograms) where
 
 import Data.Text (Text)
 import qualified Data.Text as Text
@@ -24,16 +24,6 @@ kernelSuccessPrograms =
         , "  0"
         , "}" ]
       , "Some([0, 2, 0, 4, 1, 2])\nNone\nNone\nNone\nSome([])\n" )
-  , ( "an empty array compares with an array whose element a generic solved"
-      , program
-        [ "import Std.Iter as Iter"
-        , "import Std.Iter.Views as Views"
-        , "fn main() -> Int {"
-        , "  let joined = Views.join(Iter.items([Iter.empty[Int]()])).toArray()"
-        , "  print(display(joined == []) + \" \" + display([] == joined) + \" \" + display(joined != []))"
-        , "  0"
-        , "}" ]
-      , "true true false\n" )
   , ( "byte helpers, buffers and writes match the interpreter, refusals included"
       , program
         [ "fn main() -> Int {"
@@ -160,6 +150,21 @@ program :: [Text] -> Text
 program body = Text.unlines (["module Main", ""] <> body)
 
 {-| Refusals keep their codes, messages and spans through every kernel family. -}
+{-| Programs whose library imports the single-module leak harness cannot load. -}
+kernelLibraryPrograms :: [(String, Text, Text)]
+kernelLibraryPrograms =
+  [ ( "an empty array compares with an array whose element a generic solved"
+      , program
+        [ "import Std.Iter as Iter"
+        , "import Std.Iter.Views as Views"
+        , "fn main() -> Int {"
+        , "  let joined = Views.join(Iter.items([Iter.empty[Int]()])).toArray()"
+        , "  print(display(joined == []) + \" \" + display([] == joined) + \" \" + display(joined != []))"
+        , "  0"
+        , "}" ]
+      , "true true false\n" )
+  ]
+
 kernelRefusalPrograms :: [(String, Text)]
 kernelRefusalPrograms =
   [ ( "flat table primitives, degenerate tables and a negative capacity"

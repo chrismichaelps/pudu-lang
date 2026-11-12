@@ -23,7 +23,7 @@ byte tests use deterministic finite floats so byte representations remain
 portable across ARM64 and x86_64 architectures, while NaN arithmetic and
 filtering semantics remain verified through dedicated aggregate and filter tests.
 
-The broad phase answers touching pairs (signed zero included) in order and refuses a NaN bound, unequal counts and an inverted box; an empty array compares with an array whose element a generic solved, on either side (#846).
+The broad phase answers touching pairs (signed zero included) in order and refuses a NaN bound, unequal counts and an inverted box; an empty array compares with an array whose element a generic solved, on either side (#846). That case imports `Std.Iter`, so it sits in `kernelLibraryPrograms`, which the conformance property runs and the single-module leak harness does not.
 
 ## Referenced by
 

@@ -148,9 +148,18 @@ The host-result carrier question resolved without widening: `parseTime`
 answers `Int`, so the interpreter now refuses an instant no `Int` carries,
 exactly where the native reader does.
 
-Exact next action: merge dev (with #848) into this branch, rerun the full
-native sweep and the suite, then record the independent review that promotes
-the ledger rows this branch completes.
+After merging dev (with #848) the sweep built 341 of 446 entry programs
+natively, with no C compiler rejection and no timeout, and 60 compared programs
+matched the interpreter. Every remaining E6001 is a foreign function or handle,
+a desktop, audio or raster device, SQLite through its foreign library, or an
+entry with parameters; the 41 others are fixtures the checker rejects by
+design. The ledger rows stay Partial: they name those families, and promotion
+requires the independent review the progress rule asks for.
+
+Exact next action: record the independent review of #847 and #830 against the
+ledger rows they complete, then decide with the Language Architect whether the
+foreign and device families leave the Host services row or receive native
+adapters.
 
 ## Referenced by
 

@@ -33,7 +33,7 @@ import Pudu.Backend.BigIntPrograms (bigIntSuccessPrograms, bigIntRefusalPrograms
 import Pudu.Backend.DecimalPrograms (decimalSuccessPrograms, decimalRefusalPrograms)
 import Pudu.Backend.WordMapPrograms (wordMapSuccessPrograms, wordMapRefusalPrograms)
 import Pudu.Backend.StorePrograms (storeSuccessPrograms, storeModulePrograms, storeRefusalPrograms)
-import Pudu.Backend.KernelPrograms (kernelSuccessPrograms, kernelRefusalPrograms)
+import Pudu.Backend.KernelPrograms (kernelSuccessPrograms, kernelLibraryPrograms, kernelRefusalPrograms)
 import Pudu.Backend.AbstractionPrograms (abstractionSuccessPrograms, abstractionRefusalPrograms)
 import Pudu.Backend.HostPrograms (hostLibraryPrograms, hostSuccessPrograms, hostRefusalPrograms)
 import Pudu.Backend.HostServicePrograms (hostServicePrograms, standardInputPrograms)
@@ -135,7 +135,7 @@ backendNativeProperties =
       (\(label, source, expected) -> conformanceExpecting (Just (expected, "", 0)) label source) (storeSuccessPrograms <> storeModulePrograms))
   , ("native indexed stores and MultiMap primitives retain interpreter refusals", conjoin <$> mapM (uncurry conformance) storeRefusalPrograms)
   , ("native pure kernels match hand-written answers and the interpreter", conjoin <$> mapM
-      (\(label, source, expected) -> conformanceExpecting (Just (expected, "", 0)) label source) kernelSuccessPrograms)
+      (\(label, source, expected) -> conformanceExpecting (Just (expected, "", 0)) label source) (kernelSuccessPrograms <> kernelLibraryPrograms))
   , ("native pure kernels retain interpreter refusals", conjoin <$> mapM (uncurry conformance) kernelRefusalPrograms)
   , ("native host services, tasks and scopes match the interpreter's own answers", conjoin <$> mapM
       (\(label, source, expected) -> conformanceExpecting (Just (expected, "", 0)) label source) hostSuccessPrograms)
