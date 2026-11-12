@@ -10,7 +10,23 @@ import Pudu.Comptime.Limits (callDepthLimit)
 
 functionSuccessPrograms :: [(String, Text)]
 functionSuccessPrograms =
-  [ ("a result checking leaves open is unit", program
+  [ ("unsafe regions run their body and carry capabilities through function values", program
+      [ "unsafe(raw) fn stepped(value: Int) -> Int { value + 1 }"
+      , "unsafe fn blanket(value: Int) -> Int { value + 2 }"
+      , "unsafe(raw, unchecked) fn both(value: Int) -> Int { value * 3 }"
+      , "fn applied(action: unsafe(raw) fn(Int) -> Int, value: Int) -> Int {"
+      , "  unsafe(raw) { action(action(value)) }"
+      , "}"
+      , "fn main() -> Int {"
+      , "  let held = stepped"
+      , "  let first = unsafe(raw) { held(1) }"
+      , "  let second = unsafe { blanket(first) + both(1) }"
+      , "  let nested = unsafe(raw) { stepped(unsafe(unchecked) { both(applied(stepped, second)) }) }"
+      , "  print(display(first) + \" \" + display(second) + \" \" + display(nested))"
+      , "  0"
+      , "}"
+      ])
+  , ("a result checking leaves open is unit", program
       [ "fn helper(value: Int) { return }"
       , "fn main() -> Int {"
       , "  helper(1)"
