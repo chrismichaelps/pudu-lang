@@ -1,0 +1,51 @@
+module ApplicationIsolation
+
+import Std.Desktop.App as App
+import Std.Desktop.Capability as Capability
+import Std.Desktop.Ipc as Ipc
+import Std.Desktop.Protocol as Protocol
+import Std.Desktop.Shape as Shape
+import Std.Hex as Hex
+import Std.Json as Json
+
+type Report = { stage: Str, passed: Bool } derives Json.Decode, Shape.Describe
+
+fn checkpoint(report: Report, call: &Ipc.Call) -> Result[Bool, Ipc.Failure] {
+  let _ = print("application isolation {report.stage} {report.passed}")
+  if !report.passed { exit(1) }
+  Ok(true)
+}
+
+fn application(name: Str, label: Str, writer: Bool, expectPresent: Bool, marker: Str, commands: &Ipc.Registry, grants: &Capability.Grants) -> Result[(), Str] {
+  let script = "(async () => \{\n const bridge = window.__pudu;\n const marker = '{marker}';\n const writer = {writer};\n const expectPresent = {expectPresent};\n let passed = false;\n try \{\n  if (writer) localStorage.setItem('pudu-isolation-probe', marker);\n  const stored = localStorage.getItem('pudu-isolation-probe');\n  passed = expectPresent ? stored === marker : stored !== marker;\n \} catch (error) \{ console.error(error); \}\n await bridge.invoke('checkpoint', \{stage: writer ? 'writer' : (expectPresent ? 'reopen' : 'reader'), passed\});\n await bridge.window.close();\n\})();"
+  let assets = Protocol.Packed(mapOf([
+        ("index.html", "<html><head><script defer src=\"test.js\"></script></head><body>Application isolation</body></html>".toBytes()),
+        ("test.js", script.toBytes())
+      ]))
+  let app = App.App{..App.newApp(name, commands, grants), assets: assets, frontend: None,
+    windows: [App.windowPlan(label, "Application isolation", 320, 240)] }
+  match App.run(&app) {
+    case Ok(_) => Ok(())
+    case Err(problem) => Err(App.explain(&problem))
+  }
+}
+
+fn main() -> Result[(), Str] {
+  let commands = match Ipc.registry(&[Ipc.command("checkpoint", checkpoint)], &[]) {
+    case Ok(found) => found
+    case Err(problem) => { return Err(Ipc.explain(&problem)) }
+  }
+  let grants = Capability.Grants{capabilities: [Capability.Capability {
+        ..Capability.capability("isolation"), views: ["main", "B|main"],
+        allow: [Capability.permit("checkpoint"), Capability.permit("window:close")]
+      }] }
+  let bytes = secureRandomBytes(16) ?
+  let marker = Hex.encode(&bytes.toArray())
+  application("PuduIsolationWriter", "main", true, true, marker, &commands, &grants) ?
+  application("PuduIsolationReader", "main", false, false, marker, &commands, &grants) ?
+  application("PuduIsolationWriter", "main", false, true, marker, &commands, &grants) ?
+  application("PuduIsolation|B", "main", true, true, marker, &commands, &grants) ?
+  application("PuduIsolation", "B|main", false, false, marker, &commands, &grants) ?
+  let _ = print("application isolation completed")
+  Ok(())
+}

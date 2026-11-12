@@ -189,6 +189,15 @@ Pudu.Compiler.Lower.Range.
 Register Pudu.Backend.Emit.Bytes, Pudu.Backend.Runtime.Bytes and
 Pudu.Compiler.Lower.Bytes.
 
+## WebView adapters (#833)
+
+macOS compiles the WebKit adapter ([[Pudu Webview macOS Adapter]], [[Pudu Webview macOS View]],
+[[Pudu Webview Records]]), links the `WebKit` framework and defines `PUDU_NATIVE_WEBVIEW`. The manual
+`webkitgtk` flag, off by default, compiles [[Pudu Webview GTK Adapter]] on Linux against
+`webkit2gtk-4.1` and `gtk+-3.0` and defines the same symbol; without it Linux answers
+`unsupported`. The manual `webview2` flag compiles [[Pudu Webview Windows Adapter]] on Windows
+with the SDK headers supplied through `--extra-include-dirs`. `Pudu.Eval.Webview` and `Pudu.Eval.Sign` join the library.
+
 ## Referenced by
 
 The library exposes [[Resolve Canonical]] for the scoped generated-Impl resolver
@@ -648,6 +657,34 @@ Resolved Grill Log: checkout-only resolution is insufficient; verify the
 source archive contains each nested module. No package dependency is added.
 
 Ship lib/Std/Iter/*.pudu for [[Std Iter Views]]. Resolved Grill Log: optional adapter imports must work from the installed archive.
+
+## Desktop window controls (#833)
+
+Resolved Grill Log: register the macOS window translation unit alongside the adapter, view and
+native units, conditional on macOS, without changing other platform linkage.
+
+Resolved Grill Log (#833): register GTK window and interaction units under the existing Linux webkitgtk condition, with no new package dependency.
+
+Resolved Grill Log: require WebKitGTK API 2.40 or newer for authenticated script-message replies; the package remains the existing webkit2gtk-4.1 SDK.
+
+Resolved Grill Log: register GTK Context for explicit storage isolation and named sharing using the existing SDK.
+
+Resolved Grill Log: register Windows window geometry under the existing Windows webview2 condition.
+
+Resolved Grill Log: register the extracted Windows environment and request units under the same
+webview2 condition, preserving existing libraries and public entry points.
+
+Resolved Grill Log: register portable policy JSON and Windows policy under webview2 with the existing native libraries.
+
+Resolved Grill Log: ship the portable policy JSON header in source distributions, alongside existing native headers.
+
+Resolved Grill Log: ship the Windows SDK wrapper, enable Microsoft extensions for the bundled Windows Clang compiler, and depend on system-cxx-std-lib ==1.0 for runtime selection. Include uuid among native Windows system libraries; do not assume stdc++ with a libc++ toolchain.
+
+Resolved Grill Log: the `webview2` flag compiles `cbits/pudu_webview_win_profile.cpp`; store
+digests use the already linked certificate library, so no library is added.
+
+Resolved Grill Log: the `webview2` stanza compiles [[Pudu Webview Windows Control]] beside the
+window unit; it needs no library the stanza did not already link.
 
 ## Native byte views (#827)
 

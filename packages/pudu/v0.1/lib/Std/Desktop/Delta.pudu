@@ -1,0 +1,137 @@
+module Std.Desktop.Delta
+
+import Std.Bytes as Bytes
+import Std.Hex as Hex
+
+/// Why a patch could not rebuild its target.
+export type DeltaError = NotPatch | BaseMismatch | Corrupt(Str) | TargetMismatch
+
+/// The window whose hash identifies a run of bytes.
+export const BLOCK: Int = 4096
+
+/// The alignment matches are searched and extended at.
+export const STEP: Int = 512
+
+/// The first line of every patch.
+export const MAGIC: Str = "PUDU-DELTA 1"
+
+fn digest(bytes: &Bytes) -> Str { Hex.encode(&sha256Of(*bytes).toArray()) }
+
+fn line(text: Str) -> Bytes { (text + "\n").toBytes() }
+
+/// A patch that rebuilds `new` from `old`.
+export fn diff(old: &Bytes, new: &Bytes) -> Bytes {
+  var index: Map[Bytes, Int] = mapOf([])
+  var at = 0
+  while at + BLOCK <= old.length() {
+    let key = sha256Of(old.slice(at, at + BLOCK))
+    if index.get(key) == None { index = index.insert(key, at) }
+    at = at + STEP
+  }
+  var parts = [line(MAGIC), line("base " + digest(old)), line("size {new.length()}"), line("target " + digest(new))]
+  var literal = 0
+  var position = 0
+  while position + BLOCK <= new.length() {
+    let window = new.slice(position, position + BLOCK)
+    let found = match index.get(sha256Of(window)) {
+      case Some(start) if old.slice(start, start + BLOCK) == window => Some(start)
+      case _ => None
+    }
+    match found {
+      case Some(start) => {
+        if literal < position {
+          parts = parts.push(line("l {position - literal}")).push(new.slice(literal, position))
+        }
+        var length = BLOCK
+        while position + length + STEP <= new.length() && start + length + STEP <= old.length()
+          && new.slice(position + length, position + length + STEP) == old.slice(start + length, start + length + STEP) {
+          length = length + STEP
+        }
+        parts = parts.push(line("c {start} {length}"))
+        position = position + length
+        literal = position
+      }
+      case None => { position = position + STEP }
+    }
+  }
+  if literal < new.length() {
+    parts = parts.push(line("l {new.length() - literal}")).push(new.slice(literal, new.length()))
+  }
+  Bytes.join(&parts)
+}
+
+/// The next line of a patch starting at `at`, and where the line after it starts.
+fn nextLine(patch: &Bytes, at: Int) -> Result[(Str, Int), DeltaError] {
+  let end = patch.drop(at).indexOf(bytesOf([10u8]))
+  if end < 0 { return Err(Corrupt("an unterminated line at byte {at}")) }
+  match patch.slice(at, at + end).toText() {
+    case Some(text) => Ok((text, at + end + 1))
+    case None => Err(Corrupt("a line that is not text at byte {at}"))
+  }
+}
+
+fn numbers(text: Str, count: Int) -> Result[Array[Int], DeltaError] {
+  let fields = text.split(" ")
+  if fields.length() != count + 1 { return Err(Corrupt("a malformed operation: {text}")) }
+  var found: Array[Int] = []
+  for field in fields.slice(1, fields.length()) {
+    match field.toInt() {
+      case Some(value) if value >= 0 => { found = found.push(value) }
+      case _ => { return Err(Corrupt("a malformed number: {text}")) }
+    }
+  }
+  Ok(found)
+}
+
+fn labelled(text: Str, label: Str) -> Result[Str, DeltaError] {
+  if text.startsWith(label + " ") { Ok(text.drop(label.length() + 1)) } else { Err(NotPatch) }
+}
+
+/// The bytes `patch` rebuilds from `old`, verified against the patch's target.
+export fn apply(old: &Bytes, patch: &Bytes) -> Result[Bytes, DeltaError] {
+  let (magic, afterMagic) = match nextLine(patch, 0) {
+    case Ok(found) => found
+    case Err(_) => { return Err(NotPatch) }
+  }
+  if magic != MAGIC { return Err(NotPatch) }
+  let (baseLine, afterBase) = nextLine(patch, afterMagic) ?
+  let (sizeLine, afterSize) = nextLine(patch, afterBase) ?
+  let (targetLine, afterTarget) = nextLine(patch, afterSize) ?
+  if labelled(baseLine, "base") ? != digest(old) { return Err(BaseMismatch) }
+  let size = match labelled(sizeLine, "size") ?.toInt() {
+    case Some(value) => value
+    case None => { return Err(Corrupt("a malformed size")) }
+  }
+  let target = labelled(targetLine, "target") ?
+  var parts: Array[Bytes] = []
+  var at = afterTarget
+  while at < patch.length() {
+    let (operation, next) = nextLine(patch, at) ?
+    if operation.startsWith("c ") {
+      let held = numbers(operation, 2) ?
+      if held[0] + held[1] > old.length() { return Err(Corrupt("a copy past the old bytes")) }
+      parts = parts.push(old.slice(held[0], held[0] + held[1]))
+      at = next
+    } else if operation.startsWith("l ") {
+      let held = numbers(operation, 1) ?
+      if next + held[0] > patch.length() { return Err(Corrupt("a literal past the patch")) }
+      parts = parts.push(patch.slice(next, next + held[0]))
+      at = next + held[0]
+    } else {
+      return Err(Corrupt("an unknown operation: {operation}"))
+    }
+  }
+  let rebuilt = Bytes.join(&parts)
+  if rebuilt.length() != size || digest(&rebuilt) != target { return Err(TargetMismatch) }
+  Ok(rebuilt)
+}
+
+/// What went wrong, for a person.
+export fn explain(problem: &DeltaError) -> Str {
+  match *problem {
+    case NotPatch => "not a patch"
+    case BaseMismatch => "the patch is for a different version"
+    case Corrupt(why) => "the patch is damaged: {why}"
+    case TargetMismatch => "the patched result is not the published version"
+  }
+}

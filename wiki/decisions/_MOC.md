@@ -7,6 +7,7 @@ tags: [moc, adr]
 
 - [[ADR-0025-if-without-else-unit-results]] — accepted correctness clarification: no-else conditionals yield unit on both normal paths across typing, evaluation, residualization and native lowering.
 - [[ADR-0025-integrated-engine-namespace]] — reserve Ark as an integrated shipped-library root.
+- [[decisions/ADR-0026-a-webview-is-a-renderer|ADR-0026 A WebView Is a Renderer]] — accepted: the program owns the application; one record channel crosses the native boundary; deny by default; updates always verified.
 
 - [[ADR-0024-building-a-web-application-for-any-host]] — accepted: one build step the application
   calls, rendering its pages in parallel and writing them with the chosen host's routing.

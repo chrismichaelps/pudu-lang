@@ -5,6 +5,22 @@ tags: [changelog]
 
 # Changelog
 
+## 2026-11-11 — Desktop build and storage verification (#833)
+
+- [[Eval Stop Requests]] keeps handler-only imports with the handler implementation.
+- [[Desktop Storage Gate]] requires the native harness to prove exit of the processes that hosted
+  its views before reopening their storage.
+
+## 2026-11-11 — Windows window controls (#833)
+
+- [[Pudu Webview Windows Control]] gives the WebView2 adapter the window chrome and state records
+  macOS and GTK already answer: minimize, maximize and their toggles, always-on-top, decorations,
+  closable, minimizable, maximizable, resizable, capture protection, background, title bar
+  styles, attention, and true fullscreen over the monitor, with `window-state`, `scale` and
+  `theme` events. A transparent title bar and taskbar badges refuse as unsupported.
+- [[Webview Windows Window Harness]] drives each record against a real window and inspects its
+  native style, menu, z-order, zoom, iconic state and frame.
+
 ## 2026-11-10 — HTML builder replaces repeated attributes (#839)
 
 - [[Std Html Build]] replaces an attribute already set where it sits instead of appending a second one, and `class` adds to the classes already set. A rendered element can no longer carry a repeated attribute that a browser would silently collapse to the first value.
@@ -24,6 +40,161 @@ tags: [changelog]
 - [[Native Indexed Stores]] defines `Buckets[V]` on the tree carrier, key narrowing, deterministic `hashOf`, seeded `mixHash` and the MultiMap primitives.
 - [[Compiler Lower Store]], [[Compiler Lower Multi Map]] and [[Native Hash Mixing]] are new; [[Backend Store Programs]] carries the conformance, refusal and counted-cleanup corpus.
 - A builtin taken as a value now reports a sited failure at the call made through it ([[Backend Frame Program]]).
+
+## 2026-11-06 — Desktop acceptance and Windows compiler preparation (#833)
+
+- [[Pudu Desktop]] records the full product completion obligations and separates tested native
+  slices from application, packaging, security, performance and delivery evidence still required.
+- Verified native Windows Cabal3.16.1.0 resolves the pinned project with GHC9.14.1; the normal
+  application-CI-style build is compiling dependencies in the task container. No completed compiler
+  build or Windows application execution is claimed.
+- Independent storage-boundary audit identifies fail-closed private admission, dynamic path safety,
+  unnamed-store isolation and COM/request ownership as the next Windows corrections.
+
+## 2026-11-06 — Windows callback lifetime admission (#833)
+
+- [[Pudu Webview Windows Host]] gives each view a unique lifetime identity. All asynchronous view
+  callbacks check it before mutating state or publishing events against a reusable numeric id.
+- [[Pudu Webview Windows View]] closes immediately during realization. View/window owners detach
+  before native teardown, preserving replacements created reentrantly; old HWND messages lose
+  their owner pointer before controller Close. Policy-failed views refuse further work.
+- [[Webview Windows Window Harness]] exercises production completion factories, borrowed late
+  controllers, retained old tokens, actual reentrant id reuse and stale native-window messages.
+  The production SDK strict build and focused Wine checks pass; real Windows application
+  execution remains a separate gate.
+- The verified official GHC9.14.1 Windows bundle's Clang20.1.7 also builds/links the adapter and
+  passes SDK, ownership, lifecycle and geometry checks under an isolated Wine display session.
+  A failed initial shared-prefix window run remains recorded; no source change was required.
+
+## 2026-11-06 — Production Windows SDK/toolchain wiring (#833)
+
+- [[Pudu Webview Windows SDK]] preserves native UUID metadata under the bundled Clang toolchain,
+  restores caller macros and provides the private interface-query helper. The former production
+  header path compiled but failed linking to missing MinGW UUID definitions.
+- [[Webview Windows SDK Harness]] validates independent SDK IDs and macro restoration. Production
+  units, handler ownership and geometry checks pass without a forced compatibility include.
+- [[Pudu Cabal Manifest]] selects the compiler C++ runtime and ships the wrapper. A Windows compiler
+  application job builds with the native SDK, places its loader correctly and runs IPC/isolation
+  examples; the new job remains unpublished and actual compiler execution remains unproved.
+
+## 2026-11-06 — Trusted HTTPS and response-cookie conformance (#833)
+
+- [[Desktop Policy Network Gate]] verifies that a protected response cannot plant a fresh cookie
+  visible on a subsequent unprotected request. Real macOS and Linux checks pass.
+- [[Desktop Policy HTTPS Gate]] validates an actual Linux upgraded POST at trusted loopback HTTPS,
+  preserving path/query/method/body and preventing original HTTP delivery. Certificate validation
+  remains enabled; task-only trust and private key files are removed afterward.
+- Trust cleanup reports rebuild/removal failures. A forced cleanup failure returns unsuccessfully;
+  verification restores the isolated trust store. Windows runtime conformance remains unproved.
+
+## 2026-11-06 — Live desktop policy network checks (#833)
+
+- [[Webview Network Policy Harness]] and [[Desktop Policy Network Gate]] exercise real native
+  pages against a fresh loopback first-party cookie. Independent server assertions prove control
+  cookie presence, empty protected headers, preserved POST bodies and zero blocked arrivals.
+- The live cookie/request checks pass on macOS and Linux with ephemeral views; the Windows network
+  executable cross-builds and links. CI registers all three backends, with an additional Windows
+  TLS-attempt probe. Windows runtime results and successful HTTPS delivery remain unproved.
+
+## 2026-11-06 — Structural desktop content policies (#833)
+
+- [[Pudu Webview Policy JSON]] and [[Pudu Webview Windows Policy]] replace substring searches with
+  bounded Unicode-aware structural parsing and transactional compiled admission. Accepted rules
+  retain URL/resource/document-domain conjunction; unsupported conditions refuse explicitly.
+- [[Std Desktop Plugin]] emits explicit case-sensitive literal filters. Native matching and
+  generated style guards use compiled tokens and aggregate work limits; missing scope metadata
+  cannot silently broaden a rule.
+- [[Webview Policy JSON Harness]], [[Webview Windows Policy Harness]] and [[Desktop Policy Script Gate]]
+  cover the former formatted-rule omission, schema/refusal/Unicode cases, domain boundaries,
+  deterministic budget exhaustion, safe selector text and frame-domain guards. Actual Windows
+  cookie/network effects and selector-failure reporting remain separate conformance obligations.
+- [[Std Env]] documents the existing runtime helpers and resolves the desktop App dependency link.
+
+## 2026-11-06 — Windows view module boundaries (#833)
+
+- [[Pudu Webview Windows Environment]] owns loader/profile/scheme setup, and
+  [[Pudu Webview Windows Request]] owns request/navigation policy. The view lifecycle unit drops
+  from 745 to 355 lines; 13 moved helper bodies are unchanged. Registration/deferred startup and
+  callback ownership remain intact.
+- All production units cross-build and link, both Windows harness executables link, and the
+  geometry harness passes under Wine after extraction. Independent review finds no new blockers.
+- Review identifies a separate inherited content-policy gap: formatted rule JSON can install zero
+  rules while reporting success. An executable probe reproduces it; policy conformance remains open.
+
+## 2026-11-06 — Windows desktop geometry enforcement (#833)
+
+- [[Pudu Webview Windows Window]] replaces accepted min/max no-ops with retained client bounds,
+  checked native conversion and shared programmatic/interactive enforcement. Native menu wrapping
+  and frame changes use actual layout; corner sizing preserves the opposite edge.
+- [[Webview Windows Window Harness]] checks actual client/tracking sizes, bounds/reset/refusal,
+  wrapped menus in both resize directions, native position changes and iconification. The linked
+  Windows executable passes under Wine; current-delta Windows CI remains unpublished.
+- [[Pudu Webview Windows Host]] constructs COM callbacks from callables without relying on
+  nonstandard template deduction and scopes their creation references through registration.
+  Concrete callback/configuration types are final. [[Webview Windows Handler Harness]] reproduces
+  the former failed-registration leak and verifies synchronous, retained and moved lifetimes.
+
+## 2026-11-06 — Fail-closed Windows storage admission and native record ownership (#833)
+
+- [[Pudu Webview Windows Profile]] resolves storage before realization: dynamically read local data
+  and program paths that refuse when missing, relative or truncated; private folders with a
+  distinct profile per unnamed or ephemeral view; and SHA-256 store folders in a versioned
+  namespace, confirmed by an identity file. Earlier digest folders are bypassed.
+- [[Pudu Webview Windows Environment]] requires every private admission step and never falls back
+  to ordinary creation. A refused view closes and reports `refused`, decoded by
+  [[Std Desktop Webview]] as a typed `Refused` event that ends [[Std Desktop App]] with Platform or
+  Unsupported. A synchronous creation failure leaves the view retryable with a fresh lifetime.
+- Pending requests carry their view's lifetime and environment, are published only with a
+  deferral, and are finished exactly once by response or view close; views release their
+  environment, controller and renderer references at close.
+- Unnamed macOS views receive their own non-persistent store. [[Webview Drive Harness]] reproduced
+  the sharing (`private-isolation=0`) before the change and passes after it.
+- [[Webview Windows Profile Harness]] and [[Webview Windows Ownership Harness]] pass under
+  emulation with counted doubles. Reintroducing each original defect makes one of them fail.
+  Real Windows storage behavior remains unproved.
+
+## 2026-11-06 — Desktop application isolation and Linux application conformance (#833)
+
+- [[Std Desktop App]] namespaces persistent stores by a canonical application-name/view-label pair.
+  [[Desktop Application Isolation Fixture]] reproduced cross-application sharing before the fix;
+  both native application paths now pass separation, reopen persistence and delimiter-name checks.
+  Names are stable logical storage identities; ambiguous legacy label-only stores are bypassed.
+- [[Desktop Webview CI]] adds an actual GTK-enabled compiler application job. Local Linux runs
+  pass the two-window lifecycle fixture and development Notes self-test (9/9), alongside the
+  native control, authority, thread and storage harness.
+- [[Pudu Webview Header]] and all adapters accept NULL only for zero-length response slices.
+  The Linux empty-header crash has a native response-completion regression.
+
+## 2026-11-05 — Linux desktop controls and isolation (#833)
+
+- [[Pudu Webview GTK Window]] and [[Pudu Webview GTK Interaction]] implement native window state,
+  chrome, titlebar overlays, authenticated drag regions, inspector actions and opt-in file drops.
+- [[Pudu Webview GTK Context]] isolates unnamed views and shares explicitly named persistent
+  contexts for the native process lifetime; scheme routing retains the actual requesting view.
+- [[Webview Drive Harness]] checks real window-manager transitions, grow/shrink geometry, overlay
+  layout, native authority refusals, storage isolation/sharing and reopen during pending clearing.
+- [[Std Desktop Webview]] retains asynchronous data-clear failures explicitly; all six GTK ABI
+  entries enforce owning-thread admission. Windows control parity remains open.
+
+## 2026-11-05 — Desktop window controls continuation (#833)
+
+- [[Std Desktop Window]], [[Std Desktop Chrome]] and [[Pudu Webview macOS Window]] add permissioned
+  window controls, tracked state, development inspector shortcuts and opt-in placements/file drops.
+- [[Std Desktop App]] retains request-loop state, observes window events, answers native refusals
+  through IPC and closes through one lifecycle path. [[Std Desktop Reload]] owns change classification.
+- [[Desktop Modules Fixture]], [[Desktop Window Loop Fixture]] and [[Webview Drive Harness]] cover
+  malformed/scoped/denied controls, lossless drop filenames, native argument refusal and live
+  multi-window state and closure. The Linux continuation above extends these native controls.
+
+## 2026-11-05 — Pudu Desktop (#833)
+
+- [[architecture/DESKTOP-WEBVIEW]] and [[decisions/ADR-0026-a-webview-is-a-renderer]]: the Pudu program owns a WebView application through one six-entry record channel ([[Pudu Webview Header]], [[Pudu Webview Records]]), implemented by [[Pudu Webview macOS Adapter]], [[Pudu Webview GTK Adapter]] and [[Pudu Webview Windows Adapter]].
+- [[Std Desktop Webview]], [[Std Desktop Protocol]], [[Std Desktop Ipc]], [[Std Desktop Shape]], [[Std Desktop Bridge]], [[Std Desktop Capability]], [[Std Desktop Plugin]] and [[Std Desktop App]]: windows and views, the `pudu://app/` origin, typed commands with streams, events and generated TypeScript, deny-by-default capabilities bound to the calling document's origin, permissioned plugins with declarative blocking, and a run loop with development reload.
+- [[Std Desktop Native]] and [[Pudu Webview macOS Native]]: hybrid UI — a menu bar, native dialogs and Canvas-drawn native surfaces in the same window as WebViews.
+- [[Std Desktop Update]], [[Std Desktop Delta]] and [[Std Crypto Sign]] ([[Eval Sign]]): Ed25519-signed manifests with tracks, archive-aligned patches, background checks, staged installs and rollback.
+- [[Std Desktop Bundle]] and its formats with [[Std Desktop Cli]]: `.app`, `.dmg`, `.deb`, `.rpm`, AppImage, NSIS and MSI from `pudu-desktop.toml`; `pudu desktop` scaffolds, develops, generates types, builds, bundles, signs and publishes.
+- [[Pudu Bundle]] reads a sidecar program so packaged executables stay signable; [[Eval Io]] adds `modifiedTime` and `executablePath`.
+- [[Desktop Webview Gate]], [[Webview Drive Harness]] and [[Desktop Webview CI]] verify modules, adapters, updates and packages; [[Notes Desktop Example]] is the live check.
 
 ## 2026-11-05 — Native byte-addressed text contract (#827)
 

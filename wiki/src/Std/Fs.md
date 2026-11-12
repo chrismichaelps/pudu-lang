@@ -89,6 +89,11 @@ Resolved Grill Log: ordinary atomic outputs follow default creation policy and
 existing full permissions; private scratch retains its separate owner-only contract.
 No numeric mode is added to the public portable API.
 
+## Modification times (#833)
+
+`modifiedAt(path)` answers when a file last changed, in milliseconds since the Unix epoch, through
+the prelude `modifiedTime`. [[Std Desktop App]] compares it between scans to reload a frontend.
+
 ## Referenced by
 
 Depends on [[Std Bytes]], [[Std Env]], [[Std Io]], and [[Std Path]].

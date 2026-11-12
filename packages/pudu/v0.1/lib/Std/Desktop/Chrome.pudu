@@ -1,0 +1,217 @@
+module Std.Desktop.Chrome
+
+import Std.Desktop.Capability as Capability
+import Std.Desktop.Ipc as Ipc
+import Std.Desktop.Protocol as Protocol
+import Std.Desktop.Webview as Webview
+import Std.Desktop.Window as Window
+import Std.Json as Json
+import Std.Ui.Preferences as Preferences
+
+/// Where a window sits: its top-left corner and content size, in points.
+export type Placement = { x: Int, y: Int, width: Int, height: Int }
+
+/// What the loop knows about its windows: state, scale and placement by window, and the theme.
+export type Tracked = {
+  states: Map[Int, Webview.WindowState],
+  scales: Map[Int, Int],
+  places: Map[Int, Placement],
+  theme: Str
+}
+
+/// One open view: its id and the window holding it.
+export type Holder = { view: Int, window: Int }
+
+/// What a `pudu:window` call answered, and whether it asked the window to close.
+export type WindowAnswer = { response: Webview.Response, commands: Array[Array[Str]], closing: Bool }
+
+/// Nothing known yet.
+export fn tracked() -> Tracked { Tracked{states: mapOf([]), scales: mapOf([]), places: mapOf([]), theme: "light"} }
+
+fn quiet() -> Webview.WindowState {
+  Webview.WindowState{minimized: false, maximized: false, fullscreen: false, visible: true, focused: false}
+}
+
+/// A window's state as the frontend reads it.
+export fn stateJson(known: &Tracked, window: Int) -> Json.Json {
+  let state = match known.states.get(window) {
+    case Some(found) => found
+    case None => quiet()
+  }
+  let scale = match known.scales.get(window) {
+    case Some(found) => found
+    case None => 1000
+  }
+  Json.object(&[
+      ("minimized", Json.Boolean(state.minimized)),
+      ("maximized", Json.Boolean(state.maximized)),
+      ("fullscreen", Json.Boolean(state.fullscreen)),
+      ("visible", Json.Boolean(state.visible)),
+      ("focused", Json.Boolean(state.focused)),
+      ("scale", Json.Number(scale)),
+      ("theme", Json.Text(known.theme))
+    ])
+}
+
+fn viewsOf(holders: &Array[Holder], window: Int) -> Array[Int] {
+  holders.filter(fn(held: Holder) -> Bool { held.window == window }).map(fn(held: Holder) -> Int { held.view })
+}
+
+fn drop(view: Int, phase: Str, x: Int, y: Int, paths: &Array[Str]) -> Array[Array[Str]] {
+  let payload = Json.object(&[
+      ("phase", Json.Text(phase)),
+      ("x", Json.Number(x)),
+      ("y", Json.Number(y)),
+      ("paths", Json.list(&paths.map(fn(path: Str) -> Json.Json { Json.Text(path) })))
+    ])
+  [Ipc.emitTo(view, "pudu:drop", &payload)]
+}
+
+fn placed(known: &Tracked, window: Int) -> Placement {
+  match known.places.get(window) {
+    case Some(found) => found
+    case None => Placement{x: 0, y: 0, width: 0, height: 0}
+  }
+}
+
+/// The event folded into what is known, and the frontend events it causes.
+export fn observe(known: &Tracked, event: &Webview.Event, holders: &Array[Holder]) -> (Tracked, Array[Array[Str]]) {
+  let target = match *event {
+    case Webview.DevtoolsChanged(view, _) => Some(view)
+    case Webview.DropEntered(view, _, _, _) => Some(view)
+    case Webview.DropMoved(view, _, _) => Some(view)
+    case Webview.Dropped(view, _, _, _) => Some(view)
+    case Webview.DropLeft(view) => Some(view)
+    case _ => None
+  }
+  if let Some(view) = target {
+    if holders.filter(fn(held: Holder) -> Bool { held.view == view }).isEmpty() { return (*known, []) }
+  }
+  match *event {
+    case Webview.WindowChanged(window, state) => {
+      let next = Tracked{..*known, states: known.states.insert(window, state)}
+      (next, Ipc.emit(&viewsOf(holders, window), "pudu:window-state", &stateJson(&next, window)))
+    }
+    case Webview.ScaleChanged(window, scale) => {
+      let next = Tracked{..*known, scales: known.scales.insert(window, scale)}
+      (next, Ipc.emit(&viewsOf(holders, window), "pudu:window-state", &stateJson(&next, window)))
+    }
+    case Webview.ThemeChanged(theme) => {
+      let next = Tracked{..*known, theme: theme}
+      let views = holders.map(fn(held: Holder) -> Int { held.view })
+      (next, Ipc.emit(&views, "pudu:theme", &Json.Text(theme)))
+    }
+    case Webview.DevtoolsChanged(view, open) => (*known, [Ipc.emitTo(view, "pudu:devtools", &Json.object(&[("open", Json.Boolean(open))]))])
+    case Webview.DropEntered(view, x, y, paths) => (*known, drop(view, "enter", x, y, &paths))
+    case Webview.DropMoved(view, x, y) => (*known, drop(view, "over", x, y, &[]))
+    case Webview.Dropped(view, x, y, paths) => (*known, drop(view, "drop", x, y, &paths))
+    case Webview.DropLeft(view) => (*known, drop(view, "leave", 0, 0, &[]))
+    case Webview.Moved(window, x, y) => {
+      let place = placed(known, window)
+      (Tracked{..*known, places: known.places.insert(window, Placement{..place, x: x, y: y})}, [])
+    }
+    case Webview.Resized(window, width, height) => {
+      let place = placed(known, window)
+      (Tracked{..*known, places: known.places.insert(window, Placement{..place, width: width, height: height})}, [])
+    }
+    case _ => (*known, [])
+  }
+}
+
+fn texts(json: &Json.Json) -> Result[Array[Str], Str] {
+  match Json.field(json, "values") {
+    case Some(Json.List(items)) => {
+      var values: Array[Str] = []
+      for item in items {
+        match item {
+          case Json.Text(text) => { values = values.push(text) }
+          case _ => { return Err("window values are strings") }
+        }
+      }
+      Ok(values)
+    }
+    case _ => Err("window values are an array of strings")
+  }
+}
+
+fn invalid(origin: Str, why: Str) -> WindowAnswer {
+  WindowAnswer{response: Ipc.failure("pudu:window", origin, &Ipc.Failure{kind: Ipc.InvalidArguments, message: why, path: ".values"}), commands: [], closing: false}
+}
+
+fn refused(name: Str, origin: Str, why: Str) -> WindowAnswer {
+  WindowAnswer{response: Ipc.failure(name, origin, &Ipc.denied(why)), commands: [], closing: false}
+}
+
+/// The answer to `pudu:window` from a view at an origin, for the window holding it.
+export fn windowCall(
+  grants: &Capability.Grants,
+  known: &Tracked,
+  label: Str,
+  origin: Str,
+  window: Int,
+  body: &Bytes
+) -> WindowAnswer {
+  let json = match body.toText() {
+    case Some(text) => match Json.decode(text) {
+      case Ok(found) => found
+      case Err(_) => { return invalid(origin, "a window call is JSON") }
+    }
+    case None => { return invalid(origin, "a window call is UTF-8") }
+  }
+  let name = match Json.field(&json, "action") {
+    case Some(Json.Text(found)) => found
+    case _ => { return invalid(origin, "a window call names its action") }
+  }
+  let command = "window:" + name
+  let decision = Capability.decide(grants, label, origin, command)
+  if let Capability.Refused(why) = decision { return refused(command, origin, why) }
+  let values = match texts(&json) { case Ok(found) => found case Err(why) => { return invalid(origin, why) } }
+  for value in values {
+    if !Capability.permits(&decision, value) { return refused(command, origin, "the window value is outside its scope") }
+  }
+  if values.isEmpty() && decision != Capability.Unrestricted { return refused(command, origin, "a window action without values needs an unscoped grant") }
+  match Window.action(window, name, &values) {
+    case Ok(record) => {
+      let answer = if name == "state" { stateJson(known, window) } else { Json.Null }
+      WindowAnswer{response: Protocol.json(200, &answer), commands: if name == "close" { [] } else { [record] }, closing: name == "close"}
+    }
+    case Err(why) => WindowAnswer {
+      response: Ipc.failure(command, origin, &Ipc.Failure{kind: Ipc.InvalidArguments, message: why, path: ".values"}),
+      commands: [],
+      closing: false
+    }
+  }
+}
+
+fn key(label: Str) -> Str { "window." + label }
+
+/// The placement remembered for a window label, when there is one.
+export fn restore(app: Str, label: Str) -> Option[Placement] {
+  let held = match Preferences.load(app) {
+    case Ok(found) => found
+    case Err(_) => { return None }
+  }
+  let width = Preferences.whole(&held, key(label) + ".width", 0)
+  let height = Preferences.whole(&held, key(label) + ".height", 0)
+  if width <= 0 || height <= 0 { return None }
+  Some(Placement{x: Preferences.whole(&held, key(label) + ".x", 0), y: Preferences.whole(&held, key(label) + ".y", 0), width: width, height: height})
+}
+
+/// Remember the placements known for labelled windows; windows the platform never placed are skipped.
+export fn remember(app: Str, known: &Tracked, labels: &Array[(Int, Str)]) -> () {
+  var held = match Preferences.load(app) {
+    case Ok(found) => found
+    case Err(_) => Preferences.empty(app)
+  }
+  for (window, label) in *labels {
+    if let Some(place) = known.places.get(window) {
+      if place.width > 0 && place.height > 0 {
+        held = Preferences.setWhole(&held, key(label) + ".x", place.x)
+        held = Preferences.setWhole(&held, key(label) + ".y", place.y)
+        held = Preferences.setWhole(&held, key(label) + ".width", place.width)
+        held = Preferences.setWhole(&held, key(label) + ".height", place.height)
+      }
+    }
+  }
+  let _ = Preferences.save(&held)
+}

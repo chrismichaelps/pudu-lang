@@ -1,0 +1,169 @@
+module Std.Desktop.Window
+
+import Std.Desktop.Webview as Webview
+
+/// How a window's title bar is drawn.
+export type TitleBar = Visible | Transparent | Overlay
+
+/// Builds one action's record for a window from the frontend's values, or nothing when they do not fit.
+export type ActionFactory = fn(Int, &Array[Str]) -> Option[Array[Str]]
+
+/// Flag spellings the frontend may send.
+const FLAGS: Map[Str, Str] = mapOf([("true", "1"), ("1", "1"), ("false", "0"), ("0", "0")])
+
+/// Title bar styles by name.
+const TITLE_BARS: Set[Str] = #{"visible", "transparent", "overlay"}
+
+/// Every action the frontend may ask of its window, each with the record it becomes.
+const ACTIONS: Map[Str, ActionFactory] = mapOf([
+    ("close", fn(window: Int, values: &Array[Str]) -> Option[Array[Str]] { bare(window, "close", values) }),
+    ("minimize", fn(window: Int, values: &Array[Str]) -> Option[Array[Str]] { bare(window, "minimize", values) }),
+    ("unminimize", fn(window: Int, values: &Array[Str]) -> Option[Array[Str]] { bare(window, "unminimize", values) }),
+    ("maximize", fn(window: Int, values: &Array[Str]) -> Option[Array[Str]] { bare(window, "maximize", values) }),
+    ("unmaximize", fn(window: Int, values: &Array[Str]) -> Option[Array[Str]] { bare(window, "unmaximize", values) }),
+    ("toggle-maximize", fn(window: Int, values: &Array[Str]) -> Option[Array[Str]] { bare(window, "toggle-maximize", values) }),
+    ("show", fn(window: Int, values: &Array[Str]) -> Option[Array[Str]] { bare(window, "show", values) }),
+    ("hide", fn(window: Int, values: &Array[Str]) -> Option[Array[Str]] { bare(window, "hide", values) }),
+    ("focus", fn(window: Int, values: &Array[Str]) -> Option[Array[Str]] { bare(window, "focus", values) }),
+    ("center", fn(window: Int, values: &Array[Str]) -> Option[Array[Str]] { bare(window, "center", values) }),
+    ("state", fn(window: Int, values: &Array[Str]) -> Option[Array[Str]] { bare(window, "state", values) }),
+    ("title", fn(window: Int, values: &Array[Str]) -> Option[Array[Str]] { if values.length() == 1 { Some(Webview.setTitle(window, values[0])) } else { None } }),
+    ("size", fn(window: Int, values: &Array[Str]) -> Option[Array[Str]] { pair(window, "size", values) }),
+    ("min-size", fn(window: Int, values: &Array[Str]) -> Option[Array[Str]] { pair(window, "min-size", values) }),
+    ("max-size", fn(window: Int, values: &Array[Str]) -> Option[Array[Str]] { pair(window, "max-size", values) }),
+    ("position", fn(window: Int, values: &Array[Str]) -> Option[Array[Str]] { pair(window, "position", values) }),
+    ("fullscreen", fn(window: Int, values: &Array[Str]) -> Option[Array[Str]] { flagged(window, "fullscreen", values) }),
+    ("always-on-top", fn(window: Int, values: &Array[Str]) -> Option[Array[Str]] { flagged(window, "always-on-top", values) }),
+    ("decorations", fn(window: Int, values: &Array[Str]) -> Option[Array[Str]] { flagged(window, "decorations", values) }),
+    ("resizable", fn(window: Int, values: &Array[Str]) -> Option[Array[Str]] { flagged(window, "resizable", values) }),
+    ("closable", fn(window: Int, values: &Array[Str]) -> Option[Array[Str]] { flagged(window, "closable", values) }),
+    ("minimizable", fn(window: Int, values: &Array[Str]) -> Option[Array[Str]] { flagged(window, "minimizable", values) }),
+    ("maximizable", fn(window: Int, values: &Array[Str]) -> Option[Array[Str]] { flagged(window, "maximizable", values) }),
+    ("content-protected", fn(window: Int, values: &Array[Str]) -> Option[Array[Str]] { flagged(window, "content-protected", values) }),
+    ("titlebar", fn(window: Int, values: &Array[Str]) -> Option[Array[Str]] {
+        if values.length() == 1 && values[0] in TITLE_BARS { Some(["window", "{window}", "titlebar", values[0]]) } else { None }
+      }),
+    ("attention", fn(window: Int, values: &Array[Str]) -> Option[Array[Str]] {
+        let parsed = flagged(window, "attention", values) ?
+        Some(requestAttention(window, parsed[3] == "1"))
+      }),
+    ("badge", fn(window: Int, values: &Array[Str]) -> Option[Array[Str]] { if values.length() == 1 { Some(setBadge(window, values[0])) } else { None } }),
+  ])
+
+fn bare(window: Int, verb: Str, values: &Array[Str]) -> Option[Array[Str]] {
+  if values.isEmpty() { Some(["window", "{window}", verb]) } else { None }
+}
+
+fn whole(text: Str) -> Option[Int] {
+  match text.toInt() {
+    case Some(value) if value >= 0 => Some(value)
+    case _ => None
+  }
+}
+
+fn pair(window: Int, verb: Str, values: &Array[Str]) -> Option[Array[Str]] {
+  if values.length() != 2 { return None }
+  let first = whole(values[0]) ?
+  let second = whole(values[1]) ?
+  Some(["window", "{window}", verb, "{first}", "{second}"])
+}
+
+fn flagged(window: Int, verb: Str, values: &Array[Str]) -> Option[Array[Str]] {
+  if values.length() != 1 { return None }
+  let spelled = FLAGS.get(values[0].toLower()) ?
+  Some(["window", "{window}", verb, spelled])
+}
+
+fn flag(value: Bool) -> Str { if value { "1" } else { "0" } }
+
+/// The record for one frontend window action, or why its values were refused.
+export fn action(window: Int, name: Str, values: &Array[Str]) -> Result[Array[Str], Str] {
+  match ACTIONS.get(name) {
+    case Some(factory) => match factory(window, values) {
+      case Some(record) => Ok(record)
+      case None => Err("{name} was given values it cannot use")
+    }
+    case None => Err("{name} is not a window action")
+  }
+}
+
+/// Every frontend window action, for writing capability grants.
+export fn actions() -> Array[Str] {
+  var names: Array[Str] = []
+  for (name, _) in ACTIONS { names = names.push(name) }
+  names
+}
+
+/// Minimize a window to the dock or task bar.
+export fn minimize(window: Int) -> Array[Str] { ["window", "{window}", "minimize"] }
+
+/// Restore a minimized window.
+export fn unminimize(window: Int) -> Array[Str] { ["window", "{window}", "unminimize"] }
+
+/// Maximize a window.
+export fn maximize(window: Int) -> Array[Str] { ["window", "{window}", "maximize"] }
+
+/// Restore a maximized window.
+export fn unmaximize(window: Int) -> Array[Str] { ["window", "{window}", "unmaximize"] }
+
+/// Maximize a window, or restore it when it already is.
+export fn toggleMaximize(window: Int) -> Array[Str] { ["window", "{window}", "toggle-maximize"] }
+
+/// Keep a window above other applications' windows.
+export fn setAlwaysOnTop(window: Int, wanted: Bool) -> Array[Str] { ["window", "{window}", "always-on-top", flag(wanted)] }
+
+/// Show or remove the window's frame and title bar.
+export fn setDecorations(window: Int, wanted: Bool) -> Array[Str] { ["window", "{window}", "decorations", flag(wanted)] }
+
+/// Whether the close button closes the window.
+export fn setClosable(window: Int, wanted: Bool) -> Array[Str] { ["window", "{window}", "closable", flag(wanted)] }
+
+/// Whether the window can be minimized.
+export fn setMinimizable(window: Int, wanted: Bool) -> Array[Str] { ["window", "{window}", "minimizable", flag(wanted)] }
+
+/// Whether the window can be maximized.
+export fn setMaximizable(window: Int, wanted: Bool) -> Array[Str] { ["window", "{window}", "maximizable", flag(wanted)] }
+
+/// Whether a person can resize the window.
+export fn setResizable(window: Int, wanted: Bool) -> Array[Str] { ["window", "{window}", "resizable", flag(wanted)] }
+
+/// The window's background behind its views, with alpha; below 255 the window is transparent.
+export fn setBackground(window: Int, red: Int, green: Int, blue: Int, alpha: Int) -> Array[Str] {
+  ["window", "{window}", "background", "{red}", "{green}", "{blue}", "{alpha}"]
+}
+
+/// How the title bar is drawn; `Overlay` lets content run under the window buttons.
+export fn setTitleBar(window: Int, style: TitleBar) -> Array[Str] {
+  let name = match style {
+    case Visible => "visible"
+    case Transparent => "transparent"
+    case Overlay => "overlay"
+  }
+  ["window", "{window}", "titlebar", name]
+}
+
+/// Ask for the person's attention, insistently when `critical`.
+export fn requestAttention(window: Int, critical: Bool) -> Array[Str] {
+  ["window", "{window}", "attention", if critical { "critical" } else { "informational" }]
+}
+
+/// The application's badge, such as an unread count; empty removes it.
+export fn setBadge(window: Int, label: Str) -> Array[Str] { ["window", "{window}", "badge", label] }
+
+/// Keep the window's content out of screenshots and screen sharing.
+export fn setContentProtected(window: Int, wanted: Bool) -> Array[Str] { ["window", "{window}", "content-protected", flag(wanted)] }
+
+/// Report the window's state, scale and theme as events.
+export fn queryState(window: Int) -> Array[Str] { ["window", "{window}", "state"] }
+
+/// Open the inspector when it is closed, close it when it is open.
+export fn toggleDevtools(view: Int) -> Array[Str] { ["view", "{view}", "devtools-toggle"] }
+
+/// Report whether the inspector is open.
+export fn queryDevtools(view: Int) -> Array[Str] { ["view", "{view}", "devtools-state"] }
+
+/// Show the print panel for a view's page.
+export fn printPage(view: Int) -> Array[Str] { ["view", "{view}", "print"] }
+
+/// Remove everything the view's website data store holds.
+export fn clearData(view: Int) -> Array[Str] { ["view", "{view}", "clear-data"] }

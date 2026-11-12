@@ -175,6 +175,7 @@ tags: [moc, module, stdlib]
 - [[Std Test Property]] — generated values with shrinking, seeded so a failure repeats.
 - [[Std Log]] — a logger as a value, carrying a level, a name, fields, and a format.
 - [[Std Process]] — subprocess results and convenience projections.
+- [[Std Env]] — arguments, environment, portable locations and monotonic time.
 - [[Std Time]] — instants, durations, calendar conversion, and clocks.
 - [[Std Cron]] — five-field schedule expressions, matching, and the next firing minute in UTC.
 - [[Std Stats]] — descriptive statistics, percentiles, correlation, histograms, and a streaming accumulator.
@@ -230,6 +231,21 @@ tags: [moc, module, stdlib]
 - [[Std Db Sqlite]] — embedded SQLite prepared statements through the shared driver contract.
 
 - [[Std Db Row]] — typed backend-neutral result access and cardinality-aware mapping.
+
+## Desktop applications
+
+- [[Std Desktop Chrome]] · [[Std Desktop Window]] — tracked window state and permissioned controls.
+- [[Std Desktop Reload]] — frontend change classification.
+
+- [[Std Desktop Webview]] · [[Std Desktop Records]] — windows, views, commands, events, requests.
+- [[Std Desktop Protocol]] — the `pudu://app/` origin and asset archives.
+- [[Std Desktop Ipc]] · [[Std Desktop Shape]] · [[Std Desktop Bridge]] — typed commands, streams, events and generated TypeScript.
+- [[Std Desktop Capability]] · [[Std Desktop Plugin]] — deny-by-default grants and permissioned plugins.
+- [[Std Desktop App]] — the run loop, development reload and reserved commands.
+- [[Std Desktop Native]] — menu bars, dialogs and native surfaces beside WebViews.
+- [[Std Desktop Update]] · [[Std Desktop Delta]] · [[Std Crypto Sign]] — signed, patched, rolled-back updates.
+- [[Std Desktop Bundle]] · [[Std Desktop Bundle Config]] · [[Std Desktop Bundle Binary]] · [[Std Desktop Bundle Mac]] · [[Std Desktop Bundle Linux]] · [[Std Desktop Bundle Rpm]] · [[Std Desktop Bundle Windows]] — packages for every platform.
+- [[Std Desktop Cli]] · [[Std Desktop Cli Template]] — `pudu desktop`.
 
 ## Referenced by
 

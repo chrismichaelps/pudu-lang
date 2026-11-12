@@ -13,6 +13,13 @@ homepage:           https://github.com/chrismichaelps/pudu-lang
 bug-reports:        https://github.com/chrismichaelps/pudu-lang/issues
 build-type:         Simple
 extra-source-files: cbits/pudu_desktop.h
+                    cbits/pudu_webview.h
+                    cbits/pudu_webview_records.h
+                    cbits/pudu_webview_macos.h
+                    cbits/pudu_webview_gtk.h
+                    cbits/pudu_webview_win.h
+                    cbits/pudu_webview_win_sdk.h
+                    cbits/pudu_webview_policy_json.h
                     cbits/pudu_desktop_host.h
                     cbits/pudu_audio.h
                     cbits/pudu_audio_stream.h
@@ -55,6 +62,16 @@ data-files:         lib/Std/*.pudu
 source-repository head
   type:             git
   location:         https://github.com/chrismichaelps/pudu-lang.git
+
+flag webview2
+  description: Build the Windows WebView adapter; needs the WebView2 SDK headers on the include path
+  default:     False
+  manual:      True
+
+flag webkitgtk
+  description: Build the Linux WebView adapter against WebKitGTK 4.1 and GTK 3
+  default:     False
+  manual:      True
 
 common warnings
   default-language: GHC2024
@@ -262,6 +279,8 @@ library
     Pudu.Eval.Aead
     Pudu.Eval.Child
     Pudu.Eval.Verify
+    Pudu.Eval.Sign
+    Pudu.Eval.Webview
     Pudu.Eval.Signal
     Pudu.Eval.Entropy
     Pudu.Eval.DeclaredOwner
@@ -531,11 +550,42 @@ library
                     cbits/pudu_desktop_access.m
                     cbits/pudu_desktop_menu.m
                     cbits/pudu_desktop_window.m
+                    cbits/pudu_webview_records.c
+                    cbits/pudu_webview_macos.m
+                    cbits/pudu_webview_macos_view.m
+                    cbits/pudu_webview_macos_window.m
+                    cbits/pudu_webview_macos_native.m
                     cbits/pudu_audio.c
                     cbits/pudu_audio_stream.c
     cc-options:     -fobjc-arc
-    cpp-options:    -DPUDU_DARWIN_DESKTOP -DPUDU_DARWIN_AUDIO
-    frameworks:     AppKit AudioToolbox CoreGraphics
+    cpp-options:    -DPUDU_DARWIN_DESKTOP -DPUDU_DARWIN_AUDIO -DPUDU_NATIVE_WEBVIEW
+    frameworks:     AppKit AudioToolbox CoreGraphics WebKit
+  if os(windows) && flag(webview2)
+    c-sources:      cbits/pudu_webview_records.c
+    cxx-sources:    cbits/pudu_webview_win.cpp
+                    cbits/pudu_webview_win_window.cpp
+                    cbits/pudu_webview_win_control.cpp
+                    cbits/pudu_webview_win_view.cpp
+                    cbits/pudu_webview_win_environment.cpp
+                    cbits/pudu_webview_win_profile.cpp
+                    cbits/pudu_webview_win_request.cpp
+                    cbits/pudu_webview_win_policy.cpp
+                    cbits/pudu_webview_policy_json.cpp
+                    cbits/pudu_webview_win_native.cpp
+    cxx-options:    -std=c++17 -fms-extensions
+    build-depends:  system-cxx-std-lib ==1.0
+    extra-libraries: ole32 user32 shlwapi comdlg32 crypt32 gdi32 uuid
+    cpp-options:    -DPUDU_NATIVE_WEBVIEW
+  if os(linux) && flag(webkitgtk)
+    c-sources:      cbits/pudu_webview_records.c
+                    cbits/pudu_webview_gtk.c
+                    cbits/pudu_webview_gtk_view.c
+                    cbits/pudu_webview_gtk_context.c
+                    cbits/pudu_webview_gtk_window.c
+                    cbits/pudu_webview_gtk_interaction.c
+                    cbits/pudu_webview_gtk_native.c
+    pkgconfig-depends: webkit2gtk-4.1 >= 2.40, gtk+-3.0
+    cpp-options:    -DPUDU_NATIVE_WEBVIEW
 
 executable pudu
   import:           warnings

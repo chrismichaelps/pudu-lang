@@ -226,6 +226,11 @@ evaluation agree. A module may shadow a kernel name like any prelude value.
 
 Lane kernel names are listed from `laneKernels` beside them.
 
+## Desktop and signature names (#833)
+
+Reserves the Ed25519, WebView, `modifiedTime` and `executablePath` names so name resolution and
+checking agree on them.
+
 ## Referenced by
 
 [[src/Pudu/Semantic/_MOC]] · [[Name Resolution]] · [[grammar/pudu]]

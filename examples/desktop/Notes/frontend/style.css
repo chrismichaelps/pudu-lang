@@ -1,0 +1,6 @@
+body { font: 15px system-ui, sans-serif; margin: 0; background: #f6f5f2; color: #222; }
+main { display: grid; gap: 12px; padding: 24px; max-width: 640px; margin: auto; }
+input, textarea, button { font: inherit; padding: 8px 10px; border: 1px solid #ccc; border-radius: 6px; }
+textarea { min-height: 220px; resize: vertical; }
+button { justify-self: start; background: #2f5d50; color: white; border: none; cursor: pointer; }
+#status { color: #555; min-height: 1.2em; }

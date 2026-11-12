@@ -50,6 +50,13 @@ import Pudu.Eval.Desktop
   , writeClipboard
   )
 import Pudu.Eval.Signal (stopRequested, watchForStop)
+import Pudu.Eval.Webview
+  ( drainWebviewEvents
+  , pumpWebview
+  , respondWebview
+  , sendWebview
+  , webviewRequestBody
+  )
 import Pudu.Eval.Handle
   ( closeHandleAt
   , flushHandleAt
@@ -166,6 +173,8 @@ effectBuiltins =
   , CreateSymbolicLinkBuiltin
   , CanonicalPathBuiltin
   , FileSizeBuiltin
+  , ModifiedTimeBuiltin
+  , ExecutablePathBuiltin
   , DirectoryExistsBuiltin
   , HomeDirectoryBuiltin
   , PathSeparatorsBuiltin
@@ -250,6 +259,11 @@ effectBuiltins =
   , DesktopMenuBuiltin
   , DesktopMenuReportBuiltin
   , DesktopCloseBuiltin
+  , WebviewSendBuiltin
+  , WebviewPumpBuiltin
+  , WebviewEventsBuiltin
+  , WebviewBodyBuiltin
+  , WebviewRespondBuiltin
   , AudioDevicePlayBuiltin
   , AudioStreamOpenBuiltin
   , AudioStreamWriteBuiltin
@@ -489,6 +503,15 @@ callEffect spanValue builtin arguments = do
       (DesktopCloseBuiltin, [IntValue _ token]) -> do
         desktop <- currentDesktopStore
         effectUnit (closeDesktop desktop (fromInteger token))
+      (WebviewSendBuiltin, [StrValue records]) -> effectUnit (sendWebview records)
+      (WebviewPumpBuiltin, [IntValue _ milliseconds]) ->
+        resultOf . fmap BoolValue <$> lift refusal (pumpWebview (fromInteger milliseconds))
+      (WebviewEventsBuiltin, []) ->
+        resultOf . fmap BytesValue <$> lift refusal drainWebviewEvents
+      (WebviewBodyBuiltin, [IntValue _ request]) ->
+        resultOf . fmap BytesValue <$> lift refusal (webviewRequestBody (fromInteger request))
+      (WebviewRespondBuiltin, [IntValue _ request, IntValue _ status, StrValue headers, BytesValue body]) ->
+        effectUnit (respondWebview (fromInteger request) (fromInteger status) headers body)
       ( AudioDevicePlayBuiltin
         , [ IntValue _ sampleRate
           , IntValue _ channels
@@ -586,6 +609,10 @@ callEffect spanValue builtin arguments = do
         resultOf . fmap StrValue <$> lift refusal (canonicalPathAt (Text.unpack path))
       (FileSizeBuiltin, [StrValue path]) ->
         resultOf . fmap intOf <$> lift refusal (fileSizeAt (Text.unpack path))
+      (ModifiedTimeBuiltin, [StrValue path]) ->
+        resultOf . fmap intOf <$> lift refusal (modifiedMillisAt (Text.unpack path))
+      (ExecutablePathBuiltin, []) ->
+        resultOf . fmap StrValue <$> lift refusal executableLocation
       (DirectoryExistsBuiltin, [StrValue path]) ->
         BoolValue <$> lift refusal (testDirectoryExists (Text.unpack path))
       (HomeDirectoryBuiltin, []) -> optionalText <$> lift refusal homeDirectoryPath

@@ -38,6 +38,7 @@ tags: [moc, module]
 - [[Eval Effect]] — the operations that reach outside the program, and the refusal that keeps them out of constant folding.
 - [[Eval Builtin]] — the effects, built-in methods, and conversions the prelude wires in.
 - [[Eval Builtin Definition]] — the closed wired-in function vocabulary and canonical source names.
+- [[Eval Stop Requests]] — process-wide stop observation.
 - [[Eval Clock]] — calendar time and subprocesses.
 - [[Eval Io]] — the effects a program may perform, each answering with an outcome.
 - [[Eval Keyed]] — the runtime semantics of `Map` and `Set`, kept in key order by a balanced tree.
@@ -96,3 +97,5 @@ Dependency direction: Builtin Definition → Value → Env → Operator/Match/Ar
 
 - [[Runtime Witness Selection Delivery]] · [[Runtime Implementation Head]] · [[Eval Type Witness]] — structural implementation parameter binding (#735).
 - [[Eval Declared Owner]] — method keys that keep a declared type named like a built-in apart from it (#529).
+- [[Eval Webview]] — the evaluator's end of the WebView record channel (#833).
+- [[Eval Sign]] — Ed25519 signing and verification over bytes (#833).

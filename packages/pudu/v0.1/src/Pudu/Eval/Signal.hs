@@ -16,10 +16,11 @@ module Pudu.Eval.Signal
   , watchForStop
   ) where
 
-import Data.IORef (IORef, newIORef, readIORef, writeIORef)
+import Data.IORef (IORef, newIORef, readIORef)
 import System.IO.Unsafe (unsafePerformIO)
 
 #if defined(PUDU_POSIX_SIGNALS)
+import Data.IORef (writeIORef)
 import System.Posix.Signals
   ( Handler (Catch)
   , installHandler

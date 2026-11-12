@@ -167,7 +167,17 @@ Read arguments, detect the render style once, dispatch to the session, checker, 
 
 DEPTH 0.35 (SHALLOW by intent). It is the presentation boundary; deepening it would move language behaviour out of the library.
 
+## Desktop applications (#833)
+
+`pudu desktop <command> ...` runs [[Std Desktop Cli]] from the first library root that holds
+`Std/Desktop/Cli.pudu`, with the remaining arguments as the program's own. The compiler adds no
+packaging logic of its own: the tool is a Pudu program using the standard library.
+
 ## Grill Log
+
+- **Q:** Should `pudu desktop` be implemented in the compiler? **A:** No. _Rationale:_ packaging
+  is file, archive and process work the standard library already does, and keeping it in Pudu makes
+  the tool the same code an application can call. The compiler only locates the program.
 
 - **Q:** Which modules does `pudu build --native` lower? **A:** Every module of the compiled program, through `programNativeModules`; a construct still outside the native subset in any of them refuses at its own span (#539).
 

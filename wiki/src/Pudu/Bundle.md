@@ -87,7 +87,20 @@ materialise :: FilePath -> Bundle -> IO FilePath
 - Never modify running binary in-place: bundle creation always writes to a new target path.
 - No global cache directory: bundle execution isolates unpacked modules into a per-run temporary directory.
 
+## Sidecar programs (#833)
+
+An executable with no attached bundle looks for the same encoding in a sidecar file before acting as
+the compiler: `<executable>.pudub` beside it, or, when it runs from a macOS application's
+`Contents/MacOS`, `Contents/Resources/<executable>.pudub`. The sidecar is exactly the bytes a build
+appends — the encoded bundle, its padded length and the marker — so a desktop package can ship the
+runtime unmodified and sign it, which an executable with data after its image cannot be.
+
 ## Grill Log
+
+- **Q:** Why a sidecar instead of signing the appended executable? **A:** Code signing on macOS
+  refuses an executable with bytes after its image, and Authenticode places its own signature at the
+  end of the file where the trailer lives. A separate file keeps the runtime a normal signable
+  executable and the program a resource the signature seals.
 
 - **Q:** Why append modules to the binary rather than embedding via linker or C compiler?
   **A:** Appending works across all host platforms without requiring external C toolchains or relinking.

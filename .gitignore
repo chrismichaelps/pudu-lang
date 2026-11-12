@@ -44,3 +44,5 @@ editors/vscode/*.vsix
 
 # Packages the website installs from pudu.lock; fetched with `pudu install --locked`, never committed.
 website/deps/
+dist-opt/
+dist-fast/

@@ -210,6 +210,13 @@ tags: [moc, module]
 
 - [[Desktop Presentation Test]] · [[Desktop Presentation Gate]] · [[Desktop Presentation CI]] — native row/channel conformance.
 - [[Desktop Window Test]] · [[Desktop Configure Gate]] · [[Desktop Configure Fixture]] — window records, density, limits and full screen.
+- [[Desktop Webview Gate]] · [[Desktop Window Loop Fixture]] · [[Desktop Application Isolation Fixture]] · [[Desktop Modules Fixture]] · [[Desktop Updates Fixture]] · [[Desktop Packages Fixture]] — desktop modules, updates over HTTP, and packages checked by their own tools.
+- [[Webview Records Test]] · [[Webview Drive Harness]] · [[Desktop Webview CI]] — record framing and both WebView adapters driven natively.
+- [[Webview Windows Window Harness]] — actual native window geometry and retained limits.
+- [[Webview Windows Handler Harness]] — callback creation-reference and asynchronous ownership.
+- [[Webview Windows Profile Harness]] · [[Webview Windows Ownership Harness]] · [[Webview Windows Doubles]] — fail-closed storage admission and exactly-once native record release.
+- [[Pudu JS Bridge]] · [[Pudu JS Bridge Declarations]] · [[Pudu JS Bridge Test]] · [[Desktop Bridge Generator]] — the page bridge, its types, tests and embedding.
+- [[Notes Desktop Example]] — a complete desktop application with a live self-test.
 
 ## Referenced by
 
@@ -328,5 +335,17 @@ tags: [moc, module]
 
 - [[Program View Spec]] · [[Text View Model Tests]]
 - [[UsesViewBoundaries]] · [[UsesStringViewSearch]] · [[UsesIterViews]]
+
+- [[Webview Policy JSON Harness]] · [[Webview Windows Policy Harness]] · [[Desktop Policy Script Gate]] — structural policy and emitted-script regressions.
+
+- [[Webview Network Policy Harness]] · [[Desktop Policy Network Gate]] — real native cookie and request interception with server-side evidence.
+
+- [[Desktop Policy HTTPS Gate]] — isolated trusted-loopback HTTPS upgrade and body conformance.
+
+- [[Webview Windows SDK Harness]] — independently checked native interface identifiers.
+
+- [[Webview Storage Harness]] · [[Desktop Storage Gate]] — real cross-process named persistence and private reset.
+
+- [[Webview Windows Storage Probe]] — native private-mode observation and prior-profile forensic replay.
 
 - [[Backend Text View Programs]] — native UTF-8 byte-boundary and lifetime evidence.

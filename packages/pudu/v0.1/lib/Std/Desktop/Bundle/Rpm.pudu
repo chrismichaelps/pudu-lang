@@ -1,0 +1,248 @@
+module Std.Desktop.Bundle.Rpm
+
+import Std.Bytes as Bytes
+import Std.Compress.Gzip as Gzip
+import Std.Desktop.Bundle.Binary as Binary
+import Std.Desktop.Bundle.Config {BundleError}
+import Std.Desktop.Bundle.Config as Config
+import Std.Desktop.Bundle.Linux as Linux
+import Std.Hex as Hex
+import Std.Path as Path
+
+/// A header entry's value, by its storage type.
+export type Value
+  = Text(Str)
+  | Texts(Array[Str])
+  | Translated(Str)
+  | Int32s(Array[Int])
+  | Int16s(Array[Int])
+  | Blob(Bytes)
+
+/// One tagged header entry.
+export type Entry = { tag: Int, value: Value }
+
+/// The region tag that closes a signature header.
+export const SIGNATURE_REGION: Int = 62
+
+/// The region tag that closes a main header.
+export const HEADER_REGION: Int = 63
+
+/// Requirement flags: less-or-equal, provided by the package manager itself.
+const RPMLIB_FLAGS: Int = 16777226
+
+/// The package-manager features this package's layout relies on, with the versions that introduced them.
+const RPMLIB_FEATURES: Array[(Str, Str)] = [
+  ("rpmlib(CompressedFileNames)", "3.0.4-1"),
+  ("rpmlib(FileDigests)", "4.6.0-1"),
+  ("rpmlib(PayloadFilesHavePrefix)", "4.0-1")
+]
+
+/// The runtime libraries a WebView application needs on RPM systems.
+const RPM_REQUIRES: Array[Str] = ["webkit2gtk4.1", "gtk3"]
+
+/// The header magic: three bytes and the header version.
+const MAGIC: Array[UInt8] = [142u8, 173u8, 232u8, 1u8]
+
+fn typeOf(value: &Value) -> Int {
+  match *value {
+    case Text(_) => 6
+    case Texts(_) => 8
+    case Translated(_) => 9
+    case Int32s(_) => 4
+    case Int16s(_) => 3
+    case Blob(_) => 7
+  }
+}
+
+fn alignmentOf(value: &Value) -> Int {
+  match *value {
+    case Int32s(_) => 4
+    case Int16s(_) => 2
+    case _ => 1
+  }
+}
+
+fn nulTerminated(text: Str) -> Bytes { text.toBytes().concat(bytesOf([0u8])) }
+
+fn encoded(value: &Value) -> (Bytes, Int) {
+  match *value {
+    case Text(text) => (nulTerminated(text), 1)
+    case Translated(text) => (nulTerminated(text), 1)
+    case Texts(items) => (Bytes.join(&items.map(fn(item: Str) -> Bytes { nulTerminated(item) })), items.length())
+    case Int32s(items) => (Bytes.join(&items.map(fn(item: Int) -> Bytes { Binary.u32(item) })), items.length())
+    case Int16s(items) => (Bytes.join(&items.map(fn(item: Int) -> Bytes { Binary.u16(item) })), items.length())
+    case Blob(bytes) => (bytes, bytes.length())
+  }
+}
+
+fn indexEntry(tag: Int, kind: Int, offset: Int, count: Int) -> Bytes {
+  Binary.u32(tag).concat(Binary.u32(kind)).concat(Binary.u32(offset)).concat(Binary.u32(count))
+}
+
+/// One header structure: entries sorted by tag, closed by the region entry `region`.
+export fn header(entries: &Array[Entry], region: Int) -> Bytes {
+  let sorted = entries.sortBy(fn(left: Entry, right: Entry) -> Bool { left.tag < right.tag })
+  var index: Array[Bytes] = []
+  var store: Array[Bytes] = []
+  var length = 0
+  for held in sorted {
+    let padding = Binary.alignTo(length, alignmentOf(&held.value))
+    let (bytes, count) = encoded(&held.value)
+    store = store.push(padding).push(bytes)
+    index = index.push(indexEntry(held.tag, typeOf(&held.value), length + padding.length(), count))
+    length = length + padding.length() + bytes.length()
+  }
+  let entryCount = sorted.length() + 1
+  let trailer = indexEntry(region, 7, 4294967296 - entryCount * 16, 16)
+  let regionEntry = indexEntry(region, 7, length, 16)
+  Bytes.join(&[
+      bytesOf(MAGIC),
+      Binary.zeros(4),
+      Binary.u32(entryCount),
+      Binary.u32(length + 16),
+      regionEntry,
+      Bytes.join(&index),
+      Bytes.join(&store),
+      trailer
+    ])
+}
+
+fn modeOf(entry: &Linux.Installed) -> Int {
+  if entry.directory { return 16384 + entry.mode }
+  match entry.link {
+    case Some(_) => 40960 + 511
+    case None => 32768 + entry.mode
+  }
+}
+
+fn dataOf(entry: &Linux.Installed) -> Bytes {
+  match entry.link {
+    case Some(target) => target.toBytes()
+    case None => entry.data
+  }
+}
+
+fn split(path: Str) -> (Str, Str) {
+  let directory = Path.directoryOf(path)
+  (if directory.endsWith("/") { directory } else { directory + "/" }, Path.nameOf(path))
+}
+
+fn lead(name: Str) -> Bytes {
+  Bytes.join(&[
+      bytesOf([237u8, 171u8, 238u8, 219u8, 3u8, 0u8]),
+      Binary.u16(0),
+      Binary.u16(1),
+      Binary.padded(name, 66),
+      Binary.u16(1),
+      Binary.u16(5),
+      Binary.zeros(16)
+    ])
+}
+
+/// Write `<pkg>-<version>-1.<arch>.rpm` under `out`; answers its path.
+export fn rpm(config: &Config.Config, inputs: &Config.Inputs, out: Str, buildTime: Int) -> Result[Str, BundleError] {
+  let name = Config.packageName(config)
+  let files = Linux.layout(config, inputs)
+  var sizes: Array[Int] = []
+  var modes: Array[Int] = []
+  var digests: Array[Str] = []
+  var links: Array[Str] = []
+  var bases: Array[Str] = []
+  var indexes: Array[Int] = []
+  var directories: Array[Str] = []
+  var installed = 0
+  var inodes: Array[Int] = []
+  var cpioEntries: Array[Binary.CpioEntry] = []
+  for entry in files {
+    let data = dataOf(&entry)
+    let regular = !entry.directory && entry.link == None
+    sizes = sizes.push(if entry.directory { 4096 } else { data.length() })
+    modes = modes.push(modeOf(&entry))
+    digests = digests.push(if regular { Hex.encode(&sha256Of(data).toArray()) } else { "" })
+    links = links.push(match entry.link { case Some(target) => target case None => "" })
+    let (directory, base) = split(entry.path)
+    let position = directories.indexOf(directory)
+    if position < 0 {
+      indexes = indexes.push(directories.length())
+      directories = directories.push(directory)
+    } else {
+      indexes = indexes.push(position)
+    }
+    bases = bases.push(base)
+    if regular { installed = installed + data.length() }
+    inodes = inodes.push(inodes.length() + 1)
+    cpioEntries = cpioEntries.push(Binary.CpioEntry{name: "." + entry.path, mode: modeOf(&entry), mtime: buildTime, data: data})
+  }
+  let repeated = fn(value: Int) -> Array[Int] { files.map(fn(entry: Linux.Installed) -> Int { value }) }
+  let named = fn(value: Str) -> Array[Str] { files.map(fn(entry: Linux.Installed) -> Str { value }) }
+  let release = "1"
+  let requires = RPM_REQUIRES.concat(config.linux.depends)
+  let main = [
+    Entry{tag: 100, value: Texts(["C"])},
+    Entry{tag: 1000, value: Text(name)},
+    Entry{tag: 1001, value: Text(config.version)},
+    Entry{tag: 1002, value: Text(release)},
+    Entry{tag: 1004, value: Translated(config.description)},
+    Entry{tag: 1005, value: Translated(config.description)},
+    Entry{tag: 1006, value: Int32s([buildTime])},
+    Entry{tag: 1009, value: Int32s([installed])},
+    Entry{tag: 1014, value: Text(config.license)},
+    Entry{tag: 1016, value: Translated("Applications/" + config.category)},
+    Entry{tag: 1020, value: Text(config.homepage)},
+    Entry{tag: 1021, value: Text("linux")},
+    Entry{tag: 1022, value: Text(inputs.arch)},
+    Entry{tag: 1028, value: Int32s(sizes)},
+    Entry{tag: 1030, value: Int16s(modes)},
+    Entry{tag: 1033, value: Int16s(repeated(0))},
+    Entry{tag: 1034, value: Int32s(repeated(buildTime))},
+    Entry{tag: 1035, value: Texts(digests)},
+    Entry{tag: 1036, value: Texts(links)},
+    Entry{tag: 1037, value: Int32s(repeated(0))},
+    Entry{tag: 1039, value: Texts(named("root"))},
+    Entry{tag: 1040, value: Texts(named("root"))},
+    Entry{tag: 1047, value: Texts([name])},
+    Entry{tag: 1048, value: Int32s(requires.map(fn(item: Str) -> Int { 0 }).concat(RPMLIB_FEATURES.map(fn(feature: (Str, Str)) -> Int { RPMLIB_FLAGS })))},
+    Entry{tag: 1049, value: Texts(requires.concat(RPMLIB_FEATURES.map(fn(feature: (Str, Str)) -> Str { let (named, _) = feature
+              named }))) },
+    Entry{tag: 1050, value: Texts(requires.map(fn(item: Str) -> Str { "" }).concat(RPMLIB_FEATURES.map(fn(feature: (Str, Str)) -> Str { let (_, version) = feature
+              version }))) },
+    Entry{tag: 1064, value: Text("4.18.0")},
+    Entry{tag: 1095, value: Int32s(repeated(1))},
+    Entry{tag: 1096, value: Int32s(inodes)},
+    Entry{tag: 1097, value: Texts(named(""))},
+    Entry{tag: 1112, value: Int32s([8])},
+    Entry{tag: 1113, value: Texts([config.version + "-" + release])},
+    Entry{tag: 1116, value: Int32s(indexes)},
+    Entry{tag: 1117, value: Texts(bases)},
+    Entry{tag: 1118, value: Texts(directories)},
+    Entry{tag: 1124, value: Text("cpio")},
+    Entry{tag: 1125, value: Text("gzip")},
+    Entry{tag: 1126, value: Text("9")},
+    Entry{tag: 5011, value: Int32s([8])}
+  ]
+  let plain = Binary.cpio(&cpioEntries)
+  let payload = Gzip.compress(&plain, &Gzip.config())
+  let mainHeader = header(&main.concat([
+        Entry{tag: 5092, value: Texts([Hex.encode(&sha256Of(payload).toArray())])},
+        Entry{tag: 5093, value: Int32s([8])},
+        Entry{tag: 5097, value: Texts([Hex.encode(&sha256Of(plain).toArray())])}
+      ]), HEADER_REGION)
+  let signature = header(&[
+      Entry{tag: 273, value: Text(Hex.encode(&sha256Of(mainHeader).toArray()))},
+      Entry{tag: 1000, value: Int32s([mainHeader.length() + payload.length()])},
+      Entry{tag: 1007, value: Int32s([plain.length()])}
+    ], SIGNATURE_REGION)
+  let package = Bytes.join(&[
+      lead(name + "-" + config.version + "-" + release),
+      signature,
+      Binary.alignTo(signature.length(), 8),
+      mainHeader,
+      payload
+    ])
+  let path = Path.join(out, "{name}-{config.version}-{release}.{inputs.arch}.rpm")
+  Config.writeFile(path, &package) ?
+  if let Some(key) = config.linux.gpgKey {
+    Config.tool(".rpm", "gpg", &["--batch", "--yes", "--armor", "--local-user", key, "--detach-sign", path]) ?
+  }
+  Ok(path)
+}
