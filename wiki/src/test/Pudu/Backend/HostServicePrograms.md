@@ -39,6 +39,11 @@ The epoch-seconds probe checks both carrier limits, including the negative secon
 whose fraction returns it to range, and the next rounded millisecond beyond
 each limit.
 
+Resolved Grill Log: standard-input fixtures carry the exact input bytes and
+expected output, including growth past the initial buffer, embedded zero,
+multibyte text, truncated encoding, and repeated refusal or end of input.
+The native conformance harness supplies each byte stream to both engines.
+
 ## Referenced by
 
 [[Backend Native Tests]] · [[Native Host Services]] · [[Native Emission Coverage]]

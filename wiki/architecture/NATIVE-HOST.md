@@ -20,6 +20,7 @@ than they are written, are native (#846).
 | TLS | verified connections through the system TLS library: connecting, upgrading a plain endpoint, sending, receiving a record, the proven name, closing |
 | Compression | the gzip wrapper and the bare compressed stream, with levels and output limits |
 | Child programs | starting with pipes, an environment and a directory; reading, writing, closing input, waiting, stopping; `runProgram` |
+| Standard input | [[Native Host Input]] emits `readLine` directly and as a builtin value, with line, end and decoding outcomes |
 | Files | whole-file reads and writes, directories, links, permissions, temporary files, atomic writes, open readers and writers |
 | Math | the binary64 kernels |
 | Lanes | the packed binary64 lane kernels |

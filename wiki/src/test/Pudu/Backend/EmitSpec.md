@@ -76,6 +76,8 @@ Uses [[Compiler Lower]], [[Compiler Lower Body]], [[Backend Emit]],
 
 ## Resolved Grill Log
 
+- Standard-input lowering now executes in [[Backend Native Tests]]. Remove its stale refusal expectation and retain the exact span checks for unsupported device calls.
+
 - **Q:** How can a wholly divergent entry be tested safely? **A:** Compile and lower both trailing-loop and returned-loop forms, assert the entry is carried, and never run them. Their body-derived ABI has no observable successful result.
 - **Q:** How is milestone #488 protected against C evaluation-order drift? **A:** Pure checks assert reachable function signatures and refusal spans; execution checks compare nested calls, mutable operand snapshots, short-circuit effects, recursion, and depth-bound diagnostics against the interpreter.
 - **Q:** May unsupported signatures pass because they are uncalled? **A:** Yes; reachability is the contract. A reachable unsupported signature refuses at its own construct, and an unreachable one never enters Core.

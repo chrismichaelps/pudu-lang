@@ -5,6 +5,10 @@ tags: [changelog]
 
 # Changelog
 
+## 2026-11-12 — Native standard input (#846)
+
+- [[Native Host Input]] emits standard-input line reads, including calls through a builtin value, end of input, and persistent decoding refusals.
+
 ## 2026-11-11 — Native tasks, host services and type abstractions (#846)
 
 - [[Native Host Services]] emits `async fn`, async lambdas, `.await` and `async with scope { ... }`, with a scope's children joined on every way out; cells, locks, channels and threads; clocks, sleeping, arguments, environment, directories and separators; whole-file I/O, links, permissions, temporary files, atomic writes and open handles; the binary64 math kernels and the packed lanes. Foreign and `unsafe` access, and the desktop, audio and raster devices, remain explicit refusals.

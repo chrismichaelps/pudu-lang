@@ -141,6 +141,7 @@ library
     Pudu.Backend.Runtime.Host.Concurrent
     Pudu.Backend.Runtime.Host.File
     Pudu.Backend.Runtime.Host.Handle
+    Pudu.Backend.Runtime.Host.Input
     Pudu.Backend.Runtime.Host.Lanes
     Pudu.Backend.Runtime.Host.Math
     Pudu.Backend.Runtime.Host.Net

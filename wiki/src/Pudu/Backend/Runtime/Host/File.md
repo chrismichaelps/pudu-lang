@@ -15,6 +15,10 @@ Files, directories and links, each refusal worded as the interpreter's runtime w
 
 Operations are the portable POSIX ones behind feature-test macros; a failure answers the host message, never a partial result.
 
+Whole-file reads use the byte-sequence bounds and decoding diagnostics from
+[[Native Host Input]]. A bounded scan reports the leading byte of the first
+invalid sequence.
+
 ## Referenced by
 
 [[Native Host Runtime]] · [[Native Host Services]]

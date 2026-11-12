@@ -4,10 +4,13 @@
     stop requests. Every expectation is what the interpreter prints for the
     same program, and no expectation holds a descriptor number, a port, or
     the system's own reason. -}
-module Pudu.Backend.HostServicePrograms (hostServicePrograms) where
+module Pudu.Backend.HostServicePrograms (hostServicePrograms, standardInputPrograms) where
+
+import qualified Data.ByteString as ByteString
 
 import Data.Text (Text)
 import qualified Data.Text as Text
+import qualified Data.Text.Encoding as TextEncoding
 
 hostServicePrograms :: [(String, Text, Text)]
 hostServicePrograms =
@@ -242,3 +245,38 @@ hostServicePrograms =
 
 program :: [Text] -> Text
 program body = Text.unlines (["module Main", ""] <> body)
+
+standardInputPrograms :: [(String, ByteString.ByteString, Text, Text)]
+standardInputPrograms =
+  [ ( "lines and repeated EOF"
+    , TextEncoding.encodeUtf8 ("first\r\n\n" <> finalLine)
+    , source
+    , "Ok(Some(\"first\r\"))\nOk(Some(\"\"))\nOk(Some(\"" <> finalLine <> "\"))\nOk(None)\nOk(None)\n"
+    )
+  , ( "persistent malformed input"
+    , ByteString.pack [111, 107, 10, 255, 10]
+    , source
+    , "Ok(Some(\"ok\"))\n" <> Text.replicate 4 (invalidByte "255")
+    )
+  , ( "truncated input at EOF"
+    , ByteString.pack [226, 130]
+    , source
+    , Text.replicate 5 (invalidByte "226")
+    )
+  ]
+ where
+  finalLine = "café\0" <> Text.replicate 512 "x"
+  invalidByte byte =
+    "Err(\"<stdin>: hGetLine: invalid argument (cannot decode byte sequence starting from " <> byte <> ")\")\n"
+  source = Text.unlines
+    [ "module Main"
+    , "fn main() -> Int {"
+    , "  print(show(readLine()))"
+    , "  let next = readLine"
+    , "  print(show(next()))"
+    , "  print(show(next()))"
+    , "  print(show(readLine()))"
+    , "  print(show(readLine()))"
+    , "  0"
+    , "}"
+    ]

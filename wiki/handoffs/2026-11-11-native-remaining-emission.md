@@ -118,6 +118,18 @@ the epoch. Canonicalization at the carrier boundary restores `Ok(0)`.
 The focused service group and instrumented native checks pass at both
 limits, one millisecond beyond each, and at the decimal accumulation limit.
 
+Architect → Backend Engineer → Test Engineer. The standard-input slice owns
+[[Native Host Input]], [[Native Host Files]], [[Native Host Runtime]],
+[[Compiler Lower Kernel Host]], the package manifest, [[Backend Native Tests]],
+[[Backend Service Programs]], [[Backend Emit Tests]], their mirrors, the host
+coverage ledger, changelog and this handoff. It admits
+`readLine` through the existing optional host outcome and releases the run gate
+during a blocking read. Focused input and refusal checks passed, and the live
+pipe probe showed that a waiting reader lets another thread run. Independent
+review found and verified the readiness fix for inherited nonblocking input.
+Delayed lines, split multibyte sequences, malformed input and EOF matched the
+interpreter on those pipes.
+
 Exact next action: resolve native representation for host results whose
 integer magnitude exceeds the existing carrier.
 

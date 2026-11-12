@@ -11,7 +11,8 @@
 -}
 module Pudu.Backend.NativeSpec (backendNativeProperties) where
 
-import Control.Exception (IOException, finally, try)
+import Control.Exception (IOException, bracket, finally, try)
+import qualified Data.ByteString as ByteString
 import Data.Text (Text)
 import qualified Data.Text as Text
 import qualified Data.Text.IO as TextIO
@@ -35,7 +36,7 @@ import Pudu.Backend.StorePrograms (storeSuccessPrograms, storeModulePrograms, st
 import Pudu.Backend.KernelPrograms (kernelSuccessPrograms, kernelRefusalPrograms)
 import Pudu.Backend.AbstractionPrograms (abstractionSuccessPrograms, abstractionRefusalPrograms)
 import Pudu.Backend.HostPrograms (hostLibraryPrograms, hostSuccessPrograms, hostRefusalPrograms)
-import Pudu.Backend.HostServicePrograms (hostServicePrograms)
+import Pudu.Backend.HostServicePrograms (hostServicePrograms, standardInputPrograms)
 import Pudu.Backend.CryptoPrograms (cryptoSuccessPrograms)
 import Pudu.Backend.CharPrograms (charSuccessPrograms, charRefusalPrograms)
 import Pudu.Backend.TuplePrograms (tupleSuccessPrograms, tupleRefusalPrograms)
@@ -100,7 +101,7 @@ import System.Directory
 import System.Environment (lookupEnv, setEnv, unsetEnv)
 import System.Exit (ExitCode (..))
 import System.FilePath ((</>))
-import System.IO (Handle, hClose, hFlush, openTempFile, stdout, stderr)
+import System.IO (Handle, IOMode (ReadMode), hClose, hFlush, hGetEncoding, hSetBinaryMode, hSetEncoding, openTempFile, stderr, stdin, stdout, utf8, withFile)
 import System.IO.Temp (withSystemTempDirectory)
 import System.Process (readProcessWithExitCode)
 import Test.QuickCheck (Property, conjoin, counterexample, property, (===))
@@ -140,6 +141,7 @@ backendNativeProperties =
       (\(label, source, expected) -> conformanceExpecting (Just (expected, "", 0)) label source) hostSuccessPrograms)
   , ("native endpoints, secured connections, compression, child programs and time match the interpreter's own answers", conjoin <$> mapM
       (\(label, source, expected) -> conformanceExpecting (Just (expected, "", 0)) label source) hostServicePrograms)
+  , ("native standard input preserves line boundaries, EOF and decoding refusals", testStandardInput)
   , ("native library float kernels print the interpreter's own bits", conjoin <$> mapM (uncurry conformance) hostLibraryPrograms)
   , ("native host services, tasks and scopes retain interpreter refusals", conjoin <$> mapM (uncurry conformance) hostRefusalPrograms)
   , ("native type parameters, constructors, dynamic values and sequence bindings match the interpreter's own answers", conjoin <$> mapM
@@ -475,13 +477,26 @@ conformance = conformanceExpecting Nothing
 conformanceExpecting :: Maybe (Text, Text, Int) -> String -> Text -> IO Property
 conformanceExpecting expected label programText = conformanceWith [] expected label programText
 
+testStandardInput :: IO Property
+testStandardInput = conjoin <$> mapM check standardInputPrograms
+ where
+  check (label, input, source, expected) =
+    conformanceWithInput (Just input) [] (Just (expected, "", 0)) label source
+
 {-| A program of several modules: each `(file, text)` is written beside
     `Main.pudu`, which is the root. -}
 conformanceWith :: [(FilePath, Text)] -> Maybe (Text, Text, Int) -> String -> Text -> IO Property
-conformanceWith modules expected label programText = withSystemTempDirectory "pudu-native" $ \root -> do
+conformanceWith = conformanceWithInput Nothing
+
+conformanceWithInput :: Maybe ByteString.ByteString -> [(FilePath, Text)] -> Maybe (Text, Text, Int) -> String -> Text -> IO Property
+conformanceWithInput input modules expected label programText = withSystemTempDirectory "pudu-native" $ \root -> do
   let path = root </> "Main.pudu"
   mapM_ (\(file, text) -> TextIO.writeFile (root </> file) text) modules
   TextIO.writeFile path programText
+  inputPath <- traverse (\bytes -> do
+    let fixture = root </> "input"
+    ByteString.writeFile fixture bytes
+    pure fixture) input
   available <- compilerAvailable
   if not available
     then do
@@ -489,11 +504,11 @@ conformanceWith modules expected label programText = withSystemTempDirectory "pu
       pure (property True)
     else do
       program <- compileProgram path
-      interpreted <- interpret root program
+      interpreted <- withStandardInput inputPath (interpret root program)
       case interpreted of
         Left problem -> pure (counterexample (label <> ": interpreter: " <> problem) False)
         Right (interpOut, interpErr, interpStatus) -> do
-          native <- buildAndRun root program
+          native <- buildAndRun inputPath root program
           case native of
             Left problem -> pure (counterexample (label <> ": native: " <> problem) False)
             Right (nativeOut, nativeErr, nativeStatus, warnings) -> pure $ conjoin $
@@ -508,6 +523,20 @@ conformanceWith modules expected label programText = withSystemTempDirectory "pu
               ] <> maybe []
                 (\answer -> [counterexample (label <> ": mathematical result differs")
                   ((interpOut, interpErr, interpStatus) === answer)]) expected
+
+withStandardInput :: Maybe FilePath -> IO a -> IO a
+withStandardInput Nothing action = action
+withStandardInput (Just path) action = withFile path ReadMode $ \input ->
+  bracket (hDuplicate stdin) hClose $ \saved -> do
+    encoding <- hGetEncoding stdin
+    let restore = do
+          hDuplicateTo saved stdin
+          maybe (hSetBinaryMode stdin True) (hSetEncoding stdin) encoding
+    (do
+        hDuplicateTo input stdin
+        hSetEncoding stdin utf8
+        action
+      ) `finally` restore
 
 {-| The interpreter side, mirroring the `pudu` executable's run path: standard
     output captured from the evaluator itself, diagnostics rendered with the
@@ -592,8 +621,8 @@ captureHandle stream directory action = do
       removeFile path
       pure (value, captured)
 
-buildAndRun :: FilePath -> ProgramResult -> IO (Either String (Text, Text, Int, Text))
-buildAndRun root program = case programNativeModules program of
+buildAndRun :: Maybe FilePath -> FilePath -> ProgramResult -> IO (Either String (Text, Text, Int, Text))
+buildAndRun input root program = case programNativeModules program of
   Nothing -> pure (Left "the program did not compile")
   Just modules -> case lowerProgram "main" modules of
     LowerRefused refusals ->
@@ -611,7 +640,9 @@ buildAndRun root program = case programNativeModules program of
         case compiled of
           Left failure -> pure (Left ("toolchain failure: " <> show failure))
           Right warnings -> do
-            (code, out, err) <- readProcessWithExitCode executable [] ""
+            (code, out, err) <- case input of
+              Nothing -> readProcessWithExitCode executable [] ""
+              Just path -> readProcessWithExitCode "sh" ["-c", "exec \"$1\" < \"$2\"", "pudu-native-input", executable, path] ""
             pure (Right (Text.pack out, Text.pack err, statusOf code, warnings))
  where
   statusOf ExitSuccess = 0

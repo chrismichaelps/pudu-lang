@@ -86,7 +86,8 @@ moded name mode count = Call (KernelHost name) [mode] [0 .. count - 1]
 
 filePrimitives :: [(Text, Primitive)]
 filePrimitives =
-  [ ("readFile", Primitive [text] (outcome text) [] (Outcome (host "read_file" 1)))
+  [ ("readLine", Primitive [] (outcome (option text)) [] (OutcomeOptional (host "read_line" 0)))
+  , ("readFile", Primitive [text] (outcome text) [] (Outcome (host "read_file" 1)))
   , ("writeFile", Primitive [text, text] (outcome unit) [] (Outcome (moded "write_file" 0 2)))
   , ("appendFile", Primitive [text, text] (outcome unit) [] (Outcome (moded "write_file" 1 2)))
   , ("fileExists", Primitive [text] CoreBoolType [] (Plain (moded "file_exists" 0 1)))

@@ -72,6 +72,12 @@ own renderer; the native side runs the published executable with
 mirrored from the `pudu` executable's `reportResult` in one documented
 helper.
 
+Resolved Grill Log: standard-input cases feed the same bytes to both engines.
+The interpreter temporarily borrows a file handle and restores its input after
+each case. The executable receives the file as standard input. Assert exact
+output for an empty line, an unterminated line, repeated end of input, calls
+through a builtin value, and a persistent decoding refusal.
+
 ## Algorithm and negative logic
 
 Programs are written to a fresh temporary directory as files whose names

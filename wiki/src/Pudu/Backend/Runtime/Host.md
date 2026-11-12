@@ -9,13 +9,13 @@ aliases: [Native Host Runtime]
 
 Export hostRuntimeParts: every host part in emission order, what the program
 asks of the machine it runs on. A family comes after the families its parts
-call: state, math, process, concurrency, files, handles, scopes, lanes,
+call: state, math, process, concurrency, input, files, handles, scopes, lanes,
 signals, sockets, compression, child programs, and time rendering and reading.
 
 ## Resolved Grill Log
 
 Parts are selected by need like every runtime part, so a program that asks
-nothing of the host carries none of this.
+nothing of the host carries none of this. [[Native Host Input]] supplies decoding\nhelpers before [[Native Host Files]] uses them.
 
 ## Referenced by
 
