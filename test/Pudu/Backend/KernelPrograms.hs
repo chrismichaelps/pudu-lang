@@ -6,7 +6,60 @@ import qualified Data.Text as Text
 
 kernelSuccessPrograms :: [(String, Text, Text)]
 kernelSuccessPrograms =
-  [ ( "the broad phase answers touching pairs in order and refuses malformed bounds"
+  [ ( "the raster kernels fill, cull, interpolate, sample and shade as the interpreter does"
+      , program
+        [ "fn lanes(values: Array[Float64]) -> Bytes { lanesFromArray(values) }",
+        "",
+        "fn shown(result: Option[(Bytes, Bytes)]) -> Str {",
+        "  match result {",
+        "    case Some((color, depth)) => show(color) + \" \" + show(lanesToArray(depth))",
+        "    case None => \"None\"",
+        "  }",
+        "}",
+        "",
+        "fn depthOf(pixels: Int) -> Bytes {",
+        "  match lanesFill(pixels, 1.0) { case Some(d) => d case None => lanes([]) }",
+        "}",
+        "",
+        "fn colorOf(pixels: Int) -> Bytes {",
+        "  match rasterFill(pixels, 0.0, 0.0, 0.0, 1.0) { case Some(c) => c case None => bytesOf([]) }",
+        "}",
+        "",
+        "fn main() -> Int {",
+        "  print(show(rasterFill(2, 0.5, -1.0, 2.0, 0.0 / 0.0)) + \" \" + show(rasterFill(0, 1.0, 1.0, 1.0, 1.0)) + \" \" + show(rasterFill(-1, 1.0, 1.0, 1.0, 1.0)) + \" \" + show(rasterFill(1, 0.001960784313725, 0.5 / 255.0, 1.5 / 255.0, 0.998)))",
+        "  let color = colorOf(16)",
+        "  let depth = depthOf(16)",
+        "  let xs = lanes([0.0, 4.0, 0.0, 4.0, 4.0, 0.0])",
+        "  let ys = lanes([0.0, 0.0, 4.0, 0.0, 4.0, 4.0])",
+        "  let zs = lanes([0.5, 0.5, 0.5, 0.25, 0.75, 0.9])",
+        "  let rs = lanes([1.0, 0.0, 0.0, 0.2, 0.4, 0.6])",
+        "  let gs = lanes([0.0, 1.0, 0.0, 0.3, 0.3, 0.3])",
+        "  let bs = lanes([0.0, 0.0, 1.0, 0.9, 0.1, 0.5])",
+        "  print(shown(rasterTriangles(color, depth, 4, 0, xs, ys, zs, rs, gs, bs)))",
+        "  print(shown(rasterTriangles(color, depth, 4, 1, xs, ys, zs, rs, gs, bs)))",
+        "  let ws = lanes([1.0, 2.0, 4.0, 0.5, 3.0, 1.5])",
+        "  print(shown(rasterPerspectiveTriangles(color, depth, 4, 0, xs, ys, zs, rs, gs, bs, ws)))",
+        "  print(shown(rasterPerspectiveTriangles(color, depth, 4, 0, xs, ys, zs, rs, gs, bs, lanes([1.0, 2.0, 0.0, 1.0, 1.0, 1.0]))))",
+        "  print(shown(rasterTriangles(color, depth, 3, 0, xs, ys, zs, rs, gs, bs)) + \" \" + shown(rasterTriangles(color, depth, 4, 2, xs, ys, zs, rs, gs, bs)) + \" \" + shown(rasterTriangles(color, depth, 4, 0, xs, lanes([0.0]), zs, rs, gs, bs)) + \" \" + shown(rasterTriangles(bytesOf([1u8]), depth, 4, 0, xs, ys, zs, rs, gs, bs)))",
+        "  let texels = bytesOf([255u8, 0u8, 0u8, 255u8, 0u8, 255u8, 0u8, 255u8, 0u8, 0u8, 255u8, 100u8, 255u8, 255u8, 255u8, 0u8])",
+        "  let us = lanes([0.0, 1.0, 0.0, 1.0, 1.0, 0.0])",
+        "  let vs = lanes([0.0, 0.0, 1.0, 0.0, 1.0, 1.0])",
+        "  print(shown(rasterTexturedTriangles(color, depth, 4, 0, xs, ys, zs, rs, gs, bs, ws, us, vs, texels, 2, 0, 0)))",
+        "  print(shown(rasterTexturedTriangles(color, depth, 4, 0, xs, ys, zs, rs, gs, bs, ws, us, vs, texels, 2, 1, 1)))",
+        "  print(shown(rasterTexturedTriangles(color, depth, 4, 0, xs, ys, zs, rs, gs, bs, ws, us, vs, texels, 3, 0, 0)) + \" \" + shown(rasterTexturedTriangles(color, depth, 4, 0, xs, ys, zs, rs, gs, bs, ws, us, vs, texels, 2, 2, 0)))",
+        "  let nx = lanes([0.0, 0.3, -0.2, 0.0, 0.1, 0.0])",
+        "  let ny = lanes([0.0, 0.1, 0.4, 1.0, 0.2, 0.0])",
+        "  let nz = lanes([1.0, 0.9, 0.8, 0.5, -1.0, 1.0])",
+        "  let px = lanes([0.0, 1.0, 0.0, 1.0, 1.0, 0.0])",
+        "  let py = lanes([0.0, 0.0, 1.0, 0.0, 1.0, 1.0])",
+        "  let pz = lanes([0.0, 0.0, 0.0, 0.5, 0.5, 0.5])",
+        "  let uniform = lanes([0.5, 0.5, 3.0, 0.3, 0.8, 0.5, 1.0, 0.95, 0.9, 0.15, 32.0, 0.6, 0.04, 0.6, 0.7, 0.9, 0.2, 0.35, 0.8, 0.995])",
+        "  print(shown(rasterShadedTriangles(color, depth, 4, 0, xs, ys, zs, rs, gs, bs, ws, nx, ny, nz, px, py, pz, uniform)))",
+        "  print(shown(rasterShadedTriangles(color, depth, 4, 0, xs, ys, zs, rs, gs, bs, ws, nx, ny, nz, px, py, pz, lanes([1.0]))))",
+        "  0",
+        "}" ]
+      , "Some(0x8000ff008000ff00) Some(0x) None Some(0x000002fe)\n0xbf2020ff806020ff409f20ff404cd9ff802060ff406060ff594cbfff4c4ca6ff40209fff734ca6ff664c8cff594c73ff8c4c8cff804c73ff734c59ff664c40ff [0.5, 0.5, 0.5, 0.33125, 0.5, 0.5, 0.49375, 0.45625, 0.5, 0.65625, 0.61875, 0.58125, 0.81875, 0.78125, 0.74375, 0.70625]\n0x000000ff000000ff000000ff000000ff000000ff000000ff000000ff000000ff000000ff000000ff000000ff000000ff000000ff000000ff000000ff000000ff [1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0]\n0xe31309ffb1430bff6b860dff384de1ffc21824ff785a2dff444cd4ff3c4dd4ff882255ff574dc1ff4e4cbeff444cbbff7a4d9eff714c96ff664d8cff574c80ff [0.5, 0.5, 0.5, 0.33125, 0.5, 0.5, 0.49375, 0.45625, 0.5, 0.65625, 0.61875, 0.58125, 0.81875, 0.78125, 0.74375, 0.70625]\nNone\nNone None None None\n0xe30000ffb10000ff008600ff004d00ffc20000ff780000ff004c00ff004d00ff880000ff004d00ff004c00ff004c00ff000000ff000000ff000000ff000000ff [0.5, 0.5, 0.5, 0.33125, 0.5, 0.5, 0.49375, 0.45625, 0.5, 0.65625, 0.61875, 0.58125, 1.0, 1.0, 1.0, 1.0]\n0xe30000ffae0100ff304a00ff004d00ffc20000ff5f1300ff004c00ff004d00ff7e0006ff123b04ff004c00ff004c00ff000000ff000000ff000000ff000000ff [0.5, 0.5, 0.5, 0.33125, 0.5, 0.5, 0.49375, 0.45625, 0.5, 0.65625, 0.61875, 0.58125, 1.0, 1.0, 1.0, 1.0]\nNone None\n0x88120fff723011ff4e6014ff384ddaff7b1620ff58452bff4b53d5ff3b4cccff612044ff7e73deff5151beff414cb4ff9672b1ffb796d3ff644e8fff464f69ff [0.5, 0.5, 0.5, 0.33125, 0.5, 0.5, 0.49375, 0.45625, 0.5, 0.65625, 0.61875, 0.58125, 0.81875, 0.78125, 0.74375, 0.70625]\nNone\n" )
+  , ( "the broad phase answers touching pairs in order and refuses malformed bounds"
       , program
         [ "fn main() -> Int {"
         , "  let minX = lanesFromArray([0.0, 2.0, 1.0, 5.0, -0.0, 0.0])"

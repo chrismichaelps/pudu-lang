@@ -22,6 +22,20 @@ operands lie outside what it takes answers None through the host state.
 `lanesOverlapPairs` maps to `lanes_overlap_pairs`. Only the raster kernels keep
 no native part.
 
+## Raster kernels (#855)
+
+`rasterFill` and the four triangle kernels map to the parts of
+[[Native Host Raster]], so every lane kernel has a native part and `lanePart`
+is total. `byteTargets` names the byte operands that are RGBA targets or
+texels (the color target of every triangle kernel, and the texels of the
+textured one); they are not guarded as whole lanes, as the interpreter does
+not check them.
+
+Resolved Grill Log: skip exactly the interpreter's unchecked positions rather
+than guard every byte operand. _Rationale:_ an RGBA target of an odd pixel
+count is a valid target, and a guard there would refuse a call the interpreter
+draws.
+
 ## Referenced by
 
 [[Compiler Lower Kernel]] · [[Native Host Lanes]] · [[Native Host Services]]
