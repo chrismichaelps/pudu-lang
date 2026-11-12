@@ -118,7 +118,7 @@ testLeaksWithSetup setup programs = do
                 binary = root </> "leaks"
             TextIO.writeFile path (instrument <> emitted <> trailer setup)
             (built, output, errors) <- readProcessWithExitCode cc
-              ["-std=c11", "-pedantic", "-O2", "-Wall", "-Wextra", "-Werror", "-Wno-unused-function", path, "-o", binary] ""
+              ["-std=c11", "-pedantic", "-O2", "-Wall", "-Wextra", "-Werror", "-Wno-unused-function", path, "-o", binary, "-lm"] ""
             if built /= ExitSuccess || not (null output && null errors)
               then pure (counterexample (label <> ": " <> show built <> output <> errors) (False === True))
               else do
