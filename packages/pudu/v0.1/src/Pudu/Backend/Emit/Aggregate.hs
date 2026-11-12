@@ -82,9 +82,10 @@ aggregateSection identities layouts tuples needs = (concat prototypes <> concat 
      in if next == found then found else close next
   helperNeeds name = filter ("agg_" `Text.isPrefixOf`) (maybe [] fst (lookup name catalogue))
   selected = [(name, body) | (name, (_, body)) <- catalogue, Set.member name wanted]
-  -- A definition's first line ending in "{" is its signature; declaring them
-  -- all first lets recursive types call each other's helpers.
-  prototypes = [[Text.dropEnd 2 header <> ";"] | (_, body) <- selected, header : _ <- [filter (" {" `Text.isSuffixOf`) body]]
+  -- Every column-zero `static ... {` line is a signature, and a body may hold
+  -- several; declaring them all first lets any helper call any other.
+  prototypes = [[Text.dropEnd 2 line <> ";" | line <- body, signature line] | (_, body) <- selected]
+  signature line = "static " `Text.isPrefixOf` line && " {" `Text.isSuffixOf` line && not (" = {" `Text.isSuffixOf` line)
   chosen = map snd selected
   runtime = Set.fromList (concat [filter (not . ("agg_" `Text.isPrefixOf`)) (fst entry)
     | (name, entry) <- catalogue, Set.member name wanted])

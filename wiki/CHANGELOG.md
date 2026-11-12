@@ -33,6 +33,10 @@ tags: [changelog]
 - [[Backend Host Programs]] and [[Backend Abstraction Programs]] carry the corpus; the native spec and counted-allocation harness register both, and the coverage ledger records the remaining refusals.
 - The host corpus no longer carries a machine's own answer: the temporary root leaves a refusal before any window is cut from it, and the window stops at the operation, so the expectation is the same on every operating system.
 
+## 2026-11-12 — Native helper signatures declared ahead (#848)
+
+- [[Native Aggregate Emission]] declares every helper signature a body defines, so equality on a sum or record holding a function compiles whatever order the types were first seen in.
+
 ## 2026-11-10 — HTML builder replaces repeated attributes (#839)
 
 - [[Std Html Build]] replaces an attribute already set where it sits instead of appending a second one, and `class` adds to the classes already set. A rendered element can no longer carry a repeated attribute that a browser would silently collapse to the first value.

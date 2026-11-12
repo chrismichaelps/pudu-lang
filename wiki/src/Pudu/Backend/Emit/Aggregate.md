@@ -140,3 +140,17 @@ its `dynamic.` key, holds one value, so show renders that payload rather than
 the variant name. Resolved Grill Log: a task is a value the writer can print;
 the runtime text is the lifted function's own display name, and nothing
 changes for ordinary closures.
+
+## Every helper signature declared (#848)
+
+A helper body may define more than one C function: the closure `equal` entry
+defines `site` and then `equal`. Every line of a selected body that starts at
+column zero with `static `, ends in ` {` and is not a table initializer
+(` = {`) is a signature, and each one is declared ahead of every definition.
+
+Resolved Grill Log: declare each signature rather than reorder the catalogue.
+_Rationale:_ a sum or record whose type is seen before the function type it
+holds calls that function type's `equal` from an earlier definition, and
+recursive types make a members-first order impossible in general. _Rejected:_
+splitting `site` into its own catalogue entry (every other multi-function body
+would carry the same trap).
