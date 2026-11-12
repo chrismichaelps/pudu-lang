@@ -212,3 +212,11 @@ modulo eight), so test shards spread it; together they hold every row once.
 Resolved Grill Log: interleaving rather than contiguous ranges keeps each
 share's mix of matrix and single-program rows alike, so no share carries all
 the large matrices.
+
+## Native byte views (#827)
+
+Register focused native text-view explicit-output and refusal groups over [[Backend Text View Programs]] using the existing differential compiler/runner. See [[Native Text Views]].
+
+## Indexed stores (#840)
+
+Register the store success, module and refusal corpora as two properties. Resolved Grill Log: module programs run in the same expected-output conformance as single-module ones.

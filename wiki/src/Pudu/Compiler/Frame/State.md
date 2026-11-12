@@ -78,3 +78,7 @@ A BigInt moves between slots like any other owned value.
 ## Decimal (#802)
 
 A Decimal moves between slots like any owned value.
+
+## Indexed stores (#840)
+
+A store is an owned slot kind. Resolved Grill Log: same carrier and release path as a map.

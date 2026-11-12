@@ -24,6 +24,7 @@ ownedType (CoreFunctionType _ _) = True
 ownedType (CoreArrayType _) = True
 ownedType (CoreMapType _ _) = True
 ownedType (CoreSetType _) = True
+ownedType (CoreStoreType _) = True
 ownedType CoreRangeType = True
 ownedType CoreBytesType = True
 ownedType CoreDecimalType = True
@@ -44,6 +45,7 @@ cType kind = case kind of
   CoreArrayType _ -> "pudu_box *"
   CoreMapType _ _ -> "pudu_box *"
   CoreSetType _ -> "pudu_box *"
+  CoreStoreType _ -> "pudu_box *"
   CoreRangeType -> "pudu_box *"
   CoreBytesType -> "pudu_box *"
   CoreDecimalType -> "pudu_dec *"
@@ -78,6 +80,7 @@ mangle kind = case kind of
   CoreArrayType element -> "A_" <> mangle element <> "_E"
   CoreMapType key value -> "MP_" <> mangle key <> "_" <> mangle value <> "_E"
   CoreSetType member -> "ST_" <> mangle member <> "_E"
+  CoreStoreType held -> "BK_" <> mangle held <> "_E"
   CoreRangeType -> "RG"
   CoreBytesType -> "BY"
   CoreFunctionType inputs result -> "F" <> Text.pack (show (length inputs)) <> "_" <> Text.intercalate "_" (map mangle (inputs <> [result])) <> "_E"
@@ -103,6 +106,7 @@ isAggregate kind = case kind of
   CoreArrayType _ -> True
   CoreMapType _ _ -> True
   CoreSetType _ -> True
+  CoreStoreType _ -> True
   CoreRangeType -> True
   CoreBytesType -> True
   _ -> False

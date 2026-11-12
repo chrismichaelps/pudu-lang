@@ -44,3 +44,7 @@ to the written call by name and closes its body over their finals, so
 
 A method value keeps the selected member in the call it lifts, so the call
 resolves the same provider, and names itself by the plain member.
+
+## Indexed stores (#840)
+
+A store's methods are values bound to their receiver, rendered `<store method name>`. Resolved Grill Log: the lifted body is the written call, so narrowing and Option construction are shared.

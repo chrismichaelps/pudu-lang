@@ -119,3 +119,7 @@ it on return. Runtime revision 19.
 ## Decimal (#802)
 
 `frameTypes` adds `pudu_dec *decimal` when Decimal cells are used.
+
+## Indexed stores (#840)
+
+The blamed-site comment covers builtins as well as methods taken as values. Resolved Grill Log: behavior follows the function table's flag; the runtime text only describes it.

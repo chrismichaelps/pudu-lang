@@ -175,6 +175,7 @@ moveValue at target payload = case payload of
     CoreArrayType _ -> True
     CoreMapType _ _ -> True
     CoreSetType _ -> True
+    CoreStoreType _ -> True
     CoreRangeType -> True
     CoreBytesType -> True
     CoreDecimalType -> True

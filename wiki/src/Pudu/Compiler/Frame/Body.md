@@ -151,3 +151,7 @@ created; the slot holds nothing to release.
 ## Decimal (#802)
 
 Decimal literals and methods lower to their frame values; a Decimal result gets a slot.
+
+## Indexed stores (#840)
+
+A store result takes a fresh result slot. Resolved Grill Log: same rule as every boxed collection.

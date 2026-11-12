@@ -4,6 +4,7 @@ module Pudu.Compiler.Lower.Constant (lowerConstant) where
 import Data.List (find)
 import Data.Foldable (toList)
 import qualified Data.ByteString as ByteString
+import qualified Data.IntMap.Strict as IntMap
 import qualified Data.Map.Strict as Map
 import qualified Data.Set as Set
 import Data.Text (Text)
@@ -56,6 +57,11 @@ project types at kind value = CoreExpression at kind <$> shape
       pairs <- traverse (\(OrdValue label, stored) ->
         member (CoreTupleType [key, held]) (TupleValue [label, stored])) (Map.toAscList entries)
       pure (keyed (CoreTupleType [key, held]) pairs)
+    (CoreStoreType held, BucketsValue entries) -> do
+      let pairType = CoreTupleType [CoreIntegerType PlatformSigned, held]
+      pairs <- traverse (\(index, stored) ->
+        member pairType (TupleValue [IntValue PlatformSigned (fromIntegral index), stored])) (IntMap.toAscList entries)
+      pure (keyed pairType pairs)
     (CoreSetType element, SetValue members) ->
       keyed element <$> traverse (member element . unOrdValue) (Set.toAscList members)
     (CoreRangeType, RangeValue low inclusive high) ->

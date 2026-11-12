@@ -347,3 +347,5 @@ tags: [moc, module]
 - [[Webview Storage Harness]] · [[Desktop Storage Gate]] — real cross-process named persistence and private reset.
 
 - [[Webview Windows Storage Probe]] — native private-mode observation and prior-profile forensic replay.
+
+- [[Backend Text View Programs]] — native UTF-8 byte-boundary and lifetime evidence.

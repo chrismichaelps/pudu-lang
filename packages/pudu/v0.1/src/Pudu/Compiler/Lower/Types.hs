@@ -1,7 +1,7 @@
 {-| @Pudu.Compiler.Lower.Types — settled checker facts for native representation. -}
 module Pudu.Compiler.Lower.Types
   ( LowerTypes, emptyTypes, nativeTypes, withShapes, withBindings, withFacts, typeBindings, lookupScheme, typeForSpan, typeFactAt, sharedReferenceTarget, referenceTarget, loanedInputs
-  , writtenLabel, selectedMember, formedCoreType, formedCoreTypeIn, ownerKeyOf, layoutOf, recordFields, sumVariants, nativeIntegerKind, nativeScalarType, nativeValueType ) where
+  , writtenLabel, selectedMember, formedCoreType, formedCoreTypeIn, ownerKeyOf, layoutOf, recordFields, sumVariants, nativeIntegerKind, nativeScalarType, nativeValueType, treeType ) where
 
 import Data.List.NonEmpty (NonEmpty (..))
 import qualified Data.List.NonEmpty as NonEmpty
@@ -133,6 +133,7 @@ ownerKeyOf kind = case kind of
   CoreArrayType _ -> Just "Array"
   CoreMapType _ _ -> Just "Map"
   CoreSetType _ -> Just "Set"
+  CoreStoreType _ -> Just "Buckets"
   CoreRangeType -> Just "Range"
   CoreBytesType -> Just "Bytes"
   CoreDecimalType -> Just "Decimal"
@@ -172,6 +173,9 @@ formedWith shapes seen parameters value = case value of
     formedKey <- formedWith shapes seen parameters key
     formedValue <- formedWith shapes seen parameters held
     if all nativeValueType [formedKey, formedValue] then Just (CoreMapType formedKey formedValue) else Nothing
+  NominalType (NominalId Nothing "Buckets") [held] -> do
+    formed <- formedWith shapes seen parameters held
+    if nativeValueType formed then Just (CoreStoreType formed) else Nothing
   NominalType (NominalId Nothing "Range") _ -> Just CoreRangeType
   NominalType (NominalId Nothing "Bytes") [] -> Just CoreBytesType
   NominalType (NominalId Nothing "Decimal") [] -> Just CoreDecimalType
@@ -260,6 +264,14 @@ nativeScalarType CoreCharType = True
 nativeScalarType CoreUnitType = True
 nativeScalarType _ = False
 
+{-| Maps, sets and indexed stores: the values held in a shared tree. -}
+treeType :: CoreType -> Bool
+treeType kind = case kind of
+  CoreMapType _ _ -> True
+  CoreSetType _ -> True
+  CoreStoreType _ -> True
+  _ -> False
+
 {-| What a native slot can hold: the scalars plus owned text and tuples. -}
 nativeValueType :: CoreType -> Bool
 nativeValueType CoreTextType = True
@@ -270,6 +282,7 @@ nativeValueType (CoreFunctionType _ _) = True
 nativeValueType (CoreArrayType _) = True
 nativeValueType (CoreMapType _ _) = True
 nativeValueType (CoreSetType _) = True
+nativeValueType (CoreStoreType _) = True
 nativeValueType CoreRangeType = True
 nativeValueType CoreBytesType = True
 nativeValueType CoreDecimalType = True

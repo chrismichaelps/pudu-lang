@@ -15,6 +15,26 @@ tags: [changelog]
 - [[Webview Windows Window Harness]] drives each record against a real window and inspects its
   native style, menu, z-order, zoom, iconic state and frame.
 
+## 2026-11-10 — HTML builder replaces repeated attributes (#839)
+
+- [[Std Html Build]] replaces an attribute already set where it sits instead of appending a second one, and `class` adds to the classes already set. A rendered element can no longer carry a repeated attribute that a browser would silently collapse to the first value.
+
+## 2026-11-10 — Trait-method chains compile in linear time (#838)
+
+- [[Eval Compile]] compiles each call part once: a member callee is dispatched from its receiver rather than compiled beside it, and a direct call hands its compiled arguments to the general form. A thirty-link trait-method chain dropped from exponential compilation to milliseconds; [[Compiled Evaluation]] remains the oracle.
+
+## 2026-11-10 — Native pure builtin kernels (#842)
+
+- [[Native Builtin Kernels]] emits the buffer, column, sort, flat-table, digest, keyed digest, checksum, sealing, signature, audio and codec builtins natively, direct and as values.
+- [[Core Kernel Operations]], [[Compiler Lower Kernel]], [[Compiler Lower Swiss]], [[Compiler Lower Primitive]] and [[Backend Emit Kernel]] are new; the runtime families live under [[Native Kernel Runtime]].
+- [[Backend Kernel Programs]] and [[Backend Crypto Programs]] carry the corpus; the native spec and the counted-allocation harness register both.
+
+## 2026-11-09 — Native indexed stores, hashing and MultiMap primitives (#840)
+
+- [[Native Indexed Stores]] defines `Buckets[V]` on the tree carrier, key narrowing, deterministic `hashOf`, seeded `mixHash` and the MultiMap primitives.
+- [[Compiler Lower Store]], [[Compiler Lower Multi Map]] and [[Native Hash Mixing]] are new; [[Backend Store Programs]] carries the conformance, refusal and counted-cleanup corpus.
+- A builtin taken as a value now reports a sited failure at the call made through it ([[Backend Frame Program]]).
+
 ## 2026-11-06 — Desktop acceptance and Windows compiler preparation (#833)
 
 - [[Pudu Desktop]] records the full product completion obligations and separates tested native
@@ -169,6 +189,10 @@ tags: [changelog]
 - [[Std Desktop Bundle]] and its formats with [[Std Desktop Cli]]: `.app`, `.dmg`, `.deb`, `.rpm`, AppImage, NSIS and MSI from `pudu-desktop.toml`; `pudu desktop` scaffolds, develops, generates types, builds, bundles, signs and publishes.
 - [[Pudu Bundle]] reads a sidecar program so packaged executables stay signable; [[Eval Io]] adds `modifiedTime` and `executablePath`.
 - [[Desktop Webview Gate]], [[Webview Drive Harness]] and [[Desktop Webview CI]] verify modules, adapters, updates and packages; [[Notes Desktop Example]] is the live check.
+
+## 2026-11-05 — Native byte-addressed text contract (#827)
+
+- [[Native Text Views]] defines guarded byte/scalar reads, shared slices, search offsets, exact carriers and required evidence before native admission.
 
 ## 2026-11-04 — Native sparse-word queries (#814)
 

@@ -15,6 +15,8 @@ import Pudu.Backend.Runtime.Frame (frameTypes, frameEngine)
 import Pudu.Backend.Runtime.Array (arrayRuntimeParts)
 import Pudu.Backend.Runtime.Text.Pieces (textPieceRuntimeParts)
 import Pudu.Backend.Runtime.Tree (treeRuntimeParts)
+import Pudu.Backend.Runtime.Hash (hashRuntimeParts)
+import Pudu.Backend.Runtime.Kernel (kernelRuntimeParts)
 import Pudu.Backend.Runtime.Range (rangeRuntimeParts)
 import Pudu.Backend.Runtime.Bytes (bytesRuntimeParts)
 import Pudu.Backend.Runtime.Dependencies (runtimeDependencies)
@@ -72,6 +74,7 @@ emitFrameProgram version sources source = do
     kind@(CoreArrayType _) -> Right (shownBox kind)
     kind@(CoreMapType _ _) -> Right (shownBox kind)
     kind@(CoreSetType _) -> Right (shownBox kind)
+    kind@(CoreStoreType _) -> Right (shownBox kind)
     CoreRangeType -> Right (shownBox CoreRangeType)
     CoreBytesType -> Right (shownBox CoreBytesType)
     CoreCharType -> Right
@@ -105,6 +108,7 @@ emitFrameProgram version sources source = do
         kind@(CoreArrayType _) -> [aggregateNeed "show" kind, "output_report"]
         kind@(CoreMapType _ _) -> [aggregateNeed "show" kind, "output_report"]
         kind@(CoreSetType _) -> [aggregateNeed "show" kind, "output_report"]
+        kind@(CoreStoreType _) -> [aggregateNeed "show" kind, "output_report"]
         CoreRangeType -> [aggregateNeed "show" CoreRangeType, "output_report"]
         CoreBytesType -> [aggregateNeed "show" CoreBytesType, "output_report"]
         CoreDecimalType -> ["text_display_dec", "output_report"]
@@ -120,7 +124,7 @@ emitFrameProgram version sources source = do
         <> ["static const pudu_function pudu_functions[] = {"]
         <> map definition indexed <> ["};"]
   pure $ Text.unlines (header <> runtime <> frameTypes wide big decimal text boxes
-    <> concat [lines' <> [""] | (name, lines') <- arrayRuntimeParts <> textPieceRuntimeParts <> treeRuntimeParts <> rangeRuntimeParts <> bytesRuntimeParts, Set.member name selected]
+    <> concat [lines' <> [""] | (name, lines') <- arrayRuntimeParts <> textPieceRuntimeParts <> treeRuntimeParts <> rangeRuntimeParts <> bytesRuntimeParts <> hashRuntimeParts <> kernelRuntimeParts, Set.member name selected]
     <> renderSites (reverse (emitSites emitted)) <> aggregates <> ownership <> reverse (emitOutput emitted)
     <> metadata <> frameEngine owned <> ["int main(void) {", "  pudu_prepare_io();"] <> ending <> ["}"])
   where
@@ -158,9 +162,12 @@ emitFrameProgram version sources source = do
         <> (if null (ownedSlots function) then "NULL" else "pudu_owned_" <> textOfInt identity)
         <> ", " <> kindOf (frameFunctionResult function) <> ", "
         <> (if maybe False closureHasEnvironment info then "1" else "0") <> ", "
-        <> (if maybe False (\found -> closureIsBuiltin found || isJust (closureMethod found)) info then "0" else "1") <> ", "
-        <> (if maybe False (isJust . closureMethod) info then "1" else "0") <> "},"
-      where info = Map.lookup (frameFunctionName function) (frameModuleClosures source)
+        <> (if lent then "0" else "1") <> ", " <> (if lent then "1" else "0") <> "},"
+      where
+        info = Map.lookup (frameFunctionName function) (frameModuleClosures source)
+        -- A builtin or a method taken as a value: its depth belongs to the
+        -- call made through it, and so do its failures.
+        lent = maybe False (\found -> closureIsBuiltin found || isJust (closureMethod found)) info
     argumentCount function = maximum (0 :
       [length arguments | block <- frameFunctionBlocks function
       , arguments <- case frameBlockTerminator block of
@@ -212,6 +219,7 @@ mentions layouts wanted = go []
         (CoreArrayType element, _) -> go (kind : seen) element
         (CoreMapType key value, _) -> any (go (kind : seen)) [key, value]
         (CoreSetType member, _) -> go (kind : seen) member
+        (CoreStoreType held, _) -> go (kind : seen) held
         (_, Just (CoreRecordLayout fields)) -> any (go (kind : seen) . snd) fields
         (_, Just (CoreSumLayout variants)) -> any (go (kind : seen) . snd) (concatMap coreVariantFields variants)
         _ -> False

@@ -685,3 +685,11 @@ digests use the already linked certificate library, so no library is added.
 
 Resolved Grill Log: the `webview2` stanza compiles [[Pudu Webview Windows Control]] beside the
 window unit; it needs no library the stanza did not already link.
+
+## Native byte views (#827)
+
+Register Pudu.Backend.Emit.Frame.TextView with the existing library dependencies; no new package or runtime ABI. See [[Native Text Views]].
+
+## Indexed stores (#840)
+
+Register Pudu.Compiler.Lower.Store, Pudu.Compiler.Lower.MultiMap and Pudu.Backend.Runtime.Hash. Resolved Grill Log: no new dependency.

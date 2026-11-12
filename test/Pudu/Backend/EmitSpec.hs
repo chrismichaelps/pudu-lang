@@ -232,7 +232,7 @@ testEntryOnly = do
       , "  return 0"
       , "}"
       , ""
-      , "fn other(value: Buckets[Int]) -> Buckets[Int] {"
+      , "fn other(value: Task[Int, Never]) -> Task[Int, Never] {"
       , "  return value"
       , "}"
       ]
@@ -252,7 +252,7 @@ testReachableFunctions = do
   compiled <- compileAndLower $ Text.unlines
     [ "module Reachable"
     , "fn second(flag: Bool) -> Bool { return !flag }"
-    , "fn unused(value: Buckets[Int]) -> Buckets[Int] { return value }"
+    , "fn unused(value: Task[Int, Never]) -> Task[Int, Never] { return value }"
     , "fn main() -> Int { return first(9, second(false)) }"
     , "fn first(value: Int, flag: Bool) -> Int {"
     , "  if second(flag) { return 0 }"
@@ -275,20 +275,21 @@ testReachableFunctions = do
     construct", not as a hand-counted column. -}
 refusalCases :: [(String, Text, Text)]
 refusalCases =
-  [ ("Buckets parameter", helperProgram "fn helper(value: Buckets[Int]) -> Int { return 1 }" "helper(bucketsOf())", "Buckets[Int]")
+  [ ("Task parameter", helperProgram "async fn job() -> Int { 1 }\nfn helper(value: Task[Int, Never]) -> Int { return 1 }" "helper(job())", "Task[Int, Never]")
   , ("call to entry", statementProgram "main()", "main()\n")
   , ("environment", bindingProgram "var pairs = environment()", "environment()")
-  , ("buckets values", bindingProgram "var held: Buckets[Int] = bucketsOf()", "bucketsOf()")
+  , ("a call to an async function", bindingProgram "var held: Task[Int, Never] = job()" <> "async fn job() -> Int { 1 }\n", "job() -> Int")
   , ("readLine", bindingProgram "var line = readLine()", "readLine()")
   , ("temporary path", bindingProgram "var path = temporaryPath()", "temporaryPath()")
   , ("a generic call at a type without a native form", Text.unlines
       [ "module Refuse"
       , "fn keep[T](value: T) -> Int { 1 }"
       , "fn main() -> Int {"
-      , "  let kept = keep(bucketsOf())"
+      , "  let kept = keep(job())"
       , "  return kept"
       , "}"
-      ], "keep(bucketsOf())")
+      , "async fn job() -> Int { 1 }"
+      ], "keep(job())")
   , ("a module without main", Text.unlines
       [ "module Refuse"
       , ""

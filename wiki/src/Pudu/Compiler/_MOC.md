@@ -6,6 +6,7 @@ aliases: [Program Compiler Module Map]
 
 # Program Compiler Module Map
 
+- [[Compiler Lower Store]] · [[Compiler Lower Multi Map]] — indexed stores, hashing and MultiMap primitives, direct and as values (#840).
 - [[Compiler Lower Word Map]] — checked direct/value sparse-word algebra (#810).
 
 - [[Compiler Frame Lowering]] · [[Compiler Frame State]] · [[Compiler Frame Body]] — structured Core to explicit continuations for #499.

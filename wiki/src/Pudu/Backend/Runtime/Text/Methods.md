@@ -42,3 +42,7 @@ targets.
 ## Referenced by
 
 [[Native Text Runtime]] · [[Compiler Lower Text]] · [[src/_MOC]]
+
+## Native byte views (#827)
+
+Add granular byte-size/index-valid/byte-at/boundary/slice-valid/slice/find/find-last/scalar-at/scalar-width kernels. Arguments borrow text; slices retain existing owners through text_view. Reads require the lowering guard. Find kernels return pudu_int -1 for absence and otherwise exact byte offsets; use subtraction bounds before loops and retain overlapping matches. Empty needles and extreme signed magnitudes follow Eval.TextView. Reuse text_width and text_decode; no invalid UTF-8 or byte copies. See [[Native Text Views]].

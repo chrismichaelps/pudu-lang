@@ -380,3 +380,9 @@ tags: [moc, handoff]
 - [[Bound Receiver Evidence Delivery]] — complete selected bound and receiver facts for #735.
 
 - [[handoffs/2026-11-05-pudu-desktop|Pudu Desktop Delivery]] — WebView applications, typed IPC, security, plugins, packaging and updates (#833).
+
+- [[Native Text View Delivery]] — native byte primitives and source-compatible views.
+
+- [[Native Indexed Store Delivery]] — native `Buckets[V]`, hashing and MultiMap primitives (#840).
+
+- [[handoffs/2026-11-10-native-kernels]]

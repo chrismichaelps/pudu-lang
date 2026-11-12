@@ -213,6 +213,52 @@ textMethodRuntimeParts =
       , "  return pudu_make(count, 0);"
       , "}"
       ])
+  , ("text_byte_size",
+      [ "static pudu_int pudu_text_byte_size(pudu_text text) { return pudu_make((uint64_t)text.length, 0); }" ])
+  , ("text_byte_index_valid",
+      [ "static int pudu_text_byte_index_valid(pudu_text text, pudu_int index) {"
+      , "  return !index.negative && pudu_magnitude(index) < (uint64_t)text.length;", "}" ])
+  , ("text_byte_at",
+      [ "static pudu_int pudu_text_byte_at(pudu_text text, pudu_int index) {"
+      , "  return pudu_make((uint64_t)text.bytes[(size_t)pudu_magnitude(index)], 0);", "}" ])
+  , ("text_byte_boundary",
+      [ "static int pudu_text_byte_boundary(pudu_text text, size_t at) {"
+      , "  return at <= text.length && (at == text.length || (text.bytes[at] & 0xC0) != 0x80);", "}" ])
+  , ("text_byte_slice_valid",
+      [ "static int pudu_text_byte_slice_valid(pudu_text text, pudu_int start, pudu_int end) {"
+      , "  uint64_t low = pudu_magnitude(start), high = pudu_magnitude(end);"
+      , "  return !start.negative && !end.negative && low <= high && high <= (uint64_t)text.length"
+      , "    && pudu_text_byte_boundary(text, (size_t)low) && pudu_text_byte_boundary(text, (size_t)high);", "}" ])
+  , ("text_byte_slice",
+      [ "static pudu_text pudu_text_byte_slice(pudu_text text, pudu_int start, pudu_int end) {"
+      , "  return pudu_text_view(text, (size_t)pudu_magnitude(start), (size_t)pudu_magnitude(end));", "}" ])
+  , ("text_byte_find",
+      [ "static pudu_int pudu_text_byte_find(pudu_text text, pudu_text needle, pudu_int start) {"
+      , "  uint64_t from = pudu_magnitude(start);"
+      , "  if (start.negative || from > (uint64_t)text.length || needle.length > text.length) return pudu_make(1, 1);"
+      , "  if (needle.length == 0) return pudu_make(from, 0);"
+      , "  size_t last = text.length - needle.length;"
+      , "  for (size_t at = (size_t)from; at <= last; ++at)"
+      , "    if (memcmp(text.bytes + at, needle.bytes, needle.length) == 0) return pudu_make((uint64_t)at, 0);"
+      , "  return pudu_make(1, 1);", "}" ])
+  , ("text_byte_find_last",
+      [ "static pudu_int pudu_text_byte_find_last(pudu_text text, pudu_text needle) {"
+      , "  if (needle.length > text.length) return pudu_make(1, 1);"
+      , "  if (needle.length == 0) return pudu_make((uint64_t)text.length, 0);"
+      , "  size_t at = text.length - needle.length;"
+      , "  for (;;) {"
+      , "    if (memcmp(text.bytes + at, needle.bytes, needle.length) == 0) return pudu_make((uint64_t)at, 0);"
+      , "    if (at == 0) break;"
+      , "    --at;"
+      , "  }"
+      , "  return pudu_make(1, 1);", "}" ])
+  , ("text_scalar_at",
+      [ "static uint32_t pudu_text_scalar_at(pudu_text text, pudu_int index) {"
+      , "  size_t at = (size_t)pudu_magnitude(index);"
+      , "  return pudu_text_decode(text.bytes, &at);", "}" ])
+  , ("text_scalar_width",
+      [ "static pudu_int pudu_text_scalar_width(pudu_text text, pudu_int index) {"
+      , "  return pudu_make((uint64_t)pudu_text_width(text.bytes[(size_t)pudu_magnitude(index)]), 0);", "}" ])
   ]
 
 textMethodRuntimeDependencies :: Text -> [Text]
@@ -237,4 +283,14 @@ textMethodRuntimeDependencies name = maybe [] id (lookup name
   , ("text_escape_html", ["text_allocate", "text_retain"])
   , ("text_replace", ["text_allocate", "text_find", "text_retain"])
   , ("text_span", ["text_decode", "make"])
+  , ("text_byte_size", ["text", "make"])
+  , ("text_byte_index_valid", ["text", "magnitude"])
+  , ("text_byte_at", ["text", "magnitude", "make"])
+  , ("text_byte_boundary", ["text"])
+  , ("text_byte_slice_valid", ["text_byte_boundary", "magnitude"])
+  , ("text_byte_slice", ["text_view", "magnitude"])
+  , ("text_byte_find", ["text", "magnitude", "make"])
+  , ("text_byte_find_last", ["text", "make"])
+  , ("text_scalar_at", ["text", "text_decode", "magnitude"])
+  , ("text_scalar_width", ["text", "text_width", "magnitude", "make"])
   ])

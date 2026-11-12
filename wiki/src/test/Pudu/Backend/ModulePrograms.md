@@ -129,6 +129,10 @@ qualified function. Resolved Grill Log: a local cannot share a qualifier's
 name (qualifiers are capitalized, and a capitalized let is a pattern), so no
 shadowing case is needed.
 
+## Native byte views (#827)
+
+Include success and refusal cases from [[Backend Text View Programs]] in the complete module corpora without replacing existing cases. See [[Native Text Views]].
+
 ## Imported trait defaults (#824)
 
 An importer inherits `loudly`, `wrapped` and `twice` from `Lib.Loud`.
@@ -139,3 +143,7 @@ syntax and the trait-qualified form.
 Resolved Grill Log (#824): an imported inherited default divides by a runtime
 zero from its implementation. Its refusal must retain the trait module's
 source span and output ordering in both evaluator modes and native execution.
+
+## Indexed stores (#840)
+
+The complete module corpus includes the store success, module and refusal programs. Resolved Grill Log: both evaluator modes see them.

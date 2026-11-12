@@ -2,17 +2,24 @@
     shared tree runtime. A map or set is a box whose first cell holds the
     tree's root. Helpers read their arguments and answer with a new reference,
     as the array helpers do. -}
-module Pudu.Backend.Emit.Keyed (mapHelpers, setHelpers) where
+module Pudu.Backend.Emit.Keyed (mapHelpers, setHelpers, storeHelpers) where
 
 import Data.Text (Text)
 import Pudu.Backend.Emit.Cell
   ( aggregateHelper, aggregateNeed, cType, cellName, isAggregate, memberCompare, memberComparable, memberEqual, memberRender
   , ownedType, released, retained )
 import Pudu.Core (CoreType (..))
-import Pudu.IntegerLiteral (IntegerKind (UnsignedKind))
+import Pudu.IntegerLiteral (IntegerKind (PlatformSigned, UnsignedKind))
 
 mapHelpers :: CoreType -> CoreType -> CoreType -> [(Text, ([Text], [Text]))]
-mapHelpers kind key value =
+mapHelpers = entryHelpers "{" "}"
+
+{-| An indexed store: a map from Int whose entries print inside `#[...]`. -}
+storeHelpers :: CoreType -> CoreType -> [(Text, ([Text], [Text]))]
+storeHelpers kind = entryHelpers "#[" "]" kind (CoreIntegerType PlatformSigned)
+
+entryHelpers :: Text -> Text -> CoreType -> CoreType -> CoreType -> [(Text, ([Text], [Text]))]
+entryHelpers opening closing kind key value =
   shared kind key (Just value) <>
   [ helper "make" (["array", "tree_insert", aggregateNeed "ops" kind, aggregateNeed "wrap" kind])
       [ "/* mapOf: inserted in order, so a repeated key keeps its first spelling"
@@ -33,6 +40,15 @@ mapHelpers kind key value =
       , "  stored." <> cellName value <> " = value;"
       , "  return " <> name "wrap" <> "(pudu_tree_insert(pudu_tree_retain(box->fields[0].tree), "
           <> name "keyretain" <> "(held), " <> name "valueretain" <> "(stored), 1, " <> ops <> "));"
+      , "}" ]
+  , helper "put" ["tree_insert", aggregateNeed "ops" kind, aggregateNeed "wrap" kind]
+      [ "/* insert, with the new key's spelling replacing an equal held key. */"
+      , "static pudu_box *" <> name "put" <> "(pudu_box *box, " <> cType key <> " key, " <> cType value <> " value) {"
+      , "  pudu_cell held, stored;"
+      , "  held." <> cellName key <> " = key;"
+      , "  stored." <> cellName value <> " = value;"
+      , "  return " <> name "wrap" <> "(pudu_tree_insert(pudu_tree_retain(box->fields[0].tree), "
+          <> name "keyretain" <> "(held), " <> name "valueretain" <> "(stored), 0, " <> ops <> "));"
       , "}" ]
   , helper "lookup" ("tree_find" : aggregateNeed "ops" kind : snd (retained value ""))
       [ "/* get, once contains has said the key is there. */"
@@ -72,7 +88,7 @@ mapHelpers kind key value =
       , "    pudu_text_release(keyed);"
       , "    pudu_text_release(held);"
       , "  }"
-      , "  shown = pudu_text_join(\"{\", NULL, parts, count, \"}\");"
+      , "  shown = pudu_text_join(\"" <> opening <> "\", NULL, parts, count, \"" <> closing <> "\");"
       , "  free(parts);"
       , "  free(nodes);"
       , "  return shown;"

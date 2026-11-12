@@ -56,3 +56,7 @@ does; a map or set is comparable when every key and value is.
 Emit Bool predicate and UInt128 count wrappers only for UInt64 payload maps; emit members only for UInt64 keys too. Select only the used kernel, typed key ops when comparing, and ordinary array ownership for member results. Standalone callable entries must compile without unused-helper warnings.
 
 Resolved Grill Log: project existing checked semantics; no inference, fallback, unsafe cell reinterpretation or frame ABI change. Reuse granular runtime dependencies and existing numeric/array ownership kernels.
+
+## Indexed stores (#840)
+
+entryHelpers builds the map-shaped helper family with its opening and closing text; mapHelpers uses `{`/`}` and storeHelpers `#[`/`]` at key Int. `put` inserts with key replacement. Resolved Grill Log: one family for both, so equality, order, comparability and cleanup cannot differ.

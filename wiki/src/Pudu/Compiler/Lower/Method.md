@@ -192,3 +192,7 @@ Decode that checked syntax structurally, treating implementation parameters
 as rigid names; never resolve aliases or infer types again. Scheme matching
 still supplies a method's own parameters renamed by checking. Trait-head
 arguments take precedence over same-spelling method matches.
+
+## Indexed stores (#840)
+
+Built-in dispatch precedes trait lookup for the store's seven methods, read from the evaluator's table. Resolved Grill Log: one method list for both engines.

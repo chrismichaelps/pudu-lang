@@ -397,3 +397,11 @@ Register [[Backend BigInt Programs]]. Resolved Grill Log: no new dependency.
 Register [[Backend Decimal Programs]]. Resolved Grill Log: no new dependency.
 
 Register [[Program View Spec]] using existing dependencies. Resolved Grill Log: real standard-library view fixtures, exact results and diagnostic refusals execute in the full program suite.
+
+## Native byte views (#827)
+
+Register Pudu.Backend.TextViewPrograms with the existing test dependencies so focused and full gates execute the same corpus. See [[Native Text Views]].
+
+## Indexed stores (#840)
+
+Register Pudu.Backend.StorePrograms. Resolved Grill Log: existing harnesses run it.

@@ -13,8 +13,10 @@ import Pudu.Backend.Emit.Aggregate (aggregateHelper, aggregateNeed, cellName, is
 import Pudu.Diagnostic.Evaluation (cannotApplyBinaryMessage)
 import Pudu.Backend.Emit.Support (integerHelper, integerKindText, integerLiteralText, isBigInteger, isWideInteger, limbsOf, zeroValue)
 import Pudu.Core (CoreArrayMethodName (..), CoreBinaryOperator (..), CoreDecimalMethodName (..), CoreKeyedMethodName (..), CoreTextMethodName (..), CoreType (..))
+import Pudu.Backend.Emit.Frame.TextView (frameTextView)
 import Pudu.Backend.Emit.Range (rangeMethodCall)
 import Pudu.Backend.Emit.Bytes (bytesFunction)
+import Pudu.Backend.Emit.Kernel (frameKernel)
 import Pudu.Core.Frame
   ( FrameFault (..), FrameSlot (..), FrameSlotId (..), FrameUnaryOperator (..)
   , FrameValue (..), FrameValueShape (..), coreScalarOperator )
@@ -182,6 +184,7 @@ frameValue state value = case frameValueShape value of
       KeyedContains -> keyed "contains"
       KeyedLookup -> keyed "lookup"
       KeyedInsert -> keyed "insert"
+      KeyedPut -> keyed "put"
       KeyedRemove -> keyed "remove"
       KeyedKeys -> keyed "keys"
       KeyedValues -> keyed "values"
@@ -199,6 +202,15 @@ frameValue state value = case frameValueShape value of
       KeyedWordDisjoint -> wordQuery "word_disjoint" [kind] CoreBoolType False
       KeyedWordPopCount -> wordQuery "word_count" [] (CoreIntegerType (UnsignedKind 128)) False
       KeyedWordMembers -> wordQuery "word_members" [] (CoreArrayType (CoreIntegerType (UnsignedKind 64))) True
+      KeyedMixHash -> plain ("pudu_mix_hash(" <> target <> ")") ["mix_hash"]
+      KeyedHash -> case kind of
+        CoreTextType -> plain ("pudu_hash_text(" <> target <> ")") ["hash_text"]
+        CoreBytesType -> plain ("pudu_hash_text(" <> target <> "->fields[0].text)") ["hash_text"]
+        CoreIntegerType integer
+          | isWideInteger integer -> plain ("pudu_hash_wide(" <> target <> ")") ["hash_wide"]
+          | isBigInteger integer -> plain ("pudu_hash_big(" <> target <> ")") ["hash_big"]
+          | otherwise -> plain ("pudu_hash_int(" <> target <> ")") ["hash_int"]
+        _ -> refused "a hash of a value without text, bytes or an integer carrier"
   FrameRangeValue low inclusive high -> do
     lowText <- traverse slotText low
     highText <- traverse slotText high
@@ -214,6 +226,7 @@ frameValue state value = case frameValueShape value of
     operands <- traverse slotText arguments
     let (function, part) = bytesFunction name
     plain (function <> "(" <> Text.intercalate ", " (target : operands) <> ")") [part]
+  FrameKernel name constants arguments -> frameKernel slotText value name constants arguments >>= uncurry plain
   FrameComparable slot -> do
     source <- slotText slot
     uncurry plain (memberComparable (frameSlotType slot) source)
@@ -222,6 +235,7 @@ frameValue state value = case frameValueShape value of
     plain ("pudu_output_write(" <> (if errors then "2" else "1") <> ", "
       <> (if newline then "1" else "0") <> ", " <> source <> ")") ["output_error"]
   FrameDisplay slot -> rendered slot
+  FrameTextMethod _ _ _ | Just selected <- frameTextView slotText state value -> selected
   FrameTextMethod name receiver arguments -> do
     target <- slotText receiver
     operands <- traverse slotText arguments
@@ -260,6 +274,7 @@ frameValue state value = case frameValueShape value of
       TextIntOf -> simple "text_int_of"
       TextParsesFloat -> simple "text_parses_float"
       TextFloatOf -> simple "text_float_of"
+      _ -> refused "a text method without a native helper"
   FrameShow slot
     | frameSlotType slot == CoreTextType -> slotText slot >>= \text -> plain ("pudu_text_show(" <> text <> ")") ["text_show"]
     | frameSlotType slot == CoreCharType -> slotText slot >>= \scalar -> plain ("pudu_char_show(" <> scalar <> ")") ["char_show"]

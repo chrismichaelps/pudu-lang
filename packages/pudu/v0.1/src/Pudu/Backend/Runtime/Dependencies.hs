@@ -17,6 +17,8 @@ import Pudu.Backend.Runtime.Text.Methods (textMethodRuntimeDependencies)
 import Pudu.Backend.Runtime.Text.Number (textNumberRuntimeDependencies)
 import Pudu.Backend.Runtime.Text.Pieces (textPieceRuntimeDependencies)
 import Pudu.Backend.Runtime.Tree (treeRuntimeDependencies)
+import Pudu.Backend.Runtime.Hash (hashRuntimeDependencies)
+import Pudu.Backend.Runtime.Kernel (kernelRuntimeDependencies)
 import Pudu.Backend.Runtime.Range (rangeRuntimeDependencies)
 import Pudu.Backend.Runtime.Bytes (bytesRuntimeDependencies)
 
@@ -27,7 +29,7 @@ runtimeDependencies name = integerRuntimeDependencies name <> floatRuntimeDepend
   <> textCaseRuntimeDependencies name <> charRuntimeDependencies name
   <> aggregateRuntimeDependencies name <> arrayRuntimeDependencies name
   <> textNumberRuntimeDependencies name <> textPieceRuntimeDependencies name
-  <> treeRuntimeDependencies name <> rangeRuntimeDependencies name <> bytesRuntimeDependencies name <> outputRuntimeDependencies name
+  <> treeRuntimeDependencies name <> rangeRuntimeDependencies name <> bytesRuntimeDependencies name <> hashRuntimeDependencies name <> kernelRuntimeDependencies name <> outputRuntimeDependencies name
   <> concat [["process_io", "wait_writable"] | name == "error_io"]
   <> ["process_io" | name == "wait_writable"]
   <> ["site" | name == "cleanup"]
