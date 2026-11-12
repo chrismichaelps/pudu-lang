@@ -4,6 +4,7 @@ module Pudu.Compiler.Lower.Primitive (lowerPrimitiveCall) where
 
 import Data.Foldable (asum)
 import Data.Text (Text)
+import Pudu.Compiler.Lower.Concurrent (lowerConcurrentPrimitive)
 import Pudu.Compiler.Lower.Decimal (lowerDecimalPrimitive)
 import Pudu.Compiler.Lower.Kernel (lowerKernelPrimitive)
 import Pudu.Compiler.Lower.State (LowerState)
@@ -22,4 +23,4 @@ lowerPrimitiveCall :: (LowerState -> Located Expression -> Lowered)
   -> LowerState -> Span -> Text -> [Located Expression] -> Maybe Lowered
 lowerPrimitiveCall lower state at name arguments = asum
   [ family lower state at name arguments
-  | family <- [lowerTextPrimitive, lowerDecimalPrimitive, lowerWordMapPrimitive, lowerStorePrimitive, lowerKernelPrimitive, lowerSwissPrimitive] ]
+  | family <- [lowerTextPrimitive, lowerDecimalPrimitive, lowerWordMapPrimitive, lowerStorePrimitive, lowerKernelPrimitive, lowerSwissPrimitive, lowerConcurrentPrimitive] ]

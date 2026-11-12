@@ -1,8 +1,8 @@
 {-| @Pudu.Compiler.Lower.State — program context, lexical scopes and typed refusals. -}
 module Pudu.Compiler.Lower.State
-  ( CoreSignature (..), Instance (..), LowerContext (..), LowerState (..), LoopFrame (..), ModuleScope (..)
+  ( CoreSignature (..), Head (..), Instance (..), LowerContext (..), LowerState (..), LoopFrame (..), ModuleScope (..)
   , emptyContext, startFunction, refuse, refused, halt, lookupLocal, bindLocal, intType
-  , resolveFunction, lookupConstant, inModule, withTypeBindings, isModuleQualifier
+  , resolveFunction, lookupConstant, lookupInitializer, inModule, withTypeBindings, isModuleQualifier
   ) where
 
 import Data.Map.Strict (Map)
@@ -14,7 +14,7 @@ import Pudu.Compiler.Lower.Types (LowerTypes, emptyTypes, typeBindings, withBind
 import Pudu.Core
 import Pudu.Diagnostic (Diagnostic)
 import Pudu.Diagnostic.Native (nativeRefusal)
-import Pudu.Frontend.Syntax (Function, Located)
+import Pudu.Frontend.Syntax (Expression, Function, Located)
 import Pudu.Type.Value (Scheme, Type)
 import Pudu.IntegerLiteral (IntegerKind (..))
 import Pudu.Eval.Frozen (Frozen)
@@ -40,6 +40,9 @@ data LowerContext = LowerContext
   {-| `(trait, owner key, member)` for `Trait.member(value)`; the trait by the
       name it was written under, as the evaluator files it. -}
   , contextTraitMethods :: !(Map (Text, Text, Text) Text)
+  {-| `(trait, owner key)` to the implementation head that provides the
+      trait for the owner. -}
+  , contextHeads :: !(Map (Text, Text) Head)
   {-| The module whose function is being lowered; names resolve in it. -}
   , contextModule :: !Text
   , contextSignatures :: !(Map Text (Maybe CoreSignature))
@@ -49,6 +52,16 @@ data LowerContext = LowerContext
   , contextFunctions :: ![CoreFunction]
   {-| Lifted lambdas and function-value forwarders made so far. -}
   , contextClosures :: !(Map Text CoreClosureInfo)
+  }
+
+{-| An implementation's head: its own parameters and their bounds, the type
+    it is for, and the trait's arguments, all in those parameters. A
+    parameter met only in a bound, as `S` in `Q: Sequence[S, A]`, is settled
+    through the head that provides the bound. -}
+data Head = Head
+  { headTarget :: !Type
+  , headArguments :: ![Type]
+  , headBounds :: ![(Text, [Type])]
   }
 
 {-| One body under its own key: the module its names resolve in, its
@@ -75,6 +88,9 @@ data ModuleScope = ModuleScope
   { scopeTypes :: !LowerTypes
   , scopeFunctions :: !(Set Text)
   , scopeConstants :: !(Map Text (Maybe Frozen))
+  {-| Each constant's written initializer, lowered where it is read when
+      folding left no portable product. -}
+  , scopeInitializers :: !(Map Text (Located Expression))
   {-| A selectively imported name and the module it comes from. -}
   , scopeSelected :: !(Map Text Text)
   {-| A qualifier (an alias, or the module path's last segment) and its module. -}
@@ -101,6 +117,12 @@ data LowerState = LowerState
   {-| The `&mut` parameters of the function being lowered, whose final values
       every way out returns beside its result. -}
   , lowerLoaned :: ![CoreLocal]
+  {-| The task scopes open in the function being lowered, innermost first,
+      each by how many loops were open around it. -}
+  , lowerOpenScopes :: ![Int]
+  {-| The type arguments written on the function call being lowered, read
+      once by the admission of its callee. -}
+  , lowerTypeArguments :: ![CoreType]
   }
 
 {-| A lexical loop destination and the scalar type observed at its breaks.
@@ -123,8 +145,8 @@ data CoreSignature = CoreSignature
 
 emptyContext
   :: Text -> Text -> Map Text ModuleScope -> [(Text, (Text, Located Function))]
-  -> Map Text Instance -> Map (Text, Text) Text -> Map (Text, Text, Text) Text -> LowerContext
-emptyContext root entryName modules table instances methods traitMethods =
+  -> Map Text Instance -> Map (Text, Text) Text -> Map (Text, Text, Text) Text -> Map (Text, Text) Head -> LowerContext
+emptyContext root entryName modules table instances methods traitMethods heads =
   LowerContext
     { contextTypes = maybe emptyTypes scopeTypes (Map.lookup root modules)
     , contextEntry = entryName
@@ -133,6 +155,7 @@ emptyContext root entryName modules table instances methods traitMethods =
     , contextInstances = instances
     , contextMethods = methods
     , contextTraitMethods = traitMethods
+    , contextHeads = heads
     , contextModule = root
     , contextSignatures = Map.empty
     , contextQueue = []
@@ -159,6 +182,8 @@ startFunction state parameters resultType =
     , lowerFunctionResult = resultType
     , lowerDeclaredResult = Nothing
     , lowerLoaned = []
+    , lowerOpenScopes = []
+    , lowerTypeArguments = []
     }
 
 refuse :: Span -> Text -> LowerState -> LowerState
@@ -201,18 +226,29 @@ resolveFunction state segments = do
     portable folded product was not supplied. Imported names never re-export. -}
 lookupConstant :: LowerState -> [Text] -> Maybe (Maybe Frozen)
 lookupConstant state segments = do
+  (owner, name) <- constantOwner state segments
+  target <- Map.lookup owner (contextModules (lowerContext state))
+  Map.lookup name (scopeConstants target)
+
+{-| The module a constant belongs to and what it was written as. -}
+lookupInitializer :: LowerState -> [Text] -> Maybe (Text, Located Expression)
+lookupInitializer state segments = do
+  (owner, name) <- constantOwner state segments
+  target <- Map.lookup owner (contextModules (lowerContext state))
+  (,) owner <$> Map.lookup name (scopeInitializers target)
+
+constantOwner :: LowerState -> [Text] -> Maybe (Text, Text)
+constantOwner state segments = do
   let context = lowerContext state
       current = contextModule context
   scope <- Map.lookup current (contextModules context)
-  (owner, name) <- case segments of
+  case segments of
     [name] | lookupLocal state name == Nothing ->
       if Map.member name (scopeConstants scope) then Just (current, name)
       else (\owner -> (owner, name)) <$> Map.lookup name (scopeSelected scope)
     [qualifier, name] | lookupLocal state qualifier == Nothing ->
       (\owner -> (owner, name)) <$> Map.lookup qualifier (scopeQualifiers scope)
     _ -> Nothing
-  target <- Map.lookup owner (contextModules context)
-  Map.lookup name (scopeConstants target)
 
 {-| Whether a name is a module qualifier in the current module and not a local. -}
 isModuleQualifier :: LowerState -> Text -> Bool

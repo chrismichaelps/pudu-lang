@@ -72,6 +72,12 @@ own renderer; the native side runs the published executable with
 mirrored from the `pudu` executable's `reportResult` in one documented
 helper.
 
+Resolved Grill Log: standard-input cases feed the same bytes to both engines.
+The interpreter temporarily borrows a file handle and restores its input after
+each case. The executable receives the file as standard input. Assert exact
+output for an empty line, an unterminated line, repeated end of input, calls
+through a builtin value, and a persistent decoding refusal.
+
 ## Algorithm and negative logic
 
 Programs are written to a fresh temporary directory as files whose names
@@ -220,3 +226,15 @@ Register focused native text-view explicit-output and refusal groups over [[Back
 ## Indexed stores (#840)
 
 Register the store success, module and refusal corpora as two properties. Resolved Grill Log: module programs run in the same expected-output conformance as single-module ones.
+
+## Host services and type abstractions (#846)
+
+Register two differential groups over [[Backend Host Programs]] and two over
+[[Backend Abstraction Programs]]: successes compare with the interpreter byte
+for byte, and runtime failures retain its diagnostics and exit status.
+Resolved Grill Log: the new corpora use the existing whole-program conformance
+runner, so a refusal or mismatch shows the same site a reader would see.
+[[Backend Service Programs]] registers one more group the same way. The
+library float group compares with the interpreter alone: its programs print
+kernels whose last bit belongs to the machine's math library, so no answer
+can be written for them.

@@ -25,3 +25,12 @@ and one expression shape per family.
 ## Referenced by
 
 [[Core IR]] · [[Core Frame IR]] · [[Compiler Lower Kernel]] · [[Backend Emit Kernel]] · [[Native Builtin Kernels]]
+
+## Host kernels (#846)
+
+`KernelHost host` names the host runtime part `pudu_host_<host>`.
+`KernelHostState` reads what the last host call on this thread left (done,
+failed, nothing there or ended), and `KernelHostMessage` reads its one-shot
+failure text. Resolved Grill Log: one name per runtime function keeps emission
+total; the host's state is asked separately from its answer so no answer
+carrier grows a status field.

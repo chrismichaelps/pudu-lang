@@ -28,6 +28,7 @@ import Data.Text (Text)
 import qualified Data.Map.Strict as Map
 import Pudu.Eval.Frozen (Frozen)
 import Pudu.Compiler.Lower.Layout (moduleLayouts)
+import Pudu.Compiler.Lower.Dynamic (dynamicSums)
 import Pudu.Compiler (CompileResult (..))
 import Pudu.Compiler.Lower.Types (LowerTypes, emptyTypes, formedCoreTypeIn, lookupScheme, nativeTypes, withShapes)
 import Pudu.Compiler.Lower.Method (methodTables)
@@ -164,7 +165,7 @@ lowerProgram entryName programModules@(rootModule : _)
     records = Map.unions
       [ Map.filterWithKey (\identity _ -> owns native identity) (fst (shapesOf native))
       | native <- programModules ]
-    sums = Map.unions
+    sums = Map.union (dynamicSums (map nativeModuleSyntax programModules)) $ Map.unions
       [ Map.filterWithKey (\identity _ -> owns native identity || nominalModule identity == Nothing)
           (snd (shapesOf native))
       | native <- programModules ]
@@ -177,6 +178,9 @@ lowerProgram entryName programModules@(rootModule : _)
             , scopeConstants = Map.fromList
                 [ (locatedValue name, Map.lookup (locatedValue name) (nativeModuleConstants native))
                 | Located _ (BindingDeclaration _ _ name _ _) <- moduleDeclarations (nativeModuleSyntax native) ]
+            , scopeInitializers = Map.fromList
+                [ (locatedValue name, initial)
+                | Located _ (BindingDeclaration _ _ name _ initial) <- moduleDeclarations (nativeModuleSyntax native) ]
             , scopeSelected = Map.fromList
                 [ (locatedValue item, moduleNameText (locatedValue (importModule value)))
                 | Located _ value <- moduleImports (nativeModuleSyntax native)
@@ -190,13 +194,13 @@ lowerProgram entryName programModules@(rootModule : _)
         )
       | native <- programModules ]
 
-    (instances, methods, traitMethods) = methodTables scopes
+    (instances, methods, traitMethods, heads) = methodTables scopes
       [ (nativeModuleName native, nativeModuleSyntax native, nativeModuleMethods native) | native <- programModules ]
 
     runWorklist entry =
       let initial =
             LowerState
-              { lowerContext = emptyContext rootName entryKey scopes table instances methods traitMethods
+              { lowerContext = emptyContext rootName entryKey scopes table instances methods traitMethods heads
               , lowerNextLoop = 0
               , lowerLoops = []
               , lowerNextLocal = 0
@@ -205,6 +209,8 @@ lowerProgram entryName programModules@(rootModule : _)
               , lowerDeclaredResult = Nothing
               , lowerCurrentKey = entryKey
               , lowerLoaned = []
+              , lowerOpenScopes = []
+              , lowerTypeArguments = []
               }
           (afterEntry, entryFunction) = lowerEntryBody entry
             ((startFunction initial [] Nothing){lowerDeclaredResult = declaredEntryResult entry})
@@ -251,7 +257,7 @@ lowerProgram entryName programModules@(rootModule : _)
 
     -- `?` in the entry returns at its declared type, before any `return` says so.
     declaredEntryResult entry = case lookupScheme (maybe emptyTypes scopeTypes (Map.lookup rootName scopes)) (locatedValue (functionName (locatedValue entry))) of
-      Just Scheme{schemeParams = [], schemeType = FunctionTypeRequiring False [] _ result} ->
+      Just Scheme{schemeParams = [], schemeType = FunctionTypeRequiring _ [] _ result} ->
         formedCoreTypeIn (maybe emptyTypes scopeTypes (Map.lookup rootName scopes)) result
       _ -> Nothing
 

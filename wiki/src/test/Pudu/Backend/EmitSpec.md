@@ -76,6 +76,8 @@ Uses [[Compiler Lower]], [[Compiler Lower Body]], [[Backend Emit]],
 
 ## Resolved Grill Log
 
+- Standard-input lowering now executes in [[Backend Native Tests]]. Remove its stale refusal expectation and retain the exact span checks for unsupported device calls.
+
 - **Q:** How can a wholly divergent entry be tested safely? **A:** Compile and lower both trailing-loop and returned-loop forms, assert the entry is carried, and never run them. Their body-derived ABI has no observable successful result.
 - **Q:** How is milestone #488 protected against C evaluation-order drift? **A:** Pure checks assert reachable function signatures and refusal spans; execution checks compare nested calls, mutable operand snapshots, short-circuit effects, recursion, and depth-bound diagnostics against the interpreter.
 - **Q:** May unsupported signatures pass because they are uncalled? **A:** Yes; reachability is the contract. A reachable unsupported signature refuses at its own construct, and an unreachable one never enters Core.
@@ -288,3 +290,11 @@ Decimal now has a native form; the refusal and reachability cases name Buckets i
 ## Indexed stores (#840)
 
 Buckets now has a native form; the refusal and reachability cases name `Task[Int, Never]` instead, which still has none. A Task-valued binding refuses at the async function it calls, and the case pins that position. Resolved Grill Log: each changed expectation was inspected; none was refreshed from output alone.
+
+## Host services and tasks (#846)
+
+Task parameters, `environment()`, async calls and `temporaryPath()` now lower,
+so their refusal cases are gone. The trimmed corpus keeps a call to the entry,
+`readLine`, `desktopOpen` and a module without `main`, and pins each refusal to
+the construct's own span. Resolved Grill Log: remove only the expectations the
+new native forms satisfy; inspect every retained marker against the source.

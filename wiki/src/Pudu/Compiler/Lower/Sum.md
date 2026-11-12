@@ -29,3 +29,10 @@ Export `lowerVariant` and `variantAt`.
 ## Referenced by
 
 [[Compiler Lower Body]] · [[Native Emission Coverage]] · [[src/_MOC]]
+
+## Dynamic payloads (#846)
+
+A variant payload declared `dynamic` widens a value of an implementing type
+to the declared type, at the argument's position, before `CoreConstruct`.
+Resolved Grill Log: the variant's declared field type chooses the widening;
+a Never payload still stops later payloads.

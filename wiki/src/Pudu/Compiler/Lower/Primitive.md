@@ -20,3 +20,11 @@ the order of the families in one place. No name is claimed twice.
 ## Referenced by
 
 [[Compiler Lower Body]] · [[Native Builtin Kernels]]
+
+## Host concurrency (#846)
+
+`lowerPrimitiveCall` also tries `lowerConcurrentPrimitive`, which owns
+`cellOpen`, `cellGet`, `cellSwap`, `channelPush`, `channelPull`,
+`channelPullWithin` and `spawnThread`. Resolved Grill Log: the concurrent
+family sits after the existing primitive families, so no name is claimed
+twice.

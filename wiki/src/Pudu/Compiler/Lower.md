@@ -21,6 +21,7 @@ span, so the reader learns what the native backend does not support and where.
 The module is the driver: it finds the entry, decides which functions are
 reachable, validates their signatures, and settles the result;
 [[Compiler Lower Body]] owns block, statement, expression and call lowering;
+[[Compiler Lower Function Body]] owns entry and named-function boundaries;
 [[Compiler Lower Control]] owns loop targets, transfers and Never joins;
 [[Compiler Lower State]] owns shared state and [[Compiler Lower Signature]]
 owns callable signature admission.
@@ -118,7 +119,7 @@ CompileResult, never an errored program. Missing facts refuse at the module span
 
 ## Dependencies and consumers
 
-Requires [[Compiler Lower Types]], [[Compiler Lower Body]], [[Compiler Lower State]],
+Requires [[Compiler Lower Types]], [[Compiler Lower Body]], [[Compiler Lower Function Body]], [[Compiler Lower State]],
 [[Compiler Lower Signature]], [[Frontend Syntax]] trees, [[Source]] spans, [[Pudu Core]], and [[Diagnostic Native]].
 Consumed by the `pudu build --native` path in [[Pudu CLI]]. It may import
 frontend and semantic modules — that is its job — and no backend module
@@ -230,10 +231,11 @@ the facts before lowering.
 Resolved Grill Log: NativeModule adds nativeModuleConstants :: Map Text Frozen
 from the same successful CompileResult. programNativeModules supplies
 compileFolded for every module. lowerModuleFolded accepts real supplied
-products; the compatibility lowerModule passes an empty product map and
-refuses reached constants rather than re-evaluating their syntax. ModuleScope
-records each declared constant with its optional frozen value, so nonportable
-and missing products stay distinct from undeclared names. No ABI change.
+products; the compatibility lowerModule passes an empty product map, and a
+reached constant without a supplied product compiles its written initializer
+in its declaring module (#846). ModuleScope records each declared constant
+with its optional frozen value and its initializer, so nonportable and missing
+products stay distinct from undeclared names. No ABI change.
 
 ## Defaulted bodies (#638)
 
@@ -247,3 +249,14 @@ A function whose signature has loaned parameters is lowered through
 `lowerLoanedBody`, around the plain or defaulted body lowerer, so defaults
 see the loans too. The initial state starts with no loans. See
 [[Native Mutable Loans]].
+
+## Host services and abstractions (#846)
+
+Resolved Grill Log: each module's scope now also carries its written constant
+initializers, and the program's sums add `dynamicSums`, one closed sum per
+trait. `emptyContext` receives the implementation heads, so a parameter named
+only by a bound can settle through the head that provides it. The worklist
+then lowers tasks, scopes, host calls, dynamic values, constructor parameters,
+static members through a type parameter, generic methods checking left open,
+and sequence bindings through [[Native Host Services]] and [[Native Type
+Abstractions]].

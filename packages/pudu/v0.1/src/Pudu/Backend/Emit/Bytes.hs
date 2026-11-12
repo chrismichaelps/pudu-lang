@@ -48,6 +48,7 @@ bytesFunction name = case name of
   BytesStartsWithValue -> ("pudu_bytes_starts_with", "bytes_starts_with")
   BytesEndsWithValue -> ("pudu_bytes_ends_with", "bytes_ends_with")
   BytesReversed -> ("pudu_bytes_reverse", "bytes_reverse")
+  BytesStridedOf -> ("pudu_bytes_strided", "bytes_strided")
   BytesToArrayOf -> ("pudu_bytes_to_array", "bytes_to_array")
   BytesIsText -> ("pudu_bytes_is_text", "bytes_is_text")
   BytesAsText -> ("pudu_bytes_as_text", "bytes_as_text")

@@ -1,12 +1,30 @@
 {-| @Test.Backend.KernelPrograms — pure builtin kernels: buffers, columns, sort indices, the flat table and the codecs; success programs carry interpreter output checked against stdlib references. -}
-module Pudu.Backend.KernelPrograms (kernelSuccessPrograms, kernelRefusalPrograms) where
+module Pudu.Backend.KernelPrograms (kernelSuccessPrograms, kernelLibraryPrograms, kernelRefusalPrograms) where
 
 import Data.Text (Text)
 import qualified Data.Text as Text
 
 kernelSuccessPrograms :: [(String, Text, Text)]
 kernelSuccessPrograms =
-  [ ( "byte helpers, buffers and writes match the interpreter, refusals included"
+  [ ( "the broad phase answers touching pairs in order and refuses malformed bounds"
+      , program
+        [ "fn main() -> Int {"
+        , "  let minX = lanesFromArray([0.0, 2.0, 1.0, 5.0, -0.0, 0.0])"
+        , "  let maxX = lanesFromArray([1.0, 3.0, 2.0, 6.0, 0.0, 9.0])"
+        , "  let low = lanesFromArray([0.0, 0.0, 0.0, 0.0, 0.0, 0.0])"
+        , "  let high = lanesFromArray([1.0, 1.0, 1.0, 1.0, 1.0, 1.0])"
+        , "  let minZ = lanesFromArray([0.0, 0.0, 0.0, 0.0, 0.0, 5.0])"
+        , "  let maxZ = lanesFromArray([1.0, 1.0, 1.0, 1.0, 1.0, 6.0])"
+        , "  print(show(lanesOverlapPairs(minX, maxX, low, high, minZ, maxZ)))"
+        , "  print(show(lanesOverlapPairs(lanesFromArray([0.0 / 0.0, 2.0, 1.0, 5.0, 0.0, 0.0]), maxX, low, high, minZ, maxZ)))"
+        , "  print(show(lanesOverlapPairs(lanesFromArray([0.0]), maxX, low, high, minZ, maxZ)))"
+        , "  print(show(lanesOverlapPairs(lanesFromArray([2.0, 2.0, 1.0, 5.0, 0.0, 0.0]), maxX, low, high, minZ, maxZ)))"
+        , "  let none = lanesFromArray([])"
+        , "  print(show(lanesOverlapPairs(none, none, none, none, none, none)))"
+        , "  0"
+        , "}" ]
+      , "Some([0, 2, 0, 4, 1, 2])\nNone\nNone\nNone\nSome([])\n" )
+  , ( "byte helpers, buffers and writes match the interpreter, refusals included"
       , program
         [ "fn main() -> Int {"
         , "  let b = bufferAlloc(24)"
@@ -132,6 +150,21 @@ program :: [Text] -> Text
 program body = Text.unlines (["module Main", ""] <> body)
 
 {-| Refusals keep their codes, messages and spans through every kernel family. -}
+{-| Programs whose library imports the single-module leak harness cannot load. -}
+kernelLibraryPrograms :: [(String, Text, Text)]
+kernelLibraryPrograms =
+  [ ( "an empty array compares with an array whose element a generic solved"
+      , program
+        [ "import Std.Iter as Iter"
+        , "import Std.Iter.Views as Views"
+        , "fn main() -> Int {"
+        , "  let joined = Views.join(Iter.items([Iter.empty[Int]()])).toArray()"
+        , "  print(display(joined == []) + \" \" + display([] == joined) + \" \" + display(joined != []))"
+        , "  0"
+        , "}" ]
+      , "true true false\n" )
+  ]
+
 kernelRefusalPrograms :: [(String, Text)]
 kernelRefusalPrograms =
   [ ( "flat table primitives, degenerate tables and a negative capacity"

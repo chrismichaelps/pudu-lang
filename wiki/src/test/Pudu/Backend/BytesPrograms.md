@@ -17,6 +17,8 @@ overlong form, a surrogate, a value past U+10FFFF, a four-byte emoji, a stray
 Bytes as map keys and set members. The refusals are range slices out of
 bounds (counting bytes) and ending before they start.
 
+`strided` covers whole and short final groups, zero width, offsets at and past the end, every malformed shape, an oversized stride and empty bytes (#846).
+
 ## Referenced by
 
 [[Backend Module Programs]] · [[Backend Text Leak Tests]] · [[Native Bytes Runtime]]

@@ -7,6 +7,9 @@ aliases: [Program Compiler Module Map]
 # Program Compiler Module Map
 
 - [[Compiler Lower Store]] · [[Compiler Lower Multi Map]] — indexed stores, hashing and MultiMap primitives, direct and as values (#840).
+- [[Compiler Lower Concurrent]] · [[Compiler Lower Scope]] — host concurrency and task-scope joins (#846).
+- [[Compiler Lower Dynamic]] — dynamic trait sums and widening (#846).
+- [[Compiler Lower Kernel Host]] · [[Compiler Lower Kernel Lanes]] · [[Compiler Lower Kernel Shape]] — host, lane and shape primitives (#846).
 - [[Compiler Lower Word Map]] — checked direct/value sparse-word algebra (#810).
 
 - [[Compiler Frame Lowering]] · [[Compiler Frame State]] · [[Compiler Frame Body]] — structured Core to explicit continuations for #499.
@@ -26,6 +29,7 @@ aliases: [Program Compiler Module Map]
   orchestration.
 - [[Compiler Lower]] — checked tree to [[Core IR]], with typed `E6001` refusals for everything the
   native subset does not carry.
+- [[Compiler Lower Function Body]] — entry and named-function boundaries, with body callbacks (#846).
 - [[Compiler Lower Body]] — the block, statement, expression, and call-site traversal the reachability
   driver drives; state and signature admission have separate modules.
 - [[Compiler Library]] — where a module is looked for, and how `Std` resolves from the distribution.

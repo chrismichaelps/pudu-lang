@@ -101,6 +101,24 @@ bytesRuntimeParts =
       , "  return pudu_bytes_wrap(turned);"
       , "}"
       ])
+  , ("bytes_strided",
+      [ "/* The group shape is checked before the call: 0 <= width <= stride, stride >= 1. */"
+      , "static pudu_box *pudu_bytes_strided(pudu_box *box, pudu_int offset, pudu_int width, pudu_int stride) {"
+      , "  pudu_text bytes = box->fields[0].text;"
+      , "  size_t start = pudu_bytes_clamp(offset, bytes.length), extent = bytes.length - start;"
+      , "  size_t step = extent == 0 ? 1 : pudu_bytes_clamp(stride, extent);"
+      , "  size_t taken = pudu_bytes_clamp(width, step);"
+      , "  size_t total = extent / step * taken + (extent % step < taken ? extent % step : taken);"
+      , "  unsigned char *out;"
+      , "  pudu_text made = pudu_text_allocate(total, &out);"
+      , "  for (size_t from = start, written = 0; written < total; from += step) {"
+      , "    size_t count = total - written < taken ? total - written : taken;"
+      , "    memcpy(out + written, bytes.bytes + from, count);"
+      , "    written += count;"
+      , "  }"
+      , "  return pudu_bytes_wrap(made);"
+      , "}"
+      ])
   , ("bytes_to_array",
       [ "static pudu_box *pudu_bytes_to_array(pudu_box *box) {"
       , "  pudu_text bytes = box->fields[0].text;"
@@ -179,6 +197,7 @@ bytesRuntimeDependencies name = maybe [] id (lookup name
   , ("bytes_starts_with", ["text"])
   , ("bytes_ends_with", ["text"])
   , ("bytes_reverse", ["bytes_wrap", "text_allocate"])
+  , ("bytes_strided", ["bytes_wrap", "bytes_clamp", "text_allocate"])
   , ("bytes_to_array", ["array", "make"])
   , ("bytes_is_text", ["text"])
   , ("bytes_as_text", ["text_retain"])

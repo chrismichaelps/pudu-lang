@@ -22,6 +22,18 @@ made-up spans, so they are replaced by one refusal at the member expression.
 Closure info records the receiver type, which drives rendering, equality and
 the caller-blaming frame flag. See [[Native Method Values]].
 
+## Text methods (#846)
+
+`toText` taken as a value from a receiver whose type declares no `toText` (an
+Int, Float, Bool, Decimal, tuple, or a record or sum without one) is a bound
+value whose body is the written `$receiver.toText()`. Its key starts with
+`textMethodPrefix` from [[Core Closure Identities]], so emission renders it as
+the interpreter does.
+
+Resolved Grill Log: decide by the same owner lookup [[Compiler Lower Method]]
+makes for a written `toText()` call. _Rejected:_ admitting every scalar member
+(only `toText` exists on them).
+
 ## Referenced by
 
 [[Compiler Lower Body]] · [[src/Pudu/Compiler/_MOC]]

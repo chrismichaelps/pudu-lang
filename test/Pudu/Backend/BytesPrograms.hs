@@ -6,7 +6,19 @@ import qualified Data.Text as Text
 
 bytesSuccessPrograms :: [(String, Text, Text)]
 bytesSuccessPrograms =
-  [ ("every byte method, valid and invalid UTF-8, range slices, ordering and keys", program
+  [ ("strided gathers groups and refuses a malformed shape", program
+      [ "fn shown(value: Option[Bytes]) -> Str {"
+      , "  match value {", "    case Some(bytes) => show(bytes.toArray())", "    case None => \"none\"", "  }", "}"
+      , "fn main() -> Int {"
+      , "  let pixels = bytesOf([1u8, 2u8, 3u8, 4u8, 5u8, 6u8, 7u8, 8u8, 9u8, 10u8])"
+      , "  print(shown(pixels.strided(0, 3, 4)) + \" \" + shown(pixels.strided(1, 2, 3)) + \" \" + shown(pixels.strided(0, 0, 1)))"
+      , "  print(shown(pixels.strided(9, 1, 1)) + \" \" + shown(pixels.strided(10, 1, 1)) + \" \" + shown(pixels.strided(99, 2, 5)))"
+      , "  print(shown(pixels.strided(-1, 1, 1)) + \" \" + shown(pixels.strided(0, -1, 1)) + \" \" + shown(pixels.strided(0, 1, 0)) + \" \" + shown(pixels.strided(0, 3, 2)))"
+      , "  print(shown(pixels.strided(2, 5, 100)) + \" \" + shown(pixels.strided(0, 1, 9223372036854775807)) + \" \" + shown(bytesOf([]).strided(0, 1, 1)))"
+      , "  print(show(pixels.strided(0, 2, 2) == Some(pixels)))"
+      , "  return 0", "}" ]
+    , "[1, 2, 3, 5, 6, 7, 9, 10] [2, 3, 5, 6, 8, 9] []\n[10] [] []\nnone none none none\n[3, 4, 5, 6, 7] [1] []\ntrue\n")
+  , ("every byte method, valid and invalid UTF-8, range slices, ordering and keys", program
       [ "fn text(raw: Array[UInt8]) -> Str {", "  match bytesOf(raw).toText() {", "    case Some(t) => \"Some(\" + t + \")\""
       , "    case None => \"None\"", "  }", "}"
       , "", "fn main() -> Int {", "  let hi = \"héllo\".toBytes()"

@@ -182,3 +182,12 @@ uses the same helper for called, retained and explicitly applied members.
 Resolved Grill Log: T.member must not fall through as ErrorType or flatten to
 an unbound T.member value key. Self specializes from the bound's receiver;
 method-local parameters remain real parameters and publish ordinary selections.
+
+## Written type-argument facts (#846)
+
+`TypeApplication` records the formed written arguments as a tuple at
+`typeArgumentsKey spanValue` after checking them, before the target is
+selected. Lowering reads that fact so a callee can bind a parameter its own
+signature never mentions. Resolved Grill Log: the written list is a fact of
+the application, not of the selected scheme; an empty key keeps it out of
+source-position lookups and leaves every existing selection unchanged.

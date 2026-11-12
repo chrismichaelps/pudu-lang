@@ -44,6 +44,13 @@ surrogates, nothing past U+10FFFF, nothing truncated.
 
 [[Native Runtime]] · [[Backend Runtime Array]]
 
+## strided (#846)
+
+`pudu_bytes_strided` clamps the offset, stride and width to the bytes after the
+offset, allocates the exact total once and copies one run per group; a final
+short group contributes what remains, as `Eval.Bytes` computes it. The shape is
+checked before the call.
+
 ## Referenced by
 
 [[Backend Emit Bytes]] · [[Backend Frame Program]] · [[src/Pudu/Backend/_MOC]]

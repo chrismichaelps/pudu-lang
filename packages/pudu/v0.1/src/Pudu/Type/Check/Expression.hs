@@ -23,7 +23,7 @@ import Pudu.Frontend.Syntax.Tree
   )
 import Data.List.NonEmpty (NonEmpty (..))
 import Pudu.Frontend.Syntax.Name (ModuleName (..))
-import Pudu.Source (Span, spanOrigin)
+import Pudu.Source (Span, spanOrigin, typeArgumentsKey)
 import Pudu.Type.Env
   ( Checker
   , DeclaredTypes (..)
@@ -394,6 +394,9 @@ inferExpression around declared rigid spanValue expression = case expression of
   TypeApplication target arguments -> do
     checkTypeArguments arguments
     formed <- mapM (formType declared rigid) arguments
+    -- The written arguments are a fact of their own, so a copy of the callee
+    -- can bind a parameter its signature never mentions.
+    recordExpression (typeArgumentsKey spanValue) (TupleTypeValue formed)
     {-| A qualified name carries type arguments as readily as a bare one:
         `Num.small[UInt16](...)` is the same call as `small[UInt16](...)` from
         inside the module, and a caller should not have to import a name

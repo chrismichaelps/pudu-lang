@@ -24,6 +24,13 @@ methods of a byte sequence, arguments before the receiver.
 
 [[Compiler Lower Array]] · [[Compiler Lower State]] · [[Compiler Lower Types]] · [[Core IR]]
 
+## strided (#846)
+
+`strided(offset, width, stride)` answers None for a negative offset or width, a
+stride below one or a width wider than the stride, and otherwise Some of
+`BytesStridedOf` ([[Core Byte Operations]]). The operands and receiver run once,
+in written order, into locals before the shape test.
+
 ## Referenced by
 
 [[Compiler Lower Body]] · [[src/Pudu/Compiler/_MOC]]

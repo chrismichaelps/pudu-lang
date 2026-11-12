@@ -44,7 +44,7 @@ import Pudu.Diagnostic.Host (memoryFailureMessage)
 {-| The runtime contract revision baked into every generated program's header
     comment. It changes only when the runtime's behaviour or interface does. -}
 runtimeRevision :: Text
-runtimeRevision = "20"
+runtimeRevision = "21"
 
 {-| @Backend.Runtime.Part — one named, self-contained piece of the runtime.
 
@@ -85,6 +85,16 @@ runtimeParts =
 preludeLines :: [Text]
 preludeLines =
   [ "/* pudu native runtime revision " <> runtimeRevision <> " */"
+  , ""
+  , "/* The host parts read clocks, files and threads the C standard leaves out. */"
+  , "#if defined(__linux__)"
+  , "#ifndef _DEFAULT_SOURCE"
+  , "#define _DEFAULT_SOURCE 1"
+  , "#endif"
+  , "#ifndef _POSIX_C_SOURCE"
+  , "#define _POSIX_C_SOURCE 200809L"
+  , "#endif"
+  , "#endif"
   , ""
   , "#include <inttypes.h>"
   , "#include <stdint.h>"
@@ -143,11 +153,14 @@ coloredLines =
 
 failLines :: [Text]
 failLines =
-  [ "/* Print the refusal and leave with the interpreter's status for one. The"
+  [ "/* A started thread's failure ends that thread, not the program. */"
+  , "static void (*pudu_trap_hook)(const char *message, size_t length, void *owned_payload) = NULL;"
+  , "/* Print the refusal and leave with the interpreter's status for one. The"
   , "   message is written by length, so a rendered value may hold any byte. */"
   , "static _Noreturn void pudu_fail_report(const pudu_site *site, const char *message, size_t length, const char *help, size_t help_length, void *owned_payload) {"
   , "  /* Read before cleanup: it frees the frame that knows its caller. */"
   , "  const pudu_site *where = site;"
+  , "  if (pudu_trap_hook != NULL) pudu_trap_hook(message, length, owned_payload);"
   , "  if (pudu_blame_hook != NULL && pudu_blame_hook() != NULL) where = pudu_blame_hook();"
   , "  if (pudu_cleanup_hook != NULL) pudu_cleanup_hook();"
   , "  pudu_prepare_error_io();"

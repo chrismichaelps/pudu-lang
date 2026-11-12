@@ -35,7 +35,7 @@ jobs:
       - name: Install the dynamic call headers
         run: |
           sudo apt-get update || echo "some package indexes could not be read; continuing to the install"
-          sudo apt-get install -y libffi-dev
+          sudo apt-get install -y libffi-dev zlib1g-dev libssl-dev pkg-config
       - run: cabal update
       # The store holds dependencies, keyed by what pins them; the build tree is
       # keyed by commit and restored from this branch's or dev's latest, so a
@@ -100,7 +100,7 @@ jobs:
       - name: Install the dynamic call headers
         run: |
           sudo apt-get update || echo "some package indexes could not be read; continuing to the install"
-          sudo apt-get install -y libffi-dev
+          sudo apt-get install -y libffi-dev zlib1g-dev libssl-dev pkg-config
       - uses: actions/download-artifact@v5
         with:
           name: pudu-binaries
@@ -143,7 +143,7 @@ jobs:
       - name: Install the dynamic call headers
         run: |
           sudo apt-get update || echo "some package indexes could not be read; continuing to the install"
-          sudo apt-get install -y libffi-dev
+          sudo apt-get install -y libffi-dev zlib1g-dev libssl-dev pkg-config
       - uses: actions/download-artifact@v5
         with:
           name: pudu-binaries
@@ -214,7 +214,7 @@ jobs:
       - name: Install the dynamic call headers
         run: |
           sudo apt-get update || echo "some package indexes could not be read; continuing to the install"
-          sudo apt-get install -y libffi-dev
+          sudo apt-get install -y libffi-dev zlib1g-dev libssl-dev pkg-config
       - uses: actions/download-artifact@v5
         with:
           name: pudu-binaries
@@ -277,7 +277,7 @@ jobs:
       - name: Install the dynamic call headers
         run: |
           sudo apt-get update || echo "some package indexes could not be read; continuing to the install"
-          sudo apt-get install -y libffi-dev
+          sudo apt-get install -y libffi-dev zlib1g-dev libssl-dev pkg-config
       - uses: actions/download-artifact@v5
         with:
           name: pudu-binaries
@@ -347,7 +347,7 @@ jobs:
       - name: Install the dynamic call headers
         run: |
           sudo apt-get update || echo "some package indexes could not be read; continuing to the install"
-          sudo apt-get install -y libffi-dev
+          sudo apt-get install -y libffi-dev zlib1g-dev libssl-dev pkg-config
       - uses: actions/download-artifact@v5
         with:
           name: pudu-binaries

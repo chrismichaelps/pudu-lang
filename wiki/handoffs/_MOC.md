@@ -384,3 +384,5 @@ tags: [moc, handoff]
 - [[Native Indexed Store Delivery]] — native `Buckets[V]`, hashing and MultiMap primitives (#840).
 
 - [[handoffs/2026-11-10-native-kernels]]
+
+- [[handoffs/2026-11-11-native-remaining-emission]] — native tasks, host services and type abstractions (#846).

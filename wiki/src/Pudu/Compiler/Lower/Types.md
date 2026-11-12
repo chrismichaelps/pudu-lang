@@ -236,3 +236,19 @@ as `Eval.Env.lookupMethod` does.
 ## Indexed stores (#840)
 
 Form `Buckets[V]` as CoreStoreType when V is a native value; ownerKeyOf answers `Buckets`. Export treeType for maps, sets and stores. Resolved Grill Log: one predicate replaces repeated three-way matches in callers.
+
+## Tasks, dynamic values and constructor parameters (#846)
+
+`Task[T, E]` forms as a function of nothing answering `T`, or `Result[T, E]`
+when the task can fail; an async function type forms as its inputs answering
+the task of its result, with no lending. A `dynamic Trait` forms as the
+trait's closed sum under a `dynamic` module no program can declare;
+`dynamicIdentity` names it and `isDynamic` recognizes it. An applied
+constructor parameter forms against the constructor its binding names and the
+arguments it already holds. `RestrictedType` is looked through: what an unsafe
+call may reach was checked where it was called. `unformed` moves a formed
+Core type back to checking's spelling.
+
+Resolved Grill Log: a task is a value, not a maker of one; a dynamic value is
+one closed sum the program's implementations fix; a constructor parameter is
+a record or sum key beside its prefix arguments, never a fresh type.

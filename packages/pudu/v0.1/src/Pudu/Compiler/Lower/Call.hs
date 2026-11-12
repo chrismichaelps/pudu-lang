@@ -5,12 +5,13 @@ module Pudu.Compiler.Lower.Call (lowerFunctionCall, lowerPrint, outputResult, lo
 import Data.Text (Text)
 import Pudu.Compiler.Lower.Control (expressionIsPrintValued)
 import Pudu.Compiler.Lower.Default (hasDefaults, suppliedArguments)
-import Pudu.Compiler.Lower.Generic (admitCallee)
+import Pudu.Compiler.Lower.Generic (admitCalleeGiven)
 import Pudu.Compiler.Lower.Loan (lowerLoanedCall)
 import Pudu.Compiler.Lower.Scalar (eagerType)
 import Pudu.Compiler.Lower.State (CoreSignature (..), LowerContext (..), LowerState (..), bindLocal, halt, refused)
-import Pudu.Compiler.Lower.Types (nativeValueType, typeForSpan)
+import Pudu.Compiler.Lower.Types (nativeValueType, typeFactAt, typeForSpan)
 import Pudu.Core
+import Pudu.Compiler.Lower.Dynamic (widen)
 import Pudu.Frontend.Syntax (Expression, Located (..))
 import Pudu.Source (Span)
 
@@ -24,25 +25,29 @@ lowerFunctionCall lower state at key callee arguments = case lookup key (context
   Nothing -> halt at "this call" state
   Just entry
     | key == contextEntry (lowerContext state) -> halt at "a call to the entry function" state
-    | otherwise -> case admitCallee state key callee entry of
+    | otherwise -> case admitCalleeGiven state (traverse (typeFactAt (contextTypes (lowerContext state)) . locatedSpan) arguments) key callee entry of
         (back, Nothing) -> refused back
         (back, Just (target, found))
           | not (null (signatureLoaned found)) ->
               lowerLoanedCall lower back at target found (hasDefaults (locatedValue (snd entry))) arguments
         (back, Just (target, found)) -> case collect back [] arguments of
-          (final, Just cores)
-            | any ((== CoreNeverType) . coreExpressionType) cores ->
-                typed final (CoreBlockValue (CoreBlock
-                  [CoreStatement (coreExpressionSpan argument) (CoreEvaluate argument) | argument <- cores] Nothing)) CoreNeverType
-            | otherwise ->
-                let queued = queue target final
-                    passed
-                      | hasDefaults (locatedValue (snd entry)) =
-                          suppliedArguments at (map (coreLocalType . coreParameterLocal) (signatureParameters found)) cores
-                      | otherwise = cores
-                 in typed queued (CoreCall target passed) (eagerType (signatureResult found) cores)
+          (final, Just given) -> passing entry final target found
+            -- An argument of an implementing type widens to a dynamic parameter.
+            (zipWith (widen (contextTypes (lowerContext final)))
+              (map (coreLocalType . coreParameterLocal) (signatureParameters found) <> repeat CoreNeverType) given)
           (final, Nothing) -> refused final
  where
+  passing entry final target found cores
+    | any ((== CoreNeverType) . coreExpressionType) cores =
+        typed final (CoreBlockValue (CoreBlock
+          [CoreStatement (coreExpressionSpan argument) (CoreEvaluate argument) | argument <- cores] Nothing)) CoreNeverType
+    | otherwise =
+        let queued = queue target final
+            passed
+              | hasDefaults (locatedValue (snd entry)) =
+                  suppliedArguments at (map (coreLocalType . coreParameterLocal) (signatureParameters found)) cores
+              | otherwise = cores
+         in typed queued (CoreCall target passed) (eagerType (signatureResult found) cores)
   typed after shape kind = (after, Just (CoreExpression at kind shape, kind))
   queue target current = current{lowerContext = (lowerContext current){contextQueue = target : contextQueue (lowerContext current)}}
   collect current done [] = (current, Just (reverse done))
