@@ -43,6 +43,10 @@ in the data and participates in equality. Type arguments retain their order.
 - Explicit callable flags are independent; do not infer policy from names/captures.
 - This is a review partition of #486, not a native coverage or readiness claim.
 
+## Foreign calls (#850)
+
+`CoreForeignCall` carries a `CoreForeign` (library, version, symbol, parameter and result crossing types) and its arguments in order. Resolved Grill Log: the call carries its whole declaration so frames and emission need no module table ([[Native Foreign Call Sites]]).
+
 ## Referenced by
 
 [[src/_MOC]] · [[Native Core Contracts Delivery]] · [[Core IR]]

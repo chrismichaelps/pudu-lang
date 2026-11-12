@@ -49,6 +49,7 @@ const shared = new Map([
   ["E7010", "a decimal quotient with no exact base-ten expansion, from the interpreter and native frame emitter"],
   ["E7012", "a built-in given arguments it does not accept, from the builtins and the effects"],
   ["E7013", "a sequence pattern whose length does not match the value, from the interpreter and native body lowering"],
+  ["E7015", "a foreign call whose library does not open or whose symbol it does not export, from the interpreter's bridge and native foreign call sites"],
   ["E7011", "a match no arm accepted, from the tree walker and from compiled bodies, which must report it alike"],
   ["W2001", "an unused import, reported by resolution and retained by lint policy and output"],
   ["W2002", "a shadowed name, reported by resolution and retained by lint policy and output"],

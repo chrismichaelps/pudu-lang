@@ -69,6 +69,10 @@ Bytes need the text cell, since their box holds a text view; an entry
 returning Bytes renders it; [[Native Bytes Runtime]] is emitted after the
 frame types.
 
+## Foreign wrappers (#850)
+
+The wrappers of every foreign declaration the frames call follow the aggregate helpers and precede the function bodies.
+
 ## Referenced by
 
 [[src/_MOC]] · [[Native Frame Pressure Repair]]

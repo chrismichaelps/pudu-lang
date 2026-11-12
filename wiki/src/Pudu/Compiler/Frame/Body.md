@@ -89,6 +89,10 @@ receiver before arguments.
 
 Byte operations lower their receiver before arguments.
 
+## Foreign calls (#850)
+
+`CoreForeignCall` lowers its arguments to slots in order, then to `FrameForeign`; a stopped argument stops the call.
+
 ## Referenced by
 
 [[src/_MOC]] · [[Program Compiler Module Map]] · [[Native Frame Pressure Repair]]

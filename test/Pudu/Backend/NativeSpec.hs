@@ -33,6 +33,7 @@ import Pudu.Backend.BigIntPrograms (bigIntSuccessPrograms, bigIntRefusalPrograms
 import Pudu.Backend.DecimalPrograms (decimalSuccessPrograms, decimalRefusalPrograms)
 import Pudu.Backend.WordMapPrograms (wordMapSuccessPrograms, wordMapRefusalPrograms)
 import Pudu.Backend.StorePrograms (storeSuccessPrograms, storeModulePrograms, storeRefusalPrograms)
+import Pudu.Backend.ForeignPrograms (foreignSuccessPrograms, foreignRefusalPrograms)
 import Pudu.Backend.KernelPrograms (kernelSuccessPrograms, kernelLibraryPrograms, kernelRefusalPrograms)
 import Pudu.Backend.AbstractionPrograms (abstractionSuccessPrograms, abstractionRefusalPrograms)
 import Pudu.Backend.HostPrograms (hostLibraryPrograms, hostSuccessPrograms, hostRefusalPrograms)
@@ -137,6 +138,8 @@ backendNativeProperties =
   , ("native pure kernels match hand-written answers and the interpreter", conjoin <$> mapM
       (\(label, source, expected) -> conformanceExpecting (Just (expected, "", 0)) label source) (kernelSuccessPrograms <> kernelLibraryPrograms))
   , ("native pure kernels retain interpreter refusals", conjoin <$> mapM (uncurry conformance) kernelRefusalPrograms)
+  , ("native foreign calls match the interpreter's bridge", conjoin <$> mapM (uncurry conformance) foreignSuccessPrograms)
+  , ("native foreign calls stop as the interpreter's bridge does", conjoin <$> mapM (uncurry conformance) foreignRefusalPrograms)
   , ("native host services, tasks and scopes match the interpreter's own answers", conjoin <$> mapM
       (\(label, source, expected) -> conformanceExpecting (Just (expected, "", 0)) label source) hostSuccessPrograms)
   , ("native endpoints, secured connections, compression, child programs and time match the interpreter's own answers", conjoin <$> mapM

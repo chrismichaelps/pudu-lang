@@ -26,6 +26,7 @@ import qualified Data.Text as Text
 import qualified Data.Text.Encoding as Encoding
 import Data.Text.Encoding.Error (lenientDecode)
 import Pudu.Backend.Runtime.Host.Compress (compressLibraryMarker)
+import Pudu.Backend.Runtime.Host.Foreign (foreignLoaderMarker)
 import Pudu.Backend.Runtime.Host.Tls (tlsLibraryMarker)
 import System.Directory (findExecutable, removeFile, renameFile)
 import System.Environment (lookupEnv)
@@ -199,7 +200,8 @@ linkerFlags
 sourceLibraries :: Text -> IO [String]
 sourceLibraries source = do
   secured <- if tlsLibraryMarker `Text.isInfixOf` source then tlsLibraryFlags else pure []
-  pure (["-lz" | compressLibraryMarker `Text.isInfixOf` source] <> secured)
+  pure (["-lz" | compressLibraryMarker `Text.isInfixOf` source] <> secured
+    <> ["-ldl" | os == "linux", foreignLoaderMarker `Text.isInfixOf` source])
 
 tlsLibraryFlags :: IO [String]
 tlsLibraryFlags = do
