@@ -15,13 +15,13 @@ lanePrimitives :: [(Text, Primitive)]
 lanePrimitives =
   [ (name, Primitive (map formed operands) (formed result) guards answer)
   | kernel <- laneKernels
-  , Just (part, modes) <- [lanePart kernel]
+  , let (part, modes) = lanePart kernel
   , let name = laneKernelName kernel
         (operands, result) = laneKernelSignature kernel
         call = Call (KernelHost part) modes [0 .. length operands - 1]
         guards =
           [ Guard (Unless (Call (KernelHost "lanes_whole") [] [position])) "E7012" (name <> " needs lanes of whole binary64 values")
-          | (position, LaneBytes) <- zip [0 ..] operands ]
+          | (position, LaneBytes) <- zip [0 ..] operands, position `notElem` byteTargets kernel ]
         answer = case result of
           LaneOption _ -> Absent call
           _ -> Plain call
@@ -38,48 +38,62 @@ formed kind = case kind of
   LanePair -> CoreTupleType [CoreBytesType, CoreBytesType]
   LaneTriple -> CoreTupleType [CoreBytesType, CoreBytesType, CoreBytesType]
 
+{-| Byte operands that are RGBA targets or texels rather than lanes, which
+    the interpreter does not check for whole binary64 values. -}
+byteTargets :: LaneKernel -> [Int]
+byteTargets kernel = case kernel of
+  RasterTriangles -> [0]
+  RasterPerspectiveTriangles -> [0]
+  RasterShadedTriangles -> [0]
+  RasterTexturedTriangles -> [0, 13]
+  _ -> []
+
 {-| The runtime part behind a kernel and the integers that pick what it
-    does. The raster kernels have no native part. -}
-lanePart :: LaneKernel -> Maybe (Text, [Int])
+    does. -}
+lanePart :: LaneKernel -> (Text, [Int])
 lanePart kernel = case kernel of
-  LaneFill -> Just ("lanes_fill", [])
-  LaneRamp -> Just ("lanes_ramp", [])
-  LaneFromArray -> Just ("lanes_from_array", [0])
-  LaneFromInts -> Just ("lanes_from_array", [1])
-  LaneToArray -> Just ("lanes_to_array", [])
-  LaneCount -> Just ("lanes_count", [])
-  LaneGet -> Just ("lanes_get", [])
-  LaneSet -> Just ("lanes_set", [])
-  LaneSlice -> Just ("lanes_slice", [])
-  LaneConcat -> Just ("lanes_concat", [])
-  LaneAdd -> Just ("lanes_zip", [0])
-  LaneSub -> Just ("lanes_zip", [1])
-  LaneMul -> Just ("lanes_zip", [2])
-  LaneDiv -> Just ("lanes_zip", [3])
-  LaneMin -> Just ("lanes_zip", [4])
-  LaneMax -> Just ("lanes_zip", [5])
-  LaneAddScalar -> Just ("lanes_scalar", [0])
-  LaneScale -> Just ("lanes_scalar", [1])
-  LaneAbove -> Just ("lanes_scalar", [2])
-  LaneClamp -> Just ("lanes_clamp", [])
-  LaneAxpy -> Just ("lanes_axpy", [])
-  LaneFma -> Just ("lanes_zip3", [0])
-  LaneSelect -> Just ("lanes_zip3", [1])
-  LaneAbs -> Just ("lanes_map", [0])
-  LaneNegate -> Just ("lanes_map", [1])
-  LaneSqrt -> Just ("lanes_map", [2])
-  LaneFloor -> Just ("lanes_map", [3])
-  LaneSum -> Just ("lanes_sum", [])
-  LaneDot -> Just ("lanes_dot", [])
-  LaneMinimum -> Just ("lanes_extreme", [0])
-  LaneMaximum -> Just ("lanes_extreme", [1])
-  LaneGather -> Just ("lanes_gather", [])
-  LaneScatter -> Just ("lanes_scatter", [0])
-  LaneScatterAdd -> Just ("lanes_scatter", [1])
-  LaneAffine3 -> Just ("lanes_affine3", [])
-  LaneInterleave -> Just ("lanes_interleave", [])
-  LaneToPcm16 -> Just ("lanes_to_pcm16", [])
-  LaneWhere -> Just ("lanes_where", [])
-  LaneToInts -> Just ("lanes_to_ints", [])
-  LaneOverlapPairs -> Just ("lanes_overlap_pairs", [])
-  _ -> Nothing
+  LaneFill -> ("lanes_fill", [])
+  LaneRamp -> ("lanes_ramp", [])
+  LaneFromArray -> ("lanes_from_array", [0])
+  LaneFromInts -> ("lanes_from_array", [1])
+  LaneToArray -> ("lanes_to_array", [])
+  LaneCount -> ("lanes_count", [])
+  LaneGet -> ("lanes_get", [])
+  LaneSet -> ("lanes_set", [])
+  LaneSlice -> ("lanes_slice", [])
+  LaneConcat -> ("lanes_concat", [])
+  LaneAdd -> ("lanes_zip", [0])
+  LaneSub -> ("lanes_zip", [1])
+  LaneMul -> ("lanes_zip", [2])
+  LaneDiv -> ("lanes_zip", [3])
+  LaneMin -> ("lanes_zip", [4])
+  LaneMax -> ("lanes_zip", [5])
+  LaneAddScalar -> ("lanes_scalar", [0])
+  LaneScale -> ("lanes_scalar", [1])
+  LaneAbove -> ("lanes_scalar", [2])
+  LaneClamp -> ("lanes_clamp", [])
+  LaneAxpy -> ("lanes_axpy", [])
+  LaneFma -> ("lanes_zip3", [0])
+  LaneSelect -> ("lanes_zip3", [1])
+  LaneAbs -> ("lanes_map", [0])
+  LaneNegate -> ("lanes_map", [1])
+  LaneSqrt -> ("lanes_map", [2])
+  LaneFloor -> ("lanes_map", [3])
+  LaneSum -> ("lanes_sum", [])
+  LaneDot -> ("lanes_dot", [])
+  LaneMinimum -> ("lanes_extreme", [0])
+  LaneMaximum -> ("lanes_extreme", [1])
+  LaneGather -> ("lanes_gather", [])
+  LaneScatter -> ("lanes_scatter", [0])
+  LaneScatterAdd -> ("lanes_scatter", [1])
+  LaneAffine3 -> ("lanes_affine3", [])
+  LaneInterleave -> ("lanes_interleave", [])
+  LaneToPcm16 -> ("lanes_to_pcm16", [])
+  LaneWhere -> ("lanes_where", [])
+  LaneToInts -> ("lanes_to_ints", [])
+  LaneOverlapPairs -> ("lanes_overlap_pairs", [])
+  RasterFill -> ("raster_fill", [])
+  RasterTriangles -> ("raster_triangles", [])
+  RasterPerspectiveTriangles -> ("raster_perspective", [])
+  RasterTexturedTriangles -> ("raster_textured", [])
+  RasterShadedTriangles -> ("raster_shaded", [])

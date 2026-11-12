@@ -11,6 +11,7 @@ import Pudu.Backend.Runtime.Host.File (hostFileParts)
 import Pudu.Backend.Runtime.Host.Handle (hostHandleParts)
 import Pudu.Backend.Runtime.Host.Input (hostInputParts)
 import Pudu.Backend.Runtime.Host.Lanes (hostLaneParts)
+import Pudu.Backend.Runtime.Host.Raster (hostRasterParts)
 import Pudu.Backend.Runtime.Host.Math (hostMathParts)
 import Pudu.Backend.Runtime.Host.Net (hostNetParts)
 import Pudu.Backend.Runtime.Host.Process (hostProcessParts)
@@ -23,5 +24,5 @@ import Pudu.Backend.Runtime.Host.Tls (hostTlsParts)
 
 hostRuntimeParts :: [(Text, [Text], [Text])]
 hostRuntimeParts = hostStateParts <> hostMathParts <> hostProcessParts <> hostConcurrentParts
-  <> hostInputParts <> hostFileParts <> hostHandleParts <> hostScopeParts <> hostLaneParts <> hostSignalParts <> hostNetParts <> hostTlsParts <> hostCompressParts
+  <> hostInputParts <> hostFileParts <> hostHandleParts <> hostScopeParts <> hostLaneParts <> hostRasterParts <> hostSignalParts <> hostNetParts <> hostTlsParts <> hostCompressParts
   <> hostChildParts <> hostTimeParts <> hostTimeParseParts

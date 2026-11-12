@@ -82,8 +82,9 @@ connecting to it take turns as channel waits do.
 
 ## Not native
 
-Desktop windows, audio devices and the raster kernels keep their typed
-E6001 refusals, as do foreign functions and foreign handles. Each needs a
+Desktop windows and audio devices keep their typed E6001 refusals, as do
+foreign functions and foreign handles. The raster kernels are native
+([[Native Host Raster]], #855). Each needs a
 device or a loaded library the generated C cannot name portably.
 
 ## Evidence

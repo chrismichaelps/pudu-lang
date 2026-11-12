@@ -7,7 +7,7 @@ aliases: [Backend Module Map]
 # Backend Module Map
 
 - [[Native Hash Mixing]] · [[Backend Store Programs]] — `hashOf`, store indexes and the indexed-store corpus (#840).
-- [[Native Host Runtime]] · [[Native Host Concurrent]] · [[Native Host State]] · [[Native Host Process]] · [[Native Host Input]] · [[Native Host Files]] · [[Native Host Handles]] · [[Native Host Scopes]] · [[Native Host Math]] · [[Native Host Lanes]] · [[Native Host Signals]] · [[Native Host Sockets]] · [[Native Host TLS]] · [[Native Host Compression]] · [[Native Host Child Programs]] · [[Native Host Time]] · [[Native Host Time Reading]] — host families (#846).
+- [[Native Host Runtime]] · [[Native Host Concurrent]] · [[Native Host State]] · [[Native Host Process]] · [[Native Host Input]] · [[Native Host Files]] · [[Native Host Handles]] · [[Native Host Scopes]] · [[Native Host Math]] · [[Native Host Lanes]] · [[Native Host Raster]] · [[Native Host Signals]] · [[Native Host Sockets]] · [[Native Host TLS]] · [[Native Host Compression]] · [[Native Host Child Programs]] · [[Native Host Time]] · [[Native Host Time Reading]] — host families (#846).
 - [[Backend Host Programs]] · [[Backend Service Programs]] · [[Backend Abstraction Programs]] — host, service, task, dynamic and abstraction corpus (#846).
 - [[Backend Word Map Programs]] — sparse-word algebra, persistence and ownership (#810).
 - [[Backend Module Programs]] — imported identities and folded collection/range conformance (#808).
