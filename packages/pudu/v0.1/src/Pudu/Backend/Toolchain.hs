@@ -25,6 +25,8 @@ import Data.Text (Text)
 import qualified Data.Text as Text
 import qualified Data.Text.Encoding as Encoding
 import Data.Text.Encoding.Error (lenientDecode)
+import Pudu.Backend.Runtime.Host.Compress (compressLibraryMarker)
+import Pudu.Backend.Runtime.Host.Tls (tlsLibraryMarker)
 import System.Directory (findExecutable, removeFile, renameFile)
 import System.Environment (lookupEnv)
 import System.Exit (ExitCode (..))
@@ -37,6 +39,7 @@ import System.Process
   , createProcess
   , proc
   , getPid
+  , readProcessWithExitCode
   , terminateProcess
   , waitForProcess
   )
@@ -106,17 +109,18 @@ compileNative request = do
       Left problem -> pure (Left (ToolchainPublishFailed (problemText problem)))
       Right () -> do
         seconds <- timeoutSeconds
-        invoked <- tryIO (runCompiler executable sourcePath executablePath seconds)
+        libraries <- sourceLibraries (toolchainSource request)
+        invoked <- tryIO (runCompiler executable sourcePath executablePath libraries seconds)
         pure $ case invoked of
           Left problem -> Left (ToolchainInvocation (problemText problem))
           Right result -> result
 
 -- Acquisition is masked until every process and pipe has a cleanup owner.
-runCompiler :: FilePath -> FilePath -> FilePath -> Int -> IO (Either ToolchainFailure Text)
-runCompiler executable sourcePath executablePath seconds = mask $ \restore -> do
+runCompiler :: FilePath -> FilePath -> FilePath -> [String] -> Int -> IO (Either ToolchainFailure Text)
+runCompiler executable sourcePath executablePath libraries seconds = mask $ \restore -> do
   capture <- newMVar emptyCapture
   (_, maybeOut, maybeErr, processHandle) <-
-    createProcess (proc executable (compilerFlags <> ["-o", executablePath, sourcePath] <> linkerFlags))
+    createProcess (proc executable (compilerFlags <> ["-o", executablePath, sourcePath] <> linkerFlags <> libraries))
       { std_in = NoStream
       , std_out = CreatePipe
       , std_err = CreatePipe
@@ -186,6 +190,23 @@ linkerFlags :: [String]
 linkerFlags
   | os == "mingw32" = []
   | otherwise = ["-lm", "-pthread"]
+
+{-| The system libraries a program's own C asks for, each named by the line
+    that includes its header. A program that never includes one links none.
+    The TLS library's flags are the ones the machine's own package
+    description gives, since its headers sit outside the default search path
+    on some systems; a machine without that description gets the plain names. -}
+sourceLibraries :: Text -> IO [String]
+sourceLibraries source = do
+  secured <- if tlsLibraryMarker `Text.isInfixOf` source then tlsLibraryFlags else pure []
+  pure (["-lz" | compressLibraryMarker `Text.isInfixOf` source] <> secured)
+
+tlsLibraryFlags :: IO [String]
+tlsLibraryFlags = do
+  described <- tryIO (readProcessWithExitCode "pkg-config" ["--cflags", "--libs", "openssl"] "")
+  pure $ case described of
+    Right (ExitSuccess, flags, _) | not (null (words flags)) -> words flags
+    _ -> ["-lssl", "-lcrypto"]
 
 {-| @Backend.Toolchain.Capture — the bounded head of what the compiler wrote,
     with both streams counted against one combined budget. -}

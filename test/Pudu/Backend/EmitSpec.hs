@@ -277,7 +277,7 @@ refusalCases :: [(String, Text, Text)]
 refusalCases =
   [ ("call to entry", statementProgram "main()", "main()\n")
   , ("readLine", bindingProgram "var line = readLine()", "readLine()")
-  , ("formatTime", bindingProgram "var shown = formatTime(\"\", 0, \"UTC\")", "formatTime")
+  , ("desktopOpen", bindingProgram "var opened = desktopOpen(\"\", 1, 1, false)", "desktopOpen")
   , ("a module without main", Text.unlines
       [ "module Refuse"
       , ""

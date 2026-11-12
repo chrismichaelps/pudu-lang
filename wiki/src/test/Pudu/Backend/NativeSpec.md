@@ -228,3 +228,7 @@ Register two differential groups over [[Backend Host Programs]] and two over
 for byte, and runtime failures retain its diagnostics and exit status.
 Resolved Grill Log: the new corpora use the existing whole-program conformance
 runner, so a refusal or mismatch shows the same site a reader would see.
+[[Backend Service Programs]] registers one more group the same way. The
+library float group compares with the interpreter alone: its programs print
+kernels whose last bit belongs to the machine's math library, so no answer
+can be written for them.

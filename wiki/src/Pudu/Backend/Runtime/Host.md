@@ -9,7 +9,8 @@ aliases: [Native Host Runtime]
 
 Export hostRuntimeParts: every host part in emission order, what the program
 asks of the machine it runs on. A family comes after the families its parts
-call: state, math, process, concurrency, files, handles, scopes and lanes.
+call: state, math, process, concurrency, files, handles, scopes, lanes,
+signals, sockets, compression, child programs, and time rendering and reading.
 
 ## Resolved Grill Log
 
@@ -18,4 +19,4 @@ nothing of the host carries none of this.
 
 ## Referenced by
 
-[[Backend Runtime]] · [[Native Host Services]]
+[[Backend Runtime]] · [[Native Host Services]] · [[Native Host Signals]] · [[Native Host Sockets]] · [[Native Host TLS]] · [[Native Host Compression]] · [[Native Host Child Programs]] · [[Native Host Time]] · [[Native Host Time Reading]]

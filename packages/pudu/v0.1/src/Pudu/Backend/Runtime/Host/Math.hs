@@ -15,15 +15,27 @@ hostMathFunctions =
   , ("log2", "log2", 1), ("log10", "log10", 1), ("pow", "pow", 2), ("hypot", "hypot", 2), ("sinh", "sinh", 1)
   , ("cosh", "cosh", 1), ("tanh", "tanh", 1), ("fma", "fma", 3) ]
 
-{-| Each part: its name, the parts it needs, and its lines. -}
+{-| The kernels every IEEE 754 platform rounds correctly, so a compiler
+    that works one out ahead of the run reaches the library's own bits. -}
+exactMathFunctions :: [Text]
+exactMathFunctions = ["sqrt", "floor", "ceil", "trunc", "round", "fma"]
+
+{-| Each part: its name, the parts it needs, and its lines. A kernel whose
+    accuracy belongs to the library reads its operands through volatile
+    storage, so the call reaches the library with the program's values and is
+    never replaced by a result the compiler computed itself. -}
 hostMathParts :: [(Text, [Text], [Text])]
 hostMathParts =
   ("host_math", [], ["#include <math.h>"])
   : [ ("host_math_" <> name, ["host_math", "float_decode", "float_encode"],
-        [ "static inline uint64_t pudu_host_math_" <> name <> "(" <> Text.intercalate ", " ["uint64_t " <> operand | operand <- operands] <> ") {"
-        , "  return pudu_float_encode(" <> function <> "(" <> Text.intercalate ", " ["pudu_float_decode(" <> operand <> ")" | operand <- operands] <> "));"
-        , "}" ])
-    | (name, function, count) <- hostMathFunctions, let operands = take count ["x", "y", "z"] ]
+        [ "static inline uint64_t pudu_host_math_" <> name <> "(" <> Text.intercalate ", " ["uint64_t " <> operand | operand <- operands] <> ") {" ]
+        <> [ "  volatile double held_" <> operand <> " = pudu_float_decode(" <> operand <> ");" | not exact, operand <- operands ]
+        <> [ "  return pudu_float_encode(" <> function <> "(" <> Text.intercalate ", " [argument operand | operand <- operands] <> "));"
+           , "}" ])
+    | (name, function, count) <- hostMathFunctions
+    , let operands = take count ["x", "y", "z"]
+    , let exact = name `elem` exactMathFunctions
+    , let argument operand = if exact then "pudu_float_decode(" <> operand <> ")" else "held_" <> operand ]
   <>
   [ ("host_math_to_bits", ["make"],
       [ "static inline pudu_int pudu_host_math_to_bits(uint64_t x) { return pudu_make(x, 0); }" ])

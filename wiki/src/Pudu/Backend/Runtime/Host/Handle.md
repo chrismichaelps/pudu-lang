@@ -14,6 +14,8 @@ Open files behind their tokens: readers, writers and appenders, chunked reads an
 ## Resolved Grill Log
 
 A token names a slot; a closed or unknown token refuses with the interpreter's words.
+The table goes with its last open handle while the numbering goes on, so a
+table made again is sized to hold the next token, not a fixed first size.
 
 ## Referenced by
 

@@ -13,7 +13,7 @@ import Pudu.FloatLiteral (FloatWidth (..))
 import Pudu.IntegerLiteral (IntegerKind (..))
 
 hostPrimitives :: [(Text, Primitive)]
-hostPrimitives = mathPrimitives <> processPrimitives <> concurrentPrimitives <> filePrimitives <> lanePrimitives
+hostPrimitives = mathPrimitives <> processPrimitives <> concurrentPrimitives <> filePrimitives <> netPrimitives <> tlsPrimitives <> compressPrimitives <> childPrimitives <> lanePrimitives
 
 {-| A host kernel over every operand in order. -}
 host :: Text -> Int -> Call
@@ -59,6 +59,10 @@ processPrimitives =
   , ("searchSeparator", Primitive [] text [] (Plain (host "search_separator" 0)))
   , ("exit", Primitive [int] unit [] (Effect (host "exit" 1)))
   , ("secureRandomBytes", Primitive [int] (outcome bytes) [] (Outcome (host "secure_bytes" 1)))
+  , ("formatTime", Primitive [text, int, text] (outcome text) [] (Outcome (host "format_time" 3)))
+  , ("parseTime", Primitive [text, text] (outcome int) [] (Outcome (host "parse_time" 2)))
+  , ("signalWatchStop", Primitive [] CoreBoolType [] (Plain (host "signal_watch" 0)))
+  , ("signalStopRequested", Primitive [] CoreBoolType [] (Plain (host "signal_requested" 0)))
   ]
 
 concurrentPrimitives :: [(Text, Primitive)]
@@ -108,4 +112,57 @@ filePrimitives =
   , ("writeChunk", Primitive [int, bytes] (outcome unit) [] (Outcome (host "write_chunk" 2)))
   , ("flushWriter", Primitive [int] (outcome unit) [] (Outcome (host "flush_writer" 1)))
   , ("closeHandle", Primitive [int] (outcome unit) [] (Outcome (host "close_handle" 1)))
+  ]
+
+netPrimitives :: [(Text, Primitive)]
+netPrimitives =
+  [ ("tcpListen", Primitive [text, int, int] (outcome int) [] (Outcome (host "tcp_listen" 3)))
+  , ("tcpAccept", Primitive [int] (outcome int) [] (Outcome (host "tcp_accept" 1)))
+  , ("tcpConnect", Primitive [text, int] (outcome int) [] (Outcome (host "tcp_connect" 2)))
+  , ("tcpConnectWithin", Primitive [text, int, int] (outcome int) [] (Outcome (host "tcp_connect_within" 3)))
+  , ("socketSend", Primitive [int, bytes] (outcome unit) [] (Outcome (host "socket_send" 2)))
+  , ("socketSendWithin", Primitive [int, bytes, int] (outcome unit) [] (Outcome (host "socket_send_within" 3)))
+  , ("socketReceive", Primitive [int, int] (outcome (option bytes)) [] (OutcomeOptional (host "socket_receive" 2)))
+  , ("socketReceiveWithin", Primitive [int, int, int] (outcome (option bytes)) [] (OutcomeOptional (host "socket_receive_within" 3)))
+  , ("socketClose", Primitive [int] (outcome unit) [] (Outcome (host "socket_close" 1)))
+  , ("socketFinish", Primitive [int] (outcome unit) [] (Outcome (host "socket_finish" 1)))
+  , ("socketPeer", Primitive [int] (outcome text) [] (Outcome (host "socket_peer" 1)))
+  , ("socketPort", Primitive [int] (outcome int) [] (Outcome (host "socket_port" 1)))
+  ]
+
+tlsPrimitives :: [(Text, Primitive)]
+tlsPrimitives =
+  [ ("tlsConnect", Primitive [text, int] (outcome int) [] (Outcome (host "tls_connect" 2)))
+  , ("tlsConnectWithin", Primitive [text, int, int] (outcome int) [] (Outcome (host "tls_connect_within" 3)))
+  , ("tlsUpgradeWithin", Primitive [int, text, int] (outcome int) [] (Outcome (host "tls_upgrade_within" 3)))
+  , ("tlsSend", Primitive [int, bytes] (outcome unit) [] (Outcome (host "tls_send" 2)))
+  , ("tlsSendWithin", Primitive [int, bytes, int] (outcome unit) [] (Outcome (host "tls_send_within" 3)))
+  , ("tlsReceive", Primitive [int, int] (outcome (option bytes)) [] (OutcomeOptional (host "tls_receive" 2)))
+  , ("tlsReceiveWithin", Primitive [int, int, int] (outcome (option bytes)) [] (OutcomeOptional (host "tls_receive_within" 3)))
+  , ("tlsClose", Primitive [int] (outcome unit) [] (Outcome (host "tls_close" 1)))
+  , ("tlsCloseWithin", Primitive [int, int] (outcome unit) [] (Outcome (host "tls_close_within" 2)))
+  , ("tlsPeer", Primitive [int] (outcome text) [] (Outcome (host "tls_peer" 1)))
+  ]
+
+compressPrimitives :: [(Text, Primitive)]
+compressPrimitives =
+  [ ("gzipCompress", Primitive [bytes, int, int] (outcome bytes) [] (Outcome (moded "deflate" 0 3)))
+  , ("deflateRaw", Primitive [bytes, int, int] (outcome bytes) [] (Outcome (moded "deflate" 1 3)))
+  , ("gzipDecompress", Primitive [bytes, int] (outcome bytes) [] (Outcome (moded "inflate" 0 2)))
+  , ("inflateRaw", Primitive [bytes, int] (outcome bytes) [] (Outcome (moded "inflate" 1 2)))
+  ]
+
+childPrimitives :: [(Text, Primitive)]
+childPrimitives =
+  [ ("spawnProgram", Primitive [text, array text] (outcome int) [] (Outcome (host "child_spawn" 2)))
+  , ("spawnProgramWith", Primitive [text, array text, array (CoreTupleType [text, text]), CoreBoolType, text] (outcome int) []
+      (Outcome (host "child_spawn_with" 5)))
+  , ("childReadChunk", Primitive [int, int] (outcome (option bytes)) [] (OutcomeOptional (moded "child_read" 0 2)))
+  , ("childReadErrorChunk", Primitive [int, int] (outcome (option bytes)) [] (OutcomeOptional (moded "child_read" 1 2)))
+  , ("childWriteChunk", Primitive [int, bytes] (outcome unit) [] (Outcome (host "child_write" 2)))
+  , ("childCloseInput", Primitive [int] (outcome unit) [] (Outcome (host "child_close_input" 1)))
+  , ("childWait", Primitive [int] (outcome int) [] (Outcome (host "child_wait" 1)))
+  , ("childWaitWithin", Primitive [int, int] (outcome (option int)) [] (OutcomeOptional (host "child_wait_within" 2)))
+  , ("childStop", Primitive [int] (outcome int) [] (Outcome (host "child_stop" 1)))
+  , ("runProgram", Primitive [text, array text, text] (outcome (CoreTupleType [int, text, text])) [] (Outcome (host "run_program" 3)))
   ]

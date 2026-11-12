@@ -50,10 +50,31 @@ and an inappropriate type on another. The expectation is the same on every
 machine, and the focused groups pass under a short temporary directory and a
 long one alike.
 
-Not done: foreign functions and handles, `unsafe` raw access, sockets and
-TLS, child processes, compression, time formatting, signals, desktop, audio
-and raster kernels keep E6001; callee-first order stays with #828; ledger
-rows stay Partial until independent review.
+A fourth was in the math kernels. glibc's `cbrt(27.0)` is one bit above
+three; the interpreter calls the library and printed `3.0000000000000004`,
+while the C compiler worked the native call out itself and printed `3.0`.
+The library-accuracy kernels now read their operands through volatile
+storage ([[Native Host Math]]), the written expectation states that kernel
+through a relation, and a new group prints the library kernels in full
+against the interpreter alone.
+
+The remaining host families followed in one pass, in the Backend Engineer
+and Test Engineer roles: stream endpoints, child programs, compression, time
+rendering and reading, stop requests and TLS ([[Native Host Sockets]],
+[[Native Host Child Programs]], [[Native Host Compression]], [[Native Host
+Time]], [[Native Host Time Reading]], [[Native Host Signals]], [[Native Host
+TLS]]), their rows in [[Compiler Lower Kernel Host]], the library flags in
+[[Backend Toolchain]], and [[Backend Service Programs]]. Each program in the
+corpus prints the same bytes in both engines on this host. TLS was also run
+by hand against public hosts: a verified connection, a request and its
+answer, the ending, and refused expired, mismatched and self-signed
+certificates behaved alike in both engines; only the library's reason inside
+`HandshakeFailed (...)` differs, by design.
+
+Not done: foreign functions and handles, `unsafe` raw access, desktop, audio
+and raster kernels keep E6001; trait-qualified method values stay with #647;
+callee-first order stays with #828; `parseTime` refuses a number of more than
+fifteen digits; ledger rows stay Partial until independent review.
 
 Exact next action: request the independent implementation and wiki-parity
 review of #846.

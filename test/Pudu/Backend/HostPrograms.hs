@@ -3,16 +3,36 @@
     kernels, clocks and surroundings, files and handles, cells, locks,
     channels and threads, tasks and scopes, and tables of functions. Every
     expectation is what the interpreter prints for the same program. -}
-module Pudu.Backend.HostPrograms (hostSuccessPrograms, hostCountedPrograms, hostRefusalPrograms) where
+module Pudu.Backend.HostPrograms (hostSuccessPrograms, hostCountedPrograms, hostLibraryPrograms, hostRefusalPrograms) where
 
 import Data.Text (Text)
 import qualified Data.Text as Text
+
+{-| Kernels whose last bit belongs to the machine's math library, printed in
+    full. No answer is written here: the only expectation is the interpreter's
+    output on the same machine, which a kernel worked out ahead of the run
+    would miss wherever the library is not correctly rounded. -}
+hostLibraryPrograms :: [(String, Text)]
+hostLibraryPrograms =
+  [ ( "library float kernels with written operands print the library's own bits", program
+      [ "fn main() -> Int {"
+      , "  print(display(floatCbrt(27.0)) + \" \" + display(floatCbrt(0.1)) + \" \" + display(floatSin(1.0e22)) + \" \" + display(floatCos(0.7)) + \" \" + display(floatTan(1.5)))"
+      , "  print(display(floatAsin(0.3)) + \" \" + display(floatAcos(0.3)) + \" \" + display(floatAtan(0.3)) + \" \" + display(floatAtan2(0.3, -0.7)) + \" \" + display(floatExp(0.7)))"
+      , "  print(display(floatLn(0.3)) + \" \" + display(floatLog2(0.3)) + \" \" + display(floatLog10(0.3)) + \" \" + display(floatPow(0.3, 0.7)) + \" \" + display(floatPow(1.1, 2.0)))"
+      , "  print(display(floatHypot(0.3, 0.7)) + \" \" + display(floatSinh(0.7)) + \" \" + display(floatCosh(0.7)) + \" \" + display(floatTanh(0.7)))"
+      , "  let root = floatCbrt"
+      , "  let power = floatPow"
+      , "  print(display(root(27.0)) + \" \" + display(power(0.3, 0.7)))"
+      , "  0"
+      , "}"
+      ] )
+  ]
 
 hostSuccessPrograms :: [(String, Text, Text)]
 hostSuccessPrograms = hostCountedPrograms <>
   [ ( "every float kernel, direct and as a value", program
       [ "fn main() -> Int {"
-      , "  print(display(floatSqrt(2.0)) + \" \" + display(floatCbrt(27.0)) + \" \" + display(floatFloor(-1.5)) + \" \" + display(floatCeil(-1.5)) + \" \" + display(floatTrunc(-1.5)) + \" \" + display(floatRound(2.5)))"
+      , "  print(display(floatSqrt(2.0)) + \" \" + display(floatRound(floatCbrt(27.0) * 1048576.0) / 1048576.0) + \" \" + display(floatFloor(-1.5)) + \" \" + display(floatCeil(-1.5)) + \" \" + display(floatTrunc(-1.5)) + \" \" + display(floatRound(2.5)))"
       , "  print(display(floatSin(0.0)) + \" \" + display(floatCos(0.0)) + \" \" + display(floatTan(0.0)) + \" \" + display(floatAsin(0.0)) + \" \" + display(floatAcos(1.0)) + \" \" + display(floatAtan(0.0)) + \" \" + display(floatAtan2(0.0, 1.0)))"
       , "  print(display(floatExp(0.0)) + \" \" + display(floatLn(1.0)) + \" \" + display(floatLog2(8.0)) + \" \" + display(floatLog10(1000.0)) + \" \" + display(floatPow(2.0, 10.0)) + \" \" + display(floatHypot(3.0, 4.0)))"
       , "  print(display(floatSinh(0.0)) + \" \" + display(floatCosh(0.0)) + \" \" + display(floatTanh(0.0)) + \" \" + display(floatFma(2.0, 3.0, 1.0)) + \" \" + display(floatSqrt(-1.0)))"

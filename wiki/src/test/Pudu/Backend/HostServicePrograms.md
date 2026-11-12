@@ -1,0 +1,30 @@
+---
+type: module
+path: "@root/test/Pudu/Backend/HostServicePrograms.hs"
+fidelity: Active
+grammar: "[[grammar/haskell]]"
+aliases: [Backend Service Programs]
+---
+# Backend Service Programs
+
+Export hostServicePrograms: stream endpoints, gzip and bare streams, child
+programs, time rendering and reading with stop requests, and secured
+connections. Each is one program with the interpreter's output as its
+expectation.
+
+## Resolved Grill Log
+
+No expectation holds a descriptor number, a port, a compressed byte run, or a
+library's own reason: a refusal that carries one is reduced to its kind inside
+the program. Reads that depend on arrival are gathered to the end, and a wait
+that must run out is bounded by a short budget. Secured connections are
+checked without leaving the machine: closed tokens, spent budgets, a listener
+that never answers and one that hangs up mid-handshake. A handshake that
+succeeds needs a certificate the machine trusts, so it is evidence gathered
+by hand against public hosts and recorded in [[Native Remaining Emission
+Delivery]], not a property. Programs here are not counted for allocations:
+the counted harness links no system library.
+
+## Referenced by
+
+[[Backend Native Tests]] · [[Native Host Services]] · [[Native Emission Coverage]]

@@ -138,3 +138,12 @@ After the source, non-Windows compilers receive `-lm` and `-pthread`; the
 MinGW target receives neither. Resolved Grill Log: left-to-right linkers need
 the libraries after the object that uses them, and the host runtime's math and
 thread calls are the only new dependencies.
+- Link every system library always? No: a library is named after the others
+  only when the generated C includes its header, so a program that never
+  compresses needs no zlib on the machine that builds it. The marker line is
+  owned by [[Native Host Compression]].
+- Where is the TLS library? Its marker line is owned by [[Native Host TLS]].
+  Its headers sit outside the default search path on some systems, so the
+  flags are the ones the machine's own package description (`pkg-config`)
+  gives; a machine without that description gets the plain library names.
+  Rejected: fixed include paths, which name one machine's layout.
