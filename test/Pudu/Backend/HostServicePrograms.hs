@@ -47,7 +47,7 @@ hostServicePrograms =
       , "      match tcpConnect(\"127.0.0.1\", port) { case Ok(open) => {"
       , "          let peer = match socketPeer(open) { case Ok(named) => named.startsWith(\"127.0.0.1:\")"
       , "            case Err(_) => false }"
-      , "          print(display(open) + display(peer) + show(socketSend(open, \"hello\".toBytes())))"
+      , "          print(display(open > listener) + display(peer) + show(socketSend(open, \"hello\".toBytes())))"
       , "          print(gather(open, \"\") + show(socketReceiveWithin(open, 4, 0)) + show(socketSend(open, \"x\".toBytes())) + show(socketClose(open)) + show(socketClose(open)))"
       , "        }"
       , "        case Err(why) => print(why) }"
@@ -61,7 +61,7 @@ hostServicePrograms =
       , "  0"
       , "}"
       ]
-    , "Err(\"the endpoint is closed\")Err(\"the endpoint is closed\")Ok(Some(0x))Ok(())Err(\"the endpoint is closed\")Err(\"the endpoint is closed\")Err(\"the endpoint is closed\")Err(\"the endpoint is closed\")\nErr(\"operation timed out\")Err(\"the endpoint is closed\")Err(\"the endpoint is closed\")\ntrue1\n2trueOk(())\nhello!.Err(\"operation timed out\")Err(\"the endpoint is closed\")Ok(())Ok(())\nOk(())\nErr(\"operation timed out\")Err(\"the endpoint is closed\")Ok(())\nOk(())Err(\"the endpoint is closed\")\n" )
+    , "Err(\"the endpoint is closed\")Err(\"the endpoint is closed\")Ok(Some(0x))Ok(())Err(\"the endpoint is closed\")Err(\"the endpoint is closed\")Err(\"the endpoint is closed\")Err(\"the endpoint is closed\")\nErr(\"operation timed out\")Err(\"the endpoint is closed\")Err(\"the endpoint is closed\")\ntrue1\ntruetrueOk(())\nhello!.Err(\"operation timed out\")Err(\"the endpoint is closed\")Ok(())Ok(())\nOk(())\nErr(\"operation timed out\")Err(\"the endpoint is closed\")Ok(())\nOk(())Err(\"the endpoint is closed\")\n" )
   , ( "gzip and bare streams: round trips, levels, limits and refusals", program
       [ "fn back(packed: Result[Bytes, Str], bare: Bool) -> Str {"
       , "  match packed { case Ok(found) => match (if bare { inflateRaw(found, 1000000) } else { gzipDecompress(found, 1000000) }) { case Ok(plain) => match plain.toText() { case Some(text) => display(text.length()) + \":\" + text.take(12)"

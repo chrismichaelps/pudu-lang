@@ -14,8 +14,8 @@ expectation.
 
 ## Resolved Grill Log
 
-No expectation holds a descriptor number, a port, a compressed byte run, or a
-library's own reason: a refusal that carries one is reduced to its kind inside
+No expectation holds a descriptor number, a port, a token another thread may
+take first, a compressed byte run, or a library's own reason: a refusal that carries one is reduced to its kind inside
 the program. Reads that depend on arrival are gathered to the end, and a wait
 that must run out is bounded by a short budget. Secured connections are
 checked without leaving the machine: closed tokens, spent budgets, a listener
