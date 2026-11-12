@@ -10,9 +10,13 @@ foreignLoaderMarker = "#include <dlfcn.h>"
 {-| Each part: its name, the parts it needs, and its lines. -}
 hostForeignParts :: [(Text, [Text], [Text])]
 hostForeignParts =
-  [ ("host_foreign", ["fail"],
+  [ ("host_foreign", ["fail", "host_math"],
       [ foreignLoaderMarker
       , "#include <pthread.h>"
+      , "/* A reference the linker keeps, so the math library stays loaded where the"
+      , "   platform links it only when used, and `c` sees the math functions as the"
+      , "   interpreter's process does. */"
+      , "double (*pudu_foreign_math)(double, double) = pow;"
       , "/* One declaration's resolved function, kept for the life of the program. */"
       , "typedef struct { void (*function)(void); } pudu_foreign_cache;"
       , "static pthread_mutex_t pudu_foreign_lock = PTHREAD_MUTEX_INITIALIZER;"

@@ -21,6 +21,9 @@ interpreter's words.
   so the counted harness sees no allocation of its own.
 - The loader's own reason is never appended. The interpreter reads it after the
   loader has already handed it to an inner attempt, so its message carries none.
+- The loader holds a reference to `pow`, so a linker that drops unused libraries
+  keeps the math library, and `c` reaches the math functions as the interpreter's
+  process does (Linux CI found `pow` and `sqrt` missing without it).
 - `foreignLoaderMarker` tells [[Backend Toolchain]] to link the dynamic loader
   where the platform keeps it apart from the C library.
 
