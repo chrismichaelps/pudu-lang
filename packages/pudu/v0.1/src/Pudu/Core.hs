@@ -28,6 +28,7 @@ module Pudu.Core
   , CoreTextMethodName (..), CoreArrayMethodName (..), CoreKeyedMethodName (..)
   , CoreRangeMethodName (..), CoreBytesMethodName (..), CoreDecimalMethodName (..)
   , CoreKernelName (..)
+  , CoreForeign (..)
   , CoreType (..)
   , coreTypeName, displayName
   ) where
@@ -229,6 +230,8 @@ data CoreExpressionShape
   | CoreDecimalMethod !CoreDecimalMethodName ![CoreExpression]
   {-| A runtime kernel over operands in order, then its layout integers. -}
   | CoreKernel !CoreKernelName ![Int] ![CoreExpression]
+  {-| A call to a foreign function, its arguments in order. -}
+  | CoreForeignCall !CoreForeign ![CoreExpression]
   {-| `array[index]`: the array, then the index. The expression's span is the
       index's, where an index out of range reports. -}
   | CoreIndex !CoreExpression !CoreExpression
@@ -344,6 +347,18 @@ data CoreDecimalMethodName
   | DecimalRoundTo
   | DecimalIsZero
   deriving stock (Eq, Show)
+
+{-| A foreign function as a native call names it: the library and version it
+    opens, the symbol it resolves, and the crossing types of its parameters
+    and result. -}
+data CoreForeign = CoreForeign
+  { coreForeignLibrary :: !Text
+  , coreForeignVersion :: !(Maybe Text)
+  , coreForeignSymbol :: !Text
+  , coreForeignParameters :: ![CoreType]
+  , coreForeignResult :: !CoreType
+  }
+  deriving stock (Eq, Ord, Show)
 
 {-| @Core.BinaryOperator — the operator vocabulary, already resolved from
     source spelling; no operator text survives into the backend. -}

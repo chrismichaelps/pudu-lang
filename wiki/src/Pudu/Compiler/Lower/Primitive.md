@@ -17,6 +17,10 @@ Nothing for any other name.
 One dispatcher keeps [[Compiler Lower Body]] below its size bound and keeps
 the order of the families in one place. No name is claimed twice.
 
+## Foreign calls (#850)
+
+[[Compiler Lower Foreign]] is the last family tried: a bare name no prelude family claims may reach a foreign declaration.
+
 ## Referenced by
 
 [[Compiler Lower Body]] · [[Native Builtin Kernels]]

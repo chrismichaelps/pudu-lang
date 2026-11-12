@@ -83,6 +83,10 @@ source slot.
 
 `FrameBytesMethod` mirrors `CoreBytesMethod`.
 
+## Foreign calls (#850)
+
+`FrameForeign` holds the declaration and the argument slots of a foreign call.
+
 ## Referenced by
 
 [[src/_MOC]] · [[Program Compiler Module Map]] · [[Native Frame Pressure Repair]]

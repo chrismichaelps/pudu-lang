@@ -1,8 +1,8 @@
 {-| @Pudu.Compiler.Lower.State — program context, lexical scopes and typed refusals. -}
 module Pudu.Compiler.Lower.State
-  ( CoreSignature (..), Head (..), Instance (..), LowerContext (..), LowerState (..), LoopFrame (..), ModuleScope (..)
+  ( CoreSignature (..), ForeignTarget (..), Head (..), Instance (..), LowerContext (..), LowerState (..), LoopFrame (..), ModuleScope (..)
   , emptyContext, startFunction, refuse, refused, halt, lookupLocal, bindLocal, intType
-  , resolveFunction, lookupConstant, lookupInitializer, inModule, withTypeBindings, isModuleQualifier
+  , resolveFunction, lookupConstant, lookupForeign, lookupInitializer, inModule, withTypeBindings, isModuleQualifier
   ) where
 
 import Data.Map.Strict (Map)
@@ -95,6 +95,15 @@ data ModuleScope = ModuleScope
   , scopeSelected :: !(Map Text Text)
   {-| A qualifier (an alias, or the module path's last segment) and its module. -}
   , scopeQualifiers :: !(Map Text Text)
+  {-| Each foreign function the module declares and what it calls. -}
+  , scopeForeign :: !(Map Text ForeignTarget)
+  }
+
+{-| The library, version and symbol a foreign declaration calls. -}
+data ForeignTarget = ForeignTarget
+  { targetLibrary :: !Text
+  , targetVersion :: !(Maybe Text)
+  , targetSymbol :: !Text
   }
 
 {-| @Compiler.Lower.State — one function's lowering state on top of the
@@ -229,6 +238,19 @@ lookupConstant state segments = do
   (owner, name) <- constantOwner state segments
   target <- Map.lookup owner (contextModules (lowerContext state))
   Map.lookup name (scopeConstants target)
+
+{-| A foreign function a bare name reaches: one the module declares, or one
+    it imports selectively, unless a local shadows it. -}
+lookupForeign :: LowerState -> Text -> Maybe ForeignTarget
+lookupForeign state name = do
+  let context = lowerContext state
+  scope <- Map.lookup (contextModule context) (contextModules context)
+  case (lookupLocal state name, Map.lookup name (scopeForeign scope)) of
+    (Just _, _) -> Nothing
+    (Nothing, Just target) -> Just target
+    (Nothing, Nothing) -> do
+      owner <- Map.lookup name (scopeSelected scope)
+      Map.lookup owner (contextModules context) >>= Map.lookup name . scopeForeign
 
 {-| The module a constant belongs to and what it was written as. -}
 lookupInitializer :: LowerState -> [Text] -> Maybe (Text, Located Expression)

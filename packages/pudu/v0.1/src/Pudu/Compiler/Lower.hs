@@ -40,7 +40,7 @@ import Pudu.Compiler.Lower.Body (lowerEntryBody, lowerExpression, lowerFunctionB
 import Pudu.Compiler.Lower.Default (hasDefaults, lowerDefaultedBody)
 import Pudu.Compiler.Lower.Loan (lowerLoanedBody)
 import Pudu.Compiler.Lower.State
-  ( CoreSignature (..), Instance (..), LowerContext (..), LowerState (..), ModuleScope (..)
+  ( CoreSignature (..), ForeignTarget (..), Instance (..), LowerContext (..), LowerState (..), ModuleScope (..)
   , emptyContext, inModule, startFunction, withTypeBindings )
 import Pudu.Compiler.Lower.Signature (ensureSignature)
 import Pudu.Core
@@ -48,6 +48,8 @@ import Pudu.Diagnostic (Diagnostic, sortDiagnostics)
 import Pudu.Diagnostic.Native (nativeRefusal)
 import Pudu.Frontend.Syntax
   ( Declaration (..)
+  , Foreign (..)
+  , ForeignFunction (..)
   , Function (..)
   , Located (..)
   , Import (..)
@@ -190,6 +192,12 @@ lowerProgram entryName programModules@(rootModule : _)
                   , moduleNameText (locatedValue (importModule value)) )
                 | Located _ value <- moduleImports (nativeModuleSyntax native)
                 , null (importItems value) ]
+            , scopeForeign = Map.fromList
+                [ ( locatedValue (foreignName function)
+                  , ForeignTarget (locatedValue (foreignLibrary declared)) (locatedValue <$> foreignVersion declared)
+                      (maybe (locatedValue (foreignName function)) locatedValue (foreignSymbol function)) )
+                | Located _ (ForeignDeclaration declared) <- moduleDeclarations (nativeModuleSyntax native)
+                , Located _ function <- foreignFunctions declared ]
             }
         )
       | native <- programModules ]

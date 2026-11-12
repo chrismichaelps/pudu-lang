@@ -17,6 +17,10 @@ signals, sockets, compression, child programs, and time rendering and reading.
 Parts are selected by need like every runtime part, so a program that asks
 nothing of the host carries none of this. [[Native Host Input]] supplies decoding\nhelpers before [[Native Host Files]] uses them.
 
+## Foreign loader (#850)
+
+[[Native Host Foreign]] supplies the dynamic loader, after the signal family.
+
 ## Referenced by
 
 [[Backend Runtime]] · [[Native Host Services]] · [[Native Host Signals]] · [[Native Host Sockets]] · [[Native Host TLS]] · [[Native Host Compression]] · [[Native Host Child Programs]] · [[Native Host Time]] · [[Native Host Time Reading]]

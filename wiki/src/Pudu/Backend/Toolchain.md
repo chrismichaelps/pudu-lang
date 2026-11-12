@@ -126,6 +126,10 @@ adapter, per [[ADR-0002-compiler-pipeline]].
   and run bounded cleanup on exceptions before propagating cancellation.
   Publication remains after successful process and capture completion only.
 
+## Dynamic loader (#850)
+
+A program whose C carries `foreignLoaderMarker` links `-ldl` on Linux; other platforms keep the loader in the C library.
+
 ## Referenced by
 
 [[src/Pudu/Backend/_MOC]] · [[src/Pudu/_MOC]] · [[Native Toolchain]] ·

@@ -10,6 +10,7 @@ aliases: [Program Compiler Module Map]
 - [[Compiler Lower Concurrent]] · [[Compiler Lower Scope]] — host concurrency and task-scope joins (#846).
 - [[Compiler Lower Dynamic]] — dynamic trait sums and widening (#846).
 - [[Compiler Lower Kernel Host]] · [[Compiler Lower Kernel Lanes]] · [[Compiler Lower Kernel Shape]] — host, lane and shape primitives (#846).
+- [[Compiler Lower Foreign]] — calls to foreign declarations through typed native call sites (#850).
 - [[Compiler Lower Word Map]] — checked direct/value sparse-word algebra (#810).
 
 - [[Compiler Frame Lowering]] · [[Compiler Frame State]] · [[Compiler Frame Body]] — structured Core to explicit continuations for #499.

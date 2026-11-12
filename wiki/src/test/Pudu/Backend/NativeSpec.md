@@ -104,6 +104,8 @@ coordinator.
 
 - **Q:** How are programs of several modules tested? **A:** `conformanceWith` writes each module beside `Main.pudu`, and every program, one module or many, is built through whole-program lowering (#539).
 
+Foreign calls are compared with the interpreter's bridge in two properties: [[Backend Foreign Programs]] success programs and E7015 refusals (#850).
+
 ## Referenced by
 
 [[Repository Test Runner]] · [[src/_MOC]] · [[src/Pudu/Backend/_MOC]] · [[Backend Toolchain]] ·

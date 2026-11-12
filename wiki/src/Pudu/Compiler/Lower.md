@@ -191,6 +191,10 @@ the module's own declarations when they are absent. Before, a field naming an
 imported type or alias had no form, so records reaching across modules, or
 holding another module's aliases, refused.
 
+## Foreign scopes (#850)
+
+Each module scope records its foreign declarations' targets, the symbol defaulting to the function's name.
+
 ## Referenced by
 
 [[src/Pudu/Compiler/_MOC]] · [[src/Pudu/_MOC]] · [[Core IR]] · [[Pudu Core]] ·

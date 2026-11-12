@@ -109,6 +109,7 @@ library
     Pudu.Backend.Emit.Kernel
     Pudu.Backend.Emit.Range
     Pudu.Backend.Emit.Bytes
+    Pudu.Backend.Emit.Foreign
     Pudu.Backend.Emit.Frame
     Pudu.Backend.Emit.State
     Pudu.Backend.Emit.Support
@@ -142,6 +143,7 @@ library
     Pudu.Backend.Runtime.Host.File
     Pudu.Backend.Runtime.Host.Handle
     Pudu.Backend.Runtime.Host.Input
+    Pudu.Backend.Runtime.Host.Foreign
     Pudu.Backend.Runtime.Host.Lanes
     Pudu.Backend.Runtime.Host.Math
     Pudu.Backend.Runtime.Host.Net
@@ -201,6 +203,7 @@ library
     Pudu.Compiler.Lower.Constant
     Pudu.Compiler.Lower.Reference
     Pudu.Compiler.Lower.Method
+    Pudu.Compiler.Lower.Foreign
     Pudu.Compiler.Lower.Generic
     Pudu.Compiler.Lower.Try
     Pudu.Compiler.Lower.For

@@ -6,6 +6,7 @@ import Data.Maybe (isJust)
 import qualified Data.Set as Set
 import Data.Text (Text)
 import qualified Data.Text as Text
+import Pudu.Backend.Emit.Foreign (foreignWrappers, foreignsOf)
 import Pudu.Backend.Emit.Aggregate (aggregateSection, aggregateTypes, cellName, ownedKinds, ownedType, released, retained, aggregateHelper, aggregateNeed)
 import Pudu.Backend.Emit.Frame.Body (emitFrameBodies)
 import Pudu.Backend.Emit.Support (integerHelper, isBigInteger, isWideInteger)
@@ -125,7 +126,7 @@ emitFrameProgram version sources source = do
         <> map definition indexed <> ["};"]
   pure $ Text.unlines (header <> runtime <> frameTypes wide big decimal text boxes
     <> concat [lines' <> [""] | (name, lines') <- arrayRuntimeParts <> textPieceRuntimeParts <> treeRuntimeParts <> rangeRuntimeParts <> bytesRuntimeParts <> hashRuntimeParts <> kernelRuntimeParts, Set.member name selected]
-    <> renderSites (reverse (emitSites emitted)) <> aggregates <> ownership <> reverse (emitOutput emitted)
+    <> renderSites (reverse (emitSites emitted)) <> aggregates <> ownership <> foreignWrappers (foreignsOf source) <> reverse (emitOutput emitted)
     <> metadata <> frameEngine owned (Set.member "host_thread_spawn" selected) <> entryPoint (Set.member "host_arguments" selected) <> ending <> ["}"])
   where
     -- Only a program that reads its arguments keeps them.

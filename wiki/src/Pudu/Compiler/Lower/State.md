@@ -80,6 +80,10 @@ result from its signature.
 Resolved Grill Log: `lowerCurrentKey` names the body being lowered, and
 `contextClosures` records every closure made so far.
 
+## Foreign declarations (#850)
+
+`ModuleScope` records each foreign function a module declares as a `ForeignTarget` (library, version, symbol). `lookupForeign` reaches one by a bare name, the module's own or a selectively imported one, unless a local shadows it.
+
 ## Referenced by
 
 [[src/Pudu/Compiler/_MOC]] · [[Compiler Lower]] · [[Compiler Lower Body]]

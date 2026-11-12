@@ -86,6 +86,10 @@ building from an array); `isEmpty` reads the root's size directly.
 
 Each byte operation is one runtime call named by [[Backend Emit Bytes]].
 
+## Foreign calls (#850)
+
+`FrameForeign` emits the call through its declaration's wrapper ([[Backend Emit Foreign]]), registering the call's E7015 site.
+
 ## Referenced by
 
 [[src/_MOC]] · [[Native Execution Frames]]

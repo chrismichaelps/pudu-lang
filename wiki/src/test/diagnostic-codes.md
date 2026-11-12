@@ -62,6 +62,8 @@ prelude no longer overrides.
   generated heads alike; E3091 is a derive contract violation and E3093 a derive instantiation
   exceeding its bounds wherever found. _Rejected:_ splitting one meaning by which phase found it.
 
+E7015 is shared by the interpreter's foreign bridge and native foreign call sites, which stop with the same words when a library does not open or a symbol is missing (#850).
+
 ## Referenced by
 
 [[test gates]] · [[Pudu Lint Config]] · [[Pudu CLI Lint]]

@@ -5,6 +5,10 @@ tags: [changelog]
 
 # Changelog
 
+## 2026-11-12 — Native foreign calls (#850)
+
+- [[Native Foreign Call Sites]]: a foreign call with fixed-width integer, float and Bool crossings compiles to a call through a pointer of its declared C type, resolved once with the interpreter's library candidates and symbol, and stops with the interpreter's E7015 when the library or symbol is missing ([[Compiler Lower Foreign]], [[Backend Emit Foreign]], [[Native Host Foreign]]).
+
 ## 2026-11-12 — Native corpus gaps closed (#846)
 
 - A sweep of every entry program found the in-scope refusals left; each is now native and matches the interpreter: `lanesOverlapPairs` ([[Native Host Lanes]]), `Bytes.strided` ([[Core Byte Operations]]), calls through function constants ([[Compiler Lower Body]]), `toText` taken as a value from a type that declares none ([[Core Closure Identities]]), and an empty array compared with an array whose element a generic solved ([[Compiler Lower Scalar]]).
