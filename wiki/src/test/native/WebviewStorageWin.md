@@ -29,6 +29,11 @@ by creating another fresh name.
   The replay descriptor retains its environment and production callback owns its controller;
   ordinary harness window cleanup releases them. The completion keeps lifetime identity checks.
 
+- **Q:** How is browser exit attributed to this test? **A:** Read the process ID from each
+  live view and retain a wait-only handle before closing it. A shared deadline bounds the wait
+  across all handles, and native messages continue to dispatch during teardown. Handle capture
+  and wait failures fail the phase. Close every acquired handle on success and failure.
+
 ## Dependencies and consumers
 
 Uses [[Pudu Webview Windows Host]], actual SDK Profile/Environment10 interfaces and

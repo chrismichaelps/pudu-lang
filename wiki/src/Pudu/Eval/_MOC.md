@@ -38,6 +38,7 @@ tags: [moc, module]
 - [[Eval Effect]] — the operations that reach outside the program, and the refusal that keeps them out of constant folding.
 - [[Eval Builtin]] — the effects, built-in methods, and conversions the prelude wires in.
 - [[Eval Builtin Definition]] — the closed wired-in function vocabulary and canonical source names.
+- [[Eval Stop Requests]] — process-wide stop observation.
 - [[Eval Clock]] — calendar time and subprocesses.
 - [[Eval Io]] — the effects a program may perform, each answering with an outcome.
 - [[Eval Keyed]] — the runtime semantics of `Map` and `Set`, kept in key order by a balanced tree.

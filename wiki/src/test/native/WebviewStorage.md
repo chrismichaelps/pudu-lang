@@ -30,8 +30,8 @@ hexadecimal characters, so generated page source cannot contain caller-injected 
 ## Grill Log
 
 - **Q:** Why two processes? **A:** Recreating a view in one process cannot establish cross-process
-  named persistence or private-data reset. [[Desktop Storage Gate]] additionally waits for the
-  task's browser process to exit before starting the read run.
+  named persistence or private-data reset. Each phase captures its views’ browser process handles before closing the window.
+  [[Webview Windows Storage Probe]] waits for those handles before the phase reports success.
 - **Q:** Why write private markers? **A:** Empty-only probes miss persistence leaks. Reopening
   both modes must be empty despite previously completed private writes.
 - **Q:** Do doubles prove this? **A:** No. The harness links the production adapter and requires

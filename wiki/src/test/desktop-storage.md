@@ -16,13 +16,11 @@ restore the previous value in finally.
 
 ## Resolved Grill Log
 
-- **Q:** What separates process reopening from browser memory reuse? **A:** Between phases,
-  enumerate real WebView2 browser processes and wait until no command line references the unique
-  task data root. Enumeration failure, any unavailable browser command line or timeout fails the gate; no browser
-  process is killed.
-- **Q:** What may cleanup remove? **A:** Only the newly generated root, after its browser processes
-  have exited. Preserve diagnostic data if browsers remain active. Original failures stay failures;
-  cleanup failure also fails an otherwise successful gate.
+- **Q:** What separates process reopening from browser memory reuse? **A:** Each successful
+  harness phase proves that the browser processes hosting its views have exited. Require the
+  exit marker before starting the read phase or removing the data root.
+- **Q:** What may cleanup remove? **A:** Only the newly generated root after both phases pass.
+  Preserve the data root and phase logs on failure. Cleanup failure fails an otherwise successful gate.
 - **Q:** Can a stale result pass? **A:** The nonce names a fresh store and the write page requires
   it to be empty before writing. Each phase has a distinct required output marker.
 

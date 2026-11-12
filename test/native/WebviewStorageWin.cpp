@@ -1,6 +1,18 @@
 #include "pudu_webview_win.h"
 #include <cstdio>
 
+extern "C" HANDLE pudu_storage_browser(int64_t id) {
+  PuduView *view = pudu_view_named(id);
+  UINT32 pid = 0;
+  if (view == nullptr || view->web == nullptr || FAILED(view->web->get_BrowserProcessId(&pid)) || pid == 0) {
+    std::fprintf(stderr, "browser identity unavailable for view %lld\n", (long long)id);
+    return nullptr;
+  }
+  HANDLE process = OpenProcess(SYNCHRONIZE, FALSE, pid);
+  if (process == nullptr) std::fprintf(stderr, "cannot observe browser %u exit (%lu)\n", (unsigned)pid, (unsigned long)GetLastError());
+  return process;
+}
+
 extern "C" int pudu_storage_mode(int64_t id, int expected, const char *identity) {
   PuduView *view = pudu_view_named(id);
   if (view == nullptr || view->web == nullptr) return 0;

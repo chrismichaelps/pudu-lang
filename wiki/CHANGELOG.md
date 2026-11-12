@@ -5,6 +5,12 @@ tags: [changelog]
 
 # Changelog
 
+## 2026-11-11 — Desktop build and storage verification (#833)
+
+- [[Eval Stop Requests]] keeps handler-only imports with the handler implementation.
+- [[Desktop Storage Gate]] requires the native harness to prove exit of the processes that hosted
+  its views before reopening their storage.
+
 ## 2026-11-11 — Windows window controls (#833)
 
 - [[Pudu Webview Windows Control]] gives the WebView2 adapter the window chrome and state records

@@ -5,9 +5,26 @@
 #include <string.h>
 #ifdef _WIN32
 #include <windows.h>
+extern HANDLE pudu_storage_browser(int64_t id);
 extern int pudu_storage_mode(int64_t id, int expected, const char *identity);
 extern int pudu_storage_replay(int64_t id, int64_t source, const char *name);
 static uint64_t now(void) { return GetTickCount64(); }
+
+static int wait_browser(HANDLE browser, uint64_t deadline) {
+  for (uint64_t current = now(); current < deadline; current = now()) {
+    uint64_t remaining = deadline - current;
+    DWORD ready = MsgWaitForMultipleObjectsEx(1, &browser, (DWORD)remaining, QS_ALLINPUT, MWMO_INPUTAVAILABLE);
+    if (ready == WAIT_OBJECT_0) return 1;
+    if (ready != WAIT_OBJECT_0 + 1) break;
+    MSG message;
+    if (PeekMessageW(&message, NULL, 0, 0, PM_REMOVE)) {
+      TranslateMessage(&message);
+      DispatchMessageW(&message);
+    }
+  }
+  fprintf(stderr, "browser exit could not be verified\n");
+  return 0;
+}
 #else
 #include <time.h>
 static uint64_t now(void) {
@@ -132,10 +149,27 @@ int main(int argc, char **argv) {
       !pudu_storage_replay(6, 3, getenv("PUDU_STORAGE_PROFILE3")) ||
       !wait_views(expected, &seen) || !pudu_storage_mode(5, 0, getenv("PUDU_STORAGE_PROFILE2")) || !pudu_storage_mode(6, 0, getenv("PUDU_STORAGE_PROFILE3"));
   }
+  HANDLE browsers[6] = {0};
+  unsigned browser_count = reading ? 6 : 3;
+  if (!failed) {
+    for (unsigned i = 0; i < browser_count; ++i) {
+      browsers[i] = pudu_storage_browser((int64_t)i + 1);
+      if (browsers[i] == NULL) failed = 1;
+    }
+  }
 #endif
   const char *close[] = {"window", "1", "close"};
   commands.length = 0;
   if (!record(&commands, close, 3) || !send_commands(&commands)) failed = 1;
+#ifdef _WIN32
+  uint64_t deadline = now() + 30000;
+  for (unsigned i = 0; i < browser_count; ++i) {
+    if (browsers[i] == NULL) continue;
+    if (!failed && !wait_browser(browsers[i], deadline)) failed = 1;
+    CloseHandle(browsers[i]);
+  }
+  if (!failed) printf("storage-browser-exited=1\n");
+#endif
   pudu_buffer_clear(&commands);
   int passed = !failed && seen == expected;
   printf("storage-%s=%d views=%u\n", argv[1], passed, seen);

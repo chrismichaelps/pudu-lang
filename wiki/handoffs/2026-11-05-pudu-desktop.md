@@ -429,3 +429,17 @@ a bounded WebviewStorage.c harness, desktop-storage.ps1 orchestration and deskto
 No adapter implementation changes belong to this slice. Independent review owns no source files.
 The native Windows compiler attempt terminated at time1.14 configure because this Wine environment
 has no compatible sh.exe; it is not a successful full compiler build.
+
+## Published continuation and CI repair
+
+Architect → Runtime Engineer → Tooling/Release. This follow-up owns [[Eval Stop Requests]],
+[[Webview Storage Harness]], [[Webview Windows Storage Probe]], [[Desktop Storage Gate]],
+their mirrors, the evaluator map, changelog and this handoff.
+
+The continuation is published in #837. The enabled compiler build reported an unused
+platform-specific import. The live storage write passed but global browser enumeration
+failed on a process with unreadable metadata. The harness now verifies exit using handles
+obtained from the actual views, and the application build uses only imports available to its
+selected platform branch.
+
+Exact next action: verify the storage reopen and compiler application jobs on #837.
