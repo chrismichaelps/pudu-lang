@@ -6,7 +6,7 @@ import Data.Text (Text)
 {-| Each part: its name, the parts it needs, and its lines. -}
 hostTimeParseParts :: [(Text, [Text], [Text])]
 hostTimeParseParts =
-  [ ("host_parse_time", ["host_calendar", "host_done", "host_fail", "kernel_int", "text_allocate"],
+  [ ("host_parse_time", ["host_calendar", "host_done", "kernel_int", "text_concat", "text_literal"],
       [ "/* One specifier's share of the text, and the reading in progress: the"
       , "   pattern with its composite specifiers written out, the text, the parts"
       , "   read so far, and how many whole readings built an instant. */"
@@ -383,11 +383,9 @@ hostTimeParseParts =
       , "  free(flat.bytes);"
       , "  if (built != 1) {"
       , "    static const char opening[] = \"the text does not fit the pattern \";"
-      , "    unsigned char *bytes;"
+      , "    pudu_text message = pudu_text_concat(pudu_text_literal(opening, sizeof opening - 1), pattern);"
       , "    pudu_text_release(pudu_host_said);"
-      , "    pudu_host_said = pudu_text_allocate(sizeof opening - 1 + pattern.length, &bytes);"
-      , "    memcpy(bytes, opening, sizeof opening - 1);"
-      , "    if (pattern.length != 0) memcpy(bytes + sizeof opening - 1, pattern.bytes, pattern.length);"
+      , "    pudu_host_said = message;"
       , "    pudu_host_status = 1;"
       , "    return pudu_kernel_int(0);"
       , "  }"

@@ -76,6 +76,12 @@ and raster kernels keep E6001; trait-qualified method values stay with #647;
 callee-first order stays with #828; `parseTime` refuses a number of more than
 fifteen digits; ledger rows stay Partial until independent review.
 
+Architect → Backend Engineer → Test Engineer. The follow-up owns the time
+reader and its mirror, changelog and this handoff. The time-reading regression
+in [[Backend Service Programs]] requires warning-free emission and preserves the
+exact refusal text. The time reader now delegates message construction to the
+shared checked text concatenation path.
+
 Exact next action: request the independent implementation and wiki-parity
 review of #846.
 

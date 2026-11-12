@@ -28,6 +28,8 @@ Text read as an instant with a pattern, as `Pudu.Eval.Clock` answers it, over th
 - A number past fifteen digits? Refused here. The interpreter answers an integer wider than 64 bits for such a year; a host answer is a 64-bit integer, so the two differ on that text and the difference is recorded in [[Native Host Services]].
 - The refusal? It names the pattern, which is the caller's, not the text.
 
+- How is the refusal text built? The shared [[Native Text Runtime]] joins a fixed prefix and the borrowed pattern with checked size arithmetic. Construct the owned result before replacing the previous host message.
+
 ## Referenced by
 
 [[Native Host Runtime]] · [[Native Host Services]]
