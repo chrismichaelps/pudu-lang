@@ -3,6 +3,7 @@
 
 #import <AppKit/AppKit.h>
 #import <WebKit/WebKit.h>
+#import <objc/message.h>
 
 #include "pudu_webview.h"
 #include "pudu_webview_records.h"
@@ -42,6 +43,8 @@
 @property(nonatomic) BOOL devtools;
 @property(nonatomic) BOOL transparent;
 @property(nonatomic) double zoom;
+@property(nonatomic) BOOL fileDrop;
+@property(nonatomic, strong) NSMutableDictionary<NSString *, NSString *> *windowActions;
 /* Stops observing and removes the WebView from its window. */
 - (void)detach;
 @end
@@ -64,6 +67,27 @@
 int32_t pudu_webview_view_command(PuduWebHost *host, pudu_field *fields, int count);
 
 NSString *pudu_field_string(pudu_field field);
+
+/* A WebView that can take file drops from the program instead of navigating to them. */
+@interface PuduWebKitView : WKWebView
+@property(nonatomic) int64_t viewIdentifier;
+@property(nonatomic) BOOL dropEnabled;
+@end
+
+/* Window requests a page makes that must run inside the event that caused them. */
+@interface PuduWindowMessages : NSObject <WKScriptMessageHandler>
+@property(nonatomic, weak) PuduWebView *view;
+@end
+
+PuduWebKitView *pudu_webview_interactive_view(PuduWebView *view, WKWebViewConfiguration *configuration);
+int32_t pudu_webview_window_permission(PuduWebHost *host, PuduWebView *view, pudu_field *fields, int count);
+void pudu_report_window_state(PuduWebWindow *owner);
+void pudu_report_window_scale(PuduWebWindow *owner);
+NSString *pudu_theme_name(NSAppearance *appearance);
+/* Window verbs beyond opening, sizing and closing; answers -3 for a verb it does not know. */
+int32_t pudu_webview_window_extra(PuduWebHost *host, PuduWebWindow *owner, NSString *verb, pudu_field *fields, int count);
+/* View verbs for the inspector, printing and stored data. */
+int32_t pudu_webview_view_extra(PuduWebHost *host, PuduWebView *view, NSString *verb, pudu_field *fields, int count);
 
 /* Applies one native-component record (fields[0] is "app" or "surface"). */
 int32_t pudu_webview_native_command(PuduWebHost *host, pudu_field *fields, int count);

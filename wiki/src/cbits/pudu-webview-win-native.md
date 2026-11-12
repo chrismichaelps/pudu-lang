@@ -36,3 +36,5 @@ Uses [[Pudu Webview Windows Host]]; dispatched from [[Pudu Webview Windows Adapt
 ## Referenced by
 
 [[src/cbits/_MOC]]
+
+Resolved Grill Log: menu replacement redraws the frame with SWP_FRAMECHANGED, reapplying retained client bounds through the width-aware window clamp.

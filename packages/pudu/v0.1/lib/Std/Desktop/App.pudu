@@ -2,12 +2,14 @@ module Std.Desktop.App
 
 import Std.Desktop.Bridge as Bridge
 import Std.Desktop.Capability as Capability
+import Std.Desktop.Chrome as Chrome
 import Std.Desktop.Ipc as Ipc
 import Std.Desktop.Plugin as Plugin
 import Std.Desktop.Protocol as Protocol
+import Std.Desktop.Reload as Reload
 import Std.Desktop.Webview as Webview
+import Std.Desktop.Window as Window
 import Std.Env as Env
-import Std.Fs as Fs
 import Std.Hex as Hex
 import Std.Io as Io
 import Std.Json as Json
@@ -20,6 +22,7 @@ export type ViewPlan = {
   page: Str,
   frame: Option[Webview.Frame],
   ephemeral: Bool,
+  fileDrop: Bool,
   allowNavigation: Array[Str]
 }
 
@@ -32,7 +35,7 @@ export type Listener = { event: Str, handle: fn(&Ipc.Call, &Json.Json) -> () }
 /// What a `tick` sees each turn of the loop.
 export type Session = { dev: Bool, windows: Array[Int], views: Array[Int], now: Int }
 
-/// A desktop application.
+/// A desktop application; name is its stable logical storage namespace.
 export type App = {
   name: Str,
   assets: Protocol.Assets,
@@ -45,6 +48,8 @@ export type App = {
   windows: Array[WindowPlan],
   devUrl: Option[Str],
   devtools: Bool,
+  openDevtools: Bool,
+  rememberWindows: Bool,
   openExternal: Bool,
   listeners: Array[Listener],
   tick: Option[fn(&Session) -> Array[Array[Str]]]
@@ -65,17 +70,24 @@ type Live = { window: Int, label: Str, key: Str }
 type Loop = {
   open: Set[Int],
   views: Map[Int, Live],
+  labels: Array[(Int, Str)],
+  chrome: Chrome.Tracked,
   stamps: Map[Str, Int],
   scanned: Int
 }
 
-/// Answers a reserved command after its invoke key was accepted.
-type ReservedHandler = fn(&App, &Live, &Webview.Pending, &Bytes) -> Webview.Response
+/// What a reserved command answers: its response, commands to send, and a window it asks to close.
+type Reserved = { response: Webview.Response, commands: Array[Array[Str]], closing: Option[Int] }
+
+/// Answers a reserved command after its invoke key and origin were accepted.
+type ReservedHandler = fn(&App, &Loop, &Live, &Webview.Pending, &Bytes) -> Reserved
 
 /// The commands the framework answers itself, by name.
 const RESERVED_HANDLERS: Map[Str, ReservedHandler] = mapOf([
-    ("pudu:emit", emitted),
-    ("pudu:console", consoleReported),
+    ("pudu:emit", fn(app: &App, state: &Loop, live: &Live, request: &Webview.Pending, body: &Bytes) -> Reserved { plain(emitted(app, live, request, body)) }),
+    ("pudu:console", fn(app: &App, state: &Loop, live: &Live, request: &Webview.Pending, body: &Bytes) -> Reserved { plain(consoleReported(app, live, request, body)) }),
+    ("pudu:window", windowCalled),
+    ("pudu:devtools", devtoolsCalled),
   ])
 
 /// How often, in milliseconds, development mode rescans the frontend.
@@ -86,7 +98,7 @@ const PUMP_MILLISECONDS: Int = 250
 
 /// A view of `page` filling its window.
 export fn viewPlan(label: Str, page: Str) -> ViewPlan {
-  ViewPlan{label: label, page: page, frame: None, ephemeral: false, allowNavigation: []}
+  ViewPlan{label: label, page: page, frame: None, ephemeral: false, fileDrop: false, allowNavigation: []}
 }
 
 /// A resizable window holding one view of the same label showing `index.html`.
@@ -108,6 +120,8 @@ export fn newApp(name: Str, commands: &Ipc.Registry, grants: &Capability.Grants)
     windows: [windowPlan("main", name, 1024, 768)],
     devUrl: None,
     devtools: false,
+    openDevtools: true,
+    rememberWindows: false,
     openExternal: true,
     listeners: [],
     tick: None
@@ -170,8 +184,9 @@ fn viewSpec(app: &App, plan: &ViewPlan, id: Int, window: Int, key: Str, dev: Boo
     frame: plan.frame,
     url: Some(pageUrl(app, plan.page, dev)),
     devtools: dev || app.devtools,
-    dataStore: Some(plan.label),
+    dataStore: Some(Json.encode(&Json.list(&[Json.Text(app.name), Json.Text(plan.label)]))),
     ephemeral: plan.ephemeral,
+    fileDrop: plan.fileDrop,
     allowNavigation: allowed,
     scripts: [Webview.Script{source: Bridge.script(key, plan.label, dev), at: Webview.AtStart, allFrames: false}]
   }
@@ -186,27 +201,64 @@ fn send(commands: &Array[Array[Str]]) -> Result[(), AppError] {
   }
 }
 
+fn optional(command: Array[Str]) -> Result[(), AppError] {
+  match Webview.send(&[command]) {
+    case Ok(_) => Ok(())
+    case Err(Webview.Unsupported) => Ok(())
+    case Err(Webview.Malformed(_)) => Ok(())
+    case Err(problem) => Err(Platform(problem))
+  }
+}
+
 fn opened(app: &App, dev: Bool) -> Result[Loop, AppError] {
   if app.windows.isEmpty() { return Err(NoWindows) }
   var commands: Array[Array[Str]] = []
   var views: Map[Int, Live] = mapOf([])
   var open: Set[Int] = setOf([])
+  var labels: Array[(Int, Str)] = []
   var next = 1
   var windowId = 1
   for plan in app.windows {
-    commands = commands.push(Webview.openWindow(&Webview.WindowSpec{id: windowId, title: plan.title, width: plan.width, height: plan.height, resizable: plan.resizable}))
+    let remembered = if app.rememberWindows { Chrome.restore(app.name, plan.label) } else { None }
+    let (width, height) = match remembered {
+      case Some(place) => (place.width, place.height)
+      case None => (plan.width, plan.height)
+    }
+    commands = commands.push(Webview.openWindow(&Webview.WindowSpec{id: windowId, title: plan.title, width: width, height: height, resizable: plan.resizable}))
+    if let Some(place) = remembered { commands = commands.push(Webview.setPosition(windowId, place.x, place.y)) }
     for held in plan.views {
       let key = freshKey() ?
-      commands = commands.concat(Webview.createView(&viewSpec(app, &held, next, windowId, key, dev)))
+      let created = Webview.createView(&viewSpec(app, &held, next, windowId, key, dev))
+      commands = commands.concat(created.slice(0, created.length() - 1))
+      let origin = Capability.originOf(pageUrl(app, held.page, dev))
+      for action in ["drag", "toggle-maximize"] {
+        if Capability.decide(&app.grants, held.label, origin, "window:" + action) == Capability.Unrestricted {
+          commands = commands.push(["view", "{next}", "window-action", action, origin]).push(["view", "{next}", "window-authority", action, origin, key])
+        }
+      }
+      commands = commands.push(["view", "{next}", "realize"])
       views = views.insert(next, Live{window: windowId, label: held.label, key: key})
       next = next + 1
     }
     commands = commands.push(Webview.showWindow(windowId))
     open = open.insert(windowId)
+    labels = labels.push((windowId, plan.label))
     windowId = windowId + 1
   }
-  send(&commands) ?
-  Ok(Loop{open: open, views: views, stamps: mapOf([]), scanned: 0})
+  var batch: Array[Array[Str]] = []
+  for command in commands {
+    if command.length() > 2 && (command[2] == "window-action" || command[2] == "window-authority") {
+      send(&batch) ?
+      batch = []
+      optional(command) ?
+    } else { batch = batch.push(command) }
+  }
+  send(&batch) ?
+  for (window, _) in labels { optional(Window.queryState(window)) ? }
+  if dev && app.openDevtools {
+    for (view, _) in views { optional(Webview.openDevtools(view)) ? }
+  }
+  Ok(Loop{open: open, views: views, labels: labels, chrome: Chrome.tracked(), stamps: mapOf([]), scanned: 0})
 }
 
 fn emitted(app: &App, live: &Live, request: &Webview.Pending, body: &Bytes) -> Webview.Response {
@@ -266,41 +318,80 @@ fn consoleReported(app: &App, live: &Live, request: &Webview.Pending, body: &Byt
   Webview.Response{status: 204, headers: [], body: bytesOf([])}
 }
 
-fn answer(app: &App, live: &Live, request: &Webview.Pending) -> Webview.Response {
+fn plain(response: Webview.Response) -> Reserved { Reserved{response: response, commands: [], closing: None} }
+
+fn holders(state: &Loop) -> Array[Chrome.Holder] {
+  var found: Array[Chrome.Holder] = []
+  for (view, live) in state.views { found = found.push(Chrome.Holder{view: view, window: live.window}) }
+  found
+}
+
+fn windowCalled(app: &App, state: &Loop, live: &Live, request: &Webview.Pending, body: &Bytes) -> Reserved {
+  let answered = Chrome.windowCall(&app.grants, &state.chrome, live.label, Capability.originOf(request.page), live.window, body)
+  Reserved{response: answered.response, commands: answered.commands, closing: if answered.closing { Some(live.window) } else { None }}
+}
+
+fn devtoolsCalled(app: &App, state: &Loop, live: &Live, request: &Webview.Pending, body: &Bytes) -> Reserved {
+  if !isDev() { return plain(Ipc.failure("pudu:devtools", Capability.originOf(request.page), &Ipc.denied("the inspector shortcut works in development"))) }
+  Reserved{response: Protocol.json(200, &Json.Null), commands: [Window.toggleDevtools(request.view)], closing: None}
+}
+
+fn answer(app: &App, state: &Loop, live: &Live, request: &Webview.Pending) -> Reserved {
   let body = match Webview.body(request) {
     case Ok(found) => found
     case Err(_) => bytesOf([])
   }
   match Protocol.ipcCommand(request.url) {
-    case None => Protocol.serve(&app.assets, request, &app.policy)
+    case None => plain(Protocol.serve(&app.assets, request, &app.policy))
     case Some(name) => match RESERVED_HANDLERS.get(name) {
       case Some(handler) => {
         let origin = Capability.originOf(request.page)
-        if request.method == "OPTIONS" { return Ipc.preflight(origin) }
+        if request.method == "OPTIONS" { return plain(Ipc.preflight(origin)) }
         if Webview.header(request, Ipc.KEY_HEADER) != Some(live.key) {
-          return Ipc.failure(name, origin, &Ipc.denied("the call did not come from this view's bridge"))
+          return plain(Ipc.failure(name, origin, &Ipc.denied("the call did not come from this view's bridge")))
         }
         match Ipc.callOrigin(request) {
           case Ok(_) => ()
-          case Err(problem) => { return Ipc.failure(name, origin, &problem) }
+          case Err(problem) => { return plain(Ipc.failure(name, origin, &problem)) }
         }
-        handler(app, live, request, &body)
+        handler(app, state, live, request, &body)
       }
-      case None => Ipc.dispatch(&app.commands, &app.grants, live.key, live.label, request, &body)
+      case None => plain(Ipc.dispatch(&app.commands, &app.grants, live.key, live.label, request, &body))
     }
   }
 }
 
-fn responded(app: &App, state: &Loop, request: &Webview.Pending) -> Result[(), AppError] {
-  let response = match state.views.get(request.view) {
-    case Some(live) => answer(app, &live, request)
-    case None => Protocol.text(404, "no such view")
+fn responded(app: &App, state: Loop, request: &Webview.Pending) -> Result[Loop, AppError] {
+  var reserved = match state.views.get(request.view) {
+    case Some(live) => answer(app, &state, &live, request)
+    case None => plain(Protocol.text(404, "no such view"))
   }
-  match Webview.respond(request, &response) {
-    case Ok(_) => Ok(())
-    case Err(Webview.RequestGone(_)) => Ok(())
-    case Err(problem) => Err(Platform(problem))
+  if !reserved.commands.isEmpty() {
+    if let Err(problem) = Webview.send(&reserved.commands) {
+      let name = match Protocol.ipcCommand(request.url) { case Some(found) => found case None => "" }
+      reserved = plain(Ipc.failure(name, Capability.originOf(request.page), &Ipc.failed(Webview.explain(&problem))))
+    }
   }
+  match Webview.respond(request, &reserved.response) {
+    case Ok(_) => ()
+    case Err(Webview.RequestGone(_)) => ()
+    case Err(problem) => { return Err(Platform(problem)) }
+  }
+  match reserved.closing {
+    case Some(window) => closed(app, state, window)
+    case None => Ok(state)
+  }
+}
+
+/// A window closed: placements remembered first, then the window and its views released.
+fn closed(app: &App, state: Loop, window: Int) -> Result[Loop, AppError] {
+  if app.rememberWindows { Chrome.remember(app.name, &state.chrome, &state.labels) }
+  send(&[Webview.closeWindow(window)]) ?
+  var views = state.views
+  for (viewId, live) in state.views {
+    if live.window == window { views = views.remove(viewId) }
+  }
+  Ok(Loop{..state, open: state.open.remove(window), views: views})
 }
 
 fn openOutside(url: Str) -> () {
@@ -313,47 +404,13 @@ fn openOutside(url: Str) -> () {
   }
 }
 
-fn snapshot(root: Str) -> Map[Str, Int] {
-  var stamps: Map[Str, Int] = mapOf([])
-  if let Ok(paths) = Protocol.walk(root) {
-    for path in paths {
-      if let Ok(stamp) = Fs.modifiedAt(Path.join(root, path)) { stamps = stamps.insert(path, stamp) }
-    }
-  }
-  stamps
-}
-
-/// The commands a frontend change needs: style sheets swapped in place, or every view reloaded.
-fn changed(before: &Map[Str, Int], after: &Map[Str, Int], views: &Array[Int]) -> Array[Array[Str]] {
-  var touched: Array[Str] = []
-  for (path, stamp) in *after {
-    if before.get(path) != Some(stamp) { touched = touched.push(path) }
-  }
-  for (path, _) in *before {
-    if after.get(path) == None { touched = touched.push(path) }
-  }
-  if touched.isEmpty() { return [] }
-  if touched.filter(fn(path: Str) -> Bool { !path.endsWith(".css") }).isEmpty() {
-    views.map(fn(id: Int) -> Array[Str] { Webview.evaluate(id, "", "window.__pudu && window.__pudu.__reloadStyles(), void 0") })
-  } else {
-    views.map(fn(id: Int) -> Array[Str] { Webview.reload(id) })
-  }
-}
-
-fn handled(app: &App, state: Loop, event: &Webview.Event) -> Result[Loop, AppError] {
+fn handled(app: &App, before: Loop, event: &Webview.Event) -> Result[Loop, AppError] {
+  let (chrome, commands) = Chrome.observe(&before.chrome, event, &holders(&before))
+  send(&commands) ?
+  let state = Loop{..before, chrome: chrome}
   match *event {
-    case Webview.Request(pending) => {
-      responded(app, &state, &pending) ?
-      Ok(state)
-    }
-    case Webview.CloseRequested(id) => {
-      send(&[Webview.closeWindow(id)]) ?
-      var views = state.views
-      for (viewId, live) in state.views {
-        if live.window == id { views = views.remove(viewId) }
-      }
-      Ok(Loop{..state, open: state.open.remove(id), views: views})
-    }
+    case Webview.Request(pending) => responded(app, state, &pending)
+    case Webview.CloseRequested(id) => closed(app, state, id)
     case Webview.Navigated(id, url) => {
       send(&Plugin.navigated(&app.plugins, id, url)) ?
       Ok(state)
@@ -370,6 +427,7 @@ fn handled(app: &App, state: Loop, event: &Webview.Event) -> Result[Loop, AppErr
       send(&[Webview.reload(id)]) ?
       Ok(state)
     }
+    case Webview.Refused(_, why) => Err(Platform(why))
     case Webview.Evaluated(_, _, Err(why)) => {
       if isDev() { let _ = printError("[script] {why}") }
       Ok(state)
@@ -397,7 +455,7 @@ export fn run(app: &App) -> Result[(), AppError] {
   }
   var state = opened(app, dev) ?
   if dev {
-    if let Some(root) = app.frontend { state = Loop{..state, stamps: snapshot(root), scanned: Env.elapsedMilliseconds()} }
+    if let Some(root) = app.frontend { state = Loop{..state, stamps: Reload.snapshot(root), scanned: Env.elapsedMilliseconds()} }
   }
   while !state.open.isEmpty() {
     match Webview.pump(PUMP_MILLISECONDS) {
@@ -413,8 +471,8 @@ export fn run(app: &App) -> Result[(), AppError] {
     let ids: Array[Int] = state.views.keys()
     if dev && now - state.scanned >= SCAN_INTERVAL {
       if let Some(root) = app.frontend {
-        let stamps = snapshot(root)
-        send(&changed(&state.stamps, &stamps, &ids)) ?
+        let stamps = Reload.snapshot(root)
+        send(&Reload.changed(&state.stamps, &stamps, &ids)) ?
         state = Loop{..state, stamps: stamps, scanned: now}
       }
     }

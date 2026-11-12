@@ -3,15 +3,35 @@ on:
   pull_request:
     paths:
       - 'packages/pudu/v0.1/cbits/pudu_webview*'
-      - 'test/native/Webview*.c'
+      - 'test/native/Webview*'
       - 'tools/pudu-js/**'
+      - 'packages/pudu/v0.1/lib/Std/Desktop/**'
+      - 'packages/pudu/v0.1/src/Pudu/Eval/Webview.hs'
+      - 'packages/pudu/v0.1/pudu.cabal'
+      - 'test-fixtures/desktop/**'
+      - 'examples/desktop/**'
+      - 'test/desktop-webview.mjs'
+      - 'test/desktop-policy.mjs'
+      - 'test/desktop-policy-network.mjs'
+      - 'test/desktop-policy-https.sh'
+      - 'test/desktop-storage.ps1'
       - '.github/workflows/desktop-webview.yml'
   push:
     branches: [dev, 'feature/**']
     paths:
       - 'packages/pudu/v0.1/cbits/pudu_webview*'
-      - 'test/native/Webview*.c'
+      - 'test/native/Webview*'
       - 'tools/pudu-js/**'
+      - 'packages/pudu/v0.1/lib/Std/Desktop/**'
+      - 'packages/pudu/v0.1/src/Pudu/Eval/Webview.hs'
+      - 'packages/pudu/v0.1/pudu.cabal'
+      - 'test-fixtures/desktop/**'
+      - 'examples/desktop/**'
+      - 'test/desktop-webview.mjs'
+      - 'test/desktop-policy.mjs'
+      - 'test/desktop-policy-network.mjs'
+      - 'test/desktop-policy-https.sh'
+      - 'test/desktop-storage.ps1'
       - '.github/workflows/desktop-webview.yml'
 permissions:
   contents: read
@@ -33,9 +53,24 @@ jobs:
             packages/pudu/v0.1/cbits/pudu_webview_records.c \
             packages/pudu/v0.1/cbits/pudu_webview_macos.m \
             packages/pudu/v0.1/cbits/pudu_webview_macos_view.m \
+            packages/pudu/v0.1/cbits/pudu_webview_macos_window.m \
             packages/pudu/v0.1/cbits/pudu_webview_macos_native.m \
             test/native/WebviewDrive.c -framework AppKit -framework WebKit -o drive
           ./drive
+      - name: Verify native cookie and request policies
+        run: |
+          cc -fobjc-arc -Wall -Wextra -Werror -I packages/pudu/v0.1/cbits \
+            packages/pudu/v0.1/cbits/pudu_webview_records.c \
+            packages/pudu/v0.1/cbits/pudu_webview_macos.m \
+            packages/pudu/v0.1/cbits/pudu_webview_macos_view.m \
+            packages/pudu/v0.1/cbits/pudu_webview_macos_window.m \
+            packages/pudu/v0.1/cbits/pudu_webview_macos_native.m \
+            test/native/WebviewNetwork.c -framework AppKit -framework WebKit -o network
+          node test/desktop-policy-network.mjs ./network
+      - name: Check bounded policy JSON
+        run: |
+          c++ -std=c++17 -Wall -Wextra -Werror -I packages/pudu/v0.1/cbits packages/pudu/v0.1/cbits/pudu_webview_policy_json.cpp test/native/WebviewPolicyJson.cpp -o policy-json
+          ./policy-json
       - name: Test the page bridge
         run: |
           node --test tools/pudu-js/bridge.test.mjs
@@ -48,7 +83,7 @@ jobs:
       - name: Install WebKitGTK and a virtual display
         run: |
           sudo apt-get update || echo "some package indexes could not be read; continuing to the install"
-          sudo apt-get install -y libwebkit2gtk-4.1-dev xvfb
+          sudo apt-get install -y libwebkit2gtk-4.1-dev xvfb openbox openssl ca-certificates
       - name: Check record framing and URL patterns
         run: |
           cc -Wall -Wextra -Werror -I packages/pudu/v0.1/cbits packages/pudu/v0.1/cbits/pudu_webview_records.c test/native/WebviewRecords.c -o records
@@ -59,9 +94,82 @@ jobs:
             packages/pudu/v0.1/cbits/pudu_webview_records.c \
             packages/pudu/v0.1/cbits/pudu_webview_gtk.c \
             packages/pudu/v0.1/cbits/pudu_webview_gtk_view.c \
+            packages/pudu/v0.1/cbits/pudu_webview_gtk_context.c \
+            packages/pudu/v0.1/cbits/pudu_webview_gtk_window.c \
+            packages/pudu/v0.1/cbits/pudu_webview_gtk_interaction.c \
             packages/pudu/v0.1/cbits/pudu_webview_gtk_native.c \
             test/native/WebviewDrive.c $(pkg-config --cflags --libs webkit2gtk-4.1 gtk+-3.0) -o drive
-          xvfb-run -a ./drive
+          xvfb-run -a sh -c 'openbox >/tmp/pudu-window-manager.log 2>&1 & ./drive'
+      - name: Verify native cookie and request policies
+        run: |
+          cc -Wall -Wextra -Werror -I packages/pudu/v0.1/cbits \
+            packages/pudu/v0.1/cbits/pudu_webview_records.c \
+            packages/pudu/v0.1/cbits/pudu_webview_gtk.c \
+            packages/pudu/v0.1/cbits/pudu_webview_gtk_view.c \
+            packages/pudu/v0.1/cbits/pudu_webview_gtk_context.c \
+            packages/pudu/v0.1/cbits/pudu_webview_gtk_window.c \
+            packages/pudu/v0.1/cbits/pudu_webview_gtk_interaction.c \
+            packages/pudu/v0.1/cbits/pudu_webview_gtk_native.c \
+            test/native/WebviewNetwork.c $(pkg-config --cflags --libs webkit2gtk-4.1 gtk+-3.0) -o network
+          xvfb-run -a sh -c 'openbox >/tmp/pudu-network-window-manager.log 2>&1 & node test/desktop-policy-network.mjs ./network'
+      - name: Verify trusted HTTPS upgrade delivery
+        run: sudo env CI=true PUDU_POLICY_TEST_TRUST=1 sh test/desktop-policy-https.sh ./network
+  webkitgtk-application:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: haskell-actions/setup@v2
+        with:
+          ghc-version: 9.14.1
+          cabal-version: 3.16.1.0
+      - name: Install the native application SDK
+        run: |
+          sudo apt-get update || echo "some package indexes could not be read; continuing to the install"
+          sudo apt-get install -y libffi-dev libncurses-dev libwebkit2gtk-4.1-dev xvfb openbox
+      - uses: actions/cache@v4
+        with:
+          path: ~/.local/state/cabal/store
+          key: desktop-gtk-store-${{ runner.os }}-${{ hashFiles('**/*.cabal', 'cabal.project*') }}
+          restore-keys: desktop-gtk-store-${{ runner.os }}-
+      - run: cabal update
+      - name: Build the GTK-enabled compiler
+        run: |
+          cabal build exe:pudu --flags=webkitgtk --disable-tests --disable-optimization --ghc-options=-Werror
+          printf 'PUDU=%s\n' "$(cabal list-bin exe:pudu --flags=webkitgtk --disable-tests --disable-optimization --ghc-options=-Werror)" >> "$GITHUB_ENV"
+      - name: Run window lifecycle and development IPC through the compiler
+        env:
+          PUDU_LIB: ${{ github.workspace }}/packages/pudu/v0.1/lib
+        run: |
+          xvfb-run -a sh -c '
+            set -eu
+            openbox >/tmp/pudu-window-manager.log 2>&1 &
+            "$PUDU" run test-fixtures/desktop/WindowLoop.pudu > window-loop.log 2>&1 || { cat window-loop.log; exit 1; }
+            cat window-loop.log
+            grep -q "window checkpoint main true" window-loop.log
+            grep -q "window checkpoint other true" window-loop.log
+            grep -q "window loop completed" window-loop.log
+            "$PUDU" run test-fixtures/desktop/ApplicationIsolation.pudu > application-isolation.log 2>&1 || { cat application-isolation.log; exit 1; }
+            cat application-isolation.log
+            grep -q "application isolation writer true" application-isolation.log
+            grep -q "application isolation reader true" application-isolation.log
+            grep -q "application isolation reopen true" application-isolation.log
+            grep -q "application isolation completed" application-isolation.log
+            cd examples/desktop/Notes
+            PUDU_DESKTOP_DEV=1 NOTES_SELF_TEST=1 "$PUDU" run Main.pudu > notes.log 2>&1 || { cat notes.log; exit 1; }
+            cat notes.log
+            grep -q "self-test passed 9 failed 0" notes.log
+          '
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: pudu-desktop-gtk-application
+          path: |
+            window-loop.log
+            application-isolation.log
+            examples/desktop/Notes/notes.log
+          if-no-files-found: ignore
+          retention-days: 3
   webview2-windows:
     runs-on: windows-latest
     timeout-minutes: 15
@@ -81,7 +189,120 @@ jobs:
       - name: Drive a WebView2 view through the adapter
         shell: cmd
         run: |
-          cl /nologo /EHsc /std:c++17 /W3 /I packages\pudu\v0.1\cbits /I webview2\build\native\include packages\pudu\v0.1\cbits\pudu_webview_records.c packages\pudu\v0.1\cbits\pudu_webview_win.cpp packages\pudu\v0.1\cbits\pudu_webview_win_view.cpp packages\pudu\v0.1\cbits\pudu_webview_win_native.cpp test\native\WebviewDrive.c /Fe:drive.exe user32.lib ole32.lib shlwapi.lib comdlg32.lib crypt32.lib gdi32.lib || exit /b 1
+          cl /nologo /EHsc /std:c++17 /W3 /I packages\pudu\v0.1\cbits /I webview2\build\native\include packages\pudu\v0.1\cbits\pudu_webview_records.c packages\pudu\v0.1\cbits\pudu_webview_win.cpp packages\pudu\v0.1\cbits\pudu_webview_win_window.cpp packages\pudu\v0.1\cbits\pudu_webview_win_control.cpp packages\pudu\v0.1\cbits\pudu_webview_win_view.cpp packages\pudu\v0.1\cbits\pudu_webview_win_environment.cpp packages\pudu\v0.1\cbits\pudu_webview_win_profile.cpp packages\pudu\v0.1\cbits\pudu_webview_win_request.cpp packages\pudu\v0.1\cbits\pudu_webview_win_policy.cpp packages\pudu\v0.1\cbits\pudu_webview_policy_json.cpp packages\pudu\v0.1\cbits\pudu_webview_win_native.cpp test\native\WebviewDrive.c /Fe:drive.exe user32.lib ole32.lib shlwapi.lib comdlg32.lib crypt32.lib gdi32.lib || exit /b 1
           copy webview2\build\native\x64\WebView2Loader.dll .
           set PUDU_HARNESS_TRACE=1
           drive.exe
+      - name: Build real storage persistence harness
+        shell: cmd
+        run: |
+          cl /nologo /EHsc /std:c++17 /W3 /I packages\pudu\v0.1\cbits /I webview2\build\native\include packages\pudu\v0.1\cbits\pudu_webview_records.c packages\pudu\v0.1\cbits\pudu_webview_win.cpp packages\pudu\v0.1\cbits\pudu_webview_win_window.cpp packages\pudu\v0.1\cbits\pudu_webview_win_control.cpp packages\pudu\v0.1\cbits\pudu_webview_win_view.cpp packages\pudu\v0.1\cbits\pudu_webview_win_environment.cpp packages\pudu\v0.1\cbits\pudu_webview_win_profile.cpp packages\pudu\v0.1\cbits\pudu_webview_win_request.cpp packages\pudu\v0.1\cbits\pudu_webview_win_policy.cpp packages\pudu\v0.1\cbits\pudu_webview_policy_json.cpp packages\pudu\v0.1\cbits\pudu_webview_win_native.cpp test\native\WebviewStorage.c test\native\WebviewStorageWin.cpp /Fe:storage.exe user32.lib ole32.lib shlwapi.lib comdlg32.lib crypt32.lib gdi32.lib || exit /b 1
+      - name: Verify named persistence and private reset across browser exit
+        shell: pwsh
+        run: ./test/desktop-storage.ps1 -Program ./storage.exe
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: pudu-desktop-windows-storage
+          path: storage-*.log
+          if-no-files-found: ignore
+          retention-days: 3
+      - name: Check native window geometry and retained limits
+        shell: cmd
+        run: |
+          cl /nologo /EHsc /std:c++17 /W3 /I packages\pudu\v0.1\cbits /I webview2\build\native\include packages\pudu\v0.1\cbits\pudu_webview_records.c packages\pudu\v0.1\cbits\pudu_webview_win.cpp packages\pudu\v0.1\cbits\pudu_webview_win_window.cpp packages\pudu\v0.1\cbits\pudu_webview_win_control.cpp packages\pudu\v0.1\cbits\pudu_webview_win_view.cpp packages\pudu\v0.1\cbits\pudu_webview_win_environment.cpp packages\pudu\v0.1\cbits\pudu_webview_win_profile.cpp packages\pudu\v0.1\cbits\pudu_webview_win_request.cpp packages\pudu\v0.1\cbits\pudu_webview_win_policy.cpp packages\pudu\v0.1\cbits\pudu_webview_policy_json.cpp packages\pudu\v0.1\cbits\pudu_webview_win_native.cpp test\native\WebviewWindow.cpp /Fe:window.exe user32.lib ole32.lib shlwapi.lib comdlg32.lib crypt32.lib gdi32.lib || exit /b 1
+          window.exe
+      - name: Check production SDK UUID metadata
+        shell: cmd
+        run: |
+          cl /nologo /EHsc /std:c++17 /W3 /I packages\pudu\v0.1\cbits /I webview2\build\native\include test\native\WebviewSdk.cpp /Fe:sdk.exe ole32.lib uuid.lib || exit /b 1
+          sdk.exe
+      - name: Check callback creation-reference ownership
+        shell: cmd
+        run: |
+          cl /nologo /EHsc /std:c++17 /W3 /I packages\pudu\v0.1\cbits /I webview2\build\native\include test\native\WebviewHandlers.cpp /Fe:handlers.exe ole32.lib uuid.lib || exit /b 1
+          handlers.exe
+      - name: Check fail-closed storage admission
+        shell: cmd
+        run: |
+          cl /nologo /EHsc /std:c++17 /W3 /I packages\pudu\v0.1\cbits /I test\native /I webview2\build\native\include packages\pudu\v0.1\cbits\pudu_webview_records.c packages\pudu\v0.1\cbits\pudu_webview_win.cpp packages\pudu\v0.1\cbits\pudu_webview_win_window.cpp packages\pudu\v0.1\cbits\pudu_webview_win_control.cpp packages\pudu\v0.1\cbits\pudu_webview_win_view.cpp packages\pudu\v0.1\cbits\pudu_webview_win_environment.cpp packages\pudu\v0.1\cbits\pudu_webview_win_profile.cpp packages\pudu\v0.1\cbits\pudu_webview_win_request.cpp packages\pudu\v0.1\cbits\pudu_webview_win_policy.cpp packages\pudu\v0.1\cbits\pudu_webview_policy_json.cpp packages\pudu\v0.1\cbits\pudu_webview_win_native.cpp test\native\WebviewProfile.cpp /Fe:profile.exe user32.lib ole32.lib shlwapi.lib comdlg32.lib crypt32.lib gdi32.lib uuid.lib || exit /b 1
+          profile.exe
+      - name: Check native view and request ownership
+        shell: cmd
+        run: |
+          cl /nologo /EHsc /std:c++17 /W3 /I packages\pudu\v0.1\cbits /I test\native /I webview2\build\native\include packages\pudu\v0.1\cbits\pudu_webview_records.c packages\pudu\v0.1\cbits\pudu_webview_win.cpp packages\pudu\v0.1\cbits\pudu_webview_win_window.cpp packages\pudu\v0.1\cbits\pudu_webview_win_control.cpp packages\pudu\v0.1\cbits\pudu_webview_win_view.cpp packages\pudu\v0.1\cbits\pudu_webview_win_environment.cpp packages\pudu\v0.1\cbits\pudu_webview_win_profile.cpp packages\pudu\v0.1\cbits\pudu_webview_win_request.cpp packages\pudu\v0.1\cbits\pudu_webview_win_policy.cpp packages\pudu\v0.1\cbits\pudu_webview_policy_json.cpp packages\pudu\v0.1\cbits\pudu_webview_win_native.cpp test\native\WebviewOwnership.cpp /Fe:ownership.exe user32.lib ole32.lib shlwapi.lib comdlg32.lib crypt32.lib gdi32.lib uuid.lib || exit /b 1
+          ownership.exe
+      - name: Check complete policy admission and emitted scripts
+        shell: cmd
+        run: |
+          cl /nologo /EHsc /std:c++17 /W3 /I packages\pudu\v0.1\cbits /I webview2\build\native\include packages\pudu\v0.1\cbits\pudu_webview_records.c packages\pudu\v0.1\cbits\pudu_webview_win.cpp packages\pudu\v0.1\cbits\pudu_webview_win_window.cpp packages\pudu\v0.1\cbits\pudu_webview_win_control.cpp packages\pudu\v0.1\cbits\pudu_webview_win_view.cpp packages\pudu\v0.1\cbits\pudu_webview_win_environment.cpp packages\pudu\v0.1\cbits\pudu_webview_win_profile.cpp packages\pudu\v0.1\cbits\pudu_webview_win_request.cpp packages\pudu\v0.1\cbits\pudu_webview_win_policy.cpp packages\pudu\v0.1\cbits\pudu_webview_policy_json.cpp packages\pudu\v0.1\cbits\pudu_webview_win_native.cpp test\native\WebviewPolicy.cpp /Fe:policy.exe user32.lib ole32.lib shlwapi.lib comdlg32.lib crypt32.lib gdi32.lib || exit /b 1
+          node test\desktop-policy.mjs .\policy.exe
+      - name: Verify native cookie, blocking and upgrade transport
+        shell: cmd
+        run: |
+          cl /nologo /EHsc /std:c++17 /W3 /I packages\pudu\v0.1\cbits /I webview2\build\native\include packages\pudu\v0.1\cbits\pudu_webview_records.c packages\pudu\v0.1\cbits\pudu_webview_win.cpp packages\pudu\v0.1\cbits\pudu_webview_win_window.cpp packages\pudu\v0.1\cbits\pudu_webview_win_control.cpp packages\pudu\v0.1\cbits\pudu_webview_win_view.cpp packages\pudu\v0.1\cbits\pudu_webview_win_environment.cpp packages\pudu\v0.1\cbits\pudu_webview_win_profile.cpp packages\pudu\v0.1\cbits\pudu_webview_win_request.cpp packages\pudu\v0.1\cbits\pudu_webview_win_policy.cpp packages\pudu\v0.1\cbits\pudu_webview_policy_json.cpp packages\pudu\v0.1\cbits\pudu_webview_win_native.cpp test\native\WebviewNetwork.c /Fe:network.exe user32.lib ole32.lib shlwapi.lib comdlg32.lib crypt32.lib gdi32.lib || exit /b 1
+          node test\desktop-policy-network.mjs .\network.exe --upgrade
+  webview2-application:
+    runs-on: windows-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - uses: haskell-actions/setup@v2
+        with:
+          ghc-version: 9.14.1
+          cabal-version: 3.16.1.0
+      - name: Install the native SDK
+        id: windows-sdk
+        shell: pwsh
+        run: |
+          Invoke-WebRequest https://www.nuget.org/api/v2/package/Microsoft.Web.WebView2/1.0.2903.40 -OutFile webview2.zip
+          Expand-Archive webview2.zip webview2
+          $prefix = Split-Path ((ghc --print-libdir).Trim())
+          $native = Join-Path $prefix 'mingw/bin'
+          if (Test-Path $native) { $native | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append }
+          $store = (cabal path --store-dir).Trim()
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          "store=$store" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
+      - uses: actions/cache@v4
+        with:
+          path: ${{ steps.windows-sdk.outputs.store }}
+          key: desktop-windows-store-${{ runner.os }}-${{ hashFiles('**/*.cabal', 'cabal.project*') }}
+          restore-keys: desktop-windows-store-${{ runner.os }}-
+      - run: cabal update
+      - name: Build the Windows-enabled compiler
+        shell: pwsh
+        run: |
+          $sdk = Join-Path $env:GITHUB_WORKSPACE 'webview2/build/native/include'
+          cabal build exe:pudu --flags=webview2 --disable-tests --disable-optimization --ghc-options=-Werror "--extra-include-dirs=$sdk"
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          $exe = (cabal list-bin exe:pudu --flags=webview2 --disable-tests --disable-optimization --ghc-options=-Werror "--extra-include-dirs=$sdk").Trim()
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          Copy-Item webview2/build/native/x64/WebView2Loader.dll (Split-Path $exe)
+          "PUDU=$exe" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+      - name: Run compiler application conformance
+        shell: pwsh
+        env:
+          PUDU_LIB: ${{ github.workspace }}/packages/pudu/v0.1/lib
+        run: |
+          & $env:PUDU run test-fixtures/desktop/ApplicationIsolation.pudu *> application-isolation.log
+          if ($LASTEXITCODE -ne 0) { Get-Content application-isolation.log; exit 1 }
+          $out = Get-Content application-isolation.log -Raw
+          if ($out -notmatch 'application isolation completed' -or $out -match 'isolation .+ false') { throw $out }
+          Push-Location examples/desktop/Notes
+          try {
+            $env:PUDU_DESKTOP_DEV = '1'
+            $env:NOTES_SELF_TEST = '1'
+            & $env:PUDU run Main.pudu *> notes.log
+            if ($LASTEXITCODE -ne 0) { Get-Content notes.log; exit 1 }
+            $out = Get-Content notes.log -Raw
+            if ($out -notmatch 'self-test passed 9 failed 0') { throw $out }
+          } finally { Pop-Location }
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: pudu-desktop-windows-application
+          path: |
+            application-isolation.log
+            examples/desktop/Notes/notes.log
+          if-no-files-found: ignore
+          retention-days: 3

@@ -16,3 +16,8 @@ command, forwarded development errors with their position, and a frozen bridge w
 ## Referenced by
 
 [[Desktop Webview Gate]] · [[Desktop Webview CI]]
+
+Resolved Grill Log: check window action payloads, drag-region exclusions and development-only
+inspector shortcuts using recorded requests and native messages.
+
+Resolved Grill Log: verify authenticated native messages contain the view key and origin without exposing the key on the public bridge.

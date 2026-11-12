@@ -215,7 +215,8 @@ static WKUserScript *pudu_style_script(NSString *css) {
 }
 
 static WKWebsiteDataStore *pudu_store(PuduWebView *view) {
-  if (view.ephemeral) {
+  /* Storage is shared only through an explicit label; an unnamed view keeps its own. */
+  if (view.ephemeral || view.dataStore.length == 0) {
     return [WKWebsiteDataStore nonPersistentDataStore];
   }
   if (view.dataStore.length > 0) {
@@ -300,7 +301,7 @@ static int32_t pudu_realize(PuduWebHost *host, PuduWebView *view) {
       (void)exception;
     }
   }
-  WKWebView *webView = [[WKWebView alloc] initWithFrame:view.frame configuration:configuration];
+  PuduWebKitView *webView = pudu_webview_interactive_view(view, configuration);
   if (webView == nil) {
     return pudu_view_refuse(host, PUDU_WEBVIEW_PLATFORM, @"the WebView could not be created");
   }
@@ -356,6 +357,7 @@ static int32_t pudu_create(PuduWebHost *host, int64_t identifier, pudu_field *fi
   view.scripts = [NSMutableArray array];
   view.allowed = [NSMutableArray array];
   view.ruleSources = [NSMutableArray array];
+  view.windowActions = [NSMutableDictionary dictionary];
   host.views[@(identifier)] = view;
   return PUDU_WEBVIEW_DONE;
 }
@@ -382,6 +384,10 @@ static int32_t pudu_configure(PuduWebHost *host, PuduWebView *view, NSString *ve
     view.ephemeral = YES;
   } else if ([verb isEqualToString:@"transparent"] && count == 3) {
     view.transparent = YES;
+  } else if ([verb isEqualToString:@"window-action"]) {
+    return pudu_webview_window_permission(host, view, fields, count);
+  } else if ([verb isEqualToString:@"file-drop"] && count == 3) {
+    view.fileDrop = YES;
   } else if ([verb isEqualToString:@"navigation-allow"] && count == 4) {
     [view.allowed addObject:value];
   } else if ([verb isEqualToString:@"rules"] && count == 4) {
@@ -400,15 +406,6 @@ static int32_t pudu_configure(PuduWebHost *host, PuduWebView *view, NSString *ve
     return pudu_view_refuse(host, PUDU_WEBVIEW_MALFORMED, [@"unknown view configuration " stringByAppendingString:verb]);
   }
   return PUDU_WEBVIEW_DONE;
-}
-
-static void pudu_show_inspector(WKWebView *webView, BOOL show) {
-  id inspector = [webView valueForKey:@"_inspector"];
-  SEL selector = NSSelectorFromString(show ? @"show" : @"close");
-  if (inspector == nil || ![inspector respondsToSelector:selector]) {
-    [NSException raise:@"PuduInspector" format:@"the inspector cannot be opened programmatically"];
-  }
-  ((void (*)(id, SEL))objc_msgSend)(inspector, selector);
 }
 
 /* Commands applied to a realized WebView. */
@@ -454,12 +451,6 @@ static int32_t pudu_operate(PuduWebHost *host, PuduWebView *view, NSString *verb
     webView.pageZoom = value.doubleValue / 1000.0;
   } else if ([verb isEqualToString:@"user-agent"] && count == 4) {
     webView.customUserAgent = value;
-  } else if ([verb isEqualToString:@"devtools-open"] || [verb isEqualToString:@"devtools-close"]) {
-    @try {
-      pudu_show_inspector(webView, [verb isEqualToString:@"devtools-open"]);
-    } @catch (NSException *exception) {
-      return pudu_view_refuse(host, PUDU_WEBVIEW_UNSUPPORTED, exception.reason ?: @"no inspector");
-    }
   } else if ([verb isEqualToString:@"show"]) {
     webView.hidden = NO;
   } else if ([verb isEqualToString:@"hide"]) {
@@ -470,7 +461,11 @@ static int32_t pudu_operate(PuduWebHost *host, PuduWebView *view, NSString *verb
     [view detach];
     [host.views removeObjectForKey:@(view.identifier)];
   } else {
-    return pudu_view_refuse(host, PUDU_WEBVIEW_MALFORMED, [@"unknown view command " stringByAppendingString:verb]);
+    @try {
+      return pudu_webview_view_extra(host, view, verb, fields, count);
+    } @catch (NSException *exception) {
+      return pudu_view_refuse(host, PUDU_WEBVIEW_UNSUPPORTED, exception.reason ?: @"view operation unavailable");
+    }
   }
   return PUDU_WEBVIEW_DONE;
 }

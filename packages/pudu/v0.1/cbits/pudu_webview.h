@@ -30,7 +30,8 @@ int64_t pudu_webview_events(uint8_t *buffer, size_t capacity);
 /* The body of pending request `request`, measured or copied the same way. */
 int64_t pudu_webview_body(int64_t request, uint8_t *buffer, size_t capacity);
 
-/* Finishes pending request `request`. `head` holds "Name: value" lines. */
+/* Finishes pending request `request`. `head` holds "Name: value" lines.
+   NULL is valid only for a zero-length header or body slice. */
 int32_t pudu_webview_respond(
     int64_t request,
     int32_t status,

@@ -20,3 +20,15 @@ records; bridge configuration; Ed25519 signatures and key files; and patches.
 ## Referenced by
 
 [[Desktop Webview Gate]]
+
+Resolved Grill Log: exercise window argument refusal, capabilities including scopes and deny
+precedence, event folding and per-window event routing without a native display.
+
+Resolved Grill Log: late inspector/drop events for a released view produce no frontend commands.
+
+Resolved Grill Log: assert data-clear success and asynchronous failure record decoding.
+
+Resolved Grill Log: inspect the content-rule JSON delta that explicitly fixes case-sensitive literal glob matching across native platforms.
+
+Resolved Grill Log: assert both refusal words decode to their typed `Refused` errors and an unknown
+word still decodes as a Platform refusal.

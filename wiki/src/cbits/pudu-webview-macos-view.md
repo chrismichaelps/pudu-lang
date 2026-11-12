@@ -57,3 +57,13 @@ Uses [[Pudu Webview Records]] and [[Pudu Webview macOS Host]]; driven by
 ## Referenced by
 
 [[src/cbits/_MOC]]
+
+Resolved Grill Log: `window-action <drag|toggle-maximize> <origin>` is pre-realization
+configuration, disabled by default; only the application grants it.
+
+Resolved Grill Log: inspector operations dispatch to the window/control unit, keeping this view lifecycle/configuration unit below the default size limit.
+
+Resolved Grill Log: an unnamed view receives its own non-persistent data store, as an ephemeral
+view does, instead of the process default store. Sharing requires an explicit label; two unnamed
+views never see each other's storage. A named store on a system without identified stores keeps
+reporting `data-store <view> shared` before using the default store.

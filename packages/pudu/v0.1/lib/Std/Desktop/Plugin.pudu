@@ -156,7 +156,7 @@ fn texts(values: &Array[Str]) -> Json.Json { Json.list(&values.map(fn(value: Str
 /// Rules in the platform's content-rule format.
 export fn rulesJson(rules: &Array[BlockRule]) -> Str {
   let entries = rules.map(fn(rule: BlockRule) -> Json.Json {
-      var trigger = [("url-filter", Json.Text(regexOf(rule.pattern)))]
+      var trigger = [("url-filter", Json.Text(regexOf(rule.pattern))), ("url-filter-is-case-sensitive", Json.Boolean(true))]
       if !rule.resources.isEmpty() { trigger = trigger.push(("resource-type", texts(&rule.resources))) }
       if !rule.domains.isEmpty() { trigger = trigger.push(("if-domain", texts(&rule.domains))) }
       Json.object(&[("trigger", Json.object(&trigger)), ("action", actionJson(&rule.action))])

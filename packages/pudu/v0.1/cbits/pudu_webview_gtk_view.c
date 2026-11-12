@@ -20,8 +20,16 @@ static void pudu_collect_header(const char *name, const char *value, gpointer da
   g_string_append_printf((GString *)data, "%s: %s\n", name, value);
 }
 
-static void pudu_on_scheme(WebKitURISchemeRequest *request, gpointer data) {
-  PuduView *view = data;
+void pudu_scheme_request(WebKitURISchemeRequest *request, gpointer data) {
+  (void)data;
+  WebKitWebView *web = webkit_uri_scheme_request_get_web_view(request);
+  PuduView *view = web == NULL ? NULL : g_object_get_data(G_OBJECT(web), "pudu-view");
+  if (view == NULL || view->web == NULL) {
+    GError *error = g_error_new_literal(G_IO_ERROR, G_IO_ERROR_CANCELLED, "the requesting view is closed");
+    webkit_uri_scheme_request_finish_error(request, error);
+    g_error_free(error);
+    return;
+  }
   int64_t identifier = pudu_next_request++;
   PuduPending *pending = g_new0(PuduPending, 1);
   pending->request = g_object_ref(request);
@@ -64,7 +72,9 @@ int32_t pudu_webview_respond(
     size_t head_length,
     const uint8_t *body,
     size_t body_length) {
-  if (status < 100 || status > 599 || (body == NULL && body_length > 0)) {
+  int32_t guard = pudu_webview_guard();
+  if (guard != PUDU_WEBVIEW_DONE) return guard;
+  if (status < 100 || status > 599 || (head == NULL && head_length > 0) || (body == NULL && body_length > 0)) {
     return PUDU_WEBVIEW_INVALID;
   }
   PuduPending *pending = g_hash_table_lookup(pudu_pending, &request);
@@ -76,7 +86,7 @@ int32_t pudu_webview_respond(
   WebKitURISchemeResponse *response = webkit_uri_scheme_response_new(stream, (gint64)body_length);
   webkit_uri_scheme_response_set_status(response, (guint)status, NULL);
   SoupMessageHeaders *headers = soup_message_headers_new(SOUP_MESSAGE_HEADERS_RESPONSE);
-  g_autofree char *text = g_strndup((const char *)head, head_length);
+  g_autofree char *text = head_length == 0 ? g_strdup("") : g_strndup((const char *)head, head_length);
   g_auto(GStrv) lines = g_strsplit(text, "\n", -1);
   for (int i = 0; lines[i] != NULL; i++) {
     char *colon = strchr(lines[i], ':');
@@ -183,33 +193,12 @@ static void pudu_on_rules(GObject *source, GAsyncResult *result, gpointer data) 
   }
 }
 
-static WebKitWebContext *pudu_context(PuduView *view) {
-  WebKitWebsiteDataManager *data;
-  if (view->ephemeral) {
-    data = webkit_website_data_manager_new_ephemeral();
-  } else {
-    /* The directory is named by a digest of the label, so no label can name a
-       path outside the application's own data directory. */
-    g_autofree char *label = g_compute_checksum_for_string(G_CHECKSUM_SHA256, view->store == NULL ? "default" : view->store, -1);
-    g_autofree char *base = g_build_filename(g_get_user_data_dir(), g_get_prgname(), "webview", label, NULL);
-    g_autofree char *cache = g_build_filename(g_get_user_cache_dir(), g_get_prgname(), "webview", label, NULL);
-    data = webkit_website_data_manager_new("base-data-directory", base, "base-cache-directory", cache, NULL);
-  }
-  WebKitWebContext *context = webkit_web_context_new_with_website_data_manager(data);
-  g_object_unref(data);
-  WebKitSecurityManager *security = webkit_web_context_get_security_manager(context);
-  webkit_security_manager_register_uri_scheme_as_secure(security, "pudu");
-  webkit_security_manager_register_uri_scheme_as_cors_enabled(security, "pudu");
-  webkit_web_context_register_uri_scheme(context, "pudu", pudu_on_scheme, view, NULL);
-  return context;
-}
-
 static int32_t pudu_realize(PuduView *view) {
   PuduWindow *owner = pudu_window_named(view->window);
   if (owner == NULL) {
     return pudu_refuse(PUDU_WEBVIEW_UNKNOWN, "the view's window is closed");
   }
-  WebKitWebContext *context = pudu_context(view);
+  WebKitWebContext *context = pudu_view_context(view);
   view->content = webkit_user_content_manager_new();
   for (guint i = 0; i < view->scripts->len; i++) {
     webkit_user_content_manager_add_script(view->content, g_ptr_array_index(view->scripts, i));
@@ -220,6 +209,7 @@ static int32_t pudu_realize(PuduView *view) {
     webkit_settings_set_user_agent(settings, view->agent);
   }
   view->web = GTK_WIDGET(g_object_new(WEBKIT_TYPE_WEB_VIEW, "web-context", context, "user-content-manager", view->content, "settings", settings, NULL));
+  g_object_set_data(G_OBJECT(view->web), "pudu-view", view);
   g_object_unref(settings);
   g_object_unref(context);
   WebKitWebView *web = WEBKIT_WEB_VIEW(view->web);
@@ -238,6 +228,7 @@ static int32_t pudu_realize(PuduView *view) {
   int height = view->fill ? owner->height : view->height;
   gtk_widget_set_size_request(view->web, width, height);
   gtk_fixed_put(GTK_FIXED(owner->fixed), view->web, view->fill ? 0 : view->x, view->fill ? 0 : view->y);
+  pudu_view_interaction(view);
   gtk_widget_show(view->web);
   view->rules_outstanding = view->rules->len;
   if (view->rules->len == 0) {
@@ -289,6 +280,10 @@ static int32_t pudu_configure(PuduView *view, pudu_field *fields, int count) {
     view->ephemeral = TRUE;
   } else if (pudu_field_is(verb, "transparent") && count == 3) {
     view->transparent = TRUE;
+  } else if (pudu_field_is(verb, "file-drop") && count == 3) {
+    view->file_drop = TRUE;
+  } else if (pudu_field_is(verb, "window-authority")) {
+    return pudu_view_authority(view, fields, count);
   } else if (pudu_field_is(verb, "navigation-allow") && count == 4) {
     g_ptr_array_add(view->allowed, g_strdup(value));
   } else if (pudu_field_is(verb, "rules") && count == 4) {
@@ -366,10 +361,6 @@ static int32_t pudu_operate(PuduView *view, pudu_field *fields, int count) {
     webkit_web_view_set_zoom_level(web, g_ascii_strtod(value, NULL) / 1000.0);
   } else if (pudu_field_is(verb, "user-agent") && count == 4 && value != NULL) {
     webkit_settings_set_user_agent(webkit_web_view_get_settings(web), value);
-  } else if (pudu_field_is(verb, "devtools-open")) {
-    webkit_web_inspector_show(webkit_web_view_get_inspector(web));
-  } else if (pudu_field_is(verb, "devtools-close")) {
-    webkit_web_inspector_close(webkit_web_view_get_inspector(web));
   } else if (pudu_field_is(verb, "show")) {
     gtk_widget_show(view->web);
   } else if (pudu_field_is(verb, "hide")) {
@@ -377,11 +368,10 @@ static int32_t pudu_operate(PuduView *view, pudu_field *fields, int count) {
   } else if (pudu_field_is(verb, "focus")) {
     gtk_widget_grab_focus(view->web);
   } else if (pudu_field_is(verb, "close")) {
-    gtk_widget_destroy(view->web);
-    view->web = NULL;
+    pudu_view_closed(view);
     g_hash_table_remove(pudu_views, &view->id);
   } else {
-    return pudu_refuse(PUDU_WEBVIEW_MALFORMED, "unknown view command");
+    return pudu_view_extra(view, fields, count);
   }
   return PUDU_WEBVIEW_DONE;
 }
@@ -415,6 +405,7 @@ int32_t pudu_view_command(pudu_field *fields, int count) {
     view->scripts = g_ptr_array_new_with_free_func((GDestroyNotify)webkit_user_script_unref);
     view->allowed = g_ptr_array_new_with_free_func(g_free);
     view->rules = g_ptr_array_new_with_free_func(g_free);
+    view->window_actions = g_hash_table_new_full(g_str_hash, g_str_equal, g_free, g_free);
     g_hash_table_insert(pudu_views, pudu_key(id), view);
     return PUDU_WEBVIEW_DONE;
   }

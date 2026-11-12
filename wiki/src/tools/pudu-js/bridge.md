@@ -26,3 +26,11 @@ declarations live in `bridge.d.ts`.
 ## Referenced by
 
 [[Std Desktop Bridge]] · [[Desktop Bridge Generator]]
+
+Resolved Grill Log: the frozen window API invokes `pudu:window` and needs a per-action capability;
+the development inspector shortcut invokes `pudu:devtools`. Native drag messages carry only the
+action; the adapter checks application-granted authority and the main-frame origin.
+
+Resolved Grill Log: when the authenticated native handler exists, drag messages carry the invoke key and captured origin inside the bridge closure. The key is never exposed on the public bridge. The legacy frame-aware native handler remains supported.
+
+Resolved Grill Log: native interaction is asynchronous; the adapter owns authority and physical-press validation.

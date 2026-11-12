@@ -132,6 +132,8 @@ void pudu_native_window_opened(HWND hwnd) {
   HMENU menu = pudu_build_menu(pudu_menu_lines, unused, &valid);
   HMENU previous = GetMenu(hwnd);
   SetMenu(hwnd, menu);
+  DrawMenuBar(hwnd);
+  SetWindowPos(hwnd, nullptr, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE | SWP_FRAMECHANGED);
   if (previous != nullptr) {
     DestroyMenu(previous);
   }

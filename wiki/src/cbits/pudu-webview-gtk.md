@@ -49,3 +49,13 @@ Driven in CI by [[Webview GTK Harness]].
 ## Referenced by
 
 [[src/cbits/_MOC]] · [[architecture/DESKTOP-WEBVIEW]]
+
+Resolved Grill Log: dispatch window controls to the window unit, attach native state signals and preserve both minimum and maximum geometry hints. GTK windows hold an overlay for optional client chrome without changing the native-components box.
+
+Resolved Grill Log: window sizes and flags must fit native ranges; bare verbs reject extra fields. Geometry constraints are validated together before mutation.
+
+Resolved Grill Log: size-allocation updates fill views using their container, but reports window client dimensions through Resized so geometry queries and saved placements remain stable.
+
+Resolved Grill Log: a mutex serializes first initialization and all six public ABI entries use the same owning-thread guard, including respond. Workers must be refused before touching GTK or pending-request state.
+
+Resolved Grill Log: the GTK overlay wraps the fixed view container inside the native-components box, preserving the menu row above all view overlays.

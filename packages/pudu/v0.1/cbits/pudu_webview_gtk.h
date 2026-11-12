@@ -12,11 +12,17 @@ typedef struct {
   GtkWidget *window;
   /* The window's column: an optional menu bar above the fixed container. */
   GtkWidget *box;
+  GtkWidget *overlay;
+  GtkWidget *titlebar;
+  GtkWidget *overlaybar;
+  GtkCssProvider *background_css;
   GtkWidget *menubar;
   GtkAccelGroup *accelerators;
   GtkWidget *fixed;
   int width;
   int height;
+  int min_width, min_height, max_width, max_height;
+  gboolean minimizable, maximizable;
 } PuduWindow;
 
 /* One view: its configuration until realized, then its WebView. */
@@ -36,7 +42,12 @@ typedef struct {
   char *store;
   gboolean ephemeral;
   gboolean devtools;
+  gboolean inspector_open, inspector_requested;
   gboolean transparent;
+  gboolean file_drop, drop_inside;
+  GHashTable *window_actions;
+  char *native_key;
+  GdkEvent *press;
   double zoom;
   guint rules_outstanding;
   gboolean rules_failed;
@@ -52,6 +63,7 @@ extern GHashTable *pudu_views;
 extern GHashTable *pudu_pending;
 extern int64_t pudu_next_request;
 
+int32_t pudu_webview_guard(void);
 int32_t pudu_refuse(int32_t status, const char *reason);
 /* Queues one event of text fields and wakes the main context. */
 void pudu_event(const char *const *fields, int count);
@@ -65,5 +77,17 @@ int32_t pudu_view_command(pudu_field *fields, int count);
 int32_t pudu_native_command(pudu_field *fields, int count);
 /* Gives a newly opened window the application's menu bar. */
 void pudu_native_window_opened(PuduWindow *owner);
+GtkWidget *pudu_fixed_new(void);
+void pudu_window_hooks(PuduWindow *owner);
+void pudu_window_report(PuduWindow *owner);
+void pudu_window_title(PuduWindow *owner);
+void pudu_window_geometry(PuduWindow *owner);
+int32_t pudu_window_extra(PuduWindow *owner, pudu_field *fields, int count);
+WebKitWebContext *pudu_view_context(PuduView *view);
+void pudu_scheme_request(WebKitURISchemeRequest *request, gpointer data);
+void pudu_view_interaction(PuduView *view);
+void pudu_view_closed(PuduView *view);
+int32_t pudu_view_authority(PuduView *view, pudu_field *fields, int count);
+int32_t pudu_view_extra(PuduView *view, pudu_field *fields, int count);
 
 #endif

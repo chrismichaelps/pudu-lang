@@ -160,6 +160,21 @@ step('packages are accepted by their own tools', () => {
 });
 
 if (process.platform === 'darwin' && process.env.PUDU_DESKTOP_DRIVE === '1') {
+  step('logical applications keep website storage isolated', () => {
+    const result = run(pudu, ['run', 'test-fixtures/desktop/ApplicationIsolation.pudu']);
+    assert.equal(result.status, 0, result.output);
+    assert.match(result.output, /application isolation writer true/);
+    assert.match(result.output, /application isolation reader true/);
+    assert.match(result.output, /application isolation reopen true/);
+    assert.match(result.output, /application isolation completed/);
+  });
+  step('window IPC preserves state, refusals and close lifecycle', () => {
+    const result = run(pudu, ['run', 'test-fixtures/desktop/WindowLoop.pudu']);
+    assert.equal(result.status, 0, result.output);
+    assert.match(result.output, /window checkpoint main true/);
+    assert.match(result.output, /window checkpoint other true/);
+    assert.match(result.output, /window loop completed/);
+  });
   step('a live WebView answers typed calls, streams, bytes and refusals', () => {
     const result = spawnSync(pudu, ['run', 'Main.pudu'], {
       cwd: join(root, 'examples/desktop/Notes'),

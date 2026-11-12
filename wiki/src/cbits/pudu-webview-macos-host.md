@@ -28,3 +28,8 @@ Shared by [[Pudu Webview macOS Adapter]] and [[Pudu Webview macOS View]].
 ## Referenced by
 
 [[src/cbits/_MOC]]
+
+Resolved Grill Log: the window message delegate holds its view weakly; per-action origins are
+collected before realization and checked against the message's main-frame URL.
+
+Resolved Grill Log: declare private helpers for interactive view construction and window-action parsing; no public record-channel ABI entry point is added.

@@ -16,3 +16,8 @@ its message type.
 ## Referenced by
 
 [[Std Desktop Bridge]] · [[Std Desktop Ipc]]
+
+Resolved Grill Log: PuduWindow, PuduWindowState and PuduDrop describe the window controls and
+events, preserving the existing generic invoke/channel contract.
+
+Resolved Grill Log: `state()` documents last-observed snapshot semantics and requests a native refresh.

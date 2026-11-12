@@ -1,0 +1,34 @@
+module Std.Desktop.Reload
+
+import Std.Desktop.Protocol as Protocol
+import Std.Desktop.Webview as Webview
+import Std.Fs as Fs
+import Std.Path as Path
+
+/// Frontend modification times; files whose metadata cannot be read are omitted.
+export fn snapshot(root: Str) -> Map[Str, Int] {
+  var stamps: Map[Str, Int] = mapOf([])
+  if let Ok(paths) = Protocol.walk(root) {
+    for path in paths {
+      if let Ok(stamp) = Fs.modifiedAt(Path.join(root, path)) { stamps = stamps.insert(path, stamp) }
+    }
+  }
+  stamps
+}
+
+/// The commands a frontend change needs: style sheets swapped in place, or every view reloaded.
+export fn changed(before: &Map[Str, Int], after: &Map[Str, Int], views: &Array[Int]) -> Array[Array[Str]] {
+  var touched: Array[Str] = []
+  for (path, stamp) in *after {
+    if before.get(path) != Some(stamp) { touched = touched.push(path) }
+  }
+  for (path, _) in *before {
+    if after.get(path) == None { touched = touched.push(path) }
+  }
+  if touched.isEmpty() { return [] }
+  if touched.filter(fn(path: Str) -> Bool { !path.endsWith(".css") }).isEmpty() {
+    views.map(fn(id: Int) -> Array[Str] { Webview.evaluate(id, "", "window.__pudu && window.__pudu.__reloadStyles(), void 0") })
+  } else {
+    views.map(fn(id: Int) -> Array[Str] { Webview.reload(id) })
+  }
+}

@@ -39,3 +39,8 @@ Uses [[Std Json]]. Consumed by [[Std Desktop Ipc]] and [[Std Desktop App]].
 ## Referenced by
 
 [[src/Std/_MOC]]
+
+Resolved Grill Log: regenerate window controls, state/drop declarations and development inspector
+shortcuts from the tested JavaScript sources.
+
+Resolved Grill Log: regenerate the authenticated native-message path from the tested JavaScript source.

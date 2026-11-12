@@ -18,6 +18,8 @@ extra-source-files: cbits/pudu_desktop.h
                     cbits/pudu_webview_macos.h
                     cbits/pudu_webview_gtk.h
                     cbits/pudu_webview_win.h
+                    cbits/pudu_webview_win_sdk.h
+                    cbits/pudu_webview_policy_json.h
                     cbits/pudu_desktop_host.h
                     cbits/pudu_audio.h
                     cbits/pudu_audio_stream.h
@@ -524,6 +526,7 @@ library
                     cbits/pudu_webview_records.c
                     cbits/pudu_webview_macos.m
                     cbits/pudu_webview_macos_view.m
+                    cbits/pudu_webview_macos_window.m
                     cbits/pudu_webview_macos_native.m
                     cbits/pudu_audio.c
                     cbits/pudu_audio_stream.c
@@ -533,17 +536,28 @@ library
   if os(windows) && flag(webview2)
     c-sources:      cbits/pudu_webview_records.c
     cxx-sources:    cbits/pudu_webview_win.cpp
+                    cbits/pudu_webview_win_window.cpp
+                    cbits/pudu_webview_win_control.cpp
                     cbits/pudu_webview_win_view.cpp
+                    cbits/pudu_webview_win_environment.cpp
+                    cbits/pudu_webview_win_profile.cpp
+                    cbits/pudu_webview_win_request.cpp
+                    cbits/pudu_webview_win_policy.cpp
+                    cbits/pudu_webview_policy_json.cpp
                     cbits/pudu_webview_win_native.cpp
-    cxx-options:    -std=c++17
-    extra-libraries: ole32 user32 shlwapi comdlg32 crypt32 gdi32 stdc++
+    cxx-options:    -std=c++17 -fms-extensions
+    build-depends:  system-cxx-std-lib ==1.0
+    extra-libraries: ole32 user32 shlwapi comdlg32 crypt32 gdi32 uuid
     cpp-options:    -DPUDU_NATIVE_WEBVIEW
   if os(linux) && flag(webkitgtk)
     c-sources:      cbits/pudu_webview_records.c
                     cbits/pudu_webview_gtk.c
                     cbits/pudu_webview_gtk_view.c
+                    cbits/pudu_webview_gtk_context.c
+                    cbits/pudu_webview_gtk_window.c
+                    cbits/pudu_webview_gtk_interaction.c
                     cbits/pudu_webview_gtk_native.c
-    pkgconfig-depends: webkit2gtk-4.1, gtk+-3.0
+    pkgconfig-depends: webkit2gtk-4.1 >= 2.40, gtk+-3.0
     cpp-options:    -DPUDU_NATIVE_WEBVIEW
 
 executable pudu

@@ -44,3 +44,10 @@ Uses [[Pudu Webview Records]] and [[Pudu Webview macOS Host]]; views come from
 ## Referenced by
 
 [[src/cbits/_MOC]] · [[architecture/DESKTOP-WEBVIEW]]
+
+Resolved Grill Log: window state is reported after resize, focus loss and explicit window changes;
+state probes include initial placement so persistence never invents an origin.
+
+Resolved Grill Log: explicit show/hide/focus commands emit window state even when no focus transition occurs.
+
+Resolved Grill Log: response header/body slices share the ABI rule: NULL only for zero length, otherwise Invalid.

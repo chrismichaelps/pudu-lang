@@ -40,3 +40,5 @@ Implemented by [[Pudu Webview macOS Adapter]] and [[Pudu Webview GTK Adapter]]; 
 ## Referenced by
 
 [[src/cbits/_MOC]] · [[architecture/DESKTOP-WEBVIEW]]
+
+Resolved Grill Log: NULL is valid for a zero-length response header or body slice. A positive length with NULL is Invalid before request lookup; empty headers must still complete a valid request normally.

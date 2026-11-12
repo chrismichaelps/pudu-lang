@@ -21,7 +21,7 @@ tags: [moc, module, foreign, ffi]
 - [[Pudu Webview macOS Host]] · [[Pudu Webview macOS Adapter]] · [[Pudu Webview macOS View]] — WebKit windows, views, scheme requests and policy.
 - [[Pudu Webview macOS Native]] — menu bar, dialogs and native surfaces in a WebView window.
 - [[Pudu Webview GTK Adapter]] · [[Pudu Webview GTK Native]] — the same contract and components on WebKitGTK.
-- [[Pudu Webview Windows Host]] · [[Pudu Webview Windows Adapter]] · [[Pudu Webview Windows View]] · [[Pudu Webview Windows Native]] — the same contract and components on WebView2.
+- [[Pudu Webview Windows Host]] · [[Pudu Webview Windows Adapter]] · [[Pudu Webview Windows View]] · [[Pudu Webview Windows Native]] — the same contract and components on WebView2, with lifetime-scoped callback admission.
 - [[Pudu Audio Header]] — framework-neutral bounded device-playback ABI and stable statuses.
 - [[Pudu Audio Adapter]] — macOS Audio Queue ownership, preallocation, refill, deadline, and release.
 - [[Pudu Audio Stream Header]] — framework-neutral persistent-output ABI, snapshot layout, and stable statuses.
@@ -30,6 +30,21 @@ tags: [moc, module, foreign, ffi]
 
 - [[Desktop Presentation Test]] · [[Desktop Presentation Gate]] — native presentation orientation regression.
 
+
+- [[Pudu Webview macOS Window]] — window controls, state and permitted drag regions.
+
+- [[Pudu Webview GTK Host]] · [[Pudu Webview GTK Context]] · [[Pudu Webview GTK View]] · [[Pudu Webview GTK Window]] · [[Pudu Webview GTK Interaction]] — native state, controls and authenticated interaction.
+
+- [[Pudu Webview Windows Window]] — retained native geometry and size constraints.
+- [[Pudu Webview Windows Control]] — window chrome, state, fullscreen and state events.
+- [[Pudu Webview Windows Profile]] — verified named-store folders and private per-view profiles; [[Webview Storage Harness]] checks actual persistence.
+- [[Pudu Webview Windows Environment]] · [[Pudu Webview Windows Request]] — environment creation,
+  scheme/profile configuration and request/navigation policy.
+
 ## Referenced by
 
 [[src/_MOC]] · [[Foreign Call]] · [[ADR-0018 Calling a Library Written Elsewhere]]
+
+- [[Pudu Webview Policy JSON Header]] · [[Pudu Webview Policy JSON]] · [[Pudu Webview Windows Policy]] — structural JSON and complete compiled rule admission.
+
+- [[Pudu Webview Windows SDK]] — scoped compiler-aware COM interface UUID metadata.

@@ -150,9 +150,19 @@ without opening a window.
   several capabilities holds their union; any deny wins; nothing is granted by default.
 - **Origins.** Bundled pages are `pudu://app`. A remote origin may call the program only when a
   capability names it; development servers are admitted only in dev mode.
-- **Isolation.** Each WebView has its own data store, keyed by its label, so storage, cookies and
-  caches are never shared unless two WebViews name the same store. A WebView marked `ephemeral` keeps
-  nothing.
+- **Isolation.** App keys persistent stores by the canonical JSON pair `[app.name, view.label]`.
+  Distinct logical application names remain separate even when their view labels match. Reusing
+  both names intentionally shares storage under the same launcher; the logical name is stable
+  storage identity, independent of window titles. Changing it starts fresh storage. Old label-only
+  stores are bypassed because they may contain unrelated applications' data. Low-level WebViews
+  share only when they explicitly name the same store; an unnamed view is private to itself on
+  every adapter, and a label spelled `default` is an ordinary name. An `ephemeral` view keeps
+  nothing. A view that asked for private storage is never given persistent storage: when the
+  platform cannot provide it, the view is refused (`Refused`) and the application stops with a
+  typed Platform or Unsupported error. Windows store folders live in a versioned namespace keyed
+  by SHA-256 of the label and confirmed by an identity file ([[Pudu Webview Windows Profile]]);
+  earlier digest folders are bypassed, not migrated. A pending request belongs to the view that
+  received it and is answered, or abandoned at that view's close, exactly once.
 - **Navigation.** A WebView may navigate only to its own origin and the patterns its configuration
   allows; any other navigation is cancelled and reported as `navigation-blocked`, and a request to
   open a new window is cancelled and reported, so the program may open it in the system browser.
@@ -170,6 +180,52 @@ the missing permissions named. Request blocking compiles to the platform's decla
 format, so a blocked request never leaves the WebView and no per-request round trip to the program
 is paid. Injected code is wrapped so it runs only where its patterns match.
 
+## Window controls and state
+
+[[Std Desktop Window]] builds chrome commands and validates frontend actions. The frozen
+`window.__pudu.window` API calls `pudu:window`; each action needs `window:<action>` for its view
+and origin. Values must be strings in an array and satisfy the capability's scopes. There is no
+window-control grant by default. A native refusal becomes an IPC failure and leaves the application
+running; close is answered before the backend releases the window.
+
+[[Std Desktop Chrome]] folds native state, scale, theme and placement events into loop state and
+routes state/drop/inspector events to the affected views. `window.state()` returns the last observed
+backend snapshot and requests a native refresh for subsequent events. `rememberWindows` opts into placement
+persistence by window label. `ViewPlan.fileDrop` opts into receiving file paths rather than letting
+the renderer navigate to dropped files. Paths use a JSON-array field to retain arbitrary filenames.
+
+On macOS, [[Pudu Webview macOS Window]] implements minimize/maximize, chrome flags, titlebar styles,
+background, attention, badges, content protection, printing and data clearing. Native drag regions
+require an unscoped `window:drag` grant, and double-click maximize requires
+`window:toggle-maximize`; messages are restricted to the configured main-frame origin and dragging
+also requires a held mouse-down belonging to that window. Script messages alone cannot start a drag.
+
+On Linux, [[Pudu Webview GTK Window]] and [[Pudu Webview GTK Interaction]] implement state, chrome,
+transparent/overlay titlebars, inspection, printing, opt-in file drops and authenticated drag regions.
+GTK native script callbacks do not supply frame metadata, so the bridge sends its private view key
+and captured origin through an authenticated native handler. The adapter checks both against the
+application's per-action grant and the current native top-level origin; dragging also requires a
+physical press for the active view and a held button. [[Webview Drive Harness]] verifies real
+window-manager state transitions under a virtual display. Desktop-specific badges and capture
+protection explicitly answer Unsupported on this backend.
+
+[[Pudu Webview GTK Context]] gives unnamed native views private ephemeral contexts. Explicitly
+named persistent stores share one process-owned context; requests still route by their native
+originating WebView. The context remains alive across last-view close/reopen and pending clearing,
+so a second manager cannot overlap the same database. Native storage tests prove both default
+isolation and explicit sharing, including request-view identity and pending-clear reopening.
+
+Windows now enforces client-size limits through [[Pudu Webview Windows Window]], including menu
+wrapping and native sizing, but still needs additional state/chrome/interaction controls. Optional
+startup configuration is probed separately from mandatory records; unsupported actions return
+typed IPC failures. Linux native and GTK-enabled compiler application checks pass locally.
+
+Windows environment creation and request policy are separate bounded units. Structural JSON and
+transactional policy compilation now preserve every accepted URL/resource/main-domain condition;
+unsupported conditions refuse rather than disappearing. Native requests and generated style rules
+share bounded evaluation budgets. Actual cookie/network actions and native selector-failure
+reporting remain required evidence before complete Windows plugin-policy conformance is claimed.
+
 ## Developer experience
 
 - `pudu desktop init <dir>` writes a working application: `pudu-desktop.toml`, `src/Main.pudu`,
@@ -177,6 +233,9 @@ is paid. Injected code is wrapped so it runs only where its patterns match.
 - `pudu desktop dev` runs the program under `pudu run --watch` with `PUDU_DESKTOP_DEV=1`; the run
   loop then enables the inspector, forwards console errors, and watches the frontend directory —
   a stylesheet change swaps styles in place, any other change reloads the page.
+- In development, the inspector opens by default (`openDevtools` can disable auto-open), and F12,
+  Cmd-Option-I or Ctrl-Shift-I requests a toggle. Release pages cannot use that shortcut. Programmatic
+  opening remains conditional on platform support; an unavailable inspector does not abort startup.
 - `pudu desktop types`, `build`, `bundle`, `keygen`, `sign` and `manifest` cover the release path.
 
 ## Packaging
@@ -234,9 +293,41 @@ them ([[Pudu Webview macOS Native]], [[Pudu Webview GTK Native]], [[Pudu Webview
 
 | Target | Adapter | Status |
 | --- | --- | --- |
-| macOS | WebKit through AppKit | **Ready**; driven live by [[Desktop Webview Gate]] and [[Desktop Webview CI]] |
-| Linux | WebKitGTK | **Ready** behind the `webkitgtk` cabal flag; [[Desktop Webview CI]] drives it under a virtual display |
-| Windows | WebView2 | **Ready** behind the `webview2` cabal flag (WebView2 SDK headers on the include path, `WebView2Loader.dll` beside the program); [[Desktop Webview CI]] drives it |
+| macOS | WebKit through AppKit | Native and compiler application gates pass locally; complete product acceptance still requires the evidence below |
+| Linux | WebKitGTK | Native harness and compiler application checks pass locally behind `webkitgtk`; current application CI changes remain unpublished |
+| Windows | WebView2 | Committed adapter harness passed CI behind `webview2`; current geometry/ownership pass cross-build and Wine checks. Compiler application execution, current-delta Windows CI and policy conformance remain unproved |
+
+## Product completion evidence
+
+A passing adapter harness establishes its tested native behavior only. Completion requires the
+whole application, packaging and developer workflow on each supported platform. Historical CI on
+the committed foundation does not validate the uncommitted continuation. The following obligations
+preserve the full desktop scope; an unproved row stays open even when its implementation exists.
+
+| Requirement | Required evidence before completion | Current limit |
+| --- | --- | --- |
+| Native embedding and multiple views | Real compiler application with multiple windows and multiple views per window on all three targets | macOS/GTK application gates pass; Windows compiler application and complete multiple-view coverage remain open |
+| Secure local origin and view controls | Local assets, denied navigation, JavaScript, zoom and user agent exercised through the application loop | Native tests exist; complete cross-platform application matrix remains open |
+| Complete inspector support | Actual inspection, console, network and debugger workflow in development on each target, with release admission checks | Inspector opening/shortcuts exist; complete workflow evidence remains open |
+| Typed IPC and generated types | Success, typed failures, request/reply, events, channels and binary payloads through the real renderer; strict generated TypeScript check | Module/bridge and native application checks cover substantial paths; complete Windows execution remains open |
+| IPC performance and binary efficiency | Measured end-to-end latency and binary-transfer behavior against explicit workload/budget | Raw byte transport exists; complete performance acceptance remains open |
+| All package formats | Install and launch actual .app/.dmg, .deb/.rpm/AppImage, NSIS and MSI outputs on supported targets | Writers/tool adapters exist; complete installed-artifact matrix remains open |
+| Signing and declarative distribution | Bundle configuration drives real signing, verification and macOS notarization/stapling with failure diagnostics | Tool invocation paths exist; credential-backed end-to-end evidence remains open |
+| Asset and binary optimization | Reproducible release artifacts demonstrate packed assets, source-map removal, symbol stripping and measured size changes | Packaging paths exist; complete artifact/size evidence remains open |
+| Automatic updates | Signed full/delta delivery, channels, background responsiveness, interrupted install and next-start rollback/confirmation on each target | Local cryptographic/staging/rollback tests pass; complete installed-application platform matrix remains open |
+| Isolation and secure defaults | Denied/allowed capabilities, origins and plugin scopes; real unnamed/ephemeral separation and intentional named-store sharing | App namespace checks pass on macOS/GTK; unnamed-view isolation is proved on real macOS and GTK renderers. Windows private admission, path safety, unnamed privacy, store identity and native record ownership are corrected and proved with counted doubles under emulation; real Windows persisted-store reopen and private isolation remain open |
+| Full development reload | Frontend asset changes and backend changes preserve the declared lifecycle, types and useful cross-boundary errors in a running app | Reload/error paths exist; complete hot-reload workflow evidence remains open |
+| Plugin execution and ecosystem | Permission refusal, injection timing, URL/navigation scoping, page modification and real request/cookie blocking with representative plugins | Modules and macOS/GTK network probes pass; complete Windows network/selector and integrated plugin evidence remains open |
+| Hybrid UI and expansion | Native menu/dialog/surface responses alongside WebViews, representative reusable integrations and measured optimization workloads | Native component adapters exist; complete interaction and expansion evidence remains open |
+| Delivery and maintenance | Code/wiki parity, independent review, focused/full validation and reviewable partitions targeting dev | Bounded reviews pass; current full-suite/CI evidence and delivery partitioning remain open |
+
+Windows storage admission and native record ownership now follow the isolation contract above:
+private requests never fall back to persistent controllers, store paths refuse missing or truncated
+inputs before realization, and pending requests finish exactly once with their own view's
+environment ([[Webview Windows Profile Harness]], [[Webview Windows Ownership Harness]]). Those
+harnesses use counted doubles; they prove branch behavior, not storage on the real runtime. The
+remaining Windows sequence is the compiler application build, then real-runtime storage evidence:
+a named store reopened with its data, and unnamed/ephemeral views that see none of it.
 
 ## Referenced by
 

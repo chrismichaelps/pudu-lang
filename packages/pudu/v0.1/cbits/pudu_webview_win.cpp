@@ -72,6 +72,40 @@ std::string pudu_text(pudu_field field) {
   return std::string(reinterpret_cast<const char *>(field.data), field.length);
 }
 
+/* The view an event belongs to, or nothing once it was closed. */
+PuduView *pudu_view_named(int64_t id) {
+  auto found = pudu_host().views.find(id);
+  return found == pudu_host().views.end() ? nullptr : found->second.get();
+}
+
+PuduViewRef pudu_view_reference(PuduView *view) { return {view->id, view->lifetime}; }
+
+PuduView *pudu_view_named(const PuduViewRef &reference) {
+  auto lifetime = reference.lifetime.lock();
+  PuduView *view = pudu_view_named(reference.id);
+  return lifetime && view != nullptr && view->lifetime == lifetime ? view : nullptr;
+}
+
+void pudu_close_view(PuduView *view) {
+  std::shared_ptr<int> lifetime = std::move(view->lifetime);
+  if (lifetime) {
+    /* Pending requests leave before native Close, which may synchronously dispatch callbacks. */
+    pudu_abandon_requests(lifetime);
+    if (view->controller != nullptr) view->controller->Close();
+  }
+  if (ICoreWebView2 *web = std::exchange(view->web, nullptr)) web->Release();
+  if (ICoreWebView2Controller *controller = std::exchange(view->controller, nullptr)) controller->Release();
+  if (ICoreWebView2Environment *environment = std::exchange(view->environment, nullptr)) environment->Release();
+}
+
+std::string pudu_take(LPWSTR text) {
+  std::string narrow = pudu_narrow(text);
+  CoTaskMemFree(text);
+  return narrow;
+}
+
+std::string pudu_label(PuduView *view) { return std::to_string(view->id); }
+
 static PuduWindow *pudu_window_of(HWND hwnd) {
   return reinterpret_cast<PuduWindow *>(GetWindowLongPtrW(hwnd, GWLP_USERDATA));
 }
@@ -91,17 +125,45 @@ void pudu_fit_views(int64_t window) {
   }
 }
 
+#ifndef WM_DPICHANGED
+#define WM_DPICHANGED 0x02E0
+#endif
+
 static LRESULT CALLBACK pudu_window_proc(HWND hwnd, UINT message, WPARAM wparam, LPARAM lparam) {
   PuduWindow *owner = pudu_window_of(hwnd);
   if (owner != nullptr) {
     std::string id = std::to_string(owner->id);
     switch (message) {
+      case WM_WINDOWPOSCHANGING: {
+        LRESULT result = DefWindowProcW(hwnd, message, wparam, lparam);
+        pudu_window_position(owner, reinterpret_cast<WINDOWPOS *>(lparam));
+        return result;
+      }
+      case WM_SIZING:
+        if (pudu_window_sizing(owner, (UINT)wparam, reinterpret_cast<RECT *>(lparam))) return TRUE;
+        break;
+      case WM_GETMINMAXINFO:
+        pudu_window_limits(owner, reinterpret_cast<MINMAXINFO *>(lparam));
+        return 0;
       case WM_CLOSE:
         pudu_event({"close-requested", id});
         return 0;
       case WM_SIZE:
         pudu_fit_views(owner->id);
         pudu_event({"resized", id, std::to_string(LOWORD(lparam)), std::to_string(HIWORD(lparam))});
+        pudu_window_report(owner, false);
+        break;
+      case WM_WINDOWPOSCHANGED:
+        if (reinterpret_cast<WINDOWPOS *>(lparam)->flags & (SWP_SHOWWINDOW | SWP_HIDEWINDOW)) pudu_window_report(owner, false);
+        break;
+      case WM_DPICHANGED:
+        pudu_window_report(owner, false);
+        break;
+      case WM_SETTINGCHANGE:
+        if (lparam != 0 && lstrcmpW(reinterpret_cast<LPCWSTR>(lparam), L"ImmersiveColorSet") == 0) pudu_window_theme();
+        break;
+      case WM_ERASEBKGND:
+        if (pudu_window_erase(owner, reinterpret_cast<HDC>(wparam))) return 1;
         break;
       case WM_MOVE:
         pudu_event({"moved", id, std::to_string((short)LOWORD(lparam)), std::to_string((short)HIWORD(lparam))});
@@ -113,6 +175,7 @@ static LRESULT CALLBACK pudu_window_proc(HWND hwnd, UINT message, WPARAM wparam,
         break;
       case WM_ACTIVATE:
         pudu_event({"focused", id, LOWORD(wparam) == WA_INACTIVE ? "0" : "1"});
+        pudu_window_report(owner, false);
         break;
       default:
         break;
@@ -148,7 +211,7 @@ static int32_t pudu_window_command(pudu_field *fields, int count) {
   if (pudu_field_is(fields[2], "open")) {
     int64_t width = 0, height = 0, resizable = 0;
     if (count != 7 || pudu_field_int(fields[4], &width) != 0 || pudu_field_int(fields[5], &height) != 0 ||
-        pudu_field_int(fields[6], &resizable) != 0 || width <= 0 || height <= 0) {
+        pudu_field_int(fields[6], &resizable) != 0 || width <= 0 || height <= 0 || (resizable != 0 && resizable != 1)) {
       return pudu_refuse(PUDU_WEBVIEW_MALFORMED, "window open needs a title, a positive size and a resizable flag");
     }
     if (host.windows.count(id) != 0) {
@@ -158,12 +221,14 @@ static int32_t pudu_window_command(pudu_field *fields, int count) {
     if (resizable == 0) {
       style &= ~(WS_THICKFRAME | WS_MAXIMIZEBOX);
     }
-    RECT bounds = {0, 0, (LONG)width, (LONG)height};
-    AdjustWindowRect(&bounds, style, FALSE);
+    SIZE bounds;
+    if (!pudu_window_outer(style, 0, FALSE, width, height, &bounds))
+      return pudu_refuse(PUDU_WEBVIEW_INVALID, "window dimensions exceed native coordinates");
     auto owner = std::make_unique<PuduWindow>();
     owner->id = id;
+    owner->resizable = resizable != 0;
     owner->hwnd = CreateWindowExW(0, PUDU_WINDOW_CLASS, pudu_wide(pudu_text(fields[3])).c_str(), style, CW_USEDEFAULT,
-                                  CW_USEDEFAULT, bounds.right - bounds.left, bounds.bottom - bounds.top, nullptr, nullptr,
+                                  CW_USEDEFAULT, bounds.cx, bounds.cy, nullptr, nullptr,
                                   GetModuleHandleW(nullptr), nullptr);
     if (owner->hwnd == nullptr) {
       return pudu_refuse(PUDU_WEBVIEW_PLATFORM, "the window could not be created");
@@ -182,12 +247,9 @@ static int32_t pudu_window_command(pudu_field *fields, int count) {
   bool pair = count == 5 && pudu_field_int(fields[3], &a) == 0 && pudu_field_int(fields[4], &b) == 0;
   if (pudu_field_is(fields[2], "title") && count == 4) {
     SetWindowTextW(hwnd, pudu_wide(pudu_text(fields[3])).c_str());
-  } else if (pudu_field_is(fields[2], "size") && pair) {
-    RECT bounds = {0, 0, (LONG)a, (LONG)b};
-    AdjustWindowRect(&bounds, (DWORD)GetWindowLongW(hwnd, GWL_STYLE), FALSE);
-    SetWindowPos(hwnd, nullptr, 0, 0, bounds.right - bounds.left, bounds.bottom - bounds.top, SWP_NOMOVE | SWP_NOZORDER);
-  } else if ((pudu_field_is(fields[2], "min-size") || pudu_field_is(fields[2], "max-size")) && pair) {
-    /* Size limits are enforced by the program's own resize handling on this platform. */
+  } else if ((pudu_field_is(fields[2], "size") || pudu_field_is(fields[2], "min-size") ||
+              pudu_field_is(fields[2], "max-size")) && pair) {
+    return pudu_window_geometry(found->second.get(), pudu_text(fields[2]), a, b);
   } else if (pudu_field_is(fields[2], "position") && pair) {
     SetWindowPos(hwnd, nullptr, (int)a, (int)b, 0, 0, SWP_NOSIZE | SWP_NOZORDER);
   } else if (pudu_field_is(fields[2], "center")) {
@@ -202,23 +264,27 @@ static int32_t pudu_window_command(pudu_field *fields, int count) {
   } else if (pudu_field_is(fields[2], "hide")) {
     ShowWindow(hwnd, SW_HIDE);
   } else if (pudu_field_is(fields[2], "fullscreen") && count == 4) {
-    ShowWindow(hwnd, pudu_field_is(fields[3], "1") ? SW_MAXIMIZE : SW_RESTORE);
+    return pudu_window_fullscreen(found->second.get(), pudu_field_is(fields[3], "1"));
   } else if (pudu_field_is(fields[2], "close")) {
+    auto closingWindow = std::move(found->second);
+    host.windows.erase(found);
+    std::vector<std::unique_ptr<PuduView>> closing;
     for (auto view = host.views.begin(); view != host.views.end();) {
       if (view->second->window == id) {
-        if (view->second->controller != nullptr) {
-          view->second->controller->Close();
-        }
+        closing.push_back(std::move(view->second));
         view = host.views.erase(view);
       } else {
         ++view;
       }
     }
     SetWindowLongPtrW(hwnd, GWLP_USERDATA, 0);
+    for (const auto &view : closing) pudu_close_view(view.get());
     DestroyWindow(hwnd);
-    host.windows.erase(found);
+    if (closingWindow->background != nullptr) DeleteObject(closingWindow->background);
   } else {
-    return pudu_refuse(PUDU_WEBVIEW_MALFORMED, "unknown window verb");
+    std::vector<std::string> record;
+    for (int index = 0; index < count; index++) record.push_back(pudu_text(fields[index]));
+    return pudu_window_extra(found->second.get(), record);
   }
   return PUDU_WEBVIEW_DONE;
 }
@@ -317,7 +383,7 @@ extern "C" int32_t pudu_webview_respond(int64_t request, int32_t status, const u
   if (!pudu_ready()) {
     return PUDU_WEBVIEW_NOT_MAIN;
   }
-  if (status < 100 || status > 599 || (body == nullptr && body_length > 0)) {
+  if (status < 100 || status > 599 || (head == nullptr && head_length > 0) || (body == nullptr && body_length > 0)) {
     return PUDU_WEBVIEW_INVALID;
   }
   PuduHost &host = pudu_host();
@@ -325,9 +391,10 @@ extern "C" int32_t pudu_webview_respond(int64_t request, int32_t status, const u
   if (found == host.pending.end()) {
     return PUDU_WEBVIEW_GONE;
   }
-  PuduPending pending = found->second;
+  PuduPending pending = std::move(found->second);
   host.pending.erase(found);
-  std::string headers(reinterpret_cast<const char *>(head), head_length);
+  std::string headers;
+  if (head_length > 0) headers.assign(reinterpret_cast<const char *>(head), head_length);
   std::string crlf;
   for (char c : headers) {
     if (c == '\n') {
@@ -355,24 +422,15 @@ extern "C" int32_t pudu_webview_respond(int64_t request, int32_t status, const u
       stream->SetSize(size);
     }
   }
-  ICoreWebView2Environment *environment = nullptr;
-  for (auto &entry : host.views) {
-    if (entry.second->environment != nullptr) {
-      environment = entry.second->environment;
-      break;
-    }
-  }
   int32_t answer = PUDU_WEBVIEW_GONE;
   ICoreWebView2WebResourceResponse *response = nullptr;
-  if (environment != nullptr &&
-      SUCCEEDED(environment->CreateWebResourceResponse(stream, status, pudu_reason(status), pudu_wide(crlf).c_str(), &response))) {
-    pending.args->put_Response(response);
+  if (!pending.lifetime.expired() && pending.environment != nullptr &&
+      SUCCEEDED(pending.environment->CreateWebResourceResponse(stream, status, pudu_reason(status), pudu_wide(crlf).c_str(), &response)) &&
+      response != nullptr) {
+    if (SUCCEEDED(pending.args->put_Response(response))) answer = PUDU_WEBVIEW_DONE;
     response->Release();
-    answer = PUDU_WEBVIEW_DONE;
   }
-  pending.deferral->Complete();
-  pending.deferral->Release();
-  pending.args->Release();
+  pudu_finish_request(pending);
   if (stream != nullptr) {
     stream->Release();
   }

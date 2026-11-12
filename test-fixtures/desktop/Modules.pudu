@@ -4,14 +4,17 @@ import Std.Bytes as Bytes
 import Std.Crypto.Sign as Sign
 import Std.Desktop.Bridge as Bridge
 import Std.Desktop.Capability as Capability
+import Std.Desktop.Chrome as Chrome
 import Std.Desktop.Delta as Delta
 import Std.Desktop.Ipc as Ipc
 import Std.Desktop.Native as Native
 import Std.Desktop.Plugin as Plugin
 import Std.Desktop.Protocol as Protocol
 import Std.Desktop.Records as Records
+import Std.Desktop.Reload as Reload
 import Std.Desktop.Shape as Shape
 import Std.Desktop.Webview as Webview
+import Std.Desktop.Window as Window
 import Std.Json as Json
 import Std.Ui.Canvas as Canvas
 
@@ -132,7 +135,7 @@ fn plugins(tally: Tally) -> Tally {
   t = check(t, "undeclared use refused", Plugin.check(&sneaky, &["block-requests", "inject-style"]) == Err(Plugin.MissingPermission("blocker", "block-requests")))
   t = check(t, "permission names parse", Plugin.parsePermission("invoke:save") == Some(Plugin.Invoke("save")) && Plugin.parsePermission("invoke") == None && Plugin.parsePermission("teleport") == None)
   t = check(t, "authority wildcard is bounded", Plugin.regexOf("https://*.example.com/*") == "^https:\\/\\/[^/?#@]*\\.example\\.com\\/.*$")
-  t = check(t, "rules compile", Plugin.rulesJson(&blocker.rules) == "[\{\"trigger\":\{\"url-filter\":\"^https:\\\\/\\\\/ads\\\\.example\\\\.com\\\\/.*$\",\"resource-type\":[\"script\"]\},\"action\":\{\"type\":\"block\"\}\}]")
+  t = check(t, "rules compile", Plugin.rulesJson(&blocker.rules) == "[\{\"trigger\":\{\"url-filter\":\"^https:\\\\/\\\\/ads\\\\.example\\\\.com\\\\/.*$\",\"url-filter-is-case-sensitive\":true,\"resource-type\":[\"script\"]\},\"action\":\{\"type\":\"block\"\}\}]")
   let applied = Plugin.apply(&Webview.newView(1, 1), &[blocker])
   t = check(t, "plugin contents reach the view", applied.scripts.length() == 1 && applied.rules.length() == 1)
   t
@@ -245,6 +248,67 @@ fn updates(tally: Tally) -> Tally {
   t
 }
 
+fn windows(tally: Tally) -> Tally {
+  var t = tally
+  t = check(t, "window size builds", Window.action(4, "size", &["800", "600"]) == Ok(["window", "4", "size", "800", "600"]))
+  t = check(t, "negative size refused", Window.action(4, "size", &["-1", "600"]) == Err("size was given values it cannot use"))
+  t = check(t, "fractional size refused", Window.action(4, "size", &["1.5", "600"]) == Err("size was given values it cannot use"))
+  t = check(t, "extra values refused", Window.action(4, "close", &["extra"]) == Err("close was given values it cannot use"))
+  t = check(t, "unknown action refused", Window.action(4, "execute", &[]) == Err("execute is not a window action"))
+  t = check(t, "bad flag refused", Window.action(4, "fullscreen", &["yes"]) == Err("fullscreen was given values it cannot use"))
+  t = check(t, "flag normalized", Window.action(4, "fullscreen", &["true"]) == Ok(["window", "4", "fullscreen", "1"]))
+  t = check(t, "close in action catalogue", Window.actions().contains("close"))
+  let grants = Capability.Grants{capabilities: [Capability.Capability {
+        ..Capability.capability("windows"), views: ["main"],
+        allow: [Capability.permit("window:state"), Capability.permit("window:close"), Capability.permitWithin("window:title", &["Notes*"], &["Notes secret*"])],
+        deny: ["window:hide"]
+      }] }
+  let known = Chrome.tracked()
+  let call = fn(name: Str, values: Array[Str]) -> Bytes {
+    Json.encode(&Json.object(&[("action", Json.Text(name)), ("values", Json.list(&values.map(fn(value: Str) -> Json.Json { Json.Text(value) })))])).toBytes()
+  }
+  let query = Chrome.windowCall(&grants, &known, "main", "pudu://app", 4, &call("state", []))
+  t = check(t, "window state permitted", query.response.status == 200)
+  t = check(t, "window close requested", Chrome.windowCall(&grants, &known, "main", "pudu://app", 4, &call("close", [])).closing)
+  t = check(t, "window close validates values", Chrome.windowCall(&grants, &known, "main", "pudu://app", 4, &call("close", ["extra"])).response.status == 400)
+  t = check(t, "window deny wins", Chrome.windowCall(&grants, &known, "main", "pudu://app", 4, &call("hide", [])).response.status == 403)
+  t = check(t, "window foreign origin denied", Chrome.windowCall(&grants, &known, "main", "https://other.example", 4, &call("state", [])).response.status == 403)
+  t = check(t, "window other view denied", Chrome.windowCall(&grants, &known, "other", "pudu://app", 4, &call("state", [])).response.status == 403)
+  t = check(t, "window title scope permits", Chrome.windowCall(&grants, &known, "main", "pudu://app", 4, &call("title", ["Notes today"])).response.status == 200)
+  t = check(t, "window title scope refuses", Chrome.windowCall(&grants, &known, "main", "pudu://app", 4, &call("title", ["Other"])).response.status == 403)
+  t = check(t, "window title scope deny wins", Chrome.windowCall(&grants, &known, "main", "pudu://app", 4, &call("title", ["Notes secret key"])).response.status == 403)
+  t = check(t, "malformed window JSON refused", Chrome.windowCall(&grants, &known, "main", "pudu://app", 4, &"\{".toBytes()).response.status == 400)
+  let malformed = "\{\"action\":\"close\",\"values\":\{\}\}".toBytes()
+  t = check(t, "object window values refused", Chrome.windowCall(&grants, &known, "main", "pudu://app", 4, &malformed).response.status == 400)
+  t = check(t, "data clear completion decoded", Webview.decodeEvents(&[["data-cleared", "10"]]) == [Webview.DataCleared(10)])
+  t = check(t, "data clear failure retained", Webview.decodeEvents(&[["data-clear-failed", "10", "denied"]]) == [Webview.DataClearFailed(10, "denied")])
+  let refusals = Webview.decodeEvents(&[["refused", "10", "unsupported", "old runtime"], ["refused", "11", "platform", "no folder"], ["refused", "12", "other", "kept"]])
+  t = check(t, "admission refusals typed", refusals == [Webview.Refused(10, Webview.Unsupported), Webview.Refused(11, Webview.Platform("no folder")), Webview.Refused(12, Webview.Platform("kept"))])
+  let paths = ["/tmp/two\nlines", "/tmp/café"]
+  let drops = Webview.decodeEvents(&[["drop", "10", "5", "6", Json.encode(&Json.list(&paths.map(fn(path: Str) -> Json.Json { Json.Text(path) })))]])
+  t = check(t, "drop filenames preserved", drops == [Webview.Dropped(10, 5, 6, paths)])
+  let holders = [Chrome.Holder{view: 10, window: 4}, Chrome.Holder{view: 11, window: 5}]
+  let (_, lateDrop) = Chrome.observe(&known, &Webview.Dropped(99, 1, 2, paths), &holders)
+  let (_, lateInspector) = Chrome.observe(&known, &Webview.DevtoolsChanged(99, true), &holders)
+  t = check(t, "late drop for closed view ignored", lateDrop.isEmpty())
+  t = check(t, "late inspector for closed view ignored", lateInspector.isEmpty())
+  let reported = Webview.WindowState{minimized: false, maximized: true, fullscreen: false, visible: true, focused: true}
+  let (observed, notifications) = Chrome.observe(&known, &Webview.WindowChanged(4, reported), &holders)
+  t = check(t, "window state retained", observed.states.get(4) == Some(reported))
+  t = check(t, "window state routes to owning view", notifications.length() == 1 && notifications[0][1] == "10")
+  let (scaled, _) = Chrome.observe(&observed, &Webview.ScaleChanged(4, 2000), &holders)
+  t = check(t, "window scale retained", Json.field(&Chrome.stateJson(&scaled, 4), "scale") == Some(Json.Number(2000)))
+  let (moved, _) = Chrome.observe(&scaled, &Webview.Moved(4, 20, 30), &holders)
+  let (sized, _) = Chrome.observe(&moved, &Webview.Resized(4, 800, 600), &holders)
+  t = check(t, "window placement merges events", sized.places.get(4) == Some(Chrome.Placement{x: 20, y: 30, width: 800, height: 600}))
+  let old: Map[Str, Int] = mapOf([("main.css", 1)])
+  t = check(t, "unchanged frontend quiet", Reload.changed(&old, &old, &[10]).isEmpty())
+  let styles = Reload.changed(&old, &mapOf([("main.css", 2)]), &[10])
+  t = check(t, "style change evaluates reload", styles.length() == 1 && styles[0][2] == "eval")
+  t = check(t, "removed page reloads", Reload.changed(&mapOf([("index.html", 1)]), &mapOf([]), &[10]) == [Webview.reload(10)])
+  t
+}
+
 fn main() {
   var tally = Tally{passed: 0, failed: []}
   tally = records(tally)
@@ -255,6 +319,7 @@ fn main() {
   tally = ipc(tally)
   tally = native(tally)
   tally = updates(tally)
+  tally = windows(tally)
   for name in tally.failed { let _ = print("FAILED " + name) }
   let _ = print("desktop modules passed {tally.passed} failed {tally.failed.length()}")
 }

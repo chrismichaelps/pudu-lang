@@ -28,3 +28,9 @@ example's self-test in a live WebView.
 ## Referenced by
 
 [[Repository Gates]] · [[Std Desktop App]] · [[architecture/DESKTOP-WEBVIEW]]
+
+Resolved Grill Log: on a live macOS run also require [[Desktop Window Loop Fixture]] to report
+both window checkpoints and return after IPC close; preserve the existing Notes self-test.
+
+Resolved Grill Log: run [[Desktop Application Isolation Fixture]] through the live compiler and
+require writer/reader checkpoints plus completion. Any failed checkpoint exits unsuccessfully.

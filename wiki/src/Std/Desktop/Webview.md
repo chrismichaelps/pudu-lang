@@ -48,3 +48,16 @@ Uses [[Std Desktop Records]] and the prelude `webview*` effects ([[Eval Webview]
 ## Referenced by
 
 [[src/Std/_MOC]] · [[architecture/DESKTOP-WEBVIEW]]
+
+Resolved Grill Log: decode window-state, scale, theme, inspector and file-drop events through the
+existing factory table. File-drop interception is opt-in before realization.
+
+Resolved Grill Log: file-drop paths occupy one JSON-array field, preserving embedded newlines and Unicode filenames.
+
+Resolved Grill Log: successful data clearing retains `data-cleared <view>`; asynchronous failure is `data-clear-failed <view> <detail>` and decodes to `DataClearFailed`, preserving failure information rather than producing Unknown.
+
+Resolved Grill Log: a view whose native admission is refused after `realize` returned reports
+`refused <view> <unsupported|platform> <reason>`, decoded as `Refused(view, Unsupported)` or
+`Refused(view, Platform(reason))`. It is distinct from `Crashed`: a crashed view was admitted and
+may be reloaded, while a refused view was closed by the adapter and never ran. An unrecognized
+status word decodes as `Platform` so the refusal is never lost.

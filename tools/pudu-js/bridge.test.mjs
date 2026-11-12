@@ -5,19 +5,21 @@ import vm from 'node:vm';
 
 const source = readFileSync(new URL('./bridge.js', import.meta.url), 'utf8');
 
-function page(config, answer) {
+function page(config, answer, authorized = false) {
   const sent = [];
   const reported = [];
   const handlers = {};
+  const posted = [];
   const window = {
     addEventListener(name, handler) {
       handlers[name] = handler;
     },
+    webkit: { messageHandlers: { [authorized ? "puduWindowAuthorized" : "puduWindow"]: { postMessage: (message) => posted.push(message) } } },
   };
   const context = {
     window,
     console: { error: (...parts) => reported.push(['error', parts]), warn: () => {}, log: () => {} },
-    document: { querySelectorAll: () => [] },
+    document: { querySelectorAll: () => [], addEventListener: (name, handler) => (handlers['document:' + name] = handler) },
     URL,
     location: { protocol: 'pudu:', host: 'app' },
     ArrayBuffer,
@@ -30,7 +32,7 @@ function page(config, answer) {
   };
   vm.createContext(context);
   vm.runInContext(`${source}(${JSON.stringify(config)});`, context);
-  return { bridge: window.__pudu, sent, reported, handlers };
+  return { bridge: window.__pudu, sent, reported, handlers, posted };
 }
 
 function reply(status, body, type = 'application/json') {
@@ -156,5 +158,54 @@ test('dev mode forwards uncaught errors with their position', async () => {
 test('the bridge cannot be replaced by the page', () => {
   const { bridge } = page({ key: 'k', label: '1' }, () => reply(200, ''));
   assert.equal(Object.isFrozen(bridge), true);
+  assert.equal('key' in bridge, false);
+});
+
+test('window actions are capability-checked calls to the reserved command', async () => {
+  const { bridge, sent } = page({ key: 'k', label: '1' }, () => reply(200, ''));
+  await bridge.window.setSize(800, 600);
+  await bridge.window.setAlwaysOnTop(true);
+  assert.equal(sent[0].url, 'pudu://app/.pudu/ipc/pudu%3Awindow');
+  assert.equal(sent[0].init.body, '{"action":"size","values":["800","600"]}');
+  assert.equal(sent[1].init.body, '{"action":"always-on-top","values":["true"]}');
+  assert.equal(Object.isFrozen(bridge.window), true);
+});
+
+test('a press on a drag region starts a native drag, a double press maximizes, controls are left alone', () => {
+  const { handlers, posted } = page({ key: 'k', label: '1' }, () => reply(200, ''));
+  const target = (region, control) => ({
+    closest: (selector) => (selector.startsWith('[data-pudu-drag-region]') ? region : control),
+  });
+  let prevented = 0;
+  const press = (detail, region, control) =>
+    handlers['document:mousedown']({ button: 0, detail, target: target(region, control), preventDefault: () => prevented++ });
+  press(1, {}, null);
+  press(2, {}, null);
+  press(1, {}, {});
+  press(1, null, null);
+  assert.deepEqual(posted, ['drag', 'toggle-maximize']);
+  assert.equal(prevented, 2);
+});
+
+test('the inspector shortcut toggles devtools in development only', async () => {
+  const dev = page({ key: 'k', label: '1', dev: true }, () => reply(200, ''));
+  let prevented = false;
+  dev.handlers.keydown({ key: 'F12', preventDefault: () => (prevented = true) });
+  dev.handlers.keydown({ key: 'a', code: 'KeyA', preventDefault: () => {} });
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  assert.equal(prevented, true);
+  assert.equal(dev.sent.length, 1);
+  assert.equal(dev.sent[0].url, 'pudu://app/.pudu/ipc/pudu%3Adevtools');
+  const release = page({ key: 'k', label: '1', dev: false }, () => reply(200, ''));
+  assert.equal(release.handlers.keydown, undefined);
+});
+
+
+test('native authority messages retain the private key and fixed document origin', () => {
+  const { bridge, handlers, posted } = page({ key: 'private-key', label: 'main' }, () => reply(200, ''), true);
+  handlers['document:mousedown']({ button: 0, detail: 1,
+    target: { closest: (selector) => selector.startsWith('[data-pudu-drag-region]') ? {} : null },
+    preventDefault() {} });
+  assert.deepEqual(JSON.parse(posted[0]), { action: 'drag', key: 'private-key', origin: 'pudu://app' });
   assert.equal('key' in bridge, false);
 });

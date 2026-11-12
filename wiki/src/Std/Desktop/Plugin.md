@@ -52,3 +52,5 @@ Uses [[Std Desktop Webview]] and [[Std Json]]. Consumed by [[Std Desktop App]].
 ## Referenced by
 
 [[src/Std/_MOC]] · [[architecture/DESKTOP-WEBVIEW]]
+
+Resolved Grill Log: rulesJson emits url-filter-is-case-sensitive:true explicitly, preserving the same literal glob case behavior as guarded scripts on every native platform.

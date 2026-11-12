@@ -1,0 +1,42 @@
+module WindowLoop
+
+import Std.Desktop.App as App
+import Std.Desktop.Capability as Capability
+import Std.Desktop.Ipc as Ipc
+import Std.Desktop.Protocol as Protocol
+import Std.Desktop.Shape as Shape
+import Std.Json as Json
+
+type Report = { passed: Bool } derives Json.Decode, Shape.Describe
+
+fn checkpoint(report: Report, call: &Ipc.Call) -> Result[Bool, Ipc.Failure] {
+  let _ = print("window checkpoint {call.label} {report.passed}")
+  Ok(report.passed)
+}
+
+fn main() -> Result[(), Str] {
+  let commands = match Ipc.registry(&[Ipc.command("checkpoint", checkpoint)], &[]) {
+    case Ok(found) => found
+    case Err(problem) => { return Err(Ipc.explain(&problem)) }
+  }
+  let grants = Capability.Grants{capabilities: [Capability.Capability {
+        ..Capability.capability("windows"), views: ["main", "other"],
+        allow: [Capability.permit("window:*"), Capability.permit("checkpoint")], deny: ["window:hide"]
+      }] }
+  let assets = Protocol.Packed(mapOf([
+        ("index.html", HTML.toBytes()), ("test.js", SCRIPT.toBytes())
+      ]))
+  let app = App.App{..App.newApp("WindowLoop", &commands, &grants), assets: assets, frontend: None,
+    windows: [App.windowPlan("main", "Window loop", 320, 240), App.windowPlan("other", "Window loop", 320, 240)] }
+  match App.run(&app) {
+    case Ok(_) => {
+      let _ = print("window loop completed")
+      Ok(())
+    }
+    case Err(problem) => Err(App.explain(&problem))
+  }
+}
+
+const HTML: Str = "<html><head><script defer src=\"test.js\"></script></head><body>Window loop</body></html>"
+
+const SCRIPT: Str = "(async () => \{\n  const bridge = window.__pudu;\n  let passed = false;\n  try \{\n    const state = await bridge.window.state();\n    if (!state.visible || state.scale < 1000) throw Error('window state missing');\n    await bridge.window.setTitle('Window loop ' + bridge.label);\n    try \{ await bridge.window.hide(); throw Error('hide accepted'); \}\n    catch (error) \{ if (error.kind !== 'denied') throw error; \}\n    try \{ await bridge.invoke('pudu:window', \{action:'close',values:\{\}\}); throw Error('malformed close accepted'); \}\n    catch (error) \{ if (error.kind !== 'invalid-arguments') throw error; \}\n    passed = true;\n  \} catch (error) \{ console.error(error); \}\n  await bridge.invoke('checkpoint', \{passed\});\n  await bridge.window.close();\n\})();"

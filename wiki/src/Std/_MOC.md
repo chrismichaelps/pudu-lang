@@ -175,6 +175,7 @@ tags: [moc, module, stdlib]
 - [[Std Test Property]] — generated values with shrinking, seeded so a failure repeats.
 - [[Std Log]] — a logger as a value, carrying a level, a name, fields, and a format.
 - [[Std Process]] — subprocess results and convenience projections.
+- [[Std Env]] — arguments, environment, portable locations and monotonic time.
 - [[Std Time]] — instants, durations, calendar conversion, and clocks.
 - [[Std Cron]] — five-field schedule expressions, matching, and the next firing minute in UTC.
 - [[Std Stats]] — descriptive statistics, percentiles, correlation, histograms, and a streaming accumulator.
@@ -232,6 +233,9 @@ tags: [moc, module, stdlib]
 - [[Std Db Row]] — typed backend-neutral result access and cardinality-aware mapping.
 
 ## Desktop applications
+
+- [[Std Desktop Chrome]] · [[Std Desktop Window]] — tracked window state and permissioned controls.
+- [[Std Desktop Reload]] — frontend change classification.
 
 - [[Std Desktop Webview]] · [[Std Desktop Records]] — windows, views, commands, events, requests.
 - [[Std Desktop Protocol]] — the `pudu://app/` origin and asset archives.

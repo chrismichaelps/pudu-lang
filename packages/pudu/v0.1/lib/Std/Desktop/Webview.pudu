@@ -1,5 +1,7 @@
 module Std.Desktop.Webview
 
+import Std.Json as Json
+
 import Std.Desktop.Records as Records
 
 /// Why a WebView operation did not happen.
@@ -41,11 +43,15 @@ export type ViewSpec = {
   dataStore: Option[Str],
   ephemeral: Bool,
   transparent: Bool,
+  fileDrop: Bool,
   allowNavigation: Array[Str],
   scripts: Array[Script],
   styles: Array[Str],
   rules: Array[Str]
 }
+
+/// What a window is doing: minimized, maximized, full screen, visible and focused.
+export type WindowState = { minimized: Bool, maximized: Bool, fullscreen: Bool, visible: Bool, focused: Bool }
 
 /// A request a page made to the `pudu` scheme, waiting for `respond`.
 ///
@@ -80,11 +86,22 @@ export type Event
   | RulesReady(Int, Str)
   | RulesFailed(Int, Str)
   | Crashed(Int)
+  | Refused(Int, WebviewError)
   | StoreShared(Int)
   | Chosen(Str)
   | DialogAnswered(Str, Array[Str])
   | DialogCancelled(Str)
   | SurfacePressed(Int, Int, Int)
+  | WindowChanged(Int, WindowState)
+  | ScaleChanged(Int, Int)
+  | ThemeChanged(Str)
+  | DevtoolsChanged(Int, Bool)
+  | DropEntered(Int, Int, Int, Array[Str])
+  | DropMoved(Int, Int, Int)
+  | DropLeft(Int)
+  | Dropped(Int, Int, Int, Array[Str])
+  | DataCleared(Int)
+  | DataClearFailed(Int, Str)
   | Unknown(Str)
 
 /// A resizable window specification.
@@ -106,6 +123,7 @@ export fn newView(id: Int, window: Int) -> ViewSpec {
     dataStore: None,
     ephemeral: false,
     transparent: false,
+    fileDrop: false,
     allowNavigation: [],
     scripts: [],
     styles: [],
@@ -139,6 +157,7 @@ export fn createView(spec: &ViewSpec) -> Array[Array[Str]] {
   if let Some(store) = spec.dataStore { records = records.push(["view", label, "data-store", store]) }
   if spec.ephemeral { records = records.push(["view", label, "ephemeral"]) }
   if spec.transparent { records = records.push(["view", label, "transparent"]) }
+  if spec.fileDrop { records = records.push(["view", label, "file-drop"]) }
   for pattern in spec.allowNavigation { records = records.push(["view", label, "navigation-allow", pattern]) }
   for script in spec.scripts {
     let at = match script.at {
@@ -297,6 +316,19 @@ export fn events() -> Result[Array[Event], WebviewError] {
   }
 }
 
+fn dropPaths(text: Str) -> Array[Str] {
+  match Json.decode(text) {
+    case Ok(Json.List(items)) => {
+      var paths: Array[Str] = []
+      for item in items {
+        if let Json.Text(path) = item { paths = paths.push(path) }
+      }
+      paths
+    }
+    case _ => []
+  }
+}
+
 fn number(text: Str) -> Int {
   match text.toInt() {
     case Some(value) => value
@@ -329,6 +361,7 @@ const EVENT_FACTORIES: Map[Str, (Int, EventFactory)] = mapOf([
     ("new-window-blocked", (3, fn(fields: &Array[Str]) -> Option[Event] { Some(NewWindowBlocked(number(fields[1]), fields[2])) })),
     ("title", (3, fn(fields: &Array[Str]) -> Option[Event] { Some(Title(number(fields[1]), fields[2])) })),
     ("crashed", (2, fn(fields: &Array[Str]) -> Option[Event] { Some(Crashed(number(fields[1]))) })),
+    ("refused", (4, refusedEvent)),
     ("data-store", (3, fn(fields: &Array[Str]) -> Option[Event] { Some(StoreShared(number(fields[1]))) })),
     ("eval", (5, evaluatedEvent)),
     ("rules", (4, rulesEvent)),
@@ -336,7 +369,27 @@ const EVENT_FACTORIES: Map[Str, (Int, EventFactory)] = mapOf([
     ("dialog-cancel", (2, fn(fields: &Array[Str]) -> Option[Event] { Some(DialogCancelled(fields[1])) })),
     ("dialog-ok", (3, fn(fields: &Array[Str]) -> Option[Event] { Some(DialogAnswered(fields[1], fields[2].lines())) })),
     ("surface-press", (4, fn(fields: &Array[Str]) -> Option[Event] { Some(SurfacePressed(number(fields[1]), number(fields[2]), number(fields[3]))) })),
+    ("window-state", (7, windowStateEvent)),
+    ("scale", (3, fn(fields: &Array[Str]) -> Option[Event] { Some(ScaleChanged(number(fields[1]), number(fields[2]))) })),
+    ("theme", (2, fn(fields: &Array[Str]) -> Option[Event] { Some(ThemeChanged(fields[1])) })),
+    ("devtools", (3, fn(fields: &Array[Str]) -> Option[Event] { Some(DevtoolsChanged(number(fields[1]), fields[2] == "open")) })),
+    ("drop-enter", (5, fn(fields: &Array[Str]) -> Option[Event] { Some(DropEntered(number(fields[1]), number(fields[2]), number(fields[3]), dropPaths(fields[4]))) })),
+    ("drop-over", (4, fn(fields: &Array[Str]) -> Option[Event] { Some(DropMoved(number(fields[1]), number(fields[2]), number(fields[3]))) })),
+    ("drop-leave", (2, fn(fields: &Array[Str]) -> Option[Event] { Some(DropLeft(number(fields[1]))) })),
+    ("drop", (5, fn(fields: &Array[Str]) -> Option[Event] { Some(Dropped(number(fields[1]), number(fields[2]), number(fields[3]), dropPaths(fields[4]))) })),
+    ("data-cleared", (2, fn(fields: &Array[Str]) -> Option[Event] { Some(DataCleared(number(fields[1]))) })),
+    ("data-clear-failed", (3, fn(fields: &Array[Str]) -> Option[Event] { Some(DataClearFailed(number(fields[1]), fields[2])) })),
   ])
+
+fn windowStateEvent(fields: &Array[Str]) -> Option[Event] {
+  Some(WindowChanged(number(fields[1]), WindowState {
+        minimized: fields[2] == "1",
+        maximized: fields[3] == "1",
+        fullscreen: fields[4] == "1",
+        visible: fields[5] == "1",
+        focused: fields[6] == "1"
+      }))
+}
 
 fn requestEvent(fields: &Array[Str]) -> Option[Event] {
   Some(Request(Pending {
@@ -353,6 +406,11 @@ fn requestEvent(fields: &Array[Str]) -> Option[Event] {
 fn evaluatedEvent(fields: &Array[Str]) -> Option[Event] {
   let outcome = if fields[3] == "ok" { Ok(fields[4]) } else { Err(fields[4]) }
   Some(Evaluated(number(fields[1]), fields[2], outcome))
+}
+
+/// A view the platform would not admit; any word but `unsupported` keeps its reason as Platform.
+fn refusedEvent(fields: &Array[Str]) -> Option[Event] {
+  Some(Refused(number(fields[1]), if fields[2] == "unsupported" { Unsupported } else { Platform(fields[3]) }))
 }
 
 fn rulesEvent(fields: &Array[Str]) -> Option[Event] {

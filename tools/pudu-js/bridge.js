@@ -115,6 +115,61 @@
     }
   }
 
+  // Native window interaction uses the platform message channel. The adapter
+  // checks authority and any required physical input state.
+  function native(message) {
+    const handlers = window.webkit && window.webkit.messageHandlers;
+    if (handlers && handlers.puduWindowAuthorized) handlers.puduWindowAuthorized.postMessage(JSON.stringify({ action: message, key: config.key, origin: ORIGIN }));
+    else if (handlers && handlers.puduWindow) handlers.puduWindow.postMessage(message);
+    else if (window.chrome && window.chrome.webview) window.chrome.webview.postMessage('pudu:' + message);
+  }
+
+  document.addEventListener(
+    'mousedown',
+    (event) => {
+      if (event.button !== 0 || !event.target || !event.target.closest) return;
+      if (!event.target.closest('[data-pudu-drag-region]')) return;
+      if (event.target.closest('a, button, input, select, textarea, [contenteditable], [data-pudu-no-drag]')) return;
+      event.preventDefault();
+      native(event.detail === 2 ? 'toggle-maximize' : 'drag');
+    },
+    true,
+  );
+
+  function control(action, ...values) {
+    return invoke('pudu:window', { action, values: values.map(String) });
+  }
+
+  const windowApi = Object.freeze({
+    minimize: () => control('minimize'),
+    unminimize: () => control('unminimize'),
+    maximize: () => control('maximize'),
+    unmaximize: () => control('unmaximize'),
+    toggleMaximize: () => control('toggle-maximize'),
+    show: () => control('show'),
+    hide: () => control('hide'),
+    focus: () => control('focus'),
+    center: () => control('center'),
+    close: () => control('close'),
+    setTitle: (title) => control('title', title),
+    setSize: (width, height) => control('size', width, height),
+    setMinSize: (width, height) => control('min-size', width, height),
+    setMaxSize: (width, height) => control('max-size', width, height),
+    setPosition: (x, y) => control('position', x, y),
+    setFullscreen: (wanted) => control('fullscreen', wanted),
+    setAlwaysOnTop: (wanted) => control('always-on-top', wanted),
+    setDecorations: (wanted) => control('decorations', wanted),
+    setResizable: (wanted) => control('resizable', wanted),
+    setClosable: (wanted) => control('closable', wanted),
+    setMinimizable: (wanted) => control('minimizable', wanted),
+    setMaximizable: (wanted) => control('maximizable', wanted),
+    setContentProtected: (wanted) => control('content-protected', wanted),
+    setTitleBar: (style) => control('titlebar', style),
+    requestAttention: (critical) => control('attention', Boolean(critical)),
+    setBadge: (label) => control('badge', label == null ? '' : label),
+    state: () => control('state'),
+  });
+
   function report(level, message, source, line, column, stack) {
     invoke('pudu:console', {
       level,
@@ -127,6 +182,19 @@
   }
 
   if (config.dev) {
+    window.addEventListener(
+      'keydown',
+      (event) => {
+        const inspect =
+          event.key === 'F12' ||
+          (event.metaKey && event.altKey && event.code === 'KeyI') ||
+          (event.ctrlKey && event.shiftKey && event.code === 'KeyI');
+        if (!inspect) return;
+        event.preventDefault();
+        invoke('pudu:devtools', null).catch(() => {});
+      },
+      true,
+    );
     for (const level of ['error', 'warn']) {
       const original = console[level].bind(console);
       console[level] = (...parts) => {
@@ -152,6 +220,7 @@
       Channel,
       PuduError,
       label: config.label,
+      window: windowApi,
       __event: deliverEvent,
       __channel: deliverChannel,
       __close: closeChannel,

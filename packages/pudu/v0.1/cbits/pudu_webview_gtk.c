@@ -8,6 +8,7 @@
 
 static gboolean pudu_started;
 static pthread_t pudu_thread;
+static pthread_mutex_t pudu_initialization = PTHREAD_MUTEX_INITIALIZER;
 static pudu_buffer pudu_events;
 static char *pudu_failure;
 static GHashTable *pudu_windows;
@@ -43,10 +44,12 @@ char *pudu_number(int64_t value) {
   return g_strdup_printf("%lld", (long long)value);
 }
 
-static gboolean pudu_ready(void) {
+int32_t pudu_webview_guard(void) {
+  pthread_mutex_lock(&pudu_initialization);
   if (!pudu_started) {
     if (!gtk_init_check(NULL, NULL)) {
-      return FALSE;
+      pthread_mutex_unlock(&pudu_initialization);
+      return PUDU_WEBVIEW_UNSUPPORTED;
     }
     pudu_started = TRUE;
     pudu_thread = pthread_self();
@@ -54,7 +57,9 @@ static gboolean pudu_ready(void) {
     pudu_views = g_hash_table_new(g_int64_hash, g_int64_equal);
     pudu_pending = g_hash_table_new(g_int64_hash, g_int64_equal);
   }
-  return pthread_equal(pudu_thread, pthread_self());
+  int32_t status = pthread_equal(pudu_thread, pthread_self()) ? PUDU_WEBVIEW_DONE : PUDU_WEBVIEW_NOT_MAIN;
+  pthread_mutex_unlock(&pudu_initialization);
+  return status;
 }
 
 int64_t *pudu_key(int64_t value) {
@@ -79,26 +84,34 @@ static gboolean pudu_on_configure(GtkWidget *widget, GdkEventConfigure *event, g
   (void)widget;
   PuduWindow *owner = data;
   g_autofree char *id = pudu_number(owner->id);
-  g_autofree char *width = pudu_number(event->width);
-  g_autofree char *height = pudu_number(event->height);
   g_autofree char *x = pudu_number(event->x);
   g_autofree char *y = pudu_number(event->y);
-  const char *resized[] = {"resized", id, width, height};
   const char *moved[] = {"moved", id, x, y};
-  pudu_event(resized, 4);
   pudu_event(moved, 4);
+  return FALSE;
+}
+
+static void pudu_on_size(GtkWidget *widget, GtkAllocation *area, gpointer data) {
+  (void)widget;
+  PuduWindow *owner = data;
+  g_autofree char *id = pudu_number(owner->id);
+  int client_width, client_height;
+  gtk_window_get_size(GTK_WINDOW(owner->window), &client_width, &client_height);
+  g_autofree char *width = pudu_number(client_width), *height = pudu_number(client_height);
+  const char *resized[] = {"resized", id, width, height};
+  pudu_event(resized, 4);
   GHashTableIter iter;
   gpointer key, value;
   g_hash_table_iter_init(&iter, pudu_views);
   while (g_hash_table_iter_next(&iter, &key, &value)) {
     PuduView *view = value;
     if (view->window == owner->id && view->fill && view->web != NULL) {
-      gtk_widget_set_size_request(view->web, event->width, event->height);
+      gtk_widget_set_size_request(view->web, area->width, area->height);
     }
   }
-  owner->width = event->width;
-  owner->height = event->height;
-  return FALSE;
+  owner->width = area->width;
+  owner->height = area->height;
+  pudu_window_report(owner);
 }
 
 static gboolean pudu_on_focus(GtkWidget *widget, GdkEventFocus *event, gpointer data) {
@@ -107,6 +120,7 @@ static gboolean pudu_on_focus(GtkWidget *widget, GdkEventFocus *event, gpointer 
   g_autofree char *id = pudu_number(owner->id);
   const char *fields[] = {"focused", id, event->in ? "1" : "0"};
   pudu_event(fields, 3);
+  pudu_window_report(owner);
   return FALSE;
 }
 
@@ -118,7 +132,7 @@ static int32_t pudu_window_command(pudu_field *fields, int count) {
   if (pudu_field_is(fields[2], "open")) {
     int64_t width = 0, height = 0, resizable = 0;
     if (count != 7 || pudu_field_int(fields[4], &width) != 0 || pudu_field_int(fields[5], &height) != 0 ||
-        pudu_field_int(fields[6], &resizable) != 0 || width <= 0 || height <= 0) {
+        pudu_field_int(fields[6], &resizable) != 0 || width <= 0 || height <= 0 || width > G_MAXINT || height > G_MAXINT || (resizable != 0 && resizable != 1)) {
       return pudu_refuse(PUDU_WEBVIEW_MALFORMED, "window open needs a title, a positive size and a resizable flag");
     }
     if (g_hash_table_contains(pudu_windows, &id)) {
@@ -128,18 +142,22 @@ static int32_t pudu_window_command(pudu_field *fields, int count) {
     PuduWindow *owner = g_new0(PuduWindow, 1);
     owner->id = id;
     owner->window = gtk_window_new(GTK_WINDOW_TOPLEVEL);
-    owner->fixed = gtk_fixed_new();
+    owner->fixed = pudu_fixed_new();
     gtk_window_set_title(GTK_WINDOW(owner->window), title == NULL ? "" : title);
     gtk_window_set_default_size(GTK_WINDOW(owner->window), (int)width, (int)height);
     owner->width = (int)width;
     owner->height = (int)height;
     gtk_window_set_resizable(GTK_WINDOW(owner->window), resizable != 0);
     owner->box = gtk_box_new(GTK_ORIENTATION_VERTICAL, 0);
-    gtk_box_pack_end(GTK_BOX(owner->box), owner->fixed, TRUE, TRUE, 0);
+    owner->overlay = gtk_overlay_new();
+    gtk_container_add(GTK_CONTAINER(owner->overlay), owner->fixed);
+    gtk_box_pack_end(GTK_BOX(owner->box), owner->overlay, TRUE, TRUE, 0);
     gtk_container_add(GTK_CONTAINER(owner->window), owner->box);
+    pudu_window_hooks(owner);
     pudu_native_window_opened(owner);
     g_signal_connect(owner->window, "delete-event", G_CALLBACK(pudu_on_delete), owner);
     g_signal_connect(owner->window, "configure-event", G_CALLBACK(pudu_on_configure), owner);
+    g_signal_connect(owner->fixed, "size-allocate", G_CALLBACK(pudu_on_size), owner);
     g_signal_connect(owner->window, "focus-in-event", G_CALLBACK(pudu_on_focus), owner);
     g_signal_connect(owner->window, "focus-out-event", G_CALLBACK(pudu_on_focus), owner);
     g_hash_table_insert(pudu_windows, pudu_key(id), owner);
@@ -150,19 +168,30 @@ static int32_t pudu_window_command(pudu_field *fields, int count) {
     return pudu_refuse(PUDU_WEBVIEW_UNKNOWN, "window is not open");
   }
   GtkWindow *window = GTK_WINDOW(owner->window);
+  if ((pudu_field_is(fields[2], "center") || pudu_field_is(fields[2], "show") ||
+      pudu_field_is(fields[2], "hide") || pudu_field_is(fields[2], "focus") || pudu_field_is(fields[2], "close")) && count != 3)
+    return pudu_refuse(PUDU_WEBVIEW_MALFORMED, "window action takes no values");
   int64_t a = 0, b = 0;
-  gboolean pair = count == 5 && pudu_field_int(fields[3], &a) == 0 && pudu_field_int(fields[4], &b) == 0;
+  gboolean pair = count == 5 && pudu_field_int(fields[3], &a) == 0 && pudu_field_int(fields[4], &b) == 0 && a >= 0 && b >= 0 && a <= G_MAXINT && b <= G_MAXINT;
   if (pudu_field_is(fields[2], "title") && count == 4) {
     g_autofree char *title = pudu_field_copy(fields[3]);
     gtk_window_set_title(window, title == NULL ? "" : title);
+    pudu_window_title(owner);
   } else if (pudu_field_is(fields[2], "size") && pair) {
+    if (a == 0 || b == 0) return pudu_refuse(PUDU_WEBVIEW_INVALID, "window size must be positive");
     gtk_window_resize(window, (int)a, (int)b);
   } else if (pudu_field_is(fields[2], "min-size") && pair) {
-    GdkGeometry hints = {.min_width = (int)a, .min_height = (int)b};
-    gtk_window_set_geometry_hints(window, NULL, &hints, GDK_HINT_MIN_SIZE);
+    if ((owner->max_width > 0 && a > owner->max_width) || (owner->max_height > 0 && b > owner->max_height))
+      return pudu_refuse(PUDU_WEBVIEW_INVALID, "minimum size exceeds maximum size");
+    owner->min_width = (int)a;
+    owner->min_height = (int)b;
+    pudu_window_geometry(owner);
   } else if (pudu_field_is(fields[2], "max-size") && pair) {
-    GdkGeometry hints = {.max_width = a == 0 ? G_MAXINT : (int)a, .max_height = b == 0 ? G_MAXINT : (int)b};
-    gtk_window_set_geometry_hints(window, NULL, &hints, GDK_HINT_MAX_SIZE);
+    if ((a > 0 && a < owner->min_width) || (b > 0 && b < owner->min_height))
+      return pudu_refuse(PUDU_WEBVIEW_INVALID, "maximum size is below minimum size");
+    owner->max_width = (int)a;
+    owner->max_height = (int)b;
+    pudu_window_geometry(owner);
   } else if (pudu_field_is(fields[2], "position") && pair) {
     gtk_window_move(window, (int)a, (int)b);
   } else if (pudu_field_is(fields[2], "center")) {
@@ -173,6 +202,8 @@ static int32_t pudu_window_command(pudu_field *fields, int count) {
   } else if (pudu_field_is(fields[2], "hide")) {
     gtk_widget_hide(owner->window);
   } else if (pudu_field_is(fields[2], "fullscreen") && count == 4) {
+    if (!(pudu_field_is(fields[3], "0") || pudu_field_is(fields[3], "1")))
+      return pudu_refuse(PUDU_WEBVIEW_MALFORMED, "fullscreen needs 0 or 1");
     if (pudu_field_is(fields[3], "1")) {
       gtk_window_fullscreen(window);
     } else {
@@ -184,14 +215,17 @@ static int32_t pudu_window_command(pudu_field *fields, int count) {
     g_hash_table_iter_init(&iter, pudu_views);
     while (g_hash_table_iter_next(&iter, &key, &value)) {
       if (((PuduView *)value)->window == id) {
+        pudu_view_closed(value);
         g_hash_table_iter_remove(&iter);
       }
     }
     gtk_widget_destroy(owner->window);
+    g_clear_object(&owner->background_css);
     g_hash_table_remove(pudu_windows, &id);
   } else {
-    return pudu_refuse(PUDU_WEBVIEW_MALFORMED, "unknown window verb");
+    return pudu_window_extra(owner, fields, count);
   }
+  if (!pudu_field_is(fields[2], "close")) pudu_window_report(owner);
   return PUDU_WEBVIEW_DONE;
 }
 
@@ -202,9 +236,8 @@ PuduWindow *pudu_window_named(int64_t id) {
 }
 
 int32_t pudu_webview_send(const uint8_t *records, size_t length) {
-  if (!pudu_ready()) {
-    return pudu_started ? PUDU_WEBVIEW_NOT_MAIN : PUDU_WEBVIEW_UNSUPPORTED;
-  }
+  int32_t guard = pudu_webview_guard();
+  if (guard != PUDU_WEBVIEW_DONE) return guard;
   if (records == NULL && length > 0) {
     return PUDU_WEBVIEW_INVALID;
   }
@@ -240,9 +273,8 @@ static gboolean pudu_on_timeout(gpointer data) {
 }
 
 int32_t pudu_webview_pump(int32_t milliseconds) {
-  if (!pudu_ready()) {
-    return pudu_started ? PUDU_WEBVIEW_NOT_MAIN : PUDU_WEBVIEW_UNSUPPORTED;
-  }
+  int32_t guard = pudu_webview_guard();
+  if (guard != PUDU_WEBVIEW_DONE) return guard;
   if (milliseconds < 0) {
     return PUDU_WEBVIEW_INVALID;
   }
@@ -258,16 +290,14 @@ int32_t pudu_webview_pump(int32_t milliseconds) {
 }
 
 int64_t pudu_webview_events(uint8_t *buffer, size_t capacity) {
-  if (!pudu_ready()) {
-    return pudu_started ? PUDU_WEBVIEW_NOT_MAIN : PUDU_WEBVIEW_UNSUPPORTED;
-  }
+  int32_t guard = pudu_webview_guard();
+  if (guard != PUDU_WEBVIEW_DONE) return guard;
   return pudu_buffer_drain(&pudu_events, buffer, capacity);
 }
 
 int64_t pudu_webview_body(int64_t request, uint8_t *buffer, size_t capacity) {
-  if (!pudu_ready()) {
-    return pudu_started ? PUDU_WEBVIEW_NOT_MAIN : PUDU_WEBVIEW_UNSUPPORTED;
-  }
+  int32_t guard = pudu_webview_guard();
+  if (guard != PUDU_WEBVIEW_DONE) return guard;
   PuduPending *pending = g_hash_table_lookup(pudu_pending, &request);
   if (pending == NULL) {
     return PUDU_WEBVIEW_GONE;
@@ -281,9 +311,8 @@ int64_t pudu_webview_body(int64_t request, uint8_t *buffer, size_t capacity) {
 }
 
 int64_t pudu_webview_failure(uint8_t *buffer, size_t capacity) {
-  if (!pudu_ready()) {
-    return pudu_started ? PUDU_WEBVIEW_NOT_MAIN : PUDU_WEBVIEW_UNSUPPORTED;
-  }
+  int32_t guard = pudu_webview_guard();
+  if (guard != PUDU_WEBVIEW_DONE) return guard;
   size_t size = pudu_failure == NULL ? 0 : strlen(pudu_failure);
   if (buffer != NULL && size <= capacity && size > 0) {
     memcpy(buffer, pudu_failure, size);

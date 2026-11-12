@@ -16,6 +16,11 @@ NSString *pudu_field_string(pudu_field field) {
 - (BOOL)isFlipped {
   return YES;
 }
+
+- (void)viewDidChangeEffectiveAppearance {
+  [super viewDidChangeEffectiveAppearance];
+  [[PuduWebHost shared] event:@[ @"theme", pudu_theme_name(self.effectiveAppearance) ]];
+}
 @end
 
 @implementation PuduPendingRequest
@@ -36,25 +41,54 @@ NSString *pudu_field_string(pudu_field field) {
     @"resized", @(self.identifier).stringValue, @((long)size.width).stringValue,
     @((long)size.height).stringValue
   ]];
+  pudu_report_window_state(self);
 }
 
 - (void)windowDidMove:(NSNotification *)notification {
   (void)notification;
+  /* Top-left corner from the top of the screen, the frame `position` takes. */
   NSRect frame = self.window.frame;
+  CGFloat top = NSMaxY(self.window.screen.frame) - NSMaxY(frame);
   [[PuduWebHost shared] event:@[
-    @"moved", @(self.identifier).stringValue, @((long)frame.origin.x).stringValue,
-    @((long)frame.origin.y).stringValue
+    @"moved", @(self.identifier).stringValue, @((long)frame.origin.x).stringValue, @((long)top).stringValue
   ]];
 }
 
 - (void)windowDidBecomeKey:(NSNotification *)notification {
   (void)notification;
   [[PuduWebHost shared] event:@[ @"focused", @(self.identifier).stringValue, @"1" ]];
+  pudu_report_window_state(self);
+}
+
+- (void)windowDidMiniaturize:(NSNotification *)notification {
+  (void)notification;
+  pudu_report_window_state(self);
+}
+
+- (void)windowDidDeminiaturize:(NSNotification *)notification {
+  (void)notification;
+  pudu_report_window_state(self);
+}
+
+- (void)windowDidEnterFullScreen:(NSNotification *)notification {
+  (void)notification;
+  pudu_report_window_state(self);
+}
+
+- (void)windowDidExitFullScreen:(NSNotification *)notification {
+  (void)notification;
+  pudu_report_window_state(self);
+}
+
+- (void)windowDidChangeBackingProperties:(NSNotification *)notification {
+  (void)notification;
+  pudu_report_window_scale(self);
 }
 
 - (void)windowDidResignKey:(NSNotification *)notification {
   (void)notification;
   [[PuduWebHost shared] event:@[ @"focused", @(self.identifier).stringValue, @"0" ]];
+  pudu_report_window_state(self);
 }
 
 @end
@@ -293,7 +327,10 @@ static int32_t pudu_window_command(PuduWebHost *host, pudu_field *fields, int co
     [window close];
     [host.windows removeObjectForKey:@(identifier)];
   } else {
-    return pudu_refuse(host, PUDU_WEBVIEW_MALFORMED, [@"unknown window verb " stringByAppendingString:verb]);
+    return pudu_webview_window_extra(host, owner, verb, fields, count);
+  }
+  if ([verb isEqualToString:@"show"] || [verb isEqualToString:@"hide"] || [verb isEqualToString:@"focus"]) {
+    pudu_report_window_state(owner);
   }
   return PUDU_WEBVIEW_DONE;
 }
@@ -395,6 +432,7 @@ static NSDictionary<NSString *, NSString *> *pudu_header_fields(const uint8_t *h
   if (head == NULL || length == 0) {
     return fields;
   }
+  if (length == 0) return fields;
   NSString *text = [[NSString alloc] initWithBytes:head length:length encoding:NSUTF8StringEncoding];
   for (NSString *line in [text componentsSeparatedByString:@"\n"]) {
     NSRange colon = [line rangeOfString:@":"];
@@ -419,7 +457,7 @@ int32_t pudu_webview_respond(
   if (![NSThread isMainThread]) {
     return PUDU_WEBVIEW_NOT_MAIN;
   }
-  if (status < 100 || status > 599 || (body == NULL && body_length > 0)) {
+  if (status < 100 || status > 599 || (head == NULL && head_length > 0) || (body == NULL && body_length > 0)) {
     return PUDU_WEBVIEW_INVALID;
   }
   @autoreleasepool {
