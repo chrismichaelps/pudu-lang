@@ -10,7 +10,7 @@ import qualified Data.Text as Text
 import Pudu.Compiler.Lower.Control (expressionIsPrintValued, printValued)
 import Pudu.Compiler.Lower.Default (suppliedArguments)
 import Pudu.Compiler.Lower.Generic (admitCallee)
-import Pudu.Compiler.Lower.Loan (Callee (..), Operand (..), closeLoaned, lowerLoanedOperands, valueSignature)
+import Pudu.Compiler.Lower.Loan (Callee (..), Operand (..), closeLoaned, lowerLoanedOperands, preparesValueCallee, valueSignature)
 import Pudu.Compiler.Lower.State
   ( LowerContext (..), LowerState (..), bindLocal, halt, lookupLocal, refused, startFunction )
 import Pudu.Compiler.Lower.Types (loanedInputs, typeFactAt, typeForSpan)
@@ -96,31 +96,40 @@ lowerFunctionValue state at key entry = case typeForSpan (contextTypes (lowerCon
        in (admitted{lowerContext = next}, Just (CoreExpression at kind (CoreClosure target []), kind))
   _ -> halt at "a function value without a native function type" state
 
-{-| `callee(arguments)` through a value. The arguments run first, then the
-    callee, as `evaluateCall` does, so each argument is held in a temporary. -}
+{-| A call through an ordinary value holds its target before supplied operands.
+    Member order remains with the receiver-order partition. -}
 lowerValueCall :: LowerExpression -> LowerState -> Span -> Located Expression -> [Located Expression] -> Lowered
 lowerValueCall lower state at callee arguments
   | loaned@(_ : _) <- maybe [] loanedInputs (typeFactAt (contextTypes (lowerContext state)) (locatedSpan callee))
   , Just (CoreFunctionType inputs (CoreTupleType (result : _))) <- typeForSpan (contextTypes (lowerContext state)) (locatedSpan callee) =
       lowerLoanedOperands lower state at (Through callee) (valueSignature at inputs result loaned) defaulted
         [(index, Argument, argument) | (index, argument) <- zip [0 ..] arguments]
+  | preparesValueCallee callee = case lower state callee of
+      (after, Nothing) -> refused after
+      (after, Just (target, CoreNeverType)) -> (after, Just (target, CoreNeverType))
+      (after, Just (target, kind)) -> case collect after [] arguments of
+        (final, Nothing) -> refused final
+        (final, Just cores) -> invoke direct final target kind cores (target : cores)
   | otherwise = case collect state [] arguments of
-  (after, Nothing) -> refused after
-  (after, Just cores) -> case lower after callee of
-    (final, Nothing) -> refused final
-    (final, Just (target, kind)) -> case kind of
-      _ | any stops (cores <> [target]) -> (final, Just (stopped (cores <> [target]), CoreNeverType))
-      CoreFunctionType inputs result
-        | defaulted, length cores < length inputs -> call final target result (suppliedArguments at inputs cores)
-        | length inputs == length cores -> call final target result cores
-      _ -> halt at ("a call through a " <> coreTypeName kind <> " value") final
+      (after, Nothing) -> refused after
+      (after, Just cores) -> case lower after callee of
+        (final, Nothing) -> refused final
+        (final, Just (target, kind)) -> invoke member final target kind cores (cores <> [target])
  where
   -- A value of a function with defaults was formed with the count of supplied
   -- arguments as its last parameter; checking says how many a call must give.
   defaulted = case typeFactAt (contextTypes (lowerContext state)) (locatedSpan callee) of
     Just (FunctionTypeRequiring _ inputs required _) -> requiredCount required < length inputs
     _ -> False
-  call final target result cores =
+  invoke make final target kind cores effects
+    | any stops effects = (final, Just (stopped effects, CoreNeverType))
+    | CoreFunctionType inputs result <- kind
+    , defaulted, length cores < length inputs = make final target result (suppliedArguments at inputs cores)
+    | CoreFunctionType inputs result <- kind
+    , length inputs == length cores = make final target result cores
+    | otherwise = halt at ("a call through a " <> coreTypeName kind <> " value") final
+  direct final target result cores = (final, Just (CoreExpression at result (CoreCallValue target cores), result))
+  member final target result cores =
     let pushed = final{lowerScopes = [] : lowerScopes final}
         (bound, temporaries) = foldl' hold (pushed, []) cores
         popped = bound{lowerScopes = drop 1 (lowerScopes bound)}

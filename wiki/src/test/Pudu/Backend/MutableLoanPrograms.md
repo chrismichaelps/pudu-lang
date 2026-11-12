@@ -26,6 +26,10 @@ compiled evaluator; healthy programs also run under counted allocation.
 
 [[Backend Output Callable Programs]] · [[Backend Native Tests]] · [[Backend Text Leak Tests]] · [[Pudu Test Cabal Manifest]]
 
+Resolved Grill Log (#828): the computed loaned callee prints before its
+argument index. The final lent value and writeback are checked independently
+of the ordering trace.
+
 ## Referenced by
 
 [[Native Mutable Loans]] · [[src/Pudu/Backend/_MOC]]

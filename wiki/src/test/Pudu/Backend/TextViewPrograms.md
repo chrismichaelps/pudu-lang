@@ -26,6 +26,9 @@ on the imported-default integration in #824; do not hide such a dependency.
 
 Bind deferred positive magnitudes without a contextual literal target, settle them through the existing negative-Int binding, and relay through an ordinary function parameter. This preserves the checker's accepted deferred-value form while exercising the actual out-of-range magnitude in byte kernels; do not change literal typing to make a fixture pass.
 
-Computed-callee ordering pins current evaluator/native parity here. Issue #828 tracks its contradiction with the normative callee-first grammar; these kernel tests do not prove that separate semantic obligation complete.
+Computed builtin callees print before both supplied operands. The operands then
+run left to right, and the byte read uses the text held before the index
+expression mutates the source binding. This fixture covers ordinary callable
+preparation under [[Callee First Call Evaluation]].
 
 Facade cases use whole-program module conformance, exercising Std.StringView byte units, shared substrings, checked mutable copy and byte searches. They join complete module tests and a focused integration property; only library-free kernel cases enter the single-module counted harness.

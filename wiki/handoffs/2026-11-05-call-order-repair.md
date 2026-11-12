@@ -7,7 +7,7 @@ aliases: [Call Order Repair Delivery]
 # Call Order Repair Delivery
 
 Architect owns the call-order ADR, semantic clarification, bounded implementation
-inventory and corresponding mirrors. No implementation assignment is released yet.
+inventory and corresponding mirrors. The implementation assignments are recorded below.
 Fresh feature/828-callee-first starts at dev b9038686. Preserve unrelated
 untracked build artifacts in this checkout; no subagents.
 
@@ -32,8 +32,18 @@ also rely on receiver-last Core sequencing, and Array's map/filter/reduce/sortBy
 expansions explicitly declare callbacks before receivers. Audit every expansion;
 changing only one frame operation would leave these paths inconsistent.
 
-Exact next action: finish the call-planner inventory and resolve each owned module
-mirror before assigning the first bounded runtime/backend implementation slice.
+Architect → Runtime Engineer → Backend Engineer → Test Engineer. The first
+partition owns [[Eval Call]], [[Compiler Lower Lambda]], [[Compiler Lower Loan]],
+[[Backend Closure Programs]], [[Backend Mutable Loan Programs]],
+[[Backend Text View Programs]] and their
+mirrors. Ordinary runtime function values are prepared before arguments in
+both evaluators and native lowering. Member and qualified dispatch remain
+outside this partition.
+
+Exact next action: prepare member receivers and their callable selections
+before arguments across evaluator and native method paths, including builtin
+expansions and loaned places. Establish when the array receiver may be moved
+without changing an argument that reads its binding.
 
 ## Referenced by
 [[handoffs/_MOC]] · [[Callee First Call Evaluation]]

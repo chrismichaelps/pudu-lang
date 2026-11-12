@@ -5,6 +5,10 @@ tags: [changelog]
 
 # Changelog
 
+## 2026-11-12 — Callee-first function values (#828)
+
+- [[Eval Call]], [[Compiler Lower Lambda]] and [[Compiler Lower Loan]] prepare ordinary function values before supplied arguments and preserve the selected value across argument mutation.
+
 ## 2026-11-10 — HTML builder replaces repeated attributes (#839)
 
 - [[Std Html Build]] replaces an attribute already set where it sits instead of appending a second one, and `class` adds to the classes already set. A rendered element can no longer carry a repeated attribute that a browser would silently collapse to the first value.

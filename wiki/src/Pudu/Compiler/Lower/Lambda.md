@@ -31,8 +31,9 @@ lambda.
 
 ## Calls through values
 
-The arguments run first, then the callee, as `evaluateCall` does. So each
-argument goes into a temporary and the call reads them back after the callee.
+An ordinary callee runs before supplied arguments. The frame retains each
+value in evaluation order. A member callee still uses the earlier receiver
+sequence until the member-call partition lands.
 
 ## Resolved Grill Log
 
@@ -49,6 +50,11 @@ argument goes into a temporary and the call reads them back after the callee.
 
 [[Compiler Lower State]] · [[Compiler Lower Types]] · [[Compiler Lower Generic]] ·
 [[Compiler Lower Control]] · [[Core IR]]
+
+Resolved Grill Log (#828): an ordinary value call lowers the target first.
+Frame operands hold the target in its own slot before arguments. A stopping
+target emits no argument effects. Member receiver ordering remains in the
+next partition.
 
 ## Referenced by
 

@@ -56,7 +56,6 @@ textViewSuccessPrograms =
       , "    if let Some(view) = textByteSlice(text, 1, 2) { print(show(textByteAt(view, 0) == Some(0u8))) }"
       , "  }\n 0", "}" ]
     , "Some(\"中\")\n3 Some(0) Some(1) Some(1)\n0 1\ntrue\n")
-  -- Current computed-callee order is tracked for normative repair in #828.
   , ("text-view callable identities and builtin argument snapshots", program
       [ "fn capture(f: fn(Str, Int) -> Option[UInt8]) { |text, at| f(text, at) }"
       , "fn make() -> fn(Str, Int) -> Option[UInt8] { print(\"callee\")\n textByteAt }"
@@ -68,7 +67,7 @@ textViewSuccessPrograms =
       , "  var source = \"needle\"\n print(show(textByteFind(source, { source = \"other\"\n \"needle\" }, 0)))"
       , "  held = \"a\"\n print(show(make()({ print(\"text\")\n held }, { print(\"index\")\n held = \"b\"\n 0 })))"
       , "  0", "}" ]
-    , "<builtin textByteAt> true\nSome(169) 2 Some(\"é\")\nSome(2) Some(1) Some(('é', 2))\nSome(97)\nSome(0)\ntext\nindex\ncallee\nSome(97)\n")
+    , "<builtin textByteAt> true\nSome(169) 2 Some(\"é\")\nSome(2) Some(1) Some(('é', 2))\nSome(97)\nSome(0)\ncallee\ntext\nindex\nSome(97)\n")
   , ("text-view first operand transfer skips later work", program
       [ "fn later() -> Int { print(\"unreachable\")\n 0 }"
       , "fn main() -> Int { textByteSlice({ print(\"transfer\")\n return 0 }, later(), later())\n 1 }" ], "transfer\n")

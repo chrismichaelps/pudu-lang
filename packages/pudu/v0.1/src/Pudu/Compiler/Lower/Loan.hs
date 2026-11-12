@@ -6,7 +6,8 @@
     resolving a lent place once where its argument stands, then stores each
     final through that place in parameter order, as `storePlace` does. -}
 module Pudu.Compiler.Lower.Loan
-  ( Callee (..), Operand (..), closeLoaned, loanedReturn, loanedValue, lowerLoanedBody, lowerLoanedCall, lowerLoanedOperands, valueSignature
+  ( Callee (..), Operand (..), closeLoaned, loanedReturn, loanedValue, lowerLoanedBody, lowerLoanedCall, lowerLoanedOperands
+  , preparesValueCallee, valueSignature
   ) where
 
 import Data.List (elemIndex, sortOn)
@@ -62,10 +63,14 @@ loanedValue state at value
           tuple = CoreExpression at kind (CoreTuple (map (reading at) (local : lowerLoaned state)))
        in (held, CoreExpression at kind (CoreBlockValue (CoreBlock [CoreStatement at (CoreDeclare local value)] (Just tuple))))
 
-{-| What a loaned call reaches: a function by name, or whatever function a
-    value holds, which runs after the operands, as `evaluateCall` orders a
-    call through a value. -}
+{-| What a loaned call reaches: a function by name or a runtime function value. -}
 data Callee = Direct !Text | Through !(Located Expression)
+
+{-| Ordinary values are held before operands. Member preparation belongs to
+    the receiver-order partition. -}
+preparesValueCallee :: Located Expression -> Bool
+preparesValueCallee (Located _ MemberExpression{}) = False
+preparesValueCallee _ = True
 
 {-| The signature a call through a value of a function type reads: its
     formed inputs, its declared result, and its `&mut` positions. -}
@@ -89,14 +94,22 @@ lowerLoanedCall lower state at target signature defaulted arguments =
     The call passes them by position and stores the finals in parameter
     order, so a method's receiver, which runs last, is written back first. -}
 lowerLoanedOperands :: LowerExpression -> LowerState -> Span -> Callee -> CoreSignature -> Bool -> [(Int, Operand, Located Expression)] -> Lowered
-lowerLoanedOperands lower state at callee signature defaulted = go state [] []
+lowerLoanedOperands lower state at callee signature defaulted operands = case callee of
+  Through written | preparesValueCallee written -> case lower state written of
+    (after, Nothing) -> refused after
+    (after, Just (target, CoreNeverType)) -> (after, Just (target, CoreNeverType))
+    (after, Just (target, kind)) ->
+      let (bound, local) = bindLocal after "" kind
+          declaration = CoreStatement (locatedSpan written) (CoreDeclare local target)
+       in go (Just (reading (locatedSpan written) local)) bound [declaration] [] operands
+  _ -> go Nothing state [] [] operands
  where
   types = contextTypes . lowerContext
   loaned = signatureLoaned signature
   parameterTypes = map (coreLocalType . coreParameterLocal) (signatureParameters signature)
 
-  go current statements held [] = finish current statements (reverse held)
-  go current statements held ((index, operand, argument) : rest) = case argumentOf current index operand argument of
+  go prepared current statements held [] = finish prepared current statements (reverse held)
+  go prepared current statements held ((index, operand, argument) : rest) = case argumentOf current index operand argument of
     (after, Nothing) -> refused after
     (after, Just (declarations, value, kept))
       | expressionIsPrintValued value -> halt (locatedSpan argument) "a Result[(), Str] call argument" after
@@ -105,7 +118,7 @@ lowerLoanedOperands lower state at callee signature defaulted = go state [] []
       | otherwise ->
           let (bound, local) = bindLocal after "" (coreExpressionType value)
               declared = declarations <> [CoreStatement (locatedSpan argument) (CoreDeclare local value)]
-           in go bound (statements <> declared) ((local, kept, index) : held) rest
+           in go prepared bound (statements <> declared) ((local, kept, index) : held) rest
 
   argumentOf current index operand argument
     | index `elem` loaned, Receiver <- operand = lentFrom argument
@@ -123,8 +136,9 @@ lowerLoanedOperands lower state at callee signature defaulted = go state [] []
       Just (after, Nothing) -> (after, Nothing)
       Just (after, Just (declarations, found)) -> (after, Just (declarations, readHeld (types after) found, Just found))
 
-  finish current statements held
+  finish prepared current statements held
     | blockType statements Nothing == CoreNeverType = stopped current statements
+    | Just target <- prepared = made current statements held (CoreCallValue target)
     | otherwise = case callee of
         Direct target -> made (queued target current) statements held (CoreCall target)
         Through written -> case lower current written of

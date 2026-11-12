@@ -356,7 +356,7 @@ mutableLoanSuccessPrograms =
       , "  print(display(d == d) + show(d))"
       , "  0"
       , "}" ]
-    , "1 9\n5Bag{size: 5}\n7182\nNone3\n6 6\nindex\ncallee\n102[1, 102]\n5 0\n18 18\n19 29 29\ntrue<fn bump>\n", "")
+    , "1 9\n5Bag{size: 5}\n7182\nNone3\n6 6\ncallee\nindex\n102[1, 102]\n5 0\n18 18\n19 29 29\ntrue<fn bump>\n", "")
   ]
 
 mutableLoanRefusalPrograms :: [(String, Text)]

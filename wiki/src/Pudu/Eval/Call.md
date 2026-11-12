@@ -113,6 +113,11 @@ are pure and must stay admissible wherever pure builtins are.
 
 `LaneKernelBuiltin` goes to [[Eval Builtin Lanes]] beside it.
 
+Resolved Grill Log (#828): prepare ordinary runtime function values before supplied
+arguments and keep the resolved value across argument mutation. Both tree and
+compiled call paths use this coordinator. Qualified dispatch and member-receiver
+preparation remain in the next partition.
+
 ## Referenced by
 
 [[src/Pudu/Eval/_MOC]] · [[Evaluator]] · [[Eval Program]] · [[Eval Loop]]
