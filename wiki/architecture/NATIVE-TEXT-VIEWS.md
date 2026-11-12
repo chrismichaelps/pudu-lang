@@ -16,7 +16,7 @@ width only at a scalar start strictly before the end.
 
 - Reuse owned text and ordinary Option/tuple carriers; no pointer ABI,
   source API, inference or interpreter fallback. Arguments are held once
-  left-to-right before receiver-last CoreTextMethod reads. Stop immediately
+  left to right before guarded byte or scalar reads. Stop immediately
   on Never. Exact solved signatures govern direct calls and builtin values.
 - Add internal byte-size/index/byte-read/slice-validity/slice/search/scalar
   read/width tags. Optional reads are guarded; searches run once into an

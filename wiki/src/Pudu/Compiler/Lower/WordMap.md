@@ -13,8 +13,7 @@ intersection, difference, symmetric difference, subset, disjointness, count and 
 ## Resolved Grill Log
 
 Lower arguments once in order, stopping on Never before visiting later ones.
-Hold both operands in declaration order before CoreKeyedMethod: frame method
-lowering reads arguments before its receiver, unlike a two-argument builtin.
+Hold operands in declaration order before CoreKeyedMethod.
 Direct calls and callable bodies share this builder. Malformed facts refuse
 at the call/reference. Native keys retain their existing canonical order.
 

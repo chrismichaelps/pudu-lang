@@ -41,7 +41,7 @@ rangeRefusalPrograms =
       [ "fn main() -> Int {", "  print(\"start\")", "  print(show((..4).toArray()))"
       , "  return 0", "}" ])
   , ("map of an unbounded range", program
-      [ "fn main() -> Int {", "  print(\"start\")", "  print(show((..4).map(|n| n)))"
+      [ "fn main() -> Int {", "  print(\"start\")", "  print(show((..4).map({ print(\"callback prepared\")\n |n| n })))"
       , "  return 0", "}" ])
   , ("for over an unbounded range", program
       [ "fn main() -> Int {", "  print(\"start\")", "  let open = 7.."

@@ -42,11 +42,10 @@ decides; otherwise exactly one candidate must exist.
 
 ## Order
 
-Arguments run first, then the receiver, and the receiver is passed as the first
-argument. Each argument is declared into an unnamed temporary inside the call's
-block value, so the order survives the receiver going first. If an argument or
-the receiver is Never, the operands are evaluated in order and the call is not
-made. Qualified calls pass their arguments as written.
+The receiver is retained before the supplied operands. Direct Core calls
+pass the receiver first and evaluate their operands in that order. A Never
+receiver stops lowering the call before arguments. An argument that transfers
+skips invocation. Qualified calls pass their arguments as written.
 
 ## Resolved Grill Log
 
@@ -56,9 +55,9 @@ made. Qualified calls pass their arguments as written.
 - **Q:** Can a default body be lowered once for all owners? **A:** No. Its facts
   name the rigid `Self`, so each owner gets its own copy with `Self` bound.
   Rejected: a dynamic dispatch table, which the native subset has no value for.
-- **Q:** Must arguments go into temporaries? **A:** Yes. An argument may
-  reassign the receiver's variable, and the evaluator reads the receiver after
-  the arguments. Rejected: reordering operands in C.
+- **Q:** How does a direct call retain the receiver across argument effects?
+  **A:** Its first frame operand owns the receiver value until invocation or
+  unwind. A loaned receiver also retains the place and indices for writeback.
 - **Q:** Are two modules' same-named types distinguished? **A:** Here, yes, by
   canonical key, as checking types the call. The evaluator collides on them
   (#550); conformance for that case waits for its fix.
@@ -96,6 +95,12 @@ looks there first.
 
 Byte methods answer before any implementation.
 
+## Dynamic receivers first (#828, #846)
+
+A method of a dynamic value holds its receiver, then its arguments, in locals
+before matching on the type the receiver holds, as every other receiver call
+runs under [[Callee First Call Evaluation]].
+
 ## Referenced by
 
 [[Compiler Lower]] · [[Compiler Lower Body]] · [[Native Trait Methods]]
@@ -113,8 +118,8 @@ to write back to. See [[Native Mutable Loans]].
 open) and admits its signature; `invoke` builds an ordinary call from it.
 A receiver call or a qualified call whose instance has loaned parameters is
 lowered again from the state before the ordinary attempt, through
-[[Compiler Lower Loan]]'s `lowerLoanedOperands`: a receiver call's arguments
-run first, then its receiver, which lends whatever place it names; a
+[[Compiler Lower Loan]]'s `lowerLoanedOperands`: a receiver call first
+retains its receiver, which lends whatever place it names, then its arguments; a
 qualified call's operands are arguments in order. Lowering is a pure state
 function, so the discarded attempt leaves nothing behind. Only `for`-loop
 protocol calls still go straight to `invoke`, whose loans refuse at the

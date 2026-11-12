@@ -58,6 +58,10 @@ See [[Native Mutable Loans]].
 
 Uses [[Compiler Lower Place]], [[Compiler Lower Default]], [[Compiler Lower Control]] and [[Compiler Lower State]]. Used by [[Compiler Lower]], [[Compiler Lower Body]], [[Compiler Lower Try]] and [[Compiler Lower Call]].
 
+Resolved Grill Log (#828): snapshot every value callee before preparing
+any operand. A direct receiver call prepares parameter zero first and
+retains its lent place. Writeback follows parameter position after invocation.
+
 ## Referenced by
 
 [[Compiler Lower]] · [[Compiler Lower Body]] · [[Compiler Lower Try]] · [[Compiler Lower Call]] · [[Native Mutable Loans]] · [[src/Pudu/Compiler/_MOC]]
@@ -68,15 +72,15 @@ Also export Operand and lowerLoanedOperands: operands come in the order
 they run, each with its parameter position and whether it is an argument or
 a method receiver. A receiver at a loaned position lends any place it
 names; an argument only `&mut place` or a local lent on. The call passes
-operands by position and stores finals in parameter order, so a receiver,
-which runs last, is written back first, as `callClosureLending` lists
+operands by position and stores finals in parameter order, so a receiver
+is written back first, as `callClosureLending` lists
 `lentSelf` first. lowerLoanedCall is the case of arguments in order.
 
 ## Calls through values (#794)
 
 Also export Callee, valueSignature and closeLoaned. A loaned call reaches a
 `Direct` function by name, queued only when the call is made, or `Through`
-a value, lowered after the operands as `evaluateCall` orders it; a value
+an ordinary value held before its operands, as `evaluateCall` orders it; a value
 that stops leaves the call unmade. valueSignature builds the signature a
 value call reads from its formed function type. closeLoaned makes a body's
 trailing result answer the finals; lambdas and lifted method values use it.

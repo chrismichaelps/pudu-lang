@@ -10,7 +10,7 @@ aliases: [Compiler Lower Bytes]
 ## Purpose and interface
 
 `lowerBytesOf` lowers `bytesOf(array)` and `lowerBytesMethod` the built-in
-methods of a byte sequence, arguments before the receiver.
+methods of a byte sequence, receiver before arguments.
 
 ## Resolved Grill Log
 
@@ -28,8 +28,8 @@ methods of a byte sequence, arguments before the receiver.
 
 `strided(offset, width, stride)` answers None for a negative offset or width, a
 stride below one or a width wider than the stride, and otherwise Some of
-`BytesStridedOf` ([[Core Byte Operations]]). The operands and receiver run once,
-in written order, into locals before the shape test.
+`BytesStridedOf` ([[Core Byte Operations]]). The receiver, then the operands, run
+once into locals before the shape test, as every receiver call runs (#828).
 
 ## Referenced by
 
@@ -37,8 +37,8 @@ in written order, into locals before the shape test.
 
 ## Total operand selection
 
-Resolved Grill Log: split the collected operands with a nonempty pattern on
-the reversed list. An empty operand list refuses at the call span; no partial
+Resolved Grill Log: split the collected operands with a nonempty pattern
+headed by the receiver. An empty operand list refuses at the call span; no partial
 `init` or `last` is needed to select the receiver.
 
 ## Shared builder (#631)

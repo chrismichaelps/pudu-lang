@@ -202,7 +202,7 @@ mutableLoanSuccessPrograms =
       , "  print(show(holder))"
       , "  0"
       , "}" ]
-    , "3 3\n-1 203\narg\ni\n[Count{n: 0}, Count{n: 6}]\n-1 204\n7 0Bag{items: [\"x\", \"y\"]}\n[Bag{items: [\"q\", \"r\"]}]\n", "")
+    , "3 3\n-1 203\ni\narg\n[Count{n: 0}, Count{n: 6}]\n-1 204\n7 0Bag{items: [\"x\", \"y\"]}\n[Bag{items: [\"q\", \"r\"]}]\n", "")
   , ("generic, inherited and fallible methods lend nested receivers", program
       [ "trait Grow {"
       , "  fn grow(self: &mut Self, by: Int) -> Int"
@@ -241,7 +241,7 @@ mutableLoanSuccessPrograms =
       , "  print(show(g.check(Err(\"x\"))) + show(g.check(Ok(1))) + show(g))"
       , "  0"
       , "}" ]
-    , "2 8\na\ni\nOuter{inner: Box{value: \"s\", count: 8}, boxes: [Box{value: 1, count: 10}]}\nErr(\"x\")Ok(3)Gauge{seen: 2}\n", "")
+    , "2 8\ni\na\nOuter{inner: Box{value: \"s\", count: 8}, boxes: [Box{value: 1, count: 10}]}\nErr(\"x\")Ok(3)Gauge{seen: 2}\n", "")
   , ("a loaned method held as a value writes back to its own copy", program
       [ "trait Bump { fn bump(self: &mut Self) -> Int }"
       , "type Count = { mut n: Int }"
@@ -356,7 +356,7 @@ mutableLoanSuccessPrograms =
       , "  print(display(d == d) + show(d))"
       , "  0"
       , "}" ]
-    , "1 9\n5Bag{size: 5}\n7182\nNone3\n6 6\nindex\ncallee\n102[1, 102]\n5 0\n18 18\n19 29 29\ntrue<fn bump>\n", "")
+    , "1 9\n5Bag{size: 5}\n7182\nNone3\n6 6\ncallee\nindex\n102[1, 102]\n5 0\n18 18\n19 29 29\ntrue<fn bump>\n", "")
   ]
 
 mutableLoanRefusalPrograms :: [(String, Text)]
@@ -375,7 +375,7 @@ mutableLoanRefusalPrograms =
       , "  print(display(pick()(&mut xs[0])) + show(xs))"
       , "  pick()(&mut xs[2])"
       , "}" ])
-  , ("a method receiver out of range fails at its root after the arguments", program
+  , ("a method receiver out of range fails before its arguments", program
       [ "trait Grow { fn grow(self: &mut Self, by: Int) -> Int }"
       , "type Box = { mut count: Int }"
       , "impl Grow for Box {"

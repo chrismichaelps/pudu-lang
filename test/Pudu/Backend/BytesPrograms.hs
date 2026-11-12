@@ -61,7 +61,7 @@ bytesSuccessPrograms =
       , "  value = bytesOf([1u8])"
       , "  print(show(captured()) + \" \" + show(keep(&value)))"
       , "  return 0", "}" ]
-    , "from\nto\nreceiver\n0x6263\nconcat-argument\nconcat-receiver\n0x6162636461626364\nat-index\nat-receiver\nSome(99)\n0x00ff 0x01\n")
+    , "receiver\nfrom\nto\n0x6263\nconcat-receiver\nconcat-argument\n0x6162636461626364\nat-receiver\nat-index\nSome(99)\n0x00ff 0x01\n")
   , ("folded bytes retain arbitrary data inside aggregates", program
       [ "type Packet = { payload: Bytes }"
       , "const RAW = bytesOf([0u8, 128u8, 255u8])"

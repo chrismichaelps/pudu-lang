@@ -35,20 +35,19 @@ bytesFromArray at array = CoreExpression at CoreBytesType (CoreBytesMethod Bytes
 {-| A method of a byte sequence; Nothing when the receiver is not one. -}
 lowerBytesMethod :: LowerExpression -> LowerState -> Span -> Located Expression -> Text -> [Located Expression] -> Maybe Lowered
 lowerBytesMethod lower state at receiver member arguments = case typeForSpan types (locatedSpan receiver) of
-  Just CoreBytesType -> Just $ case collect lower state (arguments <> [receiver]) of
+  Just CoreBytesType -> Just $ case collect lower state (receiver : arguments) of
     (after, Nothing) -> refused after
     (after, Just cores)
       | any stops cores -> (after, Just (stopped at cores, CoreNeverType))
       | otherwise -> case (member, cores) of
           ("isEmpty", [bytes]) -> built after CoreBoolType (CoreBinary CoreEqual (method intType BytesLengthOf bytes []) (number 0))
-          ("at", [index, bytes]) | coreExpressionType index == intType -> at' after index bytes
+          ("at", [bytes, index]) | coreExpressionType index == intType -> at' after index bytes
           ("toText", [bytes]) -> asText after bytes
-          ("strided", [offset, width, stride, bytes])
+          ("strided", [bytes, offset, width, stride])
             | all ((== intType) . coreExpressionType) [offset, width, stride] -> strided after (offset, width, stride) bytes
-          _ -> case (lookup member direct, reverse cores) of
-            (Just (name, parameters, result), bytes : reversed)
-              | let operands = reverse reversed
-              , map coreExpressionType operands == parameters ->
+          _ -> case (lookup member direct, cores) of
+            (Just (name, parameters, result), bytes : operands)
+              | map coreExpressionType operands == parameters ->
                   built after result (CoreBytesMethod name bytes operands)
             _ -> halt at ("a call to " <> member <> " on Bytes with these arguments") after
   _ -> Nothing
@@ -83,9 +82,9 @@ lowerBytesMethod lower state at receiver member arguments = case typeForSpan typ
           none = CoreExpression at option (CoreConstruct "None" [])
           choice = CoreExpression at option (CoreIfValue inside (CoreBlock [] (Just some)) none)
        in (withBytes, Just (CoreExpression at option (CoreBlockValue (CoreBlock
-            [CoreStatement at (CoreDeclare indexLocal index), CoreStatement at (CoreDeclare bytesLocal bytes)] (Just choice))), option))
+            [CoreStatement at (CoreDeclare bytesLocal bytes), CoreStatement at (CoreDeclare indexLocal index)] (Just choice))), option))
     _ -> halt at "an Option result of at without a native form" current
-  -- strided: None for a negative offset or width, a stride below one or a
+  -- strided: the receiver, then the operands, run into locals; None for a negative offset or width, a stride below one or a
   -- width wider than the stride; otherwise Some of the gathered groups.
   strided current (offsetCore, widthCore, strideCore) bytes = case optionAt of
     Just option@(CoreSumType _ _) ->
@@ -101,7 +100,7 @@ lowerBytesMethod lower state at receiver member arguments = case typeForSpan typ
           none = CoreExpression at option (CoreConstruct "None" [])
           choice = CoreExpression at option (CoreIfValue shaped (CoreBlock [] (Just some)) none)
           declared = [CoreStatement at (CoreDeclare local operand)
-            | (local, operand) <- [(offsetLocal, offsetCore), (widthLocal, widthCore), (strideLocal, strideCore), (bytesLocal, bytes)]]
+            | (local, operand) <- [(bytesLocal, bytes), (offsetLocal, offsetCore), (widthLocal, widthCore), (strideLocal, strideCore)]]
        in (withBytes, Just (CoreExpression at option (CoreBlockValue (CoreBlock declared (Just choice))), option))
     _ -> halt at "an Option result of strided without a native form" current
   -- toText: Some of the same storage when it is valid UTF-8, None otherwise.

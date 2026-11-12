@@ -49,7 +49,7 @@ charSuccessPrograms =
       , "  return 0"
       , "}" ]
     , "b\n3\n'z'\nb\n<b>\nb\n")
-  , ("charAt runs its index before the receiver", program
+  , ("charAt retains the receiver before its index", program
       [ "fn main() -> Int {"
       , "  let c = { print(\"text\")"
       , "    \"abc\" }.charAt({ print(\"index\")"
@@ -57,7 +57,7 @@ charSuccessPrograms =
       , "  print(display(c))"
       , "  return 0"
       , "}" ]
-    , "index\ntext\nb\n")
+    , "text\nindex\nb\n")
   ] <>
   [ ("Char entry " <> label, program ["fn main() -> Char {", "  " <> body, "}"], answer <> "\n")
   | (label, body, answer) <-

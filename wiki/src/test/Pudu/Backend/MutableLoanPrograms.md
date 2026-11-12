@@ -26,6 +26,10 @@ compiled evaluator; healthy programs also run under counted allocation.
 
 [[Backend Output Callable Programs]] · [[Backend Native Tests]] · [[Backend Text Leak Tests]] · [[Pudu Test Cabal Manifest]]
 
+Resolved Grill Log (#828): the computed loaned callee prints before its
+argument index. The final lent value and writeback are checked independently
+of the ordering trace.
+
 ## Referenced by
 
 [[Native Mutable Loans]] · [[src/Pudu/Backend/_MOC]]
@@ -33,16 +37,18 @@ compiled evaluator; healthy programs also run under counted allocation.
 ## Method loans (#790)
 
 Successes add receiver and argument loans with a qualified trait call and
-an element receiver whose index runs after the argument; generic,
+an element receiver whose index runs before the argument; generic,
 inherited and fallible methods on nested receivers; and a loaned method held
 as a value. A failure adds an element receiver out of range, reported at
-its root after the argument ran.
+its root before the argument runs.
 
 ## Loans through values (#794)
 
 Successes add named functions, parameters typed `fn(&mut Int) -> Int`,
 lambdas and arrays of loaned functions; bound and type-qualified method
 values with `&mut` inputs, lambdas with `return`, `?` and captures, a callee
-that runs after an element argument, a record field, a generic
+that runs before an element argument, a record field, a generic
 higher-order function and a defaulted function value. A failure adds an
 element out of range lent through a value, after the callee ran.
+
+Resolved Grill Log (#828): A receiver index runs before the supplied argument. A bad receiver index fails at the root before any supplied argument effects.

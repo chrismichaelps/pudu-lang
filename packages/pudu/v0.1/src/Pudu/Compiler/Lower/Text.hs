@@ -33,8 +33,8 @@ lowerTextMethod lower state at receiver member arguments = case lower state rece
         collect current done []
           | length arguments /= length parameters =
               halt at ("a call to " <> member <> " with this many arguments") current
-          | any ((== CoreNeverType) . coreExpressionType) (reverse done <> [coreReceiver]) =
-              let operands = reverse done <> [coreReceiver]
+          | any ((== CoreNeverType) . coreExpressionType) done =
+              let operands = coreReceiver : reverse done
                in built current (CoreBlockValue (CoreBlock
                     [CoreStatement (coreExpressionSpan operand) (CoreEvaluate operand) | operand <- operands] Nothing))
                     CoreNeverType
@@ -45,17 +45,7 @@ lowerTextMethod lower state at receiver member arguments = case lower state rece
             | expressionIsPrintValued core -> halt (locatedSpan argument) "a Result[(), Str] method argument" next
             | kind == expected || kind == CoreNeverType -> collect next (core : done) rest
             | otherwise -> halt (locatedSpan argument) ("a " <> coreTypeName kind <> " argument to " <> member) next
-  (after, Just (coreReceiver, CoreNeverType)) -> effects after [] arguments
-    where
-      -- The receiver still runs after the arguments, and it is what stops the call.
-      effects current done [] = built current (CoreBlockValue (CoreBlock
-        [CoreStatement (coreExpressionSpan operand) (CoreEvaluate operand) | operand <- reverse done <> [coreReceiver]] Nothing))
-        CoreNeverType
-      effects current done (argument : rest) = case lower current argument of
-        (next, Nothing) -> refused next
-        (next, Just (core, _))
-          | expressionIsPrintValued core -> halt (locatedSpan argument) "a Result[(), Str] method argument" next
-          | otherwise -> effects next (core : done) rest
+  (after, Just (coreReceiver, CoreNeverType)) -> (after, Just (coreReceiver, CoreNeverType))
   (after, Just (coreReceiver, CoreCharType)) -> case (member, arguments) of
     -- Char answers these two before any impl, as readCharMember does.
     ("code", []) -> built after (CoreCharCode coreReceiver) intType

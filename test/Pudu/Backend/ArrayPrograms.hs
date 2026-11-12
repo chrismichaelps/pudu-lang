@@ -38,6 +38,18 @@ arraySuccessPrograms =
       , "  print(display(built.length()) + \" \" + display(total))"
       , "  return 0", "}" ]
     , "[\"a\"] [\"a\", \"b\"] [\"z\", \"b\", \"c\", \"z\", \"b\"]\n2000 1999000\n")
+  , ("array updates and callbacks retain the receiver before operands", program
+      [ "fn items() -> Array[Int] { print(\"array\")\n [1, 2] }"
+      , "fn callback() -> fn(Int) -> Int { print(\"callback\")\n |n| n + 1 }"
+      , "fn main() -> Int {"
+      , "  var xs = [1, 2]"
+      , "  xs = xs.push(xs[0])"
+      , "  print(show(xs))"
+      , "  xs = xs.push({ xs = [9]\n xs[0] })"
+      , "  print(show(xs))"
+      , "  print(show(items().map(callback())))"
+      , "  0", "}" ]
+    , "[1, 2, 1]\n[1, 2, 1, 9]\narray\ncallback\n[2, 3]\n")
   , ("map, filter and reduce call back once per item, in order", program
       [ "fn noted(label: Str, value: Int) -> Int {", "  print(label + display(value))", "  value", "}"
       , "fn main() -> Int {"

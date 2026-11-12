@@ -14,7 +14,7 @@ Compile ordinary checked Pudu programs into portable C11 with interpreter-identi
 | Area | State | Next obligation |
 | --- | --- | --- |
 | Platform Int/Bool, checked arithmetic, if/while, printing | Implemented (#498, #505) | Preserve exact deferred magnitudes, control/output parity and closed-pipe continuation/diagnostic regressions |
-| Scalar functions, recursion, call depth | Partial (#499, #828) | Reconcile computed-callee ordering with the normative callee-first contract (#828); existing engines currently agree on argument-first behavior. Preserve explicit-frame lifetime, argument ordering, E7002 timing and differential evidence, including once-counted named-value calls (#568); promotion still requires independent review |
+| Scalar functions, recursion, call depth | Partial (#499, #828) | Callees, receivers and their selected members run before arguments in the tree, compiled and native paths (#828), including dynamic receivers and byte operations added by #846. Preserve explicit-frame lifetime, argument ordering, E7002 timing and differential evidence, including once-counted named-value calls (#568); promotion still requires independent review |
 | Loop control and scalar loop results | Implemented (#489) | Preserve labels, transfers, Never joins and condition-scope evidence |
 | Unit values, parameters and operations | Implemented (#492, #493) | Preserve effect-first temporaries, display/equality and #494 E7001 runtime refusals |
 | Entry result reporting | Partial (#512, #521, #525, #566) | Represented values, including output Results, use interpreter-identical rendering and builder buffering; complete callable forms and platform failure evidence remain |

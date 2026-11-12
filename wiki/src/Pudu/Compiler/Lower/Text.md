@@ -31,7 +31,7 @@ Str receiver. Methods outside the table refuse; nothing falls back.
 
 ## Grill Log
 
-- **Q:** Why lower the receiver first when it runs last? **A:** Its type picks
+- **Q:** Why lower the receiver first? **A:** Its type picks
   the method; lowering builds Core only, and Core records the evaluation
   order the emitter follows. _Rejected:_ guessing the receiver type from
   syntax.
@@ -71,4 +71,4 @@ is what `readCharMember` finds before any impl; other Char members refuse.
 
 ## Native byte views (#827)
 
-Export lowerTextPrimitive and textCallable in addition to lowerTextMethod. Consume the six exact checked builtin signatures; hold operands once left-to-right and stop on Never before later arguments. Build ordinary Option/tuple values with guarded byte/scalar reads. Search once into an Int local, branch on nonnegative result, then construct Some or None. Direct calls require the solved result; callable registration supplies its validated result explicitly. Existing receiver-last Str method behavior is unchanged. See [[Native Text Views]].
+Export lowerTextPrimitive and textCallable in addition to lowerTextMethod. Consume the six exact checked builtin signatures; hold operands once left-to-right and stop on Never before later arguments. Build ordinary Option/tuple values with guarded byte/scalar reads. Search once into an Int local, branch on nonnegative result, then construct Some or None. Direct calls require the solved result; callable registration supplies its validated result explicitly. See [[Native Text Views]].

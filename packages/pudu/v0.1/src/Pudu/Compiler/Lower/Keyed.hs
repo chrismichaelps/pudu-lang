@@ -1,6 +1,6 @@
 {-| @Pudu.Compiler.Lower.Keyed — maps and sets: `mapOf`, `setOf`, `#{...}`
-    and their methods, as `Eval.Builtin.Collection` answers them. Arguments run
-    before the receiver. A key whose type could hold a function is tested
+    and their methods, as `Eval.Builtin.Collection` answers them. The receiver runs
+    before arguments. A key whose type could hold a function is tested
     before it is stored, and one that can't be ordered stops the program with
     E7008, as `comparableValue` decides. -}
 module Pudu.Compiler.Lower.Keyed
@@ -77,19 +77,19 @@ lowerKeyedMethod lower state at receiver member arguments = case typeForSpan typ
     Nothing -> halt at ("the " <> collectionName kind <> " method '" <> member <> "'") state
     Just (parameters, result, shape)
       | length parameters /= length arguments -> halt at ("a call to " <> member <> " with this many arguments") state
-      | otherwise -> case collect lower state (arguments <> [receiver]) of
+      | otherwise -> case collect lower state (receiver : arguments) of
           (after, Nothing) -> refused after
           (after, Just cores)
             | any stops cores -> (after, Just (stopped at cores, CoreNeverType))
-            | and (zipWith (\expected core -> coreExpressionType core == expected) parameters cores) ->
-                shape after kind key (indexed kind cores) result
+            | target : operands <- cores, map coreExpressionType operands == parameters ->
+                shape after kind key (target : indexed kind operands) result
             | otherwise -> halt at ("a call to " <> member <> " with these arguments") after
   collectionName kind = case kind of
     CoreMapType _ _ -> "Map"
     CoreStoreType _ -> "Buckets"
     _ -> "Set"
   indexed kind cores = case (kind, cores) of
-    (CoreStoreType _, probe : rest@(_ : _)) -> CoreExpression (coreExpressionSpan probe) intType
+    (CoreStoreType _, probe : rest) -> CoreExpression (coreExpressionSpan probe) intType
       (CoreBinary CoreWrapAdd probe (CoreExpression at intType (CoreIntegerLiteral PlatformSigned 0))) : rest
     _ -> cores
   storeMethods kind value =
@@ -121,12 +121,12 @@ lowerKeyedMethod lower state at receiver member arguments = case typeForSpan typ
     , ("union", ([kind], kind, plain KeyedUnion))
     , ("intersect", ([kind], kind, plain KeyedIntersect))
     , ("difference", ([kind], kind, plain KeyedDifference)) ]
-  plain name current _ _ cores result = case reverse cores of
-    target : backwards -> (current, Just (CoreExpression at result (CoreKeyedMethod name target (reverse backwards)), result))
+  plain name current _ _ cores result = case cores of
+    target : operands -> (current, Just (CoreExpression at result (CoreKeyedMethod name target operands), result))
     [] -> refused current
   -- get: Some(lookup) when contains says the key is there, None otherwise.
   getting current kind _ cores _ = case (typeForSpan types at, cores) of
-    (Just option@(CoreSumType _ _), [probe, collection]) ->
+    (Just option@(CoreSumType _ _), [collection, probe]) ->
       let (withKey, keyLocal) = bindLocal current "" (coreExpressionType probe)
           (withMap, mapLocal) = bindLocal withKey "" kind
           valueType = case kind of
@@ -141,7 +141,7 @@ lowerKeyedMethod lower state at receiver member arguments = case typeForSpan typ
           choice = CoreExpression at option (CoreIfValue found (CoreBlock [] (Just some)) none)
        in ( withMap
           , Just (CoreExpression at option (CoreBlockValue (CoreBlock
-              [CoreStatement at (CoreDeclare keyLocal probe), CoreStatement at (CoreDeclare mapLocal collection)] (Just choice))), option) )
+              [CoreStatement at (CoreDeclare mapLocal collection), CoreStatement at (CoreDeclare keyLocal probe)] (Just choice))), option) )
     _ -> halt at "an Option result of get without a native form" current
   -- insert: everything runs, then the key is checked, then stored.
   inserting described current kind key cores result
@@ -151,12 +151,11 @@ lowerKeyedMethod lower state at receiver member arguments = case typeForSpan typ
             read' local = CoreExpression at (coreLocalType local) (CoreReadLocal local)
             declares = [CoreStatement at (CoreDeclare local core) | (local, core) <- zip locals cores]
          in case locals of
-              keyLocal : _ ->
+              target : operands@(keyLocal : _) ->
                 let check = orderable AtCall at described (read' keyLocal)
-                    target = last locals
-                    stored = CoreExpression at result (CoreKeyedMethod KeyedInsert (read' target) (map read' (init locals)))
+                    stored = CoreExpression at result (CoreKeyedMethod KeyedInsert (read' target) (map read' operands))
                  in (final, Just (CoreExpression at result (CoreBlockValue (CoreBlock (declares <> [check]) (Just stored))), result))
-              [] -> refused final
+              _ -> refused final
 
 {-| The array goes into a local, its keys are checked when they could need
     it, then the tree is built from it. -}

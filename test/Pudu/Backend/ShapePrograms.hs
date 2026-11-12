@@ -12,7 +12,7 @@ shapeSuccessPrograms =
       , "", "fn main() -> Int {", "  let held = Holder{name: \"pudu\", admits: fn(reader: Str) -> Int { reader.length() }}"
       , "  print(display(held.name.length() * 10 + (held.admits)(\"abc\")))", "  0", "}" ]
     , "43\n")
-  , ("a method of a field's name wins, and arguments run before the receiver", program
+  , ("a method of a field's name wins in callee position", program
       [ "type Task = { run: fn(Int) -> Int, name: Str }", "", "trait Runs {"
       , "  fn run(self: Task, n: Int) -> Int", "}", ""
       , "impl Runs for Task {", "  fn run(self: Task, n: Int) -> Int { n + 1000 }", "}"
@@ -22,6 +22,15 @@ shapeSuccessPrograms =
       , "  let picked = job.run", "  print(display(picked(5)))", "  0"
       , "}" ]
     , "arg 3\narg 4\n1003 1004\n10\n")
+  , ("a function field is selected before its record is rebound", program
+      [ "type Holder = { run: fn(Int) -> Int }"
+      , "fn main() -> Int {"
+      , "  var held = Holder{run: |n| n + 1}"
+      , "  print(display(held.run({ held = Holder{run: |n| n + 10}"
+      , "    4 })))"
+      , "  print(display(held.run(4)))"
+      , "  0", "}" ]
+    , "5\n14\n")
   , ("mutually recursive records in one module", program
       [ "type Node = { label: Int, parent: Option[Wrap] }", "type Wrap = { node: Node }", ""
       , "fn depth(node: Node) -> Int {", "  match node.parent {", "    case Some(wrapped) => 1 + depth(wrapped.node)"

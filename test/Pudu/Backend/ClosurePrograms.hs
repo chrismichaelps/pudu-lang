@@ -70,15 +70,33 @@ closureSuccessPrograms =
       , "  print(display(outer(3)(4)))"
       , "  return 0", "}" ]
     , "(10, 20) (\"aa\", \"bb\")\n32\n304\n")
-  , ("arguments run before the callee value", program
+  , ("the callee value is retained before arguments", program
       [ "fn tag(label: Str, value: Int) -> Int {", "  print(label)", "  value", "}"
       , "fn pick(label: Str) -> fn(Int) -> Int {", "  print(label)", "  |n| n + 1", "}"
       , "fn main() -> Int {"
       , "  print(display(pick(\"callee\")(tag(\"argument\", 1))))"
       , "  var f = |n: Int| n * 2"
       , "  print(display(f({ f = |n: Int| n * 3", "    5 })))"
+      , "  print(display(f(5)))"
       , "  return 0", "}" ]
-    , "argument\ncallee\n2\n15\n")
+    , "callee\nargument\n2\n10\n15\n")
+  , ("a transfer skips the remaining parts of a value call", program
+      [ "fn tag(label: Str, value: Int) -> Int {", "  print(label)", "  value", "}"
+      , "fn leave(stop: Bool) -> Int {"
+      , "  (if stop { print(\"callee stops\")"
+      , "    return 7 } else { |value: Int| value })(tag(\"skipped argument\", 1))"
+      , "}"
+      , "fn prepare() -> fn(Int, Int) -> Int {", "  print(\"callee held\")"
+      , "  |a, b| tag(\"skipped invocation\", a + b)", "}"
+      , "fn leaveArgument() -> Int {"
+      , "  prepare()({ print(\"argument stops\")"
+      , "    return 9 }, tag(\"skipped argument\", 1))"
+      , "}"
+      , "fn main() -> Int {"
+      , "  print(display(leave(true)))"
+      , "  print(display(leaveArgument()))"
+      , "  0", "}" ]
+    , "callee stops\n7\ncallee held\nargument stops\n9\n")
   ]
 
 {-| Failures inside a lambda report at the lambda's own source. -}

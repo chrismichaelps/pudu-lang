@@ -20,8 +20,8 @@ missing needles, overlapping matches (`"aaa".indexOf("aa")`,
 `"aaaa".replace("aa", "b")`), empty alphabets, counts of zero, past the end
 and `maxBound :: Int`, slice bounds that are negative, reversed or past the
 end, HTML escapes of all five marks. Views that outlive their source and are
-returned from calls. Effect order: arguments before the receiver, a Never
-argument that stops before the receiver runs.
+returned from calls. Effect order: receiver before arguments. A transfer skips later operands
+and invocation.
 
 Refusals: negative drop, take and repeat (including a negative repeat of
 empty text, which still refuses), the repeat size limit, and a refusal whose
@@ -43,3 +43,5 @@ Trim of ASCII, ideographic and no-break spaces, a line separator (not a space
 for isSpace), empty and all-space text; toUpper of ß and the ﬁ ligature,
 dotted capital I lowered to two scalars, Greek capital sigma (no final form),
 the Dz titlecase digraph both ways, and ΐ, which uppercases to three scalars.
+
+Resolved Grill Log (#828): Check receiver, first argument, and second argument in order, and both receiver and argument transfers.

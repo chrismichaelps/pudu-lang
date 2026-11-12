@@ -31,8 +31,8 @@ lambda.
 
 ## Calls through values
 
-The arguments run first, then the callee, as `evaluateCall` does. So each
-argument goes into a temporary and the call reads them back after the callee.
+A callee runs before supplied arguments. The frame retains each value in
+evaluation order, including a callable selected from a field.
 
 ## Resolved Grill Log
 
@@ -49,6 +49,10 @@ argument goes into a temporary and the call reads them back after the callee.
 
 [[Compiler Lower State]] · [[Compiler Lower Types]] · [[Compiler Lower Generic]] ·
 [[Compiler Lower Control]] · [[Core IR]]
+
+Resolved Grill Log (#828): value calls lower the target first, including
+function-valued members. The frame retains that target before reading any
+argument. A Never target emits no argument effects.
 
 ## Referenced by
 
