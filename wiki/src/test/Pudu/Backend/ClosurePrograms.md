@@ -20,6 +20,10 @@ reassigns the callee's variable. The refusals are tuple ordering over held
 functions (an E7001 after both operands ran, while an absent function still
 orders) and an overflow inside a lambda body.
 
+A sum holding a function, compared in a function declared before any lambda
+is formed, sees its type before the function type; its equality calls the
+function type's `equal` from an earlier definition (#848).
+
 ## Referenced by
 
 [[Native Closures]] · [[Backend Module Programs]] · [[Backend Text Leak Tests]]
