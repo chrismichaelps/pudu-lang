@@ -28,6 +28,12 @@ Compile ordinary checked Pudu programs into portable C11 with interpreter-identi
 | Errors, references and resources | Partial (#544, #553, #649, #651, #790, #794) | Shared borrows, dereference and `?` on Result and Option match the interpreter; assignment to fields, elements and paths of both follows the interpreter's order and root-span failures (#649); functions and methods with `&mut` parameters, `self: &mut Self` included, write each final back to the lent place on every return path, directly, through methods and through function values (#651, #790, #794); moves, drop and all unwind paths remain |
 | Host services and concurrency | Partial (#846) | Tasks, async lambdas, `.await`, `async with scope` joins, cells, locks, channels, threads, clocks, sleeping, arguments, environment, directories, standard-input lines, whole-file I/O, links, permissions, temporary files, atomic writes, open readers/writers, binary64 math, packed lanes and the broad-phase overlap kernel, stream sockets, child programs, gzip and bare-stream compression, time rendering and reading, stop signals and TLS connections through the system TLS library are native; foreign functions with fixed-width integer, float, Bool, text, lent byte and record crossings are typed native call sites ([[Native Foreign Call Sites]], #850, #851, #852); desktop and audio devices and the handle and slot crossings remain refused at their written site; time readings beyond the integer carrier refuse alike in both engines |
 
+## Nested foreign records (#863)
+
+The interpreter and C11 use the platform layout of each nested record.
+[[Nested Foreign Record Delivery]] covers inner tail padding and records
+whose combined scalar leaves exceed the per-record member limit.
+
 ## Published progress (#496)
 
 The README progress bar counts **completed coverage areas**, not individual language

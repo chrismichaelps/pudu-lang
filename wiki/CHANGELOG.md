@@ -5,6 +5,11 @@ tags: [changelog]
 
 # Changelog
 
+## 2026-11-13 — Nested foreign record layout (#863)
+
+- [[Pudu FFI Bridge]] preserves nested struct layouts for arguments, results
+  and output slots, including inner tail padding. See [[Nested Foreign Record Delivery]].
+
 ## 2026-11-12 — Native foreign records (#852)
 
 - [[Native Foreign Call Sites]]: records cross native foreign calls by value as C structs declared from the record, nested records nested, with text fields copied in and out and a missing text field named as the interpreter names it ([[Backend Emit Foreign ABI]]).

@@ -5,6 +5,8 @@ tags: [moc, handoff]
 
 # Handoff Map
 
+- [[Nested Foreign Record Delivery]] — interpreter ABI layout for nested records (#863).
+
 - [[Call Order Repair Delivery]] — #828 normative callee and receiver evaluation order.
 
 - [[Native Word Map Query Delivery]] — #814 remaining sparse-word queries.
