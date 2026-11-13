@@ -5,6 +5,8 @@ tags: [moc, handoff]
 
 # Handoff Map
 
+- [[Native Audio Adapter Delivery]] — AudioToolbox playback and streams (#857).
+
 - [[Native Desktop Adapter Delivery]] — source packaging and desktop builtins (#856).
 
 - [[Nested Foreign Record Delivery]] — interpreter ABI layout for nested records (#863).

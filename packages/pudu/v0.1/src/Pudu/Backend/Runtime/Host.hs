@@ -4,6 +4,7 @@
 module Pudu.Backend.Runtime.Host (hostRuntimeParts) where
 
 import Data.Text (Text)
+import Pudu.Backend.Runtime.Host.Audio (hostAudioParts)
 import Pudu.Backend.Runtime.Host.Child (hostChildParts)
 import Pudu.Backend.Runtime.Host.Compress (hostCompressParts)
 import Pudu.Backend.Runtime.Host.Concurrent (hostConcurrentParts)
@@ -27,4 +28,4 @@ import Pudu.Backend.Runtime.Host.Tls (hostTlsParts)
 hostRuntimeParts :: [(Text, [Text], [Text])]
 hostRuntimeParts = hostStateParts <> hostMathParts <> hostProcessParts <> hostConcurrentParts
   <> hostInputParts <> hostFileParts <> hostHandleParts <> hostScopeParts <> hostLaneParts <> hostRasterParts <> hostSignalParts <> hostForeignParts <> hostNetParts <> hostTlsParts <> hostCompressParts
-  <> hostChildParts <> hostTimeParts <> hostTimeParseParts <> hostDesktopParts
+  <> hostChildParts <> hostTimeParts <> hostTimeParseParts <> hostDesktopParts <> hostAudioParts
