@@ -37,5 +37,6 @@ or a host exception. Old recursive C emission is removed from this module.
 Also export `emitUnit :: EntryForm -> Text -> [Source] -> FrameModule ->
 Either FrameFault EmittedUnit`, with `EntryForm (..)` and `EmittedUnit (..)`
 from [[Backend Emit Entry]]. `emitProgram` stays the executable form's source.
-Resolved Grill Log: the unit carries selected runtime parts and foreign
-library names alongside C so a target can validate them without reading C.
+Resolved Grill Log: the unit reports its selected runtime parts and foreign
+library names so [[Backend Native Target]] refuses from what was emitted, not
+from C text.

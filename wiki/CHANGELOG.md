@@ -5,6 +5,12 @@ tags: [changelog]
 
 # Changelog
 
+## 2026-11-13 — Native iOS library targets (#878)
+
+- `pudu build --native --target` exposes arm64 device and simulator libraries.
+  [[iOS Simulator Run]] compares C and CoreFoundation foreign calls with
+  interpreter output.
+
 ## 2026-11-13 — Apple SDK archive builder (#878)
 
 - [[Backend Toolchain Library]] builds arm64 device and simulator archives.

@@ -51,7 +51,7 @@ embeddedHeaderName :: FilePath
 ## Dependencies and consumers
 
 `containers`, `text`. Consumed by [[Backend Frame Program]],
-[[Backend Emit]] and [[Native Frame Body Tests]].
+[[Backend Emit]] and [[Backend Toolchain Library]].
 
 ## Resolved Grill Log
 
@@ -63,4 +63,4 @@ embeddedHeaderName :: FilePath
 
 ## Referenced by
 
-[[src/Pudu/Backend/_MOC]] · [[Backend Frame Program]]
+[[src/Pudu/Backend/_MOC]] · [[Native Mobile Targets]] · [[Backend Frame Program]]

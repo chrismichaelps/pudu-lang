@@ -58,7 +58,7 @@ compileLibrary :: LibraryRequest -> IO (Either ToolchainFailure LibraryProducts)
 
 [[Backend Native Target]], [[Backend Toolchain Process]], [[Backend Emit Entry]],
 [[Native Host Compression]]; `directory`, `filepath`, `process`, `temporary`.
-Exercised by [[Backend Native Target Tests]].
+Consumed by [[Pudu CLI]] and [[Backend Native Target Tests]].
 
 ## Resolved Grill Log
 
@@ -74,4 +74,4 @@ Exercised by [[Backend Native Target Tests]].
 
 ## Referenced by
 
-[[src/Pudu/Backend/_MOC]] · [[Native Mobile Targets]]
+[[src/Pudu/Backend/_MOC]] · [[Native Mobile Targets]] · [[Pudu CLI]]

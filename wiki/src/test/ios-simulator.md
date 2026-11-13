@@ -1,0 +1,52 @@
+---
+type: module
+path: "@root/test/ios-simulator.mjs"
+fidelity: Active
+tags: [module, test, native, mobile]
+aliases: [iOS Simulator Run]
+---
+
+# iOS Simulator Run
+
+## Purpose and interface
+
+`node test/ios-simulator.mjs <pudu>` builds a Pudu program for
+`ios-simulator-arm64`, links it into a minimal application and compares what
+the application prints on a booted simulator with `pudu run`.
+
+## Algorithm and invariants
+
+- Skips with a message outside Apple silicon macOS, `xcrun` is missing, or no
+  iPhone simulator runtime is installed.
+- The program calls `abs` and `strlen` through `foreign "c"` and calls
+  `CFAbsoluteTimeGetCurrent` through the CoreFoundation system framework.
+  It checks that the returned timestamp is positive, so the host and simulator
+  can compare stable output.
+- `main.m` owns `main`, calls `pudu_program_run` inside an autorelease pool,
+  prints the status it returns and ends, so the launch finishes by itself.
+- The application is linked with `xcrun --sdk iphonesimulator clang`, given an
+  `Info.plist` with its identifier and executable, and ad-hoc signed.
+- The script creates its own iPhone device, boots it, installs, launches with
+  `--console-pty` capturing standard output, and deletes the device afterwards
+  on every path. An explicit `PUDU_IOS_SIMULATOR_UDID` instead uses an already
+  booted test simulator and uninstalls only the uniquely identified smoke app.
+- Passes when the captured lines equal `pudu run`'s output followed by the
+  status line.
+
+## Dependencies and consumers
+
+[[Native Mobile Targets]], [[Backend Toolchain Library]]. Run on an Apple silicon Mac with an installed iOS runtime.
+
+## Resolved Grill Log
+
+- **Q:** Why create a device rather than use an existing one? **A:** An
+  existing device may be booted by its owner; a private device is deleted
+  afterwards without touching anyone else's.
+- **Q:** Why not start `UIApplicationMain`? **A:** The check is that the
+  library runs inside an application process the host owns; a run loop would
+  only make the launch wait. Where a host calls the entry is its framework's
+  choice.
+
+## Referenced by
+
+[[Native Mobile Targets]] · [[Native Mobile Targets Delivery]]

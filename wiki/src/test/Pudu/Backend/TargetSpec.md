@@ -47,7 +47,7 @@ aliases: [Backend Native Target Tests]
 - **Q:** How do SDK diagnostics run on Linux CI? **A:** Scripted `xcrun` and
   environment control, as the host toolchain tests script `PUDU_CC`.
 - **Q:** Why not run the simulator here? **A:** Booting a device takes
-  minutes and needs Xcode; A separate simulator smoke covers application execution.
+  minutes and needs Xcode; [[iOS Simulator Run]] owns that check.
 
 ## Referenced by
 

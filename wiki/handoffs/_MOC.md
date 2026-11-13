@@ -5,6 +5,8 @@ tags: [moc, handoff]
 
 # Handoff Map
 
+- [[Native Mobile Targets Delivery]] — iOS static libraries and simulator evidence (#878).
+
 - [[Native Audio Adapter Delivery]] — AudioToolbox playback and streams (#857).
 
 - [[Native Desktop Adapter Delivery]] — source packaging and desktop builtins (#856).

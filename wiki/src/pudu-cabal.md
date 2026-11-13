@@ -688,22 +688,9 @@ Resolved Grill Log: Register [[Native Host Audio]] and ship the embedded AudioTo
 
 Register [[Backend Emit Foreign Handle]] and [[Core Text Operations]] using existing dependencies.
 
-## Shared native runner (#878)
+## Native mobile targets (#878)
 
-Register [[Backend Toolchain Process]] with the existing toolchain
-dependencies. Resolved Grill Log: the process runner needs no new package.
-
-## Embedded native entry (#878)
-
-Register [[Backend Emit Entry]] with existing dependencies. Resolved Grill
-Log: the emitter uses the existing text and containers packages.
-
-## Native target policy (#878)
-
-Register [[Backend Native Target]]. Resolved Grill Log: the policy needs
-only the existing text and containers dependencies.
-
-## Apple SDK archive builder (#878)
-
-Register [[Backend Toolchain Library]]. Resolved Grill Log: staging and
-invocation use existing toolchain dependencies.
+Register [[Backend Native Target]], [[Backend Emit Entry]],
+[[Backend Toolchain Process]] and [[Backend Toolchain Library]]. Resolved Grill
+Log: the existing `process`, `directory`, `filepath`, `temporary` and
+`containers` dependencies cover them; no package is added.
