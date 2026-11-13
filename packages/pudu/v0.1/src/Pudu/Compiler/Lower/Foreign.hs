@@ -41,7 +41,14 @@ admittedResult target types parameters result
   | CoreTupleType (native : slots) <- result =
       all scalarCrossing parameters && (native == CoreUnitType || scalarCrossing native)
         && length slots == length (targetSlotPositions target)
-        && all scalarCrossing slots
+        && all (slotCrossing types) slots
+  | otherwise = False
+
+slotCrossing :: LowerTypes -> CoreType -> Bool
+slotCrossing types kind
+  | scalarCrossing kind = True
+  | Just fields <- recordFields types kind =
+      not (null fields) && length fields <= 32 && all (slotCrossing types . snd) fields
   | otherwise = False
 
 {-| A parameter crosses as a number, Bool, text, a lent run of bytes or a

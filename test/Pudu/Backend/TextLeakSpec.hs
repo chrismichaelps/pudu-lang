@@ -122,6 +122,11 @@ testForeignHandleLeaks = testCountedPrograms linkerFlags fixture "" cases
     , "  puts(\"release entry\");"
     , "  fflush(stdout);"
     , "}"
+    , "typedef struct { double value; uint8_t marker; } test_padded;"
+    , "typedef struct { test_padded inner; uint8_t tail; } test_padded_slot;"
+    , "void pudu_test_padded_slot(test_padded_slot *slot) {"
+    , "  slot->inner.value = 4.0; slot->tail = 7;"
+    , "}"
     , "typedef struct { int32_t value; } test_value;"
     , "int32_t pudu_test_record_argument(test_value record) { return record.value; }"
     , "typedef struct { const char *first, *second; } test_pair;"
@@ -197,6 +202,16 @@ testForeignHandleLeaks = testCountedPrograms linkerFlags fixture "" cases
         , "fn main() -> Bool {"
         , "  let (_, first, untouched) = unsafe(foreign) { slots(7i32) }"
         , "  first == 8i32 && untouched == 0i32"
+        , "}"
+        ], "true\n", "", ExitSuccess)
+    , ("record output slots preserve nested padding and drop temporary boxes", Text.unlines
+        [ "module Main"
+        , "type Inner = { value: Float64, marker: UInt8 }"
+        , "type Written = { inner: Inner, tail: UInt8 }"
+        , "foreign \"c\" { fn fill symbol \"pudu_test_padded_slot\" (out written: Written) -> () }"
+        , "fn main() -> Bool {"
+        , "  let (_, written) = unsafe(foreign) { fill() }"
+        , "  written.inner.value == 4.0 && written.inner.marker == 0u8 && written.tail == 7u8"
         , "}"
         ], "true\n", "", ExitSuccess)
     , ("entry reporting uses the handle box after teardown", Text.unlines

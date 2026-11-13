@@ -22,8 +22,8 @@ ownership settlement before the full issue can close.
 
 ## Exact next action
 
-Extend slot conversion to records and text, then settle owned handle slots
-as a batch. Scalar differential and counted checks pass.
+Extend slot conversion to text, then settle owned handle slots as a batch.
+Scalar differential and scalar-only record counted checks pass.
 
 ## Referenced by
 

@@ -54,3 +54,7 @@ crossing direction. Record codecs still emit both directions.
 ## Scalar output slots (#854)
 
 Resolved Grill Log: Initialize scalar slots to zero, pass their addresses, and construct the checked result tuple after dispatch.
+
+## Record output slots (#854)
+
+Resolved Grill Log: use the same record decoder as a by-value result, then release its temporary after the result tuple retains it.

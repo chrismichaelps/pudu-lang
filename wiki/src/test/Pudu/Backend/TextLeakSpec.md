@@ -224,3 +224,6 @@ discovery without a local of that type. The C fixture reads its only field.
 Resolved Grill Log: interleave a written slot before a supplied operand and
 an untouched slot after it. Count the result tuple and preserve its unit
 first member. The unwritten slot must contain zero.
+
+A scalar-only record slot checks zeroed fields, nested padding, and release of
+the intermediate decoded record.
