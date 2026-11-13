@@ -5,6 +5,8 @@ tags: [moc, handoff]
 
 # Handoff Map
 
+- [[Foreign Callback Delivery]] — callbacks into Pudu across foreign calls (#875 decided, #876 next).
+
 - [[Native Desktop Adapter Delivery]] — source packaging and desktop builtins (#856).
 
 - [[Nested Foreign Record Delivery]] — interpreter ABI layout for nested records (#863).

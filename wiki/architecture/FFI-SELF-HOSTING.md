@@ -44,7 +44,7 @@ enforced:
 | 2 | Owned values passed by value | Target-derived aggregate layout; identity and transfer declared per result rather than inferred from the layout — owned, borrowed and counted are all real and all needed; full-value destruction |
 | 3 | Returned buffers | Explicit byte length and allocator-matched release; null/empty distinction; overflow checks |
 | 4 | Writable buffers | Exclusive call lease; capacity and initialized length; explicit allocation; no mutation of immutable `Bytes` |
-| 5 | Callbacks | Registration ownership; lifetime, thread affinity, reentrancy, and quiescent unregister |
+| 5 | Callbacks | Decided by [[Foreign Callbacks and Thread Affinity|ADR-0028]]; implementation is #876 |
 | 6 | Hardware operations | Target-specific layout, volatility, ordering, alignment, interrupt and DMA contracts |
 | 7 | Self-hosting bootstrap | Source-to-C compiler with reproducible stage comparison, then measured incremental and parallel compilation |
 
@@ -89,11 +89,19 @@ must be distinguished rather than guessed from parameter names.
 
 ## Callback and hardware boundaries
 
-Callbacks need an owned registration token. Unregister must prevent new invocations and wait for
-in-flight callbacks before captured state or the trampoline can be destroyed. Reentrant unregister
-must have a defined non-deadlocking outcome. Foreign threads must attach to an explicit runtime
-context; capabilities and failures cannot be inherited implicitly. No host exception may unwind
-through a C frame. Cancellation and callback failure require separately defined return behavior.
+[[Foreign Callbacks and Thread Affinity|ADR-0028]] settles each callback obligation:
+
+| Obligation | Decision |
+|---|---|
+| Shape | One C function pointer per callback type plus a generation-qualified context key |
+| Lifetime | An owned registration token; `unregister()` refuses new invocations and waits for in-flight ones |
+| Reentrant unregister | Returns without waiting; the registration is reclaimed at its last exit |
+| Thread affinity | The invoking thread; affinity comes from the platform's own dispatch |
+| Foreign threads | Attach for one invocation; inherit no capability, task or failure boundary |
+| Native run gate | Yielded for dispatch; handle arguments under counted leases |
+| Failure | Stops at the trampoline; the library receives the declared `else` value; nested failures fail the enclosing call, detached ones answer `unregister()` |
+| Cancellation | Observed after the foreign call returns; nested invocations run masked |
+| Teardown | Registrations retire before handles release; later invocations run no Pudu code |
 
 MMIO requires named target address spaces, supported access widths, alignment checks, and explicit
 volatile operations. Volatile access does not imply atomicity, ordering, or a device fence. DMA
@@ -136,4 +144,5 @@ before assigning a throughput claim. No benchmarks were run in the hardening pas
 ## Referenced by
 
 [[architecture/_MOC]] · [[architecture/STDLIB]] · [[2026-09-04-ffi-hardening]] ·
+[[Foreign Callbacks and Thread Affinity]] ·
 [[2026-09-20-owned-foreign-values]]
