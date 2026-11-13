@@ -21,3 +21,10 @@ ordering identical to the interpreter on each target.
 ## Referenced by
 
 [[src/Pudu/Backend/_MOC]] · [[Native Host Runtime]] · [[Native Audio Adapter Delivery]]
+
+## Native stop observation (#857)
+
+Resolved Grill Log: playback also accepts a stop predicate. The adapter
+polls it on the playback thread beside the existing cancellation token.
+Native playback releases the run gate during the call and reacquires it
+before returning the outcome.

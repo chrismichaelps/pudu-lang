@@ -66,7 +66,7 @@ hostAudioParts =
       , "}"
       , "#endif"
       ])
-  , ("host_audio_device_play", ["host_audio", "kernel_int", "host_signal_requested"],
+  , ("host_audio_device_play", ["host_audio", "kernel_int", "host_signal_requested", "host_gate"],
       [ "static pudu_int pudu_host_audio_device_play(pudu_int rate, pudu_int channels, pudu_box * bytes, pudu_int frames, pudu_int buffers, pudu_int timeout) {"
       , "  int64_t rate_value = pudu_kernel_signed(rate.bits);"
       , "  int64_t channels_value = pudu_kernel_signed(channels.bits);"
@@ -84,10 +84,11 @@ hostAudioParts =
       , "#if defined(__APPLE__)"
       , "  uint64_t completed = 0;"
       , "  int32_t cancelled = 0;"
-      , "  if (pudu_host_signal_requested()) pudu_audio_request_cancel(&cancelled);"
-      , "  int status = pudu_audio_play((int32_t)rate_value, (int32_t)channels_value,"
+      , "  pudu_host_leave();"
+      , "  int status = pudu_audio_play_polling((int32_t)rate_value, (int32_t)channels_value,"
       , "    pcm.bytes, pcm.length, (int32_t)frames_value, (int32_t)buffers_value,"
-      , "    (int32_t)timeout_value, &cancelled, &completed);"
+      , "    (int32_t)timeout_value, &cancelled, &completed, pudu_host_signal_requested);"
+      , "  pudu_host_enter();"
       , "  static const char *const words[] = {"
       , "    \"audio device playback failed in the platform adapter\","
       , "    \"audio device playback received an invalid argument\","

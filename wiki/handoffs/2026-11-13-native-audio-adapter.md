@@ -21,9 +21,11 @@ unsupported-platform outcome precedence. The C adapter owns its queues.
 
 ## Exact next action
 
-Verify playback cancellation while the native adapter is running. The macOS
-playback and stream smoke matched the interpreter, and focused validation
-and unknown-stream checks passed.
+The macOS playback and stream smoke matched the interpreter. Sending SIGTERM
+during a ten-second clip produced the same cancellation outcome, empty
+stderr, and exit status zero in both engines.
+
+Verify counted stream teardown and review the non-macOS outcomes in CI.
 
 ## Referenced by
 
