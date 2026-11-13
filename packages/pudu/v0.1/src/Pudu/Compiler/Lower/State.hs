@@ -2,7 +2,7 @@
 module Pudu.Compiler.Lower.State
   ( CoreSignature (..), ForeignTarget (..), Head (..), Instance (..), LowerContext (..), LowerState (..), LoopFrame (..), ModuleScope (..)
   , emptyContext, startFunction, refuse, refused, halt, lookupLocal, bindLocal, intType
-  , resolveFunction, lookupConstant, lookupForeign, lookupInitializer, inModule, withTypeBindings, isModuleQualifier
+  , resolveFunction, lookupConstant, lookupForeign, lookupQualifiedForeign, lookupInitializer, inModule, withTypeBindings, isModuleQualifier
   ) where
 
 import Data.Map.Strict (Map)
@@ -255,6 +255,16 @@ lookupForeign state name = do
     (Nothing, Nothing) -> do
       owner <- Map.lookup name (scopeSelected scope)
       Map.lookup owner (contextModules context) >>= Map.lookup name . scopeForeign
+
+{-| A foreign function `Qualifier.name` reaches: one the qualifier's module
+    declares, unless a local shadows the qualifier. -}
+lookupQualifiedForeign :: LowerState -> Text -> Text -> Maybe ForeignTarget
+lookupQualifiedForeign state qualifier name = do
+  let context = lowerContext state
+  Nothing <- Just (lookupLocal state qualifier)
+  scope <- Map.lookup (contextModule context) (contextModules context)
+  owner <- Map.lookup qualifier (scopeQualifiers scope)
+  Map.lookup owner (contextModules context) >>= Map.lookup name . scopeForeign
 
 {-| The module a constant belongs to and what it was written as. -}
 lookupInitializer :: LowerState -> [Text] -> Maybe (Text, Located Expression)
