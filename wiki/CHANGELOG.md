@@ -12,6 +12,12 @@ tags: [changelog]
   `UsesEffects`) work in a directory made for each run and remove it at the
   end, so suites running at the same time on one machine never share files.
 
+## 2026-11-13 — Entry parameters report a located stop (#871)
+
+- [[Eval Program]] calls the entry at its name, so an entry parameter without
+  a default stops with E7003 instead of an internal error, and
+  [[Compiler Lower Function Body]] compiles the same stop natively.
+
 ## 2026-11-13 — Qualified foreign calls (#873)
 
 - [[Compiler Lower Foreign]] lowers `Qualifier.f(...)` through the module the

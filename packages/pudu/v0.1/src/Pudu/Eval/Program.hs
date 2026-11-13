@@ -187,7 +187,7 @@ programEntry folded integerKinds dependencies entryName moduleValue = do
   found <- lookupName entryName
   case found of
     Just (FunctionValue closure) -> do
-      result <- callClosure closure [] Nothing
+      result <- callClosure closure [] (Just (locatedSpan (functionName (closureFunction closure))))
       if functionAsync (closureFunction closure)
         then awaitTask (locatedSpan (functionName (closureFunction closure))) result
         else pure result
