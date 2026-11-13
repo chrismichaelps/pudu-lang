@@ -27,6 +27,10 @@ The crossing types are the checked argument types and the call's own result.
   and a `()` result. Text, bytes, records, handles and slots refuse here until
   their slices (#851–#854).
 
+## Text and bytes (#851)
+
+Parameters may also cross as `Str` and `Bytes`, and a result as `Str`. Records, handles and slots still refuse (#852–#854).
+
 ## Referenced by
 
 [[Compiler Lower Primitive]] · [[Native Foreign Call Sites]]

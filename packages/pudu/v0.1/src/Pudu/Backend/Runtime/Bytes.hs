@@ -129,12 +129,11 @@ bytesRuntimeParts =
       , "  return array;"
       , "}"
       ])
-  , ("bytes_is_text",
+  , ("utf8_valid",
       [ "/* Well-formed UTF-8: shortest forms only, no surrogates, nothing past"
       , "   U+10FFFF, nothing cut short. */"
-      , "static int pudu_bytes_is_text(pudu_box *box) {"
-      , "  const unsigned char *b = box->fields[0].text.bytes;"
-      , "  size_t length = box->fields[0].text.length, i = 0;"
+      , "static int pudu_utf8_valid(const unsigned char *b, size_t length) {"
+      , "  size_t i = 0;"
       , "  while (i < length) {"
       , "    unsigned char lead = b[i];"
       , "    size_t width;"
@@ -156,6 +155,11 @@ bytesRuntimeParts =
       , "    i += width;"
       , "  }"
       , "  return 1;"
+      , "}"
+      ])
+  , ("bytes_is_text",
+      [ "static int pudu_bytes_is_text(pudu_box *box) {"
+      , "  return pudu_utf8_valid(box->fields[0].text.bytes, box->fields[0].text.length);"
       , "}"
       ])
   , ("bytes_as_text",
@@ -199,7 +203,8 @@ bytesRuntimeDependencies name = maybe [] id (lookup name
   , ("bytes_reverse", ["bytes_wrap", "text_allocate"])
   , ("bytes_strided", ["bytes_wrap", "bytes_clamp", "text_allocate"])
   , ("bytes_to_array", ["array", "make"])
-  , ("bytes_is_text", ["text"])
+  , ("utf8_valid", [])
+  , ("bytes_is_text", ["text", "utf8_valid"])
   , ("bytes_as_text", ["text_retain"])
   , ("bytes_show", ["text_allocate", "memory_failure"])
   ])

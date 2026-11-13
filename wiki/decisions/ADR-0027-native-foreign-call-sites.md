@@ -47,6 +47,10 @@ loader (`dlopen`, `dlsym`), linked where the platform keeps it apart from the C
 library. Version text selects candidate file names and is not otherwise
 checked, as in the interpreter.
 
+## Text and bytes (#851)
+
+`Str` crosses as a nought-terminated UTF-8 copy for the call and comes back copied out of storage the library keeps; `Bytes` cross as the lent address of their storage, the length an ordinary parameter ([[ADR-0020-handing-a-library-a-run-of-bytes]]).
+
 ## Referenced by
 
 [[decisions/_MOC]] · [[Native Emission Coverage]]

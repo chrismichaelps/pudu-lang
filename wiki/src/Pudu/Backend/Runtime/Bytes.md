@@ -51,6 +51,10 @@ offset, allocates the exact total once and copies one run per group; a final
 short group contributes what remains, as `Eval.Bytes` computes it. The shape is
 checked before the call.
 
+## UTF-8 validity (#851)
+
+`utf8_valid` checks a buffer of any origin; `bytes_is_text` and native foreign text results share it, so both answer the same validity.
+
 ## Referenced by
 
 [[Backend Emit Bytes]] · [[Backend Frame Program]] · [[src/Pudu/Backend/_MOC]]

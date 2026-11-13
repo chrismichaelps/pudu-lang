@@ -64,6 +64,8 @@ prelude no longer overrides.
 
 E7015 is shared by the interpreter's foreign bridge and native foreign call sites, which stop with the same words when a library does not open or a symbol is missing (#850).
 
+E7017, E7024 and E7025 are shared by the bridge and native foreign call sites (#851).
+
 ## Referenced by
 
 [[test gates]] · [[Pudu Lint Config]] · [[Pudu CLI Lint]]

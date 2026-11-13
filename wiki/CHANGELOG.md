@@ -5,6 +5,10 @@ tags: [changelog]
 
 # Changelog
 
+## 2026-11-12 — Native text and byte foreign crossings (#851)
+
+- [[Native Foreign Call Sites]]: `Str` arguments and results and lent `Bytes` cross native foreign calls as the interpreter's bridge passes them, with its E7017, E7024 and E7025 stops ([[Backend Emit Foreign]], [[Native Host Foreign]]).
+
 ## 2026-11-12 — Native raster kernels (#855)
 
 - [[Native Host Raster]] emits `rasterFill` and the plain, perspective, textured and shaded triangle kernels, keeping the interpreter's floating order, fill rule, sampling and shading; [[Compiler Lower Kernel Lanes]] leaves the RGBA targets and texels unguarded as the interpreter does.
