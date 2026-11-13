@@ -5,6 +5,13 @@ tags: [changelog]
 
 # Changelog
 
+## 2026-11-13 — Qualified foreign calls (#873)
+
+- [[Compiler Lower Foreign]] lowers `Qualifier.f(...)` through the module the
+  qualifier names, sharing the bare call's crossings, claims and refusals, so
+  foreign blocks exported by another module compile natively
+  ([[Backend Foreign Programs]]).
+
 ## 2026-11-13 — Shorthand function field facts (#872)
 
 - [[Type Check Record]] publishes the solved type of a shorthand field value

@@ -1,7 +1,7 @@
 {-| @Test.Backend.ForeignPrograms — foreign calls through typed native call
     sites against the interpreter's bridge: libc values and handles,
     with loader, crossing and ownership refusals. -}
-module Pudu.Backend.ForeignPrograms (foreignSuccessPrograms, foreignRefusalPrograms) where
+module Pudu.Backend.ForeignPrograms (foreignSuccessPrograms, foreignRefusalPrograms, foreignModulePrograms) where
 
 import Data.Text (Text)
 import qualified Data.Text as Text
@@ -168,6 +168,33 @@ messageBindings =
   [ "type Message"
   , "fn errorMessage symbol \"strerror\" (code: Int32) -> borrowed Message"
   , "fn messageLength symbol \"strlen\" (message: Message) -> UInt64" ]
+
+{-| Foreign functions another module exports, called through its name and
+    an alias: the qualified call reaches the same native call site. -}
+foreignModulePrograms :: [(String, [(FilePath, Text)], Text, Text)]
+foreignModulePrograms =
+  [ ( "foreign functions called through a module qualifier and an alias"
+    , [ ("Clib.pudu", Text.unlines
+          [ "module Clib", ""
+          , "export foreign \"c\" {"
+          , "  fn labs(value: Int64) -> Int64"
+          , "  fn strlen(text: Str) -> Int64"
+          , "  fn strdup(text: Str) -> owned Text by free"
+          , "  fn strlen_of symbol \"strlen\" (text: Text) -> Int64"
+          , "  fn free(text: Text) -> ()"
+          , "  type Text"
+          , "}" ]) ]
+    , program
+        [ "import Clib", "import Clib as C", ""
+        , "fn main() -> Int {"
+        , "  unsafe(foreign) {"
+        , "    print(display(Clib.labs(-9000000000i64)) + \" \" + display(C.strlen(\"pudu\")))"
+        , "    let held = C.strdup(\"native\")"
+        , "    print(display(Clib.strlen_of(held)))"
+        , "    Clib.free(held)"
+        , "  }"
+        , "  0", "}" ]
+    , "9000000000 4\n6\n" ) ]
 
 handleProgram :: [Text] -> [Text] -> Text
 handleProgram bindings body = program $

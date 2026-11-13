@@ -1,11 +1,11 @@
 {-| @Compiler.Lower.Foreign — a call to a foreign function the module declares
     or imports: its arguments in order, then the call through the declared
     library and symbol. -}
-module Pudu.Compiler.Lower.Foreign (lowerForeignCall) where
+module Pudu.Compiler.Lower.Foreign (lowerForeignCall, lowerQualifiedForeignCall) where
 
 import Data.Text (Text)
 import Pudu.Compiler.Lower.Array (collect, stops, stopped)
-import Pudu.Compiler.Lower.State (ForeignTarget (..), LowerContext (..), LowerState (..), halt, lookupForeign, refused)
+import Pudu.Compiler.Lower.State (ForeignTarget (..), LowerContext (..), LowerState (..), halt, lookupForeign, lookupQualifiedForeign, refused)
 import Pudu.Compiler.Lower.Types (LowerTypes, recordFields, typeForSpan)
 import Pudu.Core
 import Pudu.Frontend.Syntax (Expression, Located)
@@ -17,9 +17,17 @@ type Lowered = (LowerState, Maybe (CoreExpression, CoreType))
 {-| Nothing unless the name reaches a foreign declaration. The crossing types
     come from the checked arguments and the call's own result. -}
 lowerForeignCall :: (LowerState -> Located Expression -> Lowered) -> LowerState -> Span -> Text -> [Located Expression] -> Maybe Lowered
-lowerForeignCall lower state at name arguments = do
-  target <- lookupForeign state name
-  Just $ case collect lower state arguments of
+lowerForeignCall lower state at name arguments =
+  crossing lower state at arguments <$> lookupForeign state name
+
+{-| Nothing unless the qualifier names a module declaring the name foreign. -}
+lowerQualifiedForeignCall :: (LowerState -> Located Expression -> Lowered) -> LowerState -> Span -> Text -> Text -> [Located Expression] -> Maybe Lowered
+lowerQualifiedForeignCall lower state at qualifier name arguments =
+  crossing lower state at arguments <$> lookupQualifiedForeign state qualifier name
+
+{-| The arguments in order, then the call through the declared target. -}
+crossing :: (LowerState -> Located Expression -> Lowered) -> LowerState -> Span -> [Located Expression] -> ForeignTarget -> Lowered
+crossing lower state at arguments target = case collect lower state arguments of
     (after, Nothing) -> refused after
     (after, Just cores)
       | any stops cores -> (after, Just (stopped at cores, CoreNeverType))

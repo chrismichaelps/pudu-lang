@@ -149,3 +149,6 @@ source span and output ordering in both evaluator modes and native execution.
 ## Indexed stores (#840)
 
 The complete module corpus includes the store success, module and refusal programs. Resolved Grill Log: both evaluator modes see them.
+
+Resolved Grill Log (#873): `modulePrograms` includes the qualified foreign
+calls of [[Backend Foreign Programs]].
