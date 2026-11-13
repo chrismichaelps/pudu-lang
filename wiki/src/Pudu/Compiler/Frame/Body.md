@@ -159,3 +159,7 @@ Decimal literals and methods lower to their frame values; a Decimal result gets 
 ## Indexed stores (#840)
 
 A store result takes a fresh result slot. Resolved Grill Log: same rule as every boxed collection.
+
+## Foreign handles (#853)
+
+Foreign calls retain the whole checked crossing and claim metadata through frame lowering, and handle results occupy owned slots.

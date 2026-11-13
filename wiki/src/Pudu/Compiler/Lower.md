@@ -264,3 +264,7 @@ then lowers tasks, scopes, host calls, dynamic values, constructor parameters,
 static members through a type parameter, generic methods checking left open,
 and sequence bindings through [[Native Host Services]] and [[Native Type
 Abstractions]].
+
+## Foreign handles (#853)
+
+Module scopes collect canonical opaque handle types and the owning declaration’s release symbol and status type. See [[Compiler Lower Foreign]].

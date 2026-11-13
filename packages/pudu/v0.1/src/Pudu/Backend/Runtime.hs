@@ -44,7 +44,7 @@ import Pudu.Diagnostic.Host (memoryFailureMessage)
 {-| The runtime contract revision baked into every generated program's header
     comment. It changes only when the runtime's behaviour or interface does. -}
 runtimeRevision :: Text
-runtimeRevision = "21"
+runtimeRevision = "22"
 
 {-| @Backend.Runtime.Part — one named, self-contained piece of the runtime.
 
@@ -67,7 +67,9 @@ runtimeParts =
   , RuntimePart "error_io" errorIoLines
   , RuntimePart "site" siteLines
   , RuntimePart "colored" coloredLines
-  , RuntimePart "cleanup" ["static void (*pudu_cleanup_hook)(void) = NULL;"]
+  , RuntimePart "cleanup"
+      [ "static void (*pudu_cleanup_hook)(void) = NULL;"
+      , "static void (*pudu_process_cleanup_hook)(void) = NULL;" ]
   -- Apart from cleanup: only a failure reads it, and memory failures do not.
   , RuntimePart "blame"
       [ "/* Where a failure in the running frame should point instead of its own site. */"
@@ -163,6 +165,7 @@ failLines =
   , "  if (pudu_trap_hook != NULL) pudu_trap_hook(message, length, owned_payload);"
   , "  if (pudu_blame_hook != NULL && pudu_blame_hook() != NULL) where = pudu_blame_hook();"
   , "  if (pudu_cleanup_hook != NULL) pudu_cleanup_hook();"
+  , "  if (pudu_process_cleanup_hook != NULL) pudu_process_cleanup_hook();"
   , "  pudu_prepare_error_io();"
   , "  int colored = pudu_colored();"
   , "  int index;"
@@ -217,6 +220,7 @@ memoryFailureLines :: [Text]
 memoryFailureLines =
   [ "static _Noreturn void pudu_memory_failure(void) {"
   , "  if (pudu_cleanup_hook != NULL) pudu_cleanup_hook();"
+  , "  if (pudu_process_cleanup_hook != NULL) pudu_process_cleanup_hook();"
   , "  pudu_prepare_error_io();"
   , "  fputs(\"" <> Text.pack memoryFailureMessage <> "\\n\", stderr);"
   , "  fflush(stderr);"

@@ -17,7 +17,7 @@ interpreter's words.
 
 ## Governance
 
-- Nothing is allocated: names and messages are built in bounded stack buffers,
+- The loader itself does not allocate scratch storage: names and messages are built in bounded stack buffers,
   so the counted harness sees no allocation of its own.
 - The loader's own reason is never appended. The interpreter reads it after the
   loader has already handed it to an inner attempt, so its message carries none.
@@ -29,11 +29,29 @@ interpreter's words.
 
 ## Text and bytes (#851)
 
-`host_foreign_text` copies a text argument with a closing nought, refusing text that holds one (E7017), and copies a text result out of storage the library keeps, refusing none (E7024) and bytes that are not UTF-8 (E7025). `host_foreign_bytes` lends a run's storage, an empty run still passing an address as the interpreter's bridge does.
+`host_foreign_text_in` validates and copies arguments, refusing embedded noughts (E7017). `host_foreign_text_out` supplies result validation and depends on the runtime text-copy helper. Result wrappers refuse missing text (E7024) and invalid UTF-8 (E7025). `host_foreign_bytes` lends a run's storage, an empty run still passing an address as the interpreter's bridge does.
 
 ## Record text fields (#852)
 
-`pudu_foreign_text_field` copies a record result's text field out, a missing one stopping with E7024 naming the field as the interpreter does.
+`pudu_foreign_missing_field` reports E7024 with the missing field name. Wrappers validate every raw text leaf before allocating field copies.
+
+## Handle claims (#853)
+
+The native run gate serializes calls through liveness checking, dispatch and
+claim settlement. Each owned address has one live claim. Counted results can
+share an address and each gets a distinct generation. Borrowed handles have
+no claim. Explicit release removes the exact live generation. Teardown
+drains owned claims by signed address, then counted claims by generation.
+
+## Resolved Grill Log
+
+- Resolve each destructor before the producing call, and cache its typed
+  pointer so cleanup cannot fail to resolve it.
+- Select argument and result text helpers independently for scalar crossings. A
+  call that only takes text needs no result copy. Record pack and unpack
+  helpers still select both directions when a record contains text.
+- The run gate covers the whole call. Keep a separate lease table deferred
+  until dispatch can release the gate or support callbacks.
 
 ## Referenced by
 

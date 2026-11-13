@@ -11,7 +11,7 @@ import qualified Data.Text as Text
 import Pudu.Backend.Emit.Cell (cType)
 import Pudu.Backend.Emit.ForeignAbi (Layouts, abiType, fromAbi, mangle, recordDefinitions, recordNeeds, recordsIn, textLeaves, toAbi)
 import Pudu.Backend.Emit.State (EmitState, cString, helpedFailureSite, textFailureSite, textOfInt)
-import Pudu.Core (CoreForeign (..), CoreLayout (..), CoreType (..), coreTypeName)
+import Pudu.Core (CoreClaim (..), CoreForeign (..), CoreLayout (..), CoreType (..))
 import Pudu.Core.Frame
 import Pudu.IntegerLiteral (IntegerKind (..))
 import Pudu.Source (Span)
@@ -30,8 +30,18 @@ foreignCall state at declared cells =
         CoreRecordType _ _ -> fmap Just (textFailureSite s2 at "E7024" (Just missingHelp))
         _ -> (s2, Nothing)
       (s4, invalid) = if answersText then fmap Just (helpedFailureSite s3 at "E7025" (symbol <> " returned text that is not valid UTF-8") invalidHelp) else (s3, Nothing)
-      sites = [siteText site] <> map siteText (maybe [] pure noughts <> maybe [] pure missing <> maybe [] pure invalid)
-   in ( s4
+      (s5, dead) = case [name | CoreHandleType _ name <- coreForeignParameters declared] of
+        name : _ -> fmap Just (helpedFailureSite s4 at "E7022"
+          ("the " <> name <> " passed to " <> symbol <> " is no longer owned") deadHelp)
+        [] -> (s4, Nothing)
+      (s6, none) = case result of
+        CoreHandleType _ name -> fmap Just (helpedFailureSite s5 at "E7020" (symbol <> " returned a null " <> name) noneHelp)
+        _ -> (s5, Nothing)
+      (s7, owned) = case (result, coreForeignClaim declared) of
+        (CoreHandleType _ name, Just (CoreOwned False _ _)) -> fmap Just (helpedFailureSite s6 at "E7021" (symbol <> " returned a " <> name <> " already owned") ownedHelp)
+        _ -> (s6, Nothing)
+      sites = [siteText site] <> map siteText (concatMap (maybe [] pure) [noughts, missing, invalid, dead, none, owned])
+   in ( s7
       , wrapperName declared <> "(" <> Text.intercalate ", " (sites <> cells) <> ")"
       , ["host_foreign"] )
  where
@@ -39,10 +49,6 @@ foreignCall state at declared cells =
   symbol = coreForeignSymbol declared
   lendsText = any carriesText (coreForeignParameters declared)
   answersText = carriesText result
-  carriesText kind = case kind of
-    CoreTextType -> True
-    CoreRecordType _ _ -> True
-    _ -> False
   siteText index = "&pudu_sites[" <> textOfInt index <> "]"
   help = "a foreign declaration names a library the platform must already have; "
     <> "install it, or check the name and the symbol against what it exports"
@@ -50,6 +56,9 @@ foreignCall state at declared cells =
   noughtHelp = "the other side reads until the first nought, so it would see less than this text says"
   missingHelp = "a declared Str must name valid UTF-8 text"
   invalidHelp = "fix the native binding or declare a byte-oriented result instead of Str"
+  deadHelp = "a foreign handle cannot be used or released after its release function has run"
+  noneHelp = "a foreign handle result must name a live object"
+  ownedHelp = "an owned foreign result must transfer one new ownership claim"
 
 {-| Every foreign declaration a module's frames call, each once. -}
 foreignsOf :: FrameModule -> [CoreForeign]
@@ -84,8 +93,39 @@ foreignNeeds layouts declarations = concat
 foreignWrappers :: Layouts -> [CoreForeign] -> [Text]
 foreignWrappers layouts declarations =
   recordDefinitions layouts (recordsIn layouts (concat [coreForeignResult declared : coreForeignParameters declared | declared <- declarations]))
+    <> concatMap releaser (Set.toList (Set.fromList (concatMap (maybe [] pure . releaseOf) declarations)))
     <> concatMap wrapper declarations
  where
+  releaser target@(_, _, _, answer) =
+    [ "static pudu_foreign_cache " <> releaserName target <> "_cache = {NULL};"
+    , "static void " <> releaserName target <> "(uint64_t address) {"
+    , "  " <> abiType answer <> " (*function)(void *) = ((" <> abiType answer <> " (*)(void *))"
+        <> releaserName target <> "_cache.function);"
+    , "  (void)function((void *)(uintptr_t)address);"
+    , "}", "" ]
+  resolveRelease producer target@(library, version, symbol, _) =
+    [ "  (void)pudu_foreign_function(site, &" <> releaserName target <> "_cache, "
+        <> cString library <> ", " <> maybe "NULL" cString version <> ", " <> cString symbol <> ", "
+        <> cString producer <> ");" ]
+  checkText kind value = case kind of
+    CoreTextType -> ["  pudu_foreign_text_check(noughts, " <> value <> ");"]
+    CoreRecordType _ _ -> case Map.lookup kind layouts of
+      Just (CoreRecordLayout fields) -> concat
+        [ checkText field ("(" <> value <> ")->fields[" <> textOfInt index <> "]."
+            <> if field == CoreTextType then "text" else "box")
+        | (index, (_, field)) <- zip [0 ..] fields ]
+      _ -> []
+    _ -> []
+  resultText kind value = case Map.lookup kind layouts of
+    Just (CoreRecordLayout fields) -> concat
+      [ let member = value <> ".f" <> textOfInt index
+         in if field == CoreTextType then [(label, member)] else resultText field member
+      | (index, (label, field)) <- zip [0 ..] fields ]
+    _ -> []
+  claimMode claim = case claim of
+    Just (CoreOwned False _ _) -> "1"
+    Just (CoreOwned True _ _) -> "2"
+    _ -> "0"
   wrapper declared =
     let parameters = zip [0 :: Int ..] (coreForeignParameters declared)
         result = coreForeignResult declared
@@ -94,59 +134,108 @@ foreignWrappers layouts declarations =
         abiParameters = if null parameters then "void" else Text.intercalate ", " [abiType kind | (_, kind) <- parameters]
         pointer = abiType result <> " (*)(" <> abiParameters <> ")"
         resolved = "((" <> pointer <> ")pudu_foreign_function(site, &cache, " <> cString (coreForeignLibrary declared) <> ", "
-          <> maybe "NULL" cString (coreForeignVersion declared) <> ", " <> cString (coreForeignSymbol declared) <> "))"
+          <> maybe "NULL" cString (coreForeignVersion declared) <> ", " <> cString (coreForeignSymbol declared) <> ", NULL))"
         argument index kind = case kind of
           CoreTextType -> "t" <> textOfInt index
           CoreRecordType _ _ -> "r" <> textOfInt index
           _ -> toAbi kind ("a" <> textOfInt index)
         call = "function(" <> Text.intercalate ", " [argument index kind | (index, kind) <- parameters] <> ")"
+        handles = [index | (index, CoreHandleType _ _) <- parameters]
+        claim = coreForeignClaim declared
+        release = releaseOf declared
         siteParameters = ["const pudu_site *site"] <> ["const pudu_site *noughts" | lendsText]
           <> concat [["const pudu_site *missing", "const pudu_site *invalid"] | carriesText result]
+          <> ["const pudu_site *dead" | not (null handles)]
+          <> concat [["const pudu_site *none"] | isHandle result]
+          <> ["const pudu_site *owned" | isHandle result, Just (CoreOwned False _ _) <- [claim]]
+        checks = [ "  pudu_foreign_require(dead, a" <> textOfInt index
+                     <> ", " <> (if coreForeignReleases declared then "1" else "0") <> ");" | index <- handles ]
+        textChecks = concat [checkText kind ("a" <> textOfInt index) | (index, kind) <- parameters]
         heldLines = if held == 0 then [] else ["  char *held[" <> textOfInt held <> "];", "  size_t held_count = 0;"]
         copies = concat
           [ case kind of
-              CoreTextType -> ["  char *t" <> textOfInt index <> " = pudu_foreign_text_in(noughts, a" <> textOfInt index <> ");"]
+              CoreTextType -> ["  char *t" <> textOfInt index <> " = pudu_foreign_text_in(a" <> textOfInt index <> ");"]
               CoreRecordType _ _ -> ["  " <> abiType kind <> " r" <> textOfInt index <> " = pudu_foreign_pack_" <> suffix kind
-                <> "(" <> (if lendsText then "noughts" else "NULL") <> ", a" <> textOfInt index <> ", " <> (if held == 0 then "NULL, NULL" else "held, &held_count") <> ");"]
+                <> "(a" <> textOfInt index <> ", " <> (if held == 0 then "NULL, NULL" else "held, &held_count") <> ");"]
               _ -> []
           | (index, kind) <- parameters ]
         releases = ["  free(t" <> textOfInt index <> ");" | (index, CoreTextType) <- parameters]
           <> ["  for (size_t i = 0; i < held_count; ++i) free(held[i]);" | held /= 0]
         body = case result of
           CoreUnitType -> ["  " <> call <> ";"] <> releases <> ["  return 0;"]
-          CoreTextType -> ["  pudu_text answer = pudu_foreign_text_out(missing, invalid, " <> call <> ");"] <> releases <> ["  return answer;"]
-          CoreRecordType _ _ -> [ "  pudu_box *answer = pudu_foreign_unpack_" <> suffix result <> "(missing, invalid, "
-            <> cString (coreForeignSymbol declared) <> ", " <> call <> ");"] <> releases <> ["  return answer;"]
+          CoreTextType -> ["  const char *raw = " <> call <> ";"
+            , "  if (raw == NULL || !pudu_foreign_text_valid(raw)) {"
+            , "    const pudu_site *problem = raw == NULL ? missing : invalid;" ]
+            <> map ("  " <>) releases
+            <> [ "    pudu_fail(problem);"
+               , "    return pudu_text_copy(\"\", 0);"
+               , "  }"
+               , "  pudu_text answer = pudu_text_copy(raw, strlen(raw));" ]
+            <> releases <> ["  return answer;"]
+          CoreRecordType _ _ ->
+            let leaves = resultText result "raw"
+                reject condition failure =
+                  ["  if (" <> condition <> ") {"]
+                  <> map ("  " <>) releases
+                  <> ["    " <> failure, "    return NULL;", "  }"]
+             in ["  " <> abiType result <> " raw = " <> call <> ";", "  (void)missing; (void)invalid;"]
+                <> concat [reject (field <> " != NULL && !pudu_foreign_text_valid(" <> field <> ")") "pudu_fail(invalid);"
+                          | (_, field) <- leaves]
+                <> concat [reject (field <> " == NULL")
+                    ("pudu_foreign_missing_field(missing, " <> cString (coreForeignSymbol declared) <> ", " <> cString label <> ");")
+                          | (label, field) <- leaves]
+                <> ["  pudu_box *answer = pudu_foreign_unpack_" <> suffix result <> "(raw);"]
+                <> releases <> ["  return answer;"]
+          CoreHandleType _ _ -> ["  void *answer = " <> call <> ";"] <> releases <>
+            [ "  return pudu_foreign_handle_result(none, " <> (if any (== "const pudu_site *owned") siteParameters then "owned" else "NULL")
+                <> ", " <> claimMode claim <> ", " <> maybe "NULL" releaserName release <> ", answer);" ]
           _ -> ["  " <> abiType result <> " answer = " <> call <> ";"] <> releases <> ["  return " <> fromAbi result "answer" <> ";"]
      in [ "static " <> cellType result <> " " <> wrapperName declared <> "("
             <> Text.intercalate ", " (siteParameters <> [cType kind <> " a" <> textOfInt index | (index, kind) <- parameters]) <> ") {"
         , "  static pudu_foreign_cache cache = {NULL};" ]
+        <> ["  (void)noughts;" | lendsText && null textChecks]
+        <> textChecks
+        <> ["  " <> abiType result <> " (*function)(" <> abiParameters <> ") = " <> resolved <> ";"]
+        <> maybe [] (resolveRelease (coreForeignSymbol declared)) release
+        <> checks
+        <> ["  pudu_foreign_reserve();" | Just _ <- [release]]
         <> heldLines
         <> copies
-        <> ["  " <> abiType result <> " (*function)(" <> abiParameters <> ") = " <> resolved <> ";"]
         <> body
         <> ["}", ""]
   cellType kind = if kind == CoreUnitType then "int" else cType kind
-  carriesText kind = case kind of
-    CoreTextType -> True
-    CoreRecordType _ _ -> True
+  isHandle kind = case kind of
+    CoreHandleType _ _ -> True
     _ -> False
   suffix kind = Text.drop (Text.length "pudu_foreign_record_") (abiType kind)
 
+{-| The release an owned handle result is released through: its library, version, symbol and result. -}
+releaseOf :: CoreForeign -> Maybe (Text, Maybe Text, Text, CoreType)
+releaseOf declared = case (coreForeignResult declared, coreForeignClaim declared) of
+  (CoreHandleType _ _, Just (CoreOwned _ symbol answer)) -> Just (coreForeignLibrary declared, coreForeignVersion declared, symbol, answer)
+  _ -> Nothing
+
+releaserName :: (Text, Maybe Text, Text, CoreType) -> Text
+releaserName target = "pudu_foreign_release_" <> mangle (Text.pack (show target))
+
 {-| A name that is a C identifier and differs for every declaration. -}
 wrapperName :: CoreForeign -> Text
-wrapperName declared = "pudu_foreign_" <> mangle key
- where
-  key = Text.intercalate "|" ([coreForeignLibrary declared, maybe "" id (coreForeignVersion declared), coreForeignSymbol declared]
-    <> map coreTypeName (coreForeignParameters declared) <> [coreTypeName (coreForeignResult declared)])
+wrapperName declared = "pudu_foreign_" <> mangle (Text.pack (show declared))
+
+carriesText :: CoreType -> Bool
+carriesText kind = case kind of
+  CoreTextType -> True
+  CoreRecordType _ _ -> True
+  _ -> False
 
 {-| The parts converting a cell to the C type it crosses as. -}
 parameterNeeds :: CoreType -> [Text]
 parameterNeeds kind = case kind of
   CoreIntegerType (SignedKind _) -> ["kernel_signed"]
   CoreFloatType _ -> ["float_decode"]
-  CoreTextType -> ["host_foreign_text"]
+  CoreTextType -> ["host_foreign_text_in"]
   CoreBytesType -> ["host_foreign_bytes"]
+  CoreHandleType _ _ -> ["host_foreign_store"]
   _ -> []
 
 {-| The parts converting an answer back to its cell. -}
@@ -155,5 +244,6 @@ resultNeeds kind = case kind of
   CoreIntegerType (SignedKind _) -> ["kernel_int"]
   CoreIntegerType _ -> ["make"]
   CoreFloatType _ -> ["float_encode"]
-  CoreTextType -> ["host_foreign_text"]
+  CoreTextType -> ["host_foreign_text_out"]
+  CoreHandleType _ _ -> ["host_foreign_store"]
   _ -> []

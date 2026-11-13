@@ -672,6 +672,6 @@ the codecs; the compiler modules stay compiler-owned. Generated programs link
 `-lm` and `-pthread` through [[Native Toolchain]]; the Haskell package gains no
 dependency.
 
-## Text operation tags (#853)
+## Foreign handles (#853)
 
-Register [[Core Text Operations]] with the Core modules.
+Register [[Backend Emit Foreign Handle]] and [[Core Text Operations]] using existing dependencies.
