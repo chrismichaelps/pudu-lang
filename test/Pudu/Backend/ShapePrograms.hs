@@ -31,6 +31,18 @@ shapeSuccessPrograms =
       , "  print(display(held.run(4)))"
       , "  0", "}" ]
     , "5\n14\n")
+  , ("shorthand fields naming functions, generic functions and locals", program
+      [ "type Plain = { step: fn(Int) -> Int }", "type Boxed[S] = { step: fn(S) -> S, seed: S }"
+      , "type Shape = Scaled{ step: fn(Int) -> Int, by: Int } | Flat"
+      , "", "fn step(value: Int) -> Int { value + 1 }", "fn same[T](value: T) -> T { value }"
+      , "", "fn main() -> Int {"
+      , "  let a = Plain{step}", "  let seed = 40", "  let b = Boxed{step, seed}"
+      , "  let c = Boxed{..b, step: same}", "  let d = Boxed{..c, step}"
+      , "  let picked = Scaled{step, by: 3}"
+      , "  let e = match picked {", "    case Scaled{step: run, by} => run(by)", "    case Flat => 0", "  }"
+      , "  print(display(a.step(1)) + \" \" + display(b.step(b.seed)) + \" \" + display(c.step(c.seed)) + \" \" + display(d.step(2)) + \" \" + display(e))"
+      , "  0", "}" ]
+    , "2 41 40 3 4\n")
   , ("mutually recursive records in one module", program
       [ "type Node = { label: Int, parent: Option[Wrap] }", "type Wrap = { node: Node }", ""
       , "fn depth(node: Node) -> Int {", "  match node.parent {", "    case Some(wrapped) => 1 + depth(wrapped.node)"

@@ -27,6 +27,7 @@ import Pudu.Type.Env
   , DeclaredTypes (..)
   , lookupField
   , lookupTypeParams
+  , recordExpression
   , recordOwner
   , recordVariantOwner
   , report
@@ -220,4 +221,9 @@ checkField checking declared rigid expected located@(Located fieldSpan field) = 
 checkFieldInit :: CheckValue -> DeclaredTypes -> [(Text, Int)] -> Located FieldInit -> Checker Type
 checkFieldInit checking declared rigid (Located fieldSpan field) = case fieldInitValue field of
   Just value -> valueOf checking declared rigid value
-  Nothing -> nameType fieldSpan (locatedValue (fieldInitName field) NonEmpty.:| [])
+  -- The shorthand is a name read at the field's span; publish its type there
+  -- as an explicit `step: step` value publishes its own.
+  Nothing -> do
+    named <- nameType fieldSpan (locatedValue (fieldInitName field) NonEmpty.:| [])
+    recordExpression fieldSpan named
+    pure named
