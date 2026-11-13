@@ -5,6 +5,12 @@ tags: [changelog]
 
 # Changelog
 
+## 2026-11-13 — Shorthand function field facts (#872)
+
+- [[Type Check Record]] publishes the solved type of a shorthand field value
+  at its span, so `Plain{step}` naming a function compiles natively as
+  `Plain{step: step}` does ([[Backend Shape Programs]]).
+
 ## 2026-11-13 — Nested foreign record layout (#863)
 
 - [[Pudu FFI Bridge]] preserves nested struct layouts for arguments, results
