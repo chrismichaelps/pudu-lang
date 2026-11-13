@@ -19,7 +19,7 @@ calls the generated C entry once. SDK discovery and unsupported runtime parts
 fail before C compilation. Simulator evidence compares a host application's
 C foreign calls with interpreter output.
 
-## Exact next action
+## Validation
 
 The arm64 device and simulator archives passed SDK and entry checks. The
 iOS 26.4 simulator host matched the interpreter for `abs`, `strlen`, and
@@ -27,7 +27,15 @@ a call to the CoreFoundation C symbol `CFAbsoluteTimeGetCurrent`. The host
 also resolved and called a C symbol from a signed embedded framework through
 `@rpath`.
 
-Review the shared native tool runner in [PR #891](https://github.com/chrismichaelps/pudu-lang/pull/891) before advancing the dependent iOS partitions.
+The [hosted macOS run](https://github.com/chrismichaelps/pudu-lang/actions/runs/43517221095)
+passed for `debf8584`. The compiler, workflow and simulator script are
+identical on this branch. The packaged XCFramework slices also linked into
+separate device and simulator C hosts locally.
+
+## Exact next action
+
+Independently review [PR #891](https://github.com/chrismichaelps/pudu-lang/pull/891),
+the shared native tool runner and first partition in the iOS stack.
 
 ## Referenced by
 
