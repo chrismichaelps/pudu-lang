@@ -20,3 +20,8 @@ module's aliases; and assignments as match-arm, `if let` and binding values.
 [[Backend Module Programs]] · [[Backend Text Leak Tests]]
 
 Resolved Grill Log (#828): Pin method precedence and capture a function-valued field before an argument rebinds its record.
+
+Resolved Grill Log (#872): shorthand fields naming a top-level function, a
+generic function at its instantiation and a local, through construction,
+record update and a named payload, compile natively from the checker's
+published facts.

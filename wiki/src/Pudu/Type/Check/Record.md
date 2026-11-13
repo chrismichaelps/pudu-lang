@@ -100,3 +100,16 @@ Resolved Grill Log: field names and payload types come from one resolved owner/v
 Record VariantOwner with canonical owner, variant label and declaration-order field names before checking authored initializers.
 
 Resolved Grill Log: carry checked owner and field order through syntax; preserve authored effects, diagnostics and cache identity. See [[Named Sum Publication]].
+
+## Shorthand field facts (#872)
+
+A shorthand field (`Plain{step}`) is a name read at the field's own span.
+Checking records that name's type at the span, exactly as `step: step`
+records its value through expression checking, so record construction,
+record update and named payloads publish one solved fact per field value.
+
+Resolved Grill Log: **Q:** Let lowering fall back to the declared field
+type? **A:** No. _Rationale:_ the declared type of a generic field is the
+rigid parameter, and the backend must not infer again; the solved fact is
+the checker's product. _Rejected:_ a lowering-side lookup of the record
+shape. No syntax, evaluation order or diagnostic change. See [[CHANGELOG]].
