@@ -23,3 +23,7 @@ publication. A program on another platform selects no AppKit source.
 ## Referenced by
 
 [[src/Pudu/Backend/_MOC]] · [[Native Desktop Adapter Delivery]]
+
+## Native audio (#857)
+
+Resolved Grill Log: Select the AudioToolbox sources with an audio marker. A single staging directory serves all selected bundles.

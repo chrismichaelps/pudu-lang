@@ -28,3 +28,7 @@ nothing of the host carries none of this. [[Native Host Input]] supplies decodin
 ## Native desktop (#856)
 
 Resolved Grill Log: Register [[Native Host Desktop]] after its shared outcome, clock and signal dependencies.
+
+## Native audio (#857)
+
+Resolved Grill Log: Select [[Native Host Audio]] after the shared outcome and array helpers.

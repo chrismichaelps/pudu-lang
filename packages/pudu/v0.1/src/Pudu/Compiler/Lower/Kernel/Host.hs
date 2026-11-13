@@ -13,7 +13,7 @@ import Pudu.FloatLiteral (FloatWidth (..))
 import Pudu.IntegerLiteral (IntegerKind (..))
 
 hostPrimitives :: [(Text, Primitive)]
-hostPrimitives = mathPrimitives <> processPrimitives <> concurrentPrimitives <> filePrimitives <> netPrimitives <> tlsPrimitives <> compressPrimitives <> childPrimitives <> lanePrimitives <> desktopPrimitives
+hostPrimitives = mathPrimitives <> processPrimitives <> concurrentPrimitives <> filePrimitives <> netPrimitives <> tlsPrimitives <> compressPrimitives <> childPrimitives <> lanePrimitives <> desktopPrimitives <> audioPrimitives
 
 {-| A host kernel over every operand in order. -}
 host :: Text -> Int -> Call
@@ -182,4 +182,16 @@ desktopPrimitives =
   , ("desktopClipboardRead", Primitive [] (outcome CoreTextType) [] (Outcome (host "desktop_clipboard_read" 0)))
   , ("desktopAccessibilityReport", Primitive [int] (outcome CoreTextType) [] (Outcome (host "desktop_accessibility_report" 1)))
   , ("desktopMenuReport", Primitive [int] (outcome CoreTextType) [] (Outcome (host "desktop_menu_report" 1)))
+  ]
+
+audioPrimitives :: [(Text, Primitive)]
+audioPrimitives =
+  [ ("audioDevicePlay", Primitive [int, int, bytes, int, int, int] (outcome int) [] (Outcome (host "audio_device_play" 6)))
+  , ("audioStreamOpen", Primitive [int, int, int, int] (outcome (array int)) [] (Outcome (host "audio_stream_open" 4)))
+  , ("audioStreamWrite", Primitive [int, int, int, bytes, int] (outcome (array int)) [] (Outcome (host "audio_stream_write" 5)))
+  , ("audioStreamPause", Primitive [int] (outcome unit) [] (Outcome (host "audio_stream_pause" 1)))
+  , ("audioStreamResume", Primitive [int] (outcome unit) [] (Outcome (host "audio_stream_resume" 1)))
+  , ("audioStreamVolume", Primitive [int, f64] (outcome unit) [] (Outcome (host "audio_stream_volume" 2)))
+  , ("audioStreamSnapshot", Primitive [int] (outcome (array int)) [] (Outcome (host "audio_stream_snapshot" 1)))
+  , ("audioStreamClose", Primitive [int, CoreBoolType, int] (outcome unit) [] (Outcome (host "audio_stream_close" 3)))
   ]
