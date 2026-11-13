@@ -5,6 +5,11 @@ tags: [changelog]
 
 # Changelog
 
+## 2026-11-13 — Foreign pointer design proposed (#877)
+
+- [[Foreign Pointers and Runs]] proposes typed loans, length relationships,
+  nullable handles and function-pointer crossings.
+
 ## 2026-11-13 — Folded byte literals (#887)
 
 - [[Pudu Core IR Module]] carries folded `Bytes` constants as one

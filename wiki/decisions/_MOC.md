@@ -5,6 +5,8 @@ tags: [moc, adr]
 
 # Decision Map
 
+- [[Foreign Pointers and Runs]] — proposed lifetime, bounds and ABI contracts (#877).
+
 - [[Callee First Call Evaluation]] — accepted callee-first conformance repair; implementation pending.
 
 - [[ADR-0025-if-without-else-unit-results]] — accepted correctness clarification: no-else conditionals yield unit on both normal paths across typing, evaluation, residualization and native lowering.

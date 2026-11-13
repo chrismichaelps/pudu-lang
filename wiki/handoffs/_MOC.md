@@ -5,6 +5,8 @@ tags: [moc, handoff]
 
 # Handoff Map
 
+- [[Foreign Pointer Delivery]] — typed foreign crossings and bounds (#877).
+
 - [[Native Audio Adapter Delivery]] — AudioToolbox playback and streams (#857).
 
 - [[Native Desktop Adapter Delivery]] — source packaging and desktop builtins (#856).
