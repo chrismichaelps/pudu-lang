@@ -31,6 +31,10 @@ The crossing types are the checked argument types and the call's own result.
 
 Parameters may also cross as `Str` and `Bytes`, and a result as `Str`. Records, handles and slots still refuse (#852–#854).
 
+## Records (#852)
+
+A parameter or result may also be a record of between one and thirty-two fields, each a number, Bool, text or such a record (bytes excepted), as the interpreter's crossing rules admit. Handles and slots still refuse (#853, #854).
+
 ## Referenced by
 
 [[Compiler Lower Primitive]] · [[Native Foreign Call Sites]]

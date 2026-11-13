@@ -40,6 +40,21 @@ foreignSuccessPrograms =
       , "  }"
       , "  0"
       , "}" ])
+  , ("records come back by value from the C library", program
+      [ "type Division = { quot: Int32, rem: Int32 }"
+      , "type LongDivision = { quot: Int64, rem: Int64 }"
+      , "foreign \"c\" {"
+      , "  fn div(numerator: Int32, denominator: Int32) -> Division"
+      , "  fn ldiv(numerator: Int64, denominator: Int64) -> LongDivision"
+      , "}"
+      , "fn main() -> Int {"
+      , "  unsafe {"
+      , "    let parts = div(17i32, 5i32)"
+      , "    print(show(parts) + \" \" + show(div(-17i32, 5i32)) + \" \" + display(parts.quot * 5i32 + parts.rem))"
+      , "    print(show(ldiv(9000000000i64, 7i64)))"
+      , "  }"
+      , "  0"
+      , "}" ])
   ]
 
 foreignRefusalPrograms :: [(String, Text)]

@@ -31,6 +31,10 @@ interpreter's words.
 
 `host_foreign_text` copies a text argument with a closing nought, refusing text that holds one (E7017), and copies a text result out of storage the library keeps, refusing none (E7024) and bytes that are not UTF-8 (E7025). `host_foreign_bytes` lends a run's storage, an empty run still passing an address as the interpreter's bridge does.
 
+## Record text fields (#852)
+
+`pudu_foreign_text_field` copies a record result's text field out, a missing one stopping with E7024 naming the field as the interpreter does.
+
 ## Referenced by
 
 [[Native Host Runtime]] · [[Backend Emit Foreign]]

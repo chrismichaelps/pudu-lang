@@ -33,6 +33,10 @@ back to its cell.
 
 A wrapper taking text receives an E7017 site and copies each `Str` with a closing nought before resolving the function, releasing the copies after the call. A wrapper answering text receives E7024 and E7025 sites, built with the interpreter's words for the declaration's symbol, and copies the answer out before releasing the argument copies, since it may point into one. `Bytes` cross as the lent address of their storage.
 
+## Records (#852)
+
+Record parameters are packed into their structs (with [[Backend Emit Foreign ABI]]) before the function resolves, their text fields held for release after the call; a record result is unpacked into a new box before the argument copies are released. `foreignNeeds` gathers, per module, each leaf's conversion and the constructor and release of every record crossed, since both its pack and unpack functions are written.
+
 ## Referenced by
 
 [[Backend Frame Program]] · [[Native Foreign Call Sites]]

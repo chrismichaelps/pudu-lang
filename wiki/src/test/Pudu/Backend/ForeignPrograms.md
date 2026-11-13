@@ -20,6 +20,8 @@ library by hand ([[Native Foreign Call Sites]]).
 
 Text and lent bytes cross to the C library (`strlen`, `strchr`, `strnlen`, `memcmp`, `strerror`), and text holding a nought (E7017) and a missing text result (E7024) stop as the bridge does (#851).
 
+Records come back by value from the C library (`div`, `ldiv`) (#852); record parameters, nested records, text fields and a missing text field were checked against a built library by hand.
+
 ## Referenced by
 
 [[Backend Native Tests]] · [[Native Foreign Call Sites]]
