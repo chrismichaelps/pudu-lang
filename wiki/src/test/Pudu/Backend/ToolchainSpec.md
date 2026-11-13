@@ -60,3 +60,7 @@ remaining short enough to expose the original indefinite wait regression.
 
 [[Repository Test Runner]] · [[src/Pudu/Backend/_MOC]] · [[src/_MOC]] ·
 [[Backend Toolchain]] · [[Backend Native Tests]]
+
+## Native host sources (#856)
+
+Resolved Grill Log: a real macOS compiler links a marked program against the packaged adapter. The program calls a null-handle operation so the link and ABI can be checked without opening a window.

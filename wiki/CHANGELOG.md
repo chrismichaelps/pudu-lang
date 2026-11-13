@@ -12,6 +12,15 @@ tags: [changelog]
   foreign blocks exported by another module compile natively
   ([[Backend Foreign Programs]]).
 
+## 2026-11-13 — Native host source packaging (#856)
+
+- [[Native Toolchain Host Sources]] packages the AppKit sources for native
+  builds that select the desktop adapter. [[Native Host Desktop]] implements
+  desktop outcomes and window ownership for compiled programs.
+- [[Native Host Desktop]] refuses invalid window settings before the
+  platform check on every host, and [[Native Host Signals]] marks the
+  stop-request reader optional so non-macOS builds emit no unused helper.
+
 ## 2026-11-13 — Nested foreign record layout (#863)
 
 - [[Pudu FFI Bridge]] preserves nested struct layouts for arguments, results

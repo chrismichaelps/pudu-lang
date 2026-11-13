@@ -30,3 +30,7 @@ output on the same machine as the only expectation.
 ## Referenced by
 
 [[Backend Native Tests]] · [[Backend Text Leak Tests]] · [[Native Host Services]]
+
+## Native desktop (#856)
+
+Resolved Grill Log: Compare invalid desktop calls and their error precedence with the interpreter without opening a window.

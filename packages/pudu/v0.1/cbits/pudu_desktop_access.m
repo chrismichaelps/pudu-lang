@@ -180,8 +180,10 @@ static void pudu_access_walk(NSArray *elements, long parent, long *counter, NSVi
   for (id<NSAccessibility> element in elements) {
     long node = (*counter)++;
     NSRect frame = pudu_access_content_frame(view, element.accessibilityFrame);
-    NSString *role = element.accessibilityRole ?: @"";
-    NSString *name = element.accessibilityLabel ?: @"";
+    NSString *role = element.accessibilityRole;
+    NSString *name = element.accessibilityLabel;
+    if (role == nil) role = @"";
+    if (name == nil) name = @"";
     [out appendFormat:@"%ld\t%ld\t%@\t%d\t%ld\t%ld\t%ld\t%ld\t%@\n",
         node, parent, pudu_access_spoken(role), element.isAccessibilityFocused ? 1 : 0,
         lround(NSMinX(frame)), lround(NSMinY(frame)), lround(NSWidth(frame)), lround(NSHeight(frame)),

@@ -11,23 +11,49 @@ import qualified Data.Text.IO as TextIO
 import Pudu.Backend.Toolchain (ToolchainFailure (..), ToolchainRequest (..), compileNative)
 import System.Directory
   ( doesFileExist
+  , findExecutable
   , getPermissions
   , listDirectory
   , setOwnerExecutable
   , setPermissions
   )
 import System.Environment (lookupEnv, setEnv, unsetEnv)
+import System.Exit (ExitCode (ExitSuccess))
 import System.FilePath ((</>))
+import System.Info (os)
+import System.Process (readProcessWithExitCode)
 import System.IO.Temp (withSystemTempDirectory)
 import System.Timeout (timeout)
 import Test.QuickCheck (Property, conjoin, counterexample, property, (===))
 
 backendToolchainProperties :: [(String, IO Property)]
 backendToolchainProperties =
-  [ ("native timeout kills a compiler that ignores TERM", testIgnoresTerm)
+  [ ("native desktop source bundle links against AppKit", testDesktopSources)
+  , ("native timeout kills a compiler that ignores TERM", testIgnoresTerm)
   , ("native timeout includes pipes retained after compiler exit", testInheritedPipes)
   , ("native cancellation cleans up and preserves the target", testCancellation)
   ]
+
+testDesktopSources :: IO Property
+testDesktopSources = do
+  compiler <- findExecutable "cc"
+  case (os, compiler) of
+    ("darwin", Just executable) -> withSystemTempDirectory "pudu-toolchain-desktop" $ \root -> do
+      let output = root </> "desktop"
+          source = Text.unlines
+            [ "/* pudu host source: desktop */"
+            , "#include <stdint.h>"
+            , "int32_t pudu_desktop_close(void *handle);"
+            , "int main(void) { return pudu_desktop_close(0) < 0 ? 0 : 1; }"
+            ]
+      built <- withEnvironment [("PUDU_CC", executable)] $
+        compileNative (ToolchainRequest source output)
+      case built of
+        Left problem -> pure (counterexample (show problem) (property False))
+        Right warnings -> do
+          outcome <- readProcessWithExitCode output [] ""
+          pure (conjoin [warnings === "", outcome === (ExitSuccess, "", "")])
+    _ -> pure (property True)
 
 testIgnoresTerm :: IO Property
 testIgnoresTerm = testDeadline "trap '' TERM\nwhile :; do sleep 1; done\n"

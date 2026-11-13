@@ -151,3 +151,7 @@ thread calls are the only new dependencies.
   flags are the ones the machine's own package description (`pkg-config`)
   gives; a machine without that description gets the plain library names.
   Rejected: fixed include paths, which name one machine's layout.
+
+## Native host sources (#856)
+
+Resolved Grill Log: select [[Native Toolchain Host Sources]] before invoking the compiler. Only marked programs create the private source directory, and the directory follows the invocation lifetime.

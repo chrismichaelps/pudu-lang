@@ -13,7 +13,7 @@ import Pudu.FloatLiteral (FloatWidth (..))
 import Pudu.IntegerLiteral (IntegerKind (..))
 
 hostPrimitives :: [(Text, Primitive)]
-hostPrimitives = mathPrimitives <> processPrimitives <> concurrentPrimitives <> filePrimitives <> netPrimitives <> tlsPrimitives <> compressPrimitives <> childPrimitives <> lanePrimitives
+hostPrimitives = mathPrimitives <> processPrimitives <> concurrentPrimitives <> filePrimitives <> netPrimitives <> tlsPrimitives <> compressPrimitives <> childPrimitives <> lanePrimitives <> desktopPrimitives
 
 {-| A host kernel over every operand in order. -}
 host :: Text -> Int -> Call
@@ -166,4 +166,20 @@ childPrimitives =
   , ("childWaitWithin", Primitive [int, int] (outcome (option int)) [] (OutcomeOptional (host "child_wait_within" 2)))
   , ("childStop", Primitive [int] (outcome int) [] (Outcome (host "child_stop" 1)))
   , ("runProgram", Primitive [text, array text, text] (outcome (CoreTupleType [int, text, text])) [] (Outcome (host "run_program" 3)))
+  ]
+
+desktopPrimitives :: [(Text, Primitive)]
+desktopPrimitives =
+  [ ("desktopOpen", Primitive [CoreTextType, int, int, CoreBoolType] (outcome int) [] (Outcome (host "desktop_open" 4)))
+  , ("desktopClose", Primitive [int] (outcome CoreUnitType) [] (Outcome (host "desktop_close" 1)))
+  , ("desktopPresent", Primitive [int, int, int, CoreBytesType] (outcome CoreUnitType) [] (Outcome (host "desktop_present" 4)))
+  , ("desktopPump", Primitive [int, int] (outcome CoreBoolType) [] (Outcome (host "desktop_pump" 2)))
+  , ("desktopConfigure", Primitive [int, int, int, int, int, int, int, int, CoreBoolType] (outcome CoreUnitType) [] (Outcome (host "desktop_configure" 9)))
+  , ("desktopClipboardWrite", Primitive [CoreTextType] (outcome CoreUnitType) [] (Outcome (host "desktop_clipboard_write" 1)))
+  , ("desktopAccessibility", Primitive [int, CoreTextType] (outcome CoreUnitType) [] (Outcome (host "desktop_accessibility" 2)))
+  , ("desktopMenu", Primitive [int, CoreTextType] (outcome CoreUnitType) [] (Outcome (host "desktop_menu" 2)))
+  , ("desktopInputs", Primitive [int] (outcome CoreTextType) [] (Outcome (host "desktop_inputs" 1)))
+  , ("desktopClipboardRead", Primitive [] (outcome CoreTextType) [] (Outcome (host "desktop_clipboard_read" 0)))
+  , ("desktopAccessibilityReport", Primitive [int] (outcome CoreTextType) [] (Outcome (host "desktop_accessibility_report" 1)))
+  , ("desktopMenuReport", Primitive [int] (outcome CoreTextType) [] (Outcome (host "desktop_menu_report" 1)))
   ]

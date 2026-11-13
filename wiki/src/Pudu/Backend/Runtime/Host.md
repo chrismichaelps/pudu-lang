@@ -24,3 +24,7 @@ nothing of the host carries none of this. [[Native Host Input]] supplies decodin
 ## Referenced by
 
 [[Backend Runtime]] · [[Native Host Services]] · [[Native Host Signals]] · [[Native Host Sockets]] · [[Native Host TLS]] · [[Native Host Compression]] · [[Native Host Child Programs]] · [[Native Host Time]] · [[Native Host Time Reading]]
+
+## Native desktop (#856)
+
+Resolved Grill Log: Register [[Native Host Desktop]] after its shared outcome, clock and signal dependencies.
