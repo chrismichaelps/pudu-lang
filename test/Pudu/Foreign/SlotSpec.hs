@@ -38,6 +38,8 @@ foreign import ccall safe "pudu_ffi_call"
     -> Ptr CDouble
     -> Ptr Int64
     -> Ptr CDouble
+    -> Ptr Word8
+    -> CInt
     -> Word8
     -> CInt
     -> Ptr Word8
@@ -78,16 +80,17 @@ data Argument = Argument
   , argumentSlot :: !Word8
   , argumentInteger :: !Int64
   , argumentFields :: ![Word8]
+  , argumentShape :: ![Word8]
   }
 
 sends :: Word8 -> Int64 -> Argument
-sends kind value = Argument kind kindVoid value []
+sends kind value = Argument kind kindVoid value [] []
 
 writesBack :: Word8 -> Argument
-writesBack kind = Argument kindVoid kind 0 []
+writesBack kind = Argument kindVoid kind 0 [] []
 
-writesRecord :: [Word8] -> Argument
-writesRecord leaves = Argument kindVoid kindStruct 0 leaves
+writesRecord :: [Word8] -> [Word8] -> Argument
+writesRecord leaves shape = Argument kindVoid kindStruct 0 leaves shape
 
 {-| What one call answered with: the bridge's own code, the native result, and
     every slot. -}
@@ -123,7 +126,7 @@ callWith symbol arguments resultKind readback =
                                   alloca $ \resultDouble ->
                                     allocaArray 1 $ \resultFieldIntegers ->
                                       allocaArray 1 $ \resultFieldDoubles -> do
-                                        code <-
+                                        code <- withArray shapes $ \shapeArray ->
                                           c_call (castFunPtrToPtr symbol) (fromIntegral count)
                                             kinds integers doubles pointers
                                             startArray countArray fieldKinds fieldIntegers
@@ -132,6 +135,7 @@ callWith symbol arguments resultKind readback =
                                             (if readback then slotIntegers else nullPtr)
                                             (if readback then slotDoubles else nullPtr)
                                             slotFieldIntegers slotFieldDoubles
+                                            shapeArray (fromIntegral (length shapes))
                                             resultKind 0 nullPtr
                                             resultInteger resultDouble
                                             resultFieldIntegers resultFieldDoubles
@@ -159,6 +163,7 @@ callWith symbol arguments resultKind readback =
  where
   count = length arguments
   leaves = concatMap argumentFields arguments
+  shapes = concatMap argumentShape arguments
   leafCount = max 1 (length leaves)
   starts = starting 0 arguments
   counts = map (fromIntegral . length . argumentFields) arguments
@@ -254,7 +259,8 @@ testTextSlot = do
 
 testRecordSlot :: IO Property
 testRecordSlot = do
-  answer <- callWith writeMixed [writesRecord [kindU8, kindF32, kindF32, kindF64]] kindVoid True
+  answer <- callWith writeMixed [writesRecord [kindU8, kindF32, kindF32, kindF64]
+    [kindStruct, 3, kindU8, kindStruct, 2, kindF32, kindF32, kindF64]] kindVoid True
   let fields = answerSlotFields answer
   pure
     ( counterexample (show fields)

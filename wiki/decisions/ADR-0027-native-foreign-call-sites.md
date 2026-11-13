@@ -52,7 +52,7 @@ checked, as in the interpreter.
 
 ## Records (#852)
 
-A record crosses as a C struct declared from the record, nested records as nested structs, so its layout is the platform's own. The interpreter's bridge flattens nested records, which differs only where an inner record ends in padding (#863).
+A record crosses as a C struct declared from the record, nested records as nested structs, so its layout is the platform's own. The interpreter constructs the same nested layouts with libffi (#863).
 
 ## Handles (#853)
 

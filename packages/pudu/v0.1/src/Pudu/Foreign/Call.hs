@@ -62,6 +62,8 @@ foreign import ccall safe "pudu_ffi_call"
     -> Ptr CDouble
     -> Ptr Int64
     -> Ptr CDouble
+    -> Ptr Word8
+    -> CInt
     -> Word8
     -> CInt
     -> Ptr Word8
@@ -170,6 +172,7 @@ callSymbol symbol supplied result =
           fieldKinds = map (kindCode . fst) fields
           fieldIntegers = map integerOf fields
           fieldDoubles = map doubleOf fields
+          shapes = concatMap (recordShape . fst) arguments <> recordShape result
           resultKinds = resultFieldKinds result
           resultCount = length resultKinds
       withArray kinds $ \kindArray ->
@@ -192,12 +195,13 @@ callSymbol symbol supplied result =
                                         alloca $ \producedDouble ->
                                           allocaArray (max 1 resultCount) $ \producedFieldIntegers ->
                                             allocaArray (max 1 resultCount) $ \producedFieldDoubles -> do
-                                              code <-
+                                              code <- withArray shapes $ \shapeArray ->
                                                 c_call symbol (fromIntegral (length arguments)) kindArray
                                                   integerArray doubleArray stringArray startArray countArray
                                                   fieldKindArray fieldIntegerArray fieldDoubleArray fieldStringArray
                                                   slotKindArray slotIntegers slotDoubles
                                                   slotFieldIntegers slotFieldDoubles
+                                                  shapeArray (fromIntegral (length shapes))
                                                   (kindCode result) (fromIntegral resultCount) resultKindArray
                                                   producedInteger producedDouble producedFieldIntegers
                                                   producedFieldDoubles
@@ -394,6 +398,17 @@ recordFields crossing value = case (crossing, value) of
       | ((_, fieldCrossing), (_, fieldValue)) <- zip declared held
       ]
   _ -> []
+
+{-| Preorder descriptors preserve nesting separately from the leaf carriers.
+    A record kind is followed by its direct member count and descriptions. -}
+recordShape :: Crossing -> [Word8]
+recordShape crossing = case crossing of
+  RecordCrossing _ fields -> kindCode crossing : fromIntegral (length fields) : concatMap (memberShape . snd) fields
+  _ -> []
+ where
+  memberShape member = case member of
+    RecordCrossing _ _ -> recordShape member
+    _ -> [kindCode member]
 
 {-| The leaves a result is read back as, in the same order. -}
 resultFieldKinds :: Crossing -> [Word8]

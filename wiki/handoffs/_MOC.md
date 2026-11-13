@@ -5,6 +5,8 @@ tags: [moc, handoff]
 
 # Handoff Map
 
+- [[Nested Foreign Record Delivery]] — interpreter ABI layout for nested records (#863).
+
 - [[Native Foreign Slot Delivery]] — output slots and mutable loans (#854).
 
 - [[Native Foreign Handles Delivery]] — opaque handles and ownership in native calls (#853).

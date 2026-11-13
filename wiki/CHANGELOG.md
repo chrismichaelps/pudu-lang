@@ -5,6 +5,11 @@ tags: [changelog]
 
 # Changelog
 
+## 2026-11-13 — Nested foreign record layout (#863)
+
+- [[Pudu FFI Bridge]] preserves nested struct layouts for arguments, results
+  and output slots, including inner tail padding. See [[Nested Foreign Record Delivery]].
+
 ## 2026-11-13 — Native scalar foreign slots (#854)
 
 - [[Native Foreign Slot Delivery]] emits scalar and scalar-only record output slots as zeroed C

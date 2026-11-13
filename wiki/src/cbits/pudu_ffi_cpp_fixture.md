@@ -98,3 +98,11 @@ extern "C" int32_t pudu_ffi_cpp_write_sum(int32_t left, int32_t right, int32_t *
 ## Referenced by
 
 [[src/cbits/_MOC]] · [[ADR-0018 Calling a Library Written Elsewhere]]
+
+## Padded records (#863)
+
+Resolved Grill Log: a nested double and byte yields trailing padding in the
+inner C++ struct. A trailing byte in the outer struct detects flattened
+layouts. Provide one round-trip function and one slot writer. An array of
+those shapes models the same layout as a record of consecutively declared
+members and exercises more than 32 scalar leaves.
