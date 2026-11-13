@@ -5,6 +5,8 @@ import qualified Data.Set as Set
 import qualified Data.Text as Text
 import qualified Data.Text.IO as TextIO
 import Pudu.Backend.ControlPrograms (controlSuccessPrograms, controlRefusalPrograms)
+import Pudu.Backend.Emit (EmittedUnit (emittedSource), EntryForm (EmbeddedEntry), emitUnit)
+import Pudu.Backend.Emit.Entry (embeddedHeader, embeddedHeaderName)
 import Pudu.Backend.Emit.Frame (emitFrameProgram)
 import Pudu.Backend.Emit.Frame.Body (emitFrameBodies)
 import Pudu.Backend.Emit.Frame.Value (frameValue, slotText)
@@ -28,7 +30,7 @@ import System.Exit (ExitCode (..))
 import System.FilePath ((</>))
 import System.IO.Temp (withSystemTempDirectory)
 import System.Process (readProcessWithExitCode)
-import Test.QuickCheck (Property, conjoin, counterexample, (===))
+import Test.QuickCheck (Property, conjoin, counterexample, once, (===))
 
 frameEmitProperties :: [(String, IO Property)]
 frameEmitProperties =
@@ -37,6 +39,7 @@ frameEmitProperties =
   , ("native text-view methods reject mismatched carriers", testTextViewSlots)
   , ("frame body emission suspends nested calls without C recursion", testCalls)
   , ("frame body emission compiles native corpora as strict C11", testBodies)
+  , ("embedded native entry returns status and flushes before returning to its C host", once <$> testEmbeddedEntry)
   ]
 
 testSlots :: IO Property
@@ -124,6 +127,44 @@ testBodies = do
                   [status === ExitSuccess, output === "", errors === ""]
           other -> pure (counterexample (name <> ": " <> show other) (False === True))
         _ -> pure (counterexample (name <> ": " <> show (compileDiagnostics checked)) (False === True))
+
+testEmbeddedEntry :: IO Property
+testEmbeddedEntry = do
+  compiler <- findExecutable "cc"
+  case compiler of
+    Nothing -> putStrLn "[skip] embedded entry C11 check: cc was not found" >> pure (True === True)
+    Just cc -> withSystemTempDirectory "pudu-embedded-entry" $ \root -> do
+      source <- newSource (SourceName "Main.pudu")
+        "module Main\nfn main() -> Int {\n  print(\"pudu\")\n  7\n}\n"
+      checked <- runCompile source
+      case (hasErrors (compileDiagnostics checked), compileModule checked) of
+        (False, Just parsed) -> case lowerModule "main" (nativeTypes (compileTypes checked) (compileSchemes checked)) parsed of
+          Lowered core -> case lowerFrames core >>= emitUnit EmbeddedEntry "test" [source] of
+            Left failure -> pure (counterexample (show failure) (False === True))
+            Right unit -> do
+              let generated = root </> "program.c"
+                  host = root </> "host.c"
+                  executable = root </> "host"
+              TextIO.writeFile generated (emittedSource unit)
+              TextIO.writeFile (root </> embeddedHeaderName) (embeddedHeader [])
+              TextIO.writeFile host (Text.unlines
+                [ "#include <stdio.h>"
+                , "#include \"pudu_program.h\""
+                , "int main(int argc, char **argv) {"
+                , "  if (pudu_program_run(argc, argv) != 7) return 1;"
+                , "  puts(\"host\");"
+                , "  return 0;"
+                , "}"
+                ])
+              (built, output, errors) <- readProcessWithExitCode cc
+                ["-std=c11", "-pedantic", "-Wall", "-Wextra", "-Werror", generated, host, "-o", executable] ""
+              case built of
+                ExitSuccess -> do
+                  ran <- readProcessWithExitCode executable [] ""
+                  pure (ran === (ExitSuccess, "pudu\nhost\n", ""))
+                _ -> pure (counterexample (output <> errors) (built === ExitSuccess))
+          other -> pure (counterexample (show other) (False === True))
+        _ -> pure (counterexample (show (compileDiagnostics checked)) (False === True))
 
 testCalls :: IO Property
 testCalls = do

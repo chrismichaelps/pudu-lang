@@ -110,6 +110,7 @@ library
     Pudu.Backend.Emit
     Pudu.Backend.Emit.Aggregate
     Pudu.Backend.Emit.Cell
+    Pudu.Backend.Emit.Entry
     Pudu.Backend.Emit.Array
     Pudu.Backend.Emit.Keyed
     Pudu.Backend.Emit.Kernel
