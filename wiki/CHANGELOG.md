@@ -5,6 +5,10 @@ tags: [changelog]
 
 # Changelog
 
+## 2026-11-13 — Shared native tool execution (#878)
+
+- [[Backend Toolchain Process]] owns compiler process lifetime and output capture.
+
 ## 2026-11-13 — Folded byte literals (#887)
 
 - [[Pudu Core IR Module]] carries folded `Bytes` constants as one
