@@ -34,3 +34,7 @@ output on the same machine as the only expectation.
 ## Native desktop (#856)
 
 Resolved Grill Log: Compare invalid desktop calls and their error precedence with the interpreter without opening a window.
+
+## Native audio (#857)
+
+Resolved Grill Log: Compare audio validation and unsupported operations against the interpreter.

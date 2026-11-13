@@ -679,3 +679,7 @@ Register [[Native Toolchain Host Sources]], keep its embedded inputs in the sour
 ## Native desktop (#856)
 
 Resolved Grill Log: Register [[Native Host Desktop]] alongside the native host runtime.
+
+## Native audio (#857)
+
+Resolved Grill Log: Register [[Native Host Audio]] and ship the embedded AudioToolbox sources in the source distribution.

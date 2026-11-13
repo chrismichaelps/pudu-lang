@@ -18,6 +18,8 @@ extra-source-files: cbits/pudu_desktop.h
                     cbits/pudu_desktop_access.m
                     cbits/pudu_desktop_menu.m
                     cbits/pudu_desktop_window.m
+                    cbits/pudu_audio.c
+                    cbits/pudu_audio_stream.c
                     cbits/pudu_audio.h
                     cbits/pudu_audio_stream.h
 data-files:         lib/Std/*.pudu
@@ -142,6 +144,7 @@ library
     Pudu.Backend.Runtime.Kernel.Verify
     Pudu.Backend.Runtime.Kernel.Xml
     Pudu.Backend.Runtime.Host
+    Pudu.Backend.Runtime.Host.Audio
     Pudu.Backend.Runtime.Host.Child
     Pudu.Backend.Runtime.Host.Compress
     Pudu.Backend.Runtime.Host.Concurrent

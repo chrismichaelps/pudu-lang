@@ -5,6 +5,11 @@ tags: [changelog]
 
 # Changelog
 
+## 2026-11-13 — Native AudioToolbox adapter (#857)
+
+- [[Native Host Audio]] emits audio playback and stream calls through the
+  same source packaging as the desktop adapter.
+
 ## 2026-11-13 — Native host source packaging (#856)
 
 - [[Native Toolchain Host Sources]] packages the AppKit sources for native
