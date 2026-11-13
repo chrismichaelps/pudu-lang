@@ -442,3 +442,15 @@ Resolved Grill Log: Keep output positions on the checked foreign call. The tuple
 ## Owned output slots (#854)
 
 Resolved Grill Log: Carry resolved destructor metadata for each handle output slot.
+
+## Byte literals (#887)
+
+`CoreBytesLiteral` carries a byte sequence known before the program runs, of
+type `CoreBytesType`. A folded `Bytes` constant becomes one such literal
+rather than `bytesOf` over an array of per-byte integer literals.
+
+Resolved Grill Log: **Q:** Keep projecting folded bytes through an array
+literal? **A:** No. _Rationale:_ every byte became its own expression, frame
+slot and statement, so an 18,432-byte constant produced an 18,474-line
+function the C compiler could not finish. _Rejected:_ chunked array literals,
+which still grow code with the data.

@@ -2,10 +2,11 @@
     byte-safe strings, and interpreter-compatible diagnostic sites. -}
 module Pudu.Backend.Emit.State
   ( EmitState (..), emptyEmitState, line, freshTemp, textOfInt
-  , shiftSites, overflowSite, divideByZeroSite, callDepthSite, operatorFailureSite, failureSite, helpedFailureSite, textFailureSite, renderSites, cString, cStringBytes
+  , shiftSites, overflowSite, divideByZeroSite, callDepthSite, operatorFailureSite, failureSite, helpedFailureSite, textFailureSite, renderSites, byteData, renderByteData, cString, cStringBytes
   ) where
 
 import qualified Data.ByteString as ByteString
+import qualified Data.List as List
 import Data.Char (ord)
 import qualified Data.Map.Strict as Map
 import qualified Data.Set as Set
@@ -52,6 +53,8 @@ data EmitState = EmitState
   , emitContinueTargets :: !(Set.Set CoreLoopId)
   {-| Each function's number in the frame table, for closures to name. -}
   , emitFunctionIds :: !(Map.Map Text Int)
+  {-| Each byte literal's data, newest first; its index names its table. -}
+  , emitByteData :: ![ByteString.ByteString]
   }
 
 emptyEmitState :: [Source] -> EmitState
@@ -68,6 +71,7 @@ emptyEmitState sources =
     , emitBreakTargets = Set.empty
     , emitContinueTargets = Set.empty
     , emitFunctionIds = Map.empty
+    , emitByteData = []
     }
 
 line :: EmitState -> Text -> EmitState
@@ -178,6 +182,29 @@ renderSites sites =
       <> " },"
   flag True = "1"
   flag False = "0"
+
+{-| The table holding a byte literal's data, `pudu_byte_data_<index>`: equal
+    data shares one table however many places read it. -}
+byteData :: ByteString.ByteString -> EmitState -> (EmitState, Int)
+byteData bytes state = case List.elemIndex bytes oldest of
+  Just index -> (state, index)
+  Nothing -> (state{emitByteData = bytes : emitByteData state}, length oldest)
+ where
+  oldest = reverse (emitByteData state)
+
+{-| File-scope tables for the registered byte literals, oldest first. A table
+    is an array initializer rather than a string literal, which has no
+    portable length limit; an empty literal keeps one unread byte because C
+    has no empty arrays. -}
+renderByteData :: [ByteString.ByteString] -> [Text]
+renderByteData tables = concat (zipWith table [0 :: Int ..] tables)
+ where
+  table index bytes =
+    ["static const unsigned char pudu_byte_data_" <> Text.pack (show index) <> "[] = {"]
+      <> map (\row -> "  " <> Text.intercalate ", " (map (Text.pack . show) row) <> ",") (rows (if ByteString.null bytes then [0] else ByteString.unpack bytes))
+      <> ["};"]
+  rows [] = []
+  rows values = let (row, rest) = splitAt 24 values in row : rows rest
 
 {-| A C string literal for exact bytes: printable ASCII verbatim, everything
     else as a three-digit octal escape, so any byte survives any compiler and

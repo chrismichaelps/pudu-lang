@@ -188,3 +188,8 @@ before preparing I/O; every other program keeps `int main(void)`.
 Resolved Grill Log: thread state is per-thread and the hooks are per-run; the
 entry shape is chosen only when the argument kernel is selected, so no program
 pays for a parameter it cannot read.
+
+## Byte data tables (#887)
+
+The program writes the registered byte-literal tables right after the site
+table, before any function that reads them.

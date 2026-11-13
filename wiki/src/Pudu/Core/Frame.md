@@ -154,3 +154,8 @@ carrier.
 ## Decimal (#802)
 
 `FrameDecimalLiteral` and `FrameDecimalMethod`.
+
+## Byte literals (#887)
+
+`FrameBytesLiteral` is the frame value of `CoreBytesLiteral`: one value,
+one slot, whatever the length.

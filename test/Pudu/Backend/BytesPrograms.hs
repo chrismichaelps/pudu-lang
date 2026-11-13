@@ -73,6 +73,20 @@ bytesSuccessPrograms =
       , "  print(display(RAW == PACKET.payload) + \" \" + show(RAW.drop(1)))"
       , "  return 0", "}" ]
     , "0x0080ff None 0x\nPacket{payload: 0x0080ff} (0x0080ff, 0xc3a9)\ntrue 0x80ff\n")
+  , ("a large folded constant and escape-sensitive bytes are one literal each", program
+      [ "const BIG: Bytes = cycled(60000)"
+      , "const EDGES: Bytes = bytesOf([0u8, 34u8, 63u8, 92u8, 48u8, 0u8, 55u8, 127u8, 128u8, 255u8])"
+      , "comptime fn cycled(count: Int) -> Bytes {"
+      , "  var out: Array[UInt8] = []", "  var next = 0u8", "  var index = 0"
+      , "  while index < count {", "    out = out.push(next)"
+      , "    next = if next == 255u8 { 0u8 } else { next + 1u8 }", "    index = index + 1", "  }"
+      , "  bytesOf(out)", "}"
+      , "fn main() -> Int {"
+      , "  print(display(BIG.length()) + \" \" + show(BIG.take(3)) + \" \" + show(BIG.drop(59997)) + \" \" + show(BIG.at(511)))"
+      , "  print(show(EDGES) + \" \" + display(EDGES.length()) + \" \" + display(BIG.slice(256, 260) == BIG.take(4)))"
+      , "  print(display(BIG == BIG) + \" \" + show(BIG.slice(254, 258)))"
+      , "  0", "}" ]
+    , "60000 0x000102 0x5d5e5f Some(255)\n0x00223f5c3000377f80ff 10 true\ntrue 0xfeff0001\n")
   , ("UTF-8 scalar boundaries and malformed continuations", program
       [ "fn isText(bytes: Bytes) -> Bool {"
       , "  match bytes.toText() {", "    case Some(_) => true", "    case None => false", "  }", "}"
