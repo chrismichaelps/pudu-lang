@@ -671,3 +671,7 @@ Resolved Grill Log: the host runtime is one more self-contained family after
 the codecs; the compiler modules stay compiler-owned. Generated programs link
 `-lm` and `-pthread` through [[Native Toolchain]]; the Haskell package gains no
 dependency.
+
+## Foreign handles (#853)
+
+Register [[Backend Emit Foreign Handle]] and [[Core Text Operations]] using existing dependencies.

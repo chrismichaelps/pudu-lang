@@ -73,6 +73,13 @@ frame types.
 
 The wrappers of every foreign declaration the frames call follow the aggregate helpers and precede the function bodies.
 
+## Foreign handles (#853)
+
+The C entry installs the process cleanup hook when foreign handle support is
+selected. A handle entry result uses the aggregate reporting path. Teardown
+releases the foreign claim first, then reporting uses the address retained in
+the box without dereferencing it.
+
 ## Foreign needs (#852)
 
 The module adds the needs of its foreign declarations (record constructors, releases, leaf conversions) to the aggregate and runtime selection, and passes its layouts to the wrappers.

@@ -44,3 +44,7 @@ Decimal is an owned cell: `pudu_dec *`, member `decimal`, retained, released, re
 ## Indexed stores (#840)
 
 CoreStoreType is an owned, aggregate `pudu_box *` mangled `BK_<held>_E`. Resolved Grill Log: a distinct mangle keeps store helpers apart from Map[Int, held] helpers in one program.
+
+## Foreign handles (#853)
+
+A foreign handle is an owned box whose C helper names include its nominal type identity.

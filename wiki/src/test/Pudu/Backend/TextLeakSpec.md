@@ -190,3 +190,55 @@ Count allocations over `hostCountedPrograms` and abstraction successes.
 Resolved Grill Log: task, scope, file and thread programs that own resources
 run only through the counted harness; programs that would wait or touch the
 network stay out of it.
+
+## Foreign handle claims (#853)
+
+The counted harness exports a C fixture through the executable's own symbols.
+A fixed address can be returned as a borrow, an owned claim or several counted
+references. The fixture traces reads and releases to stdout, and also traces
+releases to stderr to check their order against fatal diagnostics. Exact stdout
+traces distinguish explicit releases from teardown and require borrowed handles to
+remain unclaimed. Duplicate ownership and stale generations stop with E7021
+and E7022 respectively, with the still-live claim released before the refusal
+is reported. A null text result (E7024) must free its text argument copy and
+release the handle. A record with one missing text field must release both
+its argument copy and its handle before E7024, and invalid UTF-8 in another
+field takes priority (E7025). The fixture also renders the address itself, so handle
+rendering is tested without assuming a process address. The exit-time allocation
+counter remains active on failures.
+
+Resolved Grill Log: use stable fixture addresses so recycling and duplicate
+ownership do not depend on the system allocator. Require exact stdout on all
+paths, including teardown before a normal result, and a release trace followed
+by the diagnostic prefix on failure. The differential corpus separately checks
+the full rendered diagnostic. Export the test symbols only for this fixture.
+
+The handle entry result case checks that teardown precedes the printed result
+and that the rendered address and entry box are both released.
+
+A folded record used exclusively as a foreign argument exercises layout
+discovery without a local of that type. The C fixture reads its only field.
+
+## Scalar foreign slots (#854)
+
+Resolved Grill Log: interleave a written slot before a supplied operand and
+an untouched slot after it. Count the result tuple and preserve its unit
+first member. The unwritten slot must contain zero.
+
+A scalar-only record slot checks zeroed fields, nested padding, and release of
+the intermediate decoded record.
+
+## Text slots (#854)
+
+Resolved Grill Log: Count allocation ownership for both null and non-null text slots.
+
+## Owned foreign slots (#854)
+
+Resolved Grill Log: count one fresh claim and one null slot, and verify
+that a duplicate address is released only once before E7021.
+
+The mixed text result uses a slot and a direct result that both alias the
+same input buffer. Both outputs must survive release of the argument copy.
+
+A direct owned result and a distinct handle slot share the batch and each
+release once.

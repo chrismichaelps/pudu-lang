@@ -30,10 +30,15 @@ lowerFunctionBodyWith :: LowerExpression -> LowerBlock -> Located Function -> Co
 
 An entry takes no parameters and passes shared function admission. A plain
 entry reports the admitted carrier of its body: integer, Bool, float, Str,
-Char, tuple, record, sum, function, array, tree, range, bytes, Decimal, unit
-or Never's unit ABI. An async entry is awaited immediately: the body is
+Char, tuple, record, sum, function, array, tree, range, bytes, Decimal,
+foreign handle, unit or Never's unit ABI. An async entry is awaited immediately: the body is
 lifted as a task, then a Result success becomes the entry's answer while a
 failure is printed and becomes the exit status.
+
+## Foreign handle entry (#853)
+
+Resolved Grill Log: preserve the handle carrier for entry reporting. Its
+rendered address stays available after the runtime releases the claim.
 
 ## Named function boundaries
 
