@@ -45,7 +45,7 @@ foreign "c" {
 
 - `T` is a fixed-width integer, `Float32`, `Float64`, `Bool`, or a record
   whose leaves are all of those, nested records included, at most 32 fields
-  each. Text, `Bytes`, handles, `()`, arrays and references behind a pointer
+  each. Text, `Bytes`, handles, `()`, and references behind a scalar or record loan
   are refused (`E3095`).
 - `&T` crosses as `const T *`: the address of a copy that lives for the call.
   The caller writes `&value`.
@@ -70,8 +70,10 @@ foreign "c" {
 }
 ```
 
-- An element is a fixed-width integer, a float or `Bool`. A run of records is
-  a later slice.
+- An element is a fixed-width integer, a float, `Bool` or a record that can
+  cross behind a lent pointer. Record runs use the target's C `sizeof(T)`
+  as stride, including tail padding. The bridge initializes and reads the
+  fields at their ABI offsets. Padding is outside the Pudu value.
 - `&Array[T]` crosses as `const T *` to the elements laid end to end at their
   natural width, copied for the call. `&mut Array[T]` crosses as `T *`; the
   library may write any element, and the final elements are stored back into
@@ -84,8 +86,8 @@ foreign "c" {
 ### A length may say what it measures
 
 ```ebnf
-foreign_parameter = "out"?, identifier, ":", "owned"?, type,
-                    (("by", identifier) | (("elements" | "bytes"), "of", identifier))? ;
+foreign_parameter = "out"?, identifier, ":", ("owned" | "nullable")?, type,
+                    (("by", identifier) | (("elements" | "bytes"), "of", identifier, ("and", identifier)*))? ;
 ```
 
 `count: Int32 elements of samples` and `length: UInt64 bytes of target`
@@ -98,15 +100,68 @@ ordinary; one told a larger length would write past storage the program
 owns. The boundary checks extent arithmetic before converting to the
 target allocation size, and refuses overflow with the same diagnostic.
 
-What the relation cannot check stays the declaration's assertion: that the
-library honours the length it is told. A single relation checks only its
-named run. A call such as `memcmp` with one length and two buffers needs a
-check for both before its declaration can promise bounds for both. A relation
-on a slot, on a
-non-integer parameter, or naming anything but a run of the same function is
-`E3098`.
+One length can bound several runs. For example, a declaration can write
+`length: UInt64 bytes of left and right` for `memcmp`. Every named run must
+hold at least the requested extent. Check relationships in declaration order
+and targets within a relationship in written order, before any foreign code
+runs. A relation on a slot, on a non-integer parameter, or naming an invalid
+or repeated run is `E3098`. The declaration asserts that the library honours
+the length and names every buffer governed by it.
 
-### A pointer that may be null is an optional handle
+### Nullable loans
+
+A foreign parameter can explicitly opt into absence with
+`argument: nullable &T` or `argument: nullable &mut T`, including run
+pointees. In that argument position, literal `None` crosses as null and a
+present argument uses the ordinary `&value` or `&mut place` form. A
+present loan follows the same overlap and writeback rules as a non-null
+loan. An absent loan has no writeback destination. The checker elaborates
+the two argument forms at a direct foreign call without introducing a
+reference-valued `Option`. Taking a foreign function with a nullable loan
+as a first-class function requires a separate function-type contract.
+
+An absent run has extent zero for every related length. A present empty run
+still has a non-null address. Thus a positive length paired with absence is
+refused before dispatch, and a zero length preserves the distinction between
+null and an empty buffer.
+
+### Returned runs are copied while the allocation is live
+
+An owned array result names an integer output slot that reports its length
+and a release function that accepts the original pointer. The result
+crossing adds `elements of <slot> by <release>` after the array type.
+The length slot must be a fixed-width integer output in the same
+declaration. The proposed declaration form is:
+
+```pudu
+foreign "buffer" {
+  type SampleStorage
+  fn read(out length: UInt64) -> owned Array[Int32] elements of length by freeSamples
+  fn freeSamples(storage: SampleStorage) -> ()
+}
+```
+
+The release declaration's opaque handle identifies the native pointer
+argument. The wrapper resolves the release before calling the producer. The
+slot remains in the existing result tuple, and the result component is a
+Pudu-owned copy. The producer must initialize the length on every return and
+guarantee the extent of initialized elements and exclusive ownership of any
+non-null allocation. Validate signed lengths, target-size arithmetic and
+allocation size before reading. The native signature and the interpreter
+must agree on layout and stride for each element.
+
+The release runs exactly once for every valid transferred non-null pointer,
+including a zero-length allocation and a refusal during conversion. Register
+the transfer before decoding the slot or copying any element so failure
+cleanup still owns the pointer. A pointer
+already claimed by the runtime is a duplicate transfer and remains owned by
+the existing claim. Null with positive length is a refusal. Null with zero
+length is allowed only for an explicit `owned Option[Array[T]]` result, where
+it becomes `None`; a non-null pointer with zero length becomes `Some([])`
+for that result. The boundary never releases null. A borrowed returned run
+needs a separate lifetime contract.
+
+### A handle that may be null uses Option
 
 ```pudu
 foreign "c" {
@@ -125,7 +180,8 @@ foreign "c" {
   `counted Option[T] by release`, or `borrowed Option[T]`. A result written
   without `Option` still refuses null at run time (`E7020`), so the absence is
   in the declaration or it is a failure.
-- `Option` of anything else is refused (`E3097`): a scalar has no absence, and
+- Outside the returned-run form, a foreign `Option` whose payload is not a
+  handle is refused (`E3097`): a scalar has no absence, and
   text already answers `Option` where it is a slot. A slot is not written
   `Option`, since a pointer slot already answers one. A release still takes
   exactly its handle (`E3067`).
@@ -195,9 +251,8 @@ The first implementation partition covers non-null lent scalar and record
 places in the checker, interpreter and native code. Scalar runs, length
 relations and nullable handle crossings follow. Function pointers depend on
 the registration and trampoline runtime in #876. Record runs, nullable
-typed loans and returned runs still require a complete extent and lifetime
-contract. Acceptance for #877 includes both execution paths and target ABI
-evidence.
+typed loans and returned runs are later implementation partitions.
+Acceptance for #877 includes both execution paths and target ABI evidence.
 
 This decision proposal changes no currently accepted program.
 
@@ -231,7 +286,7 @@ This decision proposal changes no currently accepted program.
   checker forms. _Rejected:_ ownership modes inside type arguments.
 - **Q:** Make `Option[Int32]` mean a pointer to an integer that may be null?
   **A:** No. _Rationale:_ `Option` here means a null pointer, and a scalar
-  crosses by value. A nullable lent place needs its own spelling, since
+  crosses by value. Nullable lent places use a parameter modifier because
   `&mut` cannot sit inside a type argument. _Rejected:_ `Option` meaning two
   things at one boundary.
 - **Q:** Admit variadic calls with the arguments' own types? **A:** No.

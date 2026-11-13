@@ -19,6 +19,8 @@ function pointers.
   writes back the final mutable values using existing Pudu place rules.
 - The target ABI supplies record layout. Interpreter and native evidence
   includes nested records with padding as well as scalar widths.
+- One length checks every named run. Returned runs copy initialized elements
+  before releasing the transferred allocation, including on conversion failure.
 - Success, overlapping loans, forbidden pointees and forbidden results need
   focused checks in both execution paths. Array capacity, null and lifetime
   cases belong to the partitions that introduce those crossings.
