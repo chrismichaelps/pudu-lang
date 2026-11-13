@@ -53,7 +53,13 @@ function smoke() {
     const library = join(root, "libMain.a");
     const app = join(root, "PuduSmoke.app");
     const host = join(root, "main.m");
-    writeFileSync(source, `module Main
+    const shimSource = join(root, "shim.c");
+    const hostShim = join(root, "libPuduSmokeShim.dylib");
+    const framework = join(app, "Frameworks", "PuduSmokeShim.framework");
+    const frameworkInstallName = "@rpath/PuduSmokeShim.framework/PuduSmokeShim";
+    writeFileSync(shimSource, "#include <stdint.h>\nint32_t pudu_smoke_add(int32_t a, int32_t b) { return a + b; }\n");
+    run(xcrun, ["--sdk", "macosx", "clang", "-dynamiclib", shimSource, "-o", hostShim]);
+    const program = `module Main
 
 foreign "c" {
   fn absolute symbol "abs" (value: Int32) -> Int32
@@ -64,18 +70,25 @@ foreign "/System/Library/Frameworks/CoreFoundation.framework/CoreFoundation" {
   fn absoluteTime symbol "CFAbsoluteTimeGetCurrent" () -> Float64
 }
 
+foreign "${frameworkInstallName}" {
+  fn add symbol "pudu_smoke_add" (a: Int32, b: Int32) -> Int32
+}
+
 fn main() -> Int {
   unsafe(foreign) {
     print("PUDU_SMOKE " + display(absolute(-42i32)) + " " + display(strlen("pudu")))
     print("PUDU_SMOKE CoreFoundation " + display(absoluteTime() > 0.0))
+    print("PUDU_SMOKE EmbeddedFramework " + display(add(19i32, 23i32)))
   }
   0
 }
-`);
+`;
+    writeFileSync(source, program.replace(frameworkInstallName, hostShim));
     const expected = run(resolve(compiler), ["run", source]).trim();
-    assert.equal(expected, "PUDU_SMOKE 42 4\nPUDU_SMOKE CoreFoundation true");
+    assert.equal(expected, "PUDU_SMOKE 42 4\nPUDU_SMOKE CoreFoundation true\nPUDU_SMOKE EmbeddedFramework 42");
+    writeFileSync(source, program);
     run(resolve(compiler), ["build", source, "--native", "--target", "ios-simulator-arm64", "-o", library]);
-    mkdirSync(app);
+    mkdirSync(framework, { recursive: true });
     writeFileSync(host, `#include "pudu_program.h"
 #include <stdio.h>
 int main(int argc, char **argv) {
@@ -99,9 +112,23 @@ int main(int argc, char **argv) {
 </dict></plist>
 `);
     const sdk = run(xcrun, ["--sdk", "iphonesimulator", "--show-sdk-path"]).trim();
-    run(xcrun, ["--sdk", "iphonesimulator", "clang", "-target",
-      "arm64-apple-ios15.0-simulator", "-isysroot", sdk, "-Wall", "-Wextra",
-      "-Werror", host, library, "-framework", "Foundation", "-o", join(app, "PuduSmoke")]);
+    const simulatorClang = ["--sdk", "iphonesimulator", "clang", "-target",
+      "arm64-apple-ios15.0-simulator", "-isysroot", sdk, "-Wall", "-Wextra", "-Werror"];
+    run(xcrun, [...simulatorClang, "-dynamiclib", "-install_name", frameworkInstallName,
+      shimSource, "-o", join(framework, "PuduSmokeShim")]);
+    writeFileSync(join(framework, "Info.plist"), `<?xml version="1.0" encoding="UTF-8"?>
+<plist version="1.0"><dict>
+<key>CFBundleIdentifier</key><string>${identifier}.shim</string>
+<key>CFBundleExecutable</key><string>PuduSmokeShim</string>
+<key>CFBundlePackageType</key><string>FMWK</string>
+<key>CFBundleVersion</key><string>1</string>
+<key>CFBundleShortVersionString</key><string>1.0</string>
+<key>CFBundleSupportedPlatforms</key><array><string>iPhoneSimulator</string></array>
+</dict></plist>
+`);
+    run("codesign", ["--force", "--sign", "-", framework]);
+    run(xcrun, [...simulatorClang, "-Wl,-rpath,@executable_path/Frameworks",
+      host, library, "-framework", "Foundation", "-o", join(app, "PuduSmoke")]);
     run("codesign", ["--force", "--sign", "-", app]);
     if (!device) {
       device = run(xcrun, ["simctl", "create", "Pudu Foreign Smoke", phone.identifier, runtime.identifier]).trim();

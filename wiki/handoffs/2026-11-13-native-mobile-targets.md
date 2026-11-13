@@ -23,7 +23,9 @@ C foreign calls with interpreter output.
 
 The arm64 device and simulator archives passed SDK and entry checks. The
 iOS 26.4 simulator host matched the interpreter for `abs`, `strlen`, and
-a call to the CoreFoundation C symbol `CFAbsoluteTimeGetCurrent`.
+a call to the CoreFoundation C symbol `CFAbsoluteTimeGetCurrent`. The host
+also resolved and called a C symbol from a signed embedded framework through
+`@rpath`.
 
 Review the shared native tool runner in [PR #891](https://github.com/chrismichaelps/pudu-lang/pull/891) before advancing the dependent iOS partitions.
 

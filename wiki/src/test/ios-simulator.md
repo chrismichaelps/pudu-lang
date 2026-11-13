@@ -26,6 +26,10 @@ Use `--require-simulator` to make an unavailable simulator a failure.
   `CFAbsoluteTimeGetCurrent` through the CoreFoundation system framework.
   It checks that the returned timestamp is positive, so the host and simulator
   can compare stable output.
+- Compile a small C framework for the simulator with an `@rpath` install name,
+  sign it inside the app's Frameworks directory, and resolve its symbol from
+  Pudu without linking the host directly to the framework. Run the same C
+  implementation through a macOS dylib to compare interpreter output.
 - `main.m` owns `main`, calls `pudu_program_run` inside an autorelease pool,
   prints the status it returns and ends, so the launch finishes by itself.
 - The application is linked with `xcrun --sdk iphonesimulator clang`, given an
