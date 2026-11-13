@@ -51,6 +51,10 @@ checked, as in the interpreter.
 
 `Str` crosses as a nought-terminated UTF-8 copy for the call and comes back copied out of storage the library keeps; `Bytes` cross as the lent address of their storage, the length an ordinary parameter ([[ADR-0020-handing-a-library-a-run-of-bytes]]).
 
+## Records (#852)
+
+A record crosses as a C struct declared from the record, nested records as nested structs, so its layout is the platform's own. The interpreter's bridge flattens nested records, which differs only where an inner record ends in padding (#863).
+
 ## Referenced by
 
 [[decisions/_MOC]] · [[Native Emission Coverage]]

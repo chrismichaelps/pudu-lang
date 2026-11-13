@@ -6,7 +6,7 @@ module Pudu.Compiler.Lower.Foreign (lowerForeignCall) where
 import Data.Text (Text)
 import Pudu.Compiler.Lower.Array (collect, stops, stopped)
 import Pudu.Compiler.Lower.State (ForeignTarget (..), LowerContext (..), LowerState (..), halt, lookupForeign, refused)
-import Pudu.Compiler.Lower.Types (typeForSpan)
+import Pudu.Compiler.Lower.Types (LowerTypes, recordFields, typeForSpan)
 import Pudu.Core
 import Pudu.Frontend.Syntax (Expression, Located)
 import Pudu.IntegerLiteral (IntegerKind (SignedKind, UnsignedKind))
@@ -25,16 +25,31 @@ lowerForeignCall lower state at name arguments = do
       | any stops cores -> (after, Just (stopped at cores, CoreNeverType))
       | otherwise -> case typeForSpan (contextTypes (lowerContext after)) at of
           Just result
-            | all parameterCrossing parameters, scalarCrossing result || result `elem` [CoreUnitType, CoreTextType] ->
+            | all (parameterCrossing types) parameters, resultCrossing types result ->
                 let declared = CoreForeign (targetLibrary target) (targetVersion target) (targetSymbol target) parameters result
                  in (after, Just (CoreExpression at result (CoreForeignCall declared cores), result))
-          _ -> halt at "a foreign call crossing records, handles or slots" after
+          _ -> halt at "a foreign call crossing handles or slots" after
       where
         parameters = map coreExpressionType cores
+        types = contextTypes (lowerContext after)
 
-{-| A parameter crosses as a number, Bool, text or a lent run of bytes. -}
-parameterCrossing :: CoreType -> Bool
-parameterCrossing kind = scalarCrossing kind || kind `elem` [CoreTextType, CoreBytesType]
+{-| A parameter crosses as a number, Bool, text, a lent run of bytes or a
+    record of those (bytes excepted). -}
+parameterCrossing :: LowerTypes -> CoreType -> Bool
+parameterCrossing types kind = kind == CoreBytesType || fieldCrossing types kind
+
+{-| A result crosses as a number, Bool, text, unit or such a record. -}
+resultCrossing :: LowerTypes -> CoreType -> Bool
+resultCrossing types kind = kind == CoreUnitType || fieldCrossing types kind
+
+{-| What a record field may be: a number, Bool, text, or a record of those,
+    the record holding between one and thirty-two fields. -}
+fieldCrossing :: LowerTypes -> CoreType -> Bool
+fieldCrossing types kind
+  | scalarCrossing kind || kind == CoreTextType = True
+  | otherwise = case recordFields types kind of
+      Just fields -> not (null fields) && length fields <= 32 && all (fieldCrossing types . snd) fields
+      Nothing -> False
 
 {-| The numeric and Bool crossings: fixed-width integers, both float widths
     and Bool. -}

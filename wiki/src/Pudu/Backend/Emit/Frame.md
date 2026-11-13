@@ -73,6 +73,10 @@ frame types.
 
 The wrappers of every foreign declaration the frames call follow the aggregate helpers and precede the function bodies.
 
+## Foreign needs (#852)
+
+The module adds the needs of its foreign declarations (record constructors, releases, leaf conversions) to the aggregate and runtime selection, and passes its layouts to the wrappers.
+
 ## Referenced by
 
 [[src/_MOC]] · [[Native Frame Pressure Repair]]

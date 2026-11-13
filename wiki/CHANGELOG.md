@@ -5,6 +5,10 @@ tags: [changelog]
 
 # Changelog
 
+## 2026-11-12 — Native foreign records (#852)
+
+- [[Native Foreign Call Sites]]: records cross native foreign calls by value as C structs declared from the record, nested records nested, with text fields copied in and out and a missing text field named as the interpreter names it ([[Backend Emit Foreign ABI]]).
+
 ## 2026-11-12 — Native text and byte foreign crossings (#851)
 
 - [[Native Foreign Call Sites]]: `Str` arguments and results and lent `Bytes` cross native foreign calls as the interpreter's bridge passes them, with its E7017, E7024 and E7025 stops ([[Backend Emit Foreign]], [[Native Host Foreign]]).
