@@ -10,7 +10,7 @@ import Pudu.Backend.Emit.Foreign (foreignNeeds, foreignWrappers, foreignsOf)
 import Pudu.Backend.Emit.Aggregate (aggregateSection, aggregateTypes, cellName, ownedKinds, ownedType, released, retained, aggregateHelper, aggregateNeed)
 import Pudu.Backend.Emit.Frame.Body (emitFrameBodies)
 import Pudu.Backend.Emit.Support (integerHelper, isBigInteger, isWideInteger)
-import Pudu.Backend.Emit.State (EmitState (..), emptyEmitState, renderSites, textOfInt)
+import Pudu.Backend.Emit.State (EmitState (..), emptyEmitState, renderByteData, renderSites, textOfInt)
 import Pudu.Backend.Runtime (RuntimePart (..), runtimeParts)
 import Pudu.Backend.Runtime.Frame (frameTypes, frameEngine)
 import Pudu.Backend.Runtime.Array (arrayRuntimeParts)
@@ -129,7 +129,7 @@ emitFrameProgram version sources source = do
         <> map definition indexed <> ["};"]
   pure $ Text.unlines (header <> runtime <> frameTypes wide big decimal text boxes
     <> concat [lines' <> [""] | (name, lines') <- arrayRuntimeParts <> textPieceRuntimeParts <> treeRuntimeParts <> rangeRuntimeParts <> bytesRuntimeParts <> hashRuntimeParts <> kernelRuntimeParts, Set.member name selected]
-    <> renderSites (reverse (emitSites emitted)) <> aggregates <> ownership <> foreignWrappers (frameModuleLayouts source) (foreignsOf source) <> reverse (emitOutput emitted)
+    <> renderSites (reverse (emitSites emitted)) <> renderByteData (reverse (emitByteData emitted)) <> aggregates <> ownership <> foreignWrappers (frameModuleLayouts source) (foreignsOf source) <> reverse (emitOutput emitted)
     <> metadata <> frameEngine owned (Set.member "host_thread_spawn" selected) <> entryPoint (Set.member "host_arguments" selected)
     <> ["  pudu_process_cleanup_hook = pudu_foreign_teardown;" | Set.member "host_foreign_store" selected]
     <> ending <> ["}"])

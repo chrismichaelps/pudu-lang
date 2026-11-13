@@ -188,3 +188,11 @@ Resolved Grill Log: project existing checked semantics; no inference, fallback, 
 ## Indexed stores (#840)
 
 Emit KeyedPut as the `put` helper, KeyedMixHash as `pudu_mix_hash`, and KeyedHash by receiver carrier: text, bytes, word integer, wide integer or BigInt; any other carrier refuses. Resolved Grill Log: lowering shows other values as text first, so emission never guesses a rendering.
+
+## Byte literals (#887)
+
+`FrameBytesLiteral` registers its data with [[Backend Emit State]] and emits
+`pudu_bytes_wrap(pudu_text_literal((const char *)pudu_byte_data_<n>, length))`:
+the bytes live in a static table and are wrapped without copying, as text
+literals already are. Resolved Grill Log: static storage has no owner to
+release, so dropping the Bytes value frees only its box.

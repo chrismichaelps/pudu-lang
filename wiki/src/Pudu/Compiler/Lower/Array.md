@@ -76,3 +76,6 @@ An array literal whose expected element is `dynamic` widens each item of an
 implementing type before the equality check, so a homogeneous dynamic array is
 admitted. Resolved Grill Log: widening happens after every item ran and keeps
 the literal's element type.
+
+Resolved Grill Log (#887): a byte literal is an independent operand, like the
+other literals, when an array method may take its receiver.

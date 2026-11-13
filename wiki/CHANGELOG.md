@@ -5,6 +5,14 @@ tags: [changelog]
 
 # Changelog
 
+## 2026-11-13 — Folded byte literals (#887)
+
+- [[Pudu Core IR Module]] carries folded `Bytes` constants as one
+  `CoreBytesLiteral`, which [[Backend Frame Values]] emits as a single static
+  C string wrapped without copying. The 18,432-byte Ark glyph atlas no longer
+  produces an 18,474-line function, so the Ark text and UI fixtures compile
+  natively.
+
 ## 2026-11-13 — Fixture scratch directories (#885)
 
 - The standard-library fixtures that write files (`UsesCsv`, `UsesIo`,

@@ -245,6 +245,7 @@ takeReceiver local expression = case coreExpressionShape expression of
     CoreDecimalLiteral{} -> True
     CoreBoolLiteral{} -> True
     CoreTextLiteral{} -> True
+    CoreBytesLiteral{} -> True
     CoreCharLiteral{} -> True
     _ -> False
 

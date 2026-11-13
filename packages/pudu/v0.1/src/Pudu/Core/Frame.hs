@@ -6,6 +6,7 @@ module Pudu.Core.Frame
   , FrameScalarOperator, scalarOperator, coreScalarOperator, FrameFault (..)
   ) where
 
+import Data.ByteString (ByteString)
 import Data.Text (Text)
 import Data.Word (Word64)
 import Pudu.FloatLiteral (FloatWidth)
@@ -88,6 +89,7 @@ data FrameValueShape
   | FrameDecimalLiteral !Integer !Int
   | FrameBoolLiteral !Bool
   | FrameTextLiteral !Text
+  | FrameBytesLiteral !ByteString
   | FrameCharLiteral !Char
   | FrameCharCode !FrameSlot
   | FrameIntegerFits !IntegerKind !FrameSlot

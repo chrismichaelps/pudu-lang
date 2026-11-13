@@ -112,3 +112,9 @@ Resolved Grill Log: compiling an initializer at its use is not evaluating it
 at runtime. Folding already denied effects, so every read answers the same
 value the one evaluation would, and the reader's locals never become visible
 to the initializer.
+
+## Folded bytes (#887)
+
+A folded `Bytes` value, at top level or nested inside a folded aggregate,
+projects to one `CoreBytesLiteral`. Resolved Grill Log: the literal keeps the
+value's exact bytes, including NUL and every value above 127.

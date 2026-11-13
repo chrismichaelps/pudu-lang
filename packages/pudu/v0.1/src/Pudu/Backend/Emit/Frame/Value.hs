@@ -1,6 +1,7 @@
 {-| @Pudu.Backend.Emit.Frame.Value — pure operations over saved frame cells. -}
 module Pudu.Backend.Emit.Frame.Value (frameValue, slotText, cellMember) where
 
+import qualified Data.ByteString as ByteString
 import Data.Set (Set)
 import qualified Data.Set as Set
 import Data.Text (Text)
@@ -8,7 +9,7 @@ import qualified Data.Text as Text
 import Numeric (showHex)
 import qualified Data.Map.Strict as Map
 import Pudu.Backend.Emit.State
-  ( EmitState (..), cString, cStringBytes, divideByZeroSite, failureSite, helpedFailureSite, operatorFailureSite, overflowSite, shiftSites, textOfInt )
+  ( EmitState (..), byteData, cString, cStringBytes, divideByZeroSite, failureSite, helpedFailureSite, operatorFailureSite, overflowSite, shiftSites, textOfInt )
 import Pudu.Backend.Emit.Aggregate (aggregateHelper, aggregateNeed, cellName, isAggregate, memberComparable, retained)
 import Pudu.Diagnostic.Evaluation (cannotApplyBinaryMessage)
 import Pudu.Backend.Emit.Support (integerHelper, integerKindText, integerLiteralText, isBigInteger, isWideInteger, limbsOf, zeroValue)
@@ -57,6 +58,9 @@ frameValue state value = case frameValueShape value of
   FrameZero -> done state (zeroValue (frameValueType value)) []
   FrameTextLiteral text ->
     plain ("pudu_text_literal(" <> cString text <> ", " <> textOfInt (cStringBytes text) <> ")") ["text_literal"]
+  FrameBytesLiteral bytes ->
+    let (withData, index) = byteData bytes state
+     in Right (withData, "pudu_bytes_wrap(pudu_text_literal((const char *)pudu_byte_data_" <> textOfInt index <> ", " <> textOfInt (ByteString.length bytes) <> "))", Set.fromList ["bytes_wrap", "text_literal"])
   FrameCharLiteral character -> done state ("UINT32_C(0x" <> Text.pack (showHex (fromEnum character) "") <> ")") []
   FrameCharCode slot -> slotText slot >>= \scalar -> plain ("pudu_make((uint64_t)" <> scalar <> ", 0)") ["make"]
   FrameCharOfCode slot -> slotText slot >>= \code -> plain ("(uint32_t)pudu_magnitude(" <> code <> ")") ["magnitude"]
