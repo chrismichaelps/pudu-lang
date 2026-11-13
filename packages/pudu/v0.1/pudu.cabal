@@ -145,6 +145,7 @@ library
     Pudu.Backend.Runtime.Host.Child
     Pudu.Backend.Runtime.Host.Compress
     Pudu.Backend.Runtime.Host.Concurrent
+    Pudu.Backend.Runtime.Host.Desktop
     Pudu.Backend.Runtime.Host.File
     Pudu.Backend.Runtime.Host.Handle
     Pudu.Backend.Runtime.Host.Input

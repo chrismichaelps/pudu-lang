@@ -9,7 +9,7 @@ aliases: [Native Desktop Adapter Delivery]
 
 Language Architect → Backend Engineer. The first partition owns the native
 toolchain and packaged AppKit sources. The next partition owns lowering,
-desktop window lifetimes, and host outcome conversion.
+desktop window lifetimes, and host outcome conversion in [[Native Host Desktop]].
 
 ## Resolved Grill Log
 
@@ -23,8 +23,11 @@ another source bundle through the same seam.
 
 ## Exact next action
 
-Lower the desktop builtins to host outcomes using the selected AppKit bundle.
-The warning-as-error library build and macOS adapter link probe passed.
+The macOS native smoke matches the interpreter for open, configure, present,
+pump, close, and repeated-close refusal. The headless differential checks
+also pass.
+
+Verify counted desktop ownership and the unsupported platform branch in CI.
 
 ## Referenced by
 

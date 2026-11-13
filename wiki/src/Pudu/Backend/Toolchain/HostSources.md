@@ -16,7 +16,7 @@ owned by [[Backend Toolchain]], and return compiler arguments.
 
 Embed the existing AppKit sources and headers at compiler build time and
 register each file as a compiler input. Materialize them only when a macOS
-program selects the desktop marker. Keep headers beside their translation
+program selects the desktop marker. Put the staging directory on the include path. Keep headers beside their translation
 units and use one compiler invocation to preserve cancellation and atomic
 publication. A program on another platform selects no AppKit source.
 

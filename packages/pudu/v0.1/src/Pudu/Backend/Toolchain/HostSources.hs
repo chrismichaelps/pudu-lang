@@ -22,7 +22,7 @@ withHostSourceArguments source compile
       withSystemTempDirectory "pudu-host" $ \directory -> do
         mapM_ (write directory) desktopSources
         compile
-          (["-fobjc-arc"]
+          (["-fobjc-arc", "-I", directory]
             <> [directory </> file | (file, _) <- desktopSources, takeExtension file == ".m"]
             <> ["-framework", "AppKit", "-framework", "CoreGraphics"])
   | otherwise = compile []

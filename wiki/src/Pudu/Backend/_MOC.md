@@ -6,7 +6,7 @@ aliases: [Backend Module Map]
 
 # Backend Module Map
 
-- [[Native Toolchain Host Sources]] — packaged native platform translation units (#856).
+- [[Native Toolchain Host Sources]] · [[Native Host Desktop]] — packaged native platform translation units (#856).
 
 - [[Native Hash Mixing]] · [[Backend Store Programs]] — `hashOf`, store indexes and the indexed-store corpus (#840).
 - [[Native Host Runtime]] · [[Native Host Concurrent]] · [[Native Host State]] · [[Native Host Process]] · [[Native Host Input]] · [[Native Host Files]] · [[Native Host Handles]] · [[Native Host Scopes]] · [[Native Host Math]] · [[Native Host Lanes]] · [[Native Host Raster]] · [[Native Host Signals]] · [[Native Host Foreign]] · [[Native Host Sockets]] · [[Native Host TLS]] · [[Native Host Compression]] · [[Native Host Child Programs]] · [[Native Host Time]] · [[Native Host Time Reading]] — host families (#846).

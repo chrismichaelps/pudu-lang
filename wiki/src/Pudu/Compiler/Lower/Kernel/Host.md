@@ -33,3 +33,7 @@ is the builtin's own checked signature; nothing is inferred.
 ## Referenced by
 
 [[Compiler Lower Kernel]] · [[Native Host Services]]
+
+## Native desktop (#856)
+
+Resolved Grill Log: Lower the monomorphic desktop builtins through the host outcome carrier to [[Native Host Desktop]].

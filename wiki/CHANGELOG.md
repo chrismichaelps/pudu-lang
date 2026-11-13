@@ -8,7 +8,8 @@ tags: [changelog]
 ## 2026-11-13 — Native host source packaging (#856)
 
 - [[Native Toolchain Host Sources]] packages the AppKit sources for native
-  builds that select the desktop adapter.
+  builds that select the desktop adapter. [[Native Host Desktop]] implements
+  desktop outcomes and window ownership for compiled programs.
 
 ## 2026-11-12 — Native foreign records (#852)
 
