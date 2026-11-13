@@ -22,6 +22,8 @@ data ToolchainFailure
   | ToolchainTimedOut !Int
   | ToolchainRejected !Text
   | ToolchainPublishFailed !Text
+  | ToolchainSdkMissing !Text !Text
+  | ToolchainTargetUnbuilt !Text
 
 runTool :: FilePath -> [String] -> Int -> IO (Either ToolchainFailure Text)
 timeoutSeconds :: IO Int
@@ -39,6 +41,10 @@ killed on POSIX when it expires, and bounded cleanup. Exit zero answers the
 captured output; nonzero is `ToolchainRejected` with it. `timeoutSeconds`
 reads `PUDU_CC_TIMEOUT` and defaults to 120.
 
+`ToolchainSdkMissing target detail` and `ToolchainTargetUnbuilt target` belong
+to [[Backend Toolchain Library]]; they live here so one type covers every
+toolchain outcome.
+
 ## Negative Logic (Prohibited Paths)
 
 - No unbounded capture, wait or cleanup.
@@ -47,13 +53,15 @@ reads `PUDU_CC_TIMEOUT` and defaults to 120.
 ## Dependencies and consumers
 
 `process`, `unix` on POSIX, `bytestring`, `text`. Consumed by
-[[Backend Toolchain]].
+[[Backend Toolchain]] and [[Backend Toolchain Library]].
 
 ## Resolved Grill Log
 
-Separate process execution from host compiler flags and artifact publication
-so future native tools share cancellation and bounded capture.
+- **Q:** Why split the runner out of the toolchain module? **A:** A mobile
+  build runs two tools (the compiler and the archiver) under the same lifetime
+  rules; one runner keeps one implementation of those rules. _Rejected:_ a
+  second runner in the library builder.
 
 ## Referenced by
 
-[[src/Pudu/Backend/_MOC]] · [[Backend Toolchain]]
+[[src/Pudu/Backend/_MOC]] · [[Backend Toolchain]] · [[Backend Toolchain Library]]
