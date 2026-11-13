@@ -5,6 +5,12 @@ tags: [changelog]
 
 # Changelog
 
+## 2026-11-13 — Entry parameters report a located stop (#871)
+
+- [[Eval Program]] calls the entry at its name, so an entry parameter without
+  a default stops with E7003 instead of an internal error, and
+  [[Compiler Lower Function Body]] compiles the same stop natively.
+
 ## 2026-11-13 — Nested foreign record layout (#863)
 
 - [[Pudu FFI Bridge]] preserves nested struct layouts for arguments, results

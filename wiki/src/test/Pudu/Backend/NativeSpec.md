@@ -240,3 +240,6 @@ runner, so a refusal or mismatch shows the same site a reader would see.
 library float group compares with the interpreter alone: its programs print
 kernels whose last bit belongs to the machine's math library, so no answer
 can be written for them.
+
+Resolved Grill Log (#871): status programs cover entries with parameters,
+which stop with the evaluator's located E7003 before any body effect.
