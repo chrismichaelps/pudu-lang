@@ -27,6 +27,7 @@ import Pudu.Backend.Emit.Array (arrayHelpers)
 import Pudu.Backend.Emit.Keyed (mapHelpers, setHelpers, storeHelpers)
 import Pudu.Backend.Emit.Range (rangeHelpers)
 import Pudu.Backend.Emit.Bytes (bytesHelpers)
+import Pudu.Backend.Emit.Handle (handleHelpers)
 import Pudu.Backend.Emit.State (cString, cStringBytes)
 import Pudu.Core (CoreClosureInfo (..), CoreLayout (..), CoreType (..), CoreVariant (..), coreTypeName, displayName)
 import Pudu.Core.Closure (isTextMethod)
@@ -102,6 +103,7 @@ helpers identities layouts kind = case (kind, Map.lookup kind layouts) of
   (CoreStoreType held, _) -> storeHelpers kind held
   (CoreRangeType, _) -> rangeHelpers kind
   (CoreBytesType, _) -> bytesHelpers kind
+  (CoreHandleType _ name, _) -> handleHelpers kind name
   (CoreFunctionType _ _, Just (CoreClosureLayout entries)) -> closureHelpers kind
     [(identity, info) | (key, info) <- entries, Just identity <- [Map.lookup key identities]]
   _ -> []

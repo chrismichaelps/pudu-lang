@@ -7,6 +7,7 @@ import Data.List.NonEmpty (NonEmpty (..))
 import qualified Data.List.NonEmpty as NonEmpty
 import Data.Map.Strict (Map)
 import qualified Data.Map.Strict as Map
+import qualified Data.Set as Set
 import Data.Text (Text)
 import qualified Data.Text as Text
 import Pudu.Core (CoreLayout (..), CoreType (..), CoreVariant (..), coreTypeName)
@@ -29,6 +30,8 @@ data LowerTypes = LowerTypes !TypeInfo !(Map Text Scheme) !Shapes !(Map Text Cor
 data Shapes = Shapes
   { shapeRecords :: !(Map NominalId ([Text], [(Text, Type)]))
   , shapeSums :: !(Map NominalId ([Text], [(Text, [Type], Maybe [Text])]))
+  {-| The opaque handles foreign blocks declare. -}
+  , shapeHandles :: !(Set.Set NominalId)
   }
 
 nativeTypes :: Maybe TypeInfo -> [(Text, Scheme)] -> Maybe LowerTypes
@@ -39,10 +42,10 @@ emptyTypes :: LowerTypes
 emptyTypes = LowerTypes (TypeInfo Map.empty Map.empty) Map.empty noShapes Map.empty
 
 noShapes :: Shapes
-noShapes = Shapes Map.empty Map.empty
+noShapes = Shapes Map.empty Map.empty Set.empty
 
-withShapes :: Map NominalId ([Text], [(Text, Type)]) -> Map NominalId ([Text], [(Text, [Type], Maybe [Text])]) -> LowerTypes -> LowerTypes
-withShapes records sums (LowerTypes info schemes _ bindings) = LowerTypes info schemes (Shapes records sums) bindings
+withShapes :: Map NominalId ([Text], [(Text, Type)]) -> Map NominalId ([Text], [(Text, [Type], Maybe [Text])]) -> Set.Set NominalId -> LowerTypes -> LowerTypes
+withShapes records sums handles (LowerTypes info schemes _ bindings) = LowerTypes info schemes (Shapes records sums handles) bindings
 
 withBindings :: Map Text CoreType -> LowerTypes -> LowerTypes
 withBindings bindings (LowerTypes info schemes shapes _) = LowerTypes info schemes shapes bindings
@@ -196,6 +199,8 @@ formedWith shapes seen parameters value = case value of
     if nativeValueType formed then Just (CoreSetType formed) else Nothing
   -- A task is the body it has not run yet: a function of nothing answering
   -- what the body answers, a Result when the task can fail.
+  NominalType identity []
+    | Set.member identity (shapeHandles shapes) -> Just (CoreHandleType (nominalKey identity) (nominalName identity))
   NominalType (NominalId Nothing "Task") [success, failure] -> do
     answered <- case failure of
       NeverType -> formedWith shapes seen parameters success
@@ -326,6 +331,7 @@ nativeValueType (CoreStoreType _) = True
 nativeValueType CoreRangeType = True
 nativeValueType CoreBytesType = True
 nativeValueType CoreDecimalType = True
+nativeValueType (CoreHandleType _ _) = True
 nativeValueType other = nativeScalarType other
 
 {-| The checker's spelling of a formed type: the identity `nominalKey` was
@@ -343,6 +349,7 @@ unformed kind = case kind of
   CoreTupleType members -> TupleTypeValue (map unformed members)
   CoreUnitType -> UnitTypeValue
   CoreNeverType -> NeverType
+  CoreHandleType key _ -> NominalType (keyIdentity key) []
   other -> NominalType (NominalId Nothing (coreTypeName other)) []
  where
   identityOf = keyIdentity

@@ -22,6 +22,7 @@ module Pudu.Compiler.Lower
   ) where
 
 import Data.List (find, sortOn)
+import Data.List.NonEmpty (NonEmpty (..))
 import qualified Data.Set as Set
 import Data.Text (Text)
 
@@ -44,16 +45,21 @@ import Pudu.Compiler.Lower.State
   , emptyContext, inModule, startFunction, withTypeBindings )
 import Pudu.Compiler.Lower.Signature (ensureSignature)
 import Pudu.Core
+import Pudu.FloatLiteral (FloatWidth (..))
+import Pudu.IntegerLiteral (IntegerKind (..))
 import Pudu.Diagnostic (Diagnostic, sortDiagnostics)
 import Pudu.Diagnostic.Native (nativeRefusal)
 import Pudu.Frontend.Syntax
   ( Declaration (..)
   , Foreign (..)
   , ForeignFunction (..)
+  , ForeignParameter (..)
   , Function (..)
   , Located (..)
   , Import (..)
   , Module (..)
+  , ModuleName (..)
+  , TypeSyntax (..)
   , moduleNameText
   )
 import Pudu.Frontend.Syntax.Name (moduleQualifier)
@@ -172,10 +178,15 @@ lowerProgram entryName programModules@(rootModule : _)
           (snd (shapesOf native))
       | native <- programModules ]
 
+    handles = Set.fromList
+      [ NominalId (Just (locatedValue (moduleName (nativeModuleSyntax native)))) (locatedValue named)
+      | native <- programModules
+      , Located _ (ForeignDeclaration declared) <- moduleDeclarations (nativeModuleSyntax native)
+      , named <- foreignTypes declared ]
     scopes = Map.fromList
       [ ( nativeModuleName native
         , ModuleScope
-            { scopeTypes = maybe emptyTypes (withShapes records sums) (nativeModuleTypes native)
+            { scopeTypes = maybe emptyTypes (withShapes records sums handles) (nativeModuleTypes native)
             , scopeFunctions = Set.fromList (map fst (functionsOf native))
             , scopeConstants = Map.fromList
                 [ (locatedValue name, Map.lookup (locatedValue name) (nativeModuleConstants native))
@@ -195,12 +206,43 @@ lowerProgram entryName programModules@(rootModule : _)
             , scopeForeign = Map.fromList
                 [ ( locatedValue (foreignName function)
                   , ForeignTarget (locatedValue (foreignLibrary declared)) (locatedValue <$> foreignVersion declared)
-                      (maybe (locatedValue (foreignName function)) locatedValue (foreignSymbol function)) )
+                      (symbolOf function) (claimOf functions function)
+                      (locatedValue (foreignName function) `elem` releasers functions)
+                      [index | (index, Located _ parameter) <- zip [0 ..] (foreignParameters function)
+                             , foreignParameterOut parameter]
+                      [claimFor functions False (foreignParameterReleasedBy parameter)
+                      | Located _ parameter <- foreignParameters function, foreignParameterOut parameter] )
                 | Located _ (ForeignDeclaration declared) <- moduleDeclarations (nativeModuleSyntax native)
-                , Located _ function <- foreignFunctions declared ]
+                , let functions = map locatedValue (foreignFunctions declared)
+                , function <- functions ]
             }
         )
       | native <- programModules ]
+
+    symbolOf function = maybe (locatedValue (foreignName function)) locatedValue (foreignSymbol function)
+    -- A borrowed result is held without a claim; an owned or counted one is
+    -- released by the function it names, called as that function returns.
+    claimOf functions function
+      | foreignResultBorrowed function = Just CoreBorrowed
+      | otherwise = claimFor functions (foreignResultCounted function) (foreignReleasedBy function)
+    claimFor functions counted written
+      | Just released <- written
+      , Just release <- find ((== locatedValue released) . locatedValue . foreignName) functions =
+          Just (CoreOwned counted (symbolOf release) (releaseResult (locatedValue (foreignResult release))))
+      | otherwise = Nothing
+    releasers functions = [locatedValue released | function <- functions, Just released <- [foreignReleasedBy function]]
+      <> [locatedValue released | function <- functions, Located _ parameter <- foreignParameters function
+         , Just released <- [foreignParameterReleasedBy parameter]]
+    -- A release answers nothing or a number, which checking already holds it to.
+    releaseResult written = case written of
+      NamedType (ModuleName (name :| [])) [] -> maybe CoreUnitType id (lookup name releaseResults)
+      _ -> CoreUnitType
+    releaseResults =
+      [ ("Int8", CoreIntegerType (SignedKind 8)), ("Int16", CoreIntegerType (SignedKind 16))
+      , ("Int32", CoreIntegerType (SignedKind 32)), ("Int64", CoreIntegerType (SignedKind 64))
+      , ("UInt8", CoreIntegerType (UnsignedKind 8)), ("UInt16", CoreIntegerType (UnsignedKind 16))
+      , ("UInt32", CoreIntegerType (UnsignedKind 32)), ("UInt64", CoreIntegerType (UnsignedKind 64))
+      , ("Float32", CoreFloatType Float32Width), ("Float64", CoreFloatType Float64Width), ("Bool", CoreBoolType) ]
 
     (instances, methods, traitMethods, heads) = methodTables scopes
       [ (nativeModuleName native, nativeModuleSyntax native, nativeModuleMethods native) | native <- programModules ]

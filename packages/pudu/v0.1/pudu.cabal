@@ -116,6 +116,7 @@ library
     Pudu.Backend.Emit.Foreign
     Pudu.Backend.Emit.ForeignAbi
     Pudu.Backend.Emit.Frame
+    Pudu.Backend.Emit.Handle
     Pudu.Backend.Emit.State
     Pudu.Backend.Emit.Support
     Pudu.Backend.Runtime
@@ -261,6 +262,7 @@ library
     Pudu.Core.Bytes
     Pudu.Core.Closure
     Pudu.Core.Keyed
+    Pudu.Core.TextMethod
     Pudu.Core.Kernel
     Pudu.Core.Frame
     Pudu.Diagnostic

@@ -14,6 +14,29 @@ tags: [changelog]
   platform check on every host, and [[Native Host Signals]] marks the
   stop-request reader optional so non-macOS builds emit no unused helper.
 
+## 2026-11-13 — Nested foreign record layout (#863)
+
+- [[Pudu FFI Bridge]] preserves nested struct layouts for arguments, results
+  and output slots, including inner tail padding. See [[Nested Foreign Record Delivery]].
+
+## 2026-11-13 — Native scalar foreign slots (#854)
+
+- [[Native Foreign Slot Delivery]] emits scalar and scalar-only record output slots as zeroed C
+  storage and returns the native result and slot values in declaration order.
+  Optional text and owned handle slots preserve absence and batch ownership.
+
+## 2026-11-13 — Native foreign handles (#853)
+
+- [[Native Foreign Call Sites]] admits direct calls with opaque handles.
+  Owned and counted results carry generation-qualified claims, borrowed
+  results carry no release obligation, and teardown drains outstanding
+  claims before reporting the program outcome. See [[Native Foreign Handles Delivery]].
+
+## 2026-11-13 — Foreign call prerequisites (#853)
+
+- [[Compiler Lower Layout]] collects record layouts used only by foreign call
+  arguments. [[Core Text Operations]] owns the text operation tags.
+
 ## 2026-11-12 — Native foreign records (#852)
 
 - [[Native Foreign Call Sites]]: records cross native foreign calls by value as C structs declared from the record, nested records nested, with text fields copied in and out and a missing text field named as the interpreter names it ([[Backend Emit Foreign ABI]]).

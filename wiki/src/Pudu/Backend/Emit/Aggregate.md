@@ -154,3 +154,7 @@ holds calls that function type's `equal` from an earlier definition, and
 recursive types make a members-first order impossible in general. _Rejected:_
 splitting `site` into its own catalogue entry (every other multi-function body
 would carry the same trap).
+
+## Foreign handles (#853)
+
+Handle types register the lifetime, rendering and comparison helpers from [[Backend Emit Foreign Handle]].

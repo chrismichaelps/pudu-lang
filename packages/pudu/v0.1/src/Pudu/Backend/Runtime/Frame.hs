@@ -164,6 +164,7 @@ frameEngine owned threads =
   , "  pudu_active_frame = pudu_new_frame(entry, NULL, 0);"
   , "  pudu_frame_depth = 1;"
   , "  result = pudu_run_active();"
+  , "  if (pudu_process_cleanup_hook != NULL) pudu_process_cleanup_hook();"
   , "  pudu_cleanup_hook = NULL;"
   , "  pudu_blame_hook = NULL;"
   , "  return result;"

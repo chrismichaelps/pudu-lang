@@ -1,7 +1,6 @@
 {-| @Test.Backend.ForeignPrograms — foreign calls through typed native call
-    sites against the interpreter's bridge: the C library reached through `c`,
-    and the E7015 stops for a library that does not open and a symbol it does
-    not export. -}
+    sites against the interpreter's bridge: libc values and handles,
+    with loader, crossing and ownership refusals. -}
 module Pudu.Backend.ForeignPrograms (foreignSuccessPrograms, foreignRefusalPrograms) where
 
 import Data.Text (Text)
@@ -55,6 +54,35 @@ foreignSuccessPrograms =
       , "  }"
       , "  0"
       , "}" ])
+  , ("an owned C stream is usable and its release returns a status", handleProgram streamBindings
+      [ "let stream = tmpfile()"
+      , "print(display(fputc(65i32, stream)))"
+      , "print(display(fclose(stream)))" ])
+  , ("a borrowed handle can be passed back to libc", handleProgram messageBindings
+      [ "let message = errorMessage(2i32)"
+      , "print(display(messageLength(message) > 0u64))" ])
+  , ("a scalar slot returns the value written by libc", handleProgram
+      [ "fn frexp(value: Float64, out exponent: Int32) -> Float64" ]
+      [ "let (fraction, exponent) = frexp(12.0)"
+      , "print(show(fraction) + \" \" + show(exponent))" ])
+  , ("a floating-point slot uses its declared C width", handleProgram
+      [ "fn splitDouble symbol \"modf\" (value: Float64, out integral: Float64) -> Float64" ]
+      [ "let (fraction, whole) = splitDouble(12.75)"
+      , "print(show(fraction) + \" \" + show(whole))" ])
+  , ("foreign slot values write back through an ordinary mutable loan", program
+      [ "type State = { mut exponent: Int32 }"
+      , "foreign \"c\" { fn frexp(value: Float64, out exponent: Int32) -> Float64 }"
+      , "fn measure(value: Float64, target: &mut Int32) -> Float64 {"
+      , "  let (fraction, exponent) = unsafe(foreign) { frexp(value) }"
+      , "  *target = exponent"
+      , "  fraction"
+      , "}"
+      , "fn main() -> Int {"
+      , "  var state = State{exponent: 0i32}"
+      , "  let fraction = measure(12.0, &mut state.exponent)"
+      , "  print(show(fraction) + \" \" + show(state.exponent))"
+      , "  0"
+      , "}" ])
   ]
 
 foreignRefusalPrograms :: [(String, Text)]
@@ -95,7 +123,57 @@ foreignRefusalPrograms =
       , "  unsafe { print(display(absent(1i32))) }"
       , "  0"
       , "}" ])
+  , ("a null owned result is refused after the call", handleProgram
+      [ "type Stream"
+      , "fn fopen(path: Str, mode: Str) -> owned Stream by fclose"
+      , "fn fclose(stream: Stream) -> Int32" ]
+      [ "print(\"before\")"
+      , "fopen(\"\", \"r\")" ])
+  , ("an alias cannot use a released stream", handleProgram streamBindings
+      [ "let stream = tmpfile()"
+      , "let alias = stream"
+      , "fclose(stream)"
+      , "fputc(65i32, alias)" ])
+  , ("an owned stream cannot be released twice", handleProgram streamBindings
+      [ "let stream = tmpfile()"
+      , "fclose(stream)"
+      , "fclose(stream)" ])
+  , ("a borrowed message cannot enter its declared release", handleProgram
+      (messageBindings <> ["fn ownedMessage symbol \"strerror\" (code: Int32) -> owned Message by messageLength"])
+      [ "let message = errorMessage(2i32)"
+      , "messageLength(message)" ])
+  , ("a missing destructor is refused before a producer can return null", handleProgram
+      [ "type Stream"
+      , "fn fopen(path: Str, mode: Str) -> owned Stream by missingRelease"
+      , "fn missingRelease symbol \"pudu_no_such_stream_release\" (stream: Stream) -> Int32" ]
+      [ "print(\"before\")"
+      , "fopen(\"\", \"r\")" ])
+  , ("borrowed and owned declarations of the same C symbol keep distinct wrappers", handleProgram
+      (messageBindings <>
+        [ "fn ownedMessage symbol \"strerror\" (code: Int32) -> owned Message by missingRelease"
+        , "fn missingRelease symbol \"pudu_no_such_message_release\" (message: Message) -> Int32" ])
+      [ "print(display(messageLength(errorMessage(2i32)) > 0u64))"
+      , "ownedMessage(2i32)" ])
   ]
+
+streamBindings :: [Text]
+streamBindings =
+  [ "type Stream"
+  , "fn tmpfile() -> owned Stream by fclose"
+  , "fn fputc(value: Int32, stream: Stream) -> Int32"
+  , "fn fclose(stream: Stream) -> Int32" ]
+
+messageBindings :: [Text]
+messageBindings =
+  [ "type Message"
+  , "fn errorMessage symbol \"strerror\" (code: Int32) -> borrowed Message"
+  , "fn messageLength symbol \"strlen\" (message: Message) -> UInt64" ]
+
+handleProgram :: [Text] -> [Text] -> Text
+handleProgram bindings body = program $
+  ["foreign \"c\" {"] <> map ("  " <>) bindings
+    <> ["}", "fn main() -> Int {", "  unsafe(foreign) {"]
+    <> map ("    " <>) body <> ["  }", "  0", "}"]
 
 program :: [Text] -> Text
 program body = Text.unlines (["module Main", ""] <> body)

@@ -78,6 +78,7 @@ emitFrameProgram version sources source = do
     kind@(CoreStoreType _) -> Right (shownBox kind)
     CoreRangeType -> Right (shownBox CoreRangeType)
     CoreBytesType -> Right (shownBox CoreBytesType)
+    kind@(CoreHandleType _ _) -> Right (shownBox kind)
     CoreCharType -> Right
       [ "  pudu_text pudu_shown = pudu_char_show(pudu_run_frames(" <> textOfInt entryId <> ").character);"
       , "  int pudu_report_status = pudu_output_report(pudu_shown);"
@@ -112,6 +113,7 @@ emitFrameProgram version sources source = do
         kind@(CoreStoreType _) -> [aggregateNeed "show" kind, "output_report"]
         CoreRangeType -> [aggregateNeed "show" CoreRangeType, "output_report"]
         CoreBytesType -> [aggregateNeed "show" CoreBytesType, "output_report"]
+        kind@(CoreHandleType _ _) -> [aggregateNeed "show" kind, "output_report"]
         CoreDecimalType -> ["text_display_dec", "output_report"]
         _ -> []
       identities = Map.fromList (zip (map frameFunctionName functions) [0 ..])
@@ -128,7 +130,9 @@ emitFrameProgram version sources source = do
   pure $ Text.unlines (header <> runtime <> frameTypes wide big decimal text boxes
     <> concat [lines' <> [""] | (name, lines') <- arrayRuntimeParts <> textPieceRuntimeParts <> treeRuntimeParts <> rangeRuntimeParts <> bytesRuntimeParts <> hashRuntimeParts <> kernelRuntimeParts, Set.member name selected]
     <> renderSites (reverse (emitSites emitted)) <> aggregates <> ownership <> foreignWrappers (frameModuleLayouts source) (foreignsOf source) <> reverse (emitOutput emitted)
-    <> metadata <> frameEngine owned (Set.member "host_thread_spawn" selected) <> entryPoint (Set.member "host_arguments" selected) <> ending <> ["}"])
+    <> metadata <> frameEngine owned (Set.member "host_thread_spawn" selected) <> entryPoint (Set.member "host_arguments" selected)
+    <> ["  pudu_process_cleanup_hook = pudu_foreign_teardown;" | Set.member "host_foreign_store" selected]
+    <> ending <> ["}"])
   where
     -- Only a program that reads its arguments keeps them.
     entryPoint False = ["int main(void) {", "  pudu_prepare_io();"]
