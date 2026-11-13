@@ -5,6 +5,8 @@ tags: [moc, handoff]
 
 # Handoff Map
 
+- [[Native Desktop Adapter Delivery]] — source packaging and desktop builtins (#856).
+
 - [[Call Order Repair Delivery]] — #828 normative callee and receiver evaluation order.
 
 - [[Native Word Map Query Delivery]] — #814 remaining sparse-word queries.

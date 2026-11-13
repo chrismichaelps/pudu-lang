@@ -5,6 +5,11 @@ tags: [changelog]
 
 # Changelog
 
+## 2026-11-13 — Native host source packaging (#856)
+
+- [[Native Toolchain Host Sources]] packages the AppKit sources for native
+  builds that select the desktop adapter.
+
 ## 2026-11-12 — Native foreign records (#852)
 
 - [[Native Foreign Call Sites]]: records cross native foreign calls by value as C structs declared from the record, nested records nested, with text fields copied in and out and a missing text field named as the interpreter names it ([[Backend Emit Foreign ABI]]).
