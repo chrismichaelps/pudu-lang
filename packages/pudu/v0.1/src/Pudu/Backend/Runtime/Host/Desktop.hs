@@ -149,7 +149,7 @@ hostDesktopParts =
       ])
   , ("host_desktop_configure", ["host_desktop"],
       [ "static int pudu_host_desktop_configure(pudu_int token, pudu_int density, pudu_int min_width, pudu_int min_height, pudu_int max_width, pudu_int max_height, pudu_int aspect_width, pudu_int aspect_height, int fullscreen) {"
-      , "#if defined(__APPLE__)"
+      , "  /* Settings are refused on every platform before the platform is consulted. */"
       , "  int64_t density_value = pudu_kernel_signed(density.bits);"
       , "  int64_t min_width_value = pudu_kernel_signed(min_width.bits);"
       , "  int64_t min_height_value = pudu_kernel_signed(min_height.bits);"
@@ -174,12 +174,13 @@ hostDesktopParts =
       , "      problem = \"desktop aspect ratio needs both terms\";"
       , "  }"
       , "  if (problem != NULL) { pudu_host_fail(problem); return 0; }"
+      , "#if defined(__APPLE__)"
       , "  pudu_window **window = pudu_window_find(token);"
       , "  if (*window == NULL) return 0;"
       , "  return pudu_desktop_problem(\"configure\", pudu_desktop_configure((*window)->handle,"
       , "    (int32_t)density_value, (int32_t)min_width_value, (int32_t)min_height_value, (int32_t)max_width_value, (int32_t)max_height_value, (int32_t)aspect_width_value, (int32_t)aspect_height_value, fullscreen));"
       , "#else"
-      , "  (void)token; (void)density; (void)min_width; (void)min_height; (void)max_width; (void)max_height; (void)aspect_width; (void)aspect_height; (void)fullscreen;"
+      , "  (void)token; (void)fullscreen;"
       , "  pudu_host_fail(\"desktop presentation is unsupported on this platform\");"
       , "  return 0;"
       , "#endif"
