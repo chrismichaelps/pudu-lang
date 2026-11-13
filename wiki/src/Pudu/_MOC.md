@@ -6,6 +6,7 @@ tags: [moc, module]
 # Pudu Module Map
 
 - [[Core Keyed Operations]] — closed map/set and word-map operation tags (#810).
+- [[Core Text Operations]] — closed text operation tags (#853).
 - [[Core Byte Operations]] — closed byte-sequence operation tags (#846).
 - [[Core Closure Identities]] — closure identities shared by lowering and emission (#846).
 

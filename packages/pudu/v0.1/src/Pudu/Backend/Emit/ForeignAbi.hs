@@ -33,6 +33,7 @@ abiType kind = case kind of
   CoreTextType -> "const char *"
   CoreBytesType -> "const void *"
   CoreRecordType _ _ -> structName kind
+  CoreHandleType _ _ -> "void *"
   _ -> "void"
 
 {-| A scalar cell as the C value it crosses as. -}
@@ -44,6 +45,7 @@ toAbi kind cell = case kind of
   CoreFloatType _ -> "pudu_float_decode(" <> cell <> ")"
   CoreBoolType -> "(uint8_t)(" <> cell <> " != 0)"
   CoreBytesType -> "pudu_foreign_bytes_in(" <> cell <> ")"
+  CoreHandleType _ _ -> "(void *)(uintptr_t)" <> cell <> "->fields[0].floating"
   _ -> cell
 
 {-| A scalar C answer as its cell. -}
@@ -61,8 +63,7 @@ mangle = Text.concatMap escape
  where
   escape c
     | isAsciiLower c || isAsciiUpper c || isDigit c = Text.singleton c
-    | otherwise = Text.pack ("_" <> pad (showHex (ord c) ""))
-  pad digits = replicate (2 - length digits) '0' <> digits
+    | otherwise = Text.pack ("_" <> showHex (ord c) "" <> "_")
 
 structName :: CoreType -> Text
 structName kind = "pudu_foreign_record_" <> mangle (Text.pack (show kind))
@@ -102,12 +103,12 @@ recordDefinitions layouts = concatMap definition
         name = structName kind
         cell index field = "box->fields[" <> textOfInt index <> "]." <> cellName field
         packed (index, (_, field)) = case field of
-          CoreTextType -> "  record.f" <> textOfInt index <> " = held[(*count)++] = pudu_foreign_text_in(noughts, " <> cell index field <> ");"
-          CoreRecordType _ _ -> "  record.f" <> textOfInt index <> " = pudu_foreign_pack_" <> structSuffix field <> "(noughts, " <> cell index field <> ", held, count);"
+          CoreTextType -> "  record.f" <> textOfInt index <> " = held[(*count)++] = pudu_foreign_text_in(" <> cell index field <> ");"
+          CoreRecordType _ _ -> "  record.f" <> textOfInt index <> " = pudu_foreign_pack_" <> structSuffix field <> "(" <> cell index field <> ", held, count);"
           _ -> "  record.f" <> textOfInt index <> " = " <> toAbi field (cell index field) <> ";"
-        unpacked (index, (label, field)) = "  " <> cType field <> " v" <> textOfInt index <> " = " <> case field of
-          CoreTextType -> "pudu_foreign_text_field(missing, invalid, symbol, " <> quoted label <> ", record.f" <> textOfInt index <> ");"
-          CoreRecordType _ _ -> "pudu_foreign_unpack_" <> structSuffix field <> "(missing, invalid, symbol, record.f" <> textOfInt index <> ");"
+        unpacked (index, (_, field)) = "  " <> cType field <> " v" <> textOfInt index <> " = " <> case field of
+          CoreTextType -> "pudu_text_copy(record.f" <> textOfInt index <> ", strlen(record.f" <> textOfInt index <> "));"
+          CoreRecordType _ _ -> "pudu_foreign_unpack_" <> structSuffix field <> "(record.f" <> textOfInt index <> ");"
           _ -> fromAbi field ("record.f" <> textOfInt index) <> ";"
         released (index, (_, field)) = case field of
           CoreTextType -> ["  pudu_text_release(v" <> textOfInt index <> ");"]
@@ -117,18 +118,16 @@ recordDefinitions layouts = concatMap definition
         <> [ "  " <> abiType field <> " f" <> textOfInt index <> ";" | (index, (_, field)) <- fields ]
         <> [ "} " <> name <> ";"
            , "PUDU_OPTIONAL static " <> name <> " pudu_foreign_pack_" <> structSuffix kind
-               <> "(const pudu_site *noughts, pudu_box *box, char **held, size_t *count) {"
+               <> "(pudu_box *box, char **held, size_t *count) {"
            , "  " <> name <> " record;"
-           , "  (void)noughts; (void)held; (void)count;" ]
+           , "  (void)held; (void)count;" ]
         <> map packed fields
         <> [ "  return record;", "}"
            , "PUDU_OPTIONAL static pudu_box *pudu_foreign_unpack_" <> structSuffix kind
-               <> "(const pudu_site *missing, const pudu_site *invalid, const char *symbol, " <> name <> " record) {"
-           , "  pudu_box *made;"
-           , "  (void)missing; (void)invalid; (void)symbol;" ]
+               <> "(" <> name <> " record) {"
+           , "  pudu_box *made;" ]
         <> map unpacked fields
         <> [ "  made = " <> aggregateHelper "make" kind <> "(" <> Text.intercalate ", " ["v" <> textOfInt index | (index, _) <- fields] <> ");" ]
         <> concatMap released fields
         <> [ "  return made;", "}", "" ]
   structSuffix kind = Text.drop (Text.length "pudu_foreign_record_") (structName kind)
-  quoted label = "\"" <> label <> "\""

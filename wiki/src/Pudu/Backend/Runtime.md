@@ -11,6 +11,13 @@ aliases: [Backend Runtime, Native Runtime]
 
 # Backend Runtime
 
+## Foreign handle teardown (#853)
+
+Revision 22 adds a process cleanup hook that runs after frame cleanup and after
+a worker has had the opportunity to trap its own diagnostic. Controlled fatal
+reports run it before writing stderr. The normal entry drains the same store
+before reporting the result. See [[Native Host Foreign]].
+
 ## Frame ownership (#499)
 
 Revision 5 adds a cleanup hook before fail and memory_failure parts. Both source

@@ -252,3 +252,7 @@ Core type back to checking's spelling.
 Resolved Grill Log: a task is a value, not a maker of one; a dynamic value is
 one closed sum the program's implementations fix; a constructor parameter is
 a record or sum key beside its prefix arguments, never a fresh type.
+
+## Foreign handles (#853)
+
+Known foreign nominal identities form as CoreHandleType, including values received from imported bindings.

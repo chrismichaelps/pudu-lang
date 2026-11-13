@@ -124,6 +124,12 @@ it on return. Runtime revision 19.
 
 The blamed-site comment covers builtins as well as methods taken as values. Resolved Grill Log: behavior follows the function table's flag; the runtime text only describes it.
 
+## Foreign handle teardown (#853)
+
+The top-level frame runner calls the installed process cleanup hook after its
+last frame returns, before handing the result to entry reporting. Worker
+closure return leaves the run-wide claims available.
+
 ## Threads and active runs (#846)
 
 When a program starts a thread, `pudu_active_frame` and `pudu_frame_depth` are

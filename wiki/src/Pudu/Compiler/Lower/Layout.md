@@ -73,3 +73,9 @@ Resolved Grill Log: Collect CoreRuntimeKind operands exactly as the prior varian
 ## Indexed stores (#840)
 
 A store closes over its held type. Resolved Grill Log: the key is always Int and needs no layout.
+
+## Foreign calls (#853)
+
+Resolved Grill Log: visit foreign call operands just as ordinary call
+operands. A folded record literal used only as a foreign argument still
+needs its nominal layout for frame lowering and C packing.

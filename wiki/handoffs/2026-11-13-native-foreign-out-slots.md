@@ -1,0 +1,34 @@
+---
+type: handoff
+status: ACTIVE
+issue: 854
+aliases: [Native Foreign Slot Delivery]
+---
+
+# Native Foreign Slot Delivery
+
+Language Architect → Backend Engineer. This branch carries [[Native Foreign
+Handles Delivery]]. The first partition owns checked slot positions, scalar
+slot storage, and tuple construction. ADR-0022 governs ordinary mutable
+loans and their existing copy-in/copy-out lowering.
+
+## Resolved Grill Log
+
+Preserve declared ABI order independently of source operand order. The
+wrapper initializes each scalar slot to zero and passes its address. The
+checked tuple retains the native result, including unit, before the slot
+values. Record, text, and handle slots require their own conversion and
+ownership settlement before the full issue can close.
+
+## Exact next action
+
+The focused differential checks include a slot value written back through
+an ordinary mutable loan. Fifteen counted programs cover argument copies,
+direct results, all four slot families, and duplicate-claim cleanup.
+
+Check conversion refusal ordering for mixed invalid text and conflicting
+handle obligations against the interpreter.
+
+## Referenced by
+
+[[handoffs/_MOC]] · [[Native Foreign Call Sites]]

@@ -5,6 +5,8 @@ tags: [moc, module]
 
 # Module Map
 
+- [[Foreign Slot Tests]] · [[Foreign Program Tests]] · [[Uses Foreign Nested]]
+
 - [[Native Unsigned Programs]] — unsigned full-range mathematical and diagnostic conformance (#500).
 
 - [[Native Signed Programs]] — fixed signed-width mathematical and diagnostic conformance (#497).

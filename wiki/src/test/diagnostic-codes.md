@@ -66,6 +66,9 @@ E7015 is shared by the interpreter's foreign bridge and native foreign call site
 
 E7017, E7024 and E7025 are shared by the bridge and native foreign call sites (#851).
 
+E7020, E7021 and E7022 are shared by the interpreter and native handle
+boundary for null results, conflicting ownership claims and invalid handle use.
+
 ## Referenced by
 
 [[test gates]] · [[Pudu Lint Config]] · [[Pudu CLI Lint]]

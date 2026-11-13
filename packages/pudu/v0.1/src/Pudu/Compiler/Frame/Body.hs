@@ -378,6 +378,7 @@ resultSlot at kind = case kind of
   CoreRangeType -> Just <$> freshSlot at "$result" kind
   CoreBytesType -> Just <$> freshSlot at "$result" kind
   CoreDecimalType -> Just <$> freshSlot at "$result" kind
+  CoreHandleType _ _ -> Just <$> freshSlot at "$result" kind
 
 lowerPrint :: Span -> CoreExpression -> Build Flow
 lowerPrint at operand = case coreExpressionShape operand of

@@ -683,3 +683,7 @@ Resolved Grill Log: Register [[Native Host Desktop]] alongside the native host r
 ## Native audio (#857)
 
 Resolved Grill Log: Register [[Native Host Audio]] and ship the embedded AudioToolbox sources in the source distribution.
+
+## Foreign handles (#853)
+
+Register [[Backend Emit Foreign Handle]] and [[Core Text Operations]] using existing dependencies.

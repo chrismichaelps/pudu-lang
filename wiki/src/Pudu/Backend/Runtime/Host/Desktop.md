@@ -16,8 +16,10 @@ window gets a token valid until explicit close or process teardown.
 
 Match the interpreter's validation and status order, preserve adapter
 main-thread checks, and keep the window registry serialized under the
-native run gate. Non-macOS branches return the interpreter's unsupported
-outcome without reaching an adapter. The macOS branch drains registered
+native run gate. Window settings are refused on every platform before the
+platform is consulted, as the interpreter's `settingsProblem` is; only
+valid settings reach the unsupported outcome. Non-macOS branches return
+the interpreter's unsupported outcome without reaching an adapter. The macOS branch drains registered
 windows during normal or controlled process exit.
 
 ## Referenced by
