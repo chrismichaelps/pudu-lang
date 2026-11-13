@@ -27,7 +27,7 @@ foreignCall state at declared cells =
       (s2, noughts) = if lendsText then fmap Just (helpedFailureSite s1 at "E7017" noughtMessage noughtHelp) else (s1, Nothing)
       (s3, missing) = case result of
         CoreTextType -> fmap Just (helpedFailureSite s2 at "E7024" (symbol <> " returned no text for result") missingHelp)
-        CoreRecordType _ _ -> fmap Just (textFailureSite s2 at "E7024" (Just missingHelp))
+        _ | answersText -> fmap Just (textFailureSite s2 at "E7024" (Just missingHelp))
         _ -> (s2, Nothing)
       (s4, invalid) = if answersText then fmap Just (helpedFailureSite s3 at "E7025" (symbol <> " returned text that is not valid UTF-8") invalidHelp) else (s3, Nothing)
       (s5, dead) = case [name | CoreHandleType _ name <- coreForeignParameters declared] of
@@ -48,7 +48,7 @@ foreignCall state at declared cells =
   result = coreForeignResult declared
   symbol = coreForeignSymbol declared
   lendsText = any carriesText (coreForeignParameters declared)
-  answersText = carriesText result
+  answersText = carriesText result || any carriesText (map slotAbiType (maybe [] snd (slotResult declared)))
   siteText index = "&pudu_sites[" <> textOfInt index <> "]"
   help = "a foreign declaration names a library the platform must already have; "
     <> "install it, or check the name and the symbol against what it exports"
@@ -78,12 +78,15 @@ foreignNeeds layouts declarations = concat
   [ concatMap parameterNeeds (concatMap leaves (coreForeignParameters declared))
       <> concatMap resultNeeds (leaves (coreForeignResult declared))
       <> (case slotResult declared of
-        Just (native, slots) -> aggregateNeed "make" (coreForeignResult declared) : concatMap resultNeeds (concatMap leaves (native : slots))
+        Just (native, slots) -> aggregateNeed "make" (coreForeignResult declared) : concatMap resultNeeds (concatMap leaves (native : map slotAbiType slots)) <> concatMap optionNeeds slots
         Nothing -> [])
       <> concat ["host_optional" : concatMap parameterNeeds (leaves kind) <> concatMap resultNeeds (leaves kind) <> recordNeeds layouts kind
                 | kind@(CoreRecordType _ _) <- crossingTypes declared]
   | declared <- declarations ]
  where
+  optionNeeds kind@(CoreSumType "Option" [CoreTextType]) =
+    [aggregateNeed "make0" kind, aggregateNeed "make1" kind, aggregateNeed "drop" kind]
+  optionNeeds _ = []
   leaves kind = case Map.lookup kind layouts of
     Just (CoreRecordLayout fields) | CoreRecordType _ _ <- kind -> concatMap (leaves . snd) fields
     _ -> [kind]
@@ -136,17 +139,26 @@ foreignWrappers layouts declarations =
     let result = coreForeignResult declared
         parameters = zip [0 ..] (coreForeignParameters declared)
         position = Set.fromList (coreForeignSlotPositions declared)
-        abiSlots = [(abiType kind <> " *", "&slot" <> textOfInt i) | (i, kind) <- zip [0 ..] slots]
+        abiSlots = [(abiType (slotAbiType kind) <> " *", "&slot" <> textOfInt i) | (i, kind) <- zip [0 ..] slots]
         abiInputs = [(abiType kind, toAbi kind ("a" <> textOfInt i)) | (i, kind) <- parameters]
         abiOrder = interleave position 0 abiInputs abiSlots
+        slotLeaves = [(label, field)
+          | (i, kind) <- zip [0 ..] slots
+          , (label, field) <- case kind of
+              CoreSumType "Option" [CoreTextType] -> [("", "slot" <> textOfInt i)]
+              _ -> resultText kind ("slot" <> textOfInt i)]
+        textSites = any (carriesText . slotAbiType) slots
         pointerArgs = Text.intercalate ", " (map fst abiOrder)
         call = "function(" <> Text.intercalate ", " (map snd abiOrder) <> ");"
         slotValue i kind = case kind of
           CoreRecordType _ _ -> "pudu_foreign_unpack_" <> suffix kind <> "(slot" <> textOfInt i <> ")"
+          CoreSumType "Option" [CoreTextType] -> "slot" <> textOfInt i <> " == NULL ? "
+            <> aggregateHelper "make1" kind <> "() : " <> aggregateHelper "make0" kind <> "(copied" <> textOfInt i <> ")"
           _ -> fromAbi kind ("slot" <> textOfInt i)
         resultArgs = (if native == CoreUnitType then "0" else fromAbi native "answer")
           : ["written" <> textOfInt i | (i, _) <- zip [0 ..] slots]
      in [ "static pudu_box *" <> wrapperName declared <> "(const pudu_site *site"
+            <> (if textSites then ", const pudu_site *missing, const pudu_site *invalid" else "")
             <> foldMap (\(i, kind) -> ", " <> cType kind <> " a" <> textOfInt i) parameters <> ") {"
         , "  static pudu_foreign_cache cache = {NULL};"
         , "  " <> abiType native <> " (*function)(" <> pointerArgs <> ") = ("
@@ -155,15 +167,26 @@ foreignWrappers layouts declarations =
             <> maybe "NULL" cString (coreForeignVersion declared) <> ", "
             <> cString (coreForeignSymbol declared) <> ", NULL);"
         ]
-        <> [ "  " <> abiType kind <> " slot" <> textOfInt i <> " = {0};"
+        <> ["  (void)missing; (void)invalid;" | textSites]
+        <> [ "  " <> abiType (slotAbiType kind) <> " slot" <> textOfInt i <> " = {0};"
            | (i, kind) <- zip [0 ..] slots ]
         <> [ "  " <> (if native == CoreUnitType then "" else abiType native <> " answer = ") <> call
            ]
+        <> [ "  if (" <> field <> " != NULL && !pudu_foreign_text_valid(" <> field <> ")) pudu_fail(invalid);"
+           | (_, field) <- slotLeaves ]
+        <> [ "  if (" <> field <> " == NULL) pudu_foreign_missing_field(missing, "
+              <> cString (coreForeignSymbol declared) <> ", " <> cString label <> ");"
+           | (label, field) <- slotLeaves, not (Text.null label) ]
+        <> [ "  pudu_text copied" <> textOfInt i <> " = slot" <> textOfInt i
+              <> " == NULL ? (pudu_text){0} : pudu_text_copy(slot" <> textOfInt i <> ", strlen(slot" <> textOfInt i <> "));"
+           | (i, CoreSumType "Option" [CoreTextType]) <- zip [0 ..] slots ]
         <> [ "  " <> cType kind <> " written" <> textOfInt i <> " = " <> slotValue i kind <> ";"
            | (i, kind) <- zip [0 ..] slots ]
         <> [ "  pudu_box *tuple = " <> aggregateHelper "make" result <> "(" <> Text.intercalate ", " resultArgs <> ");" ]
         <> [ "  " <> dropSlot | (i, kind) <- zip [0 ..] slots
            , let dropSlot = released kind ("written" <> textOfInt i), not (Text.null dropSlot) ]
+        <> [ "  pudu_text_release(copied" <> textOfInt i <> ");"
+           | (i, CoreSumType "Option" [CoreTextType]) <- zip [0 ..] slots ]
         <> [ "  return tuple;", "}", "" ]
   interleave position index inputs slots
     | Set.member index position, slot : rest <- slots =
@@ -257,6 +280,10 @@ crossingTypes :: CoreForeign -> [CoreType]
 crossingTypes declared = coreForeignParameters declared <> case slotResult declared of
   Just (native, slots) -> native : slots
   Nothing -> [coreForeignResult declared]
+
+slotAbiType :: CoreType -> CoreType
+slotAbiType (CoreSumType "Option" [CoreTextType]) = CoreTextType
+slotAbiType kind = kind
 
 slotResult :: CoreForeign -> Maybe (CoreType, [CoreType])
 slotResult declared

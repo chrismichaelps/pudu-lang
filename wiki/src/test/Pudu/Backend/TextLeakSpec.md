@@ -227,3 +227,7 @@ first member. The unwritten slot must contain zero.
 
 A scalar-only record slot checks zeroed fields, nested padding, and release of
 the intermediate decoded record.
+
+## Text slots (#854)
+
+Resolved Grill Log: Count allocation ownership for both null and non-null text slots.

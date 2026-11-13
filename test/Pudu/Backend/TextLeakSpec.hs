@@ -122,6 +122,10 @@ testForeignHandleLeaks = testCountedPrograms linkerFlags fixture "" cases
     , "  puts(\"release entry\");"
     , "  fflush(stdout);"
     , "}"
+    , "void pudu_test_text_slots(const char **first, const char **second) {"
+    , "  if (*first != NULL || *second != NULL) abort();"
+    , "  *first = \"written\";"
+    , "}"
     , "typedef struct { double value; uint8_t marker; } test_padded;"
     , "typedef struct { test_padded inner; uint8_t tail; } test_padded_slot;"
     , "void pudu_test_padded_slot(test_padded_slot *slot) {"
@@ -212,6 +216,14 @@ testForeignHandleLeaks = testCountedPrograms linkerFlags fixture "" cases
         , "fn main() -> Bool {"
         , "  let (_, written) = unsafe(foreign) { fill() }"
         , "  written.inner.value == 4.0 && written.inner.marker == 0u8 && written.tail == 7u8"
+        , "}"
+        ], "true\n", "", ExitSuccess)
+    , ("text slots copy Some and preserve None without leaks", Text.unlines
+        [ "module Main"
+        , "foreign \"c\" { fn fill symbol \"pudu_test_text_slots\" (out first: Str, out second: Str) -> () }"
+        , "fn main() -> Bool {"
+        , "  let (_, first, second) = unsafe(foreign) { fill() }"
+        , "  show(first) == \"Some(\\\"written\\\")\" && show(second) == \"None\""
         , "}"
         ], "true\n", "", ExitSuccess)
     , ("entry reporting uses the handle box after teardown", Text.unlines

@@ -46,6 +46,7 @@ admittedResult target types parameters result
 
 slotCrossing :: LowerTypes -> CoreType -> Bool
 slotCrossing types kind
+  | kind == CoreSumType "Option" [CoreTextType] = True
   | scalarCrossing kind = True
   | Just fields <- recordFields types kind =
       not (null fields) && length fields <= 32 && all (slotCrossing types . snd) fields

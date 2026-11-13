@@ -58,3 +58,7 @@ Resolved Grill Log: Initialize scalar slots to zero, pass their addresses, and c
 ## Record output slots (#854)
 
 Resolved Grill Log: use the same record decoder as a by-value result, then release its temporary after the result tuple retains it.
+
+## Text slots (#854)
+
+Resolved Grill Log: A null text slot becomes None. Validate all returned text before allocating result boxes, then copy a non-null text slot into Some.

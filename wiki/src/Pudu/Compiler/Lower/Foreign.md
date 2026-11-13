@@ -51,3 +51,7 @@ Resolved Grill Log: Admit scalar slots from the checked tuple. Preserve the ABI 
 ## Record output slots (#854)
 
 Resolved Grill Log: admit record slot layouts with scalar leaves, preserving nested C ABI.
+
+## Text slots (#854)
+
+Resolved Grill Log: Admit optional text slots and record slots with text fields.
