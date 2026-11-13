@@ -434,3 +434,7 @@ CoreStoreType held is `Buckets[held]`: an Int-keyed store on the map's tree carr
 ## Foreign handles (#853)
 
 CoreForeign carries checked transfer and release metadata. CoreHandleType keeps nominal identity and the source-facing name. [[Core Text Operations]] owns the unchanged text-method enum.
+
+## Scalar output slots (#854)
+
+Resolved Grill Log: Keep output positions on the checked foreign call. The tuple result contains the ABI result and the written scalar types.

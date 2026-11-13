@@ -25,14 +25,24 @@ lowerForeignCall lower state at name arguments = do
       | any stops cores -> (after, Just (stopped at cores, CoreNeverType))
       | otherwise -> case typeForSpan (contextTypes (lowerContext after)) at of
           Just result
-            | all (parameterCrossing types) parameters, resultCrossing types result || handleResult target result ->
+            | all (parameterCrossing types) parameters
+            , admittedResult target types parameters result ->
                 let declared = CoreForeign (targetLibrary target) (targetVersion target) (targetSymbol target) parameters result
-                      (targetClaim target) (targetReleases target)
+                      (targetClaim target) (targetReleases target) (targetSlotPositions target)
                  in (after, Just (CoreExpression at result (CoreForeignCall declared cores), result))
           _ -> halt at "a foreign call crossing output slots" after
       where
         parameters = map coreExpressionType cores
         types = contextTypes (lowerContext after)
+
+admittedResult :: ForeignTarget -> LowerTypes -> [CoreType] -> CoreType -> Bool
+admittedResult target types parameters result
+  | null (targetSlotPositions target) = resultCrossing types result || handleResult target result
+  | CoreTupleType (native : slots) <- result =
+      all scalarCrossing parameters && (native == CoreUnitType || scalarCrossing native)
+        && length slots == length (targetSlotPositions target)
+        && all scalarCrossing slots
+  | otherwise = False
 
 {-| A parameter crosses as a number, Bool, text, a lent run of bytes or a
     record of those (bytes excepted). -}

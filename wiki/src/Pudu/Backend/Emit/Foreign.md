@@ -50,3 +50,7 @@ crossing direction. Record codecs still emit both directions.
 ## Referenced by
 
 [[Backend Frame Program]] · [[Native Foreign Call Sites]]
+
+## Scalar output slots (#854)
+
+Resolved Grill Log: Initialize scalar slots to zero, pass their addresses, and construct the checked result tuple after dispatch.

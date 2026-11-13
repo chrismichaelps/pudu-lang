@@ -218,3 +218,9 @@ and that the rendered address and entry box are both released.
 
 A folded record used exclusively as a foreign argument exercises layout
 discovery without a local of that type. The C fixture reads its only field.
+
+## Scalar foreign slots (#854)
+
+Resolved Grill Log: interleave a written slot before a supplied operand and
+an untouched slot after it. Count the result tuple and preserve its unit
+first member. The unwritten slot must contain zero.

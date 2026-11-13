@@ -8,7 +8,7 @@ import qualified Data.Map.Strict as Map
 import qualified Data.Set as Set
 import Data.Text (Text)
 import qualified Data.Text as Text
-import Pudu.Backend.Emit.Cell (cType)
+import Pudu.Backend.Emit.Cell (aggregateHelper, aggregateNeed, cType)
 import Pudu.Backend.Emit.ForeignAbi (Layouts, abiType, fromAbi, mangle, recordDefinitions, recordNeeds, recordsIn, textLeaves, toAbi)
 import Pudu.Backend.Emit.State (EmitState, cString, helpedFailureSite, textFailureSite, textOfInt)
 import Pudu.Core (CoreClaim (..), CoreForeign (..), CoreLayout (..), CoreType (..))
@@ -77,6 +77,9 @@ foreignNeeds :: Layouts -> [CoreForeign] -> [Text]
 foreignNeeds layouts declarations = concat
   [ concatMap parameterNeeds (concatMap leaves (coreForeignParameters declared))
       <> concatMap resultNeeds (leaves (coreForeignResult declared))
+      <> (case slotResult declared of
+        Just (native, slots) -> aggregateNeed "make" (coreForeignResult declared) : concatMap resultNeeds (native : slots)
+        Nothing -> [])
       <> concat ["host_optional" : concatMap parameterNeeds (leaves kind) <> concatMap resultNeeds (leaves kind) <> recordNeeds layouts kind
                 | kind@(CoreRecordType _ _) <- coreForeignResult declared : coreForeignParameters declared]
   | declared <- declarations ]
@@ -94,7 +97,7 @@ foreignWrappers :: Layouts -> [CoreForeign] -> [Text]
 foreignWrappers layouts declarations =
   recordDefinitions layouts (recordsIn layouts (concat [coreForeignResult declared : coreForeignParameters declared | declared <- declarations]))
     <> concatMap releaser (Set.toList (Set.fromList (concatMap (maybe [] pure . releaseOf) declarations)))
-    <> concatMap wrapper declarations
+    <> concatMap emitWrapper declarations
  where
   releaser target@(_, _, _, answer) =
     [ "static pudu_foreign_cache " <> releaserName target <> "_cache = {NULL};"
@@ -126,6 +129,39 @@ foreignWrappers layouts declarations =
     Just (CoreOwned False _ _) -> "1"
     Just (CoreOwned True _ _) -> "2"
     _ -> "0"
+  emitWrapper declared = case slotResult declared of
+    Just (native, slots) -> scalarSlotWrapper declared native slots
+    Nothing -> wrapper declared
+  scalarSlotWrapper declared native slots =
+    let result = coreForeignResult declared
+        parameters = zip [0 ..] (coreForeignParameters declared)
+        position = Set.fromList (coreForeignSlotPositions declared)
+        abiSlots = [(abiType kind <> " *", "&slot" <> textOfInt i) | (i, kind) <- zip [0 ..] slots]
+        abiInputs = [(abiType kind, toAbi kind ("a" <> textOfInt i)) | (i, kind) <- parameters]
+        abiOrder = interleave position 0 abiInputs abiSlots
+        pointerArgs = Text.intercalate ", " (map fst abiOrder)
+        call = "function(" <> Text.intercalate ", " (map snd abiOrder) <> ");"
+        resultArgs = (if native == CoreUnitType then "0" else fromAbi native "answer")
+          : [fromAbi kind ("slot" <> textOfInt i) | (i, kind) <- zip [0 ..] slots]
+     in [ "static pudu_box *" <> wrapperName declared <> "(const pudu_site *site"
+            <> foldMap (\(i, kind) -> ", " <> cType kind <> " a" <> textOfInt i) parameters <> ") {"
+        , "  static pudu_foreign_cache cache = {NULL};"
+        , "  " <> abiType native <> " (*function)(" <> pointerArgs <> ") = ("
+            <> abiType native <> " (*)(" <> pointerArgs <> "))pudu_foreign_function(site, &cache, "
+            <> cString (coreForeignLibrary declared) <> ", "
+            <> maybe "NULL" cString (coreForeignVersion declared) <> ", "
+            <> cString (coreForeignSymbol declared) <> ", NULL);"
+        ]
+        <> [ "  " <> abiType kind <> " slot" <> textOfInt i <> " = {0};"
+           | (i, kind) <- zip [0 ..] slots ]
+        <> [ "  " <> (if native == CoreUnitType then "" else abiType native <> " answer = ") <> call
+           , "  return " <> aggregateHelper "make" result <> "(" <> Text.intercalate ", " resultArgs <> ");"
+           , "}", "" ]
+  interleave position index inputs slots
+    | Set.member index position, slot : rest <- slots =
+        slot : interleave position (index + 1) inputs rest
+    | input : rest <- inputs = input : interleave position (index + 1) rest slots
+    | otherwise = []
   wrapper declared =
     let parameters = zip [0 :: Int ..] (coreForeignParameters declared)
         result = coreForeignResult declared
@@ -208,6 +244,12 @@ foreignWrappers layouts declarations =
     CoreHandleType _ _ -> True
     _ -> False
   suffix kind = Text.drop (Text.length "pudu_foreign_record_") (abiType kind)
+
+slotResult :: CoreForeign -> Maybe (CoreType, [CoreType])
+slotResult declared
+  | not (null (coreForeignSlotPositions declared))
+  , CoreTupleType (native : slots) <- coreForeignResult declared = Just (native, slots)
+  | otherwise = Nothing
 
 {-| The release an owned handle result is released through: its library, version, symbol and result. -}
 releaseOf :: CoreForeign -> Maybe (Text, Maybe Text, Text, CoreType)

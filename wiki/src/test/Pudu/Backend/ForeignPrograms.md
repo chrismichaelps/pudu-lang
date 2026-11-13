@@ -41,3 +41,7 @@ dispatch is observable without freeing libc-owned storage.
 ## Referenced by
 
 [[Backend Native Tests]] · [[Native Foreign Call Sites]]
+
+## Scalar output slots (#854)
+
+Resolved Grill Log: Compare a real libc scalar output slot and its written value with the interpreter.

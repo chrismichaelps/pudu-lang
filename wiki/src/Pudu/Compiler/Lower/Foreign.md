@@ -43,3 +43,7 @@ owned or counted transfer policy. Output slots remain refused (#854).
 ## Referenced by
 
 [[Compiler Lower Primitive]] · [[Native Foreign Call Sites]]
+
+## Scalar output slots (#854)
+
+Resolved Grill Log: Admit scalar slots from the checked tuple. Preserve the ABI result before the slots.

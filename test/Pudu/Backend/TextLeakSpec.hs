@@ -103,6 +103,10 @@ testForeignHandleLeaks = testCountedPrograms linkerFlags fixture "" cases
     <> ["-ldl" | os == "linux"]
   fixture = Text.unlines
     [ "static int test_handles[3];"
+    , "void pudu_test_slots(int32_t *first, int32_t value, int32_t *untouched) {"
+    , "  if (*untouched != 0) abort();"
+    , "  *first = value + 1;"
+    , "}"
     , "void *pudu_test_handle(int32_t slot) { return &test_handles[slot]; }"
     , "const char *pudu_test_handle_render(void *handle) {"
     , "  static char rendered[32];"
@@ -186,6 +190,14 @@ testForeignHandleLeaks = testCountedPrograms linkerFlags fixture "" cases
         , "const PROBE: Value = Value{value: 7i32}"
         , "foreign \"c\" { fn read symbol \"pudu_test_record_argument\" (record: Value) -> Int32 }"
         , "fn main() -> Bool { unsafe(foreign) { read(PROBE) == 7i32 } }"
+        ], "true\n", "", ExitSuccess)
+    , ("out slots interleave with operands and start zeroed", Text.unlines
+        [ "module Main"
+        , "foreign \"c\" { fn slots symbol \"pudu_test_slots\" (out first: Int32, value: Int32, out untouched: Int32) -> () }"
+        , "fn main() -> Bool {"
+        , "  let (_, first, untouched) = unsafe(foreign) { slots(7i32) }"
+        , "  first == 8i32 && untouched == 0i32"
+        , "}"
         ], "true\n", "", ExitSuccess)
     , ("entry reporting uses the handle box after teardown", Text.unlines
         [ "module Main"

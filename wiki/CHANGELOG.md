@@ -5,6 +5,11 @@ tags: [changelog]
 
 # Changelog
 
+## 2026-11-13 — Native scalar foreign slots (#854)
+
+- [[Native Foreign Slot Delivery]] emits scalar output slots as zeroed C
+  storage and returns the native result and slot values in declaration order.
+
 ## 2026-11-13 — Native foreign handles (#853)
 
 - [[Native Foreign Call Sites]] admits direct calls with opaque handles.

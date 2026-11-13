@@ -61,6 +61,14 @@ foreignSuccessPrograms =
   , ("a borrowed handle can be passed back to libc", handleProgram messageBindings
       [ "let message = errorMessage(2i32)"
       , "print(display(messageLength(message) > 0u64))" ])
+  , ("a scalar slot returns the value written by libc", handleProgram
+      [ "fn frexp(value: Float64, out exponent: Int32) -> Float64" ]
+      [ "let (fraction, exponent) = frexp(12.0)"
+      , "print(show(fraction) + \" \" + show(exponent))" ])
+  , ("a floating-point slot uses its declared C width", handleProgram
+      [ "fn splitDouble symbol \"modf\" (value: Float64, out integral: Float64) -> Float64" ]
+      [ "let (fraction, whole) = splitDouble(12.75)"
+      , "print(show(fraction) + \" \" + show(whole))" ])
   ]
 
 foreignRefusalPrograms :: [(String, Text)]
