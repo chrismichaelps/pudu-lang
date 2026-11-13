@@ -59,3 +59,7 @@ Resolved Grill Log: Admit optional text slots and record slots with text fields.
 ## Owned output slots (#854)
 
 Resolved Grill Log: Admit checked optional handle slots with a declared destructor.
+
+## Mixed crossings (#854)
+
+Resolved Grill Log: allow existing input crossings and scalar, unit, text and record native results beside output slots.

@@ -236,3 +236,9 @@ Resolved Grill Log: Count allocation ownership for both null and non-null text s
 
 Resolved Grill Log: count one fresh claim and one null slot, and verify
 that a duplicate address is released only once before E7021.
+
+The mixed text result uses a slot and a direct result that both alias the
+same input buffer. Both outputs must survive release of the argument copy.
+
+A direct owned result and a distinct handle slot share the batch and each
+release once.

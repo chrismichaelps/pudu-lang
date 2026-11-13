@@ -107,6 +107,9 @@ testForeignHandleLeaks = testCountedPrograms linkerFlags fixture "" cases
     , "  if (*untouched != 0) abort();"
     , "  *first = value + 1;"
     , "}"
+    , "void *pudu_test_result_and_slot(void **slot) {"
+    , "  *slot = &test_handles[1]; return &test_handles[0];"
+    , "}"
     , "void pudu_test_handle_slots(void **first, void **second, uint8_t duplicate) {"
     , "  *first = &test_handles[0];"
     , "  if (duplicate) *second = *first;"
@@ -125,6 +128,9 @@ testForeignHandleLeaks = testCountedPrograms linkerFlags fixture "" cases
     , "  if ((uintptr_t)handle != 1) abort();"
     , "  puts(\"release entry\");"
     , "  fflush(stdout);"
+    , "}"
+    , "const char *pudu_test_alias_slot(const char **written, const char *input) {"
+    , "  *written = input; return input;"
     , "}"
     , "void pudu_test_text_slots(const char **first, const char **second) {"
     , "  if (*first != NULL || *second != NULL) abort();"
@@ -234,6 +240,29 @@ testForeignHandleLeaks = testCountedPrograms linkerFlags fixture "" cases
         "release 0\ntrue\n", "release 0\n", ExitSuccess)
     , ("duplicate owned slots release once before refusing the batch", handleSlotProgram True,
         "release 0\n", "release 0\nerror[E7021]: pudu_test_handle_slots handed back duplicate or already owned resources\n", ExitFailure 1)
+    , ("native result and slot copy aliased text before freeing scratch", Text.unlines
+        [ "module Main"
+        , "foreign \"c\" { fn fill symbol \"pudu_test_alias_slot\" (out written: Str, input: Str) -> Str }"
+        , "fn main() -> Bool {"
+        , "  let (answer, written) = unsafe(foreign) { fill(\"probe\") }"
+        , "  answer == \"probe\" && show(written) == \"Some(\\\"probe\\\")\""
+        , "}"
+        ], "true\n", "", ExitSuccess)
+    , ("direct result and owned slot settle together", Text.unlines
+        [ "module Main"
+        , "foreign \"c\" {"
+        , "  type Handle"
+        , "  fn fill symbol \"pudu_test_result_and_slot\" (out written: owned Handle by release) -> owned Handle by release"
+        , "  fn release symbol \"pudu_test_release_handle\" (handle: Handle) -> Int32"
+        , "}"
+        , "fn main() -> Bool {"
+        , "  let (answer, written) = unsafe(foreign) { fill() }"
+        , "  match written {"
+        , "    case Some(other) => unsafe(foreign) { release(answer) == 0i32 && release(other) == 1i32 }"
+        , "    case None => false"
+        , "  }"
+        , "}"
+        ], "release 0\nrelease 1\ntrue\n", "release 0\nrelease 1\n", ExitSuccess)
     , ("entry reporting uses the handle box after teardown", Text.unlines
         [ "module Main"
         , "foreign \"c\" {"

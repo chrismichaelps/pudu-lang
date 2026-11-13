@@ -22,9 +22,12 @@ ownership settlement before the full issue can close.
 
 ## Exact next action
 
-Unify the slot and direct wrappers so an output slot can accompany any
-admitted native result or ordinary argument. The counted cases cover scalar,
-record, optional text, owned handle, and duplicate-claim cleanup.
+The focused differential checks include a slot value written back through
+an ordinary mutable loan. Fifteen counted programs cover argument copies,
+direct results, all four slot families, and duplicate-claim cleanup.
+
+Check conversion refusal ordering for mixed invalid text and conflicting
+handle obligations against the interpreter.
 
 ## Referenced by
 

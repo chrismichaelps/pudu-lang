@@ -26,7 +26,7 @@ lowerForeignCall lower state at name arguments = do
       | otherwise -> case typeForSpan (contextTypes (lowerContext after)) at of
           Just result
             | all (parameterCrossing types) parameters
-            , admittedResult target types parameters result ->
+            , admittedResult target types result ->
                 let declared = CoreForeign (targetLibrary target) (targetVersion target) (targetSymbol target) parameters result
                       (targetClaim target) (targetReleases target) (targetSlotPositions target) (targetSlotClaims target)
                  in (after, Just (CoreExpression at result (CoreForeignCall declared cores), result))
@@ -35,14 +35,19 @@ lowerForeignCall lower state at name arguments = do
         parameters = map coreExpressionType cores
         types = contextTypes (lowerContext after)
 
-admittedResult :: ForeignTarget -> LowerTypes -> [CoreType] -> CoreType -> Bool
-admittedResult target types parameters result
+admittedResult :: ForeignTarget -> LowerTypes -> CoreType -> Bool
+admittedResult target types result
   | null (targetSlotPositions target) = resultCrossing types result || handleResult target result
   | CoreTupleType (native : slots) <- result =
-      all scalarCrossing parameters && (native == CoreUnitType || scalarCrossing native)
+      (resultCrossing types native || ownedNative target native)
         && length slots == length (targetSlotPositions target)
         && and (zipWith (admitSlot types) slots (targetSlotClaims target))
   | otherwise = False
+
+ownedNative :: ForeignTarget -> CoreType -> Bool
+ownedNative target kind = case (kind, targetClaim target) of
+  (CoreHandleType _ _, Just (CoreOwned _ _ _)) -> True
+  _ -> False
 
 admitSlot :: LowerTypes -> CoreType -> Maybe CoreClaim -> Bool
 admitSlot types kind claim = case kind of

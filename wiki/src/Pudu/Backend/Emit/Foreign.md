@@ -66,3 +66,10 @@ Resolved Grill Log: A null text slot becomes None. Validate all returned text be
 ## Owned output slots (#854)
 
 Resolved Grill Log: Resolve all slot destructors before dispatch. Claim returned handles as one batch before converting the tuple.
+
+## Mixed crossings (#854)
+
+Resolved Grill Log: validate arguments and handles before dispatch. Copy all returned text before releasing any argument scratch that it can alias.
+
+A direct owned handle result participates in the same batch as owned slots.
+Reserve space and resolve every destructor before dispatch.

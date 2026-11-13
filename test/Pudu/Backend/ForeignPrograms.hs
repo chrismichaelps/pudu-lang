@@ -69,6 +69,20 @@ foreignSuccessPrograms =
       [ "fn splitDouble symbol \"modf\" (value: Float64, out integral: Float64) -> Float64" ]
       [ "let (fraction, whole) = splitDouble(12.75)"
       , "print(show(fraction) + \" \" + show(whole))" ])
+  , ("foreign slot values write back through an ordinary mutable loan", program
+      [ "type State = { mut exponent: Int32 }"
+      , "foreign \"c\" { fn frexp(value: Float64, out exponent: Int32) -> Float64 }"
+      , "fn measure(value: Float64, target: &mut Int32) -> Float64 {"
+      , "  let (fraction, exponent) = unsafe(foreign) { frexp(value) }"
+      , "  *target = exponent"
+      , "  fraction"
+      , "}"
+      , "fn main() -> Int {"
+      , "  var state = State{exponent: 0i32}"
+      , "  let fraction = measure(12.0, &mut state.exponent)"
+      , "  print(show(fraction) + \" \" + show(state.exponent))"
+      , "  0"
+      , "}" ])
   ]
 
 foreignRefusalPrograms :: [(String, Text)]
