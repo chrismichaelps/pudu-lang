@@ -5,6 +5,13 @@ tags: [changelog]
 
 # Changelog
 
+## 2026-11-13 — Fixture scratch directories (#885)
+
+- The standard-library fixtures that write files (`UsesCsv`, `UsesIo`,
+  `UsesIoAll`, `UsesStreams`, `UsesJsonStrings`, `UsesUiAppShellAll`,
+  `UsesEffects`) work in a directory made for each run and remove it at the
+  end, so suites running at the same time on one machine never share files.
+
 ## 2026-11-13 — Native coverage ledger: hosts and entries
 
 - [[Native Emission Coverage]] records native desktop and audio host
