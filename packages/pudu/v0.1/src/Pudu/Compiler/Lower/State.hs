@@ -104,6 +104,8 @@ data ForeignTarget = ForeignTarget
   { targetLibrary :: !Text
   , targetVersion :: !(Maybe Text)
   , targetSymbol :: !Text
+  , targetClaim :: !(Maybe CoreClaim)
+  , targetReleases :: !Bool
   }
 
 {-| @Compiler.Lower.State — one function's lowering state on top of the

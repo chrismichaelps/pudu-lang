@@ -431,6 +431,6 @@ Add TextByteSize, TextByteIndexValid, TextByteRead, TextByteSliceValid, TextByte
 
 CoreStoreType held is `Buckets[held]`: an Int-keyed store on the map's tree carrier, named `Buckets[...]` by coreTypeName. Resolved Grill Log: a distinct type, not Map[Int, held], because rendering, runtime kind and methods differ. The export list and header were tightened to keep the module under its line limit.
 
-## Text operation tags (#853)
+## Foreign handles (#853)
 
-[[Core Text Operations]] owns the unchanged text-method enum and Core re-exports it.
+CoreForeign carries checked transfer and release metadata. CoreHandleType keeps nominal identity and the source-facing name. [[Core Text Operations]] owns the unchanged text-method enum.

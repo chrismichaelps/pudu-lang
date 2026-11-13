@@ -28,7 +28,7 @@ module Pudu.Core
   , CoreTextMethodName (..), CoreArrayMethodName (..), CoreKeyedMethodName (..)
   , CoreRangeMethodName (..), CoreBytesMethodName (..), CoreDecimalMethodName (..)
   , CoreKernelName (..)
-  , CoreForeign (..)
+  , CoreForeign (..), CoreClaim (..)
   , CoreType (..)
   , coreTypeName, displayName
   ) where
@@ -40,8 +40,8 @@ import Data.Word (Word64)
 import Pudu.FloatLiteral (FloatWidth, floatWidthType)
 import Pudu.IntegerLiteral (IntegerKind, integerKindName)
 import Pudu.Source (Span)
-import Pudu.Core.TextMethod (CoreTextMethodName (..))
 import Pudu.Core.Bytes (CoreBytesMethodName (..))
+import Pudu.Core.TextMethod (CoreTextMethodName (..))
 import Pudu.Core.Keyed (CoreKeyedMethodName (..))
 import Pudu.Core.Kernel (CoreKernelName (..))
 
@@ -316,7 +316,17 @@ data CoreForeign = CoreForeign
   , coreForeignSymbol :: !Text
   , coreForeignParameters :: ![CoreType]
   , coreForeignResult :: !CoreType
+    -- | What a handle result transfers, when the result is a handle.
+  , coreForeignClaim :: !(Maybe CoreClaim)
+    -- | Whether the function releases the handle it takes.
+  , coreForeignReleases :: !Bool
   }
+  deriving stock (Eq, Ord, Show)
+
+{-| A handle result is borrowed, or owned (each result its own claim, or one
+    claim per reference when counted) and released by a function of the same
+    library: its symbol and its result type. -}
+data CoreClaim = CoreBorrowed | CoreOwned !Bool !Text !CoreType
   deriving stock (Eq, Ord, Show)
 
 {-| @Core.BinaryOperator — the operator vocabulary, already resolved from
@@ -377,6 +387,9 @@ data CoreType
   | CoreFunctionType ![CoreType] !CoreType
   | CoreUnitType
   | CoreNeverType
+  {-| An opaque handle a foreign library hands back: its canonical name, then
+      the name it renders under. -}
+  | CoreHandleType !Text !Text
   deriving stock (Eq, Ord, Show)
 
 coreTypeName :: CoreType -> Text
@@ -401,6 +414,7 @@ coreTypeName coreType = case coreType of
   CoreFunctionType inputs result -> "fn(" <> Text.intercalate ", " (map coreTypeName inputs) <> ") -> " <> coreTypeName result
   CoreUnitType -> "Unit"
   CoreNeverType -> "Never"
+  CoreHandleType _ name -> name
 
 {-| A record or sum as a program writes it: the last segment of its canonical
     key (`Main.Point` is `Point`), which is how the evaluator renders it. -}

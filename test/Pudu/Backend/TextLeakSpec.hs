@@ -72,6 +72,7 @@ textLeakProperties =
   , ("native text-view reads release every allocation", testLeaksFor textViewSuccessPrograms)
   , ("native folded constants release every allocation", testLeaksFor constantPrograms)
   , ("native Decimal programs release every allocation", testLeaksFor decimalLeakPrograms)
+  , ("native foreign handles release each claim exactly once", testForeignHandleLeaks)
   ]
 
 testLeaks :: IO Property
@@ -95,8 +96,132 @@ testFailedOutputLeaks
     , "    if (dup2(descriptors[1], target) < 0 || close(descriptors[1]) != 0) return 96;"
     , "  }" ]
 
+testForeignHandleLeaks :: IO Property
+testForeignHandleLeaks = testCountedPrograms linkerFlags fixture "" cases
+ where
+  linkerFlags = ["-pthread", if os == "darwin" then "-Wl,-export_dynamic" else "-Wl,--export-dynamic"]
+    <> ["-ldl" | os == "linux"]
+  fixture = Text.unlines
+    [ "static int test_handles[3];"
+    , "void *pudu_test_handle(int32_t slot) { return &test_handles[slot]; }"
+    , "const char *pudu_test_handle_render(void *handle) {"
+    , "  static char rendered[32];"
+    , "  snprintf(rendered, sizeof rendered, \"<Handle at 0x%\" PRIxPTR, (uintptr_t)handle);"
+    , "  return rendered;"
+    , "}"
+    , "const char *pudu_test_handle_null_text(void *handle, const char *text) {"
+    , "  return handle == &test_handles[0] && strcmp(text, \"probe\") == 0 ? NULL : \"unexpected\";"
+    , "}"
+    , "void *pudu_test_entry_handle(void) { return (void *)(uintptr_t)1; }"
+    , "void pudu_test_release_entry_handle(void *handle) {"
+    , "  if ((uintptr_t)handle != 1) abort();"
+    , "  puts(\"release entry\");"
+    , "  fflush(stdout);"
+    , "}"
+    , "typedef struct { int32_t value; } test_value;"
+    , "int32_t pudu_test_record_argument(test_value record) { return record.value; }"
+    , "typedef struct { const char *first, *second; } test_pair;"
+    , "test_pair pudu_test_handle_text_pair(void *handle, const char *text, uint8_t invalid) {"
+    , "  if (handle != &test_handles[0]) return (test_pair){\"unexpected\", \"handle\"};"
+    , "  if (invalid) return (test_pair){NULL, \"\\xff\"};"
+    , "  return (test_pair){text, NULL};"
+    , "}"
+    , "int32_t pudu_test_read_handle(void *handle) {"
+    , "  int slot = (int)((int *)handle - test_handles);"
+    , "  printf(\"read %d\\n\", slot);"
+    , "  fflush(stdout);"
+    , "  return slot;"
+    , "}"
+    , "int32_t pudu_test_release_handle(void *handle) {"
+    , "  int slot = (int)((int *)handle - test_handles);"
+    , "  fprintf(stderr, \"release %d\\n\", slot);"
+    , "  fflush(stderr);"
+    , "  printf(\"release %d\\n\", slot);"
+    , "  fflush(stdout);"
+    , "  return slot;"
+    , "}"
+    ]
+  cases =
+    [ ("explicit and implicit releases count claims, including two references to one address", program
+        [ "let explicit = acquire(0i32)"
+        , "let implicit = acquire(1i32)"
+        , "let borrowed = borrow(2i32)"
+        , "let first = retainHandle(2i32)"
+        , "let second = retainHandle(2i32)"
+        , "let status = release(explicit)"
+        , "release(first)"
+        , "let rendered = show(implicit) == renderHandle(implicit)"
+        , "rendered && status == 0i32 && readHandle(implicit) == 1i32 && readHandle(borrowed) == 2i32 && readHandle(second) == 2i32"
+        ], "release 0\nrelease 2\nread 1\nread 2\nread 2\nrelease 1\nrelease 2\ntrue\n",
+        "release 0\nrelease 2\nrelease 1\nrelease 2\n", ExitSuccess)
+    , ("duplicate ownership preserves the original release obligation", program
+        [ "acquire(0i32)"
+        , "acquire(0i32)"
+        , "false"
+        ], "release 0\n", "release 0\nerror[E7021]: pudu_test_handle returned a Handle already owned\n", ExitFailure 1)
+    , ("a reused address never revives the stale claim", program
+        [ "let stale = acquire(0i32)"
+        , "release(stale)"
+        , "acquire(0i32)"
+        , "readHandle(stale) == 0i32"
+        ], "release 0\nrelease 0\n",
+        "release 0\nrelease 0\nerror[E7022]: the Handle passed to pudu_test_read_handle is no longer owned\n", ExitFailure 1)
+    , ("a null text result releases the argument copy and the live handle", program
+        [ "let live = acquire(0i32)"
+        , "nullText(live, \"probe\") == \"unexpected\""
+        ], "release 0\n", "release 0\nerror[E7024]: pudu_test_handle_null_text returned no text for result\n", ExitFailure 1)
+    , ("a missing record text field releases the argument copy and the live handle", program
+        [ "let live = acquire(0i32)"
+        , "textPair(live, \"probe\", false).first == \"unexpected\""
+        ], "release 0\n",
+        "release 0\nerror[E7024]: pudu_test_handle_text_pair returned no text for second\n", ExitFailure 1)
+    , ("invalid record text takes priority over an earlier missing field", program
+        [ "let live = acquire(0i32)"
+        , "textPair(live, \"probe\", true).first == \"unexpected\""
+        ], "release 0\n",
+        "release 0\nerror[E7025]: pudu_test_handle_text_pair returned text that is not valid UTF-8\n", ExitFailure 1)
+    , ("a folded record used only as a foreign argument has a layout", Text.unlines
+        [ "module Main"
+        , "type Value = { value: Int32 }"
+        , "const PROBE: Value = Value{value: 7i32}"
+        , "foreign \"c\" { fn read symbol \"pudu_test_record_argument\" (record: Value) -> Int32 }"
+        , "fn main() -> Bool { unsafe(foreign) { read(PROBE) == 7i32 } }"
+        ], "true\n", "", ExitSuccess)
+    , ("entry reporting uses the handle box after teardown", Text.unlines
+        [ "module Main"
+        , "foreign \"c\" {"
+        , "  type Handle"
+        , "  fn acquire symbol \"pudu_test_entry_handle\" () -> owned Handle by release"
+        , "  fn release symbol \"pudu_test_release_entry_handle\" (handle: Handle) -> ()"
+        , "}"
+        , "fn main() -> Handle { unsafe(foreign) { acquire() } }"
+        ], "release entry\n<Handle at 0x1\n", "", ExitSuccess)
+    ]
+  program body = Text.unlines
+    ([ "module Main"
+     , "type TextPair = { first: Str, second: Str }"
+     , "foreign \"c\" {"
+     , "  type Handle"
+     , "  fn acquire symbol \"pudu_test_handle\" (slot: Int32) -> owned Handle by release"
+     , "  fn borrow symbol \"pudu_test_handle\" (slot: Int32) -> borrowed Handle"
+     , "  fn retainHandle symbol \"pudu_test_handle\" (slot: Int32) -> counted Handle by release"
+     , "  fn readHandle symbol \"pudu_test_read_handle\" (handle: Handle) -> Int32"
+     , "  fn release symbol \"pudu_test_release_handle\" (handle: Handle) -> Int32"
+     , "  fn renderHandle symbol \"pudu_test_handle_render\" (handle: Handle) -> Str"
+     , "  fn nullText symbol \"pudu_test_handle_null_text\" (handle: Handle, text: Str) -> Str"
+     , "  fn textPair symbol \"pudu_test_handle_text_pair\" (handle: Handle, text: Str, invalid: Bool) -> TextPair"
+     , "}"
+     , "fn main() -> Bool {"
+     , "  unsafe(foreign) {"
+     ] <> map ("    " <>) body <> ["  }", "}"])
+
 testLeaksWithSetup :: Text -> [(String, Text, Text, Text)] -> IO Property
-testLeaksWithSetup setup programs = do
+testLeaksWithSetup setup programs =
+  testCountedPrograms [] "" setup
+    [(label, source, output, errors, ExitSuccess) | (label, source, output, errors) <- programs]
+
+testCountedPrograms :: [String] -> Text -> Text -> [(String, Text, Text, Text, ExitCode)] -> IO Property
+testCountedPrograms linkerFlags fixture setup programs = do
   configured <- lookupEnv "PUDU_CC"
   compiler <- findExecutable (maybe "cc" id configured)
   case compiler of
@@ -106,7 +231,7 @@ testLeaksWithSetup setup programs = do
       putStrLn ("[text leaks] executed " <> show (length outcomes) <> " counted programs")
       pure (conjoin outcomes)
  where
-  check cc root (label, text, expected, expectedErrors) = do
+  check cc root (label, text, expected, expectedErrors, expectedStatus) = do
     source <- newSource (SourceName "Main.pudu") text
     checked <- runCompile source
     case (hasErrors (compileDiagnostics checked), compileModule checked) of
@@ -116,15 +241,18 @@ testLeaksWithSetup setup programs = do
           Right emitted -> do
             let path = root </> "leaks.c"
                 binary = root </> "leaks"
-            TextIO.writeFile path (instrument <> emitted <> trailer setup)
+            TextIO.writeFile path (instrument <> emitted <> fixture <> trailer setup)
             (built, output, errors) <- readProcessWithExitCode cc
-              ["-std=c11", "-pedantic", "-O2", "-Wall", "-Wextra", "-Werror", "-Wno-unused-function", path, "-o", binary, "-lm"] ""
+              (["-std=c11", "-pedantic", "-O2", "-Wall", "-Wextra", "-Werror", "-Wno-unused-function", path, "-o", binary, "-lm"] <> linkerFlags) ""
             if built /= ExitSuccess || not (null output && null errors)
               then pure (counterexample (label <> ": " <> show built <> output <> errors) (False === True))
               else do
                 (status, out, err) <- readProcessWithExitCode binary [] ""
+                let observedErrors = case expectedStatus of
+                      ExitSuccess -> Text.pack err
+                      ExitFailure _ -> Text.take (Text.length expectedErrors) (Text.pack err)
                 pure $ counterexample (label <> ": " <> show (status, err)) $ conjoin
-                  [status === ExitSuccess, Text.pack out === expected, Text.pack err === expectedErrors]
+                  [status === expectedStatus, Text.pack out === expected, observedErrors === expectedErrors]
         other -> pure (counterexample (label <> ": " <> show other) (False === True))
       _ -> pure (counterexample (label <> ": " <> show (compileDiagnostics checked)) (False === True))
 

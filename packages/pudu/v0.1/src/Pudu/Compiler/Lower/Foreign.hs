@@ -25,10 +25,11 @@ lowerForeignCall lower state at name arguments = do
       | any stops cores -> (after, Just (stopped at cores, CoreNeverType))
       | otherwise -> case typeForSpan (contextTypes (lowerContext after)) at of
           Just result
-            | all (parameterCrossing types) parameters, resultCrossing types result ->
+            | all (parameterCrossing types) parameters, resultCrossing types result || handleResult target result ->
                 let declared = CoreForeign (targetLibrary target) (targetVersion target) (targetSymbol target) parameters result
+                      (targetClaim target) (targetReleases target)
                  in (after, Just (CoreExpression at result (CoreForeignCall declared cores), result))
-          _ -> halt at "a foreign call crossing handles or slots" after
+          _ -> halt at "a foreign call crossing output slots" after
       where
         parameters = map coreExpressionType cores
         types = contextTypes (lowerContext after)
@@ -36,7 +37,16 @@ lowerForeignCall lower state at name arguments = do
 {-| A parameter crosses as a number, Bool, text, a lent run of bytes or a
     record of those (bytes excepted). -}
 parameterCrossing :: LowerTypes -> CoreType -> Bool
-parameterCrossing types kind = kind == CoreBytesType || fieldCrossing types kind
+parameterCrossing types kind = kind == CoreBytesType || handle kind || fieldCrossing types kind
+
+{-| A handle result crosses when its declaration says what it transfers. -}
+handleResult :: ForeignTarget -> CoreType -> Bool
+handleResult target kind = handle kind && targetClaim target /= Nothing
+
+handle :: CoreType -> Bool
+handle kind = case kind of
+  CoreHandleType _ _ -> True
+  _ -> False
 
 {-| A result crosses as a number, Bool, text, unit or such a record. -}
 resultCrossing :: LowerTypes -> CoreType -> Bool

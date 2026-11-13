@@ -144,3 +144,7 @@ callee is being admitted. `ModuleScope` also keeps `scopeInitializers`, so
 its declaring module; `lookupInitializer` names that module and expression.
 `emptyContext` receives implementation `heads` for settling bound-only
 parameters.
+
+## Foreign handles (#853)
+
+ForeignTarget carries ownership mode and release-call status alongside library and symbol metadata.

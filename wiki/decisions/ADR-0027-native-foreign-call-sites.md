@@ -1,6 +1,6 @@
 ---
 type: decision
-status: Accepted design; implementation in progress (#850)
+status: ACCEPTED
 date: 2026-11-12
 tags: [decision, native, foreign, backend]
 aliases: [Native Foreign Call Sites]
@@ -19,8 +19,7 @@ type, declared once per declaration, and carries no call-description library.
 Resolution is the interpreter's own. The library opens on first use with the
 same candidates in the same order: the written name, its versioned spellings,
 then the plain spellings; the name `c` opens the program itself. The symbol is
-the declaration's `symbol`, else its name. Each library and each symbol is
-resolved once per program and kept. A library that does not open, or a symbol
+the declaration's `symbol`, else its name. Each typed wrapper and destructor caches its resolved symbol. A library that does not open, or a symbol
 it does not export, stops the program with E7015 at the call, in the
 interpreter's words and with its help.
 
@@ -55,6 +54,20 @@ checked, as in the interpreter.
 
 A record crosses as a C struct declared from the record, nested records as nested structs, so its layout is the platform's own. The interpreter's bridge flattens nested records, which differs only where an inner record ends in padding (#863).
 
+## Handles (#853)
+
+Opaque handles cross as pointers. Each owned result claims its address with
+a fresh generation, and counted results claim each reference separately.
+Borrowed results carry no release obligation. An explicit release checks
+and consumes the live generation immediately before dispatch. An owned or
+counted producer resolves its destructor before it can acquire an obligation.
+Release functions may return unit or a fixed-width integer status. Implicit
+release discards that status.
+The native run gate covers the interval from liveness checks through dispatch
+and claim settlement. The program drains outstanding claims before ordinary entry reporting and
+controlled fatal diagnostics. Async entry output still uses in-frame reporting.
+Output slots remain with #854.
+
 ## Referenced by
 
-[[decisions/_MOC]] · [[Native Emission Coverage]]
+[[decisions/_MOC]] · [[Native Emission Coverage]] · [[Native Foreign Handles Delivery]]

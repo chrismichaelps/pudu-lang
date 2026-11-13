@@ -5,6 +5,13 @@ tags: [changelog]
 
 # Changelog
 
+## 2026-11-13 — Native foreign handles (#853)
+
+- [[Native Foreign Call Sites]] admits direct calls with opaque handles.
+  Owned and counted results carry generation-qualified claims, borrowed
+  results carry no release obligation, and teardown drains outstanding
+  claims before reporting the program outcome. See [[Native Foreign Handles Delivery]].
+
 ## 2026-11-13 — Foreign call prerequisites (#853)
 
 - [[Compiler Lower Layout]] collects record layouts used only by foreign call

@@ -74,6 +74,7 @@ lowerEntryBodyWith lowerExpression lowerBlock located state
                 kind@(CoreSumType _ _) -> built after coreBlock kind
                 kind@(CoreFunctionType _ _) -> built after coreBlock kind
                 kind@(CoreArrayType _) -> built after coreBlock kind
+                kind@(CoreHandleType _ _) -> built after coreBlock kind
                 kind | treeType kind -> built after coreBlock kind
                 kind | kind `elem` [CoreRangeType, CoreBytesType, CoreDecimalType] -> built after coreBlock kind
                 CoreNeverType -> built after coreBlock CoreUnitType

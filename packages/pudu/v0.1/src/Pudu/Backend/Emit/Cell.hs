@@ -28,6 +28,7 @@ ownedType (CoreStoreType _) = True
 ownedType CoreRangeType = True
 ownedType CoreBytesType = True
 ownedType CoreDecimalType = True
+ownedType (CoreHandleType _ _) = True
 ownedType _ = False
 
 cType :: CoreType -> Text
@@ -48,6 +49,7 @@ cType kind = case kind of
   CoreStoreType _ -> "pudu_box *"
   CoreRangeType -> "pudu_box *"
   CoreBytesType -> "pudu_box *"
+  CoreHandleType _ _ -> "pudu_box *"
   CoreDecimalType -> "pudu_dec *"
   _ -> "int"
 
@@ -83,6 +85,7 @@ mangle kind = case kind of
   CoreStoreType held -> "BK_" <> mangle held <> "_E"
   CoreRangeType -> "RG"
   CoreBytesType -> "BY"
+  CoreHandleType key _ -> "H_" <> mangleKey key
   CoreFunctionType inputs result -> "F" <> Text.pack (show (length inputs)) <> "_" <> Text.intercalate "_" (map mangle (inputs <> [result])) <> "_E"
   other -> coreTypeName other
 
@@ -109,6 +112,7 @@ isAggregate kind = case kind of
   CoreStoreType _ -> True
   CoreRangeType -> True
   CoreBytesType -> True
+  CoreHandleType _ _ -> True
   _ -> False
 
 {-| A member rendered as `renderValue` writes it inside an aggregate. -}
