@@ -56,3 +56,7 @@ drains owned claims by signed address, then counted claims by generation.
 ## Referenced by
 
 [[Native Host Runtime]] · [[Backend Emit Foreign]]
+
+## Owned output slots (#854)
+
+Resolved Grill Log: Reserve batch claim space before dispatch. Reject duplicate or existing addresses before exposing any new boxes. Release each unambiguous fresh obligation on refusal.

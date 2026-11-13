@@ -62,3 +62,7 @@ Resolved Grill Log: use the same record decoder as a by-value result, then relea
 ## Text slots (#854)
 
 Resolved Grill Log: A null text slot becomes None. Validate all returned text before allocating result boxes, then copy a non-null text slot into Some.
+
+## Owned output slots (#854)
+
+Resolved Grill Log: Resolve all slot destructors before dispatch. Claim returned handles as one batch before converting the tuple.

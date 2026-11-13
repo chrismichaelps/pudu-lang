@@ -28,7 +28,7 @@ lowerForeignCall lower state at name arguments = do
             | all (parameterCrossing types) parameters
             , admittedResult target types parameters result ->
                 let declared = CoreForeign (targetLibrary target) (targetVersion target) (targetSymbol target) parameters result
-                      (targetClaim target) (targetReleases target) (targetSlotPositions target)
+                      (targetClaim target) (targetReleases target) (targetSlotPositions target) (targetSlotClaims target)
                  in (after, Just (CoreExpression at result (CoreForeignCall declared cores), result))
           _ -> halt at "a foreign call crossing output slots" after
       where
@@ -41,8 +41,13 @@ admittedResult target types parameters result
   | CoreTupleType (native : slots) <- result =
       all scalarCrossing parameters && (native == CoreUnitType || scalarCrossing native)
         && length slots == length (targetSlotPositions target)
-        && all (slotCrossing types) slots
+        && and (zipWith (admitSlot types) slots (targetSlotClaims target))
   | otherwise = False
+
+admitSlot :: LowerTypes -> CoreType -> Maybe CoreClaim -> Bool
+admitSlot types kind claim = case kind of
+  CoreSumType "Option" [CoreHandleType _ _] -> claim /= Nothing
+  _ -> slotCrossing types kind
 
 slotCrossing :: LowerTypes -> CoreType -> Bool
 slotCrossing types kind

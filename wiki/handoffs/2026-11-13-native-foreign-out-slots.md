@@ -22,8 +22,9 @@ ownership settlement before the full issue can close.
 
 ## Exact next action
 
-Extend slot conversion to text, then settle owned handle slots as a batch.
-Scalar differential and scalar-only record counted checks pass.
+Unify the slot and direct wrappers so an output slot can accompany any
+admitted native result or ordinary argument. The counted cases cover scalar,
+record, optional text, owned handle, and duplicate-claim cleanup.
 
 ## Referenced by
 

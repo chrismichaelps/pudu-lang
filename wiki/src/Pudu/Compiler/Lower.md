@@ -272,3 +272,7 @@ Module scopes collect canonical opaque handle types and the owning declarationâ€
 ## Scalar output slots (#854)
 
 Resolved Grill Log: Read the written output positions in declaration order when building the foreign target.
+
+## Owned output slots (#854)
+
+Resolved Grill Log: Resolve a slot destructor through its own foreign block.

@@ -209,7 +209,9 @@ lowerProgram entryName programModules@(rootModule : _)
                       (symbolOf function) (claimOf functions function)
                       (locatedValue (foreignName function) `elem` releasers functions)
                       [index | (index, Located _ parameter) <- zip [0 ..] (foreignParameters function)
-                             , foreignParameterOut parameter] )
+                             , foreignParameterOut parameter]
+                      [claimFor functions False (foreignParameterReleasedBy parameter)
+                      | Located _ parameter <- foreignParameters function, foreignParameterOut parameter] )
                 | Located _ (ForeignDeclaration declared) <- moduleDeclarations (nativeModuleSyntax native)
                 , let functions = map locatedValue (foreignFunctions declared)
                 , function <- functions ]
@@ -222,9 +224,11 @@ lowerProgram entryName programModules@(rootModule : _)
     -- released by the function it names, called as that function returns.
     claimOf functions function
       | foreignResultBorrowed function = Just CoreBorrowed
-      | Just released <- foreignReleasedBy function
-      , release : _ <- [candidate | candidate <- functions, locatedValue (foreignName candidate) == locatedValue released] =
-          Just (CoreOwned (foreignResultCounted function) (symbolOf release) (releaseResult (locatedValue (foreignResult release))))
+      | otherwise = claimFor functions (foreignResultCounted function) (foreignReleasedBy function)
+    claimFor functions counted written
+      | Just released <- written
+      , Just release <- find ((== locatedValue released) . locatedValue . foreignName) functions =
+          Just (CoreOwned counted (symbolOf release) (releaseResult (locatedValue (foreignResult release))))
       | otherwise = Nothing
     releasers functions = [locatedValue released | function <- functions, Just released <- [foreignReleasedBy function]]
       <> [locatedValue released | function <- functions, Located _ parameter <- foreignParameters function

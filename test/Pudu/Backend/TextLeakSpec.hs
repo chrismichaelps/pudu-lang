@@ -107,6 +107,10 @@ testForeignHandleLeaks = testCountedPrograms linkerFlags fixture "" cases
     , "  if (*untouched != 0) abort();"
     , "  *first = value + 1;"
     , "}"
+    , "void pudu_test_handle_slots(void **first, void **second, uint8_t duplicate) {"
+    , "  *first = &test_handles[0];"
+    , "  if (duplicate) *second = *first;"
+    , "}"
     , "void *pudu_test_handle(int32_t slot) { return &test_handles[slot]; }"
     , "const char *pudu_test_handle_render(void *handle) {"
     , "  static char rendered[32];"
@@ -226,6 +230,10 @@ testForeignHandleLeaks = testCountedPrograms linkerFlags fixture "" cases
         , "  show(first) == \"Some(\\\"written\\\")\" && show(second) == \"None\""
         , "}"
         ], "true\n", "", ExitSuccess)
+    , ("owned slots claim a fresh address and preserve None", handleSlotProgram False,
+        "release 0\ntrue\n", "release 0\n", ExitSuccess)
+    , ("duplicate owned slots release once before refusing the batch", handleSlotProgram True,
+        "release 0\n", "release 0\nerror[E7021]: pudu_test_handle_slots handed back duplicate or already owned resources\n", ExitFailure 1)
     , ("entry reporting uses the handle box after teardown", Text.unlines
         [ "module Main"
         , "foreign \"c\" {"
@@ -235,6 +243,21 @@ testForeignHandleLeaks = testCountedPrograms linkerFlags fixture "" cases
         , "}"
         , "fn main() -> Handle { unsafe(foreign) { acquire() } }"
         ], "release entry\n<Handle at 0x1\n", "", ExitSuccess)
+    ]
+  handleSlotProgram duplicate = Text.unlines
+    [ "module Main"
+    , "foreign \"c\" {"
+    , "  type Handle"
+    , "  fn fill symbol \"pudu_test_handle_slots\" (out first: owned Handle by release, out second: owned Handle by release, duplicate: Bool) -> ()"
+    , "  fn release symbol \"pudu_test_release_handle\" (handle: Handle) -> Int32"
+    , "}"
+    , "fn main() -> Bool {"
+    , "  let (_, first, second) = unsafe(foreign) { fill(" <> (if duplicate then "true" else "false") <> ") }"
+    , "  match first {"
+    , "    case Some(handle) => unsafe(foreign) { release(handle) == 0i32 && show(second) == \"None\" }"
+    , "    case None => false"
+    , "  }"
+    , "}"
     ]
   program body = Text.unlines
     ([ "module Main"

@@ -438,3 +438,7 @@ CoreForeign carries checked transfer and release metadata. CoreHandleType keeps 
 ## Scalar output slots (#854)
 
 Resolved Grill Log: Keep output positions on the checked foreign call. The tuple result contains the ABI result and the written scalar types.
+
+## Owned output slots (#854)
+
+Resolved Grill Log: Carry resolved destructor metadata for each handle output slot.

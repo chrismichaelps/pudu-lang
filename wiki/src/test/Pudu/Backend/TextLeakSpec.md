@@ -231,3 +231,8 @@ the intermediate decoded record.
 ## Text slots (#854)
 
 Resolved Grill Log: Count allocation ownership for both null and non-null text slots.
+
+## Owned foreign slots (#854)
+
+Resolved Grill Log: count one fresh claim and one null slot, and verify
+that a duplicate address is released only once before E7021.

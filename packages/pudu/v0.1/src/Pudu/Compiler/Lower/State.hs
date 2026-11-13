@@ -107,6 +107,7 @@ data ForeignTarget = ForeignTarget
   , targetClaim :: !(Maybe CoreClaim)
   , targetReleases :: !Bool
   , targetSlotPositions :: ![Int]
+  , targetSlotClaims :: ![Maybe CoreClaim]
   }
 
 {-| @Compiler.Lower.State — one function's lowering state on top of the

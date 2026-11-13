@@ -39,6 +39,8 @@ foreignCall state at declared cells =
         _ -> (s5, Nothing)
       (s7, owned) = case (result, coreForeignClaim declared) of
         (CoreHandleType _ name, Just (CoreOwned False _ _)) -> fmap Just (helpedFailureSite s6 at "E7021" (symbol <> " returned a " <> name <> " already owned") ownedHelp)
+        _ | not (null (slotReleases declared)) -> fmap Just (helpedFailureSite s6 at "E7021"
+          (symbol <> " handed back duplicate or already owned resources") "an owned foreign value must transfer one new ownership claim")
         _ -> (s6, Nothing)
       sites = [siteText site] <> map siteText (concatMap (maybe [] pure) [noughts, missing, invalid, dead, none, owned])
    in ( s7
@@ -84,7 +86,7 @@ foreignNeeds layouts declarations = concat
                 | kind@(CoreRecordType _ _) <- crossingTypes declared]
   | declared <- declarations ]
  where
-  optionNeeds kind@(CoreSumType "Option" [CoreTextType]) =
+  optionNeeds kind@(CoreSumType "Option" [_]) =
     [aggregateNeed "make0" kind, aggregateNeed "make1" kind, aggregateNeed "drop" kind]
   optionNeeds _ = []
   leaves kind = case Map.lookup kind layouts of
@@ -99,7 +101,7 @@ foreignNeeds layouts declarations = concat
 foreignWrappers :: Layouts -> [CoreForeign] -> [Text]
 foreignWrappers layouts declarations =
   recordDefinitions layouts (recordsIn layouts (concatMap crossingTypes declarations))
-    <> concatMap releaser (Set.toList (Set.fromList (concatMap (maybe [] pure . releaseOf) declarations)))
+    <> concatMap releaser (Set.toList (Set.fromList (concatMap (\declared -> maybe [] pure (releaseOf declared) <> map snd (slotReleases declared)) declarations)))
     <> concatMap emitWrapper declarations
  where
   releaser target@(_, _, _, answer) =
@@ -139,6 +141,13 @@ foreignWrappers layouts declarations =
     let result = coreForeignResult declared
         parameters = zip [0 ..] (coreForeignParameters declared)
         position = Set.fromList (coreForeignSlotPositions declared)
+        releases = slotReleases declared
+        destructorCount = textOfInt (length releases)
+        handleNames = Set.toAscList (Set.fromList [handle | CoreSumType "Option" [handle@(CoreHandleType _ _)] <- slots])
+        claimLine (i, target) =
+          let identity = maybe 0 (\kind -> maybe 0 (+ 1) (lookup kind (zip handleNames [0 ..]))) (lookup i (zip [0 ..] (map slotAbiType slots)))
+           in "    {(uint64_t)(uintptr_t)slot" <> textOfInt i <> ", " <> textOfInt identity <> ", 0, " <> releaserName target <> "},"
+        claimIndex i = maybe "0" textOfInt (lookup i (zip (map fst releases) [0 ..]))
         abiSlots = [(abiType (slotAbiType kind) <> " *", "&slot" <> textOfInt i) | (i, kind) <- zip [0 ..] slots]
         abiInputs = [(abiType kind, toAbi kind ("a" <> textOfInt i)) | (i, kind) <- parameters]
         abiOrder = interleave position 0 abiInputs abiSlots
@@ -154,11 +163,14 @@ foreignWrappers layouts declarations =
           CoreRecordType _ _ -> "pudu_foreign_unpack_" <> suffix kind <> "(slot" <> textOfInt i <> ")"
           CoreSumType "Option" [CoreTextType] -> "slot" <> textOfInt i <> " == NULL ? "
             <> aggregateHelper "make1" kind <> "() : " <> aggregateHelper "make0" kind <> "(copied" <> textOfInt i <> ")"
+          CoreSumType "Option" [CoreHandleType _ _] -> "held" <> textOfInt i <> " == NULL ? "
+            <> aggregateHelper "make1" kind <> "() : " <> aggregateHelper "make0" kind <> "(held" <> textOfInt i <> ")"
           _ -> fromAbi kind ("slot" <> textOfInt i)
         resultArgs = (if native == CoreUnitType then "0" else fromAbi native "answer")
           : ["written" <> textOfInt i | (i, _) <- zip [0 ..] slots]
      in [ "static pudu_box *" <> wrapperName declared <> "(const pudu_site *site"
             <> (if textSites then ", const pudu_site *missing, const pudu_site *invalid" else "")
+            <> (if null releases then "" else ", const pudu_site *duplicate")
             <> foldMap (\(i, kind) -> ", " <> cType kind <> " a" <> textOfInt i) parameters <> ") {"
         , "  static pudu_foreign_cache cache = {NULL};"
         , "  " <> abiType native <> " (*function)(" <> pointerArgs <> ") = ("
@@ -167,16 +179,24 @@ foreignWrappers layouts declarations =
             <> maybe "NULL" cString (coreForeignVersion declared) <> ", "
             <> cString (coreForeignSymbol declared) <> ", NULL);"
         ]
+        <> concatMap (resolveRelease (coreForeignSymbol declared) . snd) releases
+        <> ["  pudu_foreign_reserve(" <> destructorCount <> ");" | not (null releases)]
         <> ["  (void)missing; (void)invalid;" | textSites]
         <> [ "  " <> abiType (slotAbiType kind) <> " slot" <> textOfInt i <> " = {0};"
            | (i, kind) <- zip [0 ..] slots ]
         <> [ "  " <> (if native == CoreUnitType then "" else abiType native <> " answer = ") <> call
            ]
+        <> (if null releases then [] else
+             ["  pudu_foreign_claim claimed[] = {"] <> map claimLine releases
+             <> ["  };", "  pudu_foreign_claim_slots(duplicate, claimed, " <> destructorCount <> ");"])
         <> [ "  if (" <> field <> " != NULL && !pudu_foreign_text_valid(" <> field <> ")) pudu_fail(invalid);"
            | (_, field) <- slotLeaves ]
         <> [ "  if (" <> field <> " == NULL) pudu_foreign_missing_field(missing, "
               <> cString (coreForeignSymbol declared) <> ", " <> cString label <> ");"
            | (label, field) <- slotLeaves, not (Text.null label) ]
+        <> [ "  pudu_box *held" <> textOfInt i <> " = slot" <> textOfInt i <> " == NULL ? NULL : "
+              <> "pudu_foreign_slot_box(claimed[" <> claimIndex i <> "].address, claimed[" <> claimIndex i <> "].generation);"
+           | (i, CoreSumType "Option" [CoreHandleType _ _]) <- zip [0 ..] slots ]
         <> [ "  pudu_text copied" <> textOfInt i <> " = slot" <> textOfInt i
               <> " == NULL ? (pudu_text){0} : pudu_text_copy(slot" <> textOfInt i <> ", strlen(slot" <> textOfInt i <> "));"
            | (i, CoreSumType "Option" [CoreTextType]) <- zip [0 ..] slots ]
@@ -185,6 +205,8 @@ foreignWrappers layouts declarations =
         <> [ "  pudu_box *tuple = " <> aggregateHelper "make" result <> "(" <> Text.intercalate ", " resultArgs <> ");" ]
         <> [ "  " <> dropSlot | (i, kind) <- zip [0 ..] slots
            , let dropSlot = released kind ("written" <> textOfInt i), not (Text.null dropSlot) ]
+        <> [ "  " <> released handle ("held" <> textOfInt i)
+           | (i, CoreSumType "Option" [handle@(CoreHandleType _ _)]) <- zip [0 ..] slots ]
         <> [ "  pudu_text_release(copied" <> textOfInt i <> ");"
            | (i, CoreSumType "Option" [CoreTextType]) <- zip [0 ..] slots ]
         <> [ "  return tuple;", "}", "" ]
@@ -265,7 +287,7 @@ foreignWrappers layouts declarations =
         <> ["  " <> abiType result <> " (*function)(" <> abiParameters <> ") = " <> resolved <> ";"]
         <> maybe [] (resolveRelease (coreForeignSymbol declared)) release
         <> checks
-        <> ["  pudu_foreign_reserve();" | Just _ <- [release]]
+        <> ["  pudu_foreign_reserve(1);" | Just _ <- [release]]
         <> heldLines
         <> copies
         <> body
@@ -282,7 +304,7 @@ crossingTypes declared = coreForeignParameters declared <> case slotResult decla
   Nothing -> [coreForeignResult declared]
 
 slotAbiType :: CoreType -> CoreType
-slotAbiType (CoreSumType "Option" [CoreTextType]) = CoreTextType
+slotAbiType (CoreSumType "Option" [kind]) = kind
 slotAbiType kind = kind
 
 slotResult :: CoreForeign -> Maybe (CoreType, [CoreType])
@@ -292,6 +314,11 @@ slotResult declared
   | otherwise = Nothing
 
 {-| The release an owned handle result is released through: its library, version, symbol and result. -}
+slotReleases :: CoreForeign -> [(Int, (Text, Maybe Text, Text, CoreType))]
+slotReleases declared =
+  [ (i, (coreForeignLibrary declared, coreForeignVersion declared, symbol, result))
+  | (i, Just (CoreOwned _ symbol result)) <- zip [0 ..] (coreForeignSlotClaims declared) ]
+
 releaseOf :: CoreForeign -> Maybe (Text, Maybe Text, Text, CoreType)
 releaseOf declared = case (coreForeignResult declared, coreForeignClaim declared) of
   (CoreHandleType _ _, Just (CoreOwned _ symbol answer)) -> Just (coreForeignLibrary declared, coreForeignVersion declared, symbol, answer)

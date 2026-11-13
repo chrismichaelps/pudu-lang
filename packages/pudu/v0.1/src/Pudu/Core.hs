@@ -321,6 +321,7 @@ data CoreForeign = CoreForeign
     -- | Whether the function releases the handle it takes.
   , coreForeignReleases :: !Bool
   , coreForeignSlotPositions :: ![Int]
+  , coreForeignSlotClaims :: ![Maybe CoreClaim]
   }
   deriving stock (Eq, Ord, Show)
 
