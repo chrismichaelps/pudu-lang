@@ -267,6 +267,8 @@ statusPrograms =
       , "  let minimum: Int = -value"
       , "  return value"
       ])
+  , ("an entry parameter without a default stops the run at the entry", "module Main\nfn main(value: Int) -> Int {\n  print(\"never\")\n  value\n}\n")
+  , ("a unit entry with two parameters names the first", "module Main\ntype Point = { x: Int }\nfn main(point: Point, other: Str) {\n  print(other)\n}\n")
   , ("zero exits zero", programWith ["  return 0"])
   , ("a small nonzero result exits as itself", programWith ["  return 3"])
   , ("a result above 255 clamps", programWith ["  return 300"])

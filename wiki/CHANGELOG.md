@@ -13,6 +13,30 @@ tags: [changelog]
   produces an 18,474-line function, so the Ark text and UI fixtures compile
   natively.
 
+## 2026-11-13 — Fixture scratch directories (#885)
+
+- The standard-library fixtures that write files (`UsesCsv`, `UsesIo`,
+  `UsesIoAll`, `UsesStreams`, `UsesJsonStrings`, `UsesUiAppShellAll`,
+  `UsesEffects`) work in a directory made for each run and remove it at the
+  end, so suites running at the same time on one machine never share files.
+
+## 2026-11-13 — Native coverage ledger: hosts and entries
+
+- [[Native Emission Coverage]] records native desktop and audio host
+  adapters (#856, #857), qualified foreign calls (#873) and the entry
+  parameter stop (#871). Row states are unchanged.
+
+## 2026-11-13 — Native AudioToolbox adapter (#857)
+
+- [[Native Host Audio]] emits audio playback and stream calls through the
+  same source packaging as the desktop adapter.
+
+## 2026-11-13 — Entry parameters report a located stop (#871)
+
+- [[Eval Program]] calls the entry at its name, so an entry parameter without
+  a default stops with E7003 instead of an internal error, and
+  [[Compiler Lower Function Body]] compiles the same stop natively.
+
 ## 2026-11-13 — Qualified foreign calls (#873)
 
 - [[Compiler Lower Foreign]] lowers `Qualifier.f(...)` through the module the

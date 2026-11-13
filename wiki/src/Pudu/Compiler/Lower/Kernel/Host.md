@@ -37,3 +37,7 @@ is the builtin's own checked signature; nothing is inferred.
 ## Native desktop (#856)
 
 Resolved Grill Log: Lower the monomorphic desktop builtins through the host outcome carrier to [[Native Host Desktop]].
+
+## Native audio (#857)
+
+Resolved Grill Log: Lower monomorphic audio builtins through the host outcome carrier.

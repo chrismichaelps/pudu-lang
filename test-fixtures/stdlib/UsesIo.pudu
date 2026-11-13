@@ -1,13 +1,16 @@
 module UsesIo
 
 import Std.Env as Env
+import Std.Fs as Fs
 import Std.Io as Io
 
 export fn main() -> Int {
   // Where this machine puts what a program does not intend to keep, rather than
   // one machine's spelling of it. A fixture that wrote `/tmp` would not run
   // where that path does not exist.
-  let target = Io.join(Env.temporaryDirectory(), "pudu-fixture-io")
+  // A directory of this run alone, so runs at the same time never meet.
+  let Ok(scratch) = Fs.temporaryDirectoryIn(Env.temporaryDirectory(), "pudu-fixture-") else { return 0 }
+  let target = Io.join(scratch, "pudu-fixture-io")
   var total = 0
   match Io.makeDirectory(target) {
     case Ok(_) => { total = total + 1 }
@@ -37,5 +40,6 @@ export fn main() -> Int {
     case Ok(_) => { total = total + 1 }
     case Err(_) => {}
   }
+  let _scratchGone = Fs.removeTree(scratch)
   total
 }
