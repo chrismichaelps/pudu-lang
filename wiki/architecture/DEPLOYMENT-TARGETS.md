@@ -37,9 +37,22 @@ terminates the process. If the build lists `-lz`, link zlib in the host.
 The compiler finds the selected iOS SDK through `xcrun`. Set `PUDU_XCRUN`
 to override the executable. `E6007` names a missing tool or SDK, and `E6008`
 identifies an unsupported runtime part or foreign library path.
-[[Native Mobile Targets]] defines the ABI, supported paths, and how to combine
-both slices into an XCFramework. Run the [[iOS Simulator Run]] to verify C
-foreign calls in a simulator application.
+[[Native Mobile Targets]] defines the ABI and supported foreign library paths.
+Run the [[iOS Simulator Run]] to verify C foreign calls in a simulator
+application.
+
+To distribute both slices together, stage each public header in its own
+directory so Xcode copies only headers into the XCFramework:
+
+```sh
+mkdir -p build/ios-device/headers build/ios-simulator/headers
+cp build/ios-device/pudu_program.h build/ios-device/headers/
+cp build/ios-simulator/pudu_program.h build/ios-simulator/headers/
+xcodebuild -create-xcframework \
+  -library build/ios-device/libMain.a -headers build/ios-device/headers \
+  -library build/ios-simulator/libMain.a -headers build/ios-simulator/headers \
+  -output build/Main.xcframework
+```
 
 ## Why a runtime built on a current Linux does not run on Lambda
 
