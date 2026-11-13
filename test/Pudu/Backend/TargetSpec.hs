@@ -22,6 +22,7 @@ import System.FilePath ((</>))
 import System.Info (arch, os)
 import System.IO.Temp (withSystemTempDirectory)
 import System.Process (readProcessWithExitCode)
+import System.Timeout (timeout)
 import Test.QuickCheck (Property, conjoin, counterexample, once, property, (===))
 
 backendTargetProperties :: [(String, IO Property)]
@@ -99,6 +100,16 @@ sdkFailures = withSystemTempDirectory "pudu-mobile-sdk" $ \root ->
         withEnvironment "PUDU_XCRUN" Nothing (compileLibrary request)
       rejected <- withEnvironment "PUDU_XCRUN" (Just fake) (compileLibrary request)
       collision <- compileLibrary request{libraryOutput = root </> "pudu_program.h"}
+      timedOut <- if os == "mingw32"
+        then pure (property True)
+        else do
+          TextIO.writeFile fake "#!/bin/sh\n/bin/sleep 30 &\nprintf '/some/sdk\\n'\n"
+          result <- withEnvironment "PUDU_XCRUN" (Just fake) $
+            withEnvironment "PUDU_CC_TIMEOUT" (Just "1") (timeout 5000000 (compileLibrary request))
+          pure $ case result of
+            Just (Left (ToolchainSdkMissing name detail)) ->
+              conjoin [name === "ios-simulator-arm64", Text.isInfixOf "did not answer in time" detail === True]
+            other -> counterexample (show other) False
       files <- listDirectory root
       pure $ conjoin
         [ missing === Left (ToolchainSdkMissing "ios-simulator-arm64" "xcrun")
@@ -109,6 +120,7 @@ sdkFailures = withSystemTempDirectory "pudu-mobile-sdk" $ \root ->
         , case collision of
             Left (ToolchainPublishFailed _) -> property True
             other -> counterexample (show other) False
+        , timedOut
         , files === ["fake-xcrun"]
         ]
 

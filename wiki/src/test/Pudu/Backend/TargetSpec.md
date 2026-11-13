@@ -28,7 +28,8 @@ aliases: [Backend Native Target Tests]
 - With `PATH` emptied and `PUDU_XCRUN` unset, an iOS build is
   `ToolchainSdkMissing "ios-simulator-arm64" "xcrun"`; a scripted `xcrun` that
   does not know the SDK is `ToolchainSdkMissing` carrying its words. Neither
-  writes the output.
+  writes the output. An SDK probe with an inherited pipe fails within the
+  configured deadline on POSIX.
 - A library output named `pudu_program.h` fails before SDK discovery.
 - The path test includes parent traversal beneath an allowed prefix and a
   version string containing a path.

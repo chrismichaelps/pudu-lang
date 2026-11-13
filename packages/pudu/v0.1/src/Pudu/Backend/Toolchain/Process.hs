@@ -13,6 +13,7 @@ module Pudu.Backend.Toolchain.Process
   , cleanup
   , problemText
   , runTool
+  , runToolOutput
   , timeoutSeconds
   , tryIO
   ) where
@@ -64,7 +65,12 @@ data ToolchainFailure
     captured output; any other exit is a rejection carrying it. Acquisition is
     masked until every process and pipe has a cleanup owner. -}
 runTool :: FilePath -> [String] -> Int -> IO (Either ToolchainFailure Text)
-runTool executable arguments seconds = mask $ \restore -> do
+runTool executable arguments seconds =
+  fmap renderToolOutput <$> runToolOutput executable arguments seconds
+
+{-| Keep the output streams separate for callers that parse stdout. -}
+runToolOutput :: FilePath -> [String] -> Int -> IO (Either ToolchainFailure (Text, Text, Bool))
+runToolOutput executable arguments seconds = mask $ \restore -> do
   capture <- newMVar emptyCapture
   (_, maybeOut, maybeErr, processHandle) <-
     createProcess (proc executable arguments)
@@ -102,8 +108,8 @@ runTool executable arguments seconds = mask $ \restore -> do
         Nothing -> stop >> pure (Left (ToolchainTimedOut seconds))
         Just (_, Left problem, _) -> stopProcess >> pure (Left (ToolchainInvocation (Text.pack (displayException problem))))
         Just (_, _, Left problem) -> stopProcess >> pure (Left (ToolchainInvocation (Text.pack (displayException problem))))
-        Just (ExitSuccess, Right (), Right ()) -> Right <$> renderedCapture capture
-        Just (ExitFailure _, Right (), Right ()) -> Left . ToolchainRejected <$> renderedCapture capture
+        Just (ExitSuccess, Right (), Right ()) -> Right . decodedCapture <$> readMVar capture
+        Just (ExitFailure _, Right (), Right ()) -> Left . ToolchainRejected . renderToolOutput . decodedCapture <$> readMVar capture
     _ -> stopProcess >> pure (Left (ToolchainInvocation "the compiler's pipes could not be created")))
       `onException` stopProcess
       `finally` closePipes
@@ -173,14 +179,17 @@ accumulate stream chunk captured
 waitDrain :: Drain -> IO (Either SomeException ())
 waitDrain (Drain _ done) = readMVar done
 
-renderedCapture :: MVar Capture -> IO Text
-renderedCapture capture = do
-  captured <- readMVar capture
-  pure (Text.stripEnd (decode (captureStdout captured) <> decode (captureStderr captured) <> note captured))
+decodedCapture :: Capture -> (Text, Text, Bool)
+decodedCapture captured =
+  (decode (captureStdout captured), decode (captureStderr captured), captureTruncated captured)
  where
   decode = Encoding.decodeUtf8With lenientDecode . ByteString.concat . reverse
-  note captured
-    | captureTruncated captured = "\n[compiler output truncated]"
+
+renderToolOutput :: (Text, Text, Bool) -> Text
+renderToolOutput (out, err, truncated) = Text.stripEnd (out <> err <> note)
+ where
+  note
+    | truncated = "\n[compiler output truncated]"
     | otherwise = Text.empty
 
 {-| `PUDU_CC_TIMEOUT` seconds when set and positive, clamped so conversion to
