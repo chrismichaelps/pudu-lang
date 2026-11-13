@@ -87,6 +87,7 @@ expression (CoreExpression _ kind shape) = kind : case shape of
   CorePrint operand -> expression operand
   CoreOutputError _ _ operand -> expression operand
   CoreCall _ arguments -> concatMap expression arguments
+  CoreForeignCall _ arguments -> concatMap expression arguments
   CoreClosure _ captures -> concatMap expression captures
   CoreCapture _ operand -> expression operand
   CoreCallValue callee arguments -> concatMap expression (callee : arguments)
