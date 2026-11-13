@@ -12,6 +12,12 @@ tags: [changelog]
   `UsesEffects`) work in a directory made for each run and remove it at the
   end, so suites running at the same time on one machine never share files.
 
+## 2026-11-13 — Native coverage ledger: hosts and entries
+
+- [[Native Emission Coverage]] records native desktop and audio host
+  adapters (#856, #857), qualified foreign calls (#873) and the entry
+  parameter stop (#871). Row states are unchanged.
+
 ## 2026-11-13 — Native AudioToolbox adapter (#857)
 
 - [[Native Host Audio]] emits audio playback and stream calls through the
