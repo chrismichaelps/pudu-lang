@@ -46,3 +46,10 @@ running-state query failure is `PUDU_AUDIO_DRAIN_FAILED`.
 ## Referenced by
 
 [[Pudu Audio Adapter Header]] · [[Std Audio Device]] · [[Pudu Cabal Manifest]]
+
+## Native stop observation (#857)
+
+Resolved Grill Log: playback also accepts a stop predicate. The adapter
+polls it on the playback thread beside the existing cancellation token.
+Native playback releases the run gate during the call and reacquires it
+before returning the outcome.

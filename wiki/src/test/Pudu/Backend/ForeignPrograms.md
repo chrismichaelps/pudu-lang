@@ -49,3 +49,11 @@ Resolved Grill Log: Compare a real libc scalar output slot and its written value
 A mutable loan passes a record field to a Pudu helper that writes an
 exponent read from a foreign output slot. The interpreter comparison
 checks that the ordinary loan writes the updated field back.
+
+## Qualified module calls (#873)
+
+`foreignModulePrograms` calls an exported foreign block through its module
+name and an alias: integer and text crossings, an owned handle and its
+release, matching the interpreter's bridge. Resolved Grill Log: the module
+programs runner already compares several-module sources, so the case joins
+[[Backend Module Programs]] rather than a second runner.

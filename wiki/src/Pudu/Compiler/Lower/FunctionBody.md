@@ -53,6 +53,16 @@ an expression one, so moving them here removes a second architectural concern
 from Compiler Lower Body without introducing callbacks in the other
 direction.
 
+## Entry parameters (#871)
+
+An entry whose first parameter has no default compiles to the evaluator's
+stop: E7003 "missing argument for parameter <name>" at the entry's name,
+before any body effect. An entry whose first parameter has a default stays
+refused until default evaluation at the entry is lowered.
+
+Resolved Grill Log: the native program reports what `pudu run` reports
+rather than refusing a program checking accepts.
+
 ## Referenced by
 
 [[Compiler Lower Body]] · [[src/Pudu/Compiler/_MOC]] · [[Pudu Cabal Manifest]]

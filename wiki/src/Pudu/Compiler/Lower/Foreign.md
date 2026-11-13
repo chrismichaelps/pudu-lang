@@ -63,3 +63,17 @@ Resolved Grill Log: Admit checked optional handle slots with a declared destruct
 ## Mixed crossings (#854)
 
 Resolved Grill Log: allow existing input crossings and scalar, unit, text and record native results beside output slots.
+
+## Qualified calls (#873)
+
+`lowerQualifiedForeignCall` lowers `Qualifier.f(...)` when the qualifier
+names a module (an alias or the module path's last segment) that declares
+`f` foreign. It shares the crossing admission of `lowerForeignCall`, so
+qualified and bare calls carry the same crossings, claims, slots and
+refusals.
+
+`lowerQualifiedForeignCall :: (LowerState -> Located Expression -> Lowered) -> LowerState -> Span -> Text -> Text -> [Located Expression] -> Maybe Lowered`
+
+Resolved Grill Log: **Q:** Resolve the qualifier here? **A:** No; [[Compiler
+Lower State]] owns qualifier scopes, and a local named like the qualifier
+shadows it before this module is asked. _Rejected:_ a second qualifier table.

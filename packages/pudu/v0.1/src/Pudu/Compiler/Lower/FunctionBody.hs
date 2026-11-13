@@ -16,7 +16,7 @@ import Pudu.Compiler.Lower.State
 import Pudu.Compiler.Lower.Types (nativeIntegerKind, treeType)
 import Pudu.Core
 import Pudu.Frontend.Syntax
-  ( Block (..), Expression, Function (..), FunctionBody (..), Located (..) )
+  ( Block (..), Expression, Function (..), FunctionBody (..), Located (..), Parameter (..) )
 import Pudu.IntegerLiteral (IntegerKind (PlatformSigned))
 
 type LowerExpression = LowerState -> Located Expression -> (LowerState, Maybe (CoreExpression, CoreType))
@@ -27,8 +27,15 @@ type LowerBlock = LowerState -> Located Block -> (LowerState, CoreBlock, CoreTyp
     printed as `renderValue` writes it, the same split `pudu run` makes. -}
 lowerEntryBodyWith :: LowerExpression -> LowerBlock -> Located Function -> LowerState -> (LowerState, Maybe CoreFunction)
 lowerEntryBodyWith lowerExpression lowerBlock located state
+  -- `pudu run` calls the entry with nothing; the first parameter without a
+  -- default stops that call at the entry's name.
+  | Located _ first : _ <- functionParameters function, Nothing <- parameterDefault first =
+      let missing = "missing argument for parameter " <> locatedValue (parameterName first)
+          stop = CoreFailText "E7003" (Just "supply the argument or give the parameter a default")
+            (CoreExpression atName CoreTextType (CoreTextLiteral missing)) Nothing
+       in built state (CoreBlock [] (Just (CoreExpression atName CoreNeverType stop))) CoreUnitType
   | not (null (functionParameters function)) =
-      halt atName "parameters on the entry function" state
+      halt atName "default parameter values on the entry function" state
   | otherwise = case functionLevelRefusal function of
       Just (spanValue, construct) -> halt spanValue construct state
       -- An async entry is awaited as soon as it is called, so its body runs

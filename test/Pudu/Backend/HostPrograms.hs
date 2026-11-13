@@ -14,7 +14,21 @@ import qualified Data.Text as Text
     would miss wherever the library is not correctly rounded. -}
 hostLibraryPrograms :: [(String, Text)]
 hostLibraryPrograms =
-  [ ("native desktop validation and unsupported outcomes match the interpreter", program
+  [ ("native audio validation and unknown streams match the interpreter", program
+      [ "fn main() -> Int {"
+      , "  print(show(audioDevicePlay(0, 0, bytesOf([]), 0, 0, 0)))"
+      , "  print(show(audioStreamOpen(0, 0, 0, 0)))"
+      , "  print(show(audioStreamWrite(0, 0, 0, bytesOf([]), 0)))"
+      , "  print(show(audioStreamPause(0)))"
+      , "  print(show(audioStreamResume(0)))"
+      , "  print(show(audioStreamVolume(0, -1.0)))"
+      , "  print(show(audioStreamSnapshot(0)))"
+      , "  print(show(audioStreamClose(0, false, 0)))"
+      , "  print(show(audioStreamClose(0, false, 1)))"
+      , "  0"
+      , "}"
+      ])
+  , ("native desktop validation and unsupported outcomes match the interpreter", program
       [ "fn main() -> Int {"
       , "  print(show(desktopOpen(\"\", 0, 0, false)))"
       , "  print(show(desktopPresent(0, 1, 1, bytesOf([]))))"

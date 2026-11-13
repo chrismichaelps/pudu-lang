@@ -29,6 +29,7 @@ import Pudu.Compiler.Lower.Dynamic (isDynamic, widen, widenBlock, widenTo)
 import Pudu.Compiler.Lower.Generic (writtenCoreType, writtenTypeArguments)
 import Pudu.Compiler.Lower.For (lowerFor)
 import Pudu.Compiler.Lower.Intrinsic (annotatedPanic, lowerIntrinsicValue)
+import Pudu.Compiler.Lower.Foreign (lowerQualifiedForeignCall)
 import Pudu.Compiler.Lower.Primitive (lowerPrimitiveCall)
 import Pudu.Compiler.Lower.MethodValue (lowerMethodValue)
 import Pudu.Compiler.Lower.Stop (lowerPanic, lowerUntypedConvert)
@@ -364,6 +365,7 @@ lowerExpression state (Located spanValue expression) = case expression of
     | otherwise -> halt spanValue ("calls to '" <> name <> "'") state
   CallExpression (Located callee (MemberExpression receiver@(Located _ (NameExpression (owner :| []))) named@(Located _ member))) arguments
     | isModuleQualifier state owner, Just key <- resolveFunction state [owner, member] -> lowerFunctionCall lowerExpression state spanValue key callee arguments
+    | Just lowered <- lowerQualifiedForeignCall lowerExpression state spanValue owner member arguments -> lowered
     | qualifier receiver, Just lowered <- lowerVariant lowerExpression clean spanValue member arguments -> lowered
     | qualifier receiver, Just lowered <- lowerQualifiedMethod lowerExpression state spanValue callee owner member arguments -> lowered
     | Just lowered <- lowerMethodCall lowerExpression clean spanValue callee receiver member arguments -> lowered

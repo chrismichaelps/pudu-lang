@@ -6,6 +6,7 @@ tags: [moc, handoff]
 # Handoff Map
 
 - [[Foreign Callback Delivery]] — callbacks into Pudu across foreign calls (#875 decided, #876 next).
+- [[Native Audio Adapter Delivery]] — AudioToolbox playback and streams (#857).
 
 - [[Native Desktop Adapter Delivery]] — source packaging and desktop builtins (#856).
 

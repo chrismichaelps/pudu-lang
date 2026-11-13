@@ -156,3 +156,10 @@ Resolved Grill Log: Retain the written output positions in the foreign target.
 ## Owned output slots (#854)
 
 Resolved Grill Log: Retain each slot destructor beside its checked ABI position.
+
+## Qualified foreign targets (#873)
+
+`lookupQualifiedForeign` answers the foreign target a `Qualifier.name`
+reaches through the current module's qualifiers, unless a local shadows
+the qualifier. Resolved Grill Log: reuse `scopeQualifiers`, as
+`resolveFunction` does for qualified functions.

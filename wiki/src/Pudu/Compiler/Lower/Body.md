@@ -500,3 +500,10 @@ the function boundary are separate responsibilities, so the split removes
 dispatch growth from this module instead of adding another concern. The module
 stays under the 500-line target. Written type-argument facts moved to
 [[Compiler Lower Generic]] with `writtenTypeArguments`.
+
+## Qualified foreign calls (#873)
+
+A call `Qualifier.f(...)` whose qualifier is a module tries the module's
+foreign declarations right after its functions. Resolved Grill Log: the
+order matches the evaluator's qualified lookup; a local qualifier still
+reaches method and field lowering.
