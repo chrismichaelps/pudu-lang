@@ -103,6 +103,17 @@ testForeignHandleLeaks = testCountedPrograms linkerFlags fixture "" cases
     <> ["-ldl" | os == "linux"]
   fixture = Text.unlines
     [ "static int test_handles[3];"
+    , "void pudu_test_slots(int32_t *first, int32_t value, int32_t *untouched) {"
+    , "  if (*untouched != 0) abort();"
+    , "  *first = value + 1;"
+    , "}"
+    , "void *pudu_test_result_and_slot(void **slot) {"
+    , "  *slot = &test_handles[1]; return &test_handles[0];"
+    , "}"
+    , "void pudu_test_handle_slots(void **first, void **second, uint8_t duplicate) {"
+    , "  *first = &test_handles[0];"
+    , "  if (duplicate) *second = *first;"
+    , "}"
     , "void *pudu_test_handle(int32_t slot) { return &test_handles[slot]; }"
     , "const char *pudu_test_handle_render(void *handle) {"
     , "  static char rendered[32];"
@@ -117,6 +128,18 @@ testForeignHandleLeaks = testCountedPrograms linkerFlags fixture "" cases
     , "  if ((uintptr_t)handle != 1) abort();"
     , "  puts(\"release entry\");"
     , "  fflush(stdout);"
+    , "}"
+    , "const char *pudu_test_alias_slot(const char **written, const char *input) {"
+    , "  *written = input; return input;"
+    , "}"
+    , "void pudu_test_text_slots(const char **first, const char **second) {"
+    , "  if (*first != NULL || *second != NULL) abort();"
+    , "  *first = \"written\";"
+    , "}"
+    , "typedef struct { double value; uint8_t marker; } test_padded;"
+    , "typedef struct { test_padded inner; uint8_t tail; } test_padded_slot;"
+    , "void pudu_test_padded_slot(test_padded_slot *slot) {"
+    , "  slot->inner.value = 4.0; slot->tail = 7;"
     , "}"
     , "typedef struct { int32_t value; } test_value;"
     , "int32_t pudu_test_record_argument(test_value record) { return record.value; }"
@@ -187,6 +210,59 @@ testForeignHandleLeaks = testCountedPrograms linkerFlags fixture "" cases
         , "foreign \"c\" { fn read symbol \"pudu_test_record_argument\" (record: Value) -> Int32 }"
         , "fn main() -> Bool { unsafe(foreign) { read(PROBE) == 7i32 } }"
         ], "true\n", "", ExitSuccess)
+    , ("out slots interleave with operands and start zeroed", Text.unlines
+        [ "module Main"
+        , "foreign \"c\" { fn slots symbol \"pudu_test_slots\" (out first: Int32, value: Int32, out untouched: Int32) -> () }"
+        , "fn main() -> Bool {"
+        , "  let (_, first, untouched) = unsafe(foreign) { slots(7i32) }"
+        , "  first == 8i32 && untouched == 0i32"
+        , "}"
+        ], "true\n", "", ExitSuccess)
+    , ("record output slots preserve nested padding and drop temporary boxes", Text.unlines
+        [ "module Main"
+        , "type Inner = { value: Float64, marker: UInt8 }"
+        , "type Written = { inner: Inner, tail: UInt8 }"
+        , "foreign \"c\" { fn fill symbol \"pudu_test_padded_slot\" (out written: Written) -> () }"
+        , "fn main() -> Bool {"
+        , "  let (_, written) = unsafe(foreign) { fill() }"
+        , "  written.inner.value == 4.0 && written.inner.marker == 0u8 && written.tail == 7u8"
+        , "}"
+        ], "true\n", "", ExitSuccess)
+    , ("text slots copy Some and preserve None without leaks", Text.unlines
+        [ "module Main"
+        , "foreign \"c\" { fn fill symbol \"pudu_test_text_slots\" (out first: Str, out second: Str) -> () }"
+        , "fn main() -> Bool {"
+        , "  let (_, first, second) = unsafe(foreign) { fill() }"
+        , "  show(first) == \"Some(\\\"written\\\")\" && show(second) == \"None\""
+        , "}"
+        ], "true\n", "", ExitSuccess)
+    , ("owned slots claim a fresh address and preserve None", handleSlotProgram False,
+        "release 0\ntrue\n", "release 0\n", ExitSuccess)
+    , ("duplicate owned slots release once before refusing the batch", handleSlotProgram True,
+        "release 0\n", "release 0\nerror[E7021]: pudu_test_handle_slots handed back duplicate or already owned resources\n", ExitFailure 1)
+    , ("native result and slot copy aliased text before freeing scratch", Text.unlines
+        [ "module Main"
+        , "foreign \"c\" { fn fill symbol \"pudu_test_alias_slot\" (out written: Str, input: Str) -> Str }"
+        , "fn main() -> Bool {"
+        , "  let (answer, written) = unsafe(foreign) { fill(\"probe\") }"
+        , "  answer == \"probe\" && show(written) == \"Some(\\\"probe\\\")\""
+        , "}"
+        ], "true\n", "", ExitSuccess)
+    , ("direct result and owned slot settle together", Text.unlines
+        [ "module Main"
+        , "foreign \"c\" {"
+        , "  type Handle"
+        , "  fn fill symbol \"pudu_test_result_and_slot\" (out written: owned Handle by release) -> owned Handle by release"
+        , "  fn release symbol \"pudu_test_release_handle\" (handle: Handle) -> Int32"
+        , "}"
+        , "fn main() -> Bool {"
+        , "  let (answer, written) = unsafe(foreign) { fill() }"
+        , "  match written {"
+        , "    case Some(other) => unsafe(foreign) { release(answer) == 0i32 && release(other) == 1i32 }"
+        , "    case None => false"
+        , "  }"
+        , "}"
+        ], "release 0\nrelease 1\ntrue\n", "release 0\nrelease 1\n", ExitSuccess)
     , ("entry reporting uses the handle box after teardown", Text.unlines
         [ "module Main"
         , "foreign \"c\" {"
@@ -196,6 +272,21 @@ testForeignHandleLeaks = testCountedPrograms linkerFlags fixture "" cases
         , "}"
         , "fn main() -> Handle { unsafe(foreign) { acquire() } }"
         ], "release entry\n<Handle at 0x1\n", "", ExitSuccess)
+    ]
+  handleSlotProgram duplicate = Text.unlines
+    [ "module Main"
+    , "foreign \"c\" {"
+    , "  type Handle"
+    , "  fn fill symbol \"pudu_test_handle_slots\" (out first: owned Handle by release, out second: owned Handle by release, duplicate: Bool) -> ()"
+    , "  fn release symbol \"pudu_test_release_handle\" (handle: Handle) -> Int32"
+    , "}"
+    , "fn main() -> Bool {"
+    , "  let (_, first, second) = unsafe(foreign) { fill(" <> (if duplicate then "true" else "false") <> ") }"
+    , "  match first {"
+    , "    case Some(handle) => unsafe(foreign) { release(handle) == 0i32 && show(second) == \"None\" }"
+    , "    case None => false"
+    , "  }"
+    , "}"
     ]
   program body = Text.unlines
     ([ "module Main"

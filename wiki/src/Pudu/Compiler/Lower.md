@@ -268,3 +268,11 @@ Abstractions]].
 ## Foreign handles (#853)
 
 Module scopes collect canonical opaque handle types and the owning declaration’s release symbol and status type. See [[Compiler Lower Foreign]].
+
+## Scalar output slots (#854)
+
+Resolved Grill Log: Read the written output positions in declaration order when building the foreign target.
+
+## Owned output slots (#854)
+
+Resolved Grill Log: Resolve a slot destructor through its own foreign block.

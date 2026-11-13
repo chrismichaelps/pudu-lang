@@ -43,3 +43,23 @@ owned or counted transfer policy. Output slots remain refused (#854).
 ## Referenced by
 
 [[Compiler Lower Primitive]] · [[Native Foreign Call Sites]]
+
+## Scalar output slots (#854)
+
+Resolved Grill Log: Admit scalar slots from the checked tuple. Preserve the ABI result before the slots.
+
+## Record output slots (#854)
+
+Resolved Grill Log: admit record slot layouts with scalar leaves, preserving nested C ABI.
+
+## Text slots (#854)
+
+Resolved Grill Log: Admit optional text slots and record slots with text fields.
+
+## Owned output slots (#854)
+
+Resolved Grill Log: Admit checked optional handle slots with a declared destructor.
+
+## Mixed crossings (#854)
+
+Resolved Grill Log: allow existing input crossings and scalar, unit, text and record native results beside output slots.

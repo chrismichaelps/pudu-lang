@@ -218,3 +218,27 @@ and that the rendered address and entry box are both released.
 
 A folded record used exclusively as a foreign argument exercises layout
 discovery without a local of that type. The C fixture reads its only field.
+
+## Scalar foreign slots (#854)
+
+Resolved Grill Log: interleave a written slot before a supplied operand and
+an untouched slot after it. Count the result tuple and preserve its unit
+first member. The unwritten slot must contain zero.
+
+A scalar-only record slot checks zeroed fields, nested padding, and release of
+the intermediate decoded record.
+
+## Text slots (#854)
+
+Resolved Grill Log: Count allocation ownership for both null and non-null text slots.
+
+## Owned foreign slots (#854)
+
+Resolved Grill Log: count one fresh claim and one null slot, and verify
+that a duplicate address is released only once before E7021.
+
+The mixed text result uses a slot and a direct result that both alias the
+same input buffer. Both outputs must survive release of the argument copy.
+
+A direct owned result and a distinct handle slot share the batch and each
+release once.

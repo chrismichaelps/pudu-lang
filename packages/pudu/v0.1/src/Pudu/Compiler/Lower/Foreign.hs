@@ -25,14 +25,42 @@ lowerForeignCall lower state at name arguments = do
       | any stops cores -> (after, Just (stopped at cores, CoreNeverType))
       | otherwise -> case typeForSpan (contextTypes (lowerContext after)) at of
           Just result
-            | all (parameterCrossing types) parameters, resultCrossing types result || handleResult target result ->
+            | all (parameterCrossing types) parameters
+            , admittedResult target types result ->
                 let declared = CoreForeign (targetLibrary target) (targetVersion target) (targetSymbol target) parameters result
-                      (targetClaim target) (targetReleases target)
+                      (targetClaim target) (targetReleases target) (targetSlotPositions target) (targetSlotClaims target)
                  in (after, Just (CoreExpression at result (CoreForeignCall declared cores), result))
           _ -> halt at "a foreign call crossing output slots" after
       where
         parameters = map coreExpressionType cores
         types = contextTypes (lowerContext after)
+
+admittedResult :: ForeignTarget -> LowerTypes -> CoreType -> Bool
+admittedResult target types result
+  | null (targetSlotPositions target) = resultCrossing types result || handleResult target result
+  | CoreTupleType (native : slots) <- result =
+      (resultCrossing types native || ownedNative target native)
+        && length slots == length (targetSlotPositions target)
+        && and (zipWith (admitSlot types) slots (targetSlotClaims target))
+  | otherwise = False
+
+ownedNative :: ForeignTarget -> CoreType -> Bool
+ownedNative target kind = case (kind, targetClaim target) of
+  (CoreHandleType _ _, Just (CoreOwned _ _ _)) -> True
+  _ -> False
+
+admitSlot :: LowerTypes -> CoreType -> Maybe CoreClaim -> Bool
+admitSlot types kind claim = case kind of
+  CoreSumType "Option" [CoreHandleType _ _] -> claim /= Nothing
+  _ -> slotCrossing types kind
+
+slotCrossing :: LowerTypes -> CoreType -> Bool
+slotCrossing types kind
+  | kind == CoreSumType "Option" [CoreTextType] = True
+  | scalarCrossing kind = True
+  | Just fields <- recordFields types kind =
+      not (null fields) && length fields <= 32 && all (slotCrossing types . snd) fields
+  | otherwise = False
 
 {-| A parameter crosses as a number, Bool, text, a lent run of bytes or a
     record of those (bytes excepted). -}

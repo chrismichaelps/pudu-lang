@@ -5,6 +5,12 @@ tags: [changelog]
 
 # Changelog
 
+## 2026-11-13 — Native scalar foreign slots (#854)
+
+- [[Native Foreign Slot Delivery]] emits scalar and scalar-only record output slots as zeroed C
+  storage and returns the native result and slot values in declaration order.
+  Optional text and owned handle slots preserve absence and batch ownership.
+
 ## 2026-11-13 — Native foreign handles (#853)
 
 - [[Native Foreign Call Sites]] admits direct calls with opaque handles.

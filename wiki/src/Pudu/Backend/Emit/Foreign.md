@@ -50,3 +50,26 @@ crossing direction. Record codecs still emit both directions.
 ## Referenced by
 
 [[Backend Frame Program]] · [[Native Foreign Call Sites]]
+
+## Scalar output slots (#854)
+
+Resolved Grill Log: Initialize scalar slots to zero, pass their addresses, and construct the checked result tuple after dispatch.
+
+## Record output slots (#854)
+
+Resolved Grill Log: use the same record decoder as a by-value result, then release its temporary after the result tuple retains it.
+
+## Text slots (#854)
+
+Resolved Grill Log: A null text slot becomes None. Validate all returned text before allocating result boxes, then copy a non-null text slot into Some.
+
+## Owned output slots (#854)
+
+Resolved Grill Log: Resolve all slot destructors before dispatch. Claim returned handles as one batch before converting the tuple.
+
+## Mixed crossings (#854)
+
+Resolved Grill Log: validate arguments and handles before dispatch. Copy all returned text before releasing any argument scratch that it can alias.
+
+A direct owned handle result participates in the same batch as owned slots.
+Reserve space and resolve every destructor before dispatch.

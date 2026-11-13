@@ -148,3 +148,11 @@ parameters.
 ## Foreign handles (#853)
 
 ForeignTarget carries ownership mode and release-call status alongside library and symbol metadata.
+
+## Scalar output slots (#854)
+
+Resolved Grill Log: Retain the written output positions in the foreign target.
+
+## Owned output slots (#854)
+
+Resolved Grill Log: Retain each slot destructor beside its checked ABI position.

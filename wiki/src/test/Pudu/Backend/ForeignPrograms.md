@@ -41,3 +41,11 @@ dispatch is observable without freeing libc-owned storage.
 ## Referenced by
 
 [[Backend Native Tests]] · [[Native Foreign Call Sites]]
+
+## Scalar output slots (#854)
+
+Resolved Grill Log: Compare a real libc scalar output slot and its written value with the interpreter.
+
+A mutable loan passes a record field to a Pudu helper that writes an
+exponent read from a foreign output slot. The interpreter comparison
+checks that the ordinary loan writes the updated field back.
