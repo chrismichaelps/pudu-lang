@@ -18,6 +18,7 @@ The request to stop that arrives from outside the program: watching for it and r
 - Which signals? The terminate and interrupt requests, recorded alike.
 - A blocked call when the signal arrives? It restarts; only the flag changes.
 - A machine without these signals? Watching answers false and nothing is installed.
+- A part whose only reader sits behind a platform guard? Every part is optional, so selecting it for the desktop and audio adapters leaves no unused definition on platforms where those readers compile out.
 
 ## Referenced by
 
