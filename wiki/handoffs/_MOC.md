@@ -5,6 +5,8 @@ tags: [moc, handoff]
 
 # Handoff Map
 
+- [[Native Desktop Adapter Delivery]] — source packaging and desktop builtins (#856).
+
 - [[Nested Foreign Record Delivery]] — interpreter ABI layout for nested records (#863).
 
 - [[Native Foreign Slot Delivery]] — output slots and mutable loans (#854).

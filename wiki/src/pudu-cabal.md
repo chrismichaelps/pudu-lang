@@ -672,6 +672,14 @@ the codecs; the compiler modules stay compiler-owned. Generated programs link
 `-lm` and `-pthread` through [[Native Toolchain]]; the Haskell package gains no
 dependency.
 
+## Native host sources (#856)
+
+Register [[Native Toolchain Host Sources]], keep its embedded inputs in the source distribution, and use the existing temporary directory package for private staging.
+
+## Native desktop (#856)
+
+Resolved Grill Log: Register [[Native Host Desktop]] alongside the native host runtime.
+
 ## Foreign handles (#853)
 
 Register [[Backend Emit Foreign Handle]] and [[Core Text Operations]] using existing dependencies.

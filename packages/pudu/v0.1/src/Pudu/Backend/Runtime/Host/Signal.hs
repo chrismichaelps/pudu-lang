@@ -34,6 +34,6 @@ hostSignalParts =
       , "}"
       ])
   , ("host_signal_requested", ["host_signals"],
-      [ "static int pudu_host_signal_requested(void) { return pudu_host_stop_asked != 0; }"
+      [ "PUDU_OPTIONAL static int pudu_host_signal_requested(void) { return pudu_host_stop_asked != 0; }"
       ])
   ]
