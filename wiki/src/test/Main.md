@@ -223,3 +223,9 @@ Register [[Binary Codec Properties]] explicitly. Resolved Grill Log: native roun
 modulo n is k; with `PUDU_TEST_MATCH` both must hold. A missing or malformed
 selector runs every property. The property `a test shard selector places
 every label in exactly one shard` checks the partition.
+
+## Native mobile targets (#878)
+
+Register `backendTargetProperties` from [[Backend Native Target Tests]] in the
+backend outcome list. Resolved Grill Log: its environment-changing checks run
+sequentially like the toolchain checks; no new runner option.
