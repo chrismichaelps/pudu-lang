@@ -14,7 +14,22 @@ import qualified Data.Text as Text
     would miss wherever the library is not correctly rounded. -}
 hostLibraryPrograms :: [(String, Text)]
 hostLibraryPrograms =
-  [ ( "library float kernels with written operands print the library's own bits", program
+  [ ("native desktop validation and unsupported outcomes match the interpreter", program
+      [ "fn main() -> Int {"
+      , "  print(show(desktopOpen(\"\", 0, 0, false)))"
+      , "  print(show(desktopPresent(0, 1, 1, bytesOf([]))))"
+      , "  print(show(desktopPump(0, -1)))"
+      , "  print(show(desktopConfigure(0, 0, 0, 0, 0, 0, 0, 0, false)))"
+      , "  print(show(desktopClose(0)))"
+      , "  print(show(desktopInputs(0)))"
+      , "  print(show(desktopAccessibility(0, \"\")))"
+      , "  print(show(desktopAccessibilityReport(0)))"
+      , "  print(show(desktopMenu(0, \"\")))"
+      , "  print(show(desktopMenuReport(0)))"
+      , "  0"
+      , "}"
+      ])
+  , ( "library float kernels with written operands print the library's own bits", program
       [ "fn main() -> Int {"
       , "  print(display(floatCbrt(27.0)) + \" \" + display(floatCbrt(0.1)) + \" \" + display(floatSin(1.0e22)) + \" \" + display(floatCos(0.7)) + \" \" + display(floatTan(1.5)))"
       , "  print(display(floatAsin(0.3)) + \" \" + display(floatAcos(0.3)) + \" \" + display(floatAtan(0.3)) + \" \" + display(floatAtan2(0.3, -0.7)) + \" \" + display(floatExp(0.7)))"

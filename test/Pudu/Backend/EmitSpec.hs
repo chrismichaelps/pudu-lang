@@ -276,7 +276,6 @@ testReachableFunctions = do
 refusalCases :: [(String, Text, Text)]
 refusalCases =
   [ ("call to entry", statementProgram "main()", "main()\n")
-  , ("desktopOpen", bindingProgram "var opened = desktopOpen(\"\", 1, 1, false)", "desktopOpen")
   , ("a module without main", Text.unlines
       [ "module Refuse"
       , ""
@@ -286,7 +285,6 @@ refusalCases =
       ], "other")
       ]
  where
-  bindingProgram binding = statementProgram binding
   statementProgram statement =
     Text.unlines
       [ "module Refuse"

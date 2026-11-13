@@ -295,6 +295,9 @@ Buckets now has a native form; the refusal and reachability cases name `Task[Int
 
 Task parameters, `environment()`, async calls and `temporaryPath()` now lower,
 so their refusal cases are gone. The trimmed corpus keeps a call to the entry,
-`readLine`, `desktopOpen` and a module without `main`, and pins each refusal to
+`readLine` and a module without `main`, and pins each refusal to
 the construct's own span. Resolved Grill Log: remove only the expectations the
 new native forms satisfy; inspect every retained marker against the source.
+
+Desktop open now lowers through the host adapter. Its failures are checked as
+runtime outcomes in [[Backend Host Programs]].

@@ -28,6 +28,7 @@ import Data.Text.Encoding.Error (lenientDecode)
 import Pudu.Backend.Runtime.Host.Compress (compressLibraryMarker)
 import Pudu.Backend.Runtime.Host.Foreign (foreignLoaderMarker)
 import Pudu.Backend.Runtime.Host.Tls (tlsLibraryMarker)
+import Pudu.Backend.Toolchain.HostSources (withHostSourceArguments)
 import System.Directory (findExecutable, removeFile, renameFile)
 import System.Environment (lookupEnv)
 import System.Exit (ExitCode (..))
@@ -111,7 +112,8 @@ compileNative request = do
       Right () -> do
         seconds <- timeoutSeconds
         libraries <- sourceLibraries (toolchainSource request)
-        invoked <- tryIO (runCompiler executable sourcePath executablePath libraries seconds)
+        invoked <- tryIO $ withHostSourceArguments (toolchainSource request) $ \hostArguments ->
+          runCompiler executable sourcePath executablePath (libraries <> hostArguments) seconds
         pure $ case invoked of
           Left problem -> Left (ToolchainInvocation (problemText problem))
           Right result -> result

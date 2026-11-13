@@ -52,6 +52,7 @@ the process and filesystem implementations.
 
 ## Grill Log
 
+- **Q:** Fall back from the focused element with the omitted-operand conditional? **A:** No. _Rationale:_ native builds compile the adapter with warnings as errors, and that form is a compiler extension. _Accepted:_ an explicit nil test.
 - **Q:** Use a declarative platform framework, a GPU view kit, or a third-party media library for the first window? **A:** No. _Rationale:_ the
   requirement is a minimal language-owned native presenter and those would introduce a framework
   model or third-party toolkit above the OS boundary. _Accepted:_ AppKit window/event services plus

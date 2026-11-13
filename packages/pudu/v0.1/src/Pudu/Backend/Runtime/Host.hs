@@ -7,6 +7,7 @@ import Data.Text (Text)
 import Pudu.Backend.Runtime.Host.Child (hostChildParts)
 import Pudu.Backend.Runtime.Host.Compress (hostCompressParts)
 import Pudu.Backend.Runtime.Host.Concurrent (hostConcurrentParts)
+import Pudu.Backend.Runtime.Host.Desktop (hostDesktopParts)
 import Pudu.Backend.Runtime.Host.File (hostFileParts)
 import Pudu.Backend.Runtime.Host.Handle (hostHandleParts)
 import Pudu.Backend.Runtime.Host.Input (hostInputParts)
@@ -26,4 +27,4 @@ import Pudu.Backend.Runtime.Host.Tls (hostTlsParts)
 hostRuntimeParts :: [(Text, [Text], [Text])]
 hostRuntimeParts = hostStateParts <> hostMathParts <> hostProcessParts <> hostConcurrentParts
   <> hostInputParts <> hostFileParts <> hostHandleParts <> hostScopeParts <> hostLaneParts <> hostRasterParts <> hostSignalParts <> hostForeignParts <> hostNetParts <> hostTlsParts <> hostCompressParts
-  <> hostChildParts <> hostTimeParts <> hostTimeParseParts
+  <> hostChildParts <> hostTimeParts <> hostTimeParseParts <> hostDesktopParts

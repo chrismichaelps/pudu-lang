@@ -22,6 +22,7 @@ import Pudu.Backend.RangePrograms (rangeRefusalPrograms, rangeSuccessPrograms)
 import Pudu.Backend.BytesPrograms (bytesRefusalPrograms, bytesSuccessPrograms)
 import Pudu.Backend.WordMapPrograms (wordMapRefusalPrograms, wordMapSuccessPrograms)
 import Pudu.Backend.StorePrograms (storeModulePrograms, storeRefusalPrograms, storeSuccessPrograms)
+import Pudu.Backend.ForeignPrograms (foreignModulePrograms)
 
 geometry :: (FilePath, Text)
 geometry = ("Geometry.pudu", Text.unlines
@@ -65,7 +66,7 @@ layout = ("Layout.pudu", Text.unlines
 
 modulePrograms :: [(String, [(FilePath, Text)], Text, Text)]
 modulePrograms =
-  [(label, [], source, answer) | (label, source, answer) <- textViewFacadePrograms <> textViewSuccessPrograms <> wordMapSuccessPrograms <> storeSuccessPrograms <> storeModulePrograms <> constantPrograms <> referenceSuccessPrograms <> methodSuccessPrograms <> genericSuccessPrograms <> trySuccessPrograms <> forSuccessPrograms <> closureSuccessPrograms <> arraySuccessPrograms <> arrayPatternSuccessPrograms <> textCollectionSuccessPrograms <> convertSuccessPrograms <> keyedSuccessPrograms <> shapeSuccessPrograms <> rangeSuccessPrograms <> bytesSuccessPrograms] <> constantModulePrograms <> renderingCallableModulePrograms <> defaultParameterModulePrograms <> shapeModulePrograms <>
+  [(label, [], source, answer) | (label, source, answer) <- textViewFacadePrograms <> textViewSuccessPrograms <> wordMapSuccessPrograms <> storeSuccessPrograms <> storeModulePrograms <> constantPrograms <> referenceSuccessPrograms <> methodSuccessPrograms <> genericSuccessPrograms <> trySuccessPrograms <> forSuccessPrograms <> closureSuccessPrograms <> arraySuccessPrograms <> arrayPatternSuccessPrograms <> textCollectionSuccessPrograms <> convertSuccessPrograms <> keyedSuccessPrograms <> shapeSuccessPrograms <> rangeSuccessPrograms <> bytesSuccessPrograms] <> constantModulePrograms <> renderingCallableModulePrograms <> defaultParameterModulePrograms <> shapeModulePrograms <> foreignModulePrograms <>
   [ ( "implementations inherit the defaults of an imported trait, run in the trait's module"
     , [ ("Lib.pudu", Text.unlines
           [ "module Lib", ""
