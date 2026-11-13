@@ -46,3 +46,7 @@ exit zero. Direct ordered operators retain E7001 even though Bytes order by
 content inside tuples and ordered collection keys.
 
 Resolved Grill Log (#828): Check receiver-first traces for direct operations and the guarded Option builder for at.
+
+Resolved Grill Log (#887): a 60,000-byte folded constant and a constant of
+escape-sensitive bytes (quote, `?`, backslash, NUL before digits, the high
+half) compile as single byte literals and match the interpreter.

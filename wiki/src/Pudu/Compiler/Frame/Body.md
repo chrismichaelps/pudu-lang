@@ -163,3 +163,7 @@ A store result takes a fresh result slot. Resolved Grill Log: same rule as every
 ## Foreign handles (#853)
 
 Foreign calls retain the whole checked crossing and claim metadata through frame lowering, and handle results occupy owned slots.
+
+## Byte literals (#887)
+
+`CoreBytesLiteral` lowers to a single `FrameBytesLiteral` value.

@@ -33,6 +33,7 @@ module Pudu.Core
   , coreTypeName, displayName
   ) where
 
+import Data.ByteString (ByteString)
 import Data.Map.Strict (Map)
 import Data.Text (Text)
 import qualified Data.Text as Text
@@ -158,6 +159,8 @@ data CoreExpressionShape
   | CoreDecimalLiteral !Integer !Int
   | CoreBoolLiteral !Bool
   | CoreTextLiteral !Text
+  {-| Bytes known before the run, of type `CoreBytesType`. -}
+  | CoreBytesLiteral !ByteString
   | CoreCharLiteral !Char
   {-| The zero of the expression's type, standing for an argument the call
       left to its default. The callee replaces it before anything reads it. -}

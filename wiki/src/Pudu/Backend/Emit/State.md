@@ -74,3 +74,14 @@ Resolved Grill Log: use defined unsigned bit patterns, validate counts before sh
 
 `failureSite state span code message` records a site for any runtime refusal
 whose code and message are fixed at emission, such as E7004 for text counts.
+
+## Byte data (#887)
+
+`byteData` registers a byte literal's data and answers the index of its
+table, sharing one table for equal data; `renderByteData` writes the
+tables as `static const unsigned char pudu_byte_data_<n>[]` initializers
+beside the site table. Resolved Grill Log: **Q:** Emit the bytes as a C
+string literal? **A:** No. _Rationale:_ C guarantees string literals only up
+to 4095 bytes and the leak builds reject longer ones; an array initializer
+has no such limit. _Rejected:_ adjacent string pieces, which still form one
+overlong literal.
