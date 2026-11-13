@@ -9,7 +9,8 @@ tags: [changelog]
 
 - `pudu build --native --target` exposes arm64 device and simulator libraries.
   [[iOS Simulator Run]] compares C and CoreFoundation foreign calls with
-  interpreter output.
+  interpreter output. [[iOS Simulator CI]] requires that smoke on macOS
+  for compiler changes.
 
 ## 2026-11-13 — Apple SDK archive builder (#878)
 

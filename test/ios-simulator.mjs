@@ -14,20 +14,24 @@ function run(command, args, timeout = 120_000) {
   return result.stdout;
 }
 
-const compiler = process.argv[2];
-if (!compiler) throw new Error("Usage: node test/ios-simulator.mjs <pudu>");
+const [, , compiler, mode, ...extra] = process.argv;
+if (!compiler || (mode && mode !== "--require-simulator") || extra.length) {
+  throw new Error("Usage: node test/ios-simulator.mjs <pudu> [--require-simulator]");
+}
+function unavailable(reason) {
+  if (mode === "--require-simulator") throw new Error(reason);
+  console.log(`SKIP iOS simulator smoke: ${reason}`);
+}
 const xcrun = process.env.PUDU_XCRUN || "xcrun";
 const identifier = `org.pudu.MobileForeignSmoke.${randomUUID()}`;
 
 function smoke() {
   if (process.platform !== "darwin" || process.arch !== "arm64") {
-    console.log("SKIP iOS simulator smoke: Apple silicon macOS required");
-    return;
+    return unavailable("Apple silicon macOS required");
   }
   const probe = spawnSync(xcrun, ["--version"], { timeout: 10_000 });
   if (probe.error?.code === "ENOENT") {
-    console.log("SKIP iOS simulator smoke: xcrun unavailable");
-    return;
+    return unavailable("xcrun unavailable");
   }
 
   const { runtimes } = JSON.parse(run(xcrun, ["simctl", "list", "runtimes", "-j"]));
@@ -35,8 +39,7 @@ function smoke() {
     item.isAvailable && item.identifier.startsWith("com.apple.CoreSimulator.SimRuntime.iOS-")
   ).at(-1);
   if (!runtime) {
-    console.log("SKIP iOS simulator smoke: no installed iOS simulator runtime");
-    return;
+    return unavailable("no installed iOS simulator runtime");
   }
   const phone = runtime.supportedDeviceTypes.find((item) => item.productFamily === "iPhone");
   assert.ok(phone, `No iPhone device type for ${runtime.identifier}`);

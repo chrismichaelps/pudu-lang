@@ -14,10 +14,14 @@ aliases: [iOS Simulator Run]
 `ios-simulator-arm64`, links it into a minimal application and compares what
 the application prints on a booted simulator with `pudu run`.
 
+Use `--require-simulator` to make an unavailable simulator a failure.
+[[iOS Simulator CI]] uses this mode.
+
 ## Algorithm and invariants
 
-- Skips with a message outside Apple silicon macOS, `xcrun` is missing, or no
-  iPhone simulator runtime is installed.
+- Reports unavailable prerequisites outside Apple silicon macOS, when
+  `xcrun` is missing, or when no iOS simulator runtime is installed. The
+  default mode skips and required mode fails.
 - The program calls `abs` and `strlen` through `foreign "c"` and calls
   `CFAbsoluteTimeGetCurrent` through the CoreFoundation system framework.
   It checks that the returned timestamp is positive, so the host and simulator

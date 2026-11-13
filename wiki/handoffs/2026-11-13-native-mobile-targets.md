@@ -9,7 +9,8 @@ aliases: [Native Mobile Targets Delivery]
 
 Language Architect → Backend and Tooling Engineer. This partition owns the
 embedded C entry, Apple SDK builds, target diagnostics, and the simulator
-smoke. Android remains a later partition.
+smoke. Tooling Engineer → Forensic Guardian review covers the draft stack
+and [[iOS Simulator CI]]. Android remains a later partition.
 
 ## Resolved Grill Log
 
