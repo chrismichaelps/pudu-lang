@@ -255,6 +255,7 @@ library
     Pudu.Core.Bytes
     Pudu.Core.Closure
     Pudu.Core.Keyed
+    Pudu.Core.TextMethod
     Pudu.Core.Kernel
     Pudu.Core.Frame
     Pudu.Diagnostic

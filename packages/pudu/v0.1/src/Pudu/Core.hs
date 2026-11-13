@@ -40,6 +40,7 @@ import Data.Word (Word64)
 import Pudu.FloatLiteral (FloatWidth, floatWidthType)
 import Pudu.IntegerLiteral (IntegerKind, integerKindName)
 import Pudu.Source (Span)
+import Pudu.Core.TextMethod (CoreTextMethodName (..))
 import Pudu.Core.Bytes (CoreBytesMethodName (..))
 import Pudu.Core.Keyed (CoreKeyedMethodName (..))
 import Pudu.Core.Kernel (CoreKernelName (..))
@@ -244,48 +245,6 @@ data CoreExpressionShape
   | CoreIfValue !CoreExpression !CoreBlock !CoreExpression
   | CoreWhileValue !CoreLoopId !CoreExpression !CoreBlock
   | CoreLoopValue !CoreLoopId !CoreBlock
-  deriving stock (Eq, Show)
-
-{-| The Str methods native implements, named as the evaluator names them. -}
-data CoreTextMethodName
-  = TextLength
-  | TextIsEmpty
-  | TextContains
-  | TextStartsWith
-  | TextEndsWith
-  | TextIndexOf
-  | TextSpanOf
-  | TextSpanNotOf
-  | TextDrop
-  | TextTake
-  | TextSlice
-  | TextRepeat
-  | TextReverse
-  | TextEscapeHtml
-  | TextReplace
-  | TextTrim
-  | TextToUpper
-  | TextToLower
-  | TextCharAt
-  | TextSplit
-  | TextLines
-  | TextChars
-  {-| `toInt` and `toFloat` come apart into a test and a read, so lowering
-      can build the Option itself. -}
-  | TextParsesInt
-  | TextIntOf
-  | TextParsesFloat
-  | TextFloatOf
-  {-| Reads require the byte guards emitted by primitive lowering. -}
-  | TextByteSize
-  | TextByteIndexValid
-  | TextByteRead
-  | TextByteSliceValid
-  | TextByteSlice
-  | TextByteFind
-  | TextByteFindLast
-  | TextScalarRead
-  | TextScalarWidth
   deriving stock (Eq, Show)
 
 {-| The array methods native implements in the runtime, named as the

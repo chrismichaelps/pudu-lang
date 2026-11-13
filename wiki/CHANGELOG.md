@@ -5,6 +5,11 @@ tags: [changelog]
 
 # Changelog
 
+## 2026-11-13 — Foreign call prerequisites (#853)
+
+- [[Compiler Lower Layout]] collects record layouts used only by foreign call
+  arguments. [[Core Text Operations]] owns the text operation tags.
+
 ## 2026-11-12 — Native foreign records (#852)
 
 - [[Native Foreign Call Sites]]: records cross native foreign calls by value as C structs declared from the record, nested records nested, with text fields copied in and out and a missing text field named as the interpreter names it ([[Backend Emit Foreign ABI]]).
