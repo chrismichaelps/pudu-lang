@@ -68,6 +68,10 @@ and claim settlement. The program drains outstanding claims before ordinary entr
 controlled fatal diagnostics. Async entry output still uses in-frame reporting.
 Output slots remain with #854.
 
+[[Foreign Callbacks and Thread Affinity|ADR-0028]] changes the gate interval: the wrapper yields the
+gate for dispatch and settles claims after taking it back, with handle arguments under counted
+leases. The change lands with #876.
+
 ## Referenced by
 
-[[decisions/_MOC]] · [[Native Emission Coverage]] · [[Native Foreign Handles Delivery]]
+[[decisions/_MOC]] · [[Native Emission Coverage]] · [[Foreign Callbacks and Thread Affinity]] · [[Native Foreign Handles Delivery]]

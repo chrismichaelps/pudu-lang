@@ -223,6 +223,16 @@ drop p:                     Available → Moved
   admission reject a stale generation after address reuse. Dispatch through ownership settlement
   masks asynchronous cancellation. Destructor failures are retained as `W7027` or related information
   on an existing boundary error, and closing stores defer busy-resource cleanup to the final lease.
+- [[Foreign Callbacks and Thread Affinity|ADR-0028]] defines callbacks, accepted and not yet
+  implemented. A callback crosses as a function pointer plus a context key. `Name(f)` registers a
+  synchronous, non-failing function value as an owned token. `unregister()` refuses new invocations
+  and waits for in-flight ones, except inside its own invocation, where it returns at once. A
+  callback runs on the invoking thread; a foreign thread attaches for one invocation and inherits no
+  capability. A failure stops at the trampoline, the library receives the declared `else` value, and
+  the registration retains the failure. A nested failure fails the enclosing foreign call after
+  settlement; a detached failure is answered by `unregister()`. Invocations after unregister or
+  teardown run no Pudu code. Native foreign dispatch yields the run gate, with counted handle
+  leases.
 - C++ crosses only through an exported `extern "C"` surface. Mangled names, object layout, templates, and exceptions do not cross the boundary.
 - Undefined behavior is confined to violated unsafe contracts; safe Pudu code must not cause undefined behavior through any input.
 
@@ -266,6 +276,12 @@ These obligations require executable property/conformance tests now and mechaniz
 - [[CHANGELOG]] provides the chronological index; this page's `## Revision Ledger` records normative semantic revisions.
 
 ## Revision Ledger
+
+- **2.0.1-draft design · 2026-11-13:** Accepted the callback and thread-affinity design without
+  admitting it: callback types, registration tokens, invoking-thread execution, per-invocation
+  attach, trampoline failure boundaries, and native gate yield during dispatch. No accepted program
+  changes until #876 lands, which moves the version to 2.1.0-draft. See
+  [[Foreign Callbacks and Thread Affinity]].
 
 - **2.0.1-draft clarification · 2026-11-05:** Retain the existing callee-first call rule, including once-held runtime receivers before supplied arguments. Current engine repair remains pending; defaults, invocation depth and loan writeback retain their existing boundaries. See [[Callee First Call Evaluation]].
 
@@ -325,6 +341,6 @@ These obligations require executable property/conformance tests now and mechaniz
 
 ## Referenced by
 
-[[architecture/_MOC]] · [[architecture/OVERVIEW]] · [[Engineering Delivery]] · [[Performance Constitution]] · [[grammar/pudu]] · [[Pudu Type]] · [[Ownership]] · [[Core IR]] · [[Semantics]] · [[ADR-0001-language-purpose-and-v1-scope]] · [[ADR-0002-compiler-pipeline]] · [[ADR-0003-ownership-and-resource-safety]] · [[ADR-0005-performance-and-low-level-optimization]] · [[CHANGELOG]] · [[ADR-0025-if-without-else-unit-results]] · [[2026-08-21-frontend-foundation]]
+[[architecture/_MOC]] · [[architecture/OVERVIEW]] · [[Engineering Delivery]] · [[Performance Constitution]] · [[grammar/pudu]] · [[Pudu Type]] · [[Ownership]] · [[Core IR]] · [[Semantics]] · [[ADR-0001-language-purpose-and-v1-scope]] · [[ADR-0002-compiler-pipeline]] · [[ADR-0003-ownership-and-resource-safety]] · [[ADR-0005-performance-and-low-level-optimization]] · [[CHANGELOG]] · [[ADR-0025-if-without-else-unit-results]] · [[Foreign Callbacks and Thread Affinity]] · [[2026-08-21-frontend-foundation]]
 
 Qualified expression paths honor a nearer local value before imported exports or nominal/trait member selection. Explicit type-owner positions retain independent type lookup. [[Qualified Shadow Delivery]] repairs #471 without introducing block-local import syntax.

@@ -374,13 +374,21 @@ unsafe_type      = "unsafe", capabilities?, type ;
 
 ```ebnf
 foreign_decl     = "export"?, "foreign", string, ("version", string)?,
-                   "{", (foreign_type | foreign_fn)*, "}" ;
+                   "{", (foreign_type | foreign_callback | foreign_fn)*, "}" ;
 foreign_type     = "type", upper_identifier ;
+foreign_callback = "callback", upper_identifier,
+                   "(", callback_parameter, (",", callback_parameter)*, ")",
+                   ("->", type, ("else", literal)?)? ;
+callback_parameter = "context" | identifier, ":", "borrowed"?, type ;
 foreign_fn       = "fn", identifier, ("symbol", string)?,
                    "(", (foreign_parameter, (",", foreign_parameter)*)?, ")",
                    ("->", ("owned" | "borrowed" | "counted")?, type, ("by", identifier)?)? ;
-foreign_parameter = "out"?, identifier, ":", "owned"?, type, ("by", identifier)? ;
+foreign_parameter = "context", identifier
+                  | "out"?, identifier, ":", "owned"?, type, ("by", identifier)? ;
 ```
+
+`foreign_callback` and the `context` parameter are accepted by
+[[Foreign Callbacks and Thread Affinity|ADR-0028]] and stay refused until #876 implements them.
 
 - A `version` on a foreign block is asked of the loader, not verified. Each platform writes a version inside the library's file name — `libcairo.so.2`, `libcairo.2.dylib`, `libcairo-2.dll` — and those spellings are tried before the unversioned ones, since the unversioned name is usually a symlink shipped for building against rather than for running. Naming the version is what lets a binding load on a machine that has the library and not its headers. Nothing checks that what opened is the ABI named.
 - `foreign` is contextual: it starts a declaration and is an ordinary name everywhere else, as are `version`, `symbol`, `out`, `owned`, `borrowed`, `counted`, and `by`. Reserving common words to add one declaration form would cost every program that had used them, and a language that charges its own users a rename for a feature has chosen the feature over them.
@@ -396,6 +404,8 @@ foreign_parameter = "out"?, identifier, ":", "owned"?, type, ("by", identifier)?
 - `owned T by release` is admitted only when `T` is an opaque type declared by the block, and is written on a result or on an output slot. `owned` on a parameter the caller supplies is refused — the value was already theirs and passing it transfers nothing. A release may not declare slots. The release must be declared in that block with exactly one `T` parameter and a unit or fixed-width integer result. Implicit release discards the status. The runtime refuses a null handle result and refuses an already released or unowned handle before entering foreign code.
 - `counted T by release` is the third: the result is another reference to something the library counts, and owes its own release even when an existing reference is the same address. `cairo_reference`, `g_object_ref`, `CFRetain` and `AddRef` all return the pointer they were given, so a boundary keyed on the address would either refuse the second reference or drop one the program still holds. Each reference is a claim of its own, releases once, and is released at teardown if the program did not. A counted result naming no release is `E3075`. Nothing checks that a type is counted by every function that returns it; declaring one owned in one place and counted in another is a mis-declaration this side cannot see.
 - `borrowed T` is the other half of a handle result: the library keeps what it returned — a default font, the text of a last error, the surface a context draws to — and nothing on this side releases it. It is claimed by no store, leased by no call, released at no teardown, and refused before native code if it is passed to the release its handle type declared. Handing one to some other foreign function that happens to free it is an ordinary unsafe call, exactly as it is for an owned handle: a function is a release because a `by` clause named it, not because of what it does. A handle result must say which it is; saying neither is `E3066`, because an address does not say, and guessing leaks or frees something still in use. Naming a release for a borrowed result is `E3074`. Whether a borrowed value outlives what owns it is not checked, and is an assertion of the same kind as every other one inside `unsafe(foreign)`. A handle *slot* must still be owned.
+
+- `callback Name(...)` declares a callback type: a C function pointer whose context pointer sits where the bare word `context` stands, exactly once. Its parameters are fixed-width integers, floats, `Bool`, `Str`, records, or `borrowed` handles of a type the block declares. Its result is `()`, a fixed-width integer, a float, or `Bool`; a non-unit result names with `else literal` what the library receives when an invocation does not complete, because a guessed zero means "continue" to many libraries. `Name` is also the Pudu type of a registration: `Name(f)` registers a function of the matching ordinary, synchronous, non-failing type, and `unregister()` ends it. A foreign parameter of callback type crosses the function pointer, and `context name` crosses that parameter's context at its own position; both occupy native positions, and together they take one Pudu argument, the registration. `callback` and `context` are contextual words.
 
 - Every call needs the `foreign` capability. The signature is an assertion by whoever wrote it that nothing can check — a wrong width is not a diagnostic, it is a corrupted stack — and `unsafe` is where this language already says a thing is asserted rather than proved.
 - A foreign call is an effect, so a `comptime` body cannot make one: a constant is folded while the compiler runs, and what a program compiles to must not depend on what was installed on the machine that compiled it.
@@ -428,4 +438,4 @@ foreign_parameter = "out"?, identifier, ":", "owned"?, type, ("by", identifier)?
 
 ## Referenced by
 
-[[grammar/_MOC]] · [[Pudu Module]] · [[Pudu Type]] · [[Ownership]] · [[architecture/SEMANTICS]] · [[Standard Library]] · [[FMCF Workflow]] · [[Token]] · [[2026-08-21-frontend-foundation]]
+[[grammar/_MOC]] · [[Foreign Callbacks and Thread Affinity]] · [[Pudu Module]] · [[Pudu Type]] · [[Ownership]] · [[architecture/SEMANTICS]] · [[Standard Library]] · [[FMCF Workflow]] · [[Token]] · [[2026-08-21-frontend-foundation]]
