@@ -357,6 +357,8 @@ tags: [moc, handoff]
 - [[Native BigInt Delivery]] — BigInt values (#800).
 - [[Native Decimal Delivery]] — Decimal values (#802).
 - [[Binary Codec Delivery]] — issue #739 native wire codec partition.
+
+- [[Binary Facade Delivery]] — issue #739 public derives and builtin wiring.
 - [[Trait Provider Delivery]] — issue #742 canonical trait-provider scheme selection.
 
 - [[Canonical Runtime Owner Delivery]] — canonical record construction and dispatch, issue #761.

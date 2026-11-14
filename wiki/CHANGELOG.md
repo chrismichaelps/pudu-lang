@@ -9,6 +9,10 @@ tags: [changelog]
 
 A default parameter value is evaluated in the declaring function's environment. Before, a default naming its own module's constant failed when called from another module, or silently read the caller's constant of the same name. See [[Program Evaluation Tests]].
 
+## 2026-11-13 — Binary facade (#739)
+
+- Binary facade (#739) adds Encode/Decode derives, framed typed reads, explicit builtin wiring and CLI/distribution validation.
+
 ## 2026-11-13 — Markdown-only changes skip CI
 
 - [[Pudu Continuous Verification]] ignores pull requests and pushes made only of Markdown files.
