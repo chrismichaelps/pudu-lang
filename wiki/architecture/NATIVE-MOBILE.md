@@ -16,7 +16,7 @@ applications on named devices, never a slogan.
 
 This page records what the current toolchain can and cannot carry, the boundaries every later
 slice must respect, and the order of work. It extends [[Native Application UI]] and
-[[Native Emission Coverage]]; it does not replace them.
+[[Native Emission Coverage]]; it does not replace them. The iOS feature target is [[Pudu Native iOS UI]].
 
 ## Feasibility against the current toolchain
 
@@ -202,4 +202,4 @@ frame, peak resident memory, and binary size on named devices, in line with
 
 ## Referenced by
 
-[[architecture/_MOC]] · [[Native Application UI]] · [[Native Emission Coverage]] · [[Native Mobile Targets]]
+[[architecture/_MOC]] · [[Native Application UI]] · [[Native Emission Coverage]] · [[Native Mobile Targets]] · [[Pudu Native iOS UI]]
