@@ -1,0 +1,50 @@
+module Form
+
+import Std.Mobile.Host as Host
+import Std.Mobile.View as View
+
+/// Tags the controls report.
+const NAME_FIELD: UInt32 = 1u32
+const SUBSCRIBE: UInt32 = 2u32
+const CLEAR: UInt32 = 3u32
+
+type Model = { name: Str, subscribed: Bool }
+
+fn greeting(model: &Model) -> Str {
+  let who = if model.name.isEmpty() { "stranger" } else { model.name }
+  "Hello, {who}" + (if model.subscribed { " (subscribed)" } else { "" })
+}
+
+fn view(model: &Model) -> View.View {
+  View.Column([
+      View.Named("Greeting", View.Label(greeting(model))),
+      View.Named("Your name", View.Field("Name", model.name, NAME_FIELD)),
+      View.Row([View.Toggle("Subscribe", model.subscribed, SUBSCRIBE), View.Button("Clear", CLEAR)])
+    ])
+}
+
+fn update(model: &Model, event: &View.Event) -> Model {
+  match *event {
+    case View.Changed(tag, text) if tag == NAME_FIELD => Model {..*model, name: text }
+    case View.Toggled(tag, on) if tag == SUBSCRIBE => Model {..*model, subscribed: on }
+    case View.Tapped(tag) if tag == CLEAR => Model { name: "", subscribed: false }
+    case _ => *model
+  }
+}
+
+fn main() -> Int {
+  var model = Model{name: "", subscribed: false}
+  var shown = view(&model)
+  Host.apply(View.build(&shown))
+  while true {
+    let event = Host.wait()
+    if event == View.Stopped {
+      return 0
+    }
+    model = update(&model, &event)
+    let next = view(&model)
+    Host.apply(View.changes(&shown, &next))
+    shown = next
+  }
+  0
+}

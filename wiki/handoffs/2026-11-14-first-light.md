@@ -1,6 +1,6 @@
 ---
 type: handoff
-status: ACTIVE
+status: COMPLETE
 issue: 909
 aliases: [Native First Light Delivery]
 ---
@@ -19,7 +19,7 @@ A local run on an iPhone simulator showed the label and button (screenshot) and 
 
 ## Exact next action
 
-Add the counter scenario to test/ios-simulator.mjs, then record first-frame time on an idle machine.
+Continued in [[Native Controls Delivery]].
 
 ## Referenced by
 

@@ -107,20 +107,33 @@ wrapper, and a Kotlin wrapper with its managed-runtime bridge, and checks the pl
 implementation against that interface at build time. Conversions are generated, not looked up at
 run time.
 
-## View stream, version 0 (#909)
+## View stream (#909, #912)
 
 One stream carries each commit. It is a sequence of little-endian 32-bit words, applied in order by the host. Every instruction begins with its code word.
 
 | Code | Instruction | Words that follow |
 | --- | --- | --- |
-| 1 | CREATE | node, kind (1 label, 2 button, 3 column) |
+| 1 | CREATE | node, kind (1 label, 2 button, 3 column, 4 row, 5 field, 6 toggle) |
 | 2 | TEXT | node, byte length, then that many UTF-8 bytes |
-| 3 | APPEND | column node, child node |
+| 3 | APPEND | column or row node, child node |
 | 4 | ROOT | node shown as the screen's content |
 | 5 | TAG | node, the tag its events report |
 | 6 | RESET | none (forget every node) |
+| 7 | STATE | node, 0 or 1 (a toggle's state) |
+| 8 | HINT | node, byte length, UTF-8 bytes (a field's placeholder) |
+| 9 | NAME | node, byte length, UTF-8 bytes (accessible name) |
 
-Events return through `pudu_ui_wait` as one 64-bit value: the kind in the high 32 bits (1 tapped, with the button's tag in the low 32 bits; 2 stopped). Version 0 has no keys and no removal. Compiled views and keyed regions extend it under ADR-0031 (compiled native execution).
+Events return through `pudu_ui_wait` as one 64-bit value: the kind in the high 32 bits, with the tag in the low 32 bits.
+
+| Kind | Event | Payload |
+| --- | --- | --- |
+| 1 | tapped | tag |
+| 2 | stopped | none |
+| 3 | changed | tag; the text is read through `pudu_ui_event_text` |
+| 4 | switched on | tag |
+| 5 | switched off | tag |
+
+Version 0 has no keys and no removal. Compiled views and keyed regions extend it under ADR-0031 (compiled native execution). Version 1 only adds codes and kinds, so a version 0 stream means the same.
 
 ## FUI on native
 

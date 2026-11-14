@@ -408,3 +408,5 @@ tags: [moc, handoff]
 - [[Database Scope Retirement Delivery]] — joined private guard retirement after completed scopes (#480).
 
 - [[Native First Light Delivery]] — counter built only from Pudu on the iOS simulator (#909).
+
+- [[Native Controls Delivery]] — rows, text fields, toggles and accessible names (#912).

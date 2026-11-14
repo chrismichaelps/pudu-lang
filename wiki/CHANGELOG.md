@@ -5,6 +5,10 @@ tags: [changelog]
 
 # Changelog
 
+## 2026-11-14 — Pudu Native controls (#912)
+
+- Pudu Native rows, text fields, toggles and accessible names: view stream codes STATE, HINT and NAME, events with payloads, and the iOS host's kinds and instructions dispatched through constant tables ([[Native Controls Delivery]]).
+
 ## 2026-11-14 — Pudu Native first light (#909)
 
 - Pudu Native first light: Std.Mobile.View and Std.Mobile.Host, the iOS host adapter and a counter example built only from Pudu ([[Native First Light Delivery]]).

@@ -72,6 +72,8 @@ foreign-call regressions.
 
 The script also builds and runs the counter example, `examples/mobile/Counter.pudu`, with the iOS host adapter ([[iOS Host Adapter]]). It runs the program with `PUDU_UI_SELFTEST=3` and expects `PUDU_LABEL Count: 3` and status 0. It also records `PUDU_FIRST_FRAME_MS` and the linked executable size in bytes.
 
+The script also builds `examples/mobile/Form.pudu` ([[Native Form Example]]) and runs it twice with `PUDU_UI_TYPE=Ada`. With no taps, the label must read `Hello, Ada (subscribed)`. With one tap of every button (Clear), it must read `Hello, stranger`. Both runs must exit with status 0.
+
 ## Referenced by
 
-[[Native Mobile Targets]] · [[Native Mobile Targets Delivery]]
+[[Native Mobile Targets]] · [[Native Mobile Targets Delivery]] · [[Native Controls Delivery]]

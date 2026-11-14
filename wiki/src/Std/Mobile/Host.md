@@ -17,7 +17,7 @@ Platform module of the mobile stack. It holds the foreign declarations of the ho
 
 Exports:
 - `apply(stream: Bytes) -> ()`: hands one commit to `pudu_ui_apply(const void *stream, uint64_t length)` in a single foreign call.
-- `wait() -> View.Event`: calls `pudu_ui_wait()` and decodes its 64-bit result with `View.event`.
+- `wait() -> View.Event`: calls `pudu_ui_wait()` and decodes its 64-bit result. When `View.carriesText` says the event carries text, it fetches that text through `pudu_ui_event_text` and decodes with `View.event(raw, text)`; otherwise the text is empty.
 
 ## Invariants
 
@@ -29,13 +29,14 @@ Exports:
 ## Negative Logic
 
 - No platform callback enters Pudu. No exported function receives events.
+- The text of an event is read only when `carriesText` asks for it; a tap or toggle never costs a text call.
 - No validation of the stream here. A malformed stream is refused by the host adapter, which ends the process with a message naming the defect.
 - No node table and no control handles; those live in the host.
 - No timeout on `wait`. The loop ends on a `Stopped` event.
 
 ## Dependencies and consumers
 
-Depends on [[Std Mobile View]] for `Event` and `event`. Consumers: [[Native Counter Example]]. The host side is [[iOS Host Adapter]], which defines `pudu_ui_apply` and `pudu_ui_wait`.
+Depends on [[Std Mobile View]] for `Event`, `event` and `carriesText`. Consumers: [[Native Counter Example]] and [[Native Form Example]]. The host side is [[iOS Host Adapter]], which defines `pudu_ui_apply`, `pudu_ui_wait` and `pudu_ui_event_text`.
 
 ## Resolved Grill Log
 
@@ -44,4 +45,4 @@ Depends on [[Std Mobile View]] for `Event` and `event`. Consumers: [[Native Coun
 
 ## Referenced by
 
-[[src/Std/_MOC]] · [[Std Mobile View]] · [[iOS Host Adapter]] · [[Native First Light Delivery]]
+[[src/Std/_MOC]] · [[Std Mobile View]] · [[iOS Host Adapter]] · [[Native First Light Delivery]] · [[Native Controls Delivery]]

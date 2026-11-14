@@ -27,6 +27,7 @@ fn main() -> Int {
       case View.Stopped => {
         return 0
       }
+      case _ => {}
     }
   }
   0
