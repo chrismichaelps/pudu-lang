@@ -174,7 +174,7 @@ testCalls = do
   checked <- runCompile source
   pure $ case (hasErrors (compileDiagnostics checked), compileModule checked) of
     (False, Just parsed) -> case lowerModule "main" (nativeTypes (compileTypes checked) (compileSchemes checked)) parsed of
-      Lowered core -> case lowerFrames core >>= emitFrameBodies (emptyEmitState [source]) of
+      Lowered core -> case lowerFrames core >>= emitFrameBodies Set.empty (emptyEmitState [source]) of
         Right (emitted, _) ->
           let output = reverse (emitOutput emitted)
               bodyNames = filter (Text.isInfixOf "pudu_body_") output

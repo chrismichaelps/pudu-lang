@@ -171,7 +171,7 @@ FUI's native presenter targets [[Std Mobile View]]: a renderer-neutral FUI tree 
 
 | Phase | Exit evidence |
 | --- | --- |
-| 0 Toolchain | Library output and iOS device and simulator targets with a simulator smoke run (#878, done); the entry guard (#899, done); C-to-Pudu calls ([[Native Calls Delivery]]) |
+| 0 Toolchain | Library output and iOS device and simulator targets with a simulator smoke run (#878, done); the entry guard (#899, done); C-to-Pudu calls ([[Native Calls Delivery]]); direct calls (#904) and export crossings for text, records and Result (#906) |
 | 1 First light | A counter application built from Pudu alone runs on an iOS simulator, and later an Android emulator, with platform label and button, measured cold start and binary size recorded |
 | 2 Declarative UI | Reconciler, mutation batches, recycling list, navigation stack, accessibility labels reaching the platform tree, simulator reload |
 | 3 Tooling | Generated projects, patch set, fingerprinted development host, signed store artifacts from local builds |

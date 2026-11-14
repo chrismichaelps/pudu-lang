@@ -84,6 +84,14 @@ the box without dereferencing it.
 
 The module adds the needs of its foreign declarations (record constructors, releases, leaf conversions) to the aggregate and runtime selection, and passes its layouts to the wrappers.
 
+## Direct set (#904)
+
+The program asks [[Backend Frame Direct]] for the direct set, passes it to the bodies and
+the exports, and after the frame engine emits, for each direct function,
+`static pudu_cell pudu_direct_<n>(const pudu_cell *arguments)`: a frame and cell array on the
+C stack, where only owned slots of the cell array are zeroed; the frame header is set field by
+field in `pudu_stack_enter`, then `pudu_run_<n>`, `pudu_stack_leave`, then return the result. `argumentCount` now comes from [[Backend Frame Direct]].
+
 ## Referenced by
 
 [[src/_MOC]] · [[Native Frame Pressure Repair]]

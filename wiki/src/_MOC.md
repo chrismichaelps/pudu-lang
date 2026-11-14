@@ -13,6 +13,7 @@ tags: [moc, module]
 
 - [[Host Failure Vocabulary]] · [[CLI Memory Failure]] · [[CLI Memory Tests]] — shared catchable host-exhaustion presentation without swallowing cancellation (#499).
 - [[Backend Frame Program]] · [[Backend Frame Runtime]] · [[Native Frame Runtime Tests]] — production frame ownership, dispatcher and controlled failure checks (#499).
+- [[Backend Frame Direct]] — direct-call set for frames on the C stack (#904).
 
 - [[Backend Frame Values]] · [[Backend Frame Bodies]] · [[Native Frame Body Tests]] — constant-arity generated C step bodies and strict corpus compilation (#499).
 
@@ -142,6 +143,7 @@ tags: [moc, module]
 - [[Runtime Raster]] · [[Raster Fixture]] — native triangle rasterization for the software render device.
 - [[Lanes Gate]] · [[Lanes Fixture]] · [[Lanes Benchmark]] — lane conformance and measurement.
 - [[Lane Collection Gate]] · [[Lane Collection Fixture]] · [[Lane Parallel Benchmark]] — lane buffers share collections so threads overlap.
+- [[Native Call Benchmark]] · [[Native Call Floor]] — 20,000,000 scalar calls measured against the same loop in hand-written C.
 - [[Float Kernel Identity]] — names and shapes of the binary64 kernels, read by checker and runtime.
 - [[Eval Word Map]] — checked UInt64 map payload reductions for STD.
 - [[Runtime Buffer Kernels]] — unboxed contiguous byte buffer operations.
@@ -254,6 +256,8 @@ tags: [moc, module]
 - [[Backend Function Programs]]
 - [[Backend Toolchain Tests]]
 - [[Backend Export Tests]] — exported functions called from a C host (#899).
+- [[Native Direct Call Tests]] — direct-call selection, output, failure location and export entry (#904).
+- [[Backend Export Crossing]] — export shapes for text, records and `Result` (#906).
 - [[Diagnostic Evaluation]]
 
 - [[Compiler Lower Control]] — resolved scalar loop targets, transfers and divergence (#489).

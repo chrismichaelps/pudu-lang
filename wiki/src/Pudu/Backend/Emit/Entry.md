@@ -38,6 +38,7 @@ embeddedHeaderName :: FilePath
   which calls it, flushes the buffered outputs (`pudu_output_finish`, only when
   the buffered output part is selected) and `stdout`/`stderr`, and returns the
   status.
+- The header includes `<stddef.h>` and `<stdint.h>` before the export declarations, since crossings use `size_t` and fixed-width integers.
 - `embeddedHeader links` is the guarded C header declaring
   `pudu_program_run` inside `extern "C"` for C++ hosts, with a comment naming
   each system library the host must link. `embeddedHeaderName` is

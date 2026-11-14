@@ -45,7 +45,7 @@ function smoke() {
     return unavailable("xcrun unavailable");
   }
 
-  const { runtimes } = JSON.parse(run(xcrun, ["simctl", "list", "runtimes", "-j"]));
+  const { runtimes } = JSON.parse(run(xcrun, ["simctl", "list", "runtimes", "-j"], simulatorTimeout));
   const runtime = runtimes.filter((item) =>
     item.isAvailable && item.identifier.startsWith("com.apple.CoreSimulator.SimRuntime.iOS-")
   ).at(-1);

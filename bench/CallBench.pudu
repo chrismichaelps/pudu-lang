@@ -1,0 +1,26 @@
+module CallBench
+
+import Std.Time as Time
+
+fn mix(acc: Int64, value: Int64) -> Int64 {
+  (acc * 31 + value) % 1000003
+}
+
+fn run(count: Int64) -> Int64 {
+  var acc: Int64 = 0
+  var index: Int64 = 0
+  while index < count {
+    acc = mix(acc, index)
+    index = index + 1
+  }
+  acc
+}
+
+export fn main() -> Int {
+  let warmup = run(1000000)
+  let started = Time.elapsed()
+  let checksum = run(20000000)
+  let elapsed = Time.elapsed() - started
+  print("20000000 calls: {elapsed} ms; checksum: {checksum}; warmup: {warmup}")
+  0
+}

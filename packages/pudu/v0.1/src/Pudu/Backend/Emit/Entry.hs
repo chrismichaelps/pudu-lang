@@ -116,7 +116,8 @@ embeddedHeader links exports = Text.unlines $
        , "   with status 1. Only the first call in a process runs the program. */"
        , "int " <> embeddedEntryName <> "(int count, char **values);" ]
     <> concat
-       [ "#include <stdint.h>"
+       [ "#include <stddef.h>"
+         : "#include <stdint.h>"
          : "/* Exported functions. Call them after pudu_program_run has returned, on"
          : "   the thread that called it, and never from inside another export. */"
          : exports
