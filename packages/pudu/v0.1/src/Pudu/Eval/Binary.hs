@@ -223,40 +223,40 @@ decodeNodes bytes = do
         case tag of
           _ | tag == tagWhole -> do
                 (bits, after) <- word64At body
-                Right (VariantValue "Whole" [intOf (toInteger (fromIntegral bits :: Int64))], after)
+                Right (SumValue "Std.Binary.Node" "Whole" [intOf (toInteger (fromIntegral bits :: Int64))], after)
             | tag == tagReal -> do
                 (bits, after) <- word64At body
-                Right (VariantValue "Real" [FloatValue Float64Width (castWord64ToDouble bits)], after)
+                Right (SumValue "Std.Binary.Node" "Real" [FloatValue Float64Width (castWord64ToDouble bits)], after)
             | tag == tagFlag -> do
                 flag <- byteAt body
-                if flag > 1 then Left "a flag byte above 1" else Right (VariantValue "Flag" [BoolValue (flag == 1)], body + 1)
+                if flag > 1 then Left "a flag byte above 1" else Right (SumValue "Std.Binary.Node" "Flag" [BoolValue (flag == 1)], body + 1)
             | tag == tagText -> do
                 (content, after) <- textAt body
-                Right (VariantValue "Text" [StrValue content], after)
+                Right (SumValue "Std.Binary.Node" "Text" [StrValue content], after)
             | tag == tagRaw -> do
                 (raw, after) <- sliceAt body
-                Right (VariantValue "Raw" [BytesValue raw], after)
+                Right (SumValue "Std.Binary.Node" "Raw" [BytesValue raw], after)
             | tag == tagReals -> do
                 (count, afterCount) <- word32At body
                 let width = fromIntegral count * 8
                 need afterCount width
-                Right (VariantValue "Reals" [BytesValue (ByteString.take width (ByteString.drop afterCount bytes))], afterCount + width)
+                Right (SumValue "Std.Binary.Node" "Reals" [BytesValue (ByteString.take width (ByteString.drop afterCount bytes))], afterCount + width)
             | tag == tagItems -> do
                 (count, afterCount) <- word32At body
                 (members, after) <- itemsFrom table (depth + 1) (fromIntegral count) afterCount Seq.empty
-                Right (VariantValue "Items" [ArrayValue members], after)
-            | tag == tagAbsent -> Right (VariantValue "Absent" [], body)
+                Right (SumValue "Std.Binary.Node" "Items" [ArrayValue members], after)
+            | tag == tagAbsent -> Right (SumValue "Std.Binary.Node" "Absent" [], body)
             | tag == tagPresent -> do
                 (held, after) <- nodeAt table (depth + 1) body
-                Right (VariantValue "Present" [held], after)
+                Right (SumValue "Std.Binary.Node" "Present" [held], after)
             | tag == tagFields -> do
                 (entries, after) <- fieldsFrom table (depth + 1) body
-                Right (VariantValue "Record" [MapValue entries], after)
+                Right (SumValue "Std.Binary.Node" "Record" [MapValue entries], after)
             | tag == tagChoice -> do
                 (index, afterIndex) <- word32At body
                 name <- nameAt table index
                 (entries, after) <- fieldsFrom table (depth + 1) afterIndex
-                Right (VariantValue "Picked" [StrValue name, MapValue entries], after)
+                Right (SumValue "Std.Binary.Node" "Picked" [StrValue name, MapValue entries], after)
             | otherwise -> Left (Text.pack ("an unknown node tag " <> show tag))
 
   itemsFrom table depth remaining offset collected

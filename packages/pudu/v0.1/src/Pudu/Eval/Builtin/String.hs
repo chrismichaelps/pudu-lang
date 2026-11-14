@@ -5,6 +5,7 @@ module Pudu.Eval.Builtin.String
   ( callStringMethod
   , callStringMethodFast
   , drop1Text
+  , prepareStringMethodFast
   , dropText
   , indexOfText
   ) where
@@ -165,37 +166,42 @@ dropText !n !t
 {-| Fast direct dispatch for built-in text methods without intermediate
     StringMethodValue closure allocation or dynamic environment queries. -}
 callStringMethodFast :: Span -> Text -> Text -> [Value] -> Maybe (Evaluator Value)
-callStringMethodFast spanValue member text arguments = case member of
-  "drop" -> Just $ case arguments of
+callStringMethodFast spanValue member text arguments =
+  ($ arguments) <$> prepareStringMethodFast spanValue member text
+
+{-| The built-in text method selected for a receiver before its arguments run. -}
+prepareStringMethodFast :: Span -> Text -> Text -> Maybe ([Value] -> Evaluator Value)
+prepareStringMethodFast spanValue member text = case member of
+  "drop" -> Just $ \case
     [IntValue _ count]
       | count < 0 -> abortAt (Just spanValue) "E7004" "a drop count cannot be negative" Nothing
       | count == 1 -> pure (StrValue (drop1Text text))
       | otherwise -> pure (StrValue (dropText (textCount text count) text))
     _ -> abortAt (Just spanValue) "E7012" "wrong arguments for drop" Nothing
-  "isEmpty" -> Just $ case arguments of
+  "isEmpty" -> Just $ \case
     [] -> pure (boolValue (Text.null text))
     _ -> abortAt (Just spanValue) "E7012" "wrong arguments for isEmpty" Nothing
-  "length" -> Just $ case arguments of
+  "length" -> Just $ \case
     [] -> intOf . fromIntegral <$> liftCursor (scalarCount text)
     _ -> abortAt (Just spanValue) "E7012" "wrong arguments for length" Nothing
-  "charAt" -> Just $ case arguments of
+  "charAt" -> Just $ \case
     [IntValue _ index] -> charAtFast spanValue text index
     _ -> abortAt (Just spanValue) "E7012" "wrong arguments for charAt" Nothing
-  "take" -> Just $ case arguments of
+  "take" -> Just $ \case
     [IntValue _ count]
       | count < 0 -> abortAt (Just spanValue) "E7004" "a take count cannot be negative" Nothing
       | otherwise -> pure (StrValue (Text.take (textCount text count) text))
     _ -> abortAt (Just spanValue) "E7012" "wrong arguments for take" Nothing
-  "contains" -> Just $ case arguments of
+  "contains" -> Just $ \case
     [StrValue needle] -> pure (boolValue (Text.isInfixOf needle text))
     _ -> abortAt (Just spanValue) "E7012" "wrong arguments for contains" Nothing
-  "startsWith" -> Just $ case arguments of
+  "startsWith" -> Just $ \case
     [StrValue needle] -> pure (boolValue (Text.isPrefixOf needle text))
     _ -> abortAt (Just spanValue) "E7012" "wrong arguments for startsWith" Nothing
-  "endsWith" -> Just $ case arguments of
+  "endsWith" -> Just $ \case
     [StrValue needle] -> pure (boolValue (Text.isSuffixOf needle text))
     _ -> abortAt (Just spanValue) "E7012" "wrong arguments for endsWith" Nothing
-  "indexOf" -> Just $ case arguments of
+  "indexOf" -> Just $ \case
     [StrValue needle] -> pure (intOf (indexOfText text needle))
     _ -> abortAt (Just spanValue) "E7012" "wrong arguments for indexOf" Nothing
   "spanOf" -> direct StringSpanOf
@@ -217,7 +223,7 @@ callStringMethodFast spanValue member text arguments = case member of
   "toDecimal" -> direct StringToDecimal
   _ -> Nothing
  where
-  direct method = Just (callStringMethod spanValue method (StrValue text) arguments)
+  direct method = Just (callStringMethod spanValue method (StrValue text))
 
 charAtFast :: Span -> Text -> Integer -> Evaluator Value
 charAtFast spanValue text@(Text array offset byteLength) index

@@ -1,0 +1,93 @@
+---
+type: module
+path: "@root/src/Pudu/Compiler/Lower/Lambda.hs"
+fidelity: Active
+grammar: "[[grammar/haskell]]"
+aliases: [Compiler Lower Lambda]
+---
+# Compiler Lower Lambda
+
+## Purpose and interface
+
+Function values under [[Native Closures]].
+
+- `lowerLambda` lifts a lambda into a function of its own whose first
+  parameter is its closure, and answers a `CoreClosure` over it.
+- `lowerFunctionValue` answers a closure naming the actual module function
+  without a forwarding frame; its ABI has no environment parameter (#568).
+- `lowerValueCall` calls through any value of function type.
+
+## Lambdas
+
+A lambda captures the enclosing locals among the names it mentions
+(`reachableNames`, the evaluator's own over-approximation), copied when the
+lambda is evaluated. The lifted body declares each capture as a local read from
+its closure, so the body reads the copy and never the enclosing variable. Its
+key is the key of the body it was written in plus its offset, so a lambda
+inside a specialized body is lowered once per copy. A key seen before keeps its
+first lowering. The parameters and result come from the lambda's checked
+function type. A lambda returning print's Result refuses, and so does an async
+lambda.
+
+## Calls through values
+
+A callee runs before supplied arguments. The frame retains each value in
+evaluation order, including a callable selected from a field.
+
+## Resolved Grill Log
+
+- **Q:** Copy or reference captures? **A:** Copy, as the evaluator's snapshot
+  does; reassigning a captured `var` later changes nothing the lambda sees.
+  Assigning a captured name inside the lambda is rejected by checking (E3076).
+- **Q:** How does a named function become a value? **A:** A box names its
+  actual target and owns no captures. It renders as `<fn name>` and retains
+  its source identity; dispatch does not add a forwarding call (#568).
+- Function values compare equal when written in the same place (the lambda's
+  span, or the named function), as `Eq Closure` leaves captures out.
+
+## Dependencies and consumers
+
+[[Compiler Lower State]] · [[Compiler Lower Types]] · [[Compiler Lower Generic]] ·
+[[Compiler Lower Control]] · [[Core IR]]
+
+Resolved Grill Log (#828): value calls lower the target first, including
+function-valued members. The frame retains that target before reading any
+argument. A Never target emits no argument effects.
+
+## Referenced by
+
+[[Compiler Lower Body]] · [[Native Closures]]
+
+## Named callable dispatch (#568)
+
+Resolved Grill Log: Replace named forwarders with closures naming their actual admitted target. Enqueue the target and register empty captures/name/site with closureHasEnvironment false. Lambdas keep the lifted function and set the flag true.
+
+## First-class output builtins (#569)
+
+Resolved Grill Log: Set closureIsBuiltin false for named source targets and lifted lambdas; hidden-environment behavior remains explicit.
+
+## Defaults through values (#638)
+
+A value call whose checked callee type requires fewer parameters than it has
+passes suppliedArguments. Resolved Grill Log: the formed type already ends
+with the count, so the closure and frame arity agree.
+
+Closure info passes closureMethod = Nothing. (#644)
+
+## Mutable loans (#794)
+
+A call through a value whose checked function type has `&mut` inputs goes
+to [[Compiler Lower Loan]] with the callee as `Through`. A lambda with
+`&mut` parameters lowers its body with those parameters loaned, returns
+typed at its declared result, and closes its trailing result over the
+finals.
+
+## Tasks and async lambdas (#846)
+
+An async body lifts as a task: a function of nothing over the names it
+mentions, registered beside the body it was written in and shown under the
+task's name. An async lambda's body is the task it answers. Making a task
+inside an `async with scope` offers it to the innermost scope and the scope's
+joiner, which runs it and stashes a failure for the scope's function. Resolved
+Grill Log: one lifted function serves a written lambda and its async form; a
+task lends no `&mut` parameters and runs only when awaited or joined.

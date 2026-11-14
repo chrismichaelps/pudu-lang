@@ -63,6 +63,8 @@ typeArgumentName :: Located TypeSyntax -> Text
 
 ## Grill Log
 
+- **Q:** What does `Range.length(&span)` select when a module declares its own `Range`? **A:** `typeOwners` orders the two keys by the first argument: a record or variant tries the declared type (`@Range`) first, anything else the built-in first, and both stay candidates. A static member's first argument is not a receiver — `Int.decode(json)` is called with a JSON value — so excluding a key by it sent derived decoders to `@Int` and reported `undefined name Int` (#529).
+
 - **Q:** Why extract path resolution into `Pudu.Eval.Call.Path`?
   **A:** `Pudu.Eval.Call` was 563 lines. Moving AST path navigation, longest-prefix searching, and callee qualification into a dedicated submodule leaves `Call.hs` focused on function application, scope joining, and thread invocation (< 400 lines).
 - **Q:** Why restrict `qualifiedParts` to uppercase identifiers?
@@ -99,3 +101,27 @@ lookup tally rather than introducing a second name-resolution policy.
 ## Lexical member admission (#471)
 
 qualifiedCallee returns Nothing immediately for an ordinary local head, skipping both dotted export lookup and receiver-owner fallback. A TypeWitnessValue retains witnessed method selection and its fallback. qualifiedPath performs the same local/witness distinction for explicit type-applied call dispatch; retain uppercase filtering only after lexical admission. Resolved Grill Log: constants may qualify ordinary value members; both evaluators must honor the same local frame and restore the outer namespace on exit.
+
+## Canonical record owners (#761)
+
+Selected type witnesses retain their complete canonical nominal key. Generated canonical method qualifiers retain their full owner path; one-segment parameter witnesses still resolve lexically.
+
+Resolved Grill Log: identity comes from the checked declaration, never import order or a basename guess. Preserve observable labels, lexical shadowing, field effects and failure provenance; no runtime filesystem lookup. See [[Canonical Runtime Owner Delivery]].
+
+## Positional sum owners (#761)
+
+Generated canonical constructor references resolve through the installed canonical sum namespace. Preserve complete owner identity in the generated fallback as well; do not rebuild a checked constructor from only its final label.
+
+Resolved Grill Log: identity comes from the declaration or native ABI, not a global short-tag registry. Keep labels, evaluation order, effects and wire bytes stable. See [[Positional Sum Owner Delivery]].
+
+## Structural implementation witnesses (#735)
+
+Delegate witness construction, ordered explicit selection, complete Self and
+witnessed method selection to [[Eval Type Witness]], preserving re-exports.
+Marked witness members normalize canonical provider keys through lookupMethod;
+unmarked legacy paths keep lookupName. Resolved Grill Log: use checked head
+matching instead of zipping owner arguments, with no duplicate path/field logic.
+
+## Declared owners named like built-ins (#529)
+
+A declared type whose name a built-in value also answers to is keyed by [[Eval Declared Owner]]: `@Name` for its methods, records, sums, witnesses and qualified calls, the bare name for built-in values.

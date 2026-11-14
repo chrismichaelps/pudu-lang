@@ -151,3 +151,43 @@ existing origin-qualified admission. Result types are real nominal sums, never s
 Resolved Grill Log: do not evaluate or type an intermediate `Module.Sum` as a value when its
 complete path names a visible constructor. Do not search the global bare variant table or bypass
 lexical shadowing, missing members, exported-type visibility or named-field construction rules.
+
+## Constructor pattern ownership (#761)
+
+Pass the current DeclaredTypes to checkExhaustive so usefulness resolves constructor identity in the same scope as pattern typing.
+
+Resolved Grill Log: preserve declaration identity through checking, executable projection and usefulness; no per-match span lookup. See [[Constructor Pattern Owner Delivery]].
+
+## Named payload field ownership (#761)
+
+Consume qualified constructor admission directly; ordinary namespace member lookup owns exported named-payload refusal. Remove the global member-basename precheck, preserving generated constructor admission.
+
+Resolved Grill Log: field names and payload types come from one resolved owner/variant key. No runtime representation or field evaluation order changes in this partition. See [[Named Payload Field Delivery]].
+
+## Checked constructor values (#766)
+
+Pass the generated constructor reference span to canonicalVariant so generated full-owner references retain their checked constructor identity.
+
+Resolved Grill Log: checked canonical identity must survive lowering even when a type and a bare variant share text. No runtime owner inference or source syntax change. See [[Variant Namespace Delivery]].
+
+## Parameter-qualified methods (#782, #735)
+
+parameterStaticCallee selects a simple lexical rigid type parameter's member
+through methodScheme before namespace fallback, unless a nearer ordinary value
+head shadows it. Retain provider facts at the inner member span; instantiate
+written or inferred method parameters at the whole application span through
+instantiateWith. Missing members report positioned E3005; ambiguity and complete
+bound/result/argument checking use the shared scheme path. Expression selection
+uses the same helper for called, retained and explicitly applied members.
+Resolved Grill Log: T.member must not fall through as ErrorType or flatten to
+an unbound T.member value key. Self specializes from the bound's receiver;
+method-local parameters remain real parameters and publish ordinary selections.
+
+## Written type-argument facts (#846)
+
+`TypeApplication` records the formed written arguments as a tuple at
+`typeArgumentsKey spanValue` after checking them, before the target is
+selected. Lowering reads that fact so a callee can bind a parameter its own
+signature never mentions. Resolved Grill Log: the written list is a fact of
+the application, not of the selected scheme; an empty key keeps it out of
+source-position lookups and leaves every existing selection unchanged.

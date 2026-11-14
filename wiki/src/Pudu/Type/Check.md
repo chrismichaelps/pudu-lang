@@ -110,7 +110,7 @@ checkModuleWith :: ImportTypes -> Set Span -> Module -> ([(Span, Type)], [Diagno
   source is checked once against its metadata sequence or ordinary Array element type. A
   request carries no members and needs no checking.
 - `checkModuleWith` installs [[Type Interface]] imports as outer declared/name/method state, then collects and checks only the current module. Imported bodies and coherence are never re-run. `checkModule` delegates with empty imports.
-- Imported concrete method keys remain marked while local signatures are installed, so an imported-plus-local provider collision reports `E3013` instead of silently granting precedence to the local declaration.
+- Imported concrete method keys remain marked while local signatures are installed, so distinct imported/local providers mark the shared slot ambiguous for call-site E3013 instead of granting local precedence.
 - Every construct's rule is the one [[grammar/pudu]] states: an `if` condition is `Bool`, its reachable branches unify, `match` arms unify with each other and their patterns with the scrutinee, `while` and `for` are unit while `loop` takes the type its `break` statements carry, and `return` is checked against the enclosing function's declared result.
 - A user-defined value is iterable only when `begin` and `advance` form one coherent protocol:
   both receivers unify with the iterated type, `begin`'s result is `advance`'s input and next state,
@@ -167,8 +167,10 @@ DEPTH 0.85 (DEEP). One entry point hides signature collection, scope constructio
 
 ## Grill Log
 
+- **Q:** Under which names is a variant bound? **A:** Its bare name and its type's canonical key (`M.Shape.Circle`), which is what a qualified `Shape.Circle` is looked up by. Without the canonical key a qualified variant fell through to checking `Shape` as a value, was typed as an error, and was accepted wherever any type was expected (#536).
 - **Q:** Why mark the body's result before checking it? **A:** [[Check Propagation]] decides
   whether a value-form failure arm is propagation from that position.
+- **Q:** Which traits may a local implementation inherit defaults from? **A:** Its own module's and every imported one, and trait members are declared before the module's other signatures, because an inherited default takes its member's declared scheme (#530).
 
 - **Q:** Discard the expression types derive-definition checking computes? **A:** Not for tooling.
   _Rationale:_ a template's metadata (`field : Field[T, F]`) is typed only there; its generated
@@ -239,3 +241,50 @@ Resolved Grill Log: preserve the checker-selected provider through ordinary exec
 including retained methods and receiver aliases. Do not infer a provider from declaration order,
 receiver spelling, or runtime type arguments. Existing evaluation order and lending stay intact.
 See [[Bound Provider Delivery]].
+
+## Canonical record owners (#761)
+
+Publish concrete-owner facts as their own checked product beside provider facts and diagnostics.
+
+Resolved Grill Log: separate semantic roles even at identical generated spans. No runtime span lookup, provider overwrite or shortened owner. See [[Canonical Runtime Owner Delivery]].
+
+## Named sum publication (#761)
+
+The detailed owner product carries OwnerSelection; provider products carry ProviderSelection.
+
+Resolved Grill Log: carry checked owner and field order through syntax; preserve authored effects, diagnostics and cache identity. See [[Named Sum Publication]].
+
+## Constructor binding identity (#774)
+
+Declare local sum variants through bindConstructorName with the formed owner and original label. Other signatures remain ordinary bindings.
+
+Resolved Grill Log: identity belongs to the selected binding; schemes remain type-only and ordinary shadows clear constructor roles. See [[Constructor Binding Delivery]].
+
+## Imported providers (#734)
+
+After formed declarations are available, initialize per-consumer provider spellings from local trait declarations and importedNames, excluding hidden graph aliases. All checker entry points share this unit setup; no extra body pass or type inference is added.
+
+Resolved Grill Log: binding identity and admitted source spellings determine provider selection and help; registration order and schemes do not. See [[Imported Provider Delivery]].
+
+## Complete provider selections (#735)
+
+ProviderSelection carries canonical trait identity, complete formed trait arguments
+and an optional complete receiver type. Existing identity-only recording keeps an
+empty argument list and no receiver. Unambiguous rigid-bound selections retain
+the selected bound arguments and actual receiver, including F[A] rather than F.
+Implementation trait facts retain formed arguments under implementation rigids.
+Final checker publication resolves inference in both arguments and receiver.
+Detailed products and ModuleTypes preserve this immutable typed evidence.
+
+Compiler Literals continues existing member-symbol projection in this partition.
+At the structural Impl trait boundary it projects the complete formed trait,
+including expanded aliases and nested canonical owners; tooling syntax stays
+authored. Runtime transport/consumption follows separately and #735 remains open.
+
+Resolved Grill Log: trait identity cannot recover a parameter present only in
+Choice[B] for Box[A]. Do not fabricate a nominal identity to hold receiver types,
+inspect container elements, overwrite target-owner facts, or drop applied receiver
+arguments while following a rigid constructor's bounds. Assert actual checker
+products, canonical implementation trait projection, authored syntax and spans;
+retain full existing dispatch, diagnostic, derive and cache gates.
+See [[Bound Receiver Evidence Delivery]].

@@ -54,6 +54,8 @@ unwrapTry :: Span -> Value -> Evaluator Value
 
 ## Grill Log
 
+- **Q:** A program declares `type Array` or `type Range`; whose methods does a built-in array or range reach? **A:** Only the built-in type's. `builtinValueOwners` lists every name `nominalNameOf` gives a built-in value, and `declaredOwner` keys a declared type of that name as `@Name`. Record and variant receivers read their methods under `declaredOwner`, built-in values under the bare name, so neither reaches the other's (#529). _Rejected:_ trying the declared key and then the built-in one for every receiver, which lets `[1, 2, 3].length()` run a declared `Array`'s `length`.
+
 - **Q:** Narrow a scalar index before checking the upper bound? **A:** No; test
   the mathematical index against the lifted host length first. _Rationale:_ an
   out-of-host-range integer can wrap into a small or negative Int. Only a proven
@@ -82,3 +84,28 @@ without a nominal name. A field or declared method of that name is always found 
 
 Resolved Grill Log: fall back only after the declared lookup, so a type's own rendering is never
 shadowed; `Char` and `Bytes` keep their own entries, the latter answering `Option`.
+
+## Positional sum owners (#761)
+
+Read positional sum methods through their carried canonical owner. Keep short labels in user-facing messages and variant-member access. Owned sums never fall back to another type whose basename matches a tag.
+
+Resolved Grill Log: identity comes from the declaration or native ABI, not a global short-tag registry. Keep labels, evaluation order, effects and wire bytes stable. See [[Positional Sum Owner Delivery]].
+
+## Named sum value foundation (#761)
+
+Read a named sum field first, then methods only under its carried canonical owner. Universal toText remains the ordinary fallback. Do not consult the short-tag owner registry.
+
+Resolved Grill Log: represent named sums independently of ordinary records and positional sums. Preserve existing field order and public labels. Source publication follows in its own tested partition. See [[Named Sum Value Delivery]].
+
+## Retained witnessed members (#735, #782)
+
+readMember recognizes TypeWitnessValue before ordinary data access and delegates
+to Eval Type Witness.witnessMethod. That helper owns canonical provider lookup
+and structural target matching and is shared by Path qualification. A miss is
+located E7001. Both evaluators use this access boundary; no duplicate selection
+logic or receiver re-evaluation. Resolved Grill Log: retained T.method must carry
+the same checked head and method-local witnesses as an immediate qualified call.
+
+## Declared owners named like built-ins (#529)
+
+A declared type whose name a built-in value also answers to is keyed by [[Eval Declared Owner]]: `@Name` for its methods, records, sums, witnesses and qualified calls, the bare name for built-in values.

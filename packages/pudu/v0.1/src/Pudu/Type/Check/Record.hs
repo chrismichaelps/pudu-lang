@@ -7,7 +7,6 @@
     checker already use for their own recursion. -}
 module Pudu.Type.Check.Record
   ( CheckValue (..)
-  , namedVariantShape
   , recordType
   , recordUpdateType
   ) where
@@ -27,12 +26,13 @@ import Pudu.Type.Env
   ( Checker
   , DeclaredTypes (..)
   , lookupField
-  , lookupVariant
-  , lookupVariantFields
   , lookupTypeParams
+  , recordExpression
+  , recordOwner
+  , recordVariantOwner
   , report
   )
-import Pudu.Type.Check.Pattern (freshFor, substituteRigid)
+import Pudu.Type.Check.Pattern (freshFor, namedVariantShapeFor, substituteRigid, variantForPath)
 import Pudu.Type.Check.Rule
   ( nameType
   )
@@ -69,12 +69,12 @@ recordType checking declared rigid spanValue path fields = do
   declaredFieldTypes <- lookupField identity
   case declaredFieldTypes of
     Nothing -> do
-      variantShape <- namedVariantShape name
+      variantShape <- namedVariantShapeFor declared (Just path)
       case variantShape of
         Just (owner, ownerParams, expected) ->
           variantRecordType checking declared rigid spanValue name owner ownerParams expected fields
         Nothing -> do
-          positional <- lookupVariant name
+          positional <- variantForPath declared path name
           report "E3007" spanValue (name <> " is not a record type")
             ( Just $ case positional of
                 Just (_, _, payload) | not (null payload) ->
@@ -86,6 +86,7 @@ recordType checking declared rigid spanValue path fields = do
           mapM_ (checkFieldInit checking declared rigid) fields
           pure ErrorType
     Just declaredFields' -> do
+      recordOwner spanValue identity
       {-| A generic record is instantiated at every construction, exactly as a
           generic sum already was. `Boxed{value: 7}` is a `Boxed[Int]`, and the
           field is checked against `Int` rather than against the declaration's
@@ -106,12 +107,6 @@ recordType checking declared rigid spanValue path fields = do
             (name <> " construction is missing " <> Text.intercalate ", " missing)
             (Just "supply every declared field")
       pure (NominalType identity (map snd replacements))
-
-{-| A variant's payload paired with the names it declared for it.
-
-    A variant is present here only when its declaration gave names. The names
-    sit over the same positional payload a bare `Circle(Int)` would carry, so
-    nothing downstream needs to know which spelling was used. -}
 
 {-| A record that is another record with some fields different.
 
@@ -142,6 +137,7 @@ recordUpdateType checking declared rigid spanValue path source fields = do
       mapM_ (checkFieldInit checking declared rigid) fields
       pure ErrorType
     Just declaredFields' -> do
+      recordOwner spanValue identity
       parameters <- maybe [] id <$> lookupTypeParams identity
       replacements <- freshFor parameters
       let updated = NominalType identity (map snd replacements)
@@ -153,20 +149,6 @@ recordUpdateType checking declared rigid spanValue path source fields = do
       _ <- unify (locatedSpan source) updated actual
       mapM_ (checkField checking declared rigid expected) fields
       pure updated
-
-{-| A variant's payload paired with the names it declared for it.
-
-    A variant is present here only when its declaration gave names. The names
-    sit over the same positional payload a bare `Circle(Int)` would carry, so
-    nothing downstream needs to know which spelling was used. -}
-namedVariantShape :: Text -> Checker (Maybe (NominalId, [Text], [(Text, Type)]))
-namedVariantShape name = do
-  fieldNames <- lookupVariantFields name
-  variant <- lookupVariant name
-  pure $ case (fieldNames, variant) of
-    (Just names, Just (owner, ownerParams, payload))
-      | length names == length payload -> Just (owner, ownerParams, zip names payload)
-    _ -> Nothing
 
 {-| Construct a variant by naming its payload elements.
 
@@ -191,6 +173,7 @@ variantRecordType
   -> [Located FieldInit]
   -> Checker Type
 variantRecordType checking declared rigid spanValue name owner ownerParams declaredShape fields = do
+  recordVariantOwner spanValue owner name (map fst declaredShape)
   replacements <- freshFor ownerParams
   let expected =
         [ (fieldName, substituteRigid replacements fieldType)
@@ -238,4 +221,9 @@ checkField checking declared rigid expected located@(Located fieldSpan field) = 
 checkFieldInit :: CheckValue -> DeclaredTypes -> [(Text, Int)] -> Located FieldInit -> Checker Type
 checkFieldInit checking declared rigid (Located fieldSpan field) = case fieldInitValue field of
   Just value -> valueOf checking declared rigid value
-  Nothing -> nameType fieldSpan (locatedValue (fieldInitName field) NonEmpty.:| [])
+  -- The shorthand is a name read at the field's span; publish its type there
+  -- as an explicit `step: step` value publishes its own.
+  Nothing -> do
+    named <- nameType fieldSpan (locatedValue (fieldInitName field) NonEmpty.:| [])
+    recordExpression fieldSpan named
+    pure named

@@ -28,3 +28,5 @@ and 23 ms per shaded 640×480 frame.
 ## Referenced by
 
 [[src/Ark/_MOC]] · [[Ark Render Gate]]
+
+Verification roadmap: [[Ark Water Validation]] and [[Ark Water Gate]] distinguish numerical recurrence evidence from later fluid-physics and optical capabilities.

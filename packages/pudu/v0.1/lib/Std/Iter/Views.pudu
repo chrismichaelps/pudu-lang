@@ -1,0 +1,143 @@
+module Std.Iter.Views
+
+import Std.Iter {Sequence}
+
+/// Disjoint bounded groups; the last may be shorter than width.
+export type Chunked[Q] = { source: Q, width: Int }
+
+/// Widths below one clamp to one. Construction does not walk source.
+export fn chunk[Q](source: Q, width: Int) -> Chunked[Q] {
+  Chunked{source: source, width: if width < 1 { 1 } else { width }}
+}
+
+impl [S, T, Q: Sequence[S, T]] Sequence[Option[S], Array[T]] for Chunked[Q] {
+  fn begin(self: &Self) -> Option[S] { Some(self.source.begin()) }
+  fn advance(self: &Self, state: Option[S]) -> Option[(Option[S], Array[T])] {
+    var current = state ?
+    var held: Array[T] = []
+    while held.length() < self.width {
+      match self.source.advance(current) {
+        case Some((next, item)) => { current = next
+          held = held.push(item) }
+        case None => { return if held.isEmpty() { None } else { Some((None, held)) } }
+      }
+    }
+    Some((Some(current), held))
+  }
+}
+
+/// Complete overlapping windows, retaining only the current window.
+export type Sliding[Q] = { source: Q, width: Int }
+
+/// Widths below one clamp to one; a shorter source yields no window.
+export fn slide[Q](source: Q, width: Int) -> Sliding[Q] {
+  Sliding{source: source, width: if width < 1 { 1 } else { width }}
+}
+
+impl [S, T, Q: Sequence[S, T]] Sequence[(S, Array[T], Bool), Array[T]] for Sliding[Q] {
+  fn begin(self: &Self) -> (S, Array[T], Bool) { (self.source.begin(), [], false) }
+  fn advance(self: &Self, state: (S, Array[T], Bool)) -> Option[((S, Array[T], Bool), Array[T])] {
+    var current = state[0]
+    var held = if state[2] { state[1].slice(1, state[1].length()) } else { state[1] }
+    while held.length() < self.width {
+      let (next, item) = self.source.advance(current) ?
+      current = next
+      held = held.push(item)
+    }
+    Some(((current, held, true), held))
+  }
+}
+
+/// Adjacent runs, carrying the first item of the following group once.
+export type Grouped[Q, T] = { source: Q, adjacent: fn(T, T) -> Bool }
+
+/// Group while adjacent original items satisfy the predicate.
+export fn chunkBy[Q, T](source: Q, adjacent: fn(T, T) -> Bool) -> Grouped[Q, T] {
+  Grouped{source: source, adjacent: adjacent}
+}
+
+impl [S, T, Q: Sequence[S, T]] Sequence[(Option[S], Option[T]), Array[T]] for Grouped[Q, T] {
+  fn begin(self: &Self) -> (Option[S], Option[T]) { (Some(self.source.begin()), None) }
+  fn advance(self: &Self, state: (Option[S], Option[T])) -> Option[((Option[S], Option[T]), Array[T])] {
+    var current = state[0] ?
+    var first = state[1]
+    if first == None {
+      let (next, item) = self.source.advance(current) ?
+      current = next
+      first = Some(item)
+    }
+    var previous = first ?
+    var held = [previous]
+    let adjacent = self.adjacent
+    loop {
+      match self.source.advance(current) {
+        case None => { return Some(((None, None), held)) }
+        case Some((next, item)) => {
+          if !adjacent(previous, item) { return Some(((Some(next), Some(item)), held)) }
+          held = held.push(item)
+          previous = item
+          current = next
+        }
+      }
+    }
+  }
+}
+
+/// A nested walk without collecting its outer or inner sequences.
+export type Joined[Q] = { source: Q }
+
+/// Flatten nested Sequences, skipping empty inner values.
+export fn join[Q](source: Q) -> Joined[Q] { Joined{source: source} }
+
+impl [S, R, T, I: Sequence[R, T], Q: Sequence[S, I]] Sequence[(S, Option[(I, R)]), T] for Joined[Q] {
+  fn begin(self: &Self) -> (S, Option[(I, R)]) { (self.source.begin(), None) }
+  fn advance(self: &Self, state: (S, Option[(I, R)])) -> Option[((S, Option[(I, R)]), T)] {
+    var outer = state[0]
+    var inner = state[1]
+    loop {
+      if let Some((source, at)) = inner {
+        if let Some((next, item)) = source.advance(at) { return Some(((outer, Some((source, next))), item)) }
+      }
+      let (next, source) = self.source.advance(outer) ?
+      outer = next
+      inner = Some((source, source.begin()))
+    }
+  }
+}
+
+/// A finite sequence buffered on its first requested item.
+export type Reversed[Q] = { source: Q }
+
+/// Reverse a finite source. Construction is lazy; the first step uses O(n) storage.
+export fn reverse[Q](source: Q) -> Reversed[Q] { Reversed{source: source} }
+
+impl [S, T, Q: Sequence[S, T]] Sequence[(Option[Array[T]], Int), T] for Reversed[Q] {
+  fn begin(self: &Self) -> (Option[Array[T]], Int) { (None, 0) }
+  fn advance(self: &Self, state: (Option[Array[T]], Int)) -> Option[((Option[Array[T]], Int), T)] {
+    let held = match state[0] {
+      case Some(values) => values
+      case None => self.source.toArray()
+    }
+    let at = if state[0] == None { held.length() - 1 } else { state[1] }
+    if at < 0 { None } else { Some(((Some(held), at - 1), held[at])) }
+  }
+}
+
+/// Left-major pairs, restarting the right sequence for each left item.
+export type Product[L, R] = { left: L, right: R }
+
+/// A lazy Cartesian product. Either empty side makes the product empty.
+export fn cartesian[L, R](left: L, right: R) -> Product[L, R] { Product{left: left, right: right} }
+
+impl [S, U, A, B, L: Sequence[S, A], R: Sequence[U, B]] Sequence[(S, Option[(A, U)]), (A, B)] for Product[L, R] {
+  fn begin(self: &Self) -> (S, Option[(A, U)]) { (self.left.begin(), None) }
+  fn advance(self: &Self, state: (S, Option[(A, U)])) -> Option[((S, Option[(A, U)]), (A, B))] {
+    var outer = state[0]
+    if let Some((left, at)) = state[1] {
+      if let Some((next, right)) = self.right.advance(at) { return Some(((outer, Some((left, next))), (left, right))) }
+    }
+    let (nextLeft, left) = self.left.advance(outer) ?
+    let (nextRight, right) = self.right.advance(self.right.begin()) ?
+    Some(((nextLeft, Some((left, nextRight))), (left, right)))
+  }
+}

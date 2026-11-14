@@ -48,11 +48,9 @@ receiverOwners  :: Value -> Evaluator [Text]
   payload its matched variant carries only when nothing does.** [[Type Check Iteration]]
   decides the binder's type in exactly this order, and taking the payload first
   made the two disagree — a binder the checker called `Int` held a variant.
-- **A value names the variant it is, not the type that declares it.** Asking
-  whether a `Cons` is a sequence therefore asks what `Cons` belongs to, which is
-  why `receiverOwners` answers with the variant's own name and then its owner.
-  The variant comes first, because a record type is its own owner and must not
-  be looked past.
+- Positional sums carry canonical owner identity independently of their short label.
+  `receiverOwners` uses that owner directly. Ownerless host values and legacy
+  named payloads retain the short-tag registry fallback until their separate audit.
 - **The compiler must terminate; a program need not.** A loop is bounded only
   while effects are refused, which is exactly when a `const` is being folded.
   A fixed step count applied to both is not a safety property — an input of any
@@ -78,6 +76,12 @@ answers with.
   it again here would put one rule in two phases.
 
 ## Grill Log
+
+- **Q:** May a short tag override a carried owner?
+  **A:** No. Canonical identity selects the implementation directly; registry lookup
+  remains only for legacy values without carried ownership. Same-named variants
+  from different modules must never dispatch through one another's implementation.
+- **Q:** Which owners does a receiver look under? **A:** A record or variant looks under `declaredOwner` of its own name and, for a variant, of its sum's; a built-in value under `nominalNameOf`. A variant named like a built-in type (`Str(Str)`) therefore never reaches the built-in `Str`'s implementations (#529).
 
 - **Q:** Why does `receiverOwners` answer with two names rather than one?
   **A:** Because a value has lost its type. _Rationale:_ the checker holds
@@ -106,3 +110,19 @@ fallback; retain ordinary execution as the oracle for non-native library wrapper
 evaluation and derive residualization. Runtime loop policy and thresholds remain
 unchanged. Resolved Grill Log: one phase-neutral declaration prevents nested
 compiler expansion and ordinary constant evaluation from drifting apart.
+
+## Positional sum owners (#761)
+
+Owned positional sums dispatch only through the owner carried by the value. Legacy ownerless host values and named payloads retain their existing lookup path until the remaining #761 audit; a tag cannot override a carried owner.
+
+Resolved Grill Log: identity comes from the declaration or native ABI, not a global short-tag registry. Keep labels, evaluation order, effects and wire bytes stable. See [[Positional Sum Owner Delivery]].
+
+## Named sum value foundation (#761)
+
+Use carried named-sum ownership for direct and generic sequence method selection. Without a Sequence implementation, iterate stored field values under the same sum payload fallback as positional sums; declaration-order storage remains the construction caller’s invariant.
+
+Resolved Grill Log: represent named sums independently of ordinary records and positional sums. Preserve existing field order and public labels. Source publication follows in its own tested partition. See [[Named Sum Value Delivery]].
+
+## Declared owners named like built-ins (#529)
+
+A declared type whose name a built-in value also answers to is keyed by [[Eval Declared Owner]]: `@Name` for its methods, records, sums, witnesses and qualified calls, the bare name for built-in values.

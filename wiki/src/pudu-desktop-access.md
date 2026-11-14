@@ -48,6 +48,7 @@ measured and then copied like the input queue.
 
 ## Grill Log
 
+- **Q:** Default a missing role or label with the omitted-operand conditional? **A:** No. _Rationale:_ native builds compile the adapter with warnings as errors, and that form is a compiler extension. _Accepted:_ an explicit nil check.
 - **Q:** Add the elements to `pudu_desktop.m`? **A:** No. _Rationale:_ the adapter is already near
   the file-size limit and accessibility is a separate responsibility. _Accepted:_ a second
   translation unit that reaches the window's view through [[Pudu Desktop Host]].

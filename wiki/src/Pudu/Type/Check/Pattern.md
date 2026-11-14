@@ -92,6 +92,14 @@ DEPTH 0.50 (MEDIUM). It isolates the closed rules from the walk that applies the
 
 [[src/Pudu/Type/_MOC]] · [[Type Check]]
 
+## Alternative binding agreement
+
+Resolved Grill Log: bind the first branch in the enclosing pattern scope and
+check later branches in temporary type frames. Unify every branch's bound
+types with the first branch's types at the later binding location. A name
+shared by alternatives therefore has one type; no last-branch overwrite may
+make an incompatible earlier payload appear well typed. Name-set agreement
+is already enforced by [[Resolve Bindings]], using [[Syntax Pattern Bindings]].
 ## Shared qualified constructor admission (#717)
 
 `qualifiedVariantType` resolves authored dotted expression paths through existing
@@ -111,3 +119,45 @@ canonical owners cannot become reachable merely because another loaded module de
 A missing constructor is diagnosed only after both written and canonical owner-member bindings
 miss. Resolved Grill Log: static methods on sums, including derived parse/decode functions, remain
 owned by ordinary method selection and cannot be mistaken for misspelled constructors.
+
+## Constructor pattern ownership (#761)
+
+Record resolved positional constructor owners at pattern spans through recordOwner. Export the existing variantForPath resolver for canonical usefulness keys; retain all visibility, payload and arity diagnostics.
+
+Resolved Grill Log: preserve declaration identity through checking, executable projection and usefulness; no per-match span lookup. See [[Constructor Pattern Owner Delivery]].
+
+## Record pattern identity (#761)
+
+Named sum-field patterns record a test fact. Declared ordinary record patterns instantiate and unify their canonical owner against the dereferenced subject before checking fields, record the owner fact and mark dynamic narrowing as a test. Anonymous patterns preserve existing field inference.
+
+Resolved Grill Log: canonical identity and subject-sensitive refutability must agree before evaluation. See [[Record Pattern Owner Delivery]].
+
+## Named payload field ownership (#761)
+
+Resolve variantForPath before looking up its field names. Export namedVariantShapeFor for construction reuse. Qualified constructor value admission checks named-payload refusal against the resolved constructor type, once.
+
+Resolved Grill Log: field names and payload types come from one resolved owner/variant key. No runtime representation or field evaluation order changes in this partition. See [[Named Payload Field Delivery]].
+
+## Named sum publication (#761)
+
+Record named pattern owner/label facts after canonical shape resolution. Refuse positional named-payload patterns with E3034 even when empty; retain field types and source provenance.
+
+Resolved Grill Log: carry checked owner and field order through syntax; preserve authored effects, diagnostics and cache identity. See [[Named Sum Publication]].
+
+## Checked constructor values (#766)
+
+canonicalVariant now accepts the complete use Span and records VariantOwner for a resolved canonical constructor. qualifiedVariantType and generated canonical constructor references share this fact; named-value refusal and lexical admission remain unchanged.
+
+Resolved Grill Log: checked canonical identity must survive lowering even when a type and a bare variant share text. No runtime owner inference or source syntax change. See [[Variant Namespace Delivery]].
+
+## Built-in scope diagnostics (#759)
+
+When a built-in sum's qualified expression names neither a variant nor an
+installed member, yield to ordinary namespace admission in Type Check Rule.
+It retains the established missing-module guidance for Result.unwrapOr and
+Option functions. User-declared sum misses retain their variant-name hint,
+and actual constructor patterns retain their existing diagnostics.
+
+Resolved Grill Log: adding built-ins to declaredNames must not let constructor
+admission preempt module/import guidance. Preserve exact E3034 code/help from
+the carrier regression rather than weakening its expected output. See [[Builtin Scope Delivery]].

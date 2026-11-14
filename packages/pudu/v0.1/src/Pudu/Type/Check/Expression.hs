@@ -22,9 +22,8 @@ import Pudu.Frontend.Syntax.Tree
   , Parameter
   )
 import Data.List.NonEmpty (NonEmpty (..))
-import qualified Data.List.NonEmpty as NonEmpty
 import Pudu.Frontend.Syntax.Name (ModuleName (..))
-import Pudu.Source (Span, spanOrigin)
+import Pudu.Source (Span, spanOrigin, typeArgumentsKey)
 import Pudu.Type.Env
   ( Checker
   , DeclaredTypes (..)
@@ -57,6 +56,7 @@ import Pudu.Type.Check.Safety
 import Pudu.Type.Check.Call
   ( CheckExpression (..)
   , selectedStaticCallee
+  , parameterStaticCallee
   , checkCalleeLending
   , throughBorrow
   , traitQualifiedCall
@@ -80,7 +80,6 @@ import Pudu.Type.Check.Rule
   , memberType
   , nameType
   , selfName
-  , namedVariantAsValue
   , qualifiedMemberType
   , localValueHead
   , tryType
@@ -142,15 +141,13 @@ inferExpression around declared rigid spanValue expression = case expression of
   LiteralExpression literal -> literalType spanValue literal
   NameExpression names@(_ :| (_ : _))
     | Just _ <- spanOrigin spanValue -> do
-        generated <- canonicalVariant declared (ModuleName names)
+        generated <- canonicalVariant declared spanValue (ModuleName names)
         maybe (nameType spanValue names) pure generated
   NameExpression names@(_ :| (_ : _)) -> do
     variant <- qualifiedVariantType declared spanValue expression
     found <- case variant of
       Nothing -> nameType spanValue names
-      Just value -> do
-        refused <- namedVariantAsValue spanValue (NonEmpty.last names)
-        pure (maybe value id refused)
+      Just value -> pure value
     checkExclusiveCapture spanValue names found
     pure found
   NameExpression names -> do
@@ -186,17 +183,11 @@ inferExpression around declared rigid spanValue expression = case expression of
             checkLending calleeType receiver arguments argumentTypes
             callType spanValue calleeType argumentTypes
   MemberExpression target member -> do
-    {-| A variant that named its payload is refused here rather than inside
-        qualified member typing, which a call reaches twice — once for the
-        callee and once for the expression — and would report twice. -}
-    refused <- namedVariantAsValue spanValue (locatedValue member)
-    qualified <- case refused of
+    parameter <- parameterStaticCallee rigid spanValue (Located spanValue expression) []
+    variant <- maybe (qualifiedVariantType declared spanValue expression) (pure . Just) parameter
+    qualified <- case variant of
       Just value -> pure (Just value)
-      Nothing -> do
-        variant <- qualifiedVariantType declared spanValue expression
-        case variant of
-          Just value -> pure (Just value)
-          Nothing -> qualifiedMemberType declared spanValue (locatedValue target) (locatedValue member)
+      Nothing -> qualifiedMemberType declared spanValue (locatedValue target) (locatedValue member)
     case qualified of
       Just value -> pure value
       Nothing -> do
@@ -341,7 +332,7 @@ inferExpression around declared rigid spanValue expression = case expression of
     result <- checkArms (checkExpression around declared rigid) declared rigid spanValue subjectType arms
     finalizeIntegerLiteralsBetween subjectCheckpoint subjectEnd
     resolvedSubject <- zonk subjectType
-    checkExhaustive spanValue resolvedSubject arms
+    checkExhaustive declared spanValue resolvedSubject arms
     declaredResult <- enclosingReturnType selfName >>= zonk
     reportRedundantPropagation spanValue arms declaredResult
     zonk result
@@ -403,12 +394,16 @@ inferExpression around declared rigid spanValue expression = case expression of
   TypeApplication target arguments -> do
     checkTypeArguments arguments
     formed <- mapM (formType declared rigid) arguments
+    -- The written arguments are a fact of their own, so a copy of the callee
+    -- can bind a parameter its signature never mentions.
+    recordExpression (typeArgumentsKey spanValue) (TupleTypeValue formed)
     {-| A qualified name carries type arguments as readily as a bare one:
         `Num.small[UInt16](...)` is the same call as `small[UInt16](...)` from
         inside the module, and a caller should not have to import a name
         unqualified to pin its type. A qualifier is written as a member access,
         so the chain is flattened back into the dotted name it stands for. -}
-    selected <- selectedStaticCallee declared rigid spanValue (locatedValue target) formed
+    parameter <- parameterStaticCallee rigid spanValue target formed
+    selected <- maybe (selectedStaticCallee declared rigid spanValue (locatedValue target) formed) (pure . Just) parameter
     local <- localValueHead (locatedValue target)
     let written = case dottedName (locatedValue target) of
           Just name | not local || not (Text.isInfixOf "." name) -> Just name

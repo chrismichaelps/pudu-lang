@@ -5,6 +5,10 @@ module Pudu.Type
   , Type (..)
   , TypeInfo (..)
   , checkTypes
+  , DeclaredShapes
+  , declaredRecords
+  , declaredSums
+  , declaredShapesWith
   , checkTypesDetailed
   , checkTypesWith
   , deriveDefinitionTypes
@@ -27,8 +31,11 @@ import Pudu.Frontend.Syntax.Located (Located (..))
 import Pudu.Source (Span, sameSpanSource, spanEnd, spanOrigin, spanStart, unOffset)
 import Pudu.Type.Check (checkModule)
 import qualified Pudu.Type.Check as Check
+import Pudu.Type.Env (DeclaredTypes (..), evalChecker)
+import Pudu.Type.Check.Import (collectImportedDeclared)
+import Pudu.Type.Formation (collectDeclared, collectDeclaredFrom)
 import Pudu.Type.Interface.Graph (ImportTypes)
-import Pudu.Type.Value (NominalId, Scheme (..), Type (..), renderType)
+import Pudu.Type.Value (ProviderSelection, OwnerSelection, NominalId, Scheme (..), Type (..), renderType)
 import Data.Text (Text)
 
 {-| @Type.Info — the type each checked expression was given, keyed by the span
@@ -70,19 +77,25 @@ data ModuleTypes = ModuleTypes
   {-| The types chosen for parameters bounded by a trait with a static
       member, by the span of the reference that chose them. -}
   , moduleSelections :: !(Map.Map Span [Type])
-  , moduleProviders :: !(Map.Map Span NominalId)
+  {-| The module's records and sums formed with its imports in scope, which
+      native lowering lays them out from. Built only when asked for. -}
+  , moduleShapes :: ~DeclaredShapes
+  , moduleOwners :: !(Map.Map Span OwnerSelection)
+  , moduleProviders :: !(Map.Map Span ProviderSelection)
   }
   deriving stock (Eq, Show)
 
 checkTypesDetailed :: ImportTypes -> Set Span -> Module -> (ModuleTypes, [Diagnostic])
 checkTypesDetailed imported writable moduleValue =
-  let (entries, schemes, kinds, methods, selections, providers, diagnostics) = Check.checkModuleDetailed imported writable moduleValue
+  let (entries, schemes, kinds, methods, selections, owners, providers, diagnostics) = Check.checkModuleDetailed imported writable moduleValue
    in ( ModuleTypes
           { moduleTypeInfo = typeInfoFor moduleValue entries
           , moduleSchemes = schemes
           , moduleIntegerKinds = Map.fromList kinds
           , moduleMethods = methods
           , moduleSelections = Map.fromList selections
+          , moduleShapes = declaredShapesWith imported moduleValue
+          , moduleOwners = Map.fromList owners
           , moduleProviders = Map.fromList providers
           }
       , diagnostics
@@ -160,3 +173,48 @@ typeInfoFor moduleValue entries = TypeInfo authored (Map.fromList entries)
     , sameSpanSource anchor location
     , spanOrigin location == Nothing
     ]
+
+{-| A module's records and its nameable sums, as `declaredRecords` and
+    `declaredSums` give them. -}
+type DeclaredShapes =
+  ( Map NominalId ([Text], [(Text, Type)])
+  , Map NominalId ([Text], [(Text, [Type], Maybe [Text])]) )
+
+{-| The same, with the module's imports declared first, as checking declares
+    them: a field naming an imported type or alias is formed as the checker
+    formed it, where `declaredRecords` alone could not see it. -}
+declaredShapesWith :: ImportTypes -> Module -> DeclaredShapes
+declaredShapesWith imported moduleValue = evalChecker $ do
+  dependency <- collectImportedDeclared imported
+  declared <- collectDeclaredFrom dependency (locatedValue (moduleName moduleValue)) (moduleDeclarations moduleValue)
+  pure (recordsOf declared, sumsOf declared)
+
+{-| Each record the module declares, with its type parameters and its fields
+    in declaration order, formed the way checking forms them. The native
+    lowerer lays records out from this rather than reading type syntax. -}
+declaredRecords :: Module -> Map NominalId ([Text], [(Text, Type)])
+declaredRecords moduleValue = evalChecker $
+  recordsOf <$> collectDeclared (locatedValue (moduleName moduleValue)) (moduleDeclarations moduleValue)
+
+recordsOf :: DeclaredTypes -> Map NominalId ([Text], [(Text, Type)])
+recordsOf declared =
+  Map.mapWithKey (\identity fields -> (Map.findWithDefault [] identity (declaredParams declared), fields))
+    (declaredFields declared)
+
+{-| Each sum the module can name, its own and the built-in Option and Result:
+    its type parameters and its variants in declaration order, each with its
+    payload types and, for a record variant, its field names. -}
+declaredSums :: Module -> Map NominalId ([Text], [(Text, [Type], Maybe [Text])])
+declaredSums moduleValue = evalChecker $
+  sumsOf <$> collectDeclared (locatedValue (moduleName moduleValue)) (moduleDeclarations moduleValue)
+
+sumsOf :: DeclaredTypes -> Map NominalId ([Text], [(Text, [Type], Maybe [Text])])
+sumsOf declared =
+  let variantOf owner name = case Map.lookup (owner, name) (declaredOwnedVariants declared) of
+        Just (_, params, payload) -> Just (params, (name, payload, Map.lookup (owner, name) (declaredVariantFields declared)))
+        Nothing -> Nothing
+      sumOf owner names = case traverse (variantOf owner) names of
+        Just found@((params, _) : _) -> Just (params, map snd found)
+        Just [] -> Just ([], [])
+        Nothing -> Nothing
+   in Map.mapMaybeWithKey sumOf (declaredOwners declared)

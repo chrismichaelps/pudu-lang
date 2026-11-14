@@ -7,6 +7,14 @@ aliases: [Pudu Continuous Verification]
 ---
 # Pudu Continuous Verification
 
+## Expanded native suite budget (#811)
+
+Bound the full-suite step at 45 minutes. The prior 12-minute deadline
+terminated an active expanded native corpus after output-mask failures.
+Resolved Grill Log: this remains a finite hang bound, not a passing result;
+all existing checks and strict descriptor observations remain mandatory.
+Actual Linux completion must be observed before claiming hosted validation.
+
 ## Purpose and interface
 
 [[Ark Assets Gate]] verifies checked CPU texture data and sampling before the higher engine gates.
@@ -61,6 +69,13 @@ their existing obligations. The application graph model tests and actual library
 
 Resolved Grill Log: command serialization is verified through the actual executable rather than only encoder properties.
 
+## Archive notice verification (#509)
+
+Run [[Package Binary Tests]] alongside the release-decision tests in local
+gates, continuous verification and the release plan job. Preserve existing
+checks and ordering. Resolved Grill Log: required archive notice/strip policy
+must not depend on a manual-only test; this introduces no publication trigger
+or compiler semantic change.
 ## Capsule support (#722)
 
 [[Ark Ground Gate]] executes after build with the shared compiler.
@@ -81,3 +96,43 @@ Resolved Grill Log: the focused gate remains mandatory alongside the full compil
 
 [[Qualified Variant Gate]] runs through the built compiler. Resolved Grill Log: imported path
 checking must agree with executed constructor values and preserve visibility/shadowing refusals.
+
+## Canonical owners and providers (#761)
+
+Run bound-provider, canonical-owner, sum-owner, qualified-record-method and trait-provider CLI
+gates against the same freshly built optimized executable. These existing local gates were absent
+from hosted CI. Resolved Grill Log: their observable dispatch, pattern and cache regressions must
+remain enforced after integration; preserve every existing workflow step. See [[Record Pattern Owner Delivery]].
+
+[[Ark Water Gate]] runs with the other engine checks against the optimized compiler. Resolved Grill Log: both evaluator/cache paths and analytic wave errors remain integration requirements.
+
+## Parallel jobs (#815)
+
+One `build` job restores the cabal store (keyed by the cabal files) and the
+build tree (keyed by commit, restored from the branch's or dev's latest),
+compiles once with `-Werror` (the flag changes no generated code, so those are the binaries every job runs), and uploads the compiler and the test binary as one
+archive so their execute bits survive. Every other job downloads it:
+
+| Job | Runs |
+| --- | --- |
+| suite | six shards of the test binary, `PUDU_TEST_SHARD=k/6` |
+| library | layers, API removals, owners, formatting, checking, documentation, Linguist, codes, release and archive policy |
+| Ark | the Ark gates, with the toolchain for their `cabal sdist` |
+| website | the website, package discovery, playground, registry and install gates |
+| runtime | language server, watch, signals, bundles, runtime packs, foreign, service, scaffold, coverage, residency, concurrency, kernels, lanes, documentation site and derive index |
+
+Resolved Grill Log: every step that ran before runs once, unchanged except
+that `cabal run pudu` is the built compiler; a run takes as long as its
+longest job instead of the sum of all of them. Recompilation in a restored
+tree is decided by source hashes, so the cache never answers for a changed
+file.
+
+## Job placement fixes (#815)
+
+- The Linguist check reads every Pudu source, the website's included, so it
+  runs in the website job after `pudu install --locked`. In the library job
+  the website's packages were absent.
+- The suite job sets `PUDU_CC_TIMEOUT=600`. A conformance matrix's single
+  entry body runs to thousands of C lines (#821), and a shared runner's GCC
+  took longer than the two-minute default once. The limit bounds a hung
+  compiler, not a correct translation.

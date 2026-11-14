@@ -1,3 +1,4 @@
+{-# LANGUAGE PatternSynonyms #-}
 {-| @Test.Eval.BinarySpec — native wire laws, exact bits and refusal boundaries. -}
 module Pudu.Eval.BinarySpec (binaryProperties) where
 
@@ -14,6 +15,9 @@ import Pudu.Eval.Value (OrdValue (..), Value (..), intOf)
 import Pudu.FloatLiteral (FloatWidth (Float64Width))
 import Test.QuickCheck (Gen, Property, arbitrary, chooseInt, conjoin, counterexample, elements, forAll, oneof, property, vectorOf, (===))
 
+pattern Node :: Text -> [Value] -> Value
+pattern Node name payload = SumValue "Std.Binary.Node" name payload
+
 binaryProperties :: [(String, IO Property)]
 binaryProperties =
   [ ("binary codec preserves canonical nodes and exact bits", pure roundTrips)
@@ -26,7 +30,17 @@ roundTrips = forAll (nodes 3) $ \node -> case encodeNode node of
   Nothing -> counterexample "generated node refused by writer" False
   Just bytes -> case decodeNodes bytes of
     Left problem -> counterexample (show problem) False
-    Right back -> encodeNode back === encodeNode (canonical node)
+    Right back -> conjoin
+      [ counterexample "decoded node owner was erased" (property (owned back))
+      , encodeNode back === encodeNode (canonical node) ]
+
+owned :: Value -> Bool
+owned value = case value of
+  SumValue owner _ members -> owner == "Std.Binary.Node" && all owned members
+  TupleValue members -> all owned members
+  ArrayValue members -> all owned members
+  MapValue members -> all (owned . snd) (Map.toList members)
+  _ -> True
 
 truncations :: Property
 truncations = forAll (nodes 2) $ \node -> case encodeNode node of
@@ -39,38 +53,38 @@ truncations = forAll (nodes 2) $ \node -> case encodeNode node of
 nodes :: Int -> Gen Value
 nodes depth = if depth == 0 then leaf else oneof
   [ leaf
-  , VariantValue "Present" . pure <$> child
+  , Node "Present" . pure <$> child
   , do count <- chooseInt (0, 3)
        members <- vectorOf count child
-       pure (VariantValue "Items" [ArrayValue (Seq.fromList members)])
+       pure (Node "Items" [ArrayValue (Seq.fromList members)])
   , do a <- child
        b <- child
        let fields = ArrayValue (Seq.fromList [TupleValue [StrValue "árbol", a], TupleValue [StrValue "z", b]])
-       oneof [pure (VariantValue "Fields" [fields]), pure (VariantValue "Choice" [StrValue "Stored", fields])]
+       oneof [pure (Node "Fields" [fields]), pure (Node "Choice" [StrValue "Stored", fields])]
   ]
  where
   child = nodes (depth - 1)
   leaf = oneof
-    [ VariantValue "Whole" . pure . intOf . toInteger <$> (arbitrary :: Gen Int64)
-    , VariantValue "Real" . pure . FloatValue Float64Width . castWord64ToDouble <$> arbitrary
-    , VariantValue "Flag" . pure . BoolValue <$> arbitrary
-    , VariantValue "Text" . pure . StrValue <$> elements ["", "a\0b", "árbol · 箱 · 🎮"]
+    [ Node "Whole" . pure . intOf . toInteger <$> (arbitrary :: Gen Int64)
+    , Node "Real" . pure . FloatValue Float64Width . castWord64ToDouble <$> arbitrary
+    , Node "Flag" . pure . BoolValue <$> arbitrary
+    , Node "Text" . pure . StrValue <$> elements ["", "a\0b", "árbol · 箱 · 🎮"]
     , do count <- chooseInt (0, 16)
          bytes <- BS.pack <$> vectorOf count arbitrary
-         pure (VariantValue "Raw" [BytesValue bytes])
+         pure (Node "Raw" [BytesValue bytes])
     , do count <- chooseInt (0, 3)
          bytes <- BS.pack <$> vectorOf (count * 8) arbitrary
-         pure (VariantValue "Reals" [BytesValue bytes])
-    , pure (VariantValue "Absent" [])
+         pure (Node "Reals" [BytesValue bytes])
+    , pure (Node "Absent" [])
     ]
 
 {-| Read-side records are maps; canonicalize field order without comparing NaNs. -}
 canonical :: Value -> Value
 canonical node = case node of
-  VariantValue "Fields" [ArrayValue fields] -> VariantValue "Record" [asMap fields]
-  VariantValue "Choice" [name, ArrayValue fields] -> VariantValue "Picked" [name, asMap fields]
-  VariantValue "Items" [ArrayValue items] -> VariantValue "Items" [ArrayValue (canonical <$> items)]
-  VariantValue "Present" [held] -> VariantValue "Present" [canonical held]
+  Node "Fields" [ArrayValue fields] -> Node "Record" [asMap fields]
+  Node "Choice" [name, ArrayValue fields] -> Node "Picked" [name, asMap fields]
+  Node "Items" [ArrayValue items] -> Node "Items" [ArrayValue (canonical <$> items)]
+  Node "Present" [held] -> Node "Present" [canonical held]
   _ -> node
  where
   asMap fields = MapValue (Map.fromList [(OrdValue (StrValue name), canonical held)
@@ -79,26 +93,26 @@ canonical node = case node of
 boundaries :: Property
 boundaries = conjoin
   [ map wireCount [-1, 0, 4294967295, 4294967296, 18446744073709551616] === [Nothing, Just 0, Just maxBound, Nothing, Nothing]
-  , encodeNode (VariantValue "Whole" [intOf (-1)]) === Just (BS.pack ([0,0,0,0,0] <> replicate 8 255))
-  , encodeNode (VariantValue "Real" [FloatValue Float64Width (castWord64ToDouble bits)]) ===
+  , encodeNode (Node "Whole" [intOf (-1)]) === Just (BS.pack ([0,0,0,0,0] <> replicate 8 255))
+  , encodeNode (Node "Real" [FloatValue Float64Width (castWord64ToDouble bits)]) ===
       Just (BS.pack [0,0,0,0,1,0x23,1,0,0,0,0,0xf8,0x7f])
   , decodeNodes (emptyNames <> BS.replicate 512 8 <> BS.singleton 7) `succeeds` "depth 512"
   , decodeNodes (emptyNames <> BS.replicate 513 8 <> BS.singleton 7) === Left "nodes nest deeper than 512"
   , conjoin [decodeNodes (emptyNames <> BS.pack bytes) === Left message | (bytes, message) <- malformed]
-  , encodeNode (VariantValue "Reals" [BytesValue (BS.singleton 1)]) === Nothing
+  , encodeNode (Node "Reals" [BytesValue (BS.singleton 1)]) === Nothing
   , encodeNode (intOf 1) === Nothing
   , encodeNode (nest 512) `writes` "writer depth 512"
   , encodeNode (nest 513) === Nothing
-  , encodeNode (VariantValue "Fields" [duplicates]) === Nothing
-  , encodeNode (VariantValue "Choice" [StrValue "Stored", duplicates]) === Nothing
-  , encodeNode (VariantValue "Items" [ArrayValue (Seq.fromList [singleField, singleField])]) `writes` "sibling field-name reuse"
+  , encodeNode (Node "Fields" [duplicates]) === Nothing
+  , encodeNode (Node "Choice" [StrValue "Stored", duplicates]) === Nothing
+  , encodeNode (Node "Items" [ArrayValue (Seq.fromList [singleField, singleField])]) `writes` "sibling field-name reuse"
   , decodeNodes (BS.pack [1,0,0,0,1,0,0,0,97,9,2,0,0,0,0,0,0,0,7,0,0,0,0,7]) === Left "the field a appears twice"
   , decodeNodes (BS.pack [1,0,0,0,1,0,0,0,255,7]) === Left "text that is not UTF-8"
   ]
  where
-  nest count = foldr (\_ held -> VariantValue "Present" [held]) (VariantValue "Absent" []) [1 .. count :: Int]
-  singleField = VariantValue "Fields" [ArrayValue (Seq.singleton (TupleValue [StrValue "x", VariantValue "Absent" []]))]
-  duplicates = ArrayValue (Seq.fromList (replicate 2 (TupleValue [StrValue "x", VariantValue "Absent" []])))
+  nest count = foldr (\_ held -> Node "Present" [held]) (Node "Absent" []) [1 .. count :: Int]
+  singleField = Node "Fields" [ArrayValue (Seq.singleton (TupleValue [StrValue "x", Node "Absent" []]))]
+  duplicates = ArrayValue (Seq.fromList (replicate 2 (TupleValue [StrValue "x", Node "Absent" []])))
   writes result label = counterexample label (property (case result of Just _ -> True; Nothing -> False))
   bits = 0x7ff8000000000123
   emptyNames = BS.replicate 4 0

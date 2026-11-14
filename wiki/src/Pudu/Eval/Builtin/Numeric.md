@@ -48,6 +48,8 @@ callCharMethod :: Span -> CharMethod -> Value -> [Value] -> Evaluator Value
 ## Grill Log
 
 - **Q:** Why group decimals, integer conversion, and character conversions into `Numeric`? **A:** These operations form the language's scalar representation and conversion boundary (~115 lines) operating between host numeric primitives, bit-widths, and Unicode codepoints.
+
+The untyped convertInteger refusal reads its wording from Pudu.Diagnostic.Evaluation. (#633)
 ## Binary64 kernels
 
 `callFloatKernel` dispatches on `floatKernelShape`: one, two or three Float64 arguments to
@@ -57,3 +59,9 @@ NaN, infinities and values outside the signed 64-bit range. Results are Float64.
 outside UInt64 or a non-float argument aborts with E7012, reachable only by an unchecked call.
 Grill Log — **Q:** keep the input width? **A:** No; every kernel is typed Float64 to Float64.
 
+## Whole numbers Int can hold (#803)
+
+`decimalToInt` answers `Some` only for a whole number `Int` can hold, and
+`None` otherwise, as its `Option[Int]` type promises; the same change is on
+dev through #803. Resolved Grill Log: native code cannot hold a larger
+`Int`, so both evaluators and native agree only with the check.

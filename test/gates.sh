@@ -54,6 +54,9 @@ run 'full suite, optimized' \
 export PUDU
 PUDU=$(cabal list-bin pudu --enable-optimization=2)
 run 'generic methods preserve checked trait providers' node test/bound-provider.mjs "$PUDU"
+run 'same-named records retain canonical runtime owners' node test/canonical-owners.mjs "$PUDU"
+run 'positional sums retain canonical runtime owners' node test/sum-owners.mjs "$PUDU"
+run 'qualified record methods preserve canonical schemes' node test/qualified-record-methods.mjs "$PUDU"
 # The directories are given to the formatter rather than expanded here: a
 # shell expansion that matches nothing passes this gate while checking nothing.
 run 'every committed Pudu file is formatted' \
@@ -81,6 +84,8 @@ run 'Ark matrices preserve composition and checked homogeneous projection' \
   node test/ark-matrix.mjs "$PUDU"
 run 'Ark assets preserve linear-light sampling and checked texture storage' \
   node test/ark-assets.mjs "$PUDU"
+run 'Ark water preserves discrete modes and unforced balances' \
+  node test/ark-water.mjs "$PUDU"
 run 'Ark physics preserves numeric admission and disjoint contact batches' \
   node test/ark-physics.mjs "$PUDU"
 run 'Ark animation samples, blends and cross-fades joint poses' \
@@ -98,6 +103,7 @@ run 'Ark build cooks checked packs and loads them through the asset server' \
 run 'atomic writes preserve creation and replacement permissions' \
   bash -c 'python3 test/atomic-permissions.py "$PUDU"'
 run 'only a compiler change at a new version releases' python3 test/release-plan.test.py
+run 'compiler archives retain notices and strip policy' python3 test/package-binary.test.py
 run 'the fixtures still reach as much of the library' \
   bash -c 'node test/api-coverage.mjs "$PUDU"'
 run 'a streaming reader holds as much at ten times the input' \

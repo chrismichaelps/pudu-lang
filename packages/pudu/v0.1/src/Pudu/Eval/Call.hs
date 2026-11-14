@@ -41,7 +41,7 @@ import Pudu.Eval.Builtin
   , callSetOf
   , callShow
   , callStringMethod
-  , callStringMethodFast
+  , prepareStringMethodFast
   , isDecimalBuiltin
   , isHashingBuiltin
   )
@@ -58,6 +58,7 @@ import Pudu.Eval.Call.Path
   , lastPathSegment
   , pathValue
   , qualifiedCallee
+  , qualifiedParts
   , readPath
   , selectTypes
   , typeArgumentNames
@@ -126,77 +127,92 @@ import Pudu.Source (Span)
     matching how the same call is typed: `value.name()` reads as a call, and a
     field holding a function must be parenthesized to be called. -}
 evaluateCall :: CallNeeds -> Span -> Located Expression -> [Located Expression] -> Evaluator Value
-evaluateCall needs spanValue callee arguments = do
-  given <- mapM (argumentOf needs) arguments
-  let values = map snd given
-      lent = noneLent{lentArguments = map fst given}
-  {-| A type argument is not erased before the call that carries it. Types have
-      no run-time form, but the *syntax* the reader wrote is still here, and a
-      conversion needs to know which type it was asked for. Reading it is not
-      the evaluator knowing about types; it is the evaluator reading the call it
-      was given. -}
+evaluateCall needs spanValue callee arguments =
   case typeArgumentNames (locatedValue callee) of
-    Just (names, inner) -> do
-      {-| The callee under a type application is read as an ordinary expression
-          rather than as a callee, because a qualified name is what carries type
-          arguments and reading it as a path is what resolves it. -}
-      let chosen = case locatedValue callee of
-            TypeApplication _ written -> mapM witnessOf written
-            _ -> pure []
-      qualified <- qualifiedCallee inner values
-      ordinaryTarget <- case locatedValue inner of
-        MemberExpression target _ -> not <$> qualifiedPath (locatedValue target)
-        _ -> pure False
-      case (qualified, locatedValue inner) of
-        (Nothing, MemberExpression target (Located _ member)) | ordinaryTarget -> do
-          (receiverPlace, receiver) <- receiverOf needs target
-          selected <- chosen
-          callMemberSelecting (selectTypes selected) needs spanValue (locatedSpan inner)
-            lent{lentSelf = receiverPlace} True receiver member values
-        _ -> do
-          target <- maybe (callEvaluate needs inner) pure qualified
-          case target of
-            BuiltinValue ConvertIntegerBuiltin -> callConvertInteger spanValue names values
-            FunctionValue closure -> do
-              selected <- chosen
-              dispatchCall needs spanValue lent (FunctionValue (selectTypes selected closure)) values
-            _ -> dispatchCall needs spanValue lent target values
-    Nothing -> do
-      qualified <- qualifiedCallee callee values
-      case qualified of
-        Just found -> dispatchCall needs spanValue lent found values
-        Nothing -> case locatedValue callee of
-          MemberExpression target (Located _ member) -> do
-            (receiverPlace, receiver) <- receiverOf needs target
-            callMember needs spanValue (locatedSpan callee) lent{lentSelf = receiverPlace} True receiver member values
-          _ -> do
-            target <- evaluateCallee needs callee
-            dispatchCall needs spanValue lent target values
+    Just (names, inner) -> prepare inner (Just names)
+    Nothing -> prepare callee Nothing
+ where
+  withArguments invoke = do
+    given <- mapM (argumentOf needs) arguments
+    invoke noneLent{lentArguments = map fst given} (map snd given)
+
+  prepare written@(Located memberSpan expression) names = case expression of
+    MemberExpression target (Located _ member) -> do
+      static <- case qualifiedParts expression of
+        Just _ -> qualifiedPath (locatedValue target)
+        Nothing -> pure False
+      if static
+        then withArguments (invokeQualified written names)
+        else do
+          (place, receiver) <- receiverOf needs target
+          select <- maybe (pure id) (const (selectTypes <$> chosen)) names
+          invoke <- prepareMember select needs spanValue memberSpan receiver member
+          withArguments (\lent -> invoke lent{lentSelf = place})
+    _ -> case qualifiedParts expression of
+      Just _ -> withArguments (invokeQualified written names)
+      Nothing -> do
+        target <- readCallee written names
+        withArguments (invokeValue names target)
+
+  chosen = case locatedValue callee of
+    TypeApplication _ written -> mapM witnessOf written
+    _ -> pure []
+
+  readCallee written names = case names of
+    Just _ -> callEvaluate needs written
+    Nothing -> evaluateCallee needs written
+
+  invokeValue (Just names) target lent values = case target of
+    BuiltinValue ConvertIntegerBuiltin -> callConvertInteger spanValue names values
+    FunctionValue closure -> do
+      selected <- chosen
+      dispatchCall needs spanValue lent (FunctionValue (selectTypes selected closure)) values
+    _ -> dispatchCall needs spanValue lent target values
+  invokeValue Nothing target lent values = dispatchCall needs spanValue lent target values
+
+  invokeQualified written names lent values = do
+    qualified <- qualifiedCallee written values
+    case (qualified, names, locatedValue written) of
+      (Nothing, Nothing, MemberExpression target (Located _ member)) -> do
+        (place, receiver) <- receiverOf needs target
+        invoke <- prepareMember id needs spanValue (locatedSpan written) receiver member
+        invoke lent{lentSelf = place} values
+      _ -> do
+        target <- maybe (readCallee written names) pure qualified
+        invokeValue names target lent values
 
 {-| A method called on a receiver already evaluated, with its arguments: an
     implementation written for the receiver's type, else the member the value
     itself carries. `implemented` is false only when no implementation anywhere
     declares a method of this name, which skips looking for one. -}
 callMember :: CallNeeds -> Span -> Span -> Lent -> Bool -> Value -> Text -> [Value] -> Evaluator Value
-callMember = callMemberSelecting id
+callMember needs spanValue memberSpan lent implemented receiver member values = do
+  invoke <- prepareSelected implemented id needs spanValue memberSpan receiver member
+  invoke lent values
 
-{-| A method call whose callee carries chosen types for its parameters. -}
-callMemberSelecting
-  :: (Closure -> Closure) -> CallNeeds -> Span -> Span -> Lent -> Bool -> Value -> Text -> [Value]
-  -> Evaluator Value
-callMemberSelecting select needs spanValue memberSpan lent implemented receiver member values = case receiver of
+{-| Select a method or field from the retained receiver before the arguments run. -}
+prepareMember
+  :: (Closure -> Closure) -> CallNeeds -> Span -> Span -> Value -> Text
+  -> Evaluator (Lent -> [Value] -> Evaluator Value)
+prepareMember = prepareSelected True
+
+{-| Member selection, skipping the owner lookup when `implemented` is false. -}
+prepareSelected
+  :: Bool -> (Closure -> Closure) -> CallNeeds -> Span -> Span -> Value -> Text
+  -> Evaluator (Lent -> [Value] -> Evaluator Value)
+prepareSelected implemented select needs spanValue memberSpan receiver member = case receiver of
   StrValue text
-    | Just direct <- callStringMethodFast spanValue member text values -> direct
+    | Just direct <- prepareStringMethodFast spanValue member text -> pure (const direct)
   _ -> do
     method <-
       if implemented
         then receiverOwners receiver >>= firstBound (ownedMethod member)
         else pure Nothing
-    calleeVal <- case method of
+    target <- case method of
       Just (owner, FunctionValue closure) ->
         pure (FunctionValue (select (withSelf (TypeWitnessValue owner []) closure{closureSelf = Just receiver})))
       _ -> readMember memberSpan receiver member
-    dispatchCall needs spanValue lent calleeVal values
+    pure (\lent values -> dispatchCall needs spanValue lent target values)
 
 {-| The method an owner installs under this member, with the owner that held
     it, so the call can name its `Self`. -}
@@ -209,7 +225,7 @@ dispatchCall needs spanValue lent target values =
   case target of
     FunctionValue closure -> callClosureLending needs closure values lent (Just spanValue)
     ForeignValue binding -> callForeign spanValue binding values
-    VariantValue name [] -> pure (VariantValue name values)
+    SumValue owner name [] -> pure (SumValue owner name values)
     BuiltinValue PanicBuiltin -> callPanic spanValue values
     BuiltinValue CharFromCodeBuiltin -> callCharFromCode spanValue values
     BuiltinValue MapOfBuiltin -> callMapOf spanValue values
@@ -293,8 +309,8 @@ awaitTask needs spanValue task = case task of
     releaseChild task
     result <- runClosure needs closure bindings callSpan
     case result of
-      VariantValue "Ok" _ -> unwrapTry spanValue result
-      VariantValue "Err" _ -> unwrapTry spanValue result
+      SumValue "Result" "Ok" _ -> unwrapTry spanValue result
+      SumValue "Result" "Err" _ -> unwrapTry spanValue result
       _ -> pure result
   _ -> abortAt (Just spanValue) "E7008" ("cannot await a " <> valueKind task)
     (Just "await a task returned by an async function")

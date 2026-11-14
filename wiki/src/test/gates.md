@@ -112,6 +112,13 @@ including externally observable filesystem modes that portable permission boolea
 
 Resolved Grill Log: local and integration delivery both exercise actual strategy output and public visibility.
 
+## Archive notice verification (#509)
+
+Run [[Package Binary Tests]] alongside the release-decision tests in local
+gates, continuous verification and the release plan job. Preserve existing
+checks and ordering. Resolved Grill Log: required archive notice/strip policy
+must not depend on a manual-only test; this introduces no publication trigger
+or compiler semantic change.
 ## Native presentation (#724)
 
 [[Desktop Presentation Gate]] runs before the compiler build on supported hosts.
@@ -141,3 +148,17 @@ negative cases. Resolved Grill Log: a silent error type is caught by wrong-resul
 [[Bound Provider Gate]] executes generic provider selection across evaluator/cache modes.
 Resolved Grill Log: selected result types and executed implementations must agree (#743).
 [[Trait Provider Gate]] pins nominal trait selection and positioned wrong-result/ambiguity diagnostics. Resolved Grill Log: distinct provider results execute through the real CLI.
+
+[[Canonical Owner Gate]] checks canonical same-named record dispatch and native factory identity.
+Resolved Grill Log: run against the freshly built optimized compiler; preserve both evaluator and cache-mode coverage.
+
+## Qualified concrete methods (#763)
+
+Run the Qualified Record Method Gate against the optimized compiler after canonical owner validation.
+
+Resolved Grill Log: known concrete identity, lexical admission, module-export priority and provider ambiguity must agree for called and retained methods. See [[Qualified Record Method Delivery]].
+
+[[Sum Owner Gate]] covers positional canonical ownership after record and qualification checks.
+Resolved Grill Log: source and native values must agree in both evaluators.
+
+[[Ark Water Gate]] runs against the optimized compiler and validates actual wave-update modes. Resolved Grill Log: numerical physics evidence is independent of render snapshots.

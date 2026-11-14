@@ -178,6 +178,11 @@ data Builtin
   | BufferScanU64Builtin
   | BufferCopyBuiltin
   | BufferSizeBuiltin
+  | TextByteSizeBuiltin
+  | TextByteSliceBuiltin
+  | TextByteFindBuiltin
+  | TextByteFindLastBuiltin
+  | TextScalarAtBuiltin
   | SwissTableEmptyBuiltin
   | SwissTableLookupBuiltin
   | SwissTableInsertBuiltin
@@ -227,6 +232,7 @@ data Builtin
   | MutexAcquireWithinBuiltin
   | FloatKernelBuiltin !FloatKernel
   | LaneKernelBuiltin !LaneKernel
+  | TextByteAtBuiltin
   deriving stock (Eq, Show)
 
 {-| The source-level binding for a built-in tag. -}
@@ -407,6 +413,12 @@ builtinName value = case value of
   BufferScanU64Builtin -> "bufferScanU64"
   BufferCopyBuiltin -> "bufferCopy"
   BufferSizeBuiltin -> "bufferSize"
+  TextByteAtBuiltin -> "textByteAt"
+  TextByteSizeBuiltin -> "textByteSize"
+  TextByteSliceBuiltin -> "textByteSlice"
+  TextByteFindBuiltin -> "textByteFind"
+  TextByteFindLastBuiltin -> "textByteFindLast"
+  TextScalarAtBuiltin -> "textScalarAt"
   SwissTableEmptyBuiltin -> "swissTableEmpty"
   SwissTableLookupBuiltin -> "swissTableLookup"
   SwissTableInsertBuiltin -> "swissTableInsert"

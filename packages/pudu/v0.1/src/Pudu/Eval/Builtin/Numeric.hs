@@ -23,6 +23,7 @@ import Pudu.DecimalLiteral
   , decimalToInteger
   , parseDecimalText
   )
+import Pudu.Diagnostic.Evaluation (builtinArgumentCode, convertIntegerTargetHelp, convertIntegerTargetMessage)
 import Pudu.Eval.Env (Evaluator (..), abortAt)
 import Pudu.Eval.Render (valueKind)
 import Pudu.Eval.Value
@@ -33,7 +34,7 @@ import Pudu.Eval.Value
   , intOf
   )
 import Pudu.FloatLiteral (FloatWidth (Float64Width))
-import Pudu.IntegerLiteral (IntegerKind (UnsignedKind), integerKindFits, integerKindOf)
+import Pudu.IntegerLiteral (IntegerKind (PlatformSigned, UnsignedKind), integerKindFits, integerKindOf)
 import Pudu.FloatKernel (FloatKernel, KernelShape (..), floatKernelName, floatKernelShape)
 import Pudu.Runtime.FloatKernel (applyFloatBinary, applyFloatTernary, applyFloatUnary)
 import Pudu.Source (Span)
@@ -57,8 +58,8 @@ callConvertInteger spanValue names arguments = case (names, arguments) of
         (target <> " is not an integer type")
         (Just "convert to one of the integer types, such as UInt8 or Int64")
   ([], _) ->
-    abortAt (Just spanValue) "E7012" "convertInteger needs the type to convert to"
-      (Just "write it as a type argument, as in convertInteger[UInt8](value)")
+    abortAt (Just spanValue) builtinArgumentCode convertIntegerTargetMessage
+      (Just convertIntegerTargetHelp)
   (_, [other]) ->
     abortAt (Just spanValue) "E7012"
       ("convertInteger moves between integers, not from a " <> valueKind other)
@@ -92,9 +93,10 @@ callDecimal spanValue builtin values = case (builtin, values) of
     pure (DecimalValue (decimalFromInteger number))
   (DecimalScaleBuiltin, [DecimalValue number]) ->
     pure (intOf (toInteger (decimalScaleOf number)))
+  -- The answer is an Option[Int]: a whole number Int cannot hold is None.
   (DecimalToIntBuiltin, [DecimalValue number]) -> pure $ case decimalToInteger number of
-    Just whole -> VariantValue "Some" [intOf whole]
-    Nothing -> VariantValue "None" []
+    Just whole | integerKindFits PlatformSigned whole -> VariantValue "Some" [intOf whole]
+    _ -> VariantValue "None" []
   (DecimalToFloatBuiltin, [DecimalValue number]) ->
     pure (FloatValue Float64Width (decimalToDouble number))
   (DecimalDivideBuiltin, [DecimalValue left, DecimalValue right, IntValue _ digits, IntValue _ mode]) ->

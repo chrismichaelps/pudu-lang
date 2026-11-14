@@ -6,7 +6,7 @@ description:        A statically typed native systems language compiler with exp
 category:           Language
 maintainer:         chrismichaelps
 license:            Apache-2.0 WITH LLVM-exception
-license-file:       LICENSE
+license-files:      LICENSE THIRD_PARTY_NOTICES
 author:             Chris M. Perez Santiago
 copyright:          (c) 2026 Chris M. Perez Santiago
 homepage:           https://github.com/chrismichaelps/pudu-lang
@@ -14,6 +14,12 @@ bug-reports:        https://github.com/chrismichaelps/pudu-lang/issues
 build-type:         Simple
 extra-source-files: cbits/pudu_desktop.h
                     cbits/pudu_desktop_host.h
+                    cbits/pudu_desktop.m
+                    cbits/pudu_desktop_access.m
+                    cbits/pudu_desktop_menu.m
+                    cbits/pudu_desktop_window.m
+                    cbits/pudu_audio.c
+                    cbits/pudu_audio_stream.c
                     cbits/pudu_audio.h
                     cbits/pudu_audio_stream.h
 data-files:         lib/Std/*.pudu
@@ -41,6 +47,9 @@ data-files:         lib/Std/*.pudu
                     lib/Std/Http/Server/*.pudu
                     lib/Std/Mail/*.pudu
                     lib/Std/Math/*.pudu
+                    lib/Std/Iter/*.pudu
+                    lib/Std/MdSpan/*.pudu
+                    lib/Std/StringView/*.pudu
                     lib/Std/Net/*.pudu
                     lib/Std/Test/*.pudu
                     lib/Std/Text/*.pudu
@@ -98,16 +107,177 @@ library
     Pudu.Version.Digest
     Pudu.Bundle
     Pudu.Cache.Persist
+    Pudu.Backend.Emit
+    Pudu.Backend.Emit.Aggregate
+    Pudu.Backend.Emit.Cell
+    Pudu.Backend.Emit.Entry
+    Pudu.Backend.Emit.Array
+    Pudu.Backend.Emit.Keyed
+    Pudu.Backend.Emit.Kernel
+    Pudu.Backend.Emit.Range
+    Pudu.Backend.Emit.Bytes
+    Pudu.Backend.Emit.Foreign
+    Pudu.Backend.Emit.ForeignAbi
+    Pudu.Backend.Emit.Frame
+    Pudu.Backend.Emit.Handle
+    Pudu.Backend.Emit.State
+    Pudu.Backend.Emit.Support
+    Pudu.Backend.Runtime
+    Pudu.Backend.Runtime.Aggregate
+    Pudu.Backend.Runtime.Array
+    Pudu.Backend.Runtime.Tree
+    Pudu.Backend.Runtime.Hash
+    Pudu.Backend.Runtime.Kernel
+    Pudu.Backend.Runtime.Kernel.Audio
+    Pudu.Backend.Runtime.Kernel.Blake2
+    Pudu.Backend.Runtime.Kernel.Buffer
+    Pudu.Backend.Runtime.Kernel.Bytes
+    Pudu.Backend.Runtime.Kernel.Checksum
+    Pudu.Backend.Runtime.Kernel.Column
+    Pudu.Backend.Runtime.Kernel.Csv
+    Pudu.Backend.Runtime.Kernel.Json
+    Pudu.Backend.Runtime.Kernel.Mac
+    Pudu.Backend.Runtime.Kernel.Natural
+    Pudu.Backend.Runtime.Kernel.Seal
+    Pudu.Backend.Runtime.Kernel.Sha2
+    Pudu.Backend.Runtime.Kernel.Sha3
+    Pudu.Backend.Runtime.Kernel.Sort
+    Pudu.Backend.Runtime.Kernel.Swiss
+    Pudu.Backend.Runtime.Kernel.Verify
+    Pudu.Backend.Runtime.Kernel.Xml
+    Pudu.Backend.Runtime.Host
+    Pudu.Backend.Runtime.Host.Audio
+    Pudu.Backend.Runtime.Host.Child
+    Pudu.Backend.Runtime.Host.Compress
+    Pudu.Backend.Runtime.Host.Concurrent
+    Pudu.Backend.Runtime.Host.Desktop
+    Pudu.Backend.Runtime.Host.File
+    Pudu.Backend.Runtime.Host.Handle
+    Pudu.Backend.Runtime.Host.Input
+    Pudu.Backend.Runtime.Host.Foreign
+    Pudu.Backend.Runtime.Host.Lanes
+    Pudu.Backend.Runtime.Host.Raster
+    Pudu.Backend.Runtime.Host.Math
+    Pudu.Backend.Runtime.Host.Net
+    Pudu.Backend.Runtime.Host.Process
+    Pudu.Backend.Runtime.Host.Scope
+    Pudu.Backend.Runtime.Host.Signal
+    Pudu.Backend.Runtime.Host.State
+    Pudu.Backend.Runtime.Host.Time
+    Pudu.Backend.Runtime.Host.TimeParse
+    Pudu.Backend.Runtime.Host.Tls
+    Pudu.Backend.Runtime.Range
+    Pudu.Backend.Runtime.Process
+    Pudu.Backend.Runtime.Output
+    Pudu.Backend.Runtime.Bytes
+    Pudu.Backend.Runtime.Char
+    Pudu.Backend.Runtime.Dependencies
+    Pudu.Backend.Runtime.Float
+    Pudu.Backend.Runtime.Frame
+    Pudu.Backend.Runtime.Float.Natural
+    Pudu.Backend.Runtime.Float.Format
+    Pudu.Backend.Runtime.Float.Value
+    Pudu.Backend.Runtime.Integer
+    Pudu.Backend.Runtime.Integer.Value
+    Pudu.Backend.Runtime.Integer.Word128
+    Pudu.Backend.Runtime.Integer.Wide.Value
+    Pudu.Backend.Runtime.Integer.Wide.Operations
+    Pudu.Backend.Runtime.Integer.Wide.Display
+    Pudu.Backend.Runtime.Integer.Big.Value
+    Pudu.Backend.Runtime.Integer.Big.Operations
+    Pudu.Backend.Runtime.Decimal.Value
+    Pudu.Backend.Runtime.Decimal.Operations
+    Pudu.Backend.Runtime.Integer.Convert
+    Pudu.Backend.Runtime.Integer.Arithmetic
+    Pudu.Backend.Runtime.Integer.Bits
+    Pudu.Backend.Runtime.Text
+    Pudu.Backend.Runtime.Text.Case
+    Pudu.Backend.Runtime.Text.Number
+    Pudu.Backend.Runtime.Text.Pieces
+    Pudu.Backend.Runtime.Text.Methods
+    Pudu.Backend.Target
+    Pudu.Backend.Toolchain
+    Pudu.Backend.Toolchain.HostSources
+    Pudu.Backend.Toolchain.Library
+    Pudu.Backend.Toolchain.Process
     Pudu.Compiler
     Pudu.Compiler.Constants
     Pudu.Compiler.Cache
     Pudu.Compiler.ComptimeDependencies
     Pudu.Compiler.Literals
     Pudu.Compiler.Library
+    Pudu.Compiler.Lower
+    Pudu.Compiler.Frame
+    Pudu.Compiler.Frame.Body
+    Pudu.Compiler.Frame.Match
+    Pudu.Compiler.Frame.State
+    Pudu.Backend.Emit.Frame.TextView
+    Pudu.Backend.Emit.Frame.Value
+    Pudu.Backend.Emit.Frame.Body
+    Pudu.Compiler.Lower.Body
+    Pudu.Compiler.Lower.FunctionBody
+    Pudu.Compiler.Lower.Constant
+    Pudu.Compiler.Lower.Reference
+    Pudu.Compiler.Lower.Method
+    Pudu.Compiler.Lower.Foreign
+    Pudu.Compiler.Lower.Generic
+    Pudu.Compiler.Lower.Try
+    Pudu.Compiler.Lower.For
+    Pudu.Compiler.Lower.Lambda
+    Pudu.Compiler.Lower.Intrinsic
+    Pudu.Compiler.Lower.MethodValue
+    Pudu.Compiler.Lower.Place
+    Pudu.Compiler.Lower.Stop
+    Pudu.Compiler.Lower.Call
+    Pudu.Compiler.Lower.Array
+    Pudu.Compiler.Lower.Sort
+    Pudu.Compiler.Lower.Slice
+    Pudu.Compiler.Lower.Convert
+    Pudu.Compiler.Lower.Decimal
+    Pudu.Compiler.Lower.Dynamic
+    Pudu.Compiler.Lower.Default
+    Pudu.Compiler.Lower.Keyed
+    Pudu.Compiler.Lower.WordMap
+    Pudu.Compiler.Lower.Store
+    Pudu.Compiler.Lower.Swiss
+    Pudu.Compiler.Lower.Kernel
+    Pudu.Compiler.Lower.Kernel.Host
+    Pudu.Compiler.Lower.Kernel.Lanes
+    Pudu.Compiler.Lower.Kernel.Shape
+    Pudu.Compiler.Lower.Concurrent
+    Pudu.Compiler.Lower.Scope
+    Pudu.Compiler.Lower.Primitive
+    Pudu.Compiler.Lower.MultiMap
+    Pudu.Compiler.Lower.Loan
+    Pudu.Compiler.Lower.Range
+    Pudu.Compiler.Lower.Bytes
+    Pudu.Compiler.Lower.Control
+    Pudu.Compiler.Lower.State
+    Pudu.Compiler.Lower.Layout
+    Pudu.Compiler.Lower.Match
+    Pudu.Compiler.Lower.Record
+    Pudu.Compiler.Lower.Sum
+    Pudu.Compiler.Lower.Text
+    Pudu.Compiler.Lower.Tuple
+    Pudu.Compiler.Lower.Signature
+    Pudu.Compiler.Lower.Scalar
+    Pudu.Compiler.Lower.Types
     Pudu.Compiler.Manifest
     Pudu.Compiler.Program
     Pudu.Compiler.Product
+    Pudu.Core
+    Pudu.Core.Bytes
+    Pudu.Core.Closure
+    Pudu.Core.Keyed
+    Pudu.Core.TextMethod
+    Pudu.Core.Kernel
+    Pudu.Core.Frame
     Pudu.Diagnostic
+    Pudu.Diagnostic.Host
+    Pudu.Cli.Memory
+    Pudu.Diagnostic.Arithmetic
+    Pudu.Diagnostic.Evaluation
+    Pudu.Diagnostic.Native
     Pudu.Diagnostic.Render
     Pudu.Eval
     Pudu.Eval.Array
@@ -140,6 +310,7 @@ library
     Pudu.Eval.Verify
     Pudu.Eval.Signal
     Pudu.Eval.Entropy
+    Pudu.Eval.DeclaredOwner
     Pudu.Eval.Install
     Pudu.Eval.Env
     Pudu.Eval.Frozen
@@ -169,6 +340,7 @@ library
     Pudu.Eval.Order
     Pudu.Eval.Range
     Pudu.Eval.Render
+    Pudu.Eval.Record
     Pudu.Eval.Compile
     Pudu.Eval.Compile.Cache
     Pudu.Eval.Compile.Layout
@@ -176,6 +348,8 @@ library
     Pudu.Eval.Rope
     Pudu.Eval.Sort
     Pudu.Eval.Value
+    Pudu.Eval.ImplementationHead
+    Pudu.Eval.TypeWitness
     Pudu.Frontend.Expand
     Pudu.Frontend.Expand.Substitute
     Pudu.Frontend.Lexer
@@ -214,6 +388,7 @@ library
     Pudu.Frontend.Syntax
     Pudu.Frontend.Syntax.Located
     Pudu.Frontend.Syntax.Name
+    Pudu.Frontend.Syntax.Pattern
     Pudu.Frontend.Syntax.Stored
     Pudu.Frontend.Syntax.Inline
     Pudu.Frontend.Syntax.Print
@@ -281,12 +456,15 @@ library
     Pudu.Type.Check.Import
     Pudu.Type.Check.Install
     Pudu.Type.Check.Call
+    Pudu.Type.Check.Qualified
     Pudu.Type.Check.Collection
     Pudu.Type.Check.Coherence
     Pudu.Type.Check.Derive
     Pudu.Type.Check.Iteration
     Pudu.Type.Check.Safety
+    Pudu.Type.Check.Inherit
     Pudu.Type.Check.Method
+    Pudu.Type.Check.Method.Binding
     Pudu.Type.Check.Pattern
     Pudu.Type.Check.Place
     Pudu.Type.Check.Expression
@@ -319,6 +497,7 @@ library
     Pudu.Semantic.Resolve
     Pudu.Semantic.Resolve.Context
     Pudu.Semantic.Resolve.State
+    Pudu.Semantic.Resolve.Ambiguity
     Pudu.Semantic.Resolve.Canonical
     Pudu.Semantic.Resolve.Reflection
     Pudu.Semantic.Resolve.Bindings
@@ -354,6 +533,7 @@ library
     Pudu.Eval.MultiMap
     Pudu.Eval.Loop.Kernel
     Pudu.Eval.Loop.Step
+    Pudu.Eval.Loop.Unboxed
     Pudu.Eval.WordMap
     Pudu.Runtime.Collection
     Pudu.Runtime.SeriesMap
@@ -361,6 +541,7 @@ library
     Pudu.Eval.Buffer
     Pudu.Runtime.SwissTable
     Pudu.Eval.SwissTable
+    Pudu.Eval.TextView
     Pudu.Runtime.Column
     Pudu.Runtime.Column.Index
     Pudu.Eval.Column
@@ -371,6 +552,7 @@ library
   build-depends:
     base >=4.20 && <4.23,
     template-haskell >=2.22 && <2.25,
+    temporary >=1.3 && <1.4,
     bytestring >=0.11 && <0.13,
     containers >=0.6 && <0.9,
     directory >=1.3 && <1.4,

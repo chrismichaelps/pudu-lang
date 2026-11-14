@@ -55,6 +55,26 @@ export fn main() -> Int {
   if attributed.contains("aria-label=\"named\"") { held = held + 1 }
   if attributed.contains("data-k=\"v\"") { held = held + 1 }
 
+  // Repeating an attribute replaces it where it sits, so the element never
+  // carries two attributes of one name. Class composes instead, because a
+  // second class means both classes.
+  let repeatedClass = rendered(&H.div().class("a").class("b"))
+  if repeatedClass == "<div class=\"a b\"></div>" { held = held + 1 }
+  if !repeatedClass.contains("class=\"a\" class=\"b\"") { held = held + 1 }
+  let repeatedKind = rendered(&H.input().kind("text").kind("submit"))
+  if repeatedKind == "<input type=\"submit\" />" { held = held + 1 }
+  if !repeatedKind.contains("type=\"text\"") { held = held + 1 }
+  let repeatedAt = rendered(&H.div().at("data-x", "1").at("data-x", "2"))
+  if repeatedAt == "<div data-x=\"2\"></div>" { held = held + 1 }
+  if !repeatedAt.contains("data-x=\"1\"") { held = held + 1 }
+  let ordered = rendered(&H.div().id("one").class("a").class("b").title("t"))
+  if ordered == "<div id=\"one\" class=\"a b\" title=\"t\"></div>" { held = held + 1 }
+  let checkedTwice = Result.unwrapOr(
+    H.div().at("data-y", "1").atChecked("data-y", "2"),
+    H.div()
+  )
+  if rendered(&checkedTwice) == "<div data-y=\"2\"></div>" { held = held + 1 }
+
   if rendered(&classed(&H.div(), "through-the-trait")).contains("through-the-trait") {
     held = held + 1
   }

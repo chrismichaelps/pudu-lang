@@ -1,6 +1,6 @@
 ---
 type: module
-path: "@root/src/Pudu/Type/Check/Method.hs"
+path: "@root/packages/pudu/v0.1/src/Pudu/Type/Check/Method.hs"
 fidelity: Active
 domain: "[[Pudu Type]]"
 subsystem: "[[Semantics]]"
@@ -26,8 +26,8 @@ Declaring a trait member whose first parameter is not `self` marks the trait sta
 ### Signatures
 
 ```haskell
-declareMethods :: DeclaredTypes -> Map NominalId [Located Function] -> Impl -> Checker ()
-declareInterfaceMethods :: DeclaredTypes -> Map NominalId [Located Function] -> Set (NominalId, Text) -> Impl -> Checker ()
+declareMethods :: DeclaredTypes -> Map NominalId Trait -> Set (NominalId, Text) -> Impl -> Checker ()
+declareInterfaceMethods :: DeclaredTypes -> Map NominalId Trait -> Set (NominalId, Text) -> Impl -> Checker ()
 declareTraitMembers :: DeclaredTypes -> Trait -> Checker ()
 declareBounds :: DeclaredTypes -> Function -> [(Text, [Type])]
 declareBuiltinConstructors :: Checker ()
@@ -36,7 +36,7 @@ methodScheme :: Span -> Type -> Text -> Checker (Maybe Scheme)
 implementationMethodKey :: NominalId -> NominalId -> Text -> Text
 functionRigid :: Function -> [(Text, Int)]
 implAliases :: DeclaredTypes -> Impl -> DeclaredTypes
-traitTable :: DeclaredTypes -> [Located Declaration] -> Map NominalId [Located Function]
+traitTable :: DeclaredTypes -> [Located Declaration] -> Map NominalId Trait
 ```
 
 ### Governance
@@ -58,6 +58,7 @@ traitTable :: DeclaredTypes -> [Located Declaration] -> Map NominalId [Located F
 - `Self` inside an implementation is its target type. That is what lets a method read the fields of the value it was called on, and it is why the alias is installed before the body is checked.
 - `Self` inside a trait member body is a rigid parameter added to the rigid list, so `formType` produces `RigidType "Self"` and method calls route through `rigidMethod` and the trait bound `selfBoundAsBound` installs. The implementing type is unknown while the trait is checked, so `Self` cannot be aliased to a nominal type there.
 - A trait member that carries a body is a default. An implementation that does not provide its own gets it, bound at the target type exactly as an overriding method would be.
+- An inherited default takes the scheme its trait member was declared with — formed once, in the trait module's own names, with `Self` and the trait's parameters rigid — and then all of them are replaced at once: `Self` by the target with the implementation's arguments, and each trait parameter by the argument the implementation's trait reference gives it. `twice` from `trait Holds[T]` is `(Int, Int)` on `impl Holds[Int] for Box`. A default's own parameter that shares a name with one of the implementation's is renamed apart first ([[Type Check Inherit]]). The trait table therefore carries each whole `Trait`, parameters included (#528).
 - `declareTraitMembers` binds a trait's own members under the trait's name with `Self` rigid, so a call on a parameter bounded by that trait finds them through `methodScheme`'s rigid path.
 - `declareBounds` collects the trait bounds a function's generic parameters carry from both the parameter list and the `where` clause, since [[grammar/pudu]] gives them the same meaning; these become the obligations a call must prove.
 - A method scheme retains both the implementation's parameter bounds and the method's own bounds.
@@ -71,11 +72,11 @@ traitTable :: DeclaredTypes -> [Located Declaration] -> Map NominalId [Located F
 - `declareBuiltinConstructors` binds `Some`/`None`/`Ok`/`Err` before the module's own declarations, so a module that declares its own `Ok` shadows the binding rather than colliding with it.
 - `methodScheme` finds a method on a nominal type through its implementations or on a rigid parameter through the traits its bounds declared, which is what a bound is for. When two or more bounds provide the same member, the lookup is ambiguous and reports `E3013` rather than silently picking the first.
 - [[Type Check Coherence]] rejects orphan implementations and duplicate implementation heads after method signatures are collected; general unification overlap remains a separate resolved-type slice. Nothing here silently picks between candidates.
-- [[Type Interface]] supplies complete body-free imported method schemes keyed by canonical target and trait identity. They are installed only for traits the consumer placed in scope, before local method signatures are added. A second imported scheme or a later local implementation at the same canonical target/member key reports `E3013` rather than overwriting the visible provider; exact duplicate local heads remain [[Type Check Coherence]]'s `E3015` responsibility.
+- [[Type Interface]] supplies complete body-free imported method schemes keyed by canonical target and trait identity. They are installed only for traits the consumer placed in scope, before local method signatures are added. Distinct imported or source providers retain separate schemes and mark the shared slot ambiguous for call-site E3013. Same/unknown-provider imported collisions preserve their existing refusal; exact duplicate local heads remain [[Type Check Coherence]]'s E3015 responsibility.
 
 ### Linkage
 
-- **Requires:** [[Type Env]], [[Type Interface]], [[Type Formation]], [[Type Value]], [[Syntax Tree]], [[architecture/SEMANTICS]].
+- **Requires:** [[Type Env]], [[Type Interface]], [[Type Formation]], [[Type Value]], [[Syntax Tree]], [[Type Check Inherit]], [[architecture/SEMANTICS]].
 - **Consumed by:** [[Type Check]].
 
 ## Algorithm
@@ -106,6 +107,10 @@ Form the implementation's target, bind each of its functions under the target's 
 DEPTH 0.55 (MEDIUM). It hides method keying, `Self` aliasing, and default inheritance behind two calls.
 
 ## Grill Log
+
+- **Q:** Form an inherited default again in the implementing module's scope? **A:** No. An imported trait's default is written in its own module's names: `Std.Iter`'s `map` returns `Mapped[Self, T, B]`, and the importing module need not see `Mapped`. Reusing the member's declared scheme keeps the trait module's resolution and forms each signature once. A local implementation now sees its module's traits and every imported one (`consumerTraits`), with imported defaults known from the interfaces (`consumerDefaults`), and the module's traits are declared before its other signatures so an implementation above its trait still finds the member schemes (#530).
+
+- **Q:** Alias the trait's parameters to the implementation's arguments while forming the default? **A:** No. A rigid name wins over an alias during formation, so `impl [T] Holds[Array[T]] for Wrap[T]` would read the trait's `T` as the implementation's. Forming in the trait's terms and substituting every rigid name at once has no such collision. _Rejected:_ alias insertion (#528).
 
 - **Q:** Where does a method of a built-in type come from? **A:** Only from a declared method: `isMethodKey` answers whether a key is one an imported module's impl provided or one this module declared. _Rationale:_ a built-in type's key has no module in it, so `import Std.Option as Option` put the module's `map` at `Option.map`, and `maybe().map(f)` checked and then failed when run. _Rejected:_ renaming built-in keys, which every impl and qualified call relies on.
 
@@ -157,3 +162,74 @@ Declaration order cannot change explicit-call typing, and a known receiver must 
 literal receiver. Wrong result annotations remain E3001 at the call; plain receiver/type calls
 still refuse ambiguity. This restores the existing selected-implementation contract and does not
 repair imported declaration collision (#734) or conditional generic dispatch (#735).
+
+## Canonical record owners (#761)
+
+Implementation target syntax records its canonical owner beside the existing canonical trait fact. Do not reduce imported or local nominal owners to their basenames.
+
+Resolved Grill Log: identity comes from the checked declaration, never import order or a basename guess. Preserve observable labels, lexical shadowing, field effects and failure provenance; no runtime filesystem lookup. See [[Canonical Runtime Owner Delivery]].
+
+## Imported providers (#734)
+
+Delegate formed method registration and canonical keys to Method Binding. Distinct imported/source canonical providers coexist and mark call-site ambiguity; same/unknown-provider refusal and coherence stay unchanged. Nominal E3013 help asks Env for actual admitted provider spellings, not graph-wide basenames. Preserve Method key re-exports and keep this module below 500 lines.
+
+Resolved Grill Log: binding identity and admitted source spellings determine provider selection and help; registration order and schemes do not. See [[Imported Provider Delivery]].
+
+Resolved nominal-provider boundary (#734): after derive substitution, a field's
+receiver is nominal and its bound-directed provider can no longer be recovered
+from its type alone. The final checker already selects an unambiguous visible
+method and retains its actual canonical provider in methodProvider. Record that
+provider at the member span whenever a registered nominal scheme is selected.
+Preserve the builtin isMethodKey guard and missing-member behavior. Reuse the
+existing provider-marker lowering; do not re-evaluate a receiver, guess from the
+scheme, change runtime registries or copy global provider order into generated
+syntax. The Wire/Json derive reproducer currently returns Json.Number to an Int
+sum in both evaluators; exact 42/JSON/1 output remains required before completion.
+See [[Imported Provider Delivery]].
+
+Resolved static boundary (#734): staticMethodScheme shares method admission and
+ambiguity checks without recording receiver-provider facts. A complete static
+owner selects its implementation arguments through structural head matching; it
+is never lowered to a runtime receiver. Existing static/derive suite cases cover
+Array, Option, nested and reordered heads in both evaluators.
+
+## Complete implementation heads (#735)
+
+ImplementationOwner Type is a distinct owner fact for an implementation target.
+Form its complete target with implementation rigid parameters, transparent aliases
+and canonical nested nominal identities. Env publishes this local immutable fact
+separately from provider evidence and interface snapshots. Compiler Literals reads
+it only at the structural Impl target field and projects the complete formed type
+into executable syntax; source/tooling syntax remains authored. Expression and
+pattern projections ignore this role. Preserve source spans, declared parameter
+order and the static-selection map; do not infer parameters from runtime values.
+
+Resolved Grill Log: a later runtime matcher needs Pair[Array[B], A] from an alias
+Reversed[A, Array[B]], not the authored alias arguments zipped to A/B. Keeping the
+complete checked target is a prerequisite, not the #735 dispatch repair itself.
+A focused compiler property must assert canonical executable heads, retained
+source heads and unchanged target spans. Existing static and derive regressions
+and every full gate remain required. See [[Implementation Witness Delivery]].
+
+## Complete provider selections (#735)
+
+ProviderSelection carries canonical trait identity, complete formed trait arguments
+and an optional complete receiver type. Existing identity-only recording keeps an
+empty argument list and no receiver. Unambiguous rigid-bound selections retain
+the selected bound arguments and actual receiver, including F[A] rather than F.
+Implementation trait facts retain formed arguments under implementation rigids.
+Final checker publication resolves inference in both arguments and receiver.
+Detailed products and ModuleTypes preserve this immutable typed evidence.
+
+Compiler Literals continues existing member-symbol projection in this partition.
+At the structural Impl trait boundary it projects the complete formed trait,
+including expanded aliases and nested canonical owners; tooling syntax stays
+authored. Runtime transport/consumption follows separately and #735 remains open.
+
+Resolved Grill Log: trait identity cannot recover a parameter present only in
+Choice[B] for Box[A]. Do not fabricate a nominal identity to hold receiver types,
+inspect container elements, overwrite target-owner facts, or drop applied receiver
+arguments while following a rigid constructor's bounds. Assert actual checker
+products, canonical implementation trait projection, authored syntax and spans;
+retain full existing dispatch, diagnostic, derive and cache gates.
+See [[Bound Receiver Evidence Delivery]].

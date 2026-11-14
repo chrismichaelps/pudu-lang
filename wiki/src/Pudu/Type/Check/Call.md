@@ -1,6 +1,6 @@
 ---
 type: module
-path: "@root/src/Pudu/Type/Check/Call.hs"
+path: "@root/packages/pudu/v0.1/src/Pudu/Type/Check/Call.hs"
 fidelity: Active
 domain: "[[Pudu Type]]"
 subsystem: "[[Semantics]]"
@@ -67,7 +67,7 @@ A call's arguments are expressions and an expression may be a call, so one direc
 argument rather than an import. `CheckExpression` is that direction — the same shape
 [[Parser Expression Control]] uses for the same reason.
 
-- **A variant that named its payload is refused before the callee is resolved**, and answered here rather than left to fall through. Falling through re-checks the same member as an expression, which reports one mistake twice; short-circuiting is also what reaches an imported variant, whose qualified name resolves before qualified member typing is ever consulted.
+- **A named-payload constructor is refused by its resolved owner**, through qualified constructor admission or exported namespace binding lookup. An ErrorType result answers the callee once, preserving one E3034 without consulting unrelated member basenames.
 
 ### Linkage
 
@@ -132,7 +132,7 @@ Qualified nominal/trait lookup must yield to localValueHead before selecting a m
 
 ## Qualified constructors (#717)
 
-After named-field variant refusal, ask [[Type Check Pattern]]'s shared qualified constructor
+Ask [[Type Check Pattern]]'s shared qualified constructor
 admission before static methods and ordinary member lookup. Preserve the existing explicit
 receiver/lending and lexical shadow checks for every non-constructor.
 
@@ -156,3 +156,51 @@ Built-in receiver type names may be absent from declaredNames. Before the ordina
 fallback, consult their recorded ambiguous receiver/member slot and refuse E3013 when present.
 Keep actual module qualifiers and nearer local values on their existing higher-priority paths.
 Resolved Grill Log: Int.encode cannot silently choose where Box.encode already refuses.
+
+## Qualified concrete methods (#763)
+
+Delegate qualified scheme lookup to Type Check Qualified after local-head admission. Both simple and module-qualified concrete owners use the same canonical method scheme; preserve explicit generic and trait-qualified call paths.
+
+Resolved Grill Log: known concrete identity, lexical admission, module-export priority and provider ambiguity must agree for called and retained methods. See [[Qualified Record Method Delivery]].
+
+Resolved Grill Log: generated complete owner applications retain their existing internal path;
+this repair changes no authored bracket grammar.
+
+## Named payload field ownership (#761)
+
+Qualified constructor admission owns named-payload refusal. Remove the unconditional member-basename refusal; ordinary qualified member typing checks exported constructor bindings, preserving one diagnostic and lexical receiver behavior.
+
+Resolved Grill Log: field names and payload types come from one resolved owner/variant key. No runtime representation or field evaluation order changes in this partition. See [[Named Payload Field Delivery]].
+
+## Qualified imported trait calls (#734)
+
+Admitted trait callees retain their canonical trait qualifier as an owner fact at
+the original callee span, only after successful self-taking trait selection.
+Reuse existing member-head lowering so evaluation never reads an alias namespace
+for the qualifier. The receiver and remaining arguments still check once.
+Qualified authored trait paths resolve through the exact consumer-visible name
+map and yield to complete dotted value bindings; preserve legacy single-name and
+generated paths. Env retains that forward map beside its lazy preferred spelling
+map. Never resolve authored aliases from graph-wide hidden names.
+Resolved Grill Log: unused-import admission alone exposed E7001 at A; canonical
+trait selection must survive into executable syntax without runtime alias guesses.
+See [[Imported Provider Delivery]].
+
+Resolved static boundary (#734): staticMethodScheme shares method admission and
+ambiguity checks without recording receiver-provider facts. A complete static
+owner selects its implementation arguments through structural head matching; it
+is never lowered to a runtime receiver. Existing static/derive suite cases cover
+Array, Option, nested and reordered heads in both evaluators.
+
+## Parameter-qualified methods (#782, #735)
+
+parameterStaticCallee selects a simple lexical rigid type parameter's member
+through methodScheme before namespace fallback, unless a nearer ordinary value
+head shadows it. Retain provider facts at the inner member span; instantiate
+written or inferred method parameters at the whole application span through
+instantiateWith. Missing members report positioned E3005; ambiguity and complete
+bound/result/argument checking use the shared scheme path. Expression selection
+uses the same helper for called, retained and explicitly applied members.
+Resolved Grill Log: T.member must not fall through as ErrorType or flatten to
+an unbound T.member value key. Self specializes from the bound's receiver;
+method-local parameters remain real parameters and publish ordinary selections.

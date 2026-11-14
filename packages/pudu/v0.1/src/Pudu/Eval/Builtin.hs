@@ -21,6 +21,7 @@ module Pudu.Eval.Builtin
   , effectBuiltins
   , isDecimalBuiltin
   , isHashingBuiltin
+  , prepareStringMethodFast
   ) where
 
 import qualified Data.Text as Text
@@ -34,6 +35,7 @@ import qualified Pudu.Eval.Json as Json
 import Pudu.Eval.MultiMap (callMultiMapAdd, callMultiMapContains)
 import qualified Pudu.Eval.Xml as Xml
 import qualified Pudu.Eval.SwissTable as Swiss
+import qualified Pudu.Eval.TextView as TextView
 import qualified Pudu.Runtime.Word as Word
 
 import Pudu.Eval.Builtin.Array (Apply, callArrayMethod)
@@ -51,7 +53,7 @@ import Pudu.Eval.Builtin.Numeric
   , callFloatKernel
   , isDecimalBuiltin
   )
-import Pudu.Eval.Builtin.String (callStringMethod, callStringMethodFast)
+import Pudu.Eval.Builtin.String (callStringMethod, callStringMethodFast, prepareStringMethodFast)
 import Pudu.Eval.Effect (callEffect, effectBuiltins)
 import Pudu.Eval.Env (Evaluator (..), abortAt)
 import qualified Data.ByteString as ByteString
@@ -87,6 +89,7 @@ import Pudu.Eval.WordMap
   , callWordMapPopCount
   , callWordMapPredicate
   )
+import Pudu.Diagnostic.Evaluation (panicArgumentHelp, panicCode)
 import Pudu.Source (Span)
 
 {-| Render any value as the text a message should carry.
@@ -125,8 +128,8 @@ callShow spanValue arguments = case arguments of
 callPanic :: Span -> [Value] -> Evaluator Value
 callPanic spanValue values =
   case values of
-    [StrValue message] -> abortAt (Just spanValue) "E7007" message Nothing
-    _ -> abortAt (Just spanValue) "E7007" "panic" (Just "panic takes one string argument")
+    [StrValue message] -> abortAt (Just spanValue) panicCode message Nothing
+    _ -> abortAt (Just spanValue) panicCode "panic" (Just panicArgumentHelp)
 
 {-| The hashing the library cannot afford to write in the language.
 
@@ -229,6 +232,12 @@ callHashing spanValue builtin arguments = case (builtin, arguments) of
   (BufferScanU64Builtin, values) -> Buffer.callBufferScanU64 spanValue values
   (BufferCopyBuiltin, values) -> Buffer.callBufferCopy spanValue values
   (BufferSizeBuiltin, values) -> Buffer.callBufferSize spanValue values
+  (TextByteAtBuiltin, values) -> TextView.callTextByteAt spanValue values
+  (TextByteSizeBuiltin, values) -> TextView.callTextByteSize spanValue values
+  (TextByteSliceBuiltin, values) -> TextView.callTextByteSlice spanValue values
+  (TextByteFindBuiltin, values) -> TextView.callTextByteFind spanValue values
+  (TextByteFindLastBuiltin, values) -> TextView.callTextByteFindLast spanValue values
+  (TextScalarAtBuiltin, values) -> TextView.callTextScalarAt spanValue values
   (SwissTableEmptyBuiltin, values) -> Swiss.callSwissTableEmpty spanValue values
   (SwissTableLookupBuiltin, values) -> Swiss.callSwissTableLookup spanValue values
   (SwissTableInsertBuiltin, values) -> Swiss.callSwissTableInsert spanValue values
@@ -310,6 +319,12 @@ isHashingBuiltin builtin = case builtin of
   BufferScanU64Builtin -> True
   BufferCopyBuiltin -> True
   BufferSizeBuiltin -> True
+  TextByteAtBuiltin -> True
+  TextByteSizeBuiltin -> True
+  TextByteSliceBuiltin -> True
+  TextByteFindBuiltin -> True
+  TextByteFindLastBuiltin -> True
+  TextScalarAtBuiltin -> True
   SwissTableEmptyBuiltin -> True
   SwissTableLookupBuiltin -> True
   SwissTableInsertBuiltin -> True

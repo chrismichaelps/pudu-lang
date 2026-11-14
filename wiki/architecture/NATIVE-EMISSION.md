@@ -1,0 +1,583 @@
+---
+type: architecture
+tags: [architecture, backend, native]
+aliases: [Native Emission Coverage]
+---
+# Native Emission Coverage
+
+## Purpose and completion rule
+
+Compile ordinary checked Pudu programs into portable C11 with interpreter-identical observable behavior. Full coverage requires every implemented language construct and reachable standard-library boundary to have lowering, representation, execution, cleanup, diagnostics, and differential evidence. A typed E6001 refusal is an honest boundary, not completed support. There is no silent interpreter fallback.
+
+## Coverage ledger
+
+| Area | State | Next obligation |
+| --- | --- | --- |
+| Platform Int/Bool, checked arithmetic, if/while, printing | Implemented (#498, #505) | Preserve exact deferred magnitudes, control/output parity and closed-pipe continuation/diagnostic regressions |
+| Scalar functions, recursion, call depth | Partial (#499, #828) | Callees, receivers and their selected members run before arguments in the tree, compiled and native paths (#828), including dynamic receivers and byte operations added by #846. Preserve explicit-frame lifetime, argument ordering, E7002 timing and differential evidence, including once-counted named-value calls (#568); promotion still requires independent review |
+| Loop control and scalar loop results | Implemented (#489) | Preserve labels, transfers, Never joins and condition-scope evidence |
+| Unit values, parameters and operations | Implemented (#492, #493) | Preserve effect-first temporaries, display/equality and #494 E7001 runtime refusals |
+| Entry result reporting | Partial (#512, #521, #525, #566, #871) | Represented values, including output Results, use interpreter-identical rendering and builder buffering; an entry whose first parameter has no default stops with the evaluator's located E7003 (#871); complete callable forms and platform failure evidence remain |
+| Complete numeric families | Implemented (#495, #497, #500, #507, #512, #560, #800, #802) | Fixed integers, Int128/UInt128, BigInt (#800), Float32/Float64 and Decimal (#802) are admitted, with `convertInteger` between every integer kind and every `Std.Decimal` primitive; preserve the carriers' differential evidence |
+| Text and bytes | Partial (#515, #516, #517, #518, #559, #562, #565) | Owned Str values, Char values, operators, rendering, printing, entries, charAt, every Int/Bool/Str-result method (trim and case mapping included), `split`, `lines`, `chars`, `toInt`, `toFloat` and `charFromCode` match the interpreter (#559, #562); Bytes with every method, `toBytes` and `bytesOf` are native (#565); output Results are native (#566); `toDecimal` is native through the Decimal parser (#802); `Bytes.strided` is native (#846); all six byte-addressed TextView primitives and builtin values are native (#827), including public StringView integration; retain the conversion and callable evidence |
+| Records, tuples, sums and collections | Partial (#521, #525, #552, #556, #558, #561, #564, #840) | Tuples, records and sums of every module, generic ones at each instantiation, and the built-in Option/Result are boxed, refcounted values with construction, field, position and payload reads, equality, ordering (tuples), rendering and run-time E7001 naming held variants; arrays (#556, #558), maps and sets (#561) and range values (#564) and Bytes (#565) are native; word-map algebra and queries are native (#810, #814); indexed stores (`Buckets[V]`), `hashOf`, `mixHash` and the MultiMap primitives are native, so `Std.HashMap` and `Std.MultiMap` compile (#840); the six flat-table primitives, the buffer, column, sort, digest, keyed digest, checksum, sealing, signature, audio and codec kernels are native ([[Native Builtin Kernels]]); the ledger row stays Partial until the independent review of #842 is recorded |
+| Pattern matching and iteration | Partial (#525, #540, #541, #554, #558, #562, #564) | `match`, `if let` (with `else if` chains) and `while let` (with labels, `break` and `continue`) lower every pattern form in order with guards, bindings, literals, ranges, tuples, constructors, records and alternatives; `let ... else` retains bindings in the enclosing block (#541); `for` walks written ranges, range values, sequence types, arrays, maps, sets, Str, tuples and sum payloads (#554, #561, #562, #564); sequence patterns are native in `match` and in `let` at any depth (#558, #846) |
+| Modules and constants | Partial (#539, #543, #563) | Calls through selective imports, aliases and qualifiers, functions of every reachable module, and records and sums by canonical identity match the interpreter; folded scalar/tuple/record/sum constants now preserve canonical solved identity, with arbitrary Bytes constants including nested byte values (#565); records and sums whose fields name other modules' types or aliases are laid out as checking formed them (#563); folded arrays, maps, sets and ranges now project recursively through their existing carriers (#808); folded stores project through the store carrier (#840); callable constants whose folding left no product compile their written initializer at the use, and calls through a constant, bare or qualified, are value calls (#846); `null` has no type until raw pointers exist, so checking refuses it (E3024) and no `null` constant reaches lowering (#858) |
+| Callables and generic code | Partial (#551, #552, #555, #560, #567, #569, #575, #631, #633, #638, #641, #644, #646, #806, #810, #819, #824, #840, #842, #846) | Implementation members, inherited defaults, type- and trait-qualified calls, `toText()`, generic functions and implementations (one copy per type list) with or without written type arguments (#560), lambdas with captures, named functions as values and calls through values match the interpreter; named expression bodies, including entries, generic copies and trait defaults, use the ordinary return path (#567); the four standard-stream builtins, display/show and charFromCode/bytesOf/mapOf/setOf are first-class values, builtin refusals through a value name the call (#569, #575, #631), builtin values whose type checking left open form at unit (#631), and panic and untyped convertInteger stop like the interpreter directly and as values, except where #634 leaves panic untyped (#633); default parameter values fill in the callee through a supplied-argument count, directly, across modules and through values (#638); module-qualified function values are first-class (#641); built-in methods of text, arrays, maps, sets, ranges, chars and bytes are values bound to their receiver, failing at the call through them (#644); trait methods are values bound to records and sums or named through their type (#646); the seven Decimal primitive values reuse their direct-call bodies and preserve builtin identity and entry rendering (#806); all eight word-map algebra/query builtins are first-class (#810, #814); static members and defaults named through a type parameter (`T.made()`) select the copy's bound type (#819); inherited defaults typed by the trait's own parameters, for plain and generic implementations, and defaults of traits imported from other modules, lowered in the trait's module (#824); `bucketsOf`, `hashOf`, `mixHash`, `multiMapAdd` and `multiMapContains` are first-class, store methods are values bound to their receiver, and a builtin value's failure points at the call made through it (#840); every pure kernel builtin is first-class too (#842); generic methods whose type arguments checking left to the call, static members through a type parameter at each instantiation, `dynamic` widening/dispatch/rendering/equality, and constructor parameters (`F[_]`) plain and through a trait are native, and `toText` taken as a value from a type that declares none is a text method rendering `<method toText>` (#846); trait-qualified method values (#647) remain |
+| Accepted operations with runtime refusals | Partial (#494, #512) | Represented Unit/Bool/float operators retain E7001; remaining runtime types/operators still need equivalent coverage |
+| Errors, references and resources | Partial (#544, #553, #649, #651, #790, #794) | Shared borrows, dereference and `?` on Result and Option match the interpreter; assignment to fields, elements and paths of both follows the interpreter's order and root-span failures (#649); functions and methods with `&mut` parameters, `self: &mut Self` included, write each final back to the lent place on every return path, directly, through methods and through function values (#651, #790, #794); moves, drop and all unwind paths remain |
+| Host services and concurrency | Partial (#846) | Tasks, async lambdas, `.await`, `async with scope` joins, cells, locks, channels, threads, clocks, sleeping, arguments, environment, directories, standard-input lines, whole-file I/O, links, permissions, temporary files, atomic writes, open readers/writers, binary64 math, packed lanes and the broad-phase overlap kernel, stream sockets, child programs, gzip and bare-stream compression, time rendering and reading, stop signals and TLS connections through the system TLS library are native; foreign functions with fixed-width integer, float, Bool, text, lent byte and record crossings are typed native call sites ([[Native Foreign Call Sites]], #850, #851, #852); direct opaque handle calls preserve owned, counted and borrowed claims and runtime refusals ([[Native Foreign Handles Delivery]], #853); scalar, record, text and owned-handle foreign out-slots preserve declaration order and zero initialization ([[Native Foreign Slot Delivery]], #854); foreign functions an imported module declares are called through its qualifier or alias as bare calls are (#873); desktop windows and audio devices and streams run through the native host adapters, refusing settings before the platform as the interpreter does ([[Native Desktop Adapter Delivery]], #856; [[Native Audio Adapter Delivery]], #857); time readings beyond the integer carrier refuse alike in both engines |
+
+## Nested foreign records (#863)
+
+The interpreter and C11 use the platform layout of each nested record.
+[[Nested Foreign Record Delivery]] covers inner tail padding and records
+whose combined scalar leaves exceed the per-record member limit.
+
+## Published progress (#496)
+
+The README progress bar counts **completed coverage areas**, not individual language
+constructs, implementation effort or release readiness. Its denominator is every row
+of the Coverage ledger above; only `Implemented` counts. `Partial` and `Pending`
+contribute zero. Display floor(100 × completed / total) and a 20-cell bar with
+floor(20 × completed / total) filled cells. Broad areas have equal weight; changing
+this inventory can decrease the percentage. A 100% area count still requires the
+completion evidence matrix below before claiming full production coverage.
+
+[[Native Progress Generator]] derives the README marker block from this table;
+[[Native Progress Workflow]] refreshes it on every dev push, including PR merges.
+Update row states only with matching implementation and evidence in the same PR.
+[[Native Progress Tests]] rejects malformed inventory and ambiguous output markers.
+
+Resolved Grill Log: no subjective partial credit or test-count proxy. The count and
+denominator stay visible so readers can audit the coarse measure.
+
+## Indexed stores, hashing and MultiMap primitives (#840)
+
+[[Native Indexed Stores]] owns the contract: `Buckets[V]` on the shared tree
+carrier at a narrowed Int key, deterministic `hashOf`, seeded `mixHash`, and
+`multiMapAdd`/`multiMapContains` over the record's two maps. An audit of the
+interpreter's bound builtins against lowering leaves these families
+unrepresented: SwissTable, buffer and column kernels, digests and keyed
+digests, sealing and signature checks, `checksumOf`, `constantTimeEqual`,
+`deriveKey`, the JSON/XML/CSV codecs and the audio byte generators.
+
+## Host services, tasks and abstractions (#846)
+
+[[Native Host Services]] owns tasks, async lambdas, `.await`, `async with
+scope` joins, shared cells/locks/channels/threads, process and file services,
+binary64 math and packed lanes. [[Native Type Abstractions]] owns `dynamic`
+values, constructor parameters, static members through a type parameter,
+generic methods whose type arguments checking left to the call, and sequence
+patterns in `let`. [[Backend Host Programs]] and [[Backend Abstraction
+Programs]] hold the differential and counted-allocation corpus. [[Backend Service Programs]] holds the corpus for sockets, child programs,
+compression, time, signals and TLS. Foreign functions stay refused at their
+written site.
+
+## Inherited default parameter scopes (#824)
+
+[[Native Inherited Defaults Delivery]] covers native copies of defaults from
+local and imported traits. Checked implementation heads supply every trait
+argument; implementation parameters settle before body bindings, and a
+concrete copy's signature is retained separately from its body's namespace.
+Same-spelling parameters, renamed own parameters and aggregate arguments
+must preserve interpreter output and cleanup. Defaults lower in their trait's
+module, including private helpers and diagnostic source spans.
+
+## Current Core control-flow contract
+
+[[Pudu Core]] carries numeric CoreLoopId identities; source labels resolve nearest-first during lowering. CoreWhileValue is unit, CoreLoopValue carries its observed break type (or CoreNeverType without a local break), and CoreBreak/CoreContinue identify their destination. A while condition is lowered outside that while's loop frame: control transfer there targets an enclosing loop, matching the checker and interpreter. Never joins a reachable branch without inventing a value. Only direct terminal transfers or provably divergent trailing results make a block divergent.
+
+The emitter places continuation targets before condition setup and break targets outside the loop body. Break operands finish before result assignment and transfer. Numeric targets avoid label collisions. Every loop body result is evaluated and discarded; breaking with a value retains all effects even when the loop result is discarded. Unsupported ownership-bearing constructs still refuse until cleanup is represented explicitly.
+
+## Grill Log
+
+- **Q:** Can full coverage mean removing all refusals immediately? **A:** No; every admitted surface needs exact runtime semantics and evidence. The ledger keeps missing behavior explicit. Rejected: unverified C translation or fallback disguised as compilation.
+- **Q:** May C break/continue implement labelled transfers? **A:** Resolved numeric destinations are required; C's nearest-loop rules cannot express outer transfers. Rejected: source labels or textual rewriting.
+- **Q:** Can a while condition see its own target? **A:** No; checker and evaluator install the target only for its body. Rejected: pushing the loop before lowering its condition.
+- **Q:** Does this change language semantics? **A:** No; this projects already checked control flow and preserves the shared language specification. Rejected: a second type checker inside the backend.
+
+## Dependencies and consumers
+
+[[Backend]] · [[Core IR]] · [[grammar/pudu]] · [[architecture/SEMANTICS]] · [[ADR-0002-compiler-pipeline]]
+
+## Referenced by
+
+[[architecture/_MOC]] · [[Backend]] · [[Native C11 Backend Delivery]] · [[Pudu Native]]
+
+## Unit-result conformance #490
+
+[[ADR-0025-if-without-else-unit-results]] resolves the checker/evaluator discrepancy as a correctness repair: a no-else if yields unit on both normal paths, preserving all effects, transfers, errors and cleanup. Tree, compiled and boxed-region evaluation, derive true-folding and dynamic contextual checking now agree in focused regression checks. Native lowering removes the temporary taken-value refusal and its differential cases pass. With-else values stay unchanged. This closes the #489 oracle boundary for represented branch values; unsupported syntax and runtime representations remain incomplete coverage.
+
+## Pure builtin kernels (#842)
+
+[[Native Builtin Kernels]] lowers the buffer, column, flat-table, digest, keyed
+digest, checksum, sealing, signature, audio and codec builtins, direct and as
+values. Each guard, refusal and span follows the interpreter's own function;
+the layout integers come from the checked `Std.Json`, `Std.Xml` and `Std.Csv`
+shapes. Evidence: [[Backend Kernel Programs]] and [[Backend Crypto Programs]]
+against hand-written and published answers, plus the counted-allocation run.
+The ledger counter stays at 4/14 until independent review is recorded.
+
+## Solved type publication
+
+The full-analysis native CLI already retains CompileResult.compileTypes and compileSchemes. TypeInfo.typeAt uses complete Span identities and publishes final substitutions; those facts must enter lowering before inferred scalar signatures, records, sums and generic specialization are broadened. The lowerer must not infer them again. Cached ExecutionProducts omit these facts; native cache support needs its own product contract rather than expanding interpreter execution products implicitly.
+
+## Completion evidence matrix
+
+The full-emission goal is unproven until all of the following are satisfied together:
+
+1. Every implemented expression, statement, declaration, pattern and literal form has a semantic lowering path. Pattern-match exhaustiveness in Haskell alone does not count when a branch only emits E6001.
+2. Every formed runtime type and callable form has representation, construction, access, dispatch, update, lifetime and failure behavior. Inferred, generic and generated identities use the checker/resolver's canonical products.
+3. Every supported standard-library/host boundary has native execution evidence, including failure and cleanup behavior. Successful ordinary fixture programs must build natively without an unsupported-construct refusal; runtime platform refusals must match the interpreter's own behavior.
+4. Differential tests compare stdout, stderr, exit status, mutation and observable resource effects across tree, compiled, optimized-region and native paths where each path is admitted. Effect/order/transfer/cleanup regressions must exercise actual paths rather than passing by fallback.
+5. Every reachable runtime diagnostic retains its code, source span, message, notes, help and output ordering. Native representation failures cannot be deferred as opaque C errors.
+6. Module linking, constants/derives, generated spans, closure capture, defaults, borrowing, moves/drop, recovery, concurrency and cancellation are explicitly covered rather than inferred from scalar examples.
+7. Clean supported-toolchain builds, complete regression/integration gates, platform runtime tests and independent implementation/architecture/wiki review all pass with remaining limitations stated.
+
+A passing slice or a smaller supported subset cannot satisfy this matrix. The goal remains active while any ledger row, runtime surface or verification obligation is pending.
+
+## Solved scalar signatures (#491)
+
+[[Compiler Lower Types]] projects the complete checked module facts into existing scalar Core representations. Final monomorphic synchronous schemes admit inferred and aliased Int/Bool parameters and Int/Bool/unit results; exact expression facts admit annotated scalar locals. Missing facts and unrepresented formed types retain E6001. This changes backend coverage without changing Pudu semantics.
+
+Resolved Grill Log: facts belong to the same successful root CompileResult, exact complete spans identify generated expressions, and canonical builtin identities select representation. No duplicate inference, interpreter cache expansion or new ownership representation.
+
+## Unit call representation (#492)
+
+An empty Core block represents the source unit literal. Canonical settled UnitTypeValue may occupy a parameter slot using the existing C int sentinel ABI; unit-returning functions remain void. Argument emission discards effects exactly once before binding zero, preserving left-to-right order, abrupt transfer, diagnostics and depth-check timing. No syntax or checker change is introduced. Unit display/equality are implemented by #493; general tuple/aggregate representations remain pending.
+
+Resolved Grill Log: never put a void C call in an argument initializer or erase Result as unit. The existing wrappers retain all parameter slots and only execute after arguments complete.
+
+## Unit operations (#493)
+
+Lower display(unit), unit equality and inequality through the existing Core/display model. Freeze every eager unit operand through its effects and an integer-zero temporary. Inline display evaluates its operand once and prints exactly the two UTF-8 bytes (). Select the string runtime printer. #494 represents the interpreter E7001 runtime refusals for Unit arithmetic/ordering; treating those operations as integer arithmetic would change behavior. No owned text representation is implied.
+
+Resolved Grill Log: effects precede constant unit representation, including calls, transfers and failures; both operands execute left to right. No syntax/checker change or Result erasure.
+
+## Explicit operator runtime failures (#494)
+
+CoreOperatorFailure carries the original operation span, ordered operands and shared E7001 message. Compiler Lower Scalar owns normal operator classification and exact fact admission. Bool ordering is valid; unit ordering/arithmetic and invalid Bool operations trap only after operand effects. Shared diagnostic factories preserve generic cannot-apply versus comparisonOnly unsupported-operator wording. Never operands preserve transfer without fabricating a trap; print Result guards remain. Valid unimplemented Int/owned operations retain explicit coverage boundaries. Resolved Grill Log: actual interpreter dispatch is authoritative, with no native arithmetic approximation or second inference pass.
+
+## Platform Int operators (#495)
+
+[[Backend Runtime Integer]] defines all platform Int bitwise, complement, shift,
+wrapping and saturation operations in portable C11. Conversion from high unsigned
+bit patterns avoids implementation-defined signed narrowing. Right shift fills
+sign bits explicitly; shifts validate counts before shifting and preserve distinct
+negative/width E7004 diagnostics through [[Diagnostic Arithmetic]]. Saturation
+checks safe bounds before signed operations. [[Backend Integer Programs]] supplies
+boundary and seeded full-width mathematical expectations in addition to actual
+interpreter/native comparison. The target remains the existing explicit 64-bit
+model; other integer families and numeric types remain coverage obligations.
+
+Resolved Grill Log: portable defined arithmetic and exact observable parity are
+required together. A passing operator slice does not complete numeric families.
+
+## Deferred out-of-range literal intermediates (#498)
+
+The exact carrier now preserves accepted positive 2^63 intermediates through
+blocks, locals, calls, mutation, branches, loop slots and entry reporting.
+Independent mathematical cases and tree/compiled/native probes pass. The #499
+wide-recursion crash discovered during integration is repaired by explicit
+heap frames and iterative dispatch in [[Native Execution Frames]]. All 19 clean
+gates and 669 test groups now pass. A separate native sanitizer run against the
+tree evaluator passes 20 groups, including the permanent pressure case; controlled
+allocation/cleanup tests and real CLI parity checks also pass. The ledger now
+counts 4/14 complete areas (28%). This is still far from full language coverage.
+
+[[Exact Native Integer Carriers]] and [[Native Frame Pressure Repair]] record
+the contracts and local evidence. Independent implementation/architecture/wiki
+review, other supported platforms and reviewable PR partitioning remain pending
+before promotion. Subsequent numeric work begins with canonical fixed signed
+widths (#497), retaining the full unsigned/large/float/Decimal obligations.
+
+## Wide integer prerequisite (#501)
+
+[[Native Wide Integers]] specifies staged Int128/UInt128 delivery. The raw
+[[Backend Word128 Kernel]], [[Backend Wide Integer Values]] and
+[[Backend Wide Operations]] have independent executed corpora (#501–#503).
+[[Native Wide Runtime Integration]] adds full-width output/status and actual
+runtime dependency selection (#504, locally validated). [[Native Wide Frame Bridge]] integrates the frame ABI (#506, all 19 clean gates/678 groups pass);
+[[Native Wide Source Admission]] adds checked source conformance #507, all 19 clean gates/678 groups pass. These prerequisites do not
+change the completed-area count.
+
+## Closed-output parity finding
+
+Before #505, a checked scalar print program with a closed pipe reader exits 0
+with empty stderr in both evaluators, while native exits by SIGPIPE (signal 13).
+This contradicted complete output parity. The refined #505 repair now matches
+108 CLI cases, including stderr failures and inherited blocked signals. The clean
+run passed 18 gates and exposed one stale standard-header whitelist assertion;
+after the inspected signal.h allowance recompiled under -Werror, all 677 groups
+pass in the full-suite rerun. Together these checks restore the scalar row.
+Independent review and additional supported-platform evidence remain pending.
+Printing helpers must not terminate an ignored print-result program by signal.
+
+## Floating output prerequisite (#508)
+
+[[Native Floating Point]] preserves the locked GHC show policy, including
+strict decimal margins and exact layout. [[Native Floating Natural Kernel]]
+provides checked finite-domain scratch, with 6,780 independent mathematical
+rows and seven minimal roots passing both C compilers/sanitizers; all 19 clean
+gates/680 groups pass. Exact
+formatting, typed arithmetic and source integration remain pending; this is
+not BigInt support and does not change completed-area counts.
+
+[[Native Binary64 Formatter]] now matches locked GHC show bytes across 63,661
+unique encodings and exact minimal helper closures under Clang/GCC/sanitizers
+(#509, all 20 clean gates/682 groups pass). Source/binary archives retain the adapted
+code's notices. This raw-bit helper performs no IO and does not admit floating
+source; typed arithmetic and Core/frame/source integration remain required.
+
+[[Native Floating Values]] adds bit transport and Double-first arithmetic with
+54,344 raw-result/predicate rows (#510, all 20 clean gates/685 groups pass). It remains a helper
+prerequisite: Core/frame/source admission, entry reporting, target conformance
+and full numeric-family coverage remain required. Progress stays 4/14 (28%).
+
+[[Native Floating Runtime]] connects actual runtime catalogue/dependency selection
+and exact output (#511, all 20 clean gates/689 groups pass). Closed-pipe and counted IO
+checks pass both compilers/sanitizers. Core/frame/source transport remains open;
+this prerequisite does not change the completed-area count.
+
+## Floating source admission (#512)
+
+Float32/Float64 values now pass through Core, frames and C as raw binary64
+encodings in a `floating` cell. Literals carry the bits FloatLiteral parsed;
+each `+ - * /` is one helper call that rounds, and narrows for Float32, before
+the next operation; comparisons use the IEEE predicates; negation flips the
+sign bit, NaN included. Other accepted operators trap with the evaluator's
+E7001 wording after their operands run. Float and Bool entry results print
+their value and exit zero, and stay silent on a closed pipe, as `pudu run`
+does. Evidence: the float corpus matches independent IEEE answers and the
+interpreter; all 42 native groups pass under Clang and GCC 15; the float
+groups pass Clang ASan/UBSan (GCC's UBSan runtime is not installed on this
+host); CLI parity holds for open and closed stdout under both compilers.
+Runtime revision is 8. Progress stays 4/14 (28%): BigInt, Decimal and the
+print Result entry keep their rows partial.
+
+## Owned text (#515)
+
+[[Native Text Runtime]] carries Str as a view over static or refcounted bytes.
+Stores build the new value before releasing the old, callee frames retain
+their text arguments, returned text hands its reference to the destination,
+and frames release their text slots on return and unwind. Text operators,
+display/show and Str entry rendering follow `textOperation`, `callDisplay`,
+`callShow` and `reportResult`. Method calls are next and must keep the
+evaluator's argument-before-receiver order (#514). Evidence:
+[[Backend Text Programs]] against answers and the interpreter, and
+[[Backend Text Leak Tests]] with counted heap blocks. Runtime revision 9.
+Progress stays 4/14 (28%).
+
+## Str methods (#516)
+
+[[Compiler Lower Text]] admits length, isEmpty, contains, startsWith,
+endsWith, indexOf, spanOf, spanNotOf, drop, take, slice, repeat, reverse,
+escapeHtml and replace on Str receivers, evaluating arguments before the
+receiver as the evaluator does (#514). [[Native Text Methods]] implements
+them by scalar; drop/take/slice return views that retain the source, and
+E7004 refusals carry the evaluator's messages. Evidence: [[Backend Text
+Method Programs]] against hand-written answers and the interpreter, with
+counted-leak runs. Progress stays 4/14 (28%).
+
+## Trim and case mapping (#517)
+
+[[Native Text Case]] reads its case and whitespace tables from the text
+library linked into pudu (text-2.1.4) when C is emitted, so native follows
+the interpreter's Unicode version by construction. [[Backend Text Case
+Tests]] compares every scalar and re-checks that the linked library has no
+context rules. Progress stays 4/14 (28%).
+
+## Char values (#518)
+
+Char is a `uint32_t` scalar in its own cell member. Literals, the six
+comparisons, `display`, `show`, `code`, `toText`, `Str.charAt` and Char entry
+results follow `comparisonOnly`, `callDisplay`, `renderValue`,
+`callCharMethod` and `charAtFast`; other operators trap with the evaluator's
+E7001 wording after their operands run. [[Native Char Runtime]] holds the
+helpers; [[Backend Char Programs]] checks hand-written answers, the
+interpreter's refusals and counted leaks under Clang, GCC 15 and ASan/UBSan.
+Runtime revision 10. `charFromCode` waits on Option. Progress stays 4/14 (28%).
+
+## Tuples (#521)
+
+[[Native Aggregate Emission]] represents a tuple as a refcounted `pudu_box`
+of cells with per-type make, drop, show, equal and compare helpers, written
+only when used. Frames now track every owned slot (text or box) with a kind,
+so retain on entry, release on return and unwind, and destination
+replacement share one path. Ordering applies compareValues, with the total
+float order of #522, through base's Ord defaults. [[Backend Tuple Programs]] holds
+answers, refusals and counted leaks under Clang, GCC 15 and ASan/UBSan.
+Runtime revision 11. Progress stays 4/14 (28%).
+
+## Records (#521)
+
+Records of the root module without type parameters share the tuple box. Their
+layout comes from the checker's own formation (`declaredRecords`), not from
+type syntax. Literals run fields in written order and store declaration order
+(#519); updates run the base first; field assignment rebuilds the local's
+value as it is after the assigned value ran. [[Backend Record Programs]] holds
+answers, refusals and counted leaks under Clang, GCC 15 and ASan/UBSan.
+
+## Sums and match (#525)
+
+A sum is a `pudu_box` whose first cell is the variant tag, followed by that
+variant's payload in declaration order; the root module's sums and Option and
+Result at concrete arguments share it. [[Compiler Lower Sum]] admits a
+variant only where the checker typed the span as a sum with that variant, so
+`Shape.Circle(3)` resolves exactly as checking did (#536 repaired that
+checking). [[Compiler Lower Match]] and [[Compiler Frame Match]] lower `match`
+into a chain of tag, literal, range and guard tests over one subject slot.
+An operator failure on a sum names the variants it holds at run time
+("cannot apply < to a Some and a None"), built from the shared wording. A
+sum's type argument left unconstrained by checking (the error type of `Ok(1)`)
+takes a unit layout, which no value can observe. [[Backend Sum Programs]]
+holds hand-written answers and the interpreter's refusals; they pass under
+Clang, GCC 15 and Clang ASan/UBSan, and the counted-leak run includes them.
+
+## Modules (#539)
+
+[[Compiler Lower]] lowers every module of the compiled program, each with its
+own checked facts, from the root's entry. Functions are keyed `Module.function`;
+a written callee resolves in its module as the evaluator links imports.
+Records and sums are named by canonical identity and rendered by their written
+name. [[Backend Module Programs]] covers every import form, a module that
+imports another, two modules' types of one name, and a failure inside an
+imported function. A run over every fixture with `main` moved from 3 to 14
+programs whose output matches the interpreter byte for byte, with none
+differing; the refusals left are led by collection and function types,
+generics, `unsafe` blocks and arrays.
+
+## if let and while let (#540)
+
+[[Compiler Lower Match]] lowers `if let` as a two-arm match, the pattern's
+block and then a wildcard taking the `else` branch or unit, and `while let` as
+a `loop` that matches the subject afresh each turn and breaks on the first
+refused value. Both inherit every pattern form, scope and refusal of `match`.
+[[Backend Sum Programs]] covers chains, an expression value, a value-less
+`if let`, side-effect order of the subject, labelled and nested loops, and
+overflows inside a body and a subject.
+
+## Refutable let bindings (#541)
+
+[[Compiler Lower Match]] now lowers `let PATTERN = subject else fallback`
+through the existing match/frame path. Success binds into the containing
+block; failure runs the diverging fallback with the original outer scope.
+[[Backend Sum Programs]] adds exactly-once evaluation, sequential bindings,
+partial failure with shadowing, alternative/record/range patterns, labelled
+transfers and exact overflow diagnostics. Clang, GCC 15, ASan/UBSan and both interpreter modes pass the corpus;
+69 counted programs release every allocation. All 20 clean repository gates
+pass, including 711 optimized test groups. The pattern/iteration area remains
+partial because iteration and sequence patterns still need native support.
+
+Delivery and evidence: [[Native Refutable Binding Delivery]].
+
+## Module folded values (#543)
+
+[[Native Folded Constants]] passes the compiler's existing immutable products
+into native module scopes. [[Compiler Lower Constant]] preserves represented
+scalars and aggregates against the solved canonical type at each reference;
+missing products and unsupported families retain located E6001 refusals.
+[[Backend Module Programs]] and [[Native Solved Types Tests]] cover the new
+boundary. No runtime initializer is evaluated by lowering. Clang, GCC 15, ASan/UBSan, both interpreter modes and 71 counted
+allocation programs pass. All 20 clean gates pass, including 712 optimized
+test groups; the real CLI native build also matches both interpreters.
+Evidence is recorded in [[Native Folded Constant Delivery]].
+
+## Shared references (#544)
+
+[[Compiler Lower Reference]] lowers `&` and `*` of represented values to the
+operand itself, as the evaluator's identity operators do, once the exact
+checked facts show a shared reference. `&mut` keeps refusing until calls write
+places back. [[Backend Shared Reference Programs]] covers parameters, results,
+aggregates, transfers, failure provenance and borrows of reassigned variables.
+
+## Trait methods (#551)
+
+[[Native Trait Methods]] lowers every method checking declares as an instance:
+an implementation's own member, or the trait member it inherits with `Self`
+bound to the owner. A receiver's checked type picks the method; arguments run
+before the receiver, which is passed first. Str and Char keep their built-in
+members first, and `toText()` falls back to `display`. [[Backend Method
+Programs]] holds the evidence. Generic implementations and `&mut self` refuse.
+
+## Generics (#552)
+
+[[Native Generics]] lowers each generic function, generic implementation and
+generic record once per type list checking instantiated it at. Bounded calls
+inside a copy dispatch to the concrete method. The fixture sweep caught a
+specialization that returned no result without refusing, which compiled two
+Std programs to an empty `main`; lowering now refuses any construct that stops
+without saying why. [[Backend Generic Programs]] holds the evidence.
+
+## Try (#553)
+
+[[Compiler Lower Try]] lowers `?` to a match whose failure arm returns the
+failure rebuilt at the enclosing function's result type. In `main` that type
+comes from the checked signature, kept apart from the entry's own result
+handling so print-Result bodies keep refusing. [[Backend Try Programs]] holds
+the evidence.
+
+## For (#554)
+
+[[Compiler Lower For]] lowers `for` over a range written with both ends and
+over types with `begin` and `advance`, as `evaluateFor` walks them, under an
+ordinary loop frame. Inclusive ranges stop at their last element before
+stepping, so they reach the largest `Int` without overflowing.
+[[Backend For Programs]] holds the evidence.
+
+## Closures (#555)
+
+[[Native Closures]] makes function values refcounted boxes whose first cell
+names the lifted function they run. Lambdas copy what they mention, named
+functions become forwarders, and calls through values reuse the frame call
+path. Ordering tuples now follows `comparableValue` and `compareValues` for
+held functions, records and sums. [[Backend Closure Programs]] holds the
+evidence.
+
+## Arrays (#556)
+
+[[Native Arrays]] carries arrays as boxes around growable buffers with the
+evaluator's method semantics. `map`, `filter` and `reduce` are loops, and
+updates that replace their own variable take it, so building an array stays
+linear. Found on the way: #557, unannotated lambda parameters' members are not
+checked when the lambda is an argument, and such lambdas refuse natively.
+[[Backend Array Programs]] holds the evidence.
+
+## Sorting, sequence patterns and slices (#558)
+
+`sortBy` runs as loops that ask the comparison what the evaluator's natural
+merge sort asks ([[Compiler Lower Sort]]). Sequence patterns and slicing by a
+written range follow `matchPattern` and `rangeBounds`, and a slice failure's
+help names the length through a new computed help on `CoreFailText`
+([[Compiler Lower Slice]]). Str indexing by Int is native. A loop body's tail
+is lowered as a statement, so a trailing `match` whose arms print no longer
+refuses. [[Backend Array Pattern Programs]] holds the evidence.
+
+## Str methods with collection results (#559)
+
+`split`, `lines` and `chars` build arrays of views into the receiver
+([[Native Text Pieces]]); `toInt` and `toFloat` validate as
+`Eval.Builtin.TextNumber` does and build their Option in Core
+([[Native Text Number]]). [[Backend Text Collection Programs]] holds the
+evidence.
+
+## Type applications and integer conversion (#560)
+
+A call written with type arguments calls the copy the checker solved for it.
+`convertInteger[T]` tests the value against `T`'s bounds and builds
+`Some`/`None` in Core ([[Compiler Lower Convert]],
+[[Native Integer Conversion]]). [[Backend Convert Programs]] holds the
+evidence.
+
+## Maps and sets (#561)
+
+[[Native Maps and Sets]] carries both as shared persistent trees with the
+evaluator's order, duplicate rules, rendering, equality, ordering and E7008
+key checks, at logarithmic cost per update: 200,000 inserts, 200,000
+lookups and 100,000 removes run in about a third of a second natively.
+[[Backend Keyed Programs]] holds the evidence.
+
+## Iteration and charFromCode (#562)
+
+`for` walks Str, tuples and sum payloads in `evaluateFor`'s order, and
+`charFromCode` answers `Some` only for scalar values ([[Compiler Lower For]],
+[[Compiler Lower Convert]]). [[Backend For Programs]] holds the evidence.
+
+## Shapes, field calls and assignment values (#563)
+
+Lowering reads record and sum shapes formed with each module's imports, so
+types reaching across modules have a native form. Calls through
+function-valued fields and assignments used as values follow the evaluator.
+[[Backend Shape Programs]] holds the evidence.
+
+## Range values (#564)
+
+[[Native Range Values]] carries ranges as small boxes with all fourteen
+methods, rendering, equality, ordering, iteration and slicing, failing as
+`Eval.Range` does ([[Compiler Lower Range]], [[Native Range Runtime]]).
+[[Backend Range Programs]] holds the evidence.
+
+## Bytes (#565)
+
+Byte sequences are boxes around views of counted storage, so slices share it
+as `ByteString` slices do; every method, strict UTF-8 decoding, rendering,
+ordering and range slicing follow `Eval.Bytes` ([[Native Bytes Runtime]],
+[[Compiler Lower Bytes]]). [[Backend Bytes Programs]] holds the evidence.
+
+Bytes completion evidence also includes frozen arbitrary byte data, accepted
+unary-byte runtime refusals, argument effects, shared borrowing, capture
+retention and byte entry results. The dedicated `native Bytes` success,
+failure and allocation groups provide a narrow iteration lane. Full-suite
+and independent review remain required before promotion; the area counter
+stays at 4/14 because the broader rows are incomplete. [[Native Bytes Delivery]].
+
+## Output Result continuation (#566)
+
+[[Native Output Results]] adds Result-valued direct output, failed-handle
+state, entry builder reporting and fatal diagnostic readiness. Differential
+checks cover both evaluators, all missing-standard-descriptor masks,
+closed/read-only outputs, closed pipes and hung-up terminals on this host.
+First-class output builtin values, complete platform evidence and promotion
+checks remain open. This slice does not complete the entry/text/host ledger
+rows or change the area counter.
+
+## Named expression bodies (#567)
+
+[[Native Expression Bodies]] reuses existing block lowering while preserving
+original expression spans. Eight explicit-output/counting cases and three
+runtime-failure probes cover return/try, closures, generics, methods, effects
+and direct/mutual recursion through the depth boundary. The full-emission
+ledger remains Partial until all callable forms and promotion evidence exist.
+
+## Named callable depth repair (#568)
+
+[[Native Named Callable Dispatch]] removes the forwarding frame for named
+function values. Explicit hidden-environment metadata keeps lifted lambdas'
+ABI while preserving named functions' parameter ABI, depth and invocation
+provenance. The exact-limit regression failed before this change. Complete
+intrinsic/bound callable forms, defaults and promotion evidence remain open.
+
+## Output builtin values (#569)
+
+[[Native Output Callable Values]] represents the four output tags as callable
+boxes with exact builtin rendering/identity and runtime kind projection.
+Uncounted intrinsic frames reuse direct-output Results while source functions
+and lambdas retain their depth checks. Isolated handle sequences also run
+through aliases. Complete builtin/method families, defaults and platform/full
+promotion evidence remain open; no completion counter changes here.
+
+## Surviving diagnostic payload cleanup (#570)
+
+[[Native Diagnostic Ownership]] explicitly transfers copied dynamic message/help
+storage into the terminating reporter and releases it after rendering. Counted
+source failures, exact evaluator output, empty/overflow payloads and fatal
+stream regressions cover the boundary. This does not complete general resource,
+allocation-failure, platform or full-emission obligations.
+
+## Rendering builtin values (#575)
+
+[[Native Rendering Callables]] admits display/show values with a generated
+body per canonical solved callable type and per-tag builtin identity.
+[[Backend Rendering Callable Programs]] covers simultaneous types, generic
+calls, owned text, entries, captures, returns, shadowing, operand transfers,
+exact source depth and failures, plus cross-module same-spelling records.
+Clang, GCC 15 and ASan/UBSan compare against both evaluator modes. Other
+builtin/method values, defaults and full promotion evidence remain pending;
+no completion counter changes here.
+
+## Unsafe regions (#858)
+
+An `unsafe` region, with or without named capabilities, lowers as the block it
+encloses: the capabilities are checked before lowering and leave nothing at
+run time, as the interpreter evaluates the body. Functions whose type requires
+a capability are ordinary function values natively. `null` has no type until
+raw pointers exist, so no valid program reaches the lowering's `null` refusal;
+raw pointers and unchecked indexing have no syntax yet. Their native form
+follows their language definition.
+
+Resolved Grill Log: close the unsafe obligation with evidence rather than new
+emission. _Rationale:_ every construct the language defines inside a region is
+already native; inventing pointer emission ahead of the grammar would fix a
+representation the Language Architect has not chosen.
+

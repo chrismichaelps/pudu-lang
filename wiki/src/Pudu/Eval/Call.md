@@ -19,7 +19,7 @@ aliases: [Eval Call]
 
 Call something, reach a name through a path, and join the tasks a scope owns.
 
-A type-applied callee binds the types it carries, as witnesses, to the callee's type parameters; a method called on a receiver keeps them through `callMemberSelecting`. Witnesses enter the callee's frame before its parameters.
+A type-applied callee binds the types it carries, as witnesses, to the callee's type parameters; a method called on a receiver keeps them through `prepareMember`. Witnesses enter the callee's frame before its parameters.
 
 ## Interface
 
@@ -32,6 +32,7 @@ data CallNeeds = CallNeeds
 
 evaluateCall   :: CallNeeds -> Span -> Located Expression -> [Located Expression] -> Evaluator Value
 callClosure    :: CallNeeds -> Closure -> [Value] -> Maybe Span -> Evaluator Value
+callMember     :: CallNeeds -> Span -> Span -> Lent -> Bool -> Value -> Text -> [Value] -> Evaluator Value
 awaitTask      :: CallNeeds -> Span -> Value -> Evaluator Value
 evaluateScope  :: CallNeeds -> Span -> Located Block -> Evaluator Value
 readPath       :: CallNeeds -> ...
@@ -112,6 +113,24 @@ the decimal and effect cases. Grill Log — **Q:** route kernels through effects
 are pure and must stay admissible wherever pure builtins are.
 
 `LaneKernelBuiltin` goes to [[Eval Builtin Lanes]] beside it.
+
+Resolved Grill Log (#828): prepare ordinary runtime function values before supplied
+arguments and keep the resolved value across argument mutation. Both tree and
+compiled call paths use this coordinator. Qualified dispatch and member-receiver
+preparation remain in the next partition.
+
+## Runtime member preparation (#828)
+
+Resolved Grill Log: evaluate the receiver and capture its lending place once
+before arguments. Select its method or read its function-valued field while
+that receiver is held. Retain the selected invocation until the arguments are
+available. Direct text dispatch keeps its existing precedence. Nominal-looking
+paths with a local value follow this same preparation; qualified declarations
+can still use the first evaluated argument for pure owner selection.
+The exported `callMember` keeps its signature and its `implemented` skip of
+the owner lookup; it prepares the member and then invokes it, so callers that
+already hold their arguments are unchanged.
+
 
 ## Referenced by
 
@@ -249,4 +268,10 @@ receiver discovery, preserving its invocation behavior and keeping it below 500 
 
 ## Lexical member admission (#471)
 
-Delegate qualified-path admission to Eval Call Path for explicit type-applied dispatch. A nearer ordinary local takes callMemberSelecting; a witness or unshadowed module retains static dispatch. Remove the capitalization-only helper, preserving arguments, lending and chosen witnesses. Resolved Grill Log: path spelling cannot override lexical scope, and prepared calls already share this coordinator.
+Delegate qualified-path admission to Eval Call Path for explicit type-applied dispatch. A nearer ordinary local takes prepareMember; a witness or unshadowed module retains static dispatch. Remove the capitalization-only helper, preserving arguments, lending and chosen witnesses. Resolved Grill Log: path spelling cannot override lexical scope, and prepared calls already share this coordinator.
+
+## Positional sum owners (#761)
+
+Applying an empty positional constructor retains its canonical owner while attaching arguments. Await unwraps only wired Result-owned Ok/Err values; a custom sum using those labels remains an ordinary successful task value.
+
+Resolved Grill Log: identity comes from the declaration or native ABI, not a global short-tag registry. Keep labels, evaluation order, effects and wire bytes stable. See [[Positional Sum Owner Delivery]].

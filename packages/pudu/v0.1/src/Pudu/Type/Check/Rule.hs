@@ -37,6 +37,8 @@ import Pudu.IntegerLiteral
   ( ParsedInteger (..), integerKindName, integerSuffixType, parseIntegerLiteral )
 import Pudu.Frontend.Syntax.Tree (Capability (..))
 import qualified Data.Map.Strict as Map
+import qualified Data.Set as Set
+import Pudu.Type.Check.Qualified (qualifiedScheme, concreteOwner)
 import Pudu.Type.Formation (builtinTypeNames)
 import Pudu.Type.Substitute (substituteRigid)
 import Pudu.Type.Check.Receiver (bindReceiver)
@@ -44,6 +46,9 @@ import Pudu.Type.Check.Method (methodScheme)
 import Pudu.Type.Env
   ( Checker
   , DeclaredTypes (..)
+  , NameBinding (..)
+  , lookupBinding
+  , recordVariantOwner
   , isStaticTrait
   , recordSelection
   , useCapability
@@ -137,15 +142,24 @@ nameType spanValue names@(first NonEmpty.:| remaining) = do
       foldM (memberType spanValue) value remaining
     _ -> namespaceNameType spanValue names
 
+bindingType :: Span -> NameBinding -> Checker Type
+bindingType spanValue binding = case binding of
+  ValueBinding scheme -> instantiate spanValue scheme
+  ConstructorBinding owner label scheme -> do
+    refused <- namedVariantAsValue spanValue label (schemeType scheme)
+    case refused of
+      Just value -> pure value
+      Nothing -> do
+        recordVariantOwner spanValue owner label []
+        instantiate spanValue scheme
+
 namespaceNameType :: Span -> NonEmpty.NonEmpty Text -> Checker Type
 namespaceNameType spanValue names = do
   let written = Text.intercalate "." (NonEmpty.toList names)
-  found <- lookupName written
-  named <- namedVariantAsValue spanValue (NonEmpty.last names)
-  case (found, named) of
-    (Just _, Just refused) -> pure refused
-    (Just scheme, Nothing) -> instantiate spanValue scheme
-    (Nothing, _) -> do
+  found <- lookupBinding written
+  case found of
+    Just binding -> bindingType spanValue binding
+    Nothing -> do
       case NonEmpty.nonEmpty (NonEmpty.init names) of
         Nothing -> pure ()
         Just qualifier -> do
@@ -171,7 +185,15 @@ namespaceNameType spanValue names = do
 qualifiedMemberType :: DeclaredTypes -> Span -> Tree.Expression -> Text -> Checker (Maybe Type)
 qualifiedMemberType declared spanValue target member = do
   local <- localValueHead target
-  if local then pure Nothing else namespaceMemberType declared spanValue target member
+  if local then pure Nothing else do
+    selected <- qualifiedScheme declared spanValue target member
+    case selected of
+      Just (owner, scheme) | not (Set.member owner (declaredTraitNames declared)) ->
+        Just <$> instantiate spanValue scheme
+      _ -> do
+        concrete <- concreteOwner declared target
+        let namespace = maybe target (\(path, _) -> Tree.NameExpression (path NonEmpty.:| [])) concrete
+        namespaceMemberType declared spanValue namespace member
 
 {-| Only nested frames establish value shadowing; shared bare exports do not. -}
 localValueHead :: Tree.Expression -> Checker Bool
@@ -184,9 +206,9 @@ namespaceMemberType :: DeclaredTypes -> Span -> Tree.Expression -> Text -> Check
 namespaceMemberType declared spanValue target member = case target of
   Tree.NameExpression names -> do
     let owner = Text.intercalate "." (NonEmpty.toList names)
-    found <- lookupName (owner <> "." <> member)
+    found <- lookupBinding (owner <> "." <> member)
     case found of
-      Just scheme -> Just <$> instantiate spanValue scheme
+      Just binding -> Just <$> bindingType spanValue binding
       Nothing -> do
         ownsMembers <- qualifiesSomething owner
         selfIsValue <- lookupName owner
@@ -274,9 +296,12 @@ declaresVariant declared owner member = case Map.lookup owner (declaredNames dec
     and a program mixing them would type check and then find no arm at run
     time. One spelling reaches the value, so the other cannot be allowed to
     start. -}
-namedVariantAsValue :: Span -> Text -> Checker (Maybe Type)
-namedVariantAsValue spanValue name = do
-  fieldNames <- lookupVariantFields name
+namedVariantAsValue :: Span -> Text -> Type -> Checker (Maybe Type)
+namedVariantAsValue spanValue name resolved = do
+  fieldNames <- case resolved of
+    NominalType owner _ -> lookupVariantFields owner name
+    FunctionTypeValue _ _ (NominalType owner _) -> lookupVariantFields owner name
+    _ -> pure Nothing
   case fieldNames of
     Nothing -> pure Nothing
     Just names -> do

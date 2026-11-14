@@ -28,6 +28,11 @@ int32_t pudu_audio_play(
     int32_t *cancel_token,
     uint64_t *completed_frames);
 
+int32_t pudu_audio_play_polling(
+    int32_t sample_rate, int32_t channels, const uint8_t *pcm, size_t pcm_length,
+    int32_t frames_per_buffer, int32_t buffer_count, int32_t timeout_ms,
+    int32_t *cancel_token, uint64_t *completed_frames, int (*stop_requested)(void));
+
 void pudu_audio_request_cancel(int32_t *cancel_token);
 
 #endif

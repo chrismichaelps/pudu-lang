@@ -217,3 +217,16 @@ by name. Preserve persistence, key representatives, duplicate counts, checked In
 overflow, and E7008 for unorderable keys or values. Do not scan complete maps on every add.
 
 mutexAcquireWithin has an appended MutexAcquireWithinBuiltin tag and total name mapping. Resolved Grill Log (#476): append after existing tags to preserve packed identities; execution stays in [[Eval Concurrent]].
+
+## Raw text-byte access (#527)
+
+Expose textByteAt(Str, Int) -> Option[UInt8] as a pure primitive with a new
+appended TextByteAtBuiltin tag and canonical name. Read the Text backing
+array in O(1) only after comparing the mathematical offset with its byte
+length. Negative, past-end and out-of-host-range offsets answer None; no
+intermediate byte copy or malformed UTF-8 text is constructed. Wrong argument
+shape/arity retains E7001/E7003 at the call span.
+
+Resolved Grill Log: scalar boundaries constrain text slices, not byte reads;
+return an exact UInt8 and keep naming, typing, installation and pure dispatch
+synchronized. Existing text primitives and packed identities are unchanged.

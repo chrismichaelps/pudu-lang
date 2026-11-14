@@ -71,3 +71,11 @@ updates or acceptance of failed compilation as successful execution.
 
 The closure fixture constructs `Closure` with an empty witness list, the
 field static selection added; behavior and assertions are unchanged.
+
+## Structural implementation witnesses (#735)
+
+Initialize closureImplementation to Nothing for ordinary functions and literals;
+retain existing captures, witnesses, proof cache and closure identity. Installed
+method metadata belongs to [[Runtime Implementation Head]] and selection to
+[[Eval Type Witness]]. Resolved Grill Log: this constructor adjustment carries
+metadata without changing ordinary function execution or the kernel fixture.

@@ -1,5 +1,7 @@
 module Pudu.Type.InterfaceSpec (interfaceProperties) where
 
+import Control.Exception (finally)
+import System.Environment (lookupEnv, setEnv, unsetEnv)
 import Data.Map.Strict qualified as Map
 import Data.Set qualified as Set
 import Data.Text (Text)
@@ -33,7 +35,33 @@ interfaceProperties =
   , ("trait defaults remain discoverable without bodies", testDefaults)
   , ("imported record fields expand later chained function aliases", testLateAliases)
   , ("a package alias cannot replace the HTTP server's Listener", testListenerIdentity)
+  , ("a module's type named Map leaves the built-in Map elsewhere", testBuiltinScope)
   ]
+
+testBuiltinScope :: IO Property
+testBuiltinScope = conjoin <$> mapM checkMode ["tree", "compiled"]
+ where
+  checkMode mode = do
+    previous <- lookupEnv "PUDU_EVAL"
+    setEnv "PUDU_EVAL" mode
+    checkCases `finally` maybe (unsetEnv "PUDU_EVAL") (setEnv "PUDU_EVAL") previous
+  checkCases = do
+    accepted <- codes "test-fixtures/builtinscope/Main.pudu"
+    result <- runEntry "test-fixtures/builtinscope/Main.pudu"
+    reversed <- codes "test-fixtures/builtinscope/Reverse.pudu"
+    reversedResult <- runEntry "test-fixtures/builtinscope/Reverse.pudu"
+    selected <- codes "test-fixtures/builtinscope/Selected.pudu"
+    selectedResult <- runEntry "test-fixtures/builtinscope/Selected.pudu"
+    refused <- codes "test-fixtures/builtinscope/RejectsGridAsBuiltin.pudu"
+    pure $ conjoin
+      [ accepted === []
+      , result === Just "0"
+      , reversed === []
+      , reversedResult === Just "0"
+      , selected === []
+      , selectedResult === Just "0"
+      , refused === ["E3001"]
+      ]
 
 testListenerIdentity :: IO Property
 testListenerIdentity = do

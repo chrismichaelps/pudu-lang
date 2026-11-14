@@ -2,6 +2,7 @@
 module Pudu.EvalSpec (evalProperties) where
 
 import Test.QuickCheck (Property)
+import Pudu.Eval.NamedSumSpec (namedSumProperties)
 
 import Pudu.Eval.ArithmeticSpec
   ( testArithmetic
@@ -44,10 +45,11 @@ import Pudu.Eval.SystemSpec
   , testUnsafeRegions
   )
 import Pudu.Eval.LoopStepSpec (testLoopSteps)
+import Pudu.Eval.TextViewSpec (testTextView, testTextByteBoundary)
 import Pudu.Runtime.SeriesMapSpec (testSeriesMaps)
 
 evalProperties :: [(String, IO Property)]
-evalProperties =
+evalProperties = namedSumProperties <>
   [ ("Decimal equality follows numbers inside every structure", testDecimalEquality)
   , ("Decimal implementations reach direct generic and qualified calls", testDecimalImpls)
   , ("arithmetic and comparison follow declared operators", testArithmetic)
@@ -58,6 +60,8 @@ evalProperties =
   , ("loops iterate and jumps leave them", testLoops)
   , ("pure loop calls preserve parameters limits and fallback", testPureCalls)
   , ("loop step results preserve ordering refusals and cleanup", testLoopSteps)
+  , ("byte-addressed text reads match a byte-level model", testTextView)
+  , ("raw text-byte reads retain carriers and call spans", testTextByteBoundary)
   , ("control unwinds restore lexical frames", testUnwindFrameCleanup)
   , ("sum and record values construct and destructure", testData)
   , ("runtime failures report exact diagnostics", testFailures)
