@@ -14,6 +14,37 @@ tags: [changelog]
   [[architecture/FFI-SELF-HOSTING]], [[ADR-0018-calling-a-library-written-elsewhere]] and
   [[Native Foreign Call Sites]] point at it. Implementation is [[Foreign Callback Delivery]] (#876).
 
+## 2026-11-13 — Pudu Native status after #878
+
+- [[Pudu Native]] records the landed iOS targets, embedded entry, and mobile refusals; phase 0 now waits only on calls into Pudu and the entry guard (#899).
+
+## 2026-11-13 — Native iOS library targets (#878)
+
+- `pudu build --native --target` exposes arm64 device and simulator libraries.
+  [[iOS Simulator Run]] compares libc, CoreFoundation, and embedded framework
+  foreign calls with interpreter output. [[iOS Simulator CI]] requires that smoke on macOS
+  for compiler changes.
+
+## 2026-11-13 — Apple SDK archive builder (#878)
+
+- [[Backend Toolchain Library]] builds arm64 device and simulator archives.
+
+## 2026-11-13 — Mobile target policy (#878)
+
+- [[Native Mobile Targets]] defines target names and foreign library admission.
+
+## 2026-11-13 — Embedded native entry (#878)
+
+- [[Backend Emit Entry]] emits a C entry callable from a host application.
+
+## 2026-11-13 — Shared native tool execution (#878)
+
+- [[Backend Toolchain Process]] owns compiler process lifetime and output capture.
+
+## 2026-11-13 — Pudu Native architecture
+
+- Added [[Pudu Native]]: mobile feasibility against the current C11 toolchain, the platform-control adapter boundary, threading, hot reload, update limits, and FUI-on-native mapping.
+
 ## 2026-11-13 — Folded byte literals (#887)
 
 - [[Pudu Core IR Module]] carries folded `Bytes` constants as one

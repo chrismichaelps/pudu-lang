@@ -21,3 +21,8 @@ must share the same property.
 ## Referenced by
 
 [[Native Diagnostic Contracts]] · [[Repository Test Runner]] · [[src/_MOC]]
+
+## Mobile target diagnostics (#878)
+
+The table covers `E6007` and `E6008`: target, detail, construct and reason
+reach the message, and both carry help.

@@ -3,7 +3,7 @@ module Pudu.Diagnostic.NativeSpec (nativeDiagnosticProperties) where
 import Pudu.Diagnostic (Severity (Error), diagnosticCode, diagnosticCodeText,
   diagnosticHelp, diagnosticMessage, diagnosticRelated, diagnosticSeverity, diagnosticSpan)
 import Pudu.Diagnostic.Native (nativeRefusal, toolchainNotFound, toolchainInvocationFailed,
-  toolchainTimedOut, toolchainRejected, toolchainPublishFailed)
+  toolchainTimedOut, toolchainRejected, toolchainPublishFailed, platformSdkMissing, targetRefusal)
 import Pudu.Diagnostic.Render (RenderStyle (PlainStyle), defaultRenderConfig, renderDiagnosticsWith)
 import Pudu.Source (SourceName (SourceName), mkSpan, newSource, offsetFromInt)
 import qualified Data.Text as Text
@@ -40,7 +40,12 @@ testContracts = do
               Just "set PUDU_CC_TIMEOUT to wait longer when a slow machine needs it")
           , ("E6005", toolchainRejected at "line one\néchec", "the C compiler rejected the generated C:\nline one\néchec",
               Just "this is a compiler defect: please report it with the program that triggered it")
-          , ("E6006", toolchainPublishFailed at "read-only file system", "the compiled executable could not be written: read-only file system", Nothing)
+          , ("E6006", toolchainPublishFailed at "read-only file system", "the compiled artifact could not be written: read-only file system", Nothing)
+          , ("E6007", platformSdkMissing at "ios-simulator-arm64" "xcrun", "the ios-simulator-arm64 target needs its platform SDK, which was not found: xcrun",
+              Just "install Xcode for an iOS target (or set PUDU_XCRUN to its xcrun), or the Android NDK for an Android target (set ANDROID_NDK_HOME)")
+          , ("E6008", targetRefusal at "ios-arm64" "child programs" "the application sandbox forbids starting processes",
+              "the ios-arm64 target cannot carry child programs: the application sandbox forbids starting processes",
+              Just "build for the host without --target to keep it, or keep it out of the program built for this target")
           ]
       , let rendered value' = renderDiagnosticsWith (defaultRenderConfig PlainStyle) source [value']
       ]
