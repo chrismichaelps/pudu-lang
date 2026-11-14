@@ -22,6 +22,7 @@ tags: [moc, adr]
   qualify live claims with generations so reused addresses or integer names do not revive stale
   values.
 - [[ADR-0022-lending-a-place]] — accepted: a place is a `var`, a `mut` field, an array element, or `*r`; `&mut` is only a parameter type and a call argument, and the evaluator hands each loan back on every exit, which the rules make indistinguishable from writing through it.
+- [[Foreign Callbacks and Thread Affinity|ADR-0028 Foreign Callbacks and Thread Affinity]] — accepted design, not yet implemented: a callback is a C function pointer plus a context key, registered as an owned token, run on the invoking thread, and never unwound through a foreign frame.
 - [[Native Foreign Call Sites|ADR-0027 Native Foreign Call Sites]] — accepted: a native program calls each foreign function through a pointer of its declared C type, resolving libraries and symbols as the interpreter does, without libffi.
 - [[ADR-0020-handing-a-library-a-run-of-bytes]] — accepted: a run of bytes a library only reads crosses as `Bytes`, which is most of what "buffers" means; the runs a library writes into or allocates keep their own ownership and lifetime questions.
 - [[ADR-0019-getting-a-value-back-out-of-a-library]] — accepted: output slots return beside the
