@@ -6,13 +6,7 @@ aliases: [Backend Module Map]
 
 # Backend Module Map
 
-- [[Backend Toolchain Library]] — Apple SDK archive builds (#878).
-
-- [[Backend Native Target]] · [[Backend Native Target Tests]] — mobile target policy (#878).
-
-- [[Backend Emit Entry]] — executable and embedded C entry forms (#878).
-
-- [[Backend Toolchain Process]] — bounded native tool execution (#878).
+- [[Backend Emit Entry]] · [[Backend Native Target]] · [[Backend Toolchain Library]] · [[Backend Toolchain Process]] · [[Backend Native Target Tests]] · [[iOS Simulator Run]] — embedded mobile builds (#878).
 
 - [[Native Toolchain Host Sources]] · [[Native Host Desktop]] · [[Native Host Audio]] — packaged native platform translation units (#856).
 

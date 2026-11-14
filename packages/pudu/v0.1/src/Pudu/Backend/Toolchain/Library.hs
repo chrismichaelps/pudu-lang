@@ -22,14 +22,11 @@ import Pudu.Backend.Emit.Entry (embeddedHeader, embeddedHeaderName)
 import Pudu.Backend.Runtime.Host.Compress (compressLibraryMarker)
 import Pudu.Backend.Target (AppleSdk (..), NativeTarget (..), TargetPlatform (..))
 import Pudu.Backend.Toolchain (compilerFlags)
-import Pudu.Backend.Toolchain.Process (ToolchainFailure (..), problemText, runTool, timeoutSeconds, tryIO)
+import Pudu.Backend.Toolchain.Process (ToolchainFailure (..), problemText, runTool, runToolOutput, timeoutSeconds, tryIO)
 import System.Directory (doesDirectoryExist, findExecutable, removeDirectoryRecursive, renameFile)
 import System.Environment (lookupEnv)
-import System.Exit (ExitCode (..))
 import System.FilePath (equalFilePath, takeDirectory, takeFileName, (</>))
 import System.IO.Temp (createTempDirectory)
-import System.Process (readProcessWithExitCode)
-import System.Timeout (timeout)
 
 data LibraryRequest = LibraryRequest
   { librarySource :: !Text
@@ -129,11 +126,15 @@ appleTools name sdk seconds = do
 
 xcrunLine :: Text -> FilePath -> [String] -> Int -> IO (Either ToolchainFailure FilePath)
 xcrunLine name xcrun arguments seconds = do
-  answered <- tryIO (timeout (seconds * 1000000) (readProcessWithExitCode xcrun arguments ""))
+  answered <- tryIO (runToolOutput xcrun arguments seconds)
   pure $ case answered of
-    Right (Just (ExitSuccess, out, _)) | [line] <- lines out, not (null line) -> Right line
-    Right (Just (_, _, err)) -> Left (missing (Text.strip (Text.pack err)))
-    Right Nothing -> Left (missing "it did not answer in time")
+    Right (Right (out, _, False))
+      | [line] <- Text.lines out, not (Text.null (Text.strip line)) -> Right (Text.unpack line)
+    Right (Right (_, _, True)) -> Left (missing "tool output was truncated")
+    Right (Right _) -> Left (missing "expected one path on standard output")
+    Right (Left (ToolchainTimedOut _)) -> Left (missing "it did not answer in time")
+    Right (Left (ToolchainRejected detail)) -> Left (missing detail)
+    Right (Left problem) -> Left (missing (Text.pack (show problem)))
     Left problem -> Left (missing (problemText problem))
  where
   command = Text.unwords (map Text.pack (xcrun : arguments))

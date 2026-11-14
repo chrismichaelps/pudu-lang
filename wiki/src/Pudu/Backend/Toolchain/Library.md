@@ -29,7 +29,8 @@ compileLibrary :: LibraryRequest -> IO (Either ToolchainFailure LibraryProducts)
 - Apple: `PUDU_XCRUN` when set, else `xcrun` on `PATH`; absent is
   `ToolchainSdkMissing target "xcrun"`. Within the deadline,
   `xcrun --sdk <sdk> --show-sdk-path`, `--find clang` and `--find libtool`
-  each answer one line; a failure, empty answer or timeout is
+  use the shared bounded runner and each answer one stdout line. A failure,
+  empty or truncated answer, or timeout is
   `ToolchainSdkMissing` with the command and what it printed.
 - In a temporary directory beside the output: the unit is written as C, the
   compiler runs `-std=c11 -O2 -Wall -Wextra -target <triple> -isysroot <root>
@@ -58,7 +59,7 @@ compileLibrary :: LibraryRequest -> IO (Either ToolchainFailure LibraryProducts)
 
 [[Backend Native Target]], [[Backend Toolchain Process]], [[Backend Emit Entry]],
 [[Native Host Compression]]; `directory`, `filepath`, `process`, `temporary`.
-Exercised by [[Backend Native Target Tests]].
+Consumed by [[Pudu CLI]] and [[Backend Native Target Tests]].
 
 ## Resolved Grill Log
 
@@ -74,4 +75,4 @@ Exercised by [[Backend Native Target Tests]].
 
 ## Referenced by
 
-[[src/Pudu/Backend/_MOC]] · [[Native Mobile Targets]]
+[[src/Pudu/Backend/_MOC]] · [[Native Mobile Targets]] · [[Pudu CLI]]

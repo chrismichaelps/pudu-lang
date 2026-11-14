@@ -25,6 +25,7 @@ data ToolchainFailure
   | ToolchainSdkMissing !Text !Text
   | ToolchainTargetUnbuilt !Text
 
+runToolOutput :: FilePath -> [String] -> Int -> IO (Either ToolchainFailure (Text, Text, Bool))
 runTool :: FilePath -> [String] -> Int -> IO (Either ToolchainFailure Text)
 timeoutSeconds :: IO Int
 tryIO :: IO a -> IO (Either IOException a)
@@ -40,6 +41,10 @@ list, no shell, its own process group, both pipes drained concurrently into one
 killed on POSIX when it expires, and bounded cleanup. Exit zero answers the
 captured output; nonzero is `ToolchainRejected` with it. `timeoutSeconds`
 reads `PUDU_CC_TIMEOUT` and defaults to 120.
+
+Resolved Grill Log: `runToolOutput` preserves stdout, stderr and truncation
+separately on success so SDK discovery can parse the path from stdout.
+`runTool` retains the combined compiler output contract.
 
 `ToolchainSdkMissing target detail` and `ToolchainTargetUnbuilt target` belong
 to [[Backend Toolchain Library]]; they live here so one type covers every

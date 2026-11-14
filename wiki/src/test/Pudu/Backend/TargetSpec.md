@@ -28,7 +28,8 @@ aliases: [Backend Native Target Tests]
 - With `PATH` emptied and `PUDU_XCRUN` unset, an iOS build is
   `ToolchainSdkMissing "ios-simulator-arm64" "xcrun"`; a scripted `xcrun` that
   does not know the SDK is `ToolchainSdkMissing` carrying its words. Neither
-  writes the output.
+  writes the output. An SDK probe with an inherited pipe fails within the
+  configured deadline on POSIX.
 - A library output named `pudu_program.h` fails before SDK discovery.
 - The path test includes parent traversal beneath an allowed prefix and a
   version string containing a path.
@@ -47,7 +48,7 @@ aliases: [Backend Native Target Tests]
 - **Q:** How do SDK diagnostics run on Linux CI? **A:** Scripted `xcrun` and
   environment control, as the host toolchain tests script `PUDU_CC`.
 - **Q:** Why not run the simulator here? **A:** Booting a device takes
-  minutes and needs Xcode; A separate simulator smoke covers application execution.
+  minutes and needs Xcode; [[iOS Simulator Run]] owns that check.
 
 ## Referenced by
 

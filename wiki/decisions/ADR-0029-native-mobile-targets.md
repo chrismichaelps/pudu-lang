@@ -28,8 +28,8 @@ names are closed and listed by the compiler:
 
 | Name | Platform | Status |
 | --- | --- | --- |
-| `ios-arm64` | iOS devices, SDK `iphoneos`, `arm64-apple-ios15.0` | planned |
-| `ios-simulator-arm64` | the iOS simulator on Apple silicon, SDK `iphonesimulator`, `arm64-apple-ios15.0-simulator` | planned |
+| `ios-arm64` | iOS devices, SDK `iphoneos`, `arm64-apple-ios15.0` | built |
+| `ios-simulator-arm64` | the iOS simulator on Apple silicon, SDK `iphonesimulator`, `arm64-apple-ios15.0-simulator` | built |
 | `android-arm64` | Android, ABI `arm64-v8a` | reserved |
 | `android-x86_64` | the Android emulator, ABI `x86_64` | reserved |
 
@@ -154,4 +154,4 @@ obligations.
 ## Referenced by
 
 [[decisions/_MOC]] · [[Native Emission Coverage]] · [[Deployment Targets]] ·
-[[Backend Native Target]]
+[[Backend Native Target]] · [[Native Mobile Targets Delivery]]

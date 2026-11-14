@@ -49,11 +49,12 @@ targetRefusals :: NativeTarget -> Set Text -> [(Text, Maybe Text)] -> [TargetRef
 
 - No target outside the map, no prefix matching on names.
 - No refusal decided from C text; the emitter's part set is the input.
-- SDK discovery belongs to the toolchain.
+- No platform probe here; [[Backend Toolchain Library]] owns discovery.
 
 ## Dependencies and consumers
 
-`containers`, `text`. Exercised by [[Backend Native Target Tests]].
+`containers`, `text`. Consumed by [[Backend Toolchain Library]], [[Pudu CLI]]
+and [[Backend Native Target Tests]].
 
 ## Resolved Grill Log
 
@@ -71,4 +72,4 @@ targetRefusals :: NativeTarget -> Set Text -> [(Text, Maybe Text)] -> [TargetRef
 
 ## Referenced by
 
-[[src/Pudu/Backend/_MOC]] · [[Native Mobile Targets]]
+[[src/Pudu/Backend/_MOC]] · [[Native Mobile Targets]] · [[Backend Toolchain Library]]
