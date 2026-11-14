@@ -95,7 +95,7 @@ emitFrameUnit form version sources source = do
     CoreNeverType -> Right ["  (void)pudu_run_frames(" <> textOfInt entryId <> ");", "  return 0;"]
   let direct = directFunctions source
   exports <- case form of
-    EmbeddedEntry -> exportSection direct indexed (frameModuleExports source)
+    EmbeddedEntry -> exportSection (frameModuleLayouts source) direct indexed (frameModuleExports source)
     ExecutableEntry -> Right (ExportSection [] [] [])
   (emitted, roots) <- emitFrameBodies direct (emptyEmitState sources) source
   let wide = frameUsesWideCells source
@@ -128,7 +128,7 @@ emitFrameUnit form version sources source = do
         CoreDecimalType -> ["text_display_dec", "output_report"]
         _ -> []
       identities = Map.fromList (zip (map frameFunctionName functions) [0 ..])
-      (aggregates, aggregateNeeds) = aggregateSection identities (frameModuleLayouts source) tuples (Set.fromList (Set.toList roots <> entryNeeds <> crossing))
+      (aggregates, aggregateNeeds) = aggregateSection identities (frameModuleLayouts source) tuples (Set.fromList (Set.toList roots <> entryNeeds <> crossing <> exportNeeds exports))
       crossing = foreignNeeds (frameModuleLayouts source) (foreignsOf source)
       ownership = if owned then ownershipSwitch text big decimal kinds else []
       selected = foldl' visit Set.empty (filter (not . Text.isPrefixOf "agg_") (Set.toList roots <> entryNeeds <> crossing <> exportNeeds exports)

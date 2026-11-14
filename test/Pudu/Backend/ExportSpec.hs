@@ -27,6 +27,8 @@ exportProperties =
   , ("embedded exports refuse a parameter C cannot pass", testTextParameter)
   , ("embedded exports refuse type parameters, defaults and async", testRefusedForms)
   , ("executables never lower exports", testExecutableIgnores)
+  , ("embedded exports carry text, records and Result to a C host", once <$> testRichCrossings)
+  , ("embedded exports refuse host text that is not UTF-8", once <$> testInvalidText)
   ]
 
 crossingProgram :: Text
@@ -85,20 +87,20 @@ earlyHost = Text.unlines
   ]
 
 testCrossings :: IO Property
-testCrossings = withHost crossingHost $ \ran -> pure (ran === (ExitSuccess, "ready\n38\n1 0\n2.50\n255\ngreet\n2\n", ""))
+testCrossings = withHost crossingProgram crossingHost $ \ran -> pure (ran === (ExitSuccess, "ready\n38\n1 0\n2.50\n255\ngreet\n2\n", ""))
 
 testEarlyCall :: IO Property
-testEarlyCall = withHost earlyHost $ \(code, _, errors) -> pure $ conjoin
+testEarlyCall = withHost crossingProgram earlyHost $ \(code, _, errors) -> pure $ conjoin
   [ counterexample (show code) (code /= ExitSuccess)
   , counterexample errors (property ("pudu_export_add was called before pudu_program_run returned" `Text.isInfixOf` Text.pack errors))
   ]
 
 testTextParameter :: IO Property
 testTextParameter = do
-  emitted <- emitLibrary (Text.unlines ["module Main", "", "fn main() -> Int {", "  0", "}", "", "export fn size(text: Str) -> Int64 {", "  0", "}"])
+  emitted <- emitLibrary (Text.unlines ["module Main", "", "fn main() -> Int {", "  0", "}", "", "export fn size(values: Array[Int64]) -> Int64 {", "  0", "}"])
   pure $ case emitted of
     Left message -> counterexample message (property ("C cannot pass" `Text.isInfixOf` Text.pack message))
-    Right _ -> counterexample "a Str parameter was exported" (property False)
+    Right _ -> counterexample "an Array parameter was exported" (property False)
 
 testRefusedForms :: IO Property
 testRefusedForms = do
@@ -124,6 +126,106 @@ testExecutableIgnores = do
     Just (Lowered _) -> property True
     other -> counterexample (show other) (property False)
 
+richProgram :: Text
+richProgram = Text.unlines
+  [ "module Main"
+  , ""
+  , "type Point = { x: Int64, y: Int64 }"
+  , "type Named = { label: Str, at: Point }"
+  , ""
+  , "fn main() -> Int {"
+  , "  print(\"ready\")"
+  , "  0"
+  , "}"
+  , ""
+  , "export fn shout(text: Str) -> Str {"
+  , "  text + \"!\""
+  , "}"
+  , ""
+  , "export fn moved(point: Point, by: Int64) -> Point {"
+  , "  Point { x: point.x + by, y: point.y + by }"
+  , "}"
+  , ""
+  , "export fn describe(item: Named) -> Str {"
+  , "  item.label + \"@\" + item.at.x.toText()"
+  , "}"
+  , ""
+  , "export fn tag(item: Named) -> Named {"
+  , "  Named { label: item.label + \"+\", at: item.at }"
+  , "}"
+  , ""
+  , "export fn half(value: Int64) -> Result[Int64, Str] {"
+  , "  if value % 2 == 0 { Ok(value / 2) } else { Err(\"odd \" + value.toText()) }"
+  , "}"
+  , ""
+  , "export fn check(value: Int64) -> Result[(), Str] {"
+  , "  if value > 0 { Ok(()) } else { Err(\"not positive\") }"
+  , "}"
+  ]
+
+richHost :: Text
+richHost = Text.unlines
+  [ "#include <stdio.h>"
+  , "#include <string.h>"
+  , "#include \"pudu_program.h\""
+  , "static pudu_string text(const char *bytes) { pudu_string made = { bytes, strlen(bytes) }; return made; }"
+  , "int main(int argc, char **argv) {"
+  , "  pudu_string loud, described, failure, refused;"
+  , "  pudu_Point start = { 1, 2 }, moved;"
+  , "  pudu_Named pin, tagged;"
+  , "  int64_t halved = 0;"
+  , "  int status;"
+  , "  if (pudu_program_run(argc, argv) != 0) return 1;"
+  , "  loud = pudu_export_shout(text(\"hi\"));"
+  , "  printf(\"%.*s %zu %d\\n\", (int)loud.length, loud.bytes, loud.length, loud.bytes[loud.length] == 0);"
+  , "  pudu_string_release(loud);"
+  , "  moved = pudu_export_moved(start, 10);"
+  , "  printf(\"%lld %lld\\n\", (long long)moved.x, (long long)moved.y);"
+  , "  pin.label = text(\"pin\");"
+  , "  pin.at.x = 3;"
+  , "  pin.at.y = 4;"
+  , "  described = pudu_export_describe(pin);"
+  , "  printf(\"%.*s\\n\", (int)described.length, described.bytes);"
+  , "  pudu_string_release(described);"
+  , "  tagged = pudu_export_tag(pin);"
+  , "  printf(\"%.*s %lld\\n\", (int)tagged.label.length, tagged.label.bytes, (long long)tagged.at.y);"
+  , "  pudu_string_release(tagged.label);"
+  , "  status = pudu_export_half(8, &halved, &failure);"
+  , "  printf(\"%d %lld\\n\", status, (long long)halved);"
+  , "  status = pudu_export_half(7, &halved, &failure);"
+  , "  printf(\"%d %.*s\\n\", status, (int)failure.length, failure.bytes);"
+  , "  pudu_string_release(failure);"
+  , "  printf(\"%d\\n\", pudu_export_half(6, NULL, NULL));"
+  , "  status = pudu_export_check(1, &refused);"
+  , "  printf(\"%d\", status);"
+  , "  status = pudu_export_check(0, &refused);"
+  , "  printf(\" %d %.*s\\n\", status, (int)refused.length, refused.bytes);"
+  , "  pudu_string_release(refused);"
+  , "  return 0;"
+  , "}"
+  ]
+
+invalidHost :: Text
+invalidHost = Text.unlines
+  [ "#include \"pudu_program.h\""
+  , "int main(int argc, char **argv) {"
+  , "  pudu_string broken = { \"\\xff\", 1 };"
+  , "  if (pudu_program_run(argc, argv) != 0) return 1;"
+  , "  pudu_string_release(pudu_export_shout(broken));"
+  , "  return 0;"
+  , "}"
+  ]
+
+testRichCrossings :: IO Property
+testRichCrossings = withHost richProgram richHost $ \ran ->
+  pure (ran === (ExitSuccess, "ready\nhi! 3 1\n11 12\npin@3\npin+ 4\n0 4\n1 odd 7\n0\n0 1 not positive\n", ""))
+
+testInvalidText :: IO Property
+testInvalidText = withHost richProgram invalidHost $ \(code, _, errors) -> pure $ conjoin
+  [ counterexample (show code) (code /= ExitSuccess)
+  , counterexample errors (property ("pudu_export_shout was called with text that is not UTF-8" `Text.isInfixOf` Text.pack errors))
+  ]
+
 -- Programs are written to a file and compiled the way `pudu build` does.
 lowerWith :: Bool -> Text -> IO (Maybe LowerResult)
 lowerWith library text = withSystemTempDirectory "pudu-export" $ \root -> do
@@ -143,15 +245,15 @@ emitLibrary text = withSystemTempDirectory "pudu-export" $ \root -> do
       Right unit -> Right unit
     other -> Left ("lowering: " <> show other <> "; diagnostics: " <> show (map diagnosticMessage (programDiagnostics program)))
 
-{-| Compile the crossing program as an embedded unit beside a C host under the
+{-| Compile a program as an embedded unit beside a C host under the
     strict policy, then run the host. -}
-withHost :: Text -> ((ExitCode, String, String) -> IO Property) -> IO Property
-withHost host check = do
+withHost :: Text -> Text -> ((ExitCode, String, String) -> IO Property) -> IO Property
+withHost program host check = do
   compiler <- findExecutable "cc"
   case compiler of
     Nothing -> putStrLn "[skip] embedded export check: cc was not found" >> pure (property True)
     Just cc -> do
-      emitted <- emitLibrary crossingProgram
+      emitted <- emitLibrary program
       case emitted of
         Left problem -> pure (counterexample problem (property False))
         Right unit -> withSystemTempDirectory "pudu-export-host" $ \root -> do

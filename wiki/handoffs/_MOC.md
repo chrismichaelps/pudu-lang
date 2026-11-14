@@ -10,6 +10,7 @@ tags: [moc, handoff]
 - [[Native Mobile Targets Delivery]] — iOS static libraries and simulator evidence (#878).
 - [[Native Calls Delivery]] — single-start entry and calls into exported functions (#899).
 - [[Native Direct Calls Delivery]] — direct C calls for bounded-depth functions (#904).
+- [[Native Export Crossings Delivery]] — text, records and `Result` across exported C calls (#906).
 
 - [[Native Audio Adapter Delivery]] — AudioToolbox playback and streams (#857).
 
