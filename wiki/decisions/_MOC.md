@@ -5,6 +5,7 @@ tags: [moc, adr]
 
 # Decision Map
 
+- [[Foreign Pointers and Runs]] — proposed lifetime, bounds and ABI contracts (#877).
 - [[Native Mobile Targets]] — host entry, Apple SDK builds, and mobile target refusals.
 
 - [[Callee First Call Evaluation]] — accepted callee-first conformance repair; implementation pending.

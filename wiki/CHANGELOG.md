@@ -5,6 +5,11 @@ tags: [changelog]
 
 # Changelog
 
+## 2026-11-13 — Foreign pointer design proposed (#877)
+
+- [[Foreign Pointers and Runs]] proposes typed loans, length relationships,
+  nullable handles and function-pointer crossings.
+
 ## 2026-11-13 — Foreign callbacks and thread affinity decided (#875)
 
 - [[Foreign Callbacks and Thread Affinity]] accepts one callback crossing, a C function pointer
