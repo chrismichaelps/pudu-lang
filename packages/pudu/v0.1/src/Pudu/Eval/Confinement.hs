@@ -78,6 +78,7 @@ keptWhenConfined builtin = case builtin of
   CellSwapBuiltin -> True
   CellDisposeBuiltin -> True
   MutexDisposeBuiltin -> True
+  MutexCloseBuiltin -> True
   ForgetThreadBuiltin -> True
   _ -> False
 

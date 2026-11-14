@@ -59,3 +59,7 @@ program rather than being absorbed as a failed stop.
 
 mutexLockWithin validates mathematical token and duration before narrowing: 0 through 3600000 milliseconds. A shared atomic probe acquires an available mutex, refuses its current owner or retired state, and waits only for another owner. Ordinary acquisition uses the same probe. Expiry changes no ownership; admission precedes expiry atomically. Ready and zero waits allocate no timer. The private bracketed timer helper also preserves channel dequeue/closure precedence and retires on completion or interruption.
 Resolved Grill Log: recursive ownership is a refusal, never a retry; bound admission without canceling an admitted callback. Preserve owner-only release and retirement races. [[Mutex Admission Spec]] proves these boundaries.
+
+## Joined scope retirement (#480)
+
+mutexClose validates the mathematical token, stops admission atomically, and joins an existing foreign owner. Closing retains that owner identity; only its release may complete retirement. Unowned close retires immediately. Self-owned close refuses before state change. New/parked acquisition sees Missing. Owner release masks retirement/removal so a canceled closer cannot retain a completed registration. Disposal continues to refuse held or closing locks. Unknown/repeated close refuses. Resolved Grill Log: close admission before joining; preserve owner-only release; never force-release admitted work.

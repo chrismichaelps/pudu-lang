@@ -9,6 +9,11 @@ tags: [changelog]
 
 - `pudu run` and `pudu test` no longer die with an uncaught exception when `main` declares parameters; the refusal is E7003 at the entry's name, and `pudu test` carries on with the remaining fixtures. [[Eval Entry Arity Tests]].
 
+## 2026-11-13 — Database scope retirement (#480)
+
+- [[Eval Concurrent]] closes mutex admission before joining its owner; [[Std Sync]] exposes joined closure.
+- [[Std Db Driver]] revokes before private guard retirement; [[Database Scope Retirement Fixture]] and [[Mutex Admission Spec]] require exact outcomes and pre-teardown registry counts.
+
 ## 2026-11-13 — Binary facade (#739)
 
 - Binary facade (#739) adds Encode/Decode derives, framed typed reads, explicit builtin wiring and CLI/distribution validation.
