@@ -18,6 +18,7 @@ module Pudu.Eval.Concurrent
   , mutexLockWithin
   , mutexUnlock
   , mutexDispose
+  , mutexClose
   , newConcurrentStore
   , sleepFor
   , threadJoin
@@ -79,7 +80,7 @@ data Channel = Channel
   , channelClosed :: !(TVar Bool)
   }
 
-data MutexState = Available | HeldBy !ThreadId | Retired
+data MutexState = Available | HeldBy !ThreadId | Closing !ThreadId | Retired
 
 newtype Mutex = Mutex
   { mutexOwner :: TVar MutexState
@@ -290,6 +291,7 @@ pollMutex lock owner = do
     HeldBy current
       | current == owner -> pure (Just (IoFailed "the lock is already owned by this thread"))
       | otherwise -> pure Nothing
+    Closing _ -> pure (Just (IoFailed "no such lock"))
     Retired -> pure (Just (IoFailed "no such lock"))
 
 {-| Release a lock only from the thread that acquired it.
@@ -298,18 +300,23 @@ pollMutex lock owner = do
     critical section. Reporting foreign and repeated releases keeps mutual
     exclusion intact and exposes the caller's ownership error. -}
 mutexUnlock :: ConcurrentStore -> Int -> IO (IoOutcome ())
-mutexUnlock store token = withMutex store token $ \lock -> do
+mutexUnlock store token = mask_ $ withMutex store token $ \lock -> do
   owner <- myThreadId
-  atomically $ do
+  outcome <- atomically $ do
     heldBy <- readTVar (mutexOwner lock)
     case heldBy of
       Available -> pure (IoFailed "the lock is not held")
       Retired -> pure (IoFailed "no such lock")
       HeldBy current
-        | current == owner -> do
-            writeTVar (mutexOwner lock) Available
-            pure (IoDone ())
+        | current == owner -> writeTVar (mutexOwner lock) Available >> pure (IoDone False)
         | otherwise -> pure (IoFailed "the lock is owned by another thread")
+      Closing current
+        | current == owner -> writeTVar (mutexOwner lock) Retired >> pure (IoDone True)
+        | otherwise -> pure (IoFailed "the lock is owned by another thread")
+  case outcome of
+    IoDone True -> atomicModifyIORef' (mutexTable store) (\table -> (IntMap.delete token table, IoDone ()))
+    IoDone False -> pure (IoDone ())
+    IoFailed problem -> pure (IoFailed problem)
 
 {-| Retire before removal so admitted waiters observe disposal. -}
 mutexDispose :: ConcurrentStore -> Int -> IO (IoOutcome ())
@@ -319,10 +326,35 @@ mutexDispose store token = mask_ $ withMutex store token $ \lock -> do
     case state of
       Available -> writeTVar (mutexOwner lock) Retired >> pure (IoDone ())
       HeldBy _ -> pure (IoFailed "the lock is still held")
+      Closing _ -> pure (IoFailed "the lock is still held")
       Retired -> pure (IoFailed "no such lock")
   case outcome of
     IoDone () -> atomicModifyIORef' (mutexTable store) (\table -> (IntMap.delete token table, IoDone ()))
     IoFailed problem -> pure (IoFailed problem)
+
+{-| Close admission before joining an owner; its release also retires after closer interruption. -}
+mutexClose :: ConcurrentStore -> Integer -> IO (IoOutcome ())
+mutexClose store token
+  | token < 1 || token > toInteger (maxBound :: Int) = pure (IoFailed "no such lock")
+  | otherwise = mask_ $ withMutex store (fromInteger token) $ \lock -> do
+      owner <- myThreadId
+      claimed <- atomically $ do
+        state <- readTVar (mutexOwner lock)
+        case state of
+          Available -> writeTVar (mutexOwner lock) Retired >> pure (IoDone False)
+          HeldBy current
+            | current == owner -> pure (IoFailed "cannot close a lock owned by this thread")
+            | otherwise -> writeTVar (mutexOwner lock) (Closing current) >> pure (IoDone True)
+          Closing _ -> pure (IoFailed "no such lock")
+          Retired -> pure (IoFailed "no such lock")
+      case claimed of
+        IoFailed problem -> pure (IoFailed problem)
+        IoDone waiting -> do
+          if waiting then atomically $ do
+            state <- readTVar (mutexOwner lock)
+            case state of { Retired -> pure (); _ -> retry }
+          else pure ()
+          atomicModifyIORef' (mutexTable store) (\table -> (IntMap.delete (fromInteger token) table, IoDone ()))
 
 withMutex :: ConcurrentStore -> Int -> (Mutex -> IO (IoOutcome a)) -> IO (IoOutcome a)
 withMutex store token action = do

@@ -259,3 +259,7 @@ shape/arity retains E7001/E7003 at the call span.
 Resolved Grill Log: scalar boundaries constrain text slices, not byte reads;
 return an exact UInt8 and keep naming, typing, installation and pure dispatch
 synchronized. Existing text primitives and packed identities are unchanged.
+
+## Joined scope retirement (#480)
+
+Register mutexClose as an ordinary primitive value name. Resolved Grill Log: naming owns neither signature nor lifecycle policy.

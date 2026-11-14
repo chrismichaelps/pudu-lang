@@ -14,6 +14,15 @@ tags: [changelog]
 
 - [[Backend Emit Entry]] admits one `pudu_program_run` per process through an atomic flag; later calls return `PUDU_PROGRAM_ALREADY_STARTED` without touching runtime state.
 
+## 2026-11-04 — Decimal.toInt range (#803)
+
+- `Decimal.toInt` answers `None` for a whole number `Int` cannot hold, instead of a `Some` that failed on first use.
+
+## 2026-11-13 — Database scope retirement (#480)
+
+- [[Eval Concurrent]] closes mutex admission before joining its owner; [[Std Sync]] exposes joined closure.
+- [[Std Db Driver]] revokes before private guard retirement; [[Database Scope Retirement Fixture]] and [[Mutex Admission Spec]] require exact outcomes and pre-teardown registry counts.
+
 ## 2026-11-13 — Binary facade (#739)
 
 - Binary facade (#739) adds Encode/Decode derives, framed typed reads, explicit builtin wiring and CLI/distribution validation.

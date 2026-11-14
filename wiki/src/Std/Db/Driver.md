@@ -48,3 +48,7 @@ failures stay typed; failed revocation preserves any primary failure and appends
 Resolved Grill Log: revoke after both outcomes; command admission and revocation share the lock;
 do not claim cleanup after runtime abort or forced cancellation. See [[Application Maturity]] and
 [[Uses Database Transaction Scope]].
+
+## Joined scope retirement (#480)
+
+After normal or typed-failed action return, revocation joins admitted commands and sets live false. Close the private gate, join any expired-handle entrant, then dispose the private cell. Missing acquisition of this never-reused private gate means expired; other synchronization errors remain typed. Retained Tx values require no registry tombstones. Preserve successful/failed outcomes and attach cleanup failures to a primary failure. Resolved Grill Log: retire only after revocation; never time out settlement or dispose state while an admitted owner may access it. Runtime abort cleanup remains separate.

@@ -127,26 +127,38 @@ export fn scoped(held: &Tx, action: fn(Tx) -> Result[Rows, Error]) -> Result[Row
           Result.mapErr(Sync.set(&live, false), synchronization)
         }), synchronization), fn(answer: Result[(), Error]) -> Result[(), Error] { answer })
   match revoked {
-    case Ok(_) => outcome
-    case Err(cleanup) => {
-      match outcome {
-        case Ok(_) => Err(cleanup)
-        case Err(primary) => Err(Error{..primary, message: primary.message + "; scope revocation failed: " + cleanup.message})
+    case Err(cleanup) => cleanupFailure(outcome, cleanup, "revocation")
+    case Ok(_) => {
+      let retired = Result.andThen(Result.mapErr(Sync.closeMutex(&gate), synchronization),
+        fn(_closed: ()) -> Result[(), Error] { Result.mapErr(Sync.disposeCell(&live), synchronization) })
+      match retired {
+        case Ok(_) => outcome
+        case Err(cleanup) => cleanupFailure(outcome, cleanup, "retirement")
       }
     }
+  }
+}
+
+fn cleanupFailure(outcome: Result[Rows, Error], cleanup: Error, phase: Str) -> Result[Rows, Error] {
+  match outcome {
+    case Ok(_) => Err(cleanup)
+    case Err(primary) => Err(Error{..primary, message: primary.message + "; scope " + phase + " failed: " + cleanup.message})
   }
 }
 
 fn admitted(gate: &Sync.Mutex, live: &Sync.Cell[Bool], action: fn() -> Result[Rows, Error]) -> Result[Rows, Error] {
   let lock = *gate
   let state = *live
-  Result.mapErr(Sync.withLock(&lock, fn() -> Result[Rows, Error] {
-        if !Result.mapErr(Sync.get(&state), synchronization) ? {
-          return Err(error("", "expired", "the transaction scope has ended"))
-        }
-        action()
-      }), synchronization) ?
+  match Sync.withLock(&lock, fn() -> Result[Rows, Error] {
+      if !Result.mapErr(Sync.get(&state), synchronization) ? { return Err(scopeEnded()) }
+      action()
+    }) {
+    case Ok(answer) => answer
+    case Err(problem) => Err(if problem == Sync.Missing { scopeEnded() } else { synchronization(problem) })
+  }
 }
+
+fn scopeEnded() -> Error { error("", "expired", "the transaction scope has ended") }
 
 fn synchronization(problem: Sync.SyncError) -> Error { error("", "synchronization", show(problem)) }
 

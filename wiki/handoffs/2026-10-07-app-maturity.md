@@ -23,7 +23,7 @@ language and vault-parity review.
 
 ## Exact next action
 
-Complete [[Database Admission Delivery]] on issue #468; savepoint repair #456 is integrated.
+Review [[Database Scope Retirement Delivery]] on issue #480; continue the Database callback-abort lifetime audit while independent review is pending. Bounded admission #468 and savepoint repair #456 are integrated.
 
 ## Transaction evidence
 

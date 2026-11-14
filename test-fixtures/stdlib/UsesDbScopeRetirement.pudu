@@ -1,0 +1,52 @@
+module UsesDbScopeRetirement
+
+import Std.Db.Driver as Driver
+import Std.Sync as Sync
+
+fn require[T, E](answer: Result[T, E]) -> T {
+  match answer { case Ok(value) => value case Err(problem) => panic(show(problem)) }
+}
+fn check(holds: Bool, name: Str) -> () { if !holds { panic(name) } }
+fn empty() -> Driver.Rows { Driver.Rows{columns: [], rows: [], command: "done"} }
+fn expired(answer: Result[Driver.Rows, Driver.Error]) -> Bool {
+  match answer { case Ok(_) => false case Err(problem) => problem.category == "expired" }
+}
+
+export fn main() -> Int {
+  let target = Sync.mutex()
+  require(Sync.lock(&target))
+  check(match Sync.closeMutex(&target) { case Ok(_) => false case Err(problem) => problem != Sync.Missing }, "owned close refuses")
+  require(Sync.unlock(&target))
+  require(Sync.closeMutex(&target))
+  check(Sync.lock(&target) == Err(Sync.Missing), "closed lock is missing")
+  check(Sync.closeMutex(&target) == Err(Sync.Missing), "repeated close is missing")
+  let kept = Sync.cell[Option[Driver.Tx]](None)
+  let calls = Sync.counter(0)
+  let command = fn() -> Result[Driver.Rows, Driver.Error] {
+    let _count = require(Sync.increment(&calls, 1))
+    Ok(empty())
+  }
+  let raw = Driver.Tx {
+    query: fn(_sql: Str, _values: Array[Driver.Value]) -> Result[Driver.Rows, Driver.Error] { command() },
+    execute: fn(_sql: Str) -> Result[Driver.Rows, Driver.Error] { command() }
+  }
+  let failure = Driver.Error{driver: "test", category: "constraint", code: Some("7"), message: "refused"}
+  for index in 0..1000 {
+    let fail = index % 2 == 1
+    let outcome = Driver.scoped(&raw, fn(held: Driver.Tx) -> Result[Driver.Rows, Driver.Error] {
+        require(Sync.set(&kept, Some(held)))
+        check(require(Driver.ask(&held, "read", &[])) == empty(), "admitted query")
+        check(require(Driver.run(&held, "write")) == empty(), "admitted execute")
+        if fail { Err(failure) } else { Ok(empty()) }
+      })
+    check(outcome == (if fail { Err(failure) } else { Ok(empty()) }), "exact scope outcome")
+    let held = match require(Sync.get(&kept)) { case Some(value) => value case None => panic("missing capture") }
+    check(expired(Driver.ask(&held, "late", &[])), "retired query stays expired")
+    check(expired((held.execute)("late")), "retired direct execute stays expired")
+  }
+  check(require(Sync.count(&calls)) == 2000, "expired calls never reach the backend")
+  require(Sync.disposeCell(&kept))
+  require(Sync.disposeCell(&calls.holder))
+  require(Sync.disposeMutex(&calls.lock))
+  0
+}

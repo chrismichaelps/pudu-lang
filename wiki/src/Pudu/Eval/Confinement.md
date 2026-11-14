@@ -20,3 +20,7 @@ Resolved Grill Log: the kept effects are an allow-list, so an effect added to th
 mutexAcquireWithin is admitted beside ordinary acquisition. Resolved Grill Log (#476): a bounded wait grants no additional capability.
 `clockNanos` is admitted under confinement, like `clock`: reading a clock reaches nothing outside.
 
+
+## Joined scope retirement (#480)
+
+Admit mutexClose alongside evaluation-owned lock creation and disposal. Resolved Grill Log: closing grants no new external capability and cannot escape effect admission.

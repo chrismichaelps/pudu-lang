@@ -2,7 +2,7 @@
 module Pudu.Eval.MutexSpec (mutexProperties) where
 
 import Control.Concurrent (ThreadId, forkIO, killThread, threadDelay)
-import Control.Concurrent.MVar (newEmptyMVar, putMVar, takeMVar)
+import Control.Concurrent.MVar (newEmptyMVar, putMVar, takeMVar, tryReadMVar)
 import Data.IORef (atomicModifyIORef', newIORef, readIORef)
 import Control.Exception (bracket, finally)
 import Control.Monad (replicateM, when)
@@ -10,11 +10,16 @@ import GHC.Conc (BlockReason (BlockedOnSTM), ThreadStatus (ThreadBlocked, Thread
 import Pudu.Compiler (CompileResult (..))
 import Pudu.Compiler.Program (compileProgram, programDependencies, programIntegerKinds, rootCompileResult, programDiagnostics)
 import Pudu.Diagnostic (hasErrors)
-import Pudu.Eval (EvalOutcome (..))
+import Pudu.Eval (EvalOutcome (..), outcomeOf)
 import Pudu.Eval.Common (codesOf, codesOfConstant)
-import Pudu.Eval.Concurrent (ConcurrentStore, closeConcurrentStore, concurrentCounts, mutexDispose, mutexLock, mutexLockWithin, mutexNew, mutexUnlock, newConcurrentStore)
+import Pudu.Eval.Concurrent (ConcurrentStore, closeConcurrentStore, concurrentCounts, mutexClose, mutexDispose, mutexLock, mutexLockWithin, mutexNew, mutexUnlock, newConcurrentStore)
 import Pudu.Eval.Io (IoOutcome (..))
-import Pudu.Eval.Program (evaluateProgramEntry)
+import Pudu.Eval.Program (evaluateInteractiveBlock, evaluateProgramEntry)
+import Pudu.Eval.Env (Env (..), Evaluator (..))
+import Pudu.Eval.Runtime (withRuntimeEnv)
+import Pudu.Frontend.Syntax.Located (Located (..))
+import Pudu.Frontend.Syntax.Tree (Declaration (FunctionDeclaration), Function (..), FunctionBody (BlockBody), Module (..))
+import qualified Data.Map.Strict as Map
 import Pudu.Eval.Render (renderValue)
 import System.Environment (lookupEnv, setEnv, unsetEnv)
 import System.Timeout (timeout)
@@ -22,7 +27,9 @@ import Test.QuickCheck (Property, conjoin, counterexample, (===))
 
 mutexProperties :: [(String, IO Property)]
 mutexProperties = [("mutex admission preserves owners and retires timers", nativeAdmission),
-  ("local database admission is finite without interrupting transactions", publicAdmission)]
+  ("local database admission is finite without interrupting transactions", publicAdmission),
+  ("mutex close joins owners and survives closer interruption", joinedClose),
+  ("database scope retirement removes registrations before teardown", scopeRetirement)]
 
 nativeAdmission :: IO Property
 nativeAdmission = bracket newConcurrentStore closeConcurrentStore $ \store -> do
@@ -137,3 +144,73 @@ publicAdmission = do
         Nothing -> counterexample (mode <> ": admission fixture exceeded external deadline") False
         Just result -> counterexample (mode <> ": " <> show (outcomeDiagnostics result)) $ conjoin
           [(renderValue <$> outcomeValue result) === Just "0", hasErrors (outcomeDiagnostics result) === False]) ["tree", "compiled"]
+
+joinedClose :: IO Property
+joinedClose = bracket newConcurrentStore closeConcurrentStore $ \store -> do
+  token <- mutexNew store
+  _ <- mutexLock store token
+  self <- timeout 1000000 (mutexClose store (toInteger token))
+  _ <- mutexUnlock store token
+  closed <- mutexClose store (toInteger token)
+  repeated <- mutexClose store (toInteger token)
+  unknown <- mapM (mutexClose store) [0, -1, toInteger token + toInteger (maxBound :: Int) + 1]
+  races <- mapM (closingOwner store) [False, True]
+  counts <- concurrentCounts store
+  constant <- codesOfConstant "{ let _ = mutexClose(1)\n true }"
+  wrongType <- codesOf "mutexClose(true)"
+  wrongArity <- codesOf "mutexClose()"
+  pure $ conjoin [self === Just (IoFailed "cannot close a lock owned by this thread"), closed === IoDone (),
+    repeated === IoFailed "no such lock", unknown === replicate 3 (IoFailed "no such lock"),
+    races === [True, True], counts === (0, 0, 0, 0), constant === ["E7009"],
+    wrongType === ["E3001"], wrongArity === ["E3003"]]
+
+closingOwner :: ConcurrentStore -> Bool -> IO Bool
+closingOwner store canceled = do
+  token <- mutexNew store
+  _ <- mutexLock store token
+  entrants <- newEmptyMVar
+  workers <- replicateM 3 $ forkIO (mutexLockWithin store (toInteger token) 60000 >>= putMVar entrants)
+  parkedEntrants <- timeout 1000000 (mapM_ untilBlocked workers)
+  answer <- newEmptyMVar
+  stopped <- newEmptyMVar
+  closer <- forkIO $ (mutexClose store (toInteger token) >>= putMVar answer) `finally` putMVar stopped ()
+  parkedCloser <- timeout 1000000 (untilBlocked closer)
+  early <- tryReadMVar answer
+  denied <- mutexLockWithin store (toInteger token) 0
+  disposed <- mutexDispose store token
+  foreignResult <- newEmptyMVar
+  outsider <- forkIO (mutexUnlock store token >>= putMVar foreignResult)
+  foreignRelease <- timeout 1000000 (takeMVar foreignResult)
+  refused <- timeout 1000000 (replicateM 3 (takeMVar entrants))
+  when canceled (killThread closer)
+  ownerRelease <- mutexUnlock store token
+  completed <- if canceled then pure Nothing else timeout 1000000 (takeMVar answer)
+  ended <- timeout 1000000 (takeMVar stopped)
+  counts <- concurrentCounts store
+  mapM_ killThread (closer : outsider : workers)
+  pure (parkedEntrants == Just () && parkedCloser == Just () && early == Nothing
+    && denied == IoFailed "no such lock" && disposed == IoFailed "the lock is still held"
+    && foreignRelease == Just (IoFailed "the lock is owned by another thread")
+    && refused == Just (replicate 3 (IoFailed "no such lock")) && ownerRelease == IoDone ()
+    && (canceled || completed == Just (IoDone ())) && ended == Just () && counts == (0, 0, 0, 0))
+
+scopeRetirement :: IO Property
+scopeRetirement = do
+  program <- compileProgram "test-fixtures/stdlib/UsesDbScopeRetirement.pudu"
+  case rootCompileResult program >>= compileModule of
+    Nothing -> pure (counterexample (show (programDiagnostics program)) False)
+    Just parsed -> case [block | Located _ (FunctionDeclaration function) <- moduleDeclarations parsed,
+      locatedValue (functionName function) == "main", Just (Located _ (BlockBody block)) <- [functionBody function]] of
+      [block] -> conjoin <$> mapM (\mode -> do
+        bodies <- if mode == "tree" then pure Nothing else Just <$> newIORef Map.empty
+        result <- timeout 20000000 $ withRuntimeEnv $ \initial -> do
+          let Evaluator execute = evaluateInteractiveBlock False (programIntegerKinds program) (programDependencies program) parsed block
+          outcome <- execute initial{envEffects = True, envCompiledBodies = bodies}
+          counts <- concurrentCounts (envConcurrentStore initial)
+          pure (outcomeOf outcome, counts)
+        pure $ case result of
+          Nothing -> counterexample (mode <> ": scope retirement exceeded external deadline") False
+          Just ((outcome, counts), problems) -> counterexample (mode <> ": " <> show (outcomeDiagnostics outcome <> problems)) $ conjoin
+            [(renderValue <$> outcomeValue outcome) === Just "0", hasErrors (outcomeDiagnostics outcome <> problems) === False,
+              counterexample "completed scopes leave no private registrations" (counts === (0, 0, 0, 0))]) ["tree", "compiled"]
+      _ -> pure (counterexample "scope fixture needs one main block" False)

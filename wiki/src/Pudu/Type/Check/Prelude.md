@@ -312,3 +312,7 @@ shape/arity retains E7001/E7003 at the call span.
 Resolved Grill Log: scalar boundaries constrain text slices, not byte reads;
 return an exact UInt8 and keep naming, typing, installation and pure dispatch
 synchronized. Existing text primitives and packed identities are unchanged.
+
+## Joined scope retirement (#480)
+
+Declare mutexClose(Int) -> Result[(), Str] alongside synchronization effects. Resolved Grill Log: preserve existing schemes; the closed signature table has a bounded exception at 514 lines with no lifecycle logic.

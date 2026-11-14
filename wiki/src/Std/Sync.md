@@ -34,3 +34,7 @@ Failures remain `SyncError` values.
 
 LockAttempt[T] = Acquired(T) | LockExpired distinguishes a completed optional value from expiry. MAX_WAIT_MILLISECONDS is 3600000. lockWithin takes a validated 0..maximum duration; zero probes immediately. withLockWithin runs no action after expiry, releases after normal action return and retains typed failures as values. Recursive acquisition returns Other without releasing the original owner. Unknown/disposed tokens return Missing.
 Resolved Grill Log: neither callback execution nor cleanup is timed; runtime abort and cancellation cleanup remain a separate recovery contract. Existing withLock also releases only after normal return. [[Mutex Admission Spec]] exercises the real public wrappers.
+
+## Joined scope retirement (#480)
+
+closeMutex(target) closes admission and waits for the existing owner to release before retiring the token. Missing covers unknown, closing and retired identities; closing from the current owner returns Other without altering ownership. The joining caller may be interrupted, but the existing owner still retires the registration on release. Resolved Grill Log: distinguish joining close from immediate disposal; no admitted work is canceled or force-released.
