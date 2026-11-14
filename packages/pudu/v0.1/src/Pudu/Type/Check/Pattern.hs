@@ -2,6 +2,9 @@
 module Pudu.Type.Check.Pattern
   ( bindPattern
   , canonicalVariant
+  , variantForPath
+  , namedVariantShapeFor
+  , qualifiedVariantType
   , freshFor
   , recordFieldsFor
   , substituteRigid
@@ -13,13 +16,16 @@ import Data.Text (Text)
 import qualified Data.Text as Text
 import Pudu.Frontend.Syntax.Located (Located (..))
 import Pudu.Frontend.Syntax.Name (ModuleName (..), moduleNameText)
-import Pudu.Frontend.Syntax.Tree (ArrayRest (..), FieldPattern (..), Pattern (..))
+import Pudu.Frontend.Syntax.Pattern (patternBindings)
+import Pudu.Frontend.Syntax.Tree (ArrayRest (..), Expression, FieldPattern (..), Pattern (..))
 import Pudu.Source (Span)
-import Pudu.Type.Check.Rule (countText, literalType)
+import Pudu.Type.Check.Rule (countText, literalType, localValueHead, namedVariantAsValue)
+import Pudu.Type.Check.Safety (dottedName)
 import Pudu.Type.Env
   ( Checker
   , DeclaredTypes (..)
   , bindName
+  , inTypeScopeWith
   , freshVariable
   , lookupField
   , lookupTypeParams
@@ -29,10 +35,13 @@ import Pudu.Type.Env
   , lookupVariantFields
   , lookupVariantIn
   , report
+  , recordOwner
+  , recordVariantOwner
+  , recordPatternTest
   )
 import Pudu.Type.Unify (unify, zonk)
 import Pudu.Type.Substitute (substituteRigid)
-import Pudu.Type.Value (NominalId, Scheme (..), Type (..), monotype)
+import Pudu.Type.Value (NominalId (..), Scheme (..), Type (..), monotype, nominalKey)
 
 {-| The variant a pattern names, found the way an expression finds one.
 
@@ -132,11 +141,10 @@ bindPattern declared rigid (Located patternSpan pattern') subjectType = case pat
         reason it is built that way: one spelling reaches the value, so the
         other can only ever fail to match. -}
     named <- case variant of
-      Just _ -> lookupVariantFields name
+      Just (owner, _, _) -> lookupVariantFields owner name
       Nothing -> pure Nothing
     case named of
-      Just names
-        | not (null arguments) ->
+      Just names ->
             report "E3034" patternSpan (name <> " names its payload")
               ( Just
                   ( "write case " <> name <> "{" <> Text.intercalate ", " names
@@ -149,6 +157,7 @@ bindPattern declared rigid (Located patternSpan pattern') subjectType = case pat
         _ <- reportUnknownQualifiedConstructor declared patternSpan path
         mapM_ (\argument -> bindPattern declared rigid argument ErrorType) arguments
       Just (owner, ownerParams, declaredPayload) -> do
+        recordOwner patternSpan owner
         replacements <- freshFor ownerParams
         let ownerType = NominalType owner (map snd replacements)
             payload = map (substituteRigid replacements) declaredPayload
@@ -164,6 +173,11 @@ bindPattern declared rigid (Located patternSpan pattern') subjectType = case pat
     variantShape <- namedVariantShapeFor declared path
     case variantShape of
       Just (owner, ownerParams, declaredShape) -> do
+        recordPatternTest patternSpan
+        case path of
+          Just written -> recordVariantOwner patternSpan owner
+            (NonEmpty.last (moduleNameSegments written)) []
+          Nothing -> pure ()
         replacements <- freshFor ownerParams
         let ownerType = NominalType owner (map snd replacements)
             expected =
@@ -185,11 +199,44 @@ bindPattern declared rigid (Located patternSpan pattern') subjectType = case pat
                   ]
             mapM_ (bindFieldPattern declared rigid errorFields) fields
           else do
-            declaredFieldTypes <- recordFieldsFor declared path subjectType
+            declaredFieldTypes <- checkedRecordFields declared patternSpan path subjectType
             mapM_ (bindFieldPattern declared rigid declaredFieldTypes) fields
-  AlternativePattern alternatives ->
-    mapM_ (\alternative -> bindPattern declared rigid alternative subjectType) alternatives
+  AlternativePattern [] -> pure ()
+  AlternativePattern (first : rest) -> do
+    bindPattern declared rigid first subjectType
+    let names = map locatedValue (patternBindings first)
+    expected <- traverse lookupName names
+    mapM_ (checkAlternative names expected) rest
+   where
+    checkAlternative names expected alternative = do
+      found <- inTypeScopeWith $ do
+        bindPattern declared rigid alternative subjectType
+        traverse lookupName names
+      sequence_ [ () <$ unify (locatedSpan alternative) (schemeType left) (schemeType right)
+                | (Just left, Just right) <- zip expected found ]
   InvalidPattern -> pure ()
+
+{-| A named record pattern checks the declaration it names, including through
+    a dynamic view; its fields use that same instantiated owner. -}
+checkedRecordFields :: DeclaredTypes -> Span -> Maybe ModuleName -> Type -> Checker [(Text, Type)]
+checkedRecordFields declared at path subjectType =
+  case path >>= \written -> Map.lookup (moduleNameText written) (declaredNames declared) of
+    Just owner -> do
+      fields <- lookupField owner
+      case fields of
+        Just _ -> do
+          resolved <- throughReferences <$> zonk subjectType
+          parameters <- maybe [] id <$> lookupTypeParams owner
+          replacements <- freshFor parameters
+          let ownerType = NominalType owner (map snd replacements)
+          _ <- unify at resolved ownerType
+          recordOwner at owner
+          case resolved of
+            DynamicTypeValue _ -> recordPatternTest at
+            _ -> pure ()
+          recordFieldsFor declared path ownerType
+        Nothing -> recordFieldsFor declared path subjectType
+    Nothing -> recordFieldsFor declared path subjectType
 
 {-| A generic sum is instantiated at every pattern, so matching `Wrap(1)` gives
     the payload `Int` rather than the declaration's rigid parameter. -}
@@ -236,12 +283,14 @@ namedVariantShapeFor declared path = case path of
   Nothing -> pure Nothing
   Just modulePath -> do
     let name = NonEmpty.last (moduleNameSegments modulePath)
-    fieldNames <- lookupVariantFields name
     variant <- variantForPath declared modulePath name
-    pure $ case (fieldNames, variant) of
-      (Just names, Just (owner, ownerParams, payload))
-        | length names == length payload -> Just (owner, ownerParams, zip names payload)
-      _ -> Nothing
+    case variant of
+      Nothing -> pure Nothing
+      Just (owner, ownerParams, payload) -> do
+        fieldNames <- lookupVariantFields owner name
+        pure $ case fieldNames of
+          Just names | length names == length payload -> Just (owner, ownerParams, zip names payload)
+          _ -> Nothing
 
 throughReferences :: Type -> Type
 throughReferences typeValue = case typeValue of
@@ -266,13 +315,46 @@ bindFieldPattern declared rigid expected (Located fieldSpan field) = do
     `Module.Type.Variant`, which its defining module need not import. Typed
     exactly as the constructor bound in the owner's module: the owner applied
     to fresh parameters, behind a function of the payload when it has one. -}
-canonicalVariant :: DeclaredTypes -> ModuleName -> Checker (Maybe Type)
-canonicalVariant declared path = do
+canonicalVariant :: DeclaredTypes -> Span -> ModuleName -> Checker (Maybe Type)
+canonicalVariant declared at path = do
   variant <- variantForPath declared path (NonEmpty.last (moduleNameSegments path))
   case variant of
     Nothing -> pure Nothing
     Just (owner, ownerParams, declaredPayload) -> do
+      recordVariantOwner at owner (NonEmpty.last (moduleNameSegments path)) []
       replacements <- freshFor ownerParams
       let ownerType = NominalType owner (map snd replacements)
           payload = map (substituteRigid replacements) declaredPayload
       pure (Just (if null payload then ownerType else FunctionTypeValue False payload ownerType))
+
+{-| Resolve the complete visible constructor path before its intermediate type
+    owner is treated as a value. A local head keeps ordinary member semantics. -}
+qualifiedVariantType :: DeclaredTypes -> Span -> Expression -> Checker (Maybe Type)
+qualifiedVariantType declared spanValue expression = do
+  local <- localValueHead expression
+  case (local, dottedName expression) of
+    (False, Just written) -> case NonEmpty.nonEmpty (Text.splitOn "." written) of
+      Just names@(_ NonEmpty.:| (_ : _)) -> do
+        let owner = Text.intercalate "." (NonEmpty.init names)
+            member = NonEmpty.last names
+            sumOwner = Map.lookup owner (declaredNames declared)
+        case sumOwner of
+          Just identity | Map.member identity (declaredOwners declared) -> do
+            variant <- canonicalVariant declared spanValue (ModuleName names)
+            case variant of
+              Just value -> do
+                refused <- namedVariantAsValue spanValue member value
+                pure (Just (maybe value id refused))
+              Nothing -> do
+                binding <- lookupName written
+                canonical <- lookupName (nominalKey identity <> "." <> member)
+                -- Built-in misses retain the namespace diagnostic's module-import guidance.
+                if binding /= Nothing || canonical /= Nothing || nominalModule identity == Nothing
+                  then pure Nothing
+                  else do
+                    report "E3034" spanValue (owner <> " has no " <> member)
+                      (Just "check the variant name against the type declaration")
+                    pure (Just ErrorType)
+          _ -> pure Nothing
+      _ -> pure Nothing
+    _ -> pure Nothing

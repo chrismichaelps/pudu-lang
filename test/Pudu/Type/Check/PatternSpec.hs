@@ -5,6 +5,7 @@ module Pudu.Type.Check.PatternSpec
   , testTupleCoverage
   , testNestedConstructorNamespaces
   , testMatchThroughBorrow
+  , testAlternativeBindings
   ) where
 
 import qualified Pudu.Compiler.Program.Common as Program
@@ -26,7 +27,44 @@ patternProperties =
   , ("matches are checked for coverage and reachability", testExhaustiveness)
   , ("tuple coverage retains correlated Option combinations", testTupleCoverage)
   , ("nested coverage follows canonical constructor owners", testNestedConstructorNamespaces)
+  , ("alternative patterns share names at one compatible type", testAlternativeBindings)
   ]
+
+testAlternativeBindings :: IO Property
+testAlternativeBindings = do
+  shared <- codes (program "Option[(Int, Int)]" "Some((n, 1)) | Some((n, 2))" "n")
+  nested <- codes (program "Option[(Int, Int)]" "Some((n, 1 | 2))" "n")
+  mismatch <- codes (program "Option[(Int, Int)]" "Some((n, 1)) | Some((m, 2))" "0")
+  let mismatchSource = Text.unlines (program "Option[(Int, Int)]" "Some((n, 1)) | Some((m, 2))" "0")
+  mismatchDiagnostic <- compile mismatchSource
+  firstDuplicate <- codes (program "Option[(Int, Int)]" "Some((n, n)) | Some((n, 2))" "n")
+  laterDuplicate <- codes (program "Option[(Int, Int)]" "Some((n, 1)) | Some((n, n))" "n")
+  incompatible <- codes
+    [ "module M", "type Choice = Number(Int) | Text(Str)"
+    , "fn run(value: Choice) -> Int {"
+    , "  match value { case Number(n) | Text(n) => 0 }", "}" ]
+  missing <- codes (program "Option[Int]" "Some(n) | Missing(n)" "n")
+  escaped <- codes
+    [ "module M", "fn run(value: Option[Int]) -> Int {"
+    , "  match value { case Some(n) | Some(n) => n case None => 0 }"
+    , "  n", "}" ]
+  pure $ conjoin
+    [ counterexample "a shared name is declared once" (shared === [])
+    , counterexample "nested alternatives retain enclosing bindings" (nested === [])
+    , counterexample "different name sets are refused" (mismatch === ["E2019"])
+    , diagnosticContract mismatchSource "Some((m, 2))" "E2019"
+        "pattern alternatives bind different names"
+        (Just "bind the same names in every alternative") mismatchDiagnostic
+    , counterexample "duplicates in the first branch remain errors" (firstDuplicate === ["E2001"])
+    , counterexample "duplicates in a later branch remain errors" (laterDuplicate === ["E2001"])
+    , counterexample "corresponding payload types must unify" (incompatible === ["E3001"])
+    , counterexample "later constructor paths are resolved" (missing === ["E2010"])
+    , counterexample "shared names do not escape their match" (escaped === ["E2010"])
+    ]
+ where
+  program kind pattern' result =
+    [ "module M", "fn run(value: " <> kind <> ") -> Int {"
+    , "  match value { case " <> pattern' <> " => " <> result <> " case _ => 0 }", "}" ]
 
 testExhaustiveness :: IO Property
 testExhaustiveness = do

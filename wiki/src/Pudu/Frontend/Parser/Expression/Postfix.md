@@ -42,14 +42,18 @@ callRecoverySpan  :: Located Expression -> [Located Expression] -> Span
   resolved toward the reading a reader almost always meant.
 - `.await` is a member access on a reserved name rather than an operator, which is why it parses
   here rather than in the operator table.
-- Argument iteration is bounded by required progress and by the shared nesting budget.
+- Arguments are read through [[Parser Expression Aggregate]]'s `parseSiblingItems`; a stopped
+  list yields no closing token. Iteration requires token progress and stops on the
+  exhausted-budget latch. Each argument's expression parser accounts actual nesting, then
+  restores its budget before the next sibling. Flat argument count is not nesting depth; postfix chains retain their own guard.
 - `callRecoverySpan` covers the callee and every argument, so a diagnostic about a failed call
   underlines the whole call rather than the token where parsing stopped.
 
 ### Linkage
 
 - **Requires:** [[Parser State]], [[Parser Type]], [[Parser Expression Control]] for the capability
-  record, [[Parser Expression Recovery]], [[Syntax Tree]], [[Token]].
+  record, [[Parser Expression Aggregate]] for the sibling loop, [[Parser Expression Recovery]],
+  [[Syntax Tree]], [[Token]].
 - **Consumed by:** [[Parser Expression]].
 
 ## Algorithm
@@ -66,6 +70,9 @@ capability record's expression parser, with records reinstated inside the parent
 - No continuing across a line break except for `.`, `?`, and `.await`.
 
 ## Grill Log
+
+- **Q:** Wrap the recursive argument tail in a depth scope? **A:** No; only an argument's
+  expression depth is charged. _Resolved:_ sibling iteration occurs after its scope ends.
 
 - **Q:** Why must a type argument's bracket be followed by `(`? **A:** Because indexing is the
   commoner reading. _Rationale:_ `values[index]` and `name[Type](x)` open identically, and without

@@ -55,6 +55,9 @@ checkMember       :: StatementNeeds -> DeclaredTypes -> [Text] -> [(Text, [Type]
   of a match, the branches of an `if`, the result of a block — and each of those
   is a statement's business. Only a `dynamic` expectation changes an outcome, so
   anything else is left to inference.
+- A pushed expectation reaches both present ordinary `if` branches only when
+  else exists. A no-else `if` falls back to inference and unifies its unit result
+  against the expectation; the discarded then value receives no dynamic widening.
 - A pushed expectation reaches both present `if let` branches. A form without `else` falls back to
   ordinary inference so its required unit result is still checked. Its subject is read through a borrow as for
   `match`, while the successful pattern binds only around the then block; this preserves dynamic
@@ -94,6 +97,9 @@ exception.
   path back, and importing either would make the cycle real.
 
 ## Grill Log
+
+- **Q:** Why mark a `return` operand before checking it? **A:** Its value is the function's
+  result, so a match there is in result position for [[Check Propagation]].
 
 - **Q:** Why does the block itself open the frame rather than each caller? **A:** Every construct
   with a block — `if`, loops, block expressions, function bodies — must discard the block's
@@ -138,3 +144,21 @@ A local binding's annotation and inferred type are checked by [[Check Place]], w
 StatementNeeds and checkMember carry full trait applications for enclosing rigid bounds.
 
 Resolved Grill Log: the recursive statement/function seam must not erase evidence preserved by declaration checking.
+
+## If-without-else contextual unit conformance (#490)
+
+[[ADR-0025-if-without-else-unit-results]] preserves the checked unit result under
+expected dynamic types, including expectations nested inside aggregate types.
+`checkAgainst` pushes an expectation through an ordinary if only when both
+alternatives exist. Without else, the ordinary expression checker establishes
+unit and fallback unification checks that unit against the expected type.
+
+Resolved Grill Log: expected dynamic information must not select the discarded
+then-block payload or synthesize an absent result branch. With-else checking
+still visits both branches under the expected type. Rejected: accepting a
+nonunit dynamic payload from an expression whose normal result is unit.
+## Constructor pattern ownership (#761)
+
+Pass the current DeclaredTypes to contextual match exhaustiveness exactly as ordinary expression checking does.
+
+Resolved Grill Log: preserve declaration identity through checking, executable projection and usefulness; no per-match span lookup. See [[Constructor Pattern Owner Delivery]].

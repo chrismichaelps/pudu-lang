@@ -12,7 +12,8 @@ import Data.Map.Strict (Map)
 import qualified Data.Map.Strict as Map
 import qualified Data.Sequence as Seq
 import Pudu.Eval.Env
-  ( Evaluator
+  ( declaredOrder
+  , Evaluator
   , Unwind (..)
   , abortAt
   , bind
@@ -30,7 +31,9 @@ import Pudu.Eval.Env
   , withNewFrame
   )
 import Pudu.Eval.Call (CallNeeds (..), callClosure, evaluateCall)
-import Pudu.Eval.Call.Path (flattenPath, lastPathSegment, pathValue)
+import Pudu.Eval.Call.Path (flattenPath, pathValue)
+import Pudu.Diagnostic.Arithmetic (CheckedOperation (..))
+import Pudu.Eval.Record (recordConstructor)
 import Pudu.Eval.Compile.Layout (slotLayout)
 import Pudu.Eval.Render (renderValue)
 import Pudu.Eval.Loop (LoopNeeds (..), evaluateFor, evaluateWhile)
@@ -131,9 +134,12 @@ compileExpression walker located@(Located spanValue expression) = case expressio
     test <- compileExpression walker condition
     taken <- compileBlock walker thenBlock
     otherwise' <- traverse (compileExpression walker) elseBranch
+    let selected = case otherwise' of
+          Nothing -> taken >> pure UnitValue
+          Just _ -> taken
     pure $ do
       truth <- test >>= expectBool spanValue
-      if truth then taken else maybe (pure UnitValue) id otherwise'
+      if truth then selected else maybe (pure UnitValue) id otherwise'
   -- The loop itself is the tree walker's, so its step limit and its handling of
   -- `break` and `continue` are written once; only the condition and the body
   -- it runs are compiled.
@@ -194,8 +200,8 @@ compileExpression walker located@(Located spanValue expression) = case expressio
     pure (ArrayValue . Seq.fromList <$> sequence codes)
   RecordExpression path fields -> do
     codes <- mapM (compileFieldInit walker spanValue) fields
-    let owner = lastPathSegment path
-    pure (RecordValue owner <$> sequence codes)
+    let build = recordConstructor path (map (locatedValue . fieldInitName . locatedValue) fields)
+    pure (sequence codes >>= declaredOrder . build)
   MatchExpression scrutinee arms -> do
     subject <- compileExpression walker scrutinee
     compiled <- mapM (compileArm walker) arms
@@ -213,7 +219,7 @@ compileExpression walker located@(Located spanValue expression) = case expressio
             | null (exclusiveParameters (closureFunction closure))
             , directCallee callee closure -> do
                 codes <- mapM (compileExpression walker) arguments
-                general <- compileCall walker spanValue callee arguments
+                general <- compileCallKnown walker spanValue callee arguments (zip arguments codes)
                 let invoke = maybe (\callSpan values -> callClosure (walkCallNeeds walker) closure values callSpan) id (multiMapWrapper closure)
                 pure $ do
                   local <- lookupLocal first
@@ -245,12 +251,24 @@ lendsExclusively (Located _ expression) = case expression of
     compiled code, found by where it starts and, where two start together, by
     the syntax itself. -}
 compileCall :: Walker -> Span -> Located Expression -> [Located Expression] -> Evaluator Code
-compileCall walker spanValue callee arguments = do
-    -- The call machinery reaches the callee, its receiver, and each argument
-    -- through the needs it is given; each is answered by its compiled code.
-    let reached = callee : calleeTarget callee <> concatMap argumentParts arguments
-    codes <- mapM (\part -> (,) part <$> compileExpression walker part) reached
-    let table = IntMap.fromListWith (<>) [(startOf part, [(part, code)]) | (part, code) <- codes]
+compileCall walker spanValue callee arguments =
+  compileCallKnown walker spanValue callee arguments []
+
+{-| A call whose parts are already compiled, such as the arguments a direct
+    call compiled before asking for its general form, are not compiled again.
+    Every part is compiled once per body; without that, a call nested in its
+    own argument cost twice as much at every level. -}
+compileCallKnown
+  :: Walker -> Span -> Located Expression -> [Located Expression]
+  -> [(Located Expression, Code)] -> Evaluator Code
+compileCallKnown walker spanValue callee arguments known = do
+    let reached = callParts callee arguments
+        knownSpans = Map.fromList [(locatedSpan part, code) | (part, code) <- known]
+        pending = filter (\part -> not (Map.member (locatedSpan part) knownSpans)) reached
+    codes <- mapM (\part -> (,) part <$> compileExpression walker part) pending
+    let table = IntMap.fromListWith (<>) $
+          [(startOf part, [(part, code)]) | (part, code) <- known]
+            <> [(startOf part, [(part, code)]) | (part, code) <- codes]
         answer part = case IntMap.lookup (startOf part) table of
           Just [(candidate, code)] | locatedSpan candidate == locatedSpan part -> code
           Just several | Just code <- lookup part several -> code
@@ -260,12 +278,21 @@ compileCall walker spanValue callee arguments = do
  where
   startOf part = unOffset (spanStart (locatedSpan part))
 
-{-| The receiver a member callee is called on. -}
-calleeTarget :: Located Expression -> [Located Expression]
-calleeTarget (Located _ expression) = case expression of
+{-| The syntax the call machinery reads through `callEvaluate`: a member
+    callee's receiver, or the callee itself, but never both. Compiling a member
+    callee as well as its receiver compiled the receiver chain twice at every
+    link, so a chain of n calls cost 2^n. -}
+callParts :: Located Expression -> [Located Expression] -> [Located Expression]
+callParts callee arguments = calleeParts callee <> concatMap argumentParts arguments
+
+{-| The part of a callee the call machinery evaluates. A member callee is
+    dispatched from its receiver and is never read as an expression; a type
+    application is read through its inner callee. -}
+calleeParts :: Located Expression -> [Located Expression]
+calleeParts callee@(Located _ expression) = case expression of
   MemberExpression target _ -> [target]
-  TypeApplication inner _ -> calleeTarget inner
-  _ -> []
+  TypeApplication inner _ -> calleeParts inner
+  _ -> [callee]
 
 {-| An argument, and what it lends when it is written `&` or `&mut`. -}
 argumentParts :: Located Expression -> [Located Expression]
@@ -365,9 +392,9 @@ compileBinary walker located@(Located spanValue _) left operator right = case op
     `combine`'s, so the two cannot disagree. -}
 operationFor :: Span -> Text -> Value -> Value -> Evaluator Value
 operationFor spanValue operator = case operator of
-  "+" -> arithmetic "add" (+)
-  "-" -> arithmetic "subtract" (-)
-  "*" -> arithmetic "multiply" (*)
+  "+" -> arithmetic CheckedAdd (+)
+  "-" -> arithmetic CheckedSubtract (-)
+  "*" -> arithmetic CheckedMultiply (*)
   "<" -> comparing (<)
   "<=" -> comparing (<=)
   ">" -> comparing (>)
@@ -380,9 +407,9 @@ operationFor spanValue operator = case operator of
     _ -> combine spanValue operator left right
   _ -> combine spanValue operator
  where
-  arithmetic what apply left right = case (left, right) of
+  arithmetic operation apply left right = case (left, right) of
     (IntValue leftKind a, IntValue rightKind b) ->
-      checkedResult spanValue (integerKindMeet leftKind rightKind) what (apply a b)
+      checkedResult spanValue (integerKindMeet leftKind rightKind) operation (apply a b)
     _ -> combine spanValue operator left right
   comparing test left right = case (left, right) of
     (IntValue _ a, IntValue _ b) -> pure (BoolValue (test a b))

@@ -6,6 +6,7 @@ module Pudu.Semantic.Resolve
   ) where
 
 import Control.Monad (when)
+import qualified Data.List.NonEmpty as NonEmpty
 import Data.Text (Text)
 import Pudu.Diagnostic (Diagnostic, sortDiagnostics)
 import Pudu.Frontend.Syntax.Located (Located (..))
@@ -58,7 +59,6 @@ import Pudu.Semantic.Resolve.Context
   , ResolverProducts (..)
   , declareBuiltin
   , declarePreludeName
-  , markAmbiguousVariant
   , declareNamed
   , declareModuleQualifier
   , inScope
@@ -79,6 +79,7 @@ import Pudu.Semantic.Resolve.Context
   , runResolver
   )
 import Pudu.Semantic.Resolve.Bindings (bindPattern, bindPatternWith)
+import Pudu.Semantic.Resolve.Ambiguity (PathUse (ValuePath), recordImportedVariants, rejectImportedPath)
 import Pudu.Semantic.Resolve.Canonical (resolveHead, resolveMemberHead, resolveConstructorPath, resolveTypePath)
 import Pudu.Semantic.ScopeIndex (ScopeIndex, delimitedExtent, spanExtent, spanningExtent)
 import Pudu.Semantic.Symbol (Namespace (..), Reference, Symbol (..), SymbolOrigin (..))
@@ -135,24 +136,7 @@ resolveUnit prepared moduleValue = do
         Just bindings -> mapM_ collectPreparedImport bindings
       setReflectionImports (moduleImports moduleValue)
       mapM_ collectDeclaration (moduleDeclarations moduleValue)
-      mapM_ markAmbiguousVariant (repeatedVariants (moduleDeclarations moduleValue))
       mapM_ walkDeclaration (moduleDeclarations moduleValue)
-
-{-| A variant spelling declared by two different types cannot be used
-    unqualified, so it is marked before any body is walked. -}
-repeatedVariants :: [Located Declaration] -> [Text]
-repeatedVariants declarations =
-  [name | (name, total) <- tally (concatMap variantNames declarations), total > (1 :: Int)]
- where
-  tally names = [(name, length (filter (== name) names)) | name <- unique names]
-  unique = foldr (\name seen -> if name `elem` seen then seen else name : seen) []
-
-variantNames :: Located Declaration -> [Text]
-variantNames (Located _ declaration) = case declaration of
-  TypeDeclaration value -> case locatedValue (typeDefinition value) of
-    SumDefinition variants -> map (locatedValue . variantName . locatedValue) variants
-    _ -> []
-  _ -> []
 
 declareWiredIn :: Resolver ()
 declareWiredIn = mapM_ (declareBuiltin TypeSpace) wiredInTypeNames
@@ -172,9 +156,11 @@ importsPrelude (Located _ value) = isPreludeModule (locatedValue (importModule v
 collectPreparedImport :: [ImportBinding] -> Resolver ()
 collectPreparedImport = mapM_ declare
  where
-  declare binding
-    | bindingNamespace binding == ValueSpace && bindingModuleQualifier binding = declareModuleQualifier name
-    | otherwise = declareNamed (bindingNamespace binding) ImportOrigin Private False name
+  declare binding = do
+    if bindingNamespace binding == ValueSpace && bindingModuleQualifier binding
+      then declareModuleQualifier name
+      else declareNamed (bindingNamespace binding) ImportOrigin Private False name
+    recordImportedVariants (bindingName binding) (bindingVariants binding)
    where
     name = Located (bindingSpan binding) (bindingName binding)
 
@@ -188,7 +174,7 @@ collectDeclaration (Located _ declaration) = case declaration of
     declareNamed ValueSpace ModuleOrigin (functionVisibility value) False (functionName value)
   TypeDeclaration value -> do
     declareNamed TypeSpace ModuleOrigin (typeVisibility value) False (typeName value)
-    collectVariants (typeDefinition value)
+    collectVariants (locatedValue (typeName value)) (typeDefinition value)
   TraitDeclaration value ->
     declareNamed TypeSpace ModuleOrigin (traitVisibility value) False (traitName value)
   ImplDeclaration _ -> pure ()
@@ -216,14 +202,13 @@ collectDeclaration (Located _ declaration) = case declaration of
       (foreignFunctions value)
   InvalidDeclaration -> pure ()
 
-{-| Variants live in their type's namespace, so they are recorded as symbols but
-    are not bound as unqualified names. -}
-collectVariants :: Located TypeDefinition -> Resolver ()
-collectVariants (Located _ definition) = case definition of
+{-| Record candidates under their declaring type before any body is walked. -}
+collectVariants :: Text -> Located TypeDefinition -> Resolver ()
+collectVariants owner (Located _ definition) = case definition of
   SumDefinition variants -> mapM_ recordVariant variants
   _ -> pure ()
  where
-  recordVariant (Located _ variant) = recordVariantSymbol (variantName variant)
+  recordVariant (Located _ variant) = recordVariantSymbol owner (variantName variant)
 
 walkDeclaration :: Located Declaration -> Resolver ()
 walkDeclaration (Located spanValue declaration) = case declaration of
@@ -387,7 +372,11 @@ walkExpression (Located spanValue expression) = case expression of
   UnaryExpression _ operand -> walkExpression operand
   BinaryExpression left _ right -> walkExpression left >> walkExpression right
   CallExpression callee arguments -> walkExpression callee >> mapM_ walkExpression arguments
-  MemberExpression target _ -> walkMemberTarget target
+  MemberExpression target member -> do
+    walkMemberTarget target
+    case locatedValue target of
+      NameExpression (first NonEmpty.:| []) -> rejectImportedPath ValuePath spanValue (first NonEmpty.:| [locatedValue member])
+      _ -> pure ()
   IndexExpression target index -> walkExpression target >> walkExpression index
   RangeExpression lower _ upper -> mapM_ walkExpression lower >> mapM_ walkExpression upper
   TryExpression target -> walkExpression target
@@ -484,9 +473,18 @@ walkType (Located typeSpan value) = case value of
     Computed targets use the ordinary expression walk. -}
 walkMemberTarget :: Located Expression -> Resolver ()
 walkMemberTarget target@(Located spanValue expression) = case expression of
-  NameExpression path -> resolveMemberHead spanValue path
+  NameExpression path -> resolveMemberHead spanValue spanValue path
   TypeApplication (Located ownerAt (NameExpression path)) arguments
     | Just _ <- spanOrigin spanValue -> do
         resolveTypePath ownerAt (ModuleName path)
         mapM_ walkType arguments
+  _ | Just (headAt, path) <- namedMemberPath target -> resolveMemberHead headAt spanValue path
   _ -> walkExpression target
+
+namedMemberPath :: Located Expression -> Maybe (Span, NonEmpty.NonEmpty Text)
+namedMemberPath (Located at expression) = case expression of
+  NameExpression path -> Just (at, path)
+  MemberExpression target member -> do
+    (headAt, path) <- namedMemberPath target
+    pure (headAt, path <> pure (locatedValue member))
+  _ -> Nothing

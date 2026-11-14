@@ -13,13 +13,15 @@ import Pudu.Compiler.Program
   , programIntegerKinds
   , rootCompileResult
   )
+import Pudu.Compiler.Program.Common (runEntry)
 import Pudu.Diagnostic (diagnosticCode, diagnosticCodeText)
 import Pudu.Eval (EvalOutcome (..))
 import Pudu.Eval.Program (evaluateProgramEntry)
 import Pudu.Eval.Render (renderValue)
 import System.Directory (listDirectory)
 import System.Environment (lookupEnv, setEnv, unsetEnv)
-import Test.QuickCheck (Property, counterexample, (===))
+import System.Timeout (timeout)
+import Test.QuickCheck (Property, conjoin, counterexample, (===))
 
 {-| Every standard-library fixture, run once by the tree walker and once with
     compiled bodies, answers the same value and the same runtime diagnostics.
@@ -30,7 +32,11 @@ testCompiledAgreement :: IO Property
 testCompiledAgreement = do
   names <- sort . filter runnable <$> listDirectory "test-fixtures/stdlib"
   differing <- concat <$> mapM compare' names
-  pure (counterexample ("fixtures that differ between evaluators: " <> show differing) (differing === []))
+  chain <- longMethodChain
+  pure $ conjoin
+    [ counterexample ("fixtures that differ between evaluators: " <> show differing) (differing === [])
+    , chain
+    ]
  where
   -- A fixture that drives a real device answers what the device's clock
   -- reported, which differs between two runs of the same evaluator.
@@ -41,6 +47,16 @@ testCompiledAgreement = do
     tree <- inMode "tree" (outcomeOfFixture path)
     compiled <- inMode "compiled" (outcomeOfFixture path)
     pure [name | tree /= compiled]
+
+{-| A chain of trait methods is compiled once per link. Compiling a member
+    callee as well as its receiver made the work double at every link, so this
+    thirty-link program took longer than any test may. -}
+longMethodChain :: IO Property
+longMethodChain = do
+  ran <- timeout 10000000 (inMode "compiled" (runEntry "test-fixtures/importchain/MethodChain.pudu"))
+  pure $ counterexample
+    "a thirty-link trait-method chain compiles in time proportional to its length"
+    (ran === Just (Just "30"))
 
 {-| What a fixture answers: its rendered value and its runtime diagnostic codes,
     or nothing when it does not compile. -}

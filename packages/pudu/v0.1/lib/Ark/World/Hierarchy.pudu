@@ -1,0 +1,360 @@
+module Ark.World.Hierarchy
+
+import Std.Lanes as Lanes
+import Ark.Core.Handle as Handle
+import Ark.Math.Quat as Q
+import Ark.Math.Transform as T
+import Ark.Math as V
+
+/// One node: its entity, its parent's slot (-1 for a root) and its depth.
+export type Node = { entity: Handle.Handle, parent: Int, depth: Int }
+
+/// Translation, rotation quaternion and scale as ten lanes indexed by slot.
+export type Poses = {
+  tx: Lanes.Lanes,
+  ty: Lanes.Lanes,
+  tz: Lanes.Lanes,
+  rx: Lanes.Lanes,
+  ry: Lanes.Lanes,
+  rz: Lanes.Lanes,
+  rw: Lanes.Lanes,
+  sx: Lanes.Lanes,
+  sy: Lanes.Lanes,
+  sz: Lanes.Lanes,
+}
+
+/// Nodes by slot, the slot of each entity index, and local and world poses.
+export type Hierarchy = { nodes: Array[Node], slots: Map[Int, Int], local: Poses, world: Poses }
+
+/// A hierarchy with no nodes.
+export fn empty() -> Hierarchy {
+  Hierarchy{nodes: [], slots: mapOf([]), local: nothing(), world: nothing()}
+}
+
+/// The number of nodes.
+export fn size(tree: &Hierarchy) -> Int {
+  tree.nodes.length()
+}
+
+/// Add an entity under an existing parent, or as a root; None if it is already a node or the parent is not.
+export fn add(tree: Hierarchy, entity: Handle.Handle, parent: Option[Handle.Handle], local: &T.Transform) -> Option[Hierarchy] {
+  if tree.slots.containsKey(entity.index) { return None }
+  let (parentSlot, depth) = match parent {
+    case Some(owner) => {
+      let slot = slotOf(&tree, owner) ?
+      (slot, tree.nodes[slot].depth + 1)
+    }
+    case None => (-1, 0)
+  }
+  let pose = single(local)
+  Some(
+    Hierarchy {
+      nodes: tree.nodes.push(Node{entity, parent: parentSlot, depth}),
+      slots: tree.slots.insert(entity.index, tree.nodes.length()),
+      local: joined(&tree.local, &pose),
+      world: joined(&tree.world, &pose),
+    },
+  )
+}
+
+/// Replace one node's local pose; an edit that copies each lane.
+export fn setLocal(tree: Hierarchy, entity: Handle.Handle, local: &T.Transform) -> Option[Hierarchy] {
+  let slot = slotOf(&tree, entity) ?
+  let p = tree.local
+  let next = Poses {
+    tx: Lanes.set(&p.tx, slot, local.translation.x) ?,
+    ty: Lanes.set(&p.ty, slot, local.translation.y) ?,
+    tz: Lanes.set(&p.tz, slot, local.translation.z) ?,
+    rx: Lanes.set(&p.rx, slot, local.rotation.x) ?,
+    ry: Lanes.set(&p.ry, slot, local.rotation.y) ?,
+    rz: Lanes.set(&p.rz, slot, local.rotation.z) ?,
+    rw: Lanes.set(&p.rw, slot, local.rotation.w) ?,
+    sx: Lanes.set(&p.sx, slot, local.scale.x) ?,
+    sy: Lanes.set(&p.sy, slot, local.scale.y) ?,
+    sz: Lanes.set(&p.sz, slot, local.scale.z) ?,
+  }
+  Some(Hierarchy{..tree, local: next})
+}
+
+/// Replace every local pose at once; None unless each lane has one value per node.
+export fn setLocals(tree: Hierarchy, poses: &Poses) -> Option[Hierarchy] {
+  let count = tree.nodes.length()
+  for lane in lanesOf(poses) {
+    if Lanes.count(&lane) != count { return None }
+  }
+  Some(Hierarchy{..tree, local: *poses})
+}
+
+/// The local poses by slot.
+export fn localPoses(tree: &Hierarchy) -> Poses {
+  tree.local
+}
+
+/// The world poses by slot, as of the last propagation.
+export fn worldPoses(tree: &Hierarchy) -> Poses {
+  tree.world
+}
+
+/// The slot an entity occupies in the pose lanes.
+export fn slotOf(tree: &Hierarchy, entity: Handle.Handle) -> Option[Int] {
+  let slot = tree.slots.get(entity.index) ?
+  if tree.nodes[slot].entity == entity { Some(slot) } else { None }
+}
+
+/// The entity's parent, or None for a root or a stranger.
+export fn parentOf(tree: &Hierarchy, entity: Handle.Handle) -> Option[Handle.Handle] {
+  let slot = slotOf(tree, entity) ?
+  let parent = tree.nodes[slot].parent
+  if parent < 0 { None } else { Some(tree.nodes[parent].entity) }
+}
+
+/// The entity's direct children in slot order.
+export fn childrenOf(tree: &Hierarchy, entity: Handle.Handle) -> Array[Handle.Handle] {
+  match slotOf(tree, entity) {
+    case Some(slot) => tree.nodes.filter(|node| node.parent == slot).map(|node| node.entity)
+    case None => []
+  }
+}
+
+/// The entity's depth; roots are zero.
+export fn depthOf(tree: &Hierarchy, entity: Handle.Handle) -> Option[Int] {
+  let slot = slotOf(tree, entity) ?
+  Some(tree.nodes[slot].depth)
+}
+
+/// Move a node and its subtree under another parent or to the root; None when that would make
+/// the node its own ancestor.
+export fn reparent(tree: Hierarchy, entity: Handle.Handle, parent: Option[Handle.Handle]) -> Option[Hierarchy] {
+  let slot = slotOf(&tree, entity) ?
+  let parentSlot = match parent {
+    case Some(owner) => slotOf(&tree, owner) ?
+    case None => -1
+  }
+  var walk = parentSlot
+  while walk >= 0 {
+    if walk == slot { return None }
+    walk = tree.nodes[walk].parent
+  }
+  var nodes = tree.nodes
+  nodes[slot] = Node{..nodes[slot], parent: parentSlot}
+  Some(Hierarchy{..tree, nodes: withDepths(&nodes)})
+}
+
+/// Remove a node and its whole subtree, answering the removed entities.
+export fn remove(tree: Hierarchy, entity: Handle.Handle) -> Option[(Hierarchy, Array[Handle.Handle])] {
+  let root = slotOf(&tree, entity) ?
+  var kept: Array[Int] = []
+  var removed: Array[Handle.Handle] = []
+  var remap: Map[Int, Int] = mapOf([])
+  var slot = 0
+  for node in tree.nodes {
+    var walk = slot
+    var inside = false
+    while walk >= 0 && !inside {
+      if walk == root { inside = true }
+      walk = tree.nodes[walk].parent
+    }
+    if inside {
+      removed = removed.push(node.entity)
+    } else {
+      remap = remap.insert(slot, kept.length())
+      kept = kept.push(slot)
+    }
+    slot = slot + 1
+  }
+  var nodes: Array[Node] = []
+  var slots: Map[Int, Int] = mapOf([])
+  for source in kept {
+    let node = tree.nodes[source]
+    let parent = if node.parent < 0 { -1 } else {
+      match remap.get(node.parent) {
+        case Some(moved) => moved
+        case None => -1
+      }
+    }
+    slots = slots.insert(node.entity.index, nodes.length())
+    nodes = nodes.push(Node{..node, parent})
+  }
+  let local = gathered(&tree.local, &kept) ?
+  let poses = gathered(&tree.world, &kept) ?
+  Some((Hierarchy{nodes, slots, local, world: poses}, removed))
+}
+
+/// Recompute every world pose from local poses, one batch of lane kernels per depth level.
+export fn propagate(tree: Hierarchy) -> Option[Hierarchy] {
+  var levels: Array[Array[Int]] = []
+  var parents: Array[Array[Int]] = []
+  var slot = 0
+  for node in tree.nodes {
+    while levels.length() <= node.depth {
+      levels = levels.push([])
+      parents = parents.push([])
+    }
+    levels[node.depth] = levels[node.depth].push(slot)
+    parents[node.depth] = parents[node.depth].push(node.parent)
+    slot = slot + 1
+  }
+  var composed = tree.local
+  var depth = 1
+  while depth < levels.length() {
+    let child = gathered(&tree.local, &levels[depth]) ?
+    let parent = gathered(&composed, &parents[depth]) ?
+    let level = compose(&parent, &child) ?
+    composed = scattered(&composed, &levels[depth], &level) ?
+    depth = depth + 1
+  }
+  Some(Hierarchy{..tree, world: composed})
+}
+
+/// The entity's world transform as of the last propagation.
+export fn world(tree: &Hierarchy, entity: Handle.Handle) -> Option[T.Transform] {
+  let slot = slotOf(tree, entity) ?
+  let p = tree.world
+  Some(
+    T.transform(
+      V.vec3(Lanes.get(&p.tx, slot) ?, Lanes.get(&p.ty, slot) ?, Lanes.get(&p.tz, slot) ?),
+      Q.quat(Lanes.get(&p.rx, slot) ?, Lanes.get(&p.ry, slot) ?, Lanes.get(&p.rz, slot) ?, Lanes.get(&p.rw, slot) ?),
+      V.vec3(Lanes.get(&p.sx, slot) ?, Lanes.get(&p.sy, slot) ?, Lanes.get(&p.sz, slot) ?),
+    ),
+  )
+}
+
+/// World = parent * child in TRS form: scale product, rotation product and the child's
+/// translation scaled and rotated by the parent before the parent's translation.
+fn compose(parent: &Poses, child: &Poses) -> Option[Poses] {
+  let mx = Lanes.multiply(&parent.sx, &child.tx) ?
+  let my = Lanes.multiply(&parent.sy, &child.ty) ?
+  let mz = Lanes.multiply(&parent.sz, &child.tz) ?
+  let doubledX = Lanes.scale(&(minus(&(mul(&parent.ry, &mz) ?), &(mul(&parent.rz, &my) ?)) ?), 2.0)
+  let doubledY = Lanes.scale(&(minus(&(mul(&parent.rz, &mx) ?), &(mul(&parent.rx, &mz) ?)) ?), 2.0)
+  let doubledZ = Lanes.scale(&(minus(&(mul(&parent.rx, &my) ?), &(mul(&parent.ry, &mx) ?)) ?), 2.0)
+  let crossX = minus(&(mul(&parent.ry, &doubledZ) ?), &(mul(&parent.rz, &doubledY) ?)) ?
+  let crossY = minus(&(mul(&parent.rz, &doubledX) ?), &(mul(&parent.rx, &doubledZ) ?)) ?
+  let crossZ = minus(&(mul(&parent.rx, &doubledY) ?), &(mul(&parent.ry, &doubledX) ?)) ?
+  let rotatedX = plus(&(Lanes.fma(&parent.rw, &doubledX, &mx) ?), &crossX) ?
+  let rotatedY = plus(&(Lanes.fma(&parent.rw, &doubledY, &my) ?), &crossY) ?
+  let rotatedZ = plus(&(Lanes.fma(&parent.rw, &doubledZ, &mz) ?), &crossZ) ?
+  let a = parent
+  let b = child
+  Some(
+    Poses {
+      tx: plus(&parent.tx, &rotatedX) ?,
+      ty: plus(&parent.ty, &rotatedY) ?,
+      tz: plus(&parent.tz, &rotatedZ) ?,
+      rx: sum4(&(mul(&a.rw, &b.rx) ?), &(mul(&a.rx, &b.rw) ?), &(mul(&a.ry, &b.rz) ?), &(Lanes.negate(&(mul(&a.rz, &b.ry) ?)))) ?,
+      ry: sum4(&(mul(&a.rw, &b.ry) ?), &(Lanes.negate(&(mul(&a.rx, &b.rz) ?))), &(mul(&a.ry, &b.rw) ?), &(mul(&a.rz, &b.rx) ?)) ?,
+      rz: sum4(&(mul(&a.rw, &b.rz) ?), &(mul(&a.rx, &b.ry) ?), &(Lanes.negate(&(mul(&a.ry, &b.rx) ?))), &(mul(&a.rz, &b.rw) ?)) ?,
+      rw: sum4(&(mul(&a.rw, &b.rw) ?), &(Lanes.negate(&(mul(&a.rx, &b.rx) ?))), &(Lanes.negate(&(mul(&a.ry, &b.ry) ?))), &(Lanes.negate(&(mul(&a.rz, &b.rz) ?)))) ?,
+      sx: mul(&a.sx, &b.sx) ?,
+      sy: mul(&a.sy, &b.sy) ?,
+      sz: mul(&a.sz, &b.sz) ?,
+    },
+  )
+}
+
+fn mul(left: &Lanes.Lanes, right: &Lanes.Lanes) -> Option[Lanes.Lanes] {
+  Lanes.multiply(left, right)
+}
+
+fn plus(left: &Lanes.Lanes, right: &Lanes.Lanes) -> Option[Lanes.Lanes] {
+  Lanes.add(left, right)
+}
+
+fn minus(left: &Lanes.Lanes, right: &Lanes.Lanes) -> Option[Lanes.Lanes] {
+  Lanes.subtract(left, right)
+}
+
+fn sum4(a: &Lanes.Lanes, b: &Lanes.Lanes, c: &Lanes.Lanes, d: &Lanes.Lanes) -> Option[Lanes.Lanes] {
+  let ab = plus(a, b) ?
+  let abc = plus(&ab, c) ?
+  plus(&abc, d)
+}
+
+fn lanesOf(p: &Poses) -> Array[Lanes.Lanes] {
+  [p.tx, p.ty, p.tz, p.rx, p.ry, p.rz, p.rw, p.sx, p.sy, p.sz]
+}
+
+fn nothing() -> Poses {
+  let none = Lanes.fromArray(&[])
+  Poses{tx: none, ty: none, tz: none, rx: none, ry: none, rz: none, rw: none, sx: none, sy: none, sz: none}
+}
+
+fn single(pose: &T.Transform) -> Poses {
+  Poses {
+    tx: Lanes.fromArray(&[pose.translation.x]),
+    ty: Lanes.fromArray(&[pose.translation.y]),
+    tz: Lanes.fromArray(&[pose.translation.z]),
+    rx: Lanes.fromArray(&[pose.rotation.x]),
+    ry: Lanes.fromArray(&[pose.rotation.y]),
+    rz: Lanes.fromArray(&[pose.rotation.z]),
+    rw: Lanes.fromArray(&[pose.rotation.w]),
+    sx: Lanes.fromArray(&[pose.scale.x]),
+    sy: Lanes.fromArray(&[pose.scale.y]),
+    sz: Lanes.fromArray(&[pose.scale.z]),
+  }
+}
+
+fn joined(first: &Poses, second: &Poses) -> Poses {
+  Poses {
+    tx: Lanes.concat(&first.tx, &second.tx),
+    ty: Lanes.concat(&first.ty, &second.ty),
+    tz: Lanes.concat(&first.tz, &second.tz),
+    rx: Lanes.concat(&first.rx, &second.rx),
+    ry: Lanes.concat(&first.ry, &second.ry),
+    rz: Lanes.concat(&first.rz, &second.rz),
+    rw: Lanes.concat(&first.rw, &second.rw),
+    sx: Lanes.concat(&first.sx, &second.sx),
+    sy: Lanes.concat(&first.sy, &second.sy),
+    sz: Lanes.concat(&first.sz, &second.sz),
+  }
+}
+
+fn gathered(poses: &Poses, slots: &Array[Int]) -> Option[Poses] {
+  Some(
+    Poses {
+      tx: Lanes.gather(&poses.tx, slots) ?,
+      ty: Lanes.gather(&poses.ty, slots) ?,
+      tz: Lanes.gather(&poses.tz, slots) ?,
+      rx: Lanes.gather(&poses.rx, slots) ?,
+      ry: Lanes.gather(&poses.ry, slots) ?,
+      rz: Lanes.gather(&poses.rz, slots) ?,
+      rw: Lanes.gather(&poses.rw, slots) ?,
+      sx: Lanes.gather(&poses.sx, slots) ?,
+      sy: Lanes.gather(&poses.sy, slots) ?,
+      sz: Lanes.gather(&poses.sz, slots) ?,
+    },
+  )
+}
+
+fn scattered(poses: &Poses, slots: &Array[Int], values: &Poses) -> Option[Poses] {
+  Some(
+    Poses {
+      tx: Lanes.scatter(&poses.tx, slots, &values.tx) ?,
+      ty: Lanes.scatter(&poses.ty, slots, &values.ty) ?,
+      tz: Lanes.scatter(&poses.tz, slots, &values.tz) ?,
+      rx: Lanes.scatter(&poses.rx, slots, &values.rx) ?,
+      ry: Lanes.scatter(&poses.ry, slots, &values.ry) ?,
+      rz: Lanes.scatter(&poses.rz, slots, &values.rz) ?,
+      rw: Lanes.scatter(&poses.rw, slots, &values.rw) ?,
+      sx: Lanes.scatter(&poses.sx, slots, &values.sx) ?,
+      sy: Lanes.scatter(&poses.sy, slots, &values.sy) ?,
+      sz: Lanes.scatter(&poses.sz, slots, &values.sz) ?,
+    },
+  )
+}
+
+fn withDepths(nodes: &Array[Node]) -> Array[Node] {
+  var result = *nodes
+  var slot = 0
+  while slot < result.length() {
+    var depth = 0
+    var walk = result[slot].parent
+    while walk >= 0 {
+      depth = depth + 1
+      walk = result[walk].parent
+    }
+    result[slot] = Node{..result[slot], depth}
+    slot = slot + 1
+  }
+  result
+}

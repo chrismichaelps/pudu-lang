@@ -5,6 +5,8 @@ module Pudu.Eval.Builtin.Definition
   ) where
 
 import Data.Text (Text)
+import Pudu.FloatKernel (FloatKernel, floatKernelName)
+import Pudu.LaneKernel (LaneKernel, laneKernelName)
 
 {-| A wired-in function the evaluator recognizes by name rather than by closure. -}
 data Builtin
@@ -102,6 +104,7 @@ data Builtin
   | DesktopPresentBuiltin
   | DesktopPumpBuiltin
   | DesktopInputsBuiltin
+  | DesktopConfigureBuiltin
   | DesktopClipboardReadBuiltin
   | DesktopClipboardWriteBuiltin
   | DesktopAccessibilityBuiltin
@@ -155,6 +158,7 @@ data Builtin
   | SearchSeparatorBuiltin
   | ExitBuiltin
   | ClockBuiltin
+  | ClockNanosBuiltin
   | NowBuiltin
   | FormatTimeBuiltin
   | ParseTimeBuiltin
@@ -174,6 +178,11 @@ data Builtin
   | BufferScanU64Builtin
   | BufferCopyBuiltin
   | BufferSizeBuiltin
+  | TextByteSizeBuiltin
+  | TextByteSliceBuiltin
+  | TextByteFindBuiltin
+  | TextByteFindLastBuiltin
+  | TextScalarAtBuiltin
   | SwissTableEmptyBuiltin
   | SwissTableLookupBuiltin
   | SwissTableInsertBuiltin
@@ -220,6 +229,9 @@ data Builtin
   | ChannelPullWithinBuiltin
   | MutexAcquireWithinBuiltin
   | MutexCloseBuiltin
+  | FloatKernelBuiltin !FloatKernel
+  | LaneKernelBuiltin !LaneKernel
+  | TextByteAtBuiltin
   deriving stock (Eq, Show)
 
 {-| The source-level binding for a built-in tag. -}
@@ -325,6 +337,7 @@ builtinName value = case value of
   DesktopPresentBuiltin -> "desktopPresent"
   DesktopPumpBuiltin -> "desktopPump"
   DesktopInputsBuiltin -> "desktopInputs"
+  DesktopConfigureBuiltin -> "desktopConfigure"
   DesktopClipboardReadBuiltin -> "desktopClipboardRead"
   DesktopClipboardWriteBuiltin -> "desktopClipboardWrite"
   DesktopAccessibilityBuiltin -> "desktopAccessibility"
@@ -378,6 +391,7 @@ builtinName value = case value of
   SearchSeparatorBuiltin -> "searchSeparator"
   ExitBuiltin -> "exit"
   ClockBuiltin -> "clock"
+  ClockNanosBuiltin -> "clockNanos"
   NowBuiltin -> "now"
   FormatTimeBuiltin -> "formatTime"
   ParseTimeBuiltin -> "parseTime"
@@ -389,6 +403,8 @@ builtinName value = case value of
   DecimalScaleBuiltin -> "decimalScale"
   DecimalToIntBuiltin -> "decimalToInt"
   DecimalToFloatBuiltin -> "decimalToFloat"
+  FloatKernelBuiltin kernel -> floatKernelName kernel
+  LaneKernelBuiltin kernel -> laneKernelName kernel
   DecimalDivideBuiltin -> "decimalDivide"
   DecimalRoundBuiltin -> "decimalRound"
   BufferAllocBuiltin -> "bufferAlloc"
@@ -397,6 +413,12 @@ builtinName value = case value of
   BufferScanU64Builtin -> "bufferScanU64"
   BufferCopyBuiltin -> "bufferCopy"
   BufferSizeBuiltin -> "bufferSize"
+  TextByteAtBuiltin -> "textByteAt"
+  TextByteSizeBuiltin -> "textByteSize"
+  TextByteSliceBuiltin -> "textByteSlice"
+  TextByteFindBuiltin -> "textByteFind"
+  TextByteFindLastBuiltin -> "textByteFindLast"
+  TextScalarAtBuiltin -> "textScalarAt"
   SwissTableEmptyBuiltin -> "swissTableEmpty"
   SwissTableLookupBuiltin -> "swissTableLookup"
   SwissTableInsertBuiltin -> "swissTableInsert"

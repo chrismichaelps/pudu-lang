@@ -1,0 +1,121 @@
+module UsesMemory
+
+import Std.Buffer as Buffer
+import Std.Memory as Memory
+import Std.Memory {Monotonic, Pooled, Resource}
+
+/// Allocation through the trait, so either allocator can stand behind it.
+fn reserve[R: Resource](from: &mut R, size: Int) -> Option[Memory.Block] {
+  from.allocate(size, 8)
+}
+
+fn alignment() -> Bool {
+  Memory.alignUp(13, 8) == Some(16)
+    && Memory.alignUp(16, 8) == Some(16)
+    && Memory.alignUp(0, 1) == Some(0)
+    && Memory.alignUp(13, 6) == None
+    && Memory.alignUp(13, 0) == None
+    && Memory.alignUp(-1, 8) == None
+}
+
+fn arenasMoveForward() -> Bool {
+  var scratch: Memory.Arena = Memory.arena(40)
+  let first = scratch.allocate(10, 1)
+  let padded = scratch.allocate(4, 8)
+  let afterTwo = scratch.used()
+  let tooBig = scratch.allocate(30, 1)
+  let rest = scratch.allocate(20, 1)
+  first == Some(Memory.Block{offset: 0, size: 10})
+    && padded == Some(Memory.Block{offset: 16, size: 4})
+    && afterTwo == 20
+    && tooBig == None
+    && rest == Some(Memory.Block{offset: 20, size: 20})
+    && scratch.remaining() == 0
+    && scratch.allocate(0, 1) == Some(Memory.Block{offset: 40, size: 0})
+    && scratch.allocate(1, 1) == None
+}
+
+fn arenaRefusals() -> Bool {
+  var scratch = Memory.arena(16)
+  let badAlignment = scratch.allocate(1, 3)
+  let negative = scratch.allocate(-1, 1)
+  let block = scratch.allocate(8, 8)
+  let released = scratch.release(Memory.Block{offset: 0, size: 8})
+  let usedAfterRelease = scratch.used()
+  scratch.reset()
+  badAlignment == None && negative == None && block != None
+    && !released && usedAfterRelease == 8
+    && scratch.used() == 0 && scratch.remaining() == 16
+    && Memory.arena(-5).remaining() == 0
+}
+
+fn poolsReuse() -> Bool {
+  var slots: Memory.Pool = Memory.pool(32, 3)
+  let a = slots.allocate(32, 8)
+  let b = slots.allocate(1, 16)
+  let c = slots.allocate(32, 32)
+  let full = slots.allocate(32, 1)
+  let availableWhenFull = slots.available()
+  let given = slots.release(Memory.Block{offset: 32, size: 32})
+  let reused = slots.allocate(32, 8)
+  a == Some(Memory.Block{offset: 0, size: 32})
+    && b == Some(Memory.Block{offset: 32, size: 32})
+    && c == Some(Memory.Block{offset: 64, size: 32})
+    && full == None && availableWhenFull == 0
+    && given && reused == Some(Memory.Block{offset: 32, size: 32})
+    && slots.inUse() == 3
+}
+
+/// A pool takes back only blocks it handed out and has not taken back.
+fn poolRefusals() -> Bool {
+  var slots = Memory.pool(32, 4)
+  let block = slots.allocate(32, 8)
+  let oversized = slots.allocate(33, 1)
+  let overAligned = slots.allocate(8, 64)
+  let first = slots.release(Memory.Block{offset: 0, size: 32})
+  let twice = slots.release(Memory.Block{offset: 0, size: 32})
+  let misaligned = slots.release(Memory.Block{offset: 16, size: 32})
+  let neverGiven = slots.release(Memory.Block{offset: 64, size: 32})
+  let outside = slots.release(Memory.Block{offset: 320, size: 32})
+  let wrongSize = slots.release(Memory.Block{offset: 0, size: 8})
+  block != None && oversized == None && overAligned == None
+    && first && !twice && !misaligned && !neverGiven && !outside && !wrongSize
+    && slots.inUse() == 0 && slots.available() == 4
+    && Memory.pool(8, -2).available() == 0
+}
+
+fn throughTheTrait() -> Bool {
+  var scratch = Memory.arena(64)
+  var slots = Memory.pool(16, 2)
+  reserve(&mut scratch, 3) == Some(Memory.Block{offset: 0, size: 3})
+    && reserve(&mut scratch, 3) == Some(Memory.Block{offset: 8, size: 3})
+    && reserve(&mut slots, 3) == Some(Memory.Block{offset: 0, size: 16})
+}
+
+/// Blocks are offsets into storage the caller owns.
+fn blocksAddressABuffer() -> Option[Bool] {
+  var scratch = Memory.arena(32)
+  let first = scratch.allocate(8, 8) ?
+  let second = scratch.allocate(8, 8) ?
+  let empty = Buffer.alloc(32)
+  let written = Buffer.writeU64(&empty, first.offset, 7u64) ?
+  let both = Buffer.writeU64(&written, second.offset, 9u64) ?
+  Some(Buffer.readU64(&both, first.offset) == Some(7u64) && Buffer.readU64(&both, second.offset) == Some(9u64))
+}
+
+export fn main() -> Int {
+  let checks = [
+    alignment(),
+    arenasMoveForward(),
+    arenaRefusals(),
+    poolsReuse(),
+    poolRefusals(),
+    throughTheTrait(),
+    blocksAddressABuffer() == Some(true),
+  ]
+  var held = 0
+  for passed in checks {
+    if passed { held = held + 1 }
+  }
+  held
+}

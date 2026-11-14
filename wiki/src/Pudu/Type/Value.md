@@ -1,6 +1,6 @@
 ---
 type: module
-path: "@root/src/Pudu/Type/Value.hs"
+path: "@root/packages/pudu/v0.1/src/Pudu/Type/Value.hs"
 fidelity: Active
 domain: "[[Pudu Type]]"
 subsystem: "[[Semantics]]"
@@ -88,3 +88,56 @@ DEPTH 0.4 (MEDIUM). It keeps one concern out of [[Type Check]], which the delive
 Scheme bounds retain complete formed trait applications. Every rigid parameter occurring in an application is substituted together with the bounded subject during instantiation. Trait identity alone cannot distinguish Holds[Int] from Holds[Bool].
 
 Resolved Grill Log: preserve arguments in the shared Scheme contract rather than recovering them from method bodies or caller context.
+
+## Named sum publication (#761)
+
+OwnerSelection distinguishes ConcreteOwner NominalId from VariantOwner NominalId Text [Text]; the latter carries the checked label and declared field order.
+
+Resolved Grill Log: carry checked owner and field order through syntax; preserve authored effects, diagnostics and cache identity. See [[Named Sum Publication]].
+
+## Checked constructor values (#766)
+
+VariantOwner describes checked variant selection. Named construction carries declared fields; qualified positional constructor values carry an empty list. The AST role determines whether executable projection builds a named payload or an empty positional constructor.
+
+Resolved Grill Log: checked canonical identity must survive lowering even when a type and a bare variant share text. No runtime owner inference or source syntax change. See [[Variant Namespace Delivery]].
+
+## Complete implementation heads (#735)
+
+ImplementationOwner Type is a distinct owner fact for an implementation target.
+Form its complete target with implementation rigid parameters, transparent aliases
+and canonical nested nominal identities. Env publishes this local immutable fact
+separately from provider evidence and interface snapshots. Compiler Literals reads
+it only at the structural Impl target field and projects the complete formed type
+into executable syntax; source/tooling syntax remains authored. Expression and
+pattern projections ignore this role. Preserve source spans, declared parameter
+order and the static-selection map; do not infer parameters from runtime values.
+
+Resolved Grill Log: a later runtime matcher needs Pair[Array[B], A] from an alias
+Reversed[A, Array[B]], not the authored alias arguments zipped to A/B. Keeping the
+complete checked target is a prerequisite, not the #735 dispatch repair itself.
+A focused compiler property must assert canonical executable heads, retained
+source heads and unchanged target spans. Existing static and derive regressions
+and every full gate remain required. See [[Implementation Witness Delivery]].
+
+## Complete provider selections (#735)
+
+ProviderSelection carries canonical trait identity, complete formed trait arguments
+and an optional complete receiver type. Existing identity-only recording keeps an
+empty argument list and no receiver. Unambiguous rigid-bound selections retain
+the selected bound arguments and actual receiver, including F[A] rather than F.
+Implementation trait facts retain formed arguments under implementation rigids.
+Final checker publication resolves inference in both arguments and receiver.
+Detailed products and ModuleTypes preserve this immutable typed evidence.
+
+Compiler Literals continues existing member-symbol projection in this partition.
+At the structural Impl trait boundary it projects the complete formed trait,
+including expanded aliases and nested canonical owners; tooling syntax stays
+authored. Runtime transport/consumption follows separately and #735 remains open.
+
+Resolved Grill Log: trait identity cannot recover a parameter present only in
+Choice[B] for Box[A]. Do not fabricate a nominal identity to hold receiver types,
+inspect container elements, overwrite target-owner facts, or drop applied receiver
+arguments while following a rigid constructor's bounds. Assert actual checker
+products, canonical implementation trait projection, authored syntax and spans;
+retain full existing dispatch, diagnostic, derive and cache gates.
+See [[Bound Receiver Evidence Delivery]].

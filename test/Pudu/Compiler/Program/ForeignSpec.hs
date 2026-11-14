@@ -178,7 +178,7 @@ testForeignHandles = do
         on it, including a record whose nesting sits between fields that need
         padding around it. -}
     , counterexample "a record inside a record crosses by value"
-        (nested === Just "8")
+        (nested === Just "11")
     , counterexample "an exported binding module keeps canonical handle types and runtime symbols"
         (imported === Just "1")
     , counterexample "a second release is refused before C++ is entered"

@@ -58,3 +58,13 @@ local property list.
 Register `testSeriesMaps` from [[Runtime Series Map Tests]]. Resolved Grill Log:
 execute generated persistent storage laws in the actual suite, alongside the
 existing runtime numeric-kind and diagnostic tests.
+
+## Named sum value foundation (#761)
+
+Register Named Sum Value Properties from the new focused nominal runtime gate in the actual executable coordinator.
+
+Resolved Grill Log: represent named sums independently of ordinary records and positional sums. Preserve existing field order and public labels. Source publication follows in its own tested partition. See [[Named Sum Value Delivery]].
+
+Register testTextByteBoundary from [[Text View Model Tests]] for the exact
+UInt8 carrier, E7001/E7003 and original call span. Resolved Grill Log: the
+primitive's dynamic boundary executes in the ordinary full suite.

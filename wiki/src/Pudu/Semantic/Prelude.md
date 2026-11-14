@@ -92,7 +92,7 @@ public wrappers while these remain language-runtime primitives.
 
 ## Desktop capability names
 
-`desktopOpen`, `desktopPresent`, `desktopPump`, `desktopInputs`, `desktopClipboardRead`, `desktopClipboardWrite`, `desktopAccessibility`, `desktopAccessibilityReport`, `desktopMenu`, `desktopMenuReport`, and `desktopClose` are discoverable effect values.
+`desktopOpen`, `desktopPresent`, `desktopPump`, `desktopInputs`, `desktopConfigure`, `desktopClipboardRead`, `desktopClipboardWrite`, `desktopAccessibility`, `desktopAccessibilityReport`, `desktopMenu`, `desktopMenuReport`, and `desktopClose` are discoverable effect values.
 Resolved Grill Log: keep the low-level names out of ordinary application documentation; the typed
 standard-library wrapper is the public contract.
 
@@ -217,6 +217,15 @@ its atomic byte replacement effect. [[Type Check Prelude]] owns the signature an
 Resolved Grill Log: register only the primitive's name here; retain phase-owned
 arity, typing and filesystem behavior.
 
+`clockNanos` is an effect value name beside `clock` (#670).
+
+## Binary64 kernels
+
+Prelude value names include `map floatKernelName floatKernels`, so resolution, checking and
+evaluation agree. A module may shadow a kernel name like any prelude value.
+
+Lane kernel names are listed from `laneKernels` beside them.
+
 ## Referenced by
 
 [[src/Pudu/Semantic/_MOC]] · [[Name Resolution]] · [[grammar/pudu]]
@@ -237,6 +246,19 @@ by name. Preserve persistence, key representatives, duplicate counts, checked In
 overflow, and E7008 for unorderable keys or values. Do not scan complete maps on every add.
 
 mutexAcquireWithin is discoverable as an effect name. Resolved Grill Log (#476): this list owns names only; admission and signatures retain their phase owners.
+
+## Raw text-byte access (#527)
+
+Expose textByteAt(Str, Int) -> Option[UInt8] as a pure primitive with a new
+appended TextByteAtBuiltin tag and canonical name. Read the Text backing
+array in O(1) only after comparing the mathematical offset with its byte
+length. Negative, past-end and out-of-host-range offsets answer None; no
+intermediate byte copy or malformed UTF-8 text is constructed. Wrong argument
+shape/arity retains E7001/E7003 at the call span.
+
+Resolved Grill Log: scalar boundaries constrain text slices, not byte reads;
+return an exact UInt8 and keep naming, typing, installation and pure dispatch
+synchronized. Existing text primitives and packed identities are unchanged.
 
 ## Joined scope retirement (#480)
 

@@ -9,6 +9,8 @@ module Pudu.Semantic.Prelude
 import Data.List.NonEmpty (NonEmpty (..))
 import qualified Data.List.NonEmpty as NonEmpty
 import Data.Text (Text)
+import Pudu.FloatKernel (floatKernelName, floatKernels)
+import Pudu.LaneKernel (laneKernelName, laneKernels)
 import Pudu.Frontend.Syntax.Name (ModuleName (..))
 
 {-| Types the compiler knows without any library: the builtin set enumerated by
@@ -46,6 +48,7 @@ preludeValueNames =
   , "wordMapPopCount", "wordMapMembers", "sha256Of", "sha512Of", "sha3_256Of", "sha3_512Of", "blake2b256Of", "blake2b512Of", "checksumOf", "hmacSha512Of", "constantTimeEqual", "sealBytes", "openSealedBytes", "verifyRsaSha256", "verifyEcdsaSha256", "hmacSha256Of", "deriveKey", "hashOf"
   , "audioToneBytes", "audioRampBytes"
   , "bufferAlloc", "bufferReadU64", "bufferWriteU64", "bufferScanU64", "bufferCopy", "bufferSize"
+  , "textByteAt", "textByteSize", "textByteSlice", "textByteFind", "textByteFindLast", "textScalarAt"
   , "bufferReadI64", "bufferWriteI64", "bufferReadF64", "bufferWriteF64", "bufferReadU32", "bufferWriteU32"
   , "bufferFill", "bufferCompare"
   , "columnSumU64", "columnMinU64", "columnMaxU64", "columnFilterGtU64", "columnProjectU64"
@@ -60,6 +63,8 @@ preludeValueNames =
   , "decimalDivide", "decimalRound"
   , "Some", "None", "Ok", "Err"
   ]
+    <> map floatKernelName floatKernels
+    <> map laneKernelName laneKernels
     <> effectValueNames
 
 {-| The effects the runtime provides, which are prelude values like any other:
@@ -89,11 +94,11 @@ effectValueNames =
   , "cellOpen", "cellGet", "cellSwap"
   , "cellDispose", "mutexDispose", "mutexClose", "forgetThread"
   , "secureRandomBytes"
-  , "desktopOpen", "desktopPresent", "desktopPump", "desktopInputs", "desktopClipboardRead", "desktopClipboardWrite", "desktopAccessibility", "desktopAccessibilityReport", "desktopMenu", "desktopMenuReport", "desktopClose", "audioDevicePlay"
+  , "desktopOpen", "desktopPresent", "desktopPump", "desktopInputs", "desktopConfigure", "desktopClipboardRead", "desktopClipboardWrite", "desktopAccessibility", "desktopAccessibilityReport", "desktopMenu", "desktopMenuReport", "desktopClose", "audioDevicePlay"
   , "audioStreamOpen", "audioStreamWrite", "audioStreamPause", "audioStreamResume"
   , "audioStreamVolume", "audioStreamSnapshot", "audioStreamClose"
   , "arguments", "environment", "temporaryPath", "userHome"
-  , "pathSeparators", "searchSeparator", "exit", "clock"
+  , "pathSeparators", "searchSeparator", "exit", "clock", "clockNanos"
   , "now", "zoneOffset", "formatTime", "parseTime", "runProgram"
   , "spawnProgramWith"
   ]

@@ -1,0 +1,109 @@
+module Ark.Animation.Machine
+
+import Std.Math.Float as Float
+import Ark.Animation as Animation
+import Ark.World.Hierarchy as Hierarchy
+
+/// A named clip played with a wrap mode at a non-negative speed.
+export type State = { name: Str, clip: Animation.Clip, wrap: Str, speed: Float64 }
+
+/// On `event` in state `from`, cross-fade to `to` over `fade` seconds.
+export type Transition = { from: Str, event: Str, to: Str, fade: Float64 }
+
+/// Declaration failures.
+export type Error
+  = DuplicateState(Str)
+  | UnknownState(Str)
+  | DuplicateTransition(Str, Str)
+  | InvalidState(Str)
+  | InvalidFade(Str, Str)
+  | JointMismatch(Str)
+
+/// The playing state and its clock, plus the state being faded out and its clock.
+export type Playback = { state: Str, time: Float64 }
+
+/// States, transitions keyed by source state and event, and current playback.
+export type Machine = {
+  states: Map[Str, State],
+  transitions: Map[(Str, Str), Transition],
+  current: Playback,
+  fading: Option[Playback],
+  fade: Float64,
+  faded: Float64,
+}
+
+/// Validate states and transitions and start in `initial` at time zero.
+export fn build(states: &Array[State], transitions: &Array[Transition], initial: Str) -> Result[Machine, Error] {
+  var table: Map[Str, State] = mapOf([])
+  var joints = -1
+  for state in *states {
+    if table.containsKey(state.name) { return Err(DuplicateState(state.name)) }
+    if !(state.speed >= 0.0) || !Float.isFinite(state.speed) || Animation.sample(&state.clip, 0.0, state.wrap) == None {
+      return Err(InvalidState(state.name))
+    }
+    if joints >= 0 && state.clip.joints != joints { return Err(JointMismatch(state.name)) }
+    joints = state.clip.joints
+    table = table.insert(state.name, state)
+  }
+  var edges: Map[(Str, Str), Transition] = mapOf([])
+  for transition in *transitions {
+    for name in [transition.from, transition.to] {
+      if !table.containsKey(name) { return Err(UnknownState(name)) }
+    }
+    let key = (transition.from, transition.event)
+    if edges.containsKey(key) { return Err(DuplicateTransition(transition.from, transition.event)) }
+    if !(transition.fade >= 0.0) || !Float.isFinite(transition.fade) { return Err(InvalidFade(transition.from, transition.event)) }
+    edges = edges.insert(key, transition)
+  }
+  if !table.containsKey(initial) { return Err(UnknownState(initial)) }
+  Ok(Machine{states: table, transitions: edges, current: Playback{state: initial, time: 0.0}, fading: None, fade: 0.0, faded: 0.0})
+}
+
+/// Whether the current state has a transition on `event`.
+export fn accepts(machine: &Machine, event: Str) -> Bool {
+  machine.transitions.containsKey((machine.current.state, event))
+}
+
+/// Follow the current state's transition on `event`, starting the target at time zero and fading
+/// out the current pose; an event with no transition leaves the machine unchanged.
+export fn trigger(machine: Machine, event: Str) -> Machine {
+  let Some(transition) = machine.transitions.get((machine.current.state, event)) else { return machine }
+  let fading = if transition.fade > 0.0 { Some(machine.current) } else { None }
+  Machine{..machine, current: Playback{state: transition.to, time: 0.0}, fading, fade: transition.fade, faded: 0.0}
+}
+
+/// Advance both clocks by `seconds` scaled by each state's speed; a finished fade ends.
+/// None for a negative or non-finite step.
+export fn advance(machine: Machine, seconds: Float64) -> Option[Machine] {
+  if !(seconds >= 0.0) || !Float.isFinite(seconds) { return None }
+  let playing = step(&machine, machine.current, seconds) ?
+  let faded = machine.faded + seconds
+  var fading: Option[Playback] = None
+  if let Some(previous) = machine.fading {
+    if faded < machine.fade { fading = Some(step(&machine, previous, seconds) ?) }
+  }
+  Some(Machine{..machine, current: playing, fading, faded})
+}
+
+/// The current state's name.
+export fn current(machine: &Machine) -> Str {
+  machine.current.state
+}
+
+/// The blended local pose: the current clip, cross-faded from the previous one while a fade runs.
+export fn pose(machine: &Machine) -> Option[Hierarchy.Poses] {
+  let target = sampled(machine, &machine.current) ?
+  let Some(previous) = machine.fading else { return Some(target) }
+  let source = sampled(machine, &previous) ?
+  Animation.blend(&source, &target, Float.clamp(machine.faded / machine.fade, 0.0, 1.0))
+}
+
+fn step(machine: &Machine, playback: Playback, seconds: Float64) -> Option[Playback] {
+  let state = machine.states.get(playback.state) ?
+  Some(Playback{..playback, time: playback.time + seconds * state.speed})
+}
+
+fn sampled(machine: &Machine, playback: &Playback) -> Option[Hierarchy.Poses] {
+  let state = machine.states.get(playback.state) ?
+  Animation.sample(&state.clip, playback.time, state.wrap)
+}

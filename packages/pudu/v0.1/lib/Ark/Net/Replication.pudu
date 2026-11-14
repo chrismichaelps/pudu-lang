@@ -1,0 +1,209 @@
+module Ark.Net.Replication
+
+import Std.Lanes as Lanes
+
+/// Entity state quantized for the wire: ids and, per field, one integer per entity row.
+export type Snapshot = { ids: Array[Int], fields: Array[Array[Int]] }
+
+/// The step each field is quantized to, e.g. 0.01 for centimetre positions.
+export type Schema = { steps: Array[Float64] }
+
+/// Capture float component columns as a snapshot, rounding each value to its field's step.
+/// None for mismatched counts, a non-positive step or a value whose quantum leaves Int.
+export fn capture(schema: &Schema, ids: &Array[Int], columns: &Array[Lanes.Lanes]) -> Option[Snapshot] {
+  if columns.length() != schema.steps.length() { return None }
+  var fields: Array[Array[Int]] = []
+  var index = 0
+  for column in *columns {
+    let step = schema.steps[index]
+    if !(step > 0.0) || Lanes.count(&column) != ids.length() { return None }
+    let quanta = Lanes.floor(&Lanes.addScalar(&Lanes.scale(&column, 1.0 / step), 0.5))
+    fields = fields.push(Lanes.toInts(&quanta) ?)
+    index = index + 1
+  }
+  Some(Snapshot{ids: *ids, fields})
+}
+
+/// Field values back as float columns.
+export fn restore(schema: &Schema, snapshot: &Snapshot) -> Option[Array[Lanes.Lanes]] {
+  if snapshot.fields.length() != schema.steps.length() { return None }
+  var columns: Array[Lanes.Lanes] = []
+  var index = 0
+  for field in snapshot.fields {
+    columns = columns.push(Lanes.scale(&Lanes.fromInts(&field), schema.steps[index]))
+    index = index + 1
+  }
+  Some(columns)
+}
+
+/// Rows whose position lies strictly within `radius` of a point, ascending.
+export fn relevant(xs: &Lanes.Lanes, ys: &Lanes.Lanes, zs: &Lanes.Lanes, x: Float64, y: Float64, z: Float64, radius: Float64) -> Option[Array[Int]] {
+  let dx = Lanes.addScalar(xs, -x)
+  let dy = Lanes.addScalar(ys, -y)
+  let dz = Lanes.addScalar(zs, -z)
+  let squared = Lanes.fma(&dx, &dx, &(Lanes.fma(&dy, &dy, &(Lanes.multiply(&dz, &dz) ?)) ?)) ?
+  Some(Lanes.positions(&Lanes.above(&Lanes.negate(&squared), -(radius * radius))))
+}
+
+/// Encode the given rows of `current` against what the peer last acknowledged: ids the peer has
+/// that are no longer sent despawn, and each sent entity carries only fields that changed.
+export fn delta(baseline: &Snapshot, current: &Snapshot, rows: &Array[Int]) -> Option[Bytes] {
+  if baseline.fields.length() != current.fields.length() { return None }
+  let known = rowsById(baseline)
+  var sent: Map[Int, Bool] = mapOf([])
+  var octets: Array[UInt8] = varint(rows.length())
+  for row in *rows {
+    if row < 0 || row >= current.ids.length() { return None }
+    let id = current.ids[row]
+    sent = sent.insert(id, true)
+    octets = octets.concat(varint(zigzag(id)))
+    var mask = 0
+    var bit = 1
+    var values: Array[UInt8] = []
+    var field = 0
+    for column in current.fields {
+      let base = match known.get(id) {
+        case Some(old) => baseline.fields[field][old]
+        case None => 0
+      }
+      let value = column[row]
+      if value != base || !known.containsKey(id) {
+        mask = mask + bit
+        values = values.concat(varint(zigzag(value - base)))
+      }
+      bit = bit * 2
+      field = field + 1
+    }
+    octets = octets.concat(varint(mask)).concat(values)
+  }
+  var gone: Array[Int] = []
+  for id in baseline.ids {
+    if !sent.containsKey(id) { gone = gone.push(id) }
+  }
+  octets = octets.concat(varint(gone.length()))
+  for id in gone { octets = octets.concat(varint(zigzag(id))) }
+  Some(bytesOf(octets))
+}
+
+/// Apply an encoded delta to the baseline it was made against; None for malformed input.
+export fn apply(baseline: &Snapshot, encoded: &Bytes) -> Option[Snapshot] {
+  let width = baseline.fields.length()
+  let known = rowsById(baseline)
+  var at = 0
+  let (count, afterCount) = readVarint(encoded, at) ?
+  at = afterCount
+  var ids: Array[Int] = []
+  var fields: Array[Array[Int]] = []
+  for _ in 0..width { fields = fields.push([]) }
+  var seen: Map[Int, Bool] = mapOf([])
+  for _ in 0..count {
+    let (code, afterId) = readVarint(encoded, at) ?
+    let (mask, afterMask) = readVarint(encoded, afterId) ?
+    at = afterMask
+    let id = unzigzag(code)
+    if seen.containsKey(id) || mask >= power(width) { return None }
+    seen = seen.insert(id, true)
+    var bits = mask
+    var field = 0
+    while field < width {
+      let base = match known.get(id) {
+        case Some(old) => baseline.fields[field][old]
+        case None => 0
+      }
+      var value = base
+      if bits % 2 == 1 {
+        let (change, afterValue) = readVarint(encoded, at) ?
+        at = afterValue
+        value = base + unzigzag(change)
+      } else if !known.containsKey(id) {
+        return None
+      }
+      fields[field] = fields[field].push(value)
+      bits = bits / 2
+      field = field + 1
+    }
+    ids = ids.push(id)
+  }
+  let (goneCount, afterGone) = readVarint(encoded, at) ?
+  at = afterGone
+  var gone: Map[Int, Bool] = mapOf([])
+  for _ in 0..goneCount {
+    let (code, next) = readVarint(encoded, at) ?
+    at = next
+    gone = gone.insert(unzigzag(code), true)
+  }
+  if at != encoded.length() { return None }
+  // Entities neither resent nor despawned keep their baseline state.
+  var row = 0
+  for id in baseline.ids {
+    if !seen.containsKey(id) && !gone.containsKey(id) {
+      ids = ids.push(id)
+      var field = 0
+      while field < width {
+        fields[field] = fields[field].push(baseline.fields[field][row])
+        field = field + 1
+      }
+    }
+    row = row + 1
+  }
+  Some(Snapshot{ids, fields})
+}
+
+fn rowsById(snapshot: &Snapshot) -> Map[Int, Int] {
+  var rows: Map[Int, Int] = mapOf([])
+  var row = 0
+  for id in snapshot.ids {
+    rows = rows.insert(id, row)
+    row = row + 1
+  }
+  rows
+}
+
+/// Signed to unsigned so small magnitudes of either sign encode in few bytes.
+fn zigzag(value: Int) -> Int {
+  if value >= 0 { value * 2 } else { -value * 2 - 1 }
+}
+
+fn unzigzag(code: Int) -> Int {
+  if code % 2 == 0 { code / 2 } else { -(code + 1) / 2 }
+}
+
+/// Seven bits per byte, low first, high bit set on every byte but the last.
+fn varint(value: Int) -> Array[UInt8] {
+  var octets: Array[UInt8] = []
+  var rest = value
+  while rest >= 128 {
+    octets = octets.push(octet(rest % 128 + 128))
+    rest = rest / 128
+  }
+  octets.push(octet(rest))
+}
+
+/// A byte from a value the caller keeps within 0..=255.
+fn octet(value: Int) -> UInt8 {
+  match convertInteger[UInt8](value) {
+    case Some(byte) => byte
+    case None => 0u8
+  }
+}
+
+fn readVarint(encoded: &Bytes, start: Int) -> Option[(Int, Int)] {
+  var value = 0
+  var scale = 1
+  var at = start
+  // Ten groups of seven bits hold any non-negative Int; more is malformed.
+  for _ in 0..10 {
+    let group = convertInteger[Int](encoded.at(at) ?) ?
+    at = at + 1
+    value = value + (group % 128) * scale
+    if group < 128 { return Some((value, at)) }
+    scale = scale * 128
+  }
+  None
+}
+
+fn power(exponent: Int) -> Int {
+  var value = 1
+  for _ in 0..exponent { value = value * 2 }
+  value
+}

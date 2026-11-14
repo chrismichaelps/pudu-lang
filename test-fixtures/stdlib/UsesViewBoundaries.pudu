@@ -1,0 +1,92 @@
+module UsesViewBoundaries
+
+import Std.Iter {Sequence}
+import Std.MdSpan {Grid}
+import Std.MdSpan.Layout as Layout
+import Std.MdSpan as MdSpan
+import Std.Memory as Memory
+import Std.Memory {Resource, Pooled}
+import Std.Span as Span
+import Std.Span {Window}
+
+const MAX = 9223372036854775807
+
+fn check(ok: Bool, label: Str) -> Int {
+  if !ok { panic(label) }
+  1
+}
+
+fn spans() -> Bool {
+  var source = [1, 2, 3]
+  let view = Span.of(source)
+  source[0] = 9
+  Span.within([1], MAX, 1) == None && Span.within([1], 0, MAX) == None
+    && Span.within([], 0, 0) != None
+    && view.get(0) == Some(1) && source[0] == 9
+    && view.subspanFrom(1).toArray() == [2, 3]
+    && view.subspanFrom(MAX).isEmpty()
+}
+
+fn layouts() -> Option[Bool] {
+  let scalar = Layout.of([], []) ?
+  let empty = Layout.of([0, MAX], [MAX, MAX]) ?
+  if scalar.size != 1 || scalar.requiredSpanSize != 1 || empty.size != 0 || empty.requiredSpanSize != 0 { return Some(false) }
+  if Layout.of([2], []) != None || Layout.of([-1], [1]) != None
+    || Layout.of([2], [-1]) != None || Layout.of([MAX, 2], [1, 1]) != None
+    || Layout.of([2], [MAX]) != None { return Some(false) }
+  for a in 0..4 {
+    for b in 0..4 {
+      for s in 0..5 {
+        for t in 0..5 {
+          let layout = Layout.of([a, b], [s, t]) ?
+          var positions = setOf[Int]([])
+          for row in 0..a {
+            for column in 0..b { positions = positions.insert(row * s + column * t) }
+          }
+          if layout.size != a * b || (layout.unique && positions.size() != layout.size)
+            || layout.exhaustive != (positions.size() == layout.requiredSpanSize) { return Some(false) }
+        }
+      }
+    }
+  }
+  Some(true)
+}
+
+fn grids() -> Option[Bool] {
+  let grid = MdSpan.rowMajor([1, 2, 3, 4, 5, 6], [2, 3]) ?
+  let column = grid.slice([MdSpan.All, MdSpan.At(1)]) ?
+  let hugeStep = (MdSpan.rowMajor([1, 2, 3], [3]) ?).slice([MdSpan.Every{first: 0, last: 3, step: MAX}]) ?
+  let broadcast = MdSpan.strided([8, 9], 0, [2, 2], [0, 1]) ?
+  Some(Grid.stride(&grid, 0) == Some(3) && Grid.stride(&grid, 2) == None
+      && grid.requiredSpanSize() == Some(6) && grid.isUnique() && grid.isExhaustive() && grid.isStrided()
+      && column.toArray() == [2, 5] && column.requiredSpanSize() == Some(4)
+      && column.isUnique() && !column.isExhaustive()
+      && hugeStep.toArray() == [1] && Grid.stride(&hugeStep, 0) == Some(MAX)
+      && broadcast.toArray() == [8, 9, 8, 9] && !broadcast.isUnique() && broadcast.isExhaustive()
+      && MdSpan.rowMajor([], [0, MAX, 2]) == None)
+}
+
+fn memory() -> Option[Bool] {
+  let aligned = Memory.alignUp(MAX, 1) == Some(MAX) && Memory.alignUp(MAX, 8) == None
+    && Memory.alignUp(MAX - 7, 8) == Some(MAX - 7)
+  var huge = Memory.checkedPool(1, MAX) ?
+  let first = huge.allocate(1, 1) ?
+  if huge.available() != MAX - 1 || !huge.release(first) || huge.release(first) { return Some(false) }
+  huge.reset()
+  var slots = Memory.pool(8, 3)
+  let block = slots.allocate(4, 8) ?
+  if slots.allocate(9, 1) != None || slots.allocate(1, 16) != None || slots.inUse() != 1 { return Some(false) }
+  if !slots.release(block) || slots.release(block) { return Some(false) }
+  let reused = slots.allocate(8, 1) ?
+  slots.reset()
+  var zero = Memory.pool(0, 2)
+  Some(aligned && huge.available() == MAX && reused == block && slots.available() == 3
+      && Memory.checkedPool(2, MAX) == None && zero.allocate(0, 1) == None && zero.available() == 0)
+}
+
+export fn main() -> Int {
+  check(spans(), "span bounds and snapshots")
+    + check(layouts() == Some(true), "layout model")
+    + check(grids() == Some(true), "grid metadata and slicing")
+    + check(memory() == Some(true), "checked memory planning")
+}

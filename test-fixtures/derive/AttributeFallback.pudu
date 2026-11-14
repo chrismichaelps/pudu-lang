@@ -1,0 +1,25 @@
+module AttributeFallback
+
+import Std.Meta as Meta
+
+trait Limits {
+  fn limits(self: &Self) -> Str
+}
+
+derive Limits for T: Record {
+  fn limits(self: &T) -> Str {
+    var text = ""
+    comptime for field: Meta.Field[T, F] in Meta.fields[T]() {
+      text = text + field.name + ":" + show(field.attributeOr("min", -1.0)) + "/" + show(field.attributeOr("max", 0.0 - 1.0)) + "/" + field.attributeOr("label", field.name) + ";"
+    }
+    text
+  }
+}
+
+type Tuning = { @min(0.5) @max(2.0) @label("Speed") speed: Float64, hits: Int } derives Limits
+
+/// The folded attribute values, with fallbacks for the field that has none.
+export fn main() -> Str {
+  let tuning = Tuning{speed: 1.0, hits: 2}
+  tuning.limits()
+}

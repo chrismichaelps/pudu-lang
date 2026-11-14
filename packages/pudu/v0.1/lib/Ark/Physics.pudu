@@ -1,0 +1,283 @@
+module Ark.Physics
+
+import Std.Lanes as Lanes
+import Std.Math.Float as Float
+import Ark.Core.Handle as Handle
+import Ark.Math.Geometry as G
+import Ark.Math.Quat as Q
+import Ark.Math as V
+
+/// A collision shape: its kind name and half extent (a sphere's radius in every component).
+export type Shape = { kind: Str, extent: V.Vec3 }
+
+/// Builds a shape of one kind from a size.
+export type ShapeFactory = fn(V.Vec3) -> Option[Shape]
+
+/// The factory for each shape kind, for content that names shapes by kind.
+const SHAPE_FACTORIES: Map[Str, ShapeFactory] = mapOf([
+    ("sphere", sphereOfSize),
+    ("box", box),
+  ])
+
+/// A body's initial state; zero mass makes it static.
+export type Body = { position: V.Vec3, velocity: V.Vec3, mass: Float64, restitution: Float64, friction: Float64, shape: Shape }
+
+/// Every body's state as lanes indexed by slot, its kind, the static planes and gravity. Spheres
+/// carry angular velocity and an orientation quaternion; boxes stay axis-aligned and never spin.
+export type Bodies = {
+  entities: Array[Handle.Handle],
+  slots: Map[Int, Int],
+  kinds: Array[Str],
+  px: Lanes.Lanes,
+  py: Lanes.Lanes,
+  pz: Lanes.Lanes,
+  vx: Lanes.Lanes,
+  vy: Lanes.Lanes,
+  vz: Lanes.Lanes,
+  wx: Lanes.Lanes,
+  wy: Lanes.Lanes,
+  wz: Lanes.Lanes,
+  qx: Lanes.Lanes,
+  qy: Lanes.Lanes,
+  qz: Lanes.Lanes,
+  qw: Lanes.Lanes,
+  ex: Lanes.Lanes,
+  ey: Lanes.Lanes,
+  ez: Lanes.Lanes,
+  inverseMass: Lanes.Lanes,
+  restitution: Lanes.Lanes,
+  friction: Lanes.Lanes,
+  movable: Lanes.Lanes,
+  round: Lanes.Lanes,
+  planes: Array[G.Plane],
+  gravity: V.Vec3,
+}
+
+/// A sphere, or None for a non-positive or non-finite radius.
+export fn sphere(radius: Float64) -> Option[Shape] {
+  if !(radius > 0.0 && radius < 1e300) { return None }
+  Some(Shape{kind: "sphere", extent: V.vec3(radius, radius, radius)})
+}
+
+/// An axis-aligned box, or None unless every half extent is positive and finite.
+export fn box(half: V.Vec3) -> Option[Shape] {
+  if !(half.x > 0.0 && half.y > 0.0 && half.z > 0.0 && V.isFinite(half)) { return None }
+  Some(Shape{kind: "box", extent: half})
+}
+
+/// A shape by kind name; a sphere reads its radius from the size's x.
+export fn shapeOf(kind: Str, size: V.Vec3) -> Option[Shape] {
+  let factory = SHAPE_FACTORIES.get(kind) ?
+  factory(size)
+}
+
+fn sphereOfSize(size: V.Vec3) -> Option[Shape] {
+  sphere(size.x)
+}
+
+/// A physics world with no bodies or planes.
+export fn world(gravity: V.Vec3) -> Bodies {
+  let none = Lanes.fromArray(&[])
+  Bodies {
+    entities: [],
+    slots: mapOf([]),
+    kinds: [],
+    px: none,
+    py: none,
+    pz: none,
+    vx: none,
+    vy: none,
+    vz: none,
+    wx: none,
+    wy: none,
+    wz: none,
+    qx: none,
+    qy: none,
+    qz: none,
+    qw: none,
+    ex: none,
+    ey: none,
+    ez: none,
+    inverseMass: none,
+    restitution: none,
+    friction: none,
+    movable: none,
+    round: none,
+    planes: [],
+    gravity,
+  }
+}
+
+/// The number of bodies.
+export fn count(bodies: &Bodies) -> Int {
+  bodies.entities.length()
+}
+
+/// The slot an entity's body occupies in the lanes.
+export fn slotOf(bodies: &Bodies, entity: Handle.Handle) -> Option[Int] {
+  let slot = bodies.slots.get(entity.index) ?
+  if bodies.entities[slot] == entity { Some(slot) } else { None }
+}
+
+/// Add a body for an entity; None for a duplicate, negative or non-finite mass, or
+/// restitution or friction outside [0, 1], a non-finite inverse mass or an invalid shape.
+export fn add(bodies: Bodies, entity: Handle.Handle, body: &Body) -> Option[Bodies] {
+  if bodies.slots.containsKey(entity.index) { return None }
+  if !(body.mass >= 0.0 && body.mass < 1e300) { return None }
+  if !(body.restitution >= 0.0 && body.restitution <= 1.0 && body.friction >= 0.0 && body.friction <= 1.0) { return None }
+  if !V.isFinite(body.position) || !V.isFinite(body.velocity) { return None }
+  if shapeOf(body.shape.kind, body.shape.extent) != Some(body.shape) { return None }
+  let moving = body.mass > 0.0
+  let inverse = if moving { 1.0 / body.mass } else { 0.0 }
+  if !Float.isFinite(inverse) { return None }
+  let initial = if moving { body.velocity } else { V.vec3(0.0, 0.0, 0.0) }
+  Some(
+    Bodies {
+      ..bodies,
+      entities: bodies.entities.push(entity),
+      slots: bodies.slots.insert(entity.index, bodies.entities.length()),
+      kinds: bodies.kinds.push(body.shape.kind),
+      px: appended(&bodies.px, body.position.x),
+      py: appended(&bodies.py, body.position.y),
+      pz: appended(&bodies.pz, body.position.z),
+      vx: appended(&bodies.vx, initial.x),
+      vy: appended(&bodies.vy, initial.y),
+      vz: appended(&bodies.vz, initial.z),
+      wx: appended(&bodies.wx, 0.0),
+      wy: appended(&bodies.wy, 0.0),
+      wz: appended(&bodies.wz, 0.0),
+      qx: appended(&bodies.qx, 0.0),
+      qy: appended(&bodies.qy, 0.0),
+      qz: appended(&bodies.qz, 0.0),
+      qw: appended(&bodies.qw, 1.0),
+      ex: appended(&bodies.ex, body.shape.extent.x),
+      ey: appended(&bodies.ey, body.shape.extent.y),
+      ez: appended(&bodies.ez, body.shape.extent.z),
+      inverseMass: appended(&bodies.inverseMass, inverse),
+      restitution: appended(&bodies.restitution, body.restitution),
+      friction: appended(&bodies.friction, body.friction),
+      movable: appended(&bodies.movable, if moving { 1.0 } else { 0.0 }),
+      round: appended(&bodies.round, if body.shape.kind == "sphere" { 1.0 } else { 0.0 }),
+    },
+  )
+}
+
+/// Remove an entity's body, compacting every lane once.
+export fn remove(bodies: Bodies, entity: Handle.Handle) -> Option[Bodies] {
+  let removed = slotOf(&bodies, entity) ?
+  var kept: Array[Int] = []
+  var slot = 0
+  while slot < bodies.entities.length() {
+    if slot != removed { kept = kept.push(slot) }
+    slot = slot + 1
+  }
+  var entities: Array[Handle.Handle] = []
+  var kinds: Array[Str] = []
+  var slots: Map[Int, Int] = mapOf([])
+  for source in kept {
+    slots = slots.insert(bodies.entities[source].index, entities.length())
+    entities = entities.push(bodies.entities[source])
+    kinds = kinds.push(bodies.kinds[source])
+  }
+  Some(
+    Bodies {
+      ..bodies,
+      entities,
+      slots,
+      kinds,
+      px: Lanes.gather(&bodies.px, &kept) ?,
+      py: Lanes.gather(&bodies.py, &kept) ?,
+      pz: Lanes.gather(&bodies.pz, &kept) ?,
+      vx: Lanes.gather(&bodies.vx, &kept) ?,
+      vy: Lanes.gather(&bodies.vy, &kept) ?,
+      vz: Lanes.gather(&bodies.vz, &kept) ?,
+      wx: Lanes.gather(&bodies.wx, &kept) ?,
+      wy: Lanes.gather(&bodies.wy, &kept) ?,
+      wz: Lanes.gather(&bodies.wz, &kept) ?,
+      qx: Lanes.gather(&bodies.qx, &kept) ?,
+      qy: Lanes.gather(&bodies.qy, &kept) ?,
+      qz: Lanes.gather(&bodies.qz, &kept) ?,
+      qw: Lanes.gather(&bodies.qw, &kept) ?,
+      ex: Lanes.gather(&bodies.ex, &kept) ?,
+      ey: Lanes.gather(&bodies.ey, &kept) ?,
+      ez: Lanes.gather(&bodies.ez, &kept) ?,
+      inverseMass: Lanes.gather(&bodies.inverseMass, &kept) ?,
+      restitution: Lanes.gather(&bodies.restitution, &kept) ?,
+      friction: Lanes.gather(&bodies.friction, &kept) ?,
+      movable: Lanes.gather(&bodies.movable, &kept) ?,
+      round: Lanes.gather(&bodies.round, &kept) ?,
+    },
+  )
+}
+
+/// Add a static plane through a point, solid on the side opposite its normal; None for a zero normal.
+export fn addPlane(bodies: Bodies, normal: V.Vec3, point: V.Vec3) -> Option[Bodies] {
+  let surface = G.plane(normal, point) ?
+  Some(Bodies{..bodies, planes: bodies.planes.push(surface)})
+}
+
+/// An entity's body position.
+export fn position(bodies: &Bodies, entity: Handle.Handle) -> Option[V.Vec3] {
+  let slot = slotOf(bodies, entity) ?
+  Some(V.vec3(Lanes.get(&bodies.px, slot) ?, Lanes.get(&bodies.py, slot) ?, Lanes.get(&bodies.pz, slot) ?))
+}
+
+/// An entity's body velocity.
+export fn velocity(bodies: &Bodies, entity: Handle.Handle) -> Option[V.Vec3] {
+  let slot = slotOf(bodies, entity) ?
+  Some(V.vec3(Lanes.get(&bodies.vx, slot) ?, Lanes.get(&bodies.vy, slot) ?, Lanes.get(&bodies.vz, slot) ?))
+}
+
+/// Replace a movable body's finite velocity; static bodies keep zero velocity.
+export fn setVelocity(bodies: Bodies, entity: Handle.Handle, value: V.Vec3) -> Option[Bodies] {
+  if !V.isFinite(value) { return None }
+  let slot = slotOf(&bodies, entity) ?
+  if Lanes.get(&bodies.movable, slot) ? == 0.0 { return Some(bodies) }
+  Some(
+    Bodies {
+      ..bodies,
+      vx: Lanes.set(&bodies.vx, slot, value.x) ?,
+      vy: Lanes.set(&bodies.vy, slot, value.y) ?,
+      vz: Lanes.set(&bodies.vz, slot, value.z) ?,
+    },
+  )
+}
+
+/// An entity's body angular velocity in radians per second about each world axis.
+export fn angularVelocity(bodies: &Bodies, entity: Handle.Handle) -> Option[V.Vec3] {
+  let slot = slotOf(bodies, entity) ?
+  Some(V.vec3(Lanes.get(&bodies.wx, slot) ?, Lanes.get(&bodies.wy, slot) ?, Lanes.get(&bodies.wz, slot) ?))
+}
+
+/// An entity's body orientation as a unit quaternion; boxes keep the identity.
+export fn orientation(bodies: &Bodies, entity: Handle.Handle) -> Option[Q.Quat] {
+  let slot = slotOf(bodies, entity) ?
+  Some(Q.quat(Lanes.get(&bodies.qx, slot) ?, Lanes.get(&bodies.qy, slot) ?, Lanes.get(&bodies.qz, slot) ?, Lanes.get(&bodies.qw, slot) ?))
+}
+
+/// Replace a movable sphere's finite angular velocity; boxes and static bodies never spin.
+export fn setAngularVelocity(bodies: Bodies, entity: Handle.Handle, value: V.Vec3) -> Option[Bodies] {
+  if !V.isFinite(value) { return None }
+  let slot = slotOf(&bodies, entity) ?
+  if Lanes.get(&bodies.movable, slot) ? == 0.0 || Lanes.get(&bodies.round, slot) ? == 0.0 { return Some(bodies) }
+  Some(
+    Bodies {
+      ..bodies,
+      wx: Lanes.set(&bodies.wx, slot, value.x) ?,
+      wy: Lanes.set(&bodies.wy, slot, value.y) ?,
+      wz: Lanes.set(&bodies.wz, slot, value.z) ?,
+    },
+  )
+}
+
+/// Change a body's velocity by an impulse divided by its mass; static bodies are unaffected.
+export fn applyImpulse(bodies: Bodies, entity: Handle.Handle, impulse: V.Vec3) -> Option[Bodies] {
+  let slot = slotOf(&bodies, entity) ?
+  let inverse = Lanes.get(&bodies.inverseMass, slot) ?
+  let current = velocity(&bodies, entity) ?
+  setVelocity(bodies, entity, V.add(current, V.scale(impulse, inverse)))
+}
+
+fn appended(lanes: &Lanes.Lanes, value: Float64) -> Lanes.Lanes {
+  Lanes.concat(lanes, &Lanes.fromArray(&[value]))
+}

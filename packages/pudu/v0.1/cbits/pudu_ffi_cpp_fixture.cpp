@@ -238,3 +238,32 @@ extern "C" bool pudu_ffi_cpp_byte_address(const unsigned char *data, std::int32_
 }
 
 extern "C" std::int32_t pudu_ffi_cpp_anchor() { return 1; }
+
+struct PaddedInner {
+  double value;
+  std::uint8_t inner;
+};
+
+struct PaddedOuter {
+  PaddedInner nested;
+  std::uint8_t outer;
+};
+
+extern "C" PaddedOuter pudu_ffi_cpp_padded(PaddedOuter value) {
+  return PaddedOuter{{value.nested.value + 1, value.nested.inner},
+                     static_cast<std::uint8_t>(value.outer + 1)};
+}
+
+extern "C" void pudu_ffi_cpp_padded_slot(PaddedOuter *out) {
+  *out = PaddedOuter{{7.0, 9}, 11};
+}
+
+struct WidePadded {
+  PaddedOuter members[12];
+};
+
+extern "C" WidePadded pudu_ffi_cpp_padded_wide() {
+  WidePadded wide{};
+  wide.members[11] = PaddedOuter{{13.0, 15}, 17};
+  return wide;
+}

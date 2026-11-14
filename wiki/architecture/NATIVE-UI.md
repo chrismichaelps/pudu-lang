@@ -254,4 +254,8 @@ in Pudu's own terms; no API names, type hierarchies, or code are carried over.
 
 ## Referenced by
 
-[[architecture/_MOC]] · [[First Release Readiness]] · [[Std Ui Canvas]]
+[[architecture/_MOC]] · [[First Release Readiness]] · [[Std Ui Canvas]] · [[Pudu Native]]
+
+## Native host sources (#856)
+
+[[Native Toolchain Host Sources]] packages the AppKit source in the compiler and links it into native programs that select the adapter. [[Native Host Desktop]] lowers the desktop builtins to the same host outcomes and owns the compiled program's window registry.
