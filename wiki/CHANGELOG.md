@@ -5,6 +5,10 @@ tags: [changelog]
 
 # Changelog
 
+## 2026-11-14 — Single-start native entry (#899)
+
+- [[Backend Emit Entry]] admits one `pudu_program_run` per process through an atomic flag; later calls return `PUDU_PROGRAM_ALREADY_STARTED` without touching runtime state.
+
 ## 2026-11-13 — Binary facade (#739)
 
 - Binary facade (#739) adds Encode/Decode derives, framed typed reads, explicit builtin wiring and CLI/distribution validation.

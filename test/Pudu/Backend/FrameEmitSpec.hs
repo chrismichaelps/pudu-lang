@@ -39,7 +39,7 @@ frameEmitProperties =
   , ("native text-view methods reject mismatched carriers", testTextViewSlots)
   , ("frame body emission suspends nested calls without C recursion", testCalls)
   , ("frame body emission compiles native corpora as strict C11", testBodies)
-  , ("embedded native entry returns status and flushes before returning to its C host", once <$> testEmbeddedEntry)
+  , ("embedded native entry returns status, flushes, and runs once per process", once <$> testEmbeddedEntry)
   ]
 
 testSlots :: IO Property
@@ -152,6 +152,7 @@ testEmbeddedEntry = do
                 , "#include \"pudu_program.h\""
                 , "int main(int argc, char **argv) {"
                 , "  if (pudu_program_run(argc, argv) != 7) return 1;"
+                , "  if (pudu_program_run(argc, argv) != PUDU_PROGRAM_ALREADY_STARTED) return 2;"
                 , "  puts(\"host\");"
                 , "  return 0;"
                 , "}"

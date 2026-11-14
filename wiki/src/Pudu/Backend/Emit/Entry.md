@@ -45,6 +45,7 @@ embeddedHeaderName :: FilePath
 
 ## Negative Logic (Prohibited Paths)
 
+- The embedded entry never runs the program body twice in one process.
 - No `main` in an embedded unit; no exported symbol besides the entry.
 - No teardown export: the run releases what it owns before returning.
 
@@ -60,7 +61,15 @@ embeddedHeaderName :: FilePath
   for all of them. _Rejected:_ inserting a flush before each `return`.
 - **Q:** Why flush `stdout` too? **A:** The scalar printers write through
   stdio; a host that keeps running would otherwise hold them until exit.
+- **Q:** May a host start the program twice? **A:** No (#899). The runtime
+  registers process hooks and frame state once and is never reset, so a second
+  run would reuse released state. A C11 atomic flag admits the first call from
+  any thread; every later call, concurrent or repeated, returns
+  `PUDU_PROGRAM_ALREADY_STARTED` (`-1`) before touching runtime state.
+  _Rejected:_ a mutex (it would block a host thread instead of answering) and
+  a reset path (no teardown evidence for the runtime's process state).
 
 ## Referenced by
 
-[[src/Pudu/Backend/_MOC]] · [[Native Mobile Targets]] · [[Backend Frame Program]]
+[[src/Pudu/Backend/_MOC]] · [[Native Mobile Targets]] · [[Backend Frame Program]] ·
+[[Native Calls Delivery]]

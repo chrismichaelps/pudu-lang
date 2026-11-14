@@ -4,7 +4,8 @@
     The executable form is C `main`. The embedded form keeps the same body in a
     static function and exports `pudu_program_run`, which a host application
     calls; it flushes both standard streams before returning, since the host
-    process keeps running after it.
+    process keeps running after it. An atomic flag admits one run per process:
+    the runtime's process state is set up once and never reset.
 -}
 module Pudu.Backend.Emit.Entry
   ( EmittedUnit (..)
@@ -33,6 +34,10 @@ data EmittedUnit = EmittedUnit
 embeddedEntryName :: Text
 embeddedEntryName = "pudu_program_run"
 
+-- | What the embedded entry answers to every call after the first.
+alreadyStartedStatus :: Text
+alreadyStartedStatus = "-1"
+
 embeddedHeaderName :: FilePath
 embeddedHeaderName = "pudu_program.h"
 
@@ -52,9 +57,13 @@ entrySection ExecutableEntry arguments _ body =
 entrySection EmbeddedEntry arguments buffered body =
   ["static int pudu_program_main(int count, char **values) {"]
     <> stored <> ["  pudu_prepare_io();"] <> body <> ["}"]
-    <> [ signature <> ";"
+    <> [ "#include <stdatomic.h>"
+       , "static atomic_flag pudu_program_started = ATOMIC_FLAG_INIT;"
+       , signature <> ";"
        , signature <> " {"
-       , "  int pudu_status = pudu_program_main(count, values);" ]
+       , "  int pudu_status;"
+       , "  if (atomic_flag_test_and_set(&pudu_program_started)) return " <> alreadyStartedStatus <> ";"
+       , "  pudu_status = pudu_program_main(count, values);" ]
     <> ["  pudu_output_finish();" | buffered]
     <> [ "  (void)fflush(stdout);"
        , "  (void)fflush(stderr);"
@@ -79,10 +88,12 @@ embeddedHeader links = Text.unlines $
     <> [ "#ifdef __cplusplus"
        , "extern \"C\" {"
        , "#endif"
+       , "/* Returned by every call after the first: the runtime runs once. */"
+       , "#define PUDU_PROGRAM_ALREADY_STARTED (" <> alreadyStartedStatus <> ")"
        , "/* Runs the program's main on the calling thread and returns its exit"
        , "   status once both standard streams are flushed and every foreign"
        , "   claim is released. A failure the program reports ends the process"
-       , "   with status 1. Call it once per process. */"
+       , "   with status 1. Only the first call in a process runs the program. */"
        , "int " <> embeddedEntryName <> "(int count, char **values);"
        , "#ifdef __cplusplus"
        , "}"
