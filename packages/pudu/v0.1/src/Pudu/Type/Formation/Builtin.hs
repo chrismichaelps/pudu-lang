@@ -1,7 +1,7 @@
 {-| @Type.Formation.Builtin — fixed language constructors, carriers and aliases. -}
 module Pudu.Type.Formation.Builtin
   ( builtinAliases, builtinKinds, builtinOwnedVariants, builtinOwners
-  , builtinTypeNames, builtinVariants ) where
+  , builtinScope, builtinTypeNames, builtinVariants ) where
 
 import Data.Map.Strict (Map)
 import qualified Data.Map.Strict as Map
@@ -16,6 +16,13 @@ builtinTypeNames =
   , "Int8", "Int16", "Int32", "Int64", "Int128"
   , "UInt8", "UInt16", "UInt32", "UInt64", "UInt128"
   ]
+
+{-| Every built-in type under its bare name. A module's scope places this
+    below its own declarations and imports and above the names every other
+    module of the program declares, so a built-in it neither declares nor
+    imports never resolves to another module's type of the same name. -}
+builtinScope :: Map Text NominalId
+builtinScope = Map.fromList [(name, NominalId Nothing name) | name <- builtinTypeNames]
 
 builtinKinds :: NominalId -> [Int]
 builtinKinds owner

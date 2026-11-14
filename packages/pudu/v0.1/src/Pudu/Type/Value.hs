@@ -2,7 +2,9 @@
 
 {-| @Type.Value.Module — represents formed types -}
 module Pudu.Type.Value
-  ( NominalId (..)
+  ( ProviderSelection (..)
+  , OwnerSelection (..)
+  , NominalId (..)
   , Scheme (..)
   , canonicalNominal
   , nominalKey
@@ -40,6 +42,21 @@ import Data.String (IsString (..))
 import Data.Word (Word8)
 import Pudu.Frontend.Syntax.Name (ModuleName, moduleNameText)
 import Pudu.Frontend.Syntax.Tree (Capability (..))
+
+{-| A selected trait application and the checked receiver whose parameters it needs. -}
+data ProviderSelection = ProviderSelection
+  { providerIdentity :: !NominalId
+  , providerArguments :: ![Type]
+  , providerReceiver :: !(Maybe Type)
+  }
+  deriving stock (Eq, Show)
+
+{-| Checked executable identity, distinct from trait-provider evidence. -}
+data OwnerSelection
+  = ConcreteOwner !NominalId
+  | VariantOwner !NominalId !Text ![Text]
+  | ImplementationOwner !Type
+  deriving stock (Eq, Show)
 
 {-| How many of a function's parameters a call must supply.
 

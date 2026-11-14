@@ -1,0 +1,47 @@
+module LaneParallel
+
+import Std.Concurrent as Concurrent
+import Std.Lanes as Lanes
+import Std.Math.Float as Float
+import Std.Time as Time
+
+/// Forty square-root passes over a 400,000-element ramp, summed.
+fn heavy(seed: Int) -> Float64 {
+  let Some(base) = Lanes.ramp(400000, Float.fromInt(seed), 1.0) else { panic("ramp") }
+  var current = base
+  var round = 0
+  while round < 40 {
+    current = Lanes.sqrt(&Lanes.addScalar(&current, 1.0))
+    round = round + 1
+  }
+  Lanes.sum(&current)
+}
+
+/// An interpreted loop that allocates no lanes.
+fn loops(seed: Int) -> Int {
+  var total = 0
+  var index = 0
+  while index < 300000 {
+    total = total + (index * seed) % 7
+    index = index + 1
+  }
+  total
+}
+
+/// Time independent lane and integer workloads on one worker and on four.
+export fn main() -> Int {
+  let seeds = [1, 2, 3, 4]
+  let a = Time.toMillis(&Time.currentInstant())
+  let Ok(one) = Concurrent.mapBounded(&seeds, 1, heavy) else { panic("one") }
+  let b = Time.toMillis(&Time.currentInstant())
+  let Ok(four) = Concurrent.mapBounded(&seeds, 4, heavy) else { panic("four") }
+  let c = Time.toMillis(&Time.currentInstant())
+  let Ok(i1) = Concurrent.mapBounded(&seeds, 1, loops) else { panic("i1") }
+  let d = Time.toMillis(&Time.currentInstant())
+  let Ok(i4) = Concurrent.mapBounded(&seeds, 4, loops) else { panic("i4") }
+  let e = Time.toMillis(&Time.currentInstant())
+  if one != four || i1 != i4 { panic("differ") }
+  print("lanes one " + show(b - a) + " ms, four " + show(c - b) + " ms")
+  print("loops one " + show(d - c) + " ms, four " + show(e - d) + " ms")
+  0
+}

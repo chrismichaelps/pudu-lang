@@ -58,10 +58,8 @@ enum pudu_kind {
  * place it well. The widest member states the requirement instead of relying on
  * that.
  *
- * A record arrives already flattened to its leaf scalars, in declaration order,
- * which is the same sequence the platform derives for the nesting itself. */
+ * Record storage is allocated from the complete libffi layout. */
 union pudu_storage {
-  unsigned char bytes[PUDU_MAX_FIELDS * 16];
   long double widest;
   void *pointer;
   int64_t integer;
@@ -249,7 +247,61 @@ static int take_field(const unsigned char *storage, size_t offset, uint8_t kind,
  * caller supplies no value for it, and what the library left there is read back
  * into the slot arrays before returning. `slot_kinds` may be null, which is a
  * call with no slots at all. */
-int pudu_ffi_call(void *symbol, int32_t arity, const uint8_t *kinds, const int64_t *integers,
+/* Descriptors and leaf offsets are consumed in declaration order. */
+struct pudu_layout {
+  const uint8_t *next, *end;
+  ffi_type *types;
+  ffi_type **elements;
+  unsigned char *storage[PUDU_MAX_ARGUMENTS + 1];
+  size_t *offsets[PUDU_MAX_ARGUMENTS + 1];
+};
+
+static ffi_type *record_type(struct pudu_layout *layout, const uint8_t *kinds,
+                             size_t *offsets, size_t count, size_t *leaf) {
+  if (layout->end - layout->next < 2 || *layout->next++ != PUDU_STRUCT) return NULL;
+  uint8_t members = *layout->next++;
+  if (members == 0 || members > PUDU_MAX_FIELDS) return NULL;
+  ffi_type *type = layout->types++;
+  ffi_type **elements = layout->elements;
+  layout->elements += members + 1;
+  size_t starts[PUDU_MAX_FIELDS + 1], direct[PUDU_MAX_FIELDS];
+  for (uint8_t member = 0; member < members; ++member) {
+    if (layout->next == layout->end) return NULL;
+    starts[member] = *leaf;
+    uint8_t kind = *layout->next;
+    if (kind == PUDU_STRUCT) {
+      elements[member] = record_type(layout, kinds, offsets, count, leaf);
+    } else {
+      if (*leaf == count || kinds[*leaf] != kind || kind == PUDU_VOID) return NULL;
+      layout->next++;
+      (*leaf)++;
+      elements[member] = type_for(kind);
+    }
+    if (elements[member] == NULL) return NULL;
+  }
+  starts[members] = *leaf;
+  elements[members] = NULL;
+  *type = (ffi_type){.type = FFI_TYPE_STRUCT, .elements = elements};
+  if (ffi_get_struct_offsets(FFI_DEFAULT_ABI, type, direct) != FFI_OK) return NULL;
+  for (uint8_t member = 0; member < members; ++member)
+    for (size_t i = starts[member]; i < starts[member + 1]; ++i)
+      offsets[i] += direct[member];
+  return type;
+}
+
+static ffi_type *prepare_record(struct pudu_layout *layout, size_t index,
+                                const uint8_t *kinds, int32_t count) {
+  if (count <= 0 || (size_t)count > SIZE_MAX / sizeof(size_t)) return NULL;
+  layout->offsets[index] = calloc((size_t)count, sizeof(size_t));
+  if (layout->offsets[index] == NULL) return NULL;
+  size_t leaf = 0;
+  ffi_type *type = record_type(layout, kinds, layout->offsets[index], (size_t)count, &leaf);
+  if (type == NULL || leaf != (size_t)count) return NULL;
+  layout->storage[index] = calloc(1, type->size);
+  return layout->storage[index] == NULL ? NULL : type;
+}
+
+static int call_with_layout(struct pudu_layout *layout, void *symbol, int32_t arity, const uint8_t *kinds, const int64_t *integers,
                   const double *doubles, void *const *pointers, const int32_t *field_starts,
                   const int32_t *field_counts, const uint8_t *field_kinds,
                   const int64_t *field_integers, const double *field_doubles,
@@ -269,14 +321,7 @@ int pudu_ffi_call(void *symbol, int32_t arity, const uint8_t *kinds, const int64
   ffi_type *argument_types[PUDU_MAX_ARGUMENTS];
   union pudu_slot slots[PUDU_MAX_ARGUMENTS];
   void *argument_values[PUDU_MAX_ARGUMENTS];
-  /* One description and one buffer per struct argument, alive for the call. */
-  ffi_type struct_types[PUDU_MAX_ARGUMENTS];
-  ffi_type *struct_elements[PUDU_MAX_ARGUMENTS][PUDU_MAX_FIELDS + 1];
-  union pudu_storage struct_storage[PUDU_MAX_ARGUMENTS];
-  /* Where each field of a record slot sits, kept because a slot is read after
-   * the call and the platform's answer must be the same one used to lay it
-   * out. */
-  size_t slot_offsets[PUDU_MAX_ARGUMENTS][PUDU_MAX_FIELDS];
+  union pudu_storage slot_storage[PUDU_MAX_ARGUMENTS] = {0};
 
   for (int32_t index = 0; index < arity; index++) {
     uint8_t slot_kind = slot_kinds == NULL ? PUDU_VOID : slot_kinds[index];
@@ -284,45 +329,19 @@ int pudu_ffi_call(void *symbol, int32_t arity, const uint8_t *kinds, const int64
       if (slot_integers == NULL || slot_doubles == NULL) {
         return 6;
       }
-      memset(&struct_storage[index], 0, sizeof(struct_storage[index]));
       if (slot_kind == PUDU_STRUCT) {
-        int32_t count = field_counts[index];
         int32_t start = field_starts[index];
-        if (count <= 0 || count > PUDU_MAX_FIELDS || start < 0 || slot_field_integers == NULL ||
-            slot_field_doubles == NULL) {
+        if (start < 0 || slot_field_integers == NULL || slot_field_doubles == NULL ||
+            prepare_record(layout, (size_t)index, field_kinds + start, field_counts[index]) == NULL)
           return 6;
-        }
-        for (int32_t field = 0; field < count; field++) {
-          ffi_type *member = type_for(field_kinds[start + field]);
-          if (member == NULL || field_kinds[start + field] == PUDU_VOID ||
-              field_kinds[start + field] == PUDU_STRUCT) {
-            return 6;
-          }
-          struct_elements[index][field] = member;
-        }
-        struct_elements[index][count] = NULL;
-        struct_types[index].size = 0;
-        struct_types[index].alignment = 0;
-        struct_types[index].type = FFI_TYPE_STRUCT;
-        struct_types[index].elements = struct_elements[index];
-        if (ffi_get_struct_offsets(FFI_DEFAULT_ABI, &struct_types[index], slot_offsets[index]) !=
-            FFI_OK) {
-          return 5;
-        }
-        if (struct_types[index].size > sizeof(struct_storage[index].bytes)) {
-          return 6;
-        }
-      } else {
-        ffi_type *written = type_for(slot_kind);
-        if (written == NULL || written->size > sizeof(struct_storage[index].bytes)) {
-          return 6;
-        }
+      } else if (type_for(slot_kind) == NULL) {
+        return 6;
       }
       /* The library is handed the address of that storage, so the argument
        * itself is a pointer and the pointer is what libffi is given a pointer
        * to. */
       argument_types[index] = &ffi_type_pointer;
-      slots[index].pointer = struct_storage[index].bytes;
+      slots[index].pointer = slot_kind == PUDU_STRUCT ? (void *)layout->storage[index] : &slot_storage[index];
       argument_values[index] = &slots[index];
       continue;
     }
@@ -330,40 +349,16 @@ int pudu_ffi_call(void *symbol, int32_t arity, const uint8_t *kinds, const int64
     if (kind == PUDU_STRUCT) {
       int32_t count = field_counts[index];
       int32_t start = field_starts[index];
-      if (count <= 0 || count > PUDU_MAX_FIELDS || start < 0) {
-        return 3;
-      }
+      if (start < 0) return 3;
+      ffi_type *type = prepare_record(layout, (size_t)index, field_kinds + start, count);
+      if (type == NULL) return 3;
       for (int32_t field = 0; field < count; field++) {
-        ffi_type *member = type_for(field_kinds[start + field]);
-        if (member == NULL || field_kinds[start + field] == PUDU_VOID ||
-            field_kinds[start + field] == PUDU_STRUCT) {
-          return 3;
-        }
-        struct_elements[index][field] = member;
-      }
-      struct_elements[index][count] = NULL;
-      struct_types[index].size = 0;
-      struct_types[index].alignment = 0;
-      struct_types[index].type = FFI_TYPE_STRUCT;
-      struct_types[index].elements = struct_elements[index];
-
-      size_t offsets[PUDU_MAX_FIELDS];
-      if (ffi_get_struct_offsets(FFI_DEFAULT_ABI, &struct_types[index], offsets) != FFI_OK) {
-        return 5;
-      }
-      if (struct_types[index].size > sizeof(struct_storage[index].bytes)) {
-        return 3;
-      }
-      memset(&struct_storage[index], 0, sizeof(struct_storage[index]));
-      for (int32_t field = 0; field < count; field++) {
-        if (place_field(struct_storage[index].bytes, offsets[field], field_kinds[start + field],
+        if (place_field(layout->storage[index], layout->offsets[index][field], field_kinds[start + field],
                         field_integers[start + field], field_doubles[start + field],
-                        field_pointers[start + field]) != 0) {
-          return 3;
-        }
+                        field_pointers[start + field]) != 0) return 3;
       }
-      argument_types[index] = &struct_types[index];
-      argument_values[index] = struct_storage[index].bytes;
+      argument_types[index] = type;
+      argument_values[index] = layout->storage[index];
       continue;
     }
     ffi_type *type = type_for(kind);
@@ -419,37 +414,10 @@ int pudu_ffi_call(void *symbol, int32_t arity, const uint8_t *kinds, const int64
     }
   }
 
-  ffi_type result_struct;
-  ffi_type *result_elements[PUDU_MAX_FIELDS + 1];
-  size_t result_offsets[PUDU_MAX_FIELDS];
-  ffi_type *returned = NULL;
-  if (result_kind == PUDU_STRUCT) {
-    if (result_field_count <= 0 || result_field_count > PUDU_MAX_FIELDS) {
-      return 4;
-    }
-    for (int32_t field = 0; field < result_field_count; field++) {
-      ffi_type *member = type_for(result_field_kinds[field]);
-      if (member == NULL || result_field_kinds[field] == PUDU_VOID ||
-          result_field_kinds[field] == PUDU_STRUCT) {
-        return 4;
-      }
-      result_elements[field] = member;
-    }
-    result_elements[result_field_count] = NULL;
-    result_struct.size = 0;
-    result_struct.alignment = 0;
-    result_struct.type = FFI_TYPE_STRUCT;
-    result_struct.elements = result_elements;
-    if (ffi_get_struct_offsets(FFI_DEFAULT_ABI, &result_struct, result_offsets) != FFI_OK) {
-      return 5;
-    }
-    returned = &result_struct;
-  } else {
-    returned = type_for(result_kind);
-  }
-  if (returned == NULL) {
-    return 4;
-  }
+  ffi_type *returned = result_kind == PUDU_STRUCT
+    ? prepare_record(layout, PUDU_MAX_ARGUMENTS, result_field_kinds, result_field_count)
+    : type_for(result_kind);
+  if (returned == NULL || layout->next != layout->end) return 4;
 
   ffi_cif call;
   if (ffi_prep_cif(&call, FFI_DEFAULT_ABI, (unsigned int)arity, returned, argument_types) !=
@@ -465,14 +433,10 @@ int pudu_ffi_call(void *symbol, int32_t arity, const uint8_t *kinds, const int64
     uint64_t u64;
     float f32;
     double f64;
-    unsigned char bytes[PUDU_MAX_FIELDS * 16];
-  } produced;
-  memset(&produced, 0, sizeof(produced));
-  if (result_kind == PUDU_STRUCT && result_struct.size > sizeof(produced.bytes)) {
-    return 4;
-  }
-
-  ffi_call(&call, FFI_FN(symbol), &produced, argument_values);
+  } produced = {0};
+  void *result_storage = result_kind == PUDU_STRUCT
+    ? (void *)layout->storage[PUDU_MAX_ARGUMENTS] : &produced;
+  ffi_call(&call, FFI_FN(symbol), result_storage, argument_values);
 
   /* What the library left in each slot, read before the result so that a call
    * answering through both is read once, here, in one place. Storage was zeroed
@@ -498,7 +462,7 @@ int pudu_ffi_call(void *symbol, int32_t arity, const uint8_t *kinds, const int64
         int32_t start = field_starts[index];
         int32_t count = field_counts[index];
         for (int32_t field = 0; field < count; field++) {
-          if (take_field(struct_storage[index].bytes, slot_offsets[index][field],
+          if (take_field(layout->storage[index], layout->offsets[index][field],
                          field_kinds[start + field], &slot_field_integers[start + field],
                          &slot_field_doubles[start + field]) != 0) {
             return 6;
@@ -508,7 +472,7 @@ int pudu_ffi_call(void *symbol, int32_t arity, const uint8_t *kinds, const int64
         slot_doubles[index] = 0.0;
         continue;
       }
-      if (take_field(struct_storage[index].bytes, 0, slot_kind, &slot_integers[index],
+      if (take_field((const unsigned char *)&slot_storage[index], 0, slot_kind, &slot_integers[index],
                      &slot_doubles[index]) != 0) {
         return 6;
       }
@@ -517,7 +481,7 @@ int pudu_ffi_call(void *symbol, int32_t arity, const uint8_t *kinds, const int64
 
   if (result_kind == PUDU_STRUCT) {
     for (int32_t field = 0; field < result_field_count; field++) {
-      if (take_field(produced.bytes, result_offsets[field], result_field_kinds[field],
+      if (take_field(layout->storage[PUDU_MAX_ARGUMENTS], layout->offsets[PUDU_MAX_ARGUMENTS][field], result_field_kinds[field],
                      &result_field_integers[field], &result_field_doubles[field]) != 0) {
         return 4;
       }
@@ -573,4 +537,38 @@ int pudu_ffi_call(void *symbol, int32_t arity, const uint8_t *kinds, const int64
     return 4;
   }
   return 0;
+}
+
+int pudu_ffi_call(void *symbol, int32_t arity, const uint8_t *kinds, const int64_t *integers,
+                  const double *doubles, void *const *pointers, const int32_t *field_starts,
+                  const int32_t *field_counts, const uint8_t *field_kinds,
+                  const int64_t *field_integers, const double *field_doubles,
+                  void *const *field_pointers, const uint8_t *slot_kinds, int64_t *slot_integers,
+                  double *slot_doubles, int64_t *slot_field_integers, double *slot_field_doubles,
+                  const uint8_t *shape, int32_t shape_count, uint8_t result_kind, int32_t result_field_count,
+                  const uint8_t *result_field_kinds,
+                  int64_t *result_integer, double *result_double, int64_t *result_field_integers,
+                  double *result_field_doubles) {
+  if (shape_count < 0) return 3;
+  struct pudu_layout layout = {.next = shape, .end = shape + shape_count};
+  size_t count = (size_t)shape_count;
+  ffi_type *types = count == 0 ? NULL : calloc(count, sizeof(*types));
+  ffi_type **elements = count == 0 ? NULL : calloc(count, sizeof(*elements));
+  layout.types = types;
+  layout.elements = elements;
+  int status = 3;
+  if (count == 0 || (types != NULL && elements != NULL)) {
+    status = call_with_layout(&layout, symbol, arity, kinds, integers, doubles, pointers,
+      field_starts, field_counts, field_kinds, field_integers, field_doubles,
+      field_pointers, slot_kinds, slot_integers, slot_doubles, slot_field_integers,
+      slot_field_doubles, result_kind, result_field_count, result_field_kinds,
+      result_integer, result_double, result_field_integers, result_field_doubles);
+  }
+  for (size_t i = 0; i <= PUDU_MAX_ARGUMENTS; ++i) {
+    free(layout.storage[i]);
+    free(layout.offsets[i]);
+  }
+  free(types);
+  free(elements);
+  return status;
 }

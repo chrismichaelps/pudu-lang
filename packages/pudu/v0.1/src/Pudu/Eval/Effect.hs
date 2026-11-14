@@ -35,7 +35,9 @@ import Pudu.Eval.AudioStream
   )
 import Pudu.Eval.Clock
 import Pudu.Eval.Desktop
-  ( closeDesktop
+  ( WindowSettings (..)
+  , closeDesktop
+  , configureDesktop
   , exposeDesktop
   , inputsDesktop
   , installMenu
@@ -170,6 +172,7 @@ effectBuiltins =
   , SearchSeparatorBuiltin
   , ExitBuiltin
   , ClockBuiltin
+  , ClockNanosBuiltin
   , NowBuiltin
   , FormatTimeBuiltin
   , ParseTimeBuiltin
@@ -239,6 +242,7 @@ effectBuiltins =
   , DesktopPresentBuiltin
   , DesktopPumpBuiltin
   , DesktopInputsBuiltin
+  , DesktopConfigureBuiltin
   , DesktopClipboardReadBuiltin
   , DesktopClipboardWriteBuiltin
   , DesktopAccessibilityBuiltin
@@ -458,6 +462,12 @@ callEffect spanValue builtin arguments = do
         desktop <- currentDesktopStore
         resultOf . fmap StrValue
           <$> lift refusal (inputsDesktop desktop (fromInteger token))
+      (DesktopConfigureBuiltin, [IntValue _ token, IntValue _ density, IntValue _ minWidth, IntValue _ minHeight, IntValue _ maxWidth, IntValue _ maxHeight, IntValue _ aspectWidth, IntValue _ aspectHeight, BoolValue fullscreen]) -> do
+        desktop <- currentDesktopStore
+        effectUnit
+          ( configureDesktop desktop (fromInteger token)
+              (WindowSettings (fromInteger density) (fromInteger minWidth) (fromInteger minHeight) (fromInteger maxWidth) (fromInteger maxHeight) (fromInteger aspectWidth) (fromInteger aspectHeight) fullscreen)
+          )
       (DesktopClipboardReadBuiltin, []) ->
         resultOf . fmap StrValue <$> lift refusal readClipboard
       (DesktopClipboardWriteBuiltin, [StrValue value]) ->
@@ -583,6 +593,7 @@ callEffect spanValue builtin arguments = do
         ArrayValue . Seq.fromList . map StrValue <$> lift refusal (pure pathSeparators)
       (SearchSeparatorBuiltin, []) -> StrValue <$> lift refusal (pure searchPathSeparatorText)
       (ClockBuiltin, []) -> intOf <$> lift refusal monotonicMilliseconds
+      (ClockNanosBuiltin, []) -> intOf <$> lift refusal monotonicNanoseconds
       (NowBuiltin, []) -> intOf <$> lift refusal currentInstant
       (ZoneOffsetBuiltin, []) -> intOf <$> lift refusal timeZoneOffset
       (FormatTimeBuiltin, [StrValue pattern, IntValue _ milliseconds, StrValue zone]) -> do

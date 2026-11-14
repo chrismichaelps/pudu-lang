@@ -31,9 +31,12 @@ import Pudu.Compiler.Program.GraphSpec
   , testInterfaceGraph
   )
 import Pudu.Compiler.Program.LanguageSpec
-  ( testCapturedScope
+  ( testBuiltinOwnerNames
+  , testCapturedScope
+  , testImportedDefaults
   , testDestructuringBindings
   , testFunctionLiterals
+  , testTraitDefaultSelf
   , testLanguageRefusals
   , testRangesAndSlices
   )
@@ -44,12 +47,13 @@ import Pudu.Compiler.Program.TypeBoundarySpec
   , testReplLoadContext
   , testTypeNamesAreNotValues
   )
+import Pudu.Compiler.Program.ViewSpec (viewProperties)
 import Test.QuickCheck (Property)
 
 {-| Aggregated properties covering dependency graph discovery, interfaces,
     type boundaries, foreign crossings, and standard library evaluation. -}
 programProperties :: [(String, IO Property)]
-programProperties = reflectionProgramProperties <>
+programProperties = reflectionProgramProperties <> viewProperties <>
   [ ("program compilation resolves imported trait methods", testImportedMethods)
   , ("program compilation preserves module privacy and trait scope", testImportFailures)
   , ("program discovery diagnoses missing and mismatched modules", testDiscoveryFailures)
@@ -71,9 +75,12 @@ programProperties = reflectionProgramProperties <>
   , ("the standard library resolves from the distribution", testStandardLibrary)
   , ("standard-library roots refresh between invocations", testResolutionFreshness)
   , ("a function literal is a value wherever a value goes", testFunctionLiterals)
+  , ("a trait default selects its implementing type through Self", testTraitDefaultSelf)
   , ("a range counts rather than building what it counts", testRangesAndSlices)
   , ("a binding takes a record, a tuple, and a sequence apart", testDestructuringBindings)
   , ("a function literal keeps reaching what it mentions", testCapturedScope)
+  , ("a type named like a built-in keeps its methods apart from the built-in's", testBuiltinOwnerNames)
+  , ("an implementation inherits the defaults of a trait it imports", testImportedDefaults)
   , ("ranges, slices, and destructuring refuse what they cannot mean", testLanguageRefusals)
   , ("an imported module is linked into evaluation", testProgramEvaluation)
   , ("linking publishes what a module declared, not what it imported", testLinkedNames)

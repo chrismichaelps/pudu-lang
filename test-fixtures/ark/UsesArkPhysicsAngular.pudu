@@ -1,0 +1,91 @@
+module UsesArkPhysicsAngular
+
+import Std.Math.Float as Float
+import Ark.Core.Handle as Handle
+import Ark.Math.Quat as Q
+import Ark.Math as V
+import Ark.Physics as Physics
+import Ark.Physics.Step as Step
+
+const DT: Float64 = 0.004166666666666667
+
+fn require(condition: Bool, name: Str) {
+  if !condition { panic(name) }
+}
+
+fn body(position: V.Vec3, velocity: V.Vec3, friction: Float64, shape: Physics.Shape) -> Physics.Body {
+  Physics.Body{position, velocity, mass: 1.0, restitution: 0.0, friction, shape}
+}
+
+fn ball() -> Physics.Shape {
+  let Some(shape) = Physics.sphere(0.5) else { panic("sphere") }
+  shape
+}
+
+fn ground(gravity: V.Vec3) -> Physics.Bodies {
+  let Some(bodies) = Physics.addPlane(Physics.world(gravity), V.vec3(0.0, 1.0, 0.0), V.vec3(0.0, 0.0, 0.0)) else { panic("plane") }
+  bodies
+}
+
+fn run(bodies: Physics.Bodies, steps: Int) -> Physics.Bodies {
+  var current = bodies
+  for _ in 0..steps {
+    let Some((next, _)) = Step.step(current, DT, 8) else { panic("step") }
+    current = next
+  }
+  current
+}
+
+fn vector(found: Option[V.Vec3]) -> V.Vec3 {
+  let Some(value) = found else { panic("vector") }
+  value
+}
+
+fn rolling() {
+  let (pool, entity) = Handle.allocate(Handle.empty())
+  let Some(world) = Physics.add(ground(V.vec3(0.0, -9.8, 0.0)), entity, &body(V.vec3(0.0, 0.5, 0.0), V.vec3(3.0, 0.0, 0.0), 0.5, ball())) else { panic("add") }
+  let settled = run(world, 480)
+  let velocity = vector(Physics.velocity(&settled, entity))
+  let spin = vector(Physics.angularVelocity(&settled, entity))
+  require(Float.abs(velocity.x - 3.0 * 5.0 / 7.0) < 0.05, "sliding sphere settles at five sevenths of its speed")
+  require(Float.abs(velocity.x + spin.z * 0.5) < 0.01, "contact point at rest: rolling without slipping")
+  require(spin.z < 0.0 && Float.abs(spin.x) < 0.000001 && Float.abs(spin.y) < 0.000001, "rolls about the axis across its motion")
+  let Some(turned) = Physics.orientation(&settled, entity) else { panic("orientation") }
+  require(Float.abs(Q.lengthSquared(turned) - 1.0) < 0.000000001 && turned.w < 1.0, "orientation stays unit and turns")
+  require(pool.live == 1, "one body")
+}
+
+fn spinning() {
+  let (_, entity) = Handle.allocate(Handle.empty())
+  let Some(world) = Physics.add(Physics.world(V.vec3(0.0, 0.0, 0.0)), entity, &body(V.vec3(0.0, 0.0, 0.0), V.vec3(0.0, 0.0, 0.0), 0.5, ball())) else { panic("add") }
+  let Some(set) = Physics.setAngularVelocity(world, entity, V.vec3(0.0, Float.pi(), 0.0)) else { panic("spin") }
+  let turned = run(set, 240)
+  let Some(final) = Physics.orientation(&turned, entity) else { panic("orientation") }
+  require(Q.angleBetween(final, Q.rotationY(Float.pi())) < 0.001, "free rotation integrates to pi radians in a second")
+  require(vector(Physics.angularVelocity(&turned, entity)).y == Float.pi(), "no contact leaves spin unchanged")
+}
+
+fn exceptions() {
+  let (pool, sliding) = Handle.allocate(Handle.empty())
+  let (_, crate) = Handle.allocate(pool)
+  let Some(slick) = Physics.add(ground(V.vec3(0.0, -9.8, 0.0)), sliding, &body(V.vec3(0.0, 0.5, 0.0), V.vec3(3.0, 0.0, 0.0), 0.0, ball())) else { panic("slick") }
+  let Some(half) = Physics.box(V.vec3(0.5, 0.5, 0.5)) else { panic("box") }
+  let Some(both) = Physics.add(slick, crate, &body(V.vec3(5.0, 0.5, 0.0), V.vec3(-3.0, 0.0, 0.0), 0.5, half)) else { panic("crate") }
+  let after = run(both, 120)
+  require(vector(Physics.angularVelocity(&after, sliding)) == V.vec3(0.0, 0.0, 0.0), "frictionless contact never spins")
+  require(vector(Physics.angularVelocity(&after, crate)) == V.vec3(0.0, 0.0, 0.0), "boxes stay axis-aligned")
+  let Some(unchanged) = Physics.setAngularVelocity(after, crate, V.vec3(1.0, 0.0, 0.0)) else { panic("set on box") }
+  require(vector(Physics.angularVelocity(&unchanged, crate)) == V.vec3(0.0, 0.0, 0.0), "a box cannot be set spinning")
+  let nan = Float.fromBits(0x7ff8000000000000u64)
+  require(Physics.setAngularVelocity(after, sliding, V.vec3(nan, 0.0, 0.0)) == None, "non-finite spin refused")
+  let Some(fewer) = Physics.remove(after, sliding) else { panic("remove") }
+  require(Physics.orientation(&fewer, crate) == Some(Q.identity()) && Physics.count(&fewer) == 1, "removal keeps angular lanes aligned")
+}
+
+export fn main() -> Int {
+  rolling()
+  spinning()
+  exceptions()
+  print("ark physics angular: ok")
+  0
+}

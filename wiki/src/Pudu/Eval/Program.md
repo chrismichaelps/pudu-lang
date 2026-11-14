@@ -154,3 +154,24 @@ The entry is called with its own name's span. Before, it was called with no
 span, so an entry that takes parameters had its arity refusal fall through
 `fallbackDiagnostic Nothing` and the process died on `error`; under
 `pudu test` that ended the whole run. Now it is E7003 at the entry's name.
+
+## Record field order (#519)
+
+Reloading declarations for an interactive block clears the record field-order
+table with the variant owners.
+## Canonical record owners (#761)
+
+Root, dependency, folding and interactive module installation supply the defining module path to the named loader. Folded records keep the same owner as runtime records.
+
+Resolved Grill Log: identity comes from the checked declaration, never import order or a basename guess. Preserve observable labels, lexical shadowing, field effects and failure provenance; no runtime filesystem lookup. See [[Canonical Runtime Owner Delivery]].
+
+## Entry call site (#871)
+
+The entry is called with no arguments at the entry function's name. A
+parameter without a default then stops with the ordinary E7003 missing
+argument diagnostic located there; defaults are evaluated as at any call.
+
+Resolved Grill Log: **Q:** Refuse entry parameters in checking? **A:** No;
+checking accepts them and tooling analyses such modules, so the run reports
+the call it makes. _Rejected:_ an unlocated abort, which had no diagnostic to
+render and ended the process with an internal error.

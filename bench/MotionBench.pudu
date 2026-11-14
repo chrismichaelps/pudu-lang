@@ -1,0 +1,43 @@
+module MotionBench
+
+import Std.Time as Time
+import Ark.Math as V
+import Ark.Physics.Motion as Motion
+
+fn assert(condition: Bool) {
+  if !condition { panic("motion assertion failed") }
+}
+
+fn query(position: V.Vec3, displacement: V.Vec3) -> Result[Option[Motion.Contact], Str] {
+  var hit: Option[Motion.Contact] = None
+  var earliest = 1.0
+  for normal in [V.vec3(1.0, 0.0, 0.0), V.vec3(0.0, 1.0, 0.0)] {
+    let speed = V.dot(displacement, normal)
+    if speed < 0.0 {
+      let fraction = V.dot(position, normal) / -speed
+      if fraction >= 0.0 && fraction <= earliest {
+        earliest = fraction
+        hit = Some(Motion.Contact{fraction, normal})
+      }
+    }
+  }
+  Ok(hit)
+}
+
+fn batch(count: Int) -> Float64 {
+  var checksum = 0.0
+  for _ in 0..count {
+    let Ok(value) = Motion.move(V.vec3(2.0, 2.0, 2.0), V.vec3(-4.0, -4.0, 3.0), 4, query) else { panic("query failed") }
+    assert(!value.exhausted && value.queries == 3 && value.contacts == 2 && value.remainingFraction == 0.0 && value.response.z == 3.0)
+    checksum = checksum + value.position.z
+  }
+  checksum
+}
+
+export fn main() -> Int {
+  print(display(batch(100)))
+  let start = Time.elapsed()
+  let checksum = batch(1_000)
+  print("motion ms={Time.elapsed() - start} checksum={checksum}")
+  0
+}

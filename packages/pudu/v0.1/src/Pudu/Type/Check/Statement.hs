@@ -41,6 +41,7 @@ import Pudu.Type.Check.Pattern (bindPattern)
 import Pudu.Type.Check.Place (checkBindingType)
 import Pudu.Type.Check.Collection (requireConcreteSetLiteral)
 import Pudu.Type.Check.Call (throughBorrow)
+import Pudu.Type.Check.Propagation (markResultSpine)
 import Pudu.Type.Check.Signature
   ( nonMutatingMethods
   )
@@ -142,6 +143,7 @@ checkStatement needs declared rigid beforeNegation (Located spanValue statement)
     reportDiscardedResult needs declared rigid expression
     reportDiscardedValue inferred beforeNegation expression
   ReturnStatement value -> do
+    mapM_ markResultSpine value
     actual <- case value of
       Nothing -> pure UnitTypeValue
       Just expression -> statementExpression needs declared rigid expression
@@ -253,11 +255,11 @@ checkAgainst needs declared rigid expected located@(Located spanValue expression
   if not (worthPushing resolved)
     then fallback
     else case expression of
-      IfExpression condition thenBlock elseBranch -> do
+      IfExpression condition thenBlock (Just elseBranch) -> do
         conditionType <- statementExpression needs declared rigid condition
         _ <- unify (locatedSpan condition) boolType conditionType
         _ <- checkBlockAgainst needs declared rigid resolved thenBlock
-        mapM_ (checkAgainst needs declared rigid resolved) elseBranch
+        _ <- checkAgainst needs declared rigid resolved elseBranch
         recordExpression spanValue resolved
         pure resolved
       IfLetExpression pattern' subject thenBlock (Just elseBranch) -> do
@@ -274,7 +276,7 @@ checkAgainst needs declared rigid expected located@(Located spanValue expression
         subject <- statementExpression needs declared rigid scrutinee
         resolvedSubject <- zonk subject
         mapM_ (checkArmAgainst needs declared rigid resolved resolvedSubject) arms
-        checkExhaustive spanValue resolvedSubject arms
+        checkExhaustive declared spanValue resolvedSubject arms
         recordExpression spanValue resolved
         pure resolved
       ArrayExpression members

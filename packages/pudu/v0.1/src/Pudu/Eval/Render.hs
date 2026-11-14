@@ -32,8 +32,8 @@ renderValue value = case value of
   UnitValue -> "()"
   TupleValue members -> "(" <> Text.intercalate ", " (map renderValue members) <> ")"
   ArrayValue members -> "[" <> Text.intercalate ", " (map renderValue (toList members)) <> "]"
-  RecordValue name fields ->
-    name <> "{" <> Text.intercalate ", " (map renderField fields) <> "}"
+  RecordValue name fields -> renderRecord (snd (Text.breakOnEnd "." name)) fields
+  NamedSumValue _ name fields -> renderRecord name fields
   VariantValue name payload
     | null payload -> name
     | otherwise -> name <> "(" <> Text.intercalate ", " (map renderValue payload) <> ")"
@@ -69,7 +69,7 @@ renderValue value = case value of
     "<" <> name <> " at 0x" <> Text.pack (Numeric.showHex address "")
   ForeignValue binding ->
     "<foreign " <> foreignBindingLibrary binding <> "." <> foreignBindingSymbol binding <> ">"
-  TypeWitnessValue owner _ -> "<type " <> owner <> ">"
+  TypeWitnessValue owner _ -> "<type " <> snd (Text.breakOnEnd "." owner) <> ">"
   {-| Bytes print as hexadecimal pairs rather than as the text they might
       decode to. A sequence being inspected is usually one that did not decode,
       and rendering it as text would hide the bytes the reader is looking for
@@ -84,6 +84,7 @@ renderValue value = case value of
       [Text.pack (show key) <> ": " <> renderValue held | (key, held) <- IntMap.toAscList entries]
       <> "]"
  where
+  renderRecord name fields = name <> "{" <> Text.intercalate ", " (map renderField fields) <> "}"
   renderField (name, fieldValue) = name <> ": " <> renderValue fieldValue
 
   hexPair byte =
@@ -102,7 +103,7 @@ valueKind :: Value -> Text
 valueKind value = case value of
   ForeignValue _ -> "foreign function"
   ForeignHandleValue name _ _ -> name
-  TypeWitnessValue owner _ -> "type " <> owner
+  TypeWitnessValue owner _ -> "type " <> snd (Text.breakOnEnd "." owner)
   IntValue kind _ -> integerKindName kind
   FloatValue _ _ -> "float"
   DecimalValue _ -> "decimal"
@@ -117,8 +118,9 @@ valueKind value = case value of
   ArrayValue _ -> "array"
   RangeValue{} -> "range"
   RangeMethodValue _ _ -> "range method"
-  RecordValue name _ -> name
+  RecordValue name _ -> snd (Text.breakOnEnd "." name)
   VariantValue name _ -> name
+  NamedSumValue _ name _ -> name
   FunctionValue _ -> "function"
   TaskValue _ _ _ -> "task"
   BuiltinValue _ -> "builtin"

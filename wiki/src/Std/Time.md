@@ -20,5 +20,7 @@ A field read from text answers its fallback when its digits spell more than an `
 - **Q:** Take whole seconds by integer division? **A:** No. _Rationale:_ division rounds toward
   zero, so an instant before the epoch named the second after it, against the documented promise
   (#419). A negative remainder steps back one.
+`monotonicNanos()` exposes `clockNanos` (#670): only differences are meaningful.
+
 ## Referenced by
 [[src/Std/_MOC]] · [[architecture/STDLIB]]

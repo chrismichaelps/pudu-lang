@@ -86,6 +86,10 @@ Dispatch on the built-in tag and the argument shapes, answering with a value or 
 - **Q:** Why decompose `Eval.Builtin` into child layers (`Array`, `String`, `Collection`, `Numeric`)? **A:** To scale the runtime architecture into bounded child modules strictly under 200 lines each, isolating distinct method families and scalar conversion logic while preserving the single re-exporting coordinator for zero API regression. _Rationale:_ callers retain complete source compatibility through `Pudu.Eval.Builtin`.
 
 
+## Binary64 kernels
+
+Re-exports `callFloatKernel` from [[Eval Builtin Numeric]] for [[Eval Call]]. No logic here.
+
 ## Referenced by
 
 [[src/Pudu/Eval/_MOC]] · [[Evaluator]] · [[Semantic Prelude]]
@@ -233,3 +237,18 @@ ordinary call semantics.
 Resolved Grill Log: use explicit primitives rather than recognizing a library function
 by name. Preserve persistence, key representatives, duplicate counts, checked Int
 overflow, and E7008 for unorderable keys or values. Do not scan complete maps on every add.
+
+panic's code and help come from Pudu.Diagnostic.Evaluation. (#633)
+
+## Raw text-byte access (#527)
+
+Expose textByteAt(Str, Int) -> Option[UInt8] as a pure primitive with a new
+appended TextByteAtBuiltin tag and canonical name. Read the Text backing
+array in O(1) only after comparing the mathematical offset with its byte
+length. Negative, past-end and out-of-host-range offsets answer None; no
+intermediate byte copy or malformed UTF-8 text is constructed. Wrong argument
+shape/arity retains E7001/E7003 at the call span.
+
+Resolved Grill Log: scalar boundaries constrain text slices, not byte reads;
+return an exact UInt8 and keep naming, typing, installation and pure dispatch
+synchronized. Existing text primitives and packed identities are unchanged.

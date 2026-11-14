@@ -1,0 +1,113 @@
+module UsesArkClip
+
+import Std.Lanes as Lanes
+import Std.Math.Float as Float
+import Ark.Math.Camera as Camera
+import Ark.Math.Color as Color
+import Ark.Math.Matrix as M
+import Ark.Math as V
+import Ark.Render.Clip as Clip
+import Ark.Render.Device as Device
+import Ark.Render.Mesh as Mesh
+import Ark.Render.Pipeline as Pipeline
+
+fn require(condition: Bool, name: Str) {
+  if !condition { panic(name) }
+}
+
+fn vertices(depths: &Array[Float64], weights: &Array[Float64]) -> Clip.Vertices {
+  Clip.Vertices {
+    xs: Lanes.fromArray(&[-0.5, 0.5, -0.5]),
+    ys: Lanes.fromArray(&[-0.5, -0.5, 0.5]),
+    zs: Lanes.fromArray(depths),
+    ws: Lanes.fromArray(weights),
+    rs: Lanes.fromArray(&[1.0, 0.0, 0.0]),
+    gs: Lanes.fromArray(&[0.0, 1.0, 0.0]),
+    bs: Lanes.fromArray(&[0.0, 0.0, 1.0]),
+    us: Lanes.fromArray(&[0.0, 1.0, 0.0]),
+    vs: Lanes.fromArray(&[1.0, 1.0, 0.0]),
+    extras: [Lanes.fromArray(&[2.0, 4.0, 6.0])],
+  }
+}
+
+fn polygons() {
+  let inside = vertices(&[0.25, 0.5, 0.75], &[1.0, 1.0, 1.0])
+  require(Clip.depth(&inside) == Some(inside), "inside retains original lanes")
+  let Some(near) = Clip.depth(&vertices(&[-1.0, 1.0, 1.0], &[1.0, 1.0, 1.0])) else { panic("near clip") }
+  require(Lanes.toArray(&near.xs) == [-0.5, 0.0, 0.5, -0.5, 0.5, -0.5], "near intersections and triangle order")
+  require(Lanes.toArray(&near.ys) == [0.0, -0.5, -0.5, 0.0, -0.5, 0.5], "near intersection y")
+  require(Lanes.toArray(&near.zs) == [0.0, 0.0, 1.0, 0.0, 1.0, 1.0], "exact near boundary")
+  require(Lanes.toArray(&near.rs) == [0.5, 0.5, 0.0, 0.5, 0.0, 0.0], "interpolated red")
+  require(Lanes.toArray(&near.gs) == [0.0, 0.5, 1.0, 0.0, 1.0, 0.0], "interpolated green")
+  require(Lanes.toArray(&near.bs) == [0.5, 0.0, 0.0, 0.5, 0.0, 1.0], "interpolated blue")
+  require(Lanes.toArray(&near.us) == [0.0, 0.5, 1.0, 0.0, 1.0, 0.0], "interpolated u")
+  require(Lanes.toArray(&near.vs) == [0.5, 1.0, 1.0, 0.5, 1.0, 0.0], "interpolated v")
+  require(Lanes.toArray(&near.extras[0]) == [4.0, 3.0, 4.0, 4.0, 4.0, 6.0], "interpolated extra attribute")
+  let crossing = vertices(&[-1.0, 1.0, 1.0], &[1.0, 1.0, 1.0])
+  let combined = Clip.Vertices {
+    xs: Lanes.concat(&inside.xs, &crossing.xs), ys: Lanes.concat(&inside.ys, &crossing.ys),
+    zs: Lanes.concat(&inside.zs, &crossing.zs), ws: Lanes.concat(&inside.ws, &crossing.ws),
+    rs: Lanes.concat(&inside.rs, &crossing.rs), gs: Lanes.concat(&inside.gs, &crossing.gs), bs: Lanes.concat(&inside.bs, &crossing.bs),
+    us: Lanes.concat(&inside.us, &crossing.us), vs: Lanes.concat(&inside.vs, &crossing.vs),
+    extras: [Lanes.concat(&inside.extras[0], &crossing.extras[0])],
+  }
+  let Some(ordered) = Clip.depth(&combined) else { panic("ordered batch") }
+  require(Lanes.slice(&ordered.zs, 0, 3) == Some(inside.zs) && Lanes.slice(&ordered.zs, 3, 6) == Some(near.zs), "authored triangle order retained")
+  let x = Lanes.toArray(&near.xs)
+  let y = Lanes.toArray(&near.ys)
+  var at = 0
+  while at < x.length() {
+    require((x[at + 1] - x[at]) * (y[at + 2] - y[at]) - (y[at + 1] - y[at]) * (x[at + 2] - x[at]) > 0.0, "winding preserved")
+    at = at + 3
+  }
+  let Some(twoOutside) = Clip.depth(&vertices(&[-1.0, -1.0, 1.0], &[1.0, 1.0, 1.0])) else { panic("two outside") }
+  require(Lanes.count(&twoOutside.xs) == 3, "two outside retains one triangle")
+  let Some(hidden) = Clip.depth(&vertices(&[-3.0, -2.0, -1.0], &[1.0, 1.0, 1.0])) else { panic("hidden") }
+  require(Lanes.count(&hidden.xs) == 0, "hidden becomes empty")
+  let boundary = vertices(&[0.0, 1.0, 0.5], &[1.0, 1.0, 1.0])
+  require(Clip.depth(&boundary) == Some(boundary), "both boundaries are inside")
+  let Some(touching) = Clip.depth(&vertices(&[-1.0, 0.0, 0.0], &[1.0, 1.0, 1.0])) else { panic("touching") }
+  require(Lanes.count(&touching.xs) == 0, "a boundary edge has no area")
+  let Some(large) = Clip.depth(&vertices(&[-1e308, 1e308, 1e308], &[1e308, 1e308, 1e308])) else { panic("scaled intersection") }
+  require(Lanes.count(&large.xs) == 6 && Lanes.toArray(&large.rs) == [0.5, 0.5, 0.0, 0.5, 0.0, 0.0], "large plane distances preserve interpolation")
+  let Some(farHidden) = Clip.depth(&vertices(&[1e308, 1e308, 1e308], &[-1e308, -1e308, -1e308])) else { panic("far hidden") }
+  require(Lanes.count(&farHidden.xs) == 0, "hidden far geometry needs no finite intersection")
+  require(Clip.depth(&vertices(&[1e308, 0.5, 0.5], &[-1e308, 1.0, 1.0])) == None, "unrepresentable mixed plane distance is explicit")
+  let Some(far) = Clip.depth(&vertices(&[2.0, 0.5, 0.5], &[1.0, 1.0, 1.0])) else { panic("far clip") }
+  require(Lanes.count(&far.xs) == 6, "far splits to two triangles")
+  for z in Lanes.toArray(&far.zs) { require(z >= 0.0 && z <= 1.0, "far depth admitted") }
+  let Some(both) = Clip.depth(&vertices(&[-1.0, 0.5, 2.0], &[1.0, 1.0, 1.0])) else { panic("both planes") }
+  require(Lanes.count(&both.xs) == 9, "both planes retain a five-corner polygon")
+  let malformed = Clip.Vertices{..inside, ys: Lanes.fromArray(&[0.0])}
+  require(Clip.depth(&malformed) == None, "lane count mismatch")
+  require(Clip.depth(&Clip.Vertices{..inside, xs: Lanes.fromArray(&[0.0, 1.0])}) == None, "partial triangle")
+  let nan = Float.fromBits(0x7ff8000000000000u64)
+  require(Clip.depth(&Clip.Vertices{..inside, rs: Lanes.fromArray(&[nan, 0.0, 0.0])}) == None, "non-finite color")
+  require(Clip.depth(&Clip.Vertices{..inside, vs: Lanes.fromArray(&[0.0, nan, 0.0])}) == None, "non-finite texture coordinate")
+  require(Clip.depth(&Clip.Vertices{..inside, us: Lanes.fromArray(&[0.0])}) == None, "texture coordinate count")
+  require(Clip.depth(&Clip.Vertices{..inside, extras: [Lanes.fromArray(&[0.0])]}) == None, "extra attribute count")
+  let infinity = Float.fromBits(0x7ff0000000000000u64)
+  require(Clip.depth(&Clip.Vertices{..inside, xs: Lanes.fromArray(&[infinity, 0.0, 0.0])}) == None, "non-finite first lane")
+  require(Clip.depth(&vertices(&[0.5, 0.5, 0.5], &[infinity, 1.0, 1.0])) == None, "non-finite homogeneous weight")
+  require(Clip.depth(&vertices(&[0.0, 0.0, 0.0], &[0.0, 0.0, 0.0])) == None, "zero homogeneous weight")
+}
+
+fn cameraCrossing() {
+  let Some(mesh) = Mesh.fromTriangles(&[V.vec3(-0.5, -0.5, -1.0), V.vec3(0.5, -0.5, -1.0), V.vec3(0.0, 0.5, 0.5)], Color.opaque(1.0, 0.0, 0.0)) else { panic("crossing triangle") }
+  let Some(sun) = Pipeline.light(V.vec3(0.0, 0.0, 1.0), Color.opaque(1.0, 1.0, 1.0), 1.0) else { panic("light") }
+  let Some(projection) = Camera.perspective(Float.pi() / 2.0, 1.0, 0.1, 10.0) else { panic("projection") }
+  let Some(batch) = Pipeline.project(&mesh, &M.identity4(), &projection, &sun, 32, 32) else { panic("crossing projection") }
+  require(Lanes.count(&batch.xs) >= 6, "camera-crossing face survives")
+  let Some(target) = Device.target(32, 32) else { panic("target") }
+  let Some(drawn) = Device.draw(target, &batch, Device.CullNone) else { panic("crossing draw") }
+  var covered = 0
+  for octet in Device.pixels(&drawn).toArray() { if octet != 0u8 { covered = covered + 1 } }
+  require(covered > 100, "clipped geometry draws visible pixels")
+}
+
+export fn main() -> Int {
+  polygons()
+  cameraCrossing()
+  print("ark depth clip: ok")
+  0
+}

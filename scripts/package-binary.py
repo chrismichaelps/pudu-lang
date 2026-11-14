@@ -15,23 +15,26 @@ import tempfile
 
 
 def strip(executable, parser):
-  """Remove the symbol tables from the packaged executable.
-
-  Nothing reads them at run time, and they are close to half the executable.
-  A bundle appends its modules after the executable's last byte, so a stripped
-  runtime carries them exactly as an unstripped one does. Packaging without
-  the tool is refused rather than silently shipping the larger file.
-  """
+  """Strip the staged compiler while retaining symbols required by its loader."""
   if executable.suffix == ".exe":
     return
   tool = shutil.which("strip")
   if tool is None:
     parser.error("strip is required to package the executable")
-  # The macOS tool removes every symbol by default, including ones the dynamic
-  # loader resolves, so it is limited to local symbols there; the GNU tool's
-  # default removes the symbol tables an executable never consults.
-  flags = ["-x"] if sys.platform == "darwin" else []
+  # Darwin keeps undefined and dynamically referenced symbols, not unused globals.
+  flags = ["-u", "-r"] if sys.platform == "darwin" else []
   subprocess.run([tool, *flags, str(executable)], check=True)
+
+
+def copy_notices(package, stage, parser):
+  """Keep package-owned notices beside the distributed compiler."""
+  for name in ("LICENSE", "THIRD_PARTY_NOTICES"):
+    source = package / name
+    if name != "LICENSE" and not source.exists() and not source.is_symlink():
+      continue
+    if source.is_symlink() or not source.is_file():
+      parser.error(f"package notice must be a package-owned regular file: {name}")
+    shutil.copyfile(source, stage / name)
 
 
 def main():
@@ -72,9 +75,12 @@ def main():
     ],
     check=True
   )
-  sources = sorted((package / "lib" / "Std").rglob("*.pudu"))
-  if not sources:
-    parser.error("standard library is empty")
+  sources = []
+  for namespace in ("Std", "Ark"):
+    namespace_sources = sorted((package / "lib" / namespace).rglob("*.pudu"))
+    if not namespace_sources:
+      parser.error(f"{namespace} library is empty")
+    sources.extend(namespace_sources)
   output = (root / args.output).resolve()
   output.mkdir(parents=True, exist_ok=True)
   name = f"pudu-{version}-{args.target}"
@@ -98,7 +104,7 @@ def main():
       target = stage / "lib" / "pudu" / source.relative_to(package / "lib")
       target.parent.mkdir(parents=True, exist_ok=True)
       shutil.copyfile(source, target)
-    shutil.copyfile(package / "LICENSE", stage / "LICENSE")
+    copy_notices(package, stage, parser)
     metadata = {
       "name": "pudu",
       "version": version,
@@ -141,4 +147,3 @@ def main():
 
 if __name__ == "__main__":
   main()
-

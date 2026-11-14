@@ -1,0 +1,60 @@
+module Ark.Core.Profile
+
+import Std.Time as Time
+
+/// Samples recorded under one scope name, in nanoseconds.
+export type Stats = { samples: Int, total: Int, minimum: Int, maximum: Int }
+
+/// Scope statistics by name.
+export type Profile = { scopes: Map[Str, Stats] }
+
+/// A profile with no scopes.
+export fn empty() -> Profile {
+  Profile{scopes: mapOf([])}
+}
+
+/// The monotonic clock in nanoseconds; subtract two readings for an interval.
+export fn now() -> Int {
+  Time.monotonicNanos()
+}
+
+/// Record the time since `startedAt` under a scope name.
+export fn record(profile: Profile, name: Str, startedAt: Int) -> Profile {
+  sample(profile, name, now() - startedAt)
+}
+
+/// Record a measured duration under a scope name.
+export fn sample(profile: Profile, name: Str, nanos: Int) -> Profile {
+  let updated = match profile.scopes.get(name) {
+    case Some(held) =>
+    Stats {
+      samples: held.samples + 1,
+      total: held.total + nanos,
+      minimum: if nanos < held.minimum { nanos } else { held.minimum },
+      maximum: if nanos > held.maximum { nanos } else { held.maximum },
+    }
+    case None => Stats{samples: 1, total: nanos, minimum: nanos, maximum: nanos}
+  }
+  Profile{scopes: profile.scopes.insert(name, updated)}
+}
+
+/// The statistics of one scope, or None when it was never recorded.
+export fn stats(profile: &Profile, name: Str) -> Option[Stats] {
+  profile.scopes.get(name)
+}
+
+/// The mean duration of a scope in nanoseconds, or None when it was never recorded.
+export fn mean(profile: &Profile, name: Str) -> Option[Int] {
+  let held = profile.scopes.get(name) ?
+  Some(held.total / held.samples)
+}
+
+/// Every recorded scope name in sorted order.
+export fn names(profile: &Profile) -> Array[Str] {
+  profile.scopes.keys()
+}
+
+/// A profile with every scope cleared.
+export fn reset(profile: Profile) -> Profile {
+  if profile.scopes.isEmpty() { profile } else { empty() }
+}

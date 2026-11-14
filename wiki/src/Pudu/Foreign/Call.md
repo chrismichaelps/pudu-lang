@@ -155,6 +155,12 @@ library at different versions do not share one handle.
   be verified either way, and refusing would break the machine where the unversioned name is the
   installed runtime, in exchange for a guarantee this layer cannot make.
 
+## Nested ABI layouts (#863)
+
+Resolved Grill Log: [[Nested Foreign Record Delivery]] preserves the tree
+for libffi layout and keeps value carriers in declaration-order leaves.
+The 32-member limit applies at each record node.
+
 ## Referenced by
 
 [[src/Pudu/_MOC]] · [[ADR-0018 Calling a Library Written Elsewhere]] · [[Foreign Crossing]]

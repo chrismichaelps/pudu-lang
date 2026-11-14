@@ -74,3 +74,7 @@ tokens and cannot be used as proof that no expansion exists.
 Requires [[Compiler Pipeline]] and [[Compiler Cache]]. Consumed by
 [[Compiler Program]]; registered in [[Pudu Cabal Manifest]].
 [[src/Pudu/Compiler/_MOC]] · [[Program Cache Spec]]
+
+## Shapes (#563)
+
+A reused checked product has no shapes, like its other analysis fields.

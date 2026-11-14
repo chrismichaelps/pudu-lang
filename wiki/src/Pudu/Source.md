@@ -157,3 +157,12 @@ DEPTH 0.61 (MEDIUM). A small interface hides validation and position conventions
 ## Referenced by
 
 [[src/Pudu/_MOC]] · [[Diagnostic Model]] · [[Token]]
+
+## Type application facts (#846)
+
+`typeArgumentsKey` exchanges a type application's ends, producing an empty
+span that covers no offset. Checking records the written type arguments at
+that key, so a fact exists for them without any reader pointing into the
+original source finding it. Resolved Grill Log: the application's own span
+already means the whole expression; an empty reversed span is a stable key
+that cannot collide with a reported location.

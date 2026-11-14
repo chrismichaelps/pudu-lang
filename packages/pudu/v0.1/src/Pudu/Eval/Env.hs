@@ -40,6 +40,11 @@ module Pudu.Eval.Env
   , withIntegerKinds
   , recordVariantOwner
   , variantOwner
+  , recordFieldOrder
+  , declaredFieldOrder
+  , inDeclaredOrder
+  , declaredOrder
+  , inDeclaredRecord
   , performEffect
   , withoutEffects
   , expectBool
@@ -64,6 +69,7 @@ module Pudu.Eval.Env
 import Data.Map.Strict (Map)
 import qualified Data.Map.Strict as Map
 import Data.Text (Text)
+import qualified Data.Text as Text
 import Pudu.Comptime.Limits (callDepthLimit)
 import Pudu.Eval.Concurrent (ConcurrentStore)
 import Pudu.Eval.AudioStream (AudioStreamStore)
@@ -77,6 +83,7 @@ import Pudu.Diagnostic
   , mkDiagnosticCode
   , withHelp
   )
+import Pudu.Diagnostic.Evaluation (callDepthCode, callDepthHelp, callDepthMessage)
 import Pudu.Eval.Render (valueKind)
 import Pudu.Eval.Socket (SocketStore)
 import Pudu.Eval.Tls (TlsStore)
@@ -93,6 +100,11 @@ data Env = Env
   { envFrames :: ![Frame]
   , envMethods :: !(Map Text Value)
   , envVariantOwners :: !(Map Text Text)
+  {-| Each record type's fields, and each record-payload variant's, in the
+      order the declaration lists them. A record value holds its fields in
+      this order whatever order the literal wrote them in, so equality,
+      ordering and rendering see one shape per value. -}
+  , envRecordFields :: !(Map Text [Text])
   , envIntegerKinds :: !(Map Span Text)
   {-| Where to tally the work, when someone asked to see it.
 
@@ -322,6 +334,7 @@ emptyEnv handles children sockets secured concurrent desktop audioStreams foreig
     { envFrames = [MapFrame Map.empty]
     , envMethods = Map.empty
     , envVariantOwners = Map.empty
+    , envRecordFields = Map.empty
     , envIntegerKinds = Map.empty
     , envTally = Nothing
     , envModuleDepth = 0
@@ -518,7 +531,12 @@ lookupModule name = Evaluator $ \env -> do
     for a method dispatched a built-in type's method to whichever module some
     other file had imported under that name. -}
 lookupMethod :: Text -> Evaluator (Maybe Value)
-lookupMethod name = Evaluator $ \env -> pure (Done (Map.lookup name (envMethods env)) env)
+lookupMethod name = Evaluator $ \env -> pure (Done (Map.lookup selected (envMethods env)) env)
+ where
+  selected = case Text.splitOn "::" name of
+    [owner, provider, member] | Just receiver <- Text.stripSuffix "." owner ->
+      provider <> "." <> receiver <> "." <> member
+    _ -> name
 
 {-| Record an implementation's method, where every module can reach it. -}
 bindMethod :: Text -> Value -> Evaluator ()
@@ -596,6 +614,46 @@ withIntegerKinds kinds =
 integerKindAt :: Span -> Evaluator (Maybe Text)
 integerKindAt spanValue =
   Evaluator $ \env -> pure (Done (Map.lookup spanValue (envIntegerKinds env)) env)
+
+recordFieldOrder :: Text -> [Text] -> Evaluator ()
+recordFieldOrder owner fields =
+  Evaluator $ \env ->
+    pure (Done () env{envRecordFields = Map.insert owner fields (envRecordFields env)})
+
+declaredFieldOrder :: Text -> Evaluator (Maybe [Text])
+declaredFieldOrder owner =
+  Evaluator $ \env -> pure (Done (Map.lookup owner (envRecordFields env)) env)
+
+{-| Written fields rearranged into the declared order. Evaluation already
+    happened in written order; only the stored order changes. Fields that are
+    not exactly the declared set are left alone, since then the name found
+    belongs to some other type. -}
+{-| A constructed record with its fields in declaration order, found by its
+    owner or, for a construction spelled through an alias, the owner's own
+    name. Any other value is returned as it is. -}
+declaredOrder :: Value -> Evaluator Value
+declaredOrder value = case value of
+  RecordValue owner fields -> do
+    declared <- declaredFieldOrder owner
+    found <- maybe (declaredFieldOrder (last (Text.splitOn "." owner))) (pure . Just) declared
+    pure (RecordValue owner (inDeclaredOrder found fields))
+  other -> pure other
+
+{-| `declaredOrder` against a table already read from the environment. -}
+inDeclaredRecord :: Map Text [Text] -> Value -> Value
+inDeclaredRecord table value = case value of
+  RecordValue owner fields ->
+    let found = maybe (Map.lookup (last (Text.splitOn "." owner)) table) Just (Map.lookup owner table)
+     in RecordValue owner (inDeclaredOrder found fields)
+  other -> other
+
+inDeclaredOrder :: Maybe [Text] -> [(Text, Value)] -> [(Text, Value)]
+inDeclaredOrder declared fields = case declared of
+  Just order
+    | map fst fields /= order
+    , length order == length fields
+    , Just arranged <- traverse (\name -> (,) name <$> lookup name fields) order -> arranged
+  _ -> fields
 
 {-| The sum a variant belongs to, when the variant is one. -}
 variantOwner :: Text -> Evaluator (Maybe Text)
@@ -755,8 +813,7 @@ descend :: Maybe Span -> Evaluator Int
 descend callSpan = do
   depth <- currentDepth
   if depth > callLimit
-    then abortAt callSpan "E7002" "call depth exceeded the evaluation limit"
-      (Just "the interactive evaluator bounds recursion") >> pure depth
+    then abortAt callSpan callDepthCode callDepthMessage (Just callDepthHelp) >> pure depth
     else setDepth (depth + 1) >> pure depth
 
 ascend :: Int -> Evaluator ()

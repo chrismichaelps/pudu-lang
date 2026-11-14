@@ -12,6 +12,12 @@
 
 # Pudu
 
+<!-- native-progress:start -->
+**C11 emission progress:** [█████░░░░░░░░░░░░░░░] **28%** (4/14 coverage areas complete)
+
+Counts completed areas in the [native coverage ledger](wiki/architecture/NATIVE-EMISSION.md). Partial areas count as incomplete; this is not a percentage of language constructs. Updated automatically after merges into `dev`.
+<!-- native-progress:end -->
+
 Pudu is a statically typed, expression-oriented language for services, tools, and native
 applications. Failure is a value, absence is explicit, and every `match` is exhaustive.
 

@@ -50,6 +50,20 @@ export fn main() -> Int {
   if Bytes.length(&Bytes.repeat(&abc, 3)) == 9 { held = held + 1 }
   if Result.unwrapOr(Bytes.toText(&Bytes.reverse(&abc)), "") == "cba" { held = held + 1 }
 
+  // Groups taken from every stride.
+  let rgba = Bytes.fromArray(&[1u8, 2u8, 3u8, 255u8, 4u8, 5u8, 6u8, 255u8, 7u8, 8u8])
+  if Bytes.strided(&rgba, 0, 3, 4) == Some(Bytes.fromArray(&[1u8, 2u8, 3u8, 4u8, 5u8, 6u8, 7u8, 8u8])) {
+    held = held + 1
+  }
+  if Bytes.strided(&rgba, 3, 1, 4) == Some(Bytes.fromArray(&[255u8, 255u8])) { held = held + 1 }
+  if Bytes.strided(&abc, 9, 1, 1) == Some(Bytes.empty()) && Bytes.strided(&abc, 0, 0, 2) == Some(Bytes.empty()) {
+    held = held + 1
+  }
+  if Bytes.strided(&abc, 1, 1, 9223372036854775807) == Some(Bytes.fromText("b")) { held = held + 1 }
+  if Bytes.strided(&abc, -1, 1, 1) == None && Bytes.strided(&abc, 0, 2, 1) == None && Bytes.strided(&abc, 0, 1, 0) == None {
+    held = held + 1
+  }
+
   // Looking inside.
   if Bytes.indexOf(&abc, &Bytes.fromText("b")) == 1 { held = held + 1 }
   if Bytes.indexOf(&abc, &Bytes.fromText("z")) < 0 { held = held + 1 }

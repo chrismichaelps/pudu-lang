@@ -125,3 +125,24 @@ Allocation now doubles with the module count (x2.0 per doubling, from x3.0–x3.
 
 [[src/Pudu/Type/_MOC]] · [[Type Interface]] · [[Type Check Import]] · [[Type Check Install]] ·
 [[Compiler Program]] · [[2026-09-21-interface-graph]]
+
+## Constructor binding identity (#774)
+
+Installed graph snapshots preserve NameBinding roles alongside schemes; consumer alias overlays copy those immutable bindings without sharing live inference state.
+
+Resolved Grill Log: identity belongs to the selected binding; schemes remain type-only and ordinary shadows clear constructor roles. See [[Constructor Binding Delivery]].
+
+## Built-in scope isolation (#759)
+
+Expose one closed builtinScope map from the language inventory. Interface
+formation overlays local declarations, then exact imports, then built-in names.
+Consumer formation overlays exact imports, then built-ins, then the shared graph;
+its own declarations are collected last and retain lexical precedence. Canonical
+qualified identities and explicit selected imports remain distinct and visible.
+
+Resolved Grill Log: an unrelated module exporting Map must not replace the
+built-in Map in Table. Do not remove graph declarations needed for implementation
+discovery, invent another type inventory, or mask local/selected declarations.
+Preserve shared once-per-graph preparation and immutable consumer overlays.
+Prove qualified, selected and reversed-import clients in both evaluators, and
+E3001 for a record passed as a built-in map. See [[Builtin Scope Delivery]].

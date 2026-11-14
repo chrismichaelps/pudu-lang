@@ -1,0 +1,24 @@
+module ConfiguresDesktop
+
+fn report(outcome: Result[(), Str]) {
+  match outcome {
+    case Ok(_) => print("configured")
+    case Err(message) => print(message)
+  }
+}
+
+/// Print why each invalid setting is refused, then whether valid settings reach a missing window.
+export fn main() -> Int {
+  report(desktopConfigure(-1, 249, 0, 0, 0, 0, 0, 0, false))
+  report(desktopConfigure(-1, 8001, 0, 0, 0, 0, 0, 0, false))
+  report(desktopConfigure(-1, 1000, -1, 0, 0, 0, 0, 0, false))
+  report(desktopConfigure(-1, 1000, 0, 0, 1000001, 0, 0, 0, false))
+  report(desktopConfigure(-1, 1000, 500, 0, 400, 0, 0, 0, false))
+  report(desktopConfigure(-1, 1000, 0, 0, 0, 0, 16, 0, false))
+  report(desktopConfigure(-1, 1000, 0, 0, 0, 0, -16, -9, false))
+  match desktopConfigure(-1, 2000, 0, 0, 0, 0, 16, 9, true) {
+    case Ok(_) => print("valid settings reached no window")
+    case Err(_) => print("valid settings refused for the missing window")
+  }
+  0
+}

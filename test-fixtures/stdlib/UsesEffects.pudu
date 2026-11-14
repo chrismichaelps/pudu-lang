@@ -1,6 +1,7 @@
 module UsesEffects
 
 import Std.Env as Env
+import Std.Fs as Fs
 import Std.Io as Io
 import Std.Option as O
 import Std.Result as R
@@ -25,7 +26,9 @@ export fn main() -> Int {
   var passed = 0
 
   // Asked of the machine rather than spelled out; see UsesIo for why.
-  let directory = Env.temporaryDirectory()
+  // A directory of this run alone, so runs at the same time never meet.
+  let Ok(scratch) = Fs.temporaryDirectoryIn(Env.temporaryDirectory(), "pudu-fixture-") else { return 0 }
+  let directory = scratch
   let path = Io.join(directory, "pudu-effects-probe.txt")
   match writeFile(path, "one two three\nfour five\n") {
     case Ok(_) => { passed = passed + 1 }
@@ -51,6 +54,7 @@ export fn main() -> Int {
 
   let started = clock()
   if started >= 0 { passed = passed + 1 }
+  let _scratchGone = Fs.removeTree(scratch)
 
   passed
 }

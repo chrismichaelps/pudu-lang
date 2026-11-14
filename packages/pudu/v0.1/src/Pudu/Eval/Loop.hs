@@ -34,6 +34,7 @@ import Pudu.Eval.Env
 import Pudu.Eval.Keyed (mapEntries, setMembers)
 import Pudu.Eval.Loop.Kernel (pureLoop)
 import Pudu.Eval.Match (matchPattern)
+import Pudu.Eval.DeclaredOwner (declaredOwner)
 import Pudu.Eval.Operator (nominalNameOf)
 import Pudu.Eval.Range (rangeElements)
 import Pudu.Eval.Render (valueKind)
@@ -217,6 +218,7 @@ evaluateFor needs spanValue label binder iterated body = case elements of
 
   variantElements = case iterated of
     VariantValue _ payload -> Just payload
+    NamedSumValue _ _ fields -> Just (map snd fields)
     _ -> Nothing
   step values = case values of
     [] -> pure UnitValue
@@ -325,18 +327,18 @@ data LoopTransfer
     out and travels on untouched, which is what makes `break @outer` from a
     nested loop leave the outer one rather than the nearest. -}
 
-{-| The names a receiver may have its methods written under.
-
-    A value names the variant it is, and an implementation is written for the
-    type that declares the variant, so a `Circle` finds `impl Shaped for Round`
-    only by asking what `Circle` belongs to. The variant's own name comes first
-    because a record type is its own owner and must not be looked past. -}
+{-| Carried sum owners select methods without consulting the short-tag registry.
+    Ownerless host values and legacy named payloads retain registry fallback. -}
 receiverOwners :: Value -> Evaluator [Text]
-receiverOwners value = case receiverOwner value of
-  Nothing -> pure []
-  Just owner -> do
-    declaring <- variantOwner owner
-    pure (owner : maybe [] pure declaring)
+receiverOwners value = case value of
+  SumValue owner _ _ | owner /= "" -> pure [declaredOwner owner]
+  NamedSumValue owner _ _ -> pure [declaredOwner owner]
+  _ -> case receiverOwner value of
+    Nothing -> pure []
+    Just owner -> do
+      declaring <- variantOwner owner
+      let owners = owner : maybe [] pure declaring
+      pure (maybe (map declaredOwner owners) (const owners) (nominalNameOf value))
 
 {-| The first of these names that binds something. -}
 
@@ -358,7 +360,8 @@ firstBound look names = case names of
 receiverOwner :: Value -> Maybe Text
 receiverOwner value = case value of
   RecordValue owner _ -> Just owner
-  VariantValue owner _ -> Just owner
+  NamedSumValue owner _ _ -> Just owner
+  SumValue owner name _ -> Just (if owner == "" then name else owner)
   _ -> nominalNameOf value
 
 {-| Call a value as a function, whether it is a closure or an array method

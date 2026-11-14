@@ -1,0 +1,70 @@
+module Ark.Build
+
+import Ark.Assets.Server as Server
+import Ark.Platform.Pack as Pack
+import Ark.Platform.Vfs as Vfs
+
+/// Why cooking or loading failed.
+export type BuildError = Assets(Server.Error) | Packing(Pack.PackError) | Resources(Vfs.ResourceError) | BadManifest(Str)
+
+/// What cooking produced: the pack and how many asset files it holds.
+export type Cooked = { pack: Bytes, assets: Int }
+
+/// The manifest's path inside every cooked pack.
+const MANIFEST: Str = "manifest.arkm"
+
+/// Validate every declaration by importing it exactly as the runtime will, then pack each
+/// asset's source bytes under its ID with a manifest that re-declares the assets against the pack.
+export fn cook(vfs: Vfs.Vfs, sources: &Array[Server.Source]) -> Result[Cooked, BuildError] {
+  let server = match Server.open(vfs, sources) {
+    case Ok(opened) => opened
+    case Err(problem) => { return Err(Assets(problem)) }
+  }
+  var files: Map[Str, Bytes] = mapOf([])
+  var lines: Array[Str] = []
+  for id in Server.ids(&server) {
+    let Some(entry) = server.entries.get(id) else { return Err(BadManifest(id)) }
+    if !Pack.validPath(id) || id == MANIFEST || !plain(id) { return Err(Packing(Pack.InvalidPath(id))) }
+    for dependency in entry.source.dependencies {
+      if !plain(dependency) { return Err(BadManifest(dependency)) }
+    }
+    files = files.insert(id, entry.bytes)
+    lines = lines.push(id + "\t" + entry.source.importer + "\t" + entry.source.dependencies.join(","))
+  }
+  files = files.insert(MANIFEST, lines.join("\n").toBytes())
+  match Pack.encode(&files) {
+    case Ok(pack) => Ok(Cooked{pack, assets: lines.length()})
+    case Err(problem) => Err(Packing(problem))
+  }
+}
+
+/// Mount a cooked pack under `mount` and open an asset server over its manifest.
+export fn load(vfs: Vfs.Vfs, mount: Str, pack: &Bytes) -> Result[Server.Server, BuildError] {
+  let mounted = match Vfs.mountPack(vfs, mount, pack) {
+    case Ok(found) => found
+    case Err(problem) => { return Err(Resources(problem)) }
+  }
+  let text = match Vfs.read(&mounted, mount + ":/" + MANIFEST) {
+    case Ok(bytes) => bytes
+    case Err(problem) => { return Err(Resources(problem)) }
+  }
+  let Some(manifest) = text.toText() else { return Err(BadManifest("manifest is not UTF-8")) }
+  var sources: Array[Server.Source] = []
+  if manifest != "" {
+    for line in manifest.split("\n") {
+      let fields = line.split("\t")
+      if fields.length() != 3 { return Err(BadManifest(line)) }
+      let dependencies = if fields[2] == "" { [] } else { fields[2].split(",") }
+      sources = sources.push(Server.Source{id: fields[0], path: mount + ":/" + fields[0], importer: fields[1], dependencies})
+    }
+  }
+  match Server.open(mounted, &sources) {
+    case Ok(server) => Ok(server)
+    case Err(problem) => Err(Assets(problem))
+  }
+}
+
+/// Whether a manifest field holds none of the manifest's separators.
+fn plain(field: Str) -> Bool {
+  !field.contains("\t") && !field.contains("\n") && !field.contains(",")
+}

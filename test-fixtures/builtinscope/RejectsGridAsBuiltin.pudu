@@ -1,0 +1,8 @@
+module RejectsGridAsBuiltin
+
+import Grid as Grid
+
+fn main() -> Int {
+  let codes: Map[Str, Int] = Grid.make()
+  0
+}

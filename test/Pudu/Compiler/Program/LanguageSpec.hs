@@ -1,10 +1,13 @@
 {-| @Test.Compiler.Program.LanguageSpec — function literals, ranges, slices, and destructuring bindings -}
 module Pudu.Compiler.Program.LanguageSpec
-  ( testCapturedScope
+  ( testBuiltinOwnerNames
+  , testCapturedScope
+  , testImportedDefaults
   , testDestructuringBindings
   , testFunctionLiterals
   , testLanguageRefusals
   , testRangesAndSlices
+  , testTraitDefaultSelf
   ) where
 
 import qualified Data.Sequence as Seq
@@ -45,6 +48,14 @@ testFunctionLiterals = do
         (asynchronous === Just "42")
     ]
 
+{-| A trait default names its implementing type as `Self`, so passing `Self`
+    on as a type argument selects that type — reached through a witness, a
+    generic implementation or a receiver alike. -}
+testTraitDefaultSelf :: IO Property
+testTraitDefaultSelf = do
+  selected <- runEntry (fixture "DefaultSelf")
+  pure (counterexample "every default selects its implementing type through Self" (selected === Just "6"))
+
 {-| A range is a value, and indexing by one is a slice.
 
     The range fixture walks twenty million values without building them, which
@@ -82,6 +93,21 @@ testRangesAndSlices = do
     narrowing, and a narrowing is only safe if nothing it drops was reachable,
     which is what the fixture checks: every way a literal reaches a name, asked
     after the literal has been carried away from where it was written. -}
+{-| A type declared under a built-in type's name keeps its own methods, and the
+    built-in values keep theirs: by method call, by type- and trait-qualified
+    call, through a generic witness, and for a variant named like one. -}
+testBuiltinOwnerNames :: IO Property
+testBuiltinOwnerNames = do
+  answer <- runEntry (fixture "BuiltinOwnerNames")
+  pure (counterexample "every built-in and declared owner reaches its own method" (answer === Just "9"))
+
+{-| An implementation inherits the defaults of a trait it imports, typed at its
+    own arguments, run in the trait module's scope, and still overridable. -}
+testImportedDefaults :: IO Property
+testImportedDefaults = do
+  answer <- runEntry "test-fixtures/importeddefaults/Main.pudu"
+  pure (counterexample "every imported default answers for the importing type" (answer === Just "6"))
+
 testCapturedScope :: IO Property
 testCapturedScope = do
   answer <- runEntry (fixture "Captures")

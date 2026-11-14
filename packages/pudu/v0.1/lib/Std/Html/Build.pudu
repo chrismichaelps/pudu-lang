@@ -17,9 +17,12 @@ export type Node = { name: Str, attributes: Array[(Str, Str)], children: Array[H
 
 /// The attributes and content a node accepts.
 ///
-/// Common attributes have a method of their own; `at` sets any other.
+/// Common attributes have a method of their own; `at` sets any other. Setting
+/// an attribute a node already has replaces its value where it sits, so a
+/// rendered element never carries the same attribute twice. `class` is the one
+/// exception: repeating it adds a class rather than replacing the earlier ones.
 export trait Building {
-  /// Sets an attribute to a value.
+  /// Sets an attribute to a value, replacing the value it already has.
   fn at(self: &Self, name: Str, value: Str) -> Self
 
   /// Sets a checked attribute, or returns why its name or value was refused.
@@ -28,6 +31,7 @@ export trait Building {
   /// Sets an attribute whose value is its own name, such as `required`.
   fn flag(self: &Self, name: Str) -> Self
 
+  /// Adds a class to the ones already set, separated by a space.
   fn class(self: &Self, value: Str) -> Self
   fn id(self: &Self, value: Str) -> Self
   fn href(self: &Self, value: Str) -> Self
@@ -93,23 +97,52 @@ export trait Building {
   fn html(self: &Self) -> Html.Html
 }
 
+/// Replace an attribute that already has this name where it sits, keeping the
+/// order the reader wrote and dropping every earlier duplicate in favour of
+/// the newest value.
+fn putAttribute(node: &Node, attribute: (Str, Str)) -> Node {
+  var attributes: Array[(Str, Str)] = []
+  var placed = false
+  for pair in node.attributes {
+    if pair[0] == attribute[0] {
+      if !placed {
+        attributes = attributes.push(attribute)
+        placed = true
+      }
+    } else {
+      attributes = attributes.push(pair)
+    }
+  }
+  if !placed { attributes = attributes.push(attribute) }
+  Node{name: node.name, attributes: attributes, children: node.children}
+}
+
+/// The class attribute with the new class added to the classes already set.
+/// Class is the one attribute whose repeated values compose rather than
+/// replace, so `.class("a").class("b")` names both classes once.
+fn mergeClass(node: &Node, value: Str) -> (Str, Str) {
+  var existing = ""
+  for pair in node.attributes {
+    if pair[0] == "class" { existing = pair[1] }
+  }
+  if existing.isEmpty() { ("class", value) }
+    else if value.isEmpty() { ("class", existing) }
+    else { ("class", existing + " " + value) }
+}
+
 impl Building for Node {
   fn at(self: &Self, name: Str, value: Str) -> Self {
-    Node{name: self.name, attributes: self.attributes.push((name, value)), children: self.children}
+    putAttribute(self, (name, value))
   }
 
   fn atChecked(self: &Self, name: Str, value: Str) -> Result[Self, Html.Unsafe] {
     let attribute = Html.attribute(name, value) ?
-    Ok(Node {
-        name: self.name,
-        attributes: self.attributes.push(attribute),
-        children: self.children
-      })
+    Ok(putAttribute(self, attribute))
   }
 
   fn flag(self: &Self, name: Str) -> Self { self.at(name, name) }
 
-  fn class(self: &Self, value: Str) -> Self { self.at("class", value) }
+  fn class(self: &Self, value: Str) -> Self { putAttribute(self, mergeClass(self, value)) }
 
   fn id(self: &Self, value: Str) -> Self { self.at("id", value) }
 

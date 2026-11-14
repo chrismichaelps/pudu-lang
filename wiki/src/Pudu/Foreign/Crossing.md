@@ -101,6 +101,12 @@ foreignRecordFieldLimit :: Int
   liveness leasing on arguments and ownership registration on results. _Rejected:_ recursively
   leasing or claiming fields without a field-level lifetime and release declaration.
 
+## Nested ABI layouts (#863)
+
+Resolved Grill Log: [[Nested Foreign Record Delivery]] preserves the tree
+for libffi layout and keeps value carriers in declaration-order leaves.
+The 32-member limit applies at each record node.
+
 ## Referenced by
 
 [[src/Pudu/_MOC]] · [[ADR-0018 Calling a Library Written Elsewhere]] · [[grammar/pudu]]

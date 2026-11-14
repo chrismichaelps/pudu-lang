@@ -1,0 +1,137 @@
+module UsesStringView
+
+import Std.Iter {Sequence}
+import Std.StringView as StringView
+import Std.StringView {View}
+
+/// "é" is two bytes, "中" three and "😀" four.
+const MIXED: Str = "aé中😀z"
+
+fn sizes() -> Bool {
+  StringView.of("").size() == 0
+    && StringView.of("").isEmpty()
+    && StringView.of("abc").size() == 3
+    && StringView.of(MIXED).size() == 11
+    && StringView.of(MIXED).toText() == MIXED
+    && MIXED.length() == 5
+}
+
+fn slicing() -> Option[Bool] {
+  let line = StringView.of("key=value")
+  let key = line.substr(0, 3) ?
+  let value = line.removePrefix(4) ?
+  let trimmed = line.removeSuffix(6) ?
+  let clamped = line.substr(4, 100) ?
+  let whole = line.substr(0, 9) ?
+  let none = line.substr(9, 3) ?
+  Some(
+    key.toText() == "key" && value.toText() == "value" && trimmed.toText() == "key"
+      && clamped.toText() == "value" && whole == line && none.isEmpty(),
+  )
+}
+
+/// An offset inside a scalar is refused, never moved.
+fn boundaries() -> Bool {
+  let text = StringView.of(MIXED)
+  text.substr(2, 1) == None
+    && text.substr(1, 1) == None
+    && text.substr(1, 2) != None
+    && text.substr(3, 3) != None
+    && text.substr(4, 2) == None
+    && text.substr(6, 4) != None
+    && text.substr(7, 4) == None
+    && text.removePrefix(2) == None
+    && text.removeSuffix(2) == None
+    && text.removeSuffix(1) != None
+    && text.substr(-1, 2) == None
+    && text.substr(0, -1) == None
+    && text.substr(12, 0) == None
+    && text.removePrefix(12) == None
+}
+
+fn searching() -> Bool {
+  let list = StringView.of("a,b,,c,")
+  list.find(",", 0) == Some(1)
+    && list.find(",", 2) == Some(3)
+    && list.find(",", 7) == None
+    && list.find(",", 8) == None
+    && list.find(",", -1) == None
+    && list.find("", 4) == Some(4)
+    && list.find("", 7) == Some(7)
+    && list.findLast(",") == Some(6)
+    && StringView.of("aaa").findLast("aa") == Some(1)
+    && StringView.of("aaa").findLast("") == Some(3)
+    && StringView.of("abc").findLast("x") == None
+    && StringView.of(MIXED).find("中", 0) == Some(3)
+    && StringView.of(MIXED).find("中", 4) == None
+    && StringView.of(MIXED).findLast("z") == Some(10)
+    && list.contains(",,") && !list.contains(";")
+    && list.startsWith("a,") && list.endsWith(",") && !list.startsWith("b")
+}
+
+fn scalars() -> Bool {
+  let text: StringView.StringView = StringView.of(MIXED)
+  let walk: StringView.Scalars = text.scalars()
+  walk.count() == 5 && text.scalarAt(0) == Some(('a', 1))
+    && text.scalarAt(1) == Some(('é', 2))
+    && text.scalarAt(2) == None
+    && text.scalarAt(3) == Some(('中', 3))
+    && text.scalarAt(6) == Some(('😀', 4))
+    && text.scalarAt(11) == None
+    && text.scalarAt(-1) == None
+    && text.front() == Some('a')
+    && text.back() == Some('z')
+    && StringView.of("中").back() == Some('中')
+    && StringView.of("").front() == None
+    && StringView.of("").back() == None
+    && text.scalars().toArray() == ['a', 'é', '中', '😀', 'z']
+    && text.scalars().count() == 5
+}
+
+fn splitting() -> Option[Bool] {
+  let split: StringView.Pieces = StringView.of("a,b,,c,").split(",")
+  let pieces = split.map(|piece| piece.toText()).toArray()
+  let (left, right) = StringView.of("k=v=w").splitOnce("=") ?
+  Some(
+    pieces == ["a", "b", "", "c", ""]
+      && left.toText() == "k" && right.toText() == "v=w"
+      && StringView.of("kv").splitOnce("=") == None
+      && StringView.of("").split(",").map(|piece| piece.toText()).toArray() == [""]
+      && StringView.of("abc").split("").count() == 1
+      && StringView.of("x--y").split("--").map(|piece| piece.size()).toArray() == [1, 1]
+      && StringView.of("é,中").split(",").map(|piece| piece.toText()).toArray() == ["é", "中"],
+  )
+}
+
+/// Text built by `+` reads the same as text written whole.
+fn builtText() -> Option[Bool] {
+  var built = ""
+  for word in ["al", "pha", "-", "βeta"] { built = built + word }
+  let view = StringView.of(built)
+  let (first, second) = view.splitOnce("-") ?
+  Some(view.size() == 11 && first.toText() == "alpha" && second.toText() == "βeta" && second.front() == Some('β'))
+}
+
+fn trimming() -> Bool {
+  StringView.of("  padded \n").trim().toText() == "padded"
+    && StringView.of("   ").trim().isEmpty()
+    && StringView.of("x").trim().toText() == "x"
+}
+
+export fn main() -> Int {
+  let checks = [
+    sizes(),
+    slicing() == Some(true),
+    boundaries(),
+    searching(),
+    scalars(),
+    splitting() == Some(true),
+    builtText() == Some(true),
+    trimming(),
+  ]
+  var held = 0
+  for passed in checks {
+    if passed { held = held + 1 }
+  }
+  held
+}

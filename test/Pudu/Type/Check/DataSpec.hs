@@ -345,6 +345,11 @@ testNamedVariants = do
     ]
   calledBare <- codes (shape <> ["fn run() -> Shape { Circle(5) }"])
   calledQualified <- codes (shape <> ["fn run() -> Shape { Shape.Circle(5) }"])
+  let positionalShape = ["module M", "type Figure = Round(Int) | Spot"]
+  qualifiedCall <- codes (positionalShape <> ["fn run() -> Figure { Figure.Round(5) }"])
+  qualifiedCallMismatch <- codes (positionalShape <> ["fn run() -> Int { Figure.Round(5) }"])
+  qualifiedUnitMismatch <- codes (positionalShape <> ["fn run() -> Str { Figure.Spot }"])
+  qualifiedValueMismatch <- codes (positionalShape <> ["fn run() -> Int {", "  let make = Figure.Round", "  make(1)", "}"])
   unapplied <- codes (shape <>
     [ "fn run() -> Int {"
     , "  var make = Circle"
@@ -382,6 +387,11 @@ testNamedVariants = do
     , counterexample "a named variant is not called" (calledBare === ["E3034"])
     , counterexample "a named variant is not called through its type"
         (calledQualified === ["E3034"])
+    , counterexample "a positional variant may be qualified by its type" (qualifiedCall === [])
+    , counterexample "a variant qualified by its type is that type, so a call is checked"
+        (qualifiedCallMismatch === ["E3001"])
+    , counterexample "and so is a unit variant" (qualifiedUnitMismatch === ["E3001"])
+    , counterexample "and so is the constructor as a value" (qualifiedValueMismatch === ["E3001"])
     , counterexample "a named variant is not a value" (unapplied === ["E3034"])
     , counterexample "a named variant is not matched by position"
         (matchedByPosition === ["E3034", "E3034"])
@@ -421,6 +431,11 @@ testPreludeData = do
     [ "module M"
     , "fn run(value: Int) -> Int { Int.toInt32(value) }"
     ]
+  localResult <- compile $ Text.unlines
+    [ "module M"
+    , "type Result[T, E] = | Ok(T) | Err(E)"
+    , "fn run() -> Result[Int, Str] { Result.Missing(1) }"
+    ]
   let helpsOf compiled = map diagnosticHelp (compileDiagnostics compiled)
   pure $ conjoin
     [ counterexample "Some builds an Option" (option === "Option[Int]")
@@ -435,6 +450,9 @@ testPreludeData = do
         ( helpsOf unimported
             === [Just "Std.Result is a module; to call its functions, import it under this name: import Std.Result as Result"]
         )
+    , counterexample "a local Result sum keeps its variant help"
+        (conjoin [codesOf localResult === ["E3034"],
+          helpsOf localResult === [Just "check the variant name against the type declaration"]])
     , counterexample "a type with no module keeps the variant help"
         ( helpsOf throughType
             === [ Just

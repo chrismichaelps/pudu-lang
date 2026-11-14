@@ -1,0 +1,39 @@
+module ReleasesConcurrent
+
+import Std.Concurrent as Concurrent
+
+fn increment(value: Int) -> Int {
+  if value == 3 { panic("three") }
+  value + 1
+}
+
+fn round(path: Str) {
+  if path == "ok" {
+    let Ok(mapped) = Concurrent.mapBounded(&[1, 2, 3, 4], 4, |value| value * 2) else { panic("map") }
+    if mapped != [2, 4, 6, 8] { panic("order") }
+  } else if path == "fail" {
+    match Concurrent.mapBounded(&[1, 2, 3, 4], 4, increment) {
+      case Err(Concurrent.Failed(_)) => {}
+      case _ => panic("a panicking transform must fail the map")
+    }
+  } else if path == "parallel" {
+    let Ok(_) = Concurrent.parallel(&[|| {}, || {}, || {}, || {}]) else { panic("parallel") }
+  } else {
+    panic("the path is ok, fail or parallel")
+  }
+}
+
+/// Run the selected path for the given number of rounds.
+export fn main() -> Int {
+  let options = arguments()
+  if options.length() < 2 { panic("give a path and a round count") }
+  let path = options[options.length() - 2]
+  let Some(rounds) = options[options.length() - 1].toInt() else { panic("the round count is a whole number") }
+  var done = 0
+  while done < rounds {
+    round(path)
+    done = done + 1
+  }
+  print("rounds " + show(done))
+  0
+}
