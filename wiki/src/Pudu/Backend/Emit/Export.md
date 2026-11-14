@@ -35,9 +35,10 @@ export keys from [[Core Frame IR]].
 - An argument converts with `fromAbi` straight into a stack array of cells; the
   result converts with `toAbi`. Nothing is looked up, boxed, or allocated per
   call beyond the frame every call already takes.
-- The call pushes the function's frame with `pudu_new_frame` and runs it with
-  `pudu_run_active`, exactly as a call inside the program does, under the same
-  cleanup and blame hooks.
+- A direct export calls `pudu_direct_<n>` with its converted arguments, so a host call
+  costs the admission checks and one C call. Any other export pushes its frame with
+  `pudu_new_frame` and runs it with `pudu_run_active`, under the same cleanup and blame
+  hooks.
 - `pudu_export_enter` admits the call only after `pudu_program_run` has
   returned, only on the thread that ran it, and never while Pudu is already
   running a call. A violation writes one line naming the export to standard
@@ -72,9 +73,9 @@ embedded form only; the prototypes reach [[Backend Toolchain Library]] through
   state another thread owns. _Rejected:_ undefined behavior, and a hidden lock
   that would serialize host threads.
 - **Q:** Why reuse the frame engine instead of emitting a plain C body? **A:**
-  The frame path is the native reference for every call: ownership, depth
-  accounting and failure reporting already hold there. A frameless leaf path
-  is a later optimization gated on a measured `-O2` comparison on device.
+  The frame layout and its ownership, depth and failure rules are the reference;
+  a direct export keeps that layout on the C stack ([[Backend Frame Direct]]) and
+  only removes the allocation and dispatch.
 - **Q:** Why require the start first? **A:** `pudu_program_run` prepares the
   process state once; an export before it would either run without that state
   or prepare it a second time. _Rejected:_ lazy preparation inside every

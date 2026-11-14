@@ -5,6 +5,14 @@ tags: [changelog]
 
 # Changelog
 
+## 2026-11-14 — Native direct calls (#904)
+
+- Native direct calls: functions with bounded call depth run in frames on the C stack, keep unowned slots in C locals, and are called as plain C functions from heap bodies, direct bodies and exports; a non-recursive scalar call measured about 14 ns against about 57 ns on heap frames ([[Native Direct Calls Delivery]]). Leaving a stack frame releases its slots without reaching the allocator, which keeps GCC's strict build free of free-nonheap-object warnings.
+
+## 2026-11-14 — Direct-call design proposed (#904)
+
+- Proposed ADR-0031 (compiled native execution) and the direct-call design: functions with bounded call depth run in frames on the C stack, called as plain C functions. See [[ADR-0031-compiled-native-execution]] and [[Backend Frame Direct]].
+
 ## 2026-11-14 — Exported functions callable from C (#899)
 
 - [[Backend Emit Export]] emits `pudu_export_<name>` for each exported root-module function with scalar crossings, declared in `pudu_program.h`; [[Compiler Lower]] roots exports in library builds. Calls are admitted after the start, on its thread, outside another call. Evidence: [[Backend Export Tests]].
