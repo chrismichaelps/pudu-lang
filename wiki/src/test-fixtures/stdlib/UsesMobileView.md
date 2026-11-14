@@ -18,7 +18,7 @@ Checks:
 - Rows, fields, toggles and names: the mount words of a tree with a row, a field, a toggle and a named control, in order.
 - In-place changes of a tree of one shape: a changed field text, placeholder, toggle title, toggle state and accessible name each produce exactly one instruction, with its code word and bytes.
 - Shape changes are precise replacements. A shorter column removes its tail. A retagged button is built, inserted at its index, and the old one removed. A retagged root is shown with ROOT, and the old root removed. A variant change follows the same replacement.
-- Keyed rows: a reorder is one MOVE; an insertion is one built row inserted at its index; a removal frees its id; the freed id is reused by the next built row; an unchanged list writes nothing.
+- Keyed rows: a reorder is one MOVE; an insertion is one built row inserted at its index; a removal frees its id; the freed id is reused by the next built row; an unchanged list with unique keys writes nothing. Repeated keys preserve the first row, replace the additional rows, and remove their old ids. Reducing the list to one occurrence frees the remaining duplicate id and a subsequent unchanged update emits no instructions.
 - Event decoding: `event` of kind 1 with tag 7 is `Tapped(7)`; kind 2 is `Stopped`; kind 3 with a text is `Changed(tag, text)`; kinds 4 and 5 are `Toggled(tag, true)` and `Toggled(tag, false)`; kind 9 reads as `Stopped`. `carriesText` is true only for kind 3.
 
 ## Invariants
@@ -39,6 +39,8 @@ Depends on [[Std Mobile View]]. Its counter view matches [[Native Counter Exampl
 ## Resolved Grill Log
 
 - **Q:** Check the stream as bytes or as a summary? **A:** As words and bytes, because the host decodes the words; a summary such as "contains a TEXT" would pass a wrong length. _Rejected:_ golden snapshots, which would hide a semantic change behind an update.
+
+- **Q:** Check only the returned tree for duplicate keys? **A:** Check the exact REMOVE instructions and recycled ids as well. The tree can be correct while an obsolete row is still visible on the host.
 
 ## Referenced by
 

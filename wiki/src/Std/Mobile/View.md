@@ -32,7 +32,7 @@ Exports:
 - A node keeping its variant and tag updates in place: TEXT for label and button titles and field text, HINT for a field's placeholder, STATE for a toggle's state, NAME for an accessible name.
 - A node changing its variant or tag is replaced: its new subtree is built, inserted at its index, and the old subtree removed. The root is replaced with ROOT, then the old root is removed.
 - Positional groups update their common children pairwise, append extra children, and remove missing ones.
-- Keyed rows are matched by key. Rows whose key is gone are removed. Each wanted row is then updated in place; it is moved to its index only when its position differs, or built and inserted there. A key repeated within one list builds a new row.
+- Keyed rows are matched by key. Rows whose key is gone are removed. Each wanted row is then updated in place; it is moved to its index only when its position differs, or built and inserted there. Only the first occurrence of a key can retain an old row. Later occurrences build fresh rows. After placing the new rows, any unclaimed old duplicates are removed and their subtree ids recycled.
 - Removed ids go to `free` and are handed out again first, so the host's node table stays as large as the screen, not as large as every row ever shown.
 - Events are unchanged: `event` reads the kind from the high 32 bits. Kind 1 is `Tapped` with the tag in the low 32 bits; kind 3 is `Changed` with the tag and the fetched text; kind 4 is `Toggled` on and kind 5 is `Toggled` off, both with the tag; kind 2 is `Stopped`. Decoding goes through the constant table `EVENTS`, so an unknown kind reads as `Stopped`.
 - `carriesText` is true only for kind 3.
@@ -55,6 +55,7 @@ Depends on [[Std Mobile Stream]] for the instruction words. Consumers: [[Std Mob
 
 - **Q:** Why stable ids instead of positions? **A:** Positions change under insertion, which would rebuild everything after it. _Rejected:_ positional ids with keys only as hints.
 - **Q:** Why move only when the position differs? **A:** An unchanged order writes nothing; a reorder writes one MOVE per displaced row. _Rejected:_ moving every keyed row on each update.
+- **Q:** What happens to old duplicate rows after a keyed update? **A:** The placed prefix is the complete new list. Remove the remaining suffix, which contains only unclaimed old duplicates, so no visible row lives outside the mounted tree. _Rejected:_ retaining old rows solely because their key still exists.
 - **Q:** Why recycle ids? **A:** The host's node table stays as large as the screen, not as large as every row ever shown.
 - **Q:** Why a table of constructors for events? **A:** Kinds dispatch through tables in this project; adding an event kind is one entry. _Rejected:_ a guard per kind.
 
