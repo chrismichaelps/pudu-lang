@@ -9,6 +9,10 @@ aliases: [Native Keyed Lists Delivery]
 
 Language Architect → Backend Engineer. Phase 2 of [[Pudu Native]]: keyed lists and a reconciler with stable node ids. Backend Engineer → Forensic Guardian review covers [[Std Mobile View]], [[Std Mobile Stream]] and [[iOS Host Adapter]].
 
+## Ownership
+
+Backend Engineer owns duplicate-key reconciliation in [[Std Mobile View]] and the exact-stream regression in [[Uses Mobile View]]. Independent review of the follow-up is pending.
+
 ## Scope
 
 The mounted tree of [[Std Mobile View]] keeps stable node ids handed out by the program and recycled after REMOVE. Keyed rows are reconciled by key into INSERT, REMOVE and MOVE instructions. [[Std Mobile Stream]] encodes the instructions. The example [[Native List Example]] exercises them.
@@ -19,7 +23,7 @@ A simulator run typed Milk and pressed Add then Reverse three times: the screen 
 
 ## Exact next action
 
-Realize a keyed list as the platform's recycling list (rows built on demand from stored row descriptions), then compiled views (ADR-0031 section 2).
+After keyed-list and simulator-app integration, implement scrolling, safe areas and keyboard avoidance as the first slice of [[Pudu Native iOS UI]].
 
 ## Referenced by
 

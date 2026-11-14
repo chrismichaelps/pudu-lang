@@ -19,7 +19,7 @@ Language Architect → Backend Engineer. Phase 3 of [[Pudu Native]]: `pudu build
 
 ## Exact next action
 
-Typed application configuration (name, identifier, version, orientations) read from pudu.toml, then signed device builds.
+After PRs #915 and #918 land, implement the scrolling, safe-area and keyboard-avoidance slice in #919, starting with [[Std Mobile View]] and [[iOS Host Adapter]].
 
 ## Referenced by
 

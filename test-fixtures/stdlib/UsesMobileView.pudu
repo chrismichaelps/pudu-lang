@@ -38,6 +38,23 @@ fn changed(shown: &View.View, next: &View.View) -> Array[UInt8] {
 
 fn row(key: Str) -> (Str, View.View) { (key, View.Label(key)) }
 
+fn duplicatesRetired() -> Bool {
+  let repeated = View.Keyed([row("aa"), row("aa")])
+  let (mounted, _) = View.mount(&repeated)
+  let (updated, rebuilt) = View.update(&mounted, &repeated)
+  let single = View.Keyed([row("aa")])
+  let (shrunk, removed) = View.update(&updated, &single)
+  let (_, still) = View.update(&shrunk, &single)
+  rebuilt.length() == 58
+    && wordsAt(&rebuilt.toArray(), 26, 8) == [10u32, 0u32, 3u32, 1u32, 11u32, 2u32, 1u32, 2u32]
+    && updated.free == [2u32]
+    && removed.length() == 16
+    && wordsAt(&removed.toArray(), 0, 4) == [11u32, 3u32, 1u32, 3u32]
+    && shrunk.free == [2u32, 3u32]
+    && shrunk.root.children[0].id == 1u32
+    && still.length() == 0
+}
+
 export fn main() -> Int {
   var held = 0
   let zero = counter(0)
@@ -113,8 +130,8 @@ export fn main() -> Int {
   if wordsAt(&dropped.toArray(), 0, 4) == [11u32, 4u32, 1u32, 4u32] && shrunk.free == [4u32] { held = held + 1 }
   let (_, reused) = View.update(&shrunk, &View.Keyed([row("cc"), row("aa"), row("bb"), row("yy")]))
   if wordsAt(&reused.toArray(), 0, 3) == [1u32, 4u32, 1u32] && wordsAt(&reused.toArray(), 26, 4) == [10u32, 0u32, 4u32, 3u32] { held = held + 1 }
-  // An unchanged keyed list writes nothing.
+  // Unique keys are a no-op when unchanged. Old repeated rows must be retired.
   let (_, still) = View.update(&shrunk, &View.Keyed([row("cc"), row("aa"), row("bb")]))
-  if still.length() == 0 { held = held + 1 }
+  if still.length() == 0 && duplicatesRetired() { held = held + 1 }
   held
 }

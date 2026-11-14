@@ -212,6 +212,10 @@ fn keyed(work: Work, parent: &Shown, before: &Array[(Str, View)], after: &Array[
     }
     seen = seen.insert(key)
   }
+  // Unclaimed old duplicates remain after the prefix placed in new order.
+  for index in placed.length()..current.length() {
+    out = removed(out, &current[index][1])
+  }
   (out, placed)
 }
 
