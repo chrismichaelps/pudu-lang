@@ -55,8 +55,15 @@ formatInstant pattern milliseconds zone = do
 parseInstant :: Text -> Text -> Either Text Integer
 parseInstant pattern text =
   case parseTimeM True defaultTimeLocale (Text.unpack pattern) (Text.unpack text) of
-    Nothing -> Left ("the text does not fit the pattern " <> pattern)
-    Just parsed -> Right (round (utcTimeToPOSIXSeconds (parsed :: UTCTime) * 1000))
+    Just parsed
+      | let instant = round (utcTimeToPOSIXSeconds (parsed :: UTCTime) * 1000)
+      , abs instant < instantLimit -> Right instant
+    _ -> Left ("the text does not fit the pattern " <> pattern)
+
+{-| One past the largest millisecond magnitude an `Int` carries: an instant
+    at or beyond it does not fit, as a written field too large to read. -}
+instantLimit :: Integer
+instantLimit = 2 ^ (64 :: Int)
 
 {-| The offset a zone name asks for, in minutes east of UTC.
 

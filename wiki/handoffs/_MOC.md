@@ -5,6 +5,36 @@ tags: [moc, handoff]
 
 # Handoff Map
 
+- [[Foreign Pointer Delivery]] — typed foreign crossings and bounds (#877).
+- [[Foreign Callback Delivery]] — callbacks into Pudu across foreign calls (#875 decided, #876 next).
+- [[Native Mobile Targets Delivery]] — iOS static libraries and simulator evidence (#878).
+
+- [[Native Audio Adapter Delivery]] — AudioToolbox playback and streams (#857).
+
+- [[Native Desktop Adapter Delivery]] — source packaging and desktop builtins (#856).
+
+- [[Nested Foreign Record Delivery]] — interpreter ABI layout for nested records (#863).
+
+- [[Native Foreign Slot Delivery]] — output slots and mutable loans (#854).
+
+- [[Native Foreign Handles Delivery]] — opaque handles and ownership in native calls (#853).
+
+- [[Call Order Repair Delivery]] — #828 normative callee and receiver evaluation order.
+
+- [[Native Word Map Query Delivery]] — #814 remaining sparse-word queries.
+
+- [[Native Inherited Defaults Delivery]] — #824 trait body scopes and parameter bindings.
+
+- [[Native Linux Output Gate Delivery]] — #811 measured descriptor readiness and bounded full-suite CI.
+- [[Native Word Map Algebra Delivery]] — #810 accelerated sparse-word algebra.
+- [[Native Frozen Collection Delivery]] — #808 compiler-folded arrays, maps, sets and ranges.
+- [[Native Decimal Callable Delivery]] — #806 first-class Decimal primitives after native stack consolidation.
+
+- [[Native Unsigned Integer Delivery]] — UInt and fixed unsigned native admission (#500).
+
+- [[Native Signed Integer Delivery]] — fixed signed widths on the exact native carrier (#497).
+
+- [[Native C11 Backend Delivery]] — native C11 backend, loop control and unit-result conformance (#486, #488–#490).
 - [[Bound Provider Delivery]] — selected trait evidence through execution (#743).
 
 - [[Lane Collection Delivery]] — issue #726 lane buffers share collections so threads overlap.
@@ -211,6 +241,8 @@ tags: [moc, handoff]
 - [[2026-09-30-compiled-evaluation-plan]] — compiled function bodies, Plan A done; slot frames next.
 - [[2026-09-30-std-layer-sweep]] — Std defects found layer by layer through the import graph (#395–#420).
 - [[2026-09-16-playground-editor]] — website playground editor, language-server repair, and confined runs.
+- [[Native Trait Method Delivery]] — #551 trait methods, complete.
+- [[Native Generic Delivery]] — #552 generics, active.
 
 - [[Desktop Presentation Delivery]] — issue #724 native frame orientation repair.
 - [[Ark Ground Delivery]] — issue #722 gravity-relative support and settlement.
@@ -230,6 +262,100 @@ tags: [moc, handoff]
 
 - [[Graph Integration Delivery]] — preserve both Database safeguards and exact graph output (#478).
 
+- [[Std Views Delivery]] — non-owning views, offset allocators and a chainable Std.Iter (#527).
+- [[Native Wide Value Publication]] — exact wide-carrier dependency partition.
+- [[Native Word128 Publication]] — independent dev-based kernel partition.
+- [[Native Diagnostic Contracts Delivery]] — independent dev-based diagnostic partition (#486).
+- [[Native Core Contracts Delivery]] — first dev-based native review partition (#486).
+- [[Backend Performance Delivery]] — measured runtime layers, release size and conditional dev integration (#483).
+
+- [[Native Frame Pressure Repair]] — active native recursion-frame parity repair (#499); the 100% emission goal remains open.
+
+- [[Native Wide Integer Delivery]] — portable 128-bit runtime prerequisite (#501).
+
+- [[Native Wide Operation Delivery]] — active portable typed arithmetic delivery (#503).
+
+- [[Native Wide Runtime Delivery]] — active real-runtime integration (#504).
+
+- [[Native Closed Pipe Delivery]] — active P1 output/startup repair (#505).
+
+- [[Native Wide Frame Delivery]] — 128-bit frame bridge after process-policy repair (#506).
+
+- [[Native Wide Source Delivery]] — source admission after wide-frame validation (#507).
+
+- [[Native Floating Natural Delivery]] — checked formatter scratch (#508).
+
+- [[Native Floating Notice Delivery]] — archive/notice partition (#509).
+
+- [[Native Binary64 Formatter Delivery]] — exact raw-bit formatter and distribution notices (#509).
+
+- [[Native Floating Value Delivery]] — floating runtime prerequisite (#510).
+
+- [[Native Floating Runtime Delivery]] — actual output/dependency integration (#511).
+
+- [[Native Floating Source Delivery]] — Float32/Float64 source admission and Bool/Float entries (#512).
+
+- [[Native Builtin Shadowing Repair]] — native calls respect shadowed print/display (#513).
+
+- [[Native Owned Text Delivery]] — owned Str values through native frames (#515).
+
+- [[Native Text Method Delivery]] — Str methods with Int/Bool/Str results (#516).
+
+- [[Native Text Case Delivery]] — native trim and case mapping (#517).
+
+- [[Native Char Delivery]] — native Char values and charAt (#518).
+
+- [[Native Tuple Delivery]] — boxed native tuples (#521).
+
+- [[Record Field Order Repair]] — records hold their declared field order (#519).
+
+- [[Total Float Order Repair]] — NaN keeps the value order total (#522).
+
+- [[Native Sum Delivery]] — sums, Option/Result and match in native frames (#525).
+
+- [[Native Refutable Binding Delivery]] — active native let … else delivery (#541).
+
+- [[Native Folded Constant Delivery]] — active compiler-folded native constant delivery (#543).
+
+- [[Native Shared Reference Delivery]] — active shared-carrier source admission (#544).
+- [[Native Array Pattern Delivery]] — #558 sortBy, sequence patterns and range slices, done.
+
+- [[Native Bytes Delivery]] — completion and focused boundary verification (#565).
+
+- [[Native Output Delivery]] — Result-valued output and failed-handle parity (#566).
+
+- [[Native Expression Body Delivery]] — named expression-body completion (#567).
+
+- [[Native Named Callable Delivery]] — callable dispatch parity (#568).
+
+- [[Native Output Callable Delivery]] — first-class output builtin parity (#569).
+
+- [[Native Diagnostic Ownership Delivery]] — counted diagnostic payload lifetimes (#570).
+
+- [[Native Rendering Callable Delivery]] — rendering intrinsic implementation and evidence.
+
+- [[Native Collection Callable Delivery]] — collection builtin values and caller-site refusals (#631).
+
+- [[Native Stopping Builtin Delivery]] — panic and untyped convertInteger (#633).
+
+- [[Native Suite Repair Delivery]] — frame-body and float runtime suite repairs (#636).
+
+- [[Native Default Parameter Delivery]] — default parameter values (#638).
+
+- [[Native Qualified Value Delivery]] — module-qualified function values (#641).
+
+- [[Native Method Value Delivery]] — built-in method values (#644).
+
+- [[Native Trait Method Value Delivery]] — trait methods as values (#646).
+
+- [[Native Place Assignment Delivery]] — element assignment and the lowering loop fix (#649).
+- [[Native Mutable Loans Delivery]] — `&mut` parameters with writeback (#651).
+- [[Native Method Loans Delivery]] — `&mut self` and method loans (#790).
+- [[Native Blame Hook Delivery]] — the blame hook in its own runtime part (#791).
+- [[Native Value Loans Delivery]] — loans through function values, lambdas and method values (#794).
+- [[Native Dev Sync Delivery]] — the native stack on dev's checker and evaluator (#798).
+- [[Native BigInt Delivery]] — BigInt values (#800).
+- [[Native Decimal Delivery]] — Decimal values (#802).
 - [[Binary Codec Delivery]] — issue #739 native wire codec partition.
 - [[Trait Provider Delivery]] — issue #742 canonical trait-provider scheme selection.
 
@@ -268,3 +394,11 @@ tags: [moc, handoff]
 - [[Builtin Scope Delivery]] — resumed #759 scope isolation; [[Builtin Scope Grid]], [[Builtin Scope Main]], [[Builtin Scope Reverse]], [[Builtin Scope Selected]], [[Builtin Scope Refusal]], [[Builtin Scope Table]].
 
 - [[Bound Receiver Evidence Delivery]] — complete selected bound and receiver facts for #735.
+
+- [[Native Text View Delivery]] — native byte primitives and source-compatible views.
+
+- [[Native Indexed Store Delivery]] — native `Buckets[V]`, hashing and MultiMap primitives (#840).
+
+- [[handoffs/2026-11-10-native-kernels]]
+
+- [[handoffs/2026-11-11-native-remaining-emission]] — native tasks, host services and type abstractions (#846).

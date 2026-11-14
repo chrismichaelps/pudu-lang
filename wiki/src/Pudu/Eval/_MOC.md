@@ -67,6 +67,7 @@ Dependency direction: Builtin Definition → Value → Env → Operator/Match/Ar
 
 - [[Eval Test Coordinator]] — executable registration of evaluator regression properties.
 - [[Eval Binding Flow Tests]] — lexical order, branches, transfers and pure loop semantics.
+- [[Eval If Unit Tests]] — no-else unit production, contextual checking, folding and boxed kernel admission.
 
 - [[Runtime Series Map]] — pure numeric occurrence storage beneath Value/MultiMap.
 
@@ -80,6 +81,7 @@ Dependency direction: Builtin Definition → Value → Env → Operator/Match/Ar
 
 - [[Eval Loop Kernel]] — complete pure regions, proven MultiMap calls and closed module functions.
 - [[Eval Loop Step]] · [[Eval Loop Step Tests]] — strict unboxed region outcomes, structured refusal/transfer and scratch cleanup.
+- [[Eval Loop Unboxed]] — machine-word integer fast path for proven kernel regions, exact refusal parity with the boxed kernel.
 
 - [[Eval Call Argument]] — argument values and receiver lending places.
 - [[Eval Call Needs]] — evaluator callbacks shared by call dispatch and argument discovery.
@@ -93,3 +95,4 @@ Dependency direction: Builtin Definition → Value → Env → Operator/Match/Ar
 - [[Eval Record Construction]] — shared canonical construction and named field storage order.
 
 - [[Runtime Witness Selection Delivery]] · [[Runtime Implementation Head]] · [[Eval Type Witness]] — structural implementation parameter binding (#735).
+- [[Eval Declared Owner]] — method keys that keep a declared type named like a built-in apart from it (#529).

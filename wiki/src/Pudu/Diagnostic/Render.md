@@ -25,10 +25,23 @@ Turn an opaque [[Diagnostic Model]] value into the text a person reads: a severi
 
 ```haskell
 data RenderStyle = PlainStyle | ColorStyle
+data Excerpt = Excerpt
+  { excerptLineText :: !Text
+  , excerptIndent :: !Int
+  , excerptWidth :: !Int
+  , excerptMultiline :: !Bool
+  }
 renderDiagnostic :: RenderStyle -> Source -> Diagnostic -> Text
 renderDiagnostics :: RenderStyle -> Source -> [Diagnostic] -> Text
 renderSummary :: [Diagnostic] -> Text
+excerptGeometry :: Source -> Span -> Maybe Excerpt
 ```
+
+`excerptGeometry` is the excerpt arithmetic — the expanded line, the caret's
+indent and width, and whether the span continues — exported so [[Backend
+Emit]] bakes exactly the interpreter's geometry into native diagnostic sites
+instead of re-deriving it. `renderExcerpt` itself is that function plus the
+gutter and paint.
 
 ### Governance
 
@@ -43,7 +56,7 @@ renderSummary :: [Diagnostic] -> Text
 ### Linkage
 
 - **Requires:** [[Diagnostic Model]], [[Source]].
-- **Consumed by:** the `pudu` executable and [[Pudu REPL]].
+- **Consumed by:** the `pudu` executable, [[Pudu REPL]], and [[Backend Emit]] (excerpt geometry only).
 
 ## Algorithm
 
@@ -67,6 +80,7 @@ DEPTH 0.55 (MEDIUM). It hides position resolution, line slicing, caret arithmeti
 - **Q:** Should rendering detect a terminal and choose colour itself? **A:** No; the style is a parameter. _Rationale:_ a pure renderer is testable byte for byte, and only the entry point knows whether output is a terminal, a pipe, or a file. _Rejected:_ ambient terminal detection inside the renderer.
 - **Q:** What happens when the span is from another snapshot? **A:** Render without the excerpt. _Rationale:_ quoting text from a different snapshot would be a confidently wrong excerpt. _Rejected:_ silently rendering the wrong line; dropping the diagnostic.
 - **Q:** Should long lines be truncated around the caret? **A:** Not yet. _Rationale:_ truncation logic that hides the caret is worse than a long line, and the trade-off deserves its own decision once real programs exist. _Rejected:_ fixed-width windowing now.
+- **Q:** Why export the excerpt arithmetic instead of letting the backend recompute it? **A:** Native refusals print the interpreter's excerpt in C, and two implementations of tab expansion and caret width would drift silently; one exported geometry keeps them equal by construction. _Rejected:_ a second copy in [[Backend Emit]].
 
 ## Referenced by
 

@@ -47,6 +47,7 @@ tags: [moc, module]
 - [[Type Check Safety]] — compile-time purity and unsafe capabilities, the two transitive checks of what a body may reach.
 - [[Type Check Iteration]] — what a `for` loop's binder takes, from the value beside it.
 - [[Type Check Method]] — trait and implementation methods, `Self`, and inherited defaults.
+- [[Type Check Inherit]] — which defaults an implementation inherits, `Self`'s arguments, and renaming a default's parameters apart.
 - [[Type Check Import]] — body-free canonical interface installation and trait-scope filtering.
 - [[Type Check Prelude]] — wired-in constructors and the signatures of runtime-provided effects.
 - [[Type Check Coherence]] — nominal orphan ownership plus qualified, alpha-normalized duplicate checks over implementation syntax.
@@ -67,6 +68,7 @@ only complete head matching and discharged premises establish evidence.
 
 [[src/Pudu/_MOC]] · [[Semantics]] · [[Pudu Type]]
 
+- [[Type Check Pattern Spec]] — alternative binding type agreement (#542).
 - [[Type Check Qualified]] — shared concrete and legacy type-qualified method schemes.
 
 - [[Method Binding]] — formed provider registration and shared-slot ambiguity.

@@ -1,0 +1,80 @@
+module Std.StringView.Search
+
+import Std.Iter {Sequence}
+
+/// Lexicographic UTF-8 byte order, reported as -1, 0 or 1.
+export fn compare(left: Str, right: Str) -> Int {
+  if left < right { -1 } else { if left > right { 1 } else { 0 } }
+}
+
+/// The last occurrence starting at or before from. Negative positions refuse.
+export fn findLastFrom(text: Str, needle: Str, from: Int) -> Option[Int] {
+  if from < 0 { return None }
+  let size = textByteSize(text)
+  let width = textByteSize(needle)
+  if width == 0 { return Some(if from > size { size } else { from }) }
+  if width > size { return None }
+  let start = if from > size - width { size - width } else { from }
+  var end = start + width
+  loop {
+    // A valid needle can end only at a scalar boundary in the shared prefix.
+    if let Some(prefix) = textByteSlice(text, 0, end) { return textByteFindLast(prefix, needle) }
+    if end == 0 { return None }
+    end = end - 1
+  }
+}
+
+fn seek(text: Str, choices: Str, from: Int, backwards: Bool, member: Bool) -> Option[Int] {
+  let size = textByteSize(text)
+  if from < 0 || size == 0 || (!backwards && from >= size) { return None }
+  let bytes = setOf(choices.toBytes().toArray())
+  var at = if backwards && from >= size { size - 1 } else { from }
+  while at >= 0 && at < size {
+    let byte = textByteAt(text, at) ?
+    if bytes.contains(byte) == member { return Some(at) }
+    at = if backwards { at - 1 } else { at + 1 }
+  }
+  None
+}
+
+/// First byte drawn from choices, at or after from.
+export fn findFirstOf(text: Str, choices: Str, from: Int) -> Option[Int] { seek(text, choices, from, false, true) }
+
+/// Last byte drawn from choices, at or before from (clamped to the end).
+export fn findLastOf(text: Str, choices: Str, from: Int) -> Option[Int] { seek(text, choices, from, true, true) }
+
+/// First byte absent from choices, at or after from.
+export fn findFirstNotOf(text: Str, choices: Str, from: Int) -> Option[Int] { seek(text, choices, from, false, false) }
+
+/// Last byte absent from choices, at or before from (clamped to the end).
+export fn findLastNotOf(text: Str, choices: Str, from: Int) -> Option[Int] { seek(text, choices, from, true, false) }
+
+/// Copy into the start of an existing array, retaining its remaining cells.
+/// Validate the whole request before writing; append no terminator.
+export fn copyInto(text: Str, target: &mut Array[UInt8], count: Int, start: Int) -> Option[Int] {
+  let size = textByteSize(text)
+  if count < 0 || start < 0 || start > size { return None }
+  let copied = if count > size - start { size - start } else { count }
+  if copied > target.length() { return None }
+  var at = 0
+  while at < copied {
+    let byte = textByteAt(text, start + at) ?
+    target[at] = byte
+    at = at + 1
+  }
+  Some(copied)
+}
+
+/// A shared text value walked as UTF-8 code units, without an encoded copy.
+export type Units = { text: Str }
+
+/// Borrow the text's existing backing bytes for a restartable byte walk.
+export fn units(text: Str) -> Units { Units{text: text} }
+
+impl Sequence[Int, UInt8] for Units {
+  fn begin(self: &Self) -> Int { 0 }
+  fn advance(self: &Self, state: Int) -> Option[(Int, UInt8)] {
+    let byte = textByteAt(self.text, state) ?
+    Some((state + 1, byte))
+  }
+}

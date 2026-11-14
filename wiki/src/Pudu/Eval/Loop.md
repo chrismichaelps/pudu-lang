@@ -81,6 +81,15 @@ answers with.
   **A:** No. Canonical identity selects the implementation directly; registry lookup
   remains only for legacy values without carried ownership. Same-named variants
   from different modules must never dispatch through one another's implementation.
+- **Q:** Which owners does a receiver look under? **A:** A record or variant looks under `declaredOwner` of its own name and, for a variant, of its sum's; a built-in value under `nominalNameOf`. A variant named like a built-in type (`Str(Str)`) therefore never reaches the built-in `Str`'s implementations (#529).
+
+- **Q:** Why does `receiverOwners` answer with two names rather than one?
+  **A:** Because a value has lost its type. _Rationale:_ the checker holds
+  `List` and looks up `List.begin` directly; the evaluator holds a `Cons` and
+  nothing in the value says which sum it came from, so the declaration leaves
+  that behind at install time and both names are tried. _Rejected:_ tagging
+  every value with its owning type, which costs every value for a lookup few
+  need.
 
 ## Referenced by
 
@@ -113,3 +122,7 @@ Resolved Grill Log: identity comes from the declaration or native ABI, not a glo
 Use carried named-sum ownership for direct and generic sequence method selection. Without a Sequence implementation, iterate stored field values under the same sum payload fallback as positional sums; declaration-order storage remains the construction caller’s invariant.
 
 Resolved Grill Log: represent named sums independently of ordinary records and positional sums. Preserve existing field order and public labels. Source publication follows in its own tested partition. See [[Named Sum Value Delivery]].
+
+## Declared owners named like built-ins (#529)
+
+A declared type whose name a built-in value also answers to is keyed by [[Eval Declared Owner]]: `@Name` for its methods, records, sums, witnesses and qualified calls, the bare name for built-in values.

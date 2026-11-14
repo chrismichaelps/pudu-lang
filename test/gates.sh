@@ -101,6 +101,7 @@ run 'Ark build cooks checked packs and loads them through the asset server' \
 run 'atomic writes preserve creation and replacement permissions' \
   bash -c 'python3 test/atomic-permissions.py "$PUDU"'
 run 'only a compiler change at a new version releases' python3 test/release-plan.test.py
+run 'compiler archives retain notices and strip policy' python3 test/package-binary.test.py
 run 'the fixtures still reach as much of the library' \
   bash -c 'node test/api-coverage.mjs "$PUDU"'
 run 'a streaming reader holds as much at ten times the input' \

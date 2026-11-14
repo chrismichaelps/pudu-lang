@@ -1,0 +1,14 @@
+module Lib
+
+/// A private helper with the same name as one the importing module declares:
+/// an inherited default must still call this one.
+fn shout(text: Str) -> Str { text + "!" }
+
+export type Wrapped[T] = { held: T }
+
+export trait Loud[T] {
+  fn word(self: &Self) -> T
+  fn loudly(self: &Self, render: fn(T) -> Str) -> Str { shout(render(self.word())) }
+  fn wrapped(self: &Self) -> Wrapped[T] { Wrapped{held: self.word()} }
+  fn twice(self: &Self) -> (T, T) { (self.word(), self.word()) }
+}

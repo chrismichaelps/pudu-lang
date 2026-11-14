@@ -28,7 +28,8 @@ enum {
 }
 
 - (id)accessibilityFocusedUIElement {
-  return self.focusedElement ?: [super accessibilityFocusedUIElement];
+  id focused = self.focusedElement;
+  return focused != nil ? focused : [super accessibilityFocusedUIElement];
 }
 
 - (void)drawRect:(NSRect)dirtyRect {

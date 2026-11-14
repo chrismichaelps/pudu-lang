@@ -155,6 +155,11 @@ unknown-name diagnostics and ordinary lexical shadowing.
 
 Resolved Grill Log: track identity in invocation-owned state so selected exports and legitimate local shadows remain values. Both declaration namespaces remain intact. Reflection E2018 takes priority outside derives, with no second E2010; qualified paths still record their references. Failed loaded interfaces remain opaque. See [[Scoped Import Design]].
 
+## Pattern diagnostics
+
+Resolved Grill Log: export the existing `emit` diagnostic accumulator for the
+phase-owned [[Resolve Bindings]] helper. Its sorting, invocation ownership and
+location contracts are unchanged; no second diagnostic store is introduced.
 ## Variant namespaces (#766)
 
 recordVariantSymbol :: Text -> Located Text -> Resolver (). Keep candidates by owner, diagnose same-owner duplicates, install the first bare alias only, and preserve ordinary conflicts. Resolve E2012 only for an actually selected variant alias with multiple owners; include every candidate span and permit nearer lexical values.

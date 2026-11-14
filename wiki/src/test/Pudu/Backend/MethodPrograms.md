@@ -1,0 +1,50 @@
+---
+type: module
+path: "@root/test/Pudu/Backend/MethodPrograms.hs"
+fidelity: Active
+grammar: "[[grammar/haskell]]"
+aliases: [Backend Method Programs]
+---
+# Backend Method Programs
+
+Exports methodSuccessPrograms (label, source, expected stdout) and
+methodRefusalPrograms (label, source), for [[Native Trait Methods]].
+
+Resolved Grill Log: the successes cover members and inherited defaults on
+records and sums, a default calling the implementation's override,
+type-qualified, trait-qualified and static members, implementations on `Int`
+and `Str` beside Str's built-in methods, `toText()` on every kind of value
+with a type's own `toText` winning, and recursion and `Self` results. Order
+cases check receiver effects before supplied arguments, the retained receiver
+after its binding changes, and a transfer after receiver effects that skips
+invocation. The refusals are runtime failures
+inside a method and inside an inherited default, which must report at their
+own source.
+
+[[Backend Module Programs]] runs them in its whole-program harness and
+[[Backend Text Leak Tests]] counts the successes' allocations.
+
+## Referenced by
+
+[[Native Trait Methods]] · [[Backend Module Programs]] · [[Backend Text Leak Tests]]
+
+## Defaults typed by trait parameters (#824)
+
+One program reaches defaults returning `Wrapped[T]`, `(T, T)` and `(V, T)` (a
+default with its own parameter) through a plain implementation
+(`Loud[Str] for Pair`), a generic one (`impl[U] Loud[U] for Box[U]`) at two
+types, and a trait-qualified call.
+
+Resolved Grill Log (#824): a separate regression reuses `T` in both the trait
+and implementation with different arguments, uses an aggregate derived
+argument `Array[T]`, and collides a default's own parameter with the
+implementation's. Handwritten output and counted cleanup exercise each copy.
+
+The collision regression also calls a default returning Int whose body uses
+the trait parameter through `self.word()`. Its signature carries no trait
+argument, proving that checked implementation heads supply the body bindings.
+
+Callable regressions pass ordinary and defaulted functions through a generic
+identity function, invoke a default's function-valued trait argument, and
+check explicit answers. This prevents concrete signature freezing from
+turning a function carrier's display text into a nominal type.

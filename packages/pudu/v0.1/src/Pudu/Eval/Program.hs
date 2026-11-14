@@ -187,7 +187,7 @@ programEntry folded integerKinds dependencies entryName moduleValue = do
   found <- lookupName entryName
   case found of
     Just (FunctionValue closure) -> do
-      result <- callClosure closure [] Nothing
+      result <- callClosure closure [] (Just (locatedSpan (functionName (closureFunction closure))))
       if functionAsync (closureFunction closure)
         then awaitTask (locatedSpan (functionName (closureFunction closure))) result
         else pure result
@@ -203,7 +203,8 @@ evaluateInteractiveBlock reuseDeclarations integerKinds dependencies moduleValue
   unless reuseDeclarations $ do
     locals <- currentFrame
     Evaluator $ \env -> pure (Done () env
-      { envFrames = [MapFrame Map.empty], envMethods = Map.empty, envVariantOwners = Map.empty })
+      { envFrames = [MapFrame Map.empty], envMethods = Map.empty, envVariantOwners = Map.empty
+      , envRecordFields = Map.empty })
     builtins <- linkDependencies dependencies
     pushFrame builtins
     pushFrame Map.empty

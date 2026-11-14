@@ -27,7 +27,7 @@ interfaceScope :: DeclaredTypes -> Map Text NominalId -> TypeInterface -> Declar
 installShared :: DeclaredTypes -> TypeInterface -> Checker ()
 installWanted
   :: DeclaredTypes -> Set NominalId -> Set Text
-  -> Map NominalId [Located Function] -> Set (NominalId, Text)
+  -> Map NominalId Trait -> Set (NominalId, Text)
   -> TypeInterface -> Checker ()
 ```
 
@@ -53,6 +53,8 @@ installWanted
 - No body checking, coherence checking, or dependency traversal.
 
 ## Grill Log
+
+- **Q:** Are an imported sum's variants bound under the canonical key too? **A:** Yes, as the module's own are, so `Shape.Circle(1)` on an imported `Shape` is typed as `Shape`. A canonical key names its module, so no bare name leaks between modules (#536).
 
 - **Q:** Why a separate module? **A:** Graph preparation and per-consumer import both need the same
   declaration code, and the graph module sits below [[Type Check Import]].

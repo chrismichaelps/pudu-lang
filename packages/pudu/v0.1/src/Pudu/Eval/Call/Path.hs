@@ -25,6 +25,7 @@ import Data.Text (Text)
 import qualified Data.Text as Text
 import Pudu.Eval.Env (Evaluator, abortAt, lookupLocal, lookupName)
 import Pudu.Eval.Install (lastSegmentOf)
+import Pudu.Eval.DeclaredOwner (declaredOwner)
 import Pudu.Eval.Loop (firstBound, receiverOwners)
 import Pudu.Eval.Operator (readMember)
 import Pudu.Eval.Value (Value (..))
@@ -49,7 +50,7 @@ qualifiedCallee (Located at expression) values = case qualifiedParts expression 
     direct <- case local of
       Just witness@TypeWitnessValue{} -> witnessMethod at witness method
       Just _ -> pure Nothing
-      Nothing -> lookupName (first <> "." <> method)
+      Nothing -> firstBound (\owner -> lookupName (owner <> "." <> method)) (typeOwners first values)
     case direct of
       Just found -> pure (Just found)
       Nothing | not (qualifies local) -> pure Nothing
@@ -58,6 +59,23 @@ qualifiedCallee (Located at expression) values = case qualifiedParts expression 
           owners <- receiverOwners receiver
           firstBound (\owner -> lookupName (first <> "." <> owner <> "." <> method)) owners
         [] -> pure Nothing
+
+{-| The method-key owners a written type name may stand for, in the order to
+    try them.
+
+    A name a built-in value also answers to may be a declared type's or the
+    built-in's. A first argument that is a record or a sum tries the declared
+    type first; anything else tries the built-in first. Both stay candidates,
+    because the first argument of a static member such as `Int.decode(json)`
+    is not a receiver and says nothing about the owner. -}
+typeOwners :: Text -> [Value] -> [Text]
+typeOwners name values
+  | declaredOwner name == name = [name]
+  | otherwise = case values of
+      RecordValue{} : _ -> [declaredOwner name, name]
+      SumValue{} : _ -> [declaredOwner name, name]
+      NamedSumValue{} : _ -> [declaredOwner name, name]
+      _ -> [name, declaredOwner name]
 
 {-| A qualified callee reaches the parser as a member access on a bare name, so
     `A.label` and a two-segment path are the same selection written twice.

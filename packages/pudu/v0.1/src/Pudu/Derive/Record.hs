@@ -280,7 +280,11 @@ expression depth context original@(Located at value) = do
     IfExpression condition success failure -> do
       condition' <- recurse condition
       case locatedValue condition' of
-        LiteralExpression (BoolValue True) -> recurseBlock success >>= out . BlockExpression
+        LiteralExpression (BoolValue True) -> case failure of
+          Just _ -> recurseBlock success >>= out . BlockExpression
+          Nothing -> do
+            success' <- recurseBlock success
+            out (IfExpression condition' success' Nothing)
         LiteralExpression (BoolValue False) -> case failure of
           Just held -> recurse held
           Nothing -> generated at (Block [] Nothing) >>= out . BlockExpression

@@ -71,7 +71,7 @@ void pudu_audio_request_cancel(int32_t *cancel_token) {
   }
 }
 
-int32_t pudu_audio_play(
+int32_t pudu_audio_play_polling(
     int32_t sample_rate,
     int32_t channels,
     const uint8_t *pcm,
@@ -80,7 +80,8 @@ int32_t pudu_audio_play(
     int32_t buffer_count,
     int32_t timeout_ms,
     int32_t *cancel_token,
-    uint64_t *completed_frames) {
+    uint64_t *completed_frames,
+    int (*stop_requested)(void)) {
   if (sample_rate < 8000 || sample_rate > 384000 || channels < 1 || channels > 8 ||
       pcm == NULL || pcm_length == 0 || frames_per_buffer < 16 || frames_per_buffer > 4096 ||
       buffer_count < 2 || buffer_count > PUDU_AUDIO_MAX_BUFFERS || timeout_ms < 1 ||
@@ -162,7 +163,7 @@ int32_t pudu_audio_play(
   for (;;) {
     // A cancelled play stops at once; the release below stops the queue
     // immediately, which discards the buffers not yet heard.
-    if (cancel_requested(cancel_token)) {
+    if (cancel_requested(cancel_token) || (stop_requested != NULL && stop_requested())) {
       status = PUDU_AUDIO_CANCELLED;
       goto release;
     }
@@ -222,4 +223,12 @@ release:
     *completed_frames = atomic_load_explicit(&state.completed_frames, memory_order_acquire);
   }
   return status;
+}
+
+int32_t pudu_audio_play(
+    int32_t sample_rate, int32_t channels, const uint8_t *pcm, size_t pcm_length,
+    int32_t frames_per_buffer, int32_t buffer_count, int32_t timeout_ms,
+    int32_t *cancel_token, uint64_t *completed_frames) {
+  return pudu_audio_play_polling(sample_rate, channels, pcm, pcm_length, frames_per_buffer,
+      buffer_count, timeout_ms, cancel_token, completed_frames, NULL);
 }

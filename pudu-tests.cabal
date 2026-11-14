@@ -68,6 +68,80 @@ test-suite pudu-test
     Pudu.Lsp.MethodDefinitionSpec
     Pudu.Diagnostic.RenderSpec
     Pudu.Cache.PersistSpec
+    Pudu.Diagnostic.NativeSpec
+    Pudu.CoreSpec
+    Pudu.Backend.EmitSpec
+    Pudu.Backend.LowerTypesSpec
+    Pudu.Backend.FrameSpec
+    Pudu.Backend.FrameEmitSpec
+    Pudu.Backend.FrameRuntimeSpec
+    Pudu.Backend.Word128Spec
+    Pudu.Backend.WideValueSpec
+    Pudu.Backend.WideOperationsSpec
+    Pudu.Backend.WideRuntimeSpec
+    Pudu.Backend.FloatFormatSpec
+    Pudu.Backend.FloatValueSpec
+    Pudu.Backend.FloatRuntimeSpec
+    Pudu.Backend.FloatNaturalSpec
+    Pudu.Backend.WideFrameSpec
+    Pudu.Backend.BrokenPipeSpec
+    Pudu.Cli.MemorySpec
+    Pudu.Backend.NativeSpec
+    Pudu.Backend.TargetSpec
+    Pudu.Backend.FunctionPrograms
+    Pudu.Backend.FloatPrograms
+    Pudu.Backend.IntegerPrograms
+    Pudu.Backend.BigIntPrograms
+    Pudu.Backend.DecimalPrograms
+    Pudu.Backend.CharPrograms
+    Pudu.Backend.CollectionCallablePrograms
+    Pudu.Backend.DefaultParameterPrograms
+    Pudu.Backend.MethodValuePrograms
+    Pudu.Backend.PlaceAssignmentPrograms
+    Pudu.Backend.MutableLoanPrograms
+    Pudu.Backend.RecordPrograms
+    Pudu.Backend.StoppingBuiltinPrograms
+    Pudu.Backend.SumPrograms
+    Pudu.Backend.ModulePrograms
+    Pudu.Backend.ReferencePrograms
+    Pudu.Backend.MethodPrograms
+    Pudu.Backend.GenericPrograms
+    Pudu.Backend.TryPrograms
+    Pudu.Backend.ForPrograms
+    Pudu.Backend.ClosurePrograms
+    Pudu.Backend.ArrayPrograms
+    Pudu.Backend.ArrayPatternPrograms
+    Pudu.Backend.TextCollectionPrograms
+    Pudu.Backend.ConvertPrograms
+    Pudu.Backend.KeyedPrograms
+    Pudu.Backend.WordMapPrograms
+    Pudu.Backend.StorePrograms
+    Pudu.Backend.ForeignPrograms
+    Pudu.Backend.KernelPrograms
+    Pudu.Backend.AbstractionPrograms
+    Pudu.Backend.HostPrograms
+    Pudu.Backend.HostServicePrograms
+    Pudu.Backend.CryptoPrograms
+    Pudu.Backend.ShapePrograms
+    Pudu.Backend.RangePrograms
+    Pudu.Backend.OutputSpec
+    Pudu.Backend.OutputCallablePrograms
+    Pudu.Backend.RenderingCallablePrograms
+    Pudu.Backend.NamedCallablePrograms
+    Pudu.Backend.ExpressionBodyPrograms
+    Pudu.Backend.OutputPrograms
+    Pudu.Backend.BytesPrograms
+    Pudu.Backend.TextCaseSpec
+    Pudu.Backend.TuplePrograms
+    Pudu.Backend.TextLeakSpec
+    Pudu.Backend.TextViewPrograms
+    Pudu.Backend.TextMethodPrograms
+    Pudu.Backend.TextPrograms
+    Pudu.Backend.SignedPrograms
+    Pudu.Backend.UnsignedPrograms
+    Pudu.Backend.DeferredPrograms
+    Pudu.Backend.ControlPrograms
+    Pudu.Backend.ToolchainSpec
     Pudu.Lsp.SchedulerSpec
     Pudu.Compiler.LiteralsSpec
     Pudu.Compiler.ProgramSpec
@@ -79,6 +153,7 @@ test-suite pudu-test
     Pudu.Compiler.Program.ForeignSpec
     Pudu.Compiler.Program.LanguageSpec
     Pudu.Compiler.Program.StdlibSpec
+    Pudu.Compiler.Program.ViewSpec
     Pudu.Compiler.Program.ReflectionSpec
     Pudu.Compiler.Program.EvalSpec
     Pudu.Compiler.Program.Eval.DataSpec
@@ -88,6 +163,9 @@ test-suite pudu-test
     Pudu.Compiler.Program.Eval.RuntimeSpec
     Pudu.Foreign.SlotSpec
     Pudu.Foreign.OwnershipSpec
+    Pudu.Eval.IfUnitSpec
+    Pudu.Eval.RecordOrderSpec
+    Pudu.Eval.FloatOrderSpec
     Pudu.Eval.Foreign.ResultSpec
     Pudu.Frontend.Lexer.CursorSpec
     Pudu.Frontend.ExpandSpec
@@ -125,6 +203,7 @@ test-suite pudu-test
     Pudu.Eval.FunctionClosureSpec
     Pudu.Eval.SystemSpec
     Pudu.Eval.MutexSpec
+    Pudu.Eval.TextViewSpec
     Pudu.DocSpec
     Pudu.Repl.AnswerSpec
     Pudu.Repl.SessionSpec

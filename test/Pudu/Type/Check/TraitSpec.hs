@@ -8,6 +8,7 @@ module Pudu.Type.Check.TraitSpec
   , testCoherence
   , testQualifiedMethods
   , testGenericTraits
+  , testGenericTraitDefaults
   ) where
 
 import Data.Text (Text)
@@ -34,6 +35,7 @@ traitProperties =
   , ("coherence rejects duplicate and orphan implementations", testCoherence)
   , ("same-named trait methods are selected by a qualified call", testQualifiedMethods)
   , ("a generic trait's parameters are solved from its implementation", testGenericTraits)
+  , ("a generic trait's default takes the implementation's arguments", testGenericTraitDefaults)
   ]
 
 traitProgram :: [Text]
@@ -474,5 +476,62 @@ testGenericTraits = do
     [ "module M"
     , "type Box = { v: Int }"
     , "trait Holds[T] { fn get(self: &Self) -> T }"
+    , "impl Holds[Int] for Box { fn get(self: &Self) -> Int { self.v } }"
+    ]
+
+testGenericTraitDefaults :: IO Property
+testGenericTraitDefaults = do
+  methodCall <- codes (holds <> ["fn run(b: Box) -> (Int, Int) { b.twice() }"])
+  qualifiedCall <- codes (holds <> ["fn run(b: Box) -> (Int, Int) { Holds.twice(&b) }"])
+  wrongResult <- codes (holds <> ["fn run(b: Box) -> (Str, Str) { b.twice() }"])
+  sharedName <- codes
+    [ "module M"
+    , "type Wrap[T] = { v: Array[T] }"
+    , "trait Holds[T] {"
+    , "  fn get(self: &Self) -> T"
+    , "  fn twice(self: &Self) -> (T, T) { (self.get(), self.get()) }"
+    , "}"
+    , "impl [T] Holds[Array[T]] for Wrap[T] { fn get(self: &Self) -> Array[T] { self.v } }"
+    , "fn run(w: Wrap[Int]) -> (Array[Int], Array[Int]) { w.twice() }"
+    ]
+  chained <- codes
+    [ "module M"
+    , "trait Seq[S, T] {"
+    , "  fn begin(self: &Self) -> S"
+    , "  fn advance(self: &Self, state: S) -> Option[(S, T)]"
+    , "  fn map[B](self: &Self, f: fn(T) -> B) -> Mapped[Self, T, B] { Mapped{source: *self, transform: f} }"
+    , "}"
+    , "type Items[T] = { values: Array[T] }"
+    , "impl [T] Seq[Int, T] for Items[T] {"
+    , "  fn begin(self: &Self) -> Int { 0 }"
+    , "  fn advance(self: &Self, state: Int) -> Option[(Int, T)] { None }"
+    , "}"
+    , "type Mapped[Q, A, B] = { source: Q, transform: fn(A) -> B }"
+    , "impl [S, A, B, Q: Seq[S, A]] Seq[S, B] for Mapped[Q, A, B] {"
+    , "  fn begin(self: &Self) -> S { self.source.begin() }"
+    , "  fn advance(self: &Self, state: S) -> Option[(S, B)] { None }"
+    , "}"
+    , "fn run() -> Option[(Int, Str)] {"
+    , "  Items{values: [1, 2]}.map(|n| n * 2).map(|n| n.toText()).advance(0)"
+    , "}"
+    ]
+  pure $ conjoin
+    [ counterexample "method syntax gives the default the implementation's argument"
+        (methodCall === [])
+    , counterexample "so does the trait-qualified form" (qualifiedCall === [])
+    , counterexample "and the default's result is still checked, once per member"
+        (wrongResult === ["E3001", "E3001"])
+    , counterexample "an implementation parameter named like the trait's stays its own"
+        (sharedName === [])
+    , counterexample "a default returning a type built from Self chains" (chained === [])
+    ]
+ where
+  holds =
+    [ "module M"
+    , "type Box = { v: Int }"
+    , "trait Holds[T] {"
+    , "  fn get(self: &Self) -> T"
+    , "  fn twice(self: &Self) -> (T, T) { (self.get(), self.get()) }"
+    , "}"
     , "impl Holds[Int] for Box { fn get(self: &Self) -> Int { self.v } }"
     ]

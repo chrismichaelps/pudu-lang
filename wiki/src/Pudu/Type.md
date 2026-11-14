@@ -88,6 +88,8 @@ DEPTH 0.60 (MEDIUM). One surface hides formation, unification, and the checking 
 
 ## Grill Log
 
+- **Q:** What does `declaredSums` answer? **A:** Each sum the module can name, its own and the built-in Option and Result, with its type parameters and its variants in declaration order, each with payload types and, for a record variant, its field names, for native lowering (#525).
+
 - **Q:** Build the expression map while admitting every `ModuleTypes` result?
   **A:** Defer only this derived lookup product until a consumer asks for it.
   _Rationale:_ phase attribution measures 87.5 MB for this unused map on an
@@ -96,6 +98,14 @@ DEPTH 0.60 (MEDIUM). One surface hides formation, unification, and the checking 
   inferred types, or sorting the facts without a measured latency win.
 - **Q:** Should the checker return an annotated tree? **A:** Not yet; it publishes a span-keyed map. _Rationale:_ a typed IR is the right home for annotations, and inventing one before lowering exists would freeze a shape no consumer has asked for. _Rejected:_ rewriting the syntax tree with types; a parallel typed AST.
 - **Q:** Carry selections beside integer kinds through the evaluator? **A:** No; they become explicit syntax once, in [[Compiler Literals]].
+
+## Shapes with imports (#563)
+
+Resolved Grill Log: `declaredShapesWith` forms a module's records and sums
+after declaring its imports, as `checkUnit` does, so a field naming another
+module's type or alias is formed the way checking formed it. `ModuleTypes`
+carries the result lazily as `moduleShapes`; `declaredRecords` and
+`declaredSums` share its helpers.
 
 ## Referenced by
 
@@ -116,6 +126,11 @@ Exact `typeAt` queries use the full span; offset query complexity stays unchange
   template position has different types in different instantiations. _Rejected:_
   last expansion wins or a linear rescan on every tooling query.
 
+## Declared records (#521)
+
+`declaredRecords` runs the checker's own `collectDeclared` over a module and
+returns each record's type parameters and fields in declaration order. The
+native lowerer lays records out from it instead of reading type syntax.
 ## Bound provider evidence (#743)
 
 ModuleTypes.moduleProviders indexes canonical trait evidence by complete span for executable projection. This product does not change authored tooling types or static argument selections.
@@ -159,3 +174,9 @@ arguments while following a rigid constructor's bounds. Assert actual checker
 products, canonical implementation trait projection, authored syntax and spans;
 retain full existing dispatch, diagnostic, derive and cache gates.
 See [[Bound Receiver Evidence Delivery]].
+
+## Shapes after the dev merge (#798)
+
+The module keeps `moduleShapes` beside dev's owner and provider selections.
+A sum's record variant fields are read by `(owner, label)`, the key dev
+stores them under.

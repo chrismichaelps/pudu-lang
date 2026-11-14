@@ -7,6 +7,7 @@ import Data.List (nub, sort)
 import qualified Data.Map.Strict as Map
 import Data.Text (Text)
 import qualified Data.Text as Text
+import Pudu.Eval.DeclaredOwner (declaredOwnerCandidates)
 import Pudu.Eval.Env (Evaluator, abortAt, lookupLocal, lookupName, lookupMethod)
 import Pudu.Eval.ImplementationHead (HeadSelection (..), ImplementationHead (..))
 import Pudu.Eval.Value (Closure (..), Value (..))
@@ -95,11 +96,20 @@ witnessShape written = case written of
   UnitType -> Just ("::unit::", [])
   InvalidType -> Nothing
 
-{-| Qualification and retained member reads share one witnessed selection. -}
+{-| The first key that binds something. -}
+firstFound :: (Text -> Evaluator (Maybe a)) -> [Text] -> Evaluator (Maybe a)
+firstFound look keys = case keys of
+  [] -> pure Nothing
+  key : rest -> look key >>= maybe (firstFound look rest) (pure . Just)
+
+{-| Qualification and retained member reads share one witnessed selection. A
+    witness names a type as written, so a declared `Array` and the built-in
+    one are both candidates, the declared one first. -}
 witnessMethod :: Span -> Value -> Text -> Evaluator (Maybe Value)
 witnessMethod at witness member = case witness of
   TypeWitnessValue owner _ -> do
-    found <- (if Text.isPrefixOf "::" member then lookupMethod else lookupName) (owner <> "." <> member)
+    found <- firstFound (\key -> (if Text.isPrefixOf "::" member then lookupMethod else lookupName) (key <> "." <> member))
+      (declaredOwnerCandidates owner)
     case found of
       Just (FunctionValue closure) -> Just . FunctionValue <$> selectImplementation at witness closure
       other -> pure other

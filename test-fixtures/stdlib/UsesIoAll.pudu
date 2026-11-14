@@ -1,6 +1,7 @@
 module UsesIoAll
 
 import Std.Env as Env
+import Std.Fs as Fs
 import Std.Io as Io
 import Std.Option as Option
 import Std.Result as Result
@@ -8,20 +9,17 @@ import Std.Result as Result
 /// Every export of `Std.Io` that touches a file, checked by writing and
 /// reading it back.
 ///
-/// Everything is done under a directory of the machine's own temporary one,
-/// named for this fixture alone, and every file made is removed at the end.
-/// A fixture that wrote beside the source would leave the tree dirty, and one
-/// sharing a name with another fixture would meet its files.
+/// Everything is done under a directory made for this run inside the machine's
+/// own temporary one, and the whole of it is removed at the end. A fixture that
+/// wrote beside the source would leave the tree dirty, and one sharing a fixed
+/// name with another run would meet its files.
 ///
 /// The path functions are checked against the separator the module reports
 /// rather than against a written slash, so the checks say the same thing on a
 /// machine that separates paths differently.
-fn root() -> Str { Io.join(Env.temporaryDirectory(), "pudu-fixture-io-all") }
-
-fn under(name: Str) -> Str { Io.join(root(), name) }
-
 export fn main() -> Int {
   var held = 0
+  let Ok(root) = Fs.temporaryDirectoryIn(Env.temporaryDirectory(), "pudu-fixture-io-all-") else { return 0 }
 
   // Path handling, in terms of the separator the module reports.
   let sep = Io.separator()
@@ -36,15 +34,15 @@ export fn main() -> Int {
   if Io.withExtension("b", "md") == "b.md" { held = held + 1 }
 
   // A directory to work in.
-  let _cleared = Io.removeIfPresent(under("one.txt"))
-  if Result.isOk(&Io.makeDirectory(root())) || Io.exists(root()) { held = held + 1 }
+  let _cleared = Io.removeIfPresent(Io.join(root, "one.txt"))
+  if Result.isOk(&Io.makeDirectory(root)) || Io.exists(root) { held = held + 1 }
 
   // Writing and reading text.
-  let first = under("one.txt")
+  let first = Io.join(root, "one.txt")
   if Result.isOk(&Io.write(first, "hello")) { held = held + 1 }
-  if Io.exists(first) && !Io.exists(under("absent.txt")) { held = held + 1 }
+  if Io.exists(first) && !Io.exists(Io.join(root, "absent.txt")) { held = held + 1 }
   if Result.unwrapOr(Io.read(first), "") == "hello" { held = held + 1 }
-  if Result.isErr(&Io.read(under("absent.txt"))) { held = held + 1 }
+  if Result.isErr(&Io.read(Io.join(root, "absent.txt"))) { held = held + 1 }
 
   // Adding to what is there.
   if Result.isOk(&Io.append(first, " there")) { held = held + 1 }
@@ -53,7 +51,7 @@ export fn main() -> Int {
   if Result.unwrapOr(Io.read(first), "").endsWith("\n") { held = held + 1 }
 
   // Lines, written and read as a list.
-  let lined = under("lines.txt")
+  let lined = Io.join(root, "lines.txt")
   if Result.isOk(&Io.writeFileLines(lined, &["a", "b"])) { held = held + 1 }
   if Result.unwrapOr(Io.readLines(lined), []) == ["a", "b"] { held = held + 1 }
   if Result.unwrapOr(Io.readAllLinesOf(lined), []) == ["a", "b"] { held = held + 1 }
@@ -65,7 +63,7 @@ export fn main() -> Int {
   if Result.isOk(&Io.forEachLine(lined, fn(_line: Str) -> () => {})) { held = held + 1 }
 
   // Bytes.
-  let bytes = under("bytes.bin")
+  let bytes = Io.join(root, "bytes.bin")
   if Result.isOk(&Io.writeAllBytes(bytes, &"abc".toBytes())) { held = held + 1 }
   if Result.unwrapOr(Io.countBytes(bytes), 0) == 3 { held = held + 1 }
   if Result.unwrapOr(Io.readAllBytes(bytes), "".toBytes()).length() == 3 { held = held + 1 }
@@ -73,7 +71,7 @@ export fn main() -> Int {
   if Result.unwrapOr(Io.countBytes(bytes), 0) == 5 { held = held + 1 }
 
   // A reader and a writer, each closed when the action is done.
-  let streamed = under("streamed.txt")
+  let streamed = Io.join(root, "streamed.txt")
   let written = Io.withWriter(streamed, fn(w: Io.Writer) -> Result[(), Io.IoError] {
       Io.writeTextTo(&w, "streamed")
     })
@@ -97,20 +95,20 @@ export fn main() -> Int {
   if Result.isOk(&walked) { held = held + 1 }
 
   // Copying and moving.
-  let copied = under("copied.txt")
+  let copied = Io.join(root, "copied.txt")
   if Result.isOk(&Io.copy(first, copied)) { held = held + 1 }
-  let moved = under("moved.txt")
+  let moved = Io.join(root, "moved.txt")
   if Result.isOk(&Io.move(copied, moved)) { held = held + 1 }
   if Io.exists(moved) && !Io.exists(copied) { held = held + 1 }
 
   // What the directory holds, by name and by path.
-  if Result.unwrapOr(Io.list(root()), []).contains("one.txt") { held = held + 1 }
-  if Result.unwrapOr(Io.listPaths(root()), []).contains(first) { held = held + 1 }
+  if Result.unwrapOr(Io.list(root), []).contains("one.txt") { held = held + 1 }
+  if Result.unwrapOr(Io.listPaths(root), []).contains(first) { held = held + 1 }
 
   // Removing, and removing what is not there.
   if Result.isOk(&Io.remove(moved)) && !Io.exists(moved) { held = held + 1 }
-  if Result.isErr(&Io.remove(under("absent.txt"))) { held = held + 1 }
-  if Result.isOk(&Io.removeIfPresent(under("absent.txt"))) { held = held + 1 }
+  if Result.isErr(&Io.remove(Io.join(root, "absent.txt"))) { held = held + 1 }
+  if Result.isOk(&Io.removeIfPresent(Io.join(root, "absent.txt"))) { held = held + 1 }
 
   // Writing to the two streams a program answers on.
   //
@@ -122,9 +120,10 @@ export fn main() -> Int {
   if Result.isOk(&Io.writeValue("")) { held = held + 1 }
 
   // Everything made here is taken away again.
-  for name in Result.unwrapOr(Io.listPaths(root()), []) {
+  for name in Result.unwrapOr(Io.listPaths(root), []) {
     let _removed = Io.removeIfPresent(name)
   }
+  let _rootGone = Fs.removeTree(root)
 
   held
 }

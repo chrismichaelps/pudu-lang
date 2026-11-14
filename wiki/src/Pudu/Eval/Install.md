@@ -80,6 +80,10 @@ against it, then evaluate each constant in declaration order.
 
 ## Grill Log
 
+- **Q:** How does an implementation inherit a default from a trait its module imports? **A:** Each module publishes its traits' defaults while it loads, under `#Trait.member` keys (`#` cannot begin a written name). They are scoped to that module like every method it adds, so an inherited body resolves names where the trait was written: `Lib`'s private `shout`, not the importer's. An implementation of a trait its own module declares takes the members directly; otherwise it copies the published closures, scope and all, with its own type parameters leading (#530). Trait names are bare here, as method owners are.
+
+- **Q:** How is an implementation for a type named like a built-in type installed? **A:** When this module declares the type, the methods are bound under `declaredOwner` of its name (`@Range.toArray`); otherwise the name means the built-in type and is bound bare. An implementation written in another module for an imported type of such a name is bound bare, which is a known limit of name-keyed methods (#529).
+
 - **Q:** Look up a release by local name during teardown? **A:** No; resolve its native symbol while
   installing the foreign block. _Rationale:_ `symbol "MemFree"` proves local and native names may
   differ, and cleanup must call the same declaration explicit release calls. _Rejected:_ guessing
@@ -226,6 +230,10 @@ Nested calls then recognize local type witnesses during folding and ordinary loa
 Resolved Grill Log: one declaration-loading boundary covers root and dependency initializers;
 imports stay outside the local witness frame and effect permissions remain unchanged.
 
+## Record field order (#519)
+
+Installing a record declaration, and each record-payload variant of a sum,
+records its field order in [[Eval Env]].
 ## Bound provider evidence (#743)
 
 Install a projected canonical implementation trait path under its full identity and retain the legacy basename alias for existing explicit qualified calls. Default-member inheritance continues to look up its local trait declaration by basename. Both keys reference the same closure and defining environment.
@@ -257,3 +265,33 @@ head. Keep impl parameters before method parameters in the original Function.
 Resolved Grill Log: installation retains checked structure without matching it,
 changing captures, copying bodies, or recovering types from program data. See
 [[Runtime Implementation Head]] and [[Eval Type Witness]].
+
+## Field order under canonical owners (#798)
+
+A record definition records its field order under both its own name and its
+namespaced owner; dev's canonical variant owners and named sum payloads
+(`::sum::` paths) replace the per-variant order the stack kept.
+
+## Declared owners named like built-ins (#529)
+
+A declared type whose name a built-in value also answers to is keyed by [[Eval Declared Owner]]: `@Name` for its methods, records, sums, witnesses and qualified calls, the bare name for built-in values.
+
+## Text-view primitive installation (#527)
+
+Install textByteSize, textByteSlice, textByteFind, textByteFindLast and
+textScalarAt as pure builtin values for [[Eval TextView]]. Resolved Grill
+Log: retain current dev's canonical owners, structural implementation heads
+and imported-default scopes when integrating the earlier view branch.
+
+## Raw text-byte access (#527)
+
+Expose textByteAt(Str, Int) -> Option[UInt8] as a pure primitive with a new
+appended TextByteAtBuiltin tag and canonical name. Read the Text backing
+array in O(1) only after comparing the mathematical offset with its byte
+length. Negative, past-end and out-of-host-range offsets answer None; no
+intermediate byte copy or malformed UTF-8 text is constructed. Wrong argument
+shape/arity retains E7001/E7003 at the call span.
+
+Resolved Grill Log: scalar boundaries constrain text slices, not byte reads;
+return an exact UInt8 and keep naming, typing, installation and pure dispatch
+synchronized. Existing text primitives and packed identities are unchanged.

@@ -1,0 +1,41 @@
+name: iOS simulator
+on:
+  pull_request:
+    paths:
+      - 'packages/pudu/**'
+      - 'cabal.project*'
+      - 'test/ios-simulator.mjs'
+      - '.github/workflows/ios-simulator.yml'
+  push:
+    branches: [dev, 'feature/**']
+    paths:
+      - 'packages/pudu/**'
+      - 'cabal.project*'
+      - 'test/ios-simulator.mjs'
+      - '.github/workflows/ios-simulator.yml'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ios-simulator-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  native-ffi:
+    runs-on: macos-15
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '24'
+      - uses: haskell-actions/setup@v2
+        with:
+          ghc-version: 9.14.1
+          cabal-version: 3.16.1.0
+      - run: cabal update
+      - name: Build Pudu
+        run: cabal build exe:pudu --ghc-options=-Werror
+      - name: Run native foreign calls in an iOS app
+        run: node test/ios-simulator.mjs "$(cabal list-bin exe:pudu --ghc-options=-Werror)" --require-simulator

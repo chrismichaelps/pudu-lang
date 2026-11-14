@@ -35,6 +35,7 @@ import Pudu.Type.Check.PatternSpec
   , testTupleCoverage
   , testExhaustiveness
   , testMatchThroughBorrow
+  , testAlternativeBindings
   )
 import Pudu.Type.Check.PlaceSpec (testPlaces)
 import Pudu.Type.Check.PrimitiveSpec
@@ -73,6 +74,7 @@ import Pudu.Type.Check.TraitSpec
   , testBounds
   , testCoherence
   , testGenericTraits
+  , testGenericTraitDefaults
   , testQualifiedMethods
   , testTraitDefaultCalls
   , testTraits
@@ -81,6 +83,7 @@ import Pudu.Type.Check.TraitSpec
 typeProperties :: [(String, IO Property)]
 typeProperties =
   [ ("nested constructor coverage follows canonical module identities", testNestedConstructorNamespaces)
+  , ("alternative patterns share names at one compatible type", testAlternativeBindings)
   , ("tuple coverage retains correlated Option combinations", testTupleCoverage)
   , ("a generic alias stands for what it names", testGenericAliases)
   , ("a trait bound is satisfied by any implementation in the program", testGlobalImpls)
@@ -129,6 +132,7 @@ typeProperties =
   , ("compiler-controlled markers are decided structurally", testMarkers)
   , ("same-named trait methods are selected by a qualified call", testQualifiedMethods)
   , ("a generic trait's parameters are solved from its implementation", testGenericTraits)
+  , ("a generic trait's default takes the implementation's arguments", testGenericTraitDefaults)
   , ("a type declaration's parameters are instantiated at every use", testGenericTypes)
   , ("a for loop binds at the element type of what it iterates", testIterationTypes)
   , ("a dynamic type accepts any implementation and nothing else", testDynamicTypes)

@@ -1,6 +1,7 @@
 module UsesUiAppShellAll
 
 import Std.Env as Env
+import Std.Fs as Fs
 import Std.Json as Json
 import Std.Ui.Canvas as Canvas
 import Std.Ui.Controls as Controls
@@ -14,7 +15,9 @@ import Std.Ui.Theme as Theme
 
 fn preferences() -> Int {
   var held = 0
-  let base = Env.temporaryDirectory() + "/pudu-preferences-fixture"
+  // A directory of this run alone, so runs at the same time never meet.
+  let Ok(scratch) = Fs.temporaryDirectoryIn(Env.temporaryDirectory(), "pudu-fixture-") else { return 0 }
+  let base = scratch + "/pudu-preferences-fixture"
   let path = base + "/nested/app/preferences.json"
 
   // Typed values with fallbacks for absent or mistyped keys.
@@ -60,6 +63,7 @@ fn preferences() -> Int {
     let _ = Preferences.save(&set)
     let _ = Preferences.load("notes")
   }
+  let _scratchGone = Fs.removeTree(scratch)
   held
 }
 

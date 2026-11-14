@@ -1,0 +1,63 @@
+module Std.MdSpan.Layout
+
+/// Checked shape metadata. `unique` is a certificate: false may be inconclusive.
+export type Mapping = {
+  extents: Array[Int],
+  strides: Array[Int],
+  size: Int,
+  requiredSpanSize: Int,
+  unique: Bool,
+  exhaustive: Bool,
+}
+
+const MAX_INDEX = 9223372036854775807
+
+fn added(left: Int, right: Int) -> Option[Int] {
+  if left > MAX_INDEX - right { None } else { Some(left + right) }
+}
+
+fn multiplied(left: Int, right: Int) -> Option[Int] {
+  if right != 0 && left > MAX_INDEX / right { None } else { Some(left * right) }
+}
+
+/// Analyze nonnegative extents and strides without visiting the elements.
+/// Negative, mismatched or unrepresentable metadata answers None.
+export fn of(extents: Array[Int], strides: Array[Int]) -> Option[Mapping] {
+  if extents.length() != strides.length() { return None }
+  var empty = false
+  var dimension = 0
+  while dimension < extents.length() {
+    if extents[dimension] < 0 || strides[dimension] < 0 { return None }
+    if extents[dimension] == 0 { empty = true }
+    dimension = dimension + 1
+  }
+  if empty {
+    return Some(Mapping{extents: extents, strides: strides, size: 0, requiredSpanSize: 0, unique: true, exhaustive: true})
+  }
+  var size = 1
+  var span = 1
+  var ordered: Array[(Int, Int)] = []
+  dimension = 0
+  while dimension < extents.length() {
+    let extent = extents[dimension]
+    let stride = strides[dimension]
+    size = multiplied(size, extent) ?
+    span = added(span, multiplied(extent - 1, stride) ?) ?
+    if extent > 1 {
+      var at = 0
+      while at < ordered.length() && ordered[at][0] <= stride { at = at + 1 }
+      ordered = ordered.insert(at, (stride, extent))
+    }
+    dimension = dimension + 1
+  }
+  var covered = 1
+  var unique = true
+  var exhaustive = true
+  for (stride, extent) in ordered {
+    // Disjoint slabs prove uniqueness; touching or overlapping intervals cover.
+    if stride < covered { unique = false }
+    if stride > covered { exhaustive = false }
+    covered = added(covered, multiplied(extent - 1, stride) ?) ?
+  }
+  Some(Mapping{extents: extents, strides: strides, size: size, requiredSpanSize: span, unique: unique, exhaustive: exhaustive})
+}

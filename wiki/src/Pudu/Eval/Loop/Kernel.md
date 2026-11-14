@@ -51,8 +51,8 @@ these constructs are outside the kernel's admitted region.
 ## Dependencies and consumers
 
 Requires [[Eval Env]], [[Eval Frame]], [[Eval Match]], [[Eval MultiMap]],
-[[Eval Operator]], [[Eval Place]], [[Eval Value]], [[Syntax Tree]], [[Syntax Name]]
-and GHC runtime arrays.
+[[Eval Operator]], [[Eval Place]], [[Eval Value]], [[Syntax Tree]], [[Syntax Name]],
+[[Eval Loop Unboxed]] and GHC runtime arrays.
 Consumed only by [[Eval Loop]].
 
 ## Grill Log
@@ -75,7 +75,7 @@ Consumed only by [[Eval Loop]].
 
 ## Referenced by
 
-[[src/Pudu/Eval/_MOC]] · [[src/_MOC]] · [[Eval Loop]] · [[Eval MultiMap]]
+[[src/Pudu/Eval/_MOC]] · [[src/_MOC]] · [[Eval Loop]] · [[Eval MultiMap]] · [[Eval Loop Unboxed]]
 
 ## Static dispatch allocation
 
@@ -179,6 +179,46 @@ larger arities retain the general ordered list path. Record field construction
 uses the same consumer boundary. Resolved Grill Log: eliminate intermediate
 argument-result wrappers, preserving complete evaluation before parameter writes.
 
+## Machine-word region execution
+
+After the complete-region proof and the writability check pass, the same
+planned region is offered to [[Eval Loop Unboxed]]. It is used only when the
+condition and body plan entirely into the platform-signed integer grammar and
+every snapshot binding is a platform `Int`; then slots are unboxed 64-bit
+elements and the boxed kernel's per-scalar `Value` traffic disappears.
+Otherwise the existing boxed execution runs, so admission, diagnostics,
+commit order, the constant step-limit boundary and abort behavior are
+unchanged. Resolved Grill Log: measured ticky attribution puts all Loop cost
+and 38% of MultiMap cost in this file's boxed scalar path; the representation
+cut is confined to regions whose full semantics are already proven, and a
+runtime initialization mismatch demotes to the boxed path after the same
+checks. Rejected: recognizing benchmark names or sizes, relaxing the proof, or
+producing any different diagnostic.
+
+Measured on GHC 9.10.3/aarch64: the scalar Loop workload falls from 560 ms to
+245 ms wall (tree) and 555 ms to 246 ms (compiled) while total allocation falls
+from 2,334 MB to 2 MB; scaling is linear to three million iterations and every
+other workload, fixture output and suite check is unchanged. The residual is
+about 78 ns per iteration of interpreter closure dispatch, so millisecond
+parity with native code still requires native emission; no promotion is
+claimed from this cut.
+
+## Unit-valued conditionals (#490)
+
+A planned `if` without `else` evaluates its taken block completely, then
+discards only its successful value and yields `UnitValue`. The untaken path
+already yields unit. Existing Step failure propagation, expression ordering,
+whole-region admission, scratch cleanup and lexical writes remain unchanged;
+conditionals with `else` keep their selected value.
+
+Resolved Grill Log: prepare the discard when selecting the taken Code, then
+use normal Step sequencing. A failure must remain a failure, and the block's
+last expression must execute even when its value is discarded. The unboxed
+planner remains a separate admission boundary.
+## Declared field order (#519)
+
+A closed-region record literal reorders its fields from the Env it runs in,
+like the other evaluators.
 ## Canonical record owners (#761)
 
 Closed record-producing kernels retain the complete projected canonical owner path, matching both general evaluators.
@@ -190,3 +230,8 @@ Resolved Grill Log: separate semantic roles even at identical generated spans. N
 Prepare [[Eval Record Construction]] construction once for eligible closed bodies; retain whole-region proof, parameter scratch lifetime and ordered field evaluation.
 
 Resolved Grill Log: carry checked owner and field order through syntax; preserve authored effects, diagnostics and cache identity. See [[Named Sum Publication]].
+
+## Records after the dev merge (#798)
+
+The kernel's record builder orders the constructed value with
+`inDeclaredRecord` against the table read from the environment.

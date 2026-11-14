@@ -17,6 +17,43 @@ the interpretation. So there is no per-architecture code generator to target: wh
 run is decided entirely by **how its runtime was linked**, and by what the runtime needs from the
 filesystem once it starts.
 
+## Embedding a native Pudu program on iOS
+
+On an Apple silicon Mac with Xcode selected, build the slice that the host
+application links:
+
+```sh
+mkdir -p build/ios-simulator build/ios-device
+pudu build Main.pudu --native --target ios-simulator-arm64 -o build/ios-simulator/libMain.a
+pudu build Main.pudu --native --target ios-arm64 -o build/ios-device/libMain.a
+```
+
+Each build places `pudu_program.h` beside the archive. Add the matching
+archive and header directory to the host target. Include the header and call
+`pudu_program_run(argc, argv)` once from the application's chosen thread.
+The call returns the Pudu entry's status. A fatal Pudu diagnostic still
+terminates the process. If the build lists `-lz`, link zlib in the host.
+
+The compiler finds the selected iOS SDK through `xcrun`. Set `PUDU_XCRUN`
+to override the executable. `E6007` names a missing tool or SDK, and `E6008`
+identifies an unsupported runtime part or foreign library path.
+[[Native Mobile Targets]] defines the ABI and supported foreign library paths.
+Run the [[iOS Simulator Run]] to verify C foreign calls in a simulator
+application.
+
+To distribute both slices together, stage each public header in its own
+directory so Xcode copies only headers into the XCFramework:
+
+```sh
+mkdir -p build/ios-device/headers build/ios-simulator/headers
+cp build/ios-device/pudu_program.h build/ios-device/headers/
+cp build/ios-simulator/pudu_program.h build/ios-simulator/headers/
+xcodebuild -create-xcframework \
+  -library build/ios-device/libMain.a -headers build/ios-device/headers \
+  -library build/ios-simulator/libMain.a -headers build/ios-simulator/headers \
+  -output build/Main.xcframework
+```
+
 ## Why a runtime built on a current Linux does not run on Lambda
 
 A runtime linked against the glibc of its build host records that host's symbol-version requirements.
