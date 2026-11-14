@@ -9,6 +9,10 @@ tags: [changelog]
 
 - `pudu build --native --target ios-simulator-arm64 --app` writes a signed simulator application with the embedded iOS host ([[Native App Delivery]]).
 
+## 2026-11-14 — Pudu Native iOS UI coverage target
+
+- Pudu Native iOS UI coverage target, including iPhone Duo, with the current gaps ([[Pudu Native iOS UI]]).
+
 ## 2026-11-14 — Pudu Native keyed lists (#914)
 
 - Pudu Native keyed lists: a mounted tree with stable, recycled node ids; keyed rows reconciled by key into INSERT, REMOVE and MOVE; Std.Mobile.Stream encodes instructions ([[Native Keyed Lists Delivery]]). The installed compiler now ships `lib/Std/Mobile`.

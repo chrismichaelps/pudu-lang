@@ -49,6 +49,7 @@ Pudu is a statically typed native systems language for developers who need predi
 - [[architecture/RELEASE-READINESS|First Release Readiness]] — evidence-based v1 blockers, completed rows, and work order.
 - [[architecture/NATIVE-UI|Native Application UI]] — Pudu-native software rendering, audio, video, and explicit platform boundaries.
 - [[Pudu Native]] — mobile feasibility against the C11 toolchain, the platform-control adapter boundary, threading, hot reload, update limits, and FUI-on-native mapping.
+- [[Pudu Native iOS UI]] — the normative iOS feature target for iPhone, iPad and iPhone Duo, with the current gaps.
 - [[architecture/DESKTOP-CONFORMANCE|Desktop Capability Conformance]] — behavioral desktop coverage,
   executable evidence, and explicit UI/audio/video gaps without copying AppKit's class surface.
 - [[architecture/PATTERNS]] — every design pattern written in Pudu and run: which dissolve, which are ordinary generics, and the one feature that was missing.
