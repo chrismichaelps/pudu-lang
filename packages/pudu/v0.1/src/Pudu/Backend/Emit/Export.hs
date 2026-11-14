@@ -4,6 +4,8 @@
 module Pudu.Backend.Emit.Export (ExportSection (..), exportSection) where
 
 import Data.List (nub)
+import Data.Set (Set)
+import qualified Data.Set as Set
 import Data.Text (Text)
 import qualified Data.Text as Text
 import Pudu.Backend.Emit.Cell (cellName)
@@ -24,12 +26,13 @@ data ExportSection = ExportSection
   deriving stock (Eq, Show)
 
 {-| The wrappers for the exports named by key, over the indexed frame
-    functions. A module without exports yields an empty section. -}
-exportSection :: [(Int, FrameFunction)] -> [Text] -> Either FrameFault ExportSection
-exportSection _ [] = Right (ExportSection [] [] [])
-exportSection indexed keys = do
+    functions; an export in the direct set is one C call to its stack-frame
+    entry. A module without exports yields an empty section. -}
+exportSection :: Set Text -> [(Int, FrameFunction)] -> [Text] -> Either FrameFault ExportSection
+exportSection _ _ [] = Right (ExportSection [] [] [])
+exportSection direct indexed keys = do
   found <- traverse locate keys
-  wrappers <- traverse wrapper found
+  wrappers <- traverse (wrapper direct) found
   pure ExportSection
     { exportCode = admission <> concatMap fst wrappers
     , exportPrototypes = map snd wrappers
@@ -72,8 +75,8 @@ admission =
   , "}"
   ]
 
-wrapper :: (Int, FrameFunction) -> Either FrameFault ([Text], Text)
-wrapper (identity, function) = do
+wrapper :: Set Text -> (Int, FrameFunction) -> Either FrameFault ([Text], Text)
+wrapper direct (identity, function) = do
   mapM_ (crossing "parameter") (frameFunctionParameters function)
   result <- resultType
   let name = mangle (Text.takeWhileEnd (/= '.') (frameFunctionName function))
@@ -86,6 +89,12 @@ wrapper (identity, function) = do
       arguments
         | count == 0 = "NULL"
         | otherwise = "pudu_arguments"
+      called
+        | Set.member (frameFunctionName function) direct =
+            [ "  pudu_result = pudu_direct_" <> textOfInt identity <> "(" <> arguments <> ");" ]
+        | otherwise =
+            [ "  pudu_active_frame = pudu_new_frame(" <> textOfInt identity <> ", " <> arguments <> ", " <> textOfInt count <> ");"
+            , "  pudu_result = pudu_run_active();" ]
       returned = case frameFunctionResult function of
         CoreUnitType -> ["  (void)pudu_result;"]
         kind -> ["  return " <> toAbi kind ("pudu_result." <> cellName kind) <> ";"]
@@ -97,9 +106,8 @@ wrapper (identity, function) = do
            , "  pudu_export_enter(\"" <> name <> "\");" ]
         <> [ "  pudu_arguments[" <> textOfInt index <> "]." <> cellName kind <> " = " <> fromAbi kind (argument index) <> ";"
            | (index, kind) <- parameters ]
-        <> [ "  pudu_active_frame = pudu_new_frame(" <> textOfInt identity <> ", " <> arguments <> ", " <> textOfInt count <> ");"
-           , "  pudu_result = pudu_run_active();"
-           , "  pudu_export_leave();" ]
+        <> called
+        <> [ "  pudu_export_leave();" ]
         <> returned
         <> ["}"]
   pure (body, signature <> ";")

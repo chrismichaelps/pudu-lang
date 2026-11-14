@@ -257,7 +257,7 @@ hostConcurrentParts =
   , ("host_thread_spawn", ["host_optional", "host_thread", "host_done", "kernel_int", "text_copy", "memory_failure", "cleanup"],
       [ "#include <setjmp.h>"
       , "PUDU_OPTIONAL static pudu_cell pudu_run_closure(pudu_box *closure, size_t depth);"
-      , "PUDU_OPTIONAL static _Thread_local size_t pudu_frame_depth;"
+      , "static _Thread_local size_t pudu_frame_depth;"
       , "PUDU_OPTIONAL static _Thread_local jmp_buf *pudu_host_escape = NULL;"
       , "PUDU_OPTIONAL static _Thread_local pudu_text pudu_host_problem;"
       , "/* A failure on a started thread ends that thread, which keeps what it said"

@@ -1,4 +1,5 @@
-{-| @Pudu.Backend.Runtime.Frame — heap-owned frames, owned cells and iterative calls. -}
+{-| @Pudu.Backend.Runtime.Frame — heap-owned frames, owned cells and iterative
+    calls, and the frames direct functions keep on the C stack. -}
 module Pudu.Backend.Runtime.Frame (frameTypes, frameEngine) where
 
 import Data.Text (Text)
@@ -6,9 +7,10 @@ import qualified Data.Text as Text
 import Pudu.Comptime.Limits (callDepthLimit)
 
 {-| The cell union only carries the wide, text and box members a program
-    needs, so a plain integer program keeps the narrow layout. -}
-frameTypes :: Bool -> Bool -> Bool -> Bool -> Bool -> [Text]
-frameTypes wide big decimal text boxes =
+    needs, so a plain integer program keeps the narrow layout. The active
+    frame and the call depth are declared here, before any body reads them. -}
+frameTypes :: Bool -> Bool -> Bool -> Bool -> Bool -> Bool -> [Text]
+frameTypes wide big decimal text boxes threads =
   [ "typedef struct pudu_box pudu_box;" | boxes ] <>
   [ "typedef struct pudu_items pudu_items;" | boxes ] <>
   [ "typedef struct pudu_tree_node pudu_tree_node;" | boxes ] <>
@@ -39,7 +41,7 @@ frameTypes wide big decimal text boxes =
   , "typedef struct pudu_frame {"
   , "  size_t pc; pudu_cell *slots; pudu_cell *arguments;"
   , "  struct pudu_frame *parent; size_t function; size_t destination; int has_destination;"
-  , "  const pudu_site *call_site;"
+  , "  const pudu_site *call_site; int stacked;"
   , "  pudu_cell cells[];"
   , "} pudu_frame;"
   , "enum { PUDU_CALL, PUDU_RETURN, PUDU_INVALID };"
@@ -52,22 +54,25 @@ frameTypes wide big decimal text boxes =
   , "  const size_t *parameters; pudu_step (*body)(pudu_frame *);"
   , "  size_t owned_count; const pudu_owned *owned; unsigned result_kind; int environment; int counted; int blames;"
   , "} pudu_function;"
+  , "static " <> local <> "pudu_frame *pudu_active_frame = NULL;"
+  , "static " <> local <> "size_t pudu_frame_depth = 0;"
   ]
+ where
+  local = threadLocal threads
 
 {-| With owned slots, `pudu_drop_cell` and `pudu_retain_cell` must already be
     written; [[Native Aggregate Emission]] writes them. -}
-frameEngine :: Bool -> Bool -> [Text]
-frameEngine owned threads =
-  [ "static " <> local <> "pudu_frame *pudu_active_frame = NULL;"
-  , "static " <> local <> "size_t pudu_frame_depth = 0;"
-  , "/* A frame owns the references in its slots; letting it go releases them. */"
+frameEngine :: Bool -> Bool -> Bool -> [Text]
+frameEngine owned threads stacked =
+  [ "/* A frame owns the references in its slots; letting it go releases them."
+  , "   A stacked frame's storage belongs to the C function running it. */"
   , "static void pudu_free_frame(pudu_frame *frame) {"
   ] <> (if owned then
   [ "  const pudu_function *definition = &pudu_functions[frame->function];"
   , "  for (size_t i = 0; i < definition->owned_count; ++i)"
   , "    pudu_drop_cell(frame->slots[definition->owned[i].slot], definition->owned[i].kind);"
   ] else []) <>
-  [ "  free(frame);"
+  [ "  if (!frame->stacked) free(frame);"
   , "}"
   , "static void pudu_unwind_frames(void) {"
   , "  while (pudu_active_frame != NULL) {"
@@ -111,7 +116,8 @@ frameEngine owned threads =
   ] else []) <>
   [ "  return frame;"
   , "}"
-  , "/* A method or builtin taken as a value fails at the call made through it. */"
+  ] <> (if stacked then stackFrames owned else []) <>
+  [ "/* A method or builtin taken as a value fails at the call made through it. */"
   , "static const pudu_site *pudu_blamed_site(void) {"
   , "  if (pudu_active_frame == NULL || !pudu_functions[pudu_active_frame->function].blames) return NULL;"
   , "  return pudu_active_frame->call_site;"
@@ -181,5 +187,37 @@ frameEngine owned threads =
   , "  return pudu_run_active();"
   , "}"
   ] else [])
- where
-  local = if threads then "_Thread_local " else ""
+
+{-| The entry and exit of a frame on the C stack, emitted only for a program
+    with direct functions. -}
+stackFrames :: Bool -> [Text]
+stackFrames owned =
+  [ "/* Lays out a direct function's frame exactly as pudu_new_frame lays out a"
+  , "   heap frame, in storage on the caller's C stack, and makes it active. */"
+  , "static inline void pudu_stack_enter(pudu_frame *frame, pudu_cell *cells, size_t function, const pudu_cell *arguments) {"
+  , "  const pudu_function *definition = &pudu_functions[function];"
+  , "  frame->slots = cells;"
+  , "  frame->arguments = cells + definition->slots;"
+  , "  frame->pc = definition->pc;"
+  , "  frame->function = function;"
+  , "  frame->parent = pudu_active_frame;"
+  , "  frame->destination = 0;"
+  , "  frame->has_destination = 0;"
+  , "  frame->call_site = NULL;"
+  , "  frame->stacked = 1;"
+  , "  for (size_t i = 0; i < definition->parameter_count; ++i)"
+  , "    frame->slots[definition->parameters[i]] = arguments[i];"
+  ] <> (if owned then
+  [ "  for (size_t i = 0; i < definition->owned_count; ++i)"
+  , "    pudu_retain_cell(frame->slots[definition->owned[i].slot], definition->owned[i].kind);"
+  ] else []) <>
+  [ "  pudu_active_frame = frame;"
+  , "}"
+  , "static inline void pudu_stack_leave(pudu_frame *frame) {"
+  , "  pudu_active_frame = frame->parent;"
+  , "  pudu_free_frame(frame);"
+  , "}"
+  ]
+
+threadLocal :: Bool -> Text
+threadLocal threads = if threads then "_Thread_local " else ""

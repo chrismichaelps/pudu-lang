@@ -28,15 +28,39 @@ internal-invalid step, never a source diagnostic or interpreted fallback.
 Select runtime roots from emitted instructions and terminators only. Print
 uses existing byte lengths and shared helpers. All fault cases return data.
 
+## Algorithm and invariants
+
+### Direct bodies
+
+Every function still gets `pudu_body_<n>` for the function table. A direct function's code
+is emitted once as `static pudu_cell pudu_run_<n>(pudu_frame *frame)`; its block jumps assign
+a local program counter, so the C compiler turns them into direct branches. Its return yields
+the retained result cell; its failure paths call the failure helper and then `abort()`. Its
+table body only forwards to `pudu_run_<n>` and returns the result as a return step.
+
+In any body, a call to a direct callee is emitted inline: the E7002 depth check at the call
+site, `pudu_direct_<m>(frame->arguments)`, the destination's previous owned value released (or
+the answer released when there is no destination), the depth restored, and the resume label
+taken, without returning to the dispatcher. Prototypes of every `pudu_run_<n>` and
+`pudu_direct_<n>` precede the bodies.
+
+Slots that own nothing are C locals named `pudu_s<n>` in a direct body, because nothing outside the body reads them: unwinding releases only owned slots. Only slots the body mentions are declared; a parameter local starts from its frame slot, any other starts zeroed. Owned slots stay in the frame so unwinding can release them.
+
+## Negative Logic (Prohibited Paths)
+
+- No call through a function value inside a direct body.
+
 ## Resolved Grill Log
 
 - **Q:** Leave recursive C calls in expression code? **A:** No; calls return steps.
 - **Q:** Put argument vectors on the C stack? **A:** No; frame-owned scratch holds them.
 - **Q:** Claim #499 fixed before dispatch integration? **A:** No; this independently testable generator leaves the allocation boundary open.
+- **Q:** Why a local program counter in direct bodies? **A:** Nothing suspends a direct body, so the counter never needs to outlive the call; keeping it local lets the compiler resolve constant jumps. _Rejected:_ storing it through the frame.
+- **Q:** Rewrite slot text instead of threading a locals mode through value emission? **A:** Every slot reference the emitters produce has the one form `frame->slots[<n>]`, so a rewrite over the lines a direct body added is exact and keeps value emission single. _Rejected:_ a second copy of value emission.
 
 ## Dependencies and consumers
 
-[[Core Frame IR]] · [[Backend Frame Values]] · [[Backend Emit State]] · [[Native Execution Frames]]
+[[Core Frame IR]] · [[Backend Frame Values]] · [[Backend Emit State]] · [[Native Execution Frames]] · [[Backend Frame Direct]]
 
 ## Grill Log
 

@@ -11,6 +11,7 @@ import Pudu.Backend.Emit.Aggregate (aggregateSection, aggregateTypes, cellName, 
 import Pudu.Backend.Emit.Entry (EmittedUnit (..), EntryForm (..), entrySection)
 import Pudu.Backend.Emit.Export (ExportSection (..), exportSection)
 import Pudu.Backend.Emit.Frame.Body (emitFrameBodies)
+import Pudu.Backend.Emit.Frame.Direct (argumentCount, directFunctions, enteredDirect, frameCells)
 import Pudu.Backend.Emit.Support (integerHelper, isBigInteger, isWideInteger)
 import Pudu.Backend.Emit.State (EmitState (..), emptyEmitState, renderByteData, renderSites, textOfInt)
 import Pudu.Backend.Runtime (RuntimePart (..), runtimeParts)
@@ -28,8 +29,8 @@ import qualified Data.Map.Strict as Map
 import Data.List (nub)
 import Pudu.Core (closureIsBuiltin, CoreForeign (..), closureHasEnvironment, closureMethod, CoreLayout (..), CoreType (..), CoreVariant (..))
 import Pudu.Core.Frame
-  ( FrameBlock (..), FrameFault (..), FrameFunction (..), FrameLabel (..)
-  , FrameModule (..), FrameSlot (..), FrameSlotId (..), FrameTerminator (..) )
+  ( FrameFault (..), FrameFunction (..), FrameLabel (..)
+  , FrameModule (..), FrameSlot (..), FrameSlotId (..) )
 import Pudu.Source (Source)
 
 emitFrameProgram :: Text -> [Source] -> FrameModule -> Either FrameFault Text
@@ -92,10 +93,11 @@ emitFrameUnit form version sources source = do
       , "  return pudu_report_status;" ]
     CoreUnitType -> Right ["  (void)pudu_run_frames(" <> textOfInt entryId <> ");", "  return 0;"]
     CoreNeverType -> Right ["  (void)pudu_run_frames(" <> textOfInt entryId <> ");", "  return 0;"]
+  let direct = directFunctions source
   exports <- case form of
-    EmbeddedEntry -> exportSection indexed (frameModuleExports source)
+    EmbeddedEntry -> exportSection direct indexed (frameModuleExports source)
     ExecutableEntry -> Right (ExportSection [] [] [])
-  (emitted, roots) <- emitFrameBodies (emptyEmitState sources) source
+  (emitted, roots) <- emitFrameBodies direct (emptyEmitState sources) source
   let wide = frameUsesWideCells source
       big = frameUsesBig source
       decimal = frameUsesDecimal source
@@ -137,10 +139,11 @@ emitFrameUnit form version sources source = do
         <> ["static const pudu_function pudu_functions[] = {"]
         <> map definition indexed <> ["};"]
   pure $ EmittedUnit
-    { emittedSource = Text.unlines (header <> runtime <> frameTypes wide big decimal text boxes
+    { emittedSource = Text.unlines (header <> runtime <> frameTypes wide big decimal text boxes (Set.member "host_thread_spawn" selected)
     <> concat [lines' <> [""] | (name, lines') <- arrayRuntimeParts <> textPieceRuntimeParts <> treeRuntimeParts <> rangeRuntimeParts <> bytesRuntimeParts <> hashRuntimeParts <> kernelRuntimeParts, Set.member name selected]
     <> renderSites (reverse (emitSites emitted)) <> renderByteData (reverse (emitByteData emitted)) <> aggregates <> ownership <> foreignWrappers (frameModuleLayouts source) (foreignsOf source) <> reverse (emitOutput emitted)
-    <> metadata <> frameEngine owned (Set.member "host_thread_spawn" selected)
+    <> metadata <> frameEngine owned (Set.member "host_thread_spawn" selected) (not (Set.null (enteredDirect source direct)))
+    <> concat [stackedCall identity function | (identity, function) <- indexed, Set.member (frameFunctionName function) (enteredDirect source direct)]
     -- Only a program that reads its arguments keeps them.
     <> entrySection form (Set.member "host_arguments" selected) (Set.member "output_state" selected) (not (null (exportCode exports)))
       (["  pudu_process_cleanup_hook = pudu_foreign_teardown;" | Set.member "host_foreign_store" selected] <> ending)
@@ -190,12 +193,20 @@ emitFrameUnit form version sources source = do
         -- A builtin or a method taken as a value: its depth belongs to the
         -- call made through it, and so do its failures.
         lent = maybe False (\found -> closureIsBuiltin found || isJust (closureMethod found)) info
-    argumentCount function = maximum (0 :
-      [length arguments | block <- frameFunctionBlocks function
-      , arguments <- case frameBlockTerminator block of
-          FrameCall _ _ given _ _ -> [given]
-          FrameCallValue _ closure given _ _ -> [closure : given]
-          _ -> []])
+    -- A direct function's frame and cells live on the C stack of this call.
+    -- Owned slots start empty, as in a heap frame, so a failure before they
+    -- are written releases nothing; unowned slots are the body's C locals.
+    stackedCall identity function =
+      [ "static pudu_cell pudu_direct_" <> textOfInt identity <> "(const pudu_cell *arguments) {"
+      , "  pudu_frame pudu_on_stack;"
+      , "  pudu_cell pudu_cells[" <> textOfInt (frameCells function) <> "];"
+      , "  pudu_cell pudu_answer;" ]
+      <> [ "  memset(&pudu_cells[" <> slotIndex slot <> "], 0, sizeof pudu_cells[0]);" | slot <- ownedSlots function ]
+      <> [ "  pudu_stack_enter(&pudu_on_stack, pudu_cells, " <> textOfInt identity <> ", arguments);"
+      , "  pudu_answer = pudu_run_" <> textOfInt identity <> "(&pudu_on_stack);"
+      , "  pudu_stack_leave(&pudu_on_stack);"
+      , "  return pudu_answer;"
+      , "}" ]
     slotIndex slot = case frameSlotId slot of FrameSlotId identity -> textOfInt identity
     label (FrameLabel identity) = textOfInt identity
 

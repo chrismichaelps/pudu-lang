@@ -1,6 +1,6 @@
 ---
 type: handoff
-status: ACTIVE
+status: COMPLETE
 issue: 899
 aliases: [Native Calls Delivery]
 ---
@@ -55,9 +55,7 @@ and requires the second call to answer `PUDU_PROGRAM_ALREADY_STARTED`.
 
 ## Exact next action
 
-Measure an export call against a direct C call of the same scalar function at
-`-O2` on an iOS device, and decide from that number whether leaf exports get a
-frameless path.
+Done: the measured comparison and the frameless path continue in [[Native Direct Calls Delivery]].
 
 ## Referenced by
 

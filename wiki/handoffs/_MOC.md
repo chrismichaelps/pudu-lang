@@ -9,6 +9,7 @@ tags: [moc, handoff]
 - [[Foreign Callback Delivery]] — callbacks into Pudu across foreign calls (#875 decided, #876 next).
 - [[Native Mobile Targets Delivery]] — iOS static libraries and simulator evidence (#878).
 - [[Native Calls Delivery]] — single-start entry and calls into exported functions (#899).
+- [[Native Direct Calls Delivery]] — direct C calls for bounded-depth functions (#904).
 
 - [[Native Audio Adapter Delivery]] — AudioToolbox playback and streams (#857).
 
