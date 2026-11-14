@@ -107,6 +107,21 @@ wrapper, and a Kotlin wrapper with its managed-runtime bridge, and checks the pl
 implementation against that interface at build time. Conversions are generated, not looked up at
 run time.
 
+## View stream, version 0 (#909)
+
+One stream carries each commit. It is a sequence of little-endian 32-bit words, applied in order by the host. Every instruction begins with its code word.
+
+| Code | Instruction | Words that follow |
+| --- | --- | --- |
+| 1 | CREATE | node, kind (1 label, 2 button, 3 column) |
+| 2 | TEXT | node, byte length, then that many UTF-8 bytes |
+| 3 | APPEND | column node, child node |
+| 4 | ROOT | node shown as the screen's content |
+| 5 | TAG | node, the tag its events report |
+| 6 | RESET | none (forget every node) |
+
+Events return through `pudu_ui_wait` as one 64-bit value: the kind in the high 32 bits (1 tapped, with the button's tag in the low 32 bits; 2 stopped). Version 0 has no keys and no removal. Compiled views and keyed regions extend it under ADR-0031 (compiled native execution).
+
 ## FUI on native
 
 FUI renders HTML today and its tokens carry CSS units. Native support requires:
@@ -136,6 +151,8 @@ New components required for real applications: navigation stack, tab bar, sideba
 rail for tablets, sheet with detents, action sheet, context menu, swipe actions, pull to refresh,
 search field, date and time pickers, stepper, segmented control, page indicator, toast or
 snackbar, and a floating action button with an iOS fallback.
+
+FUI's native presenter targets [[Std Mobile View]]: a renderer-neutral FUI tree is realized as these controls on phones, and as HTML on the web.
 
 ## Phase gates
 

@@ -68,6 +68,10 @@ report is compared as is, so a wrong value can never pass on a second try.
 _Rejected:_ retrying the whole smoke, which would also hide compile or
 foreign-call regressions.
 
+## Counter example (#909)
+
+The script also builds and runs the counter example, `examples/mobile/Counter.pudu`, with the iOS host adapter ([[iOS Host Adapter]]). It runs the program with `PUDU_UI_SELFTEST=3` and expects `PUDU_LABEL Count: 3` and status 0. It also records `PUDU_FIRST_FRAME_MS` and the linked executable size in bytes.
+
 ## Referenced by
 
 [[Native Mobile Targets]] · [[Native Mobile Targets Delivery]]

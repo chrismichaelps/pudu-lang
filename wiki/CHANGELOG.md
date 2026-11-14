@@ -5,6 +5,10 @@ tags: [changelog]
 
 # Changelog
 
+## 2026-11-14 — Pudu Native first light (#909)
+
+- Pudu Native first light: Std.Mobile.View and Std.Mobile.Host, the iOS host adapter and a counter example built only from Pudu ([[Native First Light Delivery]]).
+
 ## 2026-11-14 — Exported functions callable from C (#899)
 
 - [[Backend Emit Export]] emits `pudu_export_<name>` for each exported root-module function with scalar crossings, declared in `pudu_program.h`; [[Compiler Lower]] roots exports in library builds. Calls are admitted after the start, on its thread, outside another call. Evidence: [[Backend Export Tests]].

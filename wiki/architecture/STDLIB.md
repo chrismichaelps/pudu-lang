@@ -199,6 +199,13 @@ Encoding uses named escapes where JSON has them and `\u00XX` for the remaining c
 | `Std.Site` | building a web application into the files and routing a host serves |
 | `Std.Ip` | IPv4 and IPv6 addresses, classification, network prefixes, allowlists |
 
+### Native mobile
+
+| Module | Provides |
+|---|---|
+| `Std.Mobile.View` | pure view tree and the instruction stream that realizes it on phones; [[Std Mobile View]] |
+| `Std.Mobile.Host` | the platform calls that apply a stream and wait for an event; [[Std Mobile Host]] |
+
 ### Concurrency
 
 | Module | Provides |

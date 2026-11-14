@@ -337,3 +337,10 @@ tags: [moc, module]
 
 - [[Backend Text View Programs]] — native UTF-8 byte-boundary and lifetime evidence.
 - [[Database Scope Retirement Fixture]] — exact outcomes and per-scope registry lifetime.
+
+## Native mobile (#909)
+
+- [[iOS Host Adapter]] — Objective-C host of a Pudu Native application on iOS.
+- [[Native Counter Example]] — Phase 1 counter built only from Pudu.
+- [[Uses Mobile View]] — stdlib fixture for the counter view stream.
+- [[Native First Light Delivery]] — phase 1 of Pudu Native (#909).
