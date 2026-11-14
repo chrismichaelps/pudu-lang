@@ -314,6 +314,14 @@ any library the host must link.
   name where the artifact runs; `--native` already says which kind of artifact.
   _Rejected:_ a second `--platform` flag.
 
+## Simulator application (#916)
+
+`pudu build <file> --native --target ios-simulator-arm64 --app [-o Name.app]` writes a
+signed simulator application named after the program (`<Name>.app`, identifier
+`org.pudu.<Name>`) through [[Backend Toolchain App]]. `--app` without `--native`, with the
+device target, or with no target is refused with a message saying why. `--app` given
+twice is refused.
+
 ## Library exports (#899)
 
 `pudu build --native --target <ios target>` lowers through `lowerLibrary`, so

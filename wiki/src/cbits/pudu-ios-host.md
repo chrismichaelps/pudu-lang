@@ -1,6 +1,6 @@
 ---
 type: module
-path: "@root/host/ios/PuduHost.m"
+path: "@root/packages/pudu/v0.1/cbits/pudu_ios_host.m"
 fidelity: Active
 domain: "[[Pudu Native]]"
 subsystem: "[[Native Mobile Targets]]"
@@ -12,7 +12,7 @@ aliases: [iOS Host Adapter]
 
 ## Purpose and interface
 
-The Objective-C host of a Pudu Native application on iOS. It starts the program, applies the streams the program produces to UIKit controls, and returns control events to the program. It carries no application logic.
+The Objective-C host of a Pudu Native application on iOS. It starts the program, applies the streams the program produces to UIKit controls, and returns control events to the program. It carries no application logic. The compiler embeds this file at build time beside the desktop host sources ([[Native Toolchain Host Sources]]) and writes it out when it builds an application; it is never compiled into the compiler.
 
 Entry points the program depends on:
 - `pudu_ui_apply(const void *stream, uint64_t length)`: applies one commit.
@@ -51,4 +51,4 @@ Implements the three symbols of [[Std Mobile Host]]. Its streams come from [[Std
 
 ## Referenced by
 
-[[Native Mobile Targets]] · [[Std Mobile Host]] · [[iOS Simulator Run]] · [[Native First Light Delivery]] · [[Native Controls Delivery]]
+[[Native Mobile Targets]] · [[Std Mobile Host]] · [[iOS Simulator Run]] · [[Backend Toolchain App]] · [[Native First Light Delivery]] · [[Native Controls Delivery]]

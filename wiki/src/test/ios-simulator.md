@@ -32,8 +32,10 @@ Use `--require-simulator` to make an unavailable simulator a failure.
   implementation through a macOS dylib to compare interpreter output.
 - `main.m` owns `main`, calls `pudu_program_run` inside an autorelease pool,
   prints the status it returns and ends, so the launch finishes by itself.
-- The application is linked with `xcrun --sdk iphonesimulator clang`, given an
-  `Info.plist` with its identifier and executable, and ad-hoc signed.
+- Each example is built with `pudu build --native --target ios-simulator-arm64 --app`
+  ([[Backend Toolchain App]]), which compiles and links the application, writes its
+  `Info.plist` and signs it. The script no longer compiles the host or writes the bundle
+  itself.
 - The script creates its own iPhone device, boots it, installs, launches with
   `--console-pty` capturing standard output, and deletes the device afterwards
   on every path. An explicit `PUDU_IOS_SIMULATOR_UDID` instead uses an already

@@ -140,6 +140,10 @@ links, which made a clean `cabal install exe:pudu` fail even though in-tree buil
   and the command dispatcher retains another responsibility. _Accepted:_ one focused library module
   consumed by the thin CLI and its tests.
 
+## iOS host and application modules (#916)
+
+`cbits/pudu_ios_host.m` joins the extra source files. It is embedded by [[Native Toolchain Host Sources]] and is not a C source of the compiler. [[Backend Toolchain App]] joins the exposed modules. Resolved Grill Log: the host is a data input to application builds, so it needs no compiler linkage.
+
 ## Method lowering (#551)
 
 Resolved Grill Log: register [[Compiler Lower Method]] with existing

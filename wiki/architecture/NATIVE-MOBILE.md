@@ -98,7 +98,7 @@ changes ship through the stores.
 Platform projects are build output. A typed, declarative patch set produced from Pudu
 configuration generates them; every patch is idempotent and ordered by declared dependency, and
 two patches writing the same key is a build error. A fingerprint over every native input decides
-whether an existing development host can load a project or a rebuild is required.
+whether an existing development host can load a project or a rebuild is required. The first step builds the application bundle directly; generated projects and typed configuration patches build on it.
 
 ### Calling Swift and Kotlin
 
@@ -177,7 +177,7 @@ FUI's native presenter targets [[Std Mobile View]]: a renderer-neutral FUI tree 
 | 0 Toolchain | Library output and iOS device and simulator targets with a simulator smoke run (#878, done); the entry guard (#899, done); C-to-Pudu calls ([[Native Calls Delivery]]); direct calls (#904) and export crossings for text, records and Result (#906) |
 | 1 First light | A counter application built from Pudu alone runs on an iOS simulator, and later an Android emulator, with platform label and button, measured cold start and binary size recorded |
 | 2 Declarative UI | Reconciler, mutation batches, recycling list, navigation stack, accessibility labels reaching the platform tree, simulator reload |
-| 3 Tooling | Generated projects, patch set, fingerprinted development host, signed store artifacts from local builds |
+| 3 Tooling | Generated projects, patch set, fingerprinted development host, signed store artifacts from local builds; `pudu build --app` writes a signed simulator application (#916) |
 | 4 Hardening | Percentile frame times on list scroll, input latency, cold start, resident memory, and size compared against hand-written platform baselines on named mid-range and high-end phones and tablets |
 | 5 Ecosystem | Versioned modules, compatibility guarantees, migration tooling |
 

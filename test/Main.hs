@@ -53,6 +53,7 @@ import Pudu.Backend.OutputSpec (outputProperties, runOutputOracle)
 import Pudu.Backend.NativeSpec (backendNativeProperties)
 import Pudu.Backend.TargetSpec (backendTargetProperties)
 import Pudu.Backend.ExportSpec (exportProperties)
+import Pudu.Backend.AppSpec (appProperties)
 import Pudu.Backend.DirectCallSpec (directCallProperties)
 import Pudu.Backend.ToolchainSpec (backendToolchainProperties)
 import Pudu.Compiler.LiteralsSpec (literalsProperties)
@@ -155,7 +156,7 @@ runTests = do
   renderOutcomes <- traverse (uncurry check) renderProperties
   programOutcomes <- traverse (uncurry check) (programProperties <> authenticationProperties)
   persistOutcomes <- traverse (uncurry check) persistProperties
-  backendOutcomes <- traverse (uncurry check) (outputProperties <> memoryProperties <> floatRuntimeProperties <> floatValueProperties <> floatFormatProperties <> floatNaturalProperties <> wideFrameProperties <> textLeakProperties <> textCaseProperties <> brokenPipeProperties <> wideRuntimeProperties <> wideOperationProperties <> wideValueProperties <> word128Properties <> frameRuntimeProperties <> frameEmitProperties <> frameProperties <> lowerTypesProperties <> backendEmitProperties <> backendNativeProperties <> backendToolchainProperties <> backendTargetProperties <> exportProperties <> directCallProperties)
+  backendOutcomes <- traverse (uncurry check) (outputProperties <> memoryProperties <> floatRuntimeProperties <> floatValueProperties <> floatFormatProperties <> floatNaturalProperties <> wideFrameProperties <> textLeakProperties <> textCaseProperties <> brokenPipeProperties <> wideRuntimeProperties <> wideOperationProperties <> wideValueProperties <> word128Properties <> frameRuntimeProperties <> frameEmitProperties <> frameProperties <> lowerTypesProperties <> backendEmitProperties <> backendNativeProperties <> backendToolchainProperties <> backendTargetProperties <> exportProperties <> directCallProperties <> appProperties)
   literalsOutcomes <- traverse (uncurry check) literalsProperties
   initOutcomes <- traverse (uncurry check) initProperties
   packageOutcomes <- traverse (uncurry check) packageProperties

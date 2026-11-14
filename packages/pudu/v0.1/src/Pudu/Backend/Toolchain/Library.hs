@@ -9,7 +9,9 @@
 module Pudu.Backend.Toolchain.Library
   ( LibraryProducts (..)
   , LibraryRequest (..)
+  , appleTools
   , compileLibrary
+  , invoke
   ) where
 
 import Control.Exception (finally, mask)
