@@ -692,3 +692,8 @@ Register [[Backend Emit Foreign Handle]] and [[Core Text Operations]] using exis
 
 Register [[Backend Toolchain Process]] with the existing toolchain
 dependencies. Resolved Grill Log: the process runner needs no new package.
+
+## Embedded native entry (#878)
+
+Register [[Backend Emit Entry]] with existing dependencies. Resolved Grill
+Log: the emitter uses the existing text and containers packages.

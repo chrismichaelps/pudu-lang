@@ -6,6 +6,8 @@ aliases: [Backend Module Map]
 
 # Backend Module Map
 
+- [[Backend Emit Entry]] — executable and embedded C entry forms (#878).
+
 - [[Backend Toolchain Process]] — bounded native tool execution (#878).
 
 - [[Native Toolchain Host Sources]] · [[Native Host Desktop]] · [[Native Host Audio]] — packaged native platform translation units (#856).

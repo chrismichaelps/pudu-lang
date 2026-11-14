@@ -5,6 +5,10 @@ tags: [changelog]
 
 # Changelog
 
+## 2026-11-13 — Embedded native entry (#878)
+
+- [[Backend Emit Entry]] emits a C entry callable from a host application.
+
 ## 2026-11-13 — Shared native tool execution (#878)
 
 - [[Backend Toolchain Process]] owns compiler process lifetime and output capture.
