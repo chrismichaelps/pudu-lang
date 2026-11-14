@@ -112,6 +112,7 @@ library
     Pudu.Backend.Emit.Cell
     Pudu.Backend.Emit.Entry
     Pudu.Backend.Emit.Export
+    Pudu.Backend.Emit.Export.Crossing
     Pudu.Backend.Emit.Array
     Pudu.Backend.Emit.Keyed
     Pudu.Backend.Emit.Kernel

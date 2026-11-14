@@ -5,6 +5,14 @@ tags: [changelog]
 
 # Changelog
 
+## 2026-11-14 — Exports carry text, records and Result (#906)
+
+- Exports carry text (`pudu_string`), records (named public structs, nested and with text) and `Result` (status with out pointers); every owned value crossing is released exactly once ([[Native Export Crossings Delivery]]).
+
+## 2026-11-14 — Export crossings designed (#906)
+
+- Export crossings designed: text as `pudu_string`, records as named public structs, `Result` as a status with out pointers ([[Native Export Crossings Delivery]]).
+
 ## 2026-11-14 — Native direct calls (#904)
 
 - Native direct calls: functions with bounded call depth run in frames on the C stack, keep unowned slots in C locals, and are called as plain C functions from heap bodies, direct bodies and exports; a non-recursive scalar call measured about 14 ns against about 57 ns on heap frames ([[Native Direct Calls Delivery]]).

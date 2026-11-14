@@ -257,6 +257,7 @@ tags: [moc, module]
 - [[Backend Toolchain Tests]]
 - [[Backend Export Tests]] — exported functions called from a C host (#899).
 - [[Native Direct Call Tests]] — direct-call selection, output, failure location and export entry (#904).
+- [[Backend Export Crossing]] — export shapes for text, records and `Result` (#906).
 - [[Diagnostic Evaluation]]
 
 - [[Compiler Lower Control]] — resolved scalar loop targets, transfers and divergence (#489).
