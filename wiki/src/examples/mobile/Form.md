@@ -15,11 +15,11 @@ The Phase 2 application of [[Pudu Native]]: a form built only from Pudu and run 
 
 - Model: `{ name: Str, subscribed: Bool }`, starting from the name given at launch and not subscribed.
 - View: a column holding a named greeting label, `Hello, {name or stranger}` plus ` (subscribed)` when subscribed, a named name field, and a row holding a `Subscribe` toggle and a `Clear` button.
-- Entry: builds the view and applies its stream with `View.build`, then loops on `Host.wait()`. `Changed` sets the name, `Toggled` sets the subscription and `Tapped` on the Clear tag empties the name and clears the subscription. Each change builds the next view and applies `View.changes` from the shown view. A `Stopped` event returns 0.
+- Entry: mounts the view with `View.mount`, then loops on `Host.wait()`. `Changed` sets the name, `Toggled` sets the subscription and `Tapped` on the Clear tag empties the name and clears the subscription. Each change builds the next view and `View.update` applies it to the mounted tree, which the loop keeps. A `Stopped` event returns 0.
 
 ## Invariants
 
-- The shown view is always the last view applied, so every `changes` call starts from what the screen displays.
+- The mounted tree is always the last tree applied, so every `update` starts from what the screen displays.
 - `update` maps each event by its tag. A tag selects one control only, and an event with an unknown tag leaves the model unchanged.
 - The field text is the model's name, so the label and the field agree after every event.
 - The entry returns 0 on `Stopped`, and the status is the process status.

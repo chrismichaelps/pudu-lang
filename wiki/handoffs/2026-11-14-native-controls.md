@@ -1,6 +1,6 @@
 ---
 type: handoff
-status: ACTIVE
+status: COMPLETE
 issue: 912
 aliases: [Native Controls Delivery]
 ---
@@ -19,7 +19,7 @@ A simulator run typed `Ada` and switched the toggle: the label read `Hello, Ada 
 
 ## Exact next action
 
-Recycling lists with keyed rows, the reconciler from compiled views (ADR-0031 sections 2 and 3).
+Continued in [[Native Keyed Lists Delivery]].
 
 ## Referenced by
 

@@ -23,37 +23,53 @@ fn textAt(bytes: &Array[UInt8], offset: Int, length: Int) -> Option[Str] {
   bytesOf(bytes.slice(offset, offset + length)).toText()
 }
 
+// The stream that builds a view from nothing.
+fn built(view: &View.View) -> Array[UInt8] {
+  let (_, stream) = View.mount(view)
+  stream.toArray()
+}
+
+// The stream that turns a freshly mounted `shown` into `next`.
+fn changed(shown: &View.View, next: &View.View) -> Array[UInt8] {
+  let (mounted, _) = View.mount(shown)
+  let (_, stream) = View.update(&mounted, next)
+  stream.toArray()
+}
+
+fn row(key: Str) -> (Str, View.View) { (key, View.Label(key)) }
+
 export fn main() -> Int {
   var held = 0
   let zero = counter(0)
-  let built = View.build(&zero).toArray()
+  let builtZero = built(&zero)
 
   // The whole counter: 26 words and 15 bytes of text.
-  if built.length() == 119 { held = held + 1 }
+  if builtZero.length() == 119 { held = held + 1 }
   // Column 0, label 1 with its text, appended; button 2 tagged 1 with its text, appended; root 0.
-  if wordsAt(&built, 0, 9) == [1u32, 0u32, 3u32, 1u32, 1u32, 1u32, 2u32, 1u32, 8u32] { held = held + 1 }
-  if textAt(&built, 36, 8) == Some("Count: 0") { held = held + 1 }
-  if wordsAt(&built, 44, 12) == [3u32, 0u32, 1u32, 1u32, 2u32, 2u32, 5u32, 2u32, 1u32, 2u32, 2u32, 7u32] { held = held + 1 }
-  if textAt(&built, 92, 7) == Some("Add one") { held = held + 1 }
-  if wordsAt(&built, 99, 5) == [3u32, 0u32, 2u32, 4u32, 0u32] { held = held + 1 }
+  if wordsAt(&builtZero, 0, 9) == [1u32, 0u32, 3u32, 1u32, 1u32, 1u32, 2u32, 1u32, 8u32] { held = held + 1 }
+  if textAt(&builtZero, 36, 8) == Some("Count: 0") { held = held + 1 }
+  if wordsAt(&builtZero, 44, 12) == [3u32, 0u32, 1u32, 1u32, 2u32, 2u32, 5u32, 2u32, 1u32, 2u32, 2u32, 7u32] { held = held + 1 }
+  if textAt(&builtZero, 92, 7) == Some("Add one") { held = held + 1 }
+  if wordsAt(&builtZero, 99, 5) == [3u32, 0u32, 2u32, 4u32, 0u32] { held = held + 1 }
 
   // A count change is one TEXT instruction for the label.
   let one = counter(1)
-  let changed = View.changes(&zero, &one).toArray()
-  if changed.length() == 20 && wordsAt(&changed, 0, 3) == [2u32, 1u32, 8u32] { held = held + 1 }
-  if textAt(&changed, 12, 8) == Some("Count: 1") { held = held + 1 }
+  let counted = changed(&zero, &one)
+  if counted.length() == 20 && wordsAt(&counted, 0, 3) == [2u32, 1u32, 8u32] { held = held + 1 }
+  if textAt(&counted, 12, 8) == Some("Count: 1") { held = held + 1 }
 
   // The same tree changes nothing.
-  if View.changes(&one, &one).length() == 0 { held = held + 1 }
+  if changed(&one, &one).length() == 0 { held = held + 1 }
 
-  // A different shape forgets the old tree and builds the new one.
+  // A shorter column keeps its first child and removes the rest.
   let other = View.Column([View.Label("only")])
-  let rebuilt = View.changes(&zero, &other).toArray()
-  if wordsAt(&rebuilt, 0, 1) == [6u32] && wordsAt(&rebuilt, 4, 3) == [1u32, 0u32, 3u32] { held = held + 1 }
+  let shortened = changed(&zero, &other)
+  if wordsAt(&shortened, 0, 3) == [2u32, 1u32, 4u32] && textAt(&shortened, 12, 4) == Some("only") && wordsAt(&shortened, 16, 4) == [11u32, 2u32, 1u32, 2u32] { held = held + 1 }
 
-  // A changed button tag is a different tree, not a text change.
+  // A changed button tag replaces only that button: built, inserted, the old one removed.
   let retagged = View.Column([View.Label("Count: 0"), View.Button("Add one", 2u32)])
-  if wordsAt(&View.changes(&zero, &retagged).toArray(), 0, 1) == [6u32] { held = held + 1 }
+  let replaced = changed(&zero, &retagged)
+  if wordsAt(&replaced, 0, 6) == [1u32, 3u32, 2u32, 5u32, 3u32, 2u32] && wordsAt(&replaced, 43, 8) == [10u32, 0u32, 3u32, 1u32, 11u32, 2u32, 1u32, 2u32] { held = held + 1 }
 
   // Events: kind above, tag below, text from the host; an unknown kind stops.
   if View.event((1u64 << 32) | 7u64, "") == View.Tapped(7u32) { held = held + 1 }
@@ -65,25 +81,40 @@ export fn main() -> Int {
 
   // A named field: created with its tag, placeholder, empty text and name.
   let form = View.Column([View.Named("Your name", View.Field("Name", "", 1u32))])
-  let formed = View.build(&form).toArray()
+  let formed = built(&form)
   if wordsAt(&formed, 12, 6) == [1u32, 1u32, 5u32, 5u32, 1u32, 1u32] && wordsAt(&formed, 36, 3) == [8u32, 1u32, 4u32] { held = held + 1 }
   if textAt(&formed, 48, 4) == Some("Name") && wordsAt(&formed, 52, 6) == [2u32, 1u32, 0u32, 9u32, 1u32, 9u32] { held = held + 1 }
   if textAt(&formed, 76, 9) == Some("Your name") && wordsAt(&formed, 85, 5) == [3u32, 0u32, 1u32, 4u32, 0u32] { held = held + 1 }
 
   // A row is kind 4.
-  let row = View.Row([View.Label("x")])
-  if wordsAt(&View.build(&row).toArray(), 0, 3) == [1u32, 0u32, 4u32] { held = held + 1 }
+  let rowed = View.Row([View.Label("x")])
+  if wordsAt(&built(&rowed), 0, 3) == [1u32, 0u32, 4u32] { held = held + 1 }
 
   // In-place changes: a toggle's state, a field's placeholder and text, a name.
   let off = View.Toggle("Subscribe", false, 2u32)
   let on = View.Toggle("Subscribe", true, 2u32)
-  if wordsAt(&View.changes(&off, &on).toArray(), 0, 3) == [7u32, 0u32, 1u32] && View.changes(&off, &on).length() == 12 { held = held + 1 }
-  let hinted = View.changes(&View.Field("Name", "", 1u32), &View.Field("Full name", "Ada", 1u32)).toArray()
+  if wordsAt(&changed(&off, &on), 0, 3) == [7u32, 0u32, 1u32] && changed(&off, &on).length() == 12 { held = held + 1 }
+  let hinted = changed(&View.Field("Name", "", 1u32), &View.Field("Full name", "Ada", 1u32))
   if wordsAt(&hinted, 0, 3) == [8u32, 0u32, 9u32] && wordsAt(&hinted, 21, 3) == [2u32, 0u32, 3u32] && textAt(&hinted, 33, 3) == Some("Ada") { held = held + 1 }
-  let renamed = View.changes(&View.Named("A", View.Label("x")), &View.Named("B", View.Label("x"))).toArray()
+  let renamed = changed(&View.Named("A", View.Label("x")), &View.Named("B", View.Label("x")))
   if wordsAt(&renamed, 0, 3) == [9u32, 0u32, 1u32] && textAt(&renamed, 12, 1) == Some("B") { held = held + 1 }
 
-  // A toggle with another tag is another tree.
-  if wordsAt(&View.changes(&off, &View.Toggle("Subscribe", false, 3u32)).toArray(), 0, 1) == [6u32] { held = held + 1 }
+  // A root with another tag is replaced: built, shown, the old one removed.
+  let retoggled = changed(&off, &View.Toggle("Subscribe", false, 3u32))
+  if wordsAt(&retoggled, 0, 6) == [1u32, 1u32, 6u32, 5u32, 1u32, 3u32] && wordsAt(&retoggled, 45, 9) == [7u32, 1u32, 0u32, 4u32, 1u32, 11u32, 0u32, 1u32, 0u32] { held = held + 1 }
+
+  // Keyed rows: a reorder is one move, an insertion one built row, a removal frees its ids for reuse.
+  let (listed, _) = View.mount(&View.Keyed([row("aa"), row("bb"), row("cc")]))
+  let (reordered, moved) = View.update(&listed, &View.Keyed([row("cc"), row("aa"), row("bb")]))
+  if wordsAt(&moved.toArray(), 0, 4) == [12u32, 0u32, 3u32, 0u32] && moved.length() == 16 { held = held + 1 }
+  let (grown, inserted) = View.update(&reordered, &View.Keyed([row("cc"), row("xx"), row("aa"), row("bb")]))
+  if wordsAt(&inserted.toArray(), 0, 6) == [1u32, 4u32, 1u32, 2u32, 4u32, 2u32] && wordsAt(&inserted.toArray(), 26, 4) == [10u32, 0u32, 4u32, 1u32] { held = held + 1 }
+  let (shrunk, dropped) = View.update(&grown, &View.Keyed([row("cc"), row("aa"), row("bb")]))
+  if wordsAt(&dropped.toArray(), 0, 4) == [11u32, 4u32, 1u32, 4u32] && shrunk.free == [4u32] { held = held + 1 }
+  let (_, reused) = View.update(&shrunk, &View.Keyed([row("cc"), row("aa"), row("bb"), row("yy")]))
+  if wordsAt(&reused.toArray(), 0, 3) == [1u32, 4u32, 1u32] && wordsAt(&reused.toArray(), 26, 4) == [10u32, 0u32, 4u32, 3u32] { held = held + 1 }
+  // An unchanged keyed list writes nothing.
+  let (_, still) = View.update(&shrunk, &View.Keyed([row("cc"), row("aa"), row("bb")]))
+  if still.length() == 0 { held = held + 1 }
   held
 }

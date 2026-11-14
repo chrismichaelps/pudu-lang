@@ -10,14 +10,15 @@ aliases: [Uses Mobile View]
 
 ## Purpose and interface
 
-Stdlib fixture for [[Std Mobile View]]. Its entry runs the checks below and answers the number of checks that held. The data spec asserts that count, stated there.
+Stdlib fixture for [[Std Mobile View]]. Its entry drives `mount` and `update` through the checks below and answers the number of checks that held: 30. The data spec asserts that count, stated there.
 
 Checks:
-- The build stream of the counter view, word by word: CREATE, TEXT, TAG and APPEND in order, ending with ROOT 0.
-- A count change from 3 to 4 produces exactly one TEXT instruction, 20 bytes long: a 4-byte code, a 4-byte node, a 4-byte length and the 8 bytes of `Count: 4`. The count is one digit in this check so the length is fixed.
-- Rows, fields, toggles and names: the build words of a tree with a row, a field, a toggle and a named control, in order.
+- The mount stream of the counter view, word by word: CREATE, TEXT, TAG and APPEND in order, ending with ROOT 0.
+- A count change from 3 to 4 through `update` produces exactly one TEXT instruction, 20 bytes long: a 4-byte code, a 4-byte node, a 4-byte length and the 8 bytes of `Count: 4`.
+- Rows, fields, toggles and names: the mount words of a tree with a row, a field, a toggle and a named control, in order.
 - In-place changes of a tree of one shape: a changed field text, placeholder, toggle title, toggle state and accessible name each produce exactly one instruction, with its code word and bytes.
-- A tag change, a child count change or a variant change resets the screen: each starts with RESET.
+- Shape changes are precise replacements. A shorter column removes its tail. A retagged button is built, inserted at its index, and the old one removed. A retagged root is shown with ROOT, and the old root removed. A variant change follows the same replacement.
+- Keyed rows: a reorder is one MOVE; an insertion is one built row inserted at its index; a removal frees its id; the freed id is reused by the next built row; an unchanged list writes nothing.
 - Event decoding: `event` of kind 1 with tag 7 is `Tapped(7)`; kind 2 is `Stopped`; kind 3 with a text is `Changed(tag, text)`; kinds 4 and 5 are `Toggled(tag, true)` and `Toggled(tag, false)`; kind 9 reads as `Stopped`. `carriesText` is true only for kind 3.
 
 ## Invariants
@@ -33,7 +34,7 @@ Checks:
 
 ## Dependencies and consumers
 
-Depends on [[Std Mobile View]]. Its counter view matches [[Native Counter Example]]; its field and toggle checks mirror [[Native Form Example]].
+Depends on [[Std Mobile View]]. Its counter view matches [[Native Counter Example]]; its field and toggle checks mirror [[Native Form Example]]; its keyed checks mirror [[Native List Example]].
 
 ## Resolved Grill Log
 
@@ -41,4 +42,4 @@ Depends on [[Std Mobile View]]. Its counter view matches [[Native Counter Exampl
 
 ## Referenced by
 
-[[Std Mobile View]] · [[Native First Light Delivery]] · [[Native Controls Delivery]]
+[[Std Mobile View]] · [[Native First Light Delivery]] · [[Native Controls Delivery]] · [[Native Keyed Lists Delivery]]

@@ -17,7 +17,8 @@
 /* Instruction codes, control kinds and event kinds of the view stream; they
    match Std.Mobile.View. */
 enum { PUDU_UI_CREATE = 1, PUDU_UI_TEXT = 2, PUDU_UI_APPEND = 3, PUDU_UI_ROOT = 4, PUDU_UI_TAG = 5, PUDU_UI_RESET = 6,
-       PUDU_UI_STATE = 7, PUDU_UI_HINT = 8, PUDU_UI_NAME = 9, PUDU_UI_INSTRUCTIONS = 10 };
+       PUDU_UI_STATE = 7, PUDU_UI_HINT = 8, PUDU_UI_NAME = 9, PUDU_UI_INSERT = 10, PUDU_UI_REMOVE = 11, PUDU_UI_MOVE = 12,
+       PUDU_UI_INSTRUCTIONS = 13 };
 enum { PUDU_UI_LABEL = 1, PUDU_UI_BUTTON = 2, PUDU_UI_COLUMN = 3, PUDU_UI_ROW = 4, PUDU_UI_FIELD = 5, PUDU_UI_TOGGLE = 6,
        PUDU_UI_KINDS = 7 };
 static const uint64_t PUDU_UI_TAPPED = 1, PUDU_UI_STOPPED = 2, PUDU_UI_CHANGED = 3, PUDU_UI_SWITCHED_ON = 4,
@@ -255,11 +256,43 @@ static void pudu_do_tag(pudu_reader *reader) {
   pudu_node_kind(node)->control(pudu_nodes[node]).tag = tag;
 }
 
-static void pudu_do_append(pudu_reader *reader) {
+/* The group a placement names, refused when its node holds nothing. */
+static UIStackView *pudu_group(pudu_reader *reader) {
   uint32_t parent = pudu_node_id(reader);
-  uint32_t child = pudu_node_id(reader);
-  if (!pudu_node_kind(parent)->groups) pudu_stream_defect("appended to a node that holds nothing:", parent);
-  [(UIStackView *)pudu_nodes[parent] addArrangedSubview:pudu_nodes[child]];
+  if (!pudu_node_kind(parent)->groups) pudu_stream_defect("placed a child in a node that holds nothing:", parent);
+  return pudu_nodes[parent];
+}
+
+static void pudu_do_append(pudu_reader *reader) {
+  UIStackView *group = pudu_group(reader);
+  [group addArrangedSubview:pudu_nodes[pudu_node_id(reader)]];
+}
+
+/* Places a child at an index of its group, refused past the group's end. */
+static void pudu_place(pudu_reader *reader) {
+  UIStackView *group = pudu_group(reader);
+  UIView *child = pudu_nodes[pudu_node_id(reader)];
+  uint32_t index = pudu_word(reader);
+  if (index > group.arrangedSubviews.count) pudu_stream_defect("placed a child past the end of its group at", index);
+  /* An arranged child already in the group moves to the index. */
+  [group insertArrangedSubview:child atIndex:index];
+}
+
+static void pudu_do_insert(pudu_reader *reader) { pudu_place(reader); }
+
+static void pudu_do_move(pudu_reader *reader) { pudu_place(reader); }
+
+/* Detaches a subtree and forgets every node it lists, so a later CREATE may
+   reuse those ids. */
+static void pudu_do_remove(pudu_reader *reader) {
+  uint32_t node = pudu_node_id(reader);
+  uint32_t count = pudu_word(reader);
+  [(UIView *)pudu_nodes[node] removeFromSuperview];
+  for (uint32_t i = 0; i < count; i++) {
+    uint32_t gone = pudu_node_id(reader);
+    pudu_nodes[gone] = [NSNull null];
+    pudu_kinds[gone] = @0;
+  }
 }
 
 static void pudu_do_root(pudu_reader *reader) {
@@ -285,6 +318,7 @@ static void (*const pudu_instruction_table[PUDU_UI_INSTRUCTIONS])(pudu_reader *)
   [PUDU_UI_CREATE] = pudu_do_create, [PUDU_UI_TEXT] = pudu_do_text, [PUDU_UI_APPEND] = pudu_do_append,
   [PUDU_UI_ROOT] = pudu_do_root, [PUDU_UI_TAG] = pudu_do_tag, [PUDU_UI_RESET] = pudu_do_reset,
   [PUDU_UI_STATE] = pudu_do_state, [PUDU_UI_HINT] = pudu_do_hint, [PUDU_UI_NAME] = pudu_do_name,
+  [PUDU_UI_INSERT] = pudu_do_insert, [PUDU_UI_REMOVE] = pudu_do_remove, [PUDU_UI_MOVE] = pudu_do_move,
 };
 
 /* Applies one commit: every instruction in order, in one call. */
@@ -321,6 +355,18 @@ const char *pudu_ui_event_text(void) {
   return pudu_event_text_bytes != NULL ? pudu_event_text_bytes : "";
 }
 
+/* Prints what each shown node reports, in the order the screen shows them. */
+static void pudu_report(UIView *view) {
+  NSUInteger node = view == nil ? NSNotFound : [pudu_nodes indexOfObjectIdenticalTo:view];
+  const pudu_kind *kind;
+  if (node == NSNotFound) return;
+  kind = pudu_node_kind((uint32_t)node);
+  if (kind->shown != NULL) printf("PUDU_LABEL %s\n", kind->shown(view).UTF8String);
+  if (kind->groups) {
+    for (UIView *child in ((UIStackView *)view).arrangedSubviews) pudu_report(child);
+  }
+}
+
 @interface PuduAppDelegate : UIResponder <UIApplicationDelegate>
 @property (strong, nonatomic) UIWindow *window;
 @end
@@ -348,9 +394,7 @@ const char *pudu_ui_event_text(void) {
   int status = pudu_program_run(0, NULL);
   printf("PUDU_PROGRAM_STATUS %d\n", status);
   if (getenv("PUDU_UI_SELFTEST") != NULL) {
-    for (NSUInteger node = 0; node < pudu_nodes.count; node++) {
-      if (pudu_node_kind((uint32_t)node)->shown != NULL) printf("PUDU_LABEL %s\n", pudu_node_kind((uint32_t)node)->shown(pudu_nodes[node]).UTF8String);
-    }
+    pudu_report(pudu_shown_root);
     fflush(stdout);
     exit(status);
   }

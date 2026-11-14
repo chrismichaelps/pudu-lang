@@ -1,10 +1,10 @@
 module Std.Mobile.View
 
-import Std.ByteOrder {writeU32LE}
+import Std.Mobile.Stream as Stream
 
-/// One platform control and what it shows. A node is named by its position
-/// in a depth-first walk, so two trees of one shape name the same controls.
-/// `Named` gives the control it wraps an accessible name and adds no node.
+/// One platform control and what it shows. `Named` gives the control it
+/// wraps an accessible name and adds no node. `Keyed` is a column whose rows
+/// carry keys, so rows are matched by key rather than by position.
 export type View
   = Label(Str)
   | Button(Str, UInt32)
@@ -13,6 +13,7 @@ export type View
   | Field(Str, Str, UInt32)
   | Toggle(Str, Bool, UInt32)
   | Named(Str, View)
+  | Keyed(Array[(Str, View)])
 
 /// What the platform reported: a button's tag was tapped, a field's text
 /// changed, a toggle was switched, or the host asked the program to stop.
@@ -22,51 +23,25 @@ export type Event
   | Toggled(UInt32, Bool)
   | Stopped
 
-/// Instruction codes of the view stream; each is followed by its words.
-const CREATE: UInt32 = 1u32
-const TEXT: UInt32 = 2u32
-const APPEND: UInt32 = 3u32
-const ROOT: UInt32 = 4u32
-const TAG: UInt32 = 5u32
-const RESET: UInt32 = 6u32
-const STATE: UInt32 = 7u32
-const HINT: UInt32 = 8u32
-const NAME: UInt32 = 9u32
+/// A node the platform shows: its id, the view it shows, and the nodes of
+/// its children in order.
+export type Shown = { id: UInt32, view: View, children: Array[Shown] }
 
-/// Control kinds a CREATE names.
-const LABEL: UInt32 = 1u32
-const BUTTON: UInt32 = 2u32
-const COLUMN: UInt32 = 3u32
-const ROW: UInt32 = 4u32
-const FIELD: UInt32 = 5u32
-const TOGGLE: UInt32 = 6u32
+/// The tree the platform shows, the next id never handed out, and the ids of
+/// removed nodes, handed out again first.
+export type Mounted = { root: Shown, next: UInt32, free: Array[UInt32] }
+
+// Ids handed out so far and the stream written so far.
+type Work = { next: UInt32, free: Array[UInt32], out: Array[UInt8] }
+
+// A node updated in place, or a node its parent must replace.
+type Outcome = Kept(Work, Shown) | Replaced
 
 /// Event kinds in the high word of a host event.
 const TAPPED: UInt64 = 1u64
 const CHANGED: UInt64 = 3u64
 const SWITCHED_ON: UInt64 = 4u64
 const SWITCHED_OFF: UInt64 = 5u64
-
-/// Whether a host event's kind carries text the host holds for it.
-export fn carriesText(raw: UInt64) -> Bool { raw >> 32 == CHANGED }
-
-/// The stream that builds `view` from nothing and shows it.
-export fn build(view: &View) -> Bytes {
-  let (bytes, _) = created([], view, 0u32)
-  bytesOf(words(bytes, [ROOT, 0u32]))
-}
-
-/// The stream that turns what `shown` built into `next`: in-place changes
-/// for a tree of the same shape, otherwise a reset and a fresh build.
-export fn changes(shown: &View, next: &View) -> Bytes {
-  match changed([], shown, next, 0u32) {
-    case Some((bytes, _)) => bytesOf(bytes)
-    case None => {
-      let (bytes, _) = created(words([], [RESET]), next, 0u32)
-      bytesOf(words(bytes, [ROOT, 0u32]))
-    }
-  }
-}
 
 /// Each event kind's constructor, given the tag and the text the host holds.
 const EVENTS: Map[UInt64, fn(UInt32, Str) -> Event] = mapOf([
@@ -75,6 +50,9 @@ const EVENTS: Map[UInt64, fn(UInt32, Str) -> Event] = mapOf([
     (SWITCHED_ON, |tag: UInt32, _text: Str| Toggled(tag, true)),
     (SWITCHED_OFF, |tag: UInt32, _text: Str| Toggled(tag, false))
   ])
+
+/// Whether a host event's kind carries text the host holds for it.
+export fn carriesText(raw: UInt64) -> Bool { raw >> 32 == CHANGED }
 
 /// A host event read from its two words, the kind above and the tag below,
 /// with the text the host holds for a changed field. A kind the table does
@@ -86,110 +64,228 @@ export fn event(raw: UInt64, text: Str) -> Event {
   }
 }
 
-// Builds `view` as node `node` and answers the stream and the next free node.
-fn created(bytes: Array[UInt8], view: &View, node: UInt32) -> (Array[UInt8], UInt32) {
+/// The tree for `view`, and the stream that builds it and shows it.
+export fn mount(view: &View) -> (Mounted, Bytes) {
+  let (work, shown) = built(Work{next: 0u32, free: [], out: []}, view)
+  (Mounted{root: shown, next: work.next, free: work.free}, bytesOf(Stream.root(work.out, shown.id)))
+}
+
+/// The tree for `next`, and the stream that turns what `mounted` shows into
+/// it: in-place changes where a node keeps its kind and tag, keyed rows
+/// matched by key, and replacement only for nodes that changed kind or tag.
+export fn update(mounted: &Mounted, next: &View) -> (Mounted, Bytes) {
+  let start = Work{next: mounted.next, free: mounted.free, out: []}
+  match reconciled(start, &mounted.root, next) {
+    case Kept(work, shown) => (Mounted{root: shown, next: work.next, free: work.free}, bytesOf(work.out))
+    case Replaced => {
+      let (made, shown) = built(start, next)
+      let work = removed(Work{..made, out: Stream.root(made.out, shown.id)}, &mounted.root)
+      (Mounted{root: shown, next: work.next, free: work.free}, bytesOf(work.out))
+    }
+  }
+}
+
+// Builds `view` with fresh ids and answers the work and its shown node.
+fn built(work: Work, view: &View) -> (Work, Shown) {
+  let (taken, id) = allocated(work)
   match *view {
-    case Label(text) => (texted(words(bytes, [CREATE, node, LABEL]), TEXT, node, text), node + 1u32)
-    case Button(title, tag) => (texted(words(bytes, [CREATE, node, BUTTON, TAG, node, tag]), TEXT, node, title), node + 1u32)
-    case Column(children) => grouped(bytes, COLUMN, &children, node)
-    case Row(children) => grouped(bytes, ROW, &children, node)
+    case Label(text) => (written(taken, Stream.text(Stream.create(taken.out, id, Stream.LABEL), id, text)), leaf(id, view))
+    case Button(title, tag) => {
+      let out = Stream.text(Stream.tag(Stream.create(taken.out, id, Stream.BUTTON), id, tag), id, title)
+      (written(taken, out), leaf(id, view))
+    }
     case Field(hint, text, tag) => {
-      let hinted = texted(words(bytes, [CREATE, node, FIELD, TAG, node, tag]), HINT, node, hint)
-      (texted(hinted, TEXT, node, text), node + 1u32)
+      let out = Stream.text(Stream.hint(Stream.tag(Stream.create(taken.out, id, Stream.FIELD), id, tag), id, hint), id, text)
+      (written(taken, out), leaf(id, view))
     }
     case Toggle(title, on, tag) => {
-      let titled = texted(words(bytes, [CREATE, node, TOGGLE, TAG, node, tag]), TEXT, node, title)
-      (words(titled, [STATE, node, stateOf(on)]), node + 1u32)
+      let out = Stream.state(Stream.text(Stream.tag(Stream.create(taken.out, id, Stream.TOGGLE), id, tag), id, title), id, on)
+      (written(taken, out), leaf(id, view))
     }
-    case Named(name, inner) => {
-      let (built, next) = created(bytes, &inner, node)
-      (texted(built, NAME, node, name), next)
+    case Column(children) => grouped(written(taken, Stream.create(taken.out, id, Stream.COLUMN)), id, view, &children)
+    case Row(children) => grouped(written(taken, Stream.create(taken.out, id, Stream.ROW)), id, view, &children)
+    case Keyed(rows) => grouped(written(taken, Stream.create(taken.out, id, Stream.COLUMN)), id, view, &rows.map(|row: (Str, View)| row[1]))
+    case Named(label, inner) => {
+      let (made, shown) = built(work, &inner)
+      (written(made, Stream.name(made.out, shown.id, label)), Shown{..shown, view: *view})
     }
   }
 }
 
-// A column or row as node `node`, its children built and appended in order.
-fn grouped(bytes: Array[UInt8], kind: UInt32, children: &Array[View], node: UInt32) -> (Array[UInt8], UInt32) {
-  var out = words(bytes, [CREATE, node, kind])
-  var next = node + 1u32
+// A group's children built and appended in order.
+fn grouped(work: Work, id: UInt32, view: &View, children: &Array[View]) -> (Work, Shown) {
+  var out = work
+  var shown: Array[Shown] = []
   for child in *children {
-    let (built, after) = created(out, &child, next)
-    out = words(built, [APPEND, node, next])
-    next = after
+    let (made, node) = built(out, &child)
+    out = written(made, Stream.append(made.out, id, node.id))
+    shown = shown.push(node)
   }
-  (out, next)
+  (out, Shown{id: id, view: *view, children: shown})
 }
 
-// The in-place changes between two trees of one shape, or None when the
-// shapes differ and the tree must be built again.
-fn changed(bytes: Array[UInt8], shown: &View, next: &View, node: UInt32) -> Option[(Array[UInt8], UInt32)] {
-  match (*shown, *next) {
-    case (Label(before), Label(after)) => Some((retexted(bytes, TEXT, node, before, after), node + 1u32))
-    case (Button(before, beforeTag), Button(after, afterTag)) => {
-      if beforeTag != afterTag { return None }
-      Some((retexted(bytes, TEXT, node, before, after), node + 1u32))
+// `shown` updated toward `next`, or Replaced when its kind or tag changed.
+fn reconciled(work: Work, shown: &Shown, next: &View) -> Outcome {
+  let id = shown.id
+  match (shown.view, *next) {
+    case (Label(before), Label(after)) => kept(work, retexted(work.out, id, before, after), shown, next)
+    case (Button(before, beforeTag), Button(after, afterTag)) if beforeTag == afterTag =>
+    kept(work, retexted(work.out, id, before, after), shown, next)
+    case (Field(beforeHint, before, beforeTag), Field(afterHint, after, afterTag)) if beforeTag == afterTag => {
+      let hinted = if beforeHint == afterHint { work.out } else { Stream.hint(work.out, id, afterHint) }
+      kept(work, retexted(hinted, id, before, after), shown, next)
     }
-    case (Column(before), Column(after)) => regrouped(bytes, &before, &after, node)
-    case (Row(before), Row(after)) => regrouped(bytes, &before, &after, node)
-    case (Field(beforeHint, before, beforeTag), Field(afterHint, after, afterTag)) => {
-      if beforeTag != afterTag { return None }
-      Some((retexted(retexted(bytes, HINT, node, beforeHint, afterHint), TEXT, node, before, after), node + 1u32))
+    case (Toggle(before, beforeOn, beforeTag), Toggle(after, afterOn, afterTag)) if beforeTag == afterTag => {
+      let titled = retexted(work.out, id, before, after)
+      kept(work, if beforeOn == afterOn { titled } else { Stream.state(titled, id, afterOn) }, shown, next)
     }
-    case (Toggle(before, beforeOn, beforeTag), Toggle(after, afterOn, afterTag)) => {
-      if beforeTag != afterTag { return None }
-      let titled = retexted(bytes, TEXT, node, before, after)
-      Some((if beforeOn == afterOn { titled } else { words(titled, [STATE, node, stateOf(afterOn)]) }, node + 1u32))
-    }
+    case (Column(before), Column(after)) => regrouped(positional(work, shown, &before, &after), shown, next)
+    case (Row(before), Row(after)) => regrouped(positional(work, shown, &before, &after), shown, next)
+    case (Keyed(before), Keyed(after)) => regrouped(keyed(work, shown, &before, &after), shown, next)
     case (Named(beforeName, beforeInner), Named(afterName, afterInner)) => {
-      let (inner, following) = changed(bytes, &beforeInner, &afterInner, node) ?
-      Some((retexted(inner, NAME, node, beforeName, afterName), following))
+      match reconciled(work, &Shown{..*shown, view: beforeInner}, &afterInner) {
+        case Kept(made, inner) => {
+          let out = if beforeName == afterName { made.out } else { Stream.name(made.out, id, afterName) }
+          Kept(written(made, out), Shown{..inner, view: *next})
+        }
+        case Replaced => Replaced
+      }
     }
-    case _ => None
+    case _ => Replaced
   }
 }
 
-// The children of two groups of one length, changed in place, or None.
-fn regrouped(bytes: Array[UInt8], before: &Array[View], after: &Array[View], node: UInt32) -> Option[(Array[UInt8], UInt32)] {
-  if before.length() != after.length() { return None }
-  var out = bytes
-  var at = node + 1u32
+// Children matched by position: the common part updated pairwise, extra
+// children appended, children no longer present removed.
+fn positional(work: Work, parent: &Shown, before: &Array[View], after: &Array[View]) -> (Work, Array[Shown]) {
+  var out = work
+  var shown: Array[Shown] = []
+  let common = if before.length() < after.length() { before.length() } else { after.length() }
+  for index in 0..common {
+    let (made, node) = settled(out, parent.id, &parent.children[index], &after[index], index)
+    out = made
+    shown = shown.push(node)
+  }
+  for index in common..after.length() {
+    let (made, node) = built(out, &after[index])
+    out = written(made, Stream.append(made.out, parent.id, node.id))
+    shown = shown.push(node)
+  }
+  for index in common..before.length() {
+    out = removed(out, &parent.children[index])
+  }
+  (out, shown)
+}
+
+// Rows matched by key: rows whose key is gone are removed, then each wanted
+// row is updated, moved to its index, or built and inserted there. `current`
+// is the platform's order of the parent's rows at every step.
+fn keyed(work: Work, parent: &Shown, before: &Array[(Str, View)], after: &Array[(Str, View)]) -> (Work, Array[Shown]) {
+  let wanted = setOf(after.map(|row: (Str, View)| row[0]))
+  var out = work
+  var current: Array[(Str, Shown)] = []
   for index in 0..before.length() {
-    let (updated, following) = changed(out, &before[index], &after[index], at) ?
-    out = updated
-    at = following
+    if wanted.contains(before[index][0]) {
+      current = current.push((before[index][0], parent.children[index]))
+    } else {
+      out = removed(out, &parent.children[index])
+    }
   }
-  Some((out, at))
+  var placed: Array[Shown] = []
+  var seen: Set[Str] = setOf([])
+  for index in 0..after.length() {
+    let (key, view) = after[index]
+    let at = positionOf(&current, key, index)
+    match at {
+      case Some(from) if !seen.contains(key) => {
+        let (made, node) = settled(out, parent.id, &current[from][1], &view, from)
+        out = if from == index { made } else { written(made, Stream.move(made.out, parent.id, node.id, word(index))) }
+        current = current.remove(from).insert(index, (key, node))
+        placed = placed.push(node)
+      }
+      case _ => {
+        let (made, node) = built(out, &view)
+        out = written(made, Stream.insert(made.out, parent.id, node.id, word(index)))
+        current = current.insert(index, (key, node))
+        placed = placed.push(node)
+      }
+    }
+    seen = seen.insert(key)
+  }
+  (out, placed)
 }
 
-// A text instruction only when the text differs.
-fn retexted(bytes: Array[UInt8], code: UInt32, node: UInt32, before: Str, after: Str) -> Array[UInt8] {
-  if before == after { bytes } else { texted(bytes, code, node, after) }
+// A child updated in place, or replaced at `index`: the new subtree is
+// inserted before the old one, which is then removed.
+fn settled(work: Work, parent: UInt32, child: &Shown, next: &View, index: Int) -> (Work, Shown) {
+  match reconciled(work, child, next) {
+    case Kept(made, node) => (made, node)
+    case Replaced => {
+      let (made, node) = built(work, next)
+      (removed(written(made, Stream.insert(made.out, parent, node.id, word(index))), child), node)
+    }
+  }
 }
 
-// A text-carrying instruction: the code, the node, the byte length, then the
-// UTF-8 bytes.
-fn texted(bytes: Array[UInt8], code: UInt32, node: UInt32, text: Str) -> Array[UInt8] {
-  let raw = text.toBytes().toArray()
-  let length = match convertInteger[UInt32](raw.length()) {
-    case Some(count) => count
+// The first row at or after `from` whose key is `key`.
+fn positionOf(rows: &Array[(Str, Shown)], key: Str, from: Int) -> Option[Int] {
+  for index in from..rows.length() {
+    if rows[index][0] == key {
+      return Some(index)
+    }
+  }
+  None
+}
+
+// The subtree of `node` detached and every one of its ids freed.
+fn removed(work: Work, node: &Shown) -> Work {
+  let ids = idsOf(node)
+  var free = work.free
+  for id in ids {
+    free = free.push(id)
+  }
+  Work{..work, free: free, out: Stream.remove(work.out, node.id, &ids)}
+}
+
+// Every id of a subtree, the root first.
+fn idsOf(node: &Shown) -> Array[UInt32] {
+  var ids = [node.id]
+  for child in node.children {
+    for id in idsOf(&child) {
+      ids = ids.push(id)
+    }
+  }
+  ids
+}
+
+// A freed id when there is one, otherwise the next new one.
+fn allocated(work: Work) -> (Work, UInt32) {
+  let count = work.free.length()
+  if count == 0 {
+    (Work{..work, next: work.next + 1u32}, work.next)
+  } else {
+    (Work{..work, free: work.free.slice(0, count - 1)}, work.free[count - 1])
+  }
+}
+
+fn kept(work: Work, out: Array[UInt8], shown: &Shown, next: &View) -> Outcome { Kept(written(work, out), Shown{..*shown, view: *next}) }
+
+fn regrouped(result: (Work, Array[Shown]), shown: &Shown, next: &View) -> Outcome {
+  let (work, children) = result
+  Kept(work, Shown{id: shown.id, view: *next, children: children})
+}
+
+fn retexted(out: Array[UInt8], id: UInt32, before: Str, after: Str) -> Array[UInt8] {
+  if before == after { out } else { Stream.text(out, id, after) }
+}
+
+fn leaf(id: UInt32, view: &View) -> Shown { Shown{id: id, view: *view, children: []} }
+
+fn written(work: Work, out: Array[UInt8]) -> Work { Work{..work, out: out} }
+
+fn word(index: Int) -> UInt32 {
+  match convertInteger[UInt32](index) {
+    case Some(value) => value
     case None => 0u32
   }
-  var out = words(bytes, [code, node, length])
-  for octet in raw {
-    out = out.push(octet)
-  }
-  out
-}
-
-fn stateOf(on: Bool) -> UInt32 { if on { 1u32 } else { 0u32 } }
-
-// Little-endian words appended to the stream.
-fn words(bytes: Array[UInt8], values: Array[UInt32]) -> Array[UInt8] {
-  var out = bytes
-  for value in values {
-    for octet in writeU32LE(value) {
-      out = out.push(octet)
-    }
-  }
-  out
 }

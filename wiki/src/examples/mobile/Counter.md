@@ -15,11 +15,11 @@ The Phase 1 application of [[Pudu Native]]: a counter built only from Pudu and r
 
 - Model: an `Int` count, starting at 0.
 - View: a column holding the label `Count: {count}` and the button `Add one`, tagged 1.
-- Entry: builds the view and applies its stream with `View.build`, then loops on `Host.wait()`. A `Tapped` event with tag 1 increments the count, builds the next view, applies `View.changes` from the shown view to the next one, and continues. A `Stopped` event returns 0.
+- Entry: mounts the view with `View.mount`, then loops on `Host.wait()`. A `Tapped` event with tag 1 increments the count, and `View.update` applies the next view to the mounted tree, which the loop keeps. A `Stopped` event returns 0.
 
 ## Invariants
 
-- The shown view is always the last view applied, so every `changes` call starts from what the screen displays.
+- The mounted tree is always the last tree applied, so every `update` starts from what the screen displays.
 - Only the button's tag selects the increment. The count changes only on that tag.
 - The entry returns 0 on `Stopped`, and the status is the process status.
 
