@@ -40,6 +40,7 @@ This scalar allocator cannot claim owned-value drop or concurrency coverage.
 - **Q:** Lose prior frames when calloc fails? **A:** No; the existing top remains published for the cleanup hook.
 - **Q:** Match arbitrary OS kills? **A:** No; catchable/reported host exhaustion has the shared process contract.
 - **Q:** Keep stack frames in the active chain? **A:** Yes: unwinding must release their owned values and blame must see the innermost frame. _Rejected:_ unlinked fast frames with different failure behavior.
+- **Q:** Why a separate slot release when `pudu_free_frame` already checks `stacked`? **A:** Once leaving is inlined into the C function that owns the stack frame, an optimizing compiler sees a `free` of a local object on a path it cannot prove dead and warns (GCC's free-nonheap-object), which strict builds reject. _Rejected:_ relying on the flag check alone.
 
 ## Dependencies and consumers
 
@@ -56,12 +57,14 @@ The cell union gains `pudu_tree_node *tree` when a program has boxes.
 
 ## Stacked frames (#904)
 
-A frame carries a `stacked` flag. `pudu_free_frame` releases a stacked frame's owned slots
-but never passes it to `free`, so unwinding works across stack and heap frames alike.
-`pudu_stack_enter(frame, cells, function, arguments)` lays out a stack frame exactly as
-`pudu_new_frame` lays out a heap frame (slots, argument scratch, entry label, parent,
+A frame carries a `stacked` flag. `pudu_release_slots` releases a frame's owned slots.
+`pudu_free_frame` releases the slots and then frees a heap frame; unwinding uses it for every
+frame in the chain and skips `free` for a stacked one, so unwinding works across stack and heap
+frames alike. `pudu_stack_enter(frame, cells, function, arguments)` lays out a stack frame exactly
+as `pudu_new_frame` lays out a heap frame (slots, argument scratch, entry label, parent,
 parameter copies, owned retains) and makes it active. `pudu_stack_leave(frame)` restores the
-parent and releases the owned slots.
+parent and calls only `pudu_release_slots`, so the allocator is unreachable from a stack frame's
+own exit.
 `pudu_stack_enter` also clears the destination, the destination flag and the call site, so the
 header needs no zeroing.
 
