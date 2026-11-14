@@ -51,9 +51,9 @@ bundleIdentifier :: Text -> Text
   outside ASCII letters, digits, `-` and `.` replaced by `-`.
 - Compiler, linker and signer output is returned as the warnings text, as in
   [[Backend Toolchain Library]].
-- Publication is by rename. An earlier `.app` at the output path moves aside into the
-  temporary directory, the staged bundle is renamed into place, and the old bundle is
-  deleted with the temporary directory.
+- Publish the signed staging bundle on macOS with an exclusive rename. An occupied
+  destination produces `E6006` and names the output path. If two builds race, only one
+  can publish there.
 
 ## Negative Logic
 
@@ -61,8 +61,8 @@ bundleIdentifier :: Text -> Text
   a device target is refused as a target not yet built.
 - No Android target.
 - No partial bundle at the output path: a failed stage leaves the output untouched.
-- Nothing is replaced at the output path unless it is a directory ending in `.app`.
-  Any other existing path is refused.
+- An existing output path is refused. Select a free path or move the previous bundle
+  before rebuilding.
 
 ## Dependencies and consumers
 
@@ -75,6 +75,9 @@ the simulator run [[iOS Simulator Run]].
 - **Q:** Why embed the host instead of shipping it as a data file? **A:** The release
   archive stages only library sources, and an embedded host always matches the compiler
   that wrote the program. _Rejected:_ a host file looked up beside the library.
+- **Q:** Does an `.app` suffix authorize deleting an existing directory? **A:** No.
+  Publish only to a vacant path, with exclusivity enforced by the macOS rename.
+  _Rejected:_ recursive deletion or a separate existence check before an ordinary rename.
 - **Q:** Why only the simulator? **A:** A device application must be signed with an
   identity the machine's owner chooses; that arrives with signed store builds.
   _Rejected:_ guessing an identity.

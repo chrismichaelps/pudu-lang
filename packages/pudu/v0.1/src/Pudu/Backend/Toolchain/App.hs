@@ -1,3 +1,6 @@
+{-# LANGUAGE CApiFFI #-}
+{-# LANGUAGE CPP #-}
+
 {-| @Pudu.Backend.Toolchain.App — a signed simulator application: the
     program's static library linked with the embedded iOS host into a bundle.
 
@@ -13,18 +16,26 @@ module Pudu.Backend.Toolchain.App
   ) where
 
 import Control.Exception (finally, mask)
-import Control.Monad (void, when)
+import Control.Monad (void)
 import qualified Data.ByteString as ByteString
 import Data.Char (isAsciiLower, isAsciiUpper, isDigit)
 import Data.Text (Text)
 import qualified Data.Text as Text
 import qualified Data.Text.Encoding as Encoding
+#if defined(darwin_HOST_OS)
+import Foreign.C.Error (throwErrnoIfMinus1_)
+import Foreign.C.String (CString)
+import Foreign.C.Types (CInt (..), CUInt (..))
+import qualified GHC.Foreign as Foreign
+import GHC.IO.Encoding (getFileSystemEncoding)
+#endif
 import Pudu.Backend.Target (AppleSdk (..), NativeTarget (..), TargetPlatform (..))
 import Pudu.Backend.Toolchain.HostSources (iosHostSource)
 import Pudu.Backend.Toolchain.Library (LibraryProducts (..), LibraryRequest (..), appleTools, compileLibrary, invoke)
 import Pudu.Backend.Toolchain.Process (ToolchainFailure (..), problemText, timeoutSeconds, tryIO)
-import System.Directory (createDirectory, doesDirectoryExist, findExecutable, removeDirectoryRecursive, renameDirectory)
-import System.FilePath (takeDirectory, takeExtension, takeFileName, (</>))
+import System.Directory (createDirectory, findExecutable, removeDirectoryRecursive)
+import System.FilePath (takeDirectory, takeFileName, (</>))
+import System.IO.Error (isAlreadyExistsError)
 import System.IO.Temp (createTempDirectory)
 
 data AppRequest = AppRequest
@@ -109,16 +120,30 @@ buildBundle request sdk = do
             case signed of
               Left failure -> pure (Left failure)
               Right warnings -> do
-                published <- tryIO (publish bundle)
+                published <- tryIO (publish bundle output)
                 pure $ case published of
-                  Left problem -> Left (ToolchainPublishFailed (problemText problem))
+                  Left problem
+                    | isAlreadyExistsError problem -> Left (ToolchainPublishFailed ("application output already exists: " <> Text.pack output))
+                    | otherwise -> Left (ToolchainPublishFailed (problemText problem))
                   Right () -> Right (Text.strip (Text.unlines (filter (not . Text.null) [libraryWarnings products, warnings])))
-  -- Only an earlier application is replaced; anything else at the output
-  -- path makes the rename fail rather than be removed.
-  publish bundle = do
-    earlier <- doesDirectoryExist output
-    when (earlier && takeExtension output == ".app") (removeDirectoryRecursive output)
-    renameDirectory bundle output
+{-| Publish without replacing any existing directory entry, even if another
+    build reaches the same output between staging and publication. -}
+publish :: FilePath -> FilePath -> IO ()
+#if defined(darwin_HOST_OS)
+publish bundle output = do
+  encoding <- getFileSystemEncoding
+  Foreign.withCString encoding bundle $ \from ->
+    Foreign.withCString encoding output $ \to ->
+      throwErrnoIfMinus1_ "renamex_np" (renameExclusive from to renameExcl)
+
+foreign import capi unsafe "stdio.h renamex_np"
+  renameExclusive :: CString -> CString -> CUInt -> IO CInt
+
+foreign import capi "stdio.h value RENAME_EXCL"
+  renameExcl :: CUInt
+#else
+publish _ _ = ioError (userError "publishing an iOS application requires macOS")
+#endif
 
 {-| The bundle identifier derived from a program's name: the prefix, then the
     name with every character outside ASCII letters, digits, `-` and `.`

@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { spawnSync } from "node:child_process";
-import { mkdtempSync, mkdirSync, rmSync, statSync, writeFileSync } from "node:fs";
+import { mkdtempSync, mkdirSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -181,8 +181,17 @@ function mobileApp(device, example, runs) {
   const bundle = `org.pudu.${example}`;
   let installed = false;
   try {
-    run(resolve(compiler), ["build", join(repository, "examples", "mobile", `${example}.pudu`),
-      "--native", "--target", "ios-simulator-arm64", "--app", "-o", app]);
+    const build = ["build", join(repository, "examples", "mobile", `${example}.pudu`),
+      "--native", "--target", "ios-simulator-arm64", "--app", "-o"];
+    if (example === "Counter") {
+      const occupied = join(root, "Occupied.app");
+      const marker = join(occupied, "keep.txt");
+      mkdirSync(occupied);
+      writeFileSync(marker, "existing data");
+      assert.throws(() => run(resolve(compiler), [...build, occupied]), /E6006.*application output already exists/s);
+      assert.equal(readFileSync(marker, "utf8"), "existing data");
+    }
+    run(resolve(compiler), [...build, app]);
     const executable = join(app, example);
     run(xcrun, ["simctl", "install", device, app], simulatorTimeout);
     installed = true;

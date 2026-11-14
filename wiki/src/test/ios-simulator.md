@@ -83,6 +83,15 @@ The script runs `examples/mobile/List.pudu` ([[Native List Example]]) with `PUDU
 
 Every app's labels are compared in screen order, so a reordered or missing row fails even when each label text is present.
 
+## Application output collision (#916)
+
+Before installing Counter, try to build into an existing `.app` directory containing
+a marker. Require `E6006` and verify the marker bytes survive. The subsequent build
+uses a vacant path and must boot.
+
+Resolved Grill Log: assert both the observable refusal and the preserved file. An
+exit code alone could hide a build that damaged the old path before failing.
+
 ## Referenced by
 
 [[Native Mobile Targets]] · [[Native Mobile Targets Delivery]] · [[Native Controls Delivery]] · [[Native Keyed Lists Delivery]]

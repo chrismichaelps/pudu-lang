@@ -11,7 +11,11 @@ Language Architect → Backend Engineer. Phase 3 of [[Pudu Native]]: `pudu build
 
 ## Scope
 
-`pudu build <file> --native --target ios-simulator-arm64 --app` builds the program's static library ([[Backend Toolchain Library]]), links it with the embedded iOS host, writes `Info.plist`, signs the bundle ad hoc and publishes `<Name>.app` by rename. The host source is embedded through [[Native Toolchain Host Sources]] and lives at `cbits/pudu_ios_host.m`. Device targets, Android and partial bundles are refused.
+`pudu build <file> --native --target ios-simulator-arm64 --app` builds the program's static library ([[Backend Toolchain Library]]), links it with the embedded iOS host, writes `Info.plist`, signs the bundle ad hoc and publishes `<Name>.app` by rename. The host source is embedded through [[Native Toolchain Host Sources]] and lives at `cbits/pudu_ios_host.m`. Device targets, Android and occupied output paths are refused.
+
+## Ownership
+
+Backend Engineer owns exclusive bundle publication in [[Backend Toolchain App]] and the output collision regression in [[iOS Simulator Run]]. Independent review is pending.
 
 ## Evidence so far
 

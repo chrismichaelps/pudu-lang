@@ -320,7 +320,8 @@ any library the host must link.
 signed simulator application named after the program (`<Name>.app`, identifier
 `org.pudu.<Name>`) through [[Backend Toolchain App]]. `--app` without `--native`, with the
 device target, or with no target is refused with a message saying why. `--app` given
-twice is refused.
+twice is refused. The application output path must be vacant. An occupied path is
+reported as `E6006` and retains its contents.
 
 ## Library exports (#899)
 
