@@ -136,3 +136,14 @@ file.
   entry body runs to thousands of C lines (#821), and a shared runner's GCC
   took longer than the two-minute default once. The limit bounds a hung
   compiler, not a correct translation.
+
+## Markdown-only changes start no run
+
+Pull requests and pushes whose every changed file is Markdown (`**/*.md`) are
+ignored by both triggers. Such a pull request is merged into `dev` directly.
+
+Resolved Grill Log: wiki and documentation pages cannot change the compiler,
+its tests, or the website build, so a full run measures nothing. A change that
+mixes Markdown with any other file still runs everything. _Rejected:_ skipping
+individual jobs, which would leave required checks reporting success for work
+they did not do.

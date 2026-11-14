@@ -5,6 +5,10 @@ tags: [changelog]
 
 # Changelog
 
+## 2026-11-13 — Markdown-only changes skip CI
+
+- [[Pudu Continuous Verification]] ignores pull requests and pushes made only of Markdown files.
+
 ## 2026-11-13 — Native iOS library targets (#878)
 
 - `pudu build --native --target` exposes arm64 device and simulator libraries.
