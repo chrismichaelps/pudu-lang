@@ -2,7 +2,7 @@
 
 {-| @Backend.Toolchain.HostSources — packaged platform translation units
     selected by the generated program. -}
-module Pudu.Backend.Toolchain.HostSources (audioSourceMarker, desktopSourceMarker, iosHostSource, withHostSourceArguments) where
+module Pudu.Backend.Toolchain.HostSources (audioSourceMarker, desktopSourceMarker, iosHostSources, withHostSourceArguments) where
 
 import qualified Data.ByteString.Char8 as ByteString
 import Data.Text (Text)
@@ -47,14 +47,14 @@ desktopSources = $(do
   contents <- runIO (traverse ByteString.readFile paths)
   lift (zip files (map ByteString.unpack contents)))
 
-{-| The iOS host of a Pudu Native application, written out and compiled
-    when an application is built; it is never part of the compiler. -}
-iosHostSource :: String
-iosHostSource = $(do
-  path <- makeRelativeToProject ("cbits" </> "pudu_ios_host.m")
-  addDependentFile path
-  contents <- runIO (ByteString.readFile path)
-  lift (ByteString.unpack contents))
+{-| The iOS host and its private header, staged only for app builds. -}
+iosHostSources :: [(FilePath, String)]
+iosHostSources = $(do
+  let files = ["pudu_ios_host.m", "pudu_ios_layout.h"]
+  paths <- traverse (makeRelativeToProject . ("cbits" </>)) files
+  mapM_ addDependentFile paths
+  contents <- runIO (traverse ByteString.readFile paths)
+  lift (zip files (map ByteString.unpack contents)))
 
 audioSources :: [(FilePath, String)]
 audioSources = $(do

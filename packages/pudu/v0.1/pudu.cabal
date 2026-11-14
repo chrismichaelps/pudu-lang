@@ -19,6 +19,7 @@ extra-source-files: cbits/pudu_desktop.h
                     cbits/pudu_desktop_menu.m
                     cbits/pudu_desktop_window.m
                     cbits/pudu_ios_host.m
+                    cbits/pudu_ios_layout.h
                     cbits/pudu_audio.c
                     cbits/pudu_audio_stream.c
                     cbits/pudu_audio.h

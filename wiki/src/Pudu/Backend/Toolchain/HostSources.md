@@ -26,9 +26,14 @@ publication. A program on another platform selects no AppKit source.
 
 ## iOS host source (#916)
 
-The module also embeds `cbits/pudu_ios_host.m` as `iosHostSource :: String`, used by
-[[Backend Toolchain App]] and never compiled into the compiler.
+The module embeds the iOS host translation unit and its private layout header as
+`iosHostSources :: [(FilePath, String)]` for [[Backend Toolchain App]]. They are data inputs
+to the compiler and are compiled into the simulator app.
 
 ## Native audio (#857)
 
 Resolved Grill Log: Select the AudioToolbox sources with an audio marker. A single staging directory serves all selected bundles.
+
+## iOS layout source (#919)
+
+Resolved Grill Log: embed the private layout header beside the host from the same source list. The staging step writes the original bytes for both before clang runs. See [[iOS Host Layout]].

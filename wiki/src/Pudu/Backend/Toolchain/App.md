@@ -85,3 +85,7 @@ the simulator run [[iOS Simulator Run]].
 ## Referenced by
 
 [[src/Pudu/Backend/_MOC]] · [[Native App Delivery]] · [[Native App Tests]] · [[iOS Host Adapter]] · [[Native Mobile Targets]]
+
+## iOS layout staging (#919)
+
+Resolved Grill Log: materialize the embedded layout header alongside the host translation unit in the existing include directory and link CoreGraphics for the geometry checks. No second compiler invocation is needed. See [[iOS Host Layout]].

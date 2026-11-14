@@ -20,6 +20,9 @@ export const FIELD: UInt32 = 5u32
 /// The kind a CREATE names for a toggle.
 export const TOGGLE: UInt32 = 6u32
 
+/// The kind a CREATE names for a vertical scroll viewport.
+export const SCROLL: UInt32 = 7u32
+
 /// Instruction codes of the view stream; each is followed by its words.
 const CREATE: UInt32 = 1u32
 const TEXT: UInt32 = 2u32

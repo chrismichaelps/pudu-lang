@@ -7,12 +7,14 @@
    names the factory that makes its control and the setters it accepts; an
    instruction code names its handler. */
 #import <UIKit/UIKit.h>
+#include <math.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <time.h>
 #include "pudu_program.h"
+#include "pudu_ios_layout.h"
 
 /* Instruction codes, control kinds and event kinds of the view stream; they
    match Std.Mobile.View. */
@@ -20,7 +22,7 @@ enum { PUDU_UI_CREATE = 1, PUDU_UI_TEXT = 2, PUDU_UI_APPEND = 3, PUDU_UI_ROOT = 
        PUDU_UI_STATE = 7, PUDU_UI_HINT = 8, PUDU_UI_NAME = 9, PUDU_UI_INSERT = 10, PUDU_UI_REMOVE = 11, PUDU_UI_MOVE = 12,
        PUDU_UI_INSTRUCTIONS = 13 };
 enum { PUDU_UI_LABEL = 1, PUDU_UI_BUTTON = 2, PUDU_UI_COLUMN = 3, PUDU_UI_ROW = 4, PUDU_UI_FIELD = 5, PUDU_UI_TOGGLE = 6,
-       PUDU_UI_KINDS = 7 };
+       PUDU_UI_SCROLL = 7, PUDU_UI_KINDS = 8 };
 static const uint64_t PUDU_UI_TAPPED = 1, PUDU_UI_STOPPED = 2, PUDU_UI_CHANGED = 3, PUDU_UI_SWITCHED_ON = 4,
                       PUDU_UI_SWITCHED_OFF = 5;
 
@@ -31,6 +33,7 @@ static NSMutableArray<NSArray *> *pudu_events;
 static char *pudu_event_text_bytes;
 static UIView *pudu_surface;
 static UIView *pudu_shown_root;
+static UILayoutGuide *pudu_available;
 static double pudu_main_started_ms;
 static double pudu_first_frame_ms = -1;
 
@@ -61,10 +64,12 @@ static void pudu_queue(uint64_t kind, NSInteger tag, NSString *text) {
 @interface PuduTarget : NSObject
 - (void)tapped:(UIButton *)sender;
 - (void)edited:(UITextField *)sender;
+- (void)focused:(UITextField *)sender;
 - (void)switched:(UISwitch *)sender;
 @end
 @implementation PuduTarget
 - (void)tapped:(UIButton *)sender { pudu_queue(PUDU_UI_TAPPED, sender.tag, nil); }
+- (void)focused:(UITextField *)sender { pudu_focus_field(sender); }
 - (void)edited:(UITextField *)sender { pudu_queue(PUDU_UI_CHANGED, sender.tag, sender.text); }
 - (void)switched:(UISwitch *)sender { pudu_queue(sender.on ? PUDU_UI_SWITCHED_ON : PUDU_UI_SWITCHED_OFF, sender.tag, nil); }
 @end
@@ -100,6 +105,7 @@ static UIView *pudu_make_field(void) {
   UITextField *field = [UITextField new];
   field.borderStyle = UITextBorderStyleRoundedRect;
   [field.widthAnchor constraintGreaterThanOrEqualToConstant:220].active = YES;
+  [field addTarget:pudu_target action:@selector(focused:) forControlEvents:UIControlEventEditingDidBegin];
   [field addTarget:pudu_target action:@selector(edited:) forControlEvents:UIControlEventEditingChanged];
   return field;
 }
@@ -136,7 +142,7 @@ static void pudu_toggle_state(UIView *view, uint32_t state) { ((PuduToggle *)vie
 static UIView *pudu_toggle_control(UIView *view) { return ((PuduToggle *)view).control; }
 
 static UIView *pudu_itself(UIView *view) { return view; }
-
+static UIStackView *pudu_direct_stack(UIView *view) { return (UIStackView *)view; }
 /* What a self-test does to a kind, and what a kind reports afterward. */
 static void pudu_field_fill(UIView *view, NSString *text) {
   ((UITextField *)view).text = text;
@@ -160,19 +166,20 @@ typedef struct {
   void (*state)(UIView *, uint32_t);
   /* The control that carries the node's tag and accessible name. */
   UIView *(*control)(UIView *);
-  int groups;
+  UIStackView *(*children)(UIView *);
   void (*fill)(UIView *, NSString *);
   void (*press)(UIView *);
   NSString *(*shown)(UIView *);
 } pudu_kind;
 
 static const pudu_kind pudu_kind_table[PUDU_UI_KINDS] = {
-  [PUDU_UI_LABEL] = { pudu_make_label, pudu_label_text, NULL, NULL, pudu_itself, 0, NULL, NULL, pudu_label_shown },
-  [PUDU_UI_BUTTON] = { pudu_make_button, pudu_button_text, NULL, NULL, pudu_itself, 0, NULL, pudu_button_press, NULL },
-  [PUDU_UI_COLUMN] = { pudu_make_column, NULL, NULL, NULL, pudu_itself, 1, NULL, NULL, NULL },
-  [PUDU_UI_ROW] = { pudu_make_row, NULL, NULL, NULL, pudu_itself, 1, NULL, NULL, NULL },
-  [PUDU_UI_FIELD] = { pudu_make_field, pudu_field_text, pudu_field_hint, NULL, pudu_itself, 0, pudu_field_fill, NULL, NULL },
-  [PUDU_UI_TOGGLE] = { pudu_make_toggle, pudu_toggle_text, NULL, pudu_toggle_state, pudu_toggle_control, 0, pudu_toggle_fill, NULL, NULL },
+  [PUDU_UI_LABEL] = { pudu_make_label, pudu_label_text, NULL, NULL, pudu_itself, NULL, NULL, NULL, pudu_label_shown },
+  [PUDU_UI_BUTTON] = { pudu_make_button, pudu_button_text, NULL, NULL, pudu_itself, NULL, NULL, pudu_button_press, NULL },
+  [PUDU_UI_COLUMN] = { pudu_make_column, NULL, NULL, NULL, pudu_itself, pudu_direct_stack, NULL, NULL, NULL },
+  [PUDU_UI_ROW] = { pudu_make_row, NULL, NULL, NULL, pudu_itself, pudu_direct_stack, NULL, NULL, NULL },
+  [PUDU_UI_FIELD] = { pudu_make_field, pudu_field_text, pudu_field_hint, NULL, pudu_itself, NULL, pudu_field_fill, NULL, NULL },
+  [PUDU_UI_TOGGLE] = { pudu_make_toggle, pudu_toggle_text, NULL, pudu_toggle_state, pudu_toggle_control, NULL, pudu_toggle_fill, NULL, NULL },
+  [PUDU_UI_SCROLL] = { pudu_make_scroll, NULL, NULL, NULL, pudu_itself, pudu_scroll_stack, NULL, NULL, NULL },
 };
 
 static const pudu_kind *pudu_kind_of(uint32_t kind) {
@@ -259,8 +266,9 @@ static void pudu_do_tag(pudu_reader *reader) {
 /* The group a placement names, refused when its node holds nothing. */
 static UIStackView *pudu_group(pudu_reader *reader) {
   uint32_t parent = pudu_node_id(reader);
-  if (!pudu_node_kind(parent)->groups) pudu_stream_defect("placed a child in a node that holds nothing:", parent);
-  return pudu_nodes[parent];
+  const pudu_kind *kind = pudu_node_kind(parent);
+  if (kind->children == NULL) pudu_stream_defect("placed a child in a node that holds nothing:", parent);
+  return kind->children(pudu_nodes[parent]);
 }
 
 static void pudu_do_append(pudu_reader *reader) {
@@ -296,14 +304,13 @@ static void pudu_do_remove(pudu_reader *reader) {
 }
 
 static void pudu_do_root(pudu_reader *reader) {
-  UIView *root = pudu_nodes[pudu_node_id(reader)];
+  uint32_t node = pudu_node_id(reader);
+  UIView *root = pudu_nodes[node];
   [pudu_shown_root removeFromSuperview];
   pudu_shown_root = root;
   root.translatesAutoresizingMaskIntoConstraints = NO;
   [pudu_surface addSubview:root];
-  [NSLayoutConstraint activateConstraints:@[
-    [root.centerXAnchor constraintEqualToAnchor:pudu_surface.centerXAnchor],
-    [root.centerYAnchor constraintEqualToAnchor:pudu_surface.centerYAnchor] ]];
+  pudu_place_root(root, pudu_available, pudu_kinds[node].unsignedIntValue == PUDU_UI_SCROLL);
 }
 
 static void pudu_do_reset(pudu_reader *reader) {
@@ -362,9 +369,57 @@ static void pudu_report(UIView *view) {
   if (node == NSNotFound) return;
   kind = pudu_node_kind((uint32_t)node);
   if (kind->shown != NULL) printf("PUDU_LABEL %s\n", kind->shown(view).UTF8String);
-  if (kind->groups) {
-    for (UIView *child in ((UIStackView *)view).arrangedSubviews) pudu_report(child);
+  if (kind->children != NULL) {
+    for (UIView *child in kind->children(view).arrangedSubviews) pudu_report(child);
   }
+}
+
+static void pudu_test_keyboard(void) {
+  [pudu_surface layoutIfNeeded];
+  UIView *root = pudu_shown_root;
+  UITextField *field = nil;
+  for (NSObject *node in pudu_nodes) {
+    if ([node isKindOfClass:UITextField.class]) field = (UITextField *)node;
+  }
+  if (![root isKindOfClass:PuduScroll.class] || field == nil) {
+    pudu_queue(PUDU_UI_STOPPED, 0, nil);
+    return;
+  }
+
+  PuduScroll *scroll = (PuduScroll *)root;
+  CGRect original = scroll.frame;
+  CGRect safe = pudu_surface.safeAreaLayoutGuide.layoutFrame;
+  if (CGRectContainsRect(CGRectInset(safe, -1, -1), original) &&
+      scroll.contentSize.height > scroll.bounds.size.height &&
+      !CGRectIntersectsRect(scroll.bounds, [field convertRect:field.bounds toView:scroll])) {
+    puts("PUDU_VIEWPORT safe and scrollable");
+  }
+
+  [field becomeFirstResponder];
+  double deadline = pudu_now_ms() + 10000;
+  __block BOOL dismissed = NO;
+  [NSTimer scheduledTimerWithTimeInterval:0.05 repeats:YES block:^(NSTimer *timer) {
+    [pudu_surface layoutIfNeeded];
+    CGFloat bottom = CGRectGetMaxY(scroll.frame);
+    CGFloat keyboard = CGRectGetMinY(pudu_surface.keyboardLayoutGuide.layoutFrame);
+    if (!dismissed && keyboard < CGRectGetMaxY(original) - 1 && bottom <= keyboard + 1 &&
+        field.isFirstResponder &&
+        CGRectContainsRect(CGRectInset(scroll.bounds, -1, -1), [field convertRect:field.bounds toView:scroll])) {
+      puts("PUDU_KEYBOARD visible field");
+      dismissed = [field resignFirstResponder];
+    } else if (dismissed && fabs(bottom - CGRectGetMaxY(original)) <= 1) {
+      puts("PUDU_KEYBOARD restored");
+      [timer invalidate];
+      pudu_queue(PUDU_UI_STOPPED, 0, nil);
+    } else if (pudu_now_ms() >= deadline) {
+      CGRect frame = [field convertRect:field.bounds toView:scroll];
+      fprintf(stderr, "pudu: keyboard test timed out (initial=%g viewport=%g keyboard=%g offset=%g field=%g..%g focus=%d dismissed=%d)\n",
+              CGRectGetMaxY(original), bottom, keyboard, scroll.contentOffset.y,
+              CGRectGetMinY(frame), CGRectGetMaxY(frame), field.isFirstResponder, dismissed);
+      [timer invalidate];
+      pudu_queue(PUDU_UI_STOPPED, 0, nil);
+    }
+  }];
 }
 
 @interface PuduAppDelegate : UIResponder <UIApplicationDelegate>
@@ -384,6 +439,7 @@ static void pudu_report(UIView *view) {
   self.window = [[UIWindow alloc] initWithFrame:UIScreen.mainScreen.bounds];
   self.window.rootViewController = controller;
   [self.window makeKeyAndVisible];
+  pudu_available = pudu_available_area(pudu_surface);
   /* A run-loop timer, not the main queue: Pudu's wait runs the loop, and the
      main queue does not drain while one of its blocks is running. */
   [self performSelector:@selector(run) withObject:nil afterDelay:0];
@@ -403,6 +459,10 @@ static void pudu_report(UIView *view) {
    is set, taps every button as many times as PUDU_UI_SELFTEST says, then asks
    the program to stop, exactly as a user's input would arrive. */
 - (void)selfTest {
+  if (getenv("PUDU_UI_KEYBOARD_TEST") != NULL) {
+    pudu_test_keyboard();
+    return;
+  }
   int taps = atoi(getenv("PUDU_UI_SELFTEST"));
   const char *typed = getenv("PUDU_UI_TYPE");
   NSArray *nodes = [pudu_nodes copy];

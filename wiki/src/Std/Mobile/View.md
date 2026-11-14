@@ -13,10 +13,10 @@ aliases: [Std Mobile View]
 
 ## Purpose and interface
 
-Pure description of a phone screen and the reconciler that keeps it current. A view is a tree of labels, buttons, rows, columns, text fields and toggles, where any control may be wrapped in a name, and a column may hold keyed rows. `mount` builds a view and shows it; `update` compares the next view with the mounted tree and emits only the instructions that change the screen. Instructions are spelled by [[Std Mobile Stream]].
+Pure description of a phone screen and the reconciler that keeps it current. A view is a tree of labels, buttons, rows, columns, text fields and toggles, where any control may be wrapped in a name, and a column may hold keyed rows. A root scroll viewport holds one view. `mount` builds a view and shows it; `update` compares the next view with the mounted tree and emits only the instructions that change the screen. Instructions are spelled by [[Std Mobile Stream]].
 
 Exports:
-- `type View = Label(Str) | Button(Str, UInt32) | Column(Array[View]) | Row(Array[View]) | Keyed(Array[(Str, View)]) | Field(Str, Str, UInt32) | Toggle(Str, Bool, UInt32) | Named(Str, View)`: `Keyed` is a column whose rows carry keys; the platform sees a column. `Field` is a placeholder, a text and a tag; `Toggle` is a title, an on state and a tag; `Named` gives the wrapped control an accessible name and adds no node.
+- `type View = Label(Str) | Button(Str, UInt32) | Column(Array[View]) | Row(Array[View]) | Keyed(Array[(Str, View)]) | Field(Str, Str, UInt32) | Toggle(Str, Bool, UInt32) | Named(Str, View) | Scroll(View)`: `Keyed` is a column whose rows carry keys; the platform sees a column. `Field` is a placeholder, a text and a tag; `Toggle` is a title, an on state and a tag; `Named` gives the wrapped control an accessible name and adds no node. `Scroll` creates a vertical viewport around one child.
 - `type Event = Tapped(UInt32) | Changed(UInt32, Str) | Toggled(UInt32, Bool) | Stopped`
 - `type Shown = { id: UInt32, view: View, children: Array[Shown] }`: one node of the mounted tree, with the view it displays.
 - `type Mounted = { root: Shown, next: UInt32, free: Array[UInt32] }`: the screen. `next` is the next fresh id; `free` holds recycled ids.
@@ -31,6 +31,7 @@ Exports:
 - Every node has a stable id handed out by the program. An id is unchanged while its node stays on screen, so a reorder or an insertion never renumbers the rows around it.
 - A node keeping its variant and tag updates in place: TEXT for label and button titles and field text, HINT for a field's placeholder, STATE for a toggle's state, NAME for an accessible name.
 - A node changing its variant or tag is replaced: its new subtree is built, inserted at its index, and the old subtree removed. The root is replaced with ROOT, then the old root is removed.
+- A scroll viewport keeps its node and reconciles its single child at index zero. A changed child kind replaces that child, preserving the viewport.
 - Positional groups update their common children pairwise, append extra children, and remove missing ones.
 - Keyed rows are matched by key. Rows whose key is gone are removed. Each wanted row is then updated in place; it is moved to its index only when its position differs, or built and inserted there. Only the first occurrence of a key can retain an old row. Later occurrences build fresh rows. After placing the new rows, any unclaimed old duplicates are removed and their subtree ids recycled.
 - Removed ids go to `free` and are handed out again first, so the host's node table stays as large as the screen, not as large as every row ever shown.
@@ -53,6 +54,8 @@ Depends on [[Std Mobile Stream]] for the instruction words. Consumers: [[Std Mob
 
 ## Resolved Grill Log
 
+- **Q:** Why a single child? **A:** Columns and keyed lists already describe groups. The viewport owns scrolling and uses the same child placement instructions.
+
 - **Q:** Why stable ids instead of positions? **A:** Positions change under insertion, which would rebuild everything after it. _Rejected:_ positional ids with keys only as hints.
 - **Q:** Why move only when the position differs? **A:** An unchanged order writes nothing; a reorder writes one MOVE per displaced row. _Rejected:_ moving every keyed row on each update.
 - **Q:** What happens to old duplicate rows after a keyed update? **A:** The placed prefix is the complete new list. Remove the remaining suffix, which contains only unclaimed old duplicates, so no visible row lives outside the mounted tree. _Rejected:_ retaining old rows solely because their key still exists.
@@ -61,4 +64,4 @@ Depends on [[Std Mobile Stream]] for the instruction words. Consumers: [[Std Mob
 
 ## Referenced by
 
-[[src/Std/_MOC]] · [[Std Mobile Host]] · [[Std Mobile Stream]] · [[Native First Light Delivery]] · [[Native Controls Delivery]] · [[Native Keyed Lists Delivery]]
+[[src/Std/_MOC]] · [[Std Mobile Host]] · [[Std Mobile Stream]] · [[Native First Light Delivery]] · [[Native Controls Delivery]] · [[Native Keyed Lists Delivery]] · [[Native iOS Scrolling Delivery]]

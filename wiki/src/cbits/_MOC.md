@@ -26,6 +26,8 @@ tags: [moc, module, foreign, ffi]
 
 - [[iOS Host Adapter]] — iOS host embedded into application builds, never compiled into the compiler (#916).
 
+- [[iOS Host Layout]] — vertical viewport, safe area, keyboard layout and focus reveal.
+
 ## Referenced by
 
 [[src/_MOC]] · [[Foreign Call]] · [[ADR-0018 Calling a Library Written Elsewhere]]

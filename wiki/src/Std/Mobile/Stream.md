@@ -16,7 +16,7 @@ aliases: [Std Mobile Stream]
 Pure encoder of the view stream of [[Pudu Native]]. The reconciler in [[Std Mobile View]] decides which changes a commit needs; this module owns how each instruction is spelled as words and bytes. Every function takes the stream so far and answers it extended.
 
 Exports:
-- Kinds, values 1 to 6: `LABEL`, `BUTTON`, `COLUMN`, `ROW`, `FIELD`, `TOGGLE`.
+- Kinds, values 1 to 7: `LABEL`, `BUTTON`, `COLUMN`, `ROW`, `FIELD`, `TOGGLE`, `SCROLL`. Kind 7 uses the existing group instructions.
 - `create(out: Array[UInt8], node: UInt32, kind: UInt32) -> Array[UInt8]`: CREATE, the node and its kind.
 - `text(out, node, value: Str) -> Array[UInt8]`: TEXT, the node, then the text.
 - `hint(out, node, value: Str) -> Array[UInt8]`: HINT, the node, then the placeholder text.
@@ -49,8 +49,10 @@ Depends on no other module. Consumer: [[Std Mobile View]], which calls these fun
 
 ## Resolved Grill Log
 
+- **Q:** Add a separate scroll instruction? **A:** CREATE identifies the viewport as a kind. APPEND, INSERT and REMOVE maintain its child.
+
 - **Q:** Why a separate encoder module? **A:** The reconciler decides what changes; the encoder owns how an instruction is spelled, so neither grows into the other. _Rejected:_ one module for both.
 
 ## Referenced by
 
-[[src/Std/_MOC]] · [[Std Mobile View]] · [[Native Keyed Lists Delivery]]
+[[src/Std/_MOC]] · [[Std Mobile View]] · [[Native Keyed Lists Delivery]] · [[Native iOS Scrolling Delivery]]

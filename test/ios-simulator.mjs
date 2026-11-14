@@ -157,6 +157,12 @@ int main(int argc, char **argv) {
       { environment: { SIMCTL_CHILD_PUDU_UI_SELFTEST: "1", SIMCTL_CHILD_PUDU_UI_TYPE: "Ada" }, labels: ["Hello, stranger"] }]);
     mobileApp(device, "List", [
       { environment: { SIMCTL_CHILD_PUDU_UI_SELFTEST: "3", SIMCTL_CHILD_PUDU_UI_TYPE: "Milk" }, labels: ["3 items", "Milk 3", "Milk 1", "Milk 2"] }]);
+    mobileApp(device, "Feed", [{
+      environment: { SIMCTL_CHILD_PUDU_UI_SELFTEST: "0", SIMCTL_CHILD_PUDU_UI_KEYBOARD_TEST: "1" },
+      labels: Array.from({ length: 40 }, (_, index) => `Row ${index + 1}`),
+      layout: ["PUDU_VIEWPORT safe and scrollable", "PUDU_KEYBOARD visible field", "PUDU_KEYBOARD restored"],
+    }]);
+    invalidGroupApp(device, root);
   } finally {
     try {
       if (device && !existingDevice) {
@@ -195,12 +201,16 @@ function mobileApp(device, example, runs) {
     const executable = join(app, example);
     run(xcrun, ["simctl", "install", device, app], simulatorTimeout);
     installed = true;
-    for (const { environment, labels } of runs) {
+    for (const { environment, labels, layout } of runs) {
       const lines = launch(device, bundle, "PUDU_", "PUDU_PROGRAM_STATUS", environment);
       // The host reports labels in the order the screen shows them.
       assert.deepEqual(lines.filter((line) => line.startsWith("PUDU_LABEL ")), labels.map((label) => `PUDU_LABEL ${label}`),
         `${example} did not show ${labels.join(", ")}:\n${lines.join("\n")}`);
       assert.ok(lines.includes("PUDU_PROGRAM_STATUS 0"), `${example} did not finish:\n${lines.join("\n")}`);
+      if (layout) {
+        assert.deepEqual(lines.filter((line) => /^PUDU_(VIEWPORT|KEYBOARD) /.test(line)), layout,
+          `${example} did not report the expected scroll and keyboard layout:\n${lines.join("\n")}`);
+      }
       const firstFrame = lines.find((line) => line.startsWith("PUDU_FIRST_FRAME_MS "));
       assert.ok(firstFrame, `${example} reported no first frame:\n${lines.join("\n")}`);
       console.log(`PASS iOS ${example}: ${labels.join(", ")}, first frame ${firstFrame.split(" ")[1]} ms from main, `
@@ -212,6 +222,38 @@ function mobileApp(device, example, runs) {
     } finally {
       rmSync(root, { recursive: true, force: true });
     }
+  }
+}
+
+function invalidGroupApp(device, scratch) {
+  const name = `InvalidGroup${randomUUID().replaceAll("-", "")}`;
+  const source = join(scratch, `${name}.pudu`);
+  const app = join(scratch, `${name}.app`);
+  const bundle = `org.pudu.${name}`;
+  writeFileSync(source, `module ${name}
+
+import Std.Mobile.Host as Host
+import Std.Mobile.Stream as Stream
+
+fn main() -> Int {
+  let parent = Stream.create([], 0u32, Stream.LABEL)
+  let child = Stream.create(parent, 1u32, Stream.LABEL)
+  Host.apply(bytesOf(Stream.append(child, 0u32, 1u32)))
+  0
+}
+`);
+  run(resolve(compiler), ["build", source, "--native", "--target", "ios-simulator-arm64", "--app", "-o", app]);
+  run(xcrun, ["simctl", "install", device, app], simulatorTimeout);
+  try {
+    const launched = spawnSync(xcrun, ["simctl", "launch", "--console-pty", device, bundle],
+      { encoding: "utf8", timeout: simulatorTimeout });
+    if (launched.error) throw launched.error;
+    const output = launched.stdout + launched.stderr;
+    assert.match(output, /pudu: a view stream placed a child in a node that holds nothing: 0/u);
+    assert.doesNotMatch(output, /PUDU_PROGRAM_STATUS 0/u);
+    console.log("PASS iOS invalid group placement refused");
+  } finally {
+    run(xcrun, ["simctl", "uninstall", device, bundle], 30_000);
   }
 }
 
