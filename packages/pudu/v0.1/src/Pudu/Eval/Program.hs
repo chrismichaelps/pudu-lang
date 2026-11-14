@@ -187,6 +187,8 @@ programEntry folded integerKinds dependencies entryName moduleValue = do
   found <- lookupName entryName
   case found of
     Just (FunctionValue closure) -> do
+      -- The entry is called from nowhere in the source, so a refusal of the
+      -- call itself (an entry that takes parameters) is reported at its name.
       result <- callClosure closure [] (Just (locatedSpan (functionName (closureFunction closure))))
       if functionAsync (closureFunction closure)
         then awaitTask (locatedSpan (functionName (closureFunction closure))) result

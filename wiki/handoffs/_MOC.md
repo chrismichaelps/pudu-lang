@@ -262,6 +262,7 @@ tags: [moc, handoff]
 
 - [[Graph Integration Delivery]] — preserve both Database safeguards and exact graph output (#478).
 
+- [[Entry Call Span Repair]] — an entry with parameters is a diagnostic (#524).
 - [[Std Views Delivery]] — non-owning views, offset allocators and a chainable Std.Iter (#527).
 - [[Native Wide Value Publication]] — exact wide-carrier dependency partition.
 - [[Native Word128 Publication]] — independent dev-based kernel partition.

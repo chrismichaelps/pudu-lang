@@ -222,6 +222,7 @@ tags: [moc, module]
 
 - [[Eval Loop Kernel]] — complete pure regions, ordered indexing and closed module functions.
 - [[Eval Loop Step]] · [[Eval Loop Step Tests]] — shared region execution without boxed intermediate result wrappers.
+- [[Eval Entry Arity Tests]] — an entry with parameters is a diagnostic, not a crash.
 - [[Eval Record Order Tests]] — records hold their declared field order in every evaluator.
 
 - [[Eval Float Order Tests]] — NaN keeps the value order total.

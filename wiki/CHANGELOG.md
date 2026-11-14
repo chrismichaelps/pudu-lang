@@ -5,6 +5,10 @@ tags: [changelog]
 
 # Changelog
 
+## 2026-10-20 — An entry that takes parameters is a diagnostic (#524)
+
+- `pudu run` and `pudu test` no longer die with an uncaught exception when `main` declares parameters; the refusal is E7003 at the entry's name, and `pudu test` carries on with the remaining fixtures. [[Eval Entry Arity Tests]].
+
 ## 2026-11-13 — Database scope retirement (#480)
 
 - [[Eval Concurrent]] closes mutex admission before joining its owner; [[Std Sync]] exposes joined closure.

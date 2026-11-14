@@ -166,6 +166,7 @@ test-suite pudu-test
     Pudu.Eval.IfUnitSpec
     Pudu.Eval.RecordOrderSpec
     Pudu.Eval.FloatOrderSpec
+    Pudu.Eval.EntryAritySpec
     Pudu.Eval.Foreign.ResultSpec
     Pudu.Frontend.Lexer.CursorSpec
     Pudu.Frontend.ExpandSpec

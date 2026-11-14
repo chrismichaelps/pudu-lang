@@ -109,6 +109,7 @@ Register [[Mutex Admission Spec]] explicitly with existing dependencies. Resolve
 
 Register [[Database Challenge Spec]] explicitly with existing dependencies. Resolved Grill Log: complete-suite execution and focused execution use the same real challenge admission assertions.
 
+Register [[Eval Entry Arity Tests]] in the evaluation group (#524).
 Register [[Native Wide Value Tests]] explicitly without new dependencies. Resolved Grill Log:
 exact value and minimal-selection properties contribute to the complete suite
 and its aggregate failure status. The release gate is unchanged.
