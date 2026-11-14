@@ -9,6 +9,10 @@ tags: [changelog]
 
 - `pudu run` and `pudu test` no longer die with an uncaught exception when `main` declares parameters; the refusal is E7003 at the entry's name, and `pudu test` carries on with the remaining fixtures. [[Eval Entry Arity Tests]].
 
+## 2026-11-13 — Binary facade (#739)
+
+- Binary facade (#739) adds Encode/Decode derives, framed typed reads, explicit builtin wiring and CLI/distribution validation.
+
 ## 2026-11-13 — Markdown-only changes skip CI
 
 - [[Pudu Continuous Verification]] ignores pull requests and pushes made only of Markdown files.
