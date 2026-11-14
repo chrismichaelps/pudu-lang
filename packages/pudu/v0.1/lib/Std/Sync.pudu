@@ -31,6 +31,11 @@ export fn disposeMutex(target: &Mutex) -> Result[(), SyncError] {
   Result.mapErr(mutexDispose(target.token), causeOf)
 }
 
+/// Stop lock admission and join its owner before retirement; the owner cannot close itself.
+export fn closeMutex(target: &Mutex) -> Result[(), SyncError] {
+  Result.mapErr(mutexClose(target.token), causeOf)
+}
+
 /// Retire a shared cell and release its retained value.
 export fn disposeCell[T](target: &Cell[T]) -> Result[(), SyncError] {
   Result.mapErr(cellDispose(target.token), causeOf)

@@ -230,3 +230,7 @@ shape/arity retains E7001/E7003 at the call span.
 Resolved Grill Log: scalar boundaries constrain text slices, not byte reads;
 return an exact UInt8 and keep naming, typing, installation and pure dispatch
 synchronized. Existing text primitives and packed identities are unchanged.
+
+## Joined scope retirement (#480)
+
+Append MutexCloseBuiltin after all existing tags with the single source name mutexClose. Resolved Grill Log: preserve packed tag identities and keep lifecycle execution in the concurrency coordinator.

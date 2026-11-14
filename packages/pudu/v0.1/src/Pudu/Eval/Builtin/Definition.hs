@@ -230,6 +230,7 @@ data Builtin
   | ForgetThreadBuiltin
   | ChannelPullWithinBuiltin
   | MutexAcquireWithinBuiltin
+  | MutexCloseBuiltin
   | FloatKernelBuiltin !FloatKernel
   | LaneKernelBuiltin !LaneKernel
   | TextByteAtBuiltin
@@ -331,6 +332,7 @@ builtinName value = case value of
   CellSwapBuiltin -> "cellSwap"
   CellDisposeBuiltin -> "cellDispose"
   MutexDisposeBuiltin -> "mutexDispose"
+  MutexCloseBuiltin -> "mutexClose"
   ForgetThreadBuiltin -> "forgetThread"
   SecureBytesBuiltin -> "secureRandomBytes"
   DesktopOpenBuiltin -> "desktopOpen"

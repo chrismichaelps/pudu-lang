@@ -13,3 +13,9 @@ Resolved Grill Log (#476): controlled admission and observed state prove ownersh
 
 ## Referenced by
 [[Database Mutex Delivery]] · [[src/Pudu/Eval/_MOC]] · [[src/_MOC]]
+
+## Joined scope retirement (#480)
+
+Controlled closure checks retain an owner while a closer and entrants park, require refusal after closing, prohibit foreign release, and join owner release before asserting zero counts. Cancel a parked closer and require the owner release to remove its registration. Exact effect/type/arity refusals remain checked. Run the real Database retirement fixture in both evaluators and inspect counts inside its live runtime environment before teardown, including repeated success and failure scopes. Resolved Grill Log: whole-program cleanup cannot prove per-scope retirement; external test deadlines expose a stranded owner or waiter.
+
+The self-owned close refusal also has an external test deadline. Resolved Grill Log: a recursive-close regression must fail visibly rather than strand the suite.
