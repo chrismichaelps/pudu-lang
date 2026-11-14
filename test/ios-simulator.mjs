@@ -35,7 +35,6 @@ function unavailable(reason) {
 }
 const xcrun = process.env.PUDU_XCRUN || "xcrun";
 const identifier = `org.pudu.MobileForeignSmoke.${randomUUID()}`;
-const counterIdentifier = `org.pudu.MobileCounter.${randomUUID()}`;
 
 function smoke() {
   if (process.platform !== "darwin" || process.arch !== "arm64") {
@@ -151,7 +150,11 @@ int main(int argc, char **argv) {
     const lines = launch(device, identifier, "PUDU_SMOKE", "PUDU_SMOKE_STATUS");
     assert.deepEqual(lines, [...expected.split("\n"), "PUDU_SMOKE_STATUS 0"]);
     console.log(`${expected}\nPASS iOS simulator smoke (${device})`);
-    counter(device, simulatorClang);
+    mobileApp(device, simulatorClang, "Counter", [
+      { environment: { SIMCTL_CHILD_PUDU_UI_SELFTEST: "3" }, label: "Count: 3" }]);
+    mobileApp(device, simulatorClang, "Form", [
+      { environment: { SIMCTL_CHILD_PUDU_UI_SELFTEST: "0", SIMCTL_CHILD_PUDU_UI_TYPE: "Ada" }, label: "Hello, Ada (subscribed)" },
+      { environment: { SIMCTL_CHILD_PUDU_UI_SELFTEST: "1", SIMCTL_CHILD_PUDU_UI_TYPE: "Ada" }, label: "Hello, stranger" }]);
   } finally {
     try {
       if (device && !existingDevice) {
@@ -166,23 +169,25 @@ int main(int argc, char **argv) {
   }
 }
 
-/* The counter of examples/mobile, built only from Pudu with the iOS host
-   adapter: the host taps its button three times, asks it to stop, and reports
-   the label, the program's status and the time from main to the first frame. */
-function counter(device, simulatorClang) {
-  const root = mkdtempSync(join(tmpdir(), "pudu-ios-counter-"));
-  const app = join(root, "PuduCounter.app");
-  const library = join(root, "libCounter.a");
+/* An example from examples/mobile, built only from Pudu with the iOS host
+   adapter and run once per entry of `runs`: the host feeds it input from the
+   entry's environment, asks it to stop, and reports its labels, its status
+   and the time from main to the first frame. */
+function mobileApp(device, simulatorClang, example, runs) {
+  const root = mkdtempSync(join(tmpdir(), `pudu-ios-${example.toLowerCase()}-`));
+  const app = join(root, `${example}.app`);
+  const library = join(root, `lib${example}.a`);
+  const bundle = `org.pudu.Mobile${example}.${randomUUID()}`;
   let installed = false;
   try {
-    run(resolve(compiler), ["build", join(repository, "examples", "mobile", "Counter.pudu"),
+    run(resolve(compiler), ["build", join(repository, "examples", "mobile", `${example}.pudu`),
       "--native", "--target", "ios-simulator-arm64", "-o", library]);
     mkdirSync(app);
     writeFileSync(join(app, "Info.plist"), `<?xml version="1.0" encoding="UTF-8"?>
 <plist version="1.0"><dict>
-<key>CFBundleIdentifier</key><string>${counterIdentifier}</string>
-<key>CFBundleExecutable</key><string>PuduCounter</string>
-<key>CFBundleName</key><string>PuduCounter</string>
+<key>CFBundleIdentifier</key><string>${bundle}</string>
+<key>CFBundleExecutable</key><string>${example}</string>
+<key>CFBundleName</key><string>${example}</string>
 <key>CFBundlePackageType</key><string>APPL</string>
 <key>CFBundleVersion</key><string>1</string>
 <key>CFBundleShortVersionString</key><string>1.0</string>
@@ -192,24 +197,25 @@ function counter(device, simulatorClang) {
 <key>UILaunchScreen</key><dict/>
 </dict></plist>
 `);
-    const executable = join(app, "PuduCounter");
+    const executable = join(app, example);
     run(xcrun, [...simulatorClang, "-fobjc-arc", "-O2", "-I", root,
       join(repository, "packages", "pudu", "v0.1", "host", "ios", "PuduHost.m"), library,
       "-framework", "UIKit", "-framework", "Foundation", "-o", executable]);
     run("codesign", ["--force", "--sign", "-", app]);
     run(xcrun, ["simctl", "install", device, app], simulatorTimeout);
     installed = true;
-    const lines = launch(device, counterIdentifier, "PUDU_", "PUDU_PROGRAM_STATUS",
-      { SIMCTL_CHILD_PUDU_UI_SELFTEST: "3" });
-    assert.ok(lines.includes("PUDU_LABEL Count: 3"), `the counter did not count three taps:\n${lines.join("\n")}`);
-    assert.ok(lines.includes("PUDU_PROGRAM_STATUS 0"), `the counter did not finish:\n${lines.join("\n")}`);
-    const firstFrame = lines.find((line) => line.startsWith("PUDU_FIRST_FRAME_MS "));
-    assert.ok(firstFrame, `the counter reported no first frame:\n${lines.join("\n")}`);
-    console.log(`PASS iOS counter: Count: 3, first frame ${firstFrame.split(" ")[1]} ms from main, `
-      + `executable ${statSync(executable).size} bytes, program archive ${statSync(library).size} bytes`);
+    for (const { environment, label } of runs) {
+      const lines = launch(device, bundle, "PUDU_", "PUDU_PROGRAM_STATUS", environment);
+      assert.ok(lines.includes(`PUDU_LABEL ${label}`), `${example} did not show ${label}:\n${lines.join("\n")}`);
+      assert.ok(lines.includes("PUDU_PROGRAM_STATUS 0"), `${example} did not finish:\n${lines.join("\n")}`);
+      const firstFrame = lines.find((line) => line.startsWith("PUDU_FIRST_FRAME_MS "));
+      assert.ok(firstFrame, `${example} reported no first frame:\n${lines.join("\n")}`);
+      console.log(`PASS iOS ${example}: ${label}, first frame ${firstFrame.split(" ")[1]} ms from main, `
+        + `executable ${statSync(executable).size} bytes, program archive ${statSync(library).size} bytes`);
+    }
   } finally {
     try {
-      if (installed) run(xcrun, ["simctl", "uninstall", device, counterIdentifier], 30_000);
+      if (installed) run(xcrun, ["simctl", "uninstall", device, bundle], 30_000);
     } finally {
       rmSync(root, { recursive: true, force: true });
     }

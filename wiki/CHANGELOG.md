@@ -5,6 +5,10 @@ tags: [changelog]
 
 # Changelog
 
+## 2026-11-14 — Pudu Native controls (#912)
+
+- Pudu Native rows, text fields, toggles and accessible names: view stream codes STATE, HINT and NAME, events with payloads, and the iOS host's kinds and instructions dispatched through constant tables ([[Native Controls Delivery]]).
+
 ## 2026-11-14 — Exports carry text, records and Result (#906)
 
 - Exports carry text (`pudu_string`), records (named public structs, nested and with text) and `Result` (status with out pointers); every owned value crossing is released exactly once ([[Native Export Crossings Delivery]]).

@@ -4,15 +4,22 @@ import Std.ByteOrder {writeU32LE}
 
 /// One platform control and what it shows. A node is named by its position
 /// in a depth-first walk, so two trees of one shape name the same controls.
+/// `Named` gives the control it wraps an accessible name and adds no node.
 export type View
   = Label(Str)
   | Button(Str, UInt32)
   | Column(Array[View])
+  | Row(Array[View])
+  | Field(Str, Str, UInt32)
+  | Toggle(Str, Bool, UInt32)
+  | Named(Str, View)
 
-/// What the platform reported: a button's tag was tapped, or the host asked
-/// the program to stop.
+/// What the platform reported: a button's tag was tapped, a field's text
+/// changed, a toggle was switched, or the host asked the program to stop.
 export type Event
   = Tapped(UInt32)
+  | Changed(UInt32, Str)
+  | Toggled(UInt32, Bool)
   | Stopped
 
 /// Instruction codes of the view stream; each is followed by its words.
@@ -22,15 +29,26 @@ const APPEND: UInt32 = 3u32
 const ROOT: UInt32 = 4u32
 const TAG: UInt32 = 5u32
 const RESET: UInt32 = 6u32
+const STATE: UInt32 = 7u32
+const HINT: UInt32 = 8u32
+const NAME: UInt32 = 9u32
 
 /// Control kinds a CREATE names.
 const LABEL: UInt32 = 1u32
 const BUTTON: UInt32 = 2u32
 const COLUMN: UInt32 = 3u32
+const ROW: UInt32 = 4u32
+const FIELD: UInt32 = 5u32
+const TOGGLE: UInt32 = 6u32
 
 /// Event kinds in the high word of a host event.
 const TAPPED: UInt64 = 1u64
-const STOPPED: UInt64 = 2u64
+const CHANGED: UInt64 = 3u64
+const SWITCHED_ON: UInt64 = 4u64
+const SWITCHED_OFF: UInt64 = 5u64
+
+/// Whether a host event's kind carries text the host holds for it.
+export fn carriesText(raw: UInt64) -> Bool { raw >> 32 == CHANGED }
 
 /// The stream that builds `view` from nothing and shows it.
 export fn build(view: &View) -> Bytes {
@@ -38,8 +56,8 @@ export fn build(view: &View) -> Bytes {
   bytesOf(words(bytes, [ROOT, 0u32]))
 }
 
-/// The stream that turns what `shown` built into `next`: text changes for a
-/// tree of the same shape, otherwise a reset and a fresh build.
+/// The stream that turns what `shown` built into `next`: in-place changes
+/// for a tree of the same shape, otherwise a reset and a fresh build.
 export fn changes(shown: &View, next: &View) -> Bytes {
   match changed([], shown, next, 0u32) {
     case Some((bytes, _)) => bytesOf(bytes)
@@ -50,12 +68,20 @@ export fn changes(shown: &View, next: &View) -> Bytes {
   }
 }
 
-/// A host event read from its two words: the kind above, the tag below.
-export fn event(raw: UInt64) -> Event {
-  let kind = raw >> 32
-  match convertInteger[UInt32](raw & 0xffffffffu64) {
-    case Some(tag) if kind == TAPPED => Tapped(tag)
-    case _ if kind == STOPPED => Stopped
+/// Each event kind's constructor, given the tag and the text the host holds.
+const EVENTS: Map[UInt64, fn(UInt32, Str) -> Event] = mapOf([
+    (TAPPED, |tag: UInt32, _text: Str| Tapped(tag)),
+    (CHANGED, |tag: UInt32, text: Str| Changed(tag, text)),
+    (SWITCHED_ON, |tag: UInt32, _text: Str| Toggled(tag, true)),
+    (SWITCHED_OFF, |tag: UInt32, _text: Str| Toggled(tag, false))
+  ])
+
+/// A host event read from its two words, the kind above and the tag below,
+/// with the text the host holds for a changed field. A kind the table does
+/// not know stops the program.
+export fn event(raw: UInt64, text: Str) -> Event {
+  match (EVENTS.get(raw >> 32), convertInteger[UInt32](raw & 0xffffffffu64)) {
+    case (Some(made), Some(tag)) => made(tag, text)
     case _ => Stopped
   }
 }
@@ -63,58 +89,99 @@ export fn event(raw: UInt64) -> Event {
 // Builds `view` as node `node` and answers the stream and the next free node.
 fn created(bytes: Array[UInt8], view: &View, node: UInt32) -> (Array[UInt8], UInt32) {
   match *view {
-    case Label(text) => (texted(words(bytes, [CREATE, node, LABEL]), node, text), node + 1u32)
-    case Button(title, tag) => (texted(words(bytes, [CREATE, node, BUTTON, TAG, node, tag]), node, title), node + 1u32)
-    case Column(children) => {
-      var out = words(bytes, [CREATE, node, COLUMN])
-      var next = node + 1u32
-      for child in children {
-        let (built, after) = created(out, &child, next)
-        out = words(built, [APPEND, node, next])
-        next = after
-      }
-      (out, next)
+    case Label(text) => (texted(words(bytes, [CREATE, node, LABEL]), TEXT, node, text), node + 1u32)
+    case Button(title, tag) => (texted(words(bytes, [CREATE, node, BUTTON, TAG, node, tag]), TEXT, node, title), node + 1u32)
+    case Column(children) => grouped(bytes, COLUMN, &children, node)
+    case Row(children) => grouped(bytes, ROW, &children, node)
+    case Field(hint, text, tag) => {
+      let hinted = texted(words(bytes, [CREATE, node, FIELD, TAG, node, tag]), HINT, node, hint)
+      (texted(hinted, TEXT, node, text), node + 1u32)
+    }
+    case Toggle(title, on, tag) => {
+      let titled = texted(words(bytes, [CREATE, node, TOGGLE, TAG, node, tag]), TEXT, node, title)
+      (words(titled, [STATE, node, stateOf(on)]), node + 1u32)
+    }
+    case Named(name, inner) => {
+      let (built, next) = created(bytes, &inner, node)
+      (texted(built, NAME, node, name), next)
     }
   }
 }
 
-// The text changes between two trees of one shape, or None when the shapes
-// differ and the tree must be built again.
+// A column or row as node `node`, its children built and appended in order.
+fn grouped(bytes: Array[UInt8], kind: UInt32, children: &Array[View], node: UInt32) -> (Array[UInt8], UInt32) {
+  var out = words(bytes, [CREATE, node, kind])
+  var next = node + 1u32
+  for child in *children {
+    let (built, after) = created(out, &child, next)
+    out = words(built, [APPEND, node, next])
+    next = after
+  }
+  (out, next)
+}
+
+// The in-place changes between two trees of one shape, or None when the
+// shapes differ and the tree must be built again.
 fn changed(bytes: Array[UInt8], shown: &View, next: &View, node: UInt32) -> Option[(Array[UInt8], UInt32)] {
   match (*shown, *next) {
-    case (Label(before), Label(after)) => Some((if before == after { bytes } else { texted(bytes, node, after) }, node + 1u32))
+    case (Label(before), Label(after)) => Some((retexted(bytes, TEXT, node, before, after), node + 1u32))
     case (Button(before, beforeTag), Button(after, afterTag)) => {
       if beforeTag != afterTag { return None }
-      Some((if before == after { bytes } else { texted(bytes, node, after) }, node + 1u32))
+      Some((retexted(bytes, TEXT, node, before, after), node + 1u32))
     }
-    case (Column(before), Column(after)) => {
-      if before.length() != after.length() { return None }
-      var out = bytes
-      var at = node + 1u32
-      for index in 0..before.length() {
-        let (updated, following) = changed(out, &before[index], &after[index], at) ?
-        out = updated
-        at = following
-      }
-      Some((out, at))
+    case (Column(before), Column(after)) => regrouped(bytes, &before, &after, node)
+    case (Row(before), Row(after)) => regrouped(bytes, &before, &after, node)
+    case (Field(beforeHint, before, beforeTag), Field(afterHint, after, afterTag)) => {
+      if beforeTag != afterTag { return None }
+      Some((retexted(retexted(bytes, HINT, node, beforeHint, afterHint), TEXT, node, before, after), node + 1u32))
+    }
+    case (Toggle(before, beforeOn, beforeTag), Toggle(after, afterOn, afterTag)) => {
+      if beforeTag != afterTag { return None }
+      let titled = retexted(bytes, TEXT, node, before, after)
+      Some((if beforeOn == afterOn { titled } else { words(titled, [STATE, node, stateOf(afterOn)]) }, node + 1u32))
+    }
+    case (Named(beforeName, beforeInner), Named(afterName, afterInner)) => {
+      let (inner, following) = changed(bytes, &beforeInner, &afterInner, node) ?
+      Some((retexted(inner, NAME, node, beforeName, afterName), following))
     }
     case _ => None
   }
 }
 
-// A TEXT instruction: the node, the byte length, then the UTF-8 bytes.
-fn texted(bytes: Array[UInt8], node: UInt32, text: Str) -> Array[UInt8] {
+// The children of two groups of one length, changed in place, or None.
+fn regrouped(bytes: Array[UInt8], before: &Array[View], after: &Array[View], node: UInt32) -> Option[(Array[UInt8], UInt32)] {
+  if before.length() != after.length() { return None }
+  var out = bytes
+  var at = node + 1u32
+  for index in 0..before.length() {
+    let (updated, following) = changed(out, &before[index], &after[index], at) ?
+    out = updated
+    at = following
+  }
+  Some((out, at))
+}
+
+// A text instruction only when the text differs.
+fn retexted(bytes: Array[UInt8], code: UInt32, node: UInt32, before: Str, after: Str) -> Array[UInt8] {
+  if before == after { bytes } else { texted(bytes, code, node, after) }
+}
+
+// A text-carrying instruction: the code, the node, the byte length, then the
+// UTF-8 bytes.
+fn texted(bytes: Array[UInt8], code: UInt32, node: UInt32, text: Str) -> Array[UInt8] {
   let raw = text.toBytes().toArray()
   let length = match convertInteger[UInt32](raw.length()) {
     case Some(count) => count
     case None => 0u32
   }
-  var out = words(bytes, [TEXT, node, length])
+  var out = words(bytes, [code, node, length])
   for octet in raw {
     out = out.push(octet)
   }
   out
 }
+
+fn stateOf(on: Bool) -> UInt32 { if on { 1u32 } else { 0u32 } }
 
 // Little-endian words appended to the stream.
 fn words(bytes: Array[UInt8], values: Array[UInt32]) -> Array[UInt8] {

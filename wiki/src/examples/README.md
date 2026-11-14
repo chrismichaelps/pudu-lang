@@ -27,7 +27,7 @@ mistaken for complete video or speaker support.
 
 ## Mobile
 
-`mobile/Counter.pudu` is the Phase 1 native phone application: a counter built only from Pudu, run on the iOS simulator through the iOS host adapter. See [[Native Counter Example]].
+`mobile/Counter.pudu` is the Phase 1 native phone application: a counter built only from Pudu, run on the iOS simulator through the iOS host adapter. See [[Native Counter Example]]. `mobile/Form.pudu` adds a named greeting, a text field and a toggle with a clear button: see [[Native Form Example]].
 
 ## Grill Log
 
@@ -39,4 +39,4 @@ mistaken for complete video or speaker support.
 
 ## Referenced by
 
-[[Module Map]] · [[Media Studio Example]] · [[Desktop Capability Conformance]]
+[[Module Map]] · [[Media Studio Example]] · [[Native Counter Example]] · [[Native Form Example]] · [[Desktop Capability Conformance]]
