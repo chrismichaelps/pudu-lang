@@ -10,6 +10,33 @@ tags: [changelog]
 - [[Foreign Pointers and Runs]] proposes typed loans, length relationships,
   nullable handles and function-pointer crossings.
 
+## 2026-11-13 — Native iOS library targets (#878)
+
+- `pudu build --native --target` exposes arm64 device and simulator libraries.
+  [[iOS Simulator Run]] compares libc, CoreFoundation, and embedded framework
+  foreign calls with interpreter output. [[iOS Simulator CI]] requires that smoke on macOS
+  for compiler changes.
+
+## 2026-11-13 — Apple SDK archive builder (#878)
+
+- [[Backend Toolchain Library]] builds arm64 device and simulator archives.
+
+## 2026-11-13 — Mobile target policy (#878)
+
+- [[Native Mobile Targets]] defines target names and foreign library admission.
+
+## 2026-11-13 — Embedded native entry (#878)
+
+- [[Backend Emit Entry]] emits a C entry callable from a host application.
+
+## 2026-11-13 — Shared native tool execution (#878)
+
+- [[Backend Toolchain Process]] owns compiler process lifetime and output capture.
+
+## 2026-11-13 — Pudu Native architecture
+
+- Added [[Pudu Native]]: mobile feasibility against the current C11 toolchain, the platform-control adapter boundary, threading, hot reload, update limits, and FUI-on-native mapping.
+
 ## 2026-11-13 — Folded byte literals (#887)
 
 - [[Pudu Core IR Module]] carries folded `Bytes` constants as one

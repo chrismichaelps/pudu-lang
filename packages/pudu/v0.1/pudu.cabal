@@ -110,6 +110,7 @@ library
     Pudu.Backend.Emit
     Pudu.Backend.Emit.Aggregate
     Pudu.Backend.Emit.Cell
+    Pudu.Backend.Emit.Entry
     Pudu.Backend.Emit.Array
     Pudu.Backend.Emit.Keyed
     Pudu.Backend.Emit.Kernel
@@ -194,8 +195,11 @@ library
     Pudu.Backend.Runtime.Text.Number
     Pudu.Backend.Runtime.Text.Pieces
     Pudu.Backend.Runtime.Text.Methods
+    Pudu.Backend.Target
     Pudu.Backend.Toolchain
     Pudu.Backend.Toolchain.HostSources
+    Pudu.Backend.Toolchain.Library
+    Pudu.Backend.Toolchain.Process
     Pudu.Compiler
     Pudu.Compiler.Constants
     Pudu.Compiler.Cache

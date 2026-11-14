@@ -193,3 +193,13 @@ pays for a parameter it cannot read.
 
 The program writes the registered byte-literal tables right after the site
 table, before any function that reads them.
+
+## Entry forms (#878)
+
+Export `emitFrameUnit :: EntryForm -> Text -> [Source] -> FrameModule ->
+Either FrameFault EmittedUnit`; `emitFrameProgram` is its executable form's
+source. The entry's opening and closing come from [[Backend Emit Entry]]
+(`entrySection`), told whether `host_arguments` and `output_state` are
+selected. The unit carries the selected part set and the libraries of the
+frames' foreign declarations with their optional versions in first-seen order. Resolved Grill Log: the
+desktop unit's bytes are unchanged; only the embedded form wraps the body.

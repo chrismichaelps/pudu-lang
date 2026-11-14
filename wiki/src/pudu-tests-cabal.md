@@ -412,3 +412,8 @@ Register [[Backend Host Programs]] and [[Backend Abstraction Programs]] in the
 test suite's other-modules. Resolved Grill Log: the existing native
 conformance, counted-allocation and leak harnesses execute both corpora; no
 separate runner or new dependency is introduced.
+
+## Native mobile targets (#878)
+
+Register [[Backend Native Target Tests]] in the test suite's other-modules. No
+dependency is added.

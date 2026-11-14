@@ -69,7 +69,7 @@ Message contracts:
   seconds.
 - `E6005` — the compiler rejected the generated C, with its captured output
   bounded and marked when truncated.
-- `E6006` — the compiled executable could not be published to the output
+- `E6006` — the compiled artifact could not be published to the output
   path, with the operating system's reason.
 
 ## Governance
@@ -120,3 +120,16 @@ belong to [[Diagnostic Arithmetic]], not here.
 
 [[src/Pudu/_MOC]] · [[src/Pudu/_MOC]] · [[Compiler Lower]] ·
 [[Backend Toolchain]] · [[Pudu CLI]] · [[Backend]]
+
+## Mobile target diagnostics (#878)
+
+`platformSdkMissing :: Span -> Text -> Text -> Diagnostic` owns `E6007`:
+`the <target> target needs its platform SDK, which was not found: <detail>`,
+with help naming Xcode with `PUDU_XCRUN` and the Android NDK with
+`ANDROID_NDK_HOME`. `targetRefusal :: Span -> Text -> Text -> Text ->
+Diagnostic` owns `E6008`: `the <target> target cannot carry <construct>:
+<reason>`, with help to build for the host or keep the construct out of the
+program. Both are errors at the root module's span ([[Native Mobile Targets]]).
+Resolved Grill Log: a refusal decided from runtime parts has no construct span,
+so the message names the construct; codes stay literal in this one module,
+which the registry gate checks.

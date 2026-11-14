@@ -1,5 +1,5 @@
 {-| @Pudu.Backend.Emit.Frame — a self-contained translation unit with explicit frames. -}
-module Pudu.Backend.Emit.Frame (emitFrameProgram, frameUsesWideCells, frameUsesText, ownershipSwitch) where
+module Pudu.Backend.Emit.Frame (emitFrameProgram, emitFrameUnit, frameUsesWideCells, frameUsesText, ownershipSwitch) where
 
 import Control.Monad (unless)
 import Data.Maybe (isJust)
@@ -8,6 +8,7 @@ import Data.Text (Text)
 import qualified Data.Text as Text
 import Pudu.Backend.Emit.Foreign (foreignNeeds, foreignWrappers, foreignsOf)
 import Pudu.Backend.Emit.Aggregate (aggregateSection, aggregateTypes, cellName, ownedKinds, ownedType, released, retained, aggregateHelper, aggregateNeed)
+import Pudu.Backend.Emit.Entry (EmittedUnit (..), EntryForm (..), entrySection)
 import Pudu.Backend.Emit.Frame.Body (emitFrameBodies)
 import Pudu.Backend.Emit.Support (integerHelper, isBigInteger, isWideInteger)
 import Pudu.Backend.Emit.State (EmitState (..), emptyEmitState, renderByteData, renderSites, textOfInt)
@@ -23,14 +24,18 @@ import Pudu.Backend.Runtime.Bytes (bytesRuntimeParts)
 import Pudu.Backend.Runtime.Dependencies (runtimeDependencies)
 import Data.Map.Strict (Map)
 import qualified Data.Map.Strict as Map
-import Pudu.Core (closureIsBuiltin, closureHasEnvironment, closureMethod, CoreLayout (..), CoreType (..), CoreVariant (..))
+import Data.List (nub)
+import Pudu.Core (closureIsBuiltin, CoreForeign (..), closureHasEnvironment, closureMethod, CoreLayout (..), CoreType (..), CoreVariant (..))
 import Pudu.Core.Frame
   ( FrameBlock (..), FrameFault (..), FrameFunction (..), FrameLabel (..)
   , FrameModule (..), FrameSlot (..), FrameSlotId (..), FrameTerminator (..) )
 import Pudu.Source (Source)
 
 emitFrameProgram :: Text -> [Source] -> FrameModule -> Either FrameFault Text
-emitFrameProgram version sources source = do
+emitFrameProgram version sources source = emittedSource <$> emitFrameUnit ExecutableEntry version sources source
+
+emitFrameUnit :: EntryForm -> Text -> [Source] -> FrameModule -> Either FrameFault EmittedUnit
+emitFrameUnit form version sources source = do
   let functions = frameModuleFunctions source
       indexed = zip [0 ..] functions
   (entryId, entry) <- case filter ((== frameModuleEntry source) . frameFunctionName . snd) indexed of
@@ -127,20 +132,18 @@ emitFrameProgram version sources source = do
       metadata = concatMap parameterArray indexed
         <> ["static const pudu_function pudu_functions[] = {"]
         <> map definition indexed <> ["};"]
-  pure $ Text.unlines (header <> runtime <> frameTypes wide big decimal text boxes
+  pure $ EmittedUnit
+    { emittedSource = Text.unlines (header <> runtime <> frameTypes wide big decimal text boxes
     <> concat [lines' <> [""] | (name, lines') <- arrayRuntimeParts <> textPieceRuntimeParts <> treeRuntimeParts <> rangeRuntimeParts <> bytesRuntimeParts <> hashRuntimeParts <> kernelRuntimeParts, Set.member name selected]
     <> renderSites (reverse (emitSites emitted)) <> renderByteData (reverse (emitByteData emitted)) <> aggregates <> ownership <> foreignWrappers (frameModuleLayouts source) (foreignsOf source) <> reverse (emitOutput emitted)
-    <> metadata <> frameEngine owned (Set.member "host_thread_spawn" selected) <> entryPoint (Set.member "host_arguments" selected)
-    <> ["  pudu_process_cleanup_hook = pudu_foreign_teardown;" | Set.member "host_foreign_store" selected]
-    <> ending <> ["}"])
-  where
+    <> metadata <> frameEngine owned (Set.member "host_thread_spawn" selected)
     -- Only a program that reads its arguments keeps them.
-    entryPoint False = ["int main(void) {", "  pudu_prepare_io();"]
-    entryPoint True =
-      [ "int main(int count, char **values) {"
-      , "  pudu_host_argument_count = count;"
-      , "  pudu_host_argument_values = values;"
-      , "  pudu_prepare_io();" ]
+    <> entrySection form (Set.member "host_arguments" selected) (Set.member "output_state" selected)
+      (["  pudu_process_cleanup_hook = pudu_foreign_teardown;" | Set.member "host_foreign_store" selected] <> ending))
+    , emittedParts = selected
+    , emittedLibraries = nub [(coreForeignLibrary foreignCall, coreForeignVersion foreignCall) | foreignCall <- foreignsOf source]
+    }
+  where
     -- Keep the owned entry value alive until reporting finishes.
     shownBox kind =
       [ "  pudu_box *pudu_entry = pudu_run_frames(" <> textOfInt entryId' <> ").box;"

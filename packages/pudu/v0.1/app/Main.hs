@@ -57,7 +57,9 @@ import Pudu.Compiler.Frame (lowerFrames)
 import Pudu.Core.Frame (FrameFault (..))
 import Pudu.Cli.Memory (withMemoryFailure)
 import Pudu.Compiler.Cache (ProductCache, collectedEntries, openCollectingCache, openProductCache)
-import Pudu.Backend.Emit (emitProgram)
+import Pudu.Backend.Emit (EmittedUnit (..), EntryForm (..), emitUnit)
+import Pudu.Backend.Target (NativeTarget (..), TargetRefusal (..), nativeTargetNamed, nativeTargetNames, targetRefusals)
+import Pudu.Backend.Toolchain.Library (LibraryProducts (..), LibraryRequest (..), compileLibrary)
 import Pudu.Backend.Toolchain
   ( ToolchainFailure (..)
   , ToolchainRequest (..)
@@ -662,7 +664,7 @@ data BuildRequest = BuildRequest
   { buildPath :: !FilePath
   , buildOutput :: !(Maybe FilePath)
   , buildRuntime :: !(Maybe FilePath)
-  , buildHost :: !(Maybe Pack.Target)
+  , buildTarget :: !(Maybe String)
   , buildNative :: !Bool
   }
 
@@ -678,7 +680,7 @@ buildArguments = go Nothing Nothing Nothing Nothing False
             { buildPath = found
             , buildOutput = target
             , buildRuntime = runtime
-            , buildHost = host
+            , buildTarget = host
             , buildNative = native
             }
     ("-o" : rest) -> case rest of
@@ -697,11 +699,11 @@ buildArguments = go Nothing Nothing Nothing Nothing False
       _ -> Left "--runtime needs the path of a runtime to attach the program to"
     ("--target" : rest) -> case rest of
       (value : remaining)
-        | Just named <- Pack.targetNamed value ->
+        | not (isFlag value) ->
             if host == Nothing
-              then go path target runtime (Just named) native remaining
+              then go path target runtime (Just value) native remaining
               else Left "--target given more than once"
-      _ -> Left ("--target needs one of: " <> intercalate ", " Pack.targetNames)
+      _ -> Left "--target needs the name of the platform to build for"
     ("--native" : remaining) ->
       if native
         then Left "--native given more than once"
@@ -717,32 +719,41 @@ buildArguments = go Nothing Nothing Nothing Nothing False
 
 {-| Run the build a request names. Native compilation writes the program itself
     as one C11 translation unit and has no runtime to attach, so asking for
-    both is refused rather than silently preferring one. -}
+    both is refused rather than silently preferring one. With `--native`,
+    `--target` names a mobile platform; without it, a runtime pack. -}
 runBuild :: RenderStyle -> BuildRequest -> IO ()
 runBuild style request
   | buildNative request && namesRuntime =
-      refusal "--native compiles the program itself, so --runtime and --target have nothing to attach; give --native alone"
-  | buildNative request =
-      buildNativeProgram style (buildPath request) target
-  | otherwise = case (buildRuntime request, buildHost request) of
+      refusal "--native compiles the program itself, so --runtime has nothing to attach; give --native alone"
+  | buildNative request = case buildTarget request of
+      Nothing -> buildNativeProgram style (buildPath request) target Nothing
+      Just value -> case nativeTargetNamed (Text.pack value) of
+        Just platform ->
+          buildNativeProgram style (buildPath request)
+            (maybe ("lib" <> defaultTargetName (buildPath request) <> ".a") id (buildOutput request)) (Just platform)
+        Nothing -> refusal ("--target with --native needs one of: " <> intercalate ", " (map Text.unpack nativeTargetNames))
+  | otherwise = case (buildRuntime request, buildTarget request) of
       (Nothing, Nothing) -> buildProgram style (buildPath request) target Nothing
       (Just runtime, Nothing) -> buildProgram style (buildPath request) target (Just runtime)
-      (Nothing, Just host) -> buildForHost style (buildPath request) (buildOutput request) host
+      (Nothing, Just value) -> case Pack.targetNamed value of
+        Just host -> buildForHost style (buildPath request) (buildOutput request) host
+        Nothing -> refusal ("--target needs one of: " <> intercalate ", " Pack.targetNames <> " (or, with --native, " <> intercalate ", " (map Text.unpack nativeTargetNames) <> ")")
       (Just _, Just _) -> refusal "--runtime and --target both name a runtime; give one"
  where
   target = maybe (defaultTargetName (buildPath request)) id (buildOutput request)
-  namesRuntime = maybe False (const True) (buildRuntime request) || maybe False (const True) (buildHost request)
+  namesRuntime = maybe False (const True) (buildRuntime request)
   refusal message = do
     hPutStrLn stderr ("pudu build: " <> message)
     exitFailure
 
 {-| Build the program as a native executable: the checked root module is
     lowered to the core subset, emitted as one deterministic C11 translation
-    unit, and compiled by the native toolchain. Refusals and toolchain failures
-    are rendered like every other diagnostic, so the output shape is the one a
-    Pudu reader already knows. -}
-buildNativeProgram :: RenderStyle -> FilePath -> FilePath -> IO ()
-buildNativeProgram style path target = do
+    unit, and compiled by the native toolchain: into an executable for the
+    host, or into a static library a mobile target's application enters.
+    Refusals and toolchain failures are rendered like every other diagnostic,
+    so the output shape is the one a Pudu reader already knows. -}
+buildNativeProgram :: RenderStyle -> FilePath -> FilePath -> Maybe NativeTarget -> IO ()
+buildNativeProgram style path target platform = do
   program <- compileProgram path
   let diagnostics = programDiagnostics program
   unless (null diagnostics) $
@@ -757,27 +768,44 @@ buildNativeProgram style path target = do
         LowerRefused refusals -> do
           TextIO.putStrLn (renderProgramDiagnostics style program refusals)
           exitFailure
-        Lowered core -> case lowerFrames core >>= emitProgram versionText (programSources program) of
+        Lowered core -> case lowerFrames core >>= emitUnit form versionText (programSources program) of
           Left failure -> do
             let at = maybe (moduleSpan parsed) id (frameFaultSpan failure)
             TextIO.putStrLn (renderProgramDiagnostics style program [Native.nativeRefusal at (frameFaultMessage failure)])
             exitFailure
-          Right emitted -> do
-            let request =
-                  ToolchainRequest
-                    { toolchainSource = emitted
-                    , toolchainOutput = target
-                    }
-            compiled <- compileNative request
-            case compiled of
-              Left failure -> do
-                TextIO.putStrLn
-                  (renderProgramDiagnostics style program [toolchainDiagnostic (moduleSpan parsed) failure])
+          Right unit -> case platform of
+            Nothing -> do
+              compiled <- compileNative ToolchainRequest{toolchainSource = emittedSource unit, toolchainOutput = target}
+              case compiled of
+                Left failure -> toolchainFailed style program (moduleSpan parsed) failure
+                Right warnings -> do
+                  unless (Text.null (Text.strip warnings)) $
+                    TextIO.putStrLn warnings
+                  TextIO.putStrLn (Text.pack target <> ": a native executable")
+            Just chosen -> case targetRefusals chosen (emittedParts unit) (emittedLibraries unit) of
+              refusals@(_ : _) -> do
+                let name = nativeTargetName chosen
+                TextIO.putStrLn (renderProgramDiagnostics style program
+                  [Native.targetRefusal (moduleSpan parsed) name (refusedConstruct refused) (refusedReason refused) | refused <- refusals])
                 exitFailure
-              Right warnings -> do
-                unless (Text.null (Text.strip warnings)) $
-                  TextIO.putStrLn warnings
-                TextIO.putStrLn (Text.pack target <> ": a native executable")
+              [] -> do
+                compiled <- compileLibrary LibraryRequest{librarySource = emittedSource unit, libraryOutput = target, libraryTarget = chosen}
+                case compiled of
+                  Left failure -> toolchainFailed style program (moduleSpan parsed) failure
+                  Right products -> do
+                    unless (Text.null (libraryWarnings products)) $
+                      TextIO.putStrLn (libraryWarnings products)
+                    TextIO.putStrLn (Text.pack target <> ": a static library for " <> nativeTargetName chosen
+                      <> ", entered through pudu_program_run in " <> Text.pack (libraryHeader products))
+                    unless (null (libraryLinks products)) $
+                      TextIO.putStrLn ("link the host with: " <> Text.unwords (libraryLinks products))
+ where
+  form = maybe ExecutableEntry (const EmbeddedEntry) platform
+
+toolchainFailed :: RenderStyle -> ProgramResult -> Span -> ToolchainFailure -> IO ()
+toolchainFailed style program spanValue failure = do
+  TextIO.putStrLn (renderProgramDiagnostics style program [toolchainDiagnostic spanValue failure])
+  exitFailure
 
 {-| The native toolchain's failure as a diagnostic, spanned at the root module
     so the ordinary renderer shows the file being built. -}
@@ -788,6 +816,9 @@ toolchainDiagnostic spanValue failure = case failure of
   ToolchainTimedOut seconds -> Native.toolchainTimedOut spanValue seconds
   ToolchainRejected output -> Native.toolchainRejected spanValue output
   ToolchainPublishFailed reason -> Native.toolchainPublishFailed spanValue reason
+  ToolchainSdkMissing target detail -> Native.platformSdkMissing spanValue target detail
+  ToolchainTargetUnbuilt target ->
+    Native.targetRefusal spanValue target "a native build" "its shared-library output is designed but not built yet"
 
 buildProgram :: RenderStyle -> FilePath -> FilePath -> Maybe FilePath -> IO ()
 buildProgram style path target runtime = do
@@ -1296,6 +1327,11 @@ usage =
     , "  pudu build <file> --native  compile the program to a native executable"
     , "                       with the C11 toolchain; needs a C compiler on PATH"
     , "                       or PUDU_CC"
+    , "  pudu build <file> --native --target <platform>  compile it to a static"
+    , "                       library and pudu_program.h for ios-arm64 or"
+    , "                       ios-simulator-arm64, entered by a host application;"
+    , "                       needs Xcode (android-arm64 and android-x86_64 are"
+    , "                       reserved)"
     , "  pudu test [path]...  discover and execute test fixtures"
     , "  pudu init [path] [--name @owner/repo] [--lib]  initialize an application or library"
     , "  pudu install [package]...  add dependencies, or install what pudu.toml"

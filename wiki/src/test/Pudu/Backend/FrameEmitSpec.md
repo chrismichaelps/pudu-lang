@@ -72,3 +72,12 @@ Add located malformed byte-method receiver, arity, offset/needle/result carrier 
 Extend malformed keyed-carrier cases for query result widths, payloads, operand types/arities and members key kinds. Require the exact FrameValue span for every fault before any C compiler is reached.
 
 Resolved Grill Log: project existing checked semantics; no inference, fallback, unsafe cell reinterpretation or frame ABI change. Reuse granular runtime dependencies and existing numeric/array ownership kernels.
+
+## Embedded entry (#878)
+
+Compile the production embedded translation unit with a separate C host. The
+host checks the returned status and writes a marker after the call. Captured
+output must contain the Pudu line before the host marker even through a pipe.
+
+Resolved Grill Log: linking a separate host catches a duplicate `main`, and
+reading the output order catches a missing flush on return.

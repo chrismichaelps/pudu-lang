@@ -294,3 +294,22 @@ Resolved Grill Log: consume canonical settled checker facts; preserve structural
 Build one program source index and pass it to snapshot-aware rendering; use the same index for primary lookup. Keep non-source project diagnostics unchanged. The existing large entry point receives only this bounded presentation change.
 
 Resolved Grill Log: source identity admits coordinates; names alone do not. See [[Diagnostic Source Delivery]].
+
+## Native mobile targets (#878)
+
+`pudu build <file> --native --target <name>` builds a static library and
+`pudu_program.h` for a mobile target ([[Native Mobile Targets]]); `-o` names
+the library, default `lib<stem>.a`. `--target`'s value is resolved after
+parsing: with `--native` against [[Backend Native Target]]'s names, without it
+against the runtime packs, each listing its own names when unknown. `--native`
+with `--runtime` stays refused. The unit is emitted with the embedded entry;
+`E6008` refusals from `targetRefusals` stop before any tool runs; toolchain
+outcomes render through the same mapping, `ToolchainSdkMissing` as `E6007` and
+`ToolchainTargetUnbuilt` as `E6008`. A success names the library, the header and
+any library the host must link.
+
+### Resolved Grill Log
+
+- **Q:** Why share `--target` between packs and native targets? **A:** Both
+  name where the artifact runs; `--native` already says which kind of artifact.
+  _Rejected:_ a second `--platform` flag.

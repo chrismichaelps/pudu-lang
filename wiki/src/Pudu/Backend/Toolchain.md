@@ -155,3 +155,12 @@ thread calls are the only new dependencies.
 ## Native host sources (#856)
 
 Resolved Grill Log: select [[Native Toolchain Host Sources]] before invoking the compiler. Only marked programs create the private source directory, and the directory follows the invocation lifetime.
+
+## Shared runner (#878)
+
+[[Backend Toolchain Process]] owns process execution, capture, and the failure
+type. This module keeps compiler discovery, flags, link libraries and atomic
+executable publication, and re-exports the failure type.
+
+Resolved Grill Log: the caller supplies structural arguments; extracting the
+runner preserves the host executable's process and publication contracts.
