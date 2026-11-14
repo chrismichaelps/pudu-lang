@@ -253,6 +253,7 @@ tags: [moc, module]
 - [[Compiler Lower Signature]]
 - [[Backend Function Programs]]
 - [[Backend Toolchain Tests]]
+- [[Backend Export Tests]] — exported functions called from a C host (#899).
 - [[Diagnostic Evaluation]]
 
 - [[Compiler Lower Control]] — resolved scalar loop targets, transfers and divergence (#489).

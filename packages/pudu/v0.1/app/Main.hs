@@ -65,7 +65,7 @@ import Pudu.Backend.Toolchain
   , ToolchainRequest (..)
   , compileNative
   )
-import Pudu.Compiler.Lower (LowerResult (..), lowerProgram, programNativeModules)
+import Pudu.Compiler.Lower (LowerResult (..), lowerLibrary, lowerProgram, programNativeModules)
 import qualified Pudu.Diagnostic.Native as Native
 import Pudu.Frontend.Syntax (moduleSpan)
 import Pudu.Compiler.Program
@@ -764,7 +764,7 @@ buildNativeProgram style path target platform = do
       Nothing -> do
         hPutStrLn stderr "pudu build: the program produced no module"
         exitFailure
-      Just parsed -> case lowerProgram entryPointName (maybe [] id (programNativeModules program)) of
+      Just parsed -> case lowering entryPointName (maybe [] id (programNativeModules program)) of
         LowerRefused refusals -> do
           TextIO.putStrLn (renderProgramDiagnostics style program refusals)
           exitFailure
@@ -789,7 +789,7 @@ buildNativeProgram style path target platform = do
                   [Native.targetRefusal (moduleSpan parsed) name (refusedConstruct refused) (refusedReason refused) | refused <- refusals])
                 exitFailure
               [] -> do
-                compiled <- compileLibrary LibraryRequest{librarySource = emittedSource unit, libraryOutput = target, libraryTarget = chosen}
+                compiled <- compileLibrary LibraryRequest{librarySource = emittedSource unit, libraryOutput = target, libraryTarget = chosen, libraryExports = emittedExports unit}
                 case compiled of
                   Left failure -> toolchainFailed style program (moduleSpan parsed) failure
                   Right products -> do
@@ -801,6 +801,7 @@ buildNativeProgram style path target platform = do
                       TextIO.putStrLn ("link the host with: " <> Text.unwords (libraryLinks products))
  where
   form = maybe ExecutableEntry (const EmbeddedEntry) platform
+  lowering = maybe lowerProgram (const lowerLibrary) platform
 
 toolchainFailed :: RenderStyle -> ProgramResult -> Span -> ToolchainFailure -> IO ()
 toolchainFailed style program spanValue failure = do

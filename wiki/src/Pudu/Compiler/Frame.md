@@ -56,3 +56,7 @@ Resolved Grill Log: closure information passes into the frame module;
 
 FrameFailCaller has no successor block, like FrameFailText.
 Resolved Grill Log: label reachability treats both refusals the same way.
+
+## Module exports (#899)
+
+Frame lowering copies the module's export keys through unchanged.

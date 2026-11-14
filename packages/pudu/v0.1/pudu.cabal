@@ -111,6 +111,7 @@ library
     Pudu.Backend.Emit.Aggregate
     Pudu.Backend.Emit.Cell
     Pudu.Backend.Emit.Entry
+    Pudu.Backend.Emit.Export
     Pudu.Backend.Emit.Array
     Pudu.Backend.Emit.Keyed
     Pudu.Backend.Emit.Kernel

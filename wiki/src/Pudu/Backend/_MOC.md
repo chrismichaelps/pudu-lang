@@ -8,6 +8,7 @@ aliases: [Backend Module Map]
 
 - [[Backend Emit Entry]] · [[Backend Native Target]] · [[Backend Toolchain Library]] · [[Backend Toolchain Process]] · [[Backend Native Target Tests]] · [[iOS Simulator Run]] — embedded mobile builds (#878).
 
+- [[Backend Emit Export]] · [[Backend Export Tests]] — exported functions a host calls through C (#899).
 - [[Native Toolchain Host Sources]] · [[Native Host Desktop]] · [[Native Host Audio]] — packaged native platform translation units (#856).
 
 - [[Native Hash Mixing]] · [[Backend Store Programs]] — `hashOf`, store indexes and the indexed-store corpus (#840).

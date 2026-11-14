@@ -159,3 +159,8 @@ carrier.
 
 `FrameBytesLiteral` is the frame value of `CoreBytesLiteral`: one value,
 one slot, whatever the length.
+
+## Module exports (#899)
+
+`frameModuleExports` carries [[Pudu Core IR Module]]'s export keys unchanged
+into the frame module, where [[Backend Emit Export]] reads them.

@@ -76,3 +76,10 @@ Consumed by [[Pudu CLI]] and [[Backend Native Target Tests]].
 ## Referenced by
 
 [[src/Pudu/Backend/_MOC]] · [[Native Mobile Targets]] · [[Pudu CLI]]
+
+## Export prototypes (#899)
+
+`LibraryRequest` carries `libraryExports`, the prototypes the emitted unit
+reported, and the published header declares them. Resolved Grill Log: the
+header is generated from what was emitted, so it cannot name a function the
+archive lacks.

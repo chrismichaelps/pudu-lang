@@ -23,7 +23,7 @@ slice must respect, and the order of work. It extends [[Native Application UI]] 
 | Requirement | Today | Gap to close first |
 | --- | --- | --- |
 | Compile a whole application to native code | C11 emitter covers an admitted subset; refusals are diagnostics, no fallback | Coverage of every construct an application uses, including host services and concurrency, which are still Pending |
-| Link into a platform host | `pudu build --native --target <ios target>` emits a static archive and `pudu_program.h`; the host's own `main` calls `pudu_program_run` ([[Backend Emit Entry]], [[Backend Toolchain Library]]) | Exported Pudu functions callable from the host, and one admitted start per process (#899) |
+| Link into a platform host | `pudu build --native --target <ios target>` emits a static archive and `pudu_program.h`; the host's own `main` calls `pudu_program_run` ([[Backend Emit Entry]], [[Backend Toolchain Library]]) | Exported Pudu functions callable from the host ([[Native Calls Delivery]]); one admitted start per process landed (#899) |
 | Build for devices | `ios-arm64` and `ios-simulator-arm64` build with the selected Xcode SDK; Android names are reserved and report E6007/E6008 ([[Backend Native Target]]) | Android builds once an NDK is available; device and simulator slices packaged together inside generated projects |
 | Call platform code | Foreign C calls are emitted through a runtime loader; on Apple targets library paths are admitted only from system locations, `@rpath`, or `@executable_path` | Calls from C back into Pudu for events and callbacks (#899) |
 | Run on more than one thread | Runtime has no atomics or locks; reference counts are plain; process-level runtime parts (child programs, signals, exit, TLS, desktop, audio) are refused on mobile targets | A declared thread model for calls into Pudu (#899), and atomic counts only for values the type system marks as shared |
@@ -141,7 +141,7 @@ snackbar, and a floating action button with an iOS fallback.
 
 | Phase | Exit evidence |
 | --- | --- |
-| 0 Toolchain | Library output and iOS device and simulator targets with a simulator smoke run (#878, done); C-to-Pudu calls and the entry guard (#899) |
+| 0 Toolchain | Library output and iOS device and simulator targets with a simulator smoke run (#878, done); the entry guard (#899, done); C-to-Pudu calls ([[Native Calls Delivery]]) |
 | 1 First light | A counter application built from Pudu alone runs on an iOS simulator, and later an Android emulator, with platform label and button, measured cold start and binary size recorded |
 | 2 Declarative UI | Reconciler, mutation batches, recycling list, navigation stack, accessibility labels reaching the platform tree, simulator reload |
 | 3 Tooling | Generated projects, patch set, fingerprinted development host, signed store artifacts from local builds |

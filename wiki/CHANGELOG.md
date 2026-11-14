@@ -5,6 +5,15 @@ tags: [changelog]
 
 # Changelog
 
+## 2026-11-14 — Exported functions callable from C (#899)
+
+- [[Backend Emit Export]] emits `pudu_export_<name>` for each exported root-module function with scalar crossings, declared in `pudu_program.h`; [[Compiler Lower]] roots exports in library builds. Calls are admitted after the start, on its thread, outside another call. Evidence: [[Backend Export Tests]].
+- [[iOS Simulator Run]] waits for a cold simulator and retries a launch that reported nothing.
+
+## 2026-11-14 — Single-start native entry (#899)
+
+- [[Backend Emit Entry]] admits one `pudu_program_run` per process through an atomic flag; later calls return `PUDU_PROGRAM_ALREADY_STARTED` without touching runtime state.
+
 ## 2026-11-04 — Decimal.toInt range (#803)
 
 - `Decimal.toInt` answers `None` for a whole number `Int` cannot hold, instead of a `Some` that failed on first use.

@@ -21,7 +21,7 @@ lowerFrames source = do
       then Left (FrameFault Nothing "missing Core entry function")
       else do
         lowered <- traverse (lowerFunction table) functions
-        pure (FrameModule (coreModuleName source) (coreModuleEntry source) lowered (coreModuleLayouts source) (coreModuleClosures source))
+        pure (FrameModule (coreModuleName source) (coreModuleEntry source) lowered (coreModuleLayouts source) (coreModuleClosures source) (coreModuleExports source))
   where
     lowerFunction table function = do
       (parameters, state) <- runBuild (body function) (initialState table (coreModuleLayouts source))

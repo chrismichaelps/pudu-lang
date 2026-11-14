@@ -32,6 +32,7 @@ data FrameModule = FrameModule
   , frameModuleFunctions :: ![FrameFunction]
   , frameModuleLayouts :: !(Map CoreType CoreLayout)
   , frameModuleClosures :: !(Map Text CoreClosureInfo)
+  , frameModuleExports :: ![Text]
   }
   deriving stock (Eq, Show)
 

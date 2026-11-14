@@ -17,6 +17,7 @@ module Pudu.Compiler.Lower
   , compiledNativeModule
   , lowerModule
   , lowerModuleFolded
+  , lowerLibrary
   , lowerProgram
   , programNativeModules
   ) where
@@ -60,6 +61,7 @@ import Pudu.Frontend.Syntax
   , Module (..)
   , ModuleName (..)
   , TypeSyntax (..)
+  , Visibility (..)
   , moduleNameText
   )
 import Pudu.Frontend.Syntax.Name (moduleQualifier)
@@ -120,10 +122,20 @@ lowerModuleFolded entryName types constants parsed =
 {-| Lower the root module's entry function and every function reachable from
     it, in whichever module each is declared. The root comes first. -}
 lowerProgram :: Text -> [NativeModule] -> LowerResult
-lowerProgram _ [] = LowerRefused []
-lowerProgram entryName programModules@(rootModule : _)
+lowerProgram = lowerRooted False
+
+{-| Lower for a library a host application links: the root module's exported
+    functions are roots beside the entry, so each is lowered even when the
+    entry never calls it. -}
+lowerLibrary :: Text -> [NativeModule] -> LowerResult
+lowerLibrary = lowerRooted True
+
+lowerRooted :: Bool -> Text -> [NativeModule] -> LowerResult
+lowerRooted _ _ [] = LowerRefused []
+lowerRooted library entryName programModules@(rootModule : _)
   | Just missing <- find (null . nativeModuleTypes) programModules =
       LowerRefused [nativeRefusal (moduleSpan (nativeModuleSyntax missing)) "missing solved native type facts"]
+  | not (null exportRefusals) = LowerRefused exportRefusals
   | otherwise = case findEntry of
       Left refusal -> LowerRefused [refusal]
       Right entry -> settle (runWorklist entry)
@@ -131,6 +143,24 @@ lowerProgram entryName programModules@(rootModule : _)
     parsed = nativeModuleSyntax rootModule
     rootName = nativeModuleName rootModule
     entryKey = rootName <> "." <> entryName
+
+    exported =
+      [ function
+      | library
+      , Located _ (FunctionDeclaration function) <- moduleDeclarations parsed
+      , functionVisibility function == Exported
+      , locatedValue (functionName function) /= entryName
+      ]
+    exportKeys = [rootName <> "." <> locatedValue (functionName function) | function <- exported]
+    -- A C caller passes every argument at a fixed type and cannot await.
+    exportRefusals =
+      [ nativeRefusal (locatedSpan (functionName function)) ("an exported function " <> reason)
+      | function <- exported
+      , reason <-
+          [ "with type parameters" | not (null (functionTypeParams function)) ]
+          <> [ "with default parameter values" | hasDefaults function ]
+          <> [ "declared async" | functionAsync function ]
+      ]
 
     findEntry = case entryFunctions of
       function : _ -> Right function
@@ -264,7 +294,7 @@ lowerProgram entryName programModules@(rootModule : _)
               }
           (afterEntry, entryFunction) = lowerEntryBody entry
             ((startFunction initial [] Nothing){lowerDeclaredResult = declaredEntryResult entry})
-          marked = markVisited afterEntry entryKey
+          marked = queueExports (markVisited afterEntry entryKey)
        in (drain marked, (\function -> function{coreFunctionName = entryKey}) <$> entryFunction)
 
     drain state = case contextQueue (lowerContext state) of
@@ -311,6 +341,9 @@ lowerProgram entryName programModules@(rootModule : _)
         formedCoreTypeIn (maybe emptyTypes scopeTypes (Map.lookup rootName scopes)) result
       _ -> Nothing
 
+    queueExports state =
+      state{lowerContext = (lowerContext state){contextQueue = exportKeys <> contextQueue (lowerContext state)}}
+
     markVisited state name =
       state
         { lowerContext =
@@ -330,6 +363,7 @@ lowerProgram entryName programModules@(rootModule : _)
               , coreModuleFunctions = functions
               , coreModuleLayouts = moduleLayouts (maybe emptyTypes scopeTypes (Map.lookup rootName scopes)) (contextClosures (lowerContext state)) functions
               , coreModuleClosures = contextClosures (lowerContext state)
+              , coreModuleExports = [key | key <- exportKeys, any ((== key) . coreFunctionName) functions]
               }
         Nothing -> LowerRefused [nativeRefusal (moduleSpan parsed) "this program"]
       refusals -> LowerRefused refusals

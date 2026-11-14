@@ -88,6 +88,7 @@ test-suite pudu-test
     Pudu.Cli.MemorySpec
     Pudu.Backend.NativeSpec
     Pudu.Backend.TargetSpec
+    Pudu.Backend.ExportSpec
     Pudu.Backend.FunctionPrograms
     Pudu.Backend.FloatPrograms
     Pudu.Backend.IntegerPrograms

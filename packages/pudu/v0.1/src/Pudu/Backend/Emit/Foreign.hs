@@ -2,7 +2,7 @@
     program calls, and the call through it. A wrapper converts each frame cell
     to the C type the declaration crosses as, calls through a function pointer
     of that exact type, and converts the answer back. -}
-module Pudu.Backend.Emit.Foreign (foreignCall, foreignWrappers, foreignNeeds, foreignsOf) where
+module Pudu.Backend.Emit.Foreign (foreignCall, foreignWrappers, foreignNeeds, foreignsOf, parameterNeeds, resultNeeds) where
 
 import qualified Data.Map.Strict as Map
 import qualified Data.Set as Set

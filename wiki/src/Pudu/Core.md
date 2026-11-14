@@ -454,3 +454,10 @@ literal? **A:** No. _Rationale:_ every byte became its own expression, frame
 slot and statement, so an 18,432-byte constant produced an 18,474-line
 function the C compiler could not finish. _Rejected:_ chunked array literals,
 which still grow code with the data.
+
+## Module exports (#899)
+
+`coreModuleExports` lists the keys of the root module's exported functions a
+library build lowered, in declaration order; an executable build leaves it
+empty. Resolved Grill Log: exports are module facts, not a backend guess, so
+emission never re-reads syntax.

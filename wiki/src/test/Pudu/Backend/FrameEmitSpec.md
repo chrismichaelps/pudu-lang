@@ -77,7 +77,8 @@ Resolved Grill Log: project existing checked semantics; no inference, fallback, 
 
 Compile the production embedded translation unit with a separate C host. The
 host checks the returned status and writes a marker after the call. Captured
-output must contain the Pudu line before the host marker even through a pipe.
+output must contain the Pudu line before the host marker even through a pipe. The host calls the entry twice and requires the second call to answer
+`PUDU_PROGRAM_ALREADY_STARTED` (#899).
 
 Resolved Grill Log: linking a separate host catches a duplicate `main`, and
 reading the output order catches a missing flush on return.

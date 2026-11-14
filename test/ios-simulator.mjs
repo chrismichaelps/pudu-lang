@@ -5,9 +5,15 @@ import { mkdtempSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 
+// A cold hosted simulator can take minutes to install or launch its first app.
+const simulatorTimeout = 300_000;
+const launchAttempts = 2;
+
 function run(command, args, timeout = 120_000) {
   const result = spawnSync(command, args, { encoding: "utf8", timeout });
-  if (result.error) throw result.error;
+  if (result.error) {
+    throw new Error(`${command} ${args.join(" ")}: ${result.error.code ?? result.error.message} after ${timeout} ms`);
+  }
   if (result.status !== 0) {
     throw new Error(`${command} ${args.join(" ")} (exit ${result.status}):\n${result.stdout}${result.stderr}`);
   }
@@ -134,11 +140,10 @@ int main(int argc, char **argv) {
       device = run(xcrun, ["simctl", "create", "Pudu Foreign Smoke", phone.identifier, runtime.identifier]).trim();
       run(xcrun, ["simctl", "bootstatus", device, "-b"], 240_000);
     }
-    run(xcrun, ["simctl", "install", device, app]);
+    run(xcrun, ["simctl", "install", device, app], simulatorTimeout);
     installed = true;
-    const output = run(xcrun, ["simctl", "launch", "--console-pty", device, identifier]);
-    assert.deepEqual(output.split(/\r?\n/u).filter((line) => line.startsWith("PUDU_SMOKE")),
-      [...expected.split("\n"), "PUDU_SMOKE_STATUS 0"]);
+    const lines = launch(device);
+    assert.deepEqual(lines, [...expected.split("\n"), "PUDU_SMOKE_STATUS 0"]);
     console.log(`${expected}\nPASS iOS simulator smoke (${device})`);
   } finally {
     try {
@@ -152,6 +157,24 @@ int main(int argc, char **argv) {
       rmSync(root, { recursive: true, force: true });
     }
   }
+}
+
+/* The app's own status line proves it ran to completion. Only a launch that
+   timed out or reported nothing is retried; any reported output is final. */
+function launch(device) {
+  const failures = [];
+  for (let attempt = 1; attempt <= launchAttempts; attempt += 1) {
+    try {
+      const output = run(xcrun, ["simctl", "launch", "--console-pty", device, identifier], simulatorTimeout);
+      const lines = output.split(/\r?\n/u).filter((line) => line.startsWith("PUDU_SMOKE"));
+      if (lines.length > 0) return lines;
+      failures.push(`attempt ${attempt}: no PUDU_SMOKE output:\n${output}`);
+    } catch (problem) {
+      failures.push(`attempt ${attempt}: ${problem.message}`);
+    }
+    spawnSync(xcrun, ["simctl", "terminate", device, identifier], { timeout: 30_000 });
+  }
+  throw new Error(`the smoke app did not report:\n${failures.join("\n")}`);
 }
 
 smoke();

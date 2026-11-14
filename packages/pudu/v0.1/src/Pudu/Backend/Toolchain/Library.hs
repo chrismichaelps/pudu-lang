@@ -32,6 +32,8 @@ data LibraryRequest = LibraryRequest
   { librarySource :: !Text
   , libraryOutput :: !FilePath
   , libraryTarget :: !NativeTarget
+  {-| The prototypes of the exported functions the header declares. -}
+  , libraryExports :: ![Text]
   }
   deriving stock (Eq, Show)
 
@@ -91,7 +93,7 @@ compileApple request sdk = do
           Left failure -> pure (Left failure)
           Right (compilerOutput, archiverOutput) -> do
             published <- tryIO (do
-              ByteString.writeFile headerPath (Encoding.encodeUtf8 (embeddedHeader links))
+              ByteString.writeFile headerPath (Encoding.encodeUtf8 (embeddedHeader links (libraryExports request)))
               renameFile archivePath output
               renameFile headerPath header)
             pure $ case published of

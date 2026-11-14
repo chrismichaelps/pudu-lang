@@ -57,6 +57,9 @@ data CoreModule = CoreModule
   , coreModuleLayouts :: !(Map CoreType CoreLayout)
   {-| Every function a closure can run, by its key. -}
   , coreModuleClosures :: !(Map Text CoreClosureInfo)
+  {-| Keys of the root module's exported functions a library build lowered,
+      in declaration order; empty for an executable. -}
+  , coreModuleExports :: ![Text]
   }
   deriving stock (Eq, Show)
 
