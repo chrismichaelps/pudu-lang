@@ -93,25 +93,4 @@ does not have yet (Xcode 26.6, iOS 26.5 SDK).
 ## Order of work
 
 1. Scrolling and safe areas with docked keyboard avoidance ([[Native iOS Scrolling Delivery]]).
-2. Navigation stack and modal sheets.
-3. Theming: FUI tokens to semantic colors, Dynamic Type, dark mode.
-4. Recycling lists and grids.
-5. Size-class adaptivity and multiple windows.
-6. iPhone Duo APIs once the 27.1 SDK is installed.
-7. Gestures, animation, context menus and system UI.
-
-## Grill Log
-
-- **Q:** Name the Duo's classes now from third-party descriptions? **A:** No. Identifiers come from
-  the SDK headers once installed. _Rejected:_ guessed APIs.
-- **Q:** Treat the Duo as a special case everywhere? **A:** No. Its displays arrive as scene
-  geometry and size-class changes, so adaptive layouts carry most of it; only hinge posture and
-  reserved regions need Duo APIs. _Rejected:_ device checks.
-
-- **Q:** When is the root keyboard layout guide installed? **A:** After the UIKit window becomes visible, so the guide observes the active window. See [[iOS Host Layout]].
-
-- **Q:** Should a 120 Hz display rebuild the Pudu tree at every refresh? **A:** UIKit owns native motion. Application state changes produce view commits, and custom animation samples presentation time only while active.
-
-## Referenced by
-
-[[architecture/_MOC]] · [[Pudu Native]] · [[Native iOS Scrolling Delivery]]
+2. Navigation stack and modal sheets. See [[Native iOS Navigation]].
