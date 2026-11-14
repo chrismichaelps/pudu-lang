@@ -29,7 +29,6 @@ import Pudu.Frontend.Syntax.Located (Located (..))
 import Pudu.Frontend.Syntax.Name (ModuleName, moduleNameText, moduleQualifier)
 import Pudu.Frontend.Syntax.Tree
   ( Declaration (..)
-  , Function
   , Import (..)
   , Module (..)
   )
@@ -44,6 +43,7 @@ import Pudu.Type.Env
   , installedNames
   )
 import Pudu.Type.Formation (collectDeclaredFrom, formTraitReference)
+import Pudu.Type.Formation.Builtin (builtinScope)
 import Pudu.Type.Interface
   ( TypeInterface
   , interfaceDeclarations
@@ -88,7 +88,7 @@ data InterfaceGraph = InterfaceGraph
   {-| The modules that import each module, which are the only interfaces whose
       names change when that module is the one being checked. -}
   , graphImporters :: !(Map ModuleName (Set ModuleName))
-  , graphTraits :: !(Map NominalId [Located Function])
+  , graphTraits :: !(Map NominalId Tree.Trait)
   , graphDefaults :: !(Set (NominalId, Text))
   , graphDeclared :: ~DeclaredTypes
   {-| The names every consumer starts from: the language's constructors, then
@@ -319,7 +319,7 @@ consumerIdentities imported =
 
 {-| The trait table of every module but the consumer's, whose traits the local
     pass declares. -}
-consumerTraits :: ImportTypes -> Map NominalId [Located Function]
+consumerTraits :: ImportTypes -> Map NominalId Tree.Trait
 consumerTraits imported = case consumerInterface imported of
   Nothing -> graphTraits (importedGraph imported)
   Just own -> Map.difference (graphTraits (importedGraph imported)) (interfaceTraits own)
@@ -353,14 +353,17 @@ consumerInterface imported = do
   owner <- importedConsumer imported
   Map.lookup owner (graphInterfaces (importedGraph imported))
 
-interfaceTraits :: TypeInterface -> Map NominalId [Located Function]
+interfaceTraits :: TypeInterface -> Map NominalId Tree.Trait
 interfaceTraits value = Map.fromList
-  [ (canonicalNominal (interfaceModule value) (locatedValue (Tree.traitName trait)), Tree.traitMembers trait)
+  [ (canonicalNominal (interfaceModule value) (locatedValue (Tree.traitName trait)), trait)
   | Located _ (TraitDeclaration trait) <- interfaceDeclarations value
   ]
 
+{-| A module's bare names: its own declarations, then what its imports bind,
+    then the built-in types. -}
 interfaceNames :: Map ModuleName [(Text, NominalId)] -> TypeInterface -> Map Text NominalId
-interfaceNames available value = interfaceLocalNames value <> interfaceReferenceNames available value
+interfaceNames available value =
+  interfaceLocalNames value <> interfaceReferenceNames available value <> builtinScope
 
 interfaceLocalNames :: TypeInterface -> Map Text NominalId
 interfaceLocalNames value = Map.fromList (concatMap one declarations)

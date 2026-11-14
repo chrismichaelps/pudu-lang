@@ -1,0 +1,71 @@
+module IkBench
+
+import Std.Lanes as Lanes
+import Std.Math.Float as Float
+import Std.Time as Time
+import Ark.Animation.Ik as Ik
+import Ark.Animation.Limbs as Limbs
+import Ark.Math as V
+
+const LIMBS: Int = 10000
+const CHAINS: Int = 1000
+
+/// Time two-bone and eight-joint chain solves.
+export fn main() -> Int {
+  let limb = Ik.Limb{root: V.vec3(0.0, 0.0, 0.0), joint: V.vec3(1.0, 0.0, 0.0), end: V.vec3(2.0, 0.0, 0.0)}
+  let pole = V.vec3(0.0, 0.0, 1.0)
+  let started = Time.monotonicNanos()
+  var index = 0
+  while index < LIMBS {
+    let angle = Float.fromInt(index) * 0.001
+    let radius = 0.5 + Float.fromInt(index % 30) * 0.1
+    let target = V.vec3(radius * Float.cos(angle), radius * Float.sin(angle), 0.3)
+    let Ok(reach) = Ik.twoBone(&limb, target, pole, 0.1) else { panic("solve") }
+    let Some(upper) = V.length(reach.joint) else { panic("upper") }
+    if Float.abs(upper - 1.0) > 0.000000001 { panic("upper length") }
+    index = index + 1
+  }
+  let limbNanos = (Time.monotonicNanos() - started) / LIMBS
+  var joints: Array[V.Vec3] = []
+  for step in 0..8 {
+    joints = joints.push(V.vec3(Float.fromInt(step), 0.0, 0.0))
+  }
+  let chainStarted = Time.monotonicNanos()
+  index = 0
+  while index < CHAINS {
+    let angle = Float.fromInt(index) * 0.01
+    let target = V.vec3(3.0 * Float.cos(angle), 3.0 * Float.sin(angle), 1.0)
+    let Ok(solve) = Ik.fabrik(&joints, target, 0.0001, 32) else { panic("chain") }
+    if !solve.reached { panic("chain converges") }
+    index = index + 1
+  }
+  let chainNanos = (Time.monotonicNanos() - chainStarted) / CHAINS
+  var tx: Array[Float64] = []
+  var ty: Array[Float64] = []
+  index = 0
+  while index < LIMBS {
+    let angle = Float.fromInt(index) * 0.001
+    let radius = 0.5 + Float.fromInt(index % 30) * 0.1
+    tx = tx.push(radius * Float.cos(angle))
+    ty = ty.push(radius * Float.sin(angle))
+    index = index + 1
+  }
+  let Some(zero) = Lanes.filled(LIMBS, 0.0) else { panic("fill") }
+  let Some(one) = Lanes.filled(LIMBS, 1.0) else { panic("fill") }
+  let Some(two) = Lanes.filled(LIMBS, 2.0) else { panic("fill") }
+  let Some(lift) = Lanes.filled(LIMBS, 0.3) else { panic("fill") }
+  let roots = Limbs.Points{xs: zero, ys: zero, zs: zero}
+  let middles = Limbs.Points{xs: one, ys: zero, zs: zero}
+  let ends = Limbs.Points{xs: two, ys: zero, zs: zero}
+  let targets = Limbs.Points{xs: Lanes.fromArray(&tx), ys: Lanes.fromArray(&ty), zs: lift}
+  let poles = Limbs.Points{xs: zero, ys: zero, zs: one}
+  let batchStarted = Time.monotonicNanos()
+  let Ok(batch) = Limbs.solve(&roots, &middles, &ends, &targets, &poles, 0.1) else { panic("batch") }
+  let batchNanos = Time.monotonicNanos() - batchStarted
+  let Some(x) = Lanes.get(&batch.joints.xs, 0) else { panic("joint") }
+  if !Float.isFinite(x) { panic("batch joint") }
+  print("twoBone " + show(limbNanos))
+  print("twoBoneBatch " + show(batchNanos / LIMBS))
+  print("fabrik " + show(chainNanos))
+  0
+}

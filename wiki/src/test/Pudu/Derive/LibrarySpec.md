@@ -16,7 +16,9 @@ aliases: [Derive Library Spec]
 compiled evaluators, requiring identical rendered answers and no diagnostics.
 It covers every shipped derive, field callbacks, static selection, the static
 member regression, definition-site callback refusals, located field-bound
-refusals and the exact `pudu expand` text.
+refusals and the exact `pudu expand` text. `runsClean` additionally requires that
+compiling [[Attribute Fallback Fixture]] reports no diagnostic at all, warnings
+included, so an effect-free `attributeOr` fallback leaves nothing behind.
 
 ## Coverage
 

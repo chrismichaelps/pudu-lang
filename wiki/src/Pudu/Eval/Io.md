@@ -146,6 +146,9 @@ Resolved Grill Log: retain private payload staging and full existing modes. Obta
 new-file permissions from an empty exclusive host template. Cleanup preserves the
 original failure and asynchronous exceptions remain control signals.
 
+`monotonicNanoseconds` reads the same monotonic clock as `monotonicMilliseconds` in whole
+nanoseconds (#670), for intervals shorter than a millisecond.
+
 ## Referenced by
 
 [[src/Pudu/Eval/_MOC]] · [[Evaluator]] · [[Atomic Permission Gate]]

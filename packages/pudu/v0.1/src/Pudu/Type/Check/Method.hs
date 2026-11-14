@@ -10,6 +10,8 @@ module Pudu.Type.Check.Method
   , implBounds
   , implRigid
   , methodScheme
+  , staticMethodScheme
+  , implementationMethodKey
   , traitMethodScheme
   , targetName
   , traitBounds
@@ -21,8 +23,8 @@ module Pudu.Type.Check.Method
   ) where
 
 import qualified Data.Map.Strict as Map
+import Data.Maybe (fromMaybe)
 import Data.Set (Set)
-import qualified Data.Set as Set
 import Data.Text (Text)
 import qualified Data.Text as Text
 import Pudu.Frontend.Syntax.Located (Located (..))
@@ -38,20 +40,21 @@ import Pudu.Frontend.Syntax.Tree
   )
 import Control.Monad (filterM, unless, when)
 import Pudu.Source (Span)
+import Pudu.Type.Check.Method.Binding
+  ( MethodOrigin (..), MethodBinding (..), bindMethod, methodKey, implementationMethodKey )
+import Pudu.Type.Check.Inherit (inheritedMembers, renameApart, selfArguments)
 import Pudu.Type.Check.Prelude (declareBuiltinConstructors, effectSignatures)
 import Pudu.Type.Env
   ( noteStaticTrait
   , Checker
   , DeclaredTypes (..)
-  , bindImportedMethod
   , bindName
+  , recordProvider, recordProviderSelection, recordImplementationOwner
   , recordDeclaredMethod
   , ambiguousProviders
-  , markAmbiguousMethod
+  , providerSpelling
   , methodProvider
-  , recordMethodProvider
   , lookupName
-  , isImportedMethod
   , isMethodKey
   , report
   , rigidBoundsOf
@@ -66,9 +69,10 @@ import Pudu.Type.Marker (isMarkerTrait)
 import Pudu.Type.Proof (TraitProof (..), implementsTrait, inferBound)
 import Pudu.Type.Substitute (substituteRigid)
 import Pudu.Type.Unify (unify, zonk)
-import Pudu.Type.Formation (declaredParameterType, formBoundFor, formOptionalType, formType)
+import Pudu.Type.Formation (declaredParameterType, formBoundType, formBoundFor, formOptionalType, formTraitReference, formType)
 import Pudu.Type.Value
-  ( NominalId (..)
+  ( ProviderSelection (..)
+  , NominalId (..)
   , Scheme (..)
   , Type (..)
   , monotype
@@ -78,12 +82,12 @@ import Pudu.Type.Value
   , renderType
   )
 
-{-| Trait members by trait name, so an implementation can inherit the defaults
+{-| Traits by name, so an implementation can inherit the defaults
     it does not override. -}
-traitTable :: DeclaredTypes -> [Located Declaration] -> Map.Map NominalId [Located Function]
+traitTable :: DeclaredTypes -> [Located Declaration] -> Map.Map NominalId Trait
 traitTable declared declarations =
   Map.fromList
-    [ (identity (locatedValue (traitName value)), traitMembers value)
+    [ (identity (locatedValue (traitName value)), value)
     | Located _ (TraitDeclaration value) <- declarations
     ]
  where
@@ -135,91 +139,109 @@ declareTraitMember declared owner traitParams bounds (Located _ method) = do
 {-| An impl's functions are methods of its target type, not module-scope names.
     They are bound under a qualified key so a member access on a value of that
     type finds them, and so one method may call another. -}
-declareMethods :: DeclaredTypes -> Map.Map NominalId [Located Function] -> Impl -> Checker ()
-declareMethods = declareMethodsWith Nothing
-
-declareInterfaceMethods
+declareMethods
   :: DeclaredTypes
-  -> Map.Map NominalId [Located Function]
+  -> Map.Map NominalId Trait
   -> Set (NominalId, Text)
   -> Impl
   -> Checker ()
-declareInterfaceMethods declared traits defaults =
-  declareMethodsWith (Just defaults) declared traits
+declareMethods = declareMethodsWith False
 
-declareMethodsWith
-  :: Maybe (Set (NominalId, Text))
-  -> DeclaredTypes
-  -> Map.Map NominalId [Located Function]
+declareInterfaceMethods
+  :: DeclaredTypes
+  -> Map.Map NominalId Trait
+  -> Set (NominalId, Text)
   -> Impl
   -> Checker ()
-declareMethodsWith defaults declared traits value = do
-  target <- formType (implAliases declared value) [] (implTarget value)
+declareInterfaceMethods = declareMethodsWith True
+
+{-| `traits` holds every trait an implementation here may name, its own module's
+    and the ones it imports; `defaults` names the imported members that carry a
+    body the interface stripped. -}
+declareMethodsWith
+  :: Bool
+  -> DeclaredTypes
+  -> Map.Map NominalId Trait
+  -> Set (NominalId, Text)
+  -> Impl
+  -> Checker ()
+declareMethodsWith rejectCollision declared traits defaults value = do
+  let trait = formBoundType (implAliases declared value) (implRigid value) (implTrait value)
+  case trait of
+    NominalType owner arguments -> recordProviderSelection (locatedSpan (implTrait value))
+      (ProviderSelection owner arguments Nothing)
+    _ -> pure ()
+  target <- formType (implAliases declared value) (implRigid value) (implTarget value)
   case targetName target of
     Nothing -> pure ()
     Just owner -> do
-      mapM_ (declareMethod (defaults /= Nothing) declared value owner) (implFunctions value)
-      mapM_ (declareMethod (defaults /= Nothing) declared value owner) (inheritedDefaults defaults declared traits value)
-
-{-| A trait member that carries a body is a default: an implementation that does
-    not override it still has it. -}
-inheritedDefaults
-  :: Maybe (Set (NominalId, Text))
-  -> DeclaredTypes
-  -> Map.Map NominalId [Located Function]
-  -> Impl
-  -> [Located Function]
-inheritedDefaults defaults declared traits value = case implTraitName declared value of
-  Nothing -> []
-  Just traitText ->
-    [ member
-    | member@(Located _ method) <- maybe [] id (Map.lookup traitText traits)
-    , isDefault traitText method
-    , locatedValue (functionName method) `notElem` provided
-    ]
- where
-  provided = map (locatedValue . functionName . locatedValue) (implFunctions value)
-  isDefault traitIdentity method = case defaults of
-    Nothing -> functionBody method /= Nothing
-    Just known -> Set.member (traitIdentity, locatedValue (functionName method)) known
+      recordImplementationOwner (locatedSpan (implTarget value)) target
+      mapM_ (declareMethod rejectCollision declared value owner Nothing) (implFunctions value)
+      case implTraitName declared value >>= \identity -> fmap ((,) identity) (Map.lookup identity traits) of
+        Nothing -> pure ()
+        Just (identity, declaredTrait) -> do
+          formed <- formTraitReference declared (implRigid value) (implTrait value)
+          let arguments = case formed of
+                NominalType _ held -> held
+                _ -> []
+              replacements =
+                ("Self", NominalType owner (selfArguments (map fst (implRigid value)) value))
+                  : zip (map fst (traitRigid declaredTrait)) arguments
+          mapM_
+            (declareMethod rejectCollision declared value owner (Just (identity, replacements)))
+            (inheritedMembers defaults identity declaredTrait value)
 
 implTraitName :: DeclaredTypes -> Impl -> Maybe NominalId
 implTraitName declared value = case locatedValue (implTrait value) of
   Tree.NamedType path _ -> Map.lookup (moduleNameText path) (declaredNames declared)
   _ -> Nothing
 
-declareMethod :: Bool -> DeclaredTypes -> Impl -> NominalId -> Located Function -> Checker ()
-declareMethod rejectCollision declared value owner (Located methodSpan method) = do
-  let rigid = implRigid value <> functionRigid method
-      aliases = implAliases declared value
-      key = methodKey owner (locatedValue (functionName method))
-  inputs <- mapM (declaredParameterType aliases rigid) (functionParameters method)
-  result <- formOptionalType aliases rigid (functionReturn method)
-  existing <- lookupName key
-  importedCollision <- if rejectCollision then pure (existing /= Nothing) else isImportedMethod key
-  provider <- methodProvider key
-  let providing = implTraitName declared value
-      localCollision =
-        not rejectCollision
-          && maybe False (\earlier -> Just earlier /= providing) provider
-  let scheme =
-        polytype rigid (implBounds declared value <> declareBoundsWith aliases (implRigid value) method)
-          (FunctionTypeValue (functionAsync method) inputs result)
-  if importedCollision
-    then do
-      report "E3013" methodSpan
-        (locatedValue (functionName method) <> " is ambiguous for " <> nominalName owner)
-        (Just "import only one providing trait or use a qualified call")
-      bindName key (monotype ErrorType)
-    else do
-      when localCollision $
-        markAmbiguousMethod key (maybe [] pure provider <> maybe [] pure providing)
-      mapM_ (recordMethodProvider key) providing
-      if rejectCollision
-        then bindImportedMethod key scheme
-        else do
-          bindName key scheme
-          recordDeclaredMethod owner (functionName method) scheme
+{-| Declare one method of an implementation's target.
+
+    An inherited default takes the scheme its trait member was given, formed
+    once in the trait module's own names with `Self` and the trait's parameters
+    rigid, and replaces each of those by what this implementation gives it, all
+    at once: `twice` from `trait Holds[T]` is `(Int, Int)` on an
+    `impl Holds[Int]`. An imported trait's members are formed where it was
+    declared, so its defaults type the same here as there. -}
+declareMethod
+  :: Bool
+  -> DeclaredTypes
+  -> Impl
+  -> NominalId
+  -> Maybe (NominalId, [(Text, Type)])
+  -> Located Function
+  -> Checker ()
+declareMethod rejectCollision declared value owner inherited (Located methodSpan method) = do
+  let aliases = implAliases declared value
+  (rigid, bounds, signature) <- case inherited of
+    Nothing -> do
+      let rigid = implRigid value <> functionRigid method
+      inputs <- mapM (declaredParameterType aliases rigid) (functionParameters method)
+      result <- formOptionalType aliases rigid (functionReturn method)
+      pure (rigid, declareBoundsWith aliases (implRigid value) method, FunctionTypeValue (functionAsync method) inputs result)
+    Just (trait, replacements) -> do
+      declaredScheme <- lookupName (methodKey trait (locatedValue (functionName method)))
+      let ownNames = map fst (functionRigid method)
+          (own, renamed) = renameApart (map fst (implRigid value)) (functionRigid method)
+          replace = substituteRigid (replacements <> renamed)
+          renamedTo name = fromMaybe name (lookup name (zip ownNames (map fst own)))
+      pure $ case declaredScheme of
+        Just declaredAs ->
+          ( implRigid value <> own
+          , [(renamedTo name, map replace held) | (name, held) <- schemeBounds declaredAs, name `elem` ownNames]
+          , replace (schemeType declaredAs)
+          )
+        Nothing -> (implRigid value, [], ErrorType)
+  let scheme = polytype rigid (implBounds declared value <> bounds) signature
+  bindMethod (if rejectCollision then InterfaceMethod else SourceMethod)
+    MethodBinding
+      { bindingOwner = owner
+      , bindingProvider = implTraitName declared value
+      , bindingName = functionName method
+      , bindingSpan = methodSpan
+      , bindingScheme = scheme
+      }
 
 {-| `Self` inside an implementation is its target type, which is what lets a
     method read the fields of the value it was called on. -}
@@ -229,38 +251,8 @@ implAliases declared value = case implTargetName declared value of
   Just name ->
     declared
       { declaredAliases =
-          Map.insert "Self" ([], NominalType name (selfArguments value)) (declaredAliases declared)
+          Map.insert "Self" ([], NominalType name (selfArguments (map fst (implRigid value)) value)) (declaredAliases declared)
       }
-
-{-| The arguments `Self` carries inside an implementation.
-
-    For `impl[T] Holds[T] for Boxed[T]`, `Self` is `Boxed[T]` with the impl's
-    own `T` — not a bare `Boxed`. Aliasing it without its arguments made the
-    type's parameter and the implementation's parameter two different rigid
-    types that happened to share a name, so `self.value` had a type the method's
-    declared result could not match and the checker reported `expected T, found
-    T` about them.
-
-    An argument naming one of the implementation's parameters becomes that rigid
-    parameter; anything else is formed as it was written, which is what makes
-    `impl Sequence[Int, Int] for Range` and the generic form agree. -}
-selfArguments :: Impl -> [Type]
-selfArguments value = case locatedValue (implTarget value) of
-  Tree.NamedType _ arguments ->
-    map (argumentType (map fst (implRigid value)) . locatedValue) arguments
-  _ -> []
-
-argumentType :: [Text] -> Tree.TypeSyntax -> Type
-argumentType parameters syntax = case syntax of
-  Tree.NamedType path []
-    | segment `elem` parameters -> RigidType segment
-    | otherwise -> NominalType (NominalId Nothing segment) []
-   where
-    segment = moduleNameText path
-  Tree.NamedType path arguments ->
-    NominalType (NominalId Nothing (moduleNameText path))
-      (map (argumentType parameters . locatedValue) arguments)
-  _ -> ErrorType
 
 {-| The nominal type an implementation is for.
 
@@ -294,9 +286,6 @@ targetName :: Type -> Maybe NominalId
 targetName typeValue = case typeValue of
   NominalType name _ -> Just name
   _ -> Nothing
-
-methodKey :: NominalId -> Text -> Text
-methodKey owner method = nominalKey owner <> "." <> method
 
 {-| Prove every trait obligation a call registered.
 
@@ -411,7 +400,14 @@ traitBounds declared value =
     caller does not fall through to `rigidMethod` and report it a second
     time. -}
 methodScheme :: Span -> Type -> Text -> Checker (Maybe Scheme)
-methodScheme spanValue receiver member = case receiver of
+methodScheme = methodSchemeWith True
+
+{-| Static owner calls carry type selections rather than receiver evidence. -}
+staticMethodScheme :: Span -> Type -> Text -> Checker (Maybe Scheme)
+staticMethodScheme = methodSchemeWith False
+
+methodSchemeWith :: Bool -> Span -> Type -> Text -> Checker (Maybe Scheme)
+methodSchemeWith retain spanValue receiver member = case receiver of
   {-| A dynamic value answers with the trait's own declaration, which is the
       only thing known about it. `Self` stays rigid there, so a member that
       returns `Self` is not callable through a `dynamic` — the caller would have no
@@ -428,38 +424,49 @@ methodScheme spanValue receiver member = case receiver of
       -- only a declared method answers for the type.
       [] | nominalModule owner == Nothing -> do
         method <- isMethodKey key
-        if method then lookupName key else pure Nothing
-      [] -> lookupName key
+        if method then selectedNominalScheme retain spanValue key else pure Nothing
+      [] -> selectedNominalScheme retain spanValue key
       _ -> do
+        spellings <- mapM providerSpelling providers
         report "E3013" spanValue
           (member <> " is ambiguous for " <> nominalName owner)
-          (Just ("call it qualified: " <> Text.intercalate " or " (map qualifiedForm providers)))
+          (Just ("call it qualified: " <> Text.intercalate " or " (map qualifiedForm spellings)))
         pure (Just (monotype ErrorType))
    where
-    qualifiedForm traitIdentity = nominalName traitIdentity <> "." <> member <> "(value)"
+    qualifiedForm spelling = spelling <> "." <> member <> "(value)"
   {-| A parameter of higher kind carries its bounds on the parameter itself, so
       a receiver of type `F[A]` finds its members exactly where a receiver of
       type `F` would. The arguments say what the container holds and never which
       trait provides a member. -}
-  AppliedType head' _ -> methodScheme spanValue head' member
-  RigidType name -> rigidBoundsOf name >>= selectBounds spanValue receiver member
+  AppliedType (RigidType name) _ -> rigidBoundsOf name >>= selectBounds retain spanValue receiver member
+  AppliedType head' _ -> methodSchemeWith retain spanValue head' member
+  RigidType name -> rigidBoundsOf name >>= selectBounds retain spanValue receiver member
   _ -> pure Nothing
+
+selectedNominalScheme :: Bool -> Span -> Text -> Checker (Maybe Scheme)
+selectedNominalScheme retain at key = do
+  found <- lookupName key
+  case found of
+    Nothing -> pure ()
+    Just _ -> when retain (methodProvider key >>= mapM_ (recordProvider at))
+  pure found
 
 traitMethodScheme :: Span -> Type -> NominalId -> Text -> Checker (Maybe Scheme)
 traitMethodScheme at receiver owner member = case receiver of
-  RigidType name -> rigidBoundsOf name >>= selectBounds at receiver member . filter owns
-  AppliedType (RigidType name) _ -> rigidBoundsOf name >>= selectBounds at receiver member . filter owns
+  RigidType name -> rigidBoundsOf name >>= selectBounds False at receiver member . filter owns
+  AppliedType (RigidType name) _ -> rigidBoundsOf name >>= selectBounds False at receiver member . filter owns
   _ -> pure Nothing
  where
   owns (NominalType identity _) = identity == owner
   owns _ = False
 
-selectBounds :: Span -> Type -> Text -> [Type] -> Checker (Maybe Scheme)
-selectBounds at receiver member bounds = do
+selectBounds :: Bool -> Span -> Type -> Text -> [Type] -> Checker (Maybe Scheme)
+selectBounds retain at receiver member bounds = do
   providers <- filterM provides bounds
   case providers of
     [] -> pure Nothing
-    [bound@(NominalType owner _)] -> do
+    [bound@(NominalType owner arguments)] -> do
+      when retain (recordProviderSelection at (ProviderSelection owner arguments (Just receiver)))
       found <- lookupName (nominalKey owner <> "." <> member)
       traverse (specializeBound at receiver bound) found
     _ -> do

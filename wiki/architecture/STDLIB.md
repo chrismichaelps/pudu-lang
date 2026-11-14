@@ -97,6 +97,7 @@ Pudu takes the middle position deliberately:
 | wired-in types | the compiler | no |
 | `Core.Prelude` | [[Semantic Prelude]] | shadowed by an explicit import |
 | `Std.*` | the standard library | imported explicitly, always |
+| `Ark.*` | integrated engine library, see [[Ark Engine]] | imported explicitly, always |
 | anything else | the program | — |
 
 `Core` holds what the language itself needs to describe its own semantics — the marker traits,
@@ -224,6 +225,8 @@ claim a lifetime guarantee the evaluator does not yet enforce.
 | `Std.Db.Session` | opening a connection and carrying one message across it |
 | `Std.Db.Migrate` | schema changes, planned without a database and applied one at a time |
 
+[[C++ Inspired View Coverage]] records the checked view completion and intentional representation differences.
+
 ## What ships today
 
 Sixty modules and 1622 exported declarations are present in this recovery branch, every public
@@ -261,7 +264,11 @@ resource-lifetime audit, mirror review, and delivery split recorded in
 | `Std.LruCache` | 22 | a map with a capacity, discarding what has gone longest unused |
 | `Std.PrefixTrie` | 25 | text keys held by their characters, so a prefix can be asked about |
 | `Std.Num` | 15 | `Integer`, `Zero`, `One`, `Add`, `Sub`, `Mul`, `Div`, `Rem` and the aggregates over them |
-| `Std.Iter` | 25 | `Sequence`, ranges and collection walks, plus lazy map/filter/take/drop/zip adapters |
+| `Std.Iter` | 31 | `Sequence` with chainable default adapters (map, filter, take, drop, takeWhile, dropWhile, stride, chain, enumerate, zip) and terminals, plus ranges and collection walks |
+| `Std.Span` | 4 | a non-owning window onto an array, narrowed and walked in place |
+| `Std.MdSpan` | 6 | a non-owning multidimensional array view: layouts, multi-index reads, slicing |
+| `Std.StringView` | 5 | a byte-addressed UTF-8 view with constant-time size and slicing |
+| `Std.Memory` | 9 | offset allocators: the `Resource` protocol, a monotonic arena, a block pool |
 | `Std.Decimal` | 30 | exact base-ten arithmetic, the seven rounding modes, scale control, the conversion path |
 | `Std.Crypto` | 8 | SHA-256, UTF-8 encoding, constant-time comparison |
 | `Std.Random` | 14 | a reproducible generator, ranges, shuffling, sampling |

@@ -34,6 +34,7 @@ int pudu_ffi_call(void *symbol, int32_t arity, const uint8_t *kinds,
                   void *const *field_pointers, const uint8_t *slot_kinds,
                   int64_t *slot_integers, double *slot_doubles,
                   int64_t *slot_field_integers, double *slot_field_doubles,
+                  const uint8_t *shape, int32_t shape_count,
                   uint8_t result_kind,
                   int32_t result_field_count, const uint8_t *result_field_kinds,
                   int64_t *result_integer, double *result_double,
@@ -50,7 +51,7 @@ int pudu_ffi_call(void *symbol, int32_t arity, const uint8_t *kinds,
   symbol.
 - Text pointers in direct and record arguments borrow UTF-8 storage owned by the Haskell call frame.
   Integer slots are bit carriers; signedness is recovered above the bridge from the kind code.
-- The fixed 32-argument and 32-field capacities are mirrored as checker limits, so these guards are
+- The fixed 32-argument and per-record 32-member capacities are mirrored as checker limits, so these guards are
   defence in depth rather than reachable behavior for a checked declaration.
 - An argument named by `slot_kinds` is written by the library rather than read from the caller: the
   bridge owns the storage for the call, passes its address, and reads back what was left there. A
@@ -83,6 +84,12 @@ int pudu_ffi_call(void *symbol, int32_t arity, const uint8_t *kinds,
 - **Q:** Tell a written zero from an unwritten scalar slot? **A:** No. _Rationale:_ both leave the
   same bytes, and no portable observation separates them. _Rejected:_ manufacturing absence from a
   byte pattern.
+
+## Nested ABI layouts (#863)
+
+Resolved Grill Log: [[Nested Foreign Record Delivery]] preserves the tree
+for libffi layout and keeps value carriers in declaration-order leaves.
+The 32-member limit applies at each record node.
 
 ## Referenced by
 

@@ -4,9 +4,7 @@ module UsesForeignNested
 ///
 /// A camera holds two points, a font holds a texture, and a sound holds a
 /// stream — a boundary admitting only flat records admits almost none of what a
-/// library passes about. What crosses is the leaves: a record is described to
-/// the platform by the scalars it flattens to, in order, which is the same
-/// description the platform derives for the nesting itself.
+/// library passes about. Each nested record keeps its own ABI layout.
 type Pair = { x: Float32, y: Float32 }
 
 type Frame = { offset: Pair, target: Pair, rotation: Float32, zoom: Float32 }
@@ -14,7 +12,14 @@ type Frame = { offset: Pair, target: Pair, rotation: Float32, zoom: Float32 }
 /// Fields of different classes with padding between them, nested one deep.
 type Mixed = { tag: UInt8, point: Pair, weight: Float64 }
 
+type Inner = { value: Float64, inner: UInt8 }
+type Outer = { nested: Inner, outer: UInt8 }
+type Wide = { m0: Outer, m1: Outer, m2: Outer, m3: Outer, m4: Outer, m5: Outer, m6: Outer, m7: Outer, m8: Outer, m9: Outer, m10: Outer, m11: Outer }
+
 foreign "c" {
+  fn padded symbol "pudu_ffi_cpp_padded" (value: Outer) -> Outer
+  fn paddedSlot symbol "pudu_ffi_cpp_padded_slot" (out value: Outer) -> ()
+  fn wide symbol "pudu_ffi_cpp_padded_wide" () -> Wide
   fn frameSum symbol "pudu_ffi_cpp_frame_sum" (frame: Frame) -> Float32
   fn frameMake symbol "pudu_ffi_cpp_frame_make" (base: Float32) -> Frame
   fn mixedSum symbol "pudu_ffi_cpp_mixed_sum" (mixed: Mixed) -> Float64
@@ -46,6 +51,18 @@ export fn main() -> Int {
     if made.target.y == 13.0f32 { held = held + 1 }
     if made.rotation == 14.0f32 { held = held + 1 }
     if made.zoom == 15.0f32 { held = held + 1 }
+    let rounded = padded(Outer{nested: Inner{value: 3.0, inner: 5u8}, outer: 7u8})
+    if rounded.nested.value == 4.0 && rounded.nested.inner == 5u8 && rounded.outer == 8u8 {
+      held = held + 1
+    }
+    let (_, slot) = paddedSlot()
+    if slot.nested.value == 7.0 && slot.nested.inner == 9u8 && slot.outer == 11u8 {
+      held = held + 1
+    }
+    let large = wide()
+    if large.m11.nested.value == 13.0 && large.m11.nested.inner == 15u8 && large.m11.outer == 17u8 {
+      held = held + 1
+    }
   }
   held
 }

@@ -1,0 +1,13 @@
+module Main
+
+import Grid as Grid
+import Table as Table
+
+fn main() -> Int {
+  let grid = Grid.make()
+  let counts: Map[Str, Int] = mapOf([("b", 2)])
+  match (Table.code("a"), counts.get("b")) {
+    case (Some(one), Some(two)) => one + two - grid.size - 2
+    case _ => 1
+  }
+}

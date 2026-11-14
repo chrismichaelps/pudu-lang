@@ -1,0 +1,177 @@
+module Ark.Render.Text
+
+import Std.Lanes as Lanes
+import Std.Math.Float as Float
+import Std.Ui.Text as Face
+import Ark.Assets.Texture as Texture
+import Ark.Math.Color as Color
+import Ark.Render.Device as Device
+
+/// The glyph atlas the batches draw from.
+export type Font = { atlas: Texture.Texture }
+
+/// Glyphs waiting to be drawn: each one's top-left pixel, atlas cell, scale and color.
+export type Batch = {
+  xs: Array[Float64],
+  ys: Array[Float64],
+  cells: Array[Float64],
+  scales: Array[Float64],
+  rs: Array[Float64],
+  gs: Array[Float64],
+  bs: Array[Float64],
+}
+
+/// Atlas cells per row, and the cell and atlas sizes in pixels.
+const COLUMNS: Int = 16
+const CELL_WIDTH: Int = 6
+const CELL_HEIGHT: Int = 8
+const ATLAS_WIDTH: Int = 96
+const ATLAS_HEIGHT: Int = 48
+
+/// The face's glyph size and layout in design units.
+const GLYPH_WIDTH: Int = 5
+const GLYPH_HEIGHT: Int = 7
+const ADVANCE: Int = 6
+const LINE: Int = 9
+
+/// The atlas cell holding the missing-glyph box, after the 95 printable characters.
+const MISSING_CELL: Int = 95
+
+/// Corner offsets of the two triangles of a quad, as fractions of its width and height.
+const CORNER_XS: Array[Float64] = [0.0, 1.0, 0.0, 1.0, 1.0, 0.0]
+const CORNER_YS: Array[Float64] = [0.0, 0.0, 1.0, 0.0, 1.0, 1.0]
+
+/// The atlas texels: white and opaque where a glyph is lit, transparent elsewhere.
+const ATLAS_PIXELS: Bytes = atlasPixels()
+
+/// Every printable character's glyph, then the missing-glyph box, as atlas texels.
+comptime fn atlasPixels() -> Bytes {
+  var texels: Array[UInt8] = []
+  var row = 0
+  while row < ATLAS_HEIGHT {
+    var column = 0
+    while column < ATLAS_WIDTH {
+      let cell = (row / CELL_HEIGHT) * COLUMNS + column / CELL_WIDTH
+      let x = column % CELL_WIDTH
+      let y = row % CELL_HEIGHT
+      var lit = false
+      if cell <= MISSING_CELL && x < GLYPH_WIDTH && y < GLYPH_HEIGHT {
+        let bits = if cell < MISSING_CELL { Face.GLYPHS[cell] } else { Face.MISSING_GLYPH }
+        lit = (bits >> (34 - (y * GLYPH_WIDTH + x))) & 1u64 == 1u64
+      }
+      let value = if lit { 255u8 } else { 0u8 }
+      texels = texels.push(value).push(value).push(value).push(value)
+      column = column + 1
+    }
+    row = row + 1
+  }
+  bytesOf(texels)
+}
+
+/// The face's glyph atlas.
+export fn font() -> Font {
+  let Some(atlas) = Texture.rgba8(ATLAS_WIDTH, ATLAS_HEIGHT, ATLAS_PIXELS, "linear") else { panic("the glyph atlas matches its size") }
+  Font{atlas}
+}
+
+/// A batch with no glyphs.
+export fn batch() -> Batch {
+  Batch{xs: [], ys: [], cells: [], scales: [], rs: [], gs: [], bs: []}
+}
+
+/// The number of glyphs a batch will draw.
+export fn glyphs(pending: &Batch) -> Int {
+  pending.cells.length()
+}
+
+/// Lay text out from its top-left corner at a whole-number scale and add its glyphs.
+export fn add(pending: Batch, text: Str, x: Float64, y: Float64, scale: Int, color: Color.Rgba) -> Result[Batch, Face.TextError] {
+  let face = Face.face(scale) ?
+  let _measured = Face.measure(&face, text) ?
+  let size = Float.fromInt(scale)
+  var xs: Array[Float64] = []
+  var ys: Array[Float64] = []
+  var cells: Array[Float64] = []
+  var column = 0
+  var line = 0
+  for character in text.chars() {
+    if character == '\n' {
+      column = 0
+      line = line + 1
+      continue
+    }
+    if character != ' ' {
+      xs = xs.push(x + Float.fromInt(column * ADVANCE) * size)
+      ys = ys.push(y + Float.fromInt(line * LINE) * size)
+      cells = cells.push(Float.fromInt(if Face.hasGlyph(character) { character.code() - 32 } else { MISSING_CELL }))
+    }
+    column = column + 1
+  }
+  let count = cells.length()
+  Ok(
+    Batch {
+      xs: pending.xs.concat(xs),
+      ys: pending.ys.concat(ys),
+      cells: pending.cells.concat(cells),
+      scales: pending.scales.concat(filled(count, size)),
+      rs: pending.rs.concat(filled(count, color.r)),
+      gs: pending.gs.concat(filled(count, color.g)),
+      bs: pending.bs.concat(filled(count, color.b)),
+    },
+  )
+}
+
+fn filled(count: Int, value: Float64) -> Array[Float64] {
+  match Lanes.filled(count, value) {
+    case Some(lanes) => Lanes.toArray(&lanes)
+    case None => []
+  }
+}
+
+/// The pixel size text occupies at a scale, as `Std.Ui.Text` measures it.
+export fn measure(text: Str, scale: Int) -> Result[(Int, Int), Face.TextError] {
+  let face = Face.face(scale) ?
+  let size = Face.measure(&face, text) ?
+  Ok((size.width, size.height))
+}
+
+/// Text broken into lines no wider than `width` pixels at a scale, as `Std.Ui.Text` wraps it.
+export fn wrap(text: Str, width: Int, scale: Int) -> Result[Array[Str], Face.TextError] {
+  let face = Face.face(scale) ?
+  Face.wrapped(&face, text, width)
+}
+
+/// Draw every glyph of a batch at a depth in one textured call; the target is unchanged for an empty batch.
+export fn draw(target: Device.Target, typeface: &Font, pending: &Batch, depth: Float64) -> Option[Device.Target] {
+  let count = pending.cells.length()
+  if count == 0 { return Some(target) }
+  let vertices = count * 6
+  let owners = Lanes.toInts(&Lanes.floor(&Lanes.scale(&(Lanes.ramp(vertices, 0.5, 1.0) ?), 1.0 / 6.0))) ?
+  let ownerLanes = Lanes.fromInts(&owners)
+  let corners = Lanes.toInts(&(Lanes.subtract(&(Lanes.ramp(vertices, 0.0, 1.0) ?), &Lanes.scale(&ownerLanes, 6.0)) ?)) ?
+  let cornerX = Lanes.gather(&Lanes.fromArray(&CORNER_XS), &corners) ?
+  let cornerY = Lanes.gather(&Lanes.fromArray(&CORNER_YS), &corners) ?
+  let per = |values: &Array[Float64]| Lanes.gather(&Lanes.fromArray(values), &owners)
+  let scales = per(&pending.scales) ?
+  let cells = per(&pending.cells) ?
+  let rows = Lanes.floor(&Lanes.scale(&cells, 1.0 / Float.fromInt(COLUMNS)))
+  let columns = Lanes.subtract(&cells, &Lanes.scale(&rows, Float.fromInt(COLUMNS))) ?
+  let width = Float.fromInt(GLYPH_WIDTH)
+  let height = Float.fromInt(GLYPH_HEIGHT)
+  let xs = Lanes.fma(&(Lanes.multiply(&cornerX, &scales) ?), &Lanes.filled(vertices, width) ?, &(per(&pending.xs) ?)) ?
+  let ys = Lanes.fma(&(Lanes.multiply(&cornerY, &scales) ?), &Lanes.filled(vertices, height) ?, &(per(&pending.ys) ?)) ?
+  let us = Lanes.scale(&(Lanes.axpy(&Lanes.scale(&columns, Float.fromInt(CELL_WIDTH)), width, &cornerX) ?), 1.0 / Float.fromInt(ATLAS_WIDTH))
+  let vs = Lanes.scale(&(Lanes.axpy(&Lanes.scale(&rows, Float.fromInt(CELL_HEIGHT)), height, &cornerY) ?), 1.0 / Float.fromInt(ATLAS_HEIGHT))
+  let quads = Device.ScreenBatch {
+    xs,
+    ys,
+    zs: Lanes.filled(vertices, depth) ?,
+    ws: Lanes.filled(vertices, 1.0) ?,
+    rs: per(&pending.rs) ?,
+    gs: per(&pending.gs) ?,
+    bs: per(&pending.bs) ?,
+    us,
+    vs,
+  }
+  Device.drawTextured(target, &quads, Device.CullNone, &typeface.atlas, "nearest")
+}

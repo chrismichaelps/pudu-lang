@@ -1,16 +1,21 @@
 {-| @Diagnostic.Render.Module — renders diagnostics for people -}
 module Pudu.Diagnostic.Render
-  ( RenderConfig (..)
+  ( Excerpt (..)
+  , RenderConfig (..)
   , RenderStyle (..)
   , defaultRenderConfig
+  , excerptGeometry
   , interactiveRenderConfig
   , renderDiagnostic
   , renderDiagnosticWith
   , renderDiagnostics
   , renderDiagnosticsWith
+  , renderDiagnosticsWithSources
   , renderSummary
   ) where
 
+import Data.Map.Strict (Map)
+import qualified Data.Map.Strict as Map
 import Data.Text (Text)
 import qualified Data.Text as Text
 import Pudu.Diagnostic
@@ -28,9 +33,11 @@ import Pudu.Diagnostic
 import Pudu.Source
   ( Position (..)
   , Source
+  , SourceName
+  , emptySpan
+  , sameSpanSource
   , Span
   , offsetPosition
-  , sourceName
   , sourceText
   , spanEnd
   , spanSource
@@ -80,7 +87,14 @@ renderDiagnostic :: RenderStyle -> Source -> Diagnostic -> Text
 renderDiagnostic style = renderDiagnosticWith (defaultRenderConfig style)
 
 renderDiagnosticWith :: RenderConfig -> Source -> Diagnostic -> Text
-renderDiagnosticWith config source value =
+renderDiagnosticWith config = renderDiagnosticFrom config Map.empty
+
+renderDiagnosticsWithSources :: RenderConfig -> Map SourceName Source -> Source -> [Diagnostic] -> Text
+renderDiagnosticsWithSources config sources source values =
+  Text.intercalate "\n" (map (renderDiagnosticFrom config sources source) values)
+
+renderDiagnosticFrom :: RenderConfig -> Map SourceName Source -> Source -> Diagnostic -> Text
+renderDiagnosticFrom config sources source value =
   Text.intercalate "\n" (headline : locationLine : excerpt <> notes <> helpLines)
  where
   style = renderStyle config
@@ -90,64 +104,120 @@ renderDiagnosticWith config source value =
   headline =
     paint style (severityColor severity) (severityLabel severity <> "[" <> code <> "]")
       <> ": " <> diagnosticMessage value
-  locationLine = "  --> " <> locationText config source spanValue
-  excerpt = renderExcerpt config source spanValue
-  notes = map (renderRelated config source) (diagnosticRelated value)
+  locationLine = "  --> " <> location spanValue
+  excerpt = case snapshot spanValue of
+    Nothing -> []
+    Just selected -> renderExcerpt (configuration spanValue) selected spanValue
+  notes = map (renderRelated location) (diagnosticRelated value)
+  configuration at
+    | ownsSpan source at = config
+    | otherwise = defaultRenderConfig style
+  snapshot at
+    | ownsSpan source at = Just source
+    | otherwise = do
+        selected <- Map.lookup (spanSource at) sources
+        if ownsSpan selected at then Just selected else Nothing
+  location at = locationText (configuration at) selected at
+   where
+    selected = case snapshot at of
+      Just found -> found
+      Nothing -> source
   helpLines = case diagnosticHelp value of
     Nothing -> []
     Just help -> ["   = " <> paint style cyan "help" <> ": " <> help]
 
-renderRelated :: RenderConfig -> Source -> Related -> Text
-renderRelated config source related =
+renderRelated :: (Span -> Text) -> Related -> Text
+renderRelated location related =
   "   = note: " <> relatedMessage related
-    <> " (" <> locationText config source (relatedSpan related) <> ")"
+    <> " (" <> location (relatedSpan related) <> ")"
+
+{-| @Diagnostic.Render.Excerpt — the geometry of one quoted line: the text with
+    tabs expanded, the caret's indent and width in expanded columns, and
+    whether the span continues past the line. Exported so the native backend
+    bakes exactly this geometry into its diagnostic sites instead of deriving
+    a second, drifting copy. -}
+data Excerpt = Excerpt
+  { excerptLineText :: !Text
+  , excerptIndent :: !Int
+  , excerptWidth :: !Int
+  , excerptMultiline :: !Bool
+  }
+  deriving stock (Eq, Show)
 
 {-| A span from another snapshot still reports its location, but never borrows a
     line of unrelated text to quote. -}
 renderExcerpt :: RenderConfig -> Source -> Span -> [Text]
 renderExcerpt config source spanValue
-  | spanSource spanValue /= sourceName source = []
+  | not (ownsSpan source spanValue) = []
   | otherwise = case positionsOf source spanValue of
       Nothing -> []
-      Just (start, end) ->
+      Just (start, _) ->
         let lineNumber = positionLine start
             style = renderStyle config
             gutter = Text.pack (show (displayLine config lineNumber))
             pad = Text.replicate (Text.length gutter) " "
-            lineText = expandTabs (sourceLine source lineNumber)
-            sameLine = positionLine end == lineNumber
-            startColumn = expandedColumn (sourceLine source lineNumber) (positionColumn start)
-            endColumn
-              | sameLine = expandedColumn (sourceLine source lineNumber) (positionColumn end)
-              | otherwise = Text.length lineText + 1
-            width = max 1 (endColumn - startColumn)
-            caret = Text.replicate (max 0 (startColumn - 1)) " " <> Text.replicate width "^"
-            continuation = if sameLine then Text.empty else " ..."
-         in [ " " <> pad <> " |"
-            , " " <> gutter <> " | " <> lineText
-            , " " <> pad <> " | " <> paint style (severityColorOf style) caret <> continuation
-            ]
+         in case excerptGeometry source spanValue of
+              Nothing -> []
+              Just excerpt ->
+                let caret =
+                      Text.replicate (excerptIndent excerpt) " "
+                        <> Text.replicate (excerptWidth excerpt) "^"
+                    continuation = if excerptMultiline excerpt then " ..." else Text.empty
+                 in [ " " <> pad <> " |"
+                    , " " <> gutter <> " | " <> excerptLineText excerpt
+                    , " " <> pad <> " | " <> paint style (severityColorOf style) caret <> continuation
+                    ]
  where
   severityColorOf _ = red
 
+{-| The excerpt arithmetic itself: expanded line text, caret indent and width,
+    and the continuation flag, all in the interpreter's own conventions. -}
+excerptGeometry :: Source -> Span -> Maybe Excerpt
+excerptGeometry source spanValue = do
+  (start, end) <- positionsOf source spanValue
+  let lineNumber = positionLine start
+      lineText = expandTabs (sourceLine source lineNumber)
+      sameLine = positionLine end == lineNumber
+      startColumn = expandedColumn (sourceLine source lineNumber) (positionColumn start)
+      endColumn
+        | sameLine = expandedColumn (sourceLine source lineNumber) (positionColumn end)
+        | otherwise = Text.length lineText + 1
+  pure
+    Excerpt
+      { excerptLineText = lineText
+      , excerptIndent = max 0 (startColumn - 1)
+      , excerptWidth = max 1 (endColumn - startColumn)
+      , excerptMultiline = not sameLine
+      }
+
 positionsOf :: Source -> Span -> Maybe (Position, Position)
-positionsOf source spanValue = do
-  start <- offsetPosition source (spanStart spanValue)
-  end <- offsetPosition source (spanEnd spanValue)
-  pure (start, end)
+positionsOf source spanValue
+  | not (ownsSpan source spanValue) = Nothing
+  | otherwise = do
+      start <- offsetPosition source (spanStart spanValue)
+      end <- offsetPosition source (spanEnd spanValue)
+      pure (start, end)
+
+ownsSpan :: Source -> Span -> Bool
+ownsSpan source = sameSpanSource (emptySpan source)
 
 locationText :: RenderConfig -> Source -> Span -> Text
 locationText config source spanValue =
   displayName <> ":" <> position
  where
-  displayName = case renderDisplayName config of
-    Just name -> name
-    Nothing -> unSourceName (spanSource spanValue)
-  position = case offsetPosition source (spanStart spanValue) of
-    Just found ->
-      Text.pack (show (displayLine config (positionLine found)))
-        <> ":" <> Text.pack (show (positionColumn found))
-    Nothing -> "offset " <> Text.pack (show (unOffset (spanStart spanValue)))
+  displayName
+    | ownsSpan source spanValue = case renderDisplayName config of
+        Just name -> name
+        Nothing -> unSourceName (spanSource spanValue)
+    | otherwise = unSourceName (spanSource spanValue)
+  position
+    | not (ownsSpan source spanValue) = offsetText
+    | otherwise = case offsetPosition source (spanStart spanValue) of
+        Just found ->
+          Text.pack (show (displayLine config (positionLine found)))
+            <> ":" <> Text.pack (show (positionColumn found))
+        Nothing -> offsetText
+  offsetText = "offset " <> Text.pack (show (unOffset (spanStart spanValue)))
 
 {-| Translate a buffer line into the line the reader typed. Lines before the
     entry clamp to the first line rather than going negative. -}

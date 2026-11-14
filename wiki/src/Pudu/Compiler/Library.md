@@ -24,7 +24,13 @@ missing bundled modules must fail rather than fall back to host code.
 
 ## Purpose
 
-Decide where a module is looked for: the program's own tree, and — for a `Std` module — the
+`Ark` is a second shipped-library namespace. `isStandardModule` accepts exactly the first
+segment `Std` or `Ark`; both use identical project-first/library-fallback roots and exclude
+installed dependency roots. `Arks` remains an ordinary project namespace. Resolved Grill Log:
+classify by exact root segment, with no prefix matching or per-module list. [[Ark Math Gate]]
+proves a caller outside the library resolves Ark through PUDU_LIB.
+
+Decide where a module is looked for: the program's own tree, and — for a `Std` or `Ark` module — the
 standard library shipped with the compiler.
 
 ## Interface
@@ -50,7 +56,7 @@ triedRoots :: FilePath -> ModuleName -> IO [FilePath]
 
 ### Governance
 
-- Membership in the standard library is by **namespace**, not by a list of names: `Std.Http.Server`
+- Membership in the shipped library is by exact **namespace** root (`Std` or `Ark`), not by a list of names: `Std.Http.Server`
   must be a standard module the day it is written, without this module learning about it.
 - The program's own source root is searched first, so a program may shadow a standard module —
   deliberately and visibly, since the shadowing file is in the program's own tree where a reader
@@ -85,7 +91,7 @@ root, existing dependency roots, existing library roots, attempted-root descript
 diagnostics, and operation counts in `ResolutionContext`.
 
 Prepend the program's source root and manifest dependency roots to the library roots when a module's
-first segment is `Std`; otherwise return only project-owned roots. These per-module queries are pure.
+first segment is `Std` or `Ark`; otherwise return project and installed-package roots. These per-module queries are pure.
 
 Reporting a module that was not found is written for a reader by `triedRoots`. When a library root
 exists it names the program's roots and the library roots found, because the module is most likely
@@ -142,5 +148,5 @@ DEPTH 0.30 (SHALLOW by intent). It answers one question about paths.
 [[src/Pudu/Compiler/_MOC]] · [[Compiler Program]] · [[Compiler Manifest]] · [[architecture/STDLIB]]
 
 Installed packages (`contextPackageRoots`) are searched after the project's own roots for an ordinary
-module and never for a `Std.*` module: the project may shadow a standard module in its own tree, and
+module and never for a `Std.*` or `Ark.*` module: the project may shadow a shipped module in its own tree, and
 a dependency may not.

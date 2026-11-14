@@ -19,20 +19,29 @@ EXPLORATORY — one production C11 compiler adapter on the native compilation pa
 
 ## Interface
 
-- Input: generated C source, target model, output path, optimization/debug policy.
-- Success: atomically published native [[Compilation Artifact]].
+- Input: generated C source and the output path; the target model and
+  optimization policy are the seam's extension points, fixed to the host and
+  the documented flags in milestone 1.
+- Success: atomically published native [[Compilation Artifact]], with the
+  compiler's captured output returned to the caller.
 - Failure: typed tool-not-found, invocation, timeout/cancellation, or compile failure with captured bounded output.
 - No shell interpolation; arguments are passed structurally.
+- Milestone 1 accepts host publication only; the target model input arrives
+  with cross-compilation.
 
 ## Adapters
 
 | Adapter | Type | Path | Last verified | Status |
 | --- | --- | --- | --- | --- |
-| System C compiler (`cc`/configured path) | production | planned `@root/src/Pudu/Backend/Toolchain.hs` | not implemented | PLANNED |
+| System C compiler (`cc`/configured path) | production | `@root/src/Pudu/Backend/Toolchain.hs` | 2026-10-16, #486 (Apple clang 21, aarch64) | PRODUCTION |
 
 ## Health
 
-DRIFT 0 (HEALTHY by specification). No callers exist; no bypass exists.
+DRIFT 0 (HEALTHY). One production adapter, exercised by [[Backend Native
+Tests]] on every suite run: discovery, bounded concurrent capture, timeout
+termination, refusal translation, and atomic publication each have a focused
+test, and no caller bypasses the seam — [[Backend Emit]] returns text and
+never starts a process.
 
 ## Negative Logic
 

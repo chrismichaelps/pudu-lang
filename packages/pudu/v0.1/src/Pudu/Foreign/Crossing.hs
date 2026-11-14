@@ -115,12 +115,11 @@ crossingFor handles layouts = crossingAt Set.empty
 
       A camera holds two points, a font holds a texture, and a record that
       admitted only numbers would admit almost nothing a library actually
-      passes. What crosses is the leaves: a record is described to the platform
-      by the scalars it flattens to, in order, which is the same description the
-      platform derives for the nesting itself.
+      passes. The record shape retains its
+      nesting so the bridge can preserve the platform ABI's padding.
 
-      A record reached from inside itself has no flattening, because there is no
-      end to its leaves. The set of records already open refuses it where it is
+      A record reached from inside itself has no finite layout. The set of
+      records already open refuses it where it is
       written rather than looping. -}
   named enclosing name
     | Set.member name handles = Just (HandleCrossing name)

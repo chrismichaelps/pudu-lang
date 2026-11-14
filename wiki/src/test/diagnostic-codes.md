@@ -31,6 +31,23 @@ unchecked allow-list.
 integer result cannot be represented by the operation's declared fixed-width result type; the
 operation-specific wording does not change that identity.
 
+E7010 is shared by the interpreter and native emitter for the same
+non-terminating Decimal quotient, with identical message/help. Resolved
+Grill Log: register this integration condition explicitly, as tracked in
+PR #807; do not rename or suppress a reporting site.
+`E7010` means a Decimal quotient has no exact base-ten expansion, in the
+interpreter and native frame emitter. Both retain the same message and help.
+Resolved Grill Log (#806): register this existing shared condition instead
+of assigning a backend-only code or suppressing either reporting module.
+
+`E7013` means a sequence pattern's length does not match the value it was
+given, in the interpreter and native body lowering. Both retain the same
+message and help. Resolved Grill Log (#846): the native form reaches the same
+run-time condition as the tree walker, so it reports the same code rather than
+a backend-only one; the leak harness now also compiles against a piece of
+instrumentation that defines its own POSIX feature macros, which the emitted
+prelude no longer overrides.
+
 ## Grill Log
 
 - **Q:** Ignore the lint modules wholesale? **A:** No. _Rationale:_ explicit per-code declarations
@@ -44,6 +61,13 @@ operation-specific wording does not change that identity.
   **A:** No. _Rationale:_ E3014 and E3015 mean ownership and overlap for authored impls and
   generated heads alike; E3091 is a derive contract violation and E3093 a derive instantiation
   exceeding its bounds wherever found. _Rejected:_ splitting one meaning by which phase found it.
+
+E7015 is shared by the interpreter's foreign bridge and native foreign call sites, which stop with the same words when a library does not open or a symbol is missing (#850).
+
+E7017, E7024 and E7025 are shared by the bridge and native foreign call sites (#851).
+
+E7020, E7021 and E7022 are shared by the interpreter and native handle
+boundary for null results, conflicting ownership claims and invalid handle use.
 
 ## Referenced by
 

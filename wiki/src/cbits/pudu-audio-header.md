@@ -25,3 +25,10 @@ drain failure, and cancellation (`0` through `-9`). The caller passes a four-byt
 ## Referenced by
 
 [[Pudu Audio macOS Adapter]] · [[Eval Audio Device]]
+
+## Native stop observation (#857)
+
+Resolved Grill Log: playback also accepts a stop predicate. The adapter
+polls it on the playback thread beside the existing cancellation token.
+Native playback releases the run gate during the call and reacquires it
+before returning the outcome.

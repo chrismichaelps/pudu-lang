@@ -39,3 +39,18 @@ still fails when passed where the callback alias is required.
 ## Referenced by
 
 [[src/Pudu/Type/_MOC]]
+
+## Built-in scope isolation (#759)
+
+Expose one closed builtinScope map from the language inventory. Interface
+formation overlays local declarations, then exact imports, then built-in names.
+Consumer formation overlays exact imports, then built-ins, then the shared graph;
+its own declarations are collected last and retain lexical precedence. Canonical
+qualified identities and explicit selected imports remain distinct and visible.
+
+Resolved Grill Log: an unrelated module exporting Map must not replace the
+built-in Map in Table. Do not remove graph declarations needed for implementation
+discovery, invent another type inventory, or mask local/selected declarations.
+Preserve shared once-per-graph preparation and immutable consumer overlays.
+Prove qualified, selected and reversed-import clients in both evaluators, and
+E3001 for a record passed as a built-in map. See [[Builtin Scope Delivery]].

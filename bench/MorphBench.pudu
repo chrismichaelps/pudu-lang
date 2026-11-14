@@ -1,0 +1,56 @@
+module MorphBench
+
+import Std.Lanes as Lanes
+import Std.Math.Float as Float
+import Std.Time as Time
+import Ark.Animation.Limbs as Limbs
+import Ark.Animation.Morph as Morph
+
+const VERTICES: Int = 10000
+const SPARSE: Int = 48
+const TOUCHED: Int = 500
+const BLENDS: Int = 60
+
+fn filled(count: Int, value: Float64) -> Lanes.Lanes {
+  let Some(lanes) = Lanes.filled(count, value) else { panic("fill") }
+  lanes
+}
+
+fn shape(count: Int, offset: Float64) -> Morph.Shape {
+  let Some(ramp) = Lanes.ramp(count, offset, 0.001) else { panic("ramp") }
+  Morph.Shape{positions: Limbs.Points{xs: ramp, ys: filled(count, 0.5), zs: filled(count, 0.0)}, normals: Limbs.Points{xs: filled(count, 0.0), ys: filled(count, 0.1), zs: filled(count, 1.0)}}
+}
+
+/// Time blends of a 10,000-vertex morph with five of fifty targets active.
+export fn main() -> Int {
+  var targets = [Morph.dense("breathe", shape(VERTICES, 0.0)), Morph.dense("squash", shape(VERTICES, 1.0))]
+  var target = 0
+  while target < SPARSE {
+    var indices: Array[Int] = []
+    var step = 0
+    while step < TOUCHED {
+      indices = indices.push((target * 197 + step * 19) % VERTICES)
+      step = step + 1
+    }
+    targets = targets.push(Morph.sparse("shape" + show(target), indices, shape(TOUCHED, 0.0)))
+    target = target + 1
+  }
+  let Ok(rig) = Morph.morph(shape(VERTICES, 0.0), targets) else { panic("morph") }
+  var weights: Array[Float64] = []
+  for slot in 0..(SPARSE + 2) {
+    weights = weights.push(if slot < 2 || slot % 16 == 0 { 0.3 } else { 0.0 })
+  }
+  let started = Time.monotonicNanos()
+  var last = Morph.Shape{positions: rig.base.positions, normals: rig.base.normals}
+  for _ in 0..BLENDS {
+    let Ok(blended) = Morph.blend(&rig, &weights) else { panic("blend") }
+    last = blended
+  }
+  let nanos = (Time.monotonicNanos() - started) / BLENDS
+  let Some(nx) = Lanes.get(&last.normals.xs, 7) else { panic("normal") }
+  let Some(ny) = Lanes.get(&last.normals.ys, 7) else { panic("normal") }
+  let Some(nz) = Lanes.get(&last.normals.zs, 7) else { panic("normal") }
+  if Float.abs(nx * nx + ny * ny + nz * nz - 1.0) > 0.000000001 { panic("unit normals") }
+  print("blend " + show(nanos))
+  0
+}

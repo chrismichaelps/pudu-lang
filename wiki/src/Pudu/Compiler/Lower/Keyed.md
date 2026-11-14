@@ -1,0 +1,55 @@
+---
+type: module
+path: "@root/src/Pudu/Compiler/Lower/Keyed.hs"
+fidelity: Active
+grammar: "[[grammar/haskell]]"
+aliases: [Compiler Lower Keyed]
+---
+# Compiler Lower Keyed
+
+## Purpose and interface
+
+`lowerMapOf`, `lowerSetOf`, `lowerSetLiteral` and `lowerKeyedMethod`: maps
+and sets under [[Native Maps and Sets]].
+
+## Order and failures
+
+The receiver runs before the supplied arguments. `get` puts the
+key in a local and builds `Some` or `None` in Core from a containment test and
+a lookup, so no C code needs an Option's layout. Where the key type could hold
+a function, every key is tested before it is stored, and one that cannot be
+ordered fails with E7008 naming its kind as `valueKind` does (a sum by the
+variant it holds): after all the members of a literal or `setOf`/`mapOf`
+array, at the call for `insert`. Where it couldn't, no test is emitted.
+
+## Resolved Grill Log
+
+- **Q:** Why test in Core rather than in C? **A:** The message needs the
+  variant name of a sum key, and Core already has `CoreRuntimeKind` and
+  `CoreFailText`.
+- **Q:** Does `for` over a map snapshot it? **A:** Yes, `entries()` first, as
+  `walkValues` lists the entries before the body runs.
+
+## Dependencies and consumers
+
+[[Compiler Lower Array]] · [[Compiler Lower State]] · [[Compiler Lower Types]] · [[Core IR]]
+
+## Referenced by
+
+[[Compiler Lower Body]] · [[Compiler Lower For]] · [[Native Maps and Sets]] · [[src/Pudu/Compiler/_MOC]]
+
+## First-class output builtins (#569)
+
+Resolved Grill Log: Use CoreRuntimeKind for callable key E7008 as well as sum variants, retaining existing comparability guards and evaluation order.
+
+## Shared builder (#631)
+
+Export keyedFromArray: given the tag, solved result and lowered array it
+builds what mapOf/setOf build, or Nothing for a mismatched type. A flag
+picks whether key refusals use the call span or the caller site.
+Resolved Grill Log: the direct call and the value body share it, so key
+checks, E7008 wording and duplicate handling cannot drift.
+
+## Indexed stores (#840)
+
+lowerKeyedMethod answers the seven store methods with the map's operations at key Int. A store's key operand is wrapped in `&+ 0`, folding a deferred magnitude into the word the interpreter narrows to. Export Blame, orderable and mayHoldFunction for [[Compiler Lower Multi Map]]. Resolved Grill Log: narrowing in lowering keeps one key convention in the helpers.

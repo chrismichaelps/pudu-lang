@@ -1,0 +1,71 @@
+module Ark.Math.Camera
+
+import Std.Math.Float as Float
+import Ark.Math.Matrix as Matrix
+import Ark.Math as Vector
+
+/// A right-handed view looking from `eye` toward `target`, or None when no orientation is defined.
+export fn lookAt(eye: Vector.Vec3, target: Vector.Vec3, up: Vector.Vec3) -> Option[Matrix.Mat4] {
+  let forward = Vector.normalized(Vector.subtract(target, eye)) ?
+  let side = Vector.normalized(Vector.cross(forward, up)) ?
+  let upward = Vector.cross(side, forward)
+  Some(
+    Matrix.columns4(
+      Vector.vec4(side.x, upward.x, -forward.x, 0.0),
+      Vector.vec4(side.y, upward.y, -forward.y, 0.0),
+      Vector.vec4(side.z, upward.z, -forward.z, 0.0),
+      Vector.vec4(-Vector.dot(side, eye), -Vector.dot(upward, eye), Vector.dot(forward, eye), 1.0),
+    ),
+  )
+}
+
+/// A perspective projection with depth 0 at `near` and 1 at `far`, or None for invalid parameters.
+export fn perspective(fovY: Float64, aspect: Float64, near: Float64, far: Float64) -> Option[Matrix.Mat4] {
+  let focal = focalLength(fovY, aspect) ?
+  if !(near > 0.0 && far > near && Float.isFinite(far)) { return None }
+  let range = near - far
+  Some(
+    Matrix.columns4(
+      Vector.vec4(focal / aspect, 0.0, 0.0, 0.0),
+      Vector.vec4(0.0, focal, 0.0, 0.0),
+      Vector.vec4(0.0, 0.0, far / range, -1.0),
+      Vector.vec4(0.0, 0.0, near * far / range, 0.0),
+    ),
+  )
+}
+
+/// An infinite perspective projection with depth 1 at `near` falling to 0 at infinity.
+export fn perspectiveReversed(fovY: Float64, aspect: Float64, near: Float64) -> Option[Matrix.Mat4] {
+  let focal = focalLength(fovY, aspect) ?
+  if !(near > 0.0 && Float.isFinite(near)) { return None }
+  Some(
+    Matrix.columns4(
+      Vector.vec4(focal / aspect, 0.0, 0.0, 0.0),
+      Vector.vec4(0.0, focal, 0.0, 0.0),
+      Vector.vec4(0.0, 0.0, 0.0, -1.0),
+      Vector.vec4(0.0, 0.0, near, 0.0),
+    ),
+  )
+}
+
+/// An orthographic projection with depth 0 at `near` and 1 at `far`, or None for empty extents.
+export fn orthographic(left: Float64, right: Float64, bottom: Float64, top: Float64, near: Float64, far: Float64) -> Option[Matrix.Mat4] {
+  let width = right - left
+  let height = top - bottom
+  let depth = near - far
+  if width == 0.0 || height == 0.0 || depth == 0.0 { return None }
+  if !Float.isFinite(width) || !Float.isFinite(height) || !Float.isFinite(depth) { return None }
+  Some(
+    Matrix.columns4(
+      Vector.vec4(2.0 / width, 0.0, 0.0, 0.0),
+      Vector.vec4(0.0, 2.0 / height, 0.0, 0.0),
+      Vector.vec4(0.0, 0.0, 1.0 / depth, 0.0),
+      Vector.vec4(-(right + left) / width, -(top + bottom) / height, near / depth, 1.0),
+    ),
+  )
+}
+
+fn focalLength(fovY: Float64, aspect: Float64) -> Option[Float64] {
+  if !(fovY > 0.0 && fovY < Float.pi() && aspect > 0.0 && Float.isFinite(aspect)) { return None }
+  Some(1.0 / Float.tan(fovY * 0.5))
+}

@@ -45,8 +45,7 @@ import Pudu.Eval.Env
 import Pudu.Eval.Frozen (Frozen, freeze, thaw)
 import Pudu.Eval.Install
   ( installBuiltinConstructors
-  , loadModuleDeclarations
-  , loadModuleDeclarationsWith
+  , loadNamedModuleDeclarationsWith
   )
 import Pudu.Eval.Value
   ( Closure (..)
@@ -167,7 +166,7 @@ programEntry folded integerKinds dependencies entryName moduleValue = do
   pushFrame Map.empty
   installImportAliases (moduleImports moduleValue)
   inherited <- currentMethods
-  loadModuleDeclarationsWith evaluate
+  loadNamedModuleDeclarationsWith (moduleNameText (locatedValue (moduleName moduleValue))) evaluate
     (foldedFor folded (moduleNameText (locatedValue (moduleName moduleValue))))
     (moduleDeclarations moduleValue)
   {-| The root's own functions are given its environment, exactly as a
@@ -188,7 +187,7 @@ programEntry folded integerKinds dependencies entryName moduleValue = do
   found <- lookupName entryName
   case found of
     Just (FunctionValue closure) -> do
-      result <- callClosure closure [] Nothing
+      result <- callClosure closure [] (Just (locatedSpan (functionName (closureFunction closure))))
       if functionAsync (closureFunction closure)
         then awaitTask (locatedSpan (functionName (closureFunction closure))) result
         else pure result
@@ -204,13 +203,14 @@ evaluateInteractiveBlock reuseDeclarations integerKinds dependencies moduleValue
   unless reuseDeclarations $ do
     locals <- currentFrame
     Evaluator $ \env -> pure (Done () env
-      { envFrames = [MapFrame Map.empty], envMethods = Map.empty, envVariantOwners = Map.empty })
+      { envFrames = [MapFrame Map.empty], envMethods = Map.empty, envVariantOwners = Map.empty
+      , envRecordFields = Map.empty })
     builtins <- linkDependencies dependencies
     pushFrame builtins
     pushFrame Map.empty
     installImportAliases (moduleImports moduleValue)
     inherited <- currentMethods
-    loadModuleDeclarations evaluate (moduleDeclarations moduleValue)
+    loadNamedModuleDeclarationsWith (moduleNameText (locatedValue (moduleName moduleValue))) evaluate Map.empty (moduleDeclarations moduleValue)
     scopeRootDeclarations inherited
     markModuleScope
     pushFrame locals
@@ -261,7 +261,7 @@ foldModuleWith foldedDependencies integerKinds dependencies moduleValue = do
     pushFrame builtins
     pushFrame Map.empty
     installImportAliases (moduleImports moduleValue)
-    loadModuleDeclarations evaluate (moduleDeclarations moduleValue)
+    loadNamedModuleDeclarationsWith (moduleNameText (locatedValue (moduleName moduleValue))) evaluate Map.empty (moduleDeclarations moduleValue)
     frame <- currentFrame
     Evaluator $ \env -> do
       writeIORef found (Map.mapMaybe freeze (Map.restrictKeys frame constants))
@@ -419,7 +419,7 @@ linkDependenciesFolded folded dependencies = do
         of them before its first request. -}
     pushFrame Map.empty
     inherited <- currentMethods
-    loadModuleDeclarationsWith evaluate (foldedFor folded path) (moduleDeclarations dependency)
+    loadNamedModuleDeclarationsWith path evaluate (foldedFor folded path) (moduleDeclarations dependency)
     loaded <- currentFrame
     outer <- captureEnvironment
     let scoped = Map.map (scopeTo (scoped : drop 1 outer)) loaded
