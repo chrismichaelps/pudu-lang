@@ -7,7 +7,7 @@ tags: [changelog]
 
 ## 2026-11-14 — Native direct calls (#904)
 
-- Native direct calls: functions with bounded call depth run in frames on the C stack, keep unowned slots in C locals, and are called as plain C functions from heap bodies, direct bodies and exports; a non-recursive scalar call measured about 14 ns against about 57 ns on heap frames ([[Native Direct Calls Delivery]]).
+- Native direct calls: functions with bounded call depth run in frames on the C stack, keep unowned slots in C locals, and are called as plain C functions from heap bodies, direct bodies and exports; a non-recursive scalar call measured about 14 ns against about 57 ns on heap frames ([[Native Direct Calls Delivery]]). Leaving a stack frame releases its slots without reaching the allocator, which keeps GCC's strict build free of free-nonheap-object warnings.
 
 ## 2026-11-14 — Direct-call design proposed (#904)
 

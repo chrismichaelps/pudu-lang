@@ -65,14 +65,19 @@ frameTypes wide big decimal text boxes threads =
 frameEngine :: Bool -> Bool -> Bool -> [Text]
 frameEngine owned threads stacked =
   [ "/* A frame owns the references in its slots; letting it go releases them."
-  , "   A stacked frame's storage belongs to the C function running it. */"
-  , "static void pudu_free_frame(pudu_frame *frame) {"
+  , "   A stacked frame's storage belongs to the C function running it, so"
+  , "   leaving one releases its slots and never reaches the allocator. */"
+  , "static void pudu_release_slots(pudu_frame *frame) {"
   ] <> (if owned then
   [ "  const pudu_function *definition = &pudu_functions[frame->function];"
   , "  for (size_t i = 0; i < definition->owned_count; ++i)"
   , "    pudu_drop_cell(frame->slots[definition->owned[i].slot], definition->owned[i].kind);"
-  ] else []) <>
-  [ "  if (!frame->stacked) free(frame);"
+  ] else
+  [ "  (void)frame;" ]) <>
+  [ "}"
+  , "static void pudu_free_frame(pudu_frame *frame) {"
+  , "  pudu_release_slots(frame);"
+  , "  if (!frame->stacked) free(frame);"
   , "}"
   , "static void pudu_unwind_frames(void) {"
   , "  while (pudu_active_frame != NULL) {"
@@ -215,7 +220,7 @@ stackFrames owned =
   , "}"
   , "static inline void pudu_stack_leave(pudu_frame *frame) {"
   , "  pudu_active_frame = frame->parent;"
-  , "  pudu_free_frame(frame);"
+  , "  pudu_release_slots(frame);"
   , "}"
   ]
 
