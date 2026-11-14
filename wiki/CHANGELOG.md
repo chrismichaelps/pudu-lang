@@ -9,6 +9,10 @@ tags: [changelog]
 
 - `Decimal.toInt` answers `None` for a whole number `Int` cannot hold, instead of a `Some` that failed on first use.
 
+## 2026-11-13 — Binary facade (#739)
+
+- Binary facade (#739) adds Encode/Decode derives, framed typed reads, explicit builtin wiring and CLI/distribution validation.
+
 ## 2026-11-13 — Markdown-only changes skip CI
 
 - [[Pudu Continuous Verification]] ignores pull requests and pushes made only of Markdown files.
