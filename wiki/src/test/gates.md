@@ -82,6 +82,10 @@ and output instead of allowing a second, incompatible lint-only code vocabulary.
 checking process-umask creation modes, existing-file modes, private scratch files, symlink
 replacement, failure output, and temporary-file cleanup on POSIX systems.
 
+## Parallel suite shards (#907)
+
+The clean optimized build gate also builds the test suite, because `cabal.project` enables tests. The suite then runs as the built binary, once per shard, all shards at the same time: shard k of n runs with `PUDU_TEST_SHARD=k/n`, the selector CI uses, so every property runs in exactly one shard. n is `PUDU_GATE_SHARDS` when set, otherwise the number of online processors. Each shard writes its own log in a temporary directory; the gate fails when any shard fails and prints the failing shard's log path. The clean build is unchanged. Measured before this change: the single-process suite took 1,367 s of a 1,871 s gate run.
+
 ## Grill Log
 
 - **Q:** Clean only the first `pudu-*` directory? **A:** No; clean every compiler
@@ -101,6 +105,13 @@ replacement, failure output, and temporary-file cleanup on POSIX systems.
 
 Resolved Grill Log: every release-relevant boundary runs against the same freshly optimized binary,
 including externally observable filesystem modes that portable permission booleans cannot prove.
+
+- **Q:** Why shard processes instead of running properties on threads in one process? **A:**
+  Properties change the working directory, environment and standard streams and compile into
+  temporary paths; separate processes keep them isolated exactly as CI runs them. _Rejected:_ an
+  in-process thread pool.
+- **Q:** Why keep the clean build? **A:** It is what proves the gate compiled the tree it reports
+  on; sharding only removes waiting, not checking. _Rejected:_ an incremental build in the gate.
 
 ## Referenced by
 

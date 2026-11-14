@@ -5,6 +5,10 @@ tags: [changelog]
 
 # Changelog
 
+## 2026-11-14 — Parallel gate suite shards (#907)
+
+- The local gate runs the optimized suite as parallel shards with the selector CI uses ([[Repository Gates]]).
+
 ## 2026-11-14 — Exported functions callable from C (#899)
 
 - [[Backend Emit Export]] emits `pudu_export_<name>` for each exported root-module function with scalar crossings, declared in `pudu_program.h`; [[Compiler Lower]] roots exports in library builds. Calls are admitted after the start, on its thread, outside another call. Evidence: [[Backend Export Tests]].
