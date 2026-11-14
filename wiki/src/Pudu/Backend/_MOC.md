@@ -6,6 +6,8 @@ aliases: [Backend Module Map]
 
 # Backend Module Map
 
+- [[Backend Native Target]] · [[Backend Native Target Tests]] — mobile target policy (#878).
+
 - [[Backend Emit Entry]] — executable and embedded C entry forms (#878).
 
 - [[Backend Toolchain Process]] — bounded native tool execution (#878).

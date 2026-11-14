@@ -195,6 +195,7 @@ library
     Pudu.Backend.Runtime.Text.Number
     Pudu.Backend.Runtime.Text.Pieces
     Pudu.Backend.Runtime.Text.Methods
+    Pudu.Backend.Target
     Pudu.Backend.Toolchain
     Pudu.Backend.Toolchain.HostSources
     Pudu.Backend.Toolchain.Process

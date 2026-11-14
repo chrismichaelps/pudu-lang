@@ -697,3 +697,8 @@ dependencies. Resolved Grill Log: the process runner needs no new package.
 
 Register [[Backend Emit Entry]] with existing dependencies. Resolved Grill
 Log: the emitter uses the existing text and containers packages.
+
+## Native target policy (#878)
+
+Register [[Backend Native Target]]. Resolved Grill Log: the policy needs
+only the existing text and containers dependencies.

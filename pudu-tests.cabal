@@ -87,6 +87,7 @@ test-suite pudu-test
     Pudu.Backend.BrokenPipeSpec
     Pudu.Cli.MemorySpec
     Pudu.Backend.NativeSpec
+    Pudu.Backend.TargetSpec
     Pudu.Backend.FunctionPrograms
     Pudu.Backend.FloatPrograms
     Pudu.Backend.IntegerPrograms
