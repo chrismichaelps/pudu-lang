@@ -6,6 +6,8 @@ aliases: [Backend Module Map]
 
 # Backend Module Map
 
+- [[Backend Toolchain Library]] — Apple SDK archive builds (#878).
+
 - [[Backend Native Target]] · [[Backend Native Target Tests]] — mobile target policy (#878).
 
 - [[Backend Emit Entry]] — executable and embedded C entry forms (#878).

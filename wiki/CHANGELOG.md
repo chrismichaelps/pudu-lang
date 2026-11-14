@@ -5,6 +5,10 @@ tags: [changelog]
 
 # Changelog
 
+## 2026-11-13 — Apple SDK archive builder (#878)
+
+- [[Backend Toolchain Library]] builds arm64 device and simulator archives.
+
 ## 2026-11-13 — Mobile target policy (#878)
 
 - [[Native Mobile Targets]] defines target names and foreign library admission.

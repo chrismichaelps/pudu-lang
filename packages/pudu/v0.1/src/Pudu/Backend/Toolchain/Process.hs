@@ -47,13 +47,17 @@ import System.Timeout (timeout)
 import Text.Read (readMaybe)
 
 {-| @Backend.Toolchain.Failure — every way building a native artifact can
-    fail, kept as data so the caller owns the message vocabulary. -}
+    fail, kept as data so the caller owns the message vocabulary. The last two
+    name a mobile target: its platform SDK was not found, or its output is
+    designed but not built. -}
 data ToolchainFailure
   = ToolchainNotFound !Text
   | ToolchainInvocation !Text
   | ToolchainTimedOut !Int
   | ToolchainRejected !Text
   | ToolchainPublishFailed !Text
+  | ToolchainSdkMissing !Text !Text
+  | ToolchainTargetUnbuilt !Text
   deriving stock (Eq, Show)
 
 {-| Run one tool to completion within the deadline. Exit zero answers the

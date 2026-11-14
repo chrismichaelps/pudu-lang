@@ -702,3 +702,8 @@ Log: the emitter uses the existing text and containers packages.
 
 Register [[Backend Native Target]]. Resolved Grill Log: the policy needs
 only the existing text and containers dependencies.
+
+## Apple SDK archive builder (#878)
+
+Register [[Backend Toolchain Library]]. Resolved Grill Log: staging and
+invocation use existing toolchain dependencies.
