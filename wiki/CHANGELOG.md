@@ -5,6 +5,10 @@ tags: [changelog]
 
 # Changelog
 
+## 2026-11-13 — Pudu Native status after #878
+
+- [[Pudu Native]] records the landed iOS targets, embedded entry, and mobile refusals; phase 0 now waits only on calls into Pudu and the entry guard (#899).
+
 ## 2026-11-13 — Native iOS library targets (#878)
 
 - `pudu build --native --target` exposes arm64 device and simulator libraries.
