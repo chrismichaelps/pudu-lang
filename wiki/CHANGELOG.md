@@ -5,6 +5,10 @@ tags: [changelog]
 
 # Changelog
 
+## 2026-11-13 — Shared native tool execution (#878)
+
+- [[Backend Toolchain Process]] owns compiler process lifetime and output capture.
+
 ## 2026-11-13 — Pudu Native architecture
 
 - Added [[Pudu Native]]: mobile feasibility against the current C11 toolchain, the platform-control adapter boundary, threading, hot reload, update limits, and FUI-on-native mapping.

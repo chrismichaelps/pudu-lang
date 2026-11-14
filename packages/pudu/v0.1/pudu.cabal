@@ -196,6 +196,7 @@ library
     Pudu.Backend.Runtime.Text.Methods
     Pudu.Backend.Toolchain
     Pudu.Backend.Toolchain.HostSources
+    Pudu.Backend.Toolchain.Process
     Pudu.Compiler
     Pudu.Compiler.Constants
     Pudu.Compiler.Cache

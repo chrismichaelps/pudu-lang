@@ -6,6 +6,8 @@ aliases: [Backend Module Map]
 
 # Backend Module Map
 
+- [[Backend Toolchain Process]] — bounded native tool execution (#878).
+
 - [[Native Toolchain Host Sources]] · [[Native Host Desktop]] · [[Native Host Audio]] — packaged native platform translation units (#856).
 
 - [[Native Hash Mixing]] · [[Backend Store Programs]] — `hashOf`, store indexes and the indexed-store corpus (#840).
