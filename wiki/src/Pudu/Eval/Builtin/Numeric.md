@@ -62,6 +62,10 @@ Grill Log — **Q:** keep the input width? **A:** No; every kernel is typed Floa
 ## Whole numbers Int can hold (#803)
 
 `decimalToInt` answers `Some` only for a whole number `Int` can hold, and
+`None` otherwise, as its `Option[Int]` type promises. Resolved Grill Log:
+before, a whole decimal past Int's range was wrapped with `intOf` unchecked
+and failed on first use; the UsesDecimal fixture checks Int's
+largest value and the one past it.
 `None` otherwise, as its `Option[Int]` type promises; the same change is on
 dev through #803. Resolved Grill Log: native code cannot hold a larger
 `Int`, so both evaluators and native agree only with the check.

@@ -5,6 +5,10 @@ tags: [changelog]
 
 # Changelog
 
+## 2026-11-04 — Decimal.toInt range (#803)
+
+- `Decimal.toInt` answers `None` for a whole number `Int` cannot hold, instead of a `Some` that failed on first use.
+
 ## 2026-11-13 — Database scope retirement (#480)
 
 - [[Eval Concurrent]] closes mutex admission before joining its owner; [[Std Sync]] exposes joined closure.
