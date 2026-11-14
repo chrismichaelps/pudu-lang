@@ -5,6 +5,10 @@ tags: [changelog]
 
 # Changelog
 
+## 2026-11-13 — Markdown-only changes skip CI
+
+- [[Pudu Continuous Verification]] ignores pull requests and pushes made only of Markdown files.
+
 ## 2026-11-13 — Foreign pointer design proposed (#877)
 
 - [[Foreign Pointers and Runs]] proposes typed loans, length relationships,
