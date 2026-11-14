@@ -9,6 +9,7 @@ aliases: [Backend Module Map]
 - [[Backend Emit Entry]] · [[Backend Native Target]] · [[Backend Toolchain Library]] · [[Backend Toolchain Process]] · [[Backend Native Target Tests]] · [[iOS Simulator Run]] — embedded mobile builds (#878).
 
 - [[Backend Emit Export]] · [[Backend Export Tests]] — exported functions a host calls through C (#899).
+- [[Backend Export Crossing]] — C shapes, header declarations and conversions for text, records and `Result` exports (#906).
 - [[Native Toolchain Host Sources]] · [[Native Host Desktop]] · [[Native Host Audio]] — packaged native platform translation units (#856).
 
 - [[Native Hash Mixing]] · [[Backend Store Programs]] — `hashOf`, store indexes and the indexed-store corpus (#840).
@@ -18,6 +19,7 @@ aliases: [Backend Module Map]
 - [[Backend Module Programs]] — imported identities and folded collection/range conformance (#808).
 
 - [[Backend Frame Program]] · [[Backend Frame Runtime]] · [[Native Frame Runtime Tests]] — deterministic assembly, heap ownership and iterative calls.
+- [[Backend Frame Direct]] — frame functions with bounded depth, run as plain C calls (#904).
 
 - [[Backend Frame Values]] · [[Backend Frame Bodies]] · [[Backend Emit Foreign]] · [[Backend Emit Foreign ABI]] · [[Backend Emit Foreign Handle]] — pure operations and suspending bodies over typed frame cells.
 - [[Native Frame Body Tests]] — strict C11 corpus compilation and call-suspension checks.

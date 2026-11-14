@@ -14,6 +14,8 @@
 set -u
 
 failed=0
+# A gate's own output is discarded; fd 3 is how one points at its log.
+exec 3>&1
 
 run() {
   local name="$1"
@@ -41,8 +43,30 @@ done < <(find dist-newstyle/build -mindepth 3 -maxdepth 3 -type d \
   \( -name 'pudu-[0-9]*' -o -name 'pudu-tests-[0-9]*' \) 2>/dev/null)
 run 'no warnings, optimized' \
   cabal build all --enable-optimization=2 --ghc-options='-Werror'
-run 'full suite, optimized' \
-  cabal test all --enable-optimization=2 --ghc-options='-Werror' --test-show-details=direct
+
+# The build above also built the suite, since cabal.project enables tests. Its
+# properties are independent and mostly wait on the C compiler, so the binary
+# runs once per shard, all at once, with the selector CI uses: every property
+# lands in exactly one shard.
+SUITE=$(cabal list-bin pudu-tests:test:pudu-test --enable-optimization=2)
+SHARDS=${PUDU_GATE_SHARDS:-$(getconf _NPROCESSORS_ONLN 2>/dev/null || echo 4)}
+SHARD_LOGS=$(mktemp -d "${TMPDIR:-/tmp}/pudu-gates.XXXXXX")
+suite_shards() {
+  local index status=0
+  local -a pids=()
+  for ((index = 0; index < SHARDS; index++)); do
+    PUDU_TEST_SHARD="$index/$SHARDS" "$SUITE" >"$SHARD_LOGS/shard-$index.log" 2>&1 &
+    pids+=("$!")
+  done
+  for index in "${!pids[@]}"; do
+    if ! wait "${pids[$index]}"; then
+      status=1
+      printf '        shard %d/%d failed: %s\n' "$index" "$SHARDS" "$SHARD_LOGS/shard-$index.log" >&3
+    fi
+  done
+  return "$status"
+}
+run "full suite, optimized, in $SHARDS shards" suite_shards
 
 # `cabal list-bin` answers for the configuration it is asked about, not the one
 # that was built. Asked plainly it names the unoptimized path: right after the

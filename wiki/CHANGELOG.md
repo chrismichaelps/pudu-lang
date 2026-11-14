@@ -5,6 +5,26 @@ tags: [changelog]
 
 # Changelog
 
+## 2026-11-14 — Exports carry text, records and Result (#906)
+
+- Exports carry text (`pudu_string`), records (named public structs, nested and with text) and `Result` (status with out pointers); every owned value crossing is released exactly once ([[Native Export Crossings Delivery]]).
+
+## 2026-11-14 — Export crossings designed (#906)
+
+- Export crossings designed: text as `pudu_string`, records as named public structs, `Result` as a status with out pointers ([[Native Export Crossings Delivery]]).
+
+## 2026-11-14 — Native direct calls (#904)
+
+- Native direct calls: functions with bounded call depth run in frames on the C stack, keep unowned slots in C locals, and are called as plain C functions from heap bodies, direct bodies and exports; a non-recursive scalar call measured about 14 ns against about 57 ns on heap frames ([[Native Direct Calls Delivery]]). Leaving a stack frame releases its slots without reaching the allocator, which keeps GCC's strict build free of free-nonheap-object warnings.
+
+## 2026-11-14 — Direct-call design proposed (#904)
+
+- Proposed ADR-0031 (compiled native execution) and the direct-call design: functions with bounded call depth run in frames on the C stack, called as plain C functions. See [[ADR-0031-compiled-native-execution]] and [[Backend Frame Direct]].
+
+## 2026-11-14 — Parallel gate suite shards (#907)
+
+- The local gate runs the optimized suite as parallel shards with the selector CI uses ([[Repository Gates]]).
+
 ## 2026-11-14 — Pudu Native first light (#909)
 
 - Pudu Native first light: Std.Mobile.View and Std.Mobile.Host, the iOS host adapter and a counter example built only from Pudu ([[Native First Light Delivery]]).
