@@ -1,4 +1,6 @@
-{-| @Pudu.Backend.Emit.Frame.Body — generated bodies suspend at source calls. -}
+{-| @Pudu.Backend.Emit.Frame.Body — generated bodies suspend at source calls;
+    a direct function's body runs to its return and calls direct callees as
+    plain C functions. -}
 module Pudu.Backend.Emit.Frame.Body (emitFrameBodies) where
 
 import Control.Monad (foldM)
@@ -7,7 +9,10 @@ import qualified Data.Map.Strict as Map
 import Data.Set (Set)
 import qualified Data.Set as Set
 import Data.Text (Text)
+import qualified Data.Text as Text
 import Pudu.Backend.Emit.Aggregate (aggregateHelper, aggregateNeed, cType, isAggregate, ownedType, released, retained)
+import Pudu.Backend.Emit.Frame.Direct (enteredDirect)
+import Pudu.Comptime.Limits (callDepthLimit)
 import Pudu.Backend.Emit.Frame.Value (cellMember, frameValue, slotText)
 import Pudu.Backend.Emit.State
   ( EmitState (..), callDepthSite, cString, cStringBytes, line, operatorFailureSite, textFailureSite, textOfInt )
@@ -17,29 +22,84 @@ import Pudu.Core.Frame
   ( FrameBlock (..), FrameFault (..), FrameFunction (..), FrameInstruction (..)
   , FrameLabel (..), FrameModule (..), FrameSlot (..), FrameSlotId (..), FrameTerminator (..) )
 
-emitFrameBodies :: EmitState -> FrameModule -> Either FrameFault (EmitState, Set Text)
-emitFrameBodies state source = do
+-- | How a body continues: suspending to the dispatcher, or running to its
+-- return as a direct function.
+data Mode = Suspending | Running
+
+-- | What a terminator needs about the module: each function's identity and
+-- definition, and which functions are direct.
+data Callees = Callees
+  { calleeIds :: !(Map Text Int)
+  , calleeFunctions :: !(Map Text FrameFunction)
+  , calleeDirect :: !(Set Text)
+  }
+
+{-| The bodies of every function, given the direct set. Prototypes of the
+    direct functions come first, so any body may call one. -}
+emitFrameBodies :: Set Text -> EmitState -> FrameModule -> Either FrameFault (EmitState, Set Text)
+emitFrameBodies direct state source = do
   let functions = frameModuleFunctions source
       identities = Map.fromList (zip (map frameFunctionName functions) [0 ..])
+      callees = Callees identities (Map.fromList [(frameFunctionName function, function) | function <- functions]) direct
+      prototypes = concat
+        [ [ "static pudu_cell pudu_run_" <> textOfInt identity <> "(pudu_frame *frame);"
+          ]
+        | (identity, function) <- zip [0 :: Int ..] functions, Set.member (frameFunctionName function) direct ]
+        <> [ "static pudu_cell pudu_direct_" <> textOfInt identity <> "(const pudu_cell *arguments);"
+           | (identity, function) <- zip [0 :: Int ..] functions, Set.member (frameFunctionName function) (enteredDirect source direct) ]
   if Map.size identities /= length functions
     then Left (FrameFault Nothing "duplicate frame function identities")
-    else foldM (emitFunction identities) (state{emitFunctionIds = identities}, Set.empty) (zip [0 ..] functions)
+    else foldM (emitFunction callees) (linesInto state{emitFunctionIds = identities} prototypes, Set.empty) (zip [0 ..] functions)
 
-emitFunction :: Map Text Int -> (EmitState, Set Text) -> (Int, FrameFunction)
+emitFunction :: Callees -> (EmitState, Set Text) -> (Int, FrameFunction)
   -> Either FrameFault (EmitState, Set Text)
-emitFunction identities (state, needs) (identity, function) = do
-  let opened = linesInto state
-        [ "static pudu_step pudu_body_" <> textOfInt identity <> "(pudu_frame *frame) {"
-        , "  for (;;) {", "    switch (frame->pc) {" ]
-  (after, selected) <- foldM emitBlock (opened, needs) (frameFunctionBlocks function)
-  pure (linesInto after
-    [ "    default: return (pudu_step){.kind = PUDU_INVALID};", "    }", "  }", "}" ], selected)
+emitFunction callees (state, needs) (identity, function)
+  | Set.member (frameFunctionName function) (calleeDirect callees) = do
+      let header =
+            [ "static pudu_cell pudu_run_" <> number <> "(pudu_frame *frame) {"
+            , "  size_t pudu_pc = frame->pc;" ]
+          before = length (emitOutput state)
+          opened = linesInto state ["  for (;;) {", "    switch (pudu_pc) {"]
+      (emitted, selected) <- foldM (emitBlock Running) (opened, needs) (frameFunctionBlocks function)
+      -- Unowned slots live in C locals: nothing outside this body reads them,
+      -- since unwinding releases only owned slots. Only the slots the body
+      -- mentions are declared, and the rewrite touches only its own lines.
+      let fresh = length (emitOutput emitted) - before
+          added = reverse (take fresh (emitOutput emitted))
+          used = [slot | slot <- locals, any (Text.isInfixOf (slotPlace slot)) added]
+          body = header <> concatMap localSlot used <> map (localize used) added
+          after = emitted{emitOutput = reverse body <> drop fresh (emitOutput emitted)}
+      -- The table keeps a body for calls through a value; it forwards here.
+      pure (linesInto after
+        [ "    default: abort();", "    }", "  }", "}"
+        , "static pudu_step pudu_body_" <> number <> "(pudu_frame *frame) {"
+        , "  pudu_step pudu_done = {.kind = PUDU_RETURN};"
+        , "  pudu_done.result = pudu_run_" <> number <> "(frame);"
+        , "  return pudu_done;"
+        , "}" ], selected)
+  | otherwise = do
+      let opened = linesInto state
+            [ "static pudu_step pudu_body_" <> number <> "(pudu_frame *frame) {"
+            , "  for (;;) {", "    switch (frame->pc) {" ]
+      (after, selected) <- foldM (emitBlock Suspending) (opened, needs) (frameFunctionBlocks function)
+      pure (linesInto after
+        [ "    default: return (pudu_step){.kind = PUDU_INVALID};", "    }", "  }", "}" ], selected)
   where
-    emitBlock current block = do
+    number = textOfInt identity
+    parameters = Set.fromList (map slotIndex (frameFunctionParameters function))
+    locals = [slot | slot <- frameFunctionSlots function, not (ownedType (frameSlotType slot))]
+    -- A parameter arrives in its frame slot; any other local starts zeroed.
+    localSlot slot
+      | Set.member (slotIndex slot) parameters = ["  pudu_cell " <> localName slot <> " = " <> slotPlace slot <> ";"]
+      | otherwise = ["  pudu_cell " <> localName slot <> ";", "  memset(&" <> localName slot <> ", 0, sizeof " <> localName slot <> ");"]
+    localName slot = "pudu_s" <> slotIndex slot
+    slotPlace slot = "frame->slots[" <> slotIndex slot <> "]"
+    localize used text = foldl' (\current slot -> Text.replace (slotPlace slot) (localName slot) current) text used
+    emitBlock mode current block = do
       let (before, selected) = current
           opened = line before ("    case " <> labelText (frameBlockLabel block) <> ":")
       afterInstructions <- foldM instruction (opened, selected) (frameBlockInstructions block)
-      terminator identities function afterInstructions (frameBlockTerminator block)
+      terminator mode callees function afterInstructions (frameBlockTerminator block)
 
 instruction :: (EmitState, Set Text) -> FrameInstruction -> Either FrameFault (EmitState, Set Text)
 instruction (state, needs) operation = case operation of
@@ -82,16 +142,35 @@ instruction (state, needs) operation = case operation of
     printed helper arguments = Right
       (line state ("      (void)pudu_" <> helper <> "(" <> arguments <> ");"), Set.insert helper needs)
 
-terminator :: Map Text Int -> FrameFunction -> (EmitState, Set Text) -> FrameTerminator
+terminator :: Mode -> Callees -> FrameFunction -> (EmitState, Set Text) -> FrameTerminator
   -> Either FrameFault (EmitState, Set Text)
-terminator identities function (state, needs) ending = case ending of
+terminator mode callees function (state, needs) ending = case ending of
   FrameJump _ target -> pure (jump state (labelText target), needs)
   FrameBranch _ slot yes no -> do
     predicate <- slotText slot
     pure (jump state (predicate <> " ? " <> labelText yes <> " : " <> labelText no), needs)
-  FrameCall at name arguments destination resume -> case Map.lookup name identities of
-    Nothing -> Left (FrameFault (Just at) "an unknown generated frame callee")
-    Just callee -> do
+  FrameCall at name arguments destination resume -> case (Map.lookup name (calleeIds callees), Map.lookup name (calleeFunctions callees)) of
+    (Just callee, Just definition) | Set.member name (calleeDirect callees) -> do
+      copies <- traverse copyArgument (zip [0 ..] arguments)
+      stored <- case destination of
+        Nothing -> Right ["        " <> orVoid (released (frameFunctionResult definition) ("pudu_answer." <> memberOf (frameFunctionResult definition)))]
+        Just slot -> do
+          place <- slotText slot
+          -- The answer arrives retained; the destination's old value goes.
+          pure [ "        " <> released (frameFunctionResult definition) place
+               , "        frame->slots[" <> slotIndex slot <> "] = pudu_answer;" ]
+      let (afterSite, index) = callDepthSite state at
+          call = linesInto (linesInto afterSite copies)
+            ([ "      if (pudu_frame_depth > " <> textOfInt callDepthLimit <> ") pudu_fail(&pudu_sites[" <> textOfInt index <> "]);"
+             , "      pudu_frame_depth += 1;"
+             , "      {"
+             , "        pudu_cell pudu_answer = pudu_direct_" <> textOfInt callee <> "(frame->arguments);" ]
+             <> stored
+             <> [ "      }", "      pudu_frame_depth -= 1;" ])
+      pure (jump call (labelText resume), Set.union needs (Set.fromList ["site", "colored", "fail"]))
+    (Just _, _) | Running <- mode -> Left (FrameFault (Just at) "a direct body calling a function on the heap path")
+    (Nothing, _) -> Left (FrameFault (Just at) "an unknown generated frame callee")
+    (Just callee, _) -> do
       copies <- traverse copyArgument (zip [0 ..] arguments)
       target <- case destination of
         Nothing -> Right []
@@ -106,6 +185,8 @@ terminator identities function (state, needs) ending = case ending of
             <> foldMap id target <> ", .call_site = &pudu_sites[" <> textOfInt index <> "]};"
       pure (line afterResume result, Set.union needs (Set.fromList ["site", "colored", "fail"]))
   -- The dispatcher passes the closure only to a lifted body.
+  FrameCallValue at _ _ _ _ | Running <- mode ->
+    Left (FrameFault (Just at) "a direct body calling through a function value")
   FrameCallValue at closure arguments destination resume -> do
     callee <- slotText closure
     copies <- traverse copyArgument (zip [0 ..] (closure : arguments))
@@ -131,9 +212,13 @@ terminator identities function (state, needs) ending = case ending of
           expression <- maybe (Right (zeroValue resultType)) slotText payload
           -- The frame releases its slots after this, so the result keeps its own reference.
           let (returned, wanted) = retained resultType expression
-          pure (Just (", .result = {." <> member <> " = " <> returned <> "}", wanted))
+          pure (Just ("." <> member <> " = " <> returned, wanted))
     let (field, extra) = maybe ("", []) id result
-    pure (line state ("      return (pudu_step){.kind = PUDU_RETURN" <> field <> "};"), Set.union needs (Set.fromList extra))
+        returned = case (mode, result) of
+          (Running, Just (value, _)) -> "      return (pudu_cell){" <> value <> "};"
+          (Running, Nothing) -> "      return (pudu_cell){0};"
+          (Suspending, _) -> "      return (pudu_step){.kind = PUDU_RETURN" <> (if field == "" then "" else ", .result = {" <> field <> "}") <> "};"
+    pure (line state returned, Set.union needs (Set.fromList extra))
   FrameFailText at code help message computed -> do
     text <- slotText message
     helpText <- traverse slotText computed
@@ -143,22 +228,31 @@ terminator identities function (state, needs) ending = case ending of
           Just extra -> "      pudu_fail_text_help(&pudu_sites[" <> textOfInt index <> "], " <> text <> ", " <> extra <> ");"
     pure (linesInto after
       [ call
-      , "      return (pudu_step){.kind = PUDU_INVALID};" ]
+      , invalid ]
       , Set.union needs (Set.fromList ["site", "colored", "fail", maybe "fail_text" (const "fail_text_help") helpText]))
   FrameFailCaller _ code help message -> do
     text <- slotText message
     pure (linesInto state
       [ "      pudu_fail_text_caller(frame->call_site, " <> cString code <> ", " <> maybe "NULL" cString help <> ", " <> text <> ");"
-      , "      return (pudu_step){.kind = PUDU_INVALID};" ]
+      , invalid ]
       , Set.union needs (Set.fromList ["site", "colored", "fail", "fail_text", "fail_text_caller"]))
   FrameOperatorFailure at message ->
     let (after, index) = operatorFailureSite state at message
      in pure (linesInto after
           [ "      pudu_fail(&pudu_sites[" <> textOfInt index <> "]);"
-          , "      return (pudu_step){.kind = PUDU_INVALID};" ]
+          , invalid ]
         , Set.union needs (Set.fromList ["site", "colored", "fail"]))
   where
-    jump current target = linesInto current ["      frame->pc = " <> target <> ";", "      continue;"]
+    jump current target = linesInto current [counter <> target <> ";", "      continue;"]
+    counter = case mode of
+      Suspending -> "      frame->pc = "
+      Running -> "      pudu_pc = "
+    -- A failure helper does not return; a direct body has no step to report.
+    invalid = case mode of
+      Suspending -> "      return (pudu_step){.kind = PUDU_INVALID};"
+      Running -> "      abort();"
+    orVoid statement = if statement == "" then "(void)pudu_answer;" else statement
+    memberOf kind = maybe "integer" id (cellMember kind)
     copyArgument (index, slot) = do
       _ <- slotText slot
       pure ("      frame->arguments[" <> textOfInt index <> "] = frame->slots[" <> slotIndex slot <> "];")

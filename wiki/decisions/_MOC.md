@@ -5,6 +5,7 @@ tags: [moc, adr]
 
 # Decision Map
 
+- [[ADR-0031-compiled-native-execution]] — proposed: direct calls, compiled views and one-crossing frames for native execution.
 - [[Foreign Pointers and Runs]] — proposed lifetime, bounds and ABI contracts (#877).
 - [[Native Mobile Targets]] — host entry, Apple SDK builds, and mobile target refusals.
 
