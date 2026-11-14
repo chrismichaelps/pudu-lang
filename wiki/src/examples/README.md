@@ -25,6 +25,10 @@ mistaken for complete video or speaker support.
 - A successful window launch on one operating system does not establish cross-platform support.
 - A written media file does not establish device playback, decoding, synchronization, or capture.
 
+## Mobile
+
+`mobile/Counter.pudu` is the Phase 1 native phone application: a counter built only from Pudu, run on the iOS simulator through the iOS host adapter. See [[Native Counter Example]].
+
 ## Grill Log
 
 - **Q:** Present Studio as full media support? **A:** No. _Rationale:_ it currently proves the pure

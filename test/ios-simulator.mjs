@@ -1,16 +1,21 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { spawnSync } from "node:child_process";
-import { mkdtempSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
+import { mkdtempSync, mkdirSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join, resolve } from "node:path";
+import { dirname, join, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
 
 // A cold hosted simulator can take minutes to install or launch its first app.
 const simulatorTimeout = 300_000;
 const launchAttempts = 2;
 
-function run(command, args, timeout = 120_000) {
-  const result = spawnSync(command, args, { encoding: "utf8", timeout });
+const repository = resolve(dirname(fileURLToPath(import.meta.url)), "..");
+// The counter imports Std.Mobile from this checkout, whichever compiler runs.
+process.env.PUDU_LIB ??= join(repository, "packages", "pudu", "v0.1", "lib");
+
+function run(command, args, timeout = 120_000, env = process.env) {
+  const result = spawnSync(command, args, { encoding: "utf8", timeout, env });
   if (result.error) {
     throw new Error(`${command} ${args.join(" ")}: ${result.error.code ?? result.error.message} after ${timeout} ms`);
   }
@@ -30,6 +35,7 @@ function unavailable(reason) {
 }
 const xcrun = process.env.PUDU_XCRUN || "xcrun";
 const identifier = `org.pudu.MobileForeignSmoke.${randomUUID()}`;
+const counterIdentifier = `org.pudu.MobileCounter.${randomUUID()}`;
 
 function smoke() {
   if (process.platform !== "darwin" || process.arch !== "arm64") {
@@ -40,7 +46,7 @@ function smoke() {
     return unavailable("xcrun unavailable");
   }
 
-  const { runtimes } = JSON.parse(run(xcrun, ["simctl", "list", "runtimes", "-j"]));
+  const { runtimes } = JSON.parse(run(xcrun, ["simctl", "list", "runtimes", "-j"], simulatorTimeout));
   const runtime = runtimes.filter((item) =>
     item.isAvailable && item.identifier.startsWith("com.apple.CoreSimulator.SimRuntime.iOS-")
   ).at(-1);
@@ -142,9 +148,10 @@ int main(int argc, char **argv) {
     }
     run(xcrun, ["simctl", "install", device, app], simulatorTimeout);
     installed = true;
-    const lines = launch(device);
+    const lines = launch(device, identifier, "PUDU_SMOKE", "PUDU_SMOKE_STATUS");
     assert.deepEqual(lines, [...expected.split("\n"), "PUDU_SMOKE_STATUS 0"]);
     console.log(`${expected}\nPASS iOS simulator smoke (${device})`);
+    counter(device, simulatorClang);
   } finally {
     try {
       if (device && !existingDevice) {
@@ -159,22 +166,73 @@ int main(int argc, char **argv) {
   }
 }
 
+/* The counter of examples/mobile, built only from Pudu with the iOS host
+   adapter: the host taps its button three times, asks it to stop, and reports
+   the label, the program's status and the time from main to the first frame. */
+function counter(device, simulatorClang) {
+  const root = mkdtempSync(join(tmpdir(), "pudu-ios-counter-"));
+  const app = join(root, "PuduCounter.app");
+  const library = join(root, "libCounter.a");
+  let installed = false;
+  try {
+    run(resolve(compiler), ["build", join(repository, "examples", "mobile", "Counter.pudu"),
+      "--native", "--target", "ios-simulator-arm64", "-o", library]);
+    mkdirSync(app);
+    writeFileSync(join(app, "Info.plist"), `<?xml version="1.0" encoding="UTF-8"?>
+<plist version="1.0"><dict>
+<key>CFBundleIdentifier</key><string>${counterIdentifier}</string>
+<key>CFBundleExecutable</key><string>PuduCounter</string>
+<key>CFBundleName</key><string>PuduCounter</string>
+<key>CFBundlePackageType</key><string>APPL</string>
+<key>CFBundleVersion</key><string>1</string>
+<key>CFBundleShortVersionString</key><string>1.0</string>
+<key>MinimumOSVersion</key><string>15.0</string>
+<key>CFBundleSupportedPlatforms</key><array><string>iPhoneSimulator</string></array>
+<key>UIDeviceFamily</key><array><integer>1</integer></array>
+<key>UILaunchScreen</key><dict/>
+</dict></plist>
+`);
+    const executable = join(app, "PuduCounter");
+    run(xcrun, [...simulatorClang, "-fobjc-arc", "-O2", "-I", root,
+      join(repository, "packages", "pudu", "v0.1", "host", "ios", "PuduHost.m"), library,
+      "-framework", "UIKit", "-framework", "Foundation", "-o", executable]);
+    run("codesign", ["--force", "--sign", "-", app]);
+    run(xcrun, ["simctl", "install", device, app], simulatorTimeout);
+    installed = true;
+    const lines = launch(device, counterIdentifier, "PUDU_", "PUDU_PROGRAM_STATUS",
+      { SIMCTL_CHILD_PUDU_UI_SELFTEST: "3" });
+    assert.ok(lines.includes("PUDU_LABEL Count: 3"), `the counter did not count three taps:\n${lines.join("\n")}`);
+    assert.ok(lines.includes("PUDU_PROGRAM_STATUS 0"), `the counter did not finish:\n${lines.join("\n")}`);
+    const firstFrame = lines.find((line) => line.startsWith("PUDU_FIRST_FRAME_MS "));
+    assert.ok(firstFrame, `the counter reported no first frame:\n${lines.join("\n")}`);
+    console.log(`PASS iOS counter: Count: 3, first frame ${firstFrame.split(" ")[1]} ms from main, `
+      + `executable ${statSync(executable).size} bytes, program archive ${statSync(library).size} bytes`);
+  } finally {
+    try {
+      if (installed) run(xcrun, ["simctl", "uninstall", device, counterIdentifier], 30_000);
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  }
+}
+
 /* The app's own status line proves it ran to completion. Only a launch that
    timed out or reported nothing is retried; any reported output is final. */
-function launch(device) {
+function launch(device, bundle, prefix, status, environment = {}) {
   const failures = [];
   for (let attempt = 1; attempt <= launchAttempts; attempt += 1) {
     try {
-      const output = run(xcrun, ["simctl", "launch", "--console-pty", device, identifier], simulatorTimeout);
-      const lines = output.split(/\r?\n/u).filter((line) => line.startsWith("PUDU_SMOKE"));
-      if (lines.length > 0) return lines;
-      failures.push(`attempt ${attempt}: no PUDU_SMOKE output:\n${output}`);
+      const output = run(xcrun, ["simctl", "launch", "--console-pty", device, bundle], simulatorTimeout,
+        { ...process.env, ...environment });
+      const lines = output.split(/\r?\n/u).filter((line) => line.startsWith(prefix));
+      if (lines.some((line) => line.startsWith(status))) return lines;
+      failures.push(`attempt ${attempt}: no ${status} line:\n${output}`);
     } catch (problem) {
       failures.push(`attempt ${attempt}: ${problem.message}`);
     }
-    spawnSync(xcrun, ["simctl", "terminate", device, identifier], { timeout: 30_000 });
+    spawnSync(xcrun, ["simctl", "terminate", device, bundle], { timeout: 30_000 });
   }
-  throw new Error(`the smoke app did not report:\n${failures.join("\n")}`);
+  throw new Error(`${bundle} did not report:\n${failures.join("\n")}`);
 }
 
 smoke();

@@ -20,6 +20,7 @@ testDataEvaluation = do
   keyedInvariants <- runEntry "test-fixtures/stdlib/KeyedInvariants.pudu"
   bitSetInvariants <- runEntry "test-fixtures/stdlib/UsesBitSet.pudu"
   buffers <- runEntry "test-fixtures/stdlib/UsesBuffer.pudu"
+  mobileViews <- runEntry "test-fixtures/stdlib/UsesMobileView.pudu"
   flatMaps <- runEntry "test-fixtures/stdlib/UsesFlatMap.pudu"
   columnVectors <- runEntry "test-fixtures/stdlib/UsesColumn.pudu"
   hashed <- runEntry "test-fixtures/stdlib/UsesHashMap.pudu"
@@ -174,6 +175,8 @@ testDataEvaluation = do
         (bitSetInvariants === Just "39")
     , counterexample "unboxed contiguous memory buffer operations evaluate"
         (buffers === Just "27")
+    , counterexample "the native view stream builds, changes and reads events"
+        (mobileViews === Just "14")
     , counterexample "flat hash table with control metadata evaluates"
         (flatMaps === Just "31")
     , counterexample "vectorized columnar engine with unboxed storage evaluates"

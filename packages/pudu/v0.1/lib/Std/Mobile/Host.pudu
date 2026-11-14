@@ -1,0 +1,30 @@
+module Std.Mobile.Host
+
+import Std.Mobile.View as View
+
+/// The platform adapter: it applies one commit's instructions, and it waits
+/// for the next event while running the platform's main loop.
+foreign "c" {
+  fn applyStream symbol "pudu_ui_apply" (stream: Bytes, length: UInt64) -> ()
+  fn waitEvent symbol "pudu_ui_wait" () -> UInt64
+}
+
+/// Hands one commit's instructions to the platform adapter in one call.
+export fn apply(stream: Bytes) -> () {
+  let length = match convertInteger[UInt64](stream.length()) {
+    case Some(count) => count
+    case None => 0u64
+  }
+  unsafe(foreign) {
+    applyStream(stream, length)
+  }
+}
+
+/// The next platform event; the platform's main loop runs until there is one.
+export fn wait() -> View.Event {
+  var raw = 0u64
+  unsafe(foreign) {
+    raw = waitEvent()
+  }
+  View.event(raw)
+}

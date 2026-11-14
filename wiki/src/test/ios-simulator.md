@@ -62,11 +62,16 @@ while installing or first launching the app on a newly booted simulator, under
 the two-minute default every tool call shared. Install and launch now wait up
 to five minutes, a timeout names the command that expired, and a launch that
 timed out or reported no `PUDU_SMOKE` line is terminated and tried once more.
+The first simulator query, listing runtimes, gets the same five-minute allowance as installing and launching, because a cold simulator service on a hosted runner can take minutes to answer it (#909).
 
 Resolved Grill Log: retry only the absence of a report; any line the app did
 report is compared as is, so a wrong value can never pass on a second try.
 _Rejected:_ retrying the whole smoke, which would also hide compile or
 foreign-call regressions.
+
+## Counter example (#909)
+
+The script also builds and runs the counter example, `examples/mobile/Counter.pudu`, with the iOS host adapter ([[iOS Host Adapter]]). It runs the program with `PUDU_UI_SELFTEST=3` and expects `PUDU_LABEL Count: 3` and status 0. It also records `PUDU_FIRST_FRAME_MS` and the linked executable size in bytes.
 
 ## Referenced by
 

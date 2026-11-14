@@ -408,3 +408,5 @@ tags: [moc, handoff]
 
 - [[handoffs/2026-11-11-native-remaining-emission]] — native tasks, host services and type abstractions (#846).
 - [[Database Scope Retirement Delivery]] — joined private guard retirement after completed scopes (#480).
+
+- [[Native First Light Delivery]] — counter built only from Pudu on the iOS simulator (#909).

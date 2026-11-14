@@ -1,0 +1,63 @@
+module UsesMobileView
+
+import Std.ByteOrder {readU32LE}
+import Std.Mobile.View as View
+
+fn counter(count: Int) -> View.View {
+  View.Column([View.Label("Count: {count}"), View.Button("Add one", 1u32)])
+}
+
+// The words at `offset` onward, read as little-endian 32-bit values.
+fn wordsAt(bytes: &Array[UInt8], offset: Int, count: Int) -> Array[UInt32] {
+  var found = []
+  for index in 0..count {
+    match readU32LE(bytes, offset + index * 4) {
+      case Some(word) => { found = found.push(word) }
+      case None => { return [] }
+    }
+  }
+  found
+}
+
+fn textAt(bytes: &Array[UInt8], offset: Int, length: Int) -> Option[Str] {
+  bytesOf(bytes.slice(offset, offset + length)).toText()
+}
+
+export fn main() -> Int {
+  var held = 0
+  let zero = counter(0)
+  let built = View.build(&zero).toArray()
+
+  // The whole counter: 26 words and 15 bytes of text.
+  if built.length() == 119 { held = held + 1 }
+  // Column 0, label 1 with its text, appended; button 2 tagged 1 with its text, appended; root 0.
+  if wordsAt(&built, 0, 9) == [1u32, 0u32, 3u32, 1u32, 1u32, 1u32, 2u32, 1u32, 8u32] { held = held + 1 }
+  if textAt(&built, 36, 8) == Some("Count: 0") { held = held + 1 }
+  if wordsAt(&built, 44, 12) == [3u32, 0u32, 1u32, 1u32, 2u32, 2u32, 5u32, 2u32, 1u32, 2u32, 2u32, 7u32] { held = held + 1 }
+  if textAt(&built, 92, 7) == Some("Add one") { held = held + 1 }
+  if wordsAt(&built, 99, 5) == [3u32, 0u32, 2u32, 4u32, 0u32] { held = held + 1 }
+
+  // A count change is one TEXT instruction for the label.
+  let one = counter(1)
+  let changed = View.changes(&zero, &one).toArray()
+  if changed.length() == 20 && wordsAt(&changed, 0, 3) == [2u32, 1u32, 8u32] { held = held + 1 }
+  if textAt(&changed, 12, 8) == Some("Count: 1") { held = held + 1 }
+
+  // The same tree changes nothing.
+  if View.changes(&one, &one).length() == 0 { held = held + 1 }
+
+  // A different shape forgets the old tree and builds the new one.
+  let other = View.Column([View.Label("only")])
+  let rebuilt = View.changes(&zero, &other).toArray()
+  if wordsAt(&rebuilt, 0, 1) == [6u32] && wordsAt(&rebuilt, 4, 3) == [1u32, 0u32, 3u32] { held = held + 1 }
+
+  // A changed button tag is a different tree, not a text change.
+  let retagged = View.Column([View.Label("Count: 0"), View.Button("Add one", 2u32)])
+  if wordsAt(&View.changes(&zero, &retagged).toArray(), 0, 1) == [6u32] { held = held + 1 }
+
+  // Events: kind above, tag below; an unknown kind stops.
+  if View.event((1u64 << 32) | 7u64) == View.Tapped(7u32) { held = held + 1 }
+  if View.event(2u64 << 32) == View.Stopped { held = held + 1 }
+  if View.event(9u64 << 32) == View.Stopped { held = held + 1 }
+  held
+}

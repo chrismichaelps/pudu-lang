@@ -1,0 +1,128 @@
+module Std.Mobile.View
+
+import Std.ByteOrder {writeU32LE}
+
+/// One platform control and what it shows. A node is named by its position
+/// in a depth-first walk, so two trees of one shape name the same controls.
+export type View
+  = Label(Str)
+  | Button(Str, UInt32)
+  | Column(Array[View])
+
+/// What the platform reported: a button's tag was tapped, or the host asked
+/// the program to stop.
+export type Event
+  = Tapped(UInt32)
+  | Stopped
+
+/// Instruction codes of the view stream; each is followed by its words.
+const CREATE: UInt32 = 1u32
+const TEXT: UInt32 = 2u32
+const APPEND: UInt32 = 3u32
+const ROOT: UInt32 = 4u32
+const TAG: UInt32 = 5u32
+const RESET: UInt32 = 6u32
+
+/// Control kinds a CREATE names.
+const LABEL: UInt32 = 1u32
+const BUTTON: UInt32 = 2u32
+const COLUMN: UInt32 = 3u32
+
+/// Event kinds in the high word of a host event.
+const TAPPED: UInt64 = 1u64
+const STOPPED: UInt64 = 2u64
+
+/// The stream that builds `view` from nothing and shows it.
+export fn build(view: &View) -> Bytes {
+  let (bytes, _) = created([], view, 0u32)
+  bytesOf(words(bytes, [ROOT, 0u32]))
+}
+
+/// The stream that turns what `shown` built into `next`: text changes for a
+/// tree of the same shape, otherwise a reset and a fresh build.
+export fn changes(shown: &View, next: &View) -> Bytes {
+  match changed([], shown, next, 0u32) {
+    case Some((bytes, _)) => bytesOf(bytes)
+    case None => {
+      let (bytes, _) = created(words([], [RESET]), next, 0u32)
+      bytesOf(words(bytes, [ROOT, 0u32]))
+    }
+  }
+}
+
+/// A host event read from its two words: the kind above, the tag below.
+export fn event(raw: UInt64) -> Event {
+  let kind = raw >> 32
+  match convertInteger[UInt32](raw & 0xffffffffu64) {
+    case Some(tag) if kind == TAPPED => Tapped(tag)
+    case _ if kind == STOPPED => Stopped
+    case _ => Stopped
+  }
+}
+
+// Builds `view` as node `node` and answers the stream and the next free node.
+fn created(bytes: Array[UInt8], view: &View, node: UInt32) -> (Array[UInt8], UInt32) {
+  match *view {
+    case Label(text) => (texted(words(bytes, [CREATE, node, LABEL]), node, text), node + 1u32)
+    case Button(title, tag) => (texted(words(bytes, [CREATE, node, BUTTON, TAG, node, tag]), node, title), node + 1u32)
+    case Column(children) => {
+      var out = words(bytes, [CREATE, node, COLUMN])
+      var next = node + 1u32
+      for child in children {
+        let (built, after) = created(out, &child, next)
+        out = words(built, [APPEND, node, next])
+        next = after
+      }
+      (out, next)
+    }
+  }
+}
+
+// The text changes between two trees of one shape, or None when the shapes
+// differ and the tree must be built again.
+fn changed(bytes: Array[UInt8], shown: &View, next: &View, node: UInt32) -> Option[(Array[UInt8], UInt32)] {
+  match (*shown, *next) {
+    case (Label(before), Label(after)) => Some((if before == after { bytes } else { texted(bytes, node, after) }, node + 1u32))
+    case (Button(before, beforeTag), Button(after, afterTag)) => {
+      if beforeTag != afterTag { return None }
+      Some((if before == after { bytes } else { texted(bytes, node, after) }, node + 1u32))
+    }
+    case (Column(before), Column(after)) => {
+      if before.length() != after.length() { return None }
+      var out = bytes
+      var at = node + 1u32
+      for index in 0..before.length() {
+        let (updated, following) = changed(out, &before[index], &after[index], at) ?
+        out = updated
+        at = following
+      }
+      Some((out, at))
+    }
+    case _ => None
+  }
+}
+
+// A TEXT instruction: the node, the byte length, then the UTF-8 bytes.
+fn texted(bytes: Array[UInt8], node: UInt32, text: Str) -> Array[UInt8] {
+  let raw = text.toBytes().toArray()
+  let length = match convertInteger[UInt32](raw.length()) {
+    case Some(count) => count
+    case None => 0u32
+  }
+  var out = words(bytes, [TEXT, node, length])
+  for octet in raw {
+    out = out.push(octet)
+  }
+  out
+}
+
+// Little-endian words appended to the stream.
+fn words(bytes: Array[UInt8], values: Array[UInt32]) -> Array[UInt8] {
+  var out = bytes
+  for value in values {
+    for octet in writeU32LE(value) {
+      out = out.push(octet)
+    }
+  }
+  out
+}

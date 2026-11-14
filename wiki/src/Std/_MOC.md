@@ -247,3 +247,8 @@ STARTTLS use [[Std Tls]]. [[Std Compress Gzip]] delegates to [[Eval Compress]] a
 - [[Std Db Challenge]] — bounded authentication challenge admission.
 
 - [[Std Binary]] — derived binary encoding and framed typed decoding.
+
+## Native mobile (#909)
+
+- [[Std Mobile View]] — pure mobile view tree and its instruction stream.
+- [[Std Mobile Host]] — foreign apply and wait calls for the mobile host.

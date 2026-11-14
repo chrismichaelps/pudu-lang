@@ -1,0 +1,33 @@
+module Counter
+
+import Std.Mobile.Host as Host
+import Std.Mobile.View as View
+
+/// The tag the button reports when tapped.
+const ADD_ONE: UInt32 = 1u32
+
+fn view(count: Int) -> View.View {
+  View.Column([View.Label("Count: {count}"), View.Button("Add one", ADD_ONE)])
+}
+
+fn main() -> Int {
+  var count = 0
+  var shown = view(count)
+  Host.apply(View.build(&shown))
+  while true {
+    match Host.wait() {
+      case View.Tapped(tag) => {
+        if tag == ADD_ONE {
+          count = count + 1
+        }
+        let next = view(count)
+        Host.apply(View.changes(&shown, &next))
+        shown = next
+      }
+      case View.Stopped => {
+        return 0
+      }
+    }
+  }
+  0
+}
