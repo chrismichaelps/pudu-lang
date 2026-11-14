@@ -7,7 +7,7 @@ tags: [changelog]
 
 ## 2026-11-14 — iOS scrolling and keyboard avoidance (#919)
 
-- `Scroll(View)` mounts a vertical root viewport with one reconciled child. UIKit constrains root content to the safe area, resizes it for the docked keyboard and reveals the focused field ([[Native iOS Scrolling Delivery]]).
+- `Scroll(View)` mounts a vertical root viewport with one reconciled child. UIKit constrains root content to the safe area, resizes it for the docked keyboard and reveals the focused field ([[Native iOS Scrolling Delivery]]). Generated iOS apps enable ProMotion timing hints and the iOS spec sets variable-refresh acceptance criteria.
 
 ## 2026-11-14 — Native application bundles (#916)
 

@@ -45,11 +45,43 @@ on both displays), and Xcode 27.1 Device Hub simulation. Exact class names are t
 | Multitasking | Stage Manager, Split View, Slide Over and multiple windows; the Duo inner display | missing |
 | Platform conventions | System gestures; rotation and orientation lock; background and foreground transitions; state restoration | missing |
 
+## ProMotion and frame pacing
+
+Refresh rate is a capability of the active display. On ProMotion devices, the iOS pipeline
+supports variable refresh up to 120 Hz. The system can select a lower rate for the display,
+power or thermal conditions, accessibility settings, or competing content. The same input
+and animation state must progress correctly across those changes and on 60 Hz devices.
+
+- Generated iOS apps set `CADisableMinimumFrameDurationOnPhone` to true so Core Animation
+  can honor higher-rate timing hints on capable iPhones. UIKit scrolling and system
+  transitions use platform frame pacing.
+- View updates preserve ordered input and reconcile state into bounded batches. Reuse mounted
+  controls, skip empty batches, and avoid rebuilding, remeasuring, or laying out unaffected
+  subtrees during scrolling. Presentation may coalesce superseded intermediate visual state
+  while still processing every ordered input and application effect.
+- For future custom presentation, use a display link for the active screen with an adaptive
+  `preferredFrameRateRange`. Sample motion from monotonic elapsed time and the actual
+  presentation target. A display link runs only while there is visual work and stops when
+  the app is idle or inactive.
+- A 120 Hz refresh interval is about 8.33 ms. That interval covers the entire frame, including
+  system work. Observe the actual presentation deadline and measure input handling, view
+  reconciliation, encoding, native application, layout, and presentation separately.
+- Validate steady scrolling and interactive transitions on named physical 60 Hz and ProMotion
+  devices, including rate changes and Low Power Mode. Report observed refresh intervals,
+  missed deadlines, frame-time percentiles and input-to-presentation latency. Simulator tests
+  validate bundle configuration and behavior. Physical traces establish the performance claim.
+
+Today the app bundle enables higher-rate timing hints, the vertical viewport uses UIKit
+scrolling, and empty updates stay on the Pudu side of the host boundary. Custom display-link
+scheduling and physical frame-time evidence remain open.
+
+[Apple's ProMotion frame-pacing guidance](https://developer.apple.com/documentation/quartzcore/optimizing-iphone-and-ipad-apps-to-support-promotion-displays)
+
 ## Phases
 
 | Phase | Scope |
 | --- | --- |
-| A Foundation | Core layout, primitives, safe areas, theming, basic navigation, accessibility foundation, single-screen iPhone and the Duo outer display |
+| A Foundation | Core layout, primitives, safe areas, variable-rate frame-pacing foundations, theming, basic navigation, accessibility foundation, single-screen iPhone and the Duo outer display |
 | B Foldable and large canvas | Duo fold state, display targeting, crease awareness, Split View, inner-display layouts, iPad multiple windows basics |
 | C Polish and productivity | Advanced lists, Apple Pencil, rich animation, Stage Manager, context menus, full multitasking |
 
@@ -77,6 +109,8 @@ does not have yet (Xcode 26.6, iOS 26.5 SDK).
   reserved regions need Duo APIs. _Rejected:_ device checks.
 
 - **Q:** When is the root keyboard layout guide installed? **A:** After the UIKit window becomes visible, so the guide observes the active window. See [[iOS Host Layout]].
+
+- **Q:** Should a 120 Hz display rebuild the Pudu tree at every refresh? **A:** UIKit owns native motion. Application state changes produce view commits, and custom animation samples presentation time only while active.
 
 ## Referenced by
 

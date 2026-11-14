@@ -77,7 +77,8 @@ Layout is Pudu's own flexible stack model from [[Std Ui Layout]], not a constrai
 Long lists map to the platform's recycling list view; Pudu supplies row models and stable identity,
 the platform owns cell reuse and scrolling. Animations described with Std.Ui.Motion run on the
 platform's animation engine and update properties directly; an animation frame never triggers a
-commit, a diff, or a layout pass unless it changes layout.
+commit, a diff, or a layout pass unless it changes layout. iOS scrolling and animations follow
+the variable-refresh and device evidence contract in [[Pudu Native iOS UI#ProMotion and frame pacing]].
 
 ### Development reload
 

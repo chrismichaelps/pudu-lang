@@ -30,5 +30,6 @@ testPlist =
         , has "<key>MinimumOSVersion</key><string>15.0</string>"
         , has "<string>iPhoneSimulator</string>"
         , has "<key>UILaunchScreen</key><dict/>"
+        , has "<key>CADisableMinimumFrameDurationOnPhone</key><true/>"
         , counterexample "an unescaped ampersand" (property (not ("A&B<" `Text.isInfixOf` plist)))
         ]

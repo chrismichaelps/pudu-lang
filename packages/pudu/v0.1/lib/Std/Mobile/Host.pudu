@@ -11,14 +11,16 @@ foreign "c" {
   fn eventText symbol "pudu_ui_event_text" () -> Str
 }
 
-/// Hands one commit's instructions to the platform adapter in one call.
+/// Applies a nonempty commit in one platform call.
 export fn apply(stream: Bytes) -> () {
   let length = match convertInteger[UInt64](stream.length()) {
     case Some(count) => count
     case None => 0u64
   }
-  unsafe(foreign) {
-    applyStream(stream, length)
+  if length > 0u64 {
+    unsafe(foreign) {
+      applyStream(stream, length)
+    }
   }
 }
 

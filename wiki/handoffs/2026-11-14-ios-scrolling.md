@@ -25,6 +25,9 @@ reported a scrollable safe-area viewport, the focused field visible above the do
 and the original viewport restored after dismissal. Creating the root guide before the window
 was visible left the viewport height unchanged when the keyboard appeared.
 
+A generated, signature-verified app contains the Boolean ProMotion opt-in. [[Pudu Native iOS UI]]
+records the adaptive frame-pacing contract and the remaining physical-device evidence.
+
 ## Exact next action
 
 Run the full gates on the integrated #919 head after #915 and #918 land, then obtain independent

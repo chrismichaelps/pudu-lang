@@ -236,6 +236,8 @@ import Std.Mobile.Host as Host
 import Std.Mobile.Stream as Stream
 
 fn main() -> Int {
+  let empty: Array[UInt8] = []
+  Host.apply(bytesOf(empty))
   let parent = Stream.create([], 0u32, Stream.LABEL)
   let child = Stream.create(parent, 1u32, Stream.LABEL)
   Host.apply(bytesOf(Stream.append(child, 0u32, 1u32)))
@@ -250,7 +252,7 @@ fn main() -> Int {
     if (launched.error) throw launched.error;
     const output = launched.stdout + launched.stderr;
     assert.match(output, /pudu: a view stream placed a child in a node that holds nothing: 0/u);
-    assert.doesNotMatch(output, /PUDU_PROGRAM_STATUS 0/u);
+    assert.doesNotMatch(output, /PUDU_FIRST_FRAME_MS|PUDU_PROGRAM_STATUS 0/u);
     console.log("PASS iOS invalid group placement refused");
   } finally {
     run(xcrun, ["simctl", "uninstall", device, bundle], 30_000);

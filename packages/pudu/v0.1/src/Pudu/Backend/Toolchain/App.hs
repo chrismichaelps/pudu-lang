@@ -171,6 +171,7 @@ infoPlist name identifier = Text.unlines
   , "<key>CFBundleSupportedPlatforms</key><array><string>iPhoneSimulator</string></array>"
   , "<key>UIDeviceFamily</key><array><integer>1</integer><integer>2</integer></array>"
   , "<key>UILaunchScreen</key><dict/>"
+  , "<key>CADisableMinimumFrameDurationOnPhone</key><true/>"
   , "</dict></plist>"
   ]
  where

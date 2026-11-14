@@ -19,7 +19,7 @@ derived from a program's name, and the property list written into the bundle.
 | Case | Kind | Evidence |
 | --- | --- | --- |
 | application identifiers derive from the program's name | success | `Counter` gives `org.pudu.Counter`; `my-app.v2` keeps its hyphen and dot; `Café Lists` replaces the non-ASCII letter and the space with `-`, giving `org.pudu.Caf--Lists` |
-| application property lists name the bundle and escape their text | success, output | the identifier, the executable `A&amp;B` for the name `A&B`, package type `APPL`, minimum system `15.0`, the `iPhoneSimulator` platform, an empty launch screen, and no unescaped ampersand |
+| application property lists name the bundle and escape their text | success, output | the identifier, the executable `A&amp;B` for the name `A&B`, package type `APPL`, minimum system `15.0`, the `iPhoneSimulator` platform, an empty launch screen, a true Boolean ProMotion opt-in, and no unescaped ampersand |
 
 ## Grill Log
 
@@ -29,6 +29,9 @@ derived from a program's name, and the property list written into the bundle.
   and launches it, so the end-to-end path is covered there. _Rationale:_ the
   identifier and the property list are pure text, and they can be checked on any
   machine without a toolchain.
+
+- **Q:** Can the simulator test establish 120 Hz presentation? **A:** It can verify the bundle
+  property type and value. Frame-rate evidence comes from a physical display.
 
 ## Referenced by
 
