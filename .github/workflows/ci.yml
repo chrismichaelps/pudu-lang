@@ -1,10 +1,14 @@
 name: ci
 
+# A change made only of Markdown (the wiki and the docs) cannot affect the
+# compiler, its tests, or the website build, so it starts no run.
 on:
   pull_request:
     branches: [dev, main]
+    paths-ignore: ['**/*.md']
   push:
     branches: [dev, main]
+    paths-ignore: ['**/*.md']
 
 permissions:
   contents: read

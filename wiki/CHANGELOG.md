@@ -10,6 +10,28 @@ tags: [changelog]
 - [[Eval Concurrent]] closes mutex admission before joining its owner; [[Std Sync]] exposes joined closure.
 - [[Std Db Driver]] revokes before private guard retirement; [[Database Scope Retirement Fixture]] and [[Mutex Admission Spec]] require exact outcomes and pre-teardown registry counts.
 
+## 2026-11-13 — Markdown-only changes skip CI
+
+- [[Pudu Continuous Verification]] ignores pull requests and pushes made only of Markdown files.
+
+## 2026-11-13 — Foreign pointer design proposed (#877)
+
+- [[Foreign Pointers and Runs]] proposes typed loans, length relationships,
+  nullable handles and function-pointer crossings.
+
+## 2026-11-13 — Foreign callbacks and thread affinity decided (#875)
+
+- [[Foreign Callbacks and Thread Affinity]] accepts one callback crossing, a C function pointer
+  plus a context key. Registrations are owned tokens. A callback runs on the invoking thread, a
+  foreign thread attaches for one invocation, and native dispatch yields the run gate. A failure
+  never unwinds through a foreign frame. [[grammar/pudu]], [[architecture/SEMANTICS]],
+  [[architecture/FFI-SELF-HOSTING]], [[ADR-0018-calling-a-library-written-elsewhere]] and
+  [[Native Foreign Call Sites]] point at it. Implementation is [[Foreign Callback Delivery]] (#876).
+
+## 2026-11-13 — Pudu Native status after #878
+
+- [[Pudu Native]] records the landed iOS targets, embedded entry, and mobile refusals; phase 0 now waits only on calls into Pudu and the entry guard (#899).
+
 ## 2026-11-13 — Native iOS library targets (#878)
 
 - `pudu build --native --target` exposes arm64 device and simulator libraries.

@@ -228,12 +228,13 @@ this possible and cannot be avoided while remaining useful.
 
 **Callbacks into this language from a foreign library** are not settled here. A library that calls
 back — which includes most event loops — needs a function pointer that re-enters the evaluator, with
-its own answers about which thread runs it and what happens when it fails. That is a separate
-decision and a separate slice.
+its own answers about which thread runs it and what happens when it fails.
+[[Foreign Callbacks and Thread Affinity|ADR-0028]] settles them.
 
-**Which thread a call runs on** is not settled. Several libraries worth calling, graphics among
+**Which thread a call runs on** is not settled here. Several libraries worth calling, graphics among
 them, require the thread the program started on, and this language's workers do not currently
-promise that.
+promise that. [[Foreign Callbacks and Thread Affinity|ADR-0028]] runs a callback on the thread that
+invokes it and leaves affinity to the platform's own dispatch.
 
 **Where a library comes from** is resolved by the platform for now. Nothing here fetches, pins, or
 verifies a library — that is the package question, and [[architecture/PACKAGES]] says why half of that
@@ -286,4 +287,4 @@ dependency.
 
 ## Referenced by
 
-[[architecture/STDLIB]] · [[grammar/pudu]] · [[Unsafe Capabilities]] · [[architecture/PACKAGES]] · [[2026-09-04-crossing-coverage]]
+[[architecture/STDLIB]] · [[grammar/pudu]] · [[Unsafe Capabilities]] · [[Foreign Callbacks and Thread Affinity]] · [[architecture/PACKAGES]] · [[2026-09-04-crossing-coverage]]
