@@ -38,6 +38,7 @@ import Pudu.Type.Env
   , DeclaredTypes (..)
   , bindName
   , bindConstructorName
+  , aliasName
   , finalizeIntegerLiterals
   , inTypeScope
   , enterUnsafe
@@ -112,6 +113,7 @@ import Pudu.Type.Value
   , OwnerSelection
   , NominalId (..)
   , Required (..)
+  , nominalKey
   , Scheme (..)
   , monotype
   , polytype
@@ -290,6 +292,8 @@ declareConstructors declared value = case locatedValue (Tree.typeDefinition valu
           | null payload = polytype rigid [] ownerType
           | otherwise = polytype rigid [] (FunctionTypeValue False payload ownerType)
     bindConstructorName owner name scheme
+    -- The canonical key is what `Shape.Circle` is looked up by.
+    aliasName name (nominalKey owner <> "." <> name)
 
 variantPayload :: DeclaredTypes -> [(Text, Int)] -> Tree.Variant -> Checker [Type]
 variantPayload declared rigid variant = case Tree.variantPayload variant of

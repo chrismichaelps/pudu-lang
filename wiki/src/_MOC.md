@@ -335,3 +335,4 @@ tags: [moc, module]
 - [[UsesViewBoundaries]] · [[UsesStringViewSearch]] · [[UsesIterViews]]
 
 - [[Backend Text View Programs]] — native UTF-8 byte-boundary and lifetime evidence.
+- [[Database Scope Retirement Fixture]] — exact outcomes and per-scope registry lifetime.
