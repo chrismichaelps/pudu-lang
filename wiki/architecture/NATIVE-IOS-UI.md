@@ -61,7 +61,7 @@ does not have yet (Xcode 26.6, iOS 26.5 SDK).
 ## Order of work
 
 1. Scrolling and safe areas with keyboard avoidance.
-2. Navigation stack and modal sheets.
+2. Navigation stack and modal sheets. See [[Native iOS Navigation]].
 3. Theming: FUI tokens to semantic colors, Dynamic Type, dark mode.
 4. Recycling lists and grids.
 5. Size-class adaptivity and multiple windows.

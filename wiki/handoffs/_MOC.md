@@ -412,3 +412,4 @@ tags: [moc, handoff]
 - [[Native First Light Delivery]] — counter built only from Pudu on the iOS simulator (#909).
 
 - [[Native Controls Delivery]] — rows, text fields, toggles and accessible names (#912).
+- [[Native iOS Navigation Delivery]] — native route identity, pop completion and page sheets (#920).

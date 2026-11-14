@@ -5,6 +5,10 @@ tags: [changelog]
 
 # Changelog
 
+## 2026-11-14 — iOS navigation contract (#920)
+
+- [[Native iOS Navigation]] specifies application-owned route state, UIKit transition completion, and native page sheets.
+
 ## 2026-11-14 — Pudu Native iOS UI coverage target
 
 - Pudu Native iOS UI coverage target, including iPhone Duo, with the current gaps ([[Pudu Native iOS UI]]).
