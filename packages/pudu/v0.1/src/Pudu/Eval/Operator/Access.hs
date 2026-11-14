@@ -2,6 +2,7 @@
 module Pudu.Eval.Operator.Access
   ( arrayMethods
   , builtinMethodNamesFor
+  , declaredOwner
   , mapMethods
   , nominalNameOf
   , readArrayMember
@@ -22,6 +23,8 @@ import qualified Data.Sequence as Seq
 import Data.Text (Text)
 import qualified Data.Text as Text
 
+import Pudu.Eval.DeclaredOwner (declaredOwner)
+import Pudu.Eval.TypeWitness (witnessMethod)
 import Pudu.Eval.Bytes (bytesMethods)
 import Pudu.Eval.Env
   ( Evaluator
@@ -88,6 +91,9 @@ readIndex spanValue container key = case (container, key) of
     it with `value` as its first argument. -}
 readMember :: Span -> Value -> Text -> Evaluator Value
 readMember spanValue value member = case value of
+  TypeWitnessValue{} -> do
+    found <- witnessMethod spanValue value member
+    maybe (abortAt (Just spanValue) "E7001" ("selected type has no " <> member) Nothing) pure found
   ArrayValue _ -> readArrayMember spanValue value member
   StrValue _ -> readStringMember spanValue value member
   BytesValue _ -> readKeyedMember spanValue value member bytesMethods BytesMethodValue "Bytes"
@@ -98,18 +104,19 @@ readMember spanValue value member = case value of
   RangeValue{} -> readKeyedMember spanValue value member rangeMethods RangeMethodValue "Range"
   RecordValue owner fields -> case lookup member fields of
     Just found -> pure found
-    Nothing -> readMethod spanValue value owner member
-  {-| A member on a variant is looked for on the sum that owns it before the
-      variant itself. An implementation is written for the type — `impl Named
-      for Option[Int]` — and the value in hand is one of its variants, so
-      looking only at the variant found nothing and reported a type the reader
-      never wrote. The variant's own name is still tried, so a member keyed
-      there keeps working. -}
-  VariantValue name _
+    Nothing -> readMethodAmong spanValue value [declaredOwner owner] owner member
+  NamedSumValue owner _ fields -> case lookup member fields of
+    Just found -> pure found
+    Nothing -> readMethodAmong spanValue value [declaredOwner owner] owner member
+  {-| Owned sums select only their canonical implementation namespace.
+      The registry remains a fallback for legacy ownerless host values. -}
+  SumValue carried name _
     | name == member -> pure value
+    | carried /= "" -> readMethodAmong spanValue value [declaredOwner carried] name member
     | otherwise -> do
         owner <- variantOwner name
-        readMethodAmong spanValue value (maybe [name] (\found -> [found, name]) owner) name member
+        readMethodAmong spanValue value
+          (map declaredOwner (maybe [name] (\found -> [found, name]) owner)) name member
   {-| A scalar has no fields, but it may have methods: an `impl Ord for Int`
       is a method on every integer. The nominal name a method is keyed by comes
       from the value's own type, which is why an integer had to start carrying

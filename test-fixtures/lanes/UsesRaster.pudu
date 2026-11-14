@@ -1,0 +1,184 @@
+module UsesRaster
+
+import Std.Lanes as Lanes
+import Std.Math.Float as Float
+
+fn require(condition: Bool, name: Str) {
+  if !condition { panic(name) }
+}
+
+fn lane(values: Array[Float64]) -> Bytes {
+  Lanes.toBytes(&Lanes.fromArray(&values))
+}
+
+fn pixel(color: &Bytes, width: Int, x: Int, y: Int) -> (UInt8, UInt8, UInt8, UInt8) {
+  let at = (y * width + x) * 4
+  (octet(color, at), octet(color, at + 1), octet(color, at + 2), octet(color, at + 3))
+}
+
+fn octet(color: &Bytes, at: Int) -> UInt8 {
+  match color.at(at) {
+    case Some(value) => value
+    case None => panic("pixel outside the target")
+  }
+}
+
+fn covered(color: &Bytes) -> Int {
+  var count = 0
+  var at = 3
+  while at < color.length() {
+    if octet(color, at) == 255u8 { count = count + 1 }
+    at = at + 4
+  }
+  count
+}
+
+fn draw(cull: Int, xs: Array[Float64], ys: Array[Float64], zs: Array[Float64], rs: Array[Float64], gs: Array[Float64], bs: Array[Float64]) -> Option[(Bytes, Bytes)] {
+  let Some(color) = rasterFill(64, 0.0, 0.0, 0.0, 0.0) else { panic("fill") }
+  let Some(depth) = Lanes.filled(64, 1.0) else { panic("depth") }
+  rasterTriangles(color, Lanes.toBytes(&depth), 8, cull, lane(xs), lane(ys), lane(zs), lane(rs), lane(gs), lane(bs))
+}
+
+fn perspectiveDraw(ws: Array[Float64]) -> Option[(Bytes, Bytes)] {
+  let Some(color) = rasterFill(16, 0.0, 0.0, 0.0, 0.0) else { panic("fill") }
+  let Some(depth) = Lanes.filled(16, 1.0) else { panic("depth") }
+  let xs = lane([0.0, 4.0, 0.0])
+  let ys = lane([0.0, 0.0, 4.0])
+  let zs = lane([0.5, 0.5, 0.5])
+  rasterPerspectiveTriangles(color, Lanes.toBytes(&depth), 4, 0, xs, ys, zs, lane([1.0, 0.0, 0.0]), lane([0.0, 1.0, 0.0]), lane([0.0, 0.0, 1.0]), lane(ws))
+}
+
+fn perspective() {
+  let Some((corrected, _)) = perspectiveDraw([1.0, 2.0, 4.0]) else { panic("perspective") }
+  require(pixel(&corrected, 4, 0, 0) == (227u8, 19u8, 9u8, 255u8), "perspective-correct color")
+  let Some((flat, _)) = perspectiveDraw([3.0, 3.0, 3.0]) else { panic("equal w") }
+  require(pixel(&flat, 4, 0, 0) == (191u8, 32u8, 32u8, 255u8), "equal w matches affine interpolation")
+  let Some((tiny, _)) = perspectiveDraw([5e-324, 1e-323, 2e-323]) else { panic("subnormal w") }
+  require(tiny == corrected, "uniformly scaled subnormal w keeps pixels")
+  let nan = Float.fromBits(0x7ff8000000000000u64)
+  let infinity = Float.fromBits(0x7ff0000000000000u64)
+  for invalid in [[0.0, 1.0, 1.0], [-1.0, 1.0, 1.0], [nan, 1.0, 1.0], [infinity, 1.0, 1.0], [1.0, 1.0]] {
+    require(perspectiveDraw(invalid) == None, "invalid w refused")
+  }
+}
+
+fn texturedDraw(texels: Bytes, texelWidth: Int, space: Int, filter: Int, shade: Float64, ws: Array[Float64]) -> Option[(Bytes, Bytes)] {
+  let Some(color) = rasterFill(16, 0.0, 0.0, 0.0, 0.0) else { panic("fill") }
+  let Some(depth) = Lanes.filled(16, 1.0) else { panic("depth") }
+  let xs = [0.0, 4.0, 0.0, 4.0, 4.0, 0.0]
+  let ys = [0.0, 0.0, 4.0, 0.0, 4.0, 4.0]
+  let lit = lane([shade, shade, shade, shade, shade, shade])
+  let us = lane([0.0, 1.0, 0.0, 1.0, 1.0, 0.0])
+  let vs = lane([0.0, 0.0, 1.0, 0.0, 1.0, 1.0])
+  rasterTexturedTriangles(color, Lanes.toBytes(&depth), 4, 0, lane(xs), lane(ys), lane([0.5, 0.5, 0.5, 0.5, 0.5, 0.5]), lit, lit, lit, lane(ws), us, vs, texels, texelWidth, space, filter)
+}
+
+fn row(color: &Bytes) -> Array[UInt8] {
+  [octet(color, 0), octet(color, 4), octet(color, 8), octet(color, 12)]
+}
+
+fn textured() {
+  let unit = [1.0, 1.0, 1.0, 1.0, 1.0, 1.0]
+  let redBlue = bytesOf([255, 0, 0, 255, 0, 0, 255, 255])
+  let Some((nearest, _)) = texturedDraw(redBlue, 2, 0, 0, 1.0, unit) else { panic("nearest") }
+  require(pixel(&nearest, 4, 1, 2) == (255u8, 0u8, 0u8, 255u8) && pixel(&nearest, 4, 2, 2) == (0u8, 0u8, 255u8, 255u8), "nearest texels")
+  let Some((dimmed, _)) = texturedDraw(redBlue, 2, 0, 0, 0.5, unit) else { panic("modulated") }
+  require(pixel(&dimmed, 4, 0, 0) == (128u8, 0u8, 0u8, 255u8), "lit color modulates the texel")
+  let Some((ramp, _)) = texturedDraw(bytesOf([0, 0, 0, 255, 255, 255, 255, 255]), 2, 0, 1, 1.0, unit) else { panic("bilinear") }
+  require(row(&ramp) == [0u8, 64u8, 191u8, 255u8], "bilinear clamps and interpolates texel centers")
+  let Some((decoded, _)) = texturedDraw(bytesOf([128, 128, 128, 255]), 1, 1, 0, 1.0, unit) else { panic("sRGB") }
+  require(pixel(&decoded, 4, 3, 3) == (55u8, 55u8, 55u8, 255u8), "sRGB decodes before shading")
+  let Some((cut, cutDepth)) = texturedDraw(bytesOf([255, 255, 255, 0, 255, 255, 255, 255]), 2, 0, 0, 1.0, unit) else { panic("cutout") }
+  let Some(cutLanes) = Lanes.fromBytes(cutDepth) else { panic("cutout depth") }
+  require(pixel(&cut, 4, 0, 0) == (0u8, 0u8, 0u8, 0u8) && Lanes.get(&cutLanes, 0) == Some(1.0), "cutout writes neither color nor depth")
+  require(pixel(&cut, 4, 3, 0) == (255u8, 255u8, 255u8, 255u8) && Lanes.get(&cutLanes, 3) == Some(0.5), "opaque texel still drawn")
+  let Some((scaled, _)) = texturedDraw(redBlue, 2, 0, 1, 1.0, [1e-300, 1e-300, 1e-300, 1e-300, 1e-300, 1e-300]) else { panic("scaled") }
+  let Some((plain, _)) = texturedDraw(redBlue, 2, 0, 1, 1.0, unit) else { panic("plain") }
+  require(scaled == plain, "uniform w scaling keeps textured pixels")
+  require(texturedDraw(redBlue, 0, 0, 0, 1.0, unit) == None, "zero texture width")
+  require(texturedDraw(redBlue, 3, 0, 0, 1.0, unit) == None, "partial texture row")
+  require(texturedDraw(bytesOf([1, 2, 3]), 1, 0, 0, 1.0, unit) == None, "partial texel")
+  require(texturedDraw(bytesOf([]), 1, 0, 0, 1.0, unit) == None, "empty texture")
+  require(texturedDraw(redBlue, 2, 2, 0, 1.0, unit) == None, "unknown color space")
+  require(texturedDraw(redBlue, 2, 0, 2, 1.0, unit) == None, "unknown filter")
+  require(texturedDraw(redBlue, 2, 0, 0, 1.0, [1.0, 1.0, 1.0]) == None, "weight lane mismatch")
+}
+
+/// Camera xyz, light direction xyz, light rgb, ambient, exponent, strength, f0, horizon rgb, zenith rgb, sun cosine.
+fn uniforms(strength: Float64, f0: Float64, ambient: Float64) -> Array[Float64] {
+  [0.0, 0.0, 10.0, 0.0, 0.0, 1.0, 0.5, 0.5, 0.5, ambient, 8.0, strength, f0, 0.2, 0.3, 0.4, 0.9, 0.9, 1.0, 0.99]
+}
+
+fn shadedDraw(normalZ: Float64, values: Array[Float64], normalCount: Int) -> Option[(Bytes, Bytes)] {
+  let Some(color) = rasterFill(16, 0.0, 0.0, 0.0, 0.0) else { panic("fill") }
+  let Some(depth) = Lanes.filled(16, 1.0) else { panic("depth") }
+  let six = [1.0, 1.0, 1.0, 1.0, 1.0, 1.0]
+  let zero = lane([0.0, 0.0, 0.0, 0.0, 0.0, 0.0])
+  var normals: Array[Float64] = []
+  for _ in 0..normalCount { normals = normals.push(normalZ) }
+  rasterShadedTriangles(color, Lanes.toBytes(&depth), 4, 0, lane([0.0, 4.0, 0.0, 4.0, 4.0, 0.0]), lane([0.0, 0.0, 4.0, 0.0, 4.0, 4.0]), lane([0.5, 0.5, 0.5, 0.5, 0.5, 0.5]), lane([0.5, 0.5, 0.5, 0.5, 0.5, 0.5]), lane([0.25, 0.25, 0.25, 0.25, 0.25, 0.25]), lane(six), lane(six), zero, zero, lane(normals), zero, zero, zero, lane(values))
+}
+
+fn lighting() {
+  let Some((matte, _)) = shadedDraw(1.0, uniforms(0.0, 0.0, 0.0), 6) else { panic("matte") }
+  require(pixel(&matte, 4, 1, 1) == (128u8, 64u8, 255u8, 255u8), "head-on light, no Fresnel: the base color")
+  let Some((mirror, _)) = shadedDraw(1.0, uniforms(0.0, 1.0, 0.0), 6) else { panic("mirror") }
+  require(pixel(&mirror, 4, 2, 2) == (178u8, 204u8, 230u8, 255u8), "full Fresnel reflects the horizon and the sun disc")
+  let Some((back, _)) = shadedDraw(-1.0, uniforms(0.0, 0.0, 0.0), 6) else { panic("back") }
+  require(back == matte, "a normal facing away is turned toward the camera")
+  let Some((shiny, _)) = shadedDraw(1.0, uniforms(1.0, 0.0, 0.0), 6) else { panic("shiny") }
+  require(pixel(&shiny, 4, 1, 1) == (255u8, 191u8, 255u8, 255u8), "the highlight adds the light color")
+  let Some((dim, _)) = shadedDraw(1.0, [0.0, 0.0, 10.0, 1.0, 0.0, 0.0, 0.5, 0.5, 0.5, 0.25, 8.0, 0.0, 0.0, 0.2, 0.3, 0.4, 0.9, 0.9, 1.0, 0.99], 6) else { panic("dim") }
+  require(pixel(&dim, 4, 1, 1) == (32u8, 16u8, 64u8, 255u8), "grazing light leaves the ambient floor")
+  require(shadedDraw(1.0, uniforms(0.0, 0.0, 0.0).pop(), 6) == None, "uniform count")
+  require(shadedDraw(1.0, uniforms(0.0, 0.0, 2.0), 6) == None, "ambient range")
+  require(shadedDraw(1.0, uniforms(0.0, 2.0, 0.0), 6) == None, "f0 range")
+  require(shadedDraw(1.0, uniforms(0.0, 0.0, 0.0), 5) == None, "normal lane count")
+}
+
+export fn main() -> Int {
+  let Some(cleared) = rasterFill(2, 1.0, 0.5, -1.0, 2.0) else { panic("fill") }
+  require(cleared.length() == 8 && pixel(&cleared, 2, 0, 0) == (255u8, 128u8, 0u8, 255u8), "fill quantizes")
+  require(rasterFill(-1, 0.0, 0.0, 0.0, 0.0) == None, "negative fill")
+  let quad = draw(
+    0,
+    [0.0, 8.0, 0.0, 8.0, 8.0, 0.0], [0.0, 0.0, 8.0, 0.0, 8.0, 8.0], [0.5, 0.5, 0.5, 0.5, 0.5, 0.5],
+    [1.0, 1.0, 1.0, 1.0, 1.0, 1.0], [0.0, 0.0, 0.0, 0.0, 0.0, 0.0], [0.0, 0.0, 0.0, 0.0, 0.0, 0.0],
+  )
+  let Some((painted, depths)) = quad else { panic("quad") }
+  require(covered(&painted) == 64, "two triangles sharing a diagonal cover every pixel once")
+  require(pixel(&painted, 8, 3, 4) == (255u8, 0u8, 0u8, 255u8), "flat color")
+  let Some(depthLanes) = Lanes.fromBytes(depths) else { panic("depth lanes") }
+  require(Lanes.get(&depthLanes, 9) == Some(0.5), "depth written")
+  let ramp = draw(0, [0.0, 8.0, 0.0], [0.0, 0.0, 8.0], [0.2, 0.2, 0.2], [0.0, 1.0, 0.0], [0.0, 0.0, 1.0], [1.0, 0.0, 0.0])
+  let Some((shaded, _)) = ramp else { panic("ramp") }
+  let (r, g, b, _) = pixel(&shaded, 8, 0, 0)
+  require(r == 16u8 && g == 16u8 && b == 223u8, "barycentric interpolation at a pixel center")
+  require(pixel(&shaded, 8, 7, 7) == (0u8, 0u8, 0u8, 0u8), "outside stays clear")
+  let Some((near, _)) = draw(
+    0,
+    [0.0, 8.0, 0.0, 0.0, 8.0, 0.0], [0.0, 0.0, 8.0, 0.0, 0.0, 8.0], [0.3, 0.3, 0.3, 0.6, 0.6, 0.6],
+    [0.0, 0.0, 0.0, 1.0, 1.0, 1.0], [1.0, 1.0, 1.0, 0.0, 0.0, 0.0], [0.0, 0.0, 0.0, 0.0, 0.0, 0.0],
+  ) else { panic("depth order") }
+  require(pixel(&near, 8, 1, 1) == (0u8, 255u8, 0u8, 255u8), "nearer triangle wins regardless of order")
+  let counterClockwiseInDevice = draw(1, [0.0, 0.0, 8.0], [0.0, 8.0, 0.0], [0.5, 0.5, 0.5], [1.0, 1.0, 1.0], [1.0, 1.0, 1.0], [1.0, 1.0, 1.0])
+  let Some((front, _)) = counterClockwiseInDevice else { panic("front") }
+  require(covered(&front) > 0, "front face kept")
+  let Some((back, _)) = draw(1, [0.0, 8.0, 0.0], [0.0, 0.0, 8.0], [0.5, 0.5, 0.5], [1.0, 1.0, 1.0], [1.0, 1.0, 1.0], [1.0, 1.0, 1.0]) else { panic("back") }
+  require(covered(&back) == 0, "back face culled")
+  let Some((beyond, _)) = draw(0, [0.0, 8.0, 0.0], [0.0, 0.0, 8.0], [0.5, 1.5, 0.5], [1.0, 1.0, 1.0], [1.0, 1.0, 1.0], [1.0, 1.0, 1.0]) else { panic("beyond") }
+  require(covered(&beyond) == 0, "depth outside range skipped")
+  let Some((clipped, _)) = draw(0, [-100.0, 300.0, -100.0], [-100.0, -100.0, 300.0], [0.5, 0.5, 0.5], [1.0, 1.0, 1.0], [1.0, 1.0, 1.0], [1.0, 1.0, 1.0]) else { panic("clip") }
+  require(covered(&clipped) == 64, "bounds clip to the target")
+  require(draw(0, [0.0, 1.0], [0.0, 1.0], [0.5, 0.5], [1.0, 1.0], [1.0, 1.0], [1.0, 1.0]) == None, "partial triangle refused")
+  require(draw(0, [0.0, 1.0, 2.0], [0.0, 1.0], [0.5, 0.5, 0.5], [1.0, 1.0, 1.0], [1.0, 1.0, 1.0], [1.0, 1.0, 1.0]) == None, "lane mismatch refused")
+  require(draw(2, [0.0, 1.0, 2.0], [0.0, 1.0, 2.0], [0.5, 0.5, 0.5], [1.0, 1.0, 1.0], [1.0, 1.0, 1.0], [1.0, 1.0, 1.0]) == None, "unknown cull refused")
+  let Some(small) = rasterFill(3, 0.0, 0.0, 0.0, 0.0) else { panic("small") }
+  let Some(unit) = Lanes.filled(4, 1.0) else { panic("unit") }
+  require(rasterTriangles(small, Lanes.toBytes(&unit), 2, 0, lane([]), lane([]), lane([]), lane([]), lane([]), lane([])) == None, "target size refused")
+  perspective()
+  textured()
+  lighting()
+  print("raster: ok")
+  0
+}

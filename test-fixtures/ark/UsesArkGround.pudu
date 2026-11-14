@@ -1,0 +1,118 @@
+module UsesArkGround
+
+import Std.Math.Float as Float
+import Ark.Math as V
+import Ark.Physics.Ground as Ground
+
+fn require(condition: Bool, name: Str) { if !condition { panic(name) } }
+fn close(actual: Float64, expected: Float64, name: Str) { require(Float.abs(actual - expected) < 1e-8, name) }
+
+fn settings(scale: Float64) -> Ground.Settings {
+  Ground.Settings{up: V.vec3(0.0, 0.0, 1.0), radius: 0.5 * scale, halfHeight: 2.0 * scale, maxDistance: scale, minUpDot: 0.8, edgeInset: 0.05 * scale, contactTolerance: 1e-7 * scale}
+}
+
+fn state(scale: Float64) -> Ground.State {
+  Ground.State{position: V.vec3(0.0, 0.0, 3.0 * scale), velocity: V.vec3(2.0 * scale, 0.0, -4.0 * scale), mode: Ground.Falling}
+}
+
+fn hit(config: Ground.Settings, current: Ground.State, normal: V.Vec3, fraction: Float64) -> Ground.Hit {
+  let center = V.add(current.position, V.scale(config.up, -fraction * config.maxDistance))
+  let lower = V.subtract(center, V.scale(config.up, config.halfHeight - config.radius))
+  Ground.Hit{fraction, normal, point: V.subtract(lower, V.scale(normal, config.radius))}
+}
+
+fn withHit(current: Ground.State, config: Ground.Settings, contact: Ground.Hit) -> Result[Ground.Settlement, Ground.Error[Str]] {
+  Ground.settle(&current, &config, |_p, _d| -> Result[Option[Ground.Hit], Str] { Ok(Some(contact)) })
+}
+
+fn settled(current: Ground.State, config: Ground.Settings, contact: Ground.Hit) -> Ground.Settlement {
+  let Ok(value) = withHit(current, config, contact) else { panic("settlement refused") }
+  value
+}
+
+export fn main() -> Int {
+  let config = settings(1.0)
+  let current = state(1.0)
+  let flat = hit(config, current, config.up, 1.0)
+  let floor = settled(current, config, flat)
+  require(floor.state.mode == Ground.Walking && floor.state.position == V.vec3(0.0, 0.0, 2.0), "landing state")
+  require(floor.state.velocity == V.vec3(2.0, 0.0, 0.0), "stored horizontal walking velocity")
+  let Some(support) = floor.support else { panic("missing support") }
+  require(support.distance == 1.0 && support.point == flat.point, "support witness and distance")
+  let boundary = settled(current, config, hit(config, current, V.vec3(0.6, 0.0, 0.8), 0.0))
+  require(boundary.state.mode == Ground.Walking && boundary.state.position == current.position, "inclusive slope and zero fraction")
+  for normal in [V.vec3(0.8, 0.0, 0.6), V.vec3(1.0, 0.0, 0.0), V.vec3(0.0, 0.0, -1.0)] {
+    require(settled(current, config, hit(config, current, normal, 0.5)).support == None, "steep wall and ceiling are unsupported")
+  }
+  let lower = Ground.Hit{..flat, point: V.vec3(0.0, 0.0, 0.5)}
+  require(settled(current, config, lower).support == None, "lower hemisphere boundary is excluded")
+  let tinySlope = Ground.Settings{..config, minUpDot: 1e-200}
+  require(settled(current, tinySlope, hit(tinySlope, current, V.vec3(1.0, 0.0, 0.0), 1.0)).support == None, "wall never passes tiny positive slope limit")
+  let edgeConfig = Ground.Settings{..config, minUpDot: 0.1}
+  let Some(z) = Float.sqrt(0.19) else { panic("edge root") }
+  let edge = hit(edgeConfig, current, V.vec3(0.9, 0.0, z), 1.0)
+  require(settled(current, edgeConfig, edge).support == None, "strict inset footprint")
+  let wider = Ground.Settings{..edgeConfig, edgeInset: 0.04}
+  require(settled(current, wider, edge).state.mode == Ground.Walking, "interior footprint remains supported")
+  let rotated = Ground.Settings{..config, up: V.vec3(0.0, 2.0, 0.0)}
+  let sideways = Ground.State{position: V.vec3(0.0, 3.0, 0.0), velocity: V.vec3(2.0, -4.0, 0.0), mode: Ground.Falling}
+  let rotatedHit = Ground.Hit{fraction: 1.0, normal: V.vec3(0.0, 1.0, 0.0), point: V.vec3(0.0, 0.0, 0.0)}
+  let alongY = settled(sideways, rotated, rotatedHit)
+  require(alongY.state.position == V.vec3(0.0, 2.0, 0.0) && alongY.state.velocity == V.vec3(2.0, 0.0, 0.0), "arbitrary normalized gravity")
+  let tiltedConfig = Ground.Settings{..config, up: V.vec3(0.6, 0.0, 0.8)}
+  let tiltedState = Ground.State{position: V.vec3(1.8, 0.0, 2.4), velocity: V.vec3(-2.4, 2.0, -3.2), mode: Ground.Falling}
+  let tilted = settled(tiltedState, tiltedConfig, hit(tiltedConfig, tiltedState, tiltedConfig.up, 1.0))
+  close(tilted.state.position.x, 1.2, "tilted center x")
+  close(tilted.state.position.z, 1.6, "tilted center z")
+  close(tilted.state.velocity.x, 0.0, "tilted velocity x")
+  close(tilted.state.velocity.y, 2.0, "tilted velocity y")
+  close(tilted.state.velocity.z, 0.0, "tilted velocity z")
+  let obliqueState = Ground.State{..tiltedState, velocity: V.vec3(-9.0, 2.0, -7.0)}
+  let first = settled(obliqueState, tiltedConfig, hit(tiltedConfig, obliqueState, tiltedConfig.up, 1.0))
+  let repeated = settled(first.state, tiltedConfig, hit(tiltedConfig, first.state, tiltedConfig.up, 0.0))
+  require(repeated.state.mode == Ground.Walking, "horizontal projection roundoff must not trigger falling")
+  for direction in [V.vec3(1.0, 2.0, 3.0), V.vec3(2.0, 3.0, 4.0), V.vec3(1.0, 1.0, 1.0), V.vec3(0.6, 0.0, 0.8), V.vec3(1.0, 4.0, 2.0)] {
+    let Some(up) = V.normalized(direction) else { panic("gravity direction") }
+    let strictConfig = Ground.Settings{..config, up, minUpDot: 1.0}
+    let body = Ground.State{position: V.scale(up, 3.0), velocity: V.scale(up, -4.0), mode: Ground.Falling}
+    let strict = settled(body, strictConfig, hit(strictConfig, body, up, 1.0))
+    require(strict.state.mode == Ground.Walking, "aligned arbitrary gravity at exact slope limit")
+  }
+  let rising = Ground.State{..current, velocity: V.vec3(0.0, 0.0, 1.0), mode: Ground.Walking}
+  let Ok(jumping) = Ground.settle(&rising, &config, |_p, _d| -> Result[Option[Ground.Hit], Str] { panic("rising state queried") }) else { panic("rising refused") }
+  require(jumping.state.mode == Ground.Falling && jumping.state.position == current.position, "rising bypass")
+  let tinyRise = Ground.State{..rising, velocity: V.vec3(1e100, 0.0, 1e-200)}
+  let Ok(tiny) = Ground.settle(&tinyRise, &config, |_p, _d| -> Result[Option[Ground.Hit], Str] { panic("tiny rise queried") }) else { panic("tiny rise refused") }
+  require(tiny.state.mode == Ground.Falling, "no fixed world-speed deadzone")
+  let Ok(lost) = Ground.settle(&floor.state, &config, |_p, _d| -> Result[Option[Ground.Hit], Str] { Ok(None) }) else { panic("lost support refused") }
+  require(lost.state.mode == Ground.Falling && lost.state.velocity == floor.state.velocity, "walk off edge")
+  let failed = Ground.settle(&current, &config, |_p, _d| -> Result[Option[Ground.Hit], Str] { Err("offline") })
+  require(match failed { case Err(Ground.QueryFailed(message)) => message == "offline" case _ => false }, "query error payload")
+  for scale in [1e-200, 1e200] {
+    let cfg = settings(scale)
+    let body = state(scale)
+    let value = settled(body, cfg, hit(cfg, body, cfg.up, 1.0))
+    close(value.state.position.z / scale, 2.0, "scaled support")
+  }
+  for bad in [Ground.Settings {..config, radius: 0.0 }, Ground.Settings{..config, halfHeight: 0.1}, Ground.Settings{..config, maxDistance: 0.0}, Ground.Settings{..config, minUpDot: 0.0}, Ground.Settings{..config, minUpDot: 1.1}, Ground.Settings{..config, edgeInset: 0.5}, Ground.Settings{..config, up: V.vec3(0.0, 0.0, 0.0)}, Ground.Settings{..config, contactTolerance: 0.0}] {
+    require(match withHit(current, bad, flat) { case Err(Ground.InvalidInput) => true case _ => false }, "invalid settings")
+  }
+  let infinity = 1e308 * 2.0
+  for bad in [Ground.Hit {..flat, fraction: -0.1 }, Ground.Hit{..flat, fraction: 1.1}, Ground.Hit{..flat, fraction: infinity - infinity}, Ground.Hit{..flat, normal: V.vec3(0.0, 0.0, 2.0)}, Ground.Hit{..flat, normal: V.vec3(0.0, 0.0, 0.0)}, Ground.Hit{..flat, point: V.vec3(infinity, 0.0, 0.0)}, Ground.Hit{..flat, point: V.vec3(0.0, 0.0, -1.0)}] {
+    require(match withHit(current, config, bad) { case Err(Ground.InvalidContact) => true case _ => false }, "invalid contact")
+  }
+  let huge = Ground.State{..current, position: V.vec3(1e308, 0.0, 0.0)}
+  require(match withHit(huge, config, flat) { case Err(Ground.NumericRange) => true case _ => false }, "under-resolved shape")
+  let wide = Ground.Settings{..config, radius: 1e307, halfHeight: 1e308, maxDistance: 1e308, edgeInset: 0.0, contactTolerance: 1e300}
+  let origin = Ground.State{..current, position: V.vec3(0.0, 0.0, 0.0)}
+  require(match withHit(origin, wide, flat) { case Err(Ground.NumericRange) => true case _ => false }, "swept capsule endpoint range")
+  let unresolvable = Ground.Settings{..config, contactTolerance: 1e-30}
+  require(match withHit(current, unresolvable, flat) { case Err(Ground.NumericRange) => true case _ => false }, "under-resolved tolerance")
+  let diagonal = Ground.Settings{..config, up: V.vec3(1.0, 1.0, 1.0)}
+  let fast = Ground.State{..current, velocity: V.vec3(1.79e308, 1.79e308, 1.79e308)}
+  require(match withHit(fast, diagonal, flat) { case Err(Ground.NumericRange) => true case _ => false }, "velocity projection range")
+  let nonfinite = Ground.State{..current, velocity: V.vec3(infinity, 0.0, 0.0)}
+  require(match withHit(nonfinite, config, flat) { case Err(Ground.InvalidInput) => true case _ => false }, "nonfinite state")
+  print("ark ground: ok")
+  0
+}

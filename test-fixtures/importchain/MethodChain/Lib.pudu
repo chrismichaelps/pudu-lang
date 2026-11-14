@@ -1,0 +1,11 @@
+module MethodChain.Lib
+
+export type B = { n: Int }
+
+export trait Op {
+  fn add(self: &Self, value: Int) -> Self
+}
+
+impl Op for B {
+  fn add(self: &Self, value: Int) -> Self { B{n: self.n + value} }
+}

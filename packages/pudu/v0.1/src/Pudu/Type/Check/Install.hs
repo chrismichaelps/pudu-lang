@@ -30,8 +30,9 @@ import Pudu.Type.Env
   ( Checker
   , DeclaredTypes (..)
   , bindName
+  , bindConstructorName
   , inheritRestrictions
-  , lookupName
+  , aliasName
   , recordComptimeFunction
   , recordUnsafeFunction
   )
@@ -96,7 +97,7 @@ installWanted
   :: DeclaredTypes
   -> Set.Set NominalId
   -> Set.Set Text
-  -> Map.Map NominalId [Located Function]
+  -> Map.Map NominalId Tree.Trait
   -> Set.Set (NominalId, Text)
   -> TypeInterface
   -> Checker ()
@@ -137,9 +138,8 @@ interfaceLayouts value =
     depend on whether it was reached directly or through its module. -}
 publishValue :: TypeInterface -> Text -> Checker ()
 publishValue value name = do
-  found <- lookupName name
   let qualified = moduleNameText (interfaceModule value) <> "." <> name
-  maybe (pure ()) (bindName qualified) found
+  aliasName name qualified
   inheritRestrictions name qualified
 
 interfaceAliases :: DeclaredTypes -> TypeInterface -> Map.Map Text ([Text], Type)
@@ -197,9 +197,9 @@ declareConstructors declared value = case locatedValue (Tree.typeDefinition valu
         scheme
           | null payload = polytype rigid [] ownerType
           | otherwise = polytype rigid [] (FunctionTypeValue False payload ownerType)
-    bindName name scheme
+    bindConstructorName owner name scheme
     -- The canonical key is what `Shape.Circle` is looked up by.
-    bindName (nominalKey owner <> "." <> name) scheme
+    aliasName name (nominalKey owner <> "." <> name)
 
 variantPayload :: DeclaredTypes -> [(Text, Int)] -> Tree.Variant -> Checker [Type]
 variantPayload declared rigid variant = case Tree.variantPayload variant of

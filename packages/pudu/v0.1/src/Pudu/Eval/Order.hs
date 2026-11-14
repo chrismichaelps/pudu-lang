@@ -47,5 +47,6 @@ comparableValue value = case value of
   ArrayValue members -> all comparableValue (toList members)
   BucketsValue entries -> all comparableValue (IntMap.elems entries)
   RecordValue _ fields -> all (comparableValue . snd) fields
+  NamedSumValue _ _ fields -> all (comparableValue . snd) fields
   VariantValue _ payload -> all comparableValue payload
   _ -> True

@@ -37,6 +37,8 @@ import Pudu.IntegerLiteral
   ( ParsedInteger (..), integerKindName, integerSuffixType, parseIntegerLiteral )
 import Pudu.Frontend.Syntax.Tree (Capability (..))
 import qualified Data.Map.Strict as Map
+import qualified Data.Set as Set
+import Pudu.Type.Check.Qualified (qualifiedScheme, concreteOwner)
 import Pudu.Type.Formation (builtinTypeNames)
 import Pudu.Type.Substitute (substituteRigid)
 import Pudu.Type.Check.Receiver (bindReceiver)
@@ -44,6 +46,9 @@ import Pudu.Type.Check.Method (methodScheme)
 import Pudu.Type.Env
   ( Checker
   , DeclaredTypes (..)
+  , NameBinding (..)
+  , lookupBinding
+  , recordVariantOwner
   , isStaticTrait
   , recordSelection
   , useCapability
@@ -137,15 +142,24 @@ nameType spanValue names@(first NonEmpty.:| remaining) = do
       foldM (memberType spanValue) value remaining
     _ -> namespaceNameType spanValue names
 
+bindingType :: Span -> NameBinding -> Checker Type
+bindingType spanValue binding = case binding of
+  ValueBinding scheme -> instantiate spanValue scheme
+  ConstructorBinding owner label scheme -> do
+    refused <- namedVariantAsValue spanValue label (schemeType scheme)
+    case refused of
+      Just value -> pure value
+      Nothing -> do
+        recordVariantOwner spanValue owner label []
+        instantiate spanValue scheme
+
 namespaceNameType :: Span -> NonEmpty.NonEmpty Text -> Checker Type
 namespaceNameType spanValue names = do
   let written = Text.intercalate "." (NonEmpty.toList names)
-  found <- lookupName written
-  named <- namedVariantAsValue spanValue (NonEmpty.last names)
-  case (found, named) of
-    (Just _, Just refused) -> pure refused
-    (Just scheme, Nothing) -> instantiate spanValue scheme
-    (Nothing, _) -> do
+  found <- lookupBinding written
+  case found of
+    Just binding -> bindingType spanValue binding
+    Nothing -> do
       case NonEmpty.nonEmpty (NonEmpty.init names) of
         Nothing -> pure ()
         Just qualifier -> do
@@ -171,7 +185,15 @@ namespaceNameType spanValue names = do
 qualifiedMemberType :: DeclaredTypes -> Span -> Tree.Expression -> Text -> Checker (Maybe Type)
 qualifiedMemberType declared spanValue target member = do
   local <- localValueHead target
-  if local then pure Nothing else namespaceMemberType declared spanValue target member
+  if local then pure Nothing else do
+    selected <- qualifiedScheme declared spanValue target member
+    case selected of
+      Just (owner, scheme) | not (Set.member owner (declaredTraitNames declared)) ->
+        Just <$> instantiate spanValue scheme
+      _ -> do
+        concrete <- concreteOwner declared target
+        let namespace = maybe target (\(path, _) -> Tree.NameExpression (path NonEmpty.:| [])) concrete
+        namespaceMemberType declared spanValue namespace member
 
 {-| Only nested frames establish value shadowing; shared bare exports do not. -}
 localValueHead :: Tree.Expression -> Checker Bool
@@ -184,14 +206,14 @@ namespaceMemberType :: DeclaredTypes -> Span -> Tree.Expression -> Text -> Check
 namespaceMemberType declared spanValue target member = case target of
   Tree.NameExpression names -> do
     let owner = Text.intercalate "." (NonEmpty.toList names)
-    written <- lookupName (owner <> "." <> member)
+    written <- lookupBinding (owner <> "." <> member)
     -- A variant is bound under its type's canonical key; the qualifier is
     -- only how this module spells that type.
     found <- case (written, Map.lookup owner (declaredNames declared)) of
-      (Nothing, Just identity) -> lookupName (nominalKey identity <> "." <> member)
+      (Nothing, Just identity) -> lookupBinding (nominalKey identity <> "." <> member)
       _ -> pure written
     case found of
-      Just scheme -> Just <$> instantiate spanValue scheme
+      Just binding -> Just <$> bindingType spanValue binding
       Nothing -> do
         ownsMembers <- qualifiesSomething owner
         selfIsValue <- lookupName owner
@@ -279,9 +301,12 @@ declaresVariant declared owner member = case Map.lookup owner (declaredNames dec
     and a program mixing them would type check and then find no arm at run
     time. One spelling reaches the value, so the other cannot be allowed to
     start. -}
-namedVariantAsValue :: Span -> Text -> Checker (Maybe Type)
-namedVariantAsValue spanValue name = do
-  fieldNames <- lookupVariantFields name
+namedVariantAsValue :: Span -> Text -> Type -> Checker (Maybe Type)
+namedVariantAsValue spanValue name resolved = do
+  fieldNames <- case resolved of
+    NominalType owner _ -> lookupVariantFields owner name
+    FunctionTypeValue _ _ (NominalType owner _) -> lookupVariantFields owner name
+    _ -> pure Nothing
   case fieldNames of
     Nothing -> pure Nothing
     Just names -> do
@@ -354,8 +379,10 @@ substituteRigidType = substituteRigid
     declared result, never from the target: that is what lets one operator serve
     both `Result` and `Option` without a token to tell them apart, and it is why
     a mismatched target is an ordinary unification failure rather than a rule of
-    its own. An unannotated result is still inferred as `Result`, because the
-    `Ok` and `Err` in such a body are what will decide it. -}
+    its own. A result not yet known, as in a function literal whose expected
+    type is unified only after its body, takes the carrier the operand already
+    names when that is `Option`; otherwise it is inferred as `Result`, because
+    the `Ok` and `Err` in such a body are what will decide it. -}
 tryType :: Span -> Type -> Type -> Checker Type
 tryType spanValue targetType declaredResult = do
   resolvedResult <- zonk declaredResult
@@ -370,13 +397,18 @@ tryType spanValue targetType declaredResult = do
       _ <- unify spanValue (NominalType "Result" [success, failure]) targetType
       _ <- unify spanValue declaredFailure failure
       pure success
-    VariableType _ -> do
-      success <- freshVariable
-      failure <- freshVariable
-      _ <- unify spanValue (NominalType "Result" [success, failure]) targetType
-      resultSuccess <- freshVariable
-      _ <- unify spanValue resolvedResult (NominalType "Result" [resultSuccess, failure])
-      pure success
+    VariableType _ -> case targetType of
+      NominalType "Option" [payload] -> do
+        resultPayload <- freshVariable
+        _ <- unify spanValue resolvedResult (NominalType "Option" [resultPayload])
+        pure payload
+      _ -> do
+        success <- freshVariable
+        failure <- freshVariable
+        _ <- unify spanValue (NominalType "Result" [success, failure]) targetType
+        resultSuccess <- freshVariable
+        _ <- unify spanValue resolvedResult (NominalType "Result" [resultSuccess, failure])
+        pure success
     ErrorType -> pure ErrorType
     _ -> do
       success <- freshVariable
@@ -911,6 +943,7 @@ bytesMethodType spanValue member = case member of
   "startsWith" -> pure (FunctionTypeValue False [bytesType] boolType)
   "endsWith" -> pure (FunctionTypeValue False [bytesType] boolType)
   "reverse" -> pure (FunctionTypeValue False [] bytesType)
+  "strided" -> pure (FunctionTypeValue False [integerType, integerType, integerType] (optionOf bytesType))
   "toArray" -> pure (FunctionTypeValue False [] (NominalType "Array" [byteType]))
   "toText" -> pure (FunctionTypeValue False [] (optionOf stringType))
   _ -> do

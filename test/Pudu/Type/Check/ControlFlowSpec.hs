@@ -277,6 +277,63 @@ testControlFlow = do
     , "  }"
     , "}"
     ]
+  keptOption <- codes
+    [ "module M"
+    , "fn step(value: Option[Int]) -> Option[Option[Int]] {"
+    , "  let kept = match value {"
+    , "    case None => None"
+    , "    case Some(found) => Some(found + 1)"
+    , "  }"
+    , "  Some(kept)"
+    , "}"
+    ]
+  boundReturn <- codes
+    [ "module M"
+    , "fn step(value: Result[Int, Str]) -> Result[Int, Str] {"
+    , "  let found = match value {"
+    , "    case Err(problem) => { return Err(problem) }"
+    , "    case Ok(held) => held"
+    , "  }"
+    , "  Ok(found + 1)"
+    , "}"
+    ]
+  branchTail <- codes
+    [ "module M"
+    , "fn step(value: Option[Int], wanted: Bool) -> Option[Int] {"
+    , "  if wanted {"
+    , "    match value {"
+    , "      case None => None"
+    , "      case Some(found) => Some(found + 1)"
+    , "    }"
+    , "  } else {"
+    , "    None"
+    , "  }"
+    , "}"
+    ]
+  returnedMatch <- codes
+    [ "module M"
+    , "fn step(value: Option[Int], wanted: Bool) -> Option[Int] {"
+    , "  if wanted {"
+    , "    return match value {"
+    , "      case None => None"
+    , "      case Some(found) => Some(found + 1)"
+    , "    }"
+    , "  }"
+    , "  None"
+    , "}"
+    ]
+  closureTail <- codes
+    [ "module M"
+    , "fn outer(values: Array[Option[Int]]) -> Int {"
+    , "  let step = fn(value: Option[Int]) -> Option[Int] {"
+    , "    match value {"
+    , "      case None => None"
+    , "      case Some(found) => Some(found + 1)"
+    , "    }"
+    , "  }"
+    , "  values.length()"
+    , "}"
+    ]
   transformingMatch <- codes
     [ "module M"
     , "fn step(value: Result[Int, Str]) -> Result[Int, Str] {"
@@ -386,6 +443,11 @@ testControlFlow = do
     , counterexample "a pass-through Err arm is a ?" (propagatingMatch === ["W3003"])
     , counterexample "a returned pass-through is the same arm" (propagatingReturn === ["W3003"])
     , counterexample "a pass-through None arm is a ?" (propagatingOption === ["W3003"])
+    , counterexample "a failure kept as a value is not propagated" (keptOption === [])
+    , counterexample "a returning arm in a binding is a ?" (boundReturn === ["W3003"])
+    , counterexample "a branch tail in result position is a ?" (branchTail === ["W3003"])
+    , counterexample "a returned match is in result position" (returnedMatch === ["W3003"])
+    , counterexample "a closure body's tail is its own result" (closureTail === ["W3003"])
     , counterexample "a transformed failure is a decision" (transformingMatch === [])
     , counterexample "a changed carrier is a decision" (crossCarrierMatch === [])
     , counterexample "a match into a plain result is a decision" (plainCarrierMatch === [])
@@ -458,10 +520,46 @@ testTry = do
     , "  Ok(value)"
     , "}"
     ]
+  optionLambda <- codes
+    [ "module M"
+    , "fn make() -> fn(Int) -> Option[Int] {"
+    , "  |x| {"
+    , "    let y = Some(x)?"
+    , "    Some(y + 1)"
+    , "  }"
+    , "}"
+    , "fn bound() -> Option[Int] {"
+    , "  let step: fn(Int) -> Option[Int] = |x| { let y = Some(x)?"
+    , "    Some(y) }"
+    , "  step(1)"
+    , "}"
+    ]
+  resultLambda <- codes
+    [ "module M"
+    , "fn attempt() -> Result[Int, Str] { Ok(1) }"
+    , "fn make() -> fn(Int) -> Result[Int, Str] {"
+    , "  |x| {"
+    , "    let y = attempt()?"
+    , "    Ok(x + y)"
+    , "  }"
+    , "}"
+    ]
+  mixedLambda <- codes
+    [ "module M"
+    , "fn make() -> fn(Int) -> Result[Int, Str] {"
+    , "  |x| {"
+    , "    let y = Some(x)?"
+    , "    Ok(y)"
+    , "  }"
+    , "}"
+    ]
   pure $ conjoin
     [ admitted === []
     , counterexample "? needs a carrier return type" (wrongCarrier === ["E3011"])
     , counterexample "the failure types must agree" (wrongFailure === ["E3001"])
+    , counterexample "an unannotated lambda propagates an Option" (optionLambda === [])
+    , counterexample "an unannotated lambda still propagates a Result" (resultLambda === [])
+    , counterexample "mixing carriers in a lambda is refused" (mixedLambda /= [])
     ]
 
 testIterationTypes :: IO Property
@@ -497,8 +595,35 @@ testIterationTypes = do
     , "  for x in d { n = n + x }"
     , "  n }"
     ]
+  let boundedHeader =
+        [ "module M"
+        , "trait Sequence[S, T] {"
+        , "  fn begin(self: &Self) -> S"
+        , "  fn advance(self: &Self, state: S) -> Option[(S, T)]"
+        , "}"
+        ]
+  boundedParameter <- codes (boundedHeader <>
+    [ "fn total[S, Q: Sequence[S, Int]](items: &Q) -> Int { var n = 0"
+    , "  for x in *items { n = n + x }"
+    , "  n }"
+    ])
+  boundedWrongUse <- codes (boundedHeader <>
+    [ "fn total[S, Q: Sequence[S, Int]](items: &Q) -> Int { var n = 0"
+    , "  for x in *items { n = n + x.length() }"
+    , "  n }"
+    ])
+  unboundedParameter <- codes
+    [ "module M"
+    , "fn total[Q](items: &Q) -> Int { var n = 0"
+    , "  for x in *items { n = n + 1 }"
+    , "  n }"
+    ]
   pure $ conjoin
     [ counterexample "an array yields its element type" (arrayElement === [])
+    , counterexample "a parameter bounded by Sequence yields its bound's item" (boundedParameter === [])
+    , counterexample "and that item is still checked" (boundedWrongUse === ["E3005"])
+    , counterexample "a parameter with no Sequence bound is reported at the for"
+        (unboundedParameter === ["E3030"])
     , counterexample "and a wrong use of it is now caught" (wrongElement === ["E3005"])
     , counterexample "including over a literal, whose element is settled first"
         (wrongElementOfLiteral === ["E3005"])

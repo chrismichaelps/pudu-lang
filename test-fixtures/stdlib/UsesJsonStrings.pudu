@@ -2,6 +2,7 @@ module UsesJsonStrings
 
 import Std.Bytes as ByteSeq
 import Std.Env as Env
+import Std.Fs as Fs
 import Std.Io as Io
 import Std.Json as Json
 import Std.Result as Result
@@ -74,7 +75,9 @@ export fn main() -> Int {
 
   // A JSON Lines file is read one value per line, skipping blank lines, and a
   // line that does not hold a value is named by its number.
-  let target = Io.join(Env.temporaryDirectory(), "pudu-fixture-json-lines")
+  // A directory of this run alone, so runs at the same time never meet.
+  let Ok(scratch) = Fs.temporaryDirectoryIn(Env.temporaryDirectory(), "pudu-fixture-") else { return 0 - 1 }
+  let target = Io.join(scratch, "pudu-fixture-json-lines")
   let _made = Io.makeDirectory(target)
   let values = Io.join(target, "values.jsonl")
   let _wroteValues = Io.writeAllBytes(values, &ByteSeq.fromText("\{\"n\":1\}\n\n  \n[2,3]\r\n4"))
@@ -87,6 +90,7 @@ export fn main() -> Int {
   }
   let _removedValues = Io.removeIfPresent(values)
   let _removedBroken = Io.removeIfPresent(broken)
+  let _scratchGone = Fs.removeTree(scratch)
   // A number is JSON's grammar exactly: no leading zero, and digits on both
   // sides of a point and after an exponent marker.
   if !rejectsAt("01", 0) || !rejectsAt("-01", 0) || !rejectsAt("[01]", 1) { return 0 - 1 }

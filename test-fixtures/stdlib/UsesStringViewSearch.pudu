@@ -1,0 +1,56 @@
+module UsesStringViewSearch
+
+import Std.Iter {Sequence}
+import Std.StringView as StringView
+import Std.StringView {View}
+
+const MAX = 9223372036854775807
+
+fn check(ok: Bool, label: Str) -> Int {
+  if !ok { panic(label) }
+  1
+}
+
+fn bytes() -> Bool {
+  let view = StringView.of("aéz")
+  let units = view.byteUnits()
+  view.byteAt(2) == Some(169u8) && view.byteAt(-1) == None && view.byteAt(4) == None
+    && units.toArray() == [97u8, 195u8, 169u8, 122u8] && units.count() == 4
+    && view.compare("aéz") == 0 && view.compare("b") == -1 && view.compare("a") == 1
+    && view.substr(2, 1) == None
+}
+
+fn bounded() -> Bool {
+  let repeated = StringView.of("aaaa")
+  let unicode = StringView.of("éé")
+  repeated.findLastFrom("aa", 1) == Some(1) && repeated.findLastFrom("aa", MAX) == Some(2)
+    && repeated.findLastFrom("aa", -1) == None && repeated.findLastFrom("aaaaa", 0) == None
+    && unicode.findLastFrom("é", 1) == Some(0) && unicode.findLastFrom("é", 2) == Some(2)
+    && unicode.findLastFrom("", 1) == Some(1) && unicode.findLastFrom("", MAX) == Some(4)
+}
+
+fn sets() -> Bool {
+  let view = StringView.of("aéz")
+  view.findFirstOf("é", 0) == Some(1) && view.findLastOf("é", MAX) == Some(2)
+    && view.findFirstNotOf("é", 1) == Some(3) && view.findLastNotOf("é", 2) == Some(0)
+    && view.findFirstOf("", 0) == None && view.findFirstNotOf("", 0) == Some(0)
+    && view.findLastNotOf("", MAX) == Some(3) && view.findFirstOf("a", -1) == None
+    && view.findFirstNotOf("", 4) == None && StringView.of("").findLastNotOf("", MAX) == None
+}
+
+fn copies() -> Bool {
+  let view = StringView.of("aé")
+  var target = [0u8, 0u8, 255u8]
+  if view.copyInto(&mut target, 2, 1) != Some(2) || target != [195u8, 169u8, 255u8] { return false }
+  if view.copyInto(&mut target, 1, 2) != Some(1) || target != [169u8, 169u8, 255u8] { return false }
+  var small = [42u8]
+  view.copyInto(&mut small, MAX, 0) == None && small == [42u8]
+    && view.copyInto(&mut small, -1, 0) == None && small == [42u8]
+    && view.copyInto(&mut small, 1, MAX) == None && small == [42u8]
+    && view.copyInto(&mut small, MAX, 3) == Some(0) && small == [42u8]
+}
+
+export fn main() -> Int {
+  check(bytes(), "code units and comparison") + check(bounded(), "bounded reverse search")
+    + check(sets(), "byte-set searches") + check(copies(), "atomic byte copy")
+}

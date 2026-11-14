@@ -17,6 +17,8 @@ Expose phase-neutral `callDepthLimit = 4096`, `iterationLimit = 100000` and
 `expansionNodeLimit = 1000000`. Runtime loops remain unrestricted; compile-time
 execution and derive residualization share the depth and iteration boundaries.
 The generated-node bound separately caps syntax growth between loop iterations.
+[[Backend Runtime]] writes `callDepthLimit` into the native call-depth check, so
+an emitted program bounds recursion by the same number the evaluator does.
 
 ## Algorithm, edge cases and negative logic
 
@@ -33,4 +35,5 @@ consume no iterations. Each phase reports its own located budget failure.
 
 ## Referenced by
 
-[[Derive Residual State]] · [[Derive Design]] · [[src/Pudu/_MOC]]
+[[Derive Residual State]] · [[Derive Design]] · [[Eval Env]] ·
+[[Backend Runtime]] · [[src/Pudu/_MOC]]

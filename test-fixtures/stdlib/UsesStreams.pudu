@@ -2,6 +2,7 @@ module UsesStreams
 
 import Std.Bytes as ByteSeq
 import Std.Env as Env
+import Std.Fs as Fs
 import Std.Io as Io
 import Std.Io {IoError, NotFound, Reader, Writer}
 import Std.Result as Result
@@ -12,7 +13,9 @@ import Std.Result as Result
 export fn main() -> Int {
   // Where this machine puts what a program does not intend to keep, rather
   // than one machine's spelling of it.
-  let target = Io.join(Env.temporaryDirectory(), "pudu-fixture-streams")
+  // A directory of this run alone, so runs at the same time never meet.
+  let Ok(scratch) = Fs.temporaryDirectoryIn(Env.temporaryDirectory(), "pudu-fixture-") else { return 0 }
+  let target = Io.join(scratch, "pudu-fixture-streams")
   var held = 0
   held = held + ok(Io.makeDirectory(target))
 
@@ -98,6 +101,7 @@ export fn main() -> Int {
   held = held + ok(Io.removeIfPresent(straddle))
   held = held + ok(Io.removeIfPresent(crlf))
   held = held + ok(Io.removeIfPresent(Io.join(target, "written.txt")))
+  let _scratchGone = Fs.removeTree(scratch)
   held
 }
 

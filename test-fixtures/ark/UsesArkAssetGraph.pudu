@@ -1,0 +1,70 @@
+module UsesArkAssetGraph
+
+import Ark.Assets.Graph as Graph
+
+fn require(condition: Bool, name: Str) {
+  if !condition { panic(name) }
+}
+
+fn node(id: Str, dependencies: Array[Str]) -> Graph.Node {
+  Graph.Node{id, dependencies}
+}
+
+fn ordering() {
+  let nodes = [
+    node("material", ["albedo", "normal"]),
+    node("albedo", ["source"]),
+    node("normal", ["source"]),
+    node("source", []),
+    node("sound", []),
+  ]
+  let Ok(graph) = Graph.compile(&nodes) else { panic("diamond") }
+  require(graph.order == ["source", "sound", "albedo", "normal", "material"], "dependency-first order")
+  require(Graph.affected(&graph, "source") == Ok(["source", "albedo", "normal", "material"]), "diamond closure once each")
+  require(Graph.affected(&graph, "normal") == Ok(["normal", "material"]), "partial closure")
+  require(Graph.affected(&graph, "material") == Ok(["material"]), "leaf closure")
+  require(Graph.affected(&graph, "sound") == Ok(["sound"]), "unrelated root")
+  require(Graph.affected(&graph, "missing") == Err(Graph.UnknownAsset("missing")), "unknown root")
+  let Ok(empty) = Graph.compile(&[]) else { panic("empty") }
+  require(empty.order == [], "empty graph")
+}
+
+fn failures() {
+  require(Graph.compile(&[node("", [])]) == Err(Graph.InvalidId("")), "empty ID")
+  require(Graph.compile(&[node("a\0b", [])]) == Err(Graph.InvalidId("a\0b")), "NUL ID")
+  require(Graph.compile(&[node("a", []), node("a", [])]) == Err(Graph.DuplicateId("a")), "duplicate ID")
+  require(Graph.compile(&[node("a", []), node("b", ["a", "a"])]) == Err(Graph.DuplicateDependency("b", "a")), "duplicate edge")
+  require(Graph.compile(&[node("a", ["ghost"])]) == Err(Graph.MissingDependency("a", "ghost")), "missing dependency")
+  require(Graph.compile(&[node("self", ["self"])]) == Err(Graph.Cycle(["self"])), "self cycle")
+  let cyclic = [node("free", []), node("a", ["c"]), node("b", ["a"]), node("c", ["b"]), node("tail", ["c", "free"])]
+  require(Graph.compile(&cyclic) == Err(Graph.Cycle(["a", "b", "c", "tail"])), "cycle reports blocked descendants")
+  let forged = Graph.Graph{order: ["a"], dependents: mapOf([("a", ["ghost"])])}
+  require(Graph.affected(&forged, "a") == Err(Graph.InvalidGraph("ghost")), "forged reference")
+  let unordered = Graph.Graph{order: [], dependents: mapOf([("a", [])])}
+  require(Graph.affected(&unordered, "a") == Err(Graph.InvalidGraph("a")), "forged order omits a node")
+  let repeated = Graph.Graph{order: ["a", "a"], dependents: mapOf([("a", [])])}
+  require(Graph.affected(&repeated, "a") == Err(Graph.InvalidGraph("a")), "forged order repeats a node")
+}
+
+fn depth() {
+  var nodes: Array[Graph.Node] = [node("n0", [])]
+  var expected: Array[Str] = ["n0"]
+  var index = 1
+  while index < 1000 {
+    let id = "n" + show(index)
+    nodes = nodes.push(node(id, ["n" + show(index - 1)]))
+    expected = expected.push(id)
+    index = index + 1
+  }
+  let Ok(graph) = Graph.compile(&nodes) else { panic("chain") }
+  require(graph.order == expected, "deep chain order")
+  require(Graph.affected(&graph, "n0") == Ok(expected), "deep chain closure")
+}
+
+export fn main() -> Int {
+  ordering()
+  failures()
+  depth()
+  print("ark asset graph: ok")
+  0
+}

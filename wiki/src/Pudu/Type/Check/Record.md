@@ -34,7 +34,8 @@ data CheckValue = CheckValue
   }
 
 recordType        :: CheckValue -> DeclaredTypes -> [Text] -> Span -> ModuleName -> [Located FieldInit] -> Checker Type
-namedVariantShape :: Text -> Checker (Maybe (NominalId, [Text], [(Text, Type)]))
+-- Field shape lookup is shared from Type Check Pattern.
+namedVariantShapeFor :: DeclaredTypes -> Maybe ModuleName -> Checker (Maybe (NominalId, [Text], [(Text, Type)]))
 ```
 
 ### Governance
@@ -48,7 +49,7 @@ namedVariantShape :: Text -> Checker (Maybe (NominalId, [Text], [(Text, Type)]))
   `Boxed[Int]`, and the field is checked against `Int` rather than against the
   declaration's rigid parameter, which nothing could satisfy.
 - A variant that named its payload is built by naming it, and the names sit over
-  the same positional payload — so `namedVariantShape` answers with the shape
+  the same positional payload — so the shared `namedVariantShapeFor` answers with the shape
   only when the declaration gave names and they match the payload's width.
 - Every declared field must be supplied (`E3008`), and a field the type does not
   declare is `E3005` where it was written rather than at the construction.
@@ -81,3 +82,34 @@ field against the type it was declared with, then name what is missing.
 ## Referenced by
 
 [[src/Pudu/Type/_MOC]] · [[Type Check Expression]] · [[grammar/pudu]]
+
+## Canonical record owners (#761)
+
+Record construction records its resolved canonical declaration owner at the construction span. Named sum payloads keep their variant tags in this record partition.
+
+Resolved Grill Log: identity comes from the checked declaration, never import order or a basename guess. Preserve observable labels, lexical shadowing, field effects and failure provenance; no runtime filesystem lookup. See [[Canonical Runtime Owner Delivery]].
+
+## Named payload field ownership (#761)
+
+Reuse Type Check Pattern namedVariantShapeFor with the complete written construction path. Remove the duplicate basename-only namedVariantShape helper; positional construction help uses variantForPath as well.
+
+Resolved Grill Log: field names and payload types come from one resolved owner/variant key. No runtime representation or field evaluation order changes in this partition. See [[Named Payload Field Delivery]].
+
+## Named sum publication (#761)
+
+Record VariantOwner with canonical owner, variant label and declaration-order field names before checking authored initializers.
+
+Resolved Grill Log: carry checked owner and field order through syntax; preserve authored effects, diagnostics and cache identity. See [[Named Sum Publication]].
+
+## Shorthand field facts (#872)
+
+A shorthand field (`Plain{step}`) is a name read at the field's own span.
+Checking records that name's type at the span, exactly as `step: step`
+records its value through expression checking, so record construction,
+record update and named payloads publish one solved fact per field value.
+
+Resolved Grill Log: **Q:** Let lowering fall back to the declared field
+type? **A:** No. _Rationale:_ the declared type of a generic field is the
+rigid parameter, and the backend must not infer again; the solved fact is
+the checker's product. _Rejected:_ a lowering-side lookup of the record
+shape. No syntax, evaluation order or diagnostic change. See [[CHANGELOG]].

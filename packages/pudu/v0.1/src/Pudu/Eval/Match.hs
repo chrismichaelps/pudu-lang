@@ -9,6 +9,7 @@ import Data.Foldable (toList)
 import qualified Data.Sequence as Seq
 import Data.List.NonEmpty (NonEmpty (..))
 import Data.Text (Text)
+import qualified Data.Text as Text
 import Pudu.Eval.Value (Value (..), intOf)
 import Pudu.DecimalLiteral (decimalFromInteger, parseDecimalLiteral)
 import Pudu.FloatLiteral
@@ -62,8 +63,8 @@ matchPattern (Located _ pattern') value = case pattern' of
      where
       named = length prefix + length suffix
   ConstructorPattern (ModuleName segments) arguments -> case value of
-    VariantValue name payload
-      | name == lastSegment segments && length payload == length arguments ->
+    SumValue owner name payload
+      | constructorMatches segments owner name && length payload == length arguments ->
           concat <$> sequence (zipWith matchPattern arguments payload)
     _ -> Nothing
   {-| A record pattern that names something must match that name.
@@ -75,8 +76,9 @@ matchPattern (Located _ pattern') value = case pattern' of
       `case Add{left, right}` and computed a product. -}
   RecordPattern path fields _ -> case value of
     RecordValue name present
-      | maybe True (== name) (patternName path) ->
-          concat <$> mapM (matchField present) fields
+      | recordMatches path name -> concat <$> mapM (matchField present) fields
+    NamedSumValue owner name present
+      | namedRecordMatches path owner name -> concat <$> mapM (matchField present) fields
     _ -> Nothing
   AlternativePattern alternatives -> firstMatch alternatives
   InvalidPattern -> Nothing
@@ -89,6 +91,22 @@ matchPattern (Located _ pattern') value = case pattern' of
   sequenceElements held = case held of
     ArrayValue members -> Just (toList members)
     _ -> Nothing
+
+  {-| Only executable projection creates a dotted single-segment constructor. -}
+  constructorMatches segments owner name = case segments of
+    symbol :| [] | Text.isInfixOf "." symbol -> symbol == owner <> "." <> name
+    _ -> name == lastSegment segments
+
+  namedRecordMatches path owner name = case path of
+    Just (ModuleName ("::sum::" :| [wantedOwner, wantedName])) ->
+      owner == wantedOwner && name == wantedName
+    Just (ModuleName (symbol :| [])) | Text.isInfixOf "." symbol -> False
+    _ -> maybe True (== name) (patternName path)
+
+  recordMatches path name = case path of
+    Just (ModuleName ("::sum::" :| _)) -> False
+    Just (ModuleName (symbol :| [])) | Text.isInfixOf "." symbol -> symbol == name
+    _ -> maybe True (== snd (Text.breakOnEnd "." name)) (patternName path)
 
   restBinding rest middle = case rest of
     Nothing -> []
@@ -134,8 +152,12 @@ sameValue left right = case (left, right) of
   (IntValue _ a, IntValue _ b) -> a == b
   (TupleValue a, TupleValue b) -> sameList a b
   (ArrayValue a, ArrayValue b) -> sameList (toList a) (toList b)
-  (VariantValue leftName a, VariantValue rightName b) ->
-    leftName == rightName && sameList a b
+  (SumValue leftOwner leftName a, SumValue rightOwner rightName b) ->
+    leftOwner == rightOwner && leftName == rightName && sameList a b
+  (NamedSumValue leftOwner leftName a, NamedSumValue rightOwner rightName b) ->
+    leftOwner == rightOwner && leftName == rightName
+      && map fst a == map fst b
+      && sameList (map snd a) (map snd b)
   (RecordValue leftName a, RecordValue rightName b) ->
     leftName == rightName
       && map fst a == map fst b

@@ -11,10 +11,13 @@ module Pudu.Type.Check.Prelude
 
 import qualified Data.List.NonEmpty as NonEmpty
 import Data.Text (Text)
+import Pudu.FloatKernel (KernelShape (..), floatKernelName, floatKernelShape, floatKernels)
+import Pudu.LaneKernel (LaneType (..), laneKernelName, laneKernelSignature, laneKernels)
 import Pudu.Frontend.Syntax.Name (ModuleName (..))
 import Pudu.Type.Env
   ( Checker
   , bindName
+  , bindConstructorName
   )
 import Pudu.Type.Value
   ( NominalId (..)
@@ -36,12 +39,12 @@ import Pudu.Type.Value
     declares its own `Ok` shadows this binding rather than colliding with it. -}
 declareBuiltinConstructors :: Checker ()
 declareBuiltinConstructors = do
-  bindName "Some"
+  bindConstructorName "Option" "Some"
     (polytype [("T", 0)] [] (FunctionTypeValue False [RigidType "T"] optionOf))
-  bindName "None" (polytype [("T", 0)] [] optionOf)
-  bindName "Ok"
+  bindConstructorName "Option" "None" (polytype [("T", 0)] [] optionOf)
+  bindConstructorName "Result" "Ok"
     (polytype [("T", 0), ("E", 0)] [] (FunctionTypeValue False [RigidType "T"] resultOf))
-  bindName "Err"
+  bindConstructorName "Result" "Err"
     (polytype [("T", 0), ("E", 0)] [] (FunctionTypeValue False [RigidType "E"] resultOf))
   {-| The one conversion that cannot be written in the language: a scalar value
       is an integer, and a character is not a one-element string, so nothing in
@@ -120,6 +123,8 @@ declareBuiltinConstructors = do
             decimalType
         )
     )
+  mapM_ (\kernel -> bindName (floatKernelName kernel) (monotype (kernelType (floatKernelShape kernel)))) floatKernels
+  mapM_ (\kernel -> bindName (laneKernelName kernel) (monotype (laneSignatureType (laneKernelSignature kernel)))) laneKernels
   {-| The effects a program may perform.
 
       Each answers with `Result[T, Str]` rather than failing: the language has
@@ -223,6 +228,19 @@ declareBuiltinConstructors = do
     (monotype (FunctionTypeValue False [bytesType, integerType, bytesType, integerType, integerType] (NominalType "Option" [bytesType])))
   bindName "bufferSize"
     (monotype (FunctionTypeValue False [bytesType] integerType))
+  bindName "textByteAt"
+    (monotype (FunctionTypeValue False [stringType, integerType] (NominalType "Option" [NominalType "UInt8" []])))
+  bindName "textByteSize"
+    (monotype (FunctionTypeValue False [stringType] integerType))
+  bindName "textByteSlice"
+    (monotype (FunctionTypeValue False [stringType, integerType, integerType] (NominalType "Option" [stringType])))
+  bindName "textByteFind"
+    (monotype (FunctionTypeValue False [stringType, stringType, integerType] (NominalType "Option" [integerType])))
+  bindName "textByteFindLast"
+    (monotype (FunctionTypeValue False [stringType, stringType] (NominalType "Option" [integerType])))
+  bindName "textScalarAt"
+    (monotype (FunctionTypeValue False [stringType, integerType]
+      (NominalType "Option" [TupleTypeValue [charType, integerType]])))
   bindName "bufferReadI64"
     (monotype (FunctionTypeValue False [bytesType, integerType] (NominalType "Option" [NominalType "Int64" []])))
   bindName "bufferWriteI64"
@@ -338,6 +356,22 @@ declareBuiltinConstructors = do
   bindName "xmlDecode"
     (monotype (FunctionTypeValue False [NominalType "Str" []] (NominalType "Option" [NominalType stdXmlTagId []])))
  where
+  laneSignatureType (arguments, result) = FunctionTypeValue False (map laneType arguments) (laneType result)
+  laneType lane = case lane of
+    LaneBytes -> bytesType
+    LaneFloat -> floatType
+    LaneInt -> integerType
+    LaneFloats -> NominalType "Array" [floatType]
+    LaneInts -> NominalType "Array" [integerType]
+    LaneOption held -> NominalType "Option" [laneType held]
+    LanePair -> TupleTypeValue [bytesType, bytesType]
+    LaneTriple -> TupleTypeValue [bytesType, bytesType, bytesType]
+  kernelType shape = case shape of
+    FloatArguments count -> FunctionTypeValue False (replicate count floatType) floatType
+    FloatToWord -> FunctionTypeValue False [floatType] (NominalType "UInt64" [])
+    WordToFloat -> FunctionTypeValue False [NominalType "UInt64" []] floatType
+    IntToFloat -> FunctionTypeValue False [integerType] floatType
+    FloatToInt -> FunctionTypeValue False [floatType] (NominalType "Option" [integerType])
   wordMapType = NominalType "Map" [RigidType "K", NominalType "UInt64" []]
   byteType = NominalType "UInt8" []
   stdFlatMapId = NominalId (Just (ModuleName ("Std" NonEmpty.:| ["FlatMap"]))) "FlatMap"
@@ -460,6 +494,7 @@ effectSignatures =
   , ("desktopPresent", monotype (FunctionTypeValue False [integerType, integerType, integerType, bytesType] (resultOf unitTypeValue)))
   , ("desktopPump", monotype (FunctionTypeValue False [integerType, integerType] (resultOf boolType)))
   , ("desktopInputs", monotype (FunctionTypeValue False [integerType] (resultOf stringType)))
+  , ("desktopConfigure", monotype (FunctionTypeValue False (replicate 8 integerType <> [boolType]) (resultOf unitTypeValue)))
   , ("desktopClipboardRead", monotype (FunctionTypeValue False [] (resultOf stringType)))
   , ("desktopClipboardWrite", monotype (FunctionTypeValue False [stringType] (resultOf unitTypeValue)))
   , ("desktopAccessibility", monotype (FunctionTypeValue False [integerType, stringType] (resultOf unitTypeValue)))
@@ -483,6 +518,7 @@ effectSignatures =
   , ("searchSeparator", monotype (FunctionTypeValue False [] stringType))
   , ("exit", monotype (FunctionTypeValue False [integerType] UnitTypeValue))
   , ("clock", monotype (FunctionTypeValue False [] integerType))
+  , ("clockNanos", monotype (FunctionTypeValue False [] integerType))
   , ("now", monotype (FunctionTypeValue False [] integerType))
   , ("zoneOffset", monotype (FunctionTypeValue False [] integerType))
   ,

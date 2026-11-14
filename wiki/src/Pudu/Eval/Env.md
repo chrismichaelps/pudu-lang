@@ -79,7 +79,7 @@ Environment combinators run the nested evaluator directly and normalize both `Do
 ## Edge Cases
 
 - A shape this module cannot handle produces a diagnostic naming the shape, never a default value.
-- The call depth limit is 4096, which is high enough for real recursive programs while still preventing stack overflow on infinite recursion.
+- The call depth limit is 4096, which is high enough for real recursive programs while still preventing stack overflow on infinite recursion. `descend` builds its refusal from [[Diagnostic Evaluation]], so the native runtime — which bakes the same text into every call site — and the interpreter print identical `E7002` output.
 - Aborts carry no recoverable environment; ordinary results and unwinds retain changes outside the lexical frame being removed.
 
 ## Depth
@@ -123,7 +123,7 @@ DEPTH 0.45 (MEDIUM). It keeps one concern out of [[Evaluator]], which would othe
   exit; `readSlot` and `writeSlot` are that body's code reading and writing by position.
 ## Referenced by
 
-[[src/Pudu/Eval/_MOC]] · [[Evaluator]]
+[[src/Pudu/Eval/_MOC]] · [[Evaluator]] · [[Diagnostic Evaluation]]
 
 ## MultiMap execution allocation
 
@@ -147,3 +147,25 @@ and failure paths; accept only ordinary optimized benchmark improvements.
 evaluation and derive residualization. Runtime loop policy and thresholds remain
 unchanged. Resolved Grill Log: one phase-neutral declaration prevents nested
 compiler expansion and ordinary constant evaluation from drifting apart.
+
+## Record field order (#519)
+
+`envRecordFields` maps a record type, or a record-payload variant, to its
+declared field names. `inDeclaredOrder` rearranges written fields into that
+order and leaves them alone unless they are exactly the declared set, since a
+name shared across modules may then belong to another type.
+## Bound provider evidence (#743)
+
+lookupMethod normalizes compiler-resolved Owner.::canonical.trait::member keys into the exact canonical.trait.Owner.member implementation key. Ordinary names retain their previous lookup. Missing selected providers never fall back to the shared receiver method slot. This is symbol lookup, not runtime trait inference.
+
+Resolved Grill Log: preserve the checker-selected provider through ordinary executable symbols,
+including retained methods and receiver aliases. Do not infer a provider from declaration order,
+receiver spelling, or runtime type arguments. Existing evaluation order and lending stay intact.
+See [[Bound Provider Delivery]].
+
+## Declared order over canonical construction (#798)
+
+`declaredOrder` and `inDeclaredRecord` put a constructed record's fields in
+declaration order, found by the record's owner or, for a construction
+spelled through an alias, the owner's own name. Construction itself is
+dev's `recordConstructor`; only the stored order changes (#519).

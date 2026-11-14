@@ -1,6 +1,6 @@
 ---
 type: module
-path: "@root/src/Pudu/Compiler/Literals.hs"
+path: "@root/packages/pudu/v0.1/src/Pudu/Compiler/Literals.hs"
 fidelity: Active
 domain: "[[Compiler Pipeline]]"
 subsystem: "[[Backend]]"
@@ -14,7 +14,7 @@ aliases: [Compiler Literals]
 ---
 # Compiler Literals
 
-`resolveLiterals :: Map Span Text -> Map Span [Type] -> Module -> Module` rewrites every integer literal in expression
+`resolveLiterals :: Map Span Text -> Map Span [Type] -> Map Span ProviderSelection -> Map Span OwnerSelection -> Module -> Module` rewrites every integer literal in expression
 position into `ResolvedInteger kind value` once, after type checking. The kind is the checker's
 answer for the literal's span, else the literal's own suffix, else the platform `Int`; the value is
 the parsed number. The evaluator then builds the value directly, with no parsing and no `Map Span`
@@ -64,3 +64,104 @@ ordinary modules with no static selections do not pay for the additional owner-o
 
 Both projections retain that distinct callee span. Resolved Grill Log: an execution product reused
 for printed expansion must retain the same explicit owner selection as an analysis product.
+
+## Bound provider evidence (#743)
+
+resolveLiterals additionally consumes Map Span ProviderSelection provider facts. Only executable receiver member symbols become ::canonical.trait::member; implementation trait type paths become canonical. Authored tooling syntax remains unchanged. These resolved symbols survive ordinary checked-product serialization; no per-call span lookup or fake type argument is introduced.
+
+Resolved Grill Log: preserve the checker-selected provider through ordinary executable symbols,
+including retained methods and receiver aliases. Do not infer a provider from declaration order,
+receiver spelling, or runtime type arguments. Existing evaluation order and lending stay intact.
+See [[Bound Provider Delivery]].
+
+## Canonical record owners (#761)
+
+Executable record constructor paths and implementation target paths retain the canonical checker owner through the existing post-check fact projection. Tooling syntax and authored spans remain unchanged.
+
+Resolved Grill Log: identity comes from the checked declaration, never import order or a basename guess. Preserve observable labels, lexical shadowing, field effects and failure provenance; no runtime filesystem lookup. See [[Canonical Runtime Owner Delivery]].
+
+Resolved Grill Log: use an independent owner-fact map and rewrite an implementation target at its structural Impl field; trait and target may share a generated span. Generic type walking must not substitute a concrete owner for a trait provider.
+
+Resolved Grill Log: a named-field sum variant carries VariantOwner independently
+of concrete record identity. Its executable descriptor retains canonical owner,
+short variant label and declared fields; authored tooling paths stay unchanged.
+
+## Qualified concrete methods (#763)
+
+A checked concrete type-member owner fact rewrites only the executable target to one canonical name symbol, preserving member/span and existing type applications. Authored tooling syntax stays unchanged; receiver-bound provider symbols retain their existing projection.
+
+Resolved Grill Log: known concrete identity, lexical admission, module-export priority and provider ambiguity must agree for called and retained methods. See [[Qualified Record Method Delivery]].
+
+## Constructor pattern ownership (#761)
+
+Project resolved positional ConstructorPattern owners into one internal canonical owner/tag path symbol only for executable syntax. Recurse into payload patterns; authored tooling paths and owner-only printable projections remain unchanged.
+
+Resolved Grill Log: preserve declaration identity through checking, executable projection and usefulness; no per-match span lookup. See [[Constructor Pattern Owner Delivery]].
+
+## Record pattern identity (#761)
+
+Project checked ordinary RecordPattern paths with owner facts into one canonical owner symbol only in executable syntax. Preserve fields/rest/spans and recurse into nested patterns; named sum payloads without record facts retain their existing representation.
+
+Resolved Grill Log: canonical identity and subject-sensitive refutability must agree before evaluation. See [[Record Pattern Owner Delivery]].
+
+## Named sum publication (#761)
+
+Project VariantOwner constructors to ::sum::/owner/label/declared-fields and named patterns to ::sum::/owner/label. Concrete projections remain restricted to ConcreteOwner. Tooling syntax stays authored.
+
+Resolved Grill Log: carry checked owner and field order through syntax; preserve authored effects, diagnostics and cache identity. See [[Named Sum Publication]].
+
+## Checked constructor values (#766)
+
+In executable syntax only, a VariantOwner fact on a NameExpression or MemberExpression becomes an empty RecordExpression with the unspellable ::constructor::/owner/label descriptor. This is an owned positional constructor value, not a namespace lookup. Preserve spans and authored tooling syntax; ordinary ConcreteOwner/provider rewrites stay separate.
+
+Resolved Grill Log: checked canonical identity must survive lowering even when a type and a bare variant share text. No runtime owner inference or source syntax change. See [[Variant Namespace Delivery]].
+
+Resolved #734 qualifier contract: retain exact admitted name lookup separately from preferred diagnostic spellings; successful explicit self-taking trait calls publish their canonical qualifier through the existing member owner-fact projection. Preserve argument order and static-member behavior. See [[Imported Provider Delivery]].
+
+Resolved #734 nominal-member contract: unambiguous nominal selections also supply existing provider facts, including concrete fields after derive expansion. The unchanged marker projection must preserve their lexical provider rather than global runtime installation order. See [[Imported Provider Delivery]].
+
+## Complete implementation heads (#735)
+
+ImplementationOwner Type is a distinct owner fact for an implementation target.
+Form its complete target with implementation rigid parameters, transparent aliases
+and canonical nested nominal identities. Env publishes this local immutable fact
+separately from provider evidence and interface snapshots. Compiler Literals reads
+it only at the structural Impl target field and projects the complete formed type
+into executable syntax; source/tooling syntax remains authored. Expression and
+pattern projections ignore this role. Preserve source spans, declared parameter
+order and the static-selection map; do not infer parameters from runtime values.
+
+Resolved Grill Log: a later runtime matcher needs Pair[Array[B], A] from an alias
+Reversed[A, Array[B]], not the authored alias arguments zipped to A/B. Keeping the
+complete checked target is a prerequisite, not the #735 dispatch repair itself.
+A focused compiler property must assert canonical executable heads, retained
+source heads and unchanged target spans. Existing static and derive regressions
+and every full gate remain required. See [[Implementation Witness Delivery]].
+
+Resolved shape boundary (#735): type projection retains nominal/rigid applications,
+references, tuples, functions, dynamic traits and capability wrappers recursively.
+Only unresolved/error types become invalid syntax; no alias argument reordering
+is reconstructed from authored syntax.
+
+## Complete provider selections (#735)
+
+ProviderSelection carries canonical trait identity, complete formed trait arguments
+and an optional complete receiver type. Existing identity-only recording keeps an
+empty argument list and no receiver. Unambiguous rigid-bound selections retain
+the selected bound arguments and actual receiver, including F[A] rather than F.
+Implementation trait facts retain formed arguments under implementation rigids.
+Final checker publication resolves inference in both arguments and receiver.
+Detailed products and ModuleTypes preserve this immutable typed evidence.
+
+Compiler Literals continues existing member-symbol projection in this partition.
+At the structural Impl trait boundary it projects the complete formed trait,
+including expanded aliases and nested canonical owners; tooling syntax stays
+authored. Runtime transport/consumption follows separately and #735 remains open.
+
+Resolved Grill Log: trait identity cannot recover a parameter present only in
+Choice[B] for Box[A]. Do not fabricate a nominal identity to hold receiver types,
+inspect container elements, overwrite target-owner facts, or drop applied receiver
+arguments while following a rigid constructor's bounds. Assert actual checker
+products, canonical implementation trait projection, authored syntax and spans;
+retain full existing dispatch, diagnostic, derive and cache gates.
+See [[Bound Receiver Evidence Delivery]].
