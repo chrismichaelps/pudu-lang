@@ -73,3 +73,13 @@ embeddedHeaderName :: FilePath
 
 [[src/Pudu/Backend/_MOC]] · [[Native Mobile Targets]] · [[Backend Frame Program]] ·
 [[Native Calls Delivery]]
+
+## Export prototypes and the owning thread (#899)
+
+`EmittedUnit` reports `emittedExports`, the C prototypes of the library's
+exports, and `embeddedHeader` declares them after the entry. A completed
+`pudu_program_run` flushes the host's standard streams before running the
+program, so host output already buffered precedes Pudu's. It records its
+thread as the runtime's owner and publishes
+readiness with release ordering; [[Backend Emit Export]] admits calls only
+after that, on that thread.

@@ -313,3 +313,9 @@ any library the host must link.
 - **Q:** Why share `--target` between packs and native targets? **A:** Both
   name where the artifact runs; `--native` already says which kind of artifact.
   _Rejected:_ a second `--platform` flag.
+
+## Library exports (#899)
+
+`pudu build --native --target <ios target>` lowers through `lowerLibrary`, so
+the root module's exported functions become C functions declared in
+`pudu_program.h`.

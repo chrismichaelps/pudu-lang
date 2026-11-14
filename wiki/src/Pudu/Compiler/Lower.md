@@ -276,3 +276,16 @@ Resolved Grill Log: Read the written output positions in declaration order when 
 ## Owned output slots (#854)
 
 Resolved Grill Log: Resolve a slot destructor through its own foreign block.
+
+## Library roots (#899)
+
+`lowerLibrary` lowers like `lowerProgram` and also queues every exported
+function of the root module as a root, so an export that `main` never calls is
+lowered. An exported function with type parameters, defaults, or `async` is
+refused with E6001 at its name. `lowerProgram` is unchanged, so executables
+never lower or refuse exports.
+
+Resolved Grill Log: roots join the existing worklist rather than a second pass,
+so an export and the entry share one set of specialized copies. _Rejected:_
+lowering exports for every build, which would make executables refuse
+signatures they never cross.

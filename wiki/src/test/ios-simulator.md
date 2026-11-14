@@ -55,6 +55,19 @@ Use `--require-simulator` to make an unavailable simulator a failure.
   only make the launch wait. Where a host calls the entry is its framework's
   choice.
 
+## Cold simulator timing (#899)
+
+Hosted macOS runners failed intermittently with `spawnSync xcrun ETIMEDOUT`
+while installing or first launching the app on a newly booted simulator, under
+the two-minute default every tool call shared. Install and launch now wait up
+to five minutes, a timeout names the command that expired, and a launch that
+timed out or reported no `PUDU_SMOKE` line is terminated and tried once more.
+
+Resolved Grill Log: retry only the absence of a report; any line the app did
+report is compared as is, so a wrong value can never pass on a second try.
+_Rejected:_ retrying the whole smoke, which would also hide compile or
+foreign-call regressions.
+
 ## Referenced by
 
 [[Native Mobile Targets]] · [[Native Mobile Targets Delivery]]

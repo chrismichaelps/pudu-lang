@@ -44,7 +44,7 @@ entry :: CoreBlock -> CoreFunction
 entry = CoreFunction "main" [] intType
 
 program :: CoreFunction -> [CoreFunction] -> CoreModule
-program mainFunction helpers = CoreModule "Main" "main" (mainFunction : helpers) Map.empty Map.empty
+program mainFunction helpers = CoreModule "Main" "main" (mainFunction : helpers) Map.empty Map.empty []
 
 site :: IO Span
 site = emptySpan <$> newSource (SourceName "frames.pudu") "frame contracts"

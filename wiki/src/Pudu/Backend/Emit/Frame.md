@@ -203,3 +203,9 @@ source. The entry's opening and closing come from [[Backend Emit Entry]]
 selected. The unit carries the selected part set and the libraries of the
 frames' foreign declarations with their optional versions in first-seen order. Resolved Grill Log: the
 desktop unit's bytes are unchanged; only the embedded form wraps the body.
+
+## Exported functions (#899)
+
+The embedded form appends [[Backend Emit Export]]'s wrappers after the entry
+and adds their conversion needs to the runtime selection; the prototypes are
+reported in the emitted unit. The executable form emits none.

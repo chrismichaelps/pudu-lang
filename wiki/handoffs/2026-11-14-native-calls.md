@@ -10,7 +10,7 @@ aliases: [Native Calls Delivery]
 Language Architect → Backend Engineer. This partition owns phase 0 of
 [[Pudu Native]] after [[Native Mobile Targets Delivery]]: the single-start
 entry guard (landed here) and calls from a host into exported Pudu functions
-(designed here, not implemented). Backend Engineer → Forensic Guardian review
+(landed here). Backend Engineer → Forensic Guardian review
 covers [[Backend Emit Entry]].
 
 ## Landed
@@ -55,9 +55,9 @@ and requires the second call to answer `PUDU_PROGRAM_ALREADY_STARTED`.
 
 ## Exact next action
 
-Add the exported names as lowering roots in `lowerProgram` (`Pudu.Compiler.Lower`)
-and record each export's identity in the frame module, with its mirror page
-and Grill Log first.
+Measure an export call against a direct C call of the same scalar function at
+`-O2` on an iOS device, and decide from that number whether leaf exports get a
+frameless path.
 
 ## Referenced by
 

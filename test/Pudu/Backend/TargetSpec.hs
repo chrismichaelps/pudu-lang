@@ -92,7 +92,7 @@ sdkFailures = withSystemTempDirectory "pudu-mobile-sdk" $ \root ->
     Nothing -> pure (property False)
     Just target -> do
       let fake = root </> "fake-xcrun"
-          request = LibraryRequest "" (root </> "libMain.a") target
+          request = LibraryRequest "" (root </> "libMain.a") target []
       TextIO.writeFile fake "#!/bin/sh\nprintf 'SDK is absent\\n' >&2\nexit 1\n"
       permissions <- getPermissions fake
       setPermissions fake (setOwnerExecutable True permissions)
@@ -146,7 +146,7 @@ checkAppleArchive xcrun (name, sdk, platform) = do
       case emitted of
         Left problem -> pure (counterexample problem False)
         Right unit -> do
-          built <- compileLibrary (LibraryRequest (emittedSource unit) archive target)
+          built <- compileLibrary (LibraryRequest (emittedSource unit) archive target [])
           case built of
             Left problem -> pure (counterexample (show problem) False)
             Right products -> do

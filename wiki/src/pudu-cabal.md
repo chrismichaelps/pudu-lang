@@ -707,3 +707,7 @@ only the existing text and containers dependencies.
 
 Register [[Backend Toolchain Library]]. Resolved Grill Log: staging and
 invocation use existing toolchain dependencies.
+
+## Export emission (#899)
+
+Register [[Backend Emit Export]] with existing dependencies.

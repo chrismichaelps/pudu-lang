@@ -146,7 +146,7 @@ testEmbeddedEntry = do
                   host = root </> "host.c"
                   executable = root </> "host"
               TextIO.writeFile generated (emittedSource unit)
-              TextIO.writeFile (root </> embeddedHeaderName) (embeddedHeader [])
+              TextIO.writeFile (root </> embeddedHeaderName) (embeddedHeader [] [])
               TextIO.writeFile host (Text.unlines
                 [ "#include <stdio.h>"
                 , "#include \"pudu_program.h\""

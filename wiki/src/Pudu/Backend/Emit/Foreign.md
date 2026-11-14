@@ -73,3 +73,9 @@ Resolved Grill Log: validate arguments and handles before dispatch. Copy all ret
 
 A direct owned handle result participates in the same batch as owned slots.
 Reserve space and resolve every destructor before dispatch.
+
+## Conversion needs shared with exports (#899)
+
+`parameterNeeds` and `resultNeeds` are exported for [[Backend Emit Export]],
+which converts in the opposite direction: an export's arguments use the
+result conversions and its result uses the parameter conversions.
