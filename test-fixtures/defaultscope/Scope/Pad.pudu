@@ -1,0 +1,5 @@
+module Scope.Pad
+
+const FILL: Str = "."
+
+export fn pad(text: Str, fill: Str = FILL) -> Str { text + fill }

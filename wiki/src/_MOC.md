@@ -240,6 +240,7 @@ tags: [moc, module]
 
 - [[Mutex Admission Fixture]] — real local Database contention and recovery.
 - [[Database Challenge Spec]] · [[Database Challenge Fixture]] · [[Database Challenge Transport]]
+- [[Program Evaluation Tests]] — imported-module evaluation and default scope.
 
 - [[Backend Word128 Kernel]] · [[Backend Wide Integer Values]] · [[Native Wide Value Tests]].
 - [[Backend Word128 Kernel]] · [[Native Word128 Tests]] — compiled wide arithmetic.

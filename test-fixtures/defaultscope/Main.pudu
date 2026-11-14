@@ -1,0 +1,7 @@
+module Main
+
+import Scope.Pad {pad}
+
+const FILL: Str = "caller"
+
+fn main() -> Str { pad("ab") + pad("cd", "!") }

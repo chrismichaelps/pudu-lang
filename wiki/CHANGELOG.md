@@ -5,6 +5,10 @@ tags: [changelog]
 
 # Changelog
 
+## 2026-10-27 — Defaults read their own module (#639)
+
+A default parameter value is evaluated in the declaring function's environment. Before, a default naming its own module's constant failed when called from another module, or silently read the caller's constant of the same name. See [[Program Evaluation Tests]].
+
 ## 2026-11-13 — Binary facade (#739)
 
 - Binary facade (#739) adds Encode/Decode derives, framed typed reads, explicit builtin wiring and CLI/distribution validation.
