@@ -37,10 +37,14 @@ The compiler-built sheet smoke runs both passed. The delegate path emitted
 Pudu-owned dismissal reached the same root without a native echo. The
 simulator drives the dismissal completion. A real swipe remains unverified.
 
+The replacement smoke case issues sheet 41 and sheet 42 while sheet 40 is
+dismissing. UIKit displays 42. Replaying the old controller's dismissal
+callback leaves 42 visible and produces no event.
+
 ## Exact next action
 
-Add a simulator regression for rapid sheet replacement followed by an old
-dismissal callback, preserving the replacement in [[Native Sheets Example]].
+Exercise a real edge swipe and a real sheet swipe in the simulator, including
+a canceled gesture, against [[Native Pages Example]] and [[Native Sheets Example]].
 
 ## Referenced by
 

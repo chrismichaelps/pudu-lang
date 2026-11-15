@@ -55,6 +55,7 @@
 @property (strong, nonatomic) PuduPage *presentedSheet;
 @property (nonatomic) BOOL sheetBusy;
 @property (nonatomic) BOOL sheetWaiting;
+@property (strong, nonatomic) UIPresentationController *sheetTestPrevious;
 - (void)reconcileSheet;
 - (void)publish:(NSArray<PuduRouteSnapshot *> *)routes;
 @end
@@ -126,6 +127,17 @@ static BOOL pudu_programmatic_pop_test(void) {
     [page dismissViewControllerAnimated:YES completion:^{
       [self presentationControllerDidDismiss:presentation];
     }];
+  } else if (strcmp(mode, "replace") == 0) {
+    if (self.sheetTestPrevious == nil) {
+      self.sheetTestPrevious = page.presentationController;
+      pudu_queue(PUDU_UI_TAPPED, 2, nil);
+    } else {
+      [self presentationControllerDidDismiss:self.sheetTestPrevious];
+      if (self.presentedSheet == page && self.controller.presentedViewController == page && page.view.window != nil) {
+        printf("PUDU_SHEET replacement visible %u\n", page.instance);
+      }
+      pudu_queue(PUDU_UI_STOPPED, 0, nil);
+    }
   } else {
     pudu_queue(PUDU_UI_TAPPED, 1, nil);
   }

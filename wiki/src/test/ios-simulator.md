@@ -118,6 +118,9 @@ completion path. Physical gestures and cancellation need separate evidence.
 
 [[Native Sheets Example]] exercises UIKit dismissal and Pudu-owned dismissal.
 The smoke suite observes the exact event count and the visible root afterward.
+A third launch issues two replacement commits while the original sheet is
+dismissing. It requires the latest sheet to be visible and verifies that
+replaying the old callback neither emits a dismissal nor clears the replacement.
 Resolved Grill Log: use a simulator-driven completion to check the delegate bridge.
 A physical swipe or a canceled gesture still requires separate evidence.
 

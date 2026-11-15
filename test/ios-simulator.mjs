@@ -179,6 +179,10 @@ int main(int argc, char **argv) {
       environment: { SIMCTL_CHILD_PUDU_UI_SELFTEST: "0", SIMCTL_CHILD_PUDU_UI_SHEET_TEST: "programmatic" },
       labels: ["Root page"],
       reports: ["PUDU_SHEET programmatic"],
+    }, {
+      environment: { SIMCTL_CHILD_PUDU_UI_SELFTEST: "0", SIMCTL_CHILD_PUDU_UI_SHEET_TEST: "replace" },
+      labels: ["Latest sheet"],
+      reports: ["PUDU_SHEET replacement requested", "PUDU_SHEET replacement visible 42"],
     }]);
     invalidGroupApp(device, root);
   } finally {

@@ -5,12 +5,20 @@ import Std.Mobile.Navigation as Navigation
 import Std.Mobile.View as View
 import Std.Ui.Navigation as Stack
 
+fn sheet(id: UInt32, title: Str) -> Option[Navigation.Sheet] {
+  Some(Navigation.Sheet{id: id, body: View.Column([
+          View.Label(title), View.Button("Close", 1u32), View.Button("Replace", 2u32)
+        ]) })
+}
+
 fn main() -> Int {
   let root = Stack.stack(Navigation.Route{id: 10u32, title: "Root", body: View.Label("Root page")})
-  let sheet = Some(Navigation.Sheet{id: 40u32, body: View.Column([View.Label("Sheet contents"), View.Button("Close", 1u32)])})
-  let Ok((mounted, stream)) = Navigation.mountPresentation(&root, sheet) else { return 1 }
+  var current = sheet(40u32, "Sheet contents")
+  let Ok((initial, stream)) = Navigation.mountPresentation(&root, current) else { return 1 }
+  var mounted = initial
   Host.apply(stream)
   var handled = false
+  var replaced = false
   while true {
     match Host.wait() {
       case View.Tapped(tag) if tag == 1u32 && !handled => {
@@ -19,16 +27,26 @@ fn main() -> Int {
         print("PUDU_SHEET programmatic")
         handled = true
       }
+      case View.Tapped(tag) if tag == 2u32 && !handled && !replaced => {
+        let Ok((first, opening)) = Navigation.updatePresentation(&mounted, &root, sheet(41u32, "Intermediate sheet"), false) else { return 7 }
+        Host.apply(opening)
+        current = sheet(42u32, "Latest sheet")
+        let Ok((latest, replacement)) = Navigation.updatePresentation(&first, &root, current, false) else { return 8 }
+        Host.apply(replacement)
+        mounted = latest
+        print("PUDU_SHEET replacement requested")
+        replaced = true
+      }
       case View.SheetDismissed(id) if !handled => {
-        let next = Navigation.afterDismissal(sheet, id)
-        if id != 40u32 { return 3 }
+        let next = Navigation.afterDismissal(current, id)
+        if next != None { return 3 }
         let Ok((_, changed)) = Navigation.updatePresentation(&mounted, &root, next, false) else { return 4 }
         Host.apply(changed)
         print("PUDU_SHEET {id}")
         handled = true
       }
       case View.SheetDismissed(_) => { return 5 }
-      case View.Stopped => { return if handled { 0 } else { 6 } }
+      case View.Stopped => { return if handled || replaced { 0 } else { 6 } }
       case _ => {}
     }
   }

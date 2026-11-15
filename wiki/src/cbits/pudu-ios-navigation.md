@@ -44,7 +44,10 @@ identity of a new presentation.
 
 The self-test exercises the completion predicate with an unchanged stack and an
 actual controller pop. A separate test waits for the completed programmatic
-transition before stopping, so an echoed pop would be visible to Pudu.
+transition before stopping, so an echoed pop would be visible to Pudu. The
+sheet replacement regression keeps the old presentation alive long enough
+to replay its dismissal callback after the replacement appears, and asserts
+the replacement remains UIKit's presented controller.
 
 ## Dependencies and consumers
 

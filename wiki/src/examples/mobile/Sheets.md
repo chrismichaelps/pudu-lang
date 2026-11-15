@@ -17,7 +17,9 @@ sheet instance to the reducer. The simulator observes the root after both paths.
 ## Invariants
 
 Only dismissal of the current sheet changes the model. A Pudu-initiated
-dismissal completes without an event echo.
+dismissal completes without an event echo. Replace issues two successive
+commits with fresh identities. The model retains the latest mounted state
+for subsequent dismissal.
 
 ## Dependencies and consumers
 
