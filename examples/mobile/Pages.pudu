@@ -1,0 +1,29 @@
+module Pages
+
+import Std.Mobile.Host as Host
+import Std.Mobile.Navigation as Navigation
+import Std.Mobile.View as View
+import Std.Ui.Navigation as Stack
+
+fn main() -> Int {
+  let root = Stack.stack(Navigation.Route{id: 10u32, title: "Root", body: View.Label("Root page")})
+  let pages = Stack.push(&root, Navigation.Route{id: 20u32, title: "Detail", body: View.Scroll(View.Label("Detail page"))})
+  let Ok((mounted, stream)) = Navigation.mount(&pages) else { return 1 }
+  Host.apply(stream)
+  var accepted = false
+  while true {
+    match Host.wait() {
+      case View.Popped(from, destination) if !accepted => {
+        let Some(next) = Navigation.afterPop(&pages, Navigation.Pop{from: from, destination: destination}) else { return 2 }
+        let Ok((_, changed)) = Navigation.update(&mounted, &next, false) else { return 3 }
+        Host.apply(changed)
+        print("PUDU_POP {from} {destination}")
+        accepted = true
+      }
+      case View.Stopped => { return if accepted { 0 } else { 4 } }
+      case View.Popped(_, _) => { return 5 }
+      case _ => {}
+    }
+  }
+  0
+}

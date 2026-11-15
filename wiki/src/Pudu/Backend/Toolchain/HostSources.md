@@ -34,6 +34,9 @@ to the compiler and are compiled into the simulator app.
 
 Resolved Grill Log: Select the AudioToolbox sources with an audio marker. A single staging directory serves all selected bundles.
 
+Resolved Grill Log for navigation: stage [[iOS Host Navigation]] in the same
+embedded source list and compile it as a private header.
+
 ## iOS layout source (#919)
 
 Resolved Grill Log: embed the private layout header beside the host from the same source list. The staging step writes the original bytes for both before clang runs. See [[iOS Host Layout]].

@@ -160,7 +160,12 @@ int main(int argc, char **argv) {
     mobileApp(device, "Feed", [{
       environment: { SIMCTL_CHILD_PUDU_UI_SELFTEST: "0", SIMCTL_CHILD_PUDU_UI_KEYBOARD_TEST: "1" },
       labels: Array.from({ length: 40 }, (_, index) => `Row ${index + 1}`),
-      layout: ["PUDU_VIEWPORT safe and scrollable", "PUDU_KEYBOARD visible field", "PUDU_KEYBOARD restored"],
+      reports: ["PUDU_VIEWPORT safe and scrollable", "PUDU_KEYBOARD visible field", "PUDU_KEYBOARD restored"],
+    }]);
+    mobileApp(device, "Pages", [{
+      environment: { SIMCTL_CHILD_PUDU_UI_SELFTEST: "0", SIMCTL_CHILD_PUDU_UI_BACK_TEST: "1" },
+      labels: ["Root page"],
+      reports: ["PUDU_POP 20 10"],
     }]);
     invalidGroupApp(device, root);
   } finally {
@@ -201,15 +206,15 @@ function mobileApp(device, example, runs) {
     const executable = join(app, example);
     run(xcrun, ["simctl", "install", device, app], simulatorTimeout);
     installed = true;
-    for (const { environment, labels, layout } of runs) {
+    for (const { environment, labels, reports } of runs) {
       const lines = launch(device, bundle, "PUDU_", "PUDU_PROGRAM_STATUS", environment);
       // The host reports labels in the order the screen shows them.
       assert.deepEqual(lines.filter((line) => line.startsWith("PUDU_LABEL ")), labels.map((label) => `PUDU_LABEL ${label}`),
         `${example} did not show ${labels.join(", ")}:\n${lines.join("\n")}`);
       assert.ok(lines.includes("PUDU_PROGRAM_STATUS 0"), `${example} did not finish:\n${lines.join("\n")}`);
-      if (layout) {
-        assert.deepEqual(lines.filter((line) => /^PUDU_(VIEWPORT|KEYBOARD) /.test(line)), layout,
-          `${example} did not report the expected scroll and keyboard layout:\n${lines.join("\n")}`);
+      if (reports) {
+        assert.deepEqual(lines.filter((line) => /^PUDU_(VIEWPORT|KEYBOARD|POP) /.test(line)), reports,
+          `${example} did not report the expected platform events:\n${lines.join("\n")}`);
       }
       const firstFrame = lines.find((line) => line.startsWith("PUDU_FIRST_FRAME_MS "));
       assert.ok(firstFrame, `${example} reported no first frame:\n${lines.join("\n")}`);

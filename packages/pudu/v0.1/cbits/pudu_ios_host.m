@@ -20,17 +20,20 @@
    match Std.Mobile.View. */
 enum { PUDU_UI_CREATE = 1, PUDU_UI_TEXT = 2, PUDU_UI_APPEND = 3, PUDU_UI_ROOT = 4, PUDU_UI_TAG = 5, PUDU_UI_RESET = 6,
        PUDU_UI_STATE = 7, PUDU_UI_HINT = 8, PUDU_UI_NAME = 9, PUDU_UI_INSERT = 10, PUDU_UI_REMOVE = 11, PUDU_UI_MOVE = 12,
-       PUDU_UI_INSTRUCTIONS = 13 };
+       PUDU_UI_NAVIGATION = 13, PUDU_UI_INSTRUCTIONS = 14 };
 enum { PUDU_UI_LABEL = 1, PUDU_UI_BUTTON = 2, PUDU_UI_COLUMN = 3, PUDU_UI_ROW = 4, PUDU_UI_FIELD = 5, PUDU_UI_TOGGLE = 6,
        PUDU_UI_SCROLL = 7, PUDU_UI_KINDS = 8 };
 static const uint64_t PUDU_UI_TAPPED = 1, PUDU_UI_STOPPED = 2, PUDU_UI_CHANGED = 3, PUDU_UI_SWITCHED_ON = 4,
-                      PUDU_UI_SWITCHED_OFF = 5;
+                      PUDU_UI_SWITCHED_OFF = 5, PUDU_UI_POPPED = 6;
 
 static NSMutableArray *pudu_nodes;
 static NSMutableArray<NSNumber *> *pudu_kinds;
 /* Each queued event is its 64-bit value and the text it carries. */
 static NSMutableArray<NSArray *> *pudu_events;
 static char *pudu_event_text_bytes;
+static uint32_t pudu_event_detail;
+static UIWindow *pudu_window;
+static UIViewController *pudu_plain;
 static UIView *pudu_surface;
 static UIView *pudu_shown_root;
 static UILayoutGuide *pudu_available;
@@ -49,8 +52,12 @@ static double pudu_now_ms(void) {
   return (double)now.tv_sec * 1000.0 + (double)now.tv_nsec / 1e6;
 }
 
+static void pudu_queue_detail(uint64_t kind, NSInteger tag, NSString *text, uint32_t detail) {
+  [pudu_events addObject:@[ @((kind << 32) | (uint32_t)tag), text ?: @"", @(detail) ]];
+}
+
 static void pudu_queue(uint64_t kind, NSInteger tag, NSString *text) {
-  [pudu_events addObject:@[ @((kind << 32) | (uint32_t)tag), text ?: @"" ]];
+  pudu_queue_detail(kind, tag, text, 0);
 }
 
 /* A toggle: its title beside the platform switch. */
@@ -217,6 +224,8 @@ static uint32_t pudu_node_id(pudu_reader *reader) {
 
 static const pudu_kind *pudu_node_kind(uint32_t node) { return &pudu_kind_table[pudu_kinds[node].unsignedIntValue]; }
 
+#include "pudu_ios_navigation.h"
+
 /* Instruction handlers, one per code. */
 static void pudu_do_create(pudu_reader *reader) {
   uint32_t node = pudu_word(reader);
@@ -295,7 +304,8 @@ static void pudu_do_move(pudu_reader *reader) { pudu_place(reader); }
 static void pudu_do_remove(pudu_reader *reader) {
   uint32_t node = pudu_node_id(reader);
   uint32_t count = pudu_word(reader);
-  [(UIView *)pudu_nodes[node] removeFromSuperview];
+  UIView *body = pudu_nodes[node];
+  if (![body.superview isKindOfClass:PuduRouteSurface.class]) [body removeFromSuperview];
   for (uint32_t i = 0; i < count; i++) {
     uint32_t gone = pudu_node_id(reader);
     pudu_nodes[gone] = [NSNull null];
@@ -304,6 +314,7 @@ static void pudu_do_remove(pudu_reader *reader) {
 }
 
 static void pudu_do_root(pudu_reader *reader) {
+  pudu_leave_navigation();
   uint32_t node = pudu_node_id(reader);
   UIView *root = pudu_nodes[node];
   [pudu_shown_root removeFromSuperview];
@@ -315,6 +326,7 @@ static void pudu_do_root(pudu_reader *reader) {
 
 static void pudu_do_reset(pudu_reader *reader) {
   (void)reader;
+  pudu_leave_navigation();
   [pudu_shown_root removeFromSuperview];
   pudu_shown_root = nil;
   [pudu_nodes removeAllObjects];
@@ -325,7 +337,7 @@ static void (*const pudu_instruction_table[PUDU_UI_INSTRUCTIONS])(pudu_reader *)
   [PUDU_UI_CREATE] = pudu_do_create, [PUDU_UI_TEXT] = pudu_do_text, [PUDU_UI_APPEND] = pudu_do_append,
   [PUDU_UI_ROOT] = pudu_do_root, [PUDU_UI_TAG] = pudu_do_tag, [PUDU_UI_RESET] = pudu_do_reset,
   [PUDU_UI_STATE] = pudu_do_state, [PUDU_UI_HINT] = pudu_do_hint, [PUDU_UI_NAME] = pudu_do_name,
-  [PUDU_UI_INSERT] = pudu_do_insert, [PUDU_UI_REMOVE] = pudu_do_remove, [PUDU_UI_MOVE] = pudu_do_move,
+  [PUDU_UI_INSERT] = pudu_do_insert, [PUDU_UI_REMOVE] = pudu_do_remove, [PUDU_UI_MOVE] = pudu_do_move, [PUDU_UI_NAVIGATION] = pudu_do_navigation,
 };
 
 /* Applies one commit: every instruction in order, in one call. */
@@ -337,7 +349,7 @@ void pudu_ui_apply(const void *stream, uint64_t length) {
     pudu_instruction_table[code](&reader);
   }
   if (pudu_first_frame_ms < 0) {
-    [pudu_surface layoutIfNeeded];
+    [pudu_window layoutIfNeeded];
     pudu_first_frame_ms = pudu_now_ms() - pudu_main_started_ms;
     printf("PUDU_FIRST_FRAME_MS %.1f\n", pudu_first_frame_ms);
     fflush(stdout);
@@ -354,6 +366,7 @@ uint64_t pudu_ui_wait(void) {
   free(pudu_event_text_bytes);
   pudu_event_text_bytes = strdup([next[1] UTF8String]);
   if (pudu_event_text_bytes == NULL) abort();
+  pudu_event_detail = [next[2] unsignedIntValue];
   return [next[0] unsignedLongLongValue];
 }
 
@@ -361,6 +374,8 @@ uint64_t pudu_ui_wait(void) {
 const char *pudu_ui_event_text(void) {
   return pudu_event_text_bytes != NULL ? pudu_event_text_bytes : "";
 }
+
+uint32_t pudu_ui_event_detail(void) { return pudu_event_detail; }
 
 /* Prints what each shown node reports, in the order the screen shows them. */
 static void pudu_report(UIView *view) {
@@ -438,6 +453,8 @@ static void pudu_test_keyboard(void) {
   pudu_target = [PuduTarget new];
   self.window = [[UIWindow alloc] initWithFrame:UIScreen.mainScreen.bounds];
   self.window.rootViewController = controller;
+  pudu_window = self.window;
+  pudu_plain = controller;
   [self.window makeKeyAndVisible];
   pudu_available = pudu_available_area(pudu_surface);
   /* A run-loop timer, not the main queue: Pudu's wait runs the loop, and the
@@ -450,7 +467,7 @@ static void pudu_test_keyboard(void) {
   int status = pudu_program_run(0, NULL);
   printf("PUDU_PROGRAM_STATUS %d\n", status);
   if (getenv("PUDU_UI_SELFTEST") != NULL) {
-    pudu_report(pudu_shown_root);
+    pudu_report(pudu_visible_body());
     fflush(stdout);
     exit(status);
   }
@@ -459,6 +476,7 @@ static void pudu_test_keyboard(void) {
    is set, taps every button as many times as PUDU_UI_SELFTEST says, then asks
    the program to stop, exactly as a user's input would arrive. */
 - (void)selfTest {
+  if (pudu_test_back()) return;
   if (getenv("PUDU_UI_KEYBOARD_TEST") != NULL) {
     pudu_test_keyboard();
     return;

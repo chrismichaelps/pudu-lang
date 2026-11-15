@@ -101,6 +101,16 @@ verifies the field is visible, then dismisses the keyboard and checks the restor
 Resolved Grill Log: observe platform layout and the field frame. A generated focus event alone
 cannot show whether the viewport actually resized.
 
+## Native page stack (#920)
+
+Build [[Native Pages Example]] and simulate a UIKit controller pop. The app
+reports the typed route IDs and reapplies its root route. Assert one event
+and the final root label.
+
+Resolved Grill Log: the simulator exercises the same delegate used by a
+native back action. A programmatic self-test pop is evidence for the
+completion path. Physical gestures and cancellation need separate evidence.
+
 ## Referenced by
 
 [[Native Mobile Targets]] · [[Native Mobile Targets Delivery]] · [[Native Controls Delivery]] · [[Native Keyed Lists Delivery]]

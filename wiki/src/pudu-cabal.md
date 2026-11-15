@@ -719,6 +719,11 @@ invocation use existing toolchain dependencies.
 
 Register [[Backend Emit Export]] with existing dependencies.
 
+## iOS navigation header (#920)
+
+Resolved Grill Log: list the navigation header as a source input because it
+is embedded along with the layout header. See [[iOS Host Navigation]].
+
 ## iOS layout header (#919)
 
 Resolved Grill Log: include `cbits/pudu_ios_layout.h` in the source distribution because the host embedding reads it at compiler build time. See [[iOS Host Layout]].

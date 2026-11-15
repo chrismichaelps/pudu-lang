@@ -28,6 +28,8 @@ tags: [moc, module, foreign, ffi]
 
 - [[iOS Host Layout]] — vertical viewport, safe area, keyboard layout and focus reveal.
 
+- [[iOS Host Navigation]] — UIKit page stack and completed-pop bridge.
+
 ## Referenced by
 
 [[src/_MOC]] · [[Foreign Call]] · [[ADR-0018 Calling a Library Written Elsewhere]]

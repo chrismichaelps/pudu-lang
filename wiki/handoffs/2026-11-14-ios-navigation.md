@@ -8,7 +8,7 @@ aliases: [Native iOS Navigation Delivery]
 # Native iOS Navigation Delivery
 
 Language Architect → Backend Engineer. The architect owns the presentation
-contract in [[Native iOS Navigation]]. Backend Engineer owns route validation and pop reduction in [[Std Mobile Navigation]], the stack snapshot in [[Std Mobile Stream]], and the regression in [[Uses Mobile View]]. Independent public-contract and vault-parity review
+contract in [[Native iOS Navigation]]. Backend Engineer owns route validation and pop reduction in [[Std Mobile Navigation]], the stack snapshot in [[Std Mobile Stream]], and the regression in [[Uses Mobile View]]. UIKit stack ownership and completion handling are in [[iOS Host Navigation]]. Independent public-contract and vault-parity review
 are pending.
 
 ## Scope
@@ -26,9 +26,12 @@ and the exact ordered snapshot with a multibyte title. Mounted stack cases
 verify stable body identity, no-op updates, explicit reassertion, and retirement
 after snapshot publication. FUI owns the cross-platform component API.
 
+On iOS 26.4, the UIKit Back button displayed the root page and reported route 20 to 10 to the Pudu model. The simulator self-test observed the same payload once and the final root label.
+
 ## Exact next action
 
-Implement the UIKit NAVIGATION handler and completed-pop event bridge for the mounted stack snapshot.
+Add an interactive-pop regression to [[Native Pages Example]] covering completed
+and canceled swipes and programmatic pop suppression.
 
 ## Referenced by
 

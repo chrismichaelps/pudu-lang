@@ -82,7 +82,11 @@ fn navigationChecks() -> Bool {
   let Some(retainedRoot) = Navigation.afterPop(&shown, toRoot) else { return false }
   let Some(retainedDetail) = Navigation.afterPop(&shown, toDetail) else { return false }
   let wire = Stream.navigation([], &[(10u32, 42u32, "Café"), (20u32, 84u32, "")])
-  Navigation.validate(&shown) == Ok(())
+  let popWord = (6u64 << 32) | 30u64
+  View.carriesDetail(popWord) && !View.carriesDetail(1u64 << 32)
+    && View.eventWithDetail(popWord, "", 10u32) == View.Popped(30u32, 10u32)
+    && View.event(popWord, "") == View.Stopped
+    && Navigation.validate(&shown) == Ok(())
     && Navigation.validate(&duplicate) == Err(Navigation.DuplicateRoute(10u32))
     && Stack.depth(&retainedRoot) == 1 && Stack.top(&retainedRoot).id == 10u32
     && Stack.depth(&retainedDetail) == 2 && Stack.top(&retainedDetail).id == 20u32

@@ -57,7 +57,16 @@ retires the tree and releases its IDs after the caller changes the presentation.
 
 Depends on [[Std Mobile Stream]] for the instruction words. Consumers: [[Std Mobile Host]] (its `wait` decodes through `event`), [[Native Counter Example]], [[Native Form Example]], [[Native List Example]], and the fixture [[Uses Mobile View]]. The native presenter of FUI targets this module, as [[Native Application UI]] describes.
 
+## Completed navigation events
+
+`eventWithDetail(raw, text, detail)` decodes kind 6 as `Popped(from, destination)`,
+using the low word and detail word respectively. `carriesDetail` is true for
+kind 6. Existing event kinds and two-argument decoding retain their behavior.
+
 ## Resolved Grill Log
+
+- **Q:** Change the meaning of the text field? **A:** Completed pops use a
+  separate UInt32 detail. Text continues to carry only changed field input.
 
 - **Q:** Allocate IDs independently for each page? **A:** Share the view allocator
   across a presentation. The host can resolve every body from the one node table.

@@ -22,6 +22,7 @@ export type Event
   = Tapped(UInt32)
   | Changed(UInt32, Str)
   | Toggled(UInt32, Bool)
+  | Popped(UInt32, UInt32)
   | Stopped
 
 /// A node the platform shows: its id, the view it shows, and the nodes of
@@ -62,6 +63,21 @@ export fn event(raw: UInt64, text: Str) -> Event {
   match (EVENTS.get(raw >> 32), convertInteger[UInt32](raw & 0xffffffffu64)) {
     case (Some(made), Some(tag)) => made(tag, text)
     case _ => Stopped
+  }
+}
+
+/// Whether a host event carries a navigation destination.
+export fn carriesDetail(raw: UInt64) -> Bool { raw >> 32 == 6u64 }
+
+/// Decodes an event carrying the optional native detail word.
+export fn eventWithDetail(raw: UInt64, text: Str, detail: UInt32) -> Event {
+  if carriesDetail(raw) {
+    match convertInteger[UInt32](raw & 0xffffffffu64) {
+      case Some(from) => Popped(from, detail)
+      case None => Stopped
+    }
+  } else {
+    event(raw, text)
   }
 }
 

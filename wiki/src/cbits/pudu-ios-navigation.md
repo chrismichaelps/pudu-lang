@@ -1,0 +1,46 @@
+---
+type: module
+path: "@root/packages/pudu/v0.1/cbits/pudu_ios_navigation.h"
+fidelity: Active
+tags: [module, host, ios, native, objective-c]
+aliases: [iOS Host Navigation]
+---
+
+# iOS Host Navigation
+
+## Purpose and interface
+
+Private UIKit stack adapter included once by [[iOS Host Adapter]]. Decode NAVIGATION
+into a complete ordered snapshot before changing the native stack. Create page
+controllers for newly presented instance IDs and retain the common prefix.
+Each page controller places its body with [[iOS Host Layout]].
+
+## Invariants
+
+- An empty snapshot, duplicate identity, duplicate body node, unknown node, or
+  invalid title is a stream defect. Decode and validate before publishing the stack.
+- The desired snapshot and UIKit retain bodies directly across transitions. Node
+  retirement makes numeric IDs reusable without invalidating those retained views.
+- If a transition is active, retain the latest snapshot and apply it after the
+  coordinator completes. Report a pop only when UIKit's completed stack is a
+  strict prefix of the requested stack and there is no newer pending snapshot.
+- A completed pop reports the old top and surviving route IDs through the event
+  queue. Canceled and programmatic transitions do not produce pop events.
+
+## Dependencies and consumers
+
+Depends on UIKit and the decoder helpers of [[iOS Host Adapter]]. The compiler
+embeds the header through [[Native Toolchain Host Sources]].
+
+## Resolved Grill Log
+
+- **Q:** Look up numeric node IDs after a UIKit callback? **A:** Hold strong
+  view references in pending snapshots and presented controllers. IDs can
+  be reused once a commit retires a node.
+- **Q:** Dispatch an event on every delegate completion? **A:** Compare
+  controller identity and count against the desired stack. Report only an
+  unsuperseded, completed reduction to a prefix.
+
+## Referenced by
+
+[[src/cbits/_MOC]] · [[Native iOS Navigation]] · [[iOS Host Adapter]]

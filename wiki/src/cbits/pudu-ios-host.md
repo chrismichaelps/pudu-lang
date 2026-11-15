@@ -45,7 +45,17 @@ Entry points the program depends on:
 
 Implements the three symbols of [[Std Mobile Host]]. Its streams come from [[Std Mobile View]]. Used by the counter [[Native Counter Example]] and by the simulator run [[iOS Simulator Run]]. [[Pudu Native]] limits hand-written native code to this platform shim.
 
+## Navigation stack
+
+[[iOS Host Navigation]] owns the navigation instruction. The bridge adds one UInt32
+detail word for the surviving route in pop events. Ordinary events retain their
+existing raw value and text. Retiring a mounted page body leaves its controller's
+strong reference in place until the controller detaches it.
+
 ## Resolved Grill Log
+
+- **Q:** Encode the destination as text? **A:** Use a numeric detail word so the
+  native and Pudu sides agree on the ID range without parsing.
 
 - **Q:** How does a scroll viewport participate in the existing host protocol? **A:** The kind can return its inner stack, so placement and traversal share the group path. Root geometry uses the keyboard guide to shrink available space while the docked keyboard is visible.
 

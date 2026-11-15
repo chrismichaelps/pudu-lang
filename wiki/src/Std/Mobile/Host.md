@@ -38,7 +38,15 @@ Exports:
 
 Depends on [[Std Mobile View]] for `Event`, `event` and `carriesText`. Consumers: [[Native Counter Example]] and [[Native Form Example]]. The host side is [[iOS Host Adapter]], which defines `pudu_ui_apply`, `pudu_ui_wait` and `pudu_ui_event_text`.
 
+## Navigation event detail
+
+For a completed pop, `wait` reads the destination ID via `pudu_ui_event_detail`
+and passes it into the typed decoder before the next event is read.
+
 ## Resolved Grill Log
+
+- **Q:** Fetch detail for every input? **A:** Fetch it only for the pop kind.
+  Existing button, toggle, and text input keep the same foreign-call count.
 
 - **Q:** Why does Pudu wait for events instead of the platform calling into Pudu? **A:** The model is a local of the entry's loop, and the language has no global mutable state. A blocking wait keeps every Pudu call on the one thread that owns the runtime and needs no reentry. _Rejected:_ platform callbacks into exported functions for events.
 - **Q:** Why one crossing per commit? **A:** A stream is one ordered batch, so the cost of the boundary does not grow with the size of the tree. _Rejected:_ one foreign call per control or per property.

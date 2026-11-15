@@ -8,6 +8,7 @@ import Std.Mobile.View as View
 foreign "c" {
   fn applyStream symbol "pudu_ui_apply" (stream: Bytes, length: UInt64) -> ()
   fn waitEvent symbol "pudu_ui_wait" () -> UInt64
+  fn eventDetail symbol "pudu_ui_event_detail" () -> UInt32
   fn eventText symbol "pudu_ui_event_text" () -> Str
 }
 
@@ -28,11 +29,15 @@ export fn apply(stream: Bytes) -> () {
 export fn wait() -> View.Event {
   var raw = 0u64
   var text = ""
+  var detail = 0u32
   unsafe(foreign) {
     raw = waitEvent()
     if View.carriesText(raw) {
       text = eventText()
     }
+    if View.carriesDetail(raw) {
+      detail = eventDetail()
+    }
   }
-  View.event(raw, text)
+  View.eventWithDetail(raw, text, detail)
 }
