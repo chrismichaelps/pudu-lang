@@ -16,7 +16,7 @@ aliases: [Std Mobile View]
 Pure description of a phone screen and the reconciler that keeps it current. A view is a tree of labels, buttons, rows, columns, text fields and toggles, where any control may be wrapped in a name, and a column may hold keyed rows. A root scroll viewport holds one view. A recycling list holds a window of its items, so a long list costs the program only the rows the screen can show. `mount` builds a view and shows it; `update` compares the next view with the mounted tree and emits only the instructions that change the screen. Instructions are spelled by [[Std Mobile Stream]].
 
 Exports:
-- `type View = Label(Str) | Button(Str, UInt32) | Column(Array[View]) | Row(Array[View]) | Keyed(Array[(Str, View)]) | Field(Str, Str, UInt32) | Toggle(Str, Bool, UInt32) | Named(Str, View) | Scroll(View) | Styled(TextStyle, View) | Painted(Role, View) | Recycled(Window)`: `Keyed` is a column whose rows carry keys; the platform sees a column. `Field` is a placeholder, a text and a tag; `Toggle` is a title, an on state and a tag; `Named` gives the wrapped control an accessible name and adds no node. `Scroll` creates a vertical viewport around one child. `Styled` gives the wrapped text control a text style and `Painted` gives it a color role; like `Named`, each adds no node. `Recycled` is a list of `total` items in `columns` equal columns: one column is a list, more are a grid.
+- `type View = Label(Str) | Button(Str, UInt32) | Column(Array[View]) | Row(Array[View]) | Keyed(Array[(Str, View)]) | Field(Str, Str, UInt32) | Toggle(Str, Bool, UInt32) | Named(Str, View) | Scroll(View) | Styled(TextStyle, View) | Painted(Role, View) | Recycled(Window) | Surfaced(Material, View)`: `Keyed` is a column whose rows carry keys; the platform sees a column. `Field` is a placeholder, a text and a tag; `Toggle` is a title, an on state and a tag; `Named` gives the wrapped control an accessible name and adds no node. `Scroll` creates a vertical viewport around one child. `Styled` gives the wrapped text control a text style and `Painted` gives it a color role; like `Named`, each adds no node. `Recycled` is a list of `total` items in `columns` equal columns: one column is a list, more are a grid. `Surfaced` is a container node of kind 9 whose background is a system material, holding one child.
 - `type Window = { tag: UInt32, total: UInt32, first: UInt32, columns: UInt32, rows: Array[(Str, View)] }`: `rows` are the keyed views of items `first`, `first + 1`, and so on, the window the program currently supplies.
 - `type Event = Tapped(UInt32) | Changed(UInt32, Str) | Toggled(UInt32, Bool) | Stopped | Reached(UInt32, UInt32)`: `Reached` names a list's tag and the index of its first visible item.
 - `type Shown = { id: UInt32, view: View, children: Array[Shown] }`: one node of the mounted tree, with the view it displays.
@@ -46,6 +46,7 @@ Exports:
 - The view module no longer writes RESET. The host keeps it so a stream from an earlier writer still means the same.
 - `Styled` and `Painted` wrap the inner control and write STYLE or COLOR for its id after the inner control is built. Wrappers of the same kind on both sides reconcile the inner node and write STYLE or COLOR only when the style or role changed.
 - STYLE and COLOR apply only to labels, buttons, fields and toggles. The host refuses them on a group.
+- `Surfaced` mounts CREATE kind 9, then MATERIAL with its material code, then its child built and appended. A changed material writes one MATERIAL for the surface's id. The child reconciles at index zero, as a scroll viewport's does, and a changed child kind replaces only that child.
 - `mount` and `update` emit no theme instruction. A theme is a separate commit made with `Std.Mobile.Host` `apply`, using [[Std Mobile Theme]]'s `stream`.
 
 ## Negative Logic
@@ -76,6 +77,7 @@ Depends on [[Std Mobile Stream]] for the instruction words and on [[Std Mobile T
 - **Q:** What happens to old duplicate rows after a keyed update? **A:** The placed prefix is the complete new list. Remove the remaining suffix, which contains only unclaimed old duplicates, so no visible row lives outside the mounted tree. _Rejected:_ retaining old rows solely because their key still exists.
 - **Q:** Why recycle ids? **A:** The host's node table stays as large as the screen, not as large as every row ever shown.
 - **Q:** Why a table of constructors for events? **A:** Kinds dispatch through tables in this project; adding an event kind is one entry. _Rejected:_ a guard per kind.
+- **Q:** Why a container rather than a wrapper like Styled? **A:** A material is drawn by its own platform view behind its content, so it is a node with one child.
 - **Q:** Why wrappers rather than fields on every control? **A:** Most controls take the platform default; a wrapper costs nothing when absent and keeps every existing constructor and stream unchanged.
 - **Q:** Why does Pudu supply a window rather than every item? **A:** Encoding a thousand rows each commit would dominate a frame; a window bounded by the screen keeps commits proportional to what can be seen. _Rejected:_ building every row up front.
 - **Q:** Why does the host report only the first visible index? **A:** The program picks the window size; one index is enough to place it, and it fits the one-word detail channel. _Rejected:_ a range packed into the tag word.
@@ -83,4 +85,4 @@ Depends on [[Std Mobile Stream]] for the instruction words and on [[Std Mobile T
 
 ## Referenced by
 
-[[src/Std/_MOC]] · [[Std Mobile Host]] · [[Std Mobile Stream]] · [[Std Mobile Theme]] · [[Native First Light Delivery]] · [[Native Controls Delivery]] · [[Native Keyed Lists Delivery]] · [[Native iOS Scrolling Delivery]] · [[Native iOS Theming Delivery]] · [[Native iOS Recycling Delivery]]
+[[src/Std/_MOC]] · [[Std Mobile Host]] · [[Std Mobile Stream]] · [[Std Mobile Theme]] · [[Native First Light Delivery]] · [[Native Controls Delivery]] · [[Native Keyed Lists Delivery]] · [[Native iOS Scrolling Delivery]] · [[Native iOS Theming Delivery]] · [[Native iOS Recycling Delivery]] · [[Native iOS Materials Delivery]]

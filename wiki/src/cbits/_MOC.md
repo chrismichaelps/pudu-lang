@@ -31,6 +31,7 @@ tags: [moc, module, foreign, ffi]
 - [[iOS Host Events]] — private event queue with the text and detail word each event carries.
 - [[iOS Host Controls]] — platform control factories, setters, target actions and self-test actions.
 - [[iOS Host List]] — recycling list and grid cells, the row store, and scroll reports.
+- [[iOS Host Material]] — surface materials realized as glass on iOS 26 or later, blur otherwise.
 
 ## Referenced by
 

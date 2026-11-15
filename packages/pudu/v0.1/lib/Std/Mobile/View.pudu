@@ -21,6 +21,7 @@ export type View
   | Styled(Theme.TextStyle, View)
   | Painted(Theme.Role, View)
   | Recycled(Window)
+  | Surfaced(Theme.Material, View)
 
 /// A recycling list of `total` items in `columns` equal columns. `rows` are
 /// the keyed views of items `first`, `first + 1` and onward: the window the
@@ -147,6 +148,10 @@ fn built(work: Work, view: &View) -> (Work, Shown) {
     case Row(children) => grouped(written(taken, Stream.create(taken.out, id, Stream.ROW)), id, view, &children)
     case Keyed(rows) => grouped(written(taken, Stream.create(taken.out, id, Stream.COLUMN)), id, view, &rows.map(|row: (Str, View)| row[1]))
     case Scroll(child) => grouped(written(taken, Stream.create(taken.out, id, Stream.SCROLL)), id, view, &[child])
+    case Surfaced(material, child) => {
+      let made = Stream.material(Stream.create(taken.out, id, Stream.MATERIAL), id, Theme.materialCode(material))
+      grouped(written(taken, made), id, view, &[child])
+    }
     case Recycled(window) => {
       let made = Stream.create(taken.out, id, Stream.LIST)
       let shaped = Stream.range(Stream.columns(Stream.tag(made, id, window.tag), id, window.columns), id, window.total, window.first)
@@ -199,6 +204,11 @@ fn reconciled(work: Work, shown: &Shown, next: &View) -> Outcome {
       let laid = if before.columns == after.columns { made.out } else { Stream.columns(made.out, id, after.columns) }
       let ranged = if before.total == after.total && before.first == after.first { laid } else { Stream.range(laid, id, after.total, after.first) }
       regrouped((written(made, ranged), rows), shown, next)
+    }
+    case (Surfaced(before, _), Surfaced(after, child)) => {
+      let (made, node) = settled(work, id, &shown.children[0], &child, 0)
+      let out = if before == after { made.out } else { Stream.material(made.out, id, Theme.materialCode(after)) }
+      regrouped((written(made, out), [node]), shown, next)
     }
     case (Scroll(_), Scroll(child)) => {
       let (made, node) = settled(work, id, &shown.children[0], &child, 0)

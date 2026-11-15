@@ -24,6 +24,7 @@ data ToolchainFailure
   | ToolchainPublishFailed !Text
   | ToolchainSdkMissing !Text !Text
   | ToolchainTargetUnbuilt !Text
+  | ToolchainOutsideLedger !Finding
 
 runToolOutput :: FilePath -> [String] -> Int -> IO (Either ToolchainFailure (Text, Text, Bool))
 runTool :: FilePath -> [String] -> Int -> IO (Either ToolchainFailure Text)
@@ -57,7 +58,8 @@ toolchain outcome.
 
 ## Dependencies and consumers
 
-`process`, `unix` on POSIX, `bytestring`, `text`. Consumed by
+`process`, `unix` on POSIX, `bytestring`, `text`, and [[Backend Ledger]] for the
+`Finding` type that `ToolchainOutsideLedger` carries. Consumed by
 [[Backend Toolchain]] and [[Backend Toolchain Library]].
 
 ## Resolved Grill Log

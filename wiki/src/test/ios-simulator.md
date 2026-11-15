@@ -39,7 +39,9 @@ Use `--require-simulator` to make an unavailable simulator a failure.
 - The script creates its own iPhone device, boots it, installs, launches with
   `--console-pty` capturing standard output, and deletes the device afterwards
   on every path. An explicit `PUDU_IOS_SIMULATOR_UDID` instead uses an already
-  booted test simulator and uninstalls only the uniquely identified smoke app.
+  booted test simulator and uninstalls the apps it installed after each case.
+  Private devices retain test apps until device deletion, so per-app
+  uninstall is skipped there.
 - Passes when the captured lines equal `pudu run`'s output followed by the
   status line.
 
@@ -48,6 +50,14 @@ Use `--require-simulator` to make an unavailable simulator a failure.
 [[Native Mobile Targets]], [[Backend Toolchain Library]]. Run on an Apple silicon Mac with an installed iOS runtime.
 
 ## Resolved Grill Log
+
+- **Q:** Use the two-minute tool timeout for a complete app build? **A:** The
+  build includes Pudu compilation, SDK probing, C compilation, linking,
+  and signing. Give that command five minutes so individual tool failures
+  can reach the caller with their own diagnostics.
+- **Q:** Uninstall each app on a private device? **A:** Device deletion already
+  removes every app. Avoid an extra service call that can time out on a cold
+  hosted runner. Explicitly reused devices still need per-app cleanup.
 
 - **Q:** Why create a device rather than use an existing one? **A:** An
   existing device may be booted by its owner; a private device is deleted
@@ -113,9 +123,10 @@ Resolved Grill Log: the refusal belongs to the host, which alone knows the node'
 
 ## Application output collision (#916)
 
-Before installing Counter, try to build into an existing `.app` directory containing
-a marker. Require `E6006` and verify the marker bytes survive. The subsequent build
-uses a vacant path and must boot.
+Once per run, build a minimal Pudu program into an existing `.app` directory
+containing a marker. Require `E6006` and verify the marker bytes survive. The
+collision exercises bundle publication regardless of the view tree or device
+family. Each Counter run separately builds, installs, and boots its app.
 
 Resolved Grill Log: assert both the observable refusal and the preserved file. An
 exit code alone could hide a build that damaged the old path before failing.
@@ -143,6 +154,28 @@ with a clean status. Two cases run through it:
 Resolved Grill Log: Q: Why test the refusal on a simulator rather than in the fixture? A: The
 refusal belongs to the host; the Pudu stream for it is well formed, so only the host can reject
 it.
+
+## Glass material (#928)
+
+The script runs `examples/mobile/Glass.pudu` ([[Native Glass Example]]) with `PUDU_UI_MATERIAL_TEST` set, on two runtimes:
+
+- The newest installed runtime, iOS 26 or later. The run must print `PUDU_MATERIAL glass`, the label `Glass` in screen order, and exit with status 0.
+- The first installed iOS runtime older than 26 (iOS 18.0 on the development Mac). The run must print `PUDU_MATERIAL blur`, the same label, and exit with status 0. The script creates a private iPhone device on that runtime and deletes it afterwards, as above. If no runtime older than 26 is installed, this run is skipped and the script says so.
+
+Resolved Grill Log: assert the realization line on each runtime, not only the exit status. A glass branch that a pre-26 system also reached would otherwise pass the fallback run.
+
+## Device matrix (#926)
+
+After the iPhone runs, the script picks the newest available device type of every other family
+the selected runtime supports, iPad and any new family, and runs Counter, Feed and Catalog on
+each. The script fails if a family the runtime offers cannot boot a device of that family.
+Each run uses a private device that is deleted afterwards, as above. A newly
+created device gets ten minutes for its first boot.
+
+Resolved Grill Log: one device per family, newest first, so a new emulator type is exercised as
+soon as its runtime is installed. A family the runtime offers that fails to boot is a failure,
+not a skip; a skip would hide the regression the matrix exists to catch. _Rejected:_ a fixed list
+of device names, which would miss families the list does not name.
 
 ## Referenced by
 

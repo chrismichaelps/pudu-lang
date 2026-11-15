@@ -57,8 +57,8 @@ compileLibrary :: LibraryRequest -> IO (Either ToolchainFailure LibraryProducts)
 
 ## Dependencies and consumers
 
-[[Backend Native Target]], [[Backend Toolchain Process]], [[Backend Emit Entry]],
-[[Native Host Compression]]; `directory`, `filepath`, `process`, `temporary`.
+[[Backend Native Target]], [[Backend Toolchain Process]], [[Backend Toolchain Probe]],
+[[Backend Ledger]], [[Backend Emit Entry]], [[Native Host Compression]]; `directory`, `filepath`, `process`, `temporary`.
 Consumed by [[Pudu CLI]] and [[Backend Native Target Tests]].
 
 ## Resolved Grill Log
@@ -82,6 +82,19 @@ Consumed by [[Pudu CLI]] and [[Backend Native Target Tests]].
 The module now also exports `appleTools` and `invoke`. [[Backend Toolchain App]] uses
 them for the same SDK resolution and tool invocation, so an application and a library
 built for one target find the same SDK and run tools the same way.
+
+## Platform preflight (#926)
+
+Before any Apple compile, the library probes the installed Xcode and the SDK the target
+names ([[Backend Toolchain Probe]]) and assesses them against [[Backend Ledger]] for today's
+date. The Distribution purpose applies to the `iphoneos` SDK and the Development purpose to
+the simulator. A refusing finding fails the build with `ToolchainOutsideLedger` carrying the
+finding; warning findings are returned with the build's warnings text. A failed probe is
+`ToolchainSdkMissing`, as before.
+
+Resolved Grill Log: the probe runs before the compiler, so a toolchain outside the ledger is
+reported as a version fact with its fix, not as a compiler error. _Rejected:_ letting the
+compiler fail and matching its output.
 
 ## Export prototypes (#899)
 

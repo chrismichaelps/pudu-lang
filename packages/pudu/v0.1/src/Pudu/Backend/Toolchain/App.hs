@@ -29,6 +29,7 @@ import Foreign.C.Types (CInt (..), CUInt (..))
 import qualified GHC.Foreign as Foreign
 import GHC.IO.Encoding (getFileSystemEncoding)
 #endif
+import Pudu.Backend.Ledger (Finding, appleLedger, ledgerDeployment, renderRelease)
 import Pudu.Backend.Target (AppleSdk (..), NativeTarget (..), TargetPlatform (..))
 import Pudu.Backend.Toolchain.HostSources (iosHostSources)
 import Pudu.Backend.Toolchain.Library (LibraryProducts (..), LibraryRequest (..), appleTools, compileLibrary, invoke)
@@ -54,7 +55,7 @@ simulatorSdk = "iphonesimulator"
 
 {-| The oldest system the application runs on; it matches the targets' triples. -}
 minimumSystem :: Text
-minimumSystem = "15.0"
+minimumSystem = renderRelease (ledgerDeployment appleLedger)
 
 {-| The prefix of an identifier derived from a program's name. -}
 identifierPrefix :: Text
@@ -64,14 +65,15 @@ identifierPrefix = "org.pudu."
 hostFrameworks :: [String]
 hostFrameworks = ["UIKit", "Foundation", "CoreGraphics", "QuartzCore"]
 
-{-| The application at the output path, answering the tools' warnings. A
-    device application needs a signing identity and is not built yet. -}
-compileApp :: AppRequest -> IO (Either ToolchainFailure Text)
+{-| The application at the output path, answering the tools' warnings and the
+    platform ledger's findings that let the build proceed. A device
+    application needs a signing identity and is not built yet. -}
+compileApp :: AppRequest -> IO (Either ToolchainFailure (Text, [Finding]))
 compileApp request = case nativeTargetPlatform (appTarget request) of
   ApplePlatform sdk | appleSdkName sdk == simulatorSdk -> buildBundle request sdk
   _ -> pure (Left (ToolchainTargetUnbuilt (nativeTargetName (appTarget request) <> " applications, which need a signing identity,")))
 
-buildBundle :: AppRequest -> AppleSdk -> IO (Either ToolchainFailure Text)
+buildBundle :: AppRequest -> AppleSdk -> IO (Either ToolchainFailure (Text, [Finding]))
 buildBundle request sdk = do
   seconds <- timeoutSeconds
   tools <- appleTools target sdk seconds
@@ -79,7 +81,7 @@ buildBundle request sdk = do
   case (tools, signer) of
     (Left failure, _) -> pure (Left failure)
     (Right _, Nothing) -> pure (Left (ToolchainSdkMissing target "codesign"))
-    (Right (root, clang, _), Just codesign) -> mask $ \restore -> do
+    (Right (root, clang, _, _), Just codesign) -> mask $ \restore -> do
       created <- tryIO (createTempDirectory (takeDirectory output) (takeFileName output <> ".pudu-tmp"))
       case created of
         Left problem -> pure (Left (ToolchainPublishFailed (problemText problem)))
@@ -125,7 +127,8 @@ buildBundle request sdk = do
                   Left problem
                     | isAlreadyExistsError problem -> Left (ToolchainPublishFailed ("application output already exists: " <> Text.pack output))
                     | otherwise -> Left (ToolchainPublishFailed (problemText problem))
-                  Right () -> Right (Text.strip (Text.unlines (filter (not . Text.null) [libraryWarnings products, warnings])))
+                  Right () ->
+                    Right (Text.strip (Text.unlines (filter (not . Text.null) [libraryWarnings products, warnings])), libraryFindings products)
 {-| Publish without replacing any existing directory entry, even if another
     build reaches the same output between staging and publication. -}
 publish :: FilePath -> FilePath -> IO ()

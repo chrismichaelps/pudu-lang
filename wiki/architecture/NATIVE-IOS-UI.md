@@ -13,7 +13,7 @@ This page is the normative feature target for applications written in Pudu with 
 iPad and iPhone Duo. Every feature below is realized through platform controls behind the
 language-owned adapter of [[Pudu Native]]; no platform type reaches Pudu; a feature the adapter
 cannot realize answers `UnsupportedPlatform`. The "Today" column records the honest state of the
-toolchain and is updated as slices land.
+toolchain and is updated as slices land. The iOS Xcode floor, tested version and store rules are in [[Native Platform Adoption]].
 
 ## Devices
 
@@ -38,7 +38,7 @@ on both displays), and Xcode 27.1 Device Hub simulation. Exact class names are t
 | Navigation | Stack with interactive pop; tab bars; sidebars; modal styles (full screen, page sheet, form sheet, popover); large and collapsing titles; custom bars and toolbars; deep and universal links | missing |
 | Lists and scrolling | Recycling lists; sections and compositional layouts; adaptive grids; pull to refresh; prefetching and infinite scroll; nested scrolling | partial: vertical root scrolling, keyed insert/remove/move, recycling lists and equal-column grids with windowed rows; sections, compositional layouts beyond equal columns, pull to refresh and nested scrolling remain open |
 | Input and gestures | Tap, long press, pan, pinch, rotate, swipe; simultaneous and exclusive recognition; pointer; Apple Pencil; keyboard, input accessories and focus; Scribble | partial: tap, text entry, switch |
-| Visual system | FUI's seven aspects mapped to iOS values; Dynamic Type; light and dark appearance; materials and vibrancy; SF Symbols; semantic colors; elevation and continuous corners | partial: semantic color roles with platform or fixed light/dark tones, appearance override, Dynamic Type text styles; materials, symbols, elevation and continuous corners remain open |
+| Visual system | FUI's seven aspects mapped to iOS values; Dynamic Type; light and dark appearance; materials and vibrancy; SF Symbols; semantic colors; elevation and continuous corners | partial: semantic color roles with platform or fixed light/dark tones, appearance override, Dynamic Type text styles; materials are done (glass on iOS 26 or later with blur fallback); symbols, elevation and continuous corners remain open |
 | Feedback and system UI | Alerts, action sheets, confirmation dialogs, context menus and previews, banners, activity and progress indicators; status bar, Dynamic Island and home indicator styling | missing |
 | Accessibility | VoiceOver; Dynamic Type; Reduce Motion; Increase Contrast; traits, labels, hints and values; keyboard focus; Switch Control | partial: accessible names reach the platform tree |
 | Animation | Interactive transitions; shared-element transitions; fold-change layout animation; platform springs and curves; gesture-driven animation | missing |
@@ -118,4 +118,4 @@ does not have yet (Xcode 26.6, iOS 26.5 SDK).
 
 ## Referenced by
 
-[[architecture/_MOC]] · [[Pudu Native]] · [[Native iOS Scrolling Delivery]] · [[Native iOS Theming Delivery]] · [[Native iOS Recycling Delivery]]
+[[architecture/_MOC]] · [[Pudu Native]] · [[Native iOS Scrolling Delivery]] · [[Native iOS Theming Delivery]] · [[Native iOS Recycling Delivery]] · [[Native iOS Materials Delivery]]

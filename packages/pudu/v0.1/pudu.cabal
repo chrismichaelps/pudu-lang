@@ -24,6 +24,7 @@ extra-source-files: cbits/pudu_desktop.h
                     cbits/pudu_ios_events.h
                     cbits/pudu_ios_list.h
                     cbits/pudu_ios_controls.h
+                    cbits/pudu_ios_material.h
                     cbits/pudu_audio.c
                     cbits/pudu_audio_stream.c
                     cbits/pudu_audio.h
@@ -107,6 +108,7 @@ library
     Pudu.Package.Solve
     Pudu.Package.Version
     Pudu.Cli.Terminate
+    Pudu.Cli.Doctor
     Pudu.Cli.Lint
     Pudu.Lint
     Pudu.Lint.Config
@@ -204,10 +206,12 @@ library
     Pudu.Backend.Runtime.Text.Number
     Pudu.Backend.Runtime.Text.Pieces
     Pudu.Backend.Runtime.Text.Methods
+    Pudu.Backend.Ledger
     Pudu.Backend.Target
     Pudu.Backend.Toolchain
     Pudu.Backend.Toolchain.HostSources
     Pudu.Backend.Toolchain.Library
+    Pudu.Backend.Toolchain.Probe
     Pudu.Backend.Toolchain.App
     Pudu.Backend.Toolchain.Process
     Pudu.Compiler

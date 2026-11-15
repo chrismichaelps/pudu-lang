@@ -16,15 +16,17 @@
 #include "pudu_ios_events.h"
 #include "pudu_ios_list.h"
 #include "pudu_ios_controls.h"
+#include "pudu_ios_material.h"
 
 /* Instruction codes and control kinds of the view stream; they match
    Std.Mobile.Stream. */
 enum { PUDU_UI_CREATE = 1, PUDU_UI_TEXT = 2, PUDU_UI_APPEND = 3, PUDU_UI_ROOT = 4, PUDU_UI_TAG = 5, PUDU_UI_RESET = 6,
        PUDU_UI_STATE = 7, PUDU_UI_HINT = 8, PUDU_UI_NAME = 9, PUDU_UI_INSERT = 10, PUDU_UI_REMOVE = 11, PUDU_UI_MOVE = 12,
        PUDU_UI_THEME = 20, PUDU_UI_APPEARANCE = 21, PUDU_UI_STYLE = 22, PUDU_UI_COLOR = 23, PUDU_UI_RANGE = 24,
-       PUDU_UI_COLUMNS = 25, PUDU_UI_INSTRUCTIONS = 26 };
+       PUDU_UI_COLUMNS = 25, PUDU_UI_MATERIAL_SET = 26, PUDU_UI_INSTRUCTIONS = 27 };
 enum { PUDU_UI_LABEL = 1, PUDU_UI_BUTTON = 2, PUDU_UI_COLUMN = 3, PUDU_UI_ROW = 4, PUDU_UI_FIELD = 5, PUDU_UI_TOGGLE = 6,
-       PUDU_UI_SCROLL = 7, PUDU_UI_LIST = 8, PUDU_UI_KINDS = 9 };
+       PUDU_UI_SCROLL = 7, PUDU_UI_LIST = 8, PUDU_UI_MATERIAL = 9,
+       PUDU_UI_KINDS = 10 };
 
 static NSMutableArray *pudu_nodes;
 static NSMutableArray<NSNumber *> *pudu_kinds;
@@ -68,6 +70,7 @@ static const pudu_kind pudu_kind_table[PUDU_UI_KINDS] = {
   [PUDU_UI_TOGGLE] = { pudu_make_toggle, pudu_toggle_text, NULL, pudu_toggle_state, pudu_toggle_control, NULL, pudu_toggle_fill, NULL, NULL, pudu_toggle_paint, pudu_toggle_style, YES },
   [PUDU_UI_SCROLL] = { pudu_make_scroll, NULL, NULL, NULL, pudu_itself, pudu_scroll_stack, NULL, NULL, NULL, NULL, NULL, NO },
   [PUDU_UI_LIST] = { pudu_make_list, NULL, NULL, NULL, pudu_itself, pudu_list_store, NULL, NULL, NULL, NULL, NULL, NO },
+  [PUDU_UI_MATERIAL] = { pudu_material_make, NULL, NULL, NULL, pudu_itself, pudu_material_stack, NULL, NULL, NULL, NULL, NULL, NO },
 };
 
 static const pudu_kind *pudu_kind_of(uint32_t kind) {
@@ -284,6 +287,14 @@ static void pudu_do_columns(pudu_reader *reader) {
   pudu_list_columns(list, columns);
 }
 
+/* MATERIAL: the system material behind a material node. */
+static void pudu_do_material(pudu_reader *reader) {
+  uint32_t node = pudu_node_id(reader);
+  uint32_t code = pudu_word(reader);
+  if (pudu_kinds[node].unsignedIntValue != PUDU_UI_MATERIAL) pudu_stream_defect("set a material on a node that is not one:", node);
+  if (!pudu_material_set(pudu_nodes[node], code)) pudu_stream_defect("used unknown material", code);
+}
+
 static void (*const pudu_instruction_table[PUDU_UI_INSTRUCTIONS])(pudu_reader *) = {
   [PUDU_UI_CREATE] = pudu_do_create, [PUDU_UI_TEXT] = pudu_do_text, [PUDU_UI_APPEND] = pudu_do_append,
   [PUDU_UI_ROOT] = pudu_do_root, [PUDU_UI_TAG] = pudu_do_tag, [PUDU_UI_RESET] = pudu_do_reset,
@@ -291,6 +302,7 @@ static void (*const pudu_instruction_table[PUDU_UI_INSTRUCTIONS])(pudu_reader *)
   [PUDU_UI_INSERT] = pudu_place, [PUDU_UI_REMOVE] = pudu_do_remove, [PUDU_UI_MOVE] = pudu_place,
   [PUDU_UI_THEME] = pudu_do_theme, [PUDU_UI_APPEARANCE] = pudu_do_appearance, [PUDU_UI_STYLE] = pudu_do_style,
   [PUDU_UI_COLOR] = pudu_do_color, [PUDU_UI_RANGE] = pudu_do_range, [PUDU_UI_COLUMNS] = pudu_do_columns,
+  [PUDU_UI_MATERIAL_SET] = pudu_do_material,
 };
 
 /* Applies one commit: every instruction in order, in one call. */
@@ -360,6 +372,10 @@ static void pudu_report(UIView *view) {
    is set, taps every button as many times as PUDU_UI_SELFTEST says, then asks
    the program to stop, exactly as a user's input would arrive. */
 - (void)selfTest {
+  if (getenv("PUDU_UI_MATERIAL_TEST") != NULL) {
+    pudu_test_material(pudu_nodes, ^{ pudu_queue(PUDU_UI_STOPPED, 0, nil, 0); });
+    return;
+  }
   if (getenv("PUDU_UI_LIST_TEST") != NULL) {
     pudu_test_list(pudu_nodes, ^{ pudu_queue(PUDU_UI_STOPPED, 0, nil, 0); });
     return;

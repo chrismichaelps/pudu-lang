@@ -23,9 +23,11 @@ import Data.Set (Set)
 import qualified Data.Set as Set
 import Data.Text (Text)
 import qualified Data.Text as Text
+import Pudu.Backend.Ledger (appleLedger, ledgerTriple)
 
 {-| @Backend.Target.AppleSdk — the SDK `xcrun` knows and the clang triple,
-    minimum release included, that compiles for it. -}
+    with the ledger's deployment target as its minimum release, that compiles
+    for it. -}
 data AppleSdk = AppleSdk
   { appleSdkName :: !Text
   , appleTriple :: !Text
@@ -54,8 +56,8 @@ nativeTargets :: Map Text NativeTarget
 nativeTargets = Map.fromList
   [ (name, NativeTarget name platform)
   | (name, platform) <-
-      [ ("ios-arm64", ApplePlatform (AppleSdk "iphoneos" "arm64-apple-ios15.0"))
-      , ("ios-simulator-arm64", ApplePlatform (AppleSdk "iphonesimulator" "arm64-apple-ios15.0-simulator"))
+      [ ("ios-arm64", ApplePlatform (AppleSdk "iphoneos" (ledgerTriple appleLedger "arm64" False)))
+      , ("ios-simulator-arm64", ApplePlatform (AppleSdk "iphonesimulator" (ledgerTriple appleLedger "arm64" True)))
       , ("android-arm64", AndroidPlatform)
       , ("android-x86_64", AndroidPlatform)
       ]

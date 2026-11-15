@@ -20,12 +20,15 @@ import qualified Data.ByteString as ByteString
 import Data.Text (Text)
 import qualified Data.Text as Text
 import qualified Data.Text.Encoding as Encoding
+import Data.Time.Clock (getCurrentTime, utctDay)
 import Pudu.Backend.Emit.Entry (embeddedHeader, embeddedHeaderName)
 import Pudu.Backend.Runtime.Host.Compress (compressLibraryMarker)
+import Pudu.Backend.Ledger (Finding, Purpose (..), appleLedger, assess, isRefusal)
 import Pudu.Backend.Target (AppleSdk (..), NativeTarget (..), TargetPlatform (..))
 import Pudu.Backend.Toolchain (compilerFlags)
+import Pudu.Backend.Toolchain.Probe (appleInstalled, findXcrun)
 import Pudu.Backend.Toolchain.Process (ToolchainFailure (..), problemText, runTool, runToolOutput, timeoutSeconds, tryIO)
-import System.Directory (doesDirectoryExist, findExecutable, removeDirectoryRecursive, renameFile)
+import System.Directory (doesDirectoryExist, removeDirectoryRecursive, renameFile)
 import System.Environment (lookupEnv)
 import System.FilePath (equalFilePath, takeDirectory, takeFileName, (</>))
 import System.IO.Temp (createTempDirectory)
@@ -40,12 +43,13 @@ data LibraryRequest = LibraryRequest
   deriving stock (Eq, Show)
 
 {-| @Backend.Toolchain.LibraryProducts — the header written beside the
-    archive, the system libraries the host must link, and what the tools
-    printed. -}
+    archive, the system libraries the host must link, what the tools printed,
+    and the platform ledger's findings that let the build proceed. -}
 data LibraryProducts = LibraryProducts
   { libraryHeader :: !FilePath
   , libraryLinks :: ![Text]
   , libraryWarnings :: !Text
+  , libraryFindings :: ![Finding]
   }
   deriving stock (Eq, Show)
 
@@ -66,19 +70,19 @@ compileApple request sdk = do
   tools <- appleTools name sdk seconds
   case tools of
     Left failure -> pure (Left failure)
-    Right (root, clang, archiver) -> mask $ \restore -> do
+    Right (root, clang, archiver, findings) -> mask $ \restore -> do
       created <- tryIO (createTempDirectory (takeDirectory output) (takeFileName output <> ".pudu-tmp"))
       case created of
         Left problem -> pure (Left (ToolchainPublishFailed (problemText problem)))
         Right directory ->
-          restore (build seconds root clang archiver directory)
+          restore (build seconds root clang archiver findings directory)
             `finally` void (tryIO (removeDirectoryRecursive directory))
  where
   name = nativeTargetName (libraryTarget request)
   output = libraryOutput request
   header = takeDirectory output </> embeddedHeaderName
   links = ["-lz" | compressLibraryMarker `Text.isInfixOf` librarySource request]
-  build seconds root clang archiver directory = do
+  build seconds root clang archiver findings directory = do
     let sourcePath = directory </> "program.c"
         objectPath = directory </> "program.o"
         archivePath = directory </> "program.a"
@@ -104,6 +108,7 @@ compileApple request sdk = do
                 { libraryHeader = header
                 , libraryLinks = links
                 , libraryWarnings = Text.strip (Text.unlines (filter (not . Text.null) [compilerOutput, archiverOutput]))
+                , libraryFindings = findings
                 }
 
 invoke :: FilePath -> [String] -> Int -> IO (Either ToolchainFailure Text)
@@ -112,21 +117,26 @@ invoke executable arguments seconds = do
   pure (either (Left . ToolchainInvocation . problemText) id ran)
 
 {-| The system root, compiler and archiver of the target's SDK, each one line
-    `xcrun` answers within the deadline. -}
-appleTools :: Text -> AppleSdk -> Int -> IO (Either ToolchainFailure (FilePath, FilePath, FilePath))
+    `xcrun` answers within the deadline, and the ledger's findings about the
+    installed Xcode and SDK. A refusing finding stops the build before any
+    compile; device SDK builds are distributions, simulator builds are not. -}
+appleTools :: Text -> AppleSdk -> Int -> IO (Either ToolchainFailure (FilePath, FilePath, FilePath, [Finding]))
 appleTools name sdk seconds = do
-  override <- lookupEnv "PUDU_XCRUN"
-  found <- case override of
-    Just value | not (null value) -> pure (Just value)
-    _ -> findExecutable "xcrun"
+  found <- findXcrun
   case found of
     Nothing -> pure (Left (ToolchainSdkMissing name "xcrun"))
     Just xcrun -> do
       let ask arguments = xcrunLine name xcrun (["--sdk", Text.unpack (appleSdkName sdk)] <> arguments) seconds
       root <- ask ["--show-sdk-path"]
-      clang <- either (pure . Left) (const (ask ["--find", "clang"])) root
+      installed <- either (pure . Left) (const (appleInstalled name xcrun sdk seconds)) root
+      today <- utctDay <$> getCurrentTime
+      let purpose = if appleSdkName sdk == "iphoneos" then Distribution else Development
+          assessed = installed >>= \versions -> case assess appleLedger today purpose versions of
+            findings | (refused : _) <- filter isRefusal findings -> Left (ToolchainOutsideLedger name refused)
+                     | otherwise -> Right findings
+      clang <- either (pure . Left) (const (ask ["--find", "clang"])) assessed
       archiver <- either (pure . Left) (const (ask ["--find", "libtool"])) clang
-      pure ((,,) <$> root <*> clang <*> archiver)
+      pure ((,,,) <$> root <*> clang <*> archiver <*> assessed)
 
 xcrunLine :: Text -> FilePath -> [String] -> Int -> IO (Either ToolchainFailure FilePath)
 xcrunLine name xcrun arguments seconds = do

@@ -5,6 +5,18 @@ tags: [changelog]
 
 # Changelog
 
+## 2026-11-14 — iOS materials (#928)
+
+- `Std.Mobile.View` gains `Surfaced`, a container whose background is a system material ([[Std Mobile Theme]] `Material`, encoded by MATERIAL, code 26 in [[Std Mobile Stream]]). The iOS host draws glass on iOS 26 or later when the SDK declares it, and a system blur otherwise ([[iOS Host Material]]). The ledger gains the `glass-material` capability ([[Backend Ledger]]), and [[Native Platform Adoption]] records it as the first gated capability ([[Native iOS Materials Delivery]]).
+
+## 2026-11-14 — Platform toolchain ledger (#926)
+
+- A pure ledger of Xcode, SDK, store-rule and capability facts ([[Backend Ledger]]) is checked by a preflight before every Apple build, which refuses an installed toolchain outside it with E6009 or E6010 and warns with W6011 or W6012 ([[Backend Toolchain Probe]], [[Backend Toolchain Library]], [[Diagnostic Native]]). `pudu doctor --native` prints the whole state ([[Pudu CLI Doctor]]). The adoption design is [[Native Platform Adoption]]; the simulator suite adds a device matrix across device families ([[iOS Simulator Run]]).
+
+- [[iOS Simulator CI]] runs on `macos-26` so the runner's Xcode meets the build preflight.
+
+- [[iOS Simulator Run]] checks bundle publication once with a minimal program and gives new simulator devices ten minutes for first boot. It removes temporary apps with the private simulator at the end of the run. Complete native app builds get a separate five-minute budget.
+
 ## 2026-11-14 — Recycling lists and grids (#925)
 
 - `Std.Mobile.View` gains `Recycled`, a list or equal-column grid that supplies rows for a window of its items, and `Reached` events with `windowStart` to move the window. [[Std Mobile Stream]] encodes RANGE and COLUMNS (codes 24 and 25). The iOS host shows a list with a row store and reports scroll positions through [[iOS Host List]] and [[iOS Host Events]] ([[Native iOS Recycling Delivery]]).
