@@ -5,6 +5,10 @@ tags: [changelog]
 
 # Changelog
 
+## 2026-11-15 — iOS simulator CI caching (#930)
+
+- iOS simulator CI caches the cabal store and build tree and allows 75 minutes for the device matrix (refs #930). See [[iOS Simulator CI]].
+
 ## 2026-11-15 — UIKit coverage inventory (#930)
 
 - The UIKit coverage inventory script and tests measure host coverage from the SDK headers, so the table in [[Pudu Native iOS UI]] is generated rather than hand-written (refs #930). The iOS simulator workflow moves to a runner image whose Xcode meets the platform floor and runs the inventory check ([[iOS Simulator CI]], [[UIKit Coverage Inventory]]).

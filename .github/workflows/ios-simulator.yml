@@ -30,7 +30,9 @@ concurrency:
 jobs:
   native-ffi:
     runs-on: macos-26
-    timeout-minutes: 40
+    # The simulator step boots an iPhone and an iPad and runs the full device
+    # matrix; on a contended hosted runner a single first frame can take 14 s.
+    timeout-minutes: 75
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-node@v7
@@ -44,6 +46,22 @@ jobs:
         run: |
           node --test test/uikit-coverage.test.mjs
           node scripts/uikit-coverage.mjs --check
+      # Dependencies and the compiler tree are restored so only changed modules
+      # recompile; recompilation is decided by source hashes.
+      - uses: actions/cache@v4
+        with:
+          path: |
+            ~/.local/state/cabal/store
+            ~/.cabal/store
+          key: cabal-store-${{ runner.os }}-${{ hashFiles('**/*.cabal', 'cabal.project*') }}
+          restore-keys: cabal-store-${{ runner.os }}-
+      - uses: actions/cache@v4
+        with:
+          path: dist-newstyle
+          key: ios-dist-${{ runner.os }}-${{ github.ref }}-${{ github.sha }}
+          restore-keys: |
+            ios-dist-${{ runner.os }}-${{ github.ref }}-
+            ios-dist-${{ runner.os }}-refs/heads/dev-
       - run: cabal update
       - name: Build Pudu
         run: cabal build exe:pudu --ghc-options=-Werror

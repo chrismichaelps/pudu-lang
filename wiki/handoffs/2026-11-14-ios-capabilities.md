@@ -27,8 +27,7 @@ Stacked on [[Native iOS Materials Delivery]] (#928).
 
 ## Exact next action
 
-Verify PR #932 on the hosted simulator after inheriting the isolated
-bundle-publication collision probe from [[Native Platform Ledger Delivery]].
+Verify PR #932's native-ffi job passes within the 75-minute budget with the cabal store and build tree cached.
 
 ## Referenced by
 
