@@ -57,10 +57,15 @@ The C11 emitter does not change for a new platform API.
 | Deployment target | iOS 15.0 |
 | App Store rule | Built with Xcode 26 and the iOS 26 SDK, effective 2026-04-28. Source: https://developer.apple.com/news/upcoming-requirements/ |
 | App Store minimum deployment target | iOS 13, effective 2026-09-09. Met by 15.0. |
+| Capability: glass-material | Needs SDK 26.0. Glass realization of materials on iOS 26 or later ([[iOS Host Material]]) |
 | Capability: fold posture | Needs SDK 27.1 (iPhone Duo hinge) |
 
 The App Store minimum deployment target constrains the deployment value, so it is checked as a
 fact of the ledger rather than as a store rule.
+
+## First gated capability
+
+Materials are the worked example of both gates for a new platform API ([[iOS Host Material]]). The build-time gate is the SDK: the glass branch is compiled only when the selected SDK declares iOS 26, so an older SDK still compiles. The run-time gate is the OS: on iOS 26 or later the glass branch runs, and on older systems the same material is drawn as a system blur. The ledger row `glass-material` records the SDK requirement. A material the host cannot realize at all is a defect, never a silent no-op.
 
 ## Known issues
 

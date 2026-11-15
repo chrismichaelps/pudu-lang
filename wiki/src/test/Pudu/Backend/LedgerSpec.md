@@ -30,8 +30,9 @@ check uses fixed values, a fixed day and recorded tool output.
   yields no finding; 1 day yields `StoreRuleDue 1`; a rule effective on the day is
   `StoreRuleMissed`; a rule the installed toolchain meets yields no finding at any date.
 - Finding order: toolchain findings first, then rules in ledger order, each rule once.
-- Capability states: the iPhone Duo posture is unavailable on SDK 27.0 and available on
-  SDK 27.1; a capability absent from the ledger is never reported.
+- Capability states cover two rows. At SDK 26.5, `glass-material` is available and the
+  iPhone Duo fold posture is not. At SDK 27.1, both are available. A capability absent from
+  the ledger is never reported.
 - Triples from the ledger: `arm64-apple-ios15.0` for a device, and
   `arm64-apple-ios15.0-simulator` for a simulator. Changing the ledger's deployment target
   changes both, so the minimum release is stated once.

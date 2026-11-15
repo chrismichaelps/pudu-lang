@@ -144,6 +144,15 @@ Resolved Grill Log: Q: Why test the refusal on a simulator rather than in the fi
 refusal belongs to the host; the Pudu stream for it is well formed, so only the host can reject
 it.
 
+## Glass material (#928)
+
+The script runs `examples/mobile/Glass.pudu` ([[Native Glass Example]]) with `PUDU_UI_MATERIAL_TEST` set, on two runtimes:
+
+- The newest installed runtime, iOS 26 or later. The run must print `PUDU_MATERIAL glass`, the label `Glass` in screen order, and exit with status 0.
+- The first installed iOS runtime older than 26 (iOS 18.0 on the development Mac). The run must print `PUDU_MATERIAL blur`, the same label, and exit with status 0. The script creates a private iPhone device on that runtime and deletes it afterwards, as above. If no runtime older than 26 is installed, this run is skipped and the script says so.
+
+Resolved Grill Log: assert the realization line on each runtime, not only the exit status. A glass branch that a pre-26 system also reached would otherwise pass the fallback run.
+
 ## Device matrix (#926)
 
 After the iPhone runs, the script picks the newest available device type of every other family

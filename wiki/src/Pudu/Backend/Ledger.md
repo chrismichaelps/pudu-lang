@@ -63,7 +63,9 @@ no finding carries text.
   target 15.0. Its store rule is the requirement that apps be built with Xcode 26 and
   the iOS 26 SDK, effective 2026-04-28, with source
   `https://developer.apple.com/news/upcoming-requirements/`. Its capability list holds
-  the fold posture, which needs SDK 27.1 (the iPhone Duo hinge).
+  two rows: `glass-material`, which needs SDK 26.0 (glass realization of materials on
+  iOS 26 or later, see [[iOS Host Material]]), and the fold posture, which needs SDK 27.1
+  (the iPhone Duo hinge).
 - The App Store minimum deployment target (iOS 13, effective 2026-09-09) constrains the
   deployment target, not the toolchain, so it is not a `StoreRule`. The ledger test asserts
   that `ledgerDeployment` meets it.

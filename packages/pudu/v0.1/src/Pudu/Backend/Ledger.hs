@@ -123,7 +123,9 @@ appleLedger = Ledger
           }
       ]
   , ledgerCapabilities =
-      [Capability "fold-posture" (Release [27, 1]) "hinge angle and reserved regions of the iPhone Duo"]
+      [ Capability "glass-material" (Release [26, 0]) "glass realization of materials on iOS 26 or later"
+      , Capability "fold-posture" (Release [27, 1]) "hinge angle and reserved regions of the iPhone Duo"
+      ]
   }
 
 {-| The clang triple for an architecture at the ledger's deployment target. -}

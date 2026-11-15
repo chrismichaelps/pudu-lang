@@ -23,7 +23,7 @@ Entry points the program depends on:
 - Starts `pudu_program_run` from a run-loop timer once UIKit has launched.
 - `pudu_ui_apply` applies every instruction of one stream in order. Instruction codes dispatch through `pudu_instruction_table`, one handler per code. Nodes live in a table indexed by node.
 - Control kinds dispatch through the constant table `pudu_kind_table`, indexed by kind. Each entry names the factory that makes the control, the setters it accepts (text, hint, state), the control that carries tag and accessible name (a toggle's switch, otherwise the view), the stack accessor for its children when present, the paint and style hooks used by [[iOS Host Theme]], and what a self-test does to it (`fill`, `press`) and reports (`shown`).
-- The headers [[iOS Host Events]], [[iOS Host Controls]], [[iOS Host Theme]] and [[iOS Host List]] are included by this file. The controls header holds the platform controls and their factories; this file keeps the stream reader, the kind table, the instruction table and the application delegate, and is about 400 lines. The theme header adds the THEME, APPEARANCE, STYLE and COLOR handlers; the list header adds RANGE and COLUMNS. The instruction table has 26 entries. The event queue lives in [[iOS Host Events]]; this file keeps the host's kinds, nodes and placement.
+- The headers [[iOS Host Events]], [[iOS Host Controls]], [[iOS Host Theme]], [[iOS Host List]] and [[iOS Host Material]] are included by this file. The controls header holds the platform controls and their factories; this file keeps the stream reader, the kind table, the instruction table and the application delegate, and is about 400 lines. The theme header adds the THEME, APPEARANCE, STYLE and COLOR handlers; the list header adds RANGE and COLUMNS; the material header adds MATERIAL. The instruction table has 27 entries. The event queue lives in [[iOS Host Events]]; this file keeps the host's kinds, nodes and placement.
 - INSERT and MOVE share one placement handler in the instruction table.
 - Kind table fields added for theming: `paint` and `style` name the hooks that apply a role or a text style, and `inked` says whether the kind takes Ink without an explicit COLOR. Labels, fields and toggles are inked; buttons follow the tint; groups have no `paint` or `style`.
 - The keyboard self-test is `pudu_test_keyboard` in [[iOS Host Layout]]. This file calls it with explicit parameters: the root surface, the shown root, the node table and a `done` block.
@@ -40,6 +40,8 @@ Entry points the program depends on:
 - Always prints `PUDU_FIRST_FRAME_MS`: monotonic milliseconds from `main` to the first applied and laid-out stream.
 - Self-test `PUDU_UI_THEME_TEST` prints the theme checks described in [[iOS Host Theme]] and then asks the program to stop.
 - Self-test `PUDU_UI_LIST_TEST` runs the list check described in [[iOS Host List]] and then asks the program to stop.
+- Kind 9 makes a material node: a visual-effect view whose content view holds a vertical stack, realized as glass or as a system blur by [[iOS Host Material]]. The kind table names its stack accessor, so placement and traversal share the group path.
+- Self-test `PUDU_UI_MATERIAL_TEST` runs the material check described in [[iOS Host Material]], prints `PUDU_MATERIAL glass` or `PUDU_MATERIAL blur` for the first material node, and then asks the program to stop.
 
 ## Negative Logic
 
@@ -51,7 +53,7 @@ Entry points the program depends on:
 
 ## Dependencies and consumers
 
-Implements the four symbols of [[Std Mobile Host]]. Its streams come from [[Std Mobile View]] and [[Std Mobile Theme]]. Includes [[iOS Host Events]], [[iOS Host Controls]], [[iOS Host Theme]] and [[iOS Host List]]. Used by the counter [[Native Counter Example]] and by the simulator run [[iOS Simulator Run]]. [[Pudu Native]] limits hand-written native code to this platform shim.
+Implements the four symbols of [[Std Mobile Host]]. Its streams come from [[Std Mobile View]] and [[Std Mobile Theme]]. Includes [[iOS Host Events]], [[iOS Host Controls]], [[iOS Host Theme]], [[iOS Host List]] and [[iOS Host Material]]. Used by the counter [[Native Counter Example]] and by the simulator run [[iOS Simulator Run]]. [[Pudu Native]] limits hand-written native code to this platform shim.
 
 ## Resolved Grill Log
 
@@ -63,4 +65,4 @@ Implements the four symbols of [[Std Mobile Host]]. Its streams come from [[Std 
 
 ## Referenced by
 
-[[Native Mobile Targets]] · [[Std Mobile Host]] · [[iOS Simulator Run]] · [[Backend Toolchain App]] · [[Native First Light Delivery]] · [[Native Controls Delivery]] · [[Native iOS Scrolling Delivery]] · [[Native iOS Theming Delivery]] · [[Native iOS Recycling Delivery]]
+[[Native Mobile Targets]] · [[Std Mobile Host]] · [[iOS Simulator Run]] · [[Backend Toolchain App]] · [[Native First Light Delivery]] · [[Native Controls Delivery]] · [[Native iOS Scrolling Delivery]] · [[Native iOS Theming Delivery]] · [[Native iOS Recycling Delivery]] · [[Native iOS Materials Delivery]]

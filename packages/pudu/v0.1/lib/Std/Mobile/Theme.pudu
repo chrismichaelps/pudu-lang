@@ -18,6 +18,10 @@ export type Appearance = System | Light | Dark
 /// A text style whose size follows the system text size.
 export type TextStyle = LargeTitle | Title | Headline | Body | Callout | Subheadline | Footnote | Caption
 
+/// A system material drawn behind content, from the most to the least
+/// translucent.
+export type Material = Thin | Regular | Thick
+
 /// One tone per role and the appearance the application asks for.
 export type Theme = {
   surface: Tone,
@@ -52,6 +56,9 @@ const STYLES: Map[TextStyle, UInt32] = mapOf([
     (Footnote, 7u32),
     (Caption, 8u32)
   ])
+
+/// Wire code of each material; zero is never written.
+const MATERIALS: Map[Material, UInt32] = mapOf([(Thin, 1u32), (Regular, 2u32), (Thick, 3u32)])
 
 /// Wire code of each appearance.
 const APPEARANCES: Map[Appearance, UInt32] = mapOf([(System, 0u32), (Light, 1u32), (Dark, 2u32)])
@@ -88,6 +95,9 @@ export fn restyled(before: &Theme, after: &Theme) -> Bytes {
 
 /// A role's wire code.
 export fn roleCode(role: Role) -> UInt32 { coded(ROLES.get(role)) }
+
+/// A material's wire code.
+export fn materialCode(material: Material) -> UInt32 { coded(MATERIALS.get(material)) }
 
 /// A text style's wire code.
 export fn styleCode(style: TextStyle) -> UInt32 { coded(STYLES.get(style)) }

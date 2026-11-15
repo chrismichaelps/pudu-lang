@@ -23,6 +23,7 @@ testDataEvaluation = do
   mobileViews <- runEntry "test-fixtures/stdlib/UsesMobileView.pudu"
   mobileThemes <- runEntry "test-fixtures/stdlib/UsesMobileTheme.pudu"
   mobileLists <- runEntry "test-fixtures/stdlib/UsesMobileList.pudu"
+  mobileMaterials <- runEntry "test-fixtures/stdlib/UsesMobileMaterial.pudu"
   flatMaps <- runEntry "test-fixtures/stdlib/UsesFlatMap.pudu"
   columnVectors <- runEntry "test-fixtures/stdlib/UsesColumn.pudu"
   hashed <- runEntry "test-fixtures/stdlib/UsesHashMap.pudu"
@@ -183,6 +184,8 @@ testDataEvaluation = do
         (mobileThemes === Just "12")
     , counterexample "the native list stream windows rows, ranges, columns and reached events"
         (mobileLists === Just "8")
+    , counterexample "the native material stream surfaces a child behind a system material"
+        (mobileMaterials === Just "5")
     , counterexample "flat hash table with control metadata evaluates"
         (flatMaps === Just "31")
     , counterexample "vectorized columnar engine with unboxed storage evaluates"

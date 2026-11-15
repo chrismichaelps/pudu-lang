@@ -179,6 +179,8 @@ int main(int argc, char **argv) {
   Host.apply(bytesOf(Stream.range(label, 0u32, 10u32, 0u32)))`,
       /pudu: a view stream shaped a node that is not a list: 0/u);
     familyMatrix(runtime);
+    mobileApp(device, "Glass", [glassRun("glass")]);
+    fallbackGlass(runtimes);
   } finally {
     try {
       if (device && !existingDevice) {
@@ -235,6 +237,37 @@ function familyMatrix(runtime) {
   }
 }
 
+function glassRun(realization) {
+  return {
+    environment: { SIMCTL_CHILD_PUDU_UI_SELFTEST: "0", SIMCTL_CHILD_PUDU_UI_MATERIAL_TEST: "1" },
+    labels: ["Glass"],
+    layout: [`PUDU_MATERIAL ${realization}`],
+  };
+}
+
+/* The same app on the oldest installed runtime before iOS 26 must take the
+   blur fallback: the glass branch is compiled in, and the run-time gate
+   declines it. */
+function fallbackGlass(runtimes) {
+  const older = runtimes.find((item) =>
+    item.isAvailable && item.identifier.startsWith("com.apple.CoreSimulator.SimRuntime.iOS-") && Number(item.version.split(".")[0]) < 26);
+  if (!older) {
+    console.log("SKIP iOS material fallback: no runtime older than iOS 26 is installed");
+    return;
+  }
+  const phone = older.supportedDeviceTypes.find((item) => item.productFamily === "iPhone");
+  assert.ok(phone, `No iPhone device type for ${older.identifier}`);
+  const device = run(xcrun, ["simctl", "create", "Pudu Material Fallback", phone.identifier, older.identifier]).trim();
+  try {
+    run(xcrun, ["simctl", "bootstatus", device, "-b"], 240_000);
+    mobileApp(device, "Glass", [glassRun("blur")]);
+    console.log(`PASS iOS material fallback (${older.name})`);
+  } finally {
+    spawnSync(xcrun, ["simctl", "shutdown", device], { timeout: 30_000 });
+    run(xcrun, ["simctl", "delete", device], 30_000);
+  }
+}
+
 /* An example from examples/mobile, built only from Pudu with the iOS host
    adapter and run once per entry of `runs`: the host feeds it input from the
    entry's environment, asks it to stop, and reports its labels, its status
@@ -266,7 +299,7 @@ function mobileApp(device, example, runs) {
         `${example} did not show ${labels.join(", ")}:\n${lines.join("\n")}`);
       assert.ok(lines.includes("PUDU_PROGRAM_STATUS 0"), `${example} did not finish:\n${lines.join("\n")}`);
       if (layout) {
-        assert.deepEqual(lines.filter((line) => /^PUDU_(VIEWPORT|KEYBOARD|THEME|LIST) /.test(line)), layout,
+        assert.deepEqual(lines.filter((line) => /^PUDU_(VIEWPORT|KEYBOARD|THEME|LIST|MATERIAL) /.test(line)), layout,
           `${example} did not report the expected layout and theme:\n${lines.join("\n")}`);
       }
       const firstFrame = lines.find((line) => line.startsWith("PUDU_FIRST_FRAME_MS "));

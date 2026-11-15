@@ -1,0 +1,50 @@
+module UsesMobileMaterial
+
+import Std.ByteOrder {readU32LE}
+import Std.Mobile.Theme as Theme
+import Std.Mobile.View as View
+
+// The words at `offset` onward, read as little-endian 32-bit values.
+fn wordsAt(bytes: &Array[UInt8], offset: Int, count: Int) -> Array[UInt32] {
+  var found = []
+  for index in 0..count {
+    match readU32LE(bytes, offset + index * 4) {
+      case Some(word) => { found = found.push(word) }
+      case None => { return [] }
+    }
+  }
+  found
+}
+
+fn changed(shown: &View.View, next: &View.View) -> Array[UInt8] {
+  let (mounted, _) = View.mount(shown)
+  let (_, stream) = View.update(&mounted, next)
+  stream.toArray()
+}
+
+export fn main() -> Int {
+  var held = 0
+  let surfaced = View.Surfaced(Theme.Regular, View.Label("x"))
+
+  // CREATE material 0, MATERIAL regular, the label built and appended, ROOT 0.
+  let (_, mounted) = View.mount(&surfaced)
+  let built = mounted.toArray()
+  if built.length() == 69 && wordsAt(&built, 0, 6) == [1u32, 0u32, 9u32, 26u32, 0u32, 2u32] && wordsAt(&built, 49, 5) == [3u32, 0u32, 1u32, 4u32, 0u32] {
+    held = held + 1
+  }
+
+  // A changed material is one MATERIAL; an unchanged tree writes nothing.
+  let thicker = changed(&surfaced, &View.Surfaced(Theme.Thick, View.Label("x")))
+  if thicker.length() == 12 && wordsAt(&thicker, 0, 3) == [26u32, 0u32, 3u32] { held = held + 1 }
+  if changed(&surfaced, &surfaced).length() == 0 { held = held + 1 }
+
+  // A new child kind replaces only the child: built, inserted at 0, the old one removed.
+  let rechild = changed(&surfaced, &View.Surfaced(Theme.Regular, View.Button("b", 1u32)))
+  if rechild.length() == 69 && wordsAt(&rechild, 0, 3) == [1u32, 2u32, 2u32] && wordsAt(&rechild, 37, 8) == [10u32, 0u32, 2u32, 0u32, 11u32, 1u32, 1u32, 1u32] {
+    held = held + 1
+  }
+
+  // Materials encode from the most translucent.
+  if [Theme.materialCode(Theme.Thin), Theme.materialCode(Theme.Regular), Theme.materialCode(Theme.Thick)] == [1u32, 2u32, 3u32] { held = held + 1 }
+  held
+}

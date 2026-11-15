@@ -104,8 +104,9 @@ dueWindow =
 capabilities :: Property
 capabilities =
   conjoin
-    [ map snd (capabilityStates appleLedger (release [26, 5])) === [False]
-    , map snd (capabilityStates appleLedger (release [27, 1])) === [True]
+    [ map snd (capabilityStates appleLedger (release [26, 5])) === [True, False]
+    , map snd (capabilityStates appleLedger (release [27, 1])) === [True, True]
+    , map snd (capabilityStates appleLedger (release [18, 5])) === [False, False]
     , ledgerTriple appleLedger "arm64" False === "arm64-apple-ios15.0"
     , ledgerTriple appleLedger "arm64" True === "arm64-apple-ios15.0-simulator"
     , fmap triple (nativeTargetNamed "ios-arm64") === Just (Just "arm64-apple-ios15.0")
@@ -166,6 +167,7 @@ doctor =
             , "iphonesimulator SDK 26.5"
             , "deployment target: iOS 15.0"
             , "App Store rule from 2026-04-28 (Xcode 26.0, SDK 26.0): met"
+            , "capability glass-material: available (glass realization of materials on iOS 26 or later)"
             , "capability fold-posture: needs SDK 27.1 (hinge angle and reserved regions of the iPhone Duo)"
             , "simulator runtime iOS 26.4: iPad 1 device types, iPhone 2 device types"
             ]
