@@ -29,6 +29,11 @@ Exports:
 - `remove(out, node, ids: &Array[UInt32]) -> Array[UInt8]`: REMOVE, the node, the count of ids, then every id of the detached subtree.
 - `root(out, node: UInt32) -> Array[UInt8]`: ROOT, the node shown as the screen's content.
 
+- `navigation(out, routes: &Array[(UInt32, UInt32, Str)]) -> Array[UInt8]`:
+  NAVIGATION (13), route count, then each route's instance ID, mounted body node ID,
+  title byte count and UTF-8 title. Routes are ordered from root to top. The caller
+  validates identities and builds the referenced body nodes before writing this snapshot.
+
 ## Invariants
 
 - Every word is a little-endian 32-bit unsigned value. Every instruction begins with its code word (CREATE 1, TEXT 2, APPEND 3, ROOT 4, TAG 5, STATE 7, HINT 8, NAME 9, INSERT 10, REMOVE 11, MOVE 12).
@@ -48,6 +53,11 @@ Exports:
 Depends on no other module. Consumer: [[Std Mobile View]], which calls these functions to build the stream of each mount and update.
 
 ## Resolved Grill Log
+
+- **Q:** Why encode the ordered stack in one instruction? **A:** UIKit can
+  reconcile its controller stack once per presentation update and retain
+  controllers in the common prefix. A half-written stack never becomes the
+  requested presentation.
 
 - **Q:** Add a separate scroll instruction? **A:** CREATE identifies the viewport as a kind. APPEND, INSERT and REMOVE maintain its child.
 

@@ -7,7 +7,7 @@ tags: [changelog]
 
 ## 2026-11-14 — iOS navigation contract (#920)
 
-- [[Native iOS Navigation]] specifies application-owned route state, UIKit transition completion, and native page sheets.
+- [[Native iOS Navigation]] specifies application-owned route state, UIKit transition completion, and native page sheets. The stack implementation branch adds duplicate-ID validation, stale-pop reduction, and the ordered route snapshot encoder.
 
 ## 2026-11-14 — iOS scrolling and keyboard avoidance (#919)
 

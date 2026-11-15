@@ -1,0 +1,42 @@
+module Std.Mobile.Navigation
+
+import Std.Mobile.View {View}
+import Std.Ui.Navigation {Stack, popToRoot, top}
+
+/// A page instance. The app gives it an identity that is stable across body edits.
+export type Route = { id: UInt32, title: Str, body: View }
+
+/// The previous top and surviving destination of a completed platform action.
+export type Pop = { from: UInt32, destination: UInt32 }
+
+/// Refusal before a route stack is sent to the platform.
+export type NavigationError =
+  | DuplicateRoute(UInt32)
+
+/// Checks route identity in presentation order before mounting.
+export fn validate(held: &Stack[Route]) -> Result[(), NavigationError] {
+  var seen = setOf([held.root.id])
+  for route in held.above {
+    if seen.contains(route.id) {
+      return Err(DuplicateRoute(route.id))
+    }
+    seen = seen.insert(route.id)
+  }
+  Ok(())
+}
+
+/// Accepts a completed pop only while it still describes the current stack.
+export fn afterPop(held: &Stack[Route], event: Pop) -> Option[Stack[Route]] {
+  if top(held).id != event.from || event.from == event.destination {
+    return None
+  }
+  if held.root.id == event.destination {
+    return Some(popToRoot(held))
+  }
+  for index in 0..held.above.length() {
+    if held.above[index].id == event.destination {
+      return Some(Stack{..*held, above: held.above.slice(0, index + 1)})
+    }
+  }
+  None
+}

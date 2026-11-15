@@ -1,7 +1,10 @@
 module UsesMobileView
 
 import Std.ByteOrder {readU32LE}
+import Std.Mobile.Navigation as Navigation
+import Std.Mobile.Stream as Stream
 import Std.Mobile.View as View
+import Std.Ui.Navigation as Stack
 
 fn counter(count: Int) -> View.View {
   View.Column([View.Label("Count: {count}"), View.Button("Add one", 1u32)])
@@ -63,6 +66,32 @@ fn scrollKeepsViewport() -> Bool {
     && wordsAt(&replaced.toArray(), 0, 11) == [1u32, 2u32, 3u32, 10u32, 0u32, 2u32, 0u32, 11u32, 1u32, 1u32, 1u32]
     && replaced.length() == 44
     && updated.root.id == mounted.root.id
+}
+
+fn route(id: UInt32, title: Str) -> Navigation.Route {
+  Navigation.Route{id: id, title: title, body: View.Label(title)}
+}
+
+fn navigationChecks() -> Bool {
+  let root = Stack.stack(route(10u32, "Café"))
+  let first = Stack.push(&root, route(20u32, "Detail"))
+  let shown = Stack.push(&first, route(30u32, "Editor"))
+  let duplicate = Stack.push(&shown, route(10u32, "Duplicate"))
+  let toRoot = Navigation.Pop{from: 30u32, destination: 10u32}
+  let toDetail = Navigation.Pop{from: 30u32, destination: 20u32}
+  let Some(retainedRoot) = Navigation.afterPop(&shown, toRoot) else { return false }
+  let Some(retainedDetail) = Navigation.afterPop(&shown, toDetail) else { return false }
+  let wire = Stream.navigation([], &[(10u32, 42u32, "Café"), (20u32, 84u32, "")])
+  Navigation.validate(&shown) == Ok(())
+    && Navigation.validate(&duplicate) == Err(Navigation.DuplicateRoute(10u32))
+    && Stack.depth(&retainedRoot) == 1 && Stack.top(&retainedRoot).id == 10u32
+    && Stack.depth(&retainedDetail) == 2 && Stack.top(&retainedDetail).id == 20u32
+    && Navigation.afterPop(&first, toRoot) == None
+    && Navigation.afterPop(&shown, Navigation.Pop{from: 30u32, destination: 99u32}) == None
+    && Navigation.afterPop(&shown, Navigation.Pop{from: 30u32, destination: 30u32}) == None
+    && wordsAt(&wire, 0, 5) == [13u32, 2u32, 10u32, 42u32, 5u32]
+    && textAt(&wire, 20, 5) == Some("Café")
+    && wordsAt(&wire, 25, 3) == [20u32, 84u32, 0u32] && wire.length() == 37
 }
 
 export fn main() -> Int {
@@ -143,5 +172,5 @@ export fn main() -> Int {
   // Unique keys are a no-op when unchanged. Old repeated rows must be retired.
   let (_, still) = View.update(&shrunk, &View.Keyed([row("cc"), row("aa"), row("bb")]))
   if still.length() == 0 && duplicatesRetired() && scrollKeepsViewport() { held = held + 1 }
-  held
+  if navigationChecks() { held } else { -1 }
 }

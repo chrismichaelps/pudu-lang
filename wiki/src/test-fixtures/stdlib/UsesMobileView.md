@@ -20,11 +20,12 @@ Checks:
 - Shape changes are precise replacements. A shorter column removes its tail. A retagged button is built, inserted at its index, and the old one removed. A retagged root is shown with ROOT, and the old root removed. A variant change follows the same replacement.
 - Keyed rows: a reorder is one MOVE; an insertion is one built row inserted at its index; a removal frees its id; the freed id is reused by the next built row; an unchanged list with unique keys writes nothing. Repeated keys preserve the first row, replace the additional rows, and remove their old ids. Reducing the list to one occurrence frees the remaining duplicate id and a subsequent unchanged update emits no instructions.
 - Scroll emits CREATE kind 7, APPEND and ROOT. Changing its child to another kind emits INSERT and REMOVE while keeping the root ID.
+- Navigation preserves the root on a pop across multiple routes, trims to an earlier pushed route, rejects stale or missing completions, and diagnoses the first duplicate ID. The wire assertion checks instance IDs, body node IDs, route order and the UTF-8 byte length of the title.
 - Event decoding: `event` of kind 1 with tag 7 is `Tapped(7)`; kind 2 is `Stopped`; kind 3 with a text is `Changed(tag, text)`; kinds 4 and 5 are `Toggled(tag, true)` and `Toggled(tag, false)`; kind 9 reads as `Stopped`. `carriesText` is true only for kind 3.
 
 ## Invariants
 
-- The fixture uses only the pure interface of [[Std Mobile View]]. It makes no foreign call.
+- The fixture uses the pure interfaces of [[Std Mobile View]], [[Std Mobile Stream]] and [[Std Mobile Navigation]]. It makes no foreign call.
 - Each check compares an exact byte or word sequence, never a length alone.
 
 ## Negative Logic
@@ -44,6 +45,8 @@ Depends on [[Std Mobile View]]. Its counter view matches [[Native Counter Exampl
 - **Q:** Check only the returned tree for duplicate keys? **A:** Check the exact REMOVE instructions and recycled ids as well. The tree can be correct while an obsolete row is still visible on the host.
 
 - **Q:** What distinguishes a child edit from replacing the viewport? **A:** Assert the exact placement and removal words and the unchanged viewport ID.
+
+- **Q:** Why exercise navigation in the existing mobile fixture? **A:** It verifies that the exact route snapshot shares the same word and UTF-8 representation as existing instructions.
 
 ## Referenced by
 

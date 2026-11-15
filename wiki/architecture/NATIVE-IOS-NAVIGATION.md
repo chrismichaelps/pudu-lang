@@ -13,7 +13,7 @@ Phase A of [[Pudu Native iOS UI]] adds a native page stack followed by one
 page sheet. The platform controls rendering and interactive transitions.
 The application controls what routes exist, the visible stack, and the
 sheet. Its state can use the root-preserving stack operations of
-[[Std Ui Navigation]]. The mobile presenter consumes route bodies
+[[Std Ui Navigation]] and validated by [[Std Mobile Navigation]]. The mobile presenter consumes route bodies
 described by [[Std Mobile View]], including a root scroll viewport.
 
 ## State and identity
@@ -73,7 +73,7 @@ an older in-flight user transition.
 UIKit owns the timing of pushes, pops and sheet transitions. There is no
 per-refresh Pudu view rebuild, extra display link, or fixed timer for
 transitions. Collect physical-device traces against the cadence and latency
-criteria in the ProMotion section of [[Pudu Native iOS UI]] once #919 lands.
+criteria in [[Pudu Native iOS UI#ProMotion and frame pacing]].
 
 1. Add exact stream and event fixtures for mount, push, title and body edits,
    pop to an earlier route, duplicate-ID refusal, and stale events.
