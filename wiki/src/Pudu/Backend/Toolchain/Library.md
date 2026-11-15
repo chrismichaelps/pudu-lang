@@ -77,6 +77,12 @@ Consumed by [[Pudu CLI]] and [[Backend Native Target Tests]].
 
 [[src/Pudu/Backend/_MOC]] · [[Native Mobile Targets]] · [[Pudu CLI]]
 
+## Shared Apple tooling (#916)
+
+The module now also exports `appleTools` and `invoke`. [[Backend Toolchain App]] uses
+them for the same SDK resolution and tool invocation, so an application and a library
+built for one target find the same SDK and run tools the same way.
+
 ## Export prototypes (#899)
 
 `LibraryRequest` carries `libraryExports`, the prototypes the emitted unit

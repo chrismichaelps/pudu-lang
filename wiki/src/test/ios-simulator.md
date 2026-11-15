@@ -32,8 +32,10 @@ Use `--require-simulator` to make an unavailable simulator a failure.
   implementation through a macOS dylib to compare interpreter output.
 - `main.m` owns `main`, calls `pudu_program_run` inside an autorelease pool,
   prints the status it returns and ends, so the launch finishes by itself.
-- The application is linked with `xcrun --sdk iphonesimulator clang`, given an
-  `Info.plist` with its identifier and executable, and ad-hoc signed.
+- Each example is built with `pudu build --native --target ios-simulator-arm64 --app`
+  ([[Backend Toolchain App]]), which compiles and links the application, writes its
+  `Info.plist` and signs it. The script no longer compiles the host or writes the bundle
+  itself.
 - The script creates its own iPhone device, boots it, installs, launches with
   `--console-pty` capturing standard output, and deletes the device afterwards
   on every path. An explicit `PUDU_IOS_SIMULATOR_UDID` instead uses an already
@@ -80,6 +82,15 @@ The script also builds `examples/mobile/Form.pudu` ([[Native Form Example]]) and
 The script runs `examples/mobile/List.pudu` ([[Native List Example]]) with `PUDU_UI_TYPE=Milk`, then taps every button in three rounds, each round pressing Add and then Reverse. The labels must read, in screen order, `3 items`, `Milk 3`, `Milk 1`, `Milk 2`, and the run must exit with status 0.
 
 Every app's labels are compared in screen order, so a reordered or missing row fails even when each label text is present.
+
+## Application output collision (#916)
+
+Before installing Counter, try to build into an existing `.app` directory containing
+a marker. Require `E6006` and verify the marker bytes survive. The subsequent build
+uses a vacant path and must boot.
+
+Resolved Grill Log: assert both the observable refusal and the preserved file. An
+exit code alone could hide a build that damaged the old path before failing.
 
 ## Referenced by
 

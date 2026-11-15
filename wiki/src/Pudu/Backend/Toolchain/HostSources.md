@@ -24,6 +24,11 @@ publication. A program on another platform selects no AppKit source.
 
 [[src/Pudu/Backend/_MOC]] · [[Native Desktop Adapter Delivery]]
 
+## iOS host source (#916)
+
+The module also embeds `cbits/pudu_ios_host.m` as `iosHostSource :: String`, used by
+[[Backend Toolchain App]] and never compiled into the compiler.
+
 ## Native audio (#857)
 
 Resolved Grill Log: Select the AudioToolbox sources with an audio marker. A single staging directory serves all selected bundles.

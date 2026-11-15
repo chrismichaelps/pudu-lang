@@ -5,6 +5,10 @@ tags: [changelog]
 
 # Changelog
 
+## 2026-11-14 — Native application bundles (#916)
+
+- `pudu build --native --target ios-simulator-arm64 --app` writes a signed simulator application with the embedded iOS host ([[Native App Delivery]]). Publication refuses occupied output paths.
+
 ## 2026-11-14 — Pudu Native iOS UI coverage target
 
 - Pudu Native iOS UI coverage target, including iPhone Duo, with the current gaps ([[Pudu Native iOS UI]]).

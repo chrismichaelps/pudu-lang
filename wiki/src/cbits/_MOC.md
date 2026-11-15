@@ -24,6 +24,8 @@ tags: [moc, module, foreign, ffi]
 
 - [[Desktop Presentation Test]] · [[Desktop Presentation Gate]] — native presentation orientation regression.
 
+- [[iOS Host Adapter]] — iOS host embedded into application builds, never compiled into the compiler (#916).
+
 ## Referenced by
 
 [[src/_MOC]] · [[Foreign Call]] · [[ADR-0018 Calling a Library Written Elsewhere]]

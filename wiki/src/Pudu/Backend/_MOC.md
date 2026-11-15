@@ -9,6 +9,7 @@ aliases: [Backend Module Map]
 - [[Backend Emit Entry]] · [[Backend Native Target]] · [[Backend Toolchain Library]] · [[Backend Toolchain Process]] · [[Backend Native Target Tests]] · [[iOS Simulator Run]] — embedded mobile builds (#878).
 
 - [[Backend Emit Export]] · [[Backend Export Tests]] — exported functions a host calls through C (#899).
+- [[Native App Tests]] — simulator application identifier and property-list checks (#916).
 - [[Backend Export Crossing]] — C shapes, header declarations and conversions for text, records and `Result` exports (#906).
 - [[Native Toolchain Host Sources]] · [[Native Host Desktop]] · [[Native Host Audio]] — packaged native platform translation units (#856).
 
@@ -136,3 +137,4 @@ aliases: [Backend Module Map]
 - [[Backend Default Parameter Programs]] — defaults in every combination, directly and through values.
 
 - [[Backend Frame Text Views]] — checked byte-method carrier emission.
+- [[Backend Toolchain App]] — simulator application bundle, Info.plist and ad-hoc signing (#916).

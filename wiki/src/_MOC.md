@@ -256,6 +256,7 @@ tags: [moc, module]
 - [[Backend Function Programs]]
 - [[Backend Toolchain Tests]]
 - [[Backend Export Tests]] — exported functions called from a C host (#899).
+- [[Native App Tests]] — application identifiers and property lists for `pudu build --app`.
 - [[Native Direct Call Tests]] — direct-call selection, output, failure location and export entry (#904).
 - [[Backend Export Crossing]] — export shapes for text, records and `Result` (#906).
 - [[Diagnostic Evaluation]]
@@ -345,6 +346,7 @@ tags: [moc, module]
 ## Native mobile (#909)
 
 - [[iOS Host Adapter]] — Objective-C host of a Pudu Native application on iOS.
+- [[Backend Toolchain App]] — simulator application bundle, Info.plist and ad-hoc signing (#916).
 - [[Native Counter Example]] — Phase 1 counter built only from Pudu.
 - [[Native List Example]] — keyed list with insertion and reorder, built only from Pudu (#914).
 - [[Uses Mobile View]] — stdlib fixture for the counter view stream.

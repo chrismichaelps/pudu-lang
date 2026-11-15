@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { spawnSync } from "node:child_process";
-import { mkdtempSync, mkdirSync, rmSync, statSync, writeFileSync } from "node:fs";
+import { mkdtempSync, mkdirSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -150,12 +150,12 @@ int main(int argc, char **argv) {
     const lines = launch(device, identifier, "PUDU_SMOKE", "PUDU_SMOKE_STATUS");
     assert.deepEqual(lines, [...expected.split("\n"), "PUDU_SMOKE_STATUS 0"]);
     console.log(`${expected}\nPASS iOS simulator smoke (${device})`);
-    mobileApp(device, simulatorClang, "Counter", [
+    mobileApp(device, "Counter", [
       { environment: { SIMCTL_CHILD_PUDU_UI_SELFTEST: "3" }, labels: ["Count: 3"] }]);
-    mobileApp(device, simulatorClang, "Form", [
+    mobileApp(device, "Form", [
       { environment: { SIMCTL_CHILD_PUDU_UI_SELFTEST: "0", SIMCTL_CHILD_PUDU_UI_TYPE: "Ada" }, labels: ["Hello, Ada (subscribed)"] },
       { environment: { SIMCTL_CHILD_PUDU_UI_SELFTEST: "1", SIMCTL_CHILD_PUDU_UI_TYPE: "Ada" }, labels: ["Hello, stranger"] }]);
-    mobileApp(device, simulatorClang, "List", [
+    mobileApp(device, "List", [
       { environment: { SIMCTL_CHILD_PUDU_UI_SELFTEST: "3", SIMCTL_CHILD_PUDU_UI_TYPE: "Milk" }, labels: ["3 items", "Milk 3", "Milk 1", "Milk 2"] }]);
   } finally {
     try {
@@ -175,35 +175,24 @@ int main(int argc, char **argv) {
    adapter and run once per entry of `runs`: the host feeds it input from the
    entry's environment, asks it to stop, and reports its labels, its status
    and the time from main to the first frame. */
-function mobileApp(device, simulatorClang, example, runs) {
+function mobileApp(device, example, runs) {
   const root = mkdtempSync(join(tmpdir(), `pudu-ios-${example.toLowerCase()}-`));
   const app = join(root, `${example}.app`);
-  const library = join(root, `lib${example}.a`);
-  const bundle = `org.pudu.Mobile${example}.${randomUUID()}`;
+  const bundle = `org.pudu.${example}`;
   let installed = false;
   try {
-    run(resolve(compiler), ["build", join(repository, "examples", "mobile", `${example}.pudu`),
-      "--native", "--target", "ios-simulator-arm64", "-o", library]);
-    mkdirSync(app);
-    writeFileSync(join(app, "Info.plist"), `<?xml version="1.0" encoding="UTF-8"?>
-<plist version="1.0"><dict>
-<key>CFBundleIdentifier</key><string>${bundle}</string>
-<key>CFBundleExecutable</key><string>${example}</string>
-<key>CFBundleName</key><string>${example}</string>
-<key>CFBundlePackageType</key><string>APPL</string>
-<key>CFBundleVersion</key><string>1</string>
-<key>CFBundleShortVersionString</key><string>1.0</string>
-<key>MinimumOSVersion</key><string>15.0</string>
-<key>CFBundleSupportedPlatforms</key><array><string>iPhoneSimulator</string></array>
-<key>UIDeviceFamily</key><array><integer>1</integer></array>
-<key>UILaunchScreen</key><dict/>
-</dict></plist>
-`);
+    const build = ["build", join(repository, "examples", "mobile", `${example}.pudu`),
+      "--native", "--target", "ios-simulator-arm64", "--app", "-o"];
+    if (example === "Counter") {
+      const occupied = join(root, "Occupied.app");
+      const marker = join(occupied, "keep.txt");
+      mkdirSync(occupied);
+      writeFileSync(marker, "existing data");
+      assert.throws(() => run(resolve(compiler), [...build, occupied]), /E6006.*application output already exists/s);
+      assert.equal(readFileSync(marker, "utf8"), "existing data");
+    }
+    run(resolve(compiler), [...build, app]);
     const executable = join(app, example);
-    run(xcrun, [...simulatorClang, "-fobjc-arc", "-O2", "-I", root,
-      join(repository, "packages", "pudu", "v0.1", "host", "ios", "PuduHost.m"), library,
-      "-framework", "UIKit", "-framework", "Foundation", "-o", executable]);
-    run("codesign", ["--force", "--sign", "-", app]);
     run(xcrun, ["simctl", "install", device, app], simulatorTimeout);
     installed = true;
     for (const { environment, labels } of runs) {
@@ -215,7 +204,7 @@ function mobileApp(device, simulatorClang, example, runs) {
       const firstFrame = lines.find((line) => line.startsWith("PUDU_FIRST_FRAME_MS "));
       assert.ok(firstFrame, `${example} reported no first frame:\n${lines.join("\n")}`);
       console.log(`PASS iOS ${example}: ${labels.join(", ")}, first frame ${firstFrame.split(" ")[1]} ms from main, `
-        + `executable ${statSync(executable).size} bytes, program archive ${statSync(library).size} bytes`);
+        + `executable ${statSync(executable).size} bytes`);
     }
   } finally {
     try {

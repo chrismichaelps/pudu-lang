@@ -18,6 +18,7 @@ extra-source-files: cbits/pudu_desktop.h
                     cbits/pudu_desktop_access.m
                     cbits/pudu_desktop_menu.m
                     cbits/pudu_desktop_window.m
+                    cbits/pudu_ios_host.m
                     cbits/pudu_audio.c
                     cbits/pudu_audio_stream.c
                     cbits/pudu_audio.h
@@ -202,6 +203,7 @@ library
     Pudu.Backend.Toolchain
     Pudu.Backend.Toolchain.HostSources
     Pudu.Backend.Toolchain.Library
+    Pudu.Backend.Toolchain.App
     Pudu.Backend.Toolchain.Process
     Pudu.Compiler
     Pudu.Compiler.Constants
