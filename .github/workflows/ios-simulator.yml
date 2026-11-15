@@ -5,6 +5,9 @@ on:
       - 'packages/pudu/**'
       - 'cabal.project*'
       - 'test/ios-simulator.mjs'
+      - 'scripts/uikit-coverage.mjs'
+      - 'test/uikit-coverage.test.mjs'
+      - 'wiki/architecture/NATIVE-IOS-UI.md'
       - '.github/workflows/ios-simulator.yml'
   push:
     branches: [dev, 'feature/**']
@@ -12,6 +15,9 @@ on:
       - 'packages/pudu/**'
       - 'cabal.project*'
       - 'test/ios-simulator.mjs'
+      - 'scripts/uikit-coverage.mjs'
+      - 'test/uikit-coverage.test.mjs'
+      - 'wiki/architecture/NATIVE-IOS-UI.md'
       - '.github/workflows/ios-simulator.yml'
 
 permissions:
@@ -23,7 +29,7 @@ concurrency:
 
 jobs:
   native-ffi:
-    runs-on: macos-15
+    runs-on: macos-26
     timeout-minutes: 40
     steps:
       - uses: actions/checkout@v7
@@ -34,6 +40,10 @@ jobs:
         with:
           ghc-version: 9.14.1
           cabal-version: 3.16.1.0
+      - name: Measure UIKit coverage against the runner's SDK
+        run: |
+          node --test test/uikit-coverage.test.mjs
+          node scripts/uikit-coverage.mjs --check
       - run: cabal update
       - name: Build Pudu
         run: cabal build exe:pudu --ghc-options=-Werror

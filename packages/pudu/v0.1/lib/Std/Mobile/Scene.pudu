@@ -1,0 +1,31 @@
+module Std.Mobile.Scene
+
+/// A size class along one axis.
+export type SizeClass = Compact | Regular
+
+/// The scene's size in points and its size class along each axis. Layout
+/// adapts to these values, never to a device model.
+export type Size = { width: Int32, height: Int32, horizontal: SizeClass, vertical: SizeClass }
+
+/// Where the application is in its lifecycle.
+export type Phase = Active | Inactive | Background | Foreground
+
+/// Size class codes in a RESIZED event's words.
+const CLASSES: Map[Int32, SizeClass] = mapOf([(1i32, Compact), (2i32, Regular)])
+
+/// Lifecycle codes in a LIFECYCLE event's detail.
+const PHASES: Map[UInt32, Phase] = mapOf([(1u32, Active), (2u32, Inactive), (3u32, Background), (4u32, Foreground)])
+
+/// The size the words `[width, height, horizontal, vertical]` describe.
+export fn sized(words: &Array[Int32]) -> Option[Size] {
+  if words.length() < 4 {
+    return None
+  }
+  match (CLASSES.get(words[2]), CLASSES.get(words[3])) {
+    case (Some(horizontal), Some(vertical)) => Some(Size{width: words[0], height: words[1], horizontal: horizontal, vertical: vertical})
+    case _ => None
+  }
+}
+
+/// The lifecycle phase a detail word names.
+export fn phase(detail: UInt32) -> Option[Phase] { PHASES.get(detail) }

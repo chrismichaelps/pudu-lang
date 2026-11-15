@@ -254,3 +254,7 @@ STARTTLS use [[Std Tls]]. [[Std Compress Gzip]] delegates to [[Eval Compress]] a
 - [[Std Mobile Host]] — foreign apply and wait calls for the mobile host.
 - [[Std Mobile Stream]] — pure encoder of the view stream instructions (#914).
 - [[Std Mobile Theme]] — color roles, text styles and appearance as a pure theme value and its stream (#923).
+- [[Std Mobile Gesture]] — recognizer kinds, phases and the decoding of gesture events (#930).
+- [[Std Mobile Scene]] — scene size, size classes and lifecycle phases decoded from host events (#930).
+- [[Std Mobile Access]] — accessibility traits as a mask, with hints and values (#930).
+- [[Std Mobile Feedback]] — alerts, action sheets and haptics as commands with a reported choice (#930).

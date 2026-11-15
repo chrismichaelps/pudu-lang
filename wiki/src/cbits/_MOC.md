@@ -32,6 +32,13 @@ tags: [moc, module, foreign, ffi]
 - [[iOS Host Controls]] — platform control factories, setters, target actions and self-test actions.
 - [[iOS Host List]] — recycling list and grid cells, the row store, and scroll reports.
 - [[iOS Host Material]] — surface materials realized as glass on iOS 26 or later, blur otherwise.
+- [[iOS Host Gesture]] — UIKit recognizers attached to a control and their gesture events (#930).
+- [[iOS Host Feedback]] — alerts presented one at a time, haptics, progress and activity indicators (#930).
+- [[iOS Host Access]] — accessibility traits, hints, values and context menus (#930).
+- [[iOS Host Scene]] — root controller, scene size and size classes, and lifecycle events (#930).
+- [[iOS Host Motion]] — animated groups and one spring per commit, honoring Reduce Motion (#930).
+- [[iOS Host Stream]] — view stream reader: words, text fields and stream defects (#930).
+- [[iOS Host Capability Test]] — self-test of the capability headers under the capability environment variable (#930).
 
 ## Referenced by
 

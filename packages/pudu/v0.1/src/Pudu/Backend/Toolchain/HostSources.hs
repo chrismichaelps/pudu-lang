@@ -50,7 +50,7 @@ desktopSources = $(do
 {-| The iOS host and its private header, staged only for app builds. -}
 iosHostSources :: [(FilePath, String)]
 iosHostSources = $(do
-  let files = ["pudu_ios_host.m", "pudu_ios_layout.h", "pudu_ios_theme.h", "pudu_ios_events.h", "pudu_ios_list.h", "pudu_ios_controls.h", "pudu_ios_material.h"]
+  let files = ["pudu_ios_host.m", "pudu_ios_layout.h", "pudu_ios_theme.h", "pudu_ios_events.h", "pudu_ios_list.h", "pudu_ios_controls.h", "pudu_ios_material.h", "pudu_ios_stream.h", "pudu_ios_gesture.h", "pudu_ios_feedback.h", "pudu_ios_access.h", "pudu_ios_scene.h", "pudu_ios_motion.h", "pudu_ios_capability_test.h"]
   paths <- traverse (makeRelativeToProject . ("cbits" </>)) files
   mapM_ addDependentFile paths
   contents <- runIO (traverse ByteString.readFile paths)

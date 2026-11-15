@@ -5,6 +5,15 @@ tags: [changelog]
 
 # Changelog
 
+## 2026-11-15 — UIKit coverage inventory (#930)
+
+- The UIKit coverage inventory script and tests measure host coverage from the SDK headers, so the table in [[Pudu Native iOS UI]] is generated rather than hand-written (refs #930). The iOS simulator workflow moves to a runner image whose Xcode meets the platform floor and runs the inventory check ([[iOS Simulator CI]], [[UIKit Coverage Inventory]]).
+- The iOS simulator run waits up to ten minutes for a new device's first boot, so the iPad matrix no longer times out beside the phone.
+
+## 2026-11-14 — iOS capabilities (#930)
+
+- `Std.Mobile` gains `Gesture`, `Scene`, `Access` and `Feedback` ([[Std Mobile Gesture]], [[Std Mobile Scene]], [[Std Mobile Access]], [[Std Mobile Feedback]]). [[Std Mobile View]] gains the `Progress`, `Activity`, `Recognizing`, `Accessible`, `Menu` and `Animated` wrappers and the `Gestured`, `Chose`, `Resized`, `Lifecycle` and `Picked` events. [[Std Mobile Stream]] encodes kinds 10 and 11 and instructions 27 to 35. [[Std Mobile Host]] reads up to four signed event words. The iOS host adds six headers for gestures, alerts and haptics, accessibility and menus, scene size and lifecycle, motion, and a self-test ([[Native iOS Capabilities Delivery]]).
+
 ## 2026-11-14 — iOS materials (#928)
 
 - `Std.Mobile.View` gains `Surfaced`, a container whose background is a system material ([[Std Mobile Theme]] `Material`, encoded by MATERIAL, code 26 in [[Std Mobile Stream]]). The iOS host draws glass on iOS 26 or later when the SDK declares it, and a system blur otherwise ([[iOS Host Material]]). The ledger gains the `glass-material` capability ([[Backend Ledger]]), and [[Native Platform Adoption]] records it as the first gated capability ([[Native iOS Materials Delivery]]).

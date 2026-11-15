@@ -49,3 +49,9 @@ The iOS host sources also stage `pudu_ios_events.h`, `pudu_ios_controls.h` and `
 ## iOS material source (#928)
 
 The iOS host sources also stage `pudu_ios_material.h` with the host translation unit and the other private headers. All seven are written unchanged before clang runs. See [[iOS Host Material]].
+
+## iOS capability sources (#930)
+
+The iOS host sources also stage `pudu_ios_gesture.h`, `pudu_ios_feedback.h`, `pudu_ios_access.h`, `pudu_ios_scene.h`, `pudu_ios_motion.h` and `pudu_ios_capability_test.h` with the host translation unit and the other private headers. All thirteen are written unchanged before clang runs. See [[iOS Host Gesture]], [[iOS Host Feedback]], [[iOS Host Access]], [[iOS Host Scene]], [[iOS Host Motion]] and [[iOS Host Capability Test]].
+
+The reader header [[iOS Host Stream]], pudu_ios_stream.h, is staged with the same private headers.

@@ -12,15 +12,19 @@ aliases: [iOS Host Events]
 
 Private event queue of the iOS host, included once by [[iOS Host Adapter]]. The compiler stages it alongside the host translation unit and the other private headers ([[Native Toolchain Host Sources]]). It owns the queue of control events, the text and detail each event carries, and the wait that hands them to the program. The queue is its own responsibility, so the host file stays within its line budget as list support is added.
 
-The header provides `pudu_queue(kind, tag, text, detail)`, which appends an event, and the wait and text accessors that [[Std Mobile Host]] calls through `pudu_ui_wait`, `pudu_ui_event_text` and `pudu_ui_event_detail`.
+The header provides `pudu_queue(kind, tag, text, detail)`, which appends an event, and the wait and text accessors that [[Std Mobile Host]] calls through `pudu_ui_wait`, `pudu_ui_event_text` and `pudu_ui_event_detail`, and the word accessors `pudu_ui_event_word_count` and `pudu_ui_event_word`.
 
 ## Behavior
 
-- Each queued event holds its 64-bit value (kind in the high 32 bits, tag in the low 32 bits), the text it carries, and its detail word. An event without text or detail stores an empty text or zero.
+- Each queued event holds its 64-bit value (kind in the high 32 bits, tag in the low 32 bits), the text it carries, its detail word, and its word channel. An event without text, detail or words stores an empty text, zero, and no words.
 - `pudu_ui_wait` runs the main run loop in the default mode until an event is queued, then hands out the oldest.
 - `pudu_ui_event_text` and `pudu_ui_event_detail` return the text and detail of the last event handed out. Both stay valid until the next wait.
 - Events are handed out in the order the controls queued them.
-- The event kind constants live in this header: tapped 1, stopped 2, changed 3, switched on 4, switched off 5, reached 8. The controls header [[iOS Host Controls]] queues them by these names.
+- The event kind constants live in this header: tapped 1, stopped 2, changed 3, switched on 4, switched off 5, reached 8, gestured 9, chose 10, resized 11, lifecycle 12, picked 13. The controls header [[iOS Host Controls]] and the capability headers queue them by these names.
+
+## Word channel
+
+Measured events, gestured (9) and resized (11), carry up to four signed words beside the detail word. `pudu_queue_words` appends them, and any count above four is cut to four. `pudu_ui_event_word_count` returns how many words the last event handed out carries, and `pudu_ui_event_word(index)` returns word `index` as its 32 bits. An index past the count reads zero. The words stay valid until the next wait. [[Std Mobile Host]] reads them only for the kinds that [[Std Mobile View]] lists as measured.
 
 ## Invariants
 
