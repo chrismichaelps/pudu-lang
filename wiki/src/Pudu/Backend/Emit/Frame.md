@@ -217,3 +217,10 @@ desktop unit's bytes are unchanged; only the embedded form wraps the body.
 The embedded form appends [[Backend Emit Export]]'s wrappers after the entry
 and adds their conversion needs to the runtime selection; the prototypes are
 reported in the emitted unit. The executable form emits none.
+
+## Physical slot allocation (#821)
+
+[[Backend Frame Slots]] runs before runtime selection, direct eligibility and
+body emission. Layout metadata and every emitted reference use the same
+physical slot IDs. The logical frame remains available to lowering tests.
+Resolved Grill Log: one layout for every backend consumer.

@@ -726,3 +726,9 @@ Resolved Grill Log: include `cbits/pudu_ios_layout.h` in the source distribution
 `cbits/pudu_ios_theme.h` is added to `extra-source-files` beside `cbits/pudu_ios_layout.h`, for the same reason: the host embedding reads it at compiler build time. See [[iOS Host Theme]].
 
 `cbits/pudu_ios_events.h`, `cbits/pudu_ios_controls.h` and `cbits/pudu_ios_list.h` are added to `extra-source-files` beside the layout and theme headers, for the same reason: the host embedding reads them at compiler build time. See [[iOS Host Events]], [[iOS Host Controls]] and [[iOS Host List]].
+
+## Physical slot allocation (#821)
+
+Register [[Backend Frame Slots]] and [[Backend Frame Slot References]] with
+existing dependencies. Resolved Grill Log: keep traversal and allocation
+separate while sharing one exhaustive reference projection.

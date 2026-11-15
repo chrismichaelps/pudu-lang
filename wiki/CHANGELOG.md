@@ -5,6 +5,10 @@ tags: [changelog]
 
 # Changelog
 
+## 2026-11-15 — Native physical frame storage (#821)
+
+- [[Backend Frame Slots]] reuses storage for disjoint value lifetimes in generated C11. Owned candidates must be explicitly emptied before reuse. The signed Int8 matrix uses 4,561 slots instead of 6,394 and retains identical output.
+
 ## 2026-11-14 — Recycling lists and grids (#925)
 
 - `Std.Mobile.View` gains `Recycled`, a list or equal-column grid that supplies rows for a window of its items, and `Reached` events with `windowStart` to move the window. [[Std Mobile Stream]] encodes RANGE and COLUMNS (codes 24 and 25). The iOS host shows a list with a row store and reports scroll positions through [[iOS Host List]] and [[iOS Host Events]] ([[Native iOS Recycling Delivery]]).

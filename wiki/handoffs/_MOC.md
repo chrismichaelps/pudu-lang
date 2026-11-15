@@ -418,3 +418,5 @@ tags: [moc, handoff]
 - [[Native App Delivery]] — `pudu build --app` writes a runnable simulator application (#916).
 - [[Native iOS Theming Delivery]] — semantic colors, appearance override and Dynamic Type styles (#923).
 - [[Native iOS Recycling Delivery]] — recycling lists and equal-column grids with windowed rows (#925).
+
+- [[Native Frame Slot Reuse Delivery]] — C11 frame pressure and allocation (#821).
