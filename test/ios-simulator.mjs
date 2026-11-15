@@ -166,6 +166,10 @@ int main(int argc, char **argv) {
       environment: { SIMCTL_CHILD_PUDU_UI_SELFTEST: "0", SIMCTL_CHILD_PUDU_UI_BACK_TEST: "1" },
       labels: ["Root page"],
       reports: ["PUDU_POP 20 10"],
+    }, {
+      environment: { SIMCTL_CHILD_PUDU_UI_SELFTEST: "1", SIMCTL_CHILD_PUDU_UI_BACK_TEST: "programmatic" },
+      labels: ["Root page"],
+      reports: ["PUDU_POP programmatic"],
     }]);
     invalidGroupApp(device, root);
   } finally {

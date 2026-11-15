@@ -54,6 +54,11 @@
 - (void)publish:(NSArray<PuduRouteSnapshot *> *)routes;
 @end
 
+static BOOL pudu_programmatic_pop_test(void) {
+  const char *mode = getenv("PUDU_UI_BACK_TEST");
+  return mode != NULL && strcmp(mode, "programmatic") == 0;
+}
+
 @implementation PuduNavigation
 - (void)flush {
   self.waiting = NO;
@@ -101,9 +106,12 @@
 }
 
 - (void)navigationController:(UINavigationController *)controller didShowViewController:(UIViewController *)shown animated:(BOOL)animated {
-  (void)shown;
   (void)animated;
   NSArray<PuduPage *> *actual = (NSArray<PuduPage *> *)controller.viewControllers;
+  if (pudu_programmatic_pop_test() && actual.count == 1 && self.requested.count == 1 &&
+      shown == self.requested.firstObject && [actual isEqualToArray:self.requested]) {
+    pudu_queue(PUDU_UI_STOPPED, 0, nil);
+  }
   if (self.pending != nil || actual.count == 0 || actual.count >= self.requested.count ||
       [actual isEqualToArray:self.reported]) return;
   for (NSUInteger index = 0; index < actual.count; index++) {
@@ -160,8 +168,11 @@ static UIView *pudu_visible_body(void) {
 }
 
 static BOOL pudu_test_back(void) {
-  if (getenv("PUDU_UI_BACK_TEST") == NULL || pudu_navigation == nil) return NO;
-  [pudu_navigation.controller popViewControllerAnimated:NO];
+  if (getenv("PUDU_UI_BACK_TEST") == NULL || pudu_navigation == nil || pudu_programmatic_pop_test()) return NO;
+  UINavigationController *controller = pudu_navigation.controller;
+  // A canceled pop leaves the final stack equal to the requested stack.
+  [pudu_navigation navigationController:controller didShowViewController:controller.topViewController animated:YES];
+  [controller popViewControllerAnimated:NO];
   return YES;
 }
 

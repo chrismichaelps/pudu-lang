@@ -495,7 +495,7 @@ static void pudu_test_keyboard(void) {
       if (kind->press != NULL) kind->press(nodes[node]);
     }
   }
-  pudu_queue(PUDU_UI_STOPPED, 0, nil);
+  if (!pudu_programmatic_pop_test()) pudu_queue(PUDU_UI_STOPPED, 0, nil);
 }
 @end
 

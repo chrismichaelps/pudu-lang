@@ -27,6 +27,12 @@ Each page controller places its body with [[iOS Host Layout]].
 - A completed pop reports the old top and surviving route IDs through the event
   queue. Canceled and programmatic transitions do not produce pop events.
 
+## Simulator evidence
+
+The self-test exercises the completion predicate with an unchanged stack and an
+actual controller pop. A separate test waits for the completed programmatic
+transition before stopping, so an echoed pop would be visible to Pudu.
+
 ## Dependencies and consumers
 
 Depends on UIKit and the decoder helpers of [[iOS Host Adapter]]. The compiler

@@ -52,6 +52,9 @@ detail word for the surviving route in pop events. Ordinary events retain their
 existing raw value and text. Retiring a mounted page body leaves its controller's
 strong reference in place until the controller detaches it.
 
+The navigation test may transfer stop ownership to the completion delegate so
+its event assertions cover the entire UIKit transition.
+
 ## Resolved Grill Log
 
 - **Q:** Encode the destination as text? **A:** Use a numeric detail word so the

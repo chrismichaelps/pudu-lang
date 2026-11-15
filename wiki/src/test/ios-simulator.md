@@ -105,7 +105,10 @@ cannot show whether the viewport actually resized.
 
 Build [[Native Pages Example]] and simulate a UIKit controller pop. The app
 reports the typed route IDs and reapplies its root route. Assert one event
-and the final root label.
+and the final root label. The harness also sends an unchanged-stack completion
+before the synthetic pop and expects no event from it. A second launch taps the
+example button and waits until UIKit displays the programmatically requested root.
+Any pop echoed from that transition fails the app or the exact report check.
 
 Resolved Grill Log: the simulator exercises the same delegate used by a
 native back action. A programmatic self-test pop is evidence for the

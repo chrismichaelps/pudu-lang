@@ -13,7 +13,8 @@ aliases: [Native Pages Example]
 Mount a root page and a detail page with the [[Std Mobile Navigation]] API.
 Consume a completed native back action, apply it to the route model, and commit
 the resulting root stack. The simulator checks the reported source and destination
-IDs and confirms the root page is visible afterward.
+IDs and confirms the root page is visible afterward. A separate run taps a detail-page button,
+which submits a Pudu-owned pop and fails if it receives any native pop event.
 
 ## Invariants
 

@@ -28,10 +28,14 @@ after snapshot publication. FUI owns the cross-platform component API.
 
 On iOS 26.4, the UIKit Back button displayed the root page and reported route 20 to 10 to the Pudu model. The simulator self-test observed the same payload once and the final root label.
 
+The simulator suite also verified that an unchanged-stack completion emits no
+event, and a Pudu-owned pop reaches the root without a native echo. A real
+canceled edge gesture has not been verified.
+
 ## Exact next action
 
-Add an interactive-pop regression to [[Native Pages Example]] covering completed
-and canceled swipes and programmatic pop suppression.
+Implement the page-sheet snapshot and dismissal bridge on top of the mounted
+navigation stack in [[Std Mobile Navigation]] and [[iOS Host Navigation]].
 
 ## Referenced by
 

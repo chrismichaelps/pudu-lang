@@ -7,7 +7,7 @@ import Std.Ui.Navigation as Stack
 
 fn main() -> Int {
   let root = Stack.stack(Navigation.Route{id: 10u32, title: "Root", body: View.Label("Root page")})
-  let pages = Stack.push(&root, Navigation.Route{id: 20u32, title: "Detail", body: View.Scroll(View.Label("Detail page"))})
+  let pages = Stack.push(&root, Navigation.Route{id: 20u32, title: "Detail", body: View.Scroll(View.Column([View.Label("Detail page"), View.Button("Return to root", 1u32)]))})
   let Ok((mounted, stream)) = Navigation.mount(&pages) else { return 1 }
   Host.apply(stream)
   var accepted = false
@@ -18,6 +18,12 @@ fn main() -> Int {
         let Ok((_, changed)) = Navigation.update(&mounted, &next, false) else { return 3 }
         Host.apply(changed)
         print("PUDU_POP {from} {destination}")
+        accepted = true
+      }
+      case View.Tapped(tag) if tag == 1u32 && !accepted => {
+        let Ok((_, changed)) = Navigation.update(&mounted, &root, false) else { return 6 }
+        Host.apply(changed)
+        print("PUDU_POP programmatic")
         accepted = true
       }
       case View.Stopped => { return if accepted { 0 } else { 4 } }
