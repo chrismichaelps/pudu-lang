@@ -8,6 +8,7 @@ import { fileURLToPath } from "node:url";
 
 // A cold hosted simulator can take minutes to install or launch its first app.
 const simulatorTimeout = 300_000;
+const bootTimeout = 600_000;
 const launchAttempts = 2;
 
 const repository = resolve(dirname(fileURLToPath(import.meta.url)), "..");
@@ -143,13 +144,14 @@ int main(int argc, char **argv) {
     run("codesign", ["--force", "--sign", "-", app]);
     if (!device) {
       device = run(xcrun, ["simctl", "create", "Pudu Foreign Smoke", phone.identifier, runtime.identifier]).trim();
-      run(xcrun, ["simctl", "bootstatus", device, "-b"], 240_000);
+      run(xcrun, ["simctl", "bootstatus", device, "-b"], bootTimeout);
     }
     run(xcrun, ["simctl", "install", device, app], simulatorTimeout);
     installed = true;
     const lines = launch(device, identifier, "PUDU_SMOKE", "PUDU_SMOKE_STATUS");
     assert.deepEqual(lines, [...expected.split("\n"), "PUDU_SMOKE_STATUS 0"]);
     console.log(`${expected}\nPASS iOS simulator smoke (${device})`);
+    refuseOccupiedOutput(root);
     familyApps(device, "Counter");
     mobileApp(device, "Form", [
       { environment: { SIMCTL_CHILD_PUDU_UI_SELFTEST: "0", SIMCTL_CHILD_PUDU_UI_TYPE: "Ada" }, labels: ["Hello, Ada (subscribed)"] },
@@ -227,7 +229,7 @@ function familyMatrix(runtime) {
   for (const [family, type] of families) {
     const device = run(xcrun, ["simctl", "create", `Pudu ${family} Matrix`, type.identifier, runtime.identifier]).trim();
     try {
-      run(xcrun, ["simctl", "bootstatus", device, "-b"], 240_000);
+      run(xcrun, ["simctl", "bootstatus", device, "-b"], bootTimeout);
       for (const example of Object.keys(familyRuns)) familyApps(device, example);
       console.log(`PASS iOS ${family} matrix (${type.name}, ${runtime.name})`);
     } finally {
@@ -259,13 +261,26 @@ function fallbackGlass(runtimes) {
   assert.ok(phone, `No iPhone device type for ${older.identifier}`);
   const device = run(xcrun, ["simctl", "create", "Pudu Material Fallback", phone.identifier, older.identifier]).trim();
   try {
-    run(xcrun, ["simctl", "bootstatus", device, "-b"], 240_000);
+    run(xcrun, ["simctl", "bootstatus", device, "-b"], bootTimeout);
     mobileApp(device, "Glass", [glassRun("blur")]);
     console.log(`PASS iOS material fallback (${older.name})`);
   } finally {
     spawnSync(xcrun, ["simctl", "shutdown", device], { timeout: 30_000 });
     run(xcrun, ["simctl", "delete", device], 30_000);
   }
+}
+
+function refuseOccupiedOutput(scratch) {
+  const source = join(scratch, "Collision.pudu");
+  const occupied = join(scratch, "Occupied.app");
+  const marker = join(occupied, "keep.txt");
+  writeFileSync(source, "module Collision\n\nfn main() -> Int { 0 }\n");
+  mkdirSync(occupied);
+  writeFileSync(marker, "existing data");
+  const build = ["build", source, "--native", "--target", "ios-simulator-arm64", "--app", "-o", occupied];
+  assert.throws(() => run(resolve(compiler), build), /E6006.*application output already exists/s);
+  assert.equal(readFileSync(marker, "utf8"), "existing data");
+  console.log("PASS iOS occupied application output refused");
 }
 
 /* An example from examples/mobile, built only from Pudu with the iOS host
@@ -280,14 +295,6 @@ function mobileApp(device, example, runs) {
   try {
     const build = ["build", join(repository, "examples", "mobile", `${example}.pudu`),
       "--native", "--target", "ios-simulator-arm64", "--app", "-o"];
-    if (example === "Counter") {
-      const occupied = join(root, "Occupied.app");
-      const marker = join(occupied, "keep.txt");
-      mkdirSync(occupied);
-      writeFileSync(marker, "existing data");
-      assert.throws(() => run(resolve(compiler), [...build, occupied]), /E6006.*application output already exists/s);
-      assert.equal(readFileSync(marker, "utf8"), "existing data");
-    }
     run(resolve(compiler), [...build, app]);
     const executable = join(app, example);
     run(xcrun, ["simctl", "install", device, app], simulatorTimeout);

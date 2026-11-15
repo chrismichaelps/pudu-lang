@@ -36,6 +36,9 @@ The full simulator suite passed on iPhone, and the new device matrix passed Coun
 
 Verify the required simulator job on `macos-26` in PR #929. The previous
 `macos-15` job selected Xcode 16.4 and failed the ledger preflight with E6009.
+Both #932 jobs reached the simulator on `macos-26` and timed out building
+the Counter collision probe. The gate now builds one minimal collision
+probe and allows ten minutes for new device boots.
 
 ## Referenced by
 
