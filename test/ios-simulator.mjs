@@ -184,10 +184,9 @@ int main(int argc, char **argv) {
   } finally {
     try {
       if (device && !existingDevice) {
-        spawnSync(xcrun, ["simctl", "shutdown", device], { timeout: 30_000 });
-        run(xcrun, ["simctl", "delete", device], 30_000);
+        deletePrivateDevice(device);
       } else if (installed) {
-        run(xcrun, ["simctl", "uninstall", device, identifier], 30_000);
+        uninstallFromReusedDevice(device, identifier);
       }
     } finally {
       rmSync(root, { recursive: true, force: true });
@@ -231,9 +230,19 @@ function familyMatrix(runtime) {
       for (const example of Object.keys(familyRuns)) familyApps(device, example);
       console.log(`PASS iOS ${family} matrix (${type.name}, ${runtime.name})`);
     } finally {
-      spawnSync(xcrun, ["simctl", "shutdown", device], { timeout: 30_000 });
-      run(xcrun, ["simctl", "delete", device], 30_000);
+      deletePrivateDevice(device);
     }
+  }
+}
+
+function deletePrivateDevice(device) {
+  spawnSync(xcrun, ["simctl", "shutdown", device], { timeout: simulatorTimeout });
+  run(xcrun, ["simctl", "delete", device], simulatorTimeout);
+}
+
+function uninstallFromReusedDevice(device, bundle) {
+  if (device === process.env.PUDU_IOS_SIMULATOR_UDID) {
+    run(xcrun, ["simctl", "uninstall", device, bundle], simulatorTimeout);
   }
 }
 
@@ -283,7 +292,7 @@ function mobileApp(device, example, runs) {
     }
   } finally {
     try {
-      if (installed) run(xcrun, ["simctl", "uninstall", device, bundle], 30_000);
+      if (installed) uninstallFromReusedDevice(device, bundle);
     } finally {
       rmSync(root, { recursive: true, force: true });
     }
@@ -317,7 +326,7 @@ ${body}
     assert.doesNotMatch(output, /PUDU_FIRST_FRAME_MS|PUDU_PROGRAM_STATUS 0/u);
     console.log(`PASS iOS ${what} refused`);
   } finally {
-    run(xcrun, ["simctl", "uninstall", device, bundle], 30_000);
+    uninstallFromReusedDevice(device, bundle);
   }
 }
 
