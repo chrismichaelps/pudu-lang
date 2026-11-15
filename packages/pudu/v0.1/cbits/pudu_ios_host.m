@@ -12,15 +12,15 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <time.h>
 #include "pudu_program.h"
 #include "pudu_ios_layout.h"
+#include "pudu_ios_theme.h"
 
 /* Instruction codes, control kinds and event kinds of the view stream; they
    match Std.Mobile.View. */
 enum { PUDU_UI_CREATE = 1, PUDU_UI_TEXT = 2, PUDU_UI_APPEND = 3, PUDU_UI_ROOT = 4, PUDU_UI_TAG = 5, PUDU_UI_RESET = 6,
        PUDU_UI_STATE = 7, PUDU_UI_HINT = 8, PUDU_UI_NAME = 9, PUDU_UI_INSERT = 10, PUDU_UI_REMOVE = 11, PUDU_UI_MOVE = 12,
-       PUDU_UI_INSTRUCTIONS = 13 };
+       PUDU_UI_THEME = 20, PUDU_UI_APPEARANCE = 21, PUDU_UI_STYLE = 22, PUDU_UI_COLOR = 23, PUDU_UI_INSTRUCTIONS = 24 };
 enum { PUDU_UI_LABEL = 1, PUDU_UI_BUTTON = 2, PUDU_UI_COLUMN = 3, PUDU_UI_ROW = 4, PUDU_UI_FIELD = 5, PUDU_UI_TOGGLE = 6,
        PUDU_UI_SCROLL = 7, PUDU_UI_KINDS = 8 };
 static const uint64_t PUDU_UI_TAPPED = 1, PUDU_UI_STOPPED = 2, PUDU_UI_CHANGED = 3, PUDU_UI_SWITCHED_ON = 4,
@@ -28,6 +28,8 @@ static const uint64_t PUDU_UI_TAPPED = 1, PUDU_UI_STOPPED = 2, PUDU_UI_CHANGED =
 
 static NSMutableArray *pudu_nodes;
 static NSMutableArray<NSNumber *> *pudu_kinds;
+/* Each node's color role from COLOR, or PUDU_ROLE_DEFAULT. */
+static NSMutableArray<NSNumber *> *pudu_paints;
 /* Each queued event is its 64-bit value and the text it carries. */
 static NSMutableArray<NSArray *> *pudu_events;
 static char *pudu_event_text_bytes;
@@ -40,13 +42,6 @@ static double pudu_first_frame_ms = -1;
 static _Noreturn void pudu_stream_defect(const char *problem, uint32_t value) {
   fprintf(stderr, "pudu: a view stream %s %u\n", problem, value);
   abort();
-}
-
-/* Milliseconds on the monotonic clock. */
-static double pudu_now_ms(void) {
-  struct timespec now;
-  clock_gettime(CLOCK_MONOTONIC, &now);
-  return (double)now.tv_sec * 1000.0 + (double)now.tv_nsec / 1e6;
 }
 
 static void pudu_queue(uint64_t kind, NSInteger tag, NSString *text) {
@@ -98,7 +93,6 @@ static UIStackView *pudu_make_group(UILayoutConstraintAxis axis, CGFloat spacing
 }
 
 static UIView *pudu_make_column(void) { return pudu_make_group(UILayoutConstraintAxisVertical, 16); }
-
 static UIView *pudu_make_row(void) { return pudu_make_group(UILayoutConstraintAxisHorizontal, 12); }
 
 static UIView *pudu_make_field(void) {
@@ -124,7 +118,6 @@ static UIView *pudu_make_toggle(void) {
 
 /* Setters a kind accepts; a kind without one refuses that instruction. */
 static void pudu_label_text(UIView *view, NSString *text) { ((UILabel *)view).text = text; }
-
 static void pudu_button_text(UIView *view, NSString *text) { [(UIButton *)view setTitle:text forState:UIControlStateNormal]; }
 
 /* A field already showing the text is left alone, so typing keeps its place. */
@@ -134,13 +127,11 @@ static void pudu_field_text(UIView *view, NSString *text) {
 }
 
 static void pudu_field_hint(UIView *view, NSString *hint) { ((UITextField *)view).placeholder = hint; }
-
 static void pudu_toggle_text(UIView *view, NSString *text) { ((PuduToggle *)view).title.text = text; }
-
 static void pudu_toggle_state(UIView *view, uint32_t state) { ((PuduToggle *)view).control.on = state != 0; }
-
 static UIView *pudu_toggle_control(UIView *view) { return ((PuduToggle *)view).control; }
-
+static void pudu_toggle_paint(UIView *view, UIColor *color) { pudu_label_paint(((PuduToggle *)view).title, color); }
+static void pudu_toggle_style(UIView *view, UIFont *font) { pudu_label_style(((PuduToggle *)view).title, font); }
 static UIView *pudu_itself(UIView *view) { return view; }
 static UIStackView *pudu_direct_stack(UIView *view) { return (UIStackView *)view; }
 /* What a self-test does to a kind, and what a kind reports afterward. */
@@ -156,7 +147,6 @@ static void pudu_toggle_fill(UIView *view, NSString *text) {
 }
 
 static void pudu_button_press(UIView *view) { [(UIButton *)view sendActionsForControlEvents:UIControlEventTouchUpInside]; }
-
 static NSString *pudu_label_shown(UIView *view) { return ((UILabel *)view).text; }
 
 typedef struct {
@@ -170,16 +160,21 @@ typedef struct {
   void (*fill)(UIView *, NSString *);
   void (*press)(UIView *);
   NSString *(*shown)(UIView *);
+  /* Text color and font; a kind without them refuses COLOR and STYLE. */
+  void (*paint)(UIView *, UIColor *);
+  void (*style)(UIView *, UIFont *);
+  /* Whether the kind takes Ink without a COLOR; buttons follow the tint. */
+  BOOL inked;
 } pudu_kind;
 
 static const pudu_kind pudu_kind_table[PUDU_UI_KINDS] = {
-  [PUDU_UI_LABEL] = { pudu_make_label, pudu_label_text, NULL, NULL, pudu_itself, NULL, NULL, NULL, pudu_label_shown },
-  [PUDU_UI_BUTTON] = { pudu_make_button, pudu_button_text, NULL, NULL, pudu_itself, NULL, NULL, pudu_button_press, NULL },
-  [PUDU_UI_COLUMN] = { pudu_make_column, NULL, NULL, NULL, pudu_itself, pudu_direct_stack, NULL, NULL, NULL },
-  [PUDU_UI_ROW] = { pudu_make_row, NULL, NULL, NULL, pudu_itself, pudu_direct_stack, NULL, NULL, NULL },
-  [PUDU_UI_FIELD] = { pudu_make_field, pudu_field_text, pudu_field_hint, NULL, pudu_itself, NULL, pudu_field_fill, NULL, NULL },
-  [PUDU_UI_TOGGLE] = { pudu_make_toggle, pudu_toggle_text, NULL, pudu_toggle_state, pudu_toggle_control, NULL, pudu_toggle_fill, NULL, NULL },
-  [PUDU_UI_SCROLL] = { pudu_make_scroll, NULL, NULL, NULL, pudu_itself, pudu_scroll_stack, NULL, NULL, NULL },
+  [PUDU_UI_LABEL] = { pudu_make_label, pudu_label_text, NULL, NULL, pudu_itself, NULL, NULL, NULL, pudu_label_shown, pudu_label_paint, pudu_label_style, YES },
+  [PUDU_UI_BUTTON] = { pudu_make_button, pudu_button_text, NULL, NULL, pudu_itself, NULL, NULL, pudu_button_press, NULL, pudu_button_paint, pudu_button_style, NO },
+  [PUDU_UI_COLUMN] = { pudu_make_column, NULL, NULL, NULL, pudu_itself, pudu_direct_stack, NULL, NULL, NULL, NULL, NULL, NO },
+  [PUDU_UI_ROW] = { pudu_make_row, NULL, NULL, NULL, pudu_itself, pudu_direct_stack, NULL, NULL, NULL, NULL, NULL, NO },
+  [PUDU_UI_FIELD] = { pudu_make_field, pudu_field_text, pudu_field_hint, NULL, pudu_itself, NULL, pudu_field_fill, NULL, NULL, pudu_field_paint, pudu_field_style, YES },
+  [PUDU_UI_TOGGLE] = { pudu_make_toggle, pudu_toggle_text, NULL, pudu_toggle_state, pudu_toggle_control, NULL, pudu_toggle_fill, NULL, NULL, pudu_toggle_paint, pudu_toggle_style, YES },
+  [PUDU_UI_SCROLL] = { pudu_make_scroll, NULL, NULL, NULL, pudu_itself, pudu_scroll_stack, NULL, NULL, NULL, NULL, NULL, NO },
 };
 
 static const pudu_kind *pudu_kind_of(uint32_t kind) {
@@ -217,6 +212,14 @@ static uint32_t pudu_node_id(pudu_reader *reader) {
 
 static const pudu_kind *pudu_node_kind(uint32_t node) { return &pudu_kind_table[pudu_kinds[node].unsignedIntValue]; }
 
+/* Paints a node with its COLOR role, or with Ink when its kind is inked. */
+static void pudu_paint(uint32_t node) {
+  const pudu_kind *kind = pudu_node_kind(node);
+  uint32_t role = pudu_paints[node].unsignedIntValue;
+  if (kind->paint == NULL || (role == PUDU_ROLE_DEFAULT && !kind->inked)) return;
+  kind->paint(pudu_nodes[node], pudu_roles[role == PUDU_ROLE_DEFAULT ? PUDU_ROLE_INK : role]);
+}
+
 /* Instruction handlers, one per code. */
 static void pudu_do_create(pudu_reader *reader) {
   uint32_t node = pudu_word(reader);
@@ -225,9 +228,12 @@ static void pudu_do_create(pudu_reader *reader) {
   while (pudu_nodes.count <= node) {
     [pudu_nodes addObject:[NSNull null]];
     [pudu_kinds addObject:@0];
+    [pudu_paints addObject:@(PUDU_ROLE_DEFAULT)];
   }
   pudu_nodes[node] = made->make();
   pudu_kinds[node] = @(kind);
+  pudu_paints[node] = @(PUDU_ROLE_DEFAULT);
+  pudu_paint(node);
 }
 
 static void pudu_do_text(pudu_reader *reader) {
@@ -276,7 +282,8 @@ static void pudu_do_append(pudu_reader *reader) {
   [group addArrangedSubview:pudu_nodes[pudu_node_id(reader)]];
 }
 
-/* Places a child at an index of its group, refused past the group's end. */
+/* INSERT and MOVE: places a child at an index of its group, refused past
+   the group's end. */
 static void pudu_place(pudu_reader *reader) {
   UIStackView *group = pudu_group(reader);
   UIView *child = pudu_nodes[pudu_node_id(reader)];
@@ -286,9 +293,6 @@ static void pudu_place(pudu_reader *reader) {
   [group insertArrangedSubview:child atIndex:index];
 }
 
-static void pudu_do_insert(pudu_reader *reader) { pudu_place(reader); }
-
-static void pudu_do_move(pudu_reader *reader) { pudu_place(reader); }
 
 /* Detaches a subtree and forgets every node it lists, so a later CREATE may
    reuse those ids. */
@@ -300,6 +304,7 @@ static void pudu_do_remove(pudu_reader *reader) {
     uint32_t gone = pudu_node_id(reader);
     pudu_nodes[gone] = [NSNull null];
     pudu_kinds[gone] = @0;
+    pudu_paints[gone] = @(PUDU_ROLE_DEFAULT);
   }
 }
 
@@ -319,13 +324,58 @@ static void pudu_do_reset(pudu_reader *reader) {
   pudu_shown_root = nil;
   [pudu_nodes removeAllObjects];
   [pudu_kinds removeAllObjects];
+  [pudu_paints removeAllObjects];
+}
+
+/* Replaces every role's tone, then repaints the surface, the tint and every
+   shown node; the colors resolve per appearance at draw time. */
+static void pudu_do_theme(pudu_reader *reader) {
+  uint32_t count = pudu_word(reader);
+  if (count != PUDU_ROLES) pudu_stream_defect("set a theme with role count", count);
+  for (uint32_t role = 0; role < PUDU_ROLES; role++) {
+    uint32_t tone = pudu_word(reader);
+    uint32_t light = pudu_word(reader);
+    uint32_t dark = pudu_word(reader);
+    if (tone > PUDU_TONE_FIXED) pudu_stream_defect("used unknown tone kind", tone);
+    pudu_roles[role] = tone == PUDU_TONE_FIXED ? pudu_fixed_tone(light, dark) : pudu_platform_roles[role];
+  }
+  pudu_surface.backgroundColor = pudu_roles[PUDU_ROLE_SURFACE];
+  pudu_surface.window.tintColor = pudu_roles[PUDU_ROLE_ACCENT];
+  for (NSUInteger node = 0; node < pudu_nodes.count; node++) {
+    if (pudu_nodes[node] != [NSNull null]) pudu_paint((uint32_t)node);
+  }
+}
+
+static void pudu_do_appearance(pudu_reader *reader) {
+  uint32_t code = pudu_word(reader);
+  if (code >= PUDU_APPEARANCES) pudu_stream_defect("asked for unknown appearance", code);
+  pudu_surface.window.overrideUserInterfaceStyle = pudu_interface_styles[code];
+}
+
+static void pudu_do_style(pudu_reader *reader) {
+  uint32_t node = pudu_node_id(reader);
+  UIFontTextStyle style = pudu_text_style(pudu_word(reader));
+  if (style == nil) pudu_stream_defect("used unknown text style on node", node);
+  if (pudu_node_kind(node)->style == NULL) pudu_stream_defect("styled a node that shows no text:", node);
+  pudu_node_kind(node)->style(pudu_nodes[node], [UIFont preferredFontForTextStyle:style]);
+}
+
+static void pudu_do_color(pudu_reader *reader) {
+  uint32_t node = pudu_node_id(reader);
+  uint32_t role = pudu_word(reader);
+  if (role >= PUDU_ROLES) pudu_stream_defect("used unknown color role", role);
+  if (pudu_node_kind(node)->paint == NULL) pudu_stream_defect("colored a node that shows no text:", node);
+  pudu_paints[node] = @(role);
+  pudu_paint(node);
 }
 
 static void (*const pudu_instruction_table[PUDU_UI_INSTRUCTIONS])(pudu_reader *) = {
   [PUDU_UI_CREATE] = pudu_do_create, [PUDU_UI_TEXT] = pudu_do_text, [PUDU_UI_APPEND] = pudu_do_append,
   [PUDU_UI_ROOT] = pudu_do_root, [PUDU_UI_TAG] = pudu_do_tag, [PUDU_UI_RESET] = pudu_do_reset,
   [PUDU_UI_STATE] = pudu_do_state, [PUDU_UI_HINT] = pudu_do_hint, [PUDU_UI_NAME] = pudu_do_name,
-  [PUDU_UI_INSERT] = pudu_do_insert, [PUDU_UI_REMOVE] = pudu_do_remove, [PUDU_UI_MOVE] = pudu_do_move,
+  [PUDU_UI_INSERT] = pudu_place, [PUDU_UI_REMOVE] = pudu_do_remove, [PUDU_UI_MOVE] = pudu_place,
+  [PUDU_UI_THEME] = pudu_do_theme, [PUDU_UI_APPEARANCE] = pudu_do_appearance, [PUDU_UI_STYLE] = pudu_do_style,
+  [PUDU_UI_COLOR] = pudu_do_color,
 };
 
 /* Applies one commit: every instruction in order, in one call. */
@@ -338,7 +388,7 @@ void pudu_ui_apply(const void *stream, uint64_t length) {
   }
   if (pudu_first_frame_ms < 0) {
     [pudu_surface layoutIfNeeded];
-    pudu_first_frame_ms = pudu_now_ms() - pudu_main_started_ms;
+    pudu_first_frame_ms = (CACurrentMediaTime() * 1000.0) - pudu_main_started_ms;
     printf("PUDU_FIRST_FRAME_MS %.1f\n", pudu_first_frame_ms);
     fflush(stdout);
   }
@@ -374,54 +424,6 @@ static void pudu_report(UIView *view) {
   }
 }
 
-static void pudu_test_keyboard(void) {
-  [pudu_surface layoutIfNeeded];
-  UIView *root = pudu_shown_root;
-  UITextField *field = nil;
-  for (NSObject *node in pudu_nodes) {
-    if ([node isKindOfClass:UITextField.class]) field = (UITextField *)node;
-  }
-  if (![root isKindOfClass:PuduScroll.class] || field == nil) {
-    pudu_queue(PUDU_UI_STOPPED, 0, nil);
-    return;
-  }
-
-  PuduScroll *scroll = (PuduScroll *)root;
-  CGRect original = scroll.frame;
-  CGRect safe = pudu_surface.safeAreaLayoutGuide.layoutFrame;
-  if (CGRectContainsRect(CGRectInset(safe, -1, -1), original) &&
-      scroll.contentSize.height > scroll.bounds.size.height &&
-      !CGRectIntersectsRect(scroll.bounds, [field convertRect:field.bounds toView:scroll])) {
-    puts("PUDU_VIEWPORT safe and scrollable");
-  }
-
-  [field becomeFirstResponder];
-  double deadline = pudu_now_ms() + 10000;
-  __block BOOL dismissed = NO;
-  [NSTimer scheduledTimerWithTimeInterval:0.05 repeats:YES block:^(NSTimer *timer) {
-    [pudu_surface layoutIfNeeded];
-    CGFloat bottom = CGRectGetMaxY(scroll.frame);
-    CGFloat keyboard = CGRectGetMinY(pudu_surface.keyboardLayoutGuide.layoutFrame);
-    if (!dismissed && keyboard < CGRectGetMaxY(original) - 1 && bottom <= keyboard + 1 &&
-        field.isFirstResponder &&
-        CGRectContainsRect(CGRectInset(scroll.bounds, -1, -1), [field convertRect:field.bounds toView:scroll])) {
-      puts("PUDU_KEYBOARD visible field");
-      dismissed = [field resignFirstResponder];
-    } else if (dismissed && fabs(bottom - CGRectGetMaxY(original)) <= 1) {
-      puts("PUDU_KEYBOARD restored");
-      [timer invalidate];
-      pudu_queue(PUDU_UI_STOPPED, 0, nil);
-    } else if (pudu_now_ms() >= deadline) {
-      CGRect frame = [field convertRect:field.bounds toView:scroll];
-      fprintf(stderr, "pudu: keyboard test timed out (initial=%g viewport=%g keyboard=%g offset=%g field=%g..%g focus=%d dismissed=%d)\n",
-              CGRectGetMaxY(original), bottom, keyboard, scroll.contentOffset.y,
-              CGRectGetMinY(frame), CGRectGetMaxY(frame), field.isFirstResponder, dismissed);
-      [timer invalidate];
-      pudu_queue(PUDU_UI_STOPPED, 0, nil);
-    }
-  }];
-}
-
 @interface PuduAppDelegate : UIResponder <UIApplicationDelegate>
 @property (strong, nonatomic) UIWindow *window;
 @end
@@ -434,6 +436,8 @@ static void pudu_test_keyboard(void) {
   pudu_surface = controller.view;
   pudu_nodes = [NSMutableArray new];
   pudu_kinds = [NSMutableArray new];
+  pudu_paints = [NSMutableArray new];
+  pudu_theme_reset();
   pudu_events = [NSMutableArray new];
   pudu_target = [PuduTarget new];
   self.window = [[UIWindow alloc] initWithFrame:UIScreen.mainScreen.bounds];
@@ -459,8 +463,12 @@ static void pudu_test_keyboard(void) {
    is set, taps every button as many times as PUDU_UI_SELFTEST says, then asks
    the program to stop, exactly as a user's input would arrive. */
 - (void)selfTest {
+  if (getenv("PUDU_UI_THEME_TEST") != NULL) {
+    pudu_test_theme(pudu_surface, pudu_nodes, ^{ pudu_queue(PUDU_UI_STOPPED, 0, nil); });
+    return;
+  }
   if (getenv("PUDU_UI_KEYBOARD_TEST") != NULL) {
-    pudu_test_keyboard();
+    pudu_test_keyboard(pudu_surface, pudu_shown_root, pudu_nodes, ^{ pudu_queue(PUDU_UI_STOPPED, 0, nil); });
     return;
   }
   int taps = atoi(getenv("PUDU_UI_SELFTEST"));
@@ -482,7 +490,7 @@ static void pudu_test_keyboard(void) {
 @end
 
 int main(int argc, char **argv) {
-  pudu_main_started_ms = pudu_now_ms();
+  pudu_main_started_ms = (CACurrentMediaTime() * 1000.0);
   @autoreleasepool {
     return UIApplicationMain(argc, argv, nil, NSStringFromClass([PuduAppDelegate class]));
   }

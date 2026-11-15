@@ -95,4 +95,54 @@ static void pudu_place_root(UIView *root, UILayoutGuide *area, BOOL fillsArea) {
   }
 }
 
+/* Self-test: the viewport fills the safe area and scrolls, a focused field
+   stays visible above the docked keyboard, and dismissal restores the
+   original viewport. `done` asks the program to stop. */
+static void pudu_test_keyboard(UIView *pudu_surface, UIView *root, NSArray *pudu_nodes, void (^done)(void)) {
+  [pudu_surface layoutIfNeeded];
+  UITextField *field = nil;
+  for (NSObject *node in pudu_nodes) {
+    if ([node isKindOfClass:UITextField.class]) field = (UITextField *)node;
+  }
+  if (![root isKindOfClass:PuduScroll.class] || field == nil) {
+    done();
+    return;
+  }
+
+  PuduScroll *scroll = (PuduScroll *)root;
+  CGRect original = scroll.frame;
+  CGRect safe = pudu_surface.safeAreaLayoutGuide.layoutFrame;
+  if (CGRectContainsRect(CGRectInset(safe, -1, -1), original) &&
+      scroll.contentSize.height > scroll.bounds.size.height &&
+      !CGRectIntersectsRect(scroll.bounds, [field convertRect:field.bounds toView:scroll])) {
+    puts("PUDU_VIEWPORT safe and scrollable");
+  }
+
+  [field becomeFirstResponder];
+  CFTimeInterval deadline = CACurrentMediaTime() + 10;
+  __block BOOL dismissed = NO;
+  [NSTimer scheduledTimerWithTimeInterval:0.05 repeats:YES block:^(NSTimer *timer) {
+    [pudu_surface layoutIfNeeded];
+    CGFloat bottom = CGRectGetMaxY(scroll.frame);
+    CGFloat keyboard = CGRectGetMinY(pudu_surface.keyboardLayoutGuide.layoutFrame);
+    if (!dismissed && keyboard < CGRectGetMaxY(original) - 1 && bottom <= keyboard + 1 &&
+        field.isFirstResponder &&
+        CGRectContainsRect(CGRectInset(scroll.bounds, -1, -1), [field convertRect:field.bounds toView:scroll])) {
+      puts("PUDU_KEYBOARD visible field");
+      dismissed = [field resignFirstResponder];
+    } else if (dismissed && fabs(bottom - CGRectGetMaxY(original)) <= 1) {
+      puts("PUDU_KEYBOARD restored");
+      [timer invalidate];
+      done();
+    } else if (CACurrentMediaTime() >= deadline) {
+      CGRect frame = [field convertRect:field.bounds toView:scroll];
+      fprintf(stderr, "pudu: keyboard test timed out (initial=%g viewport=%g keyboard=%g offset=%g field=%g..%g focus=%d dismissed=%d)\n",
+              CGRectGetMaxY(original), bottom, keyboard, scroll.contentOffset.y,
+              CGRectGetMinY(frame), CGRectGetMaxY(frame), field.isFirstResponder, dismissed);
+      [timer invalidate];
+      done();
+    }
+  }];
+}
+
 #endif

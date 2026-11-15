@@ -62,7 +62,7 @@ identifierPrefix = "org.pudu."
 
 {-| The frameworks the iOS host links. -}
 hostFrameworks :: [String]
-hostFrameworks = ["UIKit", "Foundation", "CoreGraphics"]
+hostFrameworks = ["UIKit", "Foundation", "CoreGraphics", "QuartzCore"]
 
 {-| The application at the output path, answering the tools' warnings. A
     device application needs a signing identity and is not built yet. -}

@@ -38,7 +38,7 @@ on both displays), and Xcode 27.1 Device Hub simulation. Exact class names are t
 | Navigation | Stack with interactive pop; tab bars; sidebars; modal styles (full screen, page sheet, form sheet, popover); large and collapsing titles; custom bars and toolbars; deep and universal links | missing |
 | Lists and scrolling | Recycling lists; sections and compositional layouts; adaptive grids; pull to refresh; prefetching and infinite scroll; nested scrolling | partial: vertical root scrolling and keyed insert, remove and move; recycling and nested scrolling remain open |
 | Input and gestures | Tap, long press, pan, pinch, rotate, swipe; simultaneous and exclusive recognition; pointer; Apple Pencil; keyboard, input accessories and focus; Scribble | partial: tap, text entry, switch |
-| Visual system | FUI's seven aspects mapped to iOS values; Dynamic Type; light and dark appearance; materials and vibrancy; SF Symbols; semantic colors; elevation and continuous corners | missing |
+| Visual system | FUI's seven aspects mapped to iOS values; Dynamic Type; light and dark appearance; materials and vibrancy; SF Symbols; semantic colors; elevation and continuous corners | partial: semantic color roles with platform or fixed light/dark tones, appearance override, Dynamic Type text styles; materials, symbols, elevation and continuous corners remain open |
 | Feedback and system UI | Alerts, action sheets, confirmation dialogs, context menus and previews, banners, activity and progress indicators; status bar, Dynamic Island and home indicator styling | missing |
 | Accessibility | VoiceOver; Dynamic Type; Reduce Motion; Increase Contrast; traits, labels, hints and values; keyboard focus; Switch Control | partial: accessible names reach the platform tree |
 | Animation | Interactive transitions; shared-element transitions; fold-change layout animation; platform springs and curves; gesture-driven animation | missing |
@@ -94,7 +94,7 @@ does not have yet (Xcode 26.6, iOS 26.5 SDK).
 
 1. Scrolling and safe areas with docked keyboard avoidance ([[Native iOS Scrolling Delivery]]).
 2. Navigation stack and modal sheets.
-3. Theming: FUI tokens to semantic colors, Dynamic Type, dark mode.
+3. Theming: FUI tokens to semantic colors, Dynamic Type, dark mode ([[Native iOS Theming Delivery]]).
 4. Recycling lists and grids.
 5. Size-class adaptivity and multiple windows.
 6. iPhone Duo APIs once the 27.1 SDK is installed.
@@ -112,6 +112,8 @@ does not have yet (Xcode 26.6, iOS 26.5 SDK).
 
 - **Q:** Should a 120 Hz display rebuild the Pudu tree at every refresh? **A:** UIKit owns native motion. Application state changes produce view commits, and custom animation samples presentation time only while active.
 
+- **Q:** Does a light/dark switch rebuild the Pudu tree? **A:** No; fixed tones are dynamic platform colors and text styles follow content size automatically.
+
 ## Referenced by
 
-[[architecture/_MOC]] · [[Pudu Native]] · [[Native iOS Scrolling Delivery]]
+[[architecture/_MOC]] · [[Pudu Native]] · [[Native iOS Scrolling Delivery]] · [[Native iOS Theming Delivery]]

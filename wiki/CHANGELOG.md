@@ -5,6 +5,10 @@ tags: [changelog]
 
 # Changelog
 
+## 2026-11-14 — iOS theming contract (#923)
+
+- `Std.Mobile.Theme` defines seven color roles with platform or fixed light/dark tones, an appearance override and text styles; `Styled` and `Painted` wrap controls in [[Std Mobile View]] and encode STYLE and COLOR through [[Std Mobile Stream]] (codes 20 to 23). The iOS host applies a theme with dynamic platform colors and Dynamic Type text styles, so a light/dark switch needs no Pudu rebuild ([[Native iOS Theming Delivery]]).
+
 ## 2026-11-14 — iOS scrolling and keyboard avoidance (#919)
 
 - `Scroll(View)` mounts a vertical root viewport with one reconciled child. UIKit constrains root content to the safe area, resizes it for the docked keyboard and reveals the focused field ([[Native iOS Scrolling Delivery]]). Generated iOS apps enable ProMotion timing hints and the iOS spec sets variable-refresh acceptance criteria.

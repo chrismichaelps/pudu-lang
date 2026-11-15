@@ -162,7 +162,22 @@ int main(int argc, char **argv) {
       labels: Array.from({ length: 40 }, (_, index) => `Row ${index + 1}`),
       layout: ["PUDU_VIEWPORT safe and scrollable", "PUDU_KEYBOARD visible field", "PUDU_KEYBOARD restored"],
     }]);
-    invalidGroupApp(device, root);
+    mobileApp(device, "Themed", [{
+      environment: { SIMCTL_CHILD_PUDU_UI_SELFTEST: "0", SIMCTL_CHILD_PUDU_UI_THEME_TEST: "1" },
+      labels: ["Themed"],
+      layout: ["PUDU_THEME ink light #1F2A44FF dark #E8EEFFFF", "PUDU_THEME appearance dark", "PUDU_THEME type grows"],
+    }]);
+    refusedApp(device, root, "invalid group placement",
+      "import Std.Mobile.Host as Host\nimport Std.Mobile.Stream as Stream", `  let empty: Array[UInt8] = []
+  Host.apply(bytesOf(empty))
+  let parent = Stream.create([], 0u32, Stream.LABEL)
+  let child = Stream.create(parent, 1u32, Stream.LABEL)
+  Host.apply(bytesOf(Stream.append(child, 0u32, 1u32)))`,
+      /pudu: a view stream placed a child in a node that holds nothing: 0/u);
+    refusedApp(device, root, "text style on a group",
+      "import Std.Mobile.Host as Host\nimport Std.Mobile.Theme as Theme\nimport Std.Mobile.View as View", `  let (_, built) = View.mount(&View.Styled(Theme.Body, View.Column([])))
+  Host.apply(built)`,
+      /pudu: a view stream styled a node that shows no text: 0/u);
   } finally {
     try {
       if (device && !existingDevice) {
@@ -208,8 +223,8 @@ function mobileApp(device, example, runs) {
         `${example} did not show ${labels.join(", ")}:\n${lines.join("\n")}`);
       assert.ok(lines.includes("PUDU_PROGRAM_STATUS 0"), `${example} did not finish:\n${lines.join("\n")}`);
       if (layout) {
-        assert.deepEqual(lines.filter((line) => /^PUDU_(VIEWPORT|KEYBOARD) /.test(line)), layout,
-          `${example} did not report the expected scroll and keyboard layout:\n${lines.join("\n")}`);
+        assert.deepEqual(lines.filter((line) => /^PUDU_(VIEWPORT|KEYBOARD|THEME) /.test(line)), layout,
+          `${example} did not report the expected layout and theme:\n${lines.join("\n")}`);
       }
       const firstFrame = lines.find((line) => line.startsWith("PUDU_FIRST_FRAME_MS "));
       assert.ok(firstFrame, `${example} reported no first frame:\n${lines.join("\n")}`);
@@ -225,22 +240,19 @@ function mobileApp(device, example, runs) {
   }
 }
 
-function invalidGroupApp(device, scratch) {
-  const name = `InvalidGroup${randomUUID().replaceAll("-", "")}`;
+/* A program whose stream the host must refuse: it aborts with `refusal` and
+   never reports a first frame or a clean status. */
+function refusedApp(device, scratch, what, imports, body, refusal) {
+  const name = `Refused${randomUUID().replaceAll("-", "")}`;
   const source = join(scratch, `${name}.pudu`);
   const app = join(scratch, `${name}.app`);
   const bundle = `org.pudu.${name}`;
   writeFileSync(source, `module ${name}
 
-import Std.Mobile.Host as Host
-import Std.Mobile.Stream as Stream
+${imports}
 
 fn main() -> Int {
-  let empty: Array[UInt8] = []
-  Host.apply(bytesOf(empty))
-  let parent = Stream.create([], 0u32, Stream.LABEL)
-  let child = Stream.create(parent, 1u32, Stream.LABEL)
-  Host.apply(bytesOf(Stream.append(child, 0u32, 1u32)))
+${body}
   0
 }
 `);
@@ -251,9 +263,9 @@ fn main() -> Int {
       { encoding: "utf8", timeout: simulatorTimeout });
     if (launched.error) throw launched.error;
     const output = launched.stdout + launched.stderr;
-    assert.match(output, /pudu: a view stream placed a child in a node that holds nothing: 0/u);
+    assert.match(output, refusal);
     assert.doesNotMatch(output, /PUDU_FIRST_FRAME_MS|PUDU_PROGRAM_STATUS 0/u);
-    console.log("PASS iOS invalid group placement refused");
+    console.log(`PASS iOS ${what} refused`);
   } finally {
     run(xcrun, ["simctl", "uninstall", device, bundle], 30_000);
   }

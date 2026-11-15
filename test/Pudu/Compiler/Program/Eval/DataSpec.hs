@@ -21,6 +21,7 @@ testDataEvaluation = do
   bitSetInvariants <- runEntry "test-fixtures/stdlib/UsesBitSet.pudu"
   buffers <- runEntry "test-fixtures/stdlib/UsesBuffer.pudu"
   mobileViews <- runEntry "test-fixtures/stdlib/UsesMobileView.pudu"
+  mobileThemes <- runEntry "test-fixtures/stdlib/UsesMobileTheme.pudu"
   flatMaps <- runEntry "test-fixtures/stdlib/UsesFlatMap.pudu"
   columnVectors <- runEntry "test-fixtures/stdlib/UsesColumn.pudu"
   hashed <- runEntry "test-fixtures/stdlib/UsesHashMap.pudu"
@@ -177,6 +178,8 @@ testDataEvaluation = do
         (buffers === Just "27")
     , counterexample "the native view stream builds, changes and reads events"
         (mobileViews === Just "30")
+    , counterexample "the native theme stream sets roles, appearance, styles and colors"
+        (mobileThemes === Just "12")
     , counterexample "flat hash table with control metadata evaluates"
         (flatMaps === Just "31")
     , counterexample "vectorized columnar engine with unboxed storage evaluates"

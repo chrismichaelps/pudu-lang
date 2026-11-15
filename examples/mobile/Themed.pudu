@@ -1,0 +1,39 @@
+module Themed
+
+import Std.Mobile.Host as Host
+import Std.Mobile.Theme as Theme
+import Std.Mobile.View as View
+
+/// The tag the Done button reports.
+const DONE: UInt32 = 1u32
+
+/// Fixed ink and accent pairs over platform roles, shown dark.
+fn theme() -> Theme.Theme {
+  Theme.Theme {
+    ..Theme.platform(),
+    ink: Theme.Fixed(Theme.rgb(0x1fu8, 0x2au8, 0x44u8), Theme.rgb(0xe8u8, 0xeeu8, 0xffu8)),
+    accent: Theme.Fixed(Theme.rgb(0x00u8, 0x66u8, 0xccu8), Theme.rgb(0x66u8, 0xb2u8, 0xffu8)),
+    appearance: Theme.Dark
+  }
+}
+
+fn view() -> View.View {
+  View.Column([
+      View.Styled(Theme.Body, View.Label("Themed")),
+      View.Painted(Theme.Accent, View.Button("Done", DONE))
+    ])
+}
+
+fn main() -> Int {
+  Host.apply(Theme.stream(&theme()))
+  let (_, built) = View.mount(&view())
+  Host.apply(built)
+  while true {
+    match Host.wait() {
+      case View.Tapped(tag) if tag == DONE => { return 0 }
+      case View.Stopped => { return 0 }
+      case _ => {}
+    }
+  }
+  0
+}
