@@ -23,6 +23,9 @@ export const TOGGLE: UInt32 = 6u32
 /// The kind a CREATE names for a vertical scroll viewport.
 export const SCROLL: UInt32 = 7u32
 
+/// The kind a CREATE names for a recycling list or grid.
+export const LIST: UInt32 = 8u32
+
 /// Instruction codes of the view stream; each is followed by its words.
 const CREATE: UInt32 = 1u32
 const TEXT: UInt32 = 2u32
@@ -39,6 +42,8 @@ const THEME: UInt32 = 20u32
 const APPEARANCE: UInt32 = 21u32
 const STYLE: UInt32 = 22u32
 const COLOR: UInt32 = 23u32
+const RANGE: UInt32 = 24u32
+const COLUMNS: UInt32 = 25u32
 
 /// Creates node `node` as a control of `kind`.
 export fn create(out: Array[UInt8], node: UInt32, kind: UInt32) -> Array[UInt8] { words(out, [CREATE, node, kind]) }
@@ -96,6 +101,14 @@ export fn style(out: Array[UInt8], node: UInt32, code: UInt32) -> Array[UInt8] {
 
 /// Sets the color role of a control that shows text.
 export fn color(out: Array[UInt8], node: UInt32, code: UInt32) -> Array[UInt8] { words(out, [COLOR, node, code]) }
+
+/// Sets how many items a list shows and the item its first window row is.
+export fn range(out: Array[UInt8], node: UInt32, total: UInt32, first: UInt32) -> Array[UInt8] {
+  words(out, [RANGE, node, total, first])
+}
+
+/// Sets how many equal columns a list lays its items in.
+export fn columns(out: Array[UInt8], node: UInt32, across: UInt32) -> Array[UInt8] { words(out, [COLUMNS, node, across]) }
 
 /// Shows `node` as the screen's content.
 export fn root(out: Array[UInt8], node: UInt32) -> Array[UInt8] { words(out, [ROOT, node]) }

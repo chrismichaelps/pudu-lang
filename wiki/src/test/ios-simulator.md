@@ -93,6 +93,24 @@ The script runs `examples/mobile/Themed.pudu` ([[Native Themed Example]]) with `
 
 Resolved Grill Log: assert the resolved colors and the font size, not only that the program exits. A theme that is accepted but never painted would otherwise pass.
 
+## List example (#925)
+
+The script runs `examples/mobile/Catalog.pudu` ([[Native Catalog Example]]) with `PUDU_UI_LIST_TEST` set. The run must print these lines, in order, and exit with status 0:
+
+- `PUDU_LIST reached Item 1000`: the self-test scrolled the first list to its last item, and that item's cell shows its label.
+- `PUDU_LIST reused`: fewer cells were made than a fifth of the 1,000 items.
+- `PUDU_CELLS <made> of <total> items`: a measurement of the cells made, printed for the record.
+
+The label report must also list exactly the last 120 items, `Item 881` through `Item 1000`, in screen order. The window clamps at the end of the list, so the final window holds items 881 to 1000 and no others.
+
+Resolved Grill Log: assert the reached label and the reuse count, not only the exit status. A list that never scrolls, or that builds every cell, would otherwise pass.
+
+## Refused list instruction (#925)
+
+The script's helper `refusedApp` runs a third case: a RANGE instruction, written directly with `Std.Mobile.Stream`, is applied to a label. The process must abort with `pudu: a view stream shaped a node that is not a list: 0`, and no first frame may be reported.
+
+Resolved Grill Log: the refusal belongs to the host, which alone knows the node's kind; the Pudu stream is well formed, so only the simulator can reject it.
+
 ## Application output collision (#916)
 
 Before installing Counter, try to build into an existing `.app` directory containing
@@ -128,4 +146,4 @@ it.
 
 ## Referenced by
 
-[[Native Mobile Targets]] · [[Native Mobile Targets Delivery]] · [[Native Controls Delivery]] · [[Native Keyed Lists Delivery]] · [[Native iOS Theming Delivery]]
+[[Native Mobile Targets]] · [[Native Mobile Targets Delivery]] · [[Native Controls Delivery]] · [[Native Keyed Lists Delivery]] · [[Native iOS Theming Delivery]] · [[Native iOS Recycling Delivery]]

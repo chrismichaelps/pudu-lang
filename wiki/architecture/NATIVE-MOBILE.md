@@ -114,7 +114,7 @@ One stream carries each commit. It is a sequence of little-endian 32-bit words, 
 
 | Code | Instruction | Words that follow |
 | --- | --- | --- |
-| 1 | CREATE | node, kind (1 label, 2 button, 3 column, 4 row, 5 field, 6 toggle) |
+| 1 | CREATE | node, kind (1 label, 2 button, 3 column, 4 row, 5 field, 6 toggle, 7 scroll, 8 list) |
 | 2 | TEXT | node, byte length, then that many UTF-8 bytes |
 | 3 | APPEND | column or row node, child node |
 | 4 | ROOT | node shown as the screen's content |
@@ -126,6 +126,12 @@ One stream carries each commit. It is a sequence of little-endian 32-bit words, 
 | 10 | INSERT | parent, child, index |
 | 11 | REMOVE | node, count, then count ids of its subtree (all forgotten) |
 | 12 | MOVE | parent, child, index |
+| 20 | THEME | count (7), then a kind, light word and dark word per role |
+| 21 | APPEARANCE | code (0 unspecified, 1 light, 2 dark) |
+| 22 | STYLE | node, text style code |
+| 23 | COLOR | node, role code |
+| 24 | RANGE | list node, total item count, first window index |
+| 25 | COLUMNS | list node, column count |
 
 Events return through `pudu_ui_wait` as one 64-bit value: the kind in the high 32 bits, with the tag in the low 32 bits.
 
@@ -136,6 +142,7 @@ Events return through `pudu_ui_wait` as one 64-bit value: the kind in the high 3
 | 3 | changed | tag; the text is read through `pudu_ui_event_text` |
 | 4 | switched on | tag |
 | 5 | switched off | tag |
+| 8 | reached | tag; the first visible index is read through the detail call |
 
 Codes 10 to 12 only add instructions, so a stream of codes 1 to 9 means the same. The view module no longer writes RESET; the host keeps it so a stream from an earlier writer still means the same. Nodes carry stable ids handed out by the program and recycled after REMOVE (#914). Compiled views extend the stream further under ADR-0031 (compiled native execution).
 

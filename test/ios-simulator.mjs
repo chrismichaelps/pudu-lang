@@ -167,6 +167,12 @@ int main(int argc, char **argv) {
       labels: ["Themed"],
       layout: ["PUDU_THEME ink light #1F2A44FF dark #E8EEFFFF", "PUDU_THEME appearance dark", "PUDU_THEME type grows"],
     }]);
+    mobileApp(device, "Catalog", [{
+      environment: { SIMCTL_CHILD_PUDU_UI_SELFTEST: "0", SIMCTL_CHILD_PUDU_UI_LIST_TEST: "1" },
+      // Scrolled to the end, the window is clamped to the last 120 items.
+      labels: Array.from({ length: 120 }, (_, index) => `Item ${881 + index}`),
+      layout: ["PUDU_LIST reached Item 1000", "PUDU_LIST reused"],
+    }]);
     refusedApp(device, root, "invalid group placement",
       "import Std.Mobile.Host as Host\nimport Std.Mobile.Stream as Stream", `  let empty: Array[UInt8] = []
   Host.apply(bytesOf(empty))
@@ -178,6 +184,10 @@ int main(int argc, char **argv) {
       "import Std.Mobile.Host as Host\nimport Std.Mobile.Theme as Theme\nimport Std.Mobile.View as View", `  let (_, built) = View.mount(&View.Styled(Theme.Body, View.Column([])))
   Host.apply(built)`,
       /pudu: a view stream styled a node that shows no text: 0/u);
+    refusedApp(device, root, "list range on a label",
+      "import Std.Mobile.Host as Host\nimport Std.Mobile.Stream as Stream", `  let label = Stream.create([], 0u32, Stream.LABEL)
+  Host.apply(bytesOf(Stream.range(label, 0u32, 10u32, 0u32)))`,
+      /pudu: a view stream shaped a node that is not a list: 0/u);
   } finally {
     try {
       if (device && !existingDevice) {
@@ -223,7 +233,7 @@ function mobileApp(device, example, runs) {
         `${example} did not show ${labels.join(", ")}:\n${lines.join("\n")}`);
       assert.ok(lines.includes("PUDU_PROGRAM_STATUS 0"), `${example} did not finish:\n${lines.join("\n")}`);
       if (layout) {
-        assert.deepEqual(lines.filter((line) => /^PUDU_(VIEWPORT|KEYBOARD|THEME) /.test(line)), layout,
+        assert.deepEqual(lines.filter((line) => /^PUDU_(VIEWPORT|KEYBOARD|THEME|LIST) /.test(line)), layout,
           `${example} did not report the expected layout and theme:\n${lines.join("\n")}`);
       }
       const firstFrame = lines.find((line) => line.startsWith("PUDU_FIRST_FRAME_MS "));

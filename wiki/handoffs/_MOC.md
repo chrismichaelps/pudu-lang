@@ -417,3 +417,4 @@ tags: [moc, handoff]
 - [[Native iOS Scrolling Delivery]] — vertical viewport, safe-area bounds and keyboard avoidance (#919).
 - [[Native App Delivery]] — `pudu build --app` writes a runnable simulator application (#916).
 - [[Native iOS Theming Delivery]] — semantic colors, appearance override and Dynamic Type styles (#923).
+- [[Native iOS Recycling Delivery]] — recycling lists and equal-column grids with windowed rows (#925).

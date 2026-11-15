@@ -36,7 +36,7 @@ on both displays), and Xcode 27.1 Device Hub simulation. Exact class names are t
 | Layout and adaptivity | Flexible stack layout with native results; safe areas including Dynamic Island, notch, home indicator and the fold; compact, regular and expanded size classes; orientations; keyboard avoidance | partial: columns and rows, safe-area root bounds and docked keyboard avoidance; size-class policy and fold regions remain open |
 | iPhone Duo | Fold state and posture reactions; outer, inner and both-display targeting; split view and multiple windows on the inner display; continuity across the fold; keeping interactive elements off the crease; layouts for 5.4 and 7.6 inches | missing |
 | Navigation | Stack with interactive pop; tab bars; sidebars; modal styles (full screen, page sheet, form sheet, popover); large and collapsing titles; custom bars and toolbars; deep and universal links | missing |
-| Lists and scrolling | Recycling lists; sections and compositional layouts; adaptive grids; pull to refresh; prefetching and infinite scroll; nested scrolling | partial: vertical root scrolling and keyed insert, remove and move; recycling and nested scrolling remain open |
+| Lists and scrolling | Recycling lists; sections and compositional layouts; adaptive grids; pull to refresh; prefetching and infinite scroll; nested scrolling | partial: vertical root scrolling, keyed insert/remove/move, recycling lists and equal-column grids with windowed rows; sections, compositional layouts beyond equal columns, pull to refresh and nested scrolling remain open |
 | Input and gestures | Tap, long press, pan, pinch, rotate, swipe; simultaneous and exclusive recognition; pointer; Apple Pencil; keyboard, input accessories and focus; Scribble | partial: tap, text entry, switch |
 | Visual system | FUI's seven aspects mapped to iOS values; Dynamic Type; light and dark appearance; materials and vibrancy; SF Symbols; semantic colors; elevation and continuous corners | partial: semantic color roles with platform or fixed light/dark tones, appearance override, Dynamic Type text styles; materials, symbols, elevation and continuous corners remain open |
 | Feedback and system UI | Alerts, action sheets, confirmation dialogs, context menus and previews, banners, activity and progress indicators; status bar, Dynamic Island and home indicator styling | missing |
@@ -95,7 +95,7 @@ does not have yet (Xcode 26.6, iOS 26.5 SDK).
 1. Scrolling and safe areas with docked keyboard avoidance ([[Native iOS Scrolling Delivery]]).
 2. Navigation stack and modal sheets.
 3. Theming: FUI tokens to semantic colors, Dynamic Type, dark mode ([[Native iOS Theming Delivery]]).
-4. Recycling lists and grids.
+4. Recycling lists and grids ([[Native iOS Recycling Delivery]]).
 5. Size-class adaptivity and multiple windows.
 6. iPhone Duo APIs once the 27.1 SDK is installed.
 7. Gestures, animation, context menus and system UI.
@@ -108,6 +108,8 @@ does not have yet (Xcode 26.6, iOS 26.5 SDK).
   geometry and size-class changes, so adaptive layouts carry most of it; only hinge posture and
   reserved regions need Duo APIs. _Rejected:_ device checks.
 
+- **Q:** Who owns cell reuse? **A:** The platform; Pudu owns identity and the window of row models. See [[iOS Host List]].
+
 - **Q:** When is the root keyboard layout guide installed? **A:** After the UIKit window becomes visible, so the guide observes the active window. See [[iOS Host Layout]].
 
 - **Q:** Should a 120 Hz display rebuild the Pudu tree at every refresh? **A:** UIKit owns native motion. Application state changes produce view commits, and custom animation samples presentation time only while active.
@@ -116,4 +118,4 @@ does not have yet (Xcode 26.6, iOS 26.5 SDK).
 
 ## Referenced by
 
-[[architecture/_MOC]] · [[Pudu Native]] · [[Native iOS Scrolling Delivery]] · [[Native iOS Theming Delivery]]
+[[architecture/_MOC]] · [[Pudu Native]] · [[Native iOS Scrolling Delivery]] · [[Native iOS Theming Delivery]] · [[Native iOS Recycling Delivery]]

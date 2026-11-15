@@ -17,26 +17,29 @@ Platform module of the mobile stack. It holds the foreign declarations of the ho
 
 Exports:
 - `apply(stream: Bytes) -> ()`: hands a nonempty commit to `pudu_ui_apply(const void *stream, uint64_t length)` in a single foreign call. An empty stream returns immediately.
-- `wait() -> View.Event`: calls `pudu_ui_wait()` and decodes its 64-bit result. When `View.carriesText` says the event carries text, it fetches that text through `pudu_ui_event_text` and decodes with `View.event(raw, text)`; otherwise the text is empty.
+- `eventDetail() -> UInt32`: calls `pudu_ui_event_detail()` and returns the detail word of the last event handed out.
+- `wait() -> View.Event`: calls `pudu_ui_wait()` and decodes its 64-bit result. When `View.carriesText` says the event carries text, it fetches that text through `pudu_ui_event_text`; when `View.carriesDetail` says it carries a detail, it fetches the word through `eventDetail`. It then decodes with `View.eventWithDetail` for a detailed event or `View.event(raw, text)` otherwise. The text is empty when the event carries none.
 
 ## Invariants
 
 - Each nonempty commit crosses the boundary once. One `apply` carries the whole stream, never one call per instruction.
 - Every call runs on the thread that runs the program. The host adapter [[iOS Host Adapter]] keeps its controls on that thread.
 - `wait` returns one event per call. Events queued while no call is waiting are delivered by later waits in the order the controls queued them.
-- These two declarations are the only foreign declarations in the mobile library.
+- A detail word is read only after the wait that produced its event, and before the next wait.
+- These three declarations are the only foreign declarations in the mobile library.
 
 ## Negative Logic
 
 - No platform callback enters Pudu. No exported function receives events.
 - The text of an event is read only when `carriesText` asks for it; a tap or toggle never costs a text call.
+- The detail word is read only when `carriesDetail` asks for it; no other event costs a detail call.
 - No validation of the stream here. A malformed stream is refused by the host adapter, which ends the process with a message naming the defect.
 - No node table and no control handles; those live in the host.
 - No timeout on `wait`. The loop ends on a `Stopped` event.
 
 ## Dependencies and consumers
 
-Depends on [[Std Mobile View]] for `Event`, `event` and `carriesText`. Consumers: [[Native Counter Example]] and [[Native Form Example]]. The host side is [[iOS Host Adapter]], which defines `pudu_ui_apply`, `pudu_ui_wait` and `pudu_ui_event_text`.
+Depends on [[Std Mobile View]] for `Event`, `event`, `eventWithDetail`, `carriesText` and `carriesDetail`. Consumers: [[Native Counter Example]], [[Native Form Example]], and [[Native Catalog Example]]. The host side is [[iOS Host Adapter]], which defines `pudu_ui_apply`, `pudu_ui_wait`, `pudu_ui_event_text` and `pudu_ui_event_detail`.
 
 ## Resolved Grill Log
 
@@ -45,6 +48,8 @@ Depends on [[Std Mobile View]] for `Event`, `event` and `carriesText`. Consumers
 
 - **Q:** Does an empty stream need a platform apply? **A:** It carries no mutation and needs no boundary crossing.
 
+- **Q:** Why a separate detail call rather than a wider event word? **A:** Only one kind carries a detail, and a separate call keeps the common tap and toggle events a single crossing. _Rejected:_ widening the 64-bit event value.
+
 ## Referenced by
 
-[[src/Std/_MOC]] · [[Std Mobile View]] · [[iOS Host Adapter]] · [[Native First Light Delivery]] · [[Native Controls Delivery]]
+[[src/Std/_MOC]] · [[Std Mobile View]] · [[iOS Host Adapter]] · [[Native First Light Delivery]] · [[Native Controls Delivery]] · [[Native iOS Recycling Delivery]]

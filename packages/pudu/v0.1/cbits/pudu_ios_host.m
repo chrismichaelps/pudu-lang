@@ -7,32 +7,29 @@
    names the factory that makes its control and the setters it accepts; an
    instruction code names its handler. */
 #import <UIKit/UIKit.h>
-#include <math.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
-#include <string.h>
 #include "pudu_program.h"
 #include "pudu_ios_layout.h"
 #include "pudu_ios_theme.h"
+#include "pudu_ios_events.h"
+#include "pudu_ios_list.h"
+#include "pudu_ios_controls.h"
 
-/* Instruction codes, control kinds and event kinds of the view stream; they
-   match Std.Mobile.View. */
+/* Instruction codes and control kinds of the view stream; they match
+   Std.Mobile.Stream. */
 enum { PUDU_UI_CREATE = 1, PUDU_UI_TEXT = 2, PUDU_UI_APPEND = 3, PUDU_UI_ROOT = 4, PUDU_UI_TAG = 5, PUDU_UI_RESET = 6,
        PUDU_UI_STATE = 7, PUDU_UI_HINT = 8, PUDU_UI_NAME = 9, PUDU_UI_INSERT = 10, PUDU_UI_REMOVE = 11, PUDU_UI_MOVE = 12,
-       PUDU_UI_THEME = 20, PUDU_UI_APPEARANCE = 21, PUDU_UI_STYLE = 22, PUDU_UI_COLOR = 23, PUDU_UI_INSTRUCTIONS = 24 };
+       PUDU_UI_THEME = 20, PUDU_UI_APPEARANCE = 21, PUDU_UI_STYLE = 22, PUDU_UI_COLOR = 23, PUDU_UI_RANGE = 24,
+       PUDU_UI_COLUMNS = 25, PUDU_UI_INSTRUCTIONS = 26 };
 enum { PUDU_UI_LABEL = 1, PUDU_UI_BUTTON = 2, PUDU_UI_COLUMN = 3, PUDU_UI_ROW = 4, PUDU_UI_FIELD = 5, PUDU_UI_TOGGLE = 6,
-       PUDU_UI_SCROLL = 7, PUDU_UI_KINDS = 8 };
-static const uint64_t PUDU_UI_TAPPED = 1, PUDU_UI_STOPPED = 2, PUDU_UI_CHANGED = 3, PUDU_UI_SWITCHED_ON = 4,
-                      PUDU_UI_SWITCHED_OFF = 5;
+       PUDU_UI_SCROLL = 7, PUDU_UI_LIST = 8, PUDU_UI_KINDS = 9 };
 
 static NSMutableArray *pudu_nodes;
 static NSMutableArray<NSNumber *> *pudu_kinds;
 /* Each node's color role from COLOR, or PUDU_ROLE_DEFAULT. */
 static NSMutableArray<NSNumber *> *pudu_paints;
-/* Each queued event is its 64-bit value and the text it carries. */
-static NSMutableArray<NSArray *> *pudu_events;
-static char *pudu_event_text_bytes;
 static UIView *pudu_surface;
 static UIView *pudu_shown_root;
 static UILayoutGuide *pudu_available;
@@ -43,111 +40,6 @@ static _Noreturn void pudu_stream_defect(const char *problem, uint32_t value) {
   fprintf(stderr, "pudu: a view stream %s %u\n", problem, value);
   abort();
 }
-
-static void pudu_queue(uint64_t kind, NSInteger tag, NSString *text) {
-  [pudu_events addObject:@[ @((kind << 32) | (uint32_t)tag), text ?: @"" ]];
-}
-
-/* A toggle: its title beside the platform switch. */
-@interface PuduToggle : UIStackView
-@property (strong, nonatomic) UILabel *title;
-@property (strong, nonatomic) UISwitch *control;
-@end
-@implementation PuduToggle
-@end
-
-@interface PuduTarget : NSObject
-- (void)tapped:(UIButton *)sender;
-- (void)edited:(UITextField *)sender;
-- (void)focused:(UITextField *)sender;
-- (void)switched:(UISwitch *)sender;
-@end
-@implementation PuduTarget
-- (void)tapped:(UIButton *)sender { pudu_queue(PUDU_UI_TAPPED, sender.tag, nil); }
-- (void)focused:(UITextField *)sender { pudu_focus_field(sender); }
-- (void)edited:(UITextField *)sender { pudu_queue(PUDU_UI_CHANGED, sender.tag, sender.text); }
-- (void)switched:(UISwitch *)sender { pudu_queue(sender.on ? PUDU_UI_SWITCHED_ON : PUDU_UI_SWITCHED_OFF, sender.tag, nil); }
-@end
-static PuduTarget *pudu_target;
-
-/* Factories: one control per kind. */
-static UIView *pudu_make_label(void) {
-  UILabel *label = [UILabel new];
-  label.font = [UIFont preferredFontForTextStyle:UIFontTextStyleTitle1];
-  label.adjustsFontForContentSizeCategory = YES;
-  return label;
-}
-
-static UIView *pudu_make_button(void) {
-  UIButton *button = [UIButton buttonWithType:UIButtonTypeSystem];
-  [button addTarget:pudu_target action:@selector(tapped:) forControlEvents:UIControlEventTouchUpInside];
-  return button;
-}
-
-static UIStackView *pudu_make_group(UILayoutConstraintAxis axis, CGFloat spacing) {
-  UIStackView *group = [UIStackView new];
-  group.axis = axis;
-  group.alignment = UIStackViewAlignmentCenter;
-  group.spacing = spacing;
-  return group;
-}
-
-static UIView *pudu_make_column(void) { return pudu_make_group(UILayoutConstraintAxisVertical, 16); }
-static UIView *pudu_make_row(void) { return pudu_make_group(UILayoutConstraintAxisHorizontal, 12); }
-
-static UIView *pudu_make_field(void) {
-  UITextField *field = [UITextField new];
-  field.borderStyle = UITextBorderStyleRoundedRect;
-  [field.widthAnchor constraintGreaterThanOrEqualToConstant:220].active = YES;
-  [field addTarget:pudu_target action:@selector(focused:) forControlEvents:UIControlEventEditingDidBegin];
-  [field addTarget:pudu_target action:@selector(edited:) forControlEvents:UIControlEventEditingChanged];
-  return field;
-}
-
-static UIView *pudu_make_toggle(void) {
-  PuduToggle *toggle = [PuduToggle new];
-  toggle.axis = UILayoutConstraintAxisHorizontal;
-  toggle.spacing = 8;
-  toggle.title = [UILabel new];
-  toggle.control = [UISwitch new];
-  [toggle.control addTarget:pudu_target action:@selector(switched:) forControlEvents:UIControlEventValueChanged];
-  [toggle addArrangedSubview:toggle.title];
-  [toggle addArrangedSubview:toggle.control];
-  return toggle;
-}
-
-/* Setters a kind accepts; a kind without one refuses that instruction. */
-static void pudu_label_text(UIView *view, NSString *text) { ((UILabel *)view).text = text; }
-static void pudu_button_text(UIView *view, NSString *text) { [(UIButton *)view setTitle:text forState:UIControlStateNormal]; }
-
-/* A field already showing the text is left alone, so typing keeps its place. */
-static void pudu_field_text(UIView *view, NSString *text) {
-  UITextField *field = (UITextField *)view;
-  if (![field.text isEqualToString:text]) field.text = text;
-}
-
-static void pudu_field_hint(UIView *view, NSString *hint) { ((UITextField *)view).placeholder = hint; }
-static void pudu_toggle_text(UIView *view, NSString *text) { ((PuduToggle *)view).title.text = text; }
-static void pudu_toggle_state(UIView *view, uint32_t state) { ((PuduToggle *)view).control.on = state != 0; }
-static UIView *pudu_toggle_control(UIView *view) { return ((PuduToggle *)view).control; }
-static void pudu_toggle_paint(UIView *view, UIColor *color) { pudu_label_paint(((PuduToggle *)view).title, color); }
-static void pudu_toggle_style(UIView *view, UIFont *font) { pudu_label_style(((PuduToggle *)view).title, font); }
-static UIView *pudu_itself(UIView *view) { return view; }
-static UIStackView *pudu_direct_stack(UIView *view) { return (UIStackView *)view; }
-/* What a self-test does to a kind, and what a kind reports afterward. */
-static void pudu_field_fill(UIView *view, NSString *text) {
-  ((UITextField *)view).text = text;
-  [(UITextField *)view sendActionsForControlEvents:UIControlEventEditingChanged];
-}
-
-static void pudu_toggle_fill(UIView *view, NSString *text) {
-  (void)text;
-  ((PuduToggle *)view).control.on = YES;
-  [((PuduToggle *)view).control sendActionsForControlEvents:UIControlEventValueChanged];
-}
-
-static void pudu_button_press(UIView *view) { [(UIButton *)view sendActionsForControlEvents:UIControlEventTouchUpInside]; }
-static NSString *pudu_label_shown(UIView *view) { return ((UILabel *)view).text; }
 
 typedef struct {
   UIView *(*make)(void);
@@ -175,6 +67,7 @@ static const pudu_kind pudu_kind_table[PUDU_UI_KINDS] = {
   [PUDU_UI_FIELD] = { pudu_make_field, pudu_field_text, pudu_field_hint, NULL, pudu_itself, NULL, pudu_field_fill, NULL, NULL, pudu_field_paint, pudu_field_style, YES },
   [PUDU_UI_TOGGLE] = { pudu_make_toggle, pudu_toggle_text, NULL, pudu_toggle_state, pudu_toggle_control, NULL, pudu_toggle_fill, NULL, NULL, pudu_toggle_paint, pudu_toggle_style, YES },
   [PUDU_UI_SCROLL] = { pudu_make_scroll, NULL, NULL, NULL, pudu_itself, pudu_scroll_stack, NULL, NULL, NULL, NULL, NULL, NO },
+  [PUDU_UI_LIST] = { pudu_make_list, NULL, NULL, NULL, pudu_itself, pudu_list_store, NULL, NULL, NULL, NULL, NULL, NO },
 };
 
 static const pudu_kind *pudu_kind_of(uint32_t kind) {
@@ -299,6 +192,7 @@ static void pudu_place(pudu_reader *reader) {
 static void pudu_do_remove(pudu_reader *reader) {
   uint32_t node = pudu_node_id(reader);
   uint32_t count = pudu_word(reader);
+  pudu_list_forget(pudu_nodes[node]);
   [(UIView *)pudu_nodes[node] removeFromSuperview];
   for (uint32_t i = 0; i < count; i++) {
     uint32_t gone = pudu_node_id(reader);
@@ -315,7 +209,8 @@ static void pudu_do_root(pudu_reader *reader) {
   pudu_shown_root = root;
   root.translatesAutoresizingMaskIntoConstraints = NO;
   [pudu_surface addSubview:root];
-  pudu_place_root(root, pudu_available, pudu_kinds[node].unsignedIntValue == PUDU_UI_SCROLL);
+  uint32_t kind = pudu_kinds[node].unsignedIntValue;
+  pudu_place_root(root, pudu_available, kind == PUDU_UI_SCROLL || kind == PUDU_UI_LIST);
 }
 
 static void pudu_do_reset(pudu_reader *reader) {
@@ -369,13 +264,33 @@ static void pudu_do_color(pudu_reader *reader) {
   pudu_paint(node);
 }
 
+/* The list a RANGE or COLUMNS names, refused for any other kind. */
+static UIView *pudu_list_node(pudu_reader *reader) {
+  uint32_t node = pudu_node_id(reader);
+  if (pudu_kinds[node].unsignedIntValue != PUDU_UI_LIST) pudu_stream_defect("shaped a node that is not a list:", node);
+  return pudu_nodes[node];
+}
+
+/* RANGE: total, then first. Arguments are read in stream order. */
+static void pudu_do_range(pudu_reader *reader) {
+  UIView *list = pudu_list_node(reader);
+  uint32_t total = pudu_word(reader);
+  pudu_list_range(list, total, pudu_word(reader));
+}
+static void pudu_do_columns(pudu_reader *reader) {
+  UIView *list = pudu_list_node(reader);
+  uint32_t columns = pudu_word(reader);
+  if (columns == 0) pudu_stream_defect("laid a list in zero columns:", 0);
+  pudu_list_columns(list, columns);
+}
+
 static void (*const pudu_instruction_table[PUDU_UI_INSTRUCTIONS])(pudu_reader *) = {
   [PUDU_UI_CREATE] = pudu_do_create, [PUDU_UI_TEXT] = pudu_do_text, [PUDU_UI_APPEND] = pudu_do_append,
   [PUDU_UI_ROOT] = pudu_do_root, [PUDU_UI_TAG] = pudu_do_tag, [PUDU_UI_RESET] = pudu_do_reset,
   [PUDU_UI_STATE] = pudu_do_state, [PUDU_UI_HINT] = pudu_do_hint, [PUDU_UI_NAME] = pudu_do_name,
   [PUDU_UI_INSERT] = pudu_place, [PUDU_UI_REMOVE] = pudu_do_remove, [PUDU_UI_MOVE] = pudu_place,
   [PUDU_UI_THEME] = pudu_do_theme, [PUDU_UI_APPEARANCE] = pudu_do_appearance, [PUDU_UI_STYLE] = pudu_do_style,
-  [PUDU_UI_COLOR] = pudu_do_color,
+  [PUDU_UI_COLOR] = pudu_do_color, [PUDU_UI_RANGE] = pudu_do_range, [PUDU_UI_COLUMNS] = pudu_do_columns,
 };
 
 /* Applies one commit: every instruction in order, in one call. */
@@ -386,30 +301,13 @@ void pudu_ui_apply(const void *stream, uint64_t length) {
     if (code >= PUDU_UI_INSTRUCTIONS || pudu_instruction_table[code] == NULL) pudu_stream_defect("used unknown instruction", code);
     pudu_instruction_table[code](&reader);
   }
+  pudu_list_reload();
   if (pudu_first_frame_ms < 0) {
     [pudu_surface layoutIfNeeded];
     pudu_first_frame_ms = (CACurrentMediaTime() * 1000.0) - pudu_main_started_ms;
     printf("PUDU_FIRST_FRAME_MS %.1f\n", pudu_first_frame_ms);
     fflush(stdout);
   }
-}
-
-/* The next event; the main loop runs, and controls queue events, until one
-   is waiting. */
-uint64_t pudu_ui_wait(void) {
-  NSArray *next;
-  while (pudu_events.count == 0) CFRunLoopRunInMode(kCFRunLoopDefaultMode, 1.0, true);
-  next = pudu_events.firstObject;
-  [pudu_events removeObjectAtIndex:0];
-  free(pudu_event_text_bytes);
-  pudu_event_text_bytes = strdup([next[1] UTF8String]);
-  if (pudu_event_text_bytes == NULL) abort();
-  return [next[0] unsignedLongLongValue];
-}
-
-/* The text the last event carried; valid until the next wait. */
-const char *pudu_ui_event_text(void) {
-  return pudu_event_text_bytes != NULL ? pudu_event_text_bytes : "";
 }
 
 /* Prints what each shown node reports, in the order the screen shows them. */
@@ -438,7 +336,6 @@ static void pudu_report(UIView *view) {
   pudu_kinds = [NSMutableArray new];
   pudu_paints = [NSMutableArray new];
   pudu_theme_reset();
-  pudu_events = [NSMutableArray new];
   pudu_target = [PuduTarget new];
   self.window = [[UIWindow alloc] initWithFrame:UIScreen.mainScreen.bounds];
   self.window.rootViewController = controller;
@@ -463,12 +360,16 @@ static void pudu_report(UIView *view) {
    is set, taps every button as many times as PUDU_UI_SELFTEST says, then asks
    the program to stop, exactly as a user's input would arrive. */
 - (void)selfTest {
+  if (getenv("PUDU_UI_LIST_TEST") != NULL) {
+    pudu_test_list(pudu_nodes, ^{ pudu_queue(PUDU_UI_STOPPED, 0, nil, 0); });
+    return;
+  }
   if (getenv("PUDU_UI_THEME_TEST") != NULL) {
-    pudu_test_theme(pudu_surface, pudu_nodes, ^{ pudu_queue(PUDU_UI_STOPPED, 0, nil); });
+    pudu_test_theme(pudu_surface, pudu_nodes, ^{ pudu_queue(PUDU_UI_STOPPED, 0, nil, 0); });
     return;
   }
   if (getenv("PUDU_UI_KEYBOARD_TEST") != NULL) {
-    pudu_test_keyboard(pudu_surface, pudu_shown_root, pudu_nodes, ^{ pudu_queue(PUDU_UI_STOPPED, 0, nil); });
+    pudu_test_keyboard(pudu_surface, pudu_shown_root, pudu_nodes, ^{ pudu_queue(PUDU_UI_STOPPED, 0, nil, 0); });
     return;
   }
   int taps = atoi(getenv("PUDU_UI_SELFTEST"));
@@ -485,7 +386,7 @@ static void pudu_report(UIView *view) {
       if (kind->press != NULL) kind->press(nodes[node]);
     }
   }
-  pudu_queue(PUDU_UI_STOPPED, 0, nil);
+  pudu_queue(PUDU_UI_STOPPED, 0, nil, 0);
 }
 @end
 

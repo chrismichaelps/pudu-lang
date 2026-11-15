@@ -5,6 +5,10 @@ tags: [changelog]
 
 # Changelog
 
+## 2026-11-14 — Recycling lists and grids (#925)
+
+- `Std.Mobile.View` gains `Recycled`, a list or equal-column grid that supplies rows for a window of its items, and `Reached` events with `windowStart` to move the window. [[Std Mobile Stream]] encodes RANGE and COLUMNS (codes 24 and 25). The iOS host shows a list with a row store and reports scroll positions through [[iOS Host List]] and [[iOS Host Events]] ([[Native iOS Recycling Delivery]]).
+
 ## 2026-11-14 — iOS theming contract (#923)
 
 - `Std.Mobile.Theme` defines seven color roles with platform or fixed light/dark tones, an appearance override and text styles; `Styled` and `Painted` wrap controls in [[Std Mobile View]] and encode STYLE and COLOR through [[Std Mobile Stream]] (codes 20 to 23). The iOS host applies a theme with dynamic platform colors and Dynamic Type text styles, so a light/dark switch needs no Pudu rebuild ([[Native iOS Theming Delivery]]).
