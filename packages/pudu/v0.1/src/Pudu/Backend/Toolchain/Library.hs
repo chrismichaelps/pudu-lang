@@ -28,7 +28,7 @@ import Pudu.Backend.Target (AppleSdk (..), NativeTarget (..), TargetPlatform (..
 import Pudu.Backend.Toolchain (compilerFlags)
 import Pudu.Backend.Toolchain.Probe (appleInstalled, findXcrun)
 import Pudu.Backend.Toolchain.Process (ToolchainFailure (..), problemText, runTool, runToolOutput, timeoutSeconds, tryIO)
-import System.Directory (doesDirectoryExist, findExecutable, removeDirectoryRecursive, renameFile)
+import System.Directory (doesDirectoryExist, removeDirectoryRecursive, renameFile)
 import System.Environment (lookupEnv)
 import System.FilePath (equalFilePath, takeDirectory, takeFileName, (</>))
 import System.IO.Temp (createTempDirectory)
