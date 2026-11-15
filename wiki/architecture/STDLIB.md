@@ -205,6 +205,7 @@ Encoding uses named escapes where JSON has them and `\u00XX` for the remaining c
 |---|---|
 | `Std.Mobile.View` | pure view tree and the instruction stream that realizes it on phones; [[Std Mobile View]] |
 | `Std.Mobile.Host` | the platform calls that apply a stream and wait for an event; [[Std Mobile Host]] |
+| `Std.Mobile.Stream` | pure encoder of the view stream instructions; [[Std Mobile Stream]] |
 
 ### Concurrency
 

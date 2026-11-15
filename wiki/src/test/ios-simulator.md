@@ -75,6 +75,12 @@ The script also builds and runs the counter example, `examples/mobile/Counter.pu
 
 The script also builds `examples/mobile/Form.pudu` ([[Native Form Example]]) and runs it twice with `PUDU_UI_TYPE=Ada`. With no taps, the label must read `Hello, Ada (subscribed)`. With one tap of every button (Clear), it must read `Hello, stranger`. Both runs must exit with status 0.
 
+## Keyed list example (#914)
+
+The script runs `examples/mobile/List.pudu` ([[Native List Example]]) with `PUDU_UI_TYPE=Milk`, then taps every button in three rounds, each round pressing Add and then Reverse. The labels must read, in screen order, `3 items`, `Milk 3`, `Milk 1`, `Milk 2`, and the run must exit with status 0.
+
+Every app's labels are compared in screen order, so a reordered or missing row fails even when each label text is present.
+
 ## Referenced by
 
-[[Native Mobile Targets]] · [[Native Mobile Targets Delivery]] · [[Native Controls Delivery]]
+[[Native Mobile Targets]] · [[Native Mobile Targets Delivery]] · [[Native Controls Delivery]] · [[Native Keyed Lists Delivery]]

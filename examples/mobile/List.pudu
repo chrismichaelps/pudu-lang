@@ -1,0 +1,53 @@
+module List
+
+import Std.Mobile.Host as Host
+import Std.Mobile.View as View
+
+/// Tags the controls report.
+const ITEM_FIELD: UInt32 = 1u32
+const ADD: UInt32 = 2u32
+const REVERSE: UInt32 = 3u32
+
+/// One row: its key never changes while the row lives.
+type Item = { id: Int, text: Str }
+
+type Model = { draft: Str, items: Array[Item], made: Int }
+
+fn view(model: &Model) -> View.View {
+  View.Column([
+      View.Named("New item", View.Field("Item", model.draft, ITEM_FIELD)),
+      View.Row([View.Button("Add", ADD), View.Button("Reverse", REVERSE)]),
+      View.Label("{model.items.length()} items"),
+      View.Keyed(model.items.map(|item: Item| (item.id.toText(), View.Label(item.text))))
+    ])
+}
+
+fn update(model: &Model, event: &View.Event) -> Model {
+  match *event {
+    case View.Changed(tag, text) if tag == ITEM_FIELD => Model {..*model, draft: text }
+    case View.Tapped(tag) if tag == ADD => {
+      let made = model.made + 1
+      Model{..*model, items: model.items.push(Item{id: made, text: "{model.draft} {made}"}), made: made}
+    }
+    case View.Tapped(tag) if tag == REVERSE => Model {..*model, items: model.items.reverse() }
+    case _ => *model
+  }
+}
+
+fn main() -> Int {
+  var model = Model{draft: "", items: [], made: 0}
+  let (first, built) = View.mount(&view(&model))
+  var mounted = first
+  Host.apply(built)
+  while true {
+    let event = Host.wait()
+    if event == View.Stopped {
+      return 0
+    }
+    model = update(&model, &event)
+    let (next, changes) = View.update(&mounted, &view(&model))
+    Host.apply(changes)
+    mounted = next
+  }
+  0
+}

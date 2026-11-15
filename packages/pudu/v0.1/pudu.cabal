@@ -57,6 +57,7 @@ data-files:         lib/Std/*.pudu
                     lib/Std/Time/Format/*.pudu
                     lib/Std/Toml/*.pudu
                     lib/Std/Ui/*.pudu
+                    lib/Std/Mobile/*.pudu
 
 source-repository head
   type:             git

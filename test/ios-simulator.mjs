@@ -151,10 +151,12 @@ int main(int argc, char **argv) {
     assert.deepEqual(lines, [...expected.split("\n"), "PUDU_SMOKE_STATUS 0"]);
     console.log(`${expected}\nPASS iOS simulator smoke (${device})`);
     mobileApp(device, simulatorClang, "Counter", [
-      { environment: { SIMCTL_CHILD_PUDU_UI_SELFTEST: "3" }, label: "Count: 3" }]);
+      { environment: { SIMCTL_CHILD_PUDU_UI_SELFTEST: "3" }, labels: ["Count: 3"] }]);
     mobileApp(device, simulatorClang, "Form", [
-      { environment: { SIMCTL_CHILD_PUDU_UI_SELFTEST: "0", SIMCTL_CHILD_PUDU_UI_TYPE: "Ada" }, label: "Hello, Ada (subscribed)" },
-      { environment: { SIMCTL_CHILD_PUDU_UI_SELFTEST: "1", SIMCTL_CHILD_PUDU_UI_TYPE: "Ada" }, label: "Hello, stranger" }]);
+      { environment: { SIMCTL_CHILD_PUDU_UI_SELFTEST: "0", SIMCTL_CHILD_PUDU_UI_TYPE: "Ada" }, labels: ["Hello, Ada (subscribed)"] },
+      { environment: { SIMCTL_CHILD_PUDU_UI_SELFTEST: "1", SIMCTL_CHILD_PUDU_UI_TYPE: "Ada" }, labels: ["Hello, stranger"] }]);
+    mobileApp(device, simulatorClang, "List", [
+      { environment: { SIMCTL_CHILD_PUDU_UI_SELFTEST: "3", SIMCTL_CHILD_PUDU_UI_TYPE: "Milk" }, labels: ["3 items", "Milk 3", "Milk 1", "Milk 2"] }]);
   } finally {
     try {
       if (device && !existingDevice) {
@@ -204,13 +206,15 @@ function mobileApp(device, simulatorClang, example, runs) {
     run("codesign", ["--force", "--sign", "-", app]);
     run(xcrun, ["simctl", "install", device, app], simulatorTimeout);
     installed = true;
-    for (const { environment, label } of runs) {
+    for (const { environment, labels } of runs) {
       const lines = launch(device, bundle, "PUDU_", "PUDU_PROGRAM_STATUS", environment);
-      assert.ok(lines.includes(`PUDU_LABEL ${label}`), `${example} did not show ${label}:\n${lines.join("\n")}`);
+      // The host reports labels in the order the screen shows them.
+      assert.deepEqual(lines.filter((line) => line.startsWith("PUDU_LABEL ")), labels.map((label) => `PUDU_LABEL ${label}`),
+        `${example} did not show ${labels.join(", ")}:\n${lines.join("\n")}`);
       assert.ok(lines.includes("PUDU_PROGRAM_STATUS 0"), `${example} did not finish:\n${lines.join("\n")}`);
       const firstFrame = lines.find((line) => line.startsWith("PUDU_FIRST_FRAME_MS "));
       assert.ok(firstFrame, `${example} reported no first frame:\n${lines.join("\n")}`);
-      console.log(`PASS iOS ${example}: ${label}, first frame ${firstFrame.split(" ")[1]} ms from main, `
+      console.log(`PASS iOS ${example}: ${labels.join(", ")}, first frame ${firstFrame.split(" ")[1]} ms from main, `
         + `executable ${statSync(executable).size} bytes, program archive ${statSync(library).size} bytes`);
     }
   } finally {

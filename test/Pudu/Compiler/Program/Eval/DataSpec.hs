@@ -176,7 +176,7 @@ testDataEvaluation = do
     , counterexample "unboxed contiguous memory buffer operations evaluate"
         (buffers === Just "27")
     , counterexample "the native view stream builds, changes and reads events"
-        (mobileViews === Just "25")
+        (mobileViews === Just "30")
     , counterexample "flat hash table with control metadata evaluates"
         (flatMaps === Just "31")
     , counterexample "vectorized columnar engine with unboxed storage evaluates"

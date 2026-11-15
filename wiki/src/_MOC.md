@@ -346,5 +346,6 @@ tags: [moc, module]
 
 - [[iOS Host Adapter]] — Objective-C host of a Pudu Native application on iOS.
 - [[Native Counter Example]] — Phase 1 counter built only from Pudu.
+- [[Native List Example]] — keyed list with insertion and reorder, built only from Pudu (#914).
 - [[Uses Mobile View]] — stdlib fixture for the counter view stream.
 - [[Native First Light Delivery]] — phase 1 of Pudu Native (#909).

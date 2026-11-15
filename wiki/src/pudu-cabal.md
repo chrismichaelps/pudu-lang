@@ -43,6 +43,9 @@ Machine]]; [[Ark Animation Gate]] checks the archive.
 Distribute `lib/Ark/Physics/*.pudu` with the root physics facade. Resolved Grill Log: the
 source archive must retain contact, step and query modules; checkout-only success is insufficient.
 
+`lib/Std/Mobile/*.pudu` ships the native mobile view, stream and host modules (#914); an installed
+compiler without it could not resolve `Std.Mobile`.
+
 Distribute `lib/Ark/*.pudu` and `lib/Ark/Math/*.pudu` beside Std in the existing library data
 root. [[Ark Math]] and [[Ark Matrix]] are language-distribution data, with no separate package
 or native dependency. Resolved Grill Log: source archives must contain both root and nested

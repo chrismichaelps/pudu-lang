@@ -122,6 +122,9 @@ One stream carries each commit. It is a sequence of little-endian 32-bit words, 
 | 7 | STATE | node, 0 or 1 (a toggle's state) |
 | 8 | HINT | node, byte length, UTF-8 bytes (a field's placeholder) |
 | 9 | NAME | node, byte length, UTF-8 bytes (accessible name) |
+| 10 | INSERT | parent, child, index |
+| 11 | REMOVE | node, count, then count ids of its subtree (all forgotten) |
+| 12 | MOVE | parent, child, index |
 
 Events return through `pudu_ui_wait` as one 64-bit value: the kind in the high 32 bits, with the tag in the low 32 bits.
 
@@ -133,7 +136,7 @@ Events return through `pudu_ui_wait` as one 64-bit value: the kind in the high 3
 | 4 | switched on | tag |
 | 5 | switched off | tag |
 
-Version 0 has no keys and no removal. Compiled views and keyed regions extend it under ADR-0031 (compiled native execution). Version 1 only adds codes and kinds, so a version 0 stream means the same.
+Codes 10 to 12 only add instructions, so a stream of codes 1 to 9 means the same. The view module no longer writes RESET; the host keeps it so a stream from an earlier writer still means the same. Nodes carry stable ids handed out by the program and recycled after REMOVE (#914). Compiled views extend the stream further under ADR-0031 (compiled native execution).
 
 ## FUI on native
 
