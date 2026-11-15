@@ -144,6 +144,18 @@ Resolved Grill Log: Q: Why test the refusal on a simulator rather than in the fi
 refusal belongs to the host; the Pudu stream for it is well formed, so only the host can reject
 it.
 
+## Device matrix (#926)
+
+After the iPhone runs, the script picks the newest available device type of every other family
+the selected runtime supports, iPad and any new family, and runs Counter, Feed and Catalog on
+each. The script fails if a family the runtime offers cannot boot a device of that family.
+Each run uses a private device that is deleted afterwards, as above.
+
+Resolved Grill Log: one device per family, newest first, so a new emulator type is exercised as
+soon as its runtime is installed. A family the runtime offers that fails to boot is a failure,
+not a skip; a skip would hide the regression the matrix exists to catch. _Rejected:_ a fixed list
+of device names, which would miss families the list does not name.
+
 ## Referenced by
 
 [[Native Mobile Targets]] · [[Native Mobile Targets Delivery]] · [[Native Controls Delivery]] · [[Native Keyed Lists Delivery]] · [[Native iOS Theming Delivery]] · [[Native iOS Recycling Delivery]]

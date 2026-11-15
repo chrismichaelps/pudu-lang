@@ -25,6 +25,7 @@ import Control.Monad (void)
 import Data.ByteString (ByteString)
 import qualified Data.ByteString as ByteString
 import Data.Text (Text)
+import Pudu.Backend.Ledger (Finding)
 import qualified Data.Text as Text
 import qualified Data.Text.Encoding as Encoding
 import Data.Text.Encoding.Error (lenientDecode)
@@ -50,7 +51,8 @@ import Text.Read (readMaybe)
 {-| @Backend.Toolchain.Failure — every way building a native artifact can
     fail, kept as data so the caller owns the message vocabulary. The last two
     name a mobile target: its platform SDK was not found, or its output is
-    designed but not built. -}
+    designed but not built. `ToolchainOutsideLedger` names a target whose
+    installed toolchain the platform ledger refuses. -}
 data ToolchainFailure
   = ToolchainNotFound !Text
   | ToolchainInvocation !Text
@@ -59,6 +61,7 @@ data ToolchainFailure
   | ToolchainPublishFailed !Text
   | ToolchainSdkMissing !Text !Text
   | ToolchainTargetUnbuilt !Text
+  | ToolchainOutsideLedger !Text !Finding
   deriving stock (Eq, Show)
 
 {-| Run one tool to completion within the deadline. Exit zero answers the

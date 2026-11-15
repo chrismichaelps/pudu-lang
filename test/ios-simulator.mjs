@@ -150,29 +150,19 @@ int main(int argc, char **argv) {
     const lines = launch(device, identifier, "PUDU_SMOKE", "PUDU_SMOKE_STATUS");
     assert.deepEqual(lines, [...expected.split("\n"), "PUDU_SMOKE_STATUS 0"]);
     console.log(`${expected}\nPASS iOS simulator smoke (${device})`);
-    mobileApp(device, "Counter", [
-      { environment: { SIMCTL_CHILD_PUDU_UI_SELFTEST: "3" }, labels: ["Count: 3"] }]);
+    familyApps(device, "Counter");
     mobileApp(device, "Form", [
       { environment: { SIMCTL_CHILD_PUDU_UI_SELFTEST: "0", SIMCTL_CHILD_PUDU_UI_TYPE: "Ada" }, labels: ["Hello, Ada (subscribed)"] },
       { environment: { SIMCTL_CHILD_PUDU_UI_SELFTEST: "1", SIMCTL_CHILD_PUDU_UI_TYPE: "Ada" }, labels: ["Hello, stranger"] }]);
     mobileApp(device, "List", [
       { environment: { SIMCTL_CHILD_PUDU_UI_SELFTEST: "3", SIMCTL_CHILD_PUDU_UI_TYPE: "Milk" }, labels: ["3 items", "Milk 3", "Milk 1", "Milk 2"] }]);
-    mobileApp(device, "Feed", [{
-      environment: { SIMCTL_CHILD_PUDU_UI_SELFTEST: "0", SIMCTL_CHILD_PUDU_UI_KEYBOARD_TEST: "1" },
-      labels: Array.from({ length: 40 }, (_, index) => `Row ${index + 1}`),
-      layout: ["PUDU_VIEWPORT safe and scrollable", "PUDU_KEYBOARD visible field", "PUDU_KEYBOARD restored"],
-    }]);
+    familyApps(device, "Feed");
     mobileApp(device, "Themed", [{
       environment: { SIMCTL_CHILD_PUDU_UI_SELFTEST: "0", SIMCTL_CHILD_PUDU_UI_THEME_TEST: "1" },
       labels: ["Themed"],
       layout: ["PUDU_THEME ink light #1F2A44FF dark #E8EEFFFF", "PUDU_THEME appearance dark", "PUDU_THEME type grows"],
     }]);
-    mobileApp(device, "Catalog", [{
-      environment: { SIMCTL_CHILD_PUDU_UI_SELFTEST: "0", SIMCTL_CHILD_PUDU_UI_LIST_TEST: "1" },
-      // Scrolled to the end, the window is clamped to the last 120 items.
-      labels: Array.from({ length: 120 }, (_, index) => `Item ${881 + index}`),
-      layout: ["PUDU_LIST reached Item 1000", "PUDU_LIST reused"],
-    }]);
+    familyApps(device, "Catalog");
     refusedApp(device, root, "invalid group placement",
       "import Std.Mobile.Host as Host\nimport Std.Mobile.Stream as Stream", `  let empty: Array[UInt8] = []
   Host.apply(bytesOf(empty))
@@ -188,6 +178,7 @@ int main(int argc, char **argv) {
       "import Std.Mobile.Host as Host\nimport Std.Mobile.Stream as Stream", `  let label = Stream.create([], 0u32, Stream.LABEL)
   Host.apply(bytesOf(Stream.range(label, 0u32, 10u32, 0u32)))`,
       /pudu: a view stream shaped a node that is not a list: 0/u);
+    familyMatrix(runtime);
   } finally {
     try {
       if (device && !existingDevice) {
@@ -198,6 +189,48 @@ int main(int argc, char **argv) {
       }
     } finally {
       rmSync(root, { recursive: true, force: true });
+    }
+  }
+}
+
+/* The runs every device family must pass: layout, keyboard avoidance and a
+   recycling grid are where screen size and idiom differ. */
+const familyRuns = {
+  Counter: [{ environment: { SIMCTL_CHILD_PUDU_UI_SELFTEST: "3" }, labels: ["Count: 3"] }],
+  Feed: [{
+    environment: { SIMCTL_CHILD_PUDU_UI_SELFTEST: "0", SIMCTL_CHILD_PUDU_UI_KEYBOARD_TEST: "1" },
+    labels: Array.from({ length: 40 }, (_, index) => `Row ${index + 1}`),
+    layout: ["PUDU_VIEWPORT safe and scrollable", "PUDU_KEYBOARD visible field", "PUDU_KEYBOARD restored"],
+  }],
+  Catalog: [{
+    environment: { SIMCTL_CHILD_PUDU_UI_SELFTEST: "0", SIMCTL_CHILD_PUDU_UI_LIST_TEST: "1" },
+    // Scrolled to the end, the window is clamped to the last 120 items.
+    labels: Array.from({ length: 120 }, (_, index) => `Item ${881 + index}`),
+    layout: ["PUDU_LIST reached Item 1000", "PUDU_LIST reused"],
+  }],
+};
+
+function familyApps(device, example) {
+  mobileApp(device, example, familyRuns[example]);
+}
+
+/* One device of every family the runtime supports besides the iPhone, which
+   ran everything above. A family introduced by a new runtime is exercised as
+   soon as that runtime is installed. Each device is private and deleted. */
+function familyMatrix(runtime) {
+  const families = new Map();
+  for (const type of runtime.supportedDeviceTypes) {
+    if (type.productFamily !== "iPhone" && !families.has(type.productFamily)) families.set(type.productFamily, type);
+  }
+  for (const [family, type] of families) {
+    const device = run(xcrun, ["simctl", "create", `Pudu ${family} Matrix`, type.identifier, runtime.identifier]).trim();
+    try {
+      run(xcrun, ["simctl", "bootstatus", device, "-b"], 240_000);
+      for (const example of Object.keys(familyRuns)) familyApps(device, example);
+      console.log(`PASS iOS ${family} matrix (${type.name}, ${runtime.name})`);
+    } finally {
+      spawnSync(xcrun, ["simctl", "shutdown", device], { timeout: 30_000 });
+      run(xcrun, ["simctl", "delete", device], 30_000);
     }
   }
 }

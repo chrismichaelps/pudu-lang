@@ -24,12 +24,18 @@ data AppRequest = AppRequest
   , appExports :: ![Text], appName :: !Text, appIdentifier :: !Text }
 
 compileApp :: AppRequest -> IO (Either ToolchainFailure Text)
-infoPlist :: Text -> Text -> Text
+infoPlist :: Text -> Text -> Text -> Text
 bundleIdentifier :: Text -> Text
 ```
 
 ## Algorithm and invariants
 
+- Before step 1, the installed Xcode and the simulator SDK are probed
+  ([[Backend Toolchain Probe]]) and assessed against [[Backend Ledger]] with today's
+  date and the Development purpose. A refusing finding fails the build with
+  `ToolchainOutsideLedger`; warning findings are returned with the build's warnings.
+- The minimum system version in `Info.plist` is the ledger's deployment target, passed in
+  as the third argument of `infoPlist`.
 - Only the simulator SDK is built. Any other target, including a device target, is
   `ToolchainTargetUnbuilt` before any tool runs.
 - SDK paths and tools come from [[Backend Toolchain Library]] (`appleTools` and
@@ -44,7 +50,7 @@ bundleIdentifier :: Text -> Text
   4. `Info.plist` is written from `infoPlist appName appIdentifier`.
   5. The bundle is signed ad hoc with `codesign --force --sign -`.
 - `infoPlist` writes the bundle identifier, the executable name, the application name,
-  package type `APPL`, version `1` and short version `1.0`, minimum system `15.0`, the
+  package type `APPL`, version `1` and short version `1.0`, minimum system from [[Backend Ledger]] (`15.0` today), the
   `iPhoneSimulator` platform, the iPhone and iPad device families, and an empty launch
   screen. It sets the Boolean `CADisableMinimumFrameDurationOnPhone` to true to enable
   higher-rate Core Animation timing hints on capable iPhones. Every text value is escaped for XML.

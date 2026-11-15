@@ -35,6 +35,8 @@ aliases: [Backend Module Map]
 - [[Backend Toolchain]] — discovery, invocation, bounded capture, timeout, and
   atomic publication of the native [[Compilation Artifact]]; the only place a
   process is started.
+- [[Backend Ledger]] · [[Backend Ledger Spec]] — pure platform toolchain facts: Xcode floor and tested release, store rules, capabilities and triples (#926).
+- [[Backend Toolchain Probe]] — asks `xcrun` and `simctl` what is installed; pure parsers (#926).
 
 - [[Compiler Lower]] — checked tree to [[Core IR]], with typed `E6001`
   refusals for everything the native subset does not carry.

@@ -87,6 +87,7 @@ test-suite pudu-test
     Pudu.Backend.BrokenPipeSpec
     Pudu.Cli.MemorySpec
     Pudu.Backend.NativeSpec
+    Pudu.Backend.LedgerSpec
     Pudu.Backend.TargetSpec
     Pudu.Backend.ExportSpec
     Pudu.Backend.AppSpec
@@ -243,4 +244,5 @@ test-suite pudu-test
     QuickCheck >=2.15 && <2.17,
     temporary >=1.3 && <1.4,
     process >=1.6 && <1.7,
-    text >=2.1 && <2.2
+    text >=2.1 && <2.2,
+    time >=1.12 && <1.15

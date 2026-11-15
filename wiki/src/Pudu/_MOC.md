@@ -44,6 +44,7 @@ tags: [moc, module]
 - [[Diagnostic Evaluation]] — the call-depth (`E7002`) refusal text the interpreter and the native runtime both print.
 - [[Diagnostic Native]] — the `E6xxx` family: native-subset refusals and toolchain failures.
 - [[Pudu CLI]] — the `pudu` executable and its exit-status contract.
+- [[Pudu CLI Doctor]] — `pudu doctor --native`: the native platform state, one line per item (#926).
 - [[Pudu Version]] — Cabal-derived version reporting, language constraints, and semver checking.
 - [[Cli RuntimePack]] — the release's musl runtime, fetched, verified, and kept for `pudu build --target`.
 - [[Cli ReleaseCatalogue]] — the API reference `pudu release` attaches to a GitHub release as `pudu-api.json`.

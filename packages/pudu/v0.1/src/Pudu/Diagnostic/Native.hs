@@ -5,13 +5,18 @@
     and so "what can native compilation tell me" is one reviewable page:
     `E6001` refuses a construct the native subset does not carry, and
     `E6002`–`E6006` translate the native toolchain's failure modes; `E6007`
-    and `E6008` are a mobile target's missing SDK and refused construct. Spans
+    and `E6008` are a mobile target's missing SDK and refused construct;
+    `E6009`, `E6010`, `W6011` and `W6012` are the platform ledger's findings
+    about the installed toolchain. Spans
     point at the program being built — the refused construct, or the root
     module's first token for environment failures — so the ordinary renderer
     shows a real file and line.
 -}
 module Pudu.Diagnostic.Native
-  ( nativeRefusal
+  ( ledgerFindingLine
+  , ledgerRefusal
+  , ledgerWarning
+  , nativeRefusal
   , platformSdkMissing
   , targetRefusal
   , toolchainInvocationFailed
@@ -23,6 +28,8 @@ module Pudu.Diagnostic.Native
 
 import Data.Text (Text)
 import qualified Data.Text as Text
+import Data.Time.Calendar (showGregorian)
+import Pudu.Backend.Ledger (Finding (..), Purpose (..), StoreRule (..), renderRelease)
 import Pudu.Diagnostic (Diagnostic, Severity (Error), diagnostic, mkDiagnosticCode, withHelp)
 import Pudu.Source (Span)
 
@@ -94,6 +101,58 @@ targetRefusal spanValue target construct reason =
   buildDiagnostic "E6008" spanValue
     ("the " <> target <> " target cannot carry " <> construct <> ": " <> reason)
     (Just "build for the host without --target to keep it, or keep it out of the program built for this target")
+
+{-| A ledger finding that refuses the build, spanned at the program being
+    built. -}
+ledgerRefusal :: Span -> Text -> Finding -> Diagnostic
+ledgerRefusal spanValue target finding =
+  buildDiagnostic code spanValue ("the " <> target <> " target " <> message) (Just help)
+ where
+  (code, message, help) = ledgerWording finding
+
+{-| A ledger finding that lets the build proceed, as one printed line. -}
+ledgerWarning :: Finding -> Text
+ledgerWarning finding = "warning[" <> code <> "]: " <> message
+ where
+  (code, message, _) = ledgerWording finding
+
+{-| Any finding as its code, message and fix, for a toolchain report. -}
+ledgerFindingLine :: Finding -> Text
+ledgerFindingLine finding = code <> ": " <> message <> "; " <> help
+ where
+  (code, message, help) = ledgerWording finding
+
+ledgerWording :: Finding -> (Text, Text, Text)
+ledgerWording finding = case finding of
+  XcodeBelowMinimum installed lowest ->
+    ( "E6009"
+    , "needs Xcode " <> renderRelease lowest <> " or later, and the selected Xcode is " <> renderRelease installed
+    , "install Xcode " <> renderRelease lowest <> " or later, or set PUDU_XCRUN to its xcrun; pudu doctor --native shows the full report"
+    )
+  XcodeUntested installed tested ->
+    ( "W6011"
+    , "is building with Xcode " <> renderRelease installed <> ", newer than Xcode " <> renderRelease tested
+        <> ", the newest release this compiler was tested with; the build proceeds"
+    , "run the simulator suite with this Xcode before shipping"
+    )
+  StoreRuleMissed Distribution rule ->
+    ("E6010", "cannot be submitted: " <> ruleText rule <> " since " <> ruleDay rule, ruleFix rule)
+  StoreRuleMissed Development rule ->
+    ( "W6012"
+    , "builds for development only: " <> ruleText rule <> " since " <> ruleDay rule <> ", so device builds are refused"
+    , ruleFix rule
+    )
+  StoreRuleDue days rule ->
+    ( "W6012"
+    , "will not meet a store rule in " <> Text.pack (show days) <> " days: " <> ruleText rule <> " from " <> ruleDay rule
+    , ruleFix rule
+    )
+ where
+  ruleText rule =
+    ruleStore rule <> " uploads must be built with Xcode " <> renderRelease (ruleXcode rule)
+      <> " and the SDK " <> renderRelease (ruleSdk rule)
+  ruleDay = Text.pack . showGregorian . ruleFrom
+  ruleFix rule = "install Xcode " <> renderRelease (ruleXcode rule) <> " or later (" <> ruleSource rule <> ")"
 
 buildDiagnostic :: Text -> Span -> Text -> Maybe Text -> Diagnostic
 buildDiagnostic code spanValue message help =

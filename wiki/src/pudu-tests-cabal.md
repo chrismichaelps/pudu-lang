@@ -417,3 +417,9 @@ separate runner or new dependency is introduced.
 
 Register [[Backend Native Target Tests]] in the test suite's other-modules. No
 dependency is added.
+
+## Platform ledger (#926)
+
+The test suite now depends on `time` for the ledger's day arithmetic and lists
+Pudu.Backend.LedgerSpec ([[Backend Ledger Spec]]) in other-modules. Resolved Grill Log: the
+ledger properties run in the complete suite with the existing dependency set plus `time`.

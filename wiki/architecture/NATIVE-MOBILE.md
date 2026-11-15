@@ -30,6 +30,9 @@ slice must respect, and the order of work. It extends [[Native Application UI]] 
 | Reload while developing | `pudu run --watch` restarts the program | State-preserving reload on simulators and emulators |
 | Platform controls | Desktop presenter draws Pudu pixels; platform UI toolkits are excluded | The adapter boundary below |
 
+Toolchain currency (the Xcode floor, the tested version, store rules and the SDK each capability
+needs) is kept in one ledger and adopted per platform release; see [[Native Platform Adoption]].
+
 ## Decisions
 
 ### One compiled program, not two code generators

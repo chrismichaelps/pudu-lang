@@ -13,7 +13,7 @@ This page is the normative feature target for applications written in Pudu with 
 iPad and iPhone Duo. Every feature below is realized through platform controls behind the
 language-owned adapter of [[Pudu Native]]; no platform type reaches Pudu; a feature the adapter
 cannot realize answers `UnsupportedPlatform`. The "Today" column records the honest state of the
-toolchain and is updated as slices land.
+toolchain and is updated as slices land. The iOS Xcode floor, tested version and store rules are in [[Native Platform Adoption]].
 
 ## Devices
 
