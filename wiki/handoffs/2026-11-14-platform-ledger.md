@@ -10,7 +10,8 @@ aliases: [Native Platform Ledger Delivery]
 Language Architect → Toolchain Engineer. Owns [[Backend Ledger]], [[Backend Toolchain Probe]],
 [[Pudu CLI Doctor]], the ledger hooks in the library and app builders and targets ([[Backend Toolchain Library]],
 [[Backend Toolchain App]], [[Backend Native Target]]), the new native diagnostics in [[Diagnostic Native]], and the
-device matrix in [[iOS Simulator Run]].
+device matrix in [[iOS Simulator Run]]. Toolchain Engineer → Tooling/Release Engineer
+for the compatible runner in [[iOS Simulator CI]].
 
 ## Scope
 
@@ -33,7 +34,8 @@ The full simulator suite passed on iPhone, and the new device matrix passed Coun
 
 ## Exact next action
 
-Merge after #927 lands and CI is green; then #928, iOS materials as the first SDK-gated capability.
+Verify the required simulator job on `macos-26` in PR #929. The previous
+`macos-15` job selected Xcode 16.4 and failed the ledger preflight with E6009.
 
 ## Referenced by
 

@@ -8,7 +8,7 @@ tags: [module, test, delivery, mobile]
 
 # iOS Simulator CI
 
-Run [[iOS Simulator Run]] on an Apple silicon GitHub-hosted macOS runner
+Run [[iOS Simulator Run]] on the Apple silicon `macos-26` GitHub-hosted runner
 for changes to the compiler, its Cabal configuration, or the smoke itself.
 Build the compiler with the repository's pinned GHC and Cabal and run the
 smoke with `--require-simulator`.
@@ -16,7 +16,8 @@ smoke with `--require-simulator`.
 ## Resolved Grill Log
 
 - Keep the workflow path-filtered and cancel superseded runs of the same ref.
-- Use the runner's Xcode and installed simulator runtimes. A missing runtime
+- Use an image whose default Xcode meets the ledger's 26.0 minimum.
+  Use the runner's installed simulator runtimes. A missing runtime
   fails the job so every successful run proves the C foreign call executed.
 - Feature pushes run the gate before stacked pull requests target dev.
 
