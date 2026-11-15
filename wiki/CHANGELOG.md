@@ -11,7 +11,7 @@ tags: [changelog]
 
 - [[iOS Simulator CI]] runs on `macos-26` so the runner's Xcode meets the build preflight.
 
-- [[iOS Simulator Run]] checks bundle publication once with a minimal program and gives new simulator devices ten minutes for first boot. It removes temporary apps with the private simulator at the end of the run.
+- [[iOS Simulator Run]] checks bundle publication once with a minimal program and gives new simulator devices ten minutes for first boot. It removes temporary apps with the private simulator at the end of the run. Complete native app builds get a separate five-minute budget.
 
 ## 2026-11-14 — Recycling lists and grids (#925)
 
