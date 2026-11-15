@@ -16,6 +16,10 @@ sheet. Its state can use the root-preserving stack operations of
 [[Std Ui Navigation]] and validated by [[Std Mobile Navigation]]. The mobile presenter consumes route bodies
 described by [[Std Mobile View]], including a root scroll viewport.
 
+[Pudu Foundation UI](https://github.com/chrismichaelps/pudu-lang-fui) owns any shared
+navigation component exposed to app authors across web, iOS, and Android. This specification
+governs the mobile route and presentation primitives used by its native renderers.
+
 ## State and identity
 
 - The app supplies a root route, ordered pushed routes, and at most one

@@ -7,7 +7,7 @@ tags: [changelog]
 
 ## 2026-11-14 — iOS navigation contract (#920)
 
-- [[Native iOS Navigation]] specifies application-owned route state, UIKit transition completion, and native page sheets. The stack implementation branch adds duplicate-ID validation, stale-pop reduction, and the ordered route snapshot encoder.
+- [[Native iOS Navigation]] specifies application-owned route state, UIKit transition completion, and native page sheets. The stack implementation branch adds duplicate-ID validation, stale-pop reduction, and the ordered route snapshot encoder. Mounted route commits reuse body IDs across in-place edits and retire replaced bodies after publishing the snapshot. The shared component API belongs to Pudu Foundation UI.
 
 ## 2026-11-14 — iOS scrolling and keyboard avoidance (#919)
 

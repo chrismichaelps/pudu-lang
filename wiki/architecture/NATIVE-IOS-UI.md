@@ -15,6 +15,10 @@ language-owned adapter of [[Pudu Native]]; no platform type reaches Pudu; a feat
 cannot realize answers `UnsupportedPlatform`. The "Today" column records the honest state of the
 toolchain and is updated as slices land.
 
+[Pudu Foundation UI](https://github.com/chrismichaelps/pudu-lang-fui) is the shared
+component system for web, iOS and Android. Its iOS renderer consumes the platform primitives
+specified here. Compiler-built examples exercise those primitives independently of FUI.
+
 ## Devices
 
 - **iPhone:** all current and recent models, including Pro and Pro Max sizes. Layouts follow size

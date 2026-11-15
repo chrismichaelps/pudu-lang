@@ -21,6 +21,7 @@ Checks:
 - Keyed rows: a reorder is one MOVE; an insertion is one built row inserted at its index; a removal frees its id; the freed id is reused by the next built row; an unchanged list with unique keys writes nothing. Repeated keys preserve the first row, replace the additional rows, and remove their old ids. Reducing the list to one occurrence frees the remaining duplicate id and a subsequent unchanged update emits no instructions.
 - Scroll emits CREATE kind 7, APPEND and ROOT. Changing its child to another kind emits INSERT and REMOVE while keeping the root ID.
 - Navigation preserves the root on a pop across multiple routes, trims to an earlier pushed route, rejects stale or missing completions, and diagnoses the first duplicate ID. The wire assertion checks instance IDs, body node IDs, route order and the UTF-8 byte length of the title.
+- Mounted navigation verifies that title and body edits retain IDs, body-only edits omit the route snapshot, an explicit reassert emits the snapshot, and a pop publishes the new stack before retiring the removed body.
 - Event decoding: `event` of kind 1 with tag 7 is `Tapped(7)`; kind 2 is `Stopped`; kind 3 with a text is `Changed(tag, text)`; kinds 4 and 5 are `Toggled(tag, true)` and `Toggled(tag, false)`; kind 9 reads as `Stopped`. `carriesText` is true only for kind 3.
 
 ## Invariants

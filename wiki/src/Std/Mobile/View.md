@@ -25,6 +25,11 @@ Exports:
 - `event(raw: UInt64, text: Str) -> Event`: decodes one value returned by a host wait, with the text the host fetched for it.
 - `carriesText(raw: UInt64) -> Bool`: whether the event's text must be fetched before `event` is called.
 
+Presenters with multiple roots use `Work` to share an allocator and output buffer.
+`buildBody` creates a detached body. `reconcileBody` returns the updated body and
+work in `Kept` or `Replaced` when the caller must build another root. `removeBody`
+retires the tree and releases its IDs after the caller changes the presentation.
+
 ## Invariants
 
 - Pure: the module declares no foreign function. Platform calls live in [[Std Mobile Host]].
@@ -53,6 +58,10 @@ Exports:
 Depends on [[Std Mobile Stream]] for the instruction words. Consumers: [[Std Mobile Host]] (its `wait` decodes through `event`), [[Native Counter Example]], [[Native Form Example]], [[Native List Example]], and the fixture [[Uses Mobile View]]. The native presenter of FUI targets this module, as [[Native Application UI]] describes.
 
 ## Resolved Grill Log
+
+- **Q:** Allocate IDs independently for each page? **A:** Share the view allocator
+  across a presentation. The host can resolve every body from the one node table.
+  Root publication and retirement ordering belong to the presenter.
 
 - **Q:** Why a single child? **A:** Columns and keyed lists already describe groups. The viewport owns scrolling and uses the same child placement instructions.
 

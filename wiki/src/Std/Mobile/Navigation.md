@@ -23,7 +23,21 @@ and `body: View`. A `Pop` names the previous top and surviving destination.
   stack when the previous top matches and the destination appears below it.
   The input stack must have passed validation.
 
+- `mount(&Stack[Route]) -> Result[(MountedStack, Bytes), NavigationError]`
+  validates and builds every body, then emits one ordered navigation snapshot.
+- `update(&MountedStack, &Stack[Route], reassert: Bool)` validates and returns
+  the new mounted state and commit. The common route prefix retains its bodies
+  as far as the existing view reconciler can update them in place. A change to
+  route identity, body root ID, or title emits a new snapshot.
+- `reassert` emits the snapshot even if the route descriptors are unchanged.
+  It acknowledges a native pop that the app declines.
+
 ## Invariants
+
+Snapshots follow the body builds and precede retirement of old roots. IDs from
+retired roots are available only to later commits. In-place edits can emit body
+instructions without a navigation snapshot. A duplicate-ID diagnostic produces
+no commit.
 
 The root survives every accepted pop. A destination can be the root or an
 earlier pushed route. A pop to the current route, to a missing route, or from
@@ -48,6 +62,10 @@ the native presentation and event bridge.
 - **Q:** Where are duplicate IDs diagnosed? **A:** A single traversal in
   presentation order names the first duplicate before the presentation is
   serialized. The reducer operates on validated state.
+
+- **Q:** When does a body replacement retire the old tree? **A:** After the new
+  snapshot. This prevents the host from observing a route descriptor that points
+  at a node already retired in the same commit.
 
 ## Referenced by
 

@@ -22,11 +22,13 @@ custom animations remain separate.
 
 The mobile fixture returns 30 in the interpreter and as a compiled native
 executable. It verifies duplicate identity refusal, valid and stale pops,
-and the exact ordered snapshot with a multibyte title.
+and the exact ordered snapshot with a multibyte title. Mounted stack cases
+verify stable body identity, no-op updates, explicit reassertion, and retirement
+after snapshot publication. FUI owns the cross-platform component API.
 
 ## Exact next action
 
-Wire the validated stack snapshot into the mounted mobile view and UIKit, then deliver completed pop payloads through the host event bridge.
+Implement the UIKit NAVIGATION handler and completed-pop event bridge for the mounted stack snapshot.
 
 ## Referenced by
 

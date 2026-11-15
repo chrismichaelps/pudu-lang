@@ -1,6 +1,7 @@
 module Std.Mobile.Navigation
 
-import Std.Mobile.View {View}
+import Std.Mobile.Stream as Stream
+import Std.Mobile.View {Kept, Replaced, Shown, View, Work, buildBody, reconcileBody, removeBody}
 import Std.Ui.Navigation {Stack, popToRoot, top}
 
 /// A page instance. The app gives it an identity that is stable across body edits.
@@ -40,3 +41,61 @@ export fn afterPop(held: &Stack[Route], event: Pop) -> Option[Stack[Route]] {
   }
   None
 }
+
+/// A route descriptor paired with its mounted body.
+export type MountedRoute = { id: UInt32, title: Str, body: Shown }
+
+/// Ordered live routes and the shared allocator for the host's node table.
+export type MountedStack = { routes: Array[MountedRoute], next: UInt32, free: Array[UInt32] }
+
+/// Builds a validated stack and publishes it with one navigation snapshot.
+export fn mount(stack: &Stack[Route]) -> Result[(MountedStack, Bytes), NavigationError] {
+  update(&MountedStack{routes: [], next: 0u32, free: []}, stack, false)
+}
+
+/// Reconciles the common route prefix and publishes a changed stack.
+/// Reassert also publishes an unchanged stack after a declined platform pop.
+export fn update(held: &MountedStack, stack: &Stack[Route], reassert: Bool) -> Result[(MountedStack, Bytes), NavigationError] {
+  let _ = validate(stack) ?
+  let wanted = stack.above.insert(0, stack.root)
+  var work = Work{next: held.next, free: held.free, out: []}
+  var routes: Array[MountedRoute] = []
+  var retired: Array[Shown] = []
+  var common = 0
+  while common < held.routes.length() && common < wanted.length() && held.routes[common].id == wanted[common].id {
+    let previous = held.routes[common]
+    let route = wanted[common]
+    match reconcileBody(work, &previous.body, &route.body) {
+      case Kept(patched, body) => {
+        work = patched
+        routes = routes.push(MountedRoute{id: route.id, title: route.title, body: body})
+      }
+      case Replaced => {
+        let (built, body) = buildBody(work, &route.body)
+        work = built
+        routes = routes.push(MountedRoute{id: route.id, title: route.title, body: body})
+        retired = retired.push(previous.body)
+      }
+    }
+    common = common + 1
+  }
+  for index in common..wanted.length() {
+    let route = wanted[index]
+    let (built, body) = buildBody(work, &route.body)
+    work = built
+    routes = routes.push(MountedRoute{id: route.id, title: route.title, body: body})
+  }
+  let entries = routes.map(descriptor)
+  if reassert || entries != held.routes.map(descriptor) {
+    work = Work{..work, out: Stream.navigation(work.out, &entries)}
+  }
+  for index in common..held.routes.length() {
+    retired = retired.push(held.routes[index].body)
+  }
+  for body in retired {
+    work = removeBody(work, &body)
+  }
+  Ok((MountedStack{routes: routes, next: work.next, free: work.free}, bytesOf(work.out)))
+}
+
+fn descriptor(route: MountedRoute) -> (UInt32, UInt32, Str) { (route.id, route.body.id, route.title) }

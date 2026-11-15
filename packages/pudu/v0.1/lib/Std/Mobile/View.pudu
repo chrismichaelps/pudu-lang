@@ -32,11 +32,11 @@ export type Shown = { id: UInt32, view: View, children: Array[Shown] }
 /// removed nodes, handed out again first.
 export type Mounted = { root: Shown, next: UInt32, free: Array[UInt32] }
 
-// Ids handed out so far and the stream written so far.
-type Work = { next: UInt32, free: Array[UInt32], out: Array[UInt8] }
+/// Shared node allocator and commit buffer for one host presentation.
+export type Work = { next: UInt32, free: Array[UInt32], out: Array[UInt8] }
 
-// A node updated in place, or a node its parent must replace.
-type Outcome = Kept(Work, Shown) | Replaced
+/// A body updated in place, or a body its presenter must replace.
+export type Outcome = Kept(Work, Shown) | Replaced
 
 /// Event kinds in the high word of a host event.
 const TAPPED: UInt64 = 1u64
@@ -67,7 +67,7 @@ export fn event(raw: UInt64, text: Str) -> Event {
 
 /// The tree for `view`, and the stream that builds it and shows it.
 export fn mount(view: &View) -> (Mounted, Bytes) {
-  let (work, shown) = built(Work{next: 0u32, free: [], out: []}, view)
+  let (work, shown) = buildBody(Work{next: 0u32, free: [], out: []}, view)
   (Mounted{root: shown, next: work.next, free: work.free}, bytesOf(Stream.root(work.out, shown.id)))
 }
 
@@ -76,18 +76,18 @@ export fn mount(view: &View) -> (Mounted, Bytes) {
 /// matched by key, and replacement only for nodes that changed kind or tag.
 export fn update(mounted: &Mounted, next: &View) -> (Mounted, Bytes) {
   let start = Work{next: mounted.next, free: mounted.free, out: []}
-  match reconciled(start, &mounted.root, next) {
+  match reconcileBody(start, &mounted.root, next) {
     case Kept(work, shown) => (Mounted{root: shown, next: work.next, free: work.free}, bytesOf(work.out))
     case Replaced => {
-      let (made, shown) = built(start, next)
-      let work = removed(Work{..made, out: Stream.root(made.out, shown.id)}, &mounted.root)
+      let (made, shown) = buildBody(start, next)
+      let work = removeBody(Work{..made, out: Stream.root(made.out, shown.id)}, &mounted.root)
       (Mounted{root: shown, next: work.next, free: work.free}, bytesOf(work.out))
     }
   }
 }
 
 // Builds `view` with fresh ids and answers the work and its shown node.
-fn built(work: Work, view: &View) -> (Work, Shown) {
+export fn buildBody(work: Work, view: &View) -> (Work, Shown) {
   let (taken, id) = allocated(work)
   match *view {
     case Label(text) => (written(taken, Stream.text(Stream.create(taken.out, id, Stream.LABEL), id, text)), leaf(id, view))
@@ -108,7 +108,7 @@ fn built(work: Work, view: &View) -> (Work, Shown) {
     case Keyed(rows) => grouped(written(taken, Stream.create(taken.out, id, Stream.COLUMN)), id, view, &rows.map(|row: (Str, View)| row[1]))
     case Scroll(child) => grouped(written(taken, Stream.create(taken.out, id, Stream.SCROLL)), id, view, &[child])
     case Named(label, inner) => {
-      let (made, shown) = built(work, &inner)
+      let (made, shown) = buildBody(work, &inner)
       (written(made, Stream.name(made.out, shown.id, label)), Shown{..shown, view: *view})
     }
   }
@@ -119,7 +119,7 @@ fn grouped(work: Work, id: UInt32, view: &View, children: &Array[View]) -> (Work
   var out = work
   var shown: Array[Shown] = []
   for child in *children {
-    let (made, node) = built(out, &child)
+    let (made, node) = buildBody(out, &child)
     out = written(made, Stream.append(made.out, id, node.id))
     shown = shown.push(node)
   }
@@ -127,7 +127,7 @@ fn grouped(work: Work, id: UInt32, view: &View, children: &Array[View]) -> (Work
 }
 
 // `shown` updated toward `next`, or Replaced when its kind or tag changed.
-fn reconciled(work: Work, shown: &Shown, next: &View) -> Outcome {
+export fn reconcileBody(work: Work, shown: &Shown, next: &View) -> Outcome {
   let id = shown.id
   match (shown.view, *next) {
     case (Label(before), Label(after)) => kept(work, retexted(work.out, id, before, after), shown, next)
@@ -149,7 +149,7 @@ fn reconciled(work: Work, shown: &Shown, next: &View) -> Outcome {
       regrouped((made, [node]), shown, next)
     }
     case (Named(beforeName, beforeInner), Named(afterName, afterInner)) => {
-      match reconciled(work, &Shown{..*shown, view: beforeInner}, &afterInner) {
+      match reconcileBody(work, &Shown{..*shown, view: beforeInner}, &afterInner) {
         case Kept(made, inner) => {
           let out = if beforeName == afterName { made.out } else { Stream.name(made.out, id, afterName) }
           Kept(written(made, out), Shown{..inner, view: *next})
@@ -173,12 +173,12 @@ fn positional(work: Work, parent: &Shown, before: &Array[View], after: &Array[Vi
     shown = shown.push(node)
   }
   for index in common..after.length() {
-    let (made, node) = built(out, &after[index])
+    let (made, node) = buildBody(out, &after[index])
     out = written(made, Stream.append(made.out, parent.id, node.id))
     shown = shown.push(node)
   }
   for index in common..before.length() {
-    out = removed(out, &parent.children[index])
+    out = removeBody(out, &parent.children[index])
   }
   (out, shown)
 }
@@ -194,7 +194,7 @@ fn keyed(work: Work, parent: &Shown, before: &Array[(Str, View)], after: &Array[
     if wanted.contains(before[index][0]) {
       current = current.push((before[index][0], parent.children[index]))
     } else {
-      out = removed(out, &parent.children[index])
+      out = removeBody(out, &parent.children[index])
     }
   }
   var placed: Array[Shown] = []
@@ -210,7 +210,7 @@ fn keyed(work: Work, parent: &Shown, before: &Array[(Str, View)], after: &Array[
         placed = placed.push(node)
       }
       case _ => {
-        let (made, node) = built(out, &view)
+        let (made, node) = buildBody(out, &view)
         out = written(made, Stream.insert(made.out, parent.id, node.id, word(index)))
         current = current.insert(index, (key, node))
         placed = placed.push(node)
@@ -220,7 +220,7 @@ fn keyed(work: Work, parent: &Shown, before: &Array[(Str, View)], after: &Array[
   }
   // Unclaimed old duplicates remain after the prefix placed in new order.
   for index in placed.length()..current.length() {
-    out = removed(out, &current[index][1])
+    out = removeBody(out, &current[index][1])
   }
   (out, placed)
 }
@@ -228,11 +228,11 @@ fn keyed(work: Work, parent: &Shown, before: &Array[(Str, View)], after: &Array[
 // A child updated in place, or replaced at `index`: the new subtree is
 // inserted before the old one, which is then removed.
 fn settled(work: Work, parent: UInt32, child: &Shown, next: &View, index: Int) -> (Work, Shown) {
-  match reconciled(work, child, next) {
+  match reconcileBody(work, child, next) {
     case Kept(made, node) => (made, node)
     case Replaced => {
-      let (made, node) = built(work, next)
-      (removed(written(made, Stream.insert(made.out, parent, node.id, word(index))), child), node)
+      let (made, node) = buildBody(work, next)
+      (removeBody(written(made, Stream.insert(made.out, parent, node.id, word(index))), child), node)
     }
   }
 }
@@ -248,7 +248,7 @@ fn positionOf(rows: &Array[(Str, Shown)], key: Str, from: Int) -> Option[Int] {
 }
 
 // The subtree of `node` detached and every one of its ids freed.
-fn removed(work: Work, node: &Shown) -> Work {
+export fn removeBody(work: Work, node: &Shown) -> Work {
   let ids = idsOf(node)
   var free = work.free
   for id in ids {

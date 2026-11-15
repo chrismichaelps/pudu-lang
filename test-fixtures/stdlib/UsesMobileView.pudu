@@ -94,6 +94,35 @@ fn navigationChecks() -> Bool {
     && wordsAt(&wire, 25, 3) == [20u32, 84u32, 0u32] && wire.length() == 37
 }
 
+fn mountedNavigationChecks() -> Bool {
+  let root = Stack.stack(route(10u32, "Root"))
+  let Ok((mounted, first)) = Navigation.mount(&root) else { return false }
+  let bodyEdit = Stack.stack(Navigation.Route{..root.root, body: View.Label("Edit")})
+  let Ok((edited, bodyOnly)) = Navigation.update(&mounted, &bodyEdit, false) else { return false }
+  let titleEdit = Stack.stack(Navigation.Route{..bodyEdit.root, title: "Renamed"})
+  let Ok((renamed, titleOnly)) = Navigation.update(&edited, &titleEdit, false) else { return false }
+  let Ok((_, unchanged)) = Navigation.update(&renamed, &titleEdit, false) else { return false }
+  let Ok((_, restored)) = Navigation.update(&renamed, &titleEdit, true) else { return false }
+  let pushed = Stack.push(&bodyEdit, route(20u32, "Detail"))
+  let Ok((withDetail, presented)) = Navigation.update(&edited, &pushed, false) else { return false }
+  let Ok((popped, retired)) = Navigation.update(&withDetail, &bodyEdit, false) else { return false }
+  let replacedRoot = Stack.stack(Navigation.Route{..bodyEdit.root, body: View.Column([])})
+  let Ok((replaced, changedRoot)) = Navigation.update(&edited, &replacedRoot, false) else { return false }
+  let invalid = Stack.push(&root, route(10u32, "Duplicate"))
+  let Err(duplicate) = Navigation.update(&mounted, &invalid, false) else { return false }
+  wordsAt(&first.toArray(), 28, 5) == [13u32, 1u32, 10u32, 0u32, 4u32] && first.length() == 52
+    && wordsAt(&bodyOnly.toArray(), 0, 3) == [2u32, 0u32, 4u32] && bodyOnly.length() == 16
+    && wordsAt(&titleOnly.toArray(), 0, 5) == [13u32, 1u32, 10u32, 0u32, 7u32]
+    && unchanged.length() == 0 && restored == titleOnly
+    && wordsAt(&presented.toArray(), 30, 5) == [13u32, 2u32, 10u32, 0u32, 4u32]
+    && withDetail.routes[1].body.id == 1u32
+    && wordsAt(&retired.toArray(), 24, 4) == [11u32, 1u32, 1u32, 1u32] && retired.length() == 40
+    && popped.routes[0].body.id == 0u32 && popped.free == [1u32]
+    && wordsAt(&changedRoot.toArray(), 12, 5) == [13u32, 1u32, 10u32, 1u32, 4u32]
+    && wordsAt(&changedRoot.toArray(), 36, 4) == [11u32, 0u32, 1u32, 0u32]
+    && replaced.routes[0].body.id == 1u32 && duplicate == Navigation.DuplicateRoute(10u32)
+}
+
 export fn main() -> Int {
   var held = 0
   let zero = counter(0)
@@ -172,5 +201,5 @@ export fn main() -> Int {
   // Unique keys are a no-op when unchanged. Old repeated rows must be retired.
   let (_, still) = View.update(&shrunk, &View.Keyed([row("cc"), row("aa"), row("bb")]))
   if still.length() == 0 && duplicatesRetired() && scrollKeepsViewport() { held = held + 1 }
-  if navigationChecks() { held } else { -1 }
+  if navigationChecks() && mountedNavigationChecks() { held } else { -1 }
 }

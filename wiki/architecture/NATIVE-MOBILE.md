@@ -141,7 +141,13 @@ Codes 10 to 12 only add instructions, so a stream of codes 1 to 9 means the same
 
 ## FUI on native
 
-FUI renders HTML today and its tokens carry CSS units. Native support requires:
+[Pudu Foundation UI](https://github.com/chrismichaelps/pudu-lang-fui) owns the
+cross-platform component catalog, typed props, tokens, and renderers for web, iOS, and
+Android. Its existing web renderer uses HTML. Pudu Native supplies compiler targets,
+mobile view primitives, event contracts, and the platform hosts that native FUI renderers
+consume. The Pudu toolchain has no dependency on FUI.
+
+Native support requires:
 
 - A renderer-neutral component tree, produced by FUI and consumed by the HTML, desktop, and
   native presenters.
@@ -169,7 +175,7 @@ rail for tablets, sheet with detents, action sheet, context menu, swipe actions,
 search field, date and time pickers, stepper, segmented control, page indicator, toast or
 snackbar, and a floating action button with an iOS fallback.
 
-FUI's native presenter targets [[Std Mobile View]]: a renderer-neutral FUI tree is realized as these controls on phones, and as HTML on the web.
+FUI's native renderers will map its renderer-neutral tree to [[Std Mobile View]] and [[Std Mobile Navigation]] as mobile capabilities land. The web renderer maps components to HTML. UIKit and Android platform behavior belong to their adapters.
 
 ## Phase gates
 
