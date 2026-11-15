@@ -83,6 +83,16 @@ The script runs `examples/mobile/List.pudu` ([[Native List Example]]) with `PUDU
 
 Every app's labels are compared in screen order, so a reordered or missing row fails even when each label text is present.
 
+## Themed example (#923)
+
+The script runs `examples/mobile/Themed.pudu` ([[Native Themed Example]]) with `PUDU_UI_THEME_TEST` set. The run must print these lines, in order, and exit with status 0:
+
+- `PUDU_THEME ink light #1F2A44FF dark #E8EEFFFF`: the ink label's text color resolved under the light and dark traits.
+- `PUDU_THEME appearance dark`: the window's user-interface style override is dark.
+- `PUDU_THEME type grows`: the Body style's font at the accessibility extra-large content size is larger than at the default size.
+
+Resolved Grill Log: assert the resolved colors and the font size, not only that the program exits. A theme that is accepted but never painted would otherwise pass.
+
 ## Application output collision (#916)
 
 Before installing Counter, try to build into an existing `.app` directory containing
@@ -101,6 +111,21 @@ verifies the field is visible, then dismisses the keyboard and checks the restor
 Resolved Grill Log: observe platform layout and the field frame. A generated focus event alone
 cannot show whether the viewport actually resized.
 
+## Refused stream checks (#923)
+
+The script's helper `refusedApp(device, scratch, what, imports, body, refusal)` writes a
+program, builds it with `--app`, launches it on the device, and requires the given host
+refusal. It also requires that no first frame is reported and that the process does not exit
+with a clean status. Two cases run through it:
+
+- Invalid group placement: the message is unchanged from the #919 check.
+- A text style on a group: `View.Styled(Theme.Body, View.Column([]))` is mounted and applied,
+  and the process must abort with `pudu: a view stream styled a node that shows no text: 0`.
+
+Resolved Grill Log: Q: Why test the refusal on a simulator rather than in the fixture? A: The
+refusal belongs to the host; the Pudu stream for it is well formed, so only the host can reject
+it.
+
 ## Referenced by
 
-[[Native Mobile Targets]] · [[Native Mobile Targets Delivery]] · [[Native Controls Delivery]] · [[Native Keyed Lists Delivery]]
+[[Native Mobile Targets]] · [[Native Mobile Targets Delivery]] · [[Native Controls Delivery]] · [[Native Keyed Lists Delivery]] · [[Native iOS Theming Delivery]]

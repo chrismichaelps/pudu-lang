@@ -40,7 +40,7 @@ bundleIdentifier :: Text -> Text
   2. The embedded iOS host source is written beside them.
   3. The SDK's own clang compiles and links the host into `<Name>.app/<Name>` with
      `-fobjc-arc`, the simulator target triple, the system root, the library, the
-     libraries the program declares, and `-framework UIKit -framework Foundation`.
+     libraries the program declares, and `-framework UIKit -framework Foundation -framework QuartzCore`.
   4. `Info.plist` is written from `infoPlist appName appIdentifier`.
   5. The bundle is signed ad hoc with `codesign --force --sign -`.
 - `infoPlist` writes the bundle identifier, the executable name, the application name,
@@ -93,3 +93,5 @@ the simulator run [[iOS Simulator Run]].
 ## iOS layout staging (#919)
 
 Resolved Grill Log: materialize the embedded layout header alongside the host translation unit in the existing include directory and link CoreGraphics for the geometry checks. No second compiler invocation is needed. See [[iOS Host Layout]].
+
+- **Q:** Why link QuartzCore? **A:** The host reads the media clock for first-frame timing and self-test deadlines, and display-link frame pacing needs the same framework.

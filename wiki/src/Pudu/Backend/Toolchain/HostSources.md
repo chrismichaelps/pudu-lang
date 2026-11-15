@@ -37,3 +37,7 @@ Resolved Grill Log: Select the AudioToolbox sources with an audio marker. A sing
 ## iOS layout source (#919)
 
 Resolved Grill Log: embed the private layout header beside the host from the same source list. The staging step writes the original bytes for both before clang runs. See [[iOS Host Layout]].
+
+## iOS theme source (#923)
+
+The iOS host sources now stage the private theme header `pudu_ios_theme.h` with the host translation unit and the layout header. All three are written unchanged before clang runs. See [[iOS Host Theme]].

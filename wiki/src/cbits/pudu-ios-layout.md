@@ -24,6 +24,9 @@ the available root area, root placement, and field reveal.
   its child and can exceed the viewport.
 - The nearest viewport reveals a focused field when editing begins and after the viewport
   changes size. The field reference is weak and reveal requires that it still owns focus.
+- `pudu_test_keyboard(surface, root, nodes, done)` is the keyboard self-test. It takes the root
+  surface, the shown root, the node table and a `done` block that asks the program to stop as
+  parameters, and reads no host globals. Its deadline is measured with `CACurrentMediaTime`.
 
 ## Negative Logic
 
@@ -41,6 +44,8 @@ Depends on UIKit. Consumed by [[iOS Host Adapter]] and staged by [[Backend Toolc
   and uses normal focus for reveal.
 - **Q:** Add a separate host translation unit? **A:** The private header keeps layout independent
   of the stream decoder and preserves the existing one-source clang invocation.
+- **Q:** Why move the keyboard self-test here? **A:** It verifies layout behavior, and moving it
+  keeps the host file within its line budget while the theme handlers are added.
 
 ## Referenced by
 

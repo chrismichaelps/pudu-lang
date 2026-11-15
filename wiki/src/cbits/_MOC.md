@@ -27,6 +27,7 @@ tags: [moc, module, foreign, ffi]
 - [[iOS Host Adapter]] — iOS host embedded into application builds, never compiled into the compiler (#916).
 
 - [[iOS Host Layout]] — vertical viewport, safe area, keyboard layout and focus reveal.
+- [[iOS Host Theme]] — semantic color roles, appearance override, and Dynamic Type text styles.
 
 ## Referenced by
 

@@ -722,3 +722,5 @@ Register [[Backend Emit Export]] with existing dependencies.
 ## iOS layout header (#919)
 
 Resolved Grill Log: include `cbits/pudu_ios_layout.h` in the source distribution because the host embedding reads it at compiler build time. See [[iOS Host Layout]].
+
+`cbits/pudu_ios_theme.h` is added to `extra-source-files` beside `cbits/pudu_ios_layout.h`, for the same reason: the host embedding reads it at compiler build time. See [[iOS Host Theme]].

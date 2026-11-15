@@ -253,3 +253,4 @@ STARTTLS use [[Std Tls]]. [[Std Compress Gzip]] delegates to [[Eval Compress]] a
 - [[Std Mobile View]] — pure mobile view tree and its instruction stream.
 - [[Std Mobile Host]] — foreign apply and wait calls for the mobile host.
 - [[Std Mobile Stream]] — pure encoder of the view stream instructions (#914).
+- [[Std Mobile Theme]] — color roles, text styles and appearance as a pure theme value and its stream (#923).

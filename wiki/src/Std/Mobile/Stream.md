@@ -28,10 +28,16 @@ Exports:
 - `move(out, parent, child, index: UInt32) -> Array[UInt8]`: MOVE, a group, a child and its new index.
 - `remove(out, node, ids: &Array[UInt32]) -> Array[UInt8]`: REMOVE, the node, the count of ids, then every id of the detached subtree.
 - `root(out, node: UInt32) -> Array[UInt8]`: ROOT, the node shown as the screen's content.
+- `theme(out, tones: &Array[(UInt32, UInt32, UInt32)]) -> Array[UInt8]`: THEME, the count of tones, then one kind, light word and dark word per role in role order.
+- `appearance(out, code: UInt32) -> Array[UInt8]`: APPEARANCE and its code.
+- `style(out, node: UInt32, code: UInt32) -> Array[UInt8]`: STYLE, the node and its text style code.
+- `color(out, node: UInt32, code: UInt32) -> Array[UInt8]`: COLOR, the node and its role code.
 
 ## Invariants
 
-- Every word is a little-endian 32-bit unsigned value. Every instruction begins with its code word (CREATE 1, TEXT 2, APPEND 3, ROOT 4, TAG 5, STATE 7, HINT 8, NAME 9, INSERT 10, REMOVE 11, MOVE 12).
+- Every word is a little-endian 32-bit unsigned value. Every instruction begins with its code word (CREATE 1, TEXT 2, APPEND 3, ROOT 4, TAG 5, STATE 7, HINT 8, NAME 9, INSERT 10, REMOVE 11, MOVE 12, THEME 20, APPEARANCE 21, STYLE 22, COLOR 23).
+- Theming codes start at 20. Navigation reserves 13 and 14, so a gap keeps both streams unambiguous when they merge.
+- THEME carries exactly seven tones; its count word is 7. The encoder writes the count, and the host refuses any other count.
 - Text is its UTF-8 byte length as one word, followed by those bytes.
 - `remove` writes the node, then the count of ids, then every id of the detached subtree, so the host can forget each one.
 - Each function appends to the stream it is given and returns the extended stream; no function reads or reorders earlier bytes.
@@ -53,6 +59,8 @@ Depends on no other module. Consumer: [[Std Mobile View]], which calls these fun
 
 - **Q:** Why a separate encoder module? **A:** The reconciler decides what changes; the encoder owns how an instruction is spelled, so neither grows into the other. _Rejected:_ one module for both.
 
+- **Q:** Why codes 20 to 23 rather than the next free numbers? **A:** The navigation slice claims 13 and 14 in parallel; a gap keeps both streams unambiguous when they merge.
+
 ## Referenced by
 
-[[src/Std/_MOC]] · [[Std Mobile View]] · [[Native Keyed Lists Delivery]] · [[Native iOS Scrolling Delivery]]
+[[src/Std/_MOC]] · [[Std Mobile View]] · [[Std Mobile Theme]] · [[Native Keyed Lists Delivery]] · [[Native iOS Scrolling Delivery]] · [[Native iOS Theming Delivery]]

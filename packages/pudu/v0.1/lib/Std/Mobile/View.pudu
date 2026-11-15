@@ -1,10 +1,13 @@
 module Std.Mobile.View
 
 import Std.Mobile.Stream as Stream
+import Std.Mobile.Theme as Theme
 
 /// One platform control and what it shows. `Named` gives the control it
 /// wraps an accessible name and adds no node. `Keyed` is a column whose rows
 /// carry keys, so rows are matched by key rather than by position.
+/// `Styled` and `Painted` set the text style or color role of the control
+/// they wrap and add no node either.
 export type View
   = Label(Str)
   | Button(Str, UInt32)
@@ -15,6 +18,8 @@ export type View
   | Named(Str, View)
   | Keyed(Array[(Str, View)])
   | Scroll(View)
+  | Styled(Theme.TextStyle, View)
+  | Painted(Theme.Role, View)
 
 /// What the platform reported: a button's tag was tapped, a field's text
 /// changed, a toggle was switched, or the host asked the program to stop.
@@ -107,11 +112,16 @@ fn built(work: Work, view: &View) -> (Work, Shown) {
     case Row(children) => grouped(written(taken, Stream.create(taken.out, id, Stream.ROW)), id, view, &children)
     case Keyed(rows) => grouped(written(taken, Stream.create(taken.out, id, Stream.COLUMN)), id, view, &rows.map(|row: (Str, View)| row[1]))
     case Scroll(child) => grouped(written(taken, Stream.create(taken.out, id, Stream.SCROLL)), id, view, &[child])
-    case Named(label, inner) => {
-      let (made, shown) = built(work, &inner)
-      (written(made, Stream.name(made.out, shown.id, label)), Shown{..shown, view: *view})
-    }
+    case Named(label, inner) => marked(work, view, &inner, |out: Array[UInt8], node: UInt32| Stream.name(out, node, label))
+    case Styled(style, inner) => marked(work, view, &inner, |out: Array[UInt8], node: UInt32| Stream.style(out, node, Theme.styleCode(style)))
+    case Painted(role, inner) => marked(work, view, &inner, |out: Array[UInt8], node: UInt32| Stream.color(out, node, Theme.roleCode(role)))
   }
+}
+
+// A wrapper: its inner control built, then `mark` written for that control's id.
+fn marked(work: Work, view: &View, inner: &View, mark: fn(Array[UInt8], UInt32) -> Array[UInt8]) -> (Work, Shown) {
+  let (made, shown) = built(work, inner)
+  (written(made, mark(made.out, shown.id)), Shown{..shown, view: *view})
 }
 
 // A group's children built and appended in order.
@@ -148,16 +158,30 @@ fn reconciled(work: Work, shown: &Shown, next: &View) -> Outcome {
       let (made, node) = settled(work, id, &shown.children[0], &child, 0)
       regrouped((made, [node]), shown, next)
     }
-    case (Named(beforeName, beforeInner), Named(afterName, afterInner)) => {
-      match reconciled(work, &Shown{..*shown, view: beforeInner}, &afterInner) {
-        case Kept(made, inner) => {
-          let out = if beforeName == afterName { made.out } else { Stream.name(made.out, id, afterName) }
-          Kept(written(made, out), Shown{..inner, view: *next})
-        }
-        case Replaced => Replaced
-      }
-    }
+    case (Named(beforeName, beforeInner), Named(afterName, afterInner)) =>
+    rewrapped(work, shown, &beforeInner, &afterInner, next, beforeName == afterName, |out: Array[UInt8]| Stream.name(out, id, afterName))
+    case (Styled(beforeStyle, beforeInner), Styled(afterStyle, afterInner)) =>
+    rewrapped(work, shown, &beforeInner, &afterInner, next, beforeStyle == afterStyle, |out: Array[UInt8]| Stream.style(out, id, Theme.styleCode(afterStyle)))
+    case (Painted(beforeRole, beforeInner), Painted(afterRole, afterInner)) =>
+    rewrapped(work, shown, &beforeInner, &afterInner, next, beforeRole == afterRole, |out: Array[UInt8]| Stream.color(out, id, Theme.roleCode(afterRole)))
     case _ => Replaced
+  }
+}
+
+// A wrapper kept on both sides: its inner control reconciled, then `mark`
+// written only when the wrapper's own value changed.
+fn rewrapped(
+  work: Work,
+  shown: &Shown,
+  before: &View,
+  after: &View,
+  next: &View,
+  same: Bool,
+  mark: fn(Array[UInt8]) -> Array[UInt8]
+) -> Outcome {
+  match reconciled(work, &Shown{..*shown, view: *before}, after) {
+    case Kept(made, inner) => Kept(written(made, if same { made.out } else { mark(made.out) }), Shown{..inner, view: *next})
+    case Replaced => Replaced
   }
 }
 
