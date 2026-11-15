@@ -92,6 +92,15 @@ uses a vacant path and must boot.
 Resolved Grill Log: assert both the observable refusal and the preserved file. An
 exit code alone could hide a build that damaged the old path before failing.
 
+## Scrolling and keyboard (#919)
+
+The feed reports its safe scroll viewport and all 40 labels in order. The host self-test focuses
+the field below the initial viewport, waits for the keyboard guide to shrink the viewport,
+verifies the field is visible, then dismisses the keyboard and checks the restored viewport. A generated app first sends an empty update, which must produce no first-frame report. It then sends APPEND to a label and must terminate with the existing stream defect diagnostic.
+
+Resolved Grill Log: observe platform layout and the field frame. A generated focus event alone
+cannot show whether the viewport actually resized.
+
 ## Referenced by
 
 [[Native Mobile Targets]] · [[Native Mobile Targets Delivery]] · [[Native Controls Delivery]] · [[Native Keyed Lists Delivery]]

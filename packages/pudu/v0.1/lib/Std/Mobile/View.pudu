@@ -14,6 +14,7 @@ export type View
   | Toggle(Str, Bool, UInt32)
   | Named(Str, View)
   | Keyed(Array[(Str, View)])
+  | Scroll(View)
 
 /// What the platform reported: a button's tag was tapped, a field's text
 /// changed, a toggle was switched, or the host asked the program to stop.
@@ -105,6 +106,7 @@ fn built(work: Work, view: &View) -> (Work, Shown) {
     case Column(children) => grouped(written(taken, Stream.create(taken.out, id, Stream.COLUMN)), id, view, &children)
     case Row(children) => grouped(written(taken, Stream.create(taken.out, id, Stream.ROW)), id, view, &children)
     case Keyed(rows) => grouped(written(taken, Stream.create(taken.out, id, Stream.COLUMN)), id, view, &rows.map(|row: (Str, View)| row[1]))
+    case Scroll(child) => grouped(written(taken, Stream.create(taken.out, id, Stream.SCROLL)), id, view, &[child])
     case Named(label, inner) => {
       let (made, shown) = built(work, &inner)
       (written(made, Stream.name(made.out, shown.id, label)), Shown{..shown, view: *view})
@@ -142,6 +144,10 @@ fn reconciled(work: Work, shown: &Shown, next: &View) -> Outcome {
     case (Column(before), Column(after)) => regrouped(positional(work, shown, &before, &after), shown, next)
     case (Row(before), Row(after)) => regrouped(positional(work, shown, &before, &after), shown, next)
     case (Keyed(before), Keyed(after)) => regrouped(keyed(work, shown, &before, &after), shown, next)
+    case (Scroll(_), Scroll(child)) => {
+      let (made, node) = settled(work, id, &shown.children[0], &child, 0)
+      regrouped((made, [node]), shown, next)
+    }
     case (Named(beforeName, beforeInner), Named(afterName, afterInner)) => {
       match reconciled(work, &Shown{..*shown, view: beforeInner}, &afterInner) {
         case Kept(made, inner) => {

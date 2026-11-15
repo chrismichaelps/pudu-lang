@@ -55,6 +55,16 @@ fn duplicatesRetired() -> Bool {
     && still.length() == 0
 }
 
+fn scrollKeepsViewport() -> Bool {
+  let (mounted, stream) = View.mount(&View.Scroll(View.Label("")))
+  let (updated, replaced) = View.update(&mounted, &View.Scroll(View.Column([])))
+  wordsAt(&stream.toArray(), 0, 14) == [1u32, 0u32, 7u32, 1u32, 1u32, 1u32, 2u32, 1u32, 0u32, 3u32, 0u32, 1u32, 4u32, 0u32]
+    && stream.length() == 56
+    && wordsAt(&replaced.toArray(), 0, 11) == [1u32, 2u32, 3u32, 10u32, 0u32, 2u32, 0u32, 11u32, 1u32, 1u32, 1u32]
+    && replaced.length() == 44
+    && updated.root.id == mounted.root.id
+}
+
 export fn main() -> Int {
   var held = 0
   let zero = counter(0)
@@ -132,6 +142,6 @@ export fn main() -> Int {
   if wordsAt(&reused.toArray(), 0, 3) == [1u32, 4u32, 1u32] && wordsAt(&reused.toArray(), 26, 4) == [10u32, 0u32, 4u32, 3u32] { held = held + 1 }
   // Unique keys are a no-op when unchanged. Old repeated rows must be retired.
   let (_, still) = View.update(&shrunk, &View.Keyed([row("cc"), row("aa"), row("bb")]))
-  if still.length() == 0 && duplicatesRetired() { held = held + 1 }
+  if still.length() == 0 && duplicatesRetired() && scrollKeepsViewport() { held = held + 1 }
   held
 }

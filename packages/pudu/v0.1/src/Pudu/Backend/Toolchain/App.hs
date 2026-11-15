@@ -17,7 +17,7 @@ module Pudu.Backend.Toolchain.App
 
 import Control.Exception (finally, mask)
 import Control.Monad (void)
-import qualified Data.ByteString as ByteString
+import qualified Data.ByteString.Char8 as ByteString
 import Data.Char (isAsciiLower, isAsciiUpper, isDigit)
 import Data.Text (Text)
 import qualified Data.Text as Text
@@ -30,7 +30,7 @@ import qualified GHC.Foreign as Foreign
 import GHC.IO.Encoding (getFileSystemEncoding)
 #endif
 import Pudu.Backend.Target (AppleSdk (..), NativeTarget (..), TargetPlatform (..))
-import Pudu.Backend.Toolchain.HostSources (iosHostSource)
+import Pudu.Backend.Toolchain.HostSources (iosHostSources)
 import Pudu.Backend.Toolchain.Library (LibraryProducts (..), LibraryRequest (..), appleTools, compileLibrary, invoke)
 import Pudu.Backend.Toolchain.Process (ToolchainFailure (..), problemText, timeoutSeconds, tryIO)
 import System.Directory (createDirectory, findExecutable, removeDirectoryRecursive)
@@ -62,7 +62,7 @@ identifierPrefix = "org.pudu."
 
 {-| The frameworks the iOS host links. -}
 hostFrameworks :: [String]
-hostFrameworks = ["UIKit", "Foundation"]
+hostFrameworks = ["UIKit", "Foundation", "CoreGraphics"]
 
 {-| The application at the output path, answering the tools' warnings. A
     device application needs a signing identity and is not built yet. -}
@@ -105,7 +105,7 @@ buildBundle request sdk = do
       Right products -> do
         prepared <- tryIO (do
           createDirectory bundle
-          ByteString.writeFile host (Encoding.encodeUtf8 (Text.pack iosHostSource))
+          mapM_ (\(file, source) -> ByteString.writeFile (directory </> file) (ByteString.pack source)) iosHostSources
           ByteString.writeFile (bundle </> "Info.plist") (Encoding.encodeUtf8 (infoPlist (appName request) (appIdentifier request))))
         case prepared of
           Left problem -> pure (Left (ToolchainPublishFailed (problemText problem)))
@@ -171,6 +171,7 @@ infoPlist name identifier = Text.unlines
   , "<key>CFBundleSupportedPlatforms</key><array><string>iPhoneSimulator</string></array>"
   , "<key>UIDeviceFamily</key><array><integer>1</integer><integer>2</integer></array>"
   , "<key>UILaunchScreen</key><dict/>"
+  , "<key>CADisableMinimumFrameDurationOnPhone</key><true/>"
   , "</dict></plist>"
   ]
  where

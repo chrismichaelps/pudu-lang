@@ -46,7 +46,8 @@ bundleIdentifier :: Text -> Text
 - `infoPlist` writes the bundle identifier, the executable name, the application name,
   package type `APPL`, version `1` and short version `1.0`, minimum system `15.0`, the
   `iPhoneSimulator` platform, the iPhone and iPad device families, and an empty launch
-  screen. Every text value is escaped for XML.
+  screen. It sets the Boolean `CADisableMinimumFrameDurationOnPhone` to true to enable
+  higher-rate Core Animation timing hints on capable iPhones. Every text value is escaped for XML.
 - `bundleIdentifier name` is `org.pudu.` followed by the name with every character
   outside ASCII letters, digits, `-` and `.` replaced by `-`.
 - Compiler, linker and signer output is returned as the warnings text, as in
@@ -72,6 +73,9 @@ the simulator run [[iOS Simulator Run]].
 
 ## Resolved Grill Log
 
+- **Q:** Does bundle opt-in set a refresh rate? **A:** Core Animation still selects the rate
+  for the display and content. This key permits higher-rate hints. See [[Pudu Native iOS UI]].
+
 - **Q:** Why embed the host instead of shipping it as a data file? **A:** The release
   archive stages only library sources, and an embedded host always matches the compiler
   that wrote the program. _Rejected:_ a host file looked up beside the library.
@@ -85,3 +89,7 @@ the simulator run [[iOS Simulator Run]].
 ## Referenced by
 
 [[src/Pudu/Backend/_MOC]] · [[Native App Delivery]] · [[Native App Tests]] · [[iOS Host Adapter]] · [[Native Mobile Targets]]
+
+## iOS layout staging (#919)
+
+Resolved Grill Log: materialize the embedded layout header alongside the host translation unit in the existing include directory and link CoreGraphics for the geometry checks. No second compiler invocation is needed. See [[iOS Host Layout]].

@@ -33,10 +33,10 @@ on both displays), and Xcode 27.1 Device Hub simulation. Exact class names are t
 
 | Area | Required features | Today |
 | --- | --- | --- |
-| Layout and adaptivity | Flexible stack layout with native results; safe areas including Dynamic Island, notch, home indicator and the fold; compact, regular and expanded size classes; orientations; keyboard avoidance | partial: columns and rows (stack views); no scrolling, safe-area policy or keyboard avoidance |
+| Layout and adaptivity | Flexible stack layout with native results; safe areas including Dynamic Island, notch, home indicator and the fold; compact, regular and expanded size classes; orientations; keyboard avoidance | partial: columns and rows, safe-area root bounds and docked keyboard avoidance; size-class policy and fold regions remain open |
 | iPhone Duo | Fold state and posture reactions; outer, inner and both-display targeting; split view and multiple windows on the inner display; continuity across the fold; keeping interactive elements off the crease; layouts for 5.4 and 7.6 inches | missing |
 | Navigation | Stack with interactive pop; tab bars; sidebars; modal styles (full screen, page sheet, form sheet, popover); large and collapsing titles; custom bars and toolbars; deep and universal links | missing |
-| Lists and scrolling | Recycling lists; sections and compositional layouts; adaptive grids; pull to refresh; prefetching and infinite scroll; nested scrolling | partial: keyed lists reconciled into insert, remove and move; no recycling or scrolling |
+| Lists and scrolling | Recycling lists; sections and compositional layouts; adaptive grids; pull to refresh; prefetching and infinite scroll; nested scrolling | partial: vertical root scrolling and keyed insert, remove and move; recycling and nested scrolling remain open |
 | Input and gestures | Tap, long press, pan, pinch, rotate, swipe; simultaneous and exclusive recognition; pointer; Apple Pencil; keyboard, input accessories and focus; Scribble | partial: tap, text entry, switch |
 | Visual system | FUI's seven aspects mapped to iOS values; Dynamic Type; light and dark appearance; materials and vibrancy; SF Symbols; semantic colors; elevation and continuous corners | missing |
 | Feedback and system UI | Alerts, action sheets, confirmation dialogs, context menus and previews, banners, activity and progress indicators; status bar, Dynamic Island and home indicator styling | missing |
@@ -45,11 +45,43 @@ on both displays), and Xcode 27.1 Device Hub simulation. Exact class names are t
 | Multitasking | Stage Manager, Split View, Slide Over and multiple windows; the Duo inner display | missing |
 | Platform conventions | System gestures; rotation and orientation lock; background and foreground transitions; state restoration | missing |
 
+## ProMotion and frame pacing
+
+Refresh rate is a capability of the active display. On ProMotion devices, the iOS pipeline
+supports variable refresh up to 120 Hz. The system can select a lower rate for the display,
+power or thermal conditions, accessibility settings, or competing content. The same input
+and animation state must progress correctly across those changes and on 60 Hz devices.
+
+- Generated iOS apps set `CADisableMinimumFrameDurationOnPhone` to true so Core Animation
+  can honor higher-rate timing hints on capable iPhones. UIKit scrolling and system
+  transitions use platform frame pacing.
+- View updates preserve ordered input and reconcile state into bounded batches. Reuse mounted
+  controls, skip empty batches, and avoid rebuilding, remeasuring, or laying out unaffected
+  subtrees during scrolling. Presentation may coalesce superseded intermediate visual state
+  while still processing every ordered input and application effect.
+- For future custom presentation, use a display link for the active screen with an adaptive
+  `preferredFrameRateRange`. Sample motion from monotonic elapsed time and the actual
+  presentation target. A display link runs only while there is visual work and stops when
+  the app is idle or inactive.
+- A 120 Hz refresh interval is about 8.33 ms. That interval covers the entire frame, including
+  system work. Observe the actual presentation deadline and measure input handling, view
+  reconciliation, encoding, native application, layout, and presentation separately.
+- Validate steady scrolling and interactive transitions on named physical 60 Hz and ProMotion
+  devices, including rate changes and Low Power Mode. Report observed refresh intervals,
+  missed deadlines, frame-time percentiles and input-to-presentation latency. Simulator tests
+  validate bundle configuration and behavior. Physical traces establish the performance claim.
+
+Today the app bundle enables higher-rate timing hints, the vertical viewport uses UIKit
+scrolling, and empty updates stay on the Pudu side of the host boundary. Custom display-link
+scheduling and physical frame-time evidence remain open.
+
+[Apple's ProMotion frame-pacing guidance](https://developer.apple.com/documentation/quartzcore/optimizing-iphone-and-ipad-apps-to-support-promotion-displays)
+
 ## Phases
 
 | Phase | Scope |
 | --- | --- |
-| A Foundation | Core layout, primitives, safe areas, theming, basic navigation, accessibility foundation, single-screen iPhone and the Duo outer display |
+| A Foundation | Core layout, primitives, safe areas, variable-rate frame-pacing foundations, theming, basic navigation, accessibility foundation, single-screen iPhone and the Duo outer display |
 | B Foldable and large canvas | Duo fold state, display targeting, crease awareness, Split View, inner-display layouts, iPad multiple windows basics |
 | C Polish and productivity | Advanced lists, Apple Pencil, rich animation, Stage Manager, context menus, full multitasking |
 
@@ -60,7 +92,7 @@ does not have yet (Xcode 26.6, iOS 26.5 SDK).
 
 ## Order of work
 
-1. Scrolling and safe areas with keyboard avoidance.
+1. Scrolling and safe areas with docked keyboard avoidance ([[Native iOS Scrolling Delivery]]).
 2. Navigation stack and modal sheets.
 3. Theming: FUI tokens to semantic colors, Dynamic Type, dark mode.
 4. Recycling lists and grids.
@@ -76,6 +108,10 @@ does not have yet (Xcode 26.6, iOS 26.5 SDK).
   geometry and size-class changes, so adaptive layouts carry most of it; only hinge posture and
   reserved regions need Duo APIs. _Rejected:_ device checks.
 
+- **Q:** When is the root keyboard layout guide installed? **A:** After the UIKit window becomes visible, so the guide observes the active window. See [[iOS Host Layout]].
+
+- **Q:** Should a 120 Hz display rebuild the Pudu tree at every refresh? **A:** UIKit owns native motion. Application state changes produce view commits, and custom animation samples presentation time only while active.
+
 ## Referenced by
 
-[[architecture/_MOC]] · [[Pudu Native]]
+[[architecture/_MOC]] · [[Pudu Native]] · [[Native iOS Scrolling Delivery]]
