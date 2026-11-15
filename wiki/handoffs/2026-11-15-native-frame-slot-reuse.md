@@ -26,12 +26,22 @@ simulator app with Apple's Boolean high-refresh opt-in in its Info.plist.
 | --- | ---: | ---: |
 | Frame slots | 6,394 | 4,561 |
 | Owned slots | 4,131 | 2,756 |
-| Generated C bytes | 1,429,513 | 1,414,651 |
+| Generated C bytes, slot reuse alone | 1,429,513 | 1,414,651 |
+| Generated C bytes, including text helpers | 1,429,513 | 1,227,359 |
+
+The compacted translation repeated 2,295 text stores and 459 text moves.
+The same fixture still matches its exact expected output after moving those
+sequences into [[Native Text Runtime]], including under GCC 15. A smaller
+loop and branch fixture that repeatedly replaces owned text matched the
+interpreter under AddressSanitizer and UndefinedBehaviorSanitizer. The
+signed Int8 fixture also matched under both sanitizers, and the strict C11
+corpus and 182 counted ownership cases passed with the shared helpers.
 
 ## Exact next action
 
-Measure repeated display-and-output emission in the signed Int8 matrix and
-identify a shared C sequence that preserves output failure and ownership.
+Run the complete iOS matrix on the integration head containing the C11
+emitter changes. Capture physical 60 Hz and ProMotion frame timing
+separately.
 
 ## Referenced by
 

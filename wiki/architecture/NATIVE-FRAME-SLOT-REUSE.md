@@ -38,11 +38,11 @@ exit-before-move cleanup. Compare C11 output results and diagnostics with
 the interpreter and the existing native corpora. Measure the frame
 descriptor and C source size for the signed-width pressure fixture.
 
-After compaction, measure repeated output emission separately before
-sharing its hot C sequences. Current measurement on the navigation
-integration compiler was 6,394 frame slots, 4,131 owned slots and
-1,429,513 C bytes for the 483-line signed Int8 matrix. The native result
-matched the fixture's expected output. This measures build pressure.
+Measure repeated output emission separately from compaction. The 483-line
+signed Int8 matrix originally generated 1,429,513 C bytes. Reusing
+physical slots reduces that to 1,414,651 bytes. Sharing the repeated text
+store and move sequences reduces it to 1,227,359 bytes. The native result
+matches the fixture's expected output. This measures build pressure.
 Display cadence and frame deadlines require separate device evidence.
 
 ## Resolved Grill Log
