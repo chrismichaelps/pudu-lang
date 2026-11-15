@@ -41,7 +41,9 @@ the Counter collision probe. The gate now builds one minimal collision
 probe and allows ten minutes for new device boots. The collision probe
 passed on the hosted runner. Its next failure was a 30-second Counter
 uninstall timeout, so private devices now clean up installed apps at
-device deletion.
+device deletion. A later #932 run reached Counter itself and exhausted the
+outer 120-second compile budget. Native app builds now get five minutes as
+a whole, while the toolchain still gives each child command its own timeout.
 
 ## Referenced by
 
