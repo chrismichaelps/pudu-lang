@@ -36,6 +36,7 @@ const INSERT: UInt32 = 10u32
 const REMOVE: UInt32 = 11u32
 const MOVE: UInt32 = 12u32
 const NAVIGATION: UInt32 = 13u32
+const SHEET: UInt32 = 14u32
 
 /// Creates node `node` as a control of `kind`.
 export fn create(out: Array[UInt8], node: UInt32, kind: UInt32) -> Array[UInt8] { words(out, [CREATE, node, kind]) }
@@ -86,6 +87,14 @@ export fn navigation(out: Array[UInt8], routes: &Array[(UInt32, UInt32, Str)]) -
     stream = textValue(words(stream, [instance, node]), title)
   }
   stream
+}
+
+/// Publishes one page sheet, or clears it when the descriptor is absent.
+export fn sheet(out: Array[UInt8], wanted: Option[(UInt32, UInt32)]) -> Array[UInt8] {
+  match wanted {
+    case Some((instance, node)) => words(out, [SHEET, 1u32, instance, node])
+    case None => words(out, [SHEET, 0u32])
+  }
 }
 
 // A text-carrying instruction: the code, the node, the byte length, then the

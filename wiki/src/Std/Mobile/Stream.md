@@ -52,6 +52,13 @@ Exports:
 
 Depends on no other module. Consumer: [[Std Mobile View]], which calls these functions to build the stream of each mount and update.
 
+## Sheet instruction
+
+SHEET uses opcode 14 and a presence word. Zero clears the sheet. One is
+followed by the instance ID and mounted body node ID. The caller validates them
+before encoding. Resolved Grill Log: the presence word preserves every UInt32
+as a valid instance identity.
+
 ## Resolved Grill Log
 
 - **Q:** Why encode the ordered stack in one instruction? **A:** UIKit can

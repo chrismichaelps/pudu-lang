@@ -63,6 +63,9 @@ Depends on [[Std Mobile Stream]] for the instruction words. Consumers: [[Std Mob
 using the low word and detail word respectively. `carriesDetail` is true for
 kind 6. Existing event kinds and two-argument decoding retain their behavior.
 
+Kind 7 is `SheetDismissed(instance)`. It carries the instance in the existing
+low word and requires neither field text nor an extra detail call.
+
 ## Resolved Grill Log
 
 - **Q:** Change the meaning of the text field? **A:** Completed pops use a

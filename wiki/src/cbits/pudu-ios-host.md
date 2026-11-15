@@ -55,6 +55,8 @@ strong reference in place until the controller detaches it.
 The navigation test may transfer stop ownership to the completion delegate so
 its event assertions cover the entire UIKit transition.
 
+SHEET dispatches through [[iOS Host Navigation]]. A completed user dismissal carries its instance in the event word.
+
 ## Resolved Grill Log
 
 - **Q:** Encode the destination as text? **A:** Use a numeric detail word so the

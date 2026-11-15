@@ -114,6 +114,13 @@ Resolved Grill Log: the simulator exercises the same delegate used by a
 native back action. A programmatic self-test pop is evidence for the
 completion path. Physical gestures and cancellation need separate evidence.
 
+## Native page sheets (#920)
+
+[[Native Sheets Example]] exercises UIKit dismissal and Pudu-owned dismissal.
+The smoke suite observes the exact event count and the visible root afterward.
+Resolved Grill Log: use a simulator-driven completion to check the delegate bridge.
+A physical swipe or a canceled gesture still requires separate evidence.
+
 ## Referenced by
 
 [[Native Mobile Targets]] · [[Native Mobile Targets Delivery]] · [[Native Controls Delivery]] · [[Native Keyed Lists Delivery]]

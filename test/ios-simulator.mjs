@@ -171,6 +171,15 @@ int main(int argc, char **argv) {
       labels: ["Root page"],
       reports: ["PUDU_POP programmatic"],
     }]);
+    mobileApp(device, "Sheets", [{
+      environment: { SIMCTL_CHILD_PUDU_UI_SELFTEST: "0", SIMCTL_CHILD_PUDU_UI_SHEET_TEST: "native" },
+      labels: ["Root page"],
+      reports: ["PUDU_SHEET 40"],
+    }, {
+      environment: { SIMCTL_CHILD_PUDU_UI_SELFTEST: "0", SIMCTL_CHILD_PUDU_UI_SHEET_TEST: "programmatic" },
+      labels: ["Root page"],
+      reports: ["PUDU_SHEET programmatic"],
+    }]);
     invalidGroupApp(device, root);
   } finally {
     try {
@@ -217,7 +226,7 @@ function mobileApp(device, example, runs) {
         `${example} did not show ${labels.join(", ")}:\n${lines.join("\n")}`);
       assert.ok(lines.includes("PUDU_PROGRAM_STATUS 0"), `${example} did not finish:\n${lines.join("\n")}`);
       if (reports) {
-        assert.deepEqual(lines.filter((line) => /^PUDU_(VIEWPORT|KEYBOARD|POP) /.test(line)), reports,
+        assert.deepEqual(lines.filter((line) => /^PUDU_(VIEWPORT|KEYBOARD|POP|SHEET) /.test(line)), reports,
           `${example} did not report the expected platform events:\n${lines.join("\n")}`);
       }
       const firstFrame = lines.find((line) => line.startsWith("PUDU_FIRST_FRAME_MS "));

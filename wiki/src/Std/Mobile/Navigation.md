@@ -55,6 +55,18 @@ Depends on [[Std Ui Navigation]] and [[Std Mobile View]]. Exercised by
 [[Uses Mobile View]]. The next navigation partition connects this module to
 the native presentation and event bridge.
 
+## Page sheet
+
+`mountPresentation(stack, sheet)` and `updatePresentation(held, stack, sheet, reassert)`
+reconcile navigation and a single optional `Sheet{id, body}` with the same node
+allocator. A sheet ID colliding with a route is refused before producing a commit.
+A sheet with the same ID can reconcile its body in place. Write SHEET before retiring
+a removed or replaced body. `afterDismissal` clears only the current instance.
+The stack-only API describes a presentation without a sheet.
+
+A resolved Grill Log decision keeps the sheet with the stack allocator so its IDs
+cannot collide with a mounted page and it can share the existing body reconciler.
+
 ## Resolved Grill Log
 
 - **Q:** Why return an optional stack? **A:** A stale or invalid completion

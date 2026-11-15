@@ -32,10 +32,15 @@ The simulator suite also verified that an unchanged-stack completion emits no
 event, and a Pudu-owned pop reaches the root without a native echo. A real
 canceled edge gesture has not been verified.
 
+The compiler-built sheet smoke runs both passed. The delegate path emitted
+`SheetDismissed(40)` once with the root visible afterward, and the
+Pudu-owned dismissal reached the same root without a native echo. The
+simulator drives the dismissal completion. A real swipe remains unverified.
+
 ## Exact next action
 
-Implement the page-sheet snapshot and dismissal bridge on top of the mounted
-navigation stack in [[Std Mobile Navigation]] and [[iOS Host Navigation]].
+Add a simulator regression for rapid sheet replacement followed by an old
+dismissal callback, preserving the replacement in [[Native Sheets Example]].
 
 ## Referenced by
 

@@ -23,6 +23,7 @@ export type Event
   | Changed(UInt32, Str)
   | Toggled(UInt32, Bool)
   | Popped(UInt32, UInt32)
+  | SheetDismissed(UInt32)
   | Stopped
 
 /// A node the platform shows: its id, the view it shows, and the nodes of
@@ -50,7 +51,8 @@ const EVENTS: Map[UInt64, fn(UInt32, Str) -> Event] = mapOf([
     (TAPPED, |tag: UInt32, _text: Str| Tapped(tag)),
     (CHANGED, |tag: UInt32, text: Str| Changed(tag, text)),
     (SWITCHED_ON, |tag: UInt32, _text: Str| Toggled(tag, true)),
-    (SWITCHED_OFF, |tag: UInt32, _text: Str| Toggled(tag, false))
+    (SWITCHED_OFF, |tag: UInt32, _text: Str| Toggled(tag, false)),
+    (7u64, |instance: UInt32, _text: Str| SheetDismissed(instance))
   ])
 
 /// Whether a host event's kind carries text the host holds for it.

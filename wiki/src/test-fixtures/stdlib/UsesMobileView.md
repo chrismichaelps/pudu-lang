@@ -50,6 +50,11 @@ Depends on [[Std Mobile View]]. Its counter view matches [[Native Counter Exampl
 
 - **Q:** Why exercise navigation in the existing mobile fixture? **A:** It verifies that the exact route snapshot shares the same word and UTF-8 representation as existing instructions.
 
+Page-sheet checks cover presentation and clearing words, stable body identity,
+duplicate route identity, and stale dismissal events. Resolved Grill Log:
+assert the clear instruction precedes retirement, because the host can retain
+a presented body through asynchronous dismissal.
+
 ## Referenced by
 
 [[Std Mobile View]] · [[Native First Light Delivery]] · [[Native Controls Delivery]] · [[Native Keyed Lists Delivery]]

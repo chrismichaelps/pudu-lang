@@ -20,11 +20,11 @@
    match Std.Mobile.View. */
 enum { PUDU_UI_CREATE = 1, PUDU_UI_TEXT = 2, PUDU_UI_APPEND = 3, PUDU_UI_ROOT = 4, PUDU_UI_TAG = 5, PUDU_UI_RESET = 6,
        PUDU_UI_STATE = 7, PUDU_UI_HINT = 8, PUDU_UI_NAME = 9, PUDU_UI_INSERT = 10, PUDU_UI_REMOVE = 11, PUDU_UI_MOVE = 12,
-       PUDU_UI_NAVIGATION = 13, PUDU_UI_INSTRUCTIONS = 14 };
+       PUDU_UI_NAVIGATION = 13, PUDU_UI_SHEET = 14, PUDU_UI_INSTRUCTIONS = 15 };
 enum { PUDU_UI_LABEL = 1, PUDU_UI_BUTTON = 2, PUDU_UI_COLUMN = 3, PUDU_UI_ROW = 4, PUDU_UI_FIELD = 5, PUDU_UI_TOGGLE = 6,
        PUDU_UI_SCROLL = 7, PUDU_UI_KINDS = 8 };
 static const uint64_t PUDU_UI_TAPPED = 1, PUDU_UI_STOPPED = 2, PUDU_UI_CHANGED = 3, PUDU_UI_SWITCHED_ON = 4,
-                      PUDU_UI_SWITCHED_OFF = 5, PUDU_UI_POPPED = 6;
+                      PUDU_UI_SWITCHED_OFF = 5, PUDU_UI_POPPED = 6, PUDU_UI_SHEET_DISMISSED = 7;
 
 static NSMutableArray *pudu_nodes;
 static NSMutableArray<NSNumber *> *pudu_kinds;
@@ -337,7 +337,7 @@ static void (*const pudu_instruction_table[PUDU_UI_INSTRUCTIONS])(pudu_reader *)
   [PUDU_UI_CREATE] = pudu_do_create, [PUDU_UI_TEXT] = pudu_do_text, [PUDU_UI_APPEND] = pudu_do_append,
   [PUDU_UI_ROOT] = pudu_do_root, [PUDU_UI_TAG] = pudu_do_tag, [PUDU_UI_RESET] = pudu_do_reset,
   [PUDU_UI_STATE] = pudu_do_state, [PUDU_UI_HINT] = pudu_do_hint, [PUDU_UI_NAME] = pudu_do_name,
-  [PUDU_UI_INSERT] = pudu_do_insert, [PUDU_UI_REMOVE] = pudu_do_remove, [PUDU_UI_MOVE] = pudu_do_move, [PUDU_UI_NAVIGATION] = pudu_do_navigation,
+  [PUDU_UI_INSERT] = pudu_do_insert, [PUDU_UI_REMOVE] = pudu_do_remove, [PUDU_UI_MOVE] = pudu_do_move, [PUDU_UI_NAVIGATION] = pudu_do_navigation, [PUDU_UI_SHEET] = pudu_do_sheet,
 };
 
 /* Applies one commit: every instruction in order, in one call. */
@@ -476,7 +476,7 @@ static void pudu_test_keyboard(void) {
    is set, taps every button as many times as PUDU_UI_SELFTEST says, then asks
    the program to stop, exactly as a user's input would arrive. */
 - (void)selfTest {
-  if (pudu_test_back()) return;
+  if (getenv("PUDU_UI_SHEET_TEST") != NULL || pudu_test_back()) return;
   if (getenv("PUDU_UI_KEYBOARD_TEST") != NULL) {
     pudu_test_keyboard();
     return;

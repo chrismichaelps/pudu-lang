@@ -10,9 +10,21 @@ export type Route = { id: UInt32, title: Str, body: View }
 /// The previous top and surviving destination of a completed platform action.
 export type Pop = { from: UInt32, destination: UInt32 }
 
+/// A page sheet identified independently of its mounted body.
+export type Sheet = { id: UInt32, body: View }
+
+/// A dismissal affects only the current sheet instance.
+export fn afterDismissal(current: Option[Sheet], dismissed: UInt32) -> Option[Sheet] {
+  match current {
+    case Some(shown) if shown.id == dismissed => None
+    case _ => current
+  }
+}
+
 /// Refusal before a route stack is sent to the platform.
 export type NavigationError =
   | DuplicateRoute(UInt32)
+  | DuplicateSheet(UInt32)
 
 /// Checks route identity in presentation order before mounting.
 export fn validate(held: &Stack[Route]) -> Result[(), NavigationError] {
@@ -45,19 +57,37 @@ export fn afterPop(held: &Stack[Route], event: Pop) -> Option[Stack[Route]] {
 /// A route descriptor paired with its mounted body.
 export type MountedRoute = { id: UInt32, title: Str, body: Shown }
 
+export type MountedSheet = { id: UInt32, body: Shown }
+
 /// Ordered live routes and the shared allocator for the host's node table.
-export type MountedStack = { routes: Array[MountedRoute], next: UInt32, free: Array[UInt32] }
+export type MountedStack = { routes: Array[MountedRoute], sheet: Option[MountedSheet], next: UInt32, free: Array[UInt32] }
 
 /// Builds a validated stack and publishes it with one navigation snapshot.
 export fn mount(stack: &Stack[Route]) -> Result[(MountedStack, Bytes), NavigationError] {
-  update(&MountedStack{routes: [], next: 0u32, free: []}, stack, false)
+  mountPresentation(stack, None)
 }
 
 /// Reconciles the common route prefix and publishes a changed stack.
 /// Reassert also publishes an unchanged stack after a declined platform pop.
 export fn update(held: &MountedStack, stack: &Stack[Route], reassert: Bool) -> Result[(MountedStack, Bytes), NavigationError] {
+  updatePresentation(held, stack, None, reassert)
+}
+
+export fn mountPresentation(stack: &Stack[Route], sheet: Option[Sheet]) -> Result[(MountedStack, Bytes), NavigationError] {
+  updatePresentation(&MountedStack{routes: [], sheet: None, next: 0u32, free: []}, stack, sheet, false)
+}
+
+export fn updatePresentation(held: &MountedStack, stack: &Stack[Route], sheet: Option[Sheet], reassert: Bool) -> Result[(MountedStack, Bytes), NavigationError] {
   let _ = validate(stack) ?
   let wanted = stack.above.insert(0, stack.root)
+  if let Some(page) = sheet {
+    for route in wanted {
+      if route.id == page.id {
+        return Err(DuplicateSheet(page.id))
+      }
+    }
+  }
+
   var work = Work{next: held.next, free: held.free, out: []}
   var routes: Array[MountedRoute] = []
   var retired: Array[Shown] = []
@@ -85,9 +115,21 @@ export fn update(held: &MountedStack, stack: &Stack[Route], reassert: Bool) -> R
     work = built
     routes = routes.push(MountedRoute{id: route.id, title: route.title, body: body})
   }
+  let (builtSheet, nextSheet) = reconcileSheet(work, held.sheet, sheet)
+  work = builtSheet
   let entries = routes.map(descriptor)
   if reassert || entries != held.routes.map(descriptor) {
     work = Work{..work, out: Stream.navigation(work.out, &entries)}
+  }
+  let sheetEntry = sheetDescriptor(nextSheet)
+  if sheetEntry != sheetDescriptor(held.sheet) || (reassert && sheetEntry != None) {
+    work = Work{..work, out: Stream.sheet(work.out, sheetEntry)}
+  }
+  if let Some(previous) = held.sheet {
+    match nextSheet {
+      case Some(current) if current.body.id == previous.body.id => {}
+      case _ => { retired = retired.push(previous.body) }
+    }
   }
   for index in common..held.routes.length() {
     retired = retired.push(held.routes[index].body)
@@ -95,7 +137,25 @@ export fn update(held: &MountedStack, stack: &Stack[Route], reassert: Bool) -> R
   for body in retired {
     work = removeBody(work, &body)
   }
-  Ok((MountedStack{routes: routes, next: work.next, free: work.free}, bytesOf(work.out)))
+  Ok((MountedStack{routes: routes, sheet: nextSheet, next: work.next, free: work.free}, bytesOf(work.out)))
 }
 
 fn descriptor(route: MountedRoute) -> (UInt32, UInt32, Str) { (route.id, route.body.id, route.title) }
+
+fn reconcileSheet(work: Work, held: Option[MountedSheet], wanted: Option[Sheet]) -> (Work, Option[MountedSheet]) {
+  let Some(page) = wanted else { return (work, None) }
+  if let Some(previous) = held {
+    if previous.id == page.id {
+      if let Kept(patched, body) = reconcileBody(work, &previous.body, &page.body) {
+        return (patched, Some(MountedSheet{id: page.id, body: body}))
+      }
+    }
+  }
+  let (built, body) = buildBody(work, &page.body)
+  (built, Some(MountedSheet{id: page.id, body: body}))
+}
+
+fn sheetDescriptor(sheet: Option[MountedSheet]) -> Option[(UInt32, UInt32)] {
+  let page = sheet ?
+  Some((page.id, page.body.id))
+}

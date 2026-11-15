@@ -1,0 +1,36 @@
+module Sheets
+
+import Std.Mobile.Host as Host
+import Std.Mobile.Navigation as Navigation
+import Std.Mobile.View as View
+import Std.Ui.Navigation as Stack
+
+fn main() -> Int {
+  let root = Stack.stack(Navigation.Route{id: 10u32, title: "Root", body: View.Label("Root page")})
+  let sheet = Some(Navigation.Sheet{id: 40u32, body: View.Column([View.Label("Sheet contents"), View.Button("Close", 1u32)])})
+  let Ok((mounted, stream)) = Navigation.mountPresentation(&root, sheet) else { return 1 }
+  Host.apply(stream)
+  var handled = false
+  while true {
+    match Host.wait() {
+      case View.Tapped(tag) if tag == 1u32 && !handled => {
+        let Ok((_, changed)) = Navigation.updatePresentation(&mounted, &root, None, false) else { return 2 }
+        Host.apply(changed)
+        print("PUDU_SHEET programmatic")
+        handled = true
+      }
+      case View.SheetDismissed(id) if !handled => {
+        let next = Navigation.afterDismissal(sheet, id)
+        if id != 40u32 { return 3 }
+        let Ok((_, changed)) = Navigation.updatePresentation(&mounted, &root, next, false) else { return 4 }
+        Host.apply(changed)
+        print("PUDU_SHEET {id}")
+        handled = true
+      }
+      case View.SheetDismissed(_) => { return 5 }
+      case View.Stopped => { return if handled { 0 } else { 6 } }
+      case _ => {}
+    }
+  }
+  0
+}

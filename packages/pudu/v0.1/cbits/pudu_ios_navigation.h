@@ -45,12 +45,17 @@
 @implementation PuduRouteSnapshot
 @end
 
-@interface PuduNavigation : NSObject <UINavigationControllerDelegate>
+@interface PuduNavigation : NSObject <UINavigationControllerDelegate, UIAdaptivePresentationControllerDelegate>
 @property (strong, nonatomic) UINavigationController *controller;
 @property (copy, nonatomic) NSArray<PuduPage *> *requested;
 @property (copy, nonatomic) NSArray<PuduPage *> *reported;
 @property (copy, nonatomic) NSArray<PuduRouteSnapshot *> *pending;
 @property (nonatomic) BOOL waiting;
+@property (strong, nonatomic) PuduRouteSnapshot *desiredSheet;
+@property (strong, nonatomic) PuduPage *presentedSheet;
+@property (nonatomic) BOOL sheetBusy;
+@property (nonatomic) BOOL sheetWaiting;
+- (void)reconcileSheet;
 - (void)publish:(NSArray<PuduRouteSnapshot *> *)routes;
 @end
 
@@ -103,6 +108,80 @@ static BOOL pudu_programmatic_pop_test(void) {
     [self.controller setViewControllers:pages animated:self.controller.view.window != nil];
   }
   if (pudu_window.rootViewController != self.controller) pudu_window.rootViewController = self.controller;
+  [self reconcileSheet];
+}
+
+- (void)resumeSheet {
+  self.sheetWaiting = NO;
+  [self reconcileSheet];
+}
+
+- (void)sheetPresented:(PuduPage *)page {
+  self.sheetBusy = NO;
+  [self reconcileSheet];
+  const char *mode = getenv("PUDU_UI_SHEET_TEST");
+  if (mode == NULL || self.presentedSheet != page || self.desiredSheet == nil) return;
+  if (strcmp(mode, "native") == 0) {
+    UIPresentationController *presentation = page.presentationController;
+    [page dismissViewControllerAnimated:YES completion:^{
+      [self presentationControllerDidDismiss:presentation];
+    }];
+  } else {
+    pudu_queue(PUDU_UI_TAPPED, 1, nil);
+  }
+}
+
+- (void)reconcileSheet {
+  if (self.sheetBusy || self.sheetWaiting || self.controller.view.window == nil) return;
+  PuduPage *current = self.presentedSheet;
+  PuduRouteSnapshot *wanted = self.desiredSheet;
+  if (current == nil && wanted == nil) return;
+  id<UIViewControllerTransitionCoordinator> transition =
+      current.transitionCoordinator ?: self.controller.transitionCoordinator;
+  if (transition != nil) {
+    self.sheetWaiting = YES;
+    BOOL registered = [transition animateAlongsideTransition:nil completion:^(id<UIViewControllerTransitionCoordinatorContext> context) {
+      (void)context;
+      [self performSelector:@selector(resumeSheet) withObject:nil afterDelay:0];
+    }];
+    if (!registered) [self performSelector:@selector(resumeSheet) withObject:nil afterDelay:0];
+    return;
+  }
+
+  if (current != nil) {
+    if (wanted != nil && wanted.instance == current.instance) {
+      [(PuduRouteSurface *)current.view placeBody:wanted.body fillsArea:[wanted.body isKindOfClass:PuduScroll.class]];
+    } else {
+      self.sheetBusy = YES;
+      [current dismissViewControllerAnimated:YES completion:^{
+        self.presentedSheet = nil;
+        self.sheetBusy = NO;
+        [self reconcileSheet];
+        if (self.desiredSheet == nil && getenv("PUDU_UI_SHEET_TEST") != NULL) pudu_queue(PUDU_UI_STOPPED, 0, nil);
+      }];
+    }
+  } else {
+    PuduPage *page = [PuduPage new];
+    page.instance = wanted.instance;
+    page.modalPresentationStyle = UIModalPresentationPageSheet;
+    [(PuduRouteSurface *)page.view placeBody:wanted.body fillsArea:[wanted.body isKindOfClass:PuduScroll.class]];
+    self.presentedSheet = page;
+    self.sheetBusy = YES;
+    page.presentationController.delegate = self;
+    [self.controller presentViewController:page animated:YES completion:^{ [self sheetPresented:page]; }];
+  }
+}
+
+- (void)presentationControllerDidDismiss:(UIPresentationController *)presentation {
+  PuduPage *dismissed = self.presentedSheet;
+  if (dismissed == nil || presentation.presentedViewController != dismissed || self.sheetBusy) return;
+  self.presentedSheet = nil;
+  if (self.desiredSheet != nil && self.desiredSheet.instance == dismissed.instance) {
+    self.desiredSheet = nil;
+    pudu_queue(PUDU_UI_SHEET_DISMISSED, dismissed.instance, nil);
+    if (getenv("PUDU_UI_SHEET_TEST") != NULL) pudu_queue(PUDU_UI_STOPPED, 0, nil);
+  }
+  [self reconcileSheet];
 }
 
 - (void)navigationController:(UINavigationController *)controller didShowViewController:(UIViewController *)shown animated:(BOOL)animated {
@@ -152,18 +231,34 @@ static void pudu_do_navigation(pudu_reader *reader) {
   [pudu_navigation publish:routes];
 }
 
+static void pudu_do_sheet(pudu_reader *reader) {
+  uint32_t present = pudu_word(reader);
+  if (pudu_navigation == nil || present > 1) pudu_stream_defect("invalid sheet presentation:", present);
+  PuduRouteSnapshot *wanted = nil;
+  if (present == 1) {
+    wanted = [PuduRouteSnapshot new];
+    wanted.instance = pudu_word(reader);
+    wanted.body = pudu_nodes[pudu_node_id(reader)];
+  }
+  pudu_navigation.desiredSheet = wanted;
+  [pudu_navigation reconcileSheet];
+}
+
 static void pudu_leave_navigation(void) {
   if (pudu_navigation != nil) {
     pudu_navigation.controller.delegate = nil;
     [NSObject cancelPreviousPerformRequestsWithTarget:pudu_navigation];
     pudu_navigation.pending = nil;
+    pudu_navigation.desiredSheet = nil;
+    pudu_navigation.presentedSheet.presentationController.delegate = nil;
     pudu_navigation = nil;
     pudu_window.rootViewController = pudu_plain;
   }
 }
 
 static UIView *pudu_visible_body(void) {
-  PuduRouteSurface *page = (PuduRouteSurface *)pudu_navigation.controller.topViewController.view;
+  PuduPage *visible = pudu_navigation.presentedSheet ?: (PuduPage *)pudu_navigation.controller.topViewController;
+  PuduRouteSurface *page = (PuduRouteSurface *)visible.view;
   return page != nil ? page.body : pudu_shown_root;
 }
 

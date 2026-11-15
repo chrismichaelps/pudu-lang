@@ -27,6 +27,19 @@ Each page controller places its body with [[iOS Host Layout]].
 - A completed pop reports the old top and surviving route IDs through the event
   queue. Canceled and programmatic transitions do not produce pop events.
 
+## Page sheet
+
+The adapter stores a desired sheet descriptor and the presented controller.
+SHEET updates the descriptor. UIKit page-sheet presentation and dismissal are
+serialized against navigation and sheet transitions. A user dismissal reports only
+the current instance, after UIKit completes it. Programmatic dismissal and a
+superseded callback produce no event. Strong references preserve bodies while
+an animation finishes even if the corresponding node IDs are retired.
+
+Resolved Grill Log: present the latest desired sheet after any in-flight
+presentation or dismissal completes. The old controller is never used as the
+identity of a new presentation.
+
 ## Simulator evidence
 
 The self-test exercises the completion predicate with an unchanged stack and an

@@ -127,6 +127,25 @@ fn mountedNavigationChecks() -> Bool {
     && replaced.routes[0].body.id == 1u32 && duplicate == Navigation.DuplicateRoute(10u32)
 }
 
+fn sheetChecks() -> Bool {
+  let root = Stack.stack(route(10u32, "Root"))
+  let first = Some(Navigation.Sheet{id: 40u32, body: View.Label("Old")})
+  let second = Some(Navigation.Sheet{id: 40u32, body: View.Label("New")})
+  let Ok((stack, _)) = Navigation.mount(&root) else { return false }
+  let Ok((opened, opening)) = Navigation.updatePresentation(&stack, &root, first, false) else { return false }
+  let Ok((edited, editing)) = Navigation.updatePresentation(&opened, &root, second, false) else { return false }
+  let Ok((cleared, closing)) = Navigation.updatePresentation(&edited, &root, None, false) else { return false }
+  let Err(duplicate) = Navigation.updatePresentation(&stack, &root, Some(Navigation.Sheet{id: 10u32, body: View.Column([])}), false) else { return false }
+  wordsAt(&opening.toArray(), 27, 4) == [14u32, 1u32, 40u32, 1u32] && opening.length() == 43
+    && wordsAt(&editing.toArray(), 0, 3) == [2u32, 1u32, 3u32] && editing.length() == 15
+    && wordsAt(&closing.toArray(), 0, 6) == [14u32, 0u32, 11u32, 1u32, 1u32, 1u32]
+    && closing.length() == 24 && cleared.free == [1u32]
+    && duplicate == Navigation.DuplicateSheet(10u32)
+    && Navigation.afterDismissal(first, 99u32) == first
+    && Navigation.afterDismissal(first, 40u32) == None
+    && View.event((7u64 << 32) | 40u64, "") == View.SheetDismissed(40u32)
+}
+
 export fn main() -> Int {
   var held = 0
   let zero = counter(0)
@@ -205,5 +224,5 @@ export fn main() -> Int {
   // Unique keys are a no-op when unchanged. Old repeated rows must be retired.
   let (_, still) = View.update(&shrunk, &View.Keyed([row("cc"), row("aa"), row("bb")]))
   if still.length() == 0 && duplicatesRetired() && scrollKeepsViewport() { held = held + 1 }
-  if navigationChecks() && mountedNavigationChecks() { held } else { -1 }
+  if navigationChecks() && mountedNavigationChecks() && sheetChecks() { held } else { -1 }
 }
