@@ -39,7 +39,9 @@ Use `--require-simulator` to make an unavailable simulator a failure.
 - The script creates its own iPhone device, boots it, installs, launches with
   `--console-pty` capturing standard output, and deletes the device afterwards
   on every path. An explicit `PUDU_IOS_SIMULATOR_UDID` instead uses an already
-  booted test simulator and uninstalls only the uniquely identified smoke app.
+  booted test simulator and uninstalls the apps it installed after each case.
+  Private devices retain test apps until device deletion, so per-app
+  uninstall is skipped there.
 - Passes when the captured lines equal `pudu run`'s output followed by the
   status line.
 
@@ -48,6 +50,10 @@ Use `--require-simulator` to make an unavailable simulator a failure.
 [[Native Mobile Targets]], [[Backend Toolchain Library]]. Run on an Apple silicon Mac with an installed iOS runtime.
 
 ## Resolved Grill Log
+
+- **Q:** Uninstall each app on a private device? **A:** Device deletion already
+  removes every app. Avoid an extra service call that can time out on a cold
+  hosted runner. Explicitly reused devices still need per-app cleanup.
 
 - **Q:** Why create a device rather than use an existing one? **A:** An
   existing device may be booted by its owner; a private device is deleted
