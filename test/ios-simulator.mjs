@@ -10,6 +10,7 @@ import { fileURLToPath } from "node:url";
 const simulatorTimeout = 300_000;
 // A first boot of a device created here; a second family boots beside the phone and takes several minutes.
 const bootTimeout = 600_000;
+const appBuildTimeout = 300_000;
 const launchAttempts = 2;
 
 const repository = resolve(dirname(fileURLToPath(import.meta.url)), "..");
@@ -305,7 +306,7 @@ function refuseOccupiedOutput(scratch) {
   mkdirSync(occupied);
   writeFileSync(marker, "existing data");
   const build = ["build", source, "--native", "--target", "ios-simulator-arm64", "--app", "-o", occupied];
-  assert.throws(() => run(resolve(compiler), build), /E6006.*application output already exists/s);
+  assert.throws(() => run(resolve(compiler), build, appBuildTimeout), /E6006.*application output already exists/s);
   assert.equal(readFileSync(marker, "utf8"), "existing data");
   console.log("PASS iOS occupied application output refused");
 }
@@ -322,7 +323,7 @@ function mobileApp(device, example, runs) {
   try {
     const build = ["build", join(repository, "examples", "mobile", `${example}.pudu`),
       "--native", "--target", "ios-simulator-arm64", "--app", "-o"];
-    run(resolve(compiler), [...build, app]);
+    run(resolve(compiler), [...build, app], appBuildTimeout);
     const executable = join(app, example);
     run(xcrun, ["simctl", "install", device, app], simulatorTimeout);
     installed = true;
@@ -366,7 +367,7 @@ ${body}
   0
 }
 `);
-  run(resolve(compiler), ["build", source, "--native", "--target", "ios-simulator-arm64", "--app", "-o", app]);
+  run(resolve(compiler), ["build", source, "--native", "--target", "ios-simulator-arm64", "--app", "-o", app], appBuildTimeout);
   run(xcrun, ["simctl", "install", device, app], simulatorTimeout);
   try {
     const launched = spawnSync(xcrun, ["simctl", "launch", "--console-pty", device, bundle],

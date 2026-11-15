@@ -51,6 +51,10 @@ Use `--require-simulator` to make an unavailable simulator a failure.
 
 ## Resolved Grill Log
 
+- **Q:** Use the two-minute tool timeout for a complete app build? **A:** The
+  build includes Pudu compilation, SDK probing, C compilation, linking,
+  and signing. Give that command five minutes so individual tool failures
+  can reach the caller with their own diagnostics.
 - **Q:** Uninstall each app on a private device? **A:** Device deletion already
   removes every app. Avoid an extra service call that can time out on a cold
   hosted runner. Explicitly reused devices still need per-app cleanup.
