@@ -11,6 +11,8 @@ tags: [changelog]
 
 - [[iOS Simulator CI]] runs on `macos-26` so the runner's Xcode meets the build preflight.
 
+- [[iOS Simulator Run]] checks bundle publication once with a minimal program and gives new simulator devices ten minutes for first boot.
+
 ## 2026-11-14 — Recycling lists and grids (#925)
 
 - `Std.Mobile.View` gains `Recycled`, a list or equal-column grid that supplies rows for a window of its items, and `Reached` events with `windowStart` to move the window. [[Std Mobile Stream]] encodes RANGE and COLUMNS (codes 24 and 25). The iOS host shows a list with a row store and reports scroll positions through [[iOS Host List]] and [[iOS Host Events]] ([[Native iOS Recycling Delivery]]).
