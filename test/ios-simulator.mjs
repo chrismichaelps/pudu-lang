@@ -152,6 +152,7 @@ int main(int argc, char **argv) {
     const lines = launch(device, identifier, "PUDU_SMOKE", "PUDU_SMOKE_STATUS");
     assert.deepEqual(lines, [...expected.split("\n"), "PUDU_SMOKE_STATUS 0"]);
     console.log(`${expected}\nPASS iOS simulator smoke (${device})`);
+    refuseOccupiedOutput(root);
     familyApps(device, "Counter");
     mobileApp(device, "Form", [
       { environment: { SIMCTL_CHILD_PUDU_UI_SELFTEST: "0", SIMCTL_CHILD_PUDU_UI_TYPE: "Ada" }, labels: ["Hello, Ada (subscribed)"] },
@@ -288,6 +289,19 @@ function fallbackGlass(runtimes) {
   }
 }
 
+function refuseOccupiedOutput(scratch) {
+  const source = join(scratch, "Collision.pudu");
+  const occupied = join(scratch, "Occupied.app");
+  const marker = join(occupied, "keep.txt");
+  writeFileSync(source, "module Collision\n\nfn main() -> Int { 0 }\n");
+  mkdirSync(occupied);
+  writeFileSync(marker, "existing data");
+  const build = ["build", source, "--native", "--target", "ios-simulator-arm64", "--app", "-o", occupied];
+  assert.throws(() => run(resolve(compiler), build), /E6006.*application output already exists/s);
+  assert.equal(readFileSync(marker, "utf8"), "existing data");
+  console.log("PASS iOS occupied application output refused");
+}
+
 /* An example from examples/mobile, built only from Pudu with the iOS host
    adapter and run once per entry of `runs`: the host feeds it input from the
    entry's environment, asks it to stop, and reports its labels, its status
@@ -300,14 +314,6 @@ function mobileApp(device, example, runs) {
   try {
     const build = ["build", join(repository, "examples", "mobile", `${example}.pudu`),
       "--native", "--target", "ios-simulator-arm64", "--app", "-o"];
-    if (example === "Counter") {
-      const occupied = join(root, "Occupied.app");
-      const marker = join(occupied, "keep.txt");
-      mkdirSync(occupied);
-      writeFileSync(marker, "existing data");
-      assert.throws(() => run(resolve(compiler), [...build, occupied]), /E6006.*application output already exists/s);
-      assert.equal(readFileSync(marker, "utf8"), "existing data");
-    }
     run(resolve(compiler), [...build, app]);
     const executable = join(app, example);
     run(xcrun, ["simctl", "install", device, app], simulatorTimeout);

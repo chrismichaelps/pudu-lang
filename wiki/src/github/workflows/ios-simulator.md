@@ -8,7 +8,7 @@ tags: [module, test, delivery, mobile]
 
 # iOS Simulator CI
 
-Run [[iOS Simulator Run]] on an Apple silicon GitHub-hosted macOS runner
+Run [[iOS Simulator Run]] on the Apple silicon `macos-26` GitHub-hosted runner
 for changes to the compiler, its Cabal configuration, or the smoke itself.
 Build the compiler with the repository's pinned GHC and Cabal and run the
 smoke with `--require-simulator`. Before the smoke, run [[UIKit Coverage Tests]] and the [[UIKit Coverage Inventory]] check against the runner's SDK.

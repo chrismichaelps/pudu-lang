@@ -27,7 +27,8 @@ Stacked on [[Native iOS Materials Delivery]] (#928).
 
 ## Exact next action
 
-None for #930. The iPhone Duo hinge and reserved regions wait for the iOS 27.1 SDK under the `fold-posture` ledger gate.
+Verify PR #932 on the hosted simulator after inheriting the isolated
+bundle-publication collision probe from [[Native Platform Ledger Delivery]].
 
 ## Referenced by
 

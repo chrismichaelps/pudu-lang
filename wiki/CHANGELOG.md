@@ -8,7 +8,6 @@ tags: [changelog]
 ## 2026-11-15 — UIKit coverage inventory (#930)
 
 - The UIKit coverage inventory script and tests measure host coverage from the SDK headers, so the table in [[Pudu Native iOS UI]] is generated rather than hand-written (refs #930). The iOS simulator workflow moves to a runner image whose Xcode meets the platform floor and runs the inventory check ([[iOS Simulator CI]], [[UIKit Coverage Inventory]]).
-- The iOS simulator run waits up to ten minutes for a new device's first boot, so the iPad matrix no longer times out beside the phone.
 
 ## 2026-11-14 — iOS capabilities (#930)
 
@@ -21,6 +20,10 @@ tags: [changelog]
 ## 2026-11-14 — Platform toolchain ledger (#926)
 
 - A pure ledger of Xcode, SDK, store-rule and capability facts ([[Backend Ledger]]) is checked by a preflight before every Apple build, which refuses an installed toolchain outside it with E6009 or E6010 and warns with W6011 or W6012 ([[Backend Toolchain Probe]], [[Backend Toolchain Library]], [[Diagnostic Native]]). `pudu doctor --native` prints the whole state ([[Pudu CLI Doctor]]). The adoption design is [[Native Platform Adoption]]; the simulator suite adds a device matrix across device families ([[iOS Simulator Run]]).
+
+- [[iOS Simulator CI]] runs on `macos-26` so the runner's Xcode meets the build preflight.
+
+- [[iOS Simulator Run]] checks bundle publication once with a minimal program and gives new simulator devices ten minutes for first boot.
 
 ## 2026-11-14 — Recycling lists and grids (#925)
 

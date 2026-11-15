@@ -115,9 +115,10 @@ Resolved Grill Log: the refusal belongs to the host, which alone knows the node'
 
 ## Application output collision (#916)
 
-Before installing Counter, try to build into an existing `.app` directory containing
-a marker. Require `E6006` and verify the marker bytes survive. The subsequent build
-uses a vacant path and must boot.
+Once per run, build a minimal Pudu program into an existing `.app` directory
+containing a marker. Require `E6006` and verify the marker bytes survive. The
+collision exercises bundle publication regardless of the view tree or device
+family. Each Counter run separately builds, installs, and boots its app.
 
 Resolved Grill Log: assert both the observable refusal and the preserved file. An
 exit code alone could hide a build that damaged the old path before failing.
@@ -160,7 +161,8 @@ Resolved Grill Log: assert the realization line on each runtime, not only the ex
 After the iPhone runs, the script picks the newest available device type of every other family
 the selected runtime supports, iPad and any new family, and runs Counter, Feed and Catalog on
 each. The script fails if a family the runtime offers cannot boot a device of that family.
-Each run uses a private device that is deleted afterwards, as above.
+Each run uses a private device that is deleted afterwards, as above. A newly
+created device gets ten minutes for its first boot.
 
 Resolved Grill Log: one device per family, newest first, so a new emulator type is exercised as
 soon as its runtime is installed. A family the runtime offers that fails to boot is a failure,
