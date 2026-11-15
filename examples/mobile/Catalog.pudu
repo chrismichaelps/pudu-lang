@@ -1,0 +1,53 @@
+module Catalog
+
+import Std.Mobile.Host as Host
+import Std.Mobile.View as View
+
+/// The tag the grid's events report.
+const GRID: UInt32 = 1u32
+
+/// Items in the catalog, the columns they fill, and the rows Pudu supplies at
+/// once: at least twice what one screen shows, so the window has room for a
+/// margin on both sides of the visible items.
+const TOTAL: UInt32 = 1000u32
+const COLUMNS: UInt32 = 3u32
+const WINDOW: UInt32 = 120u32
+
+fn item(index: Int) -> (Str, View.View) { ("{index}", View.Label("Item {index + 1}")) }
+
+fn view(first: UInt32) -> View.View {
+  let start = widened(first)
+  let end = widened(if first + WINDOW < TOTAL { first + WINDOW } else { TOTAL })
+  var rows: Array[(Str, View.View)] = []
+  for index in start..end {
+    rows = rows.push(item(index))
+  }
+  View.Recycled(View.Window{tag: GRID, total: TOTAL, first: first, columns: COLUMNS, rows: rows})
+}
+
+fn main() -> Int {
+  var first = 0u32
+  let (start, built) = View.mount(&view(first))
+  var mounted = start
+  Host.apply(built)
+  while true {
+    match Host.wait() {
+      case View.Reached(tag, visible) if tag == GRID => {
+        first = View.windowStart(visible, TOTAL, WINDOW)
+        let (next, changes) = View.update(&mounted, &view(first))
+        Host.apply(changes)
+        mounted = next
+      }
+      case View.Stopped => { return 0 }
+      case _ => {}
+    }
+  }
+  0
+}
+
+fn widened(index: UInt32) -> Int {
+  match convertInteger[Int](index) {
+    case Some(value) => value
+    case None => 0
+  }
+}

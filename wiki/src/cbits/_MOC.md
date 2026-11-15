@@ -28,6 +28,9 @@ tags: [moc, module, foreign, ffi]
 
 - [[iOS Host Layout]] — vertical viewport, safe area, keyboard layout and focus reveal.
 - [[iOS Host Theme]] — semantic color roles, appearance override, and Dynamic Type text styles.
+- [[iOS Host Events]] — private event queue with the text and detail word each event carries.
+- [[iOS Host Controls]] — platform control factories, setters, target actions and self-test actions.
+- [[iOS Host List]] — recycling list and grid cells, the row store, and scroll reports.
 
 ## Referenced by
 

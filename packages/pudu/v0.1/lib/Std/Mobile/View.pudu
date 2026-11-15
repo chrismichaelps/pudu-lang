@@ -20,13 +20,23 @@ export type View
   | Scroll(View)
   | Styled(Theme.TextStyle, View)
   | Painted(Theme.Role, View)
+  | Recycled(Window)
+
+/// A recycling list of `total` items in `columns` equal columns. `rows` are
+/// the keyed views of items `first`, `first + 1` and onward: the window the
+/// program supplies. The platform reuses cells; items outside the window
+/// have no row.
+export type Window = { tag: UInt32, total: UInt32, first: UInt32, columns: UInt32, rows: Array[(Str, View)] }
 
 /// What the platform reported: a button's tag was tapped, a field's text
-/// changed, a toggle was switched, or the host asked the program to stop.
+/// changed, a toggle was switched, a list's visible range neared the edge of
+/// its window (its tag and first visible item), or the host asked the
+/// program to stop.
 export type Event
   = Tapped(UInt32)
   | Changed(UInt32, Str)
   | Toggled(UInt32, Bool)
+  | Reached(UInt32, UInt32)
   | Stopped
 
 /// A node the platform shows: its id, the view it shows, and the nodes of
@@ -48,6 +58,7 @@ const TAPPED: UInt64 = 1u64
 const CHANGED: UInt64 = 3u64
 const SWITCHED_ON: UInt64 = 4u64
 const SWITCHED_OFF: UInt64 = 5u64
+const REACHED: UInt64 = 8u64
 
 /// Each event kind's constructor, given the tag and the text the host holds.
 const EVENTS: Map[UInt64, fn(UInt32, Str) -> Event] = mapOf([
@@ -56,6 +67,30 @@ const EVENTS: Map[UInt64, fn(UInt32, Str) -> Event] = mapOf([
     (SWITCHED_ON, |tag: UInt32, _text: Str| Toggled(tag, true)),
     (SWITCHED_OFF, |tag: UInt32, _text: Str| Toggled(tag, false))
   ])
+
+/// Each detailed event kind's constructor, given the tag and the detail word.
+const DETAILED: Map[UInt64, fn(UInt32, UInt32) -> Event] = mapOf([(REACHED, |tag: UInt32, first: UInt32| Reached(tag, first))])
+
+/// Whether a host event's kind carries a detail word the host holds for it.
+export fn carriesDetail(raw: UInt64) -> Bool { DETAILED.containsKey(raw >> 32) }
+
+/// A host event read with its text and detail word: detailed kinds decode
+/// through `DETAILED`, every other kind through `event`.
+export fn eventWithDetail(raw: UInt64, text: Str, detail: UInt32) -> Event {
+  match (DETAILED.get(raw >> 32), convertInteger[UInt32](raw & 0xffffffffu64)) {
+    case (Some(made), Some(tag)) => made(tag, detail)
+    case _ => event(raw, text)
+  }
+}
+
+/// The first item of a window of `size` items that places `visible` a
+/// quarter of the window from its start, clamped to the end of the list.
+export fn windowStart(visible: UInt32, total: UInt32, size: UInt32) -> UInt32 {
+  let lead = size / 4u32
+  let start = if visible > lead { visible - lead } else { 0u32 }
+  let last = if total > size { total - size } else { 0u32 }
+  if start > last { last } else { start }
+}
 
 /// Whether a host event's kind carries text the host holds for it.
 export fn carriesText(raw: UInt64) -> Bool { raw >> 32 == CHANGED }
@@ -112,6 +147,11 @@ fn built(work: Work, view: &View) -> (Work, Shown) {
     case Row(children) => grouped(written(taken, Stream.create(taken.out, id, Stream.ROW)), id, view, &children)
     case Keyed(rows) => grouped(written(taken, Stream.create(taken.out, id, Stream.COLUMN)), id, view, &rows.map(|row: (Str, View)| row[1]))
     case Scroll(child) => grouped(written(taken, Stream.create(taken.out, id, Stream.SCROLL)), id, view, &[child])
+    case Recycled(window) => {
+      let made = Stream.create(taken.out, id, Stream.LIST)
+      let shaped = Stream.range(Stream.columns(Stream.tag(made, id, window.tag), id, window.columns), id, window.total, window.first)
+      grouped(written(taken, shaped), id, view, &window.rows.map(|row: (Str, View)| row[1]))
+    }
     case Named(label, inner) => marked(work, view, &inner, |out: Array[UInt8], node: UInt32| Stream.name(out, node, label))
     case Styled(style, inner) => marked(work, view, &inner, |out: Array[UInt8], node: UInt32| Stream.style(out, node, Theme.styleCode(style)))
     case Painted(role, inner) => marked(work, view, &inner, |out: Array[UInt8], node: UInt32| Stream.color(out, node, Theme.roleCode(role)))
@@ -154,6 +194,12 @@ fn reconciled(work: Work, shown: &Shown, next: &View) -> Outcome {
     case (Column(before), Column(after)) => regrouped(positional(work, shown, &before, &after), shown, next)
     case (Row(before), Row(after)) => regrouped(positional(work, shown, &before, &after), shown, next)
     case (Keyed(before), Keyed(after)) => regrouped(keyed(work, shown, &before, &after), shown, next)
+    case (Recycled(before), Recycled(after)) if before.tag == after.tag => {
+      let (made, rows) = keyed(work, shown, &before.rows, &after.rows)
+      let laid = if before.columns == after.columns { made.out } else { Stream.columns(made.out, id, after.columns) }
+      let ranged = if before.total == after.total && before.first == after.first { laid } else { Stream.range(laid, id, after.total, after.first) }
+      regrouped((written(made, ranged), rows), shown, next)
+    }
     case (Scroll(_), Scroll(child)) => {
       let (made, node) = settled(work, id, &shown.children[0], &child, 0)
       regrouped((made, [node]), shown, next)
