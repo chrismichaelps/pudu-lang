@@ -20,6 +20,9 @@ module Pudu.Frontend.Syntax.Tree
   , requiredParameterCount
   , FunctionBody (..)
   , Foreign (..)
+  , foreignCallbackNames
+  , ForeignCallback (..)
+  , ForeignCallbackParameter (..)
   , ForeignFunction (..)
   , ForeignParameter (..)
   , Impl (..)
@@ -403,8 +406,27 @@ data Foreign = Foreign
       is not a texture — and one address type for all of them makes passing the
       wrong one a fault the library reports rather than one the checker does. -}
   , foreignTypes :: ![Located Text]
+  , foreignCallbacks :: ![Located ForeignCallback]
   , foreignFunctions :: ![Located ForeignFunction]
   }
+  deriving stock (Eq, Show, Generic)
+
+foreignCallbackNames :: Foreign -> [Located Text]
+foreignCallbackNames = map (foreignCallbackName . locatedValue) . foreignCallbacks
+
+{-| The callback signature keeps the native argument order, including the
+    context word that has no corresponding Pudu argument. -}
+data ForeignCallback = ForeignCallback
+  { foreignCallbackName :: !(Located Text)
+  , foreignCallbackParameters :: ![Located ForeignCallbackParameter]
+  , foreignCallbackResult :: !(Located TypeSyntax)
+  , foreignCallbackFallback :: !(Maybe (Located Literal))
+  }
+  deriving stock (Eq, Show, Generic)
+
+data ForeignCallbackParameter
+  = ForeignCallbackContext
+  | ForeignCallbackArgument !(Located Text) !Bool !(Located TypeSyntax)
   deriving stock (Eq, Show, Generic)
 
 {-| One function in a foreign library, as this program asserts its shape.
@@ -440,6 +462,9 @@ data ForeignFunction = ForeignFunction
     distinction is in the declaration rather than in a comment. -}
 data ForeignParameter = ForeignParameter
   { foreignParameterName :: !(Located Text)
+  {-| A native context slot refers to a callback argument by name and has no
+      separately written type. -}
+  , foreignParameterContext :: !Bool
   , foreignParameterType :: !(Maybe (Located TypeSyntax))
   {-| Whether the library writes this parameter rather than reading it. -}
   , foreignParameterOut :: !Bool

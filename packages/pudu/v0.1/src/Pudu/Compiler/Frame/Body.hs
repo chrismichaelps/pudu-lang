@@ -237,6 +237,7 @@ lowerExpression expression@(CoreExpression at kind shape) = case shape of
   CoreKernel name constants arguments -> do
     operands <- lowerOperands arguments
     maybe (pure Stopped) (value . FrameKernel name constants) operands
+  CoreCallback operation operand -> rendered (FrameCallback operation) operand
   CoreForeignCall declared arguments -> do
     operands <- lowerOperands arguments
     maybe (pure Stopped) (value . FrameForeign declared) operands
@@ -380,6 +381,7 @@ resultSlot at kind = case kind of
   CoreBytesType -> Just <$> freshSlot at "$result" kind
   CoreDecimalType -> Just <$> freshSlot at "$result" kind
   CoreHandleType _ _ -> Just <$> freshSlot at "$result" kind
+  CoreCallbackType _ _ -> Just <$> freshSlot at "$result" kind
 
 lowerPrint :: Span -> CoreExpression -> Build Flow
 lowerPrint at operand = case coreExpressionShape operand of

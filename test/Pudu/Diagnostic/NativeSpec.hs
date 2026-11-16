@@ -32,7 +32,7 @@ testContracts = do
           ]
       | (code, value, message, help) <-
           [ ("E6001", nativeRefusal at "async λ", "the native backend does not support async λ yet",
-              Just "run this program with the tree interpreter, or keep to the supported subset: Int and Bool locals, while, if, print, and checked integer arithmetic")
+              Just "run this program with the tree interpreter (`pudu run`), or rewrite the construct at this location in a form the native backend carries")
           , ("E6002", toolchainNotFound at "PUDU_CC=/missing/cc", "no C compiler found: looked for PUDU_CC=/missing/cc",
               Just "install a C11 compiler, or set PUDU_CC to the compiler to use")
           , ("E6003", toolchainInvocationFailed at "permission denied", "the C compiler could not be started: permission denied", Nothing)

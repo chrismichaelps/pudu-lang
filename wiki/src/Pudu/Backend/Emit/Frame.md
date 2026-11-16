@@ -18,6 +18,10 @@ and have no parameters. Numeric IDs follow module order. Empty parameter vectors
 use NULL, not zero-length arrays. Frame slot counts and argument scratch maxima
 come from actual emitted functions. No frontend/compiler import or inference.
 
+Typed direct entries from [[Backend Typed Integer Calls]] are emitted before
+the stack entries that call them. The function table keeps the usual frame
+body, and the stack entry selects the typed form only for canonical inputs.
+
 ## Resolved Grill Log
 
 - **Q:** Lower structured Core inside the backend? **A:** No; the compiler calls lowerFrames before this boundary.
@@ -217,3 +221,10 @@ desktop unit's bytes are unchanged; only the embedded form wraps the body.
 The embedded form appends [[Backend Emit Export]]'s wrappers after the entry
 and adds their conversion needs to the runtime selection; the prototypes are
 reported in the emitted unit. The executable form emits none.
+
+## Physical slot allocation (#821)
+
+[[Backend Frame Slots]] runs before runtime selection, direct eligibility and
+body emission. Layout metadata and every emitted reference use the same
+physical slot IDs. The logical frame remains available to lowering tests.
+Resolved Grill Log: one layout for every backend consumer.

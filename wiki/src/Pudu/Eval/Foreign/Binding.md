@@ -32,6 +32,12 @@ Resolved: extracting independent foreign metadata avoids expanding Eval.Value
 past its size target for MultiMap storage. Keep exports and all field semantics
 unchanged; do not split recursive Value/OrdValue definitions or add orphan instances.
 
+## Resolved Grill Log for #876 — Interpreter callback values
+
+Each callback slot records its owner, both native positions and the
+trampoline signature. The corresponding context parameter consumes no
+Pudu argument.
+
 ## Referenced by
 
 [[src/Pudu/Eval/_MOC]] · [[src/_MOC]] · [[Eval Value]]

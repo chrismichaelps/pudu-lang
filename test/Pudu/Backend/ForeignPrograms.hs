@@ -1,7 +1,7 @@
 {-| @Test.Backend.ForeignPrograms — foreign calls through typed native call
     sites against the interpreter's bridge: libc values and handles,
     with loader, crossing and ownership refusals. -}
-module Pudu.Backend.ForeignPrograms (foreignSuccessPrograms, foreignRefusalPrograms, foreignModulePrograms) where
+module Pudu.Backend.ForeignPrograms (callbackCaller, optionalHandleLibrary, optionalHandlePrograms, foreignCallbackPrograms, foreignSuccessPrograms, foreignRefusalPrograms, foreignModulePrograms) where
 
 import Data.Text (Text)
 import qualified Data.Text as Text
@@ -204,3 +204,117 @@ handleProgram bindings body = program $
 
 program :: [Text] -> Text
 program body = Text.unlines (["module Main", ""] <> body)
+
+{-| A library function that calls back: it hands each index below `count`
+    to `visit`, with the context it was given, and sums the answers. The test
+    executable defines it for the interpreter; a native build carries it. -}
+callbackCaller :: Text
+callbackCaller = Text.unlines
+  [ "int64_t pudu_ffi_each(int64_t count, int64_t (*visit)(void *, int64_t), void *context);"
+  , "int64_t pudu_ffi_each(int64_t count, int64_t (*visit)(void *, int64_t), void *context) {"
+  , "  int64_t total = 0;"
+  , "  for (int64_t index = 0; index < count; ++index) total += visit(context, index);"
+  , "  return total;"
+  , "}" ]
+
+callbackBindings :: [Text]
+callbackBindings =
+  [ "foreign \"c\" {"
+  , "  callback Visit(context, index: Int64) -> Int64 else 100i64"
+  , "  fn each symbol \"pudu_ffi_each\" (count: Int64, visit: Visit, context visit) -> Int64"
+  , "}" ]
+
+foreignCallbackPrograms :: [(String, Text)]
+foreignCallbackPrograms =
+  [ ("a registered function is called back during the foreign call", program $ callbackBindings <>
+      [ "fn squared(index: Int64) -> Int64 { index * index }"
+      , "fn main() -> Int {"
+      , "  unsafe(foreign) {"
+      , "    let token = Visit(squared)"
+      , "    print(display(each(4i64, token)))"
+      , "    print(display(each(0i64, token)))"
+      , "    print(show(token.unregister()))"
+      , "  }"
+      , "  0"
+      , "}" ])
+  , ("a closure registers with what it captured", program $ callbackBindings <>
+      [ "fn main() -> Int {"
+      , "  let base = 10i64"
+      , "  unsafe(foreign) {"
+      , "    let token = Visit(fn(index: Int64) -> Int64 { index + base })"
+      , "    print(display(each(3i64, token)))"
+      , "    let _gone = token.unregister()"
+      , "  }"
+      , "  0"
+      , "}" ])
+  , ("a retired registration answers its fallback", program $ callbackBindings <>
+      [ "fn doubled(index: Int64) -> Int64 { index * 2i64 }"
+      , "fn main() -> Int {"
+      , "  unsafe(foreign) {"
+      , "    let token = Visit(doubled)"
+      , "    let _gone = token.unregister()"
+      , "    print(display(each(3i64, token)))"
+      , "  }"
+      , "  0"
+      , "}" ])
+  , ("a callback's failure fails the foreign call at the callback", program $ callbackBindings <>
+      [ "fn broken(index: Int64) -> Int64 { 10i64 / (index - 2i64) }"
+      , "fn main() -> Int {"
+      , "  unsafe(foreign) {"
+      , "    let token = Visit(broken)"
+      , "    print(display(each(4i64, token)))"
+      , "  }"
+      , "  0"
+      , "}" ])
+  ]
+
+{-| A library whose functions take a handle that may be absent: it reads a
+    box's value, or answers the fallback when it is handed none. The test
+    executable defines it for the interpreter; a native build carries it. -}
+optionalHandleLibrary :: Text
+optionalHandleLibrary = Text.unlines
+  [ "typedef struct { int32_t value; } pudu_ffi_optional_box;"
+  , "void *pudu_ffi_optional_new(int32_t value);"
+  , "void pudu_ffi_optional_delete(void *box);"
+  , "int32_t pudu_ffi_optional_read(void *box, int32_t fallback);"
+  , "void *pudu_ffi_optional_new(int32_t value) {"
+  , "  pudu_ffi_optional_box *box = malloc(sizeof *box);"
+  , "  if (box != NULL) box->value = value;"
+  , "  return box;"
+  , "}"
+  , "void pudu_ffi_optional_delete(void *box) { free(box); }"
+  , "int32_t pudu_ffi_optional_read(void *box, int32_t fallback) {"
+  , "  return box == NULL ? fallback : ((pudu_ffi_optional_box *)box)->value;"
+  , "}" ]
+
+optionalHandleBindings :: [Text]
+optionalHandleBindings =
+  [ "foreign \"c\" {"
+  , "  type Box"
+  , "  fn boxNew symbol \"pudu_ffi_optional_new\" (value: Int32) -> owned Box by boxDelete"
+  , "  fn boxDelete symbol \"pudu_ffi_optional_delete\" (box: Box) -> ()"
+  , "  fn boxRead symbol \"pudu_ffi_optional_read\" (box: Option[Box], fallback: Int32) -> Int32"
+  , "}" ]
+
+optionalHandlePrograms :: [(String, Text)]
+optionalHandlePrograms =
+  [ ("an optional handle crosses as the handle it holds, or as null", program $ optionalHandleBindings <>
+      [ "fn main() -> Int {"
+      , "  unsafe(foreign) {"
+      , "    let box = boxNew(7i32)"
+      , "    let held: Option[Box] = Some(box)"
+      , "    print(display(boxRead(held, -1i32)) + \" \" + display(boxRead(None, -1i32)))"
+      , "    boxDelete(box)"
+      , "  }"
+      , "  0"
+      , "}" ])
+  , ("an optional handle that was released is refused before the call", program $ optionalHandleBindings <>
+      [ "fn main() -> Int {"
+      , "  unsafe(foreign) {"
+      , "    let box = boxNew(3i32)"
+      , "    boxDelete(box)"
+      , "    print(display(boxRead(Some(box), -1i32)))"
+      , "  }"
+      , "  0"
+      , "}" ])
+  ]

@@ -24,6 +24,18 @@ outputSuccessPrograms =
       , "  print(display({ print(\"nested\") }))"
       , "  return 0", "}" ]
     , "stored\nOk(()) true\npart[Ok(()), Ok(())]\nargument\nOk(())\ncallee\nOk(())\nbreak\nOk(())\nclosure\nOk(())\nnested\nOk(())\n")
+  , ("output Results cross named function bodies and assignments", program
+      [ "fn emit() -> Result[(), Str] { print(\"body\") }"
+      , "fn main() -> Int {"
+      , "  var outcome: Result[(), Str] = Err(\"replaced\")"
+      , "  outcome = emit()"
+      , "  print(show(outcome))"
+      , "  outcome = print(\"assigned\")"
+      , "  print(show(outcome))"
+      , "  0"
+      , "}"
+      ]
+    , "body\nOk(())\nassigned\nOk(())\n")
   , ("a trailing output Result is the entry result", program
       ["fn main() -> Result[(), Str] { print(\"entry\") }"]
     , "entry\nOk(())\n")

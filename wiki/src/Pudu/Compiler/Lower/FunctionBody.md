@@ -28,7 +28,7 @@ lowerFunctionBodyWith :: LowerExpression -> LowerBlock -> Located Function -> Co
 
 ## Entry boundaries
 
-An entry takes no parameters and passes shared function admission. A plain
+The generated entry has no ABI parameters and passes shared function admission. A plain
 entry reports the admitted carrier of its body: integer, Bool, float, Str,
 Char, tuple, record, sum, function, array, tree, range, bytes, Decimal,
 foreign handle, unit or Never's unit ABI. An async entry is awaited immediately: the body is
@@ -55,13 +55,20 @@ direction.
 
 ## Entry parameters (#871)
 
-An entry whose first parameter has no default compiles to the evaluator's
-stop: E7003 "missing argument for parameter <name>" at the entry's name,
-before any body effect. An entry whose first parameter has a default stays
-refused until default evaluation at the entry is lowered.
+An argument-free entry binds defaults in declaration order using its checked
+parameter carriers. Each default sees earlier bindings. The first missing
+required parameter reports E7003 at the entry name after preceding effects.
+A default that stops prevents later defaults and the body from running.
+The async entry captures the bound values into its task.
 
-Resolved Grill Log: the native program reports what `pudu run` reports
-rather than refusing a program checking accepts.
+Resolved Grill Log: keep the generated ABI parameterless and use ordinary
+Core declarations for entry defaults. The body and async task retain their
+existing reporting paths.
+
+## Resolved Grill Log for #876 — Native callback lowering
+
+A callback token can return from an ordinary lowered function as its nominal
+native scalar.
 
 ## Referenced by
 

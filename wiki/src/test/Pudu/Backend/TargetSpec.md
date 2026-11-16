@@ -14,6 +14,12 @@ aliases: [Backend Native Target Tests]
 `backendTargetProperties :: [(String, IO Property)]` holds
 [[Native Mobile Targets]] to its contract. The pure target policy runs without a platform SDK.
 
+## TLS provider admission
+
+An embedded TLS program is admitted by the iOS and Android library targets.
+The test removes each target's provider prefix in turn and verifies the
+dependency diagnostic and the absence of published artifacts.
+
 ## Algorithm and invariants
 
 - Target names are exactly the four documented, each found by its own name;

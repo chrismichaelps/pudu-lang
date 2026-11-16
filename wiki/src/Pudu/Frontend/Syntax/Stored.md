@@ -27,6 +27,12 @@ tree's module holds its shapes alone.
 - The instances are orphans on purpose: the class knows nothing of syntax. Every module that stores
   or reads a tree imports this one; a missing import is a compile error, never a silent change.
 
+## Resolved Grill Log
+
+- **Q:** How are callback syntax nodes stored? **A:** Their generic instances
+  preserve each located field and the parameter variant. Compiler cache
+  identity changes when the executable changes, including after schema changes.
+
 ## Linkage
 
 - **Requires:** [[Syntax Tree]], [[Cache Persist]].

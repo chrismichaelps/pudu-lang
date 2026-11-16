@@ -98,6 +98,13 @@ decimal primitives. Grill Log — **Q:** list kernel names here? **A:** No; they
 
 Lane kernels bind the same way from `laneKernels` under `laneKernelName`.
 
+## Resolved Grill Log for #876 — Interpreter callback values
+
+Install the callback registration value and unregistration member under
+the declaring name. A foreign function binding records checked native
+callback and context positions and the complete trampoline signature.
+Record arguments use the declaring module's canonical runtime owner.
+
 ## Referenced by
 
 [[src/Pudu/Eval/_MOC]] · [[Evaluator]] · [[Name Resolution]]

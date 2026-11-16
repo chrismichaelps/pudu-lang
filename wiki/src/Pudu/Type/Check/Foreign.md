@@ -37,7 +37,9 @@ foreignHandles :: Foreign -> Set Text
   definition as far as this program is concerned. None of that needs machinery of its own.
 - **Every foreign function requires the `foreign` capability without saying so.** The signature is
   unverifiable by construction, and this language already has a word for an assertion of that kind.
-- **Handle syntax is formed through `DeclaredTypes`.** This preserves the declaring module in nominal identity, so same-spelling handles from two binding modules cannot unify; scalar crossings still retain their exact ABI widths.
+- **Handle syntax is formed through `DeclaredTypes`.** This preserves the declaring module in nominal identity, so same-spelling handles from two binding modules cannot unify; scalar crossings still retain their exact ABI widths. A parameter is formed through
+  `parameterCrossingFor`, so `Option` of a declared handle is admitted there and nowhere else;
+  `formedCrossing` takes the same path.
 - **A slot is a native argument and not a Pudu one.** Two signatures are derived from one
   declaration: the native one, ordinary parameters and slots in source order, and the Pudu one,
   ordinary parameters answering a tuple of the native result and each slot. The native result stays
@@ -59,7 +61,7 @@ foreignHandles :: Foreign -> Set Text
 
 ### Linkage
 
-- **Requires:** [[Type Env]], [[Foreign Crossing]].
+- **Requires:** [[Type Env]], [[Foreign Crossing]], [[Foreign Callback Signature]].
 - **Used by:** [[Type Check]].
 
 ## Grill Log
@@ -85,6 +87,31 @@ foreignHandles :: Foreign -> Set Text
 - **Q:** Diagnose an oversized record as merely uncrossable? **A:** No. _Rationale:_ the declaration
   is otherwise a supported flat record and the author needs the exact 32-field bridge boundary to
   repair it. _Rejected:_ reusing `E3063` and hiding the actionable cause.
+
+## Resolved Grill Log for #876
+
+- **Q:** How is `Name(f)` typed? **A:** Its sole argument is the ordinary
+  synchronous function type formed from the validated callback inputs and
+  result. It returns the nominal token from the declaring module. The
+  registration value requires no foreign capability. Only the actual
+  foreign call requires it.
+- **Q:** Where do context arguments appear? **A:** The token occupies the
+  checked Pudu parameter position. The context pointer is inserted at its
+  separately checked native index and consumes no Pudu argument.
+
+- **Q:** Which ordinary checks apply to a callback-bearing foreign function?
+  **A:** The original argument count includes the callback and context slots.
+  The remaining parameter, result, ownership and symbol checks use the same
+  rules as other foreign functions. [[Foreign Callback Signature]] validates
+  the callback argument types and their context pairs.
+- **Q:** When can a valid pair reach dispatch? **A:** The checker retains
+  the admission guard until registration, lowering and both runtime paths
+  consume the checked signature. Invalid pairs report the failing span.
+
+## Resolved Grill Log for #876 — Interpreter callback values
+
+A callback token answers unregister with `Result[(), Str]`. This method
+uses the owning nominal identity and has no foreign capability requirement.
 
 ## Referenced by
 

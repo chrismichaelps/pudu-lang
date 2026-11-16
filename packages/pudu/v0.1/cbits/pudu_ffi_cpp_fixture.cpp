@@ -267,3 +267,30 @@ extern "C" WidePadded pudu_ffi_cpp_padded_wide() {
   wide.members[11] = PaddedOuter{{13.0, 15}, 17};
   return wide;
 }
+
+/* Calls back once per index with the context it was handed, as a sort or a
+ * traversal does, and sums what the callback answers. */
+extern "C" std::int64_t pudu_ffi_each(std::int64_t count, std::int64_t (*visit)(void *, std::int64_t),
+                                      void *context) {
+  std::int64_t total = 0;
+  for (std::int64_t index = 0; index < count; ++index) total += visit(context, index);
+  return total;
+}
+
+/* A box a function may be handed or not: reading one that is absent answers
+ * the fallback, as a library taking an optional object does. */
+namespace {
+struct OptionalBox {
+  std::int32_t value;
+};
+}
+
+extern "C" void *pudu_ffi_optional_new(std::int32_t value) {
+  return new (std::nothrow) OptionalBox{value};
+}
+
+extern "C" void pudu_ffi_optional_delete(void *box) { delete static_cast<OptionalBox *>(box); }
+
+extern "C" std::int32_t pudu_ffi_optional_read(void *box, std::int32_t fallback) {
+  return box == nullptr ? fallback : static_cast<OptionalBox *>(box)->value;
+}

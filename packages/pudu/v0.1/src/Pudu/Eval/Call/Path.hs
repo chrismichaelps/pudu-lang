@@ -119,6 +119,7 @@ qualifies (Just _) = False
     longer match is the one the reader meant, and preferring it cannot shadow a
     local. -}
 readPath :: Span -> NonEmpty Text -> Evaluator Value
+readPath _ ("::trait-method::" :| [provider, member]) = pure (TraitMethodValue provider member Nothing)
 readPath spanValue (name :| []) = readName spanValue name
 readPath spanValue path@(first :| rest) = do
   local <- if null rest then pure Nothing else lookupLocal first

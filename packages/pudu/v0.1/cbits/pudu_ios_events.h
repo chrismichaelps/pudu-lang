@@ -23,6 +23,15 @@ static void pudu_queue(uint64_t kind, NSInteger tag, NSString *text, uint32_t de
   [pudu_events addObject:@[ @((kind << 32) | (uint32_t)tag), text ?: @"", @(detail) ]];
 }
 
+/* The list self-test must let queued viewport reports settle before stopping. */
+static BOOL pudu_reached_pending(NSInteger tag) {
+  uint64_t event = (PUDU_UI_REACHED << 32) | (uint32_t)tag;
+  for (NSArray *queued in pudu_events) {
+    if ([queued[0] unsignedLongLongValue] == event) return YES;
+  }
+  return NO;
+}
+
 /* The next event; the main loop runs, and controls queue events, until one
    is waiting. */
 uint64_t pudu_ui_wait(void) {

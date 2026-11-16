@@ -36,6 +36,12 @@ This extraction preserves the prior collection order and shadowing rules.
   its pure shell pass. _Rationale:_ nominal registration is a distinct dependency
   before type formation. _Rejected:_ exposing checker state or duplicating the pass.
 
+## Resolved Grill Log for #876
+
+Collect callback token names under the canonical declaring module identity
+alongside foreign handles. Registering an opaque shell gives it no fields,
+variants, or structural constructor.
+
 ## Referenced by
 
 [[Type Formation]] · [[src/Pudu/Type/_MOC]] · [[Pudu Cabal Manifest]]
