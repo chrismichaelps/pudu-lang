@@ -5,6 +5,10 @@ tags: [changelog]
 
 # Changelog
 
+## 2026-11-15 — iOS value controls (#934)
+
+- `Std.Mobile.Control` gains slider, stepper, segments, wheel, date, text area, search, symbol, pages and color well ([[Std Mobile Control]]). Event decoding is split into `Std.Mobile.Decode` ([[Std Mobile Decode]]), and the host kind table into `pudu_ios_kinds.h` ([[iOS Host Kinds]]); the controls are realized by [[iOS Host Values]], [[iOS Host Text]] and [[iOS Host Controls Test]] ([[Native iOS Controls Delivery]]).
+
 ## 2026-11-15 — iOS simulator CI caching (#930)
 
 - iOS simulator CI caches the cabal store and build tree and allows 75 minutes for the device matrix (refs #930). See [[iOS Simulator CI]].

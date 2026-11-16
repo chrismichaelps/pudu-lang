@@ -20,7 +20,7 @@ Checks:
 - Shape changes are precise replacements. A shorter column removes its tail. A retagged button is built, inserted at its index, and the old one removed. A retagged root is shown with ROOT, and the old root removed. A variant change follows the same replacement.
 - Keyed rows: a reorder is one MOVE; an insertion is one built row inserted at its index; a removal frees its id; the freed id is reused by the next built row; an unchanged list with unique keys writes nothing. Repeated keys preserve the first row, replace the additional rows, and remove their old ids. Reducing the list to one occurrence frees the remaining duplicate id and a subsequent unchanged update emits no instructions.
 - Scroll emits CREATE kind 7, APPEND and ROOT. Changing its child to another kind emits INSERT and REMOVE while keeping the root ID.
-- Event decoding: `event` of kind 1 with tag 7 is `Tapped(7)`; kind 2 is `Stopped`; kind 3 with a text is `Changed(tag, text)`; kinds 4 and 5 are `Toggled(tag, true)` and `Toggled(tag, false)`; kind 9 reads as `Stopped`. `carriesText` is true only for kind 3.
+- Event decoding, through [[Std Mobile Decode]]: `event` of kind 1 with tag 7 is `Tapped(7)`; kind 2 is `Stopped`; kind 3 with a text is `Changed(tag, text)`; kinds 4 and 5 are `Toggled(tag, true)` and `Toggled(tag, false)`; kind 9 reads as `Stopped`. `carriesText` is true only for kind 3.
 
 ## Invariants
 
@@ -35,7 +35,7 @@ Checks:
 
 ## Dependencies and consumers
 
-Depends on [[Std Mobile View]]. Its counter view matches [[Native Counter Example]]; its field and toggle checks mirror [[Native Form Example]]; its keyed checks mirror [[Native List Example]].
+Depends on [[Std Mobile View]] and [[Std Mobile Decode]]. Its counter view matches [[Native Counter Example]]; its field and toggle checks mirror [[Native Form Example]]; its keyed checks mirror [[Native List Example]].
 
 ## Resolved Grill Log
 

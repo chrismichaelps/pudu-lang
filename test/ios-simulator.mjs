@@ -182,6 +182,20 @@ int main(int argc, char **argv) {
       "import Std.Mobile.Host as Host\nimport Std.Mobile.Stream as Stream", `  let label = Stream.create([], 0u32, Stream.LABEL)
   Host.apply(bytesOf(Stream.range(label, 0u32, 10u32, 0u32)))`,
       /pudu: a view stream shaped a node that is not a list: 0/u);
+    familyApps(device, "Controls");
+    refusedApp(device, root, "inverted slider range",
+      "import Std.Mobile.Host as Host\nimport Std.Mobile.Stream as Stream", `  let slider = Stream.create([], 0u32, Stream.SLIDER)
+  Host.apply(bytesOf(Stream.bounds(slider, 0u32, 10u32, 0u32, 1u32)))`,
+      /pudu: a view stream set an inverted range or a step below one on node 0/u);
+    refusedApp(device, root, "empty segment list",
+      "import Std.Mobile.Host as Host\nimport Std.Mobile.Stream as Stream", `  let segments = Stream.create([], 0u32, Stream.SEGMENTS)
+  let none: Array[Str] = []
+  Host.apply(bytesOf(Stream.options(segments, 0u32, &none)))`,
+      /pudu: a view stream gave no options to node 0/u);
+    refusedApp(device, root, "value on a label",
+      "import Std.Mobile.Host as Host\nimport Std.Mobile.Stream as Stream", `  let label = Stream.create([], 0u32, Stream.LABEL)
+  Host.apply(bytesOf(Stream.number(label, 0u32, 1u32)))`,
+      /pudu: a view stream set a value on a node that holds none: 0/u);
     familyMatrix(runtime);
     mobileApp(device, "Glass", [glassRun("glass")]);
     mobileApp(device, "Showcase", [{
@@ -230,6 +244,13 @@ const familyRuns = {
     // Scrolled to the end, the window is clamped to the last 120 items.
     labels: Array.from({ length: 120 }, (_, index) => `Item ${881 + index}`),
     layout: ["PUDU_LIST reached Item 1000", "PUDU_LIST reused"],
+  }],
+  // Each value control is changed once; the slider's thumb lands at 2.6
+  // steps and settles on the third.
+  Controls: [{
+    environment: { SIMCTL_CHILD_PUDU_UI_SELFTEST: "0", SIMCTL_CHILD_PUDU_UI_CONTROLS_TEST: "1" },
+    labels: ["Slider: 30", "Stepper: 6", "Segment: Week", "Wheel: Pear", "Date: 1000000000", "Notes: Notes",
+      "Search: pudu", "Pages: 3", "Color: ff8000ff"],
   }],
 };
 

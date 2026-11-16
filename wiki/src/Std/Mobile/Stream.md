@@ -16,7 +16,7 @@ aliases: [Std Mobile Stream]
 Pure encoder of the view stream of [[Pudu Native]]. The reconciler in [[Std Mobile View]] decides which changes a commit needs; this module owns how each instruction is spelled as words and bytes. Every function takes the stream so far and answers it extended.
 
 Exports:
-- Kinds, values 1 to 11: `LABEL`, `BUTTON`, `COLUMN`, `ROW`, `FIELD`, `TOGGLE`, `SCROLL`, `LIST`, `MATERIAL`, `PROGRESS` (10) and `ACTIVITY` (11). Kinds 7 and 8 use the existing group instructions; a list additionally takes RANGE and COLUMNS. Kind 9 is a container of one child, as a scroll viewport is. Kinds 10 and 11 are leaves, mounted by CREATE and their value instruction.
+- Kinds, values 1 to 11: `LABEL`, `BUTTON`, `COLUMN`, `ROW`, `FIELD`, `TOGGLE`, `SCROLL`, `LIST`, `MATERIAL`, `PROGRESS` (10) and `ACTIVITY` (11). Kinds 7 and 8 use the existing group instructions; a list additionally takes RANGE and COLUMNS. Kind 9 is a container of one child, as a scroll viewport is. Kinds 10 and 11 are leaves, mounted by CREATE and their value instruction. Kinds 12 to 21 are the value controls of [[Std Mobile Control]]: `SLIDER` (12), `STEPPER` (13), `SEGMENTS` (14), `WHEEL` (15), `DATE` (16), `TEXT_AREA` (17), `SEARCH` (18), `SYMBOL` (19), `PAGES` (20) and `WELL` (21). Each is a leaf.
 - `create(out: Array[UInt8], node: UInt32, kind: UInt32) -> Array[UInt8]`: CREATE, the node and its kind.
 - `text(out, node, value: Str) -> Array[UInt8]`: TEXT, the node, then the text.
 - `hint(out, node, value: Str) -> Array[UInt8]`: HINT, the node, then the placeholder text.
@@ -37,21 +37,25 @@ Exports:
 - `material(out, node: UInt32, code: UInt32) -> Array[UInt8]`: MATERIAL, the material node and its material code.
 - `gestures(out, node, tag: UInt32, mask: UInt32) -> Array[UInt8]`: GESTURES, the node, the tag its events report and the recognizer mask.
 - `alert(out, tag: UInt32, style: UInt32, title: Str, message: Str, choices: &Array[(UInt32, Str)]) -> Array[UInt8]`: ALERT, the tag, the style code, the title and message as text fields, then the choices.
-- `value(out, node, permille: UInt32) -> Array[UInt8]`: VALUE, the node and its completion in thousandths.
+- `number(out, node, word: UInt32) -> Array[UInt8]`: VALUE, the node and one word. For a progress bar the word is its completion in thousandths. For a value control it is the number that control takes: Int32 bits for a slider or stepper, an index for segments or a wheel, a page for a page control, or packed RGBA for a color well. `progress` calls this general VALUE for a progress bar.
 - `haptic(out, code: UInt32) -> Array[UInt8]`: HAPTIC and its code.
 - `traits(out, node, mask: UInt32) -> Array[UInt8]`: TRAITS, the node and its accessibility trait mask.
 - `accessHint(out, node, value: Str) -> Array[UInt8]` and `accessValue(out, node, value: Str) -> Array[UInt8]`: ACCESS_HINT and ACCESS_VALUE, the node and its text.
 - `menu(out, node, tag: UInt32, choices: &Array[(UInt32, Str)]) -> Array[UInt8]`: MENU, the node, the tag its events report, then the choices.
 - `animate(out, node, on: Bool) -> Array[UInt8]`: ANIMATE, the group and 0 or 1.
+- `bounds(out, node, low, high, step) -> Array[UInt8]`: BOUNDS, the node, then the low, high and step as UInt32 bits of signed values, for a slider or stepper.
+- `options(out, node, labels: &Array[Str]) -> Array[UInt8]`: OPTIONS, the node, the count of labels, then each label as a text field.
+- `pages(out, node, total: UInt32) -> Array[UInt8]`: COUNT, the node and the page count of a page control. The encoder is exported as `pages`; `count` is a private length helper.
+- `moment(out, node, mode: UInt32, seconds: Int64) -> Array[UInt8]`: MOMENT, the node, the mode code, then the high word and the low word of the seconds since the epoch. The high word is the seconds shifted right by 32 bits, with its sign carried into two's complement bits; the low word is the low 32 bits.
 
 ## Invariants
 
-- Every word is a little-endian 32-bit unsigned value. Every instruction begins with its code word (CREATE 1, TEXT 2, APPEND 3, ROOT 4, TAG 5, STATE 7, HINT 8, NAME 9, INSERT 10, REMOVE 11, MOVE 12, THEME 20, APPEARANCE 21, STYLE 22, COLOR 23, RANGE 24, COLUMNS 25, MATERIAL 26, GESTURES 27, ALERT 28, VALUE 29, HAPTIC 30, TRAITS 31, ACCESS_HINT 32, ACCESS_VALUE 33, MENU 34, ANIMATE 35).
+- Every word is a little-endian 32-bit unsigned value. Every instruction begins with its code word (CREATE 1, TEXT 2, APPEND 3, ROOT 4, TAG 5, STATE 7, HINT 8, NAME 9, INSERT 10, REMOVE 11, MOVE 12, THEME 20, APPEARANCE 21, STYLE 22, COLOR 23, RANGE 24, COLUMNS 25, MATERIAL 26, GESTURES 27, ALERT 28, VALUE 29, HAPTIC 30, TRAITS 31, ACCESS_HINT 32, ACCESS_VALUE 33, MENU 34, ANIMATE 35, BOUNDS 36, OPTIONS 37, COUNT 38, MOMENT 39).
 - Theming codes start at 20. Navigation reserves 13 and 14, so a gap keeps both streams unambiguous when they merge.
 - RANGE is exactly three words after its code word; COLUMNS is exactly two; MATERIAL is exactly two. A RANGE is 16 bytes, a COLUMNS is 12 bytes and a MATERIAL is 12 bytes.
 - THEME carries exactly seven tones; its count word is 7. The encoder writes the count, and the host refuses any other count.
 - Text is its UTF-8 byte length as one word, followed by those bytes.
-- Word counts after the code word: GESTURES 3, VALUE 2, HAPTIC 1, TRAITS 2 and ANIMATE 2. ACCESS_HINT and ACCESS_VALUE are a node and a text field. ALERT is a tag, a style, two text fields and a choice list; MENU is a node, a tag and a choice list.
+- Word counts after the code word: GESTURES 3, VALUE 2, HAPTIC 1, TRAITS 2, ANIMATE 2, BOUNDS 4, COUNT 2 and MOMENT 4. OPTIONS is a node, a count word, then a text field per label. ACCESS_HINT and ACCESS_VALUE are a node and a text field. ALERT is a tag, a style, two text fields and a choice list; MENU is a node, a tag and a choice list.
 - A choice list is a count word, then each choice's role word and a text field.
 - `remove` writes the node, then the count of ids, then every id of the detached subtree, so the host can forget each one.
 - Each function appends to the stream it is given and returns the extended stream; no function reads or reorders earlier bytes.
@@ -66,7 +70,7 @@ Exports:
 
 ## Dependencies and consumers
 
-Depends on no other module. Consumers: [[Std Mobile View]], which calls these functions to build the stream of each mount and update, and [[Std Mobile Feedback]], which encodes alerts and haptics.
+Depends on no other module. Consumers: [[Std Mobile View]], which calls these functions to build the stream of each mount and update, [[Std Mobile Feedback]], which encodes alerts and haptics, and [[Std Mobile Control]], which encodes the value controls.
 
 ## Resolved Grill Log
 
@@ -83,4 +87,4 @@ Depends on no other module. Consumers: [[Std Mobile View]], which calls these fu
 
 ## Referenced by
 
-[[src/Std/_MOC]] · [[Std Mobile View]] · [[Std Mobile Theme]] · [[Native Keyed Lists Delivery]] · [[Native iOS Scrolling Delivery]] · [[Native iOS Theming Delivery]] · [[Native iOS Recycling Delivery]] · [[Native iOS Materials Delivery]]
+[[src/Std/_MOC]] · [[Std Mobile View]] · [[Std Mobile Theme]] · [[Native Keyed Lists Delivery]] · [[Native iOS Scrolling Delivery]] · [[Native iOS Theming Delivery]] · [[Native iOS Recycling Delivery]] · [[Native iOS Materials Delivery]] · [[Std Mobile Control]] · [[Native iOS Controls Delivery]]

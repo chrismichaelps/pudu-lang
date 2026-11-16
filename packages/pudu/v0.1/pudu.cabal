@@ -32,6 +32,10 @@ extra-source-files: cbits/pudu_desktop.h
                     cbits/pudu_ios_scene.h
                     cbits/pudu_ios_motion.h
                     cbits/pudu_ios_capability_test.h
+                    cbits/pudu_ios_kinds.h
+                    cbits/pudu_ios_values.h
+                    cbits/pudu_ios_text.h
+                    cbits/pudu_ios_controls_test.h
                     cbits/pudu_audio.c
                     cbits/pudu_audio_stream.c
                     cbits/pudu_audio.h

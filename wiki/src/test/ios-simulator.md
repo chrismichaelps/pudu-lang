@@ -179,6 +179,16 @@ soon as its runtime is installed. A family the runtime offers that fails to boot
 not a skip; a skip would hide the regression the matrix exists to catch. _Rejected:_ a fixed list
 of device names, which would miss families the list does not name.
 
+## Controls example (value controls)
+
+The Controls example, `examples/mobile/Controls.pudu` ([[Native Controls Example]]), joins the family runs: the iPhone and every other device family run with `PUDU_UI_CONTROLS_TEST` set. The run must print these labels, in screen order: `Slider: 30`, `Stepper: 6`, `Segment: Week`, `Wheel: Pear`, `Date: 1000000000`, `Notes: Notes`, `Search: pudu`, `Pages: 3` and `Color: ff8000ff`.
+
+Three more refusals run through `refusedApp`, each requiring a host abort and no first frame:
+
+- A slider whose range is inverted (high less than low).
+- A segment control with an empty segment list.
+- A value written to a label.
+
 ## Referenced by
 
 [[Native Mobile Targets]] · [[Native Mobile Targets Delivery]] · [[Native Controls Delivery]] · [[Native Keyed Lists Delivery]] · [[Native iOS Theming Delivery]] · [[Native iOS Recycling Delivery]]

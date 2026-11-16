@@ -5,7 +5,7 @@
 
 @interface PuduScroll : UIScrollView
 @property (strong, nonatomic) UIStackView *content;
-@property (weak, nonatomic) UITextField *focusedField;
+@property (weak, nonatomic) UIView *focusedField;
 - (void)revealField;
 @end
 
@@ -13,7 +13,7 @@
   CGSize previousViewport;
 }
 - (void)revealField {
-  UITextField *field = self.focusedField;
+  UIView *field = self.focusedField;
   if (field.isFirstResponder && [field isDescendantOfView:self]) {
     [self scrollRectToVisible:[field convertRect:field.bounds toView:self] animated:NO];
   }
@@ -27,7 +27,8 @@
 }
 @end
 
-static void pudu_focus_field(UITextField *sender) {
+/* A field or text area taking focus is kept visible inside its scroll view. */
+static void pudu_focus_field(UIView *sender) {
   for (UIView *parent = sender.superview; parent != nil; parent = parent.superview) {
     if ([parent isKindOfClass:PuduScroll.class]) {
       PuduScroll *scroll = (PuduScroll *)parent;

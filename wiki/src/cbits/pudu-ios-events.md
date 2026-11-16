@@ -20,7 +20,7 @@ The header provides `pudu_queue(kind, tag, text, detail)`, which appends an even
 - `pudu_ui_wait` runs the main run loop in the default mode until an event is queued, then hands out the oldest.
 - `pudu_ui_event_text` and `pudu_ui_event_detail` return the text and detail of the last event handed out. Both stay valid until the next wait.
 - Events are handed out in the order the controls queued them.
-- The event kind constants live in this header: tapped 1, stopped 2, changed 3, switched on 4, switched off 5, reached 8, gestured 9, chose 10, resized 11, lifecycle 12, picked 13. The controls header [[iOS Host Controls]] and the capability headers queue them by these names.
+- The event kind constants live in this header: tapped 1, stopped 2, changed 3, switched on 4, switched off 5, reached 8, gestured 9, chose 10, resized 11, lifecycle 12, picked 13, valued 14, colored 15, dated 16. Valued carries its value as Int32 bits in the detail word; colored carries packed RGBA in the detail word; dated carries the high and low words of its seconds on the word channel, and text area and search report changed with their text. The controls header [[iOS Host Controls]] and the capability headers queue them by these names.
 
 ## Word channel
 

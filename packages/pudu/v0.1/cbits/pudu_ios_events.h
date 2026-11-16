@@ -12,7 +12,8 @@
 /* Event kinds in the high word of an event; they match Std.Mobile.View. */
 static const uint64_t PUDU_UI_TAPPED = 1, PUDU_UI_STOPPED = 2, PUDU_UI_CHANGED = 3, PUDU_UI_SWITCHED_ON = 4,
                       PUDU_UI_SWITCHED_OFF = 5, PUDU_UI_REACHED = 8, PUDU_UI_GESTURED = 9, PUDU_UI_CHOSE = 10,
-                      PUDU_UI_RESIZED = 11, PUDU_UI_LIFECYCLE = 12, PUDU_UI_PICKED = 13;
+                      PUDU_UI_RESIZED = 11, PUDU_UI_LIFECYCLE = 12, PUDU_UI_PICKED = 13, PUDU_UI_VALUED = 14,
+                      PUDU_UI_COLORED = 15, PUDU_UI_DATED = 16;
 
 /* At most this many words travel with one event. */
 enum { PUDU_EVENT_WORDS = 4 };

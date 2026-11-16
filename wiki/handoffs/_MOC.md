@@ -421,3 +421,4 @@ tags: [moc, handoff]
 - [[Native Platform Ledger Delivery]] — platform toolchain ledger, preflight, doctor and device matrix (#926).
 - [[Native iOS Materials Delivery]] — surface materials, glass on iOS 26 or later with blur fallback (#928).
 - [[Native iOS Capabilities Delivery]] — gestures, alerts, haptics, accessibility, context menus, scene and motion (#930).
+- [[Native iOS Controls Delivery]] — value controls: slider, stepper, segments, wheel, date, text area, search, symbol, pages and color well (#934).

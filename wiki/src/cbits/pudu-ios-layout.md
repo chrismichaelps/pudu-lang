@@ -24,6 +24,7 @@ the available root area, root placement, and field reveal.
   its child and can exceed the viewport.
 - The nearest viewport reveals a focused field when editing begins and after the viewport
   changes size. The field reference is weak and reveal requires that it still owns focus.
+  `pudu_focus_field` takes any view, a field or a text area, not only a text field.
 - `pudu_test_keyboard(surface, root, nodes, done)` is the keyboard self-test. It takes the root
   surface, the shown root, the node table and a `done` block that asks the program to stop as
   parameters, and reads no host globals. Its deadline is measured with `CACurrentMediaTime`.

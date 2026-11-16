@@ -258,3 +258,5 @@ STARTTLS use [[Std Tls]]. [[Std Compress Gzip]] delegates to [[Eval Compress]] a
 - [[Std Mobile Scene]] — scene size, size classes and lifecycle phases decoded from host events (#930).
 - [[Std Mobile Access]] — accessibility traits as a mask, with hints and values (#930).
 - [[Std Mobile Feedback]] — alerts, action sheets and haptics as commands with a reported choice (#930).
+- [[Std Mobile Control]] — value controls (slider, stepper, segments, wheel, date, text area, search, symbol, pages, color well) as exact integers (#934).
+- [[Std Mobile Decode]] — event decoding split out of the view, with valued, colored and dated events (#934).

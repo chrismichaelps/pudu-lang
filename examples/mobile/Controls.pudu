@@ -1,0 +1,113 @@
+module Controls
+
+import Std.Mobile.Control as Input
+import Std.Mobile.Host as Host
+import Std.Mobile.View as View
+
+/// Tags the controls report.
+const SLIDER: UInt32 = 1u32
+const STEPPER: UInt32 = 2u32
+const SEGMENTS: UInt32 = 3u32
+const WHEEL: UInt32 = 4u32
+const DATE: UInt32 = 5u32
+const NOTES: UInt32 = 6u32
+const SEARCH: UInt32 = 7u32
+const PAGES: UInt32 = 8u32
+const WELL: UInt32 = 9u32
+
+/// Labels of the segmented control and the wheel, by index.
+const SPANS: Array[Str] = ["Day", "Week", "Month"]
+const FRUIT: Array[Str] = ["Apple", "Banana", "Pear"]
+
+/// Hexadecimal digits by value.
+const DIGITS: Array[Str] = ["0", "1", "2", "3", "4", "5", "6", "7", "8", "9", "a", "b", "c", "d", "e", "f"]
+
+/// Every value the screen holds; the controls show these and report changes.
+type Model = { level: Int32, count: Int32, span: UInt32, fruit: UInt32, moment: Int64, notes: Str, query: Str, page: UInt32, color: UInt32 }
+
+fn picked(labels: &Array[Str], index: UInt32) -> Str {
+  match convertInteger[Int](index) {
+    case Some(at) if at < labels.length() => labels[at]
+    case _ => "?"
+  }
+}
+
+// Packed RGBA as eight lowercase hexadecimal digits, red first.
+fn hex(rgba: UInt32) -> Str {
+  var text = ""
+  for nibble in 0..8 {
+    let digit = match convertInteger[Int]((rgba >> (28 - nibble * 4)) & 15u32) {
+      case Some(at) => DIGITS[at]
+      case None => "?"
+    }
+    text = text + digit
+  }
+  text
+}
+
+fn view(model: &Model) -> View.View {
+  View.Scroll(
+    View.Column([
+        View.Control(Input.Symbol("slider.horizontal.3")),
+        View.Label("Slider: {model.level}"),
+        View.Control(Input.Slider(SLIDER, model.level, Input.Bounds{low: 0i32, high: 100i32, step: 10i32})),
+        View.Label("Stepper: {model.count}"),
+        View.Control(Input.Stepper(STEPPER, model.count, Input.Bounds{low: 0i32, high: 10i32, step: 1i32})),
+        View.Label("Segment: " + picked(&SPANS, model.span)),
+        View.Control(Input.Segments(SEGMENTS, SPANS, model.span)),
+        View.Label("Wheel: " + picked(&FRUIT, model.fruit)),
+        View.Control(Input.Wheel(WHEEL, FRUIT, model.fruit)),
+        View.Label("Date: {model.moment}"),
+        View.Control(Input.Date(DATE, model.moment, Input.DayAndTime)),
+        View.Label("Notes: {model.notes}"),
+        View.Control(Input.TextArea(NOTES, model.notes)),
+        View.Label("Search: {model.query}"),
+        View.Control(Input.Search(SEARCH, "Search", model.query)),
+        View.Label("Pages: {model.page + 1u32}"),
+        View.Control(Input.Pages(PAGES, 4u32, model.page)),
+        View.Label("Color: " + hex(model.color)),
+        View.Control(Input.Well(WELL, model.color))
+      ])
+  )
+}
+
+// Indexes and pages arrive as signed values; a negative one is not an index.
+fn position(value: Int32) -> UInt32 {
+  match convertInteger[UInt32](value) {
+    case Some(found) => found
+    case None => 0u32
+  }
+}
+
+fn update(model: &Model, event: &View.Event) -> Model {
+  match *event {
+    case View.Valued(tag, value) if tag == SLIDER => Model {..*model, level: value }
+    case View.Valued(tag, value) if tag == STEPPER => Model {..*model, count: value }
+    case View.Valued(tag, value) if tag == SEGMENTS => Model {..*model, span: position(value) }
+    case View.Valued(tag, value) if tag == WHEEL => Model {..*model, fruit: position(value) }
+    case View.Valued(tag, value) if tag == PAGES => Model {..*model, page: position(value) }
+    case View.Dated(tag, seconds) if tag == DATE => Model {..*model, moment: seconds }
+    case View.Colored(tag, rgba) if tag == WELL => Model {..*model, color: rgba }
+    case View.Changed(tag, text) if tag == NOTES => Model {..*model, notes: text }
+    case View.Changed(tag, text) if tag == SEARCH => Model {..*model, query: text }
+    case _ => *model
+  }
+}
+
+fn main() -> Int {
+  var model = Model{level: 0i32, count: 5i32, span: 0u32, fruit: 0u32, moment: 0i64, notes: "", query: "", page: 0u32, color: 0x0000ffffu32}
+  let (first, built) = View.mount(&view(&model))
+  var mounted = first
+  Host.apply(built)
+  while true {
+    let event = Host.wait()
+    if event == View.Stopped {
+      return 0
+    }
+    model = update(&model, &event)
+    let (next, changes) = View.update(&mounted, &view(&model))
+    Host.apply(changes)
+    mounted = next
+  }
+  0
+}

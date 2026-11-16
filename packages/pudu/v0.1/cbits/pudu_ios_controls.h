@@ -114,6 +114,21 @@ static void pudu_toggle_fill(UIView *view, NSString *text) {
   [((PuduToggle *)view).control sendActionsForControlEvents:UIControlEventValueChanged];
 }
 
+/* A system symbol. A name this OS does not know shows nothing: symbol
+   availability follows the OS version, so it is not a stream defect. */
+static UIView *pudu_make_symbol(void) {
+  UIImageView *symbol = [UIImageView new];
+  symbol.contentMode = UIViewContentModeScaleAspectFit;
+  symbol.preferredSymbolConfiguration = [UIImageSymbolConfiguration configurationWithTextStyle:UIFontTextStyleTitle1];
+  return symbol;
+}
+
+static void pudu_symbol_text(UIView *view, NSString *name) { ((UIImageView *)view).image = [UIImage systemImageNamed:name]; }
+static void pudu_symbol_paint(UIView *view, UIColor *color) { view.tintColor = color; }
+static void pudu_symbol_style(UIView *view, UIFont *font) {
+  ((UIImageView *)view).preferredSymbolConfiguration = [UIImageSymbolConfiguration configurationWithFont:font];
+}
+
 static void pudu_button_press(UIView *view) { [(UIButton *)view sendActionsForControlEvents:UIControlEventTouchUpInside]; }
 static NSString *pudu_label_shown(UIView *view) { return ((UILabel *)view).text; }
 

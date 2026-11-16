@@ -12,7 +12,7 @@ aliases: [iOS Host Controls]
 
 Private platform controls of the iOS host, included once by [[iOS Host Adapter]]. The compiler stages it with the other private headers ([[Native Toolchain Host Sources]]). It owns the factory of each control kind, the setters each kind accepts, the target object that turns control actions into queued events, and the self-test actions. The header never reads the view stream: the kind table that wires these factories into instructions stays in [[iOS Host Adapter]].
 
-The header holds the toggle, a title label beside a platform switch, and one factory per control kind: label, system button, vertical column, horizontal row, text field, toggle and list.
+The header holds the toggle, a title label beside a platform switch, and one factory per control kind: label, system button, vertical column, horizontal row, text field, toggle and list. It also holds the symbol view, a UIImageView that shows a system symbol named by its text.
 
 ## Behavior
 
@@ -21,6 +21,7 @@ The header holds the toggle, a title label beside a platform switch, and one fac
 - A column is a vertical stack with spacing 16 and center alignment; a row is a horizontal stack with spacing 12 and center alignment.
 - A text field is rounded and at least 220 points wide.
 - A toggle is a title label beside a platform switch. Its tag and accessible name are carried by the switch.
+- A symbol is a UIImageView whose text names a system symbol. Its color sets the tint and its style sets the symbol configuration from the text style's font. An unknown name shows nothing and is not a defect, since symbol availability depends on the OS version.
 - A list reports through its reached callback, which queues event kind 8 with the list's tag and the first visible index as the detail. Field focus is routed to the layout header [[iOS Host Layout]].
 - The target object queues tapped, changed and switched events. Its actions carry the control's tag, its text and its state.
 - Setters: text for label, button, field and toggle titles; hint for fields; state for toggles; accessible name for the control that carries it.

@@ -10,7 +10,7 @@ aliases: [Uses Mobile List]
 
 ## Purpose and interface
 
-Stdlib fixture for the recycling list additions of [[Std Mobile View]] and their instructions in [[Std Mobile Stream]]. Its entry drives `mount`, `update`, `windowStart`, `event` and `carriesDetail` through the checks below and answers the number of checks that held: 8. The data spec `test/Pudu/Compiler/Program/Eval/DataSpec.hs` asserts that count.
+Stdlib fixture for the recycling list additions of [[Std Mobile View]] and their instructions in [[Std Mobile Stream]]. Its entry drives `mount`, `update`, `windowStart`, `event` and `carriesDetail` of [[Std Mobile Decode]] through the checks below and answers the number of checks that held: 8. The data spec `test/Pudu/Compiler/Program/Eval/DataSpec.hs` asserts that count.
 
 Checks:
 1. A list mounts CREATE kind 8, TAG, COLUMNS 1, RANGE with total and first 0, then its rows appended.
@@ -34,7 +34,7 @@ Checks:
 
 ## Dependencies and consumers
 
-Depends on [[Std Mobile View]] and [[Std Mobile Stream]]. Its checks mirror the window contract that [[Native Catalog Example]] uses.
+Depends on [[Std Mobile View]], [[Std Mobile Decode]] and [[Std Mobile Stream]]. Its checks mirror the window contract that [[Native Catalog Example]] uses.
 
 ## Resolved Grill Log
 

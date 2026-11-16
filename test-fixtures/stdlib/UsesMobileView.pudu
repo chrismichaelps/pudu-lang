@@ -1,6 +1,7 @@
 module UsesMobileView
 
 import Std.ByteOrder {readU32LE}
+import Std.Mobile.Decode as Decode
 import Std.Mobile.View as View
 
 fn counter(count: Int) -> View.View {
@@ -99,12 +100,12 @@ export fn main() -> Int {
   if wordsAt(&replaced, 0, 6) == [1u32, 3u32, 2u32, 5u32, 3u32, 2u32] && wordsAt(&replaced, 43, 8) == [10u32, 0u32, 3u32, 1u32, 11u32, 2u32, 1u32, 2u32] { held = held + 1 }
 
   // Events: kind above, tag below, text from the host; an unknown kind stops.
-  if View.event((1u64 << 32) | 7u64, "") == View.Tapped(7u32) { held = held + 1 }
-  if View.event(2u64 << 32, "") == View.Stopped { held = held + 1 }
-  if View.event(9u64 << 32, "") == View.Stopped { held = held + 1 }
-  if View.event((3u64 << 32) | 2u64, "Ada") == View.Changed(2u32, "Ada") { held = held + 1 }
-  if View.event((4u64 << 32) | 5u64, "") == View.Toggled(5u32, true) && View.event((5u64 << 32) | 5u64, "") == View.Toggled(5u32, false) { held = held + 1 }
-  if View.carriesText(3u64 << 32) && !View.carriesText(1u64 << 32) { held = held + 1 }
+  if Decode.event((1u64 << 32) | 7u64, "") == View.Tapped(7u32) { held = held + 1 }
+  if Decode.event(2u64 << 32, "") == View.Stopped { held = held + 1 }
+  if Decode.event(9u64 << 32, "") == View.Stopped { held = held + 1 }
+  if Decode.event((3u64 << 32) | 2u64, "Ada") == View.Changed(2u32, "Ada") { held = held + 1 }
+  if Decode.event((4u64 << 32) | 5u64, "") == View.Toggled(5u32, true) && Decode.event((5u64 << 32) | 5u64, "") == View.Toggled(5u32, false) { held = held + 1 }
+  if Decode.carriesText(3u64 << 32) && !Decode.carriesText(1u64 << 32) { held = held + 1 }
 
   // A named field: created with its tag, placeholder, empty text and name.
   let form = View.Column([View.Named("Your name", View.Field("Name", "", 1u32))])

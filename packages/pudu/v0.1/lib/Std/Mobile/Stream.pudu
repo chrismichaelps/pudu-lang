@@ -35,6 +35,36 @@ export const PROGRESS: UInt32 = 10u32
 /// The kind a CREATE names for an activity indicator.
 export const ACTIVITY: UInt32 = 11u32
 
+/// The kind a CREATE names for a slider over integer values.
+export const SLIDER: UInt32 = 12u32
+
+/// The kind a CREATE names for a stepper.
+export const STEPPER: UInt32 = 13u32
+
+/// The kind a CREATE names for a segmented control.
+export const SEGMENTS: UInt32 = 14u32
+
+/// The kind a CREATE names for a wheel of one column.
+export const WHEEL: UInt32 = 15u32
+
+/// The kind a CREATE names for a date picker.
+export const DATE: UInt32 = 16u32
+
+/// The kind a CREATE names for a text area of several lines.
+export const TEXT_AREA: UInt32 = 17u32
+
+/// The kind a CREATE names for a search field.
+export const SEARCH: UInt32 = 18u32
+
+/// The kind a CREATE names for a system symbol.
+export const SYMBOL: UInt32 = 19u32
+
+/// The kind a CREATE names for a page control.
+export const PAGES: UInt32 = 20u32
+
+/// The kind a CREATE names for a color well.
+export const WELL: UInt32 = 21u32
+
 /// Instruction codes of the view stream; each is followed by its words.
 const CREATE: UInt32 = 1u32
 const TEXT: UInt32 = 2u32
@@ -63,6 +93,10 @@ const ACCESS_HINT: UInt32 = 32u32
 const ACCESS_VALUE: UInt32 = 33u32
 const MENU: UInt32 = 34u32
 const ANIMATE: UInt32 = 35u32
+const BOUNDS: UInt32 = 36u32
+const OPTIONS: UInt32 = 37u32
+const COUNT: UInt32 = 38u32
+const MOMENT: UInt32 = 39u32
 
 /// Creates node `node` as a control of `kind`.
 export fn create(out: Array[UInt8], node: UInt32, kind: UInt32) -> Array[UInt8] { words(out, [CREATE, node, kind]) }
@@ -144,7 +178,46 @@ export fn alert(out: Array[UInt8], reported: UInt32, form: UInt32, title: Str, m
 }
 
 /// Sets a progress bar's completion in thousandths.
-export fn progress(out: Array[UInt8], node: UInt32, permille: UInt32) -> Array[UInt8] { words(out, [VALUE, node, permille]) }
+export fn progress(out: Array[UInt8], node: UInt32, permille: UInt32) -> Array[UInt8] { number(out, node, permille) }
+
+/// Sets the number a control holds: a progress bar's thousandths, a slider's
+/// or stepper's value bits, a selected index, a current page, or a packed color.
+export fn number(out: Array[UInt8], node: UInt32, word: UInt32) -> Array[UInt8] { words(out, [VALUE, node, word]) }
+
+/// Sets a slider's or stepper's least value, greatest value and step, as the
+/// bits of signed values.
+export fn bounds(out: Array[UInt8], node: UInt32, low: UInt32, high: UInt32, step: UInt32) -> Array[UInt8] {
+  words(out, [BOUNDS, node, low, high, step])
+}
+
+/// Replaces a segmented control's or wheel's labels.
+export fn options(out: Array[UInt8], node: UInt32, labels: &Array[Str]) -> Array[UInt8] {
+  var bytes = words(out, [OPTIONS, node, count(labels.length())])
+  for label in *labels {
+    bytes = field(bytes, label)
+  }
+  bytes
+}
+
+/// Sets how many pages a page control shows.
+export fn pages(out: Array[UInt8], node: UInt32, total: UInt32) -> Array[UInt8] { words(out, [COUNT, node, total]) }
+
+/// Sets what a date picker picks and the moment it shows, in whole seconds
+/// since the epoch carried as the high word then the low word.
+export fn moment(out: Array[UInt8], node: UInt32, mode: UInt32, seconds: Int64) -> Array[UInt8] {
+  let low = seconds & 0xffffffffi64
+  words(out, [MOMENT, node, mode, wordOf(seconds >> 32), wordOf(low)])
+}
+
+// A value known to fit 32 bits, as a word; the high half of a seconds count
+// arrives sign-extended and is folded to its two's complement bits.
+fn wordOf(part: Int64) -> UInt32 {
+  let folded = if part < 0i64 { part + 4294967296i64 } else { part }
+  match convertInteger[UInt32](folded) {
+    case Some(found) => found
+    case None => 0u32
+  }
+}
 
 /// Plays a haptic.
 export fn haptic(out: Array[UInt8], code: UInt32) -> Array[UInt8] { words(out, [HAPTIC, code]) }

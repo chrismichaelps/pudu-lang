@@ -10,7 +10,7 @@ aliases: [Uses Mobile Capabilities]
 
 ## Purpose and interface
 
-Stdlib fixture for the capability additions of [[Std Mobile View]]: the instructions of [[Std Mobile Stream]] that carry them, and the event decoding of [[Std Mobile Host]]'s words. Its entry drives `mount` and `update` through the checks below and answers the number of checks that held. It answers 16, asserted by the data spec.
+Stdlib fixture for the capability additions of [[Std Mobile View]]: the instructions of [[Std Mobile Stream]] that carry them, and the event decoding of [[Std Mobile Decode]], including the words of measured events. Its entry drives `mount` and `update` through the checks below and answers the number of checks that held. It answers 16, asserted by the data spec.
 
 The fixture checks:
 1. The stream words of every new instruction: GESTURES, ALERT, VALUE, HAPTIC, TRAITS, ACCESS_HINT, ACCESS_VALUE, MENU and ANIMATE.
@@ -34,7 +34,7 @@ The fixture runs interpreted and as native C11 code, and both must agree.
 
 ## Dependencies and consumers
 
-Depends on [[Std Mobile View]], [[Std Mobile Stream]], [[Std Mobile Gesture]], [[Std Mobile Scene]], [[Std Mobile Access]] and [[Std Mobile Feedback]]. Its checks mirror the contracts that [[iOS Host Gesture]], [[iOS Host Feedback]], [[iOS Host Access]], [[iOS Host Scene]] and [[iOS Host Motion]] realize.
+Depends on [[Std Mobile View]], [[Std Mobile Decode]], [[Std Mobile Stream]], [[Std Mobile Gesture]], [[Std Mobile Scene]], [[Std Mobile Access]] and [[Std Mobile Feedback]]. Its checks mirror the contracts that [[iOS Host Gesture]], [[iOS Host Feedback]], [[iOS Host Access]], [[iOS Host Scene]] and [[iOS Host Motion]] realize.
 
 ## Resolved Grill Log
 

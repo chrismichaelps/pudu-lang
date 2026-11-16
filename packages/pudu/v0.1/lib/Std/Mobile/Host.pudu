@@ -1,5 +1,6 @@
 module Std.Mobile.Host
 
+import Std.Mobile.Decode as Decode
 import Std.Mobile.View as View
 
 /// The platform adapter: it applies one commit's instructions, waits for the
@@ -35,20 +36,20 @@ export fn wait() -> View.Event {
   var values: Array[Int32] = []
   unsafe(foreign) {
     raw = waitEvent()
-    if View.carriesText(raw) {
+    if Decode.carriesText(raw) {
       text = eventText()
     }
-    if View.carriesDetail(raw) {
+    if Decode.carriesDetail(raw) {
       detail = eventDetail()
     }
-    if View.carriesWords(raw) {
+    if Decode.carriesWords(raw) {
       var index = 0u32
       let total = eventWordCount()
       while index < total {
-        values = values.push(View.signed(eventWord(index)))
+        values = values.push(Decode.signed(eventWord(index)))
         index = index + 1u32
       }
     }
   }
-  View.eventWithWords(raw, text, detail, values)
+  Decode.eventWithWords(raw, text, detail, values)
 }

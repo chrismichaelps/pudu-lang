@@ -24,18 +24,8 @@
 #include "pudu_ios_scene.h"
 #include "pudu_ios_motion.h"
 #include "pudu_ios_capability_test.h"
+#include "pudu_ios_kinds.h"
 
-/* Instruction codes and control kinds of the view stream; they match
-   Std.Mobile.Stream. */
-enum { PUDU_UI_CREATE = 1, PUDU_UI_TEXT = 2, PUDU_UI_APPEND = 3, PUDU_UI_ROOT = 4, PUDU_UI_TAG = 5, PUDU_UI_RESET = 6,
-       PUDU_UI_STATE = 7, PUDU_UI_HINT = 8, PUDU_UI_NAME = 9, PUDU_UI_INSERT = 10, PUDU_UI_REMOVE = 11, PUDU_UI_MOVE = 12,
-       PUDU_UI_THEME = 20, PUDU_UI_APPEARANCE = 21, PUDU_UI_STYLE = 22, PUDU_UI_COLOR = 23, PUDU_UI_RANGE = 24,
-       PUDU_UI_COLUMNS = 25, PUDU_UI_MATERIAL_SET = 26, PUDU_UI_GESTURES = 27,
-       PUDU_UI_ALERT = 28, PUDU_UI_VALUE = 29, PUDU_UI_HAPTIC = 30, PUDU_UI_TRAITS = 31, PUDU_UI_ACCESS_HINT = 32,
-       PUDU_UI_ACCESS_VALUE = 33, PUDU_UI_MENU = 34, PUDU_UI_ANIMATE = 35, PUDU_UI_INSTRUCTIONS = 36 };
-enum { PUDU_UI_LABEL = 1, PUDU_UI_BUTTON = 2, PUDU_UI_COLUMN = 3, PUDU_UI_ROW = 4, PUDU_UI_FIELD = 5, PUDU_UI_TOGGLE = 6,
-       PUDU_UI_SCROLL = 7, PUDU_UI_LIST = 8, PUDU_UI_MATERIAL = 9,
-       PUDU_UI_PROGRESS = 10, PUDU_UI_ACTIVITY = 11, PUDU_UI_KINDS = 12 };
 
 static NSMutableArray *pudu_nodes;
 static NSMutableArray<NSNumber *> *pudu_kinds;
@@ -46,38 +36,6 @@ static UIView *pudu_shown_root;
 static UILayoutGuide *pudu_available;
 static double pudu_main_started_ms;
 static double pudu_first_frame_ms = -1;
-
-typedef struct {
-  UIView *(*make)(void);
-  void (*text)(UIView *, NSString *);
-  void (*hint)(UIView *, NSString *);
-  void (*state)(UIView *, uint32_t);
-  /* The control that carries the node's tag and accessible name. */
-  UIView *(*control)(UIView *);
-  UIStackView *(*children)(UIView *);
-  void (*fill)(UIView *, NSString *);
-  void (*press)(UIView *);
-  NSString *(*shown)(UIView *);
-  /* Text color and font; a kind without them refuses COLOR and STYLE. */
-  void (*paint)(UIView *, UIColor *);
-  void (*style)(UIView *, UIFont *);
-  /* Whether the kind takes Ink without a COLOR; buttons follow the tint. */
-  BOOL inked;
-} pudu_kind;
-
-static const pudu_kind pudu_kind_table[PUDU_UI_KINDS] = {
-  [PUDU_UI_LABEL] = { pudu_make_label, pudu_label_text, NULL, NULL, pudu_itself, NULL, NULL, NULL, pudu_label_shown, pudu_label_paint, pudu_label_style, YES },
-  [PUDU_UI_BUTTON] = { pudu_make_button, pudu_button_text, NULL, NULL, pudu_itself, NULL, NULL, pudu_button_press, NULL, pudu_button_paint, pudu_button_style, NO },
-  [PUDU_UI_COLUMN] = { pudu_make_column, NULL, NULL, NULL, pudu_itself, pudu_direct_stack, NULL, NULL, NULL, NULL, NULL, NO },
-  [PUDU_UI_ROW] = { pudu_make_row, NULL, NULL, NULL, pudu_itself, pudu_direct_stack, NULL, NULL, NULL, NULL, NULL, NO },
-  [PUDU_UI_FIELD] = { pudu_make_field, pudu_field_text, pudu_field_hint, NULL, pudu_itself, NULL, pudu_field_fill, NULL, NULL, pudu_field_paint, pudu_field_style, YES },
-  [PUDU_UI_TOGGLE] = { pudu_make_toggle, pudu_toggle_text, NULL, pudu_toggle_state, pudu_toggle_control, NULL, pudu_toggle_fill, NULL, NULL, pudu_toggle_paint, pudu_toggle_style, YES },
-  [PUDU_UI_SCROLL] = { pudu_make_scroll, NULL, NULL, NULL, pudu_itself, pudu_scroll_stack, NULL, NULL, NULL, NULL, NULL, NO },
-  [PUDU_UI_LIST] = { pudu_make_list, NULL, NULL, NULL, pudu_itself, pudu_list_store, NULL, NULL, NULL, NULL, NULL, NO },
-  [PUDU_UI_MATERIAL] = { pudu_material_make, NULL, NULL, NULL, pudu_itself, pudu_material_stack, NULL, NULL, NULL, NULL, NULL, NO },
-  [PUDU_UI_PROGRESS] = { pudu_make_progress, NULL, NULL, NULL, pudu_itself, NULL, NULL, NULL, NULL, NULL, NULL, NO },
-  [PUDU_UI_ACTIVITY] = { pudu_make_activity, NULL, NULL, pudu_activity_state, pudu_itself, NULL, NULL, NULL, NULL, NULL, NULL, NO },
-};
 
 static const pudu_kind *pudu_kind_of(uint32_t kind) {
   if (kind >= PUDU_UI_KINDS || pudu_kind_table[kind].make == NULL) pudu_stream_defect("created unknown kind", kind);
@@ -313,9 +271,47 @@ static void pudu_do_alert(pudu_reader *reader) {
 
 static void pudu_do_value(pudu_reader *reader) {
   uint32_t node = pudu_node_id(reader);
-  uint32_t permille = pudu_word(reader);
-  if (pudu_kinds[node].unsignedIntValue != PUDU_UI_PROGRESS) pudu_stream_defect("set a value on a node that is not a progress bar:", node);
-  pudu_progress_value(pudu_nodes[node], permille);
+  uint32_t word = pudu_word(reader);
+  if (pudu_node_kind(node)->number == NULL) pudu_stream_defect("set a value on a node that holds none:", node);
+  pudu_node_kind(node)->number(pudu_nodes[node], word);
+}
+
+/* BOUNDS: low, high and step as signed words; an inverted range or a step
+   below one is refused. */
+static void pudu_do_bounds(pudu_reader *reader) {
+  uint32_t node = pudu_node_id(reader);
+  int32_t low = (int32_t)pudu_word(reader), high = (int32_t)pudu_word(reader), step = (int32_t)pudu_word(reader);
+  if (pudu_node_kind(node)->bounds == NULL) pudu_stream_defect("bounded a node that takes no bounds:", node);
+  if (high < low || step < 1) pudu_stream_defect("set an inverted range or a step below one on node", node);
+  pudu_node_kind(node)->bounds(pudu_nodes[node], low, high, step);
+}
+
+static void pudu_do_options(pudu_reader *reader) {
+  uint32_t node = pudu_node_id(reader);
+  uint32_t count = pudu_word(reader);
+  NSMutableArray<NSString *> *labels = [NSMutableArray new];
+  if (pudu_node_kind(node)->options == NULL) pudu_stream_defect("gave options to a node that takes none:", node);
+  if (count == 0) pudu_stream_defect("gave no options to node", node);
+  for (uint32_t i = 0; i < count; i++) [labels addObject:pudu_text(reader)];
+  pudu_node_kind(node)->options(pudu_nodes[node], labels);
+}
+
+static void pudu_do_count(pudu_reader *reader) {
+  uint32_t node = pudu_node_id(reader);
+  uint32_t total = pudu_word(reader);
+  if (pudu_kinds[node].unsignedIntValue != PUDU_UI_PAGES) pudu_stream_defect("counted pages on a node that is not a page control:", node);
+  pudu_pages_count(pudu_nodes[node], total);
+}
+
+/* MOMENT: the mode, then the seconds as the high and low words. */
+static void pudu_do_moment(pudu_reader *reader) {
+  uint32_t node = pudu_node_id(reader);
+  uint32_t mode = pudu_word(reader);
+  int64_t high = (int32_t)pudu_word(reader);
+  int64_t seconds = (int64_t)((uint64_t)high << 32) | (int64_t)pudu_word(reader);
+  if (pudu_kinds[node].unsignedIntValue != PUDU_UI_DATE) pudu_stream_defect("set a moment on a node that is not a date picker:", node);
+  if (mode >= PUDU_MOMENTS) pudu_stream_defect("used unknown date mode", mode);
+  pudu_date_moment(pudu_nodes[node], mode, seconds);
 }
 
 static void pudu_do_haptic(pudu_reader *reader) {
@@ -365,7 +361,8 @@ static void (*const pudu_instruction_table[PUDU_UI_INSTRUCTIONS])(pudu_reader *)
   [PUDU_UI_MATERIAL_SET] = pudu_do_material, [PUDU_UI_GESTURES] = pudu_do_gestures, [PUDU_UI_ALERT] = pudu_do_alert,
   [PUDU_UI_VALUE] = pudu_do_value, [PUDU_UI_HAPTIC] = pudu_do_haptic, [PUDU_UI_TRAITS] = pudu_do_traits,
   [PUDU_UI_ACCESS_HINT] = pudu_do_access_hint, [PUDU_UI_ACCESS_VALUE] = pudu_do_access_value,
-  [PUDU_UI_MENU] = pudu_do_menu, [PUDU_UI_ANIMATE] = pudu_do_animate,
+  [PUDU_UI_MENU] = pudu_do_menu, [PUDU_UI_ANIMATE] = pudu_do_animate, [PUDU_UI_BOUNDS] = pudu_do_bounds,
+  [PUDU_UI_OPTIONS] = pudu_do_options, [PUDU_UI_COUNT] = pudu_do_count, [PUDU_UI_MOMENT] = pudu_do_moment,
 };
 
 /* Applies one commit: every instruction in order, in one call. */
@@ -463,6 +460,11 @@ static void pudu_report(UIView *view) {
   const char *typed = getenv("PUDU_UI_TYPE");
   NSArray *nodes = [pudu_nodes copy];
   NSArray<NSNumber *> *kinds = [pudu_kinds copy];
+  /* The controls test changes every value control once, through its kind's drive. */
+  for (NSUInteger node = 0; getenv("PUDU_UI_CONTROLS_TEST") != NULL && node < nodes.count; node++) {
+    const pudu_kind *kind = &pudu_kind_table[kinds[node].unsignedIntValue];
+    if (kind->drive != NULL) kind->drive(nodes[node]);
+  }
   for (NSUInteger node = 0; typed != NULL && node < nodes.count; node++) {
     const pudu_kind *kind = &pudu_kind_table[kinds[node].unsignedIntValue];
     if (kind->fill != NULL) kind->fill(nodes[node], @(typed));

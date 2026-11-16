@@ -1,0 +1,129 @@
+module UsesMobileControls
+
+import Std.ByteOrder {readU32LE}
+import Std.Mobile.Control as Controls
+import Std.Mobile.Decode as Decode
+import Std.Mobile.View as View
+
+// The words at `offset` onward, read as little-endian 32-bit values.
+fn wordsAt(bytes: &Array[UInt8], offset: Int, count: Int) -> Array[UInt32] {
+  var found = []
+  for index in 0..count {
+    match readU32LE(bytes, offset + index * 4) {
+      case Some(word) => { found = found.push(word) }
+      case None => { return [] }
+    }
+  }
+  found
+}
+
+fn built(control: Controls.Control) -> Array[UInt8] {
+  let (_, stream) = View.mount(&View.Control(control))
+  stream.toArray()
+}
+
+fn changed(shown: Controls.Control, next: Controls.Control) -> Array[UInt8] {
+  let (mounted, _) = View.mount(&View.Control(shown))
+  let (_, stream) = View.update(&mounted, &View.Control(next))
+  stream.toArray()
+}
+
+fn tenths() -> Controls.Bounds { Controls.Bounds{low: 0i32, high: 100i32, step: 10i32} }
+
+export fn main() -> Int {
+  var held = 0
+
+  // A slider: CREATE, TAG, BOUNDS before VALUE, then ROOT.
+  let slider = built(Controls.Slider(7u32, 30i32, tenths()))
+  if slider.length() == 64 && wordsAt(&slider, 0, 16) == [1u32, 0u32, 12u32, 5u32, 0u32, 7u32, 36u32, 0u32, 0u32, 100u32, 10u32, 29u32, 0u32, 30u32, 4u32, 0u32] {
+    held = held + 1
+  }
+
+  // A stepper's negative bounds and value travel as two's complement bits.
+  let stepper = built(Controls.Stepper(3u32, -2i32, Controls.Bounds{low: -5i32, high: 5i32, step: 1i32}))
+  if wordsAt(&stepper, 0, 14) == [1u32, 0u32, 13u32, 5u32, 0u32, 3u32, 36u32, 0u32, 4294967291u32, 5u32, 1u32, 29u32, 0u32, 4294967294u32] {
+    held = held + 1
+  }
+
+  // Segments: OPTIONS carries each label, then VALUE selects one.
+  let segments = built(Controls.Segments(2u32, ["Day", "Week"], 1u32))
+  if segments.length() == 71 && wordsAt(&segments, 0, 10) == [1u32, 0u32, 14u32, 5u32, 0u32, 2u32, 37u32, 0u32, 2u32, 3u32]
+    && wordsAt(&segments, 43, 1) == [4u32] && wordsAt(&segments, 51, 3) == [29u32, 0u32, 1u32] {
+    held = held + 1
+  }
+
+  // A wheel is the same shape under its own kind.
+  if wordsAt(&built(Controls.Wheel(4u32, ["Pear"], 0u32)), 0, 3) == [1u32, 0u32, 15u32] { held = held + 1 }
+
+  // A date: MOMENT carries the mode and the seconds as high then low words.
+  let date = built(Controls.Date(5u32, 1000000000i64, Controls.DayAndTime))
+  let beforeEpoch = built(Controls.Date(5u32, -1i64, Controls.Day))
+  let farOff = built(Controls.Date(5u32, 8589934592i64, Controls.Time))
+  if wordsAt(&date, 0, 11) == [1u32, 0u32, 16u32, 5u32, 0u32, 5u32, 39u32, 0u32, 2u32, 0u32, 1000000000u32]
+    && wordsAt(&beforeEpoch, 24, 5) == [39u32, 0u32, 0u32, 4294967295u32, 4294967295u32]
+    && wordsAt(&farOff, 24, 5) == [39u32, 0u32, 1u32, 2u32, 0u32] {
+    held = held + 1
+  }
+
+  // Text controls reuse TEXT and HINT; a symbol has no tag.
+  let area = built(Controls.TextArea(9u32, "a"))
+  let search = built(Controls.Search(8u32, "Find", "x"))
+  let symbol = built(Controls.Symbol("star"))
+  if wordsAt(&area, 0, 9) == [1u32, 0u32, 17u32, 5u32, 0u32, 9u32, 2u32, 0u32, 1u32]
+    && wordsAt(&search, 0, 9) == [1u32, 0u32, 18u32, 5u32, 0u32, 8u32, 8u32, 0u32, 4u32]
+    && wordsAt(&symbol, 0, 6) == [1u32, 0u32, 19u32, 2u32, 0u32, 4u32] {
+    held = held + 1
+  }
+
+  // Pages count before the current page; a well holds packed RGBA.
+  if wordsAt(&built(Controls.Pages(4u32, 5u32, 2u32)), 0, 12) == [1u32, 0u32, 20u32, 5u32, 0u32, 4u32, 38u32, 0u32, 5u32, 29u32, 0u32, 2u32]
+    && wordsAt(&built(Controls.Well(6u32, 0xff8000ffu32)), 0, 9) == [1u32, 0u32, 21u32, 5u32, 0u32, 6u32, 29u32, 0u32, 0xff8000ffu32] {
+    held = held + 1
+  }
+
+  // Revision writes only what changed; a new range rewrites the value after it.
+  let moved = changed(Controls.Slider(7u32, 30i32, tenths()), Controls.Slider(7u32, 40i32, tenths()))
+  let widened = changed(Controls.Slider(7u32, 30i32, tenths()), Controls.Slider(7u32, 30i32, Controls.Bounds{low: 0i32, high: 200i32, step: 10i32}))
+  let still = changed(Controls.Slider(7u32, 30i32, tenths()), Controls.Slider(7u32, 30i32, tenths()))
+  if moved.length() == 12 && wordsAt(&moved, 0, 3) == [29u32, 0u32, 40u32]
+    && widened.length() == 32 && wordsAt(&widened, 0, 8) == [36u32, 0u32, 0u32, 200u32, 10u32, 29u32, 0u32, 30u32]
+    && still.length() == 0 {
+    held = held + 1
+  }
+
+  // New options, a new page count and a new mode each rewrite what follows.
+  let relabeled = changed(Controls.Segments(2u32, ["Day", "Week"], 1u32), Controls.Segments(2u32, ["Day", "Month"], 1u32))
+  let repaged = changed(Controls.Pages(4u32, 5u32, 2u32), Controls.Pages(4u32, 6u32, 2u32))
+  let remoded = changed(Controls.Date(5u32, 0i64, Controls.Day), Controls.Date(5u32, 0i64, Controls.Time))
+  if wordsAt(&relabeled, 0, 3) == [37u32, 0u32, 2u32] && wordsAt(&repaged, 0, 6) == [38u32, 0u32, 6u32, 29u32, 0u32, 2u32]
+    && wordsAt(&remoded, 0, 5) == [39u32, 0u32, 1u32, 0u32, 0u32] {
+    held = held + 1
+  }
+
+  // A new tag or a different control replaces the node under a fresh id.
+  let retagged = changed(Controls.Slider(7u32, 30i32, tenths()), Controls.Slider(8u32, 30i32, tenths()))
+  let swapped = changed(Controls.Slider(7u32, 30i32, tenths()), Controls.Stepper(7u32, 30i32, tenths()))
+  if wordsAt(&retagged, 0, 3) == [1u32, 1u32, 12u32] && wordsAt(&swapped, 0, 3) == [1u32, 1u32, 13u32] { held = held + 1 }
+
+  // Value and color events arrive as detail words.
+  if Decode.eventWithWords((14u64 << 32) | 7u64, "", 0xfffffffeu32, []) == View.Valued(7u32, -2i32)
+    && Decode.eventWithWords((15u64 << 32) | 6u64, "", 0xff8000ffu32, []) == View.Colored(6u32, 0xff8000ffu32)
+    && Decode.carriesDetail(14u64 << 32) && !Decode.carriesWords(15u64 << 32) {
+    held = held + 1
+  }
+
+  // Dates arrive as two words, high read signed and low read unsigned; one word is not a date.
+  if Decode.eventWithWords((16u64 << 32) | 5u64, "", 0u32, [0i32, 1000000000i32]) == View.Dated(5u32, 1000000000i64)
+    && Decode.eventWithWords((16u64 << 32) | 5u64, "", 0u32, [-1i32, -1i32]) == View.Dated(5u32, -1i64)
+    && Decode.eventWithWords((16u64 << 32) | 5u64, "", 0u32, [2i32, 0i32]) == View.Dated(5u32, 8589934592i64)
+    && Decode.eventWithWords((16u64 << 32) | 5u64, "", 0u32, [1i32]) == View.Stopped
+    && Decode.carriesWords(16u64 << 32) {
+    held = held + 1
+  }
+
+  // Signed values round-trip through their bits.
+  if Controls.bits(-1i32) == 0xffffffffu32 && Controls.bits(5i32) == 5u32 && Decode.signed(Controls.bits(-123456i32)) == -123456i32 {
+    held = held + 1
+  }
+  held
+}

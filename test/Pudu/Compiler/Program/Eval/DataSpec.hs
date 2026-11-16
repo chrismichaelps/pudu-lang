@@ -25,6 +25,7 @@ testDataEvaluation = do
   mobileLists <- runEntry "test-fixtures/stdlib/UsesMobileList.pudu"
   mobileMaterials <- runEntry "test-fixtures/stdlib/UsesMobileMaterial.pudu"
   mobileCapabilities <- runEntry "test-fixtures/stdlib/UsesMobileCapabilities.pudu"
+  mobileControls <- runEntry "test-fixtures/stdlib/UsesMobileControls.pudu"
   flatMaps <- runEntry "test-fixtures/stdlib/UsesFlatMap.pudu"
   columnVectors <- runEntry "test-fixtures/stdlib/UsesColumn.pudu"
   hashed <- runEntry "test-fixtures/stdlib/UsesHashMap.pudu"
@@ -189,6 +190,8 @@ testDataEvaluation = do
         (mobileMaterials === Just "5")
     , counterexample "the native capability stream carries gestures, feedback, access, menus, motion and scene events"
         (mobileCapabilities === Just "16")
+    , counterexample "the native value controls build, revise and decode exact values"
+        (mobileControls === Just "13")
     , counterexample "flat hash table with control metadata evaluates"
         (flatMaps === Just "31")
     , counterexample "vectorized columnar engine with unboxed storage evaluates"

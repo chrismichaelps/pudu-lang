@@ -39,6 +39,10 @@ tags: [moc, module, foreign, ffi]
 - [[iOS Host Motion]] — animated groups and one spring per commit, honoring Reduce Motion (#930).
 - [[iOS Host Stream]] — view stream reader: words, text fields and stream defects (#930).
 - [[iOS Host Capability Test]] — self-test of the capability headers under the capability environment variable (#930).
+- [[iOS Host Kinds]] — instruction and kind codes, the kind record and the kind table (#934).
+- [[iOS Host Values]] — slider, stepper, segments, wheel, date, page control and color well (#934).
+- [[iOS Host Text]] — text area and search field (#934).
+- [[iOS Host Controls Test]] — self-test of the value controls under the controls environment variable (#934).
 
 ## Referenced by
 

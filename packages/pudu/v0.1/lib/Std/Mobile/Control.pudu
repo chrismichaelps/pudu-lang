@@ -1,0 +1,128 @@
+module Std.Mobile.Control
+
+import Std.Mobile.Stream as Stream
+
+/// The range of a slider or stepper: its least and greatest value and the
+/// step between values, counted from `low`.
+export type Bounds = { low: Int32, high: Int32, step: Int32 }
+
+/// What a date picker picks: a calendar day, a time of day, or both.
+export type Moment = Day | Time | DayAndTime
+
+/// A platform control that holds a value. Each one's tag names the events it
+/// reports. `Date` holds whole seconds since the epoch; `Well` holds a color
+/// packed as RGBA with red in the high byte; `Symbol` names a system symbol.
+export type Control
+  = Slider(UInt32, Int32, Bounds)
+  | Stepper(UInt32, Int32, Bounds)
+  | Segments(UInt32, Array[Str], UInt32)
+  | Wheel(UInt32, Array[Str], UInt32)
+  | Date(UInt32, Int64, Moment)
+  | TextArea(UInt32, Str)
+  | Search(UInt32, Str, Str)
+  | Symbol(Str)
+  | Pages(UInt32, UInt32, UInt32)
+  | Well(UInt32, UInt32)
+
+/// The mode code MOMENT carries for each moment.
+const MOMENTS: Map[Moment, UInt32] = mapOf([(Day, 0u32), (Time, 1u32), (DayAndTime, 2u32)])
+
+/// The instructions that create `control` as node `node`: CREATE and TAG,
+/// then its fields, bounds before a value and options before a selection so
+/// the platform clamps against the range it will show.
+export fn build(out: Array[UInt8], node: UInt32, control: &Control) -> Array[UInt8] {
+  match *control {
+    case Slider(tag, value, range) => Stream.number(bounded(made(out, node, Stream.SLIDER, tag), node, &range), node, bits(value))
+    case Stepper(tag, value, range) => Stream.number(bounded(made(out, node, Stream.STEPPER, tag), node, &range), node, bits(value))
+    case Segments(tag, labels, index) => Stream.number(Stream.options(made(out, node, Stream.SEGMENTS, tag), node, &labels), node, index)
+    case Wheel(tag, rows, index) => Stream.number(Stream.options(made(out, node, Stream.WHEEL, tag), node, &rows), node, index)
+    case Date(tag, seconds, moment) => Stream.moment(made(out, node, Stream.DATE, tag), node, modeOf(moment), seconds)
+    case TextArea(tag, text) => Stream.text(made(out, node, Stream.TEXT_AREA, tag), node, text)
+    case Search(tag, hint, text) => Stream.text(Stream.hint(made(out, node, Stream.SEARCH, tag), node, hint), node, text)
+    case Symbol(name) => Stream.text(Stream.create(out, node, Stream.SYMBOL), node, name)
+    case Pages(tag, total, current) => Stream.number(Stream.pages(made(out, node, Stream.PAGES, tag), node, total), node, current)
+    case Well(tag, rgba) => Stream.number(made(out, node, Stream.WELL, tag), node, rgba)
+  }
+}
+
+/// The instructions that turn `current` into `wanted` on node `node`, writing
+/// only the fields that changed; a changed range or option list rewrites the
+/// value after it. None when the variant or the tag differs: the node is
+/// replaced.
+export fn revise(out: Array[UInt8], node: UInt32, current: &Control, wanted: &Control) -> Option[Array[UInt8]] {
+  match (*current, *wanted) {
+    case (Slider(beforeTag, beforeValue, beforeRange), Slider(afterTag, afterValue, afterRange)) if beforeTag == afterTag =>
+    Some(ranged(out, node, beforeValue, &beforeRange, afterValue, &afterRange))
+    case (Stepper(beforeTag, beforeValue, beforeRange), Stepper(afterTag, afterValue, afterRange)) if beforeTag == afterTag =>
+    Some(ranged(out, node, beforeValue, &beforeRange, afterValue, &afterRange))
+    case (Segments(beforeTag, beforeLabels, beforeIndex), Segments(afterTag, afterLabels, afterIndex)) if beforeTag == afterTag =>
+    Some(chosen(out, node, &beforeLabels, beforeIndex, &afterLabels, afterIndex))
+    case (Wheel(beforeTag, beforeRows, beforeIndex), Wheel(afterTag, afterRows, afterIndex)) if beforeTag == afterTag =>
+    Some(chosen(out, node, &beforeRows, beforeIndex, &afterRows, afterIndex))
+    case (Date(beforeTag, beforeSeconds, beforeMoment), Date(afterTag, afterSeconds, afterMoment)) if beforeTag == afterTag =>
+    Some(if beforeSeconds == afterSeconds && beforeMoment == afterMoment { out } else { Stream.moment(out, node, modeOf(afterMoment), afterSeconds) })
+    case (TextArea(beforeTag, before), TextArea(afterTag, after)) if beforeTag == afterTag => Some(retexted(out, node, before, after))
+    case (Search(beforeTag, beforeHint, before), Search(afterTag, afterHint, after)) if beforeTag == afterTag => {
+      let hinted = if beforeHint == afterHint { out } else { Stream.hint(out, node, afterHint) }
+      Some(retexted(hinted, node, before, after))
+    }
+    case (Symbol(before), Symbol(after)) => Some(retexted(out, node, before, after))
+    case (Pages(beforeTag, beforeTotal, beforeCurrent), Pages(afterTag, afterTotal, afterCurrent)) if beforeTag == afterTag => {
+      if beforeTotal != afterTotal {
+        Some(Stream.number(Stream.pages(out, node, afterTotal), node, afterCurrent))
+      } else {
+        Some(if beforeCurrent == afterCurrent { out } else { Stream.number(out, node, afterCurrent) })
+      }
+    }
+    case (Well(beforeTag, before), Well(afterTag, after)) if beforeTag == afterTag =>
+    Some(if before == after { out } else { Stream.number(out, node, after) })
+    case _ => None
+  }
+}
+
+/// The bits of a signed value in two's complement.
+export fn bits(value: Int32) -> UInt32 {
+  let wide = match convertInteger[Int64](value) {
+    case Some(found) => found
+    case None => 0i64
+  }
+  let folded = if wide < 0i64 { wide + 4294967296i64 } else { wide }
+  match convertInteger[UInt32](folded) {
+    case Some(found) => found
+    case None => 0u32
+  }
+}
+
+// CREATE then TAG.
+fn made(out: Array[UInt8], node: UInt32, kind: UInt32, tag: UInt32) -> Array[UInt8] { Stream.tag(Stream.create(out, node, kind), node, tag) }
+
+fn bounded(out: Array[UInt8], node: UInt32, range: &Bounds) -> Array[UInt8] { Stream.bounds(out, node, bits(range.low), bits(range.high), bits(range.step)) }
+
+// A ranged control's revision: a new range rewrites the value after it.
+fn ranged(out: Array[UInt8], node: UInt32, before: Int32, beforeRange: &Bounds, after: Int32, afterRange: &Bounds) -> Array[UInt8] {
+  if *beforeRange != *afterRange {
+    Stream.number(bounded(out, node, afterRange), node, bits(after))
+  } else {
+    if before == after { out } else { Stream.number(out, node, bits(after)) }
+  }
+}
+
+// A choosing control's revision: new options rewrite the selection after them.
+fn chosen(out: Array[UInt8], node: UInt32, before: &Array[Str], beforeIndex: UInt32, after: &Array[Str], afterIndex: UInt32) -> Array[UInt8] {
+  if *before != *after {
+    Stream.number(Stream.options(out, node, after), node, afterIndex)
+  } else {
+    if beforeIndex == afterIndex { out } else { Stream.number(out, node, afterIndex) }
+  }
+}
+
+fn retexted(out: Array[UInt8], node: UInt32, before: Str, after: Str) -> Array[UInt8] {
+  if before == after { out } else { Stream.text(out, node, after) }
+}
+
+fn modeOf(moment: Moment) -> UInt32 {
+  match MOMENTS.get(moment) {
+    case Some(code) => code
+    case None => 0u32
+  }
+}

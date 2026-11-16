@@ -106,13 +106,13 @@ Each row lists what the toolchain realizes today and what is next. The measured 
 
 | Area | Covered now | Next |
 | --- | --- | --- |
-| Controls | label, button, field, toggle, progress, activity, material, list and grid | slider, stepper, segmented control, date picker, picker, text view, search field, image and symbols, page control, color well |
+| Controls | label, button, field, toggle, progress, activity, material, list and grid, slider, stepper, segmented control, wheel, date picker, text area, search field, system symbols, page control, color well | date ranges and minute intervals, multi-column wheels, button menus, image assets, refresh control, paste control |
 | Gestures | long press, pan, pinch, rotation, swipe | tap counts, screen-edge pan, hover, pointer, Pencil |
 | Accessibility | names, all 19 traits, hints, values | custom actions, live announcements, rotors, grouping |
 | Feedback | alerts, action sheets, haptics (selection, impact, notification), indicators | canvas feedback on Pencil Pro |
 | Presentation | navigation stack and page sheets (#920) | detents, popovers, full-screen styles |
 | Adaptivity | size classes, scene size, lifecycle | multiple windows, state restoration |
-| Visual | semantic colors, appearance, Dynamic Type, materials with glass | SF Symbols, glass button configurations, continuous corners |
+| Visual | semantic colors, appearance, Dynamic Type, materials with glass, system symbols | glass button configurations, continuous corners |
 | Animation | spring layout transitions honoring Reduce Motion | interactive and shared-element transitions, symbol effects |
 | System services | none | pasteboard, share sheet, drag and drop, document and photo pickers, notifications, open URL; reached through platform FFI (#874) where they are not UI |
 
@@ -123,8 +123,8 @@ Measured against `iPhoneSimulator26.5`.
 
 | Category | Covered | In the host | Not in the host |
 | --- | --- | --- | --- |
-| Controls | 3 of 12 | `UIButton`, `UISwitch`, `UITextField` | `UIColorWell`, `UIDatePicker`, `UIPageControl`, `UIPasteControl`, `UIRefreshControl`, `UISearchTextField`, `UISegmentedControl`, `UISlider`, `UIStepper` |
-| Views | 9 of 33 | `UIActivityIndicatorView`, `UICollectionView`, `UICollectionViewCell`, `UILabel`, `UIProgressView`, `UIScrollView`, `UIStackView`, `UIVisualEffectView`, `UIWindow` | `UIActionSheet`, `UIAlertView`, `UIBackgroundExtensionView`, `UICalendarView`, `UICollectionReusableView`, `UICollectionViewListCell`, `UIContentUnavailableView`, `UIControl`, `UIEventAttributionView`, `UIImageView`, `UIInputView`, `UIListContentView`, `UINavigationBar`, `UIPickerView`, `UIPopoverBackgroundView`, `UISearchBar`, `UIStandardTextCursorView`, `UITabBar`, `UITableView`, `UITableViewCell`, `UITableViewHeaderFooterView`, `UITextView`, `UIToolbar`, `UIWebView` |
+| Controls | 10 of 12 | `UIButton`, `UIColorWell`, `UIDatePicker`, `UIPageControl`, `UISearchTextField`, `UISegmentedControl`, `UISlider`, `UIStepper`, `UISwitch`, `UITextField` | `UIPasteControl`, `UIRefreshControl` |
+| Views | 13 of 33 | `UIActivityIndicatorView`, `UICollectionView`, `UICollectionViewCell`, `UIControl`, `UIImageView`, `UILabel`, `UIPickerView`, `UIProgressView`, `UIScrollView`, `UIStackView`, `UITextView`, `UIVisualEffectView`, `UIWindow` | `UIActionSheet`, `UIAlertView`, `UIBackgroundExtensionView`, `UICalendarView`, `UICollectionReusableView`, `UICollectionViewListCell`, `UIContentUnavailableView`, `UIEventAttributionView`, `UIInputView`, `UIListContentView`, `UINavigationBar`, `UIPopoverBackgroundView`, `UISearchBar`, `UIStandardTextCursorView`, `UITabBar`, `UITableView`, `UITableViewCell`, `UITableViewHeaderFooterView`, `UIToolbar`, `UIWebView` |
 | Gestures | 5 of 7 | `UILongPressGestureRecognizer`, `UIPanGestureRecognizer`, `UIPinchGestureRecognizer`, `UIRotationGestureRecognizer`, `UISwipeGestureRecognizer` | `UIScreenEdgePanGestureRecognizer`, `UITapGestureRecognizer` |
 | Feedback | 3 of 4 | `UIImpactFeedbackGenerator`, `UINotificationFeedbackGenerator`, `UISelectionFeedbackGenerator` | `UICanvasFeedbackGenerator` |
 | Accessibility traits | 19 of 19 | `UIAccessibilityTraitAdjustable`, `UIAccessibilityTraitAllowsDirectInteraction`, `UIAccessibilityTraitButton`, `UIAccessibilityTraitCausesPageTurn`, `UIAccessibilityTraitHeader`, `UIAccessibilityTraitImage`, `UIAccessibilityTraitKeyboardKey`, `UIAccessibilityTraitLink`, `UIAccessibilityTraitNotEnabled`, `UIAccessibilityTraitPlaysSound`, `UIAccessibilityTraitSearchField`, `UIAccessibilityTraitSelected`, `UIAccessibilityTraitStartsMediaSession`, `UIAccessibilityTraitStaticText`, `UIAccessibilityTraitSummaryElement`, `UIAccessibilityTraitSupportsZoom`, `UIAccessibilityTraitTabBar`, `UIAccessibilityTraitToggleButton`, `UIAccessibilityTraitUpdatesFrequently` | none |
@@ -145,6 +145,8 @@ Measured against `iPhoneSimulator26.5`.
 - **Q:** Should a 120 Hz display rebuild the Pudu tree at every refresh? **A:** UIKit owns native motion. Application state changes produce view commits, and custom animation samples presentation time only while active.
 
 - **Q:** Does a light/dark switch rebuild the Pudu tree? **A:** No; fixed tones are dynamic platform colors and text styles follow content size automatically.
+
+- **Q:** Why exact integers for slider values? **A:** Interpreted and native runs must show the same value; a slider runs in step indexes, and a program wanting fractions scales its bounds. See [[Std Mobile Control]].
 
 ## Referenced by
 
