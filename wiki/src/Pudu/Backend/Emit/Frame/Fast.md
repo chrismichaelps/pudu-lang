@@ -31,6 +31,8 @@ branch of the direct cell entry in [[Backend Frame Program]].
   path carries that magnitude until a checked operation consumes it.
 - Values and operations outside the typed set keep their frame representation.
   Runtime helpers are emitted when a selected body or entry uses them.
+- Each generated prototype carries an assembler label naming the Pudu
+  function, its role and its index. Calls keep the indexed names.
 
 ## Resolved Grill Log
 
@@ -38,7 +40,9 @@ The direct stack entry owns argument conversion and can execute a frame whose
 integers hold a deferred magnitude. Typed callees use int64_t after that
 boundary establishes range. The graph admits no owned values or suspensions,
 so bypassing an empty frame preserves unwind behavior. Typed calls count
-toward the Pudu call-depth limit.
+toward the Pudu call-depth limit. A label on the first declaration renames
+the symbol without touching any reference, so typed calls keep their indexed
+names.
 
 ## Referenced by
 

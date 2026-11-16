@@ -16,11 +16,11 @@ Own deterministic output state, diagnostic-site baking, byte escaping, and tempo
 
 ## Interface
 
-Exports EmitState fields, emptyEmitState, line, freshTemp, textOfInt, overflowSite, divideByZeroSite, callDepthSite, operatorFailureSite, shiftSites, renderSites, cString, and cStringBytes.
+Exports EmitState fields, emptyEmitState, line, freshTemp, textOfInt, overflowSite, divideByZeroSite, callDepthSite, operatorFailureSite, shiftSites, renderSites, cString, cStringBytes, and profileLabel.
 
 ## Algorithm and invariants
 
-Output and site lists accumulate in reverse; counters increase monotonically across the translation unit. Site geometry uses the shared diagnostic renderer. UTF-8 bytes escape as three-digit octal sequences; question marks also escape to prevent C11 trigraph replacement. No source-dependent preprocessor behavior is allowed.
+Output and site lists accumulate in reverse; counters increase monotonically across the translation unit. Site geometry uses the shared diagnostic renderer. UTF-8 bytes escape as three-digit octal sequences; question marks also escape to prevent C11 trigraph replacement. No source-dependent preprocessor behavior is allowed. `profileLabel role name identity` builds the assembler label of a generated function from its role, Pudu name and index: characters outside `A-Za-z0-9` become `_`, and the name is capped at 96 characters.
 
 ## Negative logic
 
@@ -37,6 +37,8 @@ Uses [[Source]], [[Diagnostic Render]], [[Diagnostic Arithmetic]], [[Diagnostic 
 
 - **Q:** Why extract this responsibility? **A:** It has a stable pure interface and keeps the emitter below 500 lines. The split preserves output ordering and diagnostic geometry. Rejected: a single growing emitter.
 - **Q:** May extraction change semantics? **A:** No; eager evaluation is sequenced by the emitter, while this module supplies representation and assembly primitives. Rejected: backend inference.
+
+- **Q:** Does a profiler label rename the calls? **A:** No. A label on the first declaration renames the symbol without touching any reference, so the indexed names stay in the generated C.
 
 ## Function numbers (#555)
 
