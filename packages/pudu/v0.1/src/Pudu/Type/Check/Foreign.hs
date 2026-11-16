@@ -21,6 +21,7 @@ import Pudu.Foreign.Callback
   ( CallbackFault (..), CallbackPair (callbackArgumentIndex), CallbackSignature, callbackPairs, checkCallbackDeclarations )
 import Pudu.Foreign.Crossing
   ( Crossing (..)
+  , parameterCrossingFor
   , RecordLayouts
   , crossableNames
   , crossingFor
@@ -169,11 +170,12 @@ slotAnswer declared layouts handles (Located _ parameter) =
 formedCrossing
   :: DeclaredTypes -> RecordLayouts -> Set.Set Text -> Located TypeSyntax -> Checker Type
 formedCrossing declared layouts handles written =
-  case crossingFor handles layouts written of
+  case parameterCrossingFor handles layouts written of
     {-| A handle and a record are both nominal types of this program, so their
         formed type is the ordinary one and a caller builds and reads one the
-        ordinary way. -}
+        ordinary way. An optional handle is the ordinary `Option` of one. -}
     Just (HandleCrossing _) -> formType declared [] written
+    Just (OptionalHandleCrossing _) -> formType declared [] written
     Just (RecordCrossing _ _) -> formType declared [] written
     Just crossing -> pure (crossingType crossing)
     Nothing -> pure ErrorType
@@ -260,7 +262,7 @@ checkParameter layouts handles declared (Located spanValue parameter) =
         )
         (Just "give every foreign parameter a type; nothing here can be inferred")
     Just written -> do
-      case crossingFor handles layouts written of
+      case parameterCrossingFor handles layouts written of
         Just NothingCrossing ->
           report "E3070" (locatedSpan written)
             "a foreign parameter cannot be ()"

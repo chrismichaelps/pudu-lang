@@ -83,6 +83,7 @@ callbackSignatureOf owner name signature =
     TextCrossing -> CoreTextType
     BytesCrossing -> CoreBytesType
     HandleCrossing label -> CoreHandleType (owner <> "." <> label) label
+    OptionalHandleCrossing label -> CoreSumType "Option" [CoreHandleType (owner <> "." <> label) label]
     RecordCrossing label _ -> CoreRecordType (owner <> "." <> label) []
     NothingCrossing -> CoreUnitType
   (result, fallback) = case Callback.callbackResult signature of
@@ -213,11 +214,17 @@ slotCrossing types kind
 {-| A parameter crosses as a number, Bool, text, a lent run of bytes or a
     record of those (bytes excepted). -}
 parameterCrossing :: LowerTypes -> CoreType -> Bool
-parameterCrossing types kind = kind == CoreBytesType || handle kind || fieldCrossing types kind
+parameterCrossing types kind = kind == CoreBytesType || handle kind || optionalHandle kind || fieldCrossing types kind
 
 {-| A handle result crosses when its declaration says what it transfers. -}
 handleResult :: ForeignTarget -> CoreType -> Bool
 handleResult target kind = handle kind && targetClaim target /= Nothing
+
+{-| An argument a library reads as a handle or as null. -}
+optionalHandle :: CoreType -> Bool
+optionalHandle kind = case kind of
+  CoreSumType "Option" [CoreHandleType _ _] -> True
+  _ -> False
 
 handle :: CoreType -> Bool
 handle kind = case kind of

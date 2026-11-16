@@ -25,7 +25,7 @@ import Pudu.Foreign.Callback
   ( CallbackPair (callbackTypeName), CallbackParameter (..)
   , CallbackSignature (..), callbackPairs, checkCallbackDeclarations )
 import Pudu.Eval.Foreign.Binding (ForeignCallbackSlot (..))
-import Pudu.Foreign.Crossing (Crossing (NothingCrossing, RecordCrossing), RecordLayouts, crossingFor, recordLayouts)
+import Pudu.Foreign.Crossing (Crossing (NothingCrossing, RecordCrossing), RecordLayouts, crossingFor, parameterCrossingFor, recordLayouts)
 import Pudu.Eval.Builtin
   ( effectBuiltins
   )
@@ -354,7 +354,7 @@ installForeign namespace layouts library handles callbacks declaration@(Located 
     CallbackContext -> CallbackContext
     CallbackValue crossing -> CallbackValue (qualify crossing)
   crossingOf parameter =
-    qualify (fromMaybe NothingCrossing (foreignParameterType parameter >>= crossingFor handles layouts))
+    qualify (fromMaybe NothingCrossing (foreignParameterType parameter >>= parameterCrossingFor handles layouts))
   qualify crossing = case crossing of
     RecordCrossing owner fields -> RecordCrossing
       (qualifiedForeignOwner namespace owner)

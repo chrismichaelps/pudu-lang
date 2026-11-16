@@ -34,7 +34,7 @@ foreignCall state at declared cells =
         _ | answersText -> fmap Just (textFailureSite s2 at "E7024" (Just missingHelp))
         _ -> (s2, Nothing)
       (s4, invalid) = if answersText then fmap Just (helpedFailureSite s3 at "E7025" (symbol <> " returned text that is not valid UTF-8") invalidHelp) else (s3, Nothing)
-      (s5, dead) = case [name | CoreHandleType _ name <- coreForeignParameters declared] of
+      (s5, dead) = case [name | Just name <- map passedHandle (coreForeignParameters declared)] of
         name : _ -> fmap Just (helpedFailureSite s4 at "E7022"
           ("the " <> name <> " passed to " <> symbol <> " is no longer owned") deadHelp)
         [] -> (s4, Nothing)
@@ -156,6 +156,8 @@ foreignWrappers layouts declarations signatures results =
     CoreCallbackType owner _ | Just signature <- callbackFor declared owner -> (trampolineType signature, trampolineName signature)
     CoreTextType -> (abiType kind, "t" <> textOfInt index)
     CoreRecordType _ _ -> (abiType kind, "r" <> textOfInt index)
+    CoreSumType "Option" [CoreHandleType _ _] -> ("void *", "pudu_foreign_optional_handle(dead, a" <> textOfInt index
+      <> ", " <> (if coreForeignReleases declared then "1" else "0") <> ")")
     _ -> (abiType kind, toAbi kind ("a" <> textOfInt index))
   callbackFor declared owner = lookup owner
     [(coreCallbackOwner (coreCallbackSignature slot), coreCallbackSignature slot) | slot <- coreForeignCallbacks declared]
@@ -228,6 +230,7 @@ foreignWrappers layouts declarations signatures results =
         abiSlots = [(abiType (slotAbiType kind) <> " *", "&slot" <> textOfInt i) | (i, kind) <- zip [0 ..] slots]
         lendsText = any (carriesText . snd) parameters
         handles = [i | (i, CoreHandleType _ _) <- parameters]
+        guarded = [i | (i, kind) <- parameters, Just _ <- [passedHandle kind]]
         held = sum [textLeaves layouts kind | (_, kind@(CoreRecordType _ _)) <- parameters]
         abiInputs = [inputCrossing declared i kind | (i, kind) <- parameters]
         textChecks = concat [checkText kind ("a" <> textOfInt i) | (i, kind) <- parameters]
@@ -273,7 +276,7 @@ foreignWrappers layouts declarations signatures results =
         <> [ "static pudu_box *" <> wrapperName declared <> "(const pudu_site *site"
             <> (if lendsText then ", const pudu_site *noughts" else "")
             <> (if textSites then ", const pudu_site *missing, const pudu_site *invalid" else "")
-            <> (if null handles then "" else ", const pudu_site *dead")
+            <> (if null guarded then "" else ", const pudu_site *dead")
             <> (if nativeRelease == Nothing then "" else ", const pudu_site *none")
             <> (if null releases then "" else ", const pudu_site *duplicate")
             <> foldMap (\(i, kind) -> ", " <> cType kind <> " a" <> textOfInt i) parameters <> ") {"
@@ -341,11 +344,12 @@ foreignWrappers layouts declarations signatures results =
           <> maybe "NULL" cString (coreForeignVersion declared) <> ", " <> cString (coreForeignSymbol declared) <> ", NULL))"
         call = nativeCall declared order
         handles = [index | (index, CoreHandleType _ _) <- parameters]
+        guarded = [index | (index, kind) <- parameters, Just _ <- [passedHandle kind]]
         claim = coreForeignClaim declared
         release = releaseOf declared
         siteParameters = ["const pudu_site *site"] <> ["const pudu_site *noughts" | lendsText]
           <> concat [["const pudu_site *missing", "const pudu_site *invalid"] | carriesText result]
-          <> ["const pudu_site *dead" | not (null handles)]
+          <> ["const pudu_site *dead" | not (null guarded)]
           <> concat [["const pudu_site *none"] | isHandle result]
           <> ["const pudu_site *owned" | isHandle result, Just (CoreOwned False _ _) <- [claim]]
         checks = [ "  pudu_foreign_require(dead, a" <> textOfInt index
@@ -443,6 +447,14 @@ releaserName target = "pudu_foreign_release_" <> mangle (Text.pack (show target)
 wrapperName :: CoreForeign -> Text
 wrapperName declared = "pudu_foreign_" <> mangle (Text.pack (show declared))
 
+{-| The handle a parameter passes, bare or optional, for the site that
+    reports one no longer owned. -}
+passedHandle :: CoreType -> Maybe Text
+passedHandle kind = case kind of
+  CoreHandleType _ name -> Just name
+  CoreSumType "Option" [CoreHandleType _ name] -> Just name
+  _ -> Nothing
+
 carriesText :: CoreType -> Bool
 carriesText kind = case kind of
   CoreTextType -> True
@@ -457,6 +469,7 @@ parameterNeeds kind = case kind of
   CoreTextType -> ["host_foreign_text_in"]
   CoreBytesType -> ["host_foreign_bytes"]
   CoreHandleType _ _ -> ["host_foreign_store"]
+  CoreSumType "Option" [CoreHandleType _ _] -> ["host_foreign_store"]
   _ -> []
 
 {-| The parts converting an answer back to its cell. -}

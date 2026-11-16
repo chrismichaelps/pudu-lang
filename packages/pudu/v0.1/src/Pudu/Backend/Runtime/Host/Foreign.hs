@@ -226,5 +226,12 @@ hostForeignParts =
       , "    }"
       , "  pudu_fail(dead);"
       , "}"
+      , "/* An optional handle crosses as the address `Some` holds, or NULL for"
+      , "   `None`; a held handle must still be live, as a bare one must. */"
+      , "PUDU_OPTIONAL static void *pudu_foreign_optional_handle(const pudu_site *dead, pudu_box *option, int take) {"
+      , "  if (option->fields[0].scalar != 0) return NULL;"
+      , "  pudu_foreign_require(dead, option->fields[1].box, take);"
+      , "  return (void *)(uintptr_t)option->fields[1].box->fields[0].floating;"
+      , "}"
       ])
   ]
