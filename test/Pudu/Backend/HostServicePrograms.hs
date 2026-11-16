@@ -14,7 +14,24 @@ import qualified Data.Text.Encoding as TextEncoding
 
 hostServicePrograms :: [(String, Text, Text)]
 hostServicePrograms =
-  [ ( "stream endpoints: listening, connecting, echoing, budgets and closed tokens", program
+  [ ( "an attempt runs on the calling thread and keeps a failure to itself", program
+      [ "fn main() -> Int {"
+      , "  print(show(attemptAction(fn() -> () { let _ = print(\"inside\") })))"
+      , "  let zero = 0"
+      , "  print(show(attemptAction(fn() -> () { let _ = print(display(10 / zero)) })))"
+      , "  let outer = attemptAction(fn() -> () {"
+      , "    let inner = attemptAction(fn() -> () { panic(\"deep\") })"
+      , "    let _ = print(show(inner))"
+      , "  })"
+      , "  print(show(outer))"
+      , "  print(show(attemptAction(fn() -> () {"
+      , "    let numbers = [1, 2]"
+      , "    let _ = print(display(numbers[5]))"
+      , "  })))"
+      , "  0"
+      , "}" ]
+    , "inside\nOk(())\nErr(\"division by zero\")\nErr(\"deep\")\nOk(())\nErr(\"index out of range\")\n" )
+  , ( "stream endpoints: listening, connecting, echoing, budgets and closed tokens", program
       [ "fn echo(listener: Int) -> () {"
       , "  match tcpAccept(listener) { case Ok(peer) => {"
       , "      match socketReceive(peer, 64) { case Ok(Some(chunk)) => {"

@@ -18,7 +18,7 @@ type Lowered = (LowerState, Maybe (CoreExpression, CoreType))
 
 concurrentPrimitive :: Text -> Bool
 concurrentPrimitive name =
-  name `elem` ["cellOpen", "cellGet", "cellSwap", "channelPush", "channelPull", "channelPullWithin", "spawnThread"]
+  name `elem` ["cellOpen", "cellGet", "cellSwap", "channelPush", "channelPull", "channelPullWithin", "spawnThread", "attemptAction"]
 
 {-| A direct call: operands run once in source order, and one that never
     returns ends the call before later operands run. -}
@@ -72,6 +72,12 @@ concurrentCallable name signature = case (name, signature) of
   ("spawnThread", CoreFunctionType [CoreFunctionType [] CoreUnitType] result@(CoreSumType "Result" [token, CoreTextType]))
     | token == intType -> Just $ \state at operands ->
         (state, Just (ok at result (CoreExpression at intType (CoreKernel (KernelHost "thread_spawn") [] operands)), result))
+  ("attemptAction", CoreFunctionType [CoreFunctionType [] CoreUnitType] result@(CoreSumType "Result" [CoreUnitType, CoreTextType])) ->
+    Just $ \state at operands ->
+      let (after, local) = bindLocal state "" CoreBoolType
+          ran = CoreExpression at CoreBoolType (CoreKernel (KernelHost "thread_attempt") [] operands)
+          unit = CoreExpression at CoreUnitType (CoreBlockValue (CoreBlock [] Nothing))
+       in finished after at result [CoreStatement at (CoreDeclare local ran)] (ok at result unit)
   _ -> Nothing
 
 {-| A value as the box of one member the runtime holds. -}

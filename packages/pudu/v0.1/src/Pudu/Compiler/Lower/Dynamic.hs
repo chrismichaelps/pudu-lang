@@ -13,22 +13,27 @@ import qualified Data.Text as Text
 import Pudu.Compiler.Lower.Types (LowerTypes, dynamicIdentity, isDynamic, ownerKeyOf, recordFields, sumVariants)
 import Pudu.Core
 import Pudu.Frontend.Syntax
-  ( Declaration (..), Impl (..), Located (..), Module (..), TypeSyntax (..), moduleNameText )
+  ( Declaration (..), Impl (..), Located (..), Module (..), Trait (..), TypeSyntax (..), moduleNameText )
 import Pudu.Frontend.Syntax.Name (ModuleName (..))
 import Pudu.Type.Value (NominalId (..), Type (..))
 
 {-| Every trait's implementing types as a sum, by the identity a dynamic
     type of that trait forms to. Only an implementation without parameters
-    of its own names one type, so only those are variants. -}
+    of its own names one type, so only those are variants. A trait nothing
+    implements is an empty sum: no value of it exists, but a container of
+    it, an empty array of behaviors, is an ordinary value. -}
 dynamicSums :: [Module] -> Map NominalId ([Text], [(Text, [Type], Maybe [Text])])
-dynamicSums modules = Map.map (\variants -> ([], dedupe variants)) $ Map.fromListWith (flip (<>))
-  [ (dynamicIdentity (identityOf (qualified syntax trait)), [(pathText target, [owner], Nothing)])
+dynamicSums modules = Map.map (\variants -> ([], dedupe variants)) $ Map.fromListWith (flip (<>)) $
+  [ (dynamicIdentity (identityOf (moduleNameText (locatedValue (moduleName syntax)) <> "." <> locatedValue (traitName trait))), [])
   | syntax <- modules
-  , Located _ (ImplDeclaration impl) <- moduleDeclarations syntax
-  , null (implTypeParams impl)
-  , NamedType trait _ <- [locatedValue (implTrait impl)]
-  , NamedType target _ <- [locatedValue (implTarget impl)]
-  , Just owner <- [writtenType [] (implTarget impl)] ]
+  , Located _ (TraitDeclaration trait) <- moduleDeclarations syntax ]
+  <> [ (dynamicIdentity (identityOf (qualified syntax trait)), [(pathText target, [owner], Nothing)])
+     | syntax <- modules
+     , Located _ (ImplDeclaration impl) <- moduleDeclarations syntax
+     , null (implTypeParams impl)
+     , NamedType trait _ <- [locatedValue (implTrait impl)]
+     , NamedType target _ <- [locatedValue (implTarget impl)]
+     , Just owner <- [writtenType [] (implTarget impl)] ]
  where
   qualified syntax trait
     | Text.isInfixOf "." (pathText trait) = pathText trait

@@ -86,6 +86,7 @@ data Builtin
   | TlsCloseWithinBuiltin
   | TlsPeerBuiltin
   | SpawnThreadBuiltin
+  | AttemptActionBuiltin
   | JoinThreadBuiltin
   | SleepBuiltin
   | ChannelOpenBuiltin
@@ -315,6 +316,7 @@ builtinName value = case value of
   TlsCloseWithinBuiltin -> "tlsCloseWithin"
   TlsPeerBuiltin -> "tlsPeer"
   SpawnThreadBuiltin -> "spawnThread"
+  AttemptActionBuiltin -> "attemptAction"
   JoinThreadBuiltin -> "joinThread"
   SleepBuiltin -> "sleepMillis"
   ChannelOpenBuiltin -> "channelOpen"
