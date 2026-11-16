@@ -40,6 +40,12 @@ locale or formatting for floats (the #509 formatter writes the bytes). No
 interning or sharing that could make two values alias mutable state; text is
 never mutated after it is filled.
 
+## Resolved Grill Log for #935
+
+The allocator bounds the complete C object, including its owner header,
+by `PTRDIFF_MAX`. Text operations still report their own length refusal
+before allocation when their language-level limit is exceeded.
+
 ## Grill Log
 
 - **Q:** Why does `pudu_fail_text` copy the message? **A:** Frame cleanup runs before printing and may release the text the message came from (#525).

@@ -20,6 +20,8 @@ scope. Typed trampolines supply their own ABI conversion and fallback.
 - A trampoline saves the interrupted frame and installs a local failure
   boundary. Nested failure is copied to the caller's scope. Detached failure
   remains on the registration.
+- The protected C function uses an already pinned invocation. Lookup and
+  retirement stay outside the setjmp frame so GCC sees a stable lifetime.
 - Teardown closes callback admission and waits within the native foreign
   timeout before tearing down handle claims. A late trampoline uses its
   typed fallback and acquires no interpreter state.

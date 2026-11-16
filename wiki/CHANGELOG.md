@@ -5,6 +5,14 @@ tags: [changelog]
 
 # Changelog
 
+## 2026-11-16 — Native validation fixes (#935)
+
+- Keep native callback lookup outside the setjmp frame and bound text
+  allocations by the maximum C object size.
+- Let queued iOS list viewport events settle before the scroll self-test
+  reports its final window.
+  [[Native Host Callbacks]] · [[iOS Host List]]
+
 ## 2026-11-16 — Foreign callback syntax (#876)
 
 - Retain callback signatures and native context positions in the parsed tree.
