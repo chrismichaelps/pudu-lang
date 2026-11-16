@@ -178,6 +178,7 @@ library
     Pudu.Backend.Runtime.Host.Time
     Pudu.Backend.Runtime.Host.TimeParse
     Pudu.Backend.Runtime.Host.Tls
+    Pudu.Backend.Runtime.Host.TlsTrust
     Pudu.Backend.Runtime.Range
     Pudu.Backend.Runtime.Process
     Pudu.Backend.Runtime.Output

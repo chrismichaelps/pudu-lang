@@ -30,7 +30,7 @@ backendTargetProperties =
   [ ("mobile targets select library paths and refuse escapes", pure (once targetPaths))
   , ("mobile entry emits a host function and refuses desktop runtime parts", once <$> entryForms)
   , ("mobile SDK discovery diagnoses absence without publishing", once <$> sdkFailures)
-  , ("mobile TLS requests the Apple provider before publishing", once <$> missingTlsProvider)
+  , ("mobile TLS requests each target provider before publishing", once <$> missingTlsProvider)
   , ("mobile Apple SDK builds export only the host entry on both slices", once <$> appleArchives)
   ]
 
@@ -140,18 +140,21 @@ missingTlsProvider = withSystemTempDirectory "pudu-mobile-tls" $ \root ->
         Right unit -> do
           let output = root </> "libMain.a"
               refusals target = map refusedConstruct (targetRefusals target (emittedParts unit) (emittedLibraries unit))
-          built <- withEnvironment "PUDU_IOS_OPENSSL_PREFIX" Nothing $
+          appleBuild <- withEnvironment "PUDU_IOS_OPENSSL_PREFIX" Nothing $
             compileLibrary (LibraryRequest (emittedSource unit) output apple [])
+          androidBuild <- withEnvironment "PUDU_ANDROID_OPENSSL_PREFIX" Nothing $
+            compileLibrary (LibraryRequest (emittedSource unit) output android [])
           files <- listDirectory root
+          let missing name variable result = case result of
+                Left (ToolchainSdkMissing actual detail) -> conjoin
+                  [ actual === name, property (Text.isInfixOf variable detail) ]
+                other -> counterexample (show other) False
           pure $ conjoin
             [ refusals apple === []
-            , refusals android === ["TLS connections"]
+            , refusals android === []
             , files === ["Main.pudu"]
-            , case built of
-                Left (ToolchainSdkMissing name detail) -> conjoin
-                  [ name === "ios-simulator-arm64"
-                  , property ("PUDU_IOS_OPENSSL_PREFIX" `Text.isInfixOf` detail) ]
-                other -> counterexample (show other) False
+            , missing "ios-simulator-arm64" "PUDU_IOS_OPENSSL_PREFIX" appleBuild
+            , missing "android-arm64" "PUDU_ANDROID_OPENSSL_PREFIX" androidBuild
             ]
     _ -> pure (counterexample "missing mobile targets" False)
 

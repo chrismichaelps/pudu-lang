@@ -105,7 +105,7 @@ The refusal is never a C compile error.
 
 The iOS TLS path uses a target-built OpenSSL archive and platform trust
 evaluation. See [[Native Host TLS]] and [[Backend Toolchain Library]].
-The Android target still refuses TLS.
+Android native libraries also support TLS with a target-built provider and a JavaVM registered by the host.
 
 Android targets refuse the same parts until the Android slice measures what
 an NDK application may do; only the reasons name the platform.

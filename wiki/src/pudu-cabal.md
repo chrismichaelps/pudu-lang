@@ -735,3 +735,7 @@ Resolved Grill Log: include `cbits/pudu_ios_layout.h` in the source distribution
 `cbits/pudu_ios_events.h`, `cbits/pudu_ios_controls.h` and `cbits/pudu_ios_list.h` are added to `extra-source-files` beside the layout and theme headers, for the same reason: the host embedding reads them at compiler build time. See [[iOS Host Events]], [[iOS Host Controls]] and [[iOS Host List]].
 
 `cbits/pudu_ios_material.h` is added to `extra-source-files` in the same list, for the same reason. See [[iOS Host Material]].
+
+## Mobile TLS verification (#935)
+
+Register [[Native Mobile TLS Trust]] with existing dependencies.

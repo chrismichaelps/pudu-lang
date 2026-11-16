@@ -5,6 +5,12 @@ tags: [changelog]
 
 # Changelog
 
+## 2026-11-16 — Android native TLS libraries (#935)
+
+- Build Android arm64 and x86_64 native libraries through the NDK and
+  verify TLS peer chains through the host JavaVM.
+  [[Backend Toolchain Library]] · [[Native Mobile TLS Trust]]
+
 ## 2026-11-16 — iOS native TLS (#935)
 
 - Enable verified TLS connects and descriptor upgrades on iOS device

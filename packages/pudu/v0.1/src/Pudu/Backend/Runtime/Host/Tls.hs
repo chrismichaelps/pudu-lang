@@ -2,72 +2,12 @@
 module Pudu.Backend.Runtime.Host.Tls (hostTlsParts, tlsLibraryMarker) where
 
 import Data.Text (Text)
+import Pudu.Backend.Runtime.Host.TlsTrust (androidTrust, appleTrust)
 
 {-| The line whose presence in a program's C says the program links the
     system's TLS library. -}
 tlsLibraryMarker :: Text
 tlsLibraryMarker = "#include <openssl/ssl.h>"
-
-{-| Apple evaluates the received chain against the system trust store.
-    OpenSSL still holds the socket, TLS state, and configured peer identity. -}
-appleTrust :: [Text]
-appleTrust =
-  [ "#if defined(PUDU_TLS_APPLE_TRUST)"
-  , "#include <CoreFoundation/CoreFoundation.h>"
-  , "#include <Security/Security.h>"
-  , "#include <openssl/x509v3.h>"
-  , "static int pudu_host_tls_apple_verify(X509_STORE_CTX *store, void *unused) {"
-  , "  X509 *peer = X509_STORE_CTX_get0_cert(store);"
-  , "  STACK_OF(X509) *chain = X509_STORE_CTX_get0_untrusted(store);"
-  , "  X509_VERIFY_PARAM *identity = X509_STORE_CTX_get0_param(store);"
-  , "  const char *dns = X509_VERIFY_PARAM_get0_host(identity, 0);"
-  , "  char *ip = NULL;"
-  , "  CFStringRef host = NULL;"
-  , "  CFMutableArrayRef certificates = NULL;"
-  , "  SecPolicyRef policy = NULL;"
-  , "  SecTrustRef trust = NULL;"
-  , "  int error = X509_V_ERR_CERT_REJECTED;"
-  , "  (void)unused;"
-  , "  if (peer == NULL) goto done;"
-  , "  if (dns != NULL) {"
-  , "    if (X509_check_host(peer, dns, 0, 0, NULL) != 1) { error = X509_V_ERR_HOSTNAME_MISMATCH; goto done; }"
-  , "    host = CFStringCreateWithCString(NULL, dns, kCFStringEncodingUTF8);"
-  , "    if (host == NULL) goto done;"
-  , "  } else {"
-  , "    ip = X509_VERIFY_PARAM_get1_ip_asc(identity);"
-  , "    if (ip == NULL || X509_check_ip_asc(peer, ip, 0) != 1) { error = X509_V_ERR_IP_ADDRESS_MISMATCH; goto done; }"
-  , "  }"
-  , "  certificates = CFArrayCreateMutable(NULL, 0, &kCFTypeArrayCallBacks);"
-  , "  if (certificates == NULL) goto done;"
-  , "  for (int index = -1, count = chain != NULL ? sk_X509_num(chain) : 0; index < count; ++index) {"
-  , "    X509 *item = index < 0 ? peer : sk_X509_value(chain, index);"
-  , "    if (index >= 0 && X509_cmp(item, peer) == 0) continue;"
-  , "    unsigned char *der = NULL;"
-  , "    int length = i2d_X509(item, &der);"
-  , "    CFDataRef bytes = length > 0 ? CFDataCreate(NULL, der, length) : NULL;"
-  , "    OPENSSL_free(der);"
-  , "    if (bytes == NULL) goto done;"
-  , "    SecCertificateRef certificate = SecCertificateCreateWithData(NULL, bytes);"
-  , "    CFRelease(bytes);"
-  , "    if (certificate == NULL) goto done;"
-  , "    CFArrayAppendValue(certificates, certificate);"
-  , "    CFRelease(certificate);"
-  , "  }"
-  , "  policy = SecPolicyCreateSSL(true, host);"
-  , "  if (policy == NULL || SecTrustCreateWithCertificates(certificates, policy, &trust) != errSecSuccess"
-  , "      || trust == NULL || SecTrustSetNetworkFetchAllowed(trust, false) != errSecSuccess) goto done;"
-  , "  if (SecTrustEvaluateWithError(trust, NULL)) error = X509_V_OK;"
-  , "done:"
-  , "  if (trust != NULL) CFRelease(trust);"
-  , "  if (policy != NULL) CFRelease(policy);"
-  , "  if (certificates != NULL) CFRelease(certificates);"
-  , "  if (host != NULL) CFRelease(host);"
-  , "  OPENSSL_free(ip);"
-  , "  X509_STORE_CTX_set_error(store, error);"
-  , "  return error == X509_V_OK;"
-  , "}"
-  , "#endif"
-  ]
 
 {-| Each part: its name, the parts it needs, and its lines. -}
 hostTlsParts :: [(Text, [Text], [Text])]
@@ -75,7 +15,7 @@ hostTlsParts =
   [ ("host_tls", ["host_sockets", "host_optional", "host_done", "host_fail", "host_fail_io", "host_grow", "host_gate", "host_path", "kernel_signed", "kernel_int", "text_retain"],
       [ tlsLibraryMarker
       , "#include <openssl/err.h>" ]
-      <> appleTrust <>
+      <> appleTrust <> androidTrust <>
       [ "/* One secured connection: the session, the descriptor beneath it, the"
       , "   name it was opened against, and whether its ending has been read. An"
       , "   empty slot has no session. */"
@@ -134,6 +74,8 @@ hostTlsParts =
       , "    SSL_CTX_set_verify(made, SSL_VERIFY_PEER, NULL);"
       , "#if defined(PUDU_TLS_APPLE_TRUST)"
       , "    SSL_CTX_set_cert_verify_callback(made, pudu_host_tls_apple_verify, NULL);"
+      , "#elif defined(PUDU_TLS_ANDROID_TRUST)"
+      , "    SSL_CTX_set_cert_verify_callback(made, pudu_host_tls_android_verify, NULL);"
       , "#else"
       , "    (void)SSL_CTX_set_default_verify_paths(made);"
       , "#endif"

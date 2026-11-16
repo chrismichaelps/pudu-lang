@@ -16,9 +16,9 @@ aliases: [Backend Native Target Tests]
 
 ## TLS provider admission
 
-An embedded TLS program is admitted by the iOS target. The test removes
-PUDU_IOS_OPENSSL_PREFIX and verifies the dependency diagnostic and the
-absence of published artifacts. The Android target still refuses TLS.
+An embedded TLS program is admitted by the iOS and Android library targets.
+The test removes each target's provider prefix in turn and verifies the
+dependency diagnostic and the absence of published artifacts.
 
 ## Algorithm and invariants
 

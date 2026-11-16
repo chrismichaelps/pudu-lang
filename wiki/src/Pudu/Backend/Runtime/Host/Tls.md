@@ -38,6 +38,13 @@ plain connection. The trust callback owns each temporary DER buffer and
 Core Foundation object until verification finishes, and reports a failed
 identity or trust check through the existing OpenSSL diagnostic path.
 
+## Android platform trust (#935)
+
+[[Native Mobile TLS Trust]] uses Android's platform trust manager for the
+presented chain. The native host registers its process JavaVM through the
+generated library header. The handshakes and descriptor upgrade share the
+OpenSSL transport and deadlines with the other targets.
+
 ## Referenced by
 
 [[Native Host Runtime]] · [[Native Host Services]] · [[Backend Toolchain]] · [[Native Host Sockets]]

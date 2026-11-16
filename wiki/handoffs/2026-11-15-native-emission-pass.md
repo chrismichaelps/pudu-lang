@@ -93,11 +93,22 @@ All three transferred ping and ACK and closed. The app rejected the
 untrusted chain before the test CA was installed and rejected the wrong
 hostname after installation.
 
-OpenSSL also built for Android arm64 API 24 and linked into an Android
-shared-library probe. The app builder and JNI host are on #937.
+Backend Engineer → Test Engineer. The Android library slice owns NDK
+discovery, provider linking, the VM registration header, and Android peer
+verification. The API 24 arm64 and x86_64 SDK builds published archives.
+An arm64 provider for the x86_64 target failed at the validation link
+before publishing. An ordinary Android library built without OpenSSL.
 
-Exact next action: integrate the Android TLS provider on the branch with the
-#937 NDK builder and JNI host, and verify its peer chain with platform trust.
+On an Android 14 arm64 emulator, a JNI host registered its process JavaVM
+and started the emitted program on a native pthread. A fresh connection
+and a TCP descriptor upgrade both negotiated TLS 1.3, exchanged ping and
+ACK, and closed after the app's trust configuration admitted the test CA.
+The app without that CA rejected both chains. The peer-name mismatch was
+rejected in both app builds. The optimized build, mobile target tests,
+desktop host-service conformance, and 355 strict C11 translations passed.
+
+Exact next action: route the #937 APK builder through the Android library
+path and register its JavaVM in JNI_OnLoad for TLS units.
 
 ## Referenced by
 

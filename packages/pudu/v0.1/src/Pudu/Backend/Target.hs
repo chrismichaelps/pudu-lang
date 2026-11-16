@@ -76,7 +76,6 @@ refusedParts = Map.fromList
   [ ("host_children", ("child programs", Just "the application sandbox forbids starting processes", androidUnmeasured))
   , ("host_signals", ("stop signals", Just "the system suspends and ends applications without them", androidUnmeasured))
   , ("host_exit", ("ending the process", Just "an application never quits itself", androidUnmeasured))
-  , ("host_tls", ("TLS connections", Nothing, "the Android TLS provider is unavailable"))
   , ("host_desktop", ("desktop windows", Just "the desktop adapter is AppKit, which runs only on macOS", macOnly))
   , ("host_audio", ("audio devices and streams", Just "the audio adapter is the macOS one", macOnly))
   ]

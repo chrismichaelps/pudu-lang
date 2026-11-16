@@ -42,9 +42,9 @@ compileLibrary :: LibraryRequest -> IO (Either ToolchainFailure LibraryProducts)
 - `libraryLinks` is `-lz` when the unit carries the compression marker; the
   header names the same libraries. Captured compiler and archiver output is the
   warnings payload.
-- Android: `ANDROID_NDK_HOME`, then `ANDROID_NDK_ROOT`; neither naming a
-  directory is `ToolchainSdkMissing`; a present NDK is
-  `ToolchainTargetUnbuilt`.
+- Android: search the explicit NDK roots and NDKs installed under the
+  Android SDK. The requested ABI selects its API 24 compiler and archiver.
+  Build and publish a static archive and its generated header.
 
 ## iOS TLS provider (#935)
 
@@ -63,6 +63,23 @@ directly. An absent or unusable provider is E6007.
 Resolved Grill Log: the arm64 device and simulator use different
 platforms. A successful target link proves the selected OpenSSL objects
 belong to the requested slice. Units without TLS skip provider discovery.
+
+## Android TLS provider (#935)
+
+For a TLS unit, set PUDU_ANDROID_OPENSSL_PREFIX to the OpenSSL installation
+for the requested API 24 ABI. The prefix supplies the same headers and
+static libraries as the Apple prefix. A validation link checks the provider
+before the archive is published. The archive contains the OpenSSL objects.
+
+The host calls pudu_program_android_enable_tls with its process JavaVM
+before pudu_program_run. An Android app also declares INTERNET access.
+The function succeeds on first registration and on a repeat with the same
+VM. [[Native Mobile TLS Trust]] verifies the server using Android's trust
+manager and the app's trust configuration.
+
+Resolved Grill Log: the native library works with a host-managed JavaVM.
+Registration retains no thread-local JNI environment. The standalone app
+builder from #937 still needs to invoke the registration.
 
 ## Negative Logic (Prohibited Paths)
 

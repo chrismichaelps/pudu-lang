@@ -17,7 +17,7 @@ than they are written, are native (#846).
 | Time | `formatTime` and `parseTime` over the percent specifiers of the fixed English locale |
 | Signals | watching for the terminate and interrupt requests and reading whether one came |
 | Sockets | stream endpoints: listening, accepting, connecting, bounded and unbounded sends and receives, peer and port, closing |
-| TLS | verified connections through OpenSSL with platform trust on iOS: connecting, upgrading a plain endpoint, sending, receiving a record, the proven name, closing |
+| TLS | verified connections through OpenSSL with platform trust on iOS and Android: connecting, upgrading a plain endpoint, sending, receiving a record, the proven name, closing |
 | Compression | the gzip wrapper and the bare compressed stream, with levels and output limits |
 | Child programs | starting with pipes, an environment and a directory; reading, writing, closing input, waiting, stopping; `runProgram` |
 | Standard input | [[Native Host Input]] emits `readLine` directly and as a builtin value, with line, end and decoding outcomes |
