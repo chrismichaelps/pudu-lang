@@ -46,6 +46,24 @@ compileLibrary :: LibraryRequest -> IO (Either ToolchainFailure LibraryProducts)
   directory is `ToolchainSdkMissing`; a present NDK is
   `ToolchainTargetUnbuilt`.
 
+## iOS TLS provider (#935)
+
+For a unit that selects TLS, set PUDU_IOS_OPENSSL_PREFIX to an OpenSSL
+installation for the exact iOS target. It supplies include/openssl/ssl.h,
+lib/libssl.a and lib/libcrypto.a. Build the dependency for the same device
+or simulator slice with a deployment minimum of iOS 15.0 or earlier.
+OpenSSL names the arm64 targets ios64-xcrun and iossimulator-arm64-xcrun.
+
+The toolchain compiles the Apple trust path and links a temporary image to
+check the platform and minimum OS before publishing. It folds OpenSSL's
+static libraries into the output archive. The generated header's link
+options include Security and CoreFoundation, which the app build consumes
+directly. An absent or unusable provider is E6007.
+
+Resolved Grill Log: the arm64 device and simulator use different
+platforms. A successful target link proves the selected OpenSSL objects
+belong to the requested slice. Units without TLS skip provider discovery.
+
 ## Negative Logic (Prohibited Paths)
 
 - No `PUDU_CC` for a mobile target: the platform SDK's own compiler is the only

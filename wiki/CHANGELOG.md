@@ -5,6 +5,12 @@ tags: [changelog]
 
 # Changelog
 
+## 2026-11-16 — iOS native TLS (#935)
+
+- Enable verified TLS connects and descriptor upgrades on iOS device
+  and simulator builds with a target-built OpenSSL provider.
+  [[Native Host TLS]] · [[Backend Toolchain Library]]
+
 ## 2026-11-15 — Native C11 callable continuations (#935)
 
 - Preserve a diverging subject in tuple, record, and sequence pattern

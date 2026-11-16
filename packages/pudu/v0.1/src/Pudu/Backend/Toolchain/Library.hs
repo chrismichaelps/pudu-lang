@@ -23,12 +23,13 @@ import qualified Data.Text.Encoding as Encoding
 import Data.Time.Clock (getCurrentTime, utctDay)
 import Pudu.Backend.Emit.Entry (embeddedHeader, embeddedHeaderName)
 import Pudu.Backend.Runtime.Host.Compress (compressLibraryMarker)
+import Pudu.Backend.Runtime.Host.Tls (tlsLibraryMarker)
 import Pudu.Backend.Ledger (Finding, Purpose (..), appleLedger, assess, isRefusal)
 import Pudu.Backend.Target (AppleSdk (..), NativeTarget (..), TargetPlatform (..))
 import Pudu.Backend.Toolchain (compilerFlags)
 import Pudu.Backend.Toolchain.Probe (appleInstalled, findXcrun)
 import Pudu.Backend.Toolchain.Process (ToolchainFailure (..), problemText, runTool, runToolOutput, timeoutSeconds, tryIO)
-import System.Directory (doesDirectoryExist, removeDirectoryRecursive, renameFile)
+import System.Directory (doesDirectoryExist, doesFileExist, removeDirectoryRecursive, renameFile)
 import System.Environment (lookupEnv)
 import System.FilePath (equalFilePath, takeDirectory, takeFileName, (</>))
 import System.IO.Temp (createTempDirectory)
@@ -67,34 +68,54 @@ compileLibrary request
 compileApple :: LibraryRequest -> AppleSdk -> IO (Either ToolchainFailure LibraryProducts)
 compileApple request sdk = do
   seconds <- timeoutSeconds
-  tools <- appleTools name sdk seconds
+  provider <- appleTlsProvider name (librarySource request)
+  tools <- case provider of
+    Left failure -> pure (Left failure)
+    Right tls -> fmap (tls,) <$> appleTools name sdk seconds
   case tools of
     Left failure -> pure (Left failure)
-    Right (root, clang, archiver, findings) -> mask $ \restore -> do
+    Right (tls, (root, clang, archiver, findings)) -> mask $ \restore -> do
       created <- tryIO (createTempDirectory (takeDirectory output) (takeFileName output <> ".pudu-tmp"))
       case created of
         Left problem -> pure (Left (ToolchainPublishFailed (problemText problem)))
         Right directory ->
-          restore (build seconds root clang archiver findings directory)
+          restore (build tls seconds root clang archiver findings directory)
             `finally` void (tryIO (removeDirectoryRecursive directory))
  where
   name = nativeTargetName (libraryTarget request)
   output = libraryOutput request
   header = takeDirectory output </> embeddedHeaderName
-  links = ["-lz" | compressLibraryMarker `Text.isInfixOf` librarySource request]
-  build seconds root clang archiver findings directory = do
+  build tls seconds root clang archiver findings directory = do
     let sourcePath = directory </> "program.c"
         objectPath = directory </> "program.o"
         archivePath = directory </> "program.a"
         headerPath = directory </> embeddedHeaderName
+        tlsFlags = maybe [] (\(include, _) -> ["-DPUDU_TLS_APPLE_TRUST", "-I", include]) tls
+        archives = maybe [] snd tls
+        targetFlags = ["-target", Text.unpack (appleTriple sdk), "-isysroot", root]
+        frameworks = if null archives then [] else ["-framework", "Security", "-framework", "CoreFoundation"]
+        links = ["-lz" | compressLibraryMarker `Text.isInfixOf` librarySource request] <> frameworks
+        -- The device and simulator share an architecture. Linking verifies
+        -- the provider's platform and minimum OS before publishing its archive.
+        checkProvider
+          | null archives = pure (Right "")
+          | otherwise = do
+              linked <- invoke clang (targetFlags <> ["-dynamiclib", "-Wl,-fatal_warnings", "-o", directory </> "verify.dylib", objectPath]
+                <> archives <> map Text.unpack links) seconds
+              pure $ case linked of
+                Left (ToolchainRejected detail) -> Left (ToolchainSdkMissing name
+                  ("usable OpenSSL in PUDU_IOS_OPENSSL_PREFIX for this target:\n" <> detail))
+                other -> other
+        archiveFlags = ["-no_warning_for_no_symbols" | not (null archives)]
     written <- tryIO (ByteString.writeFile sourcePath (Encoding.encodeUtf8 (librarySource request)))
     case written of
       Left problem -> pure (Left (ToolchainPublishFailed (problemText problem)))
       Right () -> do
         compiled <- invoke clang
-          (compilerFlags <> ["-target", Text.unpack (appleTriple sdk), "-isysroot", root, "-c", sourcePath, "-o", objectPath])
+          (compilerFlags <> tlsFlags <> targetFlags <> ["-c", sourcePath, "-o", objectPath])
           seconds
-        archived <- either (pure . Left) (\warnings -> fmap (warnings,) <$> invoke archiver ["-static", "-o", archivePath, objectPath] seconds) compiled
+        checked <- either (pure . Left) (\warnings -> fmap (warnings <>) <$> checkProvider) compiled
+        archived <- either (pure . Left) (\warnings -> fmap (warnings,) <$> invoke archiver (["-static"] <> archiveFlags <> ["-o", archivePath, objectPath] <> archives) seconds) checked
         case archived of
           Left failure -> pure (Left failure)
           Right (compilerOutput, archiverOutput) -> do
@@ -110,6 +131,24 @@ compileApple request sdk = do
                 , libraryWarnings = Text.strip (Text.unlines (filter (not . Text.null) [compilerOutput, archiverOutput]))
                 , libraryFindings = findings
                 }
+
+{-| The target's OpenSSL headers and archives. A native unit without TLS
+    needs no provider. Use the target's installation, never the host's. -}
+appleTlsProvider :: Text -> Text -> IO (Either ToolchainFailure (Maybe (FilePath, [FilePath])))
+appleTlsProvider target source
+  | not (tlsLibraryMarker `Text.isInfixOf` source) = pure (Right Nothing)
+  | otherwise = do
+      prefix <- lookupEnv "PUDU_IOS_OPENSSL_PREFIX"
+      case prefix of
+        Just root | not (null root) -> do
+          let include = root </> "include"
+              archives = map ((root </> "lib") </>) ["libssl.a", "libcrypto.a"]
+          present <- traverse doesFileExist ((include </> "openssl" </> "ssl.h") : archives)
+          pure (if and present then Right (Just (include, archives)) else missing)
+        _ -> pure missing
+ where
+  missing = Left (ToolchainSdkMissing target
+    "OpenSSL for this target. Set PUDU_IOS_OPENSSL_PREFIX to its installation with include/openssl/ssl.h, lib/libssl.a, and lib/libcrypto.a")
 
 invoke :: FilePath -> [String] -> Int -> IO (Either ToolchainFailure Text)
 invoke executable arguments seconds = do

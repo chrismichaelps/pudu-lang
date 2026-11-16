@@ -47,6 +47,12 @@ targetRefusals :: NativeTarget -> Set Text -> [(Text, Maybe Text)] -> [TargetRef
 - Refusals list parts in table order, then libraries in first-seen order, each
   once.
 
+## iOS TLS selection (#935)
+
+The TLS part is admitted on both iOS targets. [[Backend Toolchain Library]]
+resolves and links their provider. The Android target still reports its
+provider as unavailable.
+
 ## Negative Logic (Prohibited Paths)
 
 - No target outside the map, no prefix matching on names.

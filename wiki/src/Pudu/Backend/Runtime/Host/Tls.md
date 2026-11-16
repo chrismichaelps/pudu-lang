@@ -24,6 +24,20 @@ Secured connections behind their tokens: connecting, securing a plain endpoint t
 - Another thread closes a connection that is waiting? The waiting operation holds its own reference to the session for the wait, so the session outlives the close.
 - Refusal wording? `the secured connection is closed`, `the plain connection is closed`, `operation timed out` and `HandshakeFailed Error_EOF` are the interpreter's own words. A failure of the descriptor is worded as a plain endpoint words it. A refusal the library itself decides (an expired certificate, a name that does not match, an unknown authority) keeps the interpreter's `HandshakeFailed` opening and carries the system library's reason in parentheses, which differs from the interpreter library's reason by design.
 
+## iOS peer verification (#935)
+
+The iOS slice uses OpenSSL for TLS records and handshakes on the existing
+socket descriptor. During verification it checks the configured DNS name
+or address literal against the leaf, then passes the leaf and presented
+intermediates to Security for evaluation against the platform trust store.
+The evaluation disables network fetching. A successful handshake still
+has to finish within the remaining connection budget.
+
+Resolved Grill Log: the TLS upgrade keeps the descriptor received from the
+plain connection. The trust callback owns each temporary DER buffer and
+Core Foundation object until verification finishes, and reports a failed
+identity or trust check through the existing OpenSSL diagnostic path.
+
 ## Referenced by
 
 [[Native Host Runtime]] · [[Native Host Services]] · [[Backend Toolchain]] · [[Native Host Sockets]]

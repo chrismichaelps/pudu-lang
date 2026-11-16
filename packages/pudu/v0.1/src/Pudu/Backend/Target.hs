@@ -71,14 +71,14 @@ nativeTargetNames = Map.keys nativeTargets
 
 {-| Each refused base part: its construct, why iOS refuses it, and why Android
     does. Every dependent part closes over its base, so the base names it. -}
-refusedParts :: Map Text (Text, Text, Text)
+refusedParts :: Map Text (Text, Maybe Text, Text)
 refusedParts = Map.fromList
-  [ ("host_children", ("child programs", "the application sandbox forbids starting processes", androidUnmeasured))
-  , ("host_signals", ("stop signals", "the system suspends and ends applications without them", androidUnmeasured))
-  , ("host_exit", ("ending the process", "an application never quits itself", androidUnmeasured))
-  , ("host_tls", ("TLS connections", "the platform ships no OpenSSL", "the NDK ships no OpenSSL"))
-  , ("host_desktop", ("desktop windows", "the desktop adapter is AppKit, which runs only on macOS", macOnly))
-  , ("host_audio", ("audio devices and streams", "the audio adapter is the macOS one", macOnly))
+  [ ("host_children", ("child programs", Just "the application sandbox forbids starting processes", androidUnmeasured))
+  , ("host_signals", ("stop signals", Just "the system suspends and ends applications without them", androidUnmeasured))
+  , ("host_exit", ("ending the process", Just "an application never quits itself", androidUnmeasured))
+  , ("host_tls", ("TLS connections", Nothing, "the Android TLS provider is unavailable"))
+  , ("host_desktop", ("desktop windows", Just "the desktop adapter is AppKit, which runs only on macOS", macOnly))
+  , ("host_audio", ("audio devices and streams", Just "the audio adapter is the macOS one", macOnly))
   ]
  where
   androidUnmeasured = "what an Android application may do here is not yet measured"
@@ -93,9 +93,10 @@ appleLibraryPrefixes = ["/System/Library/Frameworks/", "/usr/lib/", "@rpath/", "
     library names: parts in table order, then libraries in first-seen order. -}
 targetRefusals :: NativeTarget -> Set Text -> [(Text, Maybe Text)] -> [TargetRefusal]
 targetRefusals target parts libraries =
-  [ TargetRefusal construct (reasonFor apple android)
+  [ TargetRefusal construct reason
   | (part, (construct, apple, android)) <- Map.toList refusedParts
   , Set.member part parts
+  , Just reason <- [reasonFor apple android]
   ]
     <> [ TargetRefusal ("the foreign library \"" <> library <> "\"") libraryReason
        | library <- nub
@@ -109,7 +110,7 @@ targetRefusals target parts libraries =
   platform = nativeTargetPlatform target
   reasonFor apple android = case platform of
     ApplePlatform _ -> apple
-    AndroidPlatform -> android
+    AndroidPlatform -> Just android
   kept library = case platform of
     ApplePlatform _ ->
       not (".." `elem` Text.splitOn "/" library)

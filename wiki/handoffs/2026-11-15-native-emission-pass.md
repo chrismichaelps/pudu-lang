@@ -84,8 +84,20 @@ panic subjects. A generic mutable receiver and argument wrote both places
 back through receiver and trait-qualified calls. Mutable Sequence protocol
 signatures fail checking before they can reach the native fallback.
 
-Exact next action: define the mobile TLS provider boundary for the existing
-connected-descriptor upgrade, including platform trust and TLS 1.3.
+Backend Engineer → Test Engineer. The iOS slice owns OpenSSL
+provider discovery, linker validation, Apple trust, and target admission.
+A real iOS device archive built and the simulator rejected a device provider
+before any output was published. On iOS 26.4, a disposable simulator checked
+TLS 1.3 connections by DNS and IP and an existing TCP descriptor upgrade.
+All three transferred ping and ACK and closed. The app rejected the
+untrusted chain before the test CA was installed and rejected the wrong
+hostname after installation.
+
+OpenSSL also built for Android arm64 API 24 and linked into an Android
+shared-library probe. The app builder and JNI host are on #937.
+
+Exact next action: integrate the Android TLS provider on the branch with the
+#937 NDK builder and JNI host, and verify its peer chain with platform trust.
 
 ## Referenced by
 

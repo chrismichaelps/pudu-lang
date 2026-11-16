@@ -30,6 +30,7 @@ backendTargetProperties =
   [ ("mobile targets select library paths and refuse escapes", pure (once targetPaths))
   , ("mobile entry emits a host function and refuses desktop runtime parts", once <$> entryForms)
   , ("mobile SDK discovery diagnoses absence without publishing", once <$> sdkFailures)
+  , ("mobile TLS requests the Apple provider before publishing", once <$> missingTlsProvider)
   , ("mobile Apple SDK builds export only the host entry on both slices", once <$> appleArchives)
   ]
 
@@ -123,6 +124,36 @@ sdkFailures = withSystemTempDirectory "pudu-mobile-sdk" $ \root ->
         , timedOut
         , files === ["fake-xcrun"]
         ]
+
+missingTlsProvider :: IO Property
+missingTlsProvider = withSystemTempDirectory "pudu-mobile-tls" $ \root ->
+  case (nativeTargetNamed "ios-simulator-arm64", nativeTargetNamed "android-arm64") of
+    (Just apple, Just android) -> do
+      let sourcePath = root </> "Main.pudu"
+      TextIO.writeFile sourcePath (Text.unlines
+        [ "module Main", "fn main() -> Int {"
+        , "  print(show(tlsConnectWithin(\"127.0.0.1\", 1, 0)))"
+        , "  0", "}" ])
+      emitted <- emitFile EmbeddedEntry sourcePath
+      case emitted of
+        Left failure -> pure (counterexample failure False)
+        Right unit -> do
+          let output = root </> "libMain.a"
+              refusals target = map refusedConstruct (targetRefusals target (emittedParts unit) (emittedLibraries unit))
+          built <- withEnvironment "PUDU_IOS_OPENSSL_PREFIX" Nothing $
+            compileLibrary (LibraryRequest (emittedSource unit) output apple [])
+          files <- listDirectory root
+          pure $ conjoin
+            [ refusals apple === []
+            , refusals android === ["TLS connections"]
+            , files === ["Main.pudu"]
+            , case built of
+                Left (ToolchainSdkMissing name detail) -> conjoin
+                  [ name === "ios-simulator-arm64"
+                  , property ("PUDU_IOS_OPENSSL_PREFIX" `Text.isInfixOf` detail) ]
+                other -> counterexample (show other) False
+            ]
+    _ -> pure (counterexample "missing mobile targets" False)
 
 appleArchives :: IO Property
 appleArchives
