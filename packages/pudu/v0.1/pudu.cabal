@@ -32,6 +32,29 @@ extra-source-files: cbits/pudu_desktop.h
                     cbits/pudu_ios_scene.h
                     cbits/pudu_ios_motion.h
                     cbits/pudu_ios_capability_test.h
+                    cbits/pudu_android_host.c
+                    cbits/pudu_android_capabilities.h
+                    cbits/pudu_android_controls.h
+                    cbits/pudu_android_events.h
+                    cbits/pudu_android_java.h
+                    cbits/pudu_android_jni.h
+                    cbits/pudu_android_kinds.h
+                    cbits/pudu_android_list.h
+                    cbits/pudu_android_nodes.h
+                    cbits/pudu_android_theme.h
+                    cbits/pudu_android_values.h
+                    android/AndroidManifest.xml
+                    android/org/pudu/PuduAccess.java
+                    android/org/pudu/PuduActivity.java
+                    android/org/pudu/PuduBridge.java
+                    android/org/pudu/PuduGestures.java
+                    android/org/pudu/PuduList.java
+                    android/org/pudu/PuduListener.java
+                    android/org/pudu/PuduMenus.java
+                    android/org/pudu/PuduMoment.java
+                    android/org/pudu/PuduPages.java
+                    android/org/pudu/PuduTests.java
+                    android/org/pudu/PuduWell.java
                     cbits/pudu_audio.c
                     cbits/pudu_audio_stream.c
                     cbits/pudu_audio.h
@@ -219,6 +242,7 @@ library
     Pudu.Backend.Toolchain.HostSources
     Pudu.Backend.Toolchain.Library
     Pudu.Backend.Toolchain.Probe
+    Pudu.Backend.Toolchain.Android
     Pudu.Backend.Toolchain.App
     Pudu.Backend.Toolchain.Process
     Pudu.Compiler

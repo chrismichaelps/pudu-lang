@@ -736,8 +736,9 @@ runBuild :: RenderStyle -> BuildRequest -> IO ()
 runBuild style request
   | buildApp request && not (buildNative request) =
       refusal "--app builds a native application; give --native --target ios-simulator-arm64 --app"
-  | buildApp request && buildTarget request /= Just simulatorTarget =
-      refusal ("--app builds simulator applications for now (a device application needs a signing identity); give --target " <> simulatorTarget)
+  | buildApp request && not (maybe False appTarget (buildTarget request)) =
+      refusal ("--app builds simulator and Android applications (an iOS device application needs a signing identity); give --target "
+        <> intercalate " or " (simulatorTarget : androidTargets))
   | buildNative request && namesRuntime =
       refusal "--native compiles the program itself, so --runtime has nothing to attach; give --native alone"
   | buildNative request = case buildTarget request of
@@ -746,7 +747,7 @@ runBuild style request
         Just platform
           | buildApp request ->
               buildNativeProgram style (buildPath request)
-                (maybe (defaultTargetName (buildPath request) <> ".app") id (buildOutput request)) (Just (platform, True))
+                (maybe (defaultTargetName (buildPath request) <> appExtension value) id (buildOutput request)) (Just (platform, True))
           | otherwise ->
               buildNativeProgram style (buildPath request)
                 (maybe ("lib" <> defaultTargetName (buildPath request) <> ".a") id (buildOutput request)) (Just (platform, False))
@@ -762,6 +763,10 @@ runBuild style request
   target = maybe (defaultTargetName (buildPath request)) id (buildOutput request)
   namesRuntime = maybe False (const True) (buildRuntime request)
   simulatorTarget = "ios-simulator-arm64"
+  androidTargets = ["android-arm64", "android-x86_64"]
+  appTarget value = value == simulatorTarget || value `elem` androidTargets
+  -- An Android application is a package; an iOS one is a bundle.
+  appExtension value = if value `elem` androidTargets then ".apk" else ".app"
   refusal message = do
     hPutStrLn stderr ("pudu build: " <> message)
     exitFailure

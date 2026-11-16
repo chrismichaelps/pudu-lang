@@ -2,6 +2,7 @@ package org.pudu;
 
 import android.app.Activity;
 import android.content.Intent;
+import android.content.pm.ApplicationInfo;
 import android.content.res.Configuration;
 import android.os.Bundle;
 import android.widget.FrameLayout;
@@ -13,6 +14,8 @@ import android.widget.FrameLayout;
 public final class PuduActivity extends Activity {
   static final int RESIZED = 11, LIFECYCLE = 12;
   static final int ACTIVE = 1, INACTIVE = 2, BACKGROUND = 3, FOREGROUND = 4;
+  /** The most taps a self-test asks for. */
+  static final int MAX_TAPS = 100;
 
   private int[] reported;
   private boolean stopped;
@@ -24,9 +27,14 @@ public final class PuduActivity extends Activity {
     setContentView(surface);
     PuduBridge.activity = this;
     PuduBridge.surface = surface;
+    /* The launcher activity is exported, so only a debuggable build honors
+       the self-test extras; a released one ignores whatever another
+       application sends. */
     Intent intent = getIntent();
-    PuduBridge.testing = intent.hasExtra("PUDU_UI_SELFTEST");
-    PuduBridge.taps = parse(intent.getStringExtra("PUDU_UI_SELFTEST"));
+    boolean debuggable = (getApplicationInfo().flags & ApplicationInfo.FLAG_DEBUGGABLE) != 0;
+    PuduBridge.testing = debuggable && intent.hasExtra("PUDU_UI_SELFTEST");
+    if (!PuduBridge.testing) intent = new Intent();
+    PuduBridge.taps = Math.min(MAX_TAPS, parse(intent.getStringExtra("PUDU_UI_SELFTEST")));
     PuduBridge.typed = intent.getStringExtra("PUDU_UI_TYPE");
     PuduBridge.controls = intent.hasExtra("PUDU_UI_CONTROLS_TEST");
     PuduBridge.capabilities = intent.hasExtra("PUDU_UI_CAPABILITY_TEST");

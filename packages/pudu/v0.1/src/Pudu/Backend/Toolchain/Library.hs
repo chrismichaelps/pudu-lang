@@ -26,10 +26,10 @@ import Pudu.Backend.Runtime.Host.Compress (compressLibraryMarker)
 import Pudu.Backend.Ledger (Finding, Purpose (..), appleLedger, assess, isRefusal)
 import Pudu.Backend.Target (AppleSdk (..), NativeTarget (..), TargetPlatform (..))
 import Pudu.Backend.Toolchain (compilerFlags)
+import Pudu.Backend.Toolchain.Android (androidTools, compileAndroidLibrary)
 import Pudu.Backend.Toolchain.Probe (appleInstalled, findXcrun)
 import Pudu.Backend.Toolchain.Process (ToolchainFailure (..), problemText, runTool, runToolOutput, timeoutSeconds, tryIO)
-import System.Directory (doesDirectoryExist, removeDirectoryRecursive, renameFile)
-import System.Environment (lookupEnv)
+import System.Directory (removeDirectoryRecursive, renameFile)
 import System.FilePath (equalFilePath, takeDirectory, takeFileName, (</>))
 import System.IO.Temp (createTempDirectory)
 
@@ -59,10 +59,25 @@ compileLibrary request
       pure (Left (ToolchainPublishFailed "the library output cannot use the generated header name pudu_program.h"))
   | otherwise = case nativeTargetPlatform target of
       ApplePlatform sdk -> compileApple request sdk
-      AndroidPlatform -> androidOutcome name
+      AndroidPlatform -> compileAndroid request
  where
   target = libraryTarget request
-  name = nativeTargetName target
+
+{-| The NDK's clang and archiver build the library; no platform ledger
+    governs Android builds yet, so there are no findings to report. -}
+compileAndroid :: LibraryRequest -> IO (Either ToolchainFailure LibraryProducts)
+compileAndroid request = do
+  tools <- androidTools (nativeTargetName (libraryTarget request)) False
+  case tools of
+    Left failure -> pure (Left failure)
+    Right found -> do
+      built <- compileAndroidLibrary found (librarySource request) (libraryExports request) (libraryOutput request)
+      pure $ flip fmap built $ \(links, warnings) -> LibraryProducts
+        { libraryHeader = takeDirectory (libraryOutput request) </> embeddedHeaderName
+        , libraryLinks = links
+        , libraryWarnings = Text.strip warnings
+        , libraryFindings = []
+        }
 
 compileApple :: LibraryRequest -> AppleSdk -> IO (Either ToolchainFailure LibraryProducts)
 compileApple request sdk = do
@@ -153,16 +168,3 @@ xcrunLine name xcrun arguments seconds = do
  where
   command = Text.unwords (map Text.pack (xcrun : arguments))
   missing detail = ToolchainSdkMissing name (command <> if Text.null detail then "" else ": " <> detail)
-
-{-| The NDK named by `ANDROID_NDK_HOME`, then `ANDROID_NDK_ROOT`. -}
-androidOutcome :: Text -> IO (Either ToolchainFailure LibraryProducts)
-androidOutcome name = do
-  named <- traverse lookupEnv androidVariables
-  present <- traverse doesDirectoryExist [path | Just path <- named, not (null path)]
-  pure $ Left $
-    if or present
-      then ToolchainTargetUnbuilt name
-      else ToolchainSdkMissing name (Text.intercalate " or " (map Text.pack androidVariables) <> " naming an NDK directory")
-
-androidVariables :: [String]
-androidVariables = ["ANDROID_NDK_HOME", "ANDROID_NDK_ROOT"]

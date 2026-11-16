@@ -5,7 +5,9 @@
    buffer of tagged values, so one C entry point serves every Java signature:
 
      Z bool (1 byte)   B byte (1)   C char (2)   S short (2)   I int (4)
-     J long (8)        F float (4)  D double (8) L handle (8)  T text (4-byte length, UTF-8)
+     J long (8)        F float (8)  D double (8) L handle (8)  T text (4-byte length, UTF-8)
+
+   A float crosses as a double's bits and is rounded once to float here.
 
    all little-endian. A call made with `main` set runs on the main thread and
    the program waits for it, as views and most services require. A Java
@@ -132,7 +134,7 @@ static int pudu_arguments(JNIEnv *env, const uint8_t *bytes, uint64_t length, jv
   while (at < length) {
     uint8_t tag = bytes[at++];
     uint64_t wide = 0;
-    size_t width = tag == 'Z' || tag == 'B' ? 1 : tag == 'C' || tag == 'S' ? 2 : tag == 'I' || tag == 'F' || tag == 'T' ? 4 : 8;
+    size_t width = tag == 'Z' || tag == 'B' ? 1 : tag == 'C' || tag == 'S' ? 2 : tag == 'I' || tag == 'T' ? 4 : 8;
     if (count == room || at + width > length) return -1;
     for (size_t i = 0; i < width; i++) wide |= (uint64_t)bytes[at + i] << (8 * i);
     at += width;
@@ -143,7 +145,7 @@ static int pudu_arguments(JNIEnv *env, const uint8_t *bytes, uint64_t length, jv
       case 'S': values[count].s = (jshort)wide; break;
       case 'I': values[count].i = (jint)(uint32_t)wide; break;
       case 'J': values[count].j = (jlong)wide; break;
-      case 'F': { uint32_t bits = (uint32_t)wide; memcpy(&values[count].f, &bits, 4); break; }
+      case 'F': { double real; memcpy(&real, &wide, 8); values[count].f = (jfloat)real; break; }
       case 'D': memcpy(&values[count].d, &wide, 8); break;
       case 'L': values[count].l = pudu_held((int64_t)wide); break;
       case 'T':

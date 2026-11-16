@@ -1,0 +1,305 @@
+module Std.Android
+
+import Std.ByteOrder {writeU64LE}
+import Std.Math.Float as Float
+
+/// A Java object the program holds through the platform; release it with
+/// `release` when done. A handle of zero is Java's null.
+export type Java = { handle: Int64 }
+
+/// One argument of a Java call, by its JNI type. A `Single` crosses as a
+/// Float64 and is rounded once to the platform's float at the call.
+export type Argument
+  = Flag(Bool)
+  | Byte(Int8)
+  | Character(UInt16)
+  | Short(Int16)
+  | Whole(Int32)
+  | Long(Int64)
+  | Single(Float64)
+  | Real(Float64)
+  | Object(Java)
+  | Text(Str)
+
+/// Where a call runs: on the program's own thread, or on the main thread,
+/// which views and most services require; the program waits for it.
+export type Thread = Background | Main
+
+/// A call: the object it is made on (or the class, for a static method or
+/// a constructor), the method's name and JNI signature, its arguments in
+/// order, and the thread it runs on.
+export type Call = { target: Java, method: Str, signature: Str, arguments: Array[Argument], thread: Thread }
+
+foreign "c" {
+  fn javaActivity symbol "pudu_java_activity" () -> Int64
+  fn javaClass symbol "pudu_java_class" (name: Str) -> Int64
+  fn javaWhole symbol "pudu_java_whole" (target: Int64, isStatic: Int32, name: Str, signature: Str, arguments: Bytes, length: UInt64, main: Int32) -> Int64
+  fn javaReal symbol "pudu_java_real" (target: Int64, isStatic: Int32, name: Str, signature: Str, arguments: Bytes, length: UInt64, main: Int32) -> Float64
+  fn javaNew symbol "pudu_java_new" (target: Int64, signature: Str, arguments: Bytes, length: UInt64, main: Int32) -> Int64
+  fn javaText symbol "pudu_java_text" (handle: Int64) -> Str
+  fn javaString symbol "pudu_java_string" (text: Str) -> Int64
+  fn javaField symbol "pudu_java_field" (target: Int64, isStatic: Int32, name: Str, kind: Str) -> Int64
+  fn javaLength symbol "pudu_java_length" (array: Int64) -> Int64
+  fn javaElement symbol "pudu_java_element" (array: Int64, index: Int64) -> Int64
+  fn javaSame symbol "pudu_java_same" (left: Int64, right: Int64) -> Int32
+  fn javaRelease symbol "pudu_java_release" (handle: Int64) -> ()
+  fn javaFailure symbol "pudu_java_failure" () -> Str
+}
+
+/// The tag byte each argument kind crosses with, by its JNI letter.
+const TAGS: Map[Str, UInt8] = mapOf([
+    ("Z", 90u8),
+    ("B", 66u8),
+    ("C", 67u8),
+    ("S", 83u8),
+    ("I", 73u8),
+    ("J", 74u8),
+    ("F", 70u8),
+    ("D", 68u8),
+    ("L", 76u8),
+    ("T", 84u8)
+  ])
+
+/// The largest unsigned word, for two's complement bits of a negative value.
+const ALL_BITS: UInt64 = 18446744073709551615u64
+
+/// The application's activity: the context every platform service starts from.
+export fn activity() -> Java {
+  var handle = 0i64
+  unsafe(foreign) {
+    handle = javaActivity()
+  }
+  Java{handle: handle}
+}
+
+/// A class by its binary name, such as `android.widget.Toast`.
+export fn classNamed(name: Str) -> Result[Java, Str] {
+  var handle = 0i64
+  unsafe(foreign) {
+    handle = javaClass(name)
+  }
+  answered(Java{handle: handle})
+}
+
+/// An instance method's answer as a whole number: a boolean as 0 or 1, any
+/// integer type widened, nothing for a void method.
+export fn invoke(call: &Call) -> Result[Int64, Str] { whole(call, 0i32) }
+
+/// A static method's answer as a whole number; `call.target` is the class.
+export fn invokeStatic(call: &Call) -> Result[Int64, Str] { whole(call, 1i32) }
+
+/// An instance method's float or double answer.
+export fn invokeReal(call: &Call) -> Result[Float64, Str] { real(call, 0i32) }
+
+/// A static method's float or double answer.
+export fn invokeStaticReal(call: &Call) -> Result[Float64, Str] { real(call, 1i32) }
+
+/// An instance method's object answer, which the program now holds.
+export fn invokeObject(call: &Call) -> Result[Java, Str] { held(whole(call, 0i32)) }
+
+/// A static method's object answer, which the program now holds.
+export fn invokeStaticObject(call: &Call) -> Result[Java, Str] { held(whole(call, 1i32)) }
+
+/// A new object of the class `call.target`, through the constructor of
+/// `call.signature`; `call.method` is not read.
+export fn construct(call: &Call) -> Result[Java, Str] {
+  let encoded = encode(&call.arguments)
+  var handle = 0i64
+  unsafe(foreign) {
+    handle = javaNew(call.target.handle, call.signature, bytesOf(encoded), size(&encoded), onMain(call.thread))
+  }
+  answered(Java{handle: handle})
+}
+
+/// An object's text: a string's own, or what `toString` answers; empty for null.
+export fn text(object: &Java) -> Str {
+  var shown = ""
+  unsafe(foreign) {
+    shown = javaText(object.handle)
+  }
+  shown
+}
+
+/// A Java string holding `content`.
+export fn string(content: Str) -> Java {
+  var handle = 0i64
+  unsafe(foreign) {
+    handle = javaString(content)
+  }
+  Java{handle: handle}
+}
+
+/// An instance field, read by its JNI type: a whole number, or a handle the
+/// program now holds for an object type.
+export fn field(target: &Java, name: Str, kind: Str) -> Result[Int64, Str] { fieldOf(target, 0i32, name, kind) }
+
+/// A static field of the class `target`, read as `field` reads.
+export fn staticField(target: &Java, name: Str, kind: Str) -> Result[Int64, Str] { fieldOf(target, 1i32, name, kind) }
+
+/// How many items a Java array holds.
+export fn length(array: &Java) -> Int64 {
+  var count = 0i64
+  unsafe(foreign) {
+    count = javaLength(array.handle)
+  }
+  count
+}
+
+/// An object array's item, which the program now holds.
+export fn element(array: &Java, index: Int64) -> Result[Java, Str] {
+  var handle = 0i64
+  unsafe(foreign) {
+    handle = javaElement(array.handle, index)
+  }
+  answered(Java{handle: handle})
+}
+
+/// Whether two handles name the same Java object.
+export fn same(left: &Java, right: &Java) -> Bool {
+  var found = 0i32
+  unsafe(foreign) {
+    found = javaSame(left.handle, right.handle)
+  }
+  found != 0i32
+}
+
+export fn isNull(object: &Java) -> Bool { object.handle == 0i64 }
+
+/// Lets the platform reclaim the object; the handle must not be used again.
+export fn release(object: &Java) -> () {
+  unsafe(foreign) {
+    javaRelease(object.handle)
+  }
+}
+
+/// The arguments as the tagged little-endian buffer the runtime reads.
+export fn encode(arguments: &Array[Argument]) -> Array[UInt8] {
+  var out: Array[UInt8] = []
+  for argument in *arguments {
+    out = appended(out, &argument)
+  }
+  out
+}
+
+fn appended(out: Array[UInt8], argument: &Argument) -> Array[UInt8] {
+  match *argument {
+    case Flag(on) => tagged(out, "Z", if on { 1u64 } else { 0u64 }, 1)
+    case Byte(value) => tagged(out, "B", bitsOf(signedOr(convertInteger[Int64](value))), 1)
+    case Character(value) => tagged(out, "C", unsignedOr(convertInteger[UInt64](value)), 2)
+    case Short(value) => tagged(out, "S", bitsOf(signedOr(convertInteger[Int64](value))), 2)
+    case Whole(value) => tagged(out, "I", bitsOf(signedOr(convertInteger[Int64](value))), 4)
+    case Long(value) => tagged(out, "J", bitsOf(value), 8)
+    case Single(value) => tagged(out, "F", Float.toBits(value), 8)
+    case Real(value) => tagged(out, "D", Float.toBits(value), 8)
+    case Object(object) => tagged(out, "L", bitsOf(object.handle), 8)
+    case Text(content) => {
+      let raw = content.toBytes().toArray()
+      var bytes = tagged(out, "T", unsignedOr(convertInteger[UInt64](raw.length())), 4)
+      for octet in raw {
+        bytes = bytes.push(octet)
+      }
+      bytes
+    }
+  }
+}
+
+// The tag, then the low `width` bytes of `bits`, least significant first.
+fn tagged(out: Array[UInt8], letter: Str, bits: UInt64, width: Int) -> Array[UInt8] {
+  var bytes = out.push(tagOf(letter))
+  let word = writeU64LE(bits)
+  for index in 0..width {
+    bytes = bytes.push(word[index])
+  }
+  bytes
+}
+
+fn tagOf(letter: Str) -> UInt8 {
+  match TAGS.get(letter) {
+    case Some(tag) => tag
+    case None => 0u8
+  }
+}
+
+// A signed value as its two's complement bits in a 64-bit word.
+fn bitsOf(value: Int64) -> UInt64 {
+  if value >= 0i64 {
+    unsignedOr(convertInteger[UInt64](value))
+  } else {
+    ALL_BITS - unsignedOr(convertInteger[UInt64](0i64 - (value + 1i64)))
+  }
+}
+
+// Every narrower integer fits; these only read the conversion's answer.
+fn signedOr(found: Option[Int64]) -> Int64 {
+  match found {
+    case Some(wide) => wide
+    case None => 0i64
+  }
+}
+
+fn unsignedOr(found: Option[UInt64]) -> UInt64 {
+  match found {
+    case Some(wide) => wide
+    case None => 0u64
+  }
+}
+
+fn size(bytes: &Array[UInt8]) -> UInt64 { unsignedOr(convertInteger[UInt64](bytes.length())) }
+
+fn onMain(thread: Thread) -> Int32 {
+  match thread {
+    case Main => 1i32
+    case Background => 0i32
+  }
+}
+
+fn whole(call: &Call, isStatic: Int32) -> Result[Int64, Str] {
+  let encoded = encode(&call.arguments)
+  var answer = 0i64
+  unsafe(foreign) {
+    answer = javaWhole(call.target.handle, isStatic, call.method, call.signature, bytesOf(encoded), size(&encoded), onMain(call.thread))
+  }
+  checked(answer)
+}
+
+fn real(call: &Call, isStatic: Int32) -> Result[Float64, Str] {
+  let encoded = encode(&call.arguments)
+  var answer = 0.0
+  unsafe(foreign) {
+    answer = javaReal(call.target.handle, isStatic, call.method, call.signature, bytesOf(encoded), size(&encoded), onMain(call.thread))
+  }
+  let failure = lastFailure()
+  if failure == "" { Ok(answer) } else { Err(failure) }
+}
+
+fn fieldOf(target: &Java, isStatic: Int32, name: Str, kind: Str) -> Result[Int64, Str] {
+  var answer = 0i64
+  unsafe(foreign) {
+    answer = javaField(target.handle, isStatic, name, kind)
+  }
+  checked(answer)
+}
+
+fn held(found: Result[Int64, Str]) -> Result[Java, Str] {
+  let handle = found ?
+  Ok(Java{handle: handle})
+}
+
+fn checked(answer: Int64) -> Result[Int64, Str] {
+  let failure = lastFailure()
+  if failure == "" { Ok(answer) } else { Err(failure) }
+}
+
+fn answered(object: Java) -> Result[Java, Str] {
+  let failure = lastFailure()
+  if failure == "" { Ok(object) } else { Err(failure) }
+}
+
+// The text of the last failed call on this thread; reading clears it.
+fn lastFailure() -> Str {
+  var said = ""
+  unsafe(foreign) {
+    said = javaFailure()
+  }
+  said
+}

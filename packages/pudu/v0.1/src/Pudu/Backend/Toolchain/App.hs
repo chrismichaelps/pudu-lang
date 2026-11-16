@@ -31,6 +31,7 @@ import GHC.IO.Encoding (getFileSystemEncoding)
 #endif
 import Pudu.Backend.Ledger (Finding, appleLedger, ledgerDeployment, renderRelease)
 import Pudu.Backend.Target (AppleSdk (..), NativeTarget (..), TargetPlatform (..))
+import Pudu.Backend.Toolchain.Android (androidTools, compileApk)
 import Pudu.Backend.Toolchain.HostSources (iosHostSources)
 import Pudu.Backend.Toolchain.Library (LibraryProducts (..), LibraryRequest (..), appleTools, compileLibrary, invoke)
 import Pudu.Backend.Toolchain.Process (ToolchainFailure (..), problemText, timeoutSeconds, tryIO)
@@ -71,6 +72,11 @@ hostFrameworks = ["UIKit", "Foundation", "CoreGraphics", "QuartzCore"]
 compileApp :: AppRequest -> IO (Either ToolchainFailure (Text, [Finding]))
 compileApp request = case nativeTargetPlatform (appTarget request) of
   ApplePlatform sdk | appleSdkName sdk == simulatorSdk -> buildBundle request sdk
+  AndroidPlatform -> do
+    tools <- androidTools (nativeTargetName (appTarget request)) True
+    case tools of
+      Left failure -> pure (Left failure)
+      Right found -> fmap (, []) <$> compileApk found (appSource request) (appExports request) (appName request) (appOutput request)
   _ -> pure (Left (ToolchainTargetUnbuilt (nativeTargetName (appTarget request) <> " applications, which need a signing identity,")))
 
 buildBundle :: AppRequest -> AppleSdk -> IO (Either ToolchainFailure (Text, [Finding]))
