@@ -1,0 +1,37 @@
+module UsesAndroidArguments
+
+import Std.Android as Android
+
+export fn main() -> Int {
+  var held = 0
+
+  // A boolean, a negative int as its low four bytes, UTF-8 text after its length, a long.
+  let mixed = Android.encode(&[Android.Flag(true), Android.Whole(-2i32), Android.Text("hé"), Android.Long(5i64)])
+  if mixed == [90u8, 1u8, 73u8, 254u8, 255u8, 255u8, 255u8, 84u8, 3u8, 0u8, 0u8, 0u8, 104u8, 195u8, 169u8,
+    74u8, 5u8, 0u8, 0u8, 0u8, 0u8, 0u8, 0u8, 0u8] {
+    held = held + 1
+  }
+
+  // Narrow kinds keep their two's complement bits in their own width.
+  if Android.encode(&[Android.Byte(-1i8), Android.Character(65u16), Android.Short(-300i16)])
+    == [66u8, 255u8, 67u8, 65u8, 0u8, 83u8, 212u8, 254u8] {
+    held = held + 1
+  }
+
+  // Doubles and floats cross as a double's bits; a null object as handle zero.
+  if Android.encode(&[Android.Real(1.0), Android.Single(0.5), Android.Object(Android.Java{handle: 0i64})])
+    == [68u8, 0u8, 0u8, 0u8, 0u8, 0u8, 0u8, 240u8, 63u8, 70u8, 0u8, 0u8, 0u8, 0u8, 0u8, 0u8, 224u8, 63u8,
+    76u8, 0u8, 0u8, 0u8, 0u8, 0u8, 0u8, 0u8, 0u8] {
+    held = held + 1
+  }
+
+  // The most negative long, and no arguments at all.
+  if Android.encode(&[Android.Long(-9223372036854775807i64 - 1i64)]) == [74u8, 0u8, 0u8, 0u8, 0u8, 0u8, 0u8, 0u8, 128u8]
+    && Android.encode(&[]) == [] {
+    held = held + 1
+  }
+
+  // A null handle is null.
+  if Android.isNull(&Android.Java{handle: 0i64}) && !Android.isNull(&Android.Java{handle: 3i64}) { held = held + 1 }
+  held
+}
