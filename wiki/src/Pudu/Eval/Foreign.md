@@ -49,6 +49,8 @@ callForeign :: Span -> ForeignBinding -> [Value] -> Evaluator Value
   installed and the usual remedy is to install it.
 - **A handle is opaque and nominal.** Only a runtime handle bearing the crossing's declared name may
   pass, and its address is never exposed as an integer.
+- **An optional handle parameter is part of the liveness claims.** A handle inside `Some` is leased
+  for the call exactly as a bare handle is, and `None` claims nothing.
 - **Ownership covers the complete native call.** Null owned results are refused; ordinary handle
   uses acquire atomic leases held until native code returns; release waits for leases and removes
   the claim before calling the destructor. A call-setup failure restores a release claim because the

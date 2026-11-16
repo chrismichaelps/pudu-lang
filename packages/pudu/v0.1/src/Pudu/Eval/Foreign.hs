@@ -68,8 +68,13 @@ callForeign
 callForeign apply spanValue binding values = maskedBoundary $ do
   guardConfined spanValue ("the foreign function " <> foreignBindingSymbol binding) False
   (crossed, callbacks) <- crossArguments spanValue binding values
+  -- A handle an optional argument holds is checked live as a bare one is.
   let claims =
-        [(address, generation) | ForeignHandleValue _ address (OwnedClaim generation) <- values]
+        [ (address, generation)
+        | value <- values
+        , ForeignHandleValue _ address (OwnedClaim generation) <- case value of
+            VariantValue "Some" [held] -> [held]
+            other -> [other] ]
   store <- currentForeignStore
   found <-
     performEffect (refusal spanValue)

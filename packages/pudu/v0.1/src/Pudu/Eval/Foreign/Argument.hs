@@ -94,6 +94,11 @@ crossOne spanValue binding crossing value = case (crossing, value) of
   (BooleanCrossing, BoolValue held) -> pure (crossing, CrossedInteger (if held then 1 else 0))
   (HandleCrossing expected, ForeignHandleValue actual address _)
     | expected == actual -> pure (crossing, CrossedHandle actual address)
+  {-| `Some` crosses as the handle it holds, so it is checked live as a bare
+      one is; `None` crosses as the null address, which nothing claims. -}
+  (OptionalHandleCrossing expected, VariantValue "Some" [ForeignHandleValue actual address _])
+    | expected == actual -> pure (crossing, CrossedHandle actual address)
+  (OptionalHandleCrossing _, VariantValue "None" []) -> pure (crossing, CrossedPointer nullPtr)
   {-| A record crosses by value, field by field, in the order its declaration
       wrote them. The value's own fields are matched by name rather than by
       position, so a record built with its fields written in another order still

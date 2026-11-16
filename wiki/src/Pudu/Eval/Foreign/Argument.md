@@ -39,6 +39,9 @@ count :: Int -> Text
 - **Type crossing validation (`E7019`):** Floats, booleans, bytes, handles, and records must strictly match the declared crossing type.
 - **Record validation (`E7023`):** Records crossing foreign boundaries must provide all declared fields by name.
 - **Slot handling:** Slots receive no caller value on input; they are threaded with placeholder values and marked for post-call output extraction.
+- **Optional handle arguments:** `Some(h)` crosses as the handle's live address and `None` as a null
+  pointer (`CrossedPointer nullPtr`). The handle inside `Some` is leased like a bare handle, so a
+  released one is refused with `E7022` before the call.
 
 ## Linkage
 

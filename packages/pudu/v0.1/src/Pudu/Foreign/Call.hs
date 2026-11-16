@@ -134,6 +134,7 @@ kindCode crossing = case crossing of
   TextCrossing -> 11
   NothingCrossing -> 12
   HandleCrossing _ -> 13
+  OptionalHandleCrossing _ -> 13
   BytesCrossing -> 15
   RecordCrossing _ _ -> 14
 

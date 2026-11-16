@@ -37,7 +37,9 @@ foreignHandles :: Foreign -> Set Text
   definition as far as this program is concerned. None of that needs machinery of its own.
 - **Every foreign function requires the `foreign` capability without saying so.** The signature is
   unverifiable by construction, and this language already has a word for an assertion of that kind.
-- **Handle syntax is formed through `DeclaredTypes`.** This preserves the declaring module in nominal identity, so same-spelling handles from two binding modules cannot unify; scalar crossings still retain their exact ABI widths.
+- **Handle syntax is formed through `DeclaredTypes`.** This preserves the declaring module in nominal identity, so same-spelling handles from two binding modules cannot unify; scalar crossings still retain their exact ABI widths. A parameter is formed through
+  `parameterCrossingFor`, so `Option` of a declared handle is admitted there and nowhere else;
+  `formedCrossing` takes the same path.
 - **A slot is a native argument and not a Pudu one.** Two signatures are derived from one
   declaration: the native one, ordinary parameters and slots in source order, and the Pudu one,
   ordinary parameters answering a tuple of the native result and each slot. The native result stays

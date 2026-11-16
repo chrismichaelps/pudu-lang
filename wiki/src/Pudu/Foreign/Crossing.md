@@ -55,6 +55,9 @@ foreignRecordFieldLimit :: Int
 - **Handle names are unqualified and come from the enclosing block.** A qualified `Other.Box` is
   never reduced to `Box`; scalar names may be unqualified only as well. A misspelled or qualified
   handle is refused rather than laundered into the block's own nominal type.
+- **A parameter may be an optional handle.** `parameterCrossingFor` admits `Option` of a declared
+  handle as `OptionalHandleCrossing`, and only parameters use it. Results and record fields keep
+  `crossingFor`, so an absent result still answers through an output slot.
 
 - **A record crosses by value and is an ordinary record.** What a library passes about is its
   colours, points, and rectangles, so a boundary admitting only scalars admits almost nothing real.
@@ -100,6 +103,10 @@ foreignRecordFieldLimit :: Int
   attached to a top-level foreign result and its declared release; nesting one would hide it from
   liveness leasing on arguments and ownership registration on results. _Rejected:_ recursively
   leasing or claiming fields without a field-level lifetime and release declaration.
+- **Q:** Let a result or record field be `Option` of a handle, as a parameter can be? **A:** No.
+  _Rationale:_ an absent result already answers through an output slot, and a nested optional handle
+  would evade the top-level lease and release contract. _Rejected:_ `Option` in result and field
+  positions.
 
 ## Nested ABI layouts (#863)
 
