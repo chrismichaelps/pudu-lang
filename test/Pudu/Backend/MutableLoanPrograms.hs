@@ -10,7 +10,34 @@ import Pudu.Comptime.Limits (callDepthLimit)
 
 mutableLoanSuccessPrograms :: [(String, Text, Text, Text)]
 mutableLoanSuccessPrograms =
-  [ ("a dynamic value's method writes back each lent place after dispatch", program
+  [ ("a dynamic receiver lent with &mut self is stored back as its variant", program
+      [ "trait Grower { fn grow(self: &mut Self, by: Int) -> Int }"
+      , "type Plant = { mut height: Int }"
+      , "type Stack = { mut items: Array[Int] }"
+      , "impl Grower for Plant {"
+      , "  fn grow(self: &mut Self, by: Int) -> Int {"
+      , "    (*self).height = (*self).height + by"
+      , "    (*self).height"
+      , "  }"
+      , "}"
+      , "impl Grower for Stack {"
+      , "  fn grow(self: &mut Self, by: Int) -> Int {"
+      , "    (*self).items = (*self).items.push(by)"
+      , "    (*self).items.length()"
+      , "  }"
+      , "}"
+      , "fn main() -> Int {"
+      , "  var one: dynamic Grower = Plant{height: 1}"
+      , "  var many: Array[dynamic Grower] = [Stack{items: []}, Plant{height: 10}]"
+      , "  let first = one.grow(4)"
+      , "  let second = many[0].grow(7)"
+      , "  let third = many[1].grow(5)"
+      , "  print(display(first) + \" \" + display(second) + \" \" + display(third))"
+      , "  print(show(one) + show(many))"
+      , "  0"
+      , "}" ]
+    , "5 1 15\nPlant{height: 5}[Stack{items: [7]}, Plant{height: 15}]\n", "")
+  , ("a dynamic value's method writes back each lent place after dispatch", program
       [ "trait Counter { fn bump(self: &Self, count: &mut Int, by: Int) -> Str }"
       , "type Ones = {}"
       , "type Tens = { scale: Int }"

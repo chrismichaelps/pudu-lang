@@ -196,24 +196,26 @@ lowerMethodCall lower state at callee receiver written arguments = do
 {-| A method of a dynamic value: the receiver runs, then the arguments, and
     the type it holds answers with its own implementation of the trait. -}
 dynamicCall :: LowerExpression -> LowerState -> Span -> CoreType -> Located Expression -> Text -> [Located Expression] -> Lowered
-dynamicCall lower state at kind receiver member arguments = case lower state receiver of
+dynamicCall lower state at kind receiver member arguments = case receiving of
   (after, Nothing) -> refused after
-  (after, Just (coreReceiver, _)) -> case operandsOf after [] arguments of
+  (after, Just (receiverPrelude, coreReceiver, receiverPlace)) -> case operandsOf after [] arguments of
     (final, Nothing) -> refused final
     (final, Just operands) ->
       let pushed = final{lowerScopes = [] : lowerScopes final}
           (withReceiver, receiverLocal) = bindLocal pushed "" (coreExpressionType coreReceiver)
           cores = [core | (_, core, _) <- operands]
           (bound, temporaries) = foldl' hold (withReceiver, []) cores
-          declarations = CoreStatement (coreExpressionSpan coreReceiver) (CoreDeclare receiverLocal coreReceiver)
-            : concat [prelude <> [CoreStatement (coreExpressionSpan core) (CoreDeclare local core)] | ((prelude, core, _), local) <- zip operands temporaries]
+          declarations = receiverPrelude <> [CoreStatement (coreExpressionSpan coreReceiver) (CoreDeclare receiverLocal coreReceiver)]
+            <> concat [prelude <> [CoreStatement (coreExpressionSpan core) (CoreDeclare local core)] | ((prelude, core, _), local) <- zip operands temporaries]
           scrutinee = CoreExpression (coreExpressionSpan coreReceiver) (coreLocalType receiverLocal) (CoreReadLocal receiverLocal)
           passed = [CoreExpression (coreExpressionSpan core) (coreLocalType local) (CoreReadLocal local) | (local, core) <- zip temporaries cores]
-          -- Parameter positions of the arguments lent through a place; the
-          -- receiver is parameter zero.
-          lent = [(position, found) | (position, (_, _, Just found)) <- zip [1 ..] operands]
+          -- Parameter positions lent through a place, the receiver at zero
+          -- when its method takes `&mut self`; a receiver that is no place is
+          -- lent a copy whose final is dropped.
+          lentArguments = [(position, Just found) | (position, (_, _, Just found)) <- zip [1 ..] operands]
+          lent = [(0, receiverPlace) | selfLent] <> lentArguments
           close next = next{lowerScopes = drop 1 (lowerScopes next)}
-       in case foldl' (arm (map fst lent) passed) (bound, Just []) (maybe [] id (sumVariants (contextTypes (lowerContext final)) kind)) of
+       in case foldl' (arm (map fst lent) passed) (bound, Just []) variants of
             (done, Just arms@(first : _)) ->
               let answered = coreExpressionType (coreArmBody first)
                   chosen = CoreExpression at answered (CoreMatch scrutinee (reverse arms))
@@ -226,7 +228,7 @@ dynamicCall lower state at kind receiver member arguments = case lower state rec
                           reading' = CoreExpression at answered (CoreReadLocal answer)
                           stores = [ storeHeld (contextTypes (lowerContext withAnswer)) (heldSpan found) found
                                        (CoreExpression (heldSpan found) (heldType found) (CoreTupleIndex (index + 1) reading'))
-                                   | (index, (_, found)) <- zip [0 ..] lent ]
+                                   | (index, (_, Just found)) <- zip [0 ..] lent ]
                           value = CoreExpression at result (CoreTupleIndex 0 reading')
                           whole = CoreBlock (declarations <> [CoreStatement at (CoreDeclare answer chosen)] <> stores) (Just value)
                        in (close withAnswer, Just (CoreExpression at result (CoreBlockValue whole), result))
@@ -237,6 +239,24 @@ dynamicCall lower state at kind receiver member arguments = case lower state rec
   trait = case kind of
     CoreSumType key _ -> last (Text.splitOn "." key)
     _ -> ""
+  variants = maybe [] id (sumVariants (contextTypes (lowerContext state)) kind)
+  -- Every implementation shares the trait's signature, so the first one says
+  -- whether the method takes `&mut self`.
+  (probed, selfLent) = case [(key, payload) | variant <- variants, [(_, payload)] <- [coreVariantFields variant]
+                                            , Just key <- [Map.lookup (trait, coreVariantName variant, member) (contextTraitMethods (lowerContext state))]] of
+    (key, payload) : _ -> case instanceTarget state at key Nothing [payload] unselected of
+      (back, Just (_, signature)) -> (back, 0 `elem` signatureLoaned signature)
+      (back, Nothing) -> (back, False)
+    [] -> (state, False)
+  -- A receiver lent with `&mut self` resolves its place once, as a lent
+  -- argument does; otherwise it is an ordinary value.
+  receiving
+    | selfLent, Just held <- holdPlace lower probed (locatedSpan receiver) receiver = case held of
+        (after, Nothing) -> (after, Nothing)
+        (after, Just (prelude, found)) -> (after, Just (prelude, readHeld (contextTypes (lowerContext after)) found, Just found))
+    | otherwise = case lower probed receiver of
+        (after, Nothing) -> (after, Nothing)
+        (after, Just (core, _)) -> (after, Just ([], core, Nothing))
   hold (current, held) core =
     let (next, local) = bindLocal current "" (coreExpressionType core)
      in (next, held <> [local])
@@ -260,19 +280,28 @@ dynamicCall lower state at kind receiver member arguments = case lower state rec
           reading = CoreExpression at payload (CoreReadLocal held)
           pattern' = CoreVariantPattern (coreVariantName variant) [CoreBindPattern held]
        in case (if null lent then invoke else invokeLent lent) withHeld at key Nothing unselected (reading : passed) of
+            (next, Just (call, CoreTupleType (result : payloadFinal : rest))) | 0 `elem` lent ->
+              -- The final receiver goes back as the dynamic value, wrapped in
+              -- this arm's variant, so every arm answers one tuple type.
+              let (withCall, called) = bindLocal next "" (coreExpressionType call)
+                  readCall = CoreExpression at (coreExpressionType call) (CoreReadLocal called)
+                  member' position kind' = CoreExpression at kind' (CoreTupleIndex position readCall)
+                  wrapped = CoreExpression at kind (CoreConstruct (coreVariantName variant) [("0", member' 1 payloadFinal)])
+                  answered = CoreTupleType (result : kind : rest)
+                  tuple = CoreExpression at answered (CoreTuple (member' 0 result : wrapped : [member' position kind' | (position, kind') <- zip [2 ..] rest]))
+                  body = CoreExpression at answered (CoreBlockValue (CoreBlock [CoreStatement at (CoreDeclare called call)] (Just tuple)))
+               in (withCall, Just (CoreArm at pattern' Nothing body : arms))
             (next, Just (call, _)) -> (next, Just (CoreArm at pattern' Nothing call : arms))
             (next, Nothing) -> (next, Nothing)
     _ -> halt at ("the method '" <> member <> "' of a dynamic value") current
 
 {-| A call to an instance whose `&mut` parameters are exactly the lent
     positions, answering its result beside each final as a loaned body
-    does. The receiver of a dynamic call cannot be lent: storing it back
-    would rewrap the held value in its variant. -}
+    does. -}
 invokeLent :: [Int] -> LowerState -> Span -> Text -> Maybe Type -> Selected -> [CoreExpression] -> Lowered
 invokeLent lent state at key written selected given = case instanceTarget state at key instantiated (coreExpressionType <$> take 1 given) selected of
   (back, Nothing) -> refused back
   (back, Just (target, CoreSignature{signatureParameters, signatureResult, signatureLoaned}))
-    | 0 `elem` signatureLoaned -> halt at "a dynamic receiver lent with &mut" back
     | signatureLoaned /= lent -> halt at "a dynamic call lending other places than its method's &mut parameters" back
     | length signatureParameters /= length given -> halt at "a method called with this many arguments" back
     | otherwise ->
