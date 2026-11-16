@@ -9,6 +9,7 @@ module Pudu.Eval.Foreign
   ) where
 
 import Control.Exception (mask_, onException)
+import qualified Data.Map.Strict as Map
 import Data.Maybe (fromMaybe)
 import Data.Int (Int64)
 import Data.Text (Text)
@@ -26,13 +27,16 @@ import Pudu.Diagnostic
   )
 import Pudu.Eval.Confinement (guardConfined)
 import Pudu.Eval.Env (Evaluator (..), Eval (..), abortAt, currentForeignStore, performEffect)
+import Pudu.Eval.Foreign.Binding (ForeignCallbackSlot)
+import Pudu.Eval.Foreign.Callback (withCallbackDispatch)
 import Pudu.Eval.Value (ForeignBinding (..), ForeignClaim (..), ForeignSlot (..), Value (..))
 import Pudu.Foreign.Call
   ( CrossedValue (..)
   , ForeignCallFailure (..)
-  , callSymbol
+  , callSymbolScoped
   , resolveSymbol
   )
+import Pudu.Foreign.CallbackStore (CallbackKey)
 import Pudu.Foreign.Crossing (Crossing (..))
 import Pudu.Eval.Foreign.Argument (crossArguments)
 import Pudu.Foreign.Ownership
@@ -58,12 +62,19 @@ import Pudu.Eval.Foreign.Resource (prepareReleases, releaseHandle, cleanupFailed
     file: a compile-time constant is folded while the compiler runs, and letting
     one reach a graphics library would make what the program compiles to depend
     on what was installed on the machine that compiled it. -}
-callForeign :: Span -> ForeignBinding -> [Value] -> Evaluator Value
-callForeign spanValue binding values = maskedBoundary $ do
+callForeign
+  :: (Span -> Value -> [Value] -> Evaluator Value)
+  -> Span -> ForeignBinding -> [Value] -> Evaluator Value
+callForeign apply spanValue binding values = maskedBoundary $ do
   guardConfined spanValue ("the foreign function " <> foreignBindingSymbol binding) False
-  crossed <- crossArguments spanValue binding values
+  (crossed, callbacks) <- crossArguments spanValue binding values
+  -- A handle an optional argument holds is checked live as a bare one is.
   let claims =
-        [(address, generation) | ForeignHandleValue _ address (OwnedClaim generation) <- values]
+        [ (address, generation)
+        | value <- values
+        , ForeignHandleValue _ address (OwnedClaim generation) <- case value of
+            VariantValue "Some" [held] -> [held]
+            other -> [other] ]
   store <- currentForeignStore
   found <-
     performEffect (refusal spanValue)
@@ -77,17 +88,44 @@ callForeign spanValue binding values = maskedBoundary $ do
         Left problem -> abortForeign spanValue binding problem
         Right () -> pure ()
       released <- prepareHandles spanValue binding store claims crossed
-      attempted <- invoke spanValue binding store symbol claims crossed
-      case attempted of
-        Nothing -> deadHandle spanValue binding (firstHandleName crossed)
-        Just (Left problem) -> do
-          case problem of
-            PostCallFailure _ handles -> performEffect (refusal spanValue)
-              (cleanupFailedOutputs spanValue binding store handles)
-            _ -> restoreReleased spanValue store released
-          abortForeignCall spanValue binding problem
-        Just (Right (produced, written)) ->
-          answer spanValue binding store produced written
+      dispatched <- invoke apply spanValue binding store symbol claims crossed callbacks
+      case dispatched of
+        Left problem -> do
+          restoreReleased spanValue store released
+          abortForeign spanValue binding problem
+        Right (attempted, callbackFailure) ->
+          afterCallbackSettlement spanValue store callbackFailure $
+            case attempted of
+              Nothing -> deadHandle spanValue binding (firstHandleName crossed)
+              Just (Left problem) -> do
+                case problem of
+                  PostCallFailure _ handles -> performEffect (refusal spanValue)
+                    (cleanupFailedOutputs spanValue binding store handles)
+                  _ -> restoreReleased spanValue store released
+                abortForeignCall spanValue binding problem
+              Just (Right (produced, written)) ->
+                answer spanValue binding store produced written
+
+afterCallbackSettlement :: Span -> ForeignStore -> Maybe Diagnostic -> Evaluator Value -> Evaluator Value
+afterCallbackSettlement _ _ Nothing action = action
+afterCallbackSettlement at store (Just callbackFailure) (Evaluator action) = Evaluator $ \env -> do
+  outcome <- action env
+  secondary <- case outcome of
+    Done value _ -> discardOwnedGenerations store (returnedClaims value) >> pure []
+    Aborted problem -> pure [Related (diagnosticSpan problem) (diagnosticMessage problem)]
+    Unwound{} -> pure []
+  let relation = Related (diagnosticSpan callbackFailure) (diagnosticMessage callbackFailure)
+      Evaluator failCall = abortAt (Just at) "E7015" "a nested foreign callback failed" Nothing
+  failed <- failCall env
+  pure $ case failed of
+    Aborted primary -> Aborted (foldl (flip withRelated) primary (relation : secondary))
+    other -> other
+ where
+  returnedClaims value = case value of
+    ForeignHandleValue _ address (OwnedClaim generation) -> [(address, generation)]
+    TupleValue members -> concatMap returnedClaims members
+    SumValue _ _ members -> concatMap returnedClaims members
+    _ -> []
 
 {-| Settle native resources before asynchronous cancellation is delivered. -}
 maskedBoundary :: Evaluator a -> Evaluator a
@@ -107,24 +145,22 @@ maskedBoundary (Evaluator action) = Evaluator $ \env -> mask_ $ do
     _ -> pure outcome
 
 invoke
-  :: Span
-  -> ForeignBinding
-  -> ForeignStore
-  -> Ptr ()
+  :: (Span -> Value -> [Value] -> Evaluator Value)
+  -> Span -> ForeignBinding -> ForeignStore -> Ptr ()
   -> [(Int64, Integer)]
   -> [(Crossing, Bool, CrossedValue)]
-  -> Evaluator (Maybe (Either ForeignCallFailure (CrossedValue, [Maybe CrossedValue])))
-invoke spanValue binding store symbol claims arguments =
-  case foreignBindingReleases binding of
-    Just _ -> Just <$> perform
-    Nothing ->
-      performEffect (refusal spanValue)
-        (withOwnedGenerations store claims
-          (callSymbol symbol arguments (foreignBindingResult binding)))
- where
-  perform =
-    performEffect (refusal spanValue)
-      (callSymbol symbol arguments (foreignBindingResult binding))
+  -> [(ForeignCallbackSlot, CallbackKey)]
+  -> Evaluator (Either Text (Maybe (Either ForeignCallFailure (CrossedValue, [Maybe CrossedValue])), Maybe Diagnostic))
+invoke apply spanValue binding store symbol claims arguments callbacks =
+  withCallbackDispatch apply spanValue callbacks $ \scope pointers -> do
+    let nativePointers = Map.fromList pointers
+        slot index argument = case Map.lookup index nativePointers of
+          Nothing -> argument
+          Just pointer -> (NothingCrossing, False, CrossedPointer pointer)
+        call = callSymbolScoped scope symbol (zipWith slot [0 ..] arguments) (foreignBindingResult binding)
+    case foreignBindingReleases binding of
+      Just _ -> Just <$> call
+      Nothing -> withOwnedGenerations store claims call
 
 {-| Validate handle liveness immediately before control crosses the boundary.
 

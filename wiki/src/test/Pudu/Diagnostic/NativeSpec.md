@@ -18,6 +18,11 @@ Check values and user-facing rendering; do not run a compiler or infer native
 execution support from these constructor contracts. Focused/full registration
 must share the same property.
 
+## Native refusal help (#935)
+
+The E6001 contract pins the interpreter command and the location-specific
+rewrite guidance.
+
 ## Referenced by
 
 [[Native Diagnostic Contracts]] · [[Repository Test Runner]] · [[src/_MOC]]

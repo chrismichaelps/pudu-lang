@@ -5,6 +5,10 @@ tags: [moc, handoff]
 
 # Handoff Map
 
+- [[Native Frame Slot Reuse Delivery]] — independent slot allocation and emission evidence (#821).
+
+- [[C11 Emission Continuation Delivery]] — binary kernels, mutex close and dynamic argument widening (#935).
+
 - [[Foreign Pointer Delivery]] — typed foreign crossings and bounds (#877).
 - [[Foreign Callback Delivery]] — callbacks into Pudu across foreign calls (#875 decided, #876 next).
 - [[Native Mobile Targets Delivery]] — iOS static libraries and simulator evidence (#878).

@@ -54,6 +54,11 @@ Range shapes contribute their operands' locals.
 
 Byte operations contribute their operands' locals.
 
+## Resolved Grill Log for #876 — Native callback lowering
+
+Reach record layouts through callback signatures even when the handler or
+foreign function is the only user. The callback context has no value layout.
+
 ## Referenced by
 
 [[Compiler Lower]] · [[Core IR]] · [[src/_MOC]]

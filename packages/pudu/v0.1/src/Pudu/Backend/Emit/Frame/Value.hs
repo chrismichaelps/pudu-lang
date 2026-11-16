@@ -19,6 +19,7 @@ import Pudu.Backend.Emit.Range (rangeMethodCall)
 import Pudu.Backend.Emit.Bytes (bytesFunction)
 import Pudu.Backend.Emit.Kernel (frameKernel)
 import Pudu.Backend.Emit.Foreign (foreignCall)
+import Pudu.Backend.Emit.Foreign.Callback (callbackOperation)
 import Pudu.Core.Frame
   ( FrameFault (..), FrameSlot (..), FrameSlotId (..), FrameUnaryOperator (..)
   , FrameValue (..), FrameValueShape (..), coreScalarOperator )
@@ -232,6 +233,9 @@ frameValue state value = case frameValueShape value of
     let (function, part) = bytesFunction name
     plain (function <> "(" <> Text.intercalate ", " (target : operands) <> ")") [part]
   FrameKernel name constants arguments -> frameKernel slotText value name constants arguments >>= uncurry plain
+  FrameCallback operation operand -> do
+    cell <- slotText operand
+    uncurry plain (callbackOperation operation (frameValueType value) operand cell)
   FrameForeign declared arguments -> do
     cells <- traverse slotText arguments
     let (after, text, needs) = foreignCall state (frameValueSpan value) declared cells

@@ -39,8 +39,8 @@ nativeRefusal spanValue construct =
   buildDiagnostic "E6001" spanValue
     ("the native backend does not support " <> construct <> " yet")
     ( Just
-        ( "run this program with the tree interpreter, or keep to the supported subset: "
-            <> "Int and Bool locals, while, if, print, and checked integer arithmetic"
+        ( "run this program with the tree interpreter (`pudu run`), "
+            <> "or rewrite the construct at this location in a form the native backend carries"
         )
     )
 

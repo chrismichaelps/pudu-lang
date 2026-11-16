@@ -7,7 +7,8 @@ import Data.Text (Text)
 import Pudu.Frontend.Syntax.Located (Located (..))
 import Pudu.Frontend.Syntax.Name (ModuleName, moduleNameText)
 import Pudu.Frontend.Syntax.Tree
-  ( Declaration (..), Foreign (..), Trait (..), TypeDeclarationValue (..), TypeParam (..) )
+  ( Declaration (..), Foreign (..), Trait (..), TypeDeclarationValue (..), TypeParam (..)
+  , foreignCallbackNames )
 import Pudu.Type.Env (DeclaredTypes (..))
 import Pudu.Type.Value (canonicalNominal)
 
@@ -30,7 +31,7 @@ locallyDeclared = Set.fromList . concatMap named
   named (Located _ declaration) = case declaration of
     TypeDeclaration value -> [locatedValue (typeName value)]
     TraitDeclaration value -> [locatedValue (traitName value)]
-    ForeignDeclaration value -> map locatedValue (foreignTypes value)
+    ForeignDeclaration value -> map locatedValue (foreignTypes value <> foreignCallbackNames value)
     _ -> []
 
 addShell :: ModuleName -> Located Declaration -> DeclaredTypes -> DeclaredTypes
@@ -59,9 +60,9 @@ addShell owner (Located _ declaration) declared = case declaration of
           (map (locatedValue . typeParamName . locatedValue) (traitTypeParams value)) (declaredParams declared)
       }
   ForeignDeclaration value ->
-    foldr addHandle declared (foreignTypes value)
+    foldr addForeignName declared (foreignTypes value <> foreignCallbackNames value)
    where
-    addHandle named accumulated =
+    addForeignName named accumulated =
       let name = locatedValue named
           identity = canonicalNominal owner name
        in accumulated

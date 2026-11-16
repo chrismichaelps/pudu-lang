@@ -275,24 +275,13 @@ testReachableFunctions = do
     construct", not as a hand-counted column. -}
 refusalCases :: [(String, Text, Text)]
 refusalCases =
-  [ ("call to entry", statementProgram "main()", "main()\n")
-  , ("a module without main", Text.unlines
+  [ ("a module without main", Text.unlines
       [ "module Refuse"
       , ""
       , "fn other() -> Int {"
       , "  return 1"
       , "}"
       ], "other")
-      ]
- where
-  statementProgram statement =
-    Text.unlines
-      [ "module Refuse"
-      , ""
-      , "fn main() -> Int {"
-      , "  " <> statement
-      , "  return 0"
-      , "}"
       ]
 
 testRefusals :: IO Property

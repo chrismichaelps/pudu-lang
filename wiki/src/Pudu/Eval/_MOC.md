@@ -73,6 +73,8 @@ Dependency direction: Builtin Definition → Value → Env → Operator/Match/Ar
 
 - [[Eval Data Tests]] — structural Decimal equality and retained numeric representation.
 
+- [[Eval Foreign Callback]] — interpreter registration values and token unregistration.
+
 ## Referenced by
 
 [[src/Pudu/_MOC]] · [[Semantics]]

@@ -74,6 +74,12 @@ answered blame (Primitive parameters result guards answer) state at cores
             found = expression payload (CoreReadLocal local)
             present = expression CoreBoolType (CoreKernel KernelPresent [] [found])
          in finish after [CoreStatement at (CoreDeclare local (kernel payload call))] (choice present found)
+      Required call code message ->
+        let (after, local) = bindLocal held "" result
+            found = expression result (CoreReadLocal local)
+            missing = expression CoreBoolType (CoreNot (expression CoreBoolType (CoreKernel KernelPresent [] [found])))
+            stop = CoreStatement at (CoreIf missing (CoreBlock [CoreStatement at (CoreEvaluate (failure code message))] Nothing) Nothing)
+         in finish after [CoreStatement at (CoreDeclare local (kernel result call)), stop] found
  where
   (held, locals) = foldl' hold (state, []) cores
   hold (current, done) core = let (next, local) = bindLocal current "" (coreExpressionType core) in (next, done <> [local])
@@ -120,15 +126,26 @@ answered blame (Primitive parameters result guards answer) state at cores
           AtCall -> CoreFailText code Nothing text Nothing
           AtCaller -> CoreFailCaller code Nothing text
 
-{-| The codec entries need the program's own Json and Xml layouts; every
+{-| The codec entries need the program's own Json, Xml and Binary layouts; every
     other entry is fixed. -}
 kernelPrimitive :: LowerTypes -> Text -> Maybe Primitive
 kernelPrimitive types name = case name of
   "jsonDecode" -> (\tags -> Primitive [CoreTextType] (option json) [] (Boxed (Call KernelJsonDecode tags [0]))) <$> jsonTags
   "jsonEncode" -> (\tags -> Primitive [json, CoreBoolType] CoreTextType [] (Plain (Call KernelJsonEncode tags [0, 1]))) <$> jsonTags
   "xmlDecode" -> (\places -> Primitive [CoreTextType] (option tag) [] (Boxed (Call KernelXmlDecode places [0]))) <$> xmlPlaces
+  "binaryEncode" -> (\tags -> Primitive [binary] CoreBytesType []
+    (Required (Call KernelBinaryEncode tags [0]) "E7001" "binaryEncode expects a Std.Binary node")) <$> binaryTags
+  "binaryDecode" -> (\tags -> Primitive [CoreBytesType] (CoreSumType "Result" [binary, CoreTextType]) []
+    (Outcome (Call KernelBinaryDecode tags [0]))) <$> binaryTags
   _ -> lookup name fixedPrimitives
  where
+  binary = CoreSumType "Std.Binary.Node" []
+  named = CoreArrayType (CoreTupleType [CoreTextType, binary])
+  keyed = CoreMapType CoreTextType binary
+  binaryTags = sumVariants types binary >>= indexes
+    [ ("Whole", [intType]), ("Real", [CoreFloatType Float64Width]), ("Flag", [CoreBoolType]), ("Text", [CoreTextType])
+    , ("Raw", [CoreBytesType]), ("Reals", [CoreBytesType]), ("Items", [CoreArrayType binary]), ("Absent", []), ("Present", [binary])
+    , ("Fields", [named]), ("Choice", [CoreTextType, named]), ("Record", [keyed]), ("Picked", [CoreTextType, keyed]) ]
   json = CoreSumType "Std.Json.Json" []
   tag = CoreRecordType "Std.Xml.Tag" []
   node = CoreSumType "Std.Xml.Node" []

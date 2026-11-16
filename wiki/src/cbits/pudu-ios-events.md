@@ -37,6 +37,11 @@ The header provides `pudu_queue(kind, tag, text, detail)`, which appends an even
 
 Depends on Foundation for the run loop. Included by [[iOS Host Adapter]]. Its values are decoded by [[Std Mobile View]] through [[Std Mobile Host]]. Staged by [[Backend Toolchain App]] and listed in [[Native Toolchain Host Sources]].
 
+## Resolved Grill Log for #935
+
+The list self-test inspects pending Reached events for its tag before it
+queues the stop. The host still delivers events in FIFO order.
+
 ## Resolved Grill Log
 
 - **Q:** Why a separate header? **A:** The queue is its own responsibility, and the host file must stay within its line budget as list support is added.

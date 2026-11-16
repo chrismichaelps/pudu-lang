@@ -2,7 +2,7 @@
 module Pudu.Compiler.Lower.State
   ( CoreSignature (..), ForeignTarget (..), Head (..), Instance (..), LowerContext (..), LowerState (..), LoopFrame (..), ModuleScope (..)
   , emptyContext, startFunction, refuse, refused, halt, lookupLocal, bindLocal, intType
-  , resolveFunction, lookupConstant, lookupForeign, lookupQualifiedForeign, lookupInitializer, inModule, withTypeBindings, isModuleQualifier
+  , resolveFunction, lookupConstant, lookupForeign, lookupQualifiedForeign, lookupCallback, lookupInitializer, inModule, withTypeBindings, isModuleQualifier
   ) where
 
 import Data.Map.Strict (Map)
@@ -97,6 +97,7 @@ data ModuleScope = ModuleScope
   , scopeQualifiers :: !(Map Text Text)
   {-| Each foreign function the module declares and what it calls. -}
   , scopeForeign :: !(Map Text ForeignTarget)
+  , scopeCallbacks :: !(Map Text CoreCallbackSignature)
   }
 
 {-| The library, version and symbol a foreign declaration calls. -}
@@ -108,6 +109,7 @@ data ForeignTarget = ForeignTarget
   , targetReleases :: !Bool
   , targetSlotPositions :: ![Int]
   , targetSlotClaims :: ![Maybe CoreClaim]
+  , targetCallbackSlots :: ![CoreCallbackSlot]
   }
 
 {-| @Compiler.Lower.State — one function's lowering state on top of the
@@ -265,6 +267,25 @@ lookupQualifiedForeign state qualifier name = do
   scope <- Map.lookup (contextModule context) (contextModules context)
   owner <- Map.lookup qualifier (scopeQualifiers scope)
   Map.lookup owner (contextModules context) >>= Map.lookup name . scopeForeign
+
+lookupCallback :: LowerState -> [Text] -> Maybe CoreCallbackSignature
+lookupCallback state segments = do
+  let context = lowerContext state
+      modules = contextModules context
+  scope <- Map.lookup (contextModule context) modules
+  case segments of
+    [name] -> case lookupLocal state name of
+      Just _ -> Nothing
+      Nothing -> case Map.lookup name (scopeCallbacks scope) of
+        Just callback -> Just callback
+        Nothing -> do
+          owner <- Map.lookup name (scopeSelected scope)
+          Map.lookup owner modules >>= Map.lookup name . scopeCallbacks
+    [qualifier, name] -> do
+      Nothing <- Just (lookupLocal state qualifier)
+      owner <- Map.lookup qualifier (scopeQualifiers scope)
+      Map.lookup owner modules >>= Map.lookup name . scopeCallbacks
+    _ -> Nothing
 
 {-| The module a constant belongs to and what it was written as. -}
 lookupInitializer :: LowerState -> [Text] -> Maybe (Text, Located Expression)

@@ -84,6 +84,11 @@ Resolved Grill Log: `lowerCurrentKey` names the body being lowered, and
 
 `ModuleScope` records each foreign function a module declares as a `ForeignTarget` (library, version, symbol). `lookupForeign` reaches one by a bare name, the module's own or a selectively imported one, unless a local shadows it.
 
+## Resolved Grill Log for #876 — Native callback lowering
+
+Callback registrations follow module and selective imports and respect local
+shadowing. Foreign targets keep their checked function/context pairs.
+
 ## Referenced by
 
 [[src/Pudu/Compiler/_MOC]] · [[Compiler Lower]] · [[Compiler Lower Body]]

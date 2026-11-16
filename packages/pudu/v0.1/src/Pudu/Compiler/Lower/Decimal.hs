@@ -102,6 +102,10 @@ answered resultType state at answer cores = case answer of
   some optionType value = expression optionType (CoreConstruct "Some" [("0", value)])
   none optionType = expression optionType (CoreConstruct "None" [])
   finish current kind value = (current, Just (expression kind (CoreBlockValue (CoreBlock declarations (Just value))), kind))
-  option build = case resultType of
-    Just optionType@(CoreSumType "Option" [_]) -> finish held optionType (expression optionType (build optionType))
-    _ -> halt at "an Option result without a native form" state
+  -- The answer's Option is fixed by the primitive, whatever facts the call kept.
+  option build =
+    let optionType = case (resultType, answer) of
+          (Just recorded@(CoreSumType "Option" [_]), _) -> recorded
+          (_, Optional _ _ kind) -> CoreSumType "Option" [kind]
+          _ -> CoreSumType "Option" [CoreDecimalType]
+     in finish held optionType (expression optionType (build optionType))

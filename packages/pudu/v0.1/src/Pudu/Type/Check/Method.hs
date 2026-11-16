@@ -125,7 +125,12 @@ declareTraitMember
   -> Checker ()
 declareTraitMember declared owner traitParams bounds (Located _ method) = do
   let rigid = ("Self", 0) : traitParams <> functionRigid method
-  inputs <- mapM (declaredParameterType declared rigid) (functionParameters method)
+  inputs <- case functionParameters method of
+    Located _ receiver : rest
+      | locatedValue (Tree.parameterName receiver) == "self"
+      , Nothing <- Tree.parameterType receiver ->
+          (RigidType "Self" :) <$> mapM (declaredParameterType declared rigid) rest
+    parameters -> mapM (declaredParameterType declared rigid) parameters
   result <- formOptionalType declared rigid (functionReturn method)
   let scheme =
         polytype rigid (bounds <> declareBoundsWith declared traitParams method)

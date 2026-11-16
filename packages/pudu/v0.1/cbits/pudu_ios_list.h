@@ -167,8 +167,8 @@ static void pudu_list_forget(UIView *row) {
   [store forget:row];
 }
 
-/* Self-test: scrolls the first list to its last item, waits until that
-   item's cell shows a label, and reports it and whether fewer cells than a fifth of the items were ever made. */
+/* Self-test: stop after the last item is displayed and queued viewport
+   changes can no longer replace the window that contains it. */
 static void pudu_test_list(NSArray *nodes, void (^done)(void)) {
   PuduList *list = nil;
   for (NSObject *node in nodes) {
@@ -184,7 +184,9 @@ static void pudu_test_list(NSArray *nodes, void (^done)(void)) {
     [list scrollToItemAtIndexPath:last atScrollPosition:UICollectionViewScrollPositionBottom animated:NO];
     [list layoutIfNeeded];
     PuduCell *cell = (PuduCell *)[list cellForItemAtIndexPath:last];
-    if ([cell.hosted isKindOfClass:UILabel.class]) {
+    if ([cell.hosted isKindOfClass:UILabel.class] &&
+        (uint64_t)list.first + list.store.ordered.count == list.total &&
+        !pudu_reached_pending(list.tag)) {
       printf("PUDU_LIST reached %s\n", ((UILabel *)cell.hosted).text.UTF8String);
       if (pudu_cells_made < list.total / 5) puts("PUDU_LIST reused");
       printf("PUDU_CELLS %lu of %u items\n", (unsigned long)pudu_cells_made, list.total);

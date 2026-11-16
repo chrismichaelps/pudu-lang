@@ -25,7 +25,8 @@ exportProperties =
   [ ("embedded exports carry every scalar crossing to a C host", once <$> testCrossings)
   , ("embedded exports refuse a call before the start", once <$> testEarlyCall)
   , ("embedded exports refuse a parameter C cannot pass", testTextParameter)
-  , ("embedded exports refuse type parameters, defaults and async", testRefusedForms)
+  , ("embedded exports refuse type parameters", testRefusedForms)
+  , ("embedded exports run defaulted and async bodies", once <$> testDefaultedAndAsync)
   , ("executables never lower exports", testExecutableIgnores)
   , ("embedded exports carry text, records and Result to a C host", once <$> testRichCrossings)
   , ("embedded exports refuse host text that is not UTF-8", once <$> testInvalidText)
@@ -106,16 +107,52 @@ testRefusedForms :: IO Property
 testRefusedForms = do
   lowered <- lowerWith True (Text.unlines
     [ "module Main", "", "fn main() -> Int {", "  0", "}", ""
-    , "export fn same[T](value: T) -> T {", "  value", "}", ""
-    , "export fn step(value: Int64, by: Int64 = 1) -> Int64 {", "  value + by", "}" ])
+    , "export fn same[T](value: T) -> T {", "  value", "}" ])
   pure $ case lowered of
-    Just (LowerRefused refusals) ->
-      let messages = map diagnosticMessage refusals
-       in conjoin
-            [ counterexample (show messages) (property (any ("with type parameters" `Text.isInfixOf`) messages))
-            , counterexample (show messages) (property (any ("with default parameter values" `Text.isInfixOf`) messages))
-            ]
+    Just (LowerRefused [refusal]) ->
+      let message = diagnosticMessage refusal
+       in counterexample (show message) (property ("with type parameters" `Text.isInfixOf` message))
     other -> counterexample (show other) (property False)
+
+testDefaultedAndAsync :: IO Property
+testDefaultedAndAsync = withHost program host $ \ran ->
+  pure (ran === (ExitSuccess, "11\n21\n7\n24\nawaited\n0 15\nawaited\n1 rejected\n", ""))
+ where
+  program = Text.unlines
+    [ "module Main"
+    , "fn main() -> Int {"
+    , "  print(show(step(2, 3)))"
+    , "  print(show(step(2, 3, 10)))"
+    , "  print(show(step(2, 3, 5, 2)))"
+    , "  0"
+    , "}"
+    , "export fn step(first: Int64 = 100, required: Int64, next: Int64 = first + required, last: Int64 = next + 1) -> Int64 {"
+    , "  next + last"
+    , "}"
+    , "async fn add(value: Int64) -> Result[Int64, Str] {"
+    , "  print(\"awaited\")"
+    , "  if value > 0 { Ok(value + 5) } else { Err(\"rejected\") }"
+    , "}"
+    , "export async fn run(value: Int64 = 10) -> Result[Int64, Str] {"
+    , "  Ok(add(value).await)"
+    , "}"
+    ]
+  host = Text.unlines
+    [ "#include <stdio.h>"
+    , "#include \"pudu_program.h\""
+    , "int main(int argc, char **argv) {"
+    , "  int64_t value = 0;"
+    , "  pudu_string error;"
+    , "  if (pudu_program_run(argc, argv) != 0) return 1;"
+    , "  printf(\"%lld\\n\", (long long)pudu_export_step(1, 2, 10, 14));"
+    , "  int status = pudu_export_run(10, &value, &error);"
+    , "  printf(\"%d %lld\\n\", status, (long long)value);"
+    , "  status = pudu_export_run(0, &value, &error);"
+    , "  printf(\"%d %.*s\\n\", status, (int)error.length, error.bytes);"
+    , "  pudu_string_release(error);"
+    , "  return 0;"
+    , "}"
+    ]
 
 testExecutableIgnores :: IO Property
 testExecutableIgnores = do

@@ -10,43 +10,7 @@
 #include <stdlib.h>
 #include <string.h>
 
-#ifdef __APPLE__
-#include <ffi/ffi.h>
-#else
-#include <ffi.h>
-#endif
-
-/* The kinds a value may cross as. The codes are shared with the evaluator and
- * must not be reordered: they are written by the side that knows the
- * declaration and read by the side that knows the machine. */
-enum pudu_kind {
-  PUDU_I8 = 0,
-  PUDU_I16 = 1,
-  PUDU_I32 = 2,
-  PUDU_I64 = 3,
-  PUDU_U8 = 4,
-  PUDU_U16 = 5,
-  PUDU_U32 = 6,
-  PUDU_U64 = 7,
-  PUDU_F32 = 8,
-  PUDU_F64 = 9,
-  PUDU_BOOL = 10,
-  PUDU_TEXT = 11,
-  PUDU_VOID = 12,
-  PUDU_HANDLE = 13,
-  /* A record crossing by value. Its fields are described separately, because a
-   * struct is the one shape whose bytes this side must lay out: where a field
-   * sits inside one is the platform's rule, not the caller's, and a caller that
-   * guessed would be writing into the wrong offsets on some machine. */
-  PUDU_STRUCT = 14,
-  /* A run of bytes the library reads. An address like any other here; what
-   * makes it different is above, where the storage it names belongs to a value
-   * that outlives the call and is not copied to get here. */
-  PUDU_BYTES = 15
-};
-
-#define PUDU_MAX_ARGUMENTS 32
-#define PUDU_MAX_FIELDS 32
+#include "pudu_ffi_internal.h"
 
 /* Storage for one argument this call lays out itself: a record crossing by
  * value, or the cell behind an output slot.
@@ -81,7 +45,7 @@ void *pudu_ffi_symbol(void *handle, const char *name) {
 
 const char *pudu_ffi_error(void) { return dlerror(); }
 
-static ffi_type *type_for(uint8_t kind) {
+ffi_type *pudu_ffi_type_for(uint8_t kind) {
   switch (kind) {
   case PUDU_I8:
     return &ffi_type_sint8;
@@ -108,6 +72,7 @@ static ffi_type *type_for(uint8_t kind) {
   case PUDU_TEXT:
   case PUDU_BYTES:
   case PUDU_HANDLE:
+  case PUDU_POINTER:
     return &ffi_type_pointer;
   case PUDU_VOID:
     return &ffi_type_void;
@@ -186,7 +151,7 @@ static int place_field(unsigned char *storage, size_t offset, uint8_t kind, int6
 }
 
 /* Read one scalar back out of a struct the library returned. */
-static int take_field(const unsigned char *storage, size_t offset, uint8_t kind, int64_t *integer,
+int pudu_ffi_take_field(const unsigned char *storage, size_t offset, uint8_t kind, int64_t *integer,
                       double *floating) {
   const void *slot = storage + offset;
   *integer = 0;
@@ -248,15 +213,7 @@ static int take_field(const unsigned char *storage, size_t offset, uint8_t kind,
  * into the slot arrays before returning. `slot_kinds` may be null, which is a
  * call with no slots at all. */
 /* Descriptors and leaf offsets are consumed in declaration order. */
-struct pudu_layout {
-  const uint8_t *next, *end;
-  ffi_type *types;
-  ffi_type **elements;
-  unsigned char *storage[PUDU_MAX_ARGUMENTS + 1];
-  size_t *offsets[PUDU_MAX_ARGUMENTS + 1];
-};
-
-static ffi_type *record_type(struct pudu_layout *layout, const uint8_t *kinds,
+ffi_type *pudu_ffi_record_type(struct pudu_layout *layout, const uint8_t *kinds,
                              size_t *offsets, size_t count, size_t *leaf) {
   if (layout->end - layout->next < 2 || *layout->next++ != PUDU_STRUCT) return NULL;
   uint8_t members = *layout->next++;
@@ -270,12 +227,12 @@ static ffi_type *record_type(struct pudu_layout *layout, const uint8_t *kinds,
     starts[member] = *leaf;
     uint8_t kind = *layout->next;
     if (kind == PUDU_STRUCT) {
-      elements[member] = record_type(layout, kinds, offsets, count, leaf);
+      elements[member] = pudu_ffi_record_type(layout, kinds, offsets, count, leaf);
     } else {
       if (*leaf == count || kinds[*leaf] != kind || kind == PUDU_VOID) return NULL;
       layout->next++;
       (*leaf)++;
-      elements[member] = type_for(kind);
+      elements[member] = pudu_ffi_type_for(kind);
     }
     if (elements[member] == NULL) return NULL;
   }
@@ -295,13 +252,13 @@ static ffi_type *prepare_record(struct pudu_layout *layout, size_t index,
   layout->offsets[index] = calloc((size_t)count, sizeof(size_t));
   if (layout->offsets[index] == NULL) return NULL;
   size_t leaf = 0;
-  ffi_type *type = record_type(layout, kinds, layout->offsets[index], (size_t)count, &leaf);
+  ffi_type *type = pudu_ffi_record_type(layout, kinds, layout->offsets[index], (size_t)count, &leaf);
   if (type == NULL || leaf != (size_t)count) return NULL;
   layout->storage[index] = calloc(1, type->size);
   return layout->storage[index] == NULL ? NULL : type;
 }
 
-static int call_with_layout(struct pudu_layout *layout, void *symbol, int32_t arity, const uint8_t *kinds, const int64_t *integers,
+static int call_with_layout(struct pudu_layout *layout, void *symbol, void *scope, int32_t arity, const uint8_t *kinds, const int64_t *integers,
                   const double *doubles, void *const *pointers, const int32_t *field_starts,
                   const int32_t *field_counts, const uint8_t *field_kinds,
                   const int64_t *field_integers, const double *field_doubles,
@@ -334,7 +291,7 @@ static int call_with_layout(struct pudu_layout *layout, void *symbol, int32_t ar
         if (start < 0 || slot_field_integers == NULL || slot_field_doubles == NULL ||
             prepare_record(layout, (size_t)index, field_kinds + start, field_counts[index]) == NULL)
           return 6;
-      } else if (type_for(slot_kind) == NULL) {
+      } else if (pudu_ffi_type_for(slot_kind) == NULL) {
         return 6;
       }
       /* The library is handed the address of that storage, so the argument
@@ -361,7 +318,7 @@ static int call_with_layout(struct pudu_layout *layout, void *symbol, int32_t ar
       argument_values[index] = layout->storage[index];
       continue;
     }
-    ffi_type *type = type_for(kind);
+    ffi_type *type = pudu_ffi_type_for(kind);
     if (type == NULL || kind == PUDU_VOID) {
       return 3;
     }
@@ -401,6 +358,7 @@ static int call_with_layout(struct pudu_layout *layout, void *symbol, int32_t ar
       break;
     case PUDU_TEXT:
     case PUDU_BYTES:
+    case PUDU_POINTER:
       slots[index].pointer = pointers[index];
       break;
     /* A handle arrives as the address it was handed back as, which is why it
@@ -416,7 +374,7 @@ static int call_with_layout(struct pudu_layout *layout, void *symbol, int32_t ar
 
   ffi_type *returned = result_kind == PUDU_STRUCT
     ? prepare_record(layout, PUDU_MAX_ARGUMENTS, result_field_kinds, result_field_count)
-    : type_for(result_kind);
+    : pudu_ffi_type_for(result_kind);
   if (returned == NULL || layout->next != layout->end) return 4;
 
   ffi_cif call;
@@ -436,7 +394,9 @@ static int call_with_layout(struct pudu_layout *layout, void *symbol, int32_t ar
   } produced = {0};
   void *result_storage = result_kind == PUDU_STRUCT
     ? (void *)layout->storage[PUDU_MAX_ARGUMENTS] : &produced;
+  void *previous_scope = pudu_ffi_swap_scope(scope);
   ffi_call(&call, FFI_FN(symbol), result_storage, argument_values);
+  pudu_ffi_swap_scope(previous_scope);
 
   /* What the library left in each slot, read before the result so that a call
    * answering through both is read once, here, in one place. Storage was zeroed
@@ -462,7 +422,7 @@ static int call_with_layout(struct pudu_layout *layout, void *symbol, int32_t ar
         int32_t start = field_starts[index];
         int32_t count = field_counts[index];
         for (int32_t field = 0; field < count; field++) {
-          if (take_field(layout->storage[index], layout->offsets[index][field],
+          if (pudu_ffi_take_field(layout->storage[index], layout->offsets[index][field],
                          field_kinds[start + field], &slot_field_integers[start + field],
                          &slot_field_doubles[start + field]) != 0) {
             return 6;
@@ -472,7 +432,7 @@ static int call_with_layout(struct pudu_layout *layout, void *symbol, int32_t ar
         slot_doubles[index] = 0.0;
         continue;
       }
-      if (take_field((const unsigned char *)&slot_storage[index], 0, slot_kind, &slot_integers[index],
+      if (pudu_ffi_take_field((const unsigned char *)&slot_storage[index], 0, slot_kind, &slot_integers[index],
                      &slot_doubles[index]) != 0) {
         return 6;
       }
@@ -481,7 +441,7 @@ static int call_with_layout(struct pudu_layout *layout, void *symbol, int32_t ar
 
   if (result_kind == PUDU_STRUCT) {
     for (int32_t field = 0; field < result_field_count; field++) {
-      if (take_field(layout->storage[PUDU_MAX_ARGUMENTS], layout->offsets[PUDU_MAX_ARGUMENTS][field], result_field_kinds[field],
+      if (pudu_ffi_take_field(layout->storage[PUDU_MAX_ARGUMENTS], layout->offsets[PUDU_MAX_ARGUMENTS][field], result_field_kinds[field],
                      &result_field_integers[field], &result_field_doubles[field]) != 0) {
         return 4;
       }
@@ -539,7 +499,7 @@ static int call_with_layout(struct pudu_layout *layout, void *symbol, int32_t ar
   return 0;
 }
 
-int pudu_ffi_call(void *symbol, int32_t arity, const uint8_t *kinds, const int64_t *integers,
+int pudu_ffi_call(void *symbol, void *scope, int32_t arity, const uint8_t *kinds, const int64_t *integers,
                   const double *doubles, void *const *pointers, const int32_t *field_starts,
                   const int32_t *field_counts, const uint8_t *field_kinds,
                   const int64_t *field_integers, const double *field_doubles,
@@ -558,7 +518,7 @@ int pudu_ffi_call(void *symbol, int32_t arity, const uint8_t *kinds, const int64
   layout.elements = elements;
   int status = 3;
   if (count == 0 || (types != NULL && elements != NULL)) {
-    status = call_with_layout(&layout, symbol, arity, kinds, integers, doubles, pointers,
+    status = call_with_layout(&layout, symbol, scope, arity, kinds, integers, doubles, pointers,
       field_starts, field_counts, field_kinds, field_integers, field_doubles,
       field_pointers, slot_kinds, slot_integers, slot_doubles, slot_field_integers,
       slot_field_doubles, result_kind, result_field_count, result_field_kinds,

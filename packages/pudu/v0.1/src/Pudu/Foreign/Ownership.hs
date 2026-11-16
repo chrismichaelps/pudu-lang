@@ -292,7 +292,10 @@ discardOwnedGenerations store claims = mask_ $ mapM_ discard claims
  where
   discard (address, generation) = do
     found <- takeOwnedGeneration store address generation
-    maybe (pure ()) cleanupOnce found
+    owned <- case found of
+      Just resource -> pure (Just resource)
+      Nothing -> takeCountedGeneration store address generation
+    maybe (pure ()) cleanupOnce owned
 
 {-| Restore a claim when the explicit destructor was never entered. -}
 restoreOwned :: ForeignStore -> Int64 -> ForeignResource -> IO ()
