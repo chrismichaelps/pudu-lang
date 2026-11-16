@@ -1,0 +1,170 @@
+module UsesSqliteFull
+
+import Std.Bytes as ByteSeq
+import Std.Db.Driver as Driver
+import Std.Db.Driver {IntegerValue, TextValue, BytesValue, NullValue}
+import Std.Db.Sqlite as Sqlite
+import Std.Env as Env
+import Std.Fs as Fs
+import Std.Option as Option
+import Std.Result as Result
+
+/// What SQLite can do through the driver, against a real database: each
+/// check counts once, so the answer is how many held.
+export fn main() -> Int {
+  var held = 0
+  let Ok(database) = Sqlite.open("sqlite::memory:", &Sqlite.options()) else { return -1 }
+  let client = database.client
+
+  // A write says how many rows it changed and which rowid it inserted; a
+  // read says neither.
+  let _made = Driver.execute(&client, "CREATE TABLE notes (id INTEGER PRIMARY KEY, title TEXT NOT NULL UNIQUE, body BLOB, score REAL)")
+  let inserted = Driver.query(&client, "INSERT INTO notes (title, body) VALUES (?, ?)", &[TextValue("first"), BytesValue(ByteSeq.fromText("abc"))])
+  if Result.map(inserted, fn(rows: Driver.Rows) -> Int { Sqlite.affected(&rows) }) == Ok(1) { held = held + 1 }
+  if Result.map(inserted, fn(rows: Driver.Rows) -> Option[Int] { Sqlite.lastInsertRowid(&rows) }) == Ok(Some(1)) { held = held + 1 }
+  let _second = Driver.query(&client, "INSERT INTO notes (title) VALUES (?)", &[TextValue("second")])
+  let updated = Driver.query(&client, "UPDATE notes SET score = 1.5", &[])
+  if Result.map(updated, fn(rows: Driver.Rows) -> Int { Sqlite.affected(&rows) }) == Ok(2) { held = held + 1 }
+  let read = Driver.query(&client, "SELECT count(*) FROM notes", &[])
+  if Result.map(read, fn(rows: Driver.Rows) -> Int { Sqlite.affected(&rows) }) == Ok(0) { held = held + 1 }
+
+  // A failure carries SQLite's own message and its category.
+  match Driver.execute(&client, "SELEC nothing") {
+    case Err(reason) => if reason.category == "statement" && reason.message.contains("syntax error") { held = held + 1 }
+    case Ok(_) => ()
+  }
+  match Driver.query(&client, "INSERT INTO notes (title) VALUES (?)", &[TextValue("first")]) {
+    case Err(reason) => if reason.category == "constraint" && reason.message.contains("UNIQUE") { held = held + 1 }
+    case Ok(_) => ()
+  }
+
+  // A column reports the type it was declared with.
+  match Driver.query(&client, "SELECT title, score FROM notes LIMIT 1", &[]) {
+    case Ok(rows) => if rows.columns[0].nativeType == Some("TEXT") && rows.columns[1].nativeType == Some("REAL") { held = held + 1 }
+    case Err(_) => ()
+  }
+
+  // Text beyond ASCII and empty values come back exactly; an empty text is
+  // not NULL.
+  let _accented = Driver.query(&client, "INSERT INTO notes (title, body) VALUES (?, ?)", &[TextValue("pudú ñandú 🦙"), BytesValue(ByteSeq.empty())])
+  match Driver.query(&client, "SELECT title, body FROM notes WHERE title LIKE 'pud%'", &[]) {
+    case Ok(rows) => if rows.rows[0][0] == TextValue("pudú ñandú 🦙") && rows.rows[0][1] == BytesValue(ByteSeq.empty()) { held = held + 1 }
+    case Err(_) => ()
+  }
+  let _blank = Driver.query(&client, "INSERT INTO notes (title) VALUES (?)", &[TextValue("")])
+  match Driver.query(&client, "SELECT count(*) FROM notes WHERE title = ''", &[]) {
+    case Ok(rows) => if rows.rows[0][0] == IntegerValue(1i64) { held = held + 1 }
+    case Err(_) => ()
+  }
+
+  // A statement run many times is prepared once and answers each time.
+  var repeated = 0
+  var index = 0
+  while index < 200 {
+    if let Ok(rows) = Driver.query(&client, "SELECT ? + 1", &[IntegerValue(Option.unwrapOr(convertInteger[Int64](index), 0i64))]) {
+      if rows.rows[0][0] == IntegerValue(Option.unwrapOr(convertInteger[Int64](index + 1), 0i64)) { repeated = repeated + 1 }
+    }
+    index = index + 1
+  }
+  if repeated == 200 { held = held + 1 }
+
+  // Named parameters, and the SQL as it would run.
+  match (database.queryNamed)("SELECT :a + @b", [(":a", IntegerValue(2i64)), ("@b", IntegerValue(3i64))]) {
+    case Ok(rows) => if rows.rows[0][0] == IntegerValue(5i64) { held = held + 1 }
+    case Err(_) => ()
+  }
+  if (database.expand)("SELECT ? || ?", [TextValue("a"), IntegerValue(4i64)]) == Ok("SELECT 'a' || 4") { held = held + 1 }
+
+  // A savepoint undoes only its own work; the transaction around it commits.
+  let saved = Driver.transaction(&client, fn(tx: Driver.Tx) -> Result[Driver.Rows, Driver.Error] {
+      let _kept = Driver.ask(&tx, "INSERT INTO notes (title) VALUES (?)", &[TextValue("kept")]) ?
+      let undone = Sqlite.savepoint(&tx, "inner", fn() -> Result[(), Driver.Error] {
+          let _lost = Driver.ask(&tx, "INSERT INTO notes (title) VALUES (?)", &[TextValue("lost")]) ?
+          Err(Driver.error("sqlite", "test", "undo"))
+        })
+      if Result.isOk(&undone) { return Err(Driver.error("sqlite", "test", "savepoint kept a failure")) }
+      Driver.ask(&tx, "SELECT count(*) FROM notes WHERE title IN ('kept', 'lost')", &[])
+    })
+  match saved {
+    case Ok(rows) => if rows.rows[0][0] == IntegerValue(1i64) { held = held + 1 }
+    case Err(_) => ()
+  }
+  if Result.isErr(&Driver.transaction(&client, fn(tx: Driver.Tx) -> Result[Driver.Rows, Driver.Error] {
+        Result.map(Sqlite.savepoint(&tx, "bad name", fn() -> Result[(), Driver.Error] { Ok(()) }), fn(_unit: ()) -> Driver.Rows { Driver.Rows{columns: [], rows: [], command: ""} })
+      })) { held = held + 1 }
+
+  // Part of a blob is read and written in place.
+  let place = Sqlite.Locator{table: "notes", column: "body", row: 1}
+  if (database.blobSize)(place) == Ok(3) { held = held + 1 }
+  if Result.isOk(&(database.writeBlob)(place, 1, ByteSeq.fromText("X"))) && (database.readBlob)(place, 0, 3) == Ok(ByteSeq.fromText("aXc")) { held = held + 1 }
+  if Result.isErr(&(database.readBlob)(place, 2, 5)) { held = held + 1 }
+
+  // The library names its version, and the connection counts its changes.
+  if Result.map((database.version)(), fn(text: Str) -> Bool { text.startsWith("3.") }) == Ok(true) { held = held + 1 }
+  if Result.map((database.totalChanges)(), fn(count: Int) -> Bool { count >= 5 }) == Ok(true) { held = held + 1 }
+
+  // A backup is a database of its own, and a restore reads one back; a
+  // read-only connection refuses to write; a write-ahead log is taken.
+  let directory = Result.unwrapOr(Fs.temporaryDirectoryIn(Env.temporaryDirectory(), "pudu-sqlite"), "")
+  if !directory.isEmpty() {
+    let copyPath = directory + "/copy.db"
+    if Result.isOk(&(database.backupTo)(copyPath)) {
+      match Sqlite.open("sqlite:" + copyPath, &Sqlite.Options{..Sqlite.options(), readOnly: true}) {
+        case Ok(copy) => {
+          match Driver.query(&copy.client, "SELECT count(*) FROM notes WHERE title = 'first'", &[]) {
+            case Ok(rows) => if rows.rows[0][0] == IntegerValue(1i64) { held = held + 1 }
+            case Err(_) => ()
+          }
+          match Driver.execute(&copy.client, "DELETE FROM notes") {
+            case Err(reason) => if reason.category == "readonly" { held = held + 1 }
+            case Ok(_) => ()
+          }
+          let _closed = Driver.close(&copy.client)
+        }
+        case Err(_) => ()
+      }
+      match Sqlite.open("sqlite::memory:", &Sqlite.options()) {
+        case Ok(fresh) => {
+          if Result.isOk(&(fresh.restoreFrom)(copyPath)) {
+            match Driver.query(&fresh.client, "SELECT count(*) FROM notes", &[]) {
+              case Ok(rows) => if rows.rows[0][0] != IntegerValue(0i64) { held = held + 1 }
+              case Err(_) => ()
+            }
+          }
+          let _closed = Driver.close(&fresh.client)
+        }
+        case Err(_) => ()
+      }
+    }
+    match Sqlite.open("sqlite:" + directory + "/wal.db", &Sqlite.Options{..Sqlite.options(), journal: Sqlite.WriteAheadLog, begin: Sqlite.Immediate}) {
+      case Ok(logged) => {
+        match Driver.query(&logged.client, "PRAGMA journal_mode", &[]) {
+          case Ok(rows) => if rows.rows[0][0] == TextValue("wal") { held = held + 1 }
+          case Err(_) => ()
+        }
+        let _closed = Driver.close(&logged.client)
+      }
+      case Err(_) => ()
+    }
+    let _removed = Fs.removeTree(directory)
+  }
+
+  // A file: URI is refused unless asked for, and opens when it is.
+  if Result.isErr(&Sqlite.open("sqlite:file::memory:", &Sqlite.options())) { held = held + 1 }
+  match Sqlite.open("sqlite:file::memory:?cache=private", &Sqlite.Options{..Sqlite.options(), uri: true}) {
+    case Ok(named) => {
+      if Result.isOk(&Driver.execute(&named.client, "SELECT 1")) { held = held + 1 }
+      let _closed = Driver.close(&named.client)
+    }
+    case Err(_) => ()
+  }
+
+  // A closed connection refuses, and interrupting one does nothing.
+  let _closed = Driver.close(&client)
+  (database.interrupt)()
+  match Driver.execute(&client, "SELECT 1") {
+    case Err(reason) => if reason.category == "closed" { held = held + 1 }
+    case Ok(_) => ()
+  }
+  held
+}

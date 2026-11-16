@@ -1,0 +1,474 @@
+module Std.Db.Sqlite.Native
+
+import Std.Bytes as ByteSeq
+import Std.Db.Driver as Driver
+import Std.Db.Driver {NullValue, TextValue, IntegerValue, DecimalValue, RealValue, BooleanValue, BytesValue}
+import Std.Option as Option
+import Std.Result as Result
+import Std.Sync as Sync
+
+/// The binding the interpreter and native programs both carry: a fixed ABI
+/// over SQLite's C interface, loaded from the system's SQLite library.
+export foreign "pudu_sqlite" {
+  /// An open database connection the binding owns.
+  type DatabaseHandle
+  /// A prepared statement the binding owns.
+  type StatementHandle
+  /// An open blob, read and written in place.
+  type BlobHandle
+  /// Open a database with SQLite open flags; the handle carries the message when opening failed.
+  fn openWith symbol "open_with" (path: Str, flags: Int32, out database: owned DatabaseHandle by releaseDatabase) -> Int32
+  /// Let a database go; SQLite closes it once its statements are gone.
+  fn releaseDatabase symbol "release" (database: DatabaseHandle) -> ()
+  /// Whether the connection is outside a transaction: nonzero when it is.
+  fn autocommit(database: DatabaseHandle) -> Int32
+  /// The extended result code of the connection's last failure.
+  fn extendedCode symbol "extended_code" (database: DatabaseHandle) -> Int32
+  /// Rows the connection's last statement changed.
+  fn changes(database: DatabaseHandle) -> Int64
+  /// Rows changed since the connection opened.
+  fn totalChanges symbol "total_changes" (database: DatabaseHandle) -> Int64
+  /// The rowid of the connection's most recent successful insert.
+  fn lastRowid symbol "last_rowid" (database: DatabaseHandle) -> Int64
+  /// Ask a statement running on this connection to stop.
+  fn interrupt(database: DatabaseHandle) -> ()
+  /// Wait this many milliseconds for another connection's lock.
+  fn busyTimeout symbol "busy_timeout" (database: DatabaseHandle, millis: Int32) -> Int32
+  /// A database string: 1 the last error's message, 2 the library's version.
+  fn databaseText symbol "database_text" (database: DatabaseHandle, mode: Int32, out text: Str) -> Int32
+  /// Copy the whole database: direction 0 to the file at path, 1 from it.
+  fn backup(database: DatabaseHandle, path: Str, direction: Int32) -> Int32
+  /// Prepare one statement; trailing statements are refused.
+  fn prepare symbol "prepare" (database: DatabaseHandle, sql: Str, out statement: owned StatementHandle by finalize) -> Int32
+  /// Release a prepared statement.
+  fn finalize symbol "finalize" (statement: StatementHandle) -> ()
+  /// Reset a statement to run again, releasing the locks it held.
+  fn reset(statement: StatementHandle) -> Int32
+  /// Set every parameter of a statement back to NULL.
+  fn clearBindings symbol "clear_bindings" (statement: StatementHandle) -> Int32
+  /// Whether a statement only reads: nonzero when it does.
+  fn readonly(statement: StatementHandle) -> Int32
+  /// How many parameters a statement takes.
+  fn parameters symbol "parameters" (statement: StatementHandle) -> Int32
+  /// The position of a named parameter, written with its sigil; zero when there is none.
+  fn parameterIndex symbol "parameter_index" (statement: StatementHandle, name: Str) -> Int32
+  /// Bind NULL to a parameter.
+  fn bindNull symbol "bind_null" (statement: StatementHandle, index: Int32) -> Int32
+  /// Bind a 64-bit integer to a parameter.
+  fn bindInteger symbol "bind_integer" (statement: StatementHandle, index: Int32, value: Int64) -> Int32
+  /// Bind a 64-bit float to a parameter.
+  fn bindReal symbol "bind_real" (statement: StatementHandle, index: Int32, value: Float64) -> Int32
+  /// Bind text (text = 1) or a blob (text = 0) to a parameter; empty values stay empty.
+  fn bindBytes symbol "bind_bytes" (statement: StatementHandle, index: Int32, value: Bytes, size: Int32, text: Int32) -> Int32
+  /// Run a statement to its next row: 100 a row, 101 done, anything else a failure.
+  fn step symbol "step" (statement: StatementHandle) -> Int32
+  /// How many columns a statement answers.
+  fn columns symbol "columns" (statement: StatementHandle) -> Int32
+  /// A column's storage class: 1 integer, 2 real, 3 text, 4 blob, 5 NULL.
+  fn columnType symbol "column_type" (statement: StatementHandle, index: Int32) -> Int32
+  /// A column as a 64-bit integer.
+  fn columnInteger symbol "column_integer" (statement: StatementHandle, index: Int32) -> Int64
+  /// A column as a 64-bit float.
+  fn columnReal symbol "column_real" (statement: StatementHandle, index: Int32) -> Float64
+  /// A column's text (1), name (2) or declared type (3), when Pudu text holds it as it is; -5 otherwise.
+  fn columnText symbol "column_text" (statement: StatementHandle, index: Int32, mode: Int32, out text: Str) -> Int32
+  /// A column's blob (0), text (1) or name (2) bytes as lowercase hex.
+  fn columnHex symbol "column_hex" (statement: StatementHandle, index: Int32, mode: Int32, out text: Str) -> Int32
+  /// A statement's SQL with its bound values written in.
+  fn expandedSql symbol "expanded_sql" (statement: StatementHandle, out text: Str) -> Int32
+  /// Open one blob of a table's column at a row, for reading or writing.
+  fn blobOpen symbol "blob_open" (database: DatabaseHandle, table: Str, column: Str, row: Int64, writable: Int32, out blob: owned BlobHandle by releaseBlob) -> Int32
+  /// Close an open blob.
+  fn releaseBlob symbol "blob_release" (blob: BlobHandle) -> ()
+  /// How many bytes an open blob holds.
+  fn blobSize symbol "blob_size" (blob: BlobHandle) -> Int32
+  /// Read part of an open blob as lowercase hex.
+  fn blobRead symbol "blob_read" (blob: BlobHandle, offset: Int32, count: Int32, out text: Str) -> Int32
+  /// Write bytes into an open blob at an offset; a blob does not grow.
+  fn blobWrite symbol "blob_write" (blob: BlobHandle, value: Bytes, size: Int32, offset: Int32) -> Int32
+}
+
+/// One open database and the statements it keeps prepared, keyed by their
+/// SQL. A cached statement is reset after each use, which releases the locks
+/// it held, and is finalized when it is evicted or the session ends.
+export type Session = { database: DatabaseHandle, cache: Sync.Cell[Map[Str, StatementHandle]], capacity: Int }
+
+/// Open the database for reading only.
+export const OPEN_READONLY: Int32 = 1i32
+/// Open the database for reading and writing.
+export const OPEN_READWRITE: Int32 = 2i32
+/// Create the database file when it is missing.
+export const OPEN_CREATE: Int32 = 4i32
+/// Read the filename as a `file:` URI.
+export const OPEN_URI: Int32 = 64i32
+
+/// The storage classes `sqlite3_column_type` answers.
+const STORAGE_INTEGER: Int32 = 1i32
+const STORAGE_REAL: Int32 = 2i32
+const STORAGE_TEXT: Int32 = 3i32
+const STORAGE_BLOB: Int32 = 4i32
+const STORAGE_NULL: Int32 = 5i32
+
+/// `sqlite3_step` answers: another row, or the statement ran to its end.
+const STEP_ROW: Int32 = 100i32
+const STEP_DONE: Int32 = 101i32
+
+/// The binding's own answer for text Pudu cannot hold as it is.
+const NOT_TEXT: Int32 = -5i32
+
+/// What a session's handle is opened as: SQLite's own refusal, with the
+/// message it gave, when it did not open.
+export fn open(path: Str, flags: Int32, capacity: Int) -> Result[Session, Driver.Error] {
+  unsafe(foreign) {
+    let opened = openWith(path, flags)
+    if opened[0] != 0i32 {
+      let failure = match opened[1] {
+        case Some(database) => {
+          let said = failureOf(database, opened[0])
+          releaseDatabase(database)
+          said
+        }
+        case None => statusError(opened[0], "")
+      }
+      return Err(failure)
+    }
+    match opened[1] {
+      case None => Err(problem("protocol", "SQLite open produced no database"))
+      case Some(database) => {
+        let cache: Sync.Cell[Map[Str, StatementHandle]] = Sync.cell(mapOf([]))
+        Ok(Session{database: database, cache: cache, capacity: capacity})
+      }
+    }
+  }
+}
+
+/// Finalize every cached statement, then let the database go. SQLite closes
+/// the file once the last statement is gone.
+export fn close(session: &Session) -> () {
+  dropStatements(session)
+  let _disposed = Sync.disposeCell(&session.cache)
+  unsafe(foreign) { releaseDatabase(session.database) }
+}
+
+fn dropStatements(session: &Session) -> () {
+  let held = Result.unwrapOr(Sync.swap(&session.cache, mapOf([])), mapOf([]))
+  unsafe(foreign) {
+    for statement in held.values() { finalize(statement) }
+  }
+}
+
+/// Wait at most this long for another connection's lock on the same file.
+export fn waitWhenBusy(session: &Session, millis: Int) -> Result[(), Driver.Error] {
+  let bounded = match convertInteger[Int32](millis) {
+    case None => { return Err(problem("configuration", "busy wait exceeds SQLite limits")) }
+    case Some(held) => held
+  }
+  unsafe(foreign) {
+    let status = busyTimeout(session.database, bounded)
+    if status != 0i32 { Err(failureOf(session.database, status)) } else { Ok(()) }
+  }
+}
+
+/// Run one statement with its values bound by position.
+export fn perform(session: &Session, sql: Str, values: &Array[Driver.Value]) -> Result[Driver.Rows, Driver.Error] {
+  performWith(session, sql, fn(statement: StatementHandle) -> Result[(), Driver.Error] { bind(session.database, statement, values) })
+}
+
+/// Run one statement with each value bound to the parameter its name names:
+/// `:name`, `@name` or `$name`, written with its sigil.
+export fn performNamed(session: &Session, sql: Str, values: &Array[(Str, Driver.Value)]) -> Result[Driver.Rows, Driver.Error] {
+  performWith(session, sql, fn(statement: StatementHandle) -> Result[(), Driver.Error] { bindNamed(session.database, statement, values) })
+}
+
+/// The statement's SQL with these values written into it, as SQLite would
+/// run it. For logging; the values are never sent as text.
+export fn expand(session: &Session, sql: Str, values: &Array[Driver.Value]) -> Result[Str, Driver.Error] {
+  let statement = statementFor(session, sql) ?
+  let outcome = Result.andThen(bind(session.database, statement[0], values), fn(_bound: ()) -> Result[Str, Driver.Error] {
+      unsafe(foreign) {
+        let expanded = expandedSql(statement[0])
+        if expanded[0] != 0i32 { return Err(statusError(expanded[0], "")) }
+        match expanded[1] {
+          case None => Err(problem("protocol", "SQLite answered no SQL"))
+          case Some(text) => Ok(text)
+        }
+      }
+    })
+  settle(session, statement)
+  outcome
+}
+
+/// A statement, its values bound, run to its end, and given back: reset into
+/// the cache, or finalized when it is not kept, whichever way it went.
+fn performWith(session: &Session, sql: Str, binding: fn(StatementHandle) -> Result[(), Driver.Error]) -> Result[Driver.Rows, Driver.Error] {
+  let statement = statementFor(session, sql) ?
+  let outcome = Result.andThen(binding(statement[0]), fn(_bound: ()) -> Result[Driver.Rows, Driver.Error] {
+      collect(session.database, statement[0])
+    })
+  settle(session, statement)
+  outcome
+}
+
+fn settle(session: &Session, statement: (StatementHandle, Bool)) -> () {
+  unsafe(foreign) {
+    if statement[1] {
+      let _reset = reset(statement[0])
+      let _cleared = clearBindings(statement[0])
+    } else {
+      finalize(statement[0])
+    }
+  }
+}
+
+/// A prepared statement for this SQL, and whether the cache keeps it. A full
+/// cache is emptied rather than ordered, so a working set larger than the
+/// capacity costs one preparation per statement, as no cache would.
+fn statementFor(session: &Session, sql: Str) -> Result[(StatementHandle, Bool), Driver.Error] {
+  if sql.contains("\0") { return Err(problem("statement", "SQL cannot contain NUL")) }
+  let cached = Result.unwrapOr(Sync.get(&session.cache), mapOf([]))
+  if let Some(found) = cached.get(sql) { return Ok((found, true)) }
+  unsafe(foreign) {
+    let prepared = prepare(session.database, sql)
+    if prepared[0] != 0i32 {
+      if let Some(statement) = prepared[1] { finalize(statement) }
+      return Err(failureOf(session.database, prepared[0]))
+    }
+    let statement = match prepared[1] {
+      case None => { return Err(problem("protocol", "SQLite prepare produced no statement")) }
+      case Some(held) => held
+    }
+    if session.capacity < 1 { return Ok((statement, false)) }
+    if cached.size() >= session.capacity { dropStatements(session) }
+    let current = Result.unwrapOr(Sync.get(&session.cache), mapOf([]))
+    let _kept = Sync.set(&session.cache, current.insert(sql, statement))
+    Ok((statement, true))
+  }
+}
+
+fn bind(database: DatabaseHandle, statement: StatementHandle, values: &Array[Driver.Value]) -> Result[(), Driver.Error] {
+  unsafe(foreign) {
+    let count = parameters(statement)
+    if convertInteger[Int32](values.length()) != Some(count) {
+      return Err(problem("parameter", "parameter count does not match the prepared statement"))
+    }
+  }
+  var index = 0
+  for value in values {
+    index = index + 1
+    let position = match convertInteger[Int32](index) {
+      case None => { return Err(problem("parameter", "parameter index exceeds SQLite limits")) }
+      case Some(held) => held
+    }
+    bindOne(database, statement, position, value) ?
+  }
+  Ok(())
+}
+
+fn bindNamed(database: DatabaseHandle, statement: StatementHandle, values: &Array[(Str, Driver.Value)]) -> Result[(), Driver.Error] {
+  unsafe(foreign) {
+    if convertInteger[Int32](values.length()) != Some(parameters(statement)) {
+      return Err(problem("parameter", "parameter count does not match the prepared statement"))
+    }
+    for entry in values {
+      if entry[0].contains("\0") { return Err(problem("parameter", "a parameter name cannot contain NUL")) }
+      let position = parameterIndex(statement, entry[0])
+      if position == 0i32 { return Err(problem("parameter", "the statement names no parameter " + entry[0])) }
+      bindOne(database, statement, position, entry[1]) ?
+    }
+  }
+  Ok(())
+}
+
+fn bindOne(database: DatabaseHandle, statement: StatementHandle, position: Int32, value: Driver.Value) -> Result[(), Driver.Error] {
+  unsafe(foreign) {
+    let status = match value {
+      case NullValue => bindNull(statement, position)
+      case IntegerValue(held) => bindInteger(statement, position, held)
+      case RealValue(held) => bindReal(statement, position, held)
+      case BooleanValue(held) => bindInteger(statement, position, if held { 1i64 } else { 0i64 })
+      case DecimalValue(_) => { return Err(problem("unsupported", "SQLite has no lossless native Decimal binding; choose an explicit storage representation")) }
+      case TextValue(held) => bindPayload(statement, position, held.toBytes(), 1i32) ?
+      case BytesValue(held) => bindPayload(statement, position, held, 0i32) ?
+    }
+    if status != 0i32 { Err(failureOf(database, status)) } else { Ok(()) }
+  }
+}
+
+fn bindPayload(statement: StatementHandle, position: Int32, bytes: Bytes, text: Int32) -> Result[Int32, Driver.Error] {
+  let size = match convertInteger[Int32](bytes.length()) {
+    case None => { return Err(problem("parameter", "parameter bytes exceed SQLite limits")) }
+    case Some(held) => held
+  }
+  unsafe(foreign) { Ok(bindBytes(statement, position, bytes, size, text)) }
+}
+
+/// Every row, then the command: `SQLITE_DONE` for a statement that only
+/// reads, and for one that writes, `SQLITE_DONE` followed by the rows it
+/// changed and the connection's last inserted rowid.
+fn collect(database: DatabaseHandle, statement: StatementHandle) -> Result[Driver.Rows, Driver.Error] {
+  unsafe(foreign) {
+    let count = columns(statement)
+    var names: Array[Driver.Column] = []
+    var index = 0i32
+    while index < count {
+      let name = readText(statement, index, 2i32) ?
+      names = names.push(Driver.Column{name: name, nativeType: declaredType(statement, index)})
+      index = index + 1i32
+    }
+    let writes = readonly(statement) == 0i32
+    let before = totalChanges(database)
+    var rows: Array[Array[Driver.Value]] = []
+    loop {
+      let status = step(statement)
+      if status == STEP_DONE {
+        let command = if writes { "SQLITE_DONE " + show(changedSince(database, before)) + " " + show(lastRowid(database)) } else { "SQLITE_DONE" }
+        return Ok(Driver.Rows{columns: names, rows: rows, command: command})
+      }
+      if status != STEP_ROW { return Err(failureOf(database, status)) }
+      var row: Array[Driver.Value] = []
+      index = 0i32
+      while index < count {
+        row = row.push(readValue(statement, index) ?)
+        index = index + 1i32
+      }
+      rows = rows.push(row)
+    }
+  }
+}
+
+/// The rows the statement changed: SQLite's count for the last statement
+/// when this one changed anything, else none, since a statement that changes
+/// nothing leaves the count of the one before it in place.
+fn changedSince(database: DatabaseHandle, before: Int64) -> Int64 {
+  unsafe(foreign) { if totalChanges(database) == before { 0i64 } else { changes(database) } }
+}
+
+fn declaredType(statement: StatementHandle, index: Int32) -> Option[Str] {
+  unsafe(foreign) {
+    let declared = columnText(statement, index, 3i32)
+    if declared[0] != 0i32 { return None }
+    match declared[1] {
+      case Some(text) => if text.isEmpty() { None } else { Some(text) }
+      case None => None
+    }
+  }
+}
+
+fn readValue(statement: StatementHandle, index: Int32) -> Result[Driver.Value, Driver.Error] {
+  unsafe(foreign) {
+    let kind = columnType(statement, index)
+    if kind == STORAGE_NULL { return Ok(NullValue) }
+    if kind == STORAGE_INTEGER { return Ok(IntegerValue(columnInteger(statement, index))) }
+    if kind == STORAGE_REAL { return Ok(RealValue(columnReal(statement, index))) }
+    if kind == STORAGE_BLOB { return Ok(BytesValue(readBytes(statement, index, 0i32) ?)) }
+    if kind == STORAGE_TEXT { return Ok(TextValue(readText(statement, index, 1i32) ?)) }
+    Err(problem("protocol", "unknown SQLite storage class"))
+  }
+}
+
+/// Text crosses as it is when Pudu text can hold it; otherwise its bytes
+/// cross and are decoded here, which reports text that is not UTF-8.
+fn readText(statement: StatementHandle, index: Int32, mode: Int32) -> Result[Str, Driver.Error] {
+  unsafe(foreign) {
+    let direct = columnText(statement, index, mode)
+    if direct[0] == 0i32 {
+      return match direct[1] {
+        case None => Err(problem("protocol", "SQLite text was not returned"))
+        case Some(text) => Ok(text)
+      }
+    }
+    if direct[0] != NOT_TEXT { return Err(statusError(direct[0], "")) }
+    let bytes = readBytes(statement, index, mode) ?
+    Result.mapErr(ByteSeq.toText(&bytes), badText)
+  }
+}
+
+fn readBytes(statement: StatementHandle, index: Int32, mode: Int32) -> Result[Bytes, Driver.Error] {
+  unsafe(foreign) {
+    let encoded = columnHex(statement, index, mode)
+    if encoded[0] != 0i32 { return Err(statusError(encoded[0], "")) }
+    match encoded[1] {
+      case None => Err(problem("protocol", "SQLite bytes were not returned"))
+      case Some(text) => Result.mapErr(ByteSeq.decodeHex(text), badText)
+    }
+  }
+}
+
+/// A database-level string: 1 the last error's message, 2 the library's version.
+export fn textOf(database: DatabaseHandle, mode: Int32) -> Result[Str, Driver.Error] {
+  unsafe(foreign) {
+    let said = databaseText(database, mode)
+    if said[0] != 0i32 { return Err(statusError(said[0], "")) }
+    match said[1] {
+      case None => Err(problem("protocol", "SQLite answered no text"))
+      case Some(text) => Ok(text)
+    }
+  }
+}
+
+/// A failure as SQLite reported it: its extended code, and its own message
+/// beside the category a caller acts on.
+export fn failureOf(database: DatabaseHandle, status: Int32) -> Driver.Error {
+  if status < 0i32 { return statusError(status, "") }
+  unsafe(foreign) {
+    let extended = extendedCode(database)
+    let code = if extended != 0i32 { extended } else { status }
+    statusError(code, Result.unwrapOr(textOf(database, 1i32), ""))
+  }
+}
+
+/// What a status means: the category a caller acts on, and what to say.
+///
+/// Keyed by SQLite's primary result code. Negative codes are this binding's
+/// own. A lock that outlasted the busy wait and a violated constraint are the
+/// two a program most often handles differently from any other failure, so
+/// each is filed under its own category rather than under a number.
+const STATUS_MEANINGS: Map[Int, (Str, Str)] = mapOf([
+    (-1, ("unavailable", "SQLite shared library is not installed")),
+    (-2, ("unavailable", "SQLite shared library lacks a required API")),
+    (-3, ("statement", "SQL contains no statement")),
+    (-4, ("statement", "only one SQL statement is accepted; trailing non-whitespace is refused")),
+    (1, ("statement", "the SQL could not be run")),
+    (2, ("internal", "SQLite reported an internal error")),
+    (3, ("permission", "the requested access mode was denied")),
+    (4, ("aborted", "the operation was aborted")),
+    (5, ("busy", "the database stayed locked by another connection past the busy wait")),
+    (6, ("busy", "a table in the database is locked")),
+    (7, ("memory", "SQLite could not allocate memory")),
+    (8, ("readonly", "the database is read-only")),
+    (9, ("interrupted", "the operation was interrupted")),
+    (10, ("io", "the operating system reported an I/O error")),
+    (11, ("corrupt", "the database file is malformed")),
+    (13, ("full", "the database or the disk is full")),
+    (14, ("unavailable", "the database file could not be opened")),
+    (15, ("protocol", "the database lock protocol failed")),
+    (17, ("schema", "the schema changed while the statement was prepared")),
+    (18, ("too-big", "a string or blob exceeds SQLite's size limit")),
+    (19, ("constraint", "a constraint was violated")),
+    (20, ("mismatch", "a value does not fit the column's type")),
+    (21, ("misuse", "the SQLite interface was used out of order")),
+    (23, ("authorization", "the statement was not authorized")),
+    (25, ("range", "a parameter or column index is out of range")),
+    (26, ("corrupt", "the file is not a database"))
+  ])
+
+/// SQLite's message follows the category's own words when it says more.
+fn statusError(code: Int32, said: Str) -> Driver.Error {
+  let number = Option.unwrapOr(convertInteger[Int](code), 0)
+  // An extended result code carries its primary code in the low byte.
+  let primary = if number > 0 { number % 256 } else { number }
+  let detail = if said.isEmpty() || said == "not an error" { "" } else { ": " + said }
+  match STATUS_MEANINGS.get(primary) {
+    case Some(meaning) => Driver.Error{driver: "sqlite", category: meaning[0], code: Some(show(code)), message: meaning[1] + detail}
+    case None => Driver.Error {
+      driver: "sqlite",
+      category: "operation",
+      code: Some(show(code)),
+      message: "SQLite operation failed with status " + show(code) + detail
+    }
+  }
+}
+
+/// A driver error in one of the categories a caller acts on.
+export fn problem(category: Str, message: Str) -> Driver.Error { Driver.error("sqlite", category, message) }
+fn badText(_problem: ByteSeq.BytesError) -> Driver.Error { Driver.error("sqlite", "decode", "SQLite returned invalid text or byte encoding") }
