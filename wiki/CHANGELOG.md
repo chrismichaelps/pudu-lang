@@ -7,6 +7,8 @@ tags: [changelog]
 
 ## 2026-11-16 — Native validation fixes (#935)
 
+- Foreign parameters accept `Option` of a declared handle: `None` crosses as null, `Some` as a live handle (#935).
+  [[Foreign Crossing]] · [[Backend Emit Foreign]]
 - Keep native callback lookup outside the setjmp frame and bound text
   allocations by the maximum C object size.
 - Let queued iOS list viewport events settle before the scroll self-test
