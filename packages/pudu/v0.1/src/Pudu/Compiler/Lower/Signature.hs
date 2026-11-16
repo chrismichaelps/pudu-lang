@@ -32,10 +32,11 @@ ensureSignature key located state = case Map.lookup key (contextSignatures conte
         , not asynchronous || null [() | ReferenceTypeValue True _ <- inputs]
         , not (null schemeParams) || null schemeBounds
         , length inputs == length (functionParameters function)
-        , requiredCount required == length inputs - length defaults ->
+        , requiredCount required >= length inputs - length defaults
+        , requiredCount required <= length inputs ->
             let (afterParameters, given) = foldl' validateParameter (state, [])
                   (zip3 [0 ..] (map locatedValue (functionParameters function)) inputs)
-                parameters = given <> [CoreParameter (CoreLocal (length inputs) suppliedCountName intType) atName | not (null defaults)]
+                parameters = given <> [CoreParameter (CoreLocal (length inputs) suppliedCountName intType) atName | requiredCount required < length inputs]
                 loaned = [index | (index, ReferenceTypeValue True _) <- zip [0 ..] inputs]
                 (afterReturn, answered) = validateReturn afterParameters result
                 -- An async function answers the task of its body.

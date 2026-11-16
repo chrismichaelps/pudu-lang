@@ -13,6 +13,8 @@ tags: [changelog]
   async functions. The embedded C entry takes every argument and awaits an
   async export before returning through the existing crossing.
   [[Compiler Lower Default]] · [[Backend Emit Export]] · [[Backend Export Tests]]
+- Admit methods with written defaults at their full checked arity.
+  [[Compiler Lower Signature]] · [[Backend Method Programs]]
 - Specialize eligible signed integer direct calls to typed C parameters and
   locals. [[Backend Typed Integer Calls]] · [[Native Direct Call Tests]]
 

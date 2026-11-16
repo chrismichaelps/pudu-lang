@@ -39,7 +39,7 @@ import Pudu.Type (DeclaredShapes, declaredRecords, declaredSums)
 import Pudu.Type.Value (NominalId (..), Scheme (..), Type (FunctionTypeRequiring))
 import Pudu.Source (Span)
 import Pudu.Compiler.Lower.Body (lowerEntryBody, lowerExpression, lowerFunctionBody)
-import Pudu.Compiler.Lower.Default (hasDefaults, lowerDefaultedBody)
+import Pudu.Compiler.Lower.Default (takesSuppliedCount, lowerDefaultedBody)
 import Pudu.Compiler.Lower.Loan (lowerLoanedBody)
 import Pudu.Compiler.Lower.State
   ( CoreSignature (..), ForeignTarget (..), Instance (..), LowerContext (..), LowerState (..), ModuleScope (..)
@@ -310,7 +310,7 @@ lowerRooted library entryName programModules@(rootModule : _)
             case ensureSignature name function ((startFunction (withTypeBindings bindings (inModule owner state)) [] Nothing){lowerCurrentKey = name}) of
               (afterSignature, Nothing) -> markVisited afterSignature name
               (afterSignature, Just signature) ->
-                case loaned signature (if hasDefaults (locatedValue function) then lowerDefaultedBody lowerExpression lowerFunctionBody else lowerFunctionBody)
+                case loaned signature (if takesSuppliedCount signature then lowerDefaultedBody lowerExpression lowerFunctionBody else lowerFunctionBody)
                   function
                   signature
                   (startFunction afterSignature (signatureParameters signature) (Just (signatureResult signature))) of

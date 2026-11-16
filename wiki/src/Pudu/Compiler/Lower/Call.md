@@ -21,7 +21,7 @@ represented value.
 
 ## Calls to the source entry
 
-A named call to main registers and calls its ordinary callable copy. Its real parameters and result are independent of the argument-free reporting entry.
+A named call to main registers and calls its ordinary callable copy. Its real parameters and result are independent of the argument-free reporting entry. Direct calls use the admitted signature to decide whether to pass the hidden count.
 
 ## Referenced by
 

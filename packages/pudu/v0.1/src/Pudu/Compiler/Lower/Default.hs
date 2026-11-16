@@ -2,7 +2,7 @@
     Such a function takes one more parameter: how many arguments the call
     supplied. Its body opens by giving every parameter the call did not reach
     its default, in order, so a default sees the parameters before it. -}
-module Pudu.Compiler.Lower.Default (hasDefaults, trailingDefaults, suppliedArguments, lowerDefaultedBody) where
+module Pudu.Compiler.Lower.Default (takesSuppliedCount, trailingDefaults, suppliedArguments, lowerDefaultedBody) where
 
 import Data.Maybe (isJust)
 import Pudu.Compiler.Lower.Dynamic (widenTo)
@@ -15,8 +15,8 @@ import Pudu.Source (Span)
 type LowerExpression = LowerState -> Located Expression -> (LowerState, Maybe (CoreExpression, CoreType))
 type LowerBody = Located Function -> CoreSignature -> LowerState -> (LowerState, Maybe CoreFunction)
 
-hasDefaults :: Function -> Bool
-hasDefaults function = any isJust (trailingDefaults function)
+takesSuppliedCount :: CoreSignature -> Bool
+takesSuppliedCount = any ((== suppliedCountName) . coreLocalName . coreParameterLocal) . signatureParameters
 
 {-| Each parameter's default when it belongs to the trailing run a call may
     omit. A default written before a parameter without one is never used: the

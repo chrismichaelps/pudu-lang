@@ -69,9 +69,16 @@ typed integer emitter with their focused differential and C-host tests.
 The optimized build with warnings as errors, export tests, direct-call tests,
 entry status conformance, and 355 strict C11 translations passed.
 
-Exact next action: reproduce a checked call that reaches
-Compiler Lower Method’s generic method refusal, then trace the recorded
-callee and receiver types into instance selection.
+The checked method scheme made every argument required even when the
+implementation wrote a default. The native signature now follows that scheme
+and the full-arity CLI reproducer prints 9 in both modes. Inferred generic
+trait calls and calls through a generic trait default also built successfully.
+The seven interleaved CallBench runs had matching checksums. Medians were
+104 ms for native Pudu and 109 ms for handwritten C, with other tests running.
+
+Exact next action: reproduce a checked general method call that reaches
+Compiler Lower Method’s mutable-parameter fallback and trace its operands
+through loanedInstanceCall.
 
 ## Referenced by
 
