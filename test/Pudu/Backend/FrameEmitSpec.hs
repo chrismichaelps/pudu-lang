@@ -228,9 +228,15 @@ testCalls = do
         Right (emitted, _) ->
           let output = reverse (emitOutput emitted)
               bodyNames = filter (Text.isInfixOf "pudu_body_") output
+              definitions = filter (Text.isSuffixOf "{") bodyNames
+              -- Each body is declared first under the label a profiler shows.
+              declarations = filter (Text.isSuffixOf ";") bodyNames
            in conjoin
-                [ length bodyNames === 3
+                [ length definitions === 3
+                , length declarations === 3
                 , counterexample (show bodyNames) (all (Text.isPrefixOf "static pudu_step pudu_body_") bodyNames)
+                , counterexample (show declarations) (all (Text.isInfixOf "__asm__(\"pudu_Main_") declarations)
+                , counterexample (show declarations) (any (Text.isInfixOf "pudu_Main_one_body") declarations)
                 , length (filter (Text.isInfixOf ".kind = PUDU_CALL") output) === 3
                 , length (filter (Text.isInfixOf "frame->arguments[") output) === 2
                 , length (filter (Text.isInfixOf ".has_destination = 1") output) === 3

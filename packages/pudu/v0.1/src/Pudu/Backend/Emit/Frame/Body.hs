@@ -15,7 +15,7 @@ import Pudu.Backend.Emit.Frame.Direct (enteredDirect)
 import Pudu.Comptime.Limits (callDepthLimit)
 import Pudu.Backend.Emit.Frame.Value (cellMember, frameValue, slotText)
 import Pudu.Backend.Emit.State
-  ( EmitState (..), callDepthSite, cString, cStringBytes, line, operatorFailureSite, textFailureSite, textOfInt )
+  ( EmitState (..), callDepthSite, cString, cStringBytes, line, operatorFailureSite, profileLabel, textFailureSite, textOfInt )
 import Pudu.Backend.Emit.Support (integerHelper, zeroValue)
 import Pudu.Core (CoreType (..))
 import Pudu.Core.Frame
@@ -41,11 +41,16 @@ emitFrameBodies direct state source = do
   let functions = frameModuleFunctions source
       identities = Map.fromList (zip (map frameFunctionName functions) [0 ..])
       callees = Callees identities (Map.fromList [(frameFunctionName function, function) | function <- functions]) direct
-      prototypes = concat
-        [ [ "static pudu_cell pudu_run_" <> textOfInt identity <> "(pudu_frame *frame);"
-          ]
-        | (identity, function) <- zip [0 :: Int ..] functions, Set.member (frameFunctionName function) direct ]
-        <> [ "static pudu_cell pudu_direct_" <> textOfInt identity <> "(const pudu_cell *arguments);"
+      -- Every body is declared first, under the label a profiler shows.
+      prototypes =
+        [ "static pudu_step pudu_body_" <> textOfInt identity <> "(pudu_frame *frame)"
+            <> profileLabel "body" (frameFunctionName function) identity <> ";"
+        | (identity, function) <- zip [0 :: Int ..] functions ]
+        <> [ "static pudu_cell pudu_run_" <> textOfInt identity <> "(pudu_frame *frame)"
+               <> profileLabel "run" (frameFunctionName function) identity <> ";"
+           | (identity, function) <- zip [0 :: Int ..] functions, Set.member (frameFunctionName function) direct ]
+        <> [ "static pudu_cell pudu_direct_" <> textOfInt identity <> "(const pudu_cell *arguments)"
+               <> profileLabel "direct" (frameFunctionName function) identity <> ";"
            | (identity, function) <- zip [0 :: Int ..] functions, Set.member (frameFunctionName function) (enteredDirect source direct) ]
   if Map.size identities /= length functions
     then Left (FrameFault Nothing "duplicate frame function identities")
