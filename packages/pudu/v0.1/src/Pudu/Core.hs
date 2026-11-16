@@ -30,7 +30,7 @@ module Pudu.Core
   , CoreKernelName (..)
   , CoreForeign (..), CoreClaim (..)
   , CoreType (..)
-  , coreTypeName, displayName
+  , coreTypeName, displayName, suppliedCountName
   ) where
 
 import Data.ByteString (ByteString)
@@ -475,3 +475,9 @@ data CorePattern
       skipped, or bound to a local), then items read from the back. -}
   | CoreArrayPattern ![CorePattern] !(Maybe (Maybe CoreLocal)) ![CorePattern]
   deriving stock (Eq, Show)
+
+{-| The trailing parameter of a function with defaults: how many arguments
+    its caller wrote. No source identifier can spell it, so a backend finds
+    it by name. -}
+suppliedCountName :: Text
+suppliedCountName = "#supplied"

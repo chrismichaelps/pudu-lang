@@ -226,7 +226,7 @@ formedWith shapes seen parameters value = case value of
         answered = if null finals then formedResult else CoreTupleType (formedResult : finals)
     if all nativeValueType formedInputs && (nativeValueType formedResult || formedResult == CoreNeverType)
       then Just (CoreFunctionType (formedInputs <> supplied) answered) else Nothing
-  TupleTypeValue members@(_ : _ : _) -> do
+  TupleTypeValue members@(_ : _) -> do
     formedMembers <- traverse (formedWith shapes seen parameters) members
     if all nativeValueType formedMembers then Just (CoreTupleType formedMembers) else Nothing
   _ -> builtin value
@@ -320,7 +320,7 @@ treeType kind = case kind of
 {-| What a native slot can hold: the scalars plus owned text and tuples. -}
 nativeValueType :: CoreType -> Bool
 nativeValueType CoreTextType = True
-nativeValueType (CoreTupleType members) = length members >= 2 && all nativeValueType members
+nativeValueType (CoreTupleType members) = not (null members) && all nativeValueType members
 nativeValueType (CoreRecordType _ _) = True
 nativeValueType (CoreSumType _ _) = True
 nativeValueType (CoreFunctionType _ _) = True

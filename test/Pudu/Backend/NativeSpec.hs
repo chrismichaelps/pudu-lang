@@ -294,6 +294,22 @@ statusPrograms =
       , "  Ok(answer)"
       , "}"
       ])
+  , ("a call to main uses its value inside the program", Text.unlines
+      [ "module Main"
+      , "fn main(depth: Int = 2) -> Int {"
+      , "  if depth == 0 { return 5 }"
+      , "  if depth == 1 {"
+      , "    let next = main"
+      , "    return next(depth - 1) + 1"
+      , "  }"
+      , "  main(depth - 1) + 1"
+      , "}"
+      ])
+  , ("a tuple with one member carries its member", programWith
+      [ "  let item = (37,)"
+      , "  print(show(item))"
+      , "  return 0"
+      ])
   , ("zero exits zero", programWith ["  return 0"])
   , ("a small nonzero result exits as itself", programWith ["  return 3"])
   , ("a result above 255 clamps", programWith ["  return 300"])

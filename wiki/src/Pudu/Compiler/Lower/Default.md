@@ -15,6 +15,10 @@ after the parameters before it are in scope, and puts
 defaulted parameter i, in order. suppliedArguments builds a call's argument
 list: what it wrote, a CoreAbsent zero per omitted parameter, then the count.
 
+Only the trailing run of defaulted parameters can be omitted. Defaults
+ahead of a required parameter occupy supplied positions. The hidden count
+follows the written slots and does not appear in C export parameters.
+
 ## Resolved Grill Log
 
 The expression and body lowerers come in as arguments so Call can use the

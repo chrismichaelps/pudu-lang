@@ -2,7 +2,7 @@
     Such a function takes one more parameter: how many arguments the call
     supplied. Its body opens by giving every parameter the call did not reach
     its default, in order, so a default sees the parameters before it. -}
-module Pudu.Compiler.Lower.Default (hasDefaults, suppliedArguments, lowerDefaultedBody) where
+module Pudu.Compiler.Lower.Default (hasDefaults, trailingDefaults, suppliedArguments, lowerDefaultedBody) where
 
 import Data.Maybe (isJust)
 import Pudu.Compiler.Lower.Dynamic (widenTo)
@@ -16,7 +16,15 @@ type LowerExpression = LowerState -> Located Expression -> (LowerState, Maybe (C
 type LowerBody = Located Function -> CoreSignature -> LowerState -> (LowerState, Maybe CoreFunction)
 
 hasDefaults :: Function -> Bool
-hasDefaults function = any (isJust . parameterDefault . locatedValue) (functionParameters function)
+hasDefaults function = any isJust (trailingDefaults function)
+
+{-| Each parameter's default when it belongs to the trailing run a call may
+    omit. A default written before a parameter without one is never used: the
+    checker requires an argument there. -}
+trailingDefaults :: Function -> [Maybe (Located Expression)]
+trailingDefaults function = map (const Nothing) required <> map (parameterDefault . locatedValue) (reverse omissible)
+ where
+  (omissible, required) = span (isJust . parameterDefault . locatedValue) (reverse (functionParameters function))
 
 {-| What a call passes to a function with defaults: the arguments it wrote,
     a zero for each parameter it left out, then how many it wrote. The types
@@ -42,8 +50,7 @@ lowerDefaultedBody lower lowerBody located signature state = case foldl' fill (s
   supplied = last locals
   defaults =
     [ (index, local, value)
-    | (index, Located _ parameter, local) <- zip3 [0 :: Integer ..] (functionParameters (locatedValue located)) locals
-    , Just value <- [parameterDefault parameter] ]
+    | (index, Just value, local) <- zip3 [0 :: Integer ..] (trailingDefaults (locatedValue located)) locals ]
   fill (current, Nothing) _ = (current, Nothing)
   -- A default of an implementing type widens to a dynamic parameter, as an
   -- argument written at the call does.

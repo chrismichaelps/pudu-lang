@@ -280,9 +280,10 @@ Resolved Grill Log: Resolve a slot destructor through its own foreign block.
 
 `lowerLibrary` lowers like `lowerProgram` and also queues every exported
 function of the root module as a root, so an export that `main` never calls is
-lowered. An exported function with type parameters, defaults, or `async` is
-refused with E6001 at its name. `lowerProgram` is unchanged, so executables
-never lower or refuse exports.
+lowered. A generic C export receives E6001 at its name. A monomorphic async
+export adds an internal entry which calls the named body, awaits the resulting
+task, and returns its payload through the normal crossing. Calls from Pudu
+continue to use the original cold task. Executable roots omit C exports.
 
 Resolved Grill Log: roots join the existing worklist rather than a second pass,
 so an export and the entry share one set of specialized copies. _Rejected:_

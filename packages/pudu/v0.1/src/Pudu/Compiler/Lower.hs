@@ -152,14 +152,12 @@ lowerRooted library entryName programModules@(rootModule : _)
       , locatedValue (functionName function) /= entryName
       ]
     exportKeys = [rootName <> "." <> locatedValue (functionName function) | function <- exported]
-    -- A C caller passes every argument at a fixed type and cannot await.
+    -- A C caller passes every argument at a fixed type.
     exportRefusals =
       [ nativeRefusal (locatedSpan (functionName function)) ("an exported function " <> reason)
       | function <- exported
       , reason <-
           [ "with type parameters" | not (null (functionTypeParams function)) ]
-          <> [ "with default parameter values" | hasDefaults function ]
-          <> [ "declared async" | functionAsync function ]
       ]
 
     findEntry = case entryFunctions of
@@ -357,7 +355,15 @@ lowerRooted library entryName programModules@(rootModule : _)
     settle (state, entryFunction) = case sortDiagnostics (contextRefusals (lowerContext state)) of
       [] -> case entryFunction of
         Just function ->
-          let functions = sortOn tableIndex (function : contextFunctions (lowerContext state))
+          let lowered = contextFunctions (lowerContext state)
+              wrappers = Map.fromList
+                [ (key, awaitExport declaration functionBody answer)
+                | (key, declaration) <- zip exportKeys exported
+                , functionAsync declaration
+                , functionBody <- lowered
+                , coreFunctionName functionBody == key
+                , CoreFunctionType [] answer <- [coreFunctionResult functionBody] ]
+              functions = sortOn tableIndex (function : lowered <> Map.elems wrappers)
            in Lowered
             CoreModule
               { coreModuleName = moduleNameText (locatedValue (moduleName parsed))
@@ -365,7 +371,9 @@ lowerRooted library entryName programModules@(rootModule : _)
               , coreModuleFunctions = functions
               , coreModuleLayouts = moduleLayouts (maybe emptyTypes scopeTypes (Map.lookup rootName scopes)) (contextClosures (lowerContext state)) functions
               , coreModuleClosures = contextClosures (lowerContext state)
-              , coreModuleExports = [key | key <- exportKeys, any ((== key) . coreFunctionName) functions]
+              , coreModuleExports =
+                  [ maybe key coreFunctionName (Map.lookup key wrappers)
+                  | key <- exportKeys, any ((== key) . coreFunctionName) lowered ]
               }
         Nothing -> LowerRefused [nativeRefusal (moduleSpan parsed) "this program"]
       refusals -> LowerRefused refusals
@@ -374,3 +382,18 @@ lowerRooted library entryName programModules@(rootModule : _)
     tableIndex function = case [index | (index, (name, _)) <- zip [0 ..] table, name == coreFunctionName function] of
       index : _ -> index
       [] -> 0
+
+{-| At a C boundary the owning thread runs the cold task to completion. Await
+    through ordinary Core so result crossing and task cleanup use the same
+    paths as a synchronous export and Pudu's own await. -}
+awaitExport :: Function -> CoreFunction -> CoreType -> CoreFunction
+awaitExport declaration target answer =
+  CoreFunction ("::export::" <> coreFunctionName target) parameters answer
+    (CoreBlock [] (Just (CoreExpression at answer (CoreCallValue task []))))
+  where
+    parameters = coreFunctionParameters target
+    at = locatedSpan (functionName declaration)
+    arguments =
+      [ CoreExpression at (coreLocalType local) (CoreReadLocal local)
+      | CoreParameter local _ <- parameters ]
+    task = CoreExpression at (coreFunctionResult target) (CoreCall (coreFunctionName target) arguments)

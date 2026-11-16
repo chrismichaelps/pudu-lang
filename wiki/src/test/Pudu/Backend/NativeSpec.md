@@ -111,6 +111,10 @@ coordinator.
 
 Foreign calls are compared with the interpreter's bridge in two properties: [[Backend Foreign Programs]] success programs and E7015 refusals (#850).
 
+## Callable entries and singleton tuples
+
+The differential corpus executes a recursive source main with a defaulted parameter and prints a one-member tuple.
+
 ## Referenced by
 
 [[Repository Test Runner]] · [[src/_MOC]] · [[src/Pudu/Backend/_MOC]] · [[Backend Toolchain]] ·

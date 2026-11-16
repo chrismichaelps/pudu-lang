@@ -333,9 +333,14 @@ lowerExpression state (Located spanValue expression) = case expression of
       (lowerVariant lowerExpression state spanValue name [])
   NameExpression ("::trait-method::" :| [provider, member]) ->
     lowerTraitMethodValue lowerExpression state spanValue provider member
+  -- A dotted path names a module's constant, a module's function as a
+  -- value, or a variant by its owner.
   NameExpression (first :| rest) ->
     case lowerConstant lowerExpression state spanValue (first : rest) of
       Just lowered -> lowered
+      Nothing
+        | Just key <- resolveFunction state (first : rest), Just entry <- lookup key (contextTable (lowerContext state)) ->
+            lowerFunctionValue state spanValue key entry
       Nothing -> maybe (halt spanValue "module-qualified names" state) id
         (lowerVariant lowerExpression state spanValue (last (first : rest)) [])
   UnaryExpression operator operand -> lowerUnary lowerExpression state spanValue operator operand
@@ -430,8 +435,8 @@ lowerExpression state (Located spanValue expression) = case expression of
     (after, Just (_, kind)) -> halt spanValue ("awaiting a " <> coreTypeName kind <> " value") after
     (after, Nothing) -> refused after
   TupleExpression [] -> value (CoreBlockValue (CoreBlock [] Nothing)) CoreUnitType
-  TupleExpression members@(_ : _ : _) -> lowerTuple lowerExpression state spanValue members
-  TupleExpression{} -> halt spanValue "tuples" state
+  -- `(x,)` is a tuple of one member, as the evaluator holds it.
+  TupleExpression members@(_ : _) -> lowerTuple lowerExpression state spanValue members
   ArrayExpression members -> lowerArrayLiteral lowerExpression state spanValue members
   SetExpression members -> lowerSetLiteral lowerExpression state spanValue members
   -- The capability is checked before lowering; the body runs as a block.
@@ -441,7 +446,8 @@ lowerExpression state (Located spanValue expression) = case expression of
   LambdaExpression function -> lowerLambda lowerExpression lowerBlock state spanValue function
   TypeApplication (Located _ (NameExpression ("::trait-method::" :| [provider, member]))) _ ->
     lowerTraitMethodValue lowerExpression state spanValue provider member
-  TypeApplication{} -> halt spanValue "type applications" state
+  -- `identity[Int]` as a value: the copy the written type arguments select.
+  TypeApplication inner written -> lowerExpression (writtenTypeArguments state spanValue inner written) inner
   RecordExpression written@(ModuleName ("::constructor::" :| _)) [] ->
     maybe (halt spanValue "this constructor" state) id (lowerVariant lowerExpression state spanValue (writtenLabel written) [])
   RecordExpression written fields -> lowerRecord lowerExpression state spanValue (writtenLabel written) fields

@@ -68,6 +68,10 @@ Resolved Grill Log: a function's type parameters and constraints refuse only
 when its type parameters are not all bound, so a specialized copy is admitted
 and the entry and plain functions keep their refusals.
 
+## Default parameter suffix
+
+The checker and lowering agree on the required argument count by counting only the trailing defaults. The hidden count slot has a Core name shared with the embedded export emitter.
+
 ## Referenced by
 
 [[src/Pudu/Compiler/_MOC]] · [[Compiler Lower]] · [[Compiler Lower Body]]

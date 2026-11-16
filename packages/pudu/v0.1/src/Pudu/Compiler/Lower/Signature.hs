@@ -2,10 +2,10 @@
 module Pudu.Compiler.Lower.Signature (ensureSignature, functionLevelRefusal) where
 
 import qualified Data.Map.Strict as Map
-import Data.Maybe (isNothing)
 import Data.Set (Set)
 import qualified Data.Set as Set
 import Data.Text (Text)
+import Pudu.Compiler.Lower.Default (trailingDefaults)
 import Pudu.Compiler.Lower.State
   ( CoreSignature (..), Instance (..), LowerContext (..), LowerState (..), intType, refuse )
 import Pudu.Compiler.Lower.Types (formedCoreTypeIn, lookupScheme, nativeValueType, typeBindings)
@@ -26,8 +26,6 @@ ensureSignature key located state = case Map.lookup key (contextSignatures conte
   Just memo -> (state, memo)
   Nothing -> case boundFunctionRefusal (Map.keysSet (typeBindings (contextTypes context))) function of
     Just (spanValue, construct) -> memoize (refuse spanValue construct state) Nothing
-    Nothing | misplaced : _ <- requiredAfterDefault ->
-      memoize (refuse misplaced "a default before a required parameter" state) Nothing
     Nothing -> case unrestricted <$> maybe (lookupScheme (contextTypes context) name) (Just . instanceScheme) (Map.lookup key (contextInstances context)) of
       Just Scheme{schemeParams, schemeBounds, schemeType = FunctionTypeRequiring asynchronous inputs required result}
         | all ((`Map.member` typeBindings (contextTypes context)) . fst) schemeParams
@@ -37,7 +35,7 @@ ensureSignature key located state = case Map.lookup key (contextSignatures conte
         , requiredCount required == length inputs - length defaults ->
             let (afterParameters, given) = foldl' validateParameter (state, [])
                   (zip3 [0 ..] (map locatedValue (functionParameters function)) inputs)
-                parameters = given <> [CoreParameter (CoreLocal (length inputs) "" intType) atName | not (null defaults)]
+                parameters = given <> [CoreParameter (CoreLocal (length inputs) suppliedCountName intType) atName | not (null defaults)]
                 loaned = [index | (index, ReferenceTypeValue True _) <- zip [0 ..] inputs]
                 (afterReturn, answered) = validateReturn afterParameters result
                 -- An async function answers the task of its body.
@@ -53,13 +51,7 @@ ensureSignature key located state = case Map.lookup key (contextSignatures conte
     function = locatedValue located
     name = locatedValue (functionName function)
     atName = locatedSpan (functionName function)
-    defaults = [value | parameter <- functionParameters function, Just value <- [parameterDefault (locatedValue parameter)]]
-    -- Defaults fill from the end; one followed by a required parameter could
-    -- not be told apart by a count of supplied arguments.
-    requiredAfterDefault =
-      [ locatedSpan (parameterName parameter)
-      | parameter <- map locatedValue (dropWhile (isNothing . parameterDefault . locatedValue) (functionParameters function))
-      , isNothing (parameterDefault parameter) ]
+    defaults = [value | Just value <- trailingDefaults function]
     memoize after memo =
       ( after
           { lowerContext =

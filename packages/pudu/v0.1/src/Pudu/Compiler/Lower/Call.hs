@@ -23,9 +23,8 @@ type Lowered = (LowerState, Maybe (CoreExpression, CoreType))
 lowerFunctionCall :: LowerExpression -> LowerState -> Span -> Text -> Span -> [Located Expression] -> Lowered
 lowerFunctionCall lower state at key callee arguments = case lookup key (contextTable (lowerContext state)) of
   Nothing -> halt at "this call" state
-  Just entry
-    | key == contextEntry (lowerContext state) -> halt at "a call to the entry function" state
-    | otherwise -> case admitCalleeGiven state (traverse (typeFactAt (contextTypes (lowerContext state)) . locatedSpan) arguments) key callee entry of
+  Just entry ->
+    case admitCalleeGiven state (traverse (typeFactAt (contextTypes (lowerContext state)) . locatedSpan) arguments) key callee entry of
         (back, Nothing) -> refused back
         (back, Just (target, found))
           | not (null (signatureLoaned found)) ->

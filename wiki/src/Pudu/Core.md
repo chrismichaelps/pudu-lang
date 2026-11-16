@@ -47,6 +47,10 @@ in the data and participates in equality. Type arguments retain their order.
 
 `CoreForeignCall` carries a `CoreForeign` (library, version, symbol, parameter and result crossing types) and its arguments in order. Resolved Grill Log: the call carries its whole declaration so frames and emission need no module table ([[Native Foreign Call Sites]]).
 
+## Default argument count
+
+suppliedCountName identifies the internal argument-count slot. The spelling cannot collide with an ordinary source parameter.
+
 ## Referenced by
 
 [[src/_MOC]] · [[Native Core Contracts Delivery]] · [[Core IR]]
