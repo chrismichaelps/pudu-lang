@@ -120,11 +120,11 @@ foldStatements state = go state []
     go current collected (one@(Located statementSpan statement) : rest) = case statement of
       LetPatternStatement _ pattern _ subject | hasSequencePattern pattern ->
         case lowerLetSequence lowerExpression current statementSpan pattern subject of
-          (after, Just lowered) -> go after (lowered : collected) rest
+          (after, Just lowered) -> binding after collected [lowered] rest
           (after, Nothing) -> (unexplained current statementSpan after, reverse collected, True)
       LetPatternStatement _ pattern annotation subject
         -> case lowerTuplePattern lowerExpression current statementSpan pattern annotation subject of
-            (after, Just statements) -> go after (reverse statements <> collected) rest
+            (after, Just statements) -> binding after collected statements rest
             (after, Nothing) -> (unexplained current statementSpan after, reverse collected, True)
       _ -> case lowerStatement current one of
         (after, Just lowered)
@@ -132,6 +132,10 @@ foldStatements state = go state []
               (after, reverse (lowered : collected), True)
         (after, Just lowered) -> go after (lowered : collected) rest
         (after, Nothing) -> (unexplained current statementSpan after, reverse collected, True)
+
+    binding after collected statements rest
+      | blockType statements Nothing == CoreNeverType = (after, reverse collected <> statements, True)
+      | otherwise = go after (reverse statements <> collected) rest
 
 lowerStatement :: LowerState -> Located Statement -> (LowerState, Maybe CoreStatement)
 lowerStatement state (Located statementSpan statement) = case statement of

@@ -511,3 +511,8 @@ A call `Qualifier.f(...)` whose qualifier is a module tries the module's
 foreign declarations right after its functions. Resolved Grill Log: the
 order matches the evaluator's qualified lookup; a local qualifier still
 reaches method and field lowering.
+
+## Diverging pattern bindings (#935)
+
+A tuple, record, or sequence binding whose subject transfers control stops
+block lowering at that subject. It introduces no bindings or projections.

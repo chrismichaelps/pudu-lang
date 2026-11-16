@@ -7,6 +7,8 @@ tags: [changelog]
 
 ## 2026-11-15 — Native C11 callable continuations (#935)
 
+- Preserve a diverging subject in tuple, record, and sequence pattern
+  bindings. [[Compiler Lower Tuple]] · [[Backend Tuple Programs]]
 - Carry single-member tuples and lower a named call to the entry through its
   ordinary callable body. [[Compiler Lower Body]] · [[Compiler Lower Generic]]
 - Allow omission of trailing defaults and export monomorphic defaulted and

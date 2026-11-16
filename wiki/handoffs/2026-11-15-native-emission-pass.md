@@ -76,9 +76,16 @@ trait calls and calls through a generic trait default also built successfully.
 The seven interleaved CallBench runs had matching checksums. Medians were
 104 ms for native Pudu and 109 ms for handwritten C, with other tests running.
 
-Exact next action: reproduce a checked general method call that reaches
-Compiler Lower Method’s mutable-parameter fallback and trace its operands
-through loanedInstanceCall.
+Backend Engineer → Test Engineer. The pattern slice owns tuple, record,
+and sequence binding transfers and the tuple diagnostic corpus. The
+optimized build and tuple diagnostic suite passed. Direct CLI comparisons
+matched output, exit status, and E7007 span for both tuple and sequence
+panic subjects. A generic mutable receiver and argument wrote both places
+back through receiver and trait-qualified calls. Mutable Sequence protocol
+signatures fail checking before they can reach the native fallback.
+
+Exact next action: define the mobile TLS provider boundary for the existing
+connected-descriptor upgrade, including platform trust and TLS 1.3.
 
 ## Referenced by
 
