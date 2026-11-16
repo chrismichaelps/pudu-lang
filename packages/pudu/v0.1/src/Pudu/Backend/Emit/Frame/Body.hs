@@ -107,21 +107,26 @@ instruction (state, needs) operation = case operation of
     destination <- slotText target
     (after, expression, selected) <- frameValue state value
     let kind = frameSlotType target
-        stored
-          -- The new value is built before the old one goes, since it may read it.
-          | ownedType kind =
-              "      { " <> cType kind <> " pudu_next = " <> expression <> "; " <> released kind destination
-                <> " " <> destination <> " = pudu_next; }"
-          | otherwise = "      " <> destination <> " = " <> expression <> ";"
-    pure (line after stored, Set.union needs selected)
+        required = Set.union needs selected
+    if kind == CoreTextType
+      then pure (line after ("      pudu_text_slot_store(&" <> destination <> ", " <> expression <> ");"),
+        Set.insert "text_slot_store" required)
+      else do
+        let stored
+              | ownedType kind =
+                  "      { " <> cType kind <> " pudu_next = " <> expression <> "; " <> released kind destination
+                    <> " " <> destination <> " = pudu_next; }"
+              | otherwise = "      " <> destination <> " = " <> expression <> ";"
+        pure (line after stored, required)
   FrameMove target source -> do
     destination <- slotText target
     origin <- slotText source
     let kind = frameSlotType target
-        emptied = if kind == CoreTextType then "(pudu_text){NULL, 0, NULL}" else "NULL"
-    pure ( line state ("      { " <> cType kind <> " pudu_moved = " <> origin <> "; " <> origin <> " = " <> emptied <> "; "
-             <> released kind destination <> " " <> destination <> " = pudu_moved; }")
-         , needs )
+    if kind == CoreTextType
+      then pure (line state ("      pudu_text_slot_move(&" <> destination <> ", &" <> origin <> ");"),
+        Set.insert "text_slot_move" needs)
+      else pure (line state ("      { " <> cType kind <> " pudu_moved = " <> origin <> "; " <> origin <> " = NULL; "
+                    <> released kind destination <> " " <> destination <> " = pudu_moved; }"), needs)
   FramePrintLiteral _ text -> printed "print_str" (cString text <> ", " <> textOfInt (cStringBytes text))
   FramePrintUnit _ -> printed "print_str" "\"()\", 2"
   FramePrintSlot at slot -> do

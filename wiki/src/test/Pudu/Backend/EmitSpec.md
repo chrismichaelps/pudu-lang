@@ -39,7 +39,7 @@ code — [[Backend Native Tests]] owns execution.
   the entry are carried — a declaration the entry cannot reach does not block
   the build and does not refuse, because the interpreter never runs it; each
   unsupported construct (a module without `main`, sets, ownership-bearing break values,
-  floats, `Str` locals, mutable borrows, matches, calls to the entry, parameters of unsupported types, default parameter values, unresolved inferred
+  floats, `Str` locals, mutable borrows, matches, parameters of unsupported types, default parameter values, unresolved inferred
   results, expression-bodied non-entry functions, and trailing or explicitly
   returned print results) lowers to a refusal whose
   code is `E6001` and whose span is the construct's own.

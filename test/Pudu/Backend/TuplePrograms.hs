@@ -111,7 +111,19 @@ tupleRefusalPrograms =
       [ ("tuple addition", "(1, 2) + (3, 4)"), ("tuple multiplication", "(\"a\", 1) * (\"b\", 2)")
       , ("tuple negation", "-(1, 2)"), ("tuple remainder", "((1, 2), 3) % ((1, 2), 3)") ]
   ] <>
-  [ ("tuple operands finish before the refusal", program
+  [ ("a tuple pattern subject can stop before binding its names", program
+      [ "fn main() -> Int {"
+      , "  print(\"before\")"
+      , "  let (first, second): (Int, Int) = panic(\"binding\")"
+      , "  first + second"
+      , "}" ])
+  , ("a sequence pattern subject can stop before binding its names", program
+      [ "fn main() -> Int {"
+      , "  print(\"before\")"
+      , "  let [first, ..rest]: Array[Int] = panic(\"sequence\")"
+      , "  first + rest.length()"
+      , "}" ])
+  , ("tuple operands finish before the refusal", program
       [ "fn side(label: Str) -> (Str, Int) {"
       , "  print(label)"
       , "  (label, 1)"

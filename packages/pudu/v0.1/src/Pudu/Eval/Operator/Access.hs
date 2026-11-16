@@ -40,6 +40,7 @@ import Pudu.Eval.Render (valueKind)
 import Pudu.Eval.Value
   ( ArrayMethod (..)
   , CharMethod (..)
+  , CallbackValue (..)
   , Closure (..)
   , MapMethod (..)
   , SetMethod (..)
@@ -91,6 +92,10 @@ readIndex spanValue container key = case (container, key) of
     it with `value` as its first argument. -}
 readMember :: Span -> Value -> Text -> Evaluator Value
 readMember spanValue value member = case value of
+  ForeignCallbackValue (CallbackToken owner key)
+    | member == "unregister" -> pure (ForeignCallbackValue (CallbackUnregister owner (Just key)))
+  ForeignCallbackValue (CallbackConstructor owner)
+    | member == "unregister" -> pure (ForeignCallbackValue (CallbackUnregister owner Nothing))
   TypeWitnessValue{} -> do
     found <- witnessMethod spanValue value member
     maybe (abortAt (Just spanValue) "E7001" ("selected type has no " <> member) Nothing) pure found
@@ -275,6 +280,7 @@ arrayMethods =
     head, so they answer with nothing and keep the old refusal. -}
 nominalNameOf :: Value -> Maybe Text
 nominalNameOf value = case value of
+  ForeignCallbackValue (CallbackToken owner _) -> Just owner
   IntValue kind _ -> Just (integerKindName kind)
   FloatValue Float32Width _ -> Just "Float32"
   FloatValue Float64Width _ -> Just "Float64"

@@ -49,6 +49,8 @@ callForeign :: Span -> ForeignBinding -> [Value] -> Evaluator Value
   installed and the usual remedy is to install it.
 - **A handle is opaque and nominal.** Only a runtime handle bearing the crossing's declared name may
   pass, and its address is never exposed as an integer.
+- **An optional handle parameter is part of the liveness claims.** A handle inside `Some` is leased
+  for the call exactly as a bare handle is, and `None` claims nothing.
 - **Ownership covers the complete native call.** Null owned results are refused; ordinary handle
   uses acquire atomic leases held until native code returns; release waits for leases and removes
   the claim before calling the destructor. A call-setup failure restores a release claim because the
@@ -173,6 +175,13 @@ no representation here for one that may be absent.
 - **Q:** Does `borrowed` bound the borrow? **A:** No, and it does not claim to. What it enforces is
   that nothing here releases the value; how long the library keeps it is the declaration's assertion,
   like the pointer validity and ABI layout beside it.
+
+## Resolved Grill Log for #876 — Interpreter callback values
+
+Dispatch uses the checked slots to supply code and context. It holds callback
+and ordinary handle leases across the native call. A nested callback failure
+is reported from the foreign call site after ownership settles; newly
+returned claims that cannot be exposed are released.
 
 ## Referenced by
 

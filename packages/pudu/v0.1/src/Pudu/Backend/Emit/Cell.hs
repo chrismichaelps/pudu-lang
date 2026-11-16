@@ -50,6 +50,7 @@ cType kind = case kind of
   CoreRangeType -> "pudu_box *"
   CoreBytesType -> "pudu_box *"
   CoreHandleType _ _ -> "pudu_box *"
+  CoreCallbackType _ _ -> "uintptr_t"
   CoreDecimalType -> "pudu_dec *"
   _ -> "int"
 
@@ -86,6 +87,7 @@ mangle kind = case kind of
   CoreRangeType -> "RG"
   CoreBytesType -> "BY"
   CoreHandleType key _ -> "H_" <> mangleKey key
+  CoreCallbackType key _ -> "CB_" <> mangleKey key
   CoreFunctionType inputs result -> "F" <> Text.pack (show (length inputs)) <> "_" <> Text.intercalate "_" (map mangle (inputs <> [result])) <> "_E"
   other -> coreTypeName other
 
@@ -167,6 +169,7 @@ cellName kind = case kind of
   CoreIntegerType integer | isBigInteger integer -> "big"
   CoreIntegerType _ -> "integer"
   CoreFloatType _ -> "floating"
+  CoreCallbackType _ _ -> "callback"
   CoreCharType -> "character"
   CoreTextType -> "text"
   CoreDecimalType -> "decimal"

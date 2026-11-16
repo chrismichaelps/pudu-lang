@@ -29,8 +29,9 @@ module Pudu.Core
   , CoreRangeMethodName (..), CoreBytesMethodName (..), CoreDecimalMethodName (..)
   , CoreKernelName (..)
   , CoreForeign (..), CoreClaim (..)
+  , CoreCallbackOperation (..), CoreCallbackSignature (..), CoreCallbackFallback (..), CoreCallbackSlot (..)
   , CoreType (..)
-  , coreTypeName, displayName
+  , coreTypeName, displayName, suppliedCountName
   ) where
 
 import Data.ByteString (ByteString)
@@ -239,6 +240,7 @@ data CoreExpressionShape
   | CoreKernel !CoreKernelName ![Int] ![CoreExpression]
   {-| A call to a foreign function, its arguments in order. -}
   | CoreForeignCall !CoreForeign ![CoreExpression]
+  | CoreCallback !CoreCallbackOperation !CoreExpression
   {-| `array[index]`: the array, then the index. The expression's span is the
       index's, where an index out of range reports. -}
   | CoreIndex !CoreExpression !CoreExpression
@@ -328,6 +330,37 @@ data CoreForeign = CoreForeign
   , coreForeignReleases :: !Bool
   , coreForeignSlotPositions :: ![Int]
   , coreForeignSlotClaims :: ![Maybe CoreClaim]
+  , coreForeignCallbacks :: ![CoreCallbackSlot]
+  }
+  deriving stock (Eq, Ord, Show)
+
+data CoreCallbackOperation
+  = CoreCallbackRegister !CoreCallbackSignature
+  | CoreCallbackUnregister
+  deriving stock (Eq, Ord, Show)
+
+{-| A trampoline's type and native slot sequence. Nothing identifies its
+    context argument. The fallback refers to the declared result carrier. -}
+data CoreCallbackSignature = CoreCallbackSignature
+  { coreCallbackOwner :: !Text
+  , coreCallbackArguments :: ![Maybe CoreType]
+  , coreCallbackResult :: !CoreType
+  , coreCallbackFallback :: !CoreCallbackFallback
+  }
+  deriving stock (Eq, Ord, Show)
+
+data CoreCallbackFallback
+  = CallbackFallbackUnit
+  | CallbackFallbackInteger !Integer
+  | CallbackFallbackFloat !Word64
+  | CallbackFallbackBool !Bool
+  deriving stock (Eq, Ord, Show)
+
+{-| Native argument indexes, including output slots and the callback context. -}
+data CoreCallbackSlot = CoreCallbackSlot
+  { coreCallbackFunctionIndex :: !Int
+  , coreCallbackContextIndex :: !Int
+  , coreCallbackSignature :: !CoreCallbackSignature
   }
   deriving stock (Eq, Ord, Show)
 
@@ -398,6 +431,7 @@ data CoreType
   {-| An opaque handle a foreign library hands back: its canonical name, then
       the name it renders under. -}
   | CoreHandleType !Text !Text
+  | CoreCallbackType !Text !Text
   deriving stock (Eq, Ord, Show)
 
 coreTypeName :: CoreType -> Text
@@ -423,6 +457,7 @@ coreTypeName coreType = case coreType of
   CoreUnitType -> "Unit"
   CoreNeverType -> "Never"
   CoreHandleType _ name -> name
+  CoreCallbackType _ name -> name
 
 {-| A record or sum as a program writes it: the last segment of its canonical
     key (`Main.Point` is `Point`), which is how the evaluator renders it. -}
@@ -475,3 +510,9 @@ data CorePattern
       skipped, or bound to a local), then items read from the back. -}
   | CoreArrayPattern ![CorePattern] !(Maybe (Maybe CoreLocal)) ![CorePattern]
   deriving stock (Eq, Show)
+
+{-| The trailing parameter of a function with defaults: how many arguments
+    its caller wrote. No source identifier can spell it, so a backend finds
+    it by name. -}
+suppliedCountName :: Text
+suppliedCountName = "#supplied"

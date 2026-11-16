@@ -2,6 +2,7 @@
 module Pudu.Backend.Runtime.Host.Tls (hostTlsParts, tlsLibraryMarker) where
 
 import Data.Text (Text)
+import Pudu.Backend.Runtime.Host.TlsTrust (androidTrust, appleTrust)
 
 {-| The line whose presence in a program's C says the program links the
     system's TLS library. -}
@@ -13,8 +14,9 @@ hostTlsParts :: [(Text, [Text], [Text])]
 hostTlsParts =
   [ ("host_tls", ["host_sockets", "host_optional", "host_done", "host_fail", "host_fail_io", "host_grow", "host_gate", "host_path", "kernel_signed", "kernel_int", "text_retain"],
       [ tlsLibraryMarker
-      , "#include <openssl/err.h>"
-      , "/* One secured connection: the session, the descriptor beneath it, the"
+      , "#include <openssl/err.h>" ]
+      <> appleTrust <> androidTrust <>
+      [ "/* One secured connection: the session, the descriptor beneath it, the"
       , "   name it was opened against, and whether its ending has been read. An"
       , "   empty slot has no session. */"
       , "typedef struct { SSL *session; int descriptor, ended; pudu_text host; } pudu_host_secured;"
@@ -68,9 +70,15 @@ hostTlsParts =
       , "  if (pudu_host_tls_trust == NULL) {"
       , "    SSL_CTX *made = SSL_CTX_new(TLS_client_method());"
       , "    if (made == NULL) return NULL;"
-      , "    (void)SSL_CTX_set_min_proto_version(made, TLS1_2_VERSION);"
+      , "    if (SSL_CTX_set_min_proto_version(made, TLS1_2_VERSION) != 1) { SSL_CTX_free(made); return NULL; }"
       , "    SSL_CTX_set_verify(made, SSL_VERIFY_PEER, NULL);"
+      , "#if defined(PUDU_TLS_APPLE_TRUST)"
+      , "    SSL_CTX_set_cert_verify_callback(made, pudu_host_tls_apple_verify, NULL);"
+      , "#elif defined(PUDU_TLS_ANDROID_TRUST)"
+      , "    SSL_CTX_set_cert_verify_callback(made, pudu_host_tls_android_verify, NULL);"
+      , "#else"
       , "    (void)SSL_CTX_set_default_verify_paths(made);"
+      , "#endif"
       , "    (void)SSL_CTX_set_mode(made, SSL_MODE_ENABLE_PARTIAL_WRITE | SSL_MODE_ACCEPT_MOVING_WRITE_BUFFER);"
       , "    pudu_host_tls_trust = made;"
       , "  }"
@@ -130,7 +138,10 @@ hostTlsParts =
       , "      ERR_clear_error();"
       , "      errno = 0;"
       , "      result = SSL_connect(session);"
-      , "      if (result == 1) { state = 3; break; }"
+      , "      if (result == 1) {"
+      , "        state = budget >= 0 && pudu_host_socket_clock() - started >= budget ? 0 : 3;"
+      , "        break;"
+      , "      }"
       , "      code = errno;"
       , "      state = pudu_host_tls_step(session, descriptor, result, budget, started);"
       , "      if (state != 1) break;"

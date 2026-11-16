@@ -11,7 +11,8 @@ import Pudu.Frontend.Syntax.Name (ModuleName)
 import Pudu.Frontend.Syntax.Tree
   ( ArrayRest, Attribute, BindingKind, Block, Capability, ComptimeFor, Constraint
   , Declaration, Derive, DeriveRequest, DeriveShape, Expression, FieldDeclaration
-  , FieldInit, FieldPattern, Foreign, ForeignFunction, ForeignParameter, Function
+  , FieldInit, FieldPattern, Foreign, ForeignCallback, ForeignCallbackParameter
+  , ForeignFunction, ForeignParameter, Function
   , FunctionBody, Impl, Import, Literal, Macro, MacroKind, MacroParam, MatchArm
   , Module, Parameter, Pattern, Statement, Trait, TypeDeclarationValue
   , TypeDefinition, TypeParam, TypeSyntax, Variant, VariantPayload, Visibility )
@@ -105,6 +106,8 @@ instance Owned Pattern
 instance Owned ArrayRest
 instance Owned FieldPattern
 instance Owned Foreign
+instance Owned ForeignCallback
+instance Owned ForeignCallbackParameter
 instance Owned ForeignFunction
 instance Owned ForeignParameter
 instance Owned FieldInit

@@ -7,6 +7,7 @@
 module Pudu.Foreign.Crossing
   ( Crossing (..)
   , crossingFor
+  , parameterCrossingFor
   , crossingName
   , crossingType
   , crossableNames
@@ -62,6 +63,10 @@ data Crossing
       not interchangeable, and one address type for all of them turns a mistake
       the checker could catch into one the library reports by failing. -}
   | HandleCrossing !Text
+  {-| A handle a parameter may leave out: `Option` of a type the block
+      declares. `None` crosses as the null address a library reads as
+      "none given", and `Some` as the handle it holds, which must be live. -}
+  | OptionalHandleCrossing !Text
   {-| A record crossing by value, under its name and with its fields in the
       order the declaration wrote them.
 
@@ -156,6 +161,15 @@ crossingFor handles layouts = crossingAt Set.empty
     "Bytes" -> Just BytesCrossing
     _ -> Nothing
 
+{-| The crossing a declared parameter describes: any crossing a value has,
+    and also `Option` of a handle the block declares, which only an argument
+    may be. A result or a field that can be absent answers through a slot. -}
+parameterCrossingFor :: Set Text -> RecordLayouts -> Located TypeSyntax -> Maybe Crossing
+parameterCrossingFor handles layouts written = case locatedValue written of
+  NamedType (ModuleName ("Option" :| [])) [Located _ (NamedType (ModuleName (name :| [])) [])]
+    | Set.member name handles -> Just (OptionalHandleCrossing name)
+  _ -> crossingFor handles layouts written
+
 {-| What the declaration wrote, for a diagnostic to name back. -}
 crossingName :: Crossing -> Text
 crossingName crossing = case crossing of
@@ -166,6 +180,7 @@ crossingName crossing = case crossing of
   TextCrossing -> "Str"
   BytesCrossing -> "Bytes"
   HandleCrossing name -> name
+  OptionalHandleCrossing name -> "Option[" <> name <> "]"
   RecordCrossing name _ -> name
   NothingCrossing -> "()"
 
@@ -179,6 +194,7 @@ crossingName crossing = case crossing of
 crossingType :: Crossing -> Type
 crossingType crossing = case crossing of
   NothingCrossing -> UnitTypeValue
+  OptionalHandleCrossing name -> NominalType "Option" [NominalType (fromString (Text.unpack name)) []]
   _ -> NominalType (fromString (Text.unpack (crossingName crossing))) []
 
 {-| Whether an integer is one the declared width can carry.

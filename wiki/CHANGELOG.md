@@ -5,6 +5,77 @@ tags: [changelog]
 
 # Changelog
 
+## 2026-11-16 — Native validation fixes (#935)
+
+- Foreign parameters accept `Option` of a declared handle: `None` crosses as null, `Some` as a live handle (#935).
+  [[Foreign Crossing]] · [[Backend Emit Foreign]]
+- Keep native callback lookup outside the setjmp frame and bound text
+  allocations by the maximum C object size.
+- Let queued iOS list viewport events settle before the scroll self-test
+  reports its final window.
+  [[Native Host Callbacks]] · [[iOS Host List]]
+
+## 2026-11-16 — Foreign callback syntax (#876)
+
+- Retain callback signatures and native context positions in the parsed tree.
+  Check callback argument types, fallbacks and context pairing during
+  declaration checking. Bind owner-qualified callback token types and their
+  synchronous registration signatures. Add the per-run interpreter store for
+  invocation leases and teardown. Wire interpreter registration and
+  unregister values to the store. Add the libffi callback adapter with
+  generation-based retirement and a fallback for late invocations. Wire
+  interpreter dispatch and nested failure settlement. Lower native callback
+  operations, signatures and paired ABI positions into the frame IR.
+  [[Foreign Callback Delivery]] · [[Foreign Callback Signature]]
+
+## 2026-11-16 — Android native TLS libraries (#935)
+
+- Build Android arm64 and x86_64 native libraries through the NDK and
+  verify TLS peer chains through the host JavaVM.
+  [[Backend Toolchain Library]] · [[Native Mobile TLS Trust]]
+
+## 2026-11-16 — iOS native TLS (#935)
+
+- Enable verified TLS connects and descriptor upgrades on iOS device
+  and simulator builds with a target-built OpenSSL provider.
+  [[Native Host TLS]] · [[Backend Toolchain Library]]
+
+## 2026-11-15 — Native C11 callable continuations (#935)
+
+- Preserve a diverging subject in tuple, record, and sequence pattern
+  bindings. [[Compiler Lower Tuple]] · [[Backend Tuple Programs]]
+- Carry single-member tuples and lower a named call to the entry through its
+  ordinary callable body. [[Compiler Lower Body]] · [[Compiler Lower Generic]]
+- Allow omission of trailing defaults and export monomorphic defaulted and
+  async functions. The embedded C entry takes every argument and awaits an
+  async export before returning through the existing crossing.
+  [[Compiler Lower Default]] · [[Backend Emit Export]] · [[Backend Export Tests]]
+- Admit methods with written defaults at their full checked arity.
+  [[Compiler Lower Signature]] · [[Backend Method Programs]]
+- Specialize eligible signed integer direct calls to typed C parameters and
+  locals. [[Backend Typed Integer Calls]] · [[Native Direct Call Tests]]
+
+## 2026-11-15 — Native frame reuse and entry defaults
+
+- Integrate physical slot reuse and shared owned-text stores from #821.
+  [[Native Frame Slot Reuse]] · [[Native Frame Slot Reuse Delivery]]
+- Evaluate entry defaults as ordinary local declarations before the body
+  or awaited task. Preserve the located missing-argument diagnostic after
+  earlier defaults. [[Compiler Lower Function Body]] · [[Backend Native Tests]]
+- Cover output Results returned from named functions and assigned to locals.
+  [[Backend Output Programs]]
+
+## 2026-11-15 — C11 emission continuation (#935)
+
+- Emit the `Std.Binary` writer and reader with the interpreter's wire format
+  and refusal behavior. [[Native Binary Kernels]] · [[Backend Kernel Programs]]
+- Emit `mutexClose` with immediate retirement or a wait for the current owner's
+  release. [[Native Host Concurrent]] · [[Backend Host Programs]]
+- Widen omitted dynamic defaults and supplied arguments through function
+  values. Update E6001 help.
+  [[Compiler Lower Default]] · [[Compiler Lower Lambda]] · [[Diagnostic Native]]
+  · [[C11 Emission Continuation Delivery]]
+
 ## 2026-11-14 — iOS materials (#928)
 
 - Database drivers state their engine kind and capabilities; bundled drivers come from a factory table, and migrations and the store no longer branch on driver names (#940).

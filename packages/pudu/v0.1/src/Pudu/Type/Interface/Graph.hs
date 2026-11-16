@@ -374,7 +374,7 @@ interfaceLocalNames value = Map.fromList (concatMap one declarations)
     TypeDeclaration typeValue -> identity (locatedValue (Tree.typeName typeValue))
     TraitDeclaration trait -> identity (locatedValue (Tree.traitName trait))
     ForeignDeclaration foreignValue ->
-      concatMap (identity . locatedValue) (Tree.foreignTypes foreignValue)
+      concatMap (identity . locatedValue) (Tree.foreignTypes foreignValue <> Tree.foreignCallbackNames foreignValue)
     _ -> []
   identity name = [(name, canonicalNominal owner name)]
 

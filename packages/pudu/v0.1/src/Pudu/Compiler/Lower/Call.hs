@@ -4,7 +4,7 @@ module Pudu.Compiler.Lower.Call (lowerFunctionCall, lowerPrint, outputResult, lo
 
 import Data.Text (Text)
 import Pudu.Compiler.Lower.Control (expressionIsPrintValued)
-import Pudu.Compiler.Lower.Default (hasDefaults, suppliedArguments)
+import Pudu.Compiler.Lower.Default (takesSuppliedCount, suppliedArguments)
 import Pudu.Compiler.Lower.Generic (admitCalleeGiven)
 import Pudu.Compiler.Lower.Loan (lowerLoanedCall)
 import Pudu.Compiler.Lower.Scalar (eagerType)
@@ -23,28 +23,27 @@ type Lowered = (LowerState, Maybe (CoreExpression, CoreType))
 lowerFunctionCall :: LowerExpression -> LowerState -> Span -> Text -> Span -> [Located Expression] -> Lowered
 lowerFunctionCall lower state at key callee arguments = case lookup key (contextTable (lowerContext state)) of
   Nothing -> halt at "this call" state
-  Just entry
-    | key == contextEntry (lowerContext state) -> halt at "a call to the entry function" state
-    | otherwise -> case admitCalleeGiven state (traverse (typeFactAt (contextTypes (lowerContext state)) . locatedSpan) arguments) key callee entry of
+  Just entry ->
+    case admitCalleeGiven state (traverse (typeFactAt (contextTypes (lowerContext state)) . locatedSpan) arguments) key callee entry of
         (back, Nothing) -> refused back
         (back, Just (target, found))
           | not (null (signatureLoaned found)) ->
-              lowerLoanedCall lower back at target found (hasDefaults (locatedValue (snd entry))) arguments
+              lowerLoanedCall lower back at target found (takesSuppliedCount found) arguments
         (back, Just (target, found)) -> case collect back [] arguments of
-          (final, Just given) -> passing entry final target found
+          (final, Just given) -> passing final target found
             -- An argument of an implementing type widens to a dynamic parameter.
             (zipWith (widen (contextTypes (lowerContext final)))
               (map (coreLocalType . coreParameterLocal) (signatureParameters found) <> repeat CoreNeverType) given)
           (final, Nothing) -> refused final
  where
-  passing entry final target found cores
+  passing final target found cores
     | any ((== CoreNeverType) . coreExpressionType) cores =
         typed final (CoreBlockValue (CoreBlock
           [CoreStatement (coreExpressionSpan argument) (CoreEvaluate argument) | argument <- cores] Nothing)) CoreNeverType
     | otherwise =
         let queued = queue target final
             passed
-              | hasDefaults (locatedValue (snd entry)) =
+              | takesSuppliedCount found =
                   suppliedArguments at (map (coreLocalType . coreParameterLocal) (signatureParameters found)) cores
               | otherwise = cores
          in typed queued (CoreCall target passed) (eagerType (signatureResult found) cores)

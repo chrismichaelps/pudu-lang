@@ -311,6 +311,8 @@ evaluateHere (Located spanValue expression) = case expression of
       FunctionValue closure -> do
         chosen <- mapM witnessOf arguments
         pure (FunctionValue (selectTypes chosen closure))
+      TraitMethodValue provider member _ | [receiver] <- arguments ->
+        TraitMethodValue provider member . Just <$> witnessOf receiver
       _ -> pure value
   LambdaExpression value -> do
     {-| A literal captures the environment it was written in, so calling it

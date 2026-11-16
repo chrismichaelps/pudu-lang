@@ -20,7 +20,8 @@ compareValues ordering including NaN members under the total order of #522;
 positions; let patterns with nesting, wildcards and a swap; tuples through
 calls, branches, loops, `break` values and mutation; member order and a Never
 member; tuple entry results. Refusals: arithmetic and negation on tuples,
-after their operands run.
+after their operands run. Tuple and sequence patterns with a panic subject
+match the interpreter’s preceding output and E7007 span.
 
 ## Grill Log
 

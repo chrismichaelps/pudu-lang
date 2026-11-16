@@ -197,6 +197,16 @@ through a value: the constant is read as [[Compiler Lower Constant]] reads it
 Resolved Grill Log: route through `lowerValueCall` rather than a constant-only
 call path, so ordering, defaults and loans match every other value call.
 
+## Tuple and callable values
+
+Lower a single-member tuple through the ordinary tuple constructor. Resolve a dotted name as a constant, function value, or variant using the checked module scope. Apply recorded type arguments before lowering a named value.
+
+## Resolved Grill Log for #876 — Native callback lowering
+
+Recognize direct, imported and retained callback registration and unregister
+operations in the ordinary expression traversal. Evaluate the receiver or
+handler once, before dispatch.
+
 ## Referenced by
 
 [[src/Pudu/Compiler/_MOC]] · [[src/Pudu/_MOC]] · [[Compiler Lower]] ·
@@ -507,3 +517,8 @@ A call `Qualifier.f(...)` whose qualifier is a module tries the module's
 foreign declarations right after its functions. Resolved Grill Log: the
 order matches the evaluator's qualified lookup; a local qualifier still
 reaches method and field lowering.
+
+## Diverging pattern bindings (#935)
+
+A tuple, record, or sequence binding whose subject transfers control stops
+block lowering at that subject. It introduces no bindings or projections.

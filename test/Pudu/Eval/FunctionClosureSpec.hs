@@ -6,6 +6,7 @@ module Pudu.Eval.FunctionClosureSpec
   , testClosures
   , testFunctions
   , testSlotScopes
+  , testTraitMethodValues
   ) where
 
 import Test.QuickCheck (Property, conjoin, counterexample, (===))
@@ -19,7 +20,26 @@ functionClosureProperties =
   , ("implementations reach built-in types", testBuiltinImpls)
   , ("Decimal implementations reach direct generic and qualified calls", testDecimalImpls)
   , ("slot admission preserves ordered lexical scope and capture", testSlotScopes)
+  , ("a trait-qualified method value selects by its first argument", testTraitMethodValues)
   ]
+
+testTraitMethodValues :: IO Property
+testTraitMethodValues = do
+  let declarations =
+        [ "trait Named { fn label(self, suffix: Str) -> Str }"
+        , "type Bot = { name: Str }"
+        , "type Cat = { lives: Int }"
+        , "impl Named for Bot { fn label(self: Bot, suffix: Str) -> Str { self.name + suffix } }"
+        , "impl Named for Cat { fn label(self: Cat, suffix: Str) -> Str { display(self.lives) + suffix } }"
+        ]
+  value <- runProgram declarations ["let viaTrait = Named.label"] "viaTrait(Bot{name: \"value\"}, \"!\")"
+  other <- runProgram declarations ["let viaTrait = Named.label"] "viaTrait(Cat{lives: 9}, \"?\")"
+  called <- evaluateWith declarations "Named.label(Bot{name: \"call\"}, \".\")"
+  pure $ conjoin
+    [ counterexample "the value dispatches on a Bot" (value === "\"value!\"")
+    , counterexample "the same value dispatches on a Cat" (other === "\"9?\"")
+    , counterexample "the written call is unchanged" (called === "\"call.\"")
+    ]
 
 testSlotScopes :: IO Property
 testSlotScopes = do

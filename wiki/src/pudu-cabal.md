@@ -8,6 +8,13 @@ aliases: [Pudu Cabal Manifest]
 
 # Pudu Cabal Manifest
 
+Register [[Backend Frame Slots]] and [[Backend Frame Slot References]].
+Resolved Grill Log: allocation and rewriting use the same exhaustive traversal.
+
+Register [[Native Binary Kernels]] with the existing runtime families.
+Resolved Grill Log: the generated codec uses the existing C11 runtime and
+requires no additional package or link dependency.
+
 Register Pudu.Core.Keyed and Pudu.Compiler.Lower.WordMap (#810), with existing
 dependencies. Resolved Grill Log: domain tags remain backend-independent and
 lowering stays compiler-owned; no new runtime linkage or package dependency.
@@ -728,3 +735,34 @@ Resolved Grill Log: include `cbits/pudu_ios_layout.h` in the source distribution
 `cbits/pudu_ios_events.h`, `cbits/pudu_ios_controls.h` and `cbits/pudu_ios_list.h` are added to `extra-source-files` beside the layout and theme headers, for the same reason: the host embedding reads them at compiler build time. See [[iOS Host Events]], [[iOS Host Controls]] and [[iOS Host List]].
 
 `cbits/pudu_ios_material.h` is added to `extra-source-files` in the same list, for the same reason. See [[iOS Host Material]].
+
+## Mobile TLS verification (#935)
+
+Register [[Native Mobile TLS Trust]] with existing dependencies.
+
+## Checked foreign callbacks (#876)
+
+Register [[Foreign Callback Signature]] alongside [[Foreign Crossing]].
+Resolved Grill Log: declaration validation uses the existing source, text,
+containers, and literal decoders.
+
+## Foreign callback store (#876)
+
+Register [[Foreign Callback Store]]. Resolved Grill Log: reuse the existing
+STM and containers packages for per-run ownership.
+
+## Interpreter callback values (#876)
+
+Register [[Eval Foreign Callback]] against the existing evaluator and callback
+store. Resolved Grill Log: no added package dependency.
+
+## libffi callback adapter (#876)
+
+Compile [[Pudu FFI Callback Bridge]], ship [[Pudu Private FFI ABI]], and
+register [[Foreign Callback Native Adapter]].
+Resolved Grill Log: use the same installed libffi library as outbound calls.
+
+## C11 callbacks (#876)
+
+Register [[Native Host Callbacks]]. Resolved Grill Log: reuse the native
+runtime's pthread gate, frame ABI and diagnostic boundary.

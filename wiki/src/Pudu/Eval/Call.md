@@ -132,6 +132,17 @@ the owner lookup; it prepares the member and then invokes it, so callers that
 already hold their arguments are unchanged.
 
 
+## Resolved Grill Log for #876 — Interpreter callback values
+
+Both ordinary calls and evaluated function application delegate callback
+registration and unregister values to [[Eval Foreign Callback]].
+
+## Resolved Grill Log for #876 — Callback dispatch
+
+Foreign dispatch passes the ordinary call dispatcher back to the callback
+adapter, so callbacks can invoke the same callable values. New workers
+start without the parent's callback ancestry.
+
 ## Referenced by
 
 [[src/Pudu/Eval/_MOC]] · [[Evaluator]] · [[Eval Program]] · [[Eval Loop]]

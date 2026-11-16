@@ -2,11 +2,13 @@
 module Pudu.Eval.Foreign.Binding
   ( ForeignBinding (..)
   , ForeignSlot (..)
+  , ForeignCallbackSlot (..)
   , ForeignClaim (..)
   , ForeignRelease (..)
   ) where
 
 import Data.Text (Text)
+import Pudu.Foreign.Callback (CallbackPair, CallbackSignature)
 import Pudu.Foreign.Crossing (Crossing)
 
 {-| Everything the runtime needs to make one foreign call.
@@ -31,6 +33,7 @@ data ForeignBinding = ForeignBinding
   {-| Which of those positions the library writes rather than reads, in the same
       order. An ordinary argument carries nothing here. -}
   , foreignBindingSlots :: ![Maybe ForeignSlot]
+  , foreignBindingCallbacks :: ![ForeignCallbackSlot]
   , foreignBindingResult :: !Crossing
   , foreignBindingReleasedBy :: !(Maybe ForeignRelease)
   {-| The handle type this function releases, when it is a release.
@@ -50,6 +53,15 @@ data ForeignBinding = ForeignBinding
 data ForeignSlot = ForeignSlot
   { foreignSlotCrossing :: !Crossing
   , foreignSlotReleasedBy :: !(Maybe ForeignRelease)
+  }
+  deriving stock (Eq, Show)
+
+{-| A callback token consumes one Pudu argument and these two native slots.
+    The signature supplies the adapter independently of the token's handler. -}
+data ForeignCallbackSlot = ForeignCallbackSlot
+  { foreignCallbackOwner :: !Text
+  , foreignCallbackPair :: !CallbackPair
+  , foreignCallbackSignature :: !CallbackSignature
   }
   deriving stock (Eq, Show)
 

@@ -59,6 +59,12 @@ installWanted
 - **Q:** Why a separate module? **A:** Graph preparation and per-consumer import both need the same
   declaration code, and the graph module sits below [[Type Check Import]].
 
+## Resolved Grill Log for #876
+
+Install a foreign callback registration under the declaring module's
+qualified name using the ordinary value alias path. The alias keeps the
+formed handler and token types and inherits the block's publication rules.
+
 ## Referenced by
 
 [[src/Pudu/Type/_MOC]] · [[Type Interface Graph]] · [[Type Check Import]]

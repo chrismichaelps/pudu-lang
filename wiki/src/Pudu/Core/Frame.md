@@ -87,6 +87,11 @@ source slot.
 
 `FrameForeign` holds the declaration and the argument slots of a foreign call.
 
+## Resolved Grill Log for #876 — Native callback lowering
+
+FrameCallback retains the operation and its evaluated handler or token slot.
+FrameForeign keeps callback positions separate from the Pudu operand list.
+
 ## Referenced by
 
 [[src/_MOC]] · [[Program Compiler Module Map]] · [[Native Frame Pressure Repair]]

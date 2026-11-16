@@ -90,6 +90,11 @@ Each byte operation is one runtime call named by [[Backend Emit Bytes]].
 
 `FrameForeign` emits the call through its declaration's wrapper ([[Backend Emit Foreign]]), registering the call's E7015 site.
 
+## Resolved Grill Log for #876 — Native callback lowering
+
+Callback operations and foreign pointer/context pairs have explicit frame
+cases. Admission remains gated until their C runtime is emitted.
+
 ## Referenced by
 
 [[src/_MOC]] · [[Native Execution Frames]]

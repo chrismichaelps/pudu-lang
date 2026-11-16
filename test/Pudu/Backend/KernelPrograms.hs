@@ -216,11 +216,42 @@ kernelLibraryPrograms =
         , "  0"
         , "}" ]
       , "true true false\n" )
+  , ( "binary kernels preserve wire bytes, recursive values and corrupt input"
+      , program
+        [ "import Std.Binary as Binary"
+        , "fn main() -> Int {"
+        , "  let encode = binaryEncode"
+        , "  let decode = binaryDecode"
+        , "  let nums = Binary.Reals(lanesFromArray([1.5, -0.0]))"
+        , "  let members = Binary.Items([Binary.Absent, Binary.Present(Binary.Flag(true)), Binary.Text(\"é\\0\"), Binary.Raw(bytesOf([255u8])), nums, Binary.Real(-1.25), Binary.Whole(-9223372036854775808)])"
+        , "  let ordered = Binary.Fields([(\"z\", members), (\"a\", Binary.Fields([(\"z\", Binary.Whole(7))]))])"
+        , "  let keyed = Binary.Record(mapOf([(\"a\", Binary.Record(mapOf([(\"z\", Binary.Whole(7))]))), (\"z\", members)]))"
+        , "  let picked = Binary.Picked(\"C\", mapOf([(\"x\", keyed)]))"
+        , "  let choice = Binary.Choice(\"C\", [(\"x\", keyed)])"
+        , "  print(show(encode(&Binary.Whole(-7))))"
+        , "  print(show(decode(encode(&ordered)) == Ok(keyed)))"
+        , "  print(show(binaryDecode(binaryEncode(&choice)) == Ok(picked)))"
+        , "  print(show(binaryEncode(&picked) == encode(&choice)))"
+        , "  print(show(decode(bytesOf([]))))"
+        , "  print(show(decode(bytesOf([0u8, 0u8, 0u8, 0u8, 7u8, 0u8]))))"
+        , "  print(show(decode(bytesOf([0u8, 0u8, 0u8, 0u8, 3u8, 1u8, 0u8, 0u8, 0u8, 255u8]))))"
+        , "  print(show(decode(bytesOf([0u8, 0u8, 0u8, 0u8, 5u8, 255u8, 255u8, 255u8, 255u8]))))"
+        , "  0"
+        , "}" ]
+      , "0x0000000000f9ffffffffffffff\ntrue\ntrue\ntrue\nErr(\"the bytes end inside a node\")\nErr(\"1 bytes follow the root node\")\nErr(\"text that is not UTF-8\")\nErr(\"the bytes end inside a node\")\n" )
   ]
 
 kernelRefusalPrograms :: [(String, Text)]
 kernelRefusalPrograms =
-  [ ( "flat table primitives, degenerate tables and a negative capacity"
+  [ ( "binary writer refuses duplicate fields through a builtin value"
+      , program
+        [ "import Std.Binary as Binary"
+        , "fn main() -> Int {"
+        , "  let encode = binaryEncode"
+        , "  print(show(encode(&Binary.Fields([(\"x\", Binary.Absent), (\"x\", Binary.Absent)]))))"
+        , "  0"
+        , "}" ] )
+  , ( "flat table primitives, degenerate tables and a negative capacity"
       , program
         [ "import Std.FlatMap as Flat"
         , "import Std.FlatMap {FlatMap}"
