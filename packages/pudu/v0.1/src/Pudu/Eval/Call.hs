@@ -105,6 +105,7 @@ import Pudu.Eval.Place
 import Pudu.Eval.MultiMap (multiMapPrimitive, multiMapWrapper)
 import Pudu.Eval.Range (callRangeMethod)
 import Pudu.Eval.Render (valueKind)
+import Pudu.Eval.TypeWitness (selectImplementation)
 import Pudu.Eval.Value
   ( Builtin (..)
   , Captured (..)
@@ -224,6 +225,8 @@ dispatchCall :: CallNeeds -> Span -> Lent -> Value -> [Value] -> Evaluator Value
 dispatchCall needs spanValue lent target values =
   case target of
     FunctionValue closure -> callClosureLending needs closure values lent (Just spanValue)
+    TraitMethodValue provider member witness ->
+      callTraitMethod needs spanValue lent provider member witness values
     ForeignValue binding -> callForeign spanValue binding values
     SumValue owner name [] -> pure (SumValue owner name values)
     BuiltinValue PanicBuiltin -> callPanic spanValue values
@@ -254,6 +257,26 @@ dispatchCall needs spanValue lent target values =
     BucketsMethodValue method receiver -> callBucketsMethod spanValue method receiver values
     TextMethodValue receiver -> callDisplay spanValue (receiver : values)
     _ -> abortAt (Just spanValue) "E7001" ("cannot call a " <> valueKind target) Nothing
+
+{-| The first argument keeps its original loan position while selecting the
+    canonical trait provider. The checked witness preserves erased arguments
+    of a generic implementation. -}
+callTraitMethod :: CallNeeds -> Span -> Lent -> Text -> Text -> Maybe Value -> [Value] -> Evaluator Value
+callTraitMethod needs at lent provider member witness values = case values of
+  receiver : _ -> do
+    owners <- receiverOwners receiver
+    found <- firstBound select owners
+    case found of
+      Just (owner, FunctionValue closure) -> do
+        selected <- case witness of
+          Just held@(TypeWitnessValue name _) | name `elem` owners -> selectImplementation at held closure
+          _ -> pure (withSelf (TypeWitnessValue owner []) closure)
+        callClosureLending needs selected values lent (Just at)
+      _ -> abortAt (Just at) "E7001" ("no implementation of " <> provider <> "." <> member <> " for the receiver") Nothing
+  [] -> abortAt (Just at) "E7003" "missing argument for parameter self"
+    (Just "supply the argument or give the parameter a default")
+ where
+  select owner = fmap (owner,) <$> lookupMethod (provider <> "." <> owner <> "." <> member)
 
 {-| A two-segment path in callee position may select a method explicitly: by the
     type that implements it, as in `Bot.label(bot)`, or by the trait that
@@ -402,6 +425,8 @@ settled callSpan outcome = case outcome of
 applyFunction :: CallNeeds -> Span -> Value -> [Value] -> Evaluator Value
 applyFunction needs spanValue function arguments = case function of
   FunctionValue closure -> callClosure needs closure arguments (Just spanValue)
+  TraitMethodValue provider member witness ->
+    callTraitMethod needs spanValue noneLent provider member witness arguments
   ArrayMethodValue method receiver -> callArrayMethod (applyFunction needs) spanValue method receiver arguments
   StringMethodValue method receiver -> callStringMethod spanValue method receiver arguments
   MapMethodValue method receiver -> callMapMethod spanValue method receiver arguments

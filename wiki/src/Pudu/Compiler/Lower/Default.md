@@ -18,8 +18,8 @@ list: what it wrote, a CoreAbsent zero per omitted parameter, then the count.
 ## Resolved Grill Log
 
 The expression and body lowerers come in as arguments so Call can use the
-helpers without importing Body. A default of another type refuses with
-E6001; a Never default stops the prologue like any block. See
+helpers without importing Body. A default widens to its parameter type through the ordinary dynamic
+conversion. A remaining type mismatch refuses with E6001; a Never default stops the prologue like any block. See
 [[Native Default Parameters]].
 
 ## Referenced by

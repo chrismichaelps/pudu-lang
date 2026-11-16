@@ -5,7 +5,8 @@
 module Pudu.Compiler.Lower.Default (hasDefaults, suppliedArguments, lowerDefaultedBody) where
 
 import Data.Maybe (isJust)
-import Pudu.Compiler.Lower.State (CoreSignature (..), LowerState, intType, refuse)
+import Pudu.Compiler.Lower.Dynamic (widenTo)
+import Pudu.Compiler.Lower.State (CoreSignature (..), LowerContext (..), LowerState (..), intType, refuse)
 import Pudu.Core
 import Pudu.Frontend.Syntax (Expression, Function (..), Located (..), Parameter (..))
 import Pudu.IntegerLiteral (IntegerKind (..))
@@ -44,8 +45,10 @@ lowerDefaultedBody lower lowerBody located signature state = case foldl' fill (s
     | (index, Located _ parameter, local) <- zip3 [0 :: Integer ..] (functionParameters (locatedValue located)) locals
     , Just value <- [parameterDefault parameter] ]
   fill (current, Nothing) _ = (current, Nothing)
+  -- A default of an implementing type widens to a dynamic parameter, as an
+  -- argument written at the call does.
   fill (current, Just done) (index, local, value) = case lower current value of
-    (after, Just (core, kind))
+    (after, Just lowered)
       | kind == coreLocalType local || kind == CoreNeverType ->
           let at = locatedSpan value
               count = CoreExpression at intType (CoreReadLocal supplied)
@@ -54,4 +57,6 @@ lowerDefaultedBody lower lowerBody located signature state = case foldl' fill (s
               assigned = CoreBlock [CoreStatement at (CoreAssign local core)] Nothing
            in (after, Just (done <> [CoreStatement at (CoreIf missing assigned Nothing)]))
       | otherwise -> (refuse (locatedSpan value) ("a default of type " <> coreTypeName kind) after, Nothing)
+     where
+      (core, kind) = widenTo (contextTypes (lowerContext after)) (coreLocalType local) lowered
     (after, Nothing) -> (after, Nothing)

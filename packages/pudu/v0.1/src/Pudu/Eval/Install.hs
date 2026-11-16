@@ -54,6 +54,7 @@ import Pudu.Frontend.Syntax.Tree
   , ForeignParameter (..)
   , Function (..)
   , Impl (..)
+  , Parameter (..)
   , Trait (..)
   , TypeDeclarationValue (..)
   , TypeParam (..)
@@ -100,6 +101,13 @@ loadNamedModuleDeclarationsWith namespace evaluateWith folded declarations = do
     , member@(Located _ method) <- members
     , functionBody method /= Nothing
     ]
+  mapM_ publishTraitMember
+    [ (traitText, locatedValue (functionName method))
+    | (traitText, members) <- Map.toList traits
+    , Located _ method <- members
+    , Located _ first : _ <- [functionParameters method]
+    , locatedValue (parameterName first) == "self"
+    ]
   markModuleScope
   mapM_ (initializeDeclaration evaluateWith folded) declarations
 
@@ -110,6 +118,11 @@ loadNamedModuleDeclarationsWith namespace evaluateWith folded declarations = do
 publishDefault :: (Text, Located Function) -> Evaluator ()
 publishDefault (traitText, member@(Located _ method)) =
   bindMethod (defaultKey traitText (locatedValue (functionName method))) (FunctionValue (declaredClosure member))
+
+{-| `Named.label`: a member taking `self`, selecting the implementation for its
+    first argument's type when called, as `Named.label(bot)` does. -}
+publishTraitMember :: (Text, Text) -> Evaluator ()
+publishTraitMember (traitText, member) = bindMethod (traitText <> "." <> member) (TraitMethodValue traitText member Nothing)
 
 {-| `#` cannot begin a written name, so a published default never meets a
     method key. -}

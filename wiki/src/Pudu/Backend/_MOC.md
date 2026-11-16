@@ -6,6 +6,8 @@ aliases: [Backend Module Map]
 
 # Backend Module Map
 
+- [[Native Binary Kernels]] · [[Backend Kernel Programs]] — C11 encoding and decoding for `Std.Binary` (#935).
+
 - [[Backend Emit Entry]] · [[Backend Native Target]] · [[Backend Toolchain Library]] · [[Backend Toolchain Process]] · [[Backend Native Target Tests]] · [[iOS Simulator Run]] — embedded mobile builds (#878).
 
 - [[Backend Emit Export]] · [[Backend Export Tests]] — exported functions a host calls through C (#899).
@@ -140,3 +142,5 @@ aliases: [Backend Module Map]
 
 - [[Backend Frame Text Views]] — checked byte-method carrier emission.
 - [[Backend Toolchain App]] — simulator application bundle, Info.plist and ad-hoc signing (#916).
+
+- [[Backend Frame Slots]] · [[Backend Frame Slot References]] — physical slot reuse for generated C11.

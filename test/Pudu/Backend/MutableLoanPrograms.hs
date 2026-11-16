@@ -10,7 +10,37 @@ import Pudu.Comptime.Limits (callDepthLimit)
 
 mutableLoanSuccessPrograms :: [(String, Text, Text, Text)]
 mutableLoanSuccessPrograms =
-  [ ("locals, fields, elements and nested places are lent and written back", program
+  [ ("a dynamic value's method writes back each lent place after dispatch", program
+      [ "trait Counter { fn bump(self: &Self, count: &mut Int, by: Int) -> Str }"
+      , "type Ones = {}"
+      , "type Tens = { scale: Int }"
+      , "impl Counter for Ones {"
+      , "  fn bump(self: &Self, count: &mut Int, by: Int) -> Str {"
+      , "    *count = *count + by"
+      , "    \"ones\""
+      , "  }"
+      , "}"
+      , "impl Counter for Tens {"
+      , "  fn bump(self: &Self, count: &mut Int, by: Int) -> Str {"
+      , "    *count = *count + by * self.scale"
+      , "    \"tens\""
+      , "  }"
+      , "}"
+      , "type Tally = { mut total: Int, label: Str }"
+      , "fn main() -> Int {"
+      , "  let counters: Array[dynamic Counter] = [Ones{}, Tens{scale: 10}]"
+      , "  var count = 0"
+      , "  var tally = Tally{total: 0, label: \"t\"}"
+      , "  var slots = [0, 0]"
+      , "  var names = \"\""
+      , "  for counter in counters {"
+      , "    names = names + counter.bump(&mut count, 2) + counter.bump(&mut tally.total, 3) + counter.bump(&mut slots[1], 1)"
+      , "  }"
+      , "  print(names + \" \" + display(count) + \" \" + show(tally) + show(slots))"
+      , "  0"
+      , "}" ]
+    , "onesonesonestenstenstens 22 Tally{total: 33, label: \"t\"}[0, 11]\n", "")
+  , ("locals, fields, elements and nested places are lent and written back", program
       [ "type Point = { mut x: Int, y: Int }"
       , "fn bump(value: &mut Int) -> Int {"
       , "  *value = *value + 1"

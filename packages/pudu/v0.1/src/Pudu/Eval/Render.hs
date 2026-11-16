@@ -38,6 +38,7 @@ renderValue value = case value of
     | null payload -> name
     | otherwise -> name <> "(" <> Text.intercalate ", " (map renderValue payload) <> ")"
   FunctionValue closure -> "<fn " <> closureName closure <> ">"
+  TraitMethodValue _ member _ -> "<fn " <> member <> ">"
   TaskValue closure _ _ -> "<task " <> closureName closure <> ">"
   BuiltinValue PanicBuiltin -> "<builtin panic>"
   BuiltinValue CharFromCodeBuiltin -> "<builtin charFromCode>"
@@ -122,6 +123,7 @@ valueKind value = case value of
   VariantValue name _ -> name
   NamedSumValue _ name _ -> name
   FunctionValue _ -> "function"
+  TraitMethodValue{} -> "function"
   TaskValue _ _ _ -> "task"
   BuiltinValue _ -> "builtin"
   MapValue _ -> "map"

@@ -75,6 +75,11 @@ data CoreKernelName
       Fractional, Text, List, Object. -}
   | KernelJsonDecode
   | KernelJsonEncode
+  {-| The integers are the `Std.Binary.Node` variants' indexes: Whole, Real,
+      Flag, Text, Raw, Reals, Items, Absent, Present, Fields, Choice, Record,
+      Picked. -}
+  | KernelBinaryEncode
+  | KernelBinaryDecode
   {-| The integers are the Tag fields' positions (name, attributes,
       children), then the Node variants' indexes (Element, Content). -}
   | KernelXmlDecode

@@ -189,8 +189,15 @@ selectProvider facts at value
   , Just (VariantOwner owner label _) <- Map.lookup at (factOwners facts)
   , constructorReference value =
       RecordExpression (ModuleName ("::constructor::" :| [nominalKey owner, label])) []
+  | not (factOwnersOnly facts)
+  , Just (TraitMethodOwner owner) <- Map.lookup at (factOwners facts)
+  , Just member <- methodName value =
+      NameExpression ("::trait-method::" :| [nominalKey owner, member])
   | otherwise = selectMember value
  where
+  methodName (NameExpression path) = Just (NonEmpty.last path)
+  methodName (MemberExpression _ member) = Just (locatedValue member)
+  methodName _ = Nothing
   constructorReference NameExpression{} = True
   constructorReference MemberExpression{} = True
   constructorReference _ = False

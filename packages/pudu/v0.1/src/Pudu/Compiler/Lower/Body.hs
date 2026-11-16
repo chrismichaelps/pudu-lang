@@ -31,7 +31,7 @@ import Pudu.Compiler.Lower.For (lowerFor)
 import Pudu.Compiler.Lower.Intrinsic (annotatedPanic, lowerIntrinsicValue)
 import Pudu.Compiler.Lower.Foreign (lowerQualifiedForeignCall)
 import Pudu.Compiler.Lower.Primitive (lowerPrimitiveCall)
-import Pudu.Compiler.Lower.MethodValue (lowerMethodValue)
+import Pudu.Compiler.Lower.MethodValue (lowerMethodValue, lowerTraitMethodValue)
 import Pudu.Compiler.Lower.Stop (lowerPanic, lowerUntypedConvert)
 import Pudu.Compiler.Lower.Lambda (lowerFunctionValue, lowerLambda, lowerValueCall)
 import Pudu.Compiler.Lower.Tuple (lowerTuple, lowerTupleIndex, lowerTuplePattern)
@@ -331,6 +331,8 @@ lowerExpression state (Located spanValue expression) = case expression of
     Nothing | Just lowered <- lowerIntrinsicValue state spanValue name -> lowered
     Nothing -> maybe (halt spanValue ("the value '" <> name <> "'") state) id
       (lowerVariant lowerExpression state spanValue name [])
+  NameExpression ("::trait-method::" :| [provider, member]) ->
+    lowerTraitMethodValue lowerExpression state spanValue provider member
   NameExpression (first :| rest) ->
     case lowerConstant lowerExpression state spanValue (first : rest) of
       Just lowered -> lowered
@@ -346,6 +348,8 @@ lowerExpression state (Located spanValue expression) = case expression of
   CallExpression (Located _ (TypeApplication (Located _ (NameExpression ("convertInteger" :| []))) _)) arguments
     | Nothing <- lookupLocal state "convertInteger"
     , Nothing <- resolveFunction state ["convertInteger"] -> lowerConvertInteger lowerExpression state spanValue arguments
+  CallExpression callee@(Located _ (TypeApplication (Located _ (NameExpression ("::trait-method::" :| [_, _]))) _)) arguments ->
+    lowerValueCall lowerExpression state spanValue callee arguments
   CallExpression (Located application (TypeApplication inner written)) arguments ->
     lowerExpression (writtenTypeArguments state application inner written) (Located spanValue (CallExpression inner arguments))
   CallExpression (Located callee (NameExpression (name :| []))) arguments
@@ -391,6 +395,8 @@ lowerExpression state (Located spanValue expression) = case expression of
     | Just lowered <- lowerRangeMethod lowerExpression clean spanValue receiver member arguments -> lowered
     | Just lowered <- lowerBytesMethod lowerExpression clean spanValue receiver member arguments -> lowered
     | otherwise -> lowerTextMethod lowerExpression clean spanValue receiver member arguments
+  CallExpression callee'@(Located _ (NameExpression ("::trait-method::" :| [_, _]))) arguments ->
+    lowerValueCall lowerExpression state spanValue callee' arguments
   CallExpression callee'@(Located callee (NameExpression (first :| rest@(_ : _)))) arguments
     | Just key <- resolveFunction state (first : rest) -> lowerFunctionCall lowerExpression state spanValue key callee arguments
     | Just lowered <- lowerVariant lowerExpression state spanValue (last rest) arguments -> lowered
@@ -433,6 +439,8 @@ lowerExpression state (Located spanValue expression) = case expression of
   MacroCall{} -> unexpanded "macro call reached evaluation unexpanded"
   ScopeExpression body -> lowerScope lowerBlock state spanValue body
   LambdaExpression function -> lowerLambda lowerExpression lowerBlock state spanValue function
+  TypeApplication (Located _ (NameExpression ("::trait-method::" :| [provider, member]))) _ ->
+    lowerTraitMethodValue lowerExpression state spanValue provider member
   TypeApplication{} -> halt spanValue "type applications" state
   RecordExpression written@(ModuleName ("::constructor::" :| _)) [] ->
     maybe (halt spanValue "this constructor" state) id (lowerVariant lowerExpression state spanValue (writtenLabel written) [])

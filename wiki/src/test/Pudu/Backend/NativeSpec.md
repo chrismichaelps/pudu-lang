@@ -30,6 +30,11 @@ invoking the toolchain. The unchanged observable conformance assertions include
 the wide recursion regression. Resolved Grill Log: faults fail the test before
 compiling, with no recursive-emitter fallback or relaxed oracle comparison.
 
+## Entry defaults
+
+The exit-status corpus compares default order, earlier parameter scope,
+missing-argument and stopping-default diagnostics, and async task capture.
+
 ## Purpose and interface
 
 `backendNativeProperties` holds native execution to the tree interpreter, byte

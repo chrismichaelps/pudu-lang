@@ -11,6 +11,7 @@ import Pudu.Backend.Emit.Aggregate (aggregateSection, aggregateTypes, cellName, 
 import Pudu.Backend.Emit.Entry (EmittedUnit (..), EntryForm (..), entrySection)
 import Pudu.Backend.Emit.Export (ExportSection (..), exportSection)
 import Pudu.Backend.Emit.Frame.Body (emitFrameBodies)
+import Pudu.Backend.Emit.Frame.Slots (compactFrameSlots)
 import Pudu.Backend.Emit.Frame.Direct (argumentCount, directFunctions, enteredDirect, frameCells)
 import Pudu.Backend.Emit.Support (integerHelper, isBigInteger, isWideInteger)
 import Pudu.Backend.Emit.State (EmitState (..), emptyEmitState, renderByteData, renderSites, textOfInt)
@@ -37,7 +38,7 @@ emitFrameProgram :: Text -> [Source] -> FrameModule -> Either FrameFault Text
 emitFrameProgram version sources source = emittedSource <$> emitFrameUnit ExecutableEntry version sources source
 
 emitFrameUnit :: EntryForm -> Text -> [Source] -> FrameModule -> Either FrameFault EmittedUnit
-emitFrameUnit form version sources source = do
+emitFrameUnit form version sources logical = do
   let functions = frameModuleFunctions source
       indexed = zip [0 ..] functions
   (entryId, entry) <- case filter ((== frameModuleEntry source) . frameFunctionName . snd) indexed of
@@ -153,6 +154,7 @@ emitFrameUnit form version sources source = do
     , emittedExports = exportPrototypes exports
     }
   where
+    source = compactFrameSlots logical
     -- Keep the owned entry value alive until reporting finishes.
     shownBox kind =
       [ "  pudu_box *pudu_entry = pudu_run_frames(" <> textOfInt entryId' <> ").box;"

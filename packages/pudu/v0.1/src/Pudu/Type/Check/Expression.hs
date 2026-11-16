@@ -22,6 +22,7 @@ import Pudu.Frontend.Syntax.Tree
   , Parameter
   )
 import Data.List.NonEmpty (NonEmpty (..))
+import qualified Data.List.NonEmpty as NonEmpty
 import Pudu.Frontend.Syntax.Name (ModuleName (..))
 import Pudu.Source (Span, spanOrigin, typeArgumentsKey)
 import Pudu.Type.Env
@@ -80,6 +81,7 @@ import Pudu.Type.Check.Rule
   , memberType
   , nameType
   , selfName
+  , qualifiedTraitValueType
   , qualifiedMemberType
   , localValueHead
   , tryType
@@ -146,7 +148,11 @@ inferExpression around declared rigid spanValue expression = case expression of
   NameExpression names@(_ :| (_ : _)) -> do
     variant <- qualifiedVariantType declared spanValue expression
     found <- case variant of
-      Nothing -> nameType spanValue names
+      Nothing -> do
+        method <- case NonEmpty.nonEmpty (NonEmpty.init names) of
+          Just owner -> qualifiedTraitValueType declared spanValue (NameExpression owner) (NonEmpty.last names)
+          Nothing -> pure Nothing
+        maybe (nameType spanValue names) pure method
       Just value -> pure value
     checkExclusiveCapture spanValue names found
     pure found
@@ -187,7 +193,11 @@ inferExpression around declared rigid spanValue expression = case expression of
     variant <- maybe (qualifiedVariantType declared spanValue expression) (pure . Just) parameter
     qualified <- case variant of
       Just value -> pure (Just value)
-      Nothing -> qualifiedMemberType declared spanValue (locatedValue target) (locatedValue member)
+      Nothing -> do
+        let receiver = locatedValue target
+            label = locatedValue member
+        trait <- qualifiedTraitValueType declared spanValue receiver label
+        maybe (qualifiedMemberType declared spanValue receiver label) (pure . Just) trait
     case qualified of
       Just value -> pure value
       Nothing -> do

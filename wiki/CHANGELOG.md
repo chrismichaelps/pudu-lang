@@ -5,6 +5,27 @@ tags: [changelog]
 
 # Changelog
 
+## 2026-11-15 — Native frame reuse and entry defaults
+
+- Integrate physical slot reuse and shared owned-text stores from #821.
+  [[Native Frame Slot Reuse]] · [[Native Frame Slot Reuse Delivery]]
+- Evaluate entry defaults as ordinary local declarations before the body
+  or awaited task. Preserve the located missing-argument diagnostic after
+  earlier defaults. [[Compiler Lower Function Body]] · [[Backend Native Tests]]
+- Cover output Results returned from named functions and assigned to locals.
+  [[Backend Output Programs]]
+
+## 2026-11-15 — C11 emission continuation (#935)
+
+- Emit the `Std.Binary` writer and reader with the interpreter's wire format
+  and refusal behavior. [[Native Binary Kernels]] · [[Backend Kernel Programs]]
+- Emit `mutexClose` with immediate retirement or a wait for the current owner's
+  release. [[Native Host Concurrent]] · [[Backend Host Programs]]
+- Widen omitted dynamic defaults and supplied arguments through function
+  values. Update E6001 help.
+  [[Compiler Lower Default]] · [[Compiler Lower Lambda]] · [[Diagnostic Native]]
+  · [[C11 Emission Continuation Delivery]]
+
 ## 2026-11-14 — iOS materials (#928)
 
 - `Std.Mobile.View` gains `Surfaced`, a container whose background is a system material ([[Std Mobile Theme]] `Material`, encoded by MATERIAL, code 26 in [[Std Mobile Stream]]). The iOS host draws glass on iOS 26 or later when the SDK declares it, and a system blur otherwise ([[iOS Host Material]]). The ledger gains the `glass-material` capability ([[Backend Ledger]]), and [[Native Platform Adoption]] records it as the first gated capability ([[Native iOS Materials Delivery]]).

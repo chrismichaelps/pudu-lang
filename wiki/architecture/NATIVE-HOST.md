@@ -12,7 +12,7 @@ than they are written, are native (#846).
 | --- | --- |
 | Tasks | `async fn`, async lambdas, an async entry, `.await` |
 | Scopes | `async with scope { ... }`, children joined on its end, `return`, `break`, `continue` and a failure that leaves the function |
-| Shared state | cells, mutexes, channels and threads behind their tokens |
+| Shared state | cells, mutexes including waiting close, channels and threads behind their tokens |
 | Process | clocks, sleeping, arguments, environment, directories and separators, `exit`, `secureRandomBytes` |
 | Time | `formatTime` and `parseTime` over the percent specifiers of the fixed English locale |
 | Signals | watching for the terminate and interrupt requests and reading whether one came |

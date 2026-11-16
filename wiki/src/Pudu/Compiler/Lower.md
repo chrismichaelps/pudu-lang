@@ -41,11 +41,10 @@ CompileResult, never an errored program. Missing facts refuse at the module span
 
 ## Algorithm and invariants
 
-- The root module must exist and compile (the caller refuses errored programs
-  first); the entry must be a plain, non-async function with no parameters, no
-  type parameters, and a block body. The entry keeps milestone 1's rule: its
-  declared return annotation is not consulted, its result type comes from the
-  body or its explicit returns, and that result must be `Int`, `()`, or Never. A Never-only entry uses the unit C ABI.
+- The root module must compile and identify one entry. The compiler preserves
+  the checked return carrier for entry propagation, including parameterized
+  entries. [[Compiler Lower Function Body]] binds defaults before lowering
+  the argument-free ABI entry and handles synchronous and async reporting.
 - Only functions *reachable from the entry* are validated, lowered, and
   carried. The table of top-level functions is built in declaration order; the
   worklist starts at the entry, and every call discovered while lowering a

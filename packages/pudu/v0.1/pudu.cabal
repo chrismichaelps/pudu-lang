@@ -142,6 +142,7 @@ library
     Pudu.Backend.Runtime.Kernel.Audio
     Pudu.Backend.Runtime.Kernel.Blake2
     Pudu.Backend.Runtime.Kernel.Buffer
+    Pudu.Backend.Runtime.Kernel.Binary
     Pudu.Backend.Runtime.Kernel.Bytes
     Pudu.Backend.Runtime.Kernel.Checksum
     Pudu.Backend.Runtime.Kernel.Column
@@ -229,6 +230,8 @@ library
     Pudu.Backend.Emit.Frame.Value
     Pudu.Backend.Emit.Frame.Body
     Pudu.Backend.Emit.Frame.Direct
+    Pudu.Backend.Emit.Frame.References
+    Pudu.Backend.Emit.Frame.Slots
     Pudu.Compiler.Lower.Body
     Pudu.Compiler.Lower.FunctionBody
     Pudu.Compiler.Lower.Constant

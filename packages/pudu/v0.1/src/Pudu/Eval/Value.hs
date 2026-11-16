@@ -115,6 +115,7 @@ data Value
   | SumValue !Text !Text ![Value]
   | NamedSumValue !Text !Text ![(Text, Value)]
   | FunctionValue !Closure
+  | TraitMethodValue !Text !Text !(Maybe Value)
   | TaskValue !Closure ![(Text, Value)] !(Maybe Span)
   | BuiltinValue !Builtin
   | ArrayMethodValue !ArrayMethod !Value
@@ -216,7 +217,7 @@ coreVariantOwner name = case name of
   "Err" -> "Result"
   _ -> ""
 
-{-# COMPLETE IntValue, FloatValue, DecimalValue, StrValue, BytesValue, BucketsValue, RangeValue, CharValue, BoolValue, NullValue, UnitValue, TupleValue, ArrayValue, MapValue, SetValue, RecordValue, VariantValue, NamedSumValue, FunctionValue, TaskValue, BuiltinValue, ArrayMethodValue, StringMethodValue, CharMethodValue, MapMethodValue, SetMethodValue, RangeMethodValue, BytesMethodValue, BucketsMethodValue, TextMethodValue, ForeignValue, ForeignHandleValue, TypeWitnessValue #-}
+{-# COMPLETE IntValue, FloatValue, DecimalValue, StrValue, BytesValue, BucketsValue, RangeValue, CharValue, BoolValue, NullValue, UnitValue, TupleValue, ArrayValue, MapValue, SetValue, RecordValue, VariantValue, NamedSumValue, FunctionValue, TraitMethodValue, TaskValue, BuiltinValue, ArrayMethodValue, StringMethodValue, CharMethodValue, MapMethodValue, SetMethodValue, RangeMethodValue, BytesMethodValue, BucketsMethodValue, TextMethodValue, ForeignValue, ForeignHandleValue, TypeWitnessValue #-}
 
 {-| Aggregate equality follows numeric Decimal equality without changing the
     retained scale or the identity of closures and foreign handle claims. -}
@@ -235,6 +236,7 @@ instance Eq Value where
     (MapValue a, MapValue b) -> a == b
     (SetValue a, SetValue b) -> a == b
     (FunctionValue a, FunctionValue b) -> a == b
+    (TraitMethodValue ownerA a _, TraitMethodValue ownerB b _) -> ownerA == ownerB && a == b
     (BuiltinValue a, BuiltinValue b) -> a == b
     (TextMethodValue a, TextMethodValue b) -> a == b
     (ForeignValue a, ForeignValue b) -> a == b
@@ -508,3 +510,4 @@ shapeRank value = case value of
   TextMethodValue _ -> 29
   TypeWitnessValue _ _ -> 30
   NamedSumValue{} -> 31
+  TraitMethodValue{} -> 32

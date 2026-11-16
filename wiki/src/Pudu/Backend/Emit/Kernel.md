@@ -19,6 +19,12 @@ The table is total over CoreKernelName, so a new kernel cannot be emitted
 without a runtime function. Operand and result carriers are those the frame
 already holds; nothing is converted here.
 
+## Binary codec (#935)
+
+The binary reader takes type-specific tree operations and a map constructor
+for `Map[Str, Node]`. Variant indexes arrive from lowering. The writer reads
+the checked boxes through their existing C cell carriers.
+
 ## Referenced by
 
 [[Backend Frame Values]] · [[Native Builtin Kernels]]

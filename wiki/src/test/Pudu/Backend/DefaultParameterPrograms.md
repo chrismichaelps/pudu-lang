@@ -30,6 +30,11 @@ interpreter reads them in the caller's module.
 
 [[Backend Output Callable Programs]] · [[Backend Module Programs]] · [[Backend Native Tests]] · [[Backend Text Leak Tests]] · [[Pudu Test Cabal Manifest]]
 
+## Dynamic defaults (#935)
+
+An omitted argument widens an implementing record to the declared dynamic
+parameter. The program calls the function directly and through its value.
+
 ## Referenced by
 
 [[Native Default Parameters]] · [[src/Pudu/Backend/_MOC]]

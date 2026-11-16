@@ -8,6 +8,13 @@ aliases: [Pudu Cabal Manifest]
 
 # Pudu Cabal Manifest
 
+Register [[Backend Frame Slots]] and [[Backend Frame Slot References]].
+Resolved Grill Log: allocation and rewriting use the same exhaustive traversal.
+
+Register [[Native Binary Kernels]] with the existing runtime families.
+Resolved Grill Log: the generated codec uses the existing C11 runtime and
+requires no additional package or link dependency.
+
 Register Pudu.Core.Keyed and Pudu.Compiler.Lower.WordMap (#810), with existing
 dependencies. Resolved Grill Log: domain tags remain backend-independent and
 lowering stays compiler-owned; no new runtime linkage or package dependency.

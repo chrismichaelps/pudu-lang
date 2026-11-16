@@ -123,3 +123,13 @@ FrameFailCaller writes `pudu_fail_text_caller(frame->call_site, code, help,
 message)` and returns PUDU_INVALID, needing the fail_text_caller part.
 Resolved Grill Log: the code and help are C string literals; the caller site
 contributes only where the error points.
+
+## Shared text stores and moves (#821)
+
+Emit calls to the selected helpers from [[Native Text Runtime]] for both
+FrameStore to text and FrameMove of text. Preserve the existing inline
+typed sequences for other carriers.
+
+Resolved Grill Log: selecting the text helpers per operation shortens
+repeated display and stream output sequences. Evaluation order and the
+release point remain the same.

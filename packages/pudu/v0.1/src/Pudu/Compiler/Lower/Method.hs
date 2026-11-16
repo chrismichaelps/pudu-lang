@@ -17,13 +17,14 @@ import Pudu.Compiler.Lower.State
 import Pudu.Compiler.Lower.Generic (instantiationOf, matchType, specialize, unformed)
 import Pudu.Compiler.Lower.Dynamic (isDynamic, pathText, widen, writtenType)
 import Pudu.Compiler.Lower.Loan (Callee (..), Operand (..), lowerLoanedOperands)
+import Pudu.Compiler.Lower.Place (HeldPlace (..), holdPlace, readHeld, storeHeld)
 import Pudu.Compiler.Lower.Types (formedCoreTypeIn, lookupScheme, ownerKeyOf, selectedMember, sumVariants, typeBindings, typeFactAt, typeForSpan, nativeValueType)
 import Pudu.Core
 import Pudu.Eval.Operator.Access (arrayMethods, mapMethods, setMethods, stringMethods)
 import Pudu.Eval.Bytes (bytesMethods)
 import Pudu.Eval.HashMap (bucketsMethods)
 import Pudu.Frontend.Syntax
-  ( Declaration (..), Expression, Constraint (..), Function (..), Impl (..), Located (..), Module (..), Parameter (..), Trait (..), TypeParam (..), TypeSyntax (..) )
+  ( Declaration (..), Expression (..), Constraint (..), Function (..), Impl (..), Located (..), Module (..), Parameter (..), Trait (..), TypeParam (..), TypeSyntax (..) )
 import Pudu.Frontend.Syntax.Name (ModuleName (..))
 import Pudu.Source (Span)
 import Pudu.Type.Value (NominalId (..), Scheme (..), Type (..), nominalKey)
@@ -46,11 +47,12 @@ methodTables scopes modules = (Map.fromList instances, Map.fromList calls, Map.f
  where
   -- Every implementation of a trait, by the trait's name and the owner's key.
   heads =
-    [ ((lastSegment (implTrait impl), pathText target), Head owner arguments bounds)
+    [ ((trait, pathText target), Head owner arguments bounds)
     | (_, syntax, _) <- modules
     , Located _ (ImplDeclaration impl) <- moduleDeclarations syntax
     , NamedType target _ <- [locatedValue (implTarget impl)]
-    , NamedType _ written <- [locatedValue (implTrait impl)]
+    , NamedType provider written <- [locatedValue (implTrait impl)]
+    , trait <- [pathText provider, lastSegment (implTrait impl)]
     , let rigid = map (locatedValue . typeParamName . locatedValue) (implTypeParams impl)
     , Just owner <- [resolvedType rigid (implTarget impl)]
     , Just arguments <- [traverse (resolvedType rigid) written]
@@ -63,12 +65,13 @@ methodTables scopes modules = (Map.fromList instances, Map.fromList calls, Map.f
             , Just held <- [traverse (resolvedType rigid) (constraintBounds constraint)], not (null held) ]
     ]
   entries =
-    [ (key, Instance declaring function scheme bindings (inherited && Map.null selfBinding) derived, (ownerKey, name), (traitText, ownerKey, name))
+    [ (key, Instance declaring function scheme bindings (inherited && Map.null selfBinding) derived, (ownerKey, name), (provider, ownerKey, name))
     | (moduleName, syntax, methods) <- modules
     , (owner, name, scheme, at) <- methods
-    , Just (declaring, traitText, function, inherited) <- [declaredAnywhere at]
-    , let ownerKey = nominalKey owner
-          key = ownerKey <> "." <> traitText <> "." <> name
+    , Just (declaring, provider, function, inherited) <- [declaredAnywhere at]
+    , let traitText = displayName provider
+          ownerKey = nominalKey owner
+          key = ownerKey <> "." <> provider <> "." <> name
           implementing = scopeTypes <$> Map.lookup moduleName scopes
           self = implementing >>= \types -> formedCoreTypeIn types (NominalType owner [])
           selfBinding = maybe Map.empty (Map.singleton "Self") self
@@ -79,7 +82,8 @@ methodTables scopes modules = (Map.fromList instances, Map.fromList calls, Map.f
     ]
   instances = [(key, found) | (key, found, _, _) <- entries]
   calls = [(call, key) | (key, _, call, _) <- entries]
-  qualified = [(selection, key) | (key, _, _, selection) <- entries]
+  qualified = [((trait, owner, member), key) | (key, _, _, (provider, owner, member)) <- entries
+    , trait <- [provider, displayName provider]]
 
   -- The body and implementation have separate rigid namespaces. Keep the
   -- matched body bindings unformed until the implementation's parameters
@@ -124,17 +128,18 @@ methodTables scopes modules = (Map.fromList instances, Map.fromList calls, Map.f
   -- evaluator runs it in that module's scope. Spans name their source, so one
   -- declaration answers.
   declaredAnywhere at = case
-    [ (moduleName, traitText, function, inherited)
+    [ (moduleName, provider, function, inherited)
     | (moduleName, syntax, _) <- modules
-    , Just (traitText, function, inherited) <- [declaredAt (moduleDeclarations syntax) at] ] of
+    , Just (provider, function, inherited) <- [declaredAt moduleName (moduleDeclarations syntax) at] ] of
       found : _ -> Just found
       [] -> Nothing
 
-  declaredAt declarations at = case
-    [ (lastSegment (implTrait impl), function, False)
+  declaredAt moduleName declarations at = case
+    [ (pathText provider, function, False)
     | Located _ (ImplDeclaration impl) <- declarations
+    , NamedType provider _ <- [locatedValue (implTrait impl)]
     , function <- implFunctions impl, locatedSpan (functionName (locatedValue function)) == at ] <>
-    [ (locatedValue (traitName trait), member, True)
+    [ (moduleName <> "." <> locatedValue (traitName trait), member, True)
     | Located _ (TraitDeclaration trait) <- declarations
     , member <- traitMembers trait, locatedSpan (functionName (locatedValue member)) == at ] of
       found : _ -> Just found
@@ -193,22 +198,39 @@ lowerMethodCall lower state at callee receiver written arguments = do
 dynamicCall :: LowerExpression -> LowerState -> Span -> CoreType -> Located Expression -> Text -> [Located Expression] -> Lowered
 dynamicCall lower state at kind receiver member arguments = case lower state receiver of
   (after, Nothing) -> refused after
-  (after, Just (coreReceiver, _)) -> case lowerAll lower after arguments of
+  (after, Just (coreReceiver, _)) -> case operandsOf after [] arguments of
     (final, Nothing) -> refused final
-    (final, Just cores) ->
+    (final, Just operands) ->
       let pushed = final{lowerScopes = [] : lowerScopes final}
           (withReceiver, receiverLocal) = bindLocal pushed "" (coreExpressionType coreReceiver)
+          cores = [core | (_, core, _) <- operands]
           (bound, temporaries) = foldl' hold (withReceiver, []) cores
           declarations = CoreStatement (coreExpressionSpan coreReceiver) (CoreDeclare receiverLocal coreReceiver)
-            : [CoreStatement (coreExpressionSpan core) (CoreDeclare local core) | (local, core) <- zip temporaries cores]
+            : concat [prelude <> [CoreStatement (coreExpressionSpan core) (CoreDeclare local core)] | ((prelude, core, _), local) <- zip operands temporaries]
           scrutinee = CoreExpression (coreExpressionSpan coreReceiver) (coreLocalType receiverLocal) (CoreReadLocal receiverLocal)
           passed = [CoreExpression (coreExpressionSpan core) (coreLocalType local) (CoreReadLocal local) | (local, core) <- zip temporaries cores]
+          -- Parameter positions of the arguments lent through a place; the
+          -- receiver is parameter zero.
+          lent = [(position, found) | (position, (_, _, Just found)) <- zip [1 ..] operands]
           close next = next{lowerScopes = drop 1 (lowerScopes next)}
-       in case foldl' (arm passed) (bound, Just []) (maybe [] id (sumVariants (contextTypes (lowerContext final)) kind)) of
+       in case foldl' (arm (map fst lent) passed) (bound, Just []) (maybe [] id (sumVariants (contextTypes (lowerContext final)) kind)) of
             (done, Just arms@(first : _)) ->
-              let result = coreExpressionType (coreArmBody first)
-                  chosen = CoreExpression at result (CoreMatch scrutinee (reverse arms))
-               in (close done, Just (CoreExpression at result (CoreBlockValue (CoreBlock declarations (Just chosen))), result))
+              let answered = coreExpressionType (coreArmBody first)
+                  chosen = CoreExpression at answered (CoreMatch scrutinee (reverse arms))
+               in case (lent, answered) of
+                    ([], _) -> (close done, Just (CoreExpression at answered (CoreBlockValue (CoreBlock declarations (Just chosen))), answered))
+                    (_, CoreTupleType (result : _)) ->
+                      -- Every arm answers the result beside each final; the
+                      -- finals go back through their places in parameter order.
+                      let (withAnswer, answer) = bindLocal done "" answered
+                          reading' = CoreExpression at answered (CoreReadLocal answer)
+                          stores = [ storeHeld (contextTypes (lowerContext withAnswer)) (heldSpan found) found
+                                       (CoreExpression (heldSpan found) (heldType found) (CoreTupleIndex (index + 1) reading'))
+                                   | (index, (_, found)) <- zip [0 ..] lent ]
+                          value = CoreExpression at result (CoreTupleIndex 0 reading')
+                          whole = CoreBlock (declarations <> [CoreStatement at (CoreDeclare answer chosen)] <> stores) (Just value)
+                       in (close withAnswer, Just (CoreExpression at result (CoreBlockValue whole), result))
+                    _ -> halt at "a lent dynamic call without its finals" (close done)
             (done, Just []) -> halt at "a method of a dynamic value no type implements" (close done)
             (done, Nothing) -> refused (close done)
  where
@@ -218,16 +240,50 @@ dynamicCall lower state at kind receiver member arguments = case lower state rec
   hold (current, held) core =
     let (next, local) = bindLocal current "" (coreExpressionType core)
      in (next, held <> [local])
-  arm _ (current, Nothing) _ = (current, Nothing)
-  arm passed (current, Just arms) variant = case coreVariantFields variant of
+  -- Each argument as it runs: a written `&mut place` resolves its place once
+  -- and passes the value it holds; any other argument is an ordinary value.
+  operandsOf current done [] = (current, Just (reverse done))
+  operandsOf current done (argument : rest) = case locatedValue argument of
+    UnaryExpression "&mut" inner | Just held <- holdPlace lower current (locatedSpan inner) inner -> case held of
+      (after, Nothing) -> (after, Nothing)
+      (after, Just (prelude, found)) ->
+        operandsOf after ((prelude, readHeld (contextTypes (lowerContext after)) found, Just found) : done) rest
+    _ -> case lower current argument of
+      (after, Nothing) -> (after, Nothing)
+      (after, Just (core, _))
+        | expressionIsPrintValued core -> halt (locatedSpan argument) "a Result[(), Str] call argument" after
+        | otherwise -> operandsOf after (([], core, Nothing) : done) rest
+  arm _ _ (current, Nothing) _ = (current, Nothing)
+  arm lent passed (current, Just arms) variant = case coreVariantFields variant of
     [(_, payload)] | Just key <- Map.lookup (trait, coreVariantName variant, member) (contextTraitMethods (lowerContext current)) ->
       let (withHeld, held) = bindLocal current "" payload
           reading = CoreExpression at payload (CoreReadLocal held)
-       in case invoke withHeld at key Nothing unselected (reading : passed) of
-            (next, Just (call, _)) ->
-              (next, Just (CoreArm at (CoreVariantPattern (coreVariantName variant) [CoreBindPattern held]) Nothing call : arms))
+          pattern' = CoreVariantPattern (coreVariantName variant) [CoreBindPattern held]
+       in case (if null lent then invoke else invokeLent lent) withHeld at key Nothing unselected (reading : passed) of
+            (next, Just (call, _)) -> (next, Just (CoreArm at pattern' Nothing call : arms))
             (next, Nothing) -> (next, Nothing)
     _ -> halt at ("the method '" <> member <> "' of a dynamic value") current
+
+{-| A call to an instance whose `&mut` parameters are exactly the lent
+    positions, answering its result beside each final as a loaned body
+    does. The receiver of a dynamic call cannot be lent: storing it back
+    would rewrap the held value in its variant. -}
+invokeLent :: [Int] -> LowerState -> Span -> Text -> Maybe Type -> Selected -> [CoreExpression] -> Lowered
+invokeLent lent state at key written selected given = case instanceTarget state at key instantiated (coreExpressionType <$> take 1 given) selected of
+  (back, Nothing) -> refused back
+  (back, Just (target, CoreSignature{signatureParameters, signatureResult, signatureLoaned}))
+    | 0 `elem` signatureLoaned -> halt at "a dynamic receiver lent with &mut" back
+    | signatureLoaned /= lent -> halt at "a dynamic call lending other places than its method's &mut parameters" back
+    | length signatureParameters /= length given -> halt at "a method called with this many arguments" back
+    | otherwise ->
+        let queued = back{lowerContext = (lowerContext back){contextQueue = target : contextQueue (lowerContext back)}}
+            types = map (coreLocalType . coreParameterLocal) signatureParameters
+            cores = zipWith (widen (contextTypes (lowerContext back))) types given
+            answered = CoreTupleType (signatureResult : [kind | (index, kind) <- zip [0 ..] types, index `elem` signatureLoaned])
+         in (queued, Just (CoreExpression at answered (CoreCall target cores), answered))
+ where
+  instantiated = written <|> (Map.lookup key (contextInstances (lowerContext state)) >>= \found ->
+    instantiationOf (instanceScheme found) (map coreExpressionType given))
 
 {-| `Owner.member(arguments)`: by the type that implements it or the trait
     that declares it. The receiver is an ordinary first argument here, so the
@@ -261,20 +317,27 @@ unselected = Selected Nothing []
 
 lowerOwnerMethod :: LowerExpression -> LowerState -> Span -> Span -> Text -> Selected -> Text -> [Located Expression] -> Maybe Lowered
 lowerOwnerMethod lower state at callee owner selected written arguments = do
-  key <- byTrait `orElse` byType
+  key <- case valueProvider of
+    Just provider -> traitMember provider
+    Nothing -> byTrait `orElse` byType
   Just $ maybe (ordinary key) id $ loanedInstanceCall lower state at key (typeFactAt (contextTypes context) callee)
-    (maybe [] pure receiverType) selected (length arguments) [(index, Argument, argument) | (index, argument) <- zip [0 ..] arguments]
+    (maybe [] pure receiverType) selection (length arguments) [(index, Argument, argument) | (index, argument) <- zip [0 ..] arguments]
  where
   ordinary key = case lowerAll lower state arguments of
     (after, Nothing) -> refused after
-    (after, Just cores) -> invoke after at key (typeFactAt (contextTypes context) callee) selected cores
+    (after, Just cores) -> invoke after at key (typeFactAt (contextTypes context) callee) selection cores
   context = lowerContext state
   receiverType = case arguments of
     first : _ -> typeForSpan (contextTypes context) (locatedSpan first)
     [] -> Nothing
   receiverKey = receiverType >>= ownerKeyOf
   member = snd (selectedMember written)
-  byTrait = receiverKey >>= \found -> Map.lookup (last (Text.splitOn "." owner), found, member) (contextTraitMethods context)
+  valueProvider = Text.stripPrefix "::trait-method::." owner
+  selection = case valueProvider of
+    Just _ -> selected{selectedOwner = receiverType}
+    Nothing -> selected
+  traitMember provider = receiverKey >>= \found -> Map.lookup (provider, found, member) (contextTraitMethods context)
+  byTrait = traitMember owner `orElse` traitMember (displayName owner)
   -- Checking names a type by its canonical key; the source by its own name.
   names ownerKey = ownerKey == owner || displayName ownerKey == owner
   candidates = [key | ((ownerKey, name), key) <- Map.toList (contextMethods context), name == member, names ownerKey]

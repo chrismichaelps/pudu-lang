@@ -8,16 +8,17 @@ module Pudu.Compiler.Lower.FunctionBody (lowerEntryBodyWith, lowerFunctionBodyWi
 
 import Pudu.Compiler.Lower.Call (outputResult)
 import Pudu.Compiler.Lower.Control (printValued)
-import Pudu.Compiler.Lower.Dynamic (widenBlock)
+import Pudu.Compiler.Lower.Dynamic (widenBlock, widenTo)
 import Pudu.Compiler.Lower.Lambda (lowerTask)
 import Pudu.Compiler.Lower.Signature (functionLevelRefusal)
 import Pudu.Compiler.Lower.State
   ( CoreSignature (..), LowerContext (..), LowerState (..), bindLocal, halt, refuse, refused )
-import Pudu.Compiler.Lower.Types (nativeIntegerKind, treeType)
+import Pudu.Compiler.Lower.Types (formedCoreTypeIn, lookupScheme, nativeIntegerKind, nativeValueType, treeType)
 import Pudu.Core
 import Pudu.Frontend.Syntax
   ( Block (..), Expression, Function (..), FunctionBody (..), Located (..), Parameter (..) )
 import Pudu.IntegerLiteral (IntegerKind (PlatformSigned))
+import Pudu.Type.Value (Scheme (..), Type (FunctionTypeRequiring, RestrictedType))
 
 type LowerExpression = LowerState -> Located Expression -> (LowerState, Maybe (CoreExpression, CoreType))
 type LowerBlock = LowerState -> Located Block -> (LowerState, CoreBlock, CoreType)
@@ -27,23 +28,60 @@ type LowerBlock = LowerState -> Located Block -> (LowerState, CoreBlock, CoreTyp
     printed as `renderValue` writes it, the same split `pudu run` makes. -}
 lowerEntryBodyWith :: LowerExpression -> LowerBlock -> Located Function -> LowerState -> (LowerState, Maybe CoreFunction)
 lowerEntryBodyWith lowerExpression lowerBlock located state
-  -- `pudu run` calls the entry with nothing; the first parameter without a
-  -- default stops that call at the entry's name.
-  | Located _ first : _ <- functionParameters function, Nothing <- parameterDefault first =
-      let missing = "missing argument for parameter " <> locatedValue (parameterName first)
+  -- An argument-free invocation stops at the first required entry parameter.
+  | Located _ first : _ <- parameters, Nothing <- parameterDefault first =
+      missing state first
+  | Just (spanValue, construct) <- functionLevelRefusal function = halt spanValue construct state
+  | null parameters = entryBody state
+  | Just Scheme{schemeType} <- lookupScheme (contextTypes (lowerContext state)) (locatedValue (functionName function))
+  , FunctionTypeRequiring _ inputs _ _ <- unrestricted schemeType
+  , length inputs == length parameters =
+      defaults state (zip parameters inputs)
+  | otherwise = halt atName "an entry without a supported solved signature" state
+  where
+    function = locatedValue located
+    parameters = functionParameters function
+    atName = locatedSpan (functionName function)
+    unrestricted (RestrictedType _ inner) = inner
+    unrestricted kind = kind
+    missing current parameter =
+      let message = "missing argument for parameter " <> locatedValue (parameterName parameter)
           stop = CoreFailText "E7003" (Just "supply the argument or give the parameter a default")
-            (CoreExpression atName CoreTextType (CoreTextLiteral missing)) Nothing
-       in built state (CoreBlock [] (Just (CoreExpression atName CoreNeverType stop))) CoreUnitType
-  | not (null (functionParameters function)) =
-      halt atName "default parameter values on the entry function" state
-  | otherwise = case functionLevelRefusal function of
-      Just (spanValue, construct) -> halt spanValue construct state
+            (CoreExpression atName CoreTextType (CoreTextLiteral message)) Nothing
+       in built current (CoreBlock [] (Just (CoreExpression atName CoreNeverType stop))) CoreUnitType
+    -- The entry has no ABI arguments. Bind each default before the body or task
+    -- captures it, with only earlier parameters visible.
+    defaults current [] = entryBody current
+    defaults current ((Located _ parameter, input) : rest) = case parameterDefault parameter of
+      Nothing -> missing current parameter
+      Just written
+        | Just expected <- formedCoreTypeIn (contextTypes (lowerContext current)) input
+        , nativeValueType expected -> case lowerExpression current written of
+            (after, Nothing) -> refused after
+            (after, Just lowered) ->
+              let (value, kind) = widenTo (contextTypes (lowerContext after)) expected lowered
+                  at = locatedSpan written
+               in if kind == CoreNeverType
+                    then built after (CoreBlock [CoreStatement at (CoreEvaluate value)] Nothing) CoreUnitType
+                    else if kind == expected
+                      then let (bound, local) = bindLocal after (locatedValue (parameterName parameter)) expected
+                               (final, entry) = defaults bound rest
+                               prepend found = found
+                                 { coreFunctionBody = (coreFunctionBody found)
+                                     { coreBlockStatements = CoreStatement at (CoreDeclare local value)
+                                         : coreBlockStatements (coreFunctionBody found) }
+                                 }
+                            in (final, prepend <$> entry)
+                      else halt at "a default outside its entry parameter type" after
+        | otherwise -> halt (locatedSpan (parameterName parameter)) "an entry parameter without a native representation" current
+
+    entryBody current
       -- An async entry is awaited as soon as it is called, so its body runs
       -- where a plain entry's would. Awaiting unwraps a Result: the success
       -- is the entry's answer, and a failure is reported as the value it is.
-      Nothing | functionAsync function, Just block <- functionBlock function
-              , Just result@(CoreSumType "Result" [success, failure]) <- lowerDeclaredResult state
-              , (after, Just (task, _)) <- lowerTask lowerExpression lowerBlock state (locatedValue (functionName function)) (CoreFunctionType [] result) function ->
+      | functionAsync function, Just block <- functionBlock function
+      , Just result@(CoreSumType "Result" [success, failure]) <- lowerDeclaredResult current
+      , (after, Just (task, _)) <- lowerTask lowerExpression lowerBlock current (locatedValue (functionName function)) (CoreFunctionType [] result) function =
         let (withOutcome, outcome) = bindLocal after "" result
             (withValue, held) = bindLocal withOutcome "" success
             (withFailure, failed) = bindLocal withValue "" failure
@@ -67,9 +105,9 @@ lowerEntryBodyWith lowerExpression lowerBlock located state
               , CoreArm at (CoreVariantPattern "Err" [CoreBindPattern failed]) Nothing bad ])
             wrapped = CoreBlock [CoreStatement at (CoreDeclare outcome (expression result (CoreCallValue task [])))] (Just chosen)
          in built withFailure wrapped answer
-      Nothing -> case functionBlock function of
+      | otherwise = case functionBlock function of
         Just block ->
-          let (after, coreBlock, resultType) = lowerBlock state block
+          let (after, coreBlock, resultType) = lowerBlock current block
            in case maybe resultType id (lowerFunctionResult after) of
                 kind@(CoreIntegerType integerKind) | nativeIntegerKind integerKind -> built after coreBlock kind
                 kind@(CoreFloatType _) -> built after coreBlock kind
@@ -97,10 +135,8 @@ lowerEntryBodyWith lowerExpression lowerBlock located state
                     (maybe atName locatedSpan (blockResult (locatedValue block)))
                     ("a main function that returns " <> coreTypeName other)
                     after
-        _ -> refused state
-  where
-    function = locatedValue located
-    atName = locatedSpan (functionName function)
+        _ -> refused current
+
     built after coreBlock resultType =
       ( after
       , Just

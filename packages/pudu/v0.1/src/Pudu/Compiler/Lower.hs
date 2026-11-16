@@ -163,8 +163,10 @@ lowerRooted library entryName programModules@(rootModule : _)
       ]
 
     findEntry = case entryFunctions of
-      function : _ -> Right function
+      [function] -> Right function
       [] -> Left firstDeclarationRefusal
+      _ : duplicate : _ ->
+        Left (nativeRefusal (locatedSpan (functionName (locatedValue duplicate))) "an ambiguous entry function")
       where
         entryFunctions =
           [ Located (locatedSpan declaration) function
@@ -337,7 +339,7 @@ lowerRooted library entryName programModules@(rootModule : _)
 
     -- `?` in the entry returns at its declared type, before any `return` says so.
     declaredEntryResult entry = case lookupScheme (maybe emptyTypes scopeTypes (Map.lookup rootName scopes)) (locatedValue (functionName (locatedValue entry))) of
-      Just Scheme{schemeParams = [], schemeType = FunctionTypeRequiring _ [] _ result} ->
+      Just Scheme{schemeParams = [], schemeType = FunctionTypeRequiring _ _ _ result} ->
         formedCoreTypeIn (maybe emptyTypes scopeTypes (Map.lookup rootName scopes)) result
       _ -> Nothing
 

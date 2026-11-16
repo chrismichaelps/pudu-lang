@@ -269,6 +269,31 @@ statusPrograms =
       ])
   , ("an entry parameter without a default stops the run at the entry", "module Main\nfn main(value: Int) -> Int {\n  print(\"never\")\n  value\n}\n")
   , ("a unit entry with two parameters names the first", "module Main\ntype Point = { x: Int }\nfn main(point: Point, other: Str) {\n  print(other)\n}\n")
+  , ("entry defaults run in order with earlier parameters visible", Text.unlines
+      [ "module Main"
+      , "fn main(seed: Int = { print(\"seed\")"
+      , "  4 }, answer: Int = seed + 3) -> Int {"
+      , "  print(show(answer))"
+      , "  answer"
+      , "}"
+      ])
+  , ("a required entry parameter follows an evaluated default", Text.unlines
+      [ "module Main"
+      , "fn main(seed: Int = { print(\"first\")"
+      , "  4 }, answer: Int) -> Int { answer }"
+      ])
+  , ("a failing entry default stops before the next default and body", Text.unlines
+      [ "module Main"
+      , "fn main(seed: Int = panic(\"default\"), answer: Int = { print(\"never\")"
+      , "  3 }) -> Int { answer }"
+      ])
+  , ("async entry defaults are available to the awaited task", Text.unlines
+      [ "module Main"
+      , "async fn main(seed: Int = 4, answer: Int = seed + 3) -> Result[Int, Str] {"
+      , "  print(show(answer))"
+      , "  Ok(answer)"
+      , "}"
+      ])
   , ("zero exits zero", programWith ["  return 0"])
   , ("a small nonzero result exits as itself", programWith ["  return 3"])
   , ("a result above 255 clamps", programWith ["  return 300"])
