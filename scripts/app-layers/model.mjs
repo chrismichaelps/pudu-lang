@@ -2,7 +2,7 @@ import {buildGraph} from '../../bench/layers/model.mjs';
 
 const groups = [
   ['Std.Db.Driver', 'Std.App.Stage'],
-  ['Std.Db.Row', 'Std.Db.Schema', 'Std.Db.Repository', ...[
+  ['Std.Db.Row', 'Std.Db.Schema', 'Std.Db.Repository', 'Std.Db.Sqlite.Native', ...[
     'Audit', 'Cache', 'Config', 'Events', 'Flag', 'Health', 'IsrCache', 'Jwt', 'Locale',
     'Metrics', 'Page', 'Password', 'Secret', 'Session', 'Totp', 'Trace', 'Work'
   ].map(name => `Std.App.${name}`)],

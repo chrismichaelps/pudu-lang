@@ -10,43 +10,81 @@ import Std.Sync as Sync
 /// The binding the interpreter and native programs both carry: a fixed ABI
 /// over SQLite's C interface, loaded from the system's SQLite library.
 export foreign "pudu_sqlite" {
+  /// An open database connection the binding owns.
   type DatabaseHandle
+  /// A prepared statement the binding owns.
   type StatementHandle
+  /// An open blob, read and written in place.
   type BlobHandle
+  /// Open a database with SQLite open flags; the handle carries the message when opening failed.
   fn openWith symbol "open_with" (path: Str, flags: Int32, out database: owned DatabaseHandle by releaseDatabase) -> Int32
+  /// Let a database go; SQLite closes it once its statements are gone.
   fn releaseDatabase symbol "release" (database: DatabaseHandle) -> ()
+  /// Whether the connection is outside a transaction: nonzero when it is.
   fn autocommit(database: DatabaseHandle) -> Int32
+  /// The extended result code of the connection's last failure.
   fn extendedCode symbol "extended_code" (database: DatabaseHandle) -> Int32
+  /// Rows the connection's last statement changed.
   fn changes(database: DatabaseHandle) -> Int64
+  /// Rows changed since the connection opened.
   fn totalChanges symbol "total_changes" (database: DatabaseHandle) -> Int64
+  /// The rowid of the connection's most recent successful insert.
   fn lastRowid symbol "last_rowid" (database: DatabaseHandle) -> Int64
+  /// Ask a statement running on this connection to stop.
   fn interrupt(database: DatabaseHandle) -> ()
+  /// Wait this many milliseconds for another connection's lock.
   fn busyTimeout symbol "busy_timeout" (database: DatabaseHandle, millis: Int32) -> Int32
+  /// A database string: 1 the last error's message, 2 the library's version.
   fn databaseText symbol "database_text" (database: DatabaseHandle, mode: Int32, out text: Str) -> Int32
+  /// Copy the whole database: direction 0 to the file at path, 1 from it.
   fn backup(database: DatabaseHandle, path: Str, direction: Int32) -> Int32
+  /// Prepare one statement; trailing statements are refused.
   fn prepare symbol "prepare" (database: DatabaseHandle, sql: Str, out statement: owned StatementHandle by finalize) -> Int32
+  /// Release a prepared statement.
   fn finalize symbol "finalize" (statement: StatementHandle) -> ()
+  /// Reset a statement to run again, releasing the locks it held.
   fn reset(statement: StatementHandle) -> Int32
+  /// Set every parameter of a statement back to NULL.
   fn clearBindings symbol "clear_bindings" (statement: StatementHandle) -> Int32
+  /// Whether a statement only reads: nonzero when it does.
   fn readonly(statement: StatementHandle) -> Int32
+  /// How many parameters a statement takes.
   fn parameters symbol "parameters" (statement: StatementHandle) -> Int32
+  /// The position of a named parameter, written with its sigil; zero when there is none.
   fn parameterIndex symbol "parameter_index" (statement: StatementHandle, name: Str) -> Int32
+  /// Bind NULL to a parameter.
   fn bindNull symbol "bind_null" (statement: StatementHandle, index: Int32) -> Int32
+  /// Bind a 64-bit integer to a parameter.
   fn bindInteger symbol "bind_integer" (statement: StatementHandle, index: Int32, value: Int64) -> Int32
+  /// Bind a 64-bit float to a parameter.
   fn bindReal symbol "bind_real" (statement: StatementHandle, index: Int32, value: Float64) -> Int32
+  /// Bind text (text = 1) or a blob (text = 0) to a parameter; empty values stay empty.
   fn bindBytes symbol "bind_bytes" (statement: StatementHandle, index: Int32, value: Bytes, size: Int32, text: Int32) -> Int32
+  /// Run a statement to its next row: 100 a row, 101 done, anything else a failure.
   fn step symbol "step" (statement: StatementHandle) -> Int32
+  /// How many columns a statement answers.
   fn columns symbol "columns" (statement: StatementHandle) -> Int32
+  /// A column's storage class: 1 integer, 2 real, 3 text, 4 blob, 5 NULL.
   fn columnType symbol "column_type" (statement: StatementHandle, index: Int32) -> Int32
+  /// A column as a 64-bit integer.
   fn columnInteger symbol "column_integer" (statement: StatementHandle, index: Int32) -> Int64
+  /// A column as a 64-bit float.
   fn columnReal symbol "column_real" (statement: StatementHandle, index: Int32) -> Float64
+  /// A column's text (1), name (2) or declared type (3), when Pudu text holds it as it is; -5 otherwise.
   fn columnText symbol "column_text" (statement: StatementHandle, index: Int32, mode: Int32, out text: Str) -> Int32
+  /// A column's blob (0), text (1) or name (2) bytes as lowercase hex.
   fn columnHex symbol "column_hex" (statement: StatementHandle, index: Int32, mode: Int32, out text: Str) -> Int32
+  /// A statement's SQL with its bound values written in.
   fn expandedSql symbol "expanded_sql" (statement: StatementHandle, out text: Str) -> Int32
+  /// Open one blob of a table's column at a row, for reading or writing.
   fn blobOpen symbol "blob_open" (database: DatabaseHandle, table: Str, column: Str, row: Int64, writable: Int32, out blob: owned BlobHandle by releaseBlob) -> Int32
+  /// Close an open blob.
   fn releaseBlob symbol "blob_release" (blob: BlobHandle) -> ()
+  /// How many bytes an open blob holds.
   fn blobSize symbol "blob_size" (blob: BlobHandle) -> Int32
+  /// Read part of an open blob as lowercase hex.
   fn blobRead symbol "blob_read" (blob: BlobHandle, offset: Int32, count: Int32, out text: Str) -> Int32
+  /// Write bytes into an open blob at an offset; a blob does not grow.
   fn blobWrite symbol "blob_write" (blob: BlobHandle, value: Bytes, size: Int32, offset: Int32) -> Int32
 }
 
@@ -55,10 +93,13 @@ export foreign "pudu_sqlite" {
 /// it held, and is finalized when it is evicted or the session ends.
 export type Session = { database: DatabaseHandle, cache: Sync.Cell[Map[Str, StatementHandle]], capacity: Int }
 
-/// SQLite's open flags this binding admits.
+/// Open the database for reading only.
 export const OPEN_READONLY: Int32 = 1i32
+/// Open the database for reading and writing.
 export const OPEN_READWRITE: Int32 = 2i32
+/// Create the database file when it is missing.
 export const OPEN_CREATE: Int32 = 4i32
+/// Read the filename as a `file:` URI.
 export const OPEN_URI: Int32 = 64i32
 
 /// The storage classes `sqlite3_column_type` answers.
@@ -428,5 +469,6 @@ fn statusError(code: Int32, said: Str) -> Driver.Error {
   }
 }
 
+/// A driver error in one of the categories a caller acts on.
 export fn problem(category: Str, message: Str) -> Driver.Error { Driver.error("sqlite", category, message) }
 fn badText(_problem: ByteSeq.BytesError) -> Driver.Error { Driver.error("sqlite", "decode", "SQLite returned invalid text or byte encoding") }
