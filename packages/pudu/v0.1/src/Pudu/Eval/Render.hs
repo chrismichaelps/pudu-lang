@@ -68,6 +68,7 @@ renderValue value = case value of
   TextMethodValue _ -> "<method toText>"
   ForeignHandleValue name address _ ->
     "<" <> name <> " at 0x" <> Text.pack (Numeric.showHex address "")
+  ForeignCallbackValue _ -> "<" <> valueKind value <> ">"
   ForeignValue binding ->
     "<foreign " <> foreignBindingLibrary binding <> "." <> foreignBindingSymbol binding <> ">"
   TypeWitnessValue owner _ -> "<type " <> snd (Text.breakOnEnd "." owner) <> ">"
@@ -103,6 +104,10 @@ escape =
 valueKind :: Value -> Text
 valueKind value = case value of
   ForeignValue _ -> "foreign function"
+  ForeignCallbackValue callback -> case callback of
+    CallbackConstructor owner -> "callback registration " <> owner
+    CallbackToken owner _ -> owner
+    CallbackUnregister _ _ -> "callback unregister method"
   ForeignHandleValue name _ _ -> name
   TypeWitnessValue owner _ -> "type " <> snd (Text.breakOnEnd "." owner)
   IntValue kind _ -> integerKindName kind

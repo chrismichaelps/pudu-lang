@@ -29,7 +29,9 @@ import Pudu.Compiler.Lower.Dynamic (isDynamic, widen, widenBlock, widenTo)
 import Pudu.Compiler.Lower.Generic (writtenCoreType, writtenTypeArguments)
 import Pudu.Compiler.Lower.For (lowerFor)
 import Pudu.Compiler.Lower.Intrinsic (annotatedPanic, lowerIntrinsicValue)
-import Pudu.Compiler.Lower.Foreign (lowerQualifiedForeignCall)
+import Pudu.Compiler.Lower.Foreign
+  (lowerQualifiedForeignCall, lowerCallbackRegistration, lowerCallbackUnregister
+  , lowerCallbackValue, lowerCallbackUnregisterValue )
 import Pudu.Compiler.Lower.Primitive (lowerPrimitiveCall)
 import Pudu.Compiler.Lower.MethodValue (lowerMethodValue, lowerTraitMethodValue)
 import Pudu.Compiler.Lower.Stop (lowerPanic, lowerUntypedConvert)
@@ -332,6 +334,7 @@ lowerExpression state (Located spanValue expression) = case expression of
     Nothing | Just lowered <- lowerConstant lowerExpression state spanValue [name] -> lowered
     Nothing | Just key <- resolveFunction state [name], Just entry <- lookup key (contextTable (lowerContext state)) ->
       lowerFunctionValue state spanValue key entry
+    Nothing | Just lowered <- lowerCallbackValue state spanValue [name] -> lowered
     Nothing | Just lowered <- lowerIntrinsicValue state spanValue name -> lowered
     Nothing -> maybe (halt spanValue ("the value '" <> name <> "'") state) id
       (lowerVariant lowerExpression state spanValue name [])
@@ -345,6 +348,7 @@ lowerExpression state (Located spanValue expression) = case expression of
       Nothing
         | Just key <- resolveFunction state (first : rest), Just entry <- lookup key (contextTable (lowerContext state)) ->
             lowerFunctionValue state spanValue key entry
+      Nothing | Just lowered <- lowerCallbackValue state spanValue (first : rest) -> lowered
       Nothing -> maybe (halt spanValue "module-qualified names" state) id
         (lowerVariant lowerExpression state spanValue (last (first : rest)) [])
   UnaryExpression operator operand -> lowerUnary lowerExpression state spanValue operator operand
@@ -365,6 +369,7 @@ lowerExpression state (Located spanValue expression) = case expression of
     | Just _ <- lookupLocal state name -> lowerValueCall lowerExpression state spanValue (Located callee (NameExpression (name :| []))) arguments
     | Just _ <- lookupConstant state [name] -> lowerValueCall lowerExpression state spanValue (Located callee (NameExpression (name :| []))) arguments
     | Just key <- resolveFunction state [name] -> lowerFunctionCall lowerExpression state spanValue key callee arguments
+    | Just lowered <- lowerCallbackRegistration lowerExpression state spanValue [name] arguments -> lowered
     | Just lowered <- lowerVariant lowerExpression state spanValue name arguments -> lowered
     | name `elem` ["print", "printPart", "printError", "printErrorPart"] -> lowerPrint lowerExpression state spanValue name arguments
     | name == "display" -> lowerRendered lowerExpression state spanValue name CoreDisplay arguments
@@ -376,8 +381,11 @@ lowerExpression state (Located spanValue expression) = case expression of
     | name == "convertInteger" -> lowerUntypedConvert lowerExpression state spanValue arguments
     | Just lowered <- lowerPrimitiveCall lowerExpression state spanValue name arguments -> lowered
     | otherwise -> halt spanValue ("calls to '" <> name <> "'") state
+  CallExpression (Located _ (MemberExpression receiver (Located _ "unregister"))) arguments
+    | Just lowered <- lowerCallbackUnregister lowerExpression clean spanValue receiver arguments -> lowered
   CallExpression (Located callee (MemberExpression receiver@(Located _ (NameExpression (owner :| []))) named@(Located _ member))) arguments
     | isModuleQualifier state owner, Just key <- resolveFunction state [owner, member] -> lowerFunctionCall lowerExpression state spanValue key callee arguments
+    | Just lowered <- lowerCallbackRegistration lowerExpression state spanValue [owner, member] arguments -> lowered
     | Just lowered <- lowerQualifiedForeignCall lowerExpression state spanValue owner member arguments -> lowered
     | qualifier receiver, Just lowered <- lowerVariant lowerExpression clean spanValue member arguments -> lowered
     | qualifier receiver, Just lowered <- lowerQualifiedMethod lowerExpression state spanValue callee owner member arguments -> lowered
@@ -408,6 +416,7 @@ lowerExpression state (Located spanValue expression) = case expression of
     lowerValueCall lowerExpression state spanValue callee' arguments
   CallExpression callee'@(Located callee (NameExpression (first :| rest@(_ : _)))) arguments
     | Just key <- resolveFunction state (first : rest) -> lowerFunctionCall lowerExpression state spanValue key callee arguments
+    | Just lowered <- lowerCallbackRegistration lowerExpression state spanValue (first : rest) arguments -> lowered
     | Just lowered <- lowerVariant lowerExpression state spanValue (last rest) arguments -> lowered
     | Just _ <- lookupConstant state (first : rest) -> lowerValueCall lowerExpression state spanValue callee' arguments
     | otherwise -> halt spanValue ("calls to '" <> Text.intercalate "." (first : rest) <> "'") state
@@ -420,7 +429,11 @@ lowerExpression state (Located spanValue expression) = case expression of
     | Located _ (NameExpression (owner :| [])) <- receiver, isModuleQualifier state owner
     , Just key <- resolveFunction state [owner, member], Just entry <- lookup key (contextTable (lowerContext state)) ->
         lowerFunctionValue state spanValue key entry
+    | Located _ (NameExpression (owner :| [])) <- receiver
+    , Just lowered <- lowerCallbackValue state spanValue [owner, member] -> lowered
     | qualifier receiver, Just lowered <- lowerVariant lowerExpression state spanValue member [] -> lowered
+    | member == "unregister"
+    , Just lowered <- lowerCallbackUnregisterValue lowerExpression state spanValue receiver -> lowered
     | Just lowered <- lowerMethodValue lowerExpression state spanValue receiver member -> lowered
     | otherwise -> lowerField lowerExpression state spanValue receiver member
   IndexExpression receiver key -> maybe (lowerTupleIndex lowerExpression state spanValue receiver key) id

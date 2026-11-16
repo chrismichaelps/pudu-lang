@@ -161,6 +161,13 @@ Resolved Grill Log: [[Nested Foreign Record Delivery]] preserves the tree
 for libffi layout and keeps value carriers in declaration-order leaves.
 The 32-member limit applies at each record node.
 
+## Resolved Grill Log for #876
+
+The scoped dispatch entry supplies the native call's failure-routing scope.
+The ordinary entry supplies an empty scope. Private callback and context
+pointer values use pointer ABI storage. Callback record decoding reuses
+this module's kind codes, leaf order and record reconstruction.
+
 ## Referenced by
 
 [[src/Pudu/_MOC]] · [[ADR-0018 Calling a Library Written Elsewhere]] · [[Foreign Crossing]]

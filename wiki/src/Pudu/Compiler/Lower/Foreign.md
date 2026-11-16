@@ -40,6 +40,13 @@ A parameter or result may also be a record of between one and thirty-two fields,
 Opaque handles cross at top level. A result carries its checked borrowed,
 owned or counted transfer policy. Output slots remain refused (#854).
 
+## Resolved Grill Log for #876 — Native callback lowering
+
+Translate checked callback parameters and fallbacks into Core. Direct and
+first-class registrations share one operation. A retained unregister
+member captures the evaluated token. The ABI position map excludes output
+slots and context pointers when matching source operands.
+
 ## Referenced by
 
 [[Compiler Lower Primitive]] · [[Native Foreign Call Sites]]

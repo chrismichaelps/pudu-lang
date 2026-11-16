@@ -65,6 +65,11 @@ Resolved Grill Log: keep the generated ABI parameterless and use ordinary
 Core declarations for entry defaults. The body and async task retain their
 existing reporting paths.
 
+## Resolved Grill Log for #876 — Native callback lowering
+
+A callback token can return from an ordinary lowered function as its nominal
+native scalar.
+
 ## Referenced by
 
 [[Compiler Lower Body]] · [[src/Pudu/Compiler/_MOC]] · [[Pudu Cabal Manifest]]

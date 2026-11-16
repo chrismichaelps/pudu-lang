@@ -132,6 +132,11 @@ methods are filed under "Map" and "Set".
 
 A nonempty tuple forms if its members are represented. The empty tuple uses the unit carrier.
 
+## Resolved Grill Log for #876 — Native callback lowering
+
+Form the owner-qualified callback token as a dedicated Core scalar. It is
+neither a foreign pointer claim nor an integer that can cross by itself.
+
 ## Referenced by
 
 [[Compiler Lower]] · [[Compiler Lower Signature]] · [[Native Emission Coverage]]

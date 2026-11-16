@@ -226,6 +226,12 @@ masked; registered cleanup actions retain their warning journal.
 - **Q:** Leave a failed result's accepted resources until evaluation teardown? **A:** No; discard
   that transaction's exact generations when conversion aborts, before returning its primary error.
 
+## Resolved Grill Log for #876 — Callback dispatch
+
+A nested callback failure may discard unpublished owned or counted
+output claims. Discard by generation so an old claim cannot dispose a
+newer reference to the same address.
+
 ## Referenced by
 
 [[src/Pudu/Foreign/_MOC]] · [[Evaluator]] · [[ADR-0018 Calling a Library Written Elsewhere]]

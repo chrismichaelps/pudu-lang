@@ -33,7 +33,7 @@ import Pudu.Backend.BigIntPrograms (bigIntSuccessPrograms, bigIntRefusalPrograms
 import Pudu.Backend.DecimalPrograms (decimalSuccessPrograms, decimalRefusalPrograms)
 import Pudu.Backend.WordMapPrograms (wordMapSuccessPrograms, wordMapRefusalPrograms)
 import Pudu.Backend.StorePrograms (storeSuccessPrograms, storeModulePrograms, storeRefusalPrograms)
-import Pudu.Backend.ForeignPrograms (foreignSuccessPrograms, foreignRefusalPrograms)
+import Pudu.Backend.ForeignPrograms (callbackCaller, foreignCallbackPrograms, foreignSuccessPrograms, foreignRefusalPrograms)
 import Pudu.Backend.KernelPrograms (kernelSuccessPrograms, kernelLibraryPrograms, kernelRefusalPrograms)
 import Pudu.Backend.AbstractionPrograms (abstractionSuccessPrograms, abstractionRefusalPrograms)
 import Pudu.Backend.HostPrograms (hostLibraryPrograms, hostSuccessPrograms, hostRefusalPrograms)
@@ -140,6 +140,8 @@ backendNativeProperties =
   , ("native pure kernels retain interpreter refusals", conjoin <$> mapM (uncurry conformance) kernelRefusalPrograms)
   , ("native foreign calls match the interpreter's bridge", conjoin <$> mapM (uncurry conformance) foreignSuccessPrograms)
   , ("native foreign calls stop as the interpreter's bridge does", conjoin <$> mapM (uncurry conformance) foreignRefusalPrograms)
+  , ("native foreign callbacks match the interpreter's trampolines", conjoin <$> mapM
+      (uncurry (conformanceLinking callbackCaller)) foreignCallbackPrograms)
   , ("native host services, tasks and scopes match the interpreter's own answers", conjoin <$> mapM
       (\(label, source, expected) -> conformanceExpecting (Just (expected, "", 0)) label source) hostSuccessPrograms)
   , ("native endpoints, secured connections, compression, child programs and time match the interpreter's own answers", conjoin <$> mapM
@@ -535,7 +537,16 @@ conformanceWith :: [(FilePath, Text)] -> Maybe (Text, Text, Int) -> String -> Te
 conformanceWith = conformanceWithInput Nothing
 
 conformanceWithInput :: Maybe ByteString.ByteString -> [(FilePath, Text)] -> Maybe (Text, Text, Int) -> String -> Text -> IO Property
-conformanceWithInput input modules expected label programText = withSystemTempDirectory "pudu-native" $ \root -> do
+conformanceWithInput = conformanceLinkingWith Text.empty
+
+{-| A program whose foreign block names its own symbols: the native build
+    carries the C in `linked`, which the test executable already defines for
+    the interpreter. -}
+conformanceLinking :: Text -> String -> Text -> IO Property
+conformanceLinking linked = conformanceLinkingWith linked Nothing [] Nothing
+
+conformanceLinkingWith :: Text -> Maybe ByteString.ByteString -> [(FilePath, Text)] -> Maybe (Text, Text, Int) -> String -> Text -> IO Property
+conformanceLinkingWith linked input modules expected label programText = withSystemTempDirectory "pudu-native" $ \root -> do
   let path = root </> "Main.pudu"
   mapM_ (\(file, text) -> TextIO.writeFile (root </> file) text) modules
   TextIO.writeFile path programText
@@ -554,7 +565,7 @@ conformanceWithInput input modules expected label programText = withSystemTempDi
       case interpreted of
         Left problem -> pure (counterexample (label <> ": interpreter: " <> problem) False)
         Right (interpOut, interpErr, interpStatus) -> do
-          native <- buildAndRun inputPath root program
+          native <- buildAndRunLinking linked inputPath root program
           case native of
             Left problem -> pure (counterexample (label <> ": native: " <> problem) False)
             Right (nativeOut, nativeErr, nativeStatus, warnings) -> pure $ conjoin $
@@ -667,8 +678,8 @@ captureHandle stream directory action = do
       removeFile path
       pure (value, captured)
 
-buildAndRun :: Maybe FilePath -> FilePath -> ProgramResult -> IO (Either String (Text, Text, Int, Text))
-buildAndRun input root program = case programNativeModules program of
+buildAndRunLinking :: Text -> Maybe FilePath -> FilePath -> ProgramResult -> IO (Either String (Text, Text, Int, Text))
+buildAndRunLinking linked input root program = case programNativeModules program of
   Nothing -> pure (Left "the program did not compile")
   Just modules -> case lowerProgram "main" modules of
     LowerRefused refusals ->
@@ -679,7 +690,7 @@ buildAndRun input root program = case programNativeModules program of
         let executable = root </> "Main.bin"
             request =
               ToolchainRequest
-                { toolchainSource = emitted
+                { toolchainSource = emitted <> linked
                 , toolchainOutput = executable
                 }
         compiled <- compileNative request

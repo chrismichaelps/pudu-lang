@@ -29,6 +29,7 @@ module Pudu.Eval.Value
   , Frame (..)
   , Closure (..)
   , Value (.., StrValue, MapValue, VariantValue)
+  , CallbackValue (..)
   , intPairMap
   , IntPairEntry (..)
   , ropeOfValue
@@ -62,6 +63,7 @@ import Pudu.DecimalLiteral (Decimal, decimalCompare)
 import Data.Int (Int64)
 import Pudu.FloatLiteral (FloatWidth)
 import Pudu.Eval.Foreign.Binding (ForeignBinding (..), ForeignClaim (..), ForeignRelease (..), ForeignSlot (..))
+import Pudu.Foreign.CallbackStore (CallbackKey)
 import Pudu.Frontend.Syntax.Tree (Function)
 import Pudu.Source (Span)
 import Pudu.Runtime.SeriesMap (SeriesMap)
@@ -139,6 +141,7 @@ data Value
       anything else is that its type was asserted rather than proved, which is
       why reaching it needed the foreign capability at the call site. -}
   | ForeignValue !ForeignBinding
+  | ForeignCallbackValue !CallbackValue
   {-| Something a foreign library handed back, under the name its block gave it.
 
       Opaque: the address is carried and never read through, and the name keeps
@@ -153,6 +156,14 @@ data Value
       the selected owner's method without any value to dispatch on. -}
   | TypeWitnessValue !Text ![Value]
   deriving stock (Show)
+
+{-| A registration function, a token, or its retained unregistration member.
+    The owner is the callback type's canonical runtime spelling. -}
+data CallbackValue
+  = CallbackConstructor !Text
+  | CallbackToken !Text !CallbackKey
+  | CallbackUnregister !Text !(Maybe CallbackKey)
+  deriving stock (Eq, Show)
 
 {-| Both map representations expose the same persistent ordered contents. -}
 pattern MapValue :: Map OrdValue Value -> Value
@@ -217,7 +228,7 @@ coreVariantOwner name = case name of
   "Err" -> "Result"
   _ -> ""
 
-{-# COMPLETE IntValue, FloatValue, DecimalValue, StrValue, BytesValue, BucketsValue, RangeValue, CharValue, BoolValue, NullValue, UnitValue, TupleValue, ArrayValue, MapValue, SetValue, RecordValue, VariantValue, NamedSumValue, FunctionValue, TraitMethodValue, TaskValue, BuiltinValue, ArrayMethodValue, StringMethodValue, CharMethodValue, MapMethodValue, SetMethodValue, RangeMethodValue, BytesMethodValue, BucketsMethodValue, TextMethodValue, ForeignValue, ForeignHandleValue, TypeWitnessValue #-}
+{-# COMPLETE IntValue, FloatValue, DecimalValue, StrValue, BytesValue, BucketsValue, RangeValue, CharValue, BoolValue, NullValue, UnitValue, TupleValue, ArrayValue, MapValue, SetValue, RecordValue, VariantValue, NamedSumValue, FunctionValue, TraitMethodValue, TaskValue, BuiltinValue, ArrayMethodValue, StringMethodValue, CharMethodValue, MapMethodValue, SetMethodValue, RangeMethodValue, BytesMethodValue, BucketsMethodValue, TextMethodValue, ForeignValue, ForeignCallbackValue, ForeignHandleValue, TypeWitnessValue #-}
 
 {-| Aggregate equality follows numeric Decimal equality without changing the
     retained scale or the identity of closures and foreign handle claims. -}
@@ -240,6 +251,7 @@ instance Eq Value where
     (BuiltinValue a, BuiltinValue b) -> a == b
     (TextMethodValue a, TextMethodValue b) -> a == b
     (ForeignValue a, ForeignValue b) -> a == b
+    (ForeignCallbackValue a, ForeignCallbackValue b) -> a == b
     (NullValue, NullValue) -> True
     (UnitValue, UnitValue) -> True
     (RecordValue tagA a, RecordValue tagB b) -> tagA == tagB && a == b
@@ -511,3 +523,4 @@ shapeRank value = case value of
   TypeWitnessValue _ _ -> 30
   NamedSumValue{} -> 31
   TraitMethodValue{} -> 32
+  ForeignCallbackValue{} -> 33

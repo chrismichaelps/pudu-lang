@@ -47,11 +47,26 @@ data Declaration
 data Foreign = Foreign
   { foreignVisibility :: !Visibility, foreignLibrary :: !(Located Text)
   , foreignVersion :: !(Maybe (Located Text)), foreignTypes :: ![Located Text]
+  , foreignCallbacks :: ![Located ForeignCallback]
   , foreignFunctions :: ![Located ForeignFunction] }
+foreignCallbackNames :: Foreign -> [Located Text]
+data ForeignCallback = ForeignCallback
+  { foreignCallbackName :: !(Located Text)
+  , foreignCallbackParameters :: ![Located ForeignCallbackParameter]
+  , foreignCallbackResult :: !(Located TypeSyntax)
+  , foreignCallbackFallback :: !(Maybe (Located Literal)) }
+data ForeignCallbackParameter
+  = ForeignCallbackContext
+  | ForeignCallbackArgument !(Located Text) !Bool !(Located TypeSyntax)
 data ForeignFunction = ForeignFunction
   { foreignName :: !(Located Text), foreignSymbol :: !(Maybe (Located Text))
-  , foreignParameters :: ![Located Parameter], foreignResult :: !(Located TypeSyntax)
+  , foreignParameters :: ![Located ForeignParameter], foreignResult :: !(Located TypeSyntax)
+  , foreignResultBorrowed :: !Bool, foreignResultCounted :: !Bool
   , foreignReleasedBy :: !(Maybe (Located Text)) }
+data ForeignParameter = ForeignParameter
+  { foreignParameterName :: !(Located Text), foreignParameterContext :: !Bool
+  , foreignParameterType :: !(Maybe (Located TypeSyntax)), foreignParameterOut :: !Bool
+  , foreignParameterOwned :: !Bool, foreignParameterReleasedBy :: !(Maybe (Located Text)) }
 data Function = Function
   { functionVisibility :: !Visibility, functionAsync :: !Bool
   , functionUnsafe :: !(Maybe [Located Capability]), functionComptime :: !Bool
@@ -251,6 +266,15 @@ DEPTH 0.56 (MEDIUM). Breadth is inherent to the grammar; co-location is delibera
 ## Variants
 
 - Later syntax families become separate files when they do not participate in this recursion knot.
+
+## Resolved Grill Log for #876
+
+- **Q:** What survives parsing? **A:** The foreign block retains located
+  callbacks. A callback's context is an explicit member of its native
+  parameter sequence. A foreign function parameter can mark a named
+  context reference in sequence without manufacturing a type span.
+- **Q:** What determines whether the fallback fits? **A:** The checker
+  uses the unresolved located literal and the formed callback result type.
 
 ## Referenced by
 

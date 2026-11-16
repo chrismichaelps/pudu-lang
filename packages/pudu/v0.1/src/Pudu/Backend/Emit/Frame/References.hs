@@ -48,6 +48,7 @@ valueSlots slot value = (\shape -> value{frameValueShape = shape}) <$> case fram
   FrameBytesMethod method receiver arguments -> FrameBytesMethod method <$> slot receiver <*> traverse slot arguments
   FrameDecimalMethod method arguments -> FrameDecimalMethod method <$> traverse slot arguments
   FrameKernel kernel immediates arguments -> FrameKernel kernel immediates <$> traverse slot arguments
+  FrameCallback operation operand -> FrameCallback operation <$> slot operand
   FrameForeign foreignCall arguments -> FrameForeign foreignCall <$> traverse slot arguments
   FrameIntegerConvert kind source -> FrameIntegerConvert kind <$> slot source
   FrameAggregate members -> FrameAggregate <$> traverse slot members

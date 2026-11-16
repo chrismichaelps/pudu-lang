@@ -739,3 +739,30 @@ Resolved Grill Log: include `cbits/pudu_ios_layout.h` in the source distribution
 ## Mobile TLS verification (#935)
 
 Register [[Native Mobile TLS Trust]] with existing dependencies.
+
+## Checked foreign callbacks (#876)
+
+Register [[Foreign Callback Signature]] alongside [[Foreign Crossing]].
+Resolved Grill Log: declaration validation uses the existing source, text,
+containers, and literal decoders.
+
+## Foreign callback store (#876)
+
+Register [[Foreign Callback Store]]. Resolved Grill Log: reuse the existing
+STM and containers packages for per-run ownership.
+
+## Interpreter callback values (#876)
+
+Register [[Eval Foreign Callback]] against the existing evaluator and callback
+store. Resolved Grill Log: no added package dependency.
+
+## libffi callback adapter (#876)
+
+Compile [[Pudu FFI Callback Bridge]], ship [[Pudu Private FFI ABI]], and
+register [[Foreign Callback Native Adapter]].
+Resolved Grill Log: use the same installed libffi library as outbound calls.
+
+## C11 callbacks (#876)
+
+Register [[Native Host Callbacks]]. Resolved Grill Log: reuse the native
+runtime's pthread gate, frame ABI and diagnostic boundary.

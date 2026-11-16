@@ -1,6 +1,6 @@
 {-| @Pudu.Backend.Runtime.Frame — heap-owned frames, owned cells and iterative
     calls, and the frames direct functions keep on the C stack. -}
-module Pudu.Backend.Runtime.Frame (frameTypes, frameEngine) where
+module Pudu.Backend.Runtime.Frame (frameTypes, frameEngine, frameCallbackEngine) where
 
 import Data.Text (Text)
 import qualified Data.Text as Text
@@ -14,7 +14,7 @@ frameTypes wide big decimal text boxes threads =
   [ "typedef struct pudu_box pudu_box;" | boxes ] <>
   [ "typedef struct pudu_items pudu_items;" | boxes ] <>
   [ "typedef struct pudu_tree_node pudu_tree_node;" | boxes ] <>
-  [ "typedef union { pudu_int integer; int scalar; uint32_t character; uint64_t floating; "
+  [ "typedef union { pudu_int integer; int scalar; uint32_t character; uint64_t floating; uintptr_t callback; "
       <> (if wide then "pudu_wide_int wide; " else "")
       <> (if big then "pudu_big *big; " else "")
       <> (if decimal then "pudu_dec *decimal; " else "")
@@ -192,6 +192,26 @@ frameEngine owned threads stacked =
   , "  return pudu_run_active();"
   , "}"
   ] else [])
+
+{-| A callback's protected invocation has already suspended the parent frame.
+    Pass its closure environment ahead of the borrowed arguments when needed. -}
+frameCallbackEngine :: [Text]
+frameCallbackEngine =
+  [ "PUDU_OPTIONAL static pudu_cell pudu_run_callback(pudu_box *closure, const pudu_cell *given,"
+  , "                                                     size_t count, const pudu_site *site) {"
+  , "  size_t function = (size_t)closure->fields[0].scalar;"
+  , "  pudu_cell arguments[33];"
+  , "  if (pudu_active_frame != NULL || count > 32 || function >= sizeof pudu_functions / sizeof pudu_functions[0])"
+  , "    pudu_invalid_frame();"
+  , "  size_t first = pudu_functions[function].environment ? 1 : 0;"
+  , "  if (first) arguments[0].box = closure;"
+  , "  for (size_t i = 0; i < count; ++i) arguments[first + i] = given[i];"
+  , "  pudu_active_frame = pudu_new_frame(function, arguments, first + count);"
+  , "  pudu_active_frame->call_site = site;"
+  , "  pudu_frame_depth = pudu_functions[function].counted ? 1 : 0;"
+  , "  return pudu_run_active();"
+  , "}"
+  ]
 
 {-| The entry and exit of a frame on the C stack, emitted only for a program
     with direct functions. -}

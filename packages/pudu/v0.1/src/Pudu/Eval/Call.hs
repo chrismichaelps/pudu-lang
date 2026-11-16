@@ -21,6 +21,7 @@ module Pudu.Eval.Call
   ) where
 
 import Data.Map.Strict (Map)
+import qualified Data.Set as Set
 import Data.Text (Text)
 import qualified Data.Text as Text
 import Pudu.Eval.Builtin
@@ -68,6 +69,7 @@ import Pudu.Eval.Call.Path
 import Pudu.Eval.HashMap (callBucketsMethod, callBucketsOf)
 import Pudu.Eval.Concurrent (threadRegister)
 import Pudu.Eval.Foreign (callForeign)
+import Pudu.Eval.Foreign.Callback (callCallbackValue)
 import Pudu.Eval.Compile.Cache (compiledBody)
 import Pudu.Eval.Env
   ( tally
@@ -78,6 +80,7 @@ import Pudu.Eval.Env
   , closeScope
   , openScope
   , releaseChild
+  , Env (envCallbackAncestry)
   , Eval (..)
   , Evaluator (..)
   , abortAt
@@ -227,7 +230,8 @@ dispatchCall needs spanValue lent target values =
     FunctionValue closure -> callClosureLending needs closure values lent (Just spanValue)
     TraitMethodValue provider member witness ->
       callTraitMethod needs spanValue lent provider member witness values
-    ForeignValue binding -> callForeign spanValue binding values
+    ForeignValue binding -> callForeign applyCallback spanValue binding values
+    ForeignCallbackValue callback -> callCallbackValue spanValue callback values
     SumValue owner name [] -> pure (SumValue owner name values)
     BuiltinValue PanicBuiltin -> callPanic spanValue values
     BuiltinValue CharFromCodeBuiltin -> callCharFromCode spanValue values
@@ -257,6 +261,8 @@ dispatchCall needs spanValue lent target values =
     BucketsMethodValue method receiver -> callBucketsMethod spanValue method receiver values
     TextMethodValue receiver -> callDisplay spanValue (receiver : values)
     _ -> abortAt (Just spanValue) "E7001" ("cannot call a " <> valueKind target) Nothing
+ where
+  applyCallback at handler arguments = dispatchCall needs at noneLent handler arguments
 
 {-| The first argument keeps its original loan position while selecting the
     canonical trait provider. The checked witness preserves erased arguments
@@ -424,6 +430,7 @@ settled callSpan outcome = case outcome of
 
 applyFunction :: CallNeeds -> Span -> Value -> [Value] -> Evaluator Value
 applyFunction needs spanValue function arguments = case function of
+  ForeignCallbackValue callback -> callCallbackValue spanValue callback arguments
   FunctionValue closure -> callClosure needs closure arguments (Just spanValue)
   TraitMethodValue provider member witness ->
     callTraitMethod needs spanValue noneLent provider member witness arguments
@@ -539,7 +546,7 @@ callSpawnThread apply spanValue arguments = case arguments of
           slot <- newEmptyMVar
           let Evaluator body = apply spanValue action []
           threadId <- forkIO $ do
-            outcome <- try (body env) :: IO (Either SomeException (Eval Value))
+            outcome <- try (body env{envCallbackAncestry = Set.empty}) :: IO (Either SomeException (Eval Value))
             putMVar slot (reported outcome)
           token <- threadRegister concurrent threadId slot
           pure (Done (VariantValue "Ok" [intOf (fromIntegral token)]) env)

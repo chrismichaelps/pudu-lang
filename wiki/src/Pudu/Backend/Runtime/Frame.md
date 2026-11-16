@@ -68,6 +68,11 @@ own exit.
 `pudu_stack_enter` also clears the destination, the destination flag and the call site, so the
 header needs no zeroing.
 
+## Resolved Grill Log for #876 — Native callback lowering
+
+Keep callback tokens in a dedicated pointer-width cell member. Moving or
+capturing the key leaves registration ownership with the run.
+
 ## Referenced by
 
 [[src/_MOC]] · [[Native Frame Pressure Repair]]

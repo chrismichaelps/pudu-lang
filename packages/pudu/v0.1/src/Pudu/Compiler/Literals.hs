@@ -297,6 +297,8 @@ instance Walk ArrayRest
 instance Walk FieldPattern
 instance Walk Foreign
 instance Walk ForeignFunction
+instance Walk ForeignCallback
+instance Walk ForeignCallbackParameter
 instance Walk ForeignParameter
 instance Walk FieldInit
 instance Walk MatchArm

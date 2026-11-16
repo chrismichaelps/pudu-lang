@@ -194,6 +194,12 @@ holding another module's aliases, refused.
 
 Each module scope records its foreign declarations' targets, the symbol defaulting to the function's name.
 
+## Resolved Grill Log for #876 — Native callback lowering
+
+Collect callback declarations with their owning module, then attach each
+checked function/context pair to its foreign target. Callback token
+identities are formed separately from owned foreign handles.
+
 ## Referenced by
 
 [[src/Pudu/Compiler/_MOC]] · [[src/Pudu/_MOC]] · [[Core IR]] · [[Pudu Core]] ·

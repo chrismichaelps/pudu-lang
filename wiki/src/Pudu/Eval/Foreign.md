@@ -174,6 +174,13 @@ no representation here for one that may be absent.
   that nothing here releases the value; how long the library keeps it is the declaration's assertion,
   like the pointer validity and ABI layout beside it.
 
+## Resolved Grill Log for #876 — Interpreter callback values
+
+Dispatch uses the checked slots to supply code and context. It holds callback
+and ordinary handle leases across the native call. A nested callback failure
+is reported from the foreign call site after ownership settles; newly
+returned claims that cannot be exposed are released.
+
 ## Referenced by
 
 [[src/Pudu/Eval/_MOC]] · [[ADR-0018 Calling a Library Written Elsewhere]]

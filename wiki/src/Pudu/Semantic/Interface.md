@@ -89,6 +89,12 @@ DEPTH 0.68 (MEDIUM). It hides export projection, namespace-aware selection, decl
 
 - Serialized package interfaces may populate the same `ExportIndex` without parsed source.
 
+## Resolved Grill Log for #876
+
+An exported foreign block publishes callback token types in the type
+namespace and their registration functions in the value namespace. Both
+names point to the same declaration and inherit the block's visibility.
+
 ## Referenced by
 
 [[src/Pudu/Semantic/_MOC]] · [[Compiler Program]] · [[Name Resolution]] · [[Resolve Context]] · [[Type Interface]]

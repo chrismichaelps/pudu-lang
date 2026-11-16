@@ -201,6 +201,12 @@ call path, so ordering, defaults and loans match every other value call.
 
 Lower a single-member tuple through the ordinary tuple constructor. Resolve a dotted name as a constant, function value, or variant using the checked module scope. Apply recorded type arguments before lowering a named value.
 
+## Resolved Grill Log for #876 — Native callback lowering
+
+Recognize direct, imported and retained callback registration and unregister
+operations in the ordinary expression traversal. Evaluate the receiver or
+handler once, before dispatch.
+
 ## Referenced by
 
 [[src/Pudu/Compiler/_MOC]] · [[src/Pudu/_MOC]] · [[Compiler Lower]] ·

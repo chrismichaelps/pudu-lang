@@ -5,6 +5,19 @@ tags: [changelog]
 
 # Changelog
 
+## 2026-11-16 — Foreign callback syntax (#876)
+
+- Retain callback signatures and native context positions in the parsed tree.
+  Check callback argument types, fallbacks and context pairing during
+  declaration checking. Bind owner-qualified callback token types and their
+  synchronous registration signatures. Add the per-run interpreter store for
+  invocation leases and teardown. Wire interpreter registration and
+  unregister values to the store. Add the libffi callback adapter with
+  generation-based retirement and a fallback for late invocations. Wire
+  interpreter dispatch and nested failure settlement. Lower native callback
+  operations, signatures and paired ABI positions into the frame IR.
+  [[Foreign Callback Delivery]] · [[Foreign Callback Signature]]
+
 ## 2026-11-16 — Android native TLS libraries (#935)
 
 - Build Android arm64 and x86_64 native libraries through the NDK and

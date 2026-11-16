@@ -17,6 +17,8 @@ import qualified Data.Map.Strict as Map
 import qualified Data.Set as Set
 import Data.Text (Text)
 import qualified Data.Text as Text
+import Pudu.Foreign.Callback
+  ( CallbackFault (..), CallbackPair (callbackArgumentIndex), CallbackSignature, callbackPairs, checkCallbackDeclarations )
 import Pudu.Foreign.Crossing
   ( Crossing (..)
   , RecordLayouts
@@ -31,15 +33,17 @@ import Pudu.Frontend.Syntax.Name (ModuleName (..))
 import Pudu.Frontend.Syntax.Tree
   ( Capability (ForeignCapability)
   , Foreign (..)
+  , ForeignCallback (..)
+  , ForeignCallbackParameter (..)
   , ForeignFunction (..)
   , ForeignParameter (..)
   , TypeSyntax (..)
   )
 import Pudu.Source (Span)
 import Pudu.Type.Env
-  ( Checker, DeclaredTypes, bindName, recordUnsafeFunction, report )
+  ( Checker, DeclaredTypes, bindName, recordDeclaredMethod, recordUnsafeFunction, report )
 import Pudu.Type.Formation (formType)
-import Pudu.Type.Value (Type (..), capabilitiesOf, monotype)
+import Pudu.Type.Value (Type (..), capabilitiesOf, monotype, nominalKey, stringType)
 
 {-| The opaque things a block declares, which its own signatures may name. -}
 foreignHandles :: Foreign -> Set.Set Text
@@ -54,13 +58,54 @@ foreignHandles value = Set.fromList (map locatedValue (foreignTypes value))
     arrives at the declaration — which is the definition, as far as this program
     is concerned. -}
 declareForeign :: DeclaredTypes -> RecordLayouts -> Foreign -> Checker ()
-declareForeign declared layouts value =
-  mapM_ (declareOne declared layouts (foreignHandles value)) (foreignFunctions value)
+declareForeign declared layouts value = do
+  let handles = foreignHandles value
+      callbacks = either (const Map.empty) id (checkCallbackDeclarations handles layouts (foreignCallbacks value))
+  mapM_ (declareCallback declared layouts handles callbacks . locatedValue) (foreignCallbacks value)
+  mapM_ (declareOne declared layouts handles callbacks) (foreignFunctions value)
+
+declareCallback
+  :: DeclaredTypes -> RecordLayouts -> Set.Set Text
+  -> Map.Map Text (Located CallbackSignature) -> ForeignCallback -> Checker ()
+declareCallback declared layouts handles callbacks callback = do
+  let name = locatedValue (foreignCallbackName callback)
+  scheme <- if Map.member name callbacks
+    then do
+      let crossing = formedCrossing declared layouts handles
+      inputs <- traverse crossing
+        [ written
+        | Located _ (ForeignCallbackArgument _ _ written) <- foreignCallbackParameters callback
+        ]
+      answer <- crossing (foreignCallbackResult callback)
+      let nameType = Located (locatedSpan (foreignCallbackName callback))
+            (NamedType (ModuleName (name :| [])) [])
+      token <- formType declared [] nameType
+      case token of
+        NominalType owner [] -> do
+          let member = Located (locatedSpan nameType) "unregister"
+              result = NominalType "Result" [UnitTypeValue, stringType]
+              method = monotype (FunctionTypeValue False [token] result)
+          bindName (nominalKey owner <> ".unregister") method
+          recordDeclaredMethod owner member method
+        _ -> pure ()
+      pure (FunctionTypeValue False [FunctionTypeValue False inputs answer] token)
+    else pure ErrorType
+  bindName name (monotype scheme)
 
 declareOne
-  :: DeclaredTypes -> RecordLayouts -> Set.Set Text -> Located ForeignFunction -> Checker ()
-declareOne declared layouts handles (Located _ function) = do
-  inputs <- mapM (parameterCrossing declared layouts handles) (ordinaryOf function)
+  :: DeclaredTypes -> RecordLayouts -> Set.Set Text
+  -> Map.Map Text (Located CallbackSignature) -> Located ForeignFunction -> Checker ()
+declareOne declared layouts handles callbacks located@(Located _ function) = do
+  let callbackArguments = either (const Set.empty) (Set.fromList . map callbackArgumentIndex)
+        (callbackPairs callbacks located)
+      input index written
+        | Set.member index callbackArguments = formType declared [] written
+        | otherwise = formedCrossing declared layouts handles written
+  inputs <- sequence
+    [ maybe (pure ErrorType) (input index) (foreignParameterType parameter)
+    | (index, Located _ parameter) <- zip [0 ..] (foreignParameters function)
+    , not (foreignParameterOut parameter || foreignParameterContext parameter)
+    ]
   native <- formedCrossing declared layouts handles (foreignResult function)
   written <- mapM (slotAnswer declared layouts handles) (slotsOf function)
   let result = answeredType native written
@@ -80,18 +125,6 @@ declareOne declared layouts handles (Located _ function) = do
   recordUnsafeFunction name [ForeignCapability]
   {-| A foreign parameter never has a default: there is no caller on this side
       to apply one, so every argument the declaration names must be supplied. -}
-
-{-| The parameters a caller supplies, and the ones the library writes.
-
-    A slot is a native argument and not a Pudu one, so the two lists are what
-    every phase after this asks for: the caller's arguments come from the first,
-    the answer's shape from the second. -}
-ordinaryOf :: ForeignFunction -> [Located ForeignParameter]
-ordinaryOf function =
-  [ parameter
-  | parameter <- foreignParameters function
-  , not (foreignParameterOut (locatedValue parameter))
-  ]
 
 slotsOf :: ForeignFunction -> [Located ForeignParameter]
 slotsOf function =
@@ -133,13 +166,6 @@ slotAnswer declared layouts handles (Located _ parameter) =
             _ -> formed
         )
 
-parameterCrossing
-  :: DeclaredTypes -> RecordLayouts -> Set.Set Text -> Located ForeignParameter -> Checker Type
-parameterCrossing declared layouts handles (Located _ parameter) =
-  case foreignParameterType parameter of
-    Just written -> formedCrossing declared layouts handles written
-    Nothing -> pure ErrorType
-
 formedCrossing
   :: DeclaredTypes -> RecordLayouts -> Set.Set Text -> Located TypeSyntax -> Checker Type
 formedCrossing declared layouts handles written =
@@ -160,8 +186,18 @@ formedCrossing declared layouts handles written =
     match what the library actually exports — is the one nothing can catch,
     which is why the other four are worth catching. -}
 checkForeign :: RecordLayouts -> Foreign -> Checker ()
-checkForeign layouts value = mapM_ (checkOne layouts handles declared) (foreignFunctions value)
+checkForeign layouts value =
+  case checkCallbackDeclarations handles layouts (foreignCallbacks value) of
+    Left failure -> reportCallbackFault failure
+    Right callbacks -> mapM_ (checkFunction callbacks) (foreignFunctions value)
  where
+  checkFunction callbacks function = case callbackPairs callbacks function of
+    Left failure -> reportCallbackFault failure >> pure False
+    Right pairs -> do
+      let callbackArguments = Set.fromList (map callbackArgumentIndex pairs)
+      checkOne layouts handles declared callbackArguments function
+      pure True
+  reportCallbackFault (CallbackFault at message) = report "E3063" at message Nothing
   handles = foreignHandles value
   declared =
     Map.fromList
@@ -173,9 +209,10 @@ checkOne
   :: RecordLayouts
   -> Set.Set Text
   -> Map.Map Text ForeignFunction
+  -> Set.Set Int
   -> Located ForeignFunction
   -> Checker ()
-checkOne layouts handles declared (Located functionSpan function) = do
+checkOne layouts handles declared callbackArguments (Located functionSpan function) = do
   when (length (foreignParameters function) > foreignArgumentLimit) $
     report "E3069" functionSpan
       "a foreign function may take at most 32 arguments"
@@ -186,7 +223,11 @@ checkOne layouts handles declared (Located functionSpan function) = do
         "a foreign symbol cannot be empty"
         (Just "write the exact function name exported by the library")
     _ -> pure ()
-  mapM_ (checkParameter layouts handles declared) (foreignParameters function)
+  mapM_ (checkParameter layouts handles declared)
+    [ parameter
+    | (index, parameter) <- zip [0 ..] (foreignParameters function)
+    , not (foreignParameterContext (locatedValue parameter) || Set.member index callbackArguments)
+    ]
   {-| A run of bytes a library allocated is a resource: it has a length that
       arrives beside it and a release that frees it, and a declaration cannot
       yet say either. Refused where it is written rather than answered with

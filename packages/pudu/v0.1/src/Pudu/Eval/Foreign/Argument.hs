@@ -8,10 +8,16 @@ module Pudu.Eval.Foreign.Argument
   , count
   ) where
 
+import qualified Data.Map.Strict as Map
+import qualified Data.Set as Set
 import Data.Text (Text)
+import Foreign.Ptr (nullPtr)
 import qualified Data.Text as Text
 import Pudu.Eval.Env (Evaluator, abortAt)
-import Pudu.Eval.Value (ForeignBinding (..), ForeignSlot (..), Value (..))
+import Pudu.Eval.Foreign.Binding (ForeignCallbackSlot (..))
+import Pudu.Eval.Value (CallbackValue (..), ForeignBinding (..), ForeignSlot (..), Value (..))
+import Pudu.Foreign.Callback (CallbackPair (..))
+import Pudu.Foreign.CallbackStore (CallbackKey)
 import Pudu.Foreign.Call (CrossedValue (..))
 import Pudu.Foreign.Crossing (Crossing (..), crossingName, fitsCrossing)
 import Pudu.Source (Span)
@@ -22,7 +28,8 @@ import Pudu.Source (Span)
     wrapped. Silent wraparound at this boundary is the oldest way for a program
     calling a library to keep running with a value it never computed. -}
 crossArguments
-  :: Span -> ForeignBinding -> [Value] -> Evaluator [(Crossing, Bool, CrossedValue)]
+  :: Span -> ForeignBinding -> [Value]
+  -> Evaluator ([(Crossing, Bool, CrossedValue)], [(ForeignCallbackSlot, CallbackKey)])
 crossArguments spanValue binding values
   | length wanted /= length values =
       abortAt (Just spanValue) "E7016"
@@ -33,21 +40,29 @@ crossArguments spanValue binding values
         (Just "the declaration in the foreign block says how many it takes")
   | otherwise = weave positions values
  where
-  positions = zip (foreignBindingArguments binding) (slotsOf binding)
-  wanted = [crossing | (crossing, Nothing) <- positions]
-  {-| The caller's values go to the positions the caller supplies. A slot takes
-      no value from this side, so it passes through carrying nothing and the
-      bridge is told to write it instead. -}
-  weave [] _ = pure []
-  weave ((crossing, Just _) : rest) remaining = do
-    crossed <- weave rest remaining
-    pure ((crossing, True, CrossedInteger 0) : crossed)
-  weave ((crossing, Nothing) : rest) remaining = case remaining of
-    [] -> pure []
-    value : more -> do
-      (_, one) <- crossOne spanValue binding crossing value
-      crossed <- weave rest more
-      pure ((crossing, False, one) : crossed)
+  positions = zip [0 ..] (zip (foreignBindingArguments binding) (slotsOf binding))
+  callbacks = foreignBindingCallbacks binding
+  byArgument = Map.fromList [(callbackArgumentIndex (foreignCallbackPair slot), slot) | slot <- callbacks]
+  contexts = Set.fromList [callbackContextIndex (foreignCallbackPair slot) | slot <- callbacks]
+  wanted = [crossing | (index, (crossing, Nothing)) <- positions, Set.notMember index contexts]
+  pointer = (NothingCrossing, False, CrossedPointer nullPtr)
+  weave [] _ = pure ([], [])
+  weave ((index, (crossing, slot)) : rest) remaining
+    | Set.member index contexts = prepend pointer <$> weave rest remaining
+    | Just _ <- slot = prepend (crossing, True, CrossedInteger 0) <$> weave rest remaining
+    | otherwise = case remaining of
+        [] -> abortAt (Just spanValue) "E7016" "foreign arguments do not match their native slots" Nothing
+        value : more -> case Map.lookup index byArgument of
+          Just callback -> case value of
+            ForeignCallbackValue (CallbackToken owner key)
+              | owner == foreignCallbackOwner callback -> do
+                  (crossed, tokens) <- weave rest more
+                  pure (pointer : crossed, (callback, key) : tokens)
+            _ -> abortAt (Just spanValue) "E7017" "expected a token of the declared callback type" Nothing
+          Nothing -> do
+            (_, one) <- crossOne spanValue binding crossing value
+            prepend (crossing, False, one) <$> weave rest more
+  prepend one (crossed, tokens) = (one : crossed, tokens)
 
 {-| Which native positions the library writes, in order. -}
 slotsOf :: ForeignBinding -> [Maybe ForeignSlot]

@@ -18,6 +18,11 @@ metadata and reference order.
   constructor explicitly so a new shape with a slot becomes a compiler
   warning until the traversal accounts for it.
 
+## Resolved Grill Log for #876 — Native callback lowering
+
+Rewrite the saved callback handler or token slot during physical slot
+compaction. The ABI signature contains no frame IDs.
+
 ## Referenced by
 
 [[Backend Frame Slots]] · [[Core Frame IR]]

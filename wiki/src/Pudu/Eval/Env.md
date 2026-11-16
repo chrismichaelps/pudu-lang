@@ -37,7 +37,7 @@ The exported signatures are the module header's export list; [[Evaluator]] is th
 - The environment carries a frame stack and, separately, the program's implementations. A name is found lexically first and among implementations second. They are separate because their scoping rules are opposite: a function belongs to the module that declared it, and an implementation belongs to the whole program.
 
 - The environment also carries one runtime resource set allocated for the evaluation. Foreign
-  resources, desktop, persistent audio, file, socket, thread, channel, mutex, and cell tokens are resolved only inside that set. Captured closures and
+  handles, callback registrations, desktop, persistent audio, file, socket, thread, channel, mutex, and cell tokens are resolved only inside that set. Captured closures and
   child host threads retain the same set; a different program evaluated in the same host process
   receives a different set.
 
@@ -121,6 +121,18 @@ DEPTH 0.45 (MEDIUM). It keeps one concern out of [[Evaluator]], which would othe
   either a map or a compiled body's slot frame. `enterSlots` turns a call's parameter frame into its
   body's slot frame and points `envSlots` at the array for the call, restoring the caller's on every
   exit; `readSlot` and `writeSlot` are that body's code reading and writing by position.
+## Resolved Grill Log for #876
+
+[[Eval Runtime]] allocates the [[Foreign Callback Store]]. Evaluation
+environments reached through calls or workers retain the same per-run store.
+
+## Resolved Grill Log for #876 — Interpreter callback values
+
+The registration store is shared by the run. Invocation ancestry belongs
+to the active callback frame and follows that frame when it calls unregister.
+A new worker begins with an empty ancestry. The run's native context cache
+belongs to the same lifetime as the logical callback store.
+
 ## Referenced by
 
 [[src/Pudu/Eval/_MOC]] · [[Evaluator]] · [[Diagnostic Evaluation]]

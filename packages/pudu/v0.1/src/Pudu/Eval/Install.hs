@@ -21,6 +21,10 @@ import qualified Data.Text as Text
 import Pudu.Eval.ImplementationHead (HeadSelection (..), ImplementationHead (..))
 import Pudu.FloatKernel (floatKernelName, floatKernels)
 import Pudu.LaneKernel (laneKernelName, laneKernels)
+import Pudu.Foreign.Callback
+  ( CallbackPair (callbackTypeName), CallbackParameter (..)
+  , CallbackSignature (..), callbackPairs, checkCallbackDeclarations )
+import Pudu.Eval.Foreign.Binding (ForeignCallbackSlot (..))
 import Pudu.Foreign.Crossing (Crossing (NothingCrossing, RecordCrossing), RecordLayouts, crossingFor, recordLayouts)
 import Pudu.Eval.Builtin
   ( effectBuiltins
@@ -39,6 +43,7 @@ import Pudu.Eval.Value
   ( Builtin (..)
   , builtinName
   , Closure (..)
+  , CallbackValue (..)
   , ForeignBinding (..)
   , ForeignRelease (..)
   , ForeignSlot (..)
@@ -50,6 +55,7 @@ import Pudu.Frontend.Syntax.Tree
   ( Declaration (..)
   , Expression (..)
   , Foreign (..)
+  , foreignCallbackNames
   , ForeignFunction (..)
   , ForeignParameter (..)
   , Function (..)
@@ -267,8 +273,18 @@ installDeclaration namespace traits layouts declared (Located _ declaration) = c
   TypeDeclaration value ->
     installVariants namespace (locatedValue (typeName value)) (typeDefinition value)
   ImplDeclaration value -> installMethods traits declared value
-  ForeignDeclaration value -> mapM_ (installForeign namespace layouts value) (foreignFunctions value)
+  ForeignDeclaration value -> do
+    mapM_ (installCallback namespace . locatedValue) (foreignCallbackNames value)
+    let handles = Set.fromList (map locatedValue (foreignTypes value))
+        callbacks = either (const Map.empty) id (checkCallbackDeclarations handles layouts (foreignCallbacks value))
+    mapM_ (installForeign namespace layouts value handles callbacks) (foreignFunctions value)
   _ -> pure ()
+
+installCallback :: Text -> Text -> Evaluator ()
+installCallback namespace name = do
+  let owner = qualifiedForeignOwner namespace name
+  bind name (ForeignCallbackValue (CallbackConstructor owner))
+  bind (name <> ".unregister") (ForeignCallbackValue (CallbackUnregister owner Nothing))
 
 {-| One foreign function becomes a value under its own name.
 
@@ -276,8 +292,10 @@ installDeclaration namespace traits layouts declared (Located _ declaration) = c
     runs: the library, the symbol, and how each value crosses. A call is then a
     call, and a declaration that could not be resolved into one has already been
     reported by the checker. -}
-installForeign :: Text -> RecordLayouts -> Foreign -> Located ForeignFunction -> Evaluator ()
-installForeign namespace layouts library (Located _ function) =
+installForeign
+  :: Text -> RecordLayouts -> Foreign -> Set Text
+  -> Map Text (Located CallbackSignature) -> Located ForeignFunction -> Evaluator ()
+installForeign namespace layouts library handles callbacks declaration@(Located _ function) =
   bind name
     ( ForeignValue
         ForeignBinding
@@ -309,6 +327,13 @@ installForeign namespace layouts library (Located _ function) =
                   else Nothing
               | Located _ parameter <- foreignParameters function
               ]
+          , foreignBindingCallbacks =
+              [ ForeignCallbackSlot (qualifiedForeignOwner namespace owner) pair
+                  signature{callbackParameters = map qualifyCallbackParameter (callbackParameters signature)}
+              | pair <- either (const []) id (callbackPairs callbacks declaration)
+              , let owner = callbackTypeName pair
+              , Just (Located _ signature) <- [Map.lookup owner callbacks]
+              ]
           , foreignBindingResult =
               qualify (fromMaybe NothingCrossing (crossingFor handles layouts (foreignResult function)))
           , foreignBindingReleasedBy = do
@@ -325,14 +350,21 @@ installForeign namespace layouts library (Located _ function) =
     )
  where
   name = locatedValue (foreignName function)
-  handles = Set.fromList (map locatedValue (foreignTypes library))
+  qualifyCallbackParameter parameter = case parameter of
+    CallbackContext -> CallbackContext
+    CallbackValue crossing -> CallbackValue (qualify crossing)
   crossingOf parameter =
     qualify (fromMaybe NothingCrossing (foreignParameterType parameter >>= crossingFor handles layouts))
   qualify crossing = case crossing of
     RecordCrossing owner fields -> RecordCrossing
-      (if namespace == "" then owner else namespace <> "." <> owner)
+      (qualifiedForeignOwner namespace owner)
       [(label, qualify held) | (label, held) <- fields]
     other -> other
+
+qualifiedForeignOwner :: Text -> Text -> Text
+qualifiedForeignOwner namespace name
+  | namespace == "" = name
+  | otherwise = namespace <> "." <> name
 
 {-| The functions of a block that release something.
 

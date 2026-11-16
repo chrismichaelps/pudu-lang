@@ -32,6 +32,9 @@ import Pudu.Eval.Frozen (Frozen)
 import Pudu.Compiler.Lower.Layout (moduleLayouts)
 import Pudu.Compiler.Lower.Dynamic (dynamicSums)
 import Pudu.Compiler (CompileResult (..))
+import Pudu.Compiler.Lower.Foreign (callbackSignatureOf)
+import qualified Pudu.Foreign.Callback as Callback
+import Pudu.Foreign.Crossing (recordLayouts)
 import Pudu.Compiler.Lower.Types (LowerTypes, emptyTypes, formedCoreTypeIn, lookupScheme, nativeTypes, withShapes)
 import Pudu.Compiler.Lower.Method (methodTables)
 import Pudu.Compiler.Program (ProgramResult (..), rootCompileResult)
@@ -53,6 +56,7 @@ import Pudu.Diagnostic.Native (nativeRefusal)
 import Pudu.Frontend.Syntax
   ( Declaration (..)
   , Foreign (..)
+  , foreignCallbackNames
   , ForeignFunction (..)
   , ForeignParameter (..)
   , Function (..)
@@ -213,10 +217,30 @@ lowerRooted library entryName programModules@(rootModule : _)
       | native <- programModules
       , Located _ (ForeignDeclaration declared) <- moduleDeclarations (nativeModuleSyntax native)
       , named <- foreignTypes declared ]
+    callbackTypes = Set.fromList
+      [ NominalId (Just (locatedValue (moduleName (nativeModuleSyntax native)))) (locatedValue named)
+      | native <- programModules
+      , Located _ (ForeignDeclaration declared) <- moduleDeclarations (nativeModuleSyntax native)
+      , named <- foreignCallbackNames declared ]
+    callbackDeclarations native =
+      [ (declared, either (const Map.empty) id
+          (Callback.checkCallbackDeclarations (Set.fromList (map locatedValue (foreignTypes declared)))
+            (recordLayouts declarations) (foreignCallbacks declared)))
+      | Located _ (ForeignDeclaration declared) <- declarations ]
+      where declarations = moduleDeclarations (nativeModuleSyntax native)
+
+    coreSignature native name = callbackSignatureOf (nativeModuleName native) name . locatedValue
+    callbackSlots native signatures function =
+      [ CoreCallbackSlot (Callback.callbackArgumentIndex pair) (Callback.callbackContextIndex pair)
+          (coreSignature native name written)
+      | pair <- either (const []) id (Callback.callbackPairs signatures function)
+      , let name = Callback.callbackTypeName pair
+      , Just written <- [Map.lookup name signatures] ]
+
     scopes = Map.fromList
       [ ( nativeModuleName native
         , ModuleScope
-            { scopeTypes = maybe emptyTypes (withShapes records sums handles) (nativeModuleTypes native)
+            { scopeTypes = maybe emptyTypes (withShapes records sums handles callbackTypes) (nativeModuleTypes native)
             , scopeFunctions = Set.fromList (map fst (functionsOf native))
             , scopeConstants = Map.fromList
                 [ (locatedValue name, Map.lookup (locatedValue name) (nativeModuleConstants native))
@@ -241,10 +265,14 @@ lowerRooted library entryName programModules@(rootModule : _)
                       [index | (index, Located _ parameter) <- zip [0 ..] (foreignParameters function)
                              , foreignParameterOut parameter]
                       [claimFor functions False (foreignParameterReleasedBy parameter)
-                      | Located _ parameter <- foreignParameters function, foreignParameterOut parameter] )
-                | Located _ (ForeignDeclaration declared) <- moduleDeclarations (nativeModuleSyntax native)
+                      | Located _ parameter <- foreignParameters function, foreignParameterOut parameter]
+                      (callbackSlots native callbacks written) )
+                | (declared, callbacks) <- callbackDeclarations native
                 , let functions = map locatedValue (foreignFunctions declared)
-                , function <- functions ]
+                , written@(Located _ function) <- foreignFunctions declared ]
+            , scopeCallbacks = Map.unions
+                [ Map.mapWithKey (coreSignature native) callbacks
+                | (_, callbacks) <- callbackDeclarations native ]
             }
         )
       | native <- programModules ]

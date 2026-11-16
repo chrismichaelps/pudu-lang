@@ -53,3 +53,9 @@ count :: Int -> Text
 ## Grill Log
 
 - **Q:** Why isolate argument crossing into `Eval.Foreign.Argument`? **A:** Validating and converting caller values to native `CrossedValue` representations constitutes a distinct, cohesive phase (~130 lines) separate from symbol resolution, ownership leasing, execution, and result settlement.
+
+## Resolved Grill Log for #876 — Callback dispatch
+
+Keep the native ordinal when weaving output slots and callbacks. A context
+slot consumes no Pudu argument. Validate a callback token's nominal owner
+before allocating native contexts.

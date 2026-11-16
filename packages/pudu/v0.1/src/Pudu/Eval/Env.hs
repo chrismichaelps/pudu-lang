@@ -25,6 +25,8 @@ module Pudu.Eval.Env
   , currentConcurrentStore
   , currentDesktopStore
   , currentAudioStreamStore
+  , currentCallbackAncestry
+  , currentCallbackStore
   , currentForeignStore
   , currentHandleStore
   , currentChildStore
@@ -89,10 +91,13 @@ import Pudu.Eval.Socket (SocketStore)
 import Pudu.Eval.Tls (TlsStore)
 import Pudu.Eval.Frame (frameAssign, frameBind, frameLookup, frameSnapshot)
 import Pudu.Eval.Value (Captured (..), Frame (..), Value (..))
+import Pudu.Foreign.Callback.Native (NativeCallbackCache)
+import Pudu.Foreign.CallbackStore (CallbackKey, CallbackStore)
 import Pudu.Foreign.Ownership (ForeignStore)
 import Data.IORef (IORef, modifyIORef', newIORef, readIORef, writeIORef)
 import GHC.IOArray (IOArray, newIOArray, unsafeReadIOArray, unsafeWriteIOArray)
 import Data.Set (Set)
+import qualified Data.Set as Set
 import Pudu.Source (Span)
 
 {-| @Eval.Env — name-keyed frames, innermost first -}
@@ -140,6 +145,9 @@ data Env = Env
   , envDesktopStore :: !DesktopStore
   , envAudioStreamStore :: !AudioStreamStore
   , envForeignStore :: !ForeignStore
+  , envCallbackAncestry :: !(Set CallbackKey)
+  , envNativeCallbacks :: !NativeCallbackCache
+  , envCallbackStore :: !(CallbackStore Value Diagnostic)
   }
 
 currentHandleStore :: Evaluator HandleStore
@@ -162,6 +170,12 @@ currentDesktopStore = Evaluator $ \env -> pure (Done (envDesktopStore env) env)
 
 currentAudioStreamStore :: Evaluator AudioStreamStore
 currentAudioStreamStore = Evaluator $ \env -> pure (Done (envAudioStreamStore env) env)
+
+currentCallbackAncestry :: Evaluator (Set CallbackKey)
+currentCallbackAncestry = Evaluator $ \env -> pure (Done (envCallbackAncestry env) env)
+
+currentCallbackStore :: Evaluator (CallbackStore Value Diagnostic)
+currentCallbackStore = Evaluator $ \env -> pure (Done (envCallbackStore env) env)
 
 currentForeignStore :: Evaluator ForeignStore
 currentForeignStore = Evaluator $ \env -> pure (Done (envForeignStore env) env)
@@ -328,8 +342,10 @@ emptyEnv
   -> DesktopStore
   -> AudioStreamStore
   -> ForeignStore
+  -> CallbackStore Value Diagnostic
+  -> NativeCallbackCache
   -> Env
-emptyEnv handles children sockets secured concurrent desktop audioStreams foreignStore =
+emptyEnv handles children sockets secured concurrent desktop audioStreams foreignStore callbackStore nativeCallbacks =
   Env
     { envFrames = [MapFrame Map.empty]
     , envMethods = Map.empty
@@ -351,6 +367,9 @@ emptyEnv handles children sockets secured concurrent desktop audioStreams foreig
     , envDesktopStore = desktop
     , envAudioStreamStore = audioStreams
     , envForeignStore = foreignStore
+    , envCallbackAncestry = Set.empty
+    , envNativeCallbacks = nativeCallbacks
+    , envCallbackStore = callbackStore
     }
 
 bind :: Text -> Value -> Evaluator ()

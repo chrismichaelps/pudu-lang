@@ -14,9 +14,13 @@ module Pudu.Foreign.Call
   , resolveSymbol
   , findSymbol
   , callSymbol
+  , callSymbolScoped
   , CrossedValue (..)
   , ForeignCallFailure (..)
   , kindCode
+  , leafKinds
+  , recordShape
+  , rebuildRecord
   ) where
 
 import qualified Data.ByteString as ByteString
@@ -28,7 +32,7 @@ import Foreign.C.Types (CChar (..), CDouble (..), CInt (..))
 import Foreign.Marshal.Alloc (alloca)
 import Foreign.Marshal.Array (allocaArray, peekArray, withArray)
 import Foreign.Marshal.Utils (withMany)
-import Foreign.Ptr (Ptr, intPtrToPtr, nullPtr)
+import Foreign.Ptr (Ptr, castPtr, intPtrToPtr, nullPtr)
 import Foreign.Storable (peek)
 import Data.Word (Word8)
 import Pudu.Foreign.Crossing (Crossing (..))
@@ -43,6 +47,7 @@ import Pudu.Foreign.Call.Library
 foreign import ccall safe "pudu_ffi_call"
   c_call
     :: Ptr ()
+    -> Ptr ()
     -> CInt
     -> Ptr Word8
     -> Ptr Int64
@@ -81,6 +86,7 @@ data CrossedValue
   | CrossedText !Text
   {-| An address the library handed back, under the name its block gave it. -}
   | CrossedHandle !Text !Int64
+  | CrossedPointer !(Ptr ())
   {-| A record crossing by value, its fields in the declaration's order. -}
   | CrossedRecord !Text ![(Text, CrossedValue)]
   {-| A run of bytes on its way out, still the program's own storage.
@@ -153,10 +159,16 @@ callSymbol
   -> [(Crossing, Bool, CrossedValue)]
   -> Crossing
   -> IO (Either ForeignCallFailure (CrossedValue, [Maybe CrossedValue]))
-callSymbol symbol supplied result =
+callSymbol symbol = callSymbolScoped nullPtr symbol
+
+callSymbolScoped
+  :: Ptr () -> Ptr () -> [(Crossing, Bool, CrossedValue)] -> Crossing
+  -> IO (Either ForeignCallFailure (CrossedValue, [Maybe CrossedValue]))
+callSymbolScoped scope symbol supplied result =
   withMany borrowedBytes (map sentBytes arguments) $ \strings ->
     withMany borrowedBytes (map sentBytes fields) $ \fieldStrings -> do
-      let kinds = map (kindCode . fst) arguments
+      let kinds = map argumentKind arguments
+          pointers = zipWith argumentPointer arguments strings
           slotKinds =
             [ if isSlot then kindCode crossing else kindCode NothingCrossing
             | ((crossing, _), isSlot) <- zip arguments written
@@ -178,7 +190,7 @@ callSymbol symbol supplied result =
       withArray kinds $ \kindArray ->
         withArray integers $ \integerArray ->
           withArray (map CDouble doubles) $ \doubleArray ->
-            withArray strings $ \stringArray ->
+            withArray pointers $ \stringArray ->
               withArray sliceStart $ \startArray ->
                 withArray sliceCount $ \countArray ->
                   withArray (orOne 0 fieldKinds) $ \fieldKindArray ->
@@ -196,7 +208,7 @@ callSymbol symbol supplied result =
                                           allocaArray (max 1 resultCount) $ \producedFieldIntegers ->
                                             allocaArray (max 1 resultCount) $ \producedFieldDoubles -> do
                                               code <- withArray shapes $ \shapeArray ->
-                                                c_call symbol (fromIntegral (length arguments)) kindArray
+                                                c_call symbol scope (fromIntegral (length arguments)) kindArray
                                                   integerArray doubleArray stringArray startArray countArray
                                                   fieldKindArray fieldIntegerArray fieldDoubleArray fieldStringArray
                                                   slotKindArray slotIntegers slotDoubles
@@ -279,6 +291,10 @@ callSymbol symbol supplied result =
   borrowedBytes (copied, held) action
     | copied = ByteString.useAsCString held action
     | otherwise = Unsafe.unsafeUseAsCString held action
+  argumentKind (NothingCrossing, CrossedPointer _) = 16
+  argumentKind (crossing, _) = kindCode crossing
+  argumentPointer (NothingCrossing, CrossedPointer pointer) _ = castPtr pointer
+  argumentPointer _ fromBytes = fromBytes
   integerOf (_, value) = case value of
     CrossedInteger held -> held
     CrossedHandle _ held -> held

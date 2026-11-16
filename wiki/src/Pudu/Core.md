@@ -51,6 +51,12 @@ in the data and participates in equality. Type arguments retain their order.
 
 suppliedCountName identifies the internal argument-count slot. The spelling cannot collide with an ordinary source parameter.
 
+## Resolved Grill Log for #876 — Native callback lowering
+
+A callback token is a distinct nominal native scalar. Core callback operations
+carry the checked declaration or use the token for unregister. Foreign calls
+retain both ABI positions and the trampoline's typed fallback.
+
 ## Referenced by
 
 [[src/_MOC]] · [[Native Core Contracts Delivery]] · [[Core IR]]
