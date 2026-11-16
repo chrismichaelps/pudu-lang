@@ -21,6 +21,7 @@ const root = process.argv[2] ?? (existsSync("packages/pudu/v0.1/src") ? "package
 
 const shared = new Map([
   ["E0003", "an unclosed block comment, raised by the trivia scanner and checked during REPL completion"],
+  ["E1000", "the file ends before what a parser expects, from the token stream and from a callback's fallback literal"],
   ["E1001", "the generic wrong-token report, raised wherever a parser expects something"],
   ["E1032", "a function body is missing, from a declaration and from a literal"],
   ["E1040", "an unexpected token in expression position, from expression recovery and early REPL entry validation"],

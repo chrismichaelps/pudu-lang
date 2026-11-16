@@ -186,7 +186,7 @@ body identities state identity function = do
     _ -> Left (FrameFault Nothing "an instruction outside the fast form")
   terminator current ending = case ending of
     FrameJump _ target -> pure (line current ("  goto " <> label target <> ";"))
-    FrameBranch _ slot yes no -> pure (line current ("  if (" <> variable slot <> ") goto " <> label yes <> "; goto " <> label no <> ";"))
+    FrameBranch _ slot yes no -> pure (line current ("  if (" <> variable slot <> ") goto " <> label yes <> "; else goto " <> label no <> ";"))
     FrameReturn _ payload -> pure (line current ("  return " <> maybe "0" variable payload <> ";"))
     FrameOperatorFailure at message ->
       let (after, index) = operatorFailureSite current at message
