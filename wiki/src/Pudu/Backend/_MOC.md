@@ -22,6 +22,7 @@ aliases: [Backend Module Map]
 - [[Backend Module Programs]] — imported identities and folded collection/range conformance (#808).
 
 - [[Backend Frame Program]] · [[Backend Frame Runtime]] · [[Native Frame Runtime Tests]] — deterministic assembly, heap ownership and iterative calls.
+- [[Backend Typed Integer Calls]] — typed C entries for suitable direct callees.
 - [[Backend Frame Direct]] — frame functions with bounded depth, run as plain C calls (#904).
 
 - [[Backend Frame Values]] · [[Backend Frame Bodies]] · [[Backend Emit Foreign]] · [[Backend Emit Foreign ABI]] · [[Backend Emit Foreign Handle]] — pure operations and suspending bodies over typed frame cells.

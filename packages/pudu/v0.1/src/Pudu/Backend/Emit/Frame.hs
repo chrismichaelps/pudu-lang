@@ -12,6 +12,7 @@ import Pudu.Backend.Emit.Entry (EmittedUnit (..), EntryForm (..), entrySection)
 import Pudu.Backend.Emit.Export (ExportSection (..), exportSection)
 import Pudu.Backend.Emit.Frame.Body (emitFrameBodies)
 import Pudu.Backend.Emit.Frame.Slots (compactFrameSlots)
+import Pudu.Backend.Emit.Frame.Fast (emitFastFunctions, fastEntry, fastFunctions)
 import Pudu.Backend.Emit.Frame.Direct (argumentCount, directFunctions, enteredDirect, frameCells)
 import Pudu.Backend.Emit.Support (integerHelper, isBigInteger, isWideInteger)
 import Pudu.Backend.Emit.State (EmitState (..), emptyEmitState, renderByteData, renderSites, textOfInt)
@@ -95,10 +96,14 @@ emitFrameUnit form version sources logical = do
     CoreUnitType -> Right ["  (void)pudu_run_frames(" <> textOfInt entryId <> ");", "  return 0;"]
     CoreNeverType -> Right ["  (void)pudu_run_frames(" <> textOfInt entryId <> ");", "  return 0;"]
   let direct = directFunctions source
+      fast = fastFunctions direct source
+      stacked = enteredDirect source direct
   exports <- case form of
     EmbeddedEntry -> exportSection (frameModuleLayouts source) direct indexed (frameModuleExports source)
     ExecutableEntry -> Right (ExportSection [] [] [])
-  (emitted, roots) <- emitFrameBodies direct (emptyEmitState sources) source
+  (withFast, fastNeeds) <- emitFastFunctions fast (emptyEmitState sources) source
+  (emitted, frameNeeds) <- emitFrameBodies direct withFast source
+  let roots = Set.union fastNeeds frameNeeds
   let wide = frameUsesWideCells source
       big = frameUsesBig source
       decimal = frameUsesDecimal source
@@ -143,8 +148,8 @@ emitFrameUnit form version sources logical = do
     { emittedSource = Text.unlines (header <> runtime <> frameTypes wide big decimal text boxes (Set.member "host_thread_spawn" selected)
     <> concat [lines' <> [""] | (name, lines') <- arrayRuntimeParts <> textPieceRuntimeParts <> treeRuntimeParts <> rangeRuntimeParts <> bytesRuntimeParts <> hashRuntimeParts <> kernelRuntimeParts, Set.member name selected]
     <> renderSites (reverse (emitSites emitted)) <> renderByteData (reverse (emitByteData emitted)) <> aggregates <> ownership <> foreignWrappers (frameModuleLayouts source) (foreignsOf source) <> reverse (emitOutput emitted)
-    <> metadata <> frameEngine owned (Set.member "host_thread_spawn" selected) (not (Set.null (enteredDirect source direct)))
-    <> concat [stackedCall identity function | (identity, function) <- indexed, Set.member (frameFunctionName function) (enteredDirect source direct)]
+    <> metadata <> frameEngine owned (Set.member "host_thread_spawn" selected) (not (Set.null stacked))
+    <> concat [stackedCall (Set.member (frameFunctionName function) fast) identity function | (identity, function) <- indexed, Set.member (frameFunctionName function) stacked]
     -- Only a program that reads its arguments keeps them.
     <> entrySection form (Set.member "host_arguments" selected) (Set.member "output_state" selected) (not (null (exportCode exports)))
       (["  pudu_process_cleanup_hook = pudu_foreign_teardown;" | Set.member "host_foreign_store" selected] <> ending)
@@ -198,9 +203,10 @@ emitFrameUnit form version sources logical = do
     -- A direct function's frame and cells live on the C stack of this call.
     -- Owned slots start empty, as in a heap frame, so a failure before they
     -- are written releases nothing; unowned slots are the body's C locals.
-    stackedCall identity function =
-      [ "static pudu_cell pudu_direct_" <> textOfInt identity <> "(const pudu_cell *arguments) {"
-      , "  pudu_frame pudu_on_stack;"
+    stackedCall typed identity function =
+      [ "static pudu_cell pudu_direct_" <> textOfInt identity <> "(const pudu_cell *arguments) {" ]
+      <> (if typed then fastEntry identity function else [])
+      <> [ "  pudu_frame pudu_on_stack;"
       , "  pudu_cell pudu_cells[" <> textOfInt (frameCells function) <> "];"
       , "  pudu_cell pudu_answer;" ]
       <> [ "  memset(&pudu_cells[" <> slotIndex slot <> "], 0, sizeof pudu_cells[0]);" | slot <- ownedSlots function ]

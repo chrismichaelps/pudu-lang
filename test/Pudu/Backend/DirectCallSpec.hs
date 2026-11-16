@@ -25,6 +25,7 @@ import Test.QuickCheck (Property, conjoin, counterexample, once, property, (===)
 directCallProperties :: [(String, IO Property)]
 directCallProperties =
   [ ("direct calls select functions with bounded call depth", testSelection)
+  , ("direct calls pass signed integer arguments as C locals", once <$> testTypedCalls)
   , ("direct calls print what heap calls print", once <$> testOutput)
   , ("direct calls report a failure at its own site", once <$> testFailure)
   , ("direct exports enter the direct body", testExportEntry)
@@ -82,6 +83,38 @@ testSelection = do
             [ counterexample shown (property (Set.member "Main.quad" direct))
             , counterexample shown (property (all (`Set.notMember` direct) ["Main.main", "Main.fact", "Main.isEven", "Main.isOdd", "Main.apply"]))
             ]
+
+testTypedCalls :: IO Property
+testTypedCalls = do
+  emitted <- emitWith ExecutableEntry program
+  case emitted of
+    Left problem -> pure (counterexample problem (property False))
+    Right unit -> do
+      observed <- runExecutable program (pure . (=== (ExitSuccess, "-7\n-9223372036854775808\n", "")))
+      pure (conjoin
+        [ counterexample "missing typed C entry" (property ("(int64_t pudu_a0" `Text.isInfixOf` emittedSource unit))
+        , observed
+        ])
+ where
+  program = Text.unlines
+    [ "module Main"
+    , "fn step(value: Int64, unused: Int64) -> Int64 {"
+    , "  value / 2 + value % 2"
+    , "}"
+    , "fn twice(value: Int64) -> Int64 {"
+    , "  step(value, 0) + step(value, 0) + 1"
+    , "}"
+    , "fn negate(value: Int) -> Int {"
+    , "  -value"
+    , "}"
+    , "fn main() -> Int {"
+    , "  let edge = 9223372036854775808"
+    , "  let minimum: Int = -edge"
+    , "  print(show(twice(-7)))"
+    , "  print(show(negate(edge)))"
+    , "  0"
+    , "}"
+    ]
 
 -- Owned text and records cross direct calls made from both a recursive (heap)
 -- caller and a direct caller; every value is released exactly as before.

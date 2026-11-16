@@ -42,20 +42,20 @@ corpus and properties above describe the build before this integration.
 
 | Table item | Current evidence and remaining work |
 | --- | --- |
-| Direct integer calls | #904 merged and [[Native Direct Call Tests]] cover the stack path, fallback, and exports. Typed integer locals and C-parameter calls still need implementation. The current emitter calls `pudu_direct_*` through argument cells. |
+| Direct integer calls | #904 merged and [[Native Direct Call Tests]] cover the stack path, fallback, and exports. Eligible named direct callees have typed C parameters and locals. Their cell entries preserve deferred magnitudes. See [[Backend Typed Integer Calls]]. |
 | Slot reuse | Draft #933 is open. Its two #821 commits are integrated locally. [[Native Frame Slot Reuse]] records the storage proof and the separate branch measurements. |
 | Tuple, sum payload, and capture members | [[Backend Emit Cell]] defines their common carrier map. Consistency checks still reject frame operands without that carrier. This row needs a per-type audit of reachable lowering. |
 | Foreign callbacks, pointers, and arrays | #875 resolved the callback contract. #876 and #877 still need implementation. [[Foreign Callback Delivery]] · [[Foreign Pointer Delivery]] |
 | C calling into Pudu | #899 is on the base. [[Native Calls Delivery]] records the start guard and host-call tests. |
 | Word maps, hashing, text, and operators | Word-map, store, and kernel groups cover the implemented operations. #832 addresses receiver lowering, and its status does not establish operator coverage. Compare the remaining emitter guards with checked operand types. |
 | Numeric operators and carriers | The emitter selects integer, wide, BigInt, Decimal, and floating helpers for their corresponding typed operands. Audit reachable checked combinations before changing guards. |
-| Builtin values and trait methods | Builtin callable dispatch is implemented for the #935 kernels and existing tested families. #647 reproduces on this worktree. Taking `Named.label` as a value checks, then reports E7001 in the evaluator and E6001 in native compilation. |
+| Builtin values and trait methods | Builtin callable dispatch is implemented for the #935 kernels and existing tested families. #647 trait-qualified values lower through a closure that dispatches against its first argument. |
 | Exported text, records, and Result | #906 merged with the typed crossings in [[Backend Export Crossing]]. |
 | Entry parameters and ambiguity | Implemented default evaluation and explicit duplicate-entry refusal in the integration tree. The usual CLI checks duplicate declarations before lowering. The frame entry ABI still takes zero parameters. |
 | Objective-C, Swift, and JNI | #879, #881, and #880 still need their platform bridges. [[Native Platform Adoption]] states the current boundary. |
-| Moves, drop, and unwind | Existing mutable-loan groups cover explicit returns and propagation. Dynamic dispatch with mutable loans still refuses. Move and drop coverage needs an audit against the implemented language. |
+| Moves, drop, and unwind | Existing mutable-loan groups cover explicit returns and propagation. Dynamic dispatch writes a lent receiver back through its place. General method loan fallback and move/drop coverage still need audits. |
 | Output Result bodies and assignments | The new conformance program returns `print` directly from a named function and assigns its result and a direct output result. [[Backend Output Programs]] |
-| Defaults and concrete signatures | Native dynamic defaults and parameterized entries lower with checked carriers. Other defaults and generic signatures still need coverage analysis. |
+| Defaults and concrete signatures | Native calls omit trailing defaults and can call the source entry by name or value. Monomorphic defaulted and async exports cross C. Generic methods still need coverage analysis. |
 | Emission faults | `pudu build --native` renders `FrameFault` through E6001 in the CLI with its own span or the module span fallback. |
 
 The integrated build passed with `-Werror`. Focused checks passed for slot
@@ -63,9 +63,15 @@ lifetimes, the strict C11 corpus, entry statuses and diagnostics, output
 Results, direct calls, C exports, word maps, indexed stores, kernels, and
 host services.
 
-Exact next action: trace the checked trait-member selection into the evaluator
-and native lowering for the #647 `Named.label` reproducer, then use that
-selection to dispatch the value through its first argument.
+Backend Engineer → Test Engineer. The callable and integer work owns the
+default/signature lowering, entry instance registration, export crossing, and
+typed integer emitter with their focused differential and C-host tests.
+The optimized build with warnings as errors, export tests, direct-call tests,
+entry status conformance, and 355 strict C11 translations passed.
+
+Exact next action: reproduce a checked call that reaches
+Compiler Lower Method’s generic method refusal, then trace the recorded
+callee and receiver types into instance selection.
 
 ## Referenced by
 

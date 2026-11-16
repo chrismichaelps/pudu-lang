@@ -230,6 +230,7 @@ library
     Pudu.Backend.Emit.Frame.Value
     Pudu.Backend.Emit.Frame.Body
     Pudu.Backend.Emit.Frame.Direct
+    Pudu.Backend.Emit.Frame.Fast
     Pudu.Backend.Emit.Frame.References
     Pudu.Backend.Emit.Frame.Slots
     Pudu.Compiler.Lower.Body

@@ -5,6 +5,17 @@ tags: [changelog]
 
 # Changelog
 
+## 2026-11-15 — Native C11 callable continuations (#935)
+
+- Carry single-member tuples and lower a named call to the entry through its
+  ordinary callable body. [[Compiler Lower Body]] · [[Compiler Lower Generic]]
+- Allow omission of trailing defaults and export monomorphic defaulted and
+  async functions. The embedded C entry takes every argument and awaits an
+  async export before returning through the existing crossing.
+  [[Compiler Lower Default]] · [[Backend Emit Export]] · [[Backend Export Tests]]
+- Specialize eligible signed integer direct calls to typed C parameters and
+  locals. [[Backend Typed Integer Calls]] · [[Native Direct Call Tests]]
+
 ## 2026-11-15 — Native frame reuse and entry defaults
 
 - Integrate physical slot reuse and shared owned-text stores from #821.
