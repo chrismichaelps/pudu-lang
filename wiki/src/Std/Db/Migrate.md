@@ -44,8 +44,9 @@ get it waits and then finds there is nothing to do, which is the correct outcome
 **Any driver applies migrations.** `apply(client, driver, migrations)` runs over [[Std Db Driver]], so
 SQLite and PostgreSQL applications share one path, and [[Std App Database]] exposes it as `migrate`
 and as a start-up stage. The plan is decided before any lock is taken, so a refusal holds nothing.
-Each pending migration then runs in its own driver transaction which, on PostgreSQL, first takes
-`pg_advisory_xact_lock`: the lock ends with the transaction however it ends, and a pooled connection
+Each pending migration then runs in its own driver transaction which, where the driver states an
+`advisoryLock` capability (PostgreSQL does, SQLite does not), first takes that lock. The lock is
+chosen by capability, never by the driver's name. It ends with the transaction however it ends, and a pooled connection
 returns to the pool with nothing attached. Inside the lock the record is read again, so a process
 that waited finds its migration already applied and skips it. SQLite admits one writer at a time;
 a second process reaching the same file mid-migration is refused as busy, and running it again finds
@@ -85,6 +86,7 @@ once between them.
 - **Q:** Take the lock in the program? **A:** No. _Rationale:_ the processes that race are different
   programs on different machines; a lock either of them holds alone is not a lock. _Rejected:_ a
   process-local guard.
+- **Q:** Branch on a driver's name to decide whether to lock? **A:** No. Engines are dispatched by kind through a factory table, and behavior by stated capability, not by driver name. _Rationale:_ a new engine that states an advisory lock is locked without an edit here.
 - **Q:** Undo a migration? **A:** Not offered. _Rationale:_ an undo that is written is rarely run and
   therefore rarely correct, and one that is run in an emergency against real data is the worst
   possible time to discover that. A change that must be reversible is written as a further migration

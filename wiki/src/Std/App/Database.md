@@ -19,6 +19,7 @@ closes the newly opened client. No global registration or implicit schema synchr
 ## Resolved Grill Log
 - **Q:** Silently ignore unsupported connection settings? **A:** No; reject before network I/O.
 - **Q:** Let handlers interpolate values into SQL? **A:** No; query binds parameters separately.
+- **Q:** Branch on a driver's name to decide behavior? **A:** No. Engines are dispatched by kind through a factory table, and behavior by stated capability, not by driver name.
 - **Q:** Claim live database conformance without execution? **A:** No; this delivery is unvalidated at the user's direction.
 
 ## Referenced by
@@ -105,8 +106,11 @@ database stage so the connection is open while it runs.
 `Database.fromConfig(&settings, "database.url", 4)` selects the bundled driver by URI scheme.
 Use `postgresql://...?...` for PostgreSQL or `sqlite:/absolute/path/app.db` for SQLite.
 `Database.create("sqlite::memory:", 1)` creates an isolated in-memory SQLite resource when started.
-`Database.bundledDrivers()` returns the explicit built-in list; append another package's driver
-and pass that list to `withDrivers` to extend selection. Unknown or ambiguous schemes fail.
+`Database.bundledDrivers()` returns the values of a const factory table, `FACTORIES: Map[Engine, fn() -> Driver]`,
+keyed by engine kind; `Database.driverFor(engine)` answers the bundled driver for one engine, or None.
+Append another package's driver and pass that list to `withDrivers` to extend selection. Unknown or
+ambiguous schemes fail. An application's own driver states its `engine` (usually `Custom(name)`) and
+its `capabilities`.
 The SQL dialect and placeholders still belong to the chosen database.
 
 Use [[Std Db Row]] to consume result cells by unique column name or index and map rows into application values. It distinguishes SQL NULL, absent columns, ambiguous labels, wrong storage kinds and wrong cardinality.
