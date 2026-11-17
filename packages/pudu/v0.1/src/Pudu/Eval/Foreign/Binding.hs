@@ -3,6 +3,7 @@ module Pudu.Eval.Foreign.Binding
   ( ForeignBinding (..)
   , ForeignSlot (..)
   , ForeignCallbackSlot (..)
+  , DelegateBinding (..)
   , ForeignClaim (..)
   , ForeignRelease (..)
   ) where
@@ -76,6 +77,17 @@ data ForeignCallbackSlot = ForeignCallbackSlot
   , foreignCallbackPair :: !CallbackPair
   , foreignCallbackSignature :: !CallbackSignature
   , foreignCallbackMembers :: !(IntMap (Text, CallbackSignature))
+  }
+  deriving stock (Eq, Show)
+
+{-| What constructing a delegate needs, settled when the block is installed:
+    the handle and class names, the group registration it carries, and each
+    method's selector with the group member it enters. -}
+data DelegateBinding = DelegateBinding
+  { delegateHandle :: !Text
+  , delegateClass :: !Text
+  , delegateSlot :: !ForeignCallbackSlot
+  , delegateMethods :: ![(Text, Int)]
   }
   deriving stock (Eq, Show)
 

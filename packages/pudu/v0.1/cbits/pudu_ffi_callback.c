@@ -2,24 +2,10 @@
  * Native keys name live interpreter entries, never their storage. */
 
 #include "pudu_ffi_internal.h"
+#include "pudu_ffi_callback_adapter.h"
 #include <stdatomic.h>
 #include <stdlib.h>
 #include <string.h>
-
-/* The layout clang gives a block literal with no copy or dispose helpers,
- * followed by the registration key. A framework that keeps the block copies
- * it, and the copy carries the key with it. */
-struct pudu_ffi_block_descriptor {
-  unsigned long reserved, size;
-};
-
-struct pudu_ffi_block {
-  void *isa;
-  int flags, reserved;
-  void *invoke;
-  const struct pudu_ffi_block_descriptor *descriptor;
-  uintptr_t key;
-};
 
 static _Thread_local void *pudu_ffi_scope;
 
@@ -34,24 +20,6 @@ typedef int (*pudu_callback_dispatch)(void *, void *, int32_t, int32_t, const in
 typedef void (*pudu_callback_dispose)(void *);
 
 #if defined(FFI_CLOSURES) && FFI_CLOSURES
-struct pudu_callback_adapter {
-  struct pudu_callback_adapter *next;
-  char *owner;
-  int32_t member, arity, context, leaf_count, shape_count;
-  uint8_t result_kind;
-  int64_t fallback_integer;
-  double fallback_double;
-  uint8_t kinds[PUDU_MAX_ARGUMENTS];
-  int32_t counts[PUDU_MAX_ARGUMENTS];
-  uint8_t *leaves, *shape;
-  size_t *offsets;
-  ffi_type *record_types;
-  ffi_type **record_elements;
-  ffi_type *argument_types[PUDU_MAX_ARGUMENTS];
-  ffi_cif cif;
-  ffi_closure *closure, *block_closure;
-  void *code, *block_code;
-};
 
 struct pudu_callback_entry {
   struct pudu_callback_entry *next;
@@ -69,24 +37,24 @@ static struct pudu_callback_adapter *pudu_callback_adapters;
 static struct pudu_callback_entry *pudu_callback_entries;
 static uintptr_t pudu_callback_next_key = 1;
 
-static void lock_callbacks(void) {
+void pudu_ffi_lock_callbacks(void) {
   while (atomic_flag_test_and_set_explicit(&pudu_callback_lock, memory_order_acquire)) {}
 }
 
-static void unlock_callbacks(void) {
+void pudu_ffi_unlock_callbacks(void) {
   atomic_flag_clear_explicit(&pudu_callback_lock, memory_order_release);
 }
 
 static struct pudu_callback_entry *acquire_entry(const struct pudu_callback_adapter *adapter,
                                                  uintptr_t key) {
-  lock_callbacks();
+  pudu_ffi_lock_callbacks();
   struct pudu_callback_entry *entry = pudu_callback_entries;
   while (entry && entry->key != key) entry = entry->next;
   if (entry != NULL && entry->adapter != adapter &&
       (adapter->member < 0 || entry->adapter->member < 0 || strcmp(entry->adapter->owner, adapter->owner) != 0))
     entry = NULL;
   if (entry != NULL) entry->invocations++;
-  unlock_callbacks();
+  pudu_ffi_unlock_callbacks();
   return entry;
 }
 
@@ -96,9 +64,9 @@ static void dispose_entry(struct pudu_callback_entry *entry) {
 }
 
 static void release_entry(struct pudu_callback_entry *entry) {
-  lock_callbacks();
+  pudu_ffi_lock_callbacks();
   int dispose = --entry->invocations == 0 && entry->retired;
-  unlock_callbacks();
+  pudu_ffi_unlock_callbacks();
   if (dispose) dispose_entry(entry);
 }
 
@@ -126,7 +94,7 @@ static int decode_arguments(const struct pudu_callback_adapter *adapter, void **
   return 1;
 }
 
-static void dispatch_callback(const struct pudu_callback_adapter *adapter, void *result,
+void pudu_ffi_dispatch_callback(const struct pudu_callback_adapter *adapter, void *result,
                               void **arguments, uintptr_t key) {
   int64_t integer = adapter->fallback_integer;
   double floating = adapter->fallback_double;
@@ -162,23 +130,13 @@ static void invoke_callback(ffi_cif *cif, void *result, void **arguments, void *
   const struct pudu_callback_adapter *adapter = data;
   void *context;
   memcpy(&context, arguments[adapter->context], sizeof(context));
-  dispatch_callback(adapter, result, arguments, (uintptr_t)context);
+  pudu_ffi_dispatch_callback(adapter, result, arguments, (uintptr_t)context);
 }
-
-#if defined(__APPLE__)
-/* A block's first argument is the block itself; its key names the entry. */
-static void invoke_block_callback(ffi_cif *cif, void *result, void **arguments, void *data) {
-  (void)cif;
-  const struct pudu_callback_adapter *adapter = data;
-  const struct pudu_ffi_block *block;
-  memcpy(&block, arguments[0], sizeof(block));
-  dispatch_callback(adapter, result, arguments, block == NULL ? 0 : block->key);
-}
-#endif
 
 static void free_adapter(struct pudu_callback_adapter *adapter) {
   if (adapter->closure) ffi_closure_free(adapter->closure);
   if (adapter->block_closure) ffi_closure_free(adapter->block_closure);
+  if (adapter->method_closure) ffi_closure_free(adapter->method_closure);
   free(adapter->record_elements);
   free(adapter->record_types);
   free(adapter->offsets);
@@ -243,7 +201,7 @@ void *pudu_ffi_callback_adapter(const char *owner, int32_t member, int32_t arity
       shape_count < 0 || (shape_count && !shape)) return NULL;
   size_t leaf_size = leaf_count ? (size_t)leaf_count : 1;
   size_t shape_size = shape_count ? (size_t)shape_count : 1;
-  lock_callbacks();
+  pudu_ffi_lock_callbacks();
   for (struct pudu_callback_adapter *held = pudu_callback_adapters; held; held = held->next) {
     if (held->member == member && held->arity == arity && held->context == context && held->leaf_count == leaf_count &&
         held->shape_count == shape_count && held->result_kind == result_kind &&
@@ -254,7 +212,7 @@ void *pudu_ffi_callback_adapter(const char *owner, int32_t member, int32_t arity
         memcmp(held->counts, counts, (size_t)arity * sizeof(*counts)) == 0 &&
         (!leaf_count || memcmp(held->leaves, leaves, (size_t)leaf_count) == 0) &&
         (!shape_count || memcmp(held->shape, shape, (size_t)shape_count) == 0)) {
-      unlock_callbacks();
+      pudu_ffi_unlock_callbacks();
       return held;
     }
   }
@@ -284,13 +242,13 @@ void *pudu_ffi_callback_adapter(const char *owner, int32_t member, int32_t arity
       if (prepare_adapter(adapter)) {
         adapter->next = pudu_callback_adapters;
         pudu_callback_adapters = adapter;
-        unlock_callbacks();
+        pudu_ffi_unlock_callbacks();
         return adapter;
       }
     }
     free_adapter(adapter);
   }
-  unlock_callbacks();
+  pudu_ffi_unlock_callbacks();
 #else
   (void)owner; (void)member; (void)arity; (void)context; (void)kinds; (void)counts;
   (void)leaf_count; (void)leaves; (void)shape_count; (void)shape;
@@ -309,68 +267,16 @@ void *pudu_ffi_callback_code(void *opaque) {
 #endif
 }
 
-/* The block entry shares the adapter's signature and is built on first use.
- * Only a signature whose context comes first can be a block's invoke. */
-void *pudu_ffi_callback_block_code(void *opaque) {
-#if defined(FFI_CLOSURES) && FFI_CLOSURES && defined(__APPLE__)
-  struct pudu_callback_adapter *adapter = opaque;
-  if (adapter == NULL || adapter->context != 0) return NULL;
-  lock_callbacks();
-  if (adapter->block_code == NULL) {
-    void *code = NULL;
-    ffi_closure *closure = ffi_closure_alloc(sizeof(*closure), &code);
-    if (closure != NULL &&
-        ffi_prep_closure_loc(closure, &adapter->cif, invoke_block_callback, adapter, code) == FFI_OK) {
-      adapter->block_closure = closure;
-      adapter->block_code = code;
-    } else if (closure != NULL) {
-      ffi_closure_free(closure);
-    }
-  }
-  void *code = adapter->block_code;
-  unlock_callbacks();
-  return code;
-#else
-  (void)opaque;
-  return NULL;
-#endif
-}
-
-#if defined(__APPLE__)
-extern void *_NSConcreteStackBlock[32];
-static const struct pudu_ffi_block_descriptor pudu_ffi_block_descriptor = {0, sizeof(struct pudu_ffi_block)};
-#endif
-
-size_t pudu_ffi_block_size(void) {
-  return sizeof(struct pudu_ffi_block);
-}
-
-/* Writes a stack block into caller storage that outlives the foreign call. */
-int pudu_ffi_block_fill(void *storage, void *invoke, void *key) {
-#if defined(__APPLE__)
-  if (storage == NULL || invoke == NULL) return 0;
-  struct pudu_ffi_block *block = storage;
-  *block = (struct pudu_ffi_block){
-    .isa = _NSConcreteStackBlock, .invoke = invoke,
-    .descriptor = &pudu_ffi_block_descriptor, .key = (uintptr_t)key
-  };
-  return 1;
-#else
-  (void)storage; (void)invoke; (void)key;
-  return 0;
-#endif
-}
-
 void *pudu_ffi_callback_register(void *adapter, void *user, pudu_callback_dispatch dispatch,
                                   pudu_callback_dispose dispose) {
 #if defined(FFI_CLOSURES) && FFI_CLOSURES
   if (!adapter || !user || !dispatch || !dispose) return NULL;
   struct pudu_callback_entry *entry = calloc(1, sizeof(*entry));
   if (entry == NULL) return NULL;
-  lock_callbacks();
+  pudu_ffi_lock_callbacks();
   uintptr_t key = pudu_callback_next_key;
   if (key == 0) {
-    unlock_callbacks();
+    pudu_ffi_unlock_callbacks();
     free(entry);
     return NULL;
   }
@@ -382,7 +288,7 @@ void *pudu_ffi_callback_register(void *adapter, void *user, pudu_callback_dispat
   entry->dispose = dispose;
   entry->next = pudu_callback_entries;
   pudu_callback_entries = entry;
-  unlock_callbacks();
+  pudu_ffi_unlock_callbacks();
   return (void *)key;
 #else
   (void)adapter; (void)user; (void)dispatch; (void)dispose;
@@ -393,7 +299,7 @@ void *pudu_ffi_callback_register(void *adapter, void *user, pudu_callback_dispat
 void pudu_ffi_callback_retire(void *context) {
 #if defined(FFI_CLOSURES) && FFI_CLOSURES
   uintptr_t key = (uintptr_t)context;
-  lock_callbacks();
+  pudu_ffi_lock_callbacks();
   struct pudu_callback_entry **link = &pudu_callback_entries;
   while (*link && (*link)->key != key) link = &(*link)->next;
   struct pudu_callback_entry *entry = *link;
@@ -403,7 +309,7 @@ void pudu_ffi_callback_retire(void *context) {
     entry->retired = 1;
     dispose = entry->invocations == 0;
   }
-  unlock_callbacks();
+  pudu_ffi_unlock_callbacks();
   if (dispose) dispose_entry(entry);
 #else
   (void)context;

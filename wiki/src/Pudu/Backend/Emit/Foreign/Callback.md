@@ -51,3 +51,7 @@ Mangle member trampolines separately and give all of them the same registration 
 ## Resolved Grill Log for native callback groups
 
 Emit one group registration that retains the record and copies its slot indexes. Each trampoline supplies its member ordinal.
+
+## Resolved Grill Log for Objective-C delegates
+
+`delegateConstructorName` gives each delegate class its `pudu_delegate_new_<class>` name. Member signatures are included in `callbackSignaturesOf`, so each member's trampoline and block helpers are emitted with the other callback helpers.

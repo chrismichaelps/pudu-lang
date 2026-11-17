@@ -19,6 +19,7 @@ module Pudu.Backend.Emit.Foreign.Callback
   , trampolineType
   , blockInvokeName
   , blockSignatures
+  , delegateConstructorName
   ) where
 
 import qualified Data.Map.Strict as Map
@@ -30,7 +31,7 @@ import Pudu.Backend.Emit.Cell (aggregateHelper, aggregateNeed, cellName, mangle,
 import Pudu.Backend.Emit.ForeignAbi (Layouts, abiType, fromAbi, toAbi)
 import Pudu.Backend.Emit.State (textOfInt)
 import Pudu.Core
-  ( CoreCallbackFallback (..), CoreCallbackOperation (..), CoreCallbackSignature (..), CoreCallbackSlot (..)
+  ( CoreCallbackFallback (..), CoreCallbackOperation (..), CoreCallbackSignature (..), CoreCallbackSlot (..), CoreDelegate (..)
   , CoreForeign (..), CoreLayout (..), CoreType (..), CoreVariant (..) )
 import Pudu.Core.Frame
 import Pudu.Foreign.Callback (CallbackPlacement (..))
@@ -83,7 +84,8 @@ callbackSignaturesOf source = Set.toList $ Set.fromList $
     , signature <- case operation of
         CoreCallbackRegister single -> [single]
         CoreCallbackRegisterGroup group _ -> [group]
-        CoreCallbackUnregister -> [] ]
+        CoreCallbackUnregister -> []
+        CoreDelegateNew delegate -> map snd (coreDelegateMethods delegate) ]
     <> [ coreCallbackSignature slot | FrameForeign declared _ <- shapes source, slot <- coreForeignCallbacks declared ]
 
 {-| The result types of every `unregister` a module's frames perform. -}
@@ -126,6 +128,9 @@ blockSignatures declarations = Set.toList $ Set.fromList
   , slot <- coreForeignCallbacks declared
   , BlockCallback _ <- [coreCallbackPlacement slot] ]
 
+delegateConstructorName :: CoreDelegate -> Text
+delegateConstructorName delegate = "pudu_delegate_new_" <> mangleKey (coreDelegateClass delegate)
+
 unregisterHelper :: CoreType -> Text
 unregisterHelper kind = "pudu_callback_unregister_" <> mangle kind
 
@@ -144,6 +149,8 @@ callbackOperation operation result operand cell = case operation of
             <> aggregateHelper "drop" handler <> ", " <> offsets <> ", " <> textOfInt (length fields) <> ")"
         , ["host_callback", aggregateNeed "drop" handler] )
   CoreCallbackUnregister -> (unregisterHelper result <> "(" <> cell <> ")", ["host_callback"])
+  CoreDelegateNew delegate ->
+    (delegateConstructorName delegate <> "(" <> cell <> ")", ["host_callback", "host_objc_delegate"])
 
 {-| The store and the conversions the trampolines and unregistrations use
     beyond the scalar crossings, which the foreign wrappers' needs cover. -}

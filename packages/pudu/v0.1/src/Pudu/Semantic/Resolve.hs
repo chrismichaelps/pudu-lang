@@ -48,6 +48,7 @@ import Pudu.Frontend.Syntax.Tree
   , BindingKind (Mutable)
   , Visibility (Private)
   , foreignCallbackNames
+  , foreignValueNames
   )
 import Pudu.Semantic.Prelude
   ( isPreludeModule
@@ -203,7 +204,7 @@ collectDeclaration (Located _ declaration) = case declaration of
       (foreignTypes value <> foreignCallbackNames value)
     mapM_
       (declareNamed ValueSpace ModuleOrigin (foreignVisibility value) False)
-      (foreignCallbackNames value)
+      (foreignValueNames value)
     mapM_
       ( \(Located _ function) ->
           declareNamed ValueSpace ModuleOrigin (foreignVisibility value) False

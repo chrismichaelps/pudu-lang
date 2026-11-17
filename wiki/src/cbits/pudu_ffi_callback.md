@@ -49,3 +49,7 @@ receives null on allocation failure and applies the checked fallback.
 A group member closure matches the stable group owner and key. Individual
 callbacks still require adapter identity. The closure passes its checked
 member and leaf count while retaining the shared registration.
+
+## Resolved Grill Log for Objective-C delegates
+
+The Objective-C entries moved to [[Pudu FFI Objective-C Bridge]]. The helpers that remain in this file use the `pudu_ffi_` prefix, and the shared declarations live in [[Pudu FFI Callback Adapter]].

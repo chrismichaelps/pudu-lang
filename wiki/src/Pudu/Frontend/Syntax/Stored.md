@@ -45,3 +45,7 @@ tree's module holds its shapes alone.
 ## Resolved Grill Log for foreign syntax cache
 
 Store new foreign declaration fields with their generic order; the executable fingerprint invalidates stale cache products.
+
+## Resolved Grill Log for Objective-C delegates
+
+Stored syntax has instances for delegate declarations and their method entries, so a cached parse round-trips them.

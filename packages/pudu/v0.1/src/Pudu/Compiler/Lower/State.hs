@@ -2,7 +2,7 @@
 module Pudu.Compiler.Lower.State
   ( CoreSignature (..), ForeignTarget (..), Head (..), Instance (..), LowerContext (..), LowerState (..), LoopFrame (..), ModuleScope (..)
   , emptyContext, startFunction, refuse, refused, halt, lookupLocal, bindLocal, intType
-  , resolveFunction, lookupConstant, lookupForeign, lookupQualifiedForeign, lookupCallback, lookupCallbackGroup, lookupInitializer, inModule, withTypeBindings, isModuleQualifier
+  , resolveFunction, lookupConstant, lookupForeign, lookupQualifiedForeign, lookupCallback, lookupCallbackGroup, lookupDelegate, lookupInitializer, inModule, withTypeBindings, isModuleQualifier
   ) where
 
 import Data.Map.Strict (Map)
@@ -101,6 +101,7 @@ data ModuleScope = ModuleScope
   , scopeForeign :: !(Map Text ForeignTarget)
   , scopeCallbacks :: !(Map Text CoreCallbackSignature)
   , scopeCallbackGroups :: !(Map Text (CoreCallbackSignature, [Text]))
+  , scopeDelegates :: !(Map Text CoreDelegate)
   }
 
 {-| The library, version and symbol a foreign declaration calls. -}
@@ -282,6 +283,9 @@ lookupCallback = lookupCallbackBinding scopeCallbacks
 
 lookupCallbackGroup :: LowerState -> [Text] -> Maybe (CoreCallbackSignature, [Text])
 lookupCallbackGroup = lookupCallbackBinding scopeCallbackGroups
+
+lookupDelegate :: LowerState -> [Text] -> Maybe CoreDelegate
+lookupDelegate = lookupCallbackBinding scopeDelegates
 
 lookupCallbackBinding :: (ModuleScope -> Map Text a) -> LowerState -> [Text] -> Maybe a
 lookupCallbackBinding bindings state segments = do

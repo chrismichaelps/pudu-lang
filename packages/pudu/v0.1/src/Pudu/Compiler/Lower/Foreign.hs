@@ -17,7 +17,7 @@ import Pudu.Foreign.Extent (ForeignBound (..))
 import Pudu.FloatLiteral (FloatWidth (..))
 import Pudu.Compiler.Lower.Array (collect, stops, stopped)
 import Pudu.Compiler.Lower.Loan (Callee (ForeignCrossing), Operand (Argument), lowerLoanedOperands, valueSignature)
-import Pudu.Compiler.Lower.State (ForeignTarget (..), LowerContext (..), LowerState (..), halt, lookupCallback, lookupCallbackGroup, lookupForeign, lookupQualifiedForeign, refused)
+import Pudu.Compiler.Lower.State (ForeignTarget (..), LowerContext (..), LowerState (..), halt, lookupCallback, lookupCallbackGroup, lookupDelegate, lookupForeign, lookupQualifiedForeign, refused)
 import Pudu.Compiler.Lower.Types (LowerTypes, recordFields, referenceTarget, typeForSpan)
 import Pudu.Core
 import Pudu.Frontend.Syntax (Expression, Located (..))
@@ -152,8 +152,11 @@ callbackSignatureOf owner name signature =
 lowerCallbackRegistration
   :: (LowerState -> Located Expression -> Lowered)
   -> LowerState -> Span -> [Text] -> [Located Expression] -> Maybe Lowered
-lowerCallbackRegistration lower state at path arguments =
-  case lookupCallbackGroup state path of
+lowerCallbackRegistration lower state at path arguments
+  | Just delegate <- lookupDelegate state path = Just $ case arguments of
+      [token] -> lowerCallbackOperand lower state at (CoreDelegateNew delegate) token
+      _ -> halt at "a delegate construction without its group token" state
+  | otherwise = case lookupCallbackGroup state path of
     Just (signature, members) -> Just $ case arguments of
       [handler] -> lowerGroup signature members handler
       _ -> halt at "a callback group registration without its handler record" state

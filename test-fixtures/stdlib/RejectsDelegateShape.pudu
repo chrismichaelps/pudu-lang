@@ -1,0 +1,16 @@
+module RejectsDelegateShape
+
+foreign "c" {
+  callback Ping(context, value: Int64) -> ()
+  callback Late(value: Int64, context) -> ()
+  callbacks Events{ping: Ping, late: Late}
+  // A selector names one segment per argument, a delegate method receives
+  // its object where the context is declared, and every method is a member.
+  delegate Watcher for Events {
+    ping "ping",
+    late "late:",
+    missing "missing:"
+  }
+}
+
+export fn main() -> Int { 0 }

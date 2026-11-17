@@ -9,6 +9,8 @@ tags: [moc, module, foreign, ffi]
   native call.
 - [[Foreign Platform Loader]] — shared platform loading and reference release.
 - [[Pudu FFI Callback Bridge]] · [[Pudu Private FFI ABI]] — libffi callbacks and shared ABI carriers.
+- [[Pudu FFI Objective-C Bridge]] — Objective-C block invocation, runtime delegate classes, and their release (Apple only).
+- [[Pudu FFI Callback Adapter]] — shared adapter struct, block literal layout, and callback lock and dispatch declarations.
 - [[Pudu FFI C++ Fixture]] — the test-only C++ resource surface exported through a stable C ABI.
 
 - [[Pudu SQLite Bridge]] — on-demand SQLite loading, statement ownership, and exact byte transport.

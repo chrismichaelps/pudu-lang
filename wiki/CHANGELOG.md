@@ -5,6 +5,11 @@ tags: [changelog]
 
 # Changelog
 
+## 2026-11-17 — Objective-C delegates (#879)
+
+- Objective-C delegates: runtime-defined classes whose methods enter callback group members (refs #879).
+  [[Backend Emit Foreign Delegate]] · [[Pudu FFI Objective-C Bridge]]
+
 ## 2026-11-17 — Foreign teardown and Objective-C blocks (#879)
 
 - Foreign teardown releases newest claims first; Objective-C autorelease

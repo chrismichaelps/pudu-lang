@@ -199,3 +199,7 @@ Resolve callback group constructors through ordinary native name visibility and 
 ## Resolved Grill Log for Objective-C dispatch
 
 Preserve the resolved Objective-C method on a foreign target.
+
+## Resolved Grill Log for Objective-C delegates
+
+`scopeDelegates` records the delegate declarations visible in the current scope so that `lookupDelegate` can answer them during lowering.

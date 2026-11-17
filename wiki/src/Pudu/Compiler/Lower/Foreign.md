@@ -138,3 +138,7 @@ Resolve declared member names to fields of the concrete checked handler record.
 ## Resolved Grill Log for Objective-C dispatch
 
 Mark Objective-C calls as capable of re-entering the runtime. Other argument and ownership crossings keep their checked positions.
+
+## Resolved Grill Log for Objective-C delegates
+
+Lowering a delegate constructor call goes through the foreign lowering path, which validates the group token and records the class for the module's delegate definitions.

@@ -206,3 +206,7 @@ Walk the callback type without resolving declaration-local extent names as sourc
 ## Resolved Grill Log for callback groups
 
 Resolve each member signature as a type. The foreign checker owns the member segment of a group trampoline projection.
+
+## Resolved Grill Log for Objective-C delegates
+
+Delegate names are published as values through `foreignValueNames`, the same route foreign functions take. The interface carries the handle type and the constructor so importing modules can construct a delegate without seeing the block's declarations.

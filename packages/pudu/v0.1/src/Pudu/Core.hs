@@ -29,7 +29,7 @@ module Pudu.Core
   , CoreRangeMethodName (..), CoreBytesMethodName (..), CoreDecimalMethodName (..)
   , CoreKernelName (..)
   , CoreForeign (..), CoreClaim (..)
-  , CoreCallbackOperation (..), CoreCallbackSignature (..), CoreCallbackFallback (..), CoreCallbackSlot (..)
+  , CoreCallbackOperation (..), CoreDelegate (..), CoreCallbackSignature (..), CoreCallbackFallback (..), CoreCallbackSlot (..)
   , CoreType (..)
   , coreTypeName, displayName, suppliedCountName
   ) where
@@ -348,6 +348,17 @@ data CoreCallbackOperation
   = CoreCallbackRegister !CoreCallbackSignature
   | CoreCallbackRegisterGroup !CoreCallbackSignature ![Int]
   | CoreCallbackUnregister
+  | CoreDelegateNew !CoreDelegate
+  deriving stock (Eq, Ord, Show)
+
+{-| An Objective-C class defined at run time: its name, the callback group
+    whose token an instance carries, and each method's selector with the
+    group member's signature it enters. -}
+data CoreDelegate = CoreDelegate
+  { coreDelegateClass :: !Text
+  , coreDelegateGroup :: !CoreCallbackSignature
+  , coreDelegateMethods :: ![(Text, CoreCallbackSignature)]
+  }
   deriving stock (Eq, Ord, Show)
 
 {-| A trampoline's type and native slot sequence. Nothing identifies its

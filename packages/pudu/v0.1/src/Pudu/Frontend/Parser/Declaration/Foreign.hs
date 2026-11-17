@@ -36,6 +36,8 @@ import Pudu.Frontend.Syntax.Tree
   , Foreign (..)
   , ForeignCallback (..)
   , ForeignCallbackGroup (..)
+  , ForeignDelegate (..)
+  , ForeignDelegateMethod (..)
   , ForeignCallbackMember (..)
   , ForeignCallbackParameter (..)
   , ForeignCallbackPassing (..)
@@ -49,7 +51,7 @@ import Pudu.Frontend.Syntax.Tree
   , Visibility
   )
 import Pudu.Frontend.Token
-  ( Keyword (KwElse, KwFalse, KwFn, KwNull, KwTrue, KwType)
+  ( Keyword (KwElse, KwFalse, KwFn, KwFor, KwNull, KwTrue, KwType)
   , Token (..)
   , TokenKind (..)
   )
@@ -67,7 +69,7 @@ parseForeign visibility = do
   library <- expectStringLiteral "for the library's name"
   version <- parseVersion
   _ <- expectSymbol "{" "to start the foreign declarations"
-  (types, classes, callbacks, groups, functions) <- parseForeignMembers [] [] [] [] []
+  (types, classes, callbacks, groups, delegates, functions) <- parseForeignMembers [] [] [] [] [] []
   closing <- expectSymbol "}" "to close the foreign declarations"
   pure
     ( Located (mergedOrLeft (tokenSpan start) (tokenSpan closing))
@@ -77,9 +79,11 @@ parseForeign visibility = do
               , foreignLibrary = library
               , foreignVersion = version
               , foreignTypes = types <> map foreignClassName classes
+                  <> map (foreignDelegateName . locatedValue) delegates
               , foreignClasses = classes
               , foreignCallbacks = callbacks
               , foreignCallbackGroups = groups
+              , foreignDelegates = delegates
               , foreignFunctions = functions
               }
         )
@@ -107,13 +111,17 @@ parseForeignMembers
   -> [ForeignClass]
   -> [Located ForeignCallback]
   -> [Located ForeignCallbackGroup]
+  -> [Located ForeignDelegate]
   -> [Located ForeignFunction]
-  -> Parser ([Located Text], [ForeignClass], [Located ForeignCallback], [Located ForeignCallbackGroup], [Located ForeignFunction])
-parseForeignMembers types classes callbacks groups functions = do
+  -> Parser
+      ( [Located Text], [ForeignClass], [Located ForeignCallback], [Located ForeignCallbackGroup]
+      , [Located ForeignDelegate], [Located ForeignFunction] )
+parseForeignMembers types classes callbacks groups delegates functions = do
   before <- peekToken
   exhausted <- budgetExhausted
   let kind = tokenKind before
-      collected = pure (reverse types, reverse classes, reverse callbacks, reverse groups, reverse functions)
+      collected = pure
+        (reverse types, reverse classes, reverse callbacks, reverse groups, reverse delegates, reverse functions)
       continue next = do
         after <- peekToken
         if before == after then collected else next
@@ -122,21 +130,53 @@ parseForeignMembers types classes callbacks groups functions = do
       Keyword KwType -> do
         _ <- advanceToken
         name <- expectUpperIdentifier "after type"
-        continue (parseForeignMembers (name : types) classes callbacks groups functions)
+        continue (parseForeignMembers (name : types) classes callbacks groups delegates functions)
       Identifier "class" -> do
         _ <- advanceToken
         name <- expectUpperIdentifier "after class"
         symbol <- parseSymbol
-        continue (parseForeignMembers types (ForeignClass name (maybe name id symbol) : classes) callbacks groups functions)
+        continue (parseForeignMembers types (ForeignClass name (maybe name id symbol) : classes) callbacks groups delegates functions)
       Identifier "callback" -> do
         callback <- parseForeignCallback
-        continue (parseForeignMembers types classes (callback : callbacks) groups functions)
+        continue (parseForeignMembers types classes (callback : callbacks) groups delegates functions)
       Identifier "callbacks" -> do
         group <- parseCallbackGroup
-        continue (parseForeignMembers types classes callbacks (group : groups) functions)
+        continue (parseForeignMembers types classes callbacks (group : groups) delegates functions)
+      Identifier "delegate" -> do
+        delegate <- parseDelegate
+        continue (parseForeignMembers types classes callbacks groups (delegate : delegates) functions)
       _ -> do
         function <- parseForeignFunction
-        continue (parseForeignMembers types classes callbacks groups (maybe functions (: functions) function))
+        continue (parseForeignMembers types classes callbacks groups delegates (maybe functions (: functions) function))
+
+{-| `delegate Name symbol "Class" for Group { member "selector:", ... }`. The
+    symbol defaults to the local name, as a class declaration's does. -}
+parseDelegate :: Parser (Located ForeignDelegate)
+parseDelegate = do
+  start <- advanceToken
+  name <- expectUpperIdentifier "after delegate"
+  symbol <- parseSymbol
+  _ <- expectKeyword KwFor "before the delegate's callback group"
+  group <- expectUpperIdentifier "for the delegate's callback group"
+  _ <- expectSymbol "{" "before the delegate's methods"
+  methods <- parseMethods []
+  closing <- expectSymbol "}" "after the delegate's methods"
+  pure (Located (mergedOrLeft (tokenSpan start) (tokenSpan closing))
+    (ForeignDelegate name (maybe name id symbol) group methods))
+ where
+  parseMethods reversed = do
+    kind <- peekKind
+    exhausted <- budgetExhausted
+    if kind == EndOfFile || isSymbol "}" kind || exhausted
+      then pure (reverse reversed)
+      else do
+        member <- expectValueIdentifier "for the callback group member"
+        selector <- expectStringLiteral "for the member's Objective-C selector"
+        let methods = ForeignDelegateMethod member selector : reversed
+        separator <- matchSymbol ","
+        case separator of
+          Just _ -> parseMethods methods
+          Nothing -> pure (reverse methods)
 
 parseCallbackGroup :: Parser (Located ForeignCallbackGroup)
 parseCallbackGroup = do

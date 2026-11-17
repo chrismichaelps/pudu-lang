@@ -79,3 +79,7 @@ name cannot exchange callback contexts in an interpreter process.
 ## Resolved Grill Log for interpreted Objective-C dispatch
 
 A resolved Objective-C method describes how to find the function and receiver at dispatch.
+
+## Resolved Grill Log for Objective-C delegates
+
+`DelegateBinding` holds the checked class symbol, the group, and the member selectors. Interpreted construction reads it when the constructor runs.

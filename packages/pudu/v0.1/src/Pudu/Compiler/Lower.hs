@@ -58,6 +58,8 @@ import Pudu.Frontend.Syntax
   ( Declaration (..)
   , Foreign (..)
   , foreignCallbackNames
+  , ForeignDelegate (..)
+  , ForeignDelegateMethod (..)
   , ForeignFunction (..)
   , ForeignParameter (..)
   , Function (..)
@@ -237,6 +239,18 @@ lowerRooted library entryName programModules@(rootModule : _)
     coreGroup native owner (Located _ members) =
       ( coreSignature native owner (Callback.callbackMemberSignature (NonEmpty.head members))
       , map Callback.callbackMemberField (NonEmpty.toList members) )
+    coreDelegate native groups delegate = do
+      let group = locatedValue (foreignDelegateGroup delegate)
+      located@(Located _ members) <- Map.lookup group groups
+      let entries = zip [0 ..] (NonEmpty.toList members)
+          method written = do
+            let member = locatedValue (foreignDelegateMember written)
+            (ordinal, entry) <- lookup member [(Callback.callbackMemberField entry, (ordinal, entry)) | (ordinal, entry) <- entries]
+            pure ( locatedValue (foreignDelegateSelector written)
+                 , (coreSignature native group (Callback.callbackMemberSignature entry))
+                     {coreCallbackProjection = Just (ordinal, member)} )
+      resolved <- traverse method (foreignDelegateMethods delegate)
+      pure (CoreDelegate (locatedValue (foreignDelegateSymbol delegate)) (fst (coreGroup native group located)) resolved)
     callbackSlots native signatures groups function =
       [ CoreCallbackSlot (Callback.callbackPlacement pair)
           ((callbackSignatureOf (nativeModuleName native) (Callback.callbackTypeName pair) (Callback.callbackSlotSignature pair))
@@ -301,6 +315,11 @@ lowerRooted library entryName programModules@(rootModule : _)
             , scopeCallbackGroups = Map.unions
                 [ Map.mapWithKey (coreGroup native) (groupsOf declared callbacks)
                 | (declared, callbacks) <- callbackDeclarations native ]
+            , scopeDelegates = Map.fromList
+                [ (locatedValue (foreignDelegateName delegate), core)
+                | (declared, callbacks) <- callbackDeclarations native
+                , Located _ delegate <- foreignDelegates declared
+                , Just core <- [coreDelegate native (groupsOf declared callbacks) delegate] ]
             }
         )
       | native <- programModules

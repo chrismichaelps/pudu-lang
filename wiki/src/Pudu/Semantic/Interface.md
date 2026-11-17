@@ -112,3 +112,7 @@ Retain owner-indexed exported variant candidates alongside the existing unique e
 Resolved Grill Log: preserve complete declaring-owner ambiguity at uses across imports, lexical shadows and generated syntax. See [[Imported Variant Delivery]].
 
 Resolved type-head control: imported candidates retain an export-index TypeSpace flag; PathUse preserves C.First.Chosen qualification without admitting ambiguous value fields. Syntactically named member paths preserve head spans. See [[Imported Variant Delivery]].
+
+## Resolved Grill Log for Objective-C delegates
+
+Delegate names are published as values through `foreignValueNames`, the same route foreign functions take. The interface carries the handle type and the constructor so importing modules can construct a delegate without seeing the block's declarations.

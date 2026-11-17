@@ -21,8 +21,11 @@ module Pudu.Frontend.Syntax.Tree
   , FunctionBody (..)
   , Foreign (..)
   , foreignCallbackNames
+  , foreignValueNames
   , ForeignCallback (..)
   , ForeignCallbackGroup (..)
+  , ForeignDelegate (..)
+  , ForeignDelegateMethod (..)
   , ForeignCallbackMember (..)
   , ForeignCallbackParameter (..)
   , ForeignFunction (..)
@@ -416,9 +419,33 @@ data Foreign = Foreign
   , foreignClasses :: ![ForeignClass]
   , foreignCallbacks :: ![Located ForeignCallback]
   , foreignCallbackGroups :: ![Located ForeignCallbackGroup]
+  , foreignDelegates :: ![Located ForeignDelegate]
   , foreignFunctions :: ![Located ForeignFunction]
   }
   deriving stock (Eq, Show, Generic)
+
+{-| An Objective-C class this program defines at run time. Each method is a
+    member of one callback group, and an instance carries that group's
+    registration, so a framework holding the object calls the handlers. -}
+data ForeignDelegate = ForeignDelegate
+  { foreignDelegateName :: !(Located Text)
+  , foreignDelegateSymbol :: !(Located Text)
+  , foreignDelegateGroup :: !(Located Text)
+  , foreignDelegateMethods :: ![ForeignDelegateMethod]
+  }
+  deriving stock (Eq, Show, Generic)
+
+data ForeignDelegateMethod = ForeignDelegateMethod
+  { foreignDelegateMember :: !(Located Text)
+  , foreignDelegateSelector :: !(Located Text)
+  }
+  deriving stock (Eq, Show, Generic)
+
+{-| The names a block binds as values: callback and group constructors, and
+    delegate constructors. Delegates are also handle types. -}
+foreignValueNames :: Foreign -> [Located Text]
+foreignValueNames declared =
+  foreignCallbackNames declared <> map (foreignDelegateName . locatedValue) (foreignDelegates declared)
 
 foreignCallbackNames :: Foreign -> [Located Text]
 foreignCallbackNames declared =

@@ -69,3 +69,7 @@ Keep the native C fixtures and the interpreter-exported fixture signatures ident
 ## Resolved Grill Log for Foundation conformance
 
 Exercise Foundation through its real framework. An alloc/init pair transfers its receiver, copy contributes a counted claim, and a stale receiver must fail before another send.
+
+## Resolved Grill Log for Objective-C delegates
+
+The NSNotificationCenter delegate conformance case runs in both the interpreter and generated C. Both paths must deliver the same notification to the same member.

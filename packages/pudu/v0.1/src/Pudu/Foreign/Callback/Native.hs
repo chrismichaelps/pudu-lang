@@ -8,6 +8,8 @@ module Pudu.Foreign.Callback.Native
   , nativeCallbackContext
   , nativeCallbackBlockCode
   , withBlockLiterals
+  , createDelegate
+  , releaseDelegate
   , findCallbackAdapter
   , retireNativeCallback
   , newNativeCallbackCache
@@ -57,6 +59,26 @@ nativeCallbackBlockCode :: NativeCallback -> IO (Maybe (Ptr ()))
 nativeCallbackBlockCode native = do
   code <- c_block_code (nativeCallbackAdapter native)
   pure (if code == nullPtr then Nothing else Just code)
+
+{-| An object of the named class, defined on first use with one method per
+    (selector, adapter), carrying the registration's context as its key. -}
+createDelegate :: Text -> [(Text, CallbackAdapter)] -> NativeCallback -> IO (Maybe (Ptr ()))
+createDelegate name methods native =
+  ByteString.useAsCString (Encoding.encodeUtf8 name) $ \className ->
+    withCStrings (map fst methods) $ \selectors ->
+      withArray selectors $ \selectorArray ->
+        withArray [adapter | (_, CallbackAdapter adapter _) <- methods] $ \adapterArray -> do
+          created <- c_delegate_class className (fromIntegral (length methods)) selectorArray adapterArray
+          if created == nullPtr then pure Nothing else do
+            object <- c_delegate_new created (nativeCallbackContext native)
+            pure (if object == nullPtr then Nothing else Just object)
+ where
+  withCStrings [] action = action []
+  withCStrings (text : rest) action =
+    ByteString.useAsCString (Encoding.encodeUtf8 text) $ \held -> withCStrings rest (action . (held :))
+
+releaseDelegate :: Ptr () -> IO ()
+releaseDelegate = c_delegate_release
 
 {-| Each (position, invoke, key) becomes a stack block living for the action.
     A callee that keeps a block copies it; the copy carries the key. -}
@@ -137,6 +159,12 @@ foreign import ccall unsafe "pudu_ffi_block_size"
   c_block_size :: IO CSize
 foreign import ccall unsafe "pudu_ffi_block_fill"
   c_block_fill :: Ptr () -> Ptr () -> Ptr () -> IO CInt
+foreign import ccall safe "pudu_ffi_delegate_class"
+  c_delegate_class :: Ptr CChar -> Int32 -> Ptr (Ptr CChar) -> Ptr (Ptr ()) -> IO (Ptr ())
+foreign import ccall safe "pudu_ffi_delegate_new"
+  c_delegate_new :: Ptr () -> Ptr () -> IO (Ptr ())
+foreign import ccall safe "pudu_ffi_delegate_release"
+  c_delegate_release :: Ptr () -> IO ()
 foreign import ccall safe "pudu_ffi_callback_retire"
   c_retire :: Ptr () -> IO ()
 

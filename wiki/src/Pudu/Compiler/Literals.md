@@ -171,3 +171,7 @@ See [[Bound Receiver Evidence Delivery]].
 Walk callback fallback literals with the existing traversal. Class names,
 selectors, group names and extent relations are declaration metadata and
 carry no expression literals.
+
+## Resolved Grill Log for Objective-C delegates
+
+Literal rewriting has instances for delegate syntax, so delegate declarations pass through the same rewrite as the other foreign forms.

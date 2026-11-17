@@ -24,9 +24,9 @@ import Pudu.Eval.ImplementationHead (HeadSelection (..), ImplementationHead (..)
 import Pudu.FloatKernel (floatKernelName, floatKernels)
 import Pudu.LaneKernel (laneKernelName, laneKernels)
 import Pudu.Foreign.Callback
-  ( CallbackGroupMember (..), CallbackGroups, CallbackPair (..), CallbackParameter (..)
+  ( CallbackGroupMember (..), CallbackGroups, CallbackPair (..), CallbackParameter (..), CallbackPlacement (..)
   , CallbackSignature (..), callbackPairs, checkCallbackDeclarations, checkCallbackGroups )
-import Pudu.Eval.Foreign.Binding (ForeignCallbackSlot (..))
+import Pudu.Eval.Foreign.Binding (DelegateBinding (..), ForeignCallbackSlot (..))
 import Pudu.Foreign.Crossing
   ( Crossing (HandleCrossing, NothingCrossing, RecordCrossing), ObjectiveCMethod (..), RecordLayouts, ReturnedRun (..)
   , crossingFor, foreignBounds, loanFor, objectiveCMethod, optionalHandleFor, parameterCrossingFor
@@ -61,6 +61,8 @@ import Pudu.Frontend.Syntax.Tree
   , Expression (..)
   , Foreign (..)
   , foreignCallbackNames
+  , ForeignDelegate (..)
+  , ForeignDelegateMethod (..)
   , ForeignFunction (..)
   , ForeignParameter (..)
   , Function (..)
@@ -284,6 +286,7 @@ installDeclaration namespace traits layouts declared (Located _ declaration) = c
         callbacks = either (const Map.empty) id (checkCallbackDeclarations handles layouts (foreignCallbacks value))
         groups = either (const Map.empty) id (checkCallbackGroups handles callbacks (foreignCallbackGroups value))
     mapM_ (installForeign namespace layouts value handles callbacks groups) (foreignFunctions value)
+    mapM_ (installDelegate namespace groups . locatedValue) (foreignDelegates value)
   _ -> pure ()
 
 installCallback :: Text -> Text -> Evaluator ()
@@ -387,16 +390,8 @@ installForeign namespace layouts library handles callbacks groups declaration@(L
     (either (const Nothing) id (resolveReturnedRun handles layouts functions function))
   functions = Map.fromList
     [(locatedValue (foreignName candidate), candidate) | Located _ candidate <- foreignFunctions library]
-  groupMembers owner = case Map.lookup owner groups of
-    Nothing -> []
-    Just (Located _ members) ->
-      [ (callbackMemberField member, qualifySignature (locatedValue (callbackMemberSignature member)))
-      | member <- NonEmpty.toList members ]
-  qualifySignature signature =
-    signature{callbackParameters = map qualifyCallbackParameter (callbackParameters signature)}
-  qualifyCallbackParameter parameter = case parameter of
-    CallbackContext -> CallbackContext
-    CallbackValue crossing -> CallbackValue (qualify crossing)
+  groupMembers = qualifiedGroupMembers namespace groups
+  qualifySignature = qualifyCallbackSignature namespace
   crossingOf parameter = qualify $ case (loanOf parameter, runOf parameter) of
     (Just (_, pointee), _) -> pointee
     (_, Just (_, element)) -> element
@@ -407,11 +402,58 @@ installForeign namespace layouts library handles callbacks groups declaration@(L
   runOf parameter
     | foreignParameterOut parameter = Nothing
     | otherwise = foreignParameterType parameter >>= runLoanFor handles layouts
-  qualify crossing = case crossing of
-    RecordCrossing owner fields -> RecordCrossing
-      (qualifiedForeignOwner namespace owner)
-      [(label, qualify held) | (label, held) <- fields]
-    other -> other
+  qualify = qualifyCrossing namespace
+
+qualifyCrossing :: Text -> Crossing -> Crossing
+qualifyCrossing namespace crossing = case crossing of
+  RecordCrossing owner fields -> RecordCrossing
+    (qualifiedForeignOwner namespace owner)
+    [(label, qualifyCrossing namespace held) | (label, held) <- fields]
+  other -> other
+
+qualifyCallbackSignature :: Text -> CallbackSignature -> CallbackSignature
+qualifyCallbackSignature namespace signature =
+  signature{callbackParameters = map qualified (callbackParameters signature)}
+ where
+  qualified parameter = case parameter of
+    CallbackContext -> CallbackContext
+    CallbackValue crossing -> CallbackValue (qualifyCrossing namespace crossing)
+
+{-| A group's members in declaration order, as the adapters key them. -}
+qualifiedGroupMembers :: Text -> CallbackGroups -> Text -> [(Text, CallbackSignature)]
+qualifiedGroupMembers namespace groups owner = case Map.lookup owner groups of
+  Nothing -> []
+  Just (Located _ members) ->
+    [ (callbackMemberField member, qualifyCallbackSignature namespace (locatedValue (callbackMemberSignature member)))
+    | member <- NonEmpty.toList members ]
+
+{-| A delegate binds a constructor from its group's token. The slot is the one
+    a foreign call crossing that group's context would use, so the methods and
+    those calls share one native registration per token. -}
+installDelegate :: Text -> CallbackGroups -> ForeignDelegate -> Evaluator ()
+installDelegate namespace groups delegate = case qualifiedGroupMembers namespace groups group of
+  [] -> pure ()
+  members@((_, representative) : _) ->
+    bind name
+      ( ForeignCallbackValue
+          ( DelegateConstructor
+              DelegateBinding
+                { delegateHandle = name
+                , delegateClass = locatedValue (foreignDelegateSymbol delegate)
+                , delegateSlot = ForeignCallbackSlot owner (owner <> " " <> Text.pack (show members))
+                    (CallbackPair (RegistrationContext 0) group Nothing representative) representative
+                    (IntMap.fromDistinctAscList (zip [0 ..] members))
+                , delegateMethods =
+                    [ (locatedValue (foreignDelegateSelector method), ordinal)
+                    | method <- foreignDelegateMethods delegate
+                    , Just ordinal <- [lookup (locatedValue (foreignDelegateMember method)) (zip (map fst members) [0 ..])] ]
+                }
+          )
+      )
+ where
+  name = locatedValue (foreignDelegateName delegate)
+  group = locatedValue (foreignDelegateGroup delegate)
+  owner = qualifiedForeignOwner namespace group
 
 qualifiedForeignOwner :: Text -> Text -> Text
 qualifiedForeignOwner namespace name

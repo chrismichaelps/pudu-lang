@@ -501,6 +501,37 @@ objectiveCPrograms =
       , "  }"
       , "  0"
       , "}" ], "now\nlater\nnow\n")
+  , ("a framework calls a delegate method that enters its group handler", program
+      [ "foreign \"/System/Library/Frameworks/Foundation.framework/Foundation\" {"
+      , "  class StringObject symbol \"NSString\""
+      , "  class Center symbol \"NSNotificationCenter\""
+      , "  type Notice"
+      , "  callback Posted(context, note: borrowed Notice) -> ()"
+      , "  callbacks Events { posted: Posted }"
+      , "  delegate Observer symbol \"PuduConformanceObserver\" for Events { posted \"noticePosted:\" }"
+      , "  fn stringFrom selector \"stringWithUTF8String:\" on StringObject (text: Str) -> borrowed StringObject"
+      , "  fn center selector \"defaultCenter\" on Center () -> borrowed Center"
+      , "  fn observe selector \"addObserver:selector:name:object:\" (receiver: Center, observer: Observer, action: UInt64, name: StringObject, sender: UInt64) -> ()"
+      , "  fn post selector \"postNotificationName:object:\" (receiver: Center, name: StringObject, sender: UInt64) -> ()"
+      , "  fn selectorNamed symbol \"sel_registerName\" (name: Str) -> UInt64"
+      , "}"
+      , "type Handlers = { posted: fn(Notice) -> () }"
+      , "fn heard(note: Notice) -> () {"
+      , "  let _shown = print(\"posted\")"
+      , "  ()"
+      , "}"
+      , "fn main() -> Int {"
+      , "  unsafe(foreign) {"
+      , "    let events = Events(Handlers{posted: heard})"
+      , "    let observer = Observer(events)"
+      , "    let name = stringFrom(\"PuduConformanceNotice\")"
+      , "    let hub = center()"
+      , "    observe(hub, observer, selectorNamed(\"noticePosted:\"), name, 0u64)"
+      , "    post(hub, name, 0u64)"
+      , "    post(hub, name, 0u64)"
+      , "  }"
+      , "  0"
+      , "}" ], "posted\nposted\n")
   ]
 
 {-| A serial dispatch queue takes blocks through its C interface: a

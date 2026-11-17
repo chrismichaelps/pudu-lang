@@ -49,3 +49,7 @@ keys. Closing the cache retires registrations and releases lookup state.
 ## Resolved Grill Log for interpreter callback groups
 
 Cache adapters by owner and member. One registration retains the dispatcher while each adapter supplies its member and decoded leaf count.
+
+## Resolved Grill Log for Objective-C delegates
+
+`createDelegate` leases the group registration and calls the native constructor. `releaseDelegate` drops that lease and sends the release message through the runtime.

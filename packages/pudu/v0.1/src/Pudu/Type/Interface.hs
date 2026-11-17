@@ -34,6 +34,7 @@ import Pudu.Frontend.Syntax.Tree
   , Variant (..)
   , Visibility (..)
   , foreignCallbackNames
+  , foreignValueNames
   )
 import Pudu.Type.Value (NominalId, canonicalNominal)
 
@@ -139,7 +140,7 @@ exportedValue :: Located Declaration -> [Text]
 exportedValue (Located _ declaration) = case declaration of
   FunctionDeclaration value -> [locatedValue (functionName value)]
   ForeignDeclaration value ->
-    map locatedValue (foreignCallbackNames value)
+    map locatedValue (foreignValueNames value)
       <> map (locatedValue . foreignName . locatedValue) (foreignFunctions value)
   TypeDeclaration value -> case locatedValue (typeDefinition value) of
     SumDefinition variants -> map (locatedValue . variantName . locatedValue) variants

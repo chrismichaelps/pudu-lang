@@ -88,3 +88,7 @@ needs its nominal layout for frame lowering and C packing.
 ## Resolved Grill Log for native callback groups
 
 Keep callback registration, handler record and trampoline types available for emission.
+
+## Resolved Grill Log for Objective-C delegates
+
+A delegate construction contributes the value types of every method's group member signature, so the layouts those methods cross are emitted even when no foreign function names that member.

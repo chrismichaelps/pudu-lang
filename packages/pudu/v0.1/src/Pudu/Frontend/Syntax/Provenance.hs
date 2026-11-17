@@ -13,7 +13,7 @@ import Pudu.Frontend.Syntax.Tree
   ( ArrayRest, Attribute, BindingKind, Block, Capability, ComptimeFor, Constraint
   , Declaration, Derive, DeriveRequest, DeriveShape, Expression, FieldDeclaration
   , FieldInit, FieldPattern, Foreign, ForeignCallback, ForeignCallbackParameter
-  , ForeignCallbackGroup, ForeignCallbackMember, ForeignCallbackPassing, ForeignClass
+  , ForeignCallbackGroup, ForeignCallbackMember, ForeignDelegate, ForeignDelegateMethod, ForeignCallbackPassing, ForeignClass
   , ForeignFunction, ForeignLength, ForeignMethod, ForeignParameter, Function
   , FunctionBody, Impl, Import, Literal, Macro, MacroKind, MacroParam, MatchArm
   , Module, Parameter, Pattern, Statement, Trait, TypeDeclarationValue
@@ -111,6 +111,8 @@ instance Owned Foreign
 instance Owned ForeignClass
 instance Owned ForeignMethod
 instance Owned ForeignCallbackGroup
+instance Owned ForeignDelegate
+instance Owned ForeignDelegateMethod
 instance Owned ForeignCallbackMember
 instance Owned ForeignCallbackPassing
 instance Owned ForeignLength

@@ -109,3 +109,7 @@ Validate and consume an idle Objective-C receiver without waiting on an invocati
 
 Release the module lookup records at process exit while keeping native
 loader references pinned for cached callbacks and final destructors.
+
+## Resolved Grill Log for Objective-C delegates
+
+The `host_objc_delegate` part resolves the libobjc functions at run time. On a non-Apple target it stops with `#error`, so a program that declares a delegate cannot be built for a platform without the runtime.

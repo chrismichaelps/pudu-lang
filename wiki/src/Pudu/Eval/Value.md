@@ -259,3 +259,7 @@ Closure retains optional immutable [[Runtime Implementation Head]] metadata.
 Ordinary functions/literals initialize None; captures, witnesses, lazy proof cache
 and function equality stay unchanged. Resolved Grill Log: head matching belongs
 to [[Eval Type Witness]], not Value; keep this value owner below 500 lines.
+
+## Resolved Grill Log for Objective-C delegates
+
+`DelegateConstructor` is the value a delegate name evaluates to. It holds the class and the group whose registration a construction leases.

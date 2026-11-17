@@ -176,3 +176,7 @@ Resolve class names within the same block. Count declared selector arguments sep
 ## Resolved Grill Log for Objective-C ownership
 
 Check borrowed and transferred method results, including an instance receiver and a transferred object result for initializers.
+
+## Resolved Grill Log for Objective-C delegates
+
+`declareDelegate` admits the handle type and the constructor value. `checkDelegate` requires the group in the same block, one entry per member, a context-first member callback, one colon-terminated selector segment per argument, and no record arguments. Each violation reports E3063.

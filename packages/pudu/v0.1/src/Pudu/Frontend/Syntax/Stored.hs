@@ -114,6 +114,8 @@ instance Persist Foreign
 instance Persist ForeignClass
 instance Persist ForeignMethod
 instance Persist ForeignCallbackGroup
+instance Persist ForeignDelegate
+instance Persist ForeignDelegateMethod
 instance Persist ForeignCallbackMember
 instance Persist ForeignCallbackPassing
 instance Persist ForeignLength

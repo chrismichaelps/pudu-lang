@@ -334,3 +334,7 @@ Publish group owners and ordered member names through the module scope.
 ## Resolved Grill Log for Objective-C dispatch
 
 Carry checked Objective-C dispatch metadata alongside the ordinary foreign crossing.
+
+## Resolved Grill Log for Objective-C delegates
+
+Lowering resolves a delegate constructor call through `lookupDelegate` and emits a `CoreDelegateNew` operation. The call takes the group token as its only runtime argument.

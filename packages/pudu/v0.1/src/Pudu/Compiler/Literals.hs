@@ -301,6 +301,8 @@ instance Walk ForeignClass
 instance Walk ForeignMethod
 instance Walk ForeignCallbackGroup
 instance Walk ForeignCallbackMember
+instance Walk ForeignDelegate
+instance Walk ForeignDelegateMethod
 instance Walk ForeignLength where
   walk _ value = value
 instance Walk ForeignCallbackPassing where

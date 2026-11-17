@@ -51,3 +51,7 @@ Publish a copied Bytes value to the handler.
 ## Resolved Grill Log for interpreter callback groups
 
 A group entry retains the handler record. Use the native member ordinal and the admitted registration to select a field before decoding the argument leaves.
+
+## Resolved Grill Log for Objective-C delegates
+
+Delegate construction shares the group's native registration with the other group callers and claims the resulting instance as an owned handle, so teardown releases it with the other claims.

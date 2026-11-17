@@ -107,3 +107,7 @@ Parse callback groups and the contextual lower-case segment on a trampoline proj
 ## Resolved Grill Log for Objective-C declarations
 
 Parse class aliases and the contextual selector clause. The selector is kept as the exact Objective-C spelling.
+
+## Resolved Grill Log for Objective-C delegates
+
+`parseDelegate` reads `delegate Name symbol "Class" for Group { member "selector" }` inside a foreign block. It records the group as a name only; whether the group exists and whether each member appears once are checker questions, so the parser reports shape errors alone.

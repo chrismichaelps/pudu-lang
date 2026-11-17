@@ -338,3 +338,7 @@ Install qualified callback member signatures once at binding installation.
 ## Resolved Grill Log for interpreted Objective-C dispatch
 
 Retain the derived selector and native class alias alongside the checked foreign binding.
+
+## Resolved Grill Log for Objective-C delegates
+
+`installDelegate` installs a delegate's members through `qualifyCallbackSignature` and `qualifiedGroupMembers`, the helpers group callbacks already use, so callback members get one qualification path.

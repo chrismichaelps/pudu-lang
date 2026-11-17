@@ -75,6 +75,7 @@ testForeignHandles = do
   badRelease <- codes "test-fixtures/stdlib/RejectsForeignReleaseShape.pudu"
   bytesSlot <- codes "test-fixtures/stdlib/RejectsForeignBytesSlot.pudu"
   blockContext <- codes "test-fixtures/stdlib/RejectsBlockContextPosition.pudu"
+  delegateShape <- codes "test-fixtures/stdlib/RejectsDelegateShape.pudu"
   wrongHandle <- codes "test-fixtures/stdlib/RejectsForeignWrongHandle.pudu"
   emptySymbol <- codes "test-fixtures/stdlib/RejectsEmptyForeignSymbol.pudu"
   qualifiedHandle <- codes "test-fixtures/foreignqualified/Root.pudu"
@@ -238,6 +239,8 @@ testForeignHandles = do
         (bytesSlot === ["E3074"])
     , counterexample "a block's callback takes its context first, where the block arrives"
         (blockContext === ["E3063"])
+    , counterexample "a delegate's selectors, context position and members match its group"
+        (delegateShape === ["E3063", "E3063", "E3063"])
     , counterexample "nominal handles cannot cross as another declared handle"
         (wrongHandle === ["E3001"])
     , counterexample "an empty native symbol is refused at its declaration"

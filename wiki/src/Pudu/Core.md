@@ -518,3 +518,7 @@ Register a checked record with its projected field offsets in group order.
 ## Resolved Grill Log for Objective-C dispatch
 
 Distinguish a C symbol call from an Objective-C send without exposing the receiver or selector as extra Pudu parameters.
+
+## Resolved Grill Log for Objective-C delegates
+
+`CoreDelegateNew` constructs an owned delegate handle from a group token. `CoreDelegate` records a checked declaration: the class symbol, the group, and each member signature in core types, so emitters derive method encodings from the checked types.

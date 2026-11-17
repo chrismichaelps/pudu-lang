@@ -20,7 +20,8 @@ import qualified Data.Set as Set
 import Data.Text (Text)
 import qualified Data.Text as Text
 import Pudu.Foreign.Callback
-  ( CallbackFault (..), CallbackGroupMember (..), CallbackGroups, CallbackPair (callbackPlacement), CallbackSignature
+  ( CallbackFault (..), CallbackGroupMember (..), CallbackGroups, CallbackPair (callbackPlacement)
+  , CallbackParameter (..), CallbackSignature (..)
   , callbackHiddenPositions, callbackNativePosition, callbackPairs, checkCallbackDeclarations, checkCallbackGroups )
 import Pudu.Foreign.Crossing
   ( Crossing (..)
@@ -51,6 +52,8 @@ import Pudu.Frontend.Syntax.Tree
   , ForeignCallback (..)
   , ForeignCallbackGroup (..)
   , ForeignCallbackParameter (..)
+  , ForeignDelegate (..)
+  , ForeignDelegateMethod (..)
   , ForeignFunction (..)
   , ForeignClass (..)
   , ForeignMethod (..)
@@ -85,6 +88,23 @@ declareForeign declared layouts value = do
   mapM_ (declareCallback declared layouts handles callbacks . locatedValue) (foreignCallbacks value)
   mapM_ (declareCallbackGroup declared layouts handles syntax groups . locatedValue) (foreignCallbackGroups value)
   mapM_ (declareOne declared layouts handles callbacks groups) (foreignFunctions value)
+  mapM_ (declareDelegate declared groups . locatedValue) (foreignDelegates value)
+
+{-| A delegate is constructed from its group's token and answers an object
+    the runtime owns until release or teardown. -}
+declareDelegate :: DeclaredTypes -> CallbackGroups -> ForeignDelegate -> Checker ()
+declareDelegate declared groups delegate = do
+  let Located at name = foreignDelegateName delegate
+      Located groupSpan group = foreignDelegateGroup delegate
+      named owner place = Located place (NamedType (ModuleName (owner :| [])) [])
+  scheme <- if Map.member group groups
+    then do
+      token <- formType declared [] (named group groupSpan)
+      object <- formType declared [] (named name at)
+      pure (RestrictedType (capabilitiesOf [ForeignCapability]) (FunctionTypeValue False [token] object))
+    else pure ErrorType
+  bindName name (monotype scheme)
+  recordUnsafeFunction name [ForeignCapability]
 
 declareCallback
   :: DeclaredTypes -> RecordLayouts -> Set.Set Text
@@ -253,8 +273,47 @@ checkForeign layouts value = do
     Left failure -> reportCallbackFault failure
     Right callbacks -> case checkCallbackGroups handles callbacks (foreignCallbackGroups value) of
       Left failure -> reportCallbackFault failure
-      Right groups -> mapM_ (checkFunction callbacks groups) (foreignFunctions value)
+      Right groups -> do
+        mapM_ (checkFunction callbacks groups) (foreignFunctions value)
+        mapM_ (checkDelegate groups . locatedValue) (foreignDelegates value)
  where
+  checkDelegate groups delegate = do
+    let Located groupSpan group = foreignDelegateGroup delegate
+        methods = foreignDelegateMethods delegate
+        Located nameSpan _ = foreignDelegateName delegate
+    checkClassName (foreignDelegateSymbol delegate)
+    case Map.lookup group groups of
+      Nothing -> report "E3063" groupSpan ("declare callback group " <> group <> " in this block before its delegate") Nothing
+      Just (Located _ members) -> do
+        when (null methods) $
+          report "E3063" nameSpan "a delegate needs at least one method" Nothing
+        let fields = map (locatedValue . foreignDelegateMember) methods
+        when (Set.size (Set.fromList fields) /= length fields) $
+          report "E3063" nameSpan "a delegate names each callback group member once" Nothing
+        mapM_ (checkDelegateMethod group (NonEmpty.toList members)) methods
+  checkDelegateMethod group members method = do
+    let Located memberSpan member = foreignDelegateMember method
+        written@(Located selectorSpan selector) = foreignDelegateSelector method
+    checkLoaderName "Objective-C selector" written
+    case [entry | entry <- members, callbackMemberField entry == member] of
+      [] -> report "E3063" memberSpan (member <> " is not a member of callback group " <> group) Nothing
+      entry : _ -> do
+        let parameters = callbackParameters (locatedValue (callbackMemberSignature entry))
+            values = [crossing | CallbackValue crossing <- parameters]
+        case parameters of
+          CallbackContext : _ -> pure ()
+          _ -> report "E3063" memberSpan
+            ("the callback for " <> member <> " must take its context first to be a delegate method")
+            (Just "the object and selector arrive where the context is declared")
+        when (any isRecord values) $
+          report "E3063" memberSpan "a delegate method cannot take a record" Nothing
+        when (Text.null selector || Text.count ":" selector /= length values
+            || (not (null values) && not (Text.isSuffixOf ":" selector))) $
+          report "E3063" selectorSpan "the selector does not match the member's argument count"
+            (Just "give one selector segment ending in a colon per argument")
+  isRecord crossing = case crossing of
+    RecordCrossing{} -> True
+    _ -> False
   checkClassName written@(Located at name) = do
     checkLoaderName "Objective-C class name" written
     when (Text.null name) $

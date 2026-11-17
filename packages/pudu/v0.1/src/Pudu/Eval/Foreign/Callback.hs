@@ -3,7 +3,7 @@ module Pudu.Eval.Foreign.Callback (callCallbackValue, withCallbackDispatch) wher
 
 import Control.Applicative ((<|>))
 import Control.Exception (SomeException, bracket, displayException, try)
-import Control.Monad (unless, when)
+import Control.Monad (join, unless, when)
 import Data.Int (Int64)
 import qualified Data.IntMap.Strict as IntMap
 import Data.IORef (IORef, atomicModifyIORef', newIORef, readIORef)
@@ -11,13 +11,13 @@ import Data.Maybe (fromMaybe)
 import qualified Data.Set as Set
 import Data.Text (Text)
 import qualified Data.Text as Text
-import Foreign.Ptr (Ptr, nullPtr)
+import Foreign.Ptr (Ptr, nullPtr, ptrToWordPtr)
 import Foreign.StablePtr (castPtrToStablePtr, castStablePtrToPtr, deRefStablePtr, freeStablePtr, newStablePtr)
 import Pudu.Diagnostic (Diagnostic, Severity (..), diagnostic, diagnosticMessage, mkDiagnosticCode)
 import Pudu.Eval.Env
   ( Env (..), Eval (..), Evaluator (..), abortAt, currentCallbackAncestry, currentCallbackStore
-  , effectsAdmitted, runtimeIO )
-import Pudu.Eval.Foreign.Binding (ForeignCallbackSlot (..))
+  , currentForeignStore, effectsAdmitted, runtimeIO )
+import Pudu.Eval.Foreign.Binding (DelegateBinding (..), ForeignCallbackSlot (..))
 import Pudu.Eval.Foreign.Result (convertForeignValue)
 import Pudu.Eval.Value (ForeignClaim (..), Value (..))
 import qualified Pudu.Eval.Value as Value
@@ -25,16 +25,18 @@ import Pudu.Foreign.Call (CrossedValue (..), ForeignCallFailure (InvalidReturned
 import Pudu.Foreign.Callback (CallbackPair (..), CallbackPlacement (..), CallbackParameter (..), CallbackResult (..), CallbackSignature (..))
 import Pudu.Foreign.Callback.Native
   ( NativeCallbackCache, decodeCallbackArguments, findNativeCallback, nativeCallbackCode
-  , callbackAdapterCode, findCallbackAdapter, nativeCallbackBlockCode, nativeCallbackContext, withBlockLiterals )
+  , callbackAdapterCode, createDelegate, findCallbackAdapter, nativeCallbackBlockCode, nativeCallbackContext
+  , releaseDelegate, withBlockLiterals )
 import Pudu.Foreign.CallbackStore
   ( CallbackAttempt (..), CallbackKey, CallbackUnregistration (..), invokeCallback
   , registerCallback, unregisterCallback, withCallbackLeases )
 import Pudu.Foreign.Crossing (Crossing (..), fitsCrossing)
-import Pudu.Foreign.Ownership (recordForeignDiagnostic)
+import Pudu.Foreign.Ownership (claimOwnedGeneration, recordForeignDiagnostic)
 import Pudu.Source (Span)
 
-callCallbackValue :: Span -> Value.CallbackValue -> [Value] -> Evaluator Value
-callCallbackValue at target arguments = case (target, arguments) of
+callCallbackValue
+  :: (Span -> Value -> [Value] -> Evaluator Value) -> Span -> Value.CallbackValue -> [Value] -> Evaluator Value
+callCallbackValue apply at target arguments = case (target, arguments) of
   (Value.CallbackConstructor owner, [handler]) -> do
     requireRuntime
     store <- currentCallbackStore
@@ -51,7 +53,42 @@ callCallbackValue at target arguments = case (target, arguments) of
     abortAt (Just at) "E7003" "callback registration needs one handler" Nothing
   (Value.CallbackUnregister _ _, _) ->
     abortAt (Just at) "E7003" "unregister needs a callback token and no other arguments" Nothing
+  (Value.DelegateConstructor delegate, [ForeignCallbackValue (Value.CallbackToken owner key)])
+    | owner == foreignCallbackOwner (delegateSlot delegate) -> do
+        requireRuntime
+        construct delegate key
+  (Value.DelegateConstructor delegate, _) ->
+    abortAt (Just at) "E7003" ("delegate " <> delegateHandle delegate <> " needs one token of its callback group") Nothing
  where
+  {-| The group's native registration is the one a foreign call crossing that
+      token would use; the object carries its context and owns a release. -}
+  construct delegate key = do
+    created <- Evaluator $ \env -> do
+      let slot = delegateSlot delegate
+          cache = envNativeCallbacks env
+          owner = foreignCallbackAdapterOwner slot
+          members = foreignCallbackMembers slot
+          adapterFor (selector, ordinal) = case IntMap.lookup ordinal members of
+            Nothing -> pure Nothing
+            Just (_, signature) -> fmap (selector,) <$> findCallbackAdapter cache owner ordinal signature
+      leased <- withCallbackLeases (envCallbackStore env) [key] $ do
+        native <- findNativeCallback cache key owner 0 (foreignCallbackSignature slot)
+          (invokeHandler apply (invocationEnv env) at slot key)
+        methods <- traverse adapterFor (delegateMethods delegate)
+        case (native, sequence methods) of
+          (Just registered, Just resolved) -> createDelegate (delegateClass delegate) resolved registered
+          _ -> pure Nothing
+      pure (Done (join leased) env)
+    case created of
+      Nothing -> abortAt (Just at) "E7001" ("delegate " <> delegateHandle delegate <> " could not be created")
+        (Just "a delegate needs an Apple platform and a live token of its callback group")
+      Just object -> do
+        store <- currentForeignStore
+        let address = fromIntegral (ptrToWordPtr object)
+        claimed <- runtimeIO (claimOwnedGeneration store address (releaseDelegate object))
+        case claimed of
+          Just generation -> pure (ForeignHandleValue (delegateHandle delegate) address (OwnedClaim generation))
+          Nothing -> abortAt (Just at) "E7021" ("delegate " <> delegateHandle delegate <> " could not be claimed") Nothing
   requireRuntime = do
     admitted <- effectsAdmitted
     unless admitted $

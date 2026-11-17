@@ -8,6 +8,7 @@ import Data.Text (Text)
 import qualified Data.Text as Text
 import Pudu.Backend.Emit.Foreign (foreignNeeds, foreignWrappers, foreignsOf, parameterNeeds, resultNeeds)
 import Pudu.Backend.Emit.Foreign.Callback (callbackArgumentTypes, callbackNeeds, callbackSignaturesOf, callbackUnregisterResults)
+import Pudu.Backend.Emit.Foreign.Delegate (delegateDefinitions, delegatesOf)
 import Pudu.Backend.Emit.Aggregate (aggregateSection, aggregateTypes, cellName, ownedKinds, ownedType, released, retained, aggregateHelper, aggregateNeed)
 import Pudu.Backend.Emit.Entry (EmittedUnit (..), EntryForm (..), entrySection)
 import Pudu.Backend.Emit.Export (ExportSection (..), exportSection)
@@ -178,7 +179,7 @@ emitFrameUnit form version sources logical = do
   pure $ EmittedUnit
     { emittedSource = Text.unlines (header <> runtime <> frameTypes wide big decimal text boxes (Set.member "host_thread_spawn" selected)
     <> concat [lines' <> [""] | (name, lines') <- arrayRuntimeParts <> textPieceRuntimeParts <> treeRuntimeParts <> rangeRuntimeParts <> bytesRuntimeParts <> hashRuntimeParts <> kernelRuntimeParts, Set.member name selected]
-    <> renderSites (reverse (emitSites emitted)) <> renderByteData (reverse (emitByteData emitted)) <> aggregates <> ownership <> callbackSection <> foreignWrappers (frameModuleLayouts source) (foreignsOf source) signatures unregistered <> reverse (emitOutput emitted)
+    <> renderSites (reverse (emitSites emitted)) <> renderByteData (reverse (emitByteData emitted)) <> aggregates <> ownership <> callbackSection <> foreignWrappers (frameModuleLayouts source) (foreignsOf source) signatures unregistered <> delegateDefinitions (delegatesOf source) <> reverse (emitOutput emitted)
     <> metadata <> frameEngine owned (Set.member "host_thread_spawn" selected) (not (Set.null stacked))
     <> (if callbacks then frameCallbackEngine else [])
     <> concat [stackedCall (Set.member (frameFunctionName function) fast) identity function | (identity, function) <- indexed, Set.member (frameFunctionName function) stacked]

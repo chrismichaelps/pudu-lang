@@ -290,3 +290,7 @@ Delegate qualified-path admission to Eval Call Path for explicit type-applied di
 Applying an empty positional constructor retains its canonical owner while attaching arguments. Await unwraps only wired Result-owned Ok/Err values; a custom sum using those labels remains an ordinary successful task value.
 
 Resolved Grill Log: identity comes from the declaration or native ABI, not a global short-tag registry. Keep labels, evaluation order, effects and wire bytes stable. See [[Positional Sum Owner Delivery]].
+
+## Resolved Grill Log for Objective-C delegates
+
+`callCallbackValue` takes the handler applier as a parameter, so a delegate method and an ordinary callback apply the handler the same way.

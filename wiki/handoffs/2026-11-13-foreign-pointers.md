@@ -155,11 +155,18 @@ key; a callee that keeps it copies the block, and the copy carries the key.
 The callback must take its context first, or the checker refuses with E3063.
 Both Objective-C conformance groups and all 17 foreign groups pass on macOS.
 
+## Delegates
+
+Objective-C delegates are declared inside a foreign block with a callback group.
+`Observer` is both a handle type and a constructor value, and each constructed
+instance is a runtime-defined subclass whose methods enter the group members.
+The class is defined on first construction, the instance stores the group's
+registration key, and a late call after unregister answers the member's
+fallback. The checker refuses malformed shapes with E3063.
+
 ## Exact next action
 
-Add delegate objects for Objective-C protocols under #879 (runtime-created
-classes whose methods are callback trampolines), then run the Foundation and
-block conformance on the iOS simulator.
+Run the Foundation, block and delegate conformance on the iOS simulator and record it, then close #879.
 
 ## Referenced by
 

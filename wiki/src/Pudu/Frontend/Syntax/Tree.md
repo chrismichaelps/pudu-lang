@@ -303,3 +303,7 @@ A callback group keeps its located name and written field order. It contributes 
 ## Resolved Grill Log for Objective-C declarations
 
 Class declarations also name opaque foreign types. Use an explicit method marker to distinguish a class receiver from a source instance receiver.
+
+## Resolved Grill Log for Objective-C delegates
+
+A delegate declaration is one node holding the class symbol, the handle name, the callback group name, and its entries as ForeignDelegateMethod pairs of member name and selector. `foreignValueNames` publishes the delegate name as a value, so the constructor call resolves through the path ordinary foreign values use.
