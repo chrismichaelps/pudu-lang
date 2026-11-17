@@ -65,6 +65,16 @@ Consumed by [[Compiler Lower Body]]; registered in [[Pudu Cabal Manifest]].
 
 - **Q:** How does an operator failure on a sum name its operands? **A:** By the variant each holds at run time, as the evaluator's `valueKind` does. `namedFailure` runs each operand once into a temporary, then builds the shared message with each sum's kind read by `CoreRuntimeKind` (#525).
 
+## Membership (#948)
+
+`lowerBinary` sends `in` with a `Set[T]` right operand whose member type is
+the left operand's type to [[Compiler Lower Keyed]]'s `setMembership` before
+the scalar operator table. Without it a well-typed `in` reached the generic
+run-time failure (E7001 "cannot apply in").
+
+Resolved Grill Log: membership is a collection operation, so the scalar
+module routes it and the keyed module builds it.
+
 ## Generic records (#552)
 
 Pattern update only: `CoreRecordType` has an argument list; behavior is unchanged.
