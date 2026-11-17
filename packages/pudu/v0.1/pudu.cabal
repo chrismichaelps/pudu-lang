@@ -13,6 +13,8 @@ homepage:           https://github.com/chrismichaelps/pudu-lang
 bug-reports:        https://github.com/chrismichaelps/pudu-lang/issues
 build-type:         Simple
 extra-source-files: cbits/pudu_ffi_internal.h
+                    cbits/pudu_ffi_callback_adapter.h
+                    cbits/pudu_loader.h
                     cbits/pudu_desktop.h
                     cbits/pudu_desktop_host.h
                     cbits/pudu_desktop.m
@@ -137,6 +139,8 @@ library
     Pudu.Backend.Emit.Bytes
     Pudu.Backend.Emit.Foreign
     Pudu.Backend.Emit.Foreign.Callback
+    Pudu.Backend.Emit.Foreign.Delegate
+    Pudu.Backend.Emit.Foreign.Loan
     Pudu.Backend.Emit.ForeignAbi
     Pudu.Backend.Emit.Frame
     Pudu.Backend.Emit.Handle
@@ -403,7 +407,9 @@ library
     Pudu.Foreign.Callback.Native
     Pudu.Foreign.CallbackStore
     Pudu.Foreign.Call.Library
+    Pudu.Foreign.Call.Run
     Pudu.Foreign.Crossing
+    Pudu.Foreign.Extent
     Pudu.Foreign.Ownership
     Pudu.Frontend.Parser.Declaration.Foreign
     Pudu.Frontend.Parser.Declaration.Function
@@ -582,6 +588,7 @@ library
 
   c-sources:        cbits/pudu_ffi.c
                    cbits/pudu_ffi_callback.c
+                   cbits/pudu_ffi_objc.c
                    cbits/pudu_sqlite.c
   extra-libraries:  ffi
   build-depends:

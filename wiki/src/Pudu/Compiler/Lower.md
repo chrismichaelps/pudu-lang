@@ -200,6 +200,22 @@ Collect callback declarations with their owning module, then attach each
 checked function/context pair to its foreign target. Callback token
 identities are formed separately from owned foreign handles.
 
+## Resolved Grill Log for #877 — Native loan lowering
+
+Retain the declaration's reference modes by native position when constructing foreign targets.
+
+## Resolved Grill Log for #877 — Checked foreign bounds
+
+Pass checked native length descriptors into imported and local foreign targets.
+
+## Resolved Grill Log for #877 — Returned run ABI
+
+Resolve a returned run in its declaring module and carry the same opaque identity used for other ownership claims.
+
+## Resolved Grill Log for #877 — Native nullable loans
+
+Retain the nullable qualifier when installing a foreign target.
+
 ## Referenced by
 
 [[src/Pudu/Compiler/_MOC]] · [[src/Pudu/_MOC]] · [[Core IR]] · [[Pudu Core]] ·
@@ -295,3 +311,30 @@ Resolved Grill Log: roots join the existing worklist rather than a second pass,
 so an export and the entry share one set of specialized copies. _Rejected:_
 lowering exports for every build, which would make executables refuse
 signatures they never cross.
+
+### Split callback placement Grill Log resolved
+
+Lowering transfers the checked placement together with the callback signature.
+
+## Resolved Grill Log for retained split callbacks
+
+Carry callback capability for every call declared in a block that splits
+registration from its trampoline. A later call without token parameters may
+invoke a retained callback, so it needs the same outbound failure scope and
+must allow the handler to acquire the gate.
+
+## Resolved Grill Log for callback group slots
+
+Lower a foreign callback slot with its registration owner and optional projection identity.
+
+## Resolved Grill Log for native callback groups
+
+Publish group owners and ordered member names through the module scope.
+
+## Resolved Grill Log for Objective-C dispatch
+
+Carry checked Objective-C dispatch metadata alongside the ordinary foreign crossing.
+
+## Resolved Grill Log for Objective-C delegates
+
+Lowering resolves a delegate constructor call through `lookupDelegate` and emits a `CoreDelegateNew` operation. The call takes the group token as its only runtime argument.

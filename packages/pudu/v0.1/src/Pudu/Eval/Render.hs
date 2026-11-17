@@ -15,6 +15,7 @@ import qualified Numeric
 import Pudu.DecimalLiteral (renderDecimal)
 import Pudu.IntegerLiteral (integerKindName)
 import Pudu.Eval.Value
+import Pudu.Eval.Foreign.Binding (DelegateBinding (..))
 
 {-| Render a value the way the session prints it. Strings and characters show
     their quotes and escape their control characters, so a printed `"1"` is
@@ -108,6 +109,7 @@ valueKind value = case value of
     CallbackConstructor owner -> "callback registration " <> owner
     CallbackToken owner _ -> owner
     CallbackUnregister _ _ -> "callback unregister method"
+    DelegateConstructor delegate -> "delegate constructor " <> delegateHandle delegate
   ForeignHandleValue name _ _ -> name
   TypeWitnessValue owner _ -> "type " <> snd (Text.breakOnEnd "." owner)
   IntValue kind _ -> integerKindName kind

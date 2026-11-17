@@ -38,6 +38,10 @@ dependency. An empty path makes `fopen` fail without touching any file. Use a
 read-only status function for the borrowed-release refusal so an erroneous
 dispatch is observable without freeing libc-owned storage.
 
+## Resolved Grill Log for Apple conformance
+
+Apple conformance cases cover an explicit pool drain, nested pools drained innermost first at exit, and a refused double drain. A block runs synchronously under `dispatch_sync`, and an escaping block runs under `dispatch_async` on a serial queue.
+
 ## Referenced by
 
 [[Backend Native Tests]] · [[Native Foreign Call Sites]]
@@ -57,3 +61,15 @@ name and an alias: integer and text crossings, an owned handle and its
 release, matching the interpreter's bridge. Resolved Grill Log: the module
 programs runner already compares several-module sources, so the case joins
 [[Backend Module Programs]] rather than a second runner.
+
+## Resolved Grill Log for C11 FFI conformance
+
+Keep the native C fixtures and the interpreter-exported fixture signatures identical. Assert results for mutable runs, null versus empty pointers, transferred allocations, and retained callbacks.
+
+## Resolved Grill Log for Foundation conformance
+
+Exercise Foundation through its real framework. An alloc/init pair transfers its receiver, copy contributes a counted claim, and a stale receiver must fail before another send.
+
+## Resolved Grill Log for Objective-C delegates
+
+The NSNotificationCenter delegate conformance case runs in both the interpreter and generated C. Both paths must deliver the same notification to the same member.

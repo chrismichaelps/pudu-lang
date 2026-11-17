@@ -13,6 +13,8 @@ module Pudu.Type.Value
   , Type (.., FunctionTypeValue)
   , Required (..)
   , requiredCount
+  , nullableLoanInputs
+  , callbackRecordMembers
   , TypeVar (..)
   , boolType
   , charType
@@ -66,15 +68,34 @@ data OwnerSelection
     usable wherever one taking both is expected, and refusing that assignment
     would make a default a breaking change to every caller that stores the
     function. The count decides one question — whether a call supplied enough —
-    and takes no part in whether two types match. -}
-newtype Required = Required Int
+    and takes no part in whether two types match. Nullable loan positions
+    additionally distinguish foreign signatures with a direct-call rule. -}
+data Required = Required !Int | NullableLoans !Int ![Int] | CallbackMembers ![Text]
   deriving stock (Show)
 
 instance Eq Required where
-  _ == _ = True
+  Required _ == Required _ = True
+  NullableLoans _ left == NullableLoans _ right = left == right
+  CallbackMembers left == CallbackMembers right = left == right
+  _ == _ = False
 
 requiredCount :: Required -> Int
 requiredCount (Required value) = value
+requiredCount (NullableLoans value _) = value
+requiredCount (CallbackMembers _) = 1
+
+nullableLoanInputs :: Type -> [(Int, Type)]
+nullableLoanInputs typeValue = case typeValue of
+  RestrictedType _ inner -> nullableLoanInputs inner
+  FunctionTypeRequiring _ inputs (NullableLoans _ positions) _ ->
+    [(index, input) | (index, input) <- zip [0 ..] inputs, index `elem` positions]
+  _ -> []
+
+callbackRecordMembers :: Type -> Maybe [Text]
+callbackRecordMembers typeValue = case typeValue of
+  RestrictedType _ inner -> callbackRecordMembers inner
+  FunctionTypeRequiring _ _ (CallbackMembers names) _ -> Just names
+  _ -> Nothing
 
 {-| The unchecked abilities a function requires of whoever calls it.
 
@@ -296,10 +317,13 @@ renderType typeValue = case typeValue of
     | null arguments -> nominalName identity
     | otherwise -> nominalName identity <> "[" <> Text.intercalate ", " (map renderType arguments) <> "]"
   TupleTypeValue members -> "(" <> Text.intercalate ", " (map renderType members) <> ")"
-  FunctionTypeValue asynchronous inputs result ->
-    (if asynchronous then "async fn(" else "fn(")
-      <> Text.intercalate ", " (map renderType inputs)
-      <> ") -> " <> renderType result
+  FunctionTypeRequiring asynchronous inputs required result ->
+    let prefix index = case required of
+          NullableLoans _ positions | index `elem` positions -> "nullable "
+          _ -> ""
+     in (if asynchronous then "async fn(" else "fn(")
+          <> Text.intercalate ", " [prefix index <> renderType input | (index, input) <- zip [0 ..] inputs]
+          <> ") -> " <> renderType result
   {-| Rendered the way it is written, so a mismatch quotes something a reader
       can search for in their own source. -}
   RestrictedType capabilities inner ->

@@ -198,3 +198,15 @@ Register prepared import candidate maps after binding introduction. Check direct
 Resolved Grill Log: preserve complete declaring-owner ambiguity at uses across imports, lexical shadows and generated syntax. See [[Imported Variant Delivery]].
 
 Resolved type-head control: imported candidates retain an export-index TypeSpace flag; PathUse preserves C.First.Chosen qualification without admitting ambiguous value fields. Syntactically named member paths preserve head spans. See [[Imported Variant Delivery]].
+
+## Resolved Grill Log for callback byte runs
+
+Walk the callback type without resolving declaration-local extent names as source bindings.
+
+## Resolved Grill Log for callback groups
+
+Resolve each member signature as a type. The foreign checker owns the member segment of a group trampoline projection.
+
+## Resolved Grill Log for Objective-C delegates
+
+Delegate names are published as values through `foreignValueNames`, the same route foreign functions take. The interface carries the handle type and the constructor so importing modules can construct a delegate without seeing the block's declarations.

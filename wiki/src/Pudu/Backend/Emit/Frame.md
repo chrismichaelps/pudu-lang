@@ -228,3 +228,7 @@ reported in the emitted unit. The executable form emits none.
 body emission. Layout metadata and every emitted reference use the same
 physical slot IDs. The logical frame remains available to lowering tests.
 Resolved Grill Log: one layout for every backend consumer.
+
+## Resolved Grill Log for Objective-C delegates
+
+Delegate definitions are emitted after the foreign wrappers and before the frame bodies that construct delegates, so each constructor is declared before its first use.

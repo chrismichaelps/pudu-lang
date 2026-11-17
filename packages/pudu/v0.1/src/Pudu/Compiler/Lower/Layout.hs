@@ -128,7 +128,9 @@ pattern shape = case shape of
 callbackTypes :: CoreCallbackOperation -> [CoreType]
 callbackTypes operation = case operation of
   CoreCallbackRegister signature -> callbackSignatureTypes signature
+  CoreCallbackRegisterGroup signature _ -> callbackSignatureTypes signature
   CoreCallbackUnregister -> []
+  CoreDelegateNew delegate -> concatMap (callbackSignatureTypes . snd) (coreDelegateMethods delegate)
 
 callbackSlotTypes :: CoreCallbackSlot -> [CoreType]
 callbackSlotTypes = callbackSignatureTypes . coreCallbackSignature

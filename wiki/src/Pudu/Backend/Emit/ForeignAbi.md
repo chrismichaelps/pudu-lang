@@ -26,6 +26,10 @@ constructor, prevalidated text fields copied out, temporaries released).
 An opaque handle crosses as `void *`; the box retains the pointer bits and
 its generation. A record still cannot contain a foreign handle field.
 
+## Resolved Grill Log for #877 — Optional handles
+
+Lower an optional handle to void pointer. Its Some payload follows the ordinary handle ABI and None yields a null address.
+
 ## Referenced by
 
 [[Backend Emit Foreign]] · [[Native Foreign Call Sites]]

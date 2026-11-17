@@ -11,6 +11,7 @@ module Pudu.Eval.Install
   ) where
 
 import Data.List.NonEmpty (NonEmpty (..))
+import qualified Data.List.NonEmpty as NonEmpty
 import Data.Map.Strict (Map)
 import qualified Data.Map.Strict as Map
 import Data.Maybe (fromMaybe)
@@ -18,14 +19,18 @@ import Data.Set (Set)
 import qualified Data.Set as Set
 import Data.Text (Text)
 import qualified Data.Text as Text
+import qualified Data.IntMap.Strict as IntMap
 import Pudu.Eval.ImplementationHead (HeadSelection (..), ImplementationHead (..))
 import Pudu.FloatKernel (floatKernelName, floatKernels)
 import Pudu.LaneKernel (laneKernelName, laneKernels)
 import Pudu.Foreign.Callback
-  ( CallbackPair (callbackTypeName), CallbackParameter (..)
-  , CallbackSignature (..), callbackPairs, checkCallbackDeclarations )
-import Pudu.Eval.Foreign.Binding (ForeignCallbackSlot (..))
-import Pudu.Foreign.Crossing (Crossing (NothingCrossing, RecordCrossing), RecordLayouts, crossingFor, parameterCrossingFor, recordLayouts)
+  ( CallbackGroupMember (..), CallbackGroups, CallbackPair (..), CallbackParameter (..), CallbackPlacement (..)
+  , CallbackSignature (..), callbackPairs, checkCallbackDeclarations, checkCallbackGroups )
+import Pudu.Eval.Foreign.Binding (DelegateBinding (..), ForeignCallbackSlot (..))
+import Pudu.Foreign.Crossing
+  ( Crossing (HandleCrossing, NothingCrossing, RecordCrossing), ObjectiveCMethod (..), RecordLayouts, ReturnedRun (..)
+  , crossingFor, foreignBounds, loanFor, objectiveCMethod, optionalHandleFor, parameterCrossingFor
+  , recordLayouts, resolveReturnedRun, runLoanFor )
 import Pudu.Eval.Builtin
   ( effectBuiltins
   )
@@ -56,6 +61,8 @@ import Pudu.Frontend.Syntax.Tree
   , Expression (..)
   , Foreign (..)
   , foreignCallbackNames
+  , ForeignDelegate (..)
+  , ForeignDelegateMethod (..)
   , ForeignFunction (..)
   , ForeignParameter (..)
   , Function (..)
@@ -277,7 +284,9 @@ installDeclaration namespace traits layouts declared (Located _ declaration) = c
     mapM_ (installCallback namespace . locatedValue) (foreignCallbackNames value)
     let handles = Set.fromList (map locatedValue (foreignTypes value))
         callbacks = either (const Map.empty) id (checkCallbackDeclarations handles layouts (foreignCallbacks value))
-    mapM_ (installForeign namespace layouts value handles callbacks) (foreignFunctions value)
+        groups = either (const Map.empty) id (checkCallbackGroups handles callbacks (foreignCallbackGroups value))
+    mapM_ (installForeign namespace layouts value handles callbacks groups) (foreignFunctions value)
+    mapM_ (installDelegate namespace groups . locatedValue) (foreignDelegates value)
   _ -> pure ()
 
 installCallback :: Text -> Text -> Evaluator ()
@@ -294,8 +303,8 @@ installCallback namespace name = do
     reported by the checker. -}
 installForeign
   :: Text -> RecordLayouts -> Foreign -> Set Text
-  -> Map Text (Located CallbackSignature) -> Located ForeignFunction -> Evaluator ()
-installForeign namespace layouts library handles callbacks declaration@(Located _ function) =
+  -> Map Text (Located CallbackSignature) -> CallbackGroups -> Located ForeignFunction -> Evaluator ()
+installForeign namespace layouts library handles callbacks groups declaration@(Located _ function) =
   bind name
     ( ForeignValue
         ForeignBinding
@@ -303,11 +312,31 @@ installForeign namespace layouts library handles callbacks declaration@(Located 
           , foreignBindingBorrowedResult = foreignResultBorrowed function
           , foreignBindingCountedResult = foreignResultCounted function
           , foreignBindingVersion = locatedValue <$> foreignVersion library
-          , foreignBindingSymbol = maybe name locatedValue (foreignSymbol function)
+          , foreignBindingObjectiveC = objectiveCMethod (foreignClasses library) function
+          , foreignBindingSymbol = case objectiveCMethod (foreignClasses library) function of
+              Just method -> objectiveCSelector method
+              Nothing -> maybe name locatedValue (foreignSymbol function)
           , foreignBindingArguments =
               [ crossingOf parameter
               | Located _ parameter <- foreignParameters function
               ]
+          , foreignBindingLoans = Map.fromList
+              [ (index, exclusive)
+              | (index, Located _ parameter) <- zip [0 ..] (foreignParameters function)
+              , Just (exclusive, _) <- [loanOf parameter]
+              ]
+          , foreignBindingRuns = Map.fromList
+              [ (index, exclusive)
+              | (index, Located _ parameter) <- zip [0 ..] (foreignParameters function)
+              , Just (exclusive, _) <- [runOf parameter]
+              ]
+          , foreignBindingNullableLoans = Set.fromList
+              [ index
+              | (index, Located _ parameter) <- zip [0 ..] (foreignParameters function)
+              , Just _ <- [foreignParameterNullable parameter]
+              , loanOf parameter /= Nothing || runOf parameter /= Nothing
+              ]
+          , foreignBindingBounds = either (const []) id (foreignBounds handles layouts (foreignParameters function))
           , foreignBindingSlots =
               [ if foreignParameterOut parameter
                   then
@@ -328,14 +357,20 @@ installForeign namespace layouts library handles callbacks declaration@(Located 
               | Located _ parameter <- foreignParameters function
               ]
           , foreignBindingCallbacks =
-              [ ForeignCallbackSlot (qualifiedForeignOwner namespace owner) pair
-                  signature{callbackParameters = map qualifyCallbackParameter (callbackParameters signature)}
-              | pair <- either (const []) id (callbackPairs callbacks declaration)
-              , let owner = callbackTypeName pair
-              , Just (Located _ signature) <- [Map.lookup owner callbacks]
+              [ ForeignCallbackSlot owner adapterOwner pair (qualifySignature (callbackSlotSignature pair))
+                  (IntMap.fromDistinctAscList (zip [0 ..] members))
+              | pair <- either (const []) id (callbackPairs callbacks groups declaration)
+              , let callbackName = callbackTypeName pair
+                    owner = qualifiedForeignOwner namespace callbackName
+                    members = groupMembers callbackName
+                    adapterOwner = if null members then owner else owner <> " " <> Text.pack (show members)
               ]
-          , foreignBindingResult =
-              qualify (fromMaybe NothingCrossing (crossingFor handles layouts (foreignResult function)))
+          , foreignBindingResult = case returnedRun of
+              Just run -> HandleCrossing (returnedRunHandle run)
+              Nothing -> qualify (fromMaybe (fromMaybe NothingCrossing optionalResult)
+                (crossingFor handles layouts (foreignResult function)))
+          , foreignBindingOptionalResult = optionalResult /= Nothing
+          , foreignBindingReturnedRun = returnedRun
           , foreignBindingReleasedBy = do
               named <- locatedValue <$> foreignReleasedBy function
               symbol <- Map.lookup named (releaseSymbolsOf library)
@@ -345,21 +380,80 @@ installForeign namespace layouts library handles callbacks declaration@(Located 
                   , foreignReleaseVersion = locatedValue <$> foreignVersion library
                   , foreignReleaseSymbol = symbol
                   }
-          , foreignBindingReleases = Map.lookup name (releasesOf library)
+          , foreignBindingReleases = Map.lookup name (releasesOf layouts library)
           }
     )
  where
   name = locatedValue (foreignName function)
-  qualifyCallbackParameter parameter = case parameter of
+  optionalResult = optionalHandleFor handles (foreignResult function)
+  returnedRun = fmap (\run -> run{returnedRunElement = qualify (returnedRunElement run)})
+    (either (const Nothing) id (resolveReturnedRun handles layouts functions function))
+  functions = Map.fromList
+    [(locatedValue (foreignName candidate), candidate) | Located _ candidate <- foreignFunctions library]
+  groupMembers = qualifiedGroupMembers namespace groups
+  qualifySignature = qualifyCallbackSignature namespace
+  crossingOf parameter = qualify $ case (loanOf parameter, runOf parameter) of
+    (Just (_, pointee), _) -> pointee
+    (_, Just (_, element)) -> element
+    _ -> fromMaybe NothingCrossing (foreignParameterType parameter >>= parameterCrossingFor handles layouts)
+  loanOf parameter
+    | foreignParameterOut parameter = Nothing
+    | otherwise = foreignParameterType parameter >>= loanFor handles layouts
+  runOf parameter
+    | foreignParameterOut parameter = Nothing
+    | otherwise = foreignParameterType parameter >>= runLoanFor handles layouts
+  qualify = qualifyCrossing namespace
+
+qualifyCrossing :: Text -> Crossing -> Crossing
+qualifyCrossing namespace crossing = case crossing of
+  RecordCrossing owner fields -> RecordCrossing
+    (qualifiedForeignOwner namespace owner)
+    [(label, qualifyCrossing namespace held) | (label, held) <- fields]
+  other -> other
+
+qualifyCallbackSignature :: Text -> CallbackSignature -> CallbackSignature
+qualifyCallbackSignature namespace signature =
+  signature{callbackParameters = map qualified (callbackParameters signature)}
+ where
+  qualified parameter = case parameter of
     CallbackContext -> CallbackContext
-    CallbackValue crossing -> CallbackValue (qualify crossing)
-  crossingOf parameter =
-    qualify (fromMaybe NothingCrossing (foreignParameterType parameter >>= parameterCrossingFor handles layouts))
-  qualify crossing = case crossing of
-    RecordCrossing owner fields -> RecordCrossing
-      (qualifiedForeignOwner namespace owner)
-      [(label, qualify held) | (label, held) <- fields]
-    other -> other
+    CallbackValue crossing -> CallbackValue (qualifyCrossing namespace crossing)
+
+{-| A group's members in declaration order, as the adapters key them. -}
+qualifiedGroupMembers :: Text -> CallbackGroups -> Text -> [(Text, CallbackSignature)]
+qualifiedGroupMembers namespace groups owner = case Map.lookup owner groups of
+  Nothing -> []
+  Just (Located _ members) ->
+    [ (callbackMemberField member, qualifyCallbackSignature namespace (locatedValue (callbackMemberSignature member)))
+    | member <- NonEmpty.toList members ]
+
+{-| A delegate binds a constructor from its group's token. The slot is the one
+    a foreign call crossing that group's context would use, so the methods and
+    those calls share one native registration per token. -}
+installDelegate :: Text -> CallbackGroups -> ForeignDelegate -> Evaluator ()
+installDelegate namespace groups delegate = case qualifiedGroupMembers namespace groups group of
+  [] -> pure ()
+  members@((_, representative) : _) ->
+    bind name
+      ( ForeignCallbackValue
+          ( DelegateConstructor
+              DelegateBinding
+                { delegateHandle = name
+                , delegateClass = locatedValue (foreignDelegateSymbol delegate)
+                , delegateSlot = ForeignCallbackSlot owner (owner <> " " <> Text.pack (show members))
+                    (CallbackPair (RegistrationContext 0) group Nothing representative) representative
+                    (IntMap.fromDistinctAscList (zip [0 ..] members))
+                , delegateMethods =
+                    [ (locatedValue (foreignDelegateSelector method), ordinal)
+                    | method <- foreignDelegateMethods delegate
+                    , Just ordinal <- [lookup (locatedValue (foreignDelegateMember method)) (zip (map fst members) [0 ..])] ]
+                }
+          )
+      )
+ where
+  name = locatedValue (foreignDelegateName delegate)
+  group = locatedValue (foreignDelegateGroup delegate)
+  owner = qualifiedForeignOwner namespace group
 
 qualifiedForeignOwner :: Text -> Text -> Text
 qualifiedForeignOwner namespace name
@@ -371,8 +465,8 @@ qualifiedForeignOwner namespace name
     Read from the declarations rather than from a name, so a release is
     whatever some function in the same block named after `by` — which is the
     only place that fact is written. -}
-releasesOf :: Foreign -> Map Text Text
-releasesOf library =
+releasesOf :: RecordLayouts -> Foreign -> Map Text Text
+releasesOf layouts library =
   Map.fromList (concatMap named (foreignFunctions library))
  where
   {-| A release is named by whatever it frees, and a resource arrives either as
@@ -381,10 +475,13 @@ releasesOf library =
       library while the claim stayed in the store, and teardown freed what the
       library had already destroyed. -}
   named (Located _ function) =
-    [ (locatedValue name, handle)
+    [ (locatedValue name, returnedRunHandle run)
+    | Just name <- [foreignReleasedBy function]
+    , Right (Just run) <- [resolveReturnedRun known layouts functions function] ]
+    <> [ (locatedValue name, handle)
     | (Just name, written) <- releasing function
-    , let handle = handleName (locatedValue written)
-    , isHandleName handle
+    , Just (HandleCrossing handle) <- [crossingFor known Map.empty written]
+        <> [optionalHandleFor known written]
     ]
   {-| Each place this function may name a release, beside what that release
       would free. -}
@@ -396,10 +493,8 @@ releasesOf library =
         , Just held <- [foreignParameterType parameter]
         ]
   known = Set.fromList (map locatedValue (foreignTypes library))
-  isHandleName = (`Set.member` known)
-  handleName syntax = case syntax of
-    NamedType (ModuleName (name :| [])) [] -> name
-    _ -> ""
+  functions = Map.fromList
+    [(locatedValue (foreignName candidate), candidate) | Located _ candidate <- foreignFunctions library]
 
 {-| Local release name to exact loader symbol. The `by` clause is local Pudu
     syntax, while teardown must invoke the same mapped symbol as an explicit

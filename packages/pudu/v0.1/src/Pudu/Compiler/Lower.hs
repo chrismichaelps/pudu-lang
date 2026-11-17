@@ -34,12 +34,13 @@ import Pudu.Compiler.Lower.Dynamic (dynamicSums)
 import Pudu.Compiler (CompileResult (..))
 import Pudu.Compiler.Lower.Foreign (callbackSignatureOf)
 import qualified Pudu.Foreign.Callback as Callback
-import Pudu.Foreign.Crossing (recordLayouts)
+import qualified Data.List.NonEmpty as NonEmpty
+import Pudu.Foreign.Crossing (ObjectiveCMethod (..), ReturnedRun (..), foreignBounds, objectiveCMethod, recordLayouts, resolveReturnedRun)
 import Pudu.Compiler.Lower.Types (LowerTypes, emptyTypes, formedCoreTypeIn, lookupScheme, nativeTypes, withShapes)
 import Pudu.Compiler.Lower.Method (methodTables)
 import Pudu.Compiler.Program (ProgramResult (..), rootCompileResult)
 import Pudu.Type (DeclaredShapes, declaredRecords, declaredSums)
-import Pudu.Type.Value (NominalId (..), Scheme (..), Type (FunctionTypeRequiring))
+import Pudu.Type.Value (NominalId (..), Scheme (..), Type (FunctionTypeRequiring), nominalKey)
 import Pudu.Source (Span)
 import Pudu.Compiler.Lower.Body (lowerEntryBody, lowerExpression, lowerFunctionBody)
 import Pudu.Compiler.Lower.Default (takesSuppliedCount, lowerDefaultedBody)
@@ -57,6 +58,8 @@ import Pudu.Frontend.Syntax
   ( Declaration (..)
   , Foreign (..)
   , foreignCallbackNames
+  , ForeignDelegate (..)
+  , ForeignDelegateMethod (..)
   , ForeignFunction (..)
   , ForeignParameter (..)
   , Function (..)
@@ -230,12 +233,29 @@ lowerRooted library entryName programModules@(rootModule : _)
       where declarations = moduleDeclarations (nativeModuleSyntax native)
 
     coreSignature native name = callbackSignatureOf (nativeModuleName native) name . locatedValue
-    callbackSlots native signatures function =
-      [ CoreCallbackSlot (Callback.callbackArgumentIndex pair) (Callback.callbackContextIndex pair)
-          (coreSignature native name written)
-      | pair <- either (const []) id (Callback.callbackPairs signatures function)
-      , let name = Callback.callbackTypeName pair
-      , Just written <- [Map.lookup name signatures] ]
+    groupsOf declared callbacks = either (const Map.empty) id $
+      Callback.checkCallbackGroups (Set.fromList (map locatedValue (foreignTypes declared)))
+        callbacks (foreignCallbackGroups declared)
+    coreGroup native owner (Located _ members) =
+      ( coreSignature native owner (Callback.callbackMemberSignature (NonEmpty.head members))
+      , map Callback.callbackMemberField (NonEmpty.toList members) )
+    coreDelegate native groups delegate = do
+      let group = locatedValue (foreignDelegateGroup delegate)
+      located@(Located _ members) <- Map.lookup group groups
+      let entries = zip [0 ..] (NonEmpty.toList members)
+          method written = do
+            let member = locatedValue (foreignDelegateMember written)
+            (ordinal, entry) <- lookup member [(Callback.callbackMemberField entry, (ordinal, entry)) | (ordinal, entry) <- entries]
+            pure ( locatedValue (foreignDelegateSelector written)
+                 , (coreSignature native group (Callback.callbackMemberSignature entry))
+                     {coreCallbackProjection = Just (ordinal, member)} )
+      resolved <- traverse method (foreignDelegateMethods delegate)
+      pure (CoreDelegate (locatedValue (foreignDelegateSymbol delegate)) (fst (coreGroup native group located)) resolved)
+    callbackSlots native signatures groups function =
+      [ CoreCallbackSlot (Callback.callbackPlacement pair)
+          ((callbackSignatureOf (nativeModuleName native) (Callback.callbackTypeName pair) (Callback.callbackSlotSignature pair))
+            {coreCallbackProjection = Callback.callbackProjection pair})
+      | pair <- either (const []) id (Callback.callbackPairs signatures groups function) ]
 
     scopes = Map.fromList
       [ ( nativeModuleName native
@@ -260,24 +280,59 @@ lowerRooted library entryName programModules@(rootModule : _)
             , scopeForeign = Map.fromList
                 [ ( locatedValue (foreignName function)
                   , ForeignTarget (locatedValue (foreignLibrary declared)) (locatedValue <$> foreignVersion declared)
-                      (symbolOf function) (claimOf functions function)
+                      (maybe (symbolOf function) objectiveCSelector method) method (claimOf functions function)
                       (locatedValue (foreignName function) `elem` releasers functions)
                       [index | (index, Located _ parameter) <- zip [0 ..] (foreignParameters function)
                              , foreignParameterOut parameter]
                       [claimFor functions False (foreignParameterReleasedBy parameter)
                       | Located _ parameter <- foreignParameters function, foreignParameterOut parameter]
-                      (callbackSlots native callbacks written) )
+                      (callbackSlots native callbacks groups written)
+                      splitCallbacks
+                      [ (index, exclusive)
+                      | (index, Located _ parameter) <- zip [0 ..] (foreignParameters function)
+                      , not (foreignParameterOut parameter)
+                      , Just (Located _ (ReferenceType exclusive _)) <- [foreignParameterType parameter]
+                      ]
+                      [ index
+                      | (index, Located _ parameter) <- zip [0 ..] (foreignParameters function)
+                      , foreignParameterNullable parameter /= Nothing
+                      ]
+                      (either (const []) id
+                        (foreignBounds foreignHandles layouts (foreignParameters function)))
+                      (returnedTarget native foreignHandles layouts functions function) )
                 | (declared, callbacks) <- callbackDeclarations native
                 , let functions = map locatedValue (foreignFunctions declared)
-                , written@(Located _ function) <- foreignFunctions declared ]
+                      foreignHandles = Set.fromList (map locatedValue (foreignTypes declared))
+                      groups = groupsOf declared callbacks
+                      splitCallbacks = or
+                        [ foreignParameterCallbackPassing parameter /= Nothing
+                        | function <- functions, Located _ parameter <- foreignParameters function ]
+                , written@(Located _ function) <- foreignFunctions declared
+                , let method = objectiveCMethod (foreignClasses declared) function ]
             , scopeCallbacks = Map.unions
                 [ Map.mapWithKey (coreSignature native) callbacks
                 | (_, callbacks) <- callbackDeclarations native ]
+            , scopeCallbackGroups = Map.unions
+                [ Map.mapWithKey (coreGroup native) (groupsOf declared callbacks)
+                | (declared, callbacks) <- callbackDeclarations native ]
+            , scopeDelegates = Map.fromList
+                [ (locatedValue (foreignDelegateName delegate), core)
+                | (declared, callbacks) <- callbackDeclarations native
+                , Located _ delegate <- foreignDelegates declared
+                , Just core <- [coreDelegate native (groupsOf declared callbacks) delegate] ]
             }
         )
-      | native <- programModules ]
+      | native <- programModules
+      , let layouts = recordLayouts (moduleDeclarations (nativeModuleSyntax native)) ]
 
     symbolOf function = maybe (locatedValue (foreignName function)) locatedValue (foreignSymbol function)
+    returnedTarget native handlesOfBlock layouts functions function = do
+      run <- either (const Nothing) id
+        (resolveReturnedRun handlesOfBlock layouts
+          (Map.fromList [(locatedValue (foreignName candidate), candidate) | candidate <- functions]) function)
+      let handle = returnedRunHandle run
+          owner = NominalId (Just (locatedValue (moduleName (nativeModuleSyntax native)))) handle
+      pure (returnedRunLengthSlot run, CoreHandleType (nominalKey owner) handle)
     -- A borrowed result is held without a claim; an owned or counted one is
     -- released by the function it names, called as that function returns.
     claimOf functions function

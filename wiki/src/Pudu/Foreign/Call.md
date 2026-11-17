@@ -28,9 +28,10 @@ resolveSymbol :: Text -> Maybe Text -> Text -> IO (Either Text (Ptr ()))
 data ForeignHandle
 data ForeignCallFailure = CallAssemblyFailure !Text | InvalidReturnedText
                         | PostCallFailure !ForeignCallFailure ![(Maybe Int, Text, Int64)]
+                                          ![(Int, CrossedValue)]
 data CrossedValue = CrossedInteger !Int64 | CrossedDouble !Double | CrossedText !Text
                   | CrossedHandle !Text !Int64 | CrossedRecord !Text ![(Text, CrossedValue)]
-                  | CrossedNoText
+                  | CrossedLoan !Bool !CrossedValue | CrossedNoText
 
 openLibrary   :: Text -> Maybe Text -> IO (Either Text ForeignHandle)
 candidates    :: Text -> Maybe Text -> [Text]
@@ -114,7 +115,7 @@ kindCode    :: Crossing -> Word8
 
 ## Post-call conversion failures
 
-`PostCallFailure ForeignCallFailure [(Maybe Int, Text, Int64)]` retains every non-null top-level
+A post-call failure retains mutable loan snapshots and every non-null top-level
 handle produced by the native result or slots. The bridge captures these addresses before decoding
 any returned text. This lets the evaluator discharge ownership even when UTF-8 decoding fails.
 
@@ -168,6 +169,50 @@ The ordinary entry supplies an empty scope. Private callback and context
 pointer values use pointer ABI storage. Callback record decoding reuses
 this module's kind codes, leaf order and record reconstruction.
 
+## Scalar and record loan transport (#877)
+
+A marshalled loan carries a scalar or record snapshot and whether it needs
+writeback. The bridge returns writeback at the native parameter's index, so
+the evaluator can apply it to the place it already resolved.
+
+### Resolved Grill Log
+
+- **Q:** Marshal a loan's address as an opaque handle? **A:** Use a slot owned by
+  the call instead. Its address expires at return and never enters the handle
+  ownership store.
+- **Q:** Recompute record offsets for loans? **A:** Reuse the by-value and
+  output-slot layout descriptors, which already preserve nested ABI padding.
+
+## Resolved Grill Log for #877 — Foreign loan settlement
+
+Decode mutable loan snapshots separately from output slots. Preserve snapshots and resource addresses on post-call conversion failure.
+
+## Resolved Grill Log for #877 — Run carriers
+
+Share the established field order and scalar decoder with [[Foreign Run Storage]]. The run storage module controls allocation and copies.
+
+## Resolved Grill Log for #877 — Interpreter array crossings
+
+A CrossedRun carries prepared elements rather than a pointer. Run storage replaces it with the scoped native address and returns any copied-out elements.
+
+## Resolved Grill Log for #877 — Returned run copying
+
+Report invalid extents on returned runs distinctly from a rejected input length while preserving the same boundary diagnostic code.
+
 ## Referenced by
 
 [[src/Pudu/_MOC]] · [[ADR-0018 Calling a Library Written Elsewhere]] · [[Foreign Crossing]]
+
+## Resolved Grill Log for library ownership
+
+The bridge exposes an explicit close for independently acquired library
+references and scoped symbol uses. Foreign declaration symbols use the
+process-owned cache.
+
+## Resolved Grill Log for interpreted Objective-C dispatch
+
+Select ordinary C dispatch or Objective-C dispatch before assembling libffi arguments. Hidden arguments are inserted without moving source storage indexes.
+
+## Resolved Grill Log for Objective-C ownership
+
+Distinguish errors returned while assembling the call from readback errors after the native call entered.

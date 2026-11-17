@@ -11,6 +11,78 @@ tags: [changelog]
   them on their first argument since #935 (refs #647).
   [[Native Method Values]] · [[Native Emission Coverage]]
 
+## 2026-11-17 — Objective-C delegates (#879)
+
+- Objective-C delegates: runtime-defined classes whose methods enter callback group members (refs #879).
+  [[Backend Emit Foreign Delegate]] · [[Pudu FFI Objective-C Bridge]]
+
+## 2026-11-17 — Foreign teardown and Objective-C blocks (#879)
+
+- Foreign teardown releases newest claims first; Objective-C autorelease
+  pools are owned handles; callbacks cross as Objective-C blocks (refs #879).
+  [[Foreign Ownership]] · [[Foreign Callback Signature]]
+
+## 2026-11-16 — Objective-C message dispatch
+
+- Resolve foreign class aliases and selectors and emit fixed-signature
+  sends in generated C11. The interpreter inserts the same ABI positions
+  while retaining source output and mutable loan indexes.
+  [[Native Host Foreign]] · [[Foreign Call Library]]
+
+## 2026-11-16 — Portable foreign loading
+
+- Share Windows and POSIX loading between the interpreter, generated C11
+  and SQLite. Close independently owned loader references after scoped
+  symbol users return. Use atomic cached symbols for repeated native calls.
+  [[Foreign Platform Loader]] · [[Native Host Foreign]]
+
+## 2026-11-16 — Foreign callback groups (#877)
+
+- Register a record of callbacks with one shared context key. Each member
+  trampoline selects its declared handler through that key.
+  [[Foreign Callback Signature]] · [[Backend Emit Foreign Callback]]
+
+## 2026-11-16 — Split foreign callbacks and byte runs (#877)
+
+- Carry trampoline and context arguments separately. Keep the outbound scope
+  available when the library invokes a retained callback on a later call.
+- Check inbound byte extents and copy the data before invoking Pudu.
+  [[Foreign Callback Signature]] · [[Backend Emit Foreign Callback]]
+
+## 2026-11-16 — Nullable foreign loans (#877)
+
+- Admit bare None at direct nullable reference arguments. Preserve null
+  with zero extent and keep present empty arrays separately addressable.
+  [[Foreign Pointer Delivery]] · [[Backend Emit Foreign Loan]]
+
+## 2026-11-16 — Returned foreign arrays (#877)
+
+- Validate returned run declarations and bound the copy by the written length
+  slot. Release transferred storage after copying and on conversion failure.
+  [[Foreign Pointer Delivery]] · [[Foreign Run Storage]]
+
+## 2026-11-16 — Optional foreign handles (#877)
+
+- Cross optional handles as nullable pointers. Preserve owned, borrowed and
+  counted result policies and pin input claims while native callbacks run.
+  [[Foreign Crossing]] · [[Native Host Foreign]]
+
+## 2026-11-16 — Foreign extent relations (#877)
+
+- Resolve declared `elements of` and `bytes of` relations in signature
+  order. Check `Bytes` bounds before foreign dispatch in both execution
+  paths. Copy typed-array inputs at the target ABI stride, including nested
+  records, and write mutable buffers back to their original places.
+  [[Foreign Extent]] · [[Foreign Run Storage]]
+
+## 2026-11-16 — Scalar and record foreign loans (#877)
+
+- Admit scalar and nested record reference parameters at foreign declarations.
+  Copy pointees through libffi in the interpreter and exact ABI locals in
+  generated C. Settle mutable loans before delivering post-call conversion
+  or callback failures.
+  [[Foreign Pointer Delivery]] · [[Foreign Call]]
+
 ## 2026-11-16 — Native validation fixes (#935)
 
 - PostgreSQL results stream in bounded batches on an open portal through Std.Db.Stream (#940).
