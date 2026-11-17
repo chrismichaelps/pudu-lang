@@ -5,6 +5,12 @@ tags: [changelog]
 
 # Changelog
 
+## 2026-11-17 — Native ledger: trait-qualified method values (#647)
+
+- Trait-qualified method values are recorded as native; both engines dispatch
+  them on their first argument since #935 (refs #647).
+  [[Native Method Values]] · [[Native Emission Coverage]]
+
 ## 2026-11-16 — Native validation fixes (#935)
 
 - PostgreSQL results stream in bounded batches on an open portal through Std.Db.Stream (#940).
