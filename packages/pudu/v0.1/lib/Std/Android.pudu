@@ -163,6 +163,7 @@ export fn same(left: &Java, right: &Java) -> Bool {
   found != 0i32
 }
 
+/// Whether the handle names no Java object, as a null reference returns.
 export fn isNull(object: &Java) -> Bool { object.handle == 0i64 }
 
 /// Lets the platform reclaim the object; the handle must not be used again.
