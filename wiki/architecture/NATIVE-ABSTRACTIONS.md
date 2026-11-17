@@ -63,10 +63,8 @@ is, as the interpreter does.
 
 ## Not native
 
-Trait members named as values (`Trait.member` without a call) are rejected
-by checking, so there is nothing to emit (#647). A user `Drop` has no
-run-time meaning in the interpreter, so native has none to match. A generic
-implementation's types are not variants of a dynamic sum.
+A user `Drop` has no run-time meaning in the interpreter, so native has none
+to match. A generic implementation's types are not variants of a dynamic sum.
 
 ## Evidence
 
