@@ -5,6 +5,12 @@ tags: [changelog]
 
 # Changelog
 
+## 2026-11-17 — Native ledger: trait-qualified method values (#647)
+
+- Trait-qualified method values are recorded as native; both engines dispatch
+  them on their first argument since #935 (refs #647).
+  [[Native Method Values]] · [[Native Emission Coverage]]
+
 ## 2026-11-17 — Swift entry points (#881)
 
 - Swift libraries reach Pudu through C entry points, checked on macOS and the iOS simulator (refs #881).
@@ -84,6 +90,11 @@ tags: [changelog]
 
 ## 2026-11-16 — Native validation fixes (#935)
 
+- PostgreSQL results stream in bounded batches on an open portal through Std.Db.Stream (#940).
+  [[Std Db Stream]] · [[Std Db Protocol]]
+- Pools decide per connection whether to keep, probe, or replace it by age and idle time through Std.Db.Lifetime. `poolWith` takes a policy, and `never()` turns the limits off ([[Std Db Lifetime]] · [[Std Db]] · [[Std Db Session]]).
+- PostgreSQL connections plan each statement once and bind it on later runs, up to 256 per connection (#940).
+  [[Std Db]] · [[Std Db Session]] · [[Std Db Protocol]]
 - Native binaries name each generated function after its Pudu function for profilers and debuggers (#938).
 - Foreign parameters accept `Option` of a declared handle: `None` crosses as null, `Some` as a live handle (#935).
   [[Foreign Crossing]] · [[Backend Emit Foreign]]
@@ -154,7 +165,21 @@ tags: [changelog]
   [[Compiler Lower Default]] · [[Compiler Lower Lambda]] · [[Diagnostic Native]]
   · [[C11 Emission Continuation Delivery]]
 
+## 2026-11-15 — iOS simulator CI caching (#930)
+
+- iOS simulator CI caches the cabal store and build tree and allows 75 minutes for the device matrix (refs #930). See [[iOS Simulator CI]].
+
+## 2026-11-15 — UIKit coverage inventory (#930)
+
+- The UIKit coverage inventory script and tests measure host coverage from the SDK headers, so the table in [[Pudu Native iOS UI]] is generated rather than hand-written (refs #930). The iOS simulator workflow moves to a runner image whose Xcode meets the platform floor and runs the inventory check ([[iOS Simulator CI]], [[UIKit Coverage Inventory]]).
+
+## 2026-11-14 — iOS capabilities (#930)
+
+- `Std.Mobile` gains `Gesture`, `Scene`, `Access` and `Feedback` ([[Std Mobile Gesture]], [[Std Mobile Scene]], [[Std Mobile Access]], [[Std Mobile Feedback]]). [[Std Mobile View]] gains the `Progress`, `Activity`, `Recognizing`, `Accessible`, `Menu` and `Animated` wrappers and the `Gestured`, `Chose`, `Resized`, `Lifecycle` and `Picked` events. [[Std Mobile Stream]] encodes kinds 10 and 11 and instructions 27 to 35. [[Std Mobile Host]] reads up to four signed event words. The iOS host adds six headers for gestures, alerts and haptics, accessibility and menus, scene size and lifecycle, motion, and a self-test ([[Native iOS Capabilities Delivery]]).
+
 ## 2026-11-14 — iOS materials (#928)
+
+- Database drivers state their engine kind and capabilities; bundled drivers come from a factory table, and migrations and the store no longer branch on driver names (#940).
 
 - `Std.Mobile.View` gains `Surfaced`, a container whose background is a system material ([[Std Mobile Theme]] `Material`, encoded by MATERIAL, code 26 in [[Std Mobile Stream]]). The iOS host draws glass on iOS 26 or later when the SDK declares it, and a system blur otherwise ([[iOS Host Material]]). The ledger gains the `glass-material` capability ([[Backend Ledger]]), and [[Native Platform Adoption]] records it as the first gated capability ([[Native iOS Materials Delivery]]).
 
@@ -165,6 +190,10 @@ tags: [changelog]
 - [[iOS Simulator CI]] runs on `macos-26` so the runner's Xcode meets the build preflight.
 
 - [[iOS Simulator Run]] checks bundle publication once with a minimal program and gives new simulator devices ten minutes for first boot. It removes temporary apps with the private simulator at the end of the run. Complete native app builds get a separate five-minute budget.
+## 2026-11-15 — Native physical frame storage (#821)
+
+- [[Backend Frame Slots]] reuses storage for disjoint value lifetimes in generated C11. Owned candidates must be explicitly emptied before reuse. The signed Int8 matrix uses 4,561 slots instead of 6,394 and retains identical output.
+- [[Backend Frame Bodies]] shares text stores and moves through [[Native Text Runtime]]. With both changes the signed Int8 matrix emits 1,227,359 C bytes instead of 1,429,513.
 
 ## 2026-11-14 — Recycling lists and grids (#925)
 

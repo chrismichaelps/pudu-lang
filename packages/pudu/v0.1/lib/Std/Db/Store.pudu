@@ -325,34 +325,13 @@ fn askIn(target: &Target, statement: &Query.Statement) -> Result[Driver.Rows, St
   refusedBy(Driver.query(&target.client, Query.textIn(statement, &target.driver.placeholders), &Query.valuesOf(statement)))
 }
 
-/// A write, and the number of rows it changed.
-///
-/// PostgreSQL states the count in the command tag it answers with. SQLite
-/// states none, so the count is asked for with `changes()`, in the same
-/// transaction so no other statement can land on the connection between the
-/// write and the question.
+/// A write, and the number of rows it changed: the last word of the command
+/// a driver answers with, as every bundled engine states it.
 fn writeIn(target: &Target, statement: &Query.Statement) -> Result[Int, StoreError] {
   let text = Query.textIn(statement, &target.driver.placeholders)
   let values = Query.valuesOf(statement)
-  if target.driver.name == "sqlite" {
-    let counted = Driver.transaction(&target.client, fn(open: Driver.Tx) -> Result[Driver.Rows, Driver.Error] {
-        let _written = Driver.ask(&open, text, &values) ?
-        Driver.ask(&open, "select changes()", &[])
-      })
-    let rows = refusedBy(counted) ?
-    Ok(countIn(&rows))
-  } else {
-    let rows = refusedBy(Driver.query(&target.client, text, &values)) ?
-    Ok(Option.unwrapOr(Text.countOf(lastWord(rows.command)), 0))
-  }
-}
-
-fn countIn(rows: &Driver.Rows) -> Int {
-  if rows.rows.length() == 0 || rows.rows[0].length() == 0 { return 0 }
-  match rows.rows[0][0] {
-    case Driver.IntegerValue(number) => Option.unwrapOr(convertInteger[Int](number), 0)
-    case _ => 0
-  }
+  let rows = refusedBy(Driver.query(&target.client, text, &values)) ?
+  Ok(Option.unwrapOr(Text.countOf(lastWord(rows.command)), 0))
 }
 
 fn lastWord(tag: Str) -> Str {

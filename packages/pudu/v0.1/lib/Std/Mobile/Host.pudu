@@ -9,6 +9,8 @@ foreign "c" {
   fn applyStream symbol "pudu_ui_apply" (stream: Bytes, length: UInt64) -> ()
   fn waitEvent symbol "pudu_ui_wait" () -> UInt64
   fn eventDetail symbol "pudu_ui_event_detail" () -> UInt32
+  fn eventWordCount symbol "pudu_ui_event_word_count" () -> UInt32
+  fn eventWord symbol "pudu_ui_event_word" (index: UInt32) -> UInt32
   fn eventText symbol "pudu_ui_event_text" () -> Str
 }
 
@@ -30,6 +32,7 @@ export fn wait() -> View.Event {
   var raw = 0u64
   var text = ""
   var detail = 0u32
+  var values: Array[Int32] = []
   unsafe(foreign) {
     raw = waitEvent()
     if View.carriesText(raw) {
@@ -38,6 +41,14 @@ export fn wait() -> View.Event {
     if View.carriesDetail(raw) {
       detail = eventDetail()
     }
+    if View.carriesWords(raw) {
+      var index = 0u32
+      let total = eventWordCount()
+      while index < total {
+        values = values.push(View.signed(eventWord(index)))
+        index = index + 1u32
+      }
+    }
   }
-  View.eventWithDetail(raw, text, detail)
+  View.eventWithWords(raw, text, detail, values)
 }

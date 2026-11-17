@@ -27,7 +27,7 @@ mistaken for complete video or speaker support.
 
 ## Mobile
 
-`mobile/Counter.pudu` is the Phase 1 native phone application: a counter built only from Pudu, run on the iOS simulator through the iOS host adapter. See [[Native Counter Example]]. `mobile/Form.pudu` adds a named greeting, a text field and a toggle with a clear button: see [[Native Form Example]]. `mobile/List.pudu` is the keyed-list application: a named field, Add and Reverse buttons, a count label and a keyed list. See [[Native List Example]]. `mobile/Feed.pudu` presents a vertical scroll viewport. See [[Native Feed Example]]. `mobile/Themed.pudu` applies a theme with fixed light and dark tones and a dark appearance, then mounts a styled label and a painted button. See [[Native Themed Example]]. `mobile/Catalog.pudu` shows a recycling grid of 1,000 items in three columns, supplying rows for a window of 120. See [[Native Catalog Example]]. `mobile/Glass.pudu` places a regular material surface around a label and a Done button; it runs on the newest runtime (glass) and on an older one (blur). See [[Native Glass Example]].
+`mobile/Counter.pudu` is the Phase 1 native phone application: a counter built only from Pudu, run on the iOS simulator through the iOS host adapter. See [[Native Counter Example]]. `mobile/Form.pudu` adds a named greeting, a text field and a toggle with a clear button: see [[Native Form Example]]. `mobile/List.pudu` is the keyed-list application: a named field, Add and Reverse buttons, a count label and a keyed list. See [[Native List Example]]. `mobile/Feed.pudu` presents a vertical scroll viewport. See [[Native Feed Example]]. `mobile/Themed.pudu` applies a theme with fixed light and dark tones and a dark appearance, then mounts a styled label and a painted button. See [[Native Themed Example]]. `mobile/Catalog.pudu` shows a recycling grid of 1,000 items in three columns, supplying rows for a window of 120. See [[Native Catalog Example]]. `mobile/Glass.pudu` places a regular material surface around a label and a Done button; it runs on the newest runtime (glass) and on an older one (blur). See [[Native Glass Example]]. `mobile/Showcase.pudu` exercises the capability headers on one screen: gestures, alerts, haptics, accessibility, a context menu, scene size, lifecycle and an animated list. It is run with `PUDU_UI_CAPABILITY_TEST` set. See [[Native Showcase Example]].
 
 ## Grill Log
 
@@ -39,4 +39,4 @@ mistaken for complete video or speaker support.
 
 ## Referenced by
 
-[[Module Map]] · [[Media Studio Example]] · [[Native Counter Example]] · [[Native Form Example]] · [[Native Themed Example]] · [[Native Catalog Example]] · [[Native Glass Example]] · [[Desktop Capability Conformance]]
+[[Module Map]] · [[Media Studio Example]] · [[Native Counter Example]] · [[Native Form Example]] · [[Native Themed Example]] · [[Native Catalog Example]] · [[Native Glass Example]] · [[Native Showcase Example]] · [[Desktop Capability Conformance]]

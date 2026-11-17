@@ -21,6 +21,7 @@ tags: [moc, module]
 - [[Core Frame IR]] · [[Compiler Frame Lowering]] · [[Compiler Frame State]] · [[Compiler Frame Body]] · [[Native Frame Lowering Tests]] — pure native continuation lowering (#499).
 
 - [[Repository README]] · [[Native Progress Generator]] · [[Native Progress Tests]] · [[Native Progress Workflow]] — auditable C11 completion publishing.
+- [[UIKit Coverage Inventory]] · [[UIKit Coverage Tests]] — measured platform class and trait coverage of the iOS host.
 - [[src/Ark/_MOC|Ark Modules]] — engine library and focused conformance gates.
 
 - [[Ark Layer Gate]] · [[Ark Layer Model]] · [[Ark Layer Tests]] — explicit engine import contracts.

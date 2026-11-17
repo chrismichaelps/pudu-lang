@@ -1,0 +1,54 @@
+module Std.Mobile.Feedback
+
+import Std.Mobile.Stream as Stream
+
+/// How a choice reads: an ordinary choice, the one that cancels, or one that
+/// destroys data.
+export type Role = Plain | Cancel | Destructive
+
+/// One choice of an alert or a context menu.
+export type Choice = { label: Str, role: Role }
+
+/// A centered alert, or an action sheet anchored to the bottom edge.
+export type Style = Centered | Sheet
+
+/// An alert the program asks the platform to show. The choice taken arrives
+/// as `Chose(tag, index)` with the index into `choices`.
+export type Alert = { tag: UInt32, style: Style, title: Str, message: Str, choices: Array[Choice] }
+
+/// A tactile response.
+export type Haptic = Selection | Light | Medium | Heavy | Success | Warning | Failure
+
+/// Wire codes of roles, styles and haptics.
+const ROLES: Map[Role, UInt32] = mapOf([(Plain, 0u32), (Cancel, 1u32), (Destructive, 2u32)])
+const STYLES: Map[Style, UInt32] = mapOf([(Centered, 0u32), (Sheet, 1u32)])
+const HAPTICS: Map[Haptic, UInt32] = mapOf([
+    (Selection, 1u32),
+    (Light, 2u32),
+    (Medium, 3u32),
+    (Heavy, 4u32),
+    (Success, 5u32),
+    (Warning, 6u32),
+    (Failure, 7u32)
+  ])
+
+/// A commit showing `alert`; the platform shows one alert at a time and
+/// queues the rest.
+export fn alert(shown: &Alert) -> Bytes {
+  bytesOf(Stream.alert([], shown.tag, coded(STYLES.get(shown.style)), shown.title, shown.message, &choices(&shown.choices)))
+}
+
+/// A commit playing `haptic`.
+export fn haptic(played: Haptic) -> Bytes { bytesOf(Stream.haptic([], coded(HAPTICS.get(played)))) }
+
+/// Choices as role codes and labels, the form ALERT and MENU carry.
+export fn choices(items: &Array[Choice]) -> Array[(UInt32, Str)] {
+  items.map(|item: Choice| (coded(ROLES.get(item.role)), item.label))
+}
+
+fn coded(found: Option[UInt32]) -> UInt32 {
+  match found {
+    case Some(code) => code
+    case None => 0u32
+  }
+}

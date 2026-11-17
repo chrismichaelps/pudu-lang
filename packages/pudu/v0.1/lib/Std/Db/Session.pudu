@@ -76,7 +76,15 @@ export type Connection = {
   /// When a read must have finished, on the monotonic clock, or -1 for no
   /// limit. Set while a connection is being opened and cleared once it is
   /// ready, so a query that legitimately runs long is never cut short.
-  deadline: Int
+  deadline: Int,
+  /// The statements this connection has prepared on the server, by their
+  /// text: a statement run again is bound and executed without planning it
+  /// again. A prepared statement lives as long as its connection.
+  prepared: Map[Str, Str],
+  /// When the connection opened and when it was last handed back to a
+  /// pool, on the monotonic clock, for the pool's lifetime policy.
+  opened: Int,
+  returned: Int
 }
 
 /// Where a connection stands with respect to a transaction.
@@ -263,7 +271,10 @@ export fn connect(settings: &Config) -> Result[Connection, DbError] {
       status: Idle,
       lease: Sync.cell(0),
       epoch: 0,
-      deadline: started + settings.connectMillis
+      deadline: started + settings.connectMillis,
+      prepared: mapOf([]),
+      opened: started,
+      returned: started
     }
     let hello = Wire.startup(&[("user", settings.user), ("database", settings.database)])
     let sent = write(&stream, &hello)

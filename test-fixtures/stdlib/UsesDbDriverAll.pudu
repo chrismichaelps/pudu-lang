@@ -37,8 +37,10 @@ fn recording(
 ) -> Driver.Driver {
   Driver.Driver {
     name: name,
+    engine: Driver.Custom(name),
     schemes: schemes,
     placeholders: holes,
+    capabilities: Driver.plainCapabilities(),
     open: fn(uri: Str, size: Int) -> Result[Driver.Client, Driver.Error] {
       asked(into, "open " + uri + " x" + show(size))
       Ok(
@@ -84,8 +86,10 @@ fn recording(
 fn refusing(name: Str, schemes: Array[Str]) -> Driver.Driver {
   Driver.Driver {
     name: name,
+    engine: Driver.Custom(name),
     schemes: schemes,
     placeholders: Named,
+    capabilities: Driver.plainCapabilities(),
     open: fn(_uri: Str, _size: Int) -> Result[Driver.Client, Driver.Error] {
       Err(Driver.error(name, "connection", "the host refused the connection"))
     }

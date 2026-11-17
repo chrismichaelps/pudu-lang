@@ -1,0 +1,68 @@
+module Std.Mobile.Access
+
+/// A role or state assistive technology announces for a control: every trait
+/// the platform defines. `SupportsZoom` and `ToggleButton` are announced on
+/// iOS 17 or later and ignored on earlier systems.
+export type Trait
+  = Button
+  | Link
+  | Header
+  | SearchField
+  | Image
+  | Selected
+  | PlaysSound
+  | KeyboardKey
+  | StaticText
+  | SummaryElement
+  | NotEnabled
+  | UpdatesFrequently
+  | StartsMediaSession
+  | Adjustable
+  | AllowsDirectInteraction
+  | CausesPageTurn
+  | TabBar
+  | ToggleButton
+  | SupportsZoom
+
+/// What assistive technology reads beyond a control's name: its traits, a
+/// hint describing what acting on it does, and its current value.
+export type Access = { traits: Array[Trait], hint: Str, value: Str }
+
+/// Each trait's bit in a TRAITS mask.
+const TRAITS: Map[Trait, UInt32] = mapOf([
+    (Button, 1u32),
+    (Link, 2u32),
+    (Header, 4u32),
+    (SearchField, 8u32),
+    (Image, 16u32),
+    (Selected, 32u32),
+    (PlaysSound, 64u32),
+    (KeyboardKey, 128u32),
+    (StaticText, 256u32),
+    (SummaryElement, 512u32),
+    (NotEnabled, 1024u32),
+    (UpdatesFrequently, 2048u32),
+    (StartsMediaSession, 4096u32),
+    (Adjustable, 8192u32),
+    (AllowsDirectInteraction, 16384u32),
+    (CausesPageTurn, 32768u32),
+    (TabBar, 65536u32),
+    (ToggleButton, 131072u32),
+    (SupportsZoom, 262144u32)
+  ])
+
+/// The TRAITS mask of a set of traits.
+export fn mask(traits: &Array[Trait]) -> UInt32 {
+  var bits = 0u32
+  for item in *traits {
+    bits = bits | bit(TRAITS.get(item))
+  }
+  bits
+}
+
+fn bit(found: Option[UInt32]) -> UInt32 {
+  match found {
+    case Some(value) => value
+    case None => 0u32
+  }
+}

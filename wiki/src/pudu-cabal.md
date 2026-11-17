@@ -746,6 +746,12 @@ Resolved Grill Log: include `cbits/pudu_ios_layout.h` in the source distribution
 
 `cbits/pudu_ios_material.h` is added to `extra-source-files` in the same list, for the same reason. See [[iOS Host Material]].
 
+## iOS capability headers (#930)
+
+The six capability headers `cbits/pudu_ios_gesture.h`, `cbits/pudu_ios_feedback.h`, `cbits/pudu_ios_access.h`, `cbits/pudu_ios_scene.h`, `cbits/pudu_ios_motion.h` and `cbits/pudu_ios_capability_test.h` join the iOS host sources. They are data inputs embedded by [[Native Toolchain Host Sources]] and staged beside the host translation unit, so they need no Cabal component of their own. The four `lib/Std/Mobile/*.pudu` modules [[Std Mobile Gesture]], [[Std Mobile Scene]], [[Std Mobile Access]] and [[Std Mobile Feedback]] ship with the other mobile modules.
+
+The reader header cbits/pudu_ios_stream.h ([[iOS Host Stream]]) joins the staged iOS host headers with the six capability headers.
+
 ## Mobile TLS verification (#935)
 
 Register [[Native Mobile TLS Trust]] with existing dependencies.
@@ -780,3 +786,9 @@ runtime's pthread gate, frame ABI and diagnostic boundary.
 ## Resolved Grill Log for the portable loader
 
 Package the portable loader header so source distributions can compile the bridge and embed the native loader.
+
+## Physical slot allocation (#821)
+
+Register [[Backend Frame Slots]] and [[Backend Frame Slot References]] with
+existing dependencies. Resolved Grill Log: keep traversal and allocation
+separate while sharing one exhaustive reference projection.

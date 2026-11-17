@@ -4,9 +4,11 @@ import Std.Bytes as ByteSeq
 import Std.Channel as Channel
 import Std.Db.Admission as Admission
 import Std.Db.Driver as Driver
+import Std.Db.Lifetime as Lifetime
 import Std.Db.Protocol as Wire
 import Std.Db.Session {Auth, Closed, Connect, Malformed, Other, Server, Unsupported, Active, Failed, Idle}
 import Std.Db.Session as Session
+import Std.Env as Env
 import Std.Net as Net
 import Std.Option as Option
 import Std.Result as Result
@@ -38,7 +40,9 @@ export type Pool = {
   ready: Channel.Channel[Option[Session.Connection]],
   size: Int,
   closing: Sync.Cell[Bool],
-  reopen: fn() -> Result[Session.Connection, Session.DbError]
+  reopen: fn() -> Result[Session.Connection, Session.DbError],
+  /// How long a connection may live and sit idle before it is replaced.
+  policy: Lifetime.Policy
 }
 
 /// Run text the server plans and executes in one step.
@@ -58,21 +62,43 @@ export fn simple(stream: Session.Connection, sql: Str) -> Result[(Rows, Session.
 /// is handed the values after, so a value holding a quotation mark, a
 /// semicolon, or the whole of another statement is a value in a column and
 /// cannot become part of what runs.
+///
+/// A statement is planned once per connection: the first run prepares it
+/// under a name, and every later run binds that name. Past the limit a
+/// connection keeps, a statement is planned unnamed each time.
 export fn run(
   stream: Session.Connection,
   sql: Str,
   values: &Array[Option[Str]]
 ) -> Result[(Rows, Session.Connection), Session.DbError] {
-  let request = ByteSeq.join(&[
-      Wire.parse("", sql),
-      Wire.bind("", "", values),
-      Wire.describeStatement(""),
-      Wire.execute("", 0),
-      Wire.sync()
-    ])
-  Session.write(&stream, &request) ?
-  collect(stream)
+  match stream.prepared.get(sql) {
+    case Some(name) => {
+      let request = ByteSeq.join(&[Wire.bind("", name, values), Wire.describePortal(""), Wire.execute("", 0), Wire.sync()])
+      Session.write(&stream, &request) ?
+      collect(stream)
+    }
+    case None => {
+      let name = if stream.prepared.size() < PREPARED_LIMIT { "pudu_" + show(stream.prepared.size()) } else { "" }
+      let request = ByteSeq.join(&[
+          Wire.parse(name, sql),
+          Wire.bind("", name, values),
+          Wire.describeStatement(name),
+          Wire.execute("", 0),
+          Wire.sync()
+        ])
+      Session.write(&stream, &request) ?
+      let answered = collect(stream) ?
+      // Kept only once the server planned it, so a statement that failed to
+      // parse is never bound by name.
+      if name.isEmpty() { return Ok(answered) }
+      let after = answered[1]
+      Ok((answered[0], Session.Connection{..after, prepared: after.prepared.insert(sql, name)}))
+    }
+  }
 }
+
+/// How many statements one connection keeps prepared on the server.
+const PREPARED_LIMIT: Int = 256
 
 /// Read until the server says it is ready again, gathering what it sent.
 fn collect(start: Session.Connection) -> Result[(Rows, Session.Connection), Session.DbError] {
@@ -408,6 +434,11 @@ export fn withSavepoint[T](
 /// It also means a pool cannot hand out more connections than it opened, which
 /// is the whole reason a database wants one.
 export fn pool(settings: &Session.Config, size: Int) -> Result[Pool, Session.DbError] {
+  poolWith(settings, size, &Lifetime.DEFAULT_POLICY)
+}
+
+/// A pool whose connections live by the given policy.
+export fn poolWith(settings: &Session.Config, size: Int, policy: &Lifetime.Policy) -> Result[Pool, Session.DbError] {
   if size < 1 { return Err(Other("a database pool must contain at least one connection")) }
   let ready: Channel.Channel[Option[Session.Connection]] = Channel.channel(size)
   let held = *settings
@@ -415,7 +446,8 @@ export fn pool(settings: &Session.Config, size: Int) -> Result[Pool, Session.DbE
     ready: ready,
     size: size,
     closing: Sync.cell(false),
-    reopen: fn() -> Result[Session.Connection, Session.DbError] { Session.connect(&held) }
+    reopen: fn() -> Result[Session.Connection, Session.DbError] { Session.connect(&held) },
+    policy: *policy
   }
   var opened = 0
   var failure: Option[Session.DbError] = None
@@ -487,7 +519,18 @@ export fn withConnectionWithin[T](
     case Ok(false) => {}
   }
   let stream = match slot {
-    case Some(found) => found
+    case Some(found) => {
+      match Lifetime.verdict(&target.policy, &found, Env.elapsedMilliseconds()) {
+        case Lifetime.Keep => found
+        case Lifetime.Probe => {
+          match simple(found, "SELECT 1") {
+            case Ok(answered) => answered[1]
+            case Err(_) => replaced(target, &found) ?
+          }
+        }
+        case Lifetime.Replace => replaced(target, &found) ?
+      }
+    }
     case None => {
       match (target.reopen)() {
         case Ok(opened) => opened
@@ -533,7 +576,7 @@ export fn withConnectionWithin[T](
       return afterCleanup(failed, discard(target, &outcome[1]))
     }
     case Ok(returning) => {
-      match Channel.send(&target.ready, Some(returning)) {
+      match Channel.send(&target.ready, Some(Session.Connection{..returning, returned: Env.elapsedMilliseconds()})) {
         case Ok(_) => outcome[0]
         case Err(problem) => {
           let cleanup: Result[(), Session.DbError] = Err(asChannel(problem))
@@ -591,6 +634,19 @@ export fn transactionWith[T](
         }
       }
     })
+}
+
+/// A fresh connection in place of one the lifetime policy retired; its place
+/// is kept empty when none opens, as a lost connection's is.
+fn replaced(target: &Pool, stale: &Session.Connection) -> Result[Session.Connection, Session.DbError] {
+  let _closed = Session.close(stale)
+  match (target.reopen)() {
+    case Ok(opened) => Ok(opened)
+    case Err(reason) => {
+      let failed: Result[Session.Connection, Session.DbError] = Err(reason)
+      afterCleanup(failed, vacate(target))
+    }
+  }
 }
 
 /// Only a confirmed idle connection may return to the available queue.

@@ -80,8 +80,8 @@ export fn driver() -> Driver.Driver { driverWithWait(DEFAULT_WAIT_MILLISECONDS) 
 
 /// Override client admission; invalid waits are refused before opening.
 export fn driverWithWait(millis: Int) -> Driver.Driver {
-  Driver.Driver{name: "sqlite", schemes: ["sqlite"], placeholders: Driver.QuestionMark,
-    open: fn(uri: Str, capacity: Int) -> Result[Driver.Client, Driver.Error] { connectWithWait(uri, capacity, millis) } }
+  Driver.Driver{name: "sqlite", engine: Driver.Sqlite, schemes: ["sqlite"], placeholders: Driver.QuestionMark,
+    capabilities: Driver.plainCapabilities(), open: fn(uri: Str, capacity: Int) -> Result[Driver.Client, Driver.Error] { connectWithWait(uri, capacity, millis) } }
 }
 
 /// One serialized connection preserves one local Database with finite admission.
@@ -299,14 +299,14 @@ fn identifier(name: Str) -> Bool {
 /// statement that only read.
 export fn affected(rows: &Driver.Rows) -> Int {
   let pieces = rows.command.split(" ")
-  if pieces.length() < 3 { 0 } else { Option.unwrapOr(Text.countOf(pieces[1]), 0) }
+  if pieces.length() < 3 { 0 } else { Option.unwrapOr(Text.countOf(pieces[2]), 0) }
 }
 
 /// The connection's last inserted rowid after a write, as SQLite keeps it:
 /// the rowid of the most recent successful insert on this connection.
 export fn lastInsertRowid(rows: &Driver.Rows) -> Option[Int] {
   let pieces = rows.command.split(" ")
-  if pieces.length() < 3 { None } else { Text.countOf(pieces[2]) }
+  if pieces.length() < 3 { None } else { Text.countOf(pieces[1]) }
 }
 
 fn copy(session: &Native.Session, path: Str, direction: Int32) -> Result[(), Driver.Error] {
