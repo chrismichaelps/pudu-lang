@@ -26,6 +26,26 @@ their connection count through [[Std Channel]].
   forgetting a failed transaction's rollback requirement.
 - **Q:** Use the clock-seeded deterministic generator for SCRAM? **A:** No. _Rationale:_ security
   protocol nonces require an unpredictable source. _Rejected:_ clock entropy; silent fallback.
+- **Q:** Name a statement before the server has planned it? **A:** No. A statement is named only
+  after the server planned it, so a failed parse is never bound by name. _Rejected:_ recording the
+  name before Parse succeeds, which would bind a statement the server never accepted.
+## Prepared statement cache
+
+`run` plans a statement once per connection. The first run of a SQL text sends Parse under a name
+of the form `pudu_<n>`, then Bind, Describe for the statement, Execute, and Sync. A later run of the
+same text on that connection sends only Bind, Describe for the portal, Execute, and Sync, so the
+server does not plan the text again. The name is recorded in the connection's `prepared` map only
+after the server has planned the statement. A statement whose Parse failed is therefore planned
+again on its next run and is never bound by name.
+
+A connection keeps at most 256 prepared statements (`PREPARED_LIMIT`). Past that limit a statement
+is planned unnamed on each run and is not recorded. Named statements live as long as their
+connection and survive a rolled-back transaction, because planning is not part of the transaction.
+A connection the pool reopens starts with an empty `prepared` map.
+
+The cache is exercised by the `test-fixtures/dbprepare` fixture, which runs against a fake
+extended-protocol server.
+
 ## Pool resource lifecycle
 
 A pool requires a positive size and owns a shared closing cell beside its channel. Construction

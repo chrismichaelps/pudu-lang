@@ -58,21 +58,43 @@ export fn simple(stream: Session.Connection, sql: Str) -> Result[(Rows, Session.
 /// is handed the values after, so a value holding a quotation mark, a
 /// semicolon, or the whole of another statement is a value in a column and
 /// cannot become part of what runs.
+///
+/// A statement is planned once per connection: the first run prepares it
+/// under a name, and every later run binds that name. Past the limit a
+/// connection keeps, a statement is planned unnamed each time.
 export fn run(
   stream: Session.Connection,
   sql: Str,
   values: &Array[Option[Str]]
 ) -> Result[(Rows, Session.Connection), Session.DbError] {
-  let request = ByteSeq.join(&[
-      Wire.parse("", sql),
-      Wire.bind("", "", values),
-      Wire.describeStatement(""),
-      Wire.execute("", 0),
-      Wire.sync()
-    ])
-  Session.write(&stream, &request) ?
-  collect(stream)
+  match stream.prepared.get(sql) {
+    case Some(name) => {
+      let request = ByteSeq.join(&[Wire.bind("", name, values), Wire.describePortal(""), Wire.execute("", 0), Wire.sync()])
+      Session.write(&stream, &request) ?
+      collect(stream)
+    }
+    case None => {
+      let name = if stream.prepared.size() < PREPARED_LIMIT { "pudu_" + show(stream.prepared.size()) } else { "" }
+      let request = ByteSeq.join(&[
+          Wire.parse(name, sql),
+          Wire.bind("", name, values),
+          Wire.describeStatement(name),
+          Wire.execute("", 0),
+          Wire.sync()
+        ])
+      Session.write(&stream, &request) ?
+      let answered = collect(stream) ?
+      // Kept only once the server planned it, so a statement that failed to
+      // parse is never bound by name.
+      if name.isEmpty() { return Ok(answered) }
+      let after = answered[1]
+      Ok((answered[0], Session.Connection{..after, prepared: after.prepared.insert(sql, name)}))
+    }
+  }
 }
+
+/// How many statements one connection keeps prepared on the server.
+const PREPARED_LIMIT: Int = 256
 
 /// Read until the server says it is ready again, gathering what it sent.
 fn collect(start: Session.Connection) -> Result[(Rows, Session.Connection), Session.DbError] {

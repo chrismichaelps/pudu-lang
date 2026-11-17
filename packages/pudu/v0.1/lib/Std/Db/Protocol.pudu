@@ -165,6 +165,11 @@ export fn describeStatement(name: Str) -> Bytes {
   frame("D", &bytesOf([83u8]).concat(cString(name)))
 }
 
+/// Ask what shape a bound portal produces: its rows, or that it has none.
+export fn describePortal(name: Str) -> Bytes {
+  frame("D", &bytesOf([80u8]).concat(cString(name)))
+}
+
 /// Run a bound statement, with no limit on how many rows come back.
 export fn execute(portal: Str, limit: Int) -> Bytes {
   frame("E", &cString(portal).concat(ByteSeq.putU32Be(widen(limit))))

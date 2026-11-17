@@ -27,6 +27,7 @@ testProtocolEvaluation = do
   disposedResources <- runEntry "test-fixtures/stdlib/UsesResourceDisposal.pudu"
   channelWait <- runEntry "test-fixtures/stdlib/UsesChannelWait.pudu"
   scopedSavepoints <- runEntry "test-fixtures/dbsavepoint/Main.pudu"
+  preparedStatements <- runEntry "test-fixtures/dbprepare/Main.pudu"
   poolAdmission <- runEntry "test-fixtures/dbwait/Main.pudu"
   lookupTables <- runEntry "test-fixtures/stdlib/UsesLookupTables.pudu"
   printers <- runEntry "test-fixtures/stdlib/UsesOut.pudu"
@@ -89,6 +90,7 @@ testProtocolEvaluation = do
     , counterexample "explicit resource disposal preserves active owners" (disposedResources === Just "0")
     , counterexample "bounded channel waits preserve payloads and closure" (channelWait === Just "0")
     , counterexample "savepoint scopes release marks and preserve cleanup failures" (scopedSavepoints === Just "0")
+    , counterexample "a connection plans a statement once and binds it after" (preparedStatements === Just "0")
     , counterexample "bounded pool admission preserves capacity and configured causes" (poolAdmission === Just "0")
     , counterexample "YAML block scalars retain content and following structural values" (yamlBlock === Just "0")
     , counterexample "YAML quoted text decodes escapes and refuses malformed scalars" (yamlQuoted === Just "0")

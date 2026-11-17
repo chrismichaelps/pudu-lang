@@ -7,6 +7,9 @@ tags: [changelog]
 
 ## 2026-11-16 — Native validation fixes (#935)
 
+- PostgreSQL connections plan each statement once and bind it on later runs, up to 256 per connection (#940).
+  [[Std Db]] · [[Std Db Session]] · [[Std Db Protocol]]
+
 - Foreign parameters accept `Option` of a declared handle: `None` crosses as null, `Some` as a live handle (#935).
   [[Foreign Crossing]] · [[Backend Emit Foreign]]
 - Keep native callback lookup outside the setjmp frame and bound text

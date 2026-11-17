@@ -28,6 +28,10 @@ whether a transaction is open.
   ready message, and a local copy can disagree. _Rejected:_ counting begins and commits.
 - **Q:** Take a nonce from the deterministic generator? **A:** No. _Rationale:_ a repeatable nonce
   is not a nonce. _Rejected:_ sharing [[Std Random]] with authentication.
+- **Q:** Record a statement name before the server plans it? **A:** No. A statement is named only
+  after the server planned it, so a failed parse is never bound by name.
+- **Q:** Share one prepared-statement map across connections? **A:** No. Names are scoped to the
+  connection that planned them, so the `prepared` map is per connection and empty for a new one.
 ## Bounded message admission
 
 `nextMessage` uses a 16 MiB complete-message cap. `nextMessageLimited(stream, maxBytes)` accepts a

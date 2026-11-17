@@ -39,5 +39,18 @@ reject trailing bytes after the declared fields. Unsupported binary columns are 
 
 - **Q:** Append each bound value to the message as it is written? **A:** No. _Rationale:_ every value
   copied the message built so far (#413). Pieces are gathered and joined once.
+## Describing a portal
+
+`describePortal(name)` encodes a Describe message for a bound portal, as opposed to a prepared
+statement. A later run of a cached statement sends it after Bind, so the row description is read
+from the portal that run created.
+
+### Resolved Grill Log
+
+- **Q:** Reuse the statement describe for a bound portal? **A:** No. A cached run binds first and
+  needs the description of the portal it created, which is a separate Describe target.
+- **Q:** Name a statement before the server plans it? **A:** No. A statement is named only after the
+  server planned it, so a failed parse is never bound by name.
+
 ## Referenced by
 [[src/Std/_MOC]] · [[Std Db]] · [[Std Bytes]]

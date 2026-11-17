@@ -22,7 +22,7 @@ fn combined(command: Str) -> Session.DbError {
 
 fn started(failOn: Str) -> Session.Connection {
   require(Db.begin(Session.Connection{socket: Net.fake(failOn), buffer: bytesOf([]), parameters: [],
-        status: Session.Idle, lease: Sync.cell(0), epoch: 0, deadline: -1 }))
+        status: Session.Idle, lease: Sync.cell(0), epoch: 0, deadline: -1, prepared: mapOf([]) }))
 }
 
 fn unsuccessful(open: Session.Connection) -> (Result[Int, Session.DbError], Session.Connection) {

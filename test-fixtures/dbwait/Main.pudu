@@ -23,7 +23,7 @@ fn finish(worker: &Concurrent.Task) -> () {
 }
 fn fresh() -> Session.Connection {
   Session.Connection{socket: Net.fake(), buffer: bytesOf([]), parameters: [], status: Session.Idle,
-    lease: Sync.cell(0), epoch: 0, deadline: -1 }
+    lease: Sync.cell(0), epoch: 0, deadline: -1, prepared: mapOf([]) }
 }
 fn pool(slot: Option[Option[Session.Connection]], openings: &Sync.Counter) -> Db.Pool {
   let ready: Channel.Channel[Option[Session.Connection]] = Channel.channel(1)
