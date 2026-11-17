@@ -3,6 +3,7 @@ module UsesStoreDriver
 import Std.App.Database as Database
 import Std.Db.Driver {DollarNumber}
 import Std.Db.Driver as Driver
+import Std.Db.Postgres as Postgres
 import Std.Db.Query as Query
 import Std.Db.Repository as Repository
 import Std.Db.Store {Refused}
@@ -174,8 +175,10 @@ fn noteAt(result: Driver.Rows, row: Int) -> Result[Note, Repository.RowError] {
 fn recording(into: Sync.Cell[Str]) -> Driver.Driver {
   Driver.Driver {
     name: "postgresql",
+    engine: Driver.Postgresql,
     schemes: ["postgresql"],
     placeholders: DollarNumber,
+    capabilities: Postgres.driver().capabilities,
     open: fn(_uri: Str, _size: Int) -> Result[Driver.Client, Driver.Error] {
       Ok(
         Driver.Client {

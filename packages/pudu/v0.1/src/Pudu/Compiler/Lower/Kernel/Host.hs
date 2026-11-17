@@ -73,6 +73,7 @@ concurrentPrimitives =
   , ("mutexAcquireWithin", Primitive [int, int] (outcome CoreBoolType) [] (Outcome (host "mutex_acquire_within" 2)))
   , ("mutexRelease", Primitive [int] (outcome unit) [] (Outcome (host "mutex_release" 1)))
   , ("mutexDispose", Primitive [int] (outcome unit) [] (Outcome (host "mutex_dispose" 1)))
+  , ("mutexClose", Primitive [int] (outcome unit) [] (Outcome (host "mutex_close" 1)))
   , ("channelOpen", Primitive [int] int [] (Plain (host "channel_open" 1)))
   , ("channelWaiting", Primitive [int] (outcome int) [] (Outcome (host "channel_waiting" 1)))
   , ("channelFinish", Primitive [int] (outcome unit) [] (Outcome (host "channel_finish" 1)))

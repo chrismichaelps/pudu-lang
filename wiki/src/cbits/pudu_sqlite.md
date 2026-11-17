@@ -10,8 +10,7 @@ aliases: [Pudu SQLite Bridge]
 ## Purpose and interface
 A fixed C ABI adapts SQLite to owned FFI handles without misdeclaring SQLite's integer-returning
 close/finalize functions as void. The reserved `pudu_sqlite` native module resolves only this
-bridge's named functions. SQLite is dynamically loaded per connection on the existing POSIX
-runtime platforms; no SQLite headers or link-time SQLite dependency are required. A missing
+bridge's named functions. SQLite is dynamically loaded per connection through [[Foreign Platform Loader]]; no SQLite headers or link-time SQLite dependency are required. A missing
 library or symbol returns a typed negative status through the Pudu adapter.
 
 ## Algorithm and ownership
@@ -32,3 +31,7 @@ exactly one SQL command and an exact parameter count. Extra statements are refus
 
 ## Referenced by
 [[src/cbits/_MOC]] · [[Pudu FFI Bridge]] · [[Std Db Sqlite]] · [[Pudu Cabal Manifest]]
+
+## Resolved Grill Log for the portable loader
+
+Use the shared loader while keeping the SQLite module pinned through the last database, statement or blob reference.

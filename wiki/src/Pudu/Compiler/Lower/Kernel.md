@@ -28,6 +28,13 @@ Option results are built in Core from a test and a read, so the runtime
 never names a sum's layout except where a codec builds a whole tree.
 Rejected: one lowering function per builtin.
 
+## Binary codec (#935)
+
+The binary entries require the checked `Std.Binary.Node` variants and
+payloads. The writer uses a required box answer with E7001 when absent.
+The reader uses the host outcome channel to construct `Result[Node, Str]`.
+Direct calls and builtin values share those paths.
+
 ## Referenced by
 
 [[Compiler Lower Primitive]] · [[Compiler Lower Intrinsic]] · [[Native Builtin Kernels]]

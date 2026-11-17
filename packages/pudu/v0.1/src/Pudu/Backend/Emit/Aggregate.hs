@@ -248,7 +248,10 @@ sumHelpers kind variants =
                   <> ["      break;"]
                 | (tag, variant) <- tagged ]
       <> [ "    default: break;", "  }", "  free(box);", "}" ]))
-  , (aggregateNeed "show" kind, ("text_join" : "text_literal" : concat [snd (memberRender member "") | member <- allMembers],
+  -- Only a variant rendering several parts joins them: a payloadless one is
+  -- its name and a dynamic one is the value it holds, and a trait nothing
+  -- implements has no variant at all.
+  , (aggregateNeed "show" kind, (["text_join" | any joins variants] <> ("text_literal" : concat [snd (memberRender member "") | member <- allMembers]),
       [ "static pudu_text " <> aggregateHelper "show" kind <> "(pudu_box *box) {"
       , "  pudu_text parts[" <> number (maximum (1 : [length (coreVariantFields variant) | variant <- variants])) <> "];"
       , "  switch (box->fields[0].scalar) {" ]
@@ -308,6 +311,10 @@ sumHelpers kind variants =
   conjunction variant = case members variant of
     [] -> "1"
     present -> Text.intercalate " && " [fst (memberEqual member (payload "a" position member) (payload "b" position member)) | (position, member) <- present]
+  joins variant = case members variant of
+    [] -> False
+    [_] -> not dynamic
+    _ -> True
   showVariant tag variant = case members variant of
     -- A dynamic value renders as the value it holds.
     [(position, member)] | dynamic ->

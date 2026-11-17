@@ -4,7 +4,7 @@
     selected by the generated program. -}
 module Pudu.Backend.Toolchain.HostSources
   ( androidHostSources, androidJavaSources, androidManifest, audioSourceMarker, desktopSourceMarker, iosHostSources
-  , withHostSourceArguments ) where
+  , loaderSourceLines, sqliteSourceMarker, withHostSourceArguments ) where
 
 import qualified Data.ByteString.Char8 as ByteString
 import Data.Text (Text)
@@ -21,20 +21,28 @@ desktopSourceMarker = "/* pudu host source: desktop */"
 audioSourceMarker :: Text
 audioSourceMarker = "/* pudu host source: audio */"
 
+sqliteSourceMarker :: Text
+sqliteSourceMarker = "/* pudu host source: sqlite */"
+
 withHostSourceArguments :: Text -> ([String] -> IO a) -> IO a
 withHostSourceArguments source compile
-  | os /= "darwin" || null sources = compile []
+  | null sources = compile []
   | otherwise = withSystemTempDirectory "pudu-host" $ \directory -> do
       mapM_ (write directory) sources
       compile
-        (["-I", directory] <> ["-fobjc-arc" | desktop]
+        (["-I", directory] <> ["-fobjc-arc" | apple, desktop]
           <> [directory </> file | (file, _) <- sources, takeExtension file /= ".h"]
           <> concat [["-framework", framework] | framework <- frameworks])
  where
   desktop = desktopSourceMarker `Text.isInfixOf` source
   audio = audioSourceMarker `Text.isInfixOf` source
-  sources = (if desktop then desktopSources else []) <> (if audio then audioSources else [])
-  frameworks = concat [["AppKit", "CoreGraphics"] | desktop] <> ["AudioToolbox" | audio]
+  apple = os == "darwin"
+  sqlite = sqliteSourceMarker `Text.isInfixOf` source
+  -- The desktop and audio hosts exist only on Apple platforms; the SQLite
+  -- binding is portable C.
+  sources = (if apple && desktop then desktopSources else []) <> (if apple && audio then audioSources else [])
+    <> (if sqlite then sqliteSources else [])
+  frameworks = concat [["AppKit", "CoreGraphics"] | apple, desktop] <> ["AudioToolbox" | apple, audio]
   write directory (file, contents) =
     ByteString.writeFile (directory </> file) (ByteString.pack contents)
 
@@ -48,6 +56,23 @@ desktopSources = $(do
   mapM_ addDependentFile paths
   contents <- runIO (traverse ByteString.readFile paths)
   lift (zip files (map ByteString.unpack contents)))
+
+{-| The SQLite binding the interpreter links, compiled into a native program
+    whose foreign block names it. -}
+sqliteSources :: [(FilePath, String)]
+sqliteSources = $(do
+  let files = ["pudu_sqlite.c", "pudu_loader.h"]
+  paths <- traverse (makeRelativeToProject . ("cbits" </>)) files
+  mapM_ addDependentFile paths
+  contents <- runIO (traverse ByteString.readFile paths)
+  lift (zip files (map ByteString.unpack contents)))
+
+loaderSourceLines :: [Text]
+loaderSourceLines = map Text.pack $(do
+  path <- makeRelativeToProject ("cbits" </> "pudu_loader.h")
+  addDependentFile path
+  contents <- runIO (ByteString.readFile path)
+  lift (lines (ByteString.unpack contents)))
 
 {-| The iOS host and its private header, staged only for app builds. -}
 iosHostSources :: [(FilePath, String)]

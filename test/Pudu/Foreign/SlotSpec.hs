@@ -22,6 +22,10 @@ import Test.QuickCheck (Property, conjoin, counterexample, property, (===))
 foreign import ccall safe "pudu_ffi_call"
   c_call
     :: Ptr ()
+    -> Ptr ()
+    -> Ptr ()
+    -> Ptr ()
+    -> Ptr ()
     -> CInt
     -> Ptr Word8
     -> Ptr Int64
@@ -127,7 +131,7 @@ callWith symbol arguments resultKind readback =
                                     allocaArray 1 $ \resultFieldIntegers ->
                                       allocaArray 1 $ \resultFieldDoubles -> do
                                         code <- withArray shapes $ \shapeArray ->
-                                          c_call (castFunPtrToPtr symbol) (fromIntegral count)
+                                          c_call (castFunPtrToPtr symbol) nullPtr nullPtr nullPtr nullPtr (fromIntegral count)
                                             kinds integers doubles pointers
                                             startArray countArray fieldKinds fieldIntegers
                                             fieldDoubles fieldPointers

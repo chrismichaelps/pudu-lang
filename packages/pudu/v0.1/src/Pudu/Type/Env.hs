@@ -68,6 +68,7 @@ module Pudu.Type.Env
   , recordProvider
   , recordProviderSelection
   , recordOwner
+  , recordTraitMethodOwner
   , recordVariantOwner
   , recordImplementationOwner
   , recordPatternTest
@@ -590,6 +591,11 @@ recordImplementationOwner at target = Checker $ \state ->
 recordOwner :: Span -> NominalId -> Checker ()
 recordOwner at owner = Checker $ \state ->
   ((), state{stateOwnersRev = (at, ConcreteOwner owner) : stateOwnersRev state})
+
+{-| An unbound method value retains the checked trait's canonical identity. -}
+recordTraitMethodOwner :: Span -> NominalId -> Checker ()
+recordTraitMethodOwner at owner = Checker $ \state ->
+  ((), state{stateOwnersRev = (at, TraitMethodOwner owner) : stateOwnersRev state})
 
 {-| Variant selections retain declared field order when the payload is named. -}
 recordVariantOwner :: Span -> NominalId -> Text -> [Text] -> Checker ()

@@ -51,6 +51,10 @@ checker spells types (`unformed`), so calls made from a copy specialize too.
 
 [[Compiler Lower State]] · [[Compiler Lower Types]] · [[Compiler Lower Signature]] · [[Core IR]] · [[Type Substitution]]
 
+## Callable entry copy
+
+entryCopy registers the entry declaration under its internal instance key so the worklist can lower it against the original checked scheme. Recursive calls reuse that key.
+
 ## Referenced by
 
 [[Compiler Lower Body]] · [[Compiler Lower Method]] · [[Native Generics]]

@@ -24,9 +24,9 @@ Export lowerTuple, lowerTupleIndex and lowerTuplePattern.
 
 - **Q:** Why a hidden local instead of re-reading the subject? **A:** The
   subject runs exactly once, as `matchPattern` sees one value.
-- **Q:** Why refuse a Never subject? **A:** There is no value to project and
-  later reads of the names would have nothing to lower against; it stays an
-  honest E6001 boundary.
+- **Q:** What if the subject is Never? **A:** Evaluate it at its written
+  location. The block stops before any bindings or later statements need
+  to lower.
 
 ## Generic records (#552)
 

@@ -1,0 +1,58 @@
+module Main
+
+import Std.Db as Db
+import Std.Db.Session {Other}
+import Std.Db.Session as Session
+import Std.Db.Stream as Stream
+import Std.Net as Net
+import Std.Result as Result
+import Std.Sync as Sync
+
+fn check(holds: Bool, name: Str) -> () { if !holds { panic(name) } }
+
+fn fresh() -> Session.Connection {
+  Session.Connection{socket: Net.fake(), buffer: bytesOf([]), parameters: [], status: Session.Idle,
+    lease: Sync.cell(0), epoch: 0, deadline: -1, prepared: mapOf([]), opened: 0, returned: 0 }
+}
+
+fn observed(open: &Session.Connection) -> Net.State {
+  match Net.state(&open.socket) {
+    case Ok(held) => held
+    case Err(problem) => panic(show(problem))
+  }
+}
+
+/// Rows arrive a batch at a time and never more than the batch at once; a
+/// handler that fails stops the stream and leaves the connection usable.
+export fn main() -> Int {
+  let seen: Sync.Cell[Array[Int]] = Sync.cell([])
+  let named: Sync.Cell[Str] = Sync.cell("")
+  let open = fresh()
+  let Ok(done) = Stream.stream(open, "select n", &[], 3, fn(columns: &Array[Db.Column], rows: &Array[Array[Option[Str]]]) -> Result[(), Session.DbError] {
+      let _named = Sync.set(&named, columns[0].name)
+      let sizes = Result.unwrapOr(Sync.get(&seen), [])
+      let _kept = Sync.set(&seen, sizes.push(rows.length()))
+      Ok(())
+    }) else { panic("the stream failed") }
+  check(Result.unwrapOr(Sync.get(&seen), []) == [3, 3, 1], "seven rows arrive as batches of at most three")
+  check(Result.unwrapOr(Sync.get(&named), "") == "n", "each batch knows its columns")
+  check(done[0] == "SELECT 7", "the stream answers the command tag")
+  check(observed(&done[1]).batches == ["PBDEH", "EH", "EH", "S"], "the portal stays open between batches")
+  check(done[1].status == Session.Idle, "the connection is ready again")
+
+  // A handler that fails stops the stream after its first batch.
+  let stopped = Stream.stream(done[1], "select n", &[], 2, fn(_columns: &Array[Db.Column], _rows: &Array[Array[Option[Str]]]) -> Result[(), Session.DbError] {
+      Err(Other("enough"))
+    })
+  check(stopped == Err(Other("enough")), "the handler's failure is the stream's")
+  check(observed(&done[1]).batches[4] == "PBDEH" && observed(&done[1]).batches[5] == "S", "the portal is closed at once")
+
+  // A statement the server refused fails, and the connection answers again.
+  check(Result.isErr(&Stream.stream(done[1], "fail", &[], 2, fn(_columns: &Array[Db.Column], _rows: &Array[Array[Option[Str]]]) -> Result[(), Session.DbError] { Ok(()) })),
+    "a refused statement fails")
+  check(Result.isOk(&Stream.stream(done[1], "select n", &[], 10, fn(_columns: &Array[Db.Column], _rows: &Array[Array[Option[Str]]]) -> Result[(), Session.DbError] { Ok(()) })),
+    "the connection streams again after a failure")
+  check(Result.isErr(&Stream.stream(done[1], "select n", &[], 0, fn(_columns: &Array[Db.Column], _rows: &Array[Array[Option[Str]]]) -> Result[(), Session.DbError] { Ok(()) })),
+    "a batch of no rows is refused")
+  0
+}

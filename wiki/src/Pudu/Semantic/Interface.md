@@ -89,6 +89,12 @@ DEPTH 0.68 (MEDIUM). It hides export projection, namespace-aware selection, decl
 
 - Serialized package interfaces may populate the same `ExportIndex` without parsed source.
 
+## Resolved Grill Log for #876
+
+An exported foreign block publishes callback token types in the type
+namespace and their registration functions in the value namespace. Both
+names point to the same declaration and inherit the block's visibility.
+
 ## Referenced by
 
 [[src/Pudu/Semantic/_MOC]] · [[Compiler Program]] · [[Name Resolution]] · [[Resolve Context]] · [[Type Interface]]
@@ -106,3 +112,7 @@ Retain owner-indexed exported variant candidates alongside the existing unique e
 Resolved Grill Log: preserve complete declaring-owner ambiguity at uses across imports, lexical shadows and generated syntax. See [[Imported Variant Delivery]].
 
 Resolved type-head control: imported candidates retain an export-index TypeSpace flag; PathUse preserves C.First.Chosen qualification without admitting ambiguous value fields. Syntactically named member paths preserve head spans. See [[Imported Variant Delivery]].
+
+## Resolved Grill Log for Objective-C delegates
+
+Delegate names are published as values through `foreignValueNames`, the same route foreign functions take. The interface carries the handle type and the constructor so importing modules can construct a delegate without seeing the block's declarations.

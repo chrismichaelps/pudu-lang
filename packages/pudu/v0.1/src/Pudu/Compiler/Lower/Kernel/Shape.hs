@@ -18,6 +18,9 @@ data Answer
   | Searched !Call
   {-| Some of the box when the kernel answered one, else None. -}
   | Boxed !Call
+  {-| The box the kernel answered; with none, the call stops with this code
+      and message. -}
+  | Required !Call !Text !Text
   | ByteLength
   {-| A host call: Ok of the answer, or Err of what the host said. -}
   | Outcome !Call

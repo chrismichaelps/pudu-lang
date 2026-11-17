@@ -1,0 +1,69 @@
+module Std.Net
+
+import Std.Db.Protocol as Wire
+import Std.Result as Result
+import Std.Sync as Sync
+
+export type NetError = Other(Str) | Closed | NetOperationTimedOut
+export type Connection = { token: Int }
+/// What a fake server saw: the kind of every message it was sent, whether it
+/// still answers, and whether it was closed.
+export type State = { pending: Bytes, kinds: Array[Str], answering: Bool, closed: Bool }
+
+/// A server that answers a simple query while `answering` holds, and drops
+/// the connection when it does not.
+export fn fake(answering: Bool) -> Connection {
+  let cell = Sync.cell(State{pending: bytesOf([]), kinds: [], answering: answering, closed: false})
+  Connection{token: cell.token}
+}
+
+export fn state(connection: &Connection) -> Result[State, NetError] {
+  let cell: Sync.Cell[State] = Sync.Cell{token: connection.token}
+  Result.mapErr(Sync.get(&cell), failed)
+}
+
+fn store(connection: &Connection, held: State) -> Result[(), NetError] {
+  let cell: Sync.Cell[State] = Sync.Cell{token: connection.token}
+  Result.mapErr(Sync.set(&cell, held), failed)
+}
+
+export fn receiveWithin(connection: &Connection, count: Int, _wait: Int) -> Result[Option[Bytes], NetError] {
+  let held = state(connection) ?
+  if held.closed { return Err(Closed) }
+  let bytes = held.pending.take(count)
+  store(connection, State{..held, pending: held.pending.drop(bytes.length())}) ?
+  if bytes.isEmpty() { Ok(None) } else { Ok(Some(bytes)) }
+}
+
+export fn send(connection: &Connection, bytes: &Bytes) -> Result[(), NetError] {
+  let held = state(connection) ?
+  if held.closed { return Err(Closed) }
+  var rest = *bytes
+  var kinds = held.kinds
+  var answer = held.pending
+  while !rest.isEmpty() {
+    let read = Result.mapErr(Wire.readMessage(&rest), protocol) ?
+    rest = read[1]
+    kinds = kinds.push(read[0].kind)
+    if read[0].kind == "Q" {
+      if !held.answering {
+        store(connection, State{..held, kinds: kinds, closed: true}) ?
+        return Err(Closed)
+      }
+      answer = answer.concat(Wire.frame("C", &Wire.cString("SELECT 1"))).concat(Wire.frame("Z", &bytesOf([73u8])))
+    }
+  }
+  store(connection, State{..held, pending: answer, kinds: kinds})
+}
+
+export fn close(connection: &Connection) -> Result[(), NetError] {
+  let held = state(connection) ?
+  store(connection, State{..held, closed: true})
+}
+
+export fn connectWithin(_host: Str, _port: Int, _wait: Int) -> Result[Connection, NetError] {
+  Err(Other("opening is outside this fixture"))
+}
+
+fn protocol(problem: Wire.ProtocolError) -> NetError { Other(show(problem)) }
+fn failed(problem: Sync.SyncError) -> NetError { Other(show(problem)) }

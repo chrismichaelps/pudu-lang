@@ -12,8 +12,14 @@ import Std.Sync as Sync
 
 /// The PostgreSQL driver, for a set a program assembles itself.
 export fn driver() -> Driver.Driver {
-  Driver.Driver{name: "postgresql", schemes: ["postgres", "postgresql"],
-    placeholders: Driver.DollarNumber, open: connect }
+  Driver.Driver{name: "postgresql", engine: Driver.Postgresql, schemes: ["postgres", "postgresql"],
+    placeholders: Driver.DollarNumber, capabilities: CAPABILITIES, open: connect }
+}
+
+/// A transaction-scoped advisory lock: released when the transaction ends,
+/// whichever way it ends.
+const CAPABILITIES: Driver.Capabilities = Driver.Capabilities {
+  advisoryLock: Some(fn(key: Int) -> Str { "select pg_advisory_xact_lock(" + show(key) + ")" })
 }
 
 /// Prepare a connector with a stated capacity wait, validated before opening.

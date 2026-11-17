@@ -32,6 +32,12 @@ frameKernel readSlot value name constants arguments = do
              in Right ( call (cells <> [aggregateHelper "ops" store <> "()" | store <- stores])
                       , part : [aggregateNeed "ops" store | store <- stores] )
           _ -> refused "a flat-table kernel without its table"
+    -- A decoded record is a map from name to node; the reader builds it
+    -- through that map type's own tree operations.
+    KernelBinaryDecode ->
+      let fields = CoreMapType CoreTextType (frameValueType value)
+       in Right ( call (cells <> map (Text.pack . show) constants <> [aggregateHelper "ops" fields <> "()", aggregateHelper "wrap" fields])
+                , [part, aggregateNeed "ops" fields, aggregateNeed "wrap" fields] )
     -- A held value's box is named by the function that releases it.
     KernelHost host | host `elem` releasesOperand, kind : _ <- reverse (map frameSlotType arguments) ->
       Right (call (cells <> [aggregateHelper "drop" kind]), [part, aggregateNeed "drop" kind])
@@ -106,6 +112,8 @@ kernelEntry name = case name of
   KernelAudioRamp -> plain "pudu_audio_ramp"
   KernelJsonDecode -> plain "pudu_json_decode"
   KernelJsonEncode -> plain "pudu_json_encode"
+  KernelBinaryEncode -> plain "pudu_binary_encode"
+  KernelBinaryDecode -> plain "pudu_binary_decode"
   KernelXmlDecode -> plain "pudu_xml_decode"
   KernelCsvDelimiter -> plain "pudu_csv_delimiter"
   KernelCsvRecords -> plain "pudu_csv_records"

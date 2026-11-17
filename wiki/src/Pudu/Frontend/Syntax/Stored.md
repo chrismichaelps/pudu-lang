@@ -27,6 +27,12 @@ tree's module holds its shapes alone.
 - The instances are orphans on purpose: the class knows nothing of syntax. Every module that stores
   or reads a tree imports this one; a missing import is a compile error, never a silent change.
 
+## Resolved Grill Log
+
+- **Q:** How are callback syntax nodes stored? **A:** Their generic instances
+  preserve each located field and the parameter variant. Compiler cache
+  identity changes when the executable changes, including after schema changes.
+
 ## Linkage
 
 - **Requires:** [[Syntax Tree]], [[Cache Persist]].
@@ -35,3 +41,11 @@ tree's module holds its shapes alone.
 ## Referenced by
 
 [[src/Pudu/Frontend/Syntax/_MOC]] · [[Syntax Tree]] · [[Compiler Cache]]
+
+## Resolved Grill Log for foreign syntax cache
+
+Store new foreign declaration fields with their generic order; the executable fingerprint invalidates stale cache products.
+
+## Resolved Grill Log for Objective-C delegates
+
+Stored syntax has instances for delegate declarations and their method entries, so a cached parse round-trips them.

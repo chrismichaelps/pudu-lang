@@ -47,11 +47,26 @@ data Declaration
 data Foreign = Foreign
   { foreignVisibility :: !Visibility, foreignLibrary :: !(Located Text)
   , foreignVersion :: !(Maybe (Located Text)), foreignTypes :: ![Located Text]
+  , foreignCallbacks :: ![Located ForeignCallback]
   , foreignFunctions :: ![Located ForeignFunction] }
+foreignCallbackNames :: Foreign -> [Located Text]
+data ForeignCallback = ForeignCallback
+  { foreignCallbackName :: !(Located Text)
+  , foreignCallbackParameters :: ![Located ForeignCallbackParameter]
+  , foreignCallbackResult :: !(Located TypeSyntax)
+  , foreignCallbackFallback :: !(Maybe (Located Literal)) }
+data ForeignCallbackParameter
+  = ForeignCallbackContext
+  | ForeignCallbackArgument !(Located Text) !Bool !(Located TypeSyntax)
 data ForeignFunction = ForeignFunction
   { foreignName :: !(Located Text), foreignSymbol :: !(Maybe (Located Text))
-  , foreignParameters :: ![Located Parameter], foreignResult :: !(Located TypeSyntax)
+  , foreignParameters :: ![Located ForeignParameter], foreignResult :: !(Located TypeSyntax)
+  , foreignResultBorrowed :: !Bool, foreignResultCounted :: !Bool
   , foreignReleasedBy :: !(Maybe (Located Text)) }
+data ForeignParameter = ForeignParameter
+  { foreignParameterName :: !(Located Text), foreignParameterContext :: !Bool
+  , foreignParameterType :: !(Maybe (Located TypeSyntax)), foreignParameterOut :: !Bool
+  , foreignParameterOwned :: !Bool, foreignParameterReleasedBy :: !(Maybe (Located Text)) }
 data Function = Function
   { functionVisibility :: !Visibility, functionAsync :: !Bool
   , functionUnsafe :: !(Maybe [Located Capability]), functionComptime :: !Bool
@@ -252,6 +267,43 @@ DEPTH 0.56 (MEDIUM). Breadth is inherent to the grammar; co-location is delibera
 
 - Later syntax families become separate files when they do not participate in this recursion knot.
 
+## Resolved Grill Log for #876
+
+- **Q:** What survives parsing? **A:** The foreign block retains located
+  callbacks. A callback's context is an explicit member of its native
+  parameter sequence. A foreign function parameter can mark a named
+  context reference in sequence without manufacturing a type span.
+- **Q:** What determines whether the fallback fits? **A:** The checker
+  uses the unresolved located literal and the formed callback result type.
+
+## Resolved Grill Log for #877 — Foreign extent relations
+
+Retain located length units and target names on foreign parameters. A result can separately name the output slot containing its element count. Keep the nullable modifier's span for declaration diagnostics.
+
+## Resolved Grill Log for Objective-C blocks
+
+A callback parameter written `work: block Work` crosses as one pointer to a block literal, with passing mode BlockPassing and placement BlockCallback. The block is a stack block (isa `_NSConcreteStackBlock`, no copy or dispose helpers) whose last field is the registration key, and it lives for the foreign call only. A callee that keeps the block copies it with `Block_copy`; the copy carries the key, which is how escaping blocks are copied. The block's invoke receives the block first, so the callback must declare its context first; the checker refuses otherwise with E3063 ("callback X must take its context first to cross as a block"). A late invocation after unregister finds the key retired and answers the fallback.
+
 ## Referenced by
 
 [[src/Pudu/Frontend/Syntax/_MOC]] · [[Syntax]] · [[Parser Expression]] · [[Parser Import]] · [[Parser Binding]] · [[Frontend]]
+
+### Split callback placement Grill Log resolved
+
+Callback placement distinguishes a projected trampoline from a typed registration context.
+
+## Resolved Grill Log for callback byte runs
+
+Carry the written extent beside the callback parameter.
+
+## Resolved Grill Log for callback groups
+
+A callback group keeps its located name and written field order. It contributes one token name and one constructor to the foreign block.
+
+## Resolved Grill Log for Objective-C declarations
+
+Class declarations also name opaque foreign types. Use an explicit method marker to distinguish a class receiver from a source instance receiver.
+
+## Resolved Grill Log for Objective-C delegates
+
+A delegate declaration is one node holding the class symbol, the handle name, the callback group name, and its entries as ForeignDelegateMethod pairs of member name and selector. `foreignValueNames` publishes the delegate name as a value, so the constructor call resolves through the path ordinary foreign values use.

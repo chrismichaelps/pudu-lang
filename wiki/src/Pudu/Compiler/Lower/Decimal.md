@@ -33,6 +33,10 @@ primitive table as direct calls. Optional results require their exact Option
 payload, and unrecognized names return Nothing. Argument retention and
 conversion execute through the existing block/declaration path.
 
+## Option result layouts
+
+An optional primitive carries its declared payload type. Decimal division and text conversion can form their Option layouts without a result fact at the call span.
+
 ## Referenced by
 
 [[Compiler Lower Body]] · [[Compiler Lower Text]] · [[src/Pudu/Compiler/_MOC]]

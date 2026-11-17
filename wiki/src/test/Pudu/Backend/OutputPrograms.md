@@ -11,7 +11,8 @@ Export outputSuccessPrograms (stdout with explicit answers),
 outputStreamPrograms (stdout and stderr answers), and outputRefusalPrograms
 (accepted operations reporting runtime diagnostics). Exercise stored and
 nested Result values, matches, propagation, arguments, loop breaks, returns,
-equality and entry reporting. Partial writes include Unicode and NUL.
+equality, assignments and entry reporting. A named function returns a direct
+output Result. Partial writes include Unicode and NUL.
 
 ## Resolved Grill Log
 

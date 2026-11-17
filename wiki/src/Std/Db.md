@@ -26,6 +26,26 @@ their connection count through [[Std Channel]].
   forgetting a failed transaction's rollback requirement.
 - **Q:** Use the clock-seeded deterministic generator for SCRAM? **A:** No. _Rationale:_ security
   protocol nonces require an unpredictable source. _Rejected:_ clock entropy; silent fallback.
+- **Q:** Name a statement before the server has planned it? **A:** No. A statement is named only
+  after the server planned it, so a failed parse is never bound by name. _Rejected:_ recording the
+  name before Parse succeeds, which would bind a statement the server never accepted.
+## Prepared statement cache
+
+`run` plans a statement once per connection. The first run of a SQL text sends Parse under a name
+of the form `pudu_<n>`, then Bind, Describe for the statement, Execute, and Sync. A later run of the
+same text on that connection sends only Bind, Describe for the portal, Execute, and Sync, so the
+server does not plan the text again. The name is recorded in the connection's `prepared` map only
+after the server has planned the statement. A statement whose Parse failed is therefore planned
+again on its next run and is never bound by name.
+
+A connection keeps at most 256 prepared statements (`PREPARED_LIMIT`). Past that limit a statement
+is planned unnamed on each run and is not recorded. Named statements live as long as their
+connection and survive a rolled-back transaction, because planning is not part of the transaction.
+A connection the pool reopens starts with an empty `prepared` map.
+
+The cache is exercised by the `test-fixtures/dbprepare` fixture, which runs against a fake
+extended-protocol server.
+
 ## Pool resource lifecycle
 
 A pool requires a positive size and owns a shared closing cell beside its channel. Construction
@@ -157,7 +177,7 @@ the extra release command is necessary to finish ownership and is not a throughp
 - **Q:** Change whole-transaction cleanup or admission here? **A:** No; those are separate boundaries.
 
 ## Referenced by
-[[src/Std/_MOC]] · [[Std Db Session]] · [[Std Db Protocol]] · [[Std Net]] · [[architecture/STDLIB]]
+[[src/Std/_MOC]] · [[Std Db Session]] · [[Std Db Lifetime]] · [[Std Db Protocol]] · [[Std Net]] · [[architecture/STDLIB]]
 
 Connection URI opening is available through [[Std Db ConnectionString]]; [[Std App Database]] connects pool lifetime to application stages and provides parameterized queries for handlers.
 
@@ -166,3 +186,28 @@ Connection URI opening is available through [[Std Db ConnectionString]]; [[Std A
 `DEFAULT_POOL_WAIT_MILLISECONDS` is ten seconds. `withConnection` delegates to `withConnectionWithin(target, waitMillis, action)`. An override accepts zero through one hour; zero probes immediately. [[Std Db Admission]] validates before dequeuing and atomically distinguishes a slot, channel completion and expiry. Expiry returns `Session.AdmissionTimedOut`, invokes neither callback nor reopening, and conserves capacity. Existing post-acquisition closing, lending renewal, return and cleanup logic stays shared.
 
 Resolved Grill Log: bound capacity admission, not admitted work. Preserve the nominal Pool record and callback contract. The existing large aggregate receives only the bounded shared entry change; extracting its nominal public types is a separate compatibility decision.
+
+## Pool lifetime policy
+
+`Pool` carries a `policy: Lifetime.Policy`. `pool(settings, size)` uses `Lifetime.DEFAULT_POLICY`.
+`poolWith(settings, size, &policy)` takes a policy, and `Lifetime.never()` keeps every connection for
+as long as it works. [[Std Db Lifetime]] owns the policy and its verdict.
+
+`withConnectionWithin` asks the verdict before it lends a connection. On `Keep` the connection is
+lent as it is. On `Probe` it sends `SELECT 1`, and a connection that fails the probe is replaced. On
+`Replace` the connection is closed and a fresh one is opened in its place. A failed reopen reports
+the connection error and keeps the place empty for a later borrower, as a lost connection does.
+
+A connection is stamped with `returned` when it goes back into the pool, so idle time is measured
+from the moment it was last handed back.
+
+### Resolved Grill Log
+
+- **Q:** Probe every connection at lend time? **A:** No. Only a connection idle past the probe
+  threshold is probed. _Rejected:_ a round trip on every borrow.
+- **Q:** Lend a connection whose probe failed? **A:** No. A failed probe replaces the connection, so
+  the caller never receives one known to be dead. _Rejected:_ lending it and letting the caller's
+  request fail.
+- **Q:** Keep the place occupied when a replacement cannot be opened? **A:** No. The place is kept
+  empty, so capacity does not shrink and the next borrower opens a fresh connection. _Rejected:_
+  closing the pool.

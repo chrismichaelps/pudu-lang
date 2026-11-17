@@ -93,6 +93,15 @@ Byte operations lower their receiver before arguments.
 
 `CoreForeignCall` lowers its arguments to slots in order, then to `FrameForeign`; a stopped argument stops the call.
 
+## Resolved Grill Log for #876 — Native callback lowering
+
+Lower a callback operation after its operand. Allocate a callback token
+result slot without borrowing a foreign-handle cell.
+
+## Resolved Grill Log for #877 — Post-call settlement
+
+Compile settlement as an ordinary unit frame store with effects, so it executes after the writeback statements.
+
 ## Referenced by
 
 [[src/_MOC]] · [[Program Compiler Module Map]] · [[Native Frame Pressure Repair]]

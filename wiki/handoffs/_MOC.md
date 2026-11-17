@@ -5,6 +5,10 @@ tags: [moc, handoff]
 
 # Handoff Map
 
+- [[Native Frame Slot Reuse Delivery]] — independent slot allocation and emission evidence (#821).
+
+- [[C11 Emission Continuation Delivery]] — binary kernels, mutex close and dynamic argument widening (#935).
+
 - [[Foreign Pointer Delivery]] — typed foreign crossings and bounds (#877).
 - [[Foreign Callback Delivery]] — callbacks into Pudu across foreign calls (#875 decided, #876 next).
 - [[Native Mobile Targets Delivery]] — iOS static libraries and simulator evidence (#878).
@@ -418,6 +422,8 @@ tags: [moc, handoff]
 - [[Native App Delivery]] — `pudu build --app` writes a runnable simulator application (#916).
 - [[Native iOS Theming Delivery]] — semantic colors, appearance override and Dynamic Type styles (#923).
 - [[Native iOS Recycling Delivery]] — recycling lists and equal-column grids with windowed rows (#925).
+
+- [[Native Frame Slot Reuse Delivery]] — C11 frame pressure and allocation (#821).
 - [[Native Platform Ledger Delivery]] — platform toolchain ledger, preflight, doctor and device matrix (#926).
 - [[Native iOS Materials Delivery]] — surface materials, glass on iOS 26 or later with blur fallback (#928).
 - [[Native iOS Capabilities Delivery]] — gestures, alerts, haptics, accessibility, context menus, scene and motion (#930).

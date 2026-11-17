@@ -106,3 +106,7 @@ inner C++ struct. A trailing byte in the outer struct detects flattened
 layouts. Provide one round-trip function and one slot writer. An array of
 those shapes models the same layout as a record of consecutively declared
 members and exercises more than 32 scalar leaves.
+
+## Resolved Grill Log for C11 FFI conformance
+
+Export C ABI fixtures for typed arrays, retained callback pointers, shared callback contexts and owned result buffers. Verify that the owned buffer release runs exactly once.

@@ -13,6 +13,7 @@ tags: [moc, module]
 
 - [[Host Failure Vocabulary]] · [[CLI Memory Failure]] · [[CLI Memory Tests]] — shared catchable host-exhaustion presentation without swallowing cancellation (#499).
 - [[Backend Frame Program]] · [[Backend Frame Runtime]] · [[Native Frame Runtime Tests]] — production frame ownership, dispatcher and controlled failure checks (#499).
+- [[Backend Typed Integer Calls]] — typed C entries for suitable direct callees.
 - [[Backend Frame Direct]] — direct-call set for frames on the C stack (#904).
 
 - [[Backend Frame Values]] · [[Backend Frame Bodies]] · [[Native Frame Body Tests]] — constant-arity generated C step bodies and strict corpus compilation (#499).

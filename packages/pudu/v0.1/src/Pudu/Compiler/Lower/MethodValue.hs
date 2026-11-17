@@ -2,7 +2,7 @@
     `text.length`, `items.push` or a trait's `bot.label`. The receiver runs once, when the value is
     made, and is kept as the closure's capture. Calling the value runs the
     method on it through the same lowering a written call gets. -}
-module Pudu.Compiler.Lower.MethodValue (lowerMethodValue) where
+module Pudu.Compiler.Lower.MethodValue (lowerMethodValue, lowerTraitMethodValue) where
 
 import Data.List.NonEmpty (NonEmpty (..))
 import qualified Data.Map.Strict as Map
@@ -22,12 +22,18 @@ import Pudu.Type.Value (Type (FunctionTypeRequiring, ReferenceTypeValue))
 type LowerExpression = LowerState -> Located Expression -> (LowerState, Maybe (CoreExpression, CoreType))
 type Lowered = (LowerState, Maybe (CoreExpression, CoreType))
 
+lowerTraitMethodValue :: LowerExpression -> LowerState -> Span -> Text -> Text -> Lowered
+lowerTraitMethodValue lower state at provider member =
+  let receiver = Located at (NameExpression ("::trait-method::" :| [provider]))
+   in maybe (refused (refuse at "a trait method value without a settled native function type" state))
+        id (lowerMethodValue lower state at receiver member)
+
 {-| Nothing unless checking typed the member as a function and it is a
     method: of a built-in value, or of a declared type that has no field of
     that name (a field holding a function is read, not bound). `Bot.label`,
     with a type for a receiver, is the method itself, taking `self` first. -}
 lowerMethodValue :: LowerExpression -> LowerState -> Span -> Located Expression -> Text -> Maybe Lowered
-lowerMethodValue lower state at receiver member = case (typeForSpan types (locatedSpan receiver), typeForSpan types at, typeFactAt types at) of
+lowerMethodValue lower state at receiver member = case (receiverFact, typeForSpan types at, typeFactAt types at) of
   (Just receiverType, Just kind@(CoreFunctionType inputs _), Just fact@(FunctionTypeRequiring _ inputFacts _ _))
     | builtIn receiverType || declared receiverType || textual receiverType, length inputs == length inputFacts -> Just $ case lower state receiver of
         (after, Nothing) -> refused after
@@ -36,14 +42,24 @@ lowerMethodValue lower state at receiver member = case (typeForSpan types (locat
           let key = (if textual receiverType then textMethodPrefix else "$method:") <> member <> ":" <> Text.pack (show receiverType) <> ":" <> Text.pack (show kind)
            in (ensure after key (Just receiverType) kind fact, Just (CoreExpression at kind (CoreClosure key [core]), kind))
   (Nothing, Just kind@(CoreFunctionType inputs@(self : _) _), Just fact@(FunctionTypeRequiring _ inputFacts _ _))
-    | Located _ (NameExpression (owner :| [])) <- receiver, Nothing <- lookupLocal state owner
-    , declared self, ownerKeyOf self == Just owner || fmap displayName (ownerKeyOf self) == Just owner
+    | Just owner <- unboundOwner self
     , length inputs == length inputFacts ->
-        let key = "$method:" <> owner <> "." <> member <> ":" <> Text.pack (show kind)
+        let key = (if traitValue then "$trait-method:" else "$method:") <> owner <> "." <> member <> ":" <> Text.pack (show kind)
          in Just (ensure state key Nothing kind fact, Just (CoreExpression at kind (CoreClosure key []), kind))
   _ -> Nothing
  where
   types = contextTypes (lowerContext state)
+  receiverFact = if traitValue then Nothing else typeForSpan types (locatedSpan receiver)
+  unboundOwner self = case locatedValue receiver of
+    NameExpression ("::trait-method::" :| [provider]) -> Just provider
+    NameExpression (owner :| [])
+      | Nothing <- lookupLocal state owner, declared self
+      , ownerKeyOf self == Just owner || fmap displayName (ownerKeyOf self) == Just owner ->
+          Just owner
+    _ -> Nothing
+  traitValue = case locatedValue receiver of
+    NameExpression ("::trait-method::" :| [_]) -> True
+    _ -> False
   -- The member's own name, without the provider checking selected.
   plain = snd (selectedMember member)
   builtIn kind = case kind of
@@ -73,7 +89,7 @@ lowerMethodValue lower state at receiver member = case (typeForSpan types (locat
   -- The receiver keeps its own span and fact; the call's span answers the
   -- method's result and each argument gets a made-up span with its
   -- parameter's fact.
-  register current key bound kind@(CoreFunctionType inputs result) (FunctionTypeRequiring _ inputFacts _ resultFact) =
+  register current key bound kind@(CoreFunctionType inputs result) whole@(FunctionTypeRequiring _ inputFacts _ resultFact) =
     let env = CoreLocal 0 "" kind
         offset = maybe 0 (const 1) bound
         parameters = [CoreParameter (CoreLocal (index - 1 + offset) (argumentName index) input) at | (index, input) <- zip [1 ..] inputs]
@@ -95,14 +111,20 @@ lowerMethodValue lower state at receiver member = case (typeForSpan types (locat
         -- Past the end of any source, so no site made from one has a position.
         beyond index = fromMaybe zeroOffset (offsetFromInt (maxBound - index))
         argumentSpans = [at{spanStart = beyond index, spanEnd = beyond index} | index <- [1 .. length inputs]]
+        -- The callee has a span of its own carrying the value's function type,
+        -- which settles a generic implementation's parameters; a lent argument
+        -- is read as the value its parameter holds.
+        calleeSpan = at{spanStart = beyond (length inputs + 1), spanEnd = beyond (length inputs + 1)}
+        lentTarget (ReferenceTypeValue True inner) = inner
+        lentTarget other = other
         original = contextTypes (lowerContext current)
         overlaid = withReceiver{lowerContext = (lowerContext withReceiver)
-          {contextTypes = withFacts ((at, resultFact) : zip argumentSpans inputFacts) original}}
+          {contextTypes = withFacts ((at, resultFact) : (calleeSpan, whole) : zip argumentSpans (map lentTarget inputFacts)) original}}
         target = case bound of
           Just _ -> Located (locatedSpan receiver) (NameExpression ("$receiver" :| []))
           Nothing -> receiver
         call = Located at (CallExpression
-          (Located at (MemberExpression target (Located at member)))
+          (Located calleeSpan (MemberExpression target (Located calleeSpan member)))
           [Located spanValue (NameExpression (argumentName index :| [])) | (index, spanValue) <- zip [1 ..] argumentSpans])
         (afterBody, lowered) = lower overlaid call
         context = (lowerContext afterBody){contextTypes = original}
@@ -115,7 +137,8 @@ lowerMethodValue lower state at receiver member = case (typeForSpan types (locat
      in case lowered of
           Just (body, _) | length (contextRefusals context) == before ->
             let lifted = CoreFunction key (hidden <> parameters) result (snd (closeLoaned afterBody at (CoreBlock prologue (Just body))))
-                info = CoreClosureInfo [receiverType | Just _ <- [bound]] plain key False (isJust bound) (Just receiverType)
+                method = if traitValue then Nothing else Just receiverType
+                info = CoreClosureInfo [receiverType | Just _ <- [bound]] plain key False (isJust bound) method
                 registered = (lowerContext settled)
                   { contextFunctions = lifted : contextFunctions (lowerContext settled)
                   , contextClosures = Map.insert key info (contextClosures (lowerContext settled))

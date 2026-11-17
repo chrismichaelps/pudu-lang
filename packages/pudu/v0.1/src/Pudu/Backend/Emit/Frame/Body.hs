@@ -15,7 +15,7 @@ import Pudu.Backend.Emit.Frame.Direct (enteredDirect)
 import Pudu.Comptime.Limits (callDepthLimit)
 import Pudu.Backend.Emit.Frame.Value (cellMember, frameValue, slotText)
 import Pudu.Backend.Emit.State
-  ( EmitState (..), callDepthSite, cString, cStringBytes, line, operatorFailureSite, textFailureSite, textOfInt )
+  ( EmitState (..), callDepthSite, cString, cStringBytes, line, operatorFailureSite, profileLabel, textFailureSite, textOfInt )
 import Pudu.Backend.Emit.Support (integerHelper, zeroValue)
 import Pudu.Core (CoreType (..))
 import Pudu.Core.Frame
@@ -41,11 +41,16 @@ emitFrameBodies direct state source = do
   let functions = frameModuleFunctions source
       identities = Map.fromList (zip (map frameFunctionName functions) [0 ..])
       callees = Callees identities (Map.fromList [(frameFunctionName function, function) | function <- functions]) direct
-      prototypes = concat
-        [ [ "static pudu_cell pudu_run_" <> textOfInt identity <> "(pudu_frame *frame);"
-          ]
-        | (identity, function) <- zip [0 :: Int ..] functions, Set.member (frameFunctionName function) direct ]
-        <> [ "static pudu_cell pudu_direct_" <> textOfInt identity <> "(const pudu_cell *arguments);"
+      -- Every body is declared first, under the label a profiler shows.
+      prototypes =
+        [ "static pudu_step pudu_body_" <> textOfInt identity <> "(pudu_frame *frame)"
+            <> profileLabel "body" (frameFunctionName function) identity <> ";"
+        | (identity, function) <- zip [0 :: Int ..] functions ]
+        <> [ "static pudu_cell pudu_run_" <> textOfInt identity <> "(pudu_frame *frame)"
+               <> profileLabel "run" (frameFunctionName function) identity <> ";"
+           | (identity, function) <- zip [0 :: Int ..] functions, Set.member (frameFunctionName function) direct ]
+        <> [ "static pudu_cell pudu_direct_" <> textOfInt identity <> "(const pudu_cell *arguments)"
+               <> profileLabel "direct" (frameFunctionName function) identity <> ";"
            | (identity, function) <- zip [0 :: Int ..] functions, Set.member (frameFunctionName function) (enteredDirect source direct) ]
   if Map.size identities /= length functions
     then Left (FrameFault Nothing "duplicate frame function identities")
@@ -107,21 +112,26 @@ instruction (state, needs) operation = case operation of
     destination <- slotText target
     (after, expression, selected) <- frameValue state value
     let kind = frameSlotType target
-        stored
-          -- The new value is built before the old one goes, since it may read it.
-          | ownedType kind =
-              "      { " <> cType kind <> " pudu_next = " <> expression <> "; " <> released kind destination
-                <> " " <> destination <> " = pudu_next; }"
-          | otherwise = "      " <> destination <> " = " <> expression <> ";"
-    pure (line after stored, Set.union needs selected)
+        required = Set.union needs selected
+    if kind == CoreTextType
+      then pure (line after ("      pudu_text_slot_store(&" <> destination <> ", " <> expression <> ");"),
+        Set.insert "text_slot_store" required)
+      else do
+        let stored
+              | ownedType kind =
+                  "      { " <> cType kind <> " pudu_next = " <> expression <> "; " <> released kind destination
+                    <> " " <> destination <> " = pudu_next; }"
+              | otherwise = "      " <> destination <> " = " <> expression <> ";"
+        pure (line after stored, required)
   FrameMove target source -> do
     destination <- slotText target
     origin <- slotText source
     let kind = frameSlotType target
-        emptied = if kind == CoreTextType then "(pudu_text){NULL, 0, NULL}" else "NULL"
-    pure ( line state ("      { " <> cType kind <> " pudu_moved = " <> origin <> "; " <> origin <> " = " <> emptied <> "; "
-             <> released kind destination <> " " <> destination <> " = pudu_moved; }")
-         , needs )
+    if kind == CoreTextType
+      then pure (line state ("      pudu_text_slot_move(&" <> destination <> ", &" <> origin <> ");"),
+        Set.insert "text_slot_move" needs)
+      else pure (line state ("      { " <> cType kind <> " pudu_moved = " <> origin <> "; " <> origin <> " = NULL; "
+                    <> released kind destination <> " " <> destination <> " = pudu_moved; }"), needs)
   FramePrintLiteral _ text -> printed "print_str" (cString text <> ", " <> textOfInt (cStringBytes text))
   FramePrintUnit _ -> printed "print_str" "\"()\", 2"
   FramePrintSlot at slot -> do

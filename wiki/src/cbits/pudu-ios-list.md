@@ -23,7 +23,7 @@ The header handles two instructions of [[Std Mobile Stream]]: RANGE (24) and COL
 - Any change to a list's rows, range or columns reloads the list once at the end of the commit. The platform reconfigures only visible cells.
 - The edge check runs in the list's layout pass, after every scroll and size change; the list is not its own scroll delegate. The edge margin is a quarter of the window, but never more than half of what the window holds beyond the visible span, so a window too small for the screen cannot alternate between its two edges. When the first visible index falls within the edge margin of the window start, and the window does not start at 0, or the last visible index falls within the edge margin of its end, and the window does not reach `total`, it queues event kind 8 with the list's tag and the first visible index as the detail. It never repeats the same index twice in a row.
 - A list shown as the root fills the safe-area region like a scroll viewport.
-- Self-test `PUDU_UI_LIST_TEST`: scrolls the first list to its last item, waits until that item's cell shows a label, prints `PUDU_LIST reached <label text>`, and prints `PUDU_LIST reused` when fewer cells were ever made than a fifth of the items. It also prints `PUDU_CELLS <made> of <total> items` as a measurement. Then it asks the program to stop.
+- Self-test `PUDU_UI_LIST_TEST`: scrolls the first list to its last item, waits until that item's cell shows a label, the committed window reaches the end, and its queued Reached events settle, prints `PUDU_LIST reached <label text>`, and prints `PUDU_LIST reused` when fewer cells were ever made than a fifth of the items. It also prints `PUDU_CELLS <made> of <total> items` as a measurement. Then it asks the program to stop.
 
 ## Invariants
 

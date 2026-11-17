@@ -58,16 +58,18 @@ lowerTextMethod lower state at receiver member arguments = case lower state rece
 
   -- toInt/toFloat: the text goes into a local, then a test picks Some(read)
   -- or None, using the Option the checker gave the call.
-  parsed current coreReceiver (test, readName, valueType) = case typeForSpan (contextTypes (lowerContext current)) at of
-    Just kind@(CoreSumType _ _) ->
-      let (withHeld, held) = bindLocal current "" CoreTextType
+  -- The parser's Option is fixed by the parser, whatever facts the call kept.
+  parsed current coreReceiver (test, readName, valueType) =
+      let kind = case typeForSpan (contextTypes (lowerContext current)) at of
+            Just recorded@(CoreSumType "Option" [_]) -> recorded
+            _ -> CoreSumType "Option" [valueType]
+          (withHeld, held) = bindLocal current "" CoreTextType
           expression shape' kind' = CoreExpression at kind' shape'
           text' = expression (CoreReadLocal held) CoreTextType
           some = expression (CoreConstruct "Some" [("0", expression (CoreTextMethod readName text' []) valueType)]) kind
           none = expression (CoreConstruct "None" []) kind
           choice = expression (CoreIfValue (expression (CoreTextMethod test text' []) CoreBoolType) (CoreBlock [] (Just some)) none) kind
        in built withHeld (CoreBlockValue (CoreBlock [CoreStatement at (CoreDeclare held coreReceiver)] (Just choice))) kind
-    _ -> halt at ("an Option result of " <> member <> " without a native form") current
 
 parsers :: [(Text, (CoreTextMethodName, CoreTextMethodName, CoreType))]
 parsers =

@@ -82,3 +82,14 @@ output must contain the Pudu line before the host marker even through a pipe. Th
 
 Resolved Grill Log: linking a separate host catches a duplicate `main`, and
 reading the output order catches a missing flush on return.
+
+## Physical slots (#821)
+
+The compaction check constructs typed frames with disjoint and overlapping
+scalar intervals, an owned move, owned values that keep their owners, and
+values crossing block boundaries. It checks physical identities in rewritten
+instructions and the physical descriptor count.
+
+Resolved Grill Log: assert operand separation and owned retirement directly
+before relying on full native corpus parity. A smaller descriptor alone can
+hide an alias that changes program output.

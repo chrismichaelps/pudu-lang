@@ -11,7 +11,7 @@ Export CoreKernelName: the closed set of runtime kernels a `CoreKernel`
 expression may name. A kernel reads operands that are already held and
 answers one value of the expression's type. Names are grouped by family:
 presence of a held box, buffers, columns, digests and keyed digests,
-checksums, sealing, signature checks, audio bytes, the JSON, XML and CSV
+checksums, sealing, signature checks, audio bytes, the JSON, XML, CSV and binary
 codecs, and the flat table. Layout positions a kernel needs (variant
 indexes, field positions, a width or a mode) travel beside the name as
 integers, not inside it.

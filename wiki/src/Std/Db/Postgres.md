@@ -8,12 +8,13 @@ aliases: [Std Db Postgres]
 # Std Db Postgres
 
 ## Purpose and interface
-Adapt the existing PostgreSQL protocol and bounded pool to the backend-neutral Driver contract. postgres and postgresql schemes, dollar-number placeholders. Parameters preserve null, text, integer, boolean, decimal, Float64 and bytes; a bytes parameter crosses as its `\x` hexadecimal text form, which the server reads back into exactly those bytes. Returned wire text stays TextValue rather than guessing types, except a `bytea` column (OID 17), whose `\x` hexadecimal cells [[Std Db]]'s `asDriverRows` reads into BytesValue, keeping any other form as text; native OIDs are metadata strings. Checked against a live PostgreSQL 14 server: three bytes, an empty value and a null each round-tripped exactly. Error category and SQLSTATE survive adaptation. Connector URI policy is the explicit ConnectionString subset. Close delegates to Db.closePool.
+Adapt the existing PostgreSQL protocol and bounded pool to the backend-neutral Driver contract. postgres and postgresql schemes, dollar-number placeholders. Parameters preserve null, text, integer, boolean, decimal, Float64 and bytes; a bytes parameter crosses as its `\x` hexadecimal text form, which the server reads back into exactly those bytes. Returned wire text stays TextValue rather than guessing types, except a `bytea` column (OID 17), whose `\x` hexadecimal cells [[Std Db]]'s `asDriverRows` reads into BytesValue, keeping any other form as text; native OIDs are metadata strings. Checked against a live PostgreSQL 14 server: three bytes, an empty value and a null each round-tripped exactly. Error category and SQLSTATE survive adaptation. Connector URI policy is the explicit ConnectionString subset. Close delegates to Db.closePool. The driver states engine `Postgresql` and a `capabilities.advisoryLock` that yields `select pg_advisory_xact_lock(key)`, a transaction-scoped lock that ends with the transaction; [[Std Db Migrate]] reads that capability rather than the driver's name.
 
 ## Resolved Grill Log
 - **Q:** Make PostgreSQL session types mandatory for every database? **A:** No; the public driver seam uses independent values and callbacks.
 - **Q:** Rewrite SQL to pretend dialects are identical? **A:** No; the selected driver declares its placeholder convention, and the caller writes its dialect.
 - **Q:** Advertise drivers that have no implementation? **A:** No; third-party drivers are supported through the contract, but only concrete adapters are listed as bundled.
+- **Q:** Branch on a driver's name to decide behavior? **A:** No. Engines are dispatched by kind through a factory table, and behavior by stated capability, not by driver name.
 
 ## Referenced by
 

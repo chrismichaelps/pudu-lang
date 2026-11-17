@@ -33,6 +33,8 @@ import Pudu.Frontend.Syntax.Tree
   , Parameter (..)
   , Variant (..)
   , Visibility (..)
+  , foreignCallbackNames
+  , foreignValueNames
   )
 import Pudu.Type.Value (NominalId, canonicalNominal)
 
@@ -130,7 +132,7 @@ exportedIdentity owner (Located _ declaration) = case declaration of
   TraitDeclaration value -> [(locatedValue (traitName value), canonicalNominal owner (locatedValue (traitName value)), True)]
   ForeignDeclaration value ->
     [ (locatedValue name, canonicalNominal owner (locatedValue name), False)
-    | name <- foreignTypes value
+    | name <- foreignTypes value <> foreignCallbackNames value
     ]
   _ -> []
 
@@ -138,7 +140,8 @@ exportedValue :: Located Declaration -> [Text]
 exportedValue (Located _ declaration) = case declaration of
   FunctionDeclaration value -> [locatedValue (functionName value)]
   ForeignDeclaration value ->
-    map (locatedValue . foreignName . locatedValue) (foreignFunctions value)
+    map locatedValue (foreignValueNames value)
+      <> map (locatedValue . foreignName . locatedValue) (foreignFunctions value)
   TypeDeclaration value -> case locatedValue (typeDefinition value) of
     SumDefinition variants -> map (locatedValue . variantName . locatedValue) variants
     _ -> []

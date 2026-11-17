@@ -33,6 +33,18 @@ methodSuccessPrograms =
       , "  print(s.name())", "  print(s.greet(\"x\"))", "  print(Square(2).greet(\"y\"))"
       , "  return 0", "}" ]
     , "point 1\nhi you from point 1\ncircle 3\nshape greets x\nshape greets y\n")
+  , ("methods with written defaults admit all checked arguments", program
+      [ "type Marker = { base: Int }"
+      , "trait Count { fn count(self: &Self, amount: Int = 2) -> Int }"
+      , "impl Count for Marker {"
+      , "  fn count(self: &Self, amount: Int = 2) -> Int { self.base + amount }"
+      , "}"
+      , "fn main() -> Int {"
+      , "  print(show(Marker{base: 5}.count(4)))"
+      , "  0"
+      , "}"
+      ]
+    , "9\n")
   , ("qualified calls select by type and by trait", program $ named <>
       [ "trait Origin { fn origin() -> Self }"
       , "impl Origin for Point { fn origin() -> Point { Point{x: 0, y: 0} } }"

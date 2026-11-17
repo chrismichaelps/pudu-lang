@@ -48,6 +48,18 @@ export fn parseHead(head: Str) -> Result[Http.Request, MessageError] {
   }
 }
 
+/// The protocol version a request's head names on its request line. A head
+/// whose line does not parse reads as the current version; parsing the head
+/// is what reports it.
+export fn requestVersion(head: Str) -> Http.Version {
+  let lines = headLines(head)
+  if lines.length() == 0 { return Http.Http11 }
+  match parseRequestLine(lines[0]) {
+    case Ok(parts) => Http.versionFrom(parts[2])
+    case Err(_) => Http.Http11
+  }
+}
+
 /// A response read from the text a connection carried.
 export fn parseResponse(source: Str) -> Result[Http.Response, MessageError] {
   let split = splitHead(source)

@@ -5,6 +5,155 @@ tags: [changelog]
 
 # Changelog
 
+## 2026-11-17 — Objective-C delegates (#879)
+
+- Objective-C delegates: runtime-defined classes whose methods enter callback group members (refs #879).
+  [[Backend Emit Foreign Delegate]] · [[Pudu FFI Objective-C Bridge]]
+
+## 2026-11-17 — Foreign teardown and Objective-C blocks (#879)
+
+- Foreign teardown releases newest claims first; Objective-C autorelease
+  pools are owned handles; callbacks cross as Objective-C blocks (refs #879).
+  [[Foreign Ownership]] · [[Foreign Callback Signature]]
+
+## 2026-11-16 — Objective-C message dispatch
+
+- Resolve foreign class aliases and selectors and emit fixed-signature
+  sends in generated C11. The interpreter inserts the same ABI positions
+  while retaining source output and mutable loan indexes.
+  [[Native Host Foreign]] · [[Foreign Call Library]]
+
+## 2026-11-16 — Portable foreign loading
+
+- Share Windows and POSIX loading between the interpreter, generated C11
+  and SQLite. Close independently owned loader references after scoped
+  symbol users return. Use atomic cached symbols for repeated native calls.
+  [[Foreign Platform Loader]] · [[Native Host Foreign]]
+
+## 2026-11-16 — Foreign callback groups (#877)
+
+- Register a record of callbacks with one shared context key. Each member
+  trampoline selects its declared handler through that key.
+  [[Foreign Callback Signature]] · [[Backend Emit Foreign Callback]]
+
+## 2026-11-16 — Split foreign callbacks and byte runs (#877)
+
+- Carry trampoline and context arguments separately. Keep the outbound scope
+  available when the library invokes a retained callback on a later call.
+- Check inbound byte extents and copy the data before invoking Pudu.
+  [[Foreign Callback Signature]] · [[Backend Emit Foreign Callback]]
+
+## 2026-11-16 — Nullable foreign loans (#877)
+
+- Admit bare None at direct nullable reference arguments. Preserve null
+  with zero extent and keep present empty arrays separately addressable.
+  [[Foreign Pointer Delivery]] · [[Backend Emit Foreign Loan]]
+
+## 2026-11-16 — Returned foreign arrays (#877)
+
+- Validate returned run declarations and bound the copy by the written length
+  slot. Release transferred storage after copying and on conversion failure.
+  [[Foreign Pointer Delivery]] · [[Foreign Run Storage]]
+
+## 2026-11-16 — Optional foreign handles (#877)
+
+- Cross optional handles as nullable pointers. Preserve owned, borrowed and
+  counted result policies and pin input claims while native callbacks run.
+  [[Foreign Crossing]] · [[Native Host Foreign]]
+
+## 2026-11-16 — Foreign extent relations (#877)
+
+- Resolve declared `elements of` and `bytes of` relations in signature
+  order. Check `Bytes` bounds before foreign dispatch in both execution
+  paths. Copy typed-array inputs at the target ABI stride, including nested
+  records, and write mutable buffers back to their original places.
+  [[Foreign Extent]] · [[Foreign Run Storage]]
+
+## 2026-11-16 — Scalar and record foreign loans (#877)
+
+- Admit scalar and nested record reference parameters at foreign declarations.
+  Copy pointees through libffi in the interpreter and exact ABI locals in
+  generated C. Settle mutable loans before delivering post-call conversion
+  or callback failures.
+  [[Foreign Pointer Delivery]] · [[Foreign Call]]
+
+## 2026-11-16 — Native validation fixes (#935)
+
+- PostgreSQL results stream in bounded batches on an open portal through Std.Db.Stream (#940).
+  [[Std Db Stream]] · [[Std Db Protocol]]
+- Pools decide per connection whether to keep, probe, or replace it by age and idle time through Std.Db.Lifetime. `poolWith` takes a policy, and `never()` turns the limits off ([[Std Db Lifetime]] · [[Std Db]] · [[Std Db Session]]).
+- PostgreSQL connections plan each statement once and bind it on later runs, up to 256 per connection (#940).
+  [[Std Db]] · [[Std Db Session]] · [[Std Db Protocol]]
+- Native binaries name each generated function after its Pudu function for profilers and debuggers (#938).
+- Foreign parameters accept `Option` of a declared handle: `None` crosses as null, `Some` as a live handle (#935).
+  [[Foreign Crossing]] · [[Backend Emit Foreign]]
+- Keep native callback lookup outside the setjmp frame and bound text
+  allocations by the maximum C object size.
+- Let queued iOS list viewport events settle before the scroll self-test
+  reports its final window.
+  [[Native Host Callbacks]] · [[iOS Host List]]
+
+## 2026-11-16 — Foreign callback syntax (#876)
+
+- Retain callback signatures and native context positions in the parsed tree.
+  Check callback argument types, fallbacks and context pairing during
+  declaration checking. Bind owner-qualified callback token types and their
+  synchronous registration signatures. Add the per-run interpreter store for
+  invocation leases and teardown. Wire interpreter registration and
+  unregister values to the store. Add the libffi callback adapter with
+  generation-based retirement and a fallback for late invocations. Wire
+  interpreter dispatch and nested failure settlement. Lower native callback
+  operations, signatures and paired ABI positions into the frame IR.
+  [[Foreign Callback Delivery]] · [[Foreign Callback Signature]]
+
+## 2026-11-16 — Android native TLS libraries (#935)
+
+- Build Android arm64 and x86_64 native libraries through the NDK and
+  verify TLS peer chains through the host JavaVM.
+  [[Backend Toolchain Library]] · [[Native Mobile TLS Trust]]
+
+## 2026-11-16 — iOS native TLS (#935)
+
+- Enable verified TLS connects and descriptor upgrades on iOS device
+  and simulator builds with a target-built OpenSSL provider.
+  [[Native Host TLS]] · [[Backend Toolchain Library]]
+
+## 2026-11-15 — Native C11 callable continuations (#935)
+
+- Preserve a diverging subject in tuple, record, and sequence pattern
+  bindings. [[Compiler Lower Tuple]] · [[Backend Tuple Programs]]
+- Carry single-member tuples and lower a named call to the entry through its
+  ordinary callable body. [[Compiler Lower Body]] · [[Compiler Lower Generic]]
+- Allow omission of trailing defaults and export monomorphic defaulted and
+  async functions. The embedded C entry takes every argument and awaits an
+  async export before returning through the existing crossing.
+  [[Compiler Lower Default]] · [[Backend Emit Export]] · [[Backend Export Tests]]
+- Admit methods with written defaults at their full checked arity.
+  [[Compiler Lower Signature]] · [[Backend Method Programs]]
+- Specialize eligible signed integer direct calls to typed C parameters and
+  locals. [[Backend Typed Integer Calls]] · [[Native Direct Call Tests]]
+
+## 2026-11-15 — Native frame reuse and entry defaults
+
+- Integrate physical slot reuse and shared owned-text stores from #821.
+  [[Native Frame Slot Reuse]] · [[Native Frame Slot Reuse Delivery]]
+- Evaluate entry defaults as ordinary local declarations before the body
+  or awaited task. Preserve the located missing-argument diagnostic after
+  earlier defaults. [[Compiler Lower Function Body]] · [[Backend Native Tests]]
+- Cover output Results returned from named functions and assigned to locals.
+  [[Backend Output Programs]]
+
+## 2026-11-15 — C11 emission continuation (#935)
+
+- Emit the `Std.Binary` writer and reader with the interpreter's wire format
+  and refusal behavior. [[Native Binary Kernels]] · [[Backend Kernel Programs]]
+- Emit `mutexClose` with immediate retirement or a wait for the current owner's
+  release. [[Native Host Concurrent]] · [[Backend Host Programs]]
+- Widen omitted dynamic defaults and supplied arguments through function
+  values. Update E6001 help.
+  [[Compiler Lower Default]] · [[Compiler Lower Lambda]] · [[Diagnostic Native]]
+  · [[C11 Emission Continuation Delivery]]
+
 ## 2026-11-15 — iOS simulator CI caching (#930)
 
 - iOS simulator CI caches the cabal store and build tree and allows 75 minutes for the device matrix (refs #930). See [[iOS Simulator CI]].
@@ -19,6 +168,8 @@ tags: [changelog]
 
 ## 2026-11-14 — iOS materials (#928)
 
+- Database drivers state their engine kind and capabilities; bundled drivers come from a factory table, and migrations and the store no longer branch on driver names (#940).
+
 - `Std.Mobile.View` gains `Surfaced`, a container whose background is a system material ([[Std Mobile Theme]] `Material`, encoded by MATERIAL, code 26 in [[Std Mobile Stream]]). The iOS host draws glass on iOS 26 or later when the SDK declares it, and a system blur otherwise ([[iOS Host Material]]). The ledger gains the `glass-material` capability ([[Backend Ledger]]), and [[Native Platform Adoption]] records it as the first gated capability ([[Native iOS Materials Delivery]]).
 
 ## 2026-11-14 — Platform toolchain ledger (#926)
@@ -28,6 +179,10 @@ tags: [changelog]
 - [[iOS Simulator CI]] runs on `macos-26` so the runner's Xcode meets the build preflight.
 
 - [[iOS Simulator Run]] checks bundle publication once with a minimal program and gives new simulator devices ten minutes for first boot. It removes temporary apps with the private simulator at the end of the run. Complete native app builds get a separate five-minute budget.
+## 2026-11-15 — Native physical frame storage (#821)
+
+- [[Backend Frame Slots]] reuses storage for disjoint value lifetimes in generated C11. Owned candidates must be explicitly emptied before reuse. The signed Int8 matrix uses 4,561 slots instead of 6,394 and retains identical output.
+- [[Backend Frame Bodies]] shares text stores and moves through [[Native Text Runtime]]. With both changes the signed Int8 matrix emits 1,227,359 C bytes instead of 1,429,513.
 
 ## 2026-11-14 — Recycling lists and grids (#925)
 

@@ -70,6 +70,17 @@ defaultParameterSuccessPrograms =
       , "  0"
       , "}" ]
     , "hi!hi?\nx!\nx!\ntrue\n[<fn greet>, <fn greet>]\n", "")
+  , ("implementing values widen to dynamic defaults", program
+      [ "trait Sized { fn size(self: &Self) -> Int }"
+      , "type Item = { count: Int }"
+      , "impl Sized for Item { fn size(self: &Self) -> Int { self.count } }"
+      , "fn count(item: dynamic Sized = Item{count: 7}) -> Int { item.size() }"
+      , "fn main() -> Int {"
+      , "  let f = count"
+      , "  print(show(count()) + show(f()) + show(f(Item{count: 9})))"
+      , "  0"
+      , "}" ]
+    , "779\n", "")
   ]
 
 defaultParameterRefusalPrograms :: [(String, Text)]

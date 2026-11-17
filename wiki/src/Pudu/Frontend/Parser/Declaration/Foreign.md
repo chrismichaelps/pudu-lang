@@ -46,6 +46,12 @@ parseForeign :: Visibility -> Parser (Located Declaration)
   the foreign library, not Pudu, owns its representation. `type` retains its established keyword
   role and the handle name must follow the ordinary upper-identifier rule.
 
+- **Callback declarations retain native order.** The callback parameter
+  list keeps the standalone context position, borrowed marker on named
+  parameters, and the span of the optional fallback literal. In a foreign
+  function, `context name` refers to a callback argument. A parameter named
+  `context` followed by `:` follows the ordinary parameter grammar.
+
 ### Linkage
 
 - **Requires:** [[Parser State]], [[Parser Type]], [[Parser Declaration Function]].
@@ -66,6 +72,42 @@ parseForeign :: Visibility -> Parser (Located Declaration)
   library should not suspend the language's naming grammar for every caller and editor feature.
   _Rejected:_ upper-initial value identifiers inside foreign blocks.
 
+## Resolved Grill Log for #876
+
+- **Q:** Reserve either callback word? **A:** Keep both contextual. The block
+  member position identifies `callback`, and one token of lookahead
+  distinguishes a context marker from an ordinary parameter name.
+- **Q:** Does parsing authorize a crossing? **A:** [[Type Check Foreign]]
+  continues to refuse callback crossings until the runtime path is available.
+
+## Resolved Grill Log for #877 — Foreign extent relations
+
+Read length relations after the parameter type. Match contextual unit words only when followed by of, leaving ordinary parameter names available. Keep declared target order. A result's elements relation names exactly one slot.
+
+## Resolved Grill Log for Objective-C blocks
+
+A callback parameter written `work: block Work` crosses as one pointer to a block literal, with passing mode BlockPassing and placement BlockCallback. The block is a stack block (isa `_NSConcreteStackBlock`, no copy or dispose helpers) whose last field is the registration key, and it lives for the foreign call only. A callee that keeps the block copies it with `Block_copy`; the copy carries the key, which is how escaping blocks are copied. The block's invoke receives the block first, so the callback must declare its context first; the checker refuses otherwise with E3063 ("callback X must take its context first to cross as a block"). A late invocation after unregister finds the key retired and answers the fallback.
+
 ## Referenced by
 
 [[src/Pudu/Frontend/_MOC]] · [[ADR-0018 Calling a Library Written Elsewhere]] · [[grammar/pudu]]
+
+### Split callback placement Grill Log resolved
+
+The contextual qualifiers after a parameter colon preserve the legacy context-name form.
+
+## Resolved Grill Log for callback byte runs
+
+Read extents using the foreign length grammar.
+
+## Resolved Grill Log for callback groups
+
+Parse callback groups and the contextual lower-case segment on a trampoline projection. Preserve the spans of the group and member for checking.
+
+## Resolved Grill Log for Objective-C declarations
+
+Parse class aliases and the contextual selector clause. The selector is kept as the exact Objective-C spelling.
+
+## Resolved Grill Log for Objective-C delegates
+
+`parseDelegate` reads `delegate Name symbol "Class" for Group { member "selector" }` inside a foreign block. It records the group as a name only; whether the group exists and whether each member appears once are checker questions, so the parser reports shape errors alone.

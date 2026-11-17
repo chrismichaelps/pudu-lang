@@ -68,6 +68,10 @@ functions without being conflated. A missing or mismatched obligation is reporte
 - **Q:** Recover a release using only the handle's type name? **A:** No; source position identifies
   the producer obligation, while the type only identifies the nominal value.
 
+## Resolved Grill Log for #877 — Optional handles
+
+On conversion failure, release a counted direct result once even if its address is already known. Borrowed direct results carry no release obligation.
+
 ## Referenced by
 
 [[src/Pudu/Eval/_MOC]] · [[Eval Foreign]] · [[Foreign Ownership]]

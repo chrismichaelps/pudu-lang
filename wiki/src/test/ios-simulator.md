@@ -67,6 +67,10 @@ Use `--require-simulator` to make an unavailable simulator a failure.
   only make the launch wait. Where a host calls the entry is its framework's
   choice.
 
+- **Q:** Does the Objective-C bridge hold on iOS? **A:** `objectiveCSmoke` builds
+  pools, blocks and a delegate for the simulator and requires the interpreter's
+  output.
+
 ## Cold simulator timing (#899)
 
 Hosted macOS runners failed intermittently with `spawnSync xcrun ETIMEDOUT`

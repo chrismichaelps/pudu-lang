@@ -86,6 +86,7 @@ installShared scope value = mapM_ declareOne (interfaceDeclarations value)
     TraitDeclaration trait -> declareTraitMembers scope trait
     ForeignDeclaration foreignValue -> do
       declareForeign scope (interfaceLayouts value) foreignValue
+      mapM_ (publishValue value . locatedValue) (Tree.foreignValueNames foreignValue)
       mapM_ (publishValue value . locatedValue . Tree.foreignName . locatedValue)
         (Tree.foreignFunctions foreignValue)
     _ -> pure ()

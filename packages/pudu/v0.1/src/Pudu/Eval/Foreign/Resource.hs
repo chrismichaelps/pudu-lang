@@ -70,22 +70,29 @@ cleanupFailedOutputs spanValue binding store handles =
           ((Nothing, (foreignBindingResult binding, foreignBindingReleasedBy binding))
             : [(Just index, (foreignSlotCrossing slot, foreignSlotReleasedBy slot))
               | (index, Just slot) <- zip [0 ..] (foreignBindingSlots binding)])
-        resources = [(address, name, release)
-                    | (position, name, address) <- handles
+        obligationInputs = [entry | entry@(position, _, _) <- handles,
+          position /= Nothing || not (foreignBindingBorrowedResult binding)]
+        resources = [(position, address, name, release)
+                    | (position, name, address) <- obligationInputs
                     , Just (HandleCrossing expected, Just release) <- [Map.lookup position declarations]
                     , expected == name]
-    if length resources /= length handles
+        counted = [(address, name, release) | (Nothing, address, name, release) <- resources,
+          foreignBindingCountedResult binding]
+        owned = [(address, name, release) | (position, address, name, release) <- resources,
+          position /= Nothing || not (foreignBindingCountedResult binding)]
+    if length resources /= length obligationInputs
       then reportCleanup store spanValue "a native output has no matching declared release"
       else pure ()
+    mapM_ (\(address, name, release) -> releaseHandle store spanValue release name address) counted
     claimed <- claimAllOwned store
-      [(address, releaseHandle store spanValue release name address) | (address, name, release) <- resources]
+      [(address, releaseHandle store spanValue release name address) | (address, name, release) <- owned]
     case claimed of
-      Left protected -> cleanupUnclaimed store spanValue protected resources
+      Left protected -> cleanupUnclaimed store spanValue protected owned
       Right () -> mapM_ (\(address, name, release) -> do
         taken <- takeOwned store address
         case taken of
           Nothing -> pure ()
-          Just _ -> releaseHandle store spanValue release name address) resources
+          Just _ -> releaseHandle store spanValue release name address) owned
 
 {-| Protected addresses and conflicting destructors never enter cleanup. -}
 cleanupUnclaimed :: ForeignStore -> Span -> [Int64] -> [(Int64, Text, ForeignRelease)] -> IO ()

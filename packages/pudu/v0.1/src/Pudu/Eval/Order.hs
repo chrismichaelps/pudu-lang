@@ -25,6 +25,7 @@ import Pudu.Eval.Value (OrdValue (..), Value (..), compareValues)
 comparableValue :: Value -> Bool
 comparableValue value = case value of
   FunctionValue _ -> False
+  TraitMethodValue{} -> False
   TaskValue{} -> False
   BuiltinValue _ -> False
   ArrayMethodValue _ _ -> False

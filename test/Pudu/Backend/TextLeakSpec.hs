@@ -175,8 +175,8 @@ testForeignHandleLeaks = testCountedPrograms linkerFlags fixture "" cases
         , "release(first)"
         , "let rendered = show(implicit) == renderHandle(implicit)"
         , "rendered && status == 0i32 && readHandle(implicit) == 1i32 && readHandle(borrowed) == 2i32 && readHandle(second) == 2i32"
-        ], "release 0\nrelease 2\nread 1\nread 2\nread 2\nrelease 1\nrelease 2\ntrue\n",
-        "release 0\nrelease 2\nrelease 1\nrelease 2\n", ExitSuccess)
+        ], "release 0\nrelease 2\nread 1\nread 2\nread 2\nrelease 2\nrelease 1\ntrue\n",
+        "release 0\nrelease 2\nrelease 2\nrelease 1\n", ExitSuccess)
     , ("duplicate ownership preserves the original release obligation", program
         [ "acquire(0i32)"
         , "acquire(0i32)"
