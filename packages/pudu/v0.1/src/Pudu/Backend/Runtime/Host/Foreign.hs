@@ -2,6 +2,7 @@
 module Pudu.Backend.Runtime.Host.Foreign (hostForeignParts, foreignLoaderMarker) where
 
 import Data.Text (Text)
+import Pudu.Backend.Toolchain.HostSources (sqliteSourceMarker)
 
 {-| The line whose presence in a program's C says the program needs the dynamic loader. -}
 foreignLoaderMarker :: Text
@@ -10,7 +11,15 @@ foreignLoaderMarker = "#include <dlfcn.h>"
 {-| Each part: its name, the parts it needs, and its lines. -}
 hostForeignParts :: [(Text, [Text], [Text])]
 hostForeignParts =
-  [ ("host_foreign", ["fail", "host_math"],
+  [ ("host_foreign_sqlite", [],
+      [ sqliteSourceMarker
+      , "/* The SQLite binding is built into the program, as it is into the"
+      , "   interpreter, and answers its own symbols. */"
+      , "#define PUDU_HOST_SQLITE 1"
+      , "void *pudu_sqlite_symbol(const char *name);"
+      , "static char pudu_foreign_sqlite_module;"
+      ])
+  , ("host_foreign", ["fail", "host_math"],
       [ foreignLoaderMarker
       , "#include <pthread.h>"
       , "/* A reference the linker keeps, so the math library stays loaded where the"
@@ -39,6 +48,9 @@ hostForeignParts =
       , "  int count = 0;"
       , "  size_t used = 0;"
       , "  void *handle;"
+      , "#ifdef PUDU_HOST_SQLITE"
+      , "  if (strcmp(library, \"pudu_sqlite\") == 0) return &pudu_foreign_sqlite_module;"
+      , "#endif"
       , "  if (strcmp(library, \"c\") == 0) {"
       , "    handle = dlopen(NULL, RTLD_LAZY | RTLD_LOCAL);"
       , "    if (handle == NULL) pudu_foreign_refuse(site, producer == NULL ? symbol : producer, library, producer == NULL ? NULL : symbol, \"the program cannot see its own symbols\");"
@@ -77,7 +89,11 @@ hostForeignParts =
       , "  pthread_mutex_lock(&pudu_foreign_lock);"
       , "  if (cache->function == NULL) {"
       , "    void *handle = pudu_foreign_open(site, library, version, symbol, producer);"
+      , "#ifdef PUDU_HOST_SQLITE"
+      , "    void *address = handle == &pudu_foreign_sqlite_module ? pudu_sqlite_symbol(symbol) : dlsym(handle, symbol);"
+      , "#else"
       , "    void *address = dlsym(handle, symbol);"
+      , "#endif"
       , "    if (address == NULL) {"
       , "      char problem[600];"
       , "      snprintf(problem, sizeof problem, \"the library exports no %s\", symbol);"

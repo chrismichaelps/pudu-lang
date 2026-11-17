@@ -156,7 +156,7 @@ methodTables scopes modules = (Map.fromList instances, Map.fromList calls, Map.f
 lowerMethodCall :: LowerExpression -> LowerState -> Span -> Span -> Located Expression -> Text -> [Located Expression] -> Maybe Lowered
 lowerMethodCall lower state at callee receiver written arguments = do
   kind <- typeForSpan (contextTypes context) (locatedSpan receiver)
-  if isDynamic kind then Just (dynamicCall lower state at kind receiver member arguments) else
+  if isDynamic kind then Just (dynamicCall lower state at kind receiver member (typeFactAt (contextTypes context) callee) arguments) else
    if builtinFirst kind then Nothing else
     case ownerKeyOf kind >>= chosen of
       Just key -> Just (callMethod lower state at key instantiated receiver arguments)
@@ -195,8 +195,8 @@ lowerMethodCall lower state at callee receiver written arguments = do
 
 {-| A method of a dynamic value: the receiver runs, then the arguments, and
     the type it holds answers with its own implementation of the trait. -}
-dynamicCall :: LowerExpression -> LowerState -> Span -> CoreType -> Located Expression -> Text -> [Located Expression] -> Lowered
-dynamicCall lower state at kind receiver member arguments = case receiving of
+dynamicCall :: LowerExpression -> LowerState -> Span -> CoreType -> Located Expression -> Text -> Maybe Type -> [Located Expression] -> Lowered
+dynamicCall lower state at kind receiver member checked arguments = case receiving of
   (after, Nothing) -> refused after
   (after, Just (receiverPrelude, coreReceiver, receiverPlace)) -> case operandsOf after [] arguments of
     (final, Nothing) -> refused final
@@ -233,7 +233,14 @@ dynamicCall lower state at kind receiver member arguments = case receiving of
                           whole = CoreBlock (declarations <> [CoreStatement at (CoreDeclare answer chosen)] <> stores) (Just value)
                        in (close withAnswer, Just (CoreExpression at result (CoreBlockValue whole), result))
                     _ -> halt at "a lent dynamic call without its finals" (close done)
-            (done, Just []) -> halt at "a method of a dynamic value no type implements" (close done)
+            -- Nothing implements the trait, so no value reaches this call:
+            -- the match has no arm, at the type checking gave the call.
+            (done, Just []) -> case typeForSpan (contextTypes (lowerContext done)) at of
+              Just answered | nativeValueType answered ->
+                ( close done
+                , Just (CoreExpression at answered (CoreBlockValue (CoreBlock declarations
+                    (Just (CoreExpression at answered (CoreMatch scrutinee []))))), answered) )
+              _ -> halt at "a method of a dynamic value no type implements" (close done)
             (done, Nothing) -> refused (close done)
  where
   trait = case kind of
@@ -244,7 +251,7 @@ dynamicCall lower state at kind receiver member arguments = case receiving of
   -- whether the method takes `&mut self`.
   (probed, selfLent) = case [(key, payload) | variant <- variants, [(_, payload)] <- [coreVariantFields variant]
                                             , Just key <- [Map.lookup (trait, coreVariantName variant, member) (contextTraitMethods (lowerContext state))]] of
-    (key, payload) : _ -> case instanceTarget state at key Nothing [payload] unselected of
+    (key, payload) : _ -> case instanceTarget state at key (heldBy payload) [payload] unselected of
       (back, Just (_, signature)) -> (back, 0 `elem` signatureLoaned signature)
       (back, Nothing) -> (back, False)
     [] -> (state, False)
@@ -273,13 +280,19 @@ dynamicCall lower state at kind receiver member arguments = case receiving of
       (after, Just (core, _))
         | expressionIsPrintValued core -> halt (locatedSpan argument) "a Result[(), Str] call argument" after
         | otherwise -> operandsOf after (([], core, Nothing) : done) rest
+  -- The call's checked type, with the held type in front as the receiver:
+  -- a generic method's own parameters settle from it, as an ordinary call's do.
+  heldBy payload = case checked of
+    Just (FunctionTypeRequiring asynchronous inputs required result) ->
+      Just (FunctionTypeRequiring asynchronous (unformed payload : inputs) required result)
+    _ -> Nothing
   arm _ _ (current, Nothing) _ = (current, Nothing)
   arm lent passed (current, Just arms) variant = case coreVariantFields variant of
     [(_, payload)] | Just key <- Map.lookup (trait, coreVariantName variant, member) (contextTraitMethods (lowerContext current)) ->
       let (withHeld, held) = bindLocal current "" payload
           reading = CoreExpression at payload (CoreReadLocal held)
           pattern' = CoreVariantPattern (coreVariantName variant) [CoreBindPattern held]
-       in case (if null lent then invoke else invokeLent lent) withHeld at key Nothing unselected (reading : passed) of
+       in case (if null lent then invoke else invokeLent lent) withHeld at key (heldBy payload) unselected (reading : passed) of
             (next, Just (call, CoreTupleType (result : payloadFinal : rest))) | 0 `elem` lent ->
               -- The final receiver goes back as the dynamic value, wrapped in
               -- this arm's variant, so every arm answers one tuple type.

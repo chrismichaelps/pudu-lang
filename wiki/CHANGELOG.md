@@ -9,7 +9,7 @@ tags: [changelog]
 
 - PostgreSQL connections plan each statement once and bind it on later runs, up to 256 per connection (#940).
   [[Std Db]] · [[Std Db Session]] · [[Std Db Protocol]]
-
+- Native binaries name each generated function after its Pudu function for profilers and debuggers (#938).
 - Foreign parameters accept `Option` of a declared handle: `None` crosses as null, `Some` as a live handle (#935).
   [[Foreign Crossing]] · [[Backend Emit Foreign]]
 - Keep native callback lookup outside the setjmp frame and bound text
