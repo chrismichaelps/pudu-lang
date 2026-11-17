@@ -772,3 +772,8 @@ Resolved Grill Log: use the same installed libffi library as outbound calls.
 
 Register [[Native Host Callbacks]]. Resolved Grill Log: reuse the native
 runtime's pthread gate, frame ABI and diagnostic boundary.
+## Physical slot allocation (#821)
+
+Register [[Backend Frame Slots]] and [[Backend Frame Slot References]] with
+existing dependencies. Resolved Grill Log: keep traversal and allocation
+separate while sharing one exhaustive reference projection.

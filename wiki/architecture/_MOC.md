@@ -138,4 +138,5 @@ Pudu is a statically typed native systems language for developers who need predi
 - [[Ark Water Validation]] — numerical wave conformance and staged fluid scenarios.
 
 - [[Native Text Views]] — byte-addressed UTF-8 reads and shared slices.
+
 - [[Native Platform Adoption]] — adopting platform releases through one toolchain ledger and a preflight (#926).

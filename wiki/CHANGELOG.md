@@ -107,6 +107,10 @@ tags: [changelog]
 - [[iOS Simulator CI]] runs on `macos-26` so the runner's Xcode meets the build preflight.
 
 - [[iOS Simulator Run]] checks bundle publication once with a minimal program and gives new simulator devices ten minutes for first boot. It removes temporary apps with the private simulator at the end of the run. Complete native app builds get a separate five-minute budget.
+## 2026-11-15 — Native physical frame storage (#821)
+
+- [[Backend Frame Slots]] reuses storage for disjoint value lifetimes in generated C11. Owned candidates must be explicitly emptied before reuse. The signed Int8 matrix uses 4,561 slots instead of 6,394 and retains identical output.
+- [[Backend Frame Bodies]] shares text stores and moves through [[Native Text Runtime]]. With both changes the signed Int8 matrix emits 1,227,359 C bytes instead of 1,429,513.
 
 ## 2026-11-14 — Recycling lists and grids (#925)
 
