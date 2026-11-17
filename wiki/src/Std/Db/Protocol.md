@@ -52,5 +52,18 @@ from the portal that run created.
 - **Q:** Name a statement before the server plans it? **A:** No. A statement is named only after the
   server planned it, so a failed parse is never bound by name.
 
+## Flushing a portal
+
+`flush()` encodes a Flush message. It asks the server to deliver every pending response while
+keeping the open portal and any open transaction. Sync is the other way to ask for responses, and it
+also ends the transaction and closes the portal, so it cannot be used between batches of a read.
+[[Std Db Stream]] uses Flush between batches for that reason.
+
+### Resolved Grill Log
+
+- **Q:** Use Sync to collect responses between batches? **A:** No. _Rationale:_ Sync closes the portal
+  and any transaction, so a second batch would have nothing to read. _Rejected:_ reusing Sync for
+  every round trip.
+
 ## Referenced by
-[[src/Std/_MOC]] · [[Std Db]] · [[Std Bytes]]
+[[src/Std/_MOC]] · [[Std Db]] · [[Std Db Stream]] · [[Std Bytes]]

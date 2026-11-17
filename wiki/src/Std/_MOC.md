@@ -87,6 +87,7 @@ tags: [moc, module, stdlib]
 - [[Std Db Schema]] — columns as names the compiler knows, so an editor offers them.
 - [[Std Db Query Shape]] — putting a statement together out of more than one table.
 - [[Std Db Store]] — a program's own values kept and read back, with nothing left unread.
+- [[Std Db Stream]] — one statement's rows read in bounded batches on an open portal.
 - [[Std Db Repository]] — rows as the program's own values, naming the column when one is wrong.
 - [[Std Db Query]] — statements in which a value cannot become part of what runs.
 - [[Std Db Migrate]] — bringing a schema to what the program expects, once and never half way.

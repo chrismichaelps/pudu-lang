@@ -181,6 +181,10 @@ export fn execute(portal: Str, limit: Int) -> Bytes {
 /// client that never sends it waits for a reply that is waiting for it.
 export fn sync() -> Bytes { frame("S", &ByteSeq.empty()) }
 
+/// Ask the server to send what it has so far, keeping the transaction and
+/// any open portal, where a Sync would end both.
+export fn flush() -> Bytes { frame("H", &ByteSeq.empty()) }
+
 /// Say the connection is finished.
 export fn terminate() -> Bytes { frame("X", &ByteSeq.empty()) }
 

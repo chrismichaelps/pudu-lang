@@ -12,7 +12,7 @@ const groups = [
   ['Std.Db.Session', 'Std.Db.Query.Shape', 'Std.Http.Server.Route'],
   ['Std.Db.Admission'],
   ['Std.Db', 'Std.App.Problem', 'Std.Http.Server.Stream'],
-  ['Std.Db.ConnectionString', 'Std.Db.Migrate', 'Std.Db.Store', 'Std.Http.Server',
+  ['Std.Db.ConnectionString', 'Std.Db.Migrate', 'Std.Db.Store', 'Std.Db.Stream', 'Std.Http.Server',
     'Std.Http.Server.Guard', 'Std.Http.Server.Socket', 'Std.Http.Server.Lambda', 'Std.App.Idempotency'],
   ['Std.Db.Postgres', 'Std.Db.Sqlite'],
   ['Std.App.Database', 'Std.App.Access', 'Std.App.Bind', 'Std.App.Tenant', 'Std.App.OpenApi', 'Std.App.Reload'],

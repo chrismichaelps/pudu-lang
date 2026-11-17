@@ -7,6 +7,8 @@ tags: [changelog]
 
 ## 2026-11-16 — Native validation fixes (#935)
 
+- PostgreSQL results stream in bounded batches on an open portal through Std.Db.Stream (#940).
+  [[Std Db Stream]] · [[Std Db Protocol]]
 - PostgreSQL connections plan each statement once and bind it on later runs, up to 256 per connection (#940).
   [[Std Db]] · [[Std Db Session]] · [[Std Db Protocol]]
 - Native binaries name each generated function after its Pudu function for profilers and debuggers (#938).
