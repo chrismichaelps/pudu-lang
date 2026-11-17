@@ -82,6 +82,18 @@ tags: [changelog]
   [[Compiler Lower Default]] · [[Compiler Lower Lambda]] · [[Diagnostic Native]]
   · [[C11 Emission Continuation Delivery]]
 
+## 2026-11-15 — iOS simulator CI caching (#930)
+
+- iOS simulator CI caches the cabal store and build tree and allows 75 minutes for the device matrix (refs #930). See [[iOS Simulator CI]].
+
+## 2026-11-15 — UIKit coverage inventory (#930)
+
+- The UIKit coverage inventory script and tests measure host coverage from the SDK headers, so the table in [[Pudu Native iOS UI]] is generated rather than hand-written (refs #930). The iOS simulator workflow moves to a runner image whose Xcode meets the platform floor and runs the inventory check ([[iOS Simulator CI]], [[UIKit Coverage Inventory]]).
+
+## 2026-11-14 — iOS capabilities (#930)
+
+- `Std.Mobile` gains `Gesture`, `Scene`, `Access` and `Feedback` ([[Std Mobile Gesture]], [[Std Mobile Scene]], [[Std Mobile Access]], [[Std Mobile Feedback]]). [[Std Mobile View]] gains the `Progress`, `Activity`, `Recognizing`, `Accessible`, `Menu` and `Animated` wrappers and the `Gestured`, `Chose`, `Resized`, `Lifecycle` and `Picked` events. [[Std Mobile Stream]] encodes kinds 10 and 11 and instructions 27 to 35. [[Std Mobile Host]] reads up to four signed event words. The iOS host adds six headers for gestures, alerts and haptics, accessibility and menus, scene size and lifecycle, motion, and a self-test ([[Native iOS Capabilities Delivery]]).
+
 ## 2026-11-14 — iOS materials (#928)
 
 - Database drivers state their engine kind and capabilities; bundled drivers come from a factory table, and migrations and the store no longer branch on driver names (#940).

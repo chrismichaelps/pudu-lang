@@ -1,0 +1,84 @@
+module Std.Mobile.Gesture
+
+/// A recognizer a control can carry.
+export type Kind = LongPress | Pan | Pinch | Rotation | Swipe
+
+/// Where a continuous gesture is: started, moved, finished, or cancelled by
+/// the platform.
+export type Phase = Began | Changed | Ended | Cancelled
+
+/// The direction of a swipe.
+export type Direction = Left | Right | Up | Down
+
+/// What a recognizer reported. A pan carries its translation in points, a
+/// pinch its scale in thousandths, and a rotation its angle in thousandths
+/// of a radian, each since the gesture began.
+export type Gesture
+  = Pressed(Phase)
+  | Panned(Phase, Int32, Int32)
+  | Pinched(Phase, Int32)
+  | Rotated(Phase, Int32)
+  | Swiped(Direction)
+
+/// Each recognizer's bit in a GESTURES mask and in a gesture event's detail.
+const KINDS: Map[Kind, UInt32] = mapOf([
+    (LongPress, 1u32),
+    (Pan, 2u32),
+    (Pinch, 4u32),
+    (Rotation, 8u32),
+    (Swipe, 16u32)
+  ])
+
+/// Phase codes in the first word of a gesture event.
+const PHASES: Map[Int32, Phase] = mapOf([(1i32, Began), (2i32, Changed), (3i32, Ended), (4i32, Cancelled)])
+
+/// Direction codes in the first word of a swipe event.
+const DIRECTIONS: Map[Int32, Direction] = mapOf([(1i32, Left), (2i32, Right), (3i32, Up), (4i32, Down)])
+
+/// Each recognizer bit's decoder from the event's words.
+const DECODERS: Map[UInt32, fn(Array[Int32]) -> Option[Gesture]] = mapOf([
+    (1u32, |words: Array[Int32]| phased(words, |phase: Phase, _a: Int32, _b: Int32| Pressed(phase))),
+    (2u32, |words: Array[Int32]| phased(words, |phase: Phase, a: Int32, b: Int32| Panned(phase, a, b))),
+    (4u32, |words: Array[Int32]| phased(words, |phase: Phase, a: Int32, _b: Int32| Pinched(phase, a))),
+    (8u32, |words: Array[Int32]| phased(words, |phase: Phase, a: Int32, _b: Int32| Rotated(phase, a))),
+    (16u32, |words: Array[Int32]| swiped(words))
+  ])
+
+/// The GESTURES mask of a set of recognizers.
+export fn mask(kinds: &Array[Kind]) -> UInt32 {
+  var bits = 0u32
+  for kind in *kinds {
+    bits = bits | coded(KINDS.get(kind))
+  }
+  bits
+}
+
+/// The gesture a recognizer bit and its words describe, or None for words
+/// the host never writes.
+export fn decoded(bit: UInt32, words: &Array[Int32]) -> Option[Gesture] {
+  let decode = DECODERS.get(bit) ?
+  decode(*words)
+}
+
+fn phased(words: Array[Int32], made: fn(Phase, Int32, Int32) -> Gesture) -> Option[Gesture] {
+  if words.length() < 3 {
+    return None
+  }
+  let phase = PHASES.get(words[0]) ?
+  Some(made(phase, words[1], words[2]))
+}
+
+fn swiped(words: Array[Int32]) -> Option[Gesture] {
+  if words.length() < 1 {
+    return None
+  }
+  let direction = DIRECTIONS.get(words[0]) ?
+  Some(Swiped(direction))
+}
+
+fn coded(found: Option[UInt32]) -> UInt32 {
+  match found {
+    case Some(code) => code
+    case None => 0u32
+  }
+}

@@ -424,3 +424,4 @@ tags: [moc, handoff]
 - [[Native iOS Recycling Delivery]] — recycling lists and equal-column grids with windowed rows (#925).
 - [[Native Platform Ledger Delivery]] — platform toolchain ledger, preflight, doctor and device matrix (#926).
 - [[Native iOS Materials Delivery]] — surface materials, glass on iOS 26 or later with blur fallback (#928).
+- [[Native iOS Capabilities Delivery]] — gestures, alerts, haptics, accessibility, context menus, scene and motion (#930).

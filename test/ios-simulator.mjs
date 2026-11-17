@@ -8,6 +8,7 @@ import { fileURLToPath } from "node:url";
 
 // A cold hosted simulator can take minutes to install or launch its first app.
 const simulatorTimeout = 300_000;
+// A first boot of a device created here; a second family boots beside the phone and takes several minutes.
 const bootTimeout = 600_000;
 const appBuildTimeout = 300_000;
 const launchAttempts = 2;
@@ -183,6 +184,24 @@ int main(int argc, char **argv) {
       /pudu: a view stream shaped a node that is not a list: 0/u);
     familyMatrix(runtime);
     mobileApp(device, "Glass", [glassRun("glass")]);
+    mobileApp(device, "Showcase", [{
+      environment: { SIMCTL_CHILD_PUDU_UI_SELFTEST: "0", SIMCTL_CHILD_PUDU_UI_CAPABILITY_TEST: "1" },
+      labels: [
+        "Gestures: press began, pan changed 12 -7, pinch changed 1500, rotation changed 785, swipe right",
+        "Size: compact regular",
+        "Phases: active inactive active",
+        "Picked: Delete",
+        "Chose: Start",
+        "Row 1",
+        "Row 2",
+      ],
+      layout: [
+        "PUDU_ALERT Welcome",
+        "PUDU_HAPTIC 5",
+        "PUDU_ACCESS header=yes hint=Shows recognized gestures value=swipe right",
+        "PUDU_MOTION animated",
+      ],
+    }]);
     fallbackGlass(runtimes);
   } finally {
     try {
@@ -315,7 +334,7 @@ function mobileApp(device, example, runs) {
         `${example} did not show ${labels.join(", ")}:\n${lines.join("\n")}`);
       assert.ok(lines.includes("PUDU_PROGRAM_STATUS 0"), `${example} did not finish:\n${lines.join("\n")}`);
       if (layout) {
-        assert.deepEqual(lines.filter((line) => /^PUDU_(VIEWPORT|KEYBOARD|THEME|LIST|MATERIAL) /.test(line)), layout,
+        assert.deepEqual(lines.filter((line) => /^PUDU_(VIEWPORT|KEYBOARD|THEME|LIST|MATERIAL|ALERT|HAPTIC|ACCESS|MOTION) /.test(line)), layout,
           `${example} did not report the expected layout and theme:\n${lines.join("\n")}`);
       }
       const firstFrame = lines.find((line) => line.startsWith("PUDU_FIRST_FRAME_MS "));

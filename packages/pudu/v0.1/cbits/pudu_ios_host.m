@@ -11,22 +11,31 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include "pudu_program.h"
+#include "pudu_ios_stream.h"
 #include "pudu_ios_layout.h"
 #include "pudu_ios_theme.h"
 #include "pudu_ios_events.h"
 #include "pudu_ios_list.h"
 #include "pudu_ios_controls.h"
 #include "pudu_ios_material.h"
+#include "pudu_ios_gesture.h"
+#include "pudu_ios_feedback.h"
+#include "pudu_ios_access.h"
+#include "pudu_ios_scene.h"
+#include "pudu_ios_motion.h"
+#include "pudu_ios_capability_test.h"
 
 /* Instruction codes and control kinds of the view stream; they match
    Std.Mobile.Stream. */
 enum { PUDU_UI_CREATE = 1, PUDU_UI_TEXT = 2, PUDU_UI_APPEND = 3, PUDU_UI_ROOT = 4, PUDU_UI_TAG = 5, PUDU_UI_RESET = 6,
        PUDU_UI_STATE = 7, PUDU_UI_HINT = 8, PUDU_UI_NAME = 9, PUDU_UI_INSERT = 10, PUDU_UI_REMOVE = 11, PUDU_UI_MOVE = 12,
        PUDU_UI_THEME = 20, PUDU_UI_APPEARANCE = 21, PUDU_UI_STYLE = 22, PUDU_UI_COLOR = 23, PUDU_UI_RANGE = 24,
-       PUDU_UI_COLUMNS = 25, PUDU_UI_MATERIAL_SET = 26, PUDU_UI_INSTRUCTIONS = 27 };
+       PUDU_UI_COLUMNS = 25, PUDU_UI_MATERIAL_SET = 26, PUDU_UI_GESTURES = 27,
+       PUDU_UI_ALERT = 28, PUDU_UI_VALUE = 29, PUDU_UI_HAPTIC = 30, PUDU_UI_TRAITS = 31, PUDU_UI_ACCESS_HINT = 32,
+       PUDU_UI_ACCESS_VALUE = 33, PUDU_UI_MENU = 34, PUDU_UI_ANIMATE = 35, PUDU_UI_INSTRUCTIONS = 36 };
 enum { PUDU_UI_LABEL = 1, PUDU_UI_BUTTON = 2, PUDU_UI_COLUMN = 3, PUDU_UI_ROW = 4, PUDU_UI_FIELD = 5, PUDU_UI_TOGGLE = 6,
        PUDU_UI_SCROLL = 7, PUDU_UI_LIST = 8, PUDU_UI_MATERIAL = 9,
-       PUDU_UI_KINDS = 10 };
+       PUDU_UI_PROGRESS = 10, PUDU_UI_ACTIVITY = 11, PUDU_UI_KINDS = 12 };
 
 static NSMutableArray *pudu_nodes;
 static NSMutableArray<NSNumber *> *pudu_kinds;
@@ -37,11 +46,6 @@ static UIView *pudu_shown_root;
 static UILayoutGuide *pudu_available;
 static double pudu_main_started_ms;
 static double pudu_first_frame_ms = -1;
-
-static _Noreturn void pudu_stream_defect(const char *problem, uint32_t value) {
-  fprintf(stderr, "pudu: a view stream %s %u\n", problem, value);
-  abort();
-}
 
 typedef struct {
   UIView *(*make)(void);
@@ -71,33 +75,13 @@ static const pudu_kind pudu_kind_table[PUDU_UI_KINDS] = {
   [PUDU_UI_SCROLL] = { pudu_make_scroll, NULL, NULL, NULL, pudu_itself, pudu_scroll_stack, NULL, NULL, NULL, NULL, NULL, NO },
   [PUDU_UI_LIST] = { pudu_make_list, NULL, NULL, NULL, pudu_itself, pudu_list_store, NULL, NULL, NULL, NULL, NULL, NO },
   [PUDU_UI_MATERIAL] = { pudu_material_make, NULL, NULL, NULL, pudu_itself, pudu_material_stack, NULL, NULL, NULL, NULL, NULL, NO },
+  [PUDU_UI_PROGRESS] = { pudu_make_progress, NULL, NULL, NULL, pudu_itself, NULL, NULL, NULL, NULL, NULL, NULL, NO },
+  [PUDU_UI_ACTIVITY] = { pudu_make_activity, NULL, NULL, pudu_activity_state, pudu_itself, NULL, NULL, NULL, NULL, NULL, NULL, NO },
 };
 
 static const pudu_kind *pudu_kind_of(uint32_t kind) {
   if (kind >= PUDU_UI_KINDS || pudu_kind_table[kind].make == NULL) pudu_stream_defect("created unknown kind", kind);
   return &pudu_kind_table[kind];
-}
-
-/* Reading the stream. */
-typedef struct {
-  const uint8_t *bytes;
-  uint64_t length, at;
-} pudu_reader;
-
-static uint32_t pudu_word(pudu_reader *reader) {
-  const uint8_t *b = reader->bytes + reader->at;
-  if (reader->at + 4 > reader->length) pudu_stream_defect("ended inside an instruction at byte", (uint32_t)reader->at);
-  reader->at += 4;
-  return (uint32_t)b[0] | (uint32_t)b[1] << 8 | (uint32_t)b[2] << 16 | (uint32_t)b[3] << 24;
-}
-
-static NSString *pudu_text(pudu_reader *reader) {
-  uint32_t count = pudu_word(reader);
-  NSString *text;
-  if (reader->at + count > reader->length) pudu_stream_defect("ended inside text of length", count);
-  text = [[NSString alloc] initWithBytes:reader->bytes + reader->at length:count encoding:NSUTF8StringEncoding];
-  reader->at += count;
-  return text;
 }
 
 static uint32_t pudu_node_id(pudu_reader *reader) {
@@ -176,6 +160,7 @@ static UIStackView *pudu_group(pudu_reader *reader) {
 static void pudu_do_append(pudu_reader *reader) {
   UIStackView *group = pudu_group(reader);
   [group addArrangedSubview:pudu_nodes[pudu_node_id(reader)]];
+  pudu_motion_touch(group);
 }
 
 /* INSERT and MOVE: places a child at an index of its group, refused past
@@ -187,6 +172,7 @@ static void pudu_place(pudu_reader *reader) {
   if (index > group.arrangedSubviews.count) pudu_stream_defect("placed a child past the end of its group at", index);
   /* An arranged child already in the group moves to the index. */
   [group insertArrangedSubview:child atIndex:index];
+  pudu_motion_touch(group);
 }
 
 
@@ -195,6 +181,7 @@ static void pudu_place(pudu_reader *reader) {
 static void pudu_do_remove(pudu_reader *reader) {
   uint32_t node = pudu_node_id(reader);
   uint32_t count = pudu_word(reader);
+  pudu_motion_touch([(UIView *)pudu_nodes[node] superview]);
   pudu_list_forget(pudu_nodes[node]);
   [(UIView *)pudu_nodes[node] removeFromSuperview];
   for (uint32_t i = 0; i < count; i++) {
@@ -295,6 +282,79 @@ static void pudu_do_material(pudu_reader *reader) {
   if (!pudu_material_set(pudu_nodes[node], code)) pudu_stream_defect("used unknown material", code);
 }
 
+/* A text field inside an instruction, read where it stands. */
+static NSArray<NSArray *> *pudu_choices(pudu_reader *reader) {
+  uint32_t count = pudu_word(reader);
+  NSMutableArray<NSArray *> *choices = [NSMutableArray new];
+  for (uint32_t i = 0; i < count; i++) {
+    uint32_t role = pudu_word(reader);
+    [choices addObject:@[ @(role), pudu_text(reader) ]];
+  }
+  return choices;
+}
+
+static UIView *pudu_control_of(uint32_t node) { return pudu_node_kind(node)->control(pudu_nodes[node]); }
+
+static void pudu_do_gestures(pudu_reader *reader) {
+  uint32_t node = pudu_node_id(reader);
+  uint32_t tag = pudu_word(reader);
+  uint32_t mask = pudu_word(reader);
+  if (mask >= 32) pudu_stream_defect("used unknown gestures", mask);
+  pudu_gestures_attach(pudu_control_of(node), tag, mask);
+}
+
+static void pudu_do_alert(pudu_reader *reader) {
+  uint32_t tag = pudu_word(reader);
+  uint32_t style = pudu_word(reader);
+  NSString *title = pudu_text(reader);
+  NSString *message = pudu_text(reader);
+  if (!pudu_alert_show(tag, style, title, message, pudu_choices(reader))) pudu_stream_defect("showed an alert with an unknown style or role, tag", tag);
+}
+
+static void pudu_do_value(pudu_reader *reader) {
+  uint32_t node = pudu_node_id(reader);
+  uint32_t permille = pudu_word(reader);
+  if (pudu_kinds[node].unsignedIntValue != PUDU_UI_PROGRESS) pudu_stream_defect("set a value on a node that is not a progress bar:", node);
+  pudu_progress_value(pudu_nodes[node], permille);
+}
+
+static void pudu_do_haptic(pudu_reader *reader) {
+  uint32_t code = pudu_word(reader);
+  if (!pudu_haptic_play(code)) pudu_stream_defect("played unknown haptic", code);
+}
+
+static void pudu_do_traits(pudu_reader *reader) {
+  uint32_t node = pudu_node_id(reader);
+  uint32_t mask = pudu_word(reader);
+  if (mask >= (1u << PUDU_TRAITS)) pudu_stream_defect("used unknown accessibility traits", mask);
+  pudu_control_of(node).accessibilityTraits = pudu_traits_of(mask);
+}
+
+static void pudu_do_access_hint(pudu_reader *reader) {
+  uint32_t node = pudu_node_id(reader);
+  pudu_control_of(node).accessibilityHint = pudu_text(reader);
+}
+
+static void pudu_do_access_value(pudu_reader *reader) {
+  uint32_t node = pudu_node_id(reader);
+  pudu_control_of(node).accessibilityValue = pudu_text(reader);
+}
+
+static void pudu_do_menu(pudu_reader *reader) {
+  uint32_t node = pudu_node_id(reader);
+  uint32_t tag = pudu_word(reader);
+  NSArray<NSArray *> *choices = pudu_choices(reader);
+  for (NSArray *choice in choices) {
+    if ([choice[0] unsignedIntValue] >= PUDU_ROLES_KNOWN) pudu_stream_defect("gave a menu item an unknown role, node", node);
+  }
+  pudu_menu_attach(pudu_control_of(node), tag, choices);
+}
+
+static void pudu_do_animate(pudu_reader *reader) {
+  UIStackView *group = pudu_group(reader);
+  pudu_motion_mark(group, pudu_word(reader) != 0);
+}
+
 static void (*const pudu_instruction_table[PUDU_UI_INSTRUCTIONS])(pudu_reader *) = {
   [PUDU_UI_CREATE] = pudu_do_create, [PUDU_UI_TEXT] = pudu_do_text, [PUDU_UI_APPEND] = pudu_do_append,
   [PUDU_UI_ROOT] = pudu_do_root, [PUDU_UI_TAG] = pudu_do_tag, [PUDU_UI_RESET] = pudu_do_reset,
@@ -302,7 +362,10 @@ static void (*const pudu_instruction_table[PUDU_UI_INSTRUCTIONS])(pudu_reader *)
   [PUDU_UI_INSERT] = pudu_place, [PUDU_UI_REMOVE] = pudu_do_remove, [PUDU_UI_MOVE] = pudu_place,
   [PUDU_UI_THEME] = pudu_do_theme, [PUDU_UI_APPEARANCE] = pudu_do_appearance, [PUDU_UI_STYLE] = pudu_do_style,
   [PUDU_UI_COLOR] = pudu_do_color, [PUDU_UI_RANGE] = pudu_do_range, [PUDU_UI_COLUMNS] = pudu_do_columns,
-  [PUDU_UI_MATERIAL_SET] = pudu_do_material,
+  [PUDU_UI_MATERIAL_SET] = pudu_do_material, [PUDU_UI_GESTURES] = pudu_do_gestures, [PUDU_UI_ALERT] = pudu_do_alert,
+  [PUDU_UI_VALUE] = pudu_do_value, [PUDU_UI_HAPTIC] = pudu_do_haptic, [PUDU_UI_TRAITS] = pudu_do_traits,
+  [PUDU_UI_ACCESS_HINT] = pudu_do_access_hint, [PUDU_UI_ACCESS_VALUE] = pudu_do_access_value,
+  [PUDU_UI_MENU] = pudu_do_menu, [PUDU_UI_ANIMATE] = pudu_do_animate,
 };
 
 /* Applies one commit: every instruction in order, in one call. */
@@ -314,6 +377,7 @@ void pudu_ui_apply(const void *stream, uint64_t length) {
     pudu_instruction_table[code](&reader);
   }
   pudu_list_reload();
+  pudu_motion_commit(pudu_surface);
   if (pudu_first_frame_ms < 0) {
     [pudu_surface layoutIfNeeded];
     pudu_first_frame_ms = (CACurrentMediaTime() * 1000.0) - pudu_main_started_ms;
@@ -341,13 +405,15 @@ static void pudu_report(UIView *view) {
 - (BOOL)application:(UIApplication *)application didFinishLaunchingWithOptions:(NSDictionary *)options {
   (void)application;
   (void)options;
-  UIViewController *controller = [UIViewController new];
+  UIViewController *controller = [PuduRootController new];
   controller.view.backgroundColor = UIColor.systemBackgroundColor;
   pudu_surface = controller.view;
   pudu_nodes = [NSMutableArray new];
   pudu_kinds = [NSMutableArray new];
   pudu_paints = [NSMutableArray new];
   pudu_theme_reset();
+  pudu_alert_presenter = controller;
+  pudu_observe_lifecycle();
   pudu_target = [PuduTarget new];
   self.window = [[UIWindow alloc] initWithFrame:UIScreen.mainScreen.bounds];
   self.window.rootViewController = controller;
@@ -364,6 +430,7 @@ static void pudu_report(UIView *view) {
   printf("PUDU_PROGRAM_STATUS %d\n", status);
   if (getenv("PUDU_UI_SELFTEST") != NULL) {
     pudu_report(pudu_shown_root);
+    if (getenv("PUDU_UI_CAPABILITY_TEST") != NULL) pudu_report_capabilities(pudu_nodes);
     fflush(stdout);
     exit(status);
   }
@@ -372,6 +439,10 @@ static void pudu_report(UIView *view) {
    is set, taps every button as many times as PUDU_UI_SELFTEST says, then asks
    the program to stop, exactly as a user's input would arrive. */
 - (void)selfTest {
+  if (getenv("PUDU_UI_CAPABILITY_TEST") != NULL) {
+    pudu_test_capabilities(pudu_nodes, ^{ pudu_queue(PUDU_UI_STOPPED, 0, nil, 0); });
+    return;
+  }
   if (getenv("PUDU_UI_MATERIAL_TEST") != NULL) {
     pudu_test_material(pudu_nodes, ^{ pudu_queue(PUDU_UI_STOPPED, 0, nil, 0); });
     return;

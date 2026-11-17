@@ -26,6 +26,13 @@ extra-source-files: cbits/pudu_ffi_internal.h
                     cbits/pudu_ios_list.h
                     cbits/pudu_ios_controls.h
                     cbits/pudu_ios_material.h
+                    cbits/pudu_ios_stream.h
+                    cbits/pudu_ios_gesture.h
+                    cbits/pudu_ios_feedback.h
+                    cbits/pudu_ios_access.h
+                    cbits/pudu_ios_scene.h
+                    cbits/pudu_ios_motion.h
+                    cbits/pudu_ios_capability_test.h
                     cbits/pudu_audio.c
                     cbits/pudu_audio_stream.c
                     cbits/pudu_audio.h

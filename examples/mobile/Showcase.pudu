@@ -1,0 +1,141 @@
+module Showcase
+
+import Std.Mobile.Access as Access
+import Std.Mobile.Feedback as Feedback
+import Std.Mobile.Gesture as Gesture
+import Std.Mobile.Host as Host
+import Std.Mobile.Scene as Scene
+import Std.Mobile.View as View
+
+/// Tags the controls report.
+const GESTURES: UInt32 = 1u32
+const MENU: UInt32 = 2u32
+const ADD: UInt32 = 3u32
+const WELCOME: UInt32 = 4u32
+
+/// Labels of the welcome alert's and the menu's choices, by index.
+const WELCOME_CHOICES: Array[Str] = ["Later", "Start"]
+const MENU_CHOICES: Array[Str] = ["Copy", "Delete"]
+
+/// The words each phase and class reads as.
+const PHASES: Map[Gesture.Phase, Str] = mapOf([
+    (Gesture.Began, "began"),
+    (Gesture.Changed, "changed"),
+    (Gesture.Ended, "ended"),
+    (Gesture.Cancelled, "cancelled")
+  ])
+const DIRECTIONS: Map[Gesture.Direction, Str] = mapOf([
+    (Gesture.Left, "left"),
+    (Gesture.Right, "right"),
+    (Gesture.Up, "up"),
+    (Gesture.Down, "down")
+  ])
+const CLASSES: Map[Scene.SizeClass, Str] = mapOf([(Scene.Compact, "compact"), (Scene.Regular, "regular")])
+const LIFECYCLE: Map[Scene.Phase, Str] = mapOf([
+    (Scene.Active, "active"),
+    (Scene.Inactive, "inactive"),
+    (Scene.Background, "background"),
+    (Scene.Foreground, "foreground")
+  ])
+
+type Model = { gestures: Array[Str], chosen: Str, size: Str, phases: Array[Str], picked: Str, rows: Int, progress: UInt32 }
+
+fn named(found: Option[Str]) -> Str {
+  match found {
+    case Some(text) => text
+    case None => "?"
+  }
+}
+
+fn described(gesture: &Gesture.Gesture) -> Str {
+  match *gesture {
+    case Gesture.Pressed(phase) => "press " + named(PHASES.get(phase))
+    case Gesture.Panned(phase, x, y) => "pan " + named(PHASES.get(phase)) + " {x} {y}"
+    case Gesture.Pinched(phase, scale) => "pinch " + named(PHASES.get(phase)) + " {scale}"
+    case Gesture.Rotated(phase, angle) => "rotation " + named(PHASES.get(phase)) + " {angle}"
+    case Gesture.Swiped(direction) => "swipe " + named(DIRECTIONS.get(direction))
+  }
+}
+
+fn joined(parts: &Array[Str], separator: Str) -> Str {
+  var text = ""
+  for index in 0..parts.length() {
+    text = if index == 0 { parts[index] } else { text + separator + parts[index] }
+  }
+  text
+}
+
+fn view(model: &Model) -> View.View {
+  let last = if model.gestures.length() == 0 { "none" } else { model.gestures[model.gestures.length() - 1] }
+  var rows: Array[(Str, View.View)] = []
+  for index in 1..model.rows + 1 {
+    rows = rows.push(("{index}", View.Label("Row {index}")))
+  }
+  View.Column([
+      View.Accessible(
+        Access.Access{traits: [Access.Header], hint: "Shows recognized gestures", value: last},
+        View.Recognizing(GESTURES, [Gesture.LongPress, Gesture.Pan, Gesture.Pinch, Gesture.Rotation, Gesture.Swipe], View.Label("Gestures: " + joined(&model.gestures, ", ")))
+      ),
+      View.Label("Size: {model.size}"),
+      View.Label("Phases: " + joined(&model.phases, " ")),
+      View.Menu(
+        MENU,
+        [Feedback.Choice{label: "Copy", role: Feedback.Plain}, Feedback.Choice{label: "Delete", role: Feedback.Destructive}],
+        View.Label("Picked: {model.picked}")
+      ),
+      View.Label("Chose: {model.chosen}"),
+      View.Progress(model.progress),
+      View.Activity(true),
+      View.Button("Add", ADD),
+      View.Animated(View.Keyed(rows))
+    ])
+}
+
+fn update(model: &Model, event: &View.Event) -> Model {
+  match *event {
+    case View.Gestured(tag, gesture) if tag == GESTURES => Model {..*model, gestures: model.gestures.push(described(&gesture)) }
+    case View.Chose(tag, index) if tag == WELCOME => Model {..*model, chosen: choice(&WELCOME_CHOICES, index), progress: 500u32 }
+    case View.Picked(tag, index) if tag == MENU => Model {..*model, picked: choice(&MENU_CHOICES, index) }
+    case View.Resized(size) => Model{..*model, size: named(CLASSES.get(size.horizontal)) + " " + named(CLASSES.get(size.vertical))}
+    case View.Lifecycle(phase) => Model{..*model, phases: model.phases.push(named(LIFECYCLE.get(phase)))}
+    case View.Tapped(tag) if tag == ADD => Model {..*model, rows: model.rows + 1 }
+    case _ => *model
+  }
+}
+
+fn choice(labels: &Array[Str], index: UInt32) -> Str {
+  match convertInteger[Int](index) {
+    case Some(at) if at < labels.length() => labels[at]
+    case _ => "?"
+  }
+}
+
+fn main() -> Int {
+  var model = Model{gestures: [], chosen: "", size: "", phases: [], picked: "", rows: 0, progress: 0u32}
+  let (first, built) = View.mount(&view(&model))
+  var mounted = first
+  Host.apply(built)
+  let welcome = Feedback.Alert {
+    tag: WELCOME,
+    style: Feedback.Centered,
+    title: "Welcome",
+    message: "Choose how to begin",
+    choices: [Feedback.Choice{label: "Later", role: Feedback.Cancel}, Feedback.Choice{label: "Start", role: Feedback.Plain}]
+  }
+  Host.apply(Feedback.alert(&welcome))
+  while true {
+    let event = Host.wait()
+    if event == View.Stopped {
+      return 0
+    }
+    match event {
+      case View.Chose(tag, _) if tag == WELCOME => Host.apply(Feedback.haptic(Feedback.Success))
+      case _ => {}
+    }
+    model = update(&model, &event)
+    let (next, changes) = View.update(&mounted, &view(&model))
+    Host.apply(changes)
+    mounted = next
+  }
+  0
+}

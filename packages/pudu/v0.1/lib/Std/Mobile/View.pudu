@@ -1,5 +1,9 @@
 module Std.Mobile.View
 
+import Std.Mobile.Access as Access
+import Std.Mobile.Feedback as Feedback
+import Std.Mobile.Gesture as Gesture
+import Std.Mobile.Scene as Scene
 import Std.Mobile.Stream as Stream
 import Std.Mobile.Theme as Theme
 
@@ -22,6 +26,12 @@ export type View
   | Painted(Theme.Role, View)
   | Recycled(Window)
   | Surfaced(Theme.Material, View)
+  | Progress(UInt32)
+  | Activity(Bool)
+  | Recognizing(UInt32, Array[Gesture.Kind], View)
+  | Accessible(Access.Access, View)
+  | Menu(UInt32, Array[Feedback.Choice], View)
+  | Animated(View)
 
 /// A recycling list of `total` items in `columns` equal columns. `rows` are
 /// the keyed views of items `first`, `first + 1` and onward: the window the
@@ -38,6 +48,11 @@ export type Event
   | Changed(UInt32, Str)
   | Toggled(UInt32, Bool)
   | Reached(UInt32, UInt32)
+  | Gestured(UInt32, Gesture.Gesture)
+  | Chose(UInt32, UInt32)
+  | Resized(Scene.Size)
+  | Lifecycle(Scene.Phase)
+  | Picked(UInt32, UInt32)
   | Stopped
 
 /// A node the platform shows: its id, the view it shows, and the nodes of
@@ -60,6 +75,11 @@ const CHANGED: UInt64 = 3u64
 const SWITCHED_ON: UInt64 = 4u64
 const SWITCHED_OFF: UInt64 = 5u64
 const REACHED: UInt64 = 8u64
+const GESTURED: UInt64 = 9u64
+const CHOSE: UInt64 = 10u64
+const RESIZED: UInt64 = 11u64
+const LIFECYCLE: UInt64 = 12u64
+const PICKED: UInt64 = 13u64
 
 /// Each event kind's constructor, given the tag and the text the host holds.
 const EVENTS: Map[UInt64, fn(UInt32, Str) -> Event] = mapOf([
@@ -70,17 +90,78 @@ const EVENTS: Map[UInt64, fn(UInt32, Str) -> Event] = mapOf([
   ])
 
 /// Each detailed event kind's constructor, given the tag and the detail word.
-const DETAILED: Map[UInt64, fn(UInt32, UInt32) -> Event] = mapOf([(REACHED, |tag: UInt32, first: UInt32| Reached(tag, first))])
+const DETAILED: Map[UInt64, fn(UInt32, UInt32) -> Option[Event]] = mapOf([
+    (REACHED, |reported: UInt32, first: UInt32| Some(Reached(reported, first))),
+    (CHOSE, |reported: UInt32, index: UInt32| Some(Chose(reported, index))),
+    (LIFECYCLE, |_reported: UInt32, code: UInt32| lifecycle(Scene.phase(code))),
+    (PICKED, |reported: UInt32, index: UInt32| Some(Picked(reported, index)))
+  ])
+
+/// Each measured event kind's constructor, given the tag, the detail word and
+/// the signed words the host holds for it.
+const MEASURED: Map[UInt64, fn(UInt32, UInt32, Array[Int32]) -> Option[Event]] = mapOf([
+    (GESTURED, |reported: UInt32, bit: UInt32, values: Array[Int32]| gestured(reported, Gesture.decoded(bit, &values))),
+    (RESIZED, |_reported: UInt32, _bit: UInt32, values: Array[Int32]| resized(Scene.sized(&values)))
+  ])
 
 /// Whether a host event's kind carries a detail word the host holds for it.
-export fn carriesDetail(raw: UInt64) -> Bool { DETAILED.containsKey(raw >> 32) }
+export fn carriesDetail(raw: UInt64) -> Bool { DETAILED.containsKey(raw >> 32) || MEASURED.containsKey(raw >> 32) }
 
-/// A host event read with its text and detail word: detailed kinds decode
-/// through `DETAILED`, every other kind through `event`.
-export fn eventWithDetail(raw: UInt64, text: Str, detail: UInt32) -> Event {
-  match (DETAILED.get(raw >> 32), convertInteger[UInt32](raw & 0xffffffffu64)) {
-    case (Some(made), Some(tag)) => made(tag, detail)
-    case _ => event(raw, text)
+/// Whether a host event's kind carries signed words the host holds for it.
+export fn carriesWords(raw: UInt64) -> Bool { MEASURED.containsKey(raw >> 32) }
+
+/// A host event read with its text and detail word.
+export fn eventWithDetail(raw: UInt64, text: Str, detail: UInt32) -> Event { eventWithWords(raw, text, detail, []) }
+
+/// A host event read with its text, detail word and words: measured kinds
+/// decode through `MEASURED`, detailed kinds through `DETAILED`, every other
+/// kind through `event`. Words the host never writes read as `Stopped`.
+export fn eventWithWords(raw: UInt64, text: Str, detail: UInt32, values: Array[Int32]) -> Event {
+  match convertInteger[UInt32](raw & 0xffffffffu64) {
+    case Some(reported) => {
+      match (MEASURED.get(raw >> 32), DETAILED.get(raw >> 32)) {
+        case (Some(made), _) => orStopped(made(reported, detail, values))
+        case (_, Some(made)) => orStopped(made(reported, detail))
+        case _ => event(raw, text)
+      }
+    }
+    case None => Stopped
+  }
+}
+
+// An event the host wrote, or Stopped for words it never writes.
+fn orStopped(found: Option[Event]) -> Event {
+  match found {
+    case Some(made) => made
+    case None => Stopped
+  }
+}
+
+fn gestured(reported: UInt32, found: Option[Gesture.Gesture]) -> Option[Event] {
+  let gesture = found ?
+  Some(Gestured(reported, gesture))
+}
+
+fn resized(found: Option[Scene.Size]) -> Option[Event] {
+  let size = found ?
+  Some(Resized(size))
+}
+
+fn lifecycle(found: Option[Scene.Phase]) -> Option[Event] {
+  let phase = found ?
+  Some(Lifecycle(phase))
+}
+
+/// A host word read as a signed value: the two's complement of its bits.
+export fn signed(bits: UInt32) -> Int32 {
+  let wide = match convertInteger[Int64](bits) {
+    case Some(value) => value
+    case None => 0i64
+  }
+  let folded = if wide >= 2147483648i64 { wide - 4294967296i64 } else { wide }
+  match convertInteger[Int32](folded) {
+    case Some(value) => value
+    case None => 0i32
   }
 }
 
@@ -152,6 +233,14 @@ fn built(work: Work, view: &View) -> (Work, Shown) {
       let made = Stream.material(Stream.create(taken.out, id, Stream.MATERIAL), id, Theme.materialCode(material))
       grouped(written(taken, made), id, view, &[child])
     }
+    case Progress(permille) => (written(taken, Stream.progress(Stream.create(taken.out, id, Stream.PROGRESS), id, permille)), leaf(id, view))
+    case Activity(on) => (written(taken, Stream.state(Stream.create(taken.out, id, Stream.ACTIVITY), id, on)), leaf(id, view))
+    case Recognizing(tag, kinds, inner) =>
+    marked(work, view, &inner, |out: Array[UInt8], node: UInt32| Stream.gestures(out, node, tag, Gesture.mask(&kinds)))
+    case Accessible(access, inner) => marked(work, view, &inner, |out: Array[UInt8], node: UInt32| described(out, node, &access))
+    case Menu(tag, choices, inner) =>
+    marked(work, view, &inner, |out: Array[UInt8], node: UInt32| Stream.menu(out, node, tag, &Feedback.choices(&choices)))
+    case Animated(inner) => marked(work, view, &inner, |out: Array[UInt8], node: UInt32| Stream.animate(out, node, true))
     case Recycled(window) => {
       let made = Stream.create(taken.out, id, Stream.LIST)
       let shaped = Stream.range(Stream.columns(Stream.tag(made, id, window.tag), id, window.columns), id, window.total, window.first)
@@ -205,6 +294,22 @@ fn reconciled(work: Work, shown: &Shown, next: &View) -> Outcome {
       let ranged = if before.total == after.total && before.first == after.first { laid } else { Stream.range(laid, id, after.total, after.first) }
       regrouped((written(made, ranged), rows), shown, next)
     }
+    case (Progress(before), Progress(after)) =>
+    kept(work, if before == after { work.out } else { Stream.progress(work.out, id, after) }, shown, next)
+    case (Activity(before), Activity(after)) =>
+    kept(work, if before == after { work.out } else { Stream.state(work.out, id, after) }, shown, next)
+    case (Recognizing(beforeTag, beforeKinds, beforeInner), Recognizing(afterTag, afterKinds, afterInner)) => {
+      let same = beforeTag == afterTag && Gesture.mask(&beforeKinds) == Gesture.mask(&afterKinds)
+      rewrapped(work, shown, &beforeInner, &afterInner, next, same, |out: Array[UInt8]| Stream.gestures(out, id, afterTag, Gesture.mask(&afterKinds)))
+    }
+    case (Accessible(before, beforeInner), Accessible(after, afterInner)) =>
+    rewrapped(work, shown, &beforeInner, &afterInner, next, false, |out: Array[UInt8]| redescribed(out, id, &before, &after))
+    case (Menu(beforeTag, beforeChoices, beforeInner), Menu(afterTag, afterChoices, afterInner)) => {
+      let same = beforeTag == afterTag && Feedback.choices(&beforeChoices) == Feedback.choices(&afterChoices)
+      rewrapped(work, shown, &beforeInner, &afterInner, next, same, |out: Array[UInt8]| Stream.menu(out, id, afterTag, &Feedback.choices(&afterChoices)))
+    }
+    case (Animated(beforeInner), Animated(afterInner)) =>
+    rewrapped(work, shown, &beforeInner, &afterInner, next, true, |out: Array[UInt8]| out)
     case (Surfaced(before, _), Surfaced(after, child)) => {
       let (made, node) = settled(work, id, &shown.children[0], &child, 0)
       let out = if before == after { made.out } else { Stream.material(made.out, id, Theme.materialCode(after)) }
@@ -315,6 +420,19 @@ fn settled(work: Work, parent: UInt32, child: &Shown, next: &View, index: Int) -
       (removed(written(made, Stream.insert(made.out, parent, node.id, word(index))), child), node)
     }
   }
+}
+
+// Every accessibility field of a control.
+fn described(out: Array[UInt8], node: UInt32, access: &Access.Access) -> Array[UInt8] {
+  Stream.accessValue(Stream.accessHint(Stream.traits(out, node, Access.mask(&access.traits)), node, access.hint), node, access.value)
+}
+
+// Only the accessibility fields that changed.
+fn redescribed(out: Array[UInt8], node: UInt32, before: &Access.Access, after: &Access.Access) -> Array[UInt8] {
+  let mask = Access.mask(&after.traits)
+  let traited = if Access.mask(&before.traits) == mask { out } else { Stream.traits(out, node, mask) }
+  let hinted = if before.hint == after.hint { traited } else { Stream.accessHint(traited, node, after.hint) }
+  if before.value == after.value { hinted } else { Stream.accessValue(hinted, node, after.value) }
 }
 
 // The first row at or after `from` whose key is `key`.
