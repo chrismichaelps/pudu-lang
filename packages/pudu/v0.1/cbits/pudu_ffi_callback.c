@@ -165,6 +165,7 @@ static void invoke_callback(ffi_cif *cif, void *result, void **arguments, void *
   dispatch_callback(adapter, result, arguments, (uintptr_t)context);
 }
 
+#if defined(__APPLE__)
 /* A block's first argument is the block itself; its key names the entry. */
 static void invoke_block_callback(ffi_cif *cif, void *result, void **arguments, void *data) {
   (void)cif;
@@ -173,6 +174,7 @@ static void invoke_block_callback(ffi_cif *cif, void *result, void **arguments, 
   memcpy(&block, arguments[0], sizeof(block));
   dispatch_callback(adapter, result, arguments, block == NULL ? 0 : block->key);
 }
+#endif
 
 static void free_adapter(struct pudu_callback_adapter *adapter) {
   if (adapter->closure) ffi_closure_free(adapter->closure);
