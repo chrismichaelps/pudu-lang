@@ -2,7 +2,9 @@
 
 {-| @Backend.Toolchain.HostSources — packaged platform translation units
     selected by the generated program. -}
-module Pudu.Backend.Toolchain.HostSources (audioSourceMarker, desktopSourceMarker, iosHostSources, loaderSourceLines, sqliteSourceMarker, withHostSourceArguments) where
+module Pudu.Backend.Toolchain.HostSources
+  ( androidHostSources, androidJavaSources, androidManifest, audioSourceMarker, desktopSourceMarker, iosHostSources
+  , loaderSourceLines, sqliteSourceMarker, withHostSourceArguments ) where
 
 import qualified Data.ByteString.Char8 as ByteString
 import Data.Text (Text)
@@ -80,6 +82,36 @@ iosHostSources = $(do
   mapM_ addDependentFile paths
   contents <- runIO (traverse ByteString.readFile paths)
   lift (zip files (map ByteString.unpack contents)))
+
+{-| The Android host: one translation unit and its private headers, staged
+    only for application builds. -}
+androidHostSources :: [(FilePath, String)]
+androidHostSources = $(do
+  let files = [ "pudu_android_host.c", "pudu_android_jni.h", "pudu_android_events.h", "pudu_android_theme.h"
+              , "pudu_android_controls.h", "pudu_android_values.h", "pudu_android_list.h", "pudu_android_kinds.h"
+              , "pudu_android_nodes.h", "pudu_android_capabilities.h", "pudu_android_java.h" ]
+  paths <- traverse (makeRelativeToProject . ("cbits" </>)) files
+  mapM_ addDependentFile paths
+  contents <- runIO (traverse ByteString.readFile paths)
+  lift (zip files (map ByteString.unpack contents)))
+
+{-| The Java side of the Android host, by file name under `org/pudu`. -}
+androidJavaSources :: [(FilePath, String)]
+androidJavaSources = $(do
+  let files = [ "PuduActivity.java", "PuduBridge.java", "PuduListener.java", "PuduList.java", "PuduMenus.java"
+              , "PuduAccess.java", "PuduGestures.java", "PuduMoment.java", "PuduPages.java", "PuduWell.java", "PuduTests.java" ]
+  paths <- traverse (makeRelativeToProject . (("android" </> "org" </> "pudu") </>)) files
+  mapM_ addDependentFile paths
+  contents <- runIO (traverse ByteString.readFile paths)
+  lift (zip files (map ByteString.unpack contents)))
+
+{-| The application manifest; the build fills in the package and label. -}
+androidManifest :: String
+androidManifest = $(do
+  path <- makeRelativeToProject ("android" </> "AndroidManifest.xml")
+  addDependentFile path
+  contents <- runIO (ByteString.readFile path)
+  lift (ByteString.unpack contents))
 
 audioSources :: [(FilePath, String)]
 audioSources = $(do
