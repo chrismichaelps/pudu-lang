@@ -7,6 +7,11 @@ tags: [changelog]
 
 ## 2026-11-16 — Native validation fixes (#935)
 
+- PostgreSQL results stream in bounded batches on an open portal through Std.Db.Stream (#940).
+  [[Std Db Stream]] · [[Std Db Protocol]]
+- Pools decide per connection whether to keep, probe, or replace it by age and idle time through Std.Db.Lifetime. `poolWith` takes a policy, and `never()` turns the limits off ([[Std Db Lifetime]] · [[Std Db]] · [[Std Db Session]]).
+- PostgreSQL connections plan each statement once and bind it on later runs, up to 256 per connection (#940).
+  [[Std Db]] · [[Std Db Session]] · [[Std Db Protocol]]
 - Native binaries name each generated function after its Pudu function for profilers and debuggers (#938).
 - Foreign parameters accept `Option` of a declared handle: `None` crosses as null, `Some` as a live handle (#935).
   [[Foreign Crossing]] · [[Backend Emit Foreign]]
@@ -78,6 +83,8 @@ tags: [changelog]
   · [[C11 Emission Continuation Delivery]]
 
 ## 2026-11-14 — iOS materials (#928)
+
+- Database drivers state their engine kind and capabilities; bundled drivers come from a factory table, and migrations and the store no longer branch on driver names (#940).
 
 - `Std.Mobile.View` gains `Surfaced`, a container whose background is a system material ([[Std Mobile Theme]] `Material`, encoded by MATERIAL, code 26 in [[Std Mobile Stream]]). The iOS host draws glass on iOS 26 or later when the SDK declares it, and a system blur otherwise ([[iOS Host Material]]). The ledger gains the `glass-material` capability ([[Backend Ledger]]), and [[Native Platform Adoption]] records it as the first gated capability ([[Native iOS Materials Delivery]]).
 

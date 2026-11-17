@@ -144,6 +144,7 @@ backendNativeProperties =
       (uncurry (conformanceLinking callbackCaller)) foreignCallbackPrograms)
   , ("native optional handles cross as the interpreter's do", conjoin <$> mapM
       (uncurry (conformanceLinking optionalHandleLibrary)) optionalHandlePrograms)
+  , ("native database programs answer as the interpreter does", conjoin <$> mapM fixtureConformance databaseFixtures)
   , ("native host services, tasks and scopes match the interpreter's own answers", conjoin <$> mapM
       (\(label, source, expected) -> conformanceExpecting (Just (expected, "", 0)) label source) hostSuccessPrograms)
   , ("native endpoints, secured connections, compression, child programs and time match the interpreter's own answers", conjoin <$> mapM
@@ -546,6 +547,50 @@ conformanceWithInput = conformanceLinkingWith Text.empty
     the interpreter. -}
 conformanceLinking :: Text -> String -> Text -> IO Property
 conformanceLinking linked = conformanceLinkingWith linked Nothing [] Nothing
+
+{-| A fixture program as it is, with the modules and standard-library
+    overrides its own directory carries: the interpreter's answer and the
+    native executable's must agree, output, errors and status alike. -}
+fixtureConformance :: FilePath -> IO Property
+fixtureConformance path = withSystemTempDirectory "pudu-native-fixture" $ \root -> do
+  available <- compilerAvailable
+  if not available
+    then pure (property True)
+    else do
+      program <- compileProgram path
+      interpreted <- interpret root program
+      case interpreted of
+        Left problem -> pure (counterexample (path <> ": interpreter: " <> problem) False)
+        Right (interpOut, interpErr, interpStatus) -> do
+          native <- buildAndRunLinking Text.empty Nothing root program
+          pure $ case native of
+            Left problem -> counterexample (path <> ": native: " <> problem) False
+            Right (nativeOut, nativeErr, nativeStatus, warnings) -> conjoin
+              [ counterexample (path <> ": stdout differs; interpreter=" <> show interpOut <> " native=" <> show nativeOut)
+                  (nativeOut === interpOut)
+              , counterexample (path <> ": stderr differs; interpreter=" <> show interpErr <> " native=" <> show nativeErr)
+                  (nativeErr === interpErr)
+              , counterexample (path <> ": status differs") (nativeStatus === interpStatus)
+              , counterexample (path <> ": the generated C drew compiler warnings: " <> Text.unpack warnings)
+                  (warnings === Text.empty)
+              ]
+
+{-| The database programs: the PostgreSQL protocol, authentication,
+    transactions, savepoints, pooling, prepared statements, streaming, the store,
+    migrations, query shapes and SQLite, each against its own fake server or
+    a real database. -}
+databaseFixtures :: [FilePath]
+databaseFixtures =
+  [ "test-fixtures/stdlib/UsesDb.pudu", "test-fixtures/stdlib/UsesDbDriverAll.pudu"
+  , "test-fixtures/stdlib/UsesDbProtocolAll.pudu", "test-fixtures/stdlib/UsesDbTransactionScope.pudu"
+  , "test-fixtures/dbauth/Main.pudu", "test-fixtures/dbsavepoint/Main.pudu", "test-fixtures/dbbuffer/Main.pudu"
+  , "test-fixtures/dbwait/Main.pudu", "test-fixtures/dbprepare/Main.pudu", "test-fixtures/dbstream/Main.pudu"
+  , "test-fixtures/dbpool/Main.pudu"
+  , "test-fixtures/stdlib/UsesStore.pudu", "test-fixtures/stdlib/UsesStoreDriver.pudu"
+  , "test-fixtures/stdlib/UsesMigrate.pudu", "test-fixtures/stdlib/UsesMigrateApply.pudu"
+  , "test-fixtures/stdlib/UsesDbQueryShapeAll.pudu", "test-fixtures/stdlib/UsesDbRow.pudu"
+  , "test-fixtures/stdlib/UsesDbEngines.pudu", "test-fixtures/stdlib/UsesSqliteFull.pudu"
+  ]
 
 conformanceLinkingWith :: Text -> Maybe ByteString.ByteString -> [(FilePath, Text)] -> Maybe (Text, Text, Int) -> String -> Text -> IO Property
 conformanceLinkingWith linked input modules expected label programText = withSystemTempDirectory "pudu-native" $ \root -> do
