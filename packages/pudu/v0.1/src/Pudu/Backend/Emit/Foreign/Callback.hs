@@ -242,8 +242,8 @@ callbackTrampolines layouts signatures blocks results =
         <> [ "  int unused;" | null parameters && result == CoreUnitType ]
         <> [ "} " <> call <> ";"
            , "static void " <> body <> "(pudu_box *handler, void *raw) {"
-           , "  " <> call <> " *call = raw;"
-           , "  pudu_cell cells[" <> textOfInt (max 1 cells) <> "];" ]
+           , "  " <> call <> " *call = raw;" ]
+        <> [ "  pudu_cell cells[" <> textOfInt cells <> "];" | cells > 0 ]
         <> [ "  (void)call;" | null values && result == CoreUnitType ]
         <> (if Map.null lengths then [] else
               [ "  static const pudu_site site = {.code = \"E7017\", .file = \"<foreign callback>\", .line = 1, .column = 1};"
@@ -251,7 +251,8 @@ callbackTrampolines layouts signatures blocks results =
               <> concatMap (\run -> [checkRun run, "    pudu_fail_message(&site, message, sizeof message - 1);"])
                    (Map.toList lengths))
         <> cellLines
-        <> [ "  pudu_cell answer = pudu_run_callback(handler, cells, " <> textOfInt cells <> ", NULL);" ]
+        <> [ "  pudu_cell answer = pudu_run_callback(handler, " <> (if cells > 0 then "cells" else "NULL")
+               <> ", " <> textOfInt cells <> ", NULL);" ]
         <> (if result == CoreUnitType then ["  (void)answer;"]
               else ["  call->answer = " <> toAbi result ("answer." <> cellName result) <> ";"])
         <> releases
