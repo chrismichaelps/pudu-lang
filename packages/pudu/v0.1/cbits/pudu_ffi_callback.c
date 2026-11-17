@@ -6,6 +6,21 @@
 #include <stdlib.h>
 #include <string.h>
 
+/* The layout clang gives a block literal with no copy or dispose helpers,
+ * followed by the registration key. A framework that keeps the block copies
+ * it, and the copy carries the key with it. */
+struct pudu_ffi_block_descriptor {
+  unsigned long reserved, size;
+};
+
+struct pudu_ffi_block {
+  void *isa;
+  int flags, reserved;
+  void *invoke;
+  const struct pudu_ffi_block_descriptor *descriptor;
+  uintptr_t key;
+};
+
 static _Thread_local void *pudu_ffi_scope;
 
 void *pudu_ffi_swap_scope(void *scope) {
@@ -14,7 +29,7 @@ void *pudu_ffi_swap_scope(void *scope) {
   return previous;
 }
 
-typedef int (*pudu_callback_dispatch)(void *, void *, const int64_t *, const double *,
+typedef int (*pudu_callback_dispatch)(void *, void *, int32_t, int32_t, const int64_t *, const double *,
                                      int64_t *, double *);
 typedef void (*pudu_callback_dispose)(void *);
 
@@ -22,7 +37,7 @@ typedef void (*pudu_callback_dispose)(void *);
 struct pudu_callback_adapter {
   struct pudu_callback_adapter *next;
   char *owner;
-  int32_t arity, context, leaf_count, shape_count;
+  int32_t member, arity, context, leaf_count, shape_count;
   uint8_t result_kind;
   int64_t fallback_integer;
   double fallback_double;
@@ -34,8 +49,8 @@ struct pudu_callback_adapter {
   ffi_type **record_elements;
   ffi_type *argument_types[PUDU_MAX_ARGUMENTS];
   ffi_cif cif;
-  ffi_closure *closure;
-  void *code;
+  ffi_closure *closure, *block_closure;
+  void *code, *block_code;
 };
 
 struct pudu_callback_entry {
@@ -66,7 +81,10 @@ static struct pudu_callback_entry *acquire_entry(const struct pudu_callback_adap
                                                  uintptr_t key) {
   lock_callbacks();
   struct pudu_callback_entry *entry = pudu_callback_entries;
-  while (entry && (entry->key != key || entry->adapter != adapter)) entry = entry->next;
+  while (entry && entry->key != key) entry = entry->next;
+  if (entry != NULL && entry->adapter != adapter &&
+      (adapter->member < 0 || entry->adapter->member < 0 || strcmp(entry->adapter->owner, adapter->owner) != 0))
+    entry = NULL;
   if (entry != NULL) entry->invocations++;
   unlock_callbacks();
   return entry;
@@ -108,36 +126,57 @@ static int decode_arguments(const struct pudu_callback_adapter *adapter, void **
   return 1;
 }
 
-static void invoke_callback(ffi_cif *cif, void *result, void **arguments, void *data) {
-  (void)cif;
-  const struct pudu_callback_adapter *adapter = data;
+static void dispatch_callback(const struct pudu_callback_adapter *adapter, void *result,
+                              void **arguments, uintptr_t key) {
   int64_t integer = adapter->fallback_integer;
   double floating = adapter->fallback_double;
-  void *context;
-  memcpy(&context, arguments[adapter->context], sizeof(context));
-  struct pudu_callback_entry *entry = acquire_entry(adapter, (uintptr_t)context);
+  struct pudu_callback_entry *entry = acquire_entry(adapter, key);
   if (entry != NULL) {
-    size_t count = adapter->leaf_count > 0 ? (size_t)adapter->leaf_count : 1;
-    int64_t *integers = calloc(count, sizeof(*integers));
-    double *doubles = calloc(count, sizeof(*doubles));
+    size_t count = (size_t)adapter->leaf_count;
+    int64_t local_integers[PUDU_MAX_ARGUMENTS];
+    double local_doubles[PUDU_MAX_ARGUMENTS];
+    int allocate = count > PUDU_MAX_ARGUMENTS;
+    int64_t *integers = allocate ? calloc(count, sizeof(*integers)) : local_integers;
+    double *doubles = allocate ? calloc(count, sizeof(*doubles)) : local_doubles;
     int valid = integers && doubles && decode_arguments(adapter, arguments, integers, doubles);
     /* The dispatcher handles an absent carrier as invocation failure. */
     int64_t returned_integer = 0;
     double returned_double = 0.0;
-    if (entry->dispatch(entry->user, pudu_ffi_scope, valid ? integers : NULL,
+    if (entry->dispatch(entry->user, pudu_ffi_scope, adapter->member, adapter->leaf_count,
+                        valid ? integers : NULL,
                         valid ? doubles : NULL, &returned_integer, &returned_double)) {
       integer = returned_integer;
       floating = returned_double;
     }
-    free(doubles);
-    free(integers);
+    if (allocate) {
+      free(doubles);
+      free(integers);
+    }
     release_entry(entry);
   }
   write_result(adapter->result_kind, result, integer, floating);
 }
 
+static void invoke_callback(ffi_cif *cif, void *result, void **arguments, void *data) {
+  (void)cif;
+  const struct pudu_callback_adapter *adapter = data;
+  void *context;
+  memcpy(&context, arguments[adapter->context], sizeof(context));
+  dispatch_callback(adapter, result, arguments, (uintptr_t)context);
+}
+
+/* A block's first argument is the block itself; its key names the entry. */
+static void invoke_block_callback(ffi_cif *cif, void *result, void **arguments, void *data) {
+  (void)cif;
+  const struct pudu_callback_adapter *adapter = data;
+  const struct pudu_ffi_block *block;
+  memcpy(&block, arguments[0], sizeof(block));
+  dispatch_callback(adapter, result, arguments, block == NULL ? 0 : block->key);
+}
+
 static void free_adapter(struct pudu_callback_adapter *adapter) {
   if (adapter->closure) ffi_closure_free(adapter->closure);
+  if (adapter->block_closure) ffi_closure_free(adapter->block_closure);
   free(adapter->record_elements);
   free(adapter->record_types);
   free(adapter->offsets);
@@ -168,7 +207,7 @@ static int prepare_adapter(struct pudu_callback_adapter *adapter) {
                                   count, &consumed);
       if (consumed != count) return 0;
     } else {
-      if (kind == PUDU_VOID || kind == PUDU_POINTER || kind == PUDU_BYTES ||
+      if (kind == PUDU_VOID || kind == PUDU_POINTER ||
           count != 1 || adapter->leaves[leaf] != kind) return 0;
       type = pudu_ffi_type_for(kind);
     }
@@ -190,21 +229,21 @@ static int prepare_adapter(struct pudu_callback_adapter *adapter) {
 
 /* Successfully published adapters remain executable for the lifetime of the
  * host. The signature and bitwise fallback form part of the cache key. */
-void *pudu_ffi_callback_adapter(const char *owner, int32_t arity, int32_t context,
+void *pudu_ffi_callback_adapter(const char *owner, int32_t member, int32_t arity, int32_t context,
                                 const uint8_t *kinds, const int32_t *counts,
                                 int32_t leaf_count, const uint8_t *leaves,
                                 int32_t shape_count, const uint8_t *shape,
                                 uint8_t result_kind, int64_t fallback_integer,
                                 double fallback_double) {
 #if defined(FFI_CLOSURES) && FFI_CLOSURES
-  if (!owner || arity < 1 || arity > PUDU_MAX_ARGUMENTS || context < 0 || context >= arity ||
+  if (!owner || member < -1 || arity < 1 || arity > PUDU_MAX_ARGUMENTS || context < 0 || context >= arity ||
       !kinds || !counts || leaf_count < 0 || (leaf_count && !leaves) ||
       shape_count < 0 || (shape_count && !shape)) return NULL;
   size_t leaf_size = leaf_count ? (size_t)leaf_count : 1;
   size_t shape_size = shape_count ? (size_t)shape_count : 1;
   lock_callbacks();
   for (struct pudu_callback_adapter *held = pudu_callback_adapters; held; held = held->next) {
-    if (held->arity == arity && held->context == context && held->leaf_count == leaf_count &&
+    if (held->member == member && held->arity == arity && held->context == context && held->leaf_count == leaf_count &&
         held->shape_count == shape_count && held->result_kind == result_kind &&
         held->fallback_integer == fallback_integer &&
         memcmp(&held->fallback_double, &fallback_double, sizeof(fallback_double)) == 0 &&
@@ -219,6 +258,7 @@ void *pudu_ffi_callback_adapter(const char *owner, int32_t arity, int32_t contex
   }
   struct pudu_callback_adapter *adapter = calloc(1, sizeof(*adapter));
   if (adapter) {
+    adapter->member = member;
     adapter->arity = arity;
     adapter->context = context;
     adapter->leaf_count = leaf_count;
@@ -250,7 +290,7 @@ void *pudu_ffi_callback_adapter(const char *owner, int32_t arity, int32_t contex
   }
   unlock_callbacks();
 #else
-  (void)owner; (void)arity; (void)context; (void)kinds; (void)counts;
+  (void)owner; (void)member; (void)arity; (void)context; (void)kinds; (void)counts;
   (void)leaf_count; (void)leaves; (void)shape_count; (void)shape;
   (void)result_kind; (void)fallback_integer; (void)fallback_double;
 #endif
@@ -264,6 +304,58 @@ void *pudu_ffi_callback_code(void *opaque) {
 #else
   (void)opaque;
   return NULL;
+#endif
+}
+
+/* The block entry shares the adapter's signature and is built on first use.
+ * Only a signature whose context comes first can be a block's invoke. */
+void *pudu_ffi_callback_block_code(void *opaque) {
+#if defined(FFI_CLOSURES) && FFI_CLOSURES && defined(__APPLE__)
+  struct pudu_callback_adapter *adapter = opaque;
+  if (adapter == NULL || adapter->context != 0) return NULL;
+  lock_callbacks();
+  if (adapter->block_code == NULL) {
+    void *code = NULL;
+    ffi_closure *closure = ffi_closure_alloc(sizeof(*closure), &code);
+    if (closure != NULL &&
+        ffi_prep_closure_loc(closure, &adapter->cif, invoke_block_callback, adapter, code) == FFI_OK) {
+      adapter->block_closure = closure;
+      adapter->block_code = code;
+    } else if (closure != NULL) {
+      ffi_closure_free(closure);
+    }
+  }
+  void *code = adapter->block_code;
+  unlock_callbacks();
+  return code;
+#else
+  (void)opaque;
+  return NULL;
+#endif
+}
+
+#if defined(__APPLE__)
+extern void *_NSConcreteStackBlock[32];
+static const struct pudu_ffi_block_descriptor pudu_ffi_block_descriptor = {0, sizeof(struct pudu_ffi_block)};
+#endif
+
+size_t pudu_ffi_block_size(void) {
+  return sizeof(struct pudu_ffi_block);
+}
+
+/* Writes a stack block into caller storage that outlives the foreign call. */
+int pudu_ffi_block_fill(void *storage, void *invoke, void *key) {
+#if defined(__APPLE__)
+  if (storage == NULL || invoke == NULL) return 0;
+  struct pudu_ffi_block *block = storage;
+  *block = (struct pudu_ffi_block){
+    .isa = _NSConcreteStackBlock, .invoke = invoke,
+    .descriptor = &pudu_ffi_block_descriptor, .key = (uintptr_t)key
+  };
+  return 1;
+#else
+  (void)storage; (void)invoke; (void)key;
+  return 0;
 #endif
 }
 

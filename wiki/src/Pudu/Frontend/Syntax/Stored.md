@@ -41,3 +41,7 @@ tree's module holds its shapes alone.
 ## Referenced by
 
 [[src/Pudu/Frontend/Syntax/_MOC]] · [[Syntax Tree]] · [[Compiler Cache]]
+
+## Resolved Grill Log for foreign syntax cache
+
+Store new foreign declaration fields with their generic order; the executable fingerprint invalidates stale cache products.

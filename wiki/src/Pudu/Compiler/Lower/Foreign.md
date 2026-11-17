@@ -50,6 +50,30 @@ first-class registrations share one operation. A retained unregister
 member captures the evaluated token. The ABI position map excludes output
 slots and context pointers when matching source operands.
 
+## Resolved Grill Log for #877 — Native loan lowering
+
+Map declared loans to caller argument positions. Lower mutable loans using the existing held-place copy-in and ordered writeback.
+
+## Resolved Grill Log for #877 — Checked foreign bounds
+
+Translate each checked length relation to caller indices with the same position map used for argument crossings.
+
+## Resolved Grill Log for #877 — C11 array crossings
+
+Accept a represented Core array at a declared address-only position when its element has a scalar-only ABI layout.
+
+## Resolved Grill Log for #877 — Optional handles
+
+Admit the built-in Option type around opaque handles and preserve that type for the generated wrapper.
+
+## Resolved Grill Log for #877 — Returned run ABI
+
+Admit an array as the native-result component only when a returned-run contract supplies its ABI and destructor.
+
+## Resolved Grill Log for #877 — Native nullable loans
+
+Lower checked bare None as a zero placeholder at the pointee type. Its explicit absence flag drives ABI pointer generation and avoids a mutable place read.
+
 ## Referenced by
 
 [[Compiler Lower Primitive]] · [[Native Foreign Call Sites]]
@@ -87,3 +111,30 @@ refusals.
 Resolved Grill Log: **Q:** Resolve the qualifier here? **A:** No; [[Compiler
 Lower State]] owns qualifier scopes, and a local named like the qualifier
 shadows it before this module is asked. _Rejected:_ a second qualifier table.
+
+### Split callback placement Grill Log resolved
+
+Pudu input positions omit static trampolines and paired hidden context slots.
+
+## Resolved Grill Log for callback byte runs
+
+Carry resolved extents to Core without changing native parameter order.
+
+## Resolved Grill Log for retained split callbacks
+
+Carry callback capability for every call declared in a block that splits
+registration from its trampoline. A later call without token parameters may
+invoke a retained callback, so it needs the same outbound failure scope and
+must allow the handler to acquire the gate.
+
+## Resolved Grill Log for callback group slots
+
+Build the native signature with the module-qualified registration owner.
+
+## Resolved Grill Log for native callback groups
+
+Resolve declared member names to fields of the concrete checked handler record.
+
+## Resolved Grill Log for Objective-C dispatch
+
+Mark Objective-C calls as capable of re-entering the runtime. Other argument and ownership crossings keep their checked positions.

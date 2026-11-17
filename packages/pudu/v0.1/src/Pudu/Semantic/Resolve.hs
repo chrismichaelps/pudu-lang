@@ -6,6 +6,7 @@ module Pudu.Semantic.Resolve
   ) where
 
 import Control.Monad (when)
+import Data.List.NonEmpty (NonEmpty (..))
 import qualified Data.List.NonEmpty as NonEmpty
 import Data.Text (Text)
 import Pudu.Diagnostic (Diagnostic, sortDiagnostics)
@@ -23,6 +24,9 @@ import Pudu.Frontend.Syntax.Tree
   , FieldInit (..)
   , Foreign (..)
   , ForeignCallback (..)
+  , ForeignCallbackGroup (..)
+  , ForeignCallbackMember (..)
+  , ForeignCallbackPassing (..)
   , ForeignCallbackParameter (..)
   , ForeignFunction (..)
   , ForeignParameter (..)
@@ -255,6 +259,7 @@ walkDeclaration (Located spanValue declaration) = case declaration of
     walkType (deriveRequestTarget value)
   ForeignDeclaration value -> do
     mapM_ (walkForeignCallback . locatedValue) (foreignCallbacks value)
+    mapM_ (walkForeignCallbackGroup . locatedValue) (foreignCallbackGroups value)
     mapM_ (walkForeignFunction . locatedValue) (foreignFunctions value)
   InvalidDeclaration -> pure ()
 
@@ -262,7 +267,7 @@ walkForeignCallback :: ForeignCallback -> Resolver ()
 walkForeignCallback callback = do
   mapM_ walkType
     [ written
-    | Located _ (ForeignCallbackArgument _ _ written) <- foreignCallbackParameters callback
+    | Located _ (ForeignCallbackArgument _ _ written _) <- foreignCallbackParameters callback
     ]
   walkType (foreignCallbackResult callback)
 
@@ -271,8 +276,21 @@ walkForeignCallback callback = do
     walk: the body is somebody else's. -}
 walkForeignFunction :: ForeignFunction -> Resolver ()
 walkForeignFunction function = do
-  mapM_ (mapM_ walkType . foreignParameterType . locatedValue) (foreignParameters function)
+  mapM_ (walkParameter . locatedValue) (foreignParameters function)
   walkType (foreignResult function)
+ where
+  walkParameter parameter = case foreignParameterType parameter of
+    Just (Located at (NamedType (ModuleName (owner :| [_])) []))
+      | foreignParameterCallbackPassing parameter == Just TrampolinePassing ->
+          walkType (Located at (NamedType (ModuleName (owner :| [])) []))
+    held -> mapM_ walkType held
+
+walkForeignCallbackGroup :: ForeignCallbackGroup -> Resolver ()
+walkForeignCallbackGroup group = mapM_ walkMember (foreignCallbackGroupMembers group)
+ where
+  walkMember member =
+    let Located at name = foreignCallbackMemberType member
+     in walkType (Located at (NamedType (ModuleName (name :| [])) []))
 
 {-| A parameter is visible to the defaults of later parameters and to the body,
     which is exactly the left-to-right rule for default arguments. -}

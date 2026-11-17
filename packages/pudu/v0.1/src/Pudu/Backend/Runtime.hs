@@ -44,7 +44,7 @@ import Pudu.Diagnostic.Host (memoryFailureMessage)
 {-| The runtime contract revision baked into every generated program's header
     comment. It changes only when the runtime's behaviour or interface does. -}
 runtimeRevision :: Text
-runtimeRevision = "22"
+runtimeRevision = "23"
 
 {-| @Backend.Runtime.Part — one named, self-contained piece of the runtime.
 
@@ -158,6 +158,8 @@ failLines =
   [ "/* A started thread's failure ends that thread, not the program. */"
   , "static void (*pudu_callback_trap_hook)(const pudu_site *, const char *, size_t, void *) = NULL;"
   , "static void (*pudu_trap_hook)(const char *message, size_t length, void *owned_payload) = NULL;"
+  , "static _Thread_local void (*pudu_report_capture_hook)(const pudu_site *, const char *, size_t,"
+  , "    const char *, size_t, const char *, size_t, void *) = NULL;"
   , "/* One diagnostic as the interpreter renders it: severity and code, the"
   , "   message, the location with its excerpt, then a note and a help line"
   , "   when given. The message is written by length, so it may hold any byte. */"
@@ -210,6 +212,8 @@ failLines =
   , "    const char *note, size_t note_length, const char *help, size_t help_length, void *owned_payload) {"
   , "  /* Read before cleanup: it frees the frame that knows its caller. */"
   , "  const pudu_site *where = site;"
+  , "  if (pudu_report_capture_hook != NULL)"
+  , "    pudu_report_capture_hook(site, message, length, note, note_length, help, help_length, owned_payload);"
   , "  if (pudu_callback_trap_hook != NULL) pudu_callback_trap_hook(site, message, length, owned_payload);"
   , "  if (pudu_trap_hook != NULL) pudu_trap_hook(message, length, owned_payload);"
   , "  if (pudu_blame_hook != NULL && pudu_blame_hook() != NULL) where = pudu_blame_hook();"

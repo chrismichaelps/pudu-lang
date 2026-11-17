@@ -62,3 +62,23 @@ count :: Int -> Text
 Keep the native ordinal when weaving output slots and callbacks. A context
 slot consumes no Pudu argument. Validate a callback token's nominal owner
 before allocating native contexts.
+
+## Resolved Grill Log for #877 — Foreign loan settlement
+
+Weave each caller value with its resolved place. A mutable loan requires a destination before native dispatch. Keep the native index alongside that destination for writeback.
+
+## Resolved Grill Log for #877 — Checked foreign bounds
+
+Check signedness and extent after preparing arguments. Bytes have equal byte and element extents. A refusal occurs before symbol dispatch.
+
+## Resolved Grill Log for #877 — Interpreter array crossings
+
+Cross array elements with the ordinary scalar and record parameter conversion, then associate a writable place with a mutable run.
+
+## Resolved Grill Log for #877 — Nullable loans
+
+A nullable reference input that evaluates to the built-in absent case crosses a null address and creates no writeback destination.
+
+### Split callback placement Grill Log resolved
+
+Split trampolines reserve a pointer slot without consuming a source argument.

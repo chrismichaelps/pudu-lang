@@ -36,6 +36,7 @@ import Control.Monad (forM_, when)
 import Data.List.NonEmpty (NonEmpty (..))
 import Data.Maybe (catMaybes)
 import Data.Text (Text)
+import Pudu.Foreign.Crossing (isAbsentLoanArgument)
 import Pudu.Frontend.Syntax.Located (Located (..))
 import Pudu.Frontend.Syntax.Tree
   ( Expression (..)
@@ -63,7 +64,7 @@ import Pudu.Type.Env
   , takeUnwrittenParameters
   )
 import Pudu.Type.Unify (zonk)
-import Pudu.Type.Value (NominalId (..), Type (..), renderType)
+import Pudu.Type.Value (NominalId (..), Type (..), nullableLoanInputs, renderType)
 
 {-| Whether a write replaces the binding a name holds, or changes something
     inside the value it holds. A `&mut` parameter permits the second and not the
@@ -115,23 +116,33 @@ checkLending
   :: Type -> Maybe (Located Expression) -> [Located Expression] -> [Type] -> Checker ()
 checkLending calleeType receiver arguments argumentTypes = do
   callee <- zonk calleeType
-  let inputs = case callee of
-        FunctionTypeRequiring _ written _ _ -> Just written
-        ErrorType -> Just []
-        _ -> Nothing
-  lent <- catMaybes <$> sequence (zipWith3 (lendingOf inputs) [0 ..] arguments argumentTypes)
+  let nullable = nullableLoanInputs callee
+      check index argument kind
+        | isAbsentLoanArgument argument, Just _ <- lookup index nullable = pure Nothing
+        | otherwise = lendingOf (inputsOf callee) index argument kind
+  lent <- catMaybes <$> sequence (zipWith3 check [0 ..] arguments argumentTypes)
   let lentReceiver = case receiver of
-        Just target -> [(locatedSpan target, path) | Just path <- [pathOf target]]
+        Just target -> [(locatedSpan target, True, path) | Just path <- [pathOf target]]
         Nothing -> []
   refuseOverlaps [] (lentReceiver <> lent)
+ where
+  inputsOf = \case
+    FunctionTypeRequiring _ written _ _ -> Just written
+    RestrictedType _ inner -> inputsOf inner
+    ErrorType -> Just []
+    _ -> Nothing
 
-lendingOf :: Maybe [Type] -> Int -> Located Expression -> Type -> Checker (Maybe (Span, Path))
+lendingOf :: Maybe [Type] -> Int -> Located Expression -> Type -> Checker (Maybe (Span, Bool, Path))
 lendingOf inputs position argument argumentType = do
   resolved <- zonk argumentType
   input <- traverse zonk (inputs >>= at position)
   let argumentSpan = locatedSpan argument
       lends = isExclusive resolved
       wanted = maybe False isExclusive input
+      exclusive = lends || wanted
+      borrowed = case input of
+        Just (ReferenceTypeValue False _) -> True
+        _ -> False
   when (holdsBelowTop resolved) $
     report "E3084" argumentSpan "an exclusive reference cannot travel inside another value"
       (Just "pass &mut place straight to the parameter that changes it")
@@ -153,8 +164,8 @@ lendingOf inputs position argument argumentType = do
             (Just "call a function whose signature takes &mut")
     _ -> pure ()
   pure $
-    if lends || wanted
-      then (\path -> (argumentSpan, path)) <$> pathOf argument
+    if exclusive || borrowed
+      then (\path -> (argumentSpan, exclusive, path)) <$> pathOf argument
       else Nothing
  where
   at index values = case drop index values of
@@ -467,6 +478,7 @@ pathOf (Located _ expression) = case expression of
   MemberExpression target (Located _ field) -> extend (FieldStep field) <$> pathOf target
   IndexExpression target _ -> extend ElementStep <$> pathOf target
   UnaryExpression "*" operand -> pathOf operand
+  UnaryExpression "&" operand -> pathOf operand
   UnaryExpression "&mut" operand -> pathOf operand
   _ -> Nothing
  where
@@ -474,14 +486,14 @@ pathOf (Located _ expression) = case expression of
 
 {-| Two places overlap when one is the other or lies inside it. Two elements
     of one array might be the same element, so they overlap too. -}
-refuseOverlaps :: [Path] -> [(Span, Path)] -> Checker ()
+refuseOverlaps :: [(Bool, Path)] -> [(Span, Bool, Path)] -> Checker ()
 refuseOverlaps earlier pending = case pending of
   [] -> pure ()
-  (spanValue, path) : rest -> do
-    when (any (overlaps path) earlier) $
+  (spanValue, exclusive, path) : rest -> do
+    when (any (\(mutable, previous) -> (exclusive || mutable) && overlaps path previous) earlier) $
       report "E3082" spanValue "this argument lends a place the call has already been lent"
         (Just "one call may not change the same place twice; lend two different variables or fields")
-    refuseOverlaps (path : earlier) rest
+    refuseOverlaps ((exclusive, path) : earlier) rest
  where
   overlaps (leftRoot, leftSteps) (rightRoot, rightSteps) =
     leftRoot == rightRoot && and (zipWith (==) leftSteps rightSteps)

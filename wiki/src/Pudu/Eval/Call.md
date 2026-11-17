@@ -143,6 +143,10 @@ Foreign dispatch passes the ordinary call dispatcher back to the callback
 adapter, so callbacks can invoke the same callable values. New workers
 start without the parent's callback ancestry.
 
+## Resolved Grill Log for #877 — Foreign loan settlement
+
+Forward the places already resolved by argument evaluation to foreign dispatch. A mutable foreign loan uses the same destination as an ordinary mutable parameter.
+
 ## Referenced by
 
 [[src/Pudu/Eval/_MOC]] · [[Evaluator]] · [[Eval Program]] · [[Eval Loop]]

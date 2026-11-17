@@ -55,6 +55,36 @@ pointer for `None`, and for `Some` the address after the same liveness refusal a
 - The run gate covers the whole call. Keep a separate lease table deferred
   until dispatch can release the gate or support callbacks.
 
+## Resolved Grill Log for #877 — Post-call settlement
+
+Capture the diagnostic in owned storage before jumping out of the crossing. The jump boundary cannot own ABI scratch locals. The caller commits writeback before replaying the report.
+
+## Resolved Grill Log for #877 — Checked foreign bounds
+
+Compare signedness and width-preserving counts with buffer extents before the native call. For Bytes, the compact carrier contains the extent directly.
+
+## Resolved Grill Log for #877 — C11 array crossings
+
+Mark raw dispatch before capturing a post-call failure. Preflight diagnostics can release run storage without triggering mutable writeback.
+
+## Resolved Grill Log for #877 — Optional handles
+
+Counted claims are separate transfer obligations, even in an output batch where a unique claim uses the same address.
+
+## Resolved Grill Log for #877 — Handle leases during dispatch
+
+Pin input generations while a callback-bearing native call yields the gate. Release waits for the final lease and wakes on reclamation.
+
+## Resolved Grill Log for teardown order
+
+Release unreleased claims newest claim first, by claim generation, in both the interpreter and generated C. Scope-shaped resources such as Objective-C autorelease pools must close inside out: draining an outer pool also drains every pool pushed after it. An autorelease pool is an ordinary owned handle: `fn poolPush symbol "objc_autoreleasePoolPush" () -> owned Pool by poolPop` with `fn poolPop symbol "objc_autoreleasePoolPop" (pool: Pool) -> ()`. No new syntax.
+
+## Resolved Grill Log for Objective-C blocks
+
+A callback parameter written `work: block Work` crosses as one pointer to a block literal, with passing mode BlockPassing and placement BlockCallback. The block is a stack block (isa `_NSConcreteStackBlock`, no copy or dispose helpers) whose last field is the registration key, and it lives for the foreign call only. A callee that keeps the block copies it with `Block_copy`; the copy carries the key, which is how escaping blocks are copied. The block's invoke receives the block first, so the callback must declare its context first; the checker refuses otherwise with E3063 ("callback X must take its context first to cross as a block"). A late invocation after unregister finds the key retired and answers the fallback.
+
+Generated C: the runtime part `host_foreign_block` refuses non-Apple targets with `#error`. Each signature gets a `pudu_block_invoke_<key>` that forwards to the trampoline, and the call site passes a compound-literal block.
+
 ## Referenced by
 
 [[Native Host Runtime]] · [[Backend Emit Foreign]]
@@ -62,3 +92,20 @@ pointer for `None`, and for `Some` the address after the same liveness refusal a
 ## Owned output slots (#854)
 
 Resolved Grill Log: Reserve batch claim space before dispatch. Reject duplicate or existing addresses before exposing any new boxes. Release each unambiguous fresh obligation on refusal.
+
+## Resolved Grill Log for the portable loader
+
+Use the shared loader and a platform mutex for cold lookups. Cache immutable symbols with atomic reads.
+
+## Resolved Grill Log for Objective-C dispatch
+
+Load the declared framework before resolving the Objective-C class and selector. Cache them on each emitted method crossing.
+
+## Resolved Grill Log for Objective-C ownership
+
+Validate and consume an idle Objective-C receiver without waiting on an invocation that may re-enter Pudu.
+
+## Resolved Grill Log for loader metadata lifetime
+
+Release the module lookup records at process exit while keeping native
+loader references pinned for cached callbacks and final destructors.

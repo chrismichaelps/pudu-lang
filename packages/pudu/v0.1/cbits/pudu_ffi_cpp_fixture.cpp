@@ -294,3 +294,43 @@ extern "C" void pudu_ffi_optional_delete(void *box) { delete static_cast<Optiona
 extern "C" std::int32_t pudu_ffi_optional_read(void *box, std::int32_t fallback) {
   return box == nullptr ? fallback : static_cast<OptionalBox *>(box)->value;
 }
+
+namespace {
+using Visit = std::int64_t (*)(void *, std::int64_t);
+using Finish = std::int64_t (*)(void *);
+Visit retained_visit;
+void *retained_context;
+std::int32_t run_releases;
+}
+
+extern "C" void pudu_ffi_save_visit(Visit visit) { retained_visit = visit; }
+extern "C" void pudu_ffi_save_context(void *context) { retained_context = context; }
+extern "C" std::int64_t pudu_ffi_fire_visit(std::int64_t value) {
+  return retained_visit == nullptr ? -1 : retained_visit(retained_context, value);
+}
+
+extern "C" std::int64_t pudu_ffi_visit_pair(Visit tick, Finish finish, void *context) {
+  return tick(context, 4) + finish(context);
+}
+
+extern "C" std::int64_t pudu_ffi_visit_bytes(
+    std::int64_t (*visit)(const unsigned char *, std::uint64_t, void *), void *context) {
+  const unsigned char bytes[] = {3, 0, 9};
+  return visit(bytes, sizeof bytes, context) + visit(nullptr, 0, context);
+}
+
+extern "C" bool pudu_ffi_mutate_run(std::int32_t *data, std::int64_t count) {
+  for (std::int64_t i = 0; i < count; ++i) data[i] += 10;
+  return data != nullptr;
+}
+
+extern "C" std::int32_t *pudu_ffi_return_run(std::uint64_t *length) {
+  auto *data = new (std::nothrow) std::int32_t[2]{7, 11};
+  *length = data == nullptr ? 0 : 2;
+  return data;
+}
+extern "C" void pudu_ffi_release_run(void *data) {
+  delete[] static_cast<std::int32_t *>(data);
+  ++run_releases;
+}
+extern "C" std::int32_t pudu_ffi_run_releases() { return run_releases; }

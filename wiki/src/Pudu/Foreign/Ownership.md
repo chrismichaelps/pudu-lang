@@ -232,6 +232,14 @@ A nested callback failure may discard unpublished owned or counted
 output claims. Discard by generation so an old claim cannot dispose a
 newer reference to the same address.
 
+## Resolved Grill Log for teardown order
+
+Release unreleased claims newest claim first, by claim generation, in both the interpreter and generated C. Scope-shaped resources such as Objective-C autorelease pools must close inside out: draining an outer pool also drains every pool pushed after it. An autorelease pool is an ordinary owned handle: `fn poolPush symbol "objc_autoreleasePoolPush" () -> owned Pool by poolPop` with `fn poolPop symbol "objc_autoreleasePoolPop" (pool: Pool) -> ()`. No new syntax.
+
 ## Referenced by
 
 [[src/Pudu/Foreign/_MOC]] · [[Evaluator]] · [[ADR-0018 Calling a Library Written Elsewhere]]
+
+## Resolved Grill Log for Objective-C ownership
+
+Transfer exactly one idle generation. Reinsert it into its original ownership table if the ABI refused the call before entry.

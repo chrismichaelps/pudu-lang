@@ -297,6 +297,14 @@ instance Walk ArrayRest
 instance Walk FieldPattern
 instance Walk Foreign
 instance Walk ForeignFunction
+instance Walk ForeignClass
+instance Walk ForeignMethod
+instance Walk ForeignCallbackGroup
+instance Walk ForeignCallbackMember
+instance Walk ForeignLength where
+  walk _ value = value
+instance Walk ForeignCallbackPassing where
+  walk _ value = value
 instance Walk ForeignCallback
 instance Walk ForeignCallbackParameter
 instance Walk ForeignParameter

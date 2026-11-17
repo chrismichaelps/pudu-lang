@@ -165,3 +165,9 @@ arguments while following a rigid constructor's bounds. Assert actual checker
 products, canonical implementation trait projection, authored syntax and spans;
 retain full existing dispatch, diagnostic, derive and cache gates.
 See [[Bound Receiver Evidence Delivery]].
+
+## Resolved Grill Log for foreign declarations
+
+Walk callback fallback literals with the existing traversal. Class names,
+selectors, group names and extent relations are declaration metadata and
+carry no expression literals.

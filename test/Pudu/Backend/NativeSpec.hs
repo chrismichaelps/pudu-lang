@@ -33,7 +33,7 @@ import Pudu.Backend.BigIntPrograms (bigIntSuccessPrograms, bigIntRefusalPrograms
 import Pudu.Backend.DecimalPrograms (decimalSuccessPrograms, decimalRefusalPrograms)
 import Pudu.Backend.WordMapPrograms (wordMapSuccessPrograms, wordMapRefusalPrograms)
 import Pudu.Backend.StorePrograms (storeSuccessPrograms, storeModulePrograms, storeRefusalPrograms)
-import Pudu.Backend.ForeignPrograms (callbackCaller, optionalHandleLibrary, optionalHandlePrograms, foreignCallbackPrograms, foreignSuccessPrograms, foreignRefusalPrograms)
+import Pudu.Backend.ForeignPrograms (callbackCaller, optionalHandleLibrary, optionalHandlePrograms, foreignCallbackPrograms, foreignCrossingLibrary, foreignCrossingPrograms, objectiveCPrograms, objectiveCRefusalPrograms, foreignSuccessPrograms, foreignRefusalPrograms)
 import Pudu.Backend.KernelPrograms (kernelSuccessPrograms, kernelLibraryPrograms, kernelRefusalPrograms)
 import Pudu.Backend.AbstractionPrograms (abstractionSuccessPrograms, abstractionRefusalPrograms)
 import Pudu.Backend.HostPrograms (hostLibraryPrograms, hostSuccessPrograms, hostRefusalPrograms)
@@ -102,6 +102,7 @@ import System.Directory
 import System.Environment (lookupEnv, setEnv, unsetEnv)
 import System.Exit (ExitCode (..))
 import System.FilePath ((</>))
+import System.Info (os)
 import System.IO (Handle, IOMode (ReadMode), hClose, hFlush, hGetEncoding, hSetBinaryMode, hSetEncoding, openTempFile, stderr, stdin, stdout, utf8, withFile)
 import System.IO.Temp (withSystemTempDirectory)
 import System.Process (readProcessWithExitCode)
@@ -142,6 +143,14 @@ backendNativeProperties =
   , ("native foreign calls stop as the interpreter's bridge does", conjoin <$> mapM (uncurry conformance) foreignRefusalPrograms)
   , ("native foreign callbacks match the interpreter's trampolines", conjoin <$> mapM
       (uncurry (conformanceLinking callbackCaller)) foreignCallbackPrograms)
+  , ("native foreign crossings match explicit results and the interpreter", conjoin <$> mapM
+      (\(label, source, expected) ->
+        conformanceLinkingWith foreignCrossingLibrary Nothing [] (Just (expected, "", 0)) label source) foreignCrossingPrograms)
+  , ("native Objective-C Foundation matches the interpreter", appleConformance $
+      conjoin <$> mapM (\(label, source, expected) ->
+        conformanceExpecting (Just (expected, "", 0)) label source) objectiveCPrograms)
+  , ("native Objective-C ownership refusals match the interpreter", appleConformance $
+      conjoin <$> mapM (uncurry conformance) objectiveCRefusalPrograms)
   , ("native optional handles cross as the interpreter's do", conjoin <$> mapM
       (uncurry (conformanceLinking optionalHandleLibrary)) optionalHandlePrograms)
   , ("native host services, tasks and scopes match the interpreter's own answers", conjoin <$> mapM
@@ -544,6 +553,13 @@ conformanceWithInput = conformanceLinkingWith Text.empty
 {-| A program whose foreign block names its own symbols: the native build
     carries the C in `linked`, which the test executable already defines for
     the interpreter. -}
+appleConformance :: IO Property -> IO Property
+appleConformance action
+  | os == "darwin" = action
+  | otherwise = do
+      putStrLn "[skip] Foundation conformance requires macOS"
+      pure (property True)
+
 conformanceLinking :: Text -> String -> Text -> IO Property
 conformanceLinking linked = conformanceLinkingWith linked Nothing [] Nothing
 

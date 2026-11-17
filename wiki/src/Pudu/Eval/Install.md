@@ -105,6 +105,30 @@ the declaring name. A foreign function binding records checked native
 callback and context positions and the complete trampoline signature.
 Record arguments use the declaring module's canonical runtime owner.
 
+## Resolved Grill Log for #877 — Foreign loan settlement
+
+Resolve a parameter's loan mode from its reference type and qualify the pointee crossing with the same record owner as by-value arguments.
+
+## Resolved Grill Log for #877 — Checked foreign bounds
+
+Install length relations from the same signature resolver used by declaration checking. Keep the relations in signature order.
+
+## Resolved Grill Log for #877 — Interpreter array crossings
+
+Install checked array-loan element crossings under the same qualified record owner used by other crossings.
+
+## Resolved Grill Log for #877 — Optional handles
+
+Install nullable handle inputs and results with the existing handle carrier and a separate optionality flag.
+
+## Resolved Grill Log for #877 — Returned run settlement
+
+Use the returned run contract to install the ABI result as an opaque temporary transfer. Qualify the array element layout as for an input run.
+
+## Resolved Grill Log for #877 — Nullable loans
+
+Preserve nullable reference positions separately from optional opaque handle inputs. Install only reference positions with an admissible pointee.
+
 ## Referenced by
 
 [[src/Pudu/Eval/_MOC]] · [[Evaluator]] · [[Name Resolution]]
@@ -302,3 +326,15 @@ shape/arity retains E7001/E7003 at the call span.
 Resolved Grill Log: scalar boundaries constrain text slices, not byte reads;
 return an exact UInt8 and keep naming, typing, installation and pure dispatch
 synchronized. Existing text primitives and packed identities are unchanged.
+
+## Resolved Grill Log for callback group slots
+
+Install native callback slots from the shared checked signature and group placement.
+
+## Resolved Grill Log for interpreter callback groups
+
+Install qualified callback member signatures once at binding installation.
+
+## Resolved Grill Log for interpreted Objective-C dispatch
+
+Retain the derived selector and native class alias alongside the checked foreign binding.

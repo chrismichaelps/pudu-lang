@@ -196,6 +196,10 @@ bytes as before for every existing failure.
 
 [[Native Text Number]]'s parts join the runtime list after text case mapping.
 
+## Resolved Grill Log for #877 — Post-call settlement
+
+The thread-local report capture hook runs before unwind. A foreign loan arms it only after native code returns. Replaying the owned report re-enters ordinary callback, thread, or process failure handling.
+
 ## Referenced by
 
 [[src/Pudu/Backend/_MOC]] · [[src/Pudu/_MOC]] · [[Backend Emit]] ·

@@ -49,3 +49,7 @@ The iOS host sources also stage `pudu_ios_events.h`, `pudu_ios_controls.h` and `
 ## iOS material source (#928)
 
 The iOS host sources also stage `pudu_ios_material.h` with the host translation unit and the other private headers. All seven are written unchanged before clang runs. See [[iOS Host Material]].
+
+## Resolved Grill Log for the portable loader
+
+Embed the loader header in generated C11 and stage the same header beside bundled SQLite.

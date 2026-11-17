@@ -252,3 +252,11 @@ can be written for them.
 
 Resolved Grill Log (#871): status programs cover entries with parameters,
 which stop with the evaluator's located E7003 before any body effect.
+
+## Resolved Grill Log for C11 FFI conformance
+
+Use the existing linked-native conformance harness with explicit outputs for the #877 crossings so agreement alone cannot hide a shared error.
+
+## Resolved Grill Log for Foundation conformance
+
+Run Objective-C Foundation conformance on macOS and record the platform skip elsewhere. Compare fixed output as well as interpreter/native diagnostics.

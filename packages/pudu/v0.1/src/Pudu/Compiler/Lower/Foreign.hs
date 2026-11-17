@@ -8,14 +8,17 @@ module Pudu.Compiler.Lower.Foreign
 
 import qualified Data.Map.Strict as Map
 import qualified Data.Set as Set
+import Data.List (elemIndex)
 import Data.Text (Text)
 import GHC.Float (castDoubleToWord64)
 import qualified Pudu.Foreign.Callback as Callback
-import Pudu.Foreign.Crossing (Crossing (..))
+import Pudu.Foreign.Crossing (Crossing (..), isAbsentLoanArgument)
+import Pudu.Foreign.Extent (ForeignBound (..))
 import Pudu.FloatLiteral (FloatWidth (..))
 import Pudu.Compiler.Lower.Array (collect, stops, stopped)
-import Pudu.Compiler.Lower.State (ForeignTarget (..), LowerContext (..), LowerState (..), halt, lookupCallback, lookupForeign, lookupQualifiedForeign, refused)
-import Pudu.Compiler.Lower.Types (LowerTypes, recordFields, typeForSpan)
+import Pudu.Compiler.Lower.Loan (Callee (ForeignCrossing), Operand (Argument), lowerLoanedOperands, valueSignature)
+import Pudu.Compiler.Lower.State (ForeignTarget (..), LowerContext (..), LowerState (..), halt, lookupCallback, lookupCallbackGroup, lookupForeign, lookupQualifiedForeign, refused)
+import Pudu.Compiler.Lower.Types (LowerTypes, recordFields, referenceTarget, typeForSpan)
 import Pudu.Core
 import Pudu.Frontend.Syntax (Expression, Located (..))
 import Pudu.IntegerLiteral (IntegerKind (SignedKind, UnsignedKind))
@@ -36,7 +39,17 @@ lowerQualifiedForeignCall lower state at qualifier name arguments =
 
 {-| The arguments in order, then the call through the declared target. -}
 crossing :: (LowerState -> Located Expression -> Lowered) -> LowerState -> Span -> [Located Expression] -> ForeignTarget -> Lowered
-crossing lower state at arguments target = case collect lower state arguments of
+crossing lower state at arguments target
+  | Just resolvedBounds <- bounds, not (null mutable) = case traverse argumentType (zip [0 ..] arguments) of
+      Just parameters
+        | Just result <- typeForSpan typesAtCall at
+        , foreignParametersFit target typesAtCall parameters
+        , admittedResult target typesAtCall result ->
+            lowerLoanedOperands lowerOperand state at (ForeignCrossing (declaration parameters result resolvedBounds))
+              (valueSignature at parameters result mutable) False
+              [(index, Argument, argument) | (index, argument) <- zip [0 ..] arguments]
+      _ -> halt at "a foreign call with unrepresented loan operands" state
+  | Just resolvedBounds <- bounds = case collect lowerOperand state arguments of
     (after, Nothing) -> refused after
     (after, Just cores)
       | any stops cores -> (after, Just (stopped at cores, CoreNeverType))
@@ -44,33 +57,74 @@ crossing lower state at arguments target = case collect lower state arguments of
           Just result
             | foreignParametersFit target types parameters
             , admittedResult target types result ->
-                let declared = CoreForeign (targetLibrary target) (targetVersion target) (targetSymbol target) parameters result
-                      (targetClaim target) (targetReleases target) (targetSlotPositions target) (targetSlotClaims target)
-                      (targetCallbackSlots target)
-                 in (after, Just (CoreExpression at result (CoreForeignCall declared cores), result))
+                (after, Just (CoreExpression at result (CoreForeignCall (declaration parameters result resolvedBounds) cores), result))
           _ -> halt at "a foreign call crossing output slots" after
       where
         parameters = map coreExpressionType cores
         types = contextTypes (lowerContext after)
+  | otherwise = halt at "a foreign length whose input positions do not match" state
+ where
+  positions = foreignInputPositions target (length arguments)
+  byNative = Map.fromList (zip positions [0 ..])
+  bounds = traverse translate (targetBounds target)
+  translate bound =
+    ForeignBound <$> Map.lookup (boundLength bound) byNative <*> pure (boundUnit bound)
+      <*> traverse (`Map.lookup` byNative) (boundTargets bound)
+  modes =
+    [ (index, exclusive)
+    | (index, native) <- zip [0 ..] positions
+    , Just exclusive <- [lookup native (targetLoans target)] ]
+  absent = [index | (index, (native, argument)) <- zip [0 ..] (zip positions arguments)
+                  , native `elem` targetNullableLoans target, isAbsentLoanArgument argument]
+  absentSpans = [locatedSpan argument | (index, argument) <- zip [0 ..] arguments, index `elem` absent]
+  mutable = [index | (index, True) <- modes, index `notElem` absent]
+  lowerOperand current argument
+    | argumentAt `elem` absentSpans
+    , Just kind <- referenceTarget (contextTypes (lowerContext current)) argumentAt =
+        (current, Just (CoreExpression argumentAt kind CoreAbsent, kind))
+    | otherwise = lower current argument
+   where
+    argumentAt = locatedSpan argument
+  typesAtCall = contextTypes (lowerContext state)
+  argumentType (index, Located argumentAt _)
+    | index `elem` mutable || index `elem` absent = referenceTarget typesAtCall argumentAt
+    | otherwise = typeForSpan typesAtCall argumentAt
+  declaration parameters result resolvedBounds = CoreForeign
+    (targetLibrary target) (targetVersion target) (targetSymbol target) (targetObjectiveC target) parameters result
+    (targetClaim target) (targetReleases target) (targetSlotPositions target) (targetSlotClaims target)
+    (targetCallbackSlots target) (targetCanReenter target || targetObjectiveC target /= Nothing) modes absent resolvedBounds (targetReturnedRun target)
 
 foreignParametersFit :: ForeignTarget -> LowerTypes -> [CoreType] -> Bool
 foreignParametersFit target types parameters =
   length inputPositions == length parameters && and (zipWith fits inputPositions parameters)
  where
   callbacks = targetCallbackSlots target
-  blocked = Set.fromList (targetSlotPositions target <> map coreCallbackContextIndex callbacks)
-  nativeCount = length parameters + Set.size blocked
-  inputPositions = [index | index <- [0 .. nativeCount - 1], Set.notMember index blocked]
+  inputPositions = foreignInputPositions target (length parameters)
   owners = Map.fromList
-    [(coreCallbackFunctionIndex slot, coreCallbackOwner (coreCallbackSignature slot)) | slot <- callbacks]
+    [ (position, coreCallbackOwner (coreCallbackSignature slot))
+    | slot <- callbacks, Just position <- [Callback.callbackInputPosition (coreCallbackPlacement slot)] ]
   fits index kind = case (Map.lookup index owners, kind) of
     (Just owner, CoreCallbackType actual _) -> owner == actual
     (Just _, _) -> False
+    (Nothing, CoreArrayType element)
+      | Just _ <- lookup index (targetLoans target) -> scalarRecord element
     (Nothing, _) -> parameterCrossing types kind
+  scalarRecord kind
+    | scalarCrossing kind = True
+    | Just fields <- recordFields types kind =
+        not (null fields) && length fields <= 32 && all (scalarRecord . snd) fields
+    | otherwise = False
+
+foreignInputPositions :: ForeignTarget -> Int -> [Int]
+foreignInputPositions target inputCount =
+  [index | index <- [0 .. inputCount + Set.size blocked - 1], Set.notMember index blocked]
+ where
+  blocked = Set.fromList (targetSlotPositions target <> concatMap (Callback.callbackHiddenPositions . coreCallbackPlacement) (targetCallbackSlots target))
 
 callbackSignatureOf :: Text -> Text -> Callback.CallbackSignature -> CoreCallbackSignature
 callbackSignatureOf owner name signature =
   CoreCallbackSignature (owner <> "." <> name) (map parameter (Callback.callbackParameters signature)) result fallback
+    (Callback.callbackByteLengths signature) Nothing
  where
   parameter Callback.CallbackContext = Nothing
   parameter (Callback.CallbackValue kind) = Just (coreCrossing kind)
@@ -98,11 +152,27 @@ callbackSignatureOf owner name signature =
 lowerCallbackRegistration
   :: (LowerState -> Located Expression -> Lowered)
   -> LowerState -> Span -> [Text] -> [Located Expression] -> Maybe Lowered
-lowerCallbackRegistration lower state at path arguments = do
-  signature <- lookupCallback state path
-  pure $ case arguments of
-    [handler] -> lowerCallbackOperand lower state at (CoreCallbackRegister signature) handler
-    _ -> halt at "a callback registration without its handler" state
+lowerCallbackRegistration lower state at path arguments =
+  case lookupCallbackGroup state path of
+    Just (signature, members) -> Just $ case arguments of
+      [handler] -> lowerGroup signature members handler
+      _ -> halt at "a callback group registration without its handler record" state
+    Nothing -> do
+      signature <- lookupCallback state path
+      pure $ case arguments of
+        [handler] -> lowerCallbackOperand lower state at (CoreCallbackRegister signature) handler
+        _ -> halt at "a callback registration without its handler" state
+ where
+  lowerGroup signature members handler = case lower state handler of
+    (after, Just (held, kind))
+      | stops held -> (after, Just (held, CoreNeverType))
+      | let types = contextTypes (lowerContext after)
+      , Just fields <- recordFields types kind
+      , Just indices <- traverse (\member -> elemIndex member (map fst fields)) members
+      , Just result <- typeForSpan types at ->
+          (after, Just (CoreExpression at result (CoreCallback (CoreCallbackRegisterGroup signature indices) held), result))
+      | otherwise -> halt at "a callback group without a represented handler record" after
+    (after, Nothing) -> refused after
 
 lowerCallbackUnregister
   :: (LowerState -> Located Expression -> Lowered)
@@ -188,15 +258,17 @@ admittedResult :: ForeignTarget -> LowerTypes -> CoreType -> Bool
 admittedResult target types result
   | null (targetSlotPositions target) = resultCrossing types result || handleResult target result
   | CoreTupleType (native : slots) <- result =
-      (resultCrossing types native || ownedNative target native)
+      (resultCrossing types native || handleResult target native || returnedRunResult target native)
         && length slots == length (targetSlotPositions target)
         && and (zipWith (admitSlot types) slots (targetSlotClaims target))
   | otherwise = False
 
-ownedNative :: ForeignTarget -> CoreType -> Bool
-ownedNative target kind = case (kind, targetClaim target) of
-  (CoreHandleType _ _, Just (CoreOwned _ _ _)) -> True
-  _ -> False
+returnedRunResult :: ForeignTarget -> CoreType -> Bool
+returnedRunResult target kind =
+  targetReturnedRun target /= Nothing && targetClaim target /= Nothing && case kind of
+    CoreArrayType _ -> True
+    CoreSumType "Option" [CoreArrayType _] -> True
+    _ -> False
 
 admitSlot :: LowerTypes -> CoreType -> Maybe CoreClaim -> Bool
 admitSlot types kind claim = case kind of
@@ -214,21 +286,16 @@ slotCrossing types kind
 {-| A parameter crosses as a number, Bool, text, a lent run of bytes or a
     record of those (bytes excepted). -}
 parameterCrossing :: LowerTypes -> CoreType -> Bool
-parameterCrossing types kind = kind == CoreBytesType || handle kind || optionalHandle kind || fieldCrossing types kind
+parameterCrossing types kind = kind == CoreBytesType || handle kind || fieldCrossing types kind
 
 {-| A handle result crosses when its declaration says what it transfers. -}
 handleResult :: ForeignTarget -> CoreType -> Bool
 handleResult target kind = handle kind && targetClaim target /= Nothing
 
-{-| An argument a library reads as a handle or as null. -}
-optionalHandle :: CoreType -> Bool
-optionalHandle kind = case kind of
-  CoreSumType "Option" [CoreHandleType _ _] -> True
-  _ -> False
-
 handle :: CoreType -> Bool
 handle kind = case kind of
   CoreHandleType _ _ -> True
+  CoreSumType "Option" [CoreHandleType _ _] -> True
   _ -> False
 
 {-| A result crosses as a number, Bool, text, unit or such a record. -}

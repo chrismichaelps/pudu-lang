@@ -113,6 +113,66 @@ foreignHandles :: Foreign -> Set Text
 A callback token answers unregister with `Result[(), Str]`. This method
 uses the owning nominal identity and has no foreign capability requirement.
 
+## Resolved Grill Log for #877 — Reference parameters
+
+Preserve the declared reference type in the Pudu function signature after
+checking the pointee's ABI shape. A loan is input-only. Report a reference
+in a result or output slot as E3094 and an invalid pointee as E3095.
+
+## Resolved Grill Log for #877 — Foreign extent relations
+
+Report invalid foreign extent relations at the declaration. A parsed nullable loan or returned run remains refused until its crossing can dispatch safely.
+
+## Resolved Grill Log for #877 — Interpreter array crossings
+
+Preserve reference array types at the call boundary. Report a by-value array separately from a reference whose element cannot cross.
+
+## Resolved Grill Log for #877 — Optional handles
+
+Keep Option in the formed language type while applying the underlying handle's ownership contract. Refuse a written Option output slot and non-handle payloads.
+
+## Resolved Grill Log for #877 — Returned run declarations
+
+A returned run requires owned transfer, a unique fixed-width output length, and a destructor taking one declared opaque handle. Reuse the ordinary array or Option type for the result.
+
+## Resolved Grill Log for #877 — Direct nullable loans
+
+Store nullable reference ordinals in the function signature in Pudu argument order. Native slots and callback contexts do not consume a Pudu argument.
+
 ## Referenced by
 
 [[src/Pudu/Type/_MOC]] · [[ADR-0018 Calling a Library Written Elsewhere]]
+
+### Split callback placement Grill Log resolved
+
+A static trampoline occupies a native slot and contributes no Pudu argument.
+
+## Resolved Grill Log for callback byte runs
+
+Present the checked byte run and its scalar length to the handler.
+
+## Resolved Grill Log for callback groups
+
+Reject malformed callback group declarations while checking a foreign block. Group membership is independent of the native function signatures that use the group.
+
+## Resolved Grill Log for a group constructor
+
+The group constructor names the token and shares the existing unregister method. Member signatures determine the expected handler types.
+
+## Resolved Grill Log for callback group slots
+
+Foreign group contexts consume a checked group token. Projected trampolines reserve ABI slots without consuming source arguments.
+
+## Resolved Grill Log for C loader names
+
+Reject embedded noughts in library names, versions and explicit symbols at
+the source span because the generated and interpreter loaders accept
+nought-terminated strings.
+
+## Resolved Grill Log for Objective-C declarations
+
+Resolve class names within the same block. Count declared selector arguments separately from self and the hidden selector.
+
+## Resolved Grill Log for Objective-C ownership
+
+Check borrowed and transferred method results, including an instance receiver and a transferred object result for initializers.

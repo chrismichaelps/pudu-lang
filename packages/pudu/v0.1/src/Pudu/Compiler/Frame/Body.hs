@@ -241,6 +241,7 @@ lowerExpression expression@(CoreExpression at kind shape) = case shape of
   CoreForeignCall declared arguments -> do
     operands <- lowerOperands arguments
     maybe (pure Stopped) (value . FrameForeign declared) operands
+  CoreForeignSettle -> value FrameForeignSettle
   CoreBytesMethod name receiver arguments -> do
     operands <- lowerOperands (receiver : arguments)
     case operands of

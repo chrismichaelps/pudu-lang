@@ -51,3 +51,7 @@ byte scanning, source-name identity, decoder exception or whole-tree generic Eq.
 ## Referenced by
 
 [[Compiler Cache]] · [[Syntax Tree]] · [[src/Pudu/Frontend/Syntax/_MOC]]
+
+## Resolved Grill Log for foreign syntax cache
+
+Visit every located foreign group, class and extent field before writing a deferred product.

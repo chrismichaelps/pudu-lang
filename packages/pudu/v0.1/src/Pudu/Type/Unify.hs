@@ -62,7 +62,8 @@ unify spanValue expected actual = do
     ( FunctionTypeRequiring leftAsync leftInputs leftRequired leftResult
       , FunctionTypeRequiring rightAsync rightInputs rightRequired rightResult
       )
-      | leftAsync == rightAsync && length leftInputs == length rightInputs -> do
+      | leftAsync == rightAsync && leftRequired == rightRequired
+      , length leftInputs == length rightInputs -> do
           inputs <- unifyAll spanValue leftInputs rightInputs
           result <- unify spanValue leftResult rightResult
           {-| The smaller count survives, because the value that ends up here

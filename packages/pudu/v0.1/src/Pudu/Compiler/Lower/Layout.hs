@@ -128,6 +128,7 @@ pattern shape = case shape of
 callbackTypes :: CoreCallbackOperation -> [CoreType]
 callbackTypes operation = case operation of
   CoreCallbackRegister signature -> callbackSignatureTypes signature
+  CoreCallbackRegisterGroup signature _ -> callbackSignatureTypes signature
   CoreCallbackUnregister -> []
 
 callbackSlotTypes :: CoreCallbackSlot -> [CoreType]

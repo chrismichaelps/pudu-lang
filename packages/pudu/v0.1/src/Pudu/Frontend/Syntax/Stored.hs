@@ -8,6 +8,7 @@
 module Pudu.Frontend.Syntax.Stored () where
 
 import Pudu.Cache.Persist (Persist (..), persistDeferred, restoreDeferred)
+import Pudu.Foreign.Extent (ExtentUnit)
 import Pudu.Frontend.Syntax.Tree
 import Pudu.IntegerLiteral (IntegerKind)
 
@@ -110,6 +111,13 @@ instance Persist Pattern
 instance Persist ArrayRest
 instance Persist FieldPattern
 instance Persist Foreign
+instance Persist ForeignClass
+instance Persist ForeignMethod
+instance Persist ForeignCallbackGroup
+instance Persist ForeignCallbackMember
+instance Persist ForeignCallbackPassing
+instance Persist ForeignLength
+instance Persist ExtentUnit
 instance Persist ForeignCallback
 instance Persist ForeignCallbackParameter
 instance Persist ForeignFunction

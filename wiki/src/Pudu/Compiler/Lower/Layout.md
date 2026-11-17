@@ -84,3 +84,7 @@ A store closes over its held type. Resolved Grill Log: the key is always Int and
 Resolved Grill Log: visit foreign call operands just as ordinary call
 operands. A folded record literal used only as a foreign argument still
 needs its nominal layout for frame lowering and C packing.
+
+## Resolved Grill Log for native callback groups
+
+Keep callback registration, handler record and trampoline types available for emission.

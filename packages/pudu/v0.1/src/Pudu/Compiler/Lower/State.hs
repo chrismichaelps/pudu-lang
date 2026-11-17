@@ -2,7 +2,7 @@
 module Pudu.Compiler.Lower.State
   ( CoreSignature (..), ForeignTarget (..), Head (..), Instance (..), LowerContext (..), LowerState (..), LoopFrame (..), ModuleScope (..)
   , emptyContext, startFunction, refuse, refused, halt, lookupLocal, bindLocal, intType
-  , resolveFunction, lookupConstant, lookupForeign, lookupQualifiedForeign, lookupCallback, lookupInitializer, inModule, withTypeBindings, isModuleQualifier
+  , resolveFunction, lookupConstant, lookupForeign, lookupQualifiedForeign, lookupCallback, lookupCallbackGroup, lookupInitializer, inModule, withTypeBindings, isModuleQualifier
   ) where
 
 import Data.Map.Strict (Map)
@@ -18,6 +18,8 @@ import Pudu.Frontend.Syntax (Expression, Function, Located)
 import Pudu.Type.Value (Scheme, Type)
 import Pudu.IntegerLiteral (IntegerKind (..))
 import Pudu.Eval.Frozen (Frozen)
+import Pudu.Foreign.Crossing (ObjectiveCMethod)
+import Pudu.Foreign.Extent (ForeignBound)
 import Pudu.Source (Span)
 
 {-| @Compiler.Lower.Context — program-global lowering state: the entry name,
@@ -98,6 +100,7 @@ data ModuleScope = ModuleScope
   {-| Each foreign function the module declares and what it calls. -}
   , scopeForeign :: !(Map Text ForeignTarget)
   , scopeCallbacks :: !(Map Text CoreCallbackSignature)
+  , scopeCallbackGroups :: !(Map Text (CoreCallbackSignature, [Text]))
   }
 
 {-| The library, version and symbol a foreign declaration calls. -}
@@ -105,11 +108,17 @@ data ForeignTarget = ForeignTarget
   { targetLibrary :: !Text
   , targetVersion :: !(Maybe Text)
   , targetSymbol :: !Text
+  , targetObjectiveC :: !(Maybe ObjectiveCMethod)
   , targetClaim :: !(Maybe CoreClaim)
   , targetReleases :: !Bool
   , targetSlotPositions :: ![Int]
   , targetSlotClaims :: ![Maybe CoreClaim]
   , targetCallbackSlots :: ![CoreCallbackSlot]
+  , targetCanReenter :: !Bool
+  , targetLoans :: ![(Int, Bool)]
+  , targetNullableLoans :: ![Int]
+  , targetBounds :: ![ForeignBound]
+  , targetReturnedRun :: !(Maybe (Int, CoreType))
   }
 
 {-| @Compiler.Lower.State — one function's lowering state on top of the
@@ -269,22 +278,28 @@ lookupQualifiedForeign state qualifier name = do
   Map.lookup owner (contextModules context) >>= Map.lookup name . scopeForeign
 
 lookupCallback :: LowerState -> [Text] -> Maybe CoreCallbackSignature
-lookupCallback state segments = do
+lookupCallback = lookupCallbackBinding scopeCallbacks
+
+lookupCallbackGroup :: LowerState -> [Text] -> Maybe (CoreCallbackSignature, [Text])
+lookupCallbackGroup = lookupCallbackBinding scopeCallbackGroups
+
+lookupCallbackBinding :: (ModuleScope -> Map Text a) -> LowerState -> [Text] -> Maybe a
+lookupCallbackBinding bindings state segments = do
   let context = lowerContext state
       modules = contextModules context
   scope <- Map.lookup (contextModule context) modules
   case segments of
     [name] -> case lookupLocal state name of
       Just _ -> Nothing
-      Nothing -> case Map.lookup name (scopeCallbacks scope) of
+      Nothing -> case Map.lookup name (bindings scope) of
         Just callback -> Just callback
         Nothing -> do
           owner <- Map.lookup name (scopeSelected scope)
-          Map.lookup owner modules >>= Map.lookup name . scopeCallbacks
+          Map.lookup owner modules >>= Map.lookup name . bindings
     [qualifier, name] -> do
       Nothing <- Just (lookupLocal state qualifier)
       owner <- Map.lookup qualifier (scopeQualifiers scope)
-      Map.lookup owner modules >>= Map.lookup name . scopeCallbacks
+      Map.lookup owner modules >>= Map.lookup name . bindings
     _ -> Nothing
 
 {-| The module a constant belongs to and what it was written as. -}

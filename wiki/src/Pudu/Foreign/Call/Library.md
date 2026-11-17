@@ -22,7 +22,7 @@ Load dynamic libraries, resolve native function symbols, manage global library h
 ## Interface
 
 ```haskell
-newtype ForeignHandle = ForeignHandle (Ptr ())
+data ForeignHandle
 
 openLibrary   :: Text -> Maybe Text -> IO (Either Text ForeignHandle)
 openProcess   :: IO (Either Text ForeignHandle)
@@ -30,6 +30,8 @@ candidates    :: Text -> Maybe Text -> [Text]
 tryCandidates :: [Text] -> IO (Either Text ForeignHandle)
 resolveSymbol :: Text -> Maybe Text -> Text -> IO (Either Text (Ptr ()))
 findSymbol    :: ForeignHandle -> Text -> IO (Either Text (Ptr ()))
+withSymbol    :: ForeignHandle -> Text -> (Ptr () -> IO a) -> IO (Either Text a)
+closeLibrary  :: ForeignHandle -> IO (Either Text ())
 ```
 
 ### Governance
@@ -47,13 +49,13 @@ findSymbol    :: ForeignHandle -> Text -> IO (Either Text (Ptr ()))
 
 ## Algorithm
 
-- `openLibrary` checks `openedLibraries`; if absent, tries `openProcess` for `"c"` or iterates candidates using `c_open` and `c_error`.
+- `openLibrary` returns one independently owned loader reference. `resolveSymbol` obtains a process-owned handle pinned in `openedLibraries`.
 - `resolveSymbol` checks `resolvedSymbols`; if absent, resolves library handle, looks up symbol via `c_symbol`, and commits address with `atomicModifyIORef'`.
 
 ## Negative Logic (Prohibited Paths)
 
 - No direct invocation or FFI marshalling; parameter preparation and execution belong to [[Foreign Call]].
-- No library unloading; handles persist for the life of the process.
+- Every address exposed through the process symbol cache stays pinned. Independently opened handles support explicit close.
 
 ## Grill Log
 
@@ -62,6 +64,17 @@ findSymbol    :: ForeignHandle -> Text -> IO (Either Text (Ptr ()))
 - **Q:** Why use `IORef` without locks for `resolvedSymbols`?
   **A:** Symbol addresses are immutable once loaded. Two threads racing to resolve the same symbol perform identical work and write the same pointer, avoiding hot-path lock contention.
 
+## Resolved Grill Log for library close
+
+An explicit close closes admission and waits for its outstanding scoped
+symbol uses. An interrupted wait reopens admission so a later close can
+finish. The cache uses a separate ownership path because a Pudu foreign
+declaration may hand callbacks and owned objects to native code.
+
 ## Referenced by
 
 [[Foreign Call]] · [[src/Pudu/_MOC]]
+
+## Resolved Grill Log for interpreted Objective-C dispatch
+
+Cache Objective-C method targets after pinning the framework. The selector and class stay opaque to Pudu.

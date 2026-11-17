@@ -79,6 +79,10 @@ DEPTH 0.4 (MEDIUM). It keeps one concern out of [[Type Check]], which the delive
 - **Q:** Should `Scheme` carry bounds? **A:** Yes, alongside its parameters. _Rationale:_ bounds are part of what a declaration promises, and instantiation must register them as obligations; storing them on the scheme is where the checker reads them. _Rejected:_ a separate bounds table keyed by name, which would drift from the scheme it describes.
 - **Q:** Should diagnostics always print the canonical module qualifier? **A:** No; store canonical identity but render the declaration name unless disambiguation requires qualification. _Rationale:_ equality and presentation have different jobs. _Rejected:_ basename equality; noisy qualification everywhere.
 
+## Resolved Grill Log for #877 — Direct nullable loans
+
+Retain nullable loan ordinals on the foreign callable signature as a separate case of Required. Ordinary function counts keep their existing equality contract.
+
 ## Referenced by
 
 [[src/Pudu/Type/_MOC]] · [[Type Check]]
@@ -141,3 +145,7 @@ arguments while following a rigid constructor's bounds. Assert actual checker
 products, canonical implementation trait projection, authored syntax and spans;
 retain full existing dispatch, diagnostic, derive and cache gates.
 See [[Bound Receiver Evidence Delivery]].
+
+## Resolved Grill Log for a group constructor
+
+A group constructor is a direct call whose argument must supply the named handler types. The checked handler type vector instantiates like ordinary function inputs.

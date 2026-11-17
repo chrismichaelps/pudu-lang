@@ -26,6 +26,14 @@ scope. Typed trampolines supply their own ABI conversion and fallback.
   timeout before tearing down handle claims. A late trampoline uses its
   typed fallback and acquires no interpreter state.
 
+## Resolved Grill Log for #877 — Post-call settlement
+
+Callback scope text survives entry retirement by retaining its own reference. Delivery frees that reference after formatting the related diagnostic.
+
 ## Referenced by
 
 [[Backend Toolchain App]] · [[Foreign Callback Delivery]] · [[Backend Frame Runtime]]
+
+## Resolved Grill Log for native callback groups
+
+Store the field index map with its registration. Resolve the member and pin the shared registration before invoking the selected handler.

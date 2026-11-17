@@ -230,7 +230,7 @@ dispatchCall needs spanValue lent target values =
     FunctionValue closure -> callClosureLending needs closure values lent (Just spanValue)
     TraitMethodValue provider member witness ->
       callTraitMethod needs spanValue lent provider member witness values
-    ForeignValue binding -> callForeign applyCallback spanValue binding values
+    ForeignValue binding -> callForeign applyCallback spanValue binding lent values
     ForeignCallbackValue callback -> callCallbackValue spanValue callback values
     SumValue owner name [] -> pure (SumValue owner name values)
     BuiltinValue PanicBuiltin -> callPanic spanValue values

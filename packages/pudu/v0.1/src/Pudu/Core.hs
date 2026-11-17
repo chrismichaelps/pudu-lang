@@ -40,6 +40,9 @@ import Data.Text (Text)
 import qualified Data.Text as Text
 import Data.Word (Word64)
 import Pudu.FloatLiteral (FloatWidth, floatWidthType)
+import Pudu.Foreign.Callback (CallbackPlacement)
+import Pudu.Foreign.Crossing (ObjectiveCMethod)
+import Pudu.Foreign.Extent (ForeignBound)
 import Pudu.IntegerLiteral (IntegerKind, integerKindName)
 import Pudu.Source (Span)
 import Pudu.Core.Bytes (CoreBytesMethodName (..))
@@ -240,6 +243,7 @@ data CoreExpressionShape
   | CoreKernel !CoreKernelName ![Int] ![CoreExpression]
   {-| A call to a foreign function, its arguments in order. -}
   | CoreForeignCall !CoreForeign ![CoreExpression]
+  | CoreForeignSettle
   | CoreCallback !CoreCallbackOperation !CoreExpression
   {-| `array[index]`: the array, then the index. The expression's span is the
       index's, where an index out of range reports. -}
@@ -322,6 +326,7 @@ data CoreForeign = CoreForeign
   { coreForeignLibrary :: !Text
   , coreForeignVersion :: !(Maybe Text)
   , coreForeignSymbol :: !Text
+  , coreForeignObjectiveC :: !(Maybe ObjectiveCMethod)
   , coreForeignParameters :: ![CoreType]
   , coreForeignResult :: !CoreType
     -- | What a handle result transfers, when the result is a handle.
@@ -331,11 +336,17 @@ data CoreForeign = CoreForeign
   , coreForeignSlotPositions :: ![Int]
   , coreForeignSlotClaims :: ![Maybe CoreClaim]
   , coreForeignCallbacks :: ![CoreCallbackSlot]
+  , coreForeignCanReenter :: !Bool
+  , coreForeignLoans :: ![(Int, Bool)]
+  , coreForeignAbsentLoans :: ![Int]
+  , coreForeignBounds :: ![ForeignBound]
+  , coreForeignReturnedRun :: !(Maybe (Int, CoreType))
   }
   deriving stock (Eq, Ord, Show)
 
 data CoreCallbackOperation
   = CoreCallbackRegister !CoreCallbackSignature
+  | CoreCallbackRegisterGroup !CoreCallbackSignature ![Int]
   | CoreCallbackUnregister
   deriving stock (Eq, Ord, Show)
 
@@ -346,6 +357,8 @@ data CoreCallbackSignature = CoreCallbackSignature
   , coreCallbackArguments :: ![Maybe CoreType]
   , coreCallbackResult :: !CoreType
   , coreCallbackFallback :: !CoreCallbackFallback
+  , coreCallbackByteLengths :: ![(Int, Int)]
+  , coreCallbackProjection :: !(Maybe (Int, Text))
   }
   deriving stock (Eq, Ord, Show)
 
@@ -358,8 +371,7 @@ data CoreCallbackFallback
 
 {-| Native argument indexes, including output slots and the callback context. -}
 data CoreCallbackSlot = CoreCallbackSlot
-  { coreCallbackFunctionIndex :: !Int
-  , coreCallbackContextIndex :: !Int
+  { coreCallbackPlacement :: !CallbackPlacement
   , coreCallbackSignature :: !CoreCallbackSignature
   }
   deriving stock (Eq, Ord, Show)

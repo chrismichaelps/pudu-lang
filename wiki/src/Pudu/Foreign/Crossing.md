@@ -28,6 +28,8 @@ data Crossing = SignedCrossing !Int | UnsignedCrossing !Int | FloatingCrossing !
               | RecordCrossing !Text ![(Text, Crossing)] | NothingCrossing
 
 crossingFor    :: Set Text -> RecordLayouts -> Located TypeSyntax -> Maybe Crossing
+loanFor        :: Set Text -> RecordLayouts -> Located TypeSyntax -> Maybe (Bool, Crossing)
+isLoanPointee  :: Crossing -> Bool
 crossingName   :: Crossing -> Text
 crossingType   :: Crossing -> Type
 fitsCrossing   :: Crossing -> Integer -> Bool
@@ -114,6 +116,46 @@ Resolved Grill Log: [[Nested Foreign Record Delivery]] preserves the tree
 for libffi layout and keeps value carriers in declaration-order leaves.
 The 32-member limit applies at each record node.
 
+## Foreign loan pointees (#877)
+
+`isLoanPointee` admits fixed-width scalar leaves and recurses through record
+members. It excludes text, bytes, handles and unit at every level.
+
+### Resolved Grill Log
+
+- **Q:** Treat every by-value record as a loan pointee? **A:** Require every
+  leaf to have a fixed-width scalar ABI carrier. Pointer-bearing fields
+  introduce additional lifetimes outside the scope of a copied loan.
+
+## Resolved Grill Log for #877 — Foreign extent relations
+
+Resolve length and run names within one foreign signature. A length is an input fixed-width integer and targets are readable buffers or array loans. Retain all native positions and report an invalid name or duplicate at its source span.
+
+## Resolved Grill Log for #877 — Interpreter array crossings
+
+Treat references to Array[T] as addressed runs of one ABI element type. Share the scalar and record element admission rules.
+
+## Resolved Grill Log for #877 — Optional handles
+
+Recognize Option of a declared opaque handle at top-level argument and result positions. The underlying ABI crossing is the same pointer carrier as a required handle.
+
+## Resolved Grill Log for #877 — Returned run declarations
+
+A returned run resolves its element layout, optionality, length position and destructor together. Keep the compact output position so decoding uses the declared length slot.
+
 ## Referenced by
 
 [[src/Pudu/_MOC]] · [[ADR-0018 Calling a Library Written Elsewhere]] · [[grammar/pudu]]
+
+## Resolved Grill Log for Objective-C dispatch
+
+Resolve the declaration-local Objective-C class alias before runtime. The resolved method carries the selector and optional class receiver.
+
+## Resolved Grill Log for Objective-C ownership
+
+Classify conventional Objective-C selector families using their first component and lowercase-boundary rule.
+
+## Resolved Grill Log for normalized nullable arguments
+
+Recognize the resolved nullary None constructor after frontend normalization
+so an absent foreign loan does not require an Option carrier in native lowering.

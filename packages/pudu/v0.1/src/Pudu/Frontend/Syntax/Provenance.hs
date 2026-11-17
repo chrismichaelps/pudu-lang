@@ -6,13 +6,15 @@ import Data.List.NonEmpty (NonEmpty)
 import Data.Text (Text)
 import GHC.Generics
   ( Generic, K1 (..), M1 (..), Rep, U1, (:+:) (..), (:*:) (..), from )
+import Pudu.Foreign.Extent (ExtentUnit)
 import Pudu.Frontend.Syntax.Located (Located (..))
 import Pudu.Frontend.Syntax.Name (ModuleName)
 import Pudu.Frontend.Syntax.Tree
   ( ArrayRest, Attribute, BindingKind, Block, Capability, ComptimeFor, Constraint
   , Declaration, Derive, DeriveRequest, DeriveShape, Expression, FieldDeclaration
   , FieldInit, FieldPattern, Foreign, ForeignCallback, ForeignCallbackParameter
-  , ForeignFunction, ForeignParameter, Function
+  , ForeignCallbackGroup, ForeignCallbackMember, ForeignCallbackPassing, ForeignClass
+  , ForeignFunction, ForeignLength, ForeignMethod, ForeignParameter, Function
   , FunctionBody, Impl, Import, Literal, Macro, MacroKind, MacroParam, MatchArm
   , Module, Parameter, Pattern, Statement, Trait, TypeDeclarationValue
   , TypeDefinition, TypeParam, TypeSyntax, Variant, VariantPayload, Visibility )
@@ -106,6 +108,13 @@ instance Owned Pattern
 instance Owned ArrayRest
 instance Owned FieldPattern
 instance Owned Foreign
+instance Owned ForeignClass
+instance Owned ForeignMethod
+instance Owned ForeignCallbackGroup
+instance Owned ForeignCallbackMember
+instance Owned ForeignCallbackPassing
+instance Owned ForeignLength
+instance Owned ExtentUnit
 instance Owned ForeignCallback
 instance Owned ForeignCallbackParameter
 instance Owned ForeignFunction

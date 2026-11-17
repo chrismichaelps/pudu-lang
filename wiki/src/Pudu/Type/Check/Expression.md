@@ -118,6 +118,10 @@ through the record.
   that can be checked via parameterised runners without cyclic dependencies.
 - **Q:** Require the defining module to import every target? **A:** No; generated constructions name owners canonically.
 
+## Resolved Grill Log for #877 — Direct nullable loans
+
+Permit a nullable foreign signature in direct callee position. Reuse the ordinary reference type for present arguments, and contextualize a bare None only at the declared positions.
+
 ## Referenced by
 
 [[src/Pudu/Type/_MOC]] · [[Type Check]]
@@ -191,3 +195,7 @@ selected. Lowering reads that fact so a callee can bind a parameter its own
 signature never mentions. Resolved Grill Log: the written list is a fact of
 the application, not of the selected scheme; an empty key keeps it out of
 source-position lookups and leaves every existing selection unchanged.
+
+## Resolved Grill Log for a group constructor
+
+Check a group argument as a nominal record and project the required handler types in declaration order. Retain the actual record type for lowering.

@@ -89,6 +89,22 @@ Resolved Grill Log: `lowerCurrentKey` names the body being lowered, and
 Callback registrations follow module and selective imports and respect local
 shadowing. Foreign targets keep their checked function/context pairs.
 
+## Resolved Grill Log for #877 — Native loan lowering
+
+A foreign target retains loan modes at native positions, before contexts and output slots are removed.
+
+## Resolved Grill Log for #877 — Checked foreign bounds
+
+Foreign target bounds refer to native positions, as do callback contexts and output slots.
+
+## Resolved Grill Log for #877 — Returned run ABI
+
+Foreign targets retain the checked length-slot index and opaque identity for a returned allocation.
+
+## Resolved Grill Log for #877 — Native nullable loans
+
+Retain nullable native positions so lowering can map direct call arguments after removing output and context slots.
+
 ## Referenced by
 
 [[src/Pudu/Compiler/_MOC]] · [[Compiler Lower]] · [[Compiler Lower Body]]
@@ -168,3 +184,18 @@ Resolved Grill Log: Retain each slot destructor beside its checked ABI position.
 reaches through the current module's qualifiers, unless a local shadows
 the qualifier. Resolved Grill Log: reuse `scopeQualifiers`, as
 `resolveFunction` does for qualified functions.
+
+## Resolved Grill Log for retained split callbacks
+
+Carry callback capability for every call declared in a block that splits
+registration from its trampoline. A later call without token parameters may
+invoke a retained callback, so it needs the same outbound failure scope and
+must allow the handler to acquire the gate.
+
+## Resolved Grill Log for native callback groups
+
+Resolve callback group constructors through ordinary native name visibility and shadowing.
+
+## Resolved Grill Log for Objective-C dispatch
+
+Preserve the resolved Objective-C method on a foreign target.

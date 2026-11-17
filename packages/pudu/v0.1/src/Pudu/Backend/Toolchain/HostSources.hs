@@ -2,7 +2,7 @@
 
 {-| @Backend.Toolchain.HostSources — packaged platform translation units
     selected by the generated program. -}
-module Pudu.Backend.Toolchain.HostSources (audioSourceMarker, desktopSourceMarker, iosHostSources, sqliteSourceMarker, withHostSourceArguments) where
+module Pudu.Backend.Toolchain.HostSources (audioSourceMarker, desktopSourceMarker, iosHostSources, loaderSourceLines, sqliteSourceMarker, withHostSourceArguments) where
 
 import qualified Data.ByteString.Char8 as ByteString
 import Data.Text (Text)
@@ -59,10 +59,18 @@ desktopSources = $(do
     whose foreign block names it. -}
 sqliteSources :: [(FilePath, String)]
 sqliteSources = $(do
-  path <- makeRelativeToProject ("cbits" </> "pudu_sqlite.c")
+  let files = ["pudu_sqlite.c", "pudu_loader.h"]
+  paths <- traverse (makeRelativeToProject . ("cbits" </>)) files
+  mapM_ addDependentFile paths
+  contents <- runIO (traverse ByteString.readFile paths)
+  lift (zip files (map ByteString.unpack contents)))
+
+loaderSourceLines :: [Text]
+loaderSourceLines = map Text.pack $(do
+  path <- makeRelativeToProject ("cbits" </> "pudu_loader.h")
   addDependentFile path
   contents <- runIO (ByteString.readFile path)
-  lift [("pudu_sqlite.c" :: FilePath, ByteString.unpack contents)])
+  lift (lines (ByteString.unpack contents)))
 
 {-| The iOS host and its private header, staged only for app builds. -}
 iosHostSources :: [(FilePath, String)]

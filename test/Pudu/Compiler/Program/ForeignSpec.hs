@@ -74,6 +74,7 @@ testForeignHandles = do
   afterBorrowed <- cppDeleteCount
   badRelease <- codes "test-fixtures/stdlib/RejectsForeignReleaseShape.pudu"
   bytesSlot <- codes "test-fixtures/stdlib/RejectsForeignBytesSlot.pudu"
+  blockContext <- codes "test-fixtures/stdlib/RejectsBlockContextPosition.pudu"
   wrongHandle <- codes "test-fixtures/stdlib/RejectsForeignWrongHandle.pudu"
   emptySymbol <- codes "test-fixtures/stdlib/RejectsEmptyForeignSymbol.pudu"
   qualifiedHandle <- codes "test-fixtures/foreignqualified/Root.pudu"
@@ -235,6 +236,8 @@ testForeignHandles = do
         which is what makes it worth a refusal rather than a caveat. -}
     , counterexample "a run of bytes cannot be a slot the library writes into"
         (bytesSlot === ["E3074"])
+    , counterexample "a block's callback takes its context first, where the block arrives"
+        (blockContext === ["E3063"])
     , counterexample "nominal handles cannot cross as another declared handle"
         (wrongHandle === ["E3001"])
     , counterexample "an empty native symbol is refused at its declaration"
