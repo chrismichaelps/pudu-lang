@@ -111,6 +111,12 @@ DEPTH 0.76 (DEEP). It hides export projection, body stripping, canonical identit
 - A serialized interface may later replace the in-memory projection without changing import semantics.
 - Runtime/link interfaces can carry executable bodies separately from this static interface.
 
+## Resolved Grill Log for #876
+
+Publish the callback token identity and registration value for exported
+foreign blocks. Retain private callback names in the private nominal shells
+so same-spelling imports do not replace the owner identity.
+
 ## Referenced by
 
 [[src/Pudu/Type/_MOC]] · [[Type Interface Graph]] · [[Compiler Program]] · [[Type Check]] · [[Type Formation]] · [[Type Check Method]]

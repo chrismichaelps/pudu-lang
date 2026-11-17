@@ -32,7 +32,9 @@ lambda.
 ## Calls through values
 
 A callee runs before supplied arguments. The frame retains each value in
-evaluation order, including a callable selected from a field.
+evaluation order, including a callable selected from a field. Supplied
+arguments use the checked closure input types for dynamic widening before
+the call is emitted, including calls with a hidden default argument count.
 
 ## Resolved Grill Log
 

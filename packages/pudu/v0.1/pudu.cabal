@@ -12,7 +12,8 @@ copyright:          (c) 2026 Chris M. Perez Santiago
 homepage:           https://github.com/chrismichaelps/pudu-lang
 bug-reports:        https://github.com/chrismichaelps/pudu-lang/issues
 build-type:         Simple
-extra-source-files: cbits/pudu_desktop.h
+extra-source-files: cbits/pudu_ffi_internal.h
+                    cbits/pudu_desktop.h
                     cbits/pudu_desktop_host.h
                     cbits/pudu_desktop.m
                     cbits/pudu_desktop_access.m
@@ -135,6 +136,7 @@ library
     Pudu.Backend.Emit.Range
     Pudu.Backend.Emit.Bytes
     Pudu.Backend.Emit.Foreign
+    Pudu.Backend.Emit.Foreign.Callback
     Pudu.Backend.Emit.ForeignAbi
     Pudu.Backend.Emit.Frame
     Pudu.Backend.Emit.Handle
@@ -149,6 +151,7 @@ library
     Pudu.Backend.Runtime.Kernel.Audio
     Pudu.Backend.Runtime.Kernel.Blake2
     Pudu.Backend.Runtime.Kernel.Buffer
+    Pudu.Backend.Runtime.Kernel.Binary
     Pudu.Backend.Runtime.Kernel.Bytes
     Pudu.Backend.Runtime.Kernel.Checksum
     Pudu.Backend.Runtime.Kernel.Column
@@ -165,6 +168,7 @@ library
     Pudu.Backend.Runtime.Kernel.Xml
     Pudu.Backend.Runtime.Host
     Pudu.Backend.Runtime.Host.Audio
+    Pudu.Backend.Runtime.Host.Callback
     Pudu.Backend.Runtime.Host.Child
     Pudu.Backend.Runtime.Host.Compress
     Pudu.Backend.Runtime.Host.Concurrent
@@ -184,6 +188,7 @@ library
     Pudu.Backend.Runtime.Host.Time
     Pudu.Backend.Runtime.Host.TimeParse
     Pudu.Backend.Runtime.Host.Tls
+    Pudu.Backend.Runtime.Host.TlsTrust
     Pudu.Backend.Runtime.Range
     Pudu.Backend.Runtime.Process
     Pudu.Backend.Runtime.Output
@@ -236,6 +241,9 @@ library
     Pudu.Backend.Emit.Frame.Value
     Pudu.Backend.Emit.Frame.Body
     Pudu.Backend.Emit.Frame.Direct
+    Pudu.Backend.Emit.Frame.Fast
+    Pudu.Backend.Emit.Frame.References
+    Pudu.Backend.Emit.Frame.Slots
     Pudu.Compiler.Lower.Body
     Pudu.Compiler.Lower.FunctionBody
     Pudu.Compiler.Lower.Constant
@@ -339,6 +347,7 @@ library
     Pudu.Eval.Foreign
     Pudu.Eval.Foreign.Argument
     Pudu.Eval.Foreign.Binding
+    Pudu.Eval.Foreign.Callback
     Pudu.Eval.Foreign.Resource
     Pudu.Eval.Foreign.Result
     Pudu.Eval.Method
@@ -390,6 +399,9 @@ library
     Pudu.Frontend.Parser.Declaration.Block
     Pudu.Frontend.Parser.Declaration.Derive
     Pudu.Foreign.Call
+    Pudu.Foreign.Callback
+    Pudu.Foreign.Callback.Native
+    Pudu.Foreign.CallbackStore
     Pudu.Foreign.Call.Library
     Pudu.Foreign.Crossing
     Pudu.Foreign.Ownership
@@ -569,6 +581,7 @@ library
     Pudu.Eval.Column
 
   c-sources:        cbits/pudu_ffi.c
+                   cbits/pudu_ffi_callback.c
                    cbits/pudu_sqlite.c
   extra-libraries:  ffi
   build-depends:

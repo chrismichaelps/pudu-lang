@@ -54,6 +54,7 @@ data ProviderSelection = ProviderSelection
 {-| Checked executable identity, distinct from trait-provider evidence. -}
 data OwnerSelection
   = ConcreteOwner !NominalId
+  | TraitMethodOwner !NominalId
   | VariantOwner !NominalId !Text ![Text]
   | ImplementationOwner !Type
   deriving stock (Eq, Show)

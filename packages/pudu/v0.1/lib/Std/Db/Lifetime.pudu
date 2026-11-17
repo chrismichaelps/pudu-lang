@@ -1,0 +1,31 @@
+module Std.Db.Lifetime
+
+import Std.Db.Session as Session
+
+/// How long a pool keeps a connection, in milliseconds; zero turns a limit
+/// off. A connection older than `maxLifetimeMillis` or idle longer than
+/// `maxIdleMillis` is replaced when it is next taken; one idle longer than
+/// `probeAfterMillis` is asked a trivial question first, so a connection the
+/// server or a network device dropped quietly is found before a caller is
+/// handed it.
+export type Policy = { maxLifetimeMillis: Int, maxIdleMillis: Int, probeAfterMillis: Int }
+
+/// What a pool does with a connection it is about to lend.
+export type Verdict = Keep | Probe | Replace
+
+/// Thirty minutes of life, ten minutes idle, and a probe after thirty
+/// seconds idle.
+export const DEFAULT_POLICY: Policy = Policy{maxLifetimeMillis: 1800000, maxIdleMillis: 600000, probeAfterMillis: 30000}
+
+/// Keep every connection for as long as it works, and never probe one.
+export fn never() -> Policy { Policy{maxLifetimeMillis: 0, maxIdleMillis: 0, probeAfterMillis: 0} }
+
+/// The verdict on a connection at `now`, on the clock its stamps were taken.
+export fn verdict(policy: &Policy, stream: &Session.Connection, now: Int) -> Verdict {
+  let age = now - stream.opened
+  let idle = now - stream.returned
+  if policy.maxLifetimeMillis > 0 && age >= policy.maxLifetimeMillis { return Replace }
+  if policy.maxIdleMillis > 0 && idle >= policy.maxIdleMillis { return Replace }
+  if policy.probeAfterMillis > 0 && idle >= policy.probeAfterMillis { return Probe }
+  Keep
+}

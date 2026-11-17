@@ -1,0 +1,88 @@
+module Std.Net
+
+import Std.Bytes as ByteSeq
+import Std.Db.Protocol as Wire
+import Std.Result as Result
+import Std.Sync as Sync
+
+export type NetError = Other(Str) | Closed | NetOperationTimedOut
+export type Connection = { token: Int }
+/// What a fake server saw: each batch's message kinds in order, and the
+/// statement name each Parse carried.
+export type State = { pending: Bytes, batches: Array[Str], parsed: Array[Str], closed: Bool }
+
+/// A server that speaks the extended protocol and refuses to plan `bad`.
+export fn fake() -> Connection {
+  let cell = Sync.cell(State{pending: bytesOf([]), batches: [], parsed: [], closed: false})
+  Connection{token: cell.token}
+}
+
+export fn state(connection: &Connection) -> Result[State, NetError] {
+  let cell: Sync.Cell[State] = Sync.Cell{token: connection.token}
+  Result.mapErr(Sync.get(&cell), failed)
+}
+
+fn store(connection: &Connection, held: State) -> Result[(), NetError] {
+  let cell: Sync.Cell[State] = Sync.Cell{token: connection.token}
+  Result.mapErr(Sync.set(&cell, held), failed)
+}
+
+export fn receiveWithin(connection: &Connection, count: Int, _wait: Int) -> Result[Option[Bytes], NetError] {
+  let held = state(connection) ?
+  if held.closed { return Err(Closed) }
+  let bytes = held.pending.take(count)
+  store(connection, State{..held, pending: held.pending.drop(bytes.length())}) ?
+  if bytes.isEmpty() { Ok(None) } else { Ok(Some(bytes)) }
+}
+
+/// Answers one batch. After a refused Parse the server skips everything up
+/// to Sync, as PostgreSQL does.
+export fn send(connection: &Connection, bytes: &Bytes) -> Result[(), NetError] {
+  let held = state(connection) ?
+  if held.closed { return Err(Closed) }
+  if !held.pending.isEmpty() { return Err(Other("unread response")) }
+  var rest = *bytes
+  var kinds = ""
+  var parsed = held.parsed
+  var answer = bytesOf([])
+  var refused = false
+  while !rest.isEmpty() {
+    let read = Result.mapErr(Wire.readMessage(&rest), protocol) ?
+    let message = read[0]
+    rest = read[1]
+    kinds = kinds + message.kind
+    if message.kind == "S" {
+      answer = answer.concat(Wire.frame("Z", &bytesOf([73u8])))
+    } else if !refused {
+      if message.kind == "P" {
+        let name = Result.mapErr(Wire.readCString(&message.payload), protocol) ?
+        let sql = Result.mapErr(Wire.readCString(&name[1]), protocol) ?
+        parsed = parsed.push(name[0])
+        if sql[0] == "bad" {
+          refused = true
+          answer = answer.concat(Wire.frame("E", &ByteSeq.join(&[Wire.cString("SERROR"), Wire.cString("C42601"),
+                  Wire.cString("Msyntax error"), bytesOf([0u8])])))
+        } else { answer = answer.concat(Wire.frame("1", &bytesOf([]))) }
+      } else if message.kind == "B" {
+        answer = answer.concat(Wire.frame("2", &bytesOf([])))
+      } else if message.kind == "D" {
+        answer = answer.concat(Wire.frame("n", &bytesOf([])))
+      } else if message.kind == "E" {
+        answer = answer.concat(Wire.frame("C", &Wire.cString("SELECT 0")))
+      }
+    }
+  }
+  store(connection, State{..held, pending: answer, batches: held.batches.push(kinds), parsed: parsed})
+}
+
+export fn close(connection: &Connection) -> Result[(), NetError] {
+  let held = state(connection) ?
+  store(connection, State{..held, closed: true})
+}
+
+export fn connectWithin(_host: Str, _port: Int, _wait: Int) -> Result[Connection, NetError] {
+  Err(Other("opening is outside this fixture"))
+}
+
+fn protocol(problem: Wire.ProtocolError) -> NetError { Other(show(problem)) }
+fn failed(problem: Sync.SyncError) -> NetError { Other(show(problem)) }

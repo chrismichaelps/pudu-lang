@@ -1,0 +1,92 @@
+module Std.Db.Stream
+
+import Std.Bytes as ByteSeq
+import Std.Db as Db
+import Std.Db.Protocol as Wire
+import Std.Db.Session {Malformed, Other}
+import Std.Db.Session as Session
+
+/// Run a statement and hand its rows to `each` a batch at a time, never
+/// holding more than `batch` rows: the server sends that many, waits on the
+/// open portal, and sends the next batch only when asked.
+///
+/// A batch handler that fails stops the stream; the portal is closed and the
+/// connection stays usable. The answer is the statement's command tag.
+export fn stream(
+  start: Session.Connection,
+  sql: Str,
+  values: &Array[Option[Str]],
+  batch: Int,
+  each: fn(&Array[Db.Column], &Array[Array[Option[Str]]]) -> Result[(), Session.DbError]
+) -> Result[(Str, Session.Connection), Session.DbError] {
+  if batch < 1 { return Err(Other("a stream's batch must hold at least one row")) }
+  let request = ByteSeq.join(&[
+      Wire.parse("", sql),
+      Wire.bind("", "", values),
+      Wire.describePortal(""),
+      Wire.execute("", batch),
+      Wire.flush()
+    ])
+  Session.write(&start, &request) ?
+  var connection = start
+  var columns: Array[Db.Column] = []
+  var rows: Array[Array[Option[Str]]] = []
+  loop {
+    let read = Session.nextMessage(connection) ?
+    let message = read[0]
+    connection = read[1]
+    if message.kind == "T" {
+      match Wire.readRowDescription(&message.payload) {
+        case Ok(found) => { columns = described(&found) }
+        case Err(_) => { return settled(connection, Malformed("a row description that did not read")) }
+      }
+    } else if message.kind == "D" {
+      match Wire.readDataRow(&message.payload) {
+        case Ok(found) => { rows = rows.push(found) }
+        case Err(_) => { return settled(connection, Malformed("a data row that did not read")) }
+      }
+    } else if message.kind == "s" {
+      // The portal is suspended with more rows behind it.
+      if let Err(reason) = each(&columns, &rows) { return settled(connection, reason) }
+      rows = []
+      Session.write(&connection, &ByteSeq.join(&[Wire.execute("", batch), Wire.flush()])) ?
+    } else if message.kind == "C" {
+      if !rows.isEmpty() {
+        if let Err(reason) = each(&columns, &rows) { return settled(connection, reason) }
+      }
+      let tag = match Wire.readCString(&message.payload) {
+        case Ok(found) => found[0]
+        case Err(_) => ""
+      }
+      Session.write(&connection, &Wire.sync()) ?
+      let ready = untilReady(connection) ?
+      return Ok((tag, ready))
+    } else if message.kind == "E" {
+      return settled(connection, Session.serverFailure(&message.payload))
+    }
+  }
+}
+
+/// End the extended query after a failure: a Sync closes the portal and the
+/// server answers it ready, so the next statement on this connection reads
+/// its own answer rather than this one's ending.
+fn settled(connection: Session.Connection, reason: Session.DbError) -> Result[(Str, Session.Connection), Session.DbError] {
+  Session.write(&connection, &Wire.sync()) ?
+  let _ready = untilReady(connection) ?
+  Err(reason)
+}
+
+fn untilReady(start: Session.Connection) -> Result[Session.Connection, Session.DbError] {
+  var connection = start
+  loop {
+    let read = Session.nextMessage(connection) ?
+    connection = read[1]
+    if read[0].kind == "Z" { return Ok(Session.withStatus(connection, &read[0].payload)) }
+  }
+}
+
+fn described(found: &Array[Wire.Column]) -> Array[Db.Column] {
+  var columns: Array[Db.Column] = []
+  for entry in found { columns = columns.push(Db.Column{name: entry.name, oid: entry.oid}) }
+  columns
+}

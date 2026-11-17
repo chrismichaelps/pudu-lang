@@ -28,6 +28,10 @@ whether a transaction is open.
   ready message, and a local copy can disagree. _Rejected:_ counting begins and commits.
 - **Q:** Take a nonce from the deterministic generator? **A:** No. _Rationale:_ a repeatable nonce
   is not a nonce. _Rejected:_ sharing [[Std Random]] with authentication.
+- **Q:** Record a statement name before the server plans it? **A:** No. A statement is named only
+  after the server planned it, so a failed parse is never bound by name.
+- **Q:** Share one prepared-statement map across connections? **A:** No. Names are scoped to the
+  connection that planned them, so the `prepared` map is per connection and empty for a new one.
 ## Bounded message admission
 
 `nextMessage` uses a 16 MiB complete-message cap. `nextMessageLimited(stream, maxBytes)` accepts a
@@ -85,3 +89,11 @@ Resolved Grill Log: malformed rounds never default or reach a runtime arithmetic
 `DbError` adds `AdmissionTimedOut` for pool capacity expiry. It is distinct from a closed pool, expired lending, opening failure and command failure. Connection opening and message reading do not manufacture this cause. Existing exhaustive matches over this public sum must add the new case.
 
 Resolved Grill Log: a pool wait is a typed cause rather than a message-text convention. This additive public variant requires independent contract review.
+
+## Connection stamps
+
+`Connection` carries `opened` and `returned`, both on the monotonic elapsed-time clock. `opened` is
+set when the connection is established. `returned` is set when a pool takes the connection back, and
+again each time it is lent. [[Std Db Lifetime]] reads both to decide whether a pooled connection is
+kept, probed, or replaced. The stamps are plain values and do not affect how messages are read or
+written.

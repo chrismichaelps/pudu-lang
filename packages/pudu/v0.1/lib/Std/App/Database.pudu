@@ -9,6 +9,7 @@ import Std.Db.Postgres as Postgres
 import Std.Db.Row as Row
 import Std.Db.Sqlite as Sqlite
 import Std.Db.Store as Store
+import Std.Option as Option
 import Std.Result as Result
 import Std.Sync as Sync
 
@@ -21,8 +22,22 @@ export type Database = {
   current: Sync.Cell[Option[Driver.Client]]
 }
 
+/// Each bundled engine's driver, by its kind. A new engine is one entry
+/// here and its driver module; nothing above the driver names an engine.
+const FACTORIES: Map[Driver.Engine, fn() -> Driver.Driver] = mapOf([
+    (Driver.Postgresql, Postgres.driver),
+    (Driver.Sqlite, Sqlite.driver)
+  ])
+
 /// Built-in connectors remain ordinary values that applications can extend.
-export fn bundledDrivers() -> Array[Driver.Driver] { [Postgres.driver(), Sqlite.driver()] }
+export fn bundledDrivers() -> Array[Driver.Driver] {
+  FACTORIES.values().map(fn(make: fn() -> Driver.Driver) -> Driver.Driver { make() })
+}
+
+/// The bundled driver for an engine, when this library carries one.
+export fn driverFor(engine: Driver.Engine) -> Option[Driver.Driver] {
+  Option.map(FACTORIES.get(engine), fn(make: fn() -> Driver.Driver) -> Driver.Driver { make() })
+}
 
 /// Select a bundled connector from the connection-string scheme.
 export fn create(uri: Str, size: Int) -> Result[Database, Driver.Error] {

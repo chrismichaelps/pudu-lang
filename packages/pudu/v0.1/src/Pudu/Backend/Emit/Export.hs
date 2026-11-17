@@ -15,7 +15,7 @@ import Pudu.Backend.Emit.Export.Crossing (crossingDeclarations, crossingHelpers,
 import Pudu.Backend.Emit.Foreign (parameterNeeds, resultNeeds)
 import Pudu.Backend.Emit.ForeignAbi (Layouts, mangle)
 import Pudu.Backend.Emit.State (textOfInt)
-import Pudu.Core (CoreLayout (..), CoreType (..), CoreVariant (..))
+import Pudu.Core (CoreLayout (..), CoreType (..), CoreVariant (..), suppliedCountName)
 import Pudu.Core.Frame (FrameFault (..), FrameFunction (..), FrameSlot (..))
 
 {-| @Backend.Emit.Export.Section — the wrappers, the declarations a header
@@ -64,7 +64,7 @@ exportSection layouts direct indexed keys = do
   releases (Outcome sum' _ _ _) = [aggregateNeed "drop" sum']
 
 parameterTypes :: FrameFunction -> [CoreType]
-parameterTypes = map frameSlotType . frameFunctionParameters
+parameterTypes = map frameSlotType . filter ((/= suppliedCountName) . frameSlotName) . frameFunctionParameters
 
 owned :: CoreType -> Bool
 owned kind = kind == CoreTextType || isAggregate kind
@@ -127,11 +127,14 @@ admission =
 
 wrapper :: Layouts -> Set Text -> ((Int, FrameFunction), Returned) -> Either FrameFault ([Text], Text)
 wrapper layouts direct ((identity, function), returned) = do
-  parameterTypes' <- traverse crossing (frameFunctionParameters function)
+  parameterTypes' <- traverse crossing written
   let name = mangle (Text.takeWhileEnd (/= '.') (frameFunctionName function))
       quoted = "\"" <> name <> "\""
-      parameters = zip [0 :: Int ..] (parameterTypes function)
-      count = length parameters
+      parameters = zip [0 :: Int ..] (map frameSlotType written)
+      -- A C caller writes every argument, so a function with defaults is
+      -- told that all of them were supplied.
+      supplied = [ "  pudu_arguments[" <> textOfInt (length written) <> "].integer = (pudu_int){" <> textOfInt (length written) <> "u, 0};" | counted ]
+      count = length written + (if counted then 1 else 0)
       argument index = "p" <> textOfInt index
       cell kind index = "pudu_arguments[" <> textOfInt index <> "]." <> cellName kind
       outcomePointers = case returned of
@@ -183,6 +186,7 @@ wrapper layouts direct ((identity, function), returned) = do
         <> [ "  pudu_cell pudu_result;"
            , "  pudu_export_enter(" <> quoted <> ");" ]
         <> [ "  " <> cell kind index <> " = " <> takeCell kind quoted (argument index) <> ";" | (index, kind) <- parameters ]
+        <> supplied
         <> called
         <> [ "  pudu_export_leave();" ]
         <> releasedArguments
@@ -190,6 +194,9 @@ wrapper layouts direct ((identity, function), returned) = do
         <> ["}"]
   pure (body, signature <> ";")
  where
+  (written, counted) = case reverse (frameFunctionParameters function) of
+    slot : rest | frameSlotName slot == suppliedCountName -> (reverse rest, True)
+    _ -> (frameFunctionParameters function, False)
   typed kind = maybe "void" id (crossingName layouts kind)
   crossing slot = case crossingName layouts (frameSlotType slot) of
     Just ctype -> Right ctype

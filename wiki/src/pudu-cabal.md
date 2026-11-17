@@ -8,6 +8,13 @@ aliases: [Pudu Cabal Manifest]
 
 # Pudu Cabal Manifest
 
+Register [[Backend Frame Slots]] and [[Backend Frame Slot References]].
+Resolved Grill Log: allocation and rewriting use the same exhaustive traversal.
+
+Register [[Native Binary Kernels]] with the existing runtime families.
+Resolved Grill Log: the generated codec uses the existing C11 runtime and
+requires no additional package or link dependency.
+
 Register Pudu.Core.Keyed and Pudu.Compiler.Lower.WordMap (#810), with existing
 dependencies. Resolved Grill Log: domain tags remain backend-independent and
 lowering stays compiler-owned; no new runtime linkage or package dependency.
@@ -734,3 +741,34 @@ Resolved Grill Log: include `cbits/pudu_ios_layout.h` in the source distribution
 The six capability headers `cbits/pudu_ios_gesture.h`, `cbits/pudu_ios_feedback.h`, `cbits/pudu_ios_access.h`, `cbits/pudu_ios_scene.h`, `cbits/pudu_ios_motion.h` and `cbits/pudu_ios_capability_test.h` join the iOS host sources. They are data inputs embedded by [[Native Toolchain Host Sources]] and staged beside the host translation unit, so they need no Cabal component of their own. The four `lib/Std/Mobile/*.pudu` modules [[Std Mobile Gesture]], [[Std Mobile Scene]], [[Std Mobile Access]] and [[Std Mobile Feedback]] ship with the other mobile modules.
 
 The reader header cbits/pudu_ios_stream.h ([[iOS Host Stream]]) joins the staged iOS host headers with the six capability headers.
+
+## Mobile TLS verification (#935)
+
+Register [[Native Mobile TLS Trust]] with existing dependencies.
+
+## Checked foreign callbacks (#876)
+
+Register [[Foreign Callback Signature]] alongside [[Foreign Crossing]].
+Resolved Grill Log: declaration validation uses the existing source, text,
+containers, and literal decoders.
+
+## Foreign callback store (#876)
+
+Register [[Foreign Callback Store]]. Resolved Grill Log: reuse the existing
+STM and containers packages for per-run ownership.
+
+## Interpreter callback values (#876)
+
+Register [[Eval Foreign Callback]] against the existing evaluator and callback
+store. Resolved Grill Log: no added package dependency.
+
+## libffi callback adapter (#876)
+
+Compile [[Pudu FFI Callback Bridge]], ship [[Pudu Private FFI ABI]], and
+register [[Foreign Callback Native Adapter]].
+Resolved Grill Log: use the same installed libffi library as outbound calls.
+
+## C11 callbacks (#876)
+
+Register [[Native Host Callbacks]]. Resolved Grill Log: reuse the native
+runtime's pthread gate, frame ABI and diagnostic boundary.

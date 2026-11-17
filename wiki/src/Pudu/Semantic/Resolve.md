@@ -130,6 +130,12 @@ DEPTH 0.84 (DEEP). One entry point hides collection order, namespace policy, sco
 
 - Cross-module resolution replaces the opaque import symbol with a real one once a module graph exists; the reference map's shape does not change.
 
+## Resolved Grill Log for #876
+
+A foreign callback name introduces a type binding and a registration value in
+the block's namespace and visibility. Resolve callback parameter and result
+types with the same type walk used for foreign function signatures.
+
 ## Referenced by
 
 [[src/Pudu/Semantic/_MOC]] · [[Semantic]] · [[Resolve Context]] · [[Symbol Model]] · [[Scope Model]] · [[Semantic Prelude]] · [[Syntax Tree]] · [[Semantics]]

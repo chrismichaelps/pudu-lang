@@ -32,6 +32,9 @@ import Pudu.Eval.Frozen (Frozen)
 import Pudu.Compiler.Lower.Layout (moduleLayouts)
 import Pudu.Compiler.Lower.Dynamic (dynamicSums)
 import Pudu.Compiler (CompileResult (..))
+import Pudu.Compiler.Lower.Foreign (callbackSignatureOf)
+import qualified Pudu.Foreign.Callback as Callback
+import Pudu.Foreign.Crossing (recordLayouts)
 import Pudu.Compiler.Lower.Types (LowerTypes, emptyTypes, formedCoreTypeIn, lookupScheme, nativeTypes, withShapes)
 import Pudu.Compiler.Lower.Method (methodTables)
 import Pudu.Compiler.Program (ProgramResult (..), rootCompileResult)
@@ -39,7 +42,7 @@ import Pudu.Type (DeclaredShapes, declaredRecords, declaredSums)
 import Pudu.Type.Value (NominalId (..), Scheme (..), Type (FunctionTypeRequiring))
 import Pudu.Source (Span)
 import Pudu.Compiler.Lower.Body (lowerEntryBody, lowerExpression, lowerFunctionBody)
-import Pudu.Compiler.Lower.Default (hasDefaults, lowerDefaultedBody)
+import Pudu.Compiler.Lower.Default (takesSuppliedCount, lowerDefaultedBody)
 import Pudu.Compiler.Lower.Loan (lowerLoanedBody)
 import Pudu.Compiler.Lower.State
   ( CoreSignature (..), ForeignTarget (..), Instance (..), LowerContext (..), LowerState (..), ModuleScope (..)
@@ -53,6 +56,7 @@ import Pudu.Diagnostic.Native (nativeRefusal)
 import Pudu.Frontend.Syntax
   ( Declaration (..)
   , Foreign (..)
+  , foreignCallbackNames
   , ForeignFunction (..)
   , ForeignParameter (..)
   , Function (..)
@@ -152,19 +156,19 @@ lowerRooted library entryName programModules@(rootModule : _)
       , locatedValue (functionName function) /= entryName
       ]
     exportKeys = [rootName <> "." <> locatedValue (functionName function) | function <- exported]
-    -- A C caller passes every argument at a fixed type and cannot await.
+    -- A C caller passes every argument at a fixed type.
     exportRefusals =
       [ nativeRefusal (locatedSpan (functionName function)) ("an exported function " <> reason)
       | function <- exported
       , reason <-
           [ "with type parameters" | not (null (functionTypeParams function)) ]
-          <> [ "with default parameter values" | hasDefaults function ]
-          <> [ "declared async" | functionAsync function ]
       ]
 
     findEntry = case entryFunctions of
-      function : _ -> Right function
+      [function] -> Right function
       [] -> Left firstDeclarationRefusal
+      _ : duplicate : _ ->
+        Left (nativeRefusal (locatedSpan (functionName (locatedValue duplicate))) "an ambiguous entry function")
       where
         entryFunctions =
           [ Located (locatedSpan declaration) function
@@ -213,10 +217,30 @@ lowerRooted library entryName programModules@(rootModule : _)
       | native <- programModules
       , Located _ (ForeignDeclaration declared) <- moduleDeclarations (nativeModuleSyntax native)
       , named <- foreignTypes declared ]
+    callbackTypes = Set.fromList
+      [ NominalId (Just (locatedValue (moduleName (nativeModuleSyntax native)))) (locatedValue named)
+      | native <- programModules
+      , Located _ (ForeignDeclaration declared) <- moduleDeclarations (nativeModuleSyntax native)
+      , named <- foreignCallbackNames declared ]
+    callbackDeclarations native =
+      [ (declared, either (const Map.empty) id
+          (Callback.checkCallbackDeclarations (Set.fromList (map locatedValue (foreignTypes declared)))
+            (recordLayouts declarations) (foreignCallbacks declared)))
+      | Located _ (ForeignDeclaration declared) <- declarations ]
+      where declarations = moduleDeclarations (nativeModuleSyntax native)
+
+    coreSignature native name = callbackSignatureOf (nativeModuleName native) name . locatedValue
+    callbackSlots native signatures function =
+      [ CoreCallbackSlot (Callback.callbackArgumentIndex pair) (Callback.callbackContextIndex pair)
+          (coreSignature native name written)
+      | pair <- either (const []) id (Callback.callbackPairs signatures function)
+      , let name = Callback.callbackTypeName pair
+      , Just written <- [Map.lookup name signatures] ]
+
     scopes = Map.fromList
       [ ( nativeModuleName native
         , ModuleScope
-            { scopeTypes = maybe emptyTypes (withShapes records sums handles) (nativeModuleTypes native)
+            { scopeTypes = maybe emptyTypes (withShapes records sums handles callbackTypes) (nativeModuleTypes native)
             , scopeFunctions = Set.fromList (map fst (functionsOf native))
             , scopeConstants = Map.fromList
                 [ (locatedValue name, Map.lookup (locatedValue name) (nativeModuleConstants native))
@@ -241,10 +265,14 @@ lowerRooted library entryName programModules@(rootModule : _)
                       [index | (index, Located _ parameter) <- zip [0 ..] (foreignParameters function)
                              , foreignParameterOut parameter]
                       [claimFor functions False (foreignParameterReleasedBy parameter)
-                      | Located _ parameter <- foreignParameters function, foreignParameterOut parameter] )
-                | Located _ (ForeignDeclaration declared) <- moduleDeclarations (nativeModuleSyntax native)
+                      | Located _ parameter <- foreignParameters function, foreignParameterOut parameter]
+                      (callbackSlots native callbacks written) )
+                | (declared, callbacks) <- callbackDeclarations native
                 , let functions = map locatedValue (foreignFunctions declared)
-                , function <- functions ]
+                , written@(Located _ function) <- foreignFunctions declared ]
+            , scopeCallbacks = Map.unions
+                [ Map.mapWithKey (coreSignature native) callbacks
+                | (_, callbacks) <- callbackDeclarations native ]
             }
         )
       | native <- programModules ]
@@ -310,7 +338,7 @@ lowerRooted library entryName programModules@(rootModule : _)
             case ensureSignature name function ((startFunction (withTypeBindings bindings (inModule owner state)) [] Nothing){lowerCurrentKey = name}) of
               (afterSignature, Nothing) -> markVisited afterSignature name
               (afterSignature, Just signature) ->
-                case loaned signature (if hasDefaults (locatedValue function) then lowerDefaultedBody lowerExpression lowerFunctionBody else lowerFunctionBody)
+                case loaned signature (if takesSuppliedCount signature then lowerDefaultedBody lowerExpression lowerFunctionBody else lowerFunctionBody)
                   function
                   signature
                   (startFunction afterSignature (signatureParameters signature) (Just (signatureResult signature))) of
@@ -337,7 +365,7 @@ lowerRooted library entryName programModules@(rootModule : _)
 
     -- `?` in the entry returns at its declared type, before any `return` says so.
     declaredEntryResult entry = case lookupScheme (maybe emptyTypes scopeTypes (Map.lookup rootName scopes)) (locatedValue (functionName (locatedValue entry))) of
-      Just Scheme{schemeParams = [], schemeType = FunctionTypeRequiring _ [] _ result} ->
+      Just Scheme{schemeParams = [], schemeType = FunctionTypeRequiring _ _ _ result} ->
         formedCoreTypeIn (maybe emptyTypes scopeTypes (Map.lookup rootName scopes)) result
       _ -> Nothing
 
@@ -355,7 +383,15 @@ lowerRooted library entryName programModules@(rootModule : _)
     settle (state, entryFunction) = case sortDiagnostics (contextRefusals (lowerContext state)) of
       [] -> case entryFunction of
         Just function ->
-          let functions = sortOn tableIndex (function : contextFunctions (lowerContext state))
+          let lowered = contextFunctions (lowerContext state)
+              wrappers = Map.fromList
+                [ (key, awaitExport declaration functionBody answer)
+                | (key, declaration) <- zip exportKeys exported
+                , functionAsync declaration
+                , functionBody <- lowered
+                , coreFunctionName functionBody == key
+                , CoreFunctionType [] answer <- [coreFunctionResult functionBody] ]
+              functions = sortOn tableIndex (function : lowered <> Map.elems wrappers)
            in Lowered
             CoreModule
               { coreModuleName = moduleNameText (locatedValue (moduleName parsed))
@@ -363,7 +399,9 @@ lowerRooted library entryName programModules@(rootModule : _)
               , coreModuleFunctions = functions
               , coreModuleLayouts = moduleLayouts (maybe emptyTypes scopeTypes (Map.lookup rootName scopes)) (contextClosures (lowerContext state)) functions
               , coreModuleClosures = contextClosures (lowerContext state)
-              , coreModuleExports = [key | key <- exportKeys, any ((== key) . coreFunctionName) functions]
+              , coreModuleExports =
+                  [ maybe key coreFunctionName (Map.lookup key wrappers)
+                  | key <- exportKeys, any ((== key) . coreFunctionName) lowered ]
               }
         Nothing -> LowerRefused [nativeRefusal (moduleSpan parsed) "this program"]
       refusals -> LowerRefused refusals
@@ -372,3 +410,18 @@ lowerRooted library entryName programModules@(rootModule : _)
     tableIndex function = case [index | (index, (name, _)) <- zip [0 ..] table, name == coreFunctionName function] of
       index : _ -> index
       [] -> 0
+
+{-| At a C boundary the owning thread runs the cold task to completion. Await
+    through ordinary Core so result crossing and task cleanup use the same
+    paths as a synchronous export and Pudu's own await. -}
+awaitExport :: Function -> CoreFunction -> CoreType -> CoreFunction
+awaitExport declaration target answer =
+  CoreFunction ("::export::" <> coreFunctionName target) parameters answer
+    (CoreBlock [] (Just (CoreExpression at answer (CoreCallValue task []))))
+  where
+    parameters = coreFunctionParameters target
+    at = locatedSpan (functionName declaration)
+    arguments =
+      [ CoreExpression at (coreLocalType local) (CoreReadLocal local)
+      | CoreParameter local _ <- parameters ]
+    task = CoreExpression at (coreFunctionResult target) (CoreCall (coreFunctionName target) arguments)

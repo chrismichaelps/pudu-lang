@@ -47,6 +47,10 @@ raw result text before allocating copies, and free argument scratch before
 reporting missing or invalid returned text. Select text helper dependencies by
 crossing direction. Record codecs still emit both directions.
 
+An optional handle parameter (#935) is passed through `pudu_foreign_optional_handle`, which the
+wrapper calls before dispatch so that `None` crosses as a null pointer and `Some` as the checked live
+address.
+
 ## Referenced by
 
 [[Backend Frame Program]] · [[Native Foreign Call Sites]]

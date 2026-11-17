@@ -87,7 +87,8 @@ expression (CoreExpression _ kind shape) = kind : case shape of
   CorePrint operand -> expression operand
   CoreOutputError _ _ operand -> expression operand
   CoreCall _ arguments -> concatMap expression arguments
-  CoreForeignCall _ arguments -> concatMap expression arguments
+  CoreCallback operation operand -> callbackTypes operation <> expression operand
+  CoreForeignCall declared arguments -> concatMap callbackSlotTypes (coreForeignCallbacks declared) <> concatMap expression arguments
   CoreClosure _ captures -> concatMap expression captures
   CoreCapture _ operand -> expression operand
   CoreCallValue callee arguments -> concatMap expression (callee : arguments)
@@ -122,3 +123,16 @@ pattern shape = case shape of
   CoreAlternativePattern members -> concatMap pattern members
   CoreArrayPattern front rest back -> concatMap pattern (front <> back) <> foldMap (foldMap (pure . coreLocalType)) rest
   CoreWildcardPattern -> []
+
+
+callbackTypes :: CoreCallbackOperation -> [CoreType]
+callbackTypes operation = case operation of
+  CoreCallbackRegister signature -> callbackSignatureTypes signature
+  CoreCallbackUnregister -> []
+
+callbackSlotTypes :: CoreCallbackSlot -> [CoreType]
+callbackSlotTypes = callbackSignatureTypes . coreCallbackSignature
+
+callbackSignatureTypes :: CoreCallbackSignature -> [CoreType]
+callbackSignatureTypes signature =
+  coreCallbackResult signature : [kind | Just kind <- coreCallbackArguments signature]

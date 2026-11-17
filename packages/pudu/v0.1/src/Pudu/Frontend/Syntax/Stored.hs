@@ -110,6 +110,8 @@ instance Persist Pattern
 instance Persist ArrayRest
 instance Persist FieldPattern
 instance Persist Foreign
+instance Persist ForeignCallback
+instance Persist ForeignCallbackParameter
 instance Persist ForeignFunction
 instance Persist ForeignParameter
 instance Persist FieldInit

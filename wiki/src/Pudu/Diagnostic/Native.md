@@ -59,8 +59,8 @@ toolchainPublishFailed :: Span -> Text -> Diagnostic   -- E6006
 
 Message contracts:
 
-- `E6001` — `the native backend does not support <construct> yet`, help names
-  the supported subset and the interpreter as the way to run the program.
+- `E6001` — `the native backend does not support <construct> yet`, help gives `pudu run`
+  and points to the reported construct as the place to adapt the source.
 - `E6002` — the C compiler could not be found, naming what was searched
   (`PUDU_CC` or `cc`) and how to point at one.
 - `E6003` — the compiler could not be started, with the operating system's

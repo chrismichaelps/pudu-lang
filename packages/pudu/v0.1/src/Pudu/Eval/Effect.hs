@@ -220,6 +220,7 @@ effectBuiltins =
   , TlsCloseWithinBuiltin
   , TlsPeerBuiltin
   , SpawnThreadBuiltin
+  , AttemptActionBuiltin
   , JoinThreadBuiltin
   , SleepBuiltin
   , ChannelOpenBuiltin

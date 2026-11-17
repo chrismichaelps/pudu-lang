@@ -40,6 +40,12 @@ locale or formatting for floats (the #509 formatter writes the bytes). No
 interning or sharing that could make two values alias mutable state; text is
 never mutated after it is filled.
 
+## Resolved Grill Log for #935
+
+The allocator bounds the complete C object, including its owner header,
+by `PTRDIFF_MAX`. Text operations still report their own length refusal
+before allocation when their language-level limit is exceeded.
+
 ## Grill Log
 
 - **Q:** Why does `pudu_fail_text` copy the message? **A:** Frame cleanup runs before printing and may release the text the message came from (#525).
@@ -81,3 +87,14 @@ Resolved Grill Log: the copy keeps the static site table read-only.
 An empty message skips the copy and reports with no payload.
 Resolved Grill Log: GCC 15 warned about the uninitialized one-byte copy once
 the empty text was folded; there is nothing to keep alive. (#633)
+
+## Owned text slot helpers (#821)
+
+TEXT slot stores and moves have separate runtime roots. The store accepts an
+already-evaluated owned text, releases the previous owner and transfers the
+new reference into the slot. The move snapshots the source, empties it and
+uses the same store. A self-move preserves the reference.
+
+Resolved Grill Log: the stored expression is a C function argument. It
+completes before the helper can release the destination, including when it
+reads the destination. Computing a slot address has no side effect.

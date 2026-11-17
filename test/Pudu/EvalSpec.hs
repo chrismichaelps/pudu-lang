@@ -31,6 +31,7 @@ import Pudu.Eval.FunctionClosureSpec
   , testClosures
   , testFunctions
   , testSlotScopes
+  , testTraitMethodValues
   )
 import Pudu.Eval.SystemSpec
   ( testAsync
@@ -81,6 +82,7 @@ evalProperties = namedSumProperties <>
   , ("calendar time and subprocesses answer with results", testClock)
   , ("fixed-width integers keep their width at run time", testIntegerWidths)
   , ("implementations reach built-in types", testBuiltinImpls)
+  , ("a trait-qualified method value selects by its first argument", testTraitMethodValues)
   , ("runtime resource stores isolate concurrent evaluations", testResourceIsolation)
   , ("explicit disposal removes completed runtime resources", testResourceDisposal)
   , ("bounded channel waits preserve atomic admission and timer lifetime", testChannelWait)

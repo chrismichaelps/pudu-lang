@@ -26,7 +26,7 @@ Open native libraries and invoke symbols through libffi using the crossing kind 
 void *pudu_ffi_open(const char *path);
 void *pudu_ffi_symbol(void *handle, const char *name);
 const char *pudu_ffi_error(void);
-int pudu_ffi_call(void *symbol, int32_t arity, const uint8_t *kinds,
+int pudu_ffi_call(void *symbol, void *scope, int32_t arity, const uint8_t *kinds,
                   const int64_t *integers, const double *doubles,
                   void *const *pointers, const int32_t *field_starts,
                   const int32_t *field_counts, const uint8_t *field_kinds,
@@ -90,6 +90,13 @@ int pudu_ffi_call(void *symbol, int32_t arity, const uint8_t *kinds,
 Resolved Grill Log: [[Nested Foreign Record Delivery]] preserves the tree
 for libffi layout and keeps value carriers in declaration-order leaves.
 The 32-member limit applies at each record node.
+
+## Resolved Grill Log for #876
+
+[[Pudu Private FFI ABI]] shares record preparation and scalar readers with
+[[Pudu FFI Callback Bridge]]. The outbound call publishes the caller's
+scope around ffi_call on that native thread. Private pointer carriers pass
+callback code and context without creating handle claims.
 
 ## Referenced by
 

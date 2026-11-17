@@ -2,7 +2,7 @@ import {buildGraph} from '../../bench/layers/model.mjs';
 
 const groups = [
   ['Std.Db.Driver', 'Std.App.Stage'],
-  ['Std.Db.Row', 'Std.Db.Schema', 'Std.Db.Repository', ...[
+  ['Std.Db.Row', 'Std.Db.Schema', 'Std.Db.Repository', 'Std.Db.Sqlite.Native', ...[
     'Audit', 'Cache', 'Config', 'Events', 'Flag', 'Health', 'IsrCache', 'Jwt', 'Locale',
     'Metrics', 'Page', 'Password', 'Secret', 'Session', 'Totp', 'Trace', 'Work'
   ].map(name => `Std.App.${name}`)],
@@ -10,9 +10,9 @@ const groups = [
     'Std.Http.Server.Resilience', 'Std.App.Otlp'],
   ['Std.Db.Challenge'],
   ['Std.Db.Session', 'Std.Db.Query.Shape', 'Std.Http.Server.Route'],
-  ['Std.Db.Admission'],
+  ['Std.Db.Admission', 'Std.Db.Lifetime'],
   ['Std.Db', 'Std.App.Problem', 'Std.Http.Server.Stream'],
-  ['Std.Db.ConnectionString', 'Std.Db.Migrate', 'Std.Db.Store', 'Std.Http.Server',
+  ['Std.Db.ConnectionString', 'Std.Db.Migrate', 'Std.Db.Store', 'Std.Db.Stream', 'Std.Http.Server',
     'Std.Http.Server.Guard', 'Std.Http.Server.Socket', 'Std.Http.Server.Lambda', 'Std.App.Idempotency'],
   ['Std.Db.Postgres', 'Std.Db.Sqlite'],
   ['Std.App.Database', 'Std.App.Access', 'Std.App.Bind', 'Std.App.Tenant', 'Std.App.OpenApi', 'Std.App.Reload'],

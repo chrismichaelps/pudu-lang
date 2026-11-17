@@ -13,6 +13,19 @@ textRuntimeParts =
       , "  if (text.owner != NULL && --text.owner->count == 0) free(text.owner);"
       , "}"
       ])
+  , ("text_slot_store",
+      [ "static inline void pudu_text_slot_store(pudu_text *destination, pudu_text next) {"
+      , "  pudu_text_release(*destination);"
+      , "  *destination = next;"
+      , "}"
+      ])
+  , ("text_slot_move",
+      [ "static inline void pudu_text_slot_move(pudu_text *destination, pudu_text *source) {"
+      , "  pudu_text moved = *source;"
+      , "  *source = (pudu_text){NULL, 0, NULL};"
+      , "  pudu_text_slot_store(destination, moved);"
+      , "}"
+      ])
   , ("text_retain",
       [ "static inline pudu_text pudu_text_retain(pudu_text text) {"
       , "  if (text.owner != NULL) text.owner->count += 1;"
@@ -30,7 +43,7 @@ textRuntimeParts =
       , "static pudu_text pudu_text_allocate(size_t length, unsigned char **bytes) {"
       , "  pudu_text_owner *owner;"
       , "  pudu_text text;"
-      , "  if (length > SIZE_MAX - sizeof(pudu_text_owner) - 1) pudu_memory_failure();"
+      , "  if (length > (size_t)PTRDIFF_MAX - sizeof(pudu_text_owner)) pudu_memory_failure();"
       , "  owner = malloc(sizeof(pudu_text_owner) + (length == 0 ? 1 : length));"
       , "  if (owner == NULL) pudu_memory_failure();"
       , "  owner->count = 1;"
@@ -186,6 +199,8 @@ textRuntimeDependencies name = maybe [] id (lookup name
   , ("fail_text_caller", ["fail_text"])
   , ("fail_text_help", ["fail", "text", "memory_failure"])
   , ("text_retain", ["text"])
+  , ("text_slot_store", ["text"])
+  , ("text_slot_move", ["text_slot_store"])
   , ("text_allocate", ["text", "memory_failure"])
   , ("text_concat", ["text_allocate", "text_retain"])
   , ("text_compare", ["text"])

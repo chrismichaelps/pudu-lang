@@ -20,6 +20,8 @@ import Pudu.Frontend.Parser.State
   , expectKeyword
   , expectSymbol
   , isSymbol
+  , lookaheadKind
+  , matchKeyword
   , matchKind
   , matchSymbol
   , peekKind
@@ -29,13 +31,16 @@ import Pudu.Frontend.Syntax.Located (Located (..))
 import Pudu.Frontend.Syntax.Tree
   ( Declaration (..)
   , Foreign (..)
+  , ForeignCallback (..)
+  , ForeignCallbackParameter (..)
   , ForeignFunction (..)
+  , Literal (..)
   , ForeignParameter (..)
   , TypeSyntax (..)
   , Visibility
   )
 import Pudu.Frontend.Token
-  ( Keyword (KwFn, KwType)
+  ( Keyword (KwElse, KwFalse, KwFn, KwNull, KwTrue, KwType)
   , Token (..)
   , TokenKind (..)
   )
@@ -53,7 +58,7 @@ parseForeign visibility = do
   library <- expectStringLiteral "for the library's name"
   version <- parseVersion
   _ <- expectSymbol "{" "to start the foreign declarations"
-  (types, functions) <- parseForeignMembers [] []
+  (types, callbacks, functions) <- parseForeignMembers [] [] []
   closing <- expectSymbol "}" "to close the foreign declarations"
   pure
     ( Located (mergedOrLeft (tokenSpan start) (tokenSpan closing))
@@ -63,6 +68,7 @@ parseForeign visibility = do
               , foreignLibrary = library
               , foreignVersion = version
               , foreignTypes = types
+              , foreignCallbacks = callbacks
               , foreignFunctions = functions
               }
         )
@@ -87,29 +93,102 @@ parseVersion = do
     second handle type that silently accepts nothing. -}
 parseForeignMembers
   :: [Located Text]
+  -> [Located ForeignCallback]
   -> [Located ForeignFunction]
-  -> Parser ([Located Text], [Located ForeignFunction])
-parseForeignMembers types reversed = do
-  kind <- peekKind
+  -> Parser ([Located Text], [Located ForeignCallback], [Located ForeignFunction])
+parseForeignMembers types callbacks functions = do
+  before <- peekToken
   exhausted <- budgetExhausted
-  if isSymbol "}" kind || kind == EndOfFile || exhausted
-    then pure (reverse types, reverse reversed)
+  let kind = tokenKind before
+      collected = pure (reverse types, reverse callbacks, reverse functions)
+      continue next = do
+        after <- peekToken
+        if before == after then collected else next
+  if isSymbol "}" kind || kind == EndOfFile || exhausted then collected else
+    case kind of
+      Keyword KwType -> do
+        _ <- advanceToken
+        name <- expectUpperIdentifier "after type"
+        continue (parseForeignMembers (name : types) callbacks functions)
+      Identifier "callback" -> do
+        callback <- parseForeignCallback
+        continue (parseForeignMembers types (callback : callbacks) functions)
+      _ -> do
+        function <- parseForeignFunction
+        continue (parseForeignMembers types callbacks (maybe functions (: functions) function))
+
+parseForeignCallback :: Parser (Located ForeignCallback)
+parseForeignCallback = do
+  start <- advanceToken
+  name <- expectUpperIdentifier "after callback"
+  _ <- expectSymbol "(" "before the callback parameter list"
+  parameters <- parseCallbackParameters []
+  closing <- expectSymbol ")" "after the callback parameter list"
+  arrow <- matchSymbol "->"
+  result <- case arrow of
+    Nothing -> pure (Located (tokenSpan closing) UnitType)
+    Just _ -> parseTypeSyntax
+  fallback <- case arrow of
+    Nothing -> pure Nothing
+    Just _ -> do
+      keyword <- matchKeyword KwElse
+      case keyword of
+        Nothing -> pure Nothing
+        Just _ -> parseCallbackFallback
+  let end = maybe (locatedSpan result) locatedSpan fallback
+  pure (Located (mergedOrLeft (tokenSpan start) end)
+    (ForeignCallback name parameters result fallback))
+
+parseCallbackParameters :: [Located ForeignCallbackParameter] -> Parser [Located ForeignCallbackParameter]
+parseCallbackParameters reversed = do
+  start <- peekToken
+  exhausted <- budgetExhausted
+  let kind = tokenKind start
+  if isSymbol ")" kind || kind == EndOfFile || exhausted
+    then pure (reverse reversed)
     else do
-      before <- peekToken
-      if kind == Keyword KwType
-        then do
-          _ <- advanceToken
-          name <- expectUpperIdentifier "after type"
-          after <- peekToken
-          if before == after
-            then pure (reverse types, reverse reversed)
-            else parseForeignMembers (name : types) reversed
+      following <- lookaheadKind 1
+      parameter <- if kind == Identifier "context" && not (isSymbol ":" following)
+        then advanceToken >> pure (Located (tokenSpan start) ForeignCallbackContext)
         else do
-          one <- parseForeignFunction
-          after <- peekToken
-          if before == after
-            then pure (reverse types, reverse reversed)
-            else parseForeignMembers types (maybe reversed (: reversed) one)
+          name <- expectValueIdentifier "for the callback parameter's name"
+          _ <- expectSymbol ":" "after the callback parameter's name"
+          borrowed <- matchWord "borrowed"
+          written <- parseTypeSyntax
+          pure (Located (mergedOrLeft (tokenSpan start) (locatedSpan written))
+            (ForeignCallbackArgument name (borrowed /= Nothing) written))
+      comma <- matchSymbol ","
+      case comma of
+        Nothing -> pure (reverse (parameter : reversed))
+        Just _ -> parseCallbackParameters (parameter : reversed)
+
+parseCallbackFallback :: Parser (Maybe (Located Literal))
+parseCallbackFallback = do
+  minus <- matchSymbol "-"
+  token <- peekToken
+  let prefix = maybe "" (const "-") minus
+      start = maybe (tokenSpan token) tokenSpan minus
+      literal = case tokenKind token of
+        IntegerLiteral value -> Just (IntegerValue (prefix <> value))
+        FloatLiteral value -> Just (FloatValue (prefix <> value))
+        DecimalLiteral value -> Just (DecimalValue (prefix <> value))
+        StringLiteral value | minus == Nothing -> Just (StringValue value)
+        CharLiteral value | minus == Nothing -> Just (CharValue value)
+        Keyword KwTrue | minus == Nothing -> Just (BoolValue True)
+        Keyword KwFalse | minus == Nothing -> Just (BoolValue False)
+        Keyword KwNull | minus == Nothing -> Just NullValue
+        _ -> Nothing
+  case literal of
+    Just value -> do
+      _ <- advanceToken
+      pure (Just (Located (mergedOrLeft start (tokenSpan token)) value))
+    Nothing -> do
+      let (code, message) = case tokenKind token of
+            EndOfFile -> ("E1000", "the file ends before the callback fallback literal")
+            _ -> ("E1001", "expected a callback fallback literal")
+      emitParseError code (tokenSpan token) message
+        (Just "give the value the library receives when the callback does not complete")
+      pure Nothing
 
 {-| One function, as this program asserts its shape.
 
@@ -181,22 +260,36 @@ parseForeignParameters reversed = do
 parseForeignParameter :: Parser (Located ForeignParameter)
 parseForeignParameter = do
   start <- peekToken
-  out <- matchWord "out"
-  name <- expectValueIdentifier "for the parameter's name"
-  _ <- expectSymbol ":" "after the parameter's name"
-  owned <- matchWord "owned"
-  written <- parseTypeSyntax
-  released <- parseSlotRelease owned (locatedSpan written)
-  pure
-    ( Located (mergedOrLeft (tokenSpan start) (locatedSpan written))
+  following <- lookaheadKind 1
+  case (tokenKind start, following) of
+    (Identifier "context", Identifier _) -> do
+      _ <- advanceToken
+      name <- expectValueIdentifier "after context"
+      pure (Located (mergedOrLeft (tokenSpan start) (locatedSpan name))
         ForeignParameter
           { foreignParameterName = name
+          , foreignParameterContext = True
+          , foreignParameterType = Nothing
+          , foreignParameterOut = False
+          , foreignParameterOwned = False
+          , foreignParameterReleasedBy = Nothing
+          })
+    _ -> do
+      out <- matchWord "out"
+      name <- expectValueIdentifier "for the parameter's name"
+      _ <- expectSymbol ":" "after the parameter's name"
+      owned <- matchWord "owned"
+      written <- parseTypeSyntax
+      released <- parseSlotRelease owned (locatedSpan written)
+      pure (Located (mergedOrLeft (tokenSpan start) (locatedSpan written))
+        ForeignParameter
+          { foreignParameterName = name
+          , foreignParameterContext = False
           , foreignParameterType = Just written
           , foreignParameterOut = out /= Nothing
           , foreignParameterOwned = owned /= Nothing
           , foreignParameterReleasedBy = released
-          }
-    )
+          })
 
 {-| What releases what an owned slot received.
 

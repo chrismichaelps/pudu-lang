@@ -1,6 +1,7 @@
 {-| @Test.Backend.FrameEmitSpec — strict C checks for suspending function bodies. -}
 module Pudu.Backend.FrameEmitSpec (frameEmitProperties) where
 
+import qualified Data.Map.Strict as Map
 import qualified Data.Set as Set
 import qualified Data.Text as Text
 import qualified Data.Text.IO as TextIO
@@ -9,6 +10,7 @@ import Pudu.Backend.Emit (EmittedUnit (emittedSource), EntryForm (EmbeddedEntry)
 import Pudu.Backend.Emit.Entry (embeddedHeader, embeddedHeaderName)
 import Pudu.Backend.Emit.Frame (emitFrameProgram)
 import Pudu.Backend.Emit.Frame.Body (emitFrameBodies)
+import Pudu.Backend.Emit.Frame.Slots (compactFrameSlots)
 import Pudu.Backend.Emit.Frame.Value (frameValue, slotText)
 import Pudu.Backend.Emit.State (EmitState (..), emptyEmitState)
 import Pudu.Backend.FunctionPrograms (functionSuccessPrograms, functionRefusalPrograms)
@@ -20,7 +22,8 @@ import Pudu.Compiler.Lower.Types (nativeTypes)
 import Pudu.Core (CoreType (..), CoreKeyedMethodName (KeyedWordUnion, KeyedWordSubset, KeyedWordDisjoint, KeyedWordPopCount, KeyedWordMembers))
 import Pudu.Core (CoreTextMethodName (..))
 import Pudu.Core.Frame
-  ( FrameFault (..), FrameSlot (..), FrameSlotId (..)
+  ( FrameBlock (..), FrameFault (..), FrameFunction (..), FrameInstruction (..)
+  , FrameLabel (..), FrameModule (..), FrameSlot (..), FrameSlotId (..), FrameTerminator (..)
   , FrameUnaryOperator (..), FrameValue (..), FrameValueShape (..) )
 import Pudu.Diagnostic (hasErrors)
 import Pudu.IntegerLiteral (IntegerKind (PlatformSigned, SignedKind, UnsignedKind))
@@ -35,6 +38,7 @@ import Test.QuickCheck (Property, conjoin, counterexample, once, (===))
 frameEmitProperties :: [(String, IO Property)]
 frameEmitProperties =
   [ ("frame body emission rejects invalid slot representations", testSlots)
+  , ("native frame compaction preserves overlaps and owned retirement", once <$> testPhysicalSlots)
   , ("native word-map frame helpers reject mismatched carriers", testWordMapSlots)
   , ("native text-view methods reject mismatched carriers", testTextViewSlots)
   , ("frame body emission suspends nested calls without C recursion", testCalls)
@@ -60,6 +64,52 @@ testSlots = do
             Left failure -> frameFaultSpan failure === Just at
             Right _ -> counterexample "unsupported descriptor was emitted" (False === True)
     ]
+
+testPhysicalSlots :: IO Property
+testPhysicalSlots = do
+  source <- newSource (SourceName "physical.pudu") "slots"
+  let at = emptySpan source
+      scalar n = FrameSlot (FrameSlotId n) "scalar" CoreBoolType at
+      text n = FrameSlot (FrameSlotId n) "text" CoreTextType at
+      flag = FrameValue at CoreBoolType (FrameBoolLiteral True)
+      literal = FrameValue at CoreTextType (FrameTextLiteral "owned")
+      stored slot value = FrameStore slot value
+      printed = FramePrintSlot at
+      start = FrameLabel 0
+      next = FrameLabel 1
+      original = FrameFunction "main" [] CoreUnitType
+        (map scalar [0 .. 3] <> map text [4 .. 9]) start
+        [ FrameBlock start
+          [ stored (scalar 0) flag, printed (scalar 0)
+          , stored (scalar 1) flag, stored (scalar 2) flag
+          , printed (scalar 1), printed (scalar 2), stored (scalar 3) flag
+          , stored (text 4) literal, FrameMove (text 5) (text 4)
+          , stored (text 6) literal, FrameMove (text 7) (text 6)
+          , stored (text 8) literal, stored (text 9) literal
+          ] (FrameJump (Just at) next)
+        , FrameBlock next [printed (scalar 3), printed (text 5), printed (text 7)] (FrameReturn Nothing Nothing)
+        ]
+      logical = FrameModule "Main" "main" [original] Map.empty Map.empty []
+  pure $ case frameModuleFunctions (compactFrameSlots logical) of
+    [result] -> case frameFunctionBlocks result of
+      [FrameBlock _ instructions _, FrameBlock _ [FramePrintSlot _ crossing, _, _] _] ->
+        case instructions of
+          [ FrameStore first _, _, FrameStore second _, FrameStore overlap _, _, _, FrameStore before _
+            , FrameStore ownedA _, FrameMove targetA movedA
+            , FrameStore ownedB _, FrameMove targetB movedB
+            , FrameStore retainedA _, FrameStore retainedB _
+            ] ->
+              let same left right = frameSlotId left === frameSlotId right
+                  separate left right = (frameSlotId left /= frameSlotId right) === True
+              in conjoin
+                [ length (frameFunctionSlots result) === 8
+                , same first second, separate second overlap, same before crossing
+                , same ownedA ownedB, same ownedA movedA, same ownedB movedB
+                , separate targetA targetB, separate targetB ownedB, separate retainedA retainedB
+                ]
+          _ -> counterexample (show instructions) (False === True)
+      blocks -> counterexample (show blocks) (False === True)
+    functions -> counterexample (show functions) (False === True)
 
 testWordMapSlots :: IO Property
 testWordMapSlots = do
@@ -178,9 +228,15 @@ testCalls = do
         Right (emitted, _) ->
           let output = reverse (emitOutput emitted)
               bodyNames = filter (Text.isInfixOf "pudu_body_") output
+              definitions = filter (Text.isSuffixOf "{") bodyNames
+              -- Each body is declared first under the label a profiler shows.
+              declarations = filter (Text.isSuffixOf ";") bodyNames
            in conjoin
-                [ length bodyNames === 3
+                [ length definitions === 3
+                , length declarations === 3
                 , counterexample (show bodyNames) (all (Text.isPrefixOf "static pudu_step pudu_body_") bodyNames)
+                , counterexample (show declarations) (all (Text.isInfixOf "__asm__(\"pudu_Main_") declarations)
+                , counterexample (show declarations) (any (Text.isInfixOf "pudu_Main_one_body") declarations)
                 , length (filter (Text.isInfixOf ".kind = PUDU_CALL") output) === 3
                 , length (filter (Text.isInfixOf "frame->arguments[") output) === 2
                 , length (filter (Text.isInfixOf ".has_destination = 1") output) === 3

@@ -74,6 +74,15 @@ Programs]] hold the differential and counted-allocation corpus. [[Backend Servic
 compression, time, signals and TLS. Foreign functions stay refused at their
 written site.
 
+## C11 emission continuation (#935)
+
+[[Native Binary Kernels]] admit both `Std.Binary` builtins.
+[[Native Host Concurrent]] handles `mutexClose`, including waiting for an existing owner.
+[[Compiler Lower Default]] widens omitted defaults to their checked dynamic
+parameter type. [[Compiler Lower Lambda]] applies the same widening to supplied
+arguments through function values. E6001 lists `pudu run` as the
+interpreter command. [[C11 Emission Continuation Delivery]] records validation.
+
 ## Inherited default parameter scopes (#824)
 
 [[Native Inherited Defaults Delivery]] covers native copies of defaults from
