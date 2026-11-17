@@ -5,6 +5,8 @@ tags: [moc, handoff]
 
 # Handoff Map
 
+- [[Swift Entry Points Delivery]] — Swift through C entry points, checked on macOS and the iOS simulator (#881).
+
 - [[Native Frame Slot Reuse Delivery]] — independent slot allocation and emission evidence (#821).
 
 - [[C11 Emission Continuation Delivery]] — binary kernels, mutex close and dynamic argument widening (#935).

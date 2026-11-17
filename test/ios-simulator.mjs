@@ -5,6 +5,7 @@ import { mkdtempSync, mkdirSync, readFileSync, rmSync, statSync, writeFileSync }
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import { objectiveCSmoke, swiftSmoke } from "./ios-foreign-apps.mjs";
 
 // A cold hosted simulator can take minutes to install or launch its first app.
 const simulatorTimeout = 300_000;
@@ -152,7 +153,9 @@ int main(int argc, char **argv) {
     const lines = launch(device, identifier, "PUDU_SMOKE", "PUDU_SMOKE_STATUS");
     assert.deepEqual(lines, [...expected.split("\n"), "PUDU_SMOKE_STATUS 0"]);
     console.log(`${expected}\nPASS iOS simulator smoke (${device})`);
-    objectiveCSmoke(device, root, sdk, simulatorClang);
+    const apps = { run, launch, uninstall: uninstallFromReusedDevice, xcrun, compiler, identifier, simulatorTimeout };
+    objectiveCSmoke(apps, device, root, simulatorClang);
+    swiftSmoke(apps, device, root, simulatorClang);
     refuseOccupiedOutput(root);
     familyApps(device, "Counter");
     mobileApp(device, "Form", [
@@ -381,119 +384,6 @@ function launch(device, bundle, prefix, status, environment = {}) {
     spawnSync(xcrun, ["simctl", "terminate", device, bundle], { timeout: 30_000 });
   }
   throw new Error(`${bundle} did not report:\n${failures.join("\n")}`);
-}
-
-/* Foundation sends inside an autorelease pool, a block run during a call and
-   one kept by a queue, and a delegate the notification center calls. The
-   macOS interpreter's output is the expectation the simulator app must meet. */
-function objectiveCSmoke(device, root, sdk, simulatorClang) {
-  const bundle = `${identifier}.objc`;
-  mkdirSync(join(root, "objc"));
-  const source = join(root, "objc", "Main.pudu");
-  const library = join(root, "libObjc.a");
-  const app = join(root, "PuduObjc.app");
-  const host = join(root, "objc.m");
-  writeFileSync(source, `module Main
-
-foreign "/System/Library/Frameworks/Foundation.framework/Foundation" {
-  class StringObject symbol "NSString"
-  class Center symbol "NSNotificationCenter"
-  type Notice
-  type Pool
-  callback Posted(context, note: borrowed Notice) -> ()
-  callbacks Events{posted: Posted}
-  delegate Observer symbol "PuduSmokeObserver" for Events {
-    posted "noticePosted:"
-  }
-  fn stringFrom selector "stringWithUTF8String:" on StringObject (text: Str) -> borrowed StringObject
-  fn length selector "length" (receiver: StringObject) -> UInt64
-  fn center selector "defaultCenter" on Center () -> borrowed Center
-  fn observe selector "addObserver:selector:name:object:" (receiver: Center, observer: Observer, action: UInt64, name: StringObject, sender: UInt64) -> ()
-  fn post selector "postNotificationName:object:" (receiver: Center, name: StringObject, sender: UInt64) -> ()
-  fn selectorNamed symbol "sel_registerName" (name: Str) -> UInt64
-  fn poolPush symbol "objc_autoreleasePoolPush" () -> owned Pool by poolPop
-  fn poolPop symbol "objc_autoreleasePoolPop" (pool: Pool) -> ()
-}
-
-foreign "/usr/lib/libSystem.B.dylib" {
-  type Queue
-  callback Work(context) -> ()
-  fn queueNew symbol "dispatch_queue_create" (label: Str, attributes: UInt64) -> owned Queue by queueRelease
-  fn queueRelease symbol "dispatch_release" (queue: Queue) -> ()
-  fn runNow symbol "dispatch_sync" (queue: Queue, work: block Work) -> ()
-  fn runLater symbol "dispatch_async" (queue: Queue, work: block Work) -> ()
-}
-
-type Handlers = { posted: fn(Notice) -> () }
-
-fn heard(note: Notice) -> () {
-  let _shown = print("PUDU_OBJC delegate")
-  ()
-}
-
-fn ran() -> () {
-  let _shown = print("PUDU_OBJC block")
-  ()
-}
-
-fn main() -> Int {
-  unsafe(foreign) {
-    let pool = poolPush()
-    print("PUDU_OBJC length " + display(length(stringFrom("pudu"))))
-    poolPop(pool)
-    let queue = queueNew("pudu.smoke", 0u64)
-    let work = Work(ran)
-    runLater(queue, work)
-    runNow(queue, work)
-    let _work = work.unregister()
-    queueRelease(queue)
-    let events = Events(Handlers{posted: heard})
-    let observer = Observer(events)
-    let name = stringFrom("PuduSmokeNotice")
-    observe(center(), observer, selectorNamed("noticePosted:"), name, 0u64)
-    post(center(), name, 0u64)
-  }
-  0
-}
-`);
-  const [, , compiler] = process.argv;
-  const expected = run(resolve(compiler), ["run", source]).trim();
-  assert.equal(expected,
-    "PUDU_OBJC length 4\nPUDU_OBJC block\nPUDU_OBJC block\nPUDU_OBJC delegate");
-  run(resolve(compiler), ["build", source, "--native", "--target", "ios-simulator-arm64", "-o", library]);
-  mkdirSync(app, { recursive: true });
-  writeFileSync(host, `#include "pudu_program.h"
-#include <stdio.h>
-int main(int argc, char **argv) {
-  @autoreleasepool {
-    int status = pudu_program_run(argc, argv);
-    printf("PUDU_OBJC_STATUS %d\\n", status);
-    return status;
-  }
-}
-`);
-  writeFileSync(join(app, "Info.plist"), `<?xml version="1.0" encoding="UTF-8"?>
-<plist version="1.0"><dict>
-<key>CFBundleIdentifier</key><string>${bundle}</string>
-<key>CFBundleExecutable</key><string>PuduObjc</string>
-<key>CFBundlePackageType</key><string>APPL</string>
-<key>CFBundleVersion</key><string>1</string>
-<key>CFBundleShortVersionString</key><string>1.0</string>
-<key>MinimumOSVersion</key><string>15.0</string>
-<key>CFBundleSupportedPlatforms</key><array><string>iPhoneSimulator</string></array>
-<key>UIDeviceFamily</key><array><integer>1</integer></array>
-</dict></plist>
-`);
-  run(xcrun, [...simulatorClang, host, library, "-framework", "Foundation", "-o", join(app, "PuduObjc")]);
-  run("codesign", ["--force", "--sign", "-", app]);
-  try {
-    run(xcrun, ["simctl", "install", device, app], simulatorTimeout);
-    const lines = launch(device, bundle, "PUDU_OBJC", "PUDU_OBJC_STATUS");
-    assert.deepEqual(lines, [...expected.split("\n"), "PUDU_OBJC_STATUS 0"]);
-    console.log(`${expected}\nPASS iOS Objective-C smoke`);
-  } finally {
-    uninstallFromReusedDevice(device, bundle);
-  }
 }
 
 smoke();
