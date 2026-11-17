@@ -164,9 +164,18 @@ The class is defined on first construction, the instance stores the group's
 registration key, and a late call after unregister answers the member's
 fallback. The checker refuses malformed shapes with E3063.
 
+## iOS simulator conformance
+
+`test/ios-simulator.mjs` builds an Objective-C program natively for
+`ios-simulator-arm64`. The program covers a Foundation send inside an
+autorelease pool, a block run by `dispatch_sync`, an escaping block run by
+`dispatch_async` from its copy, and an `NSNotificationCenter` delegate. Its
+output matched the macOS interpreter on the iOS 26.4 simulator. The full
+simulator smoke passed, 20 checks.
+
 ## Exact next action
 
-Run the Foundation, block and delegate conformance on the iOS simulator and record it, then close #879.
+Merge the foreign pointer and Objective-C PR into dev once CI is green, then close #879 and move to the next open native issue.
 
 ## Referenced by
 
