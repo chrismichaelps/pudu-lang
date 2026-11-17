@@ -17,7 +17,7 @@ fn check(holds: Bool, name: Str) -> () { if !holds { panic(name) } }
 
 fn stream(socket: Net.Connection) -> Session.Connection {
   Session.Connection{socket: socket, buffer: bytesOf([]), parameters: [], status: Session.Idle,
-    lease: Sync.cell(0), epoch: 0, deadline: -1 }
+    lease: Sync.cell(0), epoch: 0, deadline: -1, prepared: mapOf([]), opened: 0, returned: 0 }
 }
 
 fn batch(fragment: Int, budget: Int, count: Int) -> () {

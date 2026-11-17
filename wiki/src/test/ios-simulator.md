@@ -80,7 +80,9 @@ to five minutes, a timeout names the command that expired, and a launch that
 timed out or reported no `PUDU_SMOKE` line is terminated and tried once more.
 The first simulator query, listing runtimes, gets the same five-minute allowance as installing and launching, because a cold simulator service on a hosted runner can take minutes to answer it (#909).
 
-Resolved Grill Log: retry only the absence of a report; any line the app did
+Resolved Grill Log:
+- A device the script creates waits up to ten minutes for its first boot; a second family booting beside the phone is slower than the five-minute install and launch limit allows.
+- Retry only the absence of a report; any line the app did
 report is compared as is, so a wrong value can never pass on a second try.
 _Rejected:_ retrying the whole smoke, which would also hide compile or
 foreign-call regressions.
@@ -184,3 +186,9 @@ of device names, which would miss families the list does not name.
 ## Referenced by
 
 [[Native Mobile Targets]] · [[Native Mobile Targets Delivery]] · [[Native Controls Delivery]] · [[Native Keyed Lists Delivery]] · [[Native iOS Theming Delivery]] · [[Native iOS Recycling Delivery]]
+
+## Capability showcase (#930)
+
+The Showcase, `examples/mobile/Showcase.pudu` ([[Native Showcase Example]]), is run with `PUDU_UI_CAPABILITY_TEST` set, and with `PUDU_UI_SELFTEST` also set so that the haptic line is printed. Its expected report lines are listed in [[Native Showcase Example]]. The self-test sequence is [[iOS Host Capability Test]].
+
+Negative logic: this script does not yet compare the capability lines. The Showcase run is manual until the suite records them.

@@ -303,8 +303,9 @@ fn bindPayload(statement: StatementHandle, position: Int32, bytes: Bytes, text: 
 }
 
 /// Every row, then the command: `SQLITE_DONE` for a statement that only
-/// reads, and for one that writes, `SQLITE_DONE` followed by the rows it
-/// changed and the connection's last inserted rowid.
+/// reads, and for one that writes, `SQLITE_DONE` followed by the connection's
+/// last inserted rowid and the rows it changed. The count comes last, where
+/// every engine's command states it.
 fn collect(database: DatabaseHandle, statement: StatementHandle) -> Result[Driver.Rows, Driver.Error] {
   unsafe(foreign) {
     let count = columns(statement)
@@ -321,7 +322,7 @@ fn collect(database: DatabaseHandle, statement: StatementHandle) -> Result[Drive
     loop {
       let status = step(statement)
       if status == STEP_DONE {
-        let command = if writes { "SQLITE_DONE " + show(changedSince(database, before)) + " " + show(lastRowid(database)) } else { "SQLITE_DONE" }
+        let command = if writes { "SQLITE_DONE " + show(lastRowid(database)) + " " + show(changedSince(database, before)) } else { "SQLITE_DONE" }
         return Ok(Driver.Rows{columns: names, rows: rows, command: command})
       }
       if status != STEP_ROW { return Err(failureOf(database, status)) }

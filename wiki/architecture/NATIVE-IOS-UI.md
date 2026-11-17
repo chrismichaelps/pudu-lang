@@ -33,17 +33,17 @@ on both displays), and Xcode 27.1 Device Hub simulation. Exact class names are t
 
 | Area | Required features | Today |
 | --- | --- | --- |
-| Layout and adaptivity | Flexible stack layout with native results; safe areas including Dynamic Island, notch, home indicator and the fold; compact, regular and expanded size classes; orientations; keyboard avoidance | partial: columns and rows, safe-area root bounds and docked keyboard avoidance; size-class policy and fold regions remain open |
+| Layout and adaptivity | Flexible stack layout with native results; safe areas including Dynamic Island, notch, home indicator and the fold; compact, regular and expanded size classes; orientations; keyboard avoidance | partial: columns and rows, safe-area root bounds, docked keyboard avoidance, and scene size and size classes reported to the program; size-class layout policy and fold regions remain open |
 | iPhone Duo | Fold state and posture reactions; outer, inner and both-display targeting; split view and multiple windows on the inner display; continuity across the fold; keeping interactive elements off the crease; layouts for 5.4 and 7.6 inches | missing |
 | Navigation | Stack with interactive pop; tab bars; sidebars; modal styles (full screen, page sheet, form sheet, popover); large and collapsing titles; custom bars and toolbars; deep and universal links | missing |
 | Lists and scrolling | Recycling lists; sections and compositional layouts; adaptive grids; pull to refresh; prefetching and infinite scroll; nested scrolling | partial: vertical root scrolling, keyed insert/remove/move, recycling lists and equal-column grids with windowed rows; sections, compositional layouts beyond equal columns, pull to refresh and nested scrolling remain open |
-| Input and gestures | Tap, long press, pan, pinch, rotate, swipe; simultaneous and exclusive recognition; pointer; Apple Pencil; keyboard, input accessories and focus; Scribble | partial: tap, text entry, switch |
+| Input and gestures | Tap, long press, pan, pinch, rotate, swipe; simultaneous and exclusive recognition; pointer; Apple Pencil; keyboard, input accessories and focus; Scribble | partial: tap, long press, pan, pinch, rotation and swipe recognizers, text entry, switch; pointer, Apple Pencil, focus and Scribble remain open |
 | Visual system | FUI's seven aspects mapped to iOS values; Dynamic Type; light and dark appearance; materials and vibrancy; SF Symbols; semantic colors; elevation and continuous corners | partial: semantic color roles with platform or fixed light/dark tones, appearance override, Dynamic Type text styles; materials are done (glass on iOS 26 or later with blur fallback); symbols, elevation and continuous corners remain open |
-| Feedback and system UI | Alerts, action sheets, confirmation dialogs, context menus and previews, banners, activity and progress indicators; status bar, Dynamic Island and home indicator styling | missing |
-| Accessibility | VoiceOver; Dynamic Type; Reduce Motion; Increase Contrast; traits, labels, hints and values; keyboard focus; Switch Control | partial: accessible names reach the platform tree |
-| Animation | Interactive transitions; shared-element transitions; fold-change layout animation; platform springs and curves; gesture-driven animation | missing |
+| Feedback and system UI | Alerts, action sheets, confirmation dialogs, context menus and previews, banners, activity and progress indicators; status bar, Dynamic Island and home indicator styling | partial: alerts, action sheets, context menus, haptics, progress and activity indicators; confirmation dialogs, previews, banners and status bar styling remain open |
+| Accessibility | VoiceOver; Dynamic Type; Reduce Motion; Increase Contrast; traits, labels, hints and values; keyboard focus; Switch Control | partial: accessible names, all 19 traits, hints and values reach the platform tree; Reduce Motion is honored by layout animation; custom actions, announcements and rotors remain open |
+| Animation | Interactive transitions; shared-element transitions; fold-change layout animation; platform springs and curves; gesture-driven animation | partial: spring layout transitions for animated groups, honoring Reduce Motion; interactive, shared-element and gesture-driven transitions remain open |
 | Multitasking | Stage Manager, Split View, Slide Over and multiple windows; the Duo inner display | missing |
-| Platform conventions | System gestures; rotation and orientation lock; background and foreground transitions; state restoration | missing |
+| Platform conventions | System gestures; rotation and orientation lock; background and foreground transitions; state restoration | partial: background and foreground transitions reported to the program; system gestures, orientation lock and state restoration remain open |
 
 ## ProMotion and frame pacing
 
@@ -100,6 +100,36 @@ does not have yet (Xcode 26.6, iOS 26.5 SDK).
 6. iPhone Duo APIs once the 27.1 SDK is installed.
 7. Gestures, animation, context menus and system UI.
 
+## UIKit coverage
+
+Each row lists what the toolchain realizes today and what is next. The measured inventory below the table is generated by [[UIKit Coverage Inventory]] from the installed SDK's headers and the host sources.
+
+| Area | Covered now | Next |
+| --- | --- | --- |
+| Controls | label, button, field, toggle, progress, activity, material, list and grid | slider, stepper, segmented control, date picker, picker, text view, search field, image and symbols, page control, color well |
+| Gestures | long press, pan, pinch, rotation, swipe | tap counts, screen-edge pan, hover, pointer, Pencil |
+| Accessibility | names, all 19 traits, hints, values | custom actions, live announcements, rotors, grouping |
+| Feedback | alerts, action sheets, haptics (selection, impact, notification), indicators | canvas feedback on Pencil Pro |
+| Presentation | navigation stack and page sheets (#920) | detents, popovers, full-screen styles |
+| Adaptivity | size classes, scene size, lifecycle | multiple windows, state restoration |
+| Visual | semantic colors, appearance, Dynamic Type, materials with glass | SF Symbols, glass button configurations, continuous corners |
+| Animation | spring layout transitions honoring Reduce Motion | interactive and shared-element transitions, symbol effects |
+| System services | none | pasteboard, share sheet, drag and drop, document and photo pickers, notifications, open URL; reached through platform FFI (#874) where they are not UI |
+
+### Measured inventory
+
+<!-- uikit-coverage:start -->
+Measured against `iPhoneSimulator26.5`.
+
+| Category | Covered | In the host | Not in the host |
+| --- | --- | --- | --- |
+| Controls | 3 of 12 | `UIButton`, `UISwitch`, `UITextField` | `UIColorWell`, `UIDatePicker`, `UIPageControl`, `UIPasteControl`, `UIRefreshControl`, `UISearchTextField`, `UISegmentedControl`, `UISlider`, `UIStepper` |
+| Views | 9 of 33 | `UIActivityIndicatorView`, `UICollectionView`, `UICollectionViewCell`, `UILabel`, `UIProgressView`, `UIScrollView`, `UIStackView`, `UIVisualEffectView`, `UIWindow` | `UIActionSheet`, `UIAlertView`, `UIBackgroundExtensionView`, `UICalendarView`, `UICollectionReusableView`, `UICollectionViewListCell`, `UIContentUnavailableView`, `UIControl`, `UIEventAttributionView`, `UIImageView`, `UIInputView`, `UIListContentView`, `UINavigationBar`, `UIPickerView`, `UIPopoverBackgroundView`, `UISearchBar`, `UIStandardTextCursorView`, `UITabBar`, `UITableView`, `UITableViewCell`, `UITableViewHeaderFooterView`, `UITextView`, `UIToolbar`, `UIWebView` |
+| Gestures | 5 of 7 | `UILongPressGestureRecognizer`, `UIPanGestureRecognizer`, `UIPinchGestureRecognizer`, `UIRotationGestureRecognizer`, `UISwipeGestureRecognizer` | `UIScreenEdgePanGestureRecognizer`, `UITapGestureRecognizer` |
+| Feedback | 3 of 4 | `UIImpactFeedbackGenerator`, `UINotificationFeedbackGenerator`, `UISelectionFeedbackGenerator` | `UICanvasFeedbackGenerator` |
+| Accessibility traits | 19 of 19 | `UIAccessibilityTraitAdjustable`, `UIAccessibilityTraitAllowsDirectInteraction`, `UIAccessibilityTraitButton`, `UIAccessibilityTraitCausesPageTurn`, `UIAccessibilityTraitHeader`, `UIAccessibilityTraitImage`, `UIAccessibilityTraitKeyboardKey`, `UIAccessibilityTraitLink`, `UIAccessibilityTraitNotEnabled`, `UIAccessibilityTraitPlaysSound`, `UIAccessibilityTraitSearchField`, `UIAccessibilityTraitSelected`, `UIAccessibilityTraitStartsMediaSession`, `UIAccessibilityTraitStaticText`, `UIAccessibilityTraitSummaryElement`, `UIAccessibilityTraitSupportsZoom`, `UIAccessibilityTraitTabBar`, `UIAccessibilityTraitToggleButton`, `UIAccessibilityTraitUpdatesFrequently` | none |
+<!-- uikit-coverage:end -->
+
 ## Grill Log
 
 - **Q:** Name the Duo's classes now from third-party descriptions? **A:** No. Identifiers come from
@@ -118,4 +148,4 @@ does not have yet (Xcode 26.6, iOS 26.5 SDK).
 
 ## Referenced by
 
-[[architecture/_MOC]] · [[Pudu Native]] · [[Native iOS Scrolling Delivery]] · [[Native iOS Theming Delivery]] · [[Native iOS Recycling Delivery]] · [[Native iOS Materials Delivery]]
+[[architecture/_MOC]] · [[Pudu Native]] · [[Native iOS Scrolling Delivery]] · [[Native iOS Theming Delivery]] · [[Native iOS Recycling Delivery]] · [[Native iOS Materials Delivery]] · [[Native iOS Capabilities Delivery]]
