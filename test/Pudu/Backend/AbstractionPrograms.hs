@@ -213,6 +213,46 @@ abstractionSuccessPrograms =
       , "}"
       ]
     , "[1, 2, 3]Fork(Leaf(1), Fork(Leaf(2), Leaf(3)))Some(\"s\")2\n[2, 4, 6]Fork(Leaf(\"10\"), Fork(Leaf(\"20\"), Leaf(\"30\")))Some(true)\n[\"x\", \"x\"]Fork(Leaf(0), Fork(Leaf(0), Leaf(0)))NoneSome('c')\n" )
+  , ( "a generic method through a dynamic value settles from the call, inside a generic closure", program
+      [ "trait Wrap {"
+      , "  fn around[Q](self: &Self, request: &Q) -> Int"
+      , "}"
+      , ""
+      , "type Doubler = { factor: Int }"
+      , ""
+      , "impl Wrap for Doubler {"
+      , "  fn around[Q](self: &Self, _request: &Q) -> Int { self.factor * 2 }"
+      , "}"
+      , ""
+      , "fn applied[Q](open: dynamic Wrap) -> fn(Q) -> Int {"
+      , "  fn(request: Q) -> Int { open.around(&request) }"
+      , "}"
+      , ""
+      , "fn main() -> Int {"
+      , "  let wrapped: fn(Str) -> Int = applied(Doubler{factor: 21})"
+      , "  print(display(wrapped(\"x\")))"
+      , "  0"
+      , "}" ]
+    , "42\n" )
+  , ( "a trait nothing implements: its values are empty arrays and its calls never run", program
+      [ "trait Empty {"
+      , "  fn size[Q](self: &Self, item: &Q) -> Int"
+      , "}"
+      , ""
+      , "type Holder = { items: Array[dynamic Empty], label: Str }"
+      , ""
+      , "fn total[Q](items: Array[dynamic Empty], item: Q) -> Int {"
+      , "  var sum = 0"
+      , "  for open in items { sum = sum + open.size(&item) }"
+      , "  sum"
+      , "}"
+      , ""
+      , "fn main() -> Int {"
+      , "  let held = Holder{items: [], label: \"none\"}"
+      , "  print(held.label + \" \" + display(total(held.items, \"x\")) + \" \" + display(held.items.length()))"
+      , "  0"
+      , "}" ]
+    , "none 0 0\n" )
   ]
 
 abstractionRefusalPrograms :: [(String, Text)]

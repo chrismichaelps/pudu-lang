@@ -42,7 +42,7 @@ In any body, a call to a direct callee is emitted inline: the E7002 depth check 
 site, `pudu_direct_<m>(frame->arguments)`, the destination's previous owned value released (or
 the answer released when there is no destination), the depth restored, and the resume label
 taken, without returning to the dispatcher. Prototypes of every `pudu_run_<n>` and
-`pudu_direct_<n>` precede the bodies.
+`pudu_direct_<n>` precede the bodies. Each of these prototypes carries an assembler label built from the Pudu name, the role (body, run or direct) and the index, such as `pudu_View_Markdown_parseWithTitle_body1854`, so profilers show the Pudu name while calls inside the generated C keep the indexed names.
 
 Slots that own nothing are C locals named `pudu_s<n>` in a direct body, because nothing outside the body reads them: unwinding releases only owned slots. Only slots the body mentions are declared; a parameter local starts from its frame slot, any other starts zeroed. Owned slots stay in the frame so unwinding can release them.
 
@@ -57,6 +57,7 @@ Slots that own nothing are C locals named `pudu_s<n>` in a direct body, because 
 - **Q:** Claim #499 fixed before dispatch integration? **A:** No; this independently testable generator leaves the allocation boundary open.
 - **Q:** Why a local program counter in direct bodies? **A:** Nothing suspends a direct body, so the counter never needs to outlive the call; keeping it local lets the compiler resolve constant jumps. _Rejected:_ storing it through the frame.
 - **Q:** Rewrite slot text instead of threading a locals mode through value emission? **A:** Every slot reference the emitters produce has the one form `frame->slots[<n>]`, so a rewrite over the lines a direct body added is exact and keeps value emission single. _Rejected:_ a second copy of value emission.
+- **Q:** Does a profiler label change the calls in the generated C? **A:** No. A label on the first declaration renames the symbol without touching any reference, so the indexed names stay in every call.
 
 ## Dependencies and consumers
 

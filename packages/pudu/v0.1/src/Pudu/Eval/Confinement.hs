@@ -61,6 +61,7 @@ keptWhenConfined builtin = case builtin of
   SignalWatchStopBuiltin -> True
   SignalStopRequestedBuiltin -> True
   SpawnThreadBuiltin -> True
+  AttemptActionBuiltin -> True
   JoinThreadBuiltin -> True
   SleepBuiltin -> True
   ChannelOpenBuiltin -> True

@@ -87,7 +87,7 @@ effectValueNames =
   , "socketClose", "socketPeer", "socketPort", "socketFinish"
   , "gzipCompress", "gzipDecompress", "deflateRaw", "inflateRaw", "tlsUpgradeWithin", "tlsConnect", "tlsConnectWithin", "tlsSend", "tlsSendWithin"
   , "tlsReceive", "tlsReceiveWithin", "tlsClose", "tlsCloseWithin", "tlsPeer"
-  , "spawnThread", "joinThread", "sleepMillis"
+  , "spawnThread", "attemptAction", "joinThread", "sleepMillis"
   , "channelOpen", "channelPush", "channelPull", "channelWaiting", "channelFinish"
   , "channelPullWithin"
   , "mutexOpen", "mutexAcquire", "mutexAcquireWithin", "mutexRelease"

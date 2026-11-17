@@ -7,6 +7,7 @@ tags: [changelog]
 
 ## 2026-11-16 — Native validation fixes (#935)
 
+- Native binaries name each generated function after its Pudu function for profilers and debuggers (#938).
 - Foreign parameters accept `Option` of a declared handle: `None` crosses as null, `Some` as a live handle (#935).
   [[Foreign Crossing]] · [[Backend Emit Foreign]]
 - Keep native callback lookup outside the setjmp frame and bound text

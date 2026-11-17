@@ -240,6 +240,7 @@ dispatchCall needs spanValue lent target values =
     BuiltinValue BytesOfBuiltin -> callBytesOf spanValue values
     BuiltinValue BucketsOfBuiltin -> callBucketsOf spanValue values
     BuiltinValue SpawnThreadBuiltin -> callSpawnThread (applyFunction needs) spanValue values
+    BuiltinValue AttemptActionBuiltin -> callAttemptAction (applyFunction needs) spanValue values
     BuiltinValue hashing
       | isHashingBuiltin hashing -> callHashing spanValue hashing values
     BuiltinValue ShowBuiltin -> callShow spanValue values
@@ -552,7 +553,32 @@ callSpawnThread apply spanValue arguments = case arguments of
           pure (Done (VariantValue "Ok" [intOf (fromIntegral token)]) env)
   _ -> abortAt (Just spanValue) "E7012" "spawnThread expects one function" Nothing
  where
-  reported outcome = case outcome of
-    Left problem -> Just (Text.pack (show problem))
-    Right (Aborted diagnostic) -> Just (diagnosticMessage diagnostic)
-    Right _ -> Nothing
+  reported = threadReport
+
+{-| What a thread's action said when it failed, which is what joining it
+    answers; Nothing when it finished. -}
+threadReport :: Either SomeException (Eval Value) -> Maybe Text
+threadReport outcome = case outcome of
+  Left problem -> Just (Text.pack (show problem))
+  Right (Aborted diagnostic) -> Just (diagnosticMessage diagnostic)
+  Right _ -> Nothing
+
+{-| `attemptAction` runs an action on the calling thread and answers what
+    starting it on a thread of its own and joining that thread would: Ok when
+    it finished, the message when it failed. The action sees the state a
+    started thread would, so nothing it binds reaches the caller. -}
+callAttemptAction :: Apply -> Span -> [Value] -> Evaluator Value
+callAttemptAction apply spanValue arguments = case arguments of
+  [action] -> do
+    admitted <- effectsAdmitted
+    if not admitted
+      then
+        abortAt (Just spanValue) "E7009" "attemptAction reaches outside the program"
+          (Just "a compile-time constant is folded while the compiler runs, so it cannot run an action apart")
+      else Evaluator $ \env -> do
+        let Evaluator body = apply spanValue action []
+        outcome <- try (body env{envCallbackAncestry = Set.empty}) :: IO (Either SomeException (Eval Value))
+        pure $ Done (case threadReport outcome of
+          Just message -> VariantValue "Err" [StrValue message]
+          Nothing -> VariantValue "Ok" [UnitValue]) env
+  _ -> abortAt (Just spanValue) "E7012" "attemptAction expects one function" Nothing

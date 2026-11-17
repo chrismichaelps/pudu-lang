@@ -92,6 +92,7 @@ foreignNeeds layouts declarations = concat
         Nothing -> [])
       <> concat ["host_optional" : concatMap parameterNeeds (leaves kind) <> concatMap resultNeeds (leaves kind) <> recordNeeds layouts kind
                 | kind@(CoreRecordType _ _) <- crossingTypes declared]
+      <> ["host_foreign_sqlite" | coreForeignLibrary declared == "pudu_sqlite"]
   | declared <- declarations ]
  where
   optionNeeds kind@(CoreSumType "Option" [_]) =

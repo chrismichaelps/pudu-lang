@@ -13,7 +13,7 @@ import Data.Set (Set)
 import qualified Data.Set as Set
 import Data.Text (Text)
 import qualified Data.Text as Text
-import Pudu.Backend.Emit.State (EmitState (..), callDepthSite, divideByZeroSite, line, operatorFailureSite, overflowSite, textOfInt)
+import Pudu.Backend.Emit.State (EmitState (..), callDepthSite, divideByZeroSite, line, operatorFailureSite, overflowSite, profileLabel, textOfInt)
 import Pudu.Comptime.Limits (callDepthLimit)
 import Pudu.Core (CoreBinaryOperator (..), CoreType (..))
 import Pudu.Core.Frame
@@ -100,7 +100,7 @@ emitFastFunctions fast state source
             , name <- helperOf (frameValueShape value) ]
           opened = foldl' line state
             (concat [code | (name, code) <- helpers, Set.member name used]
-              <> [prototype identity function <> ";" | (identity, function) <- chosen])
+              <> [prototype identity function <> profileLabel "fast" (frameFunctionName function) identity <> ";" | (identity, function) <- chosen])
       done <- foldM (\current (identity, function) -> body identities current identity function) opened chosen
       let signedParameters = any (any signedSlot . frameFunctionParameters . snd) chosen
       pure (done, Set.fromList
