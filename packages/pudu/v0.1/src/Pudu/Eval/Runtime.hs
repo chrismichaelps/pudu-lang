@@ -4,7 +4,9 @@ module Pudu.Eval.Runtime
   ) where
 
 import Control.Exception (bracket)
-import Pudu.Diagnostic (Diagnostic)
+import Data.Maybe (mapMaybe)
+import Pudu.Diagnostic
+  ( Diagnostic, Severity (Warning), diagnostic, diagnosticMessage, diagnosticSpan, mkDiagnosticCode )
 import Pudu.Eval.Child (closeChildStore, newChildStore)
 import Pudu.Eval.Concurrent (closeConcurrentStore, newConcurrentStore)
 import Pudu.Eval.Desktop (closeDesktopStore, newDesktopStore)
@@ -13,6 +15,8 @@ import Pudu.Eval.Env (Env, emptyEnv)
 import Pudu.Eval.Handle (closeHandleStore, newHandleStore)
 import Pudu.Eval.Socket (closeSocketStore, newSocketStore)
 import Pudu.Eval.Tls (closeTlsStore, newTlsStore)
+import Pudu.Foreign.Callback.Native (closeNativeCallbackCache, newNativeCallbackCache)
+import Pudu.Foreign.CallbackStore (closeCallbackStore, newCallbackStore)
 import Pudu.Foreign.Ownership
   ( closeForeignStore
   , newForeignStore
@@ -27,11 +31,28 @@ withRuntimeEnv action =
     bracket newSocketStore closeSocketStore $ \sockets ->
       bracket newTlsStore closeTlsStore $ \secured ->
         bracket newForeignStore closeForeignStore $ \foreignStore -> do
-          result <- bracket newChildStore closeChildStore $ \children ->
-            bracket newConcurrentStore closeConcurrentStore $ \concurrent ->
-              bracket newDesktopStore closeDesktopStore $ \desktop ->
-                bracket newAudioStreamStore closeAudioStreamStore $ \audioStreams ->
-                  action (emptyEnv handles children sockets secured concurrent desktop audioStreams foreignStore)
+          (result, callbackProblems) <-
+            bracket newChildStore closeChildStore $ \children ->
+              bracket newConcurrentStore closeConcurrentStore $ \concurrent ->
+                bracket newDesktopStore closeDesktopStore $ \desktop ->
+                  bracket newAudioStreamStore closeAudioStreamStore $ \audioStreams ->
+                    bracket newCallbackStore closeCallbacks $ \callbacks ->
+                      bracket newNativeCallbackCache closeNativeCallbackCache $ \nativeCallbacks -> do
+                        value <- action (emptyEnv handles children sockets secured concurrent desktop audioStreams foreignStore callbacks nativeCallbacks)
+                        closeNativeCallbackCache nativeCallbacks
+                        failures <- closeCallbackStore callbackDrainPatience callbacks
+                        pure (value, mapMaybe callbackCleanupWarning failures)
           closeForeignStore foreignStore
           problems <- takeForeignDiagnostics foreignStore
-          pure (result, problems)
+          pure (result, callbackProblems <> problems)
+ where
+  closeCallbacks store = closeCallbackStore callbackDrainPatience store >> pure ()
+
+callbackDrainPatience :: Int
+callbackDrainPatience = 5 * 1000 * 1000
+
+callbackCleanupWarning :: Diagnostic -> Maybe Diagnostic
+callbackCleanupWarning failure = do
+  code <- mkDiagnosticCode "W7027"
+  diagnostic code Warning (diagnosticSpan failure)
+    ("foreign callback failed before teardown: " <> diagnosticMessage failure)

@@ -46,6 +46,12 @@ parseForeign :: Visibility -> Parser (Located Declaration)
   the foreign library, not Pudu, owns its representation. `type` retains its established keyword
   role and the handle name must follow the ordinary upper-identifier rule.
 
+- **Callback declarations retain native order.** The callback parameter
+  list keeps the standalone context position, borrowed marker on named
+  parameters, and the span of the optional fallback literal. In a foreign
+  function, `context name` refers to a callback argument. A parameter named
+  `context` followed by `:` follows the ordinary parameter grammar.
+
 ### Linkage
 
 - **Requires:** [[Parser State]], [[Parser Type]], [[Parser Declaration Function]].
@@ -65,6 +71,14 @@ parseForeign :: Visibility -> Parser (Located Declaration)
 - **Q:** Permit the foreign spelling directly as the Pudu name? **A:** No. _Rationale:_ one imported
   library should not suspend the language's naming grammar for every caller and editor feature.
   _Rejected:_ upper-initial value identifiers inside foreign blocks.
+
+## Resolved Grill Log for #876
+
+- **Q:** Reserve either callback word? **A:** Keep both contextual. The block
+  member position identifies `callback`, and one token of lookahead
+  distinguishes a context marker from an ordinary parameter name.
+- **Q:** Does parsing authorize a crossing? **A:** [[Type Check Foreign]]
+  continues to refuse callback crossings until the runtime path is available.
 
 ## Referenced by
 

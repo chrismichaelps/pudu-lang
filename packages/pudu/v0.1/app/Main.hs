@@ -59,6 +59,7 @@ import Pudu.Cli.Memory (withMemoryFailure)
 import Pudu.Compiler.Cache (ProductCache, collectedEntries, openCollectingCache, openProductCache)
 import Pudu.Backend.Emit (EmittedUnit (..), EntryForm (..), emitUnit)
 import Pudu.Backend.Target (NativeTarget (..), TargetRefusal (..), nativeTargetNamed, nativeTargetNames, targetRefusals)
+import Pudu.Cli.Doctor (runDoctor)
 import Pudu.Backend.Toolchain.App (AppRequest (..), bundleIdentifier, compileApp)
 import Pudu.Backend.Toolchain.Library (LibraryProducts (..), LibraryRequest (..), compileLibrary)
 import Pudu.Backend.Toolchain
@@ -428,6 +429,7 @@ runCommand = do
     [] -> startRepl style Nothing
     ("repl" : rest) -> startRepl style (listToPath rest)
     ("check" : paths) -> checkPaths style paths
+    ("doctor" : rest) -> runDoctor rest
     ["expand", path] -> expandProgram style path
     ("lint" : rest) -> runLint style rest
     ("run" : "--watch" : rest) -> case watchOptions [] rest of
@@ -813,9 +815,10 @@ buildNativeProgram style path target requested = do
                   , appExports = emittedExports unit, appName = name, appIdentifier = bundleIdentifier name }
                 case compiled of
                   Left failure -> toolchainFailed style program (moduleSpan parsed) failure
-                  Right warnings -> do
+                  Right (warnings, findings) -> do
                     unless (Text.null warnings) $
                       TextIO.putStrLn warnings
+                    mapM_ (TextIO.putStrLn . Native.ledgerWarning) findings
                     TextIO.putStrLn (Text.pack target <> ": an application for " <> nativeTargetName chosen <> ", identified as " <> bundleIdentifier name)
               [] -> do
                 compiled <- compileLibrary LibraryRequest{librarySource = emittedSource unit, libraryOutput = target, libraryTarget = chosen, libraryExports = emittedExports unit}
@@ -824,6 +827,7 @@ buildNativeProgram style path target requested = do
                   Right products -> do
                     unless (Text.null (libraryWarnings products)) $
                       TextIO.putStrLn (libraryWarnings products)
+                    mapM_ (TextIO.putStrLn . Native.ledgerWarning) (libraryFindings products)
                     TextIO.putStrLn (Text.pack target <> ": a static library for " <> nativeTargetName chosen
                       <> ", entered through pudu_program_run in " <> Text.pack (libraryHeader products))
                     unless (null (libraryLinks products)) $
@@ -850,6 +854,7 @@ toolchainDiagnostic spanValue failure = case failure of
   ToolchainSdkMissing target detail -> Native.platformSdkMissing spanValue target detail
   ToolchainTargetUnbuilt target ->
     Native.targetRefusal spanValue target "a native build" "its shared-library output is designed but not built yet"
+  ToolchainOutsideLedger target finding -> Native.ledgerRefusal spanValue target finding
 
 buildProgram :: RenderStyle -> FilePath -> FilePath -> Maybe FilePath -> IO ()
 buildProgram style path target runtime = do
@@ -1338,6 +1343,7 @@ usage =
     , "  pudu                 start the puduci interactive session"
     , "  pudu repl [file]     start puduci, optionally loading a file"
     , "  pudu check <file>... compile files and report diagnostics"
+    , "  pudu doctor --native report the native toolchain against the platform ledger"
     , "  pudu expand <file>   print the implementations its derives generate"
     , "  pudu lint [--json] [--fix] [--allow CODE] <path>..."
     , "                       analyze Pudu files or directories"

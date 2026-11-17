@@ -47,6 +47,16 @@ in the data and participates in equality. Type arguments retain their order.
 
 `CoreForeignCall` carries a `CoreForeign` (library, version, symbol, parameter and result crossing types) and its arguments in order. Resolved Grill Log: the call carries its whole declaration so frames and emission need no module table ([[Native Foreign Call Sites]]).
 
+## Default argument count
+
+suppliedCountName identifies the internal argument-count slot. The spelling cannot collide with an ordinary source parameter.
+
+## Resolved Grill Log for #876 — Native callback lowering
+
+A callback token is a distinct nominal native scalar. Core callback operations
+carry the checked declaration or use the token for unregister. Foreign calls
+retain both ABI positions and the trampoline's typed fallback.
+
 ## Referenced by
 
 [[src/_MOC]] · [[Native Core Contracts Delivery]] · [[Core IR]]

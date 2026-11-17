@@ -1,0 +1,53 @@
+module Main
+
+import Std.Db as Db
+import Std.Db.Session as Session
+import Std.Net as Net
+import Std.Result as Result
+import Std.Sync as Sync
+
+fn check(holds: Bool, name: Str) -> () { if !holds { panic(name) } }
+
+fn observed(open: &Session.Connection) -> Net.State {
+  match Net.state(&open.socket) {
+    case Ok(held) => held
+    case Err(problem) => panic(show(problem))
+  }
+}
+
+/// A statement is planned once per connection: the first run parses it
+/// under a name, a second run binds that name, and a statement the server
+/// refused to plan is never bound by name.
+export fn main() -> Int {
+  let fresh = Session.Connection{socket: Net.fake(), buffer: bytesOf([]), parameters: [], status: Session.Idle,
+    lease: Sync.cell(0), epoch: 0, deadline: -1, prepared: mapOf([]), opened: 0, returned: 0 }
+  let Ok(first) = Db.run(fresh, "select $1", &[Some("1")]) else { panic("first run") }
+  check(observed(&first[1]).batches == ["PBDES"], "a first run plans the statement")
+  check(observed(&first[1]).parsed == ["pudu_0"], "under a name")
+  let Ok(second) = Db.run(first[1], "select $1", &[Some("2")]) else { panic("second run") }
+  check(observed(&second[1]).batches == ["PBDES", "BDES"], "a second run binds the name without planning")
+
+  // A refused statement keeps nothing, so the next run plans it again.
+  let refused = Db.run(second[1], "bad", &[])
+  check(Result.isErr(&refused), "a statement the server refused fails")
+  let held = observed(&second[1])
+  check(held.batches[2] == "PBDES" && held.parsed == ["pudu_0", "pudu_1"], "the refused statement was parsed")
+  let again = Db.run(second[1], "bad", &[])
+  check(Result.isErr(&again), "and fails again")
+  check(observed(&second[1]).parsed == ["pudu_0", "pudu_1", "pudu_1"], "planned again rather than bound by name")
+
+  // Past the limit a connection keeps, a statement is planned unnamed.
+  var open = second[1]
+  var index = 0
+  while index < 260 {
+    match Db.run(open, "select " + show(index), &[]) {
+      case Ok(pair) => { open = pair[1] }
+      case Err(problem) => panic(show(problem))
+    }
+    index = index + 1
+  }
+  let names = observed(&open).parsed
+  check(names[names.length() - 1] == "", "statements past the limit are planned unnamed")
+  check(open.prepared.size() == 256, "the connection keeps its limit")
+  0
+}

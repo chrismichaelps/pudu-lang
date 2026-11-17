@@ -51,6 +51,10 @@ the call ([[Native Text Number]]). No C code needs to know an Option's layout.
 
 `Str.toBytes()` wraps the text's own storage as Bytes.
 
+## Option result layouts
+
+Each numeric parser knows its result carrier. Use it to form the Option layout when the call does not carry that layout in its span facts.
+
 ## Referenced by
 
 [[Compiler Lower Body]] · [[Native Text Methods]] · [[src/_MOC]]

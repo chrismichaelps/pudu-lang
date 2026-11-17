@@ -45,3 +45,7 @@ The iOS host sources now stage the private theme header `pudu_ios_theme.h` with 
 ## iOS event and list sources (#925)
 
 The iOS host sources also stage `pudu_ios_events.h`, `pudu_ios_controls.h` and `pudu_ios_list.h` with the host translation unit and the other private headers. All six are written unchanged before clang runs. See [[iOS Host Events]], [[iOS Host Controls]] and [[iOS Host List]].
+
+## iOS material source (#928)
+
+The iOS host sources also stage `pudu_ios_material.h` with the host translation unit and the other private headers. All seven are written unchanged before clang runs. See [[iOS Host Material]].

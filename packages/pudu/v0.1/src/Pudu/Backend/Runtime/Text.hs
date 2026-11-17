@@ -43,7 +43,7 @@ textRuntimeParts =
       , "static pudu_text pudu_text_allocate(size_t length, unsigned char **bytes) {"
       , "  pudu_text_owner *owner;"
       , "  pudu_text text;"
-      , "  if (length > SIZE_MAX - sizeof(pudu_text_owner) - 1) pudu_memory_failure();"
+      , "  if (length > (size_t)PTRDIFF_MAX - sizeof(pudu_text_owner)) pudu_memory_failure();"
       , "  owner = malloc(sizeof(pudu_text_owner) + (length == 0 ? 1 : length));"
       , "  if (owner == NULL) pudu_memory_failure();"
       , "  owner->count = 1;"

@@ -26,7 +26,8 @@ Exports:
 - `rgb(red: UInt8, green: UInt8, blue: UInt8) -> Rgba`: an opaque color.
 - `stream(theme: &Theme) -> Bytes`: one THEME instruction with the seven tones in role order, then one APPEARANCE instruction.
 - `restyled(before: &Theme, after: &Theme) -> Bytes`: empty when the two encode identically, otherwise `stream(after)`.
-- `roleCode(role: Role) -> UInt32` and `styleCode(style: TextStyle) -> UInt32`: the wire codes, read from constant tables.
+- `type Material = Thin | Regular | Thick`: wire codes 1, 2 and 3 in that order. Code 0 is never written.
+- `roleCode(role: Role) -> UInt32`, `styleCode(style: TextStyle) -> UInt32` and `materialCode(material: Material) -> UInt32`: the wire codes, read from constant tables. `materialCode` reads the constant table `MATERIALS`.
 
 ## Invariants
 
@@ -42,10 +43,11 @@ Exports:
 - No Oklch and no CSS. Design-token conversion to sRGB happens once, in the token package of FUI, before a value reaches this module.
 - A theme change is a separate commit, applied with `Std.Mobile.Host` `apply`. It is never part of a view update, so `View.mount` and `View.update` emit no theme instruction.
 - No string-keyed tokens on the wire. Roles are a closed sum.
+- A material is a code only. The host chooses its realization (glass or blur) at draw time; this module names no platform view.
 
 ## Dependencies and consumers
 
-Depends on [[Std Mobile Stream]] for the instruction words. Consumers: [[Std Mobile View]], which uses `Role` and `TextStyle` in its wrappers; the host [[iOS Host Theme]]; the fixture [[Uses Mobile Theme]]; and the example [[Native Themed Example]].
+Depends on [[Std Mobile Stream]] for the instruction words. Consumers: [[Std Mobile View]], which uses `Role`, `TextStyle` and `Material` in its wrappers; the host [[iOS Host Theme]]; the host [[iOS Host Material]]; the fixtures [[Uses Mobile Theme]] and [[Uses Mobile Material]]; and the examples [[Native Themed Example]] and [[Native Glass Example]].
 
 ## Resolved Grill Log
 
@@ -56,4 +58,4 @@ Depends on [[Std Mobile Stream]] for the instruction words. Consumers: [[Std Mob
 
 ## Referenced by
 
-[[src/Std/_MOC]] · [[Std Mobile View]] · [[Std Mobile Stream]] · [[iOS Host Theme]] · [[Native iOS Theming Delivery]]
+[[src/Std/_MOC]] · [[Std Mobile View]] · [[Std Mobile Stream]] · [[iOS Host Theme]] · [[iOS Host Material]] · [[Native iOS Theming Delivery]] · [[Native iOS Materials Delivery]]

@@ -122,7 +122,9 @@ sourceLibraries :: Text -> IO [String]
 sourceLibraries source = do
   secured <- if tlsLibraryMarker `Text.isInfixOf` source then tlsLibraryFlags else pure []
   pure (["-lz" | compressLibraryMarker `Text.isInfixOf` source] <> secured
-    <> ["-ldl" | os == "linux", foreignLoaderMarker `Text.isInfixOf` source])
+    -- A foreign block naming the C library reaches the program's own
+    -- symbols; Linux exports them only when asked.
+    <> concat [["-ldl", "-rdynamic"] | os == "linux", foreignLoaderMarker `Text.isInfixOf` source])
 
 tlsLibraryFlags :: IO [String]
 tlsLibraryFlags = do

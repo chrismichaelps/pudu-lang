@@ -16,6 +16,12 @@ and [[Compiler Lower Kernel Lanes]] build their tables from it.
 The description is data, so the direct call and the callable body of a
 builtin are one builder over one row.
 
+## Required answers (#935)
+
+`Required` holds the kernel call and the diagnostic to raise if its return
+box is absent. Lowering reads the held box once and uses the same direct-call
+or caller-blame rule as other guarded kernels.
+
 ## Referenced by
 
 [[Compiler Lower Kernel]] · [[Compiler Lower Kernel Host]] · [[Compiler Lower Kernel Lanes]]

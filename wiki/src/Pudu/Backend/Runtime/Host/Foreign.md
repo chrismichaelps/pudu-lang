@@ -42,6 +42,8 @@ claim settlement. Each owned address has one live claim. Counted results can
 share an address and each gets a distinct generation. Borrowed handles have
 no claim. Explicit release removes the exact live generation. Teardown
 drains owned claims by signed address, then counted claims by generation.
+`pudu_foreign_optional_handle` (#935) supplies the address for an optional handle parameter: a null
+pointer for `None`, and for `Some` the address after the same liveness refusal a bare handle receives.
 
 ## Resolved Grill Log
 

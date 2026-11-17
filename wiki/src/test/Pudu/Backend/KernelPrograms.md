@@ -7,7 +7,7 @@ aliases: [Backend Kernel Programs]
 ---
 # Backend Kernel Programs
 
-Export kernelSuccessPrograms, kernelModulePrograms and kernelRefusalPrograms.
+Export kernelSuccessPrograms, kernelLibraryPrograms and kernelRefusalPrograms.
 Success programs carry handwritten output for the buffer, column and
 flat-table primitives, the checksums, the audio generators and every
 builtin as a value. Module programs import `Std.FlatMap`, `Std.Json`,
@@ -26,6 +26,12 @@ filtering semantics remain verified through dedicated aggregate and filter tests
 The broad phase answers touching pairs (signed zero included) in order and refuses a NaN bound, unequal counts and an inverted box; an empty array compares with an array whose element a generic solved, on either side (#846). That case imports `Std.Iter`, so it sits in `kernelLibraryPrograms`, which the conformance property runs and the single-module leak harness does not.
 
 The raster kernels fill (clamped and half-even channels), cull, own shared edges, interpolate affinely and with perspective weights, sample nearest and bilinear in linear and sRGB with alpha cutout, and shade; every malformed target, cull, lane count, weight, texture and uniform answers None (#855).
+
+## Binary codec (#935)
+
+The library programs check canonical scalar wire bytes, recursive values,
+map construction, and corrupt input. The refusal program checks duplicate
+writer fields through a first-class builtin, including caller blame.
 
 ## Referenced by
 

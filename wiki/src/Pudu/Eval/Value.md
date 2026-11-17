@@ -154,6 +154,12 @@ includes the claim, so a borrowed handle and an owned one at one address are not
   equality, hashing, and freezing are unchanged. _Rejected:_ a rope for every text.
 - **Q:** Where does `Frame` live? **A:** Beside `Captured`, which holds frames, so a closure's
   captured environment is the frames themselves rather than maps rewrapped on every call.
+## Resolved Grill Log for #876 — Interpreter callback values
+
+The callback registration function, token and bound unregister operation
+have distinct runtime variants. A token carries its declaring owner and
+store key. The retained handler lives in [[Foreign Callback Store]].
+
 ## Referenced by
 
 [[src/Pudu/Eval/_MOC]] · [[Evaluator]]

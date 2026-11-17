@@ -8,12 +8,13 @@ aliases: [Std Db Driver]
 # Std Db Driver
 
 ## Purpose and interface
-Backend-neutral Value, Column, Rows, Error, Client and Driver records. A driver owns URI schemes, placeholders and opening a client; clients own bound-query, fixed-statement and close callbacks. Explicit connect selects exactly one matching driver from a caller-supplied array; zero matches or ambiguous matches fail. No global registry, fallback driver or SQL rewriting. Custom drivers can adapt SQL or other databases without PostgreSQL types. All callbacks propagate typed errors and own resource cleanup; clients must serialize or pool concurrent calls and close admission safely.
+Backend-neutral Value, Column, Rows, Error, Client and Driver records. A driver owns URI schemes, placeholders and opening a client; clients own bound-query, fixed-statement and close callbacks. Explicit connect selects exactly one matching driver from a caller-supplied array; zero matches or ambiguous matches fail. No global registry, fallback driver or SQL rewriting. Each driver declares an `engine` kind (`Postgresql`, `Sqlite` or `Custom(Str)`) and a `capabilities` record; `plainCapabilities()` states none. Code above the driver branches on a stated capability, never on a driver's name. Custom drivers can adapt SQL or other databases without PostgreSQL types. All callbacks propagate typed errors and own resource cleanup; clients must serialize or pool concurrent calls and close admission safely.
 
 ## Resolved Grill Log
 - **Q:** Make PostgreSQL session types mandatory for every database? **A:** No; the public driver seam uses independent values and callbacks.
 - **Q:** Rewrite SQL to pretend dialects are identical? **A:** No; the selected driver declares its placeholder convention, and the caller writes its dialect.
 - **Q:** Advertise drivers that have no implementation? **A:** No; third-party drivers are supported through the contract, but only concrete adapters are listed as bundled.
+- **Q:** Branch on a driver's name to decide behavior? **A:** No. Engines are dispatched by kind through a factory table, and behavior by stated capability, not by driver name.
 
 ## Referenced by
 [[src/Std/_MOC]] · [[Std App Database]] · [[Std Db]] · [[architecture/STDLIB]]

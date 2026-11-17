@@ -8,7 +8,7 @@ aliases: [Native Builtin Kernels]
 The pure builtin kernels are native: fixed-width buffer access, the column
 kernels, sort indices, the flat table behind `Std.FlatMap`, digests and keyed
 digests, `deriveKey`, `checksumOf`, sealing, the RSA and P-256 signature
-checks, the audio byte generators and the JSON, XML and CSV codecs. Each is a
+checks, the audio byte generators and the JSON, XML, CSV and binary codecs. Each is a
 first-class value as well as a direct call.
 
 | Family | Native surface |
@@ -19,7 +19,7 @@ first-class value as well as a direct call.
 | Digests | SHA-2, SHA-3, BLAKE2b, HMAC over SHA-256 and SHA-512, PBKDF2 |
 | Checks | `constantTimeEqual`, `checksumOf`, `sealBytes`, `openSealedBytes`, `verifyRsaSha256`, `verifyEcdsaSha256` |
 | Audio | `audioToneBytes`, `audioRampBytes` |
-| Codecs | `jsonDecode`, `jsonEncode`, `xmlDecode`, `csvRecords` |
+| Codecs | `jsonDecode`, `jsonEncode`, `xmlDecode`, `csvRecords`, `binaryEncode`, `binaryDecode` |
 
 ## Contract
 
@@ -28,12 +28,13 @@ stops on Never before later operands run. Guards run in the interpreter's
 order with its codes, messages and spans. The table of kernel names is closed
 ([[Core Kernel Operations]]), so emission cannot reach a kernel it has no
 runtime function for. Layout integers (variant indexes, field positions,
-modes) are fixed by the checked `Std.Json`, `Std.Xml` and `Std.Csv` shapes
+modes) are fixed by the checked `Std.Json`, `Std.Xml`, `Std.Binary` and `Std.Csv` shapes
 and refuse when a program's type does not have them.
 
 The Option results are built in Core from a test and a read; the runtime
 returns a box, an index or a presence flag and never names a sum layout
-except where a codec builds a whole tree.
+except where a codec builds a whole tree. [[Native Binary Kernels]] use the
+host outcome channel for decoder errors and E7001 for writer refusal.
 
 ## Evidence
 

@@ -48,13 +48,32 @@ export type Client = {
   close: fn() -> Result[(), Error]
 }
 
+/// The database engine a driver speaks to. An application's own driver names
+/// its engine as `Custom`.
+export type Engine = Postgresql | Sqlite | Custom(Str)
+
+/// What an engine can do that code above the driver must know, stated by the
+/// driver rather than read from its name: code that branches on a capability
+/// works for an engine it has never heard of.
+export type Capabilities = {
+  /// The statement that takes a lock held until the transaction ends, by the
+  /// key it guards, for an engine that has one. Migrations take it so two
+  /// processes do not apply the same migration at once.
+  advisoryLock: Option[fn(Int) -> Str]
+}
+
 /// A connector is an ordinary value; applications choose which drivers they admit.
 export type Driver = {
   name: Str,
+  engine: Engine,
   schemes: Array[Str],
   placeholders: Placeholders,
+  capabilities: Capabilities,
   open: fn(Str, Int) -> Result[Client, Error]
 }
+
+/// An engine that states no capability beyond the driver contract.
+export fn plainCapabilities() -> Capabilities { Capabilities{advisoryLock: None} }
 
 /// An error naming the driver, the kind of failure, and what happened.
 export fn error(driver: Str, category: Str, message: Str) -> Error {

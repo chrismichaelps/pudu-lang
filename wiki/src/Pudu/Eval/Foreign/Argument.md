@@ -39,6 +39,9 @@ count :: Int -> Text
 - **Type crossing validation (`E7019`):** Floats, booleans, bytes, handles, and records must strictly match the declared crossing type.
 - **Record validation (`E7023`):** Records crossing foreign boundaries must provide all declared fields by name.
 - **Slot handling:** Slots receive no caller value on input; they are threaded with placeholder values and marked for post-call output extraction.
+- **Optional handle arguments:** `Some(h)` crosses as the handle's live address and `None` as a null
+  pointer (`CrossedPointer nullPtr`). The handle inside `Some` is leased like a bare handle, so a
+  released one is refused with `E7022` before the call.
 
 ## Linkage
 
@@ -53,3 +56,9 @@ count :: Int -> Text
 ## Grill Log
 
 - **Q:** Why isolate argument crossing into `Eval.Foreign.Argument`? **A:** Validating and converting caller values to native `CrossedValue` representations constitutes a distinct, cohesive phase (~130 lines) separate from symbol resolution, ownership leasing, execution, and result settlement.
+
+## Resolved Grill Log for #876 — Callback dispatch
+
+Keep the native ordinal when weaving output slots and callbacks. A context
+slot consumes no Pudu argument. Validate a callback token's nominal owner
+before allocating native contexts.

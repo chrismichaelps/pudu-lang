@@ -82,8 +82,8 @@ export fn handlerOf(target: &Server) -> Route.Handler {
 
 /// A handler's answer, or a 500 when the handler failed while running.
 ///
-/// A handler runs on a thread of its own, and a failure there is reported to
-/// the thread that joins it rather than ending that thread. Without this, a
+/// A handler runs as an attempt, so a failure ends the handler and is
+/// reported to the worker rather than ending the worker. Without this, a
 /// route that failed — an index out of range, a value no arm matched — ended
 /// the worker serving it: the client was never answered, nothing was logged,
 /// and after as many failures as there were workers the server answered
@@ -94,17 +94,10 @@ export fn handlerOf(target: &Server) -> Route.Handler {
 fn contained(handle: Route.Handler, request: Route.Request) -> Http.Response {
   let held: Sync.Cell[Option[Http.Response]] = Sync.cell(None)
   let asked = request
-  let started = Concurrent.start(fn() -> () {
-      let _kept = Sync.set(&held, Some(handle(asked)))
-    })
-  let outcome = match started {
-    case Ok(runner) => {
-      let joined = Concurrent.join(&runner)
-      let _forgotten = Concurrent.forget(&runner)
-      Result.mapErr(joined, fn(problem: Concurrent.ConcurrentError) -> Str { show(problem) })
-    }
-    case Err(problem) => Err("the handler could not start: " + show(problem))
-  }
+  let outcome = Result.mapErr(
+    Concurrent.attempt(fn() -> () { let _kept = Sync.set(&held, Some(handle(asked))) }),
+    fn(problem: Concurrent.ConcurrentError) -> Str { show(problem) }
+  )
   let answer = Result.unwrapOr(Sync.get(&held), None)
   let _disposed = Sync.disposeCell(&held)
   match outcome {
@@ -128,7 +121,8 @@ fn failedRequest(request: &Route.Request, reason: Str) -> Http.Response {
   withLength(&closing(&text(500, "internal server error")))
 }
 
-/// A request built from what a connection carried, or the reason it was not
+/// A request built from what a connection carried, with whether its version
+/// keeps the connection open unless told otherwise, or the reason it was not
 /// one. The reason is a response rather than an error, because a server that
 /// was handed a malformed message is working correctly when it says so.
 fn readRequest(
@@ -137,7 +131,7 @@ fn readRequest(
   bodyLimit: Int,
   readMillis: Int,
   peer: Str
-) -> Result[Route.Request, Http.Response] {
+) -> Result[(Route.Request, Bool), Http.Response] {
   let expires = clock() + readMillis
   let split = Read.until(connection, &ByteSeq.fromText("\r\n\r\n"), headLimit, expires)
   if let Err(_) = split { return Err(badRequest("the head did not arrive")) }
@@ -168,15 +162,14 @@ fn readRequest(
     case Ok(body) => Http.Request{..message, body: body, binaryBody: None}
     case Err(_) => Http.Request{..message, body: "", binaryBody: Some(payload)}
   }
-  Ok(
-    Route.Request {
-      message: whole,
-      path: Route.pathOf(whole.target),
-      params: mapOf([]),
-      query: Route.queryOf(whole.target),
-      peer: peer
-    }
-  )
+  let request = Route.Request {
+    message: whole,
+    path: Route.pathOf(whole.target),
+    params: mapOf([]),
+    query: Route.queryOf(whole.target),
+    peer: peer
+  }
+  Ok((request, Http.keepsAlive(&Message.requestVersion(head))))
 }
 
 /// Serve one connection: read a request, answer it, and say whether the
@@ -197,11 +190,12 @@ fn serveWith(target: &Server, connection: &Net.Connection, handle: Route.Handler
     let _sent = sendResponse(connection, &withLength(&closing(&refusal)), target.writeMillis)
     false
   } else {
-    let request = Result.unwrapOr(read, emptyServerRequest())
+    let pair = Result.unwrapOr(read, (emptyServerRequest(), false))
+    let request = pair[0]
     // The route is already contained inside the chain; the chain needs it
     // again only when it holds middleware of its own that could fail.
     let answer = if target.middleware.length() == 0 { handle(request) } else { contained(handle, request) }
-    let keeping = wantsKeepAlive(&request.message)
+    let keeping = wantsKeepAlive(&request.message, pair[1])
     let framed = withLength(&answer)
     let selected = if request.message.method == Http.Head { Http.Response{..framed, body: "", binaryBody: None} } else { framed }
     let finished = if keeping { selected } else { closing(&selected) }
@@ -227,16 +221,19 @@ fn sendResponse(connection: &Net.Connection, answer: &Http.Response, millis: Int
   }
 }
 
-/// Whether the client asked to keep the connection open.
-/// The protocol's later versions keep it open unless the request says
-/// otherwise, which is the default assumed here.
-fn wantsKeepAlive(message: &Http.Request) -> Bool {
+/// Whether the connection stays open after this request: what its
+/// `Connection` header asks, else the default of the version it was sent in.
+/// HTTP/1.0 closes unless asked to stay open, and a client of it waits for the
+/// close to know the response is over.
+fn wantsKeepAlive(message: &Http.Request, byDefault: Bool) -> Bool {
   for entry in message.headers {
     if entry[0].toLower() == "connection" {
-      if entry[1].trim().toLower() == "close" { return false }
+      let asked = entry[1].trim().toLower()
+      if asked == "close" { return false }
+      if asked == "keep-alive" { return true }
     }
   }
-  true
+  byDefault
 }
 
 fn closing(answer: &Http.Response) -> Http.Response {

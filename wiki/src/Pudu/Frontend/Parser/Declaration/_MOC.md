@@ -14,7 +14,7 @@ tags: [moc, module]
 - [[Parser Trait]] — trait contracts and `impl` blocks.
 - [[Parser Derive Declaration]] — attributes, `derives` clauses, and `derive` definitions and requests.
 - [[Parser Macro]] — typed syntax transformers, whose parameters declare the syntax each accepts.
-- [[Parser Declaration Foreign]] — a block declaring a library written elsewhere, the functions it exports, and what releases an owned result.
+- [[Parser Declaration Foreign]] — a block declaring a library written elsewhere, including callback signatures, context positions, and owned results.
 
 The submodules accept narrow parser capabilities and never import the declaration orchestrator, preventing the recursive block/expression/declaration knot from becoming a Haskell module cycle.
 

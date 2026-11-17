@@ -215,14 +215,10 @@ fn applyThrough(
   }
 }
 
-/// The statement that takes the migration lock inside a transaction, for the
-/// backends that have one.
+/// The statement that takes the migration lock inside a transaction, for an
+/// engine whose driver states one.
 fn lockFor(driver: &Driver.Driver) -> Option[Str] {
-  if driver.name == "postgresql" {
-    Some("select pg_advisory_xact_lock(" + show(LOCK_KEY) + ")")
-  } else {
-    None
-  }
+  Option.map(driver.capabilities.advisoryLock, fn(lock: fn(Int) -> Str) -> Str { lock(LOCK_KEY) })
 }
 
 fn locked(open: &Driver.Tx, guard: &Option[Str]) -> Result[(), Driver.Error] {

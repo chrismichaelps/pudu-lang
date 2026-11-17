@@ -38,6 +38,7 @@ import Pudu.Frontend.Syntax.Tree
   , TypeDefinition (..)
   , Variant (..)
   , Visibility (..)
+  , foreignCallbackNames
   )
 import Pudu.Semantic.Symbol (Namespace (..))
 import Pudu.Source (Span)
@@ -119,7 +120,8 @@ declarationExports owner (Located _ declaration) = case declaration of
     | traitVisibility value == Exported -> one TypeSpace (traitName value)
   ForeignDeclaration value
     | foreignVisibility value == Exported ->
-        concatMap (one TypeSpace) (foreignTypes value)
+        concatMap (one TypeSpace) (foreignTypes value <> foreignCallbackNames value)
+          <> concatMap (one ValueSpace) (foreignCallbackNames value)
           <> concatMap (one ValueSpace . foreignName . locatedValue) (foreignFunctions value)
   _ -> []
  where

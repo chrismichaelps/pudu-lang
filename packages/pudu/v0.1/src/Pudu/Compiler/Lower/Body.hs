@@ -29,9 +29,11 @@ import Pudu.Compiler.Lower.Dynamic (isDynamic, widen, widenBlock, widenTo)
 import Pudu.Compiler.Lower.Generic (writtenCoreType, writtenTypeArguments)
 import Pudu.Compiler.Lower.For (lowerFor)
 import Pudu.Compiler.Lower.Intrinsic (annotatedPanic, lowerIntrinsicValue)
-import Pudu.Compiler.Lower.Foreign (lowerQualifiedForeignCall)
+import Pudu.Compiler.Lower.Foreign
+  (lowerQualifiedForeignCall, lowerCallbackRegistration, lowerCallbackUnregister
+  , lowerCallbackValue, lowerCallbackUnregisterValue )
 import Pudu.Compiler.Lower.Primitive (lowerPrimitiveCall)
-import Pudu.Compiler.Lower.MethodValue (lowerMethodValue)
+import Pudu.Compiler.Lower.MethodValue (lowerMethodValue, lowerTraitMethodValue)
 import Pudu.Compiler.Lower.Stop (lowerPanic, lowerUntypedConvert)
 import Pudu.Compiler.Lower.Lambda (lowerFunctionValue, lowerLambda, lowerValueCall)
 import Pudu.Compiler.Lower.Tuple (lowerTuple, lowerTupleIndex, lowerTuplePattern)
@@ -120,11 +122,11 @@ foldStatements state = go state []
     go current collected (one@(Located statementSpan statement) : rest) = case statement of
       LetPatternStatement _ pattern _ subject | hasSequencePattern pattern ->
         case lowerLetSequence lowerExpression current statementSpan pattern subject of
-          (after, Just lowered) -> go after (lowered : collected) rest
+          (after, Just lowered) -> binding after collected [lowered] rest
           (after, Nothing) -> (unexplained current statementSpan after, reverse collected, True)
       LetPatternStatement _ pattern annotation subject
         -> case lowerTuplePattern lowerExpression current statementSpan pattern annotation subject of
-            (after, Just statements) -> go after (reverse statements <> collected) rest
+            (after, Just statements) -> binding after collected statements rest
             (after, Nothing) -> (unexplained current statementSpan after, reverse collected, True)
       _ -> case lowerStatement current one of
         (after, Just lowered)
@@ -132,6 +134,10 @@ foldStatements state = go state []
               (after, reverse (lowered : collected), True)
         (after, Just lowered) -> go after (lowered : collected) rest
         (after, Nothing) -> (unexplained current statementSpan after, reverse collected, True)
+
+    binding after collected statements rest
+      | blockType statements Nothing == CoreNeverType = (after, reverse collected <> statements, True)
+      | otherwise = go after (reverse statements <> collected) rest
 
 lowerStatement :: LowerState -> Located Statement -> (LowerState, Maybe CoreStatement)
 lowerStatement state (Located statementSpan statement) = case statement of
@@ -328,12 +334,21 @@ lowerExpression state (Located spanValue expression) = case expression of
     Nothing | Just lowered <- lowerConstant lowerExpression state spanValue [name] -> lowered
     Nothing | Just key <- resolveFunction state [name], Just entry <- lookup key (contextTable (lowerContext state)) ->
       lowerFunctionValue state spanValue key entry
+    Nothing | Just lowered <- lowerCallbackValue state spanValue [name] -> lowered
     Nothing | Just lowered <- lowerIntrinsicValue state spanValue name -> lowered
     Nothing -> maybe (halt spanValue ("the value '" <> name <> "'") state) id
       (lowerVariant lowerExpression state spanValue name [])
+  NameExpression ("::trait-method::" :| [provider, member]) ->
+    lowerTraitMethodValue lowerExpression state spanValue provider member
+  -- A dotted path names a module's constant, a module's function as a
+  -- value, or a variant by its owner.
   NameExpression (first :| rest) ->
     case lowerConstant lowerExpression state spanValue (first : rest) of
       Just lowered -> lowered
+      Nothing
+        | Just key <- resolveFunction state (first : rest), Just entry <- lookup key (contextTable (lowerContext state)) ->
+            lowerFunctionValue state spanValue key entry
+      Nothing | Just lowered <- lowerCallbackValue state spanValue (first : rest) -> lowered
       Nothing -> maybe (halt spanValue "module-qualified names" state) id
         (lowerVariant lowerExpression state spanValue (last (first : rest)) [])
   UnaryExpression operator operand -> lowerUnary lowerExpression state spanValue operator operand
@@ -346,12 +361,15 @@ lowerExpression state (Located spanValue expression) = case expression of
   CallExpression (Located _ (TypeApplication (Located _ (NameExpression ("convertInteger" :| []))) _)) arguments
     | Nothing <- lookupLocal state "convertInteger"
     , Nothing <- resolveFunction state ["convertInteger"] -> lowerConvertInteger lowerExpression state spanValue arguments
+  CallExpression callee@(Located _ (TypeApplication (Located _ (NameExpression ("::trait-method::" :| [_, _]))) _)) arguments ->
+    lowerValueCall lowerExpression state spanValue callee arguments
   CallExpression (Located application (TypeApplication inner written)) arguments ->
     lowerExpression (writtenTypeArguments state application inner written) (Located spanValue (CallExpression inner arguments))
   CallExpression (Located callee (NameExpression (name :| []))) arguments
     | Just _ <- lookupLocal state name -> lowerValueCall lowerExpression state spanValue (Located callee (NameExpression (name :| []))) arguments
     | Just _ <- lookupConstant state [name] -> lowerValueCall lowerExpression state spanValue (Located callee (NameExpression (name :| []))) arguments
     | Just key <- resolveFunction state [name] -> lowerFunctionCall lowerExpression state spanValue key callee arguments
+    | Just lowered <- lowerCallbackRegistration lowerExpression state spanValue [name] arguments -> lowered
     | Just lowered <- lowerVariant lowerExpression state spanValue name arguments -> lowered
     | name `elem` ["print", "printPart", "printError", "printErrorPart"] -> lowerPrint lowerExpression state spanValue name arguments
     | name == "display" -> lowerRendered lowerExpression state spanValue name CoreDisplay arguments
@@ -363,8 +381,11 @@ lowerExpression state (Located spanValue expression) = case expression of
     | name == "convertInteger" -> lowerUntypedConvert lowerExpression state spanValue arguments
     | Just lowered <- lowerPrimitiveCall lowerExpression state spanValue name arguments -> lowered
     | otherwise -> halt spanValue ("calls to '" <> name <> "'") state
+  CallExpression (Located _ (MemberExpression receiver (Located _ "unregister"))) arguments
+    | Just lowered <- lowerCallbackUnregister lowerExpression clean spanValue receiver arguments -> lowered
   CallExpression (Located callee (MemberExpression receiver@(Located _ (NameExpression (owner :| []))) named@(Located _ member))) arguments
     | isModuleQualifier state owner, Just key <- resolveFunction state [owner, member] -> lowerFunctionCall lowerExpression state spanValue key callee arguments
+    | Just lowered <- lowerCallbackRegistration lowerExpression state spanValue [owner, member] arguments -> lowered
     | Just lowered <- lowerQualifiedForeignCall lowerExpression state spanValue owner member arguments -> lowered
     | qualifier receiver, Just lowered <- lowerVariant lowerExpression clean spanValue member arguments -> lowered
     | qualifier receiver, Just lowered <- lowerQualifiedMethod lowerExpression state spanValue callee owner member arguments -> lowered
@@ -391,8 +412,11 @@ lowerExpression state (Located spanValue expression) = case expression of
     | Just lowered <- lowerRangeMethod lowerExpression clean spanValue receiver member arguments -> lowered
     | Just lowered <- lowerBytesMethod lowerExpression clean spanValue receiver member arguments -> lowered
     | otherwise -> lowerTextMethod lowerExpression clean spanValue receiver member arguments
+  CallExpression callee'@(Located _ (NameExpression ("::trait-method::" :| [_, _]))) arguments ->
+    lowerValueCall lowerExpression state spanValue callee' arguments
   CallExpression callee'@(Located callee (NameExpression (first :| rest@(_ : _)))) arguments
     | Just key <- resolveFunction state (first : rest) -> lowerFunctionCall lowerExpression state spanValue key callee arguments
+    | Just lowered <- lowerCallbackRegistration lowerExpression state spanValue (first : rest) arguments -> lowered
     | Just lowered <- lowerVariant lowerExpression state spanValue (last rest) arguments -> lowered
     | Just _ <- lookupConstant state (first : rest) -> lowerValueCall lowerExpression state spanValue callee' arguments
     | otherwise -> halt spanValue ("calls to '" <> Text.intercalate "." (first : rest) <> "'") state
@@ -405,7 +429,11 @@ lowerExpression state (Located spanValue expression) = case expression of
     | Located _ (NameExpression (owner :| [])) <- receiver, isModuleQualifier state owner
     , Just key <- resolveFunction state [owner, member], Just entry <- lookup key (contextTable (lowerContext state)) ->
         lowerFunctionValue state spanValue key entry
+    | Located _ (NameExpression (owner :| [])) <- receiver
+    , Just lowered <- lowerCallbackValue state spanValue [owner, member] -> lowered
     | qualifier receiver, Just lowered <- lowerVariant lowerExpression state spanValue member [] -> lowered
+    | member == "unregister"
+    , Just lowered <- lowerCallbackUnregisterValue lowerExpression state spanValue receiver -> lowered
     | Just lowered <- lowerMethodValue lowerExpression state spanValue receiver member -> lowered
     | otherwise -> lowerField lowerExpression state spanValue receiver member
   IndexExpression receiver key -> maybe (lowerTupleIndex lowerExpression state spanValue receiver key) id
@@ -424,8 +452,8 @@ lowerExpression state (Located spanValue expression) = case expression of
     (after, Just (_, kind)) -> halt spanValue ("awaiting a " <> coreTypeName kind <> " value") after
     (after, Nothing) -> refused after
   TupleExpression [] -> value (CoreBlockValue (CoreBlock [] Nothing)) CoreUnitType
-  TupleExpression members@(_ : _ : _) -> lowerTuple lowerExpression state spanValue members
-  TupleExpression{} -> halt spanValue "tuples" state
+  -- `(x,)` is a tuple of one member, as the evaluator holds it.
+  TupleExpression members@(_ : _) -> lowerTuple lowerExpression state spanValue members
   ArrayExpression members -> lowerArrayLiteral lowerExpression state spanValue members
   SetExpression members -> lowerSetLiteral lowerExpression state spanValue members
   -- The capability is checked before lowering; the body runs as a block.
@@ -433,7 +461,10 @@ lowerExpression state (Located spanValue expression) = case expression of
   MacroCall{} -> unexpanded "macro call reached evaluation unexpanded"
   ScopeExpression body -> lowerScope lowerBlock state spanValue body
   LambdaExpression function -> lowerLambda lowerExpression lowerBlock state spanValue function
-  TypeApplication{} -> halt spanValue "type applications" state
+  TypeApplication (Located _ (NameExpression ("::trait-method::" :| [provider, member]))) _ ->
+    lowerTraitMethodValue lowerExpression state spanValue provider member
+  -- `identity[Int]` as a value: the copy the written type arguments select.
+  TypeApplication inner written -> lowerExpression (writtenTypeArguments state spanValue inner written) inner
   RecordExpression written@(ModuleName ("::constructor::" :| _)) [] ->
     maybe (halt spanValue "this constructor" state) id (lowerVariant lowerExpression state spanValue (writtenLabel written) [])
   RecordExpression written fields -> lowerRecord lowerExpression state spanValue (writtenLabel written) fields

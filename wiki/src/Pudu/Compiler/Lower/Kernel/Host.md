@@ -16,7 +16,7 @@ parameter, each described by its operands, guards and answer as
 | Math | the binary64 kernels, from the one list [[Native Host Math]] emits |
 | Standard input | `readLine`, as `Result[Option[Str], Str]` |
 | Process | `clock`, `clockNanos`, `now`, `zoneOffset`, `sleepMillis`, `arguments`, `environment`, `temporaryPath`, `userHome`, `pathSeparators`, `searchSeparator`, `exit`, `secureRandomBytes`, `formatTime`, `parseTime`, `signalWatchStop`, `signalStopRequested` |
-| Concurrency | `cellDispose`, the mutex builtins, `channelOpen`, `channelWaiting`, `channelFinish`, `joinThread`, `forgetThread` |
+| Concurrency | `cellDispose`, the mutex builtins including `mutexClose`, `channelOpen`, `channelWaiting`, `channelFinish`, `joinThread`, `forgetThread` |
 | Files | reading, writing and appending files, existence, removal, directories, renaming, sizes, permissions, symbolic links, canonical paths, listings, temporary files, atomic writes, and the open-handle builtins |
 | Sockets | `tcpListen`, `tcpAccept`, `tcpConnect`, `tcpConnectWithin`, `socketSend`, `socketSendWithin`, `socketReceive`, `socketReceiveWithin`, `socketClose`, `socketFinish`, `socketPeer`, `socketPort` |
 | TLS | `tlsConnect`, `tlsConnectWithin`, `tlsUpgradeWithin`, `tlsSend`, `tlsSendWithin`, `tlsReceive`, `tlsReceiveWithin`, `tlsClose`, `tlsCloseWithin`, `tlsPeer` |

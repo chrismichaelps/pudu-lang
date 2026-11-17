@@ -1,0 +1,25 @@
+module Glass
+
+import Std.Mobile.Host as Host
+import Std.Mobile.Theme as Theme
+import Std.Mobile.View as View
+
+/// The tag the Done button reports.
+const DONE: UInt32 = 1u32
+
+fn view() -> View.View {
+  View.Column([View.Surfaced(Theme.Regular, View.Label("Glass")), View.Button("Done", DONE)])
+}
+
+fn main() -> Int {
+  let (_, built) = View.mount(&view())
+  Host.apply(built)
+  while true {
+    match Host.wait() {
+      case View.Tapped(tag) if tag == DONE => { return 0 }
+      case View.Stopped => { return 0 }
+      case _ => {}
+    }
+  }
+  0
+}

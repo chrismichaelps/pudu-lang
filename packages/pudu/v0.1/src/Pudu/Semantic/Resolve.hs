@@ -22,6 +22,8 @@ import Pudu.Frontend.Syntax.Tree
   , FieldDeclaration (..)
   , FieldInit (..)
   , Foreign (..)
+  , ForeignCallback (..)
+  , ForeignCallbackParameter (..)
   , ForeignFunction (..)
   , ForeignParameter (..)
   , Function (..)
@@ -41,6 +43,7 @@ import Pudu.Frontend.Syntax.Tree
   , VariantPayload (..)
   , BindingKind (Mutable)
   , Visibility (Private)
+  , foreignCallbackNames
   )
 import Pudu.Semantic.Prelude
   ( isPreludeModule
@@ -193,7 +196,10 @@ collectDeclaration (Located _ declaration) = case declaration of
   ForeignDeclaration value -> do
     mapM_
       (declareNamed TypeSpace ModuleOrigin (foreignVisibility value) False)
-      (foreignTypes value)
+      (foreignTypes value <> foreignCallbackNames value)
+    mapM_
+      (declareNamed ValueSpace ModuleOrigin (foreignVisibility value) False)
+      (foreignCallbackNames value)
     mapM_
       ( \(Located _ function) ->
           declareNamed ValueSpace ModuleOrigin (foreignVisibility value) False
@@ -247,9 +253,18 @@ walkDeclaration (Located spanValue declaration) = case declaration of
   DeriveImplDeclaration value -> do
     walkType (deriveRequestTrait value)
     walkType (deriveRequestTarget value)
-  ForeignDeclaration value ->
+  ForeignDeclaration value -> do
+    mapM_ (walkForeignCallback . locatedValue) (foreignCallbacks value)
     mapM_ (walkForeignFunction . locatedValue) (foreignFunctions value)
   InvalidDeclaration -> pure ()
+
+walkForeignCallback :: ForeignCallback -> Resolver ()
+walkForeignCallback callback = do
+  mapM_ walkType
+    [ written
+    | Located _ (ForeignCallbackArgument _ _ written) <- foreignCallbackParameters callback
+    ]
+  walkType (foreignCallbackResult callback)
 
 {-| A foreign signature's types are resolved like any other, so a type it names
     that does not exist is reported where it is written. There is no body to

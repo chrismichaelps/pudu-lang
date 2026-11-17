@@ -30,6 +30,13 @@ export fn start(action: fn() -> ()) -> Result[Task, ConcurrentError] {
   )
 }
 
+/// Run an action on this thread and report what it said if it failed: the
+/// answer starting it and joining it would give, without a thread of its own.
+/// A failure ends the action, not the caller, which carries on either way.
+export fn attempt(action: fn() -> ()) -> Result[(), ConcurrentError] {
+  Result.mapErr(attemptAction(action), causeOf)
+}
+
 /// Wait for a thread to finish, and report what it said if it failed.
 /// Joining twice answers the same way both times, so a scope joining its
 /// children and a caller that already joined one do not race.

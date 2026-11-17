@@ -1,0 +1,125 @@
+module Main
+
+import Std.Channel as Channel
+import Std.Db as Db
+import Std.Db.Lifetime as Lifetime
+import Std.Db.Session as Session
+import Std.Env as Env
+import Std.Net as Net
+import Std.Sync as Sync
+
+fn require[T, E](held: Result[T, E]) -> T {
+  match held { case Ok(value) => value case Err(reason) => panic(show(reason)) }
+}
+fn check(held: Bool, message: Str) -> () { if !held { panic(message) } }
+
+fn connection(answering: Bool, opened: Int, returned: Int) -> Session.Connection {
+  Session.Connection{socket: Net.fake(answering), buffer: bytesOf([]), parameters: [], status: Session.Idle,
+    lease: Sync.cell(0), epoch: 0, deadline: -1, prepared: mapOf([]), opened: opened, returned: returned }
+}
+
+fn observed(stream: &Session.Connection) -> Net.State { require(Net.state(&stream.socket)) }
+
+/// A one-place pool holding `queued`, whose reopening counts itself and hands
+/// out `fresh`, or fails when `fresh` is None.
+fn pool(queued: Session.Connection, fresh: Option[Session.Connection], openings: &Sync.Counter, policy: Lifetime.Policy) -> Db.Pool {
+  let ready: Channel.Channel[Option[Session.Connection]] = Channel.channel(1)
+  require(Channel.send(&ready, Some(queued)))
+  Db.Pool{ready: ready, size: 1, closing: Sync.cell(false),
+    reopen: fn() -> Result[Session.Connection, Session.DbError] {
+      require(Sync.increment(openings, 1))
+      match fresh { case Some(stream) => Ok(stream) case None => Err(Session.Other("no server")) }
+    }, policy: policy }
+}
+
+/// The connection an action was lent, so a test can see which one it was.
+fn lent(target: &Db.Pool) -> Result[Session.Connection, Session.DbError] {
+  Db.withConnectionWithin(target, 0, fn(stream: Session.Connection) -> (Result[Session.Connection, Session.DbError], Session.Connection) {
+      (Ok(stream), stream)
+    })
+}
+
+fn verdicts() -> () {
+  let policy = Lifetime.Policy{maxLifetimeMillis: 100, maxIdleMillis: 50, probeAfterMillis: 10}
+  check(Lifetime.verdict(&policy, &connection(true, 0, 0), 5) == Lifetime.Keep, "young and busy is kept")
+  check(Lifetime.verdict(&policy, &connection(true, 0, 0), 10) == Lifetime.Probe, "idle past the probe is probed")
+  check(Lifetime.verdict(&policy, &connection(true, 0, 0), 50) == Lifetime.Replace, "idle past the limit is replaced")
+  check(Lifetime.verdict(&policy, &connection(true, 0, 95), 100) == Lifetime.Replace, "old is replaced however busy")
+  check(Lifetime.verdict(&policy, &connection(true, 0, 95), 99) == Lifetime.Keep, "just short of old is kept")
+  let off = Lifetime.never()
+  check(Lifetime.verdict(&off, &connection(true, 0, 0), 9223372036854775807) == Lifetime.Keep, "no limit retires nothing")
+  let defaults = Lifetime.DEFAULT_POLICY
+  check(defaults.maxLifetimeMillis == 1800000 && defaults.maxIdleMillis == 600000 && defaults.probeAfterMillis == 30000,
+    "default policy changed")
+}
+
+/// A connection that answers its probe is lent, and goes back stamped as
+/// just returned.
+fn probed() -> () {
+  let openings = Sync.counter(0)
+  let start = Env.elapsedMilliseconds()
+  let queued = connection(true, start, start - 1000)
+  let target = pool(queued, None, &openings, Lifetime.Policy{maxLifetimeMillis: 0, maxIdleMillis: 0, probeAfterMillis: 1})
+  let given = require(lent(&target))
+  check(given.socket == queued.socket && observed(&queued).kinds == ["Q"], "an answering connection was not probed and lent")
+  check(require(Sync.count(&openings)) == 0, "a probe that answered reopened")
+  let back = match require(Channel.receiveWithin(&target.ready, 0)) {
+    case Channel.Received(Some(stream)) => stream
+    case _ => panic("the probed connection did not return")
+  }
+  check(back.returned >= start && back.opened == start, "return stamp not taken")
+}
+
+/// A connection that does not answer its probe is closed, and a fresh one is
+/// lent in its place.
+fn probeFails() -> () {
+  let openings = Sync.counter(0)
+  let start = Env.elapsedMilliseconds()
+  let queued = connection(false, start, start - 1000)
+  let fresh = connection(true, start, start)
+  let target = pool(queued, Some(fresh), &openings, Lifetime.Policy{maxLifetimeMillis: 0, maxIdleMillis: 0, probeAfterMillis: 1})
+  let given = require(lent(&target))
+  check(given.socket == fresh.socket && observed(&queued).closed, "a silent connection was lent")
+  check(require(Sync.count(&openings)) == 1, "a silent connection was not replaced once")
+  require(Db.closePool(&target))
+}
+
+/// An old connection is replaced without a probe; when no replacement opens,
+/// the caller hears why and the place is kept for a later opening.
+fn replaced() -> () {
+  let openings = Sync.counter(0)
+  let start = Env.elapsedMilliseconds()
+  let old = connection(true, start - 1000, start)
+  let fresh = connection(true, start, start)
+  let aging = Lifetime.Policy{maxLifetimeMillis: 10, maxIdleMillis: 0, probeAfterMillis: 0}
+  let target = pool(old, Some(fresh), &openings, aging)
+  check(require(lent(&target)).socket == fresh.socket, "an old connection was lent")
+  check(observed(&old).closed && observed(&old).kinds.contains("Q") == false, "an old connection was probed or kept open")
+  require(Db.closePool(&target))
+
+  let stale = connection(true, start - 1000, start)
+  let failing = pool(stale, None, &openings, aging)
+  check(lent(&failing) == Err(Session.Other("no server")), "a failed replacement was not reported")
+  check(observed(&stale).closed, "the retired connection stayed open")
+  check(require(Channel.pending(&failing.ready)) == 1, "a failed replacement lost the place")
+  require(Db.closePool(&failing))
+}
+
+/// With no policy a connection is lent as it is, however long it waited.
+fn kept() -> () {
+  let openings = Sync.counter(0)
+  let queued = connection(true, -1000000, -1000000)
+  let target = pool(queued, None, &openings, Lifetime.never())
+  check(require(lent(&target)).socket == queued.socket, "a kept connection was replaced")
+  check(observed(&queued).kinds.isEmpty() && require(Sync.count(&openings)) == 0, "a kept connection was probed")
+  require(Db.closePool(&target))
+}
+
+export fn main() -> Int {
+  verdicts()
+  probed()
+  probeFails()
+  replaced()
+  kept()
+  0
+}

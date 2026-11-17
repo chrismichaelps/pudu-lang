@@ -1,0 +1,62 @@
+module UsesDbEngines
+
+import Std.App.Database as Database
+import Std.Db.Driver as Driver
+import Std.Db.Driver {IntegerValue}
+import Std.Db.Sqlite as Sqlite
+import Std.Option as Option
+import Std.Result as Result
+
+/// Engines are a kind: each bundled one is made by the factory its kind
+/// names, states its capabilities, and is told apart by them rather than by
+/// its name. Each check counts once.
+export fn main() -> Int {
+  var held = 0
+  let bundled = Database.bundledDrivers()
+  if bundled.length() == 2 { held = held + 1 }
+
+  // Each engine's factory makes the driver for that engine.
+  match Database.driverFor(Driver.Postgresql) {
+    case Some(found) => if found.name == "postgresql" && found.engine == Driver.Postgresql { held = held + 1 }
+    case None => ()
+  }
+  match Database.driverFor(Driver.Sqlite) {
+    case Some(found) => if found.name == "sqlite" && found.engine == Driver.Sqlite { held = held + 1 }
+    case None => ()
+  }
+  // An application's own engine is not one this library makes.
+  if Option.isNone(&Database.driverFor(Driver.Custom("mysql"))) { held = held + 1 }
+
+  // PostgreSQL states a transaction-scoped lock; SQLite states none.
+  match Database.driverFor(Driver.Postgresql) {
+    case Some(found) => match found.capabilities.advisoryLock {
+      case Some(lock) => if lock(7) == "select pg_advisory_xact_lock(7)" { held = held + 1 }
+      case None => ()
+    }
+    case None => ()
+  }
+  match Database.driverFor(Driver.Sqlite) {
+    case Some(found) => if Option.isNone(&found.capabilities.advisoryLock) { held = held + 1 }
+    case None => ()
+  }
+  if Option.isNone(&Driver.plainCapabilities().advisoryLock) { held = held + 1 }
+
+  // A write states its count last, as every engine's command does.
+  match Sqlite.connect("sqlite::memory:", 1) {
+    case Ok(client) => {
+      let _made = Driver.execute(&client, "CREATE TABLE t (id INTEGER PRIMARY KEY, v INTEGER)")
+      let _first = Driver.query(&client, "INSERT INTO t (v) VALUES (?), (?)", &[IntegerValue(1i64), IntegerValue(2i64)])
+      match Driver.query(&client, "UPDATE t SET v = v + 1", &[]) {
+        case Ok(rows) => {
+          let pieces = rows.command.split(" ")
+          if pieces[pieces.length() - 1] == "2" && Sqlite.affected(&rows) == 2 { held = held + 1 }
+          if Sqlite.lastInsertRowid(&rows) == Some(2) { held = held + 1 }
+        }
+        case Err(_) => ()
+      }
+      let _closed = Driver.close(&client)
+    }
+    case Err(_) => ()
+  }
+  held
+}

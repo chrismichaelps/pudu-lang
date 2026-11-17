@@ -6,17 +6,20 @@ import Data.Maybe (isJust)
 import qualified Data.Set as Set
 import Data.Text (Text)
 import qualified Data.Text as Text
-import Pudu.Backend.Emit.Foreign (foreignNeeds, foreignWrappers, foreignsOf)
+import Pudu.Backend.Emit.Foreign (foreignNeeds, foreignWrappers, foreignsOf, parameterNeeds, resultNeeds)
+import Pudu.Backend.Emit.Foreign.Callback (callbackArgumentTypes, callbackNeeds, callbackSignaturesOf, callbackUnregisterResults)
 import Pudu.Backend.Emit.Aggregate (aggregateSection, aggregateTypes, cellName, ownedKinds, ownedType, released, retained, aggregateHelper, aggregateNeed)
 import Pudu.Backend.Emit.Entry (EmittedUnit (..), EntryForm (..), entrySection)
 import Pudu.Backend.Emit.Export (ExportSection (..), exportSection)
 import Pudu.Backend.Emit.Frame.Body (emitFrameBodies)
 import Pudu.Backend.Emit.Frame.Slots (compactFrameSlots)
+import Pudu.Backend.Emit.Frame.Fast (emitFastFunctions, fastEntry, fastFunctions)
 import Pudu.Backend.Emit.Frame.Direct (argumentCount, directFunctions, enteredDirect, frameCells)
 import Pudu.Backend.Emit.Support (integerHelper, isBigInteger, isWideInteger)
-import Pudu.Backend.Emit.State (EmitState (..), emptyEmitState, renderByteData, renderSites, textOfInt)
+import Pudu.Backend.Emit.State (EmitState (..), cString, cStringBytes, emptyEmitState, renderByteData, renderSites, textOfInt)
 import Pudu.Backend.Runtime (RuntimePart (..), runtimeParts)
-import Pudu.Backend.Runtime.Frame (frameTypes, frameEngine)
+import Pudu.Backend.Runtime.Frame (frameCallbackEngine, frameTypes, frameEngine)
+import Pudu.Backend.Runtime.Host.Callback (callbackRuntime)
 import Pudu.Backend.Runtime.Array (arrayRuntimeParts)
 import Pudu.Backend.Runtime.Text.Pieces (textPieceRuntimeParts)
 import Pudu.Backend.Runtime.Tree (treeRuntimeParts)
@@ -28,7 +31,7 @@ import Pudu.Backend.Runtime.Dependencies (runtimeDependencies)
 import Data.Map.Strict (Map)
 import qualified Data.Map.Strict as Map
 import Data.List (nub)
-import Pudu.Core (closureIsBuiltin, CoreForeign (..), closureHasEnvironment, closureMethod, CoreLayout (..), CoreType (..), CoreVariant (..))
+import Pudu.Core (closureIsBuiltin, CoreCallbackSignature (..), CoreForeign (..), closureHasEnvironment, closureMethod, CoreLayout (..), CoreType (..), CoreVariant (..))
 import Pudu.Core.Frame
   ( FrameFault (..), FrameFunction (..), FrameLabel (..)
   , FrameModule (..), FrameSlot (..), FrameSlotId (..) )
@@ -92,13 +95,21 @@ emitFrameUnit form version sources logical = do
       , "  int pudu_report_status = pudu_output_report(pudu_shown);"
       , "  pudu_text_release(pudu_shown);"
       , "  return pudu_report_status;" ]
+    -- A token is shown as the callback declaration it registers with.
+    CoreCallbackType _ name -> Right
+      [ "  (void)pudu_run_frames(" <> textOfInt entryId <> ");"
+      , "  return pudu_output_report(pudu_text_literal(" <> cString name <> ", " <> textOfInt (cStringBytes name) <> "));" ]
     CoreUnitType -> Right ["  (void)pudu_run_frames(" <> textOfInt entryId <> ");", "  return 0;"]
     CoreNeverType -> Right ["  (void)pudu_run_frames(" <> textOfInt entryId <> ");", "  return 0;"]
   let direct = directFunctions source
+      fast = fastFunctions direct source
+      stacked = enteredDirect source direct
   exports <- case form of
     EmbeddedEntry -> exportSection (frameModuleLayouts source) direct indexed (frameModuleExports source)
     ExecutableEntry -> Right (ExportSection [] [] [])
-  (emitted, roots) <- emitFrameBodies direct (emptyEmitState sources) source
+  (withFast, fastNeeds) <- emitFastFunctions fast (emptyEmitState sources) source
+  (emitted, frameNeeds) <- emitFrameBodies direct withFast source
+  let roots = Set.union fastNeeds frameNeeds
   let wide = frameUsesWideCells source
       big = frameUsesBig source
       decimal = frameUsesDecimal source
@@ -113,6 +124,7 @@ emitFrameUnit form version sources logical = do
         CoreIntegerType _ -> [integerHelper (frameFunctionResult entry) "status"]
         CoreFloatType _ -> ["text_display_float", "output_report"]
         CoreBoolType -> ["text_literal", "output_report"]
+        CoreCallbackType _ _ -> ["text_literal", "output_report"]
         CoreTextType -> ["text_show", "output_report"]
         CoreCharType -> ["char_show", "output_report"]
         kind@(CoreTupleType _) -> [aggregateNeed "show" kind, "output_report"]
@@ -131,6 +143,30 @@ emitFrameUnit form version sources logical = do
       identities = Map.fromList (zip (map frameFunctionName functions) [0 ..])
       (aggregates, aggregateNeeds) = aggregateSection identities (frameModuleLayouts source) tuples (Set.fromList (Set.toList roots <> entryNeeds <> crossing <> exportNeeds exports))
       crossing = foreignNeeds (frameModuleLayouts source) (foreignsOf source)
+        <> callbackNeeds (frameModuleLayouts source) signatures unregistered
+        <> concatMap resultNeeds (concatMap callbackArgumentTypes signatures)
+        <> concatMap (parameterNeeds . coreCallbackResult) signatures
+      signatures = callbackSignaturesOf source
+      unregistered = callbackUnregisterResults source
+      callbacks = Set.member "host_callback" selected
+      cleanupLines
+        | callbacks =
+            [ "  pudu_process_cleanup_hook = pudu_callback_cleanup;"
+            , "  if (atexit(pudu_callback_finish) != 0) pudu_memory_failure();"
+            , "  pudu_callback_enable();" ]
+        | otherwise = ["  pudu_process_cleanup_hook = pudu_foreign_teardown;" | foreignStore]
+      foreignStore = Set.member "host_foreign_store" selected
+      -- The store closes before foreign claims are released, on a failure
+      -- and at exit alike.
+      callbackSection = if not callbacks then [] else callbackRuntime <>
+        [ "static void pudu_callback_cleanup(void) {"
+        , "  (void)pudu_callback_teardown();" ]
+        <> [ "  pudu_foreign_teardown();" | foreignStore ]
+        <> [ "}"
+           , "static void pudu_callback_finish(void) {"
+           , "  (void)pudu_callback_teardown();"
+           , "  pudu_callback_warn_unobserved();"
+           , "}", "" ]
       ownership = if owned then ownershipSwitch text big decimal kinds else []
       selected = foldl' visit Set.empty (filter (not . Text.isPrefixOf "agg_") (Set.toList roots <> entryNeeds <> crossing <> exportNeeds exports)
         <> Set.toList aggregateNeeds <> base <> ["text_retain" | text])
@@ -142,12 +178,13 @@ emitFrameUnit form version sources logical = do
   pure $ EmittedUnit
     { emittedSource = Text.unlines (header <> runtime <> frameTypes wide big decimal text boxes (Set.member "host_thread_spawn" selected)
     <> concat [lines' <> [""] | (name, lines') <- arrayRuntimeParts <> textPieceRuntimeParts <> treeRuntimeParts <> rangeRuntimeParts <> bytesRuntimeParts <> hashRuntimeParts <> kernelRuntimeParts, Set.member name selected]
-    <> renderSites (reverse (emitSites emitted)) <> renderByteData (reverse (emitByteData emitted)) <> aggregates <> ownership <> foreignWrappers (frameModuleLayouts source) (foreignsOf source) <> reverse (emitOutput emitted)
-    <> metadata <> frameEngine owned (Set.member "host_thread_spawn" selected) (not (Set.null (enteredDirect source direct)))
-    <> concat [stackedCall identity function | (identity, function) <- indexed, Set.member (frameFunctionName function) (enteredDirect source direct)]
+    <> renderSites (reverse (emitSites emitted)) <> renderByteData (reverse (emitByteData emitted)) <> aggregates <> ownership <> callbackSection <> foreignWrappers (frameModuleLayouts source) (foreignsOf source) signatures unregistered <> reverse (emitOutput emitted)
+    <> metadata <> frameEngine owned (Set.member "host_thread_spawn" selected) (not (Set.null stacked))
+    <> (if callbacks then frameCallbackEngine else [])
+    <> concat [stackedCall (Set.member (frameFunctionName function) fast) identity function | (identity, function) <- indexed, Set.member (frameFunctionName function) stacked]
     -- Only a program that reads its arguments keeps them.
     <> entrySection form (Set.member "host_arguments" selected) (Set.member "output_state" selected) (not (null (exportCode exports)))
-      (["  pudu_process_cleanup_hook = pudu_foreign_teardown;" | Set.member "host_foreign_store" selected] <> ending)
+      (cleanupLines <> ending)
     <> exportCode exports)
     , emittedParts = selected
     , emittedLibraries = nub [(coreForeignLibrary foreignCall, coreForeignVersion foreignCall) | foreignCall <- foreignsOf source]
@@ -198,9 +235,10 @@ emitFrameUnit form version sources logical = do
     -- A direct function's frame and cells live on the C stack of this call.
     -- Owned slots start empty, as in a heap frame, so a failure before they
     -- are written releases nothing; unowned slots are the body's C locals.
-    stackedCall identity function =
-      [ "static pudu_cell pudu_direct_" <> textOfInt identity <> "(const pudu_cell *arguments) {"
-      , "  pudu_frame pudu_on_stack;"
+    stackedCall typed identity function =
+      [ "static pudu_cell pudu_direct_" <> textOfInt identity <> "(const pudu_cell *arguments) {" ]
+      <> (if typed then fastEntry identity function else [])
+      <> [ "  pudu_frame pudu_on_stack;"
       , "  pudu_cell pudu_cells[" <> textOfInt (frameCells function) <> "];"
       , "  pudu_cell pudu_answer;" ]
       <> [ "  memset(&pudu_cells[" <> slotIndex slot <> "], 0, sizeof pudu_cells[0]);" | slot <- ownedSlots function ]

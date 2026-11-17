@@ -2,7 +2,7 @@
 
 {-| @Backend.Toolchain.HostSources — packaged platform translation units
     selected by the generated program. -}
-module Pudu.Backend.Toolchain.HostSources (audioSourceMarker, desktopSourceMarker, iosHostSources, withHostSourceArguments) where
+module Pudu.Backend.Toolchain.HostSources (audioSourceMarker, desktopSourceMarker, iosHostSources, sqliteSourceMarker, withHostSourceArguments) where
 
 import qualified Data.ByteString.Char8 as ByteString
 import Data.Text (Text)
@@ -19,20 +19,28 @@ desktopSourceMarker = "/* pudu host source: desktop */"
 audioSourceMarker :: Text
 audioSourceMarker = "/* pudu host source: audio */"
 
+sqliteSourceMarker :: Text
+sqliteSourceMarker = "/* pudu host source: sqlite */"
+
 withHostSourceArguments :: Text -> ([String] -> IO a) -> IO a
 withHostSourceArguments source compile
-  | os /= "darwin" || null sources = compile []
+  | null sources = compile []
   | otherwise = withSystemTempDirectory "pudu-host" $ \directory -> do
       mapM_ (write directory) sources
       compile
-        (["-I", directory] <> ["-fobjc-arc" | desktop]
+        (["-I", directory] <> ["-fobjc-arc" | apple, desktop]
           <> [directory </> file | (file, _) <- sources, takeExtension file /= ".h"]
           <> concat [["-framework", framework] | framework <- frameworks])
  where
   desktop = desktopSourceMarker `Text.isInfixOf` source
   audio = audioSourceMarker `Text.isInfixOf` source
-  sources = (if desktop then desktopSources else []) <> (if audio then audioSources else [])
-  frameworks = concat [["AppKit", "CoreGraphics"] | desktop] <> ["AudioToolbox" | audio]
+  apple = os == "darwin"
+  sqlite = sqliteSourceMarker `Text.isInfixOf` source
+  -- The desktop and audio hosts exist only on Apple platforms; the SQLite
+  -- binding is portable C.
+  sources = (if apple && desktop then desktopSources else []) <> (if apple && audio then audioSources else [])
+    <> (if sqlite then sqliteSources else [])
+  frameworks = concat [["AppKit", "CoreGraphics"] | apple, desktop] <> ["AudioToolbox" | apple, audio]
   write directory (file, contents) =
     ByteString.writeFile (directory </> file) (ByteString.pack contents)
 
@@ -47,10 +55,19 @@ desktopSources = $(do
   contents <- runIO (traverse ByteString.readFile paths)
   lift (zip files (map ByteString.unpack contents)))
 
+{-| The SQLite binding the interpreter links, compiled into a native program
+    whose foreign block names it. -}
+sqliteSources :: [(FilePath, String)]
+sqliteSources = $(do
+  path <- makeRelativeToProject ("cbits" </> "pudu_sqlite.c")
+  addDependentFile path
+  contents <- runIO (ByteString.readFile path)
+  lift [("pudu_sqlite.c" :: FilePath, ByteString.unpack contents)])
+
 {-| The iOS host and its private header, staged only for app builds. -}
 iosHostSources :: [(FilePath, String)]
 iosHostSources = $(do
-  let files = ["pudu_ios_host.m", "pudu_ios_layout.h", "pudu_ios_theme.h", "pudu_ios_events.h", "pudu_ios_list.h", "pudu_ios_controls.h"]
+  let files = ["pudu_ios_host.m", "pudu_ios_layout.h", "pudu_ios_theme.h", "pudu_ios_events.h", "pudu_ios_list.h", "pudu_ios_controls.h", "pudu_ios_material.h"]
   paths <- traverse (makeRelativeToProject . ("cbits" </>)) files
   mapM_ addDependentFile paths
   contents <- runIO (traverse ByteString.readFile paths)

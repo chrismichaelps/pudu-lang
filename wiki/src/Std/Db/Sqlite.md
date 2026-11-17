@@ -12,7 +12,8 @@ A real SQLite implementation of [[Std Db Driver]]. `driver` advertises `sqlite` 
 placeholders. `connect` accepts `sqlite::memory:` or `sqlite:/path/to/file.db` (also relative paths).
 The suffix is a literal filename, not a libpq or SQLite file URI; NUL, empty paths, file: names and
 query/fragment syntax are refused. Each client owns one serialized connection; capacity is a
-positive upper bound, so even a larger requested capacity uses one connection.
+positive upper bound, so even a larger requested capacity uses one connection. The driver states
+engine `Sqlite` and plain capabilities (no advisory lock).
 
 ## Algorithm and ownership
 A mutex covers complete prepare/bind/step/finalize operations and shutdown. An optional-handle cell
@@ -28,6 +29,7 @@ cross-call transaction ownership are not promised by the shared Client API.
 - **Q:** Interpolate parameters into SQL? **A:** No; bind prepared statement slots.
 - **Q:** Silently coerce exact Decimal to floating point? **A:** No; return unsupported.
 - **Q:** Drop statement ownership after a typed decode failure? **A:** No; always finalize before returning.
+- **Q:** Branch on a driver's name to decide behavior? **A:** No. Engines are dispatched by kind through a factory table, and behavior by stated capability, not by driver name.
 
 ## Referenced by
 
@@ -73,7 +75,8 @@ constraint, `readonly`, `io`, `corrupt`, `full`, and `unavailable` for a library
 be opened. The numeric code is kept in `code`. A code the table does not name keeps category
 `operation` and states its number.
 
-The result command is `SQLITE_DONE`, not an affected-row count. Integers remain Int64, SQL NULL
+The write command is `SQLITE_DONE <rowid> <changes>`: its last word is the changed-row count, and
+`affected` and `lastInsertRowid` read it. Integers remain Int64, SQL NULL
 remains NullValue, and empty blobs/text remain distinct. Decimal parameters require an explicit
 application storage choice. Standalone BEGIN/COMMIT calls do not reserve a client for one caller;
 use the scoped transaction callback to reserve exclusive ownership through settlement.

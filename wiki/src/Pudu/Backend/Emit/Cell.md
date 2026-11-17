@@ -29,6 +29,11 @@ A range is an owned box, mangled `RG`.
 
 Bytes are owned boxes, mangled `BY`.
 
+## Resolved Grill Log for #876 — Native callback lowering
+
+The callback token occupies a uintptr_t frame cell. The run retains its
+handler and owns registration lifetime.
+
 ## Referenced by
 
 [[Backend Emit Aggregate]] · [[Backend Emit Array]]

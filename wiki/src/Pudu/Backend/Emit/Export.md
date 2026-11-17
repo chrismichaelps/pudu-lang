@@ -74,6 +74,13 @@ Uses [[Backend Emit Foreign ABI]], the conversion needs of
 embedded form only; the prototypes reach [[Backend Toolchain Library]] through
 [[Backend Emit Entry]].
 
+## Defaulted and async crossings
+
+A host provides every written parameter. The wrapper fills the hidden count
+when the body accepts omitted Pudu arguments. A monomorphic async export
+enters the await body from [[Compiler Lower]] on the owning thread and
+returns the completed value or Result through the regular crossing.
+
 ## Grill Log
 
 - **Q:** Why abort on a wrong-thread or early call instead of returning a

@@ -32,6 +32,7 @@ data Shapes = Shapes
   , shapeSums :: !(Map NominalId ([Text], [(Text, [Type], Maybe [Text])]))
   {-| The opaque handles foreign blocks declare. -}
   , shapeHandles :: !(Set.Set NominalId)
+  , shapeCallbacks :: !(Set.Set NominalId)
   }
 
 nativeTypes :: Maybe TypeInfo -> [(Text, Scheme)] -> Maybe LowerTypes
@@ -42,10 +43,11 @@ emptyTypes :: LowerTypes
 emptyTypes = LowerTypes (TypeInfo Map.empty Map.empty) Map.empty noShapes Map.empty
 
 noShapes :: Shapes
-noShapes = Shapes Map.empty Map.empty Set.empty
+noShapes = Shapes Map.empty Map.empty Set.empty Set.empty
 
-withShapes :: Map NominalId ([Text], [(Text, Type)]) -> Map NominalId ([Text], [(Text, [Type], Maybe [Text])]) -> Set.Set NominalId -> LowerTypes -> LowerTypes
-withShapes records sums handles (LowerTypes info schemes _ bindings) = LowerTypes info schemes (Shapes records sums handles) bindings
+withShapes :: Map NominalId ([Text], [(Text, Type)]) -> Map NominalId ([Text], [(Text, [Type], Maybe [Text])]) -> Set.Set NominalId -> Set.Set NominalId -> LowerTypes -> LowerTypes
+withShapes records sums handles callbacks (LowerTypes info schemes _ bindings) =
+  LowerTypes info schemes (Shapes records sums handles callbacks) bindings
 
 withBindings :: Map Text CoreType -> LowerTypes -> LowerTypes
 withBindings bindings (LowerTypes info schemes shapes _) = LowerTypes info schemes shapes bindings
@@ -200,6 +202,7 @@ formedWith shapes seen parameters value = case value of
   -- A task is the body it has not run yet: a function of nothing answering
   -- what the body answers, a Result when the task can fail.
   NominalType identity []
+    | Set.member identity (shapeCallbacks shapes) -> Just (CoreCallbackType (nominalKey identity) (nominalName identity))
     | Set.member identity (shapeHandles shapes) -> Just (CoreHandleType (nominalKey identity) (nominalName identity))
   NominalType (NominalId Nothing "Task") [success, failure] -> do
     answered <- case failure of
@@ -226,7 +229,7 @@ formedWith shapes seen parameters value = case value of
         answered = if null finals then formedResult else CoreTupleType (formedResult : finals)
     if all nativeValueType formedInputs && (nativeValueType formedResult || formedResult == CoreNeverType)
       then Just (CoreFunctionType (formedInputs <> supplied) answered) else Nothing
-  TupleTypeValue members@(_ : _ : _) -> do
+  TupleTypeValue members@(_ : _) -> do
     formedMembers <- traverse (formedWith shapes seen parameters) members
     if all nativeValueType formedMembers then Just (CoreTupleType formedMembers) else Nothing
   _ -> builtin value
@@ -307,6 +310,7 @@ nativeScalarType (CoreFloatType _) = True
 nativeScalarType CoreBoolType = True
 nativeScalarType CoreCharType = True
 nativeScalarType CoreUnitType = True
+nativeScalarType CoreCallbackType{} = True
 nativeScalarType _ = False
 
 {-| Maps, sets and indexed stores: the values held in a shared tree. -}
@@ -320,7 +324,7 @@ treeType kind = case kind of
 {-| What a native slot can hold: the scalars plus owned text and tuples. -}
 nativeValueType :: CoreType -> Bool
 nativeValueType CoreTextType = True
-nativeValueType (CoreTupleType members) = length members >= 2 && all nativeValueType members
+nativeValueType (CoreTupleType members) = not (null members) && all nativeValueType members
 nativeValueType (CoreRecordType _ _) = True
 nativeValueType (CoreSumType _ _) = True
 nativeValueType (CoreFunctionType _ _) = True
@@ -350,6 +354,7 @@ unformed kind = case kind of
   CoreUnitType -> UnitTypeValue
   CoreNeverType -> NeverType
   CoreHandleType key _ -> NominalType (keyIdentity key) []
+  CoreCallbackType key _ -> NominalType (keyIdentity key) []
   other -> NominalType (NominalId Nothing (coreTypeName other)) []
  where
   identityOf = keyIdentity

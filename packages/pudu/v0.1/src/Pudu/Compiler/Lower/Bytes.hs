@@ -70,10 +70,12 @@ lowerBytesMethod lower state at receiver member arguments = case typeForSpan typ
   number value = CoreExpression at intType (CoreIntegerLiteral PlatformSigned value)
   reading local = CoreExpression at (coreLocalType local) (CoreReadLocal local)
   compare' operator a b = CoreExpression at CoreBoolType (CoreBinary operator a b)
-  optionAt = typeForSpan types at
+  -- Each method's Option is fixed by the method, whatever facts the call kept.
+  optionOf payload = case typeForSpan types at of
+    Just recorded@(CoreSumType "Option" [_]) -> recorded
+    _ -> CoreSumType "Option" [payload]
   -- at: Some(byte) when 0 <= index < length, None otherwise.
-  at' current index bytes = case optionAt of
-    Just option@(CoreSumType _ _) ->
+  at' current index bytes = let option = optionOf byteType in
       let (withIndex, indexLocal) = bindLocal current "" intType
           (withBytes, bytesLocal) = bindLocal withIndex "" CoreBytesType
           inside = compare' CoreAnd (compare' CoreGreaterOrEqual (reading indexLocal) (number 0))
@@ -83,11 +85,9 @@ lowerBytesMethod lower state at receiver member arguments = case typeForSpan typ
           choice = CoreExpression at option (CoreIfValue inside (CoreBlock [] (Just some)) none)
        in (withBytes, Just (CoreExpression at option (CoreBlockValue (CoreBlock
             [CoreStatement at (CoreDeclare bytesLocal bytes), CoreStatement at (CoreDeclare indexLocal index)] (Just choice))), option))
-    _ -> halt at "an Option result of at without a native form" current
   -- strided: the receiver, then the operands, run into locals; None for a negative offset or width, a stride below one or a
   -- width wider than the stride; otherwise Some of the gathered groups.
-  strided current (offsetCore, widthCore, strideCore) bytes = case optionAt of
-    Just option@(CoreSumType _ _) ->
+  strided current (offsetCore, widthCore, strideCore) bytes = let option = optionOf CoreBytesType in
       let (withOffset, offsetLocal) = bindLocal current "" intType
           (withWidth, widthLocal) = bindLocal withOffset "" intType
           (withStride, strideLocal) = bindLocal withWidth "" intType
@@ -102,13 +102,10 @@ lowerBytesMethod lower state at receiver member arguments = case typeForSpan typ
           declared = [CoreStatement at (CoreDeclare local operand)
             | (local, operand) <- [(bytesLocal, bytes), (offsetLocal, offsetCore), (widthLocal, widthCore), (strideLocal, strideCore)]]
        in (withBytes, Just (CoreExpression at option (CoreBlockValue (CoreBlock declared (Just choice))), option))
-    _ -> halt at "an Option result of strided without a native form" current
   -- toText: Some of the same storage when it is valid UTF-8, None otherwise.
-  asText current bytes = case optionAt of
-    Just option@(CoreSumType _ _) ->
+  asText current bytes = let option = optionOf CoreTextType in
       let (withBytes, bytesLocal) = bindLocal current "" CoreBytesType
           some = CoreExpression at option (CoreConstruct "Some" [("0", method CoreTextType BytesAsText (reading bytesLocal) [])])
           none = CoreExpression at option (CoreConstruct "None" [])
           choice = CoreExpression at option (CoreIfValue (method CoreBoolType BytesIsText (reading bytesLocal) []) (CoreBlock [] (Just some)) none)
        in (withBytes, Just (CoreExpression at option (CoreBlockValue (CoreBlock [CoreStatement at (CoreDeclare bytesLocal bytes)] (Just choice))), option))
-    _ -> halt at "an Option result of toText without a native form" current

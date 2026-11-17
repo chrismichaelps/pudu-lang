@@ -30,6 +30,11 @@ invoking the toolchain. The unchanged observable conformance assertions include
 the wide recursion regression. Resolved Grill Log: faults fail the test before
 compiling, with no recursive-emitter fallback or relaxed oracle comparison.
 
+## Entry defaults
+
+The exit-status corpus compares default order, earlier parameter scope,
+missing-argument and stopping-default diagnostics, and async task capture.
+
 ## Purpose and interface
 
 `backendNativeProperties` holds native execution to the tree interpreter, byte
@@ -105,6 +110,10 @@ coordinator.
 - **Q:** How are programs of several modules tested? **A:** `conformanceWith` writes each module beside `Main.pudu`, and every program, one module or many, is built through whole-program lowering (#539).
 
 Foreign calls are compared with the interpreter's bridge in two properties: [[Backend Foreign Programs]] success programs and E7015 refusals (#850).
+
+## Callable entries and singleton tuples
+
+The differential corpus executes a recursive source main with a defaulted parameter and prints a one-member tuple.
 
 ## Referenced by
 

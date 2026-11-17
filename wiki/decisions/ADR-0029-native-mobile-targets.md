@@ -100,9 +100,12 @@ The refusal is never a C compile error.
 | `host_children` | child programs | the application sandbox forbids starting processes |
 | `host_signals` | stop signals | the system suspends and ends applications without them |
 | `host_exit` | ending the process | an application never quits itself |
-| `host_tls` | TLS connections | the platform ships no OpenSSL |
 | `host_desktop` | desktop windows | the adapter is AppKit, macOS only |
 | `host_audio` | audio devices and streams | the adapter is the macOS one |
+
+The iOS TLS path uses a target-built OpenSSL archive and platform trust
+evaluation. See [[Native Host TLS]] and [[Backend Toolchain Library]].
+Android native libraries also support TLS with a target-built provider and a JavaVM registered by the host.
 
 Android targets refuse the same parts until the Android slice measures what
 an NDK application may do; only the reasons name the platform.

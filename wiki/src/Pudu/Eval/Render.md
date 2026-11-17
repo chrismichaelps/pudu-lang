@@ -96,6 +96,11 @@ is ignored by rendering but retained in value equality and runtime liveness chec
 - **Q:** Expose ownership generations as language values? **A:** No; generations are internal
   admission metadata, not a new user-visible numeric or pointer API.
 
+## Resolved Grill Log for #876 — Interpreter callback values
+
+Render callback registrations, tokens and methods without exposing the
+opaque key used by the native boundary.
+
 ## Referenced by
 
 [[src/Pudu/Eval/_MOC]] · [[Eval Value]]

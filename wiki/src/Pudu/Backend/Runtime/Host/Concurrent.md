@@ -19,6 +19,13 @@ A failure on a started thread runs the cleanup hook before the long jump, so sta
 
 A started thread's failure ends that thread, not the program. Threads take turns through the run gate.
 
+## Mutex close (#935)
+
+Close retires an available mutex immediately. Closing an owned mutex stops
+admission while the closer waits through the run gate. The owner's release
+retires the token and wakes the closer. Self-close is refused and leaves the
+owner able to release the mutex normally.
+
 ## Referenced by
 
 [[Native Host Runtime]] · [[Native Host Services]]

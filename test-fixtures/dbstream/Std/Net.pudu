@@ -1,0 +1,112 @@
+module Std.Net
+
+import Std.Bytes as ByteSeq
+import Std.Db.Protocol as Wire
+import Std.Option as Option
+import Std.Result as Result
+import Std.Sync as Sync
+
+export type NetError = Other(Str) | Closed | NetOperationTimedOut
+export type Connection = { token: Int }
+/// A server holding seven rows of one text column: the message kinds it was
+/// sent, batch by batch, and the next row it would send.
+export type State = { pending: Bytes, batches: Array[Str], next: Int, closed: Bool }
+
+/// How many rows the fake table holds.
+const ROWS: Int = 7
+
+export fn fake() -> Connection {
+  let cell = Sync.cell(State{pending: bytesOf([]), batches: [], next: 0, closed: false})
+  Connection{token: cell.token}
+}
+
+export fn state(connection: &Connection) -> Result[State, NetError] {
+  let cell: Sync.Cell[State] = Sync.Cell{token: connection.token}
+  Result.mapErr(Sync.get(&cell), failed)
+}
+
+fn store(connection: &Connection, held: State) -> Result[(), NetError] {
+  let cell: Sync.Cell[State] = Sync.Cell{token: connection.token}
+  Result.mapErr(Sync.set(&cell, held), failed)
+}
+
+export fn receiveWithin(connection: &Connection, count: Int, _wait: Int) -> Result[Option[Bytes], NetError] {
+  let held = state(connection) ?
+  if held.closed { return Err(Closed) }
+  let bytes = held.pending.take(count)
+  store(connection, State{..held, pending: held.pending.drop(bytes.length())}) ?
+  if bytes.isEmpty() { Ok(None) } else { Ok(Some(bytes)) }
+}
+
+/// Answers each message of one batch in order: a row limit on Execute pages
+/// the table, and a refused Parse skips everything up to Sync.
+export fn send(connection: &Connection, bytes: &Bytes) -> Result[(), NetError] {
+  let held = state(connection) ?
+  if held.closed { return Err(Closed) }
+  var rest = *bytes
+  var kinds = ""
+  var next = held.next
+  var answer = held.pending
+  var refused = false
+  while !rest.isEmpty() {
+    let read = Result.mapErr(Wire.readMessage(&rest), protocol) ?
+    let message = read[0]
+    rest = read[1]
+    kinds = kinds + message.kind
+    if message.kind == "S" {
+      refused = false
+      answer = answer.concat(Wire.frame("Z", &bytesOf([73u8])))
+    } else if !refused {
+      if message.kind == "P" {
+        let name = Result.mapErr(Wire.readCString(&message.payload), protocol) ?
+        let sql = Result.mapErr(Wire.readCString(&name[1]), protocol) ?
+        next = 0
+        if sql[0] == "fail" {
+          refused = true
+          answer = answer.concat(Wire.frame("E", &ByteSeq.join(&[Wire.cString("SERROR"), Wire.cString("C42601"),
+                  Wire.cString("Msyntax error"), bytesOf([0u8])])))
+        } else { answer = answer.concat(Wire.frame("1", &bytesOf([]))) }
+      } else if message.kind == "B" {
+        answer = answer.concat(Wire.frame("2", &bytesOf([])))
+      } else if message.kind == "D" {
+        answer = answer.concat(description())
+      } else if message.kind == "E" {
+        let portal = Result.mapErr(Wire.readCString(&message.payload), protocol) ?
+        let limit = Result.mapErr(ByteSeq.getU32Be(&portal[1]), fn(_problem: ByteSeq.BytesError) -> NetError { Other("limit") }) ?
+        let wanted = Option.unwrapOr(convertInteger[Int](limit[0]), 0)
+        var sent = 0
+        while next < ROWS && (wanted == 0 || sent < wanted) {
+          next = next + 1
+          sent = sent + 1
+          answer = answer.concat(row(show(next)))
+        }
+        answer = answer.concat(if next < ROWS { Wire.frame("s", &bytesOf([])) } else { Wire.frame("C", &Wire.cString("SELECT 7")) })
+      }
+    }
+  }
+  store(connection, State{..held, pending: answer, batches: held.batches.push(kinds), next: next})
+}
+
+/// One text column named `n`.
+fn description() -> Bytes {
+  Wire.frame("T", &ByteSeq.join(&[ByteSeq.putU16Be(1u16), Wire.cString("n"), ByteSeq.putU32Be(0u32),
+        ByteSeq.putU16Be(0u16), ByteSeq.putU32Be(25u32), ByteSeq.putU16Be(65535u16), ByteSeq.putU32Be(4294967295u32),
+        ByteSeq.putU16Be(0u16)]))
+}
+
+fn row(text: Str) -> Bytes {
+  let value = text.toBytes()
+  Wire.frame("D", &ByteSeq.join(&[ByteSeq.putU16Be(1u16), ByteSeq.putU32Be(Option.unwrapOr(convertInteger[UInt32](value.length()), 0u32)), value]))
+}
+
+export fn close(connection: &Connection) -> Result[(), NetError] {
+  let held = state(connection) ?
+  store(connection, State{..held, closed: true})
+}
+
+export fn connectWithin(_host: Str, _port: Int, _wait: Int) -> Result[Connection, NetError] {
+  Err(Other("opening is outside this fixture"))
+}
+
+fn protocol(problem: Wire.ProtocolError) -> NetError { Other(show(problem)) }
+fn failed(problem: Sync.SyncError) -> NetError { Other(show(problem)) }

@@ -7,6 +7,7 @@ tags: [moc, module, foreign, ffi]
 
 - [[Pudu FFI Bridge]] — the C/libffi adapter that turns a checked crossing description into one
   native call.
+- [[Pudu FFI Callback Bridge]] · [[Pudu Private FFI ABI]] — libffi callbacks and shared ABI carriers.
 - [[Pudu FFI C++ Fixture]] — the test-only C++ resource surface exported through a stable C ABI.
 
 - [[Pudu SQLite Bridge]] — on-demand SQLite loading, statement ownership, and exact byte transport.
@@ -31,6 +32,7 @@ tags: [moc, module, foreign, ffi]
 - [[iOS Host Events]] — private event queue with the text and detail word each event carries.
 - [[iOS Host Controls]] — platform control factories, setters, target actions and self-test actions.
 - [[iOS Host List]] — recycling list and grid cells, the row store, and scroll reports.
+- [[iOS Host Material]] — surface materials realized as glass on iOS 26 or later, blur otherwise.
 
 ## Referenced by
 
