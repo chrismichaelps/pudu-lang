@@ -80,7 +80,11 @@ export type Connection = {
   /// The statements this connection has prepared on the server, by their
   /// text: a statement run again is bound and executed without planning it
   /// again. A prepared statement lives as long as its connection.
-  prepared: Map[Str, Str]
+  prepared: Map[Str, Str],
+  /// When the connection opened and when it was last handed back to a
+  /// pool, on the monotonic clock, for the pool's lifetime policy.
+  opened: Int,
+  returned: Int
 }
 
 /// Where a connection stands with respect to a transaction.
@@ -268,7 +272,9 @@ export fn connect(settings: &Config) -> Result[Connection, DbError] {
       lease: Sync.cell(0),
       epoch: 0,
       deadline: started + settings.connectMillis,
-      prepared: mapOf([])
+      prepared: mapOf([]),
+      opened: started,
+      returned: started
     }
     let hello = Wire.startup(&[("user", settings.user), ("database", settings.database)])
     let sent = write(&stream, &hello)

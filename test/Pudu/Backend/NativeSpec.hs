@@ -585,6 +585,7 @@ databaseFixtures =
   , "test-fixtures/stdlib/UsesDbProtocolAll.pudu", "test-fixtures/stdlib/UsesDbTransactionScope.pudu"
   , "test-fixtures/dbauth/Main.pudu", "test-fixtures/dbsavepoint/Main.pudu", "test-fixtures/dbbuffer/Main.pudu"
   , "test-fixtures/dbwait/Main.pudu", "test-fixtures/dbprepare/Main.pudu", "test-fixtures/dbstream/Main.pudu"
+  , "test-fixtures/dbpool/Main.pudu"
   , "test-fixtures/stdlib/UsesStore.pudu", "test-fixtures/stdlib/UsesStoreDriver.pudu"
   , "test-fixtures/stdlib/UsesMigrate.pudu", "test-fixtures/stdlib/UsesMigrateApply.pudu"
   , "test-fixtures/stdlib/UsesDbQueryShapeAll.pudu", "test-fixtures/stdlib/UsesDbRow.pudu"

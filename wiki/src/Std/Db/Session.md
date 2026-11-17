@@ -89,3 +89,11 @@ Resolved Grill Log: malformed rounds never default or reach a runtime arithmetic
 `DbError` adds `AdmissionTimedOut` for pool capacity expiry. It is distinct from a closed pool, expired lending, opening failure and command failure. Connection opening and message reading do not manufacture this cause. Existing exhaustive matches over this public sum must add the new case.
 
 Resolved Grill Log: a pool wait is a typed cause rather than a message-text convention. This additive public variant requires independent contract review.
+
+## Connection stamps
+
+`Connection` carries `opened` and `returned`, both on the monotonic elapsed-time clock. `opened` is
+set when the connection is established. `returned` is set when a pool takes the connection back, and
+again each time it is lent. [[Std Db Lifetime]] reads both to decide whether a pooled connection is
+kept, probed, or replaced. The stamps are plain values and do not affect how messages are read or
+written.

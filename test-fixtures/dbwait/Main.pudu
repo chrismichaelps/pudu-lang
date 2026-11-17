@@ -5,6 +5,7 @@ import Std.Concurrent as Concurrent
 import Std.Db.Admission as Admission
 import Std.Db as Db
 import Std.Db.Driver as Driver
+import Std.Db.Lifetime as Lifetime
 import Std.Db.Postgres as Connector
 import Std.Db.Protocol as Wire
 import Std.Db.Session as Session
@@ -23,7 +24,7 @@ fn finish(worker: &Concurrent.Task) -> () {
 }
 fn fresh() -> Session.Connection {
   Session.Connection{socket: Net.fake(), buffer: bytesOf([]), parameters: [], status: Session.Idle,
-    lease: Sync.cell(0), epoch: 0, deadline: -1, prepared: mapOf([]) }
+    lease: Sync.cell(0), epoch: 0, deadline: -1, prepared: mapOf([]), opened: 0, returned: 0 }
 }
 fn pool(slot: Option[Option[Session.Connection]], openings: &Sync.Counter) -> Db.Pool {
   let ready: Channel.Channel[Option[Session.Connection]] = Channel.channel(1)
@@ -32,7 +33,7 @@ fn pool(slot: Option[Option[Session.Connection]], openings: &Sync.Counter) -> Db
     reopen: fn() -> Result[Session.Connection, Session.DbError] {
       require(Sync.increment(openings, 1))
       Ok(fresh())
-    } }
+    }, policy: Lifetime.never() }
 }
 fn action(stream: Session.Connection) -> (Result[Int, Session.DbError], Session.Connection) { (Ok(7), stream) }
 

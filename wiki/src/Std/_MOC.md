@@ -10,6 +10,7 @@ tags: [moc, module, stdlib]
 
 - [[Std Lanes]] — packed binary64 values with whole-lane native kernels.
 - [[Std Db Admission]] — finite capacity wait below pool ownership.
+- [[Std Db Lifetime]] — pool connection age and idle limits, with a probe before reuse.
 
 - [[Std Num]] · [[Std Order]] — primitive numeric and ordering capabilities.
 

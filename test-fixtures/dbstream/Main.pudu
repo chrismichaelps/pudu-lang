@@ -12,7 +12,7 @@ fn check(holds: Bool, name: Str) -> () { if !holds { panic(name) } }
 
 fn fresh() -> Session.Connection {
   Session.Connection{socket: Net.fake(), buffer: bytesOf([]), parameters: [], status: Session.Idle,
-    lease: Sync.cell(0), epoch: 0, deadline: -1, prepared: mapOf([]) }
+    lease: Sync.cell(0), epoch: 0, deadline: -1, prepared: mapOf([]), opened: 0, returned: 0 }
 }
 
 fn observed(open: &Session.Connection) -> Net.State {

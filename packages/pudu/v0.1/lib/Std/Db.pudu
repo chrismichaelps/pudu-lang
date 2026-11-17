@@ -4,9 +4,11 @@ import Std.Bytes as ByteSeq
 import Std.Channel as Channel
 import Std.Db.Admission as Admission
 import Std.Db.Driver as Driver
+import Std.Db.Lifetime as Lifetime
 import Std.Db.Protocol as Wire
 import Std.Db.Session {Auth, Closed, Connect, Malformed, Other, Server, Unsupported, Active, Failed, Idle}
 import Std.Db.Session as Session
+import Std.Env as Env
 import Std.Net as Net
 import Std.Option as Option
 import Std.Result as Result
@@ -38,7 +40,9 @@ export type Pool = {
   ready: Channel.Channel[Option[Session.Connection]],
   size: Int,
   closing: Sync.Cell[Bool],
-  reopen: fn() -> Result[Session.Connection, Session.DbError]
+  reopen: fn() -> Result[Session.Connection, Session.DbError],
+  /// How long a connection may live and sit idle before it is replaced.
+  policy: Lifetime.Policy
 }
 
 /// Run text the server plans and executes in one step.
@@ -430,6 +434,11 @@ export fn withSavepoint[T](
 /// It also means a pool cannot hand out more connections than it opened, which
 /// is the whole reason a database wants one.
 export fn pool(settings: &Session.Config, size: Int) -> Result[Pool, Session.DbError] {
+  poolWith(settings, size, &Lifetime.DEFAULT_POLICY)
+}
+
+/// A pool whose connections live by the given policy.
+export fn poolWith(settings: &Session.Config, size: Int, policy: &Lifetime.Policy) -> Result[Pool, Session.DbError] {
   if size < 1 { return Err(Other("a database pool must contain at least one connection")) }
   let ready: Channel.Channel[Option[Session.Connection]] = Channel.channel(size)
   let held = *settings
@@ -437,7 +446,8 @@ export fn pool(settings: &Session.Config, size: Int) -> Result[Pool, Session.DbE
     ready: ready,
     size: size,
     closing: Sync.cell(false),
-    reopen: fn() -> Result[Session.Connection, Session.DbError] { Session.connect(&held) }
+    reopen: fn() -> Result[Session.Connection, Session.DbError] { Session.connect(&held) },
+    policy: *policy
   }
   var opened = 0
   var failure: Option[Session.DbError] = None
@@ -509,7 +519,18 @@ export fn withConnectionWithin[T](
     case Ok(false) => {}
   }
   let stream = match slot {
-    case Some(found) => found
+    case Some(found) => {
+      match Lifetime.verdict(&target.policy, &found, Env.elapsedMilliseconds()) {
+        case Lifetime.Keep => found
+        case Lifetime.Probe => {
+          match simple(found, "SELECT 1") {
+            case Ok(answered) => answered[1]
+            case Err(_) => replaced(target, &found) ?
+          }
+        }
+        case Lifetime.Replace => replaced(target, &found) ?
+      }
+    }
     case None => {
       match (target.reopen)() {
         case Ok(opened) => opened
@@ -555,7 +576,7 @@ export fn withConnectionWithin[T](
       return afterCleanup(failed, discard(target, &outcome[1]))
     }
     case Ok(returning) => {
-      match Channel.send(&target.ready, Some(returning)) {
+      match Channel.send(&target.ready, Some(Session.Connection{..returning, returned: Env.elapsedMilliseconds()})) {
         case Ok(_) => outcome[0]
         case Err(problem) => {
           let cleanup: Result[(), Session.DbError] = Err(asChannel(problem))
@@ -613,6 +634,19 @@ export fn transactionWith[T](
         }
       }
     })
+}
+
+/// A fresh connection in place of one the lifetime policy retired; its place
+/// is kept empty when none opens, as a lost connection's is.
+fn replaced(target: &Pool, stale: &Session.Connection) -> Result[Session.Connection, Session.DbError] {
+  let _closed = Session.close(stale)
+  match (target.reopen)() {
+    case Ok(opened) => Ok(opened)
+    case Err(reason) => {
+      let failed: Result[Session.Connection, Session.DbError] = Err(reason)
+      afterCleanup(failed, vacate(target))
+    }
+  }
 }
 
 /// Only a confirmed idle connection may return to the available queue.

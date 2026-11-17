@@ -177,7 +177,7 @@ the extra release command is necessary to finish ownership and is not a throughp
 - **Q:** Change whole-transaction cleanup or admission here? **A:** No; those are separate boundaries.
 
 ## Referenced by
-[[src/Std/_MOC]] · [[Std Db Session]] · [[Std Db Protocol]] · [[Std Net]] · [[architecture/STDLIB]]
+[[src/Std/_MOC]] · [[Std Db Session]] · [[Std Db Lifetime]] · [[Std Db Protocol]] · [[Std Net]] · [[architecture/STDLIB]]
 
 Connection URI opening is available through [[Std Db ConnectionString]]; [[Std App Database]] connects pool lifetime to application stages and provides parameterized queries for handlers.
 
@@ -186,3 +186,28 @@ Connection URI opening is available through [[Std Db ConnectionString]]; [[Std A
 `DEFAULT_POOL_WAIT_MILLISECONDS` is ten seconds. `withConnection` delegates to `withConnectionWithin(target, waitMillis, action)`. An override accepts zero through one hour; zero probes immediately. [[Std Db Admission]] validates before dequeuing and atomically distinguishes a slot, channel completion and expiry. Expiry returns `Session.AdmissionTimedOut`, invokes neither callback nor reopening, and conserves capacity. Existing post-acquisition closing, lending renewal, return and cleanup logic stays shared.
 
 Resolved Grill Log: bound capacity admission, not admitted work. Preserve the nominal Pool record and callback contract. The existing large aggregate receives only the bounded shared entry change; extracting its nominal public types is a separate compatibility decision.
+
+## Pool lifetime policy
+
+`Pool` carries a `policy: Lifetime.Policy`. `pool(settings, size)` uses `Lifetime.DEFAULT_POLICY`.
+`poolWith(settings, size, &policy)` takes a policy, and `Lifetime.never()` keeps every connection for
+as long as it works. [[Std Db Lifetime]] owns the policy and its verdict.
+
+`withConnectionWithin` asks the verdict before it lends a connection. On `Keep` the connection is
+lent as it is. On `Probe` it sends `SELECT 1`, and a connection that fails the probe is replaced. On
+`Replace` the connection is closed and a fresh one is opened in its place. A failed reopen reports
+the connection error and keeps the place empty for a later borrower, as a lost connection does.
+
+A connection is stamped with `returned` when it goes back into the pool, so idle time is measured
+from the moment it was last handed back.
+
+### Resolved Grill Log
+
+- **Q:** Probe every connection at lend time? **A:** No. Only a connection idle past the probe
+  threshold is probed. _Rejected:_ a round trip on every borrow.
+- **Q:** Lend a connection whose probe failed? **A:** No. A failed probe replaces the connection, so
+  the caller never receives one known to be dead. _Rejected:_ lending it and letting the caller's
+  request fail.
+- **Q:** Keep the place occupied when a replacement cannot be opened? **A:** No. The place is kept
+  empty, so capacity does not shrink and the next borrower opens a fresh connection. _Rejected:_
+  closing the pool.
