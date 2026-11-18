@@ -11,6 +11,13 @@ tags: [changelog]
   timed section, so a first-launch scan no longer trips the deadline (refs #953).
   [[Backend Toolchain Tests]]
 
+## 2026-11-17 — Android test builds (#951)
+
+- Android packages are debuggable and accept self-test extras only when
+  built with `PUDU_ANDROID_TEST_BUILD`; release packages drop every extra
+  (refs #951).
+  [[Backend Toolchain Android]] · [[Native Android Activity]]
+
 ## 2026-11-17 — Native parity audit
 
 - The native coverage page records a whole-corpus comparison of native
