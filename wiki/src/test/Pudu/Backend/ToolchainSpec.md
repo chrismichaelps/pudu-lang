@@ -64,3 +64,14 @@ remaining short enough to expose the original indefinite wait regression.
 ## Native host sources (#856)
 
 Resolved Grill Log: a real macOS compiler links a marked program against the packaged adapter. The program calls a null-handle operation so the link and ABI can be checked without opening a window.
+
+## Stand-in warm-up (#953)
+
+`withCompiler` launches the freshly written stand-in compiler once with
+`--pudu-warm`, which the script prefix answers by exiting, before any timed
+section. A system that scans a new executable on its first launch pays that
+cost outside the deadline the properties measure, so the readiness and
+cancellation properties observe the toolchain, not the first launch.
+
+Resolved Grill Log: warm the script instead of raising the deadline; the
+properties still exercise the configured one-second limit.
