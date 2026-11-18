@@ -5,6 +5,13 @@ tags: [changelog]
 
 # Changelog
 
+## 2026-11-17 — Android test builds (#951)
+
+- Android packages are debuggable and accept self-test extras only when
+  built with `PUDU_ANDROID_TEST_BUILD`; release packages drop every extra
+  (refs #951).
+  [[Backend Toolchain Android]] · [[Native Android Activity]]
+
 ## 2026-11-17 — Native ledger: trait-qualified method values (#647)
 
 - Trait-qualified method values are recorded as native; both engines dispatch
