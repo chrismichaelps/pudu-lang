@@ -94,6 +94,7 @@ tags: [moc, module]
   - [[Derive Library Spec]] — every shipped derive, field callbacks, static selection and the expansion snapshot in both evaluators.
   - [[Derive Field Callbacks]] · [[Derive Residual Context]] — build/collect unrolling and shared residual state.
   - [[Derive Expansion Output]] · [[Syntax Printer]] · [[Statement Inlining]] — `pudu expand` text.
+  - Attribute fixtures: [[src/test-fixtures/attributes/UnknownAttribute]] · [[src/test-fixtures/attributes/WrongAttributeArgument]] · [[src/test-fixtures/attributes/conflict/Main]] · [[src/test-fixtures/attributes/conflict/Tags]] · [[src/test-fixtures/attributes/UndeclaredRead]] · [[src/test-fixtures/attributes/UnsupportedKind]] · [[src/test-fixtures/attributes/DeclaredAttribute]].
   - Fixtures: [[src/test-fixtures/derive/StdOrder]] · [[src/test-fixtures/derive/StdShow]] · [[src/test-fixtures/derive/StdJson]] · [[src/test-fixtures/derive/StdRow]] · [[src/test-fixtures/derive/Builders]] · [[src/test-fixtures/derive/StaticSelection]] · [[src/test-fixtures/derive/StaticMember]] · [[src/test-fixtures/derive/BuildEscape]] · [[src/test-fixtures/derive/UnmetStdField]] · [[src/test-fixtures/derive/Expand]].
   - [[Derive Capture Inference]] — resolved private contract dependency closure.
   without leftover declaration parameters or source-string generation.

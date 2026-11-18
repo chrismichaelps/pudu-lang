@@ -55,6 +55,7 @@ testMetadata = do
  where
   header imported qualifier = Text.unlines
     [ "module Probe", imported
+    , "attribute wire(Str)"
     , "trait Label { fn label(self: &Self) -> Str }"
     , "derive Label for T: Record {"
     , " fn label(self: &T) -> Str {"
@@ -122,6 +123,7 @@ testScopes = conjoin <$> sequence [scopeCase, setterCase]
     , "trait Step { fn step(self: &Self) -> Self }"
     , "impl Step for Int { fn step(self: &Self) -> Self = (*self) + 1 }"
     , "impl Step for Bool { fn step(self: &Self) -> Self = !(*self) }"
+    , "attribute restore"
     , "trait Advance { fn advance(self: &mut Self) -> () }"
     , "derive Advance for T: Record {"
     , " fn advance(self: &mut T) -> () {"
@@ -218,7 +220,7 @@ testRefusals = do
   refusals <- mapM refusalCase
     [ ("sum shape", "type Sample = Ready | Done", "Meta.nameOf[T]()", "record target")
     , ("metadata escape", "type Sample = { number: Int }", "{\n let held = Meta.nameOf\n \"unused\"\n }", "metadata cannot escape")
-    , ("attribute arity", "type Sample = { @wire(\"a\", \"b\") number: Int }",
+    , ("attribute arity", "attribute wire(Str, Str)\ntype Sample = { @wire(\"a\", \"b\") number: Int }",
        "{\n var names = \"\"\n comptime for field: Meta.Field[T, F] in Meta.fields[T]() {\n names = names + field.attributeOr(\"wire\", field.name)\n }\n names\n }", "exactly one attribute literal")
     ]
   let depth = runResidual at (withinDepth callDepthLimit at)

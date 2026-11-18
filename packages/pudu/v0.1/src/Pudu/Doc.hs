@@ -27,7 +27,8 @@ import Pudu.Frontend.Syntax.Located (Located (..))
 import Pudu.Frontend.Syntax.Name (moduleNameText)
 import Pudu.Frontend.Syntax.Print (printType)
 import Pudu.Frontend.Syntax.Tree
-  ( Declaration (..)
+  ( AttributeDeclarationValue (..)
+  , Declaration (..)
   , Derive (..)
   , DeriveShape (..)
   , Visibility (..)
@@ -40,6 +41,7 @@ import Pudu.Frontend.Syntax.Tree
   , Trait (..)
   , TypeDeclarationValue (..)
   , TypeSyntax (..)
+  , attributeSignature
   )
 import Pudu.Frontend.Token (Token (..), Trivia (..), TriviaKind (DocComment, Whitespace))
 import Pudu.Source (spanEnd, spanStart, unOffset)
@@ -65,6 +67,10 @@ data DocKind
       declaration and proved by nothing, and a reader deciding how carefully to
       check a call wants to be told that without having to go and look. -}
   | DocForeign !Text
+  {-| An attribute a module declares, with its declaration as written. It names
+      no value, so it is documented and outlined but never offered where a
+      value or type is completed. -}
+  | DocAttribute !Text
   deriving stock (Eq, Ord, Show)
 
 {-| @Doc.Derive — declaration metadata, independent of callable schemes. -}
@@ -216,6 +222,9 @@ buildIndexFrom tokens settled moduleValue =
                   functionSpan name
               )
     InvalidDeclaration -> []
+    AttributeDeclaration value ->
+      let name = locatedValue (attributeDeclarationName value)
+       in [make lowerBound name (DocAttribute (attributeSignature value)) declarationSpan name]
 
   {-| A member's documentation is bounded by its enclosing declaration rather
       than by the previous top-level one, so the first member cannot claim the
@@ -409,12 +418,14 @@ kindLabel kind = case kind of
   DocMacro -> "macro"
   DocDerive _ -> "derive"
   DocForeign _ -> "foreign"
+  DocAttribute _ -> "attribute"
 
 {-| One line, the way a search result lists it: the name, its type, and where it
     came from. -}
 renderEntry :: DocEntry -> Text
 renderEntry value = case docKind value of
   DocDerive metadata -> deriveSignature metadata
+  DocAttribute signature -> signature
   _ -> docName value
     <> maybe Text.empty (\signature -> " :: " <> renderSignature signature) (docSignature value)
 
@@ -431,6 +442,7 @@ deriveSignature metadata =
 entrySignature :: DocEntry -> Maybe Text
 entrySignature entry = case docKind entry of
   DocDerive metadata -> Just (deriveSignature metadata)
+  DocAttribute signature -> Just signature
   _ -> renderSignature <$> docSignature entry
 
 {-| The full description, the way a documentation listing shows it. -}

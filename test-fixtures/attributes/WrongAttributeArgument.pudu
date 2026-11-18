@@ -1,0 +1,8 @@
+module WrongAttributeArgument
+
+import Std.Json as Json
+
+/// `@json` takes the key as text, not a number.
+type Point = { x: Int, @json(1) y: Int } derives Json.Encode
+
+export fn main() -> Int { 0 }

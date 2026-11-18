@@ -165,6 +165,10 @@ Collect declared shapes and signatures, check trait implementation ownership and
 
 DEPTH 0.85 (DEEP). One entry point hides signature collection, scope construction, bidirectional inference, and the rules for every construct in the language.
 
+## Declared attributes
+
+`checkAttributes` runs over each module after its declarations are formed. Its diagnostics belong to the module whose type, field or variant carries the attribute; the check itself is in [[Type Check Attribute]].
+
 ## Grill Log
 
 - **Q:** Under which names is a variant bound? **A:** Its bare name and its type's canonical key (`M.Shape.Circle`), which is what a qualified `Shape.Circle` is looked up by. Without the canonical key a qualified variant fell through to checking `Shape` as a value, was typed as an error, and was accepted wherever any type was expected (#536).

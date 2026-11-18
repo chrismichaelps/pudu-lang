@@ -11,7 +11,7 @@ tags: [module, fixture, derive]
 ## Purpose and contract
 
 Instantiate a shape-independent Sum template for a direct sum and a transparent
-sum alias. `Meta.nameOf` folds to the underlying declaration name. Invoke both
+sum alias. The module declares `round`, the marker on the `Circle` variant. `Meta.nameOf` folds to the underlying declaration name. Invoke both
 generated methods and assert `Shape:sumOther:sum` in ordinary evaluation.
 The alias does not create a second nominal identity.
 

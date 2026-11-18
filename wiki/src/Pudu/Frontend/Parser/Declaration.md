@@ -62,6 +62,10 @@ Require the `module` keyword and path, collect leading imports, then loop declar
 
 DEPTH 0.74 (MEDIUM). It centralizes compilation-unit structure, visibility ownership, ordering, and module-scope recovery while delegating every construct grammar.
 
+## Declared attributes
+
+`Identifier "attribute"` at a declaration start dispatches to `parseAttributeDeclaration`. Elsewhere the word stays an ordinary identifier.
+
 ## Grill Log
 
 - **Q:** Should the orchestrator own block parsing, as the earlier monolithic draft did? **A:** No; [[Parser Block]] owns it and resolves the recursion itself. _Rationale:_ the orchestrator would otherwise be imported by the modules it composes, recreating the cycle the partition was meant to remove. _Rejected:_ a single declaration file holding block, function, and import grammar.

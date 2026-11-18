@@ -5,6 +5,11 @@ tags: [changelog]
 
 # Changelog
 
+## 2026-11-18 — Declared attributes (#965)
+
+- Declared attributes (#965): `attribute name(...)` declarations; unknown or misused attributes are E3104/E3105, conflicting declarations E3106, unsupported parameter types E1069; the standard library declares json, skip, default, binary, column, label, min, max and readonly.
+  [[Type Check Attribute]] · [[Derive Design]] · [[grammar/pudu]]
+
 ## 2026-11-18 — Native navigation stack and page sheets (#920)
 
 - Native navigation stack and page sheets (#920): Std.Mobile.Navigation, Std.Mobile.Events, NAVIGATE instruction, POPPED and DISMISSED events, UIKit navigation host.

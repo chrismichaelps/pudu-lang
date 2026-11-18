@@ -83,6 +83,10 @@ costs linear time and reports one `E1099` rather than a diagnostic per token.
   enclosing construct.
 - An empty derive body parses with no members rather than a diagnostic.
 
+## Declared attributes
+
+`parseAttributeDeclaration` reads `attribute name`, with an optional parenthesized list of literal kinds. A parameter outside the six kinds is reported as `E1069` and the declaration still parses, so following declarations are kept.
+
 ## Grill Log
 
 - **Q:** Report an empty `derives` at whatever token follows? **A:** Only on the

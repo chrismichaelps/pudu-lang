@@ -40,6 +40,10 @@ and checks each body against an abstract field type. User trait names never ente
 the compiler. Resolver restrictions cover all imported Meta names, including aliases
 and selected imports, outside derive definitions.
 
+## Declared attributes
+
+Declares `export attribute skip`. A derive reads it with `field.has("skip")`.
+
 ## Grill Log
 
 - **Q:** Return Array[Field[T, F]] from fields? **A:** No. Fields[T] preserves

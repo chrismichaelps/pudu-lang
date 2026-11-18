@@ -1,0 +1,8 @@
+module UnknownAttribute
+
+import Std.Json as Json
+
+/// `@skp` is a misspelling of `@skip`; it must not be silently ignored.
+type Point = { x: Int, @skp y: Int } derives Json.Encode
+
+export fn main() -> Int { 0 }

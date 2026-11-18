@@ -104,6 +104,10 @@ Push the builtin frame, collect module declarations and imports into the module 
 
 DEPTH 0.84 (DEEP). One entry point hides collection order, namespace policy, scope construction for six declaration forms, pattern binding, shadow classification, and reference recording.
 
+## Declared attributes
+
+Resolution does nothing with an attribute declaration. Attribute names have their own namespace and bind no value, so no name enters a scope.
+
 ## Grill Log
 
 - **Q:** Why does resolution publish its frames instead of tooling rebuilding scope from spans?

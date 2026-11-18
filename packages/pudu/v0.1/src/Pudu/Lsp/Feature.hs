@@ -193,6 +193,7 @@ kindText kind = case kind of
   DocDerive _ -> "derive strategy"
   DocMacro -> "macro"
   DocForeign library -> "foreign function from " <> library <> ", asserted rather than proved"
+  DocAttribute _ -> "attribute"
 
 locationOf :: Text -> Text -> DocEntry -> Json
 locationOf uri content entry =
@@ -238,6 +239,7 @@ symbolKind kind = case kind of
   DocDerive _ -> 11
   DocMacro -> 12
   DocForeign _ -> 12
+  DocAttribute _ -> 7
 
 {-| Everything the file declares, offered as completions.
 
@@ -249,6 +251,7 @@ completionItems index = JsonArray
   [completionItem entry | entry <- indexEntries index, bindable (docKind entry)]
  where
   bindable (DocDerive _) = False
+  bindable (DocAttribute _) = False
   bindable _ = True
 
 {-| One declaration as a completion: its name, its kind, its signature, and its
@@ -278,3 +281,4 @@ completionKind kind = case kind of
   DocDerive _ -> 8
   DocMacro -> 3
   DocForeign _ -> 3
+  DocAttribute _ -> 10

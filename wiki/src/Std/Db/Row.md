@@ -27,6 +27,10 @@ Driver.Value variant, with no implicit numeric narrowing, parsing, or text conve
 - **Q:** Guess native types from text? **A:** No; PostgreSQL wire text and SQLite native cells retain their actual variants. Application parsers make conversions explicit.
 - **Q:** Expose the bad cell in diagnostics? **A:** No; errors carry positions, column names and expected kinds, never database values.
 
+## Declared attributes
+
+Declares `export attribute column(Str)`.
+
 ## Grill Log
 
 - **Q:** Accept any column kind for an Int? **A:** No; a whole number that does not fit is WrongKind, as is any other kind.

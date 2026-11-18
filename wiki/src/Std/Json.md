@@ -84,6 +84,10 @@ digit. Anything else is `Unexpected` at the first position that breaks the gramm
   through the library reader alone.
 - Formatter, checker, O0 evaluation, O2 evaluation, and the full compiler suite form the delivery gate.
 
+## Declared attributes
+
+Declares `export attribute json(Str)` and `export attribute default(Str)`.
+
 ## Grill Log
 - **Q:** Why keep objects as ordered pairs? **A:** Encoding remains deterministic and preserves source order while lookup still has an explicit rule. _Rejected:_ host-map ordering.
 - **Q:** Why not keep accepting every character after a backslash? **A:** That produces values from text JSON itself rejects and hides misspelled escapes. A typed parse error is safer than inventing data. _Rejected:_ permissive pass-through for unknown escapes.

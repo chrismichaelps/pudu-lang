@@ -96,6 +96,8 @@ instance Persist Macro
 instance Persist MacroParam
 instance Persist MacroKind
 instance Persist Attribute
+instance Persist AttributeDeclarationValue
+instance Persist AttributeParameter
 instance Persist DeriveShape
 instance Persist Derive
 instance Persist DeriveRequest

@@ -10,7 +10,7 @@ import Pudu.Foreign.Extent (ExtentUnit)
 import Pudu.Frontend.Syntax.Located (Located (..))
 import Pudu.Frontend.Syntax.Name (ModuleName)
 import Pudu.Frontend.Syntax.Tree
-  ( ArrayRest, Attribute, BindingKind, Block, Capability, ComptimeFor, Constraint
+  ( ArrayRest, Attribute, AttributeDeclarationValue, AttributeParameter, BindingKind, Block, Capability, ComptimeFor, Constraint
   , Declaration, Derive, DeriveRequest, DeriveShape, Expression, FieldDeclaration
   , FieldInit, FieldPattern, Foreign, ForeignCallback, ForeignCallbackParameter
   , ForeignCallbackGroup, ForeignCallbackMember, ForeignDelegate, ForeignDelegateMethod, ForeignCallbackPassing, ForeignClass
@@ -94,6 +94,8 @@ instance Owned Macro
 instance Owned MacroParam
 instance Owned MacroKind
 instance Owned Attribute
+instance Owned AttributeDeclarationValue
+instance Owned AttributeParameter
 instance Owned DeriveShape
 instance Owned Derive
 instance Owned DeriveRequest

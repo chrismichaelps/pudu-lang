@@ -7,6 +7,7 @@
     a feature has chosen the feature over them. -}
 module Pudu.Frontend.Parser.Declaration.Derive
   ( matchDeriveWord
+  , parseAttributeDeclaration
   , parseAttributes
   , parseDeriveDeclaration
   , parseDerivesClause
@@ -40,6 +41,8 @@ import Pudu.Frontend.Parser.Type (parseTypeSyntax)
 import Pudu.Frontend.Syntax.Located (Located (..), locatedSpan, locatedValue)
 import Pudu.Frontend.Syntax.Tree
   ( Attribute (..)
+  , AttributeDeclarationValue (..)
+  , AttributeParameter (..)
   , Capability
   , Declaration (..)
   , Derive (..)
@@ -159,6 +162,66 @@ parseAttributeArgumentList reversed ending recovering = do
     Keyword KwFalse -> Just (BoolValue False)
     Keyword KwNull -> Just NullValue
     _ -> Nothing
+
+{-| Parse `attribute name` or `attribute name(Kind, ...)`. `attribute` is
+    special only here, at a declaration start; each kind names a literal kind,
+    and anything else is `E1069`. -}
+parseAttributeDeclaration :: Visibility -> Parser (Located Declaration)
+parseAttributeDeclaration visibility = do
+  start <- advanceToken
+  name <- expectIdentifier "after attribute to name it"
+  open <- matchSymbol "("
+  (parameters, ending) <- case open of
+    Nothing -> pure ([], locatedSpan name)
+    Just token -> parseParameterKinds [] (tokenSpan token)
+  pure
+    ( Located (mergedOrLeft (tokenSpan start) ending)
+        ( AttributeDeclaration
+            AttributeDeclarationValue
+              { attributeDeclarationVisibility = visibility
+              , attributeDeclarationName = name
+              , attributeDeclarationParameters = parameters
+              }
+        )
+    )
+
+parseParameterKinds :: [Located AttributeParameter] -> Span -> Parser ([Located AttributeParameter], Span)
+parseParameterKinds reversed ending = do
+  kind <- peekKind
+  exhausted <- budgetExhausted
+  token <- peekToken
+  case kind of
+    _ | exhausted || argumentBoundary kind -> do
+      _ <- expectSymbol ")" "to close the attribute's argument kinds"
+      pure (reverse reversed, ending)
+    Symbol SymRightParen -> do
+      closing <- advanceToken
+      pure (reverse reversed, tokenSpan closing)
+    Identifier written | Just parameter <- lookup written parameterKinds -> do
+      _ <- advanceToken
+      next (Located (tokenSpan token) parameter : reversed) (tokenSpan token)
+    _ -> do
+      emitParseError "E1069" (tokenSpan token) "expected a literal kind for an attribute argument"
+        (Just "argument kinds are Str, Int, Float, Decimal, Bool, or Char")
+      _ <- advanceToken
+      next reversed (tokenSpan token)
+ where
+  next collected ending' = do
+    comma <- matchSymbol ","
+    case comma of
+      Just token -> parseParameterKinds collected (tokenSpan token)
+      Nothing -> parseParameterKinds collected ending'
+
+{-| The literal kinds an attribute declaration may name. -}
+parameterKinds :: [(Text, AttributeParameter)]
+parameterKinds =
+  [ ("Str", TextParameter)
+  , ("Int", IntegerParameter)
+  , ("Float", NumberParameter)
+  , ("Decimal", DecimalParameter)
+  , ("Bool", BoolParameter)
+  , ("Char", CharParameter)
+  ]
 
 argumentBoundary :: TokenKind -> Bool
 argumentBoundary kind = kind == EndOfFile || isDeclarationStart kind
