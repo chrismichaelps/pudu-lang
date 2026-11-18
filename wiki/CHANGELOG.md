@@ -17,6 +17,11 @@ tags: [changelog]
   them on their first argument since #935 (refs #647).
   [[Native Method Values]] · [[Native Emission Coverage]]
 
+## 2026-11-17 — Swift entry points (#881)
+
+- Swift libraries reach Pudu through C entry points, checked on macOS and the iOS simulator (refs #881).
+  [[Swift Entry Points Test]] · [[iOS Foreign Apps Test]]
+
 ## 2026-11-17 — Objective-C delegates (#879)
 
 - Objective-C delegates: runtime-defined classes whose methods enter callback group members (refs #879).

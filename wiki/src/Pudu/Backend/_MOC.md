@@ -8,7 +8,7 @@ aliases: [Backend Module Map]
 
 - [[Native Binary Kernels]] · [[Backend Kernel Programs]] — C11 encoding and decoding for `Std.Binary` (#935).
 
-- [[Backend Emit Entry]] · [[Backend Native Target]] · [[Backend Toolchain Library]] · [[Backend Toolchain Process]] · [[Backend Native Target Tests]] · [[iOS Simulator Run]] — embedded mobile builds (#878).
+- [[Backend Emit Entry]] · [[Backend Native Target]] · [[Backend Toolchain Library]] · [[Backend Toolchain Process]] · [[Backend Native Target Tests]] · [[iOS Simulator Run]] · [[iOS Foreign Apps Test]] · [[Swift Entry Points Test]] · [[Swift Counter Fixture]] — embedded mobile builds (#878) and Swift entry points (#881).
 
 - [[Backend Emit Export]] · [[Backend Export Tests]] — exported functions a host calls through C (#899).
 - [[Native App Tests]] — simulator application identifier and property-list checks (#916).
