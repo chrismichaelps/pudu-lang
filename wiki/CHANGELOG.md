@@ -5,6 +5,12 @@ tags: [changelog]
 
 # Changelog
 
+## 2026-11-17 — Stand-in compiler warm-up (#953)
+
+- Toolchain lifetime tests launch their stand-in compiler once before the
+  timed section, so a first-launch scan no longer trips the deadline (refs #953).
+  [[Backend Toolchain Tests]]
+
 ## 2026-11-17 — Android test builds (#951)
 
 - Android packages are debuggable and accept self-test extras only when
