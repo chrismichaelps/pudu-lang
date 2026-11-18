@@ -12,6 +12,12 @@ tags: [changelog]
   (refs #951).
   [[Backend Toolchain Android]] · [[Native Android Activity]]
 
+## 2026-11-17 — Native parity audit
+
+- The native coverage page records a whole-corpus comparison of native
+  executables against the interpreter.
+  [[Native Emission Coverage]]
+
 ## 2026-11-17 — Native set membership (#948)
 
 - `x in set` lowers to the set's `contains` primitive natively, with the
