@@ -4,6 +4,7 @@ module Pudu.Compiler.Lower.Scalar (lowerUnary, lowerBinary, eagerType) where
 import Data.Text (Text)
 import qualified Data.Text as Text
 import Pudu.Compiler.Lower.Control (expressionIsPrintValued)
+import Pudu.Compiler.Lower.Keyed (setMembership)
 import Pudu.Compiler.Lower.Reference (lowerReference)
 import Pudu.Compiler.Lower.State
   ( LowerContext (..), LowerState (..), halt, intType, refused )
@@ -56,6 +57,8 @@ lowerBinary lower state at left operator right
                 [CoreStatement (coreExpressionSpan core) (CoreEvaluate core) | core <- [coreLeft, coreRight]] Nothing)) CoreNeverType
           | expressionIsPrintValued coreLeft -> halt (locatedSpan left) "comparing or operating on a Result[(), Str] value" after
           | expressionIsPrintValued coreRight -> halt (locatedSpan right) "comparing or operating on a Result[(), Str] value" after
+          | operator == "in", CoreSetType member <- rightType, member == leftType ->
+              setMembership after at coreLeft coreRight
           | Just (operation, result) <- represented operator leftType rightType ->
               built after at (CoreBinary operation coreLeft coreRight) result
           | all nativeValueType [leftType, rightType]

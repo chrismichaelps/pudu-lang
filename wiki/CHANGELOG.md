@@ -12,11 +12,22 @@ tags: [changelog]
   (refs #951).
   [[Backend Toolchain Android]] · [[Native Android Activity]]
 
+## 2026-11-17 — Native set membership (#948)
+
+- `x in set` lowers to the set's `contains` primitive natively, with the
+  candidate evaluated before the set (refs #948).
+  [[Compiler Lower Keyed]] · [[Compiler Lower Scalar]]
+
 ## 2026-11-17 — Native ledger: trait-qualified method values (#647)
 
 - Trait-qualified method values are recorded as native; both engines dispatch
   them on their first argument since #935 (refs #647).
   [[Native Method Values]] · [[Native Emission Coverage]]
+
+## 2026-11-17 — Swift entry points (#881)
+
+- Swift libraries reach Pudu through C entry points, checked on macOS and the iOS simulator (refs #881).
+  [[Swift Entry Points Test]] · [[iOS Foreign Apps Test]]
 
 ## 2026-11-17 — Objective-C delegates (#879)
 
