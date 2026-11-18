@@ -75,6 +75,13 @@ testDiagnosticCopies = withCompiler $ \cc root -> conjoin <$> traverse (check cc
       "let items = [1]\n let invalid = items[0..2]\n print(show(invalid))")
   , ("E7004", "slice range out of bounds", Just "it has 2 elements",
       "let text = \"hé\"\n let invalid = text[0..3]\n print(invalid)")
+  -- Read through a method receiver, an element fails at its key as it does read as a value.
+  , ("E7004", "slice range out of bounds", Just "it has 1 elements",
+      "let items = [1]\n print(display(items[0..2].length()))")
+  , ("E7004", "slice range out of bounds", Just "it has 2 elements",
+      "let text = \"hé\"\n print(text[1..4].trim())")
+  , ("E7004", "index out of range", Nothing,
+      "let items = [1]\n print(items[3].toText())")
   ]
  where
   check cc root (code, message, help, body) = do

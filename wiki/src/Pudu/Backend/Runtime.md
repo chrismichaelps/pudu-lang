@@ -377,3 +377,7 @@ families ([[Native Host Runtime]]). `pudu_trap_hook` runs before blame and clean
 thread installs it so a failure unwinds that thread and is stashed for the
 scope rather than ending the process. The revision is 21 because emitted
 programs gain host behavior and the thread hook.
+
+## Derive notes (#959)
+
+`pudu_site` has a trailing field `notes`, the baked note lines of a span generated from a derive (see [[Backend Emit State]]). `pudu_render_report` prints it after the excerpt and before a dynamic note and the help line.

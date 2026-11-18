@@ -23,6 +23,11 @@ Stream endpoints behind their tokens: listening, accepting, connecting, sending 
 - Refusal wording? The operation's library name, the failure kind and the system's reason, in the interpreter's layout; a connection names its descriptor.
 - Who else dials? [[Native Host TLS]]: `host_socket_dialing` answers a connected descriptor and `host_socket_connecting` keeps it behind a token, so a secured connection never spends a plain token.
 - Resolution? Asked of the machine's resolver for a stream address; the first answer is used.
+- Closing a descriptor does not wake a `poll` another thread holds on it, so a slice bound replaces the unbounded wait (#960).
+
+## Accept
+
+`pudu_host_tcp_accept` tries a non-blocking `accept` holding the gate and leaves the gate only to wait, in slices of `PUDU_HOST_ACCEPT_SLICE_MS` (100 ms). Each turn checks, holding the gate, that the token still names the same descriptor; once `closeListener` has closed it, the accept ends with a failure, which is how a server's `stop` brings a waiting accept loop out.
 
 ## Referenced by
 
