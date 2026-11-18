@@ -44,15 +44,16 @@ Exports:
 - `menu(out, node, tag: UInt32, choices: &Array[(UInt32, Str)]) -> Array[UInt8]`: MENU, the node, the tag its events report, then the choices.
 - `animate(out, node, on: Bool) -> Array[UInt8]`: ANIMATE, the group and 0 or 1.
 - `navigate(out, pages: &Array[(UInt32, UInt32, Str)], sheet: Option[(UInt32, UInt32)]) -> Array[UInt8]`: NAVIGATE, the route count, then each route's id, body node and title, then 1 and the sheet's id and body node, or 0.
+- `refresh(out, node, tag, on)`: REFRESH, the scroll or list node, its tag and 1 or 0.
 
 ## Invariants
 
-- Every word is a little-endian 32-bit unsigned value. Every instruction begins with its code word (CREATE 1, TEXT 2, APPEND 3, ROOT 4, TAG 5, STATE 7, HINT 8, NAME 9, INSERT 10, REMOVE 11, MOVE 12, THEME 20, APPEARANCE 21, STYLE 22, COLOR 23, RANGE 24, COLUMNS 25, MATERIAL 26, GESTURES 27, ALERT 28, VALUE 29, HAPTIC 30, TRAITS 31, ACCESS_HINT 32, ACCESS_VALUE 33, MENU 34, ANIMATE 35, NAVIGATE 36).
+- Every word is a little-endian 32-bit unsigned value. Every instruction begins with its code word (CREATE 1, TEXT 2, APPEND 3, ROOT 4, TAG 5, STATE 7, HINT 8, NAME 9, INSERT 10, REMOVE 11, MOVE 12, THEME 20, APPEARANCE 21, STYLE 22, COLOR 23, RANGE 24, COLUMNS 25, MATERIAL 26, GESTURES 27, ALERT 28, VALUE 29, HAPTIC 30, TRAITS 31, ACCESS_HINT 32, ACCESS_VALUE 33, MENU 34, ANIMATE 35, NAVIGATE 36, REFRESH 37).
 - Theming codes start at 20. Navigation reserves 13 and 14, so a gap keeps both streams unambiguous when they merge.
 - RANGE is exactly three words after its code word; COLUMNS is exactly two; MATERIAL is exactly two. A RANGE is 16 bytes, a COLUMNS is 12 bytes and a MATERIAL is 12 bytes.
 - THEME carries exactly seven tones; its count word is 7. The encoder writes the count, and the host refuses any other count.
 - Text is its UTF-8 byte length as one word, followed by those bytes.
-- Word counts after the code word: GESTURES 3, VALUE 2, HAPTIC 1, TRAITS 2 and ANIMATE 2. ACCESS_HINT and ACCESS_VALUE are a node and a text field. ALERT is a tag, a style, two text fields and a choice list; MENU is a node, a tag and a choice list.
+- Word counts after the code word: GESTURES 3, VALUE 2, HAPTIC 1, TRAITS 2, ANIMATE 2 and REFRESH 2. ACCESS_HINT and ACCESS_VALUE are a node and a text field. ALERT is a tag, a style, two text fields and a choice list; MENU is a node, a tag and a choice list.
 - NAVIGATE is a route count, then per route an id word, a body node word and a text field, then a sheet flag word (1 or 0), followed by the sheet's id and body node when the flag is 1. A NAVIGATE with no sheet ends at the flag word.
 - A choice list is a count word, then each choice's role word and a text field.
 - `remove` writes the node, then the count of ids, then every id of the detached subtree, so the host can forget each one.
@@ -61,6 +62,7 @@ Exports:
 ## Negative Logic
 
 - No decisions: the encoder never chooses which instruction a commit needs, never compares two trees, and never allocates a node id.
+- REFRESH is a node, a tag and a flag word, 16 bytes in all. The encoder writes the flag as 1 or 0; the host refuses any other value.
 - No RESET. The view module no longer writes RESET, and this encoder does not spell it.
 - No validation of node ids, indices or kinds. Refusing a bad instruction is the host's job, in [[iOS Host Adapter]].
 - No window arithmetic. The first index and the total are passed through as given; [[Std Mobile View]] decides them.
@@ -87,4 +89,4 @@ Depends on no other module. Consumers: [[Std Mobile View]], which calls these fu
 
 ## Referenced by
 
-[[src/Std/_MOC]] · [[Std Mobile View]] · [[Std Mobile Theme]] · [[Native Keyed Lists Delivery]] · [[Native iOS Scrolling Delivery]] · [[Native iOS Theming Delivery]] · [[Native iOS Recycling Delivery]] · [[Native iOS Materials Delivery]]
+[[src/Std/_MOC]] · [[Std Mobile View]] · [[Std Mobile Theme]] · [[Native Keyed Lists Delivery]] · [[Native iOS Scrolling Delivery]] · [[Native iOS Theming Delivery]] · [[Native iOS Recycling Delivery]] · [[Native iOS Materials Delivery]] · [[Native iOS Refresh Delivery]]

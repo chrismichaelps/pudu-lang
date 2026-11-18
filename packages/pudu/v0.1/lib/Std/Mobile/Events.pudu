@@ -17,6 +17,8 @@ const LIFECYCLE: UInt64 = 12u64
 const PICKED: UInt64 = 13u64
 const POPPED: UInt64 = 14u64
 const DISMISSED: UInt64 = 15u64
+const REFRESHED: UInt64 = 16u64
+const INSETS: UInt64 = 17u64
 
 /// Each event kind's constructor, given the tag and the text the host holds.
 const EVENTS: Map[UInt64, fn(UInt32, Str) -> View.Event] = mapOf([
@@ -24,7 +26,8 @@ const EVENTS: Map[UInt64, fn(UInt32, Str) -> View.Event] = mapOf([
     (CHANGED, |tag: UInt32, text: Str| View.Changed(tag, text)),
     (SWITCHED_ON, |tag: UInt32, _text: Str| View.Toggled(tag, true)),
     (SWITCHED_OFF, |tag: UInt32, _text: Str| View.Toggled(tag, false)),
-    (DISMISSED, |sheet: UInt32, _text: Str| View.Dismissed(sheet))
+    (DISMISSED, |sheet: UInt32, _text: Str| View.Dismissed(sheet)),
+    (REFRESHED, |tag: UInt32, _text: Str| View.Refreshed(tag))
   ])
 
 /// Each detailed event kind's constructor, given the tag and the detail word.
@@ -41,7 +44,8 @@ const DETAILED: Map[UInt64, fn(UInt32, UInt32) -> Option[View.Event]] = mapOf([
 /// the signed words the host holds for it.
 const MEASURED: Map[UInt64, fn(UInt32, UInt32, Array[Int32]) -> Option[View.Event]] = mapOf([
     (GESTURED, |reported: UInt32, bit: UInt32, values: Array[Int32]| gestured(reported, Gesture.decoded(bit, &values))),
-    (RESIZED, |_reported: UInt32, _bit: UInt32, values: Array[Int32]| resized(Scene.sized(&values)))
+    (RESIZED, |_reported: UInt32, _bit: UInt32, values: Array[Int32]| resized(Scene.sized(&values))),
+    (INSETS, |_reported: UInt32, _bit: UInt32, values: Array[Int32]| inset(Scene.insets(&values)))
   ])
 
 /// Whether a host event's kind carries text the host holds for it.
@@ -111,6 +115,11 @@ fn gestured(reported: UInt32, found: Option[Gesture.Gesture]) -> Option[View.Eve
 fn resized(found: Option[Scene.Size]) -> Option[View.Event] {
   let size = found ?
   Some(View.Resized(size))
+}
+
+fn inset(found: Option[Scene.Insets]) -> Option[View.Event] {
+  let insets = found ?
+  Some(View.SafeArea(insets))
 }
 
 fn lifecycle(found: Option[Scene.Phase]) -> Option[View.Event] {

@@ -11,7 +11,9 @@ import Std.Mobile.Theme as Theme
 /// wraps an accessible name and adds no node. `Keyed` is a column whose rows
 /// carry keys, so rows are matched by key rather than by position.
 /// `Styled` and `Painted` set the text style or color role of the control
-/// they wrap and add no node either.
+/// they wrap and add no node either. `Refreshing` gives the scroll or list it
+/// wraps pull to refresh: the tag a pull reports and whether the program is
+/// refreshing, which the platform indicator follows.
 export type View
   = Label(Str)
   | Button(Str, UInt32)
@@ -32,6 +34,7 @@ export type View
   | Accessible(Access.Access, View)
   | Menu(UInt32, Array[Feedback.Choice], View)
   | Animated(View)
+  | Refreshing(UInt32, Bool, View)
 
 /// A recycling list of `total` items in `columns` equal columns. `rows` are
 /// the keyed views of items `first`, `first + 1` and onward: the window the
@@ -43,7 +46,9 @@ export type Window = { tag: UInt32, total: UInt32, first: UInt32, columns: UInt3
 /// changed, a toggle was switched, a list's visible range neared the edge of
 /// its window (its tag and first visible item), the user popped the
 /// navigation from a top route to a destination route below it, the user
-/// dismissed a sheet, or the host asked the program to stop. Std.Mobile.Events
+/// dismissed a sheet, the user pulled a refresh control with a tag, the
+/// screen's safe-area insets changed, or the host asked the program to stop.
+/// Std.Mobile.Events
 /// decodes them from the host's words.
 export type Event
   = Tapped(UInt32)
@@ -57,6 +62,8 @@ export type Event
   | Picked(UInt32, UInt32)
   | Popped(UInt32, UInt32)
   | Dismissed(UInt32)
+  | Refreshed(UInt32)
+  | SafeArea(Scene.Insets)
   | Stopped
 
 /// A node the platform shows: its id, the view it shows, and the nodes of
@@ -167,6 +174,7 @@ fn built(work: Work, view: &View) -> (Work, Shown) {
     case Menu(tag, choices, inner) =>
     marked(work, view, &inner, |out: Array[UInt8], node: UInt32| Stream.menu(out, node, tag, &Feedback.choices(&choices)))
     case Animated(inner) => marked(work, view, &inner, |out: Array[UInt8], node: UInt32| Stream.animate(out, node, true))
+    case Refreshing(tag, on, inner) => marked(work, view, &inner, |out: Array[UInt8], node: UInt32| Stream.refresh(out, node, tag, on))
     case Recycled(window) => {
       let made = Stream.create(taken.out, id, Stream.LIST)
       let shaped = Stream.range(Stream.columns(Stream.tag(made, id, window.tag), id, window.columns), id, window.total, window.first)
@@ -236,6 +244,8 @@ fn reconciled(work: Work, shown: &Shown, next: &View) -> Outcome {
     }
     case (Animated(beforeInner), Animated(afterInner)) =>
     rewrapped(work, shown, &beforeInner, &afterInner, next, true, |out: Array[UInt8]| out)
+    case (Refreshing(beforeTag, beforeOn, beforeInner), Refreshing(afterTag, afterOn, afterInner)) =>
+    rewrapped(work, shown, &beforeInner, &afterInner, next, beforeTag == afterTag && beforeOn == afterOn, |out: Array[UInt8]| Stream.refresh(out, id, afterTag, afterOn))
     case (Surfaced(before, _), Surfaced(after, child)) => {
       let (made, node) = settled(work, id, &shown.children[0], &child, 0)
       let out = if before == after { made.out } else { Stream.material(made.out, id, Theme.materialCode(after)) }

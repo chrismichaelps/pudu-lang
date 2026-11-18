@@ -5,6 +5,11 @@ tags: [changelog]
 
 # Changelog
 
+## 2026-11-18 — Native pull to refresh and safe-area insets (#962)
+
+- Native pull to refresh and safe-area insets (#962): View.Refreshing, REFRESH instruction, REFRESHED and INSETS events, Scene.Insets.
+  [[Std Mobile View]] · [[Std Mobile Stream]] · [[Std Mobile Events]] · [[Std Mobile Scene]] · [[pudu_ios_refresh.h]]
+
 ## 2026-11-18 — Native navigation stack and page sheets (#920)
 
 - Native navigation stack and page sheets (#920): Std.Mobile.Navigation, Std.Mobile.Events, NAVIGATE instruction, POPPED and DISMISSED events, UIKit navigation host.

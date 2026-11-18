@@ -20,6 +20,7 @@
 #include "pudu_ios_events.h"
 #include "pudu_ios_feedback.h"
 #include "pudu_ios_layout.h"
+#include "pudu_ios_nodes.h"
 #include "pudu_ios_stream.h"
 
 /* One route's page: the route's body under the platform's bars, laid out with
@@ -189,10 +190,15 @@ static UIViewController *pudu_topmost(UIViewController *controller) {
 
 static PuduNavigator *pudu_navigator;
 
-/* Reads a NAVIGATE whole and refuses repeated ids before anything changes.
-   `node` reads a body node and answers its view and whether it fills the
-   page. */
-static NSDictionary *pudu_navigation_read(pudu_reader *reader, UIView *(^node)(pudu_reader *, BOOL *)) {
+/* A route's body node: its view and whether it fills the page. */
+static UIView *pudu_navigation_body(pudu_reader *reader, BOOL *fills) {
+  uint32_t node = pudu_node_id(reader);
+  *fills = pudu_node_scrolls(node);
+  return pudu_nodes[node];
+}
+
+/* Reads a NAVIGATE whole and refuses repeated ids before anything changes. */
+static NSDictionary *pudu_navigation_read(pudu_reader *reader) {
   uint32_t count = pudu_word(reader);
   NSMutableArray<NSArray *> *routes = [NSMutableArray new];
   NSMutableSet<NSNumber *> *ids = [NSMutableSet new];
@@ -201,7 +207,7 @@ static NSDictionary *pudu_navigation_read(pudu_reader *reader, UIView *(^node)(p
   for (uint32_t i = 0; i < count; i++) {
     uint32_t route = pudu_word(reader);
     BOOL fills = NO;
-    UIView *body = node(reader, &fills);
+    UIView *body = pudu_navigation_body(reader, &fills);
     NSString *title = pudu_text(reader);
     if ([ids containsObject:@(route)]) pudu_stream_defect("showed two routes with id", route);
     [ids addObject:@(route)];
@@ -212,7 +218,7 @@ static NSDictionary *pudu_navigation_read(pudu_reader *reader, UIView *(^node)(p
   if (present == 1) {
     uint32_t route = pudu_word(reader);
     BOOL fills = NO;
-    UIView *body = node(reader, &fills);
+    UIView *body = pudu_navigation_body(reader, &fills);
     if ([ids containsObject:@(route)]) pudu_stream_defect("showed a sheet sharing a route's id", route);
     sheet = @[ @(route), body, @(fills) ];
   }

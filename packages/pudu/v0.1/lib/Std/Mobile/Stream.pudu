@@ -64,6 +64,7 @@ const ACCESS_VALUE: UInt32 = 33u32
 const MENU: UInt32 = 34u32
 const ANIMATE: UInt32 = 35u32
 const NAVIGATE: UInt32 = 36u32
+const REFRESH: UInt32 = 37u32
 
 /// Creates node `node` as a control of `kind`.
 export fn create(out: Array[UInt8], node: UInt32, kind: UInt32) -> Array[UInt8] { words(out, [CREATE, node, kind]) }
@@ -168,6 +169,12 @@ export fn menu(out: Array[UInt8], node: UInt32, reported: UInt32, choices: &Arra
 /// Makes a group's placements animate, or stop animating.
 export fn animate(out: Array[UInt8], node: UInt32, on: Bool) -> Array[UInt8] {
   words(out, [ANIMATE, node, if on { 1u32 } else { 0u32 }])
+}
+
+/// Attaches pull to refresh to a scroll or list: the tag its pulls report and
+/// whether the program is refreshing.
+export fn refresh(out: Array[UInt8], node: UInt32, reported: UInt32, on: Bool) -> Array[UInt8] {
+  words(out, [REFRESH, node, reported, if on { 1u32 } else { 0u32 }])
 }
 
 /// Shows the navigation: each route's id, body node and title, root first,

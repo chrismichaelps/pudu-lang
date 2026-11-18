@@ -10,13 +10,14 @@ aliases: [iOS Host Scene]
 
 ## Purpose and interface
 
-Private scene implementation of the iOS host, included once by [[iOS Host Adapter]]. The compiler stages it with the other private headers ([[Native Toolchain Host Sources]]). It owns the root view controller of the application, the report of the scene's size and size classes, and the observation of lifecycle transitions. It defines no stream instruction; it reports the events RESIZED (11) and LIFECYCLE (12) of [[Std Mobile View]].
+Private scene implementation of the iOS host, included once by [[iOS Host Adapter]]. The compiler stages it with the other private headers ([[Native Toolchain Host Sources]]). It owns the root view controller of the application, the report of the scene's size and size classes, the report of its safe-area insets, and the observation of lifecycle transitions. It defines no stream instruction; it reports the events RESIZED (11), LIFECYCLE (12) and INSETS (17) of [[Std Mobile View]].
 
 ## Behavior
 
 - The application's root controller is `PuduRootController`. After each layout pass it reads its view's size in points and the horizontal and vertical size class of its trait collection.
 - RESIZED carries four words: width, height, horizontal class, vertical class. The class codes are 1 compact and 2 regular, the codes of [[Std Mobile Scene]].
 - RESIZED is queued only when the size or a class changed since the last report, and only once the view has a positive width.
+- INSETS carries four words, the top, left, bottom and right safe-area insets, rounded to whole points. The root controller reports them once its view is laid out and whenever they change, as RESIZED does.
 - LIFECYCLE is observed for four application notifications: became active (1), will resign active (2, inactive), entered background (3) and will enter foreground (4). Each queues a LIFECYCLE event with its code as the detail word, in the order the platform posts them.
 
 ## Invariants
@@ -24,6 +25,7 @@ Private scene implementation of the iOS host, included once by [[iOS Host Adapte
 - The reported size is the size of the root view's bounds, rounded to whole points.
 - A RESIZED event is never queued with a zero or negative width.
 - Each lifecycle notification queues exactly one event.
+- An INSETS event is never queued before the root view has been laid out.
 
 ## Negative Logic
 
@@ -42,4 +44,4 @@ Depends on UIKit for the root controller, the trait collection and the notificat
 
 ## Referenced by
 
-[[src/cbits/_MOC]] · [[iOS Host Adapter]] · [[Std Mobile Scene]] · [[Native iOS Capabilities Delivery]]
+[[src/cbits/_MOC]] · [[iOS Host Adapter]] · [[Std Mobile Scene]] · [[Native iOS Capabilities Delivery]] · [[Native iOS Refresh Delivery]]

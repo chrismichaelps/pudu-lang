@@ -22,6 +22,7 @@ testDataEvaluation = do
   buffers <- runEntry "test-fixtures/stdlib/UsesBuffer.pudu"
   mobileViews <- runEntry "test-fixtures/stdlib/UsesMobileView.pudu"
   mobileNavigation <- runEntry "test-fixtures/stdlib/UsesMobileNavigation.pudu"
+  mobileRefresh <- runEntry "test-fixtures/stdlib/UsesMobileRefresh.pudu"
   mobileThemes <- runEntry "test-fixtures/stdlib/UsesMobileTheme.pudu"
   mobileLists <- runEntry "test-fixtures/stdlib/UsesMobileList.pudu"
   mobileMaterials <- runEntry "test-fixtures/stdlib/UsesMobileMaterial.pudu"
@@ -187,6 +188,8 @@ testDataEvaluation = do
         must not resend the navigation, and one it refuses must. -}
     , counterexample "the native navigation stream pushes, pops and dismisses without echo"
         (mobileNavigation === Just "19")
+    , counterexample "the native refresh stream follows the program's flag and reads pulls and insets"
+        (mobileRefresh === Just "9")
     , counterexample "the native theme stream sets roles, appearance, styles and colors"
         (mobileThemes === Just "12")
     , counterexample "the native list stream windows rows, ranges, columns and reached events"
