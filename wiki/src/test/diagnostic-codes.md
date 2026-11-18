@@ -69,6 +69,11 @@ E7017, E7024 and E7025 are shared by the bridge and native foreign call sites (#
 E7020, E7021 and E7022 are shared by the interpreter and native handle
 boundary for null results, conflicting ownership claims and invalid handle use.
 
+## Resolved Grill Log for #877 — Foreign extents
+
+E7028 is shared because both execution paths reject the same out-of-range
+length at the foreign call site.
+
 ## Referenced by
 
 [[test gates]] · [[Pudu Lint Config]] · [[Pudu CLI Lint]]

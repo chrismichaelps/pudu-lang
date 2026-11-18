@@ -57,6 +57,26 @@ A callback token is a distinct nominal native scalar. Core callback operations
 carry the checked declaration or use the token for unregister. Foreign calls
 retain both ABI positions and the trampoline's typed fallback.
 
+## Resolved Grill Log for #877 — Native loan lowering
+
+Record loan modes by Pudu input position alongside the native call shape. The source result excludes the mutable loan finals; the internal call result carries them in input order.
+
+## Resolved Grill Log for #877 — Post-call settlement
+
+CoreForeignSettle delivers a pending native report after the copy-out stores, with no new source-visible value.
+
+## Resolved Grill Log for #877 — Checked foreign bounds
+
+Carry bounds over Pudu input positions in the lowered foreign-call shape, independent of native output and context positions.
+
+## Resolved Grill Log for #877 — Returned run ABI
+
+A returned run records the compact length-slot index and opaque storage identity. Its language result stays an array or optional array.
+
+## Resolved Grill Log for #877 — Native nullable loans
+
+Record statically absent loans by caller position. Keep their ABI position and pointer type, while excluding them from copy-out.
+
 ## Referenced by
 
 [[src/_MOC]] · [[Native Core Contracts Delivery]] · [[Core IR]]
@@ -471,3 +491,34 @@ which still grow code with the data.
 library build lowered, in declaration order; an executable build leaves it
 empty. Resolved Grill Log: exports are module facts, not a backend guess, so
 emission never re-reads syntax.
+
+### Split callback placement Grill Log resolved
+
+Callback slots retain the checked placement through native emission.
+
+## Resolved Grill Log for callback byte runs
+
+Preserve the native index of each byte run and length in the trampoline signature.
+
+## Resolved Grill Log for retained split callbacks
+
+Carry callback capability for every call declared in a block that splits
+registration from its trampoline. A later call without token parameters may
+invoke a retained callback, so it needs the same outbound failure scope and
+must allow the handler to acquire the gate.
+
+## Resolved Grill Log for callback group slots
+
+A callback signature can carry the projection field and ordinal used to select a group handler.
+
+## Resolved Grill Log for native callback groups
+
+Register a checked record with its projected field offsets in group order.
+
+## Resolved Grill Log for Objective-C dispatch
+
+Distinguish a C symbol call from an Objective-C send without exposing the receiver or selector as extra Pudu parameters.
+
+## Resolved Grill Log for Objective-C delegates
+
+`CoreDelegateNew` constructs an owned delegate handle from a group token. `CoreDelegate` records a checked declaration: the class symbol, the group, and each member signature in core types, so emitters derive method encodings from the checked types.

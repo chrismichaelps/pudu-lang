@@ -62,7 +62,7 @@ import qualified Data.Set as Set
 import Pudu.DecimalLiteral (Decimal, decimalCompare)
 import Data.Int (Int64)
 import Pudu.FloatLiteral (FloatWidth)
-import Pudu.Eval.Foreign.Binding (ForeignBinding (..), ForeignClaim (..), ForeignRelease (..), ForeignSlot (..))
+import Pudu.Eval.Foreign.Binding (DelegateBinding, ForeignBinding (..), ForeignClaim (..), ForeignRelease (..), ForeignSlot (..))
 import Pudu.Foreign.CallbackStore (CallbackKey)
 import Pudu.Frontend.Syntax.Tree (Function)
 import Pudu.Source (Span)
@@ -163,6 +163,7 @@ data CallbackValue
   = CallbackConstructor !Text
   | CallbackToken !Text !CallbackKey
   | CallbackUnregister !Text !(Maybe CallbackKey)
+  | DelegateConstructor !DelegateBinding
   deriving stock (Eq, Show)
 
 {-| Both map representations expose the same persistent ordered contents. -}

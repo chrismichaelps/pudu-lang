@@ -13,6 +13,8 @@ homepage:           https://github.com/chrismichaelps/pudu-lang
 bug-reports:        https://github.com/chrismichaelps/pudu-lang/issues
 build-type:         Simple
 extra-source-files: cbits/pudu_ffi_internal.h
+                    cbits/pudu_ffi_callback_adapter.h
+                    cbits/pudu_loader.h
                     cbits/pudu_desktop.h
                     cbits/pudu_desktop_host.h
                     cbits/pudu_desktop.m
@@ -33,6 +35,29 @@ extra-source-files: cbits/pudu_ffi_internal.h
                     cbits/pudu_ios_scene.h
                     cbits/pudu_ios_motion.h
                     cbits/pudu_ios_capability_test.h
+                    cbits/pudu_android_host.c
+                    cbits/pudu_android_capabilities.h
+                    cbits/pudu_android_controls.h
+                    cbits/pudu_android_events.h
+                    cbits/pudu_android_java.h
+                    cbits/pudu_android_jni.h
+                    cbits/pudu_android_kinds.h
+                    cbits/pudu_android_list.h
+                    cbits/pudu_android_nodes.h
+                    cbits/pudu_android_theme.h
+                    cbits/pudu_android_values.h
+                    android/AndroidManifest.xml
+                    android/org/pudu/PuduAccess.java
+                    android/org/pudu/PuduActivity.java
+                    android/org/pudu/PuduBridge.java
+                    android/org/pudu/PuduGestures.java
+                    android/org/pudu/PuduList.java
+                    android/org/pudu/PuduListener.java
+                    android/org/pudu/PuduMenus.java
+                    android/org/pudu/PuduMoment.java
+                    android/org/pudu/PuduPages.java
+                    android/org/pudu/PuduTests.java
+                    android/org/pudu/PuduWell.java
                     cbits/pudu_audio.c
                     cbits/pudu_audio_stream.c
                     cbits/pudu_audio.h
@@ -137,6 +162,8 @@ library
     Pudu.Backend.Emit.Bytes
     Pudu.Backend.Emit.Foreign
     Pudu.Backend.Emit.Foreign.Callback
+    Pudu.Backend.Emit.Foreign.Delegate
+    Pudu.Backend.Emit.Foreign.Loan
     Pudu.Backend.Emit.ForeignAbi
     Pudu.Backend.Emit.Frame
     Pudu.Backend.Emit.Handle
@@ -224,6 +251,7 @@ library
     Pudu.Backend.Toolchain.HostSources
     Pudu.Backend.Toolchain.Library
     Pudu.Backend.Toolchain.Probe
+    Pudu.Backend.Toolchain.Android
     Pudu.Backend.Toolchain.App
     Pudu.Backend.Toolchain.Process
     Pudu.Compiler
@@ -403,7 +431,9 @@ library
     Pudu.Foreign.Callback.Native
     Pudu.Foreign.CallbackStore
     Pudu.Foreign.Call.Library
+    Pudu.Foreign.Call.Run
     Pudu.Foreign.Crossing
+    Pudu.Foreign.Extent
     Pudu.Foreign.Ownership
     Pudu.Frontend.Parser.Declaration.Foreign
     Pudu.Frontend.Parser.Declaration.Function
@@ -582,6 +612,7 @@ library
 
   c-sources:        cbits/pudu_ffi.c
                    cbits/pudu_ffi_callback.c
+                   cbits/pudu_ffi_objc.c
                    cbits/pudu_sqlite.c
   extra-libraries:  ffi
   build-depends:

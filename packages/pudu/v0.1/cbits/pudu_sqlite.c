@@ -1,6 +1,6 @@
 /* Fixed SQLite ABI: library lifetime follows database, statement and blob
    ownership. Every symbol Pudu reaches is named in pudu_sqlite_symbol. */
-#include <dlfcn.h>
+#include "pudu_loader.h"
 #include <limits.h>
 #include <stdatomic.h>
 #include <stdint.h>
@@ -99,7 +99,7 @@ struct blob {
 static void drop_database(struct database *db) {
   if (atomic_fetch_sub(&db->references, 1) != 1) return;
   if (db->native) db->api.close(db->native);
-  dlclose(db->library);
+  pudu_loader_close(db->library);
   free(db->scratch);
   free(db);
 }
@@ -117,11 +117,11 @@ static void release_blob(struct blob *blob) {
   free(blob);
 }
 
-/* POSIX specifies dlsym function-pointer conversion; memcpy avoids aliasing casts. */
+/* The platform loader supplies the function pointer representation. */
 #define BIND(field, symbol_name, required) do { \
-  void *symbol = dlsym(db->library, symbol_name); \
-  if (!symbol && (required)) { dlclose(db->library); free(db); return -2; } \
-  _Static_assert(sizeof(db->api.field) == sizeof(symbol), "POSIX function pointer size"); \
+  void *symbol = pudu_loader_symbol(db->library, symbol_name); \
+  if (!symbol && (required)) { pudu_loader_close(db->library); free(db); return -2; } \
+  _Static_assert(sizeof(db->api.field) == sizeof(symbol), "loader function pointer size"); \
   memcpy(&db->api.field, &symbol, sizeof(symbol)); \
 } while (0)
 #define LOAD(field, symbol_name) BIND(field, symbol_name, 1)
@@ -132,9 +132,13 @@ static int32_t open_with(const char *path, int32_t flags, struct database **out)
   if ((flags & ~OPEN_ALLOWED) != 0 || (flags & (OPEN_READONLY | OPEN_READWRITE)) == 0) return SQLITE_MISUSE;
   struct database *db = calloc(1, sizeof(*db));
   if (!db) return SQLITE_NOMEM;
+#if defined(_WIN32)
+  const char *names[] = {"sqlite3.dll", "libsqlite3-0.dll", "libsqlite3.dll"};
+#else
   const char *names[] = {"libsqlite3.so.0", "libsqlite3.dylib", "libsqlite3.so"};
+#endif
   for (size_t i = 0; i < sizeof(names) / sizeof(names[0]); ++i) {
-    db->library = dlopen(names[i], RTLD_NOW | RTLD_LOCAL);
+    db->library = pudu_loader_open(names[i], 1);
     if (db->library) break;
   }
   if (!db->library) { free(db); return -1; }

@@ -240,6 +240,7 @@ frameValue state value = case frameValueShape value of
     cells <- traverse slotText arguments
     let (after, text, needs) = foreignCall state (frameValueSpan value) declared cells
     Right (after, text, Set.fromList needs)
+  FrameForeignSettle -> plain "pudu_foreign_loan_settle()" ["host_foreign_loan"]
   FrameComparable slot -> do
     source <- slotText slot
     uncurry plain (memberComparable (frameSlotType slot) source)

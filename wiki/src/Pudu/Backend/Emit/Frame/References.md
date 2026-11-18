@@ -23,6 +23,10 @@ metadata and reference order.
 Rewrite the saved callback handler or token slot during physical slot
 compaction. The ABI signature contains no frame IDs.
 
+## Resolved Grill Log for #877 — Post-call settlement
+
+Foreign loan settlement refers to no frame slots.
+
 ## Referenced by
 
 [[Backend Frame Slots]] · [[Core Frame IR]]

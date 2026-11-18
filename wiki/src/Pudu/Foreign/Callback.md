@@ -38,6 +38,30 @@ result is either void, or a scalar paired with a checked fallback value.
   retains a separate admission guard until token binding and both runtime
   paths consume these checked shapes.
 
+## Resolved Grill Log for Objective-C blocks
+
+A callback parameter written `work: block Work` crosses as one pointer to a block literal, with passing mode BlockPassing and placement BlockCallback. The block is a stack block (isa `_NSConcreteStackBlock`, no copy or dispose helpers) whose last field is the registration key, and it lives for the foreign call only. A callee that keeps the block copies it with `Block_copy`; the copy carries the key, which is how escaping blocks are copied. The block's invoke receives the block first, so the callback must declare its context first; the checker refuses otherwise with E3063 ("callback X must take its context first to cross as a block"). A late invocation after unregister finds the key retired and answers the fallback.
+
 ## Referenced by
 
 [[src/Pudu/Foreign/_MOC]] · [[Type Check Foreign]] · [[Foreign Callback Delivery]]
+
+### Split callback placement Grill Log resolved
+
+Checked placements carry native positions and identify the single input position, if any.
+
+## Resolved Grill Log for callback byte runs
+
+Resolve every Bytes argument to exactly one fixed-width integer length.
+
+## Resolved Grill Log for callback groups
+
+Resolve each group member against an earlier same-block callback signature. Preserve declaration order for use by the two runtime dispatch paths.
+
+## Resolved Grill Log for a group constructor
+
+Member metadata retains callback type identity independently of the projected group field.
+
+## Resolved Grill Log for callback group slots
+
+A projected trampoline carries the member ordinal and selected signature. The context slot carries the group owner and takes one token.

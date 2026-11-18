@@ -3,37 +3,40 @@ module Pudu.Eval.Foreign.Callback (callCallbackValue, withCallbackDispatch) wher
 
 import Control.Applicative ((<|>))
 import Control.Exception (SomeException, bracket, displayException, try)
-import Control.Monad (unless, when)
+import Control.Monad (join, unless, when)
 import Data.Int (Int64)
+import qualified Data.IntMap.Strict as IntMap
 import Data.IORef (IORef, atomicModifyIORef', newIORef, readIORef)
 import Data.Maybe (fromMaybe)
 import qualified Data.Set as Set
 import Data.Text (Text)
 import qualified Data.Text as Text
-import Foreign.Ptr (Ptr, nullPtr)
+import Foreign.Ptr (Ptr, nullPtr, ptrToWordPtr)
 import Foreign.StablePtr (castPtrToStablePtr, castStablePtrToPtr, deRefStablePtr, freeStablePtr, newStablePtr)
 import Pudu.Diagnostic (Diagnostic, Severity (..), diagnostic, diagnosticMessage, mkDiagnosticCode)
 import Pudu.Eval.Env
   ( Env (..), Eval (..), Evaluator (..), abortAt, currentCallbackAncestry, currentCallbackStore
-  , effectsAdmitted, runtimeIO )
-import Pudu.Eval.Foreign.Binding (ForeignCallbackSlot (..))
+  , currentForeignStore, effectsAdmitted, runtimeIO )
+import Pudu.Eval.Foreign.Binding (DelegateBinding (..), ForeignCallbackSlot (..))
 import Pudu.Eval.Foreign.Result (convertForeignValue)
 import Pudu.Eval.Value (ForeignClaim (..), Value (..))
 import qualified Pudu.Eval.Value as Value
 import Pudu.Foreign.Call (CrossedValue (..), ForeignCallFailure (InvalidReturnedText))
-import Pudu.Foreign.Callback (CallbackPair (..), CallbackParameter (..), CallbackResult (..), CallbackSignature (..))
+import Pudu.Foreign.Callback (CallbackPair (..), CallbackPlacement (..), CallbackParameter (..), CallbackResult (..), CallbackSignature (..))
 import Pudu.Foreign.Callback.Native
   ( NativeCallbackCache, decodeCallbackArguments, findNativeCallback, nativeCallbackCode
-  , nativeCallbackContext, prepareCallbackAdapter, registerNativeCallback )
+  , callbackAdapterCode, createDelegate, findCallbackAdapter, nativeCallbackBlockCode, nativeCallbackContext
+  , releaseDelegate, withBlockLiterals )
 import Pudu.Foreign.CallbackStore
   ( CallbackAttempt (..), CallbackKey, CallbackUnregistration (..), invokeCallback
   , registerCallback, unregisterCallback, withCallbackLeases )
 import Pudu.Foreign.Crossing (Crossing (..), fitsCrossing)
-import Pudu.Foreign.Ownership (recordForeignDiagnostic)
+import Pudu.Foreign.Ownership (claimOwnedGeneration, recordForeignDiagnostic)
 import Pudu.Source (Span)
 
-callCallbackValue :: Span -> Value.CallbackValue -> [Value] -> Evaluator Value
-callCallbackValue at target arguments = case (target, arguments) of
+callCallbackValue
+  :: (Span -> Value -> [Value] -> Evaluator Value) -> Span -> Value.CallbackValue -> [Value] -> Evaluator Value
+callCallbackValue apply at target arguments = case (target, arguments) of
   (Value.CallbackConstructor owner, [handler]) -> do
     requireRuntime
     store <- currentCallbackStore
@@ -50,7 +53,42 @@ callCallbackValue at target arguments = case (target, arguments) of
     abortAt (Just at) "E7003" "callback registration needs one handler" Nothing
   (Value.CallbackUnregister _ _, _) ->
     abortAt (Just at) "E7003" "unregister needs a callback token and no other arguments" Nothing
+  (Value.DelegateConstructor delegate, [ForeignCallbackValue (Value.CallbackToken owner key)])
+    | owner == foreignCallbackOwner (delegateSlot delegate) -> do
+        requireRuntime
+        construct delegate key
+  (Value.DelegateConstructor delegate, _) ->
+    abortAt (Just at) "E7003" ("delegate " <> delegateHandle delegate <> " needs one token of its callback group") Nothing
  where
+  {-| The group's native registration is the one a foreign call crossing that
+      token would use; the object carries its context and owns a release. -}
+  construct delegate key = do
+    created <- Evaluator $ \env -> do
+      let slot = delegateSlot delegate
+          cache = envNativeCallbacks env
+          owner = foreignCallbackAdapterOwner slot
+          members = foreignCallbackMembers slot
+          adapterFor (selector, ordinal) = case IntMap.lookup ordinal members of
+            Nothing -> pure Nothing
+            Just (_, signature) -> fmap (selector,) <$> findCallbackAdapter cache owner ordinal signature
+      leased <- withCallbackLeases (envCallbackStore env) [key] $ do
+        native <- findNativeCallback cache key owner 0 (foreignCallbackSignature slot)
+          (invokeHandler apply (invocationEnv env) at slot key)
+        methods <- traverse adapterFor (delegateMethods delegate)
+        case (native, sequence methods) of
+          (Just registered, Just resolved) -> createDelegate (delegateClass delegate) resolved registered
+          _ -> pure Nothing
+      pure (Done (join leased) env)
+    case created of
+      Nothing -> abortAt (Just at) "E7001" ("delegate " <> delegateHandle delegate <> " could not be created")
+        (Just "a delegate needs an Apple platform and a live token of its callback group")
+      Just object -> do
+        store <- currentForeignStore
+        let address = fromIntegral (ptrToWordPtr object)
+        claimed <- runtimeIO (claimOwnedGeneration store address (releaseDelegate object))
+        case claimed of
+          Just generation -> pure (ForeignHandleValue (delegateHandle delegate) address (OwnedClaim generation))
+          Nothing -> abortAt (Just at) "E7021" ("delegate " <> delegateHandle delegate <> " could not be claimed") Nothing
   requireRuntime = do
     admitted <- effectsAdmitted
     unless admitted $
@@ -73,32 +111,53 @@ data CallbackScope = CallbackScope !NativeCallbackCache !(Set.Set CallbackKey) !
 withCallbackDispatch
   :: (Span -> Value -> [Value] -> Evaluator Value)
   -> Span
-  -> [(ForeignCallbackSlot, CallbackKey)]
+  -> [(ForeignCallbackSlot, Maybe CallbackKey)]
   -> (Ptr () -> [(Int, Ptr ())] -> IO a)
   -> Evaluator (Either Text (a, Maybe Diagnostic))
 withCallbackDispatch apply at tokens action = Evaluator $ \env -> do
-  leased <- withCallbackLeases (envCallbackStore env) (map snd tokens) $ do
+  leased <- withCallbackLeases (envCallbackStore env) ([key | (_, Just key) <- tokens]) $ do
     configured <- traverse (prepare env) tokens
     case sequence configured of
       Nothing -> pure (Left "a native callback context could not be prepared")
       Just native -> do
         failure <- newIORef Nothing
         let scope = CallbackScope (envNativeCallbacks env) (envCallbackAncestry env) failure
-        result <- bracket (newStablePtr scope) freeStablePtr $ \pointer ->
-          action (castStablePtrToPtr pointer) (concat native)
-        retained <- readIORef failure
-        pure (Right (result, retained))
+            plain = [entry | Left entry <- concat native]
+            blocks = [entry | Right entry <- concat native]
+        built <- withBlockLiterals blocks $ \literals ->
+          bracket (newStablePtr scope) freeStablePtr $ \pointer ->
+            action (castStablePtrToPtr pointer) (plain <> literals)
+        case built of
+          Nothing -> pure (Left "an Objective-C block needs a platform with a block runtime")
+          Just result -> do
+            retained <- readIORef failure
+            pure (Right (result, retained))
   pure (Done (fromMaybe (Left "a callback token is no longer registered") leased) env)
  where
-  prepare env (slot, key) = do
-    native <- findNativeCallback (envNativeCallbacks env) key $ do
-      adapter <- prepareCallbackAdapter (foreignCallbackOwner slot) (foreignCallbackSignature slot)
-      case adapter of
-        Nothing -> pure Nothing
-        Just valid -> registerNativeCallback valid (invokeHandler apply (invocationEnv env) at slot key)
-    let pair = foreignCallbackPair slot
-    pure $ fmap (\held -> [(callbackArgumentIndex pair, nativeCallbackCode held),
-                           (callbackContextIndex pair, nativeCallbackContext held)]) native
+  prepare env (slot, token) =
+    let cache = envNativeCallbacks env
+        owner = foreignCallbackAdapterOwner slot
+        signature = foreignCallbackSignature slot
+        member = maybe (-1) fst (callbackProjection (foreignCallbackPair slot))
+        representative = if IntMap.null (foreignCallbackMembers slot) then -1 else 0
+        adapter = findCallbackAdapter cache owner member signature
+        registration key = findNativeCallback cache key owner representative signature
+          (invokeHandler apply (invocationEnv env) at slot key)
+     in case (callbackPlacement (foreignCallbackPair slot), token) of
+          (StaticTrampoline position, Nothing) ->
+            fmap (\valid -> [Left (position, callbackAdapterCode valid)]) <$> adapter
+          (PairedCallback function context, Just key) ->
+            fmap (\held -> [Left (function, nativeCallbackCode held), Left (context, nativeCallbackContext held)])
+              <$> registration key
+          (RegistrationContext context, Just key) ->
+            fmap (\held -> [Left (context, nativeCallbackContext held)]) <$> registration key
+          (BlockCallback position, Just key) -> do
+            held <- registration key
+            case held of
+              Nothing -> pure Nothing
+              Just native ->
+                fmap (\code -> [Right (position, code, nativeCallbackContext native)]) <$> nativeCallbackBlockCode native
+          _ -> pure Nothing
 
 invocationEnv :: Env -> Env
 invocationEnv env = env
@@ -112,8 +171,8 @@ invocationEnv env = env
 invokeHandler
   :: (Span -> Value -> [Value] -> Evaluator Value)
   -> Env -> Span -> ForeignCallbackSlot -> CallbackKey
-  -> Ptr () -> Maybe [(Int64, Double)] -> IO (Maybe (Int64, Double))
-invokeHandler apply env at slot key scopePointer leaves = do
+  -> Int -> Ptr () -> Maybe [(Int64, Double)] -> IO (Maybe (Int64, Double))
+invokeHandler apply env at slot key member scopePointer leaves = do
   scope <- if scopePointer == nullPtr then pure Nothing else do
     active@(CallbackScope owner _ _) <- deRefStablePtr (castPtrToStablePtr scopePointer)
     pure (if owner == envNativeCallbacks env then Just active else Nothing)
@@ -121,9 +180,8 @@ invokeHandler apply env at slot key scopePointer leaves = do
         Nothing -> Set.empty
         Just (CallbackScope _ ancestors _) -> ancestors
       local = env{envCallbackAncestry = Set.insert key ancestry}
-      signature = foreignCallbackSignature slot
-  outcome <- invokeCallback (envCallbackStore env) key $ \handler -> do
-    performed <- try @SomeException (runHandler local signature handler)
+  outcome <- invokeCallback (envCallbackStore env) key $ \registration -> do
+    performed <- try @SomeException (runHandler local registration)
     case performed of
       Left problem -> Left <$> callbackDiagnostic Error "E7001" at (Text.pack (displayException problem))
       Right (Done value _) -> pure (Right value)
@@ -143,8 +201,15 @@ invokeHandler apply env at slot key scopePointer leaves = do
       pure Nothing
     CallbackUnavailable -> pure Nothing
  where
-  runHandler local signature handler = do
+  runHandler local registration = do
     let Evaluator evaluate = do
+          (signature, handler) <- case (member, registration) of
+            (-1, _) | IntMap.null (foreignCallbackMembers slot) ->
+              pure (foreignCallbackSignature slot, registration)
+            (_, RecordValue _ fields)
+              | Just (field, signature) <- IntMap.lookup member (foreignCallbackMembers slot)
+              , Just handler <- lookup field fields -> pure (signature, handler)
+            _ -> abortAt (Just at) "E7017" "a callback group member has no registered handler" Nothing
           raw <- case leaves of
             Nothing -> abortAt (Just at) "E7017" "could not decode callback argument storage" Nothing
             Just fields -> do
@@ -164,6 +229,7 @@ invokeHandler apply env at slot key scopePointer leaves = do
 
 incoming :: Span -> Crossing -> CrossedValue -> Evaluator Value
 incoming at crossing value = case (crossing, value) of
+  (BytesCrossing, CrossedBytes bytes) -> pure (BytesValue bytes)
   (HandleCrossing expected, CrossedHandle actual address)
     | expected == actual && address /= 0 -> pure (ForeignHandleValue actual address BorrowedClaim)
   _ -> either (\_ -> abortAt (Just at) "E7017" "foreign callback argument does not match its declaration" Nothing)

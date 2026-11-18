@@ -120,3 +120,7 @@ Resolved Grill Log: identity comes from the checked declaration, never import or
 Render NamedSumValue as its existing short variant label with named fields; diagnostic valueKind retains the short label. Reuse record field rendering without exposing canonical identity.
 
 Resolved Grill Log: represent named sums independently of ordinary records and positional sums. Preserve existing field order and public labels. Source publication follows in its own tested partition. See [[Named Sum Value Delivery]].
+
+## Resolved Grill Log for Objective-C delegates
+
+A delegate value renders with its class label, so a constructor result reads as the class it instantiates in diagnostics.

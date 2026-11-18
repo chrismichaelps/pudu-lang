@@ -103,6 +103,7 @@ data FrameValueShape
   | FrameDecimalMethod !CoreDecimalMethodName ![FrameSlot]
   | FrameKernel !CoreKernelName ![Int] ![FrameSlot]
   | FrameForeign !CoreForeign ![FrameSlot]
+  | FrameForeignSettle
   | FrameCallback !CoreCallbackOperation !FrameSlot
   | FrameIntegerConvert !IntegerKind !FrameSlot
   | FrameAggregate ![FrameSlot]

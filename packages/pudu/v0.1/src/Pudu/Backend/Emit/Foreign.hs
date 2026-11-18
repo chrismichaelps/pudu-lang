@@ -10,10 +10,17 @@ import Data.Text (Text)
 import qualified Data.Text as Text
 import Pudu.Backend.Emit.Cell (aggregateHelper, aggregateNeed, cType, released)
 import Pudu.Backend.Emit.Foreign.Callback
-  ( NativeArgument (..), callbackArgumentTypes, callbackIdentity, callbackTrampolines, nativeArguments
+  ( NativeArgument (..), blockInvokeName, blockSignatures, callbackArgumentTypes, callbackIdentity, callbackTrampolines, nativeArguments
   , trampolineName, trampolineType )
-import Pudu.Backend.Emit.ForeignAbi (Layouts, abiType, fromAbi, mangle, recordDefinitions, recordNeeds, recordsIn, textLeaves, toAbi)
+import Pudu.Backend.Emit.Foreign.Loan
+  ( byValueInputs, extentChecks, foreignCallName, foreignCellType, hasLiveRunInputs, hasMutableInputs, hasRunInputs
+  , inputParameter, loanPointer, loanResult, loanWrapper, mutableInputs, needsLoanProtection
+  , pointeeType, unpackNativeRun )
+import Pudu.Backend.Emit.ForeignAbi
+  ( Layouts, abiType, foreignHandleType, fromAbi, isOptionalHandle, mangle
+  , recordDefinitions, recordNeeds, recordsIn, textLeaves, toAbi )
 import Pudu.Backend.Emit.State (EmitState, cString, cStringBytes, helpedFailureSite, textFailureSite, textOfInt)
+import Pudu.Foreign.Crossing (ObjectiveCMethod (..), objectiveCInitializer)
 import Pudu.Core
   ( CoreCallbackSignature (..), CoreCallbackSlot (..), CoreClaim (..), CoreForeign (..), CoreLayout (..), CoreType (..) )
 import Pudu.Core.Frame
@@ -34,28 +41,36 @@ foreignCall state at declared cells =
         _ | answersText -> fmap Just (textFailureSite s2 at "E7024" (Just missingHelp))
         _ -> (s2, Nothing)
       (s4, invalid) = if answersText then fmap Just (helpedFailureSite s3 at "E7025" (symbol <> " returned text that is not valid UTF-8") invalidHelp) else (s3, Nothing)
-      (s5, dead) = case [name | Just name <- map passedHandle (coreForeignParameters declared)] of
+      (s5, dead) = case [name | kind <- coreForeignParameters declared, Just (CoreHandleType _ name) <- [foreignHandleType kind]] of
         name : _ -> fmap Just (helpedFailureSite s4 at "E7022"
           ("the " <> name <> " passed to " <> symbol <> " is no longer owned") deadHelp)
         [] -> (s4, Nothing)
       (s6, none) = case nativeResult of
         CoreHandleType _ name -> fmap Just (helpedFailureSite s5 at "E7020" (symbol <> " returned a null " <> name) (if hasSlots then "an owned foreign result must name a live object" else noneHelp))
         _ -> (s5, Nothing)
-      (s7, owned) = case (result, coreForeignClaim declared) of
-        (CoreHandleType _ name, Just (CoreOwned False _ _)) -> fmap Just (helpedFailureSite s6 at "E7021" (symbol <> " returned a " <> name <> " already owned") ownedHelp)
+      (s7, owned) = case (foreignHandleType result, coreForeignClaim declared) of
+        (Just (CoreHandleType _ name), Just (CoreOwned False _ _)) -> fmap Just (helpedFailureSite s6 at "E7021" (symbol <> " returned a " <> name <> " already owned") ownedHelp)
         _ | hasSlots, not (null (slotReleases declared)) || releaseOf declared /= Nothing -> fmap Just (helpedFailureSite s6 at "E7021"
           (symbol <> " handed back duplicate or already owned resources") "an owned foreign value must transfer one new ownership claim")
         _ -> (s6, Nothing)
-      sites = [siteText site] <> map siteText (concatMap (maybe [] pure) [noughts, missing, invalid, dead, none, owned])
-   in ( s7
-      , wrapperName declared <> "(" <> Text.intercalate ", " (sites <> cells) <> ")"
+      (s8, resultExtent) = case coreForeignReturnedRun declared of
+        Nothing -> (s7, Nothing)
+        Just _ -> fmap Just (helpedFailureSite s7 at "E7028" "foreign result has an invalid buffer length or address"
+          "return a live allocation of the declared length, or an allowed null with length zero")
+      (s9, extent) = if null (coreForeignBounds declared) && not (hasLiveRunInputs declared) then (s8, Nothing)
+        else fmap Just (helpedFailureSite s8 at "E7028" "foreign length is outside the input buffer"
+          "pass a non-negative length within every related buffer")
+      sites = [siteText site] <> map siteText (concatMap (maybe [] pure)
+        [noughts, missing, invalid, dead, none, owned, resultExtent, extent])
+   in ( s9
+      , foreignCallName (wrapperName declared) declared <> "(" <> Text.intercalate ", " (sites <> cells) <> ")"
       , ["host_foreign"] )
  where
   result = coreForeignResult declared
   nativeResult = maybe result fst (slotResult declared)
   hasSlots = not (null (coreForeignSlotPositions declared))
   symbol = coreForeignSymbol declared
-  lendsText = any carriesText (coreForeignParameters declared)
+  lendsText = any (carriesText . snd) (byValueInputs declared)
   answersText = any carriesText (case slotResult declared of
     Just (native, slots) -> native : map slotAbiType slots
     Nothing -> [result])
@@ -85,8 +100,22 @@ foreignsOf source = Set.toList $ Set.fromList
     both written. -}
 foreignNeeds :: Layouts -> [CoreForeign] -> [Text]
 foreignNeeds layouts declarations = concat
-  [ concatMap parameterNeeds (concatMap leaves (coreForeignParameters declared))
+  [ concatMap parameterNeeds (concatMap (leaves . pointeeType) (coreForeignParameters declared))
       <> concatMap resultNeeds (leaves (coreForeignResult declared))
+      <> concatMap (resultNeeds . pointeeType . snd) (mutableInputs declared)
+      <> [aggregateNeed "drop" kind | (_, kind@CoreArrayType{}) <- mutableInputs declared]
+      <> ["host_foreign_loan" | needsLoanProtection declared]
+      <> ["host_foreign_run" | hasLiveRunInputs declared]
+      <> ["host_foreign_lease" | yieldsWithHandles declared]
+      <> ["host_callback" | callbackScopeNeeded declared]
+      <> ["host_objc" | coreForeignObjectiveC declared /= Nothing]
+      <> ["host_foreign_block" | not (null (blockSignatures [declared]))]
+      <> ["host_foreign_bounds" | not (null (coreForeignBounds declared))]
+      <> concat
+          [ ["array", "host_foreign_store", aggregateNeed "drop" (CoreArrayType element)]
+              <> resultNeeds element <> optionNeeds native
+          | Just (native, element) <- [returnedRunTypes declared] ]
+      <> [aggregateNeed "make" (loanResult declared) | hasMutableInputs declared]
       <> (case slotResult declared of
         Just (native, slots) -> aggregateNeed "make" (coreForeignResult declared) : concatMap resultNeeds (concatMap leaves (native : map slotAbiType slots)) <> concatMap optionNeeds slots
         Nothing -> [])
@@ -111,14 +140,14 @@ foreignWrappers :: Layouts -> [CoreForeign] -> [CoreCallbackSignature] -> [CoreT
 foreignWrappers layouts declarations signatures results =
   recordDefinitions layouts (recordsIn layouts (concatMap crossingTypes declarations <> concatMap callbackArgumentTypes signatures))
     <> concatMap releaser (Set.toList (Set.fromList (concatMap (\declared -> maybe [] pure (releaseOf declared) <> map snd (slotReleases declared)) declarations)))
-    <> callbackTrampolines layouts signatures results
+    <> callbackTrampolines layouts signatures (blockSignatures declarations) results
     <> concatMap emitWrapper declarations
  where
   releaser target@(_, _, _, answer) =
     [ "static pudu_foreign_cache " <> releaserName target <> "_cache = {NULL};"
     , "static void " <> releaserName target <> "(uint64_t address) {"
-    , "  " <> abiType answer <> " (*function)(void *) = ((" <> abiType answer <> " (*)(void *))"
-        <> releaserName target <> "_cache.function);"
+    , "  " <> abiType answer <> " (*function)(void *) = (" <> abiType answer <> " (*)(void *))"
+        <> "pudu_foreign_cached(&" <> releaserName target <> "_cache);"
     , "  (void)function((void *)(uintptr_t)address);"
     , "}", "" ]
   resolveRelease producer target@(library, version, symbol, _) =
@@ -144,37 +173,121 @@ foreignWrappers layouts declarations signatures results =
     Just (CoreOwned False _ _) -> "1"
     Just (CoreOwned True _ _) -> "2"
     _ -> "0"
-  emitWrapper declared
-    | null (coreForeignCallbacks declared) = crossed
-    | otherwise = delivering declared crossed
+  handleInputs parameters = [(index, kind) | (index, kind) <- parameters, isHandle kind]
+  handleInput index kind =
+    let argument = "a" <> textOfInt index
+        present = argument <> "->fields[0].scalar == 0"
+        handle = if isOptionalHandle kind then argument <> "->fields[1].box" else argument
+        condition = if isOptionalHandle kind then "if (" <> present <> ") " else ""
+     in (condition, handle)
+  requireHandle consume (index, kind) =
+    let (condition, handle) = handleInput index kind
+     in "  " <> condition <> "pudu_foreign_require(dead, " <> handle <> ", " <> (if consume then "1" else "0") <> ");"
+  leaseHandles declared acquire =
+    [ "  " <> condition <> "pudu_foreign_handle_lease(" <> handle <> ", " <> (if acquire then "1" else "0") <> ");"
+    | yieldsWithHandles declared
+    , (index, kind) <- handleInputs (zip [0 ..] (coreForeignParameters declared))
+    , index /= 0 || not (initializesReceiver declared)
+    , let (condition, handle) = handleInput index kind ]
+  receiverChecks declared handles
+    | not (initializesReceiver declared) = []
+    | otherwise =
+        ["  pudu_foreign_check_receiver(dead, a0);"]
+        <> [ "  " <> condition <> "if (pudu_foreign_same_claim(a0, " <> handle <> ")) pudu_fail(dead);"
+           | (index, kind) <- handles, index /= 0
+           , let (condition, handle) = handleInput index kind ]
+  optionHandle kind output value =
+    [ "  pudu_box *" <> output <> " = " <> value <> " == NULL ? "
+        <> aggregateHelper "make1" kind <> "() : " <> aggregateHelper "make0" kind <> "(" <> value <> ");"
+    ] <> ["  " <> released handle value | Just handle <- [foreignHandleType kind]]
+  discardResults declared = case slotResult declared of
+    Nothing ->
+      [discardResult (coreForeignResult declared) "answer" | releaseOf declared /= Nothing]
+    Just (native, slots) ->
+      [discardResult native "answer->fields[0].box"
+      | releaseOf declared /= Nothing, coreForeignReturnedRun declared == Nothing]
+        <> [ discardResult kind ("answer->fields[" <> textOfInt (index + 1) <> "].box")
+           | (index, kind) <- zip [0 ..] slots, Just _ <- [lookup index (slotReleases declared)] ]
+  discardResult kind value
+    | isOptionalHandle kind =
+        "if (" <> value <> "->fields[0].scalar == 0) "
+          <> discardGeneration (value <> "->fields[1].box")
+    | otherwise = discardGeneration value
+  discardGeneration value = "pudu_foreign_discard_generation(" <> value <> "->fields[1].floating);"
+  emitWrapper declared = dispatched <> loanWrapper (wrapperName declared) declared sites
    where
-    crossed = case slotResult declared of
+    (sites, crossed) = case slotResult declared of
       Just (native, slots) -> slotWrapper declared native slots
       Nothing -> wrapper declared
+    dispatched
+      | not (callbackScopeNeeded declared) = crossed
+      | otherwise = delivering declared crossed
+
   -- A Pudu argument as the C type and value it crosses as. A callback token
   -- crosses as its declaration's trampoline; its context crosses beside it.
   inputCrossing declared index kind = case kind of
+    _ | Just exclusive <- lookup index (coreForeignLoans declared) ->
+      (loanPointer exclusive kind, "a" <> textOfInt index)
     CoreCallbackType owner _ | Just signature <- callbackFor declared owner -> (trampolineType signature, trampolineName signature)
     CoreTextType -> (abiType kind, "t" <> textOfInt index)
     CoreRecordType _ _ -> (abiType kind, "r" <> textOfInt index)
-    CoreSumType "Option" [CoreHandleType _ _] -> ("void *", "pudu_foreign_optional_handle(dead, a" <> textOfInt index
-      <> ", " <> (if coreForeignReleases declared then "1" else "0") <> ")")
     _ -> (abiType kind, toAbi kind ("a" <> textOfInt index))
   callbackFor declared owner = lookup owner
     [(coreCallbackOwner (coreCallbackSignature slot), coreCallbackSignature slot) | slot <- coreForeignCallbacks declared]
   nativeOrder declared inputs slots =
-    [ case argument of
-        NativeInput index -> inputs !! index
-        NativeSlot index -> slots !! index
-        NativeContext index -> ("void *", "(void *)a" <> textOfInt index)
-    | argument <- nativeArguments declared ]
+    let crossed =
+          [ case argument of
+              NativeInput index -> inputs !! index
+              NativeSlot index -> slots !! index
+              NativeContext index -> ("void *", "(void *)a" <> textOfInt index)
+              NativeTrampoline signature -> (trampolineType signature, trampolineName signature)
+              -- The literal lives until the wrapper returns; a callee that keeps it copies it.
+              NativeBlock index signature -> ("void *", "(void *)&(pudu_foreign_block){_NSConcreteStackBlock, 0, 0, (void *)"
+                <> blockInvokeName signature <> ", &pudu_foreign_block_shape, (uintptr_t)a" <> textOfInt index <> "}")
+          | argument <- nativeArguments declared ]
+        selector = ("void *", "pudu_objc_selector(&objc)")
+     in case coreForeignObjectiveC declared of
+          Just ObjectiveCMethod{objectiveCClass = Just _} ->
+            ("void *", "pudu_objc_receiver(&objc)") : selector : crossed
+          Just _ -> case crossed of
+            receiver : rest -> receiver : selector : rest
+            [] -> []
+          Nothing -> crossed
+  functionCache declared = case coreForeignObjectiveC declared of
+    Nothing -> "  static pudu_foreign_cache cache = {NULL};"
+    Just _ -> "  static pudu_objc_cache objc = {0};"
+  resolveFunction declared result =
+    let library = cString (coreForeignLibrary declared)
+        version = maybe "NULL" cString (coreForeignVersion declared)
+        symbol = cString (coreForeignSymbol declared)
+        identity = Text.intercalate ", " [library, version, symbol]
+        structure = case result of
+          CoreRecordType{} -> "sizeof(" <> abiType result <> ")"
+          _ -> "0"
+     in case coreForeignObjectiveC declared of
+          Nothing -> "pudu_foreign_function(site, &cache, " <> identity <> ", NULL)"
+          Just method -> "pudu_objc_prepare(site, &objc, " <> identity <> ", "
+            <> maybe "NULL" cString (objectiveCClass method) <> ", " <> structure <> ")"
   -- With callbacks, the native call runs outside the run gate, inside a
   -- failure scope a callback's failure is recorded in.
   nativeCall declared order
-    | null (coreForeignCallbacks declared) = "function(" <> Text.intercalate ", " (map snd order) <> ")"
+    | not (callbackScopeNeeded declared) = "function(" <> Text.intercalate ", " (map snd order) <> ")"
     | otherwise = wrapperName declared <> "_native(scope, function" <> foldMap ((", " <>) . snd) order <> ")"
+  afterNative declared statement =
+    ["  pudu_foreign_loan_disarm();" | hasLiveRunInputs declared]
+    <> ["  pudu_foreign_transfer_receiver(a0);" | initializesReceiver declared]
+    <> leaseHandles declared True
+    <> ["  " <> statement <> ";"]
+    <> leaseHandles declared False
+    <> (if needsLoanProtection declared
+          then ["  loan->dispatched = 1;", "  pudu_foreign_loan_arm(loan);"]
+          else [])
+  loanParameter declared = ["pudu_foreign_loan *loan" | needsLoanProtection declared]
+  extentParameter declared =
+    ["const pudu_site *extent" | not (hasRunInputs declared) && not (null (coreForeignBounds declared))]
+  directExtentChecks declared = [line | not (hasRunInputs declared), line <- extentChecks declared]
   nativeShim declared answer order
-    | null (coreForeignCallbacks declared) = []
+    | not (callbackScopeNeeded declared) = []
     | otherwise =
         let types = if null order then "void" else Text.intercalate ", " (map fst order)
             named = [(kind, "x" <> textOfInt index) | (index, (kind, _)) <- zip [0 :: Int ..] order]
@@ -199,53 +312,85 @@ foreignWrappers layouts declarations signatures results =
               tokens = [ (index, signature)
                        | (index, CoreCallbackType owner _) <- zip [0 :: Int ..] (coreForeignParameters declared)
                        , Just signature <- [callbackFor declared owner] ]
+              cleanup = wrapperName declared <> "_cleanup"
+              cleanupType = cleanup <> "_state"
+              capture = needsLoanProtection declared
+              dropBox = released (coreForeignResult declared) "answer"
+              dropResult = discardResults declared <> [dropBox | not (Text.null dropBox)]
            in shim
                 <> [front <> wrapperName declared <> "_crossing(pudu_callback_scope *scope, " <> parameters <> ") {"]
                 <> rest
+                <> (if capture then
+                      [ "typedef struct { pudu_callback_scope *scope; pudu_callback_entry *leases[" <> textOfInt (max 1 (length tokens)) <> "]; } " <> cleanupType <> ";"
+                      , "static void " <> cleanup <> "(void *value) {"
+                      , "  " <> cleanupType <> " *held = value;"
+                      ] <> ["  for (size_t i = 0; i < " <> textOfInt (length tokens)
+                          <> "; ++i) if (held->leases[i] != NULL) pudu_callback_unlease(held->leases[i]);" | not (null tokens)]
+                      <> ["  if (held->scope->failed) pudu_text_release(held->scope->failure);", "}"] else [])
                 <> [ header
                    , "  pudu_callback_scope scope = {0};" ]
+                <> (if capture then
+                      [ "  " <> cleanupType <> " held = {.scope = &scope};"
+                      , "  loan->cleanup = " <> cleanup <> ";"
+                      , "  loan->cleanup_data = &held;" ] else [])
                 <> concat
                    [ [ "  pudu_callback_entry *lease" <> textOfInt index <> " = pudu_callback_lease(a" <> textOfInt index
                          <> ", &" <> callbackIdentity signature <> ");"
-                     , "  if (lease" <> textOfInt index <> " == NULL) pudu_fail_message(site, " <> cString retired
-                         <> ", " <> textOfInt (cStringBytes retired) <> ");" ]
-                   | (index, signature) <- tokens ]
+                     , "  if (lease" <> textOfInt index <> " == NULL) {" ]
+                     <> ["    pudu_callback_unlease(lease" <> textOfInt prior <> ");"
+                        | not capture, (prior, _) <- take ordinal tokens]
+                     <> ["    pudu_fail_message(site, " <> cString retired
+                         <> ", " <> textOfInt (cStringBytes retired) <> ");", "  }"]
+                     <> ["  held.leases[" <> textOfInt ordinal <> "] = lease" <> textOfInt index <> ";" | capture]
+                   | (ordinal, (index, signature)) <- zip [0 ..] tokens ]
                 <> [ "  " <> answer <> " answer = " <> wrapperName declared <> "_crossing(&scope, " <> Text.intercalate ", " names <> ");" ]
                 <> [ "  if (lease" <> textOfInt index <> " != NULL) pudu_callback_unlease(lease" <> textOfInt index <> ");" | (index, _) <- tokens ]
+                <> ["  loan->cleanup = NULL;" | capture]
+                <> (if null dropResult then [] else
+                      ["  if (scope.failed) {"] <> map ("    " <>) dropResult <> ["  }"])
                 <> [ "  if (scope.failed) pudu_callback_deliver(site, &scope);"
                    , "  return answer;"
                    , "}", "" ]
     _ -> crossed
   slotWrapper declared native slots =
     let result = coreForeignResult declared
+        run = coreForeignReturnedRun declared
+        nativeAbi = maybe native snd run
         parameters = zip [0 ..] (coreForeignParameters declared)
         nativeRelease = releaseOf declared
         releases = slotReleases declared <> [(-1, target) | Just target <- [nativeRelease]]
         destructorCount = textOfInt (length releases)
-        handleNames = Set.toAscList (Set.fromList [handle | handle@(CoreHandleType _ _) <- native : map slotAbiType slots])
-        handleTypes = (-1, native) : zip [0 ..] (map slotAbiType slots)
+        handleTypes =
+          [(index, handle) | (index, kind) <- (-1, nativeAbi) : zip [0 ..] slots, Just handle <- [foreignHandleType kind]]
+        handleNames = Set.toAscList (Set.fromList (map snd handleTypes))
+        counted = case coreForeignClaim declared of
+          Just (CoreOwned True _ _) -> True
+          _ -> False
         claimLine (i, target) =
           let identity = maybe 0 (\kind -> maybe 0 (+ 1) (lookup kind (zip handleNames [0 ..]))) (lookup i handleTypes)
-           in "    {(uint64_t)(uintptr_t)" <> (if i < 0 then "answer" else "slot" <> textOfInt i) <> ", " <> textOfInt identity <> ", 0, " <> releaserName target <> "},"
+              countedFlag = if i < 0 && counted then "1" else "0"
+           in "    {(uint64_t)(uintptr_t)" <> (if i < 0 then "answer" else "slot" <> textOfInt i)
+                <> ", " <> textOfInt identity <> ", " <> countedFlag <> ", " <> releaserName target <> ", 0},"
         claimIndex i = maybe "0" textOfInt (lookup i (zip (map fst releases) [0 ..]))
         abiSlots = [(abiType (slotAbiType kind) <> " *", "&slot" <> textOfInt i) | (i, kind) <- zip [0 ..] slots]
-        lendsText = any (carriesText . snd) parameters
-        handles = [i | (i, CoreHandleType _ _) <- parameters]
-        guarded = [i | (i, kind) <- parameters, Just _ <- [passedHandle kind]]
-        held = sum [textLeaves layouts kind | (_, kind@(CoreRecordType _ _)) <- parameters]
+        ordinary = byValueInputs declared
+        lendsText = any (carriesText . snd) ordinary
+        handles = handleInputs parameters
+        held = sum [textLeaves layouts kind | (_, kind@(CoreRecordType _ _)) <- ordinary]
         abiInputs = [inputCrossing declared i kind | (i, kind) <- parameters]
-        textChecks = concat [checkText kind ("a" <> textOfInt i) | (i, kind) <- parameters]
+        textChecks = concat [checkText kind ("a" <> textOfInt i) | (i, kind) <- ordinary]
         copies = concat
           [ case kind of
               CoreTextType -> ["  char *t" <> textOfInt i <> " = pudu_foreign_text_in(a" <> textOfInt i <> ");"]
               CoreRecordType _ _ -> ["  " <> abiType kind <> " r" <> textOfInt i <> " = pudu_foreign_pack_" <> suffix kind
                 <> "(a" <> textOfInt i <> ", " <> (if held == 0 then "NULL, NULL" else "held, &held_count") <> ");"]
               _ -> []
-          | (i, kind) <- parameters ]
+          | (i, kind) <- ordinary ]
         scratchDrops = ["  free(t" <> textOfInt i <> ");" | (i, CoreTextType) <- parameters]
           <> ["  for (size_t i = 0; i < held_count; ++i) free(held[i]);" | held /= 0]
-        refuse condition statement = ["  if (" <> condition <> ") {"]
-          <> map ("  " <>) scratchDrops <> ["    " <> statement, "    return NULL;", "  }"]
+        refuse cleanup condition statement = ["  if (" <> condition <> ") {"]
+          <> map ("  " <>) (scratchDrops <> cleanup) <> ["    " <> statement, "    return NULL;", "  }"]
+        discardClaims = ["  pudu_foreign_discard_slots(claimed, " <> destructorCount <> ");" | not (null releases)]
         resultLeaves = case native of
           CoreTextType -> [("result", "answer")]
           _ -> resultText native "answer"
@@ -257,7 +402,7 @@ foreignWrappers layouts declarations signatures results =
               _ -> resultText kind ("slot" <> textOfInt i)]
         textSites = carriesText native || any (carriesText . slotAbiType) slots
         pointerArgs = Text.intercalate ", " (map fst abiOrder)
-        call = nativeCall declared abiOrder <> ";"
+        call = nativeCall declared abiOrder
         slotValue i kind = case kind of
           CoreRecordType _ _ -> "pudu_foreign_unpack_" <> suffix kind <> "(slot" <> textOfInt i <> ")"
           CoreSumType "Option" [CoreTextType] -> "slot" <> textOfInt i <> " == NULL ? "
@@ -266,52 +411,91 @@ foreignWrappers layouts declarations signatures results =
             <> aggregateHelper "make1" kind <> "() : " <> aggregateHelper "make0" kind <> "(held" <> textOfInt i <> ")"
           _ -> fromAbi kind ("slot" <> textOfInt i)
         resultArgument = case native of
+          _ | run /= Nothing -> "native_value"
           CoreUnitType -> "0"
           CoreTextType -> "native_value"
           CoreRecordType _ _ -> "native_value"
-          CoreHandleType _ _ -> "native_value"
+          _ | isHandle native -> "native_value"
           _ -> fromAbi native "answer"
         resultArgs = resultArgument
           : ["written" <> textOfInt i | (i, _) <- zip [0 ..] slots]
-     in nativeShim declared (abiType native) abiOrder
-        <> [ "static pudu_box *" <> wrapperName declared <> "(const pudu_site *site"
-            <> (if lendsText then ", const pudu_site *noughts" else "")
-            <> (if textSites then ", const pudu_site *missing, const pudu_site *invalid" else "")
-            <> (if null guarded then "" else ", const pudu_site *dead")
-            <> (if nativeRelease == Nothing then "" else ", const pudu_site *none")
-            <> (if null releases then "" else ", const pudu_site *duplicate")
-            <> foldMap (\(i, kind) -> ", " <> cType kind <> " a" <> textOfInt i) parameters <> ") {"
-        , "  static pudu_foreign_cache cache = {NULL};"
+        siteParameters = ["const pudu_site *site"] <> ["const pudu_site *noughts" | lendsText]
+          <> concat [["const pudu_site *missing", "const pudu_site *invalid"] | textSites]
+          <> ["const pudu_site *dead" | not (null handles)]
+          <> ["const pudu_site *none" | isHandle native && not (isOptionalHandle native)]
+          <> ["const pudu_site *duplicate" | not (null releases)]
+          <> ["const pudu_site *result_extent" | run /= Nothing]
+          <> extentParameter declared
+        decodeRun = concat
+          [ let countSlot = "slot" <> textOfInt index
+                optional = case native of
+                  CoreSumType "Option" [_] -> True
+                  _ -> False
+                negative = case kind of
+                  CoreIntegerType (SignedKind _) -> [countSlot <> " < 0"]
+                  _ -> []
+                noBuffer = if optional then "answer == NULL && run_count != 0" else "answer == NULL"
+                overflow =
+                  [ "run_count > (uint64_t)PTRDIFF_MAX / sizeof(" <> abiType element <> ")"
+                  , "run_count > ((size_t)PTRDIFF_MAX - sizeof(pudu_items)) / sizeof(pudu_cell)" ]
+                buffer = "((const " <> abiType element <> " *)answer)"
+                build = unpackNativeRun element buffer "(size_t)run_count" "result_array"
+                  <> ["  pudu_foreign_discard_generation(claimed[" <> claimIndex (-1) <> "].generation);"]
+                boxed
+                  | optional = ["  pudu_box *native_value;", "  if (answer == NULL) {",
+                      "    native_value = " <> aggregateHelper "make1" native <> "();", "  } else {"]
+                      <> map ("  " <>) build
+                      <> ["    native_value = " <> aggregateHelper "make0" native <> "(result_array);",
+                          "    " <> released (CoreArrayType element) "result_array", "  }"]
+                  | otherwise = build <> ["  pudu_box *native_value = result_array;"]
+             in ["  uint64_t run_count = (uint64_t)" <> countSlot <> ";"]
+                  <> refuse discardClaims (Text.intercalate " || " (negative <> ["(" <> noBuffer <> ")"] <> overflow))
+                    "pudu_fail(result_extent);"
+                  <> boxed
+          | Just (index, _) <- [run]
+          , Just kind <- [lookup index (zip [0 ..] slots)]
+          , Just (_, element) <- [returnedRunTypes declared] ]
+     in (siteParameters, nativeShim declared (abiType nativeAbi) abiOrder
+        <> [ "static pudu_box *" <> wrapperName declared <> "("
+            <> Text.intercalate ", " (loanParameter declared <> siteParameters <> [inputParameter declared i kind | (i, kind) <- parameters]) <> ") {"
+        , functionCache declared
         ]
         <> ["  (void)noughts;" | lendsText && null textChecks] <> textChecks
-        <> [ "  " <> abiType native <> " (*function)(" <> pointerArgs <> ") = ("
-            <> abiType native <> " (*)(" <> pointerArgs <> "))pudu_foreign_function(site, &cache, "
-            <> cString (coreForeignLibrary declared) <> ", "
-            <> maybe "NULL" cString (coreForeignVersion declared) <> ", "
-            <> cString (coreForeignSymbol declared) <> ", NULL);"
+        <> directExtentChecks declared
+        <> [ "  " <> abiType nativeAbi <> " (*function)(" <> pointerArgs <> ") = ("
+            <> abiType nativeAbi <> " (*)(" <> pointerArgs <> "))" <> resolveFunction declared nativeAbi <> ";"
         ]
         <> concatMap (resolveRelease (coreForeignSymbol declared) . snd) releases
-        <> [ "  pudu_foreign_require(dead, a" <> textOfInt i <> ", 0);" | i <- handles ]
+        <> map (requireHandle False) handles
+        <> receiverChecks declared handles
         <> ["  pudu_foreign_reserve(" <> destructorCount <> ");" | not (null releases)]
         <> ["  (void)missing; (void)invalid;" | textSites]
         <> [ "  " <> abiType (slotAbiType kind) <> " slot" <> textOfInt i <> " = {0};"
            | (i, kind) <- zip [0 ..] slots ]
         <> (if held == 0 then [] else ["  char *held[" <> textOfInt held <> "];", "  size_t held_count = 0;"])
         <> copies
-        <> [ "  " <> (if native == CoreUnitType then "" else abiType native <> " answer = ") <> call
-           ]
+        <> afterNative declared ((if native == CoreUnitType then "" else abiType nativeAbi <> " answer = ") <> call)
         <> (if null releases then [] else
              ["  pudu_foreign_claim claimed[] = {"] <> map claimLine releases
-             <> ["  };", "  pudu_foreign_claim_slots(duplicate, claimed, " <> destructorCount <> ");"])
-        <> concat [refuse (field <> " != NULL && !pudu_foreign_text_valid(" <> field <> ")") "pudu_fail(invalid);"
+             <> ["  };"] <> refuse [] ("!pudu_foreign_claim_slots(claimed, " <> destructorCount <> ")") "pudu_fail(duplicate);")
+        <> concat [refuse discardClaims (field <> " != NULL && !pudu_foreign_text_valid(" <> field <> ")") "pudu_fail(invalid);"
                   | (_, field) <- resultLeaves <> slotLeaves]
-        <> concat [refuse (field <> " == NULL") ("pudu_foreign_missing_field(missing, "
+        <> concat [refuse discardClaims (field <> " == NULL") ("pudu_foreign_missing_field(missing, "
                     <> cString (coreForeignSymbol declared) <> ", " <> cString label <> ");")
                   | (label, field) <- resultLeaves <> slotLeaves, not (Text.null label)]
-        <> [line | Just _ <- [nativeRelease], line <- refuse "answer == NULL" "pudu_fail(none);"]
+        <> [line | isHandle native && not (isOptionalHandle native), line <- refuse discardClaims "answer == NULL" "pudu_fail(none);"]
+        <> decodeRun
         <> (case native of
-              CoreHandleType _ _ -> ["  pudu_box *native_value = pudu_foreign_slot_box(claimed["
-                <> claimIndex (-1) <> "].address, claimed[" <> claimIndex (-1) <> "].generation);"]
+              _ | run /= Nothing -> []
+              _ | isHandle native ->
+                  let generation = case nativeRelease of
+                        Just _ -> "claimed[" <> claimIndex (-1) <> "].generation"
+                        Nothing -> "0"
+                      boxed = "pudu_foreign_slot_box((uint64_t)(uintptr_t)answer, " <> generation <> ")"
+                   in if isOptionalHandle native
+                        then ["  pudu_box *held_result = answer == NULL ? NULL : " <> boxed <> ";"]
+                          <> optionHandle native "native_value" "held_result"
+                        else ["  pudu_box *native_value = " <> boxed <> ";"]
               CoreTextType -> ["  pudu_text native_value = pudu_text_copy(answer, strlen(answer));"]
               CoreRecordType _ _ -> ["  pudu_box *native_value = pudu_foreign_unpack_" <> suffix native <> "(answer);"]
               _ -> [])
@@ -332,30 +516,29 @@ foreignWrappers layouts declarations signatures results =
            | (i, CoreSumType "Option" [CoreTextType]) <- zip [0 ..] slots ]
         <> ["  " <> dropNative | let dropNative = released native "native_value", not (Text.null dropNative)]
         <> scratchDrops
-        <> [ "  return tuple;", "}", "" ]
+        <> [ "  return tuple;", "}", "" ])
   wrapper declared =
     let parameters = zip [0 :: Int ..] (coreForeignParameters declared)
         result = coreForeignResult declared
-        held = sum [textLeaves layouts kind | (_, kind@(CoreRecordType _ _)) <- parameters]
-        lendsText = any (carriesText . snd) parameters
+        ordinary = byValueInputs declared
+        held = sum [textLeaves layouts kind | (_, kind@(CoreRecordType _ _)) <- ordinary]
+        lendsText = any (carriesText . snd) ordinary
         order = nativeOrder declared [inputCrossing declared index kind | (index, kind) <- parameters] []
         abiParameters = if null order then "void" else Text.intercalate ", " (map fst order)
         pointer = abiType result <> " (*)(" <> abiParameters <> ")"
-        resolved = "((" <> pointer <> ")pudu_foreign_function(site, &cache, " <> cString (coreForeignLibrary declared) <> ", "
-          <> maybe "NULL" cString (coreForeignVersion declared) <> ", " <> cString (coreForeignSymbol declared) <> ", NULL))"
+        resolved = "((" <> pointer <> ")" <> resolveFunction declared result <> ")"
         call = nativeCall declared order
-        handles = [index | (index, CoreHandleType _ _) <- parameters]
-        guarded = [index | (index, kind) <- parameters, Just _ <- [passedHandle kind]]
+        handles = handleInputs parameters
         claim = coreForeignClaim declared
         release = releaseOf declared
         siteParameters = ["const pudu_site *site"] <> ["const pudu_site *noughts" | lendsText]
           <> concat [["const pudu_site *missing", "const pudu_site *invalid"] | carriesText result]
-          <> ["const pudu_site *dead" | not (null guarded)]
-          <> concat [["const pudu_site *none"] | isHandle result]
+          <> ["const pudu_site *dead" | not (null handles)]
+          <> ["const pudu_site *none" | isHandle result && not (isOptionalHandle result)]
           <> ["const pudu_site *owned" | isHandle result, Just (CoreOwned False _ _) <- [claim]]
-        checks = [ "  pudu_foreign_require(dead, a" <> textOfInt index
-                     <> ", " <> (if coreForeignReleases declared then "1" else "0") <> ");" | index <- handles ]
-        textChecks = concat [checkText kind ("a" <> textOfInt index) | (index, kind) <- parameters]
+          <> extentParameter declared
+        checks = map (requireHandle (coreForeignReleases declared)) handles <> receiverChecks declared handles
+        textChecks = concat [checkText kind ("a" <> textOfInt index) | (index, kind) <- ordinary]
         heldLines = if held == 0 then [] else ["  char *held[" <> textOfInt held <> "];", "  size_t held_count = 0;"]
         copies = concat
           [ case kind of
@@ -363,13 +546,13 @@ foreignWrappers layouts declarations signatures results =
               CoreRecordType _ _ -> ["  " <> abiType kind <> " r" <> textOfInt index <> " = pudu_foreign_pack_" <> suffix kind
                 <> "(a" <> textOfInt index <> ", " <> (if held == 0 then "NULL, NULL" else "held, &held_count") <> ");"]
               _ -> []
-          | (index, kind) <- parameters ]
+          | (index, kind) <- ordinary ]
         releases = ["  free(t" <> textOfInt index <> ");" | (index, CoreTextType) <- parameters]
           <> ["  for (size_t i = 0; i < held_count; ++i) free(held[i]);" | held /= 0]
         body = case result of
-          CoreUnitType -> ["  " <> call <> ";"] <> releases <> ["  return 0;"]
-          CoreTextType -> ["  const char *raw = " <> call <> ";"
-            , "  if (raw == NULL || !pudu_foreign_text_valid(raw)) {"
+          CoreUnitType -> afterNative declared call <> releases <> ["  return 0;"]
+          CoreTextType -> afterNative declared ("const char *raw = " <> call)
+            <> [ "  if (raw == NULL || !pudu_foreign_text_valid(raw)) {"
             , "    const pudu_site *problem = raw == NULL ? missing : invalid;" ]
             <> map ("  " <>) releases
             <> [ "    pudu_fail(problem);"
@@ -383,7 +566,8 @@ foreignWrappers layouts declarations signatures results =
                   ["  if (" <> condition <> ") {"]
                   <> map ("  " <>) releases
                   <> ["    " <> failure, "    return NULL;", "  }"]
-             in ["  " <> abiType result <> " raw = " <> call <> ";", "  (void)missing; (void)invalid;"]
+             in afterNative declared (abiType result <> " raw = " <> call)
+                <> ["  (void)missing; (void)invalid;"]
                 <> concat [reject (field <> " != NULL && !pudu_foreign_text_valid(" <> field <> ")") "pudu_fail(invalid);"
                           | (_, field) <- leaves]
                 <> concat [reject (field <> " == NULL")
@@ -391,16 +575,25 @@ foreignWrappers layouts declarations signatures results =
                           | (label, field) <- leaves]
                 <> ["  pudu_box *answer = pudu_foreign_unpack_" <> suffix result <> "(raw);"]
                 <> releases <> ["  return answer;"]
-          CoreHandleType _ _ -> ["  void *answer = " <> call <> ";"] <> releases <>
-            [ "  return pudu_foreign_handle_result(none, " <> (if any (== "const pudu_site *owned") siteParameters then "owned" else "NULL")
-                <> ", " <> claimMode claim <> ", " <> maybe "NULL" releaserName release <> ", answer);" ]
-          _ -> ["  " <> abiType result <> " answer = " <> call <> ";"] <> releases <> ["  return " <> fromAbi result "answer" <> ";"]
-     in nativeShim declared (abiType result) order
-        <> [ "static " <> cellType result <> " " <> wrapperName declared <> "("
-            <> Text.intercalate ", " (siteParameters <> [cType kind <> " a" <> textOfInt index | (index, kind) <- parameters]) <> ") {"
-        , "  static pudu_foreign_cache cache = {NULL};" ]
+          _ | isHandle result ->
+                let optional = isOptionalHandle result
+                    none = if optional then "NULL" else "none"
+                    owned = if any (== "const pudu_site *owned") siteParameters then "owned" else "NULL"
+                    boxed = "pudu_foreign_handle_result(" <> none <> ", " <> owned <> ", " <> claimMode claim
+                      <> ", " <> maybe "NULL" releaserName release <> ", answer)"
+                 in afterNative declared ("void *answer = " <> call) <> releases <>
+                      (if optional
+                        then ["  pudu_box *held_result = answer == NULL ? NULL : " <> boxed <> ";"]
+                          <> optionHandle result "native_value" "held_result" <> ["  return native_value;"]
+                        else ["  return " <> boxed <> ";"])
+          _ -> afterNative declared (abiType result <> " answer = " <> call) <> releases <> ["  return " <> fromAbi result "answer" <> ";"]
+     in (siteParameters, nativeShim declared (abiType result) order
+        <> [ "static " <> foreignCellType result <> " " <> wrapperName declared <> "("
+            <> Text.intercalate ", " (loanParameter declared <> siteParameters <> [inputParameter declared index kind | (index, kind) <- parameters]) <> ") {"
+        , functionCache declared ]
         <> ["  (void)noughts;" | lendsText && null textChecks]
         <> textChecks
+        <> directExtentChecks declared
         <> ["  " <> abiType result <> " (*function)(" <> abiParameters <> ") = " <> resolved <> ";"]
         <> maybe [] (resolveRelease (coreForeignSymbol declared)) release
         <> checks
@@ -408,17 +601,37 @@ foreignWrappers layouts declarations signatures results =
         <> heldLines
         <> copies
         <> body
-        <> ["}", ""]
-  cellType kind = if kind == CoreUnitType then "int" else cType kind
-  isHandle kind = case kind of
-    CoreHandleType _ _ -> True
-    _ -> False
+        <> ["}", ""])
+  isHandle kind = foreignHandleType kind /= Nothing
   suffix kind = Text.drop (Text.length "pudu_foreign_record_") (abiType kind)
 
+initializesReceiver :: CoreForeign -> Bool
+initializesReceiver declared =
+  maybe False objectiveCInitializer (coreForeignObjectiveC declared)
+    && foreignHandleType (maybe (coreForeignResult declared) fst (slotResult declared)) /= Nothing
+
+callbackScopeNeeded :: CoreForeign -> Bool
+callbackScopeNeeded declared = coreForeignCanReenter declared || not (null (coreForeignCallbacks declared))
+
+yieldsWithHandles :: CoreForeign -> Bool
+yieldsWithHandles declared =
+  callbackScopeNeeded declared
+    && any ((/= Nothing) . foreignHandleType) (coreForeignParameters declared)
+
 crossingTypes :: CoreForeign -> [CoreType]
-crossingTypes declared = coreForeignParameters declared <> case slotResult declared of
+crossingTypes declared = map pointeeType (coreForeignParameters declared)
+  <> [element | Just (_, element) <- [returnedRunTypes declared]] <> case slotResult declared of
   Just (native, slots) -> native : slots
   Nothing -> [coreForeignResult declared]
+
+returnedRunTypes :: CoreForeign -> Maybe (CoreType, CoreType)
+returnedRunTypes declared = do
+  _ <- coreForeignReturnedRun declared
+  (native, _) <- slotResult declared
+  case native of
+    CoreArrayType element -> Just (native, element)
+    CoreSumType "Option" [CoreArrayType element] -> Just (native, element)
+    _ -> Nothing
 
 slotAbiType :: CoreType -> CoreType
 slotAbiType (CoreSumType "Option" [kind]) = kind
@@ -437,9 +650,12 @@ slotReleases declared =
   | (i, Just (CoreOwned _ symbol result)) <- zip [0 ..] (coreForeignSlotClaims declared) ]
 
 releaseOf :: CoreForeign -> Maybe (Text, Maybe Text, Text, CoreType)
-releaseOf declared = case (maybe (coreForeignResult declared) fst (slotResult declared), coreForeignClaim declared) of
-  (CoreHandleType _ _, Just (CoreOwned _ symbol answer)) -> Just (coreForeignLibrary declared, coreForeignVersion declared, symbol, answer)
+releaseOf declared = case (foreignHandleType nativeAbi, coreForeignClaim declared) of
+  (Just _, Just (CoreOwned _ symbol answer)) -> Just (coreForeignLibrary declared, coreForeignVersion declared, symbol, answer)
   _ -> Nothing
+ where
+  native = maybe (coreForeignResult declared) fst (slotResult declared)
+  nativeAbi = maybe native snd (coreForeignReturnedRun declared)
 
 releaserName :: (Text, Maybe Text, Text, CoreType) -> Text
 releaserName target = "pudu_foreign_release_" <> mangle (Text.pack (show target))
@@ -447,14 +663,6 @@ releaserName target = "pudu_foreign_release_" <> mangle (Text.pack (show target)
 {-| A name that is a C identifier and differs for every declaration. -}
 wrapperName :: CoreForeign -> Text
 wrapperName declared = "pudu_foreign_" <> mangle (Text.pack (show declared))
-
-{-| The handle a parameter passes, bare or optional, for the site that
-    reports one no longer owned. -}
-passedHandle :: CoreType -> Maybe Text
-passedHandle kind = case kind of
-  CoreHandleType _ name -> Just name
-  CoreSumType "Option" [CoreHandleType _ name] -> Just name
-  _ -> Nothing
 
 carriesText :: CoreType -> Bool
 carriesText kind = case kind of
@@ -481,4 +689,7 @@ resultNeeds kind = case kind of
   CoreFloatType _ -> ["float_encode"]
   CoreTextType -> ["host_foreign_text_out"]
   CoreHandleType _ _ -> ["host_foreign_store"]
+  CoreSumType "Option" [handle@CoreHandleType{}] ->
+    ["host_foreign_store", aggregateNeed "make0" kind, aggregateNeed "make1" kind,
+      aggregateNeed "drop" kind, aggregateNeed "drop" handle]
   _ -> []

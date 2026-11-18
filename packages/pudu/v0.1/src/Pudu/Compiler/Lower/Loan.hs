@@ -64,7 +64,7 @@ loanedValue state at value
        in (held, CoreExpression at kind (CoreBlockValue (CoreBlock [CoreStatement at (CoreDeclare local value)] (Just tuple))))
 
 {-| What a loaned call reaches: a function by name or a runtime function value. -}
-data Callee = Direct !Text | Through !(Located Expression)
+data Callee = Direct !Text | Through !(Located Expression) | ForeignCrossing !CoreForeign
 
 {-| The signature a call through a value of a function type reads: its
     formed inputs, its declared result, and its `&mut` positions. -}
@@ -98,6 +98,7 @@ lowerLoanedOperands lower state at callee signature defaulted operands = case ca
           call current = (current, CoreCallValue (reading (locatedSpan written) local))
        in go call bound [declaration] [] operands
   Direct target -> go (\current -> (queued target current, CoreCall target)) state [] [] operands
+  ForeignCrossing target -> go (\current -> (current, CoreForeignCall target)) state [] [] operands
  where
   types = contextTypes . lowerContext
   loaned = signatureLoaned signature
@@ -152,7 +153,10 @@ lowerLoanedOperands lower state at callee signature defaulted operands = case ca
                   (CoreExpression (heldSpan found) (heldType found) (CoreTupleIndex (position + 1) answered))
               | (_, Just found, index) <- sortOn (\(_, _, index) -> index) held, Just position <- [elemIndex index loaned] ]
             result = CoreExpression at (signatureResult signature) (CoreTupleIndex 0 answered)
-            whole = CoreBlock (statements <> [called] <> stores) (Just result)
+            settle = case callee of
+              ForeignCrossing _ -> [CoreStatement at (CoreEvaluate (CoreExpression at CoreUnitType CoreForeignSettle))]
+              _ -> []
+            whole = CoreBlock (statements <> [called] <> stores <> settle) (Just result)
          in (bound, Just (CoreExpression at (signatureResult signature) (CoreBlockValue whole), signatureResult signature))
 
   -- Only a call that is made reaches its callee.

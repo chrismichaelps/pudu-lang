@@ -57,6 +57,23 @@ keyedSuccessPrograms =
       , "  print(display(full.size()) + \" \" + display(m.size()) + \" \" + display(keys) + \" \" + display(s.size()) + \" \" + show(m.get(2)) + \" \" + show(full.get(0)))", "  print(show(m.keys().slice(0, 8)) + \" \" + show(s.toArray().slice(990, 997)))", "  return 0"
       , "}" ]
     , "3000 1001 1500704 997 None Some(\"0\")\n[3, 4, 7, 8, 11, 12, 16, 20] [990, 991, 992, 993, 994, 995, 996]\n")
+  , ("set membership with in runs the candidate before the set for every key shape", program
+      [ "type Point = { x: Int, y: Int }", "type Shade = Dark | Light | Mid(Int)", "type Held = { chosen: Set[Int] }", ""
+      , "fn has(held: &Held, index: Int) -> Bool { index in held.chosen }", ""
+      , "fn main() -> Int {", "  let s = setOf([3, 1, 2])"
+      , "  print(display(2 in s) + \" \" + display(9 in s) + \" \" + display(!(1 in s)))"
+      , "  print(display({ print(\"candidate\")\n 2 } in { print(\"set\")\n s }))"
+      , "  let empty: Set[Str] = #{}"
+      , "  print(display(\"a\" in empty) + \" \" + display(\"pear\" in setOf([\"pear\", \"fig\"])))"
+      , "  print(display(Point{x: 1, y: 2} in setOf([Point{x: 1, y: 2}])) + \" \" + display((1, \"b\") in #{(1, \"a\")}))"
+      , "  print(display(Mid(2) in setOf([Mid(1), Dark])) + \" \" + display(Light in #{Light}))"
+      , "  print(display(-0.0 in setOf([0.0])))"
+      , "  let held = Held{chosen: #{4, 7}}"
+      , "  print(display(has(&held, 7)) + \" \" + display(has(&held, 5)))"
+      , "  var count = 0", "  var i = 0"
+      , "  while i < 10 {", "    if i in s { count = count + 1 }", "    i = i + 1", "  }"
+      , "  print(display(count))", "  0", "}" ]
+    , "true false false\ncandidate\nset\ntrue\nfalse true\ntrue false\nfalse true\ntrue\ntrue false\n3\n")
   ]
 
 keyedRefusalPrograms :: [(String, Text)]

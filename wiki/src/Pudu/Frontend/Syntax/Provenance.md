@@ -51,3 +51,11 @@ byte scanning, source-name identity, decoder exception or whole-tree generic Eq.
 ## Referenced by
 
 [[Compiler Cache]] · [[Syntax Tree]] · [[src/Pudu/Frontend/Syntax/_MOC]]
+
+## Resolved Grill Log for foreign syntax cache
+
+Visit every located foreign group, class and extent field before writing a deferred product.
+
+## Resolved Grill Log for Objective-C delegates
+
+Provenance has instances for delegate syntax, so diagnostics on a delegate declaration point at its located members.

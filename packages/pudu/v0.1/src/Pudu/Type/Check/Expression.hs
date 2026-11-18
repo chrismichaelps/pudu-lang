@@ -13,6 +13,7 @@ import Control.Monad (foldM, unless, when)
 import qualified Data.Map.Strict as Map
 import Data.Text (Text)
 import qualified Data.Text as Text
+import Pudu.Foreign.Crossing (isAbsentLoanArgument)
 import Pudu.Frontend.Syntax.Located (Located (..))
 import Pudu.Frontend.Syntax.Tree
   ( Block (..)
@@ -38,13 +39,15 @@ import Pudu.Type.Env
   , integerLiteralCheckpoint
   , enterUnsafe
   , lookupName
+  , lookupField
+  , lookupTypeParams
   , recordExpression
   , report
   , validateIntegerLiteralsSince
   , withAdditionalRigidBounds
   , withLocalObligations
   )
-import Pudu.Type.Check.Pattern (bindPattern, canonicalVariant, qualifiedVariantType)
+import Pudu.Type.Check.Pattern (bindPattern, canonicalVariant, qualifiedVariantType, substituteRigid)
 import Pudu.Type.Check.Reflection
   ( checkBuildCall, checkSequenceElement, fieldCallee, reflectedParameters )
 import Pudu.Type.Check.Bound (checkBounds)
@@ -109,8 +112,10 @@ import Pudu.Type.Unify (unify, zonk)
 import Pudu.Type.Value
   ( Type (..)
   , boolType
+  , callbackRecordMembers
   , integerType
   , monotype
+  , nullableLoanInputs
   )
 
 {-| @Check.Expression.CheckSurroundings — what an expression needs of the
@@ -131,11 +136,67 @@ expressionChecker around = CheckExpression (checkExpression around)
 
 checkExpression
   :: CheckSurroundings -> DeclaredTypes -> [(Text, Int)] -> Located Expression -> Checker Type
-checkExpression around declared rigid (Located spanValue expression) = do
+checkExpression = checkExpressionUse False
+
+checkExpressionUse
+  :: Bool -> CheckSurroundings -> DeclaredTypes -> [(Text, Int)] -> Located Expression -> Checker Type
+checkExpressionUse direct around declared rigid (Located spanValue expression) = do
   typeValue <- inferExpression around declared rigid spanValue expression
   resolved <- zonk typeValue
   recordExpression spanValue resolved
-  pure typeValue
+  case () of
+    _ | direct -> pure typeValue
+      | Just _ <- callbackRecordMembers resolved -> do
+          report "E3063" spanValue "a callback group constructor must be called directly"
+            (Just "call the group by name with a record of handlers")
+          pure ErrorType
+      | null (nullableLoanInputs resolved) -> pure typeValue
+      | otherwise -> do
+          report "E3102" spanValue "a foreign function with a nullable loan must be called directly"
+            (Just "call the declared foreign function by name")
+          pure ErrorType
+
+directName :: Located Expression -> Bool
+directName (Located _ expression) = case expression of
+  NameExpression _ -> True
+  MemberExpression receiver _ -> directName receiver
+  _ -> False
+
+checkNullableArgument
+  :: CheckSurroundings -> DeclaredTypes -> [(Text, Int)] -> [(Int, Type)]
+  -> (Int, Located Expression) -> Checker Type
+checkNullableArgument around declared rigid nullable (index, argument) = do
+  actual <- checkExpression around declared rigid argument
+  case lookup index nullable of
+    Just expected | isAbsentLoanArgument argument -> do
+      resolved <- zonk actual
+      case resolved of
+        NominalType "Option" [_] -> do
+          recordExpression (locatedSpan argument) expected
+          pure expected
+        _ -> pure actual
+    _ -> pure actual
+
+callbackGroupInput :: [Text] -> Span -> Type -> Checker Type
+callbackGroupInput names at actual = do
+  formed <- zonk actual
+  case formed of
+    NominalType owner arguments -> do
+      fields <- lookupField owner
+      parameters <- maybe [] id <$> lookupTypeParams owner
+      case fields of
+        Just members -> case traverse (\name -> lookup name members) names of
+          Just handlers ->
+            pure (TupleTypeValue (map (substituteRigid (zip parameters arguments)) handlers))
+          Nothing -> refuseGroup
+        Nothing -> refuseGroup
+    ErrorType -> pure ErrorType
+    _ -> refuseGroup
+ where
+  refuseGroup = do
+    report "E3063" at "a callback group needs a record with all its named handlers"
+      (Just ("supply " <> Text.intercalate ", " names))
+    pure ErrorType
 
 inferExpression
   :: CheckSurroundings -> DeclaredTypes -> [(Text, Int)] -> Span -> Expression -> Checker Type
@@ -178,16 +239,27 @@ inferExpression around declared rigid spanValue expression = case expression of
         checkLending calleeType Nothing arguments argumentTypes
         callType spanValue calleeType argumentTypes
       Nothing -> do
-        (calleeType, receiver) <- checkCalleeLending (expressionChecker around) declared rigid callee
+        let direct = CheckExpression $ \scope parameters operand ->
+              checkExpressionUse (locatedSpan operand == locatedSpan callee && directName callee)
+                around scope parameters operand
+        (calleeType, receiver) <- checkCalleeLending direct declared rigid callee
         checking <- inDeriveChecking
         building <- if checking then fieldCallee <$> zonk calleeType else pure Nothing
         case (building, arguments) of
           (Just shape, [callback]) ->
             checkBuildCall (checkExpression around) declared rigid spanValue shape callback
           _ -> do
-            argumentTypes <- mapM (checkExpression around declared rigid) arguments
-            checkLending calleeType receiver arguments argumentTypes
-            callType spanValue calleeType argumentTypes
+            let nullable = nullableLoanInputs calleeType
+            argumentTypes <- if null nullable
+              then mapM (checkExpression around declared rigid) arguments
+              else mapM (checkNullableArgument around declared rigid nullable) (zip [0 ..] arguments)
+            case (callbackRecordMembers calleeType, arguments, argumentTypes) of
+              (Just members, [argument], [actual]) -> do
+                handlers <- callbackGroupInput members (locatedSpan argument) actual
+                callType spanValue calleeType [handlers]
+              _ -> do
+                checkLending calleeType receiver arguments argumentTypes
+                callType spanValue calleeType argumentTypes
   MemberExpression target member -> do
     parameter <- parameterStaticCallee rigid spanValue (Located spanValue expression) []
     variant <- maybe (qualifiedVariantType declared spanValue expression) (pure . Just) parameter

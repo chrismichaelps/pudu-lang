@@ -205,6 +205,16 @@ Pudu.Compiler.Lower.Range.
 Register Pudu.Backend.Emit.Bytes, Pudu.Backend.Runtime.Bytes and
 Pudu.Compiler.Lower.Bytes.
 
+## Resolved Grill Log for #877 — Native loan wrapper
+
+Register [[Backend Emit Foreign Loan]] in the library module inventory so
+compiler and CLI builds use the same C wrapper renderer. [[Foreign Extent]]
+provides the common checked extent representation.
+
+## Resolved Grill Log for #877 — Run marshalling
+
+Register [[Foreign Run Storage]] with the interpreter library so the installed compiler uses the same C layout bridge as the test executable.
+
 ## Referenced by
 
 The library exposes [[Resolve Canonical]] for the scoped generated-Impl resolver
@@ -772,6 +782,11 @@ Resolved Grill Log: use the same installed libffi library as outbound calls.
 
 Register [[Native Host Callbacks]]. Resolved Grill Log: reuse the native
 runtime's pthread gate, frame ABI and diagnostic boundary.
+
+## Resolved Grill Log for the portable loader
+
+Package the portable loader header so source distributions can compile the bridge and embed the native loader.
+
 ## Physical slot allocation (#821)
 
 Register [[Backend Frame Slots]] and [[Backend Frame Slot References]] with

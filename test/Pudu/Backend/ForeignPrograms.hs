@@ -1,7 +1,7 @@
 {-| @Test.Backend.ForeignPrograms — foreign calls through typed native call
     sites against the interpreter's bridge: libc values and handles,
     with loader, crossing and ownership refusals. -}
-module Pudu.Backend.ForeignPrograms (callbackCaller, optionalHandleLibrary, optionalHandlePrograms, foreignCallbackPrograms, foreignSuccessPrograms, foreignRefusalPrograms, foreignModulePrograms) where
+module Pudu.Backend.ForeignPrograms (callbackCaller, optionalHandleLibrary, optionalHandlePrograms, foreignCallbackPrograms, foreignCrossingLibrary, foreignCrossingPrograms, objectiveCPrograms, objectiveCRefusalPrograms, foreignSuccessPrograms, foreignRefusalPrograms, foreignModulePrograms) where
 
 import Data.Text (Text)
 import qualified Data.Text as Text
@@ -314,6 +314,266 @@ optionalHandlePrograms =
       , "    let box = boxNew(3i32)"
       , "    boxDelete(box)"
       , "    print(display(boxRead(Some(box), -1i32)))"
+      , "  }"
+      , "  0"
+      , "}" ])
+  ]
+
+
+foreignCrossingLibrary :: Text
+foreignCrossingLibrary = Text.unlines
+  [ "#include <stdbool.h>"
+  , "typedef int64_t (*fixture_visit)(void *, int64_t);"
+  , "typedef int64_t (*fixture_finish)(void *);"
+  , "static fixture_visit retained_visit;"
+  , "static void *retained_context;"
+  , "static int32_t run_releases;"
+  , "void pudu_ffi_save_visit(fixture_visit visit) { retained_visit = visit; }"
+  , "void pudu_ffi_save_context(void *context) { retained_context = context; }"
+  , "int64_t pudu_ffi_fire_visit(int64_t value) {"
+  , "  return retained_visit == NULL ? -1 : retained_visit(retained_context, value);"
+  , "}"
+  , "int64_t pudu_ffi_visit_pair(fixture_visit tick, fixture_finish finish, void *context) {"
+  , "  return tick(context, 4) + finish(context);"
+  , "}"
+  , "int64_t pudu_ffi_visit_bytes(int64_t (*visit)(const unsigned char *, uint64_t, void *), void *context) {"
+  , "  const unsigned char bytes[] = {3, 0, 9};"
+  , "  return visit(bytes, sizeof bytes, context) + visit(NULL, 0, context);"
+  , "}"
+  , "bool pudu_ffi_mutate_run(int32_t *data, int64_t count) {"
+  , "  for (int64_t i = 0; i < count; ++i) data[i] += 10;"
+  , "  return data != NULL;"
+  , "}"
+  , "int32_t *pudu_ffi_return_run(uint64_t *length) {"
+  , "  int32_t *data = malloc(2 * sizeof(*data));"
+  , "  *length = data == NULL ? 0 : 2;"
+  , "  if (data != NULL) { data[0] = 7; data[1] = 11; }"
+  , "  return data;"
+  , "}"
+  , "void pudu_ffi_release_run(void *data) { free(data); ++run_releases; }"
+  , "int32_t pudu_ffi_run_releases(void) { return run_releases; }"
+  ]
+
+foreignCrossingPrograms :: [(String, Text, Text)]
+foreignCrossingPrograms =
+  [ ("nullable runs distinguish absent and empty and copy mutations back", program
+      [ "foreign \"c\" {"
+      , "  fn mutate symbol \"pudu_ffi_mutate_run\" (data: nullable &mut Array[Int32], count: Int64 elements of data) -> Bool"
+      , "}"
+      , "fn main() -> Int {"
+      , "  var items = [1i32, 2i32]"
+      , "  var empty: Array[Int32] = []"
+      , "  unsafe(foreign) {"
+      , "    print(display(mutate(None, 0i64)))"
+      , "    print(display(mutate(&mut empty, 0i64)))"
+      , "    print(display(mutate(&mut items, 1i64)))"
+      , "  }"
+      , "  print(show(items))"
+      , "  0"
+      , "}" ], "false\ntrue\ntrue\n[11, 2]\n")
+  , ("returned runs are copied and released before publication", program
+      [ "foreign \"c\" {"
+      , "  type Storage"
+      , "  fn read symbol \"pudu_ffi_return_run\" (out length: UInt64) -> owned Array[Int32] elements of length by dispose"
+      , "  fn dispose symbol \"pudu_ffi_release_run\" (data: Storage)"
+      , "  fn releases symbol \"pudu_ffi_run_releases\" () -> Int32"
+      , "}"
+      , "fn main() -> Int {"
+      , "  unsafe(foreign) {"
+      , "    let before = releases()"
+      , "    let (data, count) = read()"
+      , "    print(show(data))"
+      , "    print(display(count))"
+      , "    print(display(releases() - before))"
+      , "  }"
+      , "  0"
+      , "}" ], "[7, 11]\n2\n1\n")
+  , ("split callback setup and shared context route through the original token", program
+      [ "foreign \"c\" {"
+      , "  callback Visit(context, value: Int64) -> Int64 else -1i64"
+      , "  callback Finish(context) -> Int64 else -2i64"
+      , "  callbacks Delegate {tick: Visit, finish: Finish}"
+      , "  fn setVisit symbol \"pudu_ffi_save_visit\" (entry: trampoline Visit)"
+      , "  fn setContext symbol \"pudu_ffi_save_context\" (data: context Visit)"
+      , "  fn fire symbol \"pudu_ffi_fire_visit\" (value: Int64) -> Int64"
+      , "  fn pair symbol \"pudu_ffi_visit_pair\" (tick: trampoline Delegate.tick, finish: trampoline Delegate.finish, data: context Delegate) -> Int64"
+      , "}"
+      , "type Handlers = { finish: fn() -> Int64, tick: fn(Int64) -> Int64 }"
+      , "fn visit(value: Int64) -> Int64 { value + 5i64 }"
+      , "fn finish() -> Int64 { 20i64 }"
+      , "fn main() -> Int {"
+      , "  unsafe(foreign) {"
+      , "    let token = Visit(visit)"
+      , "    setVisit()"
+      , "    setContext(token)"
+      , "    print(display(fire(3i64)))"
+      , "    let delegate = Delegate(Handlers{finish: finish, tick: visit})"
+      , "    print(display(pair(delegate)))"
+      , "    let _gone = token.unregister()"
+      , "    let _alsoGone = delegate.unregister()"
+      , "  }"
+      , "  0"
+      , "}" ], "8\n29\n")
+  , ("callback byte runs preserve embedded noughts and null-empty storage", program
+      [ "foreign \"c\" {"
+      , "  callback Read(data: Bytes, count: UInt64 bytes of data, context) -> Int64 else 100i64"
+      , "  fn visit symbol \"pudu_ffi_visit_bytes\" (read: Read, context read) -> Int64"
+      , "}"
+      , "fn read(data: Bytes, count: UInt64) -> Int64 {"
+      , "  if count == 0u64 { 5i64 } else { if data == bytesOf([3u8, 0u8, 9u8]) { 7i64 } else { 0i64 } }"
+      , "}"
+      , "fn main() -> Int {"
+      , "  unsafe(foreign) {"
+      , "    let token = Read(read)"
+      , "    print(display(visit(token)))"
+      , "    let _gone = token.unregister()"
+      , "  }"
+      , "  0"
+      , "}" ], "12\n")
+  ]
+
+objectiveCBindings :: [Text]
+objectiveCBindings =
+  [ "foreign \"/System/Library/Frameworks/Foundation.framework/Foundation\" {"
+  , "  class StringObject symbol \"NSString\""
+  , "  fn allocate selector \"alloc\" on StringObject () -> owned StringObject by release"
+  , "  fn initialize selector \"initWithUTF8String:\" (receiver: StringObject, text: Str) -> owned StringObject by release"
+  , "  fn copy selector \"copy\" (receiver: StringObject) -> counted StringObject by release"
+  , "  fn length selector \"length\" (receiver: StringObject) -> UInt64"
+  , "  fn utf8 selector \"UTF8String\" (receiver: StringObject) -> Str"
+  , "  fn release symbol \"objc_release\" (receiver: StringObject)"
+  , "}" ]
+
+objectiveCPrograms :: [(String, Text, Text)]
+objectiveCPrograms =
+  [ ("Foundation class lookup, initializer transfer and counted copy", program $ objectiveCBindings <>
+      [ "fn main() -> Int {"
+      , "  unsafe(foreign) {"
+      , "    let uninitialized = allocate()"
+      , "    let value = initialize(uninitialized, \"hello\")"
+      , "    let duplicate = copy(value)"
+      , "    print(display(length(value)))"
+      , "    print(utf8(duplicate))"
+      , "    release(duplicate)"
+      , "    release(value)"
+      , "  }"
+      , "  0"
+      , "}" ], "5\nhello\n")
+  , ("an explicit autorelease pool holds a borrowed result until it drains", program $ poolBindings <>
+      [ "fn main() -> Int {"
+      , "  unsafe(foreign) {"
+      , "    let pool = poolPush()"
+      , "    let value = stringFrom(\"pooled\")"
+      , "    print(utf8(value))"
+      , "    poolPop(pool)"
+      , "  }"
+      , "  0"
+      , "}" ], "pooled\n")
+  , ("open nested autorelease pools drain innermost first at exit", program $ poolBindings <>
+      [ "fn main() -> Int {"
+      , "  unsafe(foreign) {"
+      , "    let _outer = poolPush()"
+      , "    let _inner = poolPush()"
+      , "    print(display(length(stringFrom(\"in\"))))"
+      , "  }"
+      , "  0"
+      , "}" ], "2\n")
+  , ("a block runs during the call and an escaping block runs from its copy", program $ blockBindings <>
+      [ "fn sayNow() -> () {"
+      , "  let _shown = print(\"now\")"
+      , "  ()"
+      , "}"
+      , "fn sayLater() -> () {"
+      , "  let _shown = print(\"later\")"
+      , "  ()"
+      , "}"
+      , "fn main() -> Int {"
+      , "  unsafe(foreign) {"
+      , "    let queue = queueNew(\"pudu.blocks\", 0u64)"
+      , "    let now = Work(sayNow)"
+      , "    let later = Work(sayLater)"
+      , "    runNow(queue, now)"
+      , "    runLater(queue, later)"
+      , "    runNow(queue, now)"
+      , "    let _later = later.unregister()"
+      , "    let _now = now.unregister()"
+      , "    queueRelease(queue)"
+      , "  }"
+      , "  0"
+      , "}" ], "now\nlater\nnow\n")
+  , ("a framework calls a delegate method that enters its group handler", program
+      [ "foreign \"/System/Library/Frameworks/Foundation.framework/Foundation\" {"
+      , "  class StringObject symbol \"NSString\""
+      , "  class Center symbol \"NSNotificationCenter\""
+      , "  type Notice"
+      , "  callback Posted(context, note: borrowed Notice) -> ()"
+      , "  callbacks Events { posted: Posted }"
+      , "  delegate Observer symbol \"PuduConformanceObserver\" for Events { posted \"noticePosted:\" }"
+      , "  fn stringFrom selector \"stringWithUTF8String:\" on StringObject (text: Str) -> borrowed StringObject"
+      , "  fn center selector \"defaultCenter\" on Center () -> borrowed Center"
+      , "  fn observe selector \"addObserver:selector:name:object:\" (receiver: Center, observer: Observer, action: UInt64, name: StringObject, sender: UInt64) -> ()"
+      , "  fn post selector \"postNotificationName:object:\" (receiver: Center, name: StringObject, sender: UInt64) -> ()"
+      , "  fn selectorNamed symbol \"sel_registerName\" (name: Str) -> UInt64"
+      , "}"
+      , "type Handlers = { posted: fn(Notice) -> () }"
+      , "fn heard(note: Notice) -> () {"
+      , "  let _shown = print(\"posted\")"
+      , "  ()"
+      , "}"
+      , "fn main() -> Int {"
+      , "  unsafe(foreign) {"
+      , "    let events = Events(Handlers{posted: heard})"
+      , "    let observer = Observer(events)"
+      , "    let name = stringFrom(\"PuduConformanceNotice\")"
+      , "    let hub = center()"
+      , "    observe(hub, observer, selectorNamed(\"noticePosted:\"), name, 0u64)"
+      , "    post(hub, name, 0u64)"
+      , "    post(hub, name, 0u64)"
+      , "  }"
+      , "  0"
+      , "}" ], "posted\nposted\n")
+  ]
+
+{-| A serial dispatch queue takes blocks through its C interface: a
+    synchronous run uses the literal, an asynchronous one keeps a copy. -}
+blockBindings :: [Text]
+blockBindings =
+  [ "foreign \"/usr/lib/libSystem.B.dylib\" {"
+  , "  type Queue"
+  , "  callback Work(context) -> ()"
+  , "  fn queueNew symbol \"dispatch_queue_create\" (label: Str, attributes: UInt64) -> owned Queue by queueRelease"
+  , "  fn queueRelease symbol \"dispatch_release\" (queue: Queue) -> ()"
+  , "  fn runNow symbol \"dispatch_sync\" (queue: Queue, work: block Work) -> ()"
+  , "  fn runLater symbol \"dispatch_async\" (queue: Queue, work: block Work) -> ()"
+  , "}" ]
+
+{-| Autorelease pools are ordinary owned handles whose release pops them. -}
+poolBindings :: [Text]
+poolBindings = init objectiveCBindings <>
+  [ "  fn stringFrom selector \"stringWithUTF8String:\" on StringObject (text: Str) -> borrowed StringObject"
+  , "  type Pool"
+  , "  fn poolPush symbol \"objc_autoreleasePoolPush\" () -> owned Pool by poolPop"
+  , "  fn poolPop symbol \"objc_autoreleasePoolPop\" (pool: Pool) -> ()"
+  , "}" ]
+
+objectiveCRefusalPrograms :: [(String, Text)]
+objectiveCRefusalPrograms =
+  [ ("an initialized receiver loses its previous ownership generation", program $ objectiveCBindings <>
+      [ "fn main() -> Int {"
+      , "  unsafe(foreign) {"
+      , "    let old = allocate()"
+      , "    let value = initialize(old, \"hello\")"
+      , "    print(display(length(value)))"
+      , "    print(display(length(old)))"
+      , "  }"
+      , "  0"
+      , "}" ])
+  , ("a drained autorelease pool cannot be drained again", program $ poolBindings <>
+      [ "fn main() -> Int {"
+      , "  unsafe(foreign) {"
+      , "    let pool = poolPush()"
+      , "    poolPop(pool)"
+      , "    poolPop(pool)"
       , "  }"
       , "  0"
       , "}" ])

@@ -25,7 +25,7 @@ aliases: [Backend Module Map]
 - [[Backend Typed Integer Calls]] — typed C entries for suitable direct callees.
 - [[Backend Frame Direct]] — frame functions with bounded depth, run as plain C calls (#904).
 
-- [[Backend Frame Values]] · [[Backend Frame Bodies]] · [[Backend Emit Foreign]] · [[Backend Emit Foreign ABI]] · [[Backend Emit Foreign Handle]] — pure operations and suspending bodies over typed frame cells.
+- [[Backend Frame Values]] · [[Backend Frame Bodies]] · [[Backend Emit Foreign]] · [[Backend Emit Foreign Callback]] · [[Backend Emit Foreign Loan]] · [[Backend Emit Foreign ABI]] · [[Backend Emit Foreign Handle]] · [[Backend Emit Foreign Delegate]] — pure operations and suspending bodies over typed frame cells.
 - [[Native Frame Body Tests]] — strict C11 corpus compilation and call-suspension checks.
 
 - [[Backend Emit]] — deterministic C11 emission from [[Core IR]], including

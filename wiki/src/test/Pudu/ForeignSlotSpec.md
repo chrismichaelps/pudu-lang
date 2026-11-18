@@ -18,6 +18,10 @@ Supply recursive record descriptors alongside the flat leaf arrays. Test a
 mixed record whose nested member contains tail padding, so the outer final
 member must use the platform offset.
 
+## Resolved Grill Log for bridge arguments
+
+The slot tests pass the bridge's stret, receiver and selector arguments, so the Objective-C dispatch path is exercised with the same argument positions as generated code.
+
 ## Referenced by
 
 [[src/_MOC]] · [[Pudu FFI Bridge]] · [[Nested Foreign Record Delivery]]

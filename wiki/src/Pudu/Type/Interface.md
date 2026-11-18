@@ -120,3 +120,7 @@ so same-spelling imports do not replace the owner identity.
 ## Referenced by
 
 [[src/Pudu/Type/_MOC]] · [[Type Interface Graph]] · [[Compiler Program]] · [[Type Check]] · [[Type Formation]] · [[Type Check Method]]
+
+## Resolved Grill Log for Objective-C delegates
+
+Delegate names are published as values through `foreignValueNames`, the same route foreign functions take. The interface carries the handle type and the constructor so importing modules can construct a delegate without seeing the block's declarations.

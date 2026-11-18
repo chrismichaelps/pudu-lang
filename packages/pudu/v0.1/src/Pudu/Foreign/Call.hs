@@ -9,20 +9,29 @@
     to the same code is how a library with internal state acquires two of it. -}
 module Pudu.Foreign.Call
   ( ForeignHandle
+  , ForeignCallee (..)
+  , callForeignScoped
+  , resolveObjectiveC
   , candidates
   , openLibrary
+  , closeLibrary
+  , withSymbol
   , resolveSymbol
   , findSymbol
   , callSymbol
   , callSymbolScoped
   , CrossedValue (..)
+  , ForeignCallResult
   , ForeignCallFailure (..)
   , kindCode
   , leafKinds
   , recordShape
   , rebuildRecord
+  , received
+  , recordFields
   ) where
 
+import Data.Bits ((.|.))
 import qualified Data.ByteString as ByteString
 import qualified Data.ByteString.Unsafe as Unsafe
 import Data.Int (Int32, Int64)
@@ -35,18 +44,25 @@ import Foreign.Marshal.Utils (withMany)
 import Foreign.Ptr (Ptr, castPtr, intPtrToPtr, nullPtr)
 import Foreign.Storable (peek)
 import Data.Word (Word8)
-import Pudu.Foreign.Crossing (Crossing (..))
+import Pudu.Foreign.Crossing (Crossing (..), isLoanPointee)
 import Pudu.Foreign.Call.Library
-  ( ForeignHandle (..)
+  ( ForeignHandle
+  , ForeignCallee (..)
+  , resolveObjectiveC
   , candidates
   , findSymbol
   , openLibrary
+  , closeLibrary
+  , withSymbol
   , resolveSymbol
   )
 
 foreign import ccall safe "pudu_ffi_call"
   c_call
     :: Ptr ()
+    -> Ptr ()
+    -> Ptr ()
+    -> Ptr ()
     -> Ptr ()
     -> CInt
     -> Ptr Word8
@@ -87,6 +103,9 @@ data CrossedValue
   {-| An address the library handed back, under the name its block gave it. -}
   | CrossedHandle !Text !Int64
   | CrossedPointer !(Ptr ())
+  -- The payload is the pointee snapshot. The flag requests mutable writeback.
+  | CrossedLoan !Bool !CrossedValue
+  | CrossedRun !Bool ![CrossedValue]
   {-| A record crossing by value, its fields in the declaration's order. -}
   | CrossedRecord !Text ![(Text, CrossedValue)]
   {-| A run of bytes on its way out, still the program's own storage.
@@ -110,8 +129,12 @@ data CrossedValue
 data ForeignCallFailure
   = CallAssemblyFailure !Text
   | InvalidReturnedText
-  | PostCallFailure !ForeignCallFailure ![(Maybe Int, Text, Int64)]
+  | ForeignExtentFailure
+  | ForeignReturnedExtentFailure
+  | PostCallFailure !ForeignCallFailure ![(Maybe Int, Text, Int64)] ![(Int, CrossedValue)]
   deriving stock (Eq, Show)
+
+type ForeignCallResult = (CrossedValue, [Maybe CrossedValue], [(Int, CrossedValue)])
 
 {-| The code the other side reads for a kind.
 
@@ -160,20 +183,30 @@ callSymbol
   -> [(Crossing, Bool, CrossedValue)]
   -> Crossing
   -> IO (Either ForeignCallFailure (CrossedValue, [Maybe CrossedValue]))
-callSymbol symbol = callSymbolScoped nullPtr symbol
+callSymbol symbol supplied result =
+  fmap (fmap (\(produced, slots, _) -> (produced, slots)))
+    (callSymbolScoped nullPtr symbol supplied result)
 
 callSymbolScoped
   :: Ptr () -> Ptr () -> [(Crossing, Bool, CrossedValue)] -> Crossing
-  -> IO (Either ForeignCallFailure (CrossedValue, [Maybe CrossedValue]))
-callSymbolScoped scope symbol supplied result =
+  -> IO (Either ForeignCallFailure ForeignCallResult)
+callSymbolScoped scope symbol = callForeignScoped scope (ForeignSymbol symbol)
+
+callForeignScoped
+  :: Ptr () -> ForeignCallee -> [(Crossing, Bool, CrossedValue)] -> Crossing
+  -> IO (Either ForeignCallFailure ForeignCallResult)
+callForeignScoped _ _ supplied _
+  | any invalidLoan supplied = pure (Left (CallAssemblyFailure "invalid foreign loan"))
+ where
+  invalidLoan (crossing, isSlot, CrossedLoan _ _) = isSlot || not (isLoanPointee crossing)
+  invalidLoan (_, _, CrossedRun _ _) = True
+  invalidLoan _ = False
+callForeignScoped scope callee supplied result =
   withMany borrowedBytes (map sentBytes arguments) $ \strings ->
     withMany borrowedBytes (map sentBytes fields) $ \fieldStrings -> do
       let kinds = map argumentKind arguments
           pointers = zipWith argumentPointer arguments strings
-          slotKinds =
-            [ if isSlot then kindCode crossing else kindCode NothingCrossing
-            | ((crossing, _), isSlot) <- zip arguments written
-            ]
+          slotKinds = map slotKind supplied
           integers = map integerOf arguments
           doubles = map doubleOf arguments
           {-| Each argument's fields laid end to end, with the slice belonging to
@@ -202,14 +235,14 @@ callSymbolScoped scope symbol supplied result =
                             withArray slotKinds $ \slotKindArray ->
                               allocaArray (max 1 (length arguments)) $ \slotIntegers ->
                                 allocaArray (max 1 (length arguments)) $ \slotDoubles ->
-                                  allocaArray (max 1 (length fields)) $ \slotFieldIntegers ->
-                                    allocaArray (max 1 (length fields)) $ \slotFieldDoubles ->
+                                  withArray (replicate (max 1 (length fields)) 0) $ \slotFieldIntegers ->
+                                    withArray (replicate (max 1 (length fields)) 0) $ \slotFieldDoubles ->
                                       alloca $ \producedInteger ->
                                         alloca $ \producedDouble ->
                                           allocaArray (max 1 resultCount) $ \producedFieldIntegers ->
                                             allocaArray (max 1 resultCount) $ \producedFieldDoubles -> do
                                               code <- withArray shapes $ \shapeArray ->
-                                                c_call symbol scope (fromIntegral (length arguments)) kindArray
+                                                c_call symbol scope stret receiver selector (fromIntegral (length arguments)) kindArray
                                                   integerArray doubleArray stringArray startArray countArray
                                                   fieldKindArray fieldIntegerArray fieldDoubleArray fieldStringArray
                                                   slotKindArray slotIntegers slotDoubles
@@ -219,18 +252,25 @@ callSymbolScoped scope symbol supplied result =
                                                   producedInteger producedDouble producedFieldIntegers
                                                   producedFieldDoubles
                                               if code /= 0
-                                                then pure (Left (refusal code))
+                                                then pure (Left (if code < 0
+                                                  then PostCallFailure (refusal (negate code)) [] []
+                                                  else refusal code))
                                                 else do
                                                   rawResult <- case result of
                                                     HandleCrossing _ -> peek producedInteger
                                                     _ -> pure 0
                                                   rawSlots <- peekArray (length arguments) slotIntegers
+                                                  rawDoubles <- map unwrapDouble <$> peekArray (length arguments) slotDoubles
+                                                  rawFieldInts <- peekArray (length fields) slotFieldIntegers
+                                                  rawFieldDoubles <- map unwrapDouble <$> peekArray (length fields) slotFieldDoubles
                                                   let owned =
                                                         [(Nothing, name, rawResult) | HandleCrossing name <- [result], rawResult /= 0]
                                                         <> [(Just index, name, address)
-                                                           | (index, ((HandleCrossing name, _), True, address)) <- zip [0 ..] (zip3 arguments written rawSlots)
+                                                           | (index, ((HandleCrossing name, True, _), address)) <- zip [0 ..] (zip supplied rawSlots)
                                                            , address /= 0]
-                                                      preserve problem = PostCallFailure problem owned
+                                                      decode wanted = takeSlots arguments wanted sliceStart sliceCount
+                                                        rawSlots rawDoubles rawFieldInts rawFieldDoubles
+                                                  copied <- if null loanIndices then pure (Right []) else decode loans
                                                   answered <- case result of
                                                     RecordCrossing _ _ -> do
                                                       producedIntegers <- peekArray resultCount producedFieldIntegers
@@ -242,28 +282,36 @@ callSymbolScoped scope symbol supplied result =
                                                       asInteger <- peek producedInteger
                                                       CDouble asDouble <- peek producedDouble
                                                       received result asInteger asDouble
-                                                  case answered of
-                                                    Left problem -> pure (Left (preserve problem))
-                                                    Right value -> do
-                                                      slotIntegersBack <-
-                                                        peekArray (max 1 (length arguments)) slotIntegers
-                                                      slotDoublesBack <-
-                                                        peekArray (max 1 (length arguments)) slotDoubles
-                                                      slotFieldIntegersBack <-
-                                                        peekArray (max 1 (length fields)) slotFieldIntegers
-                                                      slotFieldDoublesBack <-
-                                                        peekArray (max 1 (length fields)) slotFieldDoubles
-                                                      taken <-
-                                                        takeSlots arguments written sliceStart sliceCount
-                                                          slotIntegersBack (map unwrapDouble slotDoublesBack)
-                                                          slotFieldIntegersBack
-                                                          (map unwrapDouble slotFieldDoublesBack)
-                                                      pure $ case taken of
-                                                        Left problem -> Left (preserve problem)
-                                                        Right slots -> Right (value, slots)
+                                                  taken <- case answered of
+                                                    Left problem -> pure (Left problem)
+                                                    Right value -> fmap (fmap ((,) value)) (decode outputs)
+                                                  pure $ case copied of
+                                                    Left problem -> Left (PostCallFailure problem owned [])
+                                                    Right snapshots ->
+                                                      let updates =
+                                                            [(index, value) | (index, Just value) <- zip loanIndices snapshots]
+                                                       in case taken of
+                                                            Left problem -> Left (PostCallFailure problem owned updates)
+                                                            Right (value, slots) -> Right (value, slots, updates)
  where
-  arguments = [(crossing, value) | (crossing, _, value) <- supplied]
-  written = [isSlot | (_, isSlot, _) <- supplied]
+  (symbol, stret, receiver, selector) = case callee of
+    ForeignSymbol pointer -> (pointer, nullPtr, nullPtr, nullPtr)
+    ObjectiveCSend send structure target operation -> (send, structure, target, operation)
+  arguments = [(crossing, pointee value) | (crossing, _, value) <- supplied]
+  outputs = [isSlot | (_, isSlot, _) <- supplied]
+  loans = [not isSlot && mutableLoan value | (_, isSlot, value) <- supplied]
+  loanIndices = [index | (index, True) <- zip [0 ..] loans]
+
+  pointee (CrossedLoan _ value) = value
+  pointee value = value
+
+  mutableLoan (CrossedLoan exclusive _) = exclusive
+  mutableLoan _ = False
+
+  slotKind (crossing, True, _) = kindCode crossing
+  slotKind (crossing, False, CrossedLoan exclusive _) =
+    kindCode crossing .|. (if exclusive then 0x80 else 0x40)
+  slotKind _ = kindCode NothingCrossing
   {-| An empty array still needs an address to pass, so an unused one carries a
       single filler the other side never reads: every count that would reach it
       is zero. The filler is a real value rather than an undefined one, because
@@ -276,7 +324,7 @@ callSymbolScoped scope symbol supplied result =
       only their kinds and their place in the buffer matter here. -}
   flattened =
     [ if isSlot then slotLeaves crossing else recordFields crossing value
-    | ((crossing, value), isSlot) <- zip arguments written
+    | ((crossing, value), isSlot) <- zip arguments outputs
     ]
   fields = concat flattened
   {-| What each argument hands the other side as an address.

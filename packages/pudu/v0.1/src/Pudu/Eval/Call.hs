@@ -230,8 +230,8 @@ dispatchCall needs spanValue lent target values =
     FunctionValue closure -> callClosureLending needs closure values lent (Just spanValue)
     TraitMethodValue provider member witness ->
       callTraitMethod needs spanValue lent provider member witness values
-    ForeignValue binding -> callForeign applyCallback spanValue binding values
-    ForeignCallbackValue callback -> callCallbackValue spanValue callback values
+    ForeignValue binding -> callForeign applyCallback spanValue binding lent values
+    ForeignCallbackValue callback -> callCallbackValue applyCallback spanValue callback values
     SumValue owner name [] -> pure (SumValue owner name values)
     BuiltinValue PanicBuiltin -> callPanic spanValue values
     BuiltinValue CharFromCodeBuiltin -> callCharFromCode spanValue values
@@ -431,7 +431,8 @@ settled callSpan outcome = case outcome of
 
 applyFunction :: CallNeeds -> Span -> Value -> [Value] -> Evaluator Value
 applyFunction needs spanValue function arguments = case function of
-  ForeignCallbackValue callback -> callCallbackValue spanValue callback arguments
+  ForeignCallbackValue callback ->
+    callCallbackValue (\at handler values -> dispatchCall needs at noneLent handler values) spanValue callback arguments
   FunctionValue closure -> callClosure needs closure arguments (Just spanValue)
   TraitMethodValue provider member witness ->
     callTraitMethod needs spanValue noneLent provider member witness arguments

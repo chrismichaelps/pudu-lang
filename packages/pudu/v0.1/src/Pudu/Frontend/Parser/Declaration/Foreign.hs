@@ -12,6 +12,8 @@ import Pudu.Frontend.Parser.Type (parseTypeSyntax)
 import Pudu.Frontend.Parser.Expression.Recovery (mergedOrLeft)
 import Pudu.Frontend.Parser.Name (expectUpperIdentifier, expectValueIdentifier)
 import Data.Text (Text)
+import Data.List.NonEmpty (NonEmpty (..))
+import Pudu.Foreign.Extent (ExtentUnit (..))
 import Pudu.Frontend.Parser.State
   ( Parser
   , advanceToken
@@ -28,19 +30,28 @@ import Pudu.Frontend.Parser.State
   , peekToken
   )
 import Pudu.Frontend.Syntax.Located (Located (..))
+import Pudu.Frontend.Syntax.Name (ModuleName (..))
 import Pudu.Frontend.Syntax.Tree
   ( Declaration (..)
   , Foreign (..)
   , ForeignCallback (..)
+  , ForeignCallbackGroup (..)
+  , ForeignDelegate (..)
+  , ForeignDelegateMethod (..)
+  , ForeignCallbackMember (..)
   , ForeignCallbackParameter (..)
+  , ForeignCallbackPassing (..)
   , ForeignFunction (..)
+  , ForeignClass (..)
+  , ForeignMethod (..)
+  , ForeignLength (..)
   , Literal (..)
   , ForeignParameter (..)
   , TypeSyntax (..)
   , Visibility
   )
 import Pudu.Frontend.Token
-  ( Keyword (KwElse, KwFalse, KwFn, KwNull, KwTrue, KwType)
+  ( Keyword (KwElse, KwFalse, KwFn, KwFor, KwNull, KwTrue, KwType)
   , Token (..)
   , TokenKind (..)
   )
@@ -58,7 +69,7 @@ parseForeign visibility = do
   library <- expectStringLiteral "for the library's name"
   version <- parseVersion
   _ <- expectSymbol "{" "to start the foreign declarations"
-  (types, callbacks, functions) <- parseForeignMembers [] [] []
+  (types, classes, callbacks, groups, delegates, functions) <- parseForeignMembers [] [] [] [] [] []
   closing <- expectSymbol "}" "to close the foreign declarations"
   pure
     ( Located (mergedOrLeft (tokenSpan start) (tokenSpan closing))
@@ -67,8 +78,12 @@ parseForeign visibility = do
               { foreignVisibility = visibility
               , foreignLibrary = library
               , foreignVersion = version
-              , foreignTypes = types
+              , foreignTypes = types <> map foreignClassName classes
+                  <> map (foreignDelegateName . locatedValue) delegates
+              , foreignClasses = classes
               , foreignCallbacks = callbacks
+              , foreignCallbackGroups = groups
+              , foreignDelegates = delegates
               , foreignFunctions = functions
               }
         )
@@ -93,14 +108,20 @@ parseVersion = do
     second handle type that silently accepts nothing. -}
 parseForeignMembers
   :: [Located Text]
+  -> [ForeignClass]
   -> [Located ForeignCallback]
+  -> [Located ForeignCallbackGroup]
+  -> [Located ForeignDelegate]
   -> [Located ForeignFunction]
-  -> Parser ([Located Text], [Located ForeignCallback], [Located ForeignFunction])
-parseForeignMembers types callbacks functions = do
+  -> Parser
+      ( [Located Text], [ForeignClass], [Located ForeignCallback], [Located ForeignCallbackGroup]
+      , [Located ForeignDelegate], [Located ForeignFunction] )
+parseForeignMembers types classes callbacks groups delegates functions = do
   before <- peekToken
   exhausted <- budgetExhausted
   let kind = tokenKind before
-      collected = pure (reverse types, reverse callbacks, reverse functions)
+      collected = pure
+        (reverse types, reverse classes, reverse callbacks, reverse groups, reverse delegates, reverse functions)
       continue next = do
         after <- peekToken
         if before == after then collected else next
@@ -109,13 +130,78 @@ parseForeignMembers types callbacks functions = do
       Keyword KwType -> do
         _ <- advanceToken
         name <- expectUpperIdentifier "after type"
-        continue (parseForeignMembers (name : types) callbacks functions)
+        continue (parseForeignMembers (name : types) classes callbacks groups delegates functions)
+      Identifier "class" -> do
+        _ <- advanceToken
+        name <- expectUpperIdentifier "after class"
+        symbol <- parseSymbol
+        continue (parseForeignMembers types (ForeignClass name (maybe name id symbol) : classes) callbacks groups delegates functions)
       Identifier "callback" -> do
         callback <- parseForeignCallback
-        continue (parseForeignMembers types (callback : callbacks) functions)
+        continue (parseForeignMembers types classes (callback : callbacks) groups delegates functions)
+      Identifier "callbacks" -> do
+        group <- parseCallbackGroup
+        continue (parseForeignMembers types classes callbacks (group : groups) delegates functions)
+      Identifier "delegate" -> do
+        delegate <- parseDelegate
+        continue (parseForeignMembers types classes callbacks groups (delegate : delegates) functions)
       _ -> do
         function <- parseForeignFunction
-        continue (parseForeignMembers types callbacks (maybe functions (: functions) function))
+        continue (parseForeignMembers types classes callbacks groups delegates (maybe functions (: functions) function))
+
+{-| `delegate Name symbol "Class" for Group { member "selector:", ... }`. The
+    symbol defaults to the local name, as a class declaration's does. -}
+parseDelegate :: Parser (Located ForeignDelegate)
+parseDelegate = do
+  start <- advanceToken
+  name <- expectUpperIdentifier "after delegate"
+  symbol <- parseSymbol
+  _ <- expectKeyword KwFor "before the delegate's callback group"
+  group <- expectUpperIdentifier "for the delegate's callback group"
+  _ <- expectSymbol "{" "before the delegate's methods"
+  methods <- parseMethods []
+  closing <- expectSymbol "}" "after the delegate's methods"
+  pure (Located (mergedOrLeft (tokenSpan start) (tokenSpan closing))
+    (ForeignDelegate name (maybe name id symbol) group methods))
+ where
+  parseMethods reversed = do
+    kind <- peekKind
+    exhausted <- budgetExhausted
+    if kind == EndOfFile || isSymbol "}" kind || exhausted
+      then pure (reverse reversed)
+      else do
+        member <- expectValueIdentifier "for the callback group member"
+        selector <- expectStringLiteral "for the member's Objective-C selector"
+        let methods = ForeignDelegateMethod member selector : reversed
+        separator <- matchSymbol ","
+        case separator of
+          Just _ -> parseMethods methods
+          Nothing -> pure (reverse methods)
+
+parseCallbackGroup :: Parser (Located ForeignCallbackGroup)
+parseCallbackGroup = do
+  start <- advanceToken
+  name <- expectUpperIdentifier "after callbacks"
+  _ <- expectSymbol "{" "before the callback group members"
+  members <- parseMembers []
+  closing <- expectSymbol "}" "after the callback group members"
+  pure (Located (mergedOrLeft (tokenSpan start) (tokenSpan closing))
+    (ForeignCallbackGroup name members))
+ where
+  parseMembers reversed = do
+    kind <- peekKind
+    exhausted <- budgetExhausted
+    if kind == EndOfFile || isSymbol "}" kind || exhausted
+      then pure (reverse reversed)
+      else do
+        name <- expectValueIdentifier "for the callback group member"
+        _ <- expectSymbol ":" "before the member's callback type"
+        callback <- expectUpperIdentifier "for the member's callback type"
+        let members = ForeignCallbackMember name callback : reversed
+        separator <- matchSymbol ","
+        case separator of
+          Just _ -> parseMembers members
+          Nothing -> pure (reverse members)
 
 parseForeignCallback :: Parser (Located ForeignCallback)
 parseForeignCallback = do
@@ -155,8 +241,9 @@ parseCallbackParameters reversed = do
           _ <- expectSymbol ":" "after the callback parameter's name"
           borrowed <- matchWord "borrowed"
           written <- parseTypeSyntax
+          extent <- parseLengthRelation
           pure (Located (mergedOrLeft (tokenSpan start) (locatedSpan written))
-            (ForeignCallbackArgument name (borrowed /= Nothing) written))
+            (ForeignCallbackArgument name (borrowed /= Nothing) written extent))
       comma <- matchSymbol ","
       case comma of
         Nothing -> pure (reverse (parameter : reversed))
@@ -200,6 +287,7 @@ parseForeignFunction = do
   _ <- expectKeyword KwFn "to start a foreign function"
   name <- expectValueIdentifier "after fn"
   symbol <- parseSymbol
+  method <- parseMethod
   _ <- expectSymbol "(" "before the parameter list"
   parameters <- parseForeignParameters []
   _ <- expectSymbol ")" "after the parameter list"
@@ -212,6 +300,11 @@ parseForeignFunction = do
       then pure Nothing
       else matchWord "counted"
   returned <- if arrow == Nothing then pure Nothing else Just <$> parseTypeSyntax
+  lengthSlot <- case returned of
+    Nothing -> pure Nothing
+    Just _ -> do
+      relation <- matchExtentWord "elements"
+      traverse (const (expectValueIdentifier "after elements of")) relation
   released <-
     parseReleasedBy owned (borrowed /= Nothing || counted /= Nothing) (tokenSpan start)
   let result = maybe (Located (tokenSpan start) UnitType) id returned
@@ -221,8 +314,10 @@ parseForeignFunction = do
             ForeignFunction
               { foreignName = name
               , foreignSymbol = symbol
+              , foreignMethod = method
               , foreignParameters = parameters
               , foreignResult = result
+              , foreignResultLength = lengthSlot
               , foreignResultBorrowed = borrowed /= Nothing
               , foreignResultCounted = counted /= Nothing
               , foreignReleasedBy = released
@@ -269,9 +364,12 @@ parseForeignParameter = do
         ForeignParameter
           { foreignParameterName = name
           , foreignParameterContext = True
+          , foreignParameterCallbackPassing = Nothing
           , foreignParameterType = Nothing
           , foreignParameterOut = False
           , foreignParameterOwned = False
+          , foreignParameterNullable = Nothing
+          , foreignParameterLength = Nothing
           , foreignParameterReleasedBy = Nothing
           })
     _ -> do
@@ -279,17 +377,77 @@ parseForeignParameter = do
       name <- expectValueIdentifier "for the parameter's name"
       _ <- expectSymbol ":" "after the parameter's name"
       owned <- matchWord "owned"
-      written <- parseTypeSyntax
+      nullable <- case owned of
+        Just _ -> pure Nothing
+        Nothing -> matchWord "nullable"
+      passing <- do
+        trampoline <- matchWord "trampoline"
+        case trampoline of
+          Just _ -> pure (Just TrampolinePassing)
+          Nothing -> do
+            context <- matchWord "context"
+            case context of
+              Just _ -> pure (Just ContextPassing)
+              Nothing -> fmap (const BlockPassing) <$> matchWord "block"
+      written <- case passing of
+        Just TrampolinePassing -> parseTrampolineType
+        _ -> parseTypeSyntax
+      extent <- parseLengthRelation
       released <- parseSlotRelease owned (locatedSpan written)
       pure (Located (mergedOrLeft (tokenSpan start) (locatedSpan written))
         ForeignParameter
           { foreignParameterName = name
           , foreignParameterContext = False
+          , foreignParameterCallbackPassing = passing
           , foreignParameterType = Just written
           , foreignParameterOut = out /= Nothing
           , foreignParameterOwned = owned /= Nothing
+          , foreignParameterNullable = tokenSpan <$> nullable
+          , foreignParameterLength = extent
           , foreignParameterReleasedBy = released
           })
+
+parseTrampolineType :: Parser (Located TypeSyntax)
+parseTrampolineType = do
+  Located at owner <- expectUpperIdentifier "after trampoline"
+  separator <- matchSymbol "."
+  case separator of
+    Nothing -> pure (Located at (NamedType (ModuleName (owner :| [])) []))
+    Just _ -> do
+      Located end member <- expectValueIdentifier "for the callback group member"
+      pure (Located (mergedOrLeft at end) (NamedType (ModuleName (owner :| [member])) []))
+
+parseLengthRelation :: Parser (Maybe ForeignLength)
+parseLengthRelation = do
+  elements <- matchExtentWord "elements"
+  case elements of
+    Just token -> Just <$> relation token ExtentElements
+    Nothing -> do
+      bytes <- matchExtentWord "bytes"
+      traverse (\token -> relation token ExtentBytes) bytes
+ where
+  relation token unit = do
+    first <- expectValueIdentifier "after the foreign length unit"
+    rest <- targets []
+    pure (ForeignLength (Located (tokenSpan token) unit) (first :| rest))
+  targets reversed = do
+    next <- matchWord "and"
+    case next of
+      Nothing -> pure (reverse reversed)
+      Just _ -> do
+        target <- expectValueIdentifier "after and"
+        targets (target : reversed)
+
+matchExtentWord :: Text -> Parser (Maybe Token)
+matchExtentWord word = do
+  kind <- peekKind
+  following <- lookaheadKind 1
+  case (kind, following) of
+    (Identifier current, Identifier "of") | current == word -> do
+      unit <- advanceToken
+      _ <- advanceToken
+      pure (Just unit)
+    _ -> pure Nothing
 
 {-| What releases what an owned slot received.
 
@@ -311,6 +469,13 @@ parseSlotRelease owned spanValue = case owned of
 {-| The exact native spelling, when its library does not use Pudu's naming
     convention. Keeping this separate lets a Raylib `MemAlloc` remain the
     idiomatic local `memAlloc` without guessing or rewriting either name. -}
+parseMethod :: Parser (Maybe ForeignMethod)
+parseMethod = do
+  keyword <- matchWord "selector"
+  traverse (const (ForeignMethod
+    <$> expectStringLiteral "for the Objective-C selector"
+    <*> (matchWord "on" >>= traverse (const (expectUpperIdentifier "after on"))))) keyword
+
 parseSymbol :: Parser (Maybe (Located Text))
 parseSymbol = do
   keyword <- matchWord "symbol"

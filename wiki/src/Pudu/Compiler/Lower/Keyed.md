@@ -9,8 +9,8 @@ aliases: [Compiler Lower Keyed]
 
 ## Purpose and interface
 
-`lowerMapOf`, `lowerSetOf`, `lowerSetLiteral` and `lowerKeyedMethod`: maps
-and sets under [[Native Maps and Sets]].
+`lowerMapOf`, `lowerSetOf`, `lowerSetLiteral`, `lowerKeyedMethod` and
+`setMembership`: maps and sets under [[Native Maps and Sets]].
 
 ## Order and failures
 
@@ -53,3 +53,15 @@ checks, E7008 wording and duplicate handling cannot drift.
 ## Indexed stores (#840)
 
 lowerKeyedMethod answers the seven store methods with the map's operations at key Int. A store's key operand is wrapped in `&+ 0`, folding a deferred magnitude into the word the interpreter narrows to. Export Blame, orderable and mayHoldFunction for [[Compiler Lower Multi Map]]. Resolved Grill Log: narrowing in lowering keeps one key convention in the helpers.
+
+## Set membership (#948)
+
+`setMembership` answers `candidate in set` with the set's `contains`
+primitive. The candidate is declared first and the set second, so the
+operands run in source order as the interpreter evaluates them; the
+membership probe reads both locals. The checker types `in` as
+`T in Set[T]`, so no other right operand reaches it.
+
+Resolved Grill Log: reuse `KeyedContains` instead of a new Core operator;
+the probe applies no orderability check, matching `Set.contains` and the
+interpreter's `setContains`.

@@ -66,3 +66,14 @@ Resolved Grill Log: the rules sit in one module rather than beside each expressi
 place model has one statement; the expression checker only calls in. Comparing argument types before
 unification is what separates a parameter declared `&mut` from a type variable that would be
 instantiated to one.
+
+## Resolved Grill Log for #877 — Restricted lending
+
+Use the enclosed function signature of a capability-restricted callee for
+place checks. Capabilities govern the call and leave the parameter's loan
+mode available for overlap checking. Shared reads may overlap one another. A
+shared loan and an exclusive loan of the same place conflict.
+
+## Resolved Grill Log for #877 — Direct nullable loans
+
+Skip absent nullable loans during overlap checking. Present shared and mutable arguments retain their usual place checks.
