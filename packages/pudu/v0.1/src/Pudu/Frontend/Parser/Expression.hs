@@ -84,7 +84,7 @@ import Pudu.Frontend.Token
   , TokenKind (..)
   , symbolText
   )
-import Pudu.Source (Span)
+import Pudu.Source (Span, enclosingSpan)
 
 
 {-| The entry points [[Parser Expression Control]] reads expressions through.
@@ -233,10 +233,13 @@ templatePiece blockParser wholeSpan part = case part of
   TemplateText text -> pure (Located wholeSpan (LiteralExpression (StringValue text)))
   TemplateHole holeSpan source -> do
     inner <- parseHole blockParser holeSpan source
+    -- The wrapper spans the braces so the hole's expression keeps a span,
+    -- and so a type, of its own.
+    let wrapper = maybe holeSpan id (enclosingSpan holeSpan)
     pure
-      ( Located holeSpan
+      ( Located wrapper
           ( CallExpression
-              (Located holeSpan (NameExpression (renderName :| [])))
+              (Located wrapper (NameExpression (renderName :| [])))
               [inner]
           )
       )

@@ -55,6 +55,7 @@ advanceOffset :: Int -> Offset -> Maybe Offset
 mkSpan :: Source -> Offset -> Offset -> Maybe Span
 zeroWidthSpan :: Source -> Offset -> Maybe Span
 mergeSpans :: Span -> Span -> Maybe Span
+enclosingSpan :: Span -> Maybe Span
 spanSource :: Span -> SourceName
 spanStart :: Span -> Offset
 spanEnd :: Span -> Offset
@@ -166,3 +167,12 @@ that key, so a fact exists for them without any reader pointing into the
 original source finding it. Resolved Grill Log: the application's own span
 already means the whole expression; an empty reversed span is a stable key
 that cannot collide with a reported location.
+
+## Enclosing span (#950)
+
+`enclosingSpan` grows an authored span by one scalar on each side, the span
+of a delimiter pair around it. It answers Nothing at the start of a source
+and for a generated span, whose origin offsets would no longer agree.
+
+Resolved Grill Log: the constructor stays abstract; callers that need the
+delimited form ask for it here instead of doing offset arithmetic.
