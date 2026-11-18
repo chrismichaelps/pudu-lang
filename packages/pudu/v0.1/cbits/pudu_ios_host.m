@@ -1,0 +1,485 @@
+/* The iOS host of a Pudu Native application: it starts the program once
+   UIKit has launched, applies each commit's view stream to platform controls,
+   and hands events back through a blocking wait that runs the main loop.
+   Nothing here calls into Pudu; Pudu calls the functions below.
+
+   Kinds and instructions dispatch through constant tables: a control kind
+   names the factory that makes its control and the setters it accepts; an
+   instruction code names its handler. */
+#import <UIKit/UIKit.h>
+#include <stdint.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include "pudu_program.h"
+#include "pudu_ios_stream.h"
+#include "pudu_ios_layout.h"
+#include "pudu_ios_theme.h"
+#include "pudu_ios_events.h"
+#include "pudu_ios_list.h"
+#include "pudu_ios_controls.h"
+#include "pudu_ios_material.h"
+#include "pudu_ios_gesture.h"
+#include "pudu_ios_feedback.h"
+#include "pudu_ios_access.h"
+#include "pudu_ios_scene.h"
+#include "pudu_ios_motion.h"
+#include "pudu_ios_capability_test.h"
+
+/* Instruction codes and control kinds of the view stream; they match
+   Std.Mobile.Stream. */
+enum { PUDU_UI_CREATE = 1, PUDU_UI_TEXT = 2, PUDU_UI_APPEND = 3, PUDU_UI_ROOT = 4, PUDU_UI_TAG = 5, PUDU_UI_RESET = 6,
+       PUDU_UI_STATE = 7, PUDU_UI_HINT = 8, PUDU_UI_NAME = 9, PUDU_UI_INSERT = 10, PUDU_UI_REMOVE = 11, PUDU_UI_MOVE = 12,
+       PUDU_UI_THEME = 20, PUDU_UI_APPEARANCE = 21, PUDU_UI_STYLE = 22, PUDU_UI_COLOR = 23, PUDU_UI_RANGE = 24,
+       PUDU_UI_COLUMNS = 25, PUDU_UI_MATERIAL_SET = 26, PUDU_UI_GESTURES = 27,
+       PUDU_UI_ALERT = 28, PUDU_UI_VALUE = 29, PUDU_UI_HAPTIC = 30, PUDU_UI_TRAITS = 31, PUDU_UI_ACCESS_HINT = 32,
+       PUDU_UI_ACCESS_VALUE = 33, PUDU_UI_MENU = 34, PUDU_UI_ANIMATE = 35, PUDU_UI_INSTRUCTIONS = 36 };
+enum { PUDU_UI_LABEL = 1, PUDU_UI_BUTTON = 2, PUDU_UI_COLUMN = 3, PUDU_UI_ROW = 4, PUDU_UI_FIELD = 5, PUDU_UI_TOGGLE = 6,
+       PUDU_UI_SCROLL = 7, PUDU_UI_LIST = 8, PUDU_UI_MATERIAL = 9,
+       PUDU_UI_PROGRESS = 10, PUDU_UI_ACTIVITY = 11, PUDU_UI_KINDS = 12 };
+
+static NSMutableArray *pudu_nodes;
+static NSMutableArray<NSNumber *> *pudu_kinds;
+/* Each node's color role from COLOR, or PUDU_ROLE_DEFAULT. */
+static NSMutableArray<NSNumber *> *pudu_paints;
+static UIView *pudu_surface;
+static UIView *pudu_shown_root;
+static UILayoutGuide *pudu_available;
+static double pudu_main_started_ms;
+static double pudu_first_frame_ms = -1;
+
+typedef struct {
+  UIView *(*make)(void);
+  void (*text)(UIView *, NSString *);
+  void (*hint)(UIView *, NSString *);
+  void (*state)(UIView *, uint32_t);
+  /* The control that carries the node's tag and accessible name. */
+  UIView *(*control)(UIView *);
+  UIStackView *(*children)(UIView *);
+  void (*fill)(UIView *, NSString *);
+  void (*press)(UIView *);
+  NSString *(*shown)(UIView *);
+  /* Text color and font; a kind without them refuses COLOR and STYLE. */
+  void (*paint)(UIView *, UIColor *);
+  void (*style)(UIView *, UIFont *);
+  /* Whether the kind takes Ink without a COLOR; buttons follow the tint. */
+  BOOL inked;
+} pudu_kind;
+
+static const pudu_kind pudu_kind_table[PUDU_UI_KINDS] = {
+  [PUDU_UI_LABEL] = { pudu_make_label, pudu_label_text, NULL, NULL, pudu_itself, NULL, NULL, NULL, pudu_label_shown, pudu_label_paint, pudu_label_style, YES },
+  [PUDU_UI_BUTTON] = { pudu_make_button, pudu_button_text, NULL, NULL, pudu_itself, NULL, NULL, pudu_button_press, NULL, pudu_button_paint, pudu_button_style, NO },
+  [PUDU_UI_COLUMN] = { pudu_make_column, NULL, NULL, NULL, pudu_itself, pudu_direct_stack, NULL, NULL, NULL, NULL, NULL, NO },
+  [PUDU_UI_ROW] = { pudu_make_row, NULL, NULL, NULL, pudu_itself, pudu_direct_stack, NULL, NULL, NULL, NULL, NULL, NO },
+  [PUDU_UI_FIELD] = { pudu_make_field, pudu_field_text, pudu_field_hint, NULL, pudu_itself, NULL, pudu_field_fill, NULL, NULL, pudu_field_paint, pudu_field_style, YES },
+  [PUDU_UI_TOGGLE] = { pudu_make_toggle, pudu_toggle_text, NULL, pudu_toggle_state, pudu_toggle_control, NULL, pudu_toggle_fill, NULL, NULL, pudu_toggle_paint, pudu_toggle_style, YES },
+  [PUDU_UI_SCROLL] = { pudu_make_scroll, NULL, NULL, NULL, pudu_itself, pudu_scroll_stack, NULL, NULL, NULL, NULL, NULL, NO },
+  [PUDU_UI_LIST] = { pudu_make_list, NULL, NULL, NULL, pudu_itself, pudu_list_store, NULL, NULL, NULL, NULL, NULL, NO },
+  [PUDU_UI_MATERIAL] = { pudu_material_make, NULL, NULL, NULL, pudu_itself, pudu_material_stack, NULL, NULL, NULL, NULL, NULL, NO },
+  [PUDU_UI_PROGRESS] = { pudu_make_progress, NULL, NULL, NULL, pudu_itself, NULL, NULL, NULL, NULL, NULL, NULL, NO },
+  [PUDU_UI_ACTIVITY] = { pudu_make_activity, NULL, NULL, pudu_activity_state, pudu_itself, NULL, NULL, NULL, NULL, NULL, NULL, NO },
+};
+
+static const pudu_kind *pudu_kind_of(uint32_t kind) {
+  if (kind >= PUDU_UI_KINDS || pudu_kind_table[kind].make == NULL) pudu_stream_defect("created unknown kind", kind);
+  return &pudu_kind_table[kind];
+}
+
+static uint32_t pudu_node_id(pudu_reader *reader) {
+  uint32_t node = pudu_word(reader);
+  if (node >= pudu_nodes.count || pudu_nodes[node] == [NSNull null]) pudu_stream_defect("named node before creating it:", node);
+  return node;
+}
+
+static const pudu_kind *pudu_node_kind(uint32_t node) { return &pudu_kind_table[pudu_kinds[node].unsignedIntValue]; }
+
+/* Paints a node with its COLOR role, or with Ink when its kind is inked. */
+static void pudu_paint(uint32_t node) {
+  const pudu_kind *kind = pudu_node_kind(node);
+  uint32_t role = pudu_paints[node].unsignedIntValue;
+  if (kind->paint == NULL || (role == PUDU_ROLE_DEFAULT && !kind->inked)) return;
+  kind->paint(pudu_nodes[node], pudu_roles[role == PUDU_ROLE_DEFAULT ? PUDU_ROLE_INK : role]);
+}
+
+/* Instruction handlers, one per code. */
+static void pudu_do_create(pudu_reader *reader) {
+  uint32_t node = pudu_word(reader);
+  uint32_t kind = pudu_word(reader);
+  const pudu_kind *made = pudu_kind_of(kind);
+  while (pudu_nodes.count <= node) {
+    [pudu_nodes addObject:[NSNull null]];
+    [pudu_kinds addObject:@0];
+    [pudu_paints addObject:@(PUDU_ROLE_DEFAULT)];
+  }
+  pudu_nodes[node] = made->make();
+  pudu_kinds[node] = @(kind);
+  pudu_paints[node] = @(PUDU_ROLE_DEFAULT);
+  pudu_paint(node);
+}
+
+static void pudu_do_text(pudu_reader *reader) {
+  uint32_t node = pudu_node_id(reader);
+  NSString *text = pudu_text(reader);
+  if (pudu_node_kind(node)->text == NULL) pudu_stream_defect("set text on a node that shows none:", node);
+  pudu_node_kind(node)->text(pudu_nodes[node], text);
+}
+
+static void pudu_do_hint(pudu_reader *reader) {
+  uint32_t node = pudu_node_id(reader);
+  NSString *hint = pudu_text(reader);
+  if (pudu_node_kind(node)->hint == NULL) pudu_stream_defect("set a hint on a node that takes none:", node);
+  pudu_node_kind(node)->hint(pudu_nodes[node], hint);
+}
+
+static void pudu_do_state(pudu_reader *reader) {
+  uint32_t node = pudu_node_id(reader);
+  uint32_t state = pudu_word(reader);
+  if (pudu_node_kind(node)->state == NULL) pudu_stream_defect("set state on a node that has none:", node);
+  pudu_node_kind(node)->state(pudu_nodes[node], state);
+}
+
+static void pudu_do_name(pudu_reader *reader) {
+  uint32_t node = pudu_node_id(reader);
+  pudu_node_kind(node)->control(pudu_nodes[node]).accessibilityLabel = pudu_text(reader);
+}
+
+static void pudu_do_tag(pudu_reader *reader) {
+  uint32_t node = pudu_node_id(reader);
+  NSInteger tag = (NSInteger)pudu_word(reader);
+  ((UIView *)pudu_nodes[node]).tag = tag;
+  pudu_node_kind(node)->control(pudu_nodes[node]).tag = tag;
+}
+
+/* The group a placement names, refused when its node holds nothing. */
+static UIStackView *pudu_group(pudu_reader *reader) {
+  uint32_t parent = pudu_node_id(reader);
+  const pudu_kind *kind = pudu_node_kind(parent);
+  if (kind->children == NULL) pudu_stream_defect("placed a child in a node that holds nothing:", parent);
+  return kind->children(pudu_nodes[parent]);
+}
+
+static void pudu_do_append(pudu_reader *reader) {
+  UIStackView *group = pudu_group(reader);
+  [group addArrangedSubview:pudu_nodes[pudu_node_id(reader)]];
+  pudu_motion_touch(group);
+}
+
+/* INSERT and MOVE: places a child at an index of its group, refused past
+   the group's end. */
+static void pudu_place(pudu_reader *reader) {
+  UIStackView *group = pudu_group(reader);
+  UIView *child = pudu_nodes[pudu_node_id(reader)];
+  uint32_t index = pudu_word(reader);
+  if (index > group.arrangedSubviews.count) pudu_stream_defect("placed a child past the end of its group at", index);
+  /* An arranged child already in the group moves to the index. */
+  [group insertArrangedSubview:child atIndex:index];
+  pudu_motion_touch(group);
+}
+
+
+/* Detaches a subtree and forgets every node it lists, so a later CREATE may
+   reuse those ids. */
+static void pudu_do_remove(pudu_reader *reader) {
+  uint32_t node = pudu_node_id(reader);
+  uint32_t count = pudu_word(reader);
+  pudu_motion_touch([(UIView *)pudu_nodes[node] superview]);
+  pudu_list_forget(pudu_nodes[node]);
+  [(UIView *)pudu_nodes[node] removeFromSuperview];
+  for (uint32_t i = 0; i < count; i++) {
+    uint32_t gone = pudu_node_id(reader);
+    pudu_nodes[gone] = [NSNull null];
+    pudu_kinds[gone] = @0;
+    pudu_paints[gone] = @(PUDU_ROLE_DEFAULT);
+  }
+}
+
+static void pudu_do_root(pudu_reader *reader) {
+  uint32_t node = pudu_node_id(reader);
+  UIView *root = pudu_nodes[node];
+  [pudu_shown_root removeFromSuperview];
+  pudu_shown_root = root;
+  root.translatesAutoresizingMaskIntoConstraints = NO;
+  [pudu_surface addSubview:root];
+  uint32_t kind = pudu_kinds[node].unsignedIntValue;
+  pudu_place_root(root, pudu_available, kind == PUDU_UI_SCROLL || kind == PUDU_UI_LIST);
+}
+
+static void pudu_do_reset(pudu_reader *reader) {
+  (void)reader;
+  [pudu_shown_root removeFromSuperview];
+  pudu_shown_root = nil;
+  [pudu_nodes removeAllObjects];
+  [pudu_kinds removeAllObjects];
+  [pudu_paints removeAllObjects];
+}
+
+/* Replaces every role's tone, then repaints the surface, the tint and every
+   shown node; the colors resolve per appearance at draw time. */
+static void pudu_do_theme(pudu_reader *reader) {
+  uint32_t count = pudu_word(reader);
+  if (count != PUDU_ROLES) pudu_stream_defect("set a theme with role count", count);
+  for (uint32_t role = 0; role < PUDU_ROLES; role++) {
+    uint32_t tone = pudu_word(reader);
+    uint32_t light = pudu_word(reader);
+    uint32_t dark = pudu_word(reader);
+    if (tone > PUDU_TONE_FIXED) pudu_stream_defect("used unknown tone kind", tone);
+    pudu_roles[role] = tone == PUDU_TONE_FIXED ? pudu_fixed_tone(light, dark) : pudu_platform_roles[role];
+  }
+  pudu_surface.backgroundColor = pudu_roles[PUDU_ROLE_SURFACE];
+  pudu_surface.window.tintColor = pudu_roles[PUDU_ROLE_ACCENT];
+  for (NSUInteger node = 0; node < pudu_nodes.count; node++) {
+    if (pudu_nodes[node] != [NSNull null]) pudu_paint((uint32_t)node);
+  }
+}
+
+static void pudu_do_appearance(pudu_reader *reader) {
+  uint32_t code = pudu_word(reader);
+  if (code >= PUDU_APPEARANCES) pudu_stream_defect("asked for unknown appearance", code);
+  pudu_surface.window.overrideUserInterfaceStyle = pudu_interface_styles[code];
+}
+
+static void pudu_do_style(pudu_reader *reader) {
+  uint32_t node = pudu_node_id(reader);
+  UIFontTextStyle style = pudu_text_style(pudu_word(reader));
+  if (style == nil) pudu_stream_defect("used unknown text style on node", node);
+  if (pudu_node_kind(node)->style == NULL) pudu_stream_defect("styled a node that shows no text:", node);
+  pudu_node_kind(node)->style(pudu_nodes[node], [UIFont preferredFontForTextStyle:style]);
+}
+
+static void pudu_do_color(pudu_reader *reader) {
+  uint32_t node = pudu_node_id(reader);
+  uint32_t role = pudu_word(reader);
+  if (role >= PUDU_ROLES) pudu_stream_defect("used unknown color role", role);
+  if (pudu_node_kind(node)->paint == NULL) pudu_stream_defect("colored a node that shows no text:", node);
+  pudu_paints[node] = @(role);
+  pudu_paint(node);
+}
+
+/* The list a RANGE or COLUMNS names, refused for any other kind. */
+static UIView *pudu_list_node(pudu_reader *reader) {
+  uint32_t node = pudu_node_id(reader);
+  if (pudu_kinds[node].unsignedIntValue != PUDU_UI_LIST) pudu_stream_defect("shaped a node that is not a list:", node);
+  return pudu_nodes[node];
+}
+
+/* RANGE: total, then first. Arguments are read in stream order. */
+static void pudu_do_range(pudu_reader *reader) {
+  UIView *list = pudu_list_node(reader);
+  uint32_t total = pudu_word(reader);
+  pudu_list_range(list, total, pudu_word(reader));
+}
+static void pudu_do_columns(pudu_reader *reader) {
+  UIView *list = pudu_list_node(reader);
+  uint32_t columns = pudu_word(reader);
+  if (columns == 0) pudu_stream_defect("laid a list in zero columns:", 0);
+  pudu_list_columns(list, columns);
+}
+
+/* MATERIAL: the system material behind a material node. */
+static void pudu_do_material(pudu_reader *reader) {
+  uint32_t node = pudu_node_id(reader);
+  uint32_t code = pudu_word(reader);
+  if (pudu_kinds[node].unsignedIntValue != PUDU_UI_MATERIAL) pudu_stream_defect("set a material on a node that is not one:", node);
+  if (!pudu_material_set(pudu_nodes[node], code)) pudu_stream_defect("used unknown material", code);
+}
+
+/* A text field inside an instruction, read where it stands. */
+static NSArray<NSArray *> *pudu_choices(pudu_reader *reader) {
+  uint32_t count = pudu_word(reader);
+  NSMutableArray<NSArray *> *choices = [NSMutableArray new];
+  for (uint32_t i = 0; i < count; i++) {
+    uint32_t role = pudu_word(reader);
+    [choices addObject:@[ @(role), pudu_text(reader) ]];
+  }
+  return choices;
+}
+
+static UIView *pudu_control_of(uint32_t node) { return pudu_node_kind(node)->control(pudu_nodes[node]); }
+
+static void pudu_do_gestures(pudu_reader *reader) {
+  uint32_t node = pudu_node_id(reader);
+  uint32_t tag = pudu_word(reader);
+  uint32_t mask = pudu_word(reader);
+  if (mask >= 32) pudu_stream_defect("used unknown gestures", mask);
+  pudu_gestures_attach(pudu_control_of(node), tag, mask);
+}
+
+static void pudu_do_alert(pudu_reader *reader) {
+  uint32_t tag = pudu_word(reader);
+  uint32_t style = pudu_word(reader);
+  NSString *title = pudu_text(reader);
+  NSString *message = pudu_text(reader);
+  if (!pudu_alert_show(tag, style, title, message, pudu_choices(reader))) pudu_stream_defect("showed an alert with an unknown style or role, tag", tag);
+}
+
+static void pudu_do_value(pudu_reader *reader) {
+  uint32_t node = pudu_node_id(reader);
+  uint32_t permille = pudu_word(reader);
+  if (pudu_kinds[node].unsignedIntValue != PUDU_UI_PROGRESS) pudu_stream_defect("set a value on a node that is not a progress bar:", node);
+  pudu_progress_value(pudu_nodes[node], permille);
+}
+
+static void pudu_do_haptic(pudu_reader *reader) {
+  uint32_t code = pudu_word(reader);
+  if (!pudu_haptic_play(code)) pudu_stream_defect("played unknown haptic", code);
+}
+
+static void pudu_do_traits(pudu_reader *reader) {
+  uint32_t node = pudu_node_id(reader);
+  uint32_t mask = pudu_word(reader);
+  if (mask >= (1u << PUDU_TRAITS)) pudu_stream_defect("used unknown accessibility traits", mask);
+  pudu_control_of(node).accessibilityTraits = pudu_traits_of(mask);
+}
+
+static void pudu_do_access_hint(pudu_reader *reader) {
+  uint32_t node = pudu_node_id(reader);
+  pudu_control_of(node).accessibilityHint = pudu_text(reader);
+}
+
+static void pudu_do_access_value(pudu_reader *reader) {
+  uint32_t node = pudu_node_id(reader);
+  pudu_control_of(node).accessibilityValue = pudu_text(reader);
+}
+
+static void pudu_do_menu(pudu_reader *reader) {
+  uint32_t node = pudu_node_id(reader);
+  uint32_t tag = pudu_word(reader);
+  NSArray<NSArray *> *choices = pudu_choices(reader);
+  for (NSArray *choice in choices) {
+    if ([choice[0] unsignedIntValue] >= PUDU_ROLES_KNOWN) pudu_stream_defect("gave a menu item an unknown role, node", node);
+  }
+  pudu_menu_attach(pudu_control_of(node), tag, choices);
+}
+
+static void pudu_do_animate(pudu_reader *reader) {
+  UIStackView *group = pudu_group(reader);
+  pudu_motion_mark(group, pudu_word(reader) != 0);
+}
+
+static void (*const pudu_instruction_table[PUDU_UI_INSTRUCTIONS])(pudu_reader *) = {
+  [PUDU_UI_CREATE] = pudu_do_create, [PUDU_UI_TEXT] = pudu_do_text, [PUDU_UI_APPEND] = pudu_do_append,
+  [PUDU_UI_ROOT] = pudu_do_root, [PUDU_UI_TAG] = pudu_do_tag, [PUDU_UI_RESET] = pudu_do_reset,
+  [PUDU_UI_STATE] = pudu_do_state, [PUDU_UI_HINT] = pudu_do_hint, [PUDU_UI_NAME] = pudu_do_name,
+  [PUDU_UI_INSERT] = pudu_place, [PUDU_UI_REMOVE] = pudu_do_remove, [PUDU_UI_MOVE] = pudu_place,
+  [PUDU_UI_THEME] = pudu_do_theme, [PUDU_UI_APPEARANCE] = pudu_do_appearance, [PUDU_UI_STYLE] = pudu_do_style,
+  [PUDU_UI_COLOR] = pudu_do_color, [PUDU_UI_RANGE] = pudu_do_range, [PUDU_UI_COLUMNS] = pudu_do_columns,
+  [PUDU_UI_MATERIAL_SET] = pudu_do_material, [PUDU_UI_GESTURES] = pudu_do_gestures, [PUDU_UI_ALERT] = pudu_do_alert,
+  [PUDU_UI_VALUE] = pudu_do_value, [PUDU_UI_HAPTIC] = pudu_do_haptic, [PUDU_UI_TRAITS] = pudu_do_traits,
+  [PUDU_UI_ACCESS_HINT] = pudu_do_access_hint, [PUDU_UI_ACCESS_VALUE] = pudu_do_access_value,
+  [PUDU_UI_MENU] = pudu_do_menu, [PUDU_UI_ANIMATE] = pudu_do_animate,
+};
+
+/* Applies one commit: every instruction in order, in one call. */
+void pudu_ui_apply(const void *stream, uint64_t length) {
+  pudu_reader reader = { stream, length, 0 };
+  while (reader.at < reader.length) {
+    uint32_t code = pudu_word(&reader);
+    if (code >= PUDU_UI_INSTRUCTIONS || pudu_instruction_table[code] == NULL) pudu_stream_defect("used unknown instruction", code);
+    pudu_instruction_table[code](&reader);
+  }
+  pudu_list_reload();
+  pudu_motion_commit(pudu_surface);
+  if (pudu_first_frame_ms < 0) {
+    [pudu_surface layoutIfNeeded];
+    pudu_first_frame_ms = (CACurrentMediaTime() * 1000.0) - pudu_main_started_ms;
+    printf("PUDU_FIRST_FRAME_MS %.1f\n", pudu_first_frame_ms);
+    fflush(stdout);
+  }
+}
+
+/* Prints what each shown node reports, in the order the screen shows them. */
+static void pudu_report(UIView *view) {
+  NSUInteger node = view == nil ? NSNotFound : [pudu_nodes indexOfObjectIdenticalTo:view];
+  const pudu_kind *kind;
+  if (node == NSNotFound) return;
+  kind = pudu_node_kind((uint32_t)node);
+  if (kind->shown != NULL) printf("PUDU_LABEL %s\n", kind->shown(view).UTF8String);
+  if (kind->children != NULL) {
+    for (UIView *child in kind->children(view).arrangedSubviews) pudu_report(child);
+  }
+}
+
+@interface PuduAppDelegate : UIResponder <UIApplicationDelegate>
+@property (strong, nonatomic) UIWindow *window;
+@end
+@implementation PuduAppDelegate
+- (BOOL)application:(UIApplication *)application didFinishLaunchingWithOptions:(NSDictionary *)options {
+  (void)application;
+  (void)options;
+  UIViewController *controller = [PuduRootController new];
+  controller.view.backgroundColor = UIColor.systemBackgroundColor;
+  pudu_surface = controller.view;
+  pudu_nodes = [NSMutableArray new];
+  pudu_kinds = [NSMutableArray new];
+  pudu_paints = [NSMutableArray new];
+  pudu_theme_reset();
+  pudu_alert_presenter = controller;
+  pudu_observe_lifecycle();
+  pudu_target = [PuduTarget new];
+  self.window = [[UIWindow alloc] initWithFrame:UIScreen.mainScreen.bounds];
+  self.window.rootViewController = controller;
+  [self.window makeKeyAndVisible];
+  pudu_available = pudu_available_area(pudu_surface);
+  /* A run-loop timer, not the main queue: Pudu's wait runs the loop, and the
+     main queue does not drain while one of its blocks is running. */
+  [self performSelector:@selector(run) withObject:nil afterDelay:0];
+  if (getenv("PUDU_UI_SELFTEST") != NULL) [self performSelector:@selector(selfTest) withObject:nil afterDelay:0.5];
+  return YES;
+}
+- (void)run {
+  int status = pudu_program_run(0, NULL);
+  printf("PUDU_PROGRAM_STATUS %d\n", status);
+  if (getenv("PUDU_UI_SELFTEST") != NULL) {
+    pudu_report(pudu_shown_root);
+    if (getenv("PUDU_UI_CAPABILITY_TEST") != NULL) pudu_report_capabilities(pudu_nodes);
+    fflush(stdout);
+    exit(status);
+  }
+}
+/* Types PUDU_UI_TYPE into every field and switches every toggle on when it
+   is set, taps every button as many times as PUDU_UI_SELFTEST says, then asks
+   the program to stop, exactly as a user's input would arrive. */
+- (void)selfTest {
+  if (getenv("PUDU_UI_CAPABILITY_TEST") != NULL) {
+    pudu_test_capabilities(pudu_nodes, ^{ pudu_queue(PUDU_UI_STOPPED, 0, nil, 0); });
+    return;
+  }
+  if (getenv("PUDU_UI_MATERIAL_TEST") != NULL) {
+    pudu_test_material(pudu_nodes, ^{ pudu_queue(PUDU_UI_STOPPED, 0, nil, 0); });
+    return;
+  }
+  if (getenv("PUDU_UI_LIST_TEST") != NULL) {
+    pudu_test_list(pudu_nodes, ^{ pudu_queue(PUDU_UI_STOPPED, 0, nil, 0); });
+    return;
+  }
+  if (getenv("PUDU_UI_THEME_TEST") != NULL) {
+    pudu_test_theme(pudu_surface, pudu_nodes, ^{ pudu_queue(PUDU_UI_STOPPED, 0, nil, 0); });
+    return;
+  }
+  if (getenv("PUDU_UI_KEYBOARD_TEST") != NULL) {
+    pudu_test_keyboard(pudu_surface, pudu_shown_root, pudu_nodes, ^{ pudu_queue(PUDU_UI_STOPPED, 0, nil, 0); });
+    return;
+  }
+  int taps = atoi(getenv("PUDU_UI_SELFTEST"));
+  const char *typed = getenv("PUDU_UI_TYPE");
+  NSArray *nodes = [pudu_nodes copy];
+  NSArray<NSNumber *> *kinds = [pudu_kinds copy];
+  for (NSUInteger node = 0; typed != NULL && node < nodes.count; node++) {
+    const pudu_kind *kind = &pudu_kind_table[kinds[node].unsignedIntValue];
+    if (kind->fill != NULL) kind->fill(nodes[node], @(typed));
+  }
+  for (int i = 0; i < taps; i++) {
+    for (NSUInteger node = 0; node < nodes.count; node++) {
+      const pudu_kind *kind = &pudu_kind_table[kinds[node].unsignedIntValue];
+      if (kind->press != NULL) kind->press(nodes[node]);
+    }
+  }
+  pudu_queue(PUDU_UI_STOPPED, 0, nil, 0);
+}
+@end
+
+int main(int argc, char **argv) {
+  pudu_main_started_ms = (CACurrentMediaTime() * 1000.0);
+  @autoreleasepool {
+    return UIApplicationMain(argc, argv, nil, NSStringFromClass([PuduAppDelegate class]));
+  }
+}

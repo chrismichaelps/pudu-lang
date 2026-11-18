@@ -6,22 +6,26 @@ aliases: [Backend Module Map]
 
 # Backend Module Map
 
-- [[Backend Emit Entry]] · [[Backend Native Target]] · [[Backend Toolchain Library]] · [[Backend Toolchain Process]] · [[Backend Native Target Tests]] · [[iOS Simulator Run]] — embedded mobile builds (#878).
+- [[Native Binary Kernels]] · [[Backend Kernel Programs]] — C11 encoding and decoding for `Std.Binary` (#935).
+
+- [[Backend Emit Entry]] · [[Backend Native Target]] · [[Backend Toolchain Library]] · [[Backend Toolchain Process]] · [[Backend Native Target Tests]] · [[iOS Simulator Run]] · [[iOS Foreign Apps Test]] · [[Swift Entry Points Test]] · [[Swift Counter Fixture]] — embedded mobile builds (#878) and Swift entry points (#881).
 
 - [[Backend Emit Export]] · [[Backend Export Tests]] — exported functions a host calls through C (#899).
+- [[Native App Tests]] — simulator application identifier and property-list checks (#916).
 - [[Backend Export Crossing]] — C shapes, header declarations and conversions for text, records and `Result` exports (#906).
 - [[Native Toolchain Host Sources]] · [[Native Host Desktop]] · [[Native Host Audio]] — packaged native platform translation units (#856).
 
 - [[Native Hash Mixing]] · [[Backend Store Programs]] — `hashOf`, store indexes and the indexed-store corpus (#840).
-- [[Native Host Runtime]] · [[Native Host Concurrent]] · [[Native Host State]] · [[Native Host Process]] · [[Native Host Input]] · [[Native Host Files]] · [[Native Host Handles]] · [[Native Host Scopes]] · [[Native Host Math]] · [[Native Host Lanes]] · [[Native Host Raster]] · [[Native Host Signals]] · [[Native Host Foreign]] · [[Native Host Sockets]] · [[Native Host TLS]] · [[Native Host Compression]] · [[Native Host Child Programs]] · [[Native Host Time]] · [[Native Host Time Reading]] — host families (#846).
+- [[Native Host Runtime]] · [[Native Host Concurrent]] · [[Native Host State]] · [[Native Host Process]] · [[Native Host Input]] · [[Native Host Files]] · [[Native Host Handles]] · [[Native Host Scopes]] · [[Native Host Math]] · [[Native Host Lanes]] · [[Native Host Raster]] · [[Native Host Signals]] · [[Native Host Foreign]] · [[Native Host Sockets]] · [[Native Host TLS]] · [[Native Mobile TLS Trust]] · [[Native Host Compression]] · [[Native Host Child Programs]] · [[Native Host Time]] · [[Native Host Time Reading]] — host families (#846).
 - [[Backend Host Programs]] · [[Backend Service Programs]] · [[Backend Abstraction Programs]] — host, service, task, dynamic and abstraction corpus (#846).
 - [[Backend Word Map Programs]] — sparse-word algebra, persistence and ownership (#810).
 - [[Backend Module Programs]] — imported identities and folded collection/range conformance (#808).
 
 - [[Backend Frame Program]] · [[Backend Frame Runtime]] · [[Native Frame Runtime Tests]] — deterministic assembly, heap ownership and iterative calls.
+- [[Backend Typed Integer Calls]] — typed C entries for suitable direct callees.
 - [[Backend Frame Direct]] — frame functions with bounded depth, run as plain C calls (#904).
 
-- [[Backend Frame Values]] · [[Backend Frame Bodies]] · [[Backend Emit Foreign]] · [[Backend Emit Foreign ABI]] · [[Backend Emit Foreign Handle]] — pure operations and suspending bodies over typed frame cells.
+- [[Backend Frame Values]] · [[Backend Frame Bodies]] · [[Backend Emit Foreign]] · [[Backend Emit Foreign Callback]] · [[Backend Emit Foreign Loan]] · [[Backend Emit Foreign ABI]] · [[Backend Emit Foreign Handle]] · [[Backend Emit Foreign Delegate]] — pure operations and suspending bodies over typed frame cells.
 - [[Native Frame Body Tests]] — strict C11 corpus compilation and call-suspension checks.
 
 - [[Backend Emit]] — deterministic C11 emission from [[Core IR]], including
@@ -34,6 +38,8 @@ aliases: [Backend Module Map]
 - [[Backend Toolchain]] — discovery, invocation, bounded capture, timeout, and
   atomic publication of the native [[Compilation Artifact]]; the only place a
   process is started.
+- [[Backend Ledger]] · [[Backend Ledger Spec]] — pure platform toolchain facts: Xcode floor and tested release, store rules, capabilities and triples (#926).
+- [[Backend Toolchain Probe]] — asks `xcrun` and `simctl` what is installed; pure parsers (#926).
 
 - [[Compiler Lower]] — checked tree to [[Core IR]], with typed `E6001`
   refusals for everything the native subset does not carry.
@@ -136,3 +142,8 @@ aliases: [Backend Module Map]
 - [[Backend Default Parameter Programs]] — defaults in every combination, directly and through values.
 
 - [[Backend Frame Text Views]] — checked byte-method carrier emission.
+- [[Backend Toolchain App]] — simulator application bundle, Info.plist and ad-hoc signing (#916).
+- [[Backend Toolchain Android]] — NDK library builds and application packages, staged and published by rename.
+- [[Native Android Activity]] — the single launcher activity, lifecycle and size reporting, self-test gate.
+
+- [[Backend Frame Slots]] · [[Backend Frame Slot References]] — physical slot reuse for generated C11.

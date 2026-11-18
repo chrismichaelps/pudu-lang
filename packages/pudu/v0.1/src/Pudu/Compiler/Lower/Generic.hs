@@ -33,12 +33,16 @@ admitCallee state = admitCalleeGiven state Nothing
     A call through a constructor parameter leaves the callee's fact naming
     an application it never settled; the arguments say what was applied. -}
 admitCalleeGiven :: LowerState -> Maybe [Type] -> Text -> Span -> (Text, Located Function) -> (LowerState, Maybe (Text, CoreSignature))
-admitCalleeGiven state operands key callee (owner, function) = case scheme of
-  Just found
-    | not (null (schemeParams found)) -> case instantiation >>= specialize taken key owner function found (written found) Map.empty of
-        Just (registered, instanceKey, bindings) -> admit registered instanceKey bindings
-        Nothing -> halt callee "a generic call whose type arguments have no native representation" taken
-  _ -> admit taken key Map.empty
+admitCalleeGiven state operands key callee entry@(owner, function)
+  | key == contextEntry context = case entryCopy state key entry of
+      Just (registered, copyKey) -> admitCalleeGiven registered operands copyKey callee entry
+      Nothing -> halt callee "a call to the entry function without a solved signature" state
+  | otherwise = case scheme of
+      Just found
+        | not (null (schemeParams found)) -> case instantiation >>= specialize taken key owner function found (written found) Map.empty of
+            Just (registered, instanceKey, bindings) -> admit registered instanceKey bindings
+            Nothing -> halt callee "a generic call whose type arguments have no native representation" taken
+      _ -> admit taken key Map.empty
  where
   context = lowerContext state
   instantiation = case (typeFactAt (contextTypes context) callee, operands) of
@@ -65,6 +69,17 @@ admitCalleeGiven state operands key callee (owner, function) = case scheme of
     let (admitted, signature) = ensureSignature target function (withTypeBindings bindings (inModule owner current))
         back = withTypeBindings (typeBindings (contextTypes context)) (inModule (contextModule context) admitted)
      in (back, (,) target <$> signature)
+
+{-| The entry called from the program: an ordinary copy of the entry body,
+    taking its arguments and answering its value, since the entry itself
+    reports through the exit status and standard output. -}
+entryCopy :: LowerState -> Text -> (Text, Located Function) -> Maybe (LowerState, Text)
+entryCopy state key (owner, function) = do
+  scheme <- lookupScheme (contextTypes (lowerContext (inModule owner state))) (locatedValue (functionName (locatedValue function)))
+  let copyKey = key <> "[]"
+      known = Instance owner function scheme Map.empty False Map.empty
+      context = lowerContext state
+  pure (state{lowerContext = context{contextInstances = Map.insert copyKey known (contextInstances context)}}, copyKey)
 
 {-| Bind a scheme's rigid parameters against an instantiation and register the
     copy. `fixed` is what is already known (`Self` for an inherited default).

@@ -49,6 +49,8 @@ callForeign :: Span -> ForeignBinding -> [Value] -> Evaluator Value
   installed and the usual remedy is to install it.
 - **A handle is opaque and nominal.** Only a runtime handle bearing the crossing's declared name may
   pass, and its address is never exposed as an integer.
+- **An optional handle parameter is part of the liveness claims.** A handle inside `Some` is leased
+  for the call exactly as a bare handle is, and `None` claims nothing.
 - **Ownership covers the complete native call.** Null owned results are refused; ordinary handle
   uses acquire atomic leases held until native code returns; release waits for leases and removes
   the claim before calling the destructor. A call-setup failure restores a release claim because the
@@ -174,6 +176,41 @@ no representation here for one that may be absent.
   that nothing here releases the value; how long the library keeps it is the declaration's assertion,
   like the pointer validity and ABI layout beside it.
 
+## Resolved Grill Log for #876 — Interpreter callback values
+
+Dispatch uses the checked slots to supply code and context. It holds callback
+and ordinary handle leases across the native call. A nested callback failure
+is reported from the foreign call site after ownership settles; newly
+returned claims that cannot be exposed are released.
+
+## Resolved Grill Log for #877 — Foreign loan settlement
+
+Apply mutable loan snapshots at their resolved destinations before exposing the result or reporting a callback failure. Keep native argument indices separate from the tuple's compact output-slot order.
+
+## Resolved Grill Log for #877 — Interpreter array crossings
+
+Preflight ABI run layout before opening the symbol when the declaration has runs or bounds. Dispatch with live run buffers and copy mutable snapshots into their resolved Pudu places before finishing the call.
+
+## Resolved Grill Log for #877 — Optional handles
+
+Lease the generation inside Some. Decode null as None, and preserve the declared ownership mode for present results, including in a batch with output slots.
+
+## Resolved Grill Log for #877 — Returned run settlement
+
+Claim the returned pointer with the output batch. Decode the declared length slot and copy the elements, then discharge the pointer claim. Failed conversion discharges it through the same batch cleanup.
+
 ## Referenced by
 
 [[src/Pudu/Eval/_MOC]] · [[ADR-0018 Calling a Library Written Elsewhere]]
+
+### Split callback placement Grill Log resolved
+
+The dispatch plan includes static projections without callback keys.
+
+## Resolved Grill Log for interpreted Objective-C dispatch
+
+Resolve the Objective-C target before transferring handles and pass it down the same loan and output-settlement path.
+
+## Resolved Grill Log for Objective-C ownership
+
+Pin the other arguments before taking the initializer receiver. A post-entry failure leaves the old receiver invalidated.

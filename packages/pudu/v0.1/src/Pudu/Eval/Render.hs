@@ -15,6 +15,7 @@ import qualified Numeric
 import Pudu.DecimalLiteral (renderDecimal)
 import Pudu.IntegerLiteral (integerKindName)
 import Pudu.Eval.Value
+import Pudu.Eval.Foreign.Binding (DelegateBinding (..))
 
 {-| Render a value the way the session prints it. Strings and characters show
     their quotes and escape their control characters, so a printed `"1"` is
@@ -38,6 +39,7 @@ renderValue value = case value of
     | null payload -> name
     | otherwise -> name <> "(" <> Text.intercalate ", " (map renderValue payload) <> ")"
   FunctionValue closure -> "<fn " <> closureName closure <> ">"
+  TraitMethodValue _ member _ -> "<fn " <> member <> ">"
   TaskValue closure _ _ -> "<task " <> closureName closure <> ">"
   BuiltinValue PanicBuiltin -> "<builtin panic>"
   BuiltinValue CharFromCodeBuiltin -> "<builtin charFromCode>"
@@ -67,6 +69,7 @@ renderValue value = case value of
   TextMethodValue _ -> "<method toText>"
   ForeignHandleValue name address _ ->
     "<" <> name <> " at 0x" <> Text.pack (Numeric.showHex address "")
+  ForeignCallbackValue _ -> "<" <> valueKind value <> ">"
   ForeignValue binding ->
     "<foreign " <> foreignBindingLibrary binding <> "." <> foreignBindingSymbol binding <> ">"
   TypeWitnessValue owner _ -> "<type " <> snd (Text.breakOnEnd "." owner) <> ">"
@@ -102,6 +105,11 @@ escape =
 valueKind :: Value -> Text
 valueKind value = case value of
   ForeignValue _ -> "foreign function"
+  ForeignCallbackValue callback -> case callback of
+    CallbackConstructor owner -> "callback registration " <> owner
+    CallbackToken owner _ -> owner
+    CallbackUnregister _ _ -> "callback unregister method"
+    DelegateConstructor delegate -> "delegate constructor " <> delegateHandle delegate
   ForeignHandleValue name _ _ -> name
   TypeWitnessValue owner _ -> "type " <> snd (Text.breakOnEnd "." owner)
   IntValue kind _ -> integerKindName kind
@@ -122,6 +130,7 @@ valueKind value = case value of
   VariantValue name _ -> name
   NamedSumValue _ name _ -> name
   FunctionValue _ -> "function"
+  TraitMethodValue{} -> "function"
   TaskValue _ _ _ -> "task"
   BuiltinValue _ -> "builtin"
   MapValue _ -> "map"

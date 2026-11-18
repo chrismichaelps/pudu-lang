@@ -59,7 +59,7 @@ lowerTuplePattern lower state at pattern annotation subject = case lower state s
   (after, Nothing) -> refused after
   (after, Just (core, kind))
     | expressionIsPrintValued core -> halt at "binding a Result[(), Str] value" after
-    | kind == CoreNeverType -> halt at "a pattern binding whose subject never finishes" after
+    | kind == CoreNeverType -> (after, Just [CoreStatement at (CoreEvaluate core)])
     | Just _ <- annotation
     , typeForSpan (contextTypes (lowerContext after)) (locatedSpan subject) /= Just kind ->
         halt at "a binding without matching solved native type facts" after

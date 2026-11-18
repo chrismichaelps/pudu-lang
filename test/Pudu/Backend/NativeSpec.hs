@@ -33,7 +33,7 @@ import Pudu.Backend.BigIntPrograms (bigIntSuccessPrograms, bigIntRefusalPrograms
 import Pudu.Backend.DecimalPrograms (decimalSuccessPrograms, decimalRefusalPrograms)
 import Pudu.Backend.WordMapPrograms (wordMapSuccessPrograms, wordMapRefusalPrograms)
 import Pudu.Backend.StorePrograms (storeSuccessPrograms, storeModulePrograms, storeRefusalPrograms)
-import Pudu.Backend.ForeignPrograms (foreignSuccessPrograms, foreignRefusalPrograms)
+import Pudu.Backend.ForeignPrograms (callbackCaller, optionalHandleLibrary, optionalHandlePrograms, foreignCallbackPrograms, foreignCrossingLibrary, foreignCrossingPrograms, objectiveCPrograms, objectiveCRefusalPrograms, foreignSuccessPrograms, foreignRefusalPrograms)
 import Pudu.Backend.KernelPrograms (kernelSuccessPrograms, kernelLibraryPrograms, kernelRefusalPrograms)
 import Pudu.Backend.AbstractionPrograms (abstractionSuccessPrograms, abstractionRefusalPrograms)
 import Pudu.Backend.HostPrograms (hostLibraryPrograms, hostSuccessPrograms, hostRefusalPrograms)
@@ -102,6 +102,7 @@ import System.Directory
 import System.Environment (lookupEnv, setEnv, unsetEnv)
 import System.Exit (ExitCode (..))
 import System.FilePath ((</>))
+import System.Info (os)
 import System.IO (Handle, IOMode (ReadMode), hClose, hFlush, hGetEncoding, hSetBinaryMode, hSetEncoding, openTempFile, stderr, stdin, stdout, utf8, withFile)
 import System.IO.Temp (withSystemTempDirectory)
 import System.Process (readProcessWithExitCode)
@@ -140,6 +141,19 @@ backendNativeProperties =
   , ("native pure kernels retain interpreter refusals", conjoin <$> mapM (uncurry conformance) kernelRefusalPrograms)
   , ("native foreign calls match the interpreter's bridge", conjoin <$> mapM (uncurry conformance) foreignSuccessPrograms)
   , ("native foreign calls stop as the interpreter's bridge does", conjoin <$> mapM (uncurry conformance) foreignRefusalPrograms)
+  , ("native foreign callbacks match the interpreter's trampolines", conjoin <$> mapM
+      (uncurry (conformanceLinking callbackCaller)) foreignCallbackPrograms)
+  , ("native foreign crossings match explicit results and the interpreter", conjoin <$> mapM
+      (\(label, source, expected) ->
+        conformanceLinkingWith foreignCrossingLibrary Nothing [] (Just (expected, "", 0)) label source) foreignCrossingPrograms)
+  , ("native Objective-C Foundation matches the interpreter", appleConformance $
+      conjoin <$> mapM (\(label, source, expected) ->
+        conformanceExpecting (Just (expected, "", 0)) label source) objectiveCPrograms)
+  , ("native Objective-C ownership refusals match the interpreter", appleConformance $
+      conjoin <$> mapM (uncurry conformance) objectiveCRefusalPrograms)
+  , ("native optional handles cross as the interpreter's do", conjoin <$> mapM
+      (uncurry (conformanceLinking optionalHandleLibrary)) optionalHandlePrograms)
+  , ("native database programs answer as the interpreter does", conjoin <$> mapM fixtureConformance databaseFixtures)
   , ("native host services, tasks and scopes match the interpreter's own answers", conjoin <$> mapM
       (\(label, source, expected) -> conformanceExpecting (Just (expected, "", 0)) label source) hostSuccessPrograms)
   , ("native endpoints, secured connections, compression, child programs and time match the interpreter's own answers", conjoin <$> mapM
@@ -269,6 +283,47 @@ statusPrograms =
       ])
   , ("an entry parameter without a default stops the run at the entry", "module Main\nfn main(value: Int) -> Int {\n  print(\"never\")\n  value\n}\n")
   , ("a unit entry with two parameters names the first", "module Main\ntype Point = { x: Int }\nfn main(point: Point, other: Str) {\n  print(other)\n}\n")
+  , ("entry defaults run in order with earlier parameters visible", Text.unlines
+      [ "module Main"
+      , "fn main(seed: Int = { print(\"seed\")"
+      , "  4 }, answer: Int = seed + 3) -> Int {"
+      , "  print(show(answer))"
+      , "  answer"
+      , "}"
+      ])
+  , ("a required entry parameter follows an evaluated default", Text.unlines
+      [ "module Main"
+      , "fn main(seed: Int = { print(\"first\")"
+      , "  4 }, answer: Int) -> Int { answer }"
+      ])
+  , ("a failing entry default stops before the next default and body", Text.unlines
+      [ "module Main"
+      , "fn main(seed: Int = panic(\"default\"), answer: Int = { print(\"never\")"
+      , "  3 }) -> Int { answer }"
+      ])
+  , ("async entry defaults are available to the awaited task", Text.unlines
+      [ "module Main"
+      , "async fn main(seed: Int = 4, answer: Int = seed + 3) -> Result[Int, Str] {"
+      , "  print(show(answer))"
+      , "  Ok(answer)"
+      , "}"
+      ])
+  , ("a call to main uses its value inside the program", Text.unlines
+      [ "module Main"
+      , "fn main(depth: Int = 2) -> Int {"
+      , "  if depth == 0 { return 5 }"
+      , "  if depth == 1 {"
+      , "    let next = main"
+      , "    return next(depth - 1) + 1"
+      , "  }"
+      , "  main(depth - 1) + 1"
+      , "}"
+      ])
+  , ("a tuple with one member carries its member", programWith
+      [ "  let item = (37,)"
+      , "  print(show(item))"
+      , "  return 0"
+      ])
   , ("zero exits zero", programWith ["  return 0"])
   , ("a small nonzero result exits as itself", programWith ["  return 3"])
   , ("a result above 255 clamps", programWith ["  return 300"])
@@ -494,7 +549,67 @@ conformanceWith :: [(FilePath, Text)] -> Maybe (Text, Text, Int) -> String -> Te
 conformanceWith = conformanceWithInput Nothing
 
 conformanceWithInput :: Maybe ByteString.ByteString -> [(FilePath, Text)] -> Maybe (Text, Text, Int) -> String -> Text -> IO Property
-conformanceWithInput input modules expected label programText = withSystemTempDirectory "pudu-native" $ \root -> do
+conformanceWithInput = conformanceLinkingWith Text.empty
+
+{-| A program whose foreign block names its own symbols: the native build
+    carries the C in `linked`, which the test executable already defines for
+    the interpreter. -}
+appleConformance :: IO Property -> IO Property
+appleConformance action
+  | os == "darwin" = action
+  | otherwise = do
+      putStrLn "[skip] Foundation conformance requires macOS"
+      pure (property True)
+
+conformanceLinking :: Text -> String -> Text -> IO Property
+conformanceLinking linked = conformanceLinkingWith linked Nothing [] Nothing
+
+{-| A fixture program as it is, with the modules and standard-library
+    overrides its own directory carries: the interpreter's answer and the
+    native executable's must agree, output, errors and status alike. -}
+fixtureConformance :: FilePath -> IO Property
+fixtureConformance path = withSystemTempDirectory "pudu-native-fixture" $ \root -> do
+  available <- compilerAvailable
+  if not available
+    then pure (property True)
+    else do
+      program <- compileProgram path
+      interpreted <- interpret root program
+      case interpreted of
+        Left problem -> pure (counterexample (path <> ": interpreter: " <> problem) False)
+        Right (interpOut, interpErr, interpStatus) -> do
+          native <- buildAndRunLinking Text.empty Nothing root program
+          pure $ case native of
+            Left problem -> counterexample (path <> ": native: " <> problem) False
+            Right (nativeOut, nativeErr, nativeStatus, warnings) -> conjoin
+              [ counterexample (path <> ": stdout differs; interpreter=" <> show interpOut <> " native=" <> show nativeOut)
+                  (nativeOut === interpOut)
+              , counterexample (path <> ": stderr differs; interpreter=" <> show interpErr <> " native=" <> show nativeErr)
+                  (nativeErr === interpErr)
+              , counterexample (path <> ": status differs") (nativeStatus === interpStatus)
+              , counterexample (path <> ": the generated C drew compiler warnings: " <> Text.unpack warnings)
+                  (warnings === Text.empty)
+              ]
+
+{-| The database programs: the PostgreSQL protocol, authentication,
+    transactions, savepoints, pooling, prepared statements, streaming, the store,
+    migrations, query shapes and SQLite, each against its own fake server or
+    a real database. -}
+databaseFixtures :: [FilePath]
+databaseFixtures =
+  [ "test-fixtures/stdlib/UsesDb.pudu", "test-fixtures/stdlib/UsesDbDriverAll.pudu"
+  , "test-fixtures/stdlib/UsesDbProtocolAll.pudu", "test-fixtures/stdlib/UsesDbTransactionScope.pudu"
+  , "test-fixtures/dbauth/Main.pudu", "test-fixtures/dbsavepoint/Main.pudu", "test-fixtures/dbbuffer/Main.pudu"
+  , "test-fixtures/dbwait/Main.pudu", "test-fixtures/dbprepare/Main.pudu", "test-fixtures/dbstream/Main.pudu"
+  , "test-fixtures/dbpool/Main.pudu"
+  , "test-fixtures/stdlib/UsesStore.pudu", "test-fixtures/stdlib/UsesStoreDriver.pudu"
+  , "test-fixtures/stdlib/UsesMigrate.pudu", "test-fixtures/stdlib/UsesMigrateApply.pudu"
+  , "test-fixtures/stdlib/UsesDbQueryShapeAll.pudu", "test-fixtures/stdlib/UsesDbRow.pudu"
+  , "test-fixtures/stdlib/UsesDbEngines.pudu", "test-fixtures/stdlib/UsesSqliteFull.pudu"
+  ]
+
+conformanceLinkingWith :: Text -> Maybe ByteString.ByteString -> [(FilePath, Text)] -> Maybe (Text, Text, Int) -> String -> Text -> IO Property
+conformanceLinkingWith linked input modules expected label programText = withSystemTempDirectory "pudu-native" $ \root -> do
   let path = root </> "Main.pudu"
   mapM_ (\(file, text) -> TextIO.writeFile (root </> file) text) modules
   TextIO.writeFile path programText
@@ -513,7 +628,7 @@ conformanceWithInput input modules expected label programText = withSystemTempDi
       case interpreted of
         Left problem -> pure (counterexample (label <> ": interpreter: " <> problem) False)
         Right (interpOut, interpErr, interpStatus) -> do
-          native <- buildAndRun inputPath root program
+          native <- buildAndRunLinking linked inputPath root program
           case native of
             Left problem -> pure (counterexample (label <> ": native: " <> problem) False)
             Right (nativeOut, nativeErr, nativeStatus, warnings) -> pure $ conjoin $
@@ -626,8 +741,8 @@ captureHandle stream directory action = do
       removeFile path
       pure (value, captured)
 
-buildAndRun :: Maybe FilePath -> FilePath -> ProgramResult -> IO (Either String (Text, Text, Int, Text))
-buildAndRun input root program = case programNativeModules program of
+buildAndRunLinking :: Text -> Maybe FilePath -> FilePath -> ProgramResult -> IO (Either String (Text, Text, Int, Text))
+buildAndRunLinking linked input root program = case programNativeModules program of
   Nothing -> pure (Left "the program did not compile")
   Just modules -> case lowerProgram "main" modules of
     LowerRefused refusals ->
@@ -638,7 +753,7 @@ buildAndRun input root program = case programNativeModules program of
         let executable = root </> "Main.bin"
             request =
               ToolchainRequest
-                { toolchainSource = emitted
+                { toolchainSource = emitted <> linked
                 , toolchainOutput = executable
                 }
         compiled <- compileNative request

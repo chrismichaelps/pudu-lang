@@ -41,6 +41,21 @@ byte scanning, source-name identity, decoder exception or whole-tree generic Eq.
   unsupported generated product must never become a latent body-decoding fault.
   _Rejected:_ scanning encoded bytes for a marker or forcing all warm reads.
 
+## Resolved Grill Log for #876
+
+- **Q:** What enters the authored-snapshot check for a callback? **A:** The
+  callback, its parameters, result and fallback all participate in the
+  existing structural span walk. The context position is located even when
+  it has no name or type.
+
 ## Referenced by
 
 [[Compiler Cache]] · [[Syntax Tree]] · [[src/Pudu/Frontend/Syntax/_MOC]]
+
+## Resolved Grill Log for foreign syntax cache
+
+Visit every located foreign group, class and extent field before writing a deferred product.
+
+## Resolved Grill Log for Objective-C delegates
+
+Provenance has instances for delegate syntax, so diagnostics on a delegate declaration point at its located members.

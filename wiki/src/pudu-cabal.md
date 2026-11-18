@@ -8,6 +8,13 @@ aliases: [Pudu Cabal Manifest]
 
 # Pudu Cabal Manifest
 
+Register [[Backend Frame Slots]] and [[Backend Frame Slot References]].
+Resolved Grill Log: allocation and rewriting use the same exhaustive traversal.
+
+Register [[Native Binary Kernels]] with the existing runtime families.
+Resolved Grill Log: the generated codec uses the existing C11 runtime and
+requires no additional package or link dependency.
+
 Register Pudu.Core.Keyed and Pudu.Compiler.Lower.WordMap (#810), with existing
 dependencies. Resolved Grill Log: domain tags remain backend-independent and
 lowering stays compiler-owned; no new runtime linkage or package dependency.
@@ -42,6 +49,9 @@ Machine]]; [[Ark Animation Gate]] checks the archive.
 
 Distribute `lib/Ark/Physics/*.pudu` with the root physics facade. Resolved Grill Log: the
 source archive must retain contact, step and query modules; checkout-only success is insufficient.
+
+`lib/Std/Mobile/*.pudu` ships the native mobile view, stream and host modules (#914); an installed
+compiler without it could not resolve `Std.Mobile`.
 
 Distribute `lib/Ark/*.pudu` and `lib/Ark/Math/*.pudu` beside Std in the existing library data
 root. [[Ark Math]] and [[Ark Matrix]] are language-distribution data, with no separate package
@@ -137,6 +147,10 @@ links, which made a clean `cabal install exe:pudu` fail even though in-tree buil
   and the command dispatcher retains another responsibility. _Accepted:_ one focused library module
   consumed by the thin CLI and its tests.
 
+## iOS host and application modules (#916)
+
+`cbits/pudu_ios_host.m` joins the extra source files. It is embedded by [[Native Toolchain Host Sources]] and is not a C source of the compiler. [[Backend Toolchain App]] joins the exposed modules. Resolved Grill Log: the host is a data input to application builds, so it needs no compiler linkage.
+
 ## Method lowering (#551)
 
 Resolved Grill Log: register [[Compiler Lower Method]] with existing
@@ -190,6 +204,16 @@ Pudu.Compiler.Lower.Range.
 
 Register Pudu.Backend.Emit.Bytes, Pudu.Backend.Runtime.Bytes and
 Pudu.Compiler.Lower.Bytes.
+
+## Resolved Grill Log for #877 — Native loan wrapper
+
+Register [[Backend Emit Foreign Loan]] in the library module inventory so
+compiler and CLI builds use the same C wrapper renderer. [[Foreign Extent]]
+provides the common checked extent representation.
+
+## Resolved Grill Log for #877 — Run marshalling
+
+Register [[Foreign Run Storage]] with the interpreter library so the installed compiler uses the same C layout bridge as the test executable.
 
 ## Referenced by
 
@@ -711,3 +735,60 @@ invocation use existing toolchain dependencies.
 ## Export emission (#899)
 
 Register [[Backend Emit Export]] with existing dependencies.
+
+## iOS layout header (#919)
+
+Resolved Grill Log: include `cbits/pudu_ios_layout.h` in the source distribution because the host embedding reads it at compiler build time. See [[iOS Host Layout]].
+
+`cbits/pudu_ios_theme.h` is added to `extra-source-files` beside `cbits/pudu_ios_layout.h`, for the same reason: the host embedding reads it at compiler build time. See [[iOS Host Theme]].
+
+`cbits/pudu_ios_events.h`, `cbits/pudu_ios_controls.h` and `cbits/pudu_ios_list.h` are added to `extra-source-files` beside the layout and theme headers, for the same reason: the host embedding reads them at compiler build time. See [[iOS Host Events]], [[iOS Host Controls]] and [[iOS Host List]].
+
+`cbits/pudu_ios_material.h` is added to `extra-source-files` in the same list, for the same reason. See [[iOS Host Material]].
+
+## iOS capability headers (#930)
+
+The six capability headers `cbits/pudu_ios_gesture.h`, `cbits/pudu_ios_feedback.h`, `cbits/pudu_ios_access.h`, `cbits/pudu_ios_scene.h`, `cbits/pudu_ios_motion.h` and `cbits/pudu_ios_capability_test.h` join the iOS host sources. They are data inputs embedded by [[Native Toolchain Host Sources]] and staged beside the host translation unit, so they need no Cabal component of their own. The four `lib/Std/Mobile/*.pudu` modules [[Std Mobile Gesture]], [[Std Mobile Scene]], [[Std Mobile Access]] and [[Std Mobile Feedback]] ship with the other mobile modules.
+
+The reader header cbits/pudu_ios_stream.h ([[iOS Host Stream]]) joins the staged iOS host headers with the six capability headers.
+
+## Mobile TLS verification (#935)
+
+Register [[Native Mobile TLS Trust]] with existing dependencies.
+
+## Checked foreign callbacks (#876)
+
+Register [[Foreign Callback Signature]] alongside [[Foreign Crossing]].
+Resolved Grill Log: declaration validation uses the existing source, text,
+containers, and literal decoders.
+
+## Foreign callback store (#876)
+
+Register [[Foreign Callback Store]]. Resolved Grill Log: reuse the existing
+STM and containers packages for per-run ownership.
+
+## Interpreter callback values (#876)
+
+Register [[Eval Foreign Callback]] against the existing evaluator and callback
+store. Resolved Grill Log: no added package dependency.
+
+## libffi callback adapter (#876)
+
+Compile [[Pudu FFI Callback Bridge]], ship [[Pudu Private FFI ABI]], and
+register [[Foreign Callback Native Adapter]].
+Resolved Grill Log: use the same installed libffi library as outbound calls.
+
+## C11 callbacks (#876)
+
+Register [[Native Host Callbacks]]. Resolved Grill Log: reuse the native
+runtime's pthread gate, frame ABI and diagnostic boundary.
+
+## Resolved Grill Log for the portable loader
+
+Package the portable loader header so source distributions can compile the bridge and embed the native loader.
+
+## Physical slot allocation (#821)
+
+Register [[Backend Frame Slots]] and [[Backend Frame Slot References]] with
+existing dependencies. Resolved Grill Log: keep traversal and allocation
+separate while sharing one exhaustive reference projection.

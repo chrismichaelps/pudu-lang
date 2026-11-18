@@ -31,6 +31,10 @@ stride below one or a width wider than the stride, and otherwise Some of
 `BytesStridedOf` ([[Core Byte Operations]]). The receiver, then the operands, run
 once into locals before the shape test, as every receiver call runs (#828).
 
+## Option result layouts
+
+Use the fixed Option payload of at, strided, or toText when the source span does not carry that layout. The payloads are UInt8, Bytes, and Str respectively.
+
 ## Referenced by
 
 [[Compiler Lower Body]] · [[src/Pudu/Compiler/_MOC]]

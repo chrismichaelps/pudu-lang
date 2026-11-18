@@ -1,13 +1,17 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { spawnSync } from "node:child_process";
-import { mkdtempSync, mkdirSync, rmSync, statSync, writeFileSync } from "node:fs";
+import { mkdtempSync, mkdirSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import { objectiveCSmoke, swiftSmoke } from "./ios-foreign-apps.mjs";
 
 // A cold hosted simulator can take minutes to install or launch its first app.
 const simulatorTimeout = 300_000;
+// A first boot of a device created here; a second family boots beside the phone and takes several minutes.
+const bootTimeout = 600_000;
+const appBuildTimeout = 300_000;
 const launchAttempts = 2;
 
 const repository = resolve(dirname(fileURLToPath(import.meta.url)), "..");
@@ -143,25 +147,72 @@ int main(int argc, char **argv) {
     run("codesign", ["--force", "--sign", "-", app]);
     if (!device) {
       device = run(xcrun, ["simctl", "create", "Pudu Foreign Smoke", phone.identifier, runtime.identifier]).trim();
-      run(xcrun, ["simctl", "bootstatus", device, "-b"], 240_000);
+      run(xcrun, ["simctl", "bootstatus", device, "-b"], bootTimeout);
     }
     run(xcrun, ["simctl", "install", device, app], simulatorTimeout);
     installed = true;
     const lines = launch(device, identifier, "PUDU_SMOKE", "PUDU_SMOKE_STATUS");
     assert.deepEqual(lines, [...expected.split("\n"), "PUDU_SMOKE_STATUS 0"]);
     console.log(`${expected}\nPASS iOS simulator smoke (${device})`);
-    mobileApp(device, simulatorClang, "Counter", [
-      { environment: { SIMCTL_CHILD_PUDU_UI_SELFTEST: "3" }, label: "Count: 3" }]);
-    mobileApp(device, simulatorClang, "Form", [
-      { environment: { SIMCTL_CHILD_PUDU_UI_SELFTEST: "0", SIMCTL_CHILD_PUDU_UI_TYPE: "Ada" }, label: "Hello, Ada (subscribed)" },
-      { environment: { SIMCTL_CHILD_PUDU_UI_SELFTEST: "1", SIMCTL_CHILD_PUDU_UI_TYPE: "Ada" }, label: "Hello, stranger" }]);
+    const apps = { run, launch, uninstall: uninstallFromReusedDevice, xcrun, compiler, identifier, simulatorTimeout };
+    objectiveCSmoke(apps, device, root, simulatorClang);
+    swiftSmoke(apps, device, root, simulatorClang);
+    refuseOccupiedOutput(root);
+    familyApps(device, "Counter");
+    mobileApp(device, "Form", [
+      { environment: { SIMCTL_CHILD_PUDU_UI_SELFTEST: "0", SIMCTL_CHILD_PUDU_UI_TYPE: "Ada" }, labels: ["Hello, Ada (subscribed)"] },
+      { environment: { SIMCTL_CHILD_PUDU_UI_SELFTEST: "1", SIMCTL_CHILD_PUDU_UI_TYPE: "Ada" }, labels: ["Hello, stranger"] }]);
+    mobileApp(device, "List", [
+      { environment: { SIMCTL_CHILD_PUDU_UI_SELFTEST: "3", SIMCTL_CHILD_PUDU_UI_TYPE: "Milk" }, labels: ["3 items", "Milk 3", "Milk 1", "Milk 2"] }]);
+    familyApps(device, "Feed");
+    mobileApp(device, "Themed", [{
+      environment: { SIMCTL_CHILD_PUDU_UI_SELFTEST: "0", SIMCTL_CHILD_PUDU_UI_THEME_TEST: "1" },
+      labels: ["Themed"],
+      layout: ["PUDU_THEME ink light #1F2A44FF dark #E8EEFFFF", "PUDU_THEME appearance dark", "PUDU_THEME type grows"],
+    }]);
+    familyApps(device, "Catalog");
+    refusedApp(device, root, "invalid group placement",
+      "import Std.Mobile.Host as Host\nimport Std.Mobile.Stream as Stream", `  let empty: Array[UInt8] = []
+  Host.apply(bytesOf(empty))
+  let parent = Stream.create([], 0u32, Stream.LABEL)
+  let child = Stream.create(parent, 1u32, Stream.LABEL)
+  Host.apply(bytesOf(Stream.append(child, 0u32, 1u32)))`,
+      /pudu: a view stream placed a child in a node that holds nothing: 0/u);
+    refusedApp(device, root, "text style on a group",
+      "import Std.Mobile.Host as Host\nimport Std.Mobile.Theme as Theme\nimport Std.Mobile.View as View", `  let (_, built) = View.mount(&View.Styled(Theme.Body, View.Column([])))
+  Host.apply(built)`,
+      /pudu: a view stream styled a node that shows no text: 0/u);
+    refusedApp(device, root, "list range on a label",
+      "import Std.Mobile.Host as Host\nimport Std.Mobile.Stream as Stream", `  let label = Stream.create([], 0u32, Stream.LABEL)
+  Host.apply(bytesOf(Stream.range(label, 0u32, 10u32, 0u32)))`,
+      /pudu: a view stream shaped a node that is not a list: 0/u);
+    familyMatrix(runtime);
+    mobileApp(device, "Glass", [glassRun("glass")]);
+    mobileApp(device, "Showcase", [{
+      environment: { SIMCTL_CHILD_PUDU_UI_SELFTEST: "0", SIMCTL_CHILD_PUDU_UI_CAPABILITY_TEST: "1" },
+      labels: [
+        "Gestures: press began, pan changed 12 -7, pinch changed 1500, rotation changed 785, swipe right",
+        "Size: compact regular",
+        "Phases: active inactive active",
+        "Picked: Delete",
+        "Chose: Start",
+        "Row 1",
+        "Row 2",
+      ],
+      layout: [
+        "PUDU_ALERT Welcome",
+        "PUDU_HAPTIC 5",
+        "PUDU_ACCESS header=yes hint=Shows recognized gestures value=swipe right",
+        "PUDU_MOTION animated",
+      ],
+    }]);
+    fallbackGlass(runtimes);
   } finally {
     try {
       if (device && !existingDevice) {
-        spawnSync(xcrun, ["simctl", "shutdown", device], { timeout: 30_000 });
-        run(xcrun, ["simctl", "delete", device], 30_000);
+        deletePrivateDevice(device);
       } else if (installed) {
-        run(xcrun, ["simctl", "uninstall", device, identifier], 30_000);
+        uninstallFromReusedDevice(device, identifier);
       }
     } finally {
       rmSync(root, { recursive: true, force: true });
@@ -169,56 +220,169 @@ int main(int argc, char **argv) {
   }
 }
 
+/* The runs every device family must pass: layout, keyboard avoidance and a
+   recycling grid are where screen size and idiom differ. */
+const familyRuns = {
+  Counter: [{ environment: { SIMCTL_CHILD_PUDU_UI_SELFTEST: "3" }, labels: ["Count: 3"] }],
+  Feed: [{
+    environment: { SIMCTL_CHILD_PUDU_UI_SELFTEST: "0", SIMCTL_CHILD_PUDU_UI_KEYBOARD_TEST: "1" },
+    labels: Array.from({ length: 40 }, (_, index) => `Row ${index + 1}`),
+    layout: ["PUDU_VIEWPORT safe and scrollable", "PUDU_KEYBOARD visible field", "PUDU_KEYBOARD restored"],
+  }],
+  Catalog: [{
+    environment: { SIMCTL_CHILD_PUDU_UI_SELFTEST: "0", SIMCTL_CHILD_PUDU_UI_LIST_TEST: "1" },
+    // Scrolled to the end, the window is clamped to the last 120 items.
+    labels: Array.from({ length: 120 }, (_, index) => `Item ${881 + index}`),
+    layout: ["PUDU_LIST reached Item 1000", "PUDU_LIST reused"],
+  }],
+};
+
+function familyApps(device, example) {
+  mobileApp(device, example, familyRuns[example]);
+}
+
+/* One device of every family the runtime supports besides the iPhone, which
+   ran everything above. A family introduced by a new runtime is exercised as
+   soon as that runtime is installed. Each device is private and deleted. */
+function familyMatrix(runtime) {
+  const families = new Map();
+  for (const type of runtime.supportedDeviceTypes) {
+    if (type.productFamily !== "iPhone" && !families.has(type.productFamily)) families.set(type.productFamily, type);
+  }
+  for (const [family, type] of families) {
+    const device = run(xcrun, ["simctl", "create", `Pudu ${family} Matrix`, type.identifier, runtime.identifier]).trim();
+    try {
+      run(xcrun, ["simctl", "bootstatus", device, "-b"], bootTimeout);
+      for (const example of Object.keys(familyRuns)) familyApps(device, example);
+      console.log(`PASS iOS ${family} matrix (${type.name}, ${runtime.name})`);
+    } finally {
+      deletePrivateDevice(device);
+    }
+  }
+}
+
+function glassRun(realization) {
+  return {
+    environment: { SIMCTL_CHILD_PUDU_UI_SELFTEST: "0", SIMCTL_CHILD_PUDU_UI_MATERIAL_TEST: "1" },
+    labels: ["Glass"],
+    layout: [`PUDU_MATERIAL ${realization}`],
+  };
+}
+
+/* The same app on the oldest installed runtime before iOS 26 must take the
+   blur fallback: the glass branch is compiled in, and the run-time gate
+   declines it. */
+function fallbackGlass(runtimes) {
+  const older = runtimes.find((item) =>
+    item.isAvailable && item.identifier.startsWith("com.apple.CoreSimulator.SimRuntime.iOS-") && Number(item.version.split(".")[0]) < 26);
+  if (!older) {
+    console.log("SKIP iOS material fallback: no runtime older than iOS 26 is installed");
+    return;
+  }
+  const phone = older.supportedDeviceTypes.find((item) => item.productFamily === "iPhone");
+  assert.ok(phone, `No iPhone device type for ${older.identifier}`);
+  const device = run(xcrun, ["simctl", "create", "Pudu Material Fallback", phone.identifier, older.identifier]).trim();
+  try {
+    run(xcrun, ["simctl", "bootstatus", device, "-b"], bootTimeout);
+    mobileApp(device, "Glass", [glassRun("blur")]);
+    console.log(`PASS iOS material fallback (${older.name})`);
+  } finally {
+    deletePrivateDevice(device);
+  }
+}
+
+function deletePrivateDevice(device) {
+  spawnSync(xcrun, ["simctl", "shutdown", device], { timeout: simulatorTimeout });
+  run(xcrun, ["simctl", "delete", device], simulatorTimeout);
+}
+
+function uninstallFromReusedDevice(device, bundle) {
+  if (device === process.env.PUDU_IOS_SIMULATOR_UDID) {
+    run(xcrun, ["simctl", "uninstall", device, bundle], simulatorTimeout);
+  }
+}
+
+function refuseOccupiedOutput(scratch) {
+  const source = join(scratch, "Collision.pudu");
+  const occupied = join(scratch, "Occupied.app");
+  const marker = join(occupied, "keep.txt");
+  writeFileSync(source, "module Collision\n\nfn main() -> Int { 0 }\n");
+  mkdirSync(occupied);
+  writeFileSync(marker, "existing data");
+  const build = ["build", source, "--native", "--target", "ios-simulator-arm64", "--app", "-o", occupied];
+  assert.throws(() => run(resolve(compiler), build, appBuildTimeout), /E6006.*application output already exists/s);
+  assert.equal(readFileSync(marker, "utf8"), "existing data");
+  console.log("PASS iOS occupied application output refused");
+}
+
 /* An example from examples/mobile, built only from Pudu with the iOS host
    adapter and run once per entry of `runs`: the host feeds it input from the
    entry's environment, asks it to stop, and reports its labels, its status
    and the time from main to the first frame. */
-function mobileApp(device, simulatorClang, example, runs) {
+function mobileApp(device, example, runs) {
   const root = mkdtempSync(join(tmpdir(), `pudu-ios-${example.toLowerCase()}-`));
   const app = join(root, `${example}.app`);
-  const library = join(root, `lib${example}.a`);
-  const bundle = `org.pudu.Mobile${example}.${randomUUID()}`;
+  const bundle = `org.pudu.${example}`;
   let installed = false;
   try {
-    run(resolve(compiler), ["build", join(repository, "examples", "mobile", `${example}.pudu`),
-      "--native", "--target", "ios-simulator-arm64", "-o", library]);
-    mkdirSync(app);
-    writeFileSync(join(app, "Info.plist"), `<?xml version="1.0" encoding="UTF-8"?>
-<plist version="1.0"><dict>
-<key>CFBundleIdentifier</key><string>${bundle}</string>
-<key>CFBundleExecutable</key><string>${example}</string>
-<key>CFBundleName</key><string>${example}</string>
-<key>CFBundlePackageType</key><string>APPL</string>
-<key>CFBundleVersion</key><string>1</string>
-<key>CFBundleShortVersionString</key><string>1.0</string>
-<key>MinimumOSVersion</key><string>15.0</string>
-<key>CFBundleSupportedPlatforms</key><array><string>iPhoneSimulator</string></array>
-<key>UIDeviceFamily</key><array><integer>1</integer></array>
-<key>UILaunchScreen</key><dict/>
-</dict></plist>
-`);
+    const build = ["build", join(repository, "examples", "mobile", `${example}.pudu`),
+      "--native", "--target", "ios-simulator-arm64", "--app", "-o"];
+    run(resolve(compiler), [...build, app], appBuildTimeout);
     const executable = join(app, example);
-    run(xcrun, [...simulatorClang, "-fobjc-arc", "-O2", "-I", root,
-      join(repository, "packages", "pudu", "v0.1", "host", "ios", "PuduHost.m"), library,
-      "-framework", "UIKit", "-framework", "Foundation", "-o", executable]);
-    run("codesign", ["--force", "--sign", "-", app]);
     run(xcrun, ["simctl", "install", device, app], simulatorTimeout);
     installed = true;
-    for (const { environment, label } of runs) {
+    for (const { environment, labels, layout } of runs) {
       const lines = launch(device, bundle, "PUDU_", "PUDU_PROGRAM_STATUS", environment);
-      assert.ok(lines.includes(`PUDU_LABEL ${label}`), `${example} did not show ${label}:\n${lines.join("\n")}`);
+      // The host reports labels in the order the screen shows them.
+      assert.deepEqual(lines.filter((line) => line.startsWith("PUDU_LABEL ")), labels.map((label) => `PUDU_LABEL ${label}`),
+        `${example} did not show ${labels.join(", ")}:\n${lines.join("\n")}`);
       assert.ok(lines.includes("PUDU_PROGRAM_STATUS 0"), `${example} did not finish:\n${lines.join("\n")}`);
+      if (layout) {
+        assert.deepEqual(lines.filter((line) => /^PUDU_(VIEWPORT|KEYBOARD|THEME|LIST|MATERIAL|ALERT|HAPTIC|ACCESS|MOTION) /.test(line)), layout,
+          `${example} did not report the expected layout and theme:\n${lines.join("\n")}`);
+      }
       const firstFrame = lines.find((line) => line.startsWith("PUDU_FIRST_FRAME_MS "));
       assert.ok(firstFrame, `${example} reported no first frame:\n${lines.join("\n")}`);
-      console.log(`PASS iOS ${example}: ${label}, first frame ${firstFrame.split(" ")[1]} ms from main, `
-        + `executable ${statSync(executable).size} bytes, program archive ${statSync(library).size} bytes`);
+      console.log(`PASS iOS ${example}: ${labels.join(", ")}, first frame ${firstFrame.split(" ")[1]} ms from main, `
+        + `executable ${statSync(executable).size} bytes`);
     }
   } finally {
     try {
-      if (installed) run(xcrun, ["simctl", "uninstall", device, bundle], 30_000);
+      if (installed) uninstallFromReusedDevice(device, bundle);
     } finally {
       rmSync(root, { recursive: true, force: true });
     }
+  }
+}
+
+/* A program whose stream the host must refuse: it aborts with `refusal` and
+   never reports a first frame or a clean status. */
+function refusedApp(device, scratch, what, imports, body, refusal) {
+  const name = `Refused${randomUUID().replaceAll("-", "")}`;
+  const source = join(scratch, `${name}.pudu`);
+  const app = join(scratch, `${name}.app`);
+  const bundle = `org.pudu.${name}`;
+  writeFileSync(source, `module ${name}
+
+${imports}
+
+fn main() -> Int {
+${body}
+  0
+}
+`);
+  run(resolve(compiler), ["build", source, "--native", "--target", "ios-simulator-arm64", "--app", "-o", app], appBuildTimeout);
+  run(xcrun, ["simctl", "install", device, app], simulatorTimeout);
+  try {
+    const launched = spawnSync(xcrun, ["simctl", "launch", "--console-pty", device, bundle],
+      { encoding: "utf8", timeout: simulatorTimeout });
+    if (launched.error) throw launched.error;
+    const output = launched.stdout + launched.stderr;
+    assert.match(output, refusal);
+    assert.doesNotMatch(output, /PUDU_FIRST_FRAME_MS|PUDU_PROGRAM_STATUS 0/u);
+    console.log(`PASS iOS ${what} refused`);
+  } finally {
+    uninstallFromReusedDevice(device, bundle);
   }
 }
 

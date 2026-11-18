@@ -119,6 +119,9 @@ withCompiler body action = do
       TextIO.writeFile script (scriptPrefix <> body)
       permissions <- getPermissions script
       setPermissions script (setOwnerExecutable True permissions)
+      -- A system may scan a new executable on its first launch; pay that
+      -- here so the timed sections observe only the toolchain.
+      _ <- readProcessWithExitCode script [warmArgument] ""
       TextIO.writeFile output "previous executable"
       withEnvironment
         [ ("PUDU_CC", script)
@@ -127,10 +130,14 @@ withCompiler body action = do
         ]
         (action root request)
 
+warmArgument :: String
+warmArgument = "--pudu-warm"
+
 -- Stage a partial artifact before failing, exercising atomic publication too.
 scriptPrefix :: Text
 scriptPrefix = Text.unlines
   [ "#!/bin/sh"
+  , "if [ \"$1\" = " <> Text.pack warmArgument <> " ]; then exit 0; fi"
   , "while [ \"$#\" -gt 0 ]; do"
   , "  if [ \"$1\" = -o ]; then"
   , "    shift"

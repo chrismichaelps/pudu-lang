@@ -32,14 +32,18 @@ import Pudu.Eval.Frozen (Frozen)
 import Pudu.Compiler.Lower.Layout (moduleLayouts)
 import Pudu.Compiler.Lower.Dynamic (dynamicSums)
 import Pudu.Compiler (CompileResult (..))
+import Pudu.Compiler.Lower.Foreign (callbackSignatureOf)
+import qualified Pudu.Foreign.Callback as Callback
+import qualified Data.List.NonEmpty as NonEmpty
+import Pudu.Foreign.Crossing (ObjectiveCMethod (..), ReturnedRun (..), foreignBounds, objectiveCMethod, recordLayouts, resolveReturnedRun)
 import Pudu.Compiler.Lower.Types (LowerTypes, emptyTypes, formedCoreTypeIn, lookupScheme, nativeTypes, withShapes)
 import Pudu.Compiler.Lower.Method (methodTables)
 import Pudu.Compiler.Program (ProgramResult (..), rootCompileResult)
 import Pudu.Type (DeclaredShapes, declaredRecords, declaredSums)
-import Pudu.Type.Value (NominalId (..), Scheme (..), Type (FunctionTypeRequiring))
+import Pudu.Type.Value (NominalId (..), Scheme (..), Type (FunctionTypeRequiring), nominalKey)
 import Pudu.Source (Span)
 import Pudu.Compiler.Lower.Body (lowerEntryBody, lowerExpression, lowerFunctionBody)
-import Pudu.Compiler.Lower.Default (hasDefaults, lowerDefaultedBody)
+import Pudu.Compiler.Lower.Default (takesSuppliedCount, lowerDefaultedBody)
 import Pudu.Compiler.Lower.Loan (lowerLoanedBody)
 import Pudu.Compiler.Lower.State
   ( CoreSignature (..), ForeignTarget (..), Instance (..), LowerContext (..), LowerState (..), ModuleScope (..)
@@ -53,6 +57,9 @@ import Pudu.Diagnostic.Native (nativeRefusal)
 import Pudu.Frontend.Syntax
   ( Declaration (..)
   , Foreign (..)
+  , foreignCallbackNames
+  , ForeignDelegate (..)
+  , ForeignDelegateMethod (..)
   , ForeignFunction (..)
   , ForeignParameter (..)
   , Function (..)
@@ -152,19 +159,19 @@ lowerRooted library entryName programModules@(rootModule : _)
       , locatedValue (functionName function) /= entryName
       ]
     exportKeys = [rootName <> "." <> locatedValue (functionName function) | function <- exported]
-    -- A C caller passes every argument at a fixed type and cannot await.
+    -- A C caller passes every argument at a fixed type.
     exportRefusals =
       [ nativeRefusal (locatedSpan (functionName function)) ("an exported function " <> reason)
       | function <- exported
       , reason <-
           [ "with type parameters" | not (null (functionTypeParams function)) ]
-          <> [ "with default parameter values" | hasDefaults function ]
-          <> [ "declared async" | functionAsync function ]
       ]
 
     findEntry = case entryFunctions of
-      function : _ -> Right function
+      [function] -> Right function
       [] -> Left firstDeclarationRefusal
+      _ : duplicate : _ ->
+        Left (nativeRefusal (locatedSpan (functionName (locatedValue duplicate))) "an ambiguous entry function")
       where
         entryFunctions =
           [ Located (locatedSpan declaration) function
@@ -213,10 +220,47 @@ lowerRooted library entryName programModules@(rootModule : _)
       | native <- programModules
       , Located _ (ForeignDeclaration declared) <- moduleDeclarations (nativeModuleSyntax native)
       , named <- foreignTypes declared ]
+    callbackTypes = Set.fromList
+      [ NominalId (Just (locatedValue (moduleName (nativeModuleSyntax native)))) (locatedValue named)
+      | native <- programModules
+      , Located _ (ForeignDeclaration declared) <- moduleDeclarations (nativeModuleSyntax native)
+      , named <- foreignCallbackNames declared ]
+    callbackDeclarations native =
+      [ (declared, either (const Map.empty) id
+          (Callback.checkCallbackDeclarations (Set.fromList (map locatedValue (foreignTypes declared)))
+            (recordLayouts declarations) (foreignCallbacks declared)))
+      | Located _ (ForeignDeclaration declared) <- declarations ]
+      where declarations = moduleDeclarations (nativeModuleSyntax native)
+
+    coreSignature native name = callbackSignatureOf (nativeModuleName native) name . locatedValue
+    groupsOf declared callbacks = either (const Map.empty) id $
+      Callback.checkCallbackGroups (Set.fromList (map locatedValue (foreignTypes declared)))
+        callbacks (foreignCallbackGroups declared)
+    coreGroup native owner (Located _ members) =
+      ( coreSignature native owner (Callback.callbackMemberSignature (NonEmpty.head members))
+      , map Callback.callbackMemberField (NonEmpty.toList members) )
+    coreDelegate native groups delegate = do
+      let group = locatedValue (foreignDelegateGroup delegate)
+      located@(Located _ members) <- Map.lookup group groups
+      let entries = zip [0 ..] (NonEmpty.toList members)
+          method written = do
+            let member = locatedValue (foreignDelegateMember written)
+            (ordinal, entry) <- lookup member [(Callback.callbackMemberField entry, (ordinal, entry)) | (ordinal, entry) <- entries]
+            pure ( locatedValue (foreignDelegateSelector written)
+                 , (coreSignature native group (Callback.callbackMemberSignature entry))
+                     {coreCallbackProjection = Just (ordinal, member)} )
+      resolved <- traverse method (foreignDelegateMethods delegate)
+      pure (CoreDelegate (locatedValue (foreignDelegateSymbol delegate)) (fst (coreGroup native group located)) resolved)
+    callbackSlots native signatures groups function =
+      [ CoreCallbackSlot (Callback.callbackPlacement pair)
+          ((callbackSignatureOf (nativeModuleName native) (Callback.callbackTypeName pair) (Callback.callbackSlotSignature pair))
+            {coreCallbackProjection = Callback.callbackProjection pair})
+      | pair <- either (const []) id (Callback.callbackPairs signatures groups function) ]
+
     scopes = Map.fromList
       [ ( nativeModuleName native
         , ModuleScope
-            { scopeTypes = maybe emptyTypes (withShapes records sums handles) (nativeModuleTypes native)
+            { scopeTypes = maybe emptyTypes (withShapes records sums handles callbackTypes) (nativeModuleTypes native)
             , scopeFunctions = Set.fromList (map fst (functionsOf native))
             , scopeConstants = Map.fromList
                 [ (locatedValue name, Map.lookup (locatedValue name) (nativeModuleConstants native))
@@ -236,20 +280,59 @@ lowerRooted library entryName programModules@(rootModule : _)
             , scopeForeign = Map.fromList
                 [ ( locatedValue (foreignName function)
                   , ForeignTarget (locatedValue (foreignLibrary declared)) (locatedValue <$> foreignVersion declared)
-                      (symbolOf function) (claimOf functions function)
+                      (maybe (symbolOf function) objectiveCSelector method) method (claimOf functions function)
                       (locatedValue (foreignName function) `elem` releasers functions)
                       [index | (index, Located _ parameter) <- zip [0 ..] (foreignParameters function)
                              , foreignParameterOut parameter]
                       [claimFor functions False (foreignParameterReleasedBy parameter)
-                      | Located _ parameter <- foreignParameters function, foreignParameterOut parameter] )
-                | Located _ (ForeignDeclaration declared) <- moduleDeclarations (nativeModuleSyntax native)
+                      | Located _ parameter <- foreignParameters function, foreignParameterOut parameter]
+                      (callbackSlots native callbacks groups written)
+                      splitCallbacks
+                      [ (index, exclusive)
+                      | (index, Located _ parameter) <- zip [0 ..] (foreignParameters function)
+                      , not (foreignParameterOut parameter)
+                      , Just (Located _ (ReferenceType exclusive _)) <- [foreignParameterType parameter]
+                      ]
+                      [ index
+                      | (index, Located _ parameter) <- zip [0 ..] (foreignParameters function)
+                      , foreignParameterNullable parameter /= Nothing
+                      ]
+                      (either (const []) id
+                        (foreignBounds foreignHandles layouts (foreignParameters function)))
+                      (returnedTarget native foreignHandles layouts functions function) )
+                | (declared, callbacks) <- callbackDeclarations native
                 , let functions = map locatedValue (foreignFunctions declared)
-                , function <- functions ]
+                      foreignHandles = Set.fromList (map locatedValue (foreignTypes declared))
+                      groups = groupsOf declared callbacks
+                      splitCallbacks = or
+                        [ foreignParameterCallbackPassing parameter /= Nothing
+                        | function <- functions, Located _ parameter <- foreignParameters function ]
+                , written@(Located _ function) <- foreignFunctions declared
+                , let method = objectiveCMethod (foreignClasses declared) function ]
+            , scopeCallbacks = Map.unions
+                [ Map.mapWithKey (coreSignature native) callbacks
+                | (_, callbacks) <- callbackDeclarations native ]
+            , scopeCallbackGroups = Map.unions
+                [ Map.mapWithKey (coreGroup native) (groupsOf declared callbacks)
+                | (declared, callbacks) <- callbackDeclarations native ]
+            , scopeDelegates = Map.fromList
+                [ (locatedValue (foreignDelegateName delegate), core)
+                | (declared, callbacks) <- callbackDeclarations native
+                , Located _ delegate <- foreignDelegates declared
+                , Just core <- [coreDelegate native (groupsOf declared callbacks) delegate] ]
             }
         )
-      | native <- programModules ]
+      | native <- programModules
+      , let layouts = recordLayouts (moduleDeclarations (nativeModuleSyntax native)) ]
 
     symbolOf function = maybe (locatedValue (foreignName function)) locatedValue (foreignSymbol function)
+    returnedTarget native handlesOfBlock layouts functions function = do
+      run <- either (const Nothing) id
+        (resolveReturnedRun handlesOfBlock layouts
+          (Map.fromList [(locatedValue (foreignName candidate), candidate) | candidate <- functions]) function)
+      let handle = returnedRunHandle run
+          owner = NominalId (Just (locatedValue (moduleName (nativeModuleSyntax native)))) handle
+      pure (returnedRunLengthSlot run, CoreHandleType (nominalKey owner) handle)
     -- A borrowed result is held without a claim; an owned or counted one is
     -- released by the function it names, called as that function returns.
     claimOf functions function
@@ -310,7 +393,7 @@ lowerRooted library entryName programModules@(rootModule : _)
             case ensureSignature name function ((startFunction (withTypeBindings bindings (inModule owner state)) [] Nothing){lowerCurrentKey = name}) of
               (afterSignature, Nothing) -> markVisited afterSignature name
               (afterSignature, Just signature) ->
-                case loaned signature (if hasDefaults (locatedValue function) then lowerDefaultedBody lowerExpression lowerFunctionBody else lowerFunctionBody)
+                case loaned signature (if takesSuppliedCount signature then lowerDefaultedBody lowerExpression lowerFunctionBody else lowerFunctionBody)
                   function
                   signature
                   (startFunction afterSignature (signatureParameters signature) (Just (signatureResult signature))) of
@@ -337,7 +420,7 @@ lowerRooted library entryName programModules@(rootModule : _)
 
     -- `?` in the entry returns at its declared type, before any `return` says so.
     declaredEntryResult entry = case lookupScheme (maybe emptyTypes scopeTypes (Map.lookup rootName scopes)) (locatedValue (functionName (locatedValue entry))) of
-      Just Scheme{schemeParams = [], schemeType = FunctionTypeRequiring _ [] _ result} ->
+      Just Scheme{schemeParams = [], schemeType = FunctionTypeRequiring _ _ _ result} ->
         formedCoreTypeIn (maybe emptyTypes scopeTypes (Map.lookup rootName scopes)) result
       _ -> Nothing
 
@@ -355,7 +438,15 @@ lowerRooted library entryName programModules@(rootModule : _)
     settle (state, entryFunction) = case sortDiagnostics (contextRefusals (lowerContext state)) of
       [] -> case entryFunction of
         Just function ->
-          let functions = sortOn tableIndex (function : contextFunctions (lowerContext state))
+          let lowered = contextFunctions (lowerContext state)
+              wrappers = Map.fromList
+                [ (key, awaitExport declaration functionBody answer)
+                | (key, declaration) <- zip exportKeys exported
+                , functionAsync declaration
+                , functionBody <- lowered
+                , coreFunctionName functionBody == key
+                , CoreFunctionType [] answer <- [coreFunctionResult functionBody] ]
+              functions = sortOn tableIndex (function : lowered <> Map.elems wrappers)
            in Lowered
             CoreModule
               { coreModuleName = moduleNameText (locatedValue (moduleName parsed))
@@ -363,7 +454,9 @@ lowerRooted library entryName programModules@(rootModule : _)
               , coreModuleFunctions = functions
               , coreModuleLayouts = moduleLayouts (maybe emptyTypes scopeTypes (Map.lookup rootName scopes)) (contextClosures (lowerContext state)) functions
               , coreModuleClosures = contextClosures (lowerContext state)
-              , coreModuleExports = [key | key <- exportKeys, any ((== key) . coreFunctionName) functions]
+              , coreModuleExports =
+                  [ maybe key coreFunctionName (Map.lookup key wrappers)
+                  | key <- exportKeys, any ((== key) . coreFunctionName) lowered ]
               }
         Nothing -> LowerRefused [nativeRefusal (moduleSpan parsed) "this program"]
       refusals -> LowerRefused refusals
@@ -372,3 +465,18 @@ lowerRooted library entryName programModules@(rootModule : _)
     tableIndex function = case [index | (index, (name, _)) <- zip [0 ..] table, name == coreFunctionName function] of
       index : _ -> index
       [] -> 0
+
+{-| At a C boundary the owning thread runs the cold task to completion. Await
+    through ordinary Core so result crossing and task cleanup use the same
+    paths as a synchronous export and Pudu's own await. -}
+awaitExport :: Function -> CoreFunction -> CoreType -> CoreFunction
+awaitExport declaration target answer =
+  CoreFunction ("::export::" <> coreFunctionName target) parameters answer
+    (CoreBlock [] (Just (CoreExpression at answer (CoreCallValue task []))))
+  where
+    parameters = coreFunctionParameters target
+    at = locatedSpan (functionName declaration)
+    arguments =
+      [ CoreExpression at (coreLocalType local) (CoreReadLocal local)
+      | CoreParameter local _ <- parameters ]
+    task = CoreExpression at (coreFunctionResult target) (CoreCall (coreFunctionName target) arguments)

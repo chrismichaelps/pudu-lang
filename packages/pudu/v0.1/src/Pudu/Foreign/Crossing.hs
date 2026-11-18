@@ -6,7 +6,24 @@
     [[ADR-0018 Calling a Library Written Elsewhere]] settles the list. -}
 module Pudu.Foreign.Crossing
   ( Crossing (..)
+  , ObjectiveCMethod (..)
+  , objectiveCMethod
+  , objectiveCInitializer
+  , objectiveCRetainedFamily
   , crossingFor
+  , parameterCrossingFor
+  , ReturnedRun (..)
+  , returnedRunElementFor
+  , resolveReturnedRun
+  , foreignBounds
+  , loanFor
+  , runElementFor
+  , runLoanFor
+  , isArrayCrossingSyntax
+  , isOptionCrossingSyntax
+  , optionalHandleFor
+  , isAbsentLoanArgument
+  , isLoanPointee
   , crossingName
   , crossingType
   , crossableNames
@@ -17,23 +34,63 @@ module Pudu.Foreign.Crossing
   , foreignRecordFieldLimit
   ) where
 
+import Control.Monad (unless)
 import Data.Set (Set)
 import qualified Data.Set as Set
 import Data.Text (Text)
 import qualified Data.Text as Text
+import Pudu.Foreign.Extent (ForeignBound (..))
 import Pudu.Frontend.Syntax.Located (Located (..))
 import Pudu.Frontend.Syntax.Name (ModuleName (..))
 import qualified Data.Map.Strict as Map
 import Pudu.Frontend.Syntax.Tree
   ( Declaration (..)
+  , Expression (..)
   , FieldDeclaration (..)
+  , ForeignLength (..)
+  , ForeignFunction (..)
+  , ForeignClass (..)
+  , ForeignMethod (..)
+  , ForeignParameter (..)
   , TypeDeclarationValue (..)
   , TypeDefinition (..)
   , TypeSyntax (..)
   )
+import Data.Char (isAsciiLower)
+import Data.List (find)
 import Data.String (fromString)
 import Pudu.Type.Value (Type (..))
 import Data.List.NonEmpty (NonEmpty (..))
+import qualified Data.List.NonEmpty as NonEmpty
+import Pudu.Source (Span)
+
+data ObjectiveCMethod = ObjectiveCMethod
+  { objectiveCSelector :: !Text
+  , objectiveCClass :: !(Maybe Text)
+  }
+  deriving stock (Eq, Ord, Show)
+
+objectiveCInitializer :: ObjectiveCMethod -> Bool
+objectiveCInitializer = selectorFamily "init" . objectiveCSelector
+
+objectiveCRetainedFamily :: Text -> Bool
+objectiveCRetainedFamily selector =
+  any (`selectorFamily` selector) ["alloc", "new", "copy", "mutableCopy", "init"]
+
+selectorFamily :: Text -> Text -> Bool
+selectorFamily name selector =
+  case Text.stripPrefix name (Text.takeWhile (/= ':') (Text.dropWhile (== '_') selector)) of
+    Just remainder -> maybe True (not . isAsciiLower . fst) (Text.uncons remainder)
+    Nothing -> False
+
+objectiveCMethod :: [ForeignClass] -> ForeignFunction -> Maybe ObjectiveCMethod
+objectiveCMethod classes function = do
+  method <- foreignMethod function
+  receiver <- traverse resolvedClass (foreignMethodClass method)
+  pure (ObjectiveCMethod (locatedValue (foreignMethodSelector method)) receiver)
+ where
+  resolvedClass name = locatedValue . foreignClassSymbol <$>
+    find ((== locatedValue name) . locatedValue . foreignClassName) classes
 
 {-| One value's representation on the other side.
 
@@ -62,6 +119,10 @@ data Crossing
       not interchangeable, and one address type for all of them turns a mistake
       the checker could catch into one the library reports by failing. -}
   | HandleCrossing !Text
+  {-| A handle a parameter may leave out: `Option` of a type the block
+      declares. `None` crosses as the null address a library reads as
+      "none given", and `Some` as the handle it holds, which must be live. -}
+  | OptionalHandleCrossing !Text
   {-| A record crossing by value, under its name and with its fields in the
       order the declaration wrote them.
 
@@ -156,6 +217,184 @@ crossingFor handles layouts = crossingAt Set.empty
     "Bytes" -> Just BytesCrossing
     _ -> Nothing
 
+{-| The crossing a declared parameter describes: any crossing a value has,
+    and also `Option` of a handle the block declares, which only an argument
+    may be. A result or a field that can be absent answers through a slot. -}
+parameterCrossingFor :: Set Text -> RecordLayouts -> Located TypeSyntax -> Maybe Crossing
+parameterCrossingFor handles layouts written = case optionalHandleFor handles written of
+  Just (HandleCrossing name) -> Just (OptionalHandleCrossing name)
+  _ -> crossingFor handles layouts written
+{-| The mutability and pointee of a reference admitted as a foreign input. -}
+loanFor :: Set Text -> RecordLayouts -> Located TypeSyntax -> Maybe (Bool, Crossing)
+loanFor handles layouts (Located _ syntax) = case syntax of
+  ReferenceType exclusive written -> do
+    pointee <- crossingFor handles layouts written
+    if isLoanPointee pointee then Just (exclusive, pointee) else Nothing
+  _ -> Nothing
+
+{-| A foreign run uses the dynamic array spelling and a scalar-only ABI element. -}
+runElementFor :: Set Text -> RecordLayouts -> Located TypeSyntax -> Maybe Crossing
+runElementFor handles layouts (Located _ syntax) = case syntax of
+  NamedType (ModuleName ("Array" :| [])) [written] -> do
+    element <- crossingFor handles layouts written
+    if isLoanPointee element then Just element else Nothing
+  _ -> Nothing
+
+runLoanFor :: Set Text -> RecordLayouts -> Located TypeSyntax -> Maybe (Bool, Crossing)
+runLoanFor handles layouts (Located _ syntax) = case syntax of
+  ReferenceType mutable pointee -> (,) mutable <$> runElementFor handles layouts pointee
+  _ -> Nothing
+
+isArrayCrossingSyntax :: Located TypeSyntax -> Bool
+isArrayCrossingSyntax (Located _ syntax) = case syntax of
+  NamedType (ModuleName ("Array" :| [])) [_] -> True
+  _ -> False
+
+isOptionCrossingSyntax :: Located TypeSyntax -> Bool
+isOptionCrossingSyntax (Located _ syntax) = case syntax of
+  NamedType (ModuleName ("Option" :| [])) _ -> True
+  _ -> False
+
+{-| The checked native result is a pointer. The length ordinal identifies
+    a member of the compact output-slot sequence after the native result. -}
+data ReturnedRun = ReturnedRun
+  { returnedRunElement :: !Crossing
+  , returnedRunOptional :: !Bool
+  , returnedRunLengthSlot :: !Int
+  , returnedRunHandle :: !Text
+  }
+  deriving stock (Eq, Show)
+
+returnedRunElementFor :: Set Text -> RecordLayouts -> Located TypeSyntax -> Maybe (Bool, Crossing)
+returnedRunElementFor handles layouts written@(Located _ syntax) = case syntax of
+  NamedType (ModuleName ("Option" :| [])) [array] -> (,) True <$> runElementFor handles layouts array
+  _ -> (,) False <$> runElementFor handles layouts written
+
+resolveReturnedRun
+  :: Set Text -> RecordLayouts -> Map.Map Text ForeignFunction -> ForeignFunction
+  -> Either (Span, Text) (Maybe ReturnedRun)
+resolveReturnedRun handles layouts functions producer =
+  traverse resolve (foreignResultLength producer)
+ where
+  result = foreignResult producer
+  resolve lengthName = do
+    (optional, element) <- require result "a returned run needs a fixed-width scalar or record element"
+      (returnedRunElementFor handles layouts result)
+    slotIndex <- lengthPosition lengthName
+    unless (not (foreignResultBorrowed producer) && not (foreignResultCounted producer)) $
+      Left (locatedSpan result, "a returned run must transfer one owned allocation")
+    releaseName <- require result "a returned run must name the release for its allocation"
+      (foreignReleasedBy producer)
+    release <- require releaseName "this block declares no release with that name"
+      (Map.lookup (locatedValue releaseName) functions)
+    handle <- releaseHandleName releaseName release
+    case crossingFor handles layouts (foreignResult release) of
+      Just kind | kind == NothingCrossing || isIntegralCrossing kind -> Right ()
+      _ -> Left (locatedSpan releaseName, "a run release must return unit or a fixed-width integer")
+    pure ReturnedRun
+      { returnedRunElement = element
+      , returnedRunOptional = optional
+      , returnedRunLengthSlot = slotIndex
+      , returnedRunHandle = handle
+      }
+  lengthPosition named = case matching named of
+    [(slotIndex, parameter)]
+      | Just written <- foreignParameterType parameter
+      , Just kind <- crossingFor handles layouts written
+      , isIntegralCrossing kind
+      , not (foreignParameterOwned parameter) -> Right slotIndex
+    _ -> Left (locatedSpan named, "a returned run length must name one fixed-width integer output slot")
+  matching named =
+    [ (slotIndex, parameter)
+    | (slotIndex, parameter) <- zip [0 ..] outputSlots
+    , locatedValue (foreignParameterName parameter) == locatedValue named ]
+  outputSlots =
+    [parameter | Located _ parameter <- foreignParameters producer, foreignParameterOut parameter]
+  releaseHandleName named release = case foreignParameters release of
+    [Located _ parameter]
+      | not (foreignParameterOut parameter || foreignParameterContext parameter || foreignParameterOwned parameter)
+      , foreignParameterNullable parameter == Nothing
+      , foreignReleasedBy release == Nothing
+      , not (foreignResultBorrowed release || foreignResultCounted release)
+      , Just written <- foreignParameterType parameter
+      , Just (HandleCrossing handle) <- crossingFor handles layouts written -> Right handle
+    _ -> Left (locatedSpan named, "a run release must take exactly one declared opaque handle")
+  require at message = maybe (Left (locatedSpan at, message)) Right
+
+isIntegralCrossing :: Crossing -> Bool
+isIntegralCrossing crossing = case crossing of
+  SignedCrossing _ -> True
+  UnsignedCrossing _ -> True
+  _ -> False
+
+{-| Optionality belongs to the language value. Both cases cross as one pointer. -}
+optionalHandleFor :: Set Text -> Located TypeSyntax -> Maybe Crossing
+optionalHandleFor handles (Located _ syntax) = case syntax of
+  NamedType (ModuleName ("Option" :| []))
+    [Located _ (NamedType (ModuleName (name :| [])) [])]
+      | Set.member name handles -> Just (HandleCrossing name)
+  _ -> Nothing
+
+isAbsentLoanArgument :: Located Expression -> Bool
+isAbsentLoanArgument (Located _ syntax) = case syntax of
+  NameExpression ("None" :| []) -> True
+  RecordExpression (ModuleName ("::constructor::" :| ["Option", "None"])) [] -> True
+  _ -> False
+
+{-| Resolve signature-local names before either execution path sees a bound. -}
+foreignBounds
+  :: Set Text -> RecordLayouts -> [Located ForeignParameter]
+  -> Either (Span, Text) [ForeignBound]
+foreignBounds handles layouts parameters =
+  traverse resolve
+    [(index, parameter, relation) | (index, parameter) <- positions
+                                  , Just relation <- [foreignParameterLength parameter]]
+ where
+  positions = zip [0 ..] (map locatedValue parameters)
+  input parameter =
+    not (foreignParameterContext parameter || foreignParameterOut parameter)
+  resolve (index, parameter, ForeignLength unit targets)
+    | input parameter
+    , foreignParameterNullable parameter == Nothing
+    , Just crossing <- foreignParameterType parameter >>= crossingFor handles layouts
+    , isIntegralCrossing crossing = do
+        resolved <- traverse resolveTarget targets
+        let repeated = duplicate Set.empty (NonEmpty.toList targets)
+        case repeated of
+          Just name -> Left (locatedSpan name, "a foreign length names the same run more than once")
+          Nothing -> Right (ForeignBound index (locatedValue unit) resolved)
+    | otherwise = Left (locatedSpan unit, "a foreign length must be a fixed-width integer input")
+  resolveTarget target =
+    case [(index, parameter) | (index, parameter) <- positions
+                            , locatedValue (foreignParameterName parameter) == locatedValue target] of
+      [(index, parameter)]
+        | input parameter
+        , Just written <- foreignParameterType parameter
+        , isRun written -> Right index
+      _ -> Left (locatedSpan target, "this foreign length target must name an input buffer")
+  isRun written@(Located _ syntax) =
+    crossingFor handles layouts written == Just BytesCrossing || case syntax of
+      ReferenceType _ pointee -> runElementFor handles layouts pointee /= Nothing
+      _ -> False
+  duplicate _ [] = Nothing
+  duplicate seen (name : rest)
+    | Set.member (locatedValue name) seen = Just name
+    | otherwise = duplicate (Set.insert (locatedValue name) seen) rest
+
+{-| A copied loan carries a finite layout with no pointer-bearing leaves. -}
+isLoanPointee :: Crossing -> Bool
+isLoanPointee = \case
+  SignedCrossing _ -> True
+  UnsignedCrossing _ -> True
+  FloatingCrossing _ -> True
+  BooleanCrossing -> True
+  RecordCrossing _ fields -> all (isLoanPointee . snd) fields
+  TextCrossing -> False
+  BytesCrossing -> False
+  HandleCrossing _ -> False
+  OptionalHandleCrossing _ -> False
+  NothingCrossing -> False
+
 {-| What the declaration wrote, for a diagnostic to name back. -}
 crossingName :: Crossing -> Text
 crossingName crossing = case crossing of
@@ -166,6 +405,7 @@ crossingName crossing = case crossing of
   TextCrossing -> "Str"
   BytesCrossing -> "Bytes"
   HandleCrossing name -> name
+  OptionalHandleCrossing name -> "Option[" <> name <> "]"
   RecordCrossing name _ -> name
   NothingCrossing -> "()"
 
@@ -179,6 +419,7 @@ crossingName crossing = case crossing of
 crossingType :: Crossing -> Type
 crossingType crossing = case crossing of
   NothingCrossing -> UnitTypeValue
+  OptionalHandleCrossing name -> NominalType "Option" [NominalType (fromString (Text.unpack name)) []]
   _ -> NominalType (fromString (Text.unpack (crossingName crossing))) []
 
 {-| Whether an integer is one the declared width can carry.

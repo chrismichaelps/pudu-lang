@@ -27,6 +27,11 @@ three on glibc) reaches a written expectation only through a relation, and
 hostLibraryPrograms prints such kernels in full with the interpreter's
 output on the same machine as the only expectation.
 
+## Mutex close (#935)
+
+The mutex program checks immediate retirement, self-close, repeated close and
+rejection of new owners while a closer waits for another thread to release.
+
 ## Referenced by
 
 [[Backend Native Tests]] · [[Backend Text Leak Tests]] · [[Native Host Services]]

@@ -205,6 +205,7 @@ Encoding uses named escapes where JSON has them and `\u00XX` for the remaining c
 |---|---|
 | `Std.Mobile.View` | pure view tree and the instruction stream that realizes it on phones; [[Std Mobile View]] |
 | `Std.Mobile.Host` | the platform calls that apply a stream and wait for an event; [[Std Mobile Host]] |
+| `Std.Mobile.Stream` | pure encoder of the view stream instructions; [[Std Mobile Stream]] |
 
 ### Concurrency
 
@@ -854,6 +855,6 @@ were implemented without tests or review; they are not a new production-readines
 
 The public extension seam is [[Std Db Driver]], independent of PostgreSQL session and OID types. [[Std App Database]] accepts developer-supplied drivers or an explicit driver array. [[Std Db Postgres]] is the first bundled adapter; SQL dialects remain driver-specific. [[Std Db Migrate]] applies migrations and [[Std Db Store]] saves and loads kept values through any driver; each also keeps its PostgreSQL session form.
 
-[[Std Db Sqlite]] is a second bundled adapter: one serialized embedded connection, prepared bindings, typed rows and explicit close. App database construction selects PostgreSQL or SQLite from the URI and accepts additional developer-supplied drivers. MySQL and other native adapters remain open work.
+[[Std Db Sqlite]] is a second bundled adapter: one serialized embedded connection, prepared bindings, typed rows and explicit close. App database construction selects PostgreSQL or SQLite from the URI and accepts additional developer-supplied drivers. MySQL and other native adapters remain open work. Each driver states an engine kind and its capabilities, and bundled drivers come from a const factory table keyed by that kind, so code above the driver branches on a stated capability rather than a driver name.
 
 [[Std Db Row]] adds backend-neutral typed result mapping without implicit storage-kind conversion, enabling application repositories to consume either bundled driver.

@@ -5,6 +5,237 @@ tags: [changelog]
 
 # Changelog
 
+## 2026-11-17 — Stand-in compiler warm-up (#953)
+
+- Toolchain lifetime tests launch their stand-in compiler once before the
+  timed section, so a first-launch scan no longer trips the deadline (refs #953).
+  [[Backend Toolchain Tests]]
+
+## 2026-11-17 — Android test builds (#951)
+
+- Android packages are debuggable and accept self-test extras only when
+  built with `PUDU_ANDROID_TEST_BUILD`; release packages drop every extra
+  (refs #951).
+  [[Backend Toolchain Android]] · [[Native Android Activity]]
+
+## 2026-11-17 — Native parity audit
+
+- The native coverage page records a whole-corpus comparison of native
+  executables against the interpreter.
+  [[Native Emission Coverage]]
+
+## 2026-11-17 — Native set membership (#948)
+
+- `x in set` lowers to the set's `contains` primitive natively, with the
+  candidate evaluated before the set (refs #948).
+  [[Compiler Lower Keyed]] · [[Compiler Lower Scalar]]
+
+## 2026-11-17 — Native ledger: trait-qualified method values (#647)
+
+- Trait-qualified method values are recorded as native; both engines dispatch
+  them on their first argument since #935 (refs #647).
+  [[Native Method Values]] · [[Native Emission Coverage]]
+
+## 2026-11-17 — Swift entry points (#881)
+
+- Swift libraries reach Pudu through C entry points, checked on macOS and the iOS simulator (refs #881).
+  [[Swift Entry Points Test]] · [[iOS Foreign Apps Test]]
+
+## 2026-11-17 — Objective-C delegates (#879)
+
+- Objective-C delegates: runtime-defined classes whose methods enter callback group members (refs #879).
+  [[Backend Emit Foreign Delegate]] · [[Pudu FFI Objective-C Bridge]]
+
+## 2026-11-17 — Foreign teardown and Objective-C blocks (#879)
+
+- Foreign teardown releases newest claims first; Objective-C autorelease
+  pools are owned handles; callbacks cross as Objective-C blocks (refs #879).
+  [[Foreign Ownership]] · [[Foreign Callback Signature]]
+
+## 2026-11-16 — Objective-C message dispatch
+
+- Resolve foreign class aliases and selectors and emit fixed-signature
+  sends in generated C11. The interpreter inserts the same ABI positions
+  while retaining source output and mutable loan indexes.
+  [[Native Host Foreign]] · [[Foreign Call Library]]
+
+## 2026-11-16 — Portable foreign loading
+
+- Share Windows and POSIX loading between the interpreter, generated C11
+  and SQLite. Close independently owned loader references after scoped
+  symbol users return. Use atomic cached symbols for repeated native calls.
+  [[Foreign Platform Loader]] · [[Native Host Foreign]]
+
+## 2026-11-16 — Foreign callback groups (#877)
+
+- Register a record of callbacks with one shared context key. Each member
+  trampoline selects its declared handler through that key.
+  [[Foreign Callback Signature]] · [[Backend Emit Foreign Callback]]
+
+## 2026-11-16 — Split foreign callbacks and byte runs (#877)
+
+- Carry trampoline and context arguments separately. Keep the outbound scope
+  available when the library invokes a retained callback on a later call.
+- Check inbound byte extents and copy the data before invoking Pudu.
+  [[Foreign Callback Signature]] · [[Backend Emit Foreign Callback]]
+
+## 2026-11-16 — Nullable foreign loans (#877)
+
+- Admit bare None at direct nullable reference arguments. Preserve null
+  with zero extent and keep present empty arrays separately addressable.
+  [[Foreign Pointer Delivery]] · [[Backend Emit Foreign Loan]]
+
+## 2026-11-16 — Returned foreign arrays (#877)
+
+- Validate returned run declarations and bound the copy by the written length
+  slot. Release transferred storage after copying and on conversion failure.
+  [[Foreign Pointer Delivery]] · [[Foreign Run Storage]]
+
+## 2026-11-16 — Optional foreign handles (#877)
+
+- Cross optional handles as nullable pointers. Preserve owned, borrowed and
+  counted result policies and pin input claims while native callbacks run.
+  [[Foreign Crossing]] · [[Native Host Foreign]]
+
+## 2026-11-16 — Foreign extent relations (#877)
+
+- Resolve declared `elements of` and `bytes of` relations in signature
+  order. Check `Bytes` bounds before foreign dispatch in both execution
+  paths. Copy typed-array inputs at the target ABI stride, including nested
+  records, and write mutable buffers back to their original places.
+  [[Foreign Extent]] · [[Foreign Run Storage]]
+
+## 2026-11-16 — Scalar and record foreign loans (#877)
+
+- Admit scalar and nested record reference parameters at foreign declarations.
+  Copy pointees through libffi in the interpreter and exact ABI locals in
+  generated C. Settle mutable loans before delivering post-call conversion
+  or callback failures.
+  [[Foreign Pointer Delivery]] · [[Foreign Call]]
+
+## 2026-11-16 — Native validation fixes (#935)
+
+- PostgreSQL results stream in bounded batches on an open portal through Std.Db.Stream (#940).
+  [[Std Db Stream]] · [[Std Db Protocol]]
+- Pools decide per connection whether to keep, probe, or replace it by age and idle time through Std.Db.Lifetime. `poolWith` takes a policy, and `never()` turns the limits off ([[Std Db Lifetime]] · [[Std Db]] · [[Std Db Session]]).
+- PostgreSQL connections plan each statement once and bind it on later runs, up to 256 per connection (#940).
+  [[Std Db]] · [[Std Db Session]] · [[Std Db Protocol]]
+- Native binaries name each generated function after its Pudu function for profilers and debuggers (#938).
+- Foreign parameters accept `Option` of a declared handle: `None` crosses as null, `Some` as a live handle (#935).
+  [[Foreign Crossing]] · [[Backend Emit Foreign]]
+- Keep native callback lookup outside the setjmp frame and bound text
+  allocations by the maximum C object size.
+- Let queued iOS list viewport events settle before the scroll self-test
+  reports its final window.
+  [[Native Host Callbacks]] · [[iOS Host List]]
+
+## 2026-11-16 — Foreign callback syntax (#876)
+
+- Retain callback signatures and native context positions in the parsed tree.
+  Check callback argument types, fallbacks and context pairing during
+  declaration checking. Bind owner-qualified callback token types and their
+  synchronous registration signatures. Add the per-run interpreter store for
+  invocation leases and teardown. Wire interpreter registration and
+  unregister values to the store. Add the libffi callback adapter with
+  generation-based retirement and a fallback for late invocations. Wire
+  interpreter dispatch and nested failure settlement. Lower native callback
+  operations, signatures and paired ABI positions into the frame IR.
+  [[Foreign Callback Delivery]] · [[Foreign Callback Signature]]
+
+## 2026-11-16 — Android native TLS libraries (#935)
+
+- Build Android arm64 and x86_64 native libraries through the NDK and
+  verify TLS peer chains through the host JavaVM.
+  [[Backend Toolchain Library]] · [[Native Mobile TLS Trust]]
+
+## 2026-11-16 — iOS native TLS (#935)
+
+- Enable verified TLS connects and descriptor upgrades on iOS device
+  and simulator builds with a target-built OpenSSL provider.
+  [[Native Host TLS]] · [[Backend Toolchain Library]]
+
+## 2026-11-15 — Native C11 callable continuations (#935)
+
+- Preserve a diverging subject in tuple, record, and sequence pattern
+  bindings. [[Compiler Lower Tuple]] · [[Backend Tuple Programs]]
+- Carry single-member tuples and lower a named call to the entry through its
+  ordinary callable body. [[Compiler Lower Body]] · [[Compiler Lower Generic]]
+- Allow omission of trailing defaults and export monomorphic defaulted and
+  async functions. The embedded C entry takes every argument and awaits an
+  async export before returning through the existing crossing.
+  [[Compiler Lower Default]] · [[Backend Emit Export]] · [[Backend Export Tests]]
+- Admit methods with written defaults at their full checked arity.
+  [[Compiler Lower Signature]] · [[Backend Method Programs]]
+- Specialize eligible signed integer direct calls to typed C parameters and
+  locals. [[Backend Typed Integer Calls]] · [[Native Direct Call Tests]]
+
+## 2026-11-15 — Native frame reuse and entry defaults
+
+- Integrate physical slot reuse and shared owned-text stores from #821.
+  [[Native Frame Slot Reuse]] · [[Native Frame Slot Reuse Delivery]]
+- Evaluate entry defaults as ordinary local declarations before the body
+  or awaited task. Preserve the located missing-argument diagnostic after
+  earlier defaults. [[Compiler Lower Function Body]] · [[Backend Native Tests]]
+- Cover output Results returned from named functions and assigned to locals.
+  [[Backend Output Programs]]
+
+## 2026-11-15 — C11 emission continuation (#935)
+
+- Emit the `Std.Binary` writer and reader with the interpreter's wire format
+  and refusal behavior. [[Native Binary Kernels]] · [[Backend Kernel Programs]]
+- Emit `mutexClose` with immediate retirement or a wait for the current owner's
+  release. [[Native Host Concurrent]] · [[Backend Host Programs]]
+- Widen omitted dynamic defaults and supplied arguments through function
+  values. Update E6001 help.
+  [[Compiler Lower Default]] · [[Compiler Lower Lambda]] · [[Diagnostic Native]]
+  · [[C11 Emission Continuation Delivery]]
+
+## 2026-11-15 — iOS simulator CI caching (#930)
+
+- iOS simulator CI caches the cabal store and build tree and allows 75 minutes for the device matrix (refs #930). See [[iOS Simulator CI]].
+
+## 2026-11-15 — UIKit coverage inventory (#930)
+
+- The UIKit coverage inventory script and tests measure host coverage from the SDK headers, so the table in [[Pudu Native iOS UI]] is generated rather than hand-written (refs #930). The iOS simulator workflow moves to a runner image whose Xcode meets the platform floor and runs the inventory check ([[iOS Simulator CI]], [[UIKit Coverage Inventory]]).
+
+## 2026-11-14 — iOS capabilities (#930)
+
+- `Std.Mobile` gains `Gesture`, `Scene`, `Access` and `Feedback` ([[Std Mobile Gesture]], [[Std Mobile Scene]], [[Std Mobile Access]], [[Std Mobile Feedback]]). [[Std Mobile View]] gains the `Progress`, `Activity`, `Recognizing`, `Accessible`, `Menu` and `Animated` wrappers and the `Gestured`, `Chose`, `Resized`, `Lifecycle` and `Picked` events. [[Std Mobile Stream]] encodes kinds 10 and 11 and instructions 27 to 35. [[Std Mobile Host]] reads up to four signed event words. The iOS host adds six headers for gestures, alerts and haptics, accessibility and menus, scene size and lifecycle, motion, and a self-test ([[Native iOS Capabilities Delivery]]).
+
+## 2026-11-14 — iOS materials (#928)
+
+- Database drivers state their engine kind and capabilities; bundled drivers come from a factory table, and migrations and the store no longer branch on driver names (#940).
+
+- `Std.Mobile.View` gains `Surfaced`, a container whose background is a system material ([[Std Mobile Theme]] `Material`, encoded by MATERIAL, code 26 in [[Std Mobile Stream]]). The iOS host draws glass on iOS 26 or later when the SDK declares it, and a system blur otherwise ([[iOS Host Material]]). The ledger gains the `glass-material` capability ([[Backend Ledger]]), and [[Native Platform Adoption]] records it as the first gated capability ([[Native iOS Materials Delivery]]).
+
+## 2026-11-14 — Platform toolchain ledger (#926)
+
+- A pure ledger of Xcode, SDK, store-rule and capability facts ([[Backend Ledger]]) is checked by a preflight before every Apple build, which refuses an installed toolchain outside it with E6009 or E6010 and warns with W6011 or W6012 ([[Backend Toolchain Probe]], [[Backend Toolchain Library]], [[Diagnostic Native]]). `pudu doctor --native` prints the whole state ([[Pudu CLI Doctor]]). The adoption design is [[Native Platform Adoption]]; the simulator suite adds a device matrix across device families ([[iOS Simulator Run]]).
+
+- [[iOS Simulator CI]] runs on `macos-26` so the runner's Xcode meets the build preflight.
+
+- [[iOS Simulator Run]] checks bundle publication once with a minimal program and gives new simulator devices ten minutes for first boot. It removes temporary apps with the private simulator at the end of the run. Complete native app builds get a separate five-minute budget.
+## 2026-11-15 — Native physical frame storage (#821)
+
+- [[Backend Frame Slots]] reuses storage for disjoint value lifetimes in generated C11. Owned candidates must be explicitly emptied before reuse. The signed Int8 matrix uses 4,561 slots instead of 6,394 and retains identical output.
+- [[Backend Frame Bodies]] shares text stores and moves through [[Native Text Runtime]]. With both changes the signed Int8 matrix emits 1,227,359 C bytes instead of 1,429,513.
+
+## 2026-11-14 — Recycling lists and grids (#925)
+
+- `Std.Mobile.View` gains `Recycled`, a list or equal-column grid that supplies rows for a window of its items, and `Reached` events with `windowStart` to move the window. [[Std Mobile Stream]] encodes RANGE and COLUMNS (codes 24 and 25). The iOS host shows a list with a row store and reports scroll positions through [[iOS Host List]] and [[iOS Host Events]] ([[Native iOS Recycling Delivery]]).
+
+## 2026-11-14 — iOS theming contract (#923)
+
+- `Std.Mobile.Theme` defines seven color roles with platform or fixed light/dark tones, an appearance override and text styles; `Styled` and `Painted` wrap controls in [[Std Mobile View]] and encode STYLE and COLOR through [[Std Mobile Stream]] (codes 20 to 23). The iOS host applies a theme with dynamic platform colors and Dynamic Type text styles, so a light/dark switch needs no Pudu rebuild ([[Native iOS Theming Delivery]]).
+
+## 2026-11-14 — iOS scrolling and keyboard avoidance (#919)
+
+- `Scroll(View)` mounts a vertical root viewport with one reconciled child. UIKit constrains root content to the safe area, resizes it for the docked keyboard and reveals the focused field ([[Native iOS Scrolling Delivery]]). Generated iOS apps enable ProMotion timing hints and the iOS spec sets variable-refresh acceptance criteria.
+
+## 2026-11-14 — Native application bundles (#916)
+
+- `pudu build --native --target ios-simulator-arm64 --app` writes a signed simulator application with the embedded iOS host ([[Native App Delivery]]). Publication refuses occupied output paths.
+
 ## 2026-11-14 — iOS navigation contract (#920)
 
 - [[Native iOS Navigation]] specifies application-owned route state, UIKit transition completion, and native page sheets.
@@ -12,6 +243,10 @@ tags: [changelog]
 ## 2026-11-14 — Pudu Native iOS UI coverage target
 
 - Pudu Native iOS UI coverage target, including iPhone Duo, with the current gaps ([[Pudu Native iOS UI]]).
+
+## 2026-11-14 — Pudu Native keyed lists (#914)
+
+- Pudu Native keyed lists: a mounted tree with stable, recycled node ids; keyed rows reconciled by key into INSERT, REMOVE and MOVE; Std.Mobile.Stream encodes instructions ([[Native Keyed Lists Delivery]]). The installed compiler now ships `lib/Std/Mobile`. Updating repeated keys removes old duplicate rows and recycles their ids.
 
 ## 2026-11-14 — Pudu Native controls (#912)
 

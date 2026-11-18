@@ -1,0 +1,16 @@
+module Feed
+
+import Std.Mobile.Host as Host
+import Std.Mobile.View as View
+
+fn main() -> Int {
+  var rows: Array[View.View] = []
+  for index in 1..=40 {
+    rows = rows.push(View.Label("Row {index}"))
+  }
+  rows = rows.push(View.Named("Feed editor", View.Field("Add a note", "", 1u32)))
+  let (_, stream) = View.mount(&View.Scroll(View.Column(rows)))
+  Host.apply(stream)
+  while Host.wait() != View.Stopped {}
+  0
+}

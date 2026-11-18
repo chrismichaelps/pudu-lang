@@ -48,3 +48,6 @@ Callable regressions pass ordinary and defaulted functions through a generic
 identity function, invoke a default's function-valued trait argument, and
 check explicit answers. This prevents concrete signature freezing from
 turning a function carrier's display text into a nominal type.
+
+The default-argument regression invokes a method with a written default
+and supplies the full checked arity. Its native result is 9.

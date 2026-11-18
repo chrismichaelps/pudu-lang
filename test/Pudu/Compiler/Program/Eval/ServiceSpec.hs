@@ -53,6 +53,8 @@ testServiceEvaluation = do
   columns <- runEntry "test-fixtures/stdlib/UsesSchema.pudu"
   kept <- runEntry "test-fixtures/stdlib/UsesStore.pudu"
   keptThrough <- runEntry "test-fixtures/stdlib/UsesStoreDriver.pudu"
+  sqliteFull <- runEntry "test-fixtures/stdlib/UsesSqliteFull.pudu"
+  engines <- runEntry "test-fixtures/stdlib/UsesDbEngines.pudu"
   shaped <- runEntry "test-fixtures/stdlib/UsesQueryShape.pudu"
   builtAndShaped <- runEntry "test-fixtures/stdlib/UsesDbQueryShapeAll.pudu"
   proved <- runEntry "test-fixtures/stdlib/UsesPassword.pudu"
@@ -335,6 +337,24 @@ testServiceEvaluation = do
     , counterexample
         "a store reads and writes through any driver and counts what it changed"
         (keptThrough === Just "25")
+    {-| Every capability of SQLite the driver binds, against a real database:
+        a write's changed rows and inserted rowid, SQLite's own error
+        messages, declared column types, text beyond ASCII and empty values
+        kept exact, a cached statement reused, named parameters and expanded
+        SQL, a savepoint undoing only its own work, blob reads and writes in
+        place, the library version and change count, backup and restore, a
+        read-only connection, a write-ahead log, file URIs only when asked
+        for, and a closed connection refusing. -}
+    , counterexample
+        "SQLite answers with all of its capabilities"
+        (sqliteFull === Just "26")
+    {-| Engines are a kind: each bundled driver comes from the factory its
+        engine names, states its capabilities, and is told apart by them
+        rather than by its name; a write states its count last whichever
+        engine answered it. -}
+    , counterexample
+        "each engine's driver comes from its factory and states its capabilities"
+        (engines === Just "9")
     {-| That a statement of real shape holds together: every join, grouping, an
         aggregate, a condition on the group, ordering that says where nothing
         sorts, set operations, a named result, and row locking — composed into

@@ -121,6 +121,12 @@ Allocation now doubles with the module count (x2.0 per doubling, from x3.0–x3.
 - **Q:** Where does installation code live? **A:** [[Type Check Install]], below both this module
   and [[Type Check Import]], so preparation and consumers share one definition without a cycle.
 
+## Resolved Grill Log for #876
+
+Index callback token names in the declaring module's local identities.
+The shared installation pass publishes the qualified registration value
+through the existing interface value path.
+
 ## Referenced by
 
 [[src/Pudu/Type/_MOC]] · [[Type Interface]] · [[Type Check Import]] · [[Type Check Install]] ·

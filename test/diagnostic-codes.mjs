@@ -21,6 +21,7 @@ const root = process.argv[2] ?? (existsSync("packages/pudu/v0.1/src") ? "package
 
 const shared = new Map([
   ["E0003", "an unclosed block comment, raised by the trivia scanner and checked during REPL completion"],
+  ["E1000", "the file ends before what a parser expects, from the token stream and from a callback's fallback literal"],
   ["E1001", "the generic wrong-token report, raised wherever a parser expects something"],
   ["E1032", "a function body is missing, from a declaration and from a literal"],
   ["E1040", "an unexpected token in expression position, from expression recovery and early REPL entry validation"],
@@ -31,6 +32,7 @@ const shared = new Map([
   ["E3001", "the type mismatch, raised wherever two types are required to agree"],
   ["E3005", "a member the receiver does not have, from field access and from method lookup"],
   ["E3013", "an ambiguous method, from trait dispatch and from coherence"],
+  ["E3063", "a foreign or callback shape its declaration does not admit, from the declaration and from a callback group's construction"],
   ["E3014", "an implementation owned by neither its trait's module nor its type's, from an authored impl and from a derive request"],
   ["E3015", "overlapping implementations, from authored impls and from generated derive heads"],
   ["E3028", "type arguments written where they cannot be carried"],
@@ -55,6 +57,7 @@ const shared = new Map([
   ["E7022", "a foreign call that cannot use or release the supplied handle"],
   ["E7024", "a foreign Str result that is missing, from the interpreter's bridge and native foreign call sites"],
   ["E7025", "a foreign Str result that is not UTF-8, from the interpreter's bridge and native foreign call sites"],
+  ["E7028", "an invalid foreign length relative to its input buffers, from the interpreter and native foreign call sites"],
   ["E7015", "a foreign call whose library does not open or whose symbol it does not export, from the interpreter's bridge and native foreign call sites"],
   ["E7011", "a match no arm accepted, from the tree walker and from compiled bodies, which must report it alike"],
   ["W2001", "an unused import, reported by resolution and retained by lint policy and output"],

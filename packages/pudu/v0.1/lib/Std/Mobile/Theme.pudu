@@ -1,0 +1,136 @@
+module Std.Mobile.Theme
+
+import Std.Mobile.Stream as Stream
+
+/// An sRGB color with straight alpha, one byte a channel.
+export type Rgba = { red: UInt8, green: UInt8, blue: UInt8, alpha: UInt8 }
+
+/// The color a role shows: the platform's own semantic color, or one color
+/// for light appearance and one for dark.
+export type Tone = Platform | Fixed(Rgba, Rgba)
+
+/// A semantic slot that platform controls draw with.
+export type Role = Surface | Ink | Accent | OnAccent | Muted | Danger | Separator
+
+/// The appearance the application asks for; `System` follows the device.
+export type Appearance = System | Light | Dark
+
+/// A text style whose size follows the system text size.
+export type TextStyle = LargeTitle | Title | Headline | Body | Callout | Subheadline | Footnote | Caption
+
+/// A system material drawn behind content, from the most to the least
+/// translucent.
+export type Material = Thin | Regular | Thick
+
+/// One tone per role and the appearance the application asks for.
+export type Theme = {
+  surface: Tone,
+  ink: Tone,
+  accent: Tone,
+  onAccent: Tone,
+  muted: Tone,
+  danger: Tone,
+  separator: Tone,
+  appearance: Appearance
+}
+
+/// Wire code of each role; THEME writes tones in this order.
+const ROLES: Map[Role, UInt32] = mapOf([
+    (Surface, 0u32),
+    (Ink, 1u32),
+    (Accent, 2u32),
+    (OnAccent, 3u32),
+    (Muted, 4u32),
+    (Danger, 5u32),
+    (Separator, 6u32)
+  ])
+
+/// Wire code of each text style; zero is never written.
+const STYLES: Map[TextStyle, UInt32] = mapOf([
+    (LargeTitle, 1u32),
+    (Title, 2u32),
+    (Headline, 3u32),
+    (Body, 4u32),
+    (Callout, 5u32),
+    (Subheadline, 6u32),
+    (Footnote, 7u32),
+    (Caption, 8u32)
+  ])
+
+/// Wire code of each material; zero is never written.
+const MATERIALS: Map[Material, UInt32] = mapOf([(Thin, 1u32), (Regular, 2u32), (Thick, 3u32)])
+
+/// Wire code of each appearance.
+const APPEARANCES: Map[Appearance, UInt32] = mapOf([(System, 0u32), (Light, 1u32), (Dark, 2u32)])
+
+/// Tone kinds on the wire.
+const PLATFORM_TONE: UInt32 = 0u32
+const FIXED_TONE: UInt32 = 1u32
+
+/// Every role drawn with the platform's semantic colors, following the device appearance.
+export fn platform() -> Theme {
+  Theme {
+    surface: Platform,
+    ink: Platform,
+    accent: Platform,
+    onAccent: Platform,
+    muted: Platform,
+    danger: Platform,
+    separator: Platform,
+    appearance: System
+  }
+}
+
+/// An opaque color.
+export fn rgb(red: UInt8, green: UInt8, blue: UInt8) -> Rgba { Rgba{red: red, green: green, blue: blue, alpha: 255u8} }
+
+/// The THEME instruction with every role's tone in role order, then APPEARANCE.
+export fn stream(theme: &Theme) -> Bytes { bytesOf(encoded(theme)) }
+
+/// Nothing when both themes encode alike, otherwise the stream of `after`.
+export fn restyled(before: &Theme, after: &Theme) -> Bytes {
+  let next = encoded(after)
+  if encoded(before) == next { bytesOf([]) } else { bytesOf(next) }
+}
+
+/// A role's wire code.
+export fn roleCode(role: Role) -> UInt32 { coded(ROLES.get(role)) }
+
+/// A material's wire code.
+export fn materialCode(material: Material) -> UInt32 { coded(MATERIALS.get(material)) }
+
+/// A text style's wire code.
+export fn styleCode(style: TextStyle) -> UInt32 { coded(STYLES.get(style)) }
+
+fn encoded(theme: &Theme) -> Array[UInt8] {
+  let tones = [theme.surface, theme.ink, theme.accent, theme.onAccent, theme.muted, theme.danger, theme.separator]
+  let themed = Stream.theme([], &tones.map(toneWords))
+  Stream.appearance(themed, coded(APPEARANCES.get(theme.appearance)))
+}
+
+// A tone as its kind and its two packed colors.
+fn toneWords(tone: Tone) -> (UInt32, UInt32, UInt32) {
+  match tone {
+    case Platform => (PLATFORM_TONE, 0u32, 0u32)
+    case Fixed(light, dark) => (FIXED_TONE, packed(&light), packed(&dark))
+  }
+}
+
+// Red in the low byte, so the word's little-endian bytes read R, G, B, A.
+fn packed(color: &Rgba) -> UInt32 {
+  widened(color.red) | widened(color.green) << 8 | widened(color.blue) << 16 | widened(color.alpha) << 24
+}
+
+fn widened(channel: UInt8) -> UInt32 {
+  match convertInteger[UInt32](channel) {
+    case Some(value) => value
+    case None => 0u32
+  }
+}
+
+fn coded(found: Option[UInt32]) -> UInt32 {
+  match found {
+    case Some(code) => code
+    case None => 0u32
+  }
+}

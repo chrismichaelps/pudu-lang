@@ -1,13 +1,13 @@
 {-| @Pudu.Backend.Emit.State — deterministic output, scalar temporaries,
     byte-safe strings, and interpreter-compatible diagnostic sites. -}
 module Pudu.Backend.Emit.State
-  ( EmitState (..), emptyEmitState, line, freshTemp, textOfInt
+  ( EmitState (..), emptyEmitState, line, freshTemp, textOfInt, profileLabel
   , shiftSites, overflowSite, divideByZeroSite, callDepthSite, operatorFailureSite, failureSite, helpedFailureSite, textFailureSite, renderSites, byteData, renderByteData, cString, cStringBytes
   ) where
 
 import qualified Data.ByteString as ByteString
 import qualified Data.List as List
-import Data.Char (ord)
+import Data.Char (isAsciiLower, isAsciiUpper, isDigit, ord)
 import qualified Data.Map.Strict as Map
 import qualified Data.Set as Set
 import Data.Text (Text)
@@ -84,6 +84,16 @@ freshTemp state =
 
 textOfInt :: Int -> Text
 textOfInt = Text.pack . show
+
+{-| The symbol a generated function is known by to a profiler or debugger:
+    its Pudu name, its role, and its index, which keeps two functions of one
+    name apart. Written as an assembler label on the function's first
+    declaration, so every reference in the C keeps its indexed name. -}
+profileLabel :: Text -> Text -> Int -> Text
+profileLabel role name identity =
+  " __asm__(\"pudu_" <> Text.take 96 (Text.map safe name) <> "_" <> role <> textOfInt identity <> "\")"
+ where
+  safe c = if isAsciiLower c || isAsciiUpper c || isDigit c then c else '_'
 
 {-| Bake a site for a span: location and excerpt geometry from the program's
     own source, text from the caller. -}

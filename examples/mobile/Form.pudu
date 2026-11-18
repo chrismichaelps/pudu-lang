@@ -34,17 +34,18 @@ fn update(model: &Model, event: &View.Event) -> Model {
 
 fn main() -> Int {
   var model = Model{name: "", subscribed: false}
-  var shown = view(&model)
-  Host.apply(View.build(&shown))
+  let (first, built) = View.mount(&view(&model))
+  var mounted = first
+  Host.apply(built)
   while true {
     let event = Host.wait()
     if event == View.Stopped {
       return 0
     }
     model = update(&model, &event)
-    let next = view(&model)
-    Host.apply(View.changes(&shown, &next))
-    shown = next
+    let (next, changes) = View.update(&mounted, &view(&model))
+    Host.apply(changes)
+    mounted = next
   }
   0
 }

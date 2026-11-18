@@ -4,6 +4,7 @@
     the functions that pack a record box into it and unpack one out of it. -}
 module Pudu.Backend.Emit.ForeignAbi
   ( Layouts, abiType, toAbi, fromAbi, mangle, recordsIn, recordDefinitions, textLeaves, recordNeeds
+  , foreignHandleType, isOptionalHandle
   ) where
 
 import Data.Char (isAsciiLower, isAsciiUpper, isDigit, ord)
@@ -34,6 +35,7 @@ abiType kind = case kind of
   CoreBytesType -> "const void *"
   CoreRecordType _ _ -> structName kind
   CoreHandleType _ _ -> "void *"
+  CoreSumType "Option" [CoreHandleType _ _] -> "void *"
   _ -> "void"
 
 {-| A scalar cell as the C value it crosses as. -}
@@ -46,6 +48,8 @@ toAbi kind cell = case kind of
   CoreBoolType -> "(uint8_t)(" <> cell <> " != 0)"
   CoreBytesType -> "pudu_foreign_bytes_in(" <> cell <> ")"
   CoreHandleType _ _ -> "(void *)(uintptr_t)" <> cell <> "->fields[0].floating"
+  CoreSumType "Option" [handle@CoreHandleType{}] ->
+    "(" <> cell <> "->fields[0].scalar == 0 ? " <> toAbi handle (cell <> "->fields[1].box") <> " : NULL)"
   _ -> cell
 
 {-| A scalar C answer as its cell. -}
@@ -56,6 +60,16 @@ fromAbi kind value = case kind of
   CoreFloatType _ -> "pudu_float_encode((double)" <> value <> ")"
   CoreBoolType -> "(" <> value <> " != 0)"
   _ -> value
+
+foreignHandleType :: CoreType -> Maybe CoreType
+foreignHandleType kind = case kind of
+  CoreHandleType _ _ -> Just kind
+  CoreSumType "Option" [handle@CoreHandleType{}] -> Just handle
+  _ -> Nothing
+
+isOptionalHandle :: CoreType -> Bool
+isOptionalHandle (CoreSumType "Option" [CoreHandleType _ _]) = True
+isOptionalHandle _ = False
 
 {-| Text made a C identifier fragment, distinct for distinct text. -}
 mangle :: Text -> Text

@@ -74,8 +74,10 @@ fn answerTo(sql: Str) -> Result[Driver.Rows, Driver.Error] {
 fn fake(into: Sync.Cell[Str]) -> Driver.Driver {
   Driver.Driver {
     name: "fake",
+    engine: Driver.Custom("fake"),
     schemes: ["fake"],
     placeholders: Named,
+    capabilities: Driver.plainCapabilities(),
     open: fn(uri: Str, size: Int) -> Result[Driver.Client, Driver.Error] {
       let _noted = Sync.set(&into, Result.unwrapOr(Sync.get(&into), "") + "open " + uri + " x" + show(size) + "\n")
       Ok(

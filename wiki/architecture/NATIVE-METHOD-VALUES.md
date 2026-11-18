@@ -76,6 +76,6 @@ method through its type: a capture-free wrapper whose body is
 reference compares equal. Both wrappers are uncounted; the implementation
 keeps its own counted frame and its own spans for failures.
 
-Resolved Grill Log: the trait-qualified value `Named.label` stays refused
-with E6001: the interpreter fails it at run time with an undefined name
-(#647), so there is no behaviour to match yet.
+Resolved Grill Log: the trait-qualified value `Named.label` is native. Both
+engines dispatch it on its first argument, like the written call; the value is
+a capture-free closure keyed by trait, member and signature (#647, #935).

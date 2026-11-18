@@ -61,8 +61,9 @@ skips invocation. Qualified calls pass their arguments as written.
 - **Q:** Are two modules' same-named types distinguished? **A:** Here, yes, by
   canonical key, as checking types the call. The evaluator collides on them
   (#550); conformance for that case waits for its fix.
-- `&mut self` still refuses at the parameter type, because no place writeback
-  exists yet.
+- A checked receiver or qualified method can lend `&mut self` through its
+  place. The synthesized iteration calls require the read-only receiver and
+  value state of the checked Sequence protocol.
 
 ## Dependencies and consumers
 
@@ -121,9 +122,9 @@ lowered again from the state before the ordinary attempt, through
 [[Compiler Lower Loan]]'s `lowerLoanedOperands`: a receiver call first
 retains its receiver, which lends whatever place it names, then its arguments; a
 qualified call's operands are arguments in order. Lowering is a pure state
-function, so the discarded attempt leaves nothing behind. Only `for`-loop
-protocol calls still go straight to `invoke`, whose loans refuse at the
-`&mut` type. A bound method value lifts the written call, so a loaned
+function, so the discarded attempt leaves nothing behind. The `for`-loop
+protocol calls still go straight to `invoke`. A checked `for` requires a
+read-only receiver and passes its state by value. A bound method value lifts the written call, so a loaned
 method held as a value writes back to the copy of the receiver it holds, as
 the evaluator's `closureSelf` does. See [[Native Mutable Loans]].
 

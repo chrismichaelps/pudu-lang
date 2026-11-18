@@ -1,0 +1,222 @@
+module Std.Mobile.Stream
+
+import Std.ByteOrder {writeU32LE}
+
+/// The kind a CREATE names for a label.
+export const LABEL: UInt32 = 1u32
+
+/// The kind a CREATE names for a button.
+export const BUTTON: UInt32 = 2u32
+
+/// The kind a CREATE names for a column; a keyed list is a column too.
+export const COLUMN: UInt32 = 3u32
+
+/// The kind a CREATE names for a row.
+export const ROW: UInt32 = 4u32
+
+/// The kind a CREATE names for a text field.
+export const FIELD: UInt32 = 5u32
+
+/// The kind a CREATE names for a toggle.
+export const TOGGLE: UInt32 = 6u32
+
+/// The kind a CREATE names for a vertical scroll viewport.
+export const SCROLL: UInt32 = 7u32
+
+/// The kind a CREATE names for a recycling list or grid.
+export const LIST: UInt32 = 8u32
+
+/// The kind a CREATE names for a material surface holding one child.
+export const MATERIAL: UInt32 = 9u32
+
+/// The kind a CREATE names for a determinate progress bar.
+export const PROGRESS: UInt32 = 10u32
+
+/// The kind a CREATE names for an activity indicator.
+export const ACTIVITY: UInt32 = 11u32
+
+/// Instruction codes of the view stream; each is followed by its words.
+const CREATE: UInt32 = 1u32
+const TEXT: UInt32 = 2u32
+const APPEND: UInt32 = 3u32
+const ROOT: UInt32 = 4u32
+const TAG: UInt32 = 5u32
+const STATE: UInt32 = 7u32
+const HINT: UInt32 = 8u32
+const NAME: UInt32 = 9u32
+const INSERT: UInt32 = 10u32
+const REMOVE: UInt32 = 11u32
+const MOVE: UInt32 = 12u32
+const THEME: UInt32 = 20u32
+const APPEARANCE: UInt32 = 21u32
+const STYLE: UInt32 = 22u32
+const COLOR: UInt32 = 23u32
+const RANGE: UInt32 = 24u32
+const COLUMNS: UInt32 = 25u32
+const SURFACE: UInt32 = 26u32
+const GESTURES: UInt32 = 27u32
+const ALERT: UInt32 = 28u32
+const VALUE: UInt32 = 29u32
+const HAPTIC: UInt32 = 30u32
+const TRAITS: UInt32 = 31u32
+const ACCESS_HINT: UInt32 = 32u32
+const ACCESS_VALUE: UInt32 = 33u32
+const MENU: UInt32 = 34u32
+const ANIMATE: UInt32 = 35u32
+
+/// Creates node `node` as a control of `kind`.
+export fn create(out: Array[UInt8], node: UInt32, kind: UInt32) -> Array[UInt8] { words(out, [CREATE, node, kind]) }
+
+/// Sets the text a node shows: a label's text, a button's title, a field's
+/// text or a toggle's title.
+export fn text(out: Array[UInt8], node: UInt32, value: Str) -> Array[UInt8] { texted(out, TEXT, node, value) }
+
+/// Sets a field's placeholder.
+export fn hint(out: Array[UInt8], node: UInt32, value: Str) -> Array[UInt8] { texted(out, HINT, node, value) }
+
+/// Sets a control's accessible name.
+export fn name(out: Array[UInt8], node: UInt32, value: Str) -> Array[UInt8] { texted(out, NAME, node, value) }
+
+/// Sets the tag a control's events report.
+export fn tag(out: Array[UInt8], node: UInt32, value: UInt32) -> Array[UInt8] { words(out, [TAG, node, value]) }
+
+/// Sets a toggle's state.
+export fn state(out: Array[UInt8], node: UInt32, on: Bool) -> Array[UInt8] {
+  words(out, [STATE, node, if on { 1u32 } else { 0u32 }])
+}
+
+/// Adds `child` after a group's last child.
+export fn append(out: Array[UInt8], parent: UInt32, child: UInt32) -> Array[UInt8] { words(out, [APPEND, parent, child]) }
+
+/// Adds `child` to a group at `index`.
+export fn insert(out: Array[UInt8], parent: UInt32, child: UInt32, index: UInt32) -> Array[UInt8] {
+  words(out, [INSERT, parent, child, index])
+}
+
+/// Moves a group's `child` to `index`.
+export fn move(out: Array[UInt8], parent: UInt32, child: UInt32, index: UInt32) -> Array[UInt8] {
+  words(out, [MOVE, parent, child, index])
+}
+
+/// Detaches `node` and forgets every node of its subtree, listed in `ids`.
+export fn remove(out: Array[UInt8], node: UInt32, ids: &Array[UInt32]) -> Array[UInt8] {
+  words(words(out, [REMOVE, node, count(ids.length())]), *ids)
+}
+
+/// Sets every role's tone, in role order, as a kind and two packed colors.
+export fn theme(out: Array[UInt8], tones: &Array[(UInt32, UInt32, UInt32)]) -> Array[UInt8] {
+  var bytes = words(out, [THEME, count(tones.length())])
+  for tone in *tones {
+    bytes = words(bytes, [tone[0], tone[1], tone[2]])
+  }
+  bytes
+}
+
+/// Sets the appearance the application asks for.
+export fn appearance(out: Array[UInt8], code: UInt32) -> Array[UInt8] { words(out, [APPEARANCE, code]) }
+
+/// Sets the text style of a control that shows text.
+export fn style(out: Array[UInt8], node: UInt32, code: UInt32) -> Array[UInt8] { words(out, [STYLE, node, code]) }
+
+/// Sets the color role of a control that shows text.
+export fn color(out: Array[UInt8], node: UInt32, code: UInt32) -> Array[UInt8] { words(out, [COLOR, node, code]) }
+
+/// Sets how many items a list shows and the item its first window row is.
+export fn range(out: Array[UInt8], node: UInt32, total: UInt32, first: UInt32) -> Array[UInt8] {
+  words(out, [RANGE, node, total, first])
+}
+
+/// Sets how many equal columns a list lays its items in.
+export fn columns(out: Array[UInt8], node: UInt32, across: UInt32) -> Array[UInt8] { words(out, [COLUMNS, node, across]) }
+
+/// Sets the system material behind a material surface.
+export fn material(out: Array[UInt8], node: UInt32, code: UInt32) -> Array[UInt8] { words(out, [SURFACE, node, code]) }
+
+/// Attaches the recognizers in `mask` to a control; their events report `tag`.
+export fn gestures(out: Array[UInt8], node: UInt32, reported: UInt32, mask: UInt32) -> Array[UInt8] {
+  words(out, [GESTURES, node, reported, mask])
+}
+
+/// Shows an alert: its tag, style, title, message, then each choice's role
+/// and label.
+export fn alert(out: Array[UInt8], reported: UInt32, form: UInt32, title: Str, message: Str, choices: &Array[(UInt32, Str)]) -> Array[UInt8] {
+  chosen(field(field(words(out, [ALERT, reported, form]), title), message), choices)
+}
+
+/// Sets a progress bar's completion in thousandths.
+export fn progress(out: Array[UInt8], node: UInt32, permille: UInt32) -> Array[UInt8] { words(out, [VALUE, node, permille]) }
+
+/// Plays a haptic.
+export fn haptic(out: Array[UInt8], code: UInt32) -> Array[UInt8] { words(out, [HAPTIC, code]) }
+
+/// Sets the accessibility traits of a control.
+export fn traits(out: Array[UInt8], node: UInt32, mask: UInt32) -> Array[UInt8] { words(out, [TRAITS, node, mask]) }
+
+/// Sets the accessibility hint of a control.
+export fn accessHint(out: Array[UInt8], node: UInt32, hinted: Str) -> Array[UInt8] { texted(out, ACCESS_HINT, node, hinted) }
+
+/// Sets the accessibility value of a control.
+export fn accessValue(out: Array[UInt8], node: UInt32, current: Str) -> Array[UInt8] { texted(out, ACCESS_VALUE, node, current) }
+
+/// Attaches a context menu to a control: its tag, then each choice's role
+/// and label.
+export fn menu(out: Array[UInt8], node: UInt32, reported: UInt32, choices: &Array[(UInt32, Str)]) -> Array[UInt8] {
+  chosen(words(out, [MENU, node, reported]), choices)
+}
+
+/// Makes a group's placements animate, or stop animating.
+export fn animate(out: Array[UInt8], node: UInt32, on: Bool) -> Array[UInt8] {
+  words(out, [ANIMATE, node, if on { 1u32 } else { 0u32 }])
+}
+
+/// Shows `node` as the screen's content.
+export fn root(out: Array[UInt8], node: UInt32) -> Array[UInt8] { words(out, [ROOT, node]) }
+
+// A text-carrying instruction: the code, the node, the byte length, then the
+// UTF-8 bytes.
+fn texted(out: Array[UInt8], code: UInt32, node: UInt32, value: Str) -> Array[UInt8] {
+  let raw = value.toBytes().toArray()
+  var bytes = words(out, [code, node, count(raw.length())])
+  for octet in raw {
+    bytes = bytes.push(octet)
+  }
+  bytes
+}
+
+// A length-prefixed UTF-8 field inside an instruction.
+fn field(out: Array[UInt8], content: Str) -> Array[UInt8] {
+  let raw = content.toBytes().toArray()
+  var bytes = words(out, [count(raw.length())])
+  for octet in raw {
+    bytes = bytes.push(octet)
+  }
+  bytes
+}
+
+// A count of choices, then each choice's role and label.
+fn chosen(out: Array[UInt8], choices: &Array[(UInt32, Str)]) -> Array[UInt8] {
+  var bytes = words(out, [count(choices.length())])
+  for choice in *choices {
+    bytes = field(words(bytes, [choice[0]]), choice[1])
+  }
+  bytes
+}
+
+// Little-endian words appended to the stream.
+fn words(out: Array[UInt8], values: Array[UInt32]) -> Array[UInt8] {
+  var bytes = out
+  for value in values {
+    for octet in writeU32LE(value) {
+      bytes = bytes.push(octet)
+    }
+  }
+  bytes
+}
+
+// A length as a word.
+fn count(length: Int) -> UInt32 {
+  match convertInteger[UInt32](length) {
+    case Some(found) => found
+    case None => 0u32
+  }
+}

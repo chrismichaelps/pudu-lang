@@ -1,0 +1,85 @@
+module UsesMobileList
+
+import Std.ByteOrder {readU32LE}
+import Std.Mobile.View as View
+
+// The words at `offset` onward, read as little-endian 32-bit values.
+fn wordsAt(bytes: &Array[UInt8], offset: Int, count: Int) -> Array[UInt32] {
+  var found = []
+  for index in 0..count {
+    match readU32LE(bytes, offset + index * 4) {
+      case Some(word) => { found = found.push(word) }
+      case None => { return [] }
+    }
+  }
+  found
+}
+
+fn row(key: Str) -> (Str, View.View) { (key, View.Label(key)) }
+
+fn list(tag: UInt32, total: UInt32, first: UInt32, columns: UInt32, keys: Array[Str]) -> View.View {
+  View.Recycled(View.Window{tag: tag, total: total, first: first, columns: columns, rows: keys.map(row)})
+}
+
+fn changed(shown: &View.View, next: &View.View) -> Array[UInt8] {
+  let (mounted, _) = View.mount(shown)
+  let (_, stream) = View.update(&mounted, next)
+  stream.toArray()
+}
+
+export fn main() -> Int {
+  var held = 0
+  let start = list(1u32, 100u32, 0u32, 1u32, ["a", "b"])
+
+  // CREATE list 0, TAG 1, COLUMNS 1, RANGE 100 from 0, then row "a" built and appended.
+  let (_, mounted) = View.mount(&start)
+  let built = mounted.toArray()
+  if wordsAt(&built, 0, 13) == [1u32, 0u32, 8u32, 5u32, 0u32, 1u32, 25u32, 0u32, 1u32, 24u32, 0u32, 100u32, 0u32]
+    && wordsAt(&built, 52, 6) == [1u32, 1u32, 1u32, 2u32, 1u32, 1u32]
+    && wordsAt(&built, 77, 3) == [3u32, 0u32, 1u32] {
+    held = held + 1
+  }
+
+  // Shifting the window by one: "a" removed, "c" built and inserted at 1, RANGE from 1.
+  let shifted = changed(&start, &list(1u32, 100u32, 1u32, 1u32, ["b", "c"]))
+  let tail = shifted.length() - 16
+  if wordsAt(&shifted, 0, 4) == [11u32, 1u32, 1u32, 1u32]
+    && wordsAt(&shifted, 16, 3) == [1u32, 1u32, 1u32]
+    && wordsAt(&shifted, 41, 4) == [10u32, 0u32, 1u32, 1u32]
+    && wordsAt(&shifted, tail, 4) == [24u32, 0u32, 100u32, 1u32] {
+    held = held + 1
+  }
+
+  // An unchanged list writes nothing.
+  if changed(&start, &start).length() == 0 { held = held + 1 }
+
+  // A changed total alone is one RANGE; a changed column count alone is one COLUMNS.
+  let grown = changed(&start, &list(1u32, 200u32, 0u32, 1u32, ["a", "b"]))
+  if grown.length() == 16 && wordsAt(&grown, 0, 4) == [24u32, 0u32, 200u32, 0u32] { held = held + 1 }
+  let gridded = changed(&start, &list(1u32, 100u32, 0u32, 3u32, ["a", "b"]))
+  if gridded.length() == 12 && wordsAt(&gridded, 0, 3) == [25u32, 0u32, 3u32] { held = held + 1 }
+
+  // A changed tag replaces the list: a new list shown, the old subtree removed.
+  let retagged = changed(&start, &list(2u32, 100u32, 0u32, 1u32, ["a", "b"]))
+  let shown = retagged.length() - 32
+  if wordsAt(&retagged, 0, 3) == [1u32, 3u32, 8u32] && wordsAt(&retagged, shown, 8) == [4u32, 3u32, 11u32, 0u32, 3u32, 0u32, 1u32, 2u32] {
+    held = held + 1
+  }
+
+  // Windows keep the visible item a quarter in and never run past the end.
+  if View.windowStart(0u32, 100u32, 20u32) == 0u32
+    && View.windowStart(50u32, 100u32, 20u32) == 45u32
+    && View.windowStart(95u32, 100u32, 20u32) == 80u32
+    && View.windowStart(3u32, 10u32, 20u32) == 0u32 {
+    held = held + 1
+  }
+
+  // Kind 8 carries a detail: the first visible index.
+  if View.eventWithDetail((8u64 << 32) | 1u64, "", 42u32) == View.Reached(1u32, 42u32)
+    && View.carriesDetail(8u64 << 32)
+    && !View.carriesDetail(1u64 << 32)
+    && View.eventWithDetail((1u64 << 32) | 7u64, "", 0u32) == View.Tapped(7u32) {
+    held = held + 1
+  }
+  held
+}

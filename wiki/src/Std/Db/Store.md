@@ -54,16 +54,18 @@ guess differently in each.
 builds, spelled for that driver's placeholders, and the session functions remain for a program that
 holds a PostgreSQL connection directly.
 
-**A write says how many rows it changed, on every backend.** PostgreSQL states the count in its
-command tag. SQLite's driver states none, so the count is asked for with `changes()` inside one
-transaction with the write, where no other statement can land between the two. A change or removal
-whose key names no row answers 0 rather than a success that wrote nothing. Because that transaction
-holds SQLite's one connection, these calls are not for use inside a transaction on the same client.
+**A write says how many rows it changed, on every backend.** Every engine's write command states the
+changed-row count as its last word: PostgreSQL in its command tag, SQLite as the final field of
+`SQLITE_DONE <rowid> <changes>`. The store reads that count from the command itself, with no second
+statement, so nothing can land between the write and the count. A change or removal whose key names
+no row answers 0 rather than a success that wrote nothing. The store does not branch on a driver's
+name to find the count.
 ## Grill Log
 - **Q:** Read SQLite's count with a second call on the client after the write? **A:** No.
   _Rationale:_ a client call takes whatever admission is free, and another statement landing between
-  the write and `changes()` would answer that statement's count. _Rejected:_ an unscoped follow-up
-  query; reporting no count on SQLite.
+  the write and a follow-up count would answer that statement's count. The count is part of the write
+  command instead. _Rejected:_ an unscoped follow-up query; reporting no count on SQLite.
+- **Q:** Branch on a driver's name to decide how to read the count? **A:** No. Engines are dispatched by kind through a factory table, and behavior by stated capability, not by driver name.
 - **Q:** Load a relation when it is first read, as the established framework does? **A:** No.
   _Rationale:_ that is the one decision that produces its three best-known failures — an exception
   when the session has closed, a query per parent, and a setting that keeps sessions open across a

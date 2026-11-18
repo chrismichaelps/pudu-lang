@@ -96,6 +96,11 @@ is ignored by rendering but retained in value equality and runtime liveness chec
 - **Q:** Expose ownership generations as language values? **A:** No; generations are internal
   admission metadata, not a new user-visible numeric or pointer API.
 
+## Resolved Grill Log for #876 — Interpreter callback values
+
+Render callback registrations, tokens and methods without exposing the
+opaque key used by the native boundary.
+
 ## Referenced by
 
 [[src/Pudu/Eval/_MOC]] · [[Eval Value]]
@@ -115,3 +120,7 @@ Resolved Grill Log: identity comes from the checked declaration, never import or
 Render NamedSumValue as its existing short variant label with named fields; diagnostic valueKind retains the short label. Reuse record field rendering without exposing canonical identity.
 
 Resolved Grill Log: represent named sums independently of ordinary records and positional sums. Preserve existing field order and public labels. Source publication follows in its own tested partition. See [[Named Sum Value Delivery]].
+
+## Resolved Grill Log for Objective-C delegates
+
+A delegate value renders with its class label, so a constructor result reads as the class it instantiates in diagnostics.

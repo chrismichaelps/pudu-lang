@@ -6,6 +6,8 @@ tags: [moc, architecture]
 
 # Architecture Map
 
+- [[Native Frame Slot Reuse]] — physical C11 frame storage and text update helpers (#821).
+
 - [[Callee First Call Evaluation]] — once-held callees and receivers before supplied arguments.
 - [[Native Indexed Stores]] — `Buckets[V]` on the tree carrier, hashing and MultiMap primitives.
 - [[Native Builtin Kernels]] — buffer, column, flat-table, digest, checksum, sealing, signature, audio and codec builtins.
@@ -137,3 +139,5 @@ Pudu is a statically typed native systems language for developers who need predi
 - [[Ark Water Validation]] — numerical wave conformance and staged fluid scenarios.
 
 - [[Native Text Views]] — byte-addressed UTF-8 reads and shared slices.
+
+- [[Native Platform Adoption]] — adopting platform releases through one toolchain ledger and a preflight (#926).

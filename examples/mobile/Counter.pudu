@@ -12,17 +12,18 @@ fn view(count: Int) -> View.View {
 
 fn main() -> Int {
   var count = 0
-  var shown = view(count)
-  Host.apply(View.build(&shown))
+  let (first, built) = View.mount(&view(count))
+  var mounted = first
+  Host.apply(built)
   while true {
     match Host.wait() {
       case View.Tapped(tag) => {
         if tag == ADD_ONE {
           count = count + 1
         }
-        let next = view(count)
-        Host.apply(View.changes(&shown, &next))
-        shown = next
+        let (next, changes) = View.update(&mounted, &view(count))
+        Host.apply(changes)
+        mounted = next
       }
       case View.Stopped => {
         return 0

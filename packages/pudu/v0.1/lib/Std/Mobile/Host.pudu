@@ -3,22 +3,27 @@ module Std.Mobile.Host
 import Std.Mobile.View as View
 
 /// The platform adapter: it applies one commit's instructions, waits for the
-/// next event while running the platform's main loop, and holds the text of
-/// the field whose change it last reported.
+/// next event while running the platform's main loop, and holds the text and
+/// detail word of the event it last reported.
 foreign "c" {
   fn applyStream symbol "pudu_ui_apply" (stream: Bytes, length: UInt64) -> ()
   fn waitEvent symbol "pudu_ui_wait" () -> UInt64
+  fn eventDetail symbol "pudu_ui_event_detail" () -> UInt32
+  fn eventWordCount symbol "pudu_ui_event_word_count" () -> UInt32
+  fn eventWord symbol "pudu_ui_event_word" (index: UInt32) -> UInt32
   fn eventText symbol "pudu_ui_event_text" () -> Str
 }
 
-/// Hands one commit's instructions to the platform adapter in one call.
+/// Applies a nonempty commit in one platform call.
 export fn apply(stream: Bytes) -> () {
   let length = match convertInteger[UInt64](stream.length()) {
     case Some(count) => count
     case None => 0u64
   }
-  unsafe(foreign) {
-    applyStream(stream, length)
+  if length > 0u64 {
+    unsafe(foreign) {
+      applyStream(stream, length)
+    }
   }
 }
 
@@ -26,11 +31,24 @@ export fn apply(stream: Bytes) -> () {
 export fn wait() -> View.Event {
   var raw = 0u64
   var text = ""
+  var detail = 0u32
+  var values: Array[Int32] = []
   unsafe(foreign) {
     raw = waitEvent()
     if View.carriesText(raw) {
       text = eventText()
     }
+    if View.carriesDetail(raw) {
+      detail = eventDetail()
+    }
+    if View.carriesWords(raw) {
+      var index = 0u32
+      let total = eventWordCount()
+      while index < total {
+        values = values.push(View.signed(eventWord(index)))
+        index = index + 1u32
+      }
+    }
   }
-  View.event(raw, text)
+  View.eventWithWords(raw, text, detail, values)
 }

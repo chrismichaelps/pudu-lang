@@ -68,6 +68,10 @@ Resolved Grill Log: a function's type parameters and constraints refuse only
 when its type parameters are not all bound, so a specialized copy is admitted
 and the entry and plain functions keep their refusals.
 
+## Default parameter suffix
+
+The checker and lowering agree on the required argument count by counting only the trailing defaults. The hidden count slot has a Core name shared with the embedded export emitter.
+
 ## Referenced by
 
 [[src/Pudu/Compiler/_MOC]] · [[Compiler Lower]] · [[Compiler Lower Body]]
@@ -101,10 +105,11 @@ Resolved Grill Log: Accept an existing expression body as well as a block body; 
 
 ## Defaults (#638)
 
-A signature with defaults admits all parameters plus a trailing Int count
-named "". A required parameter after a default refuses with E6001.
-Resolved Grill Log: the scheme's required count must equal the parameters
-without a default; defaults only fill from the end.
+The checked required count determines whether the signature adds the trailing
+Int count slot. A method whose checked signature requires every argument can
+have written defaults and still uses the ordinary ABI.
+Resolved Grill Log: any positions checking permits a caller to omit must
+have defaults in the trailing suffix.
 
 ## Mutable loans (#651)
 

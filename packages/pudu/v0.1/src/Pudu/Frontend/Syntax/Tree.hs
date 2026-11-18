@@ -20,8 +20,20 @@ module Pudu.Frontend.Syntax.Tree
   , requiredParameterCount
   , FunctionBody (..)
   , Foreign (..)
+  , foreignCallbackNames
+  , foreignValueNames
+  , ForeignCallback (..)
+  , ForeignCallbackGroup (..)
+  , ForeignDelegate (..)
+  , ForeignDelegateMethod (..)
+  , ForeignCallbackMember (..)
+  , ForeignCallbackParameter (..)
   , ForeignFunction (..)
+  , ForeignClass (..)
+  , ForeignMethod (..)
+  , ForeignLength (..)
   , ForeignParameter (..)
+  , ForeignCallbackPassing (..)
   , Impl (..)
   , Import (..)
   , Literal (..)
@@ -46,6 +58,7 @@ module Pudu.Frontend.Syntax.Tree
 import Data.List.NonEmpty (NonEmpty)
 import GHC.Generics (Generic)
 import Data.Text (Text)
+import Pudu.Foreign.Extent (ExtentUnit)
 import Pudu.Frontend.Syntax.Located (Located, locatedValue)
 import Pudu.Frontend.Syntax.Name (ModuleName)
 import Pudu.IntegerLiteral (IntegerKind)
@@ -403,21 +416,94 @@ data Foreign = Foreign
       is not a texture — and one address type for all of them makes passing the
       wrong one a fault the library reports rather than one the checker does. -}
   , foreignTypes :: ![Located Text]
+  , foreignClasses :: ![ForeignClass]
+  , foreignCallbacks :: ![Located ForeignCallback]
+  , foreignCallbackGroups :: ![Located ForeignCallbackGroup]
+  , foreignDelegates :: ![Located ForeignDelegate]
   , foreignFunctions :: ![Located ForeignFunction]
   }
+  deriving stock (Eq, Show, Generic)
+
+{-| An Objective-C class this program defines at run time. Each method is a
+    member of one callback group, and an instance carries that group's
+    registration, so a framework holding the object calls the handlers. -}
+data ForeignDelegate = ForeignDelegate
+  { foreignDelegateName :: !(Located Text)
+  , foreignDelegateSymbol :: !(Located Text)
+  , foreignDelegateGroup :: !(Located Text)
+  , foreignDelegateMethods :: ![ForeignDelegateMethod]
+  }
+  deriving stock (Eq, Show, Generic)
+
+data ForeignDelegateMethod = ForeignDelegateMethod
+  { foreignDelegateMember :: !(Located Text)
+  , foreignDelegateSelector :: !(Located Text)
+  }
+  deriving stock (Eq, Show, Generic)
+
+{-| The names a block binds as values: callback and group constructors, and
+    delegate constructors. Delegates are also handle types. -}
+foreignValueNames :: Foreign -> [Located Text]
+foreignValueNames declared =
+  foreignCallbackNames declared <> map (foreignDelegateName . locatedValue) (foreignDelegates declared)
+
+foreignCallbackNames :: Foreign -> [Located Text]
+foreignCallbackNames declared =
+  map (foreignCallbackName . locatedValue) (foreignCallbacks declared)
+    <> map (foreignCallbackGroupName . locatedValue) (foreignCallbackGroups declared)
+
+data ForeignCallbackGroup = ForeignCallbackGroup
+  { foreignCallbackGroupName :: !(Located Text)
+  , foreignCallbackGroupMembers :: ![ForeignCallbackMember]
+  }
+  deriving stock (Eq, Show, Generic)
+
+data ForeignCallbackMember = ForeignCallbackMember
+  { foreignCallbackMemberName :: !(Located Text)
+  , foreignCallbackMemberType :: !(Located Text)
+  }
+  deriving stock (Eq, Show, Generic)
+
+{-| The callback signature keeps the native argument order, including the
+    context word that has no corresponding Pudu argument. -}
+data ForeignCallback = ForeignCallback
+  { foreignCallbackName :: !(Located Text)
+  , foreignCallbackParameters :: ![Located ForeignCallbackParameter]
+  , foreignCallbackResult :: !(Located TypeSyntax)
+  , foreignCallbackFallback :: !(Maybe (Located Literal))
+  }
+  deriving stock (Eq, Show, Generic)
+
+data ForeignCallbackParameter
+  = ForeignCallbackContext
+  | ForeignCallbackArgument !(Located Text) !Bool !(Located TypeSyntax) !(Maybe ForeignLength)
   deriving stock (Eq, Show, Generic)
 
 {-| One function in a foreign library, as this program asserts its shape.
 
     The assertion is unverifiable — a wrong width is a corrupted stack rather
     than a diagnostic — which is why reaching one needs `unsafe`. -}
+data ForeignClass = ForeignClass
+  { foreignClassName :: !(Located Text)
+  , foreignClassSymbol :: !(Located Text)
+  }
+  deriving stock (Eq, Show, Generic)
+
+data ForeignMethod = ForeignMethod
+  { foreignMethodSelector :: !(Located Text)
+  , foreignMethodClass :: !(Maybe (Located Text))
+  }
+  deriving stock (Eq, Show, Generic)
+
 data ForeignFunction = ForeignFunction
   { foreignName :: !(Located Text)
   {-| The exact symbol the library exports when it differs from the local
       value name. Tooling and calls keep the local name; only lookup reads this. -}
   , foreignSymbol :: !(Maybe (Located Text))
+  , foreignMethod :: !(Maybe ForeignMethod)
   , foreignParameters :: ![Located ForeignParameter]
   , foreignResult :: !(Located TypeSyntax)
+  , foreignResultLength :: !(Maybe (Located Text))
   {-| Written `borrowed`: the library keeps what it returns, so nothing here
       releases it and no release may be named for it. -}
   , foreignResultBorrowed :: !Bool
@@ -438,8 +524,18 @@ data ForeignFunction = ForeignFunction
     for it, and what the library left there comes back beside the result. Most C
     libraries hand back the resource they made this way, which is why the
     distinction is in the declaration rather than in a comment. -}
+{-| How a callback token reaches native code: as a static trampoline, as
+    the registration context paired with a trampoline elsewhere, or as an
+    Objective-C block whose invoke is the trampoline. -}
+data ForeignCallbackPassing = TrampolinePassing | ContextPassing | BlockPassing
+  deriving stock (Eq, Show, Generic)
+
 data ForeignParameter = ForeignParameter
   { foreignParameterName :: !(Located Text)
+  {-| A native context slot refers to a callback argument by name and has no
+      separately written type. -}
+  , foreignParameterContext :: !Bool
+  , foreignParameterCallbackPassing :: !(Maybe ForeignCallbackPassing)
   , foreignParameterType :: !(Maybe (Located TypeSyntax))
   {-| Whether the library writes this parameter rather than reading it. -}
   , foreignParameterOut :: !Bool
@@ -447,8 +543,14 @@ data ForeignParameter = ForeignParameter
       written `owned` at all — a handle slot that is not owned is refused, so
       the two are recorded separately. -}
   , foreignParameterOwned :: !Bool
+  , foreignParameterNullable :: !(Maybe Span)
+  , foreignParameterLength :: !(Maybe ForeignLength)
   , foreignParameterReleasedBy :: !(Maybe (Located Text))
   }
+  deriving stock (Eq, Show, Generic)
+
+{-| A length's written unit and the ordered buffer names it bounds. -}
+data ForeignLength = ForeignLength !(Located ExtentUnit) !(NonEmpty (Located Text))
   deriving stock (Eq, Show, Generic)
 
 data FieldInit = FieldInit

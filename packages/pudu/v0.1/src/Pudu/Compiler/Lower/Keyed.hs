@@ -4,7 +4,7 @@
     before it is stored, and one that can't be ordered stops the program with
     E7008, as `comparableValue` decides. -}
 module Pudu.Compiler.Lower.Keyed
-  (lowerKeyedBuilder, keyedFromArray, lowerSetLiteral, lowerKeyedMethod, Blame (..), orderable, mayHoldFunction) where
+  (lowerKeyedBuilder, keyedFromArray, lowerSetLiteral, lowerKeyedMethod, setMembership, Blame (..), orderable, mayHoldFunction) where
 
 import Data.Text (Text)
 import Pudu.Compiler.Lower.Array (collect, stopped, stops)
@@ -61,6 +61,17 @@ lowerSetLiteral lower state at members = case typeForSpan (contextTypes (lowerCo
           built AtCall after at kind id "set member" (CoreExpression at (CoreArrayType member) (CoreArray cores))
       | otherwise -> halt at "a set literal whose members have different types" after
   _ -> halt at "a set without a native member type" state
+
+{-| `candidate in set`: the candidate is held before the set, the order the
+    interpreter evaluates them in, and the probe is the set's `contains`. -}
+setMembership :: LowerState -> Span -> CoreExpression -> CoreExpression -> Lowered
+setMembership state at candidate set =
+  let (withCandidate, candidateLocal) = bindLocal state "" (coreExpressionType candidate)
+      (withSet, setLocal) = bindLocal withCandidate "" (coreExpressionType set)
+      read' local = CoreExpression at (coreLocalType local) (CoreReadLocal local)
+      probe = CoreExpression at CoreBoolType (CoreKeyedMethod KeyedContains (read' setLocal) [read' candidateLocal])
+      held = [CoreStatement at (CoreDeclare candidateLocal candidate), CoreStatement at (CoreDeclare setLocal set)]
+   in (withSet, Just (CoreExpression at CoreBoolType (CoreBlockValue (CoreBlock held (Just probe))), CoreBoolType))
 
 {-| A built-in map, set or store method when the receiver is one; Nothing
     otherwise. A store is addressed by the Int folded into one word, which is

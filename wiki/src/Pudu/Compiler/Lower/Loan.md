@@ -62,6 +62,14 @@ Resolved Grill Log (#828): snapshot every value callee before preparing
 any operand. A direct receiver call prepares parameter zero first and
 retains its lent place. Writeback follows parameter position after invocation.
 
+## Resolved Grill Log for #877 — Native loan lowering
+
+Build foreign calls from the same held-operand traversal as language calls. The foreign crossing supplies the result and final tuple; place lookup and writeback remain here.
+
+## Resolved Grill Log for #877 — Post-call settlement
+
+A foreign call checks its captured report after the ordered stores and before reading the result.
+
 ## Referenced by
 
 [[Compiler Lower]] · [[Compiler Lower Body]] · [[Compiler Lower Try]] · [[Compiler Lower Call]] · [[Native Mutable Loans]] · [[src/Pudu/Compiler/_MOC]]

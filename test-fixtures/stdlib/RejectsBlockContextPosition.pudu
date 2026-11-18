@@ -1,0 +1,11 @@
+module RejectsBlockContextPosition
+
+foreign "c" {
+  type Queue
+  // A block's invoke receives the block itself first, so the callback's
+  // context word must be its first parameter.
+  callback Late(value: Int64, context) -> ()
+  fn runNow symbol "dispatch_sync" (queue: Queue, work: block Late) -> ()
+}
+
+export fn main() -> Int { 0 }

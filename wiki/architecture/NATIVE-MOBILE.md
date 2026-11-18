@@ -30,6 +30,9 @@ slice must respect, and the order of work. It extends [[Native Application UI]] 
 | Reload while developing | `pudu run --watch` restarts the program | State-preserving reload on simulators and emulators |
 | Platform controls | Desktop presenter draws Pudu pixels; platform UI toolkits are excluded | The adapter boundary below |
 
+Toolchain currency (the Xcode floor, the tested version, store rules and the SDK each capability
+needs) is kept in one ledger and adopted per platform release; see [[Native Platform Adoption]].
+
 ## Decisions
 
 ### One compiled program, not two code generators
@@ -77,7 +80,8 @@ Layout is Pudu's own flexible stack model from [[Std Ui Layout]], not a constrai
 Long lists map to the platform's recycling list view; Pudu supplies row models and stable identity,
 the platform owns cell reuse and scrolling. Animations described with Std.Ui.Motion run on the
 platform's animation engine and update properties directly; an animation frame never triggers a
-commit, a diff, or a layout pass unless it changes layout.
+commit, a diff, or a layout pass unless it changes layout. iOS scrolling and animations follow
+the variable-refresh and device evidence contract in [[Pudu Native iOS UI#ProMotion and frame pacing]].
 
 ### Development reload
 
@@ -98,7 +102,7 @@ changes ship through the stores.
 Platform projects are build output. A typed, declarative patch set produced from Pudu
 configuration generates them; every patch is idempotent and ordered by declared dependency, and
 two patches writing the same key is a build error. A fingerprint over every native input decides
-whether an existing development host can load a project or a rebuild is required.
+whether an existing development host can load a project or a rebuild is required. The first step builds the application bundle directly; generated projects and typed configuration patches build on it.
 
 ### Calling Swift and Kotlin
 
@@ -113,7 +117,7 @@ One stream carries each commit. It is a sequence of little-endian 32-bit words, 
 
 | Code | Instruction | Words that follow |
 | --- | --- | --- |
-| 1 | CREATE | node, kind (1 label, 2 button, 3 column, 4 row, 5 field, 6 toggle) |
+| 1 | CREATE | node, kind (1 label, 2 button, 3 column, 4 row, 5 field, 6 toggle, 7 scroll, 8 list) |
 | 2 | TEXT | node, byte length, then that many UTF-8 bytes |
 | 3 | APPEND | column or row node, child node |
 | 4 | ROOT | node shown as the screen's content |
@@ -122,6 +126,15 @@ One stream carries each commit. It is a sequence of little-endian 32-bit words, 
 | 7 | STATE | node, 0 or 1 (a toggle's state) |
 | 8 | HINT | node, byte length, UTF-8 bytes (a field's placeholder) |
 | 9 | NAME | node, byte length, UTF-8 bytes (accessible name) |
+| 10 | INSERT | parent, child, index |
+| 11 | REMOVE | node, count, then count ids of its subtree (all forgotten) |
+| 12 | MOVE | parent, child, index |
+| 20 | THEME | count (7), then a kind, light word and dark word per role |
+| 21 | APPEARANCE | code (0 unspecified, 1 light, 2 dark) |
+| 22 | STYLE | node, text style code |
+| 23 | COLOR | node, role code |
+| 24 | RANGE | list node, total item count, first window index |
+| 25 | COLUMNS | list node, column count |
 
 Events return through `pudu_ui_wait` as one 64-bit value: the kind in the high 32 bits, with the tag in the low 32 bits.
 
@@ -132,8 +145,9 @@ Events return through `pudu_ui_wait` as one 64-bit value: the kind in the high 3
 | 3 | changed | tag; the text is read through `pudu_ui_event_text` |
 | 4 | switched on | tag |
 | 5 | switched off | tag |
+| 8 | reached | tag; the first visible index is read through the detail call |
 
-Version 0 has no keys and no removal. Compiled views and keyed regions extend it under ADR-0031 (compiled native execution). Version 1 only adds codes and kinds, so a version 0 stream means the same.
+Codes 10 to 12 only add instructions, so a stream of codes 1 to 9 means the same. The view module no longer writes RESET; the host keeps it so a stream from an earlier writer still means the same. Nodes carry stable ids handed out by the program and recycled after REMOVE (#914). Compiled views extend the stream further under ADR-0031 (compiled native execution).
 
 ## FUI on native
 
@@ -174,7 +188,7 @@ FUI's native presenter targets [[Std Mobile View]]: a renderer-neutral FUI tree 
 | 0 Toolchain | Library output and iOS device and simulator targets with a simulator smoke run (#878, done); the entry guard (#899, done); C-to-Pudu calls ([[Native Calls Delivery]]); direct calls (#904) and export crossings for text, records and Result (#906) |
 | 1 First light | A counter application built from Pudu alone runs on an iOS simulator, and later an Android emulator, with platform label and button, measured cold start and binary size recorded |
 | 2 Declarative UI | Reconciler, mutation batches, recycling list, navigation stack, accessibility labels reaching the platform tree, simulator reload |
-| 3 Tooling | Generated projects, patch set, fingerprinted development host, signed store artifacts from local builds |
+| 3 Tooling | Generated projects, patch set, fingerprinted development host, signed store artifacts from local builds; `pudu build --app` writes a signed simulator application (#916) |
 | 4 Hardening | Percentile frame times on list scroll, input latency, cold start, resident memory, and size compared against hand-written platform baselines on named mid-range and high-end phones and tablets |
 | 5 Ecosystem | Versioned modules, compatibility guarantees, migration tooling |
 

@@ -13,6 +13,7 @@ tags: [moc, module]
 
 - [[Host Failure Vocabulary]] · [[CLI Memory Failure]] · [[CLI Memory Tests]] — shared catchable host-exhaustion presentation without swallowing cancellation (#499).
 - [[Backend Frame Program]] · [[Backend Frame Runtime]] · [[Native Frame Runtime Tests]] — production frame ownership, dispatcher and controlled failure checks (#499).
+- [[Backend Typed Integer Calls]] — typed C entries for suitable direct callees.
 - [[Backend Frame Direct]] — direct-call set for frames on the C stack (#904).
 
 - [[Backend Frame Values]] · [[Backend Frame Bodies]] · [[Native Frame Body Tests]] — constant-arity generated C step bodies and strict corpus compilation (#499).
@@ -20,6 +21,7 @@ tags: [moc, module]
 - [[Core Frame IR]] · [[Compiler Frame Lowering]] · [[Compiler Frame State]] · [[Compiler Frame Body]] · [[Native Frame Lowering Tests]] — pure native continuation lowering (#499).
 
 - [[Repository README]] · [[Native Progress Generator]] · [[Native Progress Tests]] · [[Native Progress Workflow]] — auditable C11 completion publishing.
+- [[UIKit Coverage Inventory]] · [[UIKit Coverage Tests]] — measured platform class and trait coverage of the iOS host.
 - [[src/Ark/_MOC|Ark Modules]] — engine library and focused conformance gates.
 
 - [[Ark Layer Gate]] · [[Ark Layer Model]] · [[Ark Layer Tests]] — explicit engine import contracts.
@@ -256,6 +258,7 @@ tags: [moc, module]
 - [[Backend Function Programs]]
 - [[Backend Toolchain Tests]]
 - [[Backend Export Tests]] — exported functions called from a C host (#899).
+- [[Native App Tests]] — application identifiers and property lists for `pudu build --app`.
 - [[Native Direct Call Tests]] — direct-call selection, output, failure location and export entry (#904).
 - [[Backend Export Crossing]] — export shapes for text, records and `Result` (#906).
 - [[Diagnostic Evaluation]]
@@ -345,6 +348,8 @@ tags: [moc, module]
 ## Native mobile (#909)
 
 - [[iOS Host Adapter]] — Objective-C host of a Pudu Native application on iOS.
+- [[Backend Toolchain App]] — simulator application bundle, Info.plist and ad-hoc signing (#916).
 - [[Native Counter Example]] — Phase 1 counter built only from Pudu.
+- [[Native List Example]] — keyed list with insertion and reorder, built only from Pudu (#914).
 - [[Uses Mobile View]] — stdlib fixture for the counter view stream.
 - [[Native First Light Delivery]] — phase 1 of Pudu Native (#909).

@@ -28,10 +28,12 @@ targetRefusals :: NativeTarget -> Set Text -> [(Text, Maybe Text)] -> [TargetRef
 
 ## Algorithm and invariants
 
-- One const map from name to target: `ios-arm64` (`iphoneos`,
-  `arm64-apple-ios15.0`), `ios-simulator-arm64` (`iphonesimulator`,
-  `arm64-apple-ios15.0-simulator`), `android-arm64` and `android-x86_64`
+- One const map from name to target: `ios-arm64` (`iphoneos`),
+  `ios-simulator-arm64` (`iphonesimulator`), `android-arm64` and `android-x86_64`
   (reserved, no toolchain fields). `nativeTargetNames` is the map's key order.
+- The `appleTriple` field of `AppleSdk` is computed from the ledger: `ledgerTriple` in
+  [[Backend Ledger]] derives `<arch>-apple-ios<deployment>` and its `-simulator` form from
+  the ledger's deployment target, so the minimum release is stated once.
 - `targetRefusals target parts libraries` takes the emitted unit's selected
   runtime parts and its foreign library names. A const table maps each refused
   base part (`host_children`, `host_signals`, `host_exit`, `host_tls`,
@@ -44,6 +46,11 @@ targetRefusals :: NativeTarget -> Set Text -> [(Text, Maybe Text)] -> [TargetRef
   a slash, which would introduce a path through a synthesized candidate.
 - Refusals list parts in table order, then libraries in first-seen order, each
   once.
+
+## Mobile TLS selection (#935)
+
+The TLS part is admitted on the iOS and Android library targets.
+[[Backend Toolchain Library]] resolves and links the selected provider.
 
 ## Negative Logic (Prohibited Paths)
 

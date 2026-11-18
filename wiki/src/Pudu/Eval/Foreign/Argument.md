@@ -39,6 +39,9 @@ count :: Int -> Text
 - **Type crossing validation (`E7019`):** Floats, booleans, bytes, handles, and records must strictly match the declared crossing type.
 - **Record validation (`E7023`):** Records crossing foreign boundaries must provide all declared fields by name.
 - **Slot handling:** Slots receive no caller value on input; they are threaded with placeholder values and marked for post-call output extraction.
+- **Optional handle arguments:** `Some(h)` crosses as the handle's live address and `None` as a null
+  pointer (`CrossedPointer nullPtr`). The handle inside `Some` is leased like a bare handle, so a
+  released one is refused with `E7022` before the call.
 
 ## Linkage
 
@@ -53,3 +56,29 @@ count :: Int -> Text
 ## Grill Log
 
 - **Q:** Why isolate argument crossing into `Eval.Foreign.Argument`? **A:** Validating and converting caller values to native `CrossedValue` representations constitutes a distinct, cohesive phase (~130 lines) separate from symbol resolution, ownership leasing, execution, and result settlement.
+
+## Resolved Grill Log for #876 — Callback dispatch
+
+Keep the native ordinal when weaving output slots and callbacks. A context
+slot consumes no Pudu argument. Validate a callback token's nominal owner
+before allocating native contexts.
+
+## Resolved Grill Log for #877 — Foreign loan settlement
+
+Weave each caller value with its resolved place. A mutable loan requires a destination before native dispatch. Keep the native index alongside that destination for writeback.
+
+## Resolved Grill Log for #877 — Checked foreign bounds
+
+Check signedness and extent after preparing arguments. Bytes have equal byte and element extents. A refusal occurs before symbol dispatch.
+
+## Resolved Grill Log for #877 — Interpreter array crossings
+
+Cross array elements with the ordinary scalar and record parameter conversion, then associate a writable place with a mutable run.
+
+## Resolved Grill Log for #877 — Nullable loans
+
+A nullable reference input that evaluates to the built-in absent case crosses a null address and creates no writeback destination.
+
+### Split callback placement Grill Log resolved
+
+Split trampolines reserve a pointer slot without consuming a source argument.

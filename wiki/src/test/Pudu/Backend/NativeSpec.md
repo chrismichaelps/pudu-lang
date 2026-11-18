@@ -30,6 +30,11 @@ invoking the toolchain. The unchanged observable conformance assertions include
 the wide recursion regression. Resolved Grill Log: faults fail the test before
 compiling, with no recursive-emitter fallback or relaxed oracle comparison.
 
+## Entry defaults
+
+The exit-status corpus compares default order, earlier parameter scope,
+missing-argument and stopping-default diagnostics, and async task capture.
+
 ## Purpose and interface
 
 `backendNativeProperties` holds native execution to the tree interpreter, byte
@@ -105,6 +110,10 @@ coordinator.
 - **Q:** How are programs of several modules tested? **A:** `conformanceWith` writes each module beside `Main.pudu`, and every program, one module or many, is built through whole-program lowering (#539).
 
 Foreign calls are compared with the interpreter's bridge in two properties: [[Backend Foreign Programs]] success programs and E7015 refusals (#850).
+
+## Callable entries and singleton tuples
+
+The differential corpus executes a recursive source main with a defaulted parameter and prints a one-member tuple.
 
 ## Referenced by
 
@@ -243,3 +252,11 @@ can be written for them.
 
 Resolved Grill Log (#871): status programs cover entries with parameters,
 which stop with the evaluator's located E7003 before any body effect.
+
+## Resolved Grill Log for C11 FFI conformance
+
+Use the existing linked-native conformance harness with explicit outputs for the #877 crossings so agreement alone cannot hide a shared error.
+
+## Resolved Grill Log for Foundation conformance
+
+Run Objective-C Foundation conformance on macOS and record the platform skip elsewhere. Compare fixed output as well as interpreter/native diagnostics.

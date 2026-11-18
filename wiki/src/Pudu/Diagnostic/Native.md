@@ -59,8 +59,8 @@ toolchainPublishFailed :: Span -> Text -> Diagnostic   -- E6006
 
 Message contracts:
 
-- `E6001` — `the native backend does not support <construct> yet`, help names
-  the supported subset and the interpreter as the way to run the program.
+- `E6001` — `the native backend does not support <construct> yet`, help gives `pudu run`
+  and points to the reported construct as the place to adapt the source.
 - `E6002` — the C compiler could not be found, naming what was searched
   (`PUDU_CC` or `cc`) and how to point at one.
 - `E6003` — the compiler could not be started, with the operating system's
@@ -133,3 +133,30 @@ program. Both are errors at the root module's span ([[Native Mobile Targets]]).
 Resolved Grill Log: a refusal decided from runtime parts has no construct span,
 so the message names the construct; codes stay literal in this one module,
 which the registry gate checks.
+
+## Platform ledger diagnostics (#926)
+
+The mobile family now runs E6007 through E6012. Each is an error or a warning of the
+same [[Diagnostic Model]] shape, built in this module from a [[Backend Ledger]] finding
+or a missing SDK, at the root module's span.
+
+| Code | Severity | Message | Help |
+| --- | --- | --- | --- |
+| E6007 | error | the `<target>` target needs its platform SDK, which was not found: `<detail>` | names Xcode with `PUDU_XCRUN` and the Android NDK with `ANDROID_NDK_HOME` |
+| E6008 | error | the `<target>` target cannot carry `<construct>`: `<reason>` | build for the host or keep the construct out of the program |
+| E6009 | error | the installed Xcode `<found>` is below the ledger minimum `<minimum>` | names the minimum and `PUDU_XCRUN` |
+| E6010 | error | the store rule `<store>` takes effect with Xcode `<xcode>` and SDK `<sdk>`; the selected SDK `<found>` does not meet it | device builds only; names the rule's Xcode, SDK and source |
+| W6011 | warning | the installed Xcode `<found>` is newer than the tested `<tested>`; the build proceeds | asks for the suite to run and the version to be recorded |
+| W6012 | warning | the store rule `<store>` is not met by the installed toolchain, and either takes effect within `<days>` days or is already in effect for a development (simulator) build | names the rule's Xcode, SDK and source |
+
+- A refusing `StoreRuleMissed` for a Distribution build is E6010. The same finding for a
+  Development build is a W6012 warning, since only device builds are submitted.
+- `StoreRuleDue` is W6012 with the day count.
+- `XcodeBelowMinimum` is E6009 and always refuses.
+- Warnings render as one line `warning[W60nn]: message` with the build output, not as
+  diagnostics that stop the build.
+
+Resolved Grill Log: E6007 and E6008 are listed here so the family has one table; their
+definitions are unchanged. One code per distinct meaning: a warning and a refusal never share
+a code, and a development rule miss uses W6012 rather than a new code. _Rejected:_ a separate
+code for each platform rule, which would multiply the family without a different fix.

@@ -41,11 +41,10 @@ CompileResult, never an errored program. Missing facts refuse at the module span
 
 ## Algorithm and invariants
 
-- The root module must exist and compile (the caller refuses errored programs
-  first); the entry must be a plain, non-async function with no parameters, no
-  type parameters, and a block body. The entry keeps milestone 1's rule: its
-  declared return annotation is not consulted, its result type comes from the
-  body or its explicit returns, and that result must be `Int`, `()`, or Never. A Never-only entry uses the unit C ABI.
+- The root module must compile and identify one entry. The compiler preserves
+  the checked return carrier for entry propagation, including parameterized
+  entries. [[Compiler Lower Function Body]] binds defaults before lowering
+  the argument-free ABI entry and handles synchronous and async reporting.
 - Only functions *reachable from the entry* are validated, lowered, and
   carried. The table of top-level functions is built in declaration order; the
   worklist starts at the entry, and every call discovered while lowering a
@@ -195,6 +194,28 @@ holding another module's aliases, refused.
 
 Each module scope records its foreign declarations' targets, the symbol defaulting to the function's name.
 
+## Resolved Grill Log for #876 — Native callback lowering
+
+Collect callback declarations with their owning module, then attach each
+checked function/context pair to its foreign target. Callback token
+identities are formed separately from owned foreign handles.
+
+## Resolved Grill Log for #877 — Native loan lowering
+
+Retain the declaration's reference modes by native position when constructing foreign targets.
+
+## Resolved Grill Log for #877 — Checked foreign bounds
+
+Pass checked native length descriptors into imported and local foreign targets.
+
+## Resolved Grill Log for #877 — Returned run ABI
+
+Resolve a returned run in its declaring module and carry the same opaque identity used for other ownership claims.
+
+## Resolved Grill Log for #877 — Native nullable loans
+
+Retain the nullable qualifier when installing a foreign target.
+
 ## Referenced by
 
 [[src/Pudu/Compiler/_MOC]] · [[src/Pudu/_MOC]] · [[Core IR]] · [[Pudu Core]] ·
@@ -281,11 +302,39 @@ Resolved Grill Log: Resolve a slot destructor through its own foreign block.
 
 `lowerLibrary` lowers like `lowerProgram` and also queues every exported
 function of the root module as a root, so an export that `main` never calls is
-lowered. An exported function with type parameters, defaults, or `async` is
-refused with E6001 at its name. `lowerProgram` is unchanged, so executables
-never lower or refuse exports.
+lowered. A generic C export receives E6001 at its name. A monomorphic async
+export adds an internal entry which calls the named body, awaits the resulting
+task, and returns its payload through the normal crossing. Calls from Pudu
+continue to use the original cold task. Executable roots omit C exports.
 
 Resolved Grill Log: roots join the existing worklist rather than a second pass,
 so an export and the entry share one set of specialized copies. _Rejected:_
 lowering exports for every build, which would make executables refuse
 signatures they never cross.
+
+### Split callback placement Grill Log resolved
+
+Lowering transfers the checked placement together with the callback signature.
+
+## Resolved Grill Log for retained split callbacks
+
+Carry callback capability for every call declared in a block that splits
+registration from its trampoline. A later call without token parameters may
+invoke a retained callback, so it needs the same outbound failure scope and
+must allow the handler to acquire the gate.
+
+## Resolved Grill Log for callback group slots
+
+Lower a foreign callback slot with its registration owner and optional projection identity.
+
+## Resolved Grill Log for native callback groups
+
+Publish group owners and ordered member names through the module scope.
+
+## Resolved Grill Log for Objective-C dispatch
+
+Carry checked Objective-C dispatch metadata alongside the ordinary foreign crossing.
+
+## Resolved Grill Log for Objective-C delegates
+
+Lowering resolves a delegate constructor call through `lookupDelegate` and emits a `CoreDelegateNew` operation. The call takes the group token as its only runtime argument.

@@ -24,6 +24,38 @@ publication. A program on another platform selects no AppKit source.
 
 [[src/Pudu/Backend/_MOC]] · [[Native Desktop Adapter Delivery]]
 
+## iOS host source (#916)
+
+The module embeds the iOS host translation unit and its private layout header as
+`iosHostSources :: [(FilePath, String)]` for [[Backend Toolchain App]]. They are data inputs
+to the compiler and are compiled into the simulator app.
+
 ## Native audio (#857)
 
 Resolved Grill Log: Select the AudioToolbox sources with an audio marker. A single staging directory serves all selected bundles.
+
+## iOS layout source (#919)
+
+Resolved Grill Log: embed the private layout header beside the host from the same source list. The staging step writes the original bytes for both before clang runs. See [[iOS Host Layout]].
+
+## iOS theme source (#923)
+
+The iOS host sources now stage the private theme header `pudu_ios_theme.h` with the host translation unit and the layout header. All three are written unchanged before clang runs. See [[iOS Host Theme]].
+
+## iOS event and list sources (#925)
+
+The iOS host sources also stage `pudu_ios_events.h`, `pudu_ios_controls.h` and `pudu_ios_list.h` with the host translation unit and the other private headers. All six are written unchanged before clang runs. See [[iOS Host Events]], [[iOS Host Controls]] and [[iOS Host List]].
+
+## iOS material source (#928)
+
+The iOS host sources also stage `pudu_ios_material.h` with the host translation unit and the other private headers. All seven are written unchanged before clang runs. See [[iOS Host Material]].
+
+## Resolved Grill Log for the portable loader
+
+Embed the loader header in generated C11 and stage the same header beside bundled SQLite.
+
+## iOS capability sources (#930)
+
+The iOS host sources also stage `pudu_ios_gesture.h`, `pudu_ios_feedback.h`, `pudu_ios_access.h`, `pudu_ios_scene.h`, `pudu_ios_motion.h` and `pudu_ios_capability_test.h` with the host translation unit and the other private headers. All thirteen are written unchanged before clang runs. See [[iOS Host Gesture]], [[iOS Host Feedback]], [[iOS Host Access]], [[iOS Host Scene]], [[iOS Host Motion]] and [[iOS Host Capability Test]].
+
+The reader header [[iOS Host Stream]], pudu_ios_stream.h, is staged with the same private headers.

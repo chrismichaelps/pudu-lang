@@ -26,7 +26,7 @@ Open native libraries and invoke symbols through libffi using the crossing kind 
 void *pudu_ffi_open(const char *path);
 void *pudu_ffi_symbol(void *handle, const char *name);
 const char *pudu_ffi_error(void);
-int pudu_ffi_call(void *symbol, int32_t arity, const uint8_t *kinds,
+int pudu_ffi_call(void *symbol, void *scope, int32_t arity, const uint8_t *kinds,
                   const int64_t *integers, const double *doubles,
                   void *const *pointers, const int32_t *field_starts,
                   const int32_t *field_counts, const uint8_t *field_kinds,
@@ -91,6 +91,29 @@ Resolved Grill Log: [[Nested Foreign Record Delivery]] preserves the tree
 for libffi layout and keeps value carriers in declaration-order leaves.
 The 32-member limit applies at each record node.
 
+## Resolved Grill Log for #876
+
+[[Pudu Private FFI ABI]] shares record preparation and scalar readers with
+[[Pudu FFI Callback Bridge]]. The outbound call publishes the caller's
+scope around ffi_call on that native thread. Private pointer carriers pass
+callback code and context without creating handle claims.
+
+## Scalar and record loan storage (#877)
+
+The private slot protocol combines the underlying kind with a shared or
+mutable loan flag. The bridge initializes either loan from its input
+carriers. Only mutable loans return data through the slot carriers.
+
+### Resolved Grill Log
+
+- **Q:** Allocate a separate representation for a loan? **A:** Reuse the
+  aligned scalar and libffi record storage used for output slots. The loan
+  passes a pointer to that storage for the duration of the call.
+
+## Resolved Grill Log for #877 — Run layout
+
+Expose complete element size and leaf offsets to [[Foreign Run Storage]]. Bulk field access shares the existing fixed-width scalar read and write paths.
+
 ## Referenced by
 
 [[src/cbits/_MOC]] · [[Foreign Call]] · [[ADR-0018 Calling a Library Written Elsewhere]] · [[ADR-0019 Getting a Value Back Out of a Library]]
@@ -101,3 +124,18 @@ The exact name `pudu_sqlite` opens a reserved bridge handle. Symbol lookup on th
 
 ### Resolved Grill Log
 - **Q:** Depend on executable symbol export flags for bundled adapters? **A:** No; resolve the reserved module through a fixed symbol table.
+
+## Resolved Grill Log for the portable loader
+
+Delegate open, symbol lookup and close to the portable loader. A close of a built-in sentinel needs no OS operation.
+
+## Resolved Grill Log for Objective-C ABI arguments
+
+Insert self and selector while retaining the declared argument and output
+store indexes. Select stret on Intel for a returned record larger than
+two eightbytes.
+
+## Resolved Grill Log for native entry status
+
+Use negative error statuses for failures during readback. The caller uses this
+boundary to decide whether a transferred receiver still belongs to Pudu.

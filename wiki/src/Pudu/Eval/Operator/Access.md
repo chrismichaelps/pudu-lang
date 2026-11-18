@@ -109,3 +109,8 @@ the same checked head and method-local witnesses as an immediate qualified call.
 ## Declared owners named like built-ins (#529)
 
 A declared type whose name a built-in value also answers to is keyed by [[Eval Declared Owner]]: `@Name` for its methods, records, sums, witnesses and qualified calls, the bare name for built-in values.
+
+## Resolved Grill Log for #876 — Interpreter callback values
+
+A callback token's unregister member retains the receiver key. The
+unbound member requires the matching owner token as its argument.

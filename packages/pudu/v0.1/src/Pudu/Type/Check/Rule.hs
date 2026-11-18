@@ -16,6 +16,7 @@ module Pudu.Type.Check.Rule
   , nameType
   , namedVariantAsValue
   , qualifiedMemberType
+  , qualifiedTraitValueType
   , localValueHead
   , selfName
   , tryType
@@ -38,7 +39,7 @@ import Pudu.IntegerLiteral
 import Pudu.Frontend.Syntax.Tree (Capability (..))
 import qualified Data.Map.Strict as Map
 import qualified Data.Set as Set
-import Pudu.Type.Check.Qualified (qualifiedScheme, concreteOwner)
+import Pudu.Type.Check.Qualified (qualifiedScheme, concreteOwner, traitOwner)
 import Pudu.Type.Formation (builtinTypeNames)
 import Pudu.Type.Substitute (substituteRigid)
 import Pudu.Type.Check.Receiver (bindReceiver)
@@ -49,6 +50,7 @@ import Pudu.Type.Env
   , NameBinding (..)
   , lookupBinding
   , recordVariantOwner
+  , recordTraitMethodOwner
   , isStaticTrait
   , recordSelection
   , useCapability
@@ -194,6 +196,35 @@ qualifiedMemberType declared spanValue target member = do
         concrete <- concreteOwner declared target
         let namespace = maybe target (\(path, _) -> Tree.NameExpression (path NonEmpty.:| [])) concrete
         namespaceMemberType declared spanValue namespace member
+
+{-| A trait receiver method used as a value retains its first input. The
+    receiver's inferred implementation is an obligation of that value. -}
+qualifiedTraitValueType :: DeclaredTypes -> Span -> Tree.Expression -> Text -> Checker (Maybe Type)
+qualifiedTraitValueType declared at target member = do
+  local <- localValueHead target
+  selected <- if local then pure Nothing else traitOwner declared target
+  case selected of
+    Just owner -> do
+      exported <- case target of
+        Tree.NameExpression (name NonEmpty.:| []) | Set.member name (declaredQualifiers declared) ->
+          lookupName (name <> "." <> member)
+        _ -> pure Nothing
+      found <- lookupName (nominalKey owner <> "." <> member)
+      case (exported, found) of
+        (Nothing, Just scheme@Scheme{schemeType = FunctionTypeValue _ (first : _) _})
+          | takesSelf first -> do
+              parameters <- maybe [] id <$> lookupTypeParams owner
+              self <- freshVariable
+              recordTraitMethodOwner at owner
+              recordSelection at [self]
+              let bound = NominalType owner (map RigidType parameters)
+              Just <$> instantiateWith at scheme{schemeBounds = ("Self", [bound]) : schemeBounds scheme} [self]
+        _ -> pure Nothing
+    Nothing -> pure Nothing
+ where
+  takesSelf (ReferenceTypeValue _ targetType) = takesSelf targetType
+  takesSelf (RigidType "Self") = True
+  takesSelf _ = False
 
 {-| Only nested frames establish value shadowing; shared bare exports do not. -}
 localValueHead :: Tree.Expression -> Checker Bool

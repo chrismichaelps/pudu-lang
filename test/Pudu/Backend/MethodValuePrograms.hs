@@ -114,6 +114,44 @@ methodValueSuccessPrograms =
       , "  0"
       , "}" ]
     , "r2!\n<fn label>\ntrue\nfalse\nr2?\n", "")
+  , ("an unbound trait method retains its provider, receiver and call order", program
+      [ "trait Named { fn label(self, suffix: Str) -> Str }"
+      , "trait Alternate { fn label(self, suffix: Str) -> Str }"
+      , "type Bot = { name: Str }"
+      , "impl Named for Bot { fn label(self: Bot, suffix: Str) -> Str { self.name + suffix } }"
+      , "impl Alternate for Bot { fn label(self: Bot, suffix: Str) -> Str { suffix + self.name } }"
+      , "fn receive() -> Bot { print(\"receiver\")"
+      , "  Bot{name: \"r2\"} }"
+      , "fn suffix() -> Str { print(\"argument\")"
+      , "  \"!\" }"
+      , "fn main() -> Int {"
+      , "  let tag = Named.label"
+      , "  let other = Alternate.label"
+      , "  print(show(tag))"
+      , "  print(display(tag == Named.label) + \" \" + display(tag == other))"
+      , "  print(tag(receive(), suffix()))"
+      , "  print(other(Bot{name: \"c3\"}, \"?\"))"
+      , "  0"
+      , "}" ]
+    , "<fn label>\ntrue false\nreceiver\nargument\nr2!\n?c3\n", "")
+  , ("an unbound generic trait method lends the receiver and preserves its result type", program
+      [ "trait Replace[T] { fn swap(self: &mut Self, next: T) -> T }"
+      , "type Box[T] = { mut value: T }"
+      , "impl[T] Replace[T] for Box[T] {"
+      , "  fn swap(self: &mut Self, next: T) -> T {"
+      , "    let old = (*self).value"
+      , "    (*self).value = next"
+      , "    old"
+      , "  }"
+      , "}"
+      , "fn main() -> Int {"
+      , "  var box = Box{value: \"old\"}"
+      , "  let swap = Replace.swap"
+      , "  print(swap(&mut box, \"new\"))"
+      , "  print(box.value)"
+      , "  0"
+      , "}" ]
+    , "old\nnew\n", "")
   , ("trait methods of sums are values in arrays and records with receiver equality", program
       [ "trait Area {"
       , "  fn area(self) -> Int"
@@ -149,7 +187,17 @@ methodValueSuccessPrograms =
 
 methodValueRefusalPrograms :: [(String, Text)]
 methodValueRefusalPrograms =
-  [ ("a method value fails at the call made through it", program
+  [ ("an unbound trait method keeps the implementation failure span", program
+      [ "trait Named { fn label(self) -> Str }"
+      , "type Bot = { name: Str }"
+      , "impl Named for Bot { fn label(self: Bot) -> Str { panic(self.name) } }"
+      , "fn main() -> Int {"
+      , "  let tag = Named.label"
+      , "  print(\"before\")"
+      , "  print(tag(Bot{name: \"stopped\"}))"
+      , "  0"
+      , "}" ])
+  , ("a method value fails at the call made through it", program
       [ "fn source() -> Str { print(\"receiver\")"
       , " \"abc\" }"
       , "fn main() -> Int {"

@@ -132,6 +132,21 @@ the owner lookup; it prepares the member and then invokes it, so callers that
 already hold their arguments are unchanged.
 
 
+## Resolved Grill Log for #876 — Interpreter callback values
+
+Both ordinary calls and evaluated function application delegate callback
+registration and unregister values to [[Eval Foreign Callback]].
+
+## Resolved Grill Log for #876 — Callback dispatch
+
+Foreign dispatch passes the ordinary call dispatcher back to the callback
+adapter, so callbacks can invoke the same callable values. New workers
+start without the parent's callback ancestry.
+
+## Resolved Grill Log for #877 — Foreign loan settlement
+
+Forward the places already resolved by argument evaluation to foreign dispatch. A mutable foreign loan uses the same destination as an ordinary mutable parameter.
+
 ## Referenced by
 
 [[src/Pudu/Eval/_MOC]] · [[Evaluator]] · [[Eval Program]] · [[Eval Loop]]
@@ -275,3 +290,7 @@ Delegate qualified-path admission to Eval Call Path for explicit type-applied di
 Applying an empty positional constructor retains its canonical owner while attaching arguments. Await unwraps only wired Result-owned Ok/Err values; a custom sum using those labels remains an ordinary successful task value.
 
 Resolved Grill Log: identity comes from the declaration or native ABI, not a global short-tag registry. Keep labels, evaluation order, effects and wire bytes stable. See [[Positional Sum Owner Delivery]].
+
+## Resolved Grill Log for Objective-C delegates
+
+`callCallbackValue` takes the handler applier as a parameter, so a delegate method and an ordinary callback apply the handler the same way.

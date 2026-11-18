@@ -5,6 +5,7 @@ module Pudu.Foreign.Ownership
   , claimCountedGeneration
   , claimOwnedGeneration
   , withOwnedGenerations
+  , withTransferredGeneration
   , discardOwnedGenerations
   , takeOwnedGeneration
   , takeCountedGeneration
@@ -22,6 +23,7 @@ module Pudu.Foreign.Ownership
 
 import Control.Concurrent.STM
   ( STM
+  , modifyTVar'
   , TVar
   , atomically
   , newTVarIO
@@ -38,11 +40,14 @@ import Control.Exception
   , fromException
   , mask
   , mask_
+  , onException
   , throwIO
   , try
   )
 import Pudu.Diagnostic (Diagnostic)
+import Data.List (sortOn)
 import Data.Maybe (isJust)
+import Data.Ord (Down (..))
 import Data.Int (Int64)
 import Data.Map.Strict (Map)
 import qualified Data.Map.Strict as Map
@@ -53,7 +58,11 @@ data ForeignResource = ForeignResource
   { resourceCleanup :: !(IO ())
   , resourceGeneration :: !Integer
   , resourceUses :: !Int
+  , resourceTransferring :: !Bool
   }
+
+resourceIdle :: ForeignResource -> Bool
+resourceIdle resource = resourceUses resource == 0 && not (resourceTransferring resource)
 
 {-| The resource claims belonging to one evaluator run.
 
@@ -119,11 +128,11 @@ claimOwnedGeneration (ForeignStore table closing _ counter _) address cleanup = 
         else do
           generation <- readTVar counter
           writeTVar counter (generation + 1)
-          writeTVar table (Map.insert address (ForeignResource cleanup generation 0) held)
+          writeTVar table (Map.insert address (ForeignResource cleanup generation 0 False) held)
           pure (Just generation, False)
   case outcome of
     (accepted, dispose) -> do
-      if dispose then cleanupOnce (ForeignResource cleanup 0 0) else pure ()
+      if dispose then cleanupOnce (ForeignResource cleanup 0 0 False) else pure ()
       pure accepted
 
 {-| Claim another reference to something already referenced.
@@ -142,11 +151,11 @@ claimCountedGeneration (ForeignStore _ closing _ counter counted) address cleanu
         generation <- readTVar counter
         writeTVar counter (generation + 1)
         held <- readTVar counted
-        writeTVar counted (Map.insert generation (address, ForeignResource cleanup generation 0) held)
+        writeTVar counted (Map.insert generation (address, ForeignResource cleanup generation 0 False) held)
         pure (Just generation)
   case outcome of
     Nothing -> do
-      cleanupOnce (ForeignResource cleanup 0 0)
+      cleanupOnce (ForeignResource cleanup 0 0 False)
       pure Nothing
     Just generation -> pure (Just generation)
 
@@ -167,7 +176,7 @@ claimAllOwnedGenerations (ForeignStore table closing _ counter _) produced = ato
       next <- readTVar counter
       let assigned = zip (Map.toAscList taken) [next ..]
           resources = Map.fromList
-            [(address, ForeignResource cleanup generation 0)
+            [(address, ForeignResource cleanup generation 0 False)
             | ((address, cleanup), generation) <- assigned]
       writeTVar counter (next + toInteger (Map.size taken))
       writeTVar table (Map.union held resources)
@@ -200,11 +209,12 @@ acquire (ForeignStore table closing _ _ counted) claims = atomically $ do
   closed <- readTVar closing
   let found (address, expected) = case Map.lookup address held of
         Just resource
-          | maybe True (== resourceGeneration resource) expected -> Just (OwnedLease address)
+          | not (resourceTransferring resource)
+          , maybe True (== resourceGeneration resource) expected -> Just (OwnedLease address)
         _ -> case expected of
           Nothing -> Nothing
           Just generation -> case Map.lookup generation references of
-            Just (owner, _) | owner == address -> Just (CountedLease generation)
+            Just (owner, resource) | owner == address, not (resourceTransferring resource) -> Just (CountedLease generation)
             _ -> Nothing
       resolved = map found claims
   if closed || any (== Nothing) resolved
@@ -231,8 +241,8 @@ releaseLeases (ForeignStore table closing _ _ counted) leases = mask_ $ do
     closed <- readTVar closing
     let updated = foldr decrementOwned held leases
         updatedCounted = foldr decrementCounted references leases
-        (idle, busy) = Map.partition ((== 0) . resourceUses) updated
-        (idleCounted, busyCounted) = Map.partition ((== 0) . resourceUses . snd) updatedCounted
+        (idle, busy) = Map.partition resourceIdle updated
+        (idleCounted, busyCounted) = Map.partition (resourceIdle . snd) updatedCounted
     writeTVar table (if closed then busy else updated)
     writeTVar counted (if closed then busyCounted else updatedCounted)
     pure
@@ -264,6 +274,7 @@ takeClaim (ForeignStore table _ _ _ _) address expected = atomically $ do
     Nothing -> pure Nothing
     Just resource
       | maybe False (/= resourceGeneration resource) expected -> pure Nothing
+      | resourceTransferring resource -> pure Nothing
       | resourceUses resource > 0 -> retry
       | otherwise -> do
           writeTVar table (Map.delete address held)
@@ -281,10 +292,47 @@ takeCountedGeneration (ForeignStore _ _ _ _ counted) address generation = atomic
     Nothing -> pure Nothing
     Just (owner, resource)
       | owner /= address -> pure Nothing
+      | resourceTransferring resource -> pure Nothing
       | resourceUses resource > 0 -> retry
       | otherwise -> do
           writeTVar counted (Map.delete generation references)
           pure (Just resource)
+
+{-| Transfer an idle generation without waiting inside native re-entry.
+    The action says whether the callee entered. -}
+withTransferredGeneration
+  :: ForeignStore -> Int64 -> Integer -> IO (Bool, a) -> IO (Maybe a)
+withTransferredGeneration (ForeignStore owned closing _ _ counted) address generation action = mask_ $ do
+  transferred <- atomically $ do
+    closed <- readTVar closing
+    if closed then pure Nothing else do
+      objects <- readTVar owned
+      references <- readTVar counted
+      case Map.lookup address objects of
+        Just resource | resourceGeneration resource == generation, resourceIdle resource -> do
+          writeTVar owned (Map.insert address resource{resourceTransferring = True} objects)
+          pure (Just (False, resource))
+        _ -> case Map.lookup generation references of
+          Just (owner, resource) | owner == address, resourceIdle resource -> do
+            writeTVar counted (Map.insert generation (address, resource{resourceTransferring = True}) references)
+            pure (Just (True, resource))
+          _ -> pure Nothing
+  case transferred of
+    Nothing -> pure Nothing
+    Just (reference, resource) -> do
+      let settle entered = do
+            dispose <- atomically $ do
+              closed <- readTVar closing
+              if reference
+                then modifyTVar' counted $
+                  if entered || closed then Map.delete generation else Map.insert generation (address, resource)
+                else modifyTVar' owned $
+                  if entered || closed then Map.delete address else Map.insert address resource
+              pure (closed && not entered)
+            if dispose then cleanupOnce resource else pure ()
+      (entered, result) <- action `onException` settle True
+      settle entered
+      pure (Just result)
 
 {-| Discard only the exact claims belonging to an unexposed result. -}
 discardOwnedGenerations :: ForeignStore -> [(Int64, Integer)] -> IO ()
@@ -292,7 +340,10 @@ discardOwnedGenerations store claims = mask_ $ mapM_ discard claims
  where
   discard (address, generation) = do
     found <- takeOwnedGeneration store address generation
-    maybe (pure ()) cleanupOnce found
+    owned <- case found of
+      Just resource -> pure (Just resource)
+      Nothing -> takeCountedGeneration store address generation
+    maybe (pure ()) cleanupOnce owned
 
 {-| Restore a claim when the explicit destructor was never entered. -}
 restoreOwned :: ForeignStore -> Int64 -> ForeignResource -> IO ()
@@ -337,12 +388,15 @@ closeForeignStore (ForeignStore table closing _ _ counted) = mask_ $ do
                        if expired then drainUnleasedCounted counted else retry
                    )
       )
-  cleanupAll (resources <> references)
+  {-| Releases run newest claim first. A scope-shaped resource, such as an
+      Objective-C autorelease pool, must close inside out: draining an outer
+      pool also drains every pool pushed after it. -}
+  cleanupAll (sortOn (Down . resourceGeneration) (resources <> references))
 
 drain :: TVar (Map Int64 ForeignResource) -> STM [ForeignResource]
 drain table = do
   held <- readTVar table
-  if any ((> 0) . resourceUses) (Map.elems held)
+  if any (not . resourceIdle) (Map.elems held)
     then retry
     else do
       writeTVar table Map.empty
@@ -352,14 +406,14 @@ drain table = do
 drainUnleased :: TVar (Map Int64 ForeignResource) -> STM [ForeignResource]
 drainUnleased table = do
   held <- readTVar table
-  let (idle, busy) = Map.partition ((== 0) . resourceUses) held
+  let (idle, busy) = Map.partition resourceIdle held
   writeTVar table busy
   pure (Map.elems idle)
 
 drainCounted :: TVar (Map Integer (Int64, ForeignResource)) -> STM [ForeignResource]
 drainCounted counted = do
   held <- readTVar counted
-  if any ((> 0) . resourceUses . snd) (Map.elems held)
+  if any (not . resourceIdle . snd) (Map.elems held)
     then retry
     else do
       writeTVar counted Map.empty
@@ -368,7 +422,7 @@ drainCounted counted = do
 drainUnleasedCounted :: TVar (Map Integer (Int64, ForeignResource)) -> STM [ForeignResource]
 drainUnleasedCounted counted = do
   held <- readTVar counted
-  let (idle, busy) = Map.partition ((== 0) . resourceUses . snd) held
+  let (idle, busy) = Map.partition (resourceIdle . snd) held
   writeTVar counted busy
   pure (map snd (Map.elems idle))
 

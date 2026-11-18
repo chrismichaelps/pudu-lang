@@ -59,6 +59,12 @@ installWanted
 - **Q:** Why a separate module? **A:** Graph preparation and per-consumer import both need the same
   declaration code, and the graph module sits below [[Type Check Import]].
 
+## Resolved Grill Log for #876
+
+Install a foreign callback registration under the declaring module's
+qualified name using the ordinary value alias path. The alias keeps the
+formed handler and token types and inherits the block's publication rules.
+
 ## Referenced by
 
 [[src/Pudu/Type/_MOC]] · [[Type Interface Graph]] · [[Type Check Import]]
@@ -68,3 +74,7 @@ installWanted
 Declare interface constructors with binding identity and publish values through aliasName, preserving their role and existing restriction inheritance.
 
 Resolved Grill Log: identity belongs to the selected binding; schemes remain type-only and ordinary shadows clear constructor roles. See [[Constructor Binding Delivery]].
+
+## Resolved Grill Log for Objective-C delegates
+
+Delegate names are published as values through `foreignValueNames`, the same route foreign functions take. The interface carries the handle type and the constructor so importing modules can construct a delegate without seeing the block's declarations.

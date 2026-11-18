@@ -9,6 +9,7 @@ import Data.Text (Text)
 import qualified Data.Text as Text
 import Pudu.Compiler.Lower.Control (expressionIsPrintValued, printValued)
 import Pudu.Compiler.Lower.Default (suppliedArguments)
+import Pudu.Compiler.Lower.Dynamic (widen)
 import Pudu.Compiler.Lower.Generic (admitCallee)
 import Pudu.Compiler.Lower.Loan (Callee (..), Operand (..), closeLoaned, lowerLoanedOperands, valueSignature)
 import Pudu.Compiler.Lower.State
@@ -179,10 +180,13 @@ lowerValueCall lower state at callee arguments
   invoke final target kind cores
     | any stops cores = (final, Just (stopped (target : cores), CoreNeverType))
     | CoreFunctionType inputs result <- kind
-    , defaulted, length cores < length inputs = called final target result (suppliedArguments at inputs cores)
+    , defaulted, length cores < length inputs =
+        called final target result (suppliedArguments at inputs (widened inputs))
     | CoreFunctionType inputs result <- kind
-    , length inputs == length cores = called final target result cores
+    , length inputs == length cores = called final target result (widened inputs)
     | otherwise = halt at ("a call through a " <> coreTypeName kind <> " value") final
+   where
+    widened inputs = zipWith (widen (contextTypes (lowerContext final))) inputs cores
   called final target result cores = (final, Just (CoreExpression at result (CoreCallValue target cores), result))
   stops core = coreExpressionType core == CoreNeverType
   stopped cores = CoreExpression at CoreNeverType (CoreBlockValue (CoreBlock

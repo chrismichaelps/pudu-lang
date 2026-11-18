@@ -86,6 +86,10 @@ DEPTH 0.6 (MEDIUM). It keeps one concern out of [[Type Check]], which the delive
 
 - **Q:** Why a separate module? **A:** Because the checking walk is already deep, and formation, unification, and state are independently testable concerns. _Rationale:_ the split follows a real seam rather than a line count alone. _Rejected:_ one large checker file.
 
+## Resolved Grill Log for #877 — Direct nullable loans
+
+Compare nullable loan ordinals before unifying function signatures so a regular function type cannot erase a foreign call restriction.
+
 ## Referenced by
 
 [[src/Pudu/Type/_MOC]] · [[Type Check]]

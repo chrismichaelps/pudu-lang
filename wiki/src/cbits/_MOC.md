@@ -7,6 +7,10 @@ tags: [moc, module, foreign, ffi]
 
 - [[Pudu FFI Bridge]] — the C/libffi adapter that turns a checked crossing description into one
   native call.
+- [[Foreign Platform Loader]] — shared platform loading and reference release.
+- [[Pudu FFI Callback Bridge]] · [[Pudu Private FFI ABI]] — libffi callbacks and shared ABI carriers.
+- [[Pudu FFI Objective-C Bridge]] — Objective-C block invocation, runtime delegate classes, and their release (Apple only).
+- [[Pudu FFI Callback Adapter]] — shared adapter struct, block literal layout, and callback lock and dispatch declarations.
 - [[Pudu FFI C++ Fixture]] — the test-only C++ resource surface exported through a stable C ABI.
 
 - [[Pudu SQLite Bridge]] — on-demand SQLite loading, statement ownership, and exact byte transport.
@@ -23,6 +27,22 @@ tags: [moc, module, foreign, ffi]
   hardware timeline, telemetry, and release.
 
 - [[Desktop Presentation Test]] · [[Desktop Presentation Gate]] — native presentation orientation regression.
+
+- [[iOS Host Adapter]] — iOS host embedded into application builds, never compiled into the compiler (#916).
+
+- [[iOS Host Layout]] — vertical viewport, safe area, keyboard layout and focus reveal.
+- [[iOS Host Theme]] — semantic color roles, appearance override, and Dynamic Type text styles.
+- [[iOS Host Events]] — private event queue with the text and detail word each event carries.
+- [[iOS Host Controls]] — platform control factories, setters, target actions and self-test actions.
+- [[iOS Host List]] — recycling list and grid cells, the row store, and scroll reports.
+- [[iOS Host Material]] — surface materials realized as glass on iOS 26 or later, blur otherwise.
+- [[iOS Host Gesture]] — UIKit recognizers attached to a control and their gesture events (#930).
+- [[iOS Host Feedback]] — alerts presented one at a time, haptics, progress and activity indicators (#930).
+- [[iOS Host Access]] — accessibility traits, hints, values and context menus (#930).
+- [[iOS Host Scene]] — root controller, scene size and size classes, and lifecycle events (#930).
+- [[iOS Host Motion]] — animated groups and one spring per commit, honoring Reduce Motion (#930).
+- [[iOS Host Stream]] — view stream reader: words, text fields and stream defects (#930).
+- [[iOS Host Capability Test]] — self-test of the capability headers under the capability environment variable (#930).
 
 ## Referenced by
 

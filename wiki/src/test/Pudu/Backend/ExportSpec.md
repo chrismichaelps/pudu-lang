@@ -23,7 +23,8 @@ Evidence for [[Backend Emit Export]] and the library roots of
 | An export taking `Array[Int64]` | failure | emission refuses the parameter C cannot pass |
 | embedded exports carry text, records and Result to a C host | success, output | a host calls `shout` (text in and out, owned terminated result), `moved` (flat record both ways), `describe` and `tag` (a nested record with a text field, in and out), `half` (`Result[Int64, Str]`: Ok with value, Err with text, null out pointers) and `check` (`Result[(), Str]`), releasing every text result with `pudu_string_release`; the output must be exactly `ready`, `hi! 3 1`, `11 12`, `pin@3`, `pin+ 4`, `0 4`, `1 odd 7`, `0`, `0 1 not positive` |
 | embedded exports refuse host text that is not UTF-8 | failure, diagnostic | a host passes the single byte 0xFF; the process stops and standard error names `pudu_export_shout ... with text that is not UTF-8` |
-| Exports with type parameters or defaults | failure | E6001 refusals at each name |
+| Export with type parameters | failure | E6001 at the export name |
+| Defaulted and async exports | success, output | Pudu calls omit trailing defaults, C passes every argument, and an async export awaits its task and crosses both Result arms |
 | The same exports in an executable build | regression | lowering ignores exports entirely |
 
 ## Grill Log

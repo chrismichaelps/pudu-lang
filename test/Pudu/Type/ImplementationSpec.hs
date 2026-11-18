@@ -22,6 +22,7 @@ import Test.QuickCheck (Property, conjoin, counterexample, property, (===))
 implementationProperties :: [(String, IO Property)]
 implementationProperties =
   [ ("trait proof retains concrete conditional and specialized heads", testHeads)
+  , ("unbound trait method values require the retained implementation", testMethodValues)
   , ("trait proof gates dynamic widening by concrete conditions", testDynamic)
   , ("trait proof preserves imported canonical conditions", testImports)
   , ("trait proof distinguishes complete applications cycles markers and budgets", testProof)
@@ -32,6 +33,25 @@ implementationProperties =
   , ("trait proof preserves constructor capability bounds", testConstructors)
   , ("trait bounds validate unused generic declarations before their bodies", testBoundHeaders)
   ]
+
+testMethodValues :: IO Property
+testMethodValues = conjoin <$> mapM check
+  [ ("Box{held: 7}", [])
+  , ("false", ["E3012"])
+  ]
+ where
+  check (receiver, expected) = do
+    source <- newSource (SourceName "Probe.pudu") $ Text.unlines
+      [ "module Probe"
+      , "trait Read { fn get(self) -> Int }"
+      , "type Box = { held: Int }"
+      , "impl Read for Box { fn get(self: Box) -> Int { self.held } }"
+      , "fn main() -> Int { let get = Read.get"
+      , "  get(" <> receiver <> ") }"
+      ]
+    result <- runCompile source
+    pure $ counterexample (show (compileDiagnostics result)) $
+      map (diagnosticCodeText . diagnosticCode) (compileDiagnostics result) === expected
 
 testHeads :: IO Property
 testHeads = conjoin <$> mapM check

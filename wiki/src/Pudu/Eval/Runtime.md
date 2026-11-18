@@ -24,6 +24,14 @@ capabilities, not foreign claims. Any session a program fails to close is closed
 [[Eval Audio Stream]] follows the same evaluation-local rule and drains nothing during emergency
 teardown: abandonment must finish promptly and cannot wait on hardware.
 
+## Resolved Grill Log for #876
+
+Retire the native contexts and close [[Foreign Callback Store]] admission
+at the end of evaluation, then
+wait within the foreign teardown bound for active invocations. Close it
+before host resources so admitted handlers can finish cleanup. Undelivered
+callback failures enter the teardown diagnostics as warnings.
+
 ## Dependencies and consumers
 
 [[Eval Env]] supplies evaluation state; [[Evaluator]] supplies action/outcome semantics.

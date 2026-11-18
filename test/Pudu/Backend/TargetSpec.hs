@@ -10,6 +10,7 @@ import qualified Data.Text.IO as TextIO
 import Pudu.Backend.Emit (EmittedUnit (..), EntryForm (..), emitUnit)
 import Pudu.Backend.Target (NativeTarget, TargetRefusal (..), nativeTargetNamed, nativeTargetNames, targetRefusals)
 import Pudu.Backend.Toolchain (ToolchainFailure (..))
+import Pudu.Backend.Toolchain.Android (packageLinkFlags, packageManifest)
 import Pudu.Backend.Toolchain.Library (LibraryProducts (..), LibraryRequest (..), compileLibrary)
 import Pudu.Compiler.Frame (lowerFrames)
 import Pudu.Compiler.Lower (LowerResult (..), lowerProgram, programNativeModules)
@@ -30,8 +31,25 @@ backendTargetProperties =
   [ ("mobile targets select library paths and refuse escapes", pure (once targetPaths))
   , ("mobile entry emits a host function and refuses desktop runtime parts", once <$> entryForms)
   , ("mobile SDK discovery diagnoses absence without publishing", once <$> sdkFailures)
+  , ("mobile TLS requests each target provider before publishing", once <$> missingTlsProvider)
   , ("mobile Apple SDK builds export only the host entry on both slices", once <$> appleArchives)
+  , ("Android release packages are neither debuggable nor marked for self-tests", pure (once androidTestBuilds))
   ]
+
+androidTestBuilds :: Property
+androidTestBuilds = conjoin
+  [ counterexample "a release package links without --debug-mode" (packageLinkFlags False === [])
+  , counterexample "a test build links with --debug-mode" (packageLinkFlags True === ["--debug-mode"])
+  , counterexample "a release manifest has no self-test marker" (property (not (marker `Text.isInfixOf` release)))
+  , counterexample "a test build manifest has exactly one marker" (Text.count marker test === 1)
+  , counterexample "the marker sits inside the application element"
+      (property (marker `Text.isInfixOf` fst (Text.breakOn "</application>" test)))
+  , counterexample "both name the program" (property (all ("org.pudu.counter" `Text.isInfixOf`) [release, test]))
+  ]
+ where
+  marker = "android:name=\"org.pudu.selftest\""
+  release = packageManifest False "Counter"
+  test = packageManifest True "Counter"
 
 targetPaths :: Property
 targetPaths = withTarget "ios-simulator-arm64" $ \ios ->
@@ -123,6 +141,39 @@ sdkFailures = withSystemTempDirectory "pudu-mobile-sdk" $ \root ->
         , timedOut
         , files === ["fake-xcrun"]
         ]
+
+missingTlsProvider :: IO Property
+missingTlsProvider = withSystemTempDirectory "pudu-mobile-tls" $ \root ->
+  case (nativeTargetNamed "ios-simulator-arm64", nativeTargetNamed "android-arm64") of
+    (Just apple, Just android) -> do
+      let sourcePath = root </> "Main.pudu"
+      TextIO.writeFile sourcePath (Text.unlines
+        [ "module Main", "fn main() -> Int {"
+        , "  print(show(tlsConnectWithin(\"127.0.0.1\", 1, 0)))"
+        , "  0", "}" ])
+      emitted <- emitFile EmbeddedEntry sourcePath
+      case emitted of
+        Left failure -> pure (counterexample failure False)
+        Right unit -> do
+          let output = root </> "libMain.a"
+              refusals target = map refusedConstruct (targetRefusals target (emittedParts unit) (emittedLibraries unit))
+          appleBuild <- withEnvironment "PUDU_IOS_OPENSSL_PREFIX" Nothing $
+            compileLibrary (LibraryRequest (emittedSource unit) output apple [])
+          androidBuild <- withEnvironment "PUDU_ANDROID_OPENSSL_PREFIX" Nothing $
+            compileLibrary (LibraryRequest (emittedSource unit) output android [])
+          files <- listDirectory root
+          let missing name variable result = case result of
+                Left (ToolchainSdkMissing actual detail) -> conjoin
+                  [ actual === name, property (Text.isInfixOf variable detail) ]
+                other -> counterexample (show other) False
+          pure $ conjoin
+            [ refusals apple === []
+            , refusals android === []
+            , files === ["Main.pudu"]
+            , missing "ios-simulator-arm64" "PUDU_IOS_OPENSSL_PREFIX" appleBuild
+            , missing "android-arm64" "PUDU_ANDROID_OPENSSL_PREFIX" androidBuild
+            ]
+    _ -> pure (counterexample "missing mobile targets" False)
 
 appleArchives :: IO Property
 appleArchives

@@ -47,6 +47,49 @@ raw result text before allocating copies, and free argument scratch before
 reporting missing or invalid returned text. Select text helper dependencies by
 crossing direction. Record codecs still emit both directions.
 
+An optional handle parameter (#935) is passed through `pudu_foreign_optional_handle`, which the
+wrapper calls before dispatch so that `None` crosses as a null pointer and `Some` as the checked live
+address.
+## Resolved Grill Log for #877 — ABI loan storage
+
+[[Backend Emit Foreign Loan]] packs each scalar or record loan into a C local of its
+exact ABI type. The native function receives the address of that local.
+A shared parameter uses a const-qualified pointer. A mutable parameter's
+final value joins the result tuple used by ordinary native place writeback.
+
+## Resolved Grill Log for #877 — Post-call settlement
+
+Arm post-call capture inside the crossing and keep mutable ABI locals outside its jump boundary. Release all callback leases on either conversion exit. Only then return the loan finals.
+
+## Resolved Grill Log for #877 — Checked foreign bounds
+
+Pass one extent diagnostic site to each wrapper with length relations. Check each target in declared order before calling C.
+
+## Resolved Grill Log for #877 — C11 array crossings
+
+Use the sized array wrapper before the raw crossing. Arm the storage cleanup around preflight and after native return, and disarm it while the library or a callback is running.
+
+## Resolved Grill Log for #877 — Optional handles
+
+Check liveness only for a present optional handle. Convert null results to None and route present handles through the appropriate owned, counted or borrowed path.
+
+## Resolved Grill Log for #877 — Handle leases during dispatch
+
+Pin present input handles before dispatch can yield, then unpin them after the native shim retakes the gate. If a callback failure discards an otherwise valid result, release the produced claims before reporting the failure.
+
+## Resolved Grill Log for #877 — Returned run copying
+
+Represent a returned run as a native void pointer claimed before checking the length slot. Copy to a Pudu array at the ABI stride and discharge the temporary generation immediately after copying.
+
+## Resolved Grill Log for #877 — Native nullable loans
+
+Select run allocation and guarded dispatch only when the call can allocate scratch. Keep extent checks for nullable arrays with related lengths.
+
+## Resolved Grill Log for Objective-C blocks
+
+A callback parameter written `work: block Work` crosses as one pointer to a block literal, with passing mode BlockPassing and placement BlockCallback. The block is a stack block (isa `_NSConcreteStackBlock`, no copy or dispose helpers) whose last field is the registration key, and it lives for the foreign call only. A callee that keeps the block copies it with `Block_copy`; the copy carries the key, which is how escaping blocks are copied. The block's invoke receives the block first, so the callback must declare its context first; the checker refuses otherwise with E3063 ("callback X must take its context first to cross as a block"). A late invocation after unregister finds the key retired and answers the fallback.
+Generated C: the runtime part `host_foreign_block` refuses non-Apple targets with `#error`. Each signature gets a `pudu_block_invoke_<key>` that forwards to the trampoline, and the call site passes a compound-literal block.
+
 ## Referenced by
 
 [[Backend Frame Program]] · [[Native Foreign Call Sites]]
@@ -79,3 +122,27 @@ Reserve space and resolve every destructor before dispatch.
 `parameterNeeds` and `resultNeeds` are exported for [[Backend Emit Export]],
 which converts in the opposite direction: an export's arguments use the
 result conversions and its result uses the parameter conversions.
+
+### Split callback placement Grill Log resolved
+
+The wrapper emits typed trampoline addresses and leases only registrations supplied by Pudu.
+
+## Resolved Grill Log for retained split callbacks
+
+Carry callback capability for every call declared in a block that splits
+registration from its trampoline. A later call without token parameters may
+invoke a retained callback, so it needs the same outbound failure scope and
+must allow the handler to acquire the gate.
+
+## Resolved Grill Log for atomic foreign symbol caches
+
+Generated release functions load the published native function through the
+loader cache accessor. The cache retains its owning module for the process.
+
+## Resolved Grill Log for Objective-C dispatch
+
+Insert the native receiver and selector at ABI positions, and cast the chosen entry point to a fixed signature.
+
+## Resolved Grill Log for Objective-C ownership
+
+Validate aliases and receiver readiness while the run gate is held. Consume the receiver after preparing scratch and before entering the send.

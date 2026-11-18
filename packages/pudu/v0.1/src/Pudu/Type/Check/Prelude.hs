@@ -478,6 +478,7 @@ effectSignatures =
   , ("tlsCloseWithin", monotype (FunctionTypeValue False [integerType, integerType] (resultOf unitTypeValue)))
   , ("tlsPeer", monotype (FunctionTypeValue False [integerType] (resultOf stringType)))
   , ("spawnThread", monotype (FunctionTypeValue False [FunctionTypeValue False [] unitTypeValue] (resultOf integerType)))
+  , ("attemptAction", monotype (FunctionTypeValue False [FunctionTypeValue False [] unitTypeValue] (resultOf unitTypeValue)))
   , ("joinThread", monotype (FunctionTypeValue False [integerType] (resultOf unitTypeValue)))
   , ("sleepMillis", monotype (FunctionTypeValue False [integerType] (resultOf unitTypeValue)))
   , ("channelOpen", monotype (FunctionTypeValue False [integerType] integerType))

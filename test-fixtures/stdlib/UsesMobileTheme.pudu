@@ -1,0 +1,82 @@
+module UsesMobileTheme
+
+import Std.ByteOrder {readU32LE}
+import Std.Mobile.Theme as Theme
+import Std.Mobile.View as View
+
+// The words at `offset` onward, read as little-endian 32-bit values.
+fn wordsAt(bytes: &Array[UInt8], offset: Int, count: Int) -> Array[UInt32] {
+  var found = []
+  for index in 0..count {
+    match readU32LE(bytes, offset + index * 4) {
+      case Some(word) => { found = found.push(word) }
+      case None => { return [] }
+    }
+  }
+  found
+}
+
+fn built(view: &View.View) -> Array[UInt8] {
+  let (_, stream) = View.mount(view)
+  stream.toArray()
+}
+
+fn changed(shown: &View.View, next: &View.View) -> Array[UInt8] {
+  let (mounted, _) = View.mount(shown)
+  let (_, stream) = View.update(&mounted, next)
+  stream.toArray()
+}
+
+fn inked() -> Theme.Theme {
+  Theme.Theme{..Theme.platform(), ink: Theme.Fixed(Theme.rgb(0x11u8, 0x22u8, 0x33u8), Theme.rgb(0x44u8, 0x55u8, 0x66u8)), appearance: Theme.Dark}
+}
+
+export fn main() -> Int {
+  var held = 0
+  let platform = Theme.stream(&Theme.platform()).toArray()
+  var zeros: Array[UInt32] = [20u32, 7u32]
+  for _ in 0..21 {
+    zeros = zeros.push(0u32)
+  }
+
+  // THEME with seven platform tones, then APPEARANCE system.
+  if platform.length() == 100 && wordsAt(&platform, 0, 25) == zeros.push(21u32).push(0u32) { held = held + 1 }
+
+  // A fixed ink pair: kind 1, then each color's bytes R, G, B, A.
+  let themed = Theme.stream(&inked()).toArray()
+  if wordsAt(&themed, 20, 3) == [1u32, 0xff332211u32, 0xff665544u32] && themed.slice(24, 28) == [0x11u8, 0x22u8, 0x33u8, 0xffu8] { held = held + 1 }
+
+  // A dark appearance closes the stream.
+  if wordsAt(&themed, 92, 2) == [21u32, 2u32] { held = held + 1 }
+
+  // An identical theme restyles nothing; a changed one restyles to its own stream.
+  if Theme.restyled(&inked(), &inked()).length() == 0 { held = held + 1 }
+  if Theme.restyled(&Theme.platform(), &inked()).toArray() == themed { held = held + 1 }
+
+  // A styled label: CREATE, TEXT, STYLE body on the label, ROOT.
+  let styled = View.Styled(Theme.Body, View.Label("x"))
+  let styledStream = built(&styled)
+  if styledStream.length() == 45 && wordsAt(&styledStream, 25, 5) == [22u32, 0u32, 4u32, 4u32, 0u32] { held = held + 1 }
+
+  // A painted button writes COLOR danger after its title.
+  let painted = built(&View.Painted(Theme.Danger, View.Button("Go", 1u32)))
+  if wordsAt(&painted, 38, 3) == [23u32, 0u32, 5u32] { held = held + 1 }
+
+  // A changed style is one STYLE; an unchanged tree writes nothing.
+  let restyled = changed(&styled, &View.Styled(Theme.Headline, View.Label("x")))
+  if restyled.length() == 12 && wordsAt(&restyled, 0, 3) == [22u32, 0u32, 3u32] { held = held + 1 }
+  if changed(&styled, &styled).length() == 0 { held = held + 1 }
+
+  // A changed role is one COLOR.
+  let recolored = changed(&View.Painted(Theme.Ink, View.Label("x")), &View.Painted(Theme.Muted, View.Label("x")))
+  if recolored.length() == 12 && wordsAt(&recolored, 0, 3) == [23u32, 0u32, 4u32] { held = held + 1 }
+
+  // Dropping the wrapper replaces the node: a new label shown, the old one removed.
+  let unstyled = changed(&styled, &View.Label("x"))
+  if wordsAt(&unstyled, 0, 3) == [1u32, 1u32, 1u32] && wordsAt(&unstyled, 25, 6) == [4u32, 1u32, 11u32, 0u32, 1u32, 0u32] { held = held + 1 }
+
+  // Nested wrappers mark one node, innermost first.
+  let nested = built(&View.Named("N", View.Styled(Theme.Body, View.Painted(Theme.Ink, View.Label("x")))))
+  if wordsAt(&nested, 25, 9) == [23u32, 0u32, 1u32, 22u32, 0u32, 4u32, 9u32, 0u32, 1u32] { held = held + 1 }
+  held
+}

@@ -7,11 +7,13 @@
 module Pudu.Foreign.OwnershipSpec (ownershipProperties) where
 
 import Control.Concurrent (forkIO, newEmptyMVar, putMVar, takeMVar, throwTo)
-import Control.Exception (AsyncException (ThreadKilled), throwIO, try)
+import Control.Exception (AsyncException (ThreadKilled), IOException, throwIO, try)
 import Data.IORef (IORef, atomicModifyIORef', newIORef, readIORef)
 import Data.Int (Int64)
 import Data.List (sort)
-import Pudu.Foreign.Call (candidates)
+import Pudu.Foreign.Call (candidates, closeLibrary, openLibrary, withSymbol)
+import Foreign.C.Types (CInt (..))
+import Foreign.Ptr (FunPtr, castPtrToFunPtr)
 import Pudu.Foreign.Ownership
   ( claimAllOwnedGenerations
   , claimCountedGeneration
@@ -22,6 +24,7 @@ import Pudu.Foreign.Ownership
   , takeOwnedGeneration
   , takeCountedGeneration
   , withOwnedGenerations
+  , withTransferredGeneration
   )
 import System.Timeout (timeout)
 import Test.QuickCheck (Property, conjoin, counterexample, property, (===))
@@ -39,6 +42,12 @@ ownershipProperties =
   , ("two references to one address are two claims", testCountedClaims)
   , ("every outstanding reference is released at teardown", testCountedTeardown)
   , ("an interrupt during teardown still releases the rest, then stops", testInterruptedTeardown)
+  , ("foreign loader closes independent references and rejects stale users", testLibraryClose)
+  , ("foreign loader scoped exceptions return their call lease", testLibraryException)
+  , ("foreign transfer restores the claim when native entry is refused", testTransferRollback)
+  , ("foreign transfer consumes its generation after native entry", testTransferEntered)
+  , ("foreign transfer refuses busy and blocks new leases", testTransferAdmission)
+  , ("foreign transfer rollback preserves counted ownership", testCountedTransferRollback)
   ]
 
 {-| A cleanup that records that it ran, so a leak and a double release are both
@@ -342,7 +351,7 @@ testInterruptedTeardown = do
 oneSecond :: Int
 oneSecond = 1000000
 
-isRefusal :: Either [Int64] a -> Bool
+isRefusal :: Either e a -> Bool
 isRefusal = either (const True) (const False)
 
 refusedAddresses :: Either [Int64] a -> [Int64]
@@ -356,3 +365,112 @@ isJustResource = maybe False (const True)
 
 isNothingResource :: Maybe a -> Bool
 isNothingResource = maybe True (const False)
+
+testTransferRollback :: IO Property
+testTransferRollback = do
+  store <- newForeignStore
+  releases <- newReleases
+  claim <- claimOwnedGeneration store 4096 (releasing releases 4096)
+  result <- case claim of
+    Nothing -> pure Nothing
+    Just generation -> withTransferredGeneration store 4096 generation (pure (False, 7 :: Int))
+  stillLive <- case claim of
+    Nothing -> pure Nothing
+    Just generation -> withOwnedGenerations store [(4096, generation)] (pure True)
+  closeForeignStore store
+  cleanup <- released releases
+  pure (conjoin [result === Just 7, stillLive === Just True, cleanup === [4096]])
+
+testTransferEntered :: IO Property
+testTransferEntered = do
+  store <- newForeignStore
+  releases <- newReleases
+  claim <- claimOwnedGeneration store 4096 (releasing releases 4096)
+  result <- case claim of
+    Nothing -> pure Nothing
+    Just generation -> withTransferredGeneration store 4096 generation (pure (True, 7 :: Int))
+  stale <- case claim of
+    Nothing -> pure Nothing
+    Just generation -> withOwnedGenerations store [(4096, generation)] (pure True)
+  closeForeignStore store
+  cleanup <- released releases
+  pure (conjoin [result === Just 7, stale === Nothing, cleanup === []])
+
+testTransferAdmission :: IO Property
+testTransferAdmission = do
+  store <- newForeignStore
+  releases <- newReleases
+  claim <- claimOwnedGeneration store 4096 (releasing releases 4096)
+  result <- case claim of
+    Nothing -> pure Nothing
+    Just generation -> do
+      busy <- withOwnedGenerations store [(4096, generation)] $
+        withTransferredGeneration store 4096 generation (pure (True, False))
+      admitted <- withTransferredGeneration store 4096 generation $ do
+        leased <- withOwnedGenerations store [(4096, generation)] (pure True)
+        pure (False, leased)
+      pure (Just (busy, admitted))
+  closeForeignStore store
+  cleanup <- released releases
+  pure (conjoin [result === Just (Just Nothing, Just Nothing), cleanup === [4096]])
+
+testCountedTransferRollback :: IO Property
+testCountedTransferRollback = do
+  store <- newForeignStore
+  releases <- newReleases
+  first <- claimCountedGeneration store 4096 (releasing releases 4096)
+  second <- claimCountedGeneration store 4096 (releasing releases 4096)
+  result <- case first of
+    Nothing -> pure Nothing
+    Just generation -> withTransferredGeneration store 4096 generation (pure (False, True))
+  live <- case (first, second) of
+    (Just left, Just right) -> withOwnedGenerations store [(4096, left), (4096, right)] (pure True)
+    _ -> pure Nothing
+  closeForeignStore store
+  cleanup <- released releases
+  pure (conjoin [result === Just True, live === Just True, cleanup === [4096, 4096]])
+
+foreign import ccall "dynamic"
+  callAbsolute :: FunPtr (CInt -> IO CInt) -> CInt -> IO CInt
+
+testLibraryClose :: IO Property
+testLibraryClose = do
+  first <- openLibrary "c" Nothing
+  second <- openLibrary "c" Nothing
+  case (first, second) of
+    (Right left, Right right) -> do
+      initial <- withSymbol left "abs" (\address -> callAbsolute (castPtrToFunPtr address) (-7))
+      closed <- closeLibrary left
+      rejected <- withSymbol left "abs" (\address -> callAbsolute (castPtrToFunPtr address) (-9))
+      survivor <- withSymbol right "abs" (\address -> callAbsolute (castPtrToFunPtr address) (-11))
+      repeated <- closeLibrary left
+      finished <- closeLibrary right
+      pure (conjoin
+        [ initial === Right 7
+        , closed === Right ()
+        , counterexample "a closed reference admitted another user" (property (isRefusal rejected))
+        , survivor === Right 11
+        , repeated === Right ()
+        , finished === Right ()
+        ])
+    (Right handle, Left failure) -> do
+      _ <- closeLibrary handle
+      pure (counterexample (show failure) False)
+    (Left failure, Right handle) -> do
+      _ <- closeLibrary handle
+      pure (counterexample (show failure) False)
+    (Left failure, _) -> pure (counterexample (show failure) False)
+
+testLibraryException :: IO Property
+testLibraryException = do
+  opened <- openLibrary "c" Nothing
+  case opened of
+    Left failure -> pure (counterexample (show failure) False)
+    Right handle -> do
+      outcome <- try @IOException $
+        withSymbol handle "abs" (\_ -> ioError (userError "scoped action failed") :: IO ())
+      closed <- timeout 1000000 (closeLibrary handle)
+      pure (conjoin
+        [ counterexample "the scoped action exception was swallowed" (property (isRefusal outcome))
+        , closed === Just (Right ())
+        ])

@@ -5,6 +5,7 @@ import Std.Db.Driver {DollarNumber, IntegerValue, TextValue}
 import Std.Db.Driver as Driver
 import Std.Db.Migrate {ArrivedLate, Changed, Refused, Unnumbered}
 import Std.Db.Migrate as Migrate
+import Std.Db.Postgres as Postgres
 import Std.Option as Option
 import Std.Result as Result
 import Std.Sync as Sync
@@ -153,8 +154,10 @@ fn count(db: &Database.Database, sql: Str) -> Int {
 fn recording(into: Sync.Cell[Str]) -> Driver.Driver {
   Driver.Driver {
     name: "postgresql",
+    engine: Driver.Postgresql,
     schemes: ["postgresql"],
     placeholders: DollarNumber,
+    capabilities: Postgres.driver().capabilities,
     open: fn(_uri: Str, _size: Int) -> Result[Driver.Client, Driver.Error] {
       let answer = fn(sql: Str) -> Result[Driver.Rows, Driver.Error] {
         let _said = Sync.set(&into, Result.unwrapOr(Sync.get(&into), "") + "tx " + sql + "\n")

@@ -53,7 +53,7 @@ Native validation: [[Binary Codec Properties]].
 
 ## Referenced by
 
-[[src/Pudu/Eval/_MOC]] · [[Binary Codec Properties]] · [[Pudu Cabal Manifest]]
+[[src/Pudu/Eval/_MOC]] · [[Binary Codec Properties]] · [[Pudu Cabal Manifest]] · [[Native Binary Kernels]]
 
 ## Writer domain agreement (#739)
 

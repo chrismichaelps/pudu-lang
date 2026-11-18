@@ -28,6 +28,8 @@ data Crossing = SignedCrossing !Int | UnsignedCrossing !Int | FloatingCrossing !
               | RecordCrossing !Text ![(Text, Crossing)] | NothingCrossing
 
 crossingFor    :: Set Text -> RecordLayouts -> Located TypeSyntax -> Maybe Crossing
+loanFor        :: Set Text -> RecordLayouts -> Located TypeSyntax -> Maybe (Bool, Crossing)
+isLoanPointee  :: Crossing -> Bool
 crossingName   :: Crossing -> Text
 crossingType   :: Crossing -> Type
 fitsCrossing   :: Crossing -> Integer -> Bool
@@ -55,6 +57,9 @@ foreignRecordFieldLimit :: Int
 - **Handle names are unqualified and come from the enclosing block.** A qualified `Other.Box` is
   never reduced to `Box`; scalar names may be unqualified only as well. A misspelled or qualified
   handle is refused rather than laundered into the block's own nominal type.
+- **A parameter may be an optional handle.** `parameterCrossingFor` admits `Option` of a declared
+  handle as `OptionalHandleCrossing`, and only parameters use it. Results and record fields keep
+  `crossingFor`, so an absent result still answers through an output slot.
 
 - **A record crosses by value and is an ordinary record.** What a library passes about is its
   colours, points, and rectangles, so a boundary admitting only scalars admits almost nothing real.
@@ -100,6 +105,10 @@ foreignRecordFieldLimit :: Int
   attached to a top-level foreign result and its declared release; nesting one would hide it from
   liveness leasing on arguments and ownership registration on results. _Rejected:_ recursively
   leasing or claiming fields without a field-level lifetime and release declaration.
+- **Q:** Let a result or record field be `Option` of a handle, as a parameter can be? **A:** No.
+  _Rationale:_ an absent result already answers through an output slot, and a nested optional handle
+  would evade the top-level lease and release contract. _Rejected:_ `Option` in result and field
+  positions.
 
 ## Nested ABI layouts (#863)
 
@@ -107,6 +116,46 @@ Resolved Grill Log: [[Nested Foreign Record Delivery]] preserves the tree
 for libffi layout and keeps value carriers in declaration-order leaves.
 The 32-member limit applies at each record node.
 
+## Foreign loan pointees (#877)
+
+`isLoanPointee` admits fixed-width scalar leaves and recurses through record
+members. It excludes text, bytes, handles and unit at every level.
+
+### Resolved Grill Log
+
+- **Q:** Treat every by-value record as a loan pointee? **A:** Require every
+  leaf to have a fixed-width scalar ABI carrier. Pointer-bearing fields
+  introduce additional lifetimes outside the scope of a copied loan.
+
+## Resolved Grill Log for #877 — Foreign extent relations
+
+Resolve length and run names within one foreign signature. A length is an input fixed-width integer and targets are readable buffers or array loans. Retain all native positions and report an invalid name or duplicate at its source span.
+
+## Resolved Grill Log for #877 — Interpreter array crossings
+
+Treat references to Array[T] as addressed runs of one ABI element type. Share the scalar and record element admission rules.
+
+## Resolved Grill Log for #877 — Optional handles
+
+Recognize Option of a declared opaque handle at top-level argument and result positions. The underlying ABI crossing is the same pointer carrier as a required handle.
+
+## Resolved Grill Log for #877 — Returned run declarations
+
+A returned run resolves its element layout, optionality, length position and destructor together. Keep the compact output position so decoding uses the declared length slot.
+
 ## Referenced by
 
 [[src/Pudu/_MOC]] · [[ADR-0018 Calling a Library Written Elsewhere]] · [[grammar/pudu]]
+
+## Resolved Grill Log for Objective-C dispatch
+
+Resolve the declaration-local Objective-C class alias before runtime. The resolved method carries the selector and optional class receiver.
+
+## Resolved Grill Log for Objective-C ownership
+
+Classify conventional Objective-C selector families using their first component and lowercase-boundary rule.
+
+## Resolved Grill Log for normalized nullable arguments
+
+Recognize the resolved nullary None constructor after frontend normalization
+so an absent foreign loan does not require an Option carrier in native lowering.
