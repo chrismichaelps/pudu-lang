@@ -3,6 +3,7 @@ package org.pudu;
 import android.app.Activity;
 import android.content.Intent;
 import android.content.pm.ApplicationInfo;
+import android.content.pm.PackageManager;
 import android.content.res.Configuration;
 import android.os.Bundle;
 import android.widget.FrameLayout;
@@ -27,12 +28,10 @@ public final class PuduActivity extends Activity {
     setContentView(surface);
     PuduBridge.activity = this;
     PuduBridge.surface = surface;
-    /* The launcher activity is exported, so only a debuggable build honors
-       the self-test extras; a released one ignores whatever another
-       application sends. */
+    /* The launcher activity is exported, so self-test extras count only in a
+       test build; any other package drops whatever another application sends. */
     Intent intent = getIntent();
-    boolean debuggable = (getApplicationInfo().flags & ApplicationInfo.FLAG_DEBUGGABLE) != 0;
-    PuduBridge.testing = debuggable && intent.hasExtra("PUDU_UI_SELFTEST");
+    PuduBridge.testing = testBuild() && intent.hasExtra("PUDU_UI_SELFTEST");
     if (!PuduBridge.testing) intent = new Intent();
     PuduBridge.taps = Math.min(MAX_TAPS, parse(intent.getStringExtra("PUDU_UI_SELFTEST")));
     PuduBridge.typed = intent.getStringExtra("PUDU_UI_TYPE");
@@ -41,6 +40,18 @@ public final class PuduActivity extends Activity {
     surface.addOnLayoutChangeListener((view, left, top, right, bottom, oldLeft, oldTop, oldRight, oldBottom) -> resized(view));
     PuduBridge.start(this, surface, getResources().getDisplayMetrics().density, night(getResources().getConfiguration()),
         PuduBridge.testing);
+  }
+
+  /** A package built with PUDU_ANDROID_TEST_BUILD: debuggable and carrying
+   *  the org.pudu.selftest marker in its manifest. */
+  private boolean testBuild() {
+    if ((getApplicationInfo().flags & ApplicationInfo.FLAG_DEBUGGABLE) == 0) return false;
+    try {
+      Bundle meta = getPackageManager().getApplicationInfo(getPackageName(), PackageManager.GET_META_DATA).metaData;
+      return meta != null && meta.getBoolean("org.pudu.selftest", false);
+    } catch (PackageManager.NameNotFoundException missing) {
+      return false;
+    }
   }
 
   private static int parse(String number) {
