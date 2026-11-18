@@ -26,4 +26,10 @@ effects finish in that order.
 
 ## Referenced by
 
+## Cases
+
+- set membership with `in`: candidate before set, key shapes, a set read through a reference, the empty set (#948)
+
+## Referenced by
+
 [[Native Maps and Sets]] · [[Backend Module Programs]] · [[Backend Text Leak Tests]]

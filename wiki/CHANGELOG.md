@@ -11,6 +11,12 @@ tags: [changelog]
   timed section, so a first-launch scan no longer trips the deadline (refs #953).
   [[Backend Toolchain Tests]]
 
+## 2026-11-17 — Native set membership (#948)
+
+- `x in set` lowers to the set's `contains` primitive natively, with the
+  candidate evaluated before the set (refs #948).
+  [[Compiler Lower Keyed]] · [[Compiler Lower Scalar]]
+
 ## 2026-11-17 — Native ledger: trait-qualified method values (#647)
 
 - Trait-qualified method values are recorded as native; both engines dispatch
