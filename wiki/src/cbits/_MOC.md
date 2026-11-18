@@ -13,6 +13,7 @@ tags: [moc, module, foreign, ffi]
 - [[Pudu FFI Callback Adapter]] — shared adapter struct, block literal layout, and callback lock and dispatch declarations.
 - [[Pudu FFI C++ Fixture]] — the test-only C++ resource surface exported through a stable C ABI.
 
+- [[pudu_ios_navigation.h]] — UIKit navigation host: page stack, page sheet, and user pop and dismissal reports.
 - [[Pudu SQLite Bridge]] — on-demand SQLite loading, statement ownership, and exact byte transport.
 - [[Pudu Desktop Header]] — framework-neutral private ABI for desktop target plumbing.
 - [[Pudu Desktop Adapter]] — macOS window, bitmap presentation, event pumping, and release.

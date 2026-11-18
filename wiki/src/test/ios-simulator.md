@@ -195,3 +195,11 @@ of device names, which would miss families the list does not name.
 The Showcase, `examples/mobile/Showcase.pudu` ([[Native Showcase Example]]), is run with `PUDU_UI_CAPABILITY_TEST` set, and with `PUDU_UI_SELFTEST` also set so that the haptic line is printed. Its expected report lines are listed in [[Native Showcase Example]]. The self-test sequence is [[iOS Host Capability Test]].
 
 Negative logic: this script does not yet compare the capability lines. The Showcase run is manual until the suite records them.
+
+## Navigation run
+
+The Pages example, `examples/mobile/Pages.pudu` ([[Native Pages Example]]), runs with `PUDU_UI_NAVIGATION_TEST` set and `PUDU_UI_SELFTEST` set to `0`. The script waits for the labels `Pops: 1` and `Dismissals: 1` and compares five lines, in order: `PUDU_NAV pushed`, `PUDU_NAV popped once`, `PUDU_NAV sheet shown`, `PUDU_NAV sheet dismissed once` and `PUDU_NAV sheet closed without echo`. The self-test sequence is described in [[pudu_ios_navigation.h]].
+
+Refusal: a stream whose NAVIGATE names the route id 1 twice is refused before any controller changes. The script compares the refusal line with `pudu: a view stream showed two routes with id 1`.
+
+Resolved Grill Log: the run asserts the labels as well as the lines, so a report that prints correctly while the screen shows a stale count still fails. _Rejected:_ comparing the lines alone, which would pass a screen that never applied the pop.

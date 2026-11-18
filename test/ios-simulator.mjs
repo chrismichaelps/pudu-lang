@@ -186,6 +186,16 @@ int main(int argc, char **argv) {
       "import Std.Mobile.Host as Host\nimport Std.Mobile.Stream as Stream", `  let label = Stream.create([], 0u32, Stream.LABEL)
   Host.apply(bytesOf(Stream.range(label, 0u32, 10u32, 0u32)))`,
       /pudu: a view stream shaped a node that is not a list: 0/u);
+    mobileApp(device, "Pages", [{
+      environment: { SIMCTL_CHILD_PUDU_UI_SELFTEST: "0", SIMCTL_CHILD_PUDU_UI_NAVIGATION_TEST: "1" },
+      labels: ["Pops: 1", "Dismissals: 1"],
+      layout: ["PUDU_NAV pushed", "PUDU_NAV popped once", "PUDU_NAV sheet shown", "PUDU_NAV sheet dismissed once",
+        "PUDU_NAV sheet closed without echo"],
+    }]);
+    refusedApp(device, root, "repeated route ids",
+      "import Std.Mobile.Host as Host\nimport Std.Mobile.Stream as Stream", `  let body = Stream.create(Stream.create([], 0u32, Stream.LABEL), 1u32, Stream.LABEL)
+  Host.apply(bytesOf(Stream.navigate(body, &[(1u32, 0u32, "A"), (1u32, 1u32, "B")], None)))`,
+      /pudu: a view stream showed two routes with id 1/u);
     familyMatrix(runtime);
     mobileApp(device, "Glass", [glassRun("glass")]);
     mobileApp(device, "Showcase", [{
@@ -338,7 +348,7 @@ function mobileApp(device, example, runs) {
         `${example} did not show ${labels.join(", ")}:\n${lines.join("\n")}`);
       assert.ok(lines.includes("PUDU_PROGRAM_STATUS 0"), `${example} did not finish:\n${lines.join("\n")}`);
       if (layout) {
-        assert.deepEqual(lines.filter((line) => /^PUDU_(VIEWPORT|KEYBOARD|THEME|LIST|MATERIAL|ALERT|HAPTIC|ACCESS|MOTION) /.test(line)), layout,
+        assert.deepEqual(lines.filter((line) => /^PUDU_(VIEWPORT|KEYBOARD|THEME|LIST|MATERIAL|ALERT|HAPTIC|ACCESS|MOTION|NAV) /.test(line)), layout,
           `${example} did not report the expected layout and theme:\n${lines.join("\n")}`);
       }
       const firstFrame = lines.find((line) => line.startsWith("PUDU_FIRST_FRAME_MS "));

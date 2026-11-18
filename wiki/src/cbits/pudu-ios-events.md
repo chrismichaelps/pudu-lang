@@ -20,7 +20,8 @@ The header provides `pudu_queue(kind, tag, text, detail)`, which appends an even
 - `pudu_ui_wait` runs the main run loop in the default mode until an event is queued, then hands out the oldest.
 - `pudu_ui_event_text` and `pudu_ui_event_detail` return the text and detail of the last event handed out. Both stay valid until the next wait.
 - Events are handed out in the order the controls queued them.
-- The event kind constants live in this header: tapped 1, stopped 2, changed 3, switched on 4, switched off 5, reached 8, gestured 9, chose 10, resized 11, lifecycle 12, picked 13. The controls header [[iOS Host Controls]] and the capability headers queue them by these names.
+- The event kind constants live in this header: tapped 1, stopped 2, changed 3, switched on 4, switched off 5, reached 8, gestured 9, chose 10, resized 11, lifecycle 12, picked 13, popped 14, dismissed 15. The controls header [[iOS Host Controls]], the capability headers and [[pudu_ios_navigation.h]] queue them by these names.
+- `pudu_unqueue(kind)` drops every queued event of `kind` that the program has not read. The navigation header calls it for popped and dismissed events when a newer NAVIGATE arrives, so a report about the replaced presentation is never delivered.
 
 ## Word channel
 

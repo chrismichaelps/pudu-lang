@@ -13,24 +13,20 @@ aliases: [Std Mobile View]
 
 ## Purpose and interface
 
-Pure description of a phone screen and the reconciler that keeps it current. A view is a tree of labels, buttons, rows, columns, text fields and toggles, where any control may be wrapped in a name, and a column may hold keyed rows. A root scroll viewport holds one view. A recycling list holds a window of its items, so a long list costs the program only the rows the screen can show. `mount` builds a view and shows it; `update` compares the next view with the mounted tree and emits only the instructions that change the screen. Instructions are spelled by [[Std Mobile Stream]].
+Pure description of a phone screen and the reconciler that keeps it current. A view is a tree of labels, buttons, rows, columns, text fields and toggles, where any control may be wrapped in a name, and a column may hold keyed rows. A root scroll viewport holds one view. A recycling list holds a window of its items, so a long list costs the program only the rows the screen can show. `mount` builds a view and shows it; `update` compares the next view with the mounted tree and emits only the instructions that change the screen. Instructions are spelled by [[Std Mobile Stream]]. Host events are decoded by [[Std Mobile Events]].
 
 Exports:
 - `type View = Label(Str) | Button(Str, UInt32) | Column(Array[View]) | Row(Array[View]) | Keyed(Array[(Str, View)]) | Field(Str, Str, UInt32) | Toggle(Str, Bool, UInt32) | Named(Str, View) | Scroll(View) | Styled(TextStyle, View) | Painted(Role, View) | Recycled(Window) | Surfaced(Material, View) | Progress(UInt32) | Activity(Bool) | Recognizing(UInt32, Array[Gesture.Kind], View) | Accessible(Access.Access, View) | Menu(UInt32, Array[Feedback.Choice], View) | Animated(View)`: `Keyed` is a column whose rows carry keys; the platform sees a column. `Field` is a placeholder, a text and a tag; `Toggle` is a title, an on state and a tag; `Named` gives the wrapped control an accessible name and adds no node. `Scroll` creates a vertical viewport around one child. `Styled` gives the wrapped text control a text style and `Painted` gives it a color role; like `Named`, each adds no node. `Recycled` is a list of `total` items in `columns` equal columns: one column is a list, more are a grid. `Surfaced` is a container node of kind 9 whose background is a system material, holding one child. `Progress` is a determinate progress bar of kind 10 with its completion in thousandths; `Activity` is an activity indicator of kind 11 that spins when on. `Recognizing` attaches the recognizers of its kinds to the wrapped control, and their events report the tag. `Accessible` gives the wrapped control its traits, hint and value. `Menu` attaches a context menu of choices to the wrapped control. `Animated` makes the placements of a group animate. Like `Named`, the last four add no node.
 - `type Window = { tag: UInt32, total: UInt32, first: UInt32, columns: UInt32, rows: Array[(Str, View)] }`: `rows` are the keyed views of items `first`, `first + 1`, and so on, the window the program currently supplies.
-- `type Event = Tapped(UInt32) | Changed(UInt32, Str) | Toggled(UInt32, Bool) | Stopped | Reached(UInt32, UInt32) | Gestured(UInt32, Gesture.Gesture) | Chose(UInt32, UInt32) | Resized(Scene.Size) | Lifecycle(Scene.Phase) | Picked(UInt32, UInt32)`: `Reached` names a list's tag and the index of its first visible item. `Gestured` reports a recognizer's phase and values. `Chose` names an alert's tag and the index of the choice taken. `Picked` names a context menu's tag and the index of its item. `Resized` reports the scene's size, and `Lifecycle` a lifecycle transition.
+- `type Event = Tapped(UInt32) | Changed(UInt32, Str) | Toggled(UInt32, Bool) | Stopped | Reached(UInt32, UInt32) | Gestured(UInt32, Gesture.Gesture) | Chose(UInt32, UInt32) | Resized(Scene.Size) | Lifecycle(Scene.Phase) | Picked(UInt32, UInt32) | Popped(UInt32, UInt32) | Dismissed(UInt32)`: `Reached` names a list's tag and the index of its first visible item. `Gestured` reports a recognizer's phase and values. `Chose` names an alert's tag and the index of the choice taken. `Picked` names a context menu's tag and the index of its item. `Resized` reports the scene's size, and `Lifecycle` a lifecycle transition. `Popped` names the route that was on top and the surviving destination route. `Dismissed` names the sheet the user dismissed.
 - `type Shown = { id: UInt32, view: View, children: Array[Shown] }`: one node of the mounted tree, with the view it displays.
 - `type Mounted = { root: Shown, next: UInt32, free: Array[UInt32] }`: the screen. `next` is the next fresh id; `free` holds recycled ids.
 - `mount(view: &View) -> (Mounted, Bytes)`: builds the view with fresh ids and shows its root.
 - `update(mounted: &Mounted, next: &View) -> (Mounted, Bytes)`: the mounted tree after `next` is shown, and the stream that moves the screen there.
+- `body(out: Array[UInt8], next: UInt32, free: Array[UInt32], view: &View) -> (Mounted, Array[UInt8])`: builds `view` with ids handed out from `next` and `free`, appends the words that build it to `out`, and answers the mounted tree with the extended stream. Nothing is shown as the screen's root; a navigation page shows the body instead.
+- `rebody(out: Array[UInt8], mounted: &Mounted, next: &View) -> (Mounted, Array[UInt8])`: appends the words that turn `mounted` into `next` to `out`. A root that changed kind or tag is built anew and the old subtree removed; no ROOT is written, so the caller reads the new root id from the result.
+- `unmount(out: Array[UInt8], mounted: &Mounted) -> (Array[UInt32], Array[UInt8])`: appends the REMOVE that detaches the whole tree, and answers the free ids with every id of the tree added, and the extended stream.
 - `windowStart(visible: UInt32, total: UInt32, size: UInt32) -> UInt32`: the `first` of a window of `size` items that places `visible` a quarter of the window from its start, clamped so the window never runs past `total`. Examples: (0, 100, 20) is 0; (50, 100, 20) is 45; (95, 100, 20) is 80; (3, 10, 20) is 0. A window should hold at least twice the items one screen shows; a smaller window moves at its edges more often.
-- `event(raw: UInt64, text: Str) -> Event`: decodes one value returned by a host wait, with the text the host fetched for it.
-- `carriesText(raw: UInt64) -> Bool`: whether the event's text must be fetched before `event` is called.
-- `carriesDetail(raw: UInt64) -> Bool`: whether the event's kind is listed in `DETAILED` or `MEASURED`, so one more word must be fetched before decoding.
-- `eventWithDetail(raw: UInt64, text: Str, detail: UInt32) -> Event`: decodes a detailed event with the word the host fetched for it. Kind 8 is `Reached`, with the tag in the low 32 bits and the first visible index as the detail.
-- `carriesWords(raw: UInt64) -> Bool`: whether the event's kind is listed in `MEASURED`, so its signed words must be fetched before decoding.
-- `eventWithWords(raw: UInt64, text: Str, detail: UInt32, values: Array[Int32]) -> Event`: decodes an event with its detail word and words. A measured kind decodes through `MEASURED`, a detailed kind through `DETAILED`, and every other kind through `event`. A measured or detailed kind whose words or detail do not decode reads as `Stopped`.
-- `signed(word: UInt32) -> Int32`: the two's complement reading of a host word, so a word with its top bit set is negative.
 
 ## Invariants
 
@@ -44,8 +40,9 @@ Exports:
 - A `Recycled` list mounts CREATE kind 8, then TAG, COLUMNS, RANGE, and then each window row built and appended in order.
 - Two `Recycled` views with the same tag reconcile their window rows by key, exactly as `Keyed` does. COLUMNS is written when the column count changed; RANGE is written when the total or the first index changed. A changed tag replaces the list.
 - Removed ids go to `free` and are handed out again first, so the host's node table stays as large as the screen, not as large as every row ever shown.
-- Events are unchanged: `event` reads the kind from the high 32 bits. Kind 1 is `Tapped` with the tag in the low 32 bits; kind 3 is `Changed` with the tag and the fetched text; kind 4 is `Toggled` on and kind 5 is `Toggled` off, both with the tag; kind 2 is `Stopped`. Kind 8 is `Reached` with the tag and the detail word. Decoding goes through the constant tables `EVENTS` and `DETAILED`, so an unknown kind reads as `Stopped`.
-- `carriesText` is true only for kind 3. `carriesDetail` is true only for the kinds in `DETAILED` (kinds 8, 10, 12 and 13) and in `MEASURED` (kinds 9 and 11). `carriesWords` is true only for the kinds in `MEASURED`.
+- `body`, `rebody` and `unmount` write no ROOT instruction. `mount` and `update` are unchanged in behaviour.
+- `body`, `rebody` and `unmount` take the stream written so far as `out` and append to it; none reorders earlier bytes.
+- Event decoding lives in [[Std Mobile Events]], which [[Std Mobile Host]] calls; this module exports no decoder. Kind 1 is `Tapped`, kind 3 `Changed`, kinds 4 and 5 `Toggled`, kind 2 `Stopped`; kind 14 is `Popped` and kind 15 `Dismissed`.
 - The view module no longer writes RESET. The host keeps it so a stream from an earlier writer still means the same.
 - `Styled` and `Painted` wrap the inner control and write STYLE or COLOR for its id after the inner control is built. Wrappers of the same kind on both sides reconcile the inner node and write STYLE or COLOR only when the style or role changed.
 - STYLE and COLOR apply only to labels, buttons, fields and toggles. The host refuses them on a group.
@@ -58,7 +55,7 @@ Exports:
 - `Menu` writes one MENU after the inner control is built. An update rewrites it only when its tag or its choices changed.
 - `Animated` writes ANIMATE on at mount. An update writes nothing for it.
 - A wrapper of the same kind on both sides reconciles its inner view as `Styled` does. A different wrapper kind replaces the node.
-- Measured events, kinds 9 and 11, carry up to four signed words, read by the host through the word channel of [[iOS Host Events]]. Detailed events, kinds 8, 10, 12 and 13, carry their index or code in the detail word. Kind 9 carries its recognizer bit as the detail word.
+- Measured events, kinds 9 and 11, carry up to four signed words, read by the host through the word channel of [[iOS Host Events]]. Detailed events, kinds 8, 10, 12, 13, 14 and 15, carry their index, code or route in the detail word. Kind 9 carries its recognizer bit as the detail word.
 
 ## Negative Logic
 
@@ -70,14 +67,13 @@ Exports:
 - No row outside the window is built. Pudu never builds rows outside the window it supplies. A row node whose item leaves the window is removed with its subtree, and its ids are recycled.
 - No cell reuse here. The platform reuses cells; this module creates a row view only for a row entering the window.
 - No RANGE or COLUMNS is written for an unchanged list.
-- No detail is read for a kind outside `DETAILED` and `MEASURED`.
+- No ROOT is written by `body` or `rebody`.
 - A tap names only the tag of its button. A toggle event names its tag and its new state. Only a `Changed` event carries text, fetched by the host and never packed into the 64-bit value.
-- `event` never fails. An unknown kind ends the loop the same way `Stopped` does.
 - No I/O and no platform call. The host owns the foreign boundary.
 
 ## Dependencies and consumers
 
-Depends on [[Std Mobile Stream]] for the instruction words, on [[Std Mobile Theme]] for the `TextStyle`, `Role` and `Material` sums, and on [[Std Mobile Gesture]], [[Std Mobile Scene]], [[Std Mobile Access]] and [[Std Mobile Feedback]] for the values of the new variants. Consumers: [[Std Mobile Host]] (its `wait` decodes through `event`, `carriesDetail`, `carriesWords`, `eventWithDetail` and `eventWithWords`), [[Native Counter Example]], [[Native Form Example]], [[Native List Example]], [[Native Catalog Example]], and the fixtures [[Uses Mobile View]], [[Uses Mobile List]], [[Uses Mobile Capabilities]], and the example [[Native Showcase Example]]. The native presenter of FUI targets this module, as [[Native Application UI]] describes.
+Depends on [[Std Mobile Stream]] for the instruction words, on [[Std Mobile Events]] for the event decoding, on [[Std Mobile Theme]] for the `TextStyle`, `Role` and `Material` sums, and on [[Std Mobile Gesture]], [[Std Mobile Scene]], [[Std Mobile Access]] and [[Std Mobile Feedback]] for the values of the new variants. Consumers: [[Std Mobile Host]] (its `wait` decodes through [[Std Mobile Events]]), [[Std Mobile Navigation]] (which builds, reconciles and unmounts page bodies with `body`, `rebody` and `unmount`), [[Native Counter Example]], [[Native Form Example]], [[Native List Example]], [[Native Catalog Example]], and the fixtures [[Uses Mobile View]], [[Uses Mobile List]], [[Uses Mobile Capabilities]], and the example [[Native Showcase Example]]. The native presenter of FUI targets this module, as [[Native Application UI]] describes.
 
 ## Resolved Grill Log
 
@@ -93,10 +89,10 @@ Depends on [[Std Mobile Stream]] for the instruction words, on [[Std Mobile Them
 - **Q:** Why does Pudu supply a window rather than every item? **A:** Encoding a thousand rows each commit would dominate a frame; a window bounded by the screen keeps commits proportional to what can be seen. _Rejected:_ building every row up front.
 - **Q:** Why does the host report only the first visible index? **A:** The program picks the window size; one index is enough to place it, and it fits the one-word detail channel. _Rejected:_ a range packed into the tag word.
 - **Q:** Why a table of detailed event kinds? **A:** Kinds dispatch through tables; a new detailed event is one entry.
-
 - **Q:** Why signed words for gestures and scene values? **A:** A pan moves left or up, so its translation is negative. The host sends the bits of each value, and the program reads two's complement, so the sign is exact. _Rejected:_ a separate sign word.
 - **Q:** Why does a new wrapper add no node? **A:** Accessibility, recognizers, menus and animation describe a control that already exists. A node per wrapper would add ids the platform never shows.
+- **Q:** Why can a body be built without a root? **A:** A navigation page shows its body inside a page controller rather than as the screen's content; all pages share one id space with the rest of the view stream.
 
 ## Referenced by
 
-[[src/Std/_MOC]] · [[Std Mobile Host]] · [[Std Mobile Stream]] · [[Std Mobile Theme]] · [[Native First Light Delivery]] · [[Native Controls Delivery]] · [[Native Keyed Lists Delivery]] · [[Native iOS Scrolling Delivery]] · [[Native iOS Theming Delivery]] · [[Native iOS Recycling Delivery]] · [[Native iOS Materials Delivery]]
+[[src/Std/_MOC]] · [[Std Mobile Host]] · [[Std Mobile Events]] · [[Std Mobile Navigation]] · [[Std Mobile Stream]] · [[Std Mobile Theme]] · [[Native First Light Delivery]] · [[Native Controls Delivery]] · [[Native Keyed Lists Delivery]] · [[Native iOS Scrolling Delivery]] · [[Native iOS Theming Delivery]] · [[Native iOS Recycling Delivery]] · [[Native iOS Materials Delivery]]

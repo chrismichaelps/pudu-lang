@@ -2,6 +2,7 @@ module UsesMobileCapabilities
 
 import Std.ByteOrder {readU32LE}
 import Std.Mobile.Access as Access
+import Std.Mobile.Events as Events
 import Std.Mobile.Feedback as Feedback
 import Std.Mobile.Gesture as Gesture
 import Std.Mobile.Scene as Scene
@@ -74,31 +75,31 @@ export fn main() -> Int {
   if wordsAt(&Feedback.haptic(Feedback.Success).toArray(), 0, 2) == [30u32, 5u32] { held = held + 1 }
 
   // Gesture events decode their bit and signed words.
-  if View.eventWithWords((9u64 << 32) | 1u64, "", 2u32, [2i32, 12i32, -7i32]) == View.Gestured(1u32, Gesture.Panned(Gesture.Changed, 12i32, -7i32))
-    && View.eventWithWords((9u64 << 32) | 1u64, "", 16u32, [2i32]) == View.Gestured(1u32, Gesture.Swiped(Gesture.Right))
-    && View.carriesWords(9u64 << 32)
-    && !View.carriesWords(10u64 << 32)
-    && View.carriesDetail(10u64 << 32) {
+  if Events.eventWithWords((9u64 << 32) | 1u64, "", 2u32, [2i32, 12i32, -7i32]) == View.Gestured(1u32, Gesture.Panned(Gesture.Changed, 12i32, -7i32))
+    && Events.eventWithWords((9u64 << 32) | 1u64, "", 16u32, [2i32]) == View.Gestured(1u32, Gesture.Swiped(Gesture.Right))
+    && Events.carriesWords(9u64 << 32)
+    && !Events.carriesWords(10u64 << 32)
+    && Events.carriesDetail(10u64 << 32) {
     held = held + 1
   }
 
   // Choices, picks and lifecycle phases arrive as details; an unknown phase stops.
-  if View.eventWithWords((10u64 << 32) | 4u64, "", 1u32, []) == View.Chose(4u32, 1u32)
-    && View.eventWithWords((13u64 << 32) | 2u64, "", 1u32, []) == View.Picked(2u32, 1u32)
-    && View.eventWithWords(12u64 << 32, "", 2u32, []) == View.Lifecycle(Scene.Inactive)
-    && View.eventWithWords(12u64 << 32, "", 9u32, []) == View.Stopped {
+  if Events.eventWithWords((10u64 << 32) | 4u64, "", 1u32, []) == View.Chose(4u32, 1u32)
+    && Events.eventWithWords((13u64 << 32) | 2u64, "", 1u32, []) == View.Picked(2u32, 1u32)
+    && Events.eventWithWords(12u64 << 32, "", 2u32, []) == View.Lifecycle(Scene.Inactive)
+    && Events.eventWithWords(12u64 << 32, "", 9u32, []) == View.Stopped {
     held = held + 1
   }
 
   // A resize carries the scene's size and classes; malformed words stop.
-  let resized = View.eventWithWords(11u64 << 32, "", 0u32, [402i32, 874i32, 1i32, 2i32])
+  let resized = Events.eventWithWords(11u64 << 32, "", 0u32, [402i32, 874i32, 1i32, 2i32])
   if resized == View.Resized(Scene.Size{width: 402i32, height: 874i32, horizontal: Scene.Compact, vertical: Scene.Regular})
-    && View.eventWithWords(11u64 << 32, "", 0u32, [1i32]) == View.Stopped {
+    && Events.eventWithWords(11u64 << 32, "", 0u32, [1i32]) == View.Stopped {
     held = held + 1
   }
 
   // Host words are two's complement.
-  if View.signed(0xfffffff9u32) == -7i32 && View.signed(12u32) == 12i32 { held = held + 1 }
+  if Events.signed(0xfffffff9u32) == -7i32 && Events.signed(12u32) == 12i32 { held = held + 1 }
 
   // Every trait and every recognizer has its own bit.
   let everyTrait = [

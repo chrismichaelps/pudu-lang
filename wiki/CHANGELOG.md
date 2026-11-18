@@ -5,6 +5,36 @@ tags: [changelog]
 
 # Changelog
 
+## 2026-11-18 — Native navigation stack and page sheets (#920)
+
+- Native navigation stack and page sheets (#920): Std.Mobile.Navigation, Std.Mobile.Events, NAVIGATE instruction, POPPED and DISMISSED events, UIKit navigation host.
+  [[Std Mobile Navigation]] · [[Std Mobile Events]] · [[pudu_ios_navigation.h]]
+
+## 2026-11-17 — Stand-in compiler warm-up (#953)
+
+- Toolchain lifetime tests launch their stand-in compiler once before the
+  timed section, so a first-launch scan no longer trips the deadline (refs #953).
+  [[Backend Toolchain Tests]]
+
+## 2026-11-17 — Android test builds (#951)
+
+- Android packages are debuggable and accept self-test extras only when
+  built with `PUDU_ANDROID_TEST_BUILD`; release packages drop every extra
+  (refs #951).
+  [[Backend Toolchain Android]] · [[Native Android Activity]]
+
+## 2026-11-17 — Interpolation hole spans (#950)
+
+- A string interpolation's `display` wrapper spans the braces, so the hole's
+  expression keeps its own type; module constants in holes build natively
+  (refs #950).
+  [[Source]] · [[Parser Expression]]
+
+## 2026-11-17 — Native parity audit
+
+- The native coverage page records a whole-corpus comparison of native
+  executables against the interpreter.
+  [[Native Emission Coverage]]
 ## 2026-11-17 — Element reads through a receiver fail at their key (#958)
 
 - An element or slice read through a method receiver reports at its key in the interpreter, as a value read and native code do (refs #958). Receivers fail at the key or range that chose them in both engines, `&mut self` included; lent `&mut` arguments and stores fail at the root name.
@@ -237,6 +267,10 @@ tags: [changelog]
 ## 2026-11-14 — Native application bundles (#916)
 
 - `pudu build --native --target ios-simulator-arm64 --app` writes a signed simulator application with the embedded iOS host ([[Native App Delivery]]). Publication refuses occupied output paths.
+
+## 2026-11-14 — iOS navigation contract (#920)
+
+- [[Native iOS Navigation]] specifies application-owned route state, UIKit transition completion, and native page sheets.
 
 ## 2026-11-14 — Pudu Native iOS UI coverage target
 
