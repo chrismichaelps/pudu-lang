@@ -28,6 +28,30 @@ Compile ordinary checked Pudu programs into portable C11 with interpreter-identi
 | Errors, references and resources | Partial (#544, #553, #649, #651, #790, #794) | Shared borrows, dereference and `?` on Result and Option match the interpreter; assignment to fields, elements and paths of both follows the interpreter's order and root-span failures (#649); functions and methods with `&mut` parameters, `self: &mut Self` included, write each final back to the lent place on every return path, directly, through methods and through function values (#651, #790, #794); moves, drop and all unwind paths remain |
 | Host services and concurrency | Partial (#846) | Tasks, async lambdas, `.await`, `async with scope` joins, cells, locks, channels, threads, clocks, sleeping, arguments, environment, directories, standard-input lines, whole-file I/O, links, permissions, temporary files, atomic writes, open readers/writers, binary64 math, packed lanes and the broad-phase overlap kernel, stream sockets, child programs, gzip and bare-stream compression, time rendering and reading, stop signals and TLS connections through the system TLS library are native; foreign functions with fixed-width integer, float, Bool, text, lent byte and record crossings are typed native call sites ([[Native Foreign Call Sites]], #850, #851, #852); direct opaque handle calls preserve owned, counted and borrowed claims and runtime refusals ([[Native Foreign Handles Delivery]], #853); scalar, record, text and owned-handle foreign out-slots preserve declaration order and zero initialization ([[Native Foreign Slot Delivery]], #854); foreign functions an imported module declares are called through its qualifier or alias as bare calls are (#873); desktop windows and audio devices and streams run through the native host adapters, refusing settings before the platform as the interpreter does ([[Native Desktop Adapter Delivery]], #856; [[Native Audio Adapter Delivery]], #857); time readings beyond the integer carrier refuse alike in both engines |
 
+## Parity audit (2026-11-17)
+
+Every program under `test-fixtures/`, `examples/` and `website/playground/examples/`
+was checked, built with `pudu build --native`, and run beside `pudu run`
+with no input, comparing standard output and exit status.
+
+| Measure | Count |
+| --- | --- |
+| Programs found | 609 |
+| Refusal fixtures (`Rejects*`) | 54 |
+| Fixtures that are deliberately invalid and fail checking | 29 |
+| Built natively | 430 |
+| Refused natively | 96: 95 library modules without `main`, and `13-compile-time`, a constant in an interpolation hole (#950) |
+| Compared and identical | 322 |
+| Compared, differing only in wall-clock readings (`Time.elapsed`) | 2 |
+| Compared and different | 1: `in` on a set (#948) |
+| Not compared: reading arguments, environment or the network | 105 |
+
+Both differences found (#948, #950) are fixed.
+
+The ledger's Partial rows predate this audit. A row stays Partial until a
+probe for each remaining claim runs in both engines; the audit shows no
+corpus program depends on a remaining gap.
+
 ## Nested foreign records (#863)
 
 The interpreter and C11 use the platform layout of each nested record.

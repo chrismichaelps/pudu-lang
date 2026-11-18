@@ -185,7 +185,10 @@ of device names, which would miss families the list does not name.
 
 ## Referenced by
 
-[[Native Mobile Targets]] · [[Native Mobile Targets Delivery]] · [[Native Controls Delivery]] · [[Native Keyed Lists Delivery]] · [[Native iOS Theming Delivery]] · [[Native iOS Recycling Delivery]]
+- **Q:** Where do foreign-interface apps live? **A:** `test/ios-foreign-apps.mjs`; the smoke
+  passes its run, launch and uninstall helpers so this script stays under 500 lines.
+
+[[Native Mobile Targets]] · [[Native Mobile Targets Delivery]] · [[Native Controls Delivery]] · [[Native Keyed Lists Delivery]] · [[Native iOS Theming Delivery]] · [[Native iOS Recycling Delivery]] · [[iOS Foreign Apps Test]]
 
 ## Capability showcase (#930)
 
