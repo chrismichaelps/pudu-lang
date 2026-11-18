@@ -5,6 +5,11 @@ tags: [changelog]
 
 # Changelog
 
+## 2026-11-18 — Native navigation stack and page sheets (#920)
+
+- Native navigation stack and page sheets (#920): Std.Mobile.Navigation, Std.Mobile.Events, NAVIGATE instruction, POPPED and DISMISSED events, UIKit navigation host.
+  [[Std Mobile Navigation]] · [[Std Mobile Events]] · [[pudu_ios_navigation.h]]
+
 ## 2026-11-17 — Stand-in compiler warm-up (#953)
 
 - Toolchain lifetime tests launch their stand-in compiler once before the

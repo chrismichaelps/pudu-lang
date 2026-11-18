@@ -353,3 +353,9 @@ tags: [moc, module]
 - [[Native List Example]] — keyed list with insertion and reorder, built only from Pudu (#914).
 - [[Uses Mobile View]] — stdlib fixture for the counter view stream.
 - [[Native First Light Delivery]] — phase 1 of Pudu Native (#909).
+- [[Std Mobile Events]] — host event decoding behind the mobile wait.
+- [[Std Mobile Navigation]] — native page stack and page sheet model.
+- [[pudu_ios_navigation.h]] — UIKit navigation host and page sheet presentation.
+- [[Native Pages Example]] — navigation stack and page sheet, built only from Pudu.
+- [[Uses Mobile Navigation]] — stdlib fixture for the navigation stream, pops and dismissals.
+- [[Pudu Compiler Program Eval Data Spec]] — data evaluation spec, including the mobile fixture counts.

@@ -1,0 +1,94 @@
+module UsesMobileNavigation
+
+import Std.ByteOrder {readU32LE}
+import Std.Mobile.Events as Events
+import Std.Mobile.Navigation as Navigation
+import Std.Mobile.View as View
+
+// The words at `offset` onward, read as little-endian 32-bit values.
+fn wordsAt(bytes: &Array[UInt8], offset: Int, count: Int) -> Array[UInt32] {
+  var found = []
+  for index in 0..count {
+    match readU32LE(bytes, offset + index * 4) {
+      case Some(word) => { found = found.push(word) }
+      case None => { return [] }
+    }
+  }
+  found
+}
+
+fn textAt(bytes: &Array[UInt8], offset: Int, length: Int) -> Option[Str] {
+  bytesOf(bytes.slice(offset, offset + length)).toText()
+}
+
+fn route(id: UInt32, title: Str, text: Str) -> Navigation.Route { Navigation.Route{id: id, title: title, body: View.Label(text)} }
+
+fn shown(root: Navigation.Route, pushed: Array[Navigation.Route], sheet: Option[Navigation.Sheet]) -> Navigation.Presentation {
+  Navigation.Presentation{root: root, pushed: pushed, sheet: sheet}
+}
+
+export fn main() -> Int {
+  var held = 0
+  let home = route(1u32, "Home", "a")
+  let (first, mounted) = Navigation.mount(&shown(home, [], None))
+  let built = mounted.toArray()
+
+  // Mount: the root body (label 0), then NAVIGATE with one route and no sheet.
+  if built.length() == 53 && wordsAt(&built, 0, 3) == [1u32, 0u32, 1u32] && wordsAt(&built, 12, 3) == [2u32, 0u32, 1u32] { held = held + 1 }
+  if wordsAt(&built, 25, 5) == [36u32, 1u32, 1u32, 0u32, 4u32] && textAt(&built, 45, 4) == Some("Home") && wordsAt(&built, 49, 1) == [0u32] { held = held + 1 }
+
+  // Push: the root keeps its body; the new page's label 1 is built; NAVIGATE names both.
+  let item = route(2u32, "B", "b")
+  let (pushed, pushing) = Navigation.update(&first, &shown(home, [item], None))
+  let push = pushing.toArray()
+  if push.length() == 66 && wordsAt(&push, 0, 3) == [1u32, 1u32, 1u32] && wordsAt(&push, 25, 5) == [36u32, 2u32, 1u32, 0u32, 4u32] { held = held + 1 }
+  if wordsAt(&push, 49, 3) == [2u32, 1u32, 1u32] && textAt(&push, 61, 1) == Some("B") && wordsAt(&push, 62, 1) == [0u32] { held = held + 1 }
+
+  // An unchanged presentation writes nothing.
+  let (_, same) = Navigation.update(&pushed, &shown(home, [item], None))
+  if same.length() == 0 { held = held + 1 }
+
+  // A body edit crosses without NAVIGATE; a title edit is NAVIGATE alone.
+  let (_, edited) = Navigation.update(&pushed, &shown(home, [route(2u32, "B", "c")], None))
+  if edited.length() == 13 && wordsAt(&edited.toArray(), 0, 3) == [2u32, 1u32, 1u32] { held = held + 1 }
+  let (_, retitled) = Navigation.update(&pushed, &shown(home, [route(2u32, "C", "b")], None))
+  if retitled.length() == 41 && wordsAt(&retitled.toArray(), 0, 2) == [36u32, 2u32] { held = held + 1 }
+
+  // A user pop the program applies: the page's nodes are removed, no NAVIGATE echoes.
+  let popped = Navigation.observe(pushed, &View.Popped(2u32, 1u32))
+  let (after, applied) = Navigation.update(&popped, &shown(home, [], None))
+  if applied.length() == 16 && wordsAt(&applied.toArray(), 0, 4) == [11u32, 1u32, 1u32, 1u32] && after.free == [1u32] { held = held + 1 }
+
+  // A user pop the program refuses: the whole stack is sent again.
+  let (_, refused) = Navigation.update(&popped, &shown(home, [item], None))
+  if refused.length() == 41 && wordsAt(&refused.toArray(), 0, 2) == [36u32, 2u32] { held = held + 1 }
+
+  // A stale pop changes nothing; `kept` names how much of a stack survives.
+  if Navigation.observe(pushed, &View.Popped(5u32, 1u32)).shown == pushed.shown { held = held + 1 }
+  if Navigation.kept(&[1u32, 2u32], 2u32, 1u32) == Some(1) && Navigation.kept(&[1u32, 2u32, 3u32], 3u32, 1u32) == Some(1) { held = held + 1 }
+  if Navigation.kept(&[1u32, 2u32], 5u32, 1u32) == None && Navigation.kept(&[1u32], 1u32, 1u32) == None && Navigation.kept(&[1u32, 2u32], 2u32, 9u32) == None { held = held + 1 }
+
+  // A programmatic pop: the page removed, then NAVIGATE with the root alone.
+  let (_, back) = Navigation.update(&pushed, &shown(home, [], None))
+  if back.length() == 44 && wordsAt(&back.toArray(), 0, 4) == [11u32, 1u32, 1u32, 1u32] && wordsAt(&back.toArray(), 16, 2) == [36u32, 1u32] { held = held + 1 }
+
+  // Another route at the same place ends the old page; its freed id is reused.
+  let (_, swapped) = Navigation.update(&pushed, &shown(home, [route(3u32, "B", "b")], None))
+  if swapped.length() == 82 && wordsAt(&swapped.toArray(), 0, 7) == [11u32, 1u32, 1u32, 1u32, 1u32, 1u32, 1u32] && wordsAt(&swapped.toArray(), 65, 2) == [3u32, 1u32] { held = held + 1 }
+
+  // A sheet: its body built, then NAVIGATE ending in 1, its id and its body node.
+  let sheet = Some(Navigation.Sheet{id: 9u32, body: View.Label("s")})
+  let (covered, presenting) = Navigation.update(&first, &shown(home, [], sheet))
+  if presenting.length() == 61 && wordsAt(&presenting.toArray(), 49, 3) == [1u32, 9u32, 1u32] { held = held + 1 }
+
+  // A user dismissal the program applies removes the body without NAVIGATE; a stale one is ignored.
+  let (_, closed) = Navigation.update(&Navigation.observe(covered, &View.Dismissed(9u32)), &shown(home, [], None))
+  if closed.length() == 16 && wordsAt(&closed.toArray(), 0, 4) == [11u32, 1u32, 1u32, 1u32] { held = held + 1 }
+  let (_, staleClose) = Navigation.update(&Navigation.observe(covered, &View.Dismissed(8u32)), &shown(home, [], None))
+  if staleClose.length() == 44 && wordsAt(&staleClose.toArray(), 16, 2) == [36u32, 1u32] { held = held + 1 }
+
+  // Events: a pop carries the top in the tag and the destination in the detail word.
+  if Events.eventWithDetail((14u64 << 32) | 2u64, "", 1u32) == View.Popped(2u32, 1u32) && Events.carriesDetail(14u64 << 32) { held = held + 1 }
+  if Events.event((15u64 << 32) | 9u64, "") == View.Dismissed(9u32) && !Events.carriesDetail(15u64 << 32) { held = held + 1 }
+  held
+}

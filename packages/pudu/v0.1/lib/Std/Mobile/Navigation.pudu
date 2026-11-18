@@ -1,0 +1,148 @@
+module Std.Mobile.Navigation
+
+import Std.Mobile.Stream as Stream
+import Std.Mobile.View as View
+
+/// One page of the stack: its instance id, the title its bar shows, and its
+/// body. An id must not be reused while a report about the earlier instance
+/// can still arrive.
+export type Route = { id: UInt32, title: Str, body: View.View }
+
+/// A page sheet over the stack: its instance id and its body.
+export type Sheet = { id: UInt32, body: View.View }
+
+/// What the program presents: the root route, the routes pushed over it in
+/// order, and at most one sheet. Ids are unique within a presentation; the
+/// host refuses a presentation that repeats one.
+export type Presentation = { root: Route, pushed: Array[Route], sheet: Option[Sheet] }
+
+/// A mounted page: its route id, title and body tree.
+export type Page = { id: UInt32, title: Str, body: View.Shown }
+
+/// The navigation the platform shows: each page's route id, body node and
+/// title, root first, and the sheet's id and body node.
+export type Shown = { pages: Array[(UInt32, UInt32, Str)], sheet: Option[(UInt32, UInt32)] }
+
+/// The mounted pages and sheet, the ids handed out so far, and what the
+/// platform shows, including completed user pops and dismissals folded in by
+/// `observe`.
+export type Mounted = { pages: Array[Page], sheet: Option[Page], next: UInt32, free: Array[UInt32], shown: Shown }
+
+// Ids handed out so far and the stream written so far.
+type Work = { next: UInt32, free: Array[UInt32], out: Array[UInt8] }
+
+/// The pages and sheet for `presentation`, and the stream that builds their
+/// bodies and shows the navigation.
+export fn mount(presentation: &Presentation) -> (Mounted, Bytes) {
+  update(&Mounted{pages: [], sheet: None, next: 0u32, free: [], shown: Shown{pages: [], sheet: None}}, presentation)
+}
+
+/// The pages and sheet for `presentation`, and the stream that turns what
+/// `mounted` holds into them. A route at the same place with the same id
+/// keeps its page and reconciles its body; later pages end and new ones are
+/// built. The sheet keeps its body only when its id is unchanged. NAVIGATE is
+/// written only when the navigation differs from what the platform shows, so
+/// a body edit crosses without it and an unchanged commit stays empty.
+export fn update(mounted: &Mounted, presentation: &Presentation) -> (Mounted, Bytes) {
+  let routes = [presentation.root].concat(presentation.pushed)
+  let held = common(&mounted.pages, &routes)
+  var work = Work{next: mounted.next, free: mounted.free, out: []}
+  for index in held..mounted.pages.length() {
+    work = dropped(work, &mounted.pages[index].body)
+  }
+  let keptSheet = match (mounted.sheet, presentation.sheet) {
+    case (Some(old), Some(wanted)) if old.id == wanted.id => Some(old.body)
+    case _ => None
+  }
+  work = match (mounted.sheet, keptSheet) {
+    case (Some(old), None) => dropped(work, &old.body)
+    case _ => work
+  }
+  var pages: Array[Page] = []
+  for index in 0..routes.length() {
+    let before = if index < held { Some(mounted.pages[index].body) } else { None }
+    let (made, body) = bodied(work, before, &routes[index].body)
+    work = made
+    pages = pages.push(Page{id: routes[index].id, title: routes[index].title, body: body})
+  }
+  var sheet: Option[Page] = None
+  match presentation.sheet {
+    case Some(wanted) => {
+      let (made, body) = bodied(work, keptSheet, &wanted.body)
+      work = made
+      sheet = Some(Page{id: wanted.id, title: "", body: body})
+    }
+    case None => {}
+  }
+  let shown = Shown{pages: pages.map(|page: Page| (page.id, page.body.id, page.title)), sheet: sheetShown(sheet)}
+  let out = if shown == mounted.shown { work.out } else { Stream.navigate(work.out, &shown.pages, shown.sheet) }
+  (Mounted{pages: pages, sheet: sheet, next: work.next, free: work.free, shown: shown}, bytesOf(out))
+}
+
+/// `mounted` with a user's completed pop or sheet dismissal folded into what
+/// the platform shows; any other event, or a stale report, leaves it as it is.
+/// The next `update` then resends the navigation only when the program kept
+/// what the user left.
+export fn observe(mounted: Mounted, event: &View.Event) -> Mounted {
+  match *event {
+    case View.Popped(top, destination) => {
+      let ids = mounted.shown.pages.map(|page: (UInt32, UInt32, Str)| page[0])
+      match kept(&ids, top, destination) {
+        case Some(count) => Mounted{..mounted, shown: Shown{..mounted.shown, pages: mounted.shown.pages.slice(0, count)}}
+        case None => mounted
+      }
+    }
+    case View.Dismissed(dismissed) => {
+      match mounted.shown.sheet {
+        case Some(current) if current[0] == dismissed => Mounted {..mounted, shown: Shown{..mounted.shown, sheet: None} }
+        case _ => mounted
+      }
+    }
+    case _ => mounted
+  }
+}
+
+/// How many routes of `stack`, route ids root first, survive a reported pop
+/// from `top` to `destination`; None when the report is stale because `top`
+/// is not the current top or `destination` is not below it.
+export fn kept(stack: &Array[UInt32], top: UInt32, destination: UInt32) -> Option[Int] {
+  let count = stack.length()
+  if count < 2 || stack[count - 1] != top {
+    return None
+  }
+  for index in 0..count - 1 {
+    if stack[index] == destination {
+      return Some(index + 1)
+    }
+  }
+  None
+}
+
+// How many leading pages keep their place: same position, same route id.
+fn common(pages: &Array[Page], routes: &Array[Route]) -> Int {
+  var held = 0
+  while held < pages.length() && held < routes.length() && pages[held].id == routes[held].id {
+    held = held + 1
+  }
+  held
+}
+
+// A body reconciled in place when one is held, otherwise built afresh.
+fn bodied(work: Work, before: Option[View.Shown], view: &View.View) -> (Work, View.Shown) {
+  let (made, out) = match before {
+    case Some(shown) => View.rebody(work.out, &View.Mounted{root: shown, next: work.next, free: work.free}, view)
+    case None => View.body(work.out, work.next, work.free, view)
+  }
+  (Work{next: made.next, free: made.free, out: out}, made.root)
+}
+
+// A body's subtree detached and its ids freed.
+fn dropped(work: Work, body: &View.Shown) -> Work {
+  let (free, out) = View.unmount(work.out, &View.Mounted{root: *body, next: work.next, free: work.free})
+  Work{..work, free: free, out: out}
+}
+
+fn sheetShown(sheet: Option[Page]) -> Option[(UInt32, UInt32)] {
+  let page = sheet ?
+  Some((page.id, page.body.id))
+}

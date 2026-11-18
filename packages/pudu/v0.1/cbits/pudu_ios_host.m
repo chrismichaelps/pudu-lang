@@ -23,6 +23,7 @@
 #include "pudu_ios_access.h"
 #include "pudu_ios_scene.h"
 #include "pudu_ios_motion.h"
+#include "pudu_ios_navigation.h"
 #include "pudu_ios_capability_test.h"
 
 /* Instruction codes and control kinds of the view stream; they match
@@ -32,7 +33,7 @@ enum { PUDU_UI_CREATE = 1, PUDU_UI_TEXT = 2, PUDU_UI_APPEND = 3, PUDU_UI_ROOT = 
        PUDU_UI_THEME = 20, PUDU_UI_APPEARANCE = 21, PUDU_UI_STYLE = 22, PUDU_UI_COLOR = 23, PUDU_UI_RANGE = 24,
        PUDU_UI_COLUMNS = 25, PUDU_UI_MATERIAL_SET = 26, PUDU_UI_GESTURES = 27,
        PUDU_UI_ALERT = 28, PUDU_UI_VALUE = 29, PUDU_UI_HAPTIC = 30, PUDU_UI_TRAITS = 31, PUDU_UI_ACCESS_HINT = 32,
-       PUDU_UI_ACCESS_VALUE = 33, PUDU_UI_MENU = 34, PUDU_UI_ANIMATE = 35, PUDU_UI_INSTRUCTIONS = 36 };
+       PUDU_UI_ACCESS_VALUE = 33, PUDU_UI_MENU = 34, PUDU_UI_ANIMATE = 35, PUDU_UI_NAVIGATE = 36, PUDU_UI_INSTRUCTIONS = 37 };
 enum { PUDU_UI_LABEL = 1, PUDU_UI_BUTTON = 2, PUDU_UI_COLUMN = 3, PUDU_UI_ROW = 4, PUDU_UI_FIELD = 5, PUDU_UI_TOGGLE = 6,
        PUDU_UI_SCROLL = 7, PUDU_UI_LIST = 8, PUDU_UI_MATERIAL = 9,
        PUDU_UI_PROGRESS = 10, PUDU_UI_ACTIVITY = 11, PUDU_UI_KINDS = 12 };
@@ -174,7 +175,6 @@ static void pudu_place(pudu_reader *reader) {
   [group insertArrangedSubview:child atIndex:index];
   pudu_motion_touch(group);
 }
-
 
 /* Detaches a subtree and forgets every node it lists, so a later CREATE may
    reuse those ids. */
@@ -355,6 +355,17 @@ static void pudu_do_animate(pudu_reader *reader) {
   pudu_motion_mark(group, pudu_word(reader) != 0);
 }
 
+/* NAVIGATE: read and checked whole, then shown over the screen in place of a ROOT. */
+static void pudu_do_navigate(pudu_reader *reader) {
+  NSDictionary *desired = pudu_navigation_read(reader, ^UIView *(pudu_reader *at, BOOL *fills) {
+    uint32_t node = pudu_node_id(at);
+    *fills = pudu_kinds[node].unsignedIntValue == PUDU_UI_SCROLL || pudu_kinds[node].unsignedIntValue == PUDU_UI_LIST;
+    return pudu_nodes[node];
+  });
+  [pudu_shown_root removeFromSuperview], pudu_shown_root = nil;
+  pudu_navigation_show(pudu_surface.window.rootViewController, desired);
+}
+
 static void (*const pudu_instruction_table[PUDU_UI_INSTRUCTIONS])(pudu_reader *) = {
   [PUDU_UI_CREATE] = pudu_do_create, [PUDU_UI_TEXT] = pudu_do_text, [PUDU_UI_APPEND] = pudu_do_append,
   [PUDU_UI_ROOT] = pudu_do_root, [PUDU_UI_TAG] = pudu_do_tag, [PUDU_UI_RESET] = pudu_do_reset,
@@ -365,7 +376,7 @@ static void (*const pudu_instruction_table[PUDU_UI_INSTRUCTIONS])(pudu_reader *)
   [PUDU_UI_MATERIAL_SET] = pudu_do_material, [PUDU_UI_GESTURES] = pudu_do_gestures, [PUDU_UI_ALERT] = pudu_do_alert,
   [PUDU_UI_VALUE] = pudu_do_value, [PUDU_UI_HAPTIC] = pudu_do_haptic, [PUDU_UI_TRAITS] = pudu_do_traits,
   [PUDU_UI_ACCESS_HINT] = pudu_do_access_hint, [PUDU_UI_ACCESS_VALUE] = pudu_do_access_value,
-  [PUDU_UI_MENU] = pudu_do_menu, [PUDU_UI_ANIMATE] = pudu_do_animate,
+  [PUDU_UI_MENU] = pudu_do_menu, [PUDU_UI_ANIMATE] = pudu_do_animate, [PUDU_UI_NAVIGATE] = pudu_do_navigate,
 };
 
 /* Applies one commit: every instruction in order, in one call. */
@@ -429,7 +440,7 @@ static void pudu_report(UIView *view) {
   int status = pudu_program_run(0, NULL);
   printf("PUDU_PROGRAM_STATUS %d\n", status);
   if (getenv("PUDU_UI_SELFTEST") != NULL) {
-    pudu_report(pudu_shown_root);
+    pudu_report(pudu_navigator != nil ? pudu_navigation_top() : pudu_shown_root);
     if (getenv("PUDU_UI_CAPABILITY_TEST") != NULL) pudu_report_capabilities(pudu_nodes);
     fflush(stdout);
     exit(status);
@@ -443,6 +454,7 @@ static void pudu_report(UIView *view) {
     pudu_test_capabilities(pudu_nodes, ^{ pudu_queue(PUDU_UI_STOPPED, 0, nil, 0); });
     return;
   }
+  if (getenv("PUDU_UI_NAVIGATION_TEST") != NULL) return pudu_test_navigation(^{ pudu_queue(PUDU_UI_STOPPED, 0, nil, 0); });
   if (getenv("PUDU_UI_MATERIAL_TEST") != NULL) {
     pudu_test_material(pudu_nodes, ^{ pudu_queue(PUDU_UI_STOPPED, 0, nil, 0); });
     return;

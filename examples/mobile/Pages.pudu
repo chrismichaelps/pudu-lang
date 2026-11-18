@@ -1,0 +1,86 @@
+module Pages
+
+import Std.Mobile.Host as Host
+import Std.Mobile.Navigation as Navigation
+import Std.Mobile.View as View
+
+/// Tags the buttons report.
+const OPEN: UInt32 = 1u32
+const SHOW_SHEET: UInt32 = 2u32
+const CLOSE: UInt32 = 3u32
+
+/// The root route's id; pushed routes and sheets take fresh ids after it, so
+/// no id returns while a report about it can still arrive.
+const HOME: UInt32 = 1u32
+
+/// The route ids on the stack, root first, the sheet shown, the next fresh
+/// id, and how many user pops and sheet dismissals were applied.
+type Model = { stack: Array[UInt32], sheet: Option[UInt32], next: UInt32, pops: Int, dismissals: Int }
+
+fn home(model: &Model) -> View.View {
+  View.Column([
+      View.Label("Pops: {model.pops}"),
+      View.Label("Dismissals: {model.dismissals}"),
+      View.Button("Open", OPEN),
+      View.Button("Show sheet", SHOW_SHEET)
+    ])
+}
+
+fn item(id: UInt32) -> View.View {
+  var rows = [View.Label("Item {id}"), View.Button("Open", OPEN)]
+  for line in 1..41 {
+    rows = rows.push(View.Label("Line {line} of item {id}"))
+  }
+  View.Scroll(View.Column(rows))
+}
+
+fn route(id: UInt32) -> Navigation.Route { Navigation.Route{id: id, title: "Item {id}", body: item(id)} }
+
+fn presented(model: &Model) -> Navigation.Presentation {
+  let sheet = match model.sheet {
+    case Some(id) => Some(Navigation.Sheet{id: id, body: View.Column([View.Label("Sheet {id}"), View.Button("Close", CLOSE)])})
+    case None => None
+  }
+  Navigation.Presentation {
+    root: Navigation.Route{id: HOME, title: "Library", body: home(model)},
+    pushed: model.stack.slice(1, model.stack.length()).map(route),
+    sheet: sheet
+  }
+}
+
+fn popped(model: &Model, top: UInt32, destination: UInt32) -> Model {
+  match Navigation.kept(&model.stack, top, destination) {
+    case Some(count) => Model{..*model, stack: model.stack.slice(0, count), pops: model.pops + 1}
+    case None => *model
+  }
+}
+
+fn update(model: &Model, event: &View.Event) -> Model {
+  match *event {
+    case View.Tapped(tag) if tag == OPEN => Model {..*model, stack: model.stack.push(model.next), next: model.next + 1u32 }
+    case View.Tapped(tag) if tag == SHOW_SHEET => Model {..*model, sheet: Some(model.next), next: model.next + 1u32 }
+    case View.Tapped(tag) if tag == CLOSE => Model {..*model, sheet: None }
+    case View.Popped(top, destination) => popped(model, top, destination)
+    case View.Dismissed(sheet) if model.sheet == Some(sheet) => Model {..*model, sheet: None, dismissals: model.dismissals + 1 }
+    case _ => *model
+  }
+}
+
+fn main() -> Int {
+  var model = Model{stack: [HOME], sheet: None, next: 2u32, pops: 0, dismissals: 0}
+  let (first, built) = Navigation.mount(&presented(&model))
+  var mounted = first
+  Host.apply(built)
+  while true {
+    let event = Host.wait()
+    if event == View.Stopped {
+      return 0
+    }
+    mounted = Navigation.observe(mounted, &event)
+    model = update(&model, &event)
+    let (next, changes) = Navigation.update(&mounted, &presented(&model))
+    Host.apply(changes)
+    mounted = next
+  }
+  0
+}

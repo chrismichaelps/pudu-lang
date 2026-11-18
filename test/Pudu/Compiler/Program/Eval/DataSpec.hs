@@ -21,6 +21,7 @@ testDataEvaluation = do
   bitSetInvariants <- runEntry "test-fixtures/stdlib/UsesBitSet.pudu"
   buffers <- runEntry "test-fixtures/stdlib/UsesBuffer.pudu"
   mobileViews <- runEntry "test-fixtures/stdlib/UsesMobileView.pudu"
+  mobileNavigation <- runEntry "test-fixtures/stdlib/UsesMobileNavigation.pudu"
   mobileThemes <- runEntry "test-fixtures/stdlib/UsesMobileTheme.pudu"
   mobileLists <- runEntry "test-fixtures/stdlib/UsesMobileList.pudu"
   mobileMaterials <- runEntry "test-fixtures/stdlib/UsesMobileMaterial.pudu"
@@ -182,6 +183,10 @@ testDataEvaluation = do
         (buffers === Just "27")
     , counterexample "the native view stream builds, changes and reads events"
         (mobileViews === Just "30")
+    {-| Pushes, pops, sheets and their user reports: a pop the program applies
+        must not resend the navigation, and one it refuses must. -}
+    , counterexample "the native navigation stream pushes, pops and dismisses without echo"
+        (mobileNavigation === Just "19")
     , counterexample "the native theme stream sets roles, appearance, styles and colors"
         (mobileThemes === Just "12")
     , counterexample "the native list stream windows rows, ranges, columns and reached events"

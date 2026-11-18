@@ -7,8 +7,8 @@ aliases: [Native iOS Navigation Delivery]
 
 # Native iOS Navigation Delivery
 
-Language Architect → Backend Engineer. The architect owns the presentation
-contract in [[Native iOS Navigation]]. Implementation will own the mobile
+Backend Engineer implementing; Language Architect and Forensic Guardian review pending.
+The architect owns the presentation contract in [[Native iOS Navigation]]. Implementation will own the mobile
 route representation, its stream and event contracts, and UIKit presentation
 and completion handling. Independent public-contract and vault-parity review
 are pending.
@@ -22,9 +22,7 @@ custom animations remain separate.
 
 ## Exact next action
 
-Write the mobile route and pop-event module mirrors and implement the first
-native-stack partition against #919, starting with exact stream and
-stale-completion fixtures.
+Validate the native stack and page sheet on the simulator with PUDU_UI_NAVIGATION_TEST, then open the PR to dev.
 
 ## Referenced by
 

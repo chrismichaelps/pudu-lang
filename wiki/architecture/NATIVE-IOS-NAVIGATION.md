@@ -1,6 +1,6 @@
 ---
 type: architecture
-status: ACTIVE_DESIGN
+status: IMPLEMENTING
 tags: [architecture, native, mobile, ios, navigation]
 aliases: [Native iOS Navigation]
 ---
@@ -103,4 +103,4 @@ criteria in the ProMotion section of [[Pudu Native iOS UI]] once #919 lands.
 
 ## Referenced by
 
-[[Pudu Native iOS UI]] · [[architecture/_MOC]] · [[Native iOS Navigation Delivery]]
+[[Pudu Native iOS UI]] · [[architecture/_MOC]] · [[Native iOS Navigation Delivery]] · [[Std Mobile Navigation]] · [[pudu_ios_navigation.h]]

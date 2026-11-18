@@ -63,6 +63,7 @@ const ACCESS_HINT: UInt32 = 32u32
 const ACCESS_VALUE: UInt32 = 33u32
 const MENU: UInt32 = 34u32
 const ANIMATE: UInt32 = 35u32
+const NAVIGATE: UInt32 = 36u32
 
 /// Creates node `node` as a control of `kind`.
 export fn create(out: Array[UInt8], node: UInt32, kind: UInt32) -> Array[UInt8] { words(out, [CREATE, node, kind]) }
@@ -167,6 +168,19 @@ export fn menu(out: Array[UInt8], node: UInt32, reported: UInt32, choices: &Arra
 /// Makes a group's placements animate, or stop animating.
 export fn animate(out: Array[UInt8], node: UInt32, on: Bool) -> Array[UInt8] {
   words(out, [ANIMATE, node, if on { 1u32 } else { 0u32 }])
+}
+
+/// Shows the navigation: each route's id, body node and title, root first,
+/// then 1 and the sheet's id and body node, or 0 when no sheet is shown.
+export fn navigate(out: Array[UInt8], pages: &Array[(UInt32, UInt32, Str)], sheet: Option[(UInt32, UInt32)]) -> Array[UInt8] {
+  var bytes = words(out, [NAVIGATE, count(pages.length())])
+  for page in *pages {
+    bytes = field(words(bytes, [page[0], page[1]]), page[2])
+  }
+  match sheet {
+    case Some(shown) => words(bytes, [1u32, shown[0], shown[1]])
+    case None => words(bytes, [0u32])
+  }
 }
 
 /// Shows `node` as the screen's content.

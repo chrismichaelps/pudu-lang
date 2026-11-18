@@ -12,7 +12,8 @@
 /* Event kinds in the high word of an event; they match Std.Mobile.View. */
 static const uint64_t PUDU_UI_TAPPED = 1, PUDU_UI_STOPPED = 2, PUDU_UI_CHANGED = 3, PUDU_UI_SWITCHED_ON = 4,
                       PUDU_UI_SWITCHED_OFF = 5, PUDU_UI_REACHED = 8, PUDU_UI_GESTURED = 9, PUDU_UI_CHOSE = 10,
-                      PUDU_UI_RESIZED = 11, PUDU_UI_LIFECYCLE = 12, PUDU_UI_PICKED = 13;
+                      PUDU_UI_RESIZED = 11, PUDU_UI_LIFECYCLE = 12, PUDU_UI_PICKED = 13, PUDU_UI_POPPED = 14,
+                      PUDU_UI_DISMISSED = 15;
 
 /* At most this many words travel with one event. */
 enum { PUDU_EVENT_WORDS = 4 };
@@ -32,6 +33,16 @@ static void pudu_queue_words(uint64_t kind, NSInteger tag, NSString *text, uint3
 
 static void pudu_queue(uint64_t kind, NSInteger tag, NSString *text, uint32_t detail) {
   pudu_queue_words(kind, tag, text, detail, nil);
+}
+
+/* Drops queued events of `kind` the program has not read. */
+static void pudu_unqueue(uint64_t kind) {
+  NSIndexSet *stale = [pudu_events indexesOfObjectsPassingTest:^BOOL(NSArray *queued, NSUInteger index, BOOL *stop) {
+    (void)index;
+    (void)stop;
+    return ([queued[0] unsignedLongLongValue] >> 32) == kind;
+  }];
+  [pudu_events removeObjectsAtIndexes:stale];
 }
 
 /* The list self-test must let queued viewport reports settle before stopping. */
