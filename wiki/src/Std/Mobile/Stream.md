@@ -43,15 +43,17 @@ Exports:
 - `accessHint(out, node, value: Str) -> Array[UInt8]` and `accessValue(out, node, value: Str) -> Array[UInt8]`: ACCESS_HINT and ACCESS_VALUE, the node and its text.
 - `menu(out, node, tag: UInt32, choices: &Array[(UInt32, Str)]) -> Array[UInt8]`: MENU, the node, the tag its events report, then the choices.
 - `animate(out, node, on: Bool) -> Array[UInt8]`: ANIMATE, the group and 0 or 1.
+- `navigate(out, pages: &Array[(UInt32, UInt32, Str)], sheet: Option[(UInt32, UInt32)]) -> Array[UInt8]`: NAVIGATE, the route count, then each route's id, body node and title, then 1 and the sheet's id and body node, or 0.
 
 ## Invariants
 
-- Every word is a little-endian 32-bit unsigned value. Every instruction begins with its code word (CREATE 1, TEXT 2, APPEND 3, ROOT 4, TAG 5, STATE 7, HINT 8, NAME 9, INSERT 10, REMOVE 11, MOVE 12, THEME 20, APPEARANCE 21, STYLE 22, COLOR 23, RANGE 24, COLUMNS 25, MATERIAL 26, GESTURES 27, ALERT 28, VALUE 29, HAPTIC 30, TRAITS 31, ACCESS_HINT 32, ACCESS_VALUE 33, MENU 34, ANIMATE 35).
+- Every word is a little-endian 32-bit unsigned value. Every instruction begins with its code word (CREATE 1, TEXT 2, APPEND 3, ROOT 4, TAG 5, STATE 7, HINT 8, NAME 9, INSERT 10, REMOVE 11, MOVE 12, THEME 20, APPEARANCE 21, STYLE 22, COLOR 23, RANGE 24, COLUMNS 25, MATERIAL 26, GESTURES 27, ALERT 28, VALUE 29, HAPTIC 30, TRAITS 31, ACCESS_HINT 32, ACCESS_VALUE 33, MENU 34, ANIMATE 35, NAVIGATE 36).
 - Theming codes start at 20. Navigation reserves 13 and 14, so a gap keeps both streams unambiguous when they merge.
 - RANGE is exactly three words after its code word; COLUMNS is exactly two; MATERIAL is exactly two. A RANGE is 16 bytes, a COLUMNS is 12 bytes and a MATERIAL is 12 bytes.
 - THEME carries exactly seven tones; its count word is 7. The encoder writes the count, and the host refuses any other count.
 - Text is its UTF-8 byte length as one word, followed by those bytes.
 - Word counts after the code word: GESTURES 3, VALUE 2, HAPTIC 1, TRAITS 2 and ANIMATE 2. ACCESS_HINT and ACCESS_VALUE are a node and a text field. ALERT is a tag, a style, two text fields and a choice list; MENU is a node, a tag and a choice list.
+- NAVIGATE is a route count, then per route an id word, a body node word and a text field, then a sheet flag word (1 or 0), followed by the sheet's id and body node when the flag is 1. A NAVIGATE with no sheet ends at the flag word.
 - A choice list is a count word, then each choice's role word and a text field.
 - `remove` writes the node, then the count of ids, then every id of the detached subtree, so the host can forget each one.
 - Each function appends to the stream it is given and returns the extended stream; no function reads or reorders earlier bytes.
@@ -78,6 +80,8 @@ Depends on no other module. Consumers: [[Std Mobile View]], which calls these fu
 
 - **Q:** Why codes 24 and 25 for RANGE and COLUMNS? **A:** They continue after the theming codes without a gap, since no other slice claims them. A list's window and its grid shape are separate instructions, so a change to one writes only that instruction.
 - **Q:** Why code 26 for MATERIAL? **A:** It continues the sequence with no gap. A material is one word of kind and one word of code, so a change of material writes one fixed-size instruction.
+
+- **Q:** Why one NAVIGATE for the whole stack? **A:** A stack is one ordered list whose order and ids must agree, so the host checks it as a unit before any controller changes. Per-route instructions would expose a half-applied stack.
 
 - **Q:** Why a separate instruction for each capability rather than one generic property word? **A:** Each capability has its own word count and its own validation. A generic property would make the host decode a second tag inside every instruction. _Rejected:_ one property instruction.
 

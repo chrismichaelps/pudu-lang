@@ -1,0 +1,119 @@
+module Std.Mobile.Events
+
+import Std.Mobile.Gesture as Gesture
+import Std.Mobile.Scene as Scene
+import Std.Mobile.View as View
+
+/// Event kinds in the high word of a host event; 2 is the host's stop.
+const TAPPED: UInt64 = 1u64
+const CHANGED: UInt64 = 3u64
+const SWITCHED_ON: UInt64 = 4u64
+const SWITCHED_OFF: UInt64 = 5u64
+const REACHED: UInt64 = 8u64
+const GESTURED: UInt64 = 9u64
+const CHOSE: UInt64 = 10u64
+const RESIZED: UInt64 = 11u64
+const LIFECYCLE: UInt64 = 12u64
+const PICKED: UInt64 = 13u64
+const POPPED: UInt64 = 14u64
+const DISMISSED: UInt64 = 15u64
+
+/// Each event kind's constructor, given the tag and the text the host holds.
+const EVENTS: Map[UInt64, fn(UInt32, Str) -> View.Event] = mapOf([
+    (TAPPED, |tag: UInt32, _text: Str| View.Tapped(tag)),
+    (CHANGED, |tag: UInt32, text: Str| View.Changed(tag, text)),
+    (SWITCHED_ON, |tag: UInt32, _text: Str| View.Toggled(tag, true)),
+    (SWITCHED_OFF, |tag: UInt32, _text: Str| View.Toggled(tag, false)),
+    (DISMISSED, |sheet: UInt32, _text: Str| View.Dismissed(sheet))
+  ])
+
+/// Each detailed event kind's constructor, given the tag and the detail word.
+/// A pop's tag is the route that was on top and its detail the destination.
+const DETAILED: Map[UInt64, fn(UInt32, UInt32) -> Option[View.Event]] = mapOf([
+    (REACHED, |reported: UInt32, first: UInt32| Some(View.Reached(reported, first))),
+    (CHOSE, |reported: UInt32, index: UInt32| Some(View.Chose(reported, index))),
+    (LIFECYCLE, |_reported: UInt32, code: UInt32| lifecycle(Scene.phase(code))),
+    (PICKED, |reported: UInt32, index: UInt32| Some(View.Picked(reported, index))),
+    (POPPED, |top: UInt32, destination: UInt32| Some(View.Popped(top, destination)))
+  ])
+
+/// Each measured event kind's constructor, given the tag, the detail word and
+/// the signed words the host holds for it.
+const MEASURED: Map[UInt64, fn(UInt32, UInt32, Array[Int32]) -> Option[View.Event]] = mapOf([
+    (GESTURED, |reported: UInt32, bit: UInt32, values: Array[Int32]| gestured(reported, Gesture.decoded(bit, &values))),
+    (RESIZED, |_reported: UInt32, _bit: UInt32, values: Array[Int32]| resized(Scene.sized(&values)))
+  ])
+
+/// Whether a host event's kind carries text the host holds for it.
+export fn carriesText(raw: UInt64) -> Bool { raw >> 32 == CHANGED }
+
+/// Whether a host event's kind carries a detail word the host holds for it.
+export fn carriesDetail(raw: UInt64) -> Bool { DETAILED.containsKey(raw >> 32) || MEASURED.containsKey(raw >> 32) }
+
+/// Whether a host event's kind carries signed words the host holds for it.
+export fn carriesWords(raw: UInt64) -> Bool { MEASURED.containsKey(raw >> 32) }
+
+/// A host event read from its two words, the kind above and the tag below,
+/// with the text the host holds for a changed field. A kind the table does
+/// not know stops the program.
+export fn event(raw: UInt64, text: Str) -> View.Event {
+  match (EVENTS.get(raw >> 32), convertInteger[UInt32](raw & 0xffffffffu64)) {
+    case (Some(made), Some(tag)) => made(tag, text)
+    case _ => View.Stopped
+  }
+}
+
+/// A host event read with its text and detail word.
+export fn eventWithDetail(raw: UInt64, text: Str, detail: UInt32) -> View.Event { eventWithWords(raw, text, detail, []) }
+
+/// A host event read with its text, detail word and words: measured kinds
+/// decode through `MEASURED`, detailed kinds through `DETAILED`, every other
+/// kind through `event`. Words the host never writes read as `Stopped`.
+export fn eventWithWords(raw: UInt64, text: Str, detail: UInt32, values: Array[Int32]) -> View.Event {
+  match convertInteger[UInt32](raw & 0xffffffffu64) {
+    case Some(reported) => {
+      match (MEASURED.get(raw >> 32), DETAILED.get(raw >> 32)) {
+        case (Some(made), _) => orStopped(made(reported, detail, values))
+        case (_, Some(made)) => orStopped(made(reported, detail))
+        case _ => event(raw, text)
+      }
+    }
+    case None => View.Stopped
+  }
+}
+
+/// A host word read as a signed value: the two's complement of its bits.
+export fn signed(bits: UInt32) -> Int32 {
+  let wide = match convertInteger[Int64](bits) {
+    case Some(value) => value
+    case None => 0i64
+  }
+  let folded = if wide >= 2147483648i64 { wide - 4294967296i64 } else { wide }
+  match convertInteger[Int32](folded) {
+    case Some(value) => value
+    case None => 0i32
+  }
+}
+
+// An event the host wrote, or Stopped for words it never writes.
+fn orStopped(found: Option[View.Event]) -> View.Event {
+  match found {
+    case Some(made) => made
+    case None => View.Stopped
+  }
+}
+
+fn gestured(reported: UInt32, found: Option[Gesture.Gesture]) -> Option[View.Event] {
+  let gesture = found ?
+  Some(View.Gestured(reported, gesture))
+}
+
+fn resized(found: Option[Scene.Size]) -> Option[View.Event] {
+  let size = found ?
+  Some(View.Resized(size))
+}
+
+fn lifecycle(found: Option[Scene.Phase]) -> Option[View.Event] {
+  let phase = found ?
+  Some(View.Lifecycle(phase))
+}

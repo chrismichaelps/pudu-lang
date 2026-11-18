@@ -20,7 +20,7 @@ Exports:
 - `eventDetail() -> UInt32`: calls `pudu_ui_event_detail()` and returns the detail word of the last event handed out.
 - `eventWordCount() -> UInt32`: calls `pudu_ui_event_word_count()` and returns how many words the last event carries.
 - `eventWord(index: UInt32) -> UInt32`: calls `pudu_ui_event_word(index)` and returns that word of the last event. An index past the count reads zero.
-- `wait() -> View.Event`: calls `pudu_ui_wait()` and decodes its 64-bit result. When `View.carriesText` says the event carries text, it fetches that text through `pudu_ui_event_text`; when `View.carriesDetail` says it carries a detail, it fetches the word through `eventDetail`. When `View.carriesWords` says the event is measured, it also fetches its words through `eventWordCount` and `eventWord`, each signed with `View.signed`. It then decodes with `View.eventWithWords`, which takes the measured, detailed or plain path by kind. The text is empty when the event carries none.
+- `wait() -> View.Event`: calls `pudu_ui_wait()` and decodes its 64-bit result. When `Events.carriesText` says the event carries text, it fetches that text through `pudu_ui_event_text`; when `Events.carriesDetail` says it carries a detail, it fetches the word through `eventDetail`. When `Events.carriesWords` says the event is measured, it also fetches its words through `eventWordCount` and `eventWord`, each signed with `Events.signed`. It then decodes through [[Std Mobile Events]]'s `eventWithWords`, which takes the measured, detailed or plain path by kind. The text is empty when the event carries none.
 
 ## Invariants
 
@@ -43,7 +43,7 @@ Exports:
 
 ## Dependencies and consumers
 
-Depends on [[Std Mobile View]] for `Event`, `event`, `eventWithDetail`, `eventWithWords`, `signed`, `carriesText`, `carriesWords` and `carriesDetail`. Consumers: [[Native Counter Example]], [[Native Form Example]], [[Native Catalog Example]] and [[Native Showcase Example]]. The host side is [[iOS Host Adapter]], which defines `pudu_ui_apply`, `pudu_ui_wait`, `pudu_ui_event_text` and `pudu_ui_event_detail`.
+Depends on [[Std Mobile Events]] for `event`, `eventWithDetail`, `eventWithWords`, `signed`, `carriesText`, `carriesWords` and `carriesDetail`, and on [[Std Mobile View]] for the `Event` type. Consumers: [[Native Counter Example]], [[Native Form Example]], [[Native Catalog Example]] and [[Native Showcase Example]]. The host side is [[iOS Host Adapter]], which defines `pudu_ui_apply`, `pudu_ui_wait`, `pudu_ui_event_text` and `pudu_ui_event_detail`.
 
 ## Resolved Grill Log
 
