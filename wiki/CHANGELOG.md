@@ -5,6 +5,13 @@ tags: [changelog]
 
 # Changelog
 
+## 2026-11-17 — Interpolation hole spans (#950)
+
+- A string interpolation's `display` wrapper spans the braces, so the hole's
+  expression keeps its own type; module constants in holes build natively
+  (refs #950).
+  [[Source]] · [[Parser Expression]]
+
 ## 2026-11-17 — Native ledger: trait-qualified method values (#647)
 
 - Trait-qualified method values are recorded as native; both engines dispatch
