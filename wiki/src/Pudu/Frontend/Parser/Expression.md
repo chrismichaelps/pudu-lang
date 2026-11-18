@@ -145,3 +145,15 @@ DEPTH 0.82 (DEEP). It hides precedence, postfix chaining, recursion safety, span
 ## Referenced by
 
 [[src/Pudu/Frontend/Parser/_MOC]] · [[Parser State]] · [[Parser Binding]] · [[Token]] · [[Syntax Tree]] · [[Frontend]]
+
+## Interpolation hole spans (#950)
+
+A hole `{x}` becomes `display(x)`. The `display` call and its callee take the
+brace-inclusive span from `enclosingSpan`; the hole's expression keeps the
+span of the text between the braces. Each node then has its own span, so the
+checker's one-type-per-span table holds the hole's own type and native
+lowering that reads a type by span, such as a module constant, sees it.
+
+Resolved Grill Log: widen the wrapper instead of relabelling the inner
+expression, so diagnostics inside the hole keep pointing at what was
+written; a failure of the wrapper itself points at the braces.

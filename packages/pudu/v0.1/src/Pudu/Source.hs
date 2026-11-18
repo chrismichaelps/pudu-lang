@@ -10,6 +10,7 @@ module Pudu.Source
   , advanceOffset
   , authoredSpan
   , emptySpan
+  , enclosingSpan
   , generatedSpan
   , newSource
   , mkSpan
@@ -212,6 +213,15 @@ mkSpan Source{sourceIdentity, sourceScalarLength} start@(Offset startValue) end@
 
 zeroWidthSpan :: Source -> Offset -> Maybe Span
 zeroWidthSpan source offset = mkSpan source offset offset
+
+{-| The span grown by one scalar on each side: the delimiter pair around an
+    authored span. Nothing at a source's start or for a generated span, whose
+    origin offsets would no longer agree. -}
+enclosingSpan :: Span -> Maybe Span
+enclosingSpan spanValue@Span{spanStart = Offset start, spanEnd = Offset end, spanOriginValue = origin}
+  | start < 1 = Nothing
+  | Just _ <- origin = Nothing
+  | otherwise = Just spanValue{spanStart = Offset (start - 1), spanEnd = Offset (end + 1)}
 
 mergeSpans :: Span -> Span -> Maybe Span
 mergeSpans left right

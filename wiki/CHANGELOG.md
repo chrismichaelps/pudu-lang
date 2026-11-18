@@ -23,6 +23,13 @@ tags: [changelog]
   (refs #951).
   [[Backend Toolchain Android]] · [[Native Android Activity]]
 
+## 2026-11-17 — Interpolation hole spans (#950)
+
+- A string interpolation's `display` wrapper spans the braces, so the hole's
+  expression keeps its own type; module constants in holes build natively
+  (refs #950).
+  [[Source]] · [[Parser Expression]]
+
 ## 2026-11-17 — Native parity audit
 
 - The native coverage page records a whole-corpus comparison of native
