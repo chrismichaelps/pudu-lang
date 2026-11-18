@@ -14,6 +14,8 @@ module Pudu.Backend.Toolchain.Android
   , androidTools
   , compileAndroidLibrary
   , compileApk
+  , packageLinkFlags
+  , packageManifest
   ) where
 
 import Control.Exception (finally, mask)
@@ -131,6 +133,7 @@ compileApk :: AndroidTools -> Text -> [Text] -> Text -> FilePath -> IO (Either T
 compileApk tools source exports label output = case toolSdk tools of
   Nothing -> pure (Left (ToolchainSdkMissing "android" "an Android SDK"))
   Just sdk -> do
+    testing <- maybe False (not . null) <$> lookupEnv testBuildVariable
     platform <- newest (sdk </> "platforms")
     buildTools <- newest (sdk </> "build-tools")
     javac <- findExecutable "javac"
@@ -138,13 +141,13 @@ compileApk tools source exports label output = case toolSdk tools of
     keytool <- findExecutable "keytool"
     case (platform, buildTools, javac, jar, keytool) of
       (Just platformDir, Just toolsDir, Just compiler, Just packer, Just keys) ->
-        staged output (assemble (platformDir </> "android.jar") toolsDir compiler packer keys)
+        staged output (assemble testing (platformDir </> "android.jar") toolsDir compiler packer keys)
       (Nothing, _, _, _, _) -> missing "an Android platform under the SDK's platforms directory"
       (_, Nothing, _, _, _) -> missing "the Android SDK build tools"
       _ -> missing "a Java development kit (javac, jar and keytool)"
  where
   missing detail = pure (Left (ToolchainSdkMissing "android" detail))
-  assemble androidJar toolsDir javac jar keytool directory = do
+  assemble testing androidJar toolsDir javac jar keytool directory = do
     seconds <- timeoutSeconds
     let library = directory </> "libprogram.a"
         nativeDir = directory </> "lib" </> toolAbi tools
@@ -166,15 +169,15 @@ compileApk tools source exports label output = case toolSdk tools of
         createDirectoryIfMissing True classes
         mapM_ (\(file, text) -> Char8.writeFile (directory </> file) (Char8.pack text)) androidHostSources
         mapM_ (\(file, text) -> Char8.writeFile (javaDir </> "org" </> "pudu" </> file) (Char8.pack text)) androidJavaSources
-        ByteString.writeFile manifest (Encoding.encodeUtf8 (manifestFor label))
+        ByteString.writeFile manifest (Encoding.encodeUtf8 (packageManifest testing label))
         let javaFiles = [javaDir </> "org" </> "pudu" </> file | (file, _) <- androidJavaSources]
         ran <- step
           [ (toolClang tools, ["-std=c11", "-O2", "-fPIC", "-shared", "-I", directory, directory </> "pudu_android_host.c", library]
               <> map Text.unpack links <> ["-llog", "-landroid", "-o", shared])
           , (javac, ["-source", "11", "-target", "11", "-nowarn", "-cp", androidJar, "-d", classes] <> javaFiles)
           , (toolsDir </> "d8", ["--min-api", show minimumApi, "--lib", androidJar, "--output", directory] <> javaFilesIn classes)
-          -- A development package is debuggable, which is what admits its self-tests.
-          , (toolsDir </> "aapt2", ["link", "-o", base, "-I", androidJar, "--manifest", manifest, "--min-sdk-version", show minimumApi, "--debug-mode"])
+          , (toolsDir </> "aapt2", ["link", "-o", base, "-I", androidJar, "--manifest", manifest, "--min-sdk-version", show minimumApi]
+              <> packageLinkFlags testing)
           , (jar, ["uf", base, "-C", directory, "classes.dex"])
           , (jar, ["u0f", base, "-C", directory, "lib"])
           , (toolsDir </> "zipalign", ["-P", "16", "-f", "4", base, aligned])
@@ -187,7 +190,27 @@ compileApk tools source exports label output = case toolSdk tools of
             renameFile signed output
             pure (Right (Text.strip (Text.unlines (filter (not . Text.null) [libraryWarnings, warnings]))))
   javaFilesIn classes = [classes </> "org" </> "pudu" </> Text.unpack (Text.replace ".java" ".class" (Text.pack file)) | (file, _) <- androidJavaSources]
-  manifestFor label' = Text.replace "PUDU_PACKAGE" (packageName label') (Text.replace "PUDU_LABEL" (escaped label') (Text.pack androidManifest))
+
+{-| Set to a non-empty value while building, it makes the package a test build. -}
+testBuildVariable :: String
+testBuildVariable = "PUDU_ANDROID_TEST_BUILD"
+
+{-| The launcher activity is exported, so any application can send it extras.
+    Only a test build is debuggable; a release package is not. -}
+packageLinkFlags :: Bool -> [String]
+packageLinkFlags testing = ["--debug-mode" | testing]
+
+{-| The manifest for a program's label. A test build also carries the marker
+    the activity requires before it reads self-test extras. -}
+packageManifest :: Bool -> Text -> Text
+packageManifest testing label
+  | testing = Text.replace "  </application>" (selfTestMarker <> "\n  </application>") named
+  | otherwise = named
+ where
+  named = Text.replace "PUDU_PACKAGE" (packageName label) (Text.replace "PUDU_LABEL" (escaped label) (Text.pack androidManifest))
+
+selfTestMarker :: Text
+selfTestMarker = "    <meta-data android:name=\"org.pudu.selftest\" android:value=\"true\" />"
 
 {-| The package's last segment derived from the program's name: ASCII letters
     and digits kept, everything else dropped, a leading digit prefixed. -}

@@ -10,6 +10,7 @@ import qualified Data.Text.IO as TextIO
 import Pudu.Backend.Emit (EmittedUnit (..), EntryForm (..), emitUnit)
 import Pudu.Backend.Target (NativeTarget, TargetRefusal (..), nativeTargetNamed, nativeTargetNames, targetRefusals)
 import Pudu.Backend.Toolchain (ToolchainFailure (..))
+import Pudu.Backend.Toolchain.Android (packageLinkFlags, packageManifest)
 import Pudu.Backend.Toolchain.Library (LibraryProducts (..), LibraryRequest (..), compileLibrary)
 import Pudu.Compiler.Frame (lowerFrames)
 import Pudu.Compiler.Lower (LowerResult (..), lowerProgram, programNativeModules)
@@ -32,7 +33,23 @@ backendTargetProperties =
   , ("mobile SDK discovery diagnoses absence without publishing", once <$> sdkFailures)
   , ("mobile TLS requests each target provider before publishing", once <$> missingTlsProvider)
   , ("mobile Apple SDK builds export only the host entry on both slices", once <$> appleArchives)
+  , ("Android release packages are neither debuggable nor marked for self-tests", pure (once androidTestBuilds))
   ]
+
+androidTestBuilds :: Property
+androidTestBuilds = conjoin
+  [ counterexample "a release package links without --debug-mode" (packageLinkFlags False === [])
+  , counterexample "a test build links with --debug-mode" (packageLinkFlags True === ["--debug-mode"])
+  , counterexample "a release manifest has no self-test marker" (property (not (marker `Text.isInfixOf` release)))
+  , counterexample "a test build manifest has exactly one marker" (Text.count marker test === 1)
+  , counterexample "the marker sits inside the application element"
+      (property (marker `Text.isInfixOf` fst (Text.breakOn "</application>" test)))
+  , counterexample "both name the program" (property (all ("org.pudu.counter" `Text.isInfixOf`) [release, test]))
+  ]
+ where
+  marker = "android:name=\"org.pudu.selftest\""
+  release = packageManifest False "Counter"
+  test = packageManifest True "Counter"
 
 targetPaths :: Property
 targetPaths = withTarget "ios-simulator-arm64" $ \ios ->
