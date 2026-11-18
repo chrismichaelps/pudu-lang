@@ -77,6 +77,7 @@ run "full suite, optimized, in $SHARDS shards" suite_shards
 # child shell see the same answer.
 export PUDU
 PUDU=$(cabal list-bin pudu --enable-optimization=2)
+run 'Swift entry points answer natively as interpreted' node test/swift-entry-points.mjs "$PUDU"
 run 'generic methods preserve checked trait providers' node test/bound-provider.mjs "$PUDU"
 run 'same-named records retain canonical runtime owners' node test/canonical-owners.mjs "$PUDU"
 run 'positional sums retain canonical runtime owners' node test/sum-owners.mjs "$PUDU"

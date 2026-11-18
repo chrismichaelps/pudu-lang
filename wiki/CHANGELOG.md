@@ -12,6 +12,12 @@ tags: [changelog]
   (refs #950).
   [[Source]] · [[Parser Expression]]
 
+## 2026-11-17 — Native parity audit
+
+- The native coverage page records a whole-corpus comparison of native
+  executables against the interpreter.
+  [[Native Emission Coverage]]
+
 ## 2026-11-17 — Native set membership (#948)
 
 - `x in set` lowers to the set's `contains` primitive natively, with the
@@ -23,6 +29,11 @@ tags: [changelog]
 - Trait-qualified method values are recorded as native; both engines dispatch
   them on their first argument since #935 (refs #647).
   [[Native Method Values]] · [[Native Emission Coverage]]
+
+## 2026-11-17 — Swift entry points (#881)
+
+- Swift libraries reach Pudu through C entry points, checked on macOS and the iOS simulator (refs #881).
+  [[Swift Entry Points Test]] · [[iOS Foreign Apps Test]]
 
 ## 2026-11-17 — Objective-C delegates (#879)
 
