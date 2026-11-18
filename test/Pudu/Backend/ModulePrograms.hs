@@ -186,6 +186,17 @@ constantPrograms =
       , "  print(display(STEP(41)) + \" \" + display(TABLE[0](5)) + \" \" + display(TABLE[1](5)) + \" \" + display(STEP(STEP(0))))"
       , "  0", "}" ]
     , "42 10 4 2\n")
+  , ("folded constants read inside interpolation holes", program
+      [ "comptime fn powerOfTwo(n: Int) -> Int { if n == 0 { 1 } else { 2 * powerOfTwo(n - 1) } }"
+      , "type Point = { x: Int, y: Int }"
+      , "const LIMIT: Int = 4096", "const SIZE: Int = powerOfTwo(12)", "const NAME: Str = \"pudu\""
+      , "const ORIGIN: Point = Point{x: 1, y: 2}", "const SQUARES: Array[Int] = [1, 4, 9]", "const MAYBE: Option[Int] = Some(3)"
+      , "fn main() -> Int {"
+      , "  print(\"limit {LIMIT} size {SIZE} name {NAME}\")"
+      , "  print(\"origin {ORIGIN} squares {SQUARES} maybe {MAYBE}\")"
+      , "  print(\"sum {LIMIT + SIZE} first {SQUARES[0]} x {ORIGIN.x}\")"
+      , "  0", "}" ]
+    , "limit 4096 size 4096 name pudu\norigin Point{x: 1, y: 2} squares [1, 4, 9] maybe Some(3)\nsum 8192 first 1 x 1\n")
   , ("folded numeric constants keep widths and compile-time answers", program
       [ "comptime fn square(n: Int) -> Int { n * n }"
       , "type Small = Int8", "const BASE = 7", "const ANSWER = square(BASE)"
