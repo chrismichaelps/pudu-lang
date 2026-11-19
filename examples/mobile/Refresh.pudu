@@ -1,0 +1,59 @@
+module Refresh
+
+import Std.Mobile.Host as Host
+import Std.Mobile.Scene as Scene
+import Std.Mobile.View as View
+
+/// The tag the scroll's pulls report, and the button that ends a refresh.
+const PULLED: UInt32 = 1u32
+const DONE: UInt32 = 2u32
+
+/// How many pulls arrived, whether the program is refreshing, and the
+/// safe-area insets last reported.
+type Model = { pulls: Int, refreshing: Bool, insets: Option[Scene.Insets] }
+
+/// Whether the reported top inset keeps content clear of the status bar; the
+/// numbers themselves differ from one screen to another.
+fn insetsText(insets: Option[Scene.Insets]) -> Str {
+  match insets {
+    case Some(found) => "Insets: top {found.top > 0i32}"
+    case None => "Insets: none"
+  }
+}
+
+fn view(model: &Model) -> View.View {
+  var rows = [View.Label("Pulls: {model.pulls}"), View.Label(insetsText(model.insets)), View.Button("Done", DONE)]
+  for line in 1..31 {
+    rows = rows.push(View.Label("Line {line}"))
+  }
+  View.Refreshing(PULLED, model.refreshing, View.Scroll(View.Column(rows)))
+}
+
+/// The first pull is answered by refreshing until Done; later pulls are only
+/// counted, so the platform stops their indicator by itself.
+fn update(model: &Model, event: &View.Event) -> Model {
+  match *event {
+    case View.Refreshed(tag) if tag == PULLED => Model {..*model, pulls: model.pulls + 1, refreshing: model.pulls == 0 }
+    case View.Tapped(tag) if tag == DONE => Model {..*model, refreshing: false }
+    case View.SafeArea(insets) => Model{..*model, insets: Some(insets)}
+    case _ => *model
+  }
+}
+
+fn main() -> Int {
+  var model = Model{pulls: 0, refreshing: false, insets: None}
+  let (first, built) = View.mount(&view(&model))
+  var mounted = first
+  Host.apply(built)
+  while true {
+    let event = Host.wait()
+    if event == View.Stopped {
+      return 0
+    }
+    model = update(&model, &event)
+    let (next, changes) = View.update(&mounted, &view(&model))
+    Host.apply(changes)
+    mounted = next
+  }
+  0
+}

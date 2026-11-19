@@ -7,6 +7,10 @@ export type SizeClass = Compact | Regular
 /// adapts to these values, never to a device model.
 export type Size = { width: Int32, height: Int32, horizontal: SizeClass, vertical: SizeClass }
 
+/// The screen's safe-area insets in points: how far bars, rounded corners
+/// and cutouts reach in from each edge.
+export type Insets = { top: Int32, left: Int32, bottom: Int32, right: Int32 }
+
 /// Where the application is in its lifecycle.
 export type Phase = Active | Inactive | Background | Foreground
 
@@ -25,6 +29,14 @@ export fn sized(words: &Array[Int32]) -> Option[Size] {
     case (Some(horizontal), Some(vertical)) => Some(Size{width: words[0], height: words[1], horizontal: horizontal, vertical: vertical})
     case _ => None
   }
+}
+
+/// The insets the words `[top, left, bottom, right]` describe.
+export fn insets(words: &Array[Int32]) -> Option[Insets] {
+  if words.length() < 4 {
+    return None
+  }
+  Some(Insets{top: words[0], left: words[1], bottom: words[2], right: words[3]})
 }
 
 /// The lifecycle phase a detail word names.

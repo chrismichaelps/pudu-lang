@@ -22,8 +22,7 @@ them in. The length is read once (characters for Str). Then the checks are
 zero or past the length (at it, for `..=`), fails with E7004 "slice range out
 of bounds" and help naming the length; an end before the start fails with
 "slice range ends before it starts". Only then does the slice run, so the
-runtime's clamping slice has nothing left to clamp. Failures report at the
-range.
+runtime's clamping slice has nothing left to clamp. A failure reports at the range, the span `readIndex` is given for the key.
 
 ## Resolved Grill Log
 
@@ -52,3 +51,7 @@ Bytes slice by written ranges and range values like arrays, counting bytes.
 ## Referenced by
 
 [[Compiler Lower Body]] · [[Native Arrays]] · [[src/Pudu/Compiler/_MOC]]
+
+## Failure location (#958)
+
+Resolved Grill Log: the range is where a slice fails in both engines, whether the slice is bound, passed or used as a method receiver (#958).

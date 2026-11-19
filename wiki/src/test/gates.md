@@ -57,6 +57,7 @@ across repeated calls.
 [[Desktop Configure Gate]] checks each refused window setting by name and the builtin's types.
 [[Lane Collection Gate]] checks that lane kernel buffers share collections rather than forcing
 one per call.
+Native executables agree with the interpreter across the corpus — [[Native Parity Gate]] (#956).
 
 ## Governance and algorithm
 

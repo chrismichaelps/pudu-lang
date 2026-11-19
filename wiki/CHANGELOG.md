@@ -5,6 +5,11 @@ tags: [changelog]
 
 # Changelog
 
+## 2026-11-18 — Native pull to refresh and safe-area insets (#962)
+
+- Native pull to refresh and safe-area insets (#962): View.Refreshing, REFRESH instruction, REFRESHED and INSETS events, Scene.Insets.
+  [[Std Mobile View]] · [[Std Mobile Stream]] · [[Std Mobile Events]] · [[Std Mobile Scene]] · [[pudu_ios_refresh.h]]
+
 ## 2026-11-18 — Declared attributes (#965)
 
 - Declared attributes (#965): `attribute name(...)` declarations; unknown or misused attributes are E3104/E3105, conflicting declarations E3106, unsupported parameter types E1069; the standard library declares json, skip, default, binary, column, label, min, max and readonly.
@@ -40,6 +45,26 @@ tags: [changelog]
 - The native coverage page records a whole-corpus comparison of native
   executables against the interpreter.
   [[Native Emission Coverage]]
+## 2026-11-17 — Element reads through a receiver fail at their key (#958)
+
+- An element or slice read through a method receiver reports at its key in the interpreter, as a value read and native code do (refs #958). Receivers fail at the key or range that chose them in both engines, `&mut self` included; lent `&mut` arguments and stores fail at the root name.
+  [[Eval Place]] · [[Compiler Lower Slice]]
+
+## 2026-11-17 — Native derive notes (#959)
+
+- Native failures at derive-generated code print the derive definition and request notes (refs #959).
+  [[Backend Emit State]] · [[Backend Runtime]]
+
+## 2026-11-17 — Native accept ends when the listener closes (#960)
+
+- A native accept waits in slices and ends once its listener is closed, so `Server.stop` finishes a running server (refs #960).
+  [[Native Host Sockets]]
+
+## 2026-11-17 — Native parity gate (#956)
+
+- `test/gates.sh` compares every corpus program's native executable against
+  the interpreter (refs #956).
+  [[Native Parity Gate]]
 
 ## 2026-11-17 — Native set membership (#948)
 

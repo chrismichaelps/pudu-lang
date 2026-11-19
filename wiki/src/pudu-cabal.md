@@ -750,7 +750,11 @@ Resolved Grill Log: include `cbits/pudu_ios_layout.h` in the source distribution
 
 The six capability headers `cbits/pudu_ios_gesture.h`, `cbits/pudu_ios_feedback.h`, `cbits/pudu_ios_access.h`, `cbits/pudu_ios_scene.h`, `cbits/pudu_ios_motion.h` and `cbits/pudu_ios_capability_test.h` join the iOS host sources. They are data inputs embedded by [[Native Toolchain Host Sources]] and staged beside the host translation unit, so they need no Cabal component of their own. The four `lib/Std/Mobile/*.pudu` modules [[Std Mobile Gesture]], [[Std Mobile Scene]], [[Std Mobile Access]] and [[Std Mobile Feedback]] ship with the other mobile modules.
 
-The navigation header `cbits/pudu_ios_navigation.h` ([[pudu_ios_navigation.h]]) is listed in `extra-source-files` beside the other iOS headers, for the same reason: the host embedding reads it at compiler build time. It is staged between `pudu_ios_motion.h` and `pudu_ios_capability_test.h`.
+The node header `cbits/pudu_ios_nodes.h` ([[pudu_ios_nodes.h]]) is listed in `extra-source-files` after the motion header and before the navigation header, for the same reason: the host embedding reads it at compiler build time. It is staged between `pudu_ios_motion.h` and `pudu_ios_navigation.h`.
+
+The navigation header `cbits/pudu_ios_navigation.h` ([[pudu_ios_navigation.h]]) is listed in `extra-source-files` beside the other iOS headers, for the same reason: the host embedding reads it at compiler build time. It is staged between `pudu_ios_nodes.h` and `pudu_ios_refresh.h`.
+
+The refresh header `cbits/pudu_ios_refresh.h` ([[pudu_ios_refresh.h]]) is listed in `extra-source-files` after the navigation header, for the same reason. It is staged between `pudu_ios_navigation.h` and `pudu_ios_capability_test.h`.
 
 The reader header cbits/pudu_ios_stream.h ([[iOS Host Stream]]) joins the staged iOS host headers with the six capability headers.
 

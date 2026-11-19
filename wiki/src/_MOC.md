@@ -356,7 +356,11 @@ tags: [moc, module]
 - [[Native First Light Delivery]] — phase 1 of Pudu Native (#909).
 - [[Std Mobile Events]] — host event decoding behind the mobile wait.
 - [[Std Mobile Navigation]] — native page stack and page sheet model.
+- [[pudu_ios_nodes.h]] — instruction codes, control kinds and the host's node table, shared by the capability headers.
 - [[pudu_ios_navigation.h]] — UIKit navigation host and page sheet presentation.
 - [[Native Pages Example]] — navigation stack and page sheet, built only from Pudu.
 - [[Uses Mobile Navigation]] — stdlib fixture for the navigation stream, pops and dismissals.
+- [[Native Refresh Example]] — pull to refresh and safe-area insets, built only from Pudu.
+- [[pudu_ios_refresh.h]] — UIKit refresh control: pulls reported and the indicator driven by the program's state.
+- [[Uses Mobile Refresh]] — stdlib fixture for the refresh stream and the insets event.
 - [[Pudu Compiler Program Eval Data Spec]] — data evaluation spec, including the mobile fixture counts.

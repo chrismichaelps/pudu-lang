@@ -8,7 +8,7 @@ module Pudu.Eval.Call.Argument
 
 import Pudu.Eval.Call.Needs (CallNeeds (..))
 import Pudu.Eval.Env (Evaluator)
-import Pudu.Eval.Place (Place, placeOf, plainPlace, readPlace)
+import Pudu.Eval.Place (Blame (..), Place, placeOf, plainPlace, readPlace)
 import Pudu.Eval.Value (Value)
 import Pudu.Frontend.Syntax.Located (Located (..))
 import Pudu.Frontend.Syntax.Tree (Expression (..))
@@ -19,7 +19,7 @@ import Pudu.Frontend.Syntax.Tree (Expression (..))
     parameters of the function it reaches. -}
 argumentOf :: CallNeeds -> Located Expression -> Evaluator (Maybe Place, Value)
 argumentOf needs argument = case locatedValue argument of
-  UnaryExpression "&mut" operand -> lentFrom needs operand
+  UnaryExpression "&mut" operand -> lentFrom AtRoot needs operand
   _ -> do
     value <- callEvaluate needs argument
     pure (argumentPlace argument, value)
@@ -35,7 +35,7 @@ argumentPlace argument = case locatedValue argument of
     evaluated once whether or not the method turns out to change the receiver. -}
 receiverOf :: CallNeeds -> Located Expression -> Evaluator (Maybe Place, Value)
 receiverOf needs target
-  | chosenByElement (locatedValue target) = lentFrom needs target
+  | chosenByElement (locatedValue target) = lentFrom AtKey needs target
   | otherwise = do
       value <- callEvaluate needs target
       pure (plainPlace target, value)
@@ -49,12 +49,12 @@ chosenByElement expression = case expression of
   UnaryExpression "*" operand -> chosenByElement (locatedValue operand)
   _ -> False
 
-lentFrom :: CallNeeds -> Located Expression -> Evaluator (Maybe Place, Value)
-lentFrom needs operand = do
+lentFrom :: Blame -> CallNeeds -> Located Expression -> Evaluator (Maybe Place, Value)
+lentFrom blame needs operand = do
   found <- placeOf (callEvaluate needs) operand
   case found of
     Just place -> do
-      value <- readPlace place
+      value <- readPlace blame place
       pure (Just place, value)
     Nothing -> do
       value <- callEvaluate needs operand

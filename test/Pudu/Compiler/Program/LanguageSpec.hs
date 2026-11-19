@@ -203,12 +203,12 @@ testLanguageRefusals = do
     , counterexample "a slice cannot end before it starts"
         ( reversedSlice
             === diagnostic "E7004" "slice range ends before it starts"
-              "write the lower bound first" (237, 243)
+              "write the lower bound first" (244, 248)
         )
     , counterexample "an inclusive slice validates its written negative end"
         ( negativeInclusive
             === diagnostic "E7004" "slice range out of bounds"
-              "the range must lie within the value; it has 3 elements" (237, 243)
+              "the range must lie within the value; it has 3 elements" (244, 249)
         )
     , counterexample "a sequence of the wrong length is reported at the binding"
         (lengthMismatch === ["E7013"])

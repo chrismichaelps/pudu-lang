@@ -23,7 +23,7 @@ Entry points the program depends on:
 ## Behavior
 
 - Starts `pudu_program_run` from a run-loop timer once UIKit has launched.
-- `pudu_ui_apply` applies every instruction of one stream in order. Instruction codes dispatch through `pudu_instruction_table`, one handler per code. Nodes live in a table indexed by node.
+- `pudu_ui_apply` applies every instruction of one stream in order. Instruction codes dispatch through `pudu_instruction_table`, one handler per code. The instruction codes, the control kinds and the node table come from [[pudu_ios_nodes.h]]: `pudu_nodes` is indexed by node, and `pudu_kinds` holds each node's kind.
 - Control kinds dispatch through the constant table `pudu_kind_table`, indexed by kind. Each entry names the factory that makes the control, the setters it accepts (text, hint, state), the control that carries tag and accessible name (a toggle's switch, otherwise the view), the stack accessor for its children when present, the paint and style hooks used by [[iOS Host Theme]], and what a self-test does to it (`fill`, `press`) and reports (`shown`).
 - The headers [[iOS Host Events]], [[iOS Host Controls]], [[iOS Host Theme]], [[iOS Host List]] and [[iOS Host Material]] are included by this file, as are the capability headers [[iOS Host Gesture]], [[iOS Host Feedback]], [[iOS Host Access]], [[iOS Host Scene]], [[iOS Host Motion]] and [[iOS Host Capability Test]]. The controls header holds the platform controls and their factories; this file keeps the stream reader, the kind table, the instruction table and the application delegate, and is about 400 lines. The theme header adds the THEME, APPEARANCE, STYLE and COLOR handlers; the list header adds RANGE and COLUMNS; the material header adds MATERIAL. The instruction table dispatches the capability codes 27 to 35 to nine handlers, one for each capability instruction. The event queue lives in [[iOS Host Events]]; this file keeps the host's kinds, nodes and placement.
 - INSERT and MOVE share one placement handler in the instruction table.
@@ -48,9 +48,11 @@ Entry points the program depends on:
 - The application's root controller is `PuduRootController`. It reports the scene's size and size classes as RESIZED from its layout pass, and only when they change ([[iOS Host Scene]]).
 - Lifecycle observation: the host queues LIFECYCLE for the four application notifications, in the order the platform posts them ([[iOS Host Scene]]).
 - Capability instructions GESTURES, ALERT, VALUE, HAPTIC, TRAITS, ACCESS_HINT, ACCESS_VALUE, MENU and ANIMATE dispatch to [[iOS Host Gesture]], [[iOS Host Feedback]], [[iOS Host Access]] and [[iOS Host Motion]]. An out-of-range mask, style, role, haptic code or trait mask is a stream defect.
+- REFRESH (37) dispatches to `pudu_do_refresh`, which lives in [[pudu_ios_refresh.h]]. It is refused on a node that is neither a scroll nor a list, with the message `pudu: refreshed a node that does not scroll:` followed by the node id.
 - Motion: after every commit, the host runs one animation for the surface if an animated group changed in that commit. With Reduce Motion on, the change is applied at once ([[iOS Host Motion]]).
+- Self-test `PUDU_UI_REFRESH_TEST` runs the pull check of [[pudu_ios_refresh.h]], prints its `PUDU_REFRESH` lines and then asks the program to stop.
 - Self-test `PUDU_UI_CAPABILITY_TEST` runs the sequence of [[iOS Host Capability Test]], queues a stop event after it, and after the program returns prints `PUDU_ACCESS` and `PUDU_MOTION` lines.
-- NAVIGATE (36) is read whole by `pudu_navigation_read` in [[pudu_ios_navigation.h]] before any controller changes. Only then is the shown root removed and the navigation shown over the root controller, which installs the platform stack on first use. Its user pop and sheet dismissal events are queued through [[iOS Host Events]].
+- NAVIGATE (36) is read whole by `pudu_navigation_read` in [[pudu_ios_navigation.h]] before any controller changes; each route body is read through `pudu_node_id` and `pudu_node_scrolls` in [[pudu_ios_nodes.h]]. Only then is the shown root removed and the navigation shown over the root controller, which installs the platform stack on first use. Its user pop and sheet dismissal events are queued through [[iOS Host Events]].
 - Self-test `PUDU_UI_NAVIGATION_TEST` runs the stack and sheet check described in [[pudu_ios_navigation.h]] and then asks the program to stop. It prints `PUDU_NAV` lines.
 - When navigation is installed, the report walks the top page's body rather than the root's shown tree, so `PUDU_LABEL` lines name the labels the user sees.
 
@@ -65,7 +67,7 @@ Entry points the program depends on:
 
 ## Dependencies and consumers
 
-Implements the four symbols of [[Std Mobile Host]]. Its streams come from [[Std Mobile View]] and [[Std Mobile Theme]]. Includes [[iOS Host Events]], [[iOS Host Controls]], [[iOS Host Theme]], [[iOS Host List]], [[iOS Host Material]], [[iOS Host Gesture]], [[iOS Host Feedback]], [[iOS Host Access]], [[iOS Host Scene]], [[iOS Host Motion]], [[iOS Host Capability Test]] and [[pudu_ios_navigation.h]]. Used by the counter [[Native Counter Example]] and by the simulator run [[iOS Simulator Run]]. [[Pudu Native]] limits hand-written native code to this platform shim.
+Implements the four symbols of [[Std Mobile Host]]. Its streams come from [[Std Mobile View]] and [[Std Mobile Theme]]. Includes [[iOS Host Events]], [[iOS Host Controls]], [[iOS Host Theme]], [[iOS Host List]], [[iOS Host Material]], [[iOS Host Gesture]], [[iOS Host Feedback]], [[iOS Host Access]], [[iOS Host Scene]], [[iOS Host Motion]], [[iOS Host Capability Test]], [[pudu_ios_nodes.h]], [[pudu_ios_navigation.h]] and [[pudu_ios_refresh.h]]. Used by the counter [[Native Counter Example]] and by the simulator run [[iOS Simulator Run]]. [[Pudu Native]] limits hand-written native code to this platform shim.
 
 ## Resolved Grill Log
 
@@ -79,4 +81,4 @@ Implements the four symbols of [[Std Mobile Host]]. Its streams come from [[Std 
 
 ## Referenced by
 
-[[Native Mobile Targets]] · [[Std Mobile Host]] · [[iOS Simulator Run]] · [[Backend Toolchain App]] · [[Native First Light Delivery]] · [[Native Controls Delivery]] · [[Native iOS Scrolling Delivery]] · [[Native iOS Theming Delivery]] · [[Native iOS Recycling Delivery]] · [[Native iOS Materials Delivery]] · [[Native iOS Capabilities Delivery]]
+[[Native Mobile Targets]] · [[Std Mobile Host]] · [[iOS Simulator Run]] · [[Backend Toolchain App]] · [[Native First Light Delivery]] · [[Native Controls Delivery]] · [[Native iOS Scrolling Delivery]] · [[Native iOS Theming Delivery]] · [[Native iOS Recycling Delivery]] · [[Native iOS Materials Delivery]] · [[Native iOS Capabilities Delivery]] · [[Native iOS Refresh Delivery]]

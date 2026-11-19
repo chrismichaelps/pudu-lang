@@ -24,18 +24,20 @@ Exports:
 - `eventWithDetail(raw: UInt64, text: Str, detail: UInt32) -> View.Event`: decodes a detailed event with the detail word the host fetched.
 - `eventWithWords(raw: UInt64, text: Str, detail: UInt32, values: Array[Int32]) -> View.Event`: decodes an event with its detail word and signed words. A measured kind decodes through `MEASURED`, a detailed kind through `DETAILED`, and every other kind through `event`.
 
-Kind codes: TAPPED 1, Stopped 2 (the host's stop), CHANGED 3, SWITCHED_ON 4, SWITCHED_OFF 5, REACHED 8, GESTURED 9, CHOSE 10, RESIZED 11, LIFECYCLE 12, PICKED 13, POPPED 14, DISMISSED 15.
+Kind codes: TAPPED 1, Stopped 2 (the host's stop), CHANGED 3, SWITCHED_ON 4, SWITCHED_OFF 5, REACHED 8, GESTURED 9, CHOSE 10, RESIZED 11, LIFECYCLE 12, PICKED 13, POPPED 14, DISMISSED 15, REFRESHED 16, INSETS 17.
 
 Event payloads by kind:
 - POPPED (14): the tag is the route that was on top, and the detail word is the surviving destination route.
 - DISMISSED (15): the tag is the dismissed sheet. It is listed in `EVENTS`, so it carries no detail word.
 - GESTURED (9) and RESIZED (11) read their signed words through `Gesture.decoded` and `Scene.sized`. A missing word reads as `Stopped`.
 - LIFECYCLE (12) reads its phase code through `Scene.phase`.
+- REFRESHED (16) carries its tag only and is listed in `EVENTS`. It names the scroll or list whose refresh control the user pulled.
+- INSETS (17) reads four signed words through `Scene.insets`, in the order top, left, bottom and right. Fewer than four words read as `Stopped`.
 
 Dispatch is three constant tables:
 - `EVENTS` maps a kind to its tag-and-text decoder.
 - `DETAILED` maps a kind to its tag-and-detail decoder.
-- `MEASURED` maps a kind to its tag, detail and signed-word decoder.
+- `MEASURED` maps a kind to its tag, detail and signed-word decoder. INSETS (17) is listed there.
 
 ## Invariants
 
@@ -55,7 +57,7 @@ Dispatch is three constant tables:
 
 ## Dependencies and consumers
 
-Depends on [[Std Mobile View]] for the `Event` type and its constructors, on [[Std Mobile Gesture]] for `Gesture.decoded` (kind 9), on [[Std Mobile Scene]] for `Scene.sized` (kind 11) and `Scene.phase` (kind 12). Consumers: [[Std Mobile Host]], whose `wait` calls the three predicates and the decoders in order. [[Std Mobile View]] exports no decoder; the decoders live in this module.
+Depends on [[Std Mobile View]] for the `Event` type and its constructors, on [[Std Mobile Gesture]] for `Gesture.decoded` (kind 9), on [[Std Mobile Scene]] for `Scene.sized` (kind 11), `Scene.phase` (kind 12) and `Scene.insets` (kind 17). Consumers: [[Std Mobile Host]], whose `wait` calls the three predicates and the decoders in order. [[Std Mobile View]] exports no decoder; the decoders live in this module.
 
 ## Resolved Grill Log
 
@@ -64,4 +66,4 @@ Depends on [[Std Mobile View]] for the `Event` type and its constructors, on [[S
 
 ## Referenced by
 
-[[src/Std/_MOC]] · [[Std Mobile View]] · [[Std Mobile Host]] · [[Std Mobile Navigation]] · [[pudu_ios_navigation.h]]
+[[src/Std/_MOC]] · [[Std Mobile View]] · [[Std Mobile Host]] · [[Std Mobile Navigation]] · [[pudu_ios_navigation.h]] · [[pudu_ios_refresh.h]]
