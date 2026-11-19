@@ -10,7 +10,7 @@ import android.widget.GridLayout;
  *  and the person's pick reports COLORED with the color packed as RGBA, red
  *  in the high byte, as the iOS well reports it. */
 public final class PuduWell extends View {
-  static final int COLORED = 15;
+  static final int COLORED = 22;
   static final int[] PALETTE = {
     0xFF000000, 0xFF7F7F7F, 0xFFFFFFFF, 0xFFFF3B30, 0xFFFF9500, 0xFFFFCC00,
     0xFF34C759, 0xFF00C7BE, 0xFF007AFF, 0xFF5856D6, 0xFFAF52DE, 0xFFFF2D55,

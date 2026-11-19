@@ -9,7 +9,7 @@ import android.widget.LinearLayout;
 /** A page control: one dot per page, the current one in the accent color.
  *  Tapping a dot reports VALUED with its page. */
 public final class PuduPages extends LinearLayout {
-  static final int VALUED = 14;
+  static final int VALUED = 21;
   int total, page;
 
   public PuduPages(Context context) {

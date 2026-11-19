@@ -5,6 +5,7 @@ tags: [moc, handoff]
 
 # Handoff Map
 
+- [[Native Value Controls Delivery]] — ten native value controls, their instructions and events (#934).
 
 - [[Native Build Cache Delivery]] — compiled executables reused by content of generated C, flags and compiler (#967).
 

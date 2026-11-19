@@ -22,6 +22,9 @@ const INSETS: UInt64 = 17u64
 const FETCHED: UInt64 = 18u64
 const WOKE: UInt64 = 19u64
 const MEMORY: UInt64 = 20u64
+const VALUED: UInt64 = 21u64
+const COLORED: UInt64 = 22u64
+const DATED: UInt64 = 23u64
 
 /// Each event kind's constructor, given the tag and the text the host holds.
 const EVENTS: Map[UInt64, fn(UInt32, Str) -> View.Event] = mapOf([
@@ -42,7 +45,9 @@ const DETAILED: Map[UInt64, fn(UInt32, UInt32) -> Option[View.Event]] = mapOf([
     (CHOSE, |reported: UInt32, index: UInt32| Some(View.Chose(reported, index))),
     (LIFECYCLE, |_reported: UInt32, code: UInt32| lifecycle(Scene.phase(code))),
     (PICKED, |reported: UInt32, index: UInt32| Some(View.Picked(reported, index))),
-    (POPPED, |top: UInt32, destination: UInt32| Some(View.Popped(top, destination)))
+    (POPPED, |top: UInt32, destination: UInt32| Some(View.Popped(top, destination))),
+    (VALUED, |reported: UInt32, bits: UInt32| Some(View.Valued(reported, signed(bits)))),
+    (COLORED, |reported: UInt32, rgba: UInt32| Some(View.Colored(reported, rgba)))
   ])
 
 /// Each measured event kind's constructor, given the tag, the detail word and
@@ -50,7 +55,8 @@ const DETAILED: Map[UInt64, fn(UInt32, UInt32) -> Option[View.Event]] = mapOf([
 const MEASURED: Map[UInt64, fn(UInt32, UInt32, Array[Int32]) -> Option[View.Event]] = mapOf([
     (GESTURED, |reported: UInt32, bit: UInt32, values: Array[Int32]| gestured(reported, Gesture.decoded(bit, &values))),
     (RESIZED, |_reported: UInt32, _bit: UInt32, values: Array[Int32]| resized(Scene.sized(&values))),
-    (INSETS, |_reported: UInt32, _bit: UInt32, values: Array[Int32]| inset(Scene.insets(&values)))
+    (INSETS, |_reported: UInt32, _bit: UInt32, values: Array[Int32]| inset(Scene.insets(&values))),
+    (DATED, |reported: UInt32, _bit: UInt32, values: Array[Int32]| dated(reported, &values))
   ])
 
 /// Whether a host event's kind carries text the host holds for it.
@@ -142,6 +148,18 @@ fn fetched(generation: UInt32, status: UInt32, body: Str, values: &Array[Int32])
     -1
   }
   View.Fetched(generation, code, body, wait)
+}
+
+// A chosen moment from its two words, the high signed and the low unsigned;
+// any other count is a word the host never writes.
+fn dated(reported: UInt32, values: &Array[Int32]) -> Option[View.Event] {
+  if values.length() != 2 {
+    return None
+  }
+  let high = convertInteger[Int64](values[0]) ?
+  let raw = convertInteger[Int64](values[1]) ?
+  let low = if raw < 0i64 { raw + 4294967296i64 } else { raw }
+  Some(View.Dated(reported, high * 4294967296i64 + low))
 }
 
 fn inset(found: Option[Scene.Insets]) -> Option[View.Event] {

@@ -24,7 +24,7 @@ Exports:
 - `eventWithDetail(raw: UInt64, text: Str, detail: UInt32) -> View.Event`: decodes a detailed event with the detail word the host fetched.
 - `eventWithWords(raw: UInt64, text: Str, detail: UInt32, values: Array[Int32]) -> View.Event`: decodes an event with its detail word and signed words. A measured kind decodes through `MEASURED`, a detailed kind through `DETAILED`, and every other kind through `event`.
 
-Kind codes: TAPPED 1, Stopped 2 (the host's stop), CHANGED 3, SWITCHED_ON 4, SWITCHED_OFF 5, REACHED 8, GESTURED 9, CHOSE 10, RESIZED 11, LIFECYCLE 12, PICKED 13, POPPED 14, DISMISSED 15, REFRESHED 16, INSETS 17, FETCHED 18, WOKE 19, MEMORY 20.
+Kind codes: TAPPED 1, Stopped 2 (the host's stop), CHANGED 3, SWITCHED_ON 4, SWITCHED_OFF 5, REACHED 8, GESTURED 9, CHOSE 10, RESIZED 11, LIFECYCLE 12, PICKED 13, POPPED 14, DISMISSED 15, REFRESHED 16, INSETS 17, FETCHED 18, WOKE 19, MEMORY 20, VALUED 21, COLORED 22, DATED 23.
 
 Event payloads by kind:
 - POPPED (14): the tag is the route that was on top, and the detail word is the surviving destination route.
@@ -36,11 +36,14 @@ Event payloads by kind:
 - FETCHED (18) carries the generation as its tag, the status as its detail word, the body as its text, and the Retry-After delay as its first word, -1 when absent. It decodes to `Fetched(generation, status, body, retryAfter)`. A missing status reads as 0 and a missing word as -1.
 - WOKE (19) carries nothing and decodes to `Woke`.
 - MEMORY (20) carries nothing and decodes to `MemoryLow`.
+- VALUED (21): the tag is the value control and the detail word is its value, read as a signed word. A slider or stepper sends low plus index times step, a segmented control or wheel its option index, a page indicator its page index. Decodes to `Valued(tag, value)`.
+- COLORED (22): the tag is the color well and the detail word is its RGBA value, red in the high byte. Decodes to `Colored(tag, rgba)`.
+- DATED (23): the tag is the date picker. Its seconds are two words, high then low, combined into one 64-bit value. Decodes to `Dated(tag, seconds)`.
 
 Dispatch is three constant tables:
 - `EVENTS` maps a kind to its tag-and-text decoder.
-- `DETAILED` maps a kind to its tag-and-detail decoder.
-- `MEASURED` maps a kind to its tag, detail and signed-word decoder. INSETS (17) is listed there.
+- `DETAILED` maps a kind to its tag-and-detail decoder. VALUED (21) and COLORED (22) are listed there.
+- `MEASURED` maps a kind to its tag, detail and signed-word decoder. INSETS (17) is listed there. DATED (23) is listed there too: its detail word is fetched and ignored, and its two words are the seconds, high then low.
 
 ## Invariants
 
@@ -67,6 +70,8 @@ Depends on [[Std Mobile View]] for the `Event` type and its constructors, on [[S
 - **Q:** Why a module apart from View? **A:** View holds the tree and its reconciliation; decoding the host's words is a separate boundary used only by Std.Mobile.Host, and keeping it apart keeps both modules under the size limit.
 - **Q:** Why does a pop carry both routes? **A:** The platform may pop several routes in one back action; the reducer needs the previous top and the destination to refuse a stale report.
 
+- **Q:** Why are seconds two words rather than one? **A:** Seconds since the epoch do not fit one 32-bit word; two words keep the 64-bit value exact. _Rejected:_ a float value.
+
 ## Referenced by
 
-[[src/Std/_MOC]] · [[Std Mobile View]] · [[Std Mobile Host]] · [[Std Mobile Navigation]] · [[pudu_ios_navigation.h]] · [[pudu_ios_refresh.h]]
+[[src/Std/_MOC]] · [[Std Mobile View]] · [[Std Mobile Host]] · [[Std Mobile Navigation]] · [[pudu_ios_navigation.h]] · [[pudu_ios_refresh.h]] · [[Std Mobile Control]] · [[pudu-ios-values]]

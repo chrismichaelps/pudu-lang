@@ -117,7 +117,7 @@ One stream carries each commit. It is a sequence of little-endian 32-bit words, 
 
 | Code | Instruction | Words that follow |
 | --- | --- | --- |
-| 1 | CREATE | node, kind (1 label, 2 button, 3 column, 4 row, 5 field, 6 toggle, 7 scroll, 8 list) |
+| 1 | CREATE | node, kind (1 label, 2 button, 3 column, 4 row, 5 field, 6 toggle, 7 scroll, 8 list, 9 material, 10 progress, 11 activity, 12 slider, 13 stepper, 14 segments, 15 wheel, 16 date, 17 text area, 18 search, 19 symbol, 20 pages, 21 well) |
 | 2 | TEXT | node, byte length, then that many UTF-8 bytes |
 | 3 | APPEND | column or row node, child node |
 | 4 | ROOT | node shown as the screen's content |
@@ -135,6 +135,25 @@ One stream carries each commit. It is a sequence of little-endian 32-bit words, 
 | 23 | COLOR | node, role code |
 | 24 | RANGE | list node, total item count, first window index |
 | 25 | COLUMNS | list node, column count |
+| 26 | SURFACE | node, material code |
+| 27 | GESTURES | node, tag, recognizer mask |
+| 28 | ALERT | tag, style code, title text, message text, choice list |
+| 29 | VALUE | node, value word (permille for progress, signed number, option index, or RGBA for a color well) |
+| 30 | HAPTIC | haptic code |
+| 31 | TRAITS | node, trait mask |
+| 32 | ACCESS_HINT | node, text |
+| 33 | ACCESS_VALUE | node, text |
+| 34 | MENU | node, tag, choice list |
+| 35 | ANIMATE | group, 0 or 1 |
+| 36 | NAVIGATE | route count, then per route an id, a body node and a title; a sheet flag, then the sheet's id and body node when the flag is 1 |
+| 37 | REFRESH | node, tag, 0 or 1 |
+| 38 | FETCH | generation, method text, URL text, header count, a name and value text per header, body text |
+| 39 | CANCEL | generation |
+| 40 | WAKE | delay in milliseconds |
+| 41 | BOUNDS | node, low, high, step (signed words) |
+| 42 | OPTIONS | node, count, then each label as length-prefixed UTF-8 |
+| 43 | COUNT | node, page count |
+| 44 | MOMENT | node, mode (0 day, 1 time, 2 day and time), seconds high word, seconds low word |
 
 Events return through `pudu_ui_wait` as one 64-bit value: the kind in the high 32 bits, with the tag in the low 32 bits.
 
@@ -146,8 +165,25 @@ Events return through `pudu_ui_wait` as one 64-bit value: the kind in the high 3
 | 4 | switched on | tag |
 | 5 | switched off | tag |
 | 8 | reached | tag; the first visible index is read through the detail call |
+| 9 | gestured | tag, phase and signed values |
+| 10 | chose | alert tag; the index of the choice taken |
+| 11 | resized | scene size, as signed words |
+| 12 | lifecycle | tag; the phase code |
+| 13 | picked | menu tag; the index of the item |
+| 14 | popped | tag (the route on top); detail (the surviving route) |
+| 15 | dismissed | sheet tag |
+| 16 | refreshed | tag |
+| 17 | insets | four signed words: top, left, bottom, right |
+| 18 | fetched | generation as tag; status as detail; body text; Retry-After word (-1 when absent) |
+| 19 | woke | none |
+| 20 | memory | none |
+| 21 | valued | tag; signed value or index as detail |
+| 22 | colored | tag; RGBA as detail |
+| 23 | dated | tag; seconds high word, then low word |
 
 Codes 10 to 12 only add instructions, so a stream of codes 1 to 9 means the same. The view module no longer writes RESET; the host keeps it so a stream from an earlier writer still means the same. Nodes carry stable ids handed out by the program and recycled after REMOVE (#914). Compiled views extend the stream further under ADR-0031 (compiled native execution).
+
+Codes 26 to 44 and events 9 to 23 are one numbering shared by the iOS and Android hosts. Android's BOUNDS, OPTIONS, COUNT and MOMENT moved from 36 to 39 to 41 to 44, and its VALUED, COLORED and DATED moved from 14 to 16 to 21 to 23, because 36 to 40 and 14 to 20 are already NAVIGATE to WAKE and POPPED to MEMORY. Android does not yet handle 36 to 40.
 
 ## FUI on native
 

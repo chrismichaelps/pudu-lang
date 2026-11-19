@@ -10,7 +10,7 @@ aliases: [iOS Host Controls]
 
 ## Purpose and interface
 
-Private platform controls of the iOS host, included once by [[iOS Host Adapter]]. The compiler stages it with the other private headers ([[Native Toolchain Host Sources]]). It owns the factory of each control kind, the setters each kind accepts, the target object that turns control actions into queued events, and the self-test actions. The header never reads the view stream: the kind table that wires these factories into instructions stays in [[iOS Host Adapter]].
+Private platform controls of the iOS host, included once by [[iOS Host Adapter]]. The compiler stages it with the other private headers ([[Native Toolchain Host Sources]]). It owns the factory of each control kind, the setters each kind accepts, the target object that turns control actions into queued events, and the self-test actions. The header never reads the view stream: the kind table that wires these factories into instructions lives in [[pudu-ios-kinds]].
 
 The header holds the toggle, a title label beside a platform switch, and one factory per control kind: label, system button, vertical column, horizontal row, text field, toggle and list.
 

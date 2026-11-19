@@ -35,6 +35,36 @@ export const PROGRESS: UInt32 = 10u32
 /// The kind a CREATE names for an activity indicator.
 export const ACTIVITY: UInt32 = 11u32
 
+/// The kind a CREATE names for a slider over whole steps.
+export const SLIDER: UInt32 = 12u32
+
+/// The kind a CREATE names for a stepper.
+export const STEPPER: UInt32 = 13u32
+
+/// The kind a CREATE names for a segmented control.
+export const SEGMENTS: UInt32 = 14u32
+
+/// The kind a CREATE names for a one-column picker wheel.
+export const WHEEL: UInt32 = 15u32
+
+/// The kind a CREATE names for a date picker.
+export const DATE: UInt32 = 16u32
+
+/// The kind a CREATE names for a multi-line text area.
+export const TEXT_AREA: UInt32 = 17u32
+
+/// The kind a CREATE names for a search field.
+export const SEARCH: UInt32 = 18u32
+
+/// The kind a CREATE names for a system symbol image.
+export const SYMBOL: UInt32 = 19u32
+
+/// The kind a CREATE names for a page indicator.
+export const PAGES: UInt32 = 20u32
+
+/// The kind a CREATE names for a color well.
+export const WELL: UInt32 = 21u32
+
 /// Instruction codes of the view stream; each is followed by its words.
 const CREATE: UInt32 = 1u32
 const TEXT: UInt32 = 2u32
@@ -68,6 +98,10 @@ const REFRESH: UInt32 = 37u32
 const FETCH: UInt32 = 38u32
 const CANCEL: UInt32 = 39u32
 const WAKE: UInt32 = 40u32
+const BOUNDS: UInt32 = 41u32
+const OPTIONS: UInt32 = 42u32
+const COUNT: UInt32 = 43u32
+const MOMENT: UInt32 = 44u32
 
 /// Creates node `node` as a control of `kind`.
 export fn create(out: Array[UInt8], node: UInt32, kind: UInt32) -> Array[UInt8] { words(out, [CREATE, node, kind]) }
@@ -150,6 +184,35 @@ export fn alert(out: Array[UInt8], reported: UInt32, form: UInt32, title: Str, m
 
 /// Sets a progress bar's completion in thousandths.
 export fn progress(out: Array[UInt8], node: UInt32, permille: UInt32) -> Array[UInt8] { words(out, [VALUE, node, permille]) }
+
+/// Sets the number a value control holds: a slider's or stepper's value as a
+/// signed word, a segmented control's, wheel's or page indicator's index, or
+/// a color well's RGBA.
+export fn number(out: Array[UInt8], node: UInt32, value: UInt32) -> Array[UInt8] { words(out, [VALUE, node, value]) }
+
+/// Sets a slider's or stepper's lowest and highest value and its step.
+export fn bounds(out: Array[UInt8], node: UInt32, low: Int32, high: Int32, step: Int32) -> Array[UInt8] {
+  words(out, [BOUNDS, node, signedWord(low), signedWord(high), signedWord(step)])
+}
+
+/// Sets the labels a segmented control or wheel offers, in order.
+export fn options(out: Array[UInt8], node: UInt32, labels: &Array[Str]) -> Array[UInt8] {
+  var bytes = words(out, [OPTIONS, node, count(labels.length())])
+  for label in *labels {
+    bytes = field(bytes, label)
+  }
+  bytes
+}
+
+/// Sets how many pages a page indicator shows.
+export fn pageCount(out: Array[UInt8], node: UInt32, total: UInt32) -> Array[UInt8] { words(out, [COUNT, node, total]) }
+
+/// Sets a date picker's mode and the moment it shows, in whole seconds since
+/// the epoch: the high word, then the low word.
+export fn moment(out: Array[UInt8], node: UInt32, mode: UInt32, seconds: Int64) -> Array[UInt8] {
+  let low = ((seconds % 4294967296i64) + 4294967296i64) % 4294967296i64
+  words(out, [MOMENT, node, mode, signedWord(narrowed((seconds - low) / 4294967296i64)), unsignedWord(low)])
+}
 
 /// Plays a haptic.
 export fn haptic(out: Array[UInt8], code: UInt32) -> Array[UInt8] { words(out, [HAPTIC, code]) }
@@ -252,6 +315,31 @@ fn words(out: Array[UInt8], values: Array[UInt32]) -> Array[UInt8] {
     }
   }
   bytes
+}
+
+/// The word holding `value`'s two's complement bits.
+export fn signedWord(value: Int32) -> UInt32 {
+  let wide = match convertInteger[Int64](value) {
+    case Some(found) => found
+    case None => 0i64
+  }
+  unsignedWord(if wide < 0i64 { wide + 4294967296i64 } else { wide })
+}
+
+// A value known to lie in 0 to 2^32 - 1 as a word.
+fn unsignedWord(value: Int64) -> UInt32 {
+  match convertInteger[UInt32](value) {
+    case Some(found) => found
+    case None => 0u32
+  }
+}
+
+// A value known to lie in the signed 32-bit range.
+fn narrowed(value: Int64) -> Int32 {
+  match convertInteger[Int32](value) {
+    case Some(found) => found
+    case None => 0i32
+  }
 }
 
 // A length as a word.

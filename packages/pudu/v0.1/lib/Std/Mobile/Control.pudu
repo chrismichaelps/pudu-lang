@@ -1,0 +1,193 @@
+module Std.Mobile.Control
+
+import Std.Mobile.Stream as Stream
+
+/// The lowest and highest value a slider or stepper takes and the distance
+/// between neighbouring values. A step below 1 reads as 1 and a high below
+/// the low reads as the low.
+export type Bounds = { low: Int32, high: Int32, step: Int32 }
+
+/// What a date picker chooses: a day, a time of day, or both.
+export type DateMode = Day | Time | DayAndTime
+
+/// A platform control that holds a value. The last word of each control that
+/// reports input is the tag its events carry.
+///
+/// A slider and a stepper hold a value inside their bounds, snapped down to a
+/// step; a segmented control and a wheel hold the index of one of their
+/// labels; a date picker holds whole seconds since the epoch; a text area and
+/// a search field (its hint, then its text) hold text; a symbol shows a
+/// system symbol by name; a page indicator holds a page count and the current
+/// page; a color well holds a color as RGBA with red in the high byte.
+/// Values outside what a control can show are brought inside it before they
+/// reach the platform, so the host never sees an inverted range, an index
+/// past the last label, or a page past the last page.
+export type Control
+  = Slider(Bounds, Int32, UInt32)
+  | Stepper(Bounds, Int32, UInt32)
+  | Segments(Array[Str], UInt32, UInt32)
+  | Wheel(Array[Str], UInt32, UInt32)
+  | Date(DateMode, Int64, UInt32)
+  | TextArea(Str, UInt32)
+  | Search(Str, Str, UInt32)
+  | Symbol(Str)
+  | Pages(UInt32, UInt32, UInt32)
+  | Well(UInt32, UInt32)
+
+/// `out` followed by the words that create node `id` as `control` and give it
+/// everything it shows. Bounds, labels and page counts precede the value
+/// they bound.
+export fn built(out: Array[UInt8], id: UInt32, control: &Control) -> Array[UInt8] {
+  match *control {
+    case Slider(range, value, tag) => ranged(Stream.tag(Stream.create(out, id, Stream.SLIDER), id, tag), id, &range, value)
+    case Stepper(range, value, tag) => ranged(Stream.tag(Stream.create(out, id, Stream.STEPPER), id, tag), id, &range, value)
+    case Segments(labels, index, tag) => listed(Stream.tag(Stream.create(out, id, Stream.SEGMENTS), id, tag), id, &labels, index)
+    case Wheel(labels, index, tag) => listed(Stream.tag(Stream.create(out, id, Stream.WHEEL), id, tag), id, &labels, index)
+    case Date(mode, seconds, tag) => Stream.moment(Stream.tag(Stream.create(out, id, Stream.DATE), id, tag), id, modeCode(mode), seconds)
+    case TextArea(text, tag) => Stream.text(Stream.tag(Stream.create(out, id, Stream.TEXT_AREA), id, tag), id, text)
+    case Search(hint, text, tag) => Stream.text(Stream.hint(Stream.tag(Stream.create(out, id, Stream.SEARCH), id, tag), id, hint), id, text)
+    case Symbol(name) => Stream.text(Stream.create(out, id, Stream.SYMBOL), id, name)
+    case Pages(total, current, tag) => paged(Stream.tag(Stream.create(out, id, Stream.PAGES), id, tag), id, total, current)
+    case Well(rgba, tag) => Stream.number(Stream.tag(Stream.create(out, id, Stream.WELL), id, tag), id, rgba)
+  }
+}
+
+/// `out` followed by the words that turn node `id` from `before` into
+/// `after`, writing only what changed, or nothing when the two are different
+/// kinds of control or carry different tags: the caller then replaces the
+/// node. A changed range or label list resends the value it bounds.
+export fn changed(out: Array[UInt8], id: UInt32, before: &Control, after: &Control) -> Option[Array[UInt8]] {
+  match (*before, *after) {
+    case (Slider(oldRange, oldValue, oldTag), Slider(range, value, tag)) if oldTag == tag => Some(reranged(out, id, &oldRange, oldValue, &range, value))
+    case (Stepper(oldRange, oldValue, oldTag), Stepper(range, value, tag)) if oldTag == tag => Some(reranged(out, id, &oldRange, oldValue, &range, value))
+    // The platform cannot take an empty label list, so emptying one replaces the control.
+    case (Segments(oldLabels, oldIndex, oldTag), Segments(labels, index, tag)) if oldTag == tag && keepsLabels(&oldLabels, &labels) =>
+    Some(relisted(out, id, &oldLabels, oldIndex, &labels, index))
+    case (Wheel(oldLabels, oldIndex, oldTag), Wheel(labels, index, tag)) if oldTag == tag && keepsLabels(&oldLabels, &labels) =>
+    Some(relisted(out, id, &oldLabels, oldIndex, &labels, index))
+    case (Date(oldMode, oldSeconds, oldTag), Date(mode, seconds, tag)) if oldTag == tag =>
+    Some(if oldMode == mode && oldSeconds == seconds { out } else { Stream.moment(out, id, modeCode(mode), seconds) })
+    case (TextArea(oldText, oldTag), TextArea(text, tag)) if oldTag == tag => Some(retexted(out, id, oldText, text))
+    case (Search(oldHint, oldText, oldTag), Search(hint, text, tag)) if oldTag == tag =>
+    Some(retexted(if oldHint == hint { out } else { Stream.hint(out, id, hint) }, id, oldText, text))
+    case (Symbol(oldName), Symbol(name)) => Some(retexted(out, id, oldName, name))
+    case (Pages(oldTotal, oldCurrent, oldTag), Pages(total, current, tag)) if oldTag == tag => Some(repaged(out, id, oldTotal, oldCurrent, total, current))
+    case (Well(oldColor, oldTag), Well(rgba, tag)) if oldTag == tag => Some(if oldColor == rgba { out } else { Stream.number(out, id, rgba) })
+    case _ => None
+  }
+}
+
+/// `bounds` as the platform takes them: a step of at least 1 and a high no
+/// lower than the low.
+export fn shaped(bounds: &Bounds) -> Bounds {
+  Bounds{low: bounds.low, high: if bounds.high < bounds.low { bounds.low } else { bounds.high }, step: if bounds.step < 1i32 { 1i32 } else { bounds.step }}
+}
+
+/// `value` clamped into `bounds` and snapped down to the nearest step above
+/// the low, the value the platform shows.
+export fn snapped(bounds: &Bounds, value: Int32) -> Int32 {
+  let range = shaped(bounds)
+  let low = wide(range.low)
+  let high = wide(range.high)
+  let clamped = if wide(value) < low { low } else if wide(value) > high { high } else { wide(value) }
+  narrow(low + (clamped - low) / wide(range.step) * wide(range.step))
+}
+
+/// `index` brought inside a list of `total` labels: the last label when it
+/// is past the end.
+export fn chosen(total: Int, index: UInt32) -> UInt32 {
+  let last = word(total - 1)
+  if total == 0 { 0u32 } else if index > last { last } else { index }
+}
+
+/// The stream code of a date mode.
+export fn modeCode(mode: DateMode) -> UInt32 {
+  match mode {
+    case Day => 0u32
+    case Time => 1u32
+    case DayAndTime => 2u32
+  }
+}
+
+// Bounds, then the value inside them.
+fn ranged(out: Array[UInt8], id: UInt32, bounds: &Bounds, value: Int32) -> Array[UInt8] {
+  let range = shaped(bounds)
+  Stream.number(Stream.bounds(out, id, range.low, range.high, range.step), id, Stream.signedWord(snapped(&range, value)))
+}
+
+// New bounds resend the value; a value that snaps to what is shown sends nothing.
+fn reranged(out: Array[UInt8], id: UInt32, oldBounds: &Bounds, oldValue: Int32, bounds: &Bounds, value: Int32) -> Array[UInt8] {
+  if shaped(oldBounds) != shaped(bounds) {
+    ranged(out, id, bounds, value)
+  } else if snapped(oldBounds, oldValue) == snapped(bounds, value) {
+    out
+  } else {
+    Stream.number(out, id, Stream.signedWord(snapped(bounds, value)))
+  }
+}
+
+// Labels, then the selected index; an empty list sends neither.
+fn listed(out: Array[UInt8], id: UInt32, labels: &Array[Str], index: UInt32) -> Array[UInt8] {
+  if labels.length() == 0 {
+    out
+  } else {
+    Stream.number(Stream.options(out, id, labels), id, chosen(labels.length(), index))
+  }
+}
+
+fn relisted(out: Array[UInt8], id: UInt32, oldLabels: &Array[Str], oldIndex: UInt32, labels: &Array[Str], index: UInt32) -> Array[UInt8] {
+  if *oldLabels != *labels {
+    listed(out, id, labels, index)
+  } else if labels.length() == 0 || chosen(labels.length(), oldIndex) == chosen(labels.length(), index) {
+    out
+  } else {
+    Stream.number(out, id, chosen(labels.length(), index))
+  }
+}
+
+fn keepsLabels(before: &Array[Str], after: &Array[Str]) -> Bool { after.length() > 0 || before.length() == 0 }
+
+// The page count, then the current page inside it.
+fn paged(out: Array[UInt8], id: UInt32, total: UInt32, current: UInt32) -> Array[UInt8] {
+  Stream.number(Stream.pageCount(out, id, total), id, lastPage(total, current))
+}
+
+fn repaged(out: Array[UInt8], id: UInt32, oldTotal: UInt32, oldCurrent: UInt32, total: UInt32, current: UInt32) -> Array[UInt8] {
+  if oldTotal != total {
+    paged(out, id, total, current)
+  } else if lastPage(oldTotal, oldCurrent) == lastPage(total, current) {
+    out
+  } else {
+    Stream.number(out, id, lastPage(total, current))
+  }
+}
+
+fn lastPage(total: UInt32, current: UInt32) -> UInt32 {
+  if total == 0u32 { 0u32 } else if current >= total { total - 1u32 } else { current }
+}
+
+fn retexted(out: Array[UInt8], id: UInt32, before: Str, after: Str) -> Array[UInt8] {
+  if before == after { out } else { Stream.text(out, id, after) }
+}
+
+fn wide(value: Int32) -> Int64 {
+  match convertInteger[Int64](value) {
+    case Some(found) => found
+    case None => 0i64
+  }
+}
+
+// A value already inside the signed 32-bit range.
+fn narrow(value: Int64) -> Int32 {
+  match convertInteger[Int32](value) {
+    case Some(found) => found
+    case None => 0i32
+  }
+}
+
+fn word(index: Int) -> UInt32 {
+  match convertInteger[UInt32](index) {
+    case Some(found) => found
+    case None => 0u32
+  }
+}

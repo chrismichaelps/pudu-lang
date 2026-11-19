@@ -1,0 +1,99 @@
+module UsesMobileControls
+
+import Std.ByteOrder {readU32LE}
+import Std.Mobile.Control as Control
+import Std.Mobile.Events as Events
+import Std.Mobile.Stream as Stream
+import Std.Mobile.View as View
+
+// The words at `offset` onward, read as little-endian 32-bit values.
+fn wordsAt(bytes: &Array[UInt8], offset: Int, count: Int) -> Array[UInt32] {
+  var found = []
+  for index in 0..count {
+    match readU32LE(bytes, offset + index * 4) {
+      case Some(word) => { found = found.push(word) }
+      case None => { return [] }
+    }
+  }
+  found
+}
+
+fn mounted(control: Control.Control) -> Array[UInt8] {
+  let (_, stream) = View.mount(&View.Control(control))
+  stream.toArray()
+}
+
+// The stream that turns a freshly mounted `shown` into `next`.
+fn changed(shown: Control.Control, next: Control.Control) -> Array[UInt8] {
+  let (held, _) = View.mount(&View.Control(shown))
+  let (_, stream) = View.update(&held, &View.Control(next))
+  stream.toArray()
+}
+
+fn slider(low: Int32, high: Int32, step: Int32, value: Int32, tag: UInt32) -> Control.Control {
+  Control.Slider(Control.Bounds{low: low, high: high, step: step}, value, tag)
+}
+
+export fn main() -> Int {
+  var held = 0
+
+  // A slider: CREATE, TAG, BOUNDS, then the value snapped down to a step, then ROOT.
+  let built = mounted(slider(0i32, 100i32, 10i32, 47i32, 3u32))
+  if built.length() == 64 && wordsAt(&built, 0, 16) == [1u32, 0u32, 12u32, 5u32, 0u32, 3u32, 41u32, 0u32, 0u32, 100u32, 10u32, 29u32, 0u32, 40u32, 4u32, 0u32] { held = held + 1 }
+
+  // An inverted range reads as the low, a step below 1 as 1; the value clamps into the range.
+  let inverted = mounted(slider(5i32, 1i32, 0i32, 9i32, 3u32))
+  if wordsAt(&inverted, 24, 8) == [41u32, 0u32, 5u32, 5u32, 1u32, 29u32, 0u32, 5u32] { held = held + 1 }
+
+  // Negative bounds and values cross as two's complement words.
+  let negative = mounted(slider(-50i32, 50i32, 25i32, -30i32, 3u32))
+  if wordsAt(&negative, 24, 8) == [41u32, 0u32, 4294967246u32, 50u32, 25u32, 29u32, 0u32, 4294967246u32] { held = held + 1 }
+
+  // An update sends a value only when its snapped value moves; new bounds resend it.
+  let moved = changed(slider(0i32, 100i32, 10i32, 47i32, 3u32), slider(0i32, 100i32, 10i32, 52i32, 3u32))
+  if moved.length() == 12 && wordsAt(&moved, 0, 3) == [29u32, 0u32, 50u32] { held = held + 1 }
+  if changed(slider(0i32, 100i32, 10i32, 47i32, 3u32), slider(0i32, 100i32, 10i32, 49i32, 3u32)).length() == 0 { held = held + 1 }
+  let rebounded = changed(slider(0i32, 100i32, 10i32, 47i32, 3u32), slider(0i32, 200i32, 10i32, 47i32, 3u32))
+  if rebounded.length() == 32 && wordsAt(&rebounded, 0, 8) == [41u32, 0u32, 0u32, 200u32, 10u32, 29u32, 0u32, 40u32] { held = held + 1 }
+
+  // A new tag or a different kind of control replaces the node.
+  let retagged = changed(slider(0i32, 100i32, 10i32, 47i32, 3u32), slider(0i32, 100i32, 10i32, 47i32, 4u32))
+  if wordsAt(&retagged, 0, 3) == [1u32, 1u32, 12u32] { held = held + 1 }
+  let rekinded = changed(slider(0i32, 100i32, 10i32, 47i32, 3u32), Control.Stepper(Control.Bounds{low: 0i32, high: 100i32, step: 10i32}, 47i32, 3u32))
+  if wordsAt(&rekinded, 0, 3) == [1u32, 1u32, 13u32] { held = held + 1 }
+
+  // Segments: OPTIONS carries each label length-prefixed, then VALUE clamped to the last label.
+  let segments = mounted(Control.Segments(["A", "B", "C"], 7u32, 2u32))
+  if segments.length() == 71 && wordsAt(&segments, 24, 4) == [42u32, 0u32, 3u32, 1u32] && segments[40] == 65u8 && wordsAt(&segments, 51, 3) == [29u32, 0u32, 2u32] { held = held + 1 }
+
+  // An empty label list sends no OPTIONS and no VALUE, and emptying a list replaces the control.
+  if mounted(Control.Wheel([], 0u32, 2u32)).length() == 32 { held = held + 1 }
+  if wordsAt(&changed(Control.Wheel(["A"], 0u32, 2u32), Control.Wheel([], 0u32, 2u32)), 0, 3) == [1u32, 1u32, 15u32] { held = held + 1 }
+  let reselected = changed(Control.Segments(["A", "B"], 0u32, 2u32), Control.Segments(["A", "B"], 1u32, 2u32))
+  if reselected.length() == 12 && wordsAt(&reselected, 0, 3) == [29u32, 0u32, 1u32] { held = held + 1 }
+
+  // A date picker's moment crosses as its mode, then the seconds' high and low words.
+  let day = mounted(Control.Date(Control.Day, 1000000000i64, 6u32))
+  if wordsAt(&day, 24, 5) == [44u32, 0u32, 0u32, 0u32, 1000000000u32] { held = held + 1 }
+  if wordsAt(&mounted(Control.Date(Control.Time, 5000000000i64, 6u32)), 24, 5) == [44u32, 0u32, 1u32, 1u32, 705032704u32] { held = held + 1 }
+  if wordsAt(&mounted(Control.Date(Control.DayAndTime, -1i64, 6u32)), 24, 5) == [44u32, 0u32, 2u32, 4294967295u32, 4294967295u32] { held = held + 1 }
+
+  // Pages: COUNT, then the current page clamped to the last; a well's color is one VALUE.
+  if wordsAt(&mounted(Control.Pages(3u32, 9u32, 1u32)), 24, 6) == [43u32, 0u32, 3u32, 29u32, 0u32, 2u32] { held = held + 1 }
+  if wordsAt(&mounted(Control.Well(4286578943u32, 5u32)), 24, 3) == [29u32, 0u32, 4286578943u32] { held = held + 1 }
+
+  // Text kinds: a symbol takes only its name; a search field its hint, then its text.
+  let symbol = mounted(Control.Symbol("star"))
+  if symbol.length() == 36 && wordsAt(&symbol, 0, 6) == [1u32, 0u32, 19u32, 2u32, 0u32, 4u32] { held = held + 1 }
+  let search = mounted(Control.Search("Find", "", 8u32))
+  if wordsAt(&search, 0, 9) == [1u32, 0u32, 18u32, 5u32, 0u32, 8u32, 8u32, 0u32, 4u32] && wordsAt(&search, 40, 3) == [2u32, 0u32, 0u32] { held = held + 1 }
+  if changed(Control.TextArea("a", 9u32), Control.TextArea("a", 9u32)).length() == 0 { held = held + 1 }
+
+  // Events: a value as a signed detail word, a color as RGBA, a moment as two words.
+  if Events.carriesDetail(21u64 << 32) && Events.eventWithDetail((21u64 << 32) | 3u64, "", Stream.signedWord(-50i32)) == View.Valued(3u32, -50i32) { held = held + 1 }
+  if Events.eventWithDetail((22u64 << 32) | 5u64, "", 4286578943u32) == View.Colored(5u32, 4286578943u32) { held = held + 1 }
+  if Events.carriesWords(23u64 << 32) && Events.eventWithWords((23u64 << 32) | 6u64, "", 0u32, [1i32, 705032704i32]) == View.Dated(6u32, 5000000000i64) { held = held + 1 }
+  if Events.eventWithWords((23u64 << 32) | 6u64, "", 0u32, [-1i32, -1i32]) == View.Dated(6u32, -1i64) { held = held + 1 }
+  if Events.eventWithWords((23u64 << 32) | 6u64, "", 0u32, [1i32]) == View.Stopped { held = held + 1 }
+  held
+}

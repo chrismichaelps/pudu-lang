@@ -367,6 +367,7 @@ tags: [moc, module]
 - [[pudu_ios_fetch.h]] — URL session host: FETCH, CANCEL, WAKE, FETCHED, WOKE and MEMORY.
 - [[pudu_ios_refresh.h]] — UIKit refresh control: pulls reported and the indicator driven by the program's state.
 - [[Uses Mobile Refresh]] — stdlib fixture for the refresh stream and the insets event.
+- [[Uses Mobile Controls]] — stdlib fixture for the value controls: build and change words, normalization and value events (#934).
 - [[Pudu Compiler Program Eval Data Spec]] — data evaluation spec, including the mobile fixture counts.
 - [[Uses Mobile Memo]] — stdlib fixture for memoized subtrees, render counters and site keys.
 - [[Memo Render Lambda]] · [[Memo Render Local]] — refusal fixtures: a memo render that is a lambda or a local binding is E3103.
