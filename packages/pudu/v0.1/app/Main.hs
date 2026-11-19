@@ -62,6 +62,8 @@ import Pudu.Backend.Target (NativeTarget (..), TargetRefusal (..), nativeTargetN
 import Pudu.Cli.Doctor (runDoctor)
 import Pudu.Backend.Toolchain.App (AppRequest (..), bundleIdentifier, compileApp)
 import Pudu.Backend.Toolchain.Assets (assetDirectory)
+import Pudu.Backend.Permissions (PermissionProblem (..), requestedKinds, settlePermissions)
+import Pudu.Compiler.Manifest (findManifestRoot, manifestPermissions, readManifest)
 import Pudu.Backend.Toolchain.Library (LibraryProducts (..), LibraryRequest (..), compileLibrary)
 import Pudu.Backend.Toolchain
   ( ToolchainFailure (..)
@@ -817,10 +819,17 @@ buildNativeProgram style path target requested = do
               [] | app -> do
                 let name = Text.pack (defaultTargetName path)
                 assets <- assetDirectory path
+                entries <- maybe (pure []) (fmap manifestPermissions . readManifest) =<< findManifestRoot (takeDirectory path)
+                let (problems, permissions, unused) = settlePermissions entries (requestedKinds core)
+                    at = moduleSpan parsed
+                unless (null problems) $ do
+                  TextIO.putStrLn (renderProgramDiagnostics style program (map (permissionDiagnostic at) problems))
+                  exitFailure
+                mapM_ (TextIO.putStrLn . Native.permissionUnused) unused
                 compiled <- compileApp AppRequest
                   { appSource = emittedSource unit, appOutput = target, appTarget = chosen
                   , appExports = emittedExports unit, appName = name, appIdentifier = bundleIdentifier name
-                  , appAssets = assets }
+                  , appAssets = assets, appPermissions = permissions }
                 case compiled of
                   Left failure -> toolchainFailed style program (moduleSpan parsed) failure
                   Right (warnings, findings) -> do
@@ -864,6 +873,13 @@ toolchainDiagnostic spanValue failure = case failure of
     Native.targetRefusal spanValue target "a native build" "its shared-library output is designed but not built yet"
   ToolchainOutsideLedger target finding -> Native.ledgerRefusal spanValue target finding
   ToolchainAssetRefused reason -> Native.assetRefused spanValue reason
+
+{-| A manifest permission problem as a diagnostic at the root module. -}
+permissionDiagnostic :: Span -> PermissionProblem -> Diagnostic
+permissionDiagnostic spanValue problem = case problem of
+  Undeclared key -> Native.permissionUndeclared spanValue key
+  Unknown key line -> Native.permissionUnknown spanValue key line
+  ReasonMissing key line -> Native.permissionReasonMissing spanValue key line
 
 buildProgram :: RenderStyle -> FilePath -> FilePath -> Maybe FilePath -> IO ()
 buildProgram style path target runtime = do

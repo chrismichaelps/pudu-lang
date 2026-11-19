@@ -144,10 +144,18 @@ public final class PuduActivity extends Activity {
 
   @Override protected void onResume() {
     super.onResume();
+    PuduPermission.foreground = true;
+    PuduPermission.resumed();
     PuduBridge.event(LIFECYCLE, 0, null, ACTIVE, null);
   }
 
+  @Override public void onRequestPermissionsResult(int code, String[] permissions, int[] results) {
+    super.onRequestPermissionsResult(code, permissions, results);
+    PuduPermission.answered(code);
+  }
+
   @Override protected void onPause() {
+    PuduPermission.foreground = false;
     PuduBridge.event(LIFECYCLE, 0, null, INACTIVE, null);
     super.onPause();
   }

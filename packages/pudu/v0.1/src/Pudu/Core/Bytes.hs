@@ -1,6 +1,8 @@
 {-| @Core.Bytes — closed byte-sequence operations shared by lowering and emission. -}
 module Pudu.Core.Bytes (CoreBytesMethodName (..)) where
 
+import Data.Data (Data)
+
 data CoreBytesMethodName
   = BytesOfArray
   | BytesFromText
@@ -21,4 +23,4 @@ data CoreBytesMethodName
   | BytesToArrayOf
   | BytesIsText
   | BytesAsText
-  deriving stock (Eq, Show)
+  deriving stock (Data, Eq, Show)

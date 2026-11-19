@@ -162,4 +162,32 @@ static void pudu_do_status(JNIEnv *env, pudu_reader *reader) {
   pudu_bridge(env, "status", "(IZ)V", (jint)style, (jboolean)(hidden == 1));
 }
 
+/* PERMISSIONS: a count, then each kind; PERMISSION: one kind; SETTINGS: none.
+   The build declares every kind a program can name, so only an unknown code
+   is refused here. */
+static uint32_t pudu_permission_kind(pudu_reader *reader) {
+  uint32_t kind = pudu_word(reader);
+  if (kind >= 11) pudu_stream_defect("named unknown permission", kind);
+  return kind;
+}
+
+static void pudu_do_permissions(JNIEnv *env, pudu_reader *reader) {
+  uint32_t count = pudu_word(reader);
+  jintArray kinds = (*env)->NewIntArray(env, (jsize)count);
+  for (uint32_t i = 0; i < count; i++) {
+    jint kind = (jint)pudu_permission_kind(reader);
+    (*env)->SetIntArrayRegion(env, kinds, (jsize)i, 1, &kind);
+  }
+  pudu_bridge(env, "permissions", "([I)V", kinds);
+}
+
+static void pudu_do_permission(JNIEnv *env, pudu_reader *reader) {
+  pudu_bridge(env, "permission", "(I)V", (jint)pudu_permission_kind(reader));
+}
+
+static void pudu_do_settings(JNIEnv *env, pudu_reader *reader) {
+  (void)reader;
+  pudu_bridge(env, "settings", "()V");
+}
+
 #endif

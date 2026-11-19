@@ -17,6 +17,7 @@ module Pudu.Foreign.Callback
   , callbackPairs
   ) where
 
+import Data.Data (Data)
 import Control.Monad (foldM, guard, unless, when)
 import Data.Maybe (isJust)
 import Data.List.NonEmpty (NonEmpty (..))
@@ -71,7 +72,7 @@ data CallbackPlacement
   | RegistrationContext !Int
   {-| One native pointer to a block literal whose invoke is the trampoline. -}
   | BlockCallback !Int
-  deriving stock (Eq, Ord, Show)
+  deriving stock (Data, Eq, Ord, Show)
 
 data CallbackPair = CallbackPair
   { callbackPlacement :: !CallbackPlacement

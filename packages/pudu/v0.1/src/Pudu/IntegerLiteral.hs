@@ -28,6 +28,7 @@ module Pudu.IntegerLiteral
   , splitIntegerSuffix
   ) where
 
+import Data.Data (Data)
 import GHC.Generics (Generic)
 import Data.Bits (complement, shiftL, shiftR, xor, (.&.), (.|.))
 import Data.Int (Int8, Int16, Int32, Int64)
@@ -88,7 +89,7 @@ data IntegerKind
   | PlatformSigned
   | PlatformUnsigned
   | BigIntKind
-  deriving stock (Eq, Ord, Show, Generic)
+  deriving stock (Data, Eq, Ord, Show, Generic)
 
 {-| The pointer width this build targets.
 

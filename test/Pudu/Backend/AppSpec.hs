@@ -21,7 +21,7 @@ testIdentifier = conjoin
 
 testPlist :: Property
 testPlist =
-  let plist = infoPlist "A&B" "org.pudu.A-B"
+  let plist = infoPlist "A&B" "org.pudu.A-B" []
       has fragment = counterexample (Text.unpack fragment) (property (fragment `Text.isInfixOf` plist))
    in conjoin
         [ has "<key>CFBundleIdentifier</key><string>org.pudu.A-B</string>"

@@ -377,3 +377,4 @@ tags: [moc, module]
 - [[Uses Mobile Memo]] — stdlib fixture for memoized subtrees, render counters and site keys.
 - [[Memo Render Lambda]] · [[Memo Render Local]] — refusal fixtures: a memo render that is a lambda or a local binding is E3103.
 - [[Native Render Skipping]] — cost model and three-part plan for skipping unchanged native rendering.
+- [[Permissions Spec]] · [[Uses Mobile Permission]] · [[Permissions Example]] — permission properties, stdlib fixture and example (#976).

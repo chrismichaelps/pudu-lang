@@ -29,6 +29,7 @@
 #include "pudu_ios_refresh.h"
 #include "pudu_ios_fetch.h"
 #include "pudu_ios_system.h"
+#include "pudu_ios_permission.h"
 #include "pudu_ios_capability_test.h"
 
 /* Each node's color role from COLOR, or PUDU_ROLE_DEFAULT. */
@@ -317,7 +318,8 @@ static void (*const pudu_instruction_table[PUDU_UI_INSTRUCTIONS])(pudu_reader *)
   [PUDU_UI_WAKE] = pudu_do_wake, [PUDU_UI_BOUNDS] = pudu_do_bounds, [PUDU_UI_OPTIONS] = pudu_do_options,
   [PUDU_UI_COUNT] = pudu_do_count, [PUDU_UI_MOMENT] = pudu_do_moment, [PUDU_UI_SOURCE] = pudu_do_source,
   [PUDU_UI_OPEN] = pudu_do_open, [PUDU_UI_SHARE] = pudu_do_share, [PUDU_UI_COPY] = pudu_do_copy, [PUDU_UI_PASTE] = pudu_do_paste,
-  [PUDU_UI_STATUS] = pudu_do_status,
+  [PUDU_UI_STATUS] = pudu_do_status, [PUDU_UI_PERMISSIONS] = pudu_do_permissions, [PUDU_UI_PERMISSION] = pudu_do_permission,
+  [PUDU_UI_SETTINGS] = pudu_do_settings,
 };
 
 /* Applies one commit: every instruction in order, in one call. */
@@ -394,6 +396,10 @@ static void pudu_report(UIView *view) {
 - (void)selfTest {
   if (getenv("PUDU_UI_CAPABILITY_TEST") != NULL) {
     pudu_test_capabilities(pudu_nodes, ^{ pudu_queue(PUDU_UI_STOPPED, 0, nil, 0); });
+    return;
+  }
+  if (getenv("PUDU_UI_PERMISSION_TEST") != NULL) {
+    pudu_test_permissions(^{ pudu_queue(PUDU_UI_STOPPED, 0, nil, 0); });
     return;
   }
   if (getenv("PUDU_UI_SYSTEM_TEST") != NULL) {

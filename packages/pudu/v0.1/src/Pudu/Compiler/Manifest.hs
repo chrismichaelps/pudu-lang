@@ -85,6 +85,9 @@ data Manifest = Manifest
   , manifestKeywords :: ![Text]
   , manifestInstall :: ![(Text, Text)]
   -- ^ The keys of the `[install]` table, such as `registry` and `min-release-age`.
+  , manifestPermissions :: ![(Text, Text, Int)]
+  -- ^ The `[app.permissions]` table: each permission key, the reason the
+  -- person reads, and its line, in written order.
   }
   deriving stock (Eq, Show)
 
@@ -115,7 +118,7 @@ data ManifestSnapshot = ManifestSnapshot
   ![FilePath]
 
 emptyManifest :: Manifest
-emptyManifest = Manifest Nothing Nothing Nothing [] Nothing Nothing Nothing Nothing [] []
+emptyManifest = Manifest Nothing Nothing Nothing [] Nothing Nothing Nothing Nothing [] [] []
 
 {-| Read `pudu.toml` from a project root, answering an empty manifest when
     there is none.
@@ -345,6 +348,8 @@ parseManifest contents = go (zip [1 ..] (Text.lines contents)) "" emptyManifest
                                   : manifestDependencies manifest
                             }
                 | section == "install" -> go rest section manifest{manifestInstall = manifestInstall manifest <> [(unquote rawKey, unquote value)]}
+                | section == "app.permissions" ->
+                    go rest section manifest{manifestPermissions = manifestPermissions manifest <> [(unquote rawKey, unquote value, number)]}
                 | otherwise -> go rest section manifest
   packageField key value manifest = case key of
     "name" -> manifest{manifestName = Just (unquote value)}

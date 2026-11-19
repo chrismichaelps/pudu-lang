@@ -67,7 +67,14 @@ Exports:
 - COPY (48): the text. Writer `copy(out, clipped)`.
 - PASTE (49): tag. Writer `paste(out, tag)`.
 - STATUS (50): style code (0 automatic, 1 light text, 2 dark text), then the hidden flag (0 or 1). Writer `status(out, code, hidden)`.
-- The instruction bound is now 51. Codes 46 to 50 are OPEN, SHARE, COPY, PASTE and STATUS.
+- The instruction bound is now 54. Codes 46 to 50 are OPEN, SHARE, COPY, PASTE and STATUS.
+
+## Permission requests (#976)
+
+- PERMISSIONS (51): a count, then each kind code. Writer `permissions(out, codes: &Array[UInt32])`. The host answers one PERMISSIONED per code, without a prompt.
+- PERMISSION (52): one kind code. Writer `permission(out, code)`. The host asks the person when the kind is NotAsked.
+- SETTINGS (53): no payload. Writer `settings(out)`. The host opens the application's page in the platform settings.
+- Codes 51 to 53 are PERMISSIONS, PERMISSION and SETTINGS. Kind codes are those of [[Std Mobile Permission]].
 
 ## Invariants
 

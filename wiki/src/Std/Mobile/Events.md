@@ -24,7 +24,7 @@ Exports:
 - `eventWithDetail(raw: UInt64, text: Str, detail: UInt32) -> View.Event`: decodes a detailed event with the detail word the host fetched.
 - `eventWithWords(raw: UInt64, text: Str, detail: UInt32, values: Array[Int32]) -> View.Event`: decodes an event with its detail word and signed words. A measured kind decodes through `MEASURED`, a detailed kind through `DETAILED`, and every other kind through `event`.
 
-Kind codes: IMAGED 24 (#973); OPENED 25, SHARED 26 and PASTED 27 (#974); TAPPED 1, Stopped 2 (the host's stop), CHANGED 3, SWITCHED_ON 4, SWITCHED_OFF 5, REACHED 8, GESTURED 9, CHOSE 10, RESIZED 11, LIFECYCLE 12, PICKED 13, POPPED 14, DISMISSED 15, REFRESHED 16, INSETS 17, FETCHED 18, WOKE 19, MEMORY 20, VALUED 21, COLORED 22, DATED 23.
+Kind codes: IMAGED 24 (#973); OPENED 25, SHARED 26 and PASTED 27 (#974); PERMISSIONED 28 (#976); TAPPED 1, Stopped 2 (the host's stop), CHANGED 3, SWITCHED_ON 4, SWITCHED_OFF 5, REACHED 8, GESTURED 9, CHOSE 10, RESIZED 11, LIFECYCLE 12, PICKED 13, POPPED 14, DISMISSED 15, REFRESHED 16, INSETS 17, FETCHED 18, WOKE 19, MEMORY 20, VALUED 21, COLORED 22, DATED 23.
 
 Event payloads by kind:
 - POPPED (14): the tag is the route that was on top, and the detail word is the surviving destination route.
@@ -54,6 +54,7 @@ Dispatch is three constant tables:
 - OPENED (25): the tag is the open request; the detail word is 1 when the platform opened the URL and 0 when it did not. Decodes to `Opened(tag, opened)` through `flagged`.
 - SHARED (26): the tag is the share request; the detail word is 1 when the person shared or, on Android, when the chooser opened, and 0 when the sheet closed without a share. Decodes to `Shared(tag, shared)` through `flagged`.
 - PASTED (27): the tag is the paste request and its text is the clipboard's text, empty when there was none. PASTED is listed in `EVENTS`, so its text is fetched and it decodes to `Pasted(tag, text)`.
+- PERMISSIONED (28): the tag is the permission kind code and the detail word is the state code. Kind codes and state codes are those of [[Std Mobile Permission]]. The kind is read through `kindOf` and the state through `stateOf`, and the event decodes to `Permissioned(kind, state)`. A kind code past 10, or a state code past 6, decodes to `Stopped`. Kind 28 is listed in `DETAILED`, so the detail word is fetched first.
 - Any other detail word for OPENED or SHARED reads as `Stopped`.
 
 ## Invariants

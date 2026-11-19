@@ -150,3 +150,5 @@ aliases: [Backend Module Map]
 - [[Native Android Activity]] — the single launcher activity, lifecycle and size reporting, self-test gate.
 
 - [[Backend Frame Slots]] · [[Backend Frame Slot References]] — physical slot reuse for generated C11.
+- [[Pudu Backend Permissions]] — declared permissions settled against requested kinds, and per-kind platform declarations (#976).
+- [[PuduPermission]] — Android permission state by API level, first-request memory, and settings page (#976).

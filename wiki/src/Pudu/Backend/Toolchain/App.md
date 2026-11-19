@@ -101,3 +101,7 @@ the simulator run [[iOS Simulator Run]].
 Resolved Grill Log: materialize the embedded layout header alongside the host translation unit in the existing include directory and link CoreGraphics for the geometry checks. No second compiler invocation is needed. See [[iOS Host Layout]].
 
 - **Q:** Why link QuartzCore? **A:** The host reads the media clock for first-frame timing and self-test deadlines, and display-link frame pacing needs the same framework.
+
+## Permission declarations (#976)
+
+The declared permissions of [[Pudu Backend Permissions]] add to the bundle. Each declared kind's usage keys are written into `Info.plist` with the reason the person reads, so a kind the application declares has its prompt text and one it does not declare has none. The compile flags `-DPUDU_PERMISSION_<KIND>=1` select the host code of each declared kind, and the frameworks of those kinds are linked after the base frameworks.

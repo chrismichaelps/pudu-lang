@@ -1,0 +1,128 @@
+module Std.Mobile.Permission
+
+import Std.Mobile.Stream as Stream
+
+/// A protected capability the platform asks the person to allow. Each kind a
+/// program requests must be declared, with the reason the person reads, in
+/// its manifest's `[app.permissions]` table; the build refuses a request for
+/// an undeclared kind and writes the platform declarations for the rest.
+export type Kind
+  = Camera
+  | Microphone
+  | Photos
+  | PhotosAdd
+  | Location
+  | LocationAlways
+  | Notifications
+  | Contacts
+  | Calendar
+  | Bluetooth
+  | Motion
+
+/// Where a kind stands: never asked; allowed; allowed in part (some photos or
+/// contacts, or approximate location); allowed quietly (notifications
+/// delivered without interrupting); refused but the program may ask again;
+/// refused so only the platform's settings can allow it; or impossible on
+/// this device or under its restrictions.
+export type State = NotAsked | Granted | Limited | Provisional | Denied | Blocked | Unavailable
+
+/// The latest state the platform reported for each kind; a kind it has not
+/// reported is absent.
+export type Table = { states: Map[Kind, State] }
+
+/// Each kind's stream code, in declaration order.
+const KINDS: Array[Kind] = [Camera, Microphone, Photos, PhotosAdd, Location, LocationAlways, Notifications, Contacts, Calendar, Bluetooth, Motion]
+
+/// Each state's stream code, in declaration order.
+const STATES: Array[State] = [NotAsked, Granted, Limited, Provisional, Denied, Blocked, Unavailable]
+
+/// Each kind's stream code, its index in `KINDS`.
+const CODES: Map[Kind, UInt32] = mapOf([
+    (Camera, 0u32),
+    (Microphone, 1u32),
+    (Photos, 2u32),
+    (PhotosAdd, 3u32),
+    (Location, 4u32),
+    (LocationAlways, 5u32),
+    (Notifications, 6u32),
+    (Contacts, 7u32),
+    (Calendar, 8u32),
+    (Bluetooth, 9u32),
+    (Motion, 10u32)
+  ])
+
+/// The manifest key that declares each kind.
+const KEYS: Map[Kind, Str] = mapOf([
+    (Camera, "camera"),
+    (Microphone, "microphone"),
+    (Photos, "photos"),
+    (PhotosAdd, "photos-add"),
+    (Location, "location"),
+    (LocationAlways, "location-always"),
+    (Notifications, "notifications"),
+    (Contacts, "contacts"),
+    (Calendar, "calendar"),
+    (Bluetooth, "bluetooth"),
+    (Motion, "motion")
+  ])
+
+/// A commit asking the platform where `kinds` stand, without prompting; each
+/// answers as `Permissioned(kind, state)`.
+export fn check(kinds: &Array[Kind]) -> Bytes { bytesOf(Stream.permissions([], &kinds.map(|kind: Kind| kindCode(kind)))) }
+
+/// A commit asking the person to allow `kind`. The platform shows one prompt
+/// at a time, only while the application is in front; a kind already
+/// answered is not asked again and simply reports its state.
+export fn request(kind: Kind) -> Bytes { bytesOf(Stream.permission([], kindCode(kind))) }
+
+/// A commit opening the application's page in the platform's settings, the
+/// only place a Blocked kind can be allowed.
+export fn settings() -> Bytes { bytesOf(Stream.settings([])) }
+
+/// A table that knows nothing yet.
+export fn table() -> Table { Table{states: mapOf([])} }
+
+/// The table after the platform reported `state` for `kind`.
+export fn recorded(held: Table, kind: Kind, state: State) -> Table { Table{states: held.states.insert(kind, state)} }
+
+/// What the platform last reported for `kind`, or nothing yet.
+export fn status(held: &Table, kind: Kind) -> Option[State] { held.states.get(kind) }
+
+/// Whether `state` lets the program use the capability, in full or in part.
+export fn allows(state: State) -> Bool {
+  match state {
+    case Granted => true
+    case Limited => true
+    case Provisional => true
+    case _ => false
+  }
+}
+
+/// The manifest key that declares `kind`.
+export fn key(kind: Kind) -> Str {
+  match KEYS.get(kind) {
+    case Some(found) => found
+    case None => ""
+  }
+}
+
+/// The stream code of `kind`.
+export fn kindCode(kind: Kind) -> UInt32 {
+  match CODES.get(kind) {
+    case Some(code) => code
+    case None => 0u32
+  }
+}
+
+/// The kind a stream code names, or nothing for a code no host writes.
+export fn kindOf(code: UInt32) -> Option[Kind] { at(&KINDS, code) }
+
+/// The state a stream code names, or nothing for a code no host writes.
+export fn stateOf(code: UInt32) -> Option[State] { at(&STATES, code) }
+
+fn at[T](values: &Array[T], code: UInt32) -> Option[T] {
+  match convertInteger[Int](code) {
+    case Some(index) if index < values.length() => Some(values[index])
+    case _ => None
+  }
+}

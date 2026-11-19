@@ -266,3 +266,4 @@ STARTTLS use [[Std Tls]]. [[Std Compress Gzip]] delegates to [[Eval Compress]] a
 - [[Std Mobile Resource]] — pure table of keyed network requests, retries and the commands for the host.
 - [[Std Mobile Memo]] — keyed constructor of memoized subtrees for the view stream, with a `@static_function` render type.
 - [[Std Mobile Control]] — value controls (slider through color well) as built and changed instruction words, with normalization (#934).
+- [[Std Mobile Permission]] — closed permission kinds and states, and the request commits for them (#976).

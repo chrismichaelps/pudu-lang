@@ -441,3 +441,4 @@ tags: [moc, handoff]
 - [[Native iOS Navigation Delivery]] — native route identity, pop completion and page sheets (#920).
 - [[Native iOS Refresh Delivery]] — pull to refresh and safe-area insets, stacked on the navigation branch (#962).
 - [[2026-11-18-render-skipping]] — memoized native subtrees and render counters, first part of render skipping (#963).
+- [[Native Permissions]] — declared, build-checked permissions and the state model (#976).

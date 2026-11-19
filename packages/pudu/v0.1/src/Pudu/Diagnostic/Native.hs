@@ -8,13 +8,18 @@
     and `E6008` are a mobile target's missing SDK and refused construct;
     `E6009`, `E6010`, `W6011` and `W6012` are the platform ledger's findings
     about the installed toolchain; `E6013` refuses an asset an application
-    cannot carry. Spans
+    cannot carry; `E6014`–`E6016` refuse an application's permissions and
+    `W6017` reports one declared but never requested. Spans
     point at the program being built — the refused construct, or the root
     module's first token for environment failures — so the ordinary renderer
     shows a real file and line.
 -}
 module Pudu.Diagnostic.Native
   ( assetRefused
+  , permissionReasonMissing
+  , permissionUndeclared
+  , permissionUnknown
+  , permissionUnused
   , ledgerFindingLine
   , ledgerRefusal
   , ledgerWarning
@@ -92,6 +97,33 @@ assetRefused spanValue reason =
   buildDiagnostic "E6013" spanValue
     ("the application's assets cannot be packaged: " <> reason)
     (Just "asset names use ASCII letters, digits, dots, dashes and underscores; copy linked files into the assets directory")
+
+{-| A permission the program can request that its manifest does not
+    declare: the platform would refuse the request, or stop the application. -}
+permissionUndeclared :: Span -> Text -> Diagnostic
+permissionUndeclared spanValue key =
+  buildDiagnostic "E6014" spanValue
+    ("the program can request the " <> key <> " permission, which the manifest does not declare")
+    (Just ("add `" <> key <> " = \"<the reason the person reads>\"` under [app.permissions] in pudu.toml"))
+
+{-| A manifest permission key no kind has. -}
+permissionUnknown :: Span -> Text -> Int -> Diagnostic
+permissionUnknown spanValue key line =
+  buildDiagnostic "E6015" spanValue
+    ("pudu.toml line " <> Text.pack (show line) <> " declares an unknown permission, " <> key)
+    (Just "permissions are camera, microphone, photos, photos-add, location, location-always, notifications, contacts, calendar, bluetooth and motion")
+
+{-| A declared permission without the reason the person reads. -}
+permissionReasonMissing :: Span -> Text -> Int -> Diagnostic
+permissionReasonMissing spanValue key line =
+  buildDiagnostic "E6016" spanValue
+    ("pudu.toml line " <> Text.pack (show line) <> " declares the " <> key <> " permission without a reason")
+    (Just "the platform shows the reason when it asks; say what the application does with the permission")
+
+{-| A declared permission nothing in the program requests; review rejects an
+    application that declares a capability it never uses. -}
+permissionUnused :: Text -> Text
+permissionUnused key = "warning[W6017]: the manifest declares the " <> key <> " permission, which the program never requests"
 
 {-| A mobile target whose platform SDK was not found, naming what was looked
     for. -}

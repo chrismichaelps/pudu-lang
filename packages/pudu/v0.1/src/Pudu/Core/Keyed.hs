@@ -1,6 +1,8 @@
 {-| @Core.Keyed — closed map/set operations shared by lowering and emission. -}
 module Pudu.Core.Keyed (CoreKeyedMethodName (..)) where
 
+import Data.Data (Data)
+
 {-| Lookup follows a successful contains test; FromArray reads typed pairs
     or members. Word operations require identical UInt64-valued map types. -}
 data CoreKeyedMethodName
@@ -32,4 +34,4 @@ data CoreKeyedMethodName
   | KeyedMixHash
   {-| `hashOf` of text, bytes or an integer: the receiver is the value. -}
   | KeyedHash
-  deriving stock (Eq, Show)
+  deriving stock (Data, Eq, Show)

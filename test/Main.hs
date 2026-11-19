@@ -52,6 +52,7 @@ import Pudu.Backend.EmitSpec (backendEmitProperties)
 import Pudu.Backend.OutputSpec (outputProperties, runOutputOracle)
 import Pudu.Backend.NativeSpec (backendNativeProperties)
 import Pudu.Backend.AssetsSpec (assetProperties)
+import Pudu.Backend.PermissionsSpec (permissionProperties)
 import Pudu.Backend.LedgerSpec (ledgerProperties)
 import Pudu.Backend.TargetSpec (backendTargetProperties)
 import Pudu.Backend.ExportSpec (exportProperties)
@@ -158,7 +159,7 @@ runTests = do
   renderOutcomes <- traverse (uncurry check) renderProperties
   programOutcomes <- traverse (uncurry check) (programProperties <> authenticationProperties)
   persistOutcomes <- traverse (uncurry check) persistProperties
-  backendOutcomes <- traverse (uncurry check) (outputProperties <> memoryProperties <> floatRuntimeProperties <> floatValueProperties <> floatFormatProperties <> floatNaturalProperties <> wideFrameProperties <> textLeakProperties <> textCaseProperties <> brokenPipeProperties <> wideRuntimeProperties <> wideOperationProperties <> wideValueProperties <> word128Properties <> frameRuntimeProperties <> frameEmitProperties <> frameProperties <> lowerTypesProperties <> backendEmitProperties <> backendNativeProperties <> backendToolchainProperties <> backendTargetProperties <> ledgerProperties <> assetProperties <> exportProperties <> directCallProperties <> appProperties)
+  backendOutcomes <- traverse (uncurry check) (outputProperties <> memoryProperties <> floatRuntimeProperties <> floatValueProperties <> floatFormatProperties <> floatNaturalProperties <> wideFrameProperties <> textLeakProperties <> textCaseProperties <> brokenPipeProperties <> wideRuntimeProperties <> wideOperationProperties <> wideValueProperties <> word128Properties <> frameRuntimeProperties <> frameEmitProperties <> frameProperties <> lowerTypesProperties <> backendEmitProperties <> backendNativeProperties <> backendToolchainProperties <> backendTargetProperties <> ledgerProperties <> assetProperties <> permissionProperties <> exportProperties <> directCallProperties <> appProperties)
   literalsOutcomes <- traverse (uncurry check) literalsProperties
   initOutcomes <- traverse (uncurry check) initProperties
   packageOutcomes <- traverse (uncurry check) packageProperties

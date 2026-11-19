@@ -48,8 +48,8 @@ androidTestBuilds = conjoin
   ]
  where
   marker = "android:name=\"org.pudu.selftest\""
-  release = packageManifest False "Counter"
-  test = packageManifest True "Counter"
+  release = packageManifest False "Counter" []
+  test = packageManifest True "Counter" []
 
 targetPaths :: Property
 targetPaths = withTarget "ios-simulator-arm64" $ \ios ->

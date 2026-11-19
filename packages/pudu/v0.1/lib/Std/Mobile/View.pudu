@@ -4,6 +4,7 @@ import Std.Mobile.Access as Access
 import Std.Mobile.Control as Controls
 import Std.Mobile.Feedback as Feedback
 import Std.Mobile.Gesture as Gesture
+import Std.Mobile.Permission as Permission
 import Std.Mobile.Scene as Scene
 import Std.Mobile.Stream as Stream
 import Std.Mobile.Theme as Theme
@@ -48,19 +49,11 @@ export type View
 /// have no row.
 export type Window = { tag: UInt32, total: UInt32, first: UInt32, columns: UInt32, rows: Array[(Str, View)] }
 
-/// What the platform reported: a button's tag was tapped, a field's text
-/// changed, a toggle was switched, a list's visible range neared the edge of
-/// its window (its tag and first visible item), the user popped the
-/// navigation from a top route to a destination route below it, the user
-/// dismissed a sheet, the user pulled a refresh control with a tag, the
-/// screen's safe-area insets changed, a request generation answered (its
-/// status, body and Retry-After delay), a requested wake time arrived, the
-/// platform ran short of memory, a value control's value, index or page was
-/// set by the person, a color well's color or a date picker's moment was
-/// chosen, an image's source loaded or failed, a URL was opened or not, the
-/// share sheet closed, the clipboard's text arrived, or the host asked the
-/// program to stop. Std.Mobile.Events decodes
-/// them from the host's words.
+/// What the platform reported: the person's input to a control, a list's
+/// window, navigation and sheet changes, scene size, insets and lifecycle, an
+/// answered request or wake, a value control's new value, an image load, a
+/// system request's answer, a permission's state, or the host's stop. Each
+/// payload is described where its kind is decoded, in Std.Mobile.Events.
 export type Event
   = Tapped(UInt32)
   | Changed(UInt32, Str)
@@ -85,6 +78,7 @@ export type Event
   | Opened(UInt32, Bool)
   | Shared(UInt32, Bool)
   | Pasted(UInt32, Str)
+  | Permissioned(Permission.Kind, Permission.State)
   | Stopped
 
 /// A node the platform shows: its id, the view it shows, and the nodes of

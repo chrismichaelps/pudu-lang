@@ -40,6 +40,7 @@ findManifestRoot :: FilePath -> IO (Maybe FilePath)
 manifestSearchRoots :: FilePath -> Manifest -> IO [FilePath]
 projectSearchRoots :: FilePath -> IO [FilePath]
 manifestVersionDiagnostics :: FilePath -> IO [Diagnostic]
+manifestPermissions :: Manifest -> [(Text, Text, Int)]
 ```
 
 ### Governance
@@ -130,3 +131,7 @@ The snapshot reads `pudu.lock` beside the manifest and adds each locked package'
 `deps/` as a package root, kept apart from the project's own roots. It fetches nothing and digests
 nothing; a lock it cannot read is `E7201`, and a locked package missing from `deps/` is `E7202` telling
 the reader to run `pudu install`. See [[architecture/PACKAGES]].
+
+## Permissions (#976)
+
+`manifestPermissions` reads the `[app.permissions]` table in written order: each entry's key, its reason and its line. The entries are settled against the kinds the program requests by [[Pudu Backend Permissions]], which refuses the build for an undeclared request, an unknown key or an empty reason.

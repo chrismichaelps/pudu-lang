@@ -215,7 +215,8 @@ static void (*const pudu_instruction_table[PUDU_UI_INSTRUCTIONS])(JNIEnv *, pudu
   [PUDU_UI_REFRESH] = pudu_do_refresh, [PUDU_UI_FETCH] = pudu_do_fetch, [PUDU_UI_CANCEL] = pudu_do_cancel,
   [PUDU_UI_WAKE] = pudu_do_wake, [PUDU_UI_BOUNDS] = pudu_do_bounds, [PUDU_UI_SOURCE] = pudu_do_source,
   [PUDU_UI_OPEN] = pudu_do_open, [PUDU_UI_SHARE] = pudu_do_share, [PUDU_UI_COPY] = pudu_do_copy, [PUDU_UI_PASTE] = pudu_do_paste,
-  [PUDU_UI_STATUS] = pudu_do_status,
+  [PUDU_UI_STATUS] = pudu_do_status, [PUDU_UI_PERMISSIONS] = pudu_do_permissions, [PUDU_UI_PERMISSION] = pudu_do_permission,
+  [PUDU_UI_SETTINGS] = pudu_do_settings,
   [PUDU_UI_OPTIONS] = pudu_do_options, [PUDU_UI_COUNT] = pudu_do_count, [PUDU_UI_MOMENT] = pudu_do_moment,
 };
 

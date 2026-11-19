@@ -320,6 +320,9 @@ public final class PuduBridge {
   static void copy(String text) { PuduSystem.copy(text); }
   static void paste(int tag) { PuduSystem.paste(tag); }
   static void status(int style, boolean hidden) { PuduSystem.status(style, hidden); }
+  static void permissions(int[] kinds) { PuduPermission.check(kinds); }
+  static void permission(int kind) { PuduPermission.request(kind); }
+  static void settings() { PuduPermission.settings(); }
   static void source(android.widget.ImageView view, int origin, int scaling, String location) {
     PuduImage.source(view, origin, scaling, location);
   }

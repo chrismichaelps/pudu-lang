@@ -112,3 +112,7 @@ activity that the package launches is described in [[Native Android Activity]].
 ## Referenced by
 
 [[src/Pudu/Backend/_MOC]] · [[Native Mobile Targets]]
+
+## Permission entries (#976)
+
+The `uses-permission` entries of the declared kinds are inserted before `<application>` in the package manifest. A permission an older API level needs only is bounded with `android:maxSdkVersion`, so storage and Bluetooth access the newer levels replace are not requested there. The entries come from [[Pudu Backend Permissions]].

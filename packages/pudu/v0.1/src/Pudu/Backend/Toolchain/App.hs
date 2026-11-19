@@ -32,6 +32,7 @@ import GHC.IO.Encoding (getFileSystemEncoding)
 import Pudu.Backend.Ledger (Finding, appleLedger, ledgerDeployment, renderRelease)
 import Pudu.Backend.Target (AppleSdk (..), NativeTarget (..), TargetPlatform (..))
 import Pudu.Backend.Toolchain.Android (androidTools, compileApk)
+import Pudu.Backend.Permissions (Permission, androidEntries, appleFlags, appleFrameworks, appleUsageKeys)
 import Pudu.Backend.Toolchain.Assets (assetFiles, stageAssets)
 import Pudu.Backend.Toolchain.HostSources (iosHostSources)
 import Pudu.Backend.Toolchain.Library (LibraryProducts (..), LibraryRequest (..), appleTools, compileLibrary, invoke)
@@ -50,6 +51,8 @@ data AppRequest = AppRequest
   , appIdentifier :: !Text
   , appAssets :: !(Maybe FilePath)
   -- ^ The program's asset directory, packaged under the same relative names.
+  , appPermissions :: ![Permission]
+  -- ^ The declared permissions, each written into the platform's declarations.
   }
   deriving stock (Eq, Show)
 
@@ -85,7 +88,7 @@ compileApp request = case nativeTargetPlatform (appTarget request) of
           Left failure -> pure (Left failure)
           Right files ->
             fmap (, []) <$> compileApk found (appSource request) (appExports request) (appName request) (appOutput request)
-              ((, files) <$> appAssets request)
+              ((, files) <$> appAssets request) (androidEntries (appPermissions request))
   _ -> pure (Left (ToolchainTargetUnbuilt (nativeTargetName (appTarget request) <> " applications, which need a signing identity,")))
 
 buildBundle :: AppRequest -> AppleSdk -> IO (Either ToolchainFailure (Text, [Finding]))
@@ -123,7 +126,7 @@ buildBundle request sdk = do
         prepared <- tryIO (do
           createDirectory bundle
           mapM_ (\(file, source) -> ByteString.writeFile (directory </> file) (ByteString.pack source)) iosHostSources
-          ByteString.writeFile (bundle </> "Info.plist") (Encoding.encodeUtf8 (infoPlist (appName request) (appIdentifier request)))
+          ByteString.writeFile (bundle </> "Info.plist") (Encoding.encodeUtf8 (infoPlist (appName request) (appIdentifier request) (appleUsageKeys (appPermissions request))))
           mapM_ (\assets -> stageAssets assets files (bundle </> "assets")) (appAssets request))
         case prepared of
           Left problem -> pure (Left (ToolchainPublishFailed (problemText problem)))
@@ -131,7 +134,8 @@ buildBundle request sdk = do
             linked <- invoke clang
               (["-target", Text.unpack (appleTriple sdk), "-isysroot", root, "-fobjc-arc", "-O2", "-I", directory, host, library]
                 <> map Text.unpack (libraryLinks products)
-                <> concat [["-framework", framework] | framework <- hostFrameworks]
+                <> map Text.unpack (appleFlags (appPermissions request))
+                <> concat [["-framework", framework] | framework <- hostFrameworks <> map Text.unpack (appleFrameworks (appPermissions request))]
                 <> ["-o", bundle </> name])
               seconds
             signed <- either (pure . Left) (\warnings -> fmap (const warnings) <$> invoke codesign ["--force", "--sign", "-", bundle] seconds) linked
@@ -182,9 +186,10 @@ bundleIdentifier name = identifierPrefix <> Text.map kept name
     | otherwise = '-'
 
 {-| The property list of a simulator application named `name` with
-    `identifier`, its text escaped for XML. -}
-infoPlist :: Text -> Text -> Text
-infoPlist name identifier = Text.unlines
+    `identifier` and the permission `usage` keys with their reasons, its text
+    escaped for XML. -}
+infoPlist :: Text -> Text -> [(Text, Text)] -> Text
+infoPlist name identifier usage = Text.unlines $
   [ "<?xml version=\"1.0\" encoding=\"UTF-8\"?>"
   , "<plist version=\"1.0\"><dict>"
   , entry "CFBundleIdentifier" identifier
@@ -198,8 +203,9 @@ infoPlist name identifier = Text.unlines
   , "<key>UIDeviceFamily</key><array><integer>1</integer><integer>2</integer></array>"
   , "<key>UILaunchScreen</key><dict/>"
   , "<key>CADisableMinimumFrameDurationOnPhone</key><true/>"
-  , "</dict></plist>"
   ]
+  <> [entry key reason | (key, reason) <- usage]
+  <> ["</dict></plist>"]
  where
   entry key value = "<key>" <> key <> "</key><string>" <> escaped value <> "</string>"
   escaped = Text.concatMap $ \c -> case c of

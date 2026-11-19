@@ -111,6 +111,9 @@ const SHARE: UInt32 = 47u32
 const COPY: UInt32 = 48u32
 const PASTE: UInt32 = 49u32
 const STATUS: UInt32 = 50u32
+const PERMISSIONS: UInt32 = 51u32
+const PERMISSION: UInt32 = 52u32
+const SETTINGS: UInt32 = 53u32
 
 /// Creates node `node` as a control of `kind`.
 export fn create(out: Array[UInt8], node: UInt32, kind: UInt32) -> Array[UInt8] { words(out, [CREATE, node, kind]) }
@@ -245,6 +248,17 @@ export fn paste(out: Array[UInt8], reported: UInt32) -> Array[UInt8] { words(out
 export fn status(out: Array[UInt8], code: UInt32, hidden: Bool) -> Array[UInt8] {
   words(out, [STATUS, code, if hidden { 1u32 } else { 0u32 }])
 }
+
+/// Asks where the permission kinds `codes` stand; each answers as PERMISSIONED.
+export fn permissions(out: Array[UInt8], codes: &Array[UInt32]) -> Array[UInt8] {
+  words(words(out, [PERMISSIONS, count(codes.length())]), *codes)
+}
+
+/// Asks the person to allow the permission kind `code`; it answers as PERMISSIONED.
+export fn permission(out: Array[UInt8], code: UInt32) -> Array[UInt8] { words(out, [PERMISSION, code]) }
+
+/// Opens the application's page in the platform's settings.
+export fn settings(out: Array[UInt8]) -> Array[UInt8] { words(out, [SETTINGS]) }
 
 /// Plays a haptic.
 export fn haptic(out: Array[UInt8], code: UInt32) -> Array[UInt8] { words(out, [HAPTIC, code]) }

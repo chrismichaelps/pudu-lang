@@ -1,6 +1,7 @@
 module Std.Mobile.Events
 
 import Std.Mobile.Gesture as Gesture
+import Std.Mobile.Permission as Permission
 import Std.Mobile.Scene as Scene
 import Std.Mobile.View as View
 
@@ -29,6 +30,7 @@ const IMAGED: UInt64 = 24u64
 const OPENED: UInt64 = 25u64
 const SHARED: UInt64 = 26u64
 const PASTED: UInt64 = 27u64
+const PERMISSIONED: UInt64 = 28u64
 
 /// Each event kind's constructor, given the tag and the text the host holds.
 const EVENTS: Map[UInt64, fn(UInt32, Str) -> View.Event] = mapOf([
@@ -55,7 +57,8 @@ const DETAILED: Map[UInt64, fn(UInt32, UInt32) -> Option[View.Event]] = mapOf([
     (COLORED, |reported: UInt32, rgba: UInt32| Some(View.Colored(reported, rgba))),
     (IMAGED, |reported: UInt32, loaded: UInt32| flagged(loaded, |done: Bool| View.Imaged(reported, done))),
     (OPENED, |reported: UInt32, opened: UInt32| flagged(opened, |done: Bool| View.Opened(reported, done))),
-    (SHARED, |reported: UInt32, shared: UInt32| flagged(shared, |done: Bool| View.Shared(reported, done)))
+    (SHARED, |reported: UInt32, shared: UInt32| flagged(shared, |done: Bool| View.Shared(reported, done))),
+    (PERMISSIONED, |kind: UInt32, state: UInt32| permissioned(Permission.kindOf(kind), Permission.stateOf(state)))
   ])
 
 /// Each measured event kind's constructor, given the tag, the detail word and
@@ -156,6 +159,14 @@ fn fetched(generation: UInt32, status: UInt32, body: Str, values: &Array[Int32])
     -1
   }
   View.Fetched(generation, code, body, wait)
+}
+
+// A permission report; codes no host writes read as Stopped.
+fn permissioned(kind: Option[Permission.Kind], state: Option[Permission.State]) -> Option[View.Event] {
+  match (kind, state) {
+    case (Some(named), Some(stood)) => Some(View.Permissioned(named, stood))
+    case _ => None
+  }
 }
 
 // An event whose detail word is 1 or 0; any other word is never written.

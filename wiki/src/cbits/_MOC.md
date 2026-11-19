@@ -55,4 +55,4 @@ tags: [moc, module, foreign, ffi]
 
 ## Referenced by
 
-[[src/_MOC]] · [[Foreign Call]] · [[ADR-0018 Calling a Library Written Elsewhere]]
+[[src/_MOC]] · [[Foreign Call]] · [[ADR-0018 Calling a Library Written Elsewhere]]- [[pudu-ios-permission]] — iOS permission state mapping, requests, settings and foreground re-checks (#976).

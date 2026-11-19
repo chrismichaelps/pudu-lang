@@ -5,6 +5,11 @@ tags: [changelog]
 
 # Changelog
 
+## 2026-11-19 — Declared, build-checked permissions (#976)
+
+- Declared, build-checked permissions (#976): PERMISSIONS 51, PERMISSION 52 and SETTINGS 53 on the iOS and Android hosts, PERMISSIONED 28 event, `[app.permissions]` in the manifest, E6014, E6015, E6016 and W6017 for declarations checked against requests.
+  [[Std Mobile Permission]] · [[Pudu Backend Permissions]] · [[pudu-ios-permission]] · [[PuduPermission]] · [[Std Mobile Stream]] · [[Std Mobile Events]] · [[Std Mobile View]] · [[Compiler Manifest]] · [[Permissions Example]] · [[Uses Mobile Permission]] · [[Permissions Spec]] · [[Native Permissions]] · [[NATIVE-MOBILE]]
+
 ## 2026-11-19 — Native open, share, clipboard and status bar (#974)
 
 - Native open, share, clipboard and status bar (#974): OPEN 46, SHARE 47, COPY 48, PASTE 49 and STATUS 50 on the iOS and Android hosts, OPENED 25, SHARED 26 and PASTED 27 events, and body caps and connection timeouts for remote images and fetch requests.

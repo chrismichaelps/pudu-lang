@@ -130,9 +130,10 @@ compileAndroidLibrary tools source exports output = staged output $ \directory -
     `libpudu_app.so`, the bridge classes dexed, the manifest linked against
     the platform, the library stored uncompressed and page-aligned, and the
     whole signed with a key made for this build. `assets` is the asset
-    directory and its checked files, packaged for the asset manager. -}
-compileApk :: AndroidTools -> Text -> [Text] -> Text -> FilePath -> Maybe (FilePath, [FilePath]) -> IO (Either ToolchainFailure Text)
-compileApk tools source exports label output assets = case toolSdk tools of
+    directory and its checked files, packaged for the asset manager;
+    `permissions` are the manifest's entries for the declared permissions. -}
+compileApk :: AndroidTools -> Text -> [Text] -> Text -> FilePath -> Maybe (FilePath, [FilePath]) -> [Text] -> IO (Either ToolchainFailure Text)
+compileApk tools source exports label output assets permissions = case toolSdk tools of
   Nothing -> pure (Left (ToolchainSdkMissing "android" "an Android SDK"))
   Just sdk -> do
     testing <- maybe False (not . null) <$> lookupEnv testBuildVariable
@@ -174,7 +175,7 @@ compileApk tools source exports label output assets = case toolSdk tools of
         createDirectoryIfMissing True classes
         mapM_ (\(file, text) -> Char8.writeFile (directory </> file) (Char8.pack text)) androidHostSources
         mapM_ (\(file, text) -> Char8.writeFile (javaDir </> "org" </> "pudu" </> file) (Char8.pack text)) androidJavaSources
-        ByteString.writeFile manifest (Encoding.encodeUtf8 (packageManifest testing label))
+        ByteString.writeFile manifest (Encoding.encodeUtf8 (packageManifest testing label permissions))
         mapM_ (\(from, files) -> stageAssets from files staging) assets
         let javaFiles = [javaDir </> "org" </> "pudu" </> file | (file, _) <- androidJavaSources]
         ran <- step
@@ -209,12 +210,13 @@ packageLinkFlags testing = ["--debug-mode" | testing]
 
 {-| The manifest for a program's label. A test build also carries the marker
     the activity requires before it reads self-test extras. -}
-packageManifest :: Bool -> Text -> Text
-packageManifest testing label
+packageManifest :: Bool -> Text -> [Text] -> Text
+packageManifest testing label permissions
   | testing = Text.replace "  </application>" (selfTestMarker <> "\n  </application>") named
   | otherwise = named
  where
-  named = Text.replace "PUDU_PACKAGE" (packageName label) (Text.replace "PUDU_LABEL" (escaped label) (Text.pack androidManifest))
+  named = Text.replace "  <application" (Text.concat [entry <> "\n" | entry <- permissions] <> "  <application")
+    (Text.replace "PUDU_PACKAGE" (packageName label) (Text.replace "PUDU_LABEL" (escaped label) (Text.pack androidManifest)))
 
 selfTestMarker :: Text
 selfTestMarker = "    <meta-data android:name=\"org.pudu.selftest\" android:value=\"true\" />"
