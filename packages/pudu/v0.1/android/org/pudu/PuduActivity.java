@@ -5,7 +5,11 @@ import android.content.Intent;
 import android.content.pm.ApplicationInfo;
 import android.content.pm.PackageManager;
 import android.content.res.Configuration;
+import android.graphics.Insets;
+import android.os.Build;
 import android.os.Bundle;
+import android.view.View;
+import android.view.WindowInsets;
 import android.widget.FrameLayout;
 
 /** The application's one activity: it loads the program's library, gives
@@ -13,12 +17,13 @@ import android.widget.FrameLayout;
  *  iOS host does. A self-test is asked for with intent extras named like the
  *  iOS host's environment variables. */
 public final class PuduActivity extends Activity {
-  static final int RESIZED = 11, LIFECYCLE = 12;
+  static final int RESIZED = 11, LIFECYCLE = 12, INSETS = 17, MEMORY = 20;
   static final int ACTIVE = 1, INACTIVE = 2, BACKGROUND = 3, FOREGROUND = 4;
   /** The most taps a self-test asks for. */
   static final int MAX_TAPS = 100;
 
   private int[] reported;
+  private int[] insetsReported;
   private boolean stopped;
 
   @Override protected void onCreate(Bundle saved) {
@@ -38,6 +43,7 @@ public final class PuduActivity extends Activity {
     PuduBridge.controls = intent.hasExtra("PUDU_UI_CONTROLS_TEST");
     PuduBridge.capabilities = intent.hasExtra("PUDU_UI_CAPABILITY_TEST");
     surface.addOnLayoutChangeListener((view, left, top, right, bottom, oldLeft, oldTop, oldRight, oldBottom) -> resized(view));
+    surface.setOnApplyWindowInsetsListener((view, insets) -> inset(view, insets));
     PuduBridge.start(this, surface, getResources().getDisplayMetrics().density, night(getResources().getConfiguration()),
         PuduBridge.testing);
   }
@@ -75,6 +81,52 @@ public final class PuduActivity extends Activity {
     if (width <= 0 || java.util.Arrays.equals(words, reported)) return;
     reported = words;
     PuduBridge.event(RESIZED, 0, null, 0, words);
+  }
+
+  /** The system bars' and cutout's insets: the surface is padded by them, so
+   *  content stays clear of the bars when the window draws edge to edge, and
+   *  they are reported in dp as top, left, bottom, right when they change. */
+  private WindowInsets inset(View view, WindowInsets insets) {
+    int top, left, bottom, right;
+    if (Build.VERSION.SDK_INT >= 30) {
+      Insets bars = insets.getInsets(WindowInsets.Type.systemBars() | WindowInsets.Type.displayCutout());
+      top = bars.top;
+      left = bars.left;
+      bottom = bars.bottom;
+      right = bars.right;
+    } else {
+      top = insets.getSystemWindowInsetTop();
+      left = insets.getSystemWindowInsetLeft();
+      bottom = insets.getSystemWindowInsetBottom();
+      right = insets.getSystemWindowInsetRight();
+    }
+    view.setPadding(left, top, right, bottom);
+    float density = getResources().getDisplayMetrics().density;
+    int[] words = {Math.round(top / density), Math.round(left / density), Math.round(bottom / density), Math.round(right / density)};
+    if (!java.util.Arrays.equals(words, insetsReported)) {
+      insetsReported = words;
+      PuduBridge.event(INSETS, 0, null, 0, words);
+    }
+    return insets;
+  }
+
+  /** System back pops the navigation before it leaves the activity; on API 33
+   *  and later the navigator registers its own callback instead. */
+  @Override public void onBackPressed() {
+    if (!PuduNavigator.back()) super.onBackPressed();
+  }
+
+  /** The platform is short of memory: the program drops what nothing shows. */
+  @Override public void onTrimMemory(int level) {
+    super.onTrimMemory(level);
+    if (level == TRIM_MEMORY_RUNNING_LOW || level == TRIM_MEMORY_RUNNING_CRITICAL || level >= TRIM_MEMORY_MODERATE) {
+      PuduBridge.event(MEMORY, 0, null, 0, null);
+    }
+  }
+
+  @Override public void onLowMemory() {
+    super.onLowMemory();
+    PuduBridge.event(MEMORY, 0, null, 0, null);
   }
 
   @Override public void onConfigurationChanged(Configuration configuration) {

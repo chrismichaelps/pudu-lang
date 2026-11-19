@@ -89,7 +89,7 @@ androidHostSources :: [(FilePath, String)]
 androidHostSources = $(do
   let files = [ "pudu_android_host.c", "pudu_android_jni.h", "pudu_android_events.h", "pudu_android_theme.h"
               , "pudu_android_controls.h", "pudu_android_values.h", "pudu_android_list.h", "pudu_android_kinds.h"
-              , "pudu_android_nodes.h", "pudu_android_capabilities.h", "pudu_android_java.h" ]
+              , "pudu_android_nodes.h", "pudu_android_capabilities.h", "pudu_android_routes.h", "pudu_android_java.h" ]
   paths <- traverse (makeRelativeToProject . ("cbits" </>)) files
   mapM_ addDependentFile paths
   contents <- runIO (traverse ByteString.readFile paths)
@@ -99,7 +99,8 @@ androidHostSources = $(do
 androidJavaSources :: [(FilePath, String)]
 androidJavaSources = $(do
   let files = [ "PuduActivity.java", "PuduBridge.java", "PuduListener.java", "PuduList.java", "PuduMenus.java"
-              , "PuduAccess.java", "PuduGestures.java", "PuduMoment.java", "PuduPages.java", "PuduWell.java", "PuduTests.java" ]
+              , "PuduAccess.java", "PuduGestures.java", "PuduMoment.java", "PuduPages.java", "PuduWell.java", "PuduTests.java"
+              , "PuduNavigator.java", "PuduRefresh.java", "PuduFetch.java" ]
   paths <- traverse (makeRelativeToProject . (("android" </> "org" </> "pudu") </>)) files
   mapM_ addDependentFile paths
   contents <- runIO (traverse ByteString.readFile paths)

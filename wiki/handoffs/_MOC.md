@@ -5,6 +5,7 @@ tags: [moc, handoff]
 
 # Handoff Map
 
+- [[Android Routes Delivery]] — Android navigation, refresh, requests, wake, memory and insets (#971).
 - [[Native Value Controls Delivery]] — ten native value controls, their instructions and events (#934).
 
 - [[Declared Attributes Delivery]] — `attribute` declarations checked at attribute uses (#965).
