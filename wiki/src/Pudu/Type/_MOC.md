@@ -29,6 +29,7 @@ tags: [moc, module]
 - [[Type Boundary]] — the phase entry point and the published type map.
 - [[Type Value]] — formed types, schemes, and how a type is rendered.
 - [[Type Substitution]] — total rigid substitution preserving function contracts.
+- [[Type Check Attribute]] — declared attribute names, argument arity and literal kinds (E3104/E3105).
 - [[Type Check Derive]] — generic canonical trait contract validation for every derive.
 - [[Type Check Derive Spec]] — trait-independent contract and scoped obligation regressions.
 - [[Type Env]] — checker state, name frames, declared shapes, and diagnostics.
@@ -42,6 +43,7 @@ tags: [moc, module]
 - [[Type Check Collection]] — post-inference collection-literal boundary diagnostics.
 - [[Type Marker]] — the compiler-controlled `Copy`, `Send`, and `Sync` markers, decided structurally.
 - [[Type Exhaust]] — match coverage and arm reachability.
+- [[Type Check Static]] — constructor arguments of a `@static_function` type must name module-level functions (E3103).
 - [[Type Check Call]] — what a call's callee refers to, resolved against the implementation it will run.
 - [[Check Place]] — what an assignment may write, what `&mut` may lend, and where an exclusive reference may be written or held.
 - [[Type Check Safety]] — compile-time purity and unsafe capabilities, the two transitive checks of what a body may reach.

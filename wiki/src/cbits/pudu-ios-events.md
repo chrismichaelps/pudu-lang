@@ -20,12 +20,13 @@ The header provides `pudu_queue(kind, tag, text, detail)`, which appends an even
 - `pudu_ui_wait` runs the main run loop in the default mode until an event is queued, then hands out the oldest.
 - `pudu_ui_event_text` and `pudu_ui_event_detail` return the text and detail of the last event handed out. Both stay valid until the next wait.
 - Events are handed out in the order the controls queued them.
-- The event kind constants live in this header: tapped 1, stopped 2, changed 3, switched on 4, switched off 5, reached 8, gestured 9, chose 10, resized 11, lifecycle 12, picked 13, popped 14, dismissed 15. The controls header [[iOS Host Controls]], the capability headers and [[pudu_ios_navigation.h]] queue them by these names.
+- The event kind constants live in this header: tapped 1, stopped 2, changed 3, switched on 4, switched off 5, reached 8, gestured 9, chose 10, resized 11, lifecycle 12, picked 13, popped 14, dismissed 15, refreshed 16, insets 17, fetched 18, woke 19, memory 20. The controls header [[iOS Host Controls]], the capability headers and [[pudu_ios_navigation.h]] queue them by these names.
 - `pudu_unqueue(kind)` drops every queued event of `kind` that the program has not read. The navigation header calls it for popped and dismissed events when a newer NAVIGATE arrives, so a report about the replaced presentation is never delivered.
+- `pudu_before_wait` is a hook run at the start of each `pudu_ui_wait`, before the queue is read. A header that must act once the program asks for its next event registers a call here; [[iOS Host Refresh]] ends an unanswered pull this way.
 
 ## Word channel
 
-Measured events, gestured (9) and resized (11), carry up to four signed words beside the detail word. `pudu_queue_words` appends them, and any count above four is cut to four. `pudu_ui_event_word_count` returns how many words the last event handed out carries, and `pudu_ui_event_word(index)` returns word `index` as its 32 bits. An index past the count reads zero. The words stay valid until the next wait. [[Std Mobile Host]] reads them only for the kinds that [[Std Mobile View]] lists as measured.
+Measured events, gestured (9), resized (11), insets (17) and fetched (18), carry up to four signed words beside the detail word. Fetched events also carry text, the response body. [[iOS Host Fetch]] queues fetched, woke and memory events through this header. `pudu_queue_words` appends them, and any count above four is cut to four. `pudu_ui_event_word_count` returns how many words the last event handed out carries, and `pudu_ui_event_word(index)` returns word `index` as its 32 bits. An index past the count reads zero. The words stay valid until the next wait. [[Std Mobile Host]] reads them only for the kinds that [[Std Mobile View]] lists as measured.
 
 ## Invariants
 
@@ -53,4 +54,4 @@ queues the stop. The host still delivers events in FIFO order.
 
 ## Referenced by
 
-[[src/cbits/_MOC]] · [[iOS Host Adapter]] · [[iOS Host List]] · [[Native iOS Recycling Delivery]]
+[[src/cbits/_MOC]] · [[iOS Host Adapter]] · [[iOS Host List]] · [[Native iOS Recycling Delivery]] · [[iOS Host Refresh]]

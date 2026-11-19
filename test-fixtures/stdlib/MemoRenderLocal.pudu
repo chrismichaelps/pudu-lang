@@ -1,0 +1,18 @@
+module MemoRenderLocal
+
+import Std.Mobile.Memo as M
+import Std.Mobile.View as View
+
+fn row(id: Int) -> View.View { View.Label("row {id}") }
+
+/// A local binding is refused even when it holds a module-level function: the
+/// checker cannot see through a binding what it might have been given. The
+/// import alias does not hide the rule.
+export fn main() -> Int {
+  let chosen = row
+  let shown = M.lazy("row", M.Render(chosen), 1)
+  match shown {
+    case View.Memo(_, _) => 0
+    case _ => 1
+  }
+}

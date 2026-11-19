@@ -55,6 +55,7 @@ sums :: IO Property
 sums = run "unit positional named generic and attributed variants"
   [ ("Strategy", Text.unlines
       [ "module Strategy", "import Std.Meta"
+      , "export attribute wire(Str)"
       , "export trait Report {fn report(self: &Self) -> Str}"
       , "export derive Report for T: Sum {fn report(self: &T) -> Str {"
       , "var out = \"\""

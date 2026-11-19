@@ -15,14 +15,16 @@ import qualified Data.List.NonEmpty as NonEmpty
 import qualified Data.Text as Text
 import Data.Map.Strict (Map)
 import qualified Data.Map.Strict as Map
-import Control.Monad (unless)
+import Control.Monad (foldM, unless)
 import qualified Data.Set as Set
 import Pudu.Source (Span)
 import Data.Text (Text)
 import Pudu.Frontend.Syntax.Located (Located (..))
 import Pudu.Frontend.Syntax.Name (ModuleName (..), moduleNameSegments, moduleNameText)
 import Pudu.Frontend.Syntax.Tree
-  ( Declaration (..)
+  ( Attribute (..)
+  , AttributeDeclarationValue (..)
+  , Declaration (..)
   , Constraint (..)
   , Impl (..)
   , Parameter (..)
@@ -49,6 +51,14 @@ import Pudu.Type.Formation.Builtin
   ( builtinAliases, builtinOwnedVariants, builtinOwners, builtinTypeNames, builtinVariants )
 import Pudu.Type.Implementation (ImplementationRule (..))
 import Pudu.Type.Substitute (substituteRigid)
+
+{-| The attribute marking a sum type whose constructors take only functions
+    named at module level. -}
+staticFunctionAttribute :: Text
+staticFunctionAttribute = "static_function"
+
+isStaticFunction :: Located Attribute -> Bool
+isStaticFunction (Located _ attribute) = locatedValue (attributeName attribute) == staticFunctionAttribute
 
 {-| Form a type from its syntax. Names that were declared as generic parameters
     become rigid; every other name is nominal, and an alias expands
@@ -332,9 +342,26 @@ collectDeclaredFrom initial owner declarations = do
           , declaredAliases =
               Map.withoutKeys (builtinAliases <> declaredAliases initial) (locallyDeclared declarations)
           }
-  foldCollect owner shells (formationOrder owner declarations)
+  collected <- foldCollect owner shells (formationOrder owner declarations)
+  foldM declareAttribute collected [located | located@(Located _ (AttributeDeclaration _)) <- declarations]
 
-foldCollect :: ModuleName -> DeclaredTypes -> [Located Declaration] -> Checker DeclaredTypes
+{-| Adds one attribute declaration. A second declaration of the same name must
+    take the same argument kinds; otherwise `@name` would mean two things, and
+    the later one is refused where it is written. -}
+declareAttribute :: DeclaredTypes -> Located Declaration -> Checker DeclaredTypes
+declareAttribute declared (Located _ declaration) = case declaration of
+  AttributeDeclaration value -> do
+    let Located at name = attributeDeclarationName value
+        kinds = map locatedValue (attributeDeclarationParameters value)
+    case Map.lookup name (declaredAttributes declared) of
+      Just earlier | earlier /= kinds -> do
+        report "E3106" at ("attribute @" <> name <> " is already declared with other arguments")
+          (Just "declare each attribute once, or give the same argument kinds everywhere")
+        pure declared
+      _ -> pure declared{declaredAttributes = Map.insert name kinds (declaredAttributes declared)}
+  _ -> pure declared
+
+foldCollect ::ModuleName -> DeclaredTypes -> [Located Declaration] -> Checker DeclaredTypes
 foldCollect owner declared declarations = case declarations of
   [] -> pure declared
   first : rest -> do
@@ -409,6 +436,10 @@ collectOne owner declared (Located _ declaration) = case declaration of
                 foldr (\(key, value') acc -> Map.insert key value' acc)
                   (declaredVariantFields declared) named
             , declaredOwners = Map.insert identity (map fst payloads) (declaredOwners declared)
+            , declaredStaticFunctions =
+                if any isStaticFunction (typeAttributes value)
+                  then Set.insert identity (declaredStaticFunctions declared)
+                  else declaredStaticFunctions declared
             }
       AliasDefinition aliased -> do
         {-| The alias body is formed with its own parameters rigid, so they can

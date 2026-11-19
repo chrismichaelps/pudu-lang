@@ -2,6 +2,9 @@ module SumShapes
 
 import Std.Meta
 
+/// A marker on one variant; declared, as every attribute must be.
+attribute round
+
 trait Tag { fn tag(self: &Self) -> Str }
 
 type Shape = @round Circle{radius: Int} | Square{side: Int} derives Tag

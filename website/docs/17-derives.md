@@ -95,6 +95,10 @@ module Describe
 import Std.Meta
 import Std.Show {Show}
 
+/// Attributes the derive below reads.
+attribute label(Str)
+attribute secret
+
 trait Describe {
   fn describe(self: &Self) -> Str
 }
@@ -118,6 +122,8 @@ fn main() -> Int {
   if user.describe() == "User user=\"ada\" age=36" { 0 } else { 1 }
 }
 ```
+
+A derive's attributes are declared with `attribute name(...)`; writing or reading an undeclared one is an error.
 
 | Call | Answers |
 | --- | --- |

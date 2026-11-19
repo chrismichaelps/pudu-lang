@@ -3,7 +3,7 @@ module Pudu.Compiler.Program.Eval.DataSpec
   ( testDataEvaluation
   ) where
 
-import Pudu.Compiler.Program.Common (runEntry)
+import Pudu.Compiler.Program.Common (codes, runEntry)
 import Test.QuickCheck (Property, conjoin, counterexample, (===))
 
 {-| Evaluates data structures, memory layout, flat hash table, and columnar vector programs. -}
@@ -22,6 +22,11 @@ testDataEvaluation = do
   buffers <- runEntry "test-fixtures/stdlib/UsesBuffer.pudu"
   mobileViews <- runEntry "test-fixtures/stdlib/UsesMobileView.pudu"
   mobileNavigation <- runEntry "test-fixtures/stdlib/UsesMobileNavigation.pudu"
+  mobileRefresh <- runEntry "test-fixtures/stdlib/UsesMobileRefresh.pudu"
+  mobileMemo <- runEntry "test-fixtures/stdlib/UsesMobileMemo.pudu"
+  mobileResources <- runEntry "test-fixtures/stdlib/UsesMobileResource.pudu"
+  memoLambda <- codes "test-fixtures/stdlib/MemoRenderLambda.pudu"
+  memoLocal <- codes "test-fixtures/stdlib/MemoRenderLocal.pudu"
   mobileThemes <- runEntry "test-fixtures/stdlib/UsesMobileTheme.pudu"
   mobileLists <- runEntry "test-fixtures/stdlib/UsesMobileList.pudu"
   mobileMaterials <- runEntry "test-fixtures/stdlib/UsesMobileMaterial.pudu"
@@ -187,6 +192,22 @@ testDataEvaluation = do
         must not resend the navigation, and one it refuses must. -}
     , counterexample "the native navigation stream pushes, pops and dismisses without echo"
         (mobileNavigation === Just "19")
+    , counterexample "the native refresh stream follows the program's flag and reads pulls and insets"
+        (mobileRefresh === Just "9")
+    {-| Golden counts: an unchanged memo is one comparison and no render, so a
+        regression that renders or compares more fails here, not on a device. -}
+    , counterexample "memoized native rows skip unchanged subtrees with exact counts"
+        (mobileMemo === Just "5")
+    {-| A memo's render may read nothing but its key: a lambda or a local is
+        refused, through an import alias too, before anything runs. -}
+    , counterexample "a memo render that is a lambda is refused"
+        (memoLambda === ["E3103"])
+    , counterexample "a memo render held by a local binding is refused through an alias"
+        (memoLocal === ["E3103"])
+    {-| One request per key, none while fresh, cancellation when no longer
+        described, jittered retries that honour Retry-After, and bounded keep. -}
+    , counterexample "the resource table sends, shares, retries and cancels requests by key"
+        (mobileResources === Just "12")
     , counterexample "the native theme stream sets roles, appearance, styles and colors"
         (mobileThemes === Just "12")
     , counterexample "the native list stream windows rows, ranges, columns and reached events"

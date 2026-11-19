@@ -218,3 +218,9 @@ its parameter's type, so a constructor parameter (`F[_]`) works plain and
 through a trait. Resolved Grill Log: dynamic dispatch is a match over the
 program's implementations, not a table of addresses; written, elaborated and
 inferred arguments all select the same instance.
+
+## Receiver failure spans (#958)
+
+A receiver lent with `&mut self` is read with readHeldAtKeys, so a bad key or
+range fails at the place where it was written, as a `&self` receiver does. Its
+writeback still stores at the root.

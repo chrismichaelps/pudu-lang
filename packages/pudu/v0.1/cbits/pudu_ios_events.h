@@ -13,7 +13,12 @@
 static const uint64_t PUDU_UI_TAPPED = 1, PUDU_UI_STOPPED = 2, PUDU_UI_CHANGED = 3, PUDU_UI_SWITCHED_ON = 4,
                       PUDU_UI_SWITCHED_OFF = 5, PUDU_UI_REACHED = 8, PUDU_UI_GESTURED = 9, PUDU_UI_CHOSE = 10,
                       PUDU_UI_RESIZED = 11, PUDU_UI_LIFECYCLE = 12, PUDU_UI_PICKED = 13, PUDU_UI_POPPED = 14,
-                      PUDU_UI_DISMISSED = 15;
+                      PUDU_UI_DISMISSED = 15, PUDU_UI_REFRESHED = 16, PUDU_UI_INSETS = 17,
+                      PUDU_UI_FETCHED = 18, PUDU_UI_WOKE = 19, PUDU_UI_MEMORY = 20;
+
+/* Run at the start of each wait, once the program has handled the event it
+   was last handed; NULL until a capability needs it. */
+static void (*pudu_before_wait)(void);
 
 /* At most this many words travel with one event. */
 enum { PUDU_EVENT_WORDS = 4 };
@@ -60,6 +65,7 @@ uint64_t pudu_ui_wait(void) {
   NSArray *next;
   NSArray<NSNumber *> *words;
   if (pudu_events == nil) pudu_events = [NSMutableArray new];
+  if (pudu_before_wait != NULL) pudu_before_wait();
   while (pudu_events.count == 0) CFRunLoopRunInMode(kCFRunLoopDefaultMode, 1.0, true);
   next = pudu_events.firstObject;
   [pudu_events removeObjectAtIndex:0];

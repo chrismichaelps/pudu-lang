@@ -1,0 +1,67 @@
+module UsesMobileMemo
+
+import Std.ByteOrder {readU32LE}
+import Std.Json as Json
+import Std.Mobile.Memo as Memo
+import Std.Mobile.View as View
+
+type Item = { id: Int, text: Str } derives Json.Encode
+
+// The words at `offset` onward, read as little-endian 32-bit values.
+fn wordsAt(bytes: &Array[UInt8], offset: Int, count: Int) -> Array[UInt32] {
+  var found = []
+  for index in 0..count {
+    match readU32LE(bytes, offset + index * 4) {
+      case Some(word) => { found = found.push(word) }
+      case None => { return [] }
+    }
+  }
+  found
+}
+
+// A row of four nodes: the row, two labels and a button.
+fn row(item: Item) -> View.View { View.Row([View.Label(item.text), View.Label("#{item.id}"), View.Button("Open", 1u32)]) }
+
+fn items(changed: Int) -> Array[Item] {
+  var found: Array[Item] = []
+  for index in 0..100 {
+    found = found.push(Item{id: index, text: if index == changed { "changed" } else { "item {index}" }})
+  }
+  found
+}
+
+fn memoized(list: &Array[Item]) -> View.View {
+  View.Keyed(list.map(|item: Item| ("{item.id}", Memo.lazy("row", Memo.Render(row), item))))
+}
+
+fn plain(list: &Array[Item]) -> View.View { View.Keyed(list.map(|item: Item| ("{item.id}", row(item)))) }
+
+fn answer(id: Int) -> View.View { View.Label("answer {id}") }
+
+fn question(id: Int) -> View.View { View.Label("question {id}") }
+
+export fn main() -> Int {
+  var held = 0
+  let (mounted, _) = View.mount(&memoized(&items(-1)))
+
+  // Unchanged rows: one comparison per memo and the list, no render, nothing written.
+  let (_, still, quiet) = View.measured(&mounted, &memoized(&items(-1)))
+  if quiet.compared == 101 && quiet.rendered == 0 && quiet.reused == 100 && still.length() == 0 { held = held + 1 }
+
+  // One changed row renders once, compares its own four nodes, and writes one
+  // TEXT for its first label (node 22).
+  let (_, edited, one) = View.measured(&mounted, &memoized(&items(5)))
+  if one.compared == 105 && one.rendered == 1 && one.reused == 99 { held = held + 1 }
+  if edited.length() == 19 && wordsAt(&edited.toArray(), 0, 3) == [2u32, 22u32, 7u32] { held = held + 1 }
+
+  // The same rows without memos compare every node of every row.
+  let (plainMounted, _) = View.mount(&plain(&items(-1)))
+  let (_, plainStill, everything) = View.measured(&plainMounted, &plain(&items(-1)))
+  if everything.compared == 401 && everything.rendered == 0 && plainStill.length() == 0 { held = held + 1 }
+
+  // Equal keys at different sites are different memos: the new one renders.
+  let (asked, _) = View.mount(&Memo.lazy("question", Memo.Render(question), 7))
+  let (_, answered, swapped) = View.measured(&asked, &Memo.lazy("answer", Memo.Render(answer), 7))
+  if swapped.rendered == 1 && swapped.reused == 0 && wordsAt(&answered.toArray(), 0, 3) == [2u32, 0u32, 8u32] { held = held + 1 }
+  held
+}

@@ -38,6 +38,7 @@ import Pudu.Frontend.Syntax.Tree
   , Variant (..)
   , VariantPayload (..)
   , Visibility (Exported)
+  , attributeSignature
   )
 
 {-| Describe a name the way a reader asks about it: what it is, how it is
@@ -325,6 +326,7 @@ declarationSummary moduleValue =
     ForeignDeclaration value ->
       "foreign " <> Text.pack (show (locatedValue (foreignLibrary value)))
     InvalidDeclaration -> "<invalid declaration>"
+    AttributeDeclaration value -> attributeSignature value
 
   bindingWord kind = case kind of
     Immutable -> "let"

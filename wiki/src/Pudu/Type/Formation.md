@@ -108,6 +108,10 @@ including through chains and generic aliases. Nominal shells terminate data recu
 
 DEPTH 0.55 (MEDIUM). It keeps one concern out of [[Type Check]], which the delivery rules cap at 500 lines.
 
+## Declared attributes
+
+Formation collects `declaredAttributes :: Map Text [AttributeParameter]` into `DeclaredTypes` from the module and every exported declaration of the program's interfaces. Two declarations of one name with different parameters are `E3106` at the later one; the earlier parameters stand.
+
 ## Grill Log
 
 - **Q:** May a bare alias entry win over the declaration resolved by the current module's names?
@@ -167,6 +171,12 @@ Transparent aliases share total [[Type Substitution]], including applied heads,
 unsafe wrappers and function default counts. Resolved Grill Log: declaration
 rules, member assumptions and alias applications cannot use different meanings
 for the same full generic bound.
+
+## Static function types
+
+A sum type whose attributes include `static_function` is recorded in `declaredStaticFunctions` when its declaration is collected. `staticFunctionAttribute` names the attribute and `isStaticFunction` tests a declared attribute against it. The record is keyed by the type's nominal identity, so every import alias of the type shares one entry. The rule that reads the record is [[Type Check Static]].
+
+Resolved Grill Log: the marker is recorded where the declaration is collected, not where a constructor is used, so no call site can reach a static type without it being known.
 
 ## Named payload field ownership (#761)
 

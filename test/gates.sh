@@ -131,6 +131,8 @@ run 'only a compiler change at a new version releases' python3 test/release-plan
 run 'compiler archives retain notices and strip policy' python3 test/package-binary.test.py
 run 'the fixtures still reach as much of the library' \
   bash -c 'node test/api-coverage.mjs "$PUDU"'
+run 'native executables agree with the interpreter across the corpus' \
+  bash -c 'node test/native-parity.mjs "$PUDU"'
 run 'a streaming reader holds as much at ten times the input' \
   bash -c 'python3 test/residency.py "$PUDU"'
 run 'bounded concurrency helpers release what they create' \

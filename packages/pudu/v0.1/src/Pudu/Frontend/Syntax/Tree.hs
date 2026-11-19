@@ -2,6 +2,9 @@
 module Pudu.Frontend.Syntax.Tree
   ( ArrayRest (..)
   , Attribute (..)
+  , AttributeDeclarationValue (..)
+  , AttributeParameter (..)
+  , attributeSignature
   , BindingKind (..)
   , Block (..)
   , Capability (..)
@@ -58,6 +61,7 @@ module Pudu.Frontend.Syntax.Tree
 import Data.List.NonEmpty (NonEmpty)
 import GHC.Generics (Generic)
 import Data.Text (Text)
+import qualified Data.Text as Text
 import Pudu.Foreign.Extent (ExtentUnit)
 import Pudu.Frontend.Syntax.Located (Located, locatedValue)
 import Pudu.Frontend.Syntax.Name (ModuleName)
@@ -127,7 +131,45 @@ data Declaration
       is one place to look. -}
   | ForeignDeclaration !Foreign
   | InvalidDeclaration
+  {-| An attribute a module gives meaning to. Last, so stored interfaces keep
+      the tags of every earlier form. -}
+  | AttributeDeclaration !AttributeDeclarationValue
   deriving stock (Eq, Show, Generic)
+
+{-| @Program.Syntax.AttributeDeclaration — the name `@name` writes and the
+    literal kind of each argument it takes. -}
+data AttributeDeclarationValue = AttributeDeclarationValue
+  { attributeDeclarationVisibility :: !Visibility
+  , attributeDeclarationName :: !(Located Text)
+  , attributeDeclarationParameters :: ![Located AttributeParameter]
+  }
+  deriving stock (Eq, Show, Generic)
+
+{-| The literal kinds an attribute argument may take. A number accepts an
+    integer literal too, since `@min(0)` and `@min(0.5)` mean the same kind. -}
+data AttributeParameter
+  = TextParameter
+  | IntegerParameter
+  | NumberParameter
+  | DecimalParameter
+  | BoolParameter
+  | CharParameter
+  deriving stock (Eq, Ord, Show, Generic)
+
+{-| The declaration as written: `attribute @name` or `attribute @name(Str, Float)`. -}
+attributeSignature :: AttributeDeclarationValue -> Text
+attributeSignature value = "attribute @" <> locatedValue (attributeDeclarationName value) <> arguments
+ where
+  arguments = case map (parameterName . locatedValue) (attributeDeclarationParameters value) of
+    [] -> ""
+    names -> "(" <> Text.intercalate ", " names <> ")"
+  parameterName parameter = case parameter of
+    TextParameter -> "Str"
+    IntegerParameter -> "Int"
+    NumberParameter -> "Float"
+    DecimalParameter -> "Decimal"
+    BoolParameter -> "Bool"
+    CharParameter -> "Char"
 
 {-| @Program.Syntax.Function — carries one complete function signature. The body
     is absent only for a trait member that declares behavior without providing

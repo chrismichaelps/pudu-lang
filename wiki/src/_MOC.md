@@ -94,6 +94,7 @@ tags: [moc, module]
   - [[Derive Library Spec]] — every shipped derive, field callbacks, static selection and the expansion snapshot in both evaluators.
   - [[Derive Field Callbacks]] · [[Derive Residual Context]] — build/collect unrolling and shared residual state.
   - [[Derive Expansion Output]] · [[Syntax Printer]] · [[Statement Inlining]] — `pudu expand` text.
+  - Attribute fixtures: [[src/test-fixtures/attributes/UnknownAttribute]] · [[src/test-fixtures/attributes/WrongAttributeArgument]] · [[src/test-fixtures/attributes/conflict/Main]] · [[src/test-fixtures/attributes/conflict/Tags]] · [[src/test-fixtures/attributes/UndeclaredRead]] · [[src/test-fixtures/attributes/UnsupportedKind]] · [[src/test-fixtures/attributes/DeclaredAttribute]].
   - Fixtures: [[src/test-fixtures/derive/StdOrder]] · [[src/test-fixtures/derive/StdShow]] · [[src/test-fixtures/derive/StdJson]] · [[src/test-fixtures/derive/StdRow]] · [[src/test-fixtures/derive/Builders]] · [[src/test-fixtures/derive/StaticSelection]] · [[src/test-fixtures/derive/StaticMember]] · [[src/test-fixtures/derive/BuildEscape]] · [[src/test-fixtures/derive/UnmetStdField]] · [[src/test-fixtures/derive/Expand]].
   - [[Derive Capture Inference]] — resolved private contract dependency closure.
   without leftover declaration parameters or source-string generation.
@@ -355,7 +356,18 @@ tags: [moc, module]
 - [[Native First Light Delivery]] — phase 1 of Pudu Native (#909).
 - [[Std Mobile Events]] — host event decoding behind the mobile wait.
 - [[Std Mobile Navigation]] — native page stack and page sheet model.
+- [[pudu_ios_nodes.h]] — instruction codes, control kinds and the host's node table, shared by the capability headers.
 - [[pudu_ios_navigation.h]] — UIKit navigation host and page sheet presentation.
 - [[Native Pages Example]] — navigation stack and page sheet, built only from Pudu.
 - [[Uses Mobile Navigation]] — stdlib fixture for the navigation stream, pops and dismissals.
+- [[Native Refresh Example]] — pull to refresh and safe-area insets, built only from Pudu.
+- [[Native Remote Example]] — two keyed network resources, one request, rate-limited retry, built only from Pudu.
+- [[Test Fetch Server]] — local server and request counts for the Remote simulator run.
+- [[Uses Mobile Resource]] — stdlib fixture for the request table, retries, failures and keeping (12 checks).
+- [[pudu_ios_fetch.h]] — URL session host: FETCH, CANCEL, WAKE, FETCHED, WOKE and MEMORY.
+- [[pudu_ios_refresh.h]] — UIKit refresh control: pulls reported and the indicator driven by the program's state.
+- [[Uses Mobile Refresh]] — stdlib fixture for the refresh stream and the insets event.
 - [[Pudu Compiler Program Eval Data Spec]] — data evaluation spec, including the mobile fixture counts.
+- [[Uses Mobile Memo]] — stdlib fixture for memoized subtrees, render counters and site keys.
+- [[Memo Render Lambda]] · [[Memo Render Local]] — refusal fixtures: a memo render that is a lambda or a local binding is E3103.
+- [[Native Render Skipping]] — cost model and three-part plan for skipping unchanged native rendering.

@@ -11,6 +11,8 @@ Export lowerPlaceAssignment. Parse a target into a root local and field and
 index steps; hold each index, then the value, in temporaries; assign the
 root the rebuilt value. Field steps use CoreRecordUpdate, index steps read
 with ArrayGetAt and write with ArrayReplaceAt, both at the root span.
+Failures of an assignment or a lent `&mut` argument report at the root name; a
+lent receiver reads its elements with readHeldAtKeys (see Held places).
 Nothing for a target that is not a place of a local.
 
 ## Resolved Grill Log
@@ -25,9 +27,10 @@ order. See [[Native Place Assignment]].
 
 ## Held places (#651)
 
-Also export HeldPlace, holdPlace, readHeld and storeHeld. holdPlace resolves
+Also export HeldPlace, holdPlace, readHeld, readHeldAtKeys and storeHeld. holdPlace resolves
 a target, `*` included, and runs its indices into held locals; readHeld reads
-it and storeHeld stores through it at the root span, reading the root as it
+it at the root span, and readHeldAtKeys reads each element at its own key span;
+both run through readHeldBy. storeHeld stores through it at the root span, reading the root as it
 is at the store. Assignment uses the same three, and `*value = x` assigns the
 local itself. A plain name still goes to [[Compiler Lower Body]]'s own case.
 Resolved Grill Log: [[Compiler Lower Loan]] lends places with them.

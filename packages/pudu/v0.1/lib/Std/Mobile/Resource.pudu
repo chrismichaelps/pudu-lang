@@ -1,0 +1,266 @@
+module Std.Mobile.Resource
+
+import Std.Mobile.Stream as Stream
+import Std.Mobile.View as View
+import Std.Random as Random
+
+/// How long a settled result is served before it is asked for again, how long
+/// an entry is kept once nothing describes it, and how many failed attempts
+/// pass before a failure is shown. Times are milliseconds.
+export type Policy = { freshFor: Int, keptFor: Int, retries: Int }
+
+/// A request the platform sends: method, URL, headers and body text.
+export type Request = { method: Str, url: Str, headers: Array[(Str, Str)], body: Str }
+
+/// A keyed request the program needs now. The key names the data, never the
+/// moment, so every place that describes the same key shares one request.
+export type Need = { key: Str, request: Request, policy: Policy }
+
+/// What the program sees for a key: nothing yet, a loaded response (its status
+/// and body), or a failure (its status, 0 when nothing arrived, and the body or
+/// reason). A loaded result stays visible while a fresh copy loads or retries.
+export type Status = Pending | Loaded(Int, Str) | Failed(Int, Str)
+
+/// A response the platform delivered for a request generation, with the delay
+/// its Retry-After asked for in milliseconds, or -1 when it asked for none.
+export type Response = { generation: UInt32, status: Int, body: Str, retryAfter: Int }
+
+/// What the host does: send a request under a generation, cancel one, or wake
+/// the program at a time so a waiting retry can start.
+export type Command = Start(UInt32, Request) | Cancel(UInt32) | Wake(Int)
+
+// One key's state. `settledAt` is when a result or a final failure arrived,
+// `flight` the generation in flight or NO_FLIGHT, `neededAt` the last time a
+// description named the key.
+type Entry = {
+  need: Need,
+  status: Status,
+  settledAt: Int,
+  flight: UInt32,
+  attempts: Int,
+  retryAt: Int,
+  neededAt: Int,
+  described: Bool
+}
+
+/// Every key's entry, the last generation handed out, how many undescribed
+/// entries are kept at most, and the generator behind retry jitter.
+export type Table = { entries: Map[Str, Entry], generation: UInt32, capacity: Int, random: Random.Generator }
+
+/// The first retry waits up to this long; each further attempt doubles it.
+const FIRST_DELAY: Int = 500
+
+/// No retry waits longer than this.
+const LONGEST_DELAY: Int = 30000
+
+/// A time not yet reached.
+const NEVER: Int = -1
+
+/// The generation of no request.
+const NO_FLIGHT: UInt32 = 0u32
+
+/// Statuses a later attempt can cure: no response, timeouts, rate limits and
+/// server failures. Any other failure is final until the result is no longer
+/// fresh.
+const TRANSIENT: Set[Int] = setOf([0, 408, 425, 429, 500, 502, 503, 504])
+
+/// An empty table keeping at most `capacity` undescribed entries; `seed`
+/// makes retry jitter reproducible.
+export fn table(capacity: Int, seed: UInt64) -> Table {
+  Table{entries: mapOf([]), generation: NO_FLIGHT, capacity: capacity, random: Random.fromSeed(seed)}
+}
+
+/// The table after `needs` describes what the program needs at `now`, and the
+/// commands that make the platform match it. A described key starts a request
+/// only when none is in flight, its result is no longer fresh and no retry is
+/// waiting; a changed request for a key cancels the old one; a key no longer
+/// described has its request cancelled and is dropped once its policy's keep
+/// time passes or the table is over capacity.
+export fn reconcile(held: Table, needs: &Array[Need], now: Int) -> (Table, Array[Command]) {
+  var entries = held.entries
+  var generation = held.generation
+  var commands: Array[Command] = []
+  var wanted: Set[Str] = setOf([])
+  for need in *needs {
+    if !wanted.contains(need.key) {
+      wanted = wanted.insert(need.key)
+      let (current, cancelled) = continued(entries.get(need.key), &need)
+      commands = commands.concat(cancelled)
+      if current.flight == NO_FLIGHT && current.retryAt <= now && !fresh(&current, now) {
+        generation = generation + 1u32
+        commands = commands.push(Start(generation, need.request))
+        entries = entries.insert(need.key, Entry{..current, flight: generation, neededAt: now, described: true})
+      } else {
+        entries = entries.insert(need.key, Entry{..current, neededAt: now, described: true})
+      }
+    }
+  }
+  var kept: Array[(Str, Entry)] = []
+  for pair in entries.entries() {
+    let (key, entry) = pair
+    if !wanted.contains(key) {
+      if entry.flight != NO_FLIGHT {
+        commands = commands.push(Cancel(entry.flight))
+      }
+      entries = entries.remove(key)
+      if now - entry.neededAt <= entry.need.policy.keptFor {
+        kept = kept.push((key, Entry{..entry, flight: NO_FLIGHT, described: false}))
+      }
+    }
+  }
+  for pair in newestFirst(&kept).slice(0, smaller(kept.length(), held.capacity)) {
+    entries = entries.insert(pair[0], pair[1])
+  }
+  let next = Table{..held, entries: entries, generation: generation}
+  (next, commands.concat(woken(&next, now)))
+}
+
+/// The table after the platform delivered `response` at `now`. A response
+/// whose generation is no longer in flight was superseded and changes nothing.
+/// Success settles the key; a transient failure waits a jittered, doubling
+/// delay, never shorter than Retry-After, then retries; any other failure
+/// settles the key as failed.
+export fn received(held: Table, response: &Response, now: Int) -> Table {
+  match flying(&held, response.generation) {
+    case Some((key, entry)) => {
+      let landed = Entry{..entry, flight: NO_FLIGHT}
+      if response.status >= 200 && response.status < 300 {
+        settled(held, key, Entry{..landed, status: Loaded(response.status, response.body), settledAt: now, attempts: 0, retryAt: NEVER})
+      } else if response.status == 304 {
+        settled(held, key, Entry{..landed, settledAt: now, attempts: 0, retryAt: NEVER})
+      } else if TRANSIENT.contains(response.status) {
+        let attempts = entry.attempts + 1
+        let (random, drawn) = Random.below(&held.random, ceilingFor(attempts))
+        let jitter = drawn + 1
+        let delay = if response.retryAfter > jitter { response.retryAfter } else { jitter }
+        let shown = match entry.status {
+          case Loaded(_, _) => entry.status
+          case _ => if attempts > entry.need.policy.retries { Failed(response.status, response.body) } else { Pending }
+        }
+        settled(Table{..held, random: random}, key, Entry{..landed, status: shown, attempts: attempts, retryAt: now + delay})
+      } else {
+        settled(held, key, Entry{..landed, status: Failed(response.status, response.body), settledAt: now, attempts: 0, retryAt: NEVER})
+      }
+    }
+    case None => held
+  }
+}
+
+/// The stream that carries `commands` to the platform at `now`; a wake is
+/// sent as the delay from `now`.
+export fn written(commands: &Array[Command], now: Int) -> Bytes {
+  var out: Array[UInt8] = []
+  for command in *commands {
+    out = match command {
+      case Start(generation, sent) => Stream.fetch(out, generation, sent.method, sent.url, &sent.headers, sent.body)
+      case Cancel(generation) => Stream.cancel(out, generation)
+      case Wake(at) => Stream.wake(out, delayFrom(at, now))
+    }
+  }
+  bytesOf(out)
+}
+
+/// The table after a platform event at `now`: an answered request is received,
+/// low memory drops what nothing describes, and anything else leaves it.
+export fn observe(held: Table, event: &View.Event, now: Int) -> Table {
+  match *event {
+    case View.Fetched(generation, code, body, retryAfter) =>
+    received(held, &Response{generation: generation, status: code, body: body, retryAfter: retryAfter}, now)
+    case View.MemoryLow => trimmed(held)
+    case _ => held
+  }
+}
+
+/// What the program sees for `key`.
+export fn status(held: &Table, key: Str) -> Status {
+  match held.entries.get(key) {
+    case Some(entry) => entry.status
+    case None => Pending
+  }
+}
+
+/// The table with every entry nothing describes dropped, for when the platform
+/// is short of memory.
+export fn trimmed(held: Table) -> Table {
+  var entries = held.entries
+  for pair in held.entries.entries() {
+    if !pair[1].described {
+      entries = entries.remove(pair[0])
+    }
+  }
+  Table{..held, entries: entries}
+}
+
+/// How many entries the table holds, described or kept.
+export fn size(held: &Table) -> Int { held.entries.size() }
+
+// The entry a description continues: the held one when its request is the
+// same, otherwise a new entry and the cancel for the old request in flight.
+fn continued(found: Option[Entry], need: &Need) -> (Entry, Array[Command]) {
+  match found {
+    case Some(entry) if entry.need.request == need.request => (Entry{..entry, need: *need}, [])
+    case Some(entry) if entry.flight != NO_FLIGHT => (started(need), [Cancel(entry.flight)])
+    case _ => (started(need), [])
+  }
+}
+
+fn started(need: &Need) -> Entry {
+  Entry{need: *need, status: Pending, settledAt: NEVER, flight: NO_FLIGHT, attempts: 0, retryAt: NEVER, neededAt: NEVER, described: true}
+}
+
+fn fresh(entry: &Entry, now: Int) -> Bool { entry.settledAt != NEVER && now - entry.settledAt < entry.need.policy.freshFor }
+
+// The described entry whose request is generation `generation`.
+fn flying(held: &Table, generation: UInt32) -> Option[(Str, Entry)] {
+  if generation == NO_FLIGHT {
+    return None
+  }
+  for pair in held.entries.entries() {
+    if pair[1].flight == generation {
+      return Some(pair)
+    }
+  }
+  None
+}
+
+fn settled(held: Table, key: Str, entry: Entry) -> Table { Table{..held, entries: held.entries.insert(key, entry)} }
+
+// The longest delay before attempt `attempts`: FIRST_DELAY doubled per earlier
+// attempt, capped at LONGEST_DELAY.
+fn ceilingFor(attempts: Int) -> Int {
+  var ceiling = FIRST_DELAY
+  var step = 1
+  while step < attempts && ceiling < LONGEST_DELAY {
+    ceiling = ceiling * 2
+    step = step + 1
+  }
+  smaller(ceiling, LONGEST_DELAY)
+}
+
+// One wake for the earliest waiting retry of a described key, if any.
+fn woken(held: &Table, now: Int) -> Array[Command] {
+  var earliest = NEVER
+  for pair in held.entries.entries() {
+    let entry = pair[1]
+    if entry.described && entry.flight == NO_FLIGHT && entry.retryAt > now && (earliest == NEVER || entry.retryAt < earliest) {
+      earliest = entry.retryAt
+    }
+  }
+  if earliest == NEVER { [] } else { [Wake(earliest)] }
+}
+
+// Undescribed entries, most recently needed first.
+fn newestFirst(entries: &Array[(Str, Entry)]) -> Array[(Str, Entry)] {
+  entries.sortBy(|left: (Str, Entry), right: (Str, Entry)| left[1].neededAt > right[1].neededAt)
+}
+
+fn smaller(left: Int, right: Int) -> Int { if left < right { left } else { right } }
+
+// The milliseconds from `now` until `at`, at least zero.
+fn delayFrom(at: Int, now: Int) -> UInt32 {
+  let span = if at > now { at - now } else { 0 }
+  match convertInteger[UInt32](span) {
+    case Some(found) => found
+    case None => 4294967295u32
+  }
+}

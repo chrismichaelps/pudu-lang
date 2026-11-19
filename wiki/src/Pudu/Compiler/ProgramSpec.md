@@ -68,3 +68,5 @@ Imported constant folding is registered from [[Program Cache Spec]], covering im
 all import forms, transitive frozen products, cache equivalence and capability refusal (#373).
 
 Register [[Program View Spec]] using existing dependencies. Resolved Grill Log: real standard-library view fixtures, exact results and diagnostic refusals execute in the full program suite.
+
+Register [[Program Attribute Spec]] using existing dependencies. Resolved Grill Log: every declared attribute use and each refusal kind is checked by exact diagnostic codes in the full program suite.

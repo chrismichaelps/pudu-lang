@@ -31,6 +31,10 @@ a checkbox for an editable flag, and a label (`label: text`) for everything else
 depth. A widget the person changed edits the value through `edit`, so the panel answers the value
 after this frame's interaction.
 
+## Declared attributes
+
+Declares `export attribute label(Str)`, `export attribute min(Float)`, `export attribute max(Float)` and `export attribute readonly`.
+
 ## Grill Log
 
 - **Q:** Hand-write inspectors per engine type? **A:** No; the editor must follow a type's fields

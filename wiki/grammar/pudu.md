@@ -42,8 +42,10 @@ import_decl      = "import", module_path, import_suffix? ;
 import_suffix    = "as", upper_ident
                  | "{", import_item, (",", import_item)*, ","?, "}" ;
 import_item      = ident ;
-top_declaration  = attribute*, "export"?, (const_decl | function_decl | type_decl | trait_decl | impl_decl | macro_decl | derive_decl | derive_impl_decl) ;
+top_declaration  = attribute*, "export"?, (const_decl | function_decl | type_decl | trait_decl | impl_decl | macro_decl | derive_decl | derive_impl_decl | attribute_declaration) ;
 attribute        = "@", lower_ident, ("(", literal, (",", literal)*, ","?, ")")? ;
+attribute_declaration = "attribute", lower_ident, ("(", literal_kind, ("," literal_kind)*, ","?, ")")? ;
+literal_kind     = "Str" | "Int" | "Float" | "Decimal" | "Bool" | "Char" ;
 literal          = integer | decimal | string | char | "true" | "false" | "null" ;
 type_decl        = "type", upper_ident, type_params?, "=", type_definition, derives_clause? ;
 derives_clause   = "derives", trait_ref, (",", trait_ref)*, ","? ;
@@ -328,6 +330,15 @@ scope_expr       = "async", "with", "scope", block ;
 - Implementations are coherent: at least the trait or implementing nominal type must be declared in the current module.
 - A type opts into generated implementations with a trailing `derives` clause naming each trait once; `derive Trait for Param: Shape { ... }` defines the strategy and `derive impl Trait for Type` requests one from another module under the orphan rules.
 - Types, fields, and variants carry attributes (`@name` or `@name(literal, ...)`), inert data only compile-time code reads.
+- Attributes must be declared. `attribute name` or `attribute name(Str, Float, ...)` declares one, optionally `export`ed; `attribute` is a contextual word, special only at a declaration start. Parameter kinds are `Str`, `Int`, `Float` (an integer literal is also accepted), `Decimal`, `Bool`, and `Char`; any other parameter type is `E1069`. An attribute declaration itself takes no attributes (`E1064`).
+  - A use must name a declared attribute, and its arguments must match in count and literal kind: an undeclared name is `E3104` with the nearest declared name as help, a mismatch is `E3105`. Two declarations of one name with different parameters are `E3106` at the later one. Inside a derive definition, `has("name")` or `attributeOr("name", fallback)` on an undeclared name is `E3104`.
+  - Declaration: `export attribute tag(Str)`.
+  - Refused use: `type User = { @tag(1) name: Str }` is `E3105`, since `1` is an `Int` where `Str` is declared.
+- A sum type may carry the type attribute `@static_function`, declared by `Std.Mobile.Memo` as `export attribute static_function`. Every argument of one of its constructors must then name a module-level function (E3103, at the argument). A lambda or a local binding is refused, even one holding a module-level function; an import alias does not change the rule.
+
+  Accepted: `@static_function export type Render[K] = | Render(fn(K) -> View)` with `Memo.Render(row)`, where `row` is declared at module level.
+
+  Refused: `Memo.Render(|id: Int| View.Label("row {id}"))` (a lambda), and `let chosen = row` followed by `Memo.Render(chosen)` (a local binding).
 - Static dispatch is the default for generic trait bounds. Dynamic dispatch requires an explicit future trait-object form and is not in v1.
 - Overlapping implementations and implicit conversions are prohibited.
 

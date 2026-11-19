@@ -23,23 +23,12 @@
 #include "pudu_ios_access.h"
 #include "pudu_ios_scene.h"
 #include "pudu_ios_motion.h"
+#include "pudu_ios_nodes.h"
 #include "pudu_ios_navigation.h"
+#include "pudu_ios_refresh.h"
+#include "pudu_ios_fetch.h"
 #include "pudu_ios_capability_test.h"
 
-/* Instruction codes and control kinds of the view stream; they match
-   Std.Mobile.Stream. */
-enum { PUDU_UI_CREATE = 1, PUDU_UI_TEXT = 2, PUDU_UI_APPEND = 3, PUDU_UI_ROOT = 4, PUDU_UI_TAG = 5, PUDU_UI_RESET = 6,
-       PUDU_UI_STATE = 7, PUDU_UI_HINT = 8, PUDU_UI_NAME = 9, PUDU_UI_INSERT = 10, PUDU_UI_REMOVE = 11, PUDU_UI_MOVE = 12,
-       PUDU_UI_THEME = 20, PUDU_UI_APPEARANCE = 21, PUDU_UI_STYLE = 22, PUDU_UI_COLOR = 23, PUDU_UI_RANGE = 24,
-       PUDU_UI_COLUMNS = 25, PUDU_UI_MATERIAL_SET = 26, PUDU_UI_GESTURES = 27,
-       PUDU_UI_ALERT = 28, PUDU_UI_VALUE = 29, PUDU_UI_HAPTIC = 30, PUDU_UI_TRAITS = 31, PUDU_UI_ACCESS_HINT = 32,
-       PUDU_UI_ACCESS_VALUE = 33, PUDU_UI_MENU = 34, PUDU_UI_ANIMATE = 35, PUDU_UI_NAVIGATE = 36, PUDU_UI_INSTRUCTIONS = 37 };
-enum { PUDU_UI_LABEL = 1, PUDU_UI_BUTTON = 2, PUDU_UI_COLUMN = 3, PUDU_UI_ROW = 4, PUDU_UI_FIELD = 5, PUDU_UI_TOGGLE = 6,
-       PUDU_UI_SCROLL = 7, PUDU_UI_LIST = 8, PUDU_UI_MATERIAL = 9,
-       PUDU_UI_PROGRESS = 10, PUDU_UI_ACTIVITY = 11, PUDU_UI_KINDS = 12 };
-
-static NSMutableArray *pudu_nodes;
-static NSMutableArray<NSNumber *> *pudu_kinds;
 /* Each node's color role from COLOR, or PUDU_ROLE_DEFAULT. */
 static NSMutableArray<NSNumber *> *pudu_paints;
 static UIView *pudu_surface;
@@ -83,12 +72,6 @@ static const pudu_kind pudu_kind_table[PUDU_UI_KINDS] = {
 static const pudu_kind *pudu_kind_of(uint32_t kind) {
   if (kind >= PUDU_UI_KINDS || pudu_kind_table[kind].make == NULL) pudu_stream_defect("created unknown kind", kind);
   return &pudu_kind_table[kind];
-}
-
-static uint32_t pudu_node_id(pudu_reader *reader) {
-  uint32_t node = pudu_word(reader);
-  if (node >= pudu_nodes.count || pudu_nodes[node] == [NSNull null]) pudu_stream_defect("named node before creating it:", node);
-  return node;
 }
 
 static const pudu_kind *pudu_node_kind(uint32_t node) { return &pudu_kind_table[pudu_kinds[node].unsignedIntValue]; }
@@ -357,12 +340,9 @@ static void pudu_do_animate(pudu_reader *reader) {
 
 /* NAVIGATE: read and checked whole, then shown over the screen in place of a ROOT. */
 static void pudu_do_navigate(pudu_reader *reader) {
-  NSDictionary *desired = pudu_navigation_read(reader, ^UIView *(pudu_reader *at, BOOL *fills) {
-    uint32_t node = pudu_node_id(at);
-    *fills = pudu_kinds[node].unsignedIntValue == PUDU_UI_SCROLL || pudu_kinds[node].unsignedIntValue == PUDU_UI_LIST;
-    return pudu_nodes[node];
-  });
-  [pudu_shown_root removeFromSuperview], pudu_shown_root = nil;
+  NSDictionary *desired = pudu_navigation_read(reader);
+  [pudu_shown_root removeFromSuperview];
+  pudu_shown_root = nil;
   pudu_navigation_show(pudu_surface.window.rootViewController, desired);
 }
 
@@ -377,6 +357,8 @@ static void (*const pudu_instruction_table[PUDU_UI_INSTRUCTIONS])(pudu_reader *)
   [PUDU_UI_VALUE] = pudu_do_value, [PUDU_UI_HAPTIC] = pudu_do_haptic, [PUDU_UI_TRAITS] = pudu_do_traits,
   [PUDU_UI_ACCESS_HINT] = pudu_do_access_hint, [PUDU_UI_ACCESS_VALUE] = pudu_do_access_value,
   [PUDU_UI_MENU] = pudu_do_menu, [PUDU_UI_ANIMATE] = pudu_do_animate, [PUDU_UI_NAVIGATE] = pudu_do_navigate,
+  [PUDU_UI_REFRESH] = pudu_do_refresh, [PUDU_UI_FETCH] = pudu_do_fetch, [PUDU_UI_CANCEL] = pudu_do_cancel,
+  [PUDU_UI_WAKE] = pudu_do_wake,
 };
 
 /* Applies one commit: every instruction in order, in one call. */
@@ -425,6 +407,7 @@ static void pudu_report(UIView *view) {
   pudu_theme_reset();
   pudu_alert_presenter = controller;
   pudu_observe_lifecycle();
+  pudu_observe_memory();
   pudu_target = [PuduTarget new];
   self.window = [[UIWindow alloc] initWithFrame:UIScreen.mainScreen.bounds];
   self.window.rootViewController = controller;
@@ -454,7 +437,18 @@ static void pudu_report(UIView *view) {
     pudu_test_capabilities(pudu_nodes, ^{ pudu_queue(PUDU_UI_STOPPED, 0, nil, 0); });
     return;
   }
-  if (getenv("PUDU_UI_NAVIGATION_TEST") != NULL) return pudu_test_navigation(^{ pudu_queue(PUDU_UI_STOPPED, 0, nil, 0); });
+  if (getenv("PUDU_UI_NAVIGATION_TEST") != NULL) {
+    pudu_test_navigation(^{ pudu_queue(PUDU_UI_STOPPED, 0, nil, 0); });
+    return;
+  }
+  if (getenv("PUDU_UI_FETCH_TEST") != NULL) {
+    pudu_test_fetch(pudu_surface, ^{ pudu_queue(PUDU_UI_STOPPED, 0, nil, 0); });
+    return;
+  }
+  if (getenv("PUDU_UI_REFRESH_TEST") != NULL) {
+    pudu_test_refresh(pudu_surface, ^{ pudu_queue(PUDU_UI_STOPPED, 0, nil, 0); });
+    return;
+  }
   if (getenv("PUDU_UI_MATERIAL_TEST") != NULL) {
     pudu_test_material(pudu_nodes, ^{ pudu_queue(PUDU_UI_STOPPED, 0, nil, 0); });
     return;

@@ -279,6 +279,8 @@ instance Walk Impl where
         , Located _ (NamedType path _) <- typeSyntax at (NominalType owner []) ->
             Located at (NamedType path arguments)
       other -> other
+instance Walk AttributeDeclarationValue
+instance Walk AttributeParameter
 instance Walk Macro
 instance Walk MacroParam
 instance Walk MacroKind

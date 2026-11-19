@@ -1,5 +1,10 @@
 module Main
 
+/// Attributes written below; each is declared, as every attribute must be.
+attribute json(Str)
+attribute skip
+attribute round
+
 trait Tag { fn tag(self: &Self) -> Str }
 
 @json("order") type Order = {

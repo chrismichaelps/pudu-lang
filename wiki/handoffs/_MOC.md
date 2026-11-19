@@ -5,7 +5,10 @@ tags: [moc, handoff]
 
 # Handoff Map
 
+
 - [[Native Build Cache Delivery]] — compiled executables reused by content of generated C, flags and compiler (#967).
+
+- [[Declared Attributes Delivery]] — `attribute` declarations checked at attribute uses (#965).
 
 - [[Swift Entry Points Delivery]] — Swift through C entry points, checked on macOS and the iOS simulator (#881).
 
@@ -432,3 +435,5 @@ tags: [moc, handoff]
 - [[Native iOS Materials Delivery]] — surface materials, glass on iOS 26 or later with blur fallback (#928).
 - [[Native iOS Capabilities Delivery]] — gestures, alerts, haptics, accessibility, context menus, scene and motion (#930).
 - [[Native iOS Navigation Delivery]] — native route identity, pop completion and page sheets (#920).
+- [[Native iOS Refresh Delivery]] — pull to refresh and safe-area insets, stacked on the navigation branch (#962).
+- [[2026-11-18-render-skipping]] — memoized native subtrees and render counters, first part of render skipping (#963).

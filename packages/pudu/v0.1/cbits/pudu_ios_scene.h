@@ -18,14 +18,23 @@ static int32_t pudu_size_class(UIUserInterfaceSizeClass value) {
   return value == UIUserInterfaceSizeClassRegular ? 2 : 1;
 }
 
-/* The root controller: it reports its view's size and size classes once
-   laid out, and again only when they change. */
+/* The root controller: it reports its view's size and size classes, and its
+   safe-area insets, once laid out and again only when they change. */
 @interface PuduRootController : UIViewController
 @property (copy, nonatomic) NSArray<NSNumber *> *reported;
+@property (copy, nonatomic) NSArray<NSNumber *> *inset;
 @end
 @implementation PuduRootController
 - (void)viewDidLayoutSubviews {
   [super viewDidLayoutSubviews];
+  UIEdgeInsets safe = self.view.safeAreaInsets;
+  NSArray<NSNumber *> *insets = @[
+    @((int32_t)lround(safe.top)), @((int32_t)lround(safe.left)), @((int32_t)lround(safe.bottom)), @((int32_t)lround(safe.right)),
+  ];
+  if (self.view.bounds.size.width > 0 && ![insets isEqualToArray:self.inset]) {
+    self.inset = insets;
+    pudu_queue_words(PUDU_UI_INSETS, 0, nil, 0, insets);
+  }
   CGSize size = self.view.bounds.size;
   NSArray<NSNumber *> *words = @[
     @((int32_t)lround(size.width)), @((int32_t)lround(size.height)),

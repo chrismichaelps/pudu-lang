@@ -15,7 +15,8 @@ aliases: [pudu_ios_navigation.h]
 The native page stack and page sheet of a Pudu Native application on iOS. The program owns which routes exist; a NAVIGATE names them root first, each with its body node and title, then the sheet. UIKit draws the bars, the back affordances and the transitions. The header is included once by [[iOS Host Adapter]], which dispatches NAVIGATE (36) to it. Its model is [[Std Mobile Navigation]]; its stream is [[Std Mobile Stream]]; the events it queues are decoded by [[Std Mobile Events]].
 
 Entry points used by the adapter:
-- `pudu_navigation_read(reader, node)`: reads one NAVIGATE whole and answers its routes and sheet, or refuses the stream.
+- `pudu_navigation_read(reader)`: reads one NAVIGATE whole and answers its routes and sheet, or refuses the stream. It takes no callback.
+- `pudu_navigation_body(reader, &fills)`: reads one route's or the sheet's body node, using `pudu_node_id` and `pudu_node_scrolls` from [[pudu_ios_nodes.h]], and reports whether that body fills its page.
 - `pudu_navigation_show(root, desired)`: installs the stack over the root controller on first use, then shows `desired`.
 - `pudu_navigation_top()`: the body on top of the screen, the sheet's when one is shown, otherwise the top page's.
 - `pudu_test_navigation(done)`: the self-test of `PUDU_UI_NAVIGATION_TEST`.
@@ -26,7 +27,7 @@ Types:
 
 ## Behavior
 
-- `pudu_navigation_read` reads the count, then each route's id, body node and title, then the sheet flag and, for a sheet, its id and body node. It refuses, as a stream defect, a count of zero, two routes with one id, a sheet flag above 1, and a sheet that shares a route's id. A body node is read with `fills` set for scroll and list kinds, so those bodies fill the page and the others are centered.
+- `pudu_navigation_read` reads the count, then each route's id, body node and title, then the sheet flag and, for a sheet, its id and body node. It refuses, as a stream defect, a count of zero, two routes with one id, a sheet flag above 1, and a sheet that shares a route's id. Each body is read by `pudu_navigation_body`, which sets `fills` from `pudu_node_scrolls` for scroll and list kinds, so those bodies fill the page and the others are centered.
 - The read happens before any controller changes. The shown root is removed only after a valid NAVIGATE is read, and the stack is then installed.
 - The first NAVIGATE installs a `UINavigationController` as a child of the root controller, sized to the root view and covering the surface. Its delegate is the navigator.
 - `want:` unqueues the unread POPPED and DISMISSED events, so a newer NAVIGATE supersedes earlier reports the program has not read. It then makes the new presentation pending and settles it.
@@ -49,7 +50,7 @@ Types:
 
 ## Dependencies and consumers
 
-Included by [[iOS Host Adapter]]. Uses [[iOS Host Layout]] for the available area and root placement, [[iOS Host Events]] for the queue and `pudu_unqueue`, [[iOS Host Controls]] and [[iOS Host Feedback]] for the page content and alerts, and [[iOS Host Stream]] for the reader. Its stream is written by [[Std Mobile Stream]] and its events are decoded by [[Std Mobile Events]]. The application shown in its self-test is [[Native Pages Example]]. Architecture: [[Native iOS Navigation]].
+Included by [[iOS Host Adapter]]. Uses [[iOS Host Layout]] for the available area and root placement, [[iOS Host Events]] for the queue and `pudu_unqueue`, [[iOS Host Controls]] and [[iOS Host Feedback]] for the page content and alerts, [[iOS Host Stream]] for the reader, and [[pudu_ios_nodes.h]] for the node table and the body reads. Its stream is written by [[Std Mobile Stream]] and its events are decoded by [[Std Mobile Events]]. The application shown in its self-test is [[Native Pages Example]]. Architecture: [[Native iOS Navigation]].
 
 ## Resolved Grill Log
 

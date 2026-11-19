@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
-import { spawnSync } from "node:child_process";
-import { mkdtempSync, mkdirSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
+import { spawn, spawnSync } from "node:child_process";
+import { existsSync, mkdtempSync, mkdirSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -27,6 +27,24 @@ function run(command, args, timeout = 120_000, env = process.env) {
     throw new Error(`${command} ${args.join(" ")} (exit ${result.status}):\n${result.stdout}${result.stderr}`);
   }
   return result.stdout;
+}
+
+/* Runs `body` with a local test server in its own process, since this script
+   blocks on every step; `body` gets the server's base URL and a function that
+   reads its request counts. */
+function withFetchServer(body) {
+  const root = mkdtempSync(join(tmpdir(), "pudu-fetch-"));
+  const record = join(root, "counts.json");
+  const server = spawn(process.execPath, [join(repository, "test", "fetch-server.mjs"), record], { stdio: "ignore" });
+  const pause = new Int32Array(new SharedArrayBuffer(4));
+  try {
+    for (let waited = 0; !existsSync(record) && waited < 10_000; waited += 50) Atomics.wait(pause, 0, 0, 50);
+    const counts = () => JSON.parse(readFileSync(record, "utf8"));
+    return body(`http://127.0.0.1:${counts().port}`, counts);
+  } finally {
+    server.kill();
+    rmSync(root, { recursive: true, force: true });
+  }
 }
 
 const [, , compiler, mode, ...extra] = process.argv;
@@ -196,6 +214,29 @@ int main(int argc, char **argv) {
       "import Std.Mobile.Host as Host\nimport Std.Mobile.Stream as Stream", `  let body = Stream.create(Stream.create([], 0u32, Stream.LABEL), 1u32, Stream.LABEL)
   Host.apply(bytesOf(Stream.navigate(body, &[(1u32, 0u32, "A"), (1u32, 1u32, "B")], None)))`,
       /pudu: a view stream showed two routes with id 1/u);
+    mobileApp(device, "Refresh", [{
+      environment: { SIMCTL_CHILD_PUDU_UI_SELFTEST: "0", SIMCTL_CHILD_PUDU_UI_REFRESH_TEST: "1" },
+      labels: ["Pulls: 2", "Insets: top true", ...Array.from({ length: 30 }, (_, index) => `Line ${index + 1}`)],
+      layout: ["PUDU_REFRESH insets reported", "PUDU_REFRESH answered pull refreshing", "PUDU_REFRESH finished by the program",
+        "PUDU_REFRESH unanswered pull stopped"],
+    }]);
+    withFetchServer((base, counts) => {
+      mobileApp(device, "Remote", [{
+        environment: { SIMCTL_CHILD_PUDU_UI_SELFTEST: "0", SIMCTL_CHILD_PUDU_UI_FETCH_TEST: "1", SIMCTL_CHILD_PUDU_FETCH_BASE: base },
+        labels: ["Profile: 200 profile body", "Limited: 200 limited body"],
+        layout: ["PUDU_FETCH loaded"],
+      }]);
+      // Two descriptions of the profile share one request; the rate-limited
+      // path is asked once, refused, and asked again after Retry-After.
+      const asked = counts();
+      assert.equal(asked.profile, 1, `profile was requested ${asked.profile} times`);
+      assert.equal(asked.limited, 2, `limited was requested ${asked.limited} times`);
+      console.log("PASS iOS Remote requests: profile once, limited twice");
+    });
+    refusedApp(device, root, "refresh on a label",
+      "import Std.Mobile.Host as Host\nimport Std.Mobile.Stream as Stream", `  let label = Stream.create([], 0u32, Stream.LABEL)
+  Host.apply(bytesOf(Stream.refresh(label, 0u32, 1u32, false)))`,
+      /pudu: a view stream refreshed a node that does not scroll: 0/u);
     familyMatrix(runtime);
     mobileApp(device, "Glass", [glassRun("glass")]);
     mobileApp(device, "Showcase", [{
@@ -348,7 +389,7 @@ function mobileApp(device, example, runs) {
         `${example} did not show ${labels.join(", ")}:\n${lines.join("\n")}`);
       assert.ok(lines.includes("PUDU_PROGRAM_STATUS 0"), `${example} did not finish:\n${lines.join("\n")}`);
       if (layout) {
-        assert.deepEqual(lines.filter((line) => /^PUDU_(VIEWPORT|KEYBOARD|THEME|LIST|MATERIAL|ALERT|HAPTIC|ACCESS|MOTION|NAV) /.test(line)), layout,
+        assert.deepEqual(lines.filter((line) => /^PUDU_(VIEWPORT|KEYBOARD|THEME|LIST|MATERIAL|ALERT|HAPTIC|ACCESS|MOTION|NAV|REFRESH|FETCH) /.test(line)), layout,
           `${example} did not report the expected layout and theme:\n${lines.join("\n")}`);
       }
       const firstFrame = lines.find((line) => line.startsWith("PUDU_FIRST_FRAME_MS "));

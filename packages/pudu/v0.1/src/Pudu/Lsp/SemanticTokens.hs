@@ -109,6 +109,7 @@ classifyIdentifier value content sp name =
               DocConstant -> spanTuple content sp 4 (mods + 4)
               DocForeign _ -> spanTuple content sp 2 mods
               DocMacro -> spanTuple content sp 2 mods
+              DocAttribute _ -> spanTuple content sp 4 mods
             Nothing
               | startsWithUpper name -> spanTuple content sp 0 mods
               | otherwise -> spanTuple content sp 4 mods

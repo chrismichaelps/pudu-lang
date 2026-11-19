@@ -1,6 +1,9 @@
 module Builders
 import Std.Meta
 
+/// A fixed text a field parses instead of reading its key.
+attribute fixed(Str)
+
 trait Parse { fn parse(text: Str) -> Result[Self, Str] }
 impl Parse for Int {
   fn parse(text: Str) -> Result[Self, Str] = if text == "bad" { Err("bad int") } else { Ok(text.length()) }

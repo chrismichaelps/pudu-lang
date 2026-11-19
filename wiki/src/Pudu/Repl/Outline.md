@@ -64,6 +64,10 @@ Direct structural recursion producing one line per statement and one string per 
 
 DEPTH 0.30 (SHALLOW by intent). It is a projection of the tree for one command.
 
+## Declared attributes
+
+An attribute declaration is listed as `attribute @name(...)` with its parameter kinds in declaration order. It binds no value.
+
 ## Grill Log
 
 - **Q:** Should `:ast` print the derived `Show` output? **A:** No. _Rationale:_ span-laden `Show` output buries the structure the command exists to reveal. _Rejected:_ deriving-based dumping; a full pretty-printer, which is the formatter's job.

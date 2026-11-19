@@ -82,14 +82,14 @@ testHelpers :: FilePath -> FilePath -> IO Property
 testHelpers cc root = do
   results <- traverse check calls
   refusal <- execute cc root ["wide_add","print_str"]
-    ["static const pudu_site probe={\"probe.pudu\",1,1,\"E7005\",\"overflow probe\",NULL,\"wide\",0,1,0,1};"
+    ["static const pudu_site probe={\"probe.pudu\",1,1,\"E7005\",\"overflow probe\",NULL,\"wide\",0,1,0,1,NULL};"
     ,"int main(void) { pudu_print_str(\"before\",6);"
     ,"  (void)pudu_wide_add((pudu_wide_int)" <> literal (modulus `div` 2-1) <> ",(pudu_wide_int){{1,0},0},(pudu_wide_kind){1},&probe); return 0; }"]
     (ExitFailure 1,"before\n","error[E7005]: overflow probe\n  --> probe.pudu:1:1\n   |\n 1 | wide\n   | ^\n")
   pure $ conjoin (refusal : (Set.fromList (map (\(name,_,_) -> name) calls) === Set.fromList (map fst (wideOperationRuntimeParts <> wideDisplayRuntimeParts))) : results)
   where
     check (name,call,output) = counterexample (Text.unpack name) <$> execute cc root [name,"site"]
-      ["int main(void) { const pudu_site site={\"runtime.pudu\",1,1,\"E7005\",\"unexpected failure\",NULL,\"\",0,0,0,0}; pudu_wide_int a={{1,0},0},b={{1,0},0}; pudu_wide_kind kind={1};"
+      ["int main(void) { const pudu_site site={\"runtime.pudu\",1,1,\"E7005\",\"unexpected failure\",NULL,\"\",0,0,0,0,NULL}; pudu_wide_int a={{1,0},0},b={{1,0},0}; pudu_wide_kind kind={1};"
       ,"  (void)site; (void)a; (void)b; (void)kind; (void)" <> call <> "; return 0; }"] (ExitSuccess,output,"")
     calls =
       [("wide_add_math","pudu_wide_add_math(a,b)","")

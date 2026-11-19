@@ -1,0 +1,12 @@
+module DeclaredAttribute
+
+import Std.Json as Json
+
+/// Attributes this module gives meaning to; each use below matches its kinds.
+attribute tag(Str)
+attribute weight(Float)
+attribute flag
+
+type Point = { @tag("x") @weight(2) x: Int, @flag @json("why") y: Int } derives Json.Encode
+
+export fn main() -> Int { 0 }
