@@ -26,6 +26,7 @@ testDataEvaluation = do
   mobileMemo <- runEntry "test-fixtures/stdlib/UsesMobileMemo.pudu"
   mobileControls <- runEntry "test-fixtures/stdlib/UsesMobileControls.pudu"
   mobileImage <- runEntry "test-fixtures/stdlib/UsesMobileImage.pudu"
+  mobileSystem <- runEntry "test-fixtures/stdlib/UsesMobileSystem.pudu"
   mobileResources <- runEntry "test-fixtures/stdlib/UsesMobileResource.pudu"
   memoLambda <- codes "test-fixtures/stdlib/MemoRenderLambda.pudu"
   memoLocal <- codes "test-fixtures/stdlib/MemoRenderLocal.pudu"
@@ -202,6 +203,8 @@ testDataEvaluation = do
         (mobileControls === Just "25")
     , counterexample "native images write their origin, scaling and location and read load reports"
         (mobileImage === Just "10")
+    , counterexample "native system requests write their words and read their answers"
+        (mobileSystem === Just "10")
     {-| Golden counts: an unchanged memo is one comparison and no render, so a
         regression that renders or compares more fails here, not on a device. -}
     , counterexample "memoized native rows skip unchanged subtrees with exact counts"

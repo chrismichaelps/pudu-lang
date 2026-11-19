@@ -30,6 +30,7 @@ static void pudu_test_images(NSArray *nodes, void (^done)(void))
 - The pixel size is the view's longest side in points times the screen scale, rounded up to a power of two starting at 64. Before layout, the screen's longest side is used.
 - The decoded images are held in an `NSCache` bounded at 64 MB by decoded bytes. A memory warning empties it.
 - Remote bytes use an `NSURLSession` with the protocol cache policy and an `NSURLCache` of 8 MB in memory and 128 MB on disk.
+- A remote body is capped at 32 MB. The transfer is stopped while it downloads and the view reports 0. The request times out after 30 seconds without data, and the whole resource after 60 seconds.
 - A new source cancels the task in flight. An answer for a key the view no longer shows is dropped.
 - A location that leaves the assets directory (an empty name, a leading slash or a `..` segment) reports a failure. A URL that is not http or https reports a failure.
 - A response with a status outside 200 to 299, or a transport error, reports a failure. A cancelled task reports nothing.

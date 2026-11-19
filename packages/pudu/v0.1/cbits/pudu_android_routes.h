@@ -133,4 +133,33 @@ static void pudu_do_wake(JNIEnv *env, pudu_reader *reader) {
   pudu_bridge(env, "wake", "(J)V", (jlong)delay);
 }
 
+/* OPEN and SHARE: the tag, then the URL or text; COPY: the text; PASTE: the
+   tag; STATUS: the style code and 1 to hide the bar or 0 to show it. */
+static void pudu_do_open(JNIEnv *env, pudu_reader *reader) {
+  uint32_t tag = pudu_word(reader);
+  jstring url = pudu_text(env, reader);
+  pudu_bridge(env, "open", "(ILjava/lang/String;)V", (jint)tag, url);
+}
+
+static void pudu_do_share(JNIEnv *env, pudu_reader *reader) {
+  uint32_t tag = pudu_word(reader);
+  jstring text = pudu_text(env, reader);
+  pudu_bridge(env, "share", "(ILjava/lang/String;)V", (jint)tag, text);
+}
+
+static void pudu_do_copy(JNIEnv *env, pudu_reader *reader) {
+  pudu_bridge(env, "copy", "(Ljava/lang/String;)V", pudu_text(env, reader));
+}
+
+static void pudu_do_paste(JNIEnv *env, pudu_reader *reader) {
+  pudu_bridge(env, "paste", "(I)V", (jint)pudu_word(reader));
+}
+
+static void pudu_do_status(JNIEnv *env, pudu_reader *reader) {
+  uint32_t style = pudu_word(reader), hidden = pudu_word(reader);
+  if (style >= 3) pudu_stream_defect("used unknown status bar style", style);
+  if (hidden > 1) pudu_stream_defect("set the status bar hidden to", hidden);
+  pudu_bridge(env, "status", "(IZ)V", (jint)style, (jboolean)(hidden == 1));
+}
+
 #endif

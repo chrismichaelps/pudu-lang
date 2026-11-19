@@ -6,6 +6,7 @@ tags: [moc, handoff]
 # Handoff Map
 
 - [[Native Images Delivery]] — native images and application assets (#973).
+- [[Native System Services]] — open, share, clipboard and status bar on both hosts (#974).
 - [[Android Routes Delivery]] — Android navigation, refresh, requests, wake, memory and insets (#971).
 - [[Native Value Controls Delivery]] — ten native value controls, their instructions and events (#934).
 

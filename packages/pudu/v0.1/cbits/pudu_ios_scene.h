@@ -18,8 +18,14 @@ static int32_t pudu_size_class(UIUserInterfaceSizeClass value) {
   return value == UIUserInterfaceSizeClassRegular ? 2 : 1;
 }
 
+/* The status bar the program asked for: its style and whether it is hidden. */
+static UIStatusBarStyle pudu_status_style = UIStatusBarStyleDefault;
+static BOOL pudu_status_hidden = NO;
+
 /* The root controller: it reports its view's size and size classes, and its
-   safe-area insets, once laid out and again only when they change. */
+   safe-area insets, once laid out and again only when they change. It draws
+   the status bar the program asked for; a navigation shown inside it defers
+   to it, so the style holds on every page. */
 @interface PuduRootController : UIViewController
 @property (copy, nonatomic) NSArray<NSNumber *> *reported;
 @property (copy, nonatomic) NSArray<NSNumber *> *inset;
@@ -44,6 +50,10 @@ static int32_t pudu_size_class(UIUserInterfaceSizeClass value) {
   self.reported = words;
   pudu_queue_words(PUDU_UI_RESIZED, 0, nil, 0, words);
 }
+- (UIStatusBarStyle)preferredStatusBarStyle { return pudu_status_style; }
+- (BOOL)prefersStatusBarHidden { return pudu_status_hidden; }
+- (UIViewController *)childViewControllerForStatusBarStyle { return nil; }
+- (UIViewController *)childViewControllerForStatusBarHidden { return nil; }
 @end
 
 /* Lifecycle notifications and the code each reports. */
