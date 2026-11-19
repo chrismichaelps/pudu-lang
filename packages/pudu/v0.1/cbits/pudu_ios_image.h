@@ -19,6 +19,44 @@
 enum { PUDU_IMAGE_ORIGINS = 2, PUDU_IMAGE_SCALINGS = 3 };
 /* Decoded images held at most, in bytes. */
 static const NSUInteger PUDU_IMAGE_CACHE_BYTES = 64u * 1024u * 1024u;
+/* The most bytes one remote source may have; a larger one stops while it downloads. */
+static const long long PUDU_IMAGE_MAX_BYTES = 32LL * 1024 * 1024;
+
+/* One remote download: its bytes so far, stopped past the byte limit, and
+   what to do with the bytes or the failure (nil) once it ends. */
+@interface PuduImageLoad : NSObject <NSURLSessionDataDelegate>
+@property (strong, nonatomic) NSMutableData *bytes;
+@property (copy, nonatomic) void (^finished)(NSData *bytes);
+@end
+@implementation PuduImageLoad
+- (void)URLSession:(NSURLSession *)session dataTask:(NSURLSessionDataTask *)task didReceiveResponse:(NSURLResponse *)response
+ completionHandler:(void (^)(NSURLSessionResponseDisposition))answer {
+  (void)session;
+  (void)task;
+  NSInteger status = [response isKindOfClass:NSHTTPURLResponse.class] ? ((NSHTTPURLResponse *)response).statusCode : 0;
+  BOOL wanted = status >= 200 && status < 300 && response.expectedContentLength <= PUDU_IMAGE_MAX_BYTES;
+  self.bytes = [NSMutableData new];
+  answer(wanted ? NSURLSessionResponseAllow : NSURLSessionResponseCancel);
+  if (!wanted) self.bytes = nil;
+}
+- (void)URLSession:(NSURLSession *)session dataTask:(NSURLSessionDataTask *)task didReceiveData:(NSData *)data {
+  (void)session;
+  if (self.bytes == nil) return;
+  if ((long long)self.bytes.length + (long long)data.length > PUDU_IMAGE_MAX_BYTES) {
+    self.bytes = nil;
+    [task cancel];
+    return;
+  }
+  [self.bytes appendData:data];
+}
+- (void)URLSession:(NSURLSession *)session task:(NSURLSessionTask *)task didCompleteWithError:(NSError *)error {
+  (void)session;
+  (void)task;
+  /* A load the view cancelled for a new source reports nothing. */
+  if (error.code == NSURLErrorCancelled && self.bytes != nil) return;
+  self.finished(error == nil ? self.bytes : nil);
+}
+@end
 
 /* An image view and the source it shows: `key` names the source at the
    pixel size it was decoded for; `loaded` is what the last report said. */
@@ -41,6 +79,8 @@ static void pudu_image_start(void) {
   NSURLSessionConfiguration *configuration = NSURLSessionConfiguration.defaultSessionConfiguration;
   configuration.requestCachePolicy = NSURLRequestUseProtocolCachePolicy;
   configuration.URLCache = [[NSURLCache alloc] initWithMemoryCapacity:8u * 1024u * 1024u diskCapacity:128u * 1024u * 1024u directoryURL:nil];
+  configuration.timeoutIntervalForRequest = 30;
+  configuration.timeoutIntervalForResource = 60;
   pudu_image_session = [NSURLSession sessionWithConfiguration:configuration];
   pudu_image_queue = dispatch_queue_create("org.pudu.image", DISPATCH_QUEUE_CONCURRENT);
   [NSNotificationCenter.defaultCenter addObserverForName:UIApplicationDidReceiveMemoryWarningNotification object:nil
@@ -143,14 +183,15 @@ static void pudu_image_source(UIView *node, uint32_t origin, uint32_t scaling, N
     pudu_image_land(view, key, nil);
     return;
   }
-  view.task = [pudu_image_session dataTaskWithURL:url completionHandler:^(NSData *data, NSURLResponse *response, NSError *error) {
-    NSInteger status = [response isKindOfClass:NSHTTPURLResponse.class] ? ((NSHTTPURLResponse *)response).statusCode : 0;
-    if (error.code == NSURLErrorCancelled) return;
-    UIImage *image = error != nil || status < 200 || status >= 300 || data == nil
-                       ? nil
-                       : pudu_image_decode(CGImageSourceCreateWithData((__bridge CFDataRef)data, NULL), pixels);
-    dispatch_async(dispatch_get_main_queue(), ^{ pudu_image_land(view, key, image); });
-  }];
+  PuduImageLoad *load = [PuduImageLoad new];
+  load.finished = ^(NSData *bytes) {
+    dispatch_async(pudu_image_queue, ^{
+      UIImage *image = bytes == nil ? nil : pudu_image_decode(CGImageSourceCreateWithData((__bridge CFDataRef)bytes, NULL), pixels);
+      dispatch_async(dispatch_get_main_queue(), ^{ pudu_image_land(view, key, image); });
+    });
+  };
+  view.task = [pudu_image_session dataTaskWithURL:url];
+  view.task.delegate = load;
   [view.task resume];
 }
 

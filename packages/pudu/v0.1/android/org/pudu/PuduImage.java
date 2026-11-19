@@ -26,6 +26,9 @@ import java.util.concurrent.Future;
 final class PuduImage {
   static final int IMAGED = 24;
   private static final int WORKERS = 3;
+  /** The most bytes one source may have; a larger file is refused while it is read. */
+  static final int MAX_BYTES = 32 * 1024 * 1024;
+  private static final int CONNECT_MS = 15_000, READ_MS = 30_000;
   private static final ImageView.ScaleType[] SCALINGS = {
     ImageView.ScaleType.CENTER_CROP, ImageView.ScaleType.FIT_CENTER, ImageView.ScaleType.FIT_XY };
 
@@ -133,8 +136,10 @@ final class PuduImage {
     HttpURLConnection connection = (HttpURLConnection) url.openConnection();
     try {
       connection.setUseCaches(true);
+      connection.setConnectTimeout(CONNECT_MS);
+      connection.setReadTimeout(READ_MS);
       int status = connection.getResponseCode();
-      if (status < 200 || status >= 300) return null;
+      if (status < 200 || status >= 300 || connection.getContentLengthLong() > MAX_BYTES) return null;
       try (InputStream in = connection.getInputStream()) {
         return read(in);
       }
@@ -148,6 +153,7 @@ final class PuduImage {
     byte[] chunk = new byte[16 * 1024];
     for (int read = in.read(chunk); read >= 0; read = in.read(chunk)) {
       if (Thread.currentThread().isInterrupted()) throw new IOException("cancelled");
+      if (out.size() + read > MAX_BYTES) throw new IOException("larger than " + MAX_BYTES + " bytes");
       out.write(chunk, 0, read);
     }
     return out.toByteArray();

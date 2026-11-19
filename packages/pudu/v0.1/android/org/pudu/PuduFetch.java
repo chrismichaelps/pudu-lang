@@ -30,6 +30,9 @@ final class PuduFetch {
   static final int SENT = 0, REPEATED = 1, UNREADABLE = 2;
   private static final int WORKERS = 4;
   private static final long CACHE_BYTES = 16L * 1024 * 1024;
+  /** The most bytes one response body may have; a larger one fails while it is read. */
+  static final int MAX_BYTES = 16 * 1024 * 1024;
+  private static final int CONNECT_MS = 15_000, READ_MS = 30_000;
 
   private static final HashMap<Integer, Future<?>> flights = new HashMap<>();
   private static ExecutorService workers;
@@ -92,6 +95,8 @@ final class PuduFetch {
     try {
       connection = (HttpURLConnection) url.openConnection();
       connection.setUseCaches(true);
+      connection.setConnectTimeout(CONNECT_MS);
+      connection.setReadTimeout(READ_MS);
       connection.setRequestMethod(method);
       for (int i = 0; i + 1 < headers.length; i += 2) connection.setRequestProperty(headers[i], headers[i + 1]);
       if (!body.isEmpty()) {
@@ -118,7 +123,11 @@ final class PuduFetch {
     try (InputStream in = stream) {
       ByteArrayOutputStream out = new ByteArrayOutputStream();
       byte[] chunk = new byte[16 * 1024];
-      for (int read = in.read(chunk); read >= 0; read = in.read(chunk)) out.write(chunk, 0, read);
+      for (int read = in.read(chunk); read >= 0; read = in.read(chunk)) {
+        if (Thread.currentThread().isInterrupted()) throw new IOException("cancelled");
+        if (out.size() + read > MAX_BYTES) throw new IOException("response larger than " + MAX_BYTES + " bytes");
+        out.write(chunk, 0, read);
+      }
       return out.toString(StandardCharsets.UTF_8.name());
     }
   }
