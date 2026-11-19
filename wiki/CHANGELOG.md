@@ -15,6 +15,11 @@ tags: [changelog]
 - Native value controls (#934): ten controls (slider through color well), BOUNDS, OPTIONS, COUNT and MOMENT instructions, VALUED, COLORED and DATED events, UIKit value host.
   [[Std Mobile Control]] · [[pudu-ios-kinds]] · [[pudu-ios-values]] · [[Std Mobile View]] · [[Std Mobile Stream]] · [[Std Mobile Events]] · [[Native Value Controls Delivery]]
 
+## 2026-11-18 — Native build cache (#967)
+
+- Native build cache (#967): identical generated C, flags and compilers reuse the compiled executable.
+  [[Backend Toolchain Cache]] · [[Native Build Cache Delivery]]
+
 ## 2026-11-18 — Memoized native subtrees and render counters (#963)
 
 - Memoized native subtrees and render counters (#963): View.Memo, Std.Mobile.Memo.lazy, View.measured.

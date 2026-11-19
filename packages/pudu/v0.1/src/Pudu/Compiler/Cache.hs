@@ -23,7 +23,6 @@ import Control.Monad (forM_, when)
 import Crypto.Hash (Blake2b_256, Context, Digest, hash, hashFinalize, hashInit, hashUpdate)
 import qualified Data.ByteArray as ByteArray
 import qualified Data.ByteString as ByteString
-import qualified Data.ByteString.Char8 as Char8
 import Data.ByteString (ByteString)
 import Data.Char (isHexDigit)
 import qualified Data.Map.Strict as Map
@@ -31,6 +30,7 @@ import Data.Map.Strict (Map)
 import Data.Text (Text)
 import qualified Data.Text as Text
 import qualified Data.Text.Encoding as Encoding
+import Pudu.Cache.Location (cacheRoot, compilerIdentity, hexDigest)
 import Pudu.Cache.Persist (decodeWith, encodeFor)
 import qualified Data.Set as Set
 import Pudu.Eval.Frozen (Frozen)
@@ -49,12 +49,9 @@ import Pudu.Type.Interface
   )
 import Data.IORef (IORef, modifyIORef', newIORef, readIORef, writeIORef)
 import Pudu.Source (Source, SourceName (..), Span, newSource, sourceDigest)
-import Pudu.Version (versionText)
 import System.Directory
   ( createDirectoryIfMissing
   , doesDirectoryExist
-  , getFileSize
-  , getHomeDirectory
   , getModificationTime
   , listDirectory
   , removeDirectoryRecursive
@@ -64,7 +61,6 @@ import System.Directory
   )
 import Data.List (sortOn)
 import Data.Time.Clock (UTCTime, getCurrentTime)
-import System.Environment (getExecutablePath, lookupEnv)
 import System.FilePath ((</>))
 import System.IO (Handle, hClose, openBinaryTempFile)
 
@@ -114,18 +110,7 @@ data CheckedProduct = CheckedProduct
     otherwise it is the user's cache directory. A cache that cannot be opened
     is no cache: compiling never depends on one. -}
 openProductCache :: IO ProductCache
-openProductCache = do
-  requested <- lookupEnv "PUDU_CACHE"
-  case requested of
-    Just "off" -> pure disabledCache
-    Just "" -> pure disabledCache
-    Just directory -> openProductCacheAt directory
-    Nothing -> do
-      xdg <- lookupEnv "XDG_CACHE_HOME"
-      base <- case xdg of
-        Just directory | not (null directory) -> pure directory
-        _ -> (</> ".cache") <$> getHomeDirectory
-      openProductCacheAt (base </> "pudu")
+openProductCache = cacheRoot >>= maybe (pure disabledCache) openProductCacheAt
 
 {-| Open a cache rooted at a directory, which is created if it is missing. -}
 openProductCacheAt :: FilePath -> IO ProductCache
@@ -158,19 +143,6 @@ openCollectingCache seed = do
 collectedEntries :: ProductCache -> IO (Map String ByteString)
 collectedEntries cache = maybe (pure Map.empty) readIORef (cacheMemory cache)
 
-{-| The compiler that is running, as a name no other build shares. -}
-compilerIdentity :: IO String
-compilerIdentity = do
-  executable <- getExecutablePath
-  size <- getFileSize executable
-  modified <- getModificationTime executable
-  pure $ hexDigest $ hash $ Encoding.encodeUtf8 $ Text.intercalate "\0"
-    [ "pudu-cache-2"
-    , versionText
-    , Text.pack executable
-    , Text.pack (show size)
-    , Text.pack (show modified)
-    ]
 
 {-| Remove what other compilers left, which this one can never read. Only
     directories named the way this module names them are touched. -}
@@ -408,13 +380,3 @@ checksum payload = ByteArray.convert (hash payload :: Digest Blake2b_256)
 digestSize :: Int
 digestSize = 32
 
-hexDigest :: Digest Blake2b_256 -> String
-hexDigest = Char8.unpack . ByteArray.convert . toHex
- where
-  toHex digest = ByteString.concatMap byteHex (ByteArray.convert digest)
-  byteHex value =
-    let (high, low) = value `divMod` 16
-     in ByteString.pack [hexChar high, hexChar low]
-  hexChar nibble
-    | nibble < 10 = 48 + nibble
-    | otherwise = 87 + nibble
