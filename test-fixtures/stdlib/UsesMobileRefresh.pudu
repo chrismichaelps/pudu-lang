@@ -1,0 +1,57 @@
+module UsesMobileRefresh
+
+import Std.ByteOrder {readU32LE}
+import Std.Mobile.Events as Events
+import Std.Mobile.Scene as Scene
+import Std.Mobile.View as View
+
+// The words at `offset` onward, read as little-endian 32-bit values.
+fn wordsAt(bytes: &Array[UInt8], offset: Int, count: Int) -> Array[UInt32] {
+  var found = []
+  for index in 0..count {
+    match readU32LE(bytes, offset + index * 4) {
+      case Some(word) => { found = found.push(word) }
+      case None => { return [] }
+    }
+  }
+  found
+}
+
+fn pulled(tag: UInt32, on: Bool) -> View.View { View.Refreshing(tag, on, View.Scroll(View.Label("a"))) }
+
+// The stream that turns a freshly mounted `shown` into `next`.
+fn changed(shown: &View.View, next: &View.View) -> Array[UInt8] {
+  let (mounted, _) = View.mount(shown)
+  let (_, stream) = View.update(&mounted, next)
+  stream.toArray()
+}
+
+export fn main() -> Int {
+  var held = 0
+  let (_, mounted) = View.mount(&pulled(4u32, false))
+  let built = mounted.toArray()
+
+  // The scroll and its label are built first; REFRESH names the scroll, then ROOT shows it.
+  if built.length() == 73 && wordsAt(&built, 0, 3) == [1u32, 0u32, 7u32] && wordsAt(&built, 37, 3) == [3u32, 0u32, 1u32] { held = held + 1 }
+  if wordsAt(&built, 49, 6) == [37u32, 0u32, 4u32, 0u32, 4u32, 0u32] { held = held + 1 }
+
+  // The program's refreshing flag and tag each cross as one REFRESH; nothing else changes.
+  let started = changed(&pulled(4u32, false), &pulled(4u32, true))
+  if started.length() == 16 && wordsAt(&started, 0, 4) == [37u32, 0u32, 4u32, 1u32] { held = held + 1 }
+  if changed(&pulled(4u32, true), &pulled(4u32, true)).length() == 0 { held = held + 1 }
+  let retagged = changed(&pulled(4u32, false), &pulled(5u32, false))
+  if retagged.length() == 16 && wordsAt(&retagged, 0, 4) == [37u32, 0u32, 5u32, 0u32] { held = held + 1 }
+
+  // A list takes the same wrapper: REFRESH follows the list and its rows, before ROOT.
+  let window = View.Window{tag: 3u32, total: 2u32, first: 0u32, columns: 1u32, rows: [("a", View.Label("a"))]}
+  let (_, listed) = View.mount(&View.Refreshing(7u32, true, View.Recycled(window)))
+  let list = listed.toArray()
+  if wordsAt(&list, 0, 3) == [1u32, 0u32, 8u32] && wordsAt(&list, list.length() - 24, 6) == [37u32, 0u32, 7u32, 1u32, 4u32, 0u32] { held = held + 1 }
+
+  // A pull reports its tag alone; insets arrive as four signed words.
+  if Events.event((16u64 << 32) | 4u64, "") == View.Refreshed(4u32) && !Events.carriesWords(16u64 << 32) { held = held + 1 }
+  let insets = Scene.Insets{top: 59i32, left: 0i32, bottom: 34i32, right: 0i32}
+  if Events.carriesWords(17u64 << 32) && Events.eventWithWords(17u64 << 32, "", 0u32, [59i32, 0i32, 34i32, 0i32]) == View.SafeArea(insets) { held = held + 1 }
+  if Events.eventWithWords(17u64 << 32, "", 0u32, [1i32, 2i32]) == View.Stopped && Scene.insets(&[1i32]) == None { held = held + 1 }
+  held
+}

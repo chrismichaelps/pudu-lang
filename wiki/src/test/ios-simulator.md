@@ -203,3 +203,11 @@ The Pages example, `examples/mobile/Pages.pudu` ([[Native Pages Example]]), runs
 Refusal: a stream whose NAVIGATE names the route id 1 twice is refused before any controller changes. The script compares the refusal line with `pudu: a view stream showed two routes with id 1`.
 
 Resolved Grill Log: the run asserts the labels as well as the lines, so a report that prints correctly while the screen shows a stale count still fails. _Rejected:_ comparing the lines alone, which would pass a screen that never applied the pop.
+
+## Refresh run
+
+The Refresh example, `examples/mobile/Refresh.pudu` ([[Native Refresh Example]]), runs with `PUDU_UI_REFRESH_TEST` set. The script compares the four `PUDU_REFRESH` lines the self-test prints, in the order the steps run: `PUDU_REFRESH insets reported`, `PUDU_REFRESH answered pull refreshing`, `PUDU_REFRESH finished by the program` and `PUDU_REFRESH unanswered pull stopped`. The run must exit with status 0. The labels the run compares are `Pulls: 2` and `Insets: top true`: the top inset must be positive on the simulator. The self-test sequence is described in [[pudu_ios_refresh.h]].
+
+Refusal: a stream whose REFRESH names a label node is refused before any controller changes. The process must abort with `pudu: refreshed a node that does not scroll: 0` for the label's node id, and no first frame may be reported.
+
+Resolved Grill Log: the refusal belongs to the host, which alone knows the node's kind, as for the list refusal above. Checking the lines alone would pass a screen whose indicator never started, so the run also compares the labels that show the pull counts and the insets.

@@ -12,11 +12,12 @@ aliases: [Pudu Compiler Program Eval Data Spec]
 
 ## Purpose and interface
 
-Evaluation spec for collections, memory layout, flat maps, columnar vectors and the stdlib mobile fixtures. `testDataEvaluation` runs each fixture through the program runner and asserts the value it answers. The mobile entries cover the view stream, the list, the theme, the material, the capabilities and the navigation stack.
+Evaluation spec for collections, memory layout, flat maps, columnar vectors and the stdlib mobile fixtures. `testDataEvaluation` runs each fixture through the program runner and asserts the value it answers. The mobile entries cover the view stream, the list, the theme, the material, the capabilities, the navigation stack, and the refresh stream and insets.
 
 The mobile entries checked by this spec:
 - `test-fixtures/stdlib/UsesMobileView.pudu`: asserted to answer `30` ([[Uses Mobile View]]).
 - `test-fixtures/stdlib/UsesMobileNavigation.pudu`: asserted to answer `19` ([[Uses Mobile Navigation]]).
+- `test-fixtures/stdlib/UsesMobileRefresh.pudu`: asserted to answer `9`, the number of checks in the file ([[Uses Mobile Refresh]]).
 - `test-fixtures/stdlib/UsesMobileTheme.pudu`, `UsesMobileList.pudu`, `UsesMobileMaterial.pudu` and `UsesMobileCapabilities.pudu`, run by the same function; their expected values are in the file.
 
 Other fixtures in the function cover lists, structures, ordered and relational maps, buffers, flat maps, columns, hash maps, database rows and the all-collection fixtures. They are listed in the file and are not described here.
@@ -33,7 +34,7 @@ Other fixtures in the function cover lists, structures, ordered and relational m
 
 ## Dependencies and consumers
 
-Depends on the shared runner in `Pudu.Compiler.Program.Common` and on the fixtures above. The mobile fixtures' pages are [[Uses Mobile View]] and [[Uses Mobile Navigation]].
+Depends on the shared runner in `Pudu.Compiler.Program.Common` and on the fixtures above. The mobile fixtures' pages are [[Uses Mobile View]], [[Uses Mobile Navigation]] and [[Uses Mobile Refresh]].
 
 ## Resolved Grill Log
 
@@ -41,4 +42,4 @@ Depends on the shared runner in `Pudu.Compiler.Program.Common` and on the fixtur
 
 ## Referenced by
 
-[[Uses Mobile Navigation]] · [[Uses Mobile View]] · [[Eval Data Tests]]
+[[Uses Mobile Navigation]] · [[Uses Mobile Refresh]] · [[Uses Mobile View]] · [[Eval Data Tests]]
