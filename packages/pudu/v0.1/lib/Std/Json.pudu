@@ -687,6 +687,14 @@ export fn explainDecode(problem: &DecodeError) -> Str {
   prefix + "expected " + problem.expected + ", found " + problem.found
 }
 
+/// `@json("name")` writes and reads a field, or names a variant, under another
+/// JSON key.
+export attribute json(Str)
+
+/// `@default("json")` gives a field the value this JSON text decodes to when
+/// its key is missing.
+export attribute default(Str)
+
 /// A type that writes itself as JSON.
 ///
 /// ## Examples

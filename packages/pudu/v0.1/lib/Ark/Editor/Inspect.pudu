@@ -166,6 +166,17 @@ impl [A: Inspect] Inspect for Array[A] {
   }
 }
 
+/// `@label("text")` shows a field under another label.
+export attribute label(Str)
+
+/// `@min(number)` and `@max(number)` bound a number field's slider; both are
+/// needed for a slider.
+export attribute min(Float)
+export attribute max(Float)
+
+/// `@readonly` shows a field without letting it be edited.
+export attribute readonly
+
 /// A record lists a group row and its fields' rows; `@label`, `@min`/`@max`, `@readonly` and `@skip` shape them.
 export derive Inspect for T: Record {
   fn properties(self: &T, path: Str, hint: &Hint) -> Array[Property] {

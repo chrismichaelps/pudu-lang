@@ -123,7 +123,7 @@ Measured against `iPhoneSimulator26.5`.
 
 | Category | Covered | In the host | Not in the host |
 | --- | --- | --- | --- |
-| Controls | 3 of 12 | `UIButton`, `UISwitch`, `UITextField` | `UIColorWell`, `UIDatePicker`, `UIPageControl`, `UIPasteControl`, `UIRefreshControl`, `UISearchTextField`, `UISegmentedControl`, `UISlider`, `UIStepper` |
+| Controls | 4 of 12 | `UIButton`, `UIRefreshControl`, `UISwitch`, `UITextField` | `UIColorWell`, `UIDatePicker`, `UIPageControl`, `UIPasteControl`, `UISearchTextField`, `UISegmentedControl`, `UISlider`, `UIStepper` |
 | Views | 9 of 33 | `UIActivityIndicatorView`, `UICollectionView`, `UICollectionViewCell`, `UILabel`, `UIProgressView`, `UIScrollView`, `UIStackView`, `UIVisualEffectView`, `UIWindow` | `UIActionSheet`, `UIAlertView`, `UIBackgroundExtensionView`, `UICalendarView`, `UICollectionReusableView`, `UICollectionViewListCell`, `UIContentUnavailableView`, `UIControl`, `UIEventAttributionView`, `UIImageView`, `UIInputView`, `UIListContentView`, `UINavigationBar`, `UIPickerView`, `UIPopoverBackgroundView`, `UISearchBar`, `UIStandardTextCursorView`, `UITabBar`, `UITableView`, `UITableViewCell`, `UITableViewHeaderFooterView`, `UITextView`, `UIToolbar`, `UIWebView` |
 | Gestures | 5 of 7 | `UILongPressGestureRecognizer`, `UIPanGestureRecognizer`, `UIPinchGestureRecognizer`, `UIRotationGestureRecognizer`, `UISwipeGestureRecognizer` | `UIScreenEdgePanGestureRecognizer`, `UITapGestureRecognizer` |
 | Feedback | 3 of 4 | `UIImpactFeedbackGenerator`, `UINotificationFeedbackGenerator`, `UISelectionFeedbackGenerator` | `UICanvasFeedbackGenerator` |

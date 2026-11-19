@@ -1,0 +1,6 @@
+module UnsupportedKind
+
+/// An attribute argument is a literal; an array is not one.
+attribute sizes(Array)
+
+export fn main() -> Int { 0 }

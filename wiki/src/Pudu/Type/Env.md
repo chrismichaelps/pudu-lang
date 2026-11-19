@@ -122,6 +122,10 @@ Direct structural recursion over the type or syntax shape, with the checker's su
 
 DEPTH 0.5 (MEDIUM). It keeps one concern out of [[Type Check]], which the delivery rules cap at 500 lines.
 
+## Declared attributes
+
+`DeclaredTypes` carries `declaredAttributes`, the name-to-parameters map that [[Type Check Attribute]] reads. The map is program-wide, so a declaration in any loaded module governs uses in every module.
+
 ## Grill Log
 
 - **Q:** Where does a match learn it stands in result position? **A:** `stateResultSpans`,

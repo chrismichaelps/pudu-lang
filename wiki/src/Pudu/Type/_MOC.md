@@ -29,6 +29,7 @@ tags: [moc, module]
 - [[Type Boundary]] — the phase entry point and the published type map.
 - [[Type Value]] — formed types, schemes, and how a type is rendered.
 - [[Type Substitution]] — total rigid substitution preserving function contracts.
+- [[Type Check Attribute]] — declared attribute names, argument arity and literal kinds (E3104/E3105).
 - [[Type Check Derive]] — generic canonical trait contract validation for every derive.
 - [[Type Check Derive Spec]] — trait-independent contract and scoped obligation regressions.
 - [[Type Env]] — checker state, name frames, declared shapes, and diagnostics.

@@ -202,6 +202,9 @@ export trait Row {
   fn fromRow(rows: &Driver.Rows, row: Int) -> Result[Self, RowError]
 }
 
+/// `@column("name")` reads a field from the column of that name.
+export attribute column(Str)
+
 /// A record reads each field from the column of its name, or of the name
 /// `@column("name")` gives; the first column that does not read stops it.
 export derive Row for T: Record {

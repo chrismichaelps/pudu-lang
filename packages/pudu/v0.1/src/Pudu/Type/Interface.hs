@@ -19,7 +19,8 @@ import Data.Text (Text)
 import Pudu.Frontend.Syntax.Located (Located (..))
 import Pudu.Frontend.Syntax.Name (ModuleName)
 import Pudu.Frontend.Syntax.Tree
-  ( Declaration (..)
+  ( AttributeDeclarationValue (..)
+  , Declaration (..)
   , Foreign (..)
   , ForeignFunction (..)
   , Function (..)
@@ -89,6 +90,10 @@ mapMaybeDeclaration = foldr keep []
         (ImplDeclaration value{implFunctions = map stripMember (filter (completeSignature . locatedValue) (implFunctions value))}) : rest
     ForeignDeclaration value
       | foreignVisibility value == Exported -> Located spanValue declaration : rest
+    {-| An exported attribute travels with the interface, so every module that
+        loads this one validates `@name` against the same declaration. -}
+    AttributeDeclaration value
+      | attributeDeclarationVisibility value == Exported -> Located spanValue declaration : rest
     _ -> rest
   stripMember (Located spanValue value) = Located spanValue value{functionBody = Nothing}
 

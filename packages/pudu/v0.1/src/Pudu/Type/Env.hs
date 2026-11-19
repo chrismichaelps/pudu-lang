@@ -128,7 +128,7 @@ import Pudu.Diagnostic
   , withHelp
   )
 import Pudu.Frontend.Syntax.Located (Located (..))
-import Pudu.Frontend.Syntax.Tree (Capability (..))
+import Pudu.Frontend.Syntax.Tree (AttributeParameter, Capability (..))
 import Pudu.Source (Span)
 import Pudu.IntegerLiteral (fitsIntegerType)
 import Pudu.Type.Frontier (splitSince, splitBetween)
@@ -170,10 +170,13 @@ data DeclaredTypes = DeclaredTypes
       one the compiler actually read. Absent from here means nothing could be
       known about it, and silence is the honest answer. -}
   , declaredQualifiers :: !(Set Text)
-  {-| Sum types declared `#[static_function]`: every function given to one of
+  {-| Sum types carrying `@static_function`: every function given to one of
       their constructors must name a module-level function. Kept by nominal
       identity, so the rule holds through any import alias. -}
   , declaredStaticFunctions :: !(Set NominalId)
+  {-| Every attribute this module and the modules it loads declare, with the
+      literal kind of each argument. A name absent here is no attribute at all. -}
+  , declaredAttributes :: !(Map Text [AttributeParameter])
   }
   deriving stock (Eq, Show)
 
@@ -200,6 +203,7 @@ emptyDeclared =
     , declaredTraitNames = Set.empty
     , declaredQualifiers = Set.empty
     , declaredStaticFunctions = Set.empty
+    , declaredAttributes = Map.empty
     }
 
 {-| Constructor identity follows aliases; ordinary bindings clear it on shadowing. -}

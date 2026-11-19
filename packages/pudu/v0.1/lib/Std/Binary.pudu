@@ -204,6 +204,10 @@ impl [A: Decode] Decode for Option[A] {
   fn missing() -> Option[Self] { Some(None) }
 }
 
+/// `@binary("name")` writes and reads a field, or names a variant, under
+/// another wire name.
+export attribute binary(Str)
+
 /// A record writes its fields under their wire names: `@binary("name")` renames one and `@skip`
 /// leaves one out.
 export derive Encode for T: Record {

@@ -108,6 +108,10 @@ including through chains and generic aliases. Nominal shells terminate data recu
 
 DEPTH 0.55 (MEDIUM). It keeps one concern out of [[Type Check]], which the delivery rules cap at 500 lines.
 
+## Declared attributes
+
+Formation collects `declaredAttributes :: Map Text [AttributeParameter]` into `DeclaredTypes` from the module and every exported declaration of the program's interfaces. Two declarations of one name with different parameters are `E3106` at the later one; the earlier parameters stand.
+
 ## Grill Log
 
 - **Q:** May a bare alias entry win over the declaration resolved by the current module's names?

@@ -86,6 +86,10 @@ result `type`. `:instances` scans implementations for a matching target head.
 
 DEPTH 0.40 (SHALLOW by intent). It is a projection of the parsed module for the inspection commands.
 
+## Declared attributes
+
+Describe shows an attribute declaration as `attribute @name(...)` with its parameter kinds. It binds no value.
+
 ## Grill Log
 
 - **Q:** Should `:kind` print `*` and `* -> *`? **A:** No. _Rationale:_ borrowing a

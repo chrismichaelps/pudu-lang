@@ -16,6 +16,7 @@ import Pudu.Frontend.Syntax
   , Located (..)
   , Module (..)
   , Visibility (..)
+  , attributeSignature
   , moduleNameText
   )
 import Pudu.Source (Source, SourceName (SourceName), newSource)
@@ -244,3 +245,4 @@ declarationShape (Located _ declaration) = case declaration of
   DeriveImplDeclaration _ -> "derive impl"
   ForeignDeclaration value -> "foreign " <> locatedValue (foreignLibrary value)
   InvalidDeclaration -> "invalid"
+  AttributeDeclaration value -> attributeSignature value

@@ -19,7 +19,8 @@ the actual Std.Meta facade; no stubs, manual AST replacement or implicit derives
 ## Coverage and invariants
 
 Sum graph fixtures execute unit, positional, named and generic payloads through
-a definition module that does not import the consumer target. Assert reflected
+a definition module that does not import the consumer target. The definition exports
+its attribute (`export attribute wire(Str)`), so consumer uses of `@wire` are checked against it. Assert reflected
 declaration indexes, attributes, canonical pattern selection, field values and
 ordinary E7013 mismatch behavior in both evaluators. Empty payloads do no work.
 

@@ -68,6 +68,7 @@ import Pudu.Type.Check.Safety
   ( requireComptimePurity
   )
 import Pudu.Type.Check.Coherence (checkCoherence)
+import Pudu.Type.Check.Attribute (checkAttributes)
 import Pudu.Type.Check.Bound (checkDeclarationBounds)
 import Pudu.Type.Check.Derive (checkDeriveContracts)
 import Pudu.Type.Check.Collection (requireConcreteSetLiteral)
@@ -207,6 +208,7 @@ checkUnit scope imported moduleValue = do
   mapM_ (declareSignature declared layouts traits defaults) (traitsFirst (moduleDeclarations moduleValue))
   when (scope == WholeModule) (checkCoherence (moduleDeclarations moduleValue))
   checkDeriveContracts declared imported moduleValue
+  checkAttributes declared (moduleDeclarations moduleValue)
   {-| A function literal's unwritten parameter types are settled once the
       declaration holding it is, so they are judged declaration by declaration. -}
   mapM_

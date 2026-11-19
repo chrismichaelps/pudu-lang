@@ -31,7 +31,7 @@ evaluation, multiple target instantiations, generic targets,
 canonical aliases and selected imports, literal-true and literal-false no-else
 unit residualization through real generated methods, lexical shadowing, nested closures and
 patterns. Assert separate generated identities and structured field obligations.
-Refuse wrong shape, unknown sequences, escaping metadata and exhausted limits.
+Refuse wrong shape, unknown sequences, escaping metadata and exhausted limits. Each probe declares the attributes it writes or reads (`attribute wire(Str)`, `attribute restore`); the arity refusal declares `attribute wire(Str, Str)` so expansion, not the checker, refuses the two-literal use.
 Test only admitted templates; malformed generic definitions fail before the kernel.
 
 ## Negative logic and edge cases

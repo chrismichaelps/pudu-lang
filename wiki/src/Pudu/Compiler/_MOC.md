@@ -89,3 +89,5 @@ Dependency direction: Library → Program. Only [[Compiler Program]] reads files
 - [[Bound Receiver Evidence Delivery]] — complete selected bound and receiver facts for #735.
 
 - [[Program View Spec]] — public view compatibility and boundary evidence.
+
+- [[Program Attribute Spec]] — declared attribute uses and their refusals, one exact-code property (#965).

@@ -91,8 +91,8 @@ callback, `return` answers that field, and `?` ends a `Result` build with its `E
 answers a collect field's `None`.
 
 Types, fields, and variants carry **attributes**, written `@name` or `@name(literal, ...)`. They are
-inert data that only compile-time code reads. An attribute no derive reads is allowed; a derive may
-refuse one it does not recognise.
+inert data that only compile-time code reads. A derive's module declares each attribute it reads with an
+`attribute name(...)` declaration; reading or writing an undeclared attribute is an error (`E3104`), and a use whose arguments do not match the declared kinds is `E3105`.
 
 ## Phases
 
@@ -300,6 +300,7 @@ attributes.
   In the definition's module, naming the type canonically; formation treats an unbound
   qualified generated path as that canonical declaration. _Rejected:_ importing every
   target into every definition module.
+- **Q:** Why declare attributes rather than warn on unread ones? **A:** What a derive reads is decided when it runs, so the compiler cannot know it ahead; a declaration states it, makes a typo an error at the use, and checks argument kinds.
 
 ## Referenced by
 

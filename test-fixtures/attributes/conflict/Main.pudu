@@ -1,0 +1,8 @@
+module Main
+
+import Tags
+
+/// `Tags` already declares `@tag` taking text; a second meaning is refused here.
+attribute tag(Int)
+
+export fn main() -> Int { Tags.one() }

@@ -18,7 +18,7 @@ reflectionProgramProperties =
 
 testDescriptors :: IO Property
 testDescriptors = checkCases
-  [ ("record properties and owner-specific read", record
+  [ ("record properties and owner-specific read", fixture ["import Std.Meta", "attribute json(Str)", "attribute default(Str)"] "Record" False
       [ "comptime for field: Meta.Field[T, F] in Meta.fields[T]() {"
       , "  let name: Str = field.name"
       , "  let held: F = field.get(self)"
