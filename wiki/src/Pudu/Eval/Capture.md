@@ -77,6 +77,10 @@ everything else contributes what it names.
 
 DEPTH 0.50 (MEDIUM). One walk, and one rule about which direction to be wrong in.
 
+## Declared attributes
+
+Closure capture does nothing with an attribute declaration; an attribute carries no value to capture.
+
 ## Grill Log
 
 - **Q:** Why not compute true free variables, subtracting what the body binds? **A:** Because the

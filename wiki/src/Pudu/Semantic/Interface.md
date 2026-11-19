@@ -75,6 +75,10 @@ Project each parsed declaration with exported visibility into its value/type nam
 
 DEPTH 0.68 (MEDIUM). It hides export projection, namespace-aware selection, declaring identity, module aliases, and stable import diagnostics behind a small pure API.
 
+## Declared attributes
+
+Interfaces export exported attribute declarations, so an importing module's semantic view includes them. Attribute declarations bind no value.
+
 ## Grill Log
 
 - **Q:** Should imports remain opaque in a program graph? **A:** No. _Rationale:_ loaded modules provide authoritative exports, so guessing both namespaces would discard privacy and identity. _Rejected:_ permanent `ImportOrigin` placeholders in both namespaces.

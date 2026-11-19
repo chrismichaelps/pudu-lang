@@ -3,6 +3,7 @@ module Pudu.Compiler.ProgramSpec
   ( programProperties
   ) where
 
+import Pudu.Compiler.Program.AttributeSpec (testDeclaredAttributes)
 import Pudu.Compiler.Program.EvalSpec (testLinkedNames, testProgramEvaluation)
 import Pudu.Compiler.Program.ForeignSpec
   ( testForeignHandles
@@ -89,4 +90,5 @@ programProperties = reflectionProgramProperties <> viewProperties <>
   , ("opaque handles cross a real C++ boundary with one release", testForeignHandles)
   , ("foreign ownership serializes release and call use", testForeignOwnershipStore)
   , ("foreign teardown ends even while a native call is inside", testForeignTeardownEnds)
+  , ("every attribute names a declaration of its kinds", testDeclaredAttributes)
   ]

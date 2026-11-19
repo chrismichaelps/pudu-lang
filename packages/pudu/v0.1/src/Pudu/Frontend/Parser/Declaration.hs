@@ -5,7 +5,7 @@ module Pudu.Frontend.Parser.Declaration
 
 import Pudu.Frontend.Parser.Declaration.Binding (parseTopConst)
 import Pudu.Frontend.Parser.Declaration.Block (parseBlock)
-import Pudu.Frontend.Parser.Declaration.Derive (parseAttributes, parseDeriveDeclaration)
+import Pudu.Frontend.Parser.Declaration.Derive (parseAttributeDeclaration, parseAttributes, parseDeriveDeclaration)
 import Pudu.Frontend.Parser.Declaration.Function (parseFunction)
 import Pudu.Frontend.Parser.Declaration.Import (parseImport)
 import Pudu.Frontend.Parser.Declaration.Macro (parseMacro)
@@ -134,6 +134,9 @@ parseTopDeclaration _ = do
         variable, and a language that costs its own users a rename to gain a
         feature has chosen the feature over them. -}
     Identifier "foreign" -> parseForeign visibility
+    {-| `attribute` declares what `@name` means, and like `derive` it is
+        special only at a declaration start. -}
+    Identifier "attribute" -> parseAttributeDeclaration visibility
     Keyword reserved | isReservedDeclaration reserved -> reservedDeclaration
     _ -> unexpectedModuleToken
   admitAttributes (not (null trailing)) attributes declaration

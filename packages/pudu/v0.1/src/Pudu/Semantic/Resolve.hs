@@ -212,6 +212,9 @@ collectDeclaration (Located _ declaration) = case declaration of
       )
       (foreignFunctions value)
   InvalidDeclaration -> pure ()
+  {-| Attribute names are their own namespace: `@name` never names a value
+      or type, and the checker validates every use against the declarations. -}
+  AttributeDeclaration _ -> pure ()
 
 {-| Record candidates under their declaring type before any body is walked. -}
 collectVariants :: Text -> Located TypeDefinition -> Resolver ()
@@ -263,6 +266,7 @@ walkDeclaration (Located spanValue declaration) = case declaration of
     mapM_ (walkForeignCallbackGroup . locatedValue) (foreignCallbackGroups value)
     mapM_ (walkForeignFunction . locatedValue) (foreignFunctions value)
   InvalidDeclaration -> pure ()
+  AttributeDeclaration _ -> pure ()
 
 walkForeignCallback :: ForeignCallback -> Resolver ()
 walkForeignCallback callback = do

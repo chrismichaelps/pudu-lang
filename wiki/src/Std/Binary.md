@@ -36,6 +36,10 @@ wire name; an unknown one is `UnknownVariant(name)`. `BinaryError` carries the `
 names and `[index]` steps, and `Corrupt(message)` for anything the native reader refused, or
 `WrongKind(expected)`.
 
+## Declared attributes
+
+Declares `export attribute binary(Str)`.
+
 ## Grill Log
 
 - **Q:** Must the derive trait be named after its implementation method? **A:** No; the public

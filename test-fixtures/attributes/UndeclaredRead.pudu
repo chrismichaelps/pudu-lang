@@ -1,0 +1,20 @@
+module UndeclaredRead
+
+import Std.Meta as Meta
+
+/// How many fields a record shows.
+trait Shown {
+  fn shown() -> Int
+}
+
+/// Reads `@hidden`, which nothing declares: the read is refused where it is
+/// written, rather than quietly answering false for every field.
+derive Shown for T: Record {
+  fn shown() -> Int {
+    Meta.collect[T](fn(member: Meta.Field[T, F]) -> Option[Int] { if member.has("hidden") { None } else { Some(1) } }).length()
+  }
+}
+
+type Point = { x: Int, y: Int } derives Shown
+
+export fn main() -> Int { 0 }

@@ -8,6 +8,9 @@ import Std.Meta
 import Std.Order {Eq, Ord}
 import Std.Show {Show}
 
+/// The heading a field's column shows; the derive below reads it.
+attribute label(Str)
+
 trait Columns {
   fn columns(self: &Self) -> Str
 }

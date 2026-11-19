@@ -49,6 +49,10 @@ files itself. The CLI owns atomic persistence and recompiles after a change.
 - Derive members lint like ordinary members: the loop unrolls them, so a finding inside one is a
   finding in every instantiation. A compile-time loop lints its source and its body like a `for` loop.
 
+## Declared attributes
+
+Lint ignores attribute declarations. They bind no value and live in their own namespace, so no unused-binding or shadowing rule applies to them.
+
 ## Grill Log
 
 - **Q:** Copy HLint's rewrite language? **A:** No. _Rationale:_ Pudu already owns exact AST spans and

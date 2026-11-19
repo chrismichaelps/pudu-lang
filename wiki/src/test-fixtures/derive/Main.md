@@ -14,7 +14,7 @@ Exercise inline record and Sum requests and an external local record request
 through the real compiler. The record template unrolls two literal iterations
 and answers `tagrr`; the Sum template answers `sum`. Calling all three generated
 methods answers `tagrrtagrrsum`, preserving ordinary construction and dispatch.
-Attributes remain inert when no template reads them.
+The module declares `json(Str)`, `skip` and `round` before any use; declared attributes remain inert when no template reads them.
 
 ## Grill Log
 

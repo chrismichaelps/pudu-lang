@@ -110,6 +110,10 @@ and attaches a direct comment or the matching inherited trait comment.
 
 DEPTH 0.60 (MEDIUM). It joins three producers without owning any of their logic.
 
+## Declared attributes
+
+The doc generator lists exported attribute declarations with their parameter kinds.
+
 ## Grill Log
 
 - **Q:** Should documentation be a field on each declaration in the syntax tree? **A:** No.

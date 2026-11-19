@@ -96,6 +96,10 @@ Collect exported declarations by namespace and assign canonical identities. Reta
 
 DEPTH 0.76 (DEEP). It hides export projection, body stripping, canonical identity, import-shape interpretation, privacy checks, trait-scope filtering, and merge policy behind two constructors.
 
+## Declared attributes
+
+Interfaces export exported attribute declarations with their parameter kinds, so an importing module sees the declared set.
+
 ## Grill Log
 
 - **Q:** Store dependency ASTs or an interface projection? **A:** A body-free interface projection. _Rationale:_ consumers need signatures, shapes, and implementations but must not re-check or own dependency bodies. _Rejected:_ whole AST; only exported names, which cannot type-check fields, constructors, or methods.

@@ -30,6 +30,7 @@ import Pudu.Frontend.Syntax.Tree
   , Pattern (..)
   , Statement (..)
   , TypeDeclarationValue (..)
+  , attributeSignature
   )
 
 {-| Render a parsed block as one line per statement. The shape is structural:
@@ -71,6 +72,7 @@ outlineDeclaration (Located _ declaration) = case declaration of
     "foreign " <> Text.pack (show (locatedValue (foreignLibrary value)))
       <> " { " <> Text.intercalate "; " (map foreignOutline (foreignFunctions value)) <> " }"
   InvalidDeclaration -> "invalid"
+  AttributeDeclaration value -> attributeSignature value
 
 outlineExpression :: Located Expression -> Text
 outlineExpression (Located _ expression) = case expression of

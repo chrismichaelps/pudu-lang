@@ -137,6 +137,7 @@ declarationWork declaration = case declaration of
   MacroDeclaration macroValue -> [ExpressionWork (macroBody macroValue)]
   ForeignDeclaration {} -> []
   InvalidDeclaration -> []
+  AttributeDeclaration {} -> []
 
 functionWork :: Function -> [Work]
 functionWork function =

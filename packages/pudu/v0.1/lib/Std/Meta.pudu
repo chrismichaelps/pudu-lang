@@ -6,6 +6,10 @@ module Std.Meta
 /// Descriptor values have no runtime representation. Their declarations
 /// provide compile-time signatures; instantiation must eliminate every use.
 
+/// `@skip` leaves a field out of every derive that reads it: encodings write
+/// nothing for it and editors list no row for it.
+export attribute skip
+
 /// One field of the record `T`, holding values of type `F`.
 export type Field[T, F] = { name: Str }
 

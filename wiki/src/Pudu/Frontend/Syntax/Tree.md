@@ -242,6 +242,10 @@ No algorithm; strict algebraic representation with derived equality/show for tes
 
 DEPTH 0.56 (MEDIUM). Breadth is inherent to the grammar; co-location is deliberate data recursion, not monolithic logic.
 
+## Declared attributes
+
+`Declaration` gains `AttributeDeclaration !AttributeDeclarationValue` as its last constructor, so stored interfaces keep the tags of the earlier constructors. `AttributeDeclarationValue` holds the visibility, the located name and the located parameter list; `AttributeParameter` is `TextParameter | IntegerParameter | NumberParameter | DecimalParameter | BoolParameter | CharParameter`.
+
 ## Grill Log
 
 - **Q:** Why does the tree hold a `ResolvedInteger` the parser never builds? **A:** [[Compiler Literals]]

@@ -78,6 +78,7 @@ fromDeclaration (Located _ declaration) = case declaration of
   TypeDeclaration _ -> Set.empty
   ForeignDeclaration _ -> Set.empty
   InvalidDeclaration -> Set.empty
+  AttributeDeclaration _ -> Set.empty
 
 fromExpression :: Located Expression -> Set Text
 fromExpression (Located _ expression) = case expression of
