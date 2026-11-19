@@ -13,7 +13,8 @@
     refuses overlapping loans, so no code can observe the place while the call
     runs and this is indistinguishable from writing through it. -}
 module Pudu.Eval.Place
-  ( Lent (..)
+  ( Blame (..)
+  , Lent (..)
   , Place
   , exclusiveParameters
   , noneLent
@@ -43,7 +44,15 @@ import Pudu.Frontend.Syntax.Tree
   )
 import Pudu.Source (Span)
 
-data Step = FieldStep !Text | ElementStep !Value
+-- An element step keeps its key's span, so a receiver read through the place
+-- can fail where reading the same element as a value does.
+data Step = FieldStep !Text | ElementStep !Span !Value
+
+{-| Where a read through a place reports a failing element or slice. A
+    receiver that is only read blames the key or range it was chosen by; a
+    loan, including a receiver lent mutably, blames the root name, as a store
+    into the same place does. -}
+data Blame = AtKey | AtRoot
 
 data Place = Place !Span !Text ![Step]
 
@@ -67,7 +76,7 @@ placeOf evaluate (Located spanValue expression) = case expression of
       Nothing -> pure Nothing
       Just found -> do
         key <- evaluate index
-        pure (Just (extend (ElementStep key) found))
+        pure (Just (extend (ElementStep (locatedSpan index) key) found))
   UnaryExpression "*" operand -> placeOf evaluate operand
   UnaryExpression "&mut" operand -> placeOf evaluate operand
   _ -> pure Nothing
@@ -85,8 +94,8 @@ extend :: Step -> Place -> Place
 extend step (Place spanValue root steps) = Place spanValue root (steps <> [step])
 
 {-| What a place holds, read the way the expression naming it would be. -}
-readPlace :: Place -> Evaluator Value
-readPlace (Place spanValue root steps) = do
+readPlace :: Blame -> Place -> Evaluator Value
+readPlace blame (Place spanValue root steps) = do
   found <- lookupName root
   case found of
     Nothing -> abortAt (Just spanValue) "E7001" ("undefined name " <> root) Nothing
@@ -95,7 +104,10 @@ readPlace (Place spanValue root steps) = do
   follow value remaining = case remaining of
     [] -> pure value
     FieldStep field : rest -> readMember spanValue value field >>= \inner -> follow inner rest
-    ElementStep key : rest -> readIndex spanValue value key >>= \inner -> follow inner rest
+    ElementStep keySpan key : rest -> readIndex (blamed keySpan) value key >>= \inner -> follow inner rest
+  blamed keySpan = case blame of
+    AtKey -> keySpan
+    AtRoot -> spanValue
 
 {-| Store a value into a place: the binding at its root is given a copy of what
     it held with the one field or element along the path replaced. -}
@@ -128,7 +140,7 @@ storePlace (Place spanValue root steps) value = do
       _ ->
         abortAt (Just spanValue) "E7001"
           ("a " <> valueKind current <> " has no field " <> field <> " to assign") Nothing
-    ElementStep key : rest -> case (current, key) of
+    ElementStep _ key : rest -> case (current, key) of
       (ArrayValue members, IntValue _ position)
         | position >= 0 && position < toInteger (Seq.length members) -> do
             let index = fromInteger position

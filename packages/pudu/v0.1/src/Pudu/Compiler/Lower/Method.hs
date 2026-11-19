@@ -17,7 +17,7 @@ import Pudu.Compiler.Lower.State
 import Pudu.Compiler.Lower.Generic (instantiationOf, matchType, specialize, unformed)
 import Pudu.Compiler.Lower.Dynamic (isDynamic, pathText, widen, writtenType)
 import Pudu.Compiler.Lower.Loan (Callee (..), Operand (..), lowerLoanedOperands)
-import Pudu.Compiler.Lower.Place (HeldPlace (..), holdPlace, readHeld, storeHeld)
+import Pudu.Compiler.Lower.Place (HeldPlace (..), holdPlace, readHeld, readHeldAtKeys, storeHeld)
 import Pudu.Compiler.Lower.Types (formedCoreTypeIn, lookupScheme, ownerKeyOf, selectedMember, sumVariants, typeBindings, typeFactAt, typeForSpan, nativeValueType)
 import Pudu.Core
 import Pudu.Eval.Operator.Access (arrayMethods, mapMethods, setMethods, stringMethods)
@@ -260,7 +260,7 @@ dynamicCall lower state at kind receiver member checked arguments = case receivi
   receiving
     | selfLent, Just held <- holdPlace lower probed (locatedSpan receiver) receiver = case held of
         (after, Nothing) -> (after, Nothing)
-        (after, Just (prelude, found)) -> (after, Just (prelude, readHeld (contextTypes (lowerContext after)) found, Just found))
+        (after, Just (prelude, found)) -> (after, Just (prelude, readHeldAtKeys (contextTypes (lowerContext after)) found, Just found))
     | otherwise = case lower probed receiver of
         (after, Nothing) -> (after, Nothing)
         (after, Just (core, _)) -> (after, Just ([], core, Nothing))

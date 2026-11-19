@@ -18,6 +18,8 @@ Own deterministic output state, diagnostic-site baking, byte escaping, and tempo
 
 Exports EmitState fields, emptyEmitState, line, freshTemp, textOfInt, overflowSite, divideByZeroSite, callDepthSite, operatorFailureSite, shiftSites, renderSites, cString, cStringBytes, and profileLabel.
 
+The `Site` record has the field `siteNotes :: [Text]`, the note lines printed after its excerpt.
+
 ## Algorithm and invariants
 
 Output and site lists accumulate in reverse; counters increase monotonically across the translation unit. Site geometry uses the shared diagnostic renderer. UTF-8 bytes escape as three-digit octal sequences; question marks also escape to prevent C11 trigraph replacement. No source-dependent preprocessor behavior is allowed. `profileLabel role name identity` builds the assembler label of a generated function from its role, Pudu name and index: characters outside `A-Za-z0-9` become `_`, and the name is capped at 96 characters.
@@ -87,3 +89,7 @@ string literal? **A:** No. _Rationale:_ C guarantees string literals only up
 to 4095 bytes and the leak builds reject longer ones; an array initializer
 has no such limit. _Rejected:_ adjacent string pieces, which still form one
 overlong literal.
+
+## Derive notes (#959)
+
+`siteAt` renders the notes of a span generated from a derive, read from `spanOrigin`: `derive definition (file:line:column)` then `derive requested here (file:line:column)`, as the interpreter's diagnostic prints them. `renderSites` emits them as one `notes` string of `   = note: ...` lines, or `NULL`. Resolved Grill Log: render at emit time, where the sources are; the C runtime prints the baked text.

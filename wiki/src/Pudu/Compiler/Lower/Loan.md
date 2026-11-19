@@ -52,6 +52,11 @@ inside a loaned function returns its own value.
   argument's index must run after an earlier argument's effects, as the
   evaluator's `mapM argumentOf` orders them.
 
+- **Q:** Why do a lent receiver and a lent argument report at different spans?
+  **A:** A receiver is chosen by its key like any element read, whatever its
+  method does; an argument written `&mut place` names a place to write back,
+  and writes report at the root.
+
 See [[Native Mutable Loans]].
 
 ## Dependencies and consumers
@@ -79,7 +84,8 @@ A foreign call checks its captured report after the ordered stores and before re
 Also export Operand and lowerLoanedOperands: operands come in the order
 they run, each with its parameter position and whether it is an argument or
 a method receiver. A receiver at a loaned position lends any place it
-names; an argument only `&mut place` or a local lent on. The call passes
+names, read with readHeldAtKeys; an argument only `&mut place` or a local lent
+on, read with readHeld. The call passes
 operands by position and stores finals in parameter order, so a receiver
 is written back first, as `callClosureLending` lists
 `lentSelf` first. lowerLoanedCall is the case of arguments in order.

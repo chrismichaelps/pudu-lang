@@ -18,7 +18,7 @@ import Pudu.Diagnostic.Arithmetic (CheckedOperation, divideByZeroCode, divideByZ
 import Pudu.Diagnostic.Evaluation (callDepthCode, callDepthHelp, callDepthMessage, operatorCode)
 import Pudu.Diagnostic.Render (Excerpt (..), excerptGeometry)
 import Pudu.IntegerLiteral (IntegerKind)
-import Pudu.Source (Position (..), Source, Span, offsetPosition, sourceName, spanSource, spanStart, unSourceName)
+import Pudu.Source (Position (..), Source, Span, offsetPosition, sourceName, spanOrigin, spanSource, spanStart, unSourceName)
 
 {-| @Backend.Emit.Site — one refusal site, flattened for the C table. -}
 data Site = Site
@@ -33,6 +33,7 @@ data Site = Site
   , siteWidth :: !Int
   , siteMultiline :: !Bool
   , siteHasExcerpt :: !Bool
+  , siteNotes :: ![Text]
   }
   deriving stock (Eq, Show)
 
@@ -121,7 +122,20 @@ siteAt state spanValue code message help =
       , siteHasExcerpt = case excerpt of
           Just _ -> True
           Nothing -> False
+      , siteNotes = case spanOrigin spanValue of
+          Just (definition, request, _) ->
+            [ "derive definition (" <> located definition <> ")"
+            , "derive requested here (" <> located request <> ")" ]
+          Nothing -> []
       }
+  -- A related span's location as the interpreter's diagnostic note prints it.
+  located at =
+    let held = filter ((== spanSource at) . sourceName) (emitSources state)
+        place = case held of
+          found : _ -> offsetPosition found (spanStart at)
+          [] -> Nothing
+     in unSourceName (spanSource at) <> ":" <> textOfInt (maybe 1 positionLine place)
+          <> ":" <> textOfInt (maybe 1 positionColumn place)
 
 overflowSite :: EmitState -> Span -> IntegerKind -> CheckedOperation -> (EmitState, Int)
 overflowSite state spanValue kind operation =
@@ -189,7 +203,11 @@ renderSites sites =
       <> flag (siteMultiline site)
       <> ", "
       <> flag (siteHasExcerpt site)
+      <> ", "
+      <> notes (siteNotes site)
       <> " },"
+  notes [] = "NULL"
+  notes related = cString (Text.concat ["   = note: " <> note <> "\n" | note <- related])
   flag True = "1"
   flag False = "0"
 

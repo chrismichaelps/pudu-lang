@@ -150,7 +150,7 @@ testPipes
   diagnostic="error[E7004]: float probe\n  --> runtime.pudu:1:1\n"
   check cc root runner fatal = do
     built <- compileRuntime cc root "pipes" [] (["print_float","process_io"]<>["fail" | fatal])
-      (["static const pudu_site probe={\"runtime.pudu\",1,1,\"E7004\",\"float probe\",NULL,\"\",0,0,0,0};" | fatal]<>
+      (["static const pudu_site probe={\"runtime.pudu\",1,1,\"E7004\",\"float probe\",NULL,\"\",0,0,0,0,NULL};" | fatal]<>
        ["int main(void) { pudu_prepare_io(); pudu_print_float(UINT64_C(0x3fb99999a0000000));"
        ,"  pudu_print_float(UINT64_C(0x8000000000000000));"
        ,if fatal then "  pudu_fail(&probe); return 0; }" else "  return 7; }"])

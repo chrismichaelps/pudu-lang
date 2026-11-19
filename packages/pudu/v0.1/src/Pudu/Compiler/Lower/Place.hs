@@ -5,7 +5,7 @@
     is reported at its root name. A lent place is held the same way: its
     indices run once, where the argument stands, and the store after the call
     reads the root again. -}
-module Pudu.Compiler.Lower.Place (HeldPlace (..), holdPlace, lowerPlaceAssignment, readHeld, storeHeld) where
+module Pudu.Compiler.Lower.Place (HeldPlace (..), holdPlace, lowerPlaceAssignment, readHeld, readHeldAtKeys, storeHeld) where
 
 import Data.List.NonEmpty (NonEmpty (..))
 import Data.Text (Text)
@@ -102,12 +102,22 @@ place (Located spanValue expression) = case expression of
   UnaryExpression "*" inner -> place inner
   _ -> Nothing
 
-{-| What a held place holds, read through its root at the root's span. -}
+{-| What a held place holds, read through its root at the root's span: a lent
+    argument fails where a store into the same place would. -}
 readHeld :: LowerTypes -> HeldPlace -> CoreExpression
-readHeld types found = foldl' step (rootRead found) (heldSteps found)
+readHeld types found = readHeldBy types (const (heldSpan found)) found
+
+{-| What a held receiver holds, each element read at its own key: a receiver
+    chosen by an element fails where reading that element as a value does,
+    whether its method reads it or changes it. -}
+readHeldAtKeys :: LowerTypes -> HeldPlace -> CoreExpression
+readHeldAtKeys types = readHeldBy types (\(CoreExpression keyAt _ _) -> keyAt)
+
+readHeldBy :: LowerTypes -> (CoreExpression -> Span) -> HeldPlace -> CoreExpression
+readHeldBy types spanOfIndex found = foldl' step (rootRead found) (heldSteps found)
  where
   step current (Left field) = CoreExpression (heldSpan found) (fieldType types current field) (CoreField field current)
-  step current (Right index) = CoreExpression (heldSpan found) (elementType current) (CoreArrayMethod ArrayGetAt current [index])
+  step current (Right index) = CoreExpression (spanOfIndex index) (elementType current) (CoreArrayMethod ArrayGetAt current [index])
 
 {-| Store a value through a held place, reading the root as it is now. -}
 storeHeld :: LowerTypes -> Span -> HeldPlace -> CoreExpression -> CoreStatement

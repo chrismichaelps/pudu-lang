@@ -143,6 +143,8 @@ siteLines =
   , "  int caret_width;"
   , "  int multiline;"
   , "  int has_excerpt;"
+  , "  /* Rendered note lines for a span generated from a derive, or NULL. */"
+  , "  const char *notes;"
   , "} pudu_site;"
   ]
 
@@ -191,6 +193,7 @@ failLines =
   , "    if (where->multiline) fputs(\" ...\", stderr);"
   , "    fputc('\\n', stderr);"
   , "  }"
+  , "  if (where->notes != NULL) fputs(where->notes, stderr);"
   , "  if (note != NULL) {"
   , "    fputs(\"   = note: \", stderr);"
   , "    if (note_length != 0) fwrite(note, 1, note_length, stderr);"

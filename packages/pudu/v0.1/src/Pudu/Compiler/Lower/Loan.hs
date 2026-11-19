@@ -15,7 +15,7 @@ import Data.List.NonEmpty (NonEmpty (..))
 import Data.Text (Text)
 import Pudu.Compiler.Lower.Control (blockType, expressionIsPrintValued)
 import Pudu.Compiler.Lower.Default (suppliedArguments)
-import Pudu.Compiler.Lower.Place (HeldPlace (..), holdPlace, readHeld, storeHeld)
+import Pudu.Compiler.Lower.Place (HeldPlace (..), holdPlace, readHeld, readHeldAtKeys, storeHeld)
 import Pudu.Compiler.Lower.State (CoreSignature (..), LowerContext (..), LowerState (..), bindLocal, halt, refused)
 import Pudu.Core
 import Pudu.Frontend.Syntax (Expression (..), Function, Located (..))
@@ -116,21 +116,23 @@ lowerLoanedOperands lower state at callee signature defaulted operands = case ca
               declared = declarations <> [CoreStatement (locatedSpan argument) (CoreDeclare local value)]
            in go prepareCall bound (statements <> declared) ((local, kept, index) : held) rest
 
+  -- A lent receiver fails at the key that chose it, as reading that element
+  -- as a value does; a lent argument fails at its root, as a store does.
   argumentOf current index operand argument
-    | index `elem` loaned, Receiver <- operand = lentFrom argument
+    | index `elem` loaned, Receiver <- operand = lentFrom readHeldAtKeys argument
     | index `elem` loaned = case locatedValue argument of
-        UnaryExpression "&mut" inner -> lentFrom inner
-        NameExpression (_ :| []) -> lentFrom argument
+        UnaryExpression "&mut" inner -> lentFrom readHeld inner
+        NameExpression (_ :| []) -> lentFrom readHeld argument
         _ -> plain argument
     | otherwise = plain argument
    where
     plain written = case lower current written of
       (after, Just (core, _)) -> (after, Just ([], core, Nothing))
       (after, Nothing) -> (after, Nothing)
-    lentFrom written = case holdPlace lower current (locatedSpan written) written of
+    lentFrom reading' written = case holdPlace lower current (locatedSpan written) written of
       Nothing -> plain written
       Just (after, Nothing) -> (after, Nothing)
-      Just (after, Just (declarations, found)) -> (after, Just (declarations, readHeld (types after) found, Just found))
+      Just (after, Just (declarations, found)) -> (after, Just (declarations, reading' (types after) found, Just found))
 
   finish prepareCall current statements held
     | blockType statements Nothing == CoreNeverType = stopped current statements
