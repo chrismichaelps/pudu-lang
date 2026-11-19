@@ -25,7 +25,7 @@ everything each was made from, so a lookup finds the product of exactly this inp
 ```haskell
 data ProductCache
 disabledCache :: ProductCache
-openProductCache :: IO ProductCache            -- PUDU_CACHE / XDG_CACHE_HOME / ~/.cache
+openProductCache :: IO ProductCache            -- root from [[Cache Location]]
 openProductCacheAt :: FilePath -> IO ProductCache
 openCollectingCache :: Map String ByteString -> IO ProductCache  -- held in memory, no directory
 collectedEntries :: ProductCache -> IO (Map String ByteString)
@@ -58,8 +58,9 @@ pruneProducts :: ProductCache -> IO ()
   file and renamed into place, and is a miss when it does not verify. A failed write removes its
   temporary file, and so does a write interrupted part way, as the language server interrupts an
   analysis nobody needs any more. A cache that cannot be opened or written is no cache; compiling never depends on it.
-- **Isolation.** Entries live under a directory named by the compiler's version and executable
-  identity; a different compiler reads none of them and removes directories it cannot read.
+- **Isolation.** Entries live under a directory named by the compiler's identity from
+  [[Cache Location]], which combines the version and the executable path, size and time; a
+  different compiler reads none of them and removes directories it cannot read.
 - **Bounded.** A compile that stored something prunes the directory to half of 4096 entries,
   least recently read first; reading an entry marks it used.
 - **In memory.** `openCollectingCache` holds entries in memory instead of a directory, seeded with
@@ -69,12 +70,13 @@ pruneProducts :: ProductCache -> IO ()
   unverified. Entries in memory are the same bytes a
   directory holds, digest included, and are verified the same way. A cache in memory has no root, so
   it neither reads nor prunes any directory.
-- `PUDU_CACHE=off` disables it; any other value names the root.
+- `PUDU_CACHE=off` disables it; any other value names the root. The root, the setting and the
+  digest encoding are defined by [[Cache Location]].
 
 ## Linkage
 
-- **Requires:** [[Cache Persist]], [[Source]], [[Type Interface]], [[Semantic Interface]],
-  [[Pudu Version]].
+- **Requires:** [[Cache Persist]], [[Cache Location]], [[Source]], [[Type Interface]],
+  [[Semantic Interface]], [[Pudu Version]].
 - **Consumed by:** [[Compiler Program]], [[Pudu CLI]].
 
 ## Negative Logic (Prohibited Paths)

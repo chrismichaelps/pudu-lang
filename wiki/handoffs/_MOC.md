@@ -5,6 +5,9 @@ tags: [moc, handoff]
 
 # Handoff Map
 
+
+- [[Native Build Cache Delivery]] — compiled executables reused by content of generated C, flags and compiler (#967).
+
 - [[Declared Attributes Delivery]] — `attribute` declarations checked at attribute uses (#965).
 
 - [[Swift Entry Points Delivery]] — Swift through C entry points, checked on macOS and the iOS simulator (#881).

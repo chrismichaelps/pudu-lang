@@ -35,6 +35,8 @@ aliases: [Backend Module Map]
   every generated program: checked arithmetic, printing, failure rendering,
   exit-status clamping.
 
+- [[Backend Toolchain Cache]] — compiled native executables reused by content; a miss stores through a rename, at most 256 entries.
+
 - [[Backend Toolchain]] — discovery, invocation, bounded capture, timeout, and
   atomic publication of the native [[Compilation Artifact]]; the only place a
   process is started.

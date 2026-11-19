@@ -39,6 +39,10 @@ compileNative :: ToolchainRequest -> IO (Either ToolchainFailure Text)
 A successful compile returns the compiler's captured output — normally empty
 under the fixed policy, non-empty when the compiler had warnings to report.
 
+`compileNative` consults the native cache ([[Backend Toolchain Cache]]) before
+invoking the compiler and stores successful builds there. A cache hit returns
+the stored warnings without starting a process.
+
 ## Algorithm and invariants
 
 - Discovery: `PUDU_CC` when set (used as given), otherwise `cc` found on
