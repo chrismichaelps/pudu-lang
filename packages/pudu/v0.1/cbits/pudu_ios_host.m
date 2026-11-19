@@ -24,6 +24,7 @@
 #include "pudu_ios_scene.h"
 #include "pudu_ios_motion.h"
 #include "pudu_ios_nodes.h"
+#include "pudu_ios_kinds.h"
 #include "pudu_ios_navigation.h"
 #include "pudu_ios_refresh.h"
 #include "pudu_ios_fetch.h"
@@ -36,45 +37,6 @@ static UIView *pudu_shown_root;
 static UILayoutGuide *pudu_available;
 static double pudu_main_started_ms;
 static double pudu_first_frame_ms = -1;
-
-typedef struct {
-  UIView *(*make)(void);
-  void (*text)(UIView *, NSString *);
-  void (*hint)(UIView *, NSString *);
-  void (*state)(UIView *, uint32_t);
-  /* The control that carries the node's tag and accessible name. */
-  UIView *(*control)(UIView *);
-  UIStackView *(*children)(UIView *);
-  void (*fill)(UIView *, NSString *);
-  void (*press)(UIView *);
-  NSString *(*shown)(UIView *);
-  /* Text color and font; a kind without them refuses COLOR and STYLE. */
-  void (*paint)(UIView *, UIColor *);
-  void (*style)(UIView *, UIFont *);
-  /* Whether the kind takes Ink without a COLOR; buttons follow the tint. */
-  BOOL inked;
-} pudu_kind;
-
-static const pudu_kind pudu_kind_table[PUDU_UI_KINDS] = {
-  [PUDU_UI_LABEL] = { pudu_make_label, pudu_label_text, NULL, NULL, pudu_itself, NULL, NULL, NULL, pudu_label_shown, pudu_label_paint, pudu_label_style, YES },
-  [PUDU_UI_BUTTON] = { pudu_make_button, pudu_button_text, NULL, NULL, pudu_itself, NULL, NULL, pudu_button_press, NULL, pudu_button_paint, pudu_button_style, NO },
-  [PUDU_UI_COLUMN] = { pudu_make_column, NULL, NULL, NULL, pudu_itself, pudu_direct_stack, NULL, NULL, NULL, NULL, NULL, NO },
-  [PUDU_UI_ROW] = { pudu_make_row, NULL, NULL, NULL, pudu_itself, pudu_direct_stack, NULL, NULL, NULL, NULL, NULL, NO },
-  [PUDU_UI_FIELD] = { pudu_make_field, pudu_field_text, pudu_field_hint, NULL, pudu_itself, NULL, pudu_field_fill, NULL, NULL, pudu_field_paint, pudu_field_style, YES },
-  [PUDU_UI_TOGGLE] = { pudu_make_toggle, pudu_toggle_text, NULL, pudu_toggle_state, pudu_toggle_control, NULL, pudu_toggle_fill, NULL, NULL, pudu_toggle_paint, pudu_toggle_style, YES },
-  [PUDU_UI_SCROLL] = { pudu_make_scroll, NULL, NULL, NULL, pudu_itself, pudu_scroll_stack, NULL, NULL, NULL, NULL, NULL, NO },
-  [PUDU_UI_LIST] = { pudu_make_list, NULL, NULL, NULL, pudu_itself, pudu_list_store, NULL, NULL, NULL, NULL, NULL, NO },
-  [PUDU_UI_MATERIAL] = { pudu_material_make, NULL, NULL, NULL, pudu_itself, pudu_material_stack, NULL, NULL, NULL, NULL, NULL, NO },
-  [PUDU_UI_PROGRESS] = { pudu_make_progress, NULL, NULL, NULL, pudu_itself, NULL, NULL, NULL, NULL, NULL, NULL, NO },
-  [PUDU_UI_ACTIVITY] = { pudu_make_activity, NULL, NULL, pudu_activity_state, pudu_itself, NULL, NULL, NULL, NULL, NULL, NULL, NO },
-};
-
-static const pudu_kind *pudu_kind_of(uint32_t kind) {
-  if (kind >= PUDU_UI_KINDS || pudu_kind_table[kind].make == NULL) pudu_stream_defect("created unknown kind", kind);
-  return &pudu_kind_table[kind];
-}
-
-static const pudu_kind *pudu_node_kind(uint32_t node) { return &pudu_kind_table[pudu_kinds[node].unsignedIntValue]; }
 
 /* Paints a node with its COLOR role, or with Ink when its kind is inked. */
 static void pudu_paint(uint32_t node) {
@@ -294,13 +256,6 @@ static void pudu_do_alert(pudu_reader *reader) {
   if (!pudu_alert_show(tag, style, title, message, pudu_choices(reader))) pudu_stream_defect("showed an alert with an unknown style or role, tag", tag);
 }
 
-static void pudu_do_value(pudu_reader *reader) {
-  uint32_t node = pudu_node_id(reader);
-  uint32_t permille = pudu_word(reader);
-  if (pudu_kinds[node].unsignedIntValue != PUDU_UI_PROGRESS) pudu_stream_defect("set a value on a node that is not a progress bar:", node);
-  pudu_progress_value(pudu_nodes[node], permille);
-}
-
 static void pudu_do_haptic(pudu_reader *reader) {
   uint32_t code = pudu_word(reader);
   if (!pudu_haptic_play(code)) pudu_stream_defect("played unknown haptic", code);
@@ -358,7 +313,8 @@ static void (*const pudu_instruction_table[PUDU_UI_INSTRUCTIONS])(pudu_reader *)
   [PUDU_UI_ACCESS_HINT] = pudu_do_access_hint, [PUDU_UI_ACCESS_VALUE] = pudu_do_access_value,
   [PUDU_UI_MENU] = pudu_do_menu, [PUDU_UI_ANIMATE] = pudu_do_animate, [PUDU_UI_NAVIGATE] = pudu_do_navigate,
   [PUDU_UI_REFRESH] = pudu_do_refresh, [PUDU_UI_FETCH] = pudu_do_fetch, [PUDU_UI_CANCEL] = pudu_do_cancel,
-  [PUDU_UI_WAKE] = pudu_do_wake,
+  [PUDU_UI_WAKE] = pudu_do_wake, [PUDU_UI_BOUNDS] = pudu_do_bounds, [PUDU_UI_OPTIONS] = pudu_do_options,
+  [PUDU_UI_COUNT] = pudu_do_count, [PUDU_UI_MOMENT] = pudu_do_moment,
 };
 
 /* Applies one commit: every instruction in order, in one call. */
@@ -435,6 +391,10 @@ static void pudu_report(UIView *view) {
 - (void)selfTest {
   if (getenv("PUDU_UI_CAPABILITY_TEST") != NULL) {
     pudu_test_capabilities(pudu_nodes, ^{ pudu_queue(PUDU_UI_STOPPED, 0, nil, 0); });
+    return;
+  }
+  if (getenv("PUDU_UI_CONTROLS_TEST") != NULL) {
+    pudu_test_controls([pudu_nodes copy], [pudu_kinds copy], ^{ pudu_queue(PUDU_UI_STOPPED, 0, nil, 0); });
     return;
   }
   if (getenv("PUDU_UI_NAVIGATION_TEST") != NULL) {

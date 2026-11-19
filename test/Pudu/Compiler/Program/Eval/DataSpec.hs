@@ -24,6 +24,7 @@ testDataEvaluation = do
   mobileNavigation <- runEntry "test-fixtures/stdlib/UsesMobileNavigation.pudu"
   mobileRefresh <- runEntry "test-fixtures/stdlib/UsesMobileRefresh.pudu"
   mobileMemo <- runEntry "test-fixtures/stdlib/UsesMobileMemo.pudu"
+  mobileControls <- runEntry "test-fixtures/stdlib/UsesMobileControls.pudu"
   mobileResources <- runEntry "test-fixtures/stdlib/UsesMobileResource.pudu"
   memoLambda <- codes "test-fixtures/stdlib/MemoRenderLambda.pudu"
   memoLocal <- codes "test-fixtures/stdlib/MemoRenderLocal.pudu"
@@ -194,6 +195,10 @@ testDataEvaluation = do
         (mobileNavigation === Just "19")
     , counterexample "the native refresh stream follows the program's flag and reads pulls and insets"
         (mobileRefresh === Just "9")
+    {-| Exact words per value control: the host never sees an inverted range,
+        an index past the last label or a page past the last page. -}
+    , counterexample "native value controls write normalized bounds, labels, moments and values"
+        (mobileControls === Just "25")
     {-| Golden counts: an unchanged memo is one comparison and no render, so a
         regression that renders or compares more fails here, not on a device. -}
     , counterexample "memoized native rows skip unchanged subtrees with exact counts"

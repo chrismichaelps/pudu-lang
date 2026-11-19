@@ -5,6 +5,11 @@ tags: [changelog]
 
 # Changelog
 
+## 2026-11-19 — Native value controls (#934)
+
+- Native value controls (#934): ten controls (slider through color well), BOUNDS, OPTIONS, COUNT and MOMENT instructions, VALUED, COLORED and DATED events, UIKit value host.
+  [[Std Mobile Control]] · [[pudu-ios-kinds]] · [[pudu-ios-values]] · [[Std Mobile View]] · [[Std Mobile Stream]] · [[Std Mobile Events]] · [[Native Value Controls Delivery]]
+
 ## 2026-11-18 — Memoized native subtrees and render counters (#963)
 
 - Memoized native subtrees and render counters (#963): View.Memo, Std.Mobile.Memo.lazy, View.measured.

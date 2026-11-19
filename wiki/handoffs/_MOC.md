@@ -5,6 +5,8 @@ tags: [moc, handoff]
 
 # Handoff Map
 
+- [[Native Value Controls Delivery]] — ten native value controls, their instructions and events (#934).
+
 - [[Declared Attributes Delivery]] — `attribute` declarations checked at attribute uses (#965).
 
 - [[Swift Entry Points Delivery]] — Swift through C entry points, checked on macOS and the iOS simulator (#881).

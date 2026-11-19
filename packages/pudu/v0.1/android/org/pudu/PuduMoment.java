@@ -10,7 +10,7 @@ import java.util.Calendar;
  *  It holds whole seconds since the epoch and reports DATED with them as a
  *  high and a low word when the person picks a new moment. */
 public final class PuduMoment extends LinearLayout {
-  static final int DATED = 16;
+  static final int DATED = 23;
   static final int DAY = 0, TIME = 1, DAY_AND_TIME = 2;
 
   final DatePicker day;

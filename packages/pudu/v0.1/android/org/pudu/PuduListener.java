@@ -14,7 +14,7 @@ import android.widget.TextView;
  *  arrives while {@link PuduBridge#quiet} is set and is not reported. */
 final class PuduListener implements View.OnClickListener, TextWatcher, CompoundButton.OnCheckedChangeListener,
     SeekBar.OnSeekBarChangeListener, NumberPicker.OnValueChangeListener, RadioGroup.OnCheckedChangeListener {
-  static final int TAPPED = 1, CHANGED = 3, SWITCHED_ON = 4, SWITCHED_OFF = 5, VALUED = 14;
+  static final int TAPPED = 1, CHANGED = 3, SWITCHED_ON = 4, SWITCHED_OFF = 5, VALUED = 21;
 
   final View view;
   final int kind;
