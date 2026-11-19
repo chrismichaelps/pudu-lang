@@ -40,39 +40,39 @@ fn labelOf(labels: &Array[Str], index: UInt32) -> Str {
 
 fn view(model: &Model) -> View.View {
   View.Scroll(View.Column([
-    View.Label("Volume: {model.volume}"),
-    View.Control(Control.Slider(Control.Bounds{low: 0i32, high: 100i32, step: 10i32}, model.volume, VOLUME)),
-    View.Label("Count: {model.count}"),
-    View.Control(Control.Stepper(Control.Bounds{low: 0i32, high: 10i32, step: 1i32}, model.count, COUNT)),
-    View.Label("Size: {labelOf(&SIZES, model.size)}"),
-    View.Control(Control.Segments(SIZES, model.size, SIZE)),
-    View.Label("Fruit: {labelOf(&FRUITS, model.fruit)}"),
-    View.Control(Control.Wheel(FRUITS, model.fruit, FRUIT)),
-    View.Label("Moment: {model.moment}"),
-    View.Control(Control.Date(Control.DayAndTime, model.moment, MOMENT)),
-    View.Label("Notes: {model.notes}"),
-    View.Control(Control.TextArea(model.notes, NOTES)),
-    View.Label("Search: {model.search}"),
-    View.Control(Control.Search("Search", model.search, SEARCH)),
-    View.Label("Page: {model.page}"),
-    View.Control(Control.Pages(3u32, model.page, PAGE)),
-    View.Label("Color: {model.color}"),
-    View.Control(Control.Well(model.color, COLOR)),
-    View.Control(Control.Symbol("star.fill"))
-  ]))
+        View.Label("Volume: {model.volume}"),
+        View.Control(Control.Slider(Control.Bounds{low: 0i32, high: 100i32, step: 10i32}, model.volume, VOLUME)),
+        View.Label("Count: {model.count}"),
+        View.Control(Control.Stepper(Control.Bounds{low: 0i32, high: 10i32, step: 1i32}, model.count, COUNT)),
+        View.Label("Size: {labelOf(&SIZES, model.size)}"),
+        View.Control(Control.Segments(SIZES, model.size, SIZE)),
+        View.Label("Fruit: {labelOf(&FRUITS, model.fruit)}"),
+        View.Control(Control.Wheel(FRUITS, model.fruit, FRUIT)),
+        View.Label("Moment: {model.moment}"),
+        View.Control(Control.Date(Control.DayAndTime, model.moment, MOMENT)),
+        View.Label("Notes: {model.notes}"),
+        View.Control(Control.TextArea(model.notes, NOTES)),
+        View.Label("Search: {model.search}"),
+        View.Control(Control.Search("Search", model.search, SEARCH)),
+        View.Label("Page: {model.page}"),
+        View.Control(Control.Pages(3u32, model.page, PAGE)),
+        View.Label("Color: {model.color}"),
+        View.Control(Control.Well(model.color, COLOR)),
+        View.Control(Control.Symbol("star.fill"))
+      ]))
 }
 
 fn update(model: &Model, event: &View.Event) -> Model {
   match *event {
-    case View.Valued(tag, value) if tag == VOLUME => Model{..*model, volume: value}
-    case View.Valued(tag, value) if tag == COUNT => Model{..*model, count: value}
-    case View.Valued(tag, value) if tag == SIZE => Model{..*model, size: asIndex(value)}
-    case View.Valued(tag, value) if tag == FRUIT => Model{..*model, fruit: asIndex(value)}
-    case View.Valued(tag, value) if tag == PAGE => Model{..*model, page: asIndex(value)}
-    case View.Dated(tag, seconds) if tag == MOMENT => Model{..*model, moment: seconds}
-    case View.Changed(tag, text) if tag == NOTES => Model{..*model, notes: text}
-    case View.Changed(tag, text) if tag == SEARCH => Model{..*model, search: text}
-    case View.Colored(tag, rgba) if tag == COLOR => Model{..*model, color: rgba}
+    case View.Valued(tag, value) if tag == VOLUME => Model {..*model, volume: value }
+    case View.Valued(tag, value) if tag == COUNT => Model {..*model, count: value }
+    case View.Valued(tag, value) if tag == SIZE => Model {..*model, size: asIndex(value) }
+    case View.Valued(tag, value) if tag == FRUIT => Model {..*model, fruit: asIndex(value) }
+    case View.Valued(tag, value) if tag == PAGE => Model {..*model, page: asIndex(value) }
+    case View.Dated(tag, seconds) if tag == MOMENT => Model {..*model, moment: seconds }
+    case View.Changed(tag, text) if tag == NOTES => Model {..*model, notes: text }
+    case View.Changed(tag, text) if tag == SEARCH => Model {..*model, search: text }
+    case View.Colored(tag, rgba) if tag == COLOR => Model {..*model, color: rgba }
     case _ => *model
   }
 }
