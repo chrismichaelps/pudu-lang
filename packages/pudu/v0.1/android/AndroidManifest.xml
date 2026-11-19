@@ -4,6 +4,7 @@
     android:versionCode="1"
     android:versionName="1.0">
   <uses-sdk android:minSdkVersion="24" android:targetSdkVersion="37" />
+  <uses-permission android:name="android.permission.INTERNET" />
   <application android:label="PUDU_LABEL" android:hasCode="true" android:extractNativeLibs="false">
     <activity android:name="org.pudu.PuduActivity"
         android:exported="true"

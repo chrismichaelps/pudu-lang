@@ -183,7 +183,7 @@ Events return through `pudu_ui_wait` as one 64-bit value: the kind in the high 3
 
 Codes 10 to 12 only add instructions, so a stream of codes 1 to 9 means the same. The view module no longer writes RESET; the host keeps it so a stream from an earlier writer still means the same. Nodes carry stable ids handed out by the program and recycled after REMOVE (#914). Compiled views extend the stream further under ADR-0031 (compiled native execution).
 
-Codes 26 to 44 and events 9 to 23 are one numbering shared by the iOS and Android hosts. Android's BOUNDS, OPTIONS, COUNT and MOMENT moved from 36 to 39 to 41 to 44, and its VALUED, COLORED and DATED moved from 14 to 16 to 21 to 23, because 36 to 40 and 14 to 20 are already NAVIGATE to WAKE and POPPED to MEMORY. Android does not yet handle 36 to 40.
+Codes 26 to 44 and events 9 to 23 are one numbering shared by the iOS and Android hosts. Android's BOUNDS, OPTIONS, COUNT and MOMENT moved from 36 to 39 to 41 to 44, and its VALUED, COLORED and DATED moved from 14 to 16 to 21 to 23, because 36 to 40 and 14 to 20 are already NAVIGATE to WAKE and POPPED to MEMORY. Both hosts handle every instruction 1 to 44 and report every event 1 to 23. Android realizes navigation with a platform toolbar and dialogs, refresh with an overlay indicator, requests through the platform HTTP client and response cache, and requests the INTERNET permission. Android runtime behavior is not yet exercised on a device or emulator.
 
 ## FUI on native
 

@@ -17,6 +17,7 @@ tags: [moc, module, foreign, ffi]
 - [[pudu_ios_navigation.h]] — UIKit navigation host: page stack, page sheet, and user pop and dismissal reports.
 - [[pudu_ios_refresh.h]] — UIKit refresh control: user pulls reported, the indicator driven by the program's state, and unanswered pulls ended at the next wait.
 - [[pudu_ios_fetch.h]] — platform URL session for the program's keyed requests: answers, cancellation, one wake timer and memory warnings.
+- [[pudu-android-routes]] — Android host routes: page stack, pull to refresh, requests, cancellation and wake, checked whole before the screen changes (#971).
 - [[pudu-ios-kinds]] — kind table of the iOS host, moved out of the host main file, with one entry per control kind (#934).
 - [[pudu-ios-values]] — UIKit value controls, their BOUNDS, OPTIONS, COUNT and MOMENT handlers, and their self-test (#934).
 - [[Pudu SQLite Bridge]] — on-demand SQLite loading, statement ownership, and exact byte transport.

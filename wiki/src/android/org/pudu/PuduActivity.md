@@ -91,3 +91,11 @@ calls), [[Native Mobile Targets]].
 ## Referenced by
 
 [[src/Pudu/Backend/Toolchain/Android]] · [[src/Pudu/Backend/_MOC]]
+
+## Insets, memory and back (#971)
+
+- Window insets: the surface listens for window insets and pads itself by the union of the system bars and the display cutout, so content stays clear of them under edge to edge. The insets are converted to dp by density and reported as one `INSETS` (17) event with the top, left, bottom and right values, only when they change.
+- Memory: `onTrimMemory` reports `MEMORY` (20) when the level is running low, running critical, or moderate and above. `onLowMemory` reports `MEMORY` as well. The event carries no payload.
+- Back: `onBackPressed` calls `PuduNavigator.back` first. The platform's own back runs only when the navigator has nothing to pop. See [[PuduNavigator]].
+
+Resolved Grill Log: a memory event is sent for every trim level from running low upward, not only the critical level, so the program can release caches before the system has to kill the process.

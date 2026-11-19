@@ -5,6 +5,11 @@ tags: [changelog]
 
 # Changelog
 
+## 2026-11-19 — Android navigation, refresh, requests, wake, memory and insets (#971)
+
+- Android navigation, refresh, requests, wake, memory and insets (#971): NAVIGATE, REFRESH, FETCH, CANCEL and WAKE on the Android host; INSETS and MEMORY events.
+  [[pudu-android-routes]] · [[PuduNavigator]] · [[PuduRefresh]] · [[PuduFetch]] · [[PuduActivity]] · [[NATIVE-MOBILE]] · [[Android Routes Delivery]]
+
 ## 2026-11-19 — Native value controls (#934)
 
 - Native value controls (#934): ten controls (slider through color well), BOUNDS, OPTIONS, COUNT and MOMENT instructions, VALUED, COLORED and DATED events, UIKit value host.

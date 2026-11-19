@@ -20,6 +20,7 @@
 #include "pudu_android_theme.h"
 #include "pudu_android_nodes.h"
 #include "pudu_android_capabilities.h"
+#include "pudu_android_routes.h"
 #include "pudu_android_java.h"
 
 
@@ -210,7 +211,9 @@ static void (*const pudu_instruction_table[PUDU_UI_INSTRUCTIONS])(JNIEnv *, pudu
   [PUDU_UI_MATERIAL_SET] = pudu_do_material, [PUDU_UI_GESTURES] = pudu_do_gestures, [PUDU_UI_ALERT] = pudu_do_alert,
   [PUDU_UI_VALUE] = pudu_do_value, [PUDU_UI_HAPTIC] = pudu_do_haptic, [PUDU_UI_TRAITS] = pudu_do_traits,
   [PUDU_UI_ACCESS_HINT] = pudu_do_access_hint, [PUDU_UI_ACCESS_VALUE] = pudu_do_access_value,
-  [PUDU_UI_MENU] = pudu_do_menu, [PUDU_UI_ANIMATE] = pudu_do_animate, [PUDU_UI_BOUNDS] = pudu_do_bounds,
+  [PUDU_UI_MENU] = pudu_do_menu, [PUDU_UI_ANIMATE] = pudu_do_animate, [PUDU_UI_NAVIGATE] = pudu_do_navigate,
+  [PUDU_UI_REFRESH] = pudu_do_refresh, [PUDU_UI_FETCH] = pudu_do_fetch, [PUDU_UI_CANCEL] = pudu_do_cancel,
+  [PUDU_UI_WAKE] = pudu_do_wake, [PUDU_UI_BOUNDS] = pudu_do_bounds,
   [PUDU_UI_OPTIONS] = pudu_do_options, [PUDU_UI_COUNT] = pudu_do_count, [PUDU_UI_MOMENT] = pudu_do_moment,
 };
 
@@ -333,7 +336,13 @@ JNIEXPORT void JNICALL Java_org_pudu_PuduBridge_selfTest(JNIEnv *env, jclass typ
 /* PuduBridge.report, on the main thread after the program ended. */
 JNIEXPORT void JNICALL Java_org_pudu_PuduBridge_report(JNIEnv *env, jclass type) {
   (void)type;
-  pudu_report(env, pudu_shown_root);
+  if (pudu_shown_root != NULL) {
+    pudu_report(env, pudu_shown_root);
+  } else {
+    jobject top = pudu_bridge_object(env, "navigationTop", "()Landroid/view/View;");
+    pudu_report(env, top);
+    if (top != NULL) (*env)->DeleteLocalRef(env, top);
+  }
   if (pudu_motion_runs > 0) puts("PUDU_MOTION animated");
   fflush(stdout);
 }

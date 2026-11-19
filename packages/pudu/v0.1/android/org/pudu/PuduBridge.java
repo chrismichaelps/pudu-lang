@@ -298,6 +298,23 @@ public final class PuduBridge {
     surface.addView(view, placed);
   }
 
+  /* Navigation, pull to refresh, requests and wake; the host has checked each instruction. */
+  static void navigate(int[] ids, View[] bodies, boolean[] fills, String[] titles, boolean hasSheet, int sheet, View sheetBody,
+      boolean sheetFills) {
+    PuduNavigator.show(ids, bodies, fills, titles, hasSheet, sheet, sheetBody, sheetFills);
+  }
+
+  /** The body on top of a navigation, or null when none is shown. */
+  static View navigationTop() { return PuduNavigator.top(); }
+
+  static void refresh(ViewGroup view, int tag, boolean on) { PuduRefresh.set(view, tag, on); }
+  static void settleRefresh(int[] queued) { PuduRefresh.settle(queued); }
+  static int fetch(int generation, String method, String url, String[] headers, String body) {
+    return PuduFetch.start(generation, method, url, headers, body);
+  }
+  static void cancelFetch(int generation) { PuduFetch.cancel(generation); }
+  static void wake(long delay) { PuduFetch.wake(delay); }
+
   static void gestures(View view, int tag, int mask) { PuduGestures.attach(view, tag, mask); }
 
   static void traits(View view, int mask) { PuduAccess.of(view).traits(mask); }
