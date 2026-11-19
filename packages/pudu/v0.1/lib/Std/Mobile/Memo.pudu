@@ -1,0 +1,30 @@
+module Std.Mobile.Memo
+
+import Std.Json as Json
+import Std.Mobile.View as View
+
+/// Marks a sum type whose constructors accept only module-level functions.
+export attribute static_function
+
+/// A function that builds a view from a key.
+export type Build[K] = fn(K) -> View.View
+
+/// A function that builds a view from its key alone. The checker accepts only
+/// a module-level function's name here, so nothing but the key can change
+/// what it builds, and reusing its view while the key is equal is sound.
+@static_function
+export type Render[K] = | Render(Build[K])
+
+/// A view that `render` builds from `key`, rendered only when it is first
+/// shown or its key changes. The memo's key is `site`, a separator, then the
+/// canonical text of `key`: two render functions given equal keys stay apart
+/// by their site.
+export fn lazy[K: Json.Encode](site: Str, render: Render[K], key: K) -> View.View {
+  View.Memo(site + "\u{0}" + Json.encode(&key.encode()), || rendered(render, key))
+}
+
+fn rendered[K](render: Render[K], key: K) -> View.View {
+  match render {
+    case Render(build) => build(key)
+  }
+}

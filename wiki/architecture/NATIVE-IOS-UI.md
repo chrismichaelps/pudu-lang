@@ -148,4 +148,4 @@ Measured against `iPhoneSimulator26.5`.
 
 ## Referenced by
 
-[[architecture/_MOC]] · [[Pudu Native]] · [[Native iOS Scrolling Delivery]] · [[Native iOS Theming Delivery]] · [[Native iOS Recycling Delivery]] · [[Native iOS Materials Delivery]] · [[Native iOS Capabilities Delivery]] · [[Native iOS Refresh Delivery]]
+[[architecture/_MOC]] · [[Pudu Native]] · [[Native iOS Scrolling Delivery]] · [[Native iOS Theming Delivery]] · [[Native iOS Recycling Delivery]] · [[Native iOS Materials Delivery]] · [[Native iOS Capabilities Delivery]] · [[Native iOS Refresh Delivery]] · [[Native Render Skipping]]

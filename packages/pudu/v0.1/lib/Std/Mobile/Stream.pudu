@@ -65,6 +65,9 @@ const MENU: UInt32 = 34u32
 const ANIMATE: UInt32 = 35u32
 const NAVIGATE: UInt32 = 36u32
 const REFRESH: UInt32 = 37u32
+const FETCH: UInt32 = 38u32
+const CANCEL: UInt32 = 39u32
+const WAKE: UInt32 = 40u32
 
 /// Creates node `node` as a control of `kind`.
 export fn create(out: Array[UInt8], node: UInt32, kind: UInt32) -> Array[UInt8] { words(out, [CREATE, node, kind]) }
@@ -176,6 +179,23 @@ export fn animate(out: Array[UInt8], node: UInt32, on: Bool) -> Array[UInt8] {
 export fn refresh(out: Array[UInt8], node: UInt32, reported: UInt32, on: Bool) -> Array[UInt8] {
   words(out, [REFRESH, node, reported, if on { 1u32 } else { 0u32 }])
 }
+
+/// Sends a request under `generation`: its method, URL, each header's name
+/// and value, then its body. Its answer arrives as a FETCHED event.
+export fn fetch(out: Array[UInt8], generation: UInt32, method: Str, url: Str, headers: &Array[(Str, Str)], body: Str) -> Array[UInt8] {
+  var bytes = field(field(words(out, [FETCH, generation]), method), url)
+  bytes = words(bytes, [count(headers.length())])
+  for header in *headers {
+    bytes = field(field(bytes, header[0]), header[1])
+  }
+  field(bytes, body)
+}
+
+/// Cancels the request sent under `generation`; no answer arrives for it.
+export fn cancel(out: Array[UInt8], generation: UInt32) -> Array[UInt8] { words(out, [CANCEL, generation]) }
+
+/// Asks for a WOKE event after `delay` milliseconds, replacing any earlier wake.
+export fn wake(out: Array[UInt8], delay: UInt32) -> Array[UInt8] { words(out, [WAKE, delay]) }
 
 /// Shows the navigation: each route's id, body node and title, root first,
 /// then 1 and the sheet's id and body node, or 0 when no sheet is shown.

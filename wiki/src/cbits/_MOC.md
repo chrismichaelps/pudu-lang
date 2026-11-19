@@ -16,6 +16,7 @@ tags: [moc, module, foreign, ffi]
 - [[pudu_ios_nodes.h]] — instruction codes, control kinds and the host's node table, shared by the capability headers.
 - [[pudu_ios_navigation.h]] — UIKit navigation host: page stack, page sheet, and user pop and dismissal reports.
 - [[pudu_ios_refresh.h]] — UIKit refresh control: user pulls reported, the indicator driven by the program's state, and unanswered pulls ended at the next wait.
+- [[pudu_ios_fetch.h]] — platform URL session for the program's keyed requests: answers, cancellation, one wake timer and memory warnings.
 - [[Pudu SQLite Bridge]] — on-demand SQLite loading, statement ownership, and exact byte transport.
 - [[Pudu Desktop Header]] — framework-neutral private ABI for desktop target plumbing.
 - [[Pudu Desktop Adapter]] — macOS window, bitmap presentation, event pumping, and release.

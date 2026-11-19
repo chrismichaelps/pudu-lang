@@ -51,6 +51,9 @@ Entry points the program depends on:
 - REFRESH (37) dispatches to `pudu_do_refresh`, which lives in [[pudu_ios_refresh.h]]. It is refused on a node that is neither a scroll nor a list, with the message `pudu: refreshed a node that does not scroll:` followed by the node id.
 - Motion: after every commit, the host runs one animation for the surface if an animated group changed in that commit. With Reduce Motion on, the change is applied at once ([[iOS Host Motion]]).
 - Self-test `PUDU_UI_REFRESH_TEST` runs the pull check of [[pudu_ios_refresh.h]], prints its `PUDU_REFRESH` lines and then asks the program to stop.
+- FETCH (38), CANCEL (39) and WAKE (40) dispatch to `pudu_do_fetch`, `pudu_do_cancel` and `pudu_do_wake` in [[pudu_ios_fetch.h]], which sends the program's requests on the platform URL session and answers them as FETCHED events.
+- A memory warning observer, `pudu_observe_memory`, is registered at launch. Each warning queues MEMORY ([[pudu_ios_fetch.h]]).
+- Self-test `PUDU_UI_FETCH_TEST` runs the wait for both Remote lines of [[Native Remote Example]] and prints `PUDU_FETCH loaded` once they show a loaded result, then asks the program to stop.
 - Self-test `PUDU_UI_CAPABILITY_TEST` runs the sequence of [[iOS Host Capability Test]], queues a stop event after it, and after the program returns prints `PUDU_ACCESS` and `PUDU_MOTION` lines.
 - NAVIGATE (36) is read whole by `pudu_navigation_read` in [[pudu_ios_navigation.h]] before any controller changes; each route body is read through `pudu_node_id` and `pudu_node_scrolls` in [[pudu_ios_nodes.h]]. Only then is the shown root removed and the navigation shown over the root controller, which installs the platform stack on first use. Its user pop and sheet dismissal events are queued through [[iOS Host Events]].
 - Self-test `PUDU_UI_NAVIGATION_TEST` runs the stack and sheet check described in [[pudu_ios_navigation.h]] and then asks the program to stop. It prints `PUDU_NAV` lines.
@@ -67,7 +70,7 @@ Entry points the program depends on:
 
 ## Dependencies and consumers
 
-Implements the four symbols of [[Std Mobile Host]]. Its streams come from [[Std Mobile View]] and [[Std Mobile Theme]]. Includes [[iOS Host Events]], [[iOS Host Controls]], [[iOS Host Theme]], [[iOS Host List]], [[iOS Host Material]], [[iOS Host Gesture]], [[iOS Host Feedback]], [[iOS Host Access]], [[iOS Host Scene]], [[iOS Host Motion]], [[iOS Host Capability Test]], [[pudu_ios_nodes.h]], [[pudu_ios_navigation.h]] and [[pudu_ios_refresh.h]]. Used by the counter [[Native Counter Example]] and by the simulator run [[iOS Simulator Run]]. [[Pudu Native]] limits hand-written native code to this platform shim.
+Implements the four symbols of [[Std Mobile Host]]. Its streams come from [[Std Mobile View]] and [[Std Mobile Theme]]. Includes [[iOS Host Events]], [[iOS Host Controls]], [[iOS Host Theme]], [[iOS Host List]], [[iOS Host Material]], [[iOS Host Gesture]], [[iOS Host Feedback]], [[iOS Host Access]], [[iOS Host Scene]], [[iOS Host Motion]], [[iOS Host Capability Test]], [[pudu_ios_nodes.h]], [[pudu_ios_navigation.h]], [[pudu_ios_refresh.h]] and [[pudu_ios_fetch.h]]. Used by the counter [[Native Counter Example]] and by the simulator run [[iOS Simulator Run]]. [[Pudu Native]] limits hand-written native code to this platform shim.
 
 ## Resolved Grill Log
 

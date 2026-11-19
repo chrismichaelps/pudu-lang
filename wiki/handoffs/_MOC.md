@@ -433,3 +433,4 @@ tags: [moc, handoff]
 - [[Native iOS Capabilities Delivery]] — gestures, alerts, haptics, accessibility, context menus, scene and motion (#930).
 - [[Native iOS Navigation Delivery]] — native route identity, pop completion and page sheets (#920).
 - [[Native iOS Refresh Delivery]] — pull to refresh and safe-area insets, stacked on the navigation branch (#962).
+- [[2026-11-18-render-skipping]] — memoized native subtrees and render counters, first part of render skipping (#963).

@@ -37,6 +37,7 @@ extra-source-files: cbits/pudu_ffi_internal.h
                     cbits/pudu_ios_nodes.h
                     cbits/pudu_ios_navigation.h
                     cbits/pudu_ios_refresh.h
+                    cbits/pudu_ios_fetch.h
                     cbits/pudu_ios_capability_test.h
                     cbits/pudu_android_host.c
                     cbits/pudu_android_capabilities.h
@@ -529,6 +530,7 @@ library
     Pudu.Type.Check.Derive
     Pudu.Type.Check.Iteration
     Pudu.Type.Check.Safety
+    Pudu.Type.Check.Static
     Pudu.Type.Check.Attribute
     Pudu.Type.Check.Inherit
     Pudu.Type.Check.Method

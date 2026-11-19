@@ -45,6 +45,9 @@ Exports:
 - `animate(out, node, on: Bool) -> Array[UInt8]`: ANIMATE, the group and 0 or 1.
 - `navigate(out, pages: &Array[(UInt32, UInt32, Str)], sheet: Option[(UInt32, UInt32)]) -> Array[UInt8]`: NAVIGATE, the route count, then each route's id, body node and title, then 1 and the sheet's id and body node, or 0.
 - `refresh(out, node, tag, on)`: REFRESH, the scroll or list node, its tag and 1 or 0.
+- `fetch(out, generation, method, url, headers: &Array[(Str, Str)], body) -> Array[UInt8]`: FETCH, the generation, the method and URL text fields, the header count, each header's name and value, then the body text. The answer arrives as a FETCHED event.
+- `cancel(out, generation) -> Array[UInt8]`: CANCEL and the generation. No answer arrives for it.
+- `wake(out, delay: UInt32) -> Array[UInt8]`: WAKE and the delay in milliseconds, replacing any earlier wake. A WOKE event arrives once.
 
 ## Invariants
 
@@ -53,6 +56,7 @@ Exports:
 - RANGE is exactly three words after its code word; COLUMNS is exactly two; MATERIAL is exactly two. A RANGE is 16 bytes, a COLUMNS is 12 bytes and a MATERIAL is 12 bytes.
 - THEME carries exactly seven tones; its count word is 7. The encoder writes the count, and the host refuses any other count.
 - Text is its UTF-8 byte length as one word, followed by those bytes.
+- FETCH 38, CANCEL 39 and WAKE 40 follow REFRESH 37. FETCH is a generation word, two text fields, a header count word, then a name and a value text field per header, then a body text field. CANCEL and WAKE are one word after the code word. The instruction bound is 41.
 - Word counts after the code word: GESTURES 3, VALUE 2, HAPTIC 1, TRAITS 2, ANIMATE 2 and REFRESH 2. ACCESS_HINT and ACCESS_VALUE are a node and a text field. ALERT is a tag, a style, two text fields and a choice list; MENU is a node, a tag and a choice list.
 - NAVIGATE is a route count, then per route an id word, a body node word and a text field, then a sheet flag word (1 or 0), followed by the sheet's id and body node when the flag is 1. A NAVIGATE with no sheet ends at the flag word.
 - A choice list is a count word, then each choice's role word and a text field.
@@ -86,6 +90,8 @@ Depends on no other module. Consumers: [[Std Mobile View]], which calls these fu
 - **Q:** Why one NAVIGATE for the whole stack? **A:** A stack is one ordered list whose order and ids must agree, so the host checks it as a unit before any controller changes. Per-route instructions would expose a half-applied stack.
 
 - **Q:** Why a separate instruction for each capability rather than one generic property word? **A:** Each capability has its own word count and its own validation. A generic property would make the host decode a second tag inside every instruction. _Rejected:_ one property instruction.
+
+- **Q:** Why does the program choose the generation rather than the host? **A:** The program matches an answer to the request it sent. The host only tags answers with the number it was given, so a superseded answer can be recognized and dropped.
 
 ## Referenced by
 

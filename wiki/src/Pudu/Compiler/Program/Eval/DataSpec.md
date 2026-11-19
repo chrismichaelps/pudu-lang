@@ -18,6 +18,10 @@ The mobile entries checked by this spec:
 - `test-fixtures/stdlib/UsesMobileView.pudu`: asserted to answer `30` ([[Uses Mobile View]]).
 - `test-fixtures/stdlib/UsesMobileNavigation.pudu`: asserted to answer `19` ([[Uses Mobile Navigation]]).
 - `test-fixtures/stdlib/UsesMobileRefresh.pudu`: asserted to answer `9`, the number of checks in the file ([[Uses Mobile Refresh]]).
+- `test-fixtures/stdlib/UsesMobileResource.pudu`: asserted to answer `12`, the number of checks in the file ([[Uses Mobile Resource]]).
+- `test-fixtures/stdlib/UsesMobileMemo.pudu`: asserted to answer `5`, the number of checks in the file ([[Uses Mobile Memo]]).
+- `test-fixtures/stdlib/MemoRenderLambda.pudu`: asserted to be refused with exactly `E3103`, a memo render written as a lambda ([[Memo Render Lambda]]).
+- `test-fixtures/stdlib/MemoRenderLocal.pudu`: asserted to be refused with exactly `E3103`, a memo render held by a local binding and passed through an import alias ([[Memo Render Local]]).
 - `test-fixtures/stdlib/UsesMobileTheme.pudu`, `UsesMobileList.pudu`, `UsesMobileMaterial.pudu` and `UsesMobileCapabilities.pudu`, run by the same function; their expected values are in the file.
 
 Other fixtures in the function cover lists, structures, ordered and relational maps, buffers, flat maps, columns, hash maps, database rows and the all-collection fixtures. They are listed in the file and are not described here.
@@ -42,4 +46,4 @@ Depends on the shared runner in `Pudu.Compiler.Program.Common` and on the fixtur
 
 ## Referenced by
 
-[[Uses Mobile Navigation]] · [[Uses Mobile Refresh]] · [[Uses Mobile View]] · [[Eval Data Tests]]
+[[Uses Mobile Memo]] · [[Uses Mobile Navigation]] · [[Uses Mobile Refresh]] · [[Uses Mobile View]] · [[Eval Data Tests]]

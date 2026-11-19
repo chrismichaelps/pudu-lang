@@ -756,6 +756,8 @@ The navigation header `cbits/pudu_ios_navigation.h` ([[pudu_ios_navigation.h]]) 
 
 The refresh header `cbits/pudu_ios_refresh.h` ([[pudu_ios_refresh.h]]) is listed in `extra-source-files` after the navigation header, for the same reason. It is staged between `pudu_ios_navigation.h` and `pudu_ios_capability_test.h`.
 
+The network header `cbits/pudu_ios_fetch.h` ([[pudu_ios_fetch.h]]) is listed in `extra-source-files` after the refresh header, for the same reason. It is staged between `pudu_ios_refresh.h` and `pudu_ios_capability_test.h`.
+
 The reader header cbits/pudu_ios_stream.h ([[iOS Host Stream]]) joins the staged iOS host headers with the six capability headers.
 
 ## Mobile TLS verification (#935)

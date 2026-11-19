@@ -262,3 +262,5 @@ STARTTLS use [[Std Tls]]. [[Std Compress Gzip]] delegates to [[Eval Compress]] a
 - [[Std Mobile Feedback]] — alerts, action sheets and haptics as commands with a reported choice (#930).
 - [[Std Mobile Events]] — host event decoding behind the mobile wait.
 - [[Std Mobile Navigation]] — native page stack and page sheet model.
+- [[Std Mobile Resource]] — pure table of keyed network requests, retries and the commands for the host.
+- [[Std Mobile Memo]] — keyed constructor of memoized subtrees for the view stream, with a `@static_function` render type.

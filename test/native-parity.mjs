@@ -35,6 +35,15 @@ const nondeterministic = new Map([
   ["test-fixtures/stdlib/UsesHttpServer.pudu", "logs the client's ephemeral port"],
 ]);
 
+/// Programs that serve on a fixed port until stopped. They never finish, and
+/// two of them run at once race for the port: the loser exits early with a
+/// bind error, so its interpreted run looks finished and its native run then
+/// serves forever. They are outside the comparison.
+const servers = new Map([
+  ["examples/web/Notes.pudu", "serves on 127.0.0.1:8080 until stopped"],
+  ["examples/social/Main.pudu", "serves until stopped"],
+]);
+
 /// Programs that differ today, each with its open issue. A listed program that
 /// agrees fails the gate, so the entry leaves with the fix.
 const knownDifferences = new Map([]);
@@ -92,7 +101,7 @@ const firstDifference = (left, right) => {
 /// One program's verdict: compared, skipped with a reason, or failed with one.
 const compare = async (path, scratch) => {
   const source = readFileSync(path, "utf8");
-  if (basename(path).startsWith("Rejects")) return { path, kind: "outside" };
+  if (basename(path).startsWith("Rejects") || servers.has(path)) return { path, kind: "outside" };
   if (!/^\s*(export\s+)?fn\s+main\s*\(/m.test(source)) return { path, kind: "outside" };
   const { cwd, file } = placement(path, source, scratch);
   if ((await run(pudu, ["check", file], cwd, buildLimit)).status !== 0) return { path, kind: "outside" };

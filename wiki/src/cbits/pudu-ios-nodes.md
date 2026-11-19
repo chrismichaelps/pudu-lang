@@ -15,7 +15,7 @@ aliases: [pudu_ios_nodes.h, iOS Host Nodes]
 The shared vocabulary of the iOS host: the instruction codes and control kinds of the view stream, and the host's node table. The header is included by [[iOS Host Adapter]] and by every capability header that handles an instruction naming a node, so each instruction's handler sits beside its capability while the codes, kinds and table stay in one place. Its codes match [[Std Mobile Stream]]; its kinds match the kind table of the host.
 
 Entry points and state:
-- `PUDU_UI_*` instruction codes, `CREATE` (1) through `REFRESH` (37). `PUDU_UI_INSTRUCTIONS` is 38, the bound of the instruction table.
+- `PUDU_UI_*` instruction codes, `CREATE` (1) through `WAKE` (40), with the network codes `FETCH` (38), `CANCEL` (39) and `WAKE` (40) handled by [[pudu_ios_fetch.h]]. `PUDU_UI_INSTRUCTIONS` is 41, the bound of the instruction table.
 - `PUDU_UI_*` control kinds, `LABEL` (1) through `ACTIVITY` (11). `PUDU_UI_KINDS` is 12, the bound of the kind table. Kind 0 is unused.
 - `pudu_nodes`: the node table, an array indexed by node id. A slot holds the platform view of a live node, or `NSNull` for a removed node that CREATE may reuse.
 - `pudu_kinds`: the kind of each slot, parallel to `pudu_nodes`, boxed as `NSNumber`.
@@ -24,7 +24,7 @@ Entry points and state:
 
 ## Behavior
 
-- The codes name the instructions of the view stream in the order [[Std Mobile Stream]] writes them. `REFRESH` (37) is the most recent code; `NAVIGATE` (36) and `ANIMATE` (35) precede it.
+- The codes name the instructions of the view stream in the order [[Std Mobile Stream]] writes them. `WAKE` (40) is the most recent code; `CANCEL` (39), `FETCH` (38), `REFRESH` (37), `NAVIGATE` (36) and `ANIMATE` (35) precede it.
 - The control kinds are numbered from 1 so that a stream word of 0 never names a kind. A kind of 12 or more is refused by the kind table in [[iOS Host Adapter]].
 - `pudu_node_id` reads one word. A node id at or past the end of `pudu_nodes`, or a slot holding `NSNull`, ends the process with the stream defect `named node before creating it:` followed by the id. The read happens before any handler changes a view.
 - `pudu_node_scrolls` reads the kind of the node. It answers yes for a scroll viewport and for a list, and no for every other kind. It is only meaningful for a node that exists, so it is called after `pudu_node_id`.
@@ -48,4 +48,4 @@ Depends on UIKit for the node types, on [[iOS Host Stream]] for the reader, `pud
 
 ## Referenced by
 
-[[src/cbits/_MOC]] · [[iOS Host Adapter]] · [[iOS Host Stream]] · [[pudu_ios_navigation.h]] · [[pudu_ios_refresh.h]] · [[Std Mobile Stream]] · [[Native iOS Navigation Delivery]] · [[Native iOS Refresh Delivery]]
+[[src/cbits/_MOC]] · [[iOS Host Adapter]] · [[iOS Host Stream]] · [[pudu_ios_navigation.h]] · [[pudu_ios_refresh.h]] · [[pudu_ios_fetch.h]] · [[Std Mobile Stream]] · [[Native iOS Navigation Delivery]] · [[Native iOS Refresh Delivery]]

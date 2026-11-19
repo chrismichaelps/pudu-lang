@@ -1,0 +1,91 @@
+module UsesMobileResource
+
+import Std.Mobile.Resource as Resource
+
+fn request(url: Str) -> Resource.Request { Resource.Request{method: "GET", url: url, headers: [], body: ""} }
+
+fn need(key: Str, url: Str) -> Resource.Need {
+  Resource.Need{key: key, request: request(url), policy: Resource.Policy{freshFor: 1000, keptFor: 5000, retries: 2}}
+}
+
+fn reply(generation: UInt32, status: Int, retryAfter: Int) -> Resource.Response {
+  Resource.Response{generation: generation, status: status, body: "body {status}", retryAfter: retryAfter}
+}
+
+// The time of the single Wake in `commands`, or -1.
+fn wakeIn(commands: &Array[Resource.Command]) -> Int {
+  var found = -1
+  for command in *commands {
+    match command {
+      case Resource.Wake(at) => { found = at }
+      case _ => {}
+    }
+  }
+  found
+}
+
+export fn main() -> Int {
+  var held = 0
+  let profile = need("profile", "https://example.test/profile")
+  let empty = Resource.table(8, 7u64)
+
+  // A new key starts one request; describing it again while in flight sends nothing.
+  let (asked, first) = Resource.reconcile(empty, &[profile], 0)
+  if first == [Resource.Start(1u32, request("https://example.test/profile"))] && Resource.status(&asked, "profile") == Resource.Pending { held = held + 1 }
+  let (_, again) = Resource.reconcile(asked, &[profile, profile], 10)
+  if again.length() == 0 { held = held + 1 }
+
+  // A success settles the key; it is served without a request while fresh, and asked for again after.
+  let loaded = Resource.received(asked, &reply(1u32, 200, -1), 100)
+  let (_, freshly) = Resource.reconcile(loaded, &[profile], 900)
+  let (_, stale) = Resource.reconcile(loaded, &[profile], 1200)
+  if Resource.status(&loaded, "profile") == Resource.Loaded(200, "body 200") && freshly.length() == 0 && stale.length() == 1 { held = held + 1 }
+
+  // A response for a generation no longer in flight changes nothing.
+  if Resource.received(loaded, &reply(1u32, 500, -1), 200) == loaded { held = held + 1 }
+
+  // A key nothing describes has its request cancelled.
+  let (_, dropped) = Resource.reconcile(asked, &[], 20)
+  if dropped == [Resource.Cancel(1u32)] { held = held + 1 }
+
+  // A changed request for a key cancels the old one and starts the new one.
+  let (_, moved) = Resource.reconcile(asked, &[need("profile", "https://example.test/v2/profile")], 30)
+  if moved == [Resource.Cancel(1u32), Resource.Start(2u32, request("https://example.test/v2/profile"))] { held = held + 1 }
+
+  // A transient failure waits a jittered delay of at most 500 ms, then retries.
+  let failing = Resource.received(asked, &reply(1u32, 503, -1), 100)
+  let (_, waiting) = Resource.reconcile(failing, &[profile], 100)
+  let wake = wakeIn(&waiting)
+  let (_, retried) = Resource.reconcile(failing, &[profile], 700)
+  if Resource.status(&failing, "profile") == Resource.Pending && wake > 100 && wake <= 600 && waiting.length() == 1 && retried.length() == 1 { held = held + 1 }
+
+  // Retry-After is honoured as the shortest wait.
+  let limited = Resource.received(asked, &reply(1u32, 429, 5000), 100)
+  let (_, early) = Resource.reconcile(limited, &[profile], 5099)
+  let (_, late) = Resource.reconcile(limited, &[profile], 5100)
+  if early == [Resource.Wake(5100)] && late == [Resource.Start(2u32, request("https://example.test/profile"))] { held = held + 1 }
+
+  // Failures show only after the policy's retries; a loaded result stays visible meanwhile.
+  let (second, _) = Resource.reconcile(failing, &[profile], 700)
+  let twice = Resource.received(second, &reply(2u32, 503, -1), 800)
+  let (third, _) = Resource.reconcile(twice, &[profile], 2000)
+  let thrice = Resource.received(third, &reply(3u32, 503, -1), 2100)
+  let (_, refreshing) = Resource.reconcile(loaded, &[profile], 1200)
+  let keptLoaded = Resource.received(Resource.reconcile(loaded, &[profile], 1200)[0], &reply(2u32, 503, -1), 1300)
+  if Resource.status(&twice, "profile") == Resource.Pending && Resource.status(&thrice, "profile") == Resource.Failed(503, "body 503")
+    && refreshing.length() == 1 && Resource.status(&keptLoaded, "profile") == Resource.Loaded(200, "body 200") { held = held + 1 }
+
+  // A final failure settles at once and is not asked for again while fresh.
+  let missing = Resource.received(asked, &reply(1u32, 404, -1), 100)
+  let (_, quiet) = Resource.reconcile(missing, &[profile], 500)
+  if Resource.status(&missing, "profile") == Resource.Failed(404, "body 404") && quiet.length() == 0 { held = held + 1 }
+
+  // Undescribed entries are kept for the policy's keep time, within capacity, and trimmed under memory pressure.
+  let (unneeded, _) = Resource.reconcile(loaded, &[], 1000)
+  let (expired, _) = Resource.reconcile(unneeded, &[], 7000)
+  if Resource.size(&unneeded) == 1 && Resource.status(&unneeded, "profile") == Resource.Loaded(200, "body 200") && Resource.size(&expired) == 0 { held = held + 1 }
+  let (tight, _) = Resource.reconcile(Resource.table(1, 7u64), &[need("a", "https://example.test/a"), need("b", "https://example.test/b")], 0)
+  let (squeezed, _) = Resource.reconcile(tight, &[], 10)
+  if Resource.size(&squeezed) == 1 && Resource.size(&Resource.trimmed(squeezed)) == 0 { held = held + 1 }
+  held
+}
