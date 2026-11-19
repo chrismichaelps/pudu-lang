@@ -5,6 +5,8 @@ tags: [moc, handoff]
 
 # Handoff Map
 
+- [[Native Build Cache Delivery]] — compiled executables reused by content of generated C, flags and compiler (#967).
+
 - [[Swift Entry Points Delivery]] — Swift through C entry points, checked on macOS and the iOS simulator (#881).
 
 - [[Native Frame Slot Reuse Delivery]] — independent slot allocation and emission evidence (#821).

@@ -23,6 +23,7 @@ import qualified Data.Text.Encoding as Encoding
 import Pudu.Backend.Runtime.Host.Compress (compressLibraryMarker)
 import Pudu.Backend.Runtime.Host.Foreign (foreignLoaderMarker)
 import Pudu.Backend.Runtime.Host.Tls (tlsLibraryMarker)
+import Pudu.Backend.Toolchain.Cache (nativeKey, restoreNative, storeNative)
 import Pudu.Backend.Toolchain.HostSources (withHostSourceArguments)
 import Pudu.Backend.Toolchain.Process (ToolchainFailure (..), cleanup, problemText, runTool, timeoutSeconds, tryIO)
 import System.Directory (findExecutable, renameFile)
@@ -50,12 +51,18 @@ compileNative request = do
   compiler <- discoverCompiler
   case compiler of
     Left failure -> pure (Left failure)
-    Right executable -> withTemporary executable
+    Right executable -> do
+      libraries <- sourceLibraries (toolchainSource request)
+      key <- nativeKey executable (compilerFlags <> linkerFlags <> libraries) (toolchainSource request)
+      restored <- maybe (pure Nothing) (`restoreNative` output) key
+      case restored of
+        Just warnings -> pure (Right warnings)
+        Nothing -> withTemporary executable libraries key
 
  where
   output = toolchainOutput request
 
-  withTemporary executable = mask $ \restore -> do
+  withTemporary executable libraries key = mask $ \restore -> do
     created <- tryIO (openTempFile (takeDirectory output) (takeFileName output <> ".pudu-tmp.c"))
     case created of
       Left problem -> pure (Left (ToolchainPublishFailed (problemText problem)))
@@ -63,10 +70,11 @@ compileNative request = do
         let executablePath = sourcePath <> ".out"
         outcome <-
           restore (do
-             compiled <- runCompile executable sourcePath sourceHandle executablePath
+             compiled <- runCompile executable libraries sourcePath sourceHandle executablePath
              case compiled of
                Left failure -> pure (Left failure)
                Right captured -> do
+                 mapM_ (\found -> storeNative found executablePath captured) key
                  published <- tryIO (renameFile executablePath output)
                  pure $ case published of
                    Left problem -> Left (ToolchainPublishFailed (problemText problem))
@@ -75,7 +83,7 @@ compileNative request = do
             `finally` (void (tryIO (hClose sourceHandle)) >> cleanup [sourcePath, executablePath])
         pure outcome
 
-  runCompile executable sourcePath sourceHandle executablePath = do
+  runCompile executable libraries sourcePath sourceHandle executablePath = do
     written <- tryIO (do
       ByteString.hPut sourceHandle (Encoding.encodeUtf8 (toolchainSource request))
       hClose sourceHandle)
@@ -83,7 +91,6 @@ compileNative request = do
       Left problem -> pure (Left (ToolchainPublishFailed (problemText problem)))
       Right () -> do
         seconds <- timeoutSeconds
-        libraries <- sourceLibraries (toolchainSource request)
         invoked <- tryIO $ withHostSourceArguments (toolchainSource request) $ \hostArguments ->
           runTool executable (compilerFlags <> ["-o", executablePath, sourcePath] <> linkerFlags <> libraries <> hostArguments) seconds
         pure $ case invoked of

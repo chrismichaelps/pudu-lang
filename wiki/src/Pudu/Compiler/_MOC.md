@@ -37,6 +37,7 @@ aliases: [Program Compiler Module Map]
 - [[Compiler Literals]] — integer literals resolved to their kind and value once, after checking.
 - [[Compiler Literals Spec]] — resolved and preserved literal regressions.
 - [[Compiler Cache]] — compiled products kept across runs under content and interface keys.
+- [[Cache Location]] — cache root, compiler identity and hex digests shared by the product and native caches.
 - [[Compiler Manifest]] — one-read project snapshots, ordered dependency roots, version diagnostics,
   and setup-operation evidence.
 - [[Standard Library Program Spec]] — loaded-standard-library discovery and qualified-member diagnostic regressions.

@@ -5,6 +5,11 @@ tags: [changelog]
 
 # Changelog
 
+## 2026-11-18 — Native build cache (#967)
+
+- Native build cache (#967): identical generated C, flags and compilers reuse the compiled executable.
+  [[Backend Toolchain Cache]] · [[Native Build Cache Delivery]]
+
 ## 2026-11-18 — Native navigation stack and page sheets (#920)
 
 - Native navigation stack and page sheets (#920): Std.Mobile.Navigation, Std.Mobile.Events, NAVIGATE instruction, POPPED and DISMISSED events, UIKit navigation host.
