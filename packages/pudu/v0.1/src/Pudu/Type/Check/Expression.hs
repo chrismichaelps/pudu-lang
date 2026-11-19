@@ -91,6 +91,7 @@ import Pudu.Type.Check.Rule
   , unaryType
   )
 import Pudu.Type.Check.Propagation (reportRedundantPropagation)
+import Pudu.Type.Check.Static (checkStaticArguments)
 import Pudu.Type.Check.Place
   ( admitLending
   , checkAssignment
@@ -259,7 +260,9 @@ inferExpression around declared rigid spanValue expression = case expression of
                 callType spanValue calleeType [handlers]
               _ -> do
                 checkLending calleeType receiver arguments argumentTypes
-                callType spanValue calleeType argumentTypes
+                result <- callType spanValue calleeType argumentTypes
+                checkStaticArguments declared callee result arguments
+                pure result
   MemberExpression target member -> do
     parameter <- parameterStaticCallee rigid spanValue (Located spanValue expression) []
     variant <- maybe (qualifiedVariantType declared spanValue expression) (pure . Just) parameter

@@ -19,6 +19,9 @@ const POPPED: UInt64 = 14u64
 const DISMISSED: UInt64 = 15u64
 const REFRESHED: UInt64 = 16u64
 const INSETS: UInt64 = 17u64
+const FETCHED: UInt64 = 18u64
+const WOKE: UInt64 = 19u64
+const MEMORY: UInt64 = 20u64
 
 /// Each event kind's constructor, given the tag and the text the host holds.
 const EVENTS: Map[UInt64, fn(UInt32, Str) -> View.Event] = mapOf([
@@ -27,7 +30,9 @@ const EVENTS: Map[UInt64, fn(UInt32, Str) -> View.Event] = mapOf([
     (SWITCHED_ON, |tag: UInt32, _text: Str| View.Toggled(tag, true)),
     (SWITCHED_OFF, |tag: UInt32, _text: Str| View.Toggled(tag, false)),
     (DISMISSED, |sheet: UInt32, _text: Str| View.Dismissed(sheet)),
-    (REFRESHED, |tag: UInt32, _text: Str| View.Refreshed(tag))
+    (REFRESHED, |tag: UInt32, _text: Str| View.Refreshed(tag)),
+    (WOKE, |_tag: UInt32, _text: Str| View.Woke),
+    (MEMORY, |_tag: UInt32, _text: Str| View.MemoryLow)
   ])
 
 /// Each detailed event kind's constructor, given the tag and the detail word.
@@ -49,13 +54,15 @@ const MEASURED: Map[UInt64, fn(UInt32, UInt32, Array[Int32]) -> Option[View.Even
   ])
 
 /// Whether a host event's kind carries text the host holds for it.
-export fn carriesText(raw: UInt64) -> Bool { raw >> 32 == CHANGED }
+export fn carriesText(raw: UInt64) -> Bool { raw >> 32 == CHANGED || raw >> 32 == FETCHED }
 
 /// Whether a host event's kind carries a detail word the host holds for it.
-export fn carriesDetail(raw: UInt64) -> Bool { DETAILED.containsKey(raw >> 32) || MEASURED.containsKey(raw >> 32) }
+export fn carriesDetail(raw: UInt64) -> Bool {
+  DETAILED.containsKey(raw >> 32) || MEASURED.containsKey(raw >> 32) || raw >> 32 == FETCHED
+}
 
 /// Whether a host event's kind carries signed words the host holds for it.
-export fn carriesWords(raw: UInt64) -> Bool { MEASURED.containsKey(raw >> 32) }
+export fn carriesWords(raw: UInt64) -> Bool { MEASURED.containsKey(raw >> 32) || raw >> 32 == FETCHED }
 
 /// A host event read from its two words, the kind above and the tag below,
 /// with the text the host holds for a changed field. A kind the table does
@@ -75,6 +82,7 @@ export fn eventWithDetail(raw: UInt64, text: Str, detail: UInt32) -> View.Event 
 /// kind through `event`. Words the host never writes read as `Stopped`.
 export fn eventWithWords(raw: UInt64, text: Str, detail: UInt32, values: Array[Int32]) -> View.Event {
   match convertInteger[UInt32](raw & 0xffffffffu64) {
+    case Some(reported) if raw >> 32 == FETCHED => fetched(reported, detail, text, &values)
     case Some(reported) => {
       match (MEASURED.get(raw >> 32), DETAILED.get(raw >> 32)) {
         case (Some(made), _) => orStopped(made(reported, detail, values))
@@ -115,6 +123,25 @@ fn gestured(reported: UInt32, found: Option[Gesture.Gesture]) -> Option[View.Eve
 fn resized(found: Option[Scene.Size]) -> Option[View.Event] {
   let size = found ?
   Some(View.Resized(size))
+}
+
+// A response for request generation `generation`: the status in the detail
+// word (0 when nothing arrived), the body as text, and the Retry-After delay
+// in milliseconds as the first word, or -1.
+fn fetched(generation: UInt32, status: UInt32, body: Str, values: &Array[Int32]) -> View.Event {
+  let code = match convertInteger[Int](status) {
+    case Some(found) => found
+    case None => 0
+  }
+  let wait = if values.length() > 0 {
+    match convertInteger[Int](values[0]) {
+      case Some(found) => found
+      case None => -1
+    }
+  } else {
+    -1
+  }
+  View.Fetched(generation, code, body, wait)
 }
 
 fn inset(found: Option[Scene.Insets]) -> Option[View.Event] {

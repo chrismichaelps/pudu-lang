@@ -26,6 +26,7 @@
 #include "pudu_ios_nodes.h"
 #include "pudu_ios_navigation.h"
 #include "pudu_ios_refresh.h"
+#include "pudu_ios_fetch.h"
 #include "pudu_ios_capability_test.h"
 
 /* Each node's color role from COLOR, or PUDU_ROLE_DEFAULT. */
@@ -356,7 +357,8 @@ static void (*const pudu_instruction_table[PUDU_UI_INSTRUCTIONS])(pudu_reader *)
   [PUDU_UI_VALUE] = pudu_do_value, [PUDU_UI_HAPTIC] = pudu_do_haptic, [PUDU_UI_TRAITS] = pudu_do_traits,
   [PUDU_UI_ACCESS_HINT] = pudu_do_access_hint, [PUDU_UI_ACCESS_VALUE] = pudu_do_access_value,
   [PUDU_UI_MENU] = pudu_do_menu, [PUDU_UI_ANIMATE] = pudu_do_animate, [PUDU_UI_NAVIGATE] = pudu_do_navigate,
-  [PUDU_UI_REFRESH] = pudu_do_refresh,
+  [PUDU_UI_REFRESH] = pudu_do_refresh, [PUDU_UI_FETCH] = pudu_do_fetch, [PUDU_UI_CANCEL] = pudu_do_cancel,
+  [PUDU_UI_WAKE] = pudu_do_wake,
 };
 
 /* Applies one commit: every instruction in order, in one call. */
@@ -405,6 +407,7 @@ static void pudu_report(UIView *view) {
   pudu_theme_reset();
   pudu_alert_presenter = controller;
   pudu_observe_lifecycle();
+  pudu_observe_memory();
   pudu_target = [PuduTarget new];
   self.window = [[UIWindow alloc] initWithFrame:UIScreen.mainScreen.bounds];
   self.window.rootViewController = controller;
@@ -436,6 +439,10 @@ static void pudu_report(UIView *view) {
   }
   if (getenv("PUDU_UI_NAVIGATION_TEST") != NULL) {
     pudu_test_navigation(^{ pudu_queue(PUDU_UI_STOPPED, 0, nil, 0); });
+    return;
+  }
+  if (getenv("PUDU_UI_FETCH_TEST") != NULL) {
+    pudu_test_fetch(pudu_surface, ^{ pudu_queue(PUDU_UI_STOPPED, 0, nil, 0); });
     return;
   }
   if (getenv("PUDU_UI_REFRESH_TEST") != NULL) {

@@ -1,0 +1,15 @@
+module MemoRenderLambda
+
+import Std.Mobile.Memo as Memo
+import Std.Mobile.View as View
+
+/// A lambda can read `suffix`, which never reaches the memo's key, so reusing
+/// its view while the key is unchanged could show stale text.
+export fn main() -> Int {
+  let suffix = "!"
+  let shown = Memo.lazy("row", Memo.Render(|id: Int| View.Label("row {id}{suffix}")), 1)
+  match shown {
+    case View.Memo(_, _) => 0
+    case _ => 1
+  }
+}

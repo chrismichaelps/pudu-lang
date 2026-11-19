@@ -58,6 +58,10 @@ Embed the loader header in generated C11 and stage the same header beside bundle
 
 The iOS host sources also stage `pudu_ios_gesture.h`, `pudu_ios_feedback.h`, `pudu_ios_access.h`, `pudu_ios_scene.h`, `pudu_ios_motion.h`, `pudu_ios_navigation.h` ([[pudu_ios_navigation.h]]), `pudu_ios_refresh.h` ([[pudu_ios_refresh.h]]) and `pudu_ios_capability_test.h` with the host translation unit and the other private headers. All of them are written unchanged before clang runs. See [[iOS Host Gesture]], [[iOS Host Feedback]], [[iOS Host Access]], [[iOS Host Scene]], [[iOS Host Motion]], [[iOS Host Refresh]] and [[iOS Host Capability Test]].
 
+## iOS network source
+
+The iOS host sources also stage `pudu_ios_fetch.h` ([[pudu_ios_fetch.h]]) immediately after `pudu_ios_refresh.h` and before `pudu_ios_capability_test.h`. It holds the FETCH, CANCEL and WAKE handlers and the URL session. The list therefore has eighteen entries in all: the host translation unit and seventeen private headers, each written unchanged before clang runs. See [[iOS Host Fetch]].
+
 ## iOS node table source
 
 The iOS host sources also stage `pudu_ios_nodes.h` ([[pudu_ios_nodes.h]]) between `pudu_ios_motion.h` and `pudu_ios_navigation.h`, with the host translation unit and the other private headers. It holds the instruction codes, the control kinds and the node table that the capability headers read, so it is staged before any header that includes it. The list therefore has seventeen entries in all: the host translation unit and sixteen private headers, each written unchanged before clang runs.

@@ -170,6 +170,10 @@ data DeclaredTypes = DeclaredTypes
       one the compiler actually read. Absent from here means nothing could be
       known about it, and silence is the honest answer. -}
   , declaredQualifiers :: !(Set Text)
+  {-| Sum types declared `#[static_function]`: every function given to one of
+      their constructors must name a module-level function. Kept by nominal
+      identity, so the rule holds through any import alias. -}
+  , declaredStaticFunctions :: !(Set NominalId)
   }
   deriving stock (Eq, Show)
 
@@ -195,6 +199,7 @@ emptyDeclared =
     , declaredAliases = Map.empty
     , declaredTraitNames = Set.empty
     , declaredQualifiers = Set.empty
+    , declaredStaticFunctions = Set.empty
     }
 
 {-| Constructor identity follows aliases; ordinary bindings clear it on shadowing. -}

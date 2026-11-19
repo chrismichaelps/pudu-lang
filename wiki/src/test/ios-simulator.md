@@ -204,6 +204,12 @@ Refusal: a stream whose NAVIGATE names the route id 1 twice is refused before an
 
 Resolved Grill Log: the run asserts the labels as well as the lines, so a report that prints correctly while the screen shows a stale count still fails. _Rejected:_ comparing the lines alone, which would pass a screen that never applied the pop.
 
+## Remote run
+
+The Remote example, `examples/mobile/Remote.pudu` ([[Native Remote Example]]), runs with `PUDU_UI_FETCH_TEST` set and `PUDU_UI_SELFTEST` set to `0`. The script runs `withFetchServer`, which starts [[Test Fetch Server]] and reads its request counts after the app exits. The app's base URL is passed through `PUDU_FETCH_BASE`.
+
+The labels `Profile: 200 profile body` and `Limited: 200 limited body` must appear, and the layout must print `PUDU_FETCH loaded`. The run then asserts that the profile was requested once, since two descriptions and the fresh policy share one request, and that the limited path was requested twice, once refused with 429 and once after Retry-After. The pass line is `PASS iOS Remote requests: profile once, limited twice`. The host behaviour is in [[pudu_ios_fetch.h]].
+
 ## Refresh run
 
 The Refresh example, `examples/mobile/Refresh.pudu` ([[Native Refresh Example]]), runs with `PUDU_UI_REFRESH_TEST` set. The script compares the four `PUDU_REFRESH` lines the self-test prints, in the order the steps run: `PUDU_REFRESH insets reported`, `PUDU_REFRESH answered pull refreshing`, `PUDU_REFRESH finished by the program` and `PUDU_REFRESH unanswered pull stopped`. The run must exit with status 0. The labels the run compares are `Pulls: 2` and `Insets: top true`: the top inset must be positive on the simulator. The self-test sequence is described in [[pudu_ios_refresh.h]].

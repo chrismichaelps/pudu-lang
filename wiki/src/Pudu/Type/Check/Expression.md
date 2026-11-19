@@ -24,6 +24,8 @@ an abstract assumption merely because no concrete request exists yet.
 
 Decide what an expression's type is.
 
+After a general call's type is known, `checkStaticArguments` from [[Type Check Static]] runs over its arguments. It refuses, with `E3103`, any argument of a `@static_function` constructor that is not a module-level function's name.
+
 In derive checking, a call whose callee is a field callback is checked by `checkBuildCall`. A generated multi-segment name naming a canonical variant is typed as that variant's constructor even when the defining module does not import its owner.
 
 ## Interface

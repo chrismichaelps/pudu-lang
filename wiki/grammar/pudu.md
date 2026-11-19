@@ -328,6 +328,11 @@ scope_expr       = "async", "with", "scope", block ;
 - Implementations are coherent: at least the trait or implementing nominal type must be declared in the current module.
 - A type opts into generated implementations with a trailing `derives` clause naming each trait once; `derive Trait for Param: Shape { ... }` defines the strategy and `derive impl Trait for Type` requests one from another module under the orphan rules.
 - Types, fields, and variants carry attributes (`@name` or `@name(literal, ...)`), inert data only compile-time code reads.
+- A sum type may carry the type attribute `@static_function`. Every argument of one of its constructors must then name a module-level function (E3103, at the argument). A lambda or a local binding is refused, even one holding a module-level function; an import alias does not change the rule.
+
+  Accepted: `@static_function export type Render[K] = Render(fn(K) -> View)` with `Memo.Render(row)`, where `row` is declared at module level.
+
+  Refused: `Memo.Render(|id: Int| View.Label("row {id}"))` (a lambda), and `let chosen = row` followed by `Memo.Render(chosen)` (a local binding).
 - Static dispatch is the default for generic trait bounds. Dynamic dispatch requires an explicit future trait-object form and is not in v1.
 - Overlapping implementations and implicit conversions are prohibited.
 

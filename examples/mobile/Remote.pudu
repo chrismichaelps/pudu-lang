@@ -1,0 +1,69 @@
+module Remote
+
+import Std.Env as Env
+import Std.Json as Json
+import Std.Mobile.Host as Host
+import Std.Mobile.Memo as Memo
+import Std.Mobile.Resource as Resource
+import Std.Mobile.View as View
+import Std.Time as Time
+
+/// Served for a minute, kept five minutes after nothing shows it, and shown
+/// as failed only after three failed attempts.
+const POLICY: Resource.Policy = Resource.Policy{freshFor: 60000, keptFor: 300000, retries: 3}
+
+/// One labelled line of the screen; it is its own memo key.
+type Line = { name: Str, text: Str } derives Json.Encode
+
+fn now() -> Int { Time.monotonicNanos() / 1000000 }
+
+fn get(base: Str, key: Str) -> Resource.Need {
+  Resource.Need{key: key, request: Resource.Request{method: "GET", url: base + "/" + key, headers: [], body: ""}, policy: POLICY}
+}
+
+/// Two places of the screen describe the profile; the table sends one
+/// request for both, and none again while it is fresh.
+fn needs(base: Str) -> Array[Resource.Need] { [get(base, "profile"), get(base, "limited"), get(base, "profile")] }
+
+fn shown(status: Resource.Status) -> Str {
+  match status {
+    case Resource.Pending => "loading"
+    case Resource.Loaded(code, body) => "{code} {body}"
+    case Resource.Failed(code, reason) => "failed {code} {reason}"
+  }
+}
+
+fn line(item: Line) -> View.View { View.Label("{item.name}: {item.text}") }
+
+/// Each line renders only when its text changes.
+fn view(table: &Resource.Table) -> View.View {
+  View.Column([
+      Memo.lazy("line", Memo.Render(line), Line{name: "Profile", text: shown(Resource.status(table, "profile"))}),
+      Memo.lazy("line", Memo.Render(line), Line{name: "Limited", text: shown(Resource.status(table, "limited"))})
+    ])
+}
+
+fn main() -> Int {
+  let base = Env.variableOr("PUDU_FETCH_BASE", "http://127.0.0.1:8080")
+  let start = now()
+  let (asked, commands) = Resource.reconcile(Resource.table(32, 1u64), &needs(base), start)
+  var table = asked
+  Host.apply(Resource.written(&commands, start))
+  let (first, built) = View.mount(&view(&table))
+  var mounted = first
+  Host.apply(built)
+  while true {
+    let event = Host.wait()
+    if event == View.Stopped {
+      return 0
+    }
+    let at = now()
+    let (next, sent) = Resource.reconcile(Resource.observe(table, &event, at), &needs(base), at)
+    table = next
+    Host.apply(Resource.written(&sent, at))
+    let (updated, changes) = View.update(&mounted, &view(&table))
+    Host.apply(changes)
+    mounted = updated
+  }
+  0
+}

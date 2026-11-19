@@ -13,7 +13,9 @@ import Std.Mobile.Theme as Theme
 /// `Styled` and `Painted` set the text style or color role of the control
 /// they wrap and add no node either. `Refreshing` gives the scroll or list it
 /// wraps pull to refresh: the tag a pull reports and whether the program is
-/// refreshing, which the platform indicator follows.
+/// refreshing, which the platform indicator follows. `Memo` renders its view
+/// only when it is built or its key changes; an unchanged key reuses what is
+/// shown with no render, comparison or instruction. Std.Mobile.Memo builds it.
 export type View
   = Label(Str)
   | Button(Str, UInt32)
@@ -35,6 +37,7 @@ export type View
   | Menu(UInt32, Array[Feedback.Choice], View)
   | Animated(View)
   | Refreshing(UInt32, Bool, View)
+  | Memo(Str, fn() -> View)
 
 /// A recycling list of `total` items in `columns` equal columns. `rows` are
 /// the keyed views of items `first`, `first + 1` and onward: the window the
@@ -47,7 +50,9 @@ export type Window = { tag: UInt32, total: UInt32, first: UInt32, columns: UInt3
 /// its window (its tag and first visible item), the user popped the
 /// navigation from a top route to a destination route below it, the user
 /// dismissed a sheet, the user pulled a refresh control with a tag, the
-/// screen's safe-area insets changed, or the host asked the program to stop.
+/// screen's safe-area insets changed, a request generation answered (its
+/// status, body and Retry-After delay), a requested wake time arrived, the
+/// platform ran short of memory, or the host asked the program to stop.
 /// Std.Mobile.Events
 /// decodes them from the host's words.
 export type Event
@@ -64,6 +69,9 @@ export type Event
   | Dismissed(UInt32)
   | Refreshed(UInt32)
   | SafeArea(Scene.Insets)
+  | Fetched(UInt32, Int, Str, Int)
+  | Woke
+  | MemoryLow
   | Stopped
 
 /// A node the platform shows: its id, the view it shows, and the nodes of
@@ -74,8 +82,12 @@ export type Shown = { id: UInt32, view: View, children: Array[Shown] }
 /// removed nodes, handed out again first.
 export type Mounted = { root: Shown, next: UInt32, free: Array[UInt32] }
 
-// Ids handed out so far and the stream written so far.
-type Work = { next: UInt32, free: Array[UInt32], out: Array[UInt8] }
+/// What one update did: the nodes it compared, the memos it rendered, and
+/// the memos whose unchanged key let it skip their subtree.
+export type Stats = { compared: Int, rendered: Int, reused: Int }
+
+// Ids handed out so far, the stream written so far, and the update's counts.
+type Work = { next: UInt32, free: Array[UInt32], out: Array[UInt8], compared: Int, rendered: Int, reused: Int }
 
 // A node updated in place, or a node its parent must replace.
 type Outcome = Kept(Work, Shown) | Replaced
@@ -99,7 +111,7 @@ export fn mount(view: &View) -> (Mounted, Bytes) {
 /// followed by the words that build it. Nothing is shown as the screen's
 /// root: a navigation page shows the body instead.
 export fn body(out: Array[UInt8], next: UInt32, free: Array[UInt32], view: &View) -> (Mounted, Array[UInt8]) {
-  let (work, shown) = built(Work{next: next, free: free, out: out}, view)
+  let (work, shown) = built(started(out, next, free), view)
   (Mounted{root: shown, next: work.next, free: work.free}, work.out)
 }
 
@@ -108,7 +120,7 @@ export fn body(out: Array[UInt8], next: UInt32, free: Array[UInt32], view: &View
 /// subtree is removed; no ROOT is written, so the caller reads the new root
 /// id from the result.
 export fn rebody(out: Array[UInt8], mounted: &Mounted, next: &View) -> (Mounted, Array[UInt8]) {
-  let start = Work{next: mounted.next, free: mounted.free, out: out}
+  let start = started(out, mounted.next, mounted.free)
   match reconciled(start, &mounted.root, next) {
     case Kept(work, shown) => (Mounted{root: shown, next: work.next, free: work.free}, work.out)
     case Replaced => {
@@ -122,7 +134,7 @@ export fn rebody(out: Array[UInt8], mounted: &Mounted, next: &View) -> (Mounted,
 /// The free ids of `mounted` with its whole tree's ids added, and `out`
 /// followed by the words that detach the tree and forget its nodes.
 export fn unmount(out: Array[UInt8], mounted: &Mounted) -> (Array[UInt32], Array[UInt8]) {
-  let work = removed(Work{next: mounted.next, free: mounted.free, out: out}, &mounted.root)
+  let work = removed(started(out, mounted.next, mounted.free), &mounted.root)
   (work.free, work.out)
 }
 
@@ -130,13 +142,20 @@ export fn unmount(out: Array[UInt8], mounted: &Mounted) -> (Array[UInt32], Array
 /// it: in-place changes where a node keeps its kind and tag, keyed rows
 /// matched by key, and replacement only for nodes that changed kind or tag.
 export fn update(mounted: &Mounted, next: &View) -> (Mounted, Bytes) {
-  let start = Work{next: mounted.next, free: mounted.free, out: []}
+  let (made, stream, _) = measured(mounted, next)
+  (made, stream)
+}
+
+/// `update`, with what it did: how many nodes it compared, memos it rendered
+/// and memos it reused. The instruction count is the stream's length.
+export fn measured(mounted: &Mounted, next: &View) -> (Mounted, Bytes, Stats) {
+  let start = started([], mounted.next, mounted.free)
   match reconciled(start, &mounted.root, next) {
-    case Kept(work, shown) => (Mounted{root: shown, next: work.next, free: work.free}, bytesOf(work.out))
+    case Kept(done, shown) => (Mounted{root: shown, next: done.next, free: done.free}, bytesOf(done.out), counted(&done))
     case Replaced => {
       let (made, shown) = built(start, next)
-      let work = removed(Work{..made, out: Stream.root(made.out, shown.id)}, &mounted.root)
-      (Mounted{root: shown, next: work.next, free: work.free}, bytesOf(work.out))
+      let replaced = removed(Work{..made, out: Stream.root(made.out, shown.id)}, &mounted.root)
+      (Mounted{root: shown, next: replaced.next, free: replaced.free}, bytesOf(replaced.out), counted(&replaced))
     }
   }
 }
@@ -175,6 +194,11 @@ fn built(work: Work, view: &View) -> (Work, Shown) {
     marked(work, view, &inner, |out: Array[UInt8], node: UInt32| Stream.menu(out, node, tag, &Feedback.choices(&choices)))
     case Animated(inner) => marked(work, view, &inner, |out: Array[UInt8], node: UInt32| Stream.animate(out, node, true))
     case Refreshing(tag, on, inner) => marked(work, view, &inner, |out: Array[UInt8], node: UInt32| Stream.refresh(out, node, tag, on))
+    case Memo(key, render) => {
+      let inner = render()
+      let (made, shown) = built(Work{..work, rendered: work.rendered + 1}, &inner)
+      (made, Shown{..shown, view: Memo(key, || inner)})
+    }
     case Recycled(window) => {
       let made = Stream.create(taken.out, id, Stream.LIST)
       let shaped = Stream.range(Stream.columns(Stream.tag(made, id, window.tag), id, window.columns), id, window.total, window.first)
@@ -205,9 +229,22 @@ fn grouped(work: Work, id: UInt32, view: &View, children: &Array[View]) -> (Work
 }
 
 // `shown` updated toward `next`, or Replaced when its kind or tag changed.
-fn reconciled(work: Work, shown: &Shown, next: &View) -> Outcome {
+fn reconciled(given: Work, shown: &Shown, next: &View) -> Outcome {
   let id = shown.id
+  let work = Work{..given, compared: given.compared + 1}
   match (shown.view, *next) {
+    // An unchanged key keeps the shown subtree and its cached view whole.
+    case (Memo(beforeKey, cached), Memo(afterKey, render)) => {
+      if beforeKey == afterKey {
+        Kept(Work{..work, reused: work.reused + 1}, *shown)
+      } else {
+        let inner = render()
+        match reconciled(Work{..work, rendered: work.rendered + 1}, &Shown{..*shown, view: cached()}, &inner) {
+          case Kept(made, node) => Kept(made, Shown{..node, view: Memo(afterKey, || inner)})
+          case Replaced => Replaced
+        }
+      }
+    }
     case (Label(before), Label(after)) => kept(work, retexted(work.out, id, before, after), shown, next)
     case (Button(before, beforeTag), Button(after, afterTag)) if beforeTag == afterTag =>
     kept(work, retexted(work.out, id, before, after), shown, next)
@@ -426,6 +463,12 @@ fn retexted(out: Array[UInt8], id: UInt32, before: Str, after: Str) -> Array[UIn
 fn leaf(id: UInt32, view: &View) -> Shown { Shown{id: id, view: *view, children: []} }
 
 fn written(work: Work, out: Array[UInt8]) -> Work { Work{..work, out: out} }
+
+fn started(out: Array[UInt8], next: UInt32, free: Array[UInt32]) -> Work {
+  Work{next: next, free: free, out: out, compared: 0, rendered: 0, reused: 0}
+}
+
+fn counted(work: &Work) -> Stats { Stats{compared: work.compared, rendered: work.rendered, reused: work.reused} }
 
 fn word(index: Int) -> UInt32 {
   match convertInteger[UInt32](index) {

@@ -5,6 +5,14 @@ tags: [changelog]
 
 # Changelog
 
+## 2026-11-18 — Memoized native subtrees and render counters (#963)
+
+- Memoized native subtrees and render counters (#963): View.Memo, Std.Mobile.Memo.lazy, View.measured.
+- Memo render functions must name module-level functions (E3103, @static_function).
+- Runtime-owned resources: Std.Mobile.Resource, FETCH/CANCEL/WAKE, FETCHED/WOKE/MEMORY events, iOS URL session host.
+  [[Std Mobile Resource]] · [[pudu_ios_fetch.h]] · [[Native Remote Example]] · [[Uses Mobile Resource]] · [[Test Fetch Server]]
+  [[Std Mobile View]] · [[Std Mobile Memo]] · [[Native Render Skipping]] · [[Uses Mobile Memo]] · [[Type Check Static]] · [[Memo Render Lambda]] · [[Memo Render Local]]
+
 ## 2026-11-18 — Native pull to refresh and safe-area insets (#962)
 
 - Native pull to refresh and safe-area insets (#962): View.Refreshing, REFRESH instruction, REFRESHED and INSETS events, Scene.Insets.

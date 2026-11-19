@@ -42,6 +42,7 @@ tags: [moc, module]
 - [[Type Check Collection]] — post-inference collection-literal boundary diagnostics.
 - [[Type Marker]] — the compiler-controlled `Copy`, `Send`, and `Sync` markers, decided structurally.
 - [[Type Exhaust]] — match coverage and arm reachability.
+- [[Type Check Static]] — constructor arguments of a `@static_function` type must name module-level functions (E3103).
 - [[Type Check Call]] — what a call's callee refers to, resolved against the implementation it will run.
 - [[Check Place]] — what an assignment may write, what `&mut` may lend, and where an exclusive reference may be written or held.
 - [[Type Check Safety]] — compile-time purity and unsafe capabilities, the two transitive checks of what a body may reach.

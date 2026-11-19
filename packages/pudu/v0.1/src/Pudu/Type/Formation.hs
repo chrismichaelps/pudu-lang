@@ -22,7 +22,8 @@ import Data.Text (Text)
 import Pudu.Frontend.Syntax.Located (Located (..))
 import Pudu.Frontend.Syntax.Name (ModuleName (..), moduleNameSegments, moduleNameText)
 import Pudu.Frontend.Syntax.Tree
-  ( Declaration (..)
+  ( Attribute (..)
+  , Declaration (..)
   , Constraint (..)
   , Impl (..)
   , Parameter (..)
@@ -49,6 +50,14 @@ import Pudu.Type.Formation.Builtin
   ( builtinAliases, builtinOwnedVariants, builtinOwners, builtinTypeNames, builtinVariants )
 import Pudu.Type.Implementation (ImplementationRule (..))
 import Pudu.Type.Substitute (substituteRigid)
+
+{-| The attribute marking a sum type whose constructors take only functions
+    named at module level. -}
+staticFunctionAttribute :: Text
+staticFunctionAttribute = "static_function"
+
+isStaticFunction :: Located Attribute -> Bool
+isStaticFunction (Located _ attribute) = locatedValue (attributeName attribute) == staticFunctionAttribute
 
 {-| Form a type from its syntax. Names that were declared as generic parameters
     become rigid; every other name is nominal, and an alias expands
@@ -409,6 +418,10 @@ collectOne owner declared (Located _ declaration) = case declaration of
                 foldr (\(key, value') acc -> Map.insert key value' acc)
                   (declaredVariantFields declared) named
             , declaredOwners = Map.insert identity (map fst payloads) (declaredOwners declared)
+            , declaredStaticFunctions =
+                if any isStaticFunction (typeAttributes value)
+                  then Set.insert identity (declaredStaticFunctions declared)
+                  else declaredStaticFunctions declared
             }
       AliasDefinition aliased -> do
         {-| The alias body is formed with its own parameters rigid, so they can
