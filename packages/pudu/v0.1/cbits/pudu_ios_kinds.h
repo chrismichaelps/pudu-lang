@@ -9,6 +9,7 @@
 #include <stdint.h>
 #include "pudu_ios_controls.h"
 #include "pudu_ios_feedback.h"
+#include "pudu_ios_image.h"
 #include "pudu_ios_layout.h"
 #include "pudu_ios_list.h"
 #include "pudu_ios_material.h"
@@ -76,6 +77,7 @@ static const pudu_kind pudu_kind_table[PUDU_UI_KINDS] = {
   [PUDU_UI_SYMBOL] = { .make = pudu_make_symbol, .text = pudu_symbol_text, .control = pudu_itself, .paint = pudu_symbol_paint },
   [PUDU_UI_PAGES] = { .make = pudu_make_pages, .control = pudu_itself, .number = pudu_pages_number, .drive = pudu_pages_drive },
   [PUDU_UI_WELL] = { .make = pudu_make_well, .control = pudu_itself, .number = pudu_well_number, .drive = pudu_well_drive },
+  [PUDU_UI_IMAGE] = { .make = pudu_make_image, .control = pudu_itself },
 };
 
 static const pudu_kind *pudu_kind_of(uint32_t kind) {
@@ -132,6 +134,18 @@ static void pudu_do_moment(pudu_reader *reader) {
   if (pudu_kinds[node].unsignedIntValue != PUDU_UI_DATE) pudu_stream_defect("set a moment on a node that is not a date picker:", node);
   if (mode >= PUDU_MOMENTS) pudu_stream_defect("used unknown date mode", mode);
   pudu_date_moment(pudu_nodes[node], mode, seconds);
+}
+
+/* SOURCE: the origin (0 an asset, 1 a URL), the scaling, then the name or URL. */
+static void pudu_do_source(pudu_reader *reader) {
+  uint32_t node = pudu_node_id(reader);
+  uint32_t origin = pudu_word(reader);
+  uint32_t scaling = pudu_word(reader);
+  NSString *location = pudu_text(reader);
+  if (pudu_kinds[node].unsignedIntValue != PUDU_UI_IMAGE) pudu_stream_defect("set a source on a node that is not an image:", node);
+  if (origin >= PUDU_IMAGE_ORIGINS) pudu_stream_defect("used unknown image origin", origin);
+  if (scaling >= PUDU_IMAGE_SCALINGS) pudu_stream_defect("used unknown image scaling", scaling);
+  pudu_image_source(pudu_nodes[node], origin, scaling, location);
 }
 
 /* Drives every value control once, then calls `done`. */

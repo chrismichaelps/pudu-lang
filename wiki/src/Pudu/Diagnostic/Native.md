@@ -136,7 +136,7 @@ which the registry gate checks.
 
 ## Platform ledger diagnostics (#926)
 
-The mobile family now runs E6007 through E6012. Each is an error or a warning of the
+The mobile family now runs E6007 through E6013. Each is an error or a warning of the
 same [[Diagnostic Model]] shape, built in this module from a [[Backend Ledger]] finding
 or a missing SDK, at the root module's span.
 
@@ -147,6 +147,7 @@ or a missing SDK, at the root module's span.
 | E6009 | error | the installed Xcode `<found>` is below the ledger minimum `<minimum>` | names the minimum and `PUDU_XCRUN` |
 | E6010 | error | the store rule `<store>` takes effect with Xcode `<xcode>` and SDK `<sdk>`; the selected SDK `<found>` does not meet it | device builds only; names the rule's Xcode, SDK and source |
 | W6011 | warning | the installed Xcode `<found>` is newer than the tested `<tested>`; the build proceeds | asks for the suite to run and the version to be recorded |
+| E6013 | error | the application's assets cannot be packaged: `<reason>` | names the file and the rule it breaks: a name other platforms may read differently, or a symbolic link |
 | W6012 | warning | the store rule `<store>` is not met by the installed toolchain, and either takes effect within `<days>` days or is already in effect for a development (simulator) build | names the rule's Xcode, SDK and source |
 
 - A refusing `StoreRuleMissed` for a Distribution build is E6010. The same finding for a

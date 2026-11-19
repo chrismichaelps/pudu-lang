@@ -10,6 +10,14 @@ export type Bounds = { low: Int32, high: Int32, step: Int32 }
 /// What a date picker chooses: a day, a time of day, or both.
 export type DateMode = Day | Time | DayAndTime
 
+/// Where an image comes from: a file under the application's `assets`
+/// directory, named by its path there, or a URL the platform loads.
+export type ImageSource = Bundled(Str) | Remote(Str)
+
+/// How an image meets its view: covering it and cropping the rest, fitting
+/// inside it whole, or stretched to its shape.
+export type Scaling = Fill | Fit | Stretch
+
 /// A platform control that holds a value. The last word of each control that
 /// reports input is the tag its events carry.
 ///
@@ -18,7 +26,8 @@ export type DateMode = Day | Time | DayAndTime
 /// labels; a date picker holds whole seconds since the epoch; a text area and
 /// a search field (its hint, then its text) hold text; a symbol shows a
 /// system symbol by name; a page indicator holds a page count and the current
-/// page; a color well holds a color as RGBA with red in the high byte.
+/// page; a color well holds a color as RGBA with red in the high byte; an
+/// image shows its source scaled to its view and reports whether it loaded.
 /// Values outside what a control can show are brought inside it before they
 /// reach the platform, so the host never sees an inverted range, an index
 /// past the last label, or a page past the last page.
@@ -33,6 +42,7 @@ export type Control
   | Symbol(Str)
   | Pages(UInt32, UInt32, UInt32)
   | Well(UInt32, UInt32)
+  | Image(ImageSource, Scaling, UInt32)
 
 /// `out` followed by the words that create node `id` as `control` and give it
 /// everything it shows. Bounds, labels and page counts precede the value
@@ -49,6 +59,7 @@ export fn built(out: Array[UInt8], id: UInt32, control: &Control) -> Array[UInt8
     case Symbol(name) => Stream.text(Stream.create(out, id, Stream.SYMBOL), id, name)
     case Pages(total, current, tag) => paged(Stream.tag(Stream.create(out, id, Stream.PAGES), id, tag), id, total, current)
     case Well(rgba, tag) => Stream.number(Stream.tag(Stream.create(out, id, Stream.WELL), id, tag), id, rgba)
+    case Image(source, scaling, tag) => sourced(Stream.tag(Stream.create(out, id, Stream.IMAGE), id, tag), id, &source, scaling)
   }
 }
 
@@ -73,6 +84,8 @@ export fn changed(out: Array[UInt8], id: UInt32, before: &Control, after: &Contr
     case (Symbol(oldName), Symbol(name)) => Some(retexted(out, id, oldName, name))
     case (Pages(oldTotal, oldCurrent, oldTag), Pages(total, current, tag)) if oldTag == tag => Some(repaged(out, id, oldTotal, oldCurrent, total, current))
     case (Well(oldColor, oldTag), Well(rgba, tag)) if oldTag == tag => Some(if oldColor == rgba { out } else { Stream.number(out, id, rgba) })
+    case (Image(oldSource, oldScaling, oldTag), Image(source, scaling, tag)) if oldTag == tag =>
+    Some(if oldSource == source && oldScaling == scaling { out } else { sourced(out, id, &source, scaling) })
     case _ => None
   }
 }
@@ -106,6 +119,23 @@ export fn modeCode(mode: DateMode) -> UInt32 {
     case Day => 0u32
     case Time => 1u32
     case DayAndTime => 2u32
+  }
+}
+
+/// The stream code of a scaling.
+export fn scalingCode(scaling: Scaling) -> UInt32 {
+  match scaling {
+    case Fill => 0u32
+    case Fit => 1u32
+    case Stretch => 2u32
+  }
+}
+
+// An image's origin, scaling and name or URL in one SOURCE.
+fn sourced(out: Array[UInt8], id: UInt32, source: &ImageSource, scaling: Scaling) -> Array[UInt8] {
+  match *source {
+    case Bundled(name) => Stream.source(out, id, 0u32, scalingCode(scaling), name)
+    case Remote(url) => Stream.source(out, id, 1u32, scalingCode(scaling), url)
   }
 }
 

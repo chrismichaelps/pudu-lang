@@ -120,12 +120,14 @@ public final class PuduActivity extends Activity {
   @Override public void onTrimMemory(int level) {
     super.onTrimMemory(level);
     if (level == TRIM_MEMORY_RUNNING_LOW || level == TRIM_MEMORY_RUNNING_CRITICAL || level >= TRIM_MEMORY_MODERATE) {
+      PuduImage.trim();
       PuduBridge.event(MEMORY, 0, null, 0, null);
     }
   }
 
   @Override public void onLowMemory() {
     super.onLowMemory();
+    PuduImage.trim();
     PuduBridge.event(MEMORY, 0, null, 0, null);
   }
 

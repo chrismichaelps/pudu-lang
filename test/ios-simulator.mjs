@@ -246,6 +246,27 @@ int main(int argc, char **argv) {
       assert.equal(asked.limited, 2, `limited was requested ${asked.limited} times`);
       console.log("PASS iOS Remote requests: profile once, limited twice");
     });
+    withFetchServer((base, counts) => {
+      // A bundled and a served image show at their own pixel size, a missing
+      // one reports a failure, and an image moved off a slow source before it
+      // answered shows its new source and never the slow one.
+      mobileApp(device, "Gallery", [{
+        environment: { SIMCTL_CHILD_PUDU_UI_SELFTEST: "0", SIMCTL_CHILD_PUDU_UI_IMAGE_TEST: "1", SIMCTL_CHILD_PUDU_FETCH_BASE: base },
+        labels: ["Loaded: 3", "Failed: 1", "Moved: true"],
+        layout: ["PUDU_IMAGE 1 1 48x48", "PUDU_IMAGE 2 1 96x96", "PUDU_IMAGE 3 0 0x0", "PUDU_IMAGE 4 1 48x48"],
+      }]);
+      const asked = counts();
+      assert.equal(asked.photo, 1, `the photo was requested ${asked.photo} times`);
+      console.log("PASS iOS Gallery requests: photo once");
+    });
+    refusedApp(device, root, "source on a label",
+      "import Std.Mobile.Host as Host\nimport Std.Mobile.Stream as Stream", `  let label = Stream.create([], 0u32, Stream.LABEL)
+  Host.apply(bytesOf(Stream.source(label, 0u32, 0u32, 0u32, "pudu.png")))`,
+      /pudu: a view stream set a source on a node that is not an image: 0/u);
+    refusedApp(device, root, "unknown image scaling",
+      "import Std.Mobile.Host as Host\nimport Std.Mobile.Stream as Stream", `  let image = Stream.create([], 0u32, Stream.IMAGE)
+  Host.apply(bytesOf(Stream.source(image, 0u32, 0u32, 9u32, "pudu.png")))`,
+      /pudu: a view stream used unknown image scaling 9/u);
     refusedApp(device, root, "refresh on a label",
       "import Std.Mobile.Host as Host\nimport Std.Mobile.Stream as Stream", `  let label = Stream.create([], 0u32, Stream.LABEL)
   Host.apply(bytesOf(Stream.refresh(label, 0u32, 1u32, false)))`,
@@ -408,7 +429,7 @@ function mobileApp(device, example, runs) {
         `${example} did not show ${labels.join(", ")}:\n${lines.join("\n")}`);
       assert.ok(lines.includes("PUDU_PROGRAM_STATUS 0"), `${example} did not finish:\n${lines.join("\n")}`);
       if (layout) {
-        assert.deepEqual(lines.filter((line) => /^PUDU_(VIEWPORT|KEYBOARD|THEME|LIST|MATERIAL|ALERT|HAPTIC|ACCESS|MOTION|NAV|REFRESH|FETCH) /.test(line)), layout,
+        assert.deepEqual(lines.filter((line) => /^PUDU_(VIEWPORT|KEYBOARD|THEME|LIST|MATERIAL|ALERT|HAPTIC|ACCESS|MOTION|NAV|REFRESH|FETCH|IMAGE) /.test(line)), layout,
           `${example} did not report the expected layout and theme:\n${lines.join("\n")}`);
       }
       const firstFrame = lines.find((line) => line.startsWith("PUDU_FIRST_FRAME_MS "));

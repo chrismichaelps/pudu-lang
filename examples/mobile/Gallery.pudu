@@ -1,0 +1,59 @@
+module Gallery
+
+import Std.Env as Env
+import Std.Mobile.Control as Control
+import Std.Mobile.Host as Host
+import Std.Mobile.View as View
+
+/// The tags each image's reports carry.
+const BUNDLED: UInt32 = 1u32
+const SERVED: UInt32 = 2u32
+const MISSING: UInt32 = 3u32
+const MOVING: UInt32 = 4u32
+
+/// How many sources loaded and failed, and whether the moving image has been
+/// given its second source.
+type Model = { loaded: Int, failed: Int, moved: Bool }
+
+fn view(model: &Model, base: Str) -> View.View {
+  // The moving image starts on a slow source and moves to the bundled one as
+  // soon as the bundled image reports; the slow answer must never show.
+  let moving = if model.moved { Control.Bundled("pudu.png") } else { Control.Remote(base + "/slow.png") }
+  View.Column([
+      View.Label("Loaded: {model.loaded}"),
+      View.Label("Failed: {model.failed}"),
+      View.Label("Moved: {model.moved}"),
+      View.Control(Control.Image(Control.Bundled("pudu.png"), Control.Fit, BUNDLED)),
+      View.Control(Control.Image(Control.Remote(base + "/photo.png"), Control.Fill, SERVED)),
+      View.Control(Control.Image(Control.Remote(base + "/missing.png"), Control.Fit, MISSING)),
+      View.Control(Control.Image(moving, Control.Stretch, MOVING))
+    ])
+}
+
+fn update(model: &Model, event: &View.Event) -> Model {
+  match *event {
+    case View.Imaged(tag, true) if tag == BUNDLED => Model {..*model, loaded: model.loaded + 1, moved: true }
+    case View.Imaged(_, true) => Model{..*model, loaded: model.loaded + 1}
+    case View.Imaged(_, false) => Model{..*model, failed: model.failed + 1}
+    case _ => *model
+  }
+}
+
+fn main() -> Int {
+  let base = Env.variableOr("PUDU_FETCH_BASE", "http://127.0.0.1:8080")
+  var model = Model{loaded: 0, failed: 0, moved: false}
+  let (first, built) = View.mount(&view(&model, base))
+  var mounted = first
+  Host.apply(built)
+  while true {
+    let event = Host.wait()
+    if event == View.Stopped {
+      return 0
+    }
+    model = update(&model, &event)
+    let (next, changes) = View.update(&mounted, &view(&model, base))
+    Host.apply(changes)
+    mounted = next
+  }
+  0
+}

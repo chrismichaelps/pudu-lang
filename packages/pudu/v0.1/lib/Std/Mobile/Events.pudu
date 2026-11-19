@@ -25,6 +25,7 @@ const MEMORY: UInt64 = 20u64
 const VALUED: UInt64 = 21u64
 const COLORED: UInt64 = 22u64
 const DATED: UInt64 = 23u64
+const IMAGED: UInt64 = 24u64
 
 /// Each event kind's constructor, given the tag and the text the host holds.
 const EVENTS: Map[UInt64, fn(UInt32, Str) -> View.Event] = mapOf([
@@ -47,7 +48,8 @@ const DETAILED: Map[UInt64, fn(UInt32, UInt32) -> Option[View.Event]] = mapOf([
     (PICKED, |reported: UInt32, index: UInt32| Some(View.Picked(reported, index))),
     (POPPED, |top: UInt32, destination: UInt32| Some(View.Popped(top, destination))),
     (VALUED, |reported: UInt32, bits: UInt32| Some(View.Valued(reported, signed(bits)))),
-    (COLORED, |reported: UInt32, rgba: UInt32| Some(View.Colored(reported, rgba)))
+    (COLORED, |reported: UInt32, rgba: UInt32| Some(View.Colored(reported, rgba))),
+    (IMAGED, |reported: UInt32, loaded: UInt32| imaged(reported, loaded))
   ])
 
 /// Each measured event kind's constructor, given the tag, the detail word and
@@ -148,6 +150,11 @@ fn fetched(generation: UInt32, status: UInt32, body: Str, values: &Array[Int32])
     -1
   }
   View.Fetched(generation, code, body, wait)
+}
+
+// Whether an image's source loaded: 1 or 0; any other word is never written.
+fn imaged(reported: UInt32, loaded: UInt32) -> Option[View.Event] {
+  if loaded > 1u32 { None } else { Some(View.Imaged(reported, loaded == 1u32)) }
 }
 
 // A chosen moment from its two words, the high signed and the low unsigned;

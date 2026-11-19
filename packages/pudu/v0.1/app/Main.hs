@@ -61,6 +61,7 @@ import Pudu.Backend.Emit (EmittedUnit (..), EntryForm (..), emitUnit)
 import Pudu.Backend.Target (NativeTarget (..), TargetRefusal (..), nativeTargetNamed, nativeTargetNames, targetRefusals)
 import Pudu.Cli.Doctor (runDoctor)
 import Pudu.Backend.Toolchain.App (AppRequest (..), bundleIdentifier, compileApp)
+import Pudu.Backend.Toolchain.Assets (assetDirectory)
 import Pudu.Backend.Toolchain.Library (LibraryProducts (..), LibraryRequest (..), compileLibrary)
 import Pudu.Backend.Toolchain
   ( ToolchainFailure (..)
@@ -815,9 +816,11 @@ buildNativeProgram style path target requested = do
                 exitFailure
               [] | app -> do
                 let name = Text.pack (defaultTargetName path)
+                assets <- assetDirectory path
                 compiled <- compileApp AppRequest
                   { appSource = emittedSource unit, appOutput = target, appTarget = chosen
-                  , appExports = emittedExports unit, appName = name, appIdentifier = bundleIdentifier name }
+                  , appExports = emittedExports unit, appName = name, appIdentifier = bundleIdentifier name
+                  , appAssets = assets }
                 case compiled of
                   Left failure -> toolchainFailed style program (moduleSpan parsed) failure
                   Right (warnings, findings) -> do
@@ -860,6 +863,7 @@ toolchainDiagnostic spanValue failure = case failure of
   ToolchainTargetUnbuilt target ->
     Native.targetRefusal spanValue target "a native build" "its shared-library output is designed but not built yet"
   ToolchainOutsideLedger target finding -> Native.ledgerRefusal spanValue target finding
+  ToolchainAssetRefused reason -> Native.assetRefused spanValue reason
 
 buildProgram :: RenderStyle -> FilePath -> FilePath -> Maybe FilePath -> IO ()
 buildProgram style path target runtime = do

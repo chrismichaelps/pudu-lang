@@ -40,6 +40,16 @@ Exports:
   instructions for what differs between the two normalized states. Answers `None`, with nothing appended, when the
   variants differ or the tags differ; the caller then replaces the node.
 
+## Images
+
+`Image(ImageSource, Scaling, UInt32)` is one image node. `ImageSource` is `Bundled(Str)`, a name under the application's `assets` directory, or `Remote(Str)`, a URL. `Scaling` is `Fill`, `Fit` or `Stretch`, coded 0, 1 and 2 by `scalingCode`. The tag is reported with IMAGED.
+
+- CREATE 22 writes the node, then TAG 5 when the tag is nonzero.
+- SOURCE 45 writes the node, the origin (0 bundled, 1 remote), the scaling code and the location text.
+- An update with the same source and scaling writes nothing. A new tag replaces the node.
+
+Resolved Grill Log: a source and a scaling change the same SOURCE, so one instruction carries both and the host never sees a half-changed image. _Rejected:_ a separate instruction per property.
+
 ## Normalization
 
 Every value is normalized before it is compared or written:

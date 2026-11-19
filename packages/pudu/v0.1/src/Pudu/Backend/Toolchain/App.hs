@@ -32,6 +32,7 @@ import GHC.IO.Encoding (getFileSystemEncoding)
 import Pudu.Backend.Ledger (Finding, appleLedger, ledgerDeployment, renderRelease)
 import Pudu.Backend.Target (AppleSdk (..), NativeTarget (..), TargetPlatform (..))
 import Pudu.Backend.Toolchain.Android (androidTools, compileApk)
+import Pudu.Backend.Toolchain.Assets (assetFiles, stageAssets)
 import Pudu.Backend.Toolchain.HostSources (iosHostSources)
 import Pudu.Backend.Toolchain.Library (LibraryProducts (..), LibraryRequest (..), appleTools, compileLibrary, invoke)
 import Pudu.Backend.Toolchain.Process (ToolchainFailure (..), problemText, timeoutSeconds, tryIO)
@@ -47,6 +48,8 @@ data AppRequest = AppRequest
   , appExports :: ![Text]
   , appName :: !Text
   , appIdentifier :: !Text
+  , appAssets :: !(Maybe FilePath)
+  -- ^ The program's asset directory, packaged under the same relative names.
   }
   deriving stock (Eq, Show)
 
@@ -64,7 +67,7 @@ identifierPrefix = "org.pudu."
 
 {-| The frameworks the iOS host links. -}
 hostFrameworks :: [String]
-hostFrameworks = ["UIKit", "Foundation", "CoreGraphics", "QuartzCore"]
+hostFrameworks = ["UIKit", "Foundation", "CoreGraphics", "QuartzCore", "ImageIO"]
 
 {-| The application at the output path, answering the tools' warnings and the
     platform ledger's findings that let the build proceed. A device
@@ -76,7 +79,13 @@ compileApp request = case nativeTargetPlatform (appTarget request) of
     tools <- androidTools (nativeTargetName (appTarget request)) True
     case tools of
       Left failure -> pure (Left failure)
-      Right found -> fmap (, []) <$> compileApk found (appSource request) (appExports request) (appName request) (appOutput request)
+      Right found -> do
+        listed <- assetsOf request
+        case listed of
+          Left failure -> pure (Left failure)
+          Right files ->
+            fmap (, []) <$> compileApk found (appSource request) (appExports request) (appName request) (appOutput request)
+              ((, files) <$> appAssets request)
   _ -> pure (Left (ToolchainTargetUnbuilt (nativeTargetName (appTarget request) <> " applications, which need a signing identity,")))
 
 buildBundle :: AppRequest -> AppleSdk -> IO (Either ToolchainFailure (Text, [Finding]))
@@ -110,11 +119,12 @@ buildBundle request sdk = do
       }
     case built of
       Left failure -> pure (Left failure)
-      Right products -> do
+      Right products -> assetsOf request >>= either (pure . Left) (\files -> do
         prepared <- tryIO (do
           createDirectory bundle
           mapM_ (\(file, source) -> ByteString.writeFile (directory </> file) (ByteString.pack source)) iosHostSources
-          ByteString.writeFile (bundle </> "Info.plist") (Encoding.encodeUtf8 (infoPlist (appName request) (appIdentifier request))))
+          ByteString.writeFile (bundle </> "Info.plist") (Encoding.encodeUtf8 (infoPlist (appName request) (appIdentifier request)))
+          mapM_ (\assets -> stageAssets assets files (bundle </> "assets")) (appAssets request))
         case prepared of
           Left problem -> pure (Left (ToolchainPublishFailed (problemText problem)))
           Right () -> do
@@ -134,7 +144,14 @@ buildBundle request sdk = do
                     | isAlreadyExistsError problem -> Left (ToolchainPublishFailed ("application output already exists: " <> Text.pack output))
                     | otherwise -> Left (ToolchainPublishFailed (problemText problem))
                   Right () ->
-                    Right (Text.strip (Text.unlines (filter (not . Text.null) [libraryWarnings products, warnings])), libraryFindings products)
+                    Right (Text.strip (Text.unlines (filter (not . Text.null) [libraryWarnings products, warnings])), libraryFindings products))
+
+{-| The program's assets, checked; none when it has no asset directory. -}
+assetsOf :: AppRequest -> IO (Either ToolchainFailure [FilePath])
+assetsOf request = case appAssets request of
+  Nothing -> pure (Right [])
+  Just directory -> either (Left . ToolchainAssetRefused) Right <$> assetFiles directory
+
 {-| Publish without replacing any existing directory entry, even if another
     build reaches the same output between staging and publication. -}
 publish :: FilePath -> FilePath -> IO ()

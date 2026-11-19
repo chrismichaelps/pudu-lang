@@ -7,13 +7,15 @@
     `E6002`–`E6006` translate the native toolchain's failure modes; `E6007`
     and `E6008` are a mobile target's missing SDK and refused construct;
     `E6009`, `E6010`, `W6011` and `W6012` are the platform ledger's findings
-    about the installed toolchain. Spans
+    about the installed toolchain; `E6013` refuses an asset an application
+    cannot carry. Spans
     point at the program being built — the refused construct, or the root
     module's first token for environment failures — so the ordinary renderer
     shows a real file and line.
 -}
 module Pudu.Diagnostic.Native
-  ( ledgerFindingLine
+  ( assetRefused
+  , ledgerFindingLine
   , ledgerRefusal
   , ledgerWarning
   , nativeRefusal
@@ -82,6 +84,14 @@ toolchainPublishFailed spanValue reason =
   buildDiagnostic "E6006" spanValue
     ("the compiled artifact could not be written: " <> reason)
     Nothing
+
+{-| An asset the application cannot carry: a name another platform may read
+    differently, or a symbolic link. -}
+assetRefused :: Span -> Text -> Diagnostic
+assetRefused spanValue reason =
+  buildDiagnostic "E6013" spanValue
+    ("the application's assets cannot be packaged: " <> reason)
+    (Just "asset names use ASCII letters, digits, dots, dashes and underscores; copy linked files into the assets directory")
 
 {-| A mobile target whose platform SDK was not found, naming what was looked
     for. -}

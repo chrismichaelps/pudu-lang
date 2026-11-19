@@ -4,11 +4,14 @@
 //
 // /profile answers 200 with an ETag, and 304 to a request that sends it back.
 // /limited answers 429 with Retry-After: 1 once, then 200.
+// /photo.png answers a PNG; /slow.png answers the same PNG after 1.5 seconds,
+// so an image retargeted before then must never show it.
 import { createServer } from "node:http";
-import { writeFileSync } from "node:fs";
+import { readFileSync, writeFileSync } from "node:fs";
 
 const [record] = process.argv.slice(2);
-const counts = { port: 0, profile: 0, limited: 0, revalidated: 0 };
+const counts = { port: 0, profile: 0, limited: 0, revalidated: 0, photo: 0, slow: 0 };
+const photo = readFileSync(new URL("../website/public/assets/pudu-lang-icon-96.png", import.meta.url));
 
 const server = createServer((request, response) => {
   if (request.url === "/profile") {
@@ -30,6 +33,16 @@ const server = createServer((request, response) => {
       response.writeHead(200, { "Content-Type": "text/plain" });
       response.end("limited body");
     }
+  } else if (request.url === "/photo.png") {
+    counts.photo += 1;
+    response.writeHead(200, { "Content-Type": "image/png", "Cache-Control": "max-age=60" });
+    response.end(photo);
+  } else if (request.url === "/slow.png") {
+    counts.slow += 1;
+    setTimeout(() => {
+      response.writeHead(200, { "Content-Type": "image/png" });
+      response.end(photo);
+    }, 1500);
   } else {
     response.writeHead(404);
     response.end();

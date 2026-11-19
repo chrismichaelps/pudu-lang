@@ -77,7 +77,7 @@ loaderSourceLines = map Text.pack $(do
 {-| The iOS host and its private header, staged only for app builds. -}
 iosHostSources :: [(FilePath, String)]
 iosHostSources = $(do
-  let files = ["pudu_ios_host.m", "pudu_ios_layout.h", "pudu_ios_theme.h", "pudu_ios_events.h", "pudu_ios_list.h", "pudu_ios_controls.h", "pudu_ios_material.h", "pudu_ios_stream.h", "pudu_ios_gesture.h", "pudu_ios_feedback.h", "pudu_ios_access.h", "pudu_ios_scene.h", "pudu_ios_motion.h", "pudu_ios_nodes.h", "pudu_ios_navigation.h", "pudu_ios_refresh.h", "pudu_ios_fetch.h", "pudu_ios_kinds.h", "pudu_ios_values.h", "pudu_ios_capability_test.h"]
+  let files = ["pudu_ios_host.m", "pudu_ios_layout.h", "pudu_ios_theme.h", "pudu_ios_events.h", "pudu_ios_list.h", "pudu_ios_controls.h", "pudu_ios_material.h", "pudu_ios_stream.h", "pudu_ios_gesture.h", "pudu_ios_feedback.h", "pudu_ios_access.h", "pudu_ios_scene.h", "pudu_ios_motion.h", "pudu_ios_nodes.h", "pudu_ios_navigation.h", "pudu_ios_refresh.h", "pudu_ios_fetch.h", "pudu_ios_kinds.h", "pudu_ios_values.h", "pudu_ios_image.h", "pudu_ios_capability_test.h"]
   paths <- traverse (makeRelativeToProject . ("cbits" </>)) files
   mapM_ addDependentFile paths
   contents <- runIO (traverse ByteString.readFile paths)
@@ -100,7 +100,7 @@ androidJavaSources :: [(FilePath, String)]
 androidJavaSources = $(do
   let files = [ "PuduActivity.java", "PuduBridge.java", "PuduListener.java", "PuduList.java", "PuduMenus.java"
               , "PuduAccess.java", "PuduGestures.java", "PuduMoment.java", "PuduPages.java", "PuduWell.java", "PuduTests.java"
-              , "PuduNavigator.java", "PuduRefresh.java", "PuduFetch.java" ]
+              , "PuduNavigator.java", "PuduRefresh.java", "PuduFetch.java", "PuduImage.java" ]
   paths <- traverse (makeRelativeToProject . (("android" </> "org" </> "pudu") </>)) files
   mapM_ addDependentFile paths
   contents <- runIO (traverse ByteString.readFile paths)

@@ -314,6 +314,10 @@ public final class PuduBridge {
   }
   static void cancelFetch(int generation) { PuduFetch.cancel(generation); }
   static void wake(long delay) { PuduFetch.wake(delay); }
+  static android.widget.ImageView image() { return PuduImage.make(); }
+  static void source(android.widget.ImageView view, int origin, int scaling, String location) {
+    PuduImage.source(view, origin, scaling, location);
+  }
 
   static void gestures(View view, int tag, int mask) { PuduGestures.attach(view, tag, mask); }
 
