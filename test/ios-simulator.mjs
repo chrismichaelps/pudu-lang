@@ -270,6 +270,17 @@ int main(int argc, char **argv) {
     // A granted camera, a refused microphone and contacts never asked report
     // as Granted, Blocked and NotAsked; requesting the granted camera answers
     // at once, without a prompt.
+    // The person picks the second tab and back, pushes and pops inside the
+    // first, and dismisses a sheet; each is reported once.
+    mobileApp(device, "Tabs", [{
+      environment: { SIMCTL_CHILD_PUDU_UI_SELFTEST: "0", SIMCTL_CHILD_PUDU_UI_TABS_TEST: "1" },
+      labels: ["Selected: 1", "Pops: 1", "Dismissals: 1"],
+      layout: ["PUDU_TABS picked", "PUDU_TABS pushed", "PUDU_TABS popped once", "PUDU_TABS sheet dismissed once"],
+    }]);
+    refusedApp(device, root, "a selected tab that is not shown",
+      "import Std.Mobile.Host as Host\nimport Std.Mobile.Stream as Stream", `  let body = Stream.create([], 0u32, Stream.LABEL)
+  Host.apply(bytesOf(Stream.tabs(body, &[(1u32, "A", "house", [(10u32, 0u32, "A")])], 2u32, None)))`,
+      /pudu: a view stream selected a tab that is not shown: 2/u);
     mobileApp(device, "Permissions", [{
       environment: { SIMCTL_CHILD_PUDU_UI_SELFTEST: "0", SIMCTL_CHILD_PUDU_UI_PERMISSION_TEST: "1" },
       privacy: [["grant", "camera"], ["revoke", "microphone"], ["reset", "contacts"]],
@@ -451,7 +462,7 @@ function mobileApp(device, example, runs, directory = "") {
         `${example} did not show ${labels.join(", ")}:\n${lines.join("\n")}`);
       assert.ok(lines.includes("PUDU_PROGRAM_STATUS 0"), `${example} did not finish:\n${lines.join("\n")}`);
       if (layout) {
-        assert.deepEqual(lines.filter((line) => /^PUDU_(VIEWPORT|KEYBOARD|THEME|LIST|MATERIAL|ALERT|HAPTIC|ACCESS|MOTION|NAV|REFRESH|FETCH|IMAGE|SYSTEM|PERMISSION) /.test(line)), layout,
+        assert.deepEqual(lines.filter((line) => /^PUDU_(VIEWPORT|KEYBOARD|THEME|LIST|MATERIAL|ALERT|HAPTIC|ACCESS|MOTION|NAV|REFRESH|FETCH|IMAGE|SYSTEM|PERMISSION|TABS) /.test(line)), layout,
           `${example} did not report the expected layout and theme:\n${lines.join("\n")}`);
       }
       const firstFrame = lines.find((line) => line.startsWith("PUDU_FIRST_FRAME_MS "));

@@ -5,6 +5,11 @@ tags: [changelog]
 
 # Changelog
 
+## 2026-11-19 — Native tab bars (#977)
+
+- Native tab bars (#977): TABS 54 on the iOS and Android hosts, SELECTED 29 event, `Tab`, `Tabbed`, and `mountTabs`, `updateTabs` and `observeTabs` in Std Mobile Navigation, and refusals for tabs with no pages, repeated ids and an unshown selection.
+  [[pudu-ios-tabs]] · [[PuduTabs]] · [[pudu-android-routes]] · [[Std Mobile Navigation]] · [[Std Mobile Stream]] · [[Std Mobile Events]] · [[Std Mobile View]] · [[Tabs Example]] · [[Uses Mobile Tabs]] · [[Native Tabs]] · [[NATIVE-MOBILE]]
+
 ## 2026-11-19 — Declared, build-checked permissions (#976)
 
 - Declared, build-checked permissions (#976): PERMISSIONS 51, PERMISSION 52 and SETTINGS 53 on the iOS and Android hosts, PERMISSIONED 28 event, `[app.permissions]` in the manifest, E6014, E6015, E6016 and W6017 for declarations checked against requests.

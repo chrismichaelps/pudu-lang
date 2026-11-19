@@ -31,6 +31,7 @@ const OPENED: UInt64 = 25u64
 const SHARED: UInt64 = 26u64
 const PASTED: UInt64 = 27u64
 const PERMISSIONED: UInt64 = 28u64
+const SELECTED: UInt64 = 29u64
 
 /// Each event kind's constructor, given the tag and the text the host holds.
 const EVENTS: Map[UInt64, fn(UInt32, Str) -> View.Event] = mapOf([
@@ -42,6 +43,7 @@ const EVENTS: Map[UInt64, fn(UInt32, Str) -> View.Event] = mapOf([
     (REFRESHED, |tag: UInt32, _text: Str| View.Refreshed(tag)),
     (WOKE, |_tag: UInt32, _text: Str| View.Woke),
     (MEMORY, |_tag: UInt32, _text: Str| View.MemoryLow),
+    (SELECTED, |tab: UInt32, _text: Str| View.Selected(tab)),
     (PASTED, |tag: UInt32, text: Str| View.Pasted(tag, text))
   ])
 

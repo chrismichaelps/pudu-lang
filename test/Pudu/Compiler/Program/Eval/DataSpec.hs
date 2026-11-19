@@ -28,6 +28,7 @@ testDataEvaluation = do
   mobileImage <- runEntry "test-fixtures/stdlib/UsesMobileImage.pudu"
   mobileSystem <- runEntry "test-fixtures/stdlib/UsesMobileSystem.pudu"
   mobilePermission <- runEntry "test-fixtures/stdlib/UsesMobilePermission.pudu"
+  mobileTabs <- runEntry "test-fixtures/stdlib/UsesMobileTabs.pudu"
   mobileResources <- runEntry "test-fixtures/stdlib/UsesMobileResource.pudu"
   memoLambda <- codes "test-fixtures/stdlib/MemoRenderLambda.pudu"
   memoLocal <- codes "test-fixtures/stdlib/MemoRenderLocal.pudu"
@@ -208,6 +209,8 @@ testDataEvaluation = do
         (mobileSystem === Just "10")
     , counterexample "native permissions write kind codes and read typed reports"
         (mobilePermission === Just "10")
+    , counterexample "native tab bars reconcile per tab and fold picks, pops and dismissals"
+        (mobileTabs === Just "10")
     {-| Golden counts: an unchanged memo is one comparison and no render, so a
         regression that renders or compares more fails here, not on a device. -}
     , counterexample "memoized native rows skip unchanged subtrees with exact counts"

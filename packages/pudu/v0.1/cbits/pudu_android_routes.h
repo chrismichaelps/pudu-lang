@@ -65,6 +65,76 @@ static void pudu_do_navigate(JNIEnv *env, pudu_reader *reader) {
               (jboolean)(present == 1 && pudu_node_scrolls(sheet_node)));
 }
 
+/* TABS: the tab count; each tab's id, title, symbol and page count, then its
+   pages' route ids, body nodes and titles; the selected tab; then the sheet as
+   for NAVIGATE. Read and checked whole, then handed over as flat arrays. */
+static void pudu_do_tabs(JNIEnv *env, pudu_reader *reader) {
+  enum { PUDU_TABS_MOST = 64, PUDU_TAB_ROUTES_MOST = 1024 };
+  uint32_t count = pudu_word(reader), total = 0, selected, present, sheet = 0, sheet_node = 0;
+  jint ids[PUDU_TABS_MOST], counts[PUDU_TABS_MOST], routes[PUDU_TAB_ROUTES_MOST];
+  jboolean fills[PUDU_TAB_ROUTES_MOST];
+  jclass view_class = (*env)->FindClass(env, "android/view/View"), string_class = (*env)->FindClass(env, "java/lang/String");
+  jobjectArray names, bodies, titles;
+  if (count == 0) pudu_stream_defect("showed a tab bar without tabs, count", count);
+  if (count > PUDU_TABS_MOST) pudu_stream_defect("showed more tabs than a bar holds:", count);
+  names = (*env)->NewObjectArray(env, (jsize)count, string_class, NULL);
+  bodies = (*env)->NewObjectArray(env, PUDU_TAB_ROUTES_MOST, view_class, NULL);
+  titles = (*env)->NewObjectArray(env, PUDU_TAB_ROUTES_MOST, string_class, NULL);
+  for (uint32_t tab = 0; tab < count; tab++) {
+    ids[tab] = (jint)pudu_word(reader);
+    jstring title = pudu_text(env, reader), symbol = pudu_text(env, reader);
+    for (uint32_t seen = 0; seen < tab; seen++) {
+      if (ids[seen] == ids[tab]) pudu_stream_defect("showed two tabs with id", (uint32_t)ids[tab]);
+    }
+    counts[tab] = (jint)pudu_word(reader);
+    (void)symbol;
+    if (counts[tab] == 0) pudu_stream_defect("showed a tab without a root route, tab", (uint32_t)ids[tab]);
+    (*env)->SetObjectArrayElement(env, names, (jsize)tab, title);
+    for (jint page = 0; page < counts[tab]; page++, total++) {
+      if (total >= PUDU_TAB_ROUTES_MOST) pudu_stream_defect("showed more routes than a bar holds:", total);
+      uint32_t route = pudu_word(reader), node = pudu_node_id(reader);
+      jstring named = pudu_text(env, reader);
+      for (uint32_t seen = 0; seen < total; seen++) {
+        if ((uint32_t)routes[seen] == route) pudu_stream_defect("showed two routes with id", route);
+      }
+      routes[total] = (jint)route;
+      fills[total] = (jboolean)pudu_node_scrolls(node);
+      (*env)->SetObjectArrayElement(env, bodies, (jsize)total, pudu_nodes[node]);
+      (*env)->SetObjectArrayElement(env, titles, (jsize)total, named);
+      (*env)->DeleteLocalRef(env, named);
+    }
+  }
+  selected = pudu_word(reader);
+  present = pudu_word(reader);
+  if (present > 1) pudu_stream_defect("marked a sheet with", present);
+  if (present == 1) {
+    sheet = pudu_word(reader);
+    sheet_node = pudu_node_id(reader);
+  }
+  {
+    int found = 0;
+    for (uint32_t tab = 0; tab < count; tab++) found = found || (uint32_t)ids[tab] == selected;
+    if (!found) pudu_stream_defect("selected a tab that is not shown:", selected);
+    for (uint32_t seen = 0; seen < total && present == 1; seen++) {
+      if ((uint32_t)routes[seen] == sheet) pudu_stream_defect("showed a sheet sharing a route's id", sheet);
+    }
+  }
+  jintArray idArray = (*env)->NewIntArray(env, (jsize)count), countArray = (*env)->NewIntArray(env, (jsize)count);
+  jintArray routeArray = (*env)->NewIntArray(env, (jsize)total);
+  jbooleanArray fillArray = (*env)->NewBooleanArray(env, (jsize)total);
+  (*env)->SetIntArrayRegion(env, idArray, 0, (jsize)count, ids);
+  (*env)->SetIntArrayRegion(env, countArray, 0, (jsize)count, counts);
+  (*env)->SetIntArrayRegion(env, routeArray, 0, (jsize)total, routes);
+  (*env)->SetBooleanArrayRegion(env, fillArray, 0, (jsize)total, fills);
+  pudu_unqueue(PUDU_UI_POPPED);
+  pudu_unqueue(PUDU_UI_DISMISSED);
+  pudu_unqueue(PUDU_UI_SELECTED);
+  pudu_shown_root = NULL;
+  pudu_bridge(env, "tabs", "([I[Ljava/lang/String;[I[I[Landroid/view/View;[Z[Ljava/lang/String;IZILandroid/view/View;Z)V", idArray, names,
+              countArray, routeArray, bodies, fillArray, titles, (jint)selected, (jboolean)(present == 1), (jint)sheet,
+              present == 1 ? pudu_nodes[sheet_node] : NULL, (jboolean)(present == 1 && pudu_node_scrolls(sheet_node)));
+}
+
 /* Run on the program thread before each wait: ends pulls the program read
    without asking to refresh. The tags of pulls still queued go along. */
 static void pudu_refresh_settle(void) {

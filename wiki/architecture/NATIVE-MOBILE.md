@@ -163,6 +163,7 @@ One stream carries each commit. It is a sequence of little-endian 32-bit words, 
 | 51 | PERMISSIONS | count, then each kind code; answers with no prompt |
 | 52 | PERMISSION | kind code; asks the person when not asked |
 | 53 | SETTINGS | none; opens the application's page in settings |
+| 54 | TABS | tab count; per tab its id, title, symbol and page count; per page its route id, body node and title; selected tab id; sheet flag, then the sheet's id and body node when the flag is 1 |
 
 Events return through `pudu_ui_wait` as one 64-bit value: the kind in the high 32 bits, with the tag in the low 32 bits.
 
@@ -194,6 +195,7 @@ Events return through `pudu_ui_wait` as one 64-bit value: the kind in the high 3
 | 26 | shared | tag; detail 1 when shared (Android: chooser opened), 0 when the sheet closed |
 | 27 | pasted | tag; the clipboard text, empty when none |
 | 28 | permissioned | tag is the kind code; detail is the state code (0 not asked to 6 unavailable) |
+| 29 | selected | tab id; no detail |
 
 Codes 10 to 12 only add instructions, so a stream of codes 1 to 9 means the same. The view module no longer writes RESET; the host keeps it so a stream from an earlier writer still means the same. Nodes carry stable ids handed out by the program and recycled after REMOVE (#914). Compiled views extend the stream further under ADR-0031 (compiled native execution).
 
@@ -279,6 +281,10 @@ OPEN 46, SHARE 47, COPY 48, PASTE 49 and STATUS 50 are requests with one reporte
 ## Remote bodies and timeouts (#974)
 
 Remote images are capped at 32 MB on both hosts; iOS stops the transfer while it downloads. Android fetch requests read at most 16 MB of body. Connections time out after 15 seconds to connect and 30 seconds to read on Android. iOS image requests time out after 30 seconds without data and 60 seconds for the whole resource.
+
+## Tabs (#977)
+
+TABS 54 shows a tab bar: one stack per tab, each tab's bar item title and system symbol, and at most one page sheet over the bar. A person's pick is reported as SELECTED 29 with the tab id; a pop inside a tab is reported as POPPED 14. TABS and NAVIGATE replace each other. The iOS host is [[pudu-ios-tabs]]. The Android host is [[PuduTabs]], fed by [[pudu-android-routes]], and shows titles only because Android has no system symbol set. The model is [[Std Mobile Navigation]]; the example is [[Tabs Example]].
 
 ## Permissions (#976)
 

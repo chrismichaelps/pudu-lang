@@ -38,6 +38,7 @@ Types:
 - `presentationControllerDidDismiss:` clears the alert presenter if it was the dismissed sheet. For the current sheet only, it sets the sheet to nil, queues DISMISSED with the route id as its tag, and settles. A report about an earlier sheet is ignored, so it cannot close its replacement.
 - While a sheet is shown, alerts are presented from it, and otherwise from the root.
 - Self-test `pudu_test_navigation` runs on a 0.1-second timer for at most 30 seconds, and waits for each step to settle. It taps Open on the Pages example and checks for two stack entries, then pops once and checks for the label Pops: 1. It shows the sheet, dismisses it, and calls the dismissal handler, then checks for Dismissals: 1. It shows the sheet again, taps its Close button, and checks that no dismissal is counted. It prints `PUDU_NAV pushed`, `PUDU_NAV popped once`, `PUDU_NAV sheet shown`, `PUDU_NAV sheet dismissed once` and `PUDU_NAV sheet closed without echo`, then asks the program to stop. On timeout it prints the step to standard error and asks the program to stop.
+- Tabs (#977) replace the stack. TABS (54) is handled by [[pudu-ios-tabs]]: a TABS detaches the single stack, and a NAVIGATE closes the tab bar. The two never show at once.
 
 ## Negative Logic
 

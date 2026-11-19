@@ -114,6 +114,7 @@ const STATUS: UInt32 = 50u32
 const PERMISSIONS: UInt32 = 51u32
 const PERMISSION: UInt32 = 52u32
 const SETTINGS: UInt32 = 53u32
+const TABS: UInt32 = 54u32
 
 /// Creates node `node` as a control of `kind`.
 export fn create(out: Array[UInt8], node: UInt32, kind: UInt32) -> Array[UInt8] { words(out, [CREATE, node, kind]) }
@@ -315,6 +316,24 @@ export fn navigate(out: Array[UInt8], pages: &Array[(UInt32, UInt32, Str)], shee
   }
   match sheet {
     case Some(shown) => words(bytes, [1u32, shown[0], shown[1]])
+    case None => words(bytes, [0u32])
+  }
+}
+
+/// Shows a tab bar: each tab's id, title and symbol, then its pages' route
+/// ids, body nodes and titles, root first; then the selected tab's id, then 1
+/// and the sheet's id and body node, or 0 when no sheet is shown.
+export fn tabs(out: Array[UInt8], shown: &Array[(UInt32, Str, Str, Array[(UInt32, UInt32, Str)])], selected: UInt32, sheet: Option[(UInt32, UInt32)]) -> Array[UInt8] {
+  var bytes = words(out, [TABS, count(shown.length())])
+  for tab in *shown {
+    bytes = words(field(field(words(bytes, [tab[0]]), tab[1]), tab[2]), [count(tab[3].length())])
+    for page in tab[3] {
+      bytes = field(words(bytes, [page[0], page[1]]), page[2])
+    }
+  }
+  bytes = words(bytes, [selected])
+  match sheet {
+    case Some(over) => words(bytes, [1u32, over[0], over[1]])
     case None => words(bytes, [0u32])
   }
 }

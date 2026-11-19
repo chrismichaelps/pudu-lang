@@ -360,6 +360,8 @@ tags: [moc, module]
 - [[pudu_ios_navigation.h]] — UIKit navigation host and page sheet presentation.
 - [[Native Pages Example]] — navigation stack and page sheet, built only from Pudu.
 - [[Uses Mobile Navigation]] — stdlib fixture for the navigation stream, pops and dismissals.
+- [[Uses Mobile Tabs]] — stdlib fixture for the tab bar stream, picks, pops, sheets and removals (#977).
+- [[Tabs Example]] — two tabs with a pushed page and a sheet on the simulator (#977).
 - [[Native Refresh Example]] — pull to refresh and safe-area insets, built only from Pudu.
 - [[Native Remote Example]] — two keyed network resources, one request, rate-limited retry, built only from Pudu.
 - [[Test Fetch Server]] — local server and request counts for the Remote simulator run.

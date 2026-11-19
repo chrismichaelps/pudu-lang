@@ -26,6 +26,7 @@
 #include "pudu_ios_nodes.h"
 #include "pudu_ios_kinds.h"
 #include "pudu_ios_navigation.h"
+#include "pudu_ios_tabs.h"
 #include "pudu_ios_refresh.h"
 #include "pudu_ios_fetch.h"
 #include "pudu_ios_system.h"
@@ -298,9 +299,18 @@ static void pudu_do_animate(pudu_reader *reader) {
 /* NAVIGATE: read and checked whole, then shown over the screen in place of a ROOT. */
 static void pudu_do_navigate(pudu_reader *reader) {
   NSDictionary *desired = pudu_navigation_read(reader);
+  pudu_tabs_close();
   [pudu_shown_root removeFromSuperview];
   pudu_shown_root = nil;
   pudu_navigation_show(pudu_surface.window.rootViewController, desired);
+}
+
+/* TABS: read and checked whole, then shown over the screen in place of a ROOT or NAVIGATE. */
+static void pudu_do_tabs(pudu_reader *reader) {
+  NSDictionary *desired = pudu_tabs_read(reader);
+  [pudu_shown_root removeFromSuperview];
+  pudu_shown_root = nil;
+  pudu_tabs_show(pudu_surface.window.rootViewController, desired);
 }
 
 static void (*const pudu_instruction_table[PUDU_UI_INSTRUCTIONS])(pudu_reader *) = {
@@ -319,7 +329,7 @@ static void (*const pudu_instruction_table[PUDU_UI_INSTRUCTIONS])(pudu_reader *)
   [PUDU_UI_COUNT] = pudu_do_count, [PUDU_UI_MOMENT] = pudu_do_moment, [PUDU_UI_SOURCE] = pudu_do_source,
   [PUDU_UI_OPEN] = pudu_do_open, [PUDU_UI_SHARE] = pudu_do_share, [PUDU_UI_COPY] = pudu_do_copy, [PUDU_UI_PASTE] = pudu_do_paste,
   [PUDU_UI_STATUS] = pudu_do_status, [PUDU_UI_PERMISSIONS] = pudu_do_permissions, [PUDU_UI_PERMISSION] = pudu_do_permission,
-  [PUDU_UI_SETTINGS] = pudu_do_settings,
+  [PUDU_UI_SETTINGS] = pudu_do_settings, [PUDU_UI_TABS] = pudu_do_tabs,
 };
 
 /* Applies one commit: every instruction in order, in one call. */
@@ -384,7 +394,7 @@ static void pudu_report(UIView *view) {
   int status = pudu_program_run(0, NULL);
   printf("PUDU_PROGRAM_STATUS %d\n", status);
   if (getenv("PUDU_UI_SELFTEST") != NULL) {
-    pudu_report(pudu_navigator != nil ? pudu_navigation_top() : pudu_shown_root);
+    pudu_report(pudu_tabs != nil ? pudu_tabs_top() : pudu_navigator != nil ? pudu_navigation_top() : pudu_shown_root);
     if (getenv("PUDU_UI_CAPABILITY_TEST") != NULL) pudu_report_capabilities(pudu_nodes);
     fflush(stdout);
     exit(status);
@@ -396,6 +406,10 @@ static void pudu_report(UIView *view) {
 - (void)selfTest {
   if (getenv("PUDU_UI_CAPABILITY_TEST") != NULL) {
     pudu_test_capabilities(pudu_nodes, ^{ pudu_queue(PUDU_UI_STOPPED, 0, nil, 0); });
+    return;
+  }
+  if (getenv("PUDU_UI_TABS_TEST") != NULL) {
+    pudu_test_tabs(^{ pudu_queue(PUDU_UI_STOPPED, 0, nil, 0); });
     return;
   }
   if (getenv("PUDU_UI_PERMISSION_TEST") != NULL) {

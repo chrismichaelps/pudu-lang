@@ -36,6 +36,7 @@ extra-source-files: cbits/pudu_ffi_internal.h
                     cbits/pudu_ios_motion.h
                     cbits/pudu_ios_nodes.h
                     cbits/pudu_ios_navigation.h
+                    cbits/pudu_ios_tabs.h
                     cbits/pudu_ios_refresh.h
                     cbits/pudu_ios_fetch.h
                     cbits/pudu_ios_kinds.h
@@ -74,6 +75,7 @@ extra-source-files: cbits/pudu_ffi_internal.h
                     android/org/pudu/PuduImage.java
                     android/org/pudu/PuduSystem.java
                     android/org/pudu/PuduPermission.java
+                    android/org/pudu/PuduTabs.java
                     cbits/pudu_audio.c
                     cbits/pudu_audio_stream.c
                     cbits/pudu_audio.h

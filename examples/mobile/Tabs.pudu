@@ -1,0 +1,70 @@
+module Tabs
+
+import Std.Mobile.Host as Host
+import Std.Mobile.Navigation as Navigation
+import Std.Mobile.View as View
+
+/// Tab ids, route ids and button tags.
+const HOME: UInt32 = 1u32
+const SETTINGS: UInt32 = 2u32
+const HOME_ROOT: UInt32 = 10u32
+const DETAIL: UInt32 = 11u32
+const SETTINGS_ROOT: UInt32 = 20u32
+const SHEET: UInt32 = 30u32
+const OPEN: UInt32 = 1u32
+const SHOW_SHEET: UInt32 = 2u32
+const CLOSE: UInt32 = 3u32
+
+/// The selected tab, whether the detail page and sheet are shown, and how many
+/// pops and dismissals the person made.
+type Model = { selected: UInt32, opened: Bool, sheet: Bool, pops: Int, dismissals: Int }
+
+fn tabbed(model: &Model) -> Navigation.Tabbed {
+  let home = View.Column([
+      View.Label("Selected: {model.selected}"),
+      View.Label("Pops: {model.pops}"),
+      View.Label("Dismissals: {model.dismissals}"),
+      View.Button("Open", OPEN),
+      View.Button("Show sheet", SHOW_SHEET)
+    ])
+  let pushed = if model.opened { [Navigation.Route{id: DETAIL, title: "Detail", body: View.Label("Detail")}] } else { [] }
+  let sheet = if model.sheet { Some(Navigation.Sheet{id: SHEET, body: View.Button("Close", CLOSE)}) } else { None }
+  Navigation.Tabbed {
+    tabs: [
+      Navigation.Tab{id: HOME, title: "Home", symbol: "house", root: Navigation.Route{id: HOME_ROOT, title: "Home", body: home}, pushed: pushed},
+      Navigation.Tab{id: SETTINGS, title: "Settings", symbol: "gear", root: Navigation.Route{id: SETTINGS_ROOT, title: "Settings", body: View.Label("Settings")}, pushed: []}
+    ],
+    selected: model.selected,
+    sheet: sheet
+  }
+}
+
+fn update(model: &Model, event: &View.Event) -> Model {
+  match *event {
+    case View.Selected(tab) => Model{..*model, selected: tab}
+    case View.Popped(_, _) => Model{..*model, opened: false, pops: model.pops + 1}
+    case View.Dismissed(_) => Model{..*model, sheet: false, dismissals: model.dismissals + 1}
+    case View.Tapped(tag) if tag == OPEN => Model {..*model, opened: true }
+    case View.Tapped(tag) if tag == SHOW_SHEET => Model {..*model, sheet: true }
+    case View.Tapped(tag) if tag == CLOSE => Model {..*model, sheet: false }
+    case _ => *model
+  }
+}
+
+fn main() -> Int {
+  var model = Model{selected: HOME, opened: false, sheet: false, pops: 0, dismissals: 0}
+  let (first, built) = Navigation.mountTabs(&tabbed(&model))
+  var mounted = first
+  Host.apply(built)
+  while true {
+    let event = Host.wait()
+    if event == View.Stopped {
+      return 0
+    }
+    model = update(&model, &event)
+    let (next, changes) = Navigation.updateTabs(&Navigation.observeTabs(mounted, &event), &tabbed(&model))
+    Host.apply(changes)
+    mounted = next
+  }
+  0
+}
