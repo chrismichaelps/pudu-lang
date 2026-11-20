@@ -20,7 +20,7 @@ in the headers the host includes.
 
 The header provides:
 - `PuduKind`: a struct of the hook fields listed below.
-- `pudu_kind_table`: a constant array of `PuduKind`, indexed by kind code, one entry for each code from 1 to 21.
+- `pudu_kind_table`: a constant array of `PuduKind`, indexed by kind code, one entry for each code from 1 to 22.
 
 Hook fields of each entry:
 
@@ -49,6 +49,10 @@ Hook fields of each entry:
 - The value kinds 12 to 21 use the same fields as the earlier kinds. A value kind with a number setter accepts VALUE;
   a value kind without one refuses it.
 
+## Image entry (#973)
+
+- Kind 22 (IMAGE): factory `pudu_make_image`, source setter `pudu_image_source` for SOURCE 45, no number, bounds, options or text setter, not choosing, and no self-test hooks beyond the image self-test of [[pudu-ios-image]].
+
 ## Invariants
 
 - One entry per kind code, and the array index equals the kind code. Code 0 is unused.
@@ -67,7 +71,7 @@ Hook fields of each entry:
 ## Dependencies and consumers
 
 Depends on [[iOS Host Controls]], [[iOS Host List]], [[iOS Host Theme]], [[iOS Host Material]], [[pudu-ios-values]] for
-the value factories and handlers, and [[pudu_ios_nodes.h]] for the kind codes. Included by [[iOS Host Adapter]], which
+the value factories and handlers, the image factory of [[pudu-ios-image]] (kind 22, SOURCE 45), and [[pudu_ios_nodes.h]] for the kind codes. Included by [[iOS Host Adapter]], which
 reads `pudu_kind_table` for every CREATE, VALUE, BOUNDS, OPTIONS, COUNT and MOMENT. The program side is
 [[Std Mobile Control]] and [[Std Mobile Stream]].
 

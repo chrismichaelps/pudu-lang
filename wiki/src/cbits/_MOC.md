@@ -19,6 +19,7 @@ tags: [moc, module, foreign, ffi]
 - [[pudu_ios_fetch.h]] — platform URL session for the program's keyed requests: answers, cancellation, one wake timer and memory warnings.
 - [[pudu-android-routes]] — Android host routes: page stack, pull to refresh, requests, cancellation and wake, checked whole before the screen changes (#971).
 - [[pudu-ios-kinds]] — kind table of the iOS host, moved out of the host main file, with one entry per control kind (#934).
+- [[pudu-ios-image]] — UIKit images: asset and URL sources decoded to the view size, bounded cache, IMAGED report and self-test (#973).
 - [[pudu-ios-values]] — UIKit value controls, their BOUNDS, OPTIONS, COUNT and MOMENT handlers, and their self-test (#934).
 - [[Pudu SQLite Bridge]] — on-demand SQLite loading, statement ownership, and exact byte transport.
 - [[Pudu Desktop Header]] — framework-neutral private ABI for desktop target plumbing.

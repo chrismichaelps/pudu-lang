@@ -54,6 +54,12 @@ Exports:
 - `pageCount(out, node, count: UInt32) -> Array[UInt8]`: COUNT (43), the node and the page count.
 - `moment(out, node, mode: UInt32, seconds: Int64) -> Array[UInt8]`: MOMENT (44), the node, the mode code (0 day, 1 time, 2 day and time), then the seconds high word and low word.
 
+## Images (#973)
+
+- IMAGE (kind 22): an image node. Its CREATE is the kind word, as for the other kinds.
+- SOURCE (45): node, origin (0 an asset name, 1 a URL), scaling code (0 Fill, 1 Fit, 2 Stretch), then the location as a length-prefixed text. Exported by the `source` writer.
+- The instruction bound is now 46; codes 41 to 45 are BOUNDS, OPTIONS, COUNT, MOMENT and SOURCE.
+
 ## Invariants
 
 - Every word is a little-endian 32-bit unsigned value. Every instruction begins with its code word (CREATE 1, TEXT 2, APPEND 3, ROOT 4, TAG 5, STATE 7, HINT 8, NAME 9, INSERT 10, REMOVE 11, MOVE 12, THEME 20, APPEARANCE 21, STYLE 22, COLOR 23, RANGE 24, COLUMNS 25, MATERIAL 26, GESTURES 27, ALERT 28, VALUE 29, HAPTIC 30, TRAITS 31, ACCESS_HINT 32, ACCESS_VALUE 33, MENU 34, ANIMATE 35, NAVIGATE 36, REFRESH 37, BOUNDS 41, OPTIONS 42, COUNT 43, MOMENT 44).

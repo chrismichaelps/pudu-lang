@@ -5,6 +5,11 @@ tags: [changelog]
 
 # Changelog
 
+## 2026-11-19 — Native images and application assets (#973)
+
+- Native images and application assets (#973): IMAGE kind 22 and SOURCE 45 on the iOS and Android hosts, IMAGED 24 event, E6013 for refused assets, and the `assets` directory packaged under relative names.
+  [[pudu-ios-image]] · [[PuduImage]] · [[Backend Toolchain Assets]] · [[Gallery Example]] · [[Uses Mobile Image]] · [[Std Mobile Control]] · [[Std Mobile Stream]] · [[Std Mobile Events]] · [[Native Images Delivery]]
+
 ## 2026-11-19 — Android navigation, refresh, requests, wake, memory and insets (#971)
 
 - Android navigation, refresh, requests, wake, memory and insets (#971): NAVIGATE, REFRESH, FETCH, CANCEL and WAKE on the Android host; INSETS and MEMORY events.

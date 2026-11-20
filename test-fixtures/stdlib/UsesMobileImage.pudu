@@ -1,0 +1,57 @@
+module UsesMobileImage
+
+import Std.ByteOrder {readU32LE}
+import Std.Mobile.Control as Control
+import Std.Mobile.Events as Events
+import Std.Mobile.View as View
+
+// The words at `offset` onward, read as little-endian 32-bit values.
+fn wordsAt(bytes: &Array[UInt8], offset: Int, count: Int) -> Array[UInt32] {
+  var found = []
+  for index in 0..count {
+    match readU32LE(bytes, offset + index * 4) {
+      case Some(word) => { found = found.push(word) }
+      case None => { return [] }
+    }
+  }
+  found
+}
+
+fn image(source: Control.ImageSource, scaling: Control.Scaling, tag: UInt32) -> View.View { View.Control(Control.Image(source, scaling, tag)) }
+
+// The stream that turns a freshly mounted `shown` into `next`.
+fn changed(shown: View.View, next: View.View) -> Array[UInt8] {
+  let (held, _) = View.mount(&shown)
+  let (_, stream) = View.update(&held, &next)
+  stream.toArray()
+}
+
+export fn main() -> Int {
+  var held = 0
+
+  // An asset image: CREATE, TAG, then SOURCE with origin 0, the scaling and the name, then ROOT.
+  let (_, mounted) = View.mount(&image(Control.Bundled("a.png"), Control.Fit, 7u32))
+  let built = mounted.toArray()
+  if built.length() == 57 && wordsAt(&built, 0, 6) == [1u32, 0u32, 22u32, 5u32, 0u32, 7u32] { held = held + 1 }
+  if wordsAt(&built, 24, 5) == [45u32, 0u32, 0u32, 1u32, 5u32] && built[44] == 97u8 && wordsAt(&built, 49, 2) == [4u32, 0u32] { held = held + 1 }
+
+  // A remote image carries origin 1 and its URL.
+  let (_, remote) = View.mount(&image(Control.Remote("https://x/y"), Control.Fill, 7u32))
+  if wordsAt(&remote.toArray(), 24, 5) == [45u32, 0u32, 1u32, 0u32, 11u32] { held = held + 1 }
+
+  // Nothing changes for the same source; a new scaling or source is one SOURCE.
+  if changed(image(Control.Bundled("a.png"), Control.Fit, 7u32), image(Control.Bundled("a.png"), Control.Fit, 7u32)).length() == 0 { held = held + 1 }
+  let scaled = changed(image(Control.Bundled("a.png"), Control.Fit, 7u32), image(Control.Bundled("a.png"), Control.Stretch, 7u32))
+  if scaled.length() == 25 && wordsAt(&scaled, 0, 5) == [45u32, 0u32, 0u32, 2u32, 5u32] { held = held + 1 }
+  let moved = changed(image(Control.Bundled("a.png"), Control.Fit, 7u32), image(Control.Remote("https://x/y"), Control.Fit, 7u32))
+  if wordsAt(&moved, 0, 5) == [45u32, 0u32, 1u32, 1u32, 11u32] { held = held + 1 }
+
+  // A new tag replaces the image.
+  if wordsAt(&changed(image(Control.Bundled("a.png"), Control.Fit, 7u32), image(Control.Bundled("a.png"), Control.Fit, 8u32)), 0, 3) == [1u32, 1u32, 22u32] { held = held + 1 }
+
+  // IMAGED carries 1 for a shown source and 0 for a failure; any other word is never written.
+  if Events.carriesDetail(24u64 << 32) && Events.eventWithDetail((24u64 << 32) | 7u64, "", 1u32) == View.Imaged(7u32, true) { held = held + 1 }
+  if Events.eventWithDetail((24u64 << 32) | 7u64, "", 0u32) == View.Imaged(7u32, false) { held = held + 1 }
+  if Events.eventWithDetail((24u64 << 32) | 7u64, "", 2u32) == View.Stopped { held = held + 1 }
+  held
+}

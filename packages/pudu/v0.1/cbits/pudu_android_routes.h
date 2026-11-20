@@ -117,6 +117,16 @@ static void pudu_do_cancel(JNIEnv *env, pudu_reader *reader) {
   pudu_unqueue_tag(PUDU_UI_FETCHED, generation);
 }
 
+/* SOURCE: the origin (0 an asset, 1 a URL), the scaling, then the name or URL. */
+static void pudu_do_source(JNIEnv *env, pudu_reader *reader) {
+  uint32_t node = pudu_node_id(reader), origin = pudu_word(reader), scaling = pudu_word(reader);
+  jstring location = pudu_text(env, reader);
+  if (pudu_kinds[node] != PUDU_UI_IMAGE) pudu_stream_defect("set a source on a node that is not an image:", node);
+  if (origin >= 2) pudu_stream_defect("used unknown image origin", origin);
+  if (scaling >= 3) pudu_stream_defect("used unknown image scaling", scaling);
+  pudu_bridge(env, "source", "(Landroid/widget/ImageView;IILjava/lang/String;)V", pudu_nodes[node], (jint)origin, (jint)scaling, location);
+}
+
 /* WAKE: milliseconds until one WOKE event, replacing any earlier wake. */
 static void pudu_do_wake(JNIEnv *env, pudu_reader *reader) {
   uint32_t delay = pudu_word(reader);

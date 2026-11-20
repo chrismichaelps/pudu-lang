@@ -18,12 +18,12 @@ enum { PUDU_UI_CREATE = 1, PUDU_UI_TEXT = 2, PUDU_UI_APPEND = 3, PUDU_UI_ROOT = 
        PUDU_UI_ALERT = 28, PUDU_UI_VALUE = 29, PUDU_UI_HAPTIC = 30, PUDU_UI_TRAITS = 31, PUDU_UI_ACCESS_HINT = 32,
        PUDU_UI_ACCESS_VALUE = 33, PUDU_UI_MENU = 34, PUDU_UI_ANIMATE = 35, PUDU_UI_NAVIGATE = 36, PUDU_UI_REFRESH = 37,
        PUDU_UI_FETCH = 38, PUDU_UI_CANCEL = 39, PUDU_UI_WAKE = 40, PUDU_UI_BOUNDS = 41, PUDU_UI_OPTIONS = 42,
-       PUDU_UI_COUNT = 43, PUDU_UI_MOMENT = 44, PUDU_UI_INSTRUCTIONS = 45 };
+       PUDU_UI_COUNT = 43, PUDU_UI_MOMENT = 44, PUDU_UI_SOURCE = 45, PUDU_UI_INSTRUCTIONS = 46 };
 enum { PUDU_UI_LABEL = 1, PUDU_UI_BUTTON = 2, PUDU_UI_COLUMN = 3, PUDU_UI_ROW = 4, PUDU_UI_FIELD = 5, PUDU_UI_TOGGLE = 6,
        PUDU_UI_SCROLL = 7, PUDU_UI_LIST = 8, PUDU_UI_MATERIAL = 9, PUDU_UI_PROGRESS = 10, PUDU_UI_ACTIVITY = 11,
        PUDU_UI_SLIDER = 12, PUDU_UI_STEPPER = 13, PUDU_UI_SEGMENTS = 14, PUDU_UI_WHEEL = 15, PUDU_UI_DATE = 16,
        PUDU_UI_TEXT_AREA = 17, PUDU_UI_SEARCH = 18, PUDU_UI_SYMBOL = 19, PUDU_UI_PAGES = 20, PUDU_UI_WELL = 21,
-       PUDU_UI_KINDS = 22 };
+       PUDU_UI_IMAGE = 22, PUDU_UI_KINDS = 23 };
 
 typedef struct {
   jobject (*make)(JNIEnv *);
@@ -51,6 +51,7 @@ typedef struct {
 } pudu_kind;
 
 static jobject pudu_no_list(JNIEnv *env) { (void)env; return NULL; }
+static jobject pudu_make_image(JNIEnv *env) { return pudu_bridge_object(env, "image", "()Landroid/widget/ImageView;"); }
 static void pudu_text_area_drive(JNIEnv *env, jobject view) {
   jstring notes = (*env)->NewStringUTF(env, "Notes");
   pudu_field_fill(env, view, notes);
@@ -92,6 +93,7 @@ static const pudu_kind pudu_kind_table[PUDU_UI_KINDS] = {
   [PUDU_UI_SYMBOL] = { .make = pudu_make_symbol, .text = pudu_symbol_text, .paint = pudu_symbol_paint },
   [PUDU_UI_PAGES] = { .make = pudu_make_pages, .number = pudu_pages_number, .drive = pudu_pages_drive },
   [PUDU_UI_WELL] = { .make = pudu_make_well, .number = pudu_well_number, .drive = pudu_well_drive },
+  [PUDU_UI_IMAGE] = { .make = pudu_make_image },
 };
 
 #endif

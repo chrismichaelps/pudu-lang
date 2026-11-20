@@ -62,6 +62,7 @@ data ToolchainFailure
   | ToolchainSdkMissing !Text !Text
   | ToolchainTargetUnbuilt !Text
   | ToolchainOutsideLedger !Text !Finding
+  | ToolchainAssetRefused !Text
   deriving stock (Eq, Show)
 
 {-| Run one tool to completion within the deadline. Exit zero answers the

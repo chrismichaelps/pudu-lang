@@ -65,6 +65,9 @@ export const PAGES: UInt32 = 20u32
 /// The kind a CREATE names for a color well.
 export const WELL: UInt32 = 21u32
 
+/// The kind a CREATE names for an image.
+export const IMAGE: UInt32 = 22u32
+
 /// Instruction codes of the view stream; each is followed by its words.
 const CREATE: UInt32 = 1u32
 const TEXT: UInt32 = 2u32
@@ -102,6 +105,7 @@ const BOUNDS: UInt32 = 41u32
 const OPTIONS: UInt32 = 42u32
 const COUNT: UInt32 = 43u32
 const MOMENT: UInt32 = 44u32
+const SOURCE: UInt32 = 45u32
 
 /// Creates node `node` as a control of `kind`.
 export fn create(out: Array[UInt8], node: UInt32, kind: UInt32) -> Array[UInt8] { words(out, [CREATE, node, kind]) }
@@ -212,6 +216,12 @@ export fn pageCount(out: Array[UInt8], node: UInt32, total: UInt32) -> Array[UIn
 export fn moment(out: Array[UInt8], node: UInt32, mode: UInt32, seconds: Int64) -> Array[UInt8] {
   let low = ((seconds % 4294967296i64) + 4294967296i64) % 4294967296i64
   words(out, [MOMENT, node, mode, signedWord(narrowed((seconds - low) / 4294967296i64)), unsignedWord(low)])
+}
+
+/// Sets what an image shows: its origin (0 an asset name, 1 a URL), its
+/// scaling, then the name or URL.
+export fn source(out: Array[UInt8], node: UInt32, origin: UInt32, scaling: UInt32, location: Str) -> Array[UInt8] {
+  field(words(out, [SOURCE, node, origin, scaling]), location)
 }
 
 /// Plays a haptic.

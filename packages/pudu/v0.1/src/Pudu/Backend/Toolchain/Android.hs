@@ -32,6 +32,7 @@ import qualified Data.Text.Encoding as Encoding
 import Pudu.Backend.Emit.Entry (embeddedHeader, embeddedHeaderName)
 import Pudu.Backend.Runtime.Host.Compress (compressLibraryMarker)
 import Pudu.Backend.Toolchain (compilerFlags)
+import Pudu.Backend.Toolchain.Assets (stageAssets)
 import Pudu.Backend.Toolchain.HostSources (androidHostSources, androidJavaSources, androidManifest)
 import Pudu.Backend.Toolchain.Process (ToolchainFailure (..), problemText, runTool, timeoutSeconds, tryIO)
 import System.Directory (createDirectoryIfMissing, doesDirectoryExist, doesFileExist, findExecutable, getHomeDirectory, listDirectory, removeDirectoryRecursive, renameFile)
@@ -128,9 +129,10 @@ compileAndroidLibrary tools source exports output = staged output $ \directory -
 {-| An application package: the program linked with the host as the ABI's
     `libpudu_app.so`, the bridge classes dexed, the manifest linked against
     the platform, the library stored uncompressed and page-aligned, and the
-    whole signed with a key made for this build. -}
-compileApk :: AndroidTools -> Text -> [Text] -> Text -> FilePath -> IO (Either ToolchainFailure Text)
-compileApk tools source exports label output = case toolSdk tools of
+    whole signed with a key made for this build. `assets` is the asset
+    directory and its checked files, packaged for the asset manager. -}
+compileApk :: AndroidTools -> Text -> [Text] -> Text -> FilePath -> Maybe (FilePath, [FilePath]) -> IO (Either ToolchainFailure Text)
+compileApk tools source exports label output assets = case toolSdk tools of
   Nothing -> pure (Left (ToolchainSdkMissing "android" "an Android SDK"))
   Just sdk -> do
     testing <- maybe False (not . null) <$> lookupEnv testBuildVariable
@@ -154,11 +156,14 @@ compileApk tools source exports label output = case toolSdk tools of
         shared = nativeDir </> "libpudu_app.so"
         javaDir = directory </> "java"
         classes = directory </> "classes"
+        classesJar = directory </> "classes.jar"
         manifest = directory </> "AndroidManifest.xml"
         base = directory </> "base.apk"
         aligned = directory </> "aligned.apk"
         signed = directory </> "signed.apk"
         keystore = directory </> "build.jks"
+        staging = directory </> "assets"
+        carried = maybe [] snd assets
         step = chain seconds
     archived <- compileAndroidLibrary tools source exports library
     case archived of
@@ -170,14 +175,17 @@ compileApk tools source exports label output = case toolSdk tools of
         mapM_ (\(file, text) -> Char8.writeFile (directory </> file) (Char8.pack text)) androidHostSources
         mapM_ (\(file, text) -> Char8.writeFile (javaDir </> "org" </> "pudu" </> file) (Char8.pack text)) androidJavaSources
         ByteString.writeFile manifest (Encoding.encodeUtf8 (packageManifest testing label))
+        mapM_ (\(from, files) -> stageAssets from files staging) assets
         let javaFiles = [javaDir </> "org" </> "pudu" </> file | (file, _) <- androidJavaSources]
         ran <- step
           [ (toolClang tools, ["-std=c11", "-O2", "-fPIC", "-shared", "-I", directory, directory </> "pudu_android_host.c", library]
               <> map Text.unpack links <> ["-llog", "-landroid", "-o", shared])
           , (javac, ["-source", "11", "-target", "11", "-nowarn", "-cp", androidJar, "-d", classes] <> javaFiles)
-          , (toolsDir </> "d8", ["--min-api", show minimumApi, "--lib", androidJar, "--output", directory] <> javaFilesIn classes)
+          -- Every class javac wrote, nested and synthetic ones included, goes to d8 as one jar.
+          , (jar, ["cf", classesJar, "-C", classes, "."])
+          , (toolsDir </> "d8", ["--min-api", show minimumApi, "--lib", androidJar, "--output", directory, classesJar])
           , (toolsDir </> "aapt2", ["link", "-o", base, "-I", androidJar, "--manifest", manifest, "--min-sdk-version", show minimumApi]
-              <> packageLinkFlags testing)
+              <> packageLinkFlags testing <> concat [["-A", staging] | not (null carried)])
           , (jar, ["uf", base, "-C", directory, "classes.dex"])
           , (jar, ["u0f", base, "-C", directory, "lib"])
           , (toolsDir </> "zipalign", ["-P", "16", "-f", "4", base, aligned])
@@ -189,7 +197,6 @@ compileApk tools source exports label output = case toolSdk tools of
           Right warnings -> do
             renameFile signed output
             pure (Right (Text.strip (Text.unlines (filter (not . Text.null) [libraryWarnings, warnings]))))
-  javaFilesIn classes = [classes </> "org" </> "pudu" </> Text.unpack (Text.replace ".java" ".class" (Text.pack file)) | (file, _) <- androidJavaSources]
 
 {-| Set to a non-empty value while building, it makes the package a test build. -}
 testBuildVariable :: String

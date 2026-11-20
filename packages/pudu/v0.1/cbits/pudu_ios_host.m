@@ -314,7 +314,7 @@ static void (*const pudu_instruction_table[PUDU_UI_INSTRUCTIONS])(pudu_reader *)
   [PUDU_UI_MENU] = pudu_do_menu, [PUDU_UI_ANIMATE] = pudu_do_animate, [PUDU_UI_NAVIGATE] = pudu_do_navigate,
   [PUDU_UI_REFRESH] = pudu_do_refresh, [PUDU_UI_FETCH] = pudu_do_fetch, [PUDU_UI_CANCEL] = pudu_do_cancel,
   [PUDU_UI_WAKE] = pudu_do_wake, [PUDU_UI_BOUNDS] = pudu_do_bounds, [PUDU_UI_OPTIONS] = pudu_do_options,
-  [PUDU_UI_COUNT] = pudu_do_count, [PUDU_UI_MOMENT] = pudu_do_moment,
+  [PUDU_UI_COUNT] = pudu_do_count, [PUDU_UI_MOMENT] = pudu_do_moment, [PUDU_UI_SOURCE] = pudu_do_source,
 };
 
 /* Applies one commit: every instruction in order, in one call. */
@@ -391,6 +391,10 @@ static void pudu_report(UIView *view) {
 - (void)selfTest {
   if (getenv("PUDU_UI_CAPABILITY_TEST") != NULL) {
     pudu_test_capabilities(pudu_nodes, ^{ pudu_queue(PUDU_UI_STOPPED, 0, nil, 0); });
+    return;
+  }
+  if (getenv("PUDU_UI_IMAGE_TEST") != NULL) {
+    pudu_test_images([pudu_nodes copy], ^{ pudu_queue(PUDU_UI_STOPPED, 0, nil, 0); });
     return;
   }
   if (getenv("PUDU_UI_CONTROLS_TEST") != NULL) {

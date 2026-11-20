@@ -117,7 +117,7 @@ One stream carries each commit. It is a sequence of little-endian 32-bit words, 
 
 | Code | Instruction | Words that follow |
 | --- | --- | --- |
-| 1 | CREATE | node, kind (1 label, 2 button, 3 column, 4 row, 5 field, 6 toggle, 7 scroll, 8 list, 9 material, 10 progress, 11 activity, 12 slider, 13 stepper, 14 segments, 15 wheel, 16 date, 17 text area, 18 search, 19 symbol, 20 pages, 21 well) |
+| 1 | CREATE | node, kind (1 label, 2 button, 3 column, 4 row, 5 field, 6 toggle, 7 scroll, 8 list, 9 material, 10 progress, 11 activity, 12 slider, 13 stepper, 14 segments, 15 wheel, 16 date, 17 text area, 18 search, 19 symbol, 20 pages, 21 well, 22 image) |
 | 2 | TEXT | node, byte length, then that many UTF-8 bytes |
 | 3 | APPEND | column or row node, child node |
 | 4 | ROOT | node shown as the screen's content |
@@ -154,6 +154,7 @@ One stream carries each commit. It is a sequence of little-endian 32-bit words, 
 | 42 | OPTIONS | node, count, then each label as length-prefixed UTF-8 |
 | 43 | COUNT | node, page count |
 | 44 | MOMENT | node, mode (0 day, 1 time, 2 day and time), seconds high word, seconds low word |
+| 45 | SOURCE | node, origin (0 asset name, 1 URL), scaling (0 fill, 1 fit, 2 stretch), then length-prefixed location text |
 
 Events return through `pudu_ui_wait` as one 64-bit value: the kind in the high 32 bits, with the tag in the low 32 bits.
 
@@ -180,6 +181,7 @@ Events return through `pudu_ui_wait` as one 64-bit value: the kind in the high 3
 | 21 | valued | tag; signed value or index as detail |
 | 22 | colored | tag; RGBA as detail |
 | 23 | dated | tag; seconds high word, then low word |
+| 24 | imaged | tag; detail 1 when shown, 0 when it could not be |
 
 Codes 10 to 12 only add instructions, so a stream of codes 1 to 9 means the same. The view module no longer writes RESET; the host keeps it so a stream from an earlier writer still means the same. Nodes carry stable ids handed out by the program and recycled after REMOVE (#914). Compiled views extend the stream further under ADR-0031 (compiled native execution).
 
@@ -253,3 +255,7 @@ frame, peak resident memory, and binary size on named devices, in line with
 ## Referenced by
 
 [[architecture/_MOC]] · [[Native Application UI]] · [[Native Emission Coverage]] · [[Native Mobile Targets]] · [[Pudu Native iOS UI]]
+
+## Application assets (#973)
+
+An application's `assets` directory, beside its entry module, is packaged under the same relative names on every platform. A program names an asset as a relative path such as `icons/a-1.png`. Names are restricted to ASCII letters, digits, dots, dashes and underscores, with no hidden segment; a link is refused. A refusal is E6013 ([[Pudu Diagnostic Native]]). iOS copies assets into the bundle's `assets` directory; Android passes them to aapt2 with `-A`.

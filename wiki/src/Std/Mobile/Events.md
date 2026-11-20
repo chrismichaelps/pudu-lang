@@ -24,7 +24,7 @@ Exports:
 - `eventWithDetail(raw: UInt64, text: Str, detail: UInt32) -> View.Event`: decodes a detailed event with the detail word the host fetched.
 - `eventWithWords(raw: UInt64, text: Str, detail: UInt32, values: Array[Int32]) -> View.Event`: decodes an event with its detail word and signed words. A measured kind decodes through `MEASURED`, a detailed kind through `DETAILED`, and every other kind through `event`.
 
-Kind codes: TAPPED 1, Stopped 2 (the host's stop), CHANGED 3, SWITCHED_ON 4, SWITCHED_OFF 5, REACHED 8, GESTURED 9, CHOSE 10, RESIZED 11, LIFECYCLE 12, PICKED 13, POPPED 14, DISMISSED 15, REFRESHED 16, INSETS 17, FETCHED 18, WOKE 19, MEMORY 20, VALUED 21, COLORED 22, DATED 23.
+Kind codes: IMAGED 24 (#973); TAPPED 1, Stopped 2 (the host's stop), CHANGED 3, SWITCHED_ON 4, SWITCHED_OFF 5, REACHED 8, GESTURED 9, CHOSE 10, RESIZED 11, LIFECYCLE 12, PICKED 13, POPPED 14, DISMISSED 15, REFRESHED 16, INSETS 17, FETCHED 18, WOKE 19, MEMORY 20, VALUED 21, COLORED 22, DATED 23.
 
 Event payloads by kind:
 - POPPED (14): the tag is the route that was on top, and the detail word is the surviving destination route.
@@ -44,6 +44,10 @@ Dispatch is three constant tables:
 - `EVENTS` maps a kind to its tag-and-text decoder.
 - `DETAILED` maps a kind to its tag-and-detail decoder. VALUED (21) and COLORED (22) are listed there.
 - `MEASURED` maps a kind to its tag, detail and signed-word decoder. INSETS (17) is listed there. DATED (23) is listed there too: its detail word is fetched and ignored, and its two words are the seconds, high then low.
+
+## Images (#973)
+
+- IMAGED (24): the tag is the image node; the detail word is 1 when the source is shown and 0 when it could not be. Any other detail word is refused and decodes to `Stopped`. Decodes to `Imaged(tag, loaded)`.
 
 ## Invariants
 
