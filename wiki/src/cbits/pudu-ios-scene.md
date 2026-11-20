@@ -10,7 +10,7 @@ aliases: [iOS Host Scene]
 
 ## Purpose and interface
 
-Private scene implementation of the iOS host, included once by [[iOS Host Adapter]]. The compiler stages it with the other private headers ([[Native Toolchain Host Sources]]). It owns the root view controller of the application, the report of the scene's size and size classes, the report of its safe-area insets, and the observation of lifecycle transitions. It defines no stream instruction; it reports the events RESIZED (11), LIFECYCLE (12) and INSETS (17) of [[Std Mobile View]].
+Private scene implementation of the iOS host, included once by [[iOS Host Adapter]]. The compiler stages it with the other private headers ([[Native Toolchain Host Sources]]). It owns the root view controller of the application, the report of the scene's size and size classes, the report of its safe-area insets, and the observation of lifecycle transitions. It applies the status bar instruction STATUS (50) of [[pudu-ios-system]]; it reports the events RESIZED (11), LIFECYCLE (12) and INSETS (17) of [[Std Mobile View]].
 
 ## Behavior
 
@@ -19,6 +19,7 @@ Private scene implementation of the iOS host, included once by [[iOS Host Adapte
 - RESIZED is queued only when the size or a class changed since the last report, and only once the view has a positive width.
 - INSETS carries four words, the top, left, bottom and right safe-area insets, rounded to whole points. The root controller reports them once its view is laid out and whenever they change, as RESIZED does.
 - LIFECYCLE is observed for four application notifications: became active (1), will resign active (2, inactive), entered background (3) and will enter foreground (4). Each queues a LIFECYCLE event with its code as the detail word, in the order the platform posts them.
+- STATUS (50) sets the status bar style and hidden state of the root controller. The root controller does not defer the style to a child, so the scene keeps one setting. The handler is in [[pudu-ios-system]].
 
 ## Invariants
 
@@ -29,7 +30,7 @@ Private scene implementation of the iOS host, included once by [[iOS Host Adapte
 
 ## Negative Logic
 
-- No instruction. The header writes no stream and reads none.
+- No stream write. The header writes no stream; the status bar handler lives in [[pudu-ios-system]].
 - No device model. The report carries the size and classes only.
 - No refusal. The scene is reported, never checked against what the program expects; a program that does not read these events ignores them.
 

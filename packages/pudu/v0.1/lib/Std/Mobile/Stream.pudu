@@ -106,6 +106,11 @@ const OPTIONS: UInt32 = 42u32
 const COUNT: UInt32 = 43u32
 const MOMENT: UInt32 = 44u32
 const SOURCE: UInt32 = 45u32
+const OPEN: UInt32 = 46u32
+const SHARE: UInt32 = 47u32
+const COPY: UInt32 = 48u32
+const PASTE: UInt32 = 49u32
+const STATUS: UInt32 = 50u32
 
 /// Creates node `node` as a control of `kind`.
 export fn create(out: Array[UInt8], node: UInt32, kind: UInt32) -> Array[UInt8] { words(out, [CREATE, node, kind]) }
@@ -222,6 +227,23 @@ export fn moment(out: Array[UInt8], node: UInt32, mode: UInt32, seconds: Int64) 
 /// scaling, then the name or URL.
 export fn source(out: Array[UInt8], node: UInt32, origin: UInt32, scaling: UInt32, location: Str) -> Array[UInt8] {
   field(words(out, [SOURCE, node, origin, scaling]), location)
+}
+
+/// Hands `url` to the platform; OPENED with `reported` answers whether an app opened it.
+export fn open(out: Array[UInt8], reported: UInt32, url: Str) -> Array[UInt8] { field(words(out, [OPEN, reported]), url) }
+
+/// Shows the share sheet for `message`; SHARED with `reported` answers when it closes.
+export fn share(out: Array[UInt8], reported: UInt32, message: Str) -> Array[UInt8] { field(words(out, [SHARE, reported]), message) }
+
+/// Puts `clipped` on the clipboard.
+export fn copy(out: Array[UInt8], clipped: Str) -> Array[UInt8] { field(words(out, [COPY]), clipped) }
+
+/// Asks for the clipboard's text; PASTED with `reported` carries it.
+export fn paste(out: Array[UInt8], reported: UInt32) -> Array[UInt8] { words(out, [PASTE, reported]) }
+
+/// Sets the status bar's style code and whether it is hidden.
+export fn status(out: Array[UInt8], code: UInt32, hidden: Bool) -> Array[UInt8] {
+  words(out, [STATUS, code, if hidden { 1u32 } else { 0u32 }])
 }
 
 /// Plays a haptic.

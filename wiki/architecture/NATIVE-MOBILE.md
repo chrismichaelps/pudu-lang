@@ -155,6 +155,11 @@ One stream carries each commit. It is a sequence of little-endian 32-bit words, 
 | 43 | COUNT | node, page count |
 | 44 | MOMENT | node, mode (0 day, 1 time, 2 day and time), seconds high word, seconds low word |
 | 45 | SOURCE | node, origin (0 asset name, 1 URL), scaling (0 fill, 1 fit, 2 stretch), then length-prefixed location text |
+| 46 | OPEN | tag, then the URL as length-prefixed text |
+| 47 | SHARE | tag, then the text as length-prefixed text |
+| 48 | COPY | the text as length-prefixed text |
+| 49 | PASTE | tag |
+| 50 | STATUS | style (0 automatic, 1 light text, 2 dark text), hidden flag (0 or 1) |
 
 Events return through `pudu_ui_wait` as one 64-bit value: the kind in the high 32 bits, with the tag in the low 32 bits.
 
@@ -182,10 +187,13 @@ Events return through `pudu_ui_wait` as one 64-bit value: the kind in the high 3
 | 22 | colored | tag; RGBA as detail |
 | 23 | dated | tag; seconds high word, then low word |
 | 24 | imaged | tag; detail 1 when shown, 0 when it could not be |
+| 25 | opened | tag; detail 1 when the platform opened the URL, 0 when not |
+| 26 | shared | tag; detail 1 when shared (Android: chooser opened), 0 when the sheet closed |
+| 27 | pasted | tag; the clipboard text, empty when none |
 
 Codes 10 to 12 only add instructions, so a stream of codes 1 to 9 means the same. The view module no longer writes RESET; the host keeps it so a stream from an earlier writer still means the same. Nodes carry stable ids handed out by the program and recycled after REMOVE (#914). Compiled views extend the stream further under ADR-0031 (compiled native execution).
 
-Codes 26 to 44 and events 9 to 23 are one numbering shared by the iOS and Android hosts. Android's BOUNDS, OPTIONS, COUNT and MOMENT moved from 36 to 39 to 41 to 44, and its VALUED, COLORED and DATED moved from 14 to 16 to 21 to 23, because 36 to 40 and 14 to 20 are already NAVIGATE to WAKE and POPPED to MEMORY. Both hosts handle every instruction 1 to 44 and report every event 1 to 23. Android realizes navigation with a platform toolbar and dialogs, refresh with an overlay indicator, requests through the platform HTTP client and response cache, and requests the INTERNET permission. Android runtime behavior is not yet exercised on a device or emulator.
+Codes 26 to 44 and events 9 to 23 are one numbering shared by the iOS and Android hosts. Android's BOUNDS, OPTIONS, COUNT and MOMENT moved from 36 to 39 to 41 to 44, and its VALUED, COLORED and DATED moved from 14 to 16 to 21 to 23, because 36 to 40 and 14 to 20 are already NAVIGATE to WAKE and POPPED to MEMORY. Both hosts handle every instruction 1 to 50 and report every event 1 to 27. Android realizes navigation with a platform toolbar and dialogs, refresh with an overlay indicator, requests through the platform HTTP client and response cache, and requests the INTERNET permission. Android runtime behavior is not yet exercised on a device or emulator.
 
 ## FUI on native
 
@@ -259,3 +267,11 @@ frame, peak resident memory, and binary size on named devices, in line with
 ## Application assets (#973)
 
 An application's `assets` directory, beside its entry module, is packaged under the same relative names on every platform. A program names an asset as a relative path such as `icons/a-1.png`. Names are restricted to ASCII letters, digits, dots, dashes and underscores, with no hidden segment; a link is refused. A refusal is E6013 ([[Pudu Diagnostic Native]]). iOS copies assets into the bundle's `assets` directory; Android passes them to aapt2 with `-A`.
+
+## System requests (#974)
+
+OPEN 46, SHARE 47, COPY 48, PASTE 49 and STATUS 50 are requests with one reported answer each, except COPY and STATUS, which report nothing. Their answers are OPENED 25, SHARED 26 and PASTED 27. The iOS host presents the share sheet and reports its completion ([[pudu-ios-system]]). The Android host starts an `ACTION_SEND` chooser and reports SHARED once it is shown, because the chooser does not report the outcome ([[PuduSystem]]). Status bar style is applied by the scene on iOS ([[pudu-ios-scene]]) and through `WindowInsetsController` on Android.
+
+## Remote bodies and timeouts (#974)
+
+Remote images are capped at 32 MB on both hosts; iOS stops the transfer while it downloads. Android fetch requests read at most 16 MB of body. Connections time out after 15 seconds to connect and 30 seconds to read on Android. iOS image requests time out after 30 seconds without data and 60 seconds for the whole resource.

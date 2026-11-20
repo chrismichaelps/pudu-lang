@@ -369,6 +369,8 @@ tags: [moc, module]
 - [[Uses Mobile Refresh]] — stdlib fixture for the refresh stream and the insets event.
 - [[Uses Mobile Image]] — stdlib fixture for images: asset and remote sources, scaling, IMAGED decode (#973).
 - [[Gallery Example]] — bundled, served, missing and moved images on the iOS simulator (#973).
+- [[Uses Mobile System]] — stdlib fixture for system requests: open, share, clipboard, status bar and their answers (#974).
+- [[Services Example]] — copy and paste, an unhandled URL, a share and the light status bar on the simulator (#974).
 - [[Pudu Backend Toolchain Assets]] — application asset listing, refused names and links, staging (#973).
 - [[Uses Mobile Controls]] — stdlib fixture for the value controls: build and change words, normalization and value events (#934).
 - [[Pudu Compiler Program Eval Data Spec]] — data evaluation spec, including the mobile fixture counts.
