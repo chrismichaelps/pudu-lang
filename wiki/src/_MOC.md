@@ -380,3 +380,5 @@ tags: [moc, module]
 - [[Memo Render Lambda]] · [[Memo Render Local]] — refusal fixtures: a memo render that is a lambda or a local binding is E3103.
 - [[Native Render Skipping]] — cost model and three-part plan for skipping unchanged native rendering.
 - [[Permissions Spec]] · [[Uses Mobile Permission]] · [[Permissions Example]] — permission properties, stdlib fixture and example (#976).
+- [[Pudu Backend Identity]] · [[Identity Spec]] — application identity from the `[app]` table and its platform declarations (#978).
+- [[Links Example]] — incoming links: the LINKED event and the simulator link self-test (#978).

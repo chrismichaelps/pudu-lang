@@ -443,3 +443,4 @@ tags: [moc, handoff]
 - [[2026-11-18-render-skipping]] — memoized native subtrees and render counters, first part of render skipping (#963).
 - [[Native Permissions]] — declared, build-checked permissions and the state model (#976).
 - [[Native Tabs]] — native tab bars: TABS, SELECTED and the per-tab stacks (#977).
+- [[Native App Identity]] — application identity from the manifest and incoming links: LINKED (#978).

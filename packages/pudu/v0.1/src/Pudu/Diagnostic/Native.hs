@@ -9,13 +9,15 @@
     `E6009`, `E6010`, `W6011` and `W6012` are the platform ledger's findings
     about the installed toolchain; `E6013` refuses an asset an application
     cannot carry; `E6014`–`E6016` refuse an application's permissions and
-    `W6017` reports one declared but never requested. Spans
+    `W6017` reports one declared but never requested; `E6018` refuses a value
+    of the `[app]` table. Spans
     point at the program being built — the refused construct, or the root
     module's first token for environment failures — so the ordinary renderer
     shows a real file and line.
 -}
 module Pudu.Diagnostic.Native
   ( assetRefused
+  , identityRefused
   , permissionReasonMissing
   , permissionUndeclared
   , permissionUnknown
@@ -97,6 +99,14 @@ assetRefused spanValue reason =
   buildDiagnostic "E6013" spanValue
     ("the application's assets cannot be packaged: " <> reason)
     (Just "asset names use ASCII letters, digits, dots, dashes and underscores; copy linked files into the assets directory")
+
+{-| A value of the manifest's `[app]` table that cannot be built: a store or
+    platform would refuse it. -}
+identityRefused :: Span -> Text -> Int -> Text -> Diagnostic
+identityRefused spanValue key line reason =
+  buildDiagnostic "E6018" spanValue
+    ("pudu.toml line " <> Text.pack (show line) <> ", [app] " <> key <> ": " <> reason)
+    Nothing
 
 {-| A permission the program can request that its manifest does not
     declare: the platform would refuse the request, or stop the application. -}

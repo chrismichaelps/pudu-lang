@@ -58,6 +58,7 @@ Entry points the program depends on:
 - NAVIGATE (36) is read whole by `pudu_navigation_read` in [[pudu_ios_navigation.h]] before any controller changes; each route body is read through `pudu_node_id` and `pudu_node_scrolls` in [[pudu_ios_nodes.h]]. Only then is the shown root removed and the navigation shown over the root controller, which installs the platform stack on first use. Its user pop and sheet dismissal events are queued through [[iOS Host Events]].
 - Self-test `PUDU_UI_NAVIGATION_TEST` runs the stack and sheet check described in [[pudu_ios_navigation.h]] and then asks the program to stop. It prints `PUDU_NAV` lines.
 - When navigation is installed, the report walks the top page's body rather than the root's shown tree, so `PUDU_LABEL` lines name the labels the user sees.
+- Links (#978): the URL in the launch options, when the application was opened by a link, and each `application:openURL:options:` call queue LINKED (30) with the URL text. Self-test `PUDU_UI_LINK_TEST` opens the URL it names through [[pudu-ios-system]], prints `PUDU_SYSTEM link opened` or `refused`, and then asks the program to stop.
 
 ## Negative Logic
 

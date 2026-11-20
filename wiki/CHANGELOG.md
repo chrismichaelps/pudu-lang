@@ -5,6 +5,11 @@ tags: [changelog]
 
 # Changelog
 
+## 2026-11-19 — Application identity and incoming links (#978)
+
+- Application identity and incoming links (#978): `[app]` table in the manifest (name, identifier, version, build, schemes), E6018 for values a store would refuse, Info.plist display name, version, build and URL types, Android package, version code and name, label, VIEW filters and singleTask launch, LINKED 30 event with the URL, and the link self-test on iOS.
+  [[Pudu Backend Identity]] · [[Compiler Manifest]] · [[Backend Toolchain App]] · [[Backend Toolchain Android]] · [[Native Diagnostics]] · [[Std Mobile View]] · [[Std Mobile Events]] · [[pudu-ios-system]] · [[Native Android Activity]] · [[Links Example]] · [[Identity Spec]] · [[Native App Identity]] · [[NATIVE-MOBILE]]
+
 ## 2026-11-19 — Native tab bars (#977)
 
 - Native tab bars (#977): TABS 54 on the iOS and Android hosts, SELECTED 29 event, `Tab`, `Tabbed`, and `mountTabs`, `updateTabs` and `observeTabs` in Std Mobile Navigation, and refusals for tabs with no pages, repeated ids and an unshown selection.

@@ -152,12 +152,14 @@ or a missing SDK, at the root module's span.
 | E6015 | error | the manifest's `[app.permissions]` names `<key>`, which no permission kind has | names the manifest line; the keys are those of [[Std Mobile Permission]] |
 | E6016 | error | the permission `<key>` is declared with an empty reason | names the manifest line; the reason is the text the person reads |
 | W6017 | warning | the permission `<key>` is declared but the program never requests it | the build proceeds; remove the declaration or the request that was meant |
+| E6018 | error | pudu.toml line `<line>`, [app] `<key>`: `<reason>` | names the key; the reason says what a store or platform would refuse |
 | W6012 | warning | the store rule `<store>` is not met by the installed toolchain, and either takes effect within `<days>` days or is already in effect for a development (simulator) build | names the rule's Xcode, SDK and source |
 
 - A refusing `StoreRuleMissed` for a Distribution build is E6010. The same finding for a
   Development build is a W6012 warning, since only device builds are submitted.
 - `StoreRuleDue` is W6012 with the day count.
 - `XcodeBelowMinimum` is E6009 and always refuses.
+- `identityRefused` is E6018, one per `[app]` value that cannot be built. It refuses the build, names the manifest line and key, and normalizes nothing.
 - Warnings render as one line `warning[W60nn]: message` with the build output, not as
   diagnostics that stop the build.
 

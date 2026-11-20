@@ -388,6 +388,16 @@ static void pudu_report(UIView *view) {
      main queue does not drain while one of its blocks is running. */
   [self performSelector:@selector(run) withObject:nil afterDelay:0];
   if (getenv("PUDU_UI_SELFTEST") != NULL) [self performSelector:@selector(selfTest) withObject:nil afterDelay:0.5];
+  /* The link that launched the application, if one did, is its first report. */
+  NSURL *launched = options[UIApplicationLaunchOptionsURLKey];
+  if (launched != nil) pudu_queue(PUDU_UI_LINKED, 0, launched.absoluteString, 0);
+  return YES;
+}
+/* A link opened while the application runs. */
+- (BOOL)application:(UIApplication *)application openURL:(NSURL *)url options:(NSDictionary *)options {
+  (void)application;
+  (void)options;
+  pudu_queue(PUDU_UI_LINKED, 0, url.absoluteString, 0);
   return YES;
 }
 - (void)run {
@@ -406,6 +416,10 @@ static void pudu_report(UIView *view) {
 - (void)selfTest {
   if (getenv("PUDU_UI_CAPABILITY_TEST") != NULL) {
     pudu_test_capabilities(pudu_nodes, ^{ pudu_queue(PUDU_UI_STOPPED, 0, nil, 0); });
+    return;
+  }
+  if (getenv("PUDU_UI_LINK_TEST") != NULL) {
+    pudu_test_link(^{ pudu_queue(PUDU_UI_STOPPED, 0, nil, 0); });
     return;
   }
   if (getenv("PUDU_UI_TABS_TEST") != NULL) {

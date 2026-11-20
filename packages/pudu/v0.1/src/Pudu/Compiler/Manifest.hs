@@ -20,6 +20,7 @@ module Pudu.Compiler.Manifest
   ( Manifest (..)
   , Dependency (..)
   , DependencySource (..)
+  , emptyManifest
   , parseManifest
   , manifestSnapshotPackageRoots
   , manifestSnapshotRoot
@@ -85,6 +86,8 @@ data Manifest = Manifest
   , manifestKeywords :: ![Text]
   , manifestInstall :: ![(Text, Text)]
   -- ^ The keys of the `[install]` table, such as `registry` and `min-release-age`.
+  , manifestApp :: ![(Text, Text, Int)]
+  -- ^ The `[app]` table: each key, its value as written, and its line.
   , manifestPermissions :: ![(Text, Text, Int)]
   -- ^ The `[app.permissions]` table: each permission key, the reason the
   -- person reads, and its line, in written order.
@@ -118,7 +121,7 @@ data ManifestSnapshot = ManifestSnapshot
   ![FilePath]
 
 emptyManifest :: Manifest
-emptyManifest = Manifest Nothing Nothing Nothing [] Nothing Nothing Nothing Nothing [] [] []
+emptyManifest = Manifest Nothing Nothing Nothing [] Nothing Nothing Nothing Nothing [] [] [] []
 
 {-| Read `pudu.toml` from a project root, answering an empty manifest when
     there is none.
@@ -348,6 +351,7 @@ parseManifest contents = go (zip [1 ..] (Text.lines contents)) "" emptyManifest
                                   : manifestDependencies manifest
                             }
                 | section == "install" -> go rest section manifest{manifestInstall = manifestInstall manifest <> [(unquote rawKey, unquote value)]}
+                | section == "app" -> go rest section manifest{manifestApp = manifestApp manifest <> [(unquote rawKey, value, number)]}
                 | section == "app.permissions" ->
                     go rest section manifest{manifestPermissions = manifestPermissions manifest <> [(unquote rawKey, unquote value, number)]}
                 | otherwise -> go rest section manifest

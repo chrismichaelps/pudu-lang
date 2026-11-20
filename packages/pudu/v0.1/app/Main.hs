@@ -63,7 +63,8 @@ import Pudu.Cli.Doctor (runDoctor)
 import Pudu.Backend.Toolchain.App (AppRequest (..), bundleIdentifier, compileApp)
 import Pudu.Backend.Toolchain.Assets (assetDirectory)
 import Pudu.Backend.Permissions (PermissionProblem (..), requestedKinds, settlePermissions)
-import Pudu.Compiler.Manifest (findManifestRoot, manifestPermissions, readManifest)
+import Pudu.Backend.Identity (Identity (..), IdentityProblem (..), defaultIdentity, settleIdentity)
+import Pudu.Compiler.Manifest (emptyManifest, findManifestRoot, manifestApp, manifestPermissions, readManifest)
 import Pudu.Backend.Toolchain.Library (LibraryProducts (..), LibraryRequest (..), compileLibrary)
 import Pudu.Backend.Toolchain
   ( ToolchainFailure (..)
@@ -819,24 +820,28 @@ buildNativeProgram style path target requested = do
               [] | app -> do
                 let name = Text.pack (defaultTargetName path)
                 assets <- assetDirectory path
-                entries <- maybe (pure []) (fmap manifestPermissions . readManifest) =<< findManifestRoot (takeDirectory path)
-                let (problems, permissions, unused) = settlePermissions entries (requestedKinds core)
+                manifest <- maybe (pure emptyManifest) readManifest =<< findManifestRoot (takeDirectory path)
+                let (problems, permissions, unused) = settlePermissions (manifestPermissions manifest) (requestedKinds core)
                     at = moduleSpan parsed
-                unless (null problems) $ do
-                  TextIO.putStrLn (renderProgramDiagnostics style program (map (permissionDiagnostic at) problems))
+                    identified = settleIdentity (defaultIdentity name (bundleIdentifier name)) (manifestApp manifest)
+                    identityProblems = either id (const []) identified
+                    identity = either (const (defaultIdentity name (bundleIdentifier name))) id identified
+                unless (null problems && null identityProblems) $ do
+                  TextIO.putStrLn (renderProgramDiagnostics style program
+                    (map (permissionDiagnostic at) problems <> [Native.identityRefused at key line reason | IdentityProblem key line reason <- identityProblems]))
                   exitFailure
                 mapM_ (TextIO.putStrLn . Native.permissionUnused) unused
                 compiled <- compileApp AppRequest
                   { appSource = emittedSource unit, appOutput = target, appTarget = chosen
                   , appExports = emittedExports unit, appName = name, appIdentifier = bundleIdentifier name
-                  , appAssets = assets, appPermissions = permissions }
+                  , appAssets = assets, appIdentity = identity, appPermissions = permissions }
                 case compiled of
                   Left failure -> toolchainFailed style program (moduleSpan parsed) failure
                   Right (warnings, findings) -> do
                     unless (Text.null warnings) $
                       TextIO.putStrLn warnings
                     mapM_ (TextIO.putStrLn . Native.ledgerWarning) findings
-                    TextIO.putStrLn (Text.pack target <> ": an application for " <> nativeTargetName chosen <> ", identified as " <> bundleIdentifier name)
+                    TextIO.putStrLn (Text.pack target <> ": an application for " <> nativeTargetName chosen <> ", identified as " <> identityIdentifier identity)
               [] -> do
                 compiled <- compileLibrary LibraryRequest{librarySource = emittedSource unit, libraryOutput = target, libraryTarget = chosen, libraryExports = emittedExports unit}
                 case compiled of

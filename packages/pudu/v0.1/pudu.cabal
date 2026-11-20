@@ -275,6 +275,7 @@ library
     Pudu.Backend.Toolchain.App
     Pudu.Backend.Toolchain.Assets
     Pudu.Backend.Permissions
+    Pudu.Backend.Identity
     Pudu.Backend.Toolchain.Process
     Pudu.Compiler
     Pudu.Compiler.Constants

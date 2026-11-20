@@ -196,6 +196,7 @@ Events return through `pudu_ui_wait` as one 64-bit value: the kind in the high 3
 | 27 | pasted | tag; the clipboard text, empty when none |
 | 28 | permissioned | tag is the kind code; detail is the state code (0 not asked to 6 unavailable) |
 | 29 | selected | tab id; no detail |
+| 30 | linked | URL text; no detail |
 
 Codes 10 to 12 only add instructions, so a stream of codes 1 to 9 means the same. The view module no longer writes RESET; the host keeps it so a stream from an earlier writer still means the same. Nodes carry stable ids handed out by the program and recycled after REMOVE (#914). Compiled views extend the stream further under ADR-0031 (compiled native execution).
 
@@ -285,6 +286,10 @@ Remote images are capped at 32 MB on both hosts; iOS stops the transfer while it
 ## Tabs (#977)
 
 TABS 54 shows a tab bar: one stack per tab, each tab's bar item title and system symbol, and at most one page sheet over the bar. A person's pick is reported as SELECTED 29 with the tab id; a pop inside a tab is reported as POPPED 14. TABS and NAVIGATE replace each other. The iOS host is [[pudu-ios-tabs]]. The Android host is [[PuduTabs]], fed by [[pudu-android-routes]], and shows titles only because Android has no system symbol set. The model is [[Std Mobile Navigation]]; the example is [[Tabs Example]].
+
+## Application identity and links (#978)
+
+The program's `pudu.toml` names the application under `[app]`: name, identifier, version, build and schemes. [[Pudu Backend Identity]] checks each value before a build, and E6018 refuses a value a store or platform would reject. The identity reaches Info.plist (display name, version, build, URL types) and the Android manifest (package, version code and name, label, one VIEW filter per scheme, singleTask launch). A link that opens the application arrives as LINKED 30 with the URL text, at launch and while it runs. The example is [[Links Example]]; the open handoff is [[Native App Identity]].
 
 ## Permissions (#976)
 

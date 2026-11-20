@@ -152,3 +152,4 @@ aliases: [Backend Module Map]
 - [[Backend Frame Slots]] · [[Backend Frame Slot References]] — physical slot reuse for generated C11.
 - [[Pudu Backend Permissions]] — declared permissions settled against requested kinds, and per-kind platform declarations (#976).
 - [[PuduPermission]] — Android permission state by API level, first-request memory, and settings page (#976).
+- [[Pudu Backend Identity]] — application identity from the `[app]` table, checked before the platform declarations (#978).

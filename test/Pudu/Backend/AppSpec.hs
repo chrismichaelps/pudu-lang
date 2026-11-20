@@ -2,6 +2,7 @@
     application built by `pudu build --app`. -}
 module Pudu.Backend.AppSpec (appProperties) where
 
+import Pudu.Backend.Identity (defaultIdentity)
 import qualified Data.Text as Text
 import Pudu.Backend.Toolchain.App (bundleIdentifier, infoPlist)
 import Test.QuickCheck (Property, conjoin, counterexample, property, (===))
@@ -21,7 +22,7 @@ testIdentifier = conjoin
 
 testPlist :: Property
 testPlist =
-  let plist = infoPlist "A&B" "org.pudu.A-B" []
+  let plist = infoPlist "A&B" (defaultIdentity "A&B" "org.pudu.A-B") []
       has fragment = counterexample (Text.unpack fragment) (property (fragment `Text.isInfixOf` plist))
    in conjoin
         [ has "<key>CFBundleIdentifier</key><string>org.pudu.A-B</string>"

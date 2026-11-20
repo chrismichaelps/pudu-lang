@@ -272,6 +272,13 @@ int main(int argc, char **argv) {
     // at once, without a prompt.
     // The person picks the second tab and back, pushes and pops inside the
     // first, and dismisses a sheet; each is reported once.
+    // The manifest's identity reaches the bundle, and a link in the
+    // application's own scheme comes back to it as Linked.
+    mobileApp(device, "Links", [{
+      environment: { SIMCTL_CHILD_PUDU_UI_SELFTEST: "0", SIMCTL_CHILD_PUDU_UI_LINK_TEST: "pudulinks://hello?from=test" },
+      labels: ["Link: pudulinks://hello?from=test"],
+      layout: ["PUDU_SYSTEM link opened"],
+    }], "links", "dev.pudu.links");
     mobileApp(device, "Tabs", [{
       environment: { SIMCTL_CHILD_PUDU_UI_SELFTEST: "0", SIMCTL_CHILD_PUDU_UI_TABS_TEST: "1" },
       labels: ["Selected: 1", "Pops: 1", "Dismissals: 1"],
@@ -441,10 +448,9 @@ function refuseOccupiedOutput(scratch) {
    adapter and run once per entry of `runs`: the host feeds it input from the
    entry's environment, asks it to stop, and reports its labels, its status
    and the time from main to the first frame. */
-function mobileApp(device, example, runs, directory = "") {
+function mobileApp(device, example, runs, directory = "", bundle = `org.pudu.${example}`) {
   const root = mkdtempSync(join(tmpdir(), `pudu-ios-${example.toLowerCase()}-`));
   const app = join(root, `${example}.app`);
-  const bundle = `org.pudu.${example}`;
   let installed = false;
   try {
     const build = ["build", join(repository, "examples", "mobile", directory, `${example}.pudu`),

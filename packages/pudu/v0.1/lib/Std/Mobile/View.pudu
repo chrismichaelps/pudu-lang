@@ -80,6 +80,7 @@ export type Event
   | Pasted(UInt32, Str)
   | Permissioned(Permission.Kind, Permission.State)
   | Selected(UInt32)
+  | Linked(Str)
   | Stopped
 
 /// A node the platform shows: its id, the view it shows, and the nodes of

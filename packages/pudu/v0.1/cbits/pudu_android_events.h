@@ -18,7 +18,7 @@ enum { PUDU_UI_TAPPED = 1, PUDU_UI_STOPPED = 2, PUDU_UI_CHANGED = 3, PUDU_UI_SWI
        PUDU_UI_FETCHED = 18, PUDU_UI_WOKE = 19, PUDU_UI_MEMORY = 20, PUDU_UI_VALUED = 21, PUDU_UI_COLORED = 22,
        PUDU_UI_DATED = 23, PUDU_UI_IMAGED = 24, PUDU_UI_OPENED = 25,
        PUDU_UI_SHARED = 26, PUDU_UI_PASTED = 27, PUDU_UI_PERMISSIONED = 28,
-       PUDU_UI_SELECTED = 29 };
+       PUDU_UI_SELECTED = 29, PUDU_UI_LINKED = 30 };
 
 /* The most queued events one scan reports; pulls past it are settled on a later wait. */
 enum { PUDU_EVENT_SCAN = 64 };

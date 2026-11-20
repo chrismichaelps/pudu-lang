@@ -32,6 +32,7 @@ const SHARED: UInt64 = 26u64
 const PASTED: UInt64 = 27u64
 const PERMISSIONED: UInt64 = 28u64
 const SELECTED: UInt64 = 29u64
+const LINKED: UInt64 = 30u64
 
 /// Each event kind's constructor, given the tag and the text the host holds.
 const EVENTS: Map[UInt64, fn(UInt32, Str) -> View.Event] = mapOf([
@@ -44,6 +45,7 @@ const EVENTS: Map[UInt64, fn(UInt32, Str) -> View.Event] = mapOf([
     (WOKE, |_tag: UInt32, _text: Str| View.Woke),
     (MEMORY, |_tag: UInt32, _text: Str| View.MemoryLow),
     (SELECTED, |tab: UInt32, _text: Str| View.Selected(tab)),
+    (LINKED, |_tag: UInt32, url: Str| View.Linked(url)),
     (PASTED, |tag: UInt32, text: Str| View.Pasted(tag, text))
   ])
 
@@ -73,7 +75,7 @@ const MEASURED: Map[UInt64, fn(UInt32, UInt32, Array[Int32]) -> Option[View.Even
   ])
 
 /// Whether a host event's kind carries text the host holds for it.
-export fn carriesText(raw: UInt64) -> Bool { raw >> 32 == CHANGED || raw >> 32 == FETCHED || raw >> 32 == PASTED }
+export fn carriesText(raw: UInt64) -> Bool { raw >> 32 == CHANGED || raw >> 32 == FETCHED || raw >> 32 == PASTED || raw >> 32 == LINKED }
 
 /// Whether a host event's kind carries a detail word the host holds for it.
 export fn carriesDetail(raw: UInt64) -> Bool {

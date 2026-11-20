@@ -16,6 +16,7 @@ import Pudu.Backend.Permissions
   , kindNamed
   , settlePermissions
   )
+import Pudu.Backend.Identity (defaultIdentity)
 import Pudu.Backend.Toolchain.Android (packageManifest)
 import Pudu.Backend.Toolchain.App (infoPlist)
 import Pudu.Compiler.Manifest (manifestPermissions, parseManifest)
@@ -67,8 +68,8 @@ declarations =
 
 written :: Property
 written =
-  let plist = infoPlist "A" "org.pudu.A" [("NSCameraUsageDescription", "Scans <receipts>")]
-      manifest = packageManifest False "A" (androidEntries [Permission Camera "Scans"])
+  let plist = infoPlist "A" (defaultIdentity "A" "org.pudu.A") [("NSCameraUsageDescription", "Scans <receipts>")]
+      manifest = packageManifest False "A" (defaultIdentity "A" "org.pudu.A") (androidEntries [Permission Camera "Scans"])
    in conjoin
         [ counterexample (Text.unpack plist) ("<key>NSCameraUsageDescription</key><string>Scans &lt;receipts&gt;</string>" `Text.isInfixOf` plist)
         , counterexample (Text.unpack manifest)

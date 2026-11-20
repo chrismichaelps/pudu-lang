@@ -32,6 +32,7 @@ import GHC.IO.Encoding (getFileSystemEncoding)
 import Pudu.Backend.Ledger (Finding, appleLedger, ledgerDeployment, renderRelease)
 import Pudu.Backend.Target (AppleSdk (..), NativeTarget (..), TargetPlatform (..))
 import Pudu.Backend.Toolchain.Android (androidTools, compileApk)
+import Pudu.Backend.Identity (Identity (..))
 import Pudu.Backend.Permissions (Permission, androidEntries, appleFlags, appleFrameworks, appleUsageKeys)
 import Pudu.Backend.Toolchain.Assets (assetFiles, stageAssets)
 import Pudu.Backend.Toolchain.HostSources (iosHostSources)
@@ -51,6 +52,8 @@ data AppRequest = AppRequest
   , appIdentifier :: !Text
   , appAssets :: !(Maybe FilePath)
   -- ^ The program's asset directory, packaged under the same relative names.
+  , appIdentity :: !Identity
+  -- ^ What the application is called, its identifier, version and build, and the schemes it opens.
   , appPermissions :: ![Permission]
   -- ^ The declared permissions, each written into the platform's declarations.
   }
@@ -88,7 +91,7 @@ compileApp request = case nativeTargetPlatform (appTarget request) of
           Left failure -> pure (Left failure)
           Right files ->
             fmap (, []) <$> compileApk found (appSource request) (appExports request) (appName request) (appOutput request)
-              ((, files) <$> appAssets request) (androidEntries (appPermissions request))
+              ((, files) <$> appAssets request) (appIdentity request) (androidEntries (appPermissions request))
   _ -> pure (Left (ToolchainTargetUnbuilt (nativeTargetName (appTarget request) <> " applications, which need a signing identity,")))
 
 buildBundle :: AppRequest -> AppleSdk -> IO (Either ToolchainFailure (Text, [Finding]))
@@ -126,7 +129,7 @@ buildBundle request sdk = do
         prepared <- tryIO (do
           createDirectory bundle
           mapM_ (\(file, source) -> ByteString.writeFile (directory </> file) (ByteString.pack source)) iosHostSources
-          ByteString.writeFile (bundle </> "Info.plist") (Encoding.encodeUtf8 (infoPlist (appName request) (appIdentifier request) (appleUsageKeys (appPermissions request))))
+          ByteString.writeFile (bundle </> "Info.plist") (Encoding.encodeUtf8 (infoPlist (appName request) (appIdentity request) (appleUsageKeys (appPermissions request))))
           mapM_ (\assets -> stageAssets assets files (bundle </> "assets")) (appAssets request))
         case prepared of
           Left problem -> pure (Left (ToolchainPublishFailed (problemText problem)))
@@ -185,19 +188,20 @@ bundleIdentifier name = identifierPrefix <> Text.map kept name
     | isAsciiLower c || isAsciiUpper c || isDigit c || c == '-' || c == '.' = c
     | otherwise = '-'
 
-{-| The property list of a simulator application named `name` with
-    `identifier` and the permission `usage` keys with their reasons, its text
-    escaped for XML. -}
-infoPlist :: Text -> Text -> [(Text, Text)] -> Text
-infoPlist name identifier usage = Text.unlines $
+{-| The property list of a simulator application whose executable is `name`,
+    with its `identity` and the permission `usage` keys with their reasons,
+    its text escaped for XML. -}
+infoPlist :: Text -> Identity -> [(Text, Text)] -> Text
+infoPlist name identity usage = Text.unlines $
   [ "<?xml version=\"1.0\" encoding=\"UTF-8\"?>"
   , "<plist version=\"1.0\"><dict>"
-  , entry "CFBundleIdentifier" identifier
+  , entry "CFBundleIdentifier" (identityIdentifier identity)
   , entry "CFBundleExecutable" name
   , entry "CFBundleName" name
+  , entry "CFBundleDisplayName" (identityName identity)
   , entry "CFBundlePackageType" "APPL"
-  , entry "CFBundleVersion" "1"
-  , entry "CFBundleShortVersionString" "1.0"
+  , entry "CFBundleVersion" (Text.pack (show (identityBuild identity)))
+  , entry "CFBundleShortVersionString" (identityVersion identity)
   , entry "MinimumOSVersion" minimumSystem
   , "<key>CFBundleSupportedPlatforms</key><array><string>iPhoneSimulator</string></array>"
   , "<key>UIDeviceFamily</key><array><integer>1</integer><integer>2</integer></array>"
@@ -205,6 +209,10 @@ infoPlist name identifier usage = Text.unlines $
   , "<key>CADisableMinimumFrameDurationOnPhone</key><true/>"
   ]
   <> [entry key reason | (key, reason) <- usage]
+  <> [ "<key>CFBundleURLTypes</key><array><dict><key>CFBundleURLName</key><string>" <> escaped (identityIdentifier identity)
+         <> "</string><key>CFBundleURLSchemes</key><array>" <> Text.concat ["<string>" <> escaped scheme <> "</string>" | scheme <- identitySchemes identity]
+         <> "</array></dict></array>"
+     | not (null (identitySchemes identity)) ]
   <> ["</dict></plist>"]
  where
   entry key value = "<key>" <> key <> "</key><string>" <> escaped value <> "</string>"

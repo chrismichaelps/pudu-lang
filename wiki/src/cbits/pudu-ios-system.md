@@ -58,6 +58,10 @@ Depends on UIKit (the activity controller, the pasteboard, the status bar and th
 - **Q:** Why refuse a second share rather than stack it? **A:** Two sheets over one controller leave the first one's completion waiting behind the second. The program receives one answer per request, so the second is refused.
 - **Q:** Why does the status bar live in the root controller? **A:** The root controller does not defer the style to a child, so the scene keeps one setting and no child changes it behind the program.
 
+## Link self-test (#978)
+
+`pudu_test_link` opens the URL named by `PUDU_UI_LINK_TEST` with `openURL:options:completionHandler:`, prints `PUDU_SYSTEM link opened` or `refused` from the completion, and waits 1.5 seconds so the link can return to the program as LINKED. Then the done block queues STOPPED. The URL must use a scheme the application declares; [[Links Example]] passes `pudulinks://hello?from=test`. Hosted by [[iOS Host Adapter]].
+
 ## Referenced by
 
 [[src/cbits/_MOC]] · [[iOS Host Adapter]] · [[pudu-ios-scene]] · [[pudu-ios-kinds]] · [[Std Mobile System]] · [[Std Mobile Stream]] · [[Std Mobile Events]] · [[Services Example]] · [[Uses Mobile System]] · [[NATIVE-MOBILE]]

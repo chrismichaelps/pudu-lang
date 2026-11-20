@@ -132,6 +132,10 @@ The snapshot reads `pudu.lock` beside the manifest and adds each locked package'
 nothing; a lock it cannot read is `E7201`, and a locked package missing from `deps/` is `E7202` telling
 the reader to run `pudu install`. See [[architecture/PACKAGES]].
 
+## Application identity (#978)
+
+`manifestApp` reads the `[app]` table in written order: each key, its value as written and its line. [[Pudu Backend Identity]] settles those entries over the defaults the build derives from the program's file name. With no manifest, or no `[app]` table, the defaults apply. `emptyManifest` is exported as that empty value for the build.
+
 ## Permissions (#976)
 
 `manifestPermissions` reads the `[app.permissions]` table in written order: each entry's key, its reason and its line. The entries are settled against the kinds the program requests by [[Pudu Backend Permissions]], which refuses the build for an undeclared request, an unknown key or an empty reason.
