@@ -142,3 +142,17 @@ Mark Objective-C calls as capable of re-entering the runtime. Other argument and
 ## Resolved Grill Log for Objective-C delegates
 
 Lowering a delegate constructor call goes through the foreign lowering path, which validates the group token and records the class for the module's delegate definitions.
+
+## Foreign declarations as values (#956)
+
+A checked foreign name becomes a closure over its resolved crossing.
+The direct call and the closure share the descriptor, including positions,
+bounds, output slots, claims and callback handling. A mutable crossing
+returns the declared result beside its final inputs through the usual
+callable loan ABI and settles the foreign operation before returning.
+
+### Resolved Grill Log
+
+The closure does not reopen name resolution. It uses the call-through-value
+site for failures and the foreign declaration identity for equality and
+rendering. Nullable addresses require a separate callable ABI for absence.

@@ -15,6 +15,25 @@ arraySuccessPrograms =
       , "  print(show([\"a\", \"b\"]) + \" \" + display([\"a\"]) + \" \" + [\"a\", \"b\", \"c\"].join(\"-\") + \"|\" + [].join(\",\") + \"|\" + [\"solo\"].join(\", \"))"
       , "  return 0", "}" ]
     , "[3, 1, 2] [] 3 true\n1 2 2 -1 true\n[\"a\", \"b\"] [\"a\"] a-b-c||solo\n")
+  , ("empty arrays of non-text elements can join directly and through a value", program
+      [ "fn main() -> Int {"
+      , "  let numbers: Array[Int] = []"
+      , "  let flags: Array[Bool] = []"
+      , "  let join = flags.join"
+      , "  print(\"[\" + numbers.join({ print(\"separator\")\n \",\" }) + \"]\")"
+      , "  print(\"[\" + join(\"/\") + \"]\")"
+      , "  return 0", "}" ]
+    , "separator\n[]\n[]\n")
+  , ("dynamic arrays join the held text variants", program
+      (dynamicJoinTypes <>
+        [ "fn main() -> Int {"
+        , "  let empty: Array[dynamic Marked] = []"
+        , "  let values: Array[dynamic Marked] = [\"é\", \"\", \"x\"]"
+        , "  let join = values.join"
+        , "  print(\"[\" + empty.join(\",\") + \"]\")"
+        , "  print(join(\"/\"))"
+        , "  return 0", "}" ])
+    , "[]\né//x\n")
   , ("updates clamp and leave the original alone", program
       [ "fn main() -> Int {"
       , "  let numbers = [3, 1, 2]", "  let empty: Array[Int] = []"
@@ -88,9 +107,36 @@ arrayRefusalPrograms =
       , "  print(display(items[-1]))", "  return 0", "}" ])
   , ("arrays are not ordered", program
       [ "fn main() -> Int {", "  print(\"before\")", "  print(display([1] < [2]))", "  return 0", "}" ])
+  , ("non-text join evaluates the receiver and separator before refusing", program
+      [ "fn items() -> Array[Int] { print(\"receiver\")\n [1] }"
+      , "fn separator() -> Str { print(\"separator\")\n \":\" }"
+      , "fn main() -> Int {", "  print(items().join(separator()))", "  return 0", "}" ])
+  , ("bound non-text join blames the call through the method value", program
+      [ "fn main() -> Int {", "  let join = [1].join"
+      , "  print(join({ print(\"separator\")\n \":\" }))", "  return 0", "}" ])
+  , ("dynamic join rejects the first member that does not hold text", program
+      (dynamicJoinTypes <>
+        [ "fn main() -> Int {"
+        , "  let values: Array[dynamic Marked] = [\"text\", Marker{}]"
+        , "  print(values.join({ print(\"separator\")\n \":\" }))"
+        , "  return 0", "}" ]))
+  , ("a unit array member triggers the invalid-member diagnostic", program
+      [ "fn main() -> Int {", "  print(\"before\")"
+      , "  print([()].join(\",\"))", "  return 0", "}" ])
+  , ("array negation reports E7001 after evaluating the operand", program
+      [ "fn main() -> Int {", "  let invalid = -{ print(\"array\")\n [1] }"
+      , "  print(show(invalid))", "  return 0", "}" ])
   , ("a failure inside a callback keeps its span", program
       [ "fn main() -> Int {", "  let items = [1, 9223372036854775807]"
       , "  print(show(items.map(|n| n + 1)))", "  return 0", "}" ])
+  ]
+
+dynamicJoinTypes :: [Text]
+dynamicJoinTypes =
+  [ "trait Marked { fn mark(self: &Self) -> Int }"
+  , "type Marker = {}"
+  , "impl Marked for Str { fn mark(self: &Self) -> Int { 1 } }"
+  , "impl Marked for Marker { fn mark(self: &Self) -> Int { 2 } }"
   ]
 
 program :: [Text] -> Text

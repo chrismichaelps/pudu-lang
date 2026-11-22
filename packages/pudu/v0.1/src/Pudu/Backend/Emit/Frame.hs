@@ -10,6 +10,7 @@ import Pudu.Backend.Emit.Foreign (foreignNeeds, foreignWrappers, foreignsOf, par
 import Pudu.Backend.Emit.Foreign.Callback (callbackArgumentTypes, callbackNeeds, callbackSignaturesOf, callbackUnregisterResults)
 import Pudu.Backend.Emit.Foreign.Delegate (delegateDefinitions, delegatesOf)
 import Pudu.Backend.Emit.Aggregate (aggregateSection, aggregateTypes, cellName, ownedKinds, ownedType, released, retained, aggregateHelper, aggregateNeed)
+import Pudu.Backend.Emit.Cell (callbackTokenText)
 import Pudu.Backend.Emit.Entry (EmittedUnit (..), EntryForm (..), entrySection)
 import Pudu.Backend.Emit.Export (ExportSection (..), exportSection)
 import Pudu.Backend.Emit.Frame.Body (emitFrameBodies)
@@ -17,7 +18,7 @@ import Pudu.Backend.Emit.Frame.Slots (compactFrameSlots)
 import Pudu.Backend.Emit.Frame.Fast (emitFastFunctions, fastEntry, fastFunctions)
 import Pudu.Backend.Emit.Frame.Direct (argumentCount, directFunctions, enteredDirect, frameCells)
 import Pudu.Backend.Emit.Support (integerHelper, isBigInteger, isWideInteger)
-import Pudu.Backend.Emit.State (EmitState (..), cString, cStringBytes, emptyEmitState, renderByteData, renderSites, textOfInt)
+import Pudu.Backend.Emit.State (EmitState (..), emptyEmitState, renderByteData, renderSites, textOfInt)
 import Pudu.Backend.Runtime (RuntimePart (..), runtimeParts)
 import Pudu.Backend.Runtime.Frame (frameCallbackEngine, frameTypes, frameEngine)
 import Pudu.Backend.Runtime.Host.Callback (callbackRuntime)
@@ -97,9 +98,9 @@ emitFrameUnit form version sources logical = do
       , "  pudu_text_release(pudu_shown);"
       , "  return pudu_report_status;" ]
     -- A token is shown as the callback declaration it registers with.
-    CoreCallbackType _ name -> Right
+    CoreCallbackType owner _ -> Right
       [ "  (void)pudu_run_frames(" <> textOfInt entryId <> ");"
-      , "  return pudu_output_report(pudu_text_literal(" <> cString name <> ", " <> textOfInt (cStringBytes name) <> "));" ]
+      , "  return pudu_output_report(" <> callbackTokenText owner <> ");" ]
     CoreUnitType -> Right ["  (void)pudu_run_frames(" <> textOfInt entryId <> ");", "  return 0;"]
     CoreNeverType -> Right ["  (void)pudu_run_frames(" <> textOfInt entryId <> ");", "  return 0;"]
   let direct = directFunctions source

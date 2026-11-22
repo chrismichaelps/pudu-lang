@@ -30,7 +30,7 @@ import Pudu.Compiler.Lower.Generic (writtenCoreType, writtenTypeArguments)
 import Pudu.Compiler.Lower.For (lowerFor)
 import Pudu.Compiler.Lower.Intrinsic (annotatedPanic, lowerIntrinsicValue)
 import Pudu.Compiler.Lower.Foreign
-  (lowerQualifiedForeignCall, lowerCallbackRegistration, lowerCallbackUnregister
+  (lowerQualifiedForeignCall, lowerForeignValue, lowerCallbackRegistration, lowerCallbackUnregister
   , lowerCallbackValue, lowerCallbackUnregisterValue )
 import Pudu.Compiler.Lower.Primitive (lowerPrimitiveCall)
 import Pudu.Compiler.Lower.MethodValue (lowerMethodValue, lowerTraitMethodValue)
@@ -334,6 +334,7 @@ lowerExpression state (Located spanValue expression) = case expression of
     Nothing | Just lowered <- lowerConstant lowerExpression state spanValue [name] -> lowered
     Nothing | Just key <- resolveFunction state [name], Just entry <- lookup key (contextTable (lowerContext state)) ->
       lowerFunctionValue state spanValue key entry
+    Nothing | Just lowered <- lowerForeignValue state spanValue [name] -> lowered
     Nothing | Just lowered <- lowerCallbackValue state spanValue [name] -> lowered
     Nothing | Just lowered <- lowerIntrinsicValue state spanValue name -> lowered
     Nothing -> maybe (halt spanValue ("the value '" <> name <> "'") state) id
@@ -348,6 +349,7 @@ lowerExpression state (Located spanValue expression) = case expression of
       Nothing
         | Just key <- resolveFunction state (first : rest), Just entry <- lookup key (contextTable (lowerContext state)) ->
             lowerFunctionValue state spanValue key entry
+      Nothing | Just lowered <- lowerForeignValue state spanValue (first : rest) -> lowered
       Nothing | Just lowered <- lowerCallbackValue state spanValue (first : rest) -> lowered
       Nothing -> maybe (halt spanValue "module-qualified names" state) id
         (lowerVariant lowerExpression state spanValue (last (first : rest)) [])
@@ -429,6 +431,8 @@ lowerExpression state (Located spanValue expression) = case expression of
     | Located _ (NameExpression (owner :| [])) <- receiver, isModuleQualifier state owner
     , Just key <- resolveFunction state [owner, member], Just entry <- lookup key (contextTable (lowerContext state)) ->
         lowerFunctionValue state spanValue key entry
+    | Located _ (NameExpression (owner :| [])) <- receiver
+    , Just lowered <- lowerForeignValue state spanValue [owner, member] -> lowered
     | Located _ (NameExpression (owner :| [])) <- receiver
     , Just lowered <- lowerCallbackValue state spanValue [owner, member] -> lowered
     | qualifier receiver, Just lowered <- lowerVariant lowerExpression state spanValue member [] -> lowered

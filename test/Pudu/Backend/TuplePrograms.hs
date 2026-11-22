@@ -79,6 +79,16 @@ tupleSuccessPrograms =
       , "  return 0"
       , "}" ]
     , "a\nb\nfirst\n4\n(1, \"two\")\n")
+  , ("only held callable members make a tuple unorderable", program
+      [ "fn main() -> Int {"
+      , "  let empty: Array[Option[fn(Int) -> Int]] = []"
+      , "  let absent: Option[fn(Int) -> Int] = None"
+      , "  let present: Option[fn(Int) -> Int] = Some(|n: Int| n)"
+      , "  print(display((0, empty) < (0, [absent])))"
+      , "  print(display((0, [absent]) <= (0, [absent])))"
+      , "  print(display((0, [present]) == (0, [present])))"
+      , "  return 0", "}" ]
+    , "true\ntrue\ntrue\n")
   , ("records and sums inside tuples order as compareValues does", program
       [ "type Point = { x: Int, y: Int }", "type Light = Red | Green(Int) | Amber"
       , "fn main() -> Int {"
@@ -123,6 +133,14 @@ tupleRefusalPrograms =
       , "  let [first, ..rest]: Array[Int] = panic(\"sequence\")"
       , "  first + rest.length()"
       , "}" ])
+  , ("nested callable blocks tuple ordering even when an earlier member differs", program
+      [ "fn main() -> Int {"
+      , "  let absent: Option[fn(Int) -> Int] = None"
+      , "  let present: Option[fn(Int) -> Int] = Some(|n: Int| n)"
+      , "  let first = { print(\"left\")\n (0, [absent]) }"
+      , "  let second = { print(\"right\")\n (1, [present]) }"
+      , "  print(display(first < second))"
+      , "  return 0", "}" ])
   , ("tuple operands finish before the refusal", program
       [ "fn side(label: Str) -> (Str, Int) {"
       , "  print(label)"

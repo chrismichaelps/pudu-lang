@@ -522,3 +522,12 @@ reaches method and field lowering.
 
 A tuple, record, or sequence binding whose subject transfers control stops
 block lowering at that subject. It introduces no bindings or projections.
+
+## Foreign callable lookup (#956)
+
+After closer names and declared functions, a bare or qualified foreign
+declaration can be read through [[Compiler Lower Foreign]] as a value.
+
+### Resolved Grill Log
+
+The existing qualifier and local lookup rules apply to a callable read.

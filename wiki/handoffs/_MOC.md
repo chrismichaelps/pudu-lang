@@ -5,6 +5,7 @@ tags: [moc, handoff]
 
 # Handoff Map
 
+- [[Native Operator Parity Delivery]] — join carriers, unary refusals and nested comparison evidence (#956).
 - [[Native Images Delivery]] — native images and application assets (#973).
 - [[Android Routes Delivery]] — Android navigation, refresh, requests, wake, memory and insets (#971).
 - [[Native Value Controls Delivery]] — ten native value controls, their instructions and events (#934).

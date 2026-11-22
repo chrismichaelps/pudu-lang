@@ -23,3 +23,14 @@ which they use.
 ## Referenced by
 
 [[Backend Emit Array]] · [[Native Arrays]]
+
+## Empty joins and invalid members (#956)
+
+The non-text join helper reads the held array's length. An empty array returns
+empty text. A nonempty array fails with E7001 and the supplied site. The text
+join checks separator and member lengths separately before adding them.
+
+### Resolved Grill Log
+
+the helper needs no element pointer or separator because
+operand evaluation has already finished and neither changes the outcome.

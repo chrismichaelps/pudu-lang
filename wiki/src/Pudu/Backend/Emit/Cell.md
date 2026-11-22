@@ -53,3 +53,23 @@ CoreStoreType is an owned, aggregate `pudu_box *` mangled `BK_<held>_E`. Resolve
 ## Foreign handles (#853)
 
 A foreign handle is an owned box whose C helper names include its nominal type identity.
+
+## Callback token text (#956)
+
+`callbackTokenText` emits the canonical declaration name in angle brackets
+as an immutable text literal. Nested renderers call it for callback cells.
+
+### Resolved Grill Log
+
+Equality compares registration identities. Ordering uses the interpreter's
+shared rank for callback values. Rendering needs only
+the owner, so it remains available after registration teardown.
+
+## Dynamic payload display (#956)
+
+Member display retains text, converts a character to text, or selects the
+payload's normal renderer.
+
+### Resolved Grill Log
+
+Both direct and erased carriers use the existing text and character helpers.

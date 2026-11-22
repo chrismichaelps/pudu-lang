@@ -16,8 +16,8 @@ Arrays under [[Native Arrays]]: `lowerArrayLiteral`, `lowerArrayIndex`,
 
 The receiver runs before the supplied arguments. `length`,
 `isEmpty`, `get`, `indexOf`, `contains`, `push`, `pop`, `insert`, `remove`,
-`slice`, `concat`, `reverse` and `join` (on text, or on a literal `[]`) are
-runtime calls. `map`, `filter` and `reduce` become loops: the closure and the
+`slice`, `concat` and `reverse` are runtime calls. `join` also calls the
+runtime after any required dynamic member extraction. `map`, `filter` and `reduce` become loops: the closure and the
 array run once into hidden locals, the length is read once, and the closure is
 called per item in order, with `reduce` passing the accumulator first, as
 `foldM` does. A method the native subset lacks (`sortBy` for now) refuses by
@@ -79,3 +79,17 @@ the literal's element type.
 
 Resolved Grill Log (#887): a byte literal is an independent operand, like the
 other literals, when an array method may take its receiver.
+
+## Join on checked arrays (#956)
+
+Lower direct and bound calls through `ArrayJoinWith` with the receiver's
+exact element type. If a dynamic element can hold text, walk the retained
+receiver in order and extract each checked text variant into a text array.
+A different variant takes the ordinary invalid-member diagnostic. Dynamic
+traits without a text variant use the non-text path.
+
+### Resolved Grill Log
+
+even when the element type differs from Str, the receiver
+and separator finish before the runtime distinguishes an empty array from
+one with an invalid member.

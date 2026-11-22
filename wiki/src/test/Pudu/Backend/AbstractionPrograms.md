@@ -24,3 +24,26 @@ success programs also run under the counted-allocation harness.
 ## Referenced by
 
 [[Backend Native Tests]] · [[Backend Text Leak Tests]] · [[Native Type Abstractions]]
+
+## Dynamic operator cases (#956)
+
+Exercise negation and complement on held integers, equality with a concrete
+implementation, and runtime refusals on held text or sum variants. Cover
+text addition, mixed-width checked, wrapping and saturating integer
+operations, mixed-width equality, signed shifts and division by zero. An
+overflow must retain its original operation, kind and span. Text and
+characters retain their separate display and show results through the dynamic cell.
+
+### Resolved Grill Log
+
+A dynamic result must still dispatch against the updated value in a later
+method call.
+
+## Dynamic aggregate order (#956)
+
+Compare dynamic integers of different widths inside tuples and exercise
+ordering and duplicate elimination for an ordered collection of those keys.
+
+### Resolved Grill Log
+
+Use held numbers whose order disagrees with the order of their type names.

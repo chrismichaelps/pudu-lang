@@ -1,19 +1,22 @@
 {-| @Pudu.Compiler.Lower.Scalar — scalar operators and ordered runtime refusals. -}
 module Pudu.Compiler.Lower.Scalar (lowerUnary, lowerBinary, eagerType) where
 
+import Data.List (mapAccumL)
 import Data.Text (Text)
 import qualified Data.Text as Text
 import Pudu.Compiler.Lower.Control (expressionIsPrintValued)
+import Pudu.Compiler.Lower.Dynamic (widen)
 import Pudu.Compiler.Lower.Keyed (setMembership)
 import Pudu.Compiler.Lower.Reference (lowerReference)
 import Pudu.Compiler.Lower.State
-  ( LowerContext (..), LowerState (..), halt, intType, refused )
-import Pudu.Compiler.Lower.Types (typeForSpan, nativeIntegerKind, nativeValueType)
+  ( LowerContext (..), LowerState (..), bindLocal, halt, intType, refused )
+import Pudu.Compiler.Lower.Types (LowerTypes, isDynamic, sumVariants, typeForSpan, nativeIntegerKind, nativeValueType)
 import Pudu.Core
+import Pudu.Diagnostic.Arithmetic (CheckedOperation (..), overflowCode, overflowHelp, overflowMessage)
 import Pudu.Diagnostic.Evaluation
-  ( cannotApplyBinaryMessage, cannotApplyUnaryMessage, unsupportedOperatorMessage )
+  ( cannotApplyBinaryMessage, cannotApplyUnaryMessage, operatorCode, unsupportedOperatorMessage )
 import Pudu.Frontend.Syntax (Expression (ArrayExpression, LiteralExpression), Literal (ResolvedInteger), Located (..))
-import Pudu.IntegerLiteral (integerKindFits)
+import Pudu.IntegerLiteral (IntegerKind (BigIntKind), integerKindBounds, integerKindFits, integerKindMeet)
 import Pudu.Source (Span)
 
 type LowerExpression = LowerState -> Located Expression -> (LowerState, Maybe (CoreExpression, CoreType))
@@ -30,16 +33,44 @@ lowerUnary lower state at operator operand
       (after, Just (core, CoreNeverType)) -> (after, Just (core, CoreNeverType))
       (after, Just (core, kind))
         | expressionIsPrintValued core -> halt at "an operator on a Result[(), Str] value" after
-        | operator == "-", integerType kind || floatType kind || kind == CoreDecimalType -> built after at (CoreNegate core) kind
-        | operator == "~", integerType kind -> built after at (CoreComplement core) kind
-        | operator == "!", kind == CoreBoolType -> built after at (CoreNot core) CoreBoolType
-        | dynamicKind kind, settled after operand core ->
-            namedFailure after at (\kinds -> cannotApplyUnaryMessage operator (mconcat kinds)) [core]
-        | kind `elem` [CoreUnitType, CoreBoolType, CoreTextType, CoreCharType, CoreBytesType] || floatType kind || tupleType kind || recordType kind
-        , settled after operand core ->
-            failure after at (cannotApplyUnaryMessage operator (runtimeKind kind)) [core]
+        | Just operation <- unaryOperation operator core -> built after at operation kind
+        | isDynamic kind, settled after operand core -> dynamicUnary after at operator core
+        | nativeValueType kind, settled after operand core ->
+            (after, Just (unaryFailure at operator core, CoreNeverType))
         | otherwise -> halt at ("the operator '" <> operator <> "' on a " <> coreTypeName kind <> " value") after
       (after, Nothing) -> refused after
+
+unaryOperation :: Text -> CoreExpression -> Maybe CoreExpressionShape
+unaryOperation operator operand
+  | operator == "-", integerType kind || floatType kind || kind == CoreDecimalType = Just (CoreNegate operand)
+  | operator == "~", integerType kind = Just (CoreComplement operand)
+  | operator == "!", kind == CoreBoolType = Just (CoreNot operand)
+  | otherwise = Nothing
+ where
+  kind = coreExpressionType operand
+
+unaryFailure :: Span -> Text -> CoreExpression -> CoreExpression
+unaryFailure at operator operand = CoreExpression at CoreNeverType $
+  if dynamicKind kind
+    then CoreFailText operatorCode Nothing (text (CoreBinary CoreAdd prefix heldKind)) Nothing
+    else CoreOperatorFailure (cannotApplyUnaryMessage operator (runtimeKind kind)) [operand]
+ where
+  kind = coreExpressionType operand
+  text = CoreExpression at CoreTextType
+  prefix = text (CoreTextLiteral (cannotApplyUnaryMessage operator ""))
+  heldKind = text (CoreRuntimeKind operand)
+
+dynamicUnary :: LowerState -> Span -> Text -> CoreExpression -> (LowerState, Maybe (CoreExpression, CoreType))
+dynamicUnary state at operator operand =
+  let (after, answer) = withDynamicValue types at result state operand lower
+   in (after, fmap (\core -> (core, result)) answer)
+ where
+  types = contextTypes (lowerContext state)
+  result = if operator == "!" then CoreBoolType else coreExpressionType operand
+  lower current held = case unaryOperation operator held of
+    Nothing -> (current, Just (unaryFailure at operator held))
+    Just operation -> wrapDynamicResult types at result current
+      (CoreExpression at (coreExpressionType held) operation)
 
 lowerBinary :: LowerExpression -> LowerState -> Span -> Located Expression -> Text -> Located Expression -> (LowerState, Maybe (CoreExpression, CoreType))
 lowerBinary lower state at left operator right
@@ -57,8 +88,11 @@ lowerBinary lower state at left operator right
                 [CoreStatement (coreExpressionSpan core) (CoreEvaluate core) | core <- [coreLeft, coreRight]] Nothing)) CoreNeverType
           | expressionIsPrintValued coreLeft -> halt (locatedSpan left) "comparing or operating on a Result[(), Str] value" after
           | expressionIsPrintValued coreRight -> halt (locatedSpan right) "comparing or operating on a Result[(), Str] value" after
-          | operator == "in", CoreSetType member <- rightType, member == leftType ->
-              setMembership after at coreLeft coreRight
+          | operator == "in", CoreSetType member <- rightType
+          , let key = widen (contextTypes (lowerContext after)) member coreLeft
+          , coreExpressionType key == member ->
+              setMembership after at key coreRight
+          | isDynamic leftType || isDynamic rightType -> dynamicBinary after at operator coreLeft coreRight
           | Just (operation, result) <- represented operator leftType rightType ->
               built after at (CoreBinary operation coreLeft coreRight) result
           | all nativeValueType [leftType, rightType]
@@ -89,6 +123,124 @@ lowerBinary lower state at left operator right
   lowerLeft = case locatedValue left of
     ArrayExpression [] | (_, Just (_, kind@(CoreArrayType _))) <- lower state right -> lowerOperand state left (Just kind)
     _ -> lower state left
+
+dynamicPayloads :: LowerTypes -> CoreType -> Maybe [(Text, CoreType)]
+dynamicPayloads types kind = sumVariants types kind >>= traverse payloadType
+ where
+  payloadType variant = case coreVariantFields variant of
+    [(_, member)] -> Just (coreVariantName variant, member)
+    _ -> Nothing
+
+dynamicBinary :: LowerState -> Span -> Text -> CoreExpression -> CoreExpression -> (LowerState, Maybe (CoreExpression, CoreType))
+dynamicBinary state at operator left right
+  | equality, leftType == rightType
+  , Just variants <- dynamicPayloads types leftType
+  , length (filter (integerType . snd) variants) <= 1 =
+      built state at (CoreBinary equalityOperator left right) CoreBoolType
+  | otherwise =
+      let (withLeft, savedLeft) = bindLocal state "" leftType
+          (withBoth, savedRight) = bindLocal withLeft "" rightType
+          (after, answer) = withDynamicValue types at result withBoth (readLocal at savedLeft) $ \leftValueState leftValue ->
+            withDynamicValue types at result leftValueState (readLocal at savedRight) $ \rightValueState rightValue ->
+              operation rightValueState leftValue rightValue
+          held = [CoreStatement at (CoreDeclare savedLeft left), CoreStatement at (CoreDeclare savedRight right)]
+       in case answer of
+            Nothing -> refused after
+            Just core -> built after at (CoreBlockValue (CoreBlock held (Just core))) result
+ where
+  types = contextTypes (lowerContext state)
+  leftType = coreExpressionType left
+  rightType = coreExpressionType right
+  equality = operator `elem` ["==", "!="]
+  equalityOperator = if operator == "==" then CoreEqual else CoreNotEqual
+  result = if operator `elem` ["==", "!=", "<", "<=", ">", ">="] then CoreBoolType else leftType
+  operation current a b
+    | Just (tag, kind) <- represented operator aType bType =
+        wrap current (CoreExpression at kind (CoreBinary tag a b))
+    | CoreIntegerType aKind <- aType, CoreIntegerType bKind <- bType
+    , Just (next, answer) <- mixedInteger current at operator (integerKindMeet aKind bKind) a b =
+        wrap next answer
+    | equality = (current, Just (CoreExpression at CoreBoolType (CoreBoolLiteral (operator == "!="))))
+    | aType == bType, comparisonOnlyType aType =
+        (current, Just (CoreExpression at CoreNeverType (CoreOperatorFailure (unsupportedOperatorMessage operator) [a, b])))
+    | dynamicKind aType || dynamicKind bType =
+        let (after, answer) = namedFailure current at names [a, b]
+         in (after, fst <$> answer)
+    | otherwise = (current, Just (CoreExpression at CoreNeverType
+        (CoreOperatorFailure (cannotApplyBinaryMessage operator (runtimeKind aType) (runtimeKind bType)) [a, b])))
+   where
+    aType = coreExpressionType a
+    bType = coreExpressionType b
+    names [aName, bName] = cannotApplyBinaryMessage operator aName bName
+    names _ = unsupportedOperatorMessage operator
+  wrap = wrapDynamicResult types at result
+
+withDynamicValue :: LowerTypes -> Span -> CoreType -> LowerState -> CoreExpression
+  -> (LowerState -> CoreExpression -> (LowerState, Maybe CoreExpression))
+  -> (LowerState, Maybe CoreExpression)
+withDynamicValue types at result state value use
+  | not (isDynamic kind) = use state value
+  | otherwise = case dynamicPayloads types kind of
+      Nothing -> halt at "a dynamic operand without a settled payload layout" state
+      Just variants ->
+        let (after, arms) = mapAccumL arm state variants
+         in (after, CoreExpression at result . CoreMatch value <$> sequence arms)
+ where
+  kind = coreExpressionType value
+  arm current (name, member) =
+    let (withPayload, local) = bindLocal current "" member
+        (after, body) = use withPayload (readLocal at local)
+     in (after, CoreArm at (CoreVariantPattern name [CoreBindPattern local]) Nothing <$> body)
+
+wrapDynamicResult :: LowerTypes -> Span -> CoreType -> LowerState -> CoreExpression -> (LowerState, Maybe CoreExpression)
+wrapDynamicResult types at result state answer
+  | coreExpressionType widened == result = (state, Just widened)
+  | otherwise = halt at "a dynamic operator result without a payload variant" state
+ where
+  widened = widen types result answer
+
+readLocal :: Span -> CoreLocal -> CoreExpression
+readLocal at local = CoreExpression at (coreLocalType local) (CoreReadLocal local)
+
+mixedInteger :: LowerState -> Span -> Text -> IntegerKind -> CoreExpression -> CoreExpression
+  -> Maybe (LowerState, CoreExpression)
+mixedInteger state at operator kind left right = do
+  (tag, answer) <- represented operator big big
+  pure (select tag answer)
+ where
+  select tag answer
+    | answer == CoreBoolType || kind == BigIntKind = (state, exact answer tag)
+    | Just checked <- lookup tag checkedTags = withExact state tag (checkedResult checked)
+    | Just arithmetic <- lookup tag saturatingTags
+    , Just (low, high) <- integerKindBounds kind = withExact state arithmetic (saturated low high)
+    | tag == CoreRemainder = (state, convert kind (exact big tag))
+    | otherwise = (state, expression target (CoreBinary tag (convert kind left) (convert kind right)))
+  target = CoreIntegerType kind
+  big = CoreIntegerType BigIntKind
+  expression = CoreExpression at
+  exact result tag = expression result (CoreBinary tag (convert BigIntKind left) (convert BigIntKind right))
+  convert to value = expression (CoreIntegerType to) (CoreIntegerConvert to value)
+  checkedTags = [(CoreAdd, CheckedAdd), (CoreSubtract, CheckedSubtract), (CoreMultiply, CheckedMultiply), (CoreDivide, CheckedDivide)]
+  saturatingTags = [(CoreSaturateAdd, CoreAdd), (CoreSaturateSubtract, CoreSubtract), (CoreSaturateMultiply, CoreMultiply)]
+  withExact current tag finish =
+    let (after, local) = bindLocal current "" big
+        held = CoreStatement at (CoreDeclare local (exact big tag))
+     in (after, expression target (CoreBlockValue (CoreBlock [held] (Just (finish (readLocal at local))))))
+  checkedResult checked held =
+    let fits = expression CoreBoolType (CoreIntegerFits kind held)
+        message = expression CoreTextType (CoreTextLiteral (overflowMessage kind checked))
+        stopped = expression CoreNeverType (CoreFailText overflowCode (Just overflowHelp) message Nothing)
+     in choose fits (convert kind held) stopped
+  saturated low high held =
+    choose (bound CoreLess low) (limited low) (choose (bound CoreGreater high) (limited high) (convert kind held))
+   where
+    bound tag value = expression CoreBoolType (CoreBinary tag held (expression big (CoreIntegerLiteral BigIntKind value)))
+    limited = expression target . CoreIntegerLiteral kind
+  choose test leftValue rightValue = expression target (CoreIfValue test (CoreBlock [] (Just leftValue)) rightValue)
+
+comparisonOnlyType :: CoreType -> Bool
+comparisonOnlyType kind =
+  integerType kind || floatType kind || kind `elem` [CoreBoolType, CoreTextType, CoreCharType, CoreDecimalType]
 
 represented :: Text -> CoreType -> CoreType -> Maybe (CoreBinaryOperator, CoreType)
 represented operator left right
@@ -125,10 +277,6 @@ tupleType :: CoreType -> Bool
 tupleType (CoreTupleType _) = True
 tupleType _ = False
 
-recordType :: CoreType -> Bool
-recordType (CoreRecordType _ _) = True
-recordType _ = False
-
 settled :: LowerState -> Located Expression -> CoreExpression -> Bool
 settled state syntax core =
   typeForSpan (contextTypes (lowerContext state)) (locatedSpan syntax) == Just (coreExpressionType core)
@@ -148,6 +296,8 @@ runtimeKind (CoreStoreType _) = "store"
 runtimeKind CoreRangeType = "range"
 runtimeKind CoreBytesType = "bytes"
 runtimeKind CoreDecimalType = "decimal"
+runtimeKind (CoreHandleType _ name) = name
+runtimeKind (CoreCallbackType owner _) = owner
 runtimeKind (CoreFunctionType _ _) = "function"
 runtimeKind kind = coreTypeName kind
 

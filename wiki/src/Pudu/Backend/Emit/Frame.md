@@ -232,3 +232,12 @@ Resolved Grill Log: one layout for every backend consumer.
 ## Resolved Grill Log for Objective-C delegates
 
 Delegate definitions are emitted after the foreign wrappers and before the frame bodies that construct delegates, so each constructor is declared before its first use.
+
+## Callback entry results (#956)
+
+Run the entry once and report its callback token using [[Backend Emit Cell]]'s
+shared token text renderer.
+
+### Resolved Grill Log
+
+Direct reporting and rendering from a cell share one canonical owner spelling.

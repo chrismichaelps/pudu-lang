@@ -5,6 +5,18 @@ tags: [changelog]
 
 # Changelog
 
+## 2026-11-22 — Native operator and array parity (#956)
+
+- Checked unary operations preserve runtime refusals for additional represented
+  values. Typed array joins preserve empty results and invalid-member
+  diagnostics in direct and bound calls. Dynamic operators select their held
+  carriers and preserve display, show, and the resulting implementation, and callback tokens render and compare through their
+  ordinary cell and entry paths. Stored foreign functions share the direct
+  crossing, callback constructors report their declaration, and dynamic
+  numeric keys compare the values they hold. The differential cases cover
+  nested comparability and slice bounds.
+  [[Native Operator Parity Delivery]] · [[Native Emission Coverage]]
+
 ## 2026-11-19 — Native images and application assets (#973)
 
 - Native images and application assets (#973): IMAGE kind 22 and SOURCE 45 on the iOS and Android hosts, IMAGED 24 event, E6013 for refused assets, and the `assets` directory packaged under relative names.

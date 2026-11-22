@@ -253,6 +253,67 @@ abstractionSuccessPrograms =
       , "  0"
       , "}" ]
     , "none 0 0\n" )
+  , ("dynamic unary results keep their implementation and admit concrete comparisons", program
+      (operatorTypes <>
+        [ "fn operand() -> dynamic Operated { print(\"operand\")\n platform(7) }"
+        , "fn main() -> Int {"
+        , "  let value = operand()"
+        , "  let negative = -value"
+        , "  let inverted = ~value"
+        , "  print(display(negative.number()) + \" \" + display(inverted.number()))"
+        , "  let expected: Int = -7"
+        , "  print(show((negative == expected, inverted != expected, value == \"7\")))"
+        , "  0", "}" ])
+    , "operand\n-7 -8\n(true, true, false)\n")
+  , ("dynamic binary operations use the held numeric and text carriers", program
+      (operatorTypes <>
+        [ "fn left() -> dynamic Operated { print(\"left\")\n platform(7) }"
+        , "fn right() -> dynamic Operated { print(\"right\")\n 7i8 }"
+        , "fn total() -> dynamic Operated { left() + right() }"
+        , "fn main() -> Int {"
+        , "  let x: dynamic Operated = 125i8"
+        , "  let y: dynamic Operated = platform(10)"
+        , "  let label: dynamic Operated = \"pu\""
+        , "  let suffix: dynamic Operated = \"du\""
+        , "  print(show(total()))"
+        , "  print(show((x &+ y, x +| y, x -| y, x % y)))"
+        , "  print(show((left() == right(), x > y, y < x, x >> 1)))"
+        , "  print(display(label + suffix))"
+        , "  0", "}" ])
+    , "left\nright\n14\n(-121, 127, 115, 5)\nleft\nright\n(true, true, true, 62)\npudu\n")
+  , ("dynamic display and show preserve raw and quoted payload text", program
+      [ "trait Rendered { fn ignored(self: &Self) -> Int }"
+      , "impl Rendered for Str { fn ignored(self: &Self) -> Int { 0 } }"
+      , "impl Rendered for Char { fn ignored(self: &Self) -> Int { 0 } }"
+      , "fn main() -> Int {"
+      , "  let word: dynamic Rendered = \"é\""
+      , "  let letter: dynamic Rendered = 'λ'"
+      , "  print(display(word) + display(letter))"
+      , "  print(show(word) + show(letter))"
+      , "  0", "}" ]
+    , "éλ\n\"é\"'λ'\n")
+  , ("dynamic aggregate ordering and set membership compare the held numbers", program
+      [ "trait Ranked { fn rank(self: &Self) -> Int }"
+      , "impl Ranked for Int { fn rank(self: &Self) -> Int { 0 } }"
+      , "impl Ranked for Int8 { fn rank(self: &Self) -> Int { 1 } }"
+      , "impl Ranked for Float64 { fn rank(self: &Self) -> Int { 2 } }"
+      , "impl Ranked for BigInt { fn rank(self: &Self) -> Int { 3 } }"
+      , "fn ordinary() -> Int { 6 }"
+      , "fn enormous() -> BigInt { 18446744073709551616 }"
+      , "fn main() -> Int {"
+      , "  let first: dynamic Ranked = ordinary()"
+      , "  let second: dynamic Ranked = 1i8"
+      , "  let fraction: dynamic Ranked = 1.5f64"
+      , "  let duplicate: dynamic Ranked = 6i8"
+      , "  let huge: dynamic Ranked = enormous()"
+      , "  print(display((first, 0) > (second, 0)))"
+      , "  print(display((fraction, 0) > (second, 0)))"
+      , "  print(display((huge, 0) > (first, 0)))"
+      , "  let values = setOf([first, second, fraction, duplicate])"
+      , "  print(show(values))"
+      , "  print(display(duplicate in values))"
+      , "  0", "}" ]
+    , "true\ntrue\ntrue\n#{1, 1.5, 6}\ntrue\n")
   ]
 
 abstractionRefusalPrograms :: [(String, Text)]
@@ -276,6 +337,60 @@ abstractionRefusalPrograms =
       , "  0"
       , "}"
       ] )
+  , ("dynamic unary failure names its held text after operand effects", program
+      (operatorTypes <>
+        [ "fn operand() -> dynamic Operated { print(\"operand\")\n \"word\" }"
+        , "fn main() -> Int { let invalid = -operand()\n print(show(invalid))\n 0 }" ]))
+  , ("dynamic unary failure names its held sum variant", program
+      (operatorTypes <>
+        [ "fn main() -> Int {"
+        , "  let value: dynamic Operated = Witness(1)"
+        , "  let invalid = ~value"
+        , "  print(show(invalid))"
+        , "  0", "}" ]))
+  , ("dynamic integer negation retains the overflow diagnostic", program
+      (operatorTypes <>
+        [ "fn minimum() -> Int { -9223372036854775808 }"
+        , "fn main() -> Int {"
+        , "  let value: dynamic Operated = minimum()"
+        , "  let invalid = -value"
+        , "  print(show(invalid))"
+        , "  0", "}" ]))
+  , ("mixed dynamic checked arithmetic names the resulting integer kind", program
+      (operatorTypes <>
+        [ "fn main() -> Int {"
+        , "  let wide: dynamic Operated = platform(1)"
+        , "  let narrow: dynamic Operated = 127i8"
+        , "  let invalid = wide + narrow"
+        , "  print(show(invalid))"
+        , "  0", "}" ]))
+  , ("mixed dynamic division by zero keeps the division site", program
+      (operatorTypes <>
+        [ "fn main() -> Int {"
+        , "  let numerator: dynamic Operated = 5i8"
+        , "  let denominator: dynamic Operated = platform(0)"
+        , "  let invalid = numerator / denominator"
+        , "  print(show(invalid))"
+        , "  0", "}" ]))
+  , ("dynamic binary failure names the actual left and right kinds", program
+      (operatorTypes <>
+        [ "fn main() -> Int {"
+        , "  let lhs: dynamic Operated = \"value\""
+        , "  let rhs: dynamic Operated = Witness(1)"
+        , "  let invalid = lhs - rhs"
+        , "  print(show(invalid))"
+        , "  0", "}" ]))
+  ]
+
+operatorTypes :: [Text]
+operatorTypes =
+  [ "trait Operated { fn number(self: &Self) -> Int }"
+  , "type Marker = Witness(Int) | Empty"
+  , "fn platform(value: Int) -> Int { value }"
+  , "impl Operated for Int { fn number(self: &Self) -> Int { *self } }"
+  , "impl Operated for Int8 { fn number(self: &Self) -> Int { 8 } }"
+  , "impl Operated for Str { fn number(self: &Self) -> Int { self.length() } }"
+  , "impl Operated for Marker { fn number(self: &Self) -> Int { 0 } }"
   ]
 
 program :: [Text] -> Text

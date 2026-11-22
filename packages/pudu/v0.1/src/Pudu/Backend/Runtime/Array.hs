@@ -78,9 +78,13 @@ arrayRuntimeParts =
       , "  unsigned char *bytes;"
       , "  pudu_text joined;"
       , "  for (size_t i = 0; i < items->length; ++i) {"
-      , "    size_t extra = items->cells[i].text.length + (i == 0 ? 0 : separator.length);"
-      , "    if (length > SIZE_MAX - extra) pudu_memory_failure();"
-      , "    length += extra;"
+      , "    size_t member = items->cells[i].text.length;"
+      , "    if (i != 0) {"
+      , "      if (separator.length > SIZE_MAX - length) pudu_memory_failure();"
+      , "      length += separator.length;"
+      , "    }"
+      , "    if (member > SIZE_MAX - length) pudu_memory_failure();"
+      , "    length += member;"
       , "  }"
       , "  joined = pudu_text_allocate(length, &bytes);"
       , "  for (size_t i = 0; i < items->length; ++i) {"
@@ -89,6 +93,12 @@ arrayRuntimeParts =
       , "    bytes += items->cells[i].text.length;"
       , "  }"
       , "  return joined;"
+      , "}"
+      ])
+  , ("array_join_nontext",
+      [ "static pudu_text pudu_array_join_nontext(pudu_box *box, const pudu_site *site) {"
+      , "  if (pudu_array_length(box) != 0) pudu_fail(site);"
+      , "  return pudu_text_literal(\"\", 0);"
       , "}"
       ])
   ]
@@ -101,4 +111,5 @@ arrayRuntimeDependencies name = maybe [] id (lookup name
   , ("array_clamp", ["array", "magnitude"])
   , ("array_size", ["array", "make"])
   , ("int_order", ["magnitude"])
-  , ("array_join", ["array", "text_allocate"]) ])
+  , ("array_join", ["array", "text_allocate"])
+  , ("array_join_nontext", ["array", "fail", "text_literal"]) ])

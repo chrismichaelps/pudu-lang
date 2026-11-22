@@ -70,6 +70,7 @@ lentTarget other = other
 {-| The positions of a function type's `&mut` inputs. -}
 loanedInputs :: Type -> [Int]
 loanedInputs value = case value of
+  RestrictedType _ inner -> loanedInputs inner
   FunctionTypeRequiring _ inputs _ _ -> [index | (index, ReferenceTypeValue True _) <- zip [0 ..] inputs]
   _ -> []
 

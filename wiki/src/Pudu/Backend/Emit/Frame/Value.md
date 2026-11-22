@@ -205,3 +205,32 @@ Emit KeyedPut as the `put` helper, KeyedMixHash as `pudu_mix_hash`, and KeyedHas
 the bytes live in a static table and are wrapped without copying, as text
 literals already are. Resolved Grill Log: static storage has no owner to
 release, so dropping the Bytes value frees only its box.
+
+## Join element carriers (#956)
+
+A Str array uses the text join helper. Other array carriers use a separate
+helper that only reads the length and receives an E7001 site. The frame's
+existing caller-blame rule applies when the method was taken as a value.
+
+### Resolved Grill Log
+
+never inspect a non-text cell as text. The empty answer
+does not need a text member and is valid for every element type.
+
+## Callback token operations (#956)
+
+Render callback cells through [[Backend Emit Cell]]. Same-declaration equality
+uses the stored registration identity.
+
+### Resolved Grill Log
+
+A callback token needs no aggregate helper for text or equality.
+
+## Dynamic display (#956)
+
+A display operation on a dynamic cell selects its payload's display helper.
+Show uses the payload's show helper.
+
+### Resolved Grill Log
+
+Widening preserves whether the source operation asks for quoted text.

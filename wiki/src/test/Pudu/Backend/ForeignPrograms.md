@@ -73,3 +73,23 @@ Exercise Foundation through its real framework. An alloc/init pair transfers its
 ## Resolved Grill Log for Objective-C delegates
 
 The NSNotificationCenter delegate conformance case runs in both the interpreter and generated C. Both paths must deliver the same notification to the same member.
+
+## Callback values and entry results (#956)
+
+Compare a returned token, direct and nested token rendering, equality of
+copied and separately registered tokens, and the token's runtime kind in an
+operator refusal.
+
+### Resolved Grill Log
+
+Each use follows normal callback registration.
+
+## First-class foreign crossings (#956)
+
+Exercise stored, passed and qualified foreign functions, failure provenance
+through a stored function, and the rendering and identity of a callback
+constructor.
+
+### Resolved Grill Log
+
+Use the same checked signatures and crossing fixtures as direct foreign calls.

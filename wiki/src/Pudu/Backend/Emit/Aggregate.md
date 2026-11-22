@@ -158,3 +158,26 @@ would carry the same trap).
 ## Foreign handles (#853)
 
 Handle types register the lifetime, rendering and comparison helpers from [[Backend Emit Foreign Handle]].
+
+## Dynamic display (#956)
+
+The dynamic display helper selects the held payload and uses its display
+renderer. The show helper uses the held payload's quoted rendering.
+
+### Resolved Grill Log
+
+Text and characters keep their display behavior after widening. Aggregate
+members and entry results keep the payload's show behavior.
+
+## Foreign callable identity and dynamic integer order (#956)
+
+Foreign function and callback-registration closures render by crossing
+identity. Their runtime kind and comparability follow the recorded value
+class. Dynamic variants holding integers compare exact magnitudes across
+widths, including in tuples and ordered collections.
+
+### Resolved Grill Log
+
+A numeric payload pair takes its shared value order before nominal tag
+ordering. Converting a mixed pair for comparison does not narrow either
+operand and releases any temporary carrier.

@@ -265,3 +265,12 @@ a record or sum key beside its prefix arguments, never a fresh type.
 ## Foreign handles (#853)
 
 Known foreign nominal identities form as CoreHandleType, including values received from imported bindings.
+
+## Restricted callable loans (#956)
+
+Read mutable input positions through a checked callable's capability wrapper.
+
+### Resolved Grill Log
+
+Capability admission happens in checking. The native callable still needs
+its loan positions for copy-in and writeback.

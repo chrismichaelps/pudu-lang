@@ -10,7 +10,7 @@ import Data.Text (Text)
 import Pudu.Compiler.Lower.Control (expressionIsPrintValued, popLoop, pushLoop)
 import Pudu.Compiler.Lower.State (LowerContext (..), LowerState (..), bindLocal, halt, intType, refused)
 import Pudu.Compiler.Lower.Sort (sortStatements)
-import Pudu.Compiler.Lower.Types (typeFactAt, typeForSpan)
+import Pudu.Compiler.Lower.Types (LowerTypes, isDynamic, sumVariants, typeFactAt, typeForSpan)
 import Pudu.Core
 import Pudu.Compiler.Lower.Dynamic (widen)
 import Pudu.Frontend.Syntax (Expression (..), Located (..))
@@ -77,9 +77,12 @@ lowerArrayIndex lower state _ receiver key = case typeForSpan (contextTypes (low
 {-| A built-in method when the receiver is an array. -}
 lowerArrayMethod :: LowerExpression -> LowerState -> Span -> Located Expression -> Text -> [Located Expression] -> Maybe Lowered
 lowerArrayMethod lower state at receiver member arguments = case receiverType of
-  Just kind@(CoreArrayType element) -> case lookup member (direct kind element) of
-    Just (name, parameters, result) -> Just (runtime name parameters result)
-    Nothing -> Just (arrayMethodWith lower state at receiver member arguments kind element id)
+  Just kind@(CoreArrayType element)
+    | member == "join", Just _ <- dynamicTextVariant types element ->
+        Just (arrayMethodWith lower state at receiver member arguments kind element id)
+    | otherwise -> case lookup member (direct kind element) of
+        Just (name, parameters, result) -> Just (runtime name parameters result)
+        Nothing -> Just (arrayMethodWith lower state at receiver member arguments kind element id)
   _ -> Nothing
  where
   types = contextTypes (lowerContext state)
@@ -104,8 +107,14 @@ lowerArrayMethod lower state at receiver member arguments = case receiverType of
     , ("remove", (ArrayRemoveAt, [intType], kind))
     , ("slice", (ArraySliceOf, [intType, intType], kind))
     , ("concat", (ArrayConcatWith, [kind], kind))
-    , ("reverse", (ArrayReversed, [], kind)) ]
-    <> [("join", (ArrayJoinWith, [CoreTextType], CoreTextType)) | element `elem` [CoreTextType, CoreUnitType]]
+    , ("reverse", (ArrayReversed, [], kind))
+    , ("join", (ArrayJoinWith, [CoreTextType], CoreTextType)) ]
+
+dynamicTextVariant :: LowerTypes -> CoreType -> Maybe CoreVariant
+dynamicTextVariant types kind
+  | isDynamic kind, Just variants <- sumVariants types kind
+  , variant : _ <- filter ((== [CoreTextType]) . map snd . coreVariantFields) variants = Just variant
+  | otherwise = Nothing
 
 {-| `map`, `filter` and `reduce` over something that is not itself an array:
     `toItems` converts the retained receiver after all supplied operands run. -}
@@ -133,6 +142,7 @@ arrayMethodWith lower state at receiver member arguments kind element toItems = 
   "filter" -> looped Nothing
   "reduce" -> reduced
   "sortBy" -> sorted
+  "join" | Just variant <- dynamicTextVariant types element -> joined variant
   _ -> halt at ("the array method '" <> member <> "'") state
  where
   types = contextTypes (lowerContext state)
@@ -193,6 +203,31 @@ arrayMethodWith lower state at receiver member arguments kind element toItems = 
               prefix = prefixArray <> [statement (CoreDeclare functionLocal function)] <> convertArray
            in (final, Just (expression kind (CoreBlockValue (CoreBlock (prefix <> statements) (Just (reading result)))), kind))
       | otherwise -> halt at ("a call to " <> member <> " with these arguments") after
+
+  joined variant = case operands state of
+    (after, Nothing) -> refused after
+    (after, Just (cores, core))
+      | any stops (core : cores) -> (after, Just (stopped at (core : cores), CoreNeverType))
+      | [separator] <- cores, coreExpressionType separator == CoreTextType ->
+          let textArray = CoreArrayType CoreTextType
+              (withArray, input, prefix, converted) = holdArray after core
+              (withSeparator, between) = hidden withArray CoreTextType
+              (withResult, texts) = hidden withSeparator textArray
+              (withPayload, payload) = hidden withResult CoreTextType
+              (withText, text) = hidden withPayload CoreTextType
+              failed = expression CoreNeverType (CoreFailText "E7001" Nothing
+                (expression CoreTextType (CoreTextLiteral "join expects an array of text")) Nothing)
+              (final, loop) = walk withText input element $ \item ->
+                [ statement (CoreDeclare text (expression CoreTextType (CoreMatch (reading item)
+                    [ CoreArm at (CoreVariantPattern (coreVariantName variant) [CoreBindPattern payload]) Nothing (reading payload)
+                    , CoreArm at CoreWildcardPattern Nothing failed ])))
+                , statement (CoreAssign texts (expression textArray (CoreArrayMethod ArrayPushValue
+                    (expression textArray (CoreTakeLocal texts)) [reading text]))) ]
+              statements = prefix <> [statement (CoreDeclare between separator)] <> converted
+                <> [statement (CoreDeclare texts (expression textArray (CoreArray [])))] <> loop
+              result = expression CoreTextType (CoreArrayMethod ArrayJoinWith (reading texts) [reading between])
+           in (final, Just (expression CoreTextType (CoreBlockValue (CoreBlock statements (Just result))), CoreTextType))
+      | otherwise -> halt at "a call to join with these arguments" after
 
   holdArray current core =
     let (held, original) = hidden current (coreExpressionType core)

@@ -2,7 +2,7 @@
     or imports: its arguments in order, then the call through the declared
     library and symbol. -}
 module Pudu.Compiler.Lower.Foreign
-  ( lowerForeignCall, lowerQualifiedForeignCall, callbackSignatureOf
+  ( lowerForeignCall, lowerQualifiedForeignCall, lowerForeignValue, callbackSignatureOf
   , lowerCallbackValue, lowerCallbackRegistration, lowerCallbackUnregister, lowerCallbackUnregisterValue
   ) where
 
@@ -10,6 +10,7 @@ import qualified Data.Map.Strict as Map
 import qualified Data.Set as Set
 import Data.List (elemIndex)
 import Data.Text (Text)
+import qualified Data.Text as Text
 import GHC.Float (castDoubleToWord64)
 import qualified Pudu.Foreign.Callback as Callback
 import Pudu.Foreign.Crossing (Crossing (..), isAbsentLoanArgument)
@@ -37,6 +38,49 @@ lowerQualifiedForeignCall :: (LowerState -> Located Expression -> Lowered) -> Lo
 lowerQualifiedForeignCall lower state at qualifier name arguments =
   crossing lower state at arguments <$> lookupQualifiedForeign state qualifier name
 
+lowerForeignValue :: LowerState -> Span -> [Text] -> Maybe Lowered
+lowerForeignValue state at path = do
+  target <- case path of
+    [name] -> lookupForeign state name
+    [qualifier, name] -> lookupQualifiedForeign state qualifier name
+    _ -> Nothing
+  pure $ case typeForSpan types at of
+    Just kind@(CoreFunctionType inputs answer)
+      | null (targetNullableLoans target)
+      , let modes = foreignModes target (length inputs)
+            mutable = filter snd modes
+      , Just result <- crossingResult mutable answer
+      , Just bounds <- foreignBounds target (length inputs)
+      , foreignParametersFit target types inputs
+      , admittedResult target types result ->
+          registered kind inputs answer (foreignDeclaration target inputs result modes [] bounds) (not (null mutable))
+    _ -> halt at "a foreign callable without a represented crossing signature" state
+ where
+  context = lowerContext state
+  types = contextTypes context
+  crossingResult [] answer = Just answer
+  crossingResult _ (CoreTupleType (result : _)) = Just result
+  crossingResult _ _ = Nothing
+  registered kind inputs answer declared mutable =
+    let key = "$foreign:" <> Text.pack (show declared)
+        display = coreForeignLibrary declared <> "." <> coreForeignSymbol declared
+        parameters = [CoreLocal index "" input | (index, input) <- zip [0 ..] inputs]
+        readLocal local = CoreExpression at (coreLocalType local) (CoreReadLocal local)
+        call = CoreExpression at answer (CoreForeignCall declared (map readLocal parameters))
+        final = CoreLocal (length inputs) "" answer
+        settled = CoreStatement at (CoreEvaluate (CoreExpression at CoreUnitType CoreForeignSettle))
+        body
+          | mutable = CoreBlock [CoreStatement at (CoreDeclare final call), settled] (Just (readLocal final))
+          | otherwise = CoreBlock [] (Just call)
+        lifted = CoreFunction key [CoreParameter local at | local <- parameters] answer body
+        info = CoreClosureInfo [] display key True False Nothing
+        next
+          | Map.member key (contextClosures context) = context
+          | otherwise = context
+              { contextFunctions = lifted : contextFunctions context
+              , contextClosures = Map.insert key info (contextClosures context) }
+     in (state{lowerContext = next}, Just (CoreExpression at kind (CoreClosure key []), kind))
+
 {-| The arguments in order, then the call through the declared target. -}
 crossing :: (LowerState -> Located Expression -> Lowered) -> LowerState -> Span -> [Located Expression] -> ForeignTarget -> Lowered
 crossing lower state at arguments target
@@ -45,7 +89,7 @@ crossing lower state at arguments target
         | Just result <- typeForSpan typesAtCall at
         , foreignParametersFit target typesAtCall parameters
         , admittedResult target typesAtCall result ->
-            lowerLoanedOperands lowerOperand state at (ForeignCrossing (declaration parameters result resolvedBounds))
+            lowerLoanedOperands lowerOperand state at (ForeignCrossing (foreignDeclaration target parameters result modes absent resolvedBounds))
               (valueSignature at parameters result mutable) False
               [(index, Argument, argument) | (index, argument) <- zip [0 ..] arguments]
       _ -> halt at "a foreign call with unrepresented loan operands" state
@@ -57,7 +101,7 @@ crossing lower state at arguments target
           Just result
             | foreignParametersFit target types parameters
             , admittedResult target types result ->
-                (after, Just (CoreExpression at result (CoreForeignCall (declaration parameters result resolvedBounds) cores), result))
+                (after, Just (CoreExpression at result (CoreForeignCall (foreignDeclaration target parameters result modes absent resolvedBounds) cores), result))
           _ -> halt at "a foreign call crossing output slots" after
       where
         parameters = map coreExpressionType cores
@@ -65,15 +109,8 @@ crossing lower state at arguments target
   | otherwise = halt at "a foreign length whose input positions do not match" state
  where
   positions = foreignInputPositions target (length arguments)
-  byNative = Map.fromList (zip positions [0 ..])
-  bounds = traverse translate (targetBounds target)
-  translate bound =
-    ForeignBound <$> Map.lookup (boundLength bound) byNative <*> pure (boundUnit bound)
-      <*> traverse (`Map.lookup` byNative) (boundTargets bound)
-  modes =
-    [ (index, exclusive)
-    | (index, native) <- zip [0 ..] positions
-    , Just exclusive <- [lookup native (targetLoans target)] ]
+  bounds = foreignBounds target (length arguments)
+  modes = foreignModes target (length arguments)
   absent = [index | (index, (native, argument)) <- zip [0 ..] (zip positions arguments)
                   , native `elem` targetNullableLoans target, isAbsentLoanArgument argument]
   absentSpans = [locatedSpan argument | (index, argument) <- zip [0 ..] arguments, index `elem` absent]
@@ -89,10 +126,27 @@ crossing lower state at arguments target
   argumentType (index, Located argumentAt _)
     | index `elem` mutable || index `elem` absent = referenceTarget typesAtCall argumentAt
     | otherwise = typeForSpan typesAtCall argumentAt
-  declaration parameters result resolvedBounds = CoreForeign
+
+foreignDeclaration :: ForeignTarget -> [CoreType] -> CoreType -> [(Int, Bool)] -> [Int] -> [ForeignBound] -> CoreForeign
+foreignDeclaration target parameters result modes absent bounds =
+  CoreForeign
     (targetLibrary target) (targetVersion target) (targetSymbol target) (targetObjectiveC target) parameters result
     (targetClaim target) (targetReleases target) (targetSlotPositions target) (targetSlotClaims target)
-    (targetCallbackSlots target) (targetCanReenter target || targetObjectiveC target /= Nothing) modes absent resolvedBounds (targetReturnedRun target)
+    (targetCallbackSlots target) (targetCanReenter target || targetObjectiveC target /= Nothing) modes absent bounds (targetReturnedRun target)
+
+foreignModes :: ForeignTarget -> Int -> [(Int, Bool)]
+foreignModes target arity =
+  [ (index, exclusive)
+  | (index, native) <- zip [0 ..] (foreignInputPositions target arity)
+  , Just exclusive <- [lookup native (targetLoans target)] ]
+
+foreignBounds :: ForeignTarget -> Int -> Maybe [ForeignBound]
+foreignBounds target arity = traverse translate (targetBounds target)
+ where
+  byNative = Map.fromList (zip (foreignInputPositions target arity) [0 ..])
+  translate bound =
+    ForeignBound <$> Map.lookup (boundLength bound) byNative <*> pure (boundUnit bound)
+      <*> traverse (`Map.lookup` byNative) (boundTargets bound)
 
 foreignParametersFit :: ForeignTarget -> LowerTypes -> [CoreType] -> Bool
 foreignParametersFit target types parameters =
@@ -208,8 +262,8 @@ lowerCallbackValue state at path = do
       operand = CoreExpression at input (CoreReadLocal parameter)
       body = CoreExpression at result (CoreCallback (CoreCallbackRegister signature) operand)
       function = CoreFunction key [CoreParameter parameter at] result (CoreBlock [] (Just body))
-      name = displayName (coreCallbackOwner signature)
-      info = CoreClosureInfo [] name key False False Nothing
+      name = coreCallbackOwner signature
+      info = CoreClosureInfo [] name key True False Nothing
       next | Map.member key (contextClosures context) = context
            | otherwise = context
               { contextFunctions = function : contextFunctions context

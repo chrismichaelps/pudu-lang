@@ -35,3 +35,15 @@ Resolved Grill Log: records and sums inside tuples order as compareValues does (
 ## Referenced by
 
 [[Backend Native Tests]] · [[Backend Text Leak Tests]] · [[src/_MOC]]
+
+## Nested comparability (#956)
+
+Exercise the tuple ordering guard with a callable inside an Option in an
+array. Empty arrays and the empty Option variant remain orderable. A present
+callable refuses after both operands finish, including when an earlier tuple
+member would otherwise decide the comparison.
+
+### Resolved Grill Log
+
+comparability is a property of the held values and is
+checked before lexicographic ordering. Equality remains available.
