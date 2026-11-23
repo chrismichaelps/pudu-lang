@@ -1,0 +1,63 @@
+module Services
+
+import Std.Mobile.Host as Host
+import Std.Mobile.System as System
+import Std.Mobile.View as View
+
+/// The tags each system request's answer carries.
+const PASTE: UInt32 = 1u32
+const OPEN: UInt32 = 2u32
+const SHARE: UInt32 = 3u32
+
+/// What the system answered: the pasted text, whether the URL opened, and
+/// whether the share sheet ended in a share; none until each answers.
+type Model = { pasted: Str, opened: Option[Bool], shared: Option[Bool] }
+
+fn answer(found: Option[Bool]) -> Str {
+  match found {
+    case Some(done) => "{done}"
+    case None => "waiting"
+  }
+}
+
+fn view(model: &Model) -> View.View {
+  View.Column([
+      View.Label("Pasted: {model.pasted}"),
+      View.Label("Opened: {answer(model.opened)}"),
+      View.Label("Shared: {answer(model.shared)}")
+    ])
+}
+
+fn update(model: &Model, event: &View.Event) -> Model {
+  match *event {
+    case View.Pasted(tag, text) if tag == PASTE => Model {..*model, pasted: text }
+    case View.Opened(tag, done) if tag == OPEN => Model {..*model, opened: Some(done) }
+    case View.Shared(tag, done) if tag == SHARE => Model {..*model, shared: Some(done) }
+    case _ => *model
+  }
+}
+
+/// On start it copies text and pastes it back, opens a URL no app handles,
+/// shows the share sheet and asks for light status bar text.
+fn main() -> Int {
+  var model = Model{pasted: "", opened: None, shared: None}
+  let (first, built) = View.mount(&view(&model))
+  var mounted = first
+  Host.apply(built)
+  Host.apply(System.copy("from Pudu"))
+  Host.apply(System.paste(PASTE))
+  Host.apply(System.open(OPEN, "pudu-unhandled://nothing"))
+  Host.apply(System.share(SHARE, "shared from Pudu"))
+  Host.apply(System.statusBar(System.LightText, false))
+  while true {
+    let event = Host.wait()
+    if event == View.Stopped {
+      return 0
+    }
+    model = update(&model, &event)
+    let (next, changes) = View.update(&mounted, &view(&model))
+    Host.apply(changes)
+    mounted = next
+  }
+  0
+}

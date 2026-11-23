@@ -315,6 +315,11 @@ public final class PuduBridge {
   static void cancelFetch(int generation) { PuduFetch.cancel(generation); }
   static void wake(long delay) { PuduFetch.wake(delay); }
   static android.widget.ImageView image() { return PuduImage.make(); }
+  static void open(int tag, String url) { PuduSystem.open(tag, url); }
+  static void share(int tag, String text) { PuduSystem.share(tag, text); }
+  static void copy(String text) { PuduSystem.copy(text); }
+  static void paste(int tag) { PuduSystem.paste(tag); }
+  static void status(int style, boolean hidden) { PuduSystem.status(style, hidden); }
   static void source(android.widget.ImageView view, int origin, int scaling, String location) {
     PuduImage.source(view, origin, scaling, location);
   }

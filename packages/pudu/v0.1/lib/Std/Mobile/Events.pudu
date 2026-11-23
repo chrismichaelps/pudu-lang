@@ -26,6 +26,9 @@ const VALUED: UInt64 = 21u64
 const COLORED: UInt64 = 22u64
 const DATED: UInt64 = 23u64
 const IMAGED: UInt64 = 24u64
+const OPENED: UInt64 = 25u64
+const SHARED: UInt64 = 26u64
+const PASTED: UInt64 = 27u64
 
 /// Each event kind's constructor, given the tag and the text the host holds.
 const EVENTS: Map[UInt64, fn(UInt32, Str) -> View.Event] = mapOf([
@@ -36,7 +39,8 @@ const EVENTS: Map[UInt64, fn(UInt32, Str) -> View.Event] = mapOf([
     (DISMISSED, |sheet: UInt32, _text: Str| View.Dismissed(sheet)),
     (REFRESHED, |tag: UInt32, _text: Str| View.Refreshed(tag)),
     (WOKE, |_tag: UInt32, _text: Str| View.Woke),
-    (MEMORY, |_tag: UInt32, _text: Str| View.MemoryLow)
+    (MEMORY, |_tag: UInt32, _text: Str| View.MemoryLow),
+    (PASTED, |tag: UInt32, text: Str| View.Pasted(tag, text))
   ])
 
 /// Each detailed event kind's constructor, given the tag and the detail word.
@@ -49,7 +53,9 @@ const DETAILED: Map[UInt64, fn(UInt32, UInt32) -> Option[View.Event]] = mapOf([
     (POPPED, |top: UInt32, destination: UInt32| Some(View.Popped(top, destination))),
     (VALUED, |reported: UInt32, bits: UInt32| Some(View.Valued(reported, signed(bits)))),
     (COLORED, |reported: UInt32, rgba: UInt32| Some(View.Colored(reported, rgba))),
-    (IMAGED, |reported: UInt32, loaded: UInt32| imaged(reported, loaded))
+    (IMAGED, |reported: UInt32, loaded: UInt32| flagged(loaded, |done: Bool| View.Imaged(reported, done))),
+    (OPENED, |reported: UInt32, opened: UInt32| flagged(opened, |done: Bool| View.Opened(reported, done))),
+    (SHARED, |reported: UInt32, shared: UInt32| flagged(shared, |done: Bool| View.Shared(reported, done)))
   ])
 
 /// Each measured event kind's constructor, given the tag, the detail word and
@@ -62,7 +68,7 @@ const MEASURED: Map[UInt64, fn(UInt32, UInt32, Array[Int32]) -> Option[View.Even
   ])
 
 /// Whether a host event's kind carries text the host holds for it.
-export fn carriesText(raw: UInt64) -> Bool { raw >> 32 == CHANGED || raw >> 32 == FETCHED }
+export fn carriesText(raw: UInt64) -> Bool { raw >> 32 == CHANGED || raw >> 32 == FETCHED || raw >> 32 == PASTED }
 
 /// Whether a host event's kind carries a detail word the host holds for it.
 export fn carriesDetail(raw: UInt64) -> Bool {
@@ -152,9 +158,9 @@ fn fetched(generation: UInt32, status: UInt32, body: Str, values: &Array[Int32])
   View.Fetched(generation, code, body, wait)
 }
 
-// Whether an image's source loaded: 1 or 0; any other word is never written.
-fn imaged(reported: UInt32, loaded: UInt32) -> Option[View.Event] {
-  if loaded > 1u32 { None } else { Some(View.Imaged(reported, loaded == 1u32)) }
+// An event whose detail word is 1 or 0; any other word is never written.
+fn flagged(word: UInt32, made: fn(Bool) -> View.Event) -> Option[View.Event] {
+  if word > 1u32 { None } else { Some(made(word == 1u32)) }
 }
 
 // A chosen moment from its two words, the high signed and the low unsigned;

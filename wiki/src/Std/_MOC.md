@@ -260,6 +260,7 @@ STARTTLS use [[Std Tls]]. [[Std Compress Gzip]] delegates to [[Eval Compress]] a
 - [[Std Mobile Scene]] — scene size, size classes and lifecycle phases decoded from host events (#930).
 - [[Std Mobile Access]] — accessibility traits as a mask, with hints and values (#930).
 - [[Std Mobile Feedback]] — alerts, action sheets and haptics as commands with a reported choice (#930).
+- [[Std Mobile System]] — open, share, clipboard and status bar as commands with reported answers (#974).
 - [[Std Mobile Events]] — host event decoding behind the mobile wait.
 - [[Std Mobile Navigation]] — native page stack and page sheet model.
 - [[Std Mobile Resource]] — pure table of keyed network requests, retries and the commands for the host.

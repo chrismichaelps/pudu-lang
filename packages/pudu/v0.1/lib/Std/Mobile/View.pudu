@@ -57,8 +57,9 @@ export type Window = { tag: UInt32, total: UInt32, first: UInt32, columns: UInt3
 /// status, body and Retry-After delay), a requested wake time arrived, the
 /// platform ran short of memory, a value control's value, index or page was
 /// set by the person, a color well's color or a date picker's moment was
-/// chosen, an image's source loaded or failed, or the host asked the program
-/// to stop. Std.Mobile.Events decodes
+/// chosen, an image's source loaded or failed, a URL was opened or not, the
+/// share sheet closed, the clipboard's text arrived, or the host asked the
+/// program to stop. Std.Mobile.Events decodes
 /// them from the host's words.
 export type Event
   = Tapped(UInt32)
@@ -81,6 +82,9 @@ export type Event
   | Colored(UInt32, UInt32)
   | Dated(UInt32, Int64)
   | Imaged(UInt32, Bool)
+  | Opened(UInt32, Bool)
+  | Shared(UInt32, Bool)
+  | Pasted(UInt32, Str)
   | Stopped
 
 /// A node the platform shows: its id, the view it shows, and the nodes of

@@ -1,0 +1,36 @@
+module Std.Mobile.System
+
+import Std.Mobile.Stream as Stream
+
+/// How the status bar draws: as the platform chooses for the current
+/// appearance, with light text for dark content, or with dark text for light
+/// content.
+export type Bar = Automatic | LightText | DarkText
+
+/// A commit handing `url` to the platform. `Opened(tag, true)` arrives when an
+/// app opened it and `Opened(tag, false)` when none could.
+export fn open(tag: UInt32, url: Str) -> Bytes { bytesOf(Stream.open([], tag, url)) }
+
+/// A commit showing the platform share sheet for `text`. `Shared(tag, done)`
+/// arrives when the sheet closes, `done` when the person shared. A platform
+/// that cannot see the outcome reports true once the sheet opens.
+export fn share(tag: UInt32, text: Str) -> Bytes { bytesOf(Stream.share([], tag, text)) }
+
+/// A commit putting `text` on the clipboard.
+export fn copy(text: Str) -> Bytes { bytesOf(Stream.copy([], text)) }
+
+/// A commit asking for the clipboard's text, which arrives as
+/// `Pasted(tag, text)`; the text is empty when the clipboard holds none.
+export fn paste(tag: UInt32) -> Bytes { bytesOf(Stream.paste([], tag)) }
+
+/// A commit styling the status bar and showing or hiding it.
+export fn statusBar(style: Bar, hidden: Bool) -> Bytes { bytesOf(Stream.status([], barCode(style), hidden)) }
+
+/// The stream code of a status bar style.
+export fn barCode(style: Bar) -> UInt32 {
+  match style {
+    case Automatic => 0u32
+    case LightText => 1u32
+    case DarkText => 2u32
+  }
+}

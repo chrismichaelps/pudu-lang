@@ -32,6 +32,7 @@ static void trim()
 - The pixel size is the view's longest side in pixels rounded up to a power of two from 64. Before layout, the screen's longest side is used.
 - The cache is an `LruCache` sized at one eighth of the maximum heap, charged by each bitmap's allocation byte count.
 - `trim` empties the cache. [[PuduActivity]] calls it from `onTrimMemory` and `onLowMemory`.
+- A remote body is read at most 32 MB. A body past the cap ends the read, and the view reports 0. Connections time out after 15 seconds to connect and 30 seconds to read.
 - `land` drops an answer whose key is no longer shown. Otherwise it caches a bitmap, sets it on the view, and sends IMAGED with 1 when a bitmap was shown and 0 when none was.
 
 ## Invariants

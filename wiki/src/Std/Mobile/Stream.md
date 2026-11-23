@@ -58,7 +58,16 @@ Exports:
 
 - IMAGE (kind 22): an image node. Its CREATE is the kind word, as for the other kinds.
 - SOURCE (45): node, origin (0 an asset name, 1 a URL), scaling code (0 Fill, 1 Fit, 2 Stretch), then the location as a length-prefixed text. Exported by the `source` writer.
-- The instruction bound is now 46; codes 41 to 45 are BOUNDS, OPTIONS, COUNT, MOMENT and SOURCE.
+- The instruction bound was 46 after SOURCE; codes 41 to 45 are BOUNDS, OPTIONS, COUNT, MOMENT and SOURCE.
+
+## System requests (#974)
+
+- OPEN (46): tag, then the URL as a length-prefixed text. Writer `open(out, tag, url)`.
+- SHARE (47): tag, then the text. Writer `share(out, tag, message)`.
+- COPY (48): the text. Writer `copy(out, clipped)`.
+- PASTE (49): tag. Writer `paste(out, tag)`.
+- STATUS (50): style code (0 automatic, 1 light text, 2 dark text), then the hidden flag (0 or 1). Writer `status(out, code, hidden)`.
+- The instruction bound is now 51. Codes 46 to 50 are OPEN, SHARE, COPY, PASTE and STATUS.
 
 ## Invariants
 
