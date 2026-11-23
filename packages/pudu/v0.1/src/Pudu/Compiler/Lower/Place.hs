@@ -46,14 +46,14 @@ withMemberReceiver :: LowerExpression -> LowerState -> Span -> Located Expressio
   -> (LowerState -> CoreExpression -> Maybe HeldPlace -> Lowered) -> Lowered
 withMemberReceiver lower state at receiver select = case receive of
   (after, Nothing) -> refused after
-  (after, Just (prelude, value, place))
+  (after, Just (prelude, value, destination))
     | blockType prelude (Just value) == CoreNeverType ->
         (after, Just (wrap prelude (value, CoreNeverType)))
-    | otherwise -> fmap (fmap (wrap prelude)) (select after value place)
+    | otherwise -> fmap (fmap (wrap prelude)) (select after value destination)
  where
   receive = case holdPlace lower state (locatedSpan receiver) receiver of
-    Just (after, Just (prelude, place)) ->
-      fmap (fmap (\(value, _) -> (prelude, value, Just place))) (readHeldAtKeys after place)
+    Just (after, Just (prelude, destination)) ->
+      fmap (fmap (\(value, _) -> (prelude, value, Just destination))) (readHeldAtKeys after destination)
     _ -> fmap (fmap (\(value, _) -> ([], value, Nothing))) (lower state receiver)
   wrap [] answer = answer
   wrap prelude (answer, kind) =

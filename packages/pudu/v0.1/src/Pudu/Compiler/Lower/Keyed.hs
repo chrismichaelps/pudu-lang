@@ -13,7 +13,7 @@ import Pudu.Compiler.Lower.Arguments
   ( ArgumentSlot (..), argumentFailure, callWithRuntimeArguments, collectArguments, methodArgumentBlame, wrappedPosition )
 import Pudu.Compiler.Lower.Array (collect, reboxArray, stopped, stops)
 import Pudu.Compiler.Lower.Control (popLoop, pushLoop)
-import Pudu.Compiler.Lower.Dynamic (commonAggregateCarrier, hasRuntimeChoice, mapRuntimeChoice, projectRuntimeValue, runtimeCarriers, storageCarrier, widen)
+import Pudu.Compiler.Lower.Dynamic (commonAggregateCarrier, hasRuntimeChoice, projectRuntimeValue, runtimeCarriers, storageCarrier, widen)
 import Pudu.Compiler.Lower.Sum (constructVariant)
 import Pudu.Compiler.Lower.State (LowerContext (..), LowerState (..), bindLocal, halt, intType, refused)
 import Pudu.Compiler.Lower.Types (LowerTypes, recordFields, sumVariants, typeForSpan)
@@ -259,7 +259,7 @@ lowerKeyedMethod lower state at checked target member arguments = case collectAr
     , ("intersect", ([kind], kind, plain KeyedIntersect))
     , ("difference", ([kind], kind, plain KeyedDifference)) ]
   plain name current _ _ cores result = case cores of
-    target : operands -> (current, Just (CoreExpression at result (CoreKeyedMethod name target operands), result))
+    collection : operands -> (current, Just (CoreExpression at result (CoreKeyedMethod name collection operands), result))
     [] -> refused current
   -- get: Some(lookup) when contains says the key is there, None otherwise.
   getting current kind _ cores _ = case cores of
@@ -290,9 +290,9 @@ lowerKeyedMethod lower state at checked target member arguments = case collectAr
             read' local = CoreExpression at (coreLocalType local) (CoreReadLocal local)
             declares = [CoreStatement at (CoreDeclare local core) | (local, core) <- zip locals cores]
          in case locals of
-              target : operands@(keyLocal : _) ->
+              collection : operands@(keyLocal : _) ->
                 let check = orderable AtCall at described (read' keyLocal)
-                    stored = CoreExpression at result (CoreKeyedMethod KeyedInsert (read' target) (map read' operands))
+                    stored = CoreExpression at result (CoreKeyedMethod KeyedInsert (read' collection) (map read' operands))
                  in (final, Just (CoreExpression at result (CoreBlockValue (CoreBlock (declares <> [check]) (Just stored))), result))
               _ -> refused final
 

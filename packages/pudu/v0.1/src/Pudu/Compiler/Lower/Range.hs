@@ -136,9 +136,9 @@ lowerRangeMethod lower lowerCallback state at receiver member arguments = case m
           choice = joinRuntimeArms at option fits
             [ CoreArm at yes Nothing ordinary
             , CoreArm at CoreWildcardPattern Nothing (some exactInt (expression exactInt (CoreIntegerConvert ExactIntKind (read' number)))) ]
-          kind = coreExpressionType choice
+          carrier = coreExpressionType choice
           declarations = [CoreStatement at (CoreDeclare range core), initial]
-       in (ready, Just (expression kind (CoreBlockValue (CoreBlock declarations (Just choice))), kind))
+       in (ready, Just (expression carrier (CoreBlockValue (CoreBlock declarations (Just choice))), carrier))
     buildOption after _ = refused after
 
 {-| The narrow materializer is valid only when every included member fits Int. -}
