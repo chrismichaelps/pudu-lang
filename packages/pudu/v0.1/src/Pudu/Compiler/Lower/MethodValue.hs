@@ -291,7 +291,7 @@ registerMethodValue lower current at receiver member key bound solved@(CoreFunct
             [Located spanValue (NameExpression (name :| [])) | (name, spanValue) <- take count (zip argumentNames argumentSpans)])
           (afterBody, lowered)
             | member == "toText", null inputs, bound `elem` [Just CoreCharType, Just CoreBytesType] =
-                lowerTextMethod lower (\_ _ -> Nothing) overlaid at calleeSpan target member []
+                lowerTextMethod lower (\_ _ _ -> Nothing) overlaid at calleeSpan target member []
             | requiredCount required < parameterCount
             , count : _ <- reverse parameters =
                 let countRead = CoreExpression at intType (CoreReadLocal (coreParameterLocal count))

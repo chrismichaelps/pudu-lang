@@ -160,3 +160,10 @@ Resolved Grill Log: a checked shared method can select a mutable
 implementation, including through an indexed receiver. Its exclusive
 arguments and receiver finals update the original places. A missing
 selected member stops before argument effects.
+
+## Mutable methods selected from checked builtins
+
+Resolved Grill Log: a checked text builtin can resolve to a
+mutable nominal method. Exercise an indexed receiver, its argument
+effects, and writeback. An ordinary text receiver still takes the
+builtin without a receiver store.

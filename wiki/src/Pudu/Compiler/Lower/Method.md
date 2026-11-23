@@ -303,3 +303,7 @@ Resolved Grill Log: retain the receiver and its eligible place before
 resolving the member or evaluating arguments. Pass the place through
 held alternatives. The selected declaration determines receiver and
 argument loans and writes finals back through the original places.
+
+Resolved Grill Log: universal text conversion shares the retained
+member selector so a held declaration can replace the checked
+renderer and write back its final.

@@ -458,6 +458,31 @@ renderingCallableSuccessPrograms =
         , "  print(show(values))"
         , "  0", "}" ])
     , "receiver\nreceiver index\nargument index\n6\n[Some(\"changed\")]\n[6]\n", "")
+  , ("a checked text builtin can select a mutable method on an indexed receiver", program
+      (selectedReceiverTypes <>
+        [ "trait HeldSearch { fn contains(self: &mut Self, needle: Str) -> Bool }"
+        , "impl HeldSearch for Option[Str] {"
+        , "  fn contains(self: &mut Self, needle: Str) -> Bool { *self = Some(needle)\n true }"
+        , "}"
+        , "fn main() -> Int {"
+        , "  var values = [choose(\"plain\"), choose(\"λ\".toBytes())]"
+        , "  print(show(values[0].contains(\"pl\")))"
+        , "  print(show(values[{ print(\"index\")\n 1 }].contains({ print(\"argument\")\n \"changed\" })))"
+        , "  print(show(values))"
+        , "  0", "}" ])
+    , "receiver\nreceiver\ntrue\nindex\nargument\ntrue\n[\"plain\", Some(\"changed\")]\n", "")
+  , ("universal text conversion can select a mutable implementation", program
+      (selectedReceiverTypes <>
+        [ "trait HeldRender { fn toText(self: &mut Self) -> Str }"
+        , "impl HeldRender for Option[Str] {"
+        , "  fn toText(self: &mut Self) -> Str { *self = Some(\"changed\")\n \"rendered\" }"
+        , "}"
+        , "fn main() -> Int {"
+        , "  var value = choose(\"λ\".toBytes())"
+        , "  print(value.toText())"
+        , "  print(show(value))"
+        , "  0", "}" ])
+    , "receiver\nrendered\nSome(\"changed\")\n", "")
   , ("a selected declared call can reach a held collection builtin", program
       (selectedReceiverTypes <> selectedByteConversion <> selectedCollection "Map[Int, Str]" "mapOf([(0, \"held\")])" <>
         [ "trait Keys { fn keys(self: &Self) -> Array[UInt8] }"

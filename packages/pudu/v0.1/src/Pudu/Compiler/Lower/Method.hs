@@ -21,7 +21,7 @@ import Pudu.Compiler.Lower.Generic (instantiationOf, matchType, runtimeCallSigna
 import Pudu.Compiler.Lower.Dynamic (commonAggregateCarrier, hasRuntimeChoice, isDynamic, joinRuntimeArms, mapRuntimeChoice, pathText, preserveRuntimeResult, projectRuntimeValue, runtimeCarriers, widen, writtenType)
 import Pudu.Compiler.Lower.Loan (Callee (..), Operand (..), loanedType, lowerLoanedOperands)
 import Pudu.Compiler.Lower.MethodValue (boundMemberFact, declaredMemberType, lowerDynamicTextCall)
-import Pudu.Compiler.Lower.Place (HeldPlace (..), holdPlace, observeHeldLayout, readHeld, readHeldAtKeys, storeHeld)
+import Pudu.Compiler.Lower.Place (HeldPlace (..), holdPlace, observeHeldLayout, readHeld, readHeldAtKeys, storeHeld, withMemberReceiver)
 import Pudu.Compiler.Lower.Types (formedCoreTypeIn, loanedInputs, lookupScheme, ownerKeyOf, recordFields, selectedMember, sumVariants, typeBindings, typeFactAt, typeForSpan, nativeValueType)
 import Pudu.Core
 import Pudu.Eval.Operator.Access (arrayMethods, mapMethods, setMethods, stringMethods)
@@ -203,13 +203,12 @@ lowerMethodCall lower redispatch state at callee receiver written arguments = do
     (after, Just (core, CoreNeverType)) -> (after, Just (core, CoreNeverType))
     (after, Just (core, _)) ->
       namedFailure after at (("cannot call a " <>) . mconcat) [CoreExpression at field (CoreField member core)]
-  rendered kind = case lower state receiver of
-    (after, Nothing) -> refused after
-    (after, Just (core, CoreNeverType)) -> (after, Just (core, CoreNeverType))
-    (after, Just (core, _))
-      | expressionIsPrintValued core -> halt at "toText of a Result[(), Str] value" after
-      | nativeValueType kind -> (after, Just (CoreExpression at CoreTextType (CoreDisplay core), CoreTextType))
-      | otherwise -> halt at ("toText of a " <> coreTypeName kind <> " value") after
+  rendered kind = withMemberReceiver lower state at receiver $ \after core place ->
+    if expressionIsPrintValued core
+      then halt at "toText of a Result[(), Str] value" after
+      else if nativeValueType kind
+        then redispatch after core place
+        else halt at ("toText of a " <> coreTypeName kind <> " value") after
 
 bindMemberReceiver :: Type -> Type -> Maybe Type
 bindMemberReceiver held (FunctionTypeRequiring asynchronous inputs required result) =
@@ -500,25 +499,18 @@ lowerOwnerMethod lower state at callee owner selected written arguments = do
 {-| Read the receiver and retain its place before selecting a member. -}
 callMethod :: LowerExpression -> Redispatch -> LowerState -> Span -> CoreType -> Text -> Maybe Type
   -> Located Expression -> [Located Expression] -> Lowered
-callMethod lower redispatch state at expected key instantiated receiver arguments = case receive of
-  (after, Nothing) -> refused after
-  (after, Just (prelude, value, place))
-    | blockType prelude (Just value) == CoreNeverType ->
-        (after, Just (wrap prelude value CoreNeverType, CoreNeverType))
-    | expressionIsPrintValued value -> halt (locatedSpan receiver) "a Result[(), Str] method receiver" after
-    | otherwise ->
+callMethod lower redispatch state at expected key instantiated receiver arguments =
+  withMemberReceiver lower state at receiver $ \after value place ->
+    if expressionIsPrintValued value
+      then halt (locatedSpan receiver) "a Result[(), Str] method receiver" after
+      else
         let (ready, chosen) = select after value place
             checked = typeForSpan (contextTypes (lowerContext ready)) at
             finish (answer, _) =
               let carried = maybe answer (\declared -> preserveRuntimeResult declared answer) checked
-                  kind = coreExpressionType carried
-               in (wrap prelude carried kind, kind)
+               in (carried, coreExpressionType carried)
          in (ready, finish <$> chosen)
  where
-  receive = case holdPlace lower state (locatedSpan receiver) receiver of
-    Just (after, Just (prelude, place)) ->
-      (after, Just (prelude, readHeldAtKeys (contextTypes (lowerContext after)) place, Just place))
-    _ -> fmap (fmap (\(value, _) -> ([], value, Nothing))) (lower state receiver)
   differs held = ownerKeyOf held /= ownerKeyOf expected
     || not (hasRuntimeChoice held) && unformed held /= unformed expected
   select current value place
@@ -526,8 +518,6 @@ callMethod lower redispatch state at expected key instantiated receiver argument
         (\ready held -> fmap (fmap fst) (select ready held place)) = selected
     | differs (coreExpressionType value) = redispatch current value place
     | otherwise = callMemberInstance lower current at key instantiated value place arguments
-  wrap [] value _ = value
-  wrap prelude value kind = CoreExpression at kind (CoreBlockValue (CoreBlock prelude (Just value)))
 
 callMemberInstance :: LowerExpression -> LowerState -> Span -> Text -> Maybe Type -> CoreExpression
   -> Maybe HeldPlace -> [Located Expression] -> Lowered

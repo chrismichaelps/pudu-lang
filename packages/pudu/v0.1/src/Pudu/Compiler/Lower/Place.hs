@@ -5,12 +5,14 @@
     is reported at its root name. A lent place is held the same way: its
     indices run once, where the argument stands, and the store after the call
     reads the root again. -}
-module Pudu.Compiler.Lower.Place (HeldPlace (..), holdPlace, lowerPlaceAssignment, observeHeldLayout, readHeld, readHeldAtKeys, storeHeld) where
+module Pudu.Compiler.Lower.Place
+  ( HeldPlace (..), holdPlace, withMemberReceiver, lowerPlaceAssignment, observeHeldLayout
+  , readHeld, readHeldAtKeys, storeHeld ) where
 
 import Data.List.NonEmpty (NonEmpty (..))
 import Data.Text (Text)
 import Pudu.Compiler.Lower.Array (takeReceiver)
-import Pudu.Compiler.Lower.Control (expressionIsPrintValued)
+import Pudu.Compiler.Lower.Control (blockType, expressionIsPrintValued)
 import Pudu.Compiler.Lower.Dynamic (hasRuntimeChoice, projectRuntimeValue, recordWithFields, storageCarrier)
 import Pudu.Compiler.Lower.State (LowerContext (..), LowerState (..), bindLocal, halt, intType, lookupLocal, observeMutableLayout, refuse, refused)
 import Pudu.Compiler.Lower.Types (LowerTypes, recordFields)
@@ -19,6 +21,7 @@ import Pudu.Frontend.Syntax (Expression (..), Located (..))
 import Pudu.Source (Span)
 
 type LowerExpression = LowerState -> Located Expression -> (LowerState, Maybe (CoreExpression, CoreType))
+type Lowered = (LowerState, Maybe (CoreExpression, CoreType))
 
 data Step = FieldStep !Text | IndexStep !(Located Expression)
 
@@ -30,6 +33,26 @@ data HeldPlace = HeldPlace
   , heldSteps :: ![Either Text CoreExpression]
   , heldType :: !CoreType
   }
+
+{-| A member receives either a place read or an ordinary value.
+    Keep receiver indices outside the selected invocation so their
+    effects and transfers occur before member selection. -}
+withMemberReceiver :: LowerExpression -> LowerState -> Span -> Located Expression
+  -> (LowerState -> CoreExpression -> Maybe HeldPlace -> Lowered) -> Lowered
+withMemberReceiver lower state at receiver select = case receive of
+  (after, Nothing) -> refused after
+  (after, Just (prelude, value, place))
+    | blockType prelude (Just value) == CoreNeverType ->
+        (after, Just (wrap prelude (value, CoreNeverType)))
+    | otherwise -> fmap (fmap (wrap prelude)) (select after value place)
+ where
+  receive = case holdPlace lower state (locatedSpan receiver) receiver of
+    Just (after, Just (prelude, place)) ->
+      (after, Just (prelude, readHeldAtKeys (contextTypes (lowerContext after)) place, Just place))
+    _ -> fmap (fmap (\(value, _) -> ([], value, Nothing))) (lower state receiver)
+  wrap [] answer = answer
+  wrap prelude (answer, kind) =
+    (CoreExpression at kind (CoreBlockValue (CoreBlock prelude (Just answer))), kind)
 
 {-| Nothing when the target is not a field or element path from a local, or
     is the local itself; `*value = x` assigns the local through the place. -}

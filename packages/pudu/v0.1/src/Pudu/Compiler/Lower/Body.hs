@@ -480,8 +480,8 @@ lowerExpression state (Located spanValue expression) = case expression of
     | Just lowered <- lowerMethodCall lowerExpression (selectedMemberCall callee receiver member arguments)
         clean spanValue callee receiver member arguments -> lowered
     | functionField receiver member -> lowerValueCall lowerExpression lowerBlock clean spanValue (Located callee (MemberExpression receiver named)) arguments
-    | otherwise -> lowerTextMethod lowerExpression (heldMember callee receiver member arguments Nothing)
-        clean spanValue callee receiver member arguments
+    | otherwise -> lowerTextMethod lowerExpression (heldMember callee receiver member arguments)
+        clean spanValue callee receiver (snd (selectedMember member)) arguments
   CallExpression (Located callee (MemberExpression (Located owner (TypeApplication (Located _ (NameExpression path)) written)) (Located _ member))) arguments
     | Just kind <- writtenCoreType clean (Located owner (NamedType (ModuleName path) written))
     , Just lowered <- lowerOwnedMethod lowerExpression clean spanValue callee kind member arguments -> lowered
@@ -494,8 +494,8 @@ lowerExpression state (Located spanValue expression) = case expression of
     | Just lowered <- lowerMethodCall lowerExpression (selectedMemberCall callee receiver member arguments)
         clean spanValue callee receiver member arguments -> lowered
     | functionField receiver member -> lowerValueCall lowerExpression lowerBlock clean spanValue (Located callee (MemberExpression receiver named)) arguments
-    | otherwise -> lowerTextMethod lowerExpression (heldMember callee receiver member arguments Nothing)
-        clean spanValue callee receiver member arguments
+    | otherwise -> lowerTextMethod lowerExpression (heldMember callee receiver member arguments)
+        clean spanValue callee receiver (snd (selectedMember member)) arguments
   CallExpression callee'@(Located _ (NameExpression ("::trait-method::" :| [_, _]))) arguments ->
     lowerValueCall lowerExpression lowerBlock state spanValue callee' arguments
   CallExpression callee'@(Located callee (NameExpression (first :| rest@(_ : _)))) arguments
@@ -615,9 +615,9 @@ lowerExpression state (Located spanValue expression) = case expression of
     qualifier (Located _ (NameExpression (owner :| []))) = lookupLocal state owner == Nothing
     qualifier _ = False
     selectedMemberCall callee receiver member arguments current held place =
-      lowerSelectedMember lowerExpression (heldMember callee receiver member arguments place)
+      lowerSelectedMember lowerExpression (\ready value -> heldMember callee receiver member arguments ready value place)
         current spanValue callee (snd (selectedMember member)) arguments held
-    heldMember callee receiver member arguments place current held =
+    heldMember callee receiver member arguments current held place =
       fieldCall <|> collection <|> lowerHeldMethod lowerExpression spanValue member arguments current held place
      where
       plain = snd (selectedMember member)

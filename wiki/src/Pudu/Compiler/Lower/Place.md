@@ -50,3 +50,10 @@ their carrier is narrower than the place's carrier.
 ## Mutable slot layout discovery (#956)
 
 Resolved Grill Log: A write to a field or array element can demand a wider root layout. It records the changed path and keeps the layouts of unaffected fields.
+
+## Member receiver preparation
+
+Resolved Grill Log: prepare a receiver as a read with an optional
+place. If the receiver cannot be represented as a place, perform its
+ordinary value read. Stop before any member work if a receiver
+index transfers control. [[Compiler Lower Text]] · [[Compiler Lower Method]]

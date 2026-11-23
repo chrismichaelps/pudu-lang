@@ -153,3 +153,6 @@ before reading any argument slot. The method body owns default
 evaluation, so binding a method does not evaluate defaults.
 
 [[Compiler Lower Default]]
+
+Resolved Grill Log: a lifted text builtin consumes its already
+captured receiver and supplies no alternate member dispatch.

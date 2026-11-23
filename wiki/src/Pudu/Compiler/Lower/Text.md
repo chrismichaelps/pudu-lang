@@ -113,3 +113,7 @@ Resolved Grill Log: Select the held receiver before delegating collection and no
 ## Held declared method receivers
 
 Resolved Grill Log: A receiver already selected by declared-method dispatch follows the same member selection and missing-member diagnostic as a selected builtin receiver.
+
+Resolved Grill Log: evaluate the receiver through [[Compiler Lower Place]]
+before selecting its builtin family. Carry its optional place into
+nominal fallback. Builtins use the retained value without writeback.

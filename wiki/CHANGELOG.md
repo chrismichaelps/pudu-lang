@@ -5,6 +5,12 @@ tags: [changelog]
 
 # Changelog
 
+## 2026-11-23 — Mutable receivers through builtin dispatch (#956)
+
+- Retain receiver places across text and collection member selection.
+  The selected nominal method can publish its final through the
+  original place. [[Compiler Lower Place]] · [[Compiler Lower Text]]
+
 ## 2026-11-23 — Mutable declared receiver selection (#956)
 
 - Select the held declaration before preparing argument loans.

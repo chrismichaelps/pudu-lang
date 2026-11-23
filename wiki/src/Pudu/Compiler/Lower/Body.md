@@ -606,3 +606,6 @@ Resolved Grill Log: Selected declared receivers can resolve builtins, record fie
 Resolved Grill Log: a declared call's held receiver can carry its
 original place into the selected method. A field read or collection
 builtin consumes only the value.
+
+Resolved Grill Log: builtin-first and declared-first lookup both
+deliver the original receiver place to a selected nominal method.

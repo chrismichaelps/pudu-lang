@@ -322,6 +322,14 @@ before selecting the runtime declaration. The selected receiver and
 argument loans publish finals to the original places after the call.
 [[Compiler Lower Method]] · [[Backend Rendering Callable Programs]]
 
+## Mutable receivers through builtin dispatch (#956)
+
+Builtin and declared member calls share receiver preparation. The
+selector retains the original receiver place so a held nominal
+method can write its final back. Universal text conversion uses
+the same dispatch. [[Compiler Lower Text]] · [[Compiler Lower Place]] ·
+[[Backend Rendering Callable Programs]]
+
 ## Published progress (#496)
 
 The README progress bar counts **completed coverage areas**, not individual language

@@ -449,10 +449,18 @@ publishes the selected implementation's finals after validating
 arity. [[Backend Rendering Callable Programs]] covers ordered indices
 and two original destinations.
 
+## Mutable receivers through builtin dispatch
+
+Architect → Backend Engineer. [[Compiler Lower Place]] prepares
+the receiver for both declared and builtin member lookup. [[Compiler
+Lower Text]] carries the eligible place through nominal fallback.
+[[Backend Rendering Callable Programs]] covers a text builtin and
+universal conversion selecting mutable implementations.
+
 ## Next action
 
-Carry the retained receiver place through builtin-first member
-selection when a held declaration replaces the checked builtin.
+Preserve exact selected integer keys in writable receiver and
+argument places, including their read and write diagnostics.
 
 ## Referenced by
 
