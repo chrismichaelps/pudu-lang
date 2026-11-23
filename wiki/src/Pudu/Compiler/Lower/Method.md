@@ -307,3 +307,6 @@ argument loans and writes finals back through the original places.
 Resolved Grill Log: universal text conversion shares the retained
 member selector so a held declaration can replace the checked
 renderer and write back its final.
+
+Resolved Grill Log: a prepared place read can allocate native locals
+for held slice bounds before dispatching a dynamic member.

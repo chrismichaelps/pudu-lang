@@ -17,8 +17,8 @@ import Pudu.Compiler.Lower.Text (lowerSelectedMember, lowerTextMethod)
 import Pudu.Compiler.Lower.Method (lowerHeldMethod, lowerMethodCall, lowerOwnedMethod, lowerQualifiedMethod)
 import Pudu.Compiler.Lower.Call (lowerFunctionCall, lowerPrint, lowerRendered)
 import Pudu.Compiler.Lower.FunctionBody (lowerEntryBodyWith, lowerFunctionBodyWith)
-import Pudu.Compiler.Lower.Array (lowerArrayIndex, lowerArrayLiteral, lowerArrayMethod, takeReceiver)
-import Pudu.Compiler.Lower.Slice (lowerRangeIndex)
+import Pudu.Compiler.Lower.Array (lowerArrayLiteral, lowerArrayMethod, takeReceiver)
+import Pudu.Compiler.Lower.Slice (lowerBracketIndex)
 import Pudu.Compiler.Lower.Convert (lowerCharFromCode, lowerConvertInteger)
 import Pudu.Compiler.Lower.Keyed (lowerKeyedBuilder, lowerKeyedMethod, lowerSetLiteral)
 import Pudu.Compiler.Lower.Range (lowerRangeMethod, lowerRangeValue)
@@ -523,7 +523,7 @@ lowerExpression state (Located spanValue expression) = case expression of
     | Just lowered <- lowerMethodValue lowerExpression state spanValue receiver member -> lowered
     | otherwise -> lowerField lowerExpression state spanValue receiver member
   IndexExpression receiver key -> maybe (lowerTupleIndex lowerExpression state spanValue receiver key) id
-    (lowerRangeIndex lowerExpression state receiver key <|> lowerArrayIndex lowerExpression state spanValue receiver key)
+    (lowerBracketIndex lowerExpression state spanValue receiver key)
   RangeExpression low inclusive high -> lowerRangeValue lowerExpression state spanValue low inclusive high
   TryExpression operand -> lowerTry lowerExpression state spanValue operand
   -- Awaiting runs the task's body now; a failure it answers leaves this

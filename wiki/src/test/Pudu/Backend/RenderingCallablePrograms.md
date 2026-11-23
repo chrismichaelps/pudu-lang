@@ -175,3 +175,10 @@ receiver reads and exclusive arguments. An out-of-range wide key must
 never wrap to a valid element. Compare distinct diagnostics for a
 noninteger key at a read and a store, and observe replacement effects
 before store failure.
+
+## Held range keys
+
+Resolved Grill Log: a checked scalar index can produce a slice and
+a checked range can produce a scalar read. Compare array and text
+results, receiver dispatch, and an exclusive read whose final cannot
+be assigned back through a slice key.

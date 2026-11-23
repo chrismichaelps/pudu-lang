@@ -187,3 +187,7 @@ runtime diagnostic.
 Resolved Grill Log: [[Compiler Lower Array Loop]] owns invocation
 and predicate validation. The collection call retains its receiver
 and callback before traversal.
+
+Resolved Grill Log: [[Compiler Lower Slice]] owns bracket key dispatch,
+including scalar reads. Array methods continue to use their own
+position semantics.

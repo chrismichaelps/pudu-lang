@@ -156,3 +156,6 @@ evaluation, so binding a method does not evaluate defaults.
 
 Resolved Grill Log: a lifted text builtin consumes its already
 captured receiver and supplies no alternate member dispatch.
+
+Resolved Grill Log: preserve the state from a place-backed text
+receiver read so a selected slice keeps its temporary slots.

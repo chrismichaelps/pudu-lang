@@ -82,3 +82,11 @@ inclusive end may be incremented.
 Resolved Grill Log: stored keys read the original endpoint magnitudes.
 After successful bounds validation the existing slice receives Int
 positions. A missing endpoint keeps its ordinary default.
+
+## Selected bracket keys
+
+Resolved Grill Log: once the operands are retained, integer and range
+keys share a selector. Use the held key's type before deciding between
+indexing and slicing. Receiver and key effects run in their original
+order. A place read uses the same selector and supplies its own blame
+span. [[Compiler Lower Place]]

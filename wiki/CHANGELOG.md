@@ -5,6 +5,12 @@ tags: [changelog]
 
 # Changelog
 
+## 2026-11-23 — Held range keys in bracket reads (#956)
+
+- Select indexing or slicing from the retained key for ordinary
+  reads, receiver preparation, and mutable arguments.
+  [[Compiler Lower Slice]] · [[Compiler Lower Place]]
+
 ## 2026-11-23 — Exact writable array indices (#956)
 
 - Retain exact integer keys through indexed assignment and loans.

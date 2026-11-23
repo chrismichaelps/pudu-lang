@@ -3,7 +3,7 @@
     and `reduce` become loops calling the closure once per item, in order,
     as `callArrayMethod` does. -}
 module Pudu.Compiler.Lower.Array
-  ( LowerCallback, lowerArrayLiteral, lowerArrayIndex, lowerArrayMethod, lowerArrayLoop, reboxArray, takeReceiver, collect, stops, stopped
+  ( LowerCallback, lowerArrayLiteral, lowerArrayMethod, lowerArrayLoop, reboxArray, takeReceiver, collect, stops, stopped
   ) where
 
 import Data.List (mapAccumL)
@@ -11,15 +11,15 @@ import qualified Data.Set as Set
 import Data.Text (Text)
 import qualified Data.Text as Text
 import Pudu.Compiler.Lower.Arguments
-  ( ArgumentBlame (AtInvocation), ArgumentSlot (..), argumentFailure, argumentFailureWith
-  , callWithRuntimeArguments, clampedPosition, collectArguments, methodArgumentBlame, stopped, stops, wrappedPosition
+  ( ArgumentSlot (..), argumentFailure, argumentFailureWith
+  , callWithRuntimeArguments, collectArguments, methodArgumentBlame, stopped, stops, wrappedPosition
   )
 import Pudu.Compiler.Lower.ArrayLoop (arrayMethodWith, joinsHeldText)
 import Pudu.Compiler.Lower.Control (expressionIsPrintValued)
 import Pudu.Compiler.Lower.State (LowerContext (..), LowerState (..), bindLocal, halt, intType, refuse, refused)
 import Pudu.Compiler.Lower.Types (typeFactAt, typeForSpan)
 import Pudu.Core
-import Pudu.Compiler.Lower.Dynamic (hasRuntimeChoice, invalidRuntimeIndex, joinRuntimeArms, mapRuntimeChoice, preserveRuntimeResult, projectRuntimeValue, runtimeCarriers, runtimeResultType, widen)
+import Pudu.Compiler.Lower.Dynamic (hasRuntimeChoice, projectRuntimeValue, runtimeCarriers, runtimeResultType, widen)
 import Pudu.Frontend.Syntax (Expression (..), Located (..))
 import Pudu.IntegerLiteral (IntegerKind (..))
 import Pudu.Source (Span)
@@ -66,62 +66,6 @@ arrayAt state at members = case typeForSpan (contextTypes (lowerContext state)) 
     , Just (NominalType (NominalId Nothing "Array") [VariableType _]) <- typeFactAt (contextTypes (lowerContext state)) at ->
         Just (CoreArrayType CoreUnitType)
     | otherwise -> Nothing
-
-{-| `array[index]` or `text[index]`: the receiver, then the index. A failure
-    reports at the index. -}
-lowerArrayIndex :: LowerExpression -> LowerState -> Span -> Located Expression -> Located Expression -> Maybe Lowered
-lowerArrayIndex lower state whole receiver key = case typeForSpan (contextTypes (lowerContext state)) (locatedSpan receiver) of
-  Just CoreArrayType{} -> Just operands
-  Just CoreTextType -> Just operands
-  _ -> Nothing
- where
-  at = locatedSpan key
-  operands = case collectArguments lower state [receiver, key] of
-    (after, Nothing) -> refused after
-    (after, Just cores@[container, index])
-      | any stops cores -> (after, Just (stopped at cores, CoreNeverType))
-      | any (hasRuntimeChoice . coreExpressionType) cores || tupleReceiver container ->
-          let (bound, held) = bindLocal after "" (coreExpressionType container)
-              (withKey, heldKey) = bindLocal bound "" (coreExpressionType index)
-              (ready, result) = select withKey (reading held) (reading heldKey)
-              declarations = [declare held container, declare heldKey index]
-           in (ready, do
-                (answer, _) <- result
-                let types = contextTypes (lowerContext ready)
-                    carried = maybe answer (\checked -> preserveRuntimeResult checked answer) (typeForSpan types whole)
-                    kind = coreExpressionType carried
-                pure (CoreExpression at kind (CoreBlockValue (CoreBlock declarations (Just carried))), kind))
-      | otherwise -> select after container index
-    (after, Just _) -> refused after
-  tupleReceiver value = case coreExpressionType value of
-    CoreTupleType _ -> True
-    _ -> False
-  reading local = CoreExpression at (coreLocalType local) (CoreReadLocal local)
-  declare local value = CoreStatement (coreExpressionSpan value) (CoreDeclare local value)
-  select current container index
-    | Just selected <- mapRuntimeChoice current at CoreNeverType container
-        (\ready held -> fmap (fmap fst) (select ready held index)) = selected
-    | Just selected <- mapRuntimeChoice current at CoreNeverType index
-        (\ready held -> fmap (fmap fst) (select ready container held)) = selected
-    | CoreIntegerType _ <- coreExpressionType index =
-        let position = clampedPosition at index
-         in case coreExpressionType container of
-              CoreArrayType element -> (current, Just (CoreExpression at element (CoreIndex container position), element))
-              CoreTextType -> (current, Just (CoreExpression at CoreCharType
-                (CoreTextMethod TextCharAt container [position]), CoreCharType))
-              CoreTupleType members ->
-                let member offset kind = CoreArm at
-                      (CoreLiteralPattern (CoreExpression at intType (CoreIntegerLiteral PlatformSigned (toInteger offset))))
-                      Nothing (CoreExpression at kind (CoreTupleIndex offset container))
-                    failure = argumentFailure AtInvocation at "E7004" "index out of range"
-                    arms = zipWith member [0 ..] members <> [CoreArm at CoreWildcardPattern Nothing failure]
-                    chosen = joinRuntimeArms at CoreNeverType position arms
-                 in (current, Just (chosen, coreExpressionType chosen))
-              _ -> invalid current container index
-    | otherwise = invalid current container index
-  invalid current container index =
-    let (ready, failure) = invalidRuntimeIndex current at container [index]
-     in (ready, Just (failure, CoreNeverType))
 
 {-| A built-in method when the receiver is an array. -}
 lowerArrayMethod :: LowerExpression -> LowerCallback -> LowerState -> Span -> CoreType -> CoreExpression -> Text

@@ -65,3 +65,10 @@ integer magnitude before narrowing for array access. A noninteger
 alternative retains its own diagnostic. Validate at the read or
 store so assignment still evaluates the replacement before reporting
 an invalid destination. An earlier transfer suppresses later keys.
+
+## Held slice keys in place reads
+
+Resolved Grill Log: a position checked as an integer can hold a
+range. Keep that key for read preparation and delegate its slice
+bounds to [[Compiler Lower Slice]]. A range remains an invalid
+assignment key, including when publishing a mutable final.

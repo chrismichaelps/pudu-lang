@@ -498,6 +498,28 @@ renderingCallableSuccessPrograms =
         , "  print(show(values))"
         , "  0", "}" ])
     , "receiver\nreplacement\n22\n27\n[10, 11, 27]\n", "")
+  , ("a held range selects an array or text slice at a scalar-checked index", program
+      (selectedReceiverTypes <> selectedRangeKey <>
+        [ "fn main() -> Int {"
+        , "  let values = [10, 11, 12, 13]"
+        , "  let index = choose(\"λ\".toBytes()).indexOf(\"window\")"
+        , "  print(show(values[index]))"
+        , "  print(show(\"abcd\"[index]))"
+        , "  print(values[{ print(\"key\")\n index }].toText())"
+        , "  0", "}" ])
+    , "receiver\n[11, 12]\n\"bc\"\nkey\n[11, 12]\n", "")
+  , ("a range-checked key can hold an ordinary integer", program
+      (selectedReceiverTypes <>
+        [ "trait CheckedWindow { fn window(self: &Self) -> Range[Int] }"
+        , "impl CheckedWindow for Str { fn window(self: &Self) -> Range[Int] { 0..2 } }"
+        , "trait HeldWindow { fn window(self: &Self) -> Int }"
+        , "impl HeldWindow for Option[Str] { fn window(self: &Self) -> Int { 2 } }"
+        , "fn main() -> Int {"
+        , "  let index = choose(\"λ\".toBytes()).window()"
+        , "  print(show([10, 11, 12][index]))"
+        , "  print(show(\"abcd\"[index]))"
+        , "  0", "}" ])
+    , "receiver\n12\n'c'\n", "")
   , ("a selected declared call can reach a held collection builtin", program
       (selectedReceiverTypes <> selectedByteConversion <> selectedCollection "Map[Int, Str]" "mapOf([(0, \"held\")])" <>
         [ "trait Keys { fn keys(self: &Self) -> Array[UInt8] }"
@@ -806,6 +828,14 @@ renderingCallableRefusalPrograms =
         , "  let indices = choose(\"λ\".toBytes())"
         , "  values[{ print(\"outer\")\n 99 }][{ print(\"inner\")\n indices.indexOf(\"invalid\") }] = { print(\"replacement\")\n 3 }"
         , "  0", "}" ]))
+  , ("a mutable argument reads its held slice before writeback refuses the range key", program
+      (selectedReceiverTypes <> selectedRangeKey <>
+        [ "fn inspect(value: &mut Int) -> Int { print(show(*value))\n 7 }"
+        , "fn main() -> Int {"
+        , "  var values = [10, 11, 12, 13]"
+        , "  let index = choose(\"λ\".toBytes()).indexOf(\"window\")"
+        , "  print(show(inspect(&mut values[index])))"
+        , "  0", "}" ]))
   , ("a stored stopping builtin receives the held runtime argument", program
       [ "trait View { fn size(self: &Self) -> Int }"
       , "impl View for Bytes { fn size(self: &Self) -> Int { 0 } }"
@@ -872,6 +902,12 @@ selectedInvalidPosition :: [Text]
 selectedInvalidPosition =
   [ "trait Positions { fn indexOf(self: &Self, label: Str) -> Bool }"
   , "impl Positions for Option[Str] { fn indexOf(self: &Self, label: Str) -> Bool { false } }"
+  ]
+
+selectedRangeKey :: [Text]
+selectedRangeKey =
+  [ "trait HeldRangeKey { fn indexOf(self: &Self, label: Str) -> Range[Int] }"
+  , "impl HeldRangeKey for Option[Str] { fn indexOf(self: &Self, label: Str) -> Range[Int] { 1..=2 } }"
   ]
 
 selectedIntegerTrait :: [Text]

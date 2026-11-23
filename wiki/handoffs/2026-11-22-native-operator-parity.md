@@ -464,10 +464,18 @@ integer keys and validates their representable positions before an
 access. [[Backend Rendering Callable Programs]] covers selected wide
 and noninteger keys, nested failure order, and writeback.
 
+## Held range keys in bracket reads
+
+Architect → Backend Engineer. [[Compiler Lower Slice]] selects the
+bracket operation from the held key. [[Compiler Lower Place]] retains
+its read and store forms. [[Backend Rendering Callable Programs]]
+covers both directions of scalar and range selection and a loan
+whose returned final cannot be assigned through its range.
+
 ## Next action
 
-Select held range keys for indexed reads, including receiver and
-mutable-argument preparation where the checked key was scalar.
+Route a tuple-checked index to its held array or text receiver while
+preserving the direct native slot read for a stable tuple.
 
 ## Referenced by
 

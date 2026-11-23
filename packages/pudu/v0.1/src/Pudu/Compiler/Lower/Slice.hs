@@ -1,38 +1,43 @@
 {-| @Pudu.Compiler.Lower.Slice — exact bounds checks for bracket slices. -}
-module Pudu.Compiler.Lower.Slice (lowerRangeIndex) where
+module Pudu.Compiler.Lower.Slice (lowerBracketIndex, lowerIndexOn) where
 
 import Data.List (mapAccumL)
-import Pudu.Compiler.Lower.Arguments (collectArguments, exactPosition, integerComparison)
-import Pudu.Compiler.Lower.Array (stopped, stops)
-import Pudu.Compiler.Lower.Dynamic (invalidRuntimeIndex, mapRuntimeChoice)
+import Pudu.Compiler.Lower.Arguments
+  ( ArgumentBlame (AtInvocation), argumentFailure, clampedPosition, collectArguments, exactPosition
+  , integerComparison, stopped, stops )
+import Pudu.Compiler.Lower.Dynamic (hasRuntimeChoice, invalidRuntimeIndex, joinRuntimeArms, mapRuntimeChoice, preserveRuntimeResult)
 import Pudu.Compiler.Lower.Range (selectRangeEndpoint)
 import Pudu.Compiler.Lower.State (LowerContext (..), LowerState (..), bindLocal, intType, refused)
 import Pudu.Compiler.Lower.Types (typeForSpan)
 import Pudu.Core
 import Pudu.Frontend.Syntax (Expression (..), Located (..))
+import Pudu.Source (Span)
 import Pudu.IntegerLiteral (IntegerKind (BigIntKind, PlatformSigned))
 
 type LowerExpression = LowerState -> Located Expression -> Lowered
 type Lowered = (LowerState, Maybe (CoreExpression, CoreType))
 
-lowerRangeIndex :: LowerExpression -> LowerState -> Located Expression -> Located Expression -> Maybe Lowered
-lowerRangeIndex lower state receiver key@(Located at keyShape)
-  | Just kind <- typeForSpan types (locatedSpan receiver), sliceable kind = case keyShape of
-      RangeExpression start inclusive end -> Just $
-        withOperands (receiver : foldMap pure start <> foldMap pure end) $ \ready -> \case
-          [held, low, high] -> written ready held (Just low) inclusive (Just high)
-          [held, bound] | Just _ <- start -> written ready held (Just bound) inclusive Nothing
-          [held, bound] -> written ready held Nothing inclusive (Just bound)
-          [held] -> written ready held Nothing inclusive Nothing
-          _ -> refused ready
-      _ | typeForSpan types at == Just CoreRangeType -> Just $
-        withOperands [receiver, key] $ \ready -> \case
-          [held, range] -> stored ready held range
-          _ -> refused ready
-      _ -> Nothing
+lowerBracketIndex :: LowerExpression -> LowerState -> Span -> Located Expression -> Located Expression -> Maybe Lowered
+lowerBracketIndex lower state whole receiver key@(Located at keyShape)
+  | Just kind <- typeForSpan types (locatedSpan receiver), sliceable kind =
+      Just $ fmap (fmap preserve) $ case keyShape of
+        RangeExpression start inclusive end ->
+          withOperands (receiver : foldMap pure start <> foldMap pure end) $ \ready -> \case
+            [held, low, high] -> written ready held (Just low) inclusive (Just high)
+            [held, bound] | Just _ <- start -> written ready held (Just bound) inclusive Nothing
+            [held, bound] -> written ready held Nothing inclusive (Just bound)
+            [held] -> written ready held Nothing inclusive Nothing
+            _ -> refused ready
+        _ -> case collectArguments lower state [receiver, key] of
+          (after, Just [held, position]) -> lowerIndexOn after at held position
+          (after, Just operands) | any stops operands -> (after, Just (stopped at operands, CoreNeverType))
+          (after, _) -> refused after
   | otherwise = Nothing
  where
   types = contextTypes (lowerContext state)
+  preserve (value, _) =
+    let carried = maybe value (\checked -> preserveRuntimeResult checked value) (typeForSpan types whole)
+     in (carried, coreExpressionType carried)
   withOperands inputs consume = case collectArguments lower state inputs of
     (after, Nothing) -> refused after
     (after, Just cores)
@@ -48,21 +53,11 @@ lowerRangeIndex lower state receiver key@(Located at keyShape)
       withEndpoint withLow high $ \withHigh safeHigh ->
         selectReceiver withHigh held [] $ \ready container ->
           let hasEnd = boolean (maybe False (const True) safeHigh)
-           in slice ready container (maybe zero id safeLow) (maybe zero id safeHigh) hasEnd (boolean inclusive)
+           in sliceOn at ready container (maybe zero id safeLow) (maybe zero id safeHigh) hasEnd (boolean inclusive)
 
   withEndpoint current Nothing consume = consume current Nothing
   withEndpoint current (Just operand) consume =
     selectRangeEndpoint at current operand (\ready value -> consume ready (Just value))
-
-  stored current held range
-    | Just selected <- mapRuntimeChoice current at CoreNeverType range
-        (\ready alternative -> fmap (fmap fst) (stored ready held alternative)) = selected
-    | coreExpressionType range == CoreRangeType =
-        selectReceiver current held [] $ \ready container ->
-          let field name kind = expression kind (CoreRangeMethod name range [])
-           in slice ready container (field RangeStartExact exactKind) (field RangeEndExact exactKind)
-                (field RangeHasEnd CoreBoolType) (field RangeIsInclusiveOf CoreBoolType)
-    | otherwise = selectReceiver current held [range] (\ready target -> invalid ready target [range])
 
   selectReceiver current held extras consume
     | Just selected <- mapRuntimeChoice current at CoreNeverType held
@@ -74,7 +69,76 @@ lowerRangeIndex lower state receiver key@(Located at keyShape)
     let (ready, failure) = invalidRuntimeIndex current at held extras
      in (ready, Just (failure, CoreNeverType))
 
-  slice current container low high hasEnd inclusive =
+  wrap statements (value, kind) = (expression kind (CoreBlockValue (CoreBlock statements (Just value))), kind)
+  expression = CoreExpression at
+  statement = CoreStatement at
+  reading local = expression (coreLocalType local) (CoreReadLocal local)
+  declare local value = statement (CoreDeclare local value)
+  number = expression intType . CoreIntegerLiteral PlatformSigned
+  zero = number 0
+  boolean = expression CoreBoolType . CoreBoolLiteral
+
+sliceable :: CoreType -> Bool
+sliceable kind = case kind of
+  CoreArrayType _ -> True
+  CoreTextType -> True
+  CoreBytesType -> True
+  _ -> False
+
+{-| Dispatch by the retained key and receiver. The bracket syntax's
+    checked type does not choose the operation once the values run. -}
+lowerIndexOn :: LowerState -> Span -> CoreExpression -> CoreExpression -> Lowered
+lowerIndexOn state at receiver key
+  | any stops operands = (state, Just (stopped at operands, CoreNeverType))
+  | any (hasRuntimeChoice . coreExpressionType) operands
+      || coreExpressionType key == CoreRangeType || isTuple (coreExpressionType receiver) =
+      let hold current value = bindLocal current "" (coreExpressionType value)
+          (bound, target) = hold state receiver
+          (withKey, position) = hold bound key
+          (ready, chosen) = select withKey (reading target) (reading position)
+          prefix = zipWith (\local value -> CoreStatement (coreExpressionSpan value) (CoreDeclare local value))
+            [target, position] operands
+       in (ready, (\(value, kind) -> (expression kind (CoreBlockValue (CoreBlock prefix (Just value))), kind)) <$> chosen)
+  | otherwise = select state receiver key
+ where
+  operands = [receiver, key]
+  isTuple CoreTupleType{} = True
+  isTuple _ = False
+  expression = CoreExpression at
+  reading local = expression (coreLocalType local) (CoreReadLocal local)
+  select current container index
+    | Just selected <- mapRuntimeChoice current at CoreNeverType container
+        (\ready held -> fmap (fmap fst) (select ready held index)) = selected
+    | Just selected <- mapRuntimeChoice current at CoreNeverType index
+        (\ready held -> fmap (fmap fst) (select ready container held)) = selected
+    | coreExpressionType index == CoreRangeType, sliceable (coreExpressionType container) =
+        let field name kind = expression kind (CoreRangeMethod name index [])
+            exactKind = CoreIntegerType BigIntKind
+         in sliceOn at current container (field RangeStartExact exactKind) (field RangeEndExact exactKind)
+              (field RangeHasEnd CoreBoolType) (field RangeIsInclusiveOf CoreBoolType)
+    | CoreIntegerType _ <- coreExpressionType index = scalar current container (clampedPosition at index)
+    | otherwise = invalid current container index
+  scalar current container position = case coreExpressionType container of
+    CoreArrayType element ->
+      (current, Just (expression element (CoreIndex container position), element))
+    CoreTextType ->
+      (current, Just (expression CoreCharType (CoreTextMethod TextCharAt container [position]), CoreCharType))
+    CoreTupleType members ->
+      let member offset kind = CoreArm at
+            (CoreLiteralPattern (expression intType (CoreIntegerLiteral PlatformSigned (toInteger offset))))
+            Nothing (expression kind (CoreTupleIndex offset container))
+          failure = argumentFailure AtInvocation at "E7004" "index out of range"
+          arms = zipWith member [0 ..] members <> [CoreArm at CoreWildcardPattern Nothing failure]
+          chosen = joinRuntimeArms at CoreNeverType position arms
+       in (current, Just (chosen, coreExpressionType chosen))
+    _ -> invalid current container position
+  invalid current container position =
+    let (ready, failure) = invalidRuntimeIndex current at container [position]
+     in (ready, Just (failure, CoreNeverType))
+
+sliceOn :: Span -> LowerState -> CoreExpression -> CoreExpression -> CoreExpression
+  -> CoreExpression -> CoreExpression -> Lowered
+sliceOn at current container low high hasEnd inclusive =
     let kind = coreExpressionType container
         (withSize, size) = bindLocal current "" intType
         (withLow, start) = bindLocal withSize "" (coreExpressionType low)
@@ -111,21 +175,15 @@ lowerRangeIndex lower state receiver key@(Located at keyShape)
               (fail' "slice range ends before it starts" (Just "write the lower bound first") Nothing) ]
      in (ready, Just (wrap statements (sliceOf, kind)))
 
-  wrap statements (value, kind) = (expression kind (CoreBlockValue (CoreBlock statements (Just value))), kind)
-  sliceable kind = case kind of
-    CoreArrayType _ -> True
-    CoreTextType -> True
-    CoreBytesType -> True
-    _ -> False
+ where
   expression = CoreExpression at
   statement = CoreStatement at
   reading local = expression (coreLocalType local) (CoreReadLocal local)
   declare local value = statement (CoreDeclare local value)
+  wrap statements (value, kind) = (expression kind (CoreBlockValue (CoreBlock statements (Just value))), kind)
   number = expression intType . CoreIntegerLiteral PlatformSigned
-  exactKind = CoreIntegerType BigIntKind
   zero = number 0
   one = number 1
-  boolean = expression CoreBoolType . CoreBoolLiteral
   text = expression CoreTextType . CoreTextLiteral
   compare' = integerComparison at
   both a b = expression CoreBoolType (CoreBinary CoreAnd a b)

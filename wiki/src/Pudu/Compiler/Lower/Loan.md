@@ -138,3 +138,6 @@ Resolved Grill Log: start selected direct method calls with the
 already evaluated receiver and its original place at parameter zero.
 Check arity after the remaining arguments run and before queueing
 the body or publishing any finals.
+
+Resolved Grill Log: a prepared place read can select a slice and
+therefore reserve native locals before collecting later arguments.

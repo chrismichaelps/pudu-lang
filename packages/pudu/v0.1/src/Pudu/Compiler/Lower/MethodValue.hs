@@ -113,8 +113,10 @@ lowerDynamicText lower state at receiver kind result direct build =
     | otherwise = declaredMethod payload >>= boundMemberFact payload
   receive variants
     | any mutating [payload | variant <- variants, (_, payload) <- coreVariantFields variant]
-    , Just (after, held) <- holdPlace lower state (locatedSpan receiver) receiver =
-        (after, (\(prelude, place) -> (prelude, readHeldAtKeys (contextTypes (lowerContext after)) place, Just place)) <$> held)
+    , Just prepared <- holdPlace lower state (locatedSpan receiver) receiver = case prepared of
+        (after, Just (prelude, place)) ->
+          fmap (fmap (\(value, _) -> (prelude, value, Just place))) (readHeldAtKeys after place)
+        (after, Nothing) -> (after, Nothing)
     | otherwise = fmap (fmap (\(core, _) -> ([], core, Nothing))) (lower state receiver)
   emit current prelude core _ arms [] =
     let joined = preserveRuntimeResult result (joinRuntimeArms at result core (reverse arms))

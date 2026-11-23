@@ -177,7 +177,8 @@ lowerLoanedOperands lower state at callee signature defaulted operands = case ca
     lentFrom reading' written = case holdPlace lower current (locatedSpan written) written of
       Nothing -> plain written
       Just (after, Nothing) -> (after, Nothing)
-      Just (after, Just (declarations, found)) -> (after, Just (declarations, reading' (types after) found, Just found))
+      Just (after, Just (declarations, found)) ->
+        fmap (fmap (\(value, _) -> (declarations, value, Just found))) (reading' after found)
 
   finish prepareCall current statements held
     | blockType statements Nothing == CoreNeverType = stopped current statements

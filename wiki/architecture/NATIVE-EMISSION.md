@@ -338,6 +338,14 @@ wrong-kind failures at the access or store. Assignment keeps
 replacement effects before a destination failure.
 [[Compiler Lower Place]] · [[Backend Rendering Callable Programs]]
 
+## Held range keys in bracket reads (#956)
+
+Native bracket reads choose scalar indexing or slicing using the
+retained key. Receiver and mutable-argument preparation share the
+same bounds and diagnostic path. A range used as a writeback key
+still reports the assignment refusal. [[Compiler Lower Slice]] ·
+[[Backend Rendering Callable Programs]]
+
 ## Published progress (#496)
 
 The README progress bar counts **completed coverage areas**, not individual language

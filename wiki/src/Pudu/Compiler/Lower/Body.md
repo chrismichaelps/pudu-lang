@@ -609,3 +609,7 @@ builtin consumes only the value.
 
 Resolved Grill Log: builtin-first and declared-first lookup both
 deliver the original receiver place to a selected nominal method.
+
+Resolved Grill Log: [[Compiler Lower Slice]] selects a bracket
+operation after the receiver and key run. Both scalar and range
+checking use that entry.

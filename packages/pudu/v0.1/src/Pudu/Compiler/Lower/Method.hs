@@ -301,7 +301,8 @@ dynamicCall lower state at kind receiver member checked arguments = case receivi
   receiving
     | selfLent, Just held <- holdPlace lower probed (locatedSpan receiver) receiver = case held of
         (after, Nothing) -> (after, Nothing)
-        (after, Just (prelude, found)) -> (after, Just (prelude, readHeldAtKeys (contextTypes (lowerContext after)) found, Just found))
+        (after, Just (prelude, found)) ->
+          fmap (fmap (\(value, _) -> (prelude, value, Just found))) (readHeldAtKeys after found)
     | otherwise = case lower probed receiver of
         (after, Nothing) -> (after, Nothing)
         (after, Just (core, _)) -> (after, Just ([], core, Nothing))
@@ -318,8 +319,9 @@ dynamicCall lower state at kind receiver member checked arguments = case receivi
     , Just held <- holdPlace lower current (locatedSpan place) place =
         case held of
           (after, Nothing) -> (after, Nothing)
-          (after, Just (prelude, found)) ->
-            next after prelude (readHeld (contextTypes (lowerContext after)) found) (Just found)
+          (after, Just (prelude, found)) -> case readHeld after found of
+            (ready, Just (value, _)) -> next ready prelude value (Just found)
+            (ready, Nothing) -> (ready, Nothing)
     | otherwise = case lower current argument of
       (after, Nothing) -> (after, Nothing)
       (after, Just (core, _))
