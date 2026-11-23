@@ -58,3 +58,8 @@ can share its layout with a defaulted function. Use the layout to
 request discovery and the callable identity to choose the count.
 
 [[Compiler Lower Array Loop]] · [[Compiler Lower Lambda]]
+
+Resolved Grill Log: the same invocation profile can name exclusive
+parameter positions. Loan preparation retains places before selection,
+while each selected invocation uses only its own final positions.
+[[Compiler Lower Loan]]

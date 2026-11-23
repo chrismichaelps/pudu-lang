@@ -5,6 +5,12 @@ tags: [changelog]
 
 # Changelog
 
+## 2026-11-23 — Selected indirect mutable arguments (#956)
+
+- Retain argument places in order and use the selected callable's
+  defaults and exclusive positions when publishing finals.
+  [[Compiler Lower Loan]] · [[Compiler Lower Default]]
+
 ## 2026-11-23 — Selected indirect callable arity (#956)
 
 - Use the retained callable's argument profile for ordinary indirect

@@ -423,10 +423,18 @@ Lower Array Loop]] select the actual closure before projecting
 arguments. [[Backend Rendering Callable Programs]] covers held
 defaults and named arity failures after argument effects.
 
+## Selected indirect mutable arguments
+
+Architect → Backend Engineer. [[Compiler Lower Loan]] retains each
+operand and possible place before [[Compiler Lower Default]] selects
+the retained callable's arity and finals. [[Backend Rendering Callable
+Programs]] covers default evaluation through an indexed place,
+nonexclusive alternatives and the selected missing-parameter diagnostic.
+
 ## Next action
 
-Select the retained callable's argument profile for indirect mutable
-loans before invoking and publishing their finals.
+Retain argument places when a callable checked with no exclusive
+inputs can hold a callable that publishes mutable finals.
 
 ## Referenced by
 

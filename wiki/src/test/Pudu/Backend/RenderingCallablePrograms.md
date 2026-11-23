@@ -136,3 +136,10 @@ Resolved Grill Log: ordinary indirect calls and traversal choose the
 held callable's default count. Distinguish a defaulted one-parameter
 closure from a fixed two-parameter closure with the same native slots.
 An arity failure retains argument effects and the real parameter name.
+
+## Selected indirect loan defaults
+
+Resolved Grill Log: a selected method with an omitted default writes
+back through an indexed place after the index and default each run
+once. An alternative with no exclusive parameter retains the same
+operand effects and returns without updating the place.

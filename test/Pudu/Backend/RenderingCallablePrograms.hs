@@ -391,6 +391,31 @@ renderingCallableSuccessPrograms =
         , "  print(show(selected(2)))"
         , "  0", "}" ])
     , "receiver\n\"field 2\"\n", "")
+  , ("a selected defaulted method writes its exclusive final through an indexed argument", program
+      (selectedReceiverTypes <> checkedLoanMethod <>
+        [ "fn amount() -> Int { print(\"default\")\n 4 }"
+        , "trait HeldShift { fn shift(self: &Self, value: &mut Int, by: Int = amount()) -> Int }"
+        , "impl HeldShift for Option[Str] {"
+        , "  fn shift(self: &Self, value: &mut Int, by: Int = amount()) -> Int { *value = *value + by\n *value }"
+        , "}"
+        , "fn main() -> Int {"
+        , "  var values = [2]"
+        , "  let held = choose(\"λ\".toBytes()).shift"
+        , "  print(show(held(&mut values[{ print(\"index\")\n 0 }])))"
+        , "  print(show(values))"
+        , "  0", "}" ])
+    , "receiver\nindex\ndefault\n6\n[6]\n", "")
+  , ("a selected method without exclusive parameters leaves the supplied place unchanged", program
+      (selectedReceiverTypes <> checkedLoanMethod <>
+        [ "trait HeldShift { fn shift(self: &Self, value: Int) -> Int }"
+        , "impl HeldShift for Option[Str] { fn shift(self: &Self, value: Int) -> Int { value + 4 } }"
+        , "fn main() -> Int {"
+        , "  var values = [2]"
+        , "  let held = choose(\"λ\".toBytes()).shift"
+        , "  print(show(held(&mut values[{ print(\"index\")\n 0 }])))"
+        , "  print(show(values))"
+        , "  0", "}" ])
+    , "receiver\nindex\n6\n[2]\n", "")
   , ("a selected declared call can reach a held collection builtin", program
       (selectedReceiverTypes <> selectedByteConversion <> selectedCollection "Map[Int, Str]" "mapOf([(0, \"held\")])" <>
         [ "trait Keys { fn keys(self: &Self) -> Array[UInt8] }"
@@ -659,6 +684,17 @@ renderingCallableRefusalPrograms =
         , "  let callback = choose(\"λ\".toBytes()).callback()"
         , "  print(show(callback({ print(\"argument\")\n 1 })))"
         , "  0", "}" ]))
+  , ("a selected loaned callable names the missing parameter after reading the place", program
+      (selectedReceiverTypes <> checkedLoanMethod <>
+        [ "trait HeldShift { fn shift(self: &Self, value: &mut Int, amount: Int) -> Int }"
+        , "impl HeldShift for Option[Str] {"
+        , "  fn shift(self: &Self, value: &mut Int, amount: Int) -> Int { print(\"unreached\")\n *value + amount }"
+        , "}"
+        , "fn main() -> Int {"
+        , "  var values = [2]"
+        , "  let held = choose(\"λ\".toBytes()).shift"
+        , "  print(show(held(&mut values[{ print(\"index\")\n 0 }])))"
+        , "  0", "}" ]))
   , ("a stored stopping builtin receives the held runtime argument", program
       [ "trait View { fn size(self: &Self) -> Int }"
       , "impl View for Bytes { fn size(self: &Self) -> Int { 0 } }"
@@ -759,6 +795,12 @@ selectedDeclaredCallback result callback =
   , "trait HeldCallback { fn callback(self: &Self) -> " <> result <> " }"
   , "impl HeldCallback for Option[Str] { fn callback(self: &Self) -> " <> result <> " { " <> callback <> " } }"
   , "fn increment(value: Int) -> Int { value + 1 }"
+  ]
+
+checkedLoanMethod :: [Text]
+checkedLoanMethod =
+  [ "trait CheckedShift { fn shift(self: &Self, value: &mut Int) -> Int }"
+  , "impl CheckedShift for Str { fn shift(self: &Self, value: &mut Int) -> Int { *value } }"
   ]
 
 program :: [Text] -> Text

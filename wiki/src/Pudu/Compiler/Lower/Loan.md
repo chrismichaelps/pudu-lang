@@ -118,3 +118,12 @@ layout it needs to hold the resulting final.
 ## Stored mutable parameter layouts (#956)
 
 Resolved Grill Log: A held operand may project into a wider loaned input without copying the callable. The return path still publishes the final into its original place.
+
+## Selected indirect loan profiles
+
+Resolved Grill Log: retain explicit places and possible forwarded
+names in operand order. The callable identity decides the written
+parameter count and which positions publish finals. A failing arity
+check runs after operand effects and before any final store.
+
+[[Compiler Lower Default]] · [[Backend Rendering Callable Programs]]

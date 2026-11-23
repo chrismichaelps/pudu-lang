@@ -4,19 +4,19 @@
     its default, in order, so a default sees the parameters before it. -}
 module Pudu.Compiler.Lower.Default
   ( takesSuppliedCount, trailingDefaults, suppliedArguments, callArityFailure
-  , withCallableArity, lowerDefaultedBody ) where
+  , withCallableArity, withLoanedCallableArity, lowerDefaultedBody ) where
 
 import Control.Applicative ((<|>))
 import Data.List (mapAccumL)
 import qualified Data.Map.Strict as Map
-import Data.Maybe (isJust)
+import Data.Maybe (fromMaybe, isJust)
 import Data.Text (Text)
 import Pudu.Compiler.Lower.Arguments (ArgumentBlame (AtCaller), argumentFailureWith)
 import Pudu.Compiler.Lower.Dynamic (joinRuntimeArms, projectRuntimeValue)
 import Pudu.Compiler.Lower.State
   ( CallableSource (..), CallableTemplate (..), CoreSignature (..), Instance (instanceFunction)
   , LowerContext (..), LowerState (..), bindLocal, intType, refuse, refused )
-import Pudu.Compiler.Lower.Types (ownerKeyOf, selectedMember)
+import Pudu.Compiler.Lower.Types (loanedInputs, ownerKeyOf, selectedMember, typeFactAt)
 import Pudu.Core
 import Pudu.Frontend.Syntax (Expression, Function (..), Located (..), Parameter (..))
 import Pudu.IntegerLiteral (IntegerKind (..))
@@ -74,7 +74,26 @@ missingArgument blame at name = argumentFailureWith blame at "E7003"
 withCallableArity :: ArgumentBlame -> Span -> LowerState -> Bool -> CoreExpression
   -> [CoreType] -> CoreType -> [CoreExpression]
   -> (LowerState -> Bool -> CoreExpression -> [CoreExpression] -> Lowered) -> Lowered
-withCallableArity blame at state checkedDefault target inputs result given invoke
+withCallableArity blame at state checkedDefault target inputs result given invoke =
+  selectCallableArity blame at state checkedDefault Nothing target inputs result given
+    (\current defaulted _ -> invoke current defaulted)
+
+withLoanedCallableArity :: ArgumentBlame -> Span -> LowerState -> Bool -> [Int] -> CoreExpression
+  -> [CoreType] -> CoreType -> [CoreExpression]
+  -> (LowerState -> Bool -> [Int] -> CoreExpression -> [CoreExpression] -> Lowered) -> Lowered
+withLoanedCallableArity blame at state checkedDefault loans =
+  selectCallableArity blame at state checkedDefault (Just loans)
+
+data CallableArity = CallableArity
+  { arityParameters :: ![Text]
+  , arityDefaulted :: !Bool
+  , arityLoans :: ![Int]
+  }
+
+selectCallableArity :: ArgumentBlame -> Span -> LowerState -> Bool -> Maybe [Int] -> CoreExpression
+  -> [CoreType] -> CoreType -> [CoreExpression]
+  -> (LowerState -> Bool -> [Int] -> CoreExpression -> [CoreExpression] -> Lowered) -> Lowered
+selectCallableArity blame at state checkedDefault checkedLoans target inputs result given invoke
   | CoreClosure key _ <- coreExpressionShape target
   , Just profile <- Map.lookup key known >>= callableArity context =
       if invalid profile then retained (apply profile) else apply profile demanded target given
@@ -98,21 +117,24 @@ withCallableArity blame at state checkedDefault target inputs result given invok
   supplied = length given
   known = Map.filter ((== coreExpressionType target) . callableTemplateType)
     (Map.union (contextObservedCallables context) (contextKnownCallables context))
-  fallback = (replicate (length inputs - fromEnum checkedDefault) "argument", checkedDefault)
-  invalid (names, defaulted) = supplied > length names || not defaulted && supplied < length names
+  fallback = CallableArity (replicate (length inputs - fromEnum checkedDefault) "argument")
+    checkedDefault (fromMaybe [] checkedLoans)
+  invalid CallableArity{arityParameters, arityDefaulted} =
+    supplied > length arityParameters || not arityDefaulted && supplied < length arityParameters
   alternatives =
     [(key, profile) | (key, template) <- Map.toAscList known
     , Just profile <- [callableArity context template]
-    , snd profile /= checkedDefault || invalid profile]
+    , arityDefaulted profile /= checkedDefault || invalid profile
+        || maybe False (/= arityLoans profile) checkedLoans]
   couldHaveCount = case reverse inputs of
     count : _ : _ -> count == intType
     _ -> False
   demanded = state{lowerContext = context{contextNeedsCallableReplay =
-    contextNeedsCallableReplay context || checkedDefault || couldHaveCount || invalid fallback}}
-  apply (names, defaulted) current held arguments
-    | supplied > length names = failed current (tooManyArguments blame at)
-    | not defaulted, name : _ <- drop supplied names = failed current (missingArgument blame at name)
-    | otherwise = invoke current defaulted held arguments
+    contextNeedsCallableReplay context || isJust checkedLoans || checkedDefault || couldHaveCount || invalid fallback}}
+  apply CallableArity{arityParameters, arityDefaulted, arityLoans} current held arguments
+    | supplied > length arityParameters = failed current (tooManyArguments blame at)
+    | not arityDefaulted, name : _ <- drop supplied arityParameters = failed current (missingArgument blame at name)
+    | otherwise = invoke current arityDefaulted arityLoans held arguments
   failed current value = (current, Just (value, CoreNeverType))
   retained select =
     let operands = target : given
@@ -124,11 +146,13 @@ withCallableArity blame at state checkedDefault target inputs result given invok
           held : arguments -> fmap (fmap reblock) (select ready held arguments)
           [] -> refused ready
 
-callableArity :: LowerContext -> CallableTemplate -> Maybe ([Text], Bool)
+callableArity :: LowerContext -> CallableTemplate -> Maybe CallableArity
 callableArity context template = case callableTemplateSource template of
-  NamedCallable (_, declaration) signature _ -> Just (names (locatedValue declaration), takesSuppliedCount signature)
-  LiftedCallable _ _ _ _ function _ _ _ -> Just (names function, False)
-  MethodCallable _ _ _ _ member bound (CoreFunctionType arguments _) (FunctionTypeRequiring _ written required _) ->
+  NamedCallable (_, declaration) signature _ ->
+    Just (CallableArity (names (locatedValue declaration)) (takesSuppliedCount signature) (signatureLoaned signature))
+  LiftedCallable types _ _ at function _ _ _ ->
+    Just (CallableArity (names function) False (maybe [] loanedInputs (typeFactAt types at)))
+  MethodCallable _ _ _ _ member bound (CoreFunctionType arguments _) fact@(FunctionTypeRequiring _ written required _) ->
     let receiver = bound <|> case arguments of
           self : _ -> Just self
           [] -> Nothing
@@ -140,7 +164,7 @@ callableArity context template = case callableTemplateSource template of
           found <- Map.lookup key (contextInstances context)
           pure (drop (fromEnum (isJust bound)) (names (locatedValue (instanceFunction found))))
         parameters = take (length written) (maybe [] id declared <> repeat "argument")
-     in Just (parameters, requiredCount required < length written)
+     in Just (CallableArity parameters (requiredCount required < length written) (loanedInputs fact))
   _ -> Nothing
  where
   names = map (locatedValue . parameterName . locatedValue) . functionParameters

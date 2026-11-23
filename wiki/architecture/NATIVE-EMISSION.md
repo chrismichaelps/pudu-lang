@@ -300,6 +300,13 @@ and a defaulted function can share a native slot layout and still
 take different invocation paths. [[Compiler Lower Default]] ·
 [[Backend Rendering Callable Programs]]
 
+## Selected indirect mutable arguments (#956)
+
+Indirect calls checked with mutable arguments retain the explicit and
+forwarded places before invoking the held callable. The selected profile
+determines omitted defaults and publishes only its own exclusive finals.
+[[Compiler Lower Loan]] · [[Backend Rendering Callable Programs]]
+
 ## Published progress (#496)
 
 The README progress bar counts **completed coverage areas**, not individual language

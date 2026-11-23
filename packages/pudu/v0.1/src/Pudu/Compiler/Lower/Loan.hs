@@ -14,12 +14,14 @@ import Data.List (elemIndex, mapAccumL, sortOn)
 import qualified Data.Map.Strict as Map
 import Data.List.NonEmpty (NonEmpty (..))
 import Data.Text (Text)
+import Pudu.Compiler.Lower.Arguments (argumentFailure, argumentFailureWith, methodArgumentBlame)
 import Pudu.Compiler.Lower.Control (blockType, expressionIsPrintValued)
-import Pudu.Compiler.Lower.Default (suppliedArguments)
-import Pudu.Compiler.Lower.Dynamic (hasRuntimeChoice, mapRuntimeChoice, projectRuntimeValue, widen)
+import Pudu.Compiler.Lower.Default (suppliedArguments, withLoanedCallableArity)
+import Pudu.Compiler.Lower.Dynamic (hasRuntimeChoice, mapRuntimeChoice, preserveRuntimeResult, projectRuntimeValue, widen)
 import Pudu.Compiler.Lower.Generic (runtimeCallSignature)
 import Pudu.Compiler.Lower.Place (HeldPlace (..), holdPlace, observeHeldLayout, readHeld, readHeldAtKeys, storeHeld)
 import Pudu.Compiler.Lower.State (CoreSignature (..), Instance (..), LowerContext (..), LowerState (..), MutableSite (MutableParameterSite), bindLocal, halt, refused)
+import Pudu.Compiler.Lower.Types (nativeValueType)
 import Pudu.Core
 import Pudu.Frontend.Syntax (Expression (..), Function, Located (..))
 import Pudu.Source (Span)
@@ -119,11 +121,14 @@ lowerLoanedOperands lower state at callee signature defaulted operands = case ca
           call current held = indirect specialize current held (reading (locatedSpan written) local)
        in go call bound [declaration] [] operands
   Direct target -> go (direct target) state [] [] operands
-  ForeignCrossing target -> go (\current held -> made current held signature (CoreForeignCall target)) state [] [] operands
+  ForeignCrossing target -> go (\current held -> made current defaulted held (values held) signature (CoreForeignCall target)) state [] [] operands
  where
   types = contextTypes . lowerContext
   loaned = signatureLoaned signature
   parameterTypes = map (coreLocalType . coreParameterLocal) . signatureParameters
+  through = case callee of
+    Through{} -> True
+    _ -> False
 
   go prepareCall current statements held [] = finish prepareCall current statements (reverse held)
   go prepareCall current statements held ((index, operand, argument) : rest) = case argumentOf current index operand argument of
@@ -132,7 +137,7 @@ lowerLoanedOperands lower state at callee signature defaulted operands = case ca
       | expressionIsPrintValued value -> halt (locatedSpan argument) "a Result[(), Str] call argument" after
       | otherwise ->
           let passed = case (kept, lookup index (zip [0 ..] (parameterTypes signature))) of
-                (Nothing, Just expected) -> widen (types after) expected value
+                (Nothing, Just expected) | not through -> widen (types after) expected value
                 _ -> value
               span' = locatedSpan argument
               (bound, local) = bindLocal after "" (coreExpressionType passed)
@@ -146,7 +151,7 @@ lowerLoanedOperands lower state at callee signature defaulted operands = case ca
   -- as a value does; a lent argument fails at its root, as a store does.
   argumentOf current index operand argument
     | index `elem` loaned, Receiver <- operand = lentFrom readHeldAtKeys argument
-    | index `elem` loaned = case locatedValue argument of
+    | through || index `elem` loaned = case locatedValue argument of
         UnaryExpression "&mut" inner -> lentFrom readHeld inner
         NameExpression (_ :| []) -> lentFrom readHeld argument
         _ -> plain argument
@@ -179,11 +184,11 @@ lowerLoanedOperands lower state at callee signature defaulted operands = case ca
           declared <- entry
           runtimeCallSignature declared current target signature [coreLocalType local | (local, _, _) <- held]
         (ready, name, exact) = maybe (current, target, signature) id selected
-     in made (queued name ready) held exact (CoreCall name)
+     in made (queued name ready) defaulted held (values held) exact (CoreCall name)
 
   indirect specialize current held target
     | Just selected <- mapRuntimeChoice current at CoreNeverType target
-        (\ready value -> fmap (fmap fst) (indirect specialize ready held value)) = selected
+        (\ready value -> fmap (fmap fst) (indirect specialize ready held value)) = fmap (fmap preserve) selected
     | CoreFunctionType inputs _ <- coreExpressionType target
     , any hasRuntimeChoice layouts
     , any (not . fits) (zip inputs held) =
@@ -199,26 +204,53 @@ lowerLoanedOperands lower state at callee signature defaulted operands = case ca
 
   invoke current held target
     | Just selected <- mapRuntimeChoice current at CoreNeverType target
-        (\ready value -> fmap (fmap fst) (invoke ready held value)) = selected
-    | CoreFunctionType inputs packed@(CoreTupleType (result : _)) <- coreExpressionType target
-    , let exact = valueSignature at inputs result loaned
-    , loanedType exact == packed =
-        made current held exact (CoreCallValue target)
+        (\ready value -> fmap (fmap fst) (invoke ready held value)) = fmap (fmap preserve) selected
+    | CoreFunctionType inputs packed <- coreExpressionType target =
+        withLoanedCallableArity (methodArgumentBlame current) at current defaulted loaned
+          target inputs (signatureResult signature) (values held) (selectedCall held inputs packed)
+    | uncallable (coreExpressionType target) =
+        let kind = CoreExpression at CoreTextType (CoreRuntimeKind target)
+            prefix = CoreExpression at CoreTextType (CoreTextLiteral "cannot call a ")
+            message = CoreExpression at CoreTextType (CoreBinary CoreAdd prefix kind)
+            failure = argumentFailureWith (methodArgumentBlame current) at "E7001" Nothing message
+         in (current, Just (failure, CoreNeverType))
     | otherwise = halt at "a loaned callable without its final layouts" current
 
-  made current held exact call =
+  uncallable kind = case kind of
+    CoreSumType{} -> False
+    CoreCallbackType{} -> False
+    _ -> nativeValueType kind
+
+  selectedCall held inputs packed current takesCount selectedLoans target given
+    | null selectedLoans =
+        made current takesCount held given (valueSignature at inputs packed []) (CoreCallValue target)
+    | CoreTupleType (result : _) <- packed
+    , let exact = valueSignature at inputs result selectedLoans
+    , loanedType exact == packed =
+        made current takesCount held given exact (CoreCallValue target)
+    | otherwise =
+        let failure = argumentFailure (methodArgumentBlame current) at "E7001"
+              "cannot call a function value with these arguments"
+         in (current, Just (failure, CoreNeverType))
+
+  preserve (value, _) =
+    let carried = preserveRuntimeResult (signatureResult signature) value
+     in (carried, coreExpressionType carried)
+  values held = [reading at local | (local, _, _) <- held]
+
+  made current takesCount held operands' exact call =
     let wanted = parameterTypes exact
-        readOperand prior (local, _, index) = case lookup index (zip [0 ..] wanted) of
-          Just expected -> projectRuntimeValue (types prior) prior expected (reading at local)
-          Nothing -> (prior, reading at local)
-        (ready, given) = mapAccumL readOperand current held
-        passed = if defaulted then suppliedArguments at wanted given else given
+        readOperand prior ((_, _, index), value) = case lookup index (zip [0 ..] wanted) of
+          Just expected -> projectRuntimeValue (types prior) prior expected value
+          Nothing -> (prior, value)
+        (ready, given) = mapAccumL readOperand current (zip held operands')
+        passed = if takesCount then suppliedArguments at wanted given else given
         payload = loanedType exact
         (bound, answer) = bindLocal ready "" payload
         answered = reading at answer
         called = CoreStatement at (CoreDeclare answer (CoreExpression at payload (call passed)))
         finals = [(found, position, coreLocalType local)
-          | (_, Just found, index) <- held, Just position <- [elemIndex index loaned]
+          | (_, Just found, index) <- held, Just position <- [elemIndex index (signatureLoaned exact)]
           , local <- take 1 (drop position (loanedLocals exact))]
         publish prior (found, position, stored) =
           let source = CoreExpression (heldSpan found) stored (CoreTupleIndex (position + 1) answered)
@@ -227,7 +259,9 @@ lowerLoanedOperands lower state at callee signature defaulted operands = case ca
                 then (after, Just (storeHeld (types after) (heldSpan found) found projected))
                 else (observeHeldLayout after found (coreExpressionType projected), Nothing)
         (final, stores) = mapAccumL publish bound finals
-        result = CoreExpression at (signatureResult exact) (CoreTupleIndex 0 answered)
+        result
+          | null (signatureLoaned exact) = answered
+          | otherwise = CoreExpression at (signatureResult exact) (CoreTupleIndex 0 answered)
         settle = case callee of
           ForeignCrossing _ -> [CoreStatement at (CoreEvaluate (CoreExpression at CoreUnitType CoreForeignSettle))]
           _ -> []
