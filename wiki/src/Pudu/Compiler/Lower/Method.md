@@ -296,3 +296,10 @@ the written operands. Loaned calls use the same count convention
 without adding the hidden count to the loan positions.
 
 [[Compiler Lower Default]]
+
+## Mutable declared receiver selection
+
+Resolved Grill Log: retain the receiver and its eligible place before
+resolving the member or evaluating arguments. Pass the place through
+held alternatives. The selected declaration determines receiver and
+argument loans and writes finals back through the original places.

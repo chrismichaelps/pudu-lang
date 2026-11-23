@@ -16,7 +16,7 @@ import Data.List.NonEmpty (NonEmpty (..))
 import Data.Text (Text)
 import Pudu.Compiler.Lower.Arguments (argumentFailure, argumentFailureWith, methodArgumentBlame)
 import Pudu.Compiler.Lower.Control (blockType, expressionIsPrintValued)
-import Pudu.Compiler.Lower.Default (suppliedArguments, withLoanedCallableArity)
+import Pudu.Compiler.Lower.Default (callArityFailure, suppliedArguments, withLoanedCallableArity)
 import Pudu.Compiler.Lower.Dynamic (hasRuntimeChoice, mapRuntimeChoice, preserveRuntimeResult, projectRuntimeValue, widen)
 import Pudu.Compiler.Lower.Generic (runtimeCallSignature)
 import Pudu.Compiler.Lower.Place (HeldPlace (..), holdPlace, observeHeldLayout, readHeld, readHeldAtKeys, storeHeld)
@@ -86,6 +86,7 @@ loanedValue state at value
 {-| What a loaned call reaches: a function by name or a runtime function value. -}
 data Callee
   = Direct !Text
+  | DirectMember !Text !CoreExpression !(Maybe HeldPlace)
   | Through !(Located Expression) !([CoreType] -> LowerState -> CoreExpression -> Lowered)
   | Retained !CoreExpression !([CoreType] -> LowerState -> CoreExpression -> Lowered)
   | ForeignCrossing !CoreForeign
@@ -118,6 +119,10 @@ lowerLoanedOperands lower state at callee signature defaulted operands = case ca
     (after, Just (target, _)) -> throughValue (locatedSpan written) specialize after target
   Retained target specialize -> throughValue (coreExpressionSpan target) specialize state target
   Direct target -> go (direct target) state [] [] operands
+  DirectMember target receiver place ->
+    let (ready, local) = bindLocal state "" (coreExpressionType receiver)
+        declaration = CoreStatement (coreExpressionSpan receiver) (CoreDeclare local receiver)
+     in go (direct target) ready [declaration] [(local, place, 0)] operands
   ForeignCrossing target -> go (\current held -> made current defaulted held (values held) signature (CoreForeignCall target)) state [] [] operands
  where
   types = contextTypes . lowerContext
@@ -125,6 +130,7 @@ lowerLoanedOperands lower state at callee signature defaulted operands = case ca
   parameterTypes = map (coreLocalType . coreParameterLocal) . signatureParameters
   through = case callee of
     Direct{} -> False
+    DirectMember{} -> False
     ForeignCrossing{} -> False
     _ -> True
 
@@ -183,6 +189,9 @@ lowerLoanedOperands lower state at callee signature defaulted operands = case ca
   stopped current statements =
     (current, Just (CoreExpression at CoreNeverType (CoreBlockValue (CoreBlock statements Nothing)), CoreNeverType))
 
+  direct _ current held
+    | Just failure <- callArityFailure (methodArgumentBlame current) at signature (length held) =
+        (current, Just (failure, CoreNeverType))
   direct target current held =
     let context = lowerContext current
         entry = case Map.lookup target (contextInstances context) of

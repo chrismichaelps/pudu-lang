@@ -440,6 +440,24 @@ renderingCallableSuccessPrograms =
         , "  print(show(value))"
         , "  0", "}" ])
     , "receiver\n6\n6\n11\n6\n[6]\n[2]\n(6, 106)\n6\n", "")
+  , ("a selected declared call writes back its indexed receiver and argument", program
+      (selectedReceiverTypes <> checkedLoanMethod <>
+        [ "trait HeldShift { fn shift(self: &mut Self, value: &mut Int) -> Int }"
+        , "impl HeldShift for Option[Str] {"
+        , "  fn shift(self: &mut Self, value: &mut Int) -> Int {"
+        , "    *self = Some(\"changed\")"
+        , "    *value = *value + 4"
+        , "    *value"
+        , "  }"
+        , "}"
+        , "fn main() -> Int {"
+        , "  var receivers = [choose(\"λ\".toBytes())]"
+        , "  var values = [2]"
+        , "  print(show(receivers[{ print(\"receiver index\")\n 0 }].shift(&mut values[{ print(\"argument index\")\n 0 }])))"
+        , "  print(show(receivers))"
+        , "  print(show(values))"
+        , "  0", "}" ])
+    , "receiver\nreceiver index\nargument index\n6\n[Some(\"changed\")]\n[6]\n", "")
   , ("a selected declared call can reach a held collection builtin", program
       (selectedReceiverTypes <> selectedByteConversion <> selectedCollection "Map[Int, Str]" "mapOf([(0, \"held\")])" <>
         [ "trait Keys { fn keys(self: &Self) -> Array[UInt8] }"

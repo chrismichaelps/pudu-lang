@@ -440,10 +440,19 @@ selected callback's ordinary result. [[Backend Rendering Callable
 Programs]] covers a writable name, a computed value, and an ordinary
 tuple with the same native shape.
 
+## Mutable declared receiver selection
+
+Architect → Backend Engineer. [[Compiler Lower Method]] chooses the
+held member before collecting loans. [[Compiler Lower Body]] passes
+the receiver place through member dispatch. [[Compiler Lower Loan]]
+publishes the selected implementation's finals after validating
+arity. [[Backend Rendering Callable Programs]] covers ordered indices
+and two original destinations.
+
 ## Next action
 
-Select the held declared method before preparing its mutable receiver
-and argument loans, retaining the original place for writeback.
+Carry the retained receiver place through builtin-first member
+selection when a held declaration replaces the checked builtin.
 
 ## Referenced by
 

@@ -18,11 +18,11 @@ import Pudu.Compiler.Lower.State
   ( CoreSignature (..), Head (..), Instance (..), LowerContext (..), LowerState (..), ModuleScope (..)
   , bindLocal, halt, inModule, refused, withTypeBindings )
 import Pudu.Compiler.Lower.Generic (instantiationOf, matchType, runtimeCallSignature, specialize, unformed)
-import Pudu.Compiler.Lower.Dynamic (commonAggregateCarrier, hasRuntimeChoice, isDynamic, joinRuntimeArms, mapRuntimeChoice, missingRuntimeMember, pathText, preserveRuntimeResult, projectRuntimeValue, runtimeCarriers, widen, writtenType)
+import Pudu.Compiler.Lower.Dynamic (commonAggregateCarrier, hasRuntimeChoice, isDynamic, joinRuntimeArms, mapRuntimeChoice, pathText, preserveRuntimeResult, projectRuntimeValue, runtimeCarriers, widen, writtenType)
 import Pudu.Compiler.Lower.Loan (Callee (..), Operand (..), loanedType, lowerLoanedOperands)
 import Pudu.Compiler.Lower.MethodValue (boundMemberFact, declaredMemberType, lowerDynamicTextCall)
 import Pudu.Compiler.Lower.Place (HeldPlace (..), holdPlace, observeHeldLayout, readHeld, readHeldAtKeys, storeHeld)
-import Pudu.Compiler.Lower.Types (formedCoreTypeIn, loanedInputs, lookupScheme, ownerKeyOf, recordFields, selectedMember, sumVariants, typeBindings, typeFactAt, typeForSpan, nativeValueType, withFacts)
+import Pudu.Compiler.Lower.Types (formedCoreTypeIn, loanedInputs, lookupScheme, ownerKeyOf, recordFields, selectedMember, sumVariants, typeBindings, typeFactAt, typeForSpan, nativeValueType)
 import Pudu.Core
 import Pudu.Eval.Operator.Access (arrayMethods, mapMethods, setMethods, stringMethods)
 import Pudu.Eval.Bytes (bytesMethods)
@@ -36,6 +36,8 @@ import Pudu.Type.Value (NominalId (..), Scheme (..), Type (..), nominalKey)
 type LowerExpression = LowerState -> Located Expression -> (LowerState, Maybe (CoreExpression, CoreType))
 
 type Lowered = (LowerState, Maybe (CoreExpression, CoreType))
+
+type Redispatch = LowerState -> CoreExpression -> Maybe HeldPlace -> Lowered
 
 {-| Every method checking declared, as an instance keyed by owner, trait and
     member, with the indexes a call reaches it through. A member is found by
@@ -157,40 +159,26 @@ methodTables scopes modules = (Map.fromList instances, Map.fromList calls, Map.f
     `toText()` on a type that declares none. Str and Char answer their own
     built-in members first, as the evaluator reads them; Nothing leaves the
     call to the built-in method lowering. -}
-lowerHeldMethod :: LowerExpression -> Span -> Span -> Span -> Text -> [Located Expression]
-  -> LowerState -> CoreExpression -> Maybe Lowered
-lowerHeldMethod lower at callee receiverAt member arguments state value = do
+lowerHeldMethod :: LowerExpression -> Span -> Text -> [Located Expression]
+  -> LowerState -> CoreExpression -> Maybe HeldPlace -> Maybe Lowered
+lowerHeldMethod lower at member arguments state value place = do
   let context = lowerContext state
-      types = contextTypes context
       kind = coreExpressionType value
       selectedFact = declaredMemberType context kind member >>= boundMemberFact kind
-      facts = (receiverAt, unformed kind) : [(callee, fact) | Just fact <- [selectedFact]]
-      opened = state
-        { lowerContext = context{contextTypes = withFacts facts types}
-        , lowerScopes = [] : lowerScopes state }
-      (bound, held) = bindLocal opened "$selectedReceiver" kind
-      target = Located receiverAt (NameExpression (NonEmpty.singleton "$selectedReceiver"))
-  (after, result) <- lowerMethodCall lower missing bound at callee target member arguments
-  let restored = after
-        { lowerContext = (lowerContext after){contextTypes = types}
-        , lowerScopes = lowerScopes state }
-      wrap (answer, resultKind) =
-        (CoreExpression at resultKind (CoreBlockValue (CoreBlock
-          [CoreStatement receiverAt (CoreDeclare held value)] (Just answer))), resultKind)
-  pure (restored, wrap <$> result)
- where
-  missing current held = (current, Just (missingRuntimeMember callee (snd (selectedMember member)) held, CoreNeverType))
+      instantiated = selectedFact >>= bindMemberReceiver (unformed kind)
+  key <- declaredMethodKey context kind member
+  pure (callMemberInstance lower state at key instantiated value place arguments)
 
-lowerMethodCall :: LowerExpression -> (LowerState -> CoreExpression -> Lowered) -> LowerState -> Span -> Span -> Located Expression -> Text -> [Located Expression] -> Maybe Lowered
+lowerMethodCall :: LowerExpression -> Redispatch -> LowerState -> Span -> Span -> Located Expression -> Text -> [Located Expression] -> Maybe Lowered
 lowerMethodCall lower redispatch state at callee receiver written arguments = do
   kind <- typeForSpan (contextTypes context) (locatedSpan receiver)
   if isDynamic kind then Just (if written == "toText" && null arguments
     then lowerDynamicTextCall lower state at callee receiver kind
     else dynamicCall lower state at kind receiver member (typeFactAt (contextTypes context) callee) arguments)
-  else case ownerKeyOf kind >>= chosen of
-    Just key | member == "toText" || not (builtinFirst kind) ->
+  else case declaredMethodKey context kind written of
+    Just key ->
       Just (callMethod lower redispatch state at kind key instantiated receiver arguments)
-    _ | not (builtinFirst kind), member == "toText", null arguments ->
+    _ | not (builtinFirst member kind), member == "toText", null arguments ->
           case recordFields (contextTypes context) kind >>= lookup member of
             Nothing -> Just (rendered kind)
             Just field
@@ -200,25 +188,11 @@ lowerMethodCall lower redispatch state at callee receiver written arguments = do
       | otherwise -> Nothing
  where
   context = lowerContext state
-  (provider, member) = selectedMember written
-  -- The implementation the checked provider gives, else the owner's only one.
-  chosen owner = case provider of
-    Just trait | Just key <- Map.lookup (trait, owner, member) (contextTraitMethods context) -> Just key
-    _ -> Map.lookup (owner, member) (contextMethods context)
-  -- The callee's fact has the receiver bound already; put it back in front.
+  member = snd (selectedMember written)
   instantiated = do
-    FunctionTypeRequiring asynchronous inputs required result <- typeFactAt (contextTypes context) callee
+    fact <- typeFactAt (contextTypes context) callee
     held <- typeFactAt (contextTypes context) (locatedSpan receiver)
-    Just (FunctionTypeRequiring asynchronous (held : inputs) required result)
-  builtinFirst kind = case kind of
-    CoreTextType -> member `elem` map fst stringMethods
-    CoreCharType -> member `elem` ["code", "toText"]
-    CoreArrayType _ -> member `elem` map fst arrayMethods
-    CoreMapType _ _ -> member `elem` map fst mapMethods
-    CoreSetType _ -> member `elem` map fst setMethods
-    CoreStoreType _ -> member `elem` map fst bucketsMethods
-    CoreBytesType -> member `elem` map fst bytesMethods
-    _ -> False
+    bindMemberReceiver held fact
   uncallable kind = case kind of
     CoreFunctionType{} -> False
     CoreSumType{} -> False
@@ -236,6 +210,32 @@ lowerMethodCall lower redispatch state at callee receiver written arguments = do
       | expressionIsPrintValued core -> halt at "toText of a Result[(), Str] value" after
       | nativeValueType kind -> (after, Just (CoreExpression at CoreTextType (CoreDisplay core), CoreTextType))
       | otherwise -> halt at ("toText of a " <> coreTypeName kind <> " value") after
+
+bindMemberReceiver :: Type -> Type -> Maybe Type
+bindMemberReceiver held (FunctionTypeRequiring asynchronous inputs required result) =
+  Just (FunctionTypeRequiring asynchronous (held : inputs) required result)
+bindMemberReceiver _ _ = Nothing
+
+declaredMethodKey :: LowerContext -> CoreType -> Text -> Maybe Text
+declaredMethodKey context kind written
+  | member /= "toText", builtinFirst member kind = Nothing
+  | otherwise = do
+      owner <- ownerKeyOf kind
+      let qualified = provider >>= \trait -> Map.lookup (trait, owner, member) (contextTraitMethods context)
+      qualified <|> Map.lookup (owner, member) (contextMethods context)
+ where
+  (provider, member) = selectedMember written
+
+builtinFirst :: Text -> CoreType -> Bool
+builtinFirst member kind = case kind of
+  CoreTextType -> member `elem` map fst stringMethods
+  CoreCharType -> member `elem` ["code", "toText"]
+  CoreArrayType _ -> member `elem` map fst arrayMethods
+  CoreMapType _ _ -> member `elem` map fst mapMethods
+  CoreSetType _ -> member `elem` map fst setMethods
+  CoreStoreType _ -> member `elem` map fst bucketsMethods
+  CoreBytesType -> member `elem` map fst bytesMethods
+  _ -> False
 
 {-| A method of a dynamic value: the receiver runs, then the arguments, and
     the type it holds answers with its own implementation of the trait. -}
@@ -469,7 +469,7 @@ lowerOwnerMethod lower state at callee owner selected written arguments = do
     Just provider -> traitMember provider
     Nothing -> byTrait `orElse` byType
   Just $ maybe (ordinary key) id $ loanedInstanceCall lower state at key (typeFactAt (contextTypes context) callee)
-    (maybe [] pure receiverType) selection (length arguments) [(index, Argument, argument) | (index, argument) <- zip [0 ..] arguments]
+    (maybe [] pure receiverType) selection [(index, Argument, argument) | (index, argument) <- zip [0 ..] arguments]
  where
   ordinary key = case lowerAll lower state arguments of
     (after, Nothing) -> refused after
@@ -497,50 +497,59 @@ lowerOwnerMethod lower state at callee owner selected written arguments = do
   orElse (Just found) _ = Just found
   orElse Nothing other = other
 
-{-| The receiver is the first evaluated operand, including when it lends a place. -}
-callMethod :: LowerExpression -> (LowerState -> CoreExpression -> Lowered) -> LowerState -> Span -> CoreType -> Text -> Maybe Type -> Located Expression -> [Located Expression] -> Lowered
-callMethod lower redispatch state at expected key instantiated receiver arguments = maybe ordinary id $
-  loanedInstanceCall lower state at key instantiated (maybe [] pure (typeForSpan (contextTypes (lowerContext state)) (locatedSpan receiver)))
-    unselected (length arguments + 1) ((0, Receiver, receiver) : [(index, Argument, argument) | (index, argument) <- zip [1 ..] arguments])
- where
-  ordinary = ordinaryMethodCall lower redispatch state at expected key instantiated receiver arguments
-
-ordinaryMethodCall :: LowerExpression -> (LowerState -> CoreExpression -> Lowered) -> LowerState
-  -> Span -> CoreType -> Text -> Maybe Type -> Located Expression -> [Located Expression] -> Lowered
-ordinaryMethodCall lower redispatch state at expected key instantiated receiver arguments = case lower state receiver of
+{-| Read the receiver and retain its place before selecting a member. -}
+callMethod :: LowerExpression -> Redispatch -> LowerState -> Span -> CoreType -> Text -> Maybe Type
+  -> Located Expression -> [Located Expression] -> Lowered
+callMethod lower redispatch state at expected key instantiated receiver arguments = case receive of
   (after, Nothing) -> refused after
-  (after, Just (core, CoreNeverType)) -> (after, Just (core, CoreNeverType))
-  (after, Just (core, actual))
-    | expressionIsPrintValued core -> halt (locatedSpan receiver) "a Result[(), Str] method receiver" after
-    | any differs (runtimeCarriers actual) ->
-        let (ready, chosen) = select after core
-            preserve (answer, _) =
-              let types = contextTypes (lowerContext ready)
-                  carried = maybe answer (\kind -> preserveRuntimeResult kind answer) (typeForSpan types at)
-               in (carried, coreExpressionType carried)
-         in (ready, preserve <$> chosen)
-    | otherwise -> apply after core
+  (after, Just (prelude, value, place))
+    | blockType prelude (Just value) == CoreNeverType ->
+        (after, Just (wrap prelude value CoreNeverType, CoreNeverType))
+    | expressionIsPrintValued value -> halt (locatedSpan receiver) "a Result[(), Str] method receiver" after
+    | otherwise ->
+        let (ready, chosen) = select after value place
+            checked = typeForSpan (contextTypes (lowerContext ready)) at
+            finish (answer, _) =
+              let carried = maybe answer (\declared -> preserveRuntimeResult declared answer) checked
+                  kind = coreExpressionType carried
+               in (wrap prelude carried kind, kind)
+         in (ready, finish <$> chosen)
  where
+  receive = case holdPlace lower state (locatedSpan receiver) receiver of
+    Just (after, Just (prelude, place)) ->
+      (after, Just (prelude, readHeldAtKeys (contextTypes (lowerContext after)) place, Just place))
+    _ -> fmap (fmap (\(value, _) -> ([], value, Nothing))) (lower state receiver)
   differs held = ownerKeyOf held /= ownerKeyOf expected
     || not (hasRuntimeChoice held) && unformed held /= unformed expected
-  select current core
-    | Just selected <- mapRuntimeChoice current at CoreNeverType core
-        (\ready held -> fmap (fmap fst) (select ready held)) = selected
-    | differs (coreExpressionType core) = redispatch current core
-    | otherwise = apply current core
-  apply current core = case lowerAll lower current arguments of
-    (after, Nothing) -> refused after
-    (after, Just cores)
-      | any ((== CoreNeverType) . coreExpressionType) cores ->
-          (after, Just (stopped (core : cores), CoreNeverType))
-      | otherwise -> invoke after at key instantiated unselected (core : cores)
-  stopped cores = CoreExpression at CoreNeverType (CoreBlockValue (CoreBlock
-    [CoreStatement (coreExpressionSpan core) (CoreEvaluate core) | core <- cores] Nothing))
+  select current value place
+    | Just selected <- mapRuntimeChoice current at CoreNeverType value
+        (\ready held -> fmap (fmap fst) (select ready held place)) = selected
+    | differs (coreExpressionType value) = redispatch current value place
+    | otherwise = callMemberInstance lower current at key instantiated value place arguments
+  wrap [] value _ = value
+  wrap prelude value kind = CoreExpression at kind (CoreBlockValue (CoreBlock prelude (Just value)))
+
+callMemberInstance :: LowerExpression -> LowerState -> Span -> Text -> Maybe Type -> CoreExpression
+  -> Maybe HeldPlace -> [Located Expression] -> Lowered
+callMemberInstance lower state at key instantiated receiver place arguments =
+  case instanceTarget state at key instantiated [coreExpressionType receiver] unselected of
+    (admitted, Just (target, signature))
+      | not (null (signatureLoaned signature)) ->
+          lowerLoanedOperands lower admitted at (DirectMember target receiver place)
+            signature (takesSuppliedCount signature)
+            [(index, Argument, argument) | (index, argument) <- zip [1 ..] arguments]
+    _ -> case lowerAll lower state arguments of
+      (after, Nothing) -> refused after
+      (after, Just cores) -> invoke after at key instantiated unselected (receiver : cores)
 
 {-| A call to an instance: its signature is admitted in its own module under
     its own bindings, then the caller's are restored. An instance with open
     parameters is specialized first, against the instantiation at the call. -}
 invoke :: LowerState -> Span -> Text -> Maybe Type -> Selected -> [CoreExpression] -> Lowered
+invoke state at _ _ _ given
+  | any ((== CoreNeverType) . coreExpressionType) given =
+      let prelude = [CoreStatement (coreExpressionSpan value) (CoreEvaluate value) | value <- given]
+       in (state, Just (CoreExpression at CoreNeverType (CoreBlockValue (CoreBlock prelude Nothing)), CoreNeverType))
 invoke state at key written selected given = case instanceTarget state at key instantiated (coreExpressionType <$> take 1 given) selected of
   (back, Nothing) -> refused back
   (back, Just (target, signature@CoreSignature{signatureLoaned}))
@@ -636,13 +645,12 @@ instanceTarget state at key instantiated receiver selected = case Map.lookup key
 {-| A call whose instance has loaned parameters, lowered from the state
     before the ordinary attempt: the operands run in the order given. -}
 loanedInstanceCall
-  :: LowerExpression -> LowerState -> Span -> Text -> Maybe Type -> [CoreType] -> Selected -> Int
+  :: LowerExpression -> LowerState -> Span -> Text -> Maybe Type -> [CoreType] -> Selected
   -> [(Int, Operand, Located Expression)] -> Maybe Lowered
-loanedInstanceCall lower state at key instantiated receiver selected count operands =
+loanedInstanceCall lower state at key instantiated receiver selected operands =
   case instanceTarget state at key instantiated receiver selected of
     (admitted, Just (target, signature))
-      | not (null (signatureLoaned signature))
-      , Nothing <- callArityFailure (methodArgumentBlame admitted) at signature count ->
+      | not (null (signatureLoaned signature)) ->
           Just (lowerLoanedOperands lower admitted at (Direct target) signature (takesSuppliedCount signature) operands)
     _ -> Nothing
 
@@ -656,6 +664,7 @@ lowerAll lower = go []
   go collected current [] = (current, Just (reverse collected))
   go collected current (argument : rest) = case lower current argument of
     (after, Just (core, _))
+      | coreExpressionType core == CoreNeverType -> (after, Just (reverse (core : collected)))
       | expressionIsPrintValued core -> halt (locatedSpan argument) "a Result[(), Str] call argument" after
       | otherwise -> go (core : collected) after rest
     (after, Nothing) -> (after, Nothing)

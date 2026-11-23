@@ -5,7 +5,7 @@ module Pudu.Compiler.Lower.Body (lowerEntryBody, lowerFunctionBody, lowerExpress
 import Data.List.NonEmpty (NonEmpty (..))
 import qualified Data.Set as Set
 import Pudu.Compiler.Lower.Scalar (lowerUnary, lowerBinary, eagerType)
-import Pudu.Compiler.Lower.Types (ownerKeyOf, recordFields, typeForSpan, nativeIntegerKind, nativeValueType, treeType, unformed, withFacts, writtenLabel)
+import Pudu.Compiler.Lower.Types (ownerKeyOf, recordFields, selectedMember, typeForSpan, nativeIntegerKind, nativeValueType, treeType, unformed, withFacts, writtenLabel)
 import Pudu.Compiler.Lower.Control
   ( lowerWhile, lowerLoop, lowerTransfer, blockType, joinType
   , expressionIsPrintValued )
@@ -480,7 +480,7 @@ lowerExpression state (Located spanValue expression) = case expression of
     | Just lowered <- lowerMethodCall lowerExpression (selectedMemberCall callee receiver member arguments)
         clean spanValue callee receiver member arguments -> lowered
     | functionField receiver member -> lowerValueCall lowerExpression lowerBlock clean spanValue (Located callee (MemberExpression receiver named)) arguments
-    | otherwise -> lowerTextMethod lowerExpression (heldMember callee receiver member arguments)
+    | otherwise -> lowerTextMethod lowerExpression (heldMember callee receiver member arguments Nothing)
         clean spanValue callee receiver member arguments
   CallExpression (Located callee (MemberExpression (Located owner (TypeApplication (Located _ (NameExpression path)) written)) (Located _ member))) arguments
     | Just kind <- writtenCoreType clean (Located owner (NamedType (ModuleName path) written))
@@ -494,7 +494,7 @@ lowerExpression state (Located spanValue expression) = case expression of
     | Just lowered <- lowerMethodCall lowerExpression (selectedMemberCall callee receiver member arguments)
         clean spanValue callee receiver member arguments -> lowered
     | functionField receiver member -> lowerValueCall lowerExpression lowerBlock clean spanValue (Located callee (MemberExpression receiver named)) arguments
-    | otherwise -> lowerTextMethod lowerExpression (heldMember callee receiver member arguments)
+    | otherwise -> lowerTextMethod lowerExpression (heldMember callee receiver member arguments Nothing)
         clean spanValue callee receiver member arguments
   CallExpression callee'@(Located _ (NameExpression ("::trait-method::" :| [_, _]))) arguments ->
     lowerValueCall lowerExpression lowerBlock state spanValue callee' arguments
@@ -614,21 +614,22 @@ lowerExpression state (Located spanValue expression) = case expression of
     -- `Shape.Circle(3)`: the receiver names a type, not a local.
     qualifier (Located _ (NameExpression (owner :| []))) = lookupLocal state owner == Nothing
     qualifier _ = False
-    selectedMemberCall callee receiver member arguments current =
-      lowerSelectedMember lowerExpression (heldMember callee receiver member arguments)
-        current spanValue callee member arguments
-    heldMember callee receiver member arguments current held =
-      fieldCall <|> collection <|> lowerHeldMethod lowerExpression spanValue callee (locatedSpan receiver) member arguments current held
+    selectedMemberCall callee receiver member arguments current held place =
+      lowerSelectedMember lowerExpression (heldMember callee receiver member arguments place)
+        current spanValue callee (snd (selectedMember member)) arguments held
+    heldMember callee receiver member arguments place current held =
+      fieldCall <|> collection <|> lowerHeldMethod lowerExpression spanValue member arguments current held place
      where
+      plain = snd (selectedMember member)
       kind = coreExpressionType held
       types = contextTypes (lowerContext current)
       checked owner = case typeForSpan types (locatedSpan receiver) of
         Just expected | ownerKeyOf expected == Just owner -> expected
         _ -> kind
       fieldCall = do
-        field <- recordFields types kind >>= lookup member
-        let expression = CoreExpression callee field (CoreField member held)
-            name = Located callee (MemberExpression receiver (Located callee member))
+        field <- recordFields types kind >>= lookup plain
+        let expression = CoreExpression callee field (CoreField plain held)
+            name = Located callee (MemberExpression receiver (Located callee plain))
             lowerFieldValue ready syntax
               | locatedSpan syntax == callee = (ready, Just (expression, field))
               | otherwise = lowerExpression ready syntax
@@ -638,15 +639,15 @@ lowerExpression state (Located spanValue expression) = case expression of
          in Just (after{lowerContext = (lowerContext after){contextTypes = types}}, result)
       collection = do
         owner <- ownerKeyOf kind
-        if member == "toText" || member `notElem` builtinMethodNamesFor owner then Nothing else
+        if plain == "toText" || plain `notElem` builtinMethodNamesFor owner then Nothing else
           case kind of
             CoreArrayType element ->
               let input = case checked owner of
                     CoreArrayType declared -> declared
                     _ -> element
-               in Just (lowerArrayMethod lowerExpression lowerArrayCallback current spanValue input held member arguments)
-            CoreRangeType -> Just (lowerRangeMethod lowerExpression lowerArrayCallback current spanValue held member arguments)
-            _ | treeType kind -> Just (lowerKeyedMethod lowerExpression current spanValue (checked owner) held member arguments)
+               in Just (lowerArrayMethod lowerExpression lowerArrayCallback current spanValue input held plain arguments)
+            CoreRangeType -> Just (lowerRangeMethod lowerExpression lowerArrayCallback current spanValue held plain arguments)
+            _ | treeType kind -> Just (lowerKeyedMethod lowerExpression current spanValue (checked owner) held plain arguments)
             _ -> Nothing
     -- With no method of that name, a call reads the field and calls what it holds.
     functionField receiver member = case typeForSpan (contextTypes (lowerContext state)) (locatedSpan receiver) of

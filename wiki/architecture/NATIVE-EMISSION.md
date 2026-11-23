@@ -315,6 +315,13 @@ eligible places and use the selected profile for writeback.
 Collection callbacks publish only the ordinary result.
 [[Compiler Lower Lambda]] · [[Backend Rendering Callable Programs]]
 
+## Mutable declared receiver selection (#956)
+
+An ordinary declared call retains its receiver and eligible place
+before selecting the runtime declaration. The selected receiver and
+argument loans publish finals to the original places after the call.
+[[Compiler Lower Method]] · [[Backend Rendering Callable Programs]]
+
 ## Published progress (#496)
 
 The README progress bar counts **completed coverage areas**, not individual language

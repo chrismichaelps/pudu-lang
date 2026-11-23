@@ -153,3 +153,10 @@ tuple with the same physical result layout remains an ordinary
 result when the selected callable has no exclusive parameter.
 Traversal uses only the ordinary result and does not assign finals
 to the input array.
+
+## Mutable declared receiver selection
+
+Resolved Grill Log: a checked shared method can select a mutable
+implementation, including through an indexed receiver. Its exclusive
+arguments and receiver finals update the original places. A missing
+selected member stops before argument effects.

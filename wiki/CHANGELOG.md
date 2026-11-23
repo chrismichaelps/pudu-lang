@@ -5,6 +5,12 @@ tags: [changelog]
 
 # Changelog
 
+## 2026-11-23 — Mutable declared receiver selection (#956)
+
+- Select the held declaration before preparing argument loans.
+  Retain indexed receiver places for ordered writeback.
+  [[Compiler Lower Method]] · [[Compiler Lower Loan]]
+
 ## 2026-11-23 — Mutable finals through ordinary callable types (#956)
 
 - Preserve places for held callables with mutable parameters.

@@ -131,3 +131,10 @@ check runs after operand effects and before any final store.
 Resolved Grill Log: an already retained indirect callee uses the
 same operand traversal as a written one. No path reevaluates the
 callee to discover its constraints.
+
+## Retained declared receiver places
+
+Resolved Grill Log: start selected direct method calls with the
+already evaluated receiver and its original place at parameter zero.
+Check arity after the remaining arguments run and before queueing
+the body or publishing any finals.

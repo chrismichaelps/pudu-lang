@@ -602,3 +602,7 @@ Resolved Grill Log: Choose collection builtins from the held receiver family. Th
 ## Held declared method receivers
 
 Resolved Grill Log: Selected declared receivers can resolve builtins, record fields or another declared method from the held layout without replaying the source receiver.
+
+Resolved Grill Log: a declared call's held receiver can carry its
+original place into the selected method. A field read or collection
+builtin consumes only the value.
