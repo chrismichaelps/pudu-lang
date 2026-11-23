@@ -246,7 +246,7 @@ projectRuntimeValue :: LowerTypes -> LowerState -> CoreType -> CoreExpression ->
 projectRuntimeValue types state expected core
   | expected /= actual
   , runtimeCarriers actual `Set.isSubsetOf` runtimeCarriers expected
-  , Just (after, Just (mapped, _)) <- mapRuntimeChoice state (coreExpressionSpan core) expected core choose ->
+  , Just (after, Just (mapped, _)) <- mapRuntimeChoice state (coreExpressionSpan core) expected core choose =
       (after, mapped)
   | isDynamic expected
   , Just (ready, Just (projected, kind)) <- mapRuntimeChoice state (coreExpressionSpan core) expected core projectMember
