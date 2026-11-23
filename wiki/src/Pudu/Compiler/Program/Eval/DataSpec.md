@@ -20,6 +20,7 @@ The mobile entries checked by this spec:
 - `test-fixtures/stdlib/UsesMobileRefresh.pudu`: asserted to answer `9`, the number of checks in the file ([[Uses Mobile Refresh]]).
 - `test-fixtures/stdlib/UsesMobileResource.pudu`: asserted to answer `12`, the number of checks in the file ([[Uses Mobile Resource]]).
 - `test-fixtures/stdlib/UsesMobileMemo.pudu`: asserted to answer `5`, the number of checks in the file ([[Uses Mobile Memo]]).
+- `test-fixtures/stdlib/UsesMobileDevice.pudu`: asserted to answer `10`, the number of checks in the file ([[Uses Mobile Device]]).
 - `test-fixtures/stdlib/MemoRenderLambda.pudu`: asserted to be refused with exactly `E3103`, a memo render written as a lambda ([[Memo Render Lambda]]).
 - `test-fixtures/stdlib/MemoRenderLocal.pudu`: asserted to be refused with exactly `E3103`, a memo render held by a local binding and passed through an import alias ([[Memo Render Local]]).
 - `test-fixtures/stdlib/UsesMobileTheme.pudu`, `UsesMobileList.pudu`, `UsesMobileMaterial.pudu` and `UsesMobileCapabilities.pudu`, run by the same function; their expected values are in the file.

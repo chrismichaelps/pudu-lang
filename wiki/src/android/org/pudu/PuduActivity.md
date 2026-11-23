@@ -69,6 +69,13 @@ alone, since the activity is exported as the launcher.
 
 Back to [[Backend Toolchain Android]].
 
+## Links (#978)
+
+- `onCreate` passes the launch intent to `linked`. `onNewIntent` stores the new intent and calls `linked` again; the activity is `singleTask`, so a later link arrives there rather than in a second activity.
+- `linked` queues LINKED (30) with the intent's data URI as text, only for an `ACTION_VIEW` intent that carries data. Other intents are ignored.
+
+The link path is not gated by the self-test marker: a released package also reports links.
+
 ## Negative Logic
 
 - No self-test without a debuggable build. A released package ignores every

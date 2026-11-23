@@ -32,6 +32,7 @@ import qualified Data.Text.Encoding as Encoding
 import Pudu.Backend.Emit.Entry (embeddedHeader, embeddedHeaderName)
 import Pudu.Backend.Runtime.Host.Compress (compressLibraryMarker)
 import Pudu.Backend.Toolchain (compilerFlags)
+import Pudu.Backend.Identity (Identity (..))
 import Pudu.Backend.Toolchain.Assets (stageAssets)
 import Pudu.Backend.Toolchain.HostSources (androidHostSources, androidJavaSources, androidManifest)
 import Pudu.Backend.Toolchain.Process (ToolchainFailure (..), problemText, runTool, timeoutSeconds, tryIO)
@@ -130,9 +131,10 @@ compileAndroidLibrary tools source exports output = staged output $ \directory -
     `libpudu_app.so`, the bridge classes dexed, the manifest linked against
     the platform, the library stored uncompressed and page-aligned, and the
     whole signed with a key made for this build. `assets` is the asset
-    directory and its checked files, packaged for the asset manager. -}
-compileApk :: AndroidTools -> Text -> [Text] -> Text -> FilePath -> Maybe (FilePath, [FilePath]) -> IO (Either ToolchainFailure Text)
-compileApk tools source exports label output assets = case toolSdk tools of
+    directory and its checked files, packaged for the asset manager;
+    `permissions` are the manifest's entries for the declared permissions. -}
+compileApk :: AndroidTools -> Text -> [Text] -> Text -> FilePath -> Maybe (FilePath, [FilePath]) -> Identity -> [Text] -> IO (Either ToolchainFailure Text)
+compileApk tools source exports label output assets identity permissions = case toolSdk tools of
   Nothing -> pure (Left (ToolchainSdkMissing "android" "an Android SDK"))
   Just sdk -> do
     testing <- maybe False (not . null) <$> lookupEnv testBuildVariable
@@ -174,7 +176,7 @@ compileApk tools source exports label output assets = case toolSdk tools of
         createDirectoryIfMissing True classes
         mapM_ (\(file, text) -> Char8.writeFile (directory </> file) (Char8.pack text)) androidHostSources
         mapM_ (\(file, text) -> Char8.writeFile (javaDir </> "org" </> "pudu" </> file) (Char8.pack text)) androidJavaSources
-        ByteString.writeFile manifest (Encoding.encodeUtf8 (packageManifest testing label))
+        ByteString.writeFile manifest (Encoding.encodeUtf8 (packageManifest testing label identity permissions))
         mapM_ (\(from, files) -> stageAssets from files staging) assets
         let javaFiles = [javaDir </> "org" </> "pudu" </> file | (file, _) <- androidJavaSources]
         ran <- step
@@ -207,14 +209,36 @@ testBuildVariable = "PUDU_ANDROID_TEST_BUILD"
 packageLinkFlags :: Bool -> [String]
 packageLinkFlags testing = ["--debug-mode" | testing]
 
-{-| The manifest for a program's label. A test build also carries the marker
-    the activity requires before it reads self-test extras. -}
-packageManifest :: Bool -> Text -> Text
-packageManifest testing label
+{-| The manifest for a program named `label` with its `identity` and the
+    permission entries. The package is the declared identifier, or one derived
+    from the label; each scheme the application opens is a VIEW filter. A
+    test build also carries the marker the activity requires before it reads
+    self-test extras. -}
+packageManifest :: Bool -> Text -> Identity -> [Text] -> Text
+packageManifest testing label identity permissions
   | testing = Text.replace "  </application>" (selfTestMarker <> "\n  </application>") named
   | otherwise = named
  where
-  named = Text.replace "PUDU_PACKAGE" (packageName label) (Text.replace "PUDU_LABEL" (escaped label) (Text.pack androidManifest))
+  package
+    | identityDeclared identity = Text.replace "-" "_" (identityIdentifier identity)
+    | otherwise = "org.pudu." <> packageName label
+  -- Applied from the last pair to the first, so the name, the only free text,
+  -- is placed after every other placeholder is gone and cannot be mistaken for one.
+  named = foldr (uncurry Text.replace) (Text.pack androidManifest)
+    [ ("PUDU_LABEL", escaped (identityName identity))
+    , ("PUDU_VERSION", escaped (identityVersion identity))
+    , ("PUDU_BUILD", Text.pack (show (identityBuild identity)))
+    , ("PUDU_PACKAGE", package)
+    , ("PUDU_LINKS", Text.concat (map linkFilter (identitySchemes identity)))
+    , ("  <application", Text.concat [entry <> "\n" | entry <- permissions] <> "  <application")
+    ]
+  linkFilter scheme = Text.unlines
+    [ "      <intent-filter>"
+    , "        <action android:name=\"android.intent.action.VIEW\" />"
+    , "        <category android:name=\"android.intent.category.DEFAULT\" />"
+    , "        <category android:name=\"android.intent.category.BROWSABLE\" />"
+    , "        <data android:scheme=\"" <> escaped scheme <> "\" />"
+    , "      </intent-filter>" ]
 
 selfTestMarker :: Text
 selfTestMarker = "    <meta-data android:name=\"org.pudu.selftest\" android:value=\"true\" />"

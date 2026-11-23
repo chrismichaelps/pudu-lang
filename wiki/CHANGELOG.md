@@ -5,6 +5,32 @@ tags: [changelog]
 
 # Changelog
 
+## 2026-11-23 — Device facts, network reachability and keep-awake (#983)
+
+- Device facts, network reachability and keep-awake: DEVICE 58, NETWORK 59 and AWAKE 60 on the iOS and Android hosts, DESCRIBED 32 and NETWORKED 33 events, `Std.Mobile.Device` with `describe`, `watchNetwork` and `keepAwake`, and refusals for a NETWORK or AWAKE word other than 0 or 1. The iOS host uses UIKit, Foundation and a Network path monitor ([[pudu-ios-device]]); the Android host uses ConnectivityManager under the normal `ACCESS_NETWORK_STATE` permission ([[PuduDevice]]). The instruction bound is now 61.
+  [[Std Mobile Device]] · [[Std Mobile Stream]] · [[Std Mobile Events]] · [[Std Mobile View]] · [[pudu-ios-device]] · [[pudu-ios-host]] · [[pudu-ios-nodes]] · [[pudu-ios-events]] · [[PuduDevice]] · [[pudu-android-routes]] · [[Backend Toolchain App]] · [[Uses Mobile Device]] · [[About Example]] · [[NATIVE-MOBILE]]
+
+## 2026-11-19 — Persistent and secure storage, and public integer parsing (#980)
+
+- Storage: `Std.Mobile.Storage` with Plain and Secure places; STORE_READ 55, STORE_WRITE 56, STORE_REMOVE 57 and the STORED 31 answer. The iOS host uses user defaults and the keychain ([[pudu-ios-storage]]); the Android host uses SharedPreferences and AES-GCM under a Keystore key ([[PuduStore]]). The example is [[Vault Example]].
+- Public integer parsing: `Std.Num.parseInt` and `parseIntIn`, answering `None` for any text they do not accept. `Std.Text`, `Std.Cron`, `Std.Ui.Desktop` and `Std.Ui.Accessible` delegate to it. Desktop and Accessible previously capped at nine digits.
+  [[Std Mobile Storage]] · [[Std Num]] · [[Std Mobile Stream]] · [[Std Mobile Events]] · [[Std Mobile View]] · [[pudu-ios-host]] · [[pudu-ios-storage]] · [[PuduStore]] · [[Uses Mobile Storage]] · [[Uses Num Parse]] · [[Vault Example]] · [[980-storage]] · [[NATIVE-MOBILE]]
+
+## 2026-11-19 — Application identity and incoming links (#978)
+
+- Application identity and incoming links (#978): `[app]` table in the manifest (name, identifier, version, build, schemes), E6018 for values a store would refuse, Info.plist display name, version, build and URL types, Android package, version code and name, label, VIEW filters and singleTask launch, LINKED 30 event with the URL, and the link self-test on iOS.
+  [[Pudu Backend Identity]] · [[Compiler Manifest]] · [[Backend Toolchain App]] · [[Backend Toolchain Android]] · [[Native Diagnostics]] · [[Std Mobile View]] · [[Std Mobile Events]] · [[pudu-ios-system]] · [[Native Android Activity]] · [[Links Example]] · [[Identity Spec]] · [[Native App Identity]] · [[NATIVE-MOBILE]]
+
+## 2026-11-19 — Native tab bars (#977)
+
+- Native tab bars (#977): TABS 54 on the iOS and Android hosts, SELECTED 29 event, `Tab`, `Tabbed`, and `mountTabs`, `updateTabs` and `observeTabs` in Std Mobile Navigation, and refusals for tabs with no pages, repeated ids and an unshown selection.
+  [[pudu-ios-tabs]] · [[PuduTabs]] · [[pudu-android-routes]] · [[Std Mobile Navigation]] · [[Std Mobile Stream]] · [[Std Mobile Events]] · [[Std Mobile View]] · [[Tabs Example]] · [[Uses Mobile Tabs]] · [[Native Tabs]] · [[NATIVE-MOBILE]]
+
+## 2026-11-19 — Declared, build-checked permissions (#976)
+
+- Declared, build-checked permissions (#976): PERMISSIONS 51, PERMISSION 52 and SETTINGS 53 on the iOS and Android hosts, PERMISSIONED 28 event, `[app.permissions]` in the manifest, E6014, E6015, E6016 and W6017 for declarations checked against requests.
+  [[Std Mobile Permission]] · [[Pudu Backend Permissions]] · [[pudu-ios-permission]] · [[PuduPermission]] · [[Std Mobile Stream]] · [[Std Mobile Events]] · [[Std Mobile View]] · [[Compiler Manifest]] · [[Permissions Example]] · [[Uses Mobile Permission]] · [[Permissions Spec]] · [[Native Permissions]] · [[NATIVE-MOBILE]]
+
 ## 2026-11-19 — Native open, share, clipboard and status bar (#974)
 
 - Native open, share, clipboard and status bar (#974): OPEN 46, SHARE 47, COPY 48, PASTE 49 and STATUS 50 on the iOS and Android hosts, OPENED 25, SHARED 26 and PASTED 27 events, and body caps and connection timeouts for remote images and fetch requests.

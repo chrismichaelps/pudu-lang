@@ -9,13 +9,14 @@ module Pudu.FloatLiteral
   , splitFloatSuffix
   ) where
 
+import Data.Data (Data)
 import Data.Text (Text)
 import qualified Data.Text as Text
 import GHC.Float (double2Float, float2Double)
 import Text.Read (readMaybe)
 
 data FloatWidth = Float32Width | Float64Width
-  deriving stock (Eq, Ord, Show)
+  deriving stock (Data, Eq, Ord, Show)
 
 data ParsedFloat = ParsedFloat
   { parsedFloatValue :: !Double

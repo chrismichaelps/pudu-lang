@@ -360,6 +360,8 @@ tags: [moc, module]
 - [[pudu_ios_navigation.h]] — UIKit navigation host and page sheet presentation.
 - [[Native Pages Example]] — navigation stack and page sheet, built only from Pudu.
 - [[Uses Mobile Navigation]] — stdlib fixture for the navigation stream, pops and dismissals.
+- [[Uses Mobile Tabs]] — stdlib fixture for the tab bar stream, picks, pops, sheets and removals (#977).
+- [[Tabs Example]] — two tabs with a pushed page and a sheet on the simulator (#977).
 - [[Native Refresh Example]] — pull to refresh and safe-area insets, built only from Pudu.
 - [[Native Remote Example]] — two keyed network resources, one request, rate-limited retry, built only from Pudu.
 - [[Test Fetch Server]] — local server and request counts for the Remote simulator run.
@@ -371,9 +373,19 @@ tags: [moc, module]
 - [[Gallery Example]] — bundled, served, missing and moved images on the iOS simulator (#973).
 - [[Uses Mobile System]] — stdlib fixture for system requests: open, share, clipboard, status bar and their answers (#974).
 - [[Services Example]] — copy and paste, an unhandled URL, a share and the light status bar on the simulator (#974).
+- [[Uses Mobile Storage]] — stdlib fixture for storage requests and the STORED answer (#980).
+- [[Uses Num Parse]] — stdlib fixture for `parseInt` and `parseIntIn` (#980).
+- [[Vault Example]] — launch count in plain storage, a secure token and a removed key on the simulator (#980).
+- [[PuduStore]] — Android SharedPreferences and Keystore-encrypted storage (#980).
+- [[Uses Mobile Device]] — stdlib fixture for device facts, reachability and keep-awake requests and answers (#983).
+- [[About Example]] — device facts, network link and keep-awake on the simulator and Android (#983).
+- [[PuduDevice]] — Android device facts, network reachability and keep-awake (#983).
 - [[Pudu Backend Toolchain Assets]] — application asset listing, refused names and links, staging (#973).
 - [[Uses Mobile Controls]] — stdlib fixture for the value controls: build and change words, normalization and value events (#934).
 - [[Pudu Compiler Program Eval Data Spec]] — data evaluation spec, including the mobile fixture counts.
 - [[Uses Mobile Memo]] — stdlib fixture for memoized subtrees, render counters and site keys.
 - [[Memo Render Lambda]] · [[Memo Render Local]] — refusal fixtures: a memo render that is a lambda or a local binding is E3103.
 - [[Native Render Skipping]] — cost model and three-part plan for skipping unchanged native rendering.
+- [[Permissions Spec]] · [[Uses Mobile Permission]] · [[Permissions Example]] — permission properties, stdlib fixture and example (#976).
+- [[Pudu Backend Identity]] · [[Identity Spec]] — application identity from the `[app]` table and its platform declarations (#978).
+- [[Links Example]] — incoming links: the LINKED event and the simulator link self-test (#978).

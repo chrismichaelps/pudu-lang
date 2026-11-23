@@ -386,3 +386,91 @@ impl Integer for BigInt {
   fn toBigInt(self: &Self) -> BigInt { *self }
   fn fromBigInt(self: &Self, value: BigInt) -> Option[Self] { Some(value) }
 }
+
+/// The `Int` that `text` spells in decimal: an optional `+` or `-`, then one
+/// or more ASCII digits, and nothing else; no spaces, separators or prefix.
+/// Every `Int` reads back exactly, the most negative included, and text
+/// spelling more than an `Int` holds answers `None`: such text so often comes
+/// from outside the program that stopping over it would let one field end it.
+///
+/// Num.parseInt("42")    // Some(42)
+/// Num.parseInt("-7")    // Some(-7)
+/// Num.parseInt("4 2")   // None
+export fn parseInt(text: Str) -> Option[Int] { parseIntIn(text, 10) }
+
+/// The `Int` that `text` spells in `radix`, from 2 to 36: an optional `+` or
+/// `-`, then one or more digits, `0`–`9` then `a`–`z` in either case for the
+/// values ten and up; nothing else. A radix outside 2 to 36, a digit the
+/// radix does not have, or a value beyond an `Int` answers `None`.
+///
+/// Num.parseIntIn("ff", 16)    // Some(255)
+/// Num.parseIntIn("-101", 2)   // Some(-5)
+/// Num.parseIntIn("8", 8)      // None
+export fn parseIntIn(text: Str, radix: Int) -> Option[Int] {
+  if radix < 2 || radix > 36 {
+    return None
+  }
+  var negative = false
+  var first = true
+  var digits = 0
+  var total = 0
+  // Set when a negative value reaches the most negative Int, whose magnitude
+  // is one past the largest Int and so cannot be held as a positive total.
+  var lowest = false
+  for symbol in text {
+    let signed = first && (symbol == '-' || symbol == '+')
+    first = false
+    if signed {
+      negative = symbol == '-'
+    } else {
+      let digit = digitValue(symbol)
+      if lowest || digit < 0 || digit >= radix {
+        return None
+      }
+      if total <= (INT_MAX - digit) / radix {
+        total = total * radix + digit
+      } else if negative && reachesLowest(total, digit, radix) {
+        lowest = true
+      } else {
+        return None
+      }
+      digits = digits + 1
+    }
+  }
+  if digits == 0 {
+    None
+  } else if lowest {
+    Some(0 - INT_MAX - 1)
+  } else if negative {
+    Some(0 - total)
+  } else {
+    Some(total)
+  }
+}
+
+/// The largest value an `Int` holds.
+const INT_MAX: Int = 9223372036854775807
+
+// Whether `total` followed by `digit` in `radix` is exactly the magnitude of
+// the most negative Int, one past INT_MAX: with INT_MAX = q * radix + r, that
+// magnitude is q followed by r + 1, or q + 1 followed by 0 when r + 1 is the
+// radix. Checked through q and r, so nothing here can overflow.
+fn reachesLowest(total: Int, digit: Int, radix: Int) -> Bool {
+  let quotient = INT_MAX / radix
+  let remainder = INT_MAX % radix
+  if remainder + 1 == radix { total == quotient + 1 && digit == 0 } else { total == quotient && digit == remainder + 1 }
+}
+
+// A digit's value in any radix up to 36, or -1 for a character that is none.
+fn digitValue(symbol: Char) -> Int {
+  let code = symbol.code()
+  if code >= 48 && code <= 57 {
+    code - 48
+  } else if code >= 97 && code <= 122 {
+    code - 87
+  } else if code >= 65 && code <= 90 {
+    code - 55
+  } else {
+    -1
+  }
+}

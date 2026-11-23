@@ -99,4 +99,15 @@ static void pudu_test_system(void (^done)(void)) {
   check();
 }
 
+/* The link self-test: the application opens a URL in its own scheme, which
+   the system hands back to it as a link, then stops once that has arrived. */
+static void pudu_test_link(void (^done)(void)) {
+  const char *url = getenv("PUDU_UI_LINK_TEST");
+  [UIApplication.sharedApplication openURL:[NSURL URLWithString:@(url)] options:@{} completionHandler:^(BOOL opened) {
+    printf("PUDU_SYSTEM link %s\n", opened ? "opened" : "refused");
+    fflush(stdout);
+    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, 1500 * NSEC_PER_MSEC), dispatch_get_main_queue(), done);
+  }];
+}
+
 #endif

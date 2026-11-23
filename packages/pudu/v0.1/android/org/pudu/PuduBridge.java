@@ -301,11 +301,12 @@ public final class PuduBridge {
   /* Navigation, pull to refresh, requests and wake; the host has checked each instruction. */
   static void navigate(int[] ids, View[] bodies, boolean[] fills, String[] titles, boolean hasSheet, int sheet, View sheetBody,
       boolean sheetFills) {
+    PuduTabs.close();
     PuduNavigator.show(ids, bodies, fills, titles, hasSheet, sheet, sheetBody, sheetFills);
   }
 
   /** The body on top of a navigation, or null when none is shown. */
-  static View navigationTop() { return PuduNavigator.top(); }
+  static View navigationTop() { return PuduTabs.shown() ? PuduTabs.top() : PuduNavigator.top(); }
 
   static void refresh(ViewGroup view, int tag, boolean on) { PuduRefresh.set(view, tag, on); }
   static void settleRefresh(int[] queued) { PuduRefresh.settle(queued); }
@@ -320,6 +321,19 @@ public final class PuduBridge {
   static void copy(String text) { PuduSystem.copy(text); }
   static void paste(int tag) { PuduSystem.paste(tag); }
   static void status(int style, boolean hidden) { PuduSystem.status(style, hidden); }
+  static void permissions(int[] kinds) { PuduPermission.check(kinds); }
+  static void permission(int kind) { PuduPermission.request(kind); }
+  static void settings() { PuduPermission.settings(); }
+  static void storeRead(int tag, int place, String key) { PuduStore.read(tag, place, key); }
+  static void storeWrite(int place, String key, String value) { PuduStore.write(place, key, value); }
+  static void storeRemove(int place, String key) { PuduStore.remove(place, key); }
+  static void device(int tag) { PuduDevice.describe(tag); }
+  static void network(boolean watching) { PuduDevice.network(watching); }
+  static void awake(boolean on) { PuduDevice.awake(on); }
+  static void tabs(int[] ids, String[] names, int[] counts, int[] routes, View[] bodies, boolean[] fills, String[] titles, int selected,
+      boolean hasSheet, int sheet, View sheetBody, boolean sheetFills) {
+    PuduTabs.show(ids, names, counts, routes, bodies, fills, titles, selected, hasSheet, sheet, sheetBody, sheetFills);
+  }
   static void source(android.widget.ImageView view, int origin, int scaling, String location) {
     PuduImage.source(view, origin, scaling, location);
   }

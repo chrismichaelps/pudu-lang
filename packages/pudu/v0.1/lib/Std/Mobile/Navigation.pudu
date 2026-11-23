@@ -28,6 +28,26 @@ export type Shown = { pages: Array[(UInt32, UInt32, Str)], sheet: Option[(UInt32
 /// `observe`.
 export type Mounted = { pages: Array[Page], sheet: Option[Page], next: UInt32, free: Array[UInt32], shown: Shown }
 
+/// One tab: its id, the title and system symbol its bar item shows, and its
+/// own stack, root first. Route ids are unique across every tab.
+export type Tab = { id: UInt32, title: Str, symbol: Str, root: Route, pushed: Array[Route] }
+
+/// What a tabbed program presents: its tabs in bar order, the selected tab's
+/// id, and at most one sheet over the whole bar.
+export type Tabbed = { tabs: Array[Tab], selected: UInt32, sheet: Option[Sheet] }
+
+/// A tab the platform shows: its id, title, symbol, and each page's route id,
+/// body node and title, root first.
+export type TabShown = { id: UInt32, title: Str, symbol: Str, pages: Array[(UInt32, UInt32, Str)] }
+
+/// The tabs the platform shows, the selected tab and the sheet.
+export type TabsShown = { tabs: Array[TabShown], selected: UInt32, sheet: Option[(UInt32, UInt32)] }
+
+/// The mounted tabs, each with its pages, the sheet, the ids handed out so
+/// far, and what the platform shows, with completed pops, tab picks and
+/// dismissals folded in by `observeTabs`.
+export type TabsMounted = { stacks: Array[(UInt32, Array[Page])], sheet: Option[Page], next: UInt32, free: Array[UInt32], shown: TabsShown }
+
 // Ids handed out so far and the stream written so far.
 type Work = { next: UInt32, free: Array[UInt32], out: Array[UInt8] }
 
@@ -44,37 +64,9 @@ export fn mount(presentation: &Presentation) -> (Mounted, Bytes) {
 /// written only when the navigation differs from what the platform shows, so
 /// a body edit crosses without it and an unchanged commit stays empty.
 export fn update(mounted: &Mounted, presentation: &Presentation) -> (Mounted, Bytes) {
-  let routes = [presentation.root].concat(presentation.pushed)
-  let held = common(&mounted.pages, &routes)
-  var work = Work{next: mounted.next, free: mounted.free, out: []}
-  for index in held..mounted.pages.length() {
-    work = dropped(work, &mounted.pages[index].body)
-  }
-  let keptSheet = match (mounted.sheet, presentation.sheet) {
-    case (Some(old), Some(wanted)) if old.id == wanted.id => Some(old.body)
-    case _ => None
-  }
-  work = match (mounted.sheet, keptSheet) {
-    case (Some(old), None) => dropped(work, &old.body)
-    case _ => work
-  }
-  var pages: Array[Page] = []
-  for index in 0..routes.length() {
-    let before = if index < held { Some(mounted.pages[index].body) } else { None }
-    let (made, body) = bodied(work, before, &routes[index].body)
-    work = made
-    pages = pages.push(Page{id: routes[index].id, title: routes[index].title, body: body})
-  }
-  var sheet: Option[Page] = None
-  match presentation.sheet {
-    case Some(wanted) => {
-      let (made, body) = bodied(work, keptSheet, &wanted.body)
-      work = made
-      sheet = Some(Page{id: wanted.id, title: "", body: body})
-    }
-    case None => {}
-  }
-  let shown = Shown{pages: pages.map(|page: Page| (page.id, page.body.id, page.title)), sheet: sheetShown(sheet)}
+  let (stacked, pages) = stack(Work{next: mounted.next, free: mounted.free, out: []}, &mounted.pages, &[presentation.root].concat(presentation.pushed))
+  let (work, sheet) = sheeted(stacked, mounted.sheet, presentation.sheet)
+  let shown = Shown{pages: listed(&pages), sheet: sheetShown(sheet)}
   let out = if shown == mounted.shown { work.out } else { Stream.navigate(work.out, &shown.pages, shown.sheet) }
   (Mounted{pages: pages, sheet: sheet, next: work.next, free: work.free, shown: shown}, bytesOf(out))
 }
@@ -102,21 +94,144 @@ export fn observe(mounted: Mounted, event: &View.Event) -> Mounted {
   }
 }
 
-/// How many routes of `stack`, route ids root first, survive a reported pop
+/// The tabs, pages and sheet for `tabbed`, and the stream that builds their
+/// bodies and shows the bar.
+export fn mountTabs(tabbed: &Tabbed) -> (TabsMounted, Bytes) {
+  let empty = TabsShown{tabs: [], selected: 0u32, sheet: None}
+  updateTabs(&TabsMounted{stacks: [], sheet: None, next: 0u32, free: [], shown: empty}, tabbed)
+}
+
+/// The tabs for `tabbed`, and the stream that turns what `mounted` holds into
+/// them. Each tab's stack reconciles against the stack its id held before; a
+/// tab no longer presented has its pages ended. TABS is written only when the
+/// bar differs from what the platform shows.
+export fn updateTabs(mounted: &TabsMounted, tabbed: &Tabbed) -> (TabsMounted, Bytes) {
+  let wanted = setOf(tabbed.tabs.map(|tab: Tab| tab.id))
+  var work = Work{next: mounted.next, free: mounted.free, out: []}
+  for held in mounted.stacks {
+    if !wanted.contains(held[0]) {
+      for page in held[1] {
+        work = dropped(work, &page.body)
+      }
+    }
+  }
+  var stacks: Array[(UInt32, Array[Page])] = []
+  var shown: Array[TabShown] = []
+  for tab in tabbed.tabs {
+    let (made, pages) = stack(work, &stackOf(&mounted.stacks, tab.id), &[tab.root].concat(tab.pushed))
+    work = made
+    stacks = stacks.push((tab.id, pages))
+    shown = shown.push(TabShown{id: tab.id, title: tab.title, symbol: tab.symbol, pages: listed(&pages)})
+  }
+  let (covered, sheet) = sheeted(work, mounted.sheet, tabbed.sheet)
+  let bar = TabsShown{tabs: shown, selected: tabbed.selected, sheet: sheetShown(sheet)}
+  let out = if bar == mounted.shown { covered.out } else { Stream.tabs(covered.out, &bar.tabs.map(|tab: TabShown| (tab.id, tab.title, tab.symbol, tab.pages)), bar.selected, bar.sheet) }
+  (TabsMounted{stacks: stacks, sheet: sheet, next: covered.next, free: covered.free, shown: bar}, bytesOf(out))
+}
+
+/// `mounted` with a person's tab pick, completed pop inside a tab, or sheet
+/// dismissal folded into what the platform shows; any other event, or a stale
+/// report, leaves it as it is.
+export fn observeTabs(mounted: TabsMounted, event: &View.Event) -> TabsMounted {
+  let shown = mounted.shown
+  match *event {
+    case View.Selected(picked) if presents(&shown.tabs, picked) => TabsMounted {..mounted, shown: TabsShown{..shown, selected: picked} }
+    case View.Popped(top, destination) => {
+      var tabs: Array[TabShown] = []
+      for tab in shown.tabs {
+        tabs = tabs.push(match kept(&tab.pages.map(|page: (UInt32, UInt32, Str)| page[0]), top, destination) {
+            case Some(count) => TabShown{..tab, pages: tab.pages.slice(0, count)}
+            case None => tab
+          })
+      }
+      TabsMounted{..mounted, shown: TabsShown{..shown, tabs: tabs}}
+    }
+    case View.Dismissed(dismissed) => {
+      match shown.sheet {
+        case Some(current) if current[0] == dismissed => TabsMounted {..mounted, shown: TabsShown{..shown, sheet: None} }
+        case _ => mounted
+      }
+    }
+    case _ => mounted
+  }
+}
+
+// Whether `tabs` holds a tab with `id`.
+fn presents(tabs: &Array[TabShown], id: UInt32) -> Bool {
+  for tab in *tabs {
+    if tab.id == id {
+      return true
+    }
+  }
+  false
+}
+
+// The pages a tab id held, or none for a new tab.
+fn stackOf(stacks: &Array[(UInt32, Array[Page])], id: UInt32) -> Array[Page] {
+  for held in *stacks {
+    if held[0] == id {
+      return held[1]
+    }
+  }
+  []
+}
+
+/// How many routes of `ids`, a stack's route ids root first, survive a reported pop
 /// from `top` to `destination`; None when the report is stale because `top`
 /// is not the current top or `destination` is not below it.
-export fn kept(stack: &Array[UInt32], top: UInt32, destination: UInt32) -> Option[Int] {
-  let count = stack.length()
-  if count < 2 || stack[count - 1] != top {
+export fn kept(ids: &Array[UInt32], top: UInt32, destination: UInt32) -> Option[Int] {
+  let count = ids.length()
+  if count < 2 || ids[count - 1] != top {
     return None
   }
   for index in 0..count - 1 {
-    if stack[index] == destination {
+    if ids[index] == destination {
       return Some(index + 1)
     }
   }
   None
 }
+
+// The pages for `routes`, reconciled against the `pages` held: a route at the
+// same place with the same id keeps its page and body, later pages end, and
+// new routes build theirs.
+fn stack(given: Work, pages: &Array[Page], routes: &Array[Route]) -> (Work, Array[Page]) {
+  let held = common(pages, routes)
+  var work = given
+  for index in held..pages.length() {
+    work = dropped(work, &pages[index].body)
+  }
+  var made: Array[Page] = []
+  for index in 0..routes.length() {
+    let before = if index < held { Some(pages[index].body) } else { None }
+    let (next, body) = bodied(work, before, &routes[index].body)
+    work = next
+    made = made.push(Page{id: routes[index].id, title: routes[index].title, body: body})
+  }
+  (work, made)
+}
+
+// The sheet for `wanted`: the held one keeps its body while its id is the same.
+fn sheeted(given: Work, old: Option[Page], wanted: Option[Sheet]) -> (Work, Option[Page]) {
+  let retained = match (old, wanted) {
+    case (Some(held), Some(asked)) if held.id == asked.id => Some(held.body)
+    case _ => None
+  }
+  let work = match (old, retained) {
+    case (Some(held), None) => dropped(given, &held.body)
+    case _ => given
+  }
+  match wanted {
+    case Some(asked) => {
+      let (made, body) = bodied(work, retained, &asked.body)
+      (made, Some(Page{id: asked.id, title: "", body: body}))
+    }
+    case None => (work, None)
+  }
+}
+
+// Each page's route id, body node and title, root first.
+fn listed(pages: &Array[Page]) -> Array[(UInt32, UInt32, Str)] { pages.map(|page: Page| (page.id, page.body.id, page.title)) }
 
 // How many leading pages keep their place: same position, same route id.
 fn common(pages: &Array[Page], routes: &Array[Route]) -> Int {

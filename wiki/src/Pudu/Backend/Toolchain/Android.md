@@ -29,7 +29,7 @@ compileAndroidLibrary :: AndroidTools -> Text -> [Text] -> FilePath
   -> IO (Either ToolchainFailure ([Text], Text))
 compileApk :: AndroidTools -> Text -> [Text] -> Text -> FilePath
   -> IO (Either ToolchainFailure Text)
-packageManifest :: Bool -> Text -> Text
+packageManifest :: Bool -> Text -> Identity -> [Text] -> Text
 packageLinkFlags :: Bool -> [String]
 ```
 
@@ -80,7 +80,7 @@ Links: [[Native Android Activity]] · [[Backend Toolchain App]] · [[Backend Too
   8. `apksigner sign` writes the signed package.
 - The package is published by renaming the signed file onto the output. Every
   staging directory is removed on every path.
-- The manifest label is escaped for XML. The package segment is derived from the
+- The manifest label is the identity's name, escaped for XML. When the identifier is not declared, the package segment is derived from the
   program's name: ASCII letters and digits only, lower-cased, a leading digit
   prefixed with `p`, and `app` when nothing remains.
 
@@ -112,3 +112,7 @@ activity that the package launches is described in [[Native Android Activity]].
 ## Referenced by
 
 [[src/Pudu/Backend/_MOC]] · [[Native Mobile Targets]]
+
+## Permission entries (#976)
+
+The `uses-permission` entries of the declared kinds are inserted before `<application>` in the package manifest. A permission an older API level needs only is bounded with `android:maxSdkVersion`, so storage and Bluetooth access the newer levels replace are not requested there. The entries come from [[Pudu Backend Permissions]].

@@ -18,8 +18,10 @@ const repository = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 // The counter imports Std.Mobile from this checkout, whichever compiler runs.
 process.env.PUDU_LIB ??= join(repository, "packages", "pudu", "v0.1", "lib");
 
+/* Runs one step to completion. Stdin is closed so no step waits on input,
+   and a step past its timeout is killed outright rather than asked to stop. */
 function run(command, args, timeout = 120_000, env = process.env) {
-  const result = spawnSync(command, args, { encoding: "utf8", timeout, env });
+  const result = spawnSync(command, args, { encoding: "utf8", timeout, env, stdio: ["ignore", "pipe", "pipe"], killSignal: "SIGKILL" });
   if (result.error) {
     throw new Error(`${command} ${args.join(" ")}: ${result.error.code ?? result.error.message} after ${timeout} ms`);
   }
@@ -267,6 +269,51 @@ int main(int argc, char **argv) {
       labels: ["Pasted: from Pudu", "Opened: false", "Shared: false"],
       layout: ["PUDU_SYSTEM share shown", "PUDU_SYSTEM status light shown"],
     }]);
+    // A granted camera, a refused microphone and contacts never asked report
+    // as Granted, Blocked and NotAsked; requesting the granted camera answers
+    // at once, without a prompt.
+    // The person picks the second tab and back, pushes and pops inside the
+    // first, and dismisses a sheet; each is reported once.
+    // The manifest's identity reaches the bundle, and a link in the
+    // application's own scheme comes back to it as Linked.
+    // Plain and secure values persist from one launch to the next, and a
+    // removed key reads as absent.
+    mobileApp(device, "Vault", [
+      { environment: { SIMCTL_CHILD_PUDU_UI_SELFTEST: "0" }, labels: ["Launches: 1", "Token: s3cret", "Temporary: none"] },
+      { environment: { SIMCTL_CHILD_PUDU_UI_SELFTEST: "0" }, labels: ["Launches: 2", "Token: s3cret", "Temporary: none"] },
+    ]);
+    // The device describes itself as iOS at the default text scale, reports
+    // a link the simulator reaches the network through, and keeps the screen
+    // awake while in front.
+    mobileApp(device, "About", [{
+      environment: { SIMCTL_CHILD_PUDU_UI_SELFTEST: "0", SIMCTL_CHILD_PUDU_UI_DEVICE_TEST: "1" },
+      labels: ["Platform: ios", /^Version: \d+(\.\d+)*$/u, /^Model: \S+$/u, /^Locale: [A-Za-z]{2,3}(-\w+)*$/u, /^Zone: \S+$/u,
+        "Scale: 100", "Online: true", /^Link: (Wifi|Cellular|Wired)$/u],
+      layout: ["PUDU_DEVICE awake yes"],
+    }]);
+    refusedApp(device, root, "network watching word 2",
+      "import Std.Mobile.Host as Host\nimport Std.Mobile.Stream as Stream", `  Host.apply(bytesOf(Stream.network([], 2u32)))`,
+      /pudu: a view stream set network watching to 2/u);
+    mobileApp(device, "Links", [{
+      environment: { SIMCTL_CHILD_PUDU_UI_SELFTEST: "0", SIMCTL_CHILD_PUDU_UI_LINK_TEST: "pudulinks://hello?from=test" },
+      labels: ["Link: pudulinks://hello?from=test"],
+      layout: ["PUDU_SYSTEM link opened"],
+    }], "links", "dev.pudu.links");
+    mobileApp(device, "Tabs", [{
+      environment: { SIMCTL_CHILD_PUDU_UI_SELFTEST: "0", SIMCTL_CHILD_PUDU_UI_TABS_TEST: "1" },
+      labels: ["Selected: 1", "Pops: 1", "Dismissals: 1"],
+      layout: ["PUDU_TABS picked", "PUDU_TABS pushed", "PUDU_TABS popped once", "PUDU_TABS sheet dismissed once"],
+    }]);
+    refusedApp(device, root, "a selected tab that is not shown",
+      "import Std.Mobile.Host as Host\nimport Std.Mobile.Stream as Stream", `  let body = Stream.create([], 0u32, Stream.LABEL)
+  Host.apply(bytesOf(Stream.tabs(body, &[(1u32, "A", "house", [(10u32, 0u32, "A")])], 2u32, None)))`,
+      /pudu: a view stream selected a tab that is not shown: 2/u);
+    mobileApp(device, "Permissions", [{
+      environment: { SIMCTL_CHILD_PUDU_UI_SELFTEST: "0", SIMCTL_CHILD_PUDU_UI_PERMISSION_TEST: "1" },
+      privacy: [["grant", "camera"], ["revoke", "microphone"], ["reset", "contacts"]],
+      labels: ["Camera: Granted", "Microphone: Blocked", "Contacts: NotAsked"],
+      layout: ["PUDU_PERMISSION 0 1", "PUDU_PERMISSION 1 5", "PUDU_PERMISSION 7 0"],
+    }], "permissions");
     refusedApp(device, root, "unknown status bar style",
       "import Std.Mobile.Host as Host\nimport Std.Mobile.Stream as Stream", `  Host.apply(bytesOf(Stream.status([], 7u32, false)))`,
       /pudu: a view stream used unknown status bar style 7/u);
@@ -421,26 +468,32 @@ function refuseOccupiedOutput(scratch) {
    adapter and run once per entry of `runs`: the host feeds it input from the
    entry's environment, asks it to stop, and reports its labels, its status
    and the time from main to the first frame. */
-function mobileApp(device, example, runs) {
+function mobileApp(device, example, runs, directory = "", bundle = `org.pudu.${example}`) {
   const root = mkdtempSync(join(tmpdir(), `pudu-ios-${example.toLowerCase()}-`));
   const app = join(root, `${example}.app`);
-  const bundle = `org.pudu.${example}`;
   let installed = false;
   try {
-    const build = ["build", join(repository, "examples", "mobile", `${example}.pudu`),
+    const build = ["build", join(repository, "examples", "mobile", directory, `${example}.pudu`),
       "--native", "--target", "ios-simulator-arm64", "--app", "-o"];
+    // Each long step announces itself, so a slow step reads as progress in the log, not a hang.
+    console.log(`BUILD iOS ${example}`);
     run(resolve(compiler), [...build, app], appBuildTimeout);
     const executable = join(app, example);
     run(xcrun, ["simctl", "install", device, app], simulatorTimeout);
     installed = true;
-    for (const { environment, labels, layout } of runs) {
+    for (const { environment, labels, layout, privacy = [] } of runs) {
+      // Each entry presets one service's answer, as the person's earlier choice would.
+      for (const [action, service] of privacy) run(xcrun, ["simctl", "privacy", device, action, service, bundle], simulatorTimeout);
       const lines = launch(device, bundle, "PUDU_", "PUDU_PROGRAM_STATUS", environment);
-      // The host reports labels in the order the screen shows them.
-      assert.deepEqual(lines.filter((line) => line.startsWith("PUDU_LABEL ")), labels.map((label) => `PUDU_LABEL ${label}`),
+      // The host reports labels in the order the screen shows them; a pattern
+      // stands for a label whose text depends on the machine.
+      const shown = lines.filter((line) => line.startsWith("PUDU_LABEL ")).map((line) => line.slice("PUDU_LABEL ".length));
+      assert.ok(shown.length === labels.length
+        && labels.every((label, index) => (label instanceof RegExp ? label.test(shown[index]) : label === shown[index])),
         `${example} did not show ${labels.join(", ")}:\n${lines.join("\n")}`);
       assert.ok(lines.includes("PUDU_PROGRAM_STATUS 0"), `${example} did not finish:\n${lines.join("\n")}`);
       if (layout) {
-        assert.deepEqual(lines.filter((line) => /^PUDU_(VIEWPORT|KEYBOARD|THEME|LIST|MATERIAL|ALERT|HAPTIC|ACCESS|MOTION|NAV|REFRESH|FETCH|IMAGE|SYSTEM) /.test(line)), layout,
+        assert.deepEqual(lines.filter((line) => /^PUDU_(VIEWPORT|KEYBOARD|THEME|LIST|MATERIAL|ALERT|HAPTIC|ACCESS|MOTION|NAV|REFRESH|FETCH|IMAGE|SYSTEM|PERMISSION|TABS|DEVICE) /.test(line)), layout,
           `${example} did not report the expected layout and theme:\n${lines.join("\n")}`);
       }
       const firstFrame = lines.find((line) => line.startsWith("PUDU_FIRST_FRAME_MS "));
@@ -493,6 +546,7 @@ ${body}
 function launch(device, bundle, prefix, status, environment = {}) {
   const failures = [];
   for (let attempt = 1; attempt <= launchAttempts; attempt += 1) {
+    console.log(`LAUNCH iOS ${bundle} attempt ${attempt}`);
     try {
       const output = run(xcrun, ["simctl", "launch", "--console-pty", device, bundle], simulatorTimeout,
         { ...process.env, ...environment });

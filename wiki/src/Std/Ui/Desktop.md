@@ -43,6 +43,8 @@ closed or invented tokens, wrong-thread access, unsupported targets, and platfor
 distinguishable `DesktopError` variants. Closing twice is a typed `SessionClosed` outcome. Runtime
 teardown closes an unclosed session.
 
+Integer fields of the window's text are read by `Std.Num.parseInt` with this module's own rule.
+
 ## Ownership and boundaries
 
 The module contains no `foreign` declaration and exposes no target framework type. It calls

@@ -90,6 +90,8 @@ test-suite pudu-test
     Pudu.Backend.NativeSpec
     Pudu.Backend.LedgerSpec
     Pudu.Backend.AssetsSpec
+    Pudu.Backend.PermissionsSpec
+    Pudu.Backend.IdentitySpec
     Pudu.Backend.TargetSpec
     Pudu.Backend.ExportSpec
     Pudu.Backend.AppSpec

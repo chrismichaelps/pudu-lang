@@ -4,11 +4,12 @@ module Pudu.Foreign.Extent
   , ForeignBound (..)
   ) where
 
+import Data.Data (Data)
 import Data.List.NonEmpty (NonEmpty)
 import GHC.Generics (Generic)
 
 data ExtentUnit = ExtentElements | ExtentBytes
-  deriving stock (Eq, Ord, Show, Generic)
+  deriving stock (Data, Eq, Ord, Show, Generic)
 
 {-| Declaration order and target order determine the first reported failure. -}
 data ForeignBound = ForeignBound
@@ -16,4 +17,4 @@ data ForeignBound = ForeignBound
   , boundUnit :: !ExtentUnit
   , boundTargets :: !(NonEmpty Int)
   }
-  deriving stock (Eq, Ord, Show)
+  deriving stock (Data, Eq, Ord, Show)

@@ -44,6 +44,7 @@ Exports:
 - `menu(out, node, tag: UInt32, choices: &Array[(UInt32, Str)]) -> Array[UInt8]`: MENU, the node, the tag its events report, then the choices.
 - `animate(out, node, on: Bool) -> Array[UInt8]`: ANIMATE, the group and 0 or 1.
 - `navigate(out, pages: &Array[(UInt32, UInt32, Str)], sheet: Option[(UInt32, UInt32)]) -> Array[UInt8]`: NAVIGATE, the route count, then each route's id, body node and title, then 1 and the sheet's id and body node, or 0.
+- `tabs(out, shown: &Array[(UInt32, Str, Str, Array[(UInt32, UInt32, Str)])], selected: UInt32, sheet: Option[(UInt32, UInt32)]) -> Array[UInt8]`: TABS (54), the tab count, then each tab's id, title, symbol and page count, then each page's route id, body node and title; then the selected tab's id, then 1 and the sheet's id and body node, or 0.
 - `refresh(out, node, tag, on)`: REFRESH, the scroll or list node, its tag and 1 or 0.
 - `fetch(out, generation, method, url, headers: &Array[(Str, Str)], body) -> Array[UInt8]`: FETCH, the generation, the method and URL text fields, the header count, each header's name and value, then the body text. The answer arrives as a FETCHED event.
 - `cancel(out, generation) -> Array[UInt8]`: CANCEL and the generation. No answer arrives for it.
@@ -67,11 +68,40 @@ Exports:
 - COPY (48): the text. Writer `copy(out, clipped)`.
 - PASTE (49): tag. Writer `paste(out, tag)`.
 - STATUS (50): style code (0 automatic, 1 light text, 2 dark text), then the hidden flag (0 or 1). Writer `status(out, code, hidden)`.
-- The instruction bound is now 51. Codes 46 to 50 are OPEN, SHARE, COPY, PASTE and STATUS.
+- The instruction bound is now 54. Codes 46 to 50 are OPEN, SHARE, COPY, PASTE and STATUS.
+
+## Permission requests (#976)
+
+- PERMISSIONS (51): a count, then each kind code. Writer `permissions(out, codes: &Array[UInt32])`. The host answers one PERMISSIONED per code, without a prompt.
+- PERMISSION (52): one kind code. Writer `permission(out, code)`. The host asks the person when the kind is NotAsked.
+- SETTINGS (53): no payload. Writer `settings(out)`. The host opens the application's page in the platform settings.
+- Codes 51 to 53 are PERMISSIONS, PERMISSION and SETTINGS. Kind codes are those of [[Std Mobile Permission]].
+
+## Tabs (#977)
+
+- TABS (54): the tab count; per tab its id, title text, symbol text and page count; per page its route id, body node and title text; then the selected tab id; then the sheet flag, followed by the sheet's id and body node when the flag is 1. Writer `tabs(out, shown, selected, sheet)`.
+- Byte layout checked by [[Uses Mobile Tabs]]: one tab, one page and no sheet is 47 bytes; the same with a sheet is 55 bytes.
+- TABS and NAVIGATE are the two whole-screen instructions. Each replaces the other, and the host closes the one it replaces.
+- The instruction bound is now 54.
+
+## Storage (#980)
+
+- STORE_READ (55): tag, place code, then the key as text. Writer `storeRead(out, tag, place, key)`.
+- STORE_WRITE (56): place code, the key text, then the value text. Writer `storeWrite(out, place, key, value)`.
+- STORE_REMOVE (57): place code, then the key text. Writer `storeRemove(out, place, key)`.
+- Place codes: 0 Plain, 1 Secure. The place is written by `Std.Mobile.Storage.placeCode`.
+- The instruction bound is now 57.
+
+## Device (#983)
+
+- DEVICE (58): the tag. Answered by one DESCRIBED (32). Writer `device(out, reported)`.
+- NETWORK (59): a flag, 1 to start watching reachability and 0 to stop. Any other word is a stream defect, refused with `set network watching to`. Writer `network(out, watching)`.
+- AWAKE (60): a flag, 1 to keep the screen on while the application is in front and 0 to let it sleep. Any other word is a stream defect, refused with `set keep-awake to`. Writer `awake(out, on)`. The setting stands until a later AWAKE changes it.
+- The instruction bound is now 61.
 
 ## Invariants
 
-- Every word is a little-endian 32-bit unsigned value. Every instruction begins with its code word (CREATE 1, TEXT 2, APPEND 3, ROOT 4, TAG 5, STATE 7, HINT 8, NAME 9, INSERT 10, REMOVE 11, MOVE 12, THEME 20, APPEARANCE 21, STYLE 22, COLOR 23, RANGE 24, COLUMNS 25, MATERIAL 26, GESTURES 27, ALERT 28, VALUE 29, HAPTIC 30, TRAITS 31, ACCESS_HINT 32, ACCESS_VALUE 33, MENU 34, ANIMATE 35, NAVIGATE 36, REFRESH 37, BOUNDS 41, OPTIONS 42, COUNT 43, MOMENT 44).
+- Every word is a little-endian 32-bit unsigned value. Every instruction begins with its code word (CREATE 1, TEXT 2, APPEND 3, ROOT 4, TAG 5, STATE 7, HINT 8, NAME 9, INSERT 10, REMOVE 11, MOVE 12, THEME 20, APPEARANCE 21, STYLE 22, COLOR 23, RANGE 24, COLUMNS 25, MATERIAL 26, GESTURES 27, ALERT 28, VALUE 29, HAPTIC 30, TRAITS 31, ACCESS_HINT 32, ACCESS_VALUE 33, MENU 34, ANIMATE 35, NAVIGATE 36, REFRESH 37, BOUNDS 41, OPTIONS 42, COUNT 43, MOMENT 44, DEVICE 58, NETWORK 59, AWAKE 60).
 - Theming codes start at 20. Navigation reserves 13 and 14, so a gap keeps both streams unambiguous when they merge.
 - RANGE is exactly three words after its code word; COLUMNS is exactly two; MATERIAL is exactly two. A RANGE is 16 bytes, a COLUMNS is 12 bytes and a MATERIAL is 12 bytes.
 - THEME carries exactly seven tones; its count word is 7. The encoder writes the count, and the host refuses any other count.

@@ -1,6 +1,7 @@
 {-| @Core.Kernel — the runtime kernels a `CoreKernel` expression names. -}
 module Pudu.Core.Kernel (CoreKernelName (..)) where
 
+import Data.Data (Data)
 import Data.Text (Text)
 
 {-| Each kernel reads held operands and answers one value. A test kernel
@@ -97,4 +98,4 @@ data CoreKernelName
   | KernelHostState
   {-| What the host said when it failed; read once. -}
   | KernelHostMessage
-  deriving stock (Eq, Show)
+  deriving stock (Data, Eq, Show)
