@@ -18,7 +18,7 @@ import Pudu.Compiler.Lower.State
 import Pudu.Compiler.Lower.Generic (instantiationOf, matchType, runtimeCallSignature, specialize, unformed)
 import Pudu.Compiler.Lower.Dynamic (commonAggregateCarrier, hasRuntimeChoice, isDynamic, joinRuntimeArms, mapRuntimeChoice, missingRuntimeMember, pathText, preserveRuntimeResult, projectRuntimeValue, runtimeCarriers, widen, writtenType)
 import Pudu.Compiler.Lower.Loan (Callee (..), Operand (..), loanedType, lowerLoanedOperands)
-import Pudu.Compiler.Lower.MethodValue (lowerDynamicTextCall)
+import Pudu.Compiler.Lower.MethodValue (boundMemberFact, declaredMemberType, lowerDynamicTextCall)
 import Pudu.Compiler.Lower.Place (HeldPlace (..), holdPlace, observeHeldLayout, readHeld, readHeldAtKeys, storeHeld)
 import Pudu.Compiler.Lower.Types (formedCoreTypeIn, loanedInputs, lookupScheme, ownerKeyOf, recordFields, selectedMember, sumVariants, typeBindings, typeFactAt, typeForSpan, nativeValueType, withFacts)
 import Pudu.Core
@@ -161,8 +161,10 @@ lowerHeldMethod lower at callee receiverAt member arguments state value = do
   let context = lowerContext state
       types = contextTypes context
       kind = coreExpressionType value
+      selectedFact = declaredMemberType context kind member >>= boundMemberFact kind
+      facts = (receiverAt, unformed kind) : [(callee, fact) | Just fact <- [selectedFact]]
       opened = state
-        { lowerContext = context{contextTypes = withFacts [(receiverAt, unformed kind)] types}
+        { lowerContext = context{contextTypes = withFacts facts types}
         , lowerScopes = [] : lowerScopes state }
       (bound, held) = bindLocal opened "$selectedReceiver" kind
       target = Located receiverAt (NameExpression (NonEmpty.singleton "$selectedReceiver"))

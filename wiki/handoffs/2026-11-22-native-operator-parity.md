@@ -398,10 +398,18 @@ receivers through field, builtin and declared member lookup.
 [[Backend Rendering Callable Programs]] covers different result layouts,
 missing members and callback arity. Execution remains deferred.
 
+## Held declared method values
+
+Architect → Backend Engineer. [[Compiler Lower Method Value]] selects
+and captures the held member before the source binding can change.
+[[Compiler Lower Method]] uses the selected declaration's bound fact
+for ordinary calls. [[Backend Rendering Callable Programs]] covers
+reassignment, function-valued fields and failure at capture.
+
 ## Next action
 
-Select the held receiver before binding a declared method value,
-preserving the captured receiver and callable identity.
+Read the compiler build and suite failures on the parity pull request,
+then resolve method default arguments through direct and stored calls.
 
 ## Referenced by
 

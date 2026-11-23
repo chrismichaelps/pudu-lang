@@ -128,3 +128,16 @@ Resolved Grill Log: Reading a bound member selects the receiver carrier before b
 ## Exact dynamic Int payloads
 
 Resolved Grill Log: A stored dynamic trait method retains its receiver once and invokes the same dispatch as a direct call.
+
+## Held declared method values
+
+Resolve member access when evaluating the receiver. A held field
+keeps its own value and identity. A selected declaration specializes
+its signature against the held receiver before creating the closure.
+The closure keeps that receiver through later reassignment.
+
+Resolved Grill Log: a missing member fails at the member read. The
+checked signature describes the admitted owner and cannot determine
+the physical signature of a different declaration.
+
+[[Native Emission Coverage]] · [[Backend Rendering Callable Programs]]

@@ -122,3 +122,10 @@ non-Boolean result from a callback that has observable effects.
 Resolved Grill Log: a selected declared method can return its
 actual callback layout into traversal. The alternate callable's
 arity and a missing declared member retain runtime diagnostics.
+
+## Held declared method values
+
+Resolved Grill Log: compare a captured method and a fresh member
+read after reassigning the receiver. Exercise a different result
+layout, a held function-valued field, and a missing member that
+fails before the next statement.

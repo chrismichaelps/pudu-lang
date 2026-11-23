@@ -5,6 +5,11 @@ tags: [changelog]
 
 # Changelog
 
+## 2026-11-23 — Held declared method values (#956)
+
+- Capture the selected receiver and retain its bound signature or field
+  value across later reads. [[Compiler Lower Method Value]]
+
 ## 2026-11-23 — Held declared method calls (#956)
 
 - Select the held ordinary method before arguments and preserve its

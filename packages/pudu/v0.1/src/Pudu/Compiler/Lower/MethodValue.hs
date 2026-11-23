@@ -3,8 +3,10 @@
     made, and is kept as the closure's capture. Calling the value runs the
     method on it through the same lowering a written call gets. -}
 module Pudu.Compiler.Lower.MethodValue
-  ( lowerMethodValue, lowerTraitMethodValue, lowerDynamicTextCall, registerMethodValue ) where
+  ( lowerMethodValue, lowerTraitMethodValue, lowerDynamicTextCall, registerMethodValue
+  , boundMemberFact, declaredMemberType ) where
 
+import Control.Applicative ((<|>))
 import qualified Data.Set as Set
 import Data.List.NonEmpty (NonEmpty (..))
 import qualified Data.Map.Strict as Map
@@ -19,7 +21,7 @@ import Pudu.Compiler.Lower.Generic (matchType)
 import Pudu.Compiler.Lower.Loan (closeLoaned, withLoanedParameters)
 import Pudu.Compiler.Lower.Place (holdPlace, readHeldAtKeys, storeHeld)
 import Pudu.Compiler.Lower.Text (lowerTextMethod)
-import Pudu.Compiler.Lower.Types (isDynamic, loanedInputs, ownerKeyOf, recordFields, selectedMember, sumVariants, typeFactAt, typeForSpan, unformed, withFacts)
+import Pudu.Compiler.Lower.Types (formedCoreTypeIn, isDynamic, loanedInputs, ownerKeyOf, recordFields, selectedMember, sumVariants, typeFactAt, typeForSpan, unformed, withFacts)
 import Pudu.Core
 import Pudu.Core.Closure (textMethodPrefix)
 import Pudu.Eval.Operator.Access (builtinMethodNamesFor)
@@ -31,6 +33,26 @@ import Pudu.Type.Value (Required (Required), Scheme (schemeType), Type (Function
 
 type LowerExpression = LowerState -> Located Expression -> (LowerState, Maybe (CoreExpression, CoreType))
 type Lowered = (LowerState, Maybe (CoreExpression, CoreType))
+
+declaredMemberType :: LowerContext -> CoreType -> Text -> Maybe Type
+declaredMemberType context kind written = do
+  owner <- ownerKeyOf kind
+  let (provider, plain) = selectedMember written
+      qualified = provider >>= \trait -> Map.lookup (trait, owner, plain) (contextTraitMethods context)
+  key <- qualified <|> Map.lookup (owner, plain) (contextMethods context)
+  schemeType . instanceScheme <$> Map.lookup key (contextInstances context)
+
+boundMemberFact :: CoreType -> Type -> Maybe Type
+boundMemberFact kind (FunctionTypeRequiring asynchronous (self : inputs) required result) = do
+  bindings <- matchType self (unformed kind) Map.empty
+  let substitute = substituteRigid (Map.toList bindings)
+  pure (FunctionTypeRequiring asynchronous (map substitute inputs)
+    (Required (max 0 (requiredCount required - 1))) (substitute result))
+boundMemberFact _ _ = Nothing
+
+intrinsicTextFact :: CoreType -> Type
+intrinsicTextFact CoreBytesType = FunctionTypeValue False [] (NominalType "Option" [stringType])
+intrinsicTextFact _ = FunctionTypeValue False [] stringType
 
 lowerTraitMethodValue :: LowerExpression -> LowerState -> Span -> Text -> Text -> Lowered
 lowerTraitMethodValue lower state at provider member =
@@ -64,21 +86,12 @@ lowerDynamicText lower state at receiver kind result direct build =
   offset = fromMaybe zeroOffset (offsetFromInt maxBound)
   heldName = "$textReceiver"
   answer current kind' shape = (current, Just (CoreExpression at kind' shape, kind'))
-  declaredMethod payload = do
-    owner <- ownerKeyOf payload
-    key <- Map.lookup (owner, "toText") (contextMethods (lowerContext state))
-    schemeType . instanceScheme <$> Map.lookup key (contextInstances (lowerContext state))
+  declaredMethod payload = declaredMemberType (lowerContext state) payload "toText"
   mutating payload = direct && maybe False (elem 0 . loanedInputs) (declaredMethod payload)
   selectedFact types payload
     | Just field <- recordFields types payload >>= lookup "toText" = Just (unformed field)
-    | payload == CoreBytesType = Just (FunctionTypeValue False [] (NominalType "Option" [stringType]))
-    | payload == CoreCharType = Just (FunctionTypeValue False [] stringType)
-    | otherwise = do
-        FunctionTypeRequiring asynchronous (self : inputs) required declared <- declaredMethod payload
-        bindings <- matchType self (unformed payload) Map.empty
-        let substitute = substituteRigid (Map.toList bindings)
-        pure (FunctionTypeRequiring asynchronous (map substitute inputs)
-          (Required (max 0 (requiredCount required - 1))) (substitute declared))
+    | payload `elem` [CoreBytesType, CoreCharType] = Just (intrinsicTextFact payload)
+    | otherwise = declaredMethod payload >>= boundMemberFact payload
   receive variants
     | any mutating [payload | variant <- variants, (_, payload) <- coreVariantFields variant]
     , Just (after, held) <- holdPlace lower state (locatedSpan receiver) receiver =
@@ -127,7 +140,11 @@ lowerMethodValue lower state at receiver member = case (receiverFact, typeForSpa
     | builtIn receiverType || declared receiverType || textual receiverType, length inputs == length inputFacts -> Just $ case lower state receiver of
         (after, Nothing) -> refused after
         (after, Just (core, CoreNeverType)) -> (after, Just (core, CoreNeverType))
-        (after, Just (core, _)) -> bindReceiver False receiverType kind fact after core
+        (after, Just (core, _)) ->
+          let preserve (value, _) =
+                let carried = preserveRuntimeResult kind value
+                 in (carried, coreExpressionType carried)
+           in fmap (fmap preserve) (bindReceiver receiverType kind fact after core)
   (Nothing, Just kind@(CoreFunctionType inputs@(self : _) _), Just fact@(FunctionTypeRequiring _ inputFacts _ _))
     | Just owner <- unboundOwner self
     , length inputs == length inputFacts ->
@@ -148,7 +165,7 @@ lowerMethodValue lower state at receiver member = case (receiverFact, typeForSpa
     NameExpression ("::trait-method::" :| [_]) -> True
     _ -> False
   -- The member's own name, without the provider checking selected.
-  plain = snd (selectedMember member)
+  (provider, plain) = selectedMember member
   builtIn kind = case kind of
     CoreTextType -> True
     CoreArrayType _ -> True
@@ -161,35 +178,44 @@ lowerMethodValue lower state at receiver member = case (receiverFact, typeForSpa
     _ -> False
   -- `toText` on a type that declares none renders the receiver; the
   -- interpreter names that value a text method.
-  textual kind = plain == "toText" && kind `notElem` [CoreCharType, CoreBytesType]
+  textual kind = plain == "toText"
     && isNothing (recordFields types kind >>= lookup plain)
-    && isNothing (ownerKeyOf kind >>= \owner -> Map.lookup (owner, plain) (contextMethods (lowerContext state)))
+    && isNothing (declaredMemberType (lowerContext state) kind member)
   declared kind = case kind of
     CoreRecordType _ _ -> isNothing (recordFields types kind >>= lookup plain)
     CoreSumType _ _ -> True
-    _ -> False
-  bindReceiver selected receiverType kind fact current core
-    | collection receiverType || receiverType `elem` [CoreTextType, CoreBytesType, CoreCharType]
-    , Just selected <- mapRuntimeChoice current at kind core
-        (\ready held -> fmap (fmap fst) (bindReceiver True receiverType kind fact ready held)) = selected
-    | selected, not (available current (coreExpressionType core)) =
-        (current, Just (missingRuntimeMember at plain core, CoreNeverType))
-    | otherwise =
-        let actual = coreExpressionType core
-            held
-              | selected || actual == receiverType || hasRuntimeChoice actual = actual
-              | otherwise = receiverType
-            key = (if textual receiverType then textMethodPrefix else "$method:") <> member <> ":" <> Text.pack (show held) <> ":" <> Text.pack (show kind)
-         in closure current key (Just held) kind fact [core]
-  available current actual = plain == "toText" || case ownerKeyOf actual of
-    Just owner -> plain `elem` builtinMethodNamesFor owner
-      || Map.member (owner, plain) (contextMethods (lowerContext current))
-    Nothing -> False
-  collection CoreArrayType{} = True
-  collection CoreMapType{} = True
-  collection CoreSetType{} = True
-  collection CoreStoreType{} = True
-  collection _ = False
+    _ -> isJust (declaredMemberType (lowerContext state) kind member)
+  bindReceiver receiverType kind fact current core
+    | Just selected <- mapRuntimeChoice current at kind core
+        (\ready held -> fmap (fmap fst) (bindReceiver receiverType kind fact ready held)) = selected
+    | unformed actual == unformed receiverType = bind kind fact ordinaryText
+    | Just field <- recordFields currentTypes actual >>= lookup plain =
+        (current, Just (CoreExpression at field (CoreField plain core), field))
+    | plain == "toText", actual `elem` [CoreCharType, CoreBytesType] =
+        bindText
+    | intrinsic = bind kind fact False
+    | Just scheme <- declaredMemberType context actual member =
+        case boundMemberFact actual scheme >>= \selected -> (,) selected <$> formedCoreTypeIn currentTypes selected of
+          Just (selectedFact, selectedKind) -> bind selectedKind selectedFact False
+          Nothing -> halt at ("the selected method value '" <> plain <> "' without a settled native signature") current
+    | plain == "toText" = bindText
+    | otherwise = (current, Just (missingRuntimeMember at plain core, CoreNeverType))
+   where
+    context = lowerContext current
+    currentTypes = contextTypes context
+    actual = coreExpressionType core
+    intrinsic = isNothing provider && plain /= "toText"
+      && maybe False (elem plain . builtinMethodNamesFor) (ownerKeyOf actual)
+    ordinaryText = plain == "toText" && actual `notElem` [CoreCharType, CoreBytesType]
+      && isNothing (declaredMemberType context actual member)
+    bindText =
+      let selected = intrinsicTextFact actual
+       in case formedCoreTypeIn currentTypes selected of
+            Just selectedKind -> bind selectedKind selected ordinaryText
+            Nothing -> halt at "a text method value without a native signature" current
+    bind selectedKind selectedFact asText =
+      let key = (if asText then textMethodPrefix else "$method:") <> member <> ":" <> Text.pack (show actual) <> ":" <> Text.pack (show selectedKind)
+       in closure current key (Just actual) selectedKind selectedFact [core]
   closure current key bound kind fact captures = case registerMethodValue lower current at receiver member key bound kind fact of
     (after, Just actual) -> (after, Just (CoreExpression at actual (CoreClosure key captures), actual))
     (after, Nothing) -> refused after

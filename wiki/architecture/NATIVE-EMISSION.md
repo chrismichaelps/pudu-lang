@@ -277,6 +277,14 @@ callable with its own parameter profile. Missing members stop before
 argument effects. [[Compiler Lower Method]] · [[Compiler Lower Body]] ·
 [[Backend Rendering Callable Programs]]. Execution evidence is pending.
 
+## Held declared method values (#956)
+
+Reading a member selects the held field or method at capture time.
+The method closure keeps the receiver and selected callable layout,
+and a missing member fails at the read. [[Compiler Lower Method
+Value]] · [[Backend Rendering Callable Programs]]. Execution evidence
+is pending.
+
 ## Published progress (#496)
 
 The README progress bar counts **completed coverage areas**, not individual language

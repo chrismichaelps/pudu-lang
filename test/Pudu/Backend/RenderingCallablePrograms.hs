@@ -347,6 +347,32 @@ renderingCallableSuccessPrograms =
         , "  print(show([2].map(choose(\"λ\".toBytes()).callback())))"
         , "  0", "}" ])
     , "receiver\n[3]\nreceiver\n[\"held 2\"]\n", "")
+  , ("a declared method value keeps its selected receiver across reassignment", program
+      (selectedReceiverTypes <> selectedDeclaredCallback "fn(Int) -> Str" "render" <>
+        [ "fn render(value: Int) -> Str { \"held \" + display(value) }"
+        , "fn main() -> Int {"
+        , "  var selected = choose(\"λ\".toBytes())"
+        , "  let captured = selected.callback"
+        , "  selected = choose(\"plain\")"
+        , "  let fresh = selected.callback"
+        , "  print(show([2].map(captured())))"
+        , "  print(show([2].map(fresh())))"
+        , "  0", "}" ])
+    , "receiver\nreceiver\n[\"held 2\"]\n[3]\n", "")
+  , ("bound member selection returns a held function field unchanged", program
+      (selectedReceiverTypes <>
+        [ "type Holder = { render: fn(Int) -> Str }"
+        , "trait Conversion { fn toBytes(self: &Self) -> Holder }"
+        , "impl Conversion for Option[Str] { fn toBytes(self: &Self) -> Holder { Holder{render: renderValue} } }"
+        , "trait Render { fn render(self: &Self, value: Int) -> Int }"
+        , "impl Render for Bytes { fn render(self: &Self, value: Int) -> Int { value + 1 } }"
+        , "fn renderValue(value: Int) -> Str { \"field \" + display(value) }"
+        , "fn main() -> Int {"
+        , "  let held = choose(\"λ\".toBytes()).toBytes()"
+        , "  let selected = held.render"
+        , "  print(show(selected(2)))"
+        , "  0", "}" ])
+    , "receiver\n\"field 2\"\n", "")
   , ("a selected declared call can reach a held collection builtin", program
       (selectedReceiverTypes <> selectedByteConversion <> selectedCollection "Map[Int, Str]" "mapOf([(0, \"held\")])" <>
         [ "trait Keys { fn keys(self: &Self) -> Array[UInt8] }"
@@ -591,6 +617,15 @@ renderingCallableRefusalPrograms =
         , "fn main() -> Int {"
         , "  let selected = choose(\"λ\".toBytes())"
         , "  print(selected.announce({ print(\"unreached\")\n \"label\" }))"
+        , "  0", "}" ]))
+  , ("a missing bound member fails at capture before a later statement", program
+      (selectedReceiverTypes <>
+        [ "trait Announce { fn announce(self: &Self, label: Str) -> Str }"
+        , "impl Announce for Str { fn announce(self: &Self, label: Str) -> Str { label } }"
+        , "fn main() -> Int {"
+        , "  let captured = choose(\"λ\".toBytes()).announce"
+        , "  print(\"unreached\")"
+        , "  print(captured(\"label\"))"
         , "  0", "}" ]))
   , ("selected declared callback reports its actual missing parameter", program
       (selectedReceiverTypes <> selectedDeclaredCallback "fn(Int, Str) -> Int" "longer" <>

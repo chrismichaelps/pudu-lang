@@ -282,3 +282,8 @@ Resolved Grill Log: The exact Int variant selects the Int implementation by nomi
 ## Held declared method receivers
 
 Resolved Grill Log: An ordinary declared call selects the held nominal receiver before lowering argument expressions. Matching owner and type arguments reuse the admitted instance. Other held values reuse the shared member dispatch.
+
+Resolved Grill Log: After selecting a different owner, specialize
+that declaration using its bound callable fact. The original member's
+signature cannot infer a different implementation's generic arguments.
+[[Compiler Lower Method Value]] supplies the shared bound signature.
