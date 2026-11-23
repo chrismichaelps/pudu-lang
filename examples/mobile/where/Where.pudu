@@ -1,0 +1,68 @@
+module Where
+
+import Std.Mobile.Host as Host
+import Std.Mobile.Location as Location
+import Std.Mobile.Permission as Permission
+import Std.Mobile.View as View
+
+/// The tag the one-shot position arrives under.
+const HERE: UInt32 = 1u32
+
+/// The name a state is shown with.
+const NAMES: Map[Permission.State, Str] = mapOf([
+    (Permission.NotAsked, "NotAsked"),
+    (Permission.Granted, "Granted"),
+    (Permission.Limited, "Limited"),
+    (Permission.Provisional, "Provisional"),
+    (Permission.Denied, "Denied"),
+    (Permission.Blocked, "Blocked"),
+    (Permission.Unavailable, "Unavailable")
+  ])
+
+/// The permission's state, the latest position, and how many positions arrived.
+type Model = { state: Str, position: Option[Location.Position], fixes: Int }
+
+fn view(model: &Model) -> View.View {
+  let place = match model.position {
+    case Some(at) => [View.Label("Latitude: {at.latitude}"), View.Label("Longitude: {at.longitude}")]
+    case None => [View.Label("Latitude: none")]
+  }
+  View.Column([View.Label("Permission: {model.state}")].concat(place).concat([View.Label("Fixes: {model.fixes}")]))
+}
+
+fn named(state: Permission.State) -> Str {
+  match NAMES.get(state) {
+    case Some(name) => name
+    case None => "?"
+  }
+}
+
+/// Asks for the Location permission, then for one precise position, and
+/// tracks moves of fifty meters once allowed. Without the permission the
+/// position answers as none, which the screen shows.
+fn main() -> Int {
+  var model = Model{state: "checking", position: None, fixes: 0}
+  let (first, built) = View.mount(&view(&model))
+  var mounted = first
+  Host.apply(built)
+  Host.apply(Permission.request(Permission.Location))
+  while true {
+    let event = Host.wait()
+    match event {
+      case View.Stopped => { return 0 }
+      case View.Permissioned(Permission.Location, state) => {
+        model = Model{..model, state: named(state)}
+        Host.apply(Location.locate(HERE, Location.Precise))
+        if Permission.allows(state) {
+          Host.apply(Location.track(true, Location.Approximate, 50))
+        }
+      }
+      case View.Located(_tag, Some(at)) => { model = Model{..model, position: Some(at), fixes: model.fixes + 1} }
+      case _ => {}
+    }
+    let (next, changes) = View.update(&mounted, &view(&model))
+    Host.apply(changes)
+    mounted = next
+  }
+  0
+}

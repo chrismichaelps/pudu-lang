@@ -31,6 +31,7 @@ testDataEvaluation = do
   mobileTabs <- runEntry "test-fixtures/stdlib/UsesMobileTabs.pudu"
   mobileStorage <- runEntry "test-fixtures/stdlib/UsesMobileStorage.pudu"
   mobileDevice <- runEntry "test-fixtures/stdlib/UsesMobileDevice.pudu"
+  mobileLocation <- runEntry "test-fixtures/stdlib/UsesMobileLocation.pudu"
   numParse <- runEntry "test-fixtures/stdlib/UsesNumParse.pudu"
   mobileResources <- runEntry "test-fixtures/stdlib/UsesMobileResource.pudu"
   memoLambda <- codes "test-fixtures/stdlib/MemoRenderLambda.pudu"
@@ -218,6 +219,8 @@ testDataEvaluation = do
         (mobileStorage === Just "6")
     , counterexample "native device requests write their words and read facts and links"
         (mobileDevice === Just "10")
+    , counterexample "native location writes its words and reads present and absent positions"
+        (mobileLocation === Just "9")
     , counterexample "integers parse exactly across the Int range in every radix"
         (numParse === Just "11")
     {-| Golden counts: an unchanged memo is one comparison and no render, so a

@@ -49,6 +49,8 @@ Entry points the program depends on:
 - Lifecycle observation: the host queues LIFECYCLE for the four application notifications, in the order the platform posts them ([[iOS Host Scene]]).
 - Capability instructions GESTURES, ALERT, VALUE, HAPTIC, TRAITS, ACCESS_HINT, ACCESS_VALUE, MENU and ANIMATE dispatch to [[iOS Host Gesture]], [[iOS Host Feedback]], [[iOS Host Access]] and [[iOS Host Motion]]. An out-of-range mask, style, role, haptic code or trait mask is a stream defect.
 - Device instructions DEVICE, NETWORK and AWAKE dispatch to [[pudu-ios-device]]. The host includes `pudu_ios_device.h` with the other private headers and links the Network framework for reachability (#983).
+- Location instructions LOCATE and TRACK dispatch to [[pudu-ios-location]]. The host includes `pudu_ios_location.h` after the permission header; CoreLocation is linked only when a location permission kind is declared (#986).
+- Self-test `PUDU_UI_LOCATION_TEST` waits until a LOCATED is queued, prints `PUDU_LOCATION answered <count>` and then asks the program to stop ([[pudu-ios-location]]).
 - REFRESH (37) dispatches to `pudu_do_refresh`, which lives in [[pudu_ios_refresh.h]]. It is refused on a node that is neither a scroll nor a list, with the message `pudu: refreshed a node that does not scroll:` followed by the node id.
 - Motion: after every commit, the host runs one animation for the surface if an animated group changed in that commit. With Reduce Motion on, the change is applied at once ([[iOS Host Motion]]).
 - Self-test `PUDU_UI_REFRESH_TEST` runs the pull check of [[pudu_ios_refresh.h]], prints its `PUDU_REFRESH` lines and then asks the program to stop.

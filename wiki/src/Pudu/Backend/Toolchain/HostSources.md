@@ -71,3 +71,7 @@ The reader header [[iOS Host Stream]], pudu_ios_stream.h, is staged with the sam
 ## Device sources (#983)
 
 The iOS host sources stage `pudu_ios_device.h` ([[pudu-ios-device]]) with the other private headers, and the host translation unit includes it once. The Android sources stage `PuduDevice.java` ([[PuduDevice]]) with the other platform classes.
+
+## Location sources (#986)
+
+The iOS host sources stage `pudu_ios_location.h` ([[pudu-ios-location]]) with the other private headers, and the host translation unit includes it after the permission header. The Android sources stage `PuduLocation.java` ([[PuduLocation]]) with the other platform classes.

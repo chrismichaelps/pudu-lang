@@ -330,6 +330,8 @@ public final class PuduBridge {
   static void device(int tag) { PuduDevice.describe(tag); }
   static void network(boolean watching) { PuduDevice.network(watching); }
   static void awake(boolean on) { PuduDevice.awake(on); }
+  static void locate(int tag, int accuracy) { PuduLocation.locate(tag, accuracy); }
+  static void track(boolean on, int accuracy, int distance) { PuduLocation.track(on, accuracy, distance); }
   static void tabs(int[] ids, String[] names, int[] counts, int[] routes, View[] bodies, boolean[] fills, String[] titles, int selected,
       boolean hasSheet, int sheet, View sheetBody, boolean sheetFills) {
     PuduTabs.show(ids, names, counts, routes, bodies, fills, titles, selected, hasSheet, sheet, sheetBody, sheetFills);

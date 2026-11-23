@@ -2,6 +2,7 @@ module Std.Mobile.Events
 
 import Std.Mobile.Device as Device
 import Std.Mobile.Gesture as Gesture
+import Std.Mobile.Location as Location
 import Std.Mobile.Permission as Permission
 import Std.Mobile.Scene as Scene
 import Std.Mobile.View as View
@@ -37,6 +38,7 @@ const LINKED: UInt64 = 30u64
 const STORED: UInt64 = 31u64
 const DESCRIBED: UInt64 = 32u64
 const NETWORKED: UInt64 = 33u64
+const LOCATED: UInt64 = 34u64
 
 /// Each event kind's constructor, given the tag and the text the host holds.
 const EVENTS: Map[UInt64, fn(UInt32, Str) -> View.Event] = mapOf([
@@ -76,7 +78,8 @@ const MEASURED: Map[UInt64, fn(UInt32, UInt32, Array[Int32]) -> Option[View.Even
     (GESTURED, |reported: UInt32, bit: UInt32, values: Array[Int32]| gestured(reported, Gesture.decoded(bit, &values))),
     (RESIZED, |_reported: UInt32, _bit: UInt32, values: Array[Int32]| resized(Scene.sized(&values))),
     (INSETS, |_reported: UInt32, _bit: UInt32, values: Array[Int32]| inset(Scene.insets(&values))),
-    (DATED, |reported: UInt32, _bit: UInt32, values: Array[Int32]| dated(reported, &values))
+    (DATED, |reported: UInt32, _bit: UInt32, values: Array[Int32]| dated(reported, &values)),
+    (LOCATED, |reported: UInt32, found: UInt32, values: Array[Int32]| located(reported, Location.position(found, &values)))
   ])
 
 /// Whether a host event's kind carries text the host holds for it.
@@ -192,6 +195,11 @@ fn described(reported: UInt32, found: Option[Device.Facts]) -> View.Event {
     case Some(facts) => View.Described(reported, facts)
     case None => View.Stopped
   }
+}
+
+fn located(reported: UInt32, found: Option[Option[Location.Position]]) -> Option[View.Event] {
+  let position = found ?
+  Some(View.Located(reported, position))
 }
 
 fn networked(found: Option[Device.Link]) -> Option[View.Event] {

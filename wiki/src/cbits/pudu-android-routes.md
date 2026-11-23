@@ -12,7 +12,7 @@ aliases: [Android Host Routes, pudu_android_routes.h]
 
 ## Purpose and interface
 
-Private route implementation of the Android host, included once by the Android host translation unit `pudu_android_host.c`. It realizes eight instructions of [[Std Mobile Stream]]: NAVIGATE (36), REFRESH (37), FETCH (38), CANCEL (39), WAKE (40), DEVICE (58), NETWORK (59) and AWAKE (60). The numbering is the one shared with the iOS host ([[NATIVE-MOBILE]]). The Java side does the platform work on the main thread: [[PuduNavigator]] for the page stack and page sheet, [[PuduRefresh]] for pull to refresh, [[PuduFetch]] for requests and the wake timer.
+Private route implementation of the Android host, included once by the Android host translation unit `pudu_android_host.c`. It realizes ten instructions of [[Std Mobile Stream]]: NAVIGATE (36), REFRESH (37), FETCH (38), CANCEL (39), WAKE (40), DEVICE (58), NETWORK (59), AWAKE (60), LOCATE (61) and TRACK (62). The numbering is the one shared with the iOS host ([[NATIVE-MOBILE]]). The Java side does the platform work on the main thread: [[PuduNavigator]] for the page stack and page sheet, [[PuduRefresh]] for pull to refresh, [[PuduFetch]] for requests and the wake timer, and [[PuduLocation]] for position fixes (#986).
 
 The header provides:
 - `pudu_do_navigate`: reads a presentation, checks it whole, then sends it to `PuduBridge.navigate`.
@@ -22,6 +22,7 @@ The header provides:
 - `pudu_do_cancel`: sends `PuduBridge.cancelFetch` and drops an unread FETCHED for that generation.
 - `pudu_do_wake`: sends `PuduBridge.wake` with a delay in milliseconds.
 - `pudu_do_device`, `pudu_do_network` and `pudu_do_awake`: check the request word, then send the request to `PuduDevice` through `PuduBridge` (#983).
+- `pudu_do_locate` and `pudu_do_track`: check the accuracy code and the tracking flag, then send the request to `PuduLocation` through `PuduBridge` (#986).
 - `pudu_node_scrolls`: true for scroll and list kinds. Its kinds come from [[pudu_android_kinds.h]].
 
 The enumeration `PUDU_FETCH_SENT`, `PUDU_FETCH_REPEATED` and `PUDU_FETCH_UNREADABLE` (0, 1, 2) is the answer the Java side returns for a request.
@@ -31,6 +32,7 @@ The enumeration `PUDU_FETCH_SENT`, `PUDU_FETCH_REPEATED` and `PUDU_FETCH_UNREADA
 - NAVIGATE reads the route count, then per route an id, a body node and a title. A count of 0 is refused with `showed a navigation without a root route, count` followed by the count. Two routes with one id are refused with `showed two routes with id` followed by the id. Then the sheet flag is read: a value above 1 is refused with `marked a sheet with` followed by the value. A flag of 1 is followed by the sheet's id and body node; a sheet id equal to a route id is refused with `showed a sheet sharing a route's id` followed by the id. Every check runs before the screen changes.
 - A checked NAVIGATE drops any unread POPPED and DISMISSED events, since they refer to a stack the program has replaced. It clears the root record of the shown page and passes the route arrays, the sheet and whether each body fills its area to `PuduBridge.navigate`. A body fills when its node is a scroll or list kind.
 - REFRESH reads the node, the tag its pulls report and the flag. A node that does not scroll is refused with `refreshed a node that does not scroll:` followed by the node id. A flag above 1 is refused with `set refreshing to` followed by the value. The settle hook is installed before the call, so the first REFRESH arms it.
+- LOCATE reads its tag and accuracy code. A code above 2 is refused with `used unknown location accuracy` followed by the code. TRACK reads its flag, accuracy code and distance. A flag above 1 is refused with `set location tracking to` followed by the flag, and an accuracy code above 2 is refused as for LOCATE. Both checks run before the request is sent.
 - NETWORK reads its watching word. A word other than 0 or 1 is refused with `set network watching to` followed by the value. AWAKE reads its word and refuses a value other than 0 or 1 with `set keep-awake to` followed by the value.
 - The settle hook runs on the program thread before each wait. It collects the tags of queued REFRESHED events with `pudu_queued_tags`, up to `PUDU_EVENT_SCAN` entries, and passes them as an int array. Java ends each unanswered pull whose tag is absent from that array.
 - FETCH reads the generation, the method, the URL, the header count, the header pairs and the body, in that order. Generation 0 is refused with `sent a request without a generation` followed by the value. The Java side answers `PUDU_FETCH_UNREADABLE` for a URL it cannot parse, refused with `sent a request to an unreadable URL, generation` followed by the generation. `PUDU_FETCH_REPEATED` for a generation already in flight is refused with `sent two requests under generation` followed by the generation. A JNI failure is checked by `pudu_checked` before either answer is read.

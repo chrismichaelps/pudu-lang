@@ -804,3 +804,7 @@ separate while sharing one exhaustive reference projection.
 ## Device facts (#983)
 
 The extra-source-files list adds `cbits/pudu_ios_device.h` ([[pudu-ios-device]]) and `android/org/pudu/PuduDevice.java` ([[PuduDevice]]), so source distributions carry both. Resolved Grill Log: no added package dependency; the Network framework is a system framework.
+
+## Location (#986)
+
+The extra-source-files list adds `cbits/pudu_ios_location.h` ([[pudu-ios-location]]) and `android/org/pudu/PuduLocation.java` ([[PuduLocation]]), so source distributions carry both. Resolved Grill Log: no added package dependency; CoreLocation is a system framework, linked only when a location permission kind is declared.

@@ -380,6 +380,9 @@ tags: [moc, module]
 - [[Uses Mobile Device]] — stdlib fixture for device facts, reachability and keep-awake requests and answers (#983).
 - [[About Example]] — device facts, network link and keep-awake on the simulator and Android (#983).
 - [[PuduDevice]] — Android device facts, network reachability and keep-awake (#983).
+- [[Uses Mobile Location]] — stdlib fixture for location requests and LOCATED answers (#986).
+- [[Where Example]] — device position from one-shot and tracked fixes on the simulator and Android (#986).
+- [[PuduLocation]] — Android device location, one-shot and tracked fixes (#986).
 - [[Pudu Backend Toolchain Assets]] — application asset listing, refused names and links, staging (#973).
 - [[Uses Mobile Controls]] — stdlib fixture for the value controls: build and change words, normalization and value events (#934).
 - [[Pudu Compiler Program Eval Data Spec]] — data evaluation spec, including the mobile fixture counts.

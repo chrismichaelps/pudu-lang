@@ -1,0 +1,57 @@
+module Std.Mobile.Location
+
+import Std.Mobile.Stream as Stream
+
+/// How close a position must be: the best the device can do, within about a
+/// hundred meters, or within about a kilometer. A closer accuracy costs more
+/// power and can take longer to arrive.
+export type Accuracy = Precise | Approximate | Coarse
+
+/// Where the device is: latitude and longitude in ten-millionths of a degree,
+/// the radius of uncertainty in meters, and the altitude in meters.
+export type Position = { latitude: Int, longitude: Int, accuracy: Int, altitude: Int }
+
+/// Accuracy codes as LOCATE and TRACK carry them.
+const CODES: Map[Accuracy, UInt32] = mapOf([(Precise, 0u32), (Approximate, 1u32), (Coarse, 2u32)])
+
+/// A commit asking for one position; it answers once as
+/// `Located(tag, Some(position))`, or `Located(tag, None)` when no position is
+/// available. It never asks the person: a program asks for the Location
+/// permission first.
+export fn locate(tag: UInt32, accuracy: Accuracy) -> Bytes { bytesOf(Stream.locate([], tag, accuracyCode(accuracy))) }
+
+/// A commit starting or stopping tracking. While tracking, each move of at
+/// least `distance` meters arrives as `Located(0, Some(position))`; a later
+/// commit replaces the accuracy and distance.
+export fn track(on: Bool, accuracy: Accuracy, distance: Int) -> Bytes {
+  let meters = match convertInteger[UInt32](distance) {
+    case Some(found) => found
+    case None => 0u32
+  }
+  bytesOf(Stream.track([], if on { 1u32 } else { 0u32 }, accuracyCode(accuracy), meters))
+}
+
+/// The stream code of an accuracy.
+export fn accuracyCode(accuracy: Accuracy) -> UInt32 {
+  match CODES.get(accuracy) {
+    case Some(code) => code
+    case None => 0u32
+  }
+}
+
+/// What a LOCATED event carries: a position from detail 1 and four words, no
+/// position from detail 0 and no words. Any other shape is never written and
+/// reads as None.
+export fn position(found: UInt32, values: &Array[Int32]) -> Option[Option[Position]] {
+  if found == 0u32 && values.length() == 0 {
+    return Some(None)
+  }
+  if found != 1u32 || values.length() != 4 {
+    return None
+  }
+  let latitude = convertInteger[Int](values[0]) ?
+  let longitude = convertInteger[Int](values[1]) ?
+  let accuracy = convertInteger[Int](values[2]) ?
+  let altitude = convertInteger[Int](values[3]) ?
+  Some(Some(Position{latitude: latitude, longitude: longitude, accuracy: accuracy, altitude: altitude}))
+}

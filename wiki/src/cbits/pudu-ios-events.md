@@ -18,6 +18,7 @@ The header provides `pudu_queue(kind, tag, text, detail)`, which appends an even
 
 - Each queued event holds its 64-bit value (kind in the high 32 bits, tag in the low 32 bits), the text it carries, its detail word, and its word channel. An event without text, detail or words stores an empty text, zero, and no words.
 - DESCRIBED (32) and NETWORKED (33) are queued by [[pudu-ios-device]]. DESCRIBED carries its five text lines and the text scale as its detail word; NETWORKED carries the link code as its detail word (#983).
+- LOCATED (34) is queued by [[pudu-ios-location]]. Its tag is the LOCATE's tag, or 0 for a TRACK report. Its detail word is 1 with four words for a position, or 0 with no words when no position is available (#986).
 - `pudu_ui_wait` runs the main run loop in the default mode until an event is queued, then hands out the oldest.
 - `pudu_ui_event_text` and `pudu_ui_event_detail` return the text and detail of the last event handed out. Both stay valid until the next wait.
 - Events are handed out in the order the controls queued them.

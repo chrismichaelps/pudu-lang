@@ -446,3 +446,4 @@ tags: [moc, handoff]
 - [[Native Tabs]] — native tab bars: TABS, SELECTED and the per-tab stacks (#977).
 - [[Native App Identity]] — application identity from the manifest and incoming links: LINKED (#978).
 - [[Native Storage]] — persistent and secure storage and public integer parsing (#980).
+- [[986-location]] — device location, one-shot and tracked fixes (#986).

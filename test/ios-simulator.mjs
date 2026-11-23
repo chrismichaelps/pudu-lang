@@ -294,6 +294,26 @@ int main(int argc, char **argv) {
     refusedApp(device, root, "network watching word 2",
       "import Std.Mobile.Host as Host\nimport Std.Mobile.Stream as Stream", `  Host.apply(bytesOf(Stream.network([], 2u32)))`,
       /pudu: a view stream set network watching to 2/u);
+    // With location allowed and set, one position arrives and shows in
+    // ten-millionths of a degree; with it revoked, the position answers as none.
+    mobileApp(device, "Where", [
+      {
+        environment: { SIMCTL_CHILD_PUDU_UI_SELFTEST: "0", SIMCTL_CHILD_PUDU_UI_LOCATION_TEST: "1" },
+        privacy: [["grant", "location"]],
+        location: "18.4655,-66.1057",
+        labels: ["Permission: Granted", "Latitude: 184655000", "Longitude: -661057000", /^Fixes: [1-9]\d*$/u],
+        layout: ["PUDU_LOCATION answered yes"],
+      },
+      {
+        environment: { SIMCTL_CHILD_PUDU_UI_SELFTEST: "0", SIMCTL_CHILD_PUDU_UI_LOCATION_TEST: "1" },
+        privacy: [["revoke", "location"]],
+        labels: ["Permission: Blocked", "Latitude: none", "Fixes: 0"],
+        layout: ["PUDU_LOCATION answered yes"],
+      },
+    ], "where");
+    refusedApp(device, root, "unknown location accuracy",
+      "import Std.Mobile.Host as Host\nimport Std.Mobile.Stream as Stream", `  Host.apply(bytesOf(Stream.locate([], 1u32, 7u32)))`,
+      /pudu: a view stream used unknown location accuracy 7/u);
     mobileApp(device, "Links", [{
       environment: { SIMCTL_CHILD_PUDU_UI_SELFTEST: "0", SIMCTL_CHILD_PUDU_UI_LINK_TEST: "pudulinks://hello?from=test" },
       labels: ["Link: pudulinks://hello?from=test"],
@@ -481,9 +501,11 @@ function mobileApp(device, example, runs, directory = "", bundle = `org.pudu.${e
     const executable = join(app, example);
     run(xcrun, ["simctl", "install", device, app], simulatorTimeout);
     installed = true;
-    for (const { environment, labels, layout, privacy = [] } of runs) {
+    for (const { environment, labels, layout, privacy = [], location } of runs) {
       // Each entry presets one service's answer, as the person's earlier choice would.
       for (const [action, service] of privacy) run(xcrun, ["simctl", "privacy", device, action, service, bundle], simulatorTimeout);
+      // A simulated position, as the device would report it.
+      if (location) run(xcrun, ["simctl", "location", device, "set", location], simulatorTimeout);
       const lines = launch(device, bundle, "PUDU_", "PUDU_PROGRAM_STATUS", environment);
       // The host reports labels in the order the screen shows them; a pattern
       // stands for a label whose text depends on the machine.
@@ -493,7 +515,7 @@ function mobileApp(device, example, runs, directory = "", bundle = `org.pudu.${e
         `${example} did not show ${labels.join(", ")}:\n${lines.join("\n")}`);
       assert.ok(lines.includes("PUDU_PROGRAM_STATUS 0"), `${example} did not finish:\n${lines.join("\n")}`);
       if (layout) {
-        assert.deepEqual(lines.filter((line) => /^PUDU_(VIEWPORT|KEYBOARD|THEME|LIST|MATERIAL|ALERT|HAPTIC|ACCESS|MOTION|NAV|REFRESH|FETCH|IMAGE|SYSTEM|PERMISSION|TABS|DEVICE) /.test(line)), layout,
+        assert.deepEqual(lines.filter((line) => /^PUDU_(VIEWPORT|KEYBOARD|THEME|LIST|MATERIAL|ALERT|HAPTIC|ACCESS|MOTION|NAV|REFRESH|FETCH|IMAGE|SYSTEM|PERMISSION|TABS|DEVICE|LOCATION) /.test(line)), layout,
           `${example} did not report the expected layout and theme:\n${lines.join("\n")}`);
       }
       const firstFrame = lines.find((line) => line.startsWith("PUDU_FIRST_FRAME_MS "));

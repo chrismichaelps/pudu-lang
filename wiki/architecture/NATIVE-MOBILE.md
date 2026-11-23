@@ -170,6 +170,8 @@ One stream carries each commit. It is a sequence of little-endian 32-bit words, 
 | 58 | DEVICE | tag; answers DESCRIBED 32 |
 | 59 | NETWORK | 1 to start watching reachability, 0 to stop; any other word is refused |
 | 60 | AWAKE | 1 to keep the screen on while in front, 0 to let it sleep; any other word is refused |
+| 61 | LOCATE | tag, accuracy code (0 precise, 1 approximate, 2 coarse); answers LOCATED 34; a code above 2 is refused |
+| 62 | TRACK | on flag, accuracy code, minimum distance in meters; reports LOCATED 34 under tag 0 while on; a flag above 1 is refused |
 
 Events return through `pudu_ui_wait` as one 64-bit value: the kind in the high 32 bits, with the tag in the low 32 bits.
 
@@ -205,6 +207,7 @@ Events return through `pudu_ui_wait` as one 64-bit value: the kind in the high 3
 | 30 | linked | URL text; no detail |
 | 32 | described | tag; five text lines (platform, system version, model, language, zone); detail is the text scale in percent |
 | 33 | networked | tag 0; detail is the link code (0 offline, 1 Wifi, 2 cellular, 3 wired) |
+| 34 | located | tag; detail 1 with four signed words (latitude and longitude in ten-millionths of a degree, accuracy in meters, altitude in meters), or detail 0 with no words when no position is available |
 
 Codes 10 to 12 only add instructions, so a stream of codes 1 to 9 means the same. The view module no longer writes RESET; the host keeps it so a stream from an earlier writer still means the same. Nodes carry stable ids handed out by the program and recycled after REMOVE (#914). Compiled views extend the stream further under ADR-0031 (compiled native execution).
 
@@ -314,3 +317,7 @@ The integer parser that programs use on stored text is [[Std Num]]: `parseInt` a
 ## Device facts, reachability and keep-awake (#983)
 
 A program asks for the device's facts with DEVICE 58, answered by DESCRIBED 32 with the platform, system version, hardware model, preferred language, time zone and preferred text scale. NETWORK 59 starts or stops reachability reports, answered by NETWORKED 33 with the link kind, Offline, Wifi, Cellular or Wired, once when watching starts and again on each change of kind. AWAKE 60 keeps the screen on while the application is in front; it is a standing setting that holds until a later AWAKE changes it. The iOS host reads the facts from UIKit and Foundation and the link from a Network framework path monitor; the Android host reads the active network through ConnectivityManager under the normal permission `ACCESS_NETWORK_STATE`. No address, network name or location is read. The program-facing module is [[Std Mobile Device]].
+
+## Location (#986)
+
+A program asks for one position with LOCATE 61, answered by exactly one LOCATED 34 under the same tag, or starts a stream of positions with TRACK 62, which reports LOCATED 34 under tag 0 for each new position until it is turned off. Positions are integers in ten-millionths of a degree, so they are exact and identical on both hosts. Accuracy is precise, approximate (about a hundred meters) or coarse (about a kilometer). The answer carries no position, with detail 0, when the permission is not allowed, location services are off, the platform fails or no fix arrives within the timeout. A LOCATE never prompts; asking is the permission module's job. The iOS host reads CoreLocation through its own location manager and answers from that manager's last location while tracking. The Android host reads LocationManager under the fine or coarse location permission and reuses a last-known fix only when it is under sixty seconds old. The program-facing module is [[Std Mobile Location]], and the example is [[Where Example]]. Android runtime behavior is not yet exercised on a device or emulator.

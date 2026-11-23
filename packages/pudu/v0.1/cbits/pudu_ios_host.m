@@ -33,6 +33,7 @@
 #include "pudu_ios_permission.h"
 #include "pudu_ios_storage.h"
 #include "pudu_ios_device.h"
+#include "pudu_ios_location.h"
 #include "pudu_ios_capability_test.h"
 
 /* Each node's color role from COLOR, or PUDU_ROLE_DEFAULT. */
@@ -334,6 +335,7 @@ static void (*const pudu_instruction_table[PUDU_UI_INSTRUCTIONS])(pudu_reader *)
   [PUDU_UI_SETTINGS] = pudu_do_settings, [PUDU_UI_TABS] = pudu_do_tabs,
   [PUDU_UI_STORE_READ] = pudu_do_store_read, [PUDU_UI_STORE_WRITE] = pudu_do_store_write, [PUDU_UI_STORE_REMOVE] = pudu_do_store_remove,
   [PUDU_UI_DEVICE] = pudu_do_device, [PUDU_UI_NETWORK] = pudu_do_network, [PUDU_UI_AWAKE] = pudu_do_awake,
+  [PUDU_UI_LOCATE] = pudu_do_locate, [PUDU_UI_TRACK] = pudu_do_track,
 };
 
 /* Applies one commit: every instruction in order, in one call. */
@@ -389,6 +391,7 @@ static const pudu_self_test pudu_self_tests[] = {
   { "PUDU_UI_FETCH_TEST", pudu_run_fetch }, { "PUDU_UI_REFRESH_TEST", pudu_run_refresh },
   { "PUDU_UI_MATERIAL_TEST", pudu_run_material }, { "PUDU_UI_LIST_TEST", pudu_run_list },
   { "PUDU_UI_THEME_TEST", pudu_run_theme }, { "PUDU_UI_KEYBOARD_TEST", pudu_run_keyboard },
+  { "PUDU_UI_LOCATION_TEST", pudu_test_location },
 };
 
 @interface PuduAppDelegate : UIResponder <UIApplicationDelegate>

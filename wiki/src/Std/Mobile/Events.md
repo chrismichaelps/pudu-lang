@@ -24,7 +24,7 @@ Exports:
 - `eventWithDetail(raw: UInt64, text: Str, detail: UInt32) -> View.Event`: decodes a detailed event with the detail word the host fetched.
 - `eventWithWords(raw: UInt64, text: Str, detail: UInt32, values: Array[Int32]) -> View.Event`: decodes an event with its detail word and signed words. A measured kind decodes through `MEASURED`, a detailed kind through `DETAILED`, and every other kind through `event`.
 
-Kind codes: IMAGED 24 (#973); OPENED 25, SHARED 26 and PASTED 27 (#974); PERMISSIONED 28 (#976); SELECTED 29 (#977); LINKED 30 (#978); STORED 31 (#980); DESCRIBED 32 and NETWORKED 33 (#983); TAPPED 1, Stopped 2 (the host's stop), CHANGED 3, SWITCHED_ON 4, SWITCHED_OFF 5, REACHED 8, GESTURED 9, CHOSE 10, RESIZED 11, LIFECYCLE 12, PICKED 13, POPPED 14, DISMISSED 15, REFRESHED 16, INSETS 17, FETCHED 18, WOKE 19, MEMORY 20, VALUED 21, COLORED 22, DATED 23.
+Kind codes: IMAGED 24 (#973); OPENED 25, SHARED 26 and PASTED 27 (#974); PERMISSIONED 28 (#976); SELECTED 29 (#977); LINKED 30 (#978); STORED 31 (#980); DESCRIBED 32 and NETWORKED 33 (#983); LOCATED 34 (#986); TAPPED 1, Stopped 2 (the host's stop), CHANGED 3, SWITCHED_ON 4, SWITCHED_OFF 5, REACHED 8, GESTURED 9, CHOSE 10, RESIZED 11, LIFECYCLE 12, PICKED 13, POPPED 14, DISMISSED 15, REFRESHED 16, INSETS 17, FETCHED 18, WOKE 19, MEMORY 20, VALUED 21, COLORED 22, DATED 23.
 
 Event payloads by kind:
 - POPPED (14): the tag is the route that was on top, and the detail word is the surviving destination route.
@@ -66,11 +66,9 @@ Dispatch is three constant tables:
 - NETWORKED (33): the tag is 0. The detail word is the link code: 0 Offline, 1 Wifi, 2 Cellular, 3 Wired (wired or any other interface). Codes above 3 decode to `Stopped`. Decodes to `Networked(link)` through `Device.linkOf`.
 - The host sends NETWORKED once when watching starts, or when NETWORK 1 arrives while watching already with the last known link, and again on each change of link kind.
 
-## Device (#983)
+## Location (#986)
 
-- DESCRIBED (32): the tag is the DEVICE request's tag. The text is five lines joined by a newline: the platform (`ios` or `android`), the system version, the hardware model, the preferred language tag (BCP 47), and the time zone (IANA id). The detail word is the preferred text scale in percent, 100 at the default. Text that is not exactly five lines, or names an unknown platform, decodes to `Stopped`. Decodes to `Described(tag, facts)` through `Device.facts`.
-- NETWORKED (33): the tag is 0. The detail word is the link code: 0 Offline, 1 Wifi, 2 Cellular, 3 Wired (wired or any other interface). Codes above 3 decode to `Stopped`. Decodes to `Networked(link)` through `Device.linkOf`.
-- The host sends NETWORKED once when watching starts, or when NETWORK 1 arrives while watching already with the last known link, and again on each change of link kind.
+- LOCATED (34): a measured kind. The tag is the LOCATE's tag, or 0 for a report of a TRACK. Detail 1 is followed by exactly four signed words: latitude and longitude in ten-millionths of a degree, horizontal accuracy in meters (rounded up), and altitude in meters. Detail 0 carries no words and means no position is available: the permission is not allowed, location services are off, the platform failed, or no fix arrived within the timeout. Any other shape decodes to `Stopped`. Decodes to `Located(tag, position)` through `Location.position`.
 
 ## Invariants
 

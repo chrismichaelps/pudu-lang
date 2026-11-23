@@ -52,7 +52,7 @@ Use `--require-simulator` to make an unavailable simulator a failure.
 - An expected label may be a regular expression, for labels whose text depends
   on the machine (About's version, model, locale, zone and link); the count and
   order of labels must still match exactly.
-- The layout filter includes `PUDU_DEVICE` lines.
+- The layout filter includes `PUDU_DEVICE` and `PUDU_LOCATION` lines.
 
 ## Dependencies and consumers
 
@@ -177,6 +177,12 @@ it.
 ## Device run (#983)
 
 The script runs `examples/mobile/About.pudu` ([[About Example]]) with `PUDU_UI_DEVICE_TEST` set. The run must print `PUDU_DEVICE awake yes` and show the labels `Platform: ios`, `Scale: 100` and `Online: true`, then exit with status 0. A refused run sends a NETWORK word of 2, which must end with the stream defect `set network watching to 2`.
+
+## Location run (#986)
+
+The script runs `examples/mobile/where/Where.pudu` ([[Where Example]]) with `PUDU_UI_LOCATION_TEST` set, after a privacy grant for location and `simctl location set 18.4655,-66.1057`. The run must print the labels `Permission: Granted`, `Latitude: 184655000` and `Longitude: -661057000`, and a `Fixes:` label with a count of at least 1; it must also print a `PUDU_LOCATION` line, then exit with status 0. A run entry may carry `location`, the coordinate pair the script sets with `simctl location set` before the application starts.
+
+A second run with location revoked must print `Permission: Blocked`, `Latitude: none` and `Fixes: 0`. A refused application built with accuracy code 7 must end with the stream defect `used unknown location accuracy 7`.
 
 ## Glass material (#928)
 

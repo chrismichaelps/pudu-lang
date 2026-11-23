@@ -5,6 +5,11 @@ tags: [changelog]
 
 # Changelog
 
+## 2026-11-23 — Device location, one-shot and tracking (#986)
+
+- Device location: LOCATE 61 and TRACK 62 on the iOS and Android hosts, LOCATED 34 event, `Std.Mobile.Location` with `locate`, `track`, `position` and `accuracyCode`, and refusals for an accuracy code above 2 or a TRACK flag above 1. The iOS host uses CoreLocation ([[pudu-ios-location]]); the Android host uses LocationManager under the fine or coarse location permission ([[PuduLocation]]). The instruction bound is now 63.
+  [[Std Mobile Location]] · [[Std Mobile Stream]] · [[Std Mobile Events]] · [[Std Mobile View]] · [[pudu-ios-location]] · [[pudu-ios-host]] · [[pudu-ios-nodes]] · [[pudu-ios-events]] · [[PuduLocation]] · [[pudu-android-routes]] · [[Native Toolchain Host Sources]] · [[Pudu Cabal Manifest]] · [[Uses Mobile Location]] · [[Where Example]] · [[Pudu Compiler Program Eval Data Spec]] · [[iOS Simulator Run]] · [[986-location]] · [[NATIVE-MOBILE]]
+
 ## 2026-11-23 — Device facts, network reachability and keep-awake (#983)
 
 - Device facts, network reachability and keep-awake: DEVICE 58, NETWORK 59 and AWAKE 60 on the iOS and Android hosts, DESCRIBED 32 and NETWORKED 33 events, `Std.Mobile.Device` with `describe`, `watchNetwork` and `keepAwake`, and refusals for a NETWORK or AWAKE word other than 0 or 1. The iOS host uses UIKit, Foundation and a Network path monitor ([[pudu-ios-device]]); the Android host uses ConnectivityManager under the normal `ACCESS_NETWORK_STATE` permission ([[PuduDevice]]). The instruction bound is now 61.

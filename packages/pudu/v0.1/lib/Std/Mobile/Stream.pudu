@@ -121,6 +121,8 @@ const STORE_REMOVE: UInt32 = 57u32
 const DEVICE: UInt32 = 58u32
 const NETWORK: UInt32 = 59u32
 const AWAKE: UInt32 = 60u32
+const LOCATE: UInt32 = 61u32
+const TRACK: UInt32 = 62u32
 
 /// Creates node `node` as a control of `kind`.
 export fn create(out: Array[UInt8], node: UInt32, kind: UInt32) -> Array[UInt8] { words(out, [CREATE, node, kind]) }
@@ -365,6 +367,13 @@ export fn network(out: Array[UInt8], watching: UInt32) -> Array[UInt8] { words(o
 
 /// Keeps the screen on with 1, or lets it sleep with 0.
 export fn awake(out: Array[UInt8], on: UInt32) -> Array[UInt8] { words(out, [AWAKE, on]) }
+
+/// Asks for one position at the accuracy `precision`; LOCATED with `reported` answers.
+export fn locate(out: Array[UInt8], reported: UInt32, precision: UInt32) -> Array[UInt8] { words(out, [LOCATE, reported, precision]) }
+
+/// Starts tracking with 1 at the accuracy `precision`, reporting moves of at
+/// least `distance` meters, or stops it with 0.
+export fn track(out: Array[UInt8], on: UInt32, precision: UInt32, distance: UInt32) -> Array[UInt8] { words(out, [TRACK, on, precision, distance]) }
 
 /// Shows `node` as the screen's content.
 export fn root(out: Array[UInt8], node: UInt32) -> Array[UInt8] { words(out, [ROOT, node]) }

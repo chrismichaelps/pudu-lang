@@ -300,4 +300,24 @@ static void pudu_do_awake(JNIEnv *env, pudu_reader *reader) {
   pudu_bridge(env, "awake", "(Z)V", (jboolean)(on == 1));
 }
 
+/* LOCATE: the tag LOCATED answers under, then the accuracy; TRACK: 1 to track
+   or 0 to stop, the accuracy, then the minimum distance in meters. */
+static uint32_t pudu_location_accuracy(pudu_reader *reader) {
+  uint32_t accuracy = pudu_word(reader);
+  if (accuracy > 2) pudu_stream_defect("used unknown location accuracy", accuracy);
+  return accuracy;
+}
+
+static void pudu_do_locate(JNIEnv *env, pudu_reader *reader) {
+  uint32_t tag = pudu_word(reader), accuracy = pudu_location_accuracy(reader);
+  pudu_bridge(env, "locate", "(II)V", (jint)tag, (jint)accuracy);
+}
+
+static void pudu_do_track(JNIEnv *env, pudu_reader *reader) {
+  uint32_t on = pudu_word(reader);
+  if (on > 1) pudu_stream_defect("set location tracking to", on);
+  uint32_t accuracy = pudu_location_accuracy(reader), distance = pudu_word(reader);
+  pudu_bridge(env, "track", "(ZII)V", (jboolean)(on == 1), (jint)accuracy, (jint)distance);
+}
+
 #endif
