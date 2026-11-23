@@ -126,28 +126,28 @@ lowerArrayIndex lower state whole receiver key = case typeForSpan (contextTypes 
 {-| A built-in method when the receiver is an array. -}
 lowerArrayMethod :: LowerExpression -> LowerCallback -> LowerState -> Span -> CoreType -> CoreExpression -> Text
   -> [Located Expression] -> Lowered
-lowerArrayMethod lower lowerCallback state at checked core member arguments
-  | kind@(CoreArrayType element) <- coreExpressionType core =
-      case arrayOperands checked kind state arguments of
+lowerArrayMethod lower lowerCallback state at declaredElement receiver member arguments
+  | kind@(CoreArrayType element) <- coreExpressionType receiver =
+      case arrayOperands declaredElement kind state arguments of
         (after, Nothing) -> refused after
         (after, Just written)
-          | any stops written -> (after, Just (stopped at (core : written), CoreNeverType))
+          | any stops written -> (after, Just (stopped at (receiver : written), CoreNeverType))
           | otherwise -> case lookup member (direct kind element) of
               Just (name, parameters, result) ->
                 let apply ready (held : operands)
                       | name == ArrayJoinWith, joinsHeldText types element =
                           arrayMethodWith ready at member (Just (operands, held)) kind element id
                       | otherwise =
-                          runtime ready checked element name parameters result held (positions name operands)
+                          runtime ready declaredElement element name parameters result held (positions name operands)
                     apply ready _ = refused ready
                  in callWithRuntimeArguments at (methodFailure name (length parameters) (length written))
-                      (ExactSlot kind : slots name parameters) apply after (core : written)
+                      (ExactSlot kind : slots name parameters) apply after (receiver : written)
               Nothing ->
                 let arity = if member == "reduce" then 2 else 1
                     apply ready (held : operands) = arrayMethodWith ready at member (Just (operands, held)) kind element id
                     apply ready _ = refused ready
                  in callWithRuntimeArguments at (wrongArity arity) (ExactSlot kind : replicate arity AnySlot)
-                      apply after (core : written)
+                      apply after (receiver : written)
   | otherwise = halt at "an array method without an array receiver" state
  where
   types = contextTypes (lowerContext state)
