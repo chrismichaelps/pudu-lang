@@ -1,5 +1,6 @@
 module Std.Ui.Accessible
 
+import Std.Num {parseInt}
 import Std.Ui.Canvas as Canvas
 import Std.Ui.Layout as Layout
 
@@ -83,7 +84,7 @@ export fn decode(text: Str) -> Result[Array[Exposed], AccessibleError] {
     if fields.length() != FIELDS { return Err(MalformedRecord(index)) }
     var numbers: Array[Int] = []
     for position in [0, 1, 4, 5, 6, 7] {
-      match integer(fields[position]) {
+      match parseInt(fields[position]) {
         case Some(value) => { numbers = numbers.push(value) }
         case None => { return Err(MalformedRecord(index)) }
       }
@@ -109,16 +110,3 @@ export fn decode(text: Str) -> Result[Array[Exposed], AccessibleError] {
 /// A name with the characters that would end its record or shift a field
 /// turned into spaces.
 fn spoken(name: Str) -> Str { name.replace("\t", " ").replace("\r", " ").replace("\n", " ") }
-
-fn integer(text: Str) -> Option[Int] {
-  let negative = text.startsWith("-")
-  let digits = if negative { text.drop(1) } else { text }
-  if digits.length() == 0 || digits.length() > 9 { return None }
-  var total = 0
-  for symbol in digits {
-    let code = symbol.code()
-    if code < 48 || code > 57 { return None }
-    total = total * 10 + code - 48
-  }
-  Some(if negative { 0 - total } else { total })
-}

@@ -324,6 +324,9 @@ public final class PuduBridge {
   static void permissions(int[] kinds) { PuduPermission.check(kinds); }
   static void permission(int kind) { PuduPermission.request(kind); }
   static void settings() { PuduPermission.settings(); }
+  static void storeRead(int tag, int place, String key) { PuduStore.read(tag, place, key); }
+  static void storeWrite(int place, String key, String value) { PuduStore.write(place, key, value); }
+  static void storeRemove(int place, String key) { PuduStore.remove(place, key); }
   static void tabs(int[] ids, String[] names, int[] counts, int[] routes, View[] bodies, boolean[] fills, String[] titles, int selected,
       boolean hasSheet, int sheet, View sheetBody, boolean sheetFills) {
     PuduTabs.show(ids, names, counts, routes, bodies, fills, titles, selected, hasSheet, sheet, sheetBody, sheetFills);

@@ -28,6 +28,8 @@ Exports:
 - `upcoming(schedule: &Schedule, after: &Time.Instant, count: Int) -> Array[Time.Instant]`.
 - `explain(problem: &CronError) -> Str`.
 
+Field numbers are read by `Std.Num.parseInt` with this module's own rule: one to four digits, no sign.
+
 ## Semantics
 
 - When both day-of-month and day-of-week are restricted, a day fires if either matches; when one is

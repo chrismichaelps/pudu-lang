@@ -84,6 +84,14 @@ Exports:
 - TABS and NAVIGATE are the two whole-screen instructions. Each replaces the other, and the host closes the one it replaces.
 - The instruction bound is now 54.
 
+## Storage (#980)
+
+- STORE_READ (55): tag, place code, then the key as text. Writer `storeRead(out, tag, place, key)`.
+- STORE_WRITE (56): place code, the key text, then the value text. Writer `storeWrite(out, place, key, value)`.
+- STORE_REMOVE (57): place code, then the key text. Writer `storeRemove(out, place, key)`.
+- Place codes: 0 Plain, 1 Secure. The place is written by `Std.Mobile.Storage.placeCode`.
+- The instruction bound is now 57.
+
 ## Invariants
 
 - Every word is a little-endian 32-bit unsigned value. Every instruction begins with its code word (CREATE 1, TEXT 2, APPEND 3, ROOT 4, TAG 5, STATE 7, HINT 8, NAME 9, INSERT 10, REMOVE 11, MOVE 12, THEME 20, APPEARANCE 21, STYLE 22, COLOR 23, RANGE 24, COLUMNS 25, MATERIAL 26, GESTURES 27, ALERT 28, VALUE 29, HAPTIC 30, TRAITS 31, ACCESS_HINT 32, ACCESS_VALUE 33, MENU 34, ANIMATE 35, NAVIGATE 36, REFRESH 37, BOUNDS 41, OPTIONS 42, COUNT 43, MOMENT 44).

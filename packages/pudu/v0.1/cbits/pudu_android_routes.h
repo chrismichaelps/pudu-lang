@@ -260,4 +260,28 @@ static void pudu_do_settings(JNIEnv *env, pudu_reader *reader) {
   pudu_bridge(env, "settings", "()V");
 }
 
+/* STORE_READ: the tag, the place, the key; STORE_WRITE: the place, key and
+   value; STORE_REMOVE: the place and key. */
+static uint32_t pudu_store_place(pudu_reader *reader) {
+  uint32_t place = pudu_word(reader);
+  if (place >= 2) pudu_stream_defect("used unknown store", place);
+  return place;
+}
+
+static void pudu_do_store_read(JNIEnv *env, pudu_reader *reader) {
+  uint32_t tag = pudu_word(reader), place = pudu_store_place(reader);
+  pudu_bridge(env, "storeRead", "(IILjava/lang/String;)V", (jint)tag, (jint)place, pudu_text(env, reader));
+}
+
+static void pudu_do_store_write(JNIEnv *env, pudu_reader *reader) {
+  uint32_t place = pudu_store_place(reader);
+  jstring key = pudu_text(env, reader), value = pudu_text(env, reader);
+  pudu_bridge(env, "storeWrite", "(ILjava/lang/String;Ljava/lang/String;)V", (jint)place, key, value);
+}
+
+static void pudu_do_store_remove(JNIEnv *env, pudu_reader *reader) {
+  uint32_t place = pudu_store_place(reader);
+  pudu_bridge(env, "storeRemove", "(ILjava/lang/String;)V", (jint)place, pudu_text(env, reader));
+}
+
 #endif

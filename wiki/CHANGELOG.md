@@ -5,6 +5,12 @@ tags: [changelog]
 
 # Changelog
 
+## 2026-11-19 — Persistent and secure storage, and public integer parsing (#980)
+
+- Storage: `Std.Mobile.Storage` with Plain and Secure places; STORE_READ 55, STORE_WRITE 56, STORE_REMOVE 57 and the STORED 31 answer. The iOS host uses user defaults and the keychain ([[pudu-ios-storage]]); the Android host uses SharedPreferences and AES-GCM under a Keystore key ([[PuduStore]]). The example is [[Vault Example]].
+- Public integer parsing: `Std.Num.parseInt` and `parseIntIn`, answering `None` for any text they do not accept. `Std.Text`, `Std.Cron`, `Std.Ui.Desktop` and `Std.Ui.Accessible` delegate to it. Desktop and Accessible previously capped at nine digits.
+  [[Std Mobile Storage]] · [[Std Num]] · [[Std Mobile Stream]] · [[Std Mobile Events]] · [[Std Mobile View]] · [[pudu-ios-host]] · [[pudu-ios-storage]] · [[PuduStore]] · [[Uses Mobile Storage]] · [[Uses Num Parse]] · [[Vault Example]] · [[980-storage]] · [[NATIVE-MOBILE]]
+
 ## 2026-11-19 — Application identity and incoming links (#978)
 
 - Application identity and incoming links (#978): `[app]` table in the manifest (name, identifier, version, build, schemes), E6018 for values a store would refuse, Info.plist display name, version, build and URL types, Android package, version code and name, label, VIEW filters and singleTask launch, LINKED 30 event with the URL, and the link self-test on iOS.

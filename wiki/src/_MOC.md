@@ -373,6 +373,10 @@ tags: [moc, module]
 - [[Gallery Example]] — bundled, served, missing and moved images on the iOS simulator (#973).
 - [[Uses Mobile System]] — stdlib fixture for system requests: open, share, clipboard, status bar and their answers (#974).
 - [[Services Example]] — copy and paste, an unhandled URL, a share and the light status bar on the simulator (#974).
+- [[Uses Mobile Storage]] — stdlib fixture for storage requests and the STORED answer (#980).
+- [[Uses Num Parse]] — stdlib fixture for `parseInt` and `parseIntIn` (#980).
+- [[Vault Example]] — launch count in plain storage, a secure token and a removed key on the simulator (#980).
+- [[PuduStore]] — Android SharedPreferences and Keystore-encrypted storage (#980).
 - [[Pudu Backend Toolchain Assets]] — application asset listing, refused names and links, staging (#973).
 - [[Uses Mobile Controls]] — stdlib fixture for the value controls: build and change words, normalization and value events (#934).
 - [[Pudu Compiler Program Eval Data Spec]] — data evaluation spec, including the mobile fixture counts.

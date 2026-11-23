@@ -274,6 +274,12 @@ int main(int argc, char **argv) {
     // first, and dismisses a sheet; each is reported once.
     // The manifest's identity reaches the bundle, and a link in the
     // application's own scheme comes back to it as Linked.
+    // Plain and secure values persist from one launch to the next, and a
+    // removed key reads as absent.
+    mobileApp(device, "Vault", [
+      { environment: { SIMCTL_CHILD_PUDU_UI_SELFTEST: "0" }, labels: ["Launches: 1", "Token: s3cret", "Temporary: none"] },
+      { environment: { SIMCTL_CHILD_PUDU_UI_SELFTEST: "0" }, labels: ["Launches: 2", "Token: s3cret", "Temporary: none"] },
+    ]);
     mobileApp(device, "Links", [{
       environment: { SIMCTL_CHILD_PUDU_UI_SELFTEST: "0", SIMCTL_CHILD_PUDU_UI_LINK_TEST: "pudulinks://hello?from=test" },
       labels: ["Link: pudulinks://hello?from=test"],

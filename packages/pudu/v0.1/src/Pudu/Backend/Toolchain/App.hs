@@ -73,7 +73,7 @@ identifierPrefix = "org.pudu."
 
 {-| The frameworks the iOS host links. -}
 hostFrameworks :: [String]
-hostFrameworks = ["UIKit", "Foundation", "CoreGraphics", "QuartzCore", "ImageIO"]
+hostFrameworks = ["UIKit", "Foundation", "CoreGraphics", "QuartzCore", "ImageIO", "Security"]
 
 {-| The application at the output path, answering the tools' warnings and the
     platform ledger's findings that let the build proceed. A device
@@ -130,17 +130,24 @@ buildBundle request sdk = do
           createDirectory bundle
           mapM_ (\(file, source) -> ByteString.writeFile (directory </> file) (ByteString.pack source)) iosHostSources
           ByteString.writeFile (bundle </> "Info.plist") (Encoding.encodeUtf8 (infoPlist (appName request) (appIdentity request) (appleUsageKeys (appPermissions request))))
+          ByteString.writeFile (directory </> "entitlements.xcent") (Encoding.encodeUtf8 (simulatedEntitlements (identityIdentifier (appIdentity request))))
           mapM_ (\assets -> stageAssets assets files (bundle </> "assets")) (appAssets request))
         case prepared of
           Left problem -> pure (Left (ToolchainPublishFailed (problemText problem)))
           Right () -> do
-            linked <- invoke clang
+            -- The simulator reads an application's entitlements from its
+            -- executable, as XML and as DER; derq writes the DER form.
+            encoded <- invoke "/usr/bin/derq"
+              ["query", "-f", "xml", "-i", directory </> "entitlements.xcent", "-o", directory </> "entitlements.der", "--raw"] seconds
+            linked <- either (pure . Left) (const (invoke clang
               (["-target", Text.unpack (appleTriple sdk), "-isysroot", root, "-fobjc-arc", "-O2", "-I", directory, host, library]
                 <> map Text.unpack (libraryLinks products)
                 <> map Text.unpack (appleFlags (appPermissions request))
                 <> concat [["-framework", framework] | framework <- hostFrameworks <> map Text.unpack (appleFrameworks (appPermissions request))]
+                <> concat [["-Xlinker", flag] | flag <- ["-sectcreate", "__TEXT", "__entitlements", directory </> "entitlements.xcent"]]
+                <> concat [["-Xlinker", flag] | flag <- ["-sectcreate", "__TEXT", "__ents_der", directory </> "entitlements.der"]]
                 <> ["-o", bundle </> name])
-              seconds
+              seconds)) encoded
             signed <- either (pure . Left) (\warnings -> fmap (const warnings) <$> invoke codesign ["--force", "--sign", "-", bundle] seconds) linked
             case signed of
               Left failure -> pure (Left failure)
@@ -152,6 +159,25 @@ buildBundle request sdk = do
                     | otherwise -> Left (ToolchainPublishFailed (problemText problem))
                   Right () ->
                     Right (Text.strip (Text.unlines (filter (not . Text.null) [libraryWarnings products, warnings])), libraryFindings products))
+
+{-| The entitlements a simulator application carries, embedded in its
+    executable as XML and as DER, as a device build carries them in its
+    signature; an ad-hoc signature cannot carry them, since the platform
+    refuses to launch an ad-hoc application claiming an identifier. It holds
+    only a keychain group of the application's own, without which the
+    simulator's keychain refuses the application's secure storage; claiming an
+    application identifier as well changes how the platform opens the
+    application's own links. The team
+    prefix is a placeholder; the simulator does not check it. -}
+simulatedEntitlements :: Text -> Text
+simulatedEntitlements identifier = Text.unlines
+  [ "<?xml version=\"1.0\" encoding=\"UTF-8\"?>"
+  , "<plist version=\"1.0\"><dict>"
+  , "<key>keychain-access-groups</key><array><string>" <> prefixed <> "</string></array>"
+  , "</dict></plist>"
+  ]
+ where
+  prefixed = "SIMULATOR." <> identifier
 
 {-| The program's assets, checked; none when it has no asset directory. -}
 assetsOf :: AppRequest -> IO (Either ToolchainFailure [FilePath])

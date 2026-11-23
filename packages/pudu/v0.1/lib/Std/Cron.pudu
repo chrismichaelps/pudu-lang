@@ -1,5 +1,6 @@
 module Std.Cron
 
+import Std.Num {parseInt}
 import Std.Time.Format.Civil as Civil
 import Std.Time as Time
 
@@ -239,15 +240,10 @@ fn value(name: Str, text: Str, names: &Map[Str, Int]) -> Result[Int, CronError] 
   }
 }
 
+// A field's number: one to four digits, with no sign.
 fn number(text: Str) -> Option[Int] {
-  if text.length() == 0 || text.length() > 4 { return None }
-  var total = 0
-  for symbol in text {
-    let code = symbol.code()
-    if code < 48 || code > 57 { return None }
-    total = total * 10 + code - 48
-  }
-  Some(total)
+  if text.length() == 0 || text.length() > 4 || text.startsWith("+") || text.startsWith("-") { return None }
+  parseInt(text)
 }
 
 fn replicated(size: Int) -> Array[Bool] {

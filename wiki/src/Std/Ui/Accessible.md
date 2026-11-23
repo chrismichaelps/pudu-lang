@@ -28,6 +28,8 @@ A record is `node`, `parent`, `role`, `focused` (`0` or `1`), `x`, `y`, `width`,
 `name`, separated by tabs and ended by a newline. Frames are logical pixels from the top-left of the
 window's content. The name is last, so it is the only field that may be empty.
 
+Integer fields of a record are read by `Std.Num.parseInt` with this module's own rule.
+
 ## Semantics
 
 - Tabs, carriage returns, and newlines inside a name become spaces, so no name can end its record

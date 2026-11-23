@@ -115,6 +115,9 @@ const PERMISSIONS: UInt32 = 51u32
 const PERMISSION: UInt32 = 52u32
 const SETTINGS: UInt32 = 53u32
 const TABS: UInt32 = 54u32
+const STORE_READ: UInt32 = 55u32
+const STORE_WRITE: UInt32 = 56u32
+const STORE_REMOVE: UInt32 = 57u32
 
 /// Creates node `node` as a control of `kind`.
 export fn create(out: Array[UInt8], node: UInt32, kind: UInt32) -> Array[UInt8] { words(out, [CREATE, node, kind]) }
@@ -337,6 +340,19 @@ export fn tabs(out: Array[UInt8], shown: &Array[(UInt32, Str, Str, Array[(UInt32
     case None => words(bytes, [0u32])
   }
 }
+
+/// Asks for the value under `key` in the store `place`; STORED with `reported` answers.
+export fn storeRead(out: Array[UInt8], reported: UInt32, place: UInt32, key: Str) -> Array[UInt8] {
+  field(words(out, [STORE_READ, reported, place]), key)
+}
+
+/// Keeps `value` under `key` in the store `place`.
+export fn storeWrite(out: Array[UInt8], place: UInt32, key: Str, value: Str) -> Array[UInt8] {
+  field(field(words(out, [STORE_WRITE, place]), key), value)
+}
+
+/// Removes what is kept under `key` in the store `place`.
+export fn storeRemove(out: Array[UInt8], place: UInt32, key: Str) -> Array[UInt8] { field(words(out, [STORE_REMOVE, place]), key) }
 
 /// Shows `node` as the screen's content.
 export fn root(out: Array[UInt8], node: UInt32) -> Array[UInt8] { words(out, [ROOT, node]) }

@@ -81,6 +81,7 @@ export type Event
   | Permissioned(Permission.Kind, Permission.State)
   | Selected(UInt32)
   | Linked(Str)
+  | Stored(UInt32, Option[Str])
   | Stopped
 
 /// A node the platform shows: its id, the view it shows, and the nodes of

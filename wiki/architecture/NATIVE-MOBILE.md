@@ -164,6 +164,9 @@ One stream carries each commit. It is a sequence of little-endian 32-bit words, 
 | 52 | PERMISSION | kind code; asks the person when not asked |
 | 53 | SETTINGS | none; opens the application's page in settings |
 | 54 | TABS | tab count; per tab its id, title, symbol and page count; per page its route id, body node and title; selected tab id; sheet flag, then the sheet's id and body node when the flag is 1 |
+| 55 | STORE_READ | tag, place (0 plain, 1 secure), key text; answers STORED 31 |
+| 56 | STORE_WRITE | place, key text, value text; reports nothing |
+| 57 | STORE_REMOVE | place, key text; reports nothing |
 
 Events return through `pudu_ui_wait` as one 64-bit value: the kind in the high 32 bits, with the tag in the low 32 bits.
 
@@ -296,3 +299,9 @@ The program's `pudu.toml` names the application under `[app]`: name, identifier,
 A program declares each permission it may request under `[app.permissions]` in its manifest, with the reason the person reads. The build refuses a request for an undeclared kind (E6014), a key no kind has (E6015) and an empty reason (E6016), and warns for a declaration never requested (W6017). Each declared kind writes its iOS usage keys, compile flag and framework, and its Android manifest entries.
 
 The state model is one closed set across platforms: NotAsked, Granted, Limited (partial access), Provisional (quiet notifications), Denied (may ask again), Blocked (only Settings can allow) and Unavailable. The program requests with PERMISSION 52, checks with PERMISSIONS 51 and opens Settings with SETTINGS 53. Answers arrive as PERMISSIONED 28. See [[Std Mobile Permission]], [[pudu-ios-permission]] and [[PuduPermission]].
+
+## Storage (#980)
+
+A program keeps key-value text in two places: Plain, kept with the application, and Secure, kept on this device only and out of backups. STORE_READ 55 asks for a key and is answered by STORED 31, whose text is the value and whose detail word is 1 when a value is present and 0 when it is absent. STORE_WRITE 56 and STORE_REMOVE 57 report nothing. A read answers after every earlier write and removal, because each instruction runs in stream order on the main thread. The iOS host keeps Plain in user defaults and Secure in the keychain, accessible after first unlock on this device only ([[pudu-ios-storage]]). The Android host keeps Plain in SharedPreferences and Secure as AES-GCM ciphertext under a Keystore key that is never exported ([[PuduStore]]); an entry that cannot be decrypted reads as absent and is removed. The program side is [[Std Mobile Storage]], and the example is [[Vault Example]].
+
+The integer parser that programs use on stored text is [[Std Num]]: `parseInt` and `parseIntIn` answer `None` for any text they do not accept, so a damaged value does not stop the program.
