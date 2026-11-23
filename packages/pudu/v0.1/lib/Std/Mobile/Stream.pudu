@@ -111,6 +111,13 @@ const SHARE: UInt32 = 47u32
 const COPY: UInt32 = 48u32
 const PASTE: UInt32 = 49u32
 const STATUS: UInt32 = 50u32
+const PERMISSIONS: UInt32 = 51u32
+const PERMISSION: UInt32 = 52u32
+const SETTINGS: UInt32 = 53u32
+const TABS: UInt32 = 54u32
+const STORE_READ: UInt32 = 55u32
+const STORE_WRITE: UInt32 = 56u32
+const STORE_REMOVE: UInt32 = 57u32
 
 /// Creates node `node` as a control of `kind`.
 export fn create(out: Array[UInt8], node: UInt32, kind: UInt32) -> Array[UInt8] { words(out, [CREATE, node, kind]) }
@@ -246,6 +253,17 @@ export fn status(out: Array[UInt8], code: UInt32, hidden: Bool) -> Array[UInt8] 
   words(out, [STATUS, code, if hidden { 1u32 } else { 0u32 }])
 }
 
+/// Asks where the permission kinds `codes` stand; each answers as PERMISSIONED.
+export fn permissions(out: Array[UInt8], codes: &Array[UInt32]) -> Array[UInt8] {
+  words(words(out, [PERMISSIONS, count(codes.length())]), *codes)
+}
+
+/// Asks the person to allow the permission kind `code`; it answers as PERMISSIONED.
+export fn permission(out: Array[UInt8], code: UInt32) -> Array[UInt8] { words(out, [PERMISSION, code]) }
+
+/// Opens the application's page in the platform's settings.
+export fn settings(out: Array[UInt8]) -> Array[UInt8] { words(out, [SETTINGS]) }
+
 /// Plays a haptic.
 export fn haptic(out: Array[UInt8], code: UInt32) -> Array[UInt8] { words(out, [HAPTIC, code]) }
 
@@ -304,6 +322,37 @@ export fn navigate(out: Array[UInt8], pages: &Array[(UInt32, UInt32, Str)], shee
     case None => words(bytes, [0u32])
   }
 }
+
+/// Shows a tab bar: each tab's id, title and symbol, then its pages' route
+/// ids, body nodes and titles, root first; then the selected tab's id, then 1
+/// and the sheet's id and body node, or 0 when no sheet is shown.
+export fn tabs(out: Array[UInt8], shown: &Array[(UInt32, Str, Str, Array[(UInt32, UInt32, Str)])], selected: UInt32, sheet: Option[(UInt32, UInt32)]) -> Array[UInt8] {
+  var bytes = words(out, [TABS, count(shown.length())])
+  for tab in *shown {
+    bytes = words(field(field(words(bytes, [tab[0]]), tab[1]), tab[2]), [count(tab[3].length())])
+    for page in tab[3] {
+      bytes = field(words(bytes, [page[0], page[1]]), page[2])
+    }
+  }
+  bytes = words(bytes, [selected])
+  match sheet {
+    case Some(over) => words(bytes, [1u32, over[0], over[1]])
+    case None => words(bytes, [0u32])
+  }
+}
+
+/// Asks for the value under `key` in the store `place`; STORED with `reported` answers.
+export fn storeRead(out: Array[UInt8], reported: UInt32, place: UInt32, key: Str) -> Array[UInt8] {
+  field(words(out, [STORE_READ, reported, place]), key)
+}
+
+/// Keeps `value` under `key` in the store `place`.
+export fn storeWrite(out: Array[UInt8], place: UInt32, key: Str, value: Str) -> Array[UInt8] {
+  field(field(words(out, [STORE_WRITE, place]), key), value)
+}
+
+/// Removes what is kept under `key` in the store `place`.
+export fn storeRemove(out: Array[UInt8], place: UInt32, key: Str) -> Array[UInt8] { field(words(out, [STORE_REMOVE, place]), key) }
 
 /// Shows `node` as the screen's content.
 export fn root(out: Array[UInt8], node: UInt32) -> Array[UInt8] { words(out, [ROOT, node]) }

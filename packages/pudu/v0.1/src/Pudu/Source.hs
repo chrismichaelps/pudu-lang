@@ -31,6 +31,7 @@ module Pudu.Source
   , zeroOffset
   ) where
 
+import Data.Data (Constr, Data (..), DataType, Fixity (Prefix), mkConstr, mkDataType)
 import Crypto.Hash (Blake2b_256, Digest, hash)
 import qualified Data.ByteArray as ByteArray
 import Data.ByteString (ByteString)
@@ -99,6 +100,20 @@ authoredSpan value = value{spanOriginValue = Nothing}
 data SpanOrigin = SpanOrigin
   !SourceIdentity !Offset !Offset !SourceIdentity !Offset !Offset !Int
   deriving stock (Eq, Ord)
+
+{-| Opaque to generic traversal: a span locates code but is not part of it,
+    so a query over a program stops here and nothing is built from one. -}
+instance Data Span where
+  gfoldl _ done span' = done span'
+  gunfold _ _ _ = errorWithoutStackTrace "Pudu.Source.Span: a span is never built generically"
+  toConstr _ = spanConstructor
+  dataTypeOf _ = spanType
+
+spanType :: DataType
+spanType = mkDataType "Pudu.Source.Span" [spanConstructor]
+
+spanConstructor :: Constr
+spanConstructor = mkConstr spanType "Span" [] Prefix
 
 instance Eq Span where
   left == right =

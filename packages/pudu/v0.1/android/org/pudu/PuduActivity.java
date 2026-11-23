@@ -17,7 +17,7 @@ import android.widget.FrameLayout;
  *  iOS host does. A self-test is asked for with intent extras named like the
  *  iOS host's environment variables. */
 public final class PuduActivity extends Activity {
-  static final int RESIZED = 11, LIFECYCLE = 12, INSETS = 17, MEMORY = 20;
+  static final int RESIZED = 11, LIFECYCLE = 12, INSETS = 17, MEMORY = 20, LINKED = 30;
   static final int ACTIVE = 1, INACTIVE = 2, BACKGROUND = 3, FOREGROUND = 4;
   /** The most taps a self-test asks for. */
   static final int MAX_TAPS = 100;
@@ -46,6 +46,7 @@ public final class PuduActivity extends Activity {
     surface.setOnApplyWindowInsetsListener((view, insets) -> inset(view, insets));
     PuduBridge.start(this, surface, getResources().getDisplayMetrics().density, night(getResources().getConfiguration()),
         PuduBridge.testing);
+    linked(getIntent());
   }
 
   /** A package built with PUDU_ANDROID_TEST_BUILD: debuggable and carrying
@@ -113,7 +114,7 @@ public final class PuduActivity extends Activity {
   /** System back pops the navigation before it leaves the activity; on API 33
    *  and later the navigator registers its own callback instead. */
   @Override public void onBackPressed() {
-    if (!PuduNavigator.back()) super.onBackPressed();
+    if (!PuduTabs.back() && !PuduNavigator.back()) super.onBackPressed();
   }
 
   /** The platform is short of memory: the program drops what nothing shows. */
@@ -131,6 +132,19 @@ public final class PuduActivity extends Activity {
     PuduBridge.event(MEMORY, 0, null, 0, null);
   }
 
+  /** A link that opened the activity, at launch or while it runs in its single task. */
+  @Override protected void onNewIntent(Intent intent) {
+    super.onNewIntent(intent);
+    setIntent(intent);
+    linked(intent);
+  }
+
+  private static void linked(Intent intent) {
+    if (intent != null && Intent.ACTION_VIEW.equals(intent.getAction()) && intent.getData() != null) {
+      PuduBridge.event(LINKED, 0, intent.getData().toString(), 0, null);
+    }
+  }
+
   @Override public void onConfigurationChanged(Configuration configuration) {
     super.onConfigurationChanged(configuration);
     PuduBridge.configured(night(configuration));
@@ -144,10 +158,18 @@ public final class PuduActivity extends Activity {
 
   @Override protected void onResume() {
     super.onResume();
+    PuduPermission.foreground = true;
+    PuduPermission.resumed();
     PuduBridge.event(LIFECYCLE, 0, null, ACTIVE, null);
   }
 
+  @Override public void onRequestPermissionsResult(int code, String[] permissions, int[] results) {
+    super.onRequestPermissionsResult(code, permissions, results);
+    PuduPermission.answered(code);
+  }
+
   @Override protected void onPause() {
+    PuduPermission.foreground = false;
     PuduBridge.event(LIFECYCLE, 0, null, INACTIVE, null);
     super.onPause();
   }

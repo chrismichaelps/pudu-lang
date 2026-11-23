@@ -10,7 +10,7 @@ aliases: [Uses Mobile System]
 
 ## Purpose and interface
 
-Stdlib fixture for system requests: their words in [[Std Mobile System]] and [[Std Mobile Stream]], and their reports in [[Std Mobile Events]]. Its entry `main` builds the instruction words for OPEN, SHARE, COPY, PASTE and STATUS, decodes the OPENED and SHARED events and the PASTED text, and answers the number of checks that held. The data spec `test/Pudu/Compiler/Program/Eval/DataSpec.hs` asserts that count, which is `10`.
+Stdlib fixture for system requests: their words in [[Std Mobile System]] and [[Std Mobile Stream]], and their reports in [[Std Mobile Events]]. Its entry `main` builds the instruction words for OPEN, SHARE, COPY, PASTE and STATUS, decodes the OPENED and SHARED events and the PASTED text, and answers the number of checks that held. The data spec `test/Pudu/Compiler/Program/Eval/DataSpec.hs` asserts that count, which is `11`.
 
 Checks, one per `if` of `main`:
 1. OPEN with tag 3 and the URL `pudu-unhandled://nothing` writes the code 46, the tag and the length-prefixed URL, in the exact words.
@@ -23,6 +23,8 @@ Checks, one per `if` of `main`:
 8. OPENED with tag 3 and detail 0 decodes to `Opened(3, false)`.
 9. SHARED with tag 4 and detail 1 decodes to `Shared(4, true)`, and SHARED with detail 0 decodes to `Shared(4, false)`.
 10. PASTED with tag 5 and text `from Pudu` decodes to `Pasted(5, "from Pudu")`, and a PASTED with empty text decodes to `Pasted(5, "")`.
+
+11. LINKED carries the URL: `carriesText` is true for kind 30, and LINKED with the URL `myapp://a?b=1` decodes to `Linked("myapp://a?b=1")`.
 
 Any other OPENED or SHARED detail word decodes to `Stopped`; the fixture checks the 1 and 0 words only.
 

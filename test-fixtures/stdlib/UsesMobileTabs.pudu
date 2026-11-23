@@ -1,0 +1,75 @@
+module UsesMobileTabs
+
+import Std.ByteOrder {readU32LE}
+import Std.Mobile.Events as Events
+import Std.Mobile.Navigation as Navigation
+import Std.Mobile.Stream as Stream
+import Std.Mobile.View as View
+
+// The words at `offset` onward, read as little-endian 32-bit values.
+fn wordsAt(bytes: &Array[UInt8], offset: Int, count: Int) -> Array[UInt32] {
+  var found = []
+  for index in 0..count {
+    match readU32LE(bytes, offset + index * 4) {
+      case Some(word) => { found = found.push(word) }
+      case None => { return [] }
+    }
+  }
+  found
+}
+
+fn route(id: UInt32, title: Str) -> Navigation.Route { Navigation.Route{id: id, title: title, body: View.Label(title)} }
+
+// Two tabs; the first may carry a pushed detail, the bar a sheet.
+fn bar(selected: UInt32, opened: Bool, sheet: Bool) -> Navigation.Tabbed {
+  let pushed = if opened { [route(11u32, "Detail")] } else { [] }
+  let over = if sheet { Some(Navigation.Sheet{id: 30u32, body: View.Label("Sheet")}) } else { None }
+  Navigation.Tabbed {
+    tabs: [
+      Navigation.Tab{id: 1u32, title: "Home", symbol: "house", root: route(10u32, "Home"), pushed: pushed},
+      Navigation.Tab{id: 2u32, title: "Settings", symbol: "gear", root: route(20u32, "Settings"), pushed: []}
+    ],
+    selected: selected,
+    sheet: over
+  }
+}
+
+fn changed(mounted: &Navigation.TabsMounted, next: &Navigation.Tabbed) -> Array[UInt8] {
+  let (_, stream) = Navigation.updateTabs(mounted, next)
+  stream.toArray()
+}
+
+export fn main() -> Int {
+  var held = 0
+
+  // TABS: the count, each tab's id, title, symbol and pages, the selection, then the sheet flag.
+  let one = Stream.tabs([], &[(1u32, "A", "a", [(10u32, 0u32, "R")])], 1u32, None)
+  if one.length() == 47 && wordsAt(&one, 0, 3) == [54u32, 1u32, 1u32] && wordsAt(&one, 22, 3) == [1u32, 10u32, 0u32] && wordsAt(&one, 39, 2) == [1u32, 0u32] { held = held + 1 }
+  let sheeted = Stream.tabs([], &[(1u32, "A", "a", [(10u32, 0u32, "R")])], 1u32, Some((30u32, 5u32)))
+  if sheeted.length() == 55 && wordsAt(&sheeted, 43, 3) == [1u32, 30u32, 5u32] { held = held + 1 }
+
+  // An unchanged bar writes nothing; a selection the person made, once observed, writes nothing either.
+  let (mounted, _) = Navigation.mountTabs(&bar(1u32, false, false))
+  if changed(&mounted, &bar(1u32, false, false)).length() == 0 { held = held + 1 }
+  if changed(&Navigation.observeTabs(mounted, &View.Selected(2u32)), &bar(2u32, false, false)).length() == 0 { held = held + 1 }
+  if changed(&mounted, &bar(2u32, false, false)).length() > 0 && changed(&Navigation.observeTabs(mounted, &View.Selected(9u32)), &bar(2u32, false, false)).length() > 0 { held = held + 1 }
+
+  // A pop inside a tab, once observed, only ends the popped page's body; a stale pop resends the bar.
+  let (opened, _) = Navigation.mountTabs(&bar(1u32, true, false))
+  let folded = changed(&Navigation.observeTabs(opened, &View.Popped(11u32, 10u32)), &bar(1u32, false, false))
+  if folded.length() > 0 && wordsAt(&folded, 0, 1) == [11u32] { held = held + 1 }
+  if changed(&Navigation.observeTabs(opened, &View.Popped(99u32, 10u32)), &bar(1u32, false, false)).length() > folded.length() { held = held + 1 }
+
+  // A dismissed sheet, once observed, only ends its body.
+  let (covered, _) = Navigation.mountTabs(&bar(1u32, false, true))
+  let gone = changed(&Navigation.observeTabs(covered, &View.Dismissed(30u32)), &bar(1u32, false, false))
+  if gone.length() > 0 && wordsAt(&gone, 0, 1) == [11u32] { held = held + 1 }
+
+  // A tab no longer presented has its pages ended and the bar resent.
+  let single = Navigation.Tabbed{tabs: [Navigation.Tab{id: 1u32, title: "Home", symbol: "house", root: route(10u32, "Home"), pushed: []}], selected: 1u32, sheet: None}
+  if changed(&mounted, &single).length() > 0 { held = held + 1 }
+
+  // SELECTED carries the picked tab's id as its tag.
+  if Events.event((29u64 << 32) | 2u64, "") == View.Selected(2u32) { held = held + 1 }
+  held
+}

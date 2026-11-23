@@ -36,12 +36,15 @@ extra-source-files: cbits/pudu_ffi_internal.h
                     cbits/pudu_ios_motion.h
                     cbits/pudu_ios_nodes.h
                     cbits/pudu_ios_navigation.h
+                    cbits/pudu_ios_tabs.h
                     cbits/pudu_ios_refresh.h
                     cbits/pudu_ios_fetch.h
                     cbits/pudu_ios_kinds.h
                     cbits/pudu_ios_values.h
                     cbits/pudu_ios_image.h
                     cbits/pudu_ios_system.h
+                    cbits/pudu_ios_permission.h
+                    cbits/pudu_ios_storage.h
                     cbits/pudu_ios_capability_test.h
                     cbits/pudu_android_host.c
                     cbits/pudu_android_capabilities.h
@@ -72,6 +75,9 @@ extra-source-files: cbits/pudu_ffi_internal.h
                     android/org/pudu/PuduFetch.java
                     android/org/pudu/PuduImage.java
                     android/org/pudu/PuduSystem.java
+                    android/org/pudu/PuduPermission.java
+                    android/org/pudu/PuduTabs.java
+                    android/org/pudu/PuduStore.java
                     cbits/pudu_audio.c
                     cbits/pudu_audio_stream.c
                     cbits/pudu_audio.h
@@ -270,6 +276,8 @@ library
     Pudu.Backend.Toolchain.Android
     Pudu.Backend.Toolchain.App
     Pudu.Backend.Toolchain.Assets
+    Pudu.Backend.Permissions
+    Pudu.Backend.Identity
     Pudu.Backend.Toolchain.Process
     Pudu.Compiler
     Pudu.Compiler.Constants

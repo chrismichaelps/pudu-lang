@@ -44,6 +44,7 @@ Exports:
 - `menu(out, node, tag: UInt32, choices: &Array[(UInt32, Str)]) -> Array[UInt8]`: MENU, the node, the tag its events report, then the choices.
 - `animate(out, node, on: Bool) -> Array[UInt8]`: ANIMATE, the group and 0 or 1.
 - `navigate(out, pages: &Array[(UInt32, UInt32, Str)], sheet: Option[(UInt32, UInt32)]) -> Array[UInt8]`: NAVIGATE, the route count, then each route's id, body node and title, then 1 and the sheet's id and body node, or 0.
+- `tabs(out, shown: &Array[(UInt32, Str, Str, Array[(UInt32, UInt32, Str)])], selected: UInt32, sheet: Option[(UInt32, UInt32)]) -> Array[UInt8]`: TABS (54), the tab count, then each tab's id, title, symbol and page count, then each page's route id, body node and title; then the selected tab's id, then 1 and the sheet's id and body node, or 0.
 - `refresh(out, node, tag, on)`: REFRESH, the scroll or list node, its tag and 1 or 0.
 - `fetch(out, generation, method, url, headers: &Array[(Str, Str)], body) -> Array[UInt8]`: FETCH, the generation, the method and URL text fields, the header count, each header's name and value, then the body text. The answer arrives as a FETCHED event.
 - `cancel(out, generation) -> Array[UInt8]`: CANCEL and the generation. No answer arrives for it.
@@ -67,7 +68,29 @@ Exports:
 - COPY (48): the text. Writer `copy(out, clipped)`.
 - PASTE (49): tag. Writer `paste(out, tag)`.
 - STATUS (50): style code (0 automatic, 1 light text, 2 dark text), then the hidden flag (0 or 1). Writer `status(out, code, hidden)`.
-- The instruction bound is now 51. Codes 46 to 50 are OPEN, SHARE, COPY, PASTE and STATUS.
+- The instruction bound is now 54. Codes 46 to 50 are OPEN, SHARE, COPY, PASTE and STATUS.
+
+## Permission requests (#976)
+
+- PERMISSIONS (51): a count, then each kind code. Writer `permissions(out, codes: &Array[UInt32])`. The host answers one PERMISSIONED per code, without a prompt.
+- PERMISSION (52): one kind code. Writer `permission(out, code)`. The host asks the person when the kind is NotAsked.
+- SETTINGS (53): no payload. Writer `settings(out)`. The host opens the application's page in the platform settings.
+- Codes 51 to 53 are PERMISSIONS, PERMISSION and SETTINGS. Kind codes are those of [[Std Mobile Permission]].
+
+## Tabs (#977)
+
+- TABS (54): the tab count; per tab its id, title text, symbol text and page count; per page its route id, body node and title text; then the selected tab id; then the sheet flag, followed by the sheet's id and body node when the flag is 1. Writer `tabs(out, shown, selected, sheet)`.
+- Byte layout checked by [[Uses Mobile Tabs]]: one tab, one page and no sheet is 47 bytes; the same with a sheet is 55 bytes.
+- TABS and NAVIGATE are the two whole-screen instructions. Each replaces the other, and the host closes the one it replaces.
+- The instruction bound is now 54.
+
+## Storage (#980)
+
+- STORE_READ (55): tag, place code, then the key as text. Writer `storeRead(out, tag, place, key)`.
+- STORE_WRITE (56): place code, the key text, then the value text. Writer `storeWrite(out, place, key, value)`.
+- STORE_REMOVE (57): place code, then the key text. Writer `storeRemove(out, place, key)`.
+- Place codes: 0 Plain, 1 Secure. The place is written by `Std.Mobile.Storage.placeCode`.
+- The instruction bound is now 57.
 
 ## Invariants
 

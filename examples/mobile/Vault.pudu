@@ -1,0 +1,67 @@
+module Vault
+
+import Std.Mobile.Host as Host
+import Std.Mobile.Storage as Storage
+import Std.Mobile.View as View
+import Std.Num as Num
+
+/// The tags each read's answer carries.
+const LAUNCHES: UInt32 = 1u32
+const TOKEN: UInt32 = 2u32
+const TEMPORARY: UInt32 = 3u32
+
+/// How many times the application has started, the secure token, and what a
+/// removed key reads as.
+type Model = { launches: Int, token: Str, temporary: Str }
+
+fn view(model: &Model) -> View.View {
+  View.Column([
+      View.Label("Launches: {model.launches}"),
+      View.Label("Token: {model.token}"),
+      View.Label("Temporary: {model.temporary}")
+    ])
+}
+
+// The count a launch stored, or zero when it holds anything else.
+fn number(text: Str) -> Int {
+  match Num.parseInt(text) {
+    case Some(found) if found >= 0 => found
+    case _ => 0
+  }
+}
+
+/// Counts its launches in plain storage, keeps a token in secure storage the
+/// first time and reads it back, and reads a key it wrote and removed.
+fn main() -> Int {
+  var model = Model{launches: 0, token: "none", temporary: "unread"}
+  let (first, built) = View.mount(&view(&model))
+  var mounted = first
+  Host.apply(built)
+  Host.apply(Storage.read(LAUNCHES, Storage.Plain, "launches"))
+  Host.apply(Storage.write(Storage.Secure, "token", "s3cret"))
+  Host.apply(Storage.read(TOKEN, Storage.Secure, "token"))
+  Host.apply(Storage.write(Storage.Plain, "temporary", "gone soon"))
+  Host.apply(Storage.remove(Storage.Plain, "temporary"))
+  Host.apply(Storage.read(TEMPORARY, Storage.Plain, "temporary"))
+  while true {
+    let event = Host.wait()
+    match event {
+      case View.Stopped => { return 0 }
+      case View.Stored(tag, found) if tag == LAUNCHES => {
+        let launches = match found {
+          case Some(text) => number(text) + 1
+          case None => 1
+        }
+        model = Model{..model, launches: launches}
+        Host.apply(Storage.write(Storage.Plain, "launches", "{launches}"))
+      }
+      case View.Stored(tag, found) if tag == TOKEN => { model = Model{..model, token: match found { case Some(text) => text case None => "missing" }} }
+      case View.Stored(tag, found) if tag == TEMPORARY => { model = Model{..model, temporary: match found { case Some(text) => text case None => "none" }} }
+      case _ => {}
+    }
+    let (next, changes) = View.update(&mounted, &view(&model))
+    Host.apply(changes)
+    mounted = next
+  }
+  0
+}

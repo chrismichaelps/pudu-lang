@@ -1,0 +1,7 @@
+# What the application is called, its identifier and release, and the links it opens.
+[app]
+name = "Pudu Links"
+identifier = "dev.pudu.links"
+version = "2.3.1"
+build = 42
+schemes = ["pudulinks"]

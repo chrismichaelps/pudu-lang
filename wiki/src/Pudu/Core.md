@@ -522,3 +522,7 @@ Distinguish a C symbol call from an Objective-C send without exposing the receiv
 ## Resolved Grill Log for Objective-C delegates
 
 `CoreDelegateNew` constructs an owned delegate handle from a group token. `CoreDelegate` records a checked declaration: the class symbol, the group, and each member signature in core types, so emitters derive method encodings from the checked types.
+
+## Derived Data (#976)
+
+The core IR types derive `Data`, so one generic traversal can find every expression in a module. [[Pudu Backend Permissions]] uses it to list the permission kinds a program constructs. Spans are opaque to the traversal, as the span type of the source model describes.

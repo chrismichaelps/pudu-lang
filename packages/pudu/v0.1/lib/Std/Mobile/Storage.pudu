@@ -1,0 +1,27 @@
+module Std.Mobile.Storage
+
+import Std.Mobile.Stream as Stream
+
+/// Where a value is kept: the application's preferences, kept until the
+/// application is removed; or the platform's protected store, encrypted at
+/// rest and kept on this device only, out of its backups.
+export type Place = Plain | Secure
+
+/// A commit asking for the value under `key` in `place`; it answers as
+/// `Stored(tag, Some(value))`, or `Stored(tag, None)` when nothing is kept.
+/// It answers after every earlier write and removal has been applied.
+export fn read(tag: UInt32, place: Place, key: Str) -> Bytes { bytesOf(Stream.storeRead([], tag, placeCode(place), key)) }
+
+/// A commit keeping `value` under `key` in `place`, replacing what was there.
+export fn write(place: Place, key: Str, value: Str) -> Bytes { bytesOf(Stream.storeWrite([], placeCode(place), key, value)) }
+
+/// A commit removing what is kept under `key` in `place`.
+export fn remove(place: Place, key: Str) -> Bytes { bytesOf(Stream.storeRemove([], placeCode(place), key)) }
+
+/// The stream code of a place.
+export fn placeCode(place: Place) -> UInt32 {
+  match place {
+    case Plain => 0u32
+    case Secure => 1u32
+  }
+}

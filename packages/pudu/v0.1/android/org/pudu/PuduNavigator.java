@@ -66,8 +66,16 @@ final class PuduNavigator {
     return bodies.length == 0 ? null : bodies[bodies.length - 1];
   }
 
-  /** Whether a navigation is shown, so the root is no longer the surface's. */
-  static boolean shown() { return page != null; }
+  /** Ends the navigation, for tabs that replace it. */
+  static void close() {
+    closeSheet();
+    page = null;
+    accepted = new int[0];
+    bodies = new View[0];
+    fills = new boolean[0];
+    titles = new String[0];
+    track();
+  }
 
   /** Pops one route as the person asked, when there is one below. */
   static boolean back() {

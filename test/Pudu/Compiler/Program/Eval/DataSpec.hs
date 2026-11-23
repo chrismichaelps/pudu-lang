@@ -27,6 +27,10 @@ testDataEvaluation = do
   mobileControls <- runEntry "test-fixtures/stdlib/UsesMobileControls.pudu"
   mobileImage <- runEntry "test-fixtures/stdlib/UsesMobileImage.pudu"
   mobileSystem <- runEntry "test-fixtures/stdlib/UsesMobileSystem.pudu"
+  mobilePermission <- runEntry "test-fixtures/stdlib/UsesMobilePermission.pudu"
+  mobileTabs <- runEntry "test-fixtures/stdlib/UsesMobileTabs.pudu"
+  mobileStorage <- runEntry "test-fixtures/stdlib/UsesMobileStorage.pudu"
+  numParse <- runEntry "test-fixtures/stdlib/UsesNumParse.pudu"
   mobileResources <- runEntry "test-fixtures/stdlib/UsesMobileResource.pudu"
   memoLambda <- codes "test-fixtures/stdlib/MemoRenderLambda.pudu"
   memoLocal <- codes "test-fixtures/stdlib/MemoRenderLocal.pudu"
@@ -204,7 +208,15 @@ testDataEvaluation = do
     , counterexample "native images write their origin, scaling and location and read load reports"
         (mobileImage === Just "10")
     , counterexample "native system requests write their words and read their answers"
-        (mobileSystem === Just "10")
+        (mobileSystem === Just "11")
+    , counterexample "native permissions write kind codes and read typed reports"
+        (mobilePermission === Just "10")
+    , counterexample "native tab bars reconcile per tab and fold picks, pops and dismissals"
+        (mobileTabs === Just "10")
+    , counterexample "native storage writes its words and reads present and absent values"
+        (mobileStorage === Just "6")
+    , counterexample "integers parse exactly across the Int range in every radix"
+        (numParse === Just "11")
     {-| Golden counts: an unchanged memo is one comparison and no render, so a
         regression that renders or compares more fails here, not on a device. -}
     , counterexample "memoized native rows skip unchanged subtrees with exact counts"

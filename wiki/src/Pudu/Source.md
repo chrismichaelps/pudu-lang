@@ -176,3 +176,7 @@ and for a generated span, whose origin offsets would no longer agree.
 
 Resolved Grill Log: the constructor stays abstract; callers that need the
 delimited form ask for it here instead of doing offset arithmetic.
+
+## Data instance (#976)
+
+`Span` has an opaque `Data` instance, so the core IR, which derives `Data`, can be traversed generically by [[Pudu Backend Permissions]]. The constructor stays hidden; the traversal sees a span as one leaf and never reads its offsets.

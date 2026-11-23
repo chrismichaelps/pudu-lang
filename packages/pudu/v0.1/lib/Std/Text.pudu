@@ -1,5 +1,7 @@
 module Std.Text
 
+import Std.Num {parseInt}
+
 /// Whether text contains only whitespace, or nothing at all.
 ///
 /// Empty text is blank, which is the answer that makes a validity check read the
@@ -1144,20 +1146,5 @@ export fn countOf(value: Str) -> Option[Int] { digitsOf(value.trim()) }
 /// that does not spell one of these numbers; stopping the program over it would
 /// let one oversized field end a service.
 fn digitsOf(body: Str) -> Option[Int] {
-  if body.isEmpty() {
-    None
-  } else {
-    var total = 0
-    var index = 0
-    var good = true
-    while index < body.length() && good {
-      let digit = "0123456789".indexOf(body.slice(index, index + 1))
-      if digit < 0 || total > (INT_MAX - digit) / 10 { good = false } else { total = total * 10 + digit }
-      index = index + 1
-    }
-    if good { Some(total) } else { None }
-  }
+  if body.startsWith("+") || body.startsWith("-") { None } else { parseInt(body) }
 }
-
-/// The largest value an `Int` holds.
-const INT_MAX: Int = 9223372036854775807

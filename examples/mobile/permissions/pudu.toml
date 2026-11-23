@@ -1,0 +1,5 @@
+# The permissions this example can ask for, each with the reason the person reads.
+[app.permissions]
+camera = "Takes photos of receipts to add them to an expense."
+microphone = "Records voice notes for an expense."
+contacts = "Finds people to split an expense with."

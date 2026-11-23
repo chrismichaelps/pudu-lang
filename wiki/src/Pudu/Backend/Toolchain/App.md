@@ -21,10 +21,11 @@ signature. The compiler writes the bundle; it never runs on the device.
 ```haskell
 data AppRequest = AppRequest
   { appSource :: !Text, appOutput :: !FilePath, appTarget :: !NativeTarget
-  , appExports :: ![Text], appName :: !Text, appIdentifier :: !Text }
+  , appExports :: ![Text], appName :: !Text, appIdentifier :: !Text
+  , appIdentity :: !Identity }
 
 compileApp :: AppRequest -> IO (Either ToolchainFailure Text)
-infoPlist :: Text -> Text -> Text -> Text
+infoPlist :: Text -> Identity -> [(Text, Text)] -> Text
 bundleIdentifier :: Text -> Text
 ```
 
@@ -47,10 +48,10 @@ bundleIdentifier :: Text -> Text
   3. The SDK's own clang compiles and links the host into `<Name>.app/<Name>` with
      `-fobjc-arc`, the simulator target triple, the system root, the library, the
      libraries the program declares, and `-framework UIKit -framework Foundation -framework QuartzCore`.
-  4. `Info.plist` is written from `infoPlist appName appIdentifier`.
+  4. `Info.plist` is written from `infoPlist appName appIdentity` and the usage keys of the declared permissions.
   5. The bundle is signed ad hoc with `codesign --force --sign -`.
 - `infoPlist` writes the bundle identifier, the executable name, the application name,
-  package type `APPL`, version `1` and short version `1.0`, minimum system from [[Backend Ledger]] (`15.0` today), the
+  package type `APPL`, the display name, build number and version from the identity, minimum system from [[Backend Ledger]] (`15.0` today), the
   `iPhoneSimulator` platform, the iPhone and iPad device families, and an empty launch
   screen. It sets the Boolean `CADisableMinimumFrameDurationOnPhone` to true to enable
   higher-rate Core Animation timing hints on capable iPhones. Every text value is escaped for XML.
@@ -101,3 +102,7 @@ the simulator run [[iOS Simulator Run]].
 Resolved Grill Log: materialize the embedded layout header alongside the host translation unit in the existing include directory and link CoreGraphics for the geometry checks. No second compiler invocation is needed. See [[iOS Host Layout]].
 
 - **Q:** Why link QuartzCore? **A:** The host reads the media clock for first-frame timing and self-test deadlines, and display-link frame pacing needs the same framework.
+
+## Permission declarations (#976)
+
+The declared permissions of [[Pudu Backend Permissions]] add to the bundle. Each declared kind's usage keys are written into `Info.plist` with the reason the person reads, so a kind the application declares has its prompt text and one it does not declare has none. The compile flags `-DPUDU_PERMISSION_<KIND>=1` select the host code of each declared kind, and the frameworks of those kinds are linked after the base frameworks.

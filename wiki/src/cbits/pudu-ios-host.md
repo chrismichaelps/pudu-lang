@@ -54,10 +54,12 @@ Entry points the program depends on:
 - FETCH (38), CANCEL (39) and WAKE (40) dispatch to `pudu_do_fetch`, `pudu_do_cancel` and `pudu_do_wake` in [[pudu_ios_fetch.h]], which sends the program's requests on the platform URL session and answers them as FETCHED events.
 - A memory warning observer, `pudu_observe_memory`, is registered at launch. Each warning queues MEMORY ([[pudu_ios_fetch.h]]).
 - Self-test `PUDU_UI_FETCH_TEST` runs the wait for both Remote lines of [[Native Remote Example]] and prints `PUDU_FETCH loaded` once they show a loaded result, then asks the program to stop.
+- Self-tests dispatch through one table of environment variable and runner, so each test is one entry rather than a branch in the launch path (#980). The host links Security for the keychain of [[pudu-ios-storage]].
 - Self-test `PUDU_UI_CAPABILITY_TEST` runs the sequence of [[iOS Host Capability Test]], queues a stop event after it, and after the program returns prints `PUDU_ACCESS` and `PUDU_MOTION` lines.
 - NAVIGATE (36) is read whole by `pudu_navigation_read` in [[pudu_ios_navigation.h]] before any controller changes; each route body is read through `pudu_node_id` and `pudu_node_scrolls` in [[pudu_ios_nodes.h]]. Only then is the shown root removed and the navigation shown over the root controller, which installs the platform stack on first use. Its user pop and sheet dismissal events are queued through [[iOS Host Events]].
 - Self-test `PUDU_UI_NAVIGATION_TEST` runs the stack and sheet check described in [[pudu_ios_navigation.h]] and then asks the program to stop. It prints `PUDU_NAV` lines.
 - When navigation is installed, the report walks the top page's body rather than the root's shown tree, so `PUDU_LABEL` lines name the labels the user sees.
+- Links (#978): the URL in the launch options, when the application was opened by a link, and each `application:openURL:options:` call queue LINKED (30) with the URL text. Self-test `PUDU_UI_LINK_TEST` opens the URL it names through [[pudu-ios-system]], prints `PUDU_SYSTEM link opened` or `refused`, and then asks the program to stop.
 
 ## Negative Logic
 

@@ -1,0 +1,26 @@
+module Links
+
+import Std.Mobile.Host as Host
+import Std.Mobile.View as View
+
+fn view(link: Str) -> View.View { View.Column([View.Label("Link: {link}")]) }
+
+/// Shows the last link that opened the application.
+fn main() -> Int {
+  var link = "none"
+  let (first, built) = View.mount(&view(link))
+  var mounted = first
+  Host.apply(built)
+  while true {
+    let event = Host.wait()
+    match event {
+      case View.Stopped => { return 0 }
+      case View.Linked(url) => { link = url }
+      case _ => {}
+    }
+    let (next, changes) = View.update(&mounted, &view(link))
+    Host.apply(changes)
+    mounted = next
+  }
+  0
+}

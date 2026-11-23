@@ -2,6 +2,7 @@
     the entry and architecture of real Apple SDK products. -}
 module Pudu.Backend.TargetSpec (backendTargetProperties) where
 
+import Pudu.Backend.Identity (defaultIdentity)
 import Control.Exception (bracket)
 import qualified Data.Set as Set
 import Data.Text (Text)
@@ -48,8 +49,8 @@ androidTestBuilds = conjoin
   ]
  where
   marker = "android:name=\"org.pudu.selftest\""
-  release = packageManifest False "Counter"
-  test = packageManifest True "Counter"
+  release = packageManifest False "Counter" (defaultIdentity "Counter" "org.pudu.Counter") []
+  test = packageManifest True "Counter" (defaultIdentity "Counter" "org.pudu.Counter") []
 
 targetPaths :: Property
 targetPaths = withTarget "ios-simulator-arm64" $ \ios ->
