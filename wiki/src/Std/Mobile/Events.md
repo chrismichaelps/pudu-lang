@@ -24,7 +24,7 @@ Exports:
 - `eventWithDetail(raw: UInt64, text: Str, detail: UInt32) -> View.Event`: decodes a detailed event with the detail word the host fetched.
 - `eventWithWords(raw: UInt64, text: Str, detail: UInt32, values: Array[Int32]) -> View.Event`: decodes an event with its detail word and signed words. A measured kind decodes through `MEASURED`, a detailed kind through `DETAILED`, and every other kind through `event`.
 
-Kind codes: IMAGED 24 (#973); OPENED 25, SHARED 26 and PASTED 27 (#974); PERMISSIONED 28 (#976); SELECTED 29 (#977); LINKED 30 (#978); STORED 31 (#980); TAPPED 1, Stopped 2 (the host's stop), CHANGED 3, SWITCHED_ON 4, SWITCHED_OFF 5, REACHED 8, GESTURED 9, CHOSE 10, RESIZED 11, LIFECYCLE 12, PICKED 13, POPPED 14, DISMISSED 15, REFRESHED 16, INSETS 17, FETCHED 18, WOKE 19, MEMORY 20, VALUED 21, COLORED 22, DATED 23.
+Kind codes: IMAGED 24 (#973); OPENED 25, SHARED 26 and PASTED 27 (#974); PERMISSIONED 28 (#976); SELECTED 29 (#977); LINKED 30 (#978); STORED 31 (#980); DESCRIBED 32 and NETWORKED 33 (#983); TAPPED 1, Stopped 2 (the host's stop), CHANGED 3, SWITCHED_ON 4, SWITCHED_OFF 5, REACHED 8, GESTURED 9, CHOSE 10, RESIZED 11, LIFECYCLE 12, PICKED 13, POPPED 14, DISMISSED 15, REFRESHED 16, INSETS 17, FETCHED 18, WOKE 19, MEMORY 20, VALUED 21, COLORED 22, DATED 23.
 
 Event payloads by kind:
 - POPPED (14): the tag is the route that was on top, and the detail word is the surviving destination route.
@@ -60,12 +60,24 @@ Dispatch is three constant tables:
 - LINKED (30): the text is the URL the platform handed the application; the tag and detail are not used. It decodes to `Linked(url)`. The host queues it at launch and while the application runs (#978).
 - Any other detail word for OPENED or SHARED reads as `Stopped`.
 
+## Device (#983)
+
+- DESCRIBED (32): the tag is the DEVICE request's tag. The text is five lines joined by a newline: the platform (`ios` or `android`), the system version, the hardware model, the preferred language tag (BCP 47), and the time zone (IANA id). The detail word is the preferred text scale in percent, 100 at the default. Text that is not exactly five lines, or names an unknown platform, decodes to `Stopped`. Decodes to `Described(tag, facts)` through `Device.facts`.
+- NETWORKED (33): the tag is 0. The detail word is the link code: 0 Offline, 1 Wifi, 2 Cellular, 3 Wired (wired or any other interface). Codes above 3 decode to `Stopped`. Decodes to `Networked(link)` through `Device.linkOf`.
+- The host sends NETWORKED once when watching starts, or when NETWORK 1 arrives while watching already with the last known link, and again on each change of link kind.
+
+## Device (#983)
+
+- DESCRIBED (32): the tag is the DEVICE request's tag. The text is five lines joined by a newline: the platform (`ios` or `android`), the system version, the hardware model, the preferred language tag (BCP 47), and the time zone (IANA id). The detail word is the preferred text scale in percent, 100 at the default. Text that is not exactly five lines, or names an unknown platform, decodes to `Stopped`. Decodes to `Described(tag, facts)` through `Device.facts`.
+- NETWORKED (33): the tag is 0. The detail word is the link code: 0 Offline, 1 Wifi, 2 Cellular, 3 Wired (wired or any other interface). Codes above 3 decode to `Stopped`. Decodes to `Networked(link)` through `Device.linkOf`.
+- The host sends NETWORKED once when watching starts, or when NETWORK 1 arrives while watching already with the last known link, and again on each change of link kind.
+
 ## Invariants
 
 - Pure: the module declares no foreign function and performs no fetch. The host fetches text, detail and words, and passes them in.
 - Words the host never writes read as `Stopped`. A measured or detailed kind whose detail or words do not decode also reads as `Stopped`.
 - `event` never fails. An unknown kind ends the loop the same way `Stopped` does.
-- `carriesDetail` is true only for kinds in `DETAILED` and `MEASURED`, and for FETCHED. `carriesWords` is true only for kinds in `MEASURED` and for FETCHED. `carriesText` is true only for kinds 3, 18, 27, 30 and 31.
+- `carriesDetail` is true only for kinds in `DETAILED` and `MEASURED`, and for FETCHED, STORED and DESCRIBED. `carriesWords` is true only for kinds in `MEASURED` and for FETCHED. `carriesText` is true only for kinds 3, 18, 27, 30, 31 and 32.
 - A tap names only its tag. A toggle names its tag and new state. Only `Changed` carries text, and that text is never packed into the 64-bit value.
 - `signed` reads a word with its top bit set as negative.
 

@@ -67,3 +67,7 @@ The iOS host sources also stage `pudu_ios_fetch.h` ([[pudu_ios_fetch.h]]) immedi
 The iOS host sources also stage `pudu_ios_nodes.h` ([[pudu_ios_nodes.h]]) between `pudu_ios_motion.h` and `pudu_ios_navigation.h`, with the host translation unit and the other private headers. It holds the instruction codes, the control kinds and the node table that the capability headers read, so it is staged before any header that includes it. The list therefore has seventeen entries in all: the host translation unit and sixteen private headers, each written unchanged before clang runs.
 
 The reader header [[iOS Host Stream]], pudu_ios_stream.h, is staged with the same private headers.
+
+## Device sources (#983)
+
+The iOS host sources stage `pudu_ios_device.h` ([[pudu-ios-device]]) with the other private headers, and the host translation unit includes it once. The Android sources stage `PuduDevice.java` ([[PuduDevice]]) with the other platform classes.

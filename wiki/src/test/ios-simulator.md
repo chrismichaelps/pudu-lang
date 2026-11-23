@@ -44,6 +44,15 @@ Use `--require-simulator` to make an unavailable simulator a failure.
   uninstall is skipped there.
 - Passes when the captured lines equal `pudu run`'s output followed by the
   status line.
+- `run` closes each step's stdin and kills a step past its timeout with SIGKILL,
+  so no step waits on input and a timed-out step cannot hold the suite.
+- Each app build and launch attempt prints a `BUILD iOS <example>` or
+  `LAUNCH iOS <bundle> attempt <n>` line before it starts, so a slow step shows
+  as progress in the log.
+- An expected label may be a regular expression, for labels whose text depends
+  on the machine (About's version, model, locale, zone and link); the count and
+  order of labels must still match exactly.
+- The layout filter includes `PUDU_DEVICE` lines.
 
 ## Dependencies and consumers
 
@@ -70,6 +79,10 @@ Use `--require-simulator` to make an unavailable simulator a failure.
 - **Q:** Does the Objective-C bridge hold on iOS? **A:** `objectiveCSmoke` builds
   pools, blocks and a delegate for the simulator and requires the interpreter's
   output.
+- **Q:** Why SIGKILL on timeout? **A:** A step that ignores the polite signal
+  would otherwise keep the suite waiting past its own timeout; a killed step
+  fails with its timeout named, which is what the log should show.
+  _Rejected:_ SIGTERM alone.
 
 ## Cold simulator timing (#899)
 
@@ -160,6 +173,10 @@ with a clean status. Two cases run through it:
 Resolved Grill Log: Q: Why test the refusal on a simulator rather than in the fixture? A: The
 refusal belongs to the host; the Pudu stream for it is well formed, so only the host can reject
 it.
+
+## Device run (#983)
+
+The script runs `examples/mobile/About.pudu` ([[About Example]]) with `PUDU_UI_DEVICE_TEST` set. The run must print `PUDU_DEVICE awake yes` and show the labels `Platform: ios`, `Scale: 100` and `Online: true`, then exit with status 0. A refused run sends a NETWORK word of 2, which must end with the stream defect `set network watching to 2`.
 
 ## Glass material (#928)
 

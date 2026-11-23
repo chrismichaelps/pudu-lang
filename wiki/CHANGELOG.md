@@ -5,6 +5,11 @@ tags: [changelog]
 
 # Changelog
 
+## 2026-11-23 — Device facts, network reachability and keep-awake (#983)
+
+- Device facts, network reachability and keep-awake: DEVICE 58, NETWORK 59 and AWAKE 60 on the iOS and Android hosts, DESCRIBED 32 and NETWORKED 33 events, `Std.Mobile.Device` with `describe`, `watchNetwork` and `keepAwake`, and refusals for a NETWORK or AWAKE word other than 0 or 1. The iOS host uses UIKit, Foundation and a Network path monitor ([[pudu-ios-device]]); the Android host uses ConnectivityManager under the normal `ACCESS_NETWORK_STATE` permission ([[PuduDevice]]). The instruction bound is now 61.
+  [[Std Mobile Device]] · [[Std Mobile Stream]] · [[Std Mobile Events]] · [[Std Mobile View]] · [[pudu-ios-device]] · [[pudu-ios-host]] · [[pudu-ios-nodes]] · [[pudu-ios-events]] · [[PuduDevice]] · [[pudu-android-routes]] · [[Backend Toolchain App]] · [[Uses Mobile Device]] · [[About Example]] · [[NATIVE-MOBILE]]
+
 ## 2026-11-19 — Persistent and secure storage, and public integer parsing (#980)
 
 - Storage: `Std.Mobile.Storage` with Plain and Secure places; STORE_READ 55, STORE_WRITE 56, STORE_REMOVE 57 and the STORED 31 answer. The iOS host uses user defaults and the keychain ([[pudu-ios-storage]]); the Android host uses SharedPreferences and AES-GCM under a Keystore key ([[PuduStore]]). The example is [[Vault Example]].

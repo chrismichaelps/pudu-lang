@@ -5,6 +5,7 @@ tags: [moc, handoff]
 
 # Handoff Map
 
+- [[983-device]] — device facts, network reachability and keep-awake (#983).
 - [[Native Images Delivery]] — native images and application assets (#973).
 - [[Native System Services]] — open, share, clipboard and status bar on both hosts (#974).
 - [[Android Routes Delivery]] — Android navigation, refresh, requests, wake, memory and insets (#971).

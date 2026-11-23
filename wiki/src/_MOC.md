@@ -377,6 +377,9 @@ tags: [moc, module]
 - [[Uses Num Parse]] — stdlib fixture for `parseInt` and `parseIntIn` (#980).
 - [[Vault Example]] — launch count in plain storage, a secure token and a removed key on the simulator (#980).
 - [[PuduStore]] — Android SharedPreferences and Keystore-encrypted storage (#980).
+- [[Uses Mobile Device]] — stdlib fixture for device facts, reachability and keep-awake requests and answers (#983).
+- [[About Example]] — device facts, network link and keep-awake on the simulator and Android (#983).
+- [[PuduDevice]] — Android device facts, network reachability and keep-awake (#983).
 - [[Pudu Backend Toolchain Assets]] — application asset listing, refused names and links, staging (#973).
 - [[Uses Mobile Controls]] — stdlib fixture for the value controls: build and change words, normalization and value events (#934).
 - [[Pudu Compiler Program Eval Data Spec]] — data evaluation spec, including the mobile fixture counts.

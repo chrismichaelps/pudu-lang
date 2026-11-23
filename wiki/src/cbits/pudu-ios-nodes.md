@@ -15,7 +15,7 @@ aliases: [pudu_ios_nodes.h, iOS Host Nodes]
 The shared vocabulary of the iOS host: the instruction codes and control kinds of the view stream, and the host's node table. The header is included by [[iOS Host Adapter]] and by every capability header that handles an instruction naming a node, so each instruction's handler sits beside its capability while the codes, kinds and table stay in one place. Its codes match [[Std Mobile Stream]]; its kinds match the kind table of the host.
 
 Entry points and state:
-- `PUDU_UI_*` instruction codes, `CREATE` (1) through `WAKE` (40), with the network codes `FETCH` (38), `CANCEL` (39) and `WAKE` (40) handled by [[pudu_ios_fetch.h]]. `PUDU_UI_INSTRUCTIONS` is 41, the bound of the instruction table.
+- `PUDU_UI_*` instruction codes, `CREATE` (1) through `WAKE` (40), with the network codes `FETCH` (38), `CANCEL` (39) and `WAKE` (40) handled by [[pudu_ios_fetch.h]]. `PUDU_UI_INSTRUCTIONS` is 61, the bound of the instruction table. DEVICE (58), NETWORK (59) and AWAKE (60) follow STORE_REMOVE (57) in the same table (#983).
 - `PUDU_UI_*` control kinds, `LABEL` (1) through `ACTIVITY` (11). `PUDU_UI_KINDS` is 12, the bound of the kind table. Kind 0 is unused.
 - `pudu_nodes`: the node table, an array indexed by node id. A slot holds the platform view of a live node, or `NSNull` for a removed node that CREATE may reuse.
 - `pudu_kinds`: the kind of each slot, parallel to `pudu_nodes`, boxed as `NSNumber`.

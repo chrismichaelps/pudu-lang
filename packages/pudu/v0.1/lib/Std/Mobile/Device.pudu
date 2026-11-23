@@ -1,0 +1,61 @@
+module Std.Mobile.Device
+
+import Std.Mobile.Stream as Stream
+
+/// The platform a program runs on.
+export type Platform = Ios | Android
+
+/// What the platform reports about the device and the person's preferences:
+/// the system version, the hardware model, the preferred language as a
+/// BCP 47 tag, the time zone as an IANA name, and the preferred text scale in
+/// percent, 100 at the platform's default.
+export type Facts = { platform: Platform, version: Str, model: Str, locale: Str, zone: Str, textScale: Int }
+
+/// The kind of path the device reaches the network through; Wired stands for
+/// a wired path and any other interface.
+export type Link = Offline | Wifi | Cellular | Wired
+
+/// Platform names and link codes as DESCRIBED and NETWORKED carry them.
+const PLATFORMS: Map[Str, Platform] = mapOf([("ios", Ios), ("android", Android)])
+const LINKS: Map[UInt32, Link] = mapOf([(0u32, Offline), (1u32, Wifi), (2u32, Cellular), (3u32, Wired)])
+const CODES: Map[Link, UInt32] = mapOf([(Offline, 0u32), (Wifi, 1u32), (Cellular, 2u32), (Wired, 3u32)])
+
+/// A commit asking for the device's facts; they arrive as
+/// `Described(tag, facts)`.
+export fn describe(tag: UInt32) -> Bytes { bytesOf(Stream.device([], tag)) }
+
+/// A commit starting reachability reports, or stopping them. While watching,
+/// `Networked(link)` arrives once with the current link and again whenever
+/// its kind changes.
+export fn watchNetwork(on: Bool) -> Bytes { bytesOf(Stream.network([], flag(on))) }
+
+/// A commit keeping the screen on while the application is in front, or
+/// letting it sleep again. It holds until a later commit changes it.
+export fn keepAwake(on: Bool) -> Bytes { bytesOf(Stream.awake([], flag(on))) }
+
+/// The facts DESCRIBED carries: five lines of text, platform, version, model,
+/// language and zone, with the text scale as the detail word. Text of any
+/// other shape is never written.
+export fn facts(text: Str, scale: UInt32) -> Option[Facts] {
+  let lines = text.split("\n")
+  if lines.length() != 5 {
+    return None
+  }
+  let platform = PLATFORMS.get(lines[0]) ?
+  let percent = convertInteger[Int](scale) ?
+  Some(Facts{platform: platform, version: lines[1], model: lines[2], locale: lines[3], zone: lines[4], textScale: percent})
+}
+
+/// The link a NETWORKED code names; codes above 3 are never written.
+export fn linkOf(code: UInt32) -> Option[Link] { LINKS.get(code) }
+
+/// The NETWORKED code of a link.
+export fn linkCode(link: Link) -> UInt32 {
+  match CODES.get(link) {
+    case Some(code) => code
+    case None => 0u32
+  }
+}
+
+// The stream word of a switch.
+fn flag(on: Bool) -> UInt32 { if on { 1u32 } else { 0u32 } }

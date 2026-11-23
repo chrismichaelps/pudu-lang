@@ -18,8 +18,10 @@ const repository = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 // The counter imports Std.Mobile from this checkout, whichever compiler runs.
 process.env.PUDU_LIB ??= join(repository, "packages", "pudu", "v0.1", "lib");
 
+/* Runs one step to completion. Stdin is closed so no step waits on input,
+   and a step past its timeout is killed outright rather than asked to stop. */
 function run(command, args, timeout = 120_000, env = process.env) {
-  const result = spawnSync(command, args, { encoding: "utf8", timeout, env });
+  const result = spawnSync(command, args, { encoding: "utf8", timeout, env, stdio: ["ignore", "pipe", "pipe"], killSignal: "SIGKILL" });
   if (result.error) {
     throw new Error(`${command} ${args.join(" ")}: ${result.error.code ?? result.error.message} after ${timeout} ms`);
   }
@@ -280,6 +282,18 @@ int main(int argc, char **argv) {
       { environment: { SIMCTL_CHILD_PUDU_UI_SELFTEST: "0" }, labels: ["Launches: 1", "Token: s3cret", "Temporary: none"] },
       { environment: { SIMCTL_CHILD_PUDU_UI_SELFTEST: "0" }, labels: ["Launches: 2", "Token: s3cret", "Temporary: none"] },
     ]);
+    // The device describes itself as iOS at the default text scale, reports
+    // a link the simulator reaches the network through, and keeps the screen
+    // awake while in front.
+    mobileApp(device, "About", [{
+      environment: { SIMCTL_CHILD_PUDU_UI_SELFTEST: "0", SIMCTL_CHILD_PUDU_UI_DEVICE_TEST: "1" },
+      labels: ["Platform: ios", /^Version: \d+(\.\d+)*$/u, /^Model: \S+$/u, /^Locale: [A-Za-z]{2,3}(-\w+)*$/u, /^Zone: \S+$/u,
+        "Scale: 100", "Online: true", /^Link: (Wifi|Cellular|Wired)$/u],
+      layout: ["PUDU_DEVICE awake yes"],
+    }]);
+    refusedApp(device, root, "network watching word 2",
+      "import Std.Mobile.Host as Host\nimport Std.Mobile.Stream as Stream", `  Host.apply(bytesOf(Stream.network([], 2u32)))`,
+      /pudu: a view stream set network watching to 2/u);
     mobileApp(device, "Links", [{
       environment: { SIMCTL_CHILD_PUDU_UI_SELFTEST: "0", SIMCTL_CHILD_PUDU_UI_LINK_TEST: "pudulinks://hello?from=test" },
       labels: ["Link: pudulinks://hello?from=test"],
@@ -461,6 +475,8 @@ function mobileApp(device, example, runs, directory = "", bundle = `org.pudu.${e
   try {
     const build = ["build", join(repository, "examples", "mobile", directory, `${example}.pudu`),
       "--native", "--target", "ios-simulator-arm64", "--app", "-o"];
+    // Each long step announces itself, so a slow step reads as progress in the log, not a hang.
+    console.log(`BUILD iOS ${example}`);
     run(resolve(compiler), [...build, app], appBuildTimeout);
     const executable = join(app, example);
     run(xcrun, ["simctl", "install", device, app], simulatorTimeout);
@@ -469,12 +485,15 @@ function mobileApp(device, example, runs, directory = "", bundle = `org.pudu.${e
       // Each entry presets one service's answer, as the person's earlier choice would.
       for (const [action, service] of privacy) run(xcrun, ["simctl", "privacy", device, action, service, bundle], simulatorTimeout);
       const lines = launch(device, bundle, "PUDU_", "PUDU_PROGRAM_STATUS", environment);
-      // The host reports labels in the order the screen shows them.
-      assert.deepEqual(lines.filter((line) => line.startsWith("PUDU_LABEL ")), labels.map((label) => `PUDU_LABEL ${label}`),
+      // The host reports labels in the order the screen shows them; a pattern
+      // stands for a label whose text depends on the machine.
+      const shown = lines.filter((line) => line.startsWith("PUDU_LABEL ")).map((line) => line.slice("PUDU_LABEL ".length));
+      assert.ok(shown.length === labels.length
+        && labels.every((label, index) => (label instanceof RegExp ? label.test(shown[index]) : label === shown[index])),
         `${example} did not show ${labels.join(", ")}:\n${lines.join("\n")}`);
       assert.ok(lines.includes("PUDU_PROGRAM_STATUS 0"), `${example} did not finish:\n${lines.join("\n")}`);
       if (layout) {
-        assert.deepEqual(lines.filter((line) => /^PUDU_(VIEWPORT|KEYBOARD|THEME|LIST|MATERIAL|ALERT|HAPTIC|ACCESS|MOTION|NAV|REFRESH|FETCH|IMAGE|SYSTEM|PERMISSION|TABS) /.test(line)), layout,
+        assert.deepEqual(lines.filter((line) => /^PUDU_(VIEWPORT|KEYBOARD|THEME|LIST|MATERIAL|ALERT|HAPTIC|ACCESS|MOTION|NAV|REFRESH|FETCH|IMAGE|SYSTEM|PERMISSION|TABS|DEVICE) /.test(line)), layout,
           `${example} did not report the expected layout and theme:\n${lines.join("\n")}`);
       }
       const firstFrame = lines.find((line) => line.startsWith("PUDU_FIRST_FRAME_MS "));
@@ -527,6 +546,7 @@ ${body}
 function launch(device, bundle, prefix, status, environment = {}) {
   const failures = [];
   for (let attempt = 1; attempt <= launchAttempts; attempt += 1) {
+    console.log(`LAUNCH iOS ${bundle} attempt ${attempt}`);
     try {
       const output = run(xcrun, ["simctl", "launch", "--console-pty", device, bundle], simulatorTimeout,
         { ...process.env, ...environment });

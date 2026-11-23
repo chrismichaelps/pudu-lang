@@ -800,3 +800,7 @@ Package the portable loader header so source distributions can compile the bridg
 Register [[Backend Frame Slots]] and [[Backend Frame Slot References]] with
 existing dependencies. Resolved Grill Log: keep traversal and allocation
 separate while sharing one exhaustive reference projection.
+
+## Device facts (#983)
+
+The extra-source-files list adds `cbits/pudu_ios_device.h` ([[pudu-ios-device]]) and `android/org/pudu/PuduDevice.java` ([[PuduDevice]]), so source distributions carry both. Resolved Grill Log: no added package dependency; the Network framework is a system framework.

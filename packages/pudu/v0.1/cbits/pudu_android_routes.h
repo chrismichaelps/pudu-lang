@@ -284,4 +284,20 @@ static void pudu_do_store_remove(JNIEnv *env, pudu_reader *reader) {
   pudu_bridge(env, "storeRemove", "(ILjava/lang/String;)V", (jint)place, pudu_text(env, reader));
 }
 
+/* DEVICE: the tag DESCRIBED answers under; NETWORK: 1 to watch reachability
+   or 0 to stop; AWAKE: 1 to keep the screen on or 0 to let it sleep. */
+static void pudu_do_device(JNIEnv *env, pudu_reader *reader) { pudu_bridge(env, "device", "(I)V", (jint)pudu_word(reader)); }
+
+static void pudu_do_network(JNIEnv *env, pudu_reader *reader) {
+  uint32_t watching = pudu_word(reader);
+  if (watching > 1) pudu_stream_defect("set network watching to", watching);
+  pudu_bridge(env, "network", "(Z)V", (jboolean)(watching == 1));
+}
+
+static void pudu_do_awake(JNIEnv *env, pudu_reader *reader) {
+  uint32_t on = pudu_word(reader);
+  if (on > 1) pudu_stream_defect("set keep-awake to", on);
+  pudu_bridge(env, "awake", "(Z)V", (jboolean)(on == 1));
+}
+
 #endif

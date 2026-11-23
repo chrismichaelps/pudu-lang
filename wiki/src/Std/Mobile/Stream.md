@@ -92,9 +92,16 @@ Exports:
 - Place codes: 0 Plain, 1 Secure. The place is written by `Std.Mobile.Storage.placeCode`.
 - The instruction bound is now 57.
 
+## Device (#983)
+
+- DEVICE (58): the tag. Answered by one DESCRIBED (32). Writer `device(out, reported)`.
+- NETWORK (59): a flag, 1 to start watching reachability and 0 to stop. Any other word is a stream defect, refused with `set network watching to`. Writer `network(out, watching)`.
+- AWAKE (60): a flag, 1 to keep the screen on while the application is in front and 0 to let it sleep. Any other word is a stream defect, refused with `set keep-awake to`. Writer `awake(out, on)`. The setting stands until a later AWAKE changes it.
+- The instruction bound is now 61.
+
 ## Invariants
 
-- Every word is a little-endian 32-bit unsigned value. Every instruction begins with its code word (CREATE 1, TEXT 2, APPEND 3, ROOT 4, TAG 5, STATE 7, HINT 8, NAME 9, INSERT 10, REMOVE 11, MOVE 12, THEME 20, APPEARANCE 21, STYLE 22, COLOR 23, RANGE 24, COLUMNS 25, MATERIAL 26, GESTURES 27, ALERT 28, VALUE 29, HAPTIC 30, TRAITS 31, ACCESS_HINT 32, ACCESS_VALUE 33, MENU 34, ANIMATE 35, NAVIGATE 36, REFRESH 37, BOUNDS 41, OPTIONS 42, COUNT 43, MOMENT 44).
+- Every word is a little-endian 32-bit unsigned value. Every instruction begins with its code word (CREATE 1, TEXT 2, APPEND 3, ROOT 4, TAG 5, STATE 7, HINT 8, NAME 9, INSERT 10, REMOVE 11, MOVE 12, THEME 20, APPEARANCE 21, STYLE 22, COLOR 23, RANGE 24, COLUMNS 25, MATERIAL 26, GESTURES 27, ALERT 28, VALUE 29, HAPTIC 30, TRAITS 31, ACCESS_HINT 32, ACCESS_VALUE 33, MENU 34, ANIMATE 35, NAVIGATE 36, REFRESH 37, BOUNDS 41, OPTIONS 42, COUNT 43, MOMENT 44, DEVICE 58, NETWORK 59, AWAKE 60).
 - Theming codes start at 20. Navigation reserves 13 and 14, so a gap keeps both streams unambiguous when they merge.
 - RANGE is exactly three words after its code word; COLUMNS is exactly two; MATERIAL is exactly two. A RANGE is 16 bytes, a COLUMNS is 12 bytes and a MATERIAL is 12 bytes.
 - THEME carries exactly seven tones; its count word is 7. The encoder writes the count, and the host refuses any other count.

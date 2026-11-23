@@ -32,6 +32,7 @@
 #include "pudu_ios_system.h"
 #include "pudu_ios_permission.h"
 #include "pudu_ios_storage.h"
+#include "pudu_ios_device.h"
 #include "pudu_ios_capability_test.h"
 
 /* Each node's color role from COLOR, or PUDU_ROLE_DEFAULT. */
@@ -332,6 +333,7 @@ static void (*const pudu_instruction_table[PUDU_UI_INSTRUCTIONS])(pudu_reader *)
   [PUDU_UI_STATUS] = pudu_do_status, [PUDU_UI_PERMISSIONS] = pudu_do_permissions, [PUDU_UI_PERMISSION] = pudu_do_permission,
   [PUDU_UI_SETTINGS] = pudu_do_settings, [PUDU_UI_TABS] = pudu_do_tabs,
   [PUDU_UI_STORE_READ] = pudu_do_store_read, [PUDU_UI_STORE_WRITE] = pudu_do_store_write, [PUDU_UI_STORE_REMOVE] = pudu_do_store_remove,
+  [PUDU_UI_DEVICE] = pudu_do_device, [PUDU_UI_NETWORK] = pudu_do_network, [PUDU_UI_AWAKE] = pudu_do_awake,
 };
 
 /* Applies one commit: every instruction in order, in one call. */
@@ -407,6 +409,9 @@ static const pudu_self_test pudu_self_tests[] = {
   pudu_observe_lifecycle();
   pudu_observe_memory();
   pudu_target = [PuduTarget new];
+  /* Line-buffered output: a report reaches the console as soon as it is
+     written, so a reader waiting on a line never waits on the buffer. */
+  setvbuf(stdout, NULL, _IOLBF, 0);
   self.window = [[UIWindow alloc] initWithFrame:UIScreen.mainScreen.bounds];
   self.window.rootViewController = controller;
   [self.window makeKeyAndVisible];
@@ -430,6 +435,7 @@ static const pudu_self_test pudu_self_tests[] = {
 - (void)run {
   int status = pudu_program_run(0, NULL);
   printf("PUDU_PROGRAM_STATUS %d\n", status);
+  fflush(stdout);
   if (getenv("PUDU_UI_SELFTEST") != NULL) {
     pudu_report(pudu_tabs != nil ? pudu_tabs_top() : pudu_navigator != nil ? pudu_navigation_top() : pudu_shown_root);
     if (getenv("PUDU_UI_CAPABILITY_TEST") != NULL) pudu_report_capabilities(pudu_nodes);

@@ -1,5 +1,6 @@
 module Std.Mobile.Events
 
+import Std.Mobile.Device as Device
 import Std.Mobile.Gesture as Gesture
 import Std.Mobile.Permission as Permission
 import Std.Mobile.Scene as Scene
@@ -34,6 +35,8 @@ const PERMISSIONED: UInt64 = 28u64
 const SELECTED: UInt64 = 29u64
 const LINKED: UInt64 = 30u64
 const STORED: UInt64 = 31u64
+const DESCRIBED: UInt64 = 32u64
+const NETWORKED: UInt64 = 33u64
 
 /// Each event kind's constructor, given the tag and the text the host holds.
 const EVENTS: Map[UInt64, fn(UInt32, Str) -> View.Event] = mapOf([
@@ -63,7 +66,8 @@ const DETAILED: Map[UInt64, fn(UInt32, UInt32) -> Option[View.Event]] = mapOf([
     (IMAGED, |reported: UInt32, loaded: UInt32| flagged(loaded, |done: Bool| View.Imaged(reported, done))),
     (OPENED, |reported: UInt32, opened: UInt32| flagged(opened, |done: Bool| View.Opened(reported, done))),
     (SHARED, |reported: UInt32, shared: UInt32| flagged(shared, |done: Bool| View.Shared(reported, done))),
-    (PERMISSIONED, |kind: UInt32, state: UInt32| permissioned(Permission.kindOf(kind), Permission.stateOf(state)))
+    (PERMISSIONED, |kind: UInt32, state: UInt32| permissioned(Permission.kindOf(kind), Permission.stateOf(state))),
+    (NETWORKED, |_reported: UInt32, code: UInt32| networked(Device.linkOf(code)))
   ])
 
 /// Each measured event kind's constructor, given the tag, the detail word and
@@ -76,11 +80,11 @@ const MEASURED: Map[UInt64, fn(UInt32, UInt32, Array[Int32]) -> Option[View.Even
   ])
 
 /// Whether a host event's kind carries text the host holds for it.
-export fn carriesText(raw: UInt64) -> Bool { raw >> 32 == CHANGED || raw >> 32 == FETCHED || raw >> 32 == PASTED || raw >> 32 == LINKED || raw >> 32 == STORED }
+export fn carriesText(raw: UInt64) -> Bool { raw >> 32 == CHANGED || raw >> 32 == FETCHED || raw >> 32 == PASTED || raw >> 32 == LINKED || raw >> 32 == STORED || raw >> 32 == DESCRIBED }
 
 /// Whether a host event's kind carries a detail word the host holds for it.
 export fn carriesDetail(raw: UInt64) -> Bool {
-  DETAILED.containsKey(raw >> 32) || MEASURED.containsKey(raw >> 32) || raw >> 32 == FETCHED || raw >> 32 == STORED
+  DETAILED.containsKey(raw >> 32) || MEASURED.containsKey(raw >> 32) || raw >> 32 == FETCHED || raw >> 32 == STORED || raw >> 32 == DESCRIBED
 }
 
 /// Whether a host event's kind carries signed words the host holds for it.
@@ -106,6 +110,7 @@ export fn eventWithWords(raw: UInt64, text: Str, detail: UInt32, values: Array[I
   match convertInteger[UInt32](raw & 0xffffffffu64) {
     case Some(reported) if raw >> 32 == FETCHED => fetched(reported, detail, text, &values)
     case Some(reported) if raw >> 32 == STORED => stored(reported, detail, text)
+    case Some(reported) if raw >> 32 == DESCRIBED => described(reported, Device.facts(text, detail))
     case Some(reported) => {
       match (MEASURED.get(raw >> 32), DETAILED.get(raw >> 32)) {
         case (Some(made), _) => orStopped(made(reported, detail, values))
@@ -179,6 +184,19 @@ fn permissioned(kind: Option[Permission.Kind], state: Option[Permission.State]) 
 // it is 0; any other word is never written.
 fn stored(reported: UInt32, present: UInt32, value: Str) -> View.Event {
   if present == 1u32 { View.Stored(reported, Some(value)) } else if present == 0u32 { View.Stored(reported, None) } else { View.Stopped }
+}
+
+// The device's facts, or Stopped for text no host writes.
+fn described(reported: UInt32, found: Option[Device.Facts]) -> View.Event {
+  match found {
+    case Some(facts) => View.Described(reported, facts)
+    case None => View.Stopped
+  }
+}
+
+fn networked(found: Option[Device.Link]) -> Option[View.Event] {
+  let link = found ?
+  Some(View.Networked(link))
 }
 
 // An event whose detail word is 1 or 0; any other word is never written.

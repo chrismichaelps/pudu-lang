@@ -167,6 +167,9 @@ One stream carries each commit. It is a sequence of little-endian 32-bit words, 
 | 55 | STORE_READ | tag, place (0 plain, 1 secure), key text; answers STORED 31 |
 | 56 | STORE_WRITE | place, key text, value text; reports nothing |
 | 57 | STORE_REMOVE | place, key text; reports nothing |
+| 58 | DEVICE | tag; answers DESCRIBED 32 |
+| 59 | NETWORK | 1 to start watching reachability, 0 to stop; any other word is refused |
+| 60 | AWAKE | 1 to keep the screen on while in front, 0 to let it sleep; any other word is refused |
 
 Events return through `pudu_ui_wait` as one 64-bit value: the kind in the high 32 bits, with the tag in the low 32 bits.
 
@@ -200,6 +203,8 @@ Events return through `pudu_ui_wait` as one 64-bit value: the kind in the high 3
 | 28 | permissioned | tag is the kind code; detail is the state code (0 not asked to 6 unavailable) |
 | 29 | selected | tab id; no detail |
 | 30 | linked | URL text; no detail |
+| 32 | described | tag; five text lines (platform, system version, model, language, zone); detail is the text scale in percent |
+| 33 | networked | tag 0; detail is the link code (0 offline, 1 Wifi, 2 cellular, 3 wired) |
 
 Codes 10 to 12 only add instructions, so a stream of codes 1 to 9 means the same. The view module no longer writes RESET; the host keeps it so a stream from an earlier writer still means the same. Nodes carry stable ids handed out by the program and recycled after REMOVE (#914). Compiled views extend the stream further under ADR-0031 (compiled native execution).
 
@@ -305,3 +310,7 @@ The state model is one closed set across platforms: NotAsked, Granted, Limited (
 A program keeps key-value text in two places: Plain, kept with the application, and Secure, kept on this device only and out of backups. STORE_READ 55 asks for a key and is answered by STORED 31, whose text is the value and whose detail word is 1 when a value is present and 0 when it is absent. STORE_WRITE 56 and STORE_REMOVE 57 report nothing. A read answers after every earlier write and removal, because each instruction runs in stream order on the main thread. The iOS host keeps Plain in user defaults and Secure in the keychain, accessible after first unlock on this device only ([[pudu-ios-storage]]). The Android host keeps Plain in SharedPreferences and Secure as AES-GCM ciphertext under a Keystore key that is never exported ([[PuduStore]]); an entry that cannot be decrypted reads as absent and is removed. The program side is [[Std Mobile Storage]], and the example is [[Vault Example]].
 
 The integer parser that programs use on stored text is [[Std Num]]: `parseInt` and `parseIntIn` answer `None` for any text they do not accept, so a damaged value does not stop the program.
+
+## Device facts, reachability and keep-awake (#983)
+
+A program asks for the device's facts with DEVICE 58, answered by DESCRIBED 32 with the platform, system version, hardware model, preferred language, time zone and preferred text scale. NETWORK 59 starts or stops reachability reports, answered by NETWORKED 33 with the link kind, Offline, Wifi, Cellular or Wired, once when watching starts and again on each change of kind. AWAKE 60 keeps the screen on while the application is in front; it is a standing setting that holds until a later AWAKE changes it. The iOS host reads the facts from UIKit and Foundation and the link from a Network framework path monitor; the Android host reads the active network through ConnectivityManager under the normal permission `ACCESS_NETWORK_STATE`. No address, network name or location is read. The program-facing module is [[Std Mobile Device]].

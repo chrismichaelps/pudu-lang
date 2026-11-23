@@ -1,0 +1,79 @@
+module About
+
+import Std.Mobile.Device as Device
+import Std.Mobile.Host as Host
+import Std.Mobile.Scene as Scene
+import Std.Mobile.View as View
+
+/// The tag the facts arrive under.
+const FACTS: UInt32 = 1u32
+
+/// Link names as the screen shows them.
+const LINKS: Map[Device.Link, Str] = mapOf([(Device.Offline, "Offline"), (Device.Wifi, "Wifi"), (Device.Cellular, "Cellular"), (Device.Wired, "Wired")])
+
+/// The facts last reported, and the link, unknown until the first report.
+type Model = { facts: Option[Device.Facts], link: Option[Device.Link] }
+
+fn platformName(platform: Device.Platform) -> Str {
+  match platform {
+    case Device.Ios => "ios"
+    case Device.Android => "android"
+  }
+}
+
+fn factLabels(found: &Option[Device.Facts]) -> Array[View.View] {
+  match *found {
+    case Some(facts) => [
+      View.Label("Platform: {platformName(facts.platform)}"),
+      View.Label("Version: {facts.version}"),
+      View.Label("Model: {facts.model}"),
+      View.Label("Locale: {facts.locale}"),
+      View.Label("Zone: {facts.zone}"),
+      View.Label("Scale: {facts.textScale}")
+    ]
+    case None => [View.Label("Platform: unknown")]
+  }
+}
+
+fn linkName(link: Device.Link) -> Str {
+  match LINKS.get(link) {
+    case Some(name) => name
+    case None => "Offline"
+  }
+}
+
+fn linkLabels(found: &Option[Device.Link]) -> Array[View.View] {
+  match *found {
+    case Some(link) => [View.Label("Online: {link != Device.Offline}"), View.Label("Link: {linkName(link)}")]
+    case None => [View.Label("Online: unknown")]
+  }
+}
+
+fn view(model: &Model) -> View.View { View.Column(factLabels(&model.facts).concat(linkLabels(&model.link))) }
+
+/// Shows the device's facts and its link while keeping the screen awake;
+/// asks for the facts again whenever it returns to the front, since the
+/// language, zone and text scale can change while it is away.
+fn main() -> Int {
+  var model = Model{facts: None, link: None}
+  let (first, built) = View.mount(&view(&model))
+  var mounted = first
+  Host.apply(built)
+  Host.apply(Device.describe(FACTS))
+  Host.apply(Device.watchNetwork(true))
+  Host.apply(Device.keepAwake(true))
+  while true {
+    let event = Host.wait()
+    match event {
+      case View.Stopped => { return 0 }
+      case View.Described(tag, facts) if tag == FACTS => { model = Model{..model, facts: Some(facts)} }
+      case View.Networked(link) => { model = Model{..model, link: Some(link)} }
+      case View.Lifecycle(Scene.Active) => { Host.apply(Device.describe(FACTS)) }
+      case _ => {}
+    }
+    let (next, changes) = View.update(&mounted, &view(&model))
+    Host.apply(changes)
+    mounted = next
+  }
+  0
+}

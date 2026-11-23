@@ -22,6 +22,7 @@ tags: [moc, module, foreign, ffi]
 - [[pudu-ios-image]] — UIKit images: asset and URL sources decoded to the view size, bounded cache, IMAGED report and self-test (#973).
 - [[pudu-ios-system]] — UIKit open, share sheet, clipboard and status bar, with their reports and self-test (#974).
 - [[pudu-ios-storage]] — user defaults and keychain storage, with the STORED report (#980).
+- [[pudu-ios-device]] — device facts, network reachability and keep-awake on the iOS host, with the DESCRIBED and NETWORKED reports (#983).
 - [[pudu-ios-tabs]] — UIKit tab bar: a stack per tab, bar items, tab picks, the sheet and self-test (#977).
 - [[pudu-ios-values]] — UIKit value controls, their BOUNDS, OPTIONS, COUNT and MOMENT handlers, and their self-test (#934).
 - [[Pudu SQLite Bridge]] — on-demand SQLite loading, statement ownership, and exact byte transport.

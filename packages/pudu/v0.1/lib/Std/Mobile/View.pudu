@@ -2,6 +2,7 @@ module Std.Mobile.View
 
 import Std.Mobile.Access as Access
 import Std.Mobile.Control as Controls
+import Std.Mobile.Device as Device
 import Std.Mobile.Feedback as Feedback
 import Std.Mobile.Gesture as Gesture
 import Std.Mobile.Permission as Permission
@@ -82,6 +83,8 @@ export type Event
   | Selected(UInt32)
   | Linked(Str)
   | Stored(UInt32, Option[Str])
+  | Described(UInt32, Device.Facts)
+  | Networked(Device.Link)
   | Stopped
 
 /// A node the platform shows: its id, the view it shows, and the nodes of

@@ -118,6 +118,9 @@ const TABS: UInt32 = 54u32
 const STORE_READ: UInt32 = 55u32
 const STORE_WRITE: UInt32 = 56u32
 const STORE_REMOVE: UInt32 = 57u32
+const DEVICE: UInt32 = 58u32
+const NETWORK: UInt32 = 59u32
+const AWAKE: UInt32 = 60u32
 
 /// Creates node `node` as a control of `kind`.
 export fn create(out: Array[UInt8], node: UInt32, kind: UInt32) -> Array[UInt8] { words(out, [CREATE, node, kind]) }
@@ -353,6 +356,15 @@ export fn storeWrite(out: Array[UInt8], place: UInt32, key: Str, value: Str) -> 
 
 /// Removes what is kept under `key` in the store `place`.
 export fn storeRemove(out: Array[UInt8], place: UInt32, key: Str) -> Array[UInt8] { field(words(out, [STORE_REMOVE, place]), key) }
+
+/// Asks for the device's facts; DESCRIBED with `reported` answers.
+export fn device(out: Array[UInt8], reported: UInt32) -> Array[UInt8] { words(out, [DEVICE, reported]) }
+
+/// Starts reachability reports with 1, or stops them with 0.
+export fn network(out: Array[UInt8], watching: UInt32) -> Array[UInt8] { words(out, [NETWORK, watching]) }
+
+/// Keeps the screen on with 1, or lets it sleep with 0.
+export fn awake(out: Array[UInt8], on: UInt32) -> Array[UInt8] { words(out, [AWAKE, on]) }
 
 /// Shows `node` as the screen's content.
 export fn root(out: Array[UInt8], node: UInt32) -> Array[UInt8] { words(out, [ROOT, node]) }
