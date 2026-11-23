@@ -415,10 +415,18 @@ Method]] forwards the supplied count, including calls with loans.
 count before reading them. [[Backend Method Programs]] covers a
 default that reads an earlier parameter, both directly and as a value.
 
+## Selected indirect callable arity
+
+Architect → Backend Engineer. [[Compiler Lower Default]] owns the
+argument profile selector. [[Compiler Lower Lambda]] and [[Compiler
+Lower Array Loop]] select the actual closure before projecting
+arguments. [[Backend Rendering Callable Programs]] covers held
+defaults and named arity failures after argument effects.
+
 ## Next action
 
-Select the actual callable's argument count profile for indirect
-calls when the runtime signature differs from the checked one.
+Select the retained callable's argument profile for indirect mutable
+loans before invoking and publishing their finals.
 
 ## Referenced by
 

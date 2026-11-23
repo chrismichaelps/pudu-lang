@@ -359,6 +359,24 @@ renderingCallableSuccessPrograms =
         , "  print(show([2].map(fresh())))"
         , "  0", "}" ])
     , "receiver\nreceiver\n[\"held 2\"]\n[3]\n", "")
+  , ("indirect calls and traversal use the held method's argument count", program
+      (selectedReceiverTypes <>
+        [ "trait CheckedLabel { fn label(self: &Self, value: Int) -> Str }"
+        , "impl CheckedLabel for Str { fn label(self: &Self, value: Int) -> Str { display(value) } }"
+        , "fn extra(value: Int) -> Int { print(\"default\")\n value + 2 }"
+        , "trait HeldLabel { fn label(self: &Self, value: Int, suffix: Int = extra(value)) -> Str }"
+        , "impl HeldLabel for Option[Str] {"
+        , "  fn label(self: &Self, value: Int, suffix: Int = extra(value)) -> Str { display(value) + \":\" + display(suffix) }"
+        , "}"
+        , "fn fixed(first: Int, second: Int, third: Int) -> Str { display(first + second + third) }"
+        , "fn applyFixed(run: fn(Int, Int, Int) -> Str) -> Str { run(1, 2, 3) }"
+        , "fn main() -> Int {"
+        , "  print(applyFixed(fixed))"
+        , "  let held = choose(\"λ\".toBytes()).label"
+        , "  print(held(4))"
+        , "  print(show([5].map(held)))"
+        , "  0", "}" ])
+    , "6\nreceiver\ndefault\n4:6\ndefault\n[\"5:7\"]\n", "")
   , ("bound member selection returns a held function field unchanged", program
       (selectedReceiverTypes <>
         [ "type Holder = { render: fn(Int) -> Str }"
@@ -633,6 +651,13 @@ renderingCallableRefusalPrograms =
         , "fn main() -> Int {"
         , "  let callback = choose(\"λ\".toBytes()).callback()"
         , "  print(show([1].map(callback)))"
+        , "  0", "}" ]))
+  , ("a selected indirect callable names its missing parameter after argument effects", program
+      (selectedReceiverTypes <> selectedDeclaredCallback "fn(Int, Str) -> Int" "longer" <>
+        [ "fn longer(value: Int, missing: Str) -> Int { value }"
+        , "fn main() -> Int {"
+        , "  let callback = choose(\"λ\".toBytes()).callback()"
+        , "  print(show(callback({ print(\"argument\")\n 1 })))"
         , "  0", "}" ]))
   , ("a stored stopping builtin receives the held runtime argument", program
       [ "trait View { fn size(self: &Self) -> Int }"

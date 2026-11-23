@@ -34,3 +34,6 @@ Resolved Grill Log: selected callable signatures separate written
 parameters from the hidden supplied count. Omitted parameters use
 the existing callee default prologue. Wrong arity uses the selected
 parameter name and the traversal invocation span.
+
+Resolved Grill Log: use [[Compiler Lower Default]] for the selected
+callback's arity, including a bound method's written parameters.

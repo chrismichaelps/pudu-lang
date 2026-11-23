@@ -11,9 +11,10 @@ import qualified Data.Map.Strict as Map
 import qualified Data.Set as Set
 import Data.Text (Text)
 import qualified Data.Text as Text
+import Pudu.Compiler.Lower.Arguments (methodArgumentBlame)
 import Pudu.Compiler.Lower.Control (expressionIsPrintValued, printValued)
-import Pudu.Compiler.Lower.Default (suppliedArguments)
-import Pudu.Compiler.Lower.Dynamic (hasRuntimeChoice, joinRuntimeArms, mapRuntimeChoice, projectRuntimeValue, runtimeCarriers, runtimeResultType, settledMutableLayout)
+import Pudu.Compiler.Lower.Default (suppliedArguments, withCallableArity)
+import Pudu.Compiler.Lower.Dynamic (hasRuntimeChoice, joinRuntimeArms, mapRuntimeChoice, preserveRuntimeResult, projectRuntimeValue, runtimeCarriers, runtimeResultType, settledMutableLayout)
 import Pudu.Compiler.Lower.Generic (admitCallee, runtimeCallSignature)
 import Pudu.Compiler.Lower.Intrinsic (specializeIntrinsicValue)
 import Pudu.Compiler.Lower.Loan (Callee (..), Operand (..), closeLoaned, loanedType, lowerLoanedOperands, valueSignature, withLoanedParameters)
@@ -322,16 +323,17 @@ specializeTarget lower block supplied state at key template held = case callable
           _ -> (restored, Nothing)
   MethodCallable types owner written receiver member bound checked fact
     | CoreFunctionType inputs result <- checked
-    , length inputs == length supplied ->
+    , length inputs >= length supplied ->
         let context = lowerContext state
+            carried = supplied <> drop (length supplied) inputs
             lexical = state{lowerContext = context
               {contextTypes = withShapesFrom (contextTypes context) types, contextModule = owner}}
             (original, present) = registerMethodValue lower lexical written receiver member key bound checked fact
-            name = fst (Text.breakOn "$runtime" key) <> "$runtime" <> Text.pack (show supplied)
+            name = fst (Text.breakOn "$runtime" key) <> "$runtime" <> Text.pack (show carried)
             (after, exact) = case present of
               Nothing -> (original, Nothing)
               Just _ -> registerMethodValue lower original written receiver member name bound
-                (CoreFunctionType supplied result) fact
+                (CoreFunctionType carried result) fact
             restored = state{lowerContext = (lowerContext after)
               {contextTypes = contextTypes context, contextModule = contextModule context}}
             captures = [CoreExpression at kind (CoreCapture 0 held) | Just kind <- [bound]]
@@ -361,21 +363,28 @@ lowerValueCall lower block state at callee arguments
     _ -> False
   invoke adaptable final target kind cores
     | any stops cores = (final, Just (stopped (target : cores), CoreNeverType))
-    | Just selected <- mapRuntimeChoice final at CoreNeverType target (callHeld adaptable cores) = selected
-    | CoreFunctionType inputs result <- kind
-    , defaulted && length cores < length inputs || length inputs == length cores =
-        let carry current (expected, argument) = projectRuntimeValue (contextTypes (lowerContext current)) current expected argument
-            (ready, projected) = mapAccumL carry final (zip inputs cores)
-            operands = if defaulted then suppliedArguments at inputs projected else projected
-         in if map coreExpressionType operands == inputs
-              then called ready target result operands
-              else if adaptable && any (hasRuntimeChoice . coreExpressionType) cores
-                then adapt ready target projected
-                else halt at "a call through a function value with incompatible argument layouts" ready
+    | Just selected <- mapRuntimeChoice final at CoreNeverType target (callHeld adaptable cores) =
+        fmap (fmap preserveSelected) selected
+    | CoreFunctionType inputs result <- kind =
+        withCallableArity (methodArgumentBlame final) at final defaulted target inputs result cores
+          (apply adaptable inputs result)
     | uncallable kind =
         namedFailure final at (\names -> "cannot call a " <> mconcat (take 1 names)) (target : cores)
     | otherwise = halt at ("a call through a " <> coreTypeName kind <> " value") final
   callHeld adaptable cores current held = fmap (fmap fst) (invoke adaptable current held (coreExpressionType held) cores)
+  preserveSelected (value, _) =
+    let checked = typeForSpan (contextTypes (lowerContext state)) at
+        carried = maybe value (\expected -> preserveRuntimeResult expected value) checked
+     in (carried, coreExpressionType carried)
+  apply adaptable inputs result final takesCount target cores =
+    let carry current (expected, argument) = projectRuntimeValue (contextTypes (lowerContext current)) current expected argument
+        (ready, projected) = mapAccumL carry final (zip inputs cores)
+        operands = if takesCount then suppliedArguments at inputs projected else projected
+     in if map coreExpressionType operands == inputs
+          then called ready target result operands
+          else if adaptable && any (hasRuntimeChoice . coreExpressionType) cores
+            then adapt ready target projected
+            else halt at "a call through a function value with incompatible argument layouts" ready
   adapt current target cores =
     let (bound, retained) = mapAccumL hold current (target : cores)
         declarations = [CoreStatement at (CoreDeclare local value) | (local, value) <- zip retained (target : cores)]
@@ -400,6 +409,7 @@ lowerValueCall lower block state at callee arguments
   collect current done [] = (current, Just (reverse done))
   collect current done (argument : rest) = case lower current argument of
     (next, Just (core, _))
+      | stops core -> (next, Just (reverse (core : done)))
       | expressionIsPrintValued core -> halt (locatedSpan argument) "a Result[(), Str] call argument" next
       | otherwise -> collect next (core : done) rest
     (next, Nothing) -> (next, Nothing)

@@ -129,3 +129,10 @@ Resolved Grill Log: compare a captured method and a fresh member
 read after reassigning the receiver. Exercise a different result
 layout, a held function-valued field, and a missing member that
 fails before the next statement.
+
+## Selected indirect call defaults
+
+Resolved Grill Log: ordinary indirect calls and traversal choose the
+held callable's default count. Distinguish a defaulted one-parameter
+closure from a fixed two-parameter closure with the same native slots.
+An arity failure retains argument effects and the real parameter name.

@@ -128,3 +128,10 @@ Resolved Grill Log: A named or lifted loaned callable advertises the actual resu
 ## Stored mutable parameter layouts (#956)
 
 Resolved Grill Log: Keep the requested input vector in the lifted body template. Rebuilding the original callable must reproduce its body key when its mutable parameters have widened.
+
+## Selected indirect call arity
+
+Resolved Grill Log: [[Compiler Lower Default]] selects arity using
+the retained callable. Projection and specialization use the written
+slots after selection. Unreachable operands do not run after an
+earlier control transfer.

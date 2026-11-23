@@ -2,18 +2,16 @@
 module Pudu.Compiler.Lower.ArrayLoop (arrayMethodWith, joinsHeldText) where
 
 import Data.List (mapAccumL)
-import qualified Data.Map.Strict as Map
 import Data.Text (Text)
 import Pudu.Compiler.Lower.Arguments (argumentFailure, argumentFailureWith, methodArgumentBlame, stopped, stops)
 import Pudu.Compiler.Lower.Control (popLoop, pushLoop)
-import Pudu.Compiler.Lower.Default (suppliedArguments, takesSuppliedCount)
-import Pudu.Compiler.Lower.Dynamic (joinRuntimeArms, mapRuntimeChoice, projectRuntimeValue)
+import Pudu.Compiler.Lower.Default (suppliedArguments, withCallableArity)
+import Pudu.Compiler.Lower.Dynamic (mapRuntimeChoice, projectRuntimeValue)
 import Pudu.Compiler.Lower.Sort (sortStatements)
 import Pudu.Compiler.Lower.State
-  ( CallableSource (..), CallableTemplate (..), LowerContext (..), LowerState (..), bindLocal, halt, intType, refused )
+  ( LowerContext (..), LowerState (..), bindLocal, halt, intType, refused )
 import Pudu.Compiler.Lower.Types (LowerTypes, isDynamic, nativeValueType, sumVariants, typeForSpan)
 import Pudu.Core
-import Pudu.Frontend.Syntax (Function (functionParameters), Located (..), Parameter (parameterName))
 import Pudu.IntegerLiteral (IntegerKind (PlatformSigned))
 import Pudu.Source (Span)
 
@@ -173,58 +171,19 @@ arrayMethodWith state at member operands kind element toItems = case member of
     | otherwise = halt at "an array callback with no native layout" current
    where
     kind = coreExpressionType function
-    supplied = length arguments
     invokeFunction entered inputs result =
-      let context = lowerContext entered
-          relevant template = callableTemplateType template == kind
-          known = Map.filter relevant (Map.union (contextObservedCallables context) (contextKnownCallables context))
-          selected = [(key, parameters, defaulted) | (key, template) <- Map.toAscList known
-            , Just (parameters, defaulted) <- [callbackParameters (callableTemplateSource template)]
-            , defaulted || length parameters /= supplied]
-          canHideCount = case reverse inputs of count : _ : _ -> count == intType; _ -> False
-          requestReplay = supplied /= length inputs || canHideCount
-          demanded = entered{lowerContext = context
-            {contextNeedsCallableReplay = contextNeedsCallableReplay context || requestReplay}}
-          makeArm (prior, arms) (key, parameters, defaulted) =
-            let (next, applied) = case drop supplied parameters of
-                  _ | supplied > length parameters -> (prior, tooMany)
-                    | defaulted -> apply prior inputs result True
-                  missing : _ -> (prior, missingNamed (locatedValue (parameterName (locatedValue missing))))
-                  [] -> apply prior inputs result False
-                guard' = expression CoreBoolType (CoreClosureIs key function)
-             in (next, CoreArm at CoreWildcardPattern (Just guard') applied : arms)
-          (after, arms) = foldl' makeArm (demanded, []) selected
-          (ready, fallback)
-            | supplied > length inputs = (after, tooMany)
-            | supplied < length inputs = (after, missingNamed "callback")
-            | otherwise = apply after inputs result False
-          chosen = case arms of
-            [] -> fallback
-            _ -> joinRuntimeArms at result (expression CoreUnitType (CoreBlockValue (CoreBlock [] Nothing)))
-              (reverse arms <> [CoreArm at CoreWildcardPattern Nothing fallback])
-       in (ready, Just (checkCallable function chosen))
-
-    apply entered inputs result defaulted =
-      let carry current' (expected, given) =
-            projectRuntimeValue (contextTypes (lowerContext current')) current' expected given
-          (ready, projected) = mapAccumL carry entered (zip inputs arguments)
-          operands | defaulted = suppliedArguments at inputs projected
-                   | otherwise = projected
-       in if map coreExpressionType operands == inputs
-            then (ready, expression result (CoreCallValue function operands))
-            else (ready, argumentFailure blame at "E7001" "cannot call a function value with these arguments")
-
-  callbackParameters source = case source of
-    NamedCallable (_, declaration) signature _ ->
-      Just (functionParameters (locatedValue declaration), takesSuppliedCount signature)
-    LiftedCallable _ _ _ _ function _ _ _ -> Just (functionParameters function, False)
-    _ -> Nothing
-
-  tooMany = argumentFailureWith blame at "E7003"
-    (Just "pass one argument per declared parameter") (literal "too many arguments in call")
-
-  missingNamed name = argumentFailureWith blame at "E7003"
-    (Just "supply the argument or give the parameter a default") (literal ("missing argument for parameter " <> name))
+      let (ready, chosen) = withCallableArity blame at entered False function inputs result arguments apply
+       in (ready, (checkCallable function . fst) <$> chosen)
+     where
+      apply prior defaulted target given =
+        let carry current' (expected, operand) =
+              projectRuntimeValue (contextTypes (lowerContext current')) current' expected operand
+            (ready, projected) = mapAccumL carry prior (zip inputs given)
+            operands = if defaulted then suppliedArguments at inputs projected else projected
+            value
+              | map coreExpressionType operands == inputs = expression result (CoreCallValue target operands)
+              | otherwise = argumentFailure blame at "E7001" "cannot call a function value with these arguments"
+         in (ready, Just (value, coreExpressionType value))
 
   checkCallable function applied =
     let label = expression CoreTextType (CoreRuntimeKind function)

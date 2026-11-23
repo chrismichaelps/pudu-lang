@@ -292,6 +292,14 @@ Stored wrappers dispatch on that count before reading argument slots.
 The implementation evaluates omitted defaults in parameter order.
 [[Compiler Lower Default]] · [[Backend Method Programs]]
 
+## Selected indirect callable arity (#956)
+
+Ordinary indirect calls and traversal select the retained callable's
+written parameters and supplied-count convention. A fixed function
+and a defaulted function can share a native slot layout and still
+take different invocation paths. [[Compiler Lower Default]] ·
+[[Backend Rendering Callable Programs]]
+
 ## Published progress (#496)
 
 The README progress bar counts **completed coverage areas**, not individual language

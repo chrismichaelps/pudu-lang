@@ -5,6 +5,12 @@ tags: [changelog]
 
 # Changelog
 
+## 2026-11-23 — Selected indirect callable arity (#956)
+
+- Use the retained callable's argument profile for ordinary indirect
+  calls and collection traversal. Preserve the named arity diagnostic
+  after supplied effects. [[Compiler Lower Default]] · [[Compiler Lower Lambda]]
+
 ## 2026-11-23 — Declared method argument counts (#956)
 
 - Forward written argument counts through direct and stored methods.

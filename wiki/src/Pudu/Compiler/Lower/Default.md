@@ -46,3 +46,15 @@ so that the callee runs its defaults and diagnoses missing parameters
 in order. Report an invalid count only after supplied operands run.
 
 [[Compiler Lower Method]]
+
+## Stored callable argument profiles
+
+Named, lifted and bound callable templates identify their written
+parameters and whether their body accepts a supplied count.
+
+Resolved Grill Log: retain the evaluated callee and arguments before
+branching on callable identity. A fixed-arity function ending in Int
+can share its layout with a defaulted function. Use the layout to
+request discovery and the callable identity to choose the count.
+
+[[Compiler Lower Array Loop]] · [[Compiler Lower Lambda]]
