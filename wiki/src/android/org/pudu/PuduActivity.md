@@ -106,3 +106,9 @@ calls), [[Native Mobile Targets]].
 - Back: `onBackPressed` calls `PuduNavigator.back` first. The platform's own back runs only when the navigator has nothing to pop. See [[PuduNavigator]].
 
 Resolved Grill Log: a memory event is sent for every trim level from running low upward, not only the critical level, so the program can release caches before the system has to kill the process.
+
+## Services (#989)
+
+- `onActivityResult` routes each result by request code to [[PuduAuth]] and [[PuduMedia]].
+- A launch or new intent that carries `org.pudu.notified` is reported as NOTIFIED 35 for its id.
+- The activity tells [[PuduMedia]] when it resumes, so BROWSED 37 is reported after the browser returns.

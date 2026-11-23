@@ -172,6 +172,17 @@ One stream carries each commit. It is a sequence of little-endian 32-bit words, 
 | 60 | AWAKE | 1 to keep the screen on while in front, 0 to let it sleep; any other word is refused |
 | 61 | LOCATE | tag, accuracy code (0 precise, 1 approximate, 2 coarse); answers LOCATED 34; a code above 2 is refused |
 | 62 | TRACK | on flag, accuracy code, minimum distance in meters; reports LOCATED 34 under tag 0 while on; a flag above 1 is refused |
+| 63 | NOTIFY | id, delay in seconds, title text, body text |
+| 64 | UNNOTIFY | id |
+| 65 | AUTHENTICATE | tag, reason text; answers AUTHENTICATED 36 |
+| 66 | BROWSE | tag, URL text; answers BROWSED 37 when the browser closes |
+| 67 | SPEAK | tag, rate in percent, language text, text; answers SPOKE 38 |
+| 68 | HUSH | none; stops speech |
+| 69 | BATTERY | tag; answers POWERED 39 |
+| 70 | BRIGHTNESS | percent 0 to 100; above 100 is refused |
+| 71 | ORIENTATION | code 0 any, 1 portrait, 2 landscape; above 2 is refused |
+| 72 | SENSE | on flag (1 or 0), interval in milliseconds; a flag above 1 is refused |
+| 73 | PICK_IMAGE | tag; answers IMAGE_PICKED 41 |
 
 Events return through `pudu_ui_wait` as one 64-bit value: the kind in the high 32 bits, with the tag in the low 32 bits.
 
@@ -208,6 +219,13 @@ Events return through `pudu_ui_wait` as one 64-bit value: the kind in the high 3
 | 32 | described | tag; five text lines (platform, system version, model, language, zone); detail is the text scale in percent |
 | 33 | networked | tag 0; detail is the link code (0 offline, 1 Wifi, 2 cellular, 3 wired) |
 | 34 | located | tag; detail 1 with four signed words (latitude and longitude in ten-millionths of a degree, accuracy in meters, altitude in meters), or detail 0 with no words when no position is available |
+| 35 | notified | tag = the id of a tapped notification; no detail |
+| 36 | authenticated | tag; detail 1 confirmed, 0 not |
+| 37 | browsed | tag; no detail |
+| 38 | spoke | tag; detail 1 finished, 0 interrupted |
+| 39 | powered | tag; detail is the charge state (0 unknown, 1 unplugged, 2 charging, 3 full), then the level word (-1 unknown) |
+| 40 | sensed | tag 0; three signed words, acceleration in milli-g on x, y and z |
+| 41 | image picked | tag; detail 1 with the path of a copy as text, 0 with empty text when cancelled |
 
 Codes 10 to 12 only add instructions, so a stream of codes 1 to 9 means the same. The view module no longer writes RESET; the host keeps it so a stream from an earlier writer still means the same. Nodes carry stable ids handed out by the program and recycled after REMOVE (#914). Compiled views extend the stream further under ADR-0031 (compiled native execution).
 
@@ -321,3 +339,7 @@ A program asks for the device's facts with DEVICE 58, answered by DESCRIBED 32 w
 ## Location (#986)
 
 A program asks for one position with LOCATE 61, answered by exactly one LOCATED 34 under the same tag, or starts a stream of positions with TRACK 62, which reports LOCATED 34 under tag 0 for each new position until it is turned off. Positions are integers in ten-millionths of a degree, so they are exact and identical on both hosts. Accuracy is precise, approximate (about a hundred meters) or coarse (about a kilometer). The answer carries no position, with detail 0, when the permission is not allowed, location services are off, the platform fails or no fix arrives within the timeout. A LOCATE never prompts; asking is the permission module's job. The iOS host reads CoreLocation through its own location manager and answers from that manager's last location while tracking. The Android host reads LocationManager under the fine or coarse location permission and reuses a last-known fix only when it is under sixty seconds old. The program-facing module is [[Std Mobile Location]], and the example is [[Where Example]]. Android runtime behavior is not yet exercised on a device or emulator.
+
+## Device services (#989)
+
+Eleven requests (codes 63 to 73) and seven events (35 to 41) carry the notification, authentication, browser, speech, battery, screen, motion and photo picker services. The instruction bound is now 74. A notification is scheduled by a delay in seconds and replaced by its id; a tap reports NOTIFIED with that id, including the tap that launched the application. Authentication asks for device-owner confirmation, which accepts biometrics or the passcode, and answers once with AUTHENTICATED. The browser, speech and photo picker each answer once per tag. The picked image is a copy in the temporary directory, named by path. Brightness and orientation are standing settings that the platform restores when the application leaves the front. Motion reports acceleration in milli-g at the requested interval. Alarms on Android are inexact, and the iOS simulator has no passcode and no accelerometer. The program-facing modules are [[Std Mobile Notify]], [[Std Mobile Auth]], [[Std Mobile Media]], [[Std Mobile Device]] and [[Std Mobile Request]]; the window helper is [[Std Mobile Paging]]. The example is [[Toolbox Example]].

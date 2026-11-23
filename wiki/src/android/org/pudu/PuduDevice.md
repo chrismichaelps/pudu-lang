@@ -55,6 +55,13 @@ Depends on `android.os.Build`, `android.net.ConnectivityManager` and `NetworkCap
 - **Q:** Why is the network permission declared without a prompt? **A:** It is a normal permission, granted at install. Declaring it for every program costs nothing at run time and needs no user decision.
 - **Q:** Why does a missing active network answer at once? **A:** The default-network callback reports only changes. A program that starts watching while offline would otherwise wait with no answer.
 
+## Services (#989)
+
+- Battery: read from the sticky ACTION_BATTERY_CHANGED intent, answered as POWERED 39 with the charge state and the level in percent.
+- Brightness: the window's screen brightness, restored when the activity leaves the front.
+- Orientation: the activity's requested orientation, from the code 0 any, 1 portrait, 2 landscape.
+- Motion: the SensorManager accelerometer, converted from meters per second squared to milli-g, reported as SENSED 40.
+
 ## Referenced by
 
 [[src/android/org/pudu/_MOC]] · [[PuduBridge]] · [[PuduActivity]] · [[pudu-ios-device]] · [[Std Mobile Device]] · [[About Example]] · [[NATIVE-MOBILE]]

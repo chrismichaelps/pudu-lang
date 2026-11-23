@@ -91,6 +91,13 @@ Implements the four symbols of [[Std Mobile Host]]. Its streams come from [[Std 
 
 - **Q:** Why line-buffer stdout rather than flush after each report? **A:** A report added later without its own flush would otherwise sit in the buffer when the console is not a terminal, and a test waiting for it would time out; line buffering covers every report at once. _Rejected:_ a flush after each print, which each new report would have to remember.
 
+## Services (#989)
+
+- Includes `pudu_ios_notify.h` and `pudu_ios_media.h`. The frameworks they use are linked by [[Backend Toolchain App]].
+- `pudu_notify_launch` runs at launch. It sets the notification delegate, so a banner shows while the application is in front and a tap queues NOTIFIED, including the tap that launched the application.
+- Eleven dispatch rows route codes 63 to 73 to the notification, authentication, media and device handlers.
+- `PUDU_UI_SERVICES_TEST` selects the services self-test in the table of self-tests.
+
 ## Referenced by
 
 [[Native Mobile Targets]] · [[Std Mobile Host]] · [[iOS Simulator Run]] · [[Backend Toolchain App]] · [[Native First Light Delivery]] · [[Native Controls Delivery]] · [[Native iOS Scrolling Delivery]] · [[Native iOS Theming Delivery]] · [[Native iOS Recycling Delivery]] · [[Native iOS Materials Delivery]] · [[Native iOS Capabilities Delivery]] · [[Native iOS Refresh Delivery]]

@@ -46,6 +46,10 @@ Depends on UIKit for the node types, on [[iOS Host Stream]] for the reader, `pud
 - **Q:** Why move the codes and node table out of the host file? **A:** Capability headers need to read node ids and kinds for their own instructions; sharing them keeps each instruction's handler beside its capability and the host file under the size limit.
 - **Q:** Why do removed slots hold `NSNull` rather than being deleted? **A:** The node id is the index a later stream names. Keeping the slot lets a reference to a removed node be refused as never created, and lets CREATE reuse the same index.
 
+## Services (#989)
+
+Codes 63 to 73 are the eleven requests of [[Std Mobile Request]], each with the word layout given there. The instruction bound is 74 (INSTRUCTIONS 74). Refusals for brightness above 100, orientation codes above 2 and sense flags above 1 are made by [[pudu-ios-device]].
+
 ## Referenced by
 
 [[src/cbits/_MOC]] · [[iOS Host Adapter]] · [[iOS Host Stream]] · [[pudu_ios_navigation.h]] · [[pudu_ios_refresh.h]] · [[pudu_ios_fetch.h]] · [[Std Mobile Stream]] · [[Native iOS Navigation Delivery]] · [[Native iOS Refresh Delivery]]

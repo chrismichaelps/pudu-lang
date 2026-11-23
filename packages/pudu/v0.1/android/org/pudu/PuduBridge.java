@@ -332,6 +332,17 @@ public final class PuduBridge {
   static void awake(boolean on) { PuduDevice.awake(on); }
   static void locate(int tag, int accuracy) { PuduLocation.locate(tag, accuracy); }
   static void track(boolean on, int accuracy, int distance) { PuduLocation.track(on, accuracy, distance); }
+  static void notify(int id, long delay, String title, String body) { PuduNotify.schedule(id, delay, title, body); }
+  static void unnotify(int id) { PuduNotify.cancel(id); }
+  static void authenticate(int tag, String reason) { PuduAuth.authenticate(tag, reason); }
+  static void browse(int tag, String url) { PuduMedia.browse(tag, url); }
+  static void speak(int tag, int rate, String language, String text) { PuduMedia.speak(tag, rate, language, text); }
+  static void hush() { PuduMedia.hush(); }
+  static void battery(int tag) { PuduDevice.battery(tag); }
+  static void brightness(int percent) { PuduDevice.brightness(percent); }
+  static void orientation(int code) { PuduDevice.orientation(code); }
+  static void sense(boolean on, int interval) { PuduDevice.sense(on, interval); }
+  static void pickImage(int tag) { PuduMedia.pickImage(tag); }
   static void tabs(int[] ids, String[] names, int[] counts, int[] routes, View[] bodies, boolean[] fills, String[] titles, int selected,
       boolean hasSheet, int sheet, View sheetBody, boolean sheetFills) {
     PuduTabs.show(ids, names, counts, routes, bodies, fills, titles, selected, hasSheet, sheet, sheetBody, sheetFills);

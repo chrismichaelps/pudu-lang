@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { spawn, spawnSync } from "node:child_process";
-import { existsSync, mkdtempSync, mkdirSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
+import { existsSync, mkdtempSync, mkdirSync, readFileSync, rmSync, statSync, writeFileSync, writeSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -13,6 +13,13 @@ const simulatorTimeout = 300_000;
 const bootTimeout = 600_000;
 const appBuildTimeout = 300_000;
 const launchAttempts = 2;
+
+/* A line written to stdout before the next step starts. Every step blocks the
+   event loop, and stdout to a pipe is otherwise written only when the loop
+   runs, so a log read during the run would lag behind it. */
+function say(line) {
+  writeSync(1, `${line}\n`);
+}
 
 const repository = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 // The counter imports Std.Mobile from this checkout, whichever compiler runs.
@@ -55,7 +62,7 @@ if (!compiler || (mode && mode !== "--require-simulator") || extra.length) {
 }
 function unavailable(reason) {
   if (mode === "--require-simulator") throw new Error(reason);
-  console.log(`SKIP iOS simulator smoke: ${reason}`);
+  say(`SKIP iOS simulator smoke: ${reason}`);
 }
 const xcrun = process.env.PUDU_XCRUN || "xcrun";
 const identifier = `org.pudu.MobileForeignSmoke.${randomUUID()}`;
@@ -173,7 +180,7 @@ int main(int argc, char **argv) {
     installed = true;
     const lines = launch(device, identifier, "PUDU_SMOKE", "PUDU_SMOKE_STATUS");
     assert.deepEqual(lines, [...expected.split("\n"), "PUDU_SMOKE_STATUS 0"]);
-    console.log(`${expected}\nPASS iOS simulator smoke (${device})`);
+    say(`${expected}\nPASS iOS simulator smoke (${device})`);
     const apps = { run, launch, uninstall: uninstallFromReusedDevice, xcrun, compiler, identifier, simulatorTimeout };
     objectiveCSmoke(apps, device, root, simulatorClang);
     swiftSmoke(apps, device, root, simulatorClang);
@@ -246,7 +253,7 @@ int main(int argc, char **argv) {
       const asked = counts();
       assert.equal(asked.profile, 1, `profile was requested ${asked.profile} times`);
       assert.equal(asked.limited, 2, `limited was requested ${asked.limited} times`);
-      console.log("PASS iOS Remote requests: profile once, limited twice");
+      say("PASS iOS Remote requests: profile once, limited twice");
     });
     withFetchServer((base, counts) => {
       // A bundled and a served image show at their own pixel size, a missing
@@ -259,7 +266,7 @@ int main(int argc, char **argv) {
       }]);
       const asked = counts();
       assert.equal(asked.photo, 1, `the photo was requested ${asked.photo} times`);
-      console.log("PASS iOS Gallery requests: photo once");
+      say("PASS iOS Gallery requests: photo once");
     });
     // The copied text pastes back, a URL no app handles reports false, the
     // share sheet shows and its cancellation reports false, and the status
@@ -311,6 +318,20 @@ int main(int argc, char **argv) {
         layout: ["PUDU_LOCATION answered yes"],
       },
     ], "where");
+    // The battery, authentication and speech each answer once; the simulator
+    // has no passcode, so the person cannot be confirmed, and no accelerometer.
+    mobileApp(device, "Toolbox", [{
+      environment: { SIMCTL_CHILD_PUDU_UI_SELFTEST: "0", SIMCTL_CHILD_PUDU_UI_SERVICES_TEST: "1" },
+      labels: [/^Battery: (unknown|unplugged|charging|full|\d+% \w+)$/u, "Authenticated: false", "Spoke: true", "Motion: none",
+        "Photo: none", "Reminders tapped: 0"],
+      layout: ["PUDU_SERVICES authenticated yes powered yes spoke yes"],
+    }], "toolbox");
+    refusedApp(device, root, "brightness above 100",
+      "import Std.Mobile.Host as Host\nimport Std.Mobile.Request as Request", `  Host.apply(bytesOf(Request.brightness([], 101u32)))`,
+      /pudu: a view stream set brightness to 101/u);
+    refusedApp(device, root, "unknown orientation",
+      "import Std.Mobile.Host as Host\nimport Std.Mobile.Request as Request", `  Host.apply(bytesOf(Request.orientation([], 3u32)))`,
+      /pudu: a view stream locked unknown orientation 3/u);
     refusedApp(device, root, "unknown location accuracy",
       "import Std.Mobile.Host as Host\nimport Std.Mobile.Stream as Stream", `  Host.apply(bytesOf(Stream.locate([], 1u32, 7u32)))`,
       /pudu: a view stream used unknown location accuracy 7/u);
@@ -423,7 +444,7 @@ function familyMatrix(runtime) {
     try {
       run(xcrun, ["simctl", "bootstatus", device, "-b"], bootTimeout);
       for (const example of Object.keys(familyRuns)) familyApps(device, example);
-      console.log(`PASS iOS ${family} matrix (${type.name}, ${runtime.name})`);
+      say(`PASS iOS ${family} matrix (${type.name}, ${runtime.name})`);
     } finally {
       deletePrivateDevice(device);
     }
@@ -445,7 +466,7 @@ function fallbackGlass(runtimes) {
   const older = runtimes.find((item) =>
     item.isAvailable && item.identifier.startsWith("com.apple.CoreSimulator.SimRuntime.iOS-") && Number(item.version.split(".")[0]) < 26);
   if (!older) {
-    console.log("SKIP iOS material fallback: no runtime older than iOS 26 is installed");
+    say("SKIP iOS material fallback: no runtime older than iOS 26 is installed");
     return;
   }
   const phone = older.supportedDeviceTypes.find((item) => item.productFamily === "iPhone");
@@ -454,7 +475,7 @@ function fallbackGlass(runtimes) {
   try {
     run(xcrun, ["simctl", "bootstatus", device, "-b"], bootTimeout);
     mobileApp(device, "Glass", [glassRun("blur")]);
-    console.log(`PASS iOS material fallback (${older.name})`);
+    say(`PASS iOS material fallback (${older.name})`);
   } finally {
     deletePrivateDevice(device);
   }
@@ -481,23 +502,35 @@ function refuseOccupiedOutput(scratch) {
   const build = ["build", source, "--native", "--target", "ios-simulator-arm64", "--app", "-o", occupied];
   assert.throws(() => run(resolve(compiler), build, appBuildTimeout), /E6006.*application output already exists/s);
   assert.equal(readFileSync(marker, "utf8"), "existing data");
-  console.log("PASS iOS occupied application output refused");
+  say("PASS iOS occupied application output refused");
 }
 
 /* An example from examples/mobile, built only from Pudu with the iOS host
    adapter and run once per entry of `runs`: the host feeds it input from the
    entry's environment, asks it to stop, and reports its labels, its status
    and the time from main to the first frame. */
+/* Apps already built, by example: the family matrix installs the same build
+   on every device rather than compiling it once per family. */
+const builtApps = new Map();
+process.on("exit", () => {
+  for (const root of builtApps.values()) rmSync(root, { recursive: true, force: true });
+});
+
 function mobileApp(device, example, runs, directory = "", bundle = `org.pudu.${example}`) {
-  const root = mkdtempSync(join(tmpdir(), `pudu-ios-${example.toLowerCase()}-`));
+  const key = join(directory, example);
+  const reused = builtApps.has(key);
+  const root = reused ? builtApps.get(key) : mkdtempSync(join(tmpdir(), `pudu-ios-${example.toLowerCase()}-`));
+  builtApps.set(key, root);
   const app = join(root, `${example}.app`);
   let installed = false;
   try {
     const build = ["build", join(repository, "examples", "mobile", directory, `${example}.pudu`),
       "--native", "--target", "ios-simulator-arm64", "--app", "-o"];
     // Each long step announces itself, so a slow step reads as progress in the log, not a hang.
-    console.log(`BUILD iOS ${example}`);
-    run(resolve(compiler), [...build, app], appBuildTimeout);
+    if (!reused) {
+      say(`BUILD iOS ${example}`);
+      run(resolve(compiler), [...build, app], appBuildTimeout);
+    }
     const executable = join(app, example);
     run(xcrun, ["simctl", "install", device, app], simulatorTimeout);
     installed = true;
@@ -515,20 +548,16 @@ function mobileApp(device, example, runs, directory = "", bundle = `org.pudu.${e
         `${example} did not show ${labels.join(", ")}:\n${lines.join("\n")}`);
       assert.ok(lines.includes("PUDU_PROGRAM_STATUS 0"), `${example} did not finish:\n${lines.join("\n")}`);
       if (layout) {
-        assert.deepEqual(lines.filter((line) => /^PUDU_(VIEWPORT|KEYBOARD|THEME|LIST|MATERIAL|ALERT|HAPTIC|ACCESS|MOTION|NAV|REFRESH|FETCH|IMAGE|SYSTEM|PERMISSION|TABS|DEVICE|LOCATION) /.test(line)), layout,
+        assert.deepEqual(lines.filter((line) => /^PUDU_(VIEWPORT|KEYBOARD|THEME|LIST|MATERIAL|ALERT|HAPTIC|ACCESS|MOTION|NAV|REFRESH|FETCH|IMAGE|SYSTEM|PERMISSION|TABS|DEVICE|LOCATION|SERVICES) /.test(line)), layout,
           `${example} did not report the expected layout and theme:\n${lines.join("\n")}`);
       }
       const firstFrame = lines.find((line) => line.startsWith("PUDU_FIRST_FRAME_MS "));
       assert.ok(firstFrame, `${example} reported no first frame:\n${lines.join("\n")}`);
-      console.log(`PASS iOS ${example}: ${labels.join(", ")}, first frame ${firstFrame.split(" ")[1]} ms from main, `
+      say(`PASS iOS ${example}: ${labels.join(", ")}, first frame ${firstFrame.split(" ")[1]} ms from main, `
         + `executable ${statSync(executable).size} bytes`);
     }
   } finally {
-    try {
-      if (installed) uninstallFromReusedDevice(device, bundle);
-    } finally {
-      rmSync(root, { recursive: true, force: true });
-    }
+    if (installed) uninstallFromReusedDevice(device, bundle);
   }
 }
 
@@ -557,7 +586,7 @@ ${body}
     const output = launched.stdout + launched.stderr;
     assert.match(output, refusal);
     assert.doesNotMatch(output, /PUDU_FIRST_FRAME_MS|PUDU_PROGRAM_STATUS 0/u);
-    console.log(`PASS iOS ${what} refused`);
+    say(`PASS iOS ${what} refused`);
   } finally {
     uninstallFromReusedDevice(device, bundle);
   }
@@ -568,7 +597,7 @@ ${body}
 function launch(device, bundle, prefix, status, environment = {}) {
   const failures = [];
   for (let attempt = 1; attempt <= launchAttempts; attempt += 1) {
-    console.log(`LAUNCH iOS ${bundle} attempt ${attempt}`);
+    say(`LAUNCH iOS ${bundle} attempt ${attempt}`);
     try {
       const output = run(xcrun, ["simctl", "launch", "--console-pty", device, bundle], simulatorTimeout,
         { ...process.env, ...environment });

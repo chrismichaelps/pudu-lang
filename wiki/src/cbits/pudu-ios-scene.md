@@ -43,6 +43,10 @@ Depends on UIKit for the root controller, the trait collection and the notificat
 - **Q:** Why report lifecycle as events rather than as state? **A:** Each transition is a one-shot change the program reacts to in order. A stored state would need the program to compare it with the last value it saw.
 - **Q:** Why report a size only when it changes? **A:** A layout pass repeats for reasons that leave the scene unchanged, and the program lays out again on every event. See [[Std Mobile Scene]].
 
+## Services (#989)
+
+The static `pudu_orientation_mask` holds the mask that the orientation request sets. It starts as all orientations. `supportedInterfaceOrientations` returns it, so the platform honors the lock. The codes are 0 all, 1 portrait and 2 landscape, mapped by [[pudu-ios-device]].
+
 ## Referenced by
 
 [[src/cbits/_MOC]] · [[iOS Host Adapter]] · [[Std Mobile Scene]] · [[Native iOS Capabilities Delivery]] · [[Native iOS Refresh Delivery]]

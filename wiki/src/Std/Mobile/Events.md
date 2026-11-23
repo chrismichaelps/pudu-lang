@@ -97,6 +97,18 @@ Depends on [[Std Mobile View]] for the `Event` type and its constructors, on [[S
 
 - **Q:** Why are seconds two words rather than one? **A:** Seconds since the epoch do not fit one 32-bit word; two words keep the 64-bit value exact. _Rejected:_ a float value.
 
+## Services (#989)
+
+- NOTIFIED 35: tag = the id of a notification the person tapped, also when the tap launched the application. No detail or text. Decodes to `Notified(id)`.
+- AUTHENTICATED 36: tag; detail 1 confirmed, 0 not (failed, cancelled, or no biometrics or passcode set). Decodes to `Authenticated(tag, Bool)`.
+- BROWSED 37: tag; no detail. Decodes to `Browsed(tag)`.
+- SPOKE 38: tag; detail 1 finished, 0 interrupted. Decodes to `Spoke(tag, Bool)`.
+- POWERED 39: tag; detail is the charge state (0 unknown, 1 unplugged, 2 charging, 3 full); one word is the level in percent, -1 when unknown. Decodes through `Device.power` to `Powered(tag, Device.Power)`.
+- SENSED 40: tag 0; three signed words are the acceleration on x, y and z in milli-g. Decodes through `Device.motion` to `Sensed(Device.Motion)`.
+- IMAGE_PICKED 41: tag; detail 1 with the text as the path of a copy in the application's temporary directory, or detail 0 with empty text when the person cancelled. Decodes to `ImagePicked(tag, Option[Str])`. The text is carried by `carriesText`.
+
+Malformed POWERED and SENSED shapes decode to Stopped.
+
 ## Referenced by
 
 [[src/Std/_MOC]] · [[Std Mobile View]] · [[Std Mobile Host]] · [[Std Mobile Navigation]] · [[pudu_ios_navigation.h]] · [[pudu_ios_refresh.h]] · [[Std Mobile Control]] · [[pudu-ios-values]]

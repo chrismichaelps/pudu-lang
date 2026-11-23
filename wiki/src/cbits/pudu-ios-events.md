@@ -54,6 +54,10 @@ queues the stop. The host still delivers events in FIFO order.
 
 - **Q:** Why a separate header? **A:** The queue is its own responsibility, and the host file must stay within its line budget as list support is added.
 
+## Services (#989)
+
+Events 35 to 41 (NOTIFIED, AUTHENTICATED, BROWSED, SPOKE, POWERED, SENSED and IMAGE_PICKED) are queued through the event channel. IMAGE_PICKED carries its file path on the text channel, as CHANGED and PASTED do. The decoders are in [[Std Mobile Events]].
+
 ## Referenced by
 
 [[src/cbits/_MOC]] · [[iOS Host Adapter]] · [[iOS Host List]] · [[Native iOS Recycling Delivery]] · [[iOS Host Refresh]]

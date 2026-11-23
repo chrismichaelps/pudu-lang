@@ -264,6 +264,11 @@ STARTTLS use [[Std Tls]]. [[Std Compress Gzip]] delegates to [[Eval Compress]] a
 - [[Std Mobile Storage]] — plain and secure key-value storage as commands with a reported read (#980).
 - [[Std Mobile Device]] — device facts, network reachability and keep-awake as commands and answers (#983).
 - [[Std Mobile Location]] — location requests and position answers, one-shot and tracked (#986).
+- [[Std Mobile Notify]] — local notification requests, scheduled by delay and cancelled by id (#989).
+- [[Std Mobile Auth]] — device-owner confirmation request (#989).
+- [[Std Mobile Media]] — in-app browser, speech and image picking requests (#989).
+- [[Std Mobile Paging]] — pure window start helper moved out of the view (#989).
+- [[Std Mobile Request]] — instruction writers for codes 63 to 73 (#989).
 - [[Std Num]] — `parseInt` and `parseIntIn`, the public integer parser shared by the standard library (#980).
 - [[Std Mobile Events]] — host event decoding behind the mobile wait.
 - [[Std Mobile Navigation]] — native page stack and page sheet model.

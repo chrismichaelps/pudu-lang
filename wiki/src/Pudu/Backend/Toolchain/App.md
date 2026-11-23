@@ -110,3 +110,7 @@ The declared permissions of [[Pudu Backend Permissions]] add to the bundle. Each
 ## Device framework (#983)
 
 The iOS link adds the Network framework to `hostFrameworks`, for the path monitor that [[pudu-ios-device]] reads for reachability. The Android side needs only the `ACCESS_NETWORK_STATE` declaration in the manifest, which [[PuduDevice]] documents.
+
+## Service frameworks (#989)
+
+The iOS host always links LocalAuthentication, SafariServices, AVFoundation, PhotosUI and CoreMotion, in `hostFrameworks`. No program needs to request them; the host sources decide their use.

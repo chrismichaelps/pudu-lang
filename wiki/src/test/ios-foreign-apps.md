@@ -28,6 +28,9 @@ code. It was split from [[iOS Simulator Run]] so that both scripts stay under 50
 - The helper receives the `run`, `launch` and `uninstall` functions from
   [[iOS Simulator Run]] and does not start simulators itself. This keeps device lifecycle in
   one place and keeps this script small.
+- PASS lines are written synchronously with `writeSync`, for the same reason as
+  [[iOS Simulator Run]]: a CI log shows each result as it is produced rather than when the
+  event loop runs.
 - The framework is signed inside the app's `Frameworks` directory, so the `@rpath` lookup
   resolves at launch without the host linking it directly.
 - A simulator run that cannot start is reported with the same skip and required-mode rules as

@@ -808,3 +808,7 @@ The extra-source-files list adds `cbits/pudu_ios_device.h` ([[pudu-ios-device]])
 ## Location (#986)
 
 The extra-source-files list adds `cbits/pudu_ios_location.h` ([[pudu-ios-location]]) and `android/org/pudu/PuduLocation.java` ([[PuduLocation]]), so source distributions carry both. Resolved Grill Log: no added package dependency; CoreLocation is a system framework, linked only when a location permission kind is declared.
+
+## Service sources (#989)
+
+The package lists the new service sources with the existing host sources: `pudu_ios_media.h`, `pudu_android_services.h`, and the Java sources `PuduNotify.java` and `PuduMedia.java`, with the other service sources of [[Native Toolchain Host Sources]].

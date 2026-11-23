@@ -46,6 +46,10 @@ Depends on the shared runner in `Pudu.Compiler.Program.Common` and on the fixtur
 
 - **Q:** Why one spec for every mobile fixture? **A:** The fixtures share the same runner and the same exact-count contract, so one place states the expected count of each.
 
+## Services (#989)
+
+The fixture [[Uses Mobile Services]] (`test-fixtures/stdlib/UsesMobileServices.pudu`) expects 18 checks: the words of each of the eleven requests, the decoding of each of the seven events, and the refusal of a malformed POWERED and a malformed SENSED.
+
 ## Referenced by
 
 [[Uses Mobile Memo]] · [[Uses Mobile Navigation]] · [[Uses Mobile Refresh]] · [[Uses Mobile View]] · [[Eval Data Tests]]

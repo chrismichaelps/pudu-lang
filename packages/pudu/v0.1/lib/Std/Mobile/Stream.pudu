@@ -389,8 +389,8 @@ fn texted(out: Array[UInt8], code: UInt32, node: UInt32, value: Str) -> Array[UI
   bytes
 }
 
-// A length-prefixed UTF-8 field inside an instruction.
-fn field(out: Array[UInt8], content: Str) -> Array[UInt8] {
+/// `out` followed by a length-prefixed UTF-8 field of an instruction.
+export fn field(out: Array[UInt8], content: Str) -> Array[UInt8] {
   let raw = content.toBytes().toArray()
   var bytes = words(out, [count(raw.length())])
   for octet in raw {
@@ -408,8 +408,8 @@ fn chosen(out: Array[UInt8], choices: &Array[(UInt32, Str)]) -> Array[UInt8] {
   bytes
 }
 
-// Little-endian words appended to the stream.
-fn words(out: Array[UInt8], values: Array[UInt32]) -> Array[UInt8] {
+/// `out` followed by `values` as little-endian words.
+export fn words(out: Array[UInt8], values: Array[UInt32]) -> Array[UInt8] {
   var bytes = out
   for value in values {
     for octet in writeU32LE(value) {

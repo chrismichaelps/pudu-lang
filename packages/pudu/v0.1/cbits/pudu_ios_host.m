@@ -34,6 +34,8 @@
 #include "pudu_ios_storage.h"
 #include "pudu_ios_device.h"
 #include "pudu_ios_location.h"
+#include "pudu_ios_notify.h"
+#include "pudu_ios_media.h"
 #include "pudu_ios_capability_test.h"
 
 /* Each node's color role from COLOR, or PUDU_ROLE_DEFAULT. */
@@ -336,6 +338,10 @@ static void (*const pudu_instruction_table[PUDU_UI_INSTRUCTIONS])(pudu_reader *)
   [PUDU_UI_STORE_READ] = pudu_do_store_read, [PUDU_UI_STORE_WRITE] = pudu_do_store_write, [PUDU_UI_STORE_REMOVE] = pudu_do_store_remove,
   [PUDU_UI_DEVICE] = pudu_do_device, [PUDU_UI_NETWORK] = pudu_do_network, [PUDU_UI_AWAKE] = pudu_do_awake,
   [PUDU_UI_LOCATE] = pudu_do_locate, [PUDU_UI_TRACK] = pudu_do_track,
+  [PUDU_UI_NOTIFY] = pudu_do_notify, [PUDU_UI_UNNOTIFY] = pudu_do_unnotify, [PUDU_UI_AUTHENTICATE] = pudu_do_authenticate,
+  [PUDU_UI_BROWSE] = pudu_do_browse, [PUDU_UI_SPEAK] = pudu_do_speak, [PUDU_UI_HUSH] = pudu_do_hush,
+  [PUDU_UI_BATTERY] = pudu_do_battery, [PUDU_UI_BRIGHTNESS] = pudu_do_brightness, [PUDU_UI_ORIENTATION] = pudu_do_orientation,
+  [PUDU_UI_SENSE] = pudu_do_sense, [PUDU_UI_PICK_IMAGE] = pudu_do_pick_image,
 };
 
 /* Applies one commit: every instruction in order, in one call. */
@@ -391,7 +397,7 @@ static const pudu_self_test pudu_self_tests[] = {
   { "PUDU_UI_FETCH_TEST", pudu_run_fetch }, { "PUDU_UI_REFRESH_TEST", pudu_run_refresh },
   { "PUDU_UI_MATERIAL_TEST", pudu_run_material }, { "PUDU_UI_LIST_TEST", pudu_run_list },
   { "PUDU_UI_THEME_TEST", pudu_run_theme }, { "PUDU_UI_KEYBOARD_TEST", pudu_run_keyboard },
-  { "PUDU_UI_LOCATION_TEST", pudu_test_location },
+  { "PUDU_UI_LOCATION_TEST", pudu_test_location }, { "PUDU_UI_SERVICES_TEST", pudu_test_services },
 };
 
 @interface PuduAppDelegate : UIResponder <UIApplicationDelegate>
@@ -411,6 +417,7 @@ static const pudu_self_test pudu_self_tests[] = {
   pudu_alert_presenter = controller;
   pudu_observe_lifecycle();
   pudu_observe_memory();
+  pudu_notify_launch();
   pudu_target = [PuduTarget new];
   /* Line-buffered output: a report reaches the console as soon as it is
      written, so a reader waiting on a line never waits on the buffer. */

@@ -47,6 +47,9 @@ extra-source-files: cbits/pudu_ffi_internal.h
                     cbits/pudu_ios_storage.h
                     cbits/pudu_ios_device.h
                     cbits/pudu_ios_location.h
+                    cbits/pudu_ios_notify.h
+                    cbits/pudu_ios_media.h
+                    cbits/pudu_android_services.h
                     cbits/pudu_ios_capability_test.h
                     cbits/pudu_android_host.c
                     cbits/pudu_android_capabilities.h
@@ -82,6 +85,10 @@ extra-source-files: cbits/pudu_ffi_internal.h
                     android/org/pudu/PuduStore.java
                     android/org/pudu/PuduDevice.java
                     android/org/pudu/PuduLocation.java
+                    android/org/pudu/PuduNotify.java
+                    android/org/pudu/PuduAlarm.java
+                    android/org/pudu/PuduAuth.java
+                    android/org/pudu/PuduMedia.java
                     cbits/pudu_audio.c
                     cbits/pudu_audio_stream.c
                     cbits/pudu_audio.h

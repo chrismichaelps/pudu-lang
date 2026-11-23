@@ -1,5 +1,6 @@
 module Std.Mobile.Device
 
+import Std.Mobile.Request as Request
 import Std.Mobile.Stream as Stream
 
 /// The platform a program runs on.
@@ -14,6 +15,23 @@ export type Facts = { platform: Platform, version: Str, model: Str, locale: Str,
 /// The kind of path the device reaches the network through; Wired stands for
 /// a wired path and any other interface.
 export type Link = Offline | Wifi | Cellular | Wired
+
+/// How the battery stands: unknown, running on battery, charging, or full.
+export type Charge = Unknown | Unplugged | Charging | Full
+
+/// The battery's level in percent, -1 when unknown, and how it stands.
+export type Power = { level: Int, charge: Charge }
+
+/// Acceleration on each axis in thousandths of standard gravity; a device
+/// lying flat and still reads about 0, 0, -1000.
+export type Motion = { x: Int, y: Int, z: Int }
+
+/// Which way the screen may turn: any way, upright only, or sideways only.
+export type Orientation = Any | Portrait | Landscape
+
+/// Charge codes as POWERED carries them, and orientation codes as ORIENTATION does.
+const CHARGES: Map[UInt32, Charge] = mapOf([(0u32, Unknown), (1u32, Unplugged), (2u32, Charging), (3u32, Full)])
+const ORIENTATIONS: Map[Orientation, UInt32] = mapOf([(Any, 0u32), (Portrait, 1u32), (Landscape, 2u32)])
 
 /// Platform names and link codes as DESCRIBED and NETWORKED carry them.
 const PLATFORMS: Map[Str, Platform] = mapOf([("ios", Ios), ("android", Android)])
@@ -53,6 +71,59 @@ export fn linkOf(code: UInt32) -> Option[Link] { LINKS.get(code) }
 export fn linkCode(link: Link) -> UInt32 {
   match CODES.get(link) {
     case Some(code) => code
+    case None => 0u32
+  }
+}
+
+/// A commit asking for the battery; it answers as `Powered(tag, power)`.
+export fn battery(tag: UInt32) -> Bytes { bytesOf(Request.battery([], tag)) }
+
+/// A commit setting the screen's brightness, clamped to 0 through 100
+/// percent. It holds while the application is in front.
+export fn brightness(percent: Int) -> Bytes {
+  let bounded = if percent < 0 { 0 } else if percent > 100 { 100 } else { percent }
+  bytesOf(Request.brightness([], clamped(bounded)))
+}
+
+/// A commit locking which way the screen may turn.
+export fn orientation(lock: Orientation) -> Bytes {
+  let code = match ORIENTATIONS.get(lock) {
+    case Some(found) => found
+    case None => 0u32
+  }
+  bytesOf(Request.orientation([], code))
+}
+
+/// A commit starting motion reports every `interval` milliseconds, or
+/// stopping them. While on, `Sensed(motion)` arrives at that pace; a device
+/// without an accelerometer reports nothing.
+export fn sense(on: Bool, interval: Int) -> Bytes { bytesOf(Request.sense([], flag(on), clamped(interval))) }
+
+/// The power POWERED carries: the charge code and the level as one word.
+export fn power(state: UInt32, values: &Array[Int32]) -> Option[Power] {
+  if values.length() != 1 {
+    return None
+  }
+  let charge = CHARGES.get(state) ?
+  let level = convertInteger[Int](values[0]) ?
+  Some(Power{level: level, charge: charge})
+}
+
+/// The motion SENSED carries as three words.
+export fn motion(values: &Array[Int32]) -> Option[Motion] {
+  if values.length() != 3 {
+    return None
+  }
+  let x = convertInteger[Int](values[0]) ?
+  let y = convertInteger[Int](values[1]) ?
+  let z = convertInteger[Int](values[2]) ?
+  Some(Motion{x: x, y: y, z: z})
+}
+
+// A count as a stream word; a negative count is written as 0.
+fn clamped(count: Int) -> UInt32 {
+  match convertInteger[UInt32](count) {
+    case Some(found) => found
     case None => 0u32
   }
 }

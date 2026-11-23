@@ -42,7 +42,7 @@ The platform names are read from the const table `PLATFORMS` of type `Map[Str, P
 - Every `describe` request carries a tag, and its `Described` answer carries the same tag.
 - Link codes and platform names come from constant tables. No code is chosen by an if-ladder.
 - Words for the network and keep-awake instructions carry one flag word: 1 to turn the setting on, 0 to turn it off. No other word is written.
-- The module imports only [[Std Mobile Stream]].
+- The module imports only [[Std Mobile Stream]] and [[Std Mobile Request]].
 
 ## Negative Logic
 
@@ -64,6 +64,16 @@ Depends on [[Std Mobile Stream]] for the DEVICE, NETWORK and AWAKE instructions,
 - **Q:** Why report only on a change of kind? **A:** A change of path within the same interface kind would wake the program with nothing new to act on.
 - **Q:** Why is keep-awake a standing setting rather than a timed lease? **A:** The platform already clears the setting when the app leaves the foreground. A timer would add a second owner for the same state, and the program knows when its reason has ended.
 
+## Services (#989)
+
+- `battery(tag: UInt32) -> Bytes`: BATTERY 69, answered by `Powered(tag, Power)`.
+- `brightness(percent: Int) -> Bytes`: BRIGHTNESS 70, clamped to 0 through 100 before the write. The setting holds while the application is in front.
+- `orientation(lock: Orientation) -> Bytes`: ORIENTATION 71; the code comes from a const table (Any 0, Portrait 1, Landscape 2).
+- `sense(on: Bool, interval: Int) -> Bytes`: SENSE 72 with the interval in milliseconds. While on, `Sensed(Motion)` arrives at that pace.
+- Types: `Charge = Unknown | Unplugged | Charging | Full`, `Power = { level: Int, charge: Charge }`, `Motion = { x: Int, y: Int, z: Int }`, `Orientation = Any | Portrait | Landscape`.
+- Decoders: `power(state: UInt32, values: &Array[Int32]) -> Option[Power]` and `motion(values: &Array[Int32]) -> Option[Motion]`.
+- The writers for battery, brightness, orientation and sense come from [[Std Mobile Request]]. DEVICE, NETWORK and AWAKE still come from [[Std Mobile Stream]].
+
 ## Referenced by
 
-[[src/Std/_MOC]] · [[Std Mobile View]] · [[Std Mobile Stream]] · [[Std Mobile Events]] · [[Std Mobile System]] · [[pudu-ios-device]] · [[PuduDevice]] · [[NATIVE-MOBILE]]
+[[src/Std/_MOC]] · [[Std Mobile View]] · [[Std Mobile Stream]] · [[Std Mobile Events]] · [[Std Mobile System]] · [[pudu-ios-device]] · [[PuduDevice]] · [[NATIVE-MOBILE]] · [[Std Mobile Request]] · [[Uses Mobile Services]]

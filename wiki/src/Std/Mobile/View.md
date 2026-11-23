@@ -30,7 +30,7 @@ The module imports [[Std Mobile Device]] for the `Facts` and `Link` types that `
 - `body(out: Array[UInt8], next: UInt32, free: Array[UInt32], view: &View) -> (Mounted, Array[UInt8])`: builds `view` with ids handed out from `next` and `free`, appends the words that build it to `out`, and answers the mounted tree with the extended stream. Nothing is shown as the screen's root; a navigation page shows the body instead.
 - `rebody(out: Array[UInt8], mounted: &Mounted, next: &View) -> (Mounted, Array[UInt8])`: appends the words that turn `mounted` into `next` to `out`. A root that changed kind or tag is built anew and the old subtree removed; no ROOT is written, so the caller reads the new root id from the result.
 - `unmount(out: Array[UInt8], mounted: &Mounted) -> (Array[UInt32], Array[UInt8])`: appends the REMOVE that detaches the whole tree, and answers the free ids with every id of the tree added, and the extended stream.
-- `windowStart(visible: UInt32, total: UInt32, size: UInt32) -> UInt32`: the `first` of a window of `size` items that places `visible` a quarter of the window from its start, clamped so the window never runs past `total`. Examples: (0, 100, 20) is 0; (50, 100, 20) is 45; (95, 100, 20) is 80; (3, 10, 20) is 0. A window should hold at least twice the items one screen shows; a smaller window moves at its edges more often.
+- `windowStart` moved to [[Std Mobile Paging]] (#989); this module no longer exports it.
 
 ## Images (#973)
 
@@ -111,6 +111,10 @@ Depends on [[Std Mobile Stream]] for the instruction words, on [[Std Mobile Even
 - **Q:** Why can a body be built without a root? **A:** A navigation page shows its body inside a page controller rather than as the screen's content; all pages share one id space with the rest of the view stream.
 - **Q:** Who owns the refreshing state? **A:** The program; a pull only reports, and the indicator follows the program's value.
 - **Q:** Why is equal-key reuse decided on the key text, not on the rendered trees? **A:** The key is the whole input of a top-level render, so an equal key means an equal subtree; comparing rendered trees is the cost that [[Native Render Skipping]] removes. _Rejected:_ rendering the new key and comparing it with the old tree on every reconcile.
+
+## Services (#989)
+
+The `Event` type gains seven constructors: `Notified(UInt32)`, `Authenticated(UInt32, Bool)`, `Browsed(UInt32)`, `Spoke(UInt32, Bool)`, `Powered(UInt32, Device.Power)`, `Sensed(Device.Motion)` and `ImagePicked(UInt32, Option[Str])`. Their decoders are in [[Std Mobile Events]]. The window helper `windowStart` is in [[Std Mobile Paging]]: the reconciler does not use it, and moving it keeps this module under the 500-line limit.
 
 ## Referenced by
 

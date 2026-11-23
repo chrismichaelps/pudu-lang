@@ -1,0 +1,9 @@
+module Std.Mobile.Auth
+
+import Std.Mobile.Request as Request
+
+/// A commit asking the person to confirm they own the device, with their
+/// biometrics or the device passcode; `reason` is the text the platform shows.
+/// It answers once as `Authenticated(tag, true)`, or `false` when the person
+/// failed or cancelled, or the device has no biometrics or passcode set.
+export fn authenticate(tag: UInt32, reason: Str) -> Bytes { bytesOf(Request.authenticate([], tag, reason)) }

@@ -84,6 +84,13 @@ export type Event
   | Described(UInt32, Device.Facts)
   | Networked(Device.Link)
   | Located(UInt32, Option[Location.Position])
+  | Notified(UInt32)
+  | Authenticated(UInt32, Bool)
+  | Browsed(UInt32)
+  | Spoke(UInt32, Bool)
+  | Powered(UInt32, Device.Power)
+  | Sensed(Device.Motion)
+  | ImagePicked(UInt32, Option[Str])
   | Stopped
 
 /// A node the platform shows: its id, the view it shows, and the nodes of
@@ -103,15 +110,6 @@ type Work = { next: UInt32, free: Array[UInt32], out: Array[UInt8], compared: In
 
 // A node updated in place, or a node its parent must replace.
 type Outcome = Kept(Work, Shown) | Replaced
-
-/// The first item of a window of `size` items that places `visible` a
-/// quarter of the window from its start, clamped to the end of the list.
-export fn windowStart(visible: UInt32, total: UInt32, size: UInt32) -> UInt32 {
-  let lead = size / 4u32
-  let start = if visible > lead { visible - lead } else { 0u32 }
-  let last = if total > size { total - size } else { 0u32 }
-  if start > last { last } else { start }
-}
 
 /// The tree for `view`, and the stream that builds it and shows it.
 export fn mount(view: &View) -> (Mounted, Bytes) {

@@ -47,6 +47,7 @@ public final class PuduActivity extends Activity {
     PuduBridge.start(this, surface, getResources().getDisplayMetrics().density, night(getResources().getConfiguration()),
         PuduBridge.testing);
     linked(getIntent());
+    PuduNotify.opened(getIntent());
   }
 
   /** A package built with PUDU_ANDROID_TEST_BUILD: debuggable and carrying
@@ -137,6 +138,7 @@ public final class PuduActivity extends Activity {
     super.onNewIntent(intent);
     setIntent(intent);
     linked(intent);
+    PuduNotify.opened(intent);
   }
 
   private static void linked(Intent intent) {
@@ -160,7 +162,15 @@ public final class PuduActivity extends Activity {
     super.onResume();
     PuduPermission.foreground = true;
     PuduPermission.resumed();
+    PuduMedia.resumed();
     PuduBridge.event(LIFECYCLE, 0, null, ACTIVE, null);
+  }
+
+  /** A result from an activity a request started: confirming the device owner, or picking an image. */
+  @Override protected void onActivityResult(int code, int result, Intent data) {
+    super.onActivityResult(code, result, data);
+    PuduAuth.result(code, result == RESULT_OK);
+    PuduMedia.result(code, result == RESULT_OK, data);
   }
 
   @Override public void onRequestPermissionsResult(int code, String[] permissions, int[] results) {

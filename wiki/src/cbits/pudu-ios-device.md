@@ -55,6 +55,14 @@ Depends on Foundation (`NSLocale`, `NSTimeZone`, `NSString`), UIKit (`UIDevice`,
 - **Q:** Why does the monitor report only on a change of link kind? **A:** Path updates for the same interface kind carry no new information for the program. Reporting them would only wake the program.
 - **Q:** Why does keep-awake hold no timer? **A:** The platform clears the idle-timer setting when the app leaves the foreground. The host sets the flag as asked and leaves the lifetime to the program.
 
+## Services (#989)
+
+- Battery: UIDevice battery monitoring is enabled for the request. POWERED 39 reports the charge state and the level in percent, -1 when unknown. The simulator reports unknown.
+- Brightness: the UIScreen brightness is set from the percent. The platform's own value returns when the application leaves the front. A percent above 100 is refused with `set brightness to <n>`.
+- Orientation: the static mask `pudu_orientation_mask` in [[pudu-ios-scene]] is set from the code, and the root controller is asked to update its geometry. A code above 2 is refused with `locked unknown orientation <n>`.
+- Motion: a CMMotionManager accelerometer on the main queue reports SENSED 40 in milli-g at the requested interval. The simulator has no accelerometer, so nothing is reported there. A flag above 1 is refused with `set motion sensing to <n>`.
+- Self-test counter: `pudu_powered_count` counts POWERED reports. The services self-test in [[pudu-ios-media]] reads it.
+
 ## Referenced by
 
 [[src/cbits/_MOC]] · [[iOS Host Adapter]] · [[Std Mobile Device]] · [[Std Mobile Stream]] · [[Std Mobile Events]] · [[About Example]] · [[Uses Mobile Device]] · [[NATIVE-MOBILE]]

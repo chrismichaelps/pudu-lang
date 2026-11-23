@@ -1,0 +1,56 @@
+module Std.Mobile.Request
+
+import Std.Mobile.Stream {field, words}
+
+/// Instruction codes of the platform requests that are not about the view:
+/// notifications, authentication, the browser, speech, the battery, the
+/// screen, motion and the photo picker. They share the view stream's code
+/// space and words.
+const NOTIFY: UInt32 = 63u32
+const UNNOTIFY: UInt32 = 64u32
+const AUTHENTICATE: UInt32 = 65u32
+const BROWSE: UInt32 = 66u32
+const SPEAK: UInt32 = 67u32
+const HUSH: UInt32 = 68u32
+const BATTERY: UInt32 = 69u32
+const BRIGHTNESS: UInt32 = 70u32
+const ORIENTATION: UInt32 = 71u32
+const SENSE: UInt32 = 72u32
+const PICK_IMAGE: UInt32 = 73u32
+
+/// Schedules notification `id` to show `title` and `body` after `delay` seconds.
+export fn notify(out: Array[UInt8], id: UInt32, delay: UInt32, title: Str, body: Str) -> Array[UInt8] {
+  field(field(words(out, [NOTIFY, id, delay]), title), body)
+}
+
+/// Cancels notification `id`, pending or shown.
+export fn unnotify(out: Array[UInt8], id: UInt32) -> Array[UInt8] { words(out, [UNNOTIFY, id]) }
+
+/// Asks the person to confirm they own the device; AUTHENTICATED with `reported` answers.
+export fn authenticate(out: Array[UInt8], reported: UInt32, reason: Str) -> Array[UInt8] { field(words(out, [AUTHENTICATE, reported]), reason) }
+
+/// Shows `url` in an in-app browser; BROWSED with `reported` answers when it closes.
+export fn browse(out: Array[UInt8], reported: UInt32, url: Str) -> Array[UInt8] { field(words(out, [BROWSE, reported]), url) }
+
+/// Speaks `text` in `language` at `rate` percent; SPOKE with `reported` answers.
+export fn speak(out: Array[UInt8], reported: UInt32, rate: UInt32, language: Str, text: Str) -> Array[UInt8] {
+  field(field(words(out, [SPEAK, reported, rate]), language), text)
+}
+
+/// Stops speech.
+export fn hush(out: Array[UInt8]) -> Array[UInt8] { words(out, [HUSH]) }
+
+/// Asks for the battery's level and charge; POWERED with `reported` answers.
+export fn battery(out: Array[UInt8], reported: UInt32) -> Array[UInt8] { words(out, [BATTERY, reported]) }
+
+/// Sets the screen's brightness to `percent`.
+export fn brightness(out: Array[UInt8], percent: UInt32) -> Array[UInt8] { words(out, [BRIGHTNESS, percent]) }
+
+/// Locks the screen to orientation `code`: 0 any, 1 portrait, 2 landscape.
+export fn orientation(out: Array[UInt8], code: UInt32) -> Array[UInt8] { words(out, [ORIENTATION, code]) }
+
+/// Starts motion reports every `interval` milliseconds with 1, or stops them with 0.
+export fn sense(out: Array[UInt8], on: UInt32, interval: UInt32) -> Array[UInt8] { words(out, [SENSE, on, interval]) }
+
+/// Shows the photo picker; IMAGE_PICKED with `reported` answers.
+export fn pickImage(out: Array[UInt8], reported: UInt32) -> Array[UInt8] { words(out, [PICK_IMAGE, reported]) }

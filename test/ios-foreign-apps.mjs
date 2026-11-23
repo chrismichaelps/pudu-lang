@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { mkdirSync, writeFileSync } from "node:fs";
+import { mkdirSync, writeFileSync, writeSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { swiftExpected, swiftProgram, swiftSource } from "./swift-counter.mjs";
 
@@ -114,7 +114,7 @@ fn main() -> Int {
   run(resolve(compiler), ["build", source, "--native", "--target", "ios-simulator-arm64", "-o", library]);
   installAndCheck(apps, device, simulatorClang,
     { app, host, library, bundle, executable: "PuduObjc", marker: "PUDU_OBJC", expected, link: [] });
-  console.log(`${expected}\nPASS iOS Objective-C smoke`);
+  writeSync(1, `${expected}\nPASS iOS Objective-C smoke\n`);
 }
 
 /* A Swift library reached through its C entry points, embedded as a
@@ -147,7 +147,7 @@ export function swiftSmoke(apps, device, root, simulatorClang) {
   installAndCheck(apps, device, simulatorClang, {
     app, host: join(directory, "main.m"), library, bundle, executable: "PuduSwift", marker: "PUDU_SWIFT", expected,
     link: ["-Wl,-rpath,@executable_path/Frameworks"] });
-  console.log(`${expected}\nPASS iOS Swift entry points`);
+  writeSync(1, `${expected}\nPASS iOS Swift entry points\n`);
 }
 
 function installAndCheck(apps, device, simulatorClang, { app, host, library, bundle, executable, marker, expected, link }) {

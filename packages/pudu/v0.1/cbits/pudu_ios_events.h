@@ -19,7 +19,9 @@ static const uint64_t PUDU_UI_TAPPED = 1, PUDU_UI_STOPPED = 2, PUDU_UI_CHANGED =
                       PUDU_UI_OPENED = 25, PUDU_UI_SHARED = 26, PUDU_UI_PASTED = 27,
                       PUDU_UI_PERMISSIONED = 28, PUDU_UI_SELECTED = 29, PUDU_UI_LINKED = 30,
                       PUDU_UI_STORED = 31, PUDU_UI_DESCRIBED = 32, PUDU_UI_NETWORKED = 33,
-                      PUDU_UI_LOCATED = 34;
+                      PUDU_UI_LOCATED = 34, PUDU_UI_NOTIFIED = 35, PUDU_UI_AUTHENTICATED = 36,
+                      PUDU_UI_BROWSED = 37, PUDU_UI_SPOKE = 38, PUDU_UI_POWERED = 39, PUDU_UI_SENSED = 40,
+                      PUDU_UI_IMAGE_PICKED = 41;
 
 /* Run at the start of each wait, once the program has handled the event it
    was last handed; NULL until a capability needs it. */

@@ -53,6 +53,12 @@ Use `--require-simulator` to make an unavailable simulator a failure.
   on the machine (About's version, model, locale, zone and link); the count and
   order of labels must still match exactly.
 - The layout filter includes `PUDU_DEVICE` and `PUDU_LOCATION` lines.
+- Every line the suite prints goes through `say`, a synchronous write to stdout.
+  Each step blocks the event loop, and stdout to a pipe is otherwise written only
+  when the loop runs, so a CI log would lag behind or appear stuck.
+- Each example is built once and reused: the family matrix installs the build the
+  iPhone pass made instead of compiling again per family. Built apps are removed
+  when the process exits.
 
 ## Dependencies and consumers
 
@@ -76,6 +82,10 @@ Use `--require-simulator` to make an unavailable simulator a failure.
   only make the launch wait. Where a host calls the entry is its framework's
   choice.
 
+- **Q:** Why reuse builds across families? **A:** The simulator build of an example
+  does not depend on the device it is installed on; rebuilding it per family only adds
+  compile time on a runner already running two simulators, which pushed builds past
+  their timeout. _Rejected:_ a longer build timeout, which hides the duplicate work.
 - **Q:** Does the Objective-C bridge hold on iOS? **A:** `objectiveCSmoke` builds
   pools, blocks and a delegate for the simulator and requires the interpreter's
   output.
@@ -240,3 +250,11 @@ The Refresh example, `examples/mobile/Refresh.pudu` ([[Native Refresh Example]])
 Refusal: a stream whose REFRESH names a label node is refused before any controller changes. The process must abort with `pudu: refreshed a node that does not scroll: 0` for the label's node id, and no first frame may be reported.
 
 Resolved Grill Log: the refusal belongs to the host, which alone knows the node's kind, as for the list refusal above. Checking the lines alone would pass a screen whose indicator never started, so the run also compares the labels that show the pull counts and the insets.
+
+## Services run (#989)
+
+The Toolbox example, `examples/mobile/toolbox/Toolbox.pudu` ([[Toolbox Example]]), runs with `PUDU_UI_SERVICES_TEST` set and `PUDU_UI_SELFTEST` set to `0`. The script waits for the labels `Battery: <level or unknown>`, `Authenticated: false` (the simulator has no passcode), `Spoke: true` and `Motion: none` (the simulator has no accelerometer).
+
+The layout line `PUDU_SERVICES authenticated yes powered yes spoke yes` reports that an answer was queued for each request, whatever its value. The layout filter includes `SERVICES`.
+
+Refusals: a stream whose BRIGHTNESS word is 101 is refused with `pudu: a view stream set brightness to 101`, and an ORIENTATION code of 3 with `pudu: a view stream locked unknown orientation 3`.

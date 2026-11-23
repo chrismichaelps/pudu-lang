@@ -383,6 +383,12 @@ tags: [moc, module]
 - [[Uses Mobile Location]] — stdlib fixture for location requests and LOCATED answers (#986).
 - [[Where Example]] — device position from one-shot and tracked fixes on the simulator and Android (#986).
 - [[PuduLocation]] — Android device location, one-shot and tracked fixes (#986).
+- [[Uses Mobile Services]] — stdlib fixture for the notification, authentication, browser, speech, picker, battery, brightness, orientation and motion requests and answers (#989).
+- [[Toolbox Example]] — services toolbox: reminder, battery, authentication, speech, brightness, orientation and motion (#989).
+- [[PuduNotify]] — Android local notifications, scheduled by an alarm and reported on tap (#989).
+- [[PuduAlarm]] — Android receiver that posts a scheduled notification (#989).
+- [[PuduAuth]] — Android device-owner confirmation by biometric prompt or credential prompt (#989).
+- [[PuduMedia]] — Android in-app browser, speech and image picking (#989).
 - [[Pudu Backend Toolchain Assets]] — application asset listing, refused names and links, staging (#973).
 - [[Uses Mobile Controls]] — stdlib fixture for the value controls: build and change words, normalization and value events (#934).
 - [[Pudu Compiler Program Eval Data Spec]] — data evaluation spec, including the mobile fixture counts.

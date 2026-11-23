@@ -21,6 +21,7 @@
 #include "pudu_android_nodes.h"
 #include "pudu_android_capabilities.h"
 #include "pudu_android_routes.h"
+#include "pudu_android_services.h"
 #include "pudu_android_java.h"
 
 
@@ -220,6 +221,10 @@ static void (*const pudu_instruction_table[PUDU_UI_INSTRUCTIONS])(JNIEnv *, pudu
   [PUDU_UI_STORE_READ] = pudu_do_store_read, [PUDU_UI_STORE_WRITE] = pudu_do_store_write, [PUDU_UI_STORE_REMOVE] = pudu_do_store_remove,
   [PUDU_UI_DEVICE] = pudu_do_device, [PUDU_UI_NETWORK] = pudu_do_network, [PUDU_UI_AWAKE] = pudu_do_awake,
   [PUDU_UI_LOCATE] = pudu_do_locate, [PUDU_UI_TRACK] = pudu_do_track,
+  [PUDU_UI_NOTIFY] = pudu_do_notify, [PUDU_UI_UNNOTIFY] = pudu_do_unnotify, [PUDU_UI_AUTHENTICATE] = pudu_do_authenticate,
+  [PUDU_UI_BROWSE] = pudu_do_browse, [PUDU_UI_SPEAK] = pudu_do_speak, [PUDU_UI_HUSH] = pudu_do_hush,
+  [PUDU_UI_BATTERY] = pudu_do_battery, [PUDU_UI_BRIGHTNESS] = pudu_do_brightness, [PUDU_UI_ORIENTATION] = pudu_do_orientation,
+  [PUDU_UI_SENSE] = pudu_do_sense, [PUDU_UI_PICK_IMAGE] = pudu_do_pick_image,
   [PUDU_UI_OPTIONS] = pudu_do_options, [PUDU_UI_COUNT] = pudu_do_count, [PUDU_UI_MOMENT] = pudu_do_moment,
 };
 

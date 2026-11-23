@@ -153,6 +153,12 @@ Depends on no other module. Consumers: [[Std Mobile View]], which calls these fu
 - **Q:** Why one kind per control rather than one control kind with a sub-tag? **A:** The host dispatches on kind through its table, so a kind per control keeps each setter and refusal in one table entry. _Rejected:_ a generic control kind with a second tag word, which would make the host decode a tag inside every create.
 - **Q:** Why one signed word for a number? **A:** The program's Int32 reaches the stream as written, and the host reads the same word. _Rejected:_ a second sign word.
 
+## Services (#989)
+
+- `field(out, content: Str)` writes a length-prefixed UTF-8 text field and `words(out, values: Array[UInt32])` writes a run of little-endian words. Both are exported for [[Std Mobile Request]], which writes the device requests.
+- Codes 63 to 73 belong to [[Std Mobile Request]]: NOTIFY 63, UNNOTIFY 64, AUTHENTICATE 65, BROWSE 66, SPEAK 67, HUSH 68, BATTERY 69, BRIGHTNESS 70, ORIENTATION 71, SENSE 72 and PICK_IMAGE 73. The instruction bound is now 74.
+- The requests outside the view live in Request so that this module stays under the 500-line limit.
+
 ## Referenced by
 
-[[src/Std/_MOC]] · [[Std Mobile View]] · [[Std Mobile Theme]] · [[Std Mobile Control]] · [[Native Keyed Lists Delivery]] · [[Native iOS Scrolling Delivery]] · [[Native iOS Theming Delivery]] · [[Native iOS Recycling Delivery]] · [[Native iOS Materials Delivery]] · [[Native iOS Refresh Delivery]]
+[[src/Std/_MOC]] · [[Std Mobile View]] · [[Std Mobile Theme]] · [[Std Mobile Control]] · [[Native Keyed Lists Delivery]] · [[Native iOS Scrolling Delivery]] · [[Native iOS Theming Delivery]] · [[Native iOS Recycling Delivery]] · [[Native iOS Materials Delivery]] · [[Native iOS Refresh Delivery]] · [[Std Mobile Request]]

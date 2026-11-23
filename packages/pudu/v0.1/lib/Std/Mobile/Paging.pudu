@@ -1,0 +1,10 @@
+module Std.Mobile.Paging
+
+/// The first item of a window of `size` items that places `visible` a
+/// quarter of the window from its start, clamped to the end of the list.
+export fn windowStart(visible: UInt32, total: UInt32, size: UInt32) -> UInt32 {
+  let lead = size / 4u32
+  let start = if visible > lead { visible - lead } else { 0u32 }
+  let last = if total > size { total - size } else { 0u32 }
+  if start > last { last } else { start }
+}

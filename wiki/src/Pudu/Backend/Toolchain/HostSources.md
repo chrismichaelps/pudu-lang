@@ -75,3 +75,7 @@ The iOS host sources stage `pudu_ios_device.h` ([[pudu-ios-device]]) with the ot
 ## Location sources (#986)
 
 The iOS host sources stage `pudu_ios_location.h` ([[pudu-ios-location]]) with the other private headers, and the host translation unit includes it after the permission header. The Android sources stage `PuduLocation.java` ([[PuduLocation]]) with the other platform classes.
+
+## Services sources (#989)
+
+The iOS source list adds `pudu_ios_notify.h` and `pudu_ios_media.h`. The Android list adds `pudu_android_services.h` and the Java sources `PuduNotify.java`, `PuduAlarm.java`, `PuduAuth.java` and `PuduMedia.java`.

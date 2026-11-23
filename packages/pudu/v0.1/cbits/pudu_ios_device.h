@@ -5,6 +5,7 @@
    with DESCRIBED. NETWORK keeps a path monitor on the main queue that sends
    NETWORKED when watching starts and whenever the kind of link changes.
    AWAKE holds the idle timer off while the application is in front. */
+#import <CoreMotion/CoreMotion.h>
 #import <Network/Network.h>
 #import <UIKit/UIKit.h>
 #include <math.h>
@@ -13,6 +14,8 @@
 #include <stdlib.h>
 #include <sys/utsname.h>
 #include "pudu_ios_events.h"
+#include "pudu_ios_feedback.h"
+#include "pudu_ios_scene.h"
 #include "pudu_ios_stream.h"
 
 enum { PUDU_LINK_OFFLINE, PUDU_LINK_WIFI, PUDU_LINK_CELLULAR, PUDU_LINK_WIRED, PUDU_LINK_UNKNOWN };
@@ -82,6 +85,66 @@ static void pudu_do_awake(pudu_reader *reader) {
     printf("PUDU_DEVICE awake %s\n", UIApplication.sharedApplication.idleTimerDisabled ? "yes" : "no");
     fflush(stdout);
   }
+}
+
+/* How many POWERED events were queued, for the services self-test. */
+static unsigned pudu_powered_count;
+
+/* BATTERY: the tag. Monitoring stays on once asked for; the simulator
+   reports an unknown level and state. */
+static void pudu_do_battery(pudu_reader *reader) {
+  uint32_t tag = pudu_word(reader);
+  UIDevice *device = UIDevice.currentDevice;
+  device.batteryMonitoringEnabled = YES;
+  static const uint32_t states[] = { [UIDeviceBatteryStateUnknown] = 0, [UIDeviceBatteryStateUnplugged] = 1,
+                                     [UIDeviceBatteryStateCharging] = 2, [UIDeviceBatteryStateFull] = 3 };
+  int32_t level = device.batteryLevel < 0 ? -1 : (int32_t)lroundf(device.batteryLevel * 100);
+  pudu_powered_count++;
+  pudu_queue_words(PUDU_UI_POWERED, tag, nil, states[device.batteryState], @[ @(level) ]);
+}
+
+/* BRIGHTNESS: the percent. */
+static void pudu_do_brightness(pudu_reader *reader) {
+  uint32_t percent = pudu_word(reader);
+  if (percent > 100) pudu_stream_defect("set brightness to", percent);
+  UIScreen.mainScreen.brightness = (CGFloat)percent / 100;
+}
+
+/* ORIENTATION: 0 any, 1 portrait, 2 landscape. The root controller reports
+   the mask, and the scene is asked to turn to it at once. */
+static void pudu_do_orientation(pudu_reader *reader) {
+  static const UIInterfaceOrientationMask masks[] = { UIInterfaceOrientationMaskAll, UIInterfaceOrientationMaskPortrait,
+                                                      UIInterfaceOrientationMaskLandscape };
+  uint32_t code = pudu_word(reader);
+  if (code > 2) pudu_stream_defect("locked unknown orientation", code);
+  pudu_orientation_mask = masks[code];
+  UIViewController *root = pudu_alert_presenter;
+  if (@available(iOS 16.0, *)) {
+    [root setNeedsUpdateOfSupportedInterfaceOrientations];
+    UIWindowSceneGeometryPreferencesIOS *preferences = [[UIWindowSceneGeometryPreferencesIOS alloc] initWithInterfaceOrientations:masks[code]];
+    [root.view.window.windowScene requestGeometryUpdateWithPreferences:preferences errorHandler:nil];
+  } else {
+    [UIViewController attemptRotationToDeviceOrientation];
+  }
+}
+
+static CMMotionManager *pudu_motion;
+
+/* SENSE: 1 or 0, then the interval in milliseconds. Acceleration arrives in
+   units of standard gravity and is reported in thousandths of it. A device
+   without an accelerometer reports nothing. */
+static void pudu_do_sense(pudu_reader *reader) {
+  uint32_t on = pudu_word(reader), interval = pudu_word(reader);
+  if (on > 1) pudu_stream_defect("set motion sensing to", on);
+  if (pudu_motion == nil) pudu_motion = [CMMotionManager new];
+  [pudu_motion stopAccelerometerUpdates];
+  if (on == 0 || !pudu_motion.accelerometerAvailable) return;
+  pudu_motion.accelerometerUpdateInterval = (NSTimeInterval)MAX(interval, 10u) / 1000;
+  [pudu_motion startAccelerometerUpdatesToQueue:NSOperationQueue.mainQueue withHandler:^(CMAccelerometerData *data, NSError *error) {
+    if (data == nil || error != nil) return;
+    CMAcceleration a = data.acceleration;
+    pudu_queue_words(PUDU_UI_SENSED, 0, nil, 0, @[ @((int32_t)lround(a.x * 1000)), @((int32_t)lround(a.y * 1000)), @((int32_t)lround(a.z * 1000)) ]);
+  }];
 }
 
 #endif
