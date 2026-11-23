@@ -5,6 +5,11 @@ tags: [changelog]
 
 # Changelog
 
+## 2026-11-19 — Native open, share, clipboard and status bar (#974)
+
+- Native open, share, clipboard and status bar (#974): OPEN 46, SHARE 47, COPY 48, PASTE 49 and STATUS 50 on the iOS and Android hosts, OPENED 25, SHARED 26 and PASTED 27 events, and body caps and connection timeouts for remote images and fetch requests.
+  [[pudu-ios-system]] · [[PuduSystem]] · [[Std Mobile System]] · [[Services Example]] · [[Uses Mobile System]] · [[Std Mobile Stream]] · [[Std Mobile Events]] · [[Native System Services]] · [[pudu-ios-scene]] · [[pudu-ios-image]] · [[PuduImage]] · [[PuduFetch]] · [[NATIVE-MOBILE]]
+
 ## 2026-11-19 — Native images and application assets (#973)
 
 - Native images and application assets (#973): IMAGE kind 22 and SOURCE 45 on the iOS and Android hosts, IMAGED 24 event, E6013 for refused assets, and the `assets` directory packaged under relative names.

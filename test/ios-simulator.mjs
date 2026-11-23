@@ -259,6 +259,17 @@ int main(int argc, char **argv) {
       assert.equal(asked.photo, 1, `the photo was requested ${asked.photo} times`);
       console.log("PASS iOS Gallery requests: photo once");
     });
+    // The copied text pastes back, a URL no app handles reports false, the
+    // share sheet shows and its cancellation reports false, and the status
+    // bar takes the light text the program asked for.
+    mobileApp(device, "Services", [{
+      environment: { SIMCTL_CHILD_PUDU_UI_SELFTEST: "0", SIMCTL_CHILD_PUDU_UI_SYSTEM_TEST: "1" },
+      labels: ["Pasted: from Pudu", "Opened: false", "Shared: false"],
+      layout: ["PUDU_SYSTEM share shown", "PUDU_SYSTEM status light shown"],
+    }]);
+    refusedApp(device, root, "unknown status bar style",
+      "import Std.Mobile.Host as Host\nimport Std.Mobile.Stream as Stream", `  Host.apply(bytesOf(Stream.status([], 7u32, false)))`,
+      /pudu: a view stream used unknown status bar style 7/u);
     refusedApp(device, root, "source on a label",
       "import Std.Mobile.Host as Host\nimport Std.Mobile.Stream as Stream", `  let label = Stream.create([], 0u32, Stream.LABEL)
   Host.apply(bytesOf(Stream.source(label, 0u32, 0u32, 0u32, "pudu.png")))`,
@@ -429,7 +440,7 @@ function mobileApp(device, example, runs) {
         `${example} did not show ${labels.join(", ")}:\n${lines.join("\n")}`);
       assert.ok(lines.includes("PUDU_PROGRAM_STATUS 0"), `${example} did not finish:\n${lines.join("\n")}`);
       if (layout) {
-        assert.deepEqual(lines.filter((line) => /^PUDU_(VIEWPORT|KEYBOARD|THEME|LIST|MATERIAL|ALERT|HAPTIC|ACCESS|MOTION|NAV|REFRESH|FETCH|IMAGE) /.test(line)), layout,
+        assert.deepEqual(lines.filter((line) => /^PUDU_(VIEWPORT|KEYBOARD|THEME|LIST|MATERIAL|ALERT|HAPTIC|ACCESS|MOTION|NAV|REFRESH|FETCH|IMAGE|SYSTEM) /.test(line)), layout,
           `${example} did not report the expected layout and theme:\n${lines.join("\n")}`);
       }
       const firstFrame = lines.find((line) => line.startsWith("PUDU_FIRST_FRAME_MS "));

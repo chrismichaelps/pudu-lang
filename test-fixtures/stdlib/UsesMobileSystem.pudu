@@ -1,0 +1,46 @@
+module UsesMobileSystem
+
+import Std.ByteOrder {readU32LE}
+import Std.Mobile.Events as Events
+import Std.Mobile.System as System
+import Std.Mobile.View as View
+
+// The words at `offset` onward, read as little-endian 32-bit values.
+fn wordsAt(bytes: &Array[UInt8], offset: Int, count: Int) -> Array[UInt32] {
+  var found = []
+  for index in 0..count {
+    match readU32LE(bytes, offset + index * 4) {
+      case Some(word) => { found = found.push(word) }
+      case None => { return [] }
+    }
+  }
+  found
+}
+
+export fn main() -> Int {
+  var held = 0
+
+  // OPEN and SHARE carry the tag, then the URL or text, length-prefixed.
+  let opened = System.open(3u32, "x:y").toArray()
+  if opened.length() == 15 && wordsAt(&opened, 0, 3) == [46u32, 3u32, 3u32] && opened[12] == 120u8 { held = held + 1 }
+  let shared = System.share(4u32, "hi").toArray()
+  if shared.length() == 14 && wordsAt(&shared, 0, 3) == [47u32, 4u32, 2u32] { held = held + 1 }
+
+  // COPY carries the text; PASTE only the tag its answer reports.
+  let copied = System.copy("abc").toArray()
+  if copied.length() == 11 && wordsAt(&copied, 0, 2) == [48u32, 3u32] { held = held + 1 }
+  if wordsAt(&System.paste(5u32).toArray(), 0, 2) == [49u32, 5u32] { held = held + 1 }
+
+  // STATUS carries the style code and the hidden flag.
+  if wordsAt(&System.statusBar(System.LightText, true).toArray(), 0, 3) == [50u32, 1u32, 1u32] { held = held + 1 }
+  if wordsAt(&System.statusBar(System.Automatic, false).toArray(), 0, 3) == [50u32, 0u32, 0u32] && System.barCode(System.DarkText) == 2u32 { held = held + 1 }
+
+  // OPENED and SHARED carry 1 or 0; any other word is never written.
+  if Events.carriesDetail(25u64 << 32) && Events.eventWithDetail((25u64 << 32) | 3u64, "", 1u32) == View.Opened(3u32, true) { held = held + 1 }
+  if Events.eventWithDetail((25u64 << 32) | 3u64, "", 0u32) == View.Opened(3u32, false) { held = held + 1 }
+  if Events.eventWithDetail((26u64 << 32) | 4u64, "", 1u32) == View.Shared(4u32, true) && Events.eventWithDetail((26u64 << 32) | 4u64, "", 7u32) == View.Stopped { held = held + 1 }
+
+  // PASTED carries the clipboard's text.
+  if Events.carriesText(27u64 << 32) && Events.event((27u64 << 32) | 5u64, "abc") == View.Pasted(5u32, "abc") { held = held + 1 }
+  held
+}
