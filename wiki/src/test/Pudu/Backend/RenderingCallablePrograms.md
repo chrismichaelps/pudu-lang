@@ -143,3 +143,13 @@ Resolved Grill Log: a selected method with an omitted default writes
 back through an indexed place after the index and default each run
 once. An alternative with no exclusive parameter retains the same
 operand effects and returns without updating the place.
+
+## Hidden exclusive parameters
+
+Resolved Grill Log: a method checked as a value-taking callable
+can hold a mutable implementation. A written name is eligible for
+writeback and a computed argument is only a value. An ordinary
+tuple with the same physical result layout remains an ordinary
+result when the selected callable has no exclusive parameter.
+Traversal uses only the ordinary result and does not assign finals
+to the input array.

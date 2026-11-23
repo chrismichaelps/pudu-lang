@@ -416,6 +416,30 @@ renderingCallableSuccessPrograms =
         , "  print(show(values))"
         , "  0", "}" ])
     , "receiver\nindex\n6\n[2]\n", "")
+  , ("a value-taking checked method can retain a mutable implementation", program
+      (selectedReceiverTypes <>
+        [ "trait CheckedShift { fn shift(self: &Self, value: Int) -> Int }"
+        , "impl CheckedShift for Str { fn shift(self: &Self, value: Int) -> Int { value } }"
+        , "trait HeldShift { fn shift(self: &Self, value: &mut Int) -> Int }"
+        , "impl HeldShift for Option[Str] {"
+        , "  fn shift(self: &Self, value: &mut Int) -> Int { *value = *value + 4\n *value }"
+        , "}"
+        , "fn pair(value: Int) -> (Int, Int) { (value, value + 100) }"
+        , "fn main() -> Int {"
+        , "  var value = 2"
+        , "  let held = choose(\"λ\".toBytes()).shift"
+        , "  print(show(held(value)))"
+        , "  print(show(value))"
+        , "  print(show(held(value + 1)))"
+        , "  print(show(value))"
+        , "  let values = [2]"
+        , "  print(show(values.map(held)))"
+        , "  print(show(values))"
+        , "  let ordinary = pair"
+        , "  print(show(ordinary(value)))"
+        , "  print(show(value))"
+        , "  0", "}" ])
+    , "receiver\n6\n6\n11\n6\n[6]\n[2]\n(6, 106)\n6\n", "")
   , ("a selected declared call can reach a held collection builtin", program
       (selectedReceiverTypes <> selectedByteConversion <> selectedCollection "Map[Int, Str]" "mapOf([(0, \"held\")])" <>
         [ "trait Keys { fn keys(self: &Self) -> Array[UInt8] }"

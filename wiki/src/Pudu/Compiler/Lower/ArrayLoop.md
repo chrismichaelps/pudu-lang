@@ -37,3 +37,7 @@ parameter name and the traversal invocation span.
 
 Resolved Grill Log: use [[Compiler Lower Default]] for the selected
 callback's arity, including a bound method's written parameters.
+
+Resolved Grill Log: traversal supplies values. When the selected
+callback returns mutable finals, extract its ordinary result and
+release the finals without writing back to the collection.

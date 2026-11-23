@@ -5,7 +5,7 @@ import Data.List (mapAccumL)
 import Data.Text (Text)
 import Pudu.Compiler.Lower.Arguments (argumentFailure, argumentFailureWith, methodArgumentBlame, stopped, stops)
 import Pudu.Compiler.Lower.Control (popLoop, pushLoop)
-import Pudu.Compiler.Lower.Default (suppliedArguments, withCallableArity)
+import Pudu.Compiler.Lower.Default (couldReturnLoanFinals, suppliedArguments, withCallableArity, withLoanedCallableArity)
 import Pudu.Compiler.Lower.Dynamic (mapRuntimeChoice, projectRuntimeValue)
 import Pudu.Compiler.Lower.Sort (sortStatements)
 import Pudu.Compiler.Lower.State
@@ -172,16 +172,25 @@ arrayMethodWith state at member operands kind element toItems = case member of
    where
     kind = coreExpressionType function
     invokeFunction entered inputs result =
-      let (ready, chosen) = withCallableArity blame at entered False function inputs result arguments apply
+      let (ready, chosen)
+            | couldReturnLoanFinals kind =
+                withLoanedCallableArity blame at entered False [] function inputs result arguments apply
+            | otherwise =
+                withCallableArity blame at entered False function inputs result arguments
+                  (\prior defaulted -> apply prior defaulted [])
        in (ready, (checkCallable function . fst) <$> chosen)
      where
-      apply prior defaulted target given =
+      apply prior defaulted loans target given =
         let carry current' (expected, operand) =
               projectRuntimeValue (contextTypes (lowerContext current')) current' expected operand
             (ready, projected) = mapAccumL carry prior (zip inputs given)
             operands = if defaulted then suppliedArguments at inputs projected else projected
+            called = expression result (CoreCallValue target operands)
             value
-              | map coreExpressionType operands == inputs = expression result (CoreCallValue target operands)
+              | map coreExpressionType operands == inputs, null loans = called
+              | map coreExpressionType operands == inputs
+              , CoreTupleType (answer : finals) <- result, length finals == length loans =
+                  expression answer (CoreTupleIndex 0 called)
               | otherwise = argumentFailure blame at "E7001" "cannot call a function value with these arguments"
          in (ready, Just (value, coreExpressionType value))
 

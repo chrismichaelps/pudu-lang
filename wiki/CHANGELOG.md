@@ -5,6 +5,13 @@ tags: [changelog]
 
 # Changelog
 
+## 2026-11-23 — Mutable finals through ordinary callable types (#956)
+
+- Preserve places for held callables with mutable parameters.
+  Collection callbacks return the ordinary result and release their
+  finals. [[Compiler Lower Lambda]] · [[Compiler Lower Loan]] ·
+  [[Compiler Lower Array Loop]]
+
 ## 2026-11-23 — Selected indirect mutable arguments (#956)
 
 - Retain argument places in order and use the selected callable's

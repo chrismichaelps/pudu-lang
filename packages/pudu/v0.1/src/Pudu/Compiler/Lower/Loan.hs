@@ -87,6 +87,7 @@ loanedValue state at value
 data Callee
   = Direct !Text
   | Through !(Located Expression) !([CoreType] -> LowerState -> CoreExpression -> Lowered)
+  | Retained !CoreExpression !([CoreType] -> LowerState -> CoreExpression -> Lowered)
   | ForeignCrossing !CoreForeign
 
 {-| The signature a call through a value of a function type reads: its
@@ -114,12 +115,8 @@ lowerLoanedOperands :: LowerExpression -> LowerState -> Span -> Callee -> CoreSi
 lowerLoanedOperands lower state at callee signature defaulted operands = case callee of
   Through written specialize -> case lower state written of
     (after, Nothing) -> refused after
-    (after, Just (target, CoreNeverType)) -> (after, Just (target, CoreNeverType))
-    (after, Just (target, kind)) ->
-      let (bound, local) = bindLocal after "" kind
-          declaration = CoreStatement (locatedSpan written) (CoreDeclare local target)
-          call current held = indirect specialize current held (reading (locatedSpan written) local)
-       in go call bound [declaration] [] operands
+    (after, Just (target, _)) -> throughValue (locatedSpan written) specialize after target
+  Retained target specialize -> throughValue (coreExpressionSpan target) specialize state target
   Direct target -> go (direct target) state [] [] operands
   ForeignCrossing target -> go (\current held -> made current defaulted held (values held) signature (CoreForeignCall target)) state [] [] operands
  where
@@ -127,8 +124,19 @@ lowerLoanedOperands lower state at callee signature defaulted operands = case ca
   loaned = signatureLoaned signature
   parameterTypes = map (coreLocalType . coreParameterLocal) . signatureParameters
   through = case callee of
-    Through{} -> True
-    _ -> False
+    Direct{} -> False
+    ForeignCrossing{} -> False
+    _ -> True
+
+  throughValue targetAt specialize current target
+    | kind == CoreNeverType = (current, Just (target, kind))
+    | otherwise =
+        let (bound, local) = bindLocal current "" kind
+            declaration = CoreStatement targetAt (CoreDeclare local target)
+            call ready held = indirect specialize ready held (reading targetAt local)
+         in go call bound [declaration] [] operands
+   where
+    kind = coreExpressionType target
 
   go prepareCall current statements held [] = finish prepareCall current statements (reverse held)
   go prepareCall current statements held ((index, operand, argument) : rest) = case argumentOf current index operand argument of

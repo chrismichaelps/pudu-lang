@@ -307,6 +307,14 @@ forwarded places before invoking the held callable. The selected profile
 determines omitted defaults and publishes only its own exclusive finals.
 [[Compiler Lower Loan]] · [[Backend Rendering Callable Programs]]
 
+## Mutable finals through ordinary callable types (#956)
+
+A selected callable may carry mutable finals even when the checked
+function type takes ordinary values. Native indirect calls retain
+eligible places and use the selected profile for writeback.
+Collection callbacks publish only the ordinary result.
+[[Compiler Lower Lambda]] · [[Backend Rendering Callable Programs]]
+
 ## Published progress (#496)
 
 The README progress bar counts **completed coverage areas**, not individual language

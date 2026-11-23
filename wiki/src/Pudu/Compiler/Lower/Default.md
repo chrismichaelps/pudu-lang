@@ -63,3 +63,7 @@ Resolved Grill Log: the same invocation profile can name exclusive
 parameter positions. Loan preparation retains places before selection,
 while each selected invocation uses only its own final positions.
 [[Compiler Lower Loan]]
+
+Resolved Grill Log: use the possible shape of an exclusive
+return tuple to schedule profile selection. The shape does not
+distinguish an ordinary tuple from a tuple carrying mutable finals.

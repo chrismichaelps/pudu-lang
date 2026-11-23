@@ -135,3 +135,12 @@ Resolved Grill Log: [[Compiler Lower Default]] selects arity using
 the retained callable. Projection and specialization use the written
 slots after selection. Unreachable operands do not run after an
 earlier control transfer.
+
+## Mutable finals through ordinary checked calls
+
+Resolved Grill Log: inspect the retained callable's physical
+signature for a possible final tuple, including alternatives.
+Pass the already evaluated callee into [[Compiler Lower Loan]]
+before lowering arguments. A matching tuple is only a reason to
+preserve places. The selected callable profile still decides which
+positions, if any, return finals.

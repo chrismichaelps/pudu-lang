@@ -127,3 +127,7 @@ parameter count and which positions publish finals. A failing arity
 check runs after operand effects and before any final store.
 
 [[Compiler Lower Default]] · [[Backend Rendering Callable Programs]]
+
+Resolved Grill Log: an already retained indirect callee uses the
+same operand traversal as a written one. No path reevaluates the
+callee to discover its constraints.

@@ -13,7 +13,7 @@ import Data.Text (Text)
 import qualified Data.Text as Text
 import Pudu.Compiler.Lower.Arguments (methodArgumentBlame)
 import Pudu.Compiler.Lower.Control (expressionIsPrintValued, printValued)
-import Pudu.Compiler.Lower.Default (suppliedArguments, withCallableArity)
+import Pudu.Compiler.Lower.Default (couldReturnLoanFinals, suppliedArguments, withCallableArity)
 import Pudu.Compiler.Lower.Dynamic (hasRuntimeChoice, joinRuntimeArms, mapRuntimeChoice, preserveRuntimeResult, projectRuntimeValue, runtimeCarriers, runtimeResultType, settledMutableLayout)
 import Pudu.Compiler.Lower.Generic (admitCallee, runtimeCallSignature)
 import Pudu.Compiler.Lower.Intrinsic (specializeIntrinsicValue)
@@ -348,14 +348,20 @@ lowerValueCall lower block state at callee arguments
   | loaned@(_ : _) <- maybe [] loanedInputs (typeFactAt (contextTypes (lowerContext state)) (locatedSpan callee))
   , Just (CoreFunctionType inputs (CoreTupleType (result : _))) <- typeForSpan (contextTypes (lowerContext state)) (locatedSpan callee) =
       lowerLoanedOperands lower state at (Through callee (specializeCallable lower block)) (valueSignature at inputs result loaned) defaulted
-        [(index, Argument, argument) | (index, argument) <- zip [0 ..] arguments]
+        indexed
   | otherwise = case lower state callee of
       (after, Nothing) -> refused after
       (after, Just (target, CoreNeverType)) -> (after, Just (target, CoreNeverType))
-      (after, Just (target, kind)) -> case collect after [] arguments of
-        (final, Nothing) -> refused final
-        (final, Just cores) -> invoke True final target kind cores
+      (after, Just (target, kind))
+        | any couldReturnLoanFinals (runtimeCarriers kind)
+        , Just result <- typeForSpan (contextTypes (lowerContext after)) at ->
+            lowerLoanedOperands lower after at (Retained target (specializeCallable lower block))
+              (valueSignature at [] result []) defaulted indexed
+        | otherwise -> case collect after [] arguments of
+            (final, Nothing) -> refused final
+            (final, Just cores) -> invoke True final target kind cores
  where
+  indexed = [(index, Argument, argument) | (index, argument) <- zip [0 ..] arguments]
   -- A value of a function with defaults was formed with the count of supplied
   -- arguments as its last parameter; checking says how many a call must give.
   defaulted = case typeFactAt (contextTypes (lowerContext state)) (locatedSpan callee) of

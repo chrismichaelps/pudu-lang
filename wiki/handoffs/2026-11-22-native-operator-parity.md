@@ -431,10 +431,19 @@ the retained callable's arity and finals. [[Backend Rendering Callable
 Programs]] covers default evaluation through an indexed place,
 nonexclusive alternatives and the selected missing-parameter diagnostic.
 
+## Mutable finals through ordinary callable types
+
+Architect → Backend Engineer. [[Compiler Lower Lambda]] passes an
+already evaluated callee into [[Compiler Lower Loan]] when a retained
+layout can carry loan finals. [[Compiler Lower Array Loop]] uses the
+selected callback's ordinary result. [[Backend Rendering Callable
+Programs]] covers a writable name, a computed value, and an ordinary
+tuple with the same native shape.
+
 ## Next action
 
-Retain argument places when a callable checked with no exclusive
-inputs can hold a callable that publishes mutable finals.
+Select the held declared method before preparing its mutable receiver
+and argument loans, retaining the original place for writeback.
 
 ## Referenced by
 

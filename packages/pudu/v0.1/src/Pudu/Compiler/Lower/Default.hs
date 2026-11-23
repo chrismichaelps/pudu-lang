@@ -4,10 +4,10 @@
     its default, in order, so a default sees the parameters before it. -}
 module Pudu.Compiler.Lower.Default
   ( takesSuppliedCount, trailingDefaults, suppliedArguments, callArityFailure
-  , withCallableArity, withLoanedCallableArity, lowerDefaultedBody ) where
+  , couldReturnLoanFinals, withCallableArity, withLoanedCallableArity, lowerDefaultedBody ) where
 
 import Control.Applicative ((<|>))
-import Data.List (mapAccumL)
+import Data.List (isSubsequenceOf, mapAccumL)
 import qualified Data.Map.Strict as Map
 import Data.Maybe (fromMaybe, isJust)
 import Data.Text (Text)
@@ -68,6 +68,11 @@ missingArgument :: ArgumentBlame -> Span -> Text -> CoreExpression
 missingArgument blame at name = argumentFailureWith blame at "E7003"
   (Just "supply the argument or give the parameter a default")
   (CoreExpression at CoreTextType (CoreTextLiteral ("missing argument for parameter " <> name)))
+
+couldReturnLoanFinals :: CoreType -> Bool
+couldReturnLoanFinals (CoreFunctionType inputs (CoreTupleType (_ : finals@(_ : _)))) =
+  finals `isSubsequenceOf` inputs
+couldReturnLoanFinals _ = False
 
 {-| The hidden count shares an ordinary integer slot, so the selected
     closure's identity determines whether that slot belongs to the caller. -}
