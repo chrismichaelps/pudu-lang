@@ -1,24 +1,26 @@
 {-| @Pudu.Compiler.Lower.Method — implementation members and trait defaults
     as ordinary native calls, selected by the receiver's checked type. -}
-module Pudu.Compiler.Lower.Method (methodTables, lowerMethodCall, lowerQualifiedMethod, lowerOwnedMethod, callInstance) where
+module Pudu.Compiler.Lower.Method (methodTables, lowerMethodCall, lowerHeldMethod, lowerQualifiedMethod, lowerOwnedMethod, callInstance) where
 
 import Data.Map.Strict (Map)
+import Data.List (mapAccumL)
 import Control.Applicative ((<|>))
 import qualified Data.Map.Strict as Map
 import qualified Data.List.NonEmpty as NonEmpty
 import Data.Text (Text)
 import qualified Data.Text as Text
-import Pudu.Compiler.Lower.Control (expressionIsPrintValued)
-import Pudu.Compiler.Lower.Scalar (eagerType)
+import Pudu.Compiler.Lower.Control (blockType, expressionIsPrintValued)
+import Pudu.Compiler.Lower.Scalar (eagerType, namedFailure)
 import Pudu.Compiler.Lower.Signature (ensureSignature)
 import Pudu.Compiler.Lower.State
   ( CoreSignature (..), Head (..), Instance (..), LowerContext (..), LowerState (..), ModuleScope (..)
   , bindLocal, halt, inModule, refused, withTypeBindings )
-import Pudu.Compiler.Lower.Generic (instantiationOf, matchType, specialize, unformed)
-import Pudu.Compiler.Lower.Dynamic (isDynamic, pathText, widen, writtenType)
-import Pudu.Compiler.Lower.Loan (Callee (..), Operand (..), lowerLoanedOperands)
-import Pudu.Compiler.Lower.Place (HeldPlace (..), holdPlace, readHeld, readHeldAtKeys, storeHeld)
-import Pudu.Compiler.Lower.Types (formedCoreTypeIn, lookupScheme, ownerKeyOf, selectedMember, sumVariants, typeBindings, typeFactAt, typeForSpan, nativeValueType)
+import Pudu.Compiler.Lower.Generic (instantiationOf, matchType, runtimeCallSignature, specialize, unformed)
+import Pudu.Compiler.Lower.Dynamic (commonAggregateCarrier, isDynamic, joinRuntimeArms, pathText, projectRuntimeValue, widen, writtenType)
+import Pudu.Compiler.Lower.Loan (Callee (..), Operand (..), loanedType, lowerLoanedOperands)
+import Pudu.Compiler.Lower.MethodValue (lowerDynamicTextCall)
+import Pudu.Compiler.Lower.Place (HeldPlace (..), holdPlace, observeHeldLayout, readHeld, readHeldAtKeys, storeHeld)
+import Pudu.Compiler.Lower.Types (formedCoreTypeIn, loanedInputs, lookupScheme, ownerKeyOf, recordFields, selectedMember, sumVariants, typeBindings, typeFactAt, typeForSpan, nativeValueType, withFacts)
 import Pudu.Core
 import Pudu.Eval.Operator.Access (arrayMethods, mapMethods, setMethods, stringMethods)
 import Pudu.Eval.Bytes (bytesMethods)
@@ -153,24 +155,50 @@ methodTables scopes modules = (Map.fromList instances, Map.fromList calls, Map.f
     `toText()` on a type that declares none. Str and Char answer their own
     built-in members first, as the evaluator reads them; Nothing leaves the
     call to the built-in method lowering. -}
+lowerHeldMethod :: LowerExpression -> Span -> Span -> Span -> Text -> [Located Expression]
+  -> LowerState -> CoreExpression -> Maybe Lowered
+lowerHeldMethod lower at callee receiverAt member arguments state value = do
+  let context = lowerContext state
+      types = contextTypes context
+      kind = coreExpressionType value
+      opened = state
+        { lowerContext = context{contextTypes = withFacts [(receiverAt, unformed kind)] types}
+        , lowerScopes = [] : lowerScopes state }
+      (bound, held) = bindLocal opened "$selectedReceiver" kind
+      target = Located receiverAt (NameExpression (NonEmpty.singleton "$selectedReceiver"))
+  (after, result) <- lowerMethodCall lower bound at callee target member arguments
+  let restored = after
+        { lowerContext = (lowerContext after){contextTypes = types}
+        , lowerScopes = lowerScopes state }
+      wrap (answer, resultKind) =
+        (CoreExpression at resultKind (CoreBlockValue (CoreBlock
+          [CoreStatement receiverAt (CoreDeclare held value)] (Just answer))), resultKind)
+  pure (restored, wrap <$> result)
+
 lowerMethodCall :: LowerExpression -> LowerState -> Span -> Span -> Located Expression -> Text -> [Located Expression] -> Maybe Lowered
 lowerMethodCall lower state at callee receiver written arguments = do
   kind <- typeForSpan (contextTypes context) (locatedSpan receiver)
-  if isDynamic kind then Just (dynamicCall lower state at kind receiver member (typeFactAt (contextTypes context) callee) arguments) else
-   if builtinFirst kind then Nothing else
-    case ownerKeyOf kind >>= chosen of
-      Just key -> Just (callMethod lower state at key instantiated receiver arguments)
-      Nothing
-        | member == "toText", null arguments -> Just (rendered kind)
-        | otherwise -> Nothing
+  if isDynamic kind then Just (if written == "toText" && null arguments
+    then lowerDynamicTextCall lower state at callee receiver kind
+    else dynamicCall lower state at kind receiver member (typeFactAt (contextTypes context) callee) arguments)
+  else case ownerKeyOf kind >>= chosen of
+    Just key | member == "toText" || not (builtinFirst kind) ->
+      Just (callMethod lower state at key instantiated receiver arguments)
+    _ | not (builtinFirst kind), member == "toText", null arguments ->
+          case recordFields (contextTypes context) kind >>= lookup member of
+            Nothing -> Just (rendered kind)
+            Just field
+              | uncallable field, Just FunctionTypeRequiring{} <- typeFactAt (contextTypes context) callee ->
+                  Just (failedField field)
+            _ -> Nothing
+      | otherwise -> Nothing
  where
   context = lowerContext state
   (provider, member) = selectedMember written
   -- The implementation the checked provider gives, else the owner's only one.
   chosen owner = case provider of
-    Just trait | Just key <- Map.lookup (lastSegment trait, owner, member) (contextTraitMethods context) -> Just key
+    Just trait | Just key <- Map.lookup (trait, owner, member) (contextTraitMethods context) -> Just key
     _ -> Map.lookup (owner, member) (contextMethods context)
-  lastSegment = last . Text.splitOn "."
   -- The callee's fact has the receiver bound already; put it back in front.
   instantiated = do
     FunctionTypeRequiring asynchronous inputs required result <- typeFactAt (contextTypes context) callee
@@ -185,6 +213,16 @@ lowerMethodCall lower state at callee receiver written arguments = do
     CoreStoreType _ -> member `elem` map fst bucketsMethods
     CoreBytesType -> member `elem` map fst bytesMethods
     _ -> False
+  uncallable kind = case kind of
+    CoreFunctionType{} -> False
+    CoreSumType{} -> False
+    CoreCallbackType{} -> False
+    _ -> nativeValueType kind
+  failedField field = case lower state receiver of
+    (after, Nothing) -> refused after
+    (after, Just (core, CoreNeverType)) -> (after, Just (core, CoreNeverType))
+    (after, Just (core, _)) ->
+      namedFailure after at (("cannot call a " <>) . mconcat) [CoreExpression at field (CoreField member core)]
   rendered kind = case lower state receiver of
     (after, Nothing) -> refused after
     (after, Just (core, CoreNeverType)) -> (after, Just (core, CoreNeverType))
@@ -198,7 +236,10 @@ lowerMethodCall lower state at callee receiver written arguments = do
 dynamicCall :: LowerExpression -> LowerState -> Span -> CoreType -> Located Expression -> Text -> Maybe Type -> [Located Expression] -> Lowered
 dynamicCall lower state at kind receiver member checked arguments = case receiving of
   (after, Nothing) -> refused after
-  (after, Just (receiverPrelude, coreReceiver, receiverPlace)) -> case operandsOf after [] arguments of
+  (after, Just (receiverPrelude, coreReceiver, _))
+    | stopsAt receiverPrelude coreReceiver ->
+        stopped after (receiverPrelude <> [CoreStatement (coreExpressionSpan coreReceiver) (CoreEvaluate coreReceiver)])
+  (after, Just (receiverPrelude, coreReceiver, receiverPlace)) -> case operandsOf after [] (zip [0 ..] arguments) of
     (final, Nothing) -> refused final
     (final, Just operands) ->
       let pushed = final{lowerScopes = [] : lowerScopes final}
@@ -215,24 +256,17 @@ dynamicCall lower state at kind receiver member checked arguments = case receivi
           lentArguments = [(position, Just found) | (position, (_, _, Just found)) <- zip [1 ..] operands]
           lent = [(0, receiverPlace) | selfLent] <> lentArguments
           close next = next{lowerScopes = drop 1 (lowerScopes next)}
-       in case foldl' (arm (map fst lent) passed) (bound, Just []) variants of
+       in if blockType declarations Nothing == CoreNeverType
+          then stopped (close bound) declarations
+          else case foldl' (arm (map fst lent) passed) (bound, Just []) variants of
             (done, Just arms@(first : _)) ->
-              let answered = coreExpressionType (coreArmBody first)
-                  chosen = CoreExpression at answered (CoreMatch scrutinee (reverse arms))
-               in case (lent, answered) of
-                    ([], _) -> (close done, Just (CoreExpression at answered (CoreBlockValue (CoreBlock declarations (Just chosen))), answered))
-                    (_, CoreTupleType (result : _)) ->
-                      -- Every arm answers the result beside each final; the
-                      -- finals go back through their places in parameter order.
-                      let (withAnswer, answer) = bindLocal done "" answered
-                          reading' = CoreExpression at answered (CoreReadLocal answer)
-                          stores = [ storeHeld (contextTypes (lowerContext withAnswer)) (heldSpan found) found
-                                       (CoreExpression (heldSpan found) (heldType found) (CoreTupleIndex (index + 1) reading'))
-                                   | (index, (_, Just found)) <- zip [0 ..] lent ]
-                          value = CoreExpression at result (CoreTupleIndex 0 reading')
-                          whole = CoreBlock (declarations <> [CoreStatement at (CoreDeclare answer chosen)] <> stores) (Just value)
-                       in (close withAnswer, Just (CoreExpression at result (CoreBlockValue whole), result))
-                    _ -> halt at "a lent dynamic call without its finals" (close done)
+              let firstKind = coreExpressionType (coreArmBody first)
+               in if null lent
+                    then let chosen = joinRuntimeArms at firstKind scrutinee (reverse arms)
+                             answered = coreExpressionType chosen
+                          in (close done, Just (CoreExpression at answered (CoreBlockValue (CoreBlock declarations (Just chosen))), answered))
+                    else let (ready, result) = publishDynamicFinals at done declarations scrutinee lent firstKind (reverse arms)
+                          in (close ready, result)
             -- Nothing implements the trait, so no value reaches this call:
             -- the match has no arm, at the type checking gave the call.
             (done, Just []) -> case typeForSpan (contextTypes (lowerContext done)) at of
@@ -243,14 +277,16 @@ dynamicCall lower state at kind receiver member checked arguments = case receivi
               _ -> halt at "a method of a dynamic value no type implements" (close done)
             (done, Nothing) -> refused (close done)
  where
-  trait = case kind of
-    CoreSumType key _ -> last (Text.splitOn "." key)
-    _ -> ""
+  targetOf current payload = do
+    CoreSumType key _ <- Just kind
+    trait <- Text.stripPrefix "dynamic." key
+    owner <- ownerKeyOf payload
+    Map.lookup (trait, owner, member) (contextTraitMethods (lowerContext current))
   variants = maybe [] id (sumVariants (contextTypes (lowerContext state)) kind)
   -- Every implementation shares the trait's signature, so the first one says
   -- whether the method takes `&mut self`.
   (probed, selfLent) = case [(key, payload) | variant <- variants, [(_, payload)] <- [coreVariantFields variant]
-                                            , Just key <- [Map.lookup (trait, coreVariantName variant, member) (contextTraitMethods (lowerContext state))]] of
+                                            , Just key <- [targetOf state payload]] of
     (key, payload) : _ -> case instanceTarget state at key (heldBy payload) [payload] unselected of
       (back, Just (_, signature)) -> (back, 0 `elem` signatureLoaned signature)
       (back, Nothing) -> (back, False)
@@ -267,19 +303,33 @@ dynamicCall lower state at kind receiver member checked arguments = case receivi
   hold (current, held) core =
     let (next, local) = bindLocal current "" (coreExpressionType core)
      in (next, held <> [local])
-  -- Each argument as it runs: a written `&mut place` resolves its place once
-  -- and passes the value it holds; any other argument is an ordinary value.
+  stopsAt prelude core = coreExpressionType core == CoreNeverType || blockType prelude Nothing == CoreNeverType
+  stopped current declarations =
+    (current, Just (CoreExpression at CoreNeverType (CoreBlockValue (CoreBlock declarations Nothing)), CoreNeverType))
+  -- A loan can name a place explicitly or forward a lent parameter.
   operandsOf current done [] = (current, Just (reverse done))
-  operandsOf current done (argument : rest) = case locatedValue argument of
-    UnaryExpression "&mut" inner | Just held <- holdPlace lower current (locatedSpan inner) inner -> case held of
-      (after, Nothing) -> (after, Nothing)
-      (after, Just (prelude, found)) ->
-        operandsOf after ((prelude, readHeld (contextTypes (lowerContext after)) found, Just found) : done) rest
-    _ -> case lower current argument of
+  operandsOf current done ((position, argument) : rest)
+    | Just place <- argumentPlace position argument
+    , Just held <- holdPlace lower current (locatedSpan place) place =
+        case held of
+          (after, Nothing) -> (after, Nothing)
+          (after, Just (prelude, found)) ->
+            next after prelude (readHeld (contextTypes (lowerContext after)) found) (Just found)
+    | otherwise = case lower current argument of
       (after, Nothing) -> (after, Nothing)
       (after, Just (core, _))
         | expressionIsPrintValued core -> halt (locatedSpan argument) "a Result[(), Str] call argument" after
-        | otherwise -> operandsOf after (([], core, Nothing) : done) rest
+        | otherwise -> next after [] core Nothing
+   where
+    next after prelude core place
+      | stopsAt prelude core = (after, Just (reverse collected))
+      | otherwise = operandsOf after collected rest
+     where
+      collected = (prelude, core, place) : done
+  argumentPlace position argument = case locatedValue argument of
+    UnaryExpression "&mut" inner -> Just inner
+    NameExpression names | length names == 1, position `elem` maybe [] loanedInputs checked -> Just argument
+    _ -> Nothing
   -- The call's checked type, with the held type in front as the receiver:
   -- a generic method's own parameters settle from it, as an ordinary call's do.
   heldBy payload = case checked of
@@ -288,7 +338,7 @@ dynamicCall lower state at kind receiver member checked arguments = case receivi
     _ -> Nothing
   arm _ _ (current, Nothing) _ = (current, Nothing)
   arm lent passed (current, Just arms) variant = case coreVariantFields variant of
-    [(_, payload)] | Just key <- Map.lookup (trait, coreVariantName variant, member) (contextTraitMethods (lowerContext current)) ->
+    [(_, payload)] | Just key <- targetOf current payload ->
       let (withHeld, held) = bindLocal current "" payload
           reading = CoreExpression at payload (CoreReadLocal held)
           pattern' = CoreVariantPattern (coreVariantName variant) [CoreBindPattern held]
@@ -308,21 +358,66 @@ dynamicCall lower state at kind receiver member checked arguments = case receivi
             (next, Nothing) -> (next, Nothing)
     _ -> halt at ("the method '" <> member <> "' of a dynamic value") current
 
+publishDynamicFinals :: Span -> LowerState -> [CoreStatement] -> CoreExpression
+  -> [(Int, Maybe HeldPlace)] -> CoreType -> [CoreArm] -> Lowered
+publishDynamicFinals at state declarations subject lent checked arms
+  | CoreTupleType (result : finals) <- shared
+  , let project current arm =
+          let (ready, value) = projectRuntimeValue types current shared (coreArmBody arm)
+           in (ready, arm{coreArmBody = value})
+        (ready, projectedArms) = mapAccumL project state arms
+  , all ((== shared) . coreExpressionType . coreArmBody) projectedArms =
+      let chosen = CoreExpression at shared (CoreMatch subject projectedArms)
+          (bound, answer) = bindLocal ready "" shared
+          read' = CoreExpression at shared (CoreReadLocal answer)
+          publish current (index, ((_, place), finalKind)) = case place of
+            Nothing -> (current, Just [])
+            Just found ->
+              let value = CoreExpression (heldSpan found) finalKind (CoreTupleIndex index read')
+                  (next, carried) = projectRuntimeValue types current (heldType found) value
+               in if coreExpressionType carried == heldType found
+                    then (next, Just [storeHeld types (heldSpan found) found carried])
+                    else (observeHeldLayout next found (coreExpressionType carried), Nothing)
+          (final, stores) = mapAccumL publish bound (zip [1 ..] (zip lent finals))
+          value = CoreExpression at result (CoreTupleIndex 0 read')
+       in case sequence stores of
+            Just writes ->
+              let whole = CoreBlock (declarations <> [CoreStatement at (CoreDeclare answer chosen)] <> concat writes) (Just value)
+               in (final, Just (CoreExpression at result (CoreBlockValue whole), result))
+            Nothing -> halt at "a lent dynamic call with incompatible writeback layouts" final
+  | otherwise = halt at "a lent dynamic call without compatible final layouts" state
+ where
+  types = contextTypes (lowerContext state)
+  shared = maybe checked id (commonAggregateCarrier types checked (map (coreExpressionType . coreArmBody) arms))
+
 {-| A call to an instance whose `&mut` parameters are exactly the lent
     positions, answering its result beside each final as a loaned body
     does. -}
 invokeLent :: [Int] -> LowerState -> Span -> Text -> Maybe Type -> Selected -> [CoreExpression] -> Lowered
 invokeLent lent state at key written selected given = case instanceTarget state at key instantiated (coreExpressionType <$> take 1 given) selected of
   (back, Nothing) -> refused back
-  (back, Just (target, CoreSignature{signatureParameters, signatureResult, signatureLoaned}))
+  (back, Just (target, signature@CoreSignature{signatureParameters, signatureLoaned}))
     | signatureLoaned /= lent -> halt at "a dynamic call lending other places than its method's &mut parameters" back
     | length signatureParameters /= length given -> halt at "a method called with this many arguments" back
     | otherwise ->
-        let queued = back{lowerContext = (lowerContext back){contextQueue = target : contextQueue (lowerContext back)}}
-            types = map (coreLocalType . coreParameterLocal) signatureParameters
-            cores = zipWith (widen (contextTypes (lowerContext back))) types given
-            answered = CoreTupleType (signatureResult : [kind | (index, kind) <- zip [0 ..] types, index `elem` signatureLoaned])
-         in (queued, Just (CoreExpression at answered (CoreCall target cores), answered))
+        let context = lowerContext back
+            layouts = map (coreLocalType . coreParameterLocal) signatureParameters
+            widenArgument index expected value
+              | index `elem` lent = value
+              | otherwise = widen (contextTypes context) expected value
+            supplied = zipWith3 widenArgument [0 ..] layouts given
+            copied = do
+              found <- Map.lookup target (contextInstances context)
+              runtimeCallSignature (instanceModule found, instanceFunction found) back target signature (map coreExpressionType supplied)
+            (ready, name, exact) = maybe (back, target, signature) id copied
+            expected = map (coreLocalType . coreParameterLocal) (signatureParameters exact)
+            (projected, cores) = mapAccumL (\current (kind, value) ->
+              projectRuntimeValue (contextTypes context) current kind value) ready (zip expected supplied)
+            queued = projected{lowerContext = (lowerContext projected){contextQueue = name : contextQueue (lowerContext projected)}}
+            answered = loanedType exact
+         in if map coreExpressionType cores == expected
+              then (queued, Just (CoreExpression at answered (CoreCall name cores), answered))
+              else halt at "a dynamic loaned call with incompatible argument layouts" projected
  where
   instantiated = written <|> (Map.lookup key (contextInstances (lowerContext state)) >>= \found ->
     instantiationOf (instanceScheme found) (map coreExpressionType given))
@@ -421,14 +516,28 @@ ordinaryMethodCall lower state at key instantiated receiver arguments = case low
 invoke :: LowerState -> Span -> Text -> Maybe Type -> Selected -> [CoreExpression] -> Lowered
 invoke state at key written selected given = case instanceTarget state at key instantiated (coreExpressionType <$> take 1 given) selected of
   (back, Nothing) -> refused back
-  (back, Just (target, CoreSignature{signatureParameters, signatureResult, signatureLoaned}))
+  (back, Just (target, signature@CoreSignature{signatureParameters, signatureLoaned}))
     | position : _ <- signatureLoaned -> halt (loanSpan back target position) "a method with &mut parameters" back
     | length signatureParameters /= length given -> halt at "a method called with this many arguments" back
     | otherwise ->
-        let queued = back{lowerContext = (lowerContext back){contextQueue = target : contextQueue (lowerContext back)}}
-            cores = zipWith (widen (contextTypes (lowerContext back))) (map (coreLocalType . coreParameterLocal) signatureParameters) given
-         in (queued, Just (CoreExpression at (eagerType signatureResult cores) (CoreCall target cores), eagerType signatureResult cores))
+        let types = contextTypes (lowerContext back)
+            (projected, cores) = project types back signature given
+            selectedCopy = do
+              instance' <- Map.lookup target (contextInstances (lowerContext projected))
+              runtimeCallSignature (instanceModule instance', instanceFunction instance') projected target signature (map coreExpressionType cores)
+         in case selectedCopy of
+              Just (copy, name, exact) ->
+                let (ready, arguments) = project types copy exact cores
+                 in queue ready name exact arguments
+              Nothing -> queue projected target signature cores
  where
+  project types current signature cores = mapAccumL
+    (\prior (expected, core) -> projectRuntimeValue types prior expected core)
+    current (zip (map (coreLocalType . coreParameterLocal) (signatureParameters signature)) cores)
+  queue current target signature cores =
+    let queued = current{lowerContext = (lowerContext current){contextQueue = target : contextQueue (lowerContext current)}}
+        result = eagerType (signatureResult signature) cores
+     in (queued, Just (CoreExpression at result (CoreCall target cores), result))
   instantiated = written <|> (Map.lookup key (contextInstances (lowerContext state)) >>= \found ->
     instantiationOf (instanceScheme found) (map coreExpressionType given))
   -- A loan this call form cannot lend is refused where its `&mut` type is written.

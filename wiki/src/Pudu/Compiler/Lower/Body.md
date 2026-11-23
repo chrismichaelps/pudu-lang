@@ -531,3 +531,62 @@ declaration can be read through [[Compiler Lower Foreign]] as a value.
 ### Resolved Grill Log
 
 The existing qualifier and local lookup rules apply to a callable read.
+
+## Checked aggregate branch joins (#956)
+
+Resolved Grill Log: when branch carriers differ, try the checked result
+carrier for both. A tuple, array or variant can widen dynamic members in
+place. Individual branch results and Never retain their original effects
+and transfers.
+
+## Local bindings with runtime alternatives (#956)
+
+Resolved Grill Log: a checked annotation remains the source contract.
+A local initialized from a runtime selection holds its concrete native
+alternatives. Subsequent reads and writes use that local carrier.
+
+## Explicit runtime return carriers (#956)
+
+Resolved Grill Log: internal synchronous bodies report the carrier their
+explicit returns produced. A replay projects it to the settled native
+signature. Return still preserves scope joins and unreachable operands.
+
+## Compound local carriers (#956)
+
+Resolved Grill Log: an annotation may retain native alternatives nested
+inside its initializer's carrier. The local and reads agree on the layout.
+
+Resolved Grill Log: ordinary assignments use the same projection as
+held-place assignments. Both statement and tail-position forms store
+through the local's established carrier.
+
+## Array callback inputs (#956)
+
+Resolved Grill Log: array lowering can request an expected native
+parameter layout while checking's facts continue to govern source name
+resolution and annotations. Ordinary expression lowering remains the
+entry for receivers and arguments with unchanged layouts.
+
+## Stored callable dispatch (#956)
+
+Resolved Grill Log: Indirect calls and array callbacks share callable adaptation. Written and stored callbacks keep their source name resolution.
+
+## Runtime layouts in products (#956)
+
+Resolved Grill Log: An if joining different product carriers gives both branches a shared native product layout. Branch effects and transfers still run only on their original paths.
+
+## Runtime layouts in sum payloads (#956)
+
+Resolved Grill Log: Conditionals treat sums with the same declared type as aggregates and join their physical payload layouts.
+
+## Native task result layouts (#956)
+
+Resolved Grill Log: Await selects the held task and its result layout, then propagates a Result failure through the same continuation as try.
+
+## Mutable slot layout discovery (#956)
+
+Resolved Grill Log: Initialize a mutable binding with the settled layout required by its writes. The initializer still runs once at the declaration.
+
+## Selected receiver layouts (#956)
+
+Resolved Grill Log: Pass the callee span separately from the invocation span on text and byte method calls.

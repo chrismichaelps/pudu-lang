@@ -1,34 +1,52 @@
 {-| @Pudu.Compiler.Lower.Intrinsic — callable bodies for prelude values. -}
-module Pudu.Compiler.Lower.Intrinsic (lowerIntrinsicValue, annotatedPanic) where
+module Pudu.Compiler.Lower.Intrinsic (lowerIntrinsicValue, specializeIntrinsicValue, annotatedPanic) where
 
 import Data.List.NonEmpty (NonEmpty (..))
 import qualified Data.Map.Strict as Map
 import Data.Text (Text)
 import qualified Data.Text as Text
-import Pudu.Compiler.Lower.Bytes (bytesFromArray)
-import Pudu.Compiler.Lower.Call (outputResult)
+import qualified Pudu.Compiler.Lower.Arguments as Arguments
+import Pudu.Compiler.Lower.Bytes (bytesOfArguments)
+import Pudu.Compiler.Lower.Call (outputResult, outputText)
 import Pudu.Compiler.Lower.Concurrent (concurrentCallable, concurrentPrimitive)
 import Pudu.Compiler.Lower.Convert (charFromCodeCore)
 import Pudu.Compiler.Lower.WordMap (wordMapCallable, wordMapMethod)
 import Pudu.Compiler.Lower.Decimal (decimalCallable)
 import Pudu.Compiler.Lower.Text (textCallable)
-import Pudu.Compiler.Lower.Keyed (Blame (AtCaller), keyedFromArray)
+import Pudu.Compiler.Lower.Keyed (Blame (AtCaller), keyedBuilderCarrier, keyedFromArray)
 import Pudu.Compiler.Lower.Store (storeCallable, storePrimitive)
 import Pudu.Compiler.Lower.Kernel (kernelCallable)
 import Pudu.Compiler.Lower.Swiss (swissCallable, swissPrimitive)
-import Pudu.Compiler.Lower.State (LowerContext (..), LowerState (..), halt, intType, lookupLocal, resolveFunction, startFunction)
+import Pudu.Compiler.Lower.State (CallableSource (..), CallableTemplate (..), LowerContext (..), LowerState (..), halt, intType, lookupLocal, resolveFunction, startFunction)
 import Pudu.Compiler.Lower.Stop (panicBody, untypedConvertBody, wrongPanicBody)
 import Pudu.Compiler.Lower.Types (nativeValueType, typeForSpan)
 import Pudu.Core
 import Pudu.Frontend.Syntax (Expression (..), Located (..), TypeSyntax (..))
 import Pudu.Frontend.Syntax.Name (ModuleName (..))
-import Pudu.IntegerLiteral (IntegerKind (..))
 import Pudu.Source (Span)
 
 type Lowered = (LowerState, Maybe (CoreExpression, CoreType))
 
 lowerIntrinsicValue :: LowerState -> Span -> Text -> Maybe Lowered
 lowerIntrinsicValue state at name = intrinsic state at name (typeForSpan (contextTypes (lowerContext state)) at)
+
+specializeIntrinsicValue :: LowerState -> Span -> Text -> CoreType -> [CoreType] -> Maybe Lowered
+specializeIntrinsicValue state at name checked supplied = do
+  CoreFunctionType inputs result <- Just checked
+  if length inputs == length supplied && adaptable name then do
+    let actualResult = case supplied of
+          [array] | Just (built, _) <- keyedBuilderCarrier (contextTypes (lowerContext state)) name result array -> built
+          _ -> result
+    (ready, original) <- intrinsic state at name (Just checked)
+    case original of
+      Nothing -> Just (ready, Nothing)
+      Just _ -> intrinsic ready at name (Just (CoreFunctionType supplied actualResult))
+  else Nothing
+
+adaptable :: Text -> Bool
+adaptable name = name `elem`
+  ["display", "show", "print", "printPart", "printError", "printErrorPart", "panic", "mapOf", "setOf", "bytesOf"]
+  || case textCallable name of { Just _ -> True; Nothing -> False }
 
 {-| `let stop: fn(Str) -> Never = panic`. Checking gives panic no type (#634),
     so the binding and the name both read as the error type and only the
@@ -53,9 +71,14 @@ intrinsic :: LowerState -> Span -> Text -> Maybe CoreType -> Maybe Lowered
 intrinsic state at name solved
   | name `elem` ["print", "printPart", "printError", "printErrorPart"] = Just $
       case solved of
-        Just kind@(CoreFunctionType [CoreTextType] result@(CoreSumType "Result" [CoreUnitType, CoreTextType])) ->
-          register state at name ("$builtin:" <> name) kind [CoreTextType] result
-            (one (\entered operand -> outputResult entered at name operand result))
+        Just kind@(CoreFunctionType [argument] result@(CoreSumType "Result" [CoreUnitType, CoreTextType]))
+          | nativeValueType argument ->
+              let key = "$builtin:" <> name
+                    <> (if argument == CoreTextType then "" else ":" <> Text.pack (show kind))
+               in register state at name key kind [argument] result
+                    (one (\entered operand ->
+                      let (ready, rendered) = outputText at entered operand
+                       in outputResult ready at name rendered result))
         _ -> halt at "an output builtin without its represented callable type" state
   | name `elem` ["display", "show"] = Just $ case solved of
       Just kind@(CoreFunctionType [argument] CoreTextType) | nativeValueType argument ->
@@ -90,11 +113,12 @@ intrinsic state at name solved
         then register state at name ("$builtin:" <> name <> ":" <> Text.pack (show kind)) kind arguments result
           (\entered -> build entered at)
         else halt at "a kernel builtin without its represented callable type" state
-  | Just (kind@(CoreFunctionType arguments result), build) <- textCallable name = Just $
-      if solved == Just kind
-        then register state at name ("$builtin:" <> name <> ":" <> Text.pack (show kind)) kind arguments result
-          (\entered -> build entered at)
-        else halt at "a text-view builtin without its represented callable type" state
+  | Just (CoreFunctionType parameters expected, build) <- textCallable name = Just $ case solved of
+      Just kind@(CoreFunctionType arguments result)
+        | result == expected, length arguments == length parameters, all nativeValueType arguments ->
+            register state at name ("$builtin:" <> name <> ":" <> Text.pack (show kind)) kind arguments result
+              (\entered -> build entered at)
+      _ -> halt at "a text-view builtin without its represented callable type" state
   | Just (kind@(CoreFunctionType arguments result), build) <- decimalCallable name = Just $
       if solved == Just kind
         then register state at name ("$builtin:" <> name <> ":" <> Text.pack (show kind)) kind arguments result
@@ -105,11 +129,12 @@ intrinsic state at name solved
   -- every call of it accepts then.
   | name `elem` ["panic", "convertInteger"] = Just $ case stoppingKind of
       Just kind@(CoreFunctionType arguments result) | all nativeValueType arguments ->
-          let body entered operands = (entered, Just (stopping operands, CoreNeverType))
-              stopping operands = case (name, operands) of
-                ("panic", [message]) | coreExpressionType message == CoreTextType -> panicBody at message
-                ("panic", _) -> wrongPanicBody at
-                _ -> untypedConvertBody at
+          let body entered operands = case (name, operands) of
+                ("panic", [message]) ->
+                  let (ready, stopped) = panicBody entered at message
+                   in (ready, Just (stopped, CoreNeverType))
+                ("panic", _) -> (entered, Just (wrongPanicBody at, CoreNeverType))
+                _ -> (entered, Just (untypedConvertBody at, CoreNeverType))
            in register state at name ("$builtin:" <> name <> ":" <> Text.pack (show kind)) kind arguments result body
       _ -> halt at "a stopping builtin without its represented callable type" state
   | otherwise = Nothing
@@ -138,9 +163,13 @@ register state at name key kind arguments result build
               let function = CoreFunction key parameters result (CoreBlock [] (Just body))
                   added = lowerContext after
                   info = CoreClosureInfo [] name ("builtin " <> name) True False Nothing
+                  template = CallableTemplate kind (IntrinsicCallable at name kind)
                   registered = added
                     { contextFunctions = function : contextFunctions added
                     , contextClosures = Map.insert key info (contextClosures added)
+                    , contextObservedCallables = if adaptable name
+                        then Map.insert key template (contextObservedCallables added)
+                        else contextObservedCallables added
                     }
                in answer state{lowerContext = registered}
             (after, Nothing) -> (state{lowerContext = lowerContext after}, Nothing)
@@ -154,11 +183,10 @@ collectionBody :: Span -> Text -> CoreType -> CoreType -> Maybe (LowerState -> C
 collectionBody at name argument result = case (name, argument, result) of
   ("charFromCode", _, CoreSumType _ [CoreCharType]) | argument == intType ->
     Just (\entered operand -> charFromCodeCore entered at result operand)
-  ("bytesOf", CoreArrayType (CoreIntegerType (UnsignedKind 8)), CoreBytesType) ->
-    Just (\entered operand -> (entered, Just (bytesFromArray at operand, CoreBytesType)))
-  ("mapOf", CoreArrayType (CoreTupleType [key, value]), CoreMapType key' value')
-    | key == key' && value == value' -> keyed
-  ("setOf", CoreArrayType member, CoreSetType member') | member == member' -> keyed
+  ("bytesOf", _, CoreBytesType) ->
+    Just (\entered operand -> bytesOfArguments Arguments.AtCaller at entered [operand])
+  ("mapOf", CoreArrayType _, CoreMapType _ _) -> keyed
+  ("setOf", CoreArrayType _, CoreSetType _) -> keyed
   _ -> Nothing
  where
   keyed = Just (\entered operand ->

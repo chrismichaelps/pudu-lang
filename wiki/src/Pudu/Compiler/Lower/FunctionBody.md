@@ -73,3 +73,18 @@ native scalar.
 ## Referenced by
 
 [[Compiler Lower Body]] · [[src/Pudu/Compiler/_MOC]] · [[Pudu Cabal Manifest]]
+
+## Runtime carriers at the body boundary (#956)
+
+Resolved Grill Log: project a tail into the current signature and
+publish any further carrier discovered for an internal body. A
+different carrier is admitted only while the worklist settles the
+compatible caller and callee layout.
+
+## Native task result layouts (#956)
+
+Resolved Grill Log: Return the settled task closure from internal async functions. Keep the declared signature at fixed boundaries.
+
+Resolved Grill Log: async entry reporting reads the selected Result
+layout, including when the failure payload uses an alternate native
+carrier. It keeps the entry's status convention.

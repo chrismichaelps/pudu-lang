@@ -41,3 +41,9 @@ run out is carried to the next round as is.
 ## Referenced by
 
 [[Compiler Lower Array]] · [[Native Arrays]] · [[src/Pudu/Compiler/_MOC]]
+
+## Stored comparison calls (#956)
+
+Resolved Grill Log: the caller supplies the comparison expression.
+The sort retains its order of comparisons and leaves the caller in
+charge of selecting the held callable's native signature.

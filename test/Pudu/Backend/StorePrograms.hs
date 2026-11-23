@@ -19,6 +19,23 @@ storeSuccessPrograms =
       , "  0"
       , "}" ]
     , "#[-1: \"a\", 3: \"d\"] #[] 2\nSome(\"d\")None#[-1: \"a\"][-1, 3][\"a\", \"d\"]\ntruefalse#[-1: \"a\", 3: \"d\"]\ntrue\n" )
+  , ( "store updates preserve callable payloads and retained aliases", program
+      [ "trait View { fn size(self: &Self) -> Int }"
+      , "impl View for Bytes { fn size(self: &Self) -> Int { 0 } }"
+      , "fn retain(value: dynamic View) -> fn() -> Str { value.toText }"
+      , "fn plain() -> Str { \"plain\" }"
+      , "fn main() -> Int {"
+      , "  let empty: Buckets[fn() -> Str] = bucketsOf()"
+      , "  let base = empty.insert(-2, plain)"
+      , "  let filled = base.insert(3, retain(\"λ\".toBytes()))"
+      , "  let read = filled.get"
+      , "  match read(3) { case Some(run) => print(run())"
+      , "                 case None => print(\"missing\") }"
+      , "  print(show(base.get(3)))"
+      , "  for run in filled.values() { print(run()) }"
+      , "  print(show(filled.remove(-2).keys()))"
+      , "  0", "}" ]
+    , "Some(\"λ\")\nNone\nplain\nSome(\"λ\")\n[3]\n")
   , ( "owned payloads, method values, builtin identity, nesting, ordering and transfers", program
       [ "type Tag = { name: Str, weight: Float }"
       , ""

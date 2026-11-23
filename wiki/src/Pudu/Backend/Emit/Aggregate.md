@@ -181,3 +181,29 @@ widths, including in tuples and ordered collections.
 A numeric payload pair takes its shared value order before nominal tag
 ordering. Converting a mixed pair for comparison does not narrow either
 operand and releases any temporary carrier.
+
+
+## Ordering erased payloads and mixed sums (#956)
+
+Dynamic boxes use the rank of the held value when two tags differ. Numeric
+pairs still use numeric comparison. A sum's rank follows its active variant,
+so positional and named variants of one type can rank differently.
+
+### Resolved Grill Log
+
+Compare shapes before nominal names. Use canonical owner order when distinct
+record or sum implementations share a shape, and use the variant name when
+comparing variants of one sum with the same shape.
+
+## Comparisons across dynamic payload layouts (#956)
+
+Resolved Grill Log: dynamic tags select held layouts. A pair of distinct
+tags dispatches to [[Backend Cross Comparison]], which walks each side's
+layout and compares their held values. Same-tag helpers retain the
+usual dependency closure.
+
+## Held kinds in dynamic diagnostics (#956)
+
+Resolved Grill Log: a dynamic tag describes a layout. Diagnostics obtain
+the held carrier's runtime label, following an ordinary sum's active
+variant or a callable's actual kind.

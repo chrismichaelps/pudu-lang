@@ -5,13 +5,14 @@
     is reported at its root name. A lent place is held the same way: its
     indices run once, where the argument stands, and the store after the call
     reads the root again. -}
-module Pudu.Compiler.Lower.Place (HeldPlace (..), holdPlace, lowerPlaceAssignment, readHeld, readHeldAtKeys, storeHeld) where
+module Pudu.Compiler.Lower.Place (HeldPlace (..), holdPlace, lowerPlaceAssignment, observeHeldLayout, readHeld, readHeldAtKeys, storeHeld) where
 
 import Data.List.NonEmpty (NonEmpty (..))
 import Data.Text (Text)
 import Pudu.Compiler.Lower.Array (takeReceiver)
 import Pudu.Compiler.Lower.Control (expressionIsPrintValued)
-import Pudu.Compiler.Lower.State (LowerContext (..), LowerState (..), bindLocal, halt, intType, lookupLocal, refuse, refused)
+import Pudu.Compiler.Lower.Dynamic (hasRuntimeChoice, projectRuntimeValue, recordWithFields, storageCarrier)
+import Pudu.Compiler.Lower.State (LowerContext (..), LowerState (..), bindLocal, halt, intType, lookupLocal, observeMutableLayout, refuse, refused)
 import Pudu.Compiler.Lower.Types (LowerTypes, recordFields)
 import Pudu.Core
 import Pudu.Frontend.Syntax (Expression (..), Located (..))
@@ -44,11 +45,12 @@ lowerPlaceAssignment lower state at target value = do
     (afterIndices, Nothing) -> refused afterIndices
     (afterIndices, Just (declarations, found)) -> case lower afterIndices value of
       (after, Nothing) -> refused after
-      (after, Just (core, kind))
+      (after, Just (replacementValue, _))
         | expressionIsPrintValued core -> halt at "assigning a Result[(), Str] value" after
-        | kind /= heldType found && kind /= CoreNeverType -> halt at "an assignment whose value has a different type" after
+        | kind /= heldType found && kind /= CoreNeverType ->
+            halt at "an assignment whose value has a different type" (observeHeldLayout after found kind)
         | otherwise ->
-            let (withHeld, local) = bindLocal after "$assigned" kind
+            let (withHeld, local) = bindLocal ready "$assigned" kind
                 root = heldRoot found
                 replacement = CoreExpression at kind (CoreReadLocal local)
                 statements = declarations <> [CoreStatement at (CoreDeclare local core)]
@@ -56,8 +58,29 @@ lowerPlaceAssignment lower state at target value = do
                 blockKind = if stops then CoreNeverType else coreLocalType root
              in (withHeld, Just (CoreStatement at (CoreAssign root (CoreExpression at blockKind
                   (CoreBlockValue (CoreBlock statements (Just (storedValue (types after) found replacement))))))))
+        where
+          (ready, core) = projectRuntimeValue (types after) after (heldType found) replacementValue
+          kind = coreExpressionType core
  where
   types = contextTypes . lowerContext
+
+observeHeldLayout :: LowerState -> HeldPlace -> CoreType -> LowerState
+observeHeldLayout state found actual
+  | hasRuntimeChoice actual
+  , Just expanded <- grow (coreLocalType root) (heldSteps found) =
+      observeMutableLayout state root expanded
+  | otherwise = state
+ where
+  root = heldRoot found
+  types = contextTypes (lowerContext state)
+  grow checked [] = Just (storageCarrier types checked [actual])
+  grow checked (Left field : rest) = do
+    fields <- recordFields types checked
+    before <- lookup field fields
+    expanded <- grow before rest
+    pure (recordWithFields types checked [if label == field then expanded else kind | (label, kind) <- fields])
+  grow (CoreArrayType member) (Right _ : rest) = CoreArrayType <$> grow member rest
+  grow _ _ = Nothing
 
 {-| Resolve a place and run its indices into held locals, in order. Nothing
     when the expression is not a place; a refusal at `at` when it is one

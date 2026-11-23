@@ -27,6 +27,7 @@ publishProduct ExecutionProducts compiled = compiled
   , compileDocs = Nothing
   , compileMethods = []
   , compileSchemes = []
+  , compileDynamicWidenings = []
   }
 
 frontendFor :: ProductUse -> ProductCache -> Source -> IO FrontendResult
@@ -61,6 +62,7 @@ checkedFor ExecutionProducts cache graph source frontend compile = do
         , compileSchemes = []
         , compileFolded = checkedFolded reused
         , compileShapes = Nothing
+        , compileDynamicWidenings = []
         }
     Nothing -> do
       fresh <- compile

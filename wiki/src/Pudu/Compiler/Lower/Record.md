@@ -53,3 +53,17 @@ A record or record variant whose declared field is `dynamic` widens the
 written value of an implementing type to the declared type before building the
 Core record. Resolved Grill Log: the declaration's field type, not the
 initializer's, chooses the widening.
+
+## Dynamic fields in record updates (#956)
+
+Resolved Grill Log: project each written replacement through the checked
+layout of the retained base. Record updates reuse the same field widening
+as construction and still evaluate the base before the written fields.
+
+## Runtime layouts in products (#956)
+
+Resolved Grill Log: Build records using their actual field layouts. An update preserves the base layout of untouched fields and may widen written fields. Field reads select the held carrier.
+
+## Runtime layouts in sum payloads (#956)
+
+Resolved Grill Log: Record-style variants reuse the sum payload construction after evaluating fields in source order.

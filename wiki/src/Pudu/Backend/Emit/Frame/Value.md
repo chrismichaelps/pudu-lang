@@ -234,3 +234,13 @@ Show uses the payload's show helper.
 ### Resolved Grill Log
 
 Widening preserves whether the source operation asks for quoted text.
+
+## Runtime kind reads (#956)
+
+Resolved Grill Log: read the kind of a saved operand through its typed
+cell. The emitter selects a static label or a runtime layout helper as
+the value's shape requires.
+
+## Stored callable dispatch (#956)
+
+Resolved Grill Log: A closure-target test uses the linked body identifier stored with the closure. It leaves captures and source-level equality untouched.

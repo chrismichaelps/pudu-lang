@@ -80,3 +80,12 @@ is missing, as `evaluateFor` does once nothing else applies.
 ## Referenced by
 
 [[Compiler Lower Body]]
+
+## Array runtime elements (#956)
+
+Resolved Grill Log: a checked array uses the lowered receiver's element
+carrier for the item local and its binder on every turn.
+
+## Runtime keyed layouts (#956)
+
+Resolved Grill Log: Iteration reads keys and entries with the lowered collection carrier. The binder uses the corresponding item layout.

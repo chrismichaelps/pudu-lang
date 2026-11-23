@@ -36,7 +36,7 @@ import Pudu.Semantic
   )
 import Pudu.Doc (DocIndex, buildIndex)
 import Pudu.Type (DeclaredShapes, ModuleTypes (..), TypeInfo, checkTypesDetailed)
-import Pudu.Type.Value (NominalId, Scheme)
+import Pudu.Type.Value (NominalId, Scheme, Type)
 import Pudu.Type.Interface.Graph (InterfaceGraph, emptyInterfaceGraph, importsFor)
 import Data.Text (Text)
 import Pudu.Source (Source, Span)
@@ -82,6 +82,7 @@ data CompileResult = CompileResult
   {-| The module's records and sums formed with its imports, for native
       lowering; nothing when checking never ran. -}
   , compileShapes :: ~(Maybe DeclaredShapes)
+  , compileDynamicWidenings :: ~[(Span, NominalId, Type)]
   }
   deriving stock (Eq, Show)
 
@@ -112,6 +113,7 @@ rejectFrontend FrontendResult{frontendTokens, frontendModule, frontendDiagnostic
     , compileSchemes = []
     , compileFolded = Map.empty
     , compileShapes = Nothing
+    , compileDynamicWidenings = []
     }
 
 {-| Run lexing, parsing, name resolution, and type checking in fixed order.
@@ -159,6 +161,7 @@ compileFrontendWithDependencies dependencyFolded dependencyKinds dependencies co
             , compileSchemes = []
             , compileFolded = Map.empty
             , compileShapes = Nothing
+            , compileDynamicWidenings = []
             }
         Just original ->
           let (parsed, expansionDiagnostics) = expandModule original
@@ -201,6 +204,7 @@ compileFrontendWithDependencies dependencyFolded dependencyKinds dependencies co
                     , compileSchemes = maybe [] moduleSchemes typing
                     , compileFolded = folded
                     , compileShapes = moduleShapes <$> typing
+                    , compileDynamicWidenings = maybe [] moduleDynamicWidenings typing
                     }
 
 {-| Evaluate the module's constants at compile time.

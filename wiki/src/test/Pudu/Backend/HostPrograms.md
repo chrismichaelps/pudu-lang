@@ -43,3 +43,7 @@ Resolved Grill Log: Compare invalid desktop calls and their error precedence wit
 ## Native audio (#857)
 
 Resolved Grill Log: Compare audio validation and unsupported operations against the interpreter.
+
+## Native task result layouts (#956)
+
+Resolved Grill Log: cover deferred tasks with stored callable inputs, selected success layouts and scope failures across joined and awaited tasks.

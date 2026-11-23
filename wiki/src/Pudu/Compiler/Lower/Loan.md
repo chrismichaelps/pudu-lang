@@ -98,3 +98,23 @@ an ordinary value held before its operands, as `evaluateCall` orders it; a value
 that stops leaves the call unmade. valueSignature builds the signature a
 value call reads from its formed function type. closeLoaned makes a body's
 trailing result answer the finals; lambdas and lifted method values use it.
+
+## Ordinary operands of loaned calls (#956)
+
+Resolved Grill Log: when a loaned call has an ordinary operand, widen it
+using the corresponding expected parameter carrier before binding it.
+A lent place must retain its exact carrier for writeback.
+
+## Native mutable loan layouts (#956)
+
+Resolved Grill Log: Read each place once at its argument position. Select the exact native parameter and final layouts before the call. Project finals back into their retained places in parameter order.
+
+## Layout demands from a lent parameter (#956)
+
+Resolved Grill Log: a named parameter may demand a broader layout
+through an assignment. The caller projects its input and records any
+layout it needs to hold the resulting final.
+
+## Stored mutable parameter layouts (#956)
+
+Resolved Grill Log: A held operand may project into a wider loaned input without copying the callable. The return path still publishes the final into its original place.

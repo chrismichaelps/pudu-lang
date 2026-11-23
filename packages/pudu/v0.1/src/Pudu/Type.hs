@@ -82,12 +82,13 @@ data ModuleTypes = ModuleTypes
   , moduleShapes :: ~DeclaredShapes
   , moduleOwners :: !(Map.Map Span OwnerSelection)
   , moduleProviders :: !(Map.Map Span ProviderSelection)
+  , moduleDynamicWidenings :: ~[(Span, NominalId, Type)]
   }
   deriving stock (Eq, Show)
 
 checkTypesDetailed :: ImportTypes -> Set Span -> Module -> (ModuleTypes, [Diagnostic])
 checkTypesDetailed imported writable moduleValue =
-  let (entries, schemes, kinds, methods, selections, owners, providers, diagnostics) = Check.checkModuleDetailed imported writable moduleValue
+  let (entries, schemes, kinds, methods, selections, owners, providers, widenings, diagnostics) = Check.checkModuleDetailed imported writable moduleValue
    in ( ModuleTypes
           { moduleTypeInfo = typeInfoFor moduleValue entries
           , moduleSchemes = schemes
@@ -97,6 +98,7 @@ checkTypesDetailed imported writable moduleValue =
           , moduleShapes = declaredShapesWith imported moduleValue
           , moduleOwners = Map.fromList owners
           , moduleProviders = Map.fromList providers
+          , moduleDynamicWidenings = widenings
           }
       , diagnostics
       )

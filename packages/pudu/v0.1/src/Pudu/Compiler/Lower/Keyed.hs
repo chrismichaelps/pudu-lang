@@ -4,11 +4,15 @@
     before it is stored, and one that can't be ordered stops the program with
     E7008, as `comparableValue` decides. -}
 module Pudu.Compiler.Lower.Keyed
-  (lowerKeyedBuilder, keyedFromArray, lowerSetLiteral, lowerKeyedMethod, setMembership, Blame (..), orderable, mayHoldFunction) where
+  (lowerKeyedBuilder, keyedFromArray, keyedBuilderCarrier, lowerSetLiteral, lowerKeyedMethod, setMembership, Blame (..), orderable, mayHoldFunction) where
 
+import Data.List (mapAccumL)
+import qualified Data.Set as Set
 import Data.Text (Text)
-import Pudu.Compiler.Lower.Array (collect, stopped, stops)
+import Pudu.Compiler.Lower.Array (collect, reboxArray, stopped, stops)
 import Pudu.Compiler.Lower.Control (popLoop, pushLoop)
+import Pudu.Compiler.Lower.Dynamic (commonAggregateCarrier, hasRuntimeChoice, mapRuntimeChoice, projectRuntimeValue, runtimeCarriers, storageCarrier, widen)
+import Pudu.Compiler.Lower.Sum (constructVariant)
 import Pudu.Compiler.Lower.State (LowerContext (..), LowerState (..), bindLocal, halt, intType, refused)
 import Pudu.Compiler.Lower.Types (LowerTypes, recordFields, sumVariants, typeForSpan)
 import Pudu.Core
@@ -23,10 +27,12 @@ type Lowered = (LowerState, Maybe (CoreExpression, CoreType))
     once all are in hand, then the tree is built. -}
 lowerKeyedBuilder :: LowerExpression -> LowerState -> Span -> Text -> [Located Expression] -> Lowered
 lowerKeyedBuilder lower state at name arguments = case (typeForSpan types at, arguments) of
-  (Just kind, [argument]) | Just (keyOf, described) <- builderOf at name kind -> case lower state argument of
+  (Just kind, [argument]) -> case lower state argument of
     (after, Nothing) -> refused after
     (after, Just (core, CoreNeverType)) -> (after, Just (core, CoreNeverType))
-    (after, Just (core, CoreArrayType _)) -> built AtCall after at kind keyOf described core
+    (after, Just (core, CoreArrayType _)) ->
+      maybe (halt at ("a call to " <> name <> " with incompatible item layouts") after) id
+        (buildFromArray AtCall after at name kind core)
     (after, Just _) -> halt (locatedSpan argument) ("a call to " <> name <> " with this argument") after
   _ -> halt at ("this call to " <> name) state
  where
@@ -36,9 +42,34 @@ lowerKeyedBuilder lower state at name arguments = case (typeForSpan types at, ar
     an unorderable key is blamed on the call made through the value. Nothing
     when the result is not that builtin's collection. -}
 keyedFromArray :: LowerState -> Span -> Text -> CoreType -> CoreExpression -> Maybe Lowered
-keyedFromArray state at name kind array = do
-  (keyOf, described) <- builderOf at name kind
-  pure (built AtCaller state at kind keyOf described array)
+keyedFromArray = buildFromArray AtCaller
+
+buildFromArray :: Blame -> LowerState -> Span -> Text -> CoreType -> CoreExpression -> Maybe Lowered
+buildFromArray blame state at name kind array = do
+  let types = contextTypes (lowerContext state)
+      base = case (kind, coreExpressionShape array) of
+        (CoreMapType key value, CoreArray []) -> array{coreExpressionType = CoreArrayType (CoreTupleType [key, value])}
+        (CoreSetType member, CoreArray []) -> array{coreExpressionType = CoreArrayType member}
+        (CoreMapType key value, _) -> widen types (CoreArrayType (CoreTupleType [key, value])) array
+        (CoreSetType member, _) -> widen types (CoreArrayType member) array
+        _ -> array
+  (result, element) <- keyedBuilderCarrier types name kind (coreExpressionType base)
+  (keyOf, described) <- builderOf at name result
+  CoreArrayType old <- Just (coreExpressionType base)
+  let (ready, items) = reboxArray state at old element base
+  pure (built blame ready at result keyOf described items)
+
+keyedBuilderCarrier :: LowerTypes -> Text -> CoreType -> CoreType -> Maybe (CoreType, CoreType)
+keyedBuilderCarrier types name checked (CoreArrayType item) = case (name, checked) of
+  ("mapOf", CoreMapType key value)
+    | CoreTupleType [actualKey, actualValue] <- item ->
+        Just (CoreMapType actualKey actualValue, item)
+    | Just pair@(CoreTupleType [actualKey, actualValue]) <- commonAggregateCarrier types
+        (CoreTupleType [key, value]) (Set.toList (runtimeCarriers item)) ->
+          Just (CoreMapType actualKey actualValue, pair)
+  ("setOf", CoreSetType _) -> Just (CoreSetType item, item)
+  _ -> Nothing
+keyedBuilderCarrier _ _ _ _ = Nothing
 
 builderOf :: Span -> Text -> CoreType -> Maybe (CoreExpression -> CoreExpression, Text)
 builderOf at name kind = case (name, kind) of
@@ -55,10 +86,16 @@ lowerSetLiteral :: LowerExpression -> LowerState -> Span -> [Located Expression]
 lowerSetLiteral lower state at members = case typeForSpan (contextTypes (lowerContext state)) at of
   Just kind@(CoreSetType member) -> case collect lower state members of
     (after, Nothing) -> refused after
-    (after, Just cores)
-      | any stops cores -> (after, Just (stopped at cores, CoreNeverType))
-      | all ((== member) . coreExpressionType) cores ->
-          built AtCall after at kind id "set member" (CoreExpression at (CoreArrayType member) (CoreArray cores))
+    (after, Just written)
+      | any stops written -> (after, Just (stopped at written, CoreNeverType))
+      | let types = contextTypes (lowerContext after)
+            widened = map (widen types member) written
+            layouts = map coreExpressionType widened
+            stored = if any hasRuntimeChoice layouts then storageCarrier types member layouts else member
+            (ready, projected) = mapAccumL (\current -> projectRuntimeValue types current stored) after widened
+      , all ((== stored) . coreExpressionType) projected ->
+          built AtCall ready at (if stored == member then kind else CoreSetType stored) id "set member"
+            (CoreExpression at (CoreArrayType stored) (CoreArray projected))
       | otherwise -> halt at "a set literal whose members have different types" after
   _ -> halt at "a set without a native member type" state
 
@@ -69,32 +106,114 @@ setMembership state at candidate set =
   let (withCandidate, candidateLocal) = bindLocal state "" (coreExpressionType candidate)
       (withSet, setLocal) = bindLocal withCandidate "" (coreExpressionType set)
       read' local = CoreExpression at (coreLocalType local) (CoreReadLocal local)
-      probe = CoreExpression at CoreBoolType (CoreKeyedMethod KeyedContains (read' setLocal) [read' candidateLocal])
+      (converted, source, operands) = carryOperands withSet at (coreExpressionType set) "contains"
+        (read' setLocal) [read' candidateLocal]
       held = [CoreStatement at (CoreDeclare candidateLocal candidate), CoreStatement at (CoreDeclare setLocal set)]
-   in (withSet, Just (CoreExpression at CoreBoolType (CoreBlockValue (CoreBlock held (Just probe))), CoreBoolType))
+   in case (coreExpressionType source, operands) of
+        (CoreSetType member, [operand]) ->
+          let types = contextTypes (lowerContext converted)
+              (ready, key) = projectRuntimeValue types converted member operand
+              probe = CoreExpression at CoreBoolType (CoreKeyedMethod KeyedContains source [key])
+           in if coreExpressionType key == member
+                then (ready, Just (CoreExpression at CoreBoolType (CoreBlockValue (CoreBlock held (Just probe))), CoreBoolType))
+                else halt at "a set membership probe with an incompatible layout" ready
+        _ -> halt at "set membership without its operands" converted
+
+carryOperands :: LowerState -> Span -> CoreType -> Text -> CoreExpression -> [CoreExpression]
+  -> (LowerState, CoreExpression, [CoreExpression])
+carryOperands state at checked name source operands = case (checked, actual, operands) of
+  (CoreMapType key value, CoreMapType oldKey oldValue, [probe, item]) | name == "insert" ->
+    retain (CoreMapType (input key oldKey probe) (input value oldValue item))
+  (CoreMapType key _, CoreMapType oldKey oldValue, [probe]) | name `elem` ["get", "containsKey", "remove"] ->
+    retain (CoreMapType (input key oldKey probe) oldValue)
+  (CoreSetType member, CoreSetType old, [probe]) | name `elem` ["contains", "insert", "remove"] ->
+    retain (CoreSetType (input member old probe))
+  (CoreStoreType value, CoreStoreType old, [_, item]) | name == "insert" ->
+    retain (CoreStoreType (input value old item))
+  (CoreMapType key value, CoreMapType oldKey oldValue, [right])
+    | name == "merge", CoreMapType rightKey rightValue <- coreExpressionType right ->
+        combine (CoreMapType (shared key oldKey rightKey) (shared value oldValue rightValue)) right
+  (CoreSetType member, CoreSetType old, [right])
+    | name `elem` ["union", "intersect", "difference"], CoreSetType rightMember <- coreExpressionType right ->
+        combine (CoreSetType (shared member old rightMember)) right
+  _ -> (state, source, operands)
+ where
+  types = contextTypes (lowerContext state)
+  actual = coreExpressionType source
+  input declared held operand =
+    let kind = coreExpressionType (widen types held operand)
+     in shared declared held kind
+  shared declared left right
+    | left /= right, hasRuntimeChoice left || hasRuntimeChoice right = storageCarrier types declared [left, right]
+    | otherwise = left
+  retain kind =
+    let (ready, rebuilt) = reboxKeyed state at kind source
+     in (ready, rebuilt, operands)
+  combine kind right =
+    let (leftReady, left) = reboxKeyed state at kind source
+        (ready, right') = reboxKeyed leftReady at kind right
+     in (ready, left, [right'])
+
+reboxKeyed :: LowerState -> Span -> CoreType -> CoreExpression -> (LowerState, CoreExpression)
+reboxKeyed state at expected value
+  | expected /= actual
+  , Just (old, method) <- items actual
+  , Just (new, _) <- items expected =
+      let entries = CoreExpression at (CoreArrayType old) (CoreKeyedMethod method value [])
+          (ready, projected) = reboxArray state at old new entries
+       in if coreExpressionType projected == CoreArrayType new
+            then (ready, CoreExpression at expected (CoreKeyedMethod KeyedFromArray projected []))
+            else (ready, value)
+  | otherwise = (state, value)
+ where
+  actual = coreExpressionType value
+  items (CoreMapType key held) = Just (CoreTupleType [key, held], KeyedEntries)
+  items (CoreStoreType held) = Just (CoreTupleType [intType, held], KeyedEntries)
+  items (CoreSetType member) = Just (member, KeyedKeys)
+  items _ = Nothing
 
 {-| A built-in map, set or store method when the receiver is one; Nothing
     otherwise. A store is addressed by the Int folded into one word, which is
     what `&+ 0` answers. -}
 lowerKeyedMethod :: LowerExpression -> LowerState -> Span -> Located Expression -> Text -> [Located Expression] -> Maybe Lowered
 lowerKeyedMethod lower state at receiver member arguments = case typeForSpan types (locatedSpan receiver) of
-  Just kind@(CoreMapType key value) -> Just (dispatch kind key (mapMethods kind key value))
-  Just kind@(CoreSetType key) -> Just (dispatch kind key (setMethods kind key))
-  Just kind@(CoreStoreType value) -> Just (dispatch kind intType (storeMethods kind value))
+  Just checked | keyedType checked -> Just $ case collect lower state (receiver : arguments) of
+    (after, Nothing) -> refused after
+    (after, Just cores)
+      | any stops cores -> (after, Just (stopped at cores, CoreNeverType))
+      | target : operands <- cores -> apply checked operands after target
+      | otherwise -> halt at ("a call to " <> member <> " without its keyed receiver") after
   _ -> Nothing
  where
   types = contextTypes (lowerContext state)
-  dispatch kind key table = case lookup member table of
-    Nothing -> halt at ("the " <> collectionName kind <> " method '" <> member <> "'") state
+  keyedType CoreMapType{} = True
+  keyedType CoreSetType{} = True
+  keyedType CoreStoreType{} = True
+  keyedType _ = False
+  apply checked operations current target
+    | Just selected <- mapRuntimeChoice current at CoreNeverType target
+        (\ready held -> fmap (fmap fst) (apply checked operations ready held)) = selected
+    | keyedType (coreExpressionType target) =
+        let (ready, source, written) = carryOperands current at checked member target operations
+         in dispatch ready source written
+    | otherwise = halt at ("a call to " <> member <> " without its keyed receiver") current
+  dispatch current source written =
+    let kind = coreExpressionType source
+     in case kind of
+          CoreMapType key value -> run current source written kind key (mapMethods kind key value)
+          CoreSetType key -> run current source written kind key (setMethods kind key)
+          CoreStoreType value -> run current source written kind intType (storeMethods kind value)
+          _ -> halt at "a keyed operation without its collection" current
+  run current source written kind key table = case lookup member table of
+    Nothing -> halt at ("the " <> collectionName kind <> " method '" <> member <> "'") current
     Just (parameters, result, shape)
-      | length parameters /= length arguments -> halt at ("a call to " <> member <> " with this many arguments") state
-      | otherwise -> case collect lower state (receiver : arguments) of
-          (after, Nothing) -> refused after
-          (after, Just cores)
-            | any stops cores -> (after, Just (stopped at cores, CoreNeverType))
-            | target : operands <- cores, map coreExpressionType operands == parameters ->
-                shape after kind key (target : indexed kind operands) result
-            | otherwise -> halt at ("a call to " <> member <> " with these arguments") after
+      | length parameters == length written
+      , let scope = contextTypes (lowerContext current)
+            (ready, projected) = mapAccumL (\prior (parameter, operand) -> projectRuntimeValue scope prior parameter operand)
+              current (zip parameters written)
+      , map coreExpressionType projected == parameters ->
+          shape ready kind key (source : indexed kind projected) result
+      | otherwise -> halt at ("a call to " <> member <> " with these arguments") current
   collectionName kind = case kind of
     CoreMapType _ _ -> "Map"
     CoreStoreType _ -> "Buckets"
@@ -137,7 +256,7 @@ lowerKeyedMethod lower state at receiver member arguments = case typeForSpan typ
     [] -> refused current
   -- get: Some(lookup) when contains says the key is there, None otherwise.
   getting current kind _ cores _ = case (typeForSpan types at, cores) of
-    (Just option@(CoreSumType _ _), [collection, probe]) ->
+    (Just option@(CoreSumType "Option" _), [collection, probe]) ->
       let (withKey, keyLocal) = bindLocal current "" (coreExpressionType probe)
           (withMap, mapLocal) = bindLocal withKey "" kind
           valueType = case kind of
@@ -147,12 +266,13 @@ lowerKeyedMethod lower state at receiver member arguments = case typeForSpan typ
           read' local = CoreExpression at (coreLocalType local) (CoreReadLocal local)
           found = CoreExpression at CoreBoolType (CoreKeyedMethod KeyedContains (read' mapLocal) [read' keyLocal])
           looked = CoreExpression at valueType (CoreKeyedMethod KeyedLookup (read' mapLocal) [read' keyLocal])
-          some = CoreExpression at option (CoreConstruct "Some" [("0", looked)])
-          none = CoreExpression at option (CoreConstruct "None" [])
-          choice = CoreExpression at option (CoreIfValue found (CoreBlock [] (Just some)) none)
-       in ( withMap
-          , Just (CoreExpression at option (CoreBlockValue (CoreBlock
-              [CoreStatement at (CoreDeclare mapLocal collection), CoreStatement at (CoreDeclare keyLocal probe)] (Just choice))), option) )
+       in case constructVariant withMap at option "Some" [("0", looked)] of
+            (ready, Just (some, result)) ->
+              let none = CoreExpression at result (CoreConstruct "None" [])
+                  choice = CoreExpression at result (CoreIfValue found (CoreBlock [] (Just some)) none)
+                  statements = [CoreStatement at (CoreDeclare mapLocal collection), CoreStatement at (CoreDeclare keyLocal probe)]
+               in (ready, Just (CoreExpression at result (CoreBlockValue (CoreBlock statements (Just choice))), result))
+            (ready, Nothing) -> refused ready
     _ -> halt at "an Option result of get without a native form" current
   -- insert: everything runs, then the key is checked, then stored.
   inserting described current kind key cores result

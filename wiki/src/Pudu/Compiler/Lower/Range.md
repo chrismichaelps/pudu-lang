@@ -33,3 +33,18 @@ with the evaluator's message naming the method.
 ## Referenced by
 
 [[Compiler Lower Body]] · [[Compiler Lower For]] · [[Compiler Lower Slice]] · [[Native Range Values]] · [[src/Pudu/Compiler/_MOC]]
+
+## Runtime reduction carriers (#956)
+
+Resolved Grill Log: range reduction uses the same accumulator
+specialization as array reduction. The range is still converted to
+items after evaluating both callback and seed.
+
+## Held endpoint validation
+
+Validate an already evaluated endpoint by its actual integer layout.
+An incompatible endpoint reports the runtime kind at the range span.
+
+Resolved Grill Log: the caller holds both written expressions before
+validation. Evaluation of a later expression can transfer before any
+endpoint-type failure. Type validation then checks the lower end first.

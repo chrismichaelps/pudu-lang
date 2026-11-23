@@ -11,10 +11,10 @@ import Pudu.Core
 import Pudu.IntegerLiteral (IntegerKind (..))
 import Pudu.Source (Span)
 
-{-| The statements sorting `items` with `before` (both already evaluated
-    into locals) and the local holding the result. `before x y` answers
-    whether x goes before y. -}
-sortStatements :: LowerState -> Span -> CoreLocal -> CoreLocal -> (LowerState, [CoreStatement], CoreLocal)
+{-| The statements sorting retained `items` and the local holding the
+    result. `before x y` answers whether x goes before y. -}
+sortStatements :: LowerState -> Span -> CoreLocal
+  -> (CoreExpression -> CoreExpression -> CoreExpression) -> (LowerState, [CoreStatement], CoreLocal)
 sortStatements state at items before =
   let kind = coreLocalType items
       element = case kind of
@@ -56,7 +56,7 @@ sortStatements state at items before =
       (o6, merging) = pushLoop Nothing o5
       final = popLoop (popLoop (popLoop o6))
 
-      asks x y = expression CoreBoolType (CoreCallValue (reading before) [reading x, reading y])
+      asks x y = before (reading x) (reading y)
       push target value = assign target (method (coreLocalType target) ArrayPushValue (taken target) [value])
       runAt position = expression kind (CoreIndex (reading runs) position)
       runEnded run = [push runs run]

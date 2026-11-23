@@ -73,3 +73,21 @@ payload's normal renderer.
 ### Resolved Grill Log
 
 Both direct and erased carriers use the existing text and character helpers.
+
+## Callable ordering by runtime shape (#956)
+
+Resolved Grill Log: a function carrier can hold foreign callables and
+callback constructors alongside ordinary closures. The comparison helper
+uses the active closure's runtime shape when ordering a comparable value.
+
+## Runtime kind names (#956)
+
+Resolved Grill Log: emit static labels through the shared Core spelling
+and call a layout helper only for values whose active shape selects the
+name.
+
+## Transparent runtime alternatives (#956)
+
+Resolved Grill Log: display and show expose the selected payload of a
+runtime alternative. Drop, equality and comparison reuse the held
+type's existing aggregate operations.

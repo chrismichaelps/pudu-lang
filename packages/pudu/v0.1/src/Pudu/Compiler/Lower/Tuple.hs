@@ -3,6 +3,7 @@
 module Pudu.Compiler.Lower.Tuple (lowerTuple, lowerTupleIndex, lowerTuplePattern) where
 
 import Pudu.Compiler.Lower.Control (expressionIsPrintValued)
+import Pudu.Compiler.Lower.Dynamic (hasRuntimeChoice, mapRuntimeChoice, normalizeAggregateValue)
 import Pudu.Compiler.Lower.State (LowerContext (..), LowerState (..), bindLocal, halt, refused)
 import Pudu.Compiler.Lower.Types (nativeValueType, recordFields, typeForSpan)
 import Pudu.Core
@@ -42,25 +43,32 @@ lowerTupleIndex :: LowerExpression -> LowerState -> Span -> Located Expression -
 lowerTupleIndex lower state at receiver key = case lower state receiver of
   (after, Nothing) -> refused after
   (after, Just (core, CoreNeverType)) -> (after, Just (core, CoreNeverType))
-  (after, Just (core, CoreTupleType members)) -> case locatedValue key of
-    LiteralExpression (ResolvedInteger _ position)
-      | position >= 0, position < fromIntegral (length members) ->
-          let kind = members !! fromInteger position
-           in (after, Just (CoreExpression at kind (CoreTupleIndex (fromInteger position) core), kind))
-    _ -> halt (locatedSpan key) "a tuple position that is not a literal in range" after
-  (after, Just (_, kind)) -> halt at ("indexing a " <> coreTypeName kind <> " value") after
+  (after, Just (core, _)) -> case select after core of
+    (ready, Just value) -> (ready, Just (value, coreExpressionType value))
+    (ready, Nothing) -> refused ready
+ where
+  select current core
+    | Just selected <- mapRuntimeChoice current at CoreNeverType core select = fmap (fmap fst) selected
+    | CoreTupleType members <- coreExpressionType core = case locatedValue key of
+        LiteralExpression (ResolvedInteger _ position)
+          | position >= 0, position < fromIntegral (length members)
+          , kind : _ <- drop (fromInteger position) members ->
+              (current, Just (CoreExpression at kind (CoreTupleIndex (fromInteger position) core)))
+        _ -> halt (locatedSpan key) "a tuple position that is not a literal in range" current
+    | otherwise = halt at ("indexing a " <> coreTypeName (coreExpressionType core) <> " value") current
 
 {-| `let (a, (b, _)) = subject`: the subject runs once into a hidden local,
     then each name reads its position. A tuple pattern of names and
     wildcards cannot fail on a tuple, so there is no refusal path to model. -}
 lowerTuplePattern :: LowerExpression -> LowerState -> Span -> Located Pattern -> Maybe (Located TypeSyntax)
   -> Located Expression -> (LowerState, Maybe [CoreStatement])
-lowerTuplePattern lower state at pattern annotation subject = case lower state subject of
+lowerTuplePattern lower state at pattern annotation subject = case loweredSubject of
   (after, Nothing) -> refused after
   (after, Just (core, kind))
     | expressionIsPrintValued core -> halt at "binding a Result[(), Str] value" after
     | kind == CoreNeverType -> (after, Just [CoreStatement at (CoreEvaluate core)])
     | Just _ <- annotation
+    , not (hasRuntimeChoice kind)
     , typeForSpan (contextTypes (lowerContext after)) (locatedSpan subject) /= Just kind ->
         halt at "a binding without matching solved native type facts" after
     | otherwise ->
@@ -71,6 +79,12 @@ lowerTuplePattern lower state at pattern annotation subject = case lower state s
                 (final, Just (CoreStatement at (CoreDeclare hidden core) : declared))
               (final, Nothing) -> (final, Nothing)
  where
+  loweredSubject = case lower state subject of
+    (after, Just (value, _)) ->
+      let types = contextTypes (lowerContext after)
+          (ready, held) = normalizeAggregateValue types (typeForSpan types (locatedSpan subject)) after value
+       in (ready, Just (held, coreExpressionType held))
+    (after, Nothing) -> refused after
   bindings current source (Located patternSpan shape) = case (shape, coreExpressionType source) of
     (WildcardPattern, _) -> (current, Just [])
     (BindingPattern (Located _ name), kind) ->

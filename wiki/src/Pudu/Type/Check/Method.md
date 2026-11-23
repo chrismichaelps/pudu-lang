@@ -233,3 +233,16 @@ arguments while following a rigid constructor's bounds. Assert actual checker
 products, canonical implementation trait projection, authored syntax and spans;
 retain full existing dispatch, diagnostic, derive and cache gates.
 See [[Bound Receiver Evidence Delivery]].
+
+## Dynamic provider identity (#956)
+
+Resolved Grill Log: a successful dynamic member selection records the
+canonical trait identity for execution. The static trait view already
+selects that provider. Two traits with the same display name can declare
+the same member and be implemented by one concrete type.
+
+## Proven widening facts (#956)
+
+Resolved Grill Log: publish a dynamic widening only after its obligation
+succeeds. A structurally matching implementation head alone cannot
+supply this proof when its bounds fail.

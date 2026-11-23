@@ -91,6 +91,7 @@ expression (CoreExpression _ kind shape) = kind : case shape of
   CoreForeignCall declared arguments -> concatMap callbackSlotTypes (coreForeignCallbacks declared) <> concatMap expression arguments
   CoreClosure _ captures -> concatMap expression captures
   CoreCapture _ operand -> expression operand
+  CoreClosureIs _ operand -> expression operand
   CoreCallValue callee arguments -> concatMap expression (callee : arguments)
   CoreArray members -> concatMap expression members
   CoreArrayMethod _ receiver arguments -> concatMap expression (receiver : arguments)

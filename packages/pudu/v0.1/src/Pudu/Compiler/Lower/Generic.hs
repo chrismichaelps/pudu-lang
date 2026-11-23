@@ -1,6 +1,6 @@
 {-| @Pudu.Compiler.Lower.Generic — one copy of a generic body per type-argument
     list, read off the instantiation checking recorded at the call. -}
-module Pudu.Compiler.Lower.Generic (admitCallee, admitCalleeGiven, matchType, specialize, instantiationOf, unformed, writtenCoreType, writtenTypeArguments) where
+module Pudu.Compiler.Lower.Generic (admitCallee, admitCalleeGiven, runtimeCallSignature, matchType, specialize, substitute, instantiationOf, unformed, writtenCoreType, writtenTypeArguments) where
 
 import Control.Monad (foldM)
 import Data.List.NonEmpty (NonEmpty (..))
@@ -8,19 +8,65 @@ import Data.Map.Strict (Map)
 import qualified Data.Map.Strict as Map
 import Data.Text (Text)
 import qualified Data.Text as Text
-import Pudu.Compiler.Lower.Signature (ensureSignature)
-import Pudu.Compiler.Lower.Dynamic (writtenType)
+import Pudu.Compiler.Lower.Default (takesSuppliedCount)
+import Pudu.Compiler.Lower.Signature (ensureSignature, taskSignatureResult)
+import Pudu.Compiler.Lower.Dynamic (hasRuntimeChoice, runtimeCarriers, runtimeResultType, settledMutableLayout, writtenType)
 import Pudu.Compiler.Lower.State
-  ( CoreSignature, Head (..), Instance (..), LowerContext (..), LowerState (..)
+  ( CoreSignature (..), Head (..), Instance (..), LowerContext (..), LowerState (..), MutableSite (MutableParameterSite)
   , halt, inModule, isModuleQualifier, lookupLocal, resolveFunction, withTypeBindings )
 import Pudu.Compiler.Lower.Types (formedCoreTypeIn, lookupScheme, typeBindings, typeFactAt, unformed)
 import qualified Data.List.NonEmpty as NonEmpty
-import Pudu.Core (CoreType (..))
+import Pudu.Core (CoreLocal (..), CoreParameter (..), CoreType (..))
 import Pudu.Frontend.Syntax.Name (ModuleName (..))
 import Pudu.Frontend.Syntax (Expression (..), Function (..), Located (..), TypeSyntax (..))
 import Pudu.Source (Span, typeArgumentsKey)
 import Pudu.Type.Value (NominalId (..), Scheme (..), Type (..), TypeVar (..), nominalKey)
 import Pudu.Type.Substitute (substituteRigid)
+
+{-| Register a native copy with the layouts its caller supplies. -}
+runtimeCallSignature :: (Text, Located Function) -> LowerState -> Text -> CoreSignature -> [CoreType]
+  -> Maybe (LowerState, Text, CoreSignature)
+runtimeCallSignature (owner, function) current target signature given = do
+  let context = lowerContext current
+      expected = map (coreLocalType . coreParameterLocal) (signatureParameters signature)
+      pairs = zip expected given
+  if any (uncurry differs) pairs
+    && all (\(wanted, actual) -> wanted == actual || hasRuntimeChoice actual) pairs
+    then do
+      instance' <- case Map.lookup target (contextInstances context) of
+        Just existing -> Just existing
+        Nothing -> do
+          let types = contextTypes (lowerContext (inModule owner current))
+          scheme <- lookupScheme types (locatedValue (functionName (locatedValue function)))
+          pure (Instance owner function scheme Map.empty False Map.empty)
+      let settledInputs = zipWith3 input [0 ..] expected given <> drop (length given) expected
+          input position wanted actual
+            | wanted == actual = wanted
+            | takesSuppliedCount signature, position `notElem` signatureLoaned signature =
+                runtimeResultType wanted (runtimeCarriers wanted <> runtimeCarriers actual)
+            | otherwise = actual
+          name = fst (Text.breakOn "$runtime" target) <> "$runtime" <> Text.pack (show settledInputs)
+          result
+            | functionAsync (locatedValue function) =
+                taskSignatureResult context name (locatedValue function) (signatureResult signature)
+            | otherwise = runtimeResultType (signatureResult signature)
+                (Map.findWithDefault Set.empty name (contextRuntimeResults context))
+          parameters = zipWith3 parameterWith [0 ..] settledInputs (signatureParameters signature)
+          parameterWith position kind parameter =
+            let local = coreParameterLocal parameter
+                actual
+                  | position `elem` signatureLoaned signature =
+                      settledMutableLayout context (MutableParameterSite name position) kind
+                  | otherwise = kind
+             in parameter{coreParameterLocal = local{coreLocalType = actual}}
+          exact = signature{signatureParameters = parameters, signatureResult = result}
+          registered = current{lowerContext = context
+            { contextInstances = Map.insert name instance' (contextInstances context)
+            , contextSignatures = Map.insert name (Just exact) (contextSignatures context) }}
+      Just (registered, name, exact)
+    else Nothing
+ where
+  differs wanted actual = wanted /= actual && hasRuntimeChoice actual
 
 {-| Admit a call's callee and answer the key the call names: the function
     itself when it is monomorphic, otherwise its copy for the types checking
@@ -158,6 +204,7 @@ substitute bindings value = case value of
   ReferenceTypeValue mutable inner -> ReferenceTypeValue mutable (substitute bindings inner)
   FunctionTypeRequiring asynchronous inputs required result ->
     FunctionTypeRequiring asynchronous (map (substitute bindings) inputs) required (substitute bindings result)
+  RestrictedType constraints target -> RestrictedType constraints (substitute bindings target)
   _ -> value
 
 {-| The rigid parameters of `pattern` as `actual` fills them. A shared

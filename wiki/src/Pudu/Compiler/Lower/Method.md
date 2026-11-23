@@ -224,3 +224,53 @@ inferred arguments all select the same instance.
 A receiver lent with `&mut self` is read with readHeldAtKeys, so a bad key or
 range fails at the place where it was written, as a `&self` receiver does. Its
 writeback still stores at the root.
+
+## Forwarding a dynamic method's loan (#956)
+
+Resolved Grill Log: read the loaned argument positions from the checked
+member type. A single name in one of those positions lends its existing
+place, just as it does in an ordinary call. Preserve the receiver and
+argument evaluation order and the dispatch arm's writeback ordering.
+
+## Dynamic dispatch keys (#956)
+
+Resolved Grill Log: take the full trait key from the dynamic carrier and
+the implementation owner from the variant's held type. Variant tags label
+the match and writeback. They do not select the method namespace.
+
+## Transfers before dynamic dispatch (#956)
+
+Resolved Grill Log: a receiver or argument that transfers control finishes
+the preceding operand effects. A partial argument list never reaches any
+implementation and never produces loan finals to write back.
+
+## Universal text method on a dynamic view (#956)
+
+Resolved Grill Log: a selected trait member keeps its checked dispatch.
+The universal fallback selects the held value first and then uses ordinary
+member resolution. Receiver evaluation precedes any selected member work.
+
+## Noncallable fields selected through a dynamic view (#956)
+
+Resolved Grill Log: a universal text call can select a definitely
+noncallable field at runtime. Read the field after evaluating the receiver
+and emit the ordinary call failure using that value's kind.
+
+## Runtime layouts in stored methods and builtins (#956)
+
+Resolved Grill Log: A synchronous method instance uses a native copy when its operands carry checked values in runtime alternative layouts. A dynamic call projects the result of its selected implementation.
+
+## Native layouts in dynamic mutable calls (#956)
+
+Resolved Grill Log: specialize each implementation on its actual
+arguments. Project compatible arm results to a common result tuple
+before publishing finals through the original places.
+
+Resolved Grill Log: when a dynamic receiver's final is broader than
+its original place, record the layout demand for the next lowering pass.
+
+## Held receiver fallback (#956)
+
+Resolved Grill Log: when a selected receiver does not supply the
+written builtin, use its nominal implementation if it declares one.
+The retained receiver is read once through its actual carrier.

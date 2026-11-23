@@ -94,3 +94,19 @@ The seven concurrent builtins are first-class through `concurrentCallable`
 after the store builtins and before SwissTable. Resolved Grill Log: exact
 solved `CoreFunctionType`s only; a mismatch refuses at the reference, and
 direct calls and callable bodies share the same builder.
+
+## Runtime layouts in stored methods and builtins (#956)
+
+Resolved Grill Log: Regenerate rendering, output, stopping and compatible collection bodies for their actual native operands. The generated body keeps its builtin identity and caller-site behavior.
+
+## Runtime keyed layouts (#956)
+
+Resolved Grill Log: A specialized keyed constructor derives its result layout from the lowered array before building its native callable body.
+
+## Byte constructor calls
+
+Register the stored byte constructor with its shared argument builder
+and caller-attributed diagnostics.
+
+Resolved Grill Log: registration keeps the checked function shape and
+the existing builtin identity.

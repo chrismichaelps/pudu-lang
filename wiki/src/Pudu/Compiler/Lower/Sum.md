@@ -36,3 +36,7 @@ A variant payload declared `dynamic` widens a value of an implementing type
 to the declared type, at the argument's position, before `CoreConstruct`.
 Resolved Grill Log: the variant's declared field type chooses the widening;
 a Never payload still stops later payloads.
+
+## Runtime layouts in sum payloads (#956)
+
+Resolved Grill Log: Positional and named constructors share payload projection. They choose the physical layout of the selected variant and preserve the other variants.

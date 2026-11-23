@@ -93,3 +93,65 @@ traits without a text variant use the non-text path.
 even when the element type differs from Str, the receiver
 and separator finish before the runtime distinguishes an empty array from
 one with an invalid member.
+
+## Dynamic arguments to runtime methods (#956)
+
+Resolved Grill Log: widen each supplied operand to its checked method
+parameter before selecting the runtime call. This shares the array literal
+conversion while preserving source arity and receiver-first evaluation.
+
+## Runtime element carriers (#956)
+
+Resolved Grill Log: checked types decide which operations are available.
+Array construction and mutation encode every member in the chosen native
+element layout. An update or concatenation that needs a broader layout
+copies the retained source entries into the new layout. A read or
+same-layout transformation uses the layout from the lowered receiver.
+The receiver and arguments each run once in source order.
+
+## Native callback signatures (#956)
+
+Resolved Grill Log: array traversal uses the callback's exact frame
+signature and preserves its result carrier when mapping. A reducer
+uses a consistent accumulator layout for initialization, callback
+input and subsequent turns. Receiver, callback and initial value
+keep their source evaluation order.
+
+## Joining selected text carriers (#956)
+
+Resolved Grill Log: a boxed element contributes text only when its
+held value is text. Evaluate the receiver and separator before walking
+the array. An empty array joins without selecting a payload.
+
+## Stored runtime callbacks (#956)
+
+Resolved Grill Log: traversal uses the same call shape for each
+selected callback body. Mapping keeps every reachable result layout;
+reduction projects callback results into its accumulator.
+
+## Runtime keyed layouts (#956)
+
+Resolved Grill Log: Keyed collections reuse the array reboxing loop for keys and entry pairs.
+
+## Mutable slot layout discovery (#956)
+
+Resolved Grill Log: Array layout projection shares the widening operation used by mutable slots and keyed collections.
+
+## Selected receiver layouts (#956)
+
+Resolved Grill Log: Index the held array or text using its actual layout. Evaluate the index before reporting an unsupported receiver.
+
+## Selected invocation arguments (#956)
+
+Resolved Grill Log: Stop collecting at an argument that transfers control. Consumers preserve the evaluated prefix.
+
+## Selected numeric keys
+
+Scalar indexing retains the receiver before the key. Select both
+held layouts only after their effects. Wider integers use the
+existing bounds checks for arrays and text. If a check admits an
+alternate tuple receiver, the position selects its actual payload.
+
+Resolved Grill Log: a noninteger key produces the same receiver-kind
+failure as the evaluator. A wider out-of-range integer remains an
+index bounds failure, reported at the key.

@@ -50,6 +50,7 @@ import Pudu.Type.Env
   , DeclaredTypes (..)
   , bindName
   , recordProvider, recordProviderSelection, recordImplementationOwner
+  , recordDynamicWidening
   , recordDeclaredMethod
   , ambiguousProviders
   , providerSpelling
@@ -323,7 +324,9 @@ dischargeObligations = do
         case (kind, bound) of
           (DynamicWidening, NominalType owner _) -> do
             satisfied <- implementsTrait resolved owner
-            unless satisfied (unsatisfied kind spanValue resolved bound)
+            if satisfied
+              then recordDynamicWidening spanValue owner resolved
+              else unsatisfied kind spanValue resolved bound
           _ -> do
             (answer, proposals) <- inferBound resolved bound
             case answer of
@@ -418,8 +421,10 @@ methodSchemeWith retain spanValue receiver member = case receiver of
       returns `Self` is not callable through a `dynamic` — the caller would have no
       type to give the result. That is a real restriction and it is the honest
       one: the concrete type is exactly what a dynamic value does not carry. -}
-  DynamicTypeValue traitIdentity ->
-    lookupName (nominalKey traitIdentity <> "." <> member)
+  DynamicTypeValue traitIdentity -> do
+    found <- lookupName (nominalKey traitIdentity <> "." <> member)
+    when retain (mapM_ (const (recordProvider spanValue traitIdentity)) found)
+    pure found
   NominalType owner _ -> do
     let key = nominalKey owner <> "." <> member
     providers <- ambiguousProviders key

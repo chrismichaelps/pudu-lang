@@ -7,16 +7,19 @@
     final through that place in parameter order, as `storePlace` does. -}
 module Pudu.Compiler.Lower.Loan
   ( Callee (..), Operand (..), closeLoaned, loanedReturn, loanedValue, lowerLoanedBody, lowerLoanedCall, lowerLoanedOperands
-  , valueSignature
+  , loanedType, valueSignature, withLoanedParameters
   ) where
 
-import Data.List (elemIndex, sortOn)
+import Data.List (elemIndex, mapAccumL, sortOn)
+import qualified Data.Map.Strict as Map
 import Data.List.NonEmpty (NonEmpty (..))
 import Data.Text (Text)
 import Pudu.Compiler.Lower.Control (blockType, expressionIsPrintValued)
 import Pudu.Compiler.Lower.Default (suppliedArguments)
-import Pudu.Compiler.Lower.Place (HeldPlace (..), holdPlace, readHeld, readHeldAtKeys, storeHeld)
-import Pudu.Compiler.Lower.State (CoreSignature (..), LowerContext (..), LowerState (..), bindLocal, halt, refused)
+import Pudu.Compiler.Lower.Dynamic (hasRuntimeChoice, mapRuntimeChoice, projectRuntimeValue, widen)
+import Pudu.Compiler.Lower.Generic (runtimeCallSignature)
+import Pudu.Compiler.Lower.Place (HeldPlace (..), holdPlace, observeHeldLayout, readHeld, readHeldAtKeys, storeHeld)
+import Pudu.Compiler.Lower.State (CoreSignature (..), Instance (..), LowerContext (..), LowerState (..), MutableSite (MutableParameterSite), bindLocal, halt, refused)
 import Pudu.Core
 import Pudu.Frontend.Syntax (Expression (..), Function, Located (..))
 import Pudu.Source (Span)
@@ -34,7 +37,22 @@ lowerLoanedBody lowerBody located signature state = case lowerBody located signa
      in (final{lowerLoaned = []}, Just function{coreFunctionResult = loanedType signature, coreFunctionBody = body})
   (after, Nothing) -> (after{lowerLoaned = []}, Nothing)
  where
-  lent = state{lowerLoaned = loanedLocals signature}
+  lent = withLoanedParameters (signatureLoaned signature) (signatureParameters signature) state
+
+withLoanedParameters :: [Int] -> [CoreParameter] -> LowerState -> LowerState
+withLoanedParameters positions parameters state =
+  state
+    { lowerLoaned = [coreParameterLocal parameter | (index, parameter) <- indexed, index `elem` positions]
+    , lowerMutableSites = if lowerFlexibleResult state
+        then foldl' register (lowerMutableSites state) indexed
+        else lowerMutableSites state }
+ where
+  indexed = zip [0 ..] parameters
+  register known (index, parameter)
+    | index `elem` positions =
+        let local = coreParameterLocal parameter
+         in Map.insert (coreLocalId local) (MutableParameterSite (lowerCurrentKey state) index) known
+    | otherwise = known
 
 {-| A body lowered with loans in the state, its trailing result made to
     answer the finals too. -}
@@ -64,7 +82,10 @@ loanedValue state at value
        in (held, CoreExpression at kind (CoreBlockValue (CoreBlock [CoreStatement at (CoreDeclare local value)] (Just tuple))))
 
 {-| What a loaned call reaches: a function by name or a runtime function value. -}
-data Callee = Direct !Text | Through !(Located Expression) | ForeignCrossing !CoreForeign
+data Callee
+  = Direct !Text
+  | Through !(Located Expression) !([CoreType] -> LowerState -> CoreExpression -> Lowered)
+  | ForeignCrossing !CoreForeign
 
 {-| The signature a call through a value of a function type reads: its
     formed inputs, its declared result, and its `&mut` positions. -}
@@ -89,32 +110,37 @@ lowerLoanedCall lower state at target signature defaulted arguments =
     order, including a receiver at parameter zero. -}
 lowerLoanedOperands :: LowerExpression -> LowerState -> Span -> Callee -> CoreSignature -> Bool -> [(Int, Operand, Located Expression)] -> Lowered
 lowerLoanedOperands lower state at callee signature defaulted operands = case callee of
-  Through written -> case lower state written of
+  Through written specialize -> case lower state written of
     (after, Nothing) -> refused after
     (after, Just (target, CoreNeverType)) -> (after, Just (target, CoreNeverType))
     (after, Just (target, kind)) ->
       let (bound, local) = bindLocal after "" kind
           declaration = CoreStatement (locatedSpan written) (CoreDeclare local target)
-          call current = (current, CoreCallValue (reading (locatedSpan written) local))
+          call current held = indirect specialize current held (reading (locatedSpan written) local)
        in go call bound [declaration] [] operands
-  Direct target -> go (\current -> (queued target current, CoreCall target)) state [] [] operands
-  ForeignCrossing target -> go (\current -> (current, CoreForeignCall target)) state [] [] operands
+  Direct target -> go (direct target) state [] [] operands
+  ForeignCrossing target -> go (\current held -> made current held signature (CoreForeignCall target)) state [] [] operands
  where
   types = contextTypes . lowerContext
   loaned = signatureLoaned signature
-  parameterTypes = map (coreLocalType . coreParameterLocal) (signatureParameters signature)
+  parameterTypes = map (coreLocalType . coreParameterLocal) . signatureParameters
 
   go prepareCall current statements held [] = finish prepareCall current statements (reverse held)
   go prepareCall current statements held ((index, operand, argument) : rest) = case argumentOf current index operand argument of
     (after, Nothing) -> refused after
     (after, Just (declarations, value, kept))
       | expressionIsPrintValued value -> halt (locatedSpan argument) "a Result[(), Str] call argument" after
-      | Just found <- kept, Just expected <- lookup index (zip [0 ..] parameterTypes)
-      , heldType found /= expected -> halt (locatedSpan argument) "lending a place of a different type" after
       | otherwise ->
-          let (bound, local) = bindLocal after "" (coreExpressionType value)
-              declared = declarations <> [CoreStatement (locatedSpan argument) (CoreDeclare local value)]
-           in go prepareCall bound (statements <> declared) ((local, kept, index) : held) rest
+          let passed = case (kept, lookup index (zip [0 ..] (parameterTypes signature))) of
+                (Nothing, Just expected) -> widen (types after) expected value
+                _ -> value
+              span' = locatedSpan argument
+              (bound, local) = bindLocal after "" (coreExpressionType passed)
+              declared = declarations <> [CoreStatement span' (CoreDeclare local passed)]
+              prelude = statements <> declared
+           in if blockType declared Nothing == CoreNeverType
+                then stopped bound prelude
+                else go prepareCall bound prelude ((local, kept, index) : held) rest
 
   -- A lent receiver fails at the key that chose it, as reading that element
   -- as a value does; a lent argument fails at its root, as a store does.
@@ -136,30 +162,82 @@ lowerLoanedOperands lower state at callee signature defaulted operands = case ca
 
   finish prepareCall current statements held
     | blockType statements Nothing == CoreNeverType = stopped current statements
-    | otherwise =
-        let (ready, call) = prepareCall current
-         in made ready statements held call
+    | otherwise = case prepareCall current (sortOn (\(_, _, index) -> index) held) of
+        (ready, Just (call, kind)) ->
+          (ready, Just (CoreExpression at kind (CoreBlockValue (CoreBlock statements (Just call))), kind))
+        (ready, Nothing) -> refused ready
 
   stopped current statements =
     (current, Just (CoreExpression at CoreNeverType (CoreBlockValue (CoreBlock statements Nothing)), CoreNeverType))
 
-  made current statements held call =
-        let given = [reading at local | (local, _, _) <- sortOn (\(_, _, index) -> index) held]
-            passed = if defaulted then suppliedArguments at parameterTypes given else given
-            kind = loanedType signature
-            (bound, answer) = bindLocal current "" kind
-            answered = reading at answer
-            called = CoreStatement at (CoreDeclare answer (CoreExpression at kind (call passed)))
-            stores =
-              [ storeHeld (types bound) (heldSpan found) found
-                  (CoreExpression (heldSpan found) (heldType found) (CoreTupleIndex (position + 1) answered))
-              | (_, Just found, index) <- sortOn (\(_, _, index) -> index) held, Just position <- [elemIndex index loaned] ]
-            result = CoreExpression at (signatureResult signature) (CoreTupleIndex 0 answered)
-            settle = case callee of
-              ForeignCrossing _ -> [CoreStatement at (CoreEvaluate (CoreExpression at CoreUnitType CoreForeignSettle))]
-              _ -> []
-            whole = CoreBlock (statements <> [called] <> stores <> settle) (Just result)
-         in (bound, Just (CoreExpression at (signatureResult signature) (CoreBlockValue whole), signatureResult signature))
+  direct target current held =
+    let context = lowerContext current
+        entry = case Map.lookup target (contextInstances context) of
+          Just found -> Just (instanceModule found, instanceFunction found)
+          Nothing -> lookup target (contextTable context)
+        selected = do
+          declared <- entry
+          runtimeCallSignature declared current target signature [coreLocalType local | (local, _, _) <- held]
+        (ready, name, exact) = maybe (current, target, signature) id selected
+     in made (queued name ready) held exact (CoreCall name)
+
+  indirect specialize current held target
+    | Just selected <- mapRuntimeChoice current at CoreNeverType target
+        (\ready value -> fmap (fmap fst) (indirect specialize ready held value)) = selected
+    | CoreFunctionType inputs _ <- coreExpressionType target
+    , any hasRuntimeChoice layouts
+    , any (not . fits) (zip inputs held) =
+        case specialize layouts current target of
+          (ready, Just (value, _)) -> invoke ready held value
+          (ready, Nothing) -> refused ready
+    | otherwise = invoke current held target
+   where
+    layouts = [coreLocalType local | (local, _, _) <- held]
+    fits (expected, (local, _, _)) =
+      let (_, value) = projectRuntimeValue (types current) current expected (reading at local)
+       in coreExpressionType value == expected
+
+  invoke current held target
+    | Just selected <- mapRuntimeChoice current at CoreNeverType target
+        (\ready value -> fmap (fmap fst) (invoke ready held value)) = selected
+    | CoreFunctionType inputs packed@(CoreTupleType (result : _)) <- coreExpressionType target
+    , let exact = valueSignature at inputs result loaned
+    , loanedType exact == packed =
+        made current held exact (CoreCallValue target)
+    | otherwise = halt at "a loaned callable without its final layouts" current
+
+  made current held exact call =
+    let wanted = parameterTypes exact
+        readOperand prior (local, _, index) = case lookup index (zip [0 ..] wanted) of
+          Just expected -> projectRuntimeValue (types prior) prior expected (reading at local)
+          Nothing -> (prior, reading at local)
+        (ready, given) = mapAccumL readOperand current held
+        passed = if defaulted then suppliedArguments at wanted given else given
+        payload = loanedType exact
+        (bound, answer) = bindLocal ready "" payload
+        answered = reading at answer
+        called = CoreStatement at (CoreDeclare answer (CoreExpression at payload (call passed)))
+        finals = [(found, position, coreLocalType local)
+          | (_, Just found, index) <- held, Just position <- [elemIndex index loaned]
+          , local <- take 1 (drop position (loanedLocals exact))]
+        publish prior (found, position, stored) =
+          let source = CoreExpression (heldSpan found) stored (CoreTupleIndex (position + 1) answered)
+              (after, projected) = projectRuntimeValue (types prior) prior (heldType found) source
+           in if coreExpressionType projected == heldType found
+                then (after, Just (storeHeld (types after) (heldSpan found) found projected))
+                else (observeHeldLayout after found (coreExpressionType projected), Nothing)
+        (final, stores) = mapAccumL publish bound finals
+        result = CoreExpression at (signatureResult exact) (CoreTupleIndex 0 answered)
+        settle = case callee of
+          ForeignCrossing _ -> [CoreStatement at (CoreEvaluate (CoreExpression at CoreUnitType CoreForeignSettle))]
+          _ -> []
+     in if map coreExpressionType passed /= wanted
+          then halt at "a loaned call with incompatible argument layouts" ready
+          else case sequence stores of
+            Nothing -> halt at "a loaned call with incompatible writeback layouts" final
+            Just writes ->
+              let whole = CoreBlock ([called] <> writes <> settle) (Just result)
+               in (final, Just (CoreExpression at (signatureResult exact) (CoreBlockValue whole), signatureResult exact))
 
   -- Only a call that is made reaches its callee.
   queued target current = current{lowerContext = (lowerContext current){contextQueue = target : contextQueue (lowerContext current)}}

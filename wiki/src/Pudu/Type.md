@@ -180,3 +180,9 @@ See [[Bound Receiver Evidence Delivery]].
 The module keeps `moduleShapes` beside dev's owner and provider selections.
 A sum's record variant fields are read by `(owner, label)`, the key dev
 stores them under.
+
+## Dynamic widening products (#956)
+
+Resolved Grill Log: preserve each successful dynamic widening's span,
+canonical trait and solved payload in the checked module. The span remains
+available to select facts belonging to a later specialized body.

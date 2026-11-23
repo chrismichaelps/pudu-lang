@@ -43,3 +43,8 @@ LowerState/optional CoreExpression-and-type result.
 
 `*value` accepts an operand whose fact is either kind of reference, through
 `referenceTarget`; `&` still requires a shared one. See [[Native Mutable Loans]].
+
+## References to selected layouts (#956)
+
+Resolved Grill Log: checking proves the reference target's source
+type. Dereference reads the actual native layout used by that place.

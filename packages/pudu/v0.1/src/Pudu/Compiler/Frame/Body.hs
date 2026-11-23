@@ -85,7 +85,9 @@ lowerExpression expression@(CoreExpression at kind shape) = case shape of
         -- Written order ran; the record holds declaration order.
         let byName = zip (map fst written) slots
         case traverse (\(name, _) -> lookup name byName) fields of
-          Just ordered -> value (FrameAggregate ordered)
+          Just ordered
+            | map frameSlotType ordered == map snd fields -> value (FrameAggregate ordered)
+            | otherwise -> fault (Just at) "a record literal with incompatible field layouts"
           Nothing -> fault (Just at) "a record literal without every declared field"
       _ -> fault (Just at) "a record literal without a record type"
   CoreConstruct name written -> do
@@ -96,7 +98,9 @@ lowerExpression expression@(CoreExpression at kind shape) = case shape of
       (Just slots, Just (index, variant)) -> do
         let byName = zip (map fst written) slots
         case traverse (\(field, _) -> lookup field byName) (coreVariantFields variant) of
-          Just ordered -> value (FrameConstruct index ordered)
+          Just ordered
+            | map frameSlotType ordered == map snd (coreVariantFields variant) -> value (FrameConstruct index ordered)
+            | otherwise -> fault (Just at) "a variant with incompatible payload layouts"
           Nothing -> fault (Just at) "a variant without every payload member"
       _ -> fault (Just at) "a variant outside its sum"
   CoreRuntimeKind operand -> rendered FrameRuntimeKind operand
@@ -123,24 +127,32 @@ lowerExpression expression@(CoreExpression at kind shape) = case shape of
   CoreRecordUpdate base written -> do
     held <- lowerScalar base
     declared <- recordLayout kind
-    case (held, declared) of
-      (Stopped, _) -> pure Stopped
-      (Completed (Just source), Just declaredFields) -> do
+    retained <- recordLayout (coreExpressionType base)
+    case (held, declared, retained) of
+      (Stopped, _, _) -> pure Stopped
+      (Completed (Just source), Just declaredFields, Just retainedFields) -> do
         operands <- lowerOperands (map snd written)
         case operands of
           Nothing -> pure Stopped
           Just slots -> do
             let byName = zip (map fst written) slots
-            members <- traverse (\(position, (name, fieldKind)) -> case lookup name byName of
-                Just slot -> pure slot
-                Nothing -> saveValue (FrameValue at fieldKind (FrameMember position source)))
-              (zip [0 ..] declaredFields)
+                retainedByName = [(label, (position, heldKind)) | (position, (label, heldKind)) <- zip [0 ..] retainedFields]
+            members <- traverse (\(name, fieldKind) -> case lookup name byName of
+                Just slot | frameSlotType slot == fieldKind -> pure slot
+                Just _ -> fault (Just at) "a record update with an incompatible replacement field"
+                Nothing -> case lookup name retainedByName of
+                  Just (position, heldKind) | heldKind == fieldKind ->
+                    saveValue (FrameValue at fieldKind (FrameMember position source))
+                  _ -> fault (Just at) "a record update with an incompatible retained field")
+              declaredFields
             value (FrameAggregate members)
       _ -> fault (Just at) "a record update without a record base"
   CoreField name operand -> do
     declared <- recordLayout (coreExpressionType operand)
-    case declared >>= \fields -> lookup name (zip (map fst fields) [0 ..]) of
-      Just position -> rendered (FrameMember position) operand
+    case declared >>= \fields -> lookup name [(label, (position, heldKind)) | (position, (label, heldKind)) <- zip [0 ..] fields] of
+      Just (position, heldKind)
+        | heldKind == kind -> rendered (FrameMember position) operand
+        | otherwise -> fault (Just at) "a field read with an incompatible result layout"
       Nothing -> fault (Just at) "a field read outside a record"
   CoreReadLocal local -> readLocal at local >>= value . FrameRead
   CoreNegate operand -> unary FrameNegate operand
@@ -190,6 +202,7 @@ lowerExpression expression@(CoreExpression at kind shape) = case shape of
     operands <- lowerOperands captures
     maybe (pure Stopped) (value . FrameClosure name) operands
   CoreCapture position operand -> rendered (FrameCapture position) operand
+  CoreClosureIs target operand -> rendered (FrameClosureIs target) operand
   CoreCallValue callee arguments -> do
     operands <- lowerOperands (callee : arguments)
     case (operands, coreExpressionType callee) of

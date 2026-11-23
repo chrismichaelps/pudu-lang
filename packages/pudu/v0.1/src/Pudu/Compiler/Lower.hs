@@ -30,9 +30,10 @@ import Data.Text (Text)
 import qualified Data.Map.Strict as Map
 import Pudu.Eval.Frozen (Frozen)
 import Pudu.Compiler.Lower.Layout (moduleLayouts)
-import Pudu.Compiler.Lower.Dynamic (dynamicSums)
+import Pudu.Compiler.Lower.Dynamic (dynamicSums, runtimeCarriers)
 import Pudu.Compiler (CompileResult (..))
 import Pudu.Compiler.Lower.Foreign (callbackSignatureOf)
+import Pudu.Compiler.Lower.Generic (substitute)
 import qualified Pudu.Foreign.Callback as Callback
 import qualified Data.List.NonEmpty as NonEmpty
 import Pudu.Foreign.Crossing (ObjectiveCMethod (..), ReturnedRun (..), foreignBounds, objectiveCMethod, recordLayouts, resolveReturnedRun)
@@ -41,13 +42,13 @@ import Pudu.Compiler.Lower.Method (methodTables)
 import Pudu.Compiler.Program (ProgramResult (..), rootCompileResult)
 import Pudu.Type (DeclaredShapes, declaredRecords, declaredSums)
 import Pudu.Type.Value (NominalId (..), Scheme (..), Type (FunctionTypeRequiring), nominalKey)
-import Pudu.Source (Span)
+import Pudu.Source (Span, sameSpanSource, spanStart, spanEnd)
 import Pudu.Compiler.Lower.Body (lowerEntryBody, lowerExpression, lowerFunctionBody)
 import Pudu.Compiler.Lower.Default (takesSuppliedCount, lowerDefaultedBody)
 import Pudu.Compiler.Lower.Loan (lowerLoanedBody)
 import Pudu.Compiler.Lower.State
   ( CoreSignature (..), ForeignTarget (..), Instance (..), LowerContext (..), LowerState (..), ModuleScope (..)
-  , emptyContext, inModule, startFunction, withTypeBindings )
+  , callableTemplateLayout, emptyContext, inModule, startFunction, withTypeBindings )
 import Pudu.Compiler.Lower.Signature (ensureSignature)
 import Pudu.Core
 import Pudu.FloatLiteral (FloatWidth (..))
@@ -91,6 +92,7 @@ data NativeModule = NativeModule
   , nativeModuleMethods :: ![(NominalId, Text, Scheme, Span)]
   {-| Its records and sums formed with its imports, when checking gave them. -}
   , nativeModuleShapes :: !(Maybe DeclaredShapes)
+  , nativeModuleDynamicWidenings :: ![(Span, NominalId, Type)]
   }
 
 {-| Every module of a compiled program as native lowering reads it, the root
@@ -114,7 +116,7 @@ compiledNativeModule :: Module -> CompileResult -> NativeModule
 compiledNativeModule syntax result =
   NativeModule (moduleNameText (locatedValue (moduleName syntax))) syntax
     (nativeTypes (compileTypes result) (compileSchemes result)) (compileFolded result) (compileMethods result)
-    (compileShapes result)
+    (compileShapes result) (compileDynamicWidenings result)
 
 {-| Lower a program of one module. -}
 lowerModule :: Text -> Maybe LowerTypes -> Module -> LowerResult
@@ -124,7 +126,7 @@ lowerModule entryName types = lowerModuleFolded entryName types Map.empty
     never evaluates a constant initializer itself. -}
 lowerModuleFolded :: Text -> Maybe LowerTypes -> Map.Map Text Frozen -> Module -> LowerResult
 lowerModuleFolded entryName types constants parsed =
-  lowerProgram entryName [NativeModule (moduleNameText (locatedValue (moduleName parsed))) parsed types constants [] Nothing]
+  lowerProgram entryName [NativeModule (moduleNameText (locatedValue (moduleName parsed))) parsed types constants [] Nothing []]
 
 {-| Lower the root module's entry function and every function reachable from
     it, in whichever module each is declared. The root comes first. -}
@@ -145,7 +147,7 @@ lowerRooted library entryName programModules@(rootModule : _)
   | not (null exportRefusals) = LowerRefused exportRefusals
   | otherwise = case findEntry of
       Left refusal -> LowerRefused [refusal]
-      Right entry -> settle (runWorklist entry)
+      Right entry -> discover entry provenWidenings (dynamicSums syntaxes provenWidenings) Map.empty Map.empty Map.empty Map.empty
   where
     parsed = nativeModuleSyntax rootModule
     rootName = nativeModuleName rootModule
@@ -210,10 +212,40 @@ lowerRooted library entryName programModules@(rootModule : _)
     records = Map.unions
       [ Map.filterWithKey (\identity _ -> owns native identity) (fst (shapesOf native))
       | native <- programModules ]
-    sums = Map.union (dynamicSums (map nativeModuleSyntax programModules)) $ Map.unions
+    sums = Map.unions
       [ Map.filterWithKey (\identity _ -> owns native identity || nominalModule identity == Nothing)
           (snd (shapesOf native))
       | native <- programModules ]
+    syntaxes = map nativeModuleSyntax programModules
+    moduleWidenings = Map.fromList [(nativeModuleName native, nativeModuleDynamicWidenings native) | native <- programModules]
+    provenWidenings = concat (Map.elems moduleWidenings)
+
+    discover entry known dynamicShapes results callables failures mutable =
+      let pass@(state, _) = runWorklist entry (Map.union dynamicShapes sums) results callables failures mutable
+          context = lowerContext state
+          extended = known <> specializedWidenings context
+          resolved = dynamicSums syntaxes extended
+          discoveredResults = Map.unionWith Set.union results (contextObservedResults context)
+          discoveredCallables = Map.union (contextObservedCallables context) callables
+          discoveredFailures = Map.unionWith Set.union failures (contextObservedTaskFailures context)
+          discoveredMutable = Map.unionWith Set.union mutable (contextObservedMutableLayouts context)
+       in if resolved == dynamicShapes && discoveredResults == results
+            && discoveredFailures == failures && discoveredMutable == mutable
+            && (not (contextNeedsCallableReplay context)
+              || Map.map callableTemplateLayout discoveredCallables == Map.map callableTemplateLayout callables)
+            then settle pass
+            else discover entry extended resolved discoveredResults discoveredCallables discoveredFailures discoveredMutable
+
+    specializedWidenings context =
+      [ (at, trait, substitute bindings payload)
+      | key <- Set.toList (contextVisited context)
+      , Just found <- [Map.lookup key (contextInstances context)]
+      , let bindings = instanceBindings found
+            bodySpan = locatedSpan (instanceFunction found)
+      , not (Map.null bindings)
+      , (at, trait, payload) <- Map.findWithDefault [] (instanceModule found) moduleWidenings
+      , sameSpanSource bodySpan at
+      , spanStart bodySpan <= spanStart at, spanEnd at <= spanEnd bodySpan ]
 
     handles = Set.fromList
       [ NominalId (Just (locatedValue (moduleName (nativeModuleSyntax native)))) (locatedValue named)
@@ -257,10 +289,10 @@ lowerRooted library entryName programModules@(rootModule : _)
             {coreCallbackProjection = Callback.callbackProjection pair})
       | pair <- either (const []) id (Callback.callbackPairs signatures groups function) ]
 
-    scopes = Map.fromList
+    scopes activeSums = Map.fromList
       [ ( nativeModuleName native
         , ModuleScope
-            { scopeTypes = maybe emptyTypes (withShapes records sums handles callbackTypes) (nativeModuleTypes native)
+            { scopeTypes = maybe emptyTypes (withShapes records activeSums handles callbackTypes) (nativeModuleTypes native)
             , scopeFunctions = Set.fromList (map fst (functionsOf native))
             , scopeConstants = Map.fromList
                 [ (locatedValue name, Map.lookup (locatedValue name) (nativeModuleConstants native))
@@ -357,18 +389,23 @@ lowerRooted library entryName programModules@(rootModule : _)
       , ("UInt32", CoreIntegerType (UnsignedKind 32)), ("UInt64", CoreIntegerType (UnsignedKind 64))
       , ("Float32", CoreFloatType Float32Width), ("Float64", CoreFloatType Float64Width), ("Bool", CoreBoolType) ]
 
-    (instances, methods, traitMethods, heads) = methodTables scopes
-      [ (nativeModuleName native, nativeModuleSyntax native, nativeModuleMethods native) | native <- programModules ]
-
-    runWorklist entry =
-      let initial =
+    runWorklist entry activeSums results callables failures mutable =
+      let activeScopes = scopes activeSums
+          (instances, methods, traitMethods, heads) = methodTables activeScopes
+            [ (nativeModuleName native, nativeModuleSyntax native, nativeModuleMethods native) | native <- programModules ]
+          initial =
             LowerState
-              { lowerContext = emptyContext rootName entryKey scopes table instances methods traitMethods heads
+              { lowerContext = (emptyContext rootName entryKey activeScopes table instances methods traitMethods heads)
+                  { contextRuntimeResults = results, contextKnownCallables = callables
+                  , contextTaskFailures = failures, contextMutableLayouts = mutable }
               , lowerNextLoop = 0
               , lowerLoops = []
               , lowerNextLocal = 0
               , lowerScopes = []
+              , lowerMutableSites = Map.empty
               , lowerFunctionResult = Nothing
+              , lowerFlexibleResult = False
+              , lowerObservedReturns = Set.empty
               , lowerDeclaredResult = Nothing
               , lowerCurrentKey = entryKey
               , lowerLoaned = []
@@ -376,7 +413,7 @@ lowerRooted library entryName programModules@(rootModule : _)
               , lowerTypeArguments = []
               }
           (afterEntry, entryFunction) = lowerEntryBody entry
-            ((startFunction initial [] Nothing){lowerDeclaredResult = declaredEntryResult entry})
+            ((startFunction initial [] Nothing){lowerDeclaredResult = declaredEntryResult (contextTypes (lowerContext initial)) entry})
           marked = queueExports (markVisited afterEntry entryKey)
        in (drain marked, (\function -> function{coreFunctionName = entryKey}) <$> entryFunction)
 
@@ -396,17 +433,32 @@ lowerRooted library entryName programModules@(rootModule : _)
                 case loaned signature (if takesSuppliedCount signature then lowerDefaultedBody lowerExpression lowerFunctionBody else lowerFunctionBody)
                   function
                   signature
-                  (startFunction afterSignature (signatureParameters signature) (Just (signatureResult signature))) of
+                  ((startFunction afterSignature (signatureParameters signature) (Just (signatureResult signature)))
+                    {lowerFlexibleResult = name `notElem` exportKeys}) of
                   (final, Nothing) -> markVisited final name
                   (final, Just coreFunction) ->
-                    markVisited
-                      final
+                    let recorded = observeResult name signature coreFunction final
+                     in markVisited
+                      recorded
                         { lowerContext =
-                            (lowerContext final)
-                              { contextFunctions = coreFunction{coreFunctionName = name} : contextFunctions (lowerContext final)
+                            (lowerContext recorded)
+                              { contextFunctions = coreFunction{coreFunctionName = name} : contextFunctions (lowerContext recorded)
                               }
                         }
                       name
+
+    observeResult name signature function state
+      | lowerFlexibleResult state
+      , let observed = lowerObservedReturns state <>
+              foldMap (runtimeCarriers . ownResult . coreExpressionType) (coreBlockResult (coreFunctionBody function))
+      , not (observed `Set.isSubsetOf` runtimeCarriers (signatureResult signature)) =
+          let context = lowerContext state
+           in state{lowerContext = context{contextObservedResults =
+                Map.insertWith Set.union name observed (contextObservedResults context)}}
+      | otherwise = state
+     where
+      ownResult (CoreTupleType (result : _)) | not (null (signatureLoaned signature)) = result
+      ownResult result = result
 
     loaned signature
       | null (signatureLoaned signature) = id
@@ -419,9 +471,9 @@ lowerRooted library entryName programModules@(rootModule : _)
         <$> Map.lookup name (contextInstances (lowerContext state))
 
     -- `?` in the entry returns at its declared type, before any `return` says so.
-    declaredEntryResult entry = case lookupScheme (maybe emptyTypes scopeTypes (Map.lookup rootName scopes)) (locatedValue (functionName (locatedValue entry))) of
+    declaredEntryResult types entry = case lookupScheme types (locatedValue (functionName (locatedValue entry))) of
       Just Scheme{schemeParams = [], schemeType = FunctionTypeRequiring _ _ _ result} ->
-        formedCoreTypeIn (maybe emptyTypes scopeTypes (Map.lookup rootName scopes)) result
+        formedCoreTypeIn types result
       _ -> Nothing
 
     queueExports state =
@@ -452,7 +504,7 @@ lowerRooted library entryName programModules@(rootModule : _)
               { coreModuleName = moduleNameText (locatedValue (moduleName parsed))
               , coreModuleEntry = entryKey
               , coreModuleFunctions = functions
-              , coreModuleLayouts = moduleLayouts (maybe emptyTypes scopeTypes (Map.lookup rootName scopes)) (contextClosures (lowerContext state)) functions
+              , coreModuleLayouts = moduleLayouts (maybe emptyTypes scopeTypes (Map.lookup rootName (contextModules (lowerContext state)))) (contextClosures (lowerContext state)) functions
               , coreModuleClosures = contextClosures (lowerContext state)
               , coreModuleExports =
                   [ maybe key coreFunctionName (Map.lookup key wrappers)

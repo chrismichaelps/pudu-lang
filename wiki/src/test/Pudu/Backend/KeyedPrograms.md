@@ -33,3 +33,12 @@ effects finish in that order.
 ## Referenced by
 
 [[Native Maps and Sets]] · [[Backend Module Programs]] · [[Backend Text Leak Tests]]
+
+## Dynamic key diagnostics (#956)
+
+Resolved Grill Log: reject a dynamic key holding a generic record with
+a function field. Name the held record after its initializer effects run.
+
+## Runtime keyed layouts (#956)
+
+Resolved Grill Log: cover selected values in construction, lookup, update and iteration, including retained aliases and missing keys.

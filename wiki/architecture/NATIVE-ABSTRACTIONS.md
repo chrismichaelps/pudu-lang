@@ -36,15 +36,21 @@ implementation's own parameters: `A` of `impl [A] Named for Array[A]` where
 ## Dynamic values
 
 [[Compiler Lower Dynamic]] owns the contract. A `dynamic Trait` forms to a
-sum with one variant per implementation that has no parameters of its own.
+sum with variants for concrete implementation heads and payload types from
+proven widenings. Native lowering specializes widening facts in reachable
+generic bodies before settling the layout.
 A concrete value widens into its variant where a dynamic type is expected:
 array items, record fields, variant payloads, call and method arguments,
-annotated bindings, assignments, `return`, a function's result, and the
-branches of an `if` or the arms of a `match` whose own type is dynamic. A
-literal nested inside another literal widens with it. A method call on a
-dynamic value runs the arguments, then the receiver, and matches on the held
+annotated bindings, assignments, `return`, a function's result, breaks
+leaving a value-producing loop, and checked conditional and match results.
+A literal nested inside another literal widens with it. A method call on a
+dynamic value runs the receiver, then the arguments, and matches on the held
 type to call that type's implementation, inherited defaults included. A
 dynamic value renders and compares as the value it holds.
+
+Named record and sum patterns select the dynamic alternative by canonical
+owner before matching its payload. [[Compiler Lower Match]] shares this
+path across matches, if let and let else.
 
 ## Constructor parameters
 
@@ -63,8 +69,10 @@ is, as the interpreter does.
 
 ## Not native
 
-A user `Drop` has no run-time meaning in the interpreter, so native has none
-to match. A generic implementation's types are not variants of a dynamic sum.
+A user `Drop` has no run-time meaning in the interpreter. Dynamic comparison
+walks both payload layouts, including distinct instantiations of one
+owner. A narrowing that would bind the same name to incompatible native
+carriers retains a located refusal.
 
 ## Evidence
 

@@ -10,7 +10,7 @@ import Numeric (showHex)
 import qualified Data.Map.Strict as Map
 import Pudu.Backend.Emit.State
   ( EmitState (..), byteData, cString, cStringBytes, divideByZeroSite, failureSite, helpedFailureSite, operatorFailureSite, overflowSite, shiftSites, textOfInt )
-import Pudu.Backend.Emit.Cell (callbackTokenText, isDynamicBox, memberDisplay)
+import Pudu.Backend.Emit.Cell (callbackTokenText, isDynamicBox, memberDisplay, memberRuntimeKind)
 import Pudu.Backend.Emit.Aggregate (aggregateHelper, aggregateNeed, cellName, isAggregate, memberComparable, retained)
 import Pudu.Diagnostic.Evaluation (cannotApplyBinaryMessage)
 import Pudu.Backend.Emit.Support (integerHelper, integerKindText, integerLiteralText, isBigInteger, isWideInteger, limbsOf, zeroValue)
@@ -113,8 +113,7 @@ frameValue state value = case frameValueShape value of
     uncurry plain (retained (frameValueType value) (source <> "->fields[" <> textOfInt (position + 1) <> "]." <> member))
   FrameRuntimeKind held -> do
     source <- slotText held
-    let kind = frameSlotType held
-    plain (aggregateHelper "name" kind <> "(" <> source <> ")") [aggregateNeed "name" kind]
+    uncurry plain (memberRuntimeKind (frameSlotType held) source)
   FrameMember position tuple -> do
     source <- slotText tuple
     member <- maybe (refused "a tuple member without a native representation") Right (cellMember (frameValueType value))
@@ -130,6 +129,11 @@ frameValue state value = case frameValueShape value of
     source <- slotText closure
     member <- maybe (refused "a capture without a native representation") Right (cellMember (frameValueType value))
     uncurry plain (retained (frameValueType value) (source <> "->fields[" <> textOfInt (position + 1) <> "]." <> member))
+  FrameClosureIs name closure -> case Map.lookup name (emitFunctionIds state) of
+    Nothing -> refused "a closure target test for an unknown function"
+    Just identity -> do
+      source <- slotText closure
+      plain ("(" <> source <> "->fields[0].scalar == " <> textOfInt identity <> ")") []
   FrameArray members -> do
     let kind = frameValueType value
         cells = Text.intercalate ", " ["frame->slots[" <> slotNumber member <> "]" | member <- members]

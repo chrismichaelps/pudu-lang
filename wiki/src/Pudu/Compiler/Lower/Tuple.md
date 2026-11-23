@@ -41,3 +41,7 @@ Pattern update only: `CoreRecordType` has an argument list; behavior is unchange
 `let {at: {x}, n: (_, last)} = subject` binds through field reads; `{x}` is
 `{x: x}`. Named record patterns are refutable in `let`, so the checker never
 hands them here.
+
+## Runtime layouts in products (#956)
+
+Resolved Grill Log: Keep actual tuple member layouts through binding and indexing. A checked annotation still supplies the source type. A boxed tuple is indexed by selecting its held layout first.

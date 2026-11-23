@@ -800,3 +800,12 @@ Package the portable loader header so source distributions can compile the bridg
 Register [[Backend Frame Slots]] and [[Backend Frame Slot References]] with
 existing dependencies. Resolved Grill Log: keep traversal and allocation
 separate while sharing one exhaustive reference projection.
+
+## Cross-layout comparison helpers (#956)
+
+Resolved Grill Log: register the native comparison emitter with the library
+so packaged builds include the same dependency closure.
+
+## Selected invocation arguments (#956)
+
+Resolved Grill Log: register [[Compiler Lower Arguments]] as an internal compiler module.

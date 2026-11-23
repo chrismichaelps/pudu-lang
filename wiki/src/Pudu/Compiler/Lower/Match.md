@@ -80,3 +80,39 @@ tuple or array it was given. `hasSequencePattern` finds the test anywhere
 inside, and `lowerLetSequence` leaves an ordinary `let` untouched. Resolved
 Grill Log: reuse CoreMatch rather than generate a comparison per element; the
 interpreter's E7013 message and hint are preserved.
+
+## Checked aggregate arm joins (#956)
+
+Resolved Grill Log: when the arm carriers differ, use the checked result
+carrier if widening every reachable arm succeeds. An aggregate can contain
+dynamic members at any depth, and guards remain outside the widened result.
+
+## Nominal narrowing of dynamic values (#956)
+
+Resolved Grill Log: checked record and constructor patterns carry a
+canonical owner. Match the outer dynamic tag by that owner, then reuse
+the ordinary pattern for the payload. A named sum additionally tests its
+own variant tag. Identical display names across declarations never select
+the same dynamic alternative. The existing pattern path owns guard,
+fallback, nesting and binding behavior.
+
+## Narrowing through the payload owner (#956)
+
+Resolved Grill Log: use the checked pattern owner to select the held
+nominal type and test that alternative's tag. Tag spelling remains internal
+to the dynamic layout.
+
+## Narrowing multiple instantiations of one owner (#956)
+
+Resolved Grill Log: a nominal test selects every tag of that owner and
+reuses the same bound locals across those alternatives. Refuse a binding
+if a payload would need an incompatible local carrier. Matching an
+ordinary field shared by every instantiation uses its declared layout.
+
+## Runtime layouts in products (#956)
+
+Resolved Grill Log: Match arms with differing native product layouts project to their shared layout after each guard and body. Pattern types still come from the subject carrier.
+
+## Runtime layouts in sum payloads (#956)
+
+Resolved Grill Log: Normalize compatible selected sum carriers before lowering source patterns. Each payload binder gets its actual slot type.

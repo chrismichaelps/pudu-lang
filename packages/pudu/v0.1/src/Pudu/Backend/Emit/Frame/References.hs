@@ -66,6 +66,7 @@ valueSlots slot value = (\shape -> value{frameValueShape = shape}) <$> case fram
   FrameZero -> pure FrameZero
   FrameClosure name captures -> FrameClosure name <$> traverse slot captures
   FrameCapture index source -> FrameCapture index <$> slot source
+  FrameClosureIs target source -> FrameClosureIs target <$> slot source
   FrameArray items -> FrameArray <$> traverse slot items
   FrameArrayMethod method receiver arguments -> FrameArrayMethod method <$> slot receiver <*> traverse slot arguments
   FrameIndex source index -> FrameIndex <$> slot source <*> slot index

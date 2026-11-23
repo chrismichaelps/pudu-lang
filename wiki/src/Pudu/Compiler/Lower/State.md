@@ -203,3 +203,37 @@ Preserve the resolved Objective-C method on a foreign target.
 ## Resolved Grill Log for Objective-C delegates
 
 `scopeDelegates` records the delegate declarations visible in the current scope so that `lookupDelegate` can answer them during lowering.
+
+## Loop expectation and observation (#956)
+
+Resolved Grill Log: the optional checked carrier guides value projection
+at a break. The observed break type continues to record which result can
+leave the loop. The two fields remain separate for divergent operands and
+for synthetic loops without a checked carrier.
+
+## Sanctioned runtime results for internal calls (#956)
+
+Resolved Grill Log: keep the current pass's observations separate from
+the prior pass's settled carriers. A body can publish explicit result
+carriers while a replay is pending. Entry, lifted bodies and external
+signatures retain their established ABI.
+
+## Stored callable dispatch (#956)
+
+Resolved Grill Log: The worklist retains the source and capture types for synchronous callable bodies. Call sites can request a copy without re-evaluating the source closure.
+
+## Runtime layouts in stored methods and builtins (#956)
+
+Resolved Grill Log: Method and intrinsic templates retain their checked signature and the information to regenerate a body. A method also retains its lexical facts and capture layout.
+
+## Native task result layouts (#956)
+
+Resolved Grill Log: The worklist records task failure carriers by their declared failure type and replays scopes when a carrier becomes reachable.
+
+## Mutable slot layout discovery (#956)
+
+Resolved Grill Log: Identify a mutable declaration by its body key and source span. Temporary slot numbers may change when lowering replays.
+
+## Stored mutable parameter layouts (#956)
+
+Resolved Grill Log: A mutable parameter is identified by the native body key and its parameter position. A generated wrapper can share this identity across member reads.

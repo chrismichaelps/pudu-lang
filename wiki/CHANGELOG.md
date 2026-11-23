@@ -5,6 +5,156 @@ tags: [changelog]
 
 # Changelog
 
+## 2026-11-23 — Exact native slice bounds (#956)
+
+- Check written endpoints at their original width and share the slice
+  bounds logic with stored keys. Preserve endpoint validation order.
+  [[Compiler Lower Slice]]
+
+## 2026-11-23 — Wider native integer positions (#956)
+
+- Preserve held integer counts and positions for text, bytes, and
+  scalar indexing. Check exact view bounds and group shape before
+  narrowing. [[Compiler Lower Arguments]] · [[Compiler Lower Bytes]]
+
+## 2026-11-23 — Selected native arguments (#956)
+
+- Select held method and text-view operands and preserve invocation
+  diagnostics. Validate selected byte-construction elements in order.
+  [[Compiler Lower Arguments]] · [[Compiler Lower Bytes]]
+
+## 2026-11-23 — Selected text and byte receivers (#956)
+
+- Dispatch methods, bound member reads and indexing on the held
+  receiver layout. Preserve failure spans and operand ordering.
+  [[Compiler Lower Text]] · [[Compiler Lower Slice]]
+
+## 2026-11-23 — Stored mutable parameter layouts (#956)
+
+- Settle later writes in lifted and bound callable parameters while
+  preserving their captured environments. [[Compiler Lower Loan]]
+
+## 2026-11-23 — Mutable slot layout discovery (#956)
+
+- Settle mutable storage from later writes, including nested updates
+  and writeback through named loans. [[Compiler Lower Place]]
+
+## 2026-11-23 — Native mutable loan layouts (#956)
+
+- Select exact layouts for native mutable call arguments and publish
+  their finals through the original places. [[Compiler Lower Loan]]
+
+## 2026-11-23 — Native task result layouts (#956)
+
+- Settle native layouts for internal async bodies and their task
+  closures. Preserve selected failures across awaits and joins.
+  [[Compiler Lower Lambda]] · [[Compiler Lower Scope]]
+
+## 2026-11-23 — Native keyed collection layouts (#956)
+
+- Preserve runtime key and value layouts in maps, sets and indexed
+  stores, including lookup, updates and traversal. [[Compiler Lower Keyed]]
+
+## 2026-11-23 — Native sum payload layouts (#956)
+
+- Preserve runtime alternatives in positional and named sum
+  constructors, payload patterns, and early failure propagation.
+  [[Compiler Lower Sum]] · [[Compiler Lower Try]]
+
+## 2026-11-23 — Native tuple and record layouts (#956)
+
+- Preserve runtime alternatives in tuple members and nominal record
+  fields. Project branch results into a shared layout and keep retained
+  fields through updates. [[Compiler Lower Record]] · [[Compiler Lower Tuple]]
+
+## 2026-11-22 — Stored method and builtin layouts (#956)
+
+- Retain receiver captures when a stored synchronous method needs
+  different native inputs. Render, write and report panic using the
+  actual input layout of a stored builtin. [[Compiler Lower Method Value]]
+
+## 2026-11-22 — Stored native callbacks (#956)
+
+- Reuse captured values when a stored callback needs a different native
+  input layout. Indirect calls and array traversal select the specialized
+  body and preserve its result. [[Compiler Lower Lambda]]
+
+## 2026-11-22 — Native array callbacks (#956)
+
+- Specialize named and inline callbacks for runtime element layouts.
+  Preserve actual mapped results and the accumulator layout in array
+  and range reductions. [[Compiler Lower Array]] · [[Compiler Lower Lambda]]
+
+## 2026-11-22 — Array runtime element carriers (#956)
+
+- Preserve selected callable layouts during array construction, retrieval,
+  copying, updates, slicing and iteration. A bound retrieval keeps its
+  captured array layout. [[Compiler Lower Array]]
+
+## 2026-11-22 — Internal runtime call carriers (#956)
+
+- Use concrete argument carriers for internal direct-call copies and
+  settle their return carriers before emission. Retain returned callables
+  through declared function signatures. [[Compiler Lower]]
+
+## 2026-11-22 — Stored runtime callables (#956)
+
+- Preserve the actual closure and result carrier across local storage.
+  Invoking a stored dynamic text method selects its typed callable;
+  rendering and operators consume the held result. [[Compiler Lower Lambda]]
+
+## 2026-11-22 — Dynamic runtime result consumers (#956)
+
+- Render selected dynamic text results in direct output and rendering
+  calls. Preserve the runtime failure of calling a numeric field and
+  report the held value's kind in dynamic diagnostics.
+  [[Native Operator Parity Delivery]]
+
+## 2026-11-22 — Dynamic text member selection (#956)
+
+- Select universal text calls and stored text methods on their held
+  receivers. Preserve callable fields, custom rendering and mutable
+  receiver writeback. [[Compiler Lower Method Value]]
+
+## 2026-11-22 — Dynamic cross-layout comparisons (#956)
+
+- Compare dynamic values through their respective payload layouts.
+  Preserve nominal identities, variant shape and field order, along with
+  nested array and keyed collection comparison. [[Backend Cross Comparison]]
+
+## 2026-11-22 — Proven generic dynamic payloads (#956)
+
+- Form dynamic variants from proven widenings in checked modules and
+  reachable generic copies. Dispatch and nominal narrowing can reach
+  multiple payload layouts of one owner. [[Native Type Abstractions]]
+
+## 2026-11-22 — Dynamic dispatch identity and transfers (#956)
+
+- Preserve full trait and payload owner identities through dynamic
+  dispatch. A transfer during argument evaluation leaves the call and
+  loan writeback unexecuted. [[Native Operator Parity Delivery]]
+
+## 2026-11-22 — Dynamic control-flow carriers (#956)
+
+- Widen breaks to their loop's checked result and use checked aggregate
+  carriers in conditional and match joins. Dynamic record and sum
+  patterns narrow by canonical owner before matching their payloads.
+  [[Native Operator Parity Delivery]] · [[Native Type Abstractions]]
+
+## 2026-11-22 — Dynamic collection and assignment carriers (#956)
+
+- Widen concrete replacements in record updates and nested assignments.
+  Arrays, sets, maps and stores accept implementing arguments in dynamic
+  slots. Calls with mutable loans widen ordinary arguments independently,
+  and dynamic methods forward named loans and write back their final values.
+  [[Native Operator Parity Delivery]] · [[Backend Abstraction Programs]]
+
+## 2026-11-22 — Native aggregate shape order (#956)
+
+- Dynamic aggregate comparisons follow the held value's shape. Concrete
+  sums order positional and named variants by shape before comparing names.
+  [[Native Aggregate Emission]] · [[Native Operator Parity Delivery]]
+
 ## 2026-11-22 — Native operator and array parity (#956)
 
 - Checked unary operations preserve runtime refusals for additional represented

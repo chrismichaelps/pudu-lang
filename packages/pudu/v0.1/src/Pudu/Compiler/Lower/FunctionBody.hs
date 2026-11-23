@@ -8,16 +8,15 @@ module Pudu.Compiler.Lower.FunctionBody (lowerEntryBodyWith, lowerFunctionBodyWi
 
 import Pudu.Compiler.Lower.Call (outputResult)
 import Pudu.Compiler.Lower.Control (printValued)
-import Pudu.Compiler.Lower.Dynamic (widenBlock, widenTo)
+import Pudu.Compiler.Lower.Dynamic (mapRuntimeChoice, projectRuntimeValue, widenTo)
 import Pudu.Compiler.Lower.Lambda (lowerTask)
 import Pudu.Compiler.Lower.Signature (functionLevelRefusal)
 import Pudu.Compiler.Lower.State
   ( CoreSignature (..), LowerContext (..), LowerState (..), bindLocal, halt, refuse, refused )
-import Pudu.Compiler.Lower.Types (formedCoreTypeIn, lookupScheme, nativeIntegerKind, nativeValueType, treeType)
+import Pudu.Compiler.Lower.Types (formedCoreTypeIn, lookupScheme, nativeIntegerKind, nativeValueType, sumVariants, treeType)
 import Pudu.Core
 import Pudu.Frontend.Syntax
   ( Block (..), Expression, Function (..), FunctionBody (..), Located (..), Parameter (..) )
-import Pudu.IntegerLiteral (IntegerKind (PlatformSigned))
 import Pudu.Type.Value (Scheme (..), Type (FunctionTypeRequiring, RestrictedType))
 
 type LowerExpression = LowerState -> Located Expression -> (LowerState, Maybe (CoreExpression, CoreType))
@@ -76,35 +75,23 @@ lowerEntryBodyWith lowerExpression lowerBlock located state
         | otherwise -> halt (locatedSpan (parameterName parameter)) "an entry parameter without a native representation" current
 
     entryBody current
-      -- An async entry is awaited as soon as it is called, so its body runs
-      -- where a plain entry's would. Awaiting unwraps a Result: the success
-      -- is the entry's answer, and a failure is reported as the value it is.
-      | functionAsync function, Just block <- functionBlock function
-      , Just result@(CoreSumType "Result" [success, failure]) <- lowerDeclaredResult current
-      , (after, Just (task, _)) <- lowerTask lowerExpression lowerBlock current (locatedValue (functionName function)) (CoreFunctionType [] result) function =
-        let (withOutcome, outcome) = bindLocal after "" result
-            (withValue, held) = bindLocal withOutcome "" success
-            (withFailure, failed) = bindLocal withValue "" failure
-            at = locatedSpan block
-            expression = CoreExpression at
-            reading local = expression (coreLocalType local) (CoreReadLocal local)
-            printed core = case outputResult withFailure at "print" (expression CoreTextType (CoreShow core)) (CoreSumType "Result" [CoreUnitType, CoreTextType]) of
-              (_, Just (written, _)) -> [CoreStatement at (CoreEvaluate written)]
-              _ -> []
-            status = case success of
-              CoreIntegerType kind | nativeIntegerKind kind -> Just success
-              _ -> Nothing
-            zero = expression success (CoreIntegerLiteral (case success of CoreIntegerType kind -> kind; _ -> PlatformSigned) 0)
-            answer = maybe CoreUnitType id status
-            good = case status of
-              Just _ -> reading held
-              Nothing -> expression CoreUnitType (CoreBlockValue (CoreBlock (if success == CoreUnitType then [] else printed (reading held)) Nothing))
-            bad = expression answer (CoreBlockValue (CoreBlock (printed (reading outcome)) (zero <$ status)))
-            chosen = expression answer (CoreMatch (reading outcome)
-              [ CoreArm at (CoreVariantPattern "Ok" [CoreBindPattern held]) Nothing good
-              , CoreArm at (CoreVariantPattern "Err" [CoreBindPattern failed]) Nothing bad ])
-            wrapped = CoreBlock [CoreStatement at (CoreDeclare outcome (expression result (CoreCallValue task [])))] (Just chosen)
-         in built withFailure wrapped answer
+      | functionAsync function
+      , Just result@(CoreSumType "Result" [success, _]) <- lowerDeclaredResult current =
+          case lowerTask lowerExpression lowerBlock current{lowerFlexibleResult = True}
+              (locatedValue (functionName function)) (CoreFunctionType [] result) function of
+            (after, Just (task, CoreFunctionType [] answered)) ->
+              let at = coreExpressionSpan task
+                  expression = CoreExpression at
+                  status = case success of
+                    CoreIntegerType kind | nativeIntegerKind kind -> Just success
+                    _ -> Nothing
+                  answer = maybe CoreUnitType id status
+                  ran = expression answered (CoreCallValue task [])
+               in case presentAsync at answer after ran of
+                    (ready, Just presented) -> built ready (CoreBlock [] (Just presented)) answer
+                    (ready, Nothing) -> refused ready
+            (after, Nothing) -> refused after
+            (after, Just _) -> halt atName "an async entry without its task result" after
       | otherwise = case functionBlock function of
         Just block ->
           let (after, coreBlock, resultType) = lowerBlock current block
@@ -138,6 +125,34 @@ lowerEntryBodyWith lowerExpression lowerBlock located state
                     after
         _ -> refused current
 
+    presentAsync at answer current result
+      | Just selected <- mapRuntimeChoice current at answer result (presentAsync at answer) = fmap (fmap fst) selected
+      | CoreSumType "Result" _ <- coreExpressionType result
+      , Just variants <- sumVariants (contextTypes (lowerContext current)) (coreExpressionType result)
+      , [success] <- [held | variant <- variants, coreVariantName variant == "Ok", (_, held) <- coreVariantFields variant] =
+          let expression = CoreExpression at
+              (withOutcome, outcome) = bindLocal current "" (coreExpressionType result)
+              (bound, held) = bindLocal withOutcome "" success
+              reading local = expression (coreLocalType local) (CoreReadLocal local)
+              zero = case answer of
+                CoreIntegerType kind -> Just (expression answer (CoreIntegerLiteral kind 0))
+                _ -> Nothing
+              printed prior value = case outputResult prior at "print"
+                (expression CoreTextType (CoreShow value)) (CoreSumType "Result" [CoreUnitType, CoreTextType]) of
+                  (ready, Just (written, _)) ->
+                    (ready, expression answer (CoreBlockValue (CoreBlock [CoreStatement at (CoreEvaluate written)] zero)))
+                  (ready, Nothing) -> (ready, expression answer (CoreBlockValue (CoreBlock [] zero)))
+              (withGood, good)
+                | success == answer = (bound, reading held)
+                | otherwise = printed bound (reading held)
+              (ready, bad) = printed withGood (reading outcome)
+              chosen = expression answer (CoreMatch (reading outcome)
+                [ CoreArm at (CoreVariantPattern "Ok" [CoreBindPattern held]) Nothing good
+                , CoreArm at (CoreVariantPattern "Err" [CoreWildcardPattern]) Nothing bad ])
+           in (ready, Just (expression answer (CoreBlockValue (CoreBlock
+                [CoreStatement at (CoreDeclare outcome result)] (Just chosen)))))
+      | otherwise = halt at "an async entry without a represented Result" current
+
     built after coreBlock resultType =
       ( after
       , Just
@@ -167,10 +182,19 @@ lowerFunctionBodyWith lowerExpression lowerBlock located signature state = case 
       (after, Nothing) -> refused after
   Just block ->
     let (after, lowered, _) = lowerBlock state block
-        coreBlock = widenBlock (contextTypes (lowerContext after)) (signatureResult signature) lowered
+        expected = signatureResult signature
+        (projected, coreBlock) = case coreBlockResult lowered of
+          Just value ->
+            let (ready, carried) = projectRuntimeValue (contextTypes (lowerContext after)) after expected value
+             in (ready, lowered{coreBlockResult = Just carried})
+          Nothing -> (after, lowered)
         final
-          | printValued coreBlock = refuse (locatedSpan block) "a function body returning Result[(), Str]" after
-          | otherwise = after
+          | printValued coreBlock = refuse (locatedSpan block) "a function body returning Result[(), Str]" projected
+          | not (lowerFlexibleResult state)
+          , Just value <- coreBlockResult coreBlock
+          , coreExpressionType value `notElem` [expected, CoreNeverType] =
+              refuse (coreExpressionSpan value) "a function body whose runtime result differs from its fixed signature" projected
+          | otherwise = projected
      in ( final
         , Just
             CoreFunction

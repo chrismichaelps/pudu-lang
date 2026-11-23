@@ -5,6 +5,7 @@ module Pudu.Compiler.Lower.For (lowerFor) where
 import qualified Data.Map.Strict as Map
 import Data.Text (Text)
 import Pudu.Compiler.Lower.Control (droppedTail, expressionIsPrintValued, popLoop, pushLoop)
+import Pudu.Compiler.Lower.Dynamic (mapRuntimeChoice)
 import Pudu.Compiler.Lower.Match (lowerPattern)
 import Pudu.Compiler.Lower.Method (callInstance)
 import Pudu.Compiler.Lower.State (LowerContext (..), LowerState (..), bindLocal, halt, intType, refused)
@@ -37,14 +38,15 @@ lowerFor lower block state at label binder iterated body = case locatedValue ite
         (afterEnd, _) -> (afterEnd, Nothing)
       (afterStart, _) -> (afterStart, Nothing)
   _ -> case typeForSpan (contextTypes (lowerContext state)) (locatedSpan iterated) of
-    Just kind@(CoreArrayType itemKind) -> case lower state iterated of
+    Just CoreArrayType{} -> case lower state iterated of
       (after, Just (core, CoreNeverType)) -> (after, Just (core, CoreNeverType))
-      (after, Just (core, _)) -> walkArray after core kind itemKind
+      (after, Just (core, kind@(CoreArrayType itemKind))) -> walkArray after core kind itemKind
+      (after, Just _) -> halt (locatedSpan iterated) "a for loop without an array receiver" after
       (after, Nothing) -> refused after
     -- A map walks its entries, a set its members and a Str its characters,
     -- listed before the body runs.
-    Just (CoreMapType key value) -> listed (CoreTupleType [key, value]) (simply (CoreTupleType [key, value]) (\core -> CoreKeyedMethod KeyedEntries core []))
-    Just (CoreSetType member) -> listed member (simply member (\core -> CoreKeyedMethod KeyedKeys core []))
+    Just CoreMapType{} -> keyed
+    Just CoreSetType{} -> keyed
     Just CoreTextType -> listed CoreCharType (simply CoreCharType (\core -> CoreTextMethod TextChars core []))
     -- A range value walks its values; one missing an end cannot be walked.
     Just CoreRangeType -> listed intType (simply intType (\core -> CoreRangeMethod RangeIterated core []))
@@ -67,6 +69,19 @@ lowerFor lower block state at label binder iterated body = case locatedValue ite
     Just kind -> halt (locatedSpan iterated) ("a for loop over a " <> coreTypeName kind) state
     Nothing -> halt (locatedSpan iterated) "a for loop over this value" state
  where
+  keyed = case lower state iterated of
+    (after, Just (core, CoreNeverType)) -> (after, Just (core, CoreNeverType))
+    (after, Just (core, _)) -> selectKeyed after core
+    (after, Nothing) -> refused after
+  selectKeyed current core
+    | Just selected <- mapRuntimeChoice current at CoreUnitType core
+        (\after held -> fmap (fmap fst) (selectKeyed after held)) = selected
+    | CoreMapType key value <- coreExpressionType core = walkKeyed current core (CoreTupleType [key, value]) KeyedEntries
+    | CoreSetType member <- coreExpressionType core = walkKeyed current core member KeyedKeys
+    | otherwise = halt (locatedSpan iterated) "a for loop without a keyed receiver" current
+  walkKeyed current core member method =
+    let kind = CoreArrayType member
+     in walkArray current (expression kind (CoreKeyedMethod method core [])) kind member
   listed itemKind toArray = case lower state iterated of
     (after, Just (core, CoreNeverType)) -> (after, Just (core, CoreNeverType))
     (after, Just (core, _)) ->

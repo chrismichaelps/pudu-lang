@@ -3,14 +3,15 @@
     and comparability of a member, and the names of per-type helpers. -}
 module Pudu.Backend.Emit.Cell
   ( ownedType, cType, retained, released, mangle, mangleKey, aggregateHelper, aggregateNeed
-  , isAggregate, isDynamicBox, memberDisplay, memberRender, memberEqual, memberCompare, memberComparable, callbackTokenText, cellName, number
+  , isAggregate, isDynamicBox, memberDisplay, memberRender, memberRuntimeKind, memberEqual, memberCompare, memberComparable, callbackTokenText, cellName, number
   ) where
 
 import Data.Text (Text)
+import Data.Maybe (isJust)
 import qualified Data.Text as Text
 import Pudu.Backend.Emit.State (cString, cStringBytes)
 import Pudu.Backend.Emit.Support (integerHelper, isBigInteger, isWideInteger)
-import Pudu.Core (CoreType (..), coreTypeName)
+import Pudu.Core (CoreType (..), coreStaticRuntimeKind, coreTypeName, runtimeChoiceAlternatives)
 import Pudu.FloatLiteral (floatWidthType)
 import Pudu.IntegerLiteral (integerKindName)
 
@@ -136,7 +137,7 @@ memberRender kind expression = case kind of
 
 isDynamicBox :: CoreType -> Bool
 isDynamicBox (CoreSumType key []) = "dynamic." `Text.isPrefixOf` key
-isDynamicBox _ = False
+isDynamicBox kind = isJust (runtimeChoiceAlternatives kind)
 
 memberDisplay :: CoreType -> Text -> (Text, [Text])
 memberDisplay kind expression = case kind of
@@ -150,6 +151,15 @@ callbackTokenText owner =
   "pudu_text_literal(" <> cString shown <> ", " <> number (cStringBytes shown) <> ")"
  where
   shown = "<" <> owner <> ">"
+
+memberRuntimeKind :: CoreType -> Text -> (Text, [Text])
+memberRuntimeKind kind expression = case kind of
+  CoreSumType{} -> named
+  CoreFunctionType{} -> named
+  _ -> ("pudu_text_literal(" <> cString label <> ", " <> number (cStringBytes label) <> ")", ["text_literal"])
+ where
+  label = coreStaticRuntimeKind kind
+  named = (aggregateHelper "name" kind <> "(" <> expression <> ")", [aggregateNeed "name" kind])
 
 {-| `==` on two members, as Value's Eq instance has it. -}
 memberEqual :: CoreType -> Text -> Text -> (Text, [Text])
@@ -171,7 +181,6 @@ memberCompare kind a b = case kind of
   CoreDecimalType -> ("pudu_dec_compare(" <> a <> ", " <> b <> ")", ["dec_compare"])
   CoreUnitType -> ("0", [])
   -- The evaluator orders these values by shape rank alone.
-  CoreFunctionType _ _ -> ("0", [])
   CoreCallbackType _ _ -> ("0", [])
   _ | isAggregate kind -> (aggregateHelper "compare" kind <> "(" <> a <> ", " <> b <> ")", [aggregateNeed "compare" kind])
   _ -> ("(" <> a <> " > " <> b <> ") - (" <> a <> " < " <> b <> ")", [])

@@ -127,6 +127,7 @@ data FrameValueShape
   | FrameClosure !Text ![FrameSlot]
   {-| Capture number i of the closure in the slot. -}
   | FrameCapture !Int !FrameSlot
+  | FrameClosureIs !Text !FrameSlot
   | FrameArray ![FrameSlot]
   {-| An array method on the receiver slot with these arguments. -}
   | FrameArrayMethod !CoreArrayMethodName !FrameSlot ![FrameSlot]

@@ -176,3 +176,15 @@ Foreign calls retain the whole checked crossing and claim metadata through frame
 ## Byte literals (#887)
 
 `CoreBytesLiteral` lowers to a single `FrameBytesLiteral` value.
+
+## Stored callable dispatch (#956)
+
+Resolved Grill Log: Lower the closure operand before testing its target. A stopping operand transfers before the test.
+
+## Runtime layouts in products (#956)
+
+Resolved Grill Log: A record update may construct a widened layout. Fields copied from the base keep their types. Replacements must match the target field carrier.
+
+## Runtime layouts in sum payloads (#956)
+
+Resolved Grill Log: Validate each selected variant payload against its physical layout before emitting its slots.

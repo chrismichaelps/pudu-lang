@@ -95,3 +95,11 @@ Resolved Grill Log: use defined unsigned bit patterns, validate counts before sh
 ## Text breaks (#515)
 
 A break operand may carry any native value type, Str included.
+
+## Checked loop result carriers (#956)
+
+Resolved Grill Log: an explicit loop records the checked carrier at its
+span before lowering the body. Each valued break widens to the carrier of
+its own destination, including a labelled outer destination. The observed
+break type is tracked separately so an operand that transfers control or
+a loop with no reachable break cannot create a result.

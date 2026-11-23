@@ -55,3 +55,24 @@ Bytes slice by written ranges and range values like arrays, counting bytes.
 ## Failure location (#958)
 
 Resolved Grill Log: the range is where a slice fails in both engines, whether the slice is bound, passed or used as a method receiver (#958).
+
+## Array runtime elements (#956)
+
+Resolved Grill Log: a slice preserves its lowered receiver's element
+carrier for written bounds and ranges held in a value.
+
+## Selected receiver layouts (#956)
+
+Resolved Grill Log: Select the held slice receiver and preserve the order of all written range ends before reporting an unsupported receiver.
+
+## Exact written slice endpoints
+
+Written and stored slice keys share the same checked slice operation.
+A written endpoint can retain any integer width. Check its original
+mathematical value against the length, then convert for the actual
+slice. Select stored keys and receivers independently.
+
+Resolved Grill Log: evaluate the receiver and both written expressions
+before validating endpoints. A wrong endpoint type therefore precedes
+receiver dispatch and bounds validation. Only a proven in-bounds
+inclusive end may be incremented.

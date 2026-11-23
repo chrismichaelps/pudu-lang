@@ -65,3 +65,14 @@ membership probe reads both locals. The checker types `in` as
 Resolved Grill Log: reuse `KeyedContains` instead of a new Core operator;
 the probe applies no orderability check, matching `Set.contains` and the
 interpreter's `setContains`.
+
+## Dynamic keys and values (#956)
+
+Resolved Grill Log: set literals and keyed methods widen their supplied
+values to their checked carriers before membership, ordering, or storage.
+Only the carrier changes. Operand order, rejected-key spans and collection
+ownership stay with the existing operations.
+
+## Runtime keyed layouts (#956)
+
+Resolved Grill Log: Construction reads the lowered item layouts. Updates and binary operations rebuild wider carriers from the retained entries. Lookups return an Option whose payload carrier matches the stored value.

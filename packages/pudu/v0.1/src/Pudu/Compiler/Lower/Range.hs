@@ -1,10 +1,11 @@
 {-| @Pudu.Compiler.Lower.Range — ranges as values: built from the ends
     written, and their methods, as `Eval.Range` answers them. The receiver
     runs before arguments. -}
-module Pudu.Compiler.Lower.Range (lowerRangeValue, lowerRangeMethod) where
+module Pudu.Compiler.Lower.Range (lowerRangeValue, lowerRangeMethod, selectRangeEndpoint) where
 
 import Data.Text (Text)
-import Pudu.Compiler.Lower.Array (collect, lowerArrayLoop, stopped, stops)
+import Pudu.Compiler.Lower.Dynamic (mapRuntimeChoice)
+import Pudu.Compiler.Lower.Array (LowerCallback, collect, lowerArrayLoop, stopped, stops)
 import Pudu.Compiler.Lower.State (LowerContext (..), LowerState (..), bindLocal, halt, intType, refused)
 import Pudu.Compiler.Lower.Types (typeForSpan)
 import Pudu.Core
@@ -29,12 +30,25 @@ lowerRangeValue lower state at low inclusive high = case collect lower state (fo
               _ -> (Nothing, Nothing)
          in (after, Just (CoreExpression at CoreRangeType (CoreRangeValue start inclusive end), CoreRangeType))
 
+{-| Endpoint expressions have already run. Validation observes their held kinds. -}
+selectRangeEndpoint :: Span -> LowerState -> CoreExpression -> (LowerState -> CoreExpression -> Lowered) -> Lowered
+selectRangeEndpoint at state endpoint consume
+  | Just selected <- mapRuntimeChoice state at CoreNeverType endpoint
+      (\ready held -> fmap (fmap fst) (selectRangeEndpoint at ready held consume)) = selected
+  | CoreIntegerType _ <- coreExpressionType endpoint = consume state endpoint
+  | otherwise =
+      let expression = CoreExpression at
+          prefix = expression CoreTextType (CoreTextLiteral "a range end must be a whole number, not a ")
+          kind = expression CoreTextType (CoreRuntimeKind endpoint)
+          message = expression CoreTextType (CoreBinary CoreAdd prefix kind)
+       in (state, Just (expression CoreNeverType (CoreFailText "E7001" Nothing message Nothing), CoreNeverType))
+
 {-| A method of a range value; Nothing when the receiver is not one. -}
-lowerRangeMethod :: LowerExpression -> LowerState -> Span -> Located Expression -> Text -> [Located Expression] -> Maybe Lowered
-lowerRangeMethod lower state at receiver member arguments = case typeForSpan types (locatedSpan receiver) of
+lowerRangeMethod :: LowerExpression -> LowerCallback -> LowerState -> Span -> Located Expression -> Text -> [Located Expression] -> Maybe Lowered
+lowerRangeMethod lower lowerCallback state at receiver member arguments = case typeForSpan types (locatedSpan receiver) of
   Just CoreRangeType -> Just $ case member of
     _ | member `elem` ["map", "filter", "reduce"] ->
-          lowerArrayLoop lower state at receiver member arguments numbers
+          lowerArrayLoop lower lowerCallback state at receiver member arguments numbers
             (\core -> CoreExpression at numbers (CoreRangeMethod (RangeValuesFor member) core []))
     "start" -> optional RangeHasStart RangeStartOf
     "end" -> optional RangeHasEnd RangeEndOf

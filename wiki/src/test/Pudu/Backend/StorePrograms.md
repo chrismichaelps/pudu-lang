@@ -27,3 +27,7 @@ counted-allocation harnesses rather than adding a runner.
 ## Referenced by
 
 [[Backend Native Tests]] · [[Backend Text Leak Tests]] · [[Backend Module Programs]] · [[Native Indexed Stores]]
+
+## Runtime keyed layouts (#956)
+
+Resolved Grill Log: cover selected values in construction, lookup, update and iteration, including retained aliases and missing keys.

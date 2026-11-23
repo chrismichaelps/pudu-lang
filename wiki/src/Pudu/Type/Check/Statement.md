@@ -162,3 +162,11 @@ nonunit dynamic payload from an expression whose normal result is unit.
 Pass the current DeclaredTypes to contextual match exhaustiveness exactly as ordinary expression checking does.
 
 Resolved Grill Log: preserve declaration identity through checking, executable projection and usefulness; no per-match span lookup. See [[Constructor Pattern Owner Delivery]].
+
+## Contextual set carriers (#956)
+
+Resolved Grill Log: a set literal checked against a known dynamic member
+type records its expected collection carrier and checks each member
+against that type, as an array literal does. Preserve ordinary inference
+when no dynamic expectation exists and retain the empty-set diagnostic
+when the member type cannot be inferred.

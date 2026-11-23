@@ -31,7 +31,10 @@ module Pudu.Core
   , CoreForeign (..), CoreClaim (..)
   , CoreCallbackOperation (..), CoreDelegate (..), CoreCallbackSignature (..), CoreCallbackFallback (..), CoreCallbackSlot (..)
   , CoreType (..)
-  , coreTypeName, displayName, suppliedCountName
+  , coreTypeName, coreStaticRuntimeKind, displayName, suppliedCountName
+  , runtimeChoiceKey, runtimeChoiceAlternatives
+  , recordCarrier, recordCarrierParts
+  , sumCarrier, sumCarrierParts
   ) where
 
 import Data.ByteString (ByteString)
@@ -222,6 +225,7 @@ data CoreExpressionShape
   | CoreClosure !Text ![CoreExpression]
   {-| Capture number i of the closure the operand reads. -}
   | CoreCapture !Int !CoreExpression
+  | CoreClosureIs !Text !CoreExpression
   {-| A call through a function value: the callee runs, then the arguments. -}
   | CoreCallValue !CoreExpression ![CoreExpression]
   {-| Members in source order, which is the order they run. -}
@@ -457,6 +461,30 @@ data CoreType
   | CoreCallbackType !Text !Text
   deriving stock (Eq, Ord, Show)
 
+runtimeChoiceKey :: Text
+runtimeChoiceKey = "_runtime_choice"
+
+runtimeChoiceAlternatives :: CoreType -> Maybe [(Text, CoreType)]
+runtimeChoiceAlternatives (CoreSumType key members)
+  | key == runtimeChoiceKey = Just (zip (map (Text.pack . show) [0 :: Int ..]) members)
+runtimeChoiceAlternatives _ = Nothing
+
+recordCarrier :: Text -> [CoreType] -> [CoreType] -> CoreType
+recordCarrier owner arguments fields =
+  CoreRecordType owner (CoreSumType "_runtime_record_fields" fields : arguments)
+
+recordCarrierParts :: [CoreType] -> ([CoreType], Maybe [CoreType])
+recordCarrierParts (CoreSumType "_runtime_record_fields" fields : arguments) = (arguments, Just fields)
+recordCarrierParts arguments = (arguments, Nothing)
+
+sumCarrier :: Text -> [CoreType] -> [CoreType] -> CoreType
+sumCarrier owner arguments payload =
+  CoreSumType owner (CoreSumType "_runtime_sum_payload" payload : arguments)
+
+sumCarrierParts :: [CoreType] -> ([CoreType], Maybe [CoreType])
+sumCarrierParts (CoreSumType "_runtime_sum_payload" payload : arguments) = (arguments, Just payload)
+sumCarrierParts arguments = (arguments, Nothing)
+
 coreTypeName :: CoreType -> Text
 coreTypeName coreType = case coreType of
   CoreIntegerType kind -> integerKindName kind
@@ -465,10 +493,12 @@ coreTypeName coreType = case coreType of
   CoreTextType -> "Str"
   CoreCharType -> "Char"
   CoreTupleType members -> "(" <> Text.intercalate ", " (map coreTypeName members) <> ")"
-  CoreRecordType name [] -> displayName name
-  CoreRecordType name arguments -> displayName name <> "[" <> Text.intercalate ", " (map coreTypeName arguments) <> "]"
-  CoreSumType name [] -> displayName name
-  CoreSumType name arguments -> displayName name <> "[" <> Text.intercalate ", " (map coreTypeName arguments) <> "]"
+  CoreRecordType name native -> case fst (recordCarrierParts native) of
+    [] -> displayName name
+    arguments -> displayName name <> "[" <> Text.intercalate ", " (map coreTypeName arguments) <> "]"
+  CoreSumType name native -> case fst (sumCarrierParts native) of
+    [] -> displayName name
+    arguments -> displayName name <> "[" <> Text.intercalate ", " (map coreTypeName arguments) <> "]"
   CoreArrayType element -> "Array[" <> coreTypeName element <> "]"
   CoreMapType key value -> "Map[" <> coreTypeName key <> ", " <> coreTypeName value <> "]"
   CoreSetType member -> "Set[" <> coreTypeName member <> "]"
@@ -481,6 +511,27 @@ coreTypeName coreType = case coreType of
   CoreNeverType -> "Never"
   CoreHandleType _ name -> name
   CoreCallbackType _ name -> name
+
+{-| The diagnostic label for a value whose shape is fixed by its carrier. -}
+coreStaticRuntimeKind :: CoreType -> Text
+coreStaticRuntimeKind CoreUnitType = "unit"
+coreStaticRuntimeKind CoreBoolType = "bool"
+coreStaticRuntimeKind (CoreFloatType _) = "float"
+coreStaticRuntimeKind CoreTextType = "string"
+coreStaticRuntimeKind CoreCharType = "char"
+coreStaticRuntimeKind (CoreTupleType _) = "tuple"
+coreStaticRuntimeKind (CoreRecordType name _) = displayName name
+coreStaticRuntimeKind (CoreArrayType _) = "array"
+coreStaticRuntimeKind (CoreMapType _ _) = "map"
+coreStaticRuntimeKind (CoreSetType _) = "set"
+coreStaticRuntimeKind (CoreStoreType _) = "store"
+coreStaticRuntimeKind CoreRangeType = "range"
+coreStaticRuntimeKind CoreBytesType = "bytes"
+coreStaticRuntimeKind CoreDecimalType = "decimal"
+coreStaticRuntimeKind (CoreHandleType _ name) = name
+coreStaticRuntimeKind (CoreCallbackType owner _) = owner
+coreStaticRuntimeKind (CoreFunctionType _ _) = "function"
+coreStaticRuntimeKind kind = coreTypeName kind
 
 {-| A record or sum as a program writes it: the last segment of its canonical
     key (`Main.Point` is `Point`), which is how the evaluator renders it. -}

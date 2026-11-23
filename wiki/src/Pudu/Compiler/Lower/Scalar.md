@@ -223,3 +223,29 @@ helper runs, and which runtime kind appears in a refusal. A mixed-width integer
 uses the evaluator's kind selection. Checking and saturation act on the exact
 intermediate, while wrapping and bit operations use the result width. Mixed
 integer comparisons compare the original mathematical values.
+
+## Equality of held aggregate layouts (#956)
+
+Resolved Grill Log: after integer and same-carrier dispatch, reuse a
+checked common dynamic carrier when both held operands can widen into
+it. Its equality compares the payloads across layout tags. Direct
+mixed-width integer equality still compares mathematical values.
+
+## Shared runtime kind labels (#956)
+
+Resolved Grill Log: use the Core label for operands whose runtime shape is
+determined by their carrier. Active variants and callables keep the
+runtime lookup.
+
+Resolved Grill Log: share the named failure builder with method calls
+whose checked dynamic view selects a noncallable field.
+
+## Operators on runtime alternatives (#956)
+
+Resolved Grill Log: select preserved native value carriers before applying
+an operator, using the same rules as held dynamic operands. Equality also
+accepts a concrete value and a selected result.
+
+## Runtime keyed layouts (#956)
+
+Resolved Grill Log: Set membership preserves source evaluation order while projecting the probe to the set carrier.

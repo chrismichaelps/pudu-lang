@@ -23,6 +23,20 @@ renderingCallableSuccessPrograms =
       , "  0"
       , "}" ]
     , "42\nraw\n\"a\\n\"\ntrue\nfalse\n<builtin show>\n", "")
+  , ("stored rendering and output select actual value layouts", program
+      [ "trait View { fn size(self: &Self) -> Int }"
+      , "impl View for Str { fn size(self: &Self) -> Int { self.length() } }"
+      , "impl View for Bytes { fn size(self: &Self) -> Int { 0 } }"
+      , "fn decode(value: dynamic View) -> Str { value.toText() }"
+      , "fn main() -> Int {"
+      , "  let render: fn(Str) -> Str = show"
+      , "  let send = print"
+      , "  print(render(decode(\"text\")))"
+      , "  print(render(decode(\"λ\".toBytes())))"
+      , "  send(decode(\"raw\"))"
+      , "  send(decode(bytesOf([255u8])))"
+      , "  0", "}" ]
+    , "\"text\"\nSome(\"λ\")\nraw\nNone\n", "")
   , ("rendering builtins specialize through generic callers", program
       [ "fn render[T](value: T, converter: fn(T) -> Str) -> Str { converter(value) }"
       , "fn main() -> Int {"
@@ -60,6 +74,119 @@ renderingCallableSuccessPrograms =
       , "  0"
       , "}" ]
     , "<fn display>\nuser:x\nlocal:y\n", "")
+  , ("selected text keeps its method and index behavior", program
+      (selectedReceiverTypes <>
+        [ "fn main() -> Int {"
+        , "  let selected = choose(\" λ \")"
+        , "  let trim = selected.trim"
+        , "  print(trim())"
+        , "  print(display(selected.length()))"
+        , "  print(display(selected[1]))"
+        , "  print(selected[1..2])"
+        , "  0", "}" ])
+    , "receiver\nλ\n3\nλ\nλ\n", "")
+  , ("selected text method operands reach direct and stored calls", program
+      (selectedReceiverTypes <>
+        [ "fn main() -> Int {"
+        , "  print(\"hello\".replace(choose(\"l\"), { print(\"replacement\")\n \"x\" }))"
+        , "  let contains = \"hello\".contains"
+        , "  print(display(contains(choose(\"ell\"))))"
+        , "  0", "}" ])
+    , "receiver\nreplacement\nhexxo\nreceiver\ntrue\n", "")
+  , ("argument transfer precedes an incompatible selected layout", program
+      (selectedReceiverTypes <>
+        [ "fn stop() -> Int {"
+        , "  \"hello\".replace(choose(\"λ\".toBytes()), { print(\"transfer\")\n return 7 })"
+        , "  99", "}"
+        , "fn main() -> Int { print(display(stop()))\n 0 }" ])
+    , "receiver\ntransfer\n7\n", "")
+  , ("selected text views retain byte offsets and callable identity", program
+      (selectedReceiverTypes <>
+        [ "fn main() -> Int {"
+        , "  let at = textByteAt"
+        , "  print(show(at(choose(\"λ\"), 1)))"
+        , "  print(show(textByteSize(choose(\"\"))))"
+        , "  print(show(at == textByteAt))"
+        , "  0", "}" ])
+    , "receiver\nSome(187)\nreceiver\n0\ntrue\n", "")
+  , ("selected bytes method operands reach the native method", program
+      (selectedReceiverTypes <> selectedByteConversion <>
+        [ "fn main() -> Int {"
+        , "  print(show(\"head\".toBytes().concat(choose(\"end\").toBytes()).toText()))"
+        , "  0", "}" ])
+    , "receiver\nSome(\"headend\")\n", "")
+  , ("byte construction checks the held array elements in both invocation forms", program
+      (selectedReceiverTypes <> selectedByteConversion <> selectedByteArray "Int" "[0, 195, 169]" <>
+        [ "fn main() -> Int {"
+        , "  let pack = bytesOf"
+        , "  print(show(bytesOf(selectedArray(\"ordinary\")).toText()))"
+        , "  print(show(pack(selectedArray(\"λ\".toBytes())).toArray()))"
+        , "  0", "}" ])
+    , "receiver\nSome(\"ordinary\")\nreceiver\n[0, 195, 169]\n", "")
+  , ("byte construction accepts an empty held array of another layout", program
+      (selectedReceiverTypes <> selectedByteConversion <> selectedByteArray "Bool" "[]" <>
+        [ "fn main() -> Int {"
+        , "  print(show(bytesOf(selectedArray(\"λ\".toBytes())).length()))"
+        , "  0", "}" ])
+    , "receiver\n0\n", "")
+  , ("wider held integer counts preserve text and byte method results", program
+      (selectedReceiverTypes <> selectedIntegerPositions <>
+        [ "fn main() -> Int {"
+        , "  let selected = choose(\"λ\".toBytes())"
+        , "  let large = selected.indexOf(\"large\")"
+        , "  let larger = selected.indexOf(\"larger\")"
+        , "  let negative = selected.indexOf(\"negative\")"
+        , "  let small = selected.indexOf(\"small\")"
+        , "  let take = \"aλz\".take"
+        , "  let bytes = \"aλz\".toBytes()"
+        , "  let gather = bytes.strided"
+        , "  print(show(take(small)) + show(take(large)) + show(\"\".repeat(large)))"
+        , "  print(show(\"aλz\".slice(negative, large)) + show(\"aλz\".slice(large, small)))"
+        , "  print(show(bytes.at(small)) + show(bytes.at(negative)) + show(bytes.take(large)))"
+        , "  print(show(gather(0, larger, large)) + show(gather(0, large, larger)))"
+        , "  print(show(bytes.strided(large, 1, 2)) + show(bytes.strided(0, 1, negative)))"
+        , "  0", "}" ])
+    , "receiver\n\"aλ\"\"aλz\"\"\"\n\"aλz\"\"\"\nSome(187)None0x61cebb7a\nNoneSome(0x61cebb7a)\nSome(0x)None\n", "")
+  , ("wider held text-view offsets preserve exact boundaries", program
+      (selectedReceiverTypes <> selectedIntegerPositions <>
+        [ "fn main() -> Int {"
+        , "  let selected = choose(\"λ\".toBytes())"
+        , "  let small = selected.indexOf(\"small\")"
+        , "  let large = selected.indexOf(\"large\")"
+        , "  let negative = selected.indexOf(\"negative\")"
+        , "  let at = textByteAt"
+        , "  let slice = textByteSlice"
+        , "  print(show(at(\"λx\", small)) + show(at(\"λ\", large)))"
+        , "  print(show(slice(\"λx\", small, 3)) + show(slice(\"λx\", negative, small)))"
+        , "  print(show(textByteFind(\"λx\", \"\", large)))"
+        , "  0", "}" ])
+    , "receiver\nSome(120)None\nSome(\"x\")None\nNone\n", "")
+  , ("wider held bracket indices select array elements and text scalars", program
+      (selectedReceiverTypes <> selectedIntegerPositions <>
+        [ "fn main() -> Int {"
+        , "  let position = choose(\"λ\".toBytes()).indexOf(\"small\")"
+        , "  print(show([5, 10, 15][position]))"
+        , "  print(show(\"λλx\"[position]))"
+        , "  0", "}" ])
+    , "receiver\n15\n'x'\n", "")
+  , ("written slices accept exact wider integer endpoints", program
+      (selectedReceiverTypes <> selectedIntegerPositions <>
+        [ "fn main() -> Int {"
+        , "  let end = choose(\"λ\".toBytes()).indexOf(\"small\")"
+        , "  print(show([1, 2, 3][1..=end]))"
+        , "  print(show(\"aλz\"[..end]))"
+        , "  print(show(\"aλz\".toBytes()[end..]))"
+        , "  0", "}" ])
+    , "receiver\n[2, 3]\n\"aλ\"\n0xbb7a\n", "")
+  , ("later slice endpoint can transfer before endpoint validation", program
+      (selectedReceiverTypes <> selectedInvalidPosition <>
+        [ "fn take() -> Int {"
+        , "  let selected = choose(\"λ\".toBytes())"
+        , "  let values = [1, 2, 3]"
+        , "  print(show(values[selected.indexOf(\"invalid\")..{ print(\"transfer\")\n return 7 }]))"
+        , "  99", "}"
+        , "fn main() -> Int { print(show(take()))\n 0 }" ])
+    , "receiver\ntransfer\n7\n", "")
   , ("rendering function arguments use callable rendering", program
       [ "fn main() -> Int {"
       , "  let repr: fn(fn(Int) -> Str) -> Str = show"
@@ -101,6 +228,113 @@ renderingCallableRefusalPrograms =
       [ "fn left() -> fn(Int) -> Str { print(\"left\")\n display }"
       , "fn right() -> fn(Int) -> Str { print(\"right\")\n show }"
       , "fn main() -> Int { let invalid = left() < right()\n print(display(invalid))\n 0 }" ])
+  , ("selected missing method fails before evaluating arguments", program
+      (selectedReceiverTypes <>
+        [ "fn main() -> Int {"
+        , "  let selected = choose(\"λ\".toBytes())"
+        , "  print(display(selected.contains({ print(\"unreached\")\n \"λ\" })))"
+        , "  0", "}" ]))
+  , ("selected missing bound method fails when retained", program
+      (selectedReceiverTypes <>
+        [ "fn main() -> Int {"
+        , "  let selected = choose(bytesOf([255u8]))"
+        , "  let kept = selected.trim"
+        , "  print(kept())"
+        , "  0", "}" ]))
+  , ("selected invalid numeric index still evaluates the key", program
+      (selectedReceiverTypes <>
+        [ "fn main() -> Int {"
+        , "  let selected = choose(\"λ\".toBytes())"
+        , "  print(display(selected[{ print(\"index\")\n 0 }]))"
+        , "  0", "}" ]))
+  , ("selected invalid slice still evaluates both ends", program
+      (selectedReceiverTypes <>
+        [ "fn bound(label: Str, value: Int) -> Int { print(label)\n value }"
+        , "fn main() -> Int {"
+        , "  let selected = choose(bytesOf([255u8]))"
+        , "  print(selected[bound(\"start\", 0)..bound(\"end\", 1)])"
+        , "  0", "}" ]))
+  , ("selected invalid text operand keeps later operand effects", program
+      (selectedReceiverTypes <>
+        [ "fn main() -> Int {"
+        , "  print(\"hello\".replace(choose(\"λ\".toBytes()), { print(\"replacement\")\n \"x\" }))"
+        , "  0", "}" ]))
+  , ("selected invalid bound text operand names the invocation", program
+      (selectedReceiverTypes <>
+        [ "fn main() -> Int {"
+        , "  let contains = \"hello\".contains"
+        , "  print(display(contains(choose(\"λ\".toBytes()))))"
+        , "  0", "}" ]))
+  , ("selected invalid byte operand uses the byte method diagnostic", program
+      (selectedReceiverTypes <> selectedByteConversion <>
+        [ "fn main() -> Int {"
+        , "  print(show(\"head\".toBytes().concat(choose(\"λ\".toBytes()).toBytes())))"
+        , "  0", "}" ]))
+  , ("selected text view operands fail after evaluating offsets", program
+      (selectedReceiverTypes <>
+        [ "fn main() -> Int {"
+        , "  print(show(textByteAt(choose(\"λ\".toBytes()), { print(\"offset\")\n 0 })))"
+        , "  0", "}" ]))
+  , ("selected stored text view failure names the invocation", program
+      (selectedReceiverTypes <>
+        [ "fn main() -> Int {"
+        , "  let at = textByteAt"
+        , "  print(show(at(choose(\"λ\".toBytes()), { print(\"offset\")\n 0 })))"
+        , "  0", "}" ]))
+  , ("byte construction reports the first out-of-range held integer", program
+      (selectedReceiverTypes <> selectedByteConversion <> selectedByteArray "Int" "[0, -1, 256]" <>
+        [ "fn main() -> Int {"
+        , "  let pack = bytesOf"
+        , "  print(show(pack(selectedArray(\"λ\".toBytes()))))"
+        , "  0", "}" ]))
+  , ("byte construction refuses a held noninteger element", program
+      (selectedReceiverTypes <> selectedByteConversion <> selectedByteArray "Bool" "[false]" <>
+        [ "fn main() -> Int {"
+        , "  print(show(bytesOf(selectedArray(\"λ\".toBytes()))))"
+        , "  0", "}" ]))
+  , ("wider held repeat count fails at the stored invocation", program
+      (selectedReceiverTypes <> selectedIntegerPositions <>
+        [ "fn main() -> Int {"
+        , "  let repeat = \"word\".repeat"
+        , "  print(repeat(choose(\"λ\".toBytes()).indexOf(\"large\")))"
+        , "  0", "}" ]))
+  , ("wider negative text count keeps the negative-count diagnostic", program
+      (selectedReceiverTypes <> selectedIntegerPositions <>
+        [ "fn main() -> Int {"
+        , "  print(\"word\".take(choose(\"λ\".toBytes()).indexOf(\"negative\")))"
+        , "  0", "}" ]))
+  , ("wider held bracket index reports an out-of-range key", program
+      (selectedReceiverTypes <> selectedIntegerPositions <>
+        [ "fn main() -> Int {"
+        , "  let numbers = [5, 10, 15]"
+        , "  print(show(numbers[choose(\"λ\".toBytes()).indexOf(\"large\")]))"
+        , "  0", "}" ]))
+  , ("written slice keeps the exact bound above Int", program
+      (selectedReceiverTypes <> selectedIntegerPositions <>
+        [ "fn main() -> Int {"
+        , "  let selected = choose(\"λ\".toBytes())"
+        , "  print(show(\"λz\"[..selected.indexOf(\"large\")]))"
+        , "  0", "}" ]))
+  , ("written slice reports the earlier incompatible endpoint after both effects", program
+      (selectedReceiverTypes <> selectedInvalidPosition <>
+        [ "fn main() -> Int {"
+        , "  let selected = choose(\"λ\".toBytes())"
+        , "  print(show([1, 2][{ print(\"start\")\n selected.indexOf(\"invalid\") }..{ print(\"end\")\n 1 }]))"
+        , "  0", "}" ]))
+  , ("written slice checks endpoint kind before the held receiver", program
+      (selectedReceiverTypes <> selectedInvalidPosition <>
+        [ "fn main() -> Int {"
+        , "  let selected = choose(\"λ\".toBytes())"
+        , "  print(show(selected[..selected.indexOf(\"invalid\")]))"
+        , "  0", "}" ]))
+  , ("a stored stopping builtin receives the held runtime argument", program
+      [ "trait View { fn size(self: &Self) -> Int }"
+      , "impl View for Bytes { fn size(self: &Self) -> Int { 0 } }"
+      , "fn decode(value: dynamic View) -> Str { print(\"argument\")\n value.toText() }"
+      , "fn main() -> Int {"
+      , "  let stop: fn(Str) -> Never = panic"
+      , "  stop(decode(\"λ\".toBytes()))"
+      , "}" ])
   , ("rendering builtin map keys retain runtime refusal", program
       [ "fn main() -> Int { let renderer: fn(Int) -> Str = show\n let invalid = mapOf([(renderer, 1)])\n print(display(invalid))\n 0 }" ])
   , ("rendering callable arguments fail before dispatch", program
@@ -117,6 +351,49 @@ deep body = program
 
 number :: Int -> Text
 number = Text.pack . show
+
+selectedReceiverTypes :: [Text]
+selectedReceiverTypes =
+  [ "trait View { fn size(self: &Self) -> Int }"
+  , "impl View for Str { fn size(self: &Self) -> Int { self.length() } }"
+  , "impl View for Bytes { fn size(self: &Self) -> Int { 0 } }"
+  , "fn choose(value: dynamic View) -> Str {"
+  , "  print(\"receiver\")"
+  , "  value.toText()"
+  , "}"
+  ]
+
+selectedByteConversion :: [Text]
+selectedByteConversion =
+  [ "trait Conversion { fn toBytes(self: &Self) -> Str }"
+  , "impl Conversion for Option[Str] { fn toBytes(self: &Self) -> Str { \"not bytes\" } }"
+  ]
+
+selectedByteArray :: Text -> Text -> [Text]
+selectedByteArray element members =
+  [ "trait ArrayView { fn toArray(self: &Self) -> Array[" <> element <> "] }"
+  , "impl ArrayView for Str { fn toArray(self: &Self) -> Array[" <> element <> "] { " <> members <> " } }"
+  , "fn selectedArray(view: dynamic View) -> Array[UInt8] { choose(view).toBytes().toArray() }"
+  ]
+
+selectedIntegerPositions :: [Text]
+selectedIntegerPositions =
+  [ "trait Positions { fn indexOf(self: &Self, label: Str) -> BigInt }"
+  , "impl Positions for Option[Str] {"
+  , "  fn indexOf(self: &Self, label: Str) -> BigInt {"
+  , "    if label == \"large\" { return 18446744073709551616 }"
+  , "    if label == \"larger\" { return 18446744073709551617 }"
+  , "    if label == \"negative\" { return -18446744073709551617 }"
+  , "    2"
+  , "  }"
+  , "}"
+  ]
+
+selectedInvalidPosition :: [Text]
+selectedInvalidPosition =
+  [ "trait Positions { fn indexOf(self: &Self, label: Str) -> Bool }"
+  , "impl Positions for Option[Str] { fn indexOf(self: &Self, label: Str) -> Bool { false } }"
+  ]
 
 program :: [Text] -> Text
 program body = Text.unlines (["module Main", ""] <> body)

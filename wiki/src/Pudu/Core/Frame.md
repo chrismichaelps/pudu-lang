@@ -173,3 +173,7 @@ one slot, whatever the length.
 
 `frameModuleExports` carries [[Pudu Core IR Module]]'s export keys unchanged
 into the frame module, where [[Backend Emit Export]] reads them.
+
+## Stored callable dispatch (#956)
+
+Resolved Grill Log: A closure-target test reads its closure slot and names a linked body. Its result slot is Bool.

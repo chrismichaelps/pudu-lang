@@ -25,3 +25,7 @@ through [[Compiler Lower Try]].
 ## Referenced by
 
 [[Compiler Lower Body]] · [[Compiler Lower Try]] · [[Native Host Scopes]] · [[Native Host Services]]
+
+## Native task result layouts (#956)
+
+Resolved Grill Log: Probe only known compatible failure carriers. Rebuild a selected failure for the enclosing function and preserve join order and mutable loan finals.

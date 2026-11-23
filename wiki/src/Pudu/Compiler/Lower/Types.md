@@ -274,3 +274,23 @@ Read mutable input positions through a checked callable's capability wrapper.
 
 Capability admission happens in checking. The native callable still needs
 its loan positions for copy-in and writeback.
+
+## Runtime alternative layouts (#956)
+
+Resolved Grill Log: form the reserved sum directly from its concrete
+arguments. Each alternative carries exactly one value with its own type.
+Keep these layouts distinct from a trait's implementation table.
+
+## Shapes during callable replay (#956)
+
+Resolved Grill Log: a copied closure uses the captured source facts
+and substitutions with the current module's native layouts. A replay
+can add a proved layout between discovering the closure and using it.
+
+## Runtime layouts in products (#956)
+
+Resolved Grill Log: A record layout suffix supplies field types in declaration order. It does not affect nominal lookup, checker substitutions, or the public type spelling.
+
+## Runtime layouts in sum payloads (#956)
+
+Resolved Grill Log: Read the declared variants first and apply only the matching payload overrides. Preserve variant labels and declaration order.

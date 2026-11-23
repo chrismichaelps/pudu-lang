@@ -69,13 +69,160 @@ slice bounds. Direct and bound join calls use the same array contract.
 The ordered collection regressions use mixed integer widths, floating values
 and duplicate numeric keys. Stored foreign declarations share the direct
 crossing for checked bounds, claims, result slots and mutable writeback.
-Callable nullable-address crossings still need an absence representation.
+The checker reserves nullable-address loans for direct calls (E3102).
+Dynamic aggregate comparisons follow the held shape after numeric dispatch,
+including sums with both positional and named variants.
+
+## Dynamic destination carriers (#956)
+
+Record updates, nested place assignments and ordinary arguments to loaned
+calls widen implementing values to their declared dynamic carriers.
+Array, map, set and store methods use the same projection for their
+arguments. A contextual set literal records its resolved member carrier
+before lowering. Dynamic method dispatch forwards an exclusive parameter
+named in a loaned position. [[Backend Abstraction Programs]] and [[Backend
+Mutable Loan Programs]] cover writeback, direct and stored calls, and
+keyed lookup after insertion.
+
+## Dynamic control-flow carriers (#956)
+
+Loop exits use the checked result carrier of their lexical destination.
+Conditional and match results widen dynamic members inside the checked
+aggregate carrier. Named record and sum patterns on dynamic values first
+test the canonical owner, then match the payload. [[Backend Abstraction
+Programs]] and [[Backend Shape Programs]] cover labelled exits, nested
+narrowing, guards, and same-named declarations across modules.
+
+## Dynamic dispatch identity and transfers (#956)
+
+Dynamic method calls preserve the selected trait's canonical identity
+through checking, execution, and native lowering. The held type selects
+the owner independently of the variant tag. A receiver or argument
+that transfers control skips invocation and writeback. [[Backend Shape
+Programs]] and [[Backend Control Programs]] exercise both behaviors.
+
+## Proven generic dynamic payloads (#956)
+
+Native lowering discovers concrete dynamic variants from proven widening
+facts in checked modules and their reachable specializations. Dispatch
+and common-field narrowing can select multiple concrete variants of one
+generic owner. [[Backend Cross Comparison]] compares their held values
+through both layouts. [[Backend Shape Programs]] covers direct equality,
+ordering inside tuples, ordered membership, and nested arrays, sums and
+maps across concrete instantiations.
+
+## Dynamic text member selection (#956)
+
+A checked trait member uses its selected trait. Universal `toText` calls
+and stored members select on the held value, including overrides,
+callable fields and builtin character conversion. Direct calls preserve
+mutable receiver writeback and a stored callable retains its selected
+receiver. Direct calls and local stored callables preserve distinct
+runtime layouts in an internal sum when returning variants disagree.
+`show`, `display`, output and scalar operators use the held value,
+including `Option[Str]` returned by `Bytes`. A numeric field reached
+through the dynamic view retains the runtime call diagnostic. Internal
+synchronous direct calls retain runtime alternatives across declared
+parameters and results, using a copy when the parameter carrier changes.
+The worklist settles return carriers before emitting frame slots.
+[[Backend Method Value Programs]] covers a returned callable, explicit
+returns, a defaulted argument, and output from the held result.
+
+[[Compiler Lower Array]] stores callable carriers with different native
+return types in one array. Indexing, range slicing, iteration and bound
+retrieval use that layout. When an update or concatenation widens the
+element carrier, it builds a new array and retains existing aliases.
+Named and inline callbacks use the native element layout for
+`map`, `filter`, `reduce` and `sortBy`. Mapping keeps the callback's
+result layout. Reduction settles its accumulator layout before
+emitting the loop, including when the input is a range. Joining mapped
+text reads the held value and reports an invalid member at the join.
+[[Backend Method Value Programs]] covers valid and invalid decoding,
+stable aliases, mixed-layout lookups and repeated reduction.
+Stored synchronous named functions and lambdas can select native
+argument layouts at an indirect call. A lambda copy uses the held
+captures and keeps the original closure's identity. Array callbacks
+select the result layout of the held body. Stored synchronous methods
+retain their captured receivers when invoked with different native
+argument layouts. Stored rendering, output, panic and applicable
+collection constructors specialize their native inputs.
+[[Backend Method Value Programs]] and [[Backend Rendering Callable Programs]]
+cover these paths.
+
+Tuples and nominal records keep selected runtime layouts in their
+members. Conditional and match results project compatible products
+into one native layout. Updates retain the base's untouched fields
+and preserve existing aliases. [[Backend Shape Programs]] covers
+nested fields, shared records, destructuring and early returns.
+Positional and named sum constructors retain the actual payload layout
+under the declared variant. Pattern binding and `?` use those payload
+slots, including a failure returned in the enclosing function's layout.
+[[Backend Shape Programs]] covers the propagation paths.
+
+Maps, sets and indexed stores preserve native key and value layouts.
+Construction, lookup, method binding and iteration use the retained
+slots. Widening an update or combining collections rebuilds entries
+without changing earlier aliases. [[Backend Keyed Programs]] and
+[[Backend Store Programs]] cover callable values, absent keys and
+set probes with selected values.
+
+Internal async functions and stored async callables retain native
+input and result layouts. Await and scope joins use the selected
+payload, including failures carried back to the async entry. [[Backend
+Shape Programs]] covers deferred execution and selected child failures.
+Mutable loans use the native layout of the held place. Direct and
+indirect calls settle the ordinary result separately from loan finals
+and publish the finals in parameter order. [[Backend Shape Programs]]
+covers retained captures, fields and indexed places. A mutable local
+also settles its physical layout from later writes, including a
+named mutable-loan final and changes through a nested field or element.
+Lifted and bound loan bodies can demand wider parameter layouts
+without changing the stored environment. Function copies retain stable
+body identities while their final layouts settle. [[Backend Shape
+Programs]] covers writeback into initially narrow places. Native
+text and byte receiver selection keeps the held layout for methods,
+bound methods and indexing. An absent member and an invalid index
+preserve their different evaluation order. [[Backend Rendering Callable
+Programs]] covers the selected access and diagnostics. Selected
+argument layouts, other intrinsic families and fixed external
+boundaries remain open.
+
+## Dynamic diagnostic kind names (#956)
+
+Dynamic values supply the held value's runtime kind when a diagnostic
+names its operand. Active sum variants and callable kinds keep their
+existing spellings. [[Backend Keyed Programs]] covers rejection of a
+generic record holding a function.
 
 ## Nested foreign records (#863)
 
 The interpreter and C11 use the platform layout of each nested record.
 [[Nested Foreign Record Delivery]] covers inner tail padding and records
 whose combined scalar leaves exceed the per-record member limit.
+
+## Selected text and byte operands (#956)
+
+Methods and text views evaluate the whole argument list before
+validating held layouts. Stored calls attach argument failures to the
+invocation. Byte construction checks each element in order before
+packing. [[Compiler Lower Arguments]] · [[Compiler Lower Bytes]] ·
+[[Backend Rendering Callable Programs]]. Execution evidence is pending.
+
+## Wider integer positions (#956)
+
+Text and byte methods and scalar indexing accept held integer widths.
+Byte views and repetition check exact bounds before conversion.
+Byte groups validate the relationship between the original width and
+stride. [[Compiler Lower Arguments]] · [[Compiler Lower Array]] ·
+[[Backend Rendering Callable Programs]]. Execution evidence is pending.
+
+## Exact written slice bounds (#956)
+
+Written slices evaluate both endpoints before validating their types
+in order. All held integer widths participate in exact bounds checks.
+Stored slice keys dispatch on their held layout and share the same
+bounds implementation. Widening the stored range representation is
+pending. [[Compiler Lower Slice]] · [[Backend Rendering Callable Programs]]
 
 ## Published progress (#496)
 

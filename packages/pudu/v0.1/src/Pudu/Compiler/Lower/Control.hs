@@ -6,9 +6,10 @@ module Pudu.Compiler.Lower.Control
   ) where
 
 import Data.Text (Text)
+import Pudu.Compiler.Lower.Dynamic (widenTo)
 import Pudu.Compiler.Lower.State
-  ( LowerState (..), LoopFrame (..), halt, refused )
-import Pudu.Compiler.Lower.Types (nativeValueType)
+  ( LowerContext (..), LowerState (..), LoopFrame (..), halt, refused )
+import Pudu.Compiler.Lower.Types (nativeValueType, typeForSpan)
 import Pudu.Core
 import Pudu.Frontend.Syntax (Block (..), Expression, Located (..), Statement (..))
 import Pudu.Source (Span)
@@ -30,7 +31,8 @@ lowerWhile expression block spanValue label condition body state =
 
 lowerLoop :: BlockLowerer -> Span -> Maybe (Located Text) -> Located Block -> LowerState -> (LowerState, Maybe (CoreExpression, CoreType))
 lowerLoop block spanValue label body state =
-  let (pushed, identity) = pushLoop label state
+  let expected = typeForSpan (contextTypes (lowerContext state)) spanValue
+      (pushed, identity) = pushLoopWith expected label state
       (after, coreBody, _) = block pushed (droppedTail body)
       resultType = case lowerLoops after of
         frame : _ -> maybe CoreNeverType id (loopBreakType frame)
@@ -46,9 +48,13 @@ droppedTail (Located at (Block statements (Just tail'))) =
 droppedTail body = body
 
 pushLoop :: Maybe (Located Text) -> LowerState -> (LowerState, CoreLoopId)
-pushLoop label state =
+pushLoop = pushLoopWith Nothing
+
+pushLoopWith :: Maybe CoreType -> Maybe (Located Text) -> LowerState -> (LowerState, CoreLoopId)
+pushLoopWith expected label state =
   let identity = CoreLoopId (lowerNextLoop state)
-   in (state{lowerNextLoop = lowerNextLoop state + 1, lowerLoops = LoopFrame identity (locatedValue <$> label) Nothing : lowerLoops state}, identity)
+      frame = LoopFrame identity (locatedValue <$> label) expected Nothing
+   in (state{lowerNextLoop = lowerNextLoop state + 1, lowerLoops = frame : lowerLoops state}, identity)
 
 popLoop :: LowerState -> LowerState
 popLoop state = state{lowerLoops = drop 1 (lowerLoops state)}
@@ -58,18 +64,24 @@ popLoop state = state{lowerLoops = drop 1 (lowerLoops state)}
 lowerTransfer :: ExpressionLowerer -> Span -> Maybe (Located Text) -> Maybe (Maybe (Located Expression)) -> LowerState -> (LowerState, Maybe CoreStatement)
 lowerTransfer expression spanValue label transfer state = case destination of
   Nothing -> halt spanValue "a loop transfer without a native target" state
-  Just identity -> case transfer of
+  Just frame -> case transfer of
     Nothing -> built state (CoreContinue identity)
     Just Nothing -> observe identity state Nothing CoreUnitType
     Just (Just operand) -> case expression state operand of
-      (after, Just (coreOperand, operandType))
+      (after, Just lowered)
         | expressionIsPrintValued coreOperand -> halt (locatedSpan operand) "breaking with a Result[(), Str] value" after
         | nativeValueType operandType || operandType == CoreNeverType -> observe identity after (Just coreOperand) operandType
         | otherwise -> halt (locatedSpan operand) ("breaking with a " <> coreTypeName operandType <> " value") after
+        where
+          (coreOperand, operandType) = case loopExpectedBreakType frame of
+            Just expected -> widenTo (contextTypes (lowerContext after)) expected lowered
+            Nothing -> lowered
       (after, Nothing) -> refused after
+    where
+      identity = loopIdentity frame
   where
-    destination = case [loopIdentity frame | frame <- lowerLoops state, maybe True (\name -> loopLabel frame == Just (locatedValue name)) label] of
-      identity : _ -> Just identity
+    destination = case [frame | frame <- lowerLoops state, maybe True (\name -> loopLabel frame == Just (locatedValue name)) label] of
+      frame : _ -> Just frame
       [] -> Nothing
     built after shape = (after, Just (CoreStatement spanValue shape))
     observe identity after operand operandType
