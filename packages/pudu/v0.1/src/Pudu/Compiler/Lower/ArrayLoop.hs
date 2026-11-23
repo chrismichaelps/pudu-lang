@@ -64,8 +64,8 @@ arrayMethodWith state at member operands kind element toItems = case member of
                         answered = coreExpressionType applied
                         output = outputKind answered
                         (withOutput, outputLocal) = hidden checked output
-                        pushed value = statement (CoreAssign outputLocal (expression output
-                          (CoreArrayMethod ArrayPushValue (expression output (CoreTakeLocal outputLocal)) [value])))
+                        pushed itemValue = statement (CoreAssign outputLocal (expression output
+                          (CoreArrayMethod ArrayPushValue (expression output (CoreTakeLocal outputLocal)) [itemValue])))
                         turn item = statement (CoreDeclare itemLocal (reading item)) : (case answered of
                           CoreNeverType -> [statement (CoreEvaluate applied)]
                           _ | maps -> [pushed applied]
@@ -164,16 +164,16 @@ arrayMethodWith state at member operands kind element toItems = case member of
   invokeCallback current function arguments
     | Just selected <- mapRuntimeChoice current at CoreNeverType function
         (\ready held -> invokeCallback ready held arguments) = fmap (fmap fst) selected
-    | CoreFunctionType inputs result <- kind =
+    | CoreFunctionType inputs result <- callableKind =
         invokeFunction current inputs result
-    | CoreCallbackType{} <- kind = halt at "an array callback through a foreign token" current
-    | nativeValueType kind = (current, Just (notCallable (expression CoreTextType (CoreRuntimeKind function))))
+    | CoreCallbackType{} <- callableKind = halt at "an array callback through a foreign token" current
+    | nativeValueType callableKind = (current, Just (notCallable (expression CoreTextType (CoreRuntimeKind function))))
     | otherwise = halt at "an array callback with no native layout" current
    where
-    kind = coreExpressionType function
+    callableKind = coreExpressionType function
     invokeFunction entered inputs result =
       let (ready, chosen)
-            | couldReturnLoanFinals kind =
+            | couldReturnLoanFinals callableKind =
                 withLoanedCallableArity blame at entered False [] function inputs result arguments apply
             | otherwise =
                 withCallableArity blame at entered False function inputs result arguments
@@ -184,11 +184,11 @@ arrayMethodWith state at member operands kind element toItems = case member of
         let carry current' (expected, operand) =
               projectRuntimeValue (contextTypes (lowerContext current')) current' expected operand
             (ready, projected) = mapAccumL carry prior (zip inputs given)
-            operands = if defaulted then suppliedArguments at inputs projected else projected
-            called = expression result (CoreCallValue target operands)
+            passed = if defaulted then suppliedArguments at inputs projected else projected
+            called = expression result (CoreCallValue target passed)
             value
-              | map coreExpressionType operands == inputs, null loans = called
-              | map coreExpressionType operands == inputs
+              | map coreExpressionType passed == inputs, null loans = called
+              | map coreExpressionType passed == inputs
               , CoreTupleType (answer : finals) <- result, length finals == length loans =
                   expression answer (CoreTupleIndex 0 called)
               | otherwise = argumentFailure blame at "E7001" "cannot call a function value with these arguments"

@@ -6,6 +6,7 @@ import Control.Monad (foldM)
 import Data.List.NonEmpty (NonEmpty (..))
 import Data.Map.Strict (Map)
 import qualified Data.Map.Strict as Map
+import qualified Data.Set as Set
 import Data.Text (Text)
 import qualified Data.Text as Text
 import Pudu.Compiler.Lower.Default (takesSuppliedCount)

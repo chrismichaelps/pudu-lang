@@ -63,8 +63,8 @@ constructVariant state at declared name fields
           actual = sumWithPayload types declared (map snd payload)
           expected = adjust selected
           project current (label, value) = case lookup label expected of
-            Just kind -> let (ready, converted) = projectRuntimeValue types current kind value
-                          in (ready, (label, converted))
+            Just kind -> let (projected, converted) = projectRuntimeValue types current kind value
+                          in (projected, (label, converted))
             Nothing -> (current, (label, value))
           (ready, members) = mapAccumL project state fields
        in if length expected == length members
