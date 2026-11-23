@@ -24,6 +24,8 @@ final class PuduMedia {
   static final int BROWSED = 37, SPOKE = 38, IMAGE_PICKED = 41;
   /** The request code of the picker activity. */
   static final int PICK = 0x5045;
+  /** The largest image copied; a larger one answers as cancelled. */
+  private static final long MAX_IMAGE_BYTES = 64L * 1024 * 1024;
 
   private static int browsing = -1, picking = -1;
   private static TextToSpeech speech;
@@ -129,14 +131,34 @@ final class PuduMedia {
     PuduBridge.event(IMAGE_PICKED, tag, copied == null ? "" : copied, copied == null ? 0 : 1, null);
   }
 
+  /** Only an image another application's provider serves is accepted: a file URI or one of this
+   *  application's own providers could name its private files. */
+  private static boolean acceptable(Uri source) {
+    if (!"content".equals(source.getScheme()) || source.getAuthority() == null) return false;
+    if (source.getAuthority().startsWith(PuduBridge.activity.getPackageName())) return false;
+    String type = PuduBridge.activity.getContentResolver().getType(source);
+    return type != null && type.startsWith("image/");
+  }
+
   private static String copy(Uri source) {
+    if (!acceptable(source)) return null;
     File target = new File(PuduBridge.activity.getCacheDir(), "pudu-image-" + UUID.randomUUID());
     try (InputStream in = PuduBridge.activity.getContentResolver().openInputStream(source); OutputStream out = new FileOutputStream(target)) {
       if (in == null) return null;
       byte[] buffer = new byte[64 * 1024];
-      for (int read = in.read(buffer); read > 0; read = in.read(buffer)) out.write(buffer, 0, read);
+      long total = 0;
+      for (int read = in.read(buffer); read > 0; read = in.read(buffer)) {
+        total += read;
+        if (total > MAX_IMAGE_BYTES) {
+          out.close();
+          target.delete();
+          return null;
+        }
+        out.write(buffer, 0, read);
+      }
       return target.getAbsolutePath();
     } catch (IOException | SecurityException failed) {
+      target.delete();
       return null;
     }
   }

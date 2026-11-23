@@ -12,15 +12,27 @@ import android.os.SystemClock;
 
 /** Local notifications. NOTIFY sets an inexact alarm that fires PuduAlarm,
  *  which posts the notification; the same id replaces an earlier one. A tap
- *  opens the activity with the id in EXTRA, which the activity reports as
- *  NOTIFIED. Without the notifications permission on versions that need it,
+ *  opens the activity with the id in EXTRA and this installation's secret
+ *  in TOKEN; the activity is exported, so only an intent carrying the secret
+ *  is reported as NOTIFIED. Without the notifications permission on versions that need it,
  *  the platform drops the notification. */
 final class PuduNotify {
   static final int NOTIFIED = 35;
-  static final String EXTRA = "org.pudu.notified", TITLE = "org.pudu.title", BODY = "org.pudu.body";
+  static final String EXTRA = "org.pudu.notified", TITLE = "org.pudu.title", BODY = "org.pudu.body", TOKEN = "org.pudu.token";
   private static final String CHANNEL = "org.pudu.notifications";
 
   private PuduNotify() {}
+
+  /** A random secret made once per installation and kept in private preferences. */
+  private static String secret(Context context) {
+    android.content.SharedPreferences kept = context.getSharedPreferences("org.pudu.notify", Context.MODE_PRIVATE);
+    String found = kept.getString("secret", null);
+    if (found == null) {
+      found = java.util.UUID.randomUUID().toString();
+      kept.edit().putString("secret", found).apply();
+    }
+    return found;
+  }
 
   private static PendingIntent alarm(Context context, int id, String title, String body) {
     Intent fire = new Intent(context, PuduAlarm.class).putExtra(EXTRA, id).putExtra(TITLE, title).putExtra(BODY, body);
@@ -50,7 +62,8 @@ final class PuduNotify {
     } else {
       builder = new Notification.Builder(context);
     }
-    Intent open = new Intent(context, PuduActivity.class).putExtra(EXTRA, id).addFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP);
+    Intent open = new Intent(context, PuduActivity.class).putExtra(EXTRA, id).putExtra(TOKEN, secret(context))
+        .addFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP);
     PendingIntent tap = PendingIntent.getActivity(context, id, open, PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE);
     builder.setContentTitle(title).setContentText(body).setSmallIcon(context.getApplicationInfo().icon).setContentIntent(tap).setAutoCancel(true);
     manager.notify(id, builder.build());
@@ -59,7 +72,9 @@ final class PuduNotify {
   /** Reports the notification a launch or new intent came from, once. */
   static void opened(Intent intent) {
     if (intent == null || !intent.hasExtra(EXTRA)) return;
-    PuduBridge.event(NOTIFIED, intent.getIntExtra(EXTRA, 0), null, 0, null);
+    boolean genuine = secret(PuduBridge.activity).equals(intent.getStringExtra(TOKEN));
+    if (genuine) PuduBridge.event(NOTIFIED, intent.getIntExtra(EXTRA, 0), null, 0, null);
     intent.removeExtra(EXTRA);
+    intent.removeExtra(TOKEN);
   }
 }
