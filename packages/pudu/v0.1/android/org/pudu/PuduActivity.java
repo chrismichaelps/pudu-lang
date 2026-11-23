@@ -115,7 +115,7 @@ public final class PuduActivity extends Activity {
   /** System back pops the navigation before it leaves the activity; on API 33
    *  and later the navigator registers its own callback instead. */
   @Override public void onBackPressed() {
-    if (!PuduTabs.back() && !PuduNavigator.back()) super.onBackPressed();
+    if (!PuduWeb.backPressed() && !PuduTabs.back() && !PuduNavigator.back()) super.onBackPressed();
   }
 
   /** The platform is short of memory: the program drops what nothing shows. */

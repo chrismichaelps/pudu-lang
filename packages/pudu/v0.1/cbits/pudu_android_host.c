@@ -225,6 +225,8 @@ static void (*const pudu_instruction_table[PUDU_UI_INSTRUCTIONS])(JNIEnv *, pudu
   [PUDU_UI_BROWSE] = pudu_do_browse, [PUDU_UI_SPEAK] = pudu_do_speak, [PUDU_UI_HUSH] = pudu_do_hush,
   [PUDU_UI_BATTERY] = pudu_do_battery, [PUDU_UI_BRIGHTNESS] = pudu_do_brightness, [PUDU_UI_ORIENTATION] = pudu_do_orientation,
   [PUDU_UI_SENSE] = pudu_do_sense, [PUDU_UI_PICK_IMAGE] = pudu_do_pick_image,
+  [PUDU_UI_LOAD] = pudu_do_load, [PUDU_UI_MEDIA] = pudu_do_media, [PUDU_UI_AUDIO] = pudu_do_audio,
+  [PUDU_UI_KEYBOARD] = pudu_do_keyboard, [PUDU_UI_BACK] = pudu_do_back,
   [PUDU_UI_OPTIONS] = pudu_do_options, [PUDU_UI_COUNT] = pudu_do_count, [PUDU_UI_MOMENT] = pudu_do_moment,
 };
 

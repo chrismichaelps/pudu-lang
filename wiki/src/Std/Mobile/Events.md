@@ -109,6 +109,13 @@ Depends on [[Std Mobile View]] for the `Event` type and its constructors, on [[S
 
 Malformed POWERED and SENSED shapes decode to Stopped.
 
-## Referenced by
+## Web, video and audio (#990)
 
+- LOADED 42: tag = the web node's tag; detail 1 when the page finished loading, 0 when it failed. Decodes to `Loaded(UInt32, Bool)`. One LOADED answers each load the program requested.
+- ENDED 43: tag = the video node's or the sound's tag. A non-looping video or sound reached its end. Decodes to `Ended(UInt32)`.
+- BACKED 44: tag 0. The person used back while the program receives it. Decodes to `Backed`.
+- Malformed shapes of LOADED, ENDED and BACKED decode to `Stopped`.
+
+## Referenced by
+ · [[Viewer Example]] · [[PuduWeb]]
 [[src/Std/_MOC]] · [[Std Mobile View]] · [[Std Mobile Host]] · [[Std Mobile Navigation]] · [[pudu_ios_navigation.h]] · [[pudu_ios_refresh.h]] · [[Std Mobile Control]] · [[pudu-ios-values]]

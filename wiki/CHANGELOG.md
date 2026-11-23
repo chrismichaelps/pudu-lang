@@ -5,6 +5,11 @@ tags: [changelog]
 
 # Changelog
 
+## 2026-11-23 — Web pages, video, audio, keyboard dismissal and the back gesture (#990)
+
+- Views: `Std.Mobile.Control` gains `Web` (kind WEB 23, then LOAD 74) and `Video` (kind VIDEO 24, then MEDIA 75); the kinds sentinel is 25. Requests: AUDIO 76, KEYBOARD 77 and BACK 78 in `Std.Mobile.Request`; the instruction bound is 79. Events: LOADED 42, ENDED 43 and BACKED 44, decoded as `Loaded`, `Ended` and `Backed` in `Std.Mobile.View`. `Std.Mobile.Media` gains `play` and `stop`; `Std.Mobile.System` gains `dismissKeyboard` and `handleBack`. The iOS host uses WKWebView and AVPlayer ([[pudu-ios-web]]); the Android host uses WebView, VideoView and MediaPlayer ([[PuduWeb]]). The example is [[Viewer Example]], and the fixture is [[Uses Mobile Web]].
+  [[Std Mobile Control]] · [[Std Mobile Stream]] · [[Std Mobile Request]] · [[Std Mobile Media]] · [[Std Mobile System]] · [[Std Mobile Events]] · [[Std Mobile View]] · [[pudu-ios-web]] · [[PuduWeb]] · [[Viewer Example]] · [[Uses Mobile Web]] · [[NATIVE-MOBILE]]
+
 ## 2026-11-23 — Notifications, authentication, browser, speech, image picking, battery, brightness, orientation and motion (#989)
 
 - Device services: NOTIFY 63, UNNOTIFY 64, AUTHENTICATE 65, BROWSE 66, SPEAK 67, HUSH 68, BATTERY 69, BRIGHTNESS 70, ORIENTATION 71, SENSE 72 and PICK_IMAGE 73 on the iOS and Android hosts, with NOTIFIED 35, AUTHENTICATED 36, BROWSED 37, SPOKE 38, POWERED 39, SENSED 40 and IMAGE_PICKED 41 events. `Std.Mobile.Request` holds the writers. `Std.Mobile.Notify`, `Std.Mobile.Auth` and `Std.Mobile.Media` are new, and `Std.Mobile.Device` gains battery, brightness, orientation and sense. `windowStart` moves from `Std.Mobile.View` to `Std.Mobile.Paging` to keep the view under 500 lines. Refusals: brightness above 100, orientation codes above 2 and sense flags above 1. The instruction bound is now 74. The iOS host uses UNUserNotificationCenter, LocalAuthentication, SafariServices, AVFoundation, PhotosUI and CoreMotion ([[pudu-ios-notify]], [[pudu-ios-media]], [[pudu-ios-device]]); the Android host uses NotificationManager with AlarmManager, BiometricPrompt, a browser intent, TextToSpeech and SensorManager ([[PuduNotify]], [[PuduAlarm]], [[PuduAuth]], [[PuduMedia]], [[PuduDevice]]).

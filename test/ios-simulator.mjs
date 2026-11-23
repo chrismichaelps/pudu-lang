@@ -21,6 +21,17 @@ function say(line) {
   writeSync(1, `${line}\n`);
 }
 
+/* PUDU_IOS_ONLY narrows a run to the named parts, comma-separated: example
+   names, "foreign" for the Objective-C and Swift smokes, "refusals" for the
+   refused streams, and "matrix" for the device families. Unset, every part
+   runs, as CI runs it. */
+const only = process.env.PUDU_IOS_ONLY ? new Set(process.env.PUDU_IOS_ONLY.split(",").map((part) => part.trim())) : null;
+function selected(part) {
+  if (only === null || only.has(part)) return true;
+  say(`SKIP iOS ${part}`);
+  return false;
+}
+
 const repository = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 // The counter imports Std.Mobile from this checkout, whichever compiler runs.
 process.env.PUDU_LIB ??= join(repository, "packages", "pudu", "v0.1", "lib");
@@ -182,8 +193,10 @@ int main(int argc, char **argv) {
     assert.deepEqual(lines, [...expected.split("\n"), "PUDU_SMOKE_STATUS 0"]);
     say(`${expected}\nPASS iOS simulator smoke (${device})`);
     const apps = { run, launch, uninstall: uninstallFromReusedDevice, xcrun, compiler, identifier, simulatorTimeout };
-    objectiveCSmoke(apps, device, root, simulatorClang);
-    swiftSmoke(apps, device, root, simulatorClang);
+    if (selected("foreign")) {
+      objectiveCSmoke(apps, device, root, simulatorClang);
+      swiftSmoke(apps, device, root, simulatorClang);
+    }
     refuseOccupiedOutput(root);
     familyApps(device, "Counter");
     mobileApp(device, "Form", [
@@ -326,6 +339,17 @@ int main(int argc, char **argv) {
         "Photo: none", "Reminders tapped: 0"],
       layout: ["PUDU_SERVICES authenticated yes powered yes spoke yes"],
     }], "toolbox");
+    // An empty page loads and answers once; the chime and the clip are not
+    // bundled, so the chime ends at once and the clip stays blank.
+    mobileApp(device, "Viewer", [{
+      environment: { SIMCTL_CHILD_PUDU_UI_SELFTEST: "0", SIMCTL_CHILD_PUDU_UI_WEB_TEST: "1" },
+      labels: ["Loaded: true", "Backs: 0", /^Sounds ended: [01]$/u],
+      layout: ["PUDU_WEB loaded yes"],
+    }]);
+    refusedApp(device, root, "load on a label",
+      "import Std.Mobile.Host as Host\nimport Std.Mobile.Stream as Stream", `  let label = Stream.create([], 0u32, Stream.LABEL)
+  Host.apply(bytesOf(Stream.load(label, 0u32, "about:blank")))`,
+      /pudu: a view stream loaded a page into a node that is not a web view: 0/u);
     refusedApp(device, root, "brightness above 100",
       "import Std.Mobile.Host as Host\nimport Std.Mobile.Request as Request", `  Host.apply(bytesOf(Request.brightness([], 101u32)))`,
       /pudu: a view stream set brightness to 101/u);
@@ -370,7 +394,7 @@ int main(int argc, char **argv) {
       "import Std.Mobile.Host as Host\nimport Std.Mobile.Stream as Stream", `  let label = Stream.create([], 0u32, Stream.LABEL)
   Host.apply(bytesOf(Stream.refresh(label, 0u32, 1u32, false)))`,
       /pudu: a view stream refreshed a node that does not scroll: 0/u);
-    familyMatrix(runtime);
+    if (selected("matrix")) familyMatrix(runtime);
     mobileApp(device, "Glass", [glassRun("glass")]);
     mobileApp(device, "Showcase", [{
       environment: { SIMCTL_CHILD_PUDU_UI_SELFTEST: "0", SIMCTL_CHILD_PUDU_UI_CAPABILITY_TEST: "1" },
@@ -517,6 +541,7 @@ process.on("exit", () => {
 });
 
 function mobileApp(device, example, runs, directory = "", bundle = `org.pudu.${example}`) {
+  if (!selected(example)) return;
   const key = join(directory, example);
   const reused = builtApps.has(key);
   const root = reused ? builtApps.get(key) : mkdtempSync(join(tmpdir(), `pudu-ios-${example.toLowerCase()}-`));
@@ -548,7 +573,7 @@ function mobileApp(device, example, runs, directory = "", bundle = `org.pudu.${e
         `${example} did not show ${labels.join(", ")}:\n${lines.join("\n")}`);
       assert.ok(lines.includes("PUDU_PROGRAM_STATUS 0"), `${example} did not finish:\n${lines.join("\n")}`);
       if (layout) {
-        assert.deepEqual(lines.filter((line) => /^PUDU_(VIEWPORT|KEYBOARD|THEME|LIST|MATERIAL|ALERT|HAPTIC|ACCESS|MOTION|NAV|REFRESH|FETCH|IMAGE|SYSTEM|PERMISSION|TABS|DEVICE|LOCATION|SERVICES) /.test(line)), layout,
+        assert.deepEqual(lines.filter((line) => /^PUDU_(VIEWPORT|KEYBOARD|THEME|LIST|MATERIAL|ALERT|HAPTIC|ACCESS|MOTION|NAV|REFRESH|FETCH|IMAGE|SYSTEM|PERMISSION|TABS|DEVICE|LOCATION|SERVICES|WEB) /.test(line)), layout,
           `${example} did not report the expected layout and theme:\n${lines.join("\n")}`);
       }
       const firstFrame = lines.find((line) => line.startsWith("PUDU_FIRST_FRAME_MS "));
@@ -564,6 +589,7 @@ function mobileApp(device, example, runs, directory = "", bundle = `org.pudu.${e
 /* A program whose stream the host must refuse: it aborts with `refusal` and
    never reports a first frame or a clean status. */
 function refusedApp(device, scratch, what, imports, body, refusal) {
+  if (only !== null && !only.has("refusals")) return;
   const name = `Refused${randomUUID().replaceAll("-", "")}`;
   const source = join(scratch, `${name}.pudu`);
   const app = join(scratch, `${name}.app`);

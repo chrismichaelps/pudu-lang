@@ -26,3 +26,11 @@ export fn hush() -> Bytes { bytesOf(Request.hush([])) }
 /// application's temporary directory, which the platform may clear;
 /// `ImagePicked(tag, None)` arrives when the person cancelled.
 export fn pickImage(tag: UInt32) -> Bytes { bytesOf(Request.pickImage([], tag)) }
+
+/// A commit playing the sound at `source` under `tag`, replacing any sound
+/// playing under it: a URL with an http or https scheme, or the name of a
+/// bundled asset. `Ended(tag)` arrives when it finishes without looping.
+export fn play(tag: UInt32, source: Str, looping: Bool) -> Bytes { bytesOf(Request.audio([], tag, 1u32, if looping { 1u32 } else { 0u32 }, source)) }
+
+/// A commit stopping the sound playing under `tag`; it reports nothing.
+export fn stop(tag: UInt32) -> Bytes { bytesOf(Request.audio([], tag, 0u32, 0u32, "")) }

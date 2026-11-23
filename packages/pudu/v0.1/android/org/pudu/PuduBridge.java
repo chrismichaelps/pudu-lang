@@ -343,6 +343,13 @@ public final class PuduBridge {
   static void orientation(int code) { PuduDevice.orientation(code); }
   static void sense(boolean on, int interval) { PuduDevice.sense(on, interval); }
   static void pickImage(int tag) { PuduMedia.pickImage(tag); }
+  static android.webkit.WebView web() { return PuduWeb.makeWeb(); }
+  static android.widget.VideoView video() { return PuduWeb.makeVideo(); }
+  static void load(android.webkit.WebView view, String url) { PuduWeb.load(view, url); }
+  static void media(android.widget.VideoView view, boolean playing, boolean looping, String source) { PuduWeb.media(view, playing, looping, source); }
+  static void audio(int tag, boolean playing, boolean looping, String source) { PuduWeb.audio(tag, playing, looping, source); }
+  static void keyboard() { PuduWeb.keyboard(); }
+  static void back(boolean on) { PuduWeb.back(on); }
   static void tabs(int[] ids, String[] names, int[] counts, int[] routes, View[] bodies, boolean[] fills, String[] titles, int selected,
       boolean hasSheet, int sheet, View sheetBody, boolean sheetFills) {
     PuduTabs.show(ids, names, counts, routes, bodies, fills, titles, selected, hasSheet, sheet, sheetBody, sheetFills);

@@ -159,6 +159,13 @@ Depends on no other module. Consumers: [[Std Mobile View]], which calls these fu
 - Codes 63 to 73 belong to [[Std Mobile Request]]: NOTIFY 63, UNNOTIFY 64, AUTHENTICATE 65, BROWSE 66, SPEAK 67, HUSH 68, BATTERY 69, BRIGHTNESS 70, ORIENTATION 71, SENSE 72 and PICK_IMAGE 73. The instruction bound is now 74.
 - The requests outside the view live in Request so that this module stays under the 500-line limit.
 
-## Referenced by
+## Web, video and audio (#990)
 
+- Kinds WEB 23 and VIDEO 24 are created by `Control.Web` and `Control.Video`. The kinds sentinel is now 25.
+- LOAD 74 is written by `load` for a node and URL text. It is refused on a node that is not a web page: `loaded a page into a node that is not a web view:`.
+- MEDIA 75 is written by `media` for a node, playing (0 or 1), looping (0 or 1) and source text. It is refused on a node that is not a video: `set media on a node that is not a video:`. A flag above 1 is a defect: `set a media flag to`.
+- The instruction bound is now 79. Codes 74 to 78 are LOAD, MEDIA, AUDIO, KEYBOARD and BACK, and AUDIO, KEYBOARD and BACK belong to [[Std Mobile Request]].
+
+## Referenced by
+ · [[Viewer Example]] · [[pudu-ios-web]] · [[PuduWeb]]
 [[src/Std/_MOC]] · [[Std Mobile View]] · [[Std Mobile Theme]] · [[Std Mobile Control]] · [[Native Keyed Lists Delivery]] · [[Native iOS Scrolling Delivery]] · [[Native iOS Theming Delivery]] · [[Native iOS Recycling Delivery]] · [[Native iOS Materials Delivery]] · [[Native iOS Refresh Delivery]] · [[Std Mobile Request]]

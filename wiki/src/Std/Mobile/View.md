@@ -116,6 +116,10 @@ Depends on [[Std Mobile Stream]] for the instruction words, on [[Std Mobile Even
 
 The `Event` type gains seven constructors: `Notified(UInt32)`, `Authenticated(UInt32, Bool)`, `Browsed(UInt32)`, `Spoke(UInt32, Bool)`, `Powered(UInt32, Device.Power)`, `Sensed(Device.Motion)` and `ImagePicked(UInt32, Option[Str])`. Their decoders are in [[Std Mobile Events]]. The window helper `windowStart` is in [[Std Mobile Paging]]: the reconciler does not use it, and moving it keeps this module under the 500-line limit.
 
-## Referenced by
+## Web, video and audio (#990)
 
+The `Event` type gains three constructors: `Loaded(UInt32, Bool)`, `Ended(UInt32)` and `Backed`. Their decoders are in [[Std Mobile Events]].
+
+## Referenced by
+ · [[Viewer Example]]
 [[src/Std/_MOC]] · [[Std Mobile Host]] · [[Std Mobile Events]] · [[Std Mobile Navigation]] · [[Std Mobile Stream]] · [[Std Mobile Theme]] · [[Native First Light Delivery]] · [[Native Controls Delivery]] · [[Native Keyed Lists Delivery]] · [[Native iOS Scrolling Delivery]] · [[Native iOS Theming Delivery]] · [[Native iOS Recycling Delivery]] · [[Native iOS Materials Delivery]] · [[Native iOS Refresh Delivery]] · [[Std Mobile Memo]] · [[Native Render Skipping]] · [[Uses Mobile Memo]] · [[Std Mobile Control]]

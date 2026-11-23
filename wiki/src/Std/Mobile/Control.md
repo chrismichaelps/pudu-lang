@@ -98,6 +98,13 @@ step 2, a value changing from 6 to 7 snaps to 6 and writes no instruction.
 Reports the host sends back, decoded by [[Std Mobile Events]]: Slider, Stepper, Segments, Wheel and Pages report
 VALUED; Well reports COLORED; Date reports DATED; TextArea and Search report CHANGED. Symbol reports nothing.
 
+## Web and video (#990)
+
+- `Web(Str, UInt32)`: the URL and the tag. `built` writes CREATE 23 and LOAD 74 with the URL. `changed` writes LOAD when the URL differs. An unchanged URL writes nothing. A different tag answers `None`, and the caller replaces the node.
+- `Video(Str, Bool, Bool, UInt32)`: the source, whether it plays, whether it loops, and the tag. `built` writes CREATE 24 and MEDIA 75 with the flags and the source. `changed` writes MEDIA when the source or either flag differs. A different tag answers `None`.
+- A source with an http or https scheme is remote. `about:blank` is accepted for a web page. Any other text names a file in the application's bundled assets.
+- The kinds sentinel is now 25.
+
 ## Invariants
 
 - Pure: the module declares no foreign function and allocates no node ids. The caller passes `id`.
@@ -146,5 +153,5 @@ reconciles all ten controls. The control set changes independently of the reconc
   and one wrapper case reconciles all ten controls, so the reconciler does not grow with each control.
 
 ## Referenced by
-
+ · [[Viewer Example]] · [[pudu-ios-web]] · [[PuduWeb]]
 [[src/Std/_MOC]] · [[Std Mobile View]] · [[Std Mobile Stream]] · [[Std Mobile Events]] · [[pudu-ios-kinds]] · [[pudu-ios-values]] · [[Native Value Controls Delivery]]

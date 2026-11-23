@@ -1,5 +1,6 @@
 module Std.Mobile.System
 
+import Std.Mobile.Request as Request
 import Std.Mobile.Stream as Stream
 
 /// How the status bar draws: as the platform chooses for the current
@@ -34,3 +35,11 @@ export fn barCode(style: Bar) -> UInt32 {
     case DarkText => 2u32
   }
 }
+
+/// A commit dismissing the on-screen keyboard.
+export fn dismissKeyboard() -> Bytes { bytesOf(Request.keyboard([])) }
+
+/// A commit receiving the platform's back gesture or button as `Backed`, in
+/// place of the platform's own back action, or returning it. A platform with
+/// no system back gesture outside navigation ignores it.
+export fn handleBack(on: Bool) -> Bytes { bytesOf(Request.back([], if on { 1u32 } else { 0u32 })) }

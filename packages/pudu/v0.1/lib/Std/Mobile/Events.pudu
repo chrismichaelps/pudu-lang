@@ -46,6 +46,9 @@ const SPOKE: UInt64 = 38u64
 const POWERED: UInt64 = 39u64
 const SENSED: UInt64 = 40u64
 const IMAGE_PICKED: UInt64 = 41u64
+const LOADED: UInt64 = 42u64
+const ENDED: UInt64 = 43u64
+const BACKED: UInt64 = 44u64
 
 /// Each event kind's constructor, given the tag and the text the host holds.
 const EVENTS: Map[UInt64, fn(UInt32, Str) -> View.Event] = mapOf([
@@ -61,7 +64,9 @@ const EVENTS: Map[UInt64, fn(UInt32, Str) -> View.Event] = mapOf([
     (LINKED, |_tag: UInt32, url: Str| View.Linked(url)),
     (PASTED, |tag: UInt32, text: Str| View.Pasted(tag, text)),
     (NOTIFIED, |id: UInt32, _text: Str| View.Notified(id)),
-    (BROWSED, |tag: UInt32, _text: Str| View.Browsed(tag))
+    (BROWSED, |tag: UInt32, _text: Str| View.Browsed(tag)),
+    (ENDED, |tag: UInt32, _text: Str| View.Ended(tag)),
+    (BACKED, |_tag: UInt32, _text: Str| View.Backed)
   ])
 
 /// Each detailed event kind's constructor, given the tag and the detail word.
@@ -80,7 +85,8 @@ const DETAILED: Map[UInt64, fn(UInt32, UInt32) -> Option[View.Event]] = mapOf([
     (PERMISSIONED, |kind: UInt32, state: UInt32| permissioned(Permission.kindOf(kind), Permission.stateOf(state))),
     (NETWORKED, |_reported: UInt32, code: UInt32| networked(Device.linkOf(code))),
     (AUTHENTICATED, |reported: UInt32, confirmed: UInt32| flagged(confirmed, |done: Bool| View.Authenticated(reported, done))),
-    (SPOKE, |reported: UInt32, finished: UInt32| flagged(finished, |done: Bool| View.Spoke(reported, done)))
+    (SPOKE, |reported: UInt32, finished: UInt32| flagged(finished, |done: Bool| View.Spoke(reported, done))),
+    (LOADED, |reported: UInt32, loaded: UInt32| flagged(loaded, |done: Bool| View.Loaded(reported, done)))
   ])
 
 /// Each measured event kind's constructor, given the tag, the detail word and

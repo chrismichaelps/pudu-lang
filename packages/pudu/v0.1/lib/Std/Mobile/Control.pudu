@@ -43,6 +43,8 @@ export type Control
   | Pages(UInt32, UInt32, UInt32)
   | Well(UInt32, UInt32)
   | Image(ImageSource, Scaling, UInt32)
+  | Web(Str, UInt32)
+  | Video(Str, Bool, Bool, UInt32)
 
 /// `out` followed by the words that create node `id` as `control` and give it
 /// everything it shows. Bounds, labels and page counts precede the value
@@ -60,6 +62,8 @@ export fn built(out: Array[UInt8], id: UInt32, control: &Control) -> Array[UInt8
     case Pages(total, current, tag) => paged(Stream.tag(Stream.create(out, id, Stream.PAGES), id, tag), id, total, current)
     case Well(rgba, tag) => Stream.number(Stream.tag(Stream.create(out, id, Stream.WELL), id, tag), id, rgba)
     case Image(source, scaling, tag) => sourced(Stream.tag(Stream.create(out, id, Stream.IMAGE), id, tag), id, &source, scaling)
+    case Web(url, tag) => Stream.load(Stream.tag(Stream.create(out, id, Stream.WEB), id, tag), id, url)
+    case Video(source, playing, looping, tag) => played(Stream.tag(Stream.create(out, id, Stream.VIDEO), id, tag), id, source, playing, looping)
   }
 }
 
@@ -86,6 +90,9 @@ export fn changed(out: Array[UInt8], id: UInt32, before: &Control, after: &Contr
     case (Well(oldColor, oldTag), Well(rgba, tag)) if oldTag == tag => Some(if oldColor == rgba { out } else { Stream.number(out, id, rgba) })
     case (Image(oldSource, oldScaling, oldTag), Image(source, scaling, tag)) if oldTag == tag =>
     Some(if oldSource == source && oldScaling == scaling { out } else { sourced(out, id, &source, scaling) })
+    case (Web(oldUrl, oldTag), Web(url, tag)) if oldTag == tag => Some(if oldUrl == url { out } else { Stream.load(out, id, url) })
+    case (Video(oldSource, oldPlaying, oldLooping, oldTag), Video(source, playing, looping, tag)) if oldTag == tag =>
+    Some(if oldSource == source && oldPlaying == playing && oldLooping == looping { out } else { played(out, id, source, playing, looping) })
     case _ => None
   }
 }
@@ -220,4 +227,9 @@ fn word(index: Int) -> UInt32 {
     case Some(found) => found
     case None => 0u32
   }
+}
+
+// A video's MEDIA instruction.
+fn played(out: Array[UInt8], id: UInt32, source: Str, playing: Bool, looping: Bool) -> Array[UInt8] {
+  Stream.media(out, id, if playing { 1u32 } else { 0u32 }, if looping { 1u32 } else { 0u32 }, source)
 }

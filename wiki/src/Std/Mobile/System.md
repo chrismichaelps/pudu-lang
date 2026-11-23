@@ -31,6 +31,12 @@ Exports:
 - `paste` answers with the clipboard's text. When the clipboard holds no text the answer is `Pasted(tag, "")`.
 - `statusBar` is a standing setting. It holds until a later commit sets it again.
 
+## Keyboard and back (#990)
+
+- `dismissKeyboard() -> Bytes`: KEYBOARD 77 with no words. It reports nothing.
+- `handleBack(on: Bool) -> Bytes`: BACK 78. With `on` true, the platform's back gesture or button answers BACKED instead of its own action. With `on` false, the gesture returns to the platform. It reports nothing. The answer arrives as `Backed` in [[Std Mobile Events]].
+- Both are standing commits, like `statusBar`. Neither writes a node.
+
 ## Invariants
 
 - Every request that reports an answer carries a tag, and the answer carries the same tag. A program matches an answer to its request by tag.
@@ -56,5 +62,5 @@ Depends on [[Std Mobile Stream]] for the OPEN, SHARE, COPY, PASTE and STATUS ins
 - **Q:** Why is the status bar a commit and not part of a screen? **A:** The status bar belongs to the scene, not to any one screen. A setting carried by a screen would reset whenever the screen changed.
 
 ## Referenced by
-
+ · [[Viewer Example]]
 [[src/Std/_MOC]] · [[Std Mobile View]] · [[Std Mobile Stream]] · [[Std Mobile Events]] · [[Std Mobile Feedback]] · [[NATIVE-MOBILE]]

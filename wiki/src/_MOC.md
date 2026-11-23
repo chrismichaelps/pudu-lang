@@ -389,6 +389,9 @@ tags: [moc, module]
 - [[PuduAlarm]] — Android receiver that posts a scheduled notification (#989).
 - [[PuduAuth]] — Android device-owner confirmation by biometric prompt or credential prompt (#989).
 - [[PuduMedia]] — Android in-app browser, speech and image picking (#989).
+- [[Uses Mobile Web]] — stdlib fixture for the web, video, audio, keyboard and back requests and their answers (#990).
+- [[Viewer Example]] — web page, looping video, sound, keyboard and back on the simulator and device (#990).
+- [[PuduWeb]] — Android web pages, video, audio, keyboard dismissal and back (#990).
 - [[Pudu Backend Toolchain Assets]] — application asset listing, refused names and links, staging (#973).
 - [[Uses Mobile Controls]] — stdlib fixture for the value controls: build and change words, normalization and value events (#934).
 - [[Pudu Compiler Program Eval Data Spec]] — data evaluation spec, including the mobile fixture counts.

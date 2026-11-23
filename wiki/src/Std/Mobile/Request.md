@@ -33,6 +33,13 @@ Exports, with their codes:
 - Each writer's words follow its code word. NOTIFY is the id, the delay in seconds, then the title and body text fields. SPEAK is the tag, the rate, the language text and the text. AUTHENTICATE and BROWSE carry a text field after their tag. HUSH carries no words.
 - The tag a writer receives is the tag its answer reports. The program chooses it and matches the answer to its request by it.
 
+## Web, video and audio (#990)
+
+- AUDIO 76 (`audio`): tag, playing (0 or 1), looping (0 or 1), and source text. Playing 1 starts a sound under the tag, replacing any sound already under it. Playing 0 stops it. ENDED answers with the tag when a non-looping sound ends.
+- KEYBOARD 77 (`keyboard`): no words. It dismisses the on-screen keyboard.
+- BACK 78 (`back`): 1 makes the platform's back gesture or button answer BACKED, and 0 returns it to the platform. iOS has no system back gesture outside navigation and ignores the word.
+- The instruction bound is now 79.
+
 ## Invariants
 
 - Codes 63 to 73 are constants of this module. The instruction bound is 74.
@@ -56,5 +63,5 @@ Depends on [[Std Mobile Stream]] for `field` and `words`. Consumers: [[Std Mobil
 - **Q:** Why does every writer take the tag from the program? **A:** A program matches an answer to the request it sent. The host echoes the tag, so an answer can always be routed.
 
 ## Referenced by
-
+ · [[Viewer Example]] · [[pudu-ios-web]] · [[PuduWeb]]
 [[src/Std/_MOC]] · [[Std Mobile Stream]] · [[Std Mobile Notify]] · [[Std Mobile Auth]] · [[Std Mobile Media]] · [[Std Mobile Device]] · [[Std Mobile Events]] · [[Uses Mobile Services]] · [[NATIVE-MOBILE]]

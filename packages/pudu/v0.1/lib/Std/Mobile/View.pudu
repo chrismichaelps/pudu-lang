@@ -91,6 +91,9 @@ export type Event
   | Powered(UInt32, Device.Power)
   | Sensed(Device.Motion)
   | ImagePicked(UInt32, Option[Str])
+  | Loaded(UInt32, Bool)
+  | Ended(UInt32)
+  | Backed
   | Stopped
 
 /// A node the platform shows: its id, the view it shows, and the nodes of

@@ -17,6 +17,9 @@ const BRIGHTNESS: UInt32 = 70u32
 const ORIENTATION: UInt32 = 71u32
 const SENSE: UInt32 = 72u32
 const PICK_IMAGE: UInt32 = 73u32
+const AUDIO: UInt32 = 76u32
+const KEYBOARD: UInt32 = 77u32
+const BACK: UInt32 = 78u32
 
 /// Schedules notification `id` to show `title` and `body` after `delay` seconds.
 export fn notify(out: Array[UInt8], id: UInt32, delay: UInt32, title: Str, body: Str) -> Array[UInt8] {
@@ -54,3 +57,15 @@ export fn sense(out: Array[UInt8], on: UInt32, interval: UInt32) -> Array[UInt8]
 
 /// Shows the photo picker; IMAGE_PICKED with `reported` answers.
 export fn pickImage(out: Array[UInt8], reported: UInt32) -> Array[UInt8] { words(out, [PICK_IMAGE, reported]) }
+
+/// Plays `source` under `tag` with 1, looping with 1, or stops it with 0;
+/// ENDED with `reported` answers when it finishes without looping.
+export fn audio(out: Array[UInt8], reported: UInt32, playing: UInt32, looping: UInt32, source: Str) -> Array[UInt8] {
+  field(words(out, [AUDIO, reported, playing, looping]), source)
+}
+
+/// Dismisses the on-screen keyboard.
+export fn keyboard(out: Array[UInt8]) -> Array[UInt8] { words(out, [KEYBOARD]) }
+
+/// Receives the platform's back gesture as BACKED with 1, or returns it with 0.
+export fn back(out: Array[UInt8], on: UInt32) -> Array[UInt8] { words(out, [BACK, on]) }

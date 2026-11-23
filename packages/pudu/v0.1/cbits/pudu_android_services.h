@@ -73,4 +73,41 @@ static void pudu_do_sense(JNIEnv *env, pudu_reader *reader) {
 /* PICK_IMAGE: the tag. */
 static void pudu_do_pick_image(JNIEnv *env, pudu_reader *reader) { pudu_bridge(env, "pickImage", "(I)V", (jint)pudu_word(reader)); }
 
+/* LOAD: the node, then the URL. */
+static void pudu_do_load(JNIEnv *env, pudu_reader *reader) {
+  uint32_t node = pudu_node_id(reader);
+  if (pudu_kinds[node] != PUDU_UI_WEB) pudu_stream_defect("loaded a page into a node that is not a web view:", node);
+  pudu_bridge(env, "load", "(Landroid/webkit/WebView;Ljava/lang/String;)V", pudu_nodes[node], pudu_text(env, reader));
+}
+
+/* MEDIA: the node, playing, looping, then the source. */
+static void pudu_do_media(JNIEnv *env, pudu_reader *reader) {
+  uint32_t node = pudu_node_id(reader);
+  if (pudu_kinds[node] != PUDU_UI_VIDEO) pudu_stream_defect("set media on a node that is not a video:", node);
+  uint32_t playing = pudu_word(reader), looping = pudu_word(reader);
+  if (playing > 1 || looping > 1) pudu_stream_defect("set a media flag to", playing > 1 ? playing : looping);
+  pudu_bridge(env, "media", "(Landroid/widget/VideoView;ZZLjava/lang/String;)V", pudu_nodes[node], (jboolean)(playing == 1),
+              (jboolean)(looping == 1), pudu_text(env, reader));
+}
+
+/* AUDIO: the tag, playing, looping, then the source. */
+static void pudu_do_audio(JNIEnv *env, pudu_reader *reader) {
+  uint32_t tag = pudu_word(reader), playing = pudu_word(reader), looping = pudu_word(reader);
+  if (playing > 1 || looping > 1) pudu_stream_defect("set a media flag to", playing > 1 ? playing : looping);
+  pudu_bridge(env, "audio", "(IZZLjava/lang/String;)V", (jint)tag, (jboolean)(playing == 1), (jboolean)(looping == 1), pudu_text(env, reader));
+}
+
+/* KEYBOARD: no words. */
+static void pudu_do_keyboard(JNIEnv *env, pudu_reader *reader) {
+  (void)reader;
+  pudu_bridge(env, "keyboard", "()V");
+}
+
+/* BACK: 1 to receive back as BACKED, 0 to return it to the platform. */
+static void pudu_do_back(JNIEnv *env, pudu_reader *reader) {
+  uint32_t on = pudu_word(reader);
+  if (on > 1) pudu_stream_defect("set back handling to", on);
+  pudu_bridge(env, "back", "(Z)V", (jboolean)(on == 1));
+}
+
 #endif

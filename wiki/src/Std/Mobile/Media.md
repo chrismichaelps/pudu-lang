@@ -27,6 +27,12 @@ Exports:
 - `speak` with a tag that has an earlier utterance still pending does not cancel that utterance. Only `hush` stops speech.
 - The picked image arrives as the path of a copy in the app's temporary directory, or as a cancellation with empty text. The bytes of the image never cross the stream.
 
+## Web, video and audio (#990)
+
+- `play(tag: UInt32, source: Str, looping: Bool) -> Bytes`: starts the sound under the tag, replacing any sound already under it, through AUDIO 76 with playing 1. A source with an http or https scheme is remote. Any other text names a bundled asset. ENDED answers with the tag when a non-looping sound ends.
+- `stop(tag: UInt32) -> Bytes`: stops the sound under the tag, through AUDIO 76 with playing 0.
+- Neither request answers once per request, unlike `browse`, `speak` and `pickImage` above. Only ENDED reports the end of a sound.
+
 ## Invariants
 
 - Each request carries its tag as its first word, so every answer can be matched to its request.
@@ -52,5 +58,5 @@ Depends on [[Std Mobile Request]] for the BROWSE, SPEAK, HUSH and PICK_IMAGE ins
 - **Q:** Why is `hush` a separate instruction? **A:** Stopping speech has no tag of its own. Its effect is reported through the interrupted utterance's `SPOKE`, so no extra answer type is needed. _Rejected:_ a cancel tag for each utterance, which adds a choice with no use.
 
 ## Referenced by
-
+ · [[Viewer Example]] · [[pudu-ios-web]]
 [[src/Std/_MOC]] · [[Std Mobile View]] · [[Std Mobile Request]] · [[Std Mobile Events]] · [[pudu-ios-media]] · [[PuduMedia]] · [[Uses Mobile Services]] · [[Toolbox Example]] · [[NATIVE-MOBILE]]

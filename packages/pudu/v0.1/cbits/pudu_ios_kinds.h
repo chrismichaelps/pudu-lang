@@ -17,6 +17,7 @@
 #include "pudu_ios_stream.h"
 #include "pudu_ios_theme.h"
 #include "pudu_ios_values.h"
+#include "pudu_ios_web.h"
 
 typedef struct {
   UIView *(*make)(void);
@@ -78,6 +79,8 @@ static const pudu_kind pudu_kind_table[PUDU_UI_KINDS] = {
   [PUDU_UI_PAGES] = { .make = pudu_make_pages, .control = pudu_itself, .number = pudu_pages_number, .drive = pudu_pages_drive },
   [PUDU_UI_WELL] = { .make = pudu_make_well, .control = pudu_itself, .number = pudu_well_number, .drive = pudu_well_drive },
   [PUDU_UI_IMAGE] = { .make = pudu_make_image, .control = pudu_itself },
+  [PUDU_UI_WEB] = { .make = pudu_make_web, .control = pudu_itself },
+  [PUDU_UI_VIDEO] = { .make = pudu_make_video, .control = pudu_itself },
 };
 
 static const pudu_kind *pudu_kind_of(uint32_t kind) {

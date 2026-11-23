@@ -251,6 +251,14 @@ Refusal: a stream whose REFRESH names a label node is refused before any control
 
 Resolved Grill Log: the refusal belongs to the host, which alone knows the node's kind, as for the list refusal above. Checking the lines alone would pass a screen whose indicator never started, so the run also compares the labels that show the pull counts and the insets.
 
+## Web run (#990)
+
+The script reads `PUDU_IOS_ONLY` to narrow a run to named parts. The accepted names are the example names, `foreign`, `refusals` and `matrix`. When it is unset, the run includes every part.
+
+The Viewer example, `examples/mobile/Viewer.pudu` ([[Viewer Example]]), runs with `PUDU_UI_WEB_TEST` set. The label must read `Loaded: true`, and the self-test must print `PUDU_WEB loaded yes`.
+
+Refusal: a LOAD sent to a label node is refused with `loaded a page into a node that is not a web view:` followed by the node id.
+
 ## Services run (#989)
 
 The Toolbox example, `examples/mobile/toolbox/Toolbox.pudu` ([[Toolbox Example]]), runs with `PUDU_UI_SERVICES_TEST` set and `PUDU_UI_SELFTEST` set to `0`. The script waits for the labels `Battery: <level or unknown>`, `Authenticated: false` (the simulator has no passcode), `Spoke: true` and `Motion: none` (the simulator has no accelerometer).
