@@ -11,13 +11,15 @@ module Pudu.Compiler.Lower.Place
 
 import Data.List.NonEmpty (NonEmpty (..))
 import Data.Text (Text)
+import Pudu.Compiler.Lower.Arguments (ArgumentBlame (AtInvocation), argumentFailure, exactPosition)
 import Pudu.Compiler.Lower.Array (takeReceiver)
 import Pudu.Compiler.Lower.Control (blockType, expressionIsPrintValued)
-import Pudu.Compiler.Lower.Dynamic (hasRuntimeChoice, projectRuntimeValue, recordWithFields, storageCarrier)
-import Pudu.Compiler.Lower.State (LowerContext (..), LowerState (..), bindLocal, halt, intType, lookupLocal, observeMutableLayout, refuse, refused)
+import Pudu.Compiler.Lower.Dynamic (hasRuntimeChoice, mapRuntimeChoice, projectRuntimeValue, recordWithFields, storageCarrier)
+import Pudu.Compiler.Lower.State (LowerContext (..), LowerState (..), bindLocal, halt, intType, lookupLocal, observeMutableLayout, refused)
 import Pudu.Compiler.Lower.Types (LowerTypes, recordFields)
 import Pudu.Core
 import Pudu.Frontend.Syntax (Expression (..), Located (..))
+import Pudu.IntegerLiteral (IntegerKind (PlatformSigned))
 import Pudu.Source (Span)
 
 type LowerExpression = LowerState -> Located Expression -> (LowerState, Maybe (CoreExpression, CoreType))
@@ -25,12 +27,14 @@ type Lowered = (LowerState, Maybe (CoreExpression, CoreType))
 
 data Step = FieldStep !Text | IndexStep !(Located Expression)
 
+data HeldIndex = HeldIndex !CoreExpression !(Maybe CoreExpression)
+
 {-| A place whose indices have run: its root, the root's span, each step with
     its index read from a held local, and the type the place holds. -}
 data HeldPlace = HeldPlace
   { heldRoot :: !CoreLocal
   , heldSpan :: !Span
-  , heldSteps :: ![Either Text CoreExpression]
+  , heldSteps :: ![Either Text HeldIndex]
   , heldType :: !CoreType
   }
 
@@ -66,6 +70,10 @@ lowerPlaceAssignment lower state at target value = do
   held <- holdPlace lower state at target
   Just $ case held of
     (afterIndices, Nothing) -> refused afterIndices
+    (afterIndices, Just (declarations, _))
+      | blockType declarations Nothing == CoreNeverType ->
+          let stopped = CoreExpression at CoreNeverType (CoreBlockValue (CoreBlock declarations Nothing))
+           in (afterIndices, Just (CoreStatement at (CoreEvaluate stopped)))
     (afterIndices, Just (declarations, found)) -> case lower afterIndices value of
       (after, Nothing) -> refused after
       (after, Just (replacementValue, _))
@@ -130,15 +138,61 @@ holdPlace lower state at target = do
   paired (FieldStep field : rest) indices = Left field : paired rest indices
   paired (IndexStep _ : rest) (index : later) = Right index : paired rest later
   paired _ _ = []
-  heldIndices current done [] = (current, Just (unzip (reverse done)))
+  heldIndices current done [] = (current, Just (finishIndices done))
   heldIndices current done (key : rest) = case lower current key of
-    (next, Just (core, kind))
-      | kind == intType || kind == CoreNeverType ->
-          let (bound, local) = bindLocal next "" kind
-              read' = CoreExpression (locatedSpan key) kind (CoreReadLocal local)
-           in heldIndices bound ((CoreStatement (locatedSpan key) (CoreDeclare local core), read') : done) rest
-      | otherwise -> (refuse (locatedSpan key) "an index that is not an Int" next, Nothing)
+    (next, Just (core, CoreNeverType)) ->
+      let (prior, indices) = finishIndices done
+          skipped = replicate (length rest + 1) (HeldIndex (outOfBounds (locatedSpan key)) Nothing)
+       in (next, Just (prior <> [CoreStatement (locatedSpan key) (CoreEvaluate core)], indices <> skipped))
+    (next, Just (core, _)) ->
+      let (ready, prepared) = holdIndex next (locatedSpan key) core
+       in heldIndices ready (prepared : done) rest
     (next, Nothing) -> (next, Nothing)
+  finishIndices done =
+    let ordered = reverse done
+     in (concatMap fst ordered, map snd ordered)
+
+holdIndex :: LowerState -> Span -> CoreExpression -> (LowerState, ([CoreStatement], HeldIndex))
+holdIndex state at value = case kind of
+  CoreIntegerType _ -> (bound, ([declare raw value], HeldIndex (position reading) Nothing))
+  _ ->
+    let (selected, normal) = case mapRuntimeChoice bound at keyType reading (\current held -> (current, Just (classify held))) of
+          Just (after, Just (key, _)) -> (after, key)
+          _ -> (bound, classify reading)
+        (ready, keyLocal) = bindLocal selected "" keyType
+        saved = CoreExpression at keyType (CoreReadLocal keyLocal)
+        valid = CoreExpression at CoreBoolType (CoreTupleIndex 0 saved)
+        normalized = CoreExpression at intType (CoreTupleIndex 1 saved)
+     in (ready, ([declare raw value, declare keyLocal normal], HeldIndex normalized (Just valid)))
+ where
+  kind = coreExpressionType value
+  (bound, raw) = bindLocal state "" kind
+  reading = CoreExpression at kind (CoreReadLocal raw)
+  declare local expression = CoreStatement at (CoreDeclare local expression)
+  keyType = CoreTupleType [CoreBoolType, intType]
+  classify held =
+    let (integer, normalized) = case coreExpressionType held of
+          CoreIntegerType _ -> (True, position held)
+          _ -> (False, outOfBounds at)
+        flag = CoreExpression at CoreBoolType (CoreBoolLiteral integer)
+     in CoreExpression at keyType (CoreTuple [flag, normalized])
+  position held
+    | coreExpressionType held == intType = held
+    | otherwise =
+        let (fits, narrow) = exactPosition at held
+         in CoreExpression at intType (CoreIfValue fits (CoreBlock [] (Just narrow)) (outOfBounds at))
+
+outOfBounds :: Span -> CoreExpression
+outOfBounds at = CoreExpression at intType (CoreIntegerLiteral PlatformSigned (-1))
+
+useIndex :: Span -> Text -> HeldIndex -> CoreExpression -> (CoreExpression -> CoreExpression) -> CoreExpression
+useIndex _ _ (HeldIndex position Nothing) _ use = use position
+useIndex at message (HeldIndex position (Just valid)) receiver use =
+  let answer = use position
+      failure = argumentFailure AtInvocation at "E7001" message
+      checked = CoreStatement (coreExpressionSpan receiver) (CoreEvaluate receiver)
+      failed = CoreExpression at CoreNeverType (CoreBlockValue (CoreBlock [checked] (Just failure)))
+   in CoreExpression at (coreExpressionType answer) (CoreIfValue valid (CoreBlock [] (Just answer)) failed)
 
 place :: Located Expression -> Maybe (Text, Span, [Step])
 place (Located spanValue expression) = case expression of
@@ -163,7 +217,11 @@ readHeldBy :: LowerTypes -> (CoreExpression -> Span) -> HeldPlace -> CoreExpress
 readHeldBy types spanOfIndex found = foldl' step (rootRead found) (heldSteps found)
  where
   step current (Left field) = CoreExpression (heldSpan found) (fieldType types current field) (CoreField field current)
-  step current (Right index) = CoreExpression (spanOfIndex index) (elementType current) (CoreArrayMethod ArrayGetAt current [index])
+  step current (Right index@(HeldIndex position _)) =
+    let at = spanOfIndex position
+        message = "cannot index a " <> coreStaticRuntimeKind (coreExpressionType current)
+     in useIndex at message index current $ \key ->
+          CoreExpression at (elementType current) (CoreArrayMethod ArrayGetAt current [key])
 
 {-| Store a value through a held place, reading the root as it is now. -}
 storeHeld :: LowerTypes -> Span -> HeldPlace -> CoreExpression -> CoreStatement
@@ -187,8 +245,10 @@ storedValue types found replacement = case heldSteps found of
       let inner = CoreExpression at (fieldType types current field) (CoreField field current)
        in CoreExpression at (coreExpressionType current) (CoreRecordUpdate current [(field, rebuilt inner rest)])
     Right index : rest ->
-      let inner = CoreExpression at (elementType current) (CoreArrayMethod ArrayGetAt current [index])
-       in CoreExpression at (coreExpressionType current) (CoreArrayMethod ArrayReplaceAt current [index, rebuilt inner rest])
+      let message = "an element of a " <> coreStaticRuntimeKind (coreExpressionType current) <> " cannot be assigned"
+       in useIndex at message index current $ \key ->
+            let inner = CoreExpression at (elementType current) (CoreArrayMethod ArrayGetAt current [key])
+             in CoreExpression at (coreExpressionType current) (CoreArrayMethod ArrayReplaceAt current [key, rebuilt inner rest])
 
 rootRead :: HeldPlace -> CoreExpression
 rootRead found = CoreExpression (heldSpan found) (coreLocalType (heldRoot found)) (CoreReadLocal (heldRoot found))

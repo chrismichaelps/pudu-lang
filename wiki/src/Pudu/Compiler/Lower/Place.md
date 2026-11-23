@@ -57,3 +57,11 @@ Resolved Grill Log: prepare a receiver as a read with an optional
 place. If the receiver cannot be represented as a place, perform its
 ordinary value read. Stop before any member work if a receiver
 index transfers control. [[Compiler Lower Text]] · [[Compiler Lower Method]]
+
+## Exact selected keys
+
+Resolved Grill Log: retain every key once and check its exact
+integer magnitude before narrowing for array access. A noninteger
+alternative retains its own diagnostic. Validate at the read or
+store so assignment still evaluates the replacement before reporting
+an invalid destination. An earlier transfer suppresses later keys.

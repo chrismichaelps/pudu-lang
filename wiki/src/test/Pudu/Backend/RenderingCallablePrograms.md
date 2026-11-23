@@ -167,3 +167,11 @@ Resolved Grill Log: a checked text builtin can resolve to a
 mutable nominal method. Exercise an indexed receiver, its argument
 effects, and writeback. An ordinary text receiver still takes the
 builtin without a receiver store.
+
+## Exact writable place keys
+
+Resolved Grill Log: exercise exact wide integer keys in assignment,
+receiver reads and exclusive arguments. An out-of-range wide key must
+never wrap to a valid element. Compare distinct diagnostics for a
+noninteger key at a read and a store, and observe replacement effects
+before store failure.

@@ -5,6 +5,12 @@ tags: [changelog]
 
 # Changelog
 
+## 2026-11-23 — Exact writable array indices (#956)
+
+- Retain exact integer keys through indexed assignment and loans.
+  Keep bounds and wrong-kind diagnostics at the read or store.
+  [[Compiler Lower Place]]
+
 ## 2026-11-23 — Mutable receivers through builtin dispatch (#956)
 
 - Retain receiver places across text and collection member selection.

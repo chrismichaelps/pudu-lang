@@ -483,6 +483,21 @@ renderingCallableSuccessPrograms =
         , "  print(show(value))"
         , "  0", "}" ])
     , "receiver\nrendered\nSome(\"changed\")\n", "")
+  , ("an exact wide integer selects the same element for assignment and mutable calls", program
+      (selectedReceiverTypes <> selectedIntegerPositions <>
+        [ "fn bump(value: &mut Int) -> Int { *value = *value + 2\n *value }"
+        , "trait Touch { fn touch(self: &mut Self) -> Int }"
+        , "impl Touch for Int { fn touch(self: &mut Self) -> Int { *self = *self + 5\n *self } }"
+        , "fn main() -> Int {"
+        , "  var values = [10, 11, 12]"
+        , "  let indices = choose(\"λ\".toBytes())"
+        , "  let key = indices.indexOf(\"two\")"
+        , "  values[key] = { print(\"replacement\")\n 20 }"
+        , "  print(show(bump(&mut values[key])))"
+        , "  print(show(values[key].touch()))"
+        , "  print(show(values))"
+        , "  0", "}" ])
+    , "receiver\nreplacement\n22\n27\n[10, 11, 27]\n", "")
   , ("a selected declared call can reach a held collection builtin", program
       (selectedReceiverTypes <> selectedByteConversion <> selectedCollection "Map[Int, Str]" "mapOf([(0, \"held\")])" <>
         [ "trait Keys { fn keys(self: &Self) -> Array[UInt8] }"
@@ -761,6 +776,35 @@ renderingCallableRefusalPrograms =
         , "  var values = [2]"
         , "  let held = choose(\"λ\".toBytes()).shift"
         , "  print(show(held(&mut values[{ print(\"index\")\n 0 }])))"
+        , "  0", "}" ]))
+  , ("a wide assignment key checks bounds after the replacement runs", program
+      (selectedReceiverTypes <> selectedIntegerPositions <>
+        [ "fn main() -> Int {"
+        , "  var values = [0, 1]"
+        , "  let indices = choose(\"λ\".toBytes())"
+        , "  values[indices.indexOf(\"large\")] = { print(\"replacement\")\n 3 }"
+        , "  0", "}" ]))
+  , ("a negative wide key fails when preparing a mutable argument", program
+      (selectedReceiverTypes <> selectedIntegerPositions <>
+        [ "fn bump(value: &mut Int) -> Int { print(\"unreached\")\n *value }"
+        , "fn main() -> Int {"
+        , "  var values = [0, 1]"
+        , "  let indices = choose(\"λ\".toBytes())"
+        , "  print(show(bump(&mut values[indices.indexOf(\"negative\")])))"
+        , "  0", "}" ]))
+  , ("a selected noninteger key reports the assignment diagnostic after the replacement", program
+      (selectedReceiverTypes <> selectedInvalidPosition <>
+        [ "fn main() -> Int {"
+        , "  var values = [0]"
+        , "  let indices = choose(\"λ\".toBytes())"
+        , "  values[indices.indexOf(\"invalid\")] = { print(\"replacement\")\n 3 }"
+        , "  0", "}" ]))
+  , ("an outer bounds failure precedes an invalid selected key in a nested store", program
+      (selectedReceiverTypes <> selectedInvalidPosition <>
+        [ "fn main() -> Int {"
+        , "  var values = [[0]]"
+        , "  let indices = choose(\"λ\".toBytes())"
+        , "  values[{ print(\"outer\")\n 99 }][{ print(\"inner\")\n indices.indexOf(\"invalid\") }] = { print(\"replacement\")\n 3 }"
         , "  0", "}" ]))
   , ("a stored stopping builtin receives the held runtime argument", program
       [ "trait View { fn size(self: &Self) -> Int }"

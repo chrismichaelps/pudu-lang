@@ -457,10 +457,17 @@ Lower Text]] carries the eligible place through nominal fallback.
 [[Backend Rendering Callable Programs]] covers a text builtin and
 universal conversion selecting mutable implementations.
 
+## Exact writable array indices
+
+Architect → Backend Engineer. [[Compiler Lower Place]] keeps exact
+integer keys and validates their representable positions before an
+access. [[Backend Rendering Callable Programs]] covers selected wide
+and noninteger keys, nested failure order, and writeback.
+
 ## Next action
 
-Preserve exact selected integer keys in writable receiver and
-argument places, including their read and write diagnostics.
+Select held range keys for indexed reads, including receiver and
+mutable-argument preparation where the checked key was scalar.
 
 ## Referenced by
 

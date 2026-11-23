@@ -330,6 +330,14 @@ method can write its final back. Universal text conversion uses
 the same dispatch. [[Compiler Lower Text]] · [[Compiler Lower Place]] ·
 [[Backend Rendering Callable Programs]]
 
+## Exact writable array indices (#956)
+
+Writable array place keys evaluate once in order. Native lowering
+checks exact integer magnitudes before narrowing and reports
+wrong-kind failures at the access or store. Assignment keeps
+replacement effects before a destination failure.
+[[Compiler Lower Place]] · [[Backend Rendering Callable Programs]]
+
 ## Published progress (#496)
 
 The README progress bar counts **completed coverage areas**, not individual language
