@@ -9,11 +9,11 @@ aliases: [Compiler Lower Tuple]
 
 ## Purpose and interface
 
-Export lowerTuple, lowerTupleIndex and lowerTuplePattern.
+Export lowerTuple and lowerTuplePattern.
 
 - A tuple literal lowers its members left to right. A Never member stops
   there: the tuple becomes the earlier members' effects and is Never.
-- `t[i]` needs the literal in-range position the checker already requires.
+- `t[i]` uses [[Compiler Lower Slice]] for its checked literal position.
 - `let (a, (b, _)) = subject` runs the subject once into a hidden `$pattern`
   local, then declares each name from its position. Tuple patterns of names,
   wildcards and tuples cannot fail on a tuple; any other pattern refuses.
@@ -45,3 +45,10 @@ hands them here.
 ## Runtime layouts in products (#956)
 
 Resolved Grill Log: Keep actual tuple member layouts through binding and indexing. A checked annotation still supplies the source type. A boxed tuple is indexed by selecting its held layout first.
+
+## Tuple-checked bracket reads
+
+Resolved Grill Log: [[Compiler Lower Slice]] owns indexing, including
+the literal slot fast path for tuples. A tuple-checked receiver can
+hold a different indexable value. A shorter held tuple uses the
+runtime bounds diagnostic.

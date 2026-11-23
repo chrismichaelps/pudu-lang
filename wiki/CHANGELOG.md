@@ -5,6 +5,12 @@ tags: [changelog]
 
 # Changelog
 
+## 2026-11-23 — Runtime receivers in tuple-checked reads (#956)
+
+- Dispatch tuple-checked indexing on the held receiver. Keep
+  direct literal slot reads on tuples and runtime bounds diagnostics
+  for shorter held tuples. [[Compiler Lower Slice]]
+
 ## 2026-11-23 — Held range keys in bracket reads (#956)
 
 - Select indexing or slicing from the retained key for ordinary

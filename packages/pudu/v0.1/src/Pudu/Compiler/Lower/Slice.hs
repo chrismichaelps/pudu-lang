@@ -2,6 +2,7 @@
 module Pudu.Compiler.Lower.Slice (lowerBracketIndex, lowerIndexOn) where
 
 import Data.List (mapAccumL)
+import Data.Maybe (isNothing)
 import Pudu.Compiler.Lower.Arguments
   ( ArgumentBlame (AtInvocation), argumentFailure, clampedPosition, collectArguments, exactPosition
   , integerComparison, stopped, stops )
@@ -17,22 +18,20 @@ import Pudu.IntegerLiteral (IntegerKind (BigIntKind, PlatformSigned))
 type LowerExpression = LowerState -> Located Expression -> Lowered
 type Lowered = (LowerState, Maybe (CoreExpression, CoreType))
 
-lowerBracketIndex :: LowerExpression -> LowerState -> Span -> Located Expression -> Located Expression -> Maybe Lowered
-lowerBracketIndex lower state whole receiver key@(Located at keyShape)
-  | Just kind <- typeForSpan types (locatedSpan receiver), sliceable kind =
-      Just $ fmap (fmap preserve) $ case keyShape of
-        RangeExpression start inclusive end ->
-          withOperands (receiver : foldMap pure start <> foldMap pure end) $ \ready -> \case
-            [held, low, high] -> written ready held (Just low) inclusive (Just high)
-            [held, bound] | Just _ <- start -> written ready held (Just bound) inclusive Nothing
-            [held, bound] -> written ready held Nothing inclusive (Just bound)
-            [held] -> written ready held Nothing inclusive Nothing
-            _ -> refused ready
-        _ -> case collectArguments lower state [receiver, key] of
-          (after, Just [held, position]) -> lowerIndexOn after at held position
-          (after, Just operands) | any stops operands -> (after, Just (stopped at operands, CoreNeverType))
-          (after, _) -> refused after
-  | otherwise = Nothing
+lowerBracketIndex :: LowerExpression -> LowerState -> Span -> Located Expression -> Located Expression -> Lowered
+lowerBracketIndex lower state whole receiver key@(Located at keyShape) =
+  fmap (fmap preserve) $ case keyShape of
+    RangeExpression start inclusive end ->
+      withOperands (receiver : foldMap pure start <> foldMap pure end) $ \ready -> \case
+        [held, low, high] -> written ready held (Just low) inclusive (Just high)
+        [held, bound] | Just _ <- start -> written ready held (Just bound) inclusive Nothing
+        [held, bound] -> written ready held Nothing inclusive (Just bound)
+        [held] -> written ready held Nothing inclusive Nothing
+        _ -> refused ready
+    _ -> case collectArguments lower state [receiver, key] of
+      (after, Just [held, position]) -> lowerIndexOn after at held position
+      (after, Just operands) | any stops operands -> (after, Just (stopped at operands, CoreNeverType))
+      (after, _) -> refused after
  where
   types = contextTypes (lowerContext state)
   preserve (value, _) =
@@ -91,19 +90,26 @@ lowerIndexOn :: LowerState -> Span -> CoreExpression -> CoreExpression -> Lowere
 lowerIndexOn state at receiver key
   | any stops operands = (state, Just (stopped at operands, CoreNeverType))
   | any (hasRuntimeChoice . coreExpressionType) operands
-      || coreExpressionType key == CoreRangeType || isTuple (coreExpressionType receiver) =
-      let hold current value = bindLocal current "" (coreExpressionType value)
-          (bound, target) = hold state receiver
-          (withKey, position) = hold bound key
-          (ready, chosen) = select withKey (reading target) (reading position)
-          prefix = zipWith (\local value -> CoreStatement (coreExpressionSpan value) (CoreDeclare local value))
-            [target, position] operands
-       in (ready, (\(value, kind) -> (expression kind (CoreBlockValue (CoreBlock prefix (Just value))), kind)) <$> chosen)
+      || coreExpressionType key == CoreRangeType
+      || isTuple (coreExpressionType receiver) && isNothing (literalPosition key) =
+      let (bound, target) = hold state receiver
+          (ready, prefix, position)
+            | Just _ <- literalPosition key = (bound, [declare target receiver], key)
+            | otherwise =
+                let (withKey, retained) = hold bound key
+                 in (withKey, [declare target receiver, declare retained key], reading retained)
+          wrap (value, kind) = (expression kind (CoreBlockValue (CoreBlock prefix (Just value))), kind)
+       in fmap (fmap wrap) (select ready (reading target) position)
   | otherwise = select state receiver key
  where
   operands = [receiver, key]
   isTuple CoreTupleType{} = True
   isTuple _ = False
+  literalPosition value = case coreExpressionShape value of
+    CoreIntegerLiteral _ position -> Just position
+    _ -> Nothing
+  hold current value = bindLocal current "" (coreExpressionType value)
+  declare local value = CoreStatement (coreExpressionSpan value) (CoreDeclare local value)
   expression = CoreExpression at
   reading local = expression (coreLocalType local) (CoreReadLocal local)
   select current container index
@@ -116,22 +122,32 @@ lowerIndexOn state at receiver key
             exactKind = CoreIntegerType BigIntKind
          in sliceOn at current container (field RangeStartExact exactKind) (field RangeEndExact exactKind)
               (field RangeHasEnd CoreBoolType) (field RangeIsInclusiveOf CoreBoolType)
-    | CoreIntegerType _ <- coreExpressionType index = scalar current container (clampedPosition at index)
+    | CoreIntegerType _ <- coreExpressionType index = scalar current container index
     | otherwise = invalid current container index
-  scalar current container position = case coreExpressionType container of
+  scalar current container index = case coreExpressionType container of
     CoreArrayType element ->
       (current, Just (expression element (CoreIndex container position), element))
     CoreTextType ->
       (current, Just (expression CoreCharType (CoreTextMethod TextCharAt container [position]), CoreCharType))
+    CoreTupleType members
+      | Just offset <- literalPosition index
+      , offset >= 0, offset < toInteger (length members)
+      , kind : _ <- drop (fromInteger offset) members ->
+          (current, Just (expression kind (CoreTupleIndex (fromInteger offset) container), kind))
+      | Just _ <- literalPosition index ->
+          let effects = [CoreStatement (coreExpressionSpan container) (CoreEvaluate container)]
+           in (current, Just (expression CoreNeverType (CoreBlockValue (CoreBlock effects (Just boundsFailure))), CoreNeverType))
     CoreTupleType members ->
       let member offset kind = CoreArm at
             (CoreLiteralPattern (expression intType (CoreIntegerLiteral PlatformSigned (toInteger offset))))
             Nothing (expression kind (CoreTupleIndex offset container))
-          failure = argumentFailure AtInvocation at "E7004" "index out of range"
-          arms = zipWith member [0 ..] members <> [CoreArm at CoreWildcardPattern Nothing failure]
+          arms = zipWith member [0 ..] members <> [CoreArm at CoreWildcardPattern Nothing boundsFailure]
           chosen = joinRuntimeArms at CoreNeverType position arms
        in (current, Just (chosen, coreExpressionType chosen))
-    _ -> invalid current container position
+    _ -> invalid current container index
+   where
+    position = clampedPosition at index
+  boundsFailure = argumentFailure AtInvocation at "E7004" "index out of range"
   invalid current container position =
     let (ready, failure) = invalidRuntimeIndex current at container [position]
      in (ready, Just (failure, CoreNeverType))

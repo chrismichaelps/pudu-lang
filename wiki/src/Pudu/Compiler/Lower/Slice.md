@@ -90,3 +90,7 @@ keys share a selector. Use the held key's type before deciding between
 indexing and slicing. Receiver and key effects run in their original
 order. A place read uses the same selector and supplies its own blame
 span. [[Compiler Lower Place]]
+
+Resolved Grill Log: dispatch does not depend on the checked receiver
+family. A retained integer literal selects a direct slot on a tuple.
+Only a nonliteral key needs the runtime slot match.

@@ -520,6 +520,20 @@ renderingCallableSuccessPrograms =
         , "  print(show(\"abcd\"[index]))"
         , "  0", "}" ])
     , "receiver\n12\n'c'\n", "")
+  , ("a tuple-checked literal read selects a held array element", program
+      (selectedReceiverTypes <> selectedIndexedReceiver "Array[Str]" "[\"first\", \"second\", \"third\"]" <>
+        [ "fn main() -> Int {"
+        , "  print(show(choose(\"plain\").indexed()[1]))"
+        , "  print(show(choose(\"λ\".toBytes()).indexed()[1]))"
+        , "  0", "}" ])
+    , "receiver\nindexed\n\"tuple\"\nreceiver\nindexed\n\"second\"\n", "")
+  , ("a tuple-checked literal read selects a held text scalar", program
+      (selectedReceiverTypes <> selectedIndexedReceiver "Str" "\"aλb\"" <>
+        [ "fn main() -> Int {"
+        , "  let held = choose(\"λ\".toBytes()).indexed()"
+        , "  print(show(held[1]))"
+        , "  0", "}" ])
+    , "receiver\nindexed\n'λ'\n", "")
   , ("a selected declared call can reach a held collection builtin", program
       (selectedReceiverTypes <> selectedByteConversion <> selectedCollection "Map[Int, Str]" "mapOf([(0, \"held\")])" <>
         [ "trait Keys { fn keys(self: &Self) -> Array[UInt8] }"
@@ -836,6 +850,11 @@ renderingCallableRefusalPrograms =
         , "  let index = choose(\"λ\".toBytes()).indexOf(\"window\")"
         , "  print(show(inspect(&mut values[index])))"
         , "  0", "}" ]))
+  , ("a shorter held tuple reports bounds after evaluating the receiver", program
+      (selectedReceiverTypes <> selectedIndexedReceiver "(Int, Int)" "(1, 2)" <>
+        [ "fn main() -> Int {"
+        , "  print(show(choose(\"λ\".toBytes()).indexed()[2]))"
+        , "  0", "}" ]))
   , ("a stored stopping builtin receives the held runtime argument", program
       [ "trait View { fn size(self: &Self) -> Int }"
       , "impl View for Bytes { fn size(self: &Self) -> Int { 0 } }"
@@ -908,6 +927,18 @@ selectedRangeKey :: [Text]
 selectedRangeKey =
   [ "trait HeldRangeKey { fn indexOf(self: &Self, label: Str) -> Range[Int] }"
   , "impl HeldRangeKey for Option[Str] { fn indexOf(self: &Self, label: Str) -> Range[Int] { 1..=2 } }"
+  ]
+
+selectedIndexedReceiver :: Text -> Text -> [Text]
+selectedIndexedReceiver held body =
+  [ "trait CheckedIndexed { fn indexed(self: &Self) -> (Int, Str, Bool) }"
+  , "impl CheckedIndexed for Str {"
+  , "  fn indexed(self: &Self) -> (Int, Str, Bool) { print(\"indexed\")\n (1, \"tuple\", true) }"
+  , "}"
+  , "trait HeldIndexed { fn indexed(self: &Self) -> " <> held <> " }"
+  , "impl HeldIndexed for Option[Str] {"
+  , "  fn indexed(self: &Self) -> " <> held <> " { print(\"indexed\")\n " <> body <> " }"
+  , "}"
   ]
 
 selectedIntegerTrait :: [Text]

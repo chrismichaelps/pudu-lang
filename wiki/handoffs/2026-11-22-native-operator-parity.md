@@ -472,10 +472,17 @@ its read and store forms. [[Backend Rendering Callable Programs]]
 covers both directions of scalar and range selection and a loan
 whose returned final cannot be assigned through its range.
 
+## Runtime receivers in tuple-checked reads
+
+Architect → Backend Engineer. [[Compiler Lower Slice]] owns
+bracket dispatch and the literal slot fast path. [[Backend Rendering
+Callable Programs]] covers stable slots and held arrays, text, and
+shorter tuples.
+
 ## Next action
 
-Route a tuple-checked index to its held array or text receiver while
-preserving the direct native slot read for a stable tuple.
+Preserve the runtime pattern failure when irrefutable tuple or
+record binding sees a differently shaped held value.
 
 ## Referenced by
 

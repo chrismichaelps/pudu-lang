@@ -182,3 +182,9 @@ Resolved Grill Log: a checked scalar index can produce a slice and
 a checked range can produce a scalar read. Compare array and text
 results, receiver dispatch, and an exclusive read whose final cannot
 be assigned back through a slice key.
+
+## Held receivers in tuple-checked reads
+
+Resolved Grill Log: compare a stable tuple, a selected array, and
+selected text at a written literal position. A shorter held tuple
+reports its own bounds failure after receiver effects.

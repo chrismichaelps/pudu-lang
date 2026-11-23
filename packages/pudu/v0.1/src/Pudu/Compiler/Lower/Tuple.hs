@@ -1,14 +1,13 @@
-{-| @Pudu.Compiler.Lower.Tuple — tuple literals, literal positions, and
-    tuple and record patterns in `let`. -}
-module Pudu.Compiler.Lower.Tuple (lowerTuple, lowerTupleIndex, lowerTuplePattern) where
+{-| @Pudu.Compiler.Lower.Tuple — tuple literals and tuple and record patterns in `let`. -}
+module Pudu.Compiler.Lower.Tuple (lowerTuple, lowerTuplePattern) where
 
 import Pudu.Compiler.Lower.Control (expressionIsPrintValued)
-import Pudu.Compiler.Lower.Dynamic (hasRuntimeChoice, mapRuntimeChoice, normalizeAggregateValue)
+import Pudu.Compiler.Lower.Dynamic (hasRuntimeChoice, normalizeAggregateValue)
 import Pudu.Compiler.Lower.State (LowerContext (..), LowerState (..), bindLocal, halt, refused)
 import Pudu.Compiler.Lower.Types (nativeValueType, recordFields, typeForSpan)
 import Pudu.Core
 import Pudu.Frontend.Syntax
-  ( Expression (..), FieldPattern (..), Literal (..), Located (..), Pattern (..), TypeSyntax )
+  ( Expression, FieldPattern (..), Located (..), Pattern (..), TypeSyntax )
 import Pudu.Source (Span)
 
 type LowerExpression = LowerState -> Located Expression -> (LowerState, Maybe (CoreExpression, CoreType))
@@ -36,26 +35,6 @@ lowerTuple lower state at = go state []
   built current shape kind = (current, Just (CoreExpression at kind shape, kind))
   effects members = CoreBlockValue (CoreBlock
     [CoreStatement (coreExpressionSpan member) (CoreEvaluate member) | member <- members] Nothing)
-
-{-| The checker only accepts a literal, in-range position on a tuple. -}
-lowerTupleIndex :: LowerExpression -> LowerState -> Span -> Located Expression -> Located Expression
-  -> (LowerState, Maybe (CoreExpression, CoreType))
-lowerTupleIndex lower state at receiver key = case lower state receiver of
-  (after, Nothing) -> refused after
-  (after, Just (core, CoreNeverType)) -> (after, Just (core, CoreNeverType))
-  (after, Just (core, _)) -> case select after core of
-    (ready, Just value) -> (ready, Just (value, coreExpressionType value))
-    (ready, Nothing) -> refused ready
- where
-  select current core
-    | Just selected <- mapRuntimeChoice current at CoreNeverType core select = fmap (fmap fst) selected
-    | CoreTupleType members <- coreExpressionType core = case locatedValue key of
-        LiteralExpression (ResolvedInteger _ position)
-          | position >= 0, position < fromIntegral (length members)
-          , kind : _ <- drop (fromInteger position) members ->
-              (current, Just (CoreExpression at kind (CoreTupleIndex (fromInteger position) core)))
-        _ -> halt (locatedSpan key) "a tuple position that is not a literal in range" current
-    | otherwise = halt at ("indexing a " <> coreTypeName (coreExpressionType core) <> " value") current
 
 {-| `let (a, (b, _)) = subject`: the subject runs once into a hidden local,
     then each name reads its position. A tuple pattern of names and

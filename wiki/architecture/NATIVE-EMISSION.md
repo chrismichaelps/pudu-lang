@@ -346,6 +346,13 @@ same bounds and diagnostic path. A range used as a writeback key
 still reports the assignment refusal. [[Compiler Lower Slice]] ·
 [[Backend Rendering Callable Programs]]
 
+## Runtime receivers in tuple-checked reads (#956)
+
+All native bracket reads select the retained receiver and key.
+Tuple literals use direct slot reads at known positions. A held
+array, text value, or shorter tuple takes its own access and
+bounds path. [[Compiler Lower Slice]] · [[Backend Rendering Callable Programs]]
+
 ## Published progress (#496)
 
 The README progress bar counts **completed coverage areas**, not individual language

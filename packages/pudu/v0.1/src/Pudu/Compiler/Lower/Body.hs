@@ -38,7 +38,7 @@ import Pudu.Compiler.Lower.Primitive (lowerPrimitiveCall)
 import Pudu.Compiler.Lower.MethodValue (lowerMethodValue, lowerTraitMethodValue)
 import Pudu.Compiler.Lower.Stop (lowerPanic, lowerUntypedConvert)
 import Pudu.Compiler.Lower.Lambda (lowerFunctionValue, lowerFunctionValueWithInputs, lowerLambda, lowerLambdaWithInputs, lowerValueCall, specializeCallable)
-import Pudu.Compiler.Lower.Tuple (lowerTuple, lowerTupleIndex, lowerTuplePattern)
+import Pudu.Compiler.Lower.Tuple (lowerTuple, lowerTuplePattern)
 import Pudu.Compiler.Lower.Place (lowerPlaceAssignment)
 import Pudu.Compiler.Lower.Loan (loanedReturn)
 import Pudu.Compiler.Lower.Record (lowerField, lowerRecord, lowerRecordUpdate)
@@ -522,8 +522,7 @@ lowerExpression state (Located spanValue expression) = case expression of
     , Just lowered <- lowerCallbackUnregisterValue lowerExpression state spanValue receiver -> lowered
     | Just lowered <- lowerMethodValue lowerExpression state spanValue receiver member -> lowered
     | otherwise -> lowerField lowerExpression state spanValue receiver member
-  IndexExpression receiver key -> maybe (lowerTupleIndex lowerExpression state spanValue receiver key) id
-    (lowerBracketIndex lowerExpression state spanValue receiver key)
+  IndexExpression receiver key -> lowerBracketIndex lowerExpression state spanValue receiver key
   RangeExpression low inclusive high -> lowerRangeValue lowerExpression state spanValue low inclusive high
   TryExpression operand -> lowerTry lowerExpression state spanValue operand
   -- Awaiting runs the task's body now; a failure it answers leaves this

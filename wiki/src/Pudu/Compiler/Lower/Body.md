@@ -613,3 +613,6 @@ deliver the original receiver place to a selected nominal method.
 Resolved Grill Log: [[Compiler Lower Slice]] selects a bracket
 operation after the receiver and key run. Both scalar and range
 checking use that entry.
+
+Resolved Grill Log: tuple-checked reads use the same bracket entry
+and retain the direct slot operation for held tuples.
