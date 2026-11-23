@@ -2,7 +2,7 @@
     Such a function takes one more parameter: how many arguments the call
     supplied. Its body opens by giving every parameter the call did not reach
     its default, in order, so a default sees the parameters before it. -}
-module Pudu.Compiler.Lower.Default (takesSuppliedCount, trailingDefaults, suppliedArguments, lowerDefaultedBody) where
+module Pudu.Compiler.Lower.Default (takesSuppliedCount, trailingDefaults, suppliedArguments, callArityFailure, lowerDefaultedBody) where
 
 import Data.Maybe (isJust)
 import Pudu.Compiler.Lower.Arguments (ArgumentBlame (AtCaller), argumentFailureWith)
@@ -35,6 +35,20 @@ suppliedArguments at parameterTypes given =
   given
     <> [CoreExpression at kind CoreAbsent | kind <- drop (length given) (take (length parameterTypes - 1) parameterTypes)]
     <> [CoreExpression at intType (CoreIntegerLiteral PlatformSigned (toInteger (length given)))]
+
+callArityFailure :: ArgumentBlame -> Span -> CoreSignature -> Int -> Maybe CoreExpression
+callArityFailure blame at signature supplied
+  | supplied > written = Just (failure "too many arguments in call" "pass one argument per declared parameter")
+  | defaulted = Nothing
+  | parameter : _ <- drop supplied (signatureParameters signature) =
+      let name = coreLocalName (coreParameterLocal parameter)
+       in Just (failure ("missing argument for parameter " <> name) "supply the argument or give the parameter a default")
+  | otherwise = Nothing
+ where
+  defaulted = takesSuppliedCount signature
+  written = length (signatureParameters signature) - if defaulted then 1 else 0
+  failure message help =
+    argumentFailureWith blame at "E7003" (Just help) (CoreExpression at CoreTextType (CoreTextLiteral message))
 
 {-| The body with its defaults in front. A default is lowered in the
     callee, after the parameters before it are in scope. -}

@@ -36,3 +36,13 @@ conversion. A remaining type mismatch refuses with E6001; a Never default stops 
 Resolved Grill Log: the callee checks an actual missing required
 parameter in declaration order. Earlier omitted defaults execute
 before that check, and the failure points at the caller.
+
+## Selected method argument counts
+
+Resolved Grill Log: check for surplus values using the selected
+signature's written slots. With no defaults, an omitted slot names
+the first missing parameter. With defaults, pass the actual count
+so that the callee runs its defaults and diagnoses missing parameters
+in order. Report an invalid count only after supplied operands run.
+
+[[Compiler Lower Method]]

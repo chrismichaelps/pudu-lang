@@ -5,6 +5,12 @@ tags: [changelog]
 
 # Changelog
 
+## 2026-11-23 — Declared method argument counts (#956)
+
+- Forward written argument counts through direct and stored methods.
+  Keep default evaluation and missing parameter diagnostics in
+  declaration order. [[Compiler Lower Default]] · [[Compiler Lower Method Value]]
+
 ## 2026-11-23 — Held declared method values (#956)
 
 - Capture the selected receiver and retain its bound signature or field

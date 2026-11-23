@@ -8,13 +8,14 @@ module Pudu.Compiler.Lower.MethodValue
 
 import Control.Applicative ((<|>))
 import qualified Data.Set as Set
+import Data.List (mapAccumL)
 import Data.List.NonEmpty (NonEmpty (..))
 import qualified Data.Map.Strict as Map
 import Data.Text (Text)
 import qualified Data.Text as Text
 import Pudu.Compiler.Lower.State
   ( CallableSource (..), CallableTemplate (..), Instance (..), LowerContext (..), LowerState (..), MutableSite (MutableParameterSite, MutableReceiverSite)
-  , bindLocal, bindMutable, halt, lookupLocal, refuse, refused, startFunction )
+  , bindLocal, bindMutable, halt, intType, lookupLocal, refuse, refused, startFunction )
 import Pudu.Compiler.Lower.Control (blockType)
 import Pudu.Compiler.Lower.Dynamic (hasRuntimeChoice, joinRuntimeArms, mapRuntimeChoice, missingRuntimeMember, preserveRuntimeResult, projectRuntimeValue, runtimeCarriers, runtimeResultType, settledMutableLayout)
 import Pudu.Compiler.Lower.Generic (matchType)
@@ -26,8 +27,10 @@ import Pudu.Core
 import Pudu.Core.Closure (textMethodPrefix)
 import Pudu.Eval.Operator.Access (builtinMethodNamesFor)
 import Pudu.Frontend.Syntax (Expression (..), Located (..))
+import Pudu.IntegerLiteral (IntegerKind (PlatformSigned))
 import Data.Maybe (fromMaybe, isJust, isNothing)
 import Pudu.Source (Span (..), offsetFromInt, zeroOffset)
+import Pudu.Type.Check.Receiver (specializeBareSelf)
 import Pudu.Type.Substitute (substituteRigid)
 import Pudu.Type.Value (Required (Required), Scheme (schemeType), Type (FunctionTypeRequiring, FunctionTypeValue, NominalType, ReferenceTypeValue), requiredCount, stringType)
 
@@ -43,16 +46,32 @@ declaredMemberType context kind written = do
   schemeType . instanceScheme <$> Map.lookup key (contextInstances context)
 
 boundMemberFact :: CoreType -> Type -> Maybe Type
-boundMemberFact kind (FunctionTypeRequiring asynchronous (self : inputs) required result) = do
-  bindings <- matchType self (unformed kind) Map.empty
-  let substitute = substituteRigid (Map.toList bindings)
-  pure (FunctionTypeRequiring asynchronous (map substitute inputs)
-    (Required (max 0 (requiredCount required - 1))) (substitute result))
-boundMemberFact _ _ = Nothing
+boundMemberFact kind signature = case signature of
+  FunctionTypeRequiring _ (self : _) _ _
+    | NominalType owner [] <- referent self
+    , NominalType actualOwner (_ : _) <- held
+    , owner == actualOwner ->
+        bind (specializeBareSelf owner held signature)
+  _ -> bind signature
+ where
+  held = unformed kind
+  referent (ReferenceTypeValue _ target) = referent target
+  referent target = target
+  bind (FunctionTypeRequiring asynchronous (self : inputs) required result) = do
+    bindings <- matchType self held Map.empty
+    let substitute = substituteRigid (Map.toList bindings)
+    pure (FunctionTypeRequiring asynchronous (map substitute inputs)
+      (Required (max 0 (requiredCount required - 1))) (substitute result))
+  bind _ = Nothing
 
 intrinsicTextFact :: CoreType -> Type
 intrinsicTextFact CoreBytesType = FunctionTypeValue False [] (NominalType "Option" [stringType])
 intrinsicTextFact _ = FunctionTypeValue False [] stringType
+
+formedInputCount :: Type -> Int
+formedInputCount (FunctionTypeRequiring _ inputs required _) =
+  length inputs + fromEnum (requiredCount required < length inputs)
+formedInputCount _ = 0
 
 lowerTraitMethodValue :: LowerExpression -> LowerState -> Span -> Text -> Text -> Lowered
 lowerTraitMethodValue lower state at provider member =
@@ -133,11 +152,11 @@ lowerDynamicText lower state at receiver kind result direct build =
     with a type for a receiver, is the method itself, taking `self` first. -}
 lowerMethodValue :: LowerExpression -> LowerState -> Span -> Located Expression -> Text -> Maybe Lowered
 lowerMethodValue lower state at receiver member = case (receiverFact, typeForSpan types at, typeFactAt types at) of
-  (Just receiverType, Just kind@(CoreFunctionType inputs _), Just fact@(FunctionTypeRequiring _ inputFacts _ _))
+  (Just receiverType, Just kind@(CoreFunctionType inputs _), Just fact@FunctionTypeRequiring{})
     | member == "toText", isDynamic receiverType ->
         Just (lowerDynamicText lower state at receiver receiverType kind False
           (\held -> MemberExpression held (Located at member)))
-    | builtIn receiverType || declared receiverType || textual receiverType, length inputs == length inputFacts -> Just $ case lower state receiver of
+    | builtIn receiverType || declared receiverType || textual receiverType, length inputs == formedInputCount fact -> Just $ case lower state receiver of
         (after, Nothing) -> refused after
         (after, Just (core, CoreNeverType)) -> (after, Just (core, CoreNeverType))
         (after, Just (core, _)) ->
@@ -145,9 +164,9 @@ lowerMethodValue lower state at receiver member = case (receiverFact, typeForSpa
                 let carried = preserveRuntimeResult kind value
                  in (carried, coreExpressionType carried)
            in fmap (fmap preserve) (bindReceiver receiverType kind fact after core)
-  (Nothing, Just kind@(CoreFunctionType inputs@(self : _) _), Just fact@(FunctionTypeRequiring _ inputFacts _ _))
+  (Nothing, Just kind@(CoreFunctionType inputs@(self : _) _), Just fact@FunctionTypeRequiring{})
     | Just owner <- unboundOwner self
-    , length inputs == length inputFacts ->
+    , length inputs == formedInputCount fact ->
         let key = (if traitValue then "$trait-method:" else "$method:") <> owner <> "." <> member <> ":" <> Text.pack (show kind)
          in Just (closure state key Nothing kind fact [])
   _ -> Nothing
@@ -224,13 +243,17 @@ lowerMethodValue lower state at receiver member = case (receiverFact, typeForSpa
 registerMethodValue :: LowerExpression -> LowerState -> Span -> Located Expression -> Text -> Text
   -> Maybe CoreType -> CoreType -> Type -> (LowerState, Maybe CoreType)
 registerMethodValue lower current at receiver member key bound solved@(CoreFunctionType requested checkedResult)
-    whole@(FunctionTypeRequiring asynchronous inputFacts _ resultFact)
+    whole@(FunctionTypeRequiring asynchronous inputFacts required resultFact)
   | Map.member key (contextClosures initial) || Set.member key (contextActiveCallables initial) =
       (current, Just kind)
   | otherwise =
       let env = CoreLocal 0 "" kind
           offset = maybe 0 (const 1) bound
-          parameters = [CoreParameter (CoreLocal (index - 1 + offset) (argumentName index) input) at | (index, input) <- zip [1 ..] inputs]
+          parameterCount = length inputFacts
+          argumentNames = map argumentName [1 .. parameterCount]
+          parameterNames = argumentNames <> [suppliedCountName | requiredCount required < parameterCount]
+          parameters =
+            [CoreParameter (CoreLocal index name input) at | (index, name, input) <- zip3 [offset ..] parameterNames inputs]
           hidden = [CoreParameter env at | Just _ <- [bound]]
           active = initial{contextActiveCallables = Set.insert key (contextActiveCallables initial)}
           entered = withLoanedParameters loaned parameters $
@@ -247,7 +270,7 @@ registerMethodValue lower current at receiver member key bound solved@(CoreFunct
             Nothing -> (entered, [])
           -- Past the end of any source, so no site made from one has a position.
           beyond index = fromMaybe zeroOffset (offsetFromInt (maxBound - index))
-          argumentSpans = [at{spanStart = beyond index, spanEnd = beyond index} | index <- [1 .. length inputs]]
+          argumentSpans = [at{spanStart = beyond index, spanEnd = beyond index} | index <- [1 .. parameterCount]]
           -- The callee has a span of its own carrying the value's function type,
           -- which settles a generic implementation's parameters; a lent argument
           -- is read as the value its parameter holds.
@@ -263,13 +286,28 @@ registerMethodValue lower current at receiver member key bound solved@(CoreFunct
           target = case bound of
             Just _ -> Located (locatedSpan receiver) (NameExpression ("$receiver" :| []))
             Nothing -> receiver
-          call = Located at (CallExpression
+          call count = Located at (CallExpression
             (Located calleeSpan (MemberExpression target (Located calleeSpan member)))
-            [Located spanValue (NameExpression (argumentName index :| [])) | (index, spanValue) <- zip [1 ..] argumentSpans])
+            [Located spanValue (NameExpression (name :| [])) | (name, spanValue) <- take count (zip argumentNames argumentSpans)])
           (afterBody, lowered)
             | member == "toText", null inputs, bound `elem` [Just CoreCharType, Just CoreBytesType] =
                 lowerTextMethod lower (\_ _ -> Nothing) overlaid at calleeSpan target member []
-            | otherwise = lower overlaid call
+            | requiredCount required < parameterCount
+            , count : _ <- reverse parameters =
+                let countRead = CoreExpression at intType (CoreReadLocal (coreParameterLocal count))
+                    arm prior supplied =
+                      let (advanced, answer) = lower prior (call supplied)
+                          pattern'
+                            | supplied == parameterCount = CoreWildcardPattern
+                            | otherwise = CoreLiteralPattern
+                                (CoreExpression at intType (CoreIntegerLiteral PlatformSigned (toInteger supplied)))
+                       in (advanced, (\(value, _) -> CoreArm at pattern' Nothing value) <$> answer)
+                    (finished, arms) = mapAccumL arm overlaid [0 .. parameterCount]
+                    join branches =
+                      let value = joinRuntimeArms at ownResult countRead branches
+                       in (value, coreExpressionType value)
+                 in (finished, join <$> sequence arms)
+            | otherwise = lower overlaid (call parameterCount)
           context = (lowerContext afterBody)
             {contextTypes = original, contextActiveCallables = Set.delete key (contextActiveCallables (lowerContext afterBody))}
           before = length (contextRefusals (lowerContext current))

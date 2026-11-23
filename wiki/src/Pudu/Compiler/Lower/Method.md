@@ -287,3 +287,12 @@ Resolved Grill Log: After selecting a different owner, specialize
 that declaration using its bound callable fact. The original member's
 signature cannot infer a different implementation's generic arguments.
 [[Compiler Lower Method Value]] supplies the shared bound signature.
+
+## Method argument counts
+
+Resolved Grill Log: ordinary and dynamically selected invocations
+pass the selected implementation's supplied count after projecting
+the written operands. Loaned calls use the same count convention
+without adding the hidden count to the loan positions.
+
+[[Compiler Lower Default]]

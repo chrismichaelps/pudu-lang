@@ -406,10 +406,19 @@ and captures the held member before the source binding can change.
 for ordinary calls. [[Backend Rendering Callable Programs]] covers
 reassignment, function-valued fields and failure at capture.
 
+## Declared method argument counts
+
+Architect → Backend Engineer. [[Compiler Lower Default]] validates
+the selected implementation's written slot count. [[Compiler Lower
+Method]] forwards the supplied count, including calls with loans.
+[[Compiler Lower Method Value]] selects the written slots using the
+count before reading them. [[Backend Method Programs]] covers a
+default that reads an earlier parameter, both directly and as a value.
+
 ## Next action
 
-Read the compiler build and suite failures on the parity pull request,
-then resolve method default arguments through direct and stored calls.
+Select the actual callable's argument count profile for indirect
+calls when the runtime signature differs from the checked one.
 
 ## Referenced by
 

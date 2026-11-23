@@ -141,3 +141,15 @@ checked signature describes the admitted owner and cannot determine
 the physical signature of a different declaration.
 
 [[Native Emission Coverage]] · [[Backend Rendering Callable Programs]]
+
+Resolved Grill Log: reuse [[Type Check Receiver]] for constructor-wide
+Self substitution before matching the selected receiver.
+
+## Defaulted method values
+
+Resolved Grill Log: the wrapper receives the same supplied count as a
+direct function value. Select the call with that many written slots
+before reading any argument slot. The method body owns default
+evaluation, so binding a method does not evaluate defaults.
+
+[[Compiler Lower Default]]

@@ -9,7 +9,9 @@ import qualified Data.Map.Strict as Map
 import qualified Data.List.NonEmpty as NonEmpty
 import Data.Text (Text)
 import qualified Data.Text as Text
+import Pudu.Compiler.Lower.Arguments (methodArgumentBlame)
 import Pudu.Compiler.Lower.Control (blockType, expressionIsPrintValued)
+import Pudu.Compiler.Lower.Default (callArityFailure, suppliedArguments, takesSuppliedCount)
 import Pudu.Compiler.Lower.Scalar (eagerType, namedFailure)
 import Pudu.Compiler.Lower.Signature (ensureSignature)
 import Pudu.Compiler.Lower.State
@@ -404,8 +406,9 @@ invokeLent :: [Int] -> LowerState -> Span -> Text -> Maybe Type -> Selected -> [
 invokeLent lent state at key written selected given = case instanceTarget state at key instantiated (coreExpressionType <$> take 1 given) selected of
   (back, Nothing) -> refused back
   (back, Just (target, signature@CoreSignature{signatureParameters, signatureLoaned}))
+    | Just failure <- callArityFailure (methodArgumentBlame back) at signature (length given) ->
+        failedInvocation back at given failure
     | signatureLoaned /= lent -> halt at "a dynamic call lending other places than its method's &mut parameters" back
-    | length signatureParameters /= length given -> halt at "a method called with this many arguments" back
     | otherwise ->
         let context = lowerContext back
             layouts = map (coreLocalType . coreParameterLocal) signatureParameters
@@ -420,10 +423,11 @@ invokeLent lent state at key written selected given = case instanceTarget state 
             expected = map (coreLocalType . coreParameterLocal) (signatureParameters exact)
             (projected, cores) = mapAccumL (\current (kind, value) ->
               projectRuntimeValue (contextTypes context) current kind value) ready (zip expected supplied)
+            operands = methodOperands at exact cores
             queued = projected{lowerContext = (lowerContext projected){contextQueue = name : contextQueue (lowerContext projected)}}
             answered = loanedType exact
-         in if map coreExpressionType cores == expected
-              then (queued, Just (CoreExpression at answered (CoreCall name cores), answered))
+         in if map coreExpressionType operands == expected
+              then (queued, Just (CoreExpression at answered (CoreCall name operands), answered))
               else halt at "a dynamic loaned call with incompatible argument layouts" projected
  where
   instantiated = written <|> (Map.lookup key (contextInstances (lowerContext state)) >>= \found ->
@@ -539,9 +543,10 @@ ordinaryMethodCall lower redispatch state at expected key instantiated receiver 
 invoke :: LowerState -> Span -> Text -> Maybe Type -> Selected -> [CoreExpression] -> Lowered
 invoke state at key written selected given = case instanceTarget state at key instantiated (coreExpressionType <$> take 1 given) selected of
   (back, Nothing) -> refused back
-  (back, Just (target, signature@CoreSignature{signatureParameters, signatureLoaned}))
+  (back, Just (target, signature@CoreSignature{signatureLoaned}))
+    | Just failure <- callArityFailure (methodArgumentBlame back) at signature (length given) ->
+        failedInvocation back at given failure
     | position : _ <- signatureLoaned -> halt (loanSpan back target position) "a method with &mut parameters" back
-    | length signatureParameters /= length given -> halt at "a method called with this many arguments" back
     | otherwise ->
         let types = contextTypes (lowerContext back)
             (projected, cores) = project types back signature given
@@ -560,7 +565,7 @@ invoke state at key written selected given = case instanceTarget state at key in
   queue current target signature cores =
     let queued = current{lowerContext = (lowerContext current){contextQueue = target : contextQueue (lowerContext current)}}
         result = eagerType (signatureResult signature) cores
-     in (queued, Just (CoreExpression at result (CoreCall target cores), result))
+     in (queued, Just (CoreExpression at result (CoreCall target (methodOperands at signature cores)), result))
   instantiated = written <|> (Map.lookup key (contextInstances (lowerContext state)) >>= \found ->
     instantiationOf (instanceScheme found) (map coreExpressionType given))
   -- A loan this call form cannot lend is refused where its `&mut` type is written.
@@ -568,6 +573,18 @@ invoke state at key written selected given = case instanceTarget state at key in
     Just found | Located _ parameter : _ <- drop position (functionParameters (locatedValue (instanceFunction found)))
                , Just annotated <- parameterType parameter -> locatedSpan annotated
     _ -> at
+
+methodOperands :: Span -> CoreSignature -> [CoreExpression] -> [CoreExpression]
+methodOperands at signature given
+  | takesSuppliedCount signature =
+      suppliedArguments at (map (coreLocalType . coreParameterLocal) (signatureParameters signature)) given
+  | otherwise = given
+
+failedInvocation :: LowerState -> Span -> [CoreExpression] -> CoreExpression -> Lowered
+failedInvocation state at given failure =
+  let effects = [CoreStatement (coreExpressionSpan value) (CoreEvaluate value) | value <- given]
+      stopped = CoreExpression at CoreNeverType (CoreBlockValue (CoreBlock effects (Just failure)))
+   in (state, Just (stopped, CoreNeverType))
 
 {-| The instance a call reaches and its admitted signature. An instance with
     open parameters is specialized first, against the instantiation at the
@@ -624,8 +641,9 @@ loanedInstanceCall
 loanedInstanceCall lower state at key instantiated receiver selected count operands =
   case instanceTarget state at key instantiated receiver selected of
     (admitted, Just (target, signature))
-      | not (null (signatureLoaned signature)), length (signatureParameters signature) == count ->
-          Just (lowerLoanedOperands lower admitted at (Direct target) signature False operands)
+      | not (null (signatureLoaned signature))
+      , Nothing <- callArityFailure (methodArgumentBlame admitted) at signature count ->
+          Just (lowerLoanedOperands lower admitted at (Direct target) signature (takesSuppliedCount signature) operands)
     _ -> Nothing
 
 {-| A call to a method instance with lowered operands, receiver first. -}

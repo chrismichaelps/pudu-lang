@@ -285,6 +285,13 @@ and a missing member fails at the read. [[Compiler Lower Method
 Value]] · [[Backend Rendering Callable Programs]]. Execution evidence
 is pending.
 
+## Declared method argument counts (#956)
+
+Declared calls pass the selected implementation's supplied count.
+Stored wrappers dispatch on that count before reading argument slots.
+The implementation evaluates omitted defaults in parameter order.
+[[Compiler Lower Default]] · [[Backend Method Programs]]
+
 ## Published progress (#496)
 
 The README progress bar counts **completed coverage areas**, not individual language
