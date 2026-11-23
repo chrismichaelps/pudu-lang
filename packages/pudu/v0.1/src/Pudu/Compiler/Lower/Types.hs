@@ -12,7 +12,7 @@ import Data.Text (Text)
 import qualified Data.Text as Text
 import Pudu.Core (CoreLayout (..), CoreType (..), CoreVariant (..), coreTypeName, recordCarrierParts, runtimeChoiceAlternatives, runtimeChoiceKey, sumCarrierParts)
 import Pudu.FloatLiteral (FloatWidth (..))
-import Pudu.IntegerLiteral (IntegerKind (BigIntKind, PlatformSigned, PlatformUnsigned, SignedKind, UnsignedKind), integerKindName, integerKindOf)
+import Pudu.IntegerLiteral (IntegerKind (BigIntKind, ExactIntKind, PlatformSigned, PlatformUnsigned, SignedKind, UnsignedKind), integerKindName, integerKindOf)
 import Pudu.Frontend.Syntax.Name (ModuleName (..))
 import Pudu.Source (Span)
 import Pudu.Type (TypeInfo (..), typeAt)
@@ -285,7 +285,10 @@ layoutOf (LowerTypes _ _ shapes _) kind = case kind of
         bound = Map.fromList (zip names arguments)
     if length names /= length arguments then Nothing else do
       declared <- traverse (variant bound) variants
-      CoreSumLayout <$> maybe (Just declared) (replacePayload declared) overridden
+      let nativeVariants
+            | isDynamic kind = declared <> concatMap exactIntVariant declared
+            | otherwise = declared
+      CoreSumLayout <$> maybe (Just nativeVariants) (replacePayload nativeVariants) overridden
   _ -> Nothing
  where
   form = formedWith shapes [] 
@@ -293,6 +296,10 @@ layoutOf (LowerTypes _ _ shapes _) kind = case kind of
     members <- traverse (form bound) payload
     let labels = maybe (map (Text.pack . show) [0 .. length members - 1]) id fields
     Just (CoreVariant name (zip labels members) (fields /= Nothing))
+  exactIntVariant entry = case coreVariantFields entry of
+    [(field, CoreIntegerType PlatformSigned)] ->
+      [entry{coreVariantName = coreVariantName entry <> "$exact", coreVariantFields = [(field, CoreIntegerType ExactIntKind)]}]
+    _ -> []
   replacePayload [] [] = Just []
   replacePayload (declared : rest) slots =
     let names = map fst (coreVariantFields declared)
@@ -327,6 +334,7 @@ nativeIntegerKind PlatformUnsigned = True
 nativeIntegerKind (SignedKind width) = width `elem` [8, 16, 32, 64, 128]
 nativeIntegerKind (UnsignedKind width) = width `elem` [8, 16, 32, 64, 128]
 nativeIntegerKind BigIntKind = True
+nativeIntegerKind ExactIntKind = True
 
 nativeScalarType :: CoreType -> Bool
 nativeScalarType (CoreIntegerType kind) = nativeIntegerKind kind

@@ -3,22 +3,26 @@ module Pudu.Backend.FrameSpec (frameProperties) where
 
 import qualified Data.Map.Strict as Map
 import qualified Data.Set as Set
+import qualified Data.Text as Text
 import Pudu.Backend.ControlPrograms (controlSuccessPrograms, controlRefusalPrograms)
 import Pudu.Backend.FunctionPrograms (functionSuccessPrograms, functionRefusalPrograms)
 import Pudu.Backend.IntegerPrograms (integerSuccessPrograms, integerRefusalPrograms)
 import Pudu.Compiler (CompileResult (..), runCompile)
 import Pudu.Compiler.Frame (lowerFrames)
 import Pudu.Compiler.Lower (LowerResult (..), lowerModule)
+import Pudu.Compiler.Lower.ArrayLoop (arrayMethodWith)
+import Pudu.Compiler.Lower.State (CallableSource (..), CallableTemplate (..), CoreSignature (..), LowerContext (..), LowerState (..), emptyContext)
 import Pudu.Compiler.Lower.Types (nativeTypes)
 import Pudu.Core
   ( CoreBinaryOperator (..), CoreBlock (..), CoreExpression (..)
-  , CoreExpressionShape (..), CoreFunction (..), CoreLocal (..), CoreLoopId (..), CoreModule (..)
-  , CoreParameter (..), CoreStatement (..), CoreStatementShape (..), CoreType (..) )
+  , CoreExpressionShape (..), CoreClosureInfo (..), CoreFunction (..), CoreLocal (..), CoreLoopId (..), CoreModule (..)
+  , CoreParameter (..), CoreStatement (..), CoreStatementShape (..), CoreType (..), suppliedCountName )
 import Pudu.Core.Frame
   ( FrameBlock (..), FrameFault (..), FrameFunction (..), FrameInstruction (..)
   , FrameModule (..), FrameSlot (..), FrameTerminator (..), FrameValue (..)
   , FrameValueShape (..), scalarOperator )
 import Pudu.Diagnostic (hasErrors)
+import Pudu.Frontend.Syntax (Declaration (..), Function (functionName), Located (..), Module (moduleDeclarations))
 import Pudu.IntegerLiteral (IntegerKind (PlatformSigned))
 import Pudu.Source (SourceName (..), Span, emptySpan, newSource)
 import Test.QuickCheck (Property, conjoin, counterexample, (===))
@@ -31,6 +35,7 @@ frameProperties =
   , ("frame lowering retains nested call destinations", testNestedCalls)
   , ("frame lowering resolves condition and break operand transfers", testTransfers)
   , ("frame lowering returns located malformed-input faults", testFaults)
+  , ("collection callback frames carry trailing defaults", testTraversalDefault)
   , ("frame lowering admits checked native corpora with closed targets", testCorpus)
   ]
 
@@ -48,6 +53,66 @@ program mainFunction helpers = CoreModule "Main" "main" (mainFunction : helpers)
 
 site :: IO Span
 site = emptySpan <$> newSource (SourceName "frames.pudu") "frame contracts"
+
+testTraversalDefault :: IO Property
+testTraversalDefault = conjoin <$> traverse check
+  [ ("map", "value: Int, amount: Int = 7", ["value", "amount", suppliedCountName], True,
+      [3], Nothing)
+  , ("map", "value: Int, amount: Int", ["value", "amount"], False,
+      [], Just "missing argument for parameter amount")
+  , ("reduce", "value: Int", ["value"], False,
+      [], Just "too many arguments in call")
+  ]
+ where
+  check (member, writtenParameters, parameterNames, defaulted, expectedCalls, wantedFailure) = do
+    source <- newSource (SourceName "Main.pudu") (Text.concat
+      ["module Main\nfn callback(", writtenParameters, ") -> Int { value }\nfn main() -> Int { 0 }\n"])
+    checked <- runCompile source
+    at <- site
+    pure $ case compileModule checked of
+      Just parsed | declaration : _ <-
+        [Located position function | Located position (FunctionDeclaration function) <- moduleDeclarations parsed
+          , locatedValue (functionName function) == "callback"] ->
+        let key = "Main.callback"
+            parameters =
+              [CoreParameter (CoreLocal index name intType) at | (index, name) <- zip [0 ..] parameterNames]
+            signature = CoreSignature parameters intType []
+            callable = CoreFunctionType (map (coreLocalType . coreParameterLocal) parameters) intType
+            template = CallableTemplate callable (NamedCallable ("Main", declaration) signature Nothing)
+            context = (emptyContext "Main" "main" Map.empty [] Map.empty Map.empty Map.empty Map.empty)
+              { contextObservedCallables = Map.singleton key template }
+            state = LowerState context 0 [[]] Map.empty 0 [] Nothing False Set.empty Nothing "main" [] [] []
+            callback = CoreExpression at callable (CoreClosure key [])
+            array = CoreArrayType intType
+            values = CoreExpression at array (CoreArray [integer at 5])
+            operands = callback : [integer at 0 | member == "reduce"]
+            (_, result) = arrayMethodWith state at member (Just (operands, values)) array intType id
+            helper = CoreFunction key parameters intType (CoreBlock [] (Just (integer at 12)))
+            info = CoreClosureInfo [] "callback" "fn Main.callback" False False Nothing
+            wantedKind
+              | member == "reduce" = intType
+              | null expectedCalls = CoreArrayType CoreUnitType
+              | otherwise = array
+         in case result of
+              Just (answer, kind) ->
+                let body = CoreBlock [CoreStatement at (CoreEvaluate answer)] (Just (integer at 0))
+                    unit = (program (entry body) [helper]){coreModuleClosures = Map.singleton key info}
+                 in case lowerFrames unit of
+                      Right lowered | mainFrame : _ <- frameModuleFunctions lowered ->
+                        let blocks = frameFunctionBlocks mainFrame
+                            calls = [passed | frame <- blocks, FrameCallValue _ _ passed _ _ <- [frameBlockTerminator frame]]
+                            stores = [(slot, frameValueShape value) | frame <- blocks, FrameStore slot value <- frameBlockInstructions frame]
+                            failures = [message | frame <- blocks, FrameFailText _ "E7003" _ slot _ <- [frameBlockTerminator frame]
+                              , (saved, FrameTextLiteral message) <- stores, saved == slot]
+                         in conjoin
+                              [ kind === wantedKind
+                              , map length calls === expectedCalls
+                              , counterexample "missing omitted ABI slot" (not defaulted || any ((== FrameZero) . snd) stores)
+                              , counterexample (show failures) (maybe True (`elem` failures) wantedFailure)
+                              ]
+                      other -> counterexample (show other) (False === True)
+              Nothing -> counterexample "traversal rejected a held callback" (False === True)
+      _ -> counterexample "could not form the callback declaration" (False === True)
 
 testSnapshots :: IO Property
 testSnapshots = do

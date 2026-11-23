@@ -318,11 +318,90 @@ slice keys share the same bounds checks. [[Backend Rendering Callable
 Programs]] covers inclusive bounds, Unicode, unsupported endpoints,
 and transfer before type validation.
 
+## Exact stored range bounds
+
+Architect → Backend Engineer. [[Compiler Lower Range]] and [[Compiler
+Lower Constant]] retain original endpoint values. [[Native Range Runtime]]
+uses those values for storage, comparison, containment, materialization
+and exact progression sums. [[Compiler Lower Slice]] checks stored
+endpoints before narrowing, and [[Compiler Lower For]] streams the held
+interval. [[Backend Rendering Callable Programs]] covers these paths.
+Execution remains deferred.
+
+## Exact Int runtime identity
+
+Architect → Backend Engineer. [[Integer Literal]] defines an internal
+exact layout with Int runtime identity. [[Backend Emit Support]]
+and [[Native Aggregate Emission]] retain its payload in frames and
+aggregates. [[Compiler Lower Scalar]] preserves checked bounds
+and exact comparisons. [[Compiler Lower Convert]] and
+[[Compiler Lower Intrinsic]] select typed conversions from the held
+integer. [[Backend Rendering Callable Programs]] covers calls,
+wrapping arithmetic and overflow. Execution remains deferred.
+
+## Dynamic exact Int payloads
+
+Architect → Backend Engineer. [[Compiler Lower Types]] provides the
+exact payload layout under the existing Int implementation identity.
+[[Compiler Lower Dynamic]], [[Compiler Lower Call]] and [[Compiler
+Lower Body]] project selected payloads into this layout. [[Compiler
+Lower Method]] reprojects mutable finals. [[Compiler Lower Scalar]]
+validates the selected logical integer kind. [[Backend Rendering
+Callable Programs]] covers retained methods, equality, set deduplication,
+writeback and diagnostic behavior. Execution remains deferred.
+
+## Held collection member selection
+
+Architect → Backend Engineer. [[Compiler Lower Body]] selects the
+held array, keyed collection or range before argument lowering.
+[[Compiler Lower Array]], [[Compiler Lower Keyed]] and [[Compiler
+Lower Range]] receive the selected value. [[Compiler Lower Dynamic]]
+retains the member lookup failure before argument effects. Keyed
+lookup results use the held value layout. [[Backend Rendering
+Callable Programs]] covers shared members and absent methods.
+
+## Held collection method arguments
+
+Architect → Backend Engineer. [[Compiler Lower Arguments]] supplies
+shape-aware argument slots. [[Compiler Lower Array]] and [[Compiler
+Lower Keyed]] preserve held operands, position conversion and diagnostic
+attribution. [[Compiler Lower Range]] and [[Native Range Runtime]] use
+the exact stride. [[Eval Range]] avoids narrowing positive strides
+and visits only selected terms. [[Backend Rendering Callable Programs]]
+covers wrapped positions, alternate keys, stride and argument failures.
+Execution remains deferred.
+
+## Traversal callback validation
+
+Architect → Backend Engineer. [[Compiler Lower Array Loop]] owns
+callback invocation and predicate checks after traversal reaches an
+item. Held builtin callbacks fail at invocation. Array predicates
+require Bool, and range filters keep only true. [[Backend Rendering
+Callable Programs]] covers empty traversal, stored methods, and
+effects before rejection. Execution remains deferred.
+
+## Callback defaults and arity
+
+Architect → Backend Engineer. [[Compiler Lower Array Loop]] selects
+the held callable's parameter profile and supplies its hidden
+argument count. [[Compiler Lower Default]] evaluates omitted defaults
+and reports required parameters in declaration order. [[Native
+Frame Lowering Tests]] covers padding, missing arguments and excess
+arguments. Execution remains deferred.
+
+## Held declared method calls
+
+Architect → Backend Engineer. [[Compiler Lower Method]] retains the
+receiver and selects its ordinary instance before argument evaluation.
+[[Compiler Lower Body]] and [[Compiler Lower Text]] route selected
+receivers through field, builtin and declared member lookup.
+[[Backend Rendering Callable Programs]] covers different result layouts,
+missing members and callback arity. Execution remains deferred.
+
 ## Next action
 
-Store arbitrary-size range endpoints in the native range value and
-feed their exact values into the slice, comparison, rendering and
-iteration operations.
+Select the held receiver before binding a declared method value,
+preserving the captured receiver and callable identity.
 
 ## Referenced by
 

@@ -809,3 +809,9 @@ so packaged builds include the same dependency closure.
 ## Selected invocation arguments (#956)
 
 Resolved Grill Log: register [[Compiler Lower Arguments]] as an internal compiler module.
+
+## Traversal callback lowering
+
+Resolved Grill Log: register [[Compiler Lower Array Loop]] as an
+internal compiler module. Its boundary is the held receiver and
+the evaluated traversal operands.

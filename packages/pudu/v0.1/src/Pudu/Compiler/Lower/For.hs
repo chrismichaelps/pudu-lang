@@ -4,10 +4,12 @@ module Pudu.Compiler.Lower.For (lowerFor) where
 
 import qualified Data.Map.Strict as Map
 import Data.Text (Text)
-import Pudu.Compiler.Lower.Control (droppedTail, expressionIsPrintValued, popLoop, pushLoop)
+import Pudu.Compiler.Lower.Arguments (ArgumentBlame (AtInvocation), argumentFailureWith, collectArguments, exactPosition)
+import Pudu.Compiler.Lower.Control (droppedTail, popLoop, pushLoop)
 import Pudu.Compiler.Lower.Dynamic (mapRuntimeChoice)
 import Pudu.Compiler.Lower.Match (lowerPattern)
 import Pudu.Compiler.Lower.Method (callInstance)
+import Pudu.Compiler.Lower.Range (selectRangeEndpoint, selectRangeItems)
 import Pudu.Compiler.Lower.State (LowerContext (..), LowerState (..), bindLocal, halt, intType, refused)
 import Pudu.Compiler.Lower.Types (ownerKeyOf, sumVariants, typeForSpan)
 import Pudu.Core
@@ -24,19 +26,15 @@ type Lowered = (LowerState, Maybe (CoreExpression, CoreType))
     start first; anything else must be a type with `begin` and `advance`. -}
 lowerFor :: LowerExpression -> LowerBlock -> LowerState -> Span -> Maybe (Located Text) -> Located Pattern -> Located Expression -> Located Block -> Lowered
 lowerFor lower block state at label binder iterated body = case locatedValue iterated of
-  RangeExpression (Just start) inclusive (Just end) -> case lowerEnds of
-    (after, Nothing) -> refused after
-    (after, Just ends@[low, high])
-      | any stops ends -> (after, Just (stopped ends, CoreNeverType))
-      | all ((== intType) . coreExpressionType) ends -> walkRange after inclusive low high
-      | otherwise -> halt (locatedSpan iterated) "a range whose ends are not Int" after
-    (after, Just _) -> refused after
-   where
-    lowerEnds = case lower state start of
-      (afterStart, Just (low, _)) | not (expressionIsPrintValued low) -> case lower afterStart end of
-        (afterEnd, Just (high, _)) | not (expressionIsPrintValued high) -> (afterEnd, Just [low, high])
-        (afterEnd, _) -> (afterEnd, Nothing)
-      (afterStart, _) -> (afterStart, Nothing)
+  RangeExpression (Just start) inclusive (Just end) ->
+    case collectArguments lower state [start, end] of
+      (after, Nothing) -> refused after
+      (after, Just bounds)
+        | any stops bounds -> (after, Just (stopped bounds, CoreNeverType))
+        | [low, high] <- bounds
+        , all ((== intType) . coreExpressionType) bounds -> walkRange after inclusive low high
+        | [low, high] <- bounds -> writtenRange after inclusive low high
+        | otherwise -> refused after
   _ -> case typeForSpan (contextTypes (lowerContext state)) (locatedSpan iterated) of
     Just CoreArrayType{} -> case lower state iterated of
       (after, Just (core, CoreNeverType)) -> (after, Just (core, CoreNeverType))
@@ -49,7 +47,10 @@ lowerFor lower block state at label binder iterated body = case locatedValue ite
     Just CoreSetType{} -> keyed
     Just CoreTextType -> listed CoreCharType (simply CoreCharType (\core -> CoreTextMethod TextChars core []))
     -- A range value walks its values; one missing an end cannot be walked.
-    Just CoreRangeType -> listed intType (simply intType (\core -> CoreRangeMethod RangeIterated core []))
+    Just CoreRangeType -> case lower state iterated of
+      (after, Just (core, CoreNeverType)) -> (after, Just (core, CoreNeverType))
+      (after, Just (core, _)) -> walkStoredRange after core
+      (after, Nothing) -> refused after
     Just kind@(CoreTupleType members@(first : _))
       | all (== first) members -> listed first (membersOf kind first members)
     Just kind
@@ -161,6 +162,56 @@ lowerFor lower block state at label binder iterated body = case locatedValue ite
             , statement (CoreIf (binary CoreEqual CoreBoolType (reading nextLocal) lastOne)
                 (CoreBlock [statement (CoreAssign moreLocal (expression CoreBoolType (CoreBoolLiteral False)))] Nothing)
                 (Just (expression CoreUnitType (CoreBlockValue (CoreBlock [statement (CoreAssign nextLocal (binary CoreAdd intType (reading nextLocal) one))] Nothing)))))
+            , matched ])
+     in looped withItem prefix turn
+
+  writtenRange current inclusive low high =
+    let (withLow, start) = hidden current (coreExpressionType low)
+        (withHigh, end) = hidden withLow (coreExpressionType high)
+        atRange = locatedSpan iterated
+        declarations = [statement (CoreDeclare start low), statement (CoreDeclare end high)]
+        (ready, result) = selectRangeEndpoint atRange withHigh (reading start) $ \held first ->
+          selectRangeEndpoint atRange held (reading end) $ \valid last' ->
+            let range = expression CoreRangeType (CoreRangeValue (Just (asExact first)) inclusive (Just (asExact last')))
+             in walkStoredRange valid range
+     in (ready, (\(value, kind) -> (expression kind (CoreBlockValue (CoreBlock declarations (Just value))), kind)) <$> result)
+
+  exactKind = CoreIntegerType BigIntKind
+  asExact value
+    | coreExpressionType value == exactKind = value
+    | otherwise = expression exactKind (CoreIntegerConvert BigIntKind value)
+
+  walkStoredRange current core = selectRangeItems at current core $ \ready range arrayKind -> case arrayKind of
+    CoreArrayType itemKind -> walkExactRange ready range itemKind
+    _ -> refused ready
+
+  walkExactRange current range itemKind =
+    let (withNext, next) = hidden current exactKind
+        (withHigh, high) = hidden withNext exactKind
+        (withEndMode, endMode) = hidden withHigh CoreBoolType
+        (withItem, item) = hidden withEndMode itemKind
+        field kind name = expression kind (CoreRangeMethod name range [])
+        within = expression CoreBoolType (CoreIfValue (reading endMode)
+          (CoreBlock [] (Just (binary CoreLessOrEqual CoreBoolType (reading next) (reading high))))
+          (binary CoreLess CoreBoolType (reading next) (reading high)))
+        oneExact = expression exactKind (CoreIntegerLiteral BigIntKind 1)
+        payload = if itemKind == intType then snd (exactPosition at (reading next)) else expression itemKind (CoreIntegerConvert ExactIntKind (reading next))
+        unbounded = argumentFailureWith AtInvocation at "E7001"
+          (Just "implement Std.Iter.Sequence for it, which is begin and advance, or convert it to an array first")
+          (expression CoreTextType (CoreTextLiteral "cannot iterate a range"))
+        prefix =
+          [ statement (CoreIf (expression CoreBoolType (CoreNot (field CoreBoolType RangeIsBoundedOf)))
+              (CoreBlock [statement (CoreEvaluate unbounded)] Nothing) Nothing)
+          , statement (CoreDeclare next (field exactKind RangeStartExact))
+          , statement (CoreDeclare high (field exactKind RangeEndExact))
+          , statement (CoreDeclare endMode (field CoreBoolType RangeIsInclusiveOf)) ]
+        turn pushed identity = case element pushed item of
+          (after, Nothing) -> (after, Nothing)
+          (after, Just matched) -> (after, Just
+            [ statement (CoreIf (expression CoreBoolType (CoreNot within))
+                (CoreBlock [statement (CoreBreak identity Nothing)] Nothing) Nothing)
+            , statement (CoreDeclare item payload)
+            , statement (CoreAssign next (binary CoreAdd exactKind (reading next) oneExact))
             , matched ])
      in looped withItem prefix turn
 

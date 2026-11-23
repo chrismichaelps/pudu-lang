@@ -84,3 +84,7 @@ omitted arguments into its call instruction.
 ## Runtime layouts in stored methods and builtins (#956)
 
 Resolved Grill Log: Direct output and output callable bodies use one conversion to stream text. The held runtime alternative determines whether text is written raw or rendered.
+
+## Exact dynamic Int payloads
+
+Resolved Grill Log: Project checked dynamic arguments before specializing or invoking a named callable.

@@ -241,3 +241,8 @@ shared token text renderer.
 ### Resolved Grill Log
 
 Direct reporting and rendering from a cell share one canonical owner spelling.
+
+## Exact range cells
+
+Resolved Grill Log: range layouts require the exact integer cell even
+when no source function itself declares an exact integer.

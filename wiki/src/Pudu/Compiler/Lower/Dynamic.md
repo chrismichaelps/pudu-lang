@@ -94,3 +94,17 @@ Resolved Grill Log: Copy arrays or keyed values into a wider element layout thro
 ## Selected receiver layouts (#956)
 
 Resolved Grill Log: Report the held value kind at a failed member read or index. Preserve the evaluator’s distinct names for nominal members and index failures.
+
+## Exact Int argument layouts
+
+Resolved Grill Log: an exact Int counts as an alternate layout for
+specialization. Its source identity stays Int and callable frames retain
+the actual owned cell through argument and return settlement.
+
+## Exact dynamic Int payloads
+
+Resolved Grill Log: Oversized Int values widen by their retained layout. When a read can hold multiple alternatives, widen each proven payload into the same dynamic trait layout after evaluating the read once.
+
+## Held collection member selection
+
+Resolved Grill Log: A missing member evaluates the held receiver once before reporting its runtime owner or shape.

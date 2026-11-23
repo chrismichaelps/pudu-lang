@@ -43,3 +43,15 @@ is guarded and when bounds may clamp to the native position carrier.
 
 Resolved Grill Log: never substitute a narrower value before an
 operation validates a relationship between two original operands.
+
+## Collection argument slots
+
+Resolved Grill Log: an unconstrained value passes in its held layout.
+A shape slot selects an eligible held receiver-independent argument.
+Array method positions and store keys wrap through the platform word
+when the evaluator converts them before indexing.
+
+## Traversal operand transfers
+
+Resolved Grill Log: the shared stopping block evaluates the supplied
+prefix and exits before traversal if the last operand transfers.

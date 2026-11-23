@@ -9,7 +9,7 @@ import qualified Pudu.Compiler.Lower.Arguments as Arguments
 import Pudu.Compiler.Lower.Bytes (bytesOfArguments)
 import Pudu.Compiler.Lower.Call (outputResult, outputText)
 import Pudu.Compiler.Lower.Concurrent (concurrentCallable, concurrentPrimitive)
-import Pudu.Compiler.Lower.Convert (charFromCodeCore)
+import Pudu.Compiler.Lower.Convert (charFromCodeArguments)
 import Pudu.Compiler.Lower.WordMap (wordMapCallable, wordMapMethod)
 import Pudu.Compiler.Lower.Decimal (decimalCallable)
 import Pudu.Compiler.Lower.Text (textCallable)
@@ -17,7 +17,7 @@ import Pudu.Compiler.Lower.Keyed (Blame (AtCaller), keyedBuilderCarrier, keyedFr
 import Pudu.Compiler.Lower.Store (storeCallable, storePrimitive)
 import Pudu.Compiler.Lower.Kernel (kernelCallable)
 import Pudu.Compiler.Lower.Swiss (swissCallable, swissPrimitive)
-import Pudu.Compiler.Lower.State (CallableSource (..), CallableTemplate (..), LowerContext (..), LowerState (..), halt, intType, lookupLocal, resolveFunction, startFunction)
+import Pudu.Compiler.Lower.State (CallableSource (..), CallableTemplate (..), LowerContext (..), LowerState (..), halt, lookupLocal, resolveFunction, startFunction)
 import Pudu.Compiler.Lower.Stop (panicBody, untypedConvertBody, wrongPanicBody)
 import Pudu.Compiler.Lower.Types (nativeValueType, typeForSpan)
 import Pudu.Core
@@ -45,7 +45,7 @@ specializeIntrinsicValue state at name checked supplied = do
 
 adaptable :: Text -> Bool
 adaptable name = name `elem`
-  ["display", "show", "print", "printPart", "printError", "printErrorPart", "panic", "mapOf", "setOf", "bytesOf"]
+  ["display", "show", "print", "printPart", "printError", "printErrorPart", "panic", "mapOf", "setOf", "bytesOf", "charFromCode"]
   || case textCallable name of { Just _ -> True; Nothing -> False }
 
 {-| `let stop: fn(Str) -> Never = panic`. Checking gives panic no type (#634),
@@ -181,8 +181,8 @@ register state at name key kind arguments result build
     solved signature is not one this builtin has. -}
 collectionBody :: Span -> Text -> CoreType -> CoreType -> Maybe (LowerState -> CoreExpression -> Lowered)
 collectionBody at name argument result = case (name, argument, result) of
-  ("charFromCode", _, CoreSumType _ [CoreCharType]) | argument == intType ->
-    Just (\entered operand -> charFromCodeCore entered at result operand)
+  ("charFromCode", _, CoreSumType _ [CoreCharType]) ->
+    Just (\entered operand -> charFromCodeArguments Arguments.AtCaller at result entered [operand])
   ("bytesOf", _, CoreBytesType) ->
     Just (\entered operand -> bytesOfArguments Arguments.AtCaller at entered [operand])
   ("mapOf", CoreArrayType _, CoreMapType _ _) -> keyed

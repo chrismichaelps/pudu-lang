@@ -5,7 +5,8 @@
 module Pudu.Compiler.Lower.Default (takesSuppliedCount, trailingDefaults, suppliedArguments, lowerDefaultedBody) where
 
 import Data.Maybe (isJust)
-import Pudu.Compiler.Lower.Dynamic (widenTo)
+import Pudu.Compiler.Lower.Arguments (ArgumentBlame (AtCaller), argumentFailureWith)
+import Pudu.Compiler.Lower.Dynamic (projectRuntimeValue)
 import Pudu.Compiler.Lower.State (CoreSignature (..), LowerContext (..), LowerState (..), intType, refuse)
 import Pudu.Core
 import Pudu.Frontend.Syntax (Expression, Function (..), Located (..), Parameter (..))
@@ -38,32 +39,40 @@ suppliedArguments at parameterTypes given =
 {-| The body with its defaults in front. A default is lowered in the
     callee, after the parameters before it are in scope. -}
 lowerDefaultedBody :: LowerExpression -> LowerBody -> LowerBody
-lowerDefaultedBody lower lowerBody located signature state = case foldl' fill (state, Just []) defaults of
-  (after, Nothing) -> (after, Nothing)
-  (after, Just prologue) -> case lowerBody located signature after of
-    (final, Just lowered) ->
-      let body = coreFunctionBody lowered
-       in (final, Just lowered{coreFunctionBody = body{coreBlockStatements = prologue <> coreBlockStatements body}})
-    other -> other
+lowerDefaultedBody lower lowerBody located signature state =
+  case reverse (map coreParameterLocal (signatureParameters signature)) of
+    supplied : parameters
+      | coreLocalName supplied == suppliedCountName ->
+          let bindings = zip3 [0 :: Integer ..] (reverse parameters) (functionParameters (locatedValue located))
+           in case foldl' (fill supplied) (state, Just []) bindings of
+                (after, Nothing) -> (after, Nothing)
+                (after, Just prologue) -> case lowerBody located signature after of
+                  (final, Just lowered) ->
+                    let body = coreFunctionBody lowered
+                     in (final, Just lowered{coreFunctionBody = body{coreBlockStatements = reverse prologue <> coreBlockStatements body}})
+                  other -> other
+    _ -> lowerBody located signature state
  where
-  locals = map coreParameterLocal (signatureParameters signature)
-  supplied = last locals
-  defaults =
-    [ (index, local, value)
-    | (index, Just value, local) <- zip3 [0 :: Integer ..] (trailingDefaults (locatedValue located)) locals ]
-  fill (current, Nothing) _ = (current, Nothing)
-  -- A default of an implementing type widens to a dynamic parameter, as an
-  -- argument written at the call does.
-  fill (current, Just done) (index, local, value) = case lower current value of
-    (after, Just lowered)
-      | kind == coreLocalType local || kind == CoreNeverType ->
+  fill _ (current, Nothing) _ = (current, Nothing)
+  fill supplied (current, Just done) (index, local, Located parameterAt parameter) =
+    case parameterDefault parameter of
+      Nothing ->
+        let name = locatedValue (parameterName parameter)
+            message = CoreExpression parameterAt CoreTextType (CoreTextLiteral ("missing argument for parameter " <> name))
+            failure = argumentFailureWith AtCaller parameterAt "E7003"
+              (Just "supply the argument or give the parameter a default") message
+         in (current, Just (whenMissing supplied parameterAt index (CoreEvaluate failure) : done))
+      Just value -> case lower current value of
+        (after, Nothing) -> (after, Nothing)
+        (after, Just (lowered, _)) ->
           let at = locatedSpan value
-              count = CoreExpression at intType (CoreReadLocal supplied)
-              position = CoreExpression at intType (CoreIntegerLiteral PlatformSigned index)
-              missing = CoreExpression at CoreBoolType (CoreBinary CoreLessOrEqual count position)
-              assigned = CoreBlock [CoreStatement at (CoreAssign local core)] Nothing
-           in (after, Just (done <> [CoreStatement at (CoreIf missing assigned Nothing)]))
-      | otherwise -> (refuse (locatedSpan value) ("a default of type " <> coreTypeName kind) after, Nothing)
-     where
-      (core, kind) = widenTo (contextTypes (lowerContext after)) (coreLocalType local) lowered
-    (after, Nothing) -> (after, Nothing)
+              (ready, core) = projectRuntimeValue (contextTypes (lowerContext after)) after (coreLocalType local) lowered
+              kind = coreExpressionType core
+           in if kind == coreLocalType local || kind == CoreNeverType
+                then (ready, Just (whenMissing supplied at index (CoreAssign local core) : done))
+                else (refuse at ("a default of type " <> coreTypeName kind) ready, Nothing)
+  whenMissing supplied at index action =
+    let count = CoreExpression at intType (CoreReadLocal supplied)
+        position = CoreExpression at intType (CoreIntegerLiteral PlatformSigned index)
+        missing = CoreExpression at CoreBoolType (CoreBinary CoreLessOrEqual count position)
+     in CoreStatement at (CoreIf missing (CoreBlock [CoreStatement at action] Nothing) Nothing)

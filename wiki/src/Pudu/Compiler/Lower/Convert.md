@@ -43,3 +43,10 @@ the surrogates, and builds `Some(CoreCharOfCode code)` or `None`.
 Export charFromCodeCore: the held code, the Unicode scalar test and the
 Some/None choice for an already lowered Int operand.
 Resolved Grill Log: direct calls and charFromCode values both use it.
+
+## Selected exact integer conversions
+
+Resolved Grill Log: select the held argument before testing the
+mathematical value against the destination. Character conversion
+clamps only to a sentinel outside the scalar range, where the
+existing bounds check yields None.

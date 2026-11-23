@@ -266,6 +266,7 @@ frameUsesBig source = any usesBig (frameModuleFunctions source)
   usesBig function = any (mentions (frameModuleLayouts source) bigType) (frameFunctionResult function
     : map frameSlotType (frameFunctionParameters function <> frameFunctionSlots function))
   bigType (CoreIntegerType kind) = isBigInteger kind
+  bigType CoreRangeType = True
   bigType _ = False
 
 frameUsesDecimal :: FrameModule -> Bool

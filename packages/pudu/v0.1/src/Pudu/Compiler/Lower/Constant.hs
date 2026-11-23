@@ -15,7 +15,7 @@ import Pudu.Core
 import Pudu.DecimalLiteral (Decimal (..))
 import Pudu.Eval.Frozen (thaw)
 import Pudu.Eval.Value (Value (..), OrdValue (..))
-import Pudu.IntegerLiteral (IntegerKind (PlatformSigned), integerKindFits)
+import Pudu.IntegerLiteral (IntegerKind (BigIntKind, PlatformSigned), integerKindFits)
 import Pudu.Source (Span)
 
 {-| A constant folding left no product for, such as a table of functions,
@@ -110,7 +110,7 @@ project types at kind value = CoreExpression at kind <$> shape
   member = project types at
   keyed element members = CoreKeyedMethod KeyedFromArray
     (CoreExpression at (CoreArrayType element) (CoreArray members)) []
-  endpoint number = member (CoreIntegerType PlatformSigned) (IntValue PlatformSigned number)
+  endpoint number = member (CoreIntegerType BigIntKind) (IntValue BigIntKind number)
   field fields (name, fieldKind) = do
     held <- Map.lookup name fields
     (,) name <$> member fieldKind held

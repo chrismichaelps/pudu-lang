@@ -10,7 +10,7 @@ import Pudu.Compiler.Lower.State (LowerContext (..), LowerState (..), bindLocal,
 import Pudu.Compiler.Lower.Types (typeForSpan)
 import Pudu.Core
 import Pudu.Frontend.Syntax (Expression (..), Located (..))
-import Pudu.IntegerLiteral (IntegerKind (PlatformSigned))
+import Pudu.IntegerLiteral (IntegerKind (BigIntKind, PlatformSigned))
 
 type LowerExpression = LowerState -> Located Expression -> Lowered
 type Lowered = (LowerState, Maybe (CoreExpression, CoreType))
@@ -60,7 +60,7 @@ lowerRangeIndex lower state receiver key@(Located at keyShape)
     | coreExpressionType range == CoreRangeType =
         selectReceiver current held [] $ \ready container ->
           let field name kind = expression kind (CoreRangeMethod name range [])
-           in slice ready container (field RangeStartOf intType) (field RangeEndOf intType)
+           in slice ready container (field RangeStartExact exactKind) (field RangeEndExact exactKind)
                 (field RangeHasEnd CoreBoolType) (field RangeIsInclusiveOf CoreBoolType)
     | otherwise = selectReceiver current held [range] (\ready target -> invalid ready target [range])
 
@@ -122,6 +122,7 @@ lowerRangeIndex lower state receiver key@(Located at keyShape)
   reading local = expression (coreLocalType local) (CoreReadLocal local)
   declare local value = statement (CoreDeclare local value)
   number = expression intType . CoreIntegerLiteral PlatformSigned
+  exactKind = CoreIntegerType BigIntKind
   zero = number 0
   one = number 1
   boolean = expression CoreBoolType . CoreBoolLiteral

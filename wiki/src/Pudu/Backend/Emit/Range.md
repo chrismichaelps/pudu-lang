@@ -19,7 +19,7 @@ operation with its failure sites.
 - **Q:** Why go through aggregate helpers at all? **A:** Tuples, records,
   arrays, maps and sets holding ranges reach them by name, as they reach every
   other member type's.
-- A range holds no references, so dropping one only frees its box.
+- A range releases its two retained endpoints when its last owner drops.
 
 ## Dependencies and consumers
 
@@ -28,3 +28,17 @@ operation with its failure sites.
 ## Referenced by
 
 [[Native Aggregate Emission]] · [[Backend Frame Values]] · [[Native Range Values]] · [[src/Pudu/Backend/_MOC]]
+
+## Exact endpoint storage
+
+Resolved Grill Log: release both retained endpoints with the range.
+Provide exact endpoint reads to consumers that check mathematical
+bounds. The direct range queries consume the exact stored values.
+
+## Exact Int layout
+
+Resolved Grill Log: The exact materializer selects the pointer cell for stored Int members.
+
+## Exact held range strides
+
+Resolved Grill Log: The step helper receives an exact integer stride before sizing its result.

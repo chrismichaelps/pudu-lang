@@ -88,3 +88,8 @@ Resolved Grill Log: Return the settled task closure from internal async function
 Resolved Grill Log: async entry reporting reads the selected Result
 layout, including when the failure payload uses an alternate native
 carrier. It keeps the entry's status convention.
+
+## Dynamic defaults
+
+Resolved Grill Log: project a selected default into the checked
+dynamic parameter layout before the entry binds it.

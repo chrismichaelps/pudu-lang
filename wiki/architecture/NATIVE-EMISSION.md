@@ -224,6 +224,59 @@ Stored slice keys dispatch on their held layout and share the same
 bounds implementation. Widening the stored range representation is
 pending. [[Compiler Lower Slice]] · [[Backend Rendering Callable Programs]]
 
+## Exact stored range bounds (#956)
+
+Stored ranges own exact endpoints for slicing, rendering, ordering,
+membership and finite extent. Native sums compute the exact progression,
+and loops walk a cursor. [[Native Range Runtime]] · [[Compiler Lower For]]
+
+## Exact Int runtime identity (#956)
+
+Wide range members use the Int runtime name and checked arithmetic
+rules. Their storage preserves the mathematical value through frames
+and conversions. Dynamic traits retain the exact payload while
+selecting the Int implementation. A mutable final can change the
+payload layout. [[Integer Literal]] · [[Compiler Lower Scalar]] ·
+[[Compiler Lower Dynamic]]. Execution evidence is pending.
+
+## Held collection member selection (#956)
+
+Array, keyed and range calls select the held receiver before evaluating
+arguments. Shared names use the held operation and result layout.
+Missing members stop at lookup. [[Compiler Lower Body]] ·
+[[Backend Rendering Callable Programs]]. Execution evidence is pending.
+
+## Held collection arguments and strides (#956)
+
+Selected array, keyed and range calls validate operands after evaluation.
+Array methods and stores preserve their platform-word conversions.
+Ranges use the exact positive stride in both execution paths and
+allocate only the selected terms. [[Compiler Lower Arguments]] ·
+[[Native Range Runtime]]. Execution evidence is pending.
+
+## Traversal callbacks (#956)
+
+Array and range traversal validate held callbacks only when reached.
+Array filter and sort preserve their Boolean-result diagnostics.
+Range filter discards other results after evaluating them.
+[[Compiler Lower Array Loop]] · [[Backend Rendering Callable Programs]].
+Execution evidence is pending.
+
+## Traversal callback defaults (#956)
+
+Callbacks use the held callable profile to pass the supplied count
+and omitted slots. The default prologue reports a missing required
+parameter at invocation after earlier defaults. [[Compiler Lower
+Array Loop]] · [[Compiler Lower Default]]. Execution evidence is pending.
+
+## Held declared method calls (#956)
+
+Ordinary calls select the held receiver before evaluating arguments.
+The selected member can supply a different result layout, including a
+callable with its own parameter profile. Missing members stop before
+argument effects. [[Compiler Lower Method]] · [[Compiler Lower Body]] ·
+[[Backend Rendering Callable Programs]]. Execution evidence is pending.
+
 ## Published progress (#496)
 
 The README progress bar counts **completed coverage areas**, not individual language

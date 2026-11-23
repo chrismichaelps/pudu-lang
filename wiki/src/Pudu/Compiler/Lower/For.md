@@ -89,3 +89,18 @@ carrier for the item local and its binder on every turn.
 ## Runtime keyed layouts (#956)
 
 Resolved Grill Log: Iteration reads keys and entries with the lowered collection carrier. The binder uses the corresponding item layout.
+
+## Exact stored range iteration
+
+Keep the direct Int loop for written Int bounds. For a stored or
+wider range, walk the exact cursor without materializing the interval.
+Check boundedness before the body. Read the ordinary Int payload
+when every visited member fits.
+
+Resolved Grill Log: the iteration step uses exact arithmetic even
+when the exclusive upper endpoint is beyond Int. An early break
+consumes only the prefix reached by the loop.
+
+## Exact Int layout
+
+Resolved Grill Log: The exact cursor advances at mathematical precision. An out-of-range binder value exposes Int identity.

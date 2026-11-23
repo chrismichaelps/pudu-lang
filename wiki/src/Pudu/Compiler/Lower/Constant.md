@@ -118,3 +118,8 @@ to the initializer.
 A folded `Bytes` value, at top level or nested inside a folded aggregate,
 projects to one `CoreBytesLiteral`. Resolved Grill Log: the literal keeps the
 value's exact bytes, including NUL and every value above 127.
+
+## Exact folded ranges
+
+Resolved Grill Log: project arbitrary folded endpoint values into the
+same exact integer inputs used for ordinary range construction.

@@ -1,5 +1,5 @@
 {-| @Pudu.Compiler.Lower.Text — built-in Str and Char methods on a lowered receiver. -}
-module Pudu.Compiler.Lower.Text (lowerTextMethod, lowerTextPrimitive, textCallable) where
+module Pudu.Compiler.Lower.Text (lowerTextMethod, lowerSelectedMember, lowerTextPrimitive, textCallable) where
 
 import Data.Text (Text)
 import Pudu.Compiler.Lower.Arguments
@@ -7,7 +7,7 @@ import Pudu.Compiler.Lower.Arguments
   , clampedPosition, collectArguments, exactPosition, integerComparison, methodArgumentBlame, positionSlot
   )
 import Pudu.Compiler.Lower.Bytes (lowerBytesOn)
-import Pudu.Compiler.Lower.Dynamic (mapRuntimeChoice, missingRuntimeMember, preserveRuntimeResult)
+import Pudu.Compiler.Lower.Dynamic (hasRuntimeChoice, mapRuntimeChoice, missingRuntimeMember, preserveRuntimeResult)
 import Pudu.Compiler.Lower.Decimal (lowerTextToDecimal)
 import Pudu.Compiler.Lower.State (LowerContext (..), LowerState (..), bindLocal, halt, intType, refused)
 import Pudu.Compiler.Lower.Types (typeForSpan)
@@ -27,17 +27,31 @@ lowerTextMethod :: LowerExpression -> (LowerState -> CoreExpression -> Maybe Low
   -> (LowerState, Maybe (CoreExpression, CoreType))
 lowerTextMethod lower fallback state at callee receiver member arguments = case lower state receiver of
   (after, Nothing) -> refused after
-  (after, Just (coreReceiver, _)) -> select False after coreReceiver
+  (after, Just (coreReceiver, actual)) ->
+    let types = contextTypes (lowerContext after)
+        selected = hasRuntimeChoice actual || maybe False (/= actual) (typeForSpan types (locatedSpan receiver))
+     in lowerMemberOn lower fallback after at callee member arguments selected coreReceiver
+
+lowerSelectedMember :: LowerExpression -> (LowerState -> CoreExpression -> Maybe Lowered)
+  -> LowerState -> Span -> Span -> Text -> [Located Expression] -> CoreExpression -> Lowered
+lowerSelectedMember lower fallback state at callee member arguments =
+  lowerMemberOn lower fallback state at callee member arguments True
+
+lowerMemberOn :: LowerExpression -> (LowerState -> CoreExpression -> Maybe Lowered)
+  -> LowerState -> Span -> Span -> Text -> [Located Expression] -> Bool -> CoreExpression -> Lowered
+lowerMemberOn lower fallback state at callee member arguments initiallySelected value =
+  let (ready, lowered) = select initiallySelected state value
+      preserve (answer, _)
+        | initiallySelected, Just expected <- typeForSpan (contextTypes (lowerContext state)) at =
+            let carried = preserveRuntimeResult expected answer
+             in (carried, coreExpressionType carried)
+        | otherwise = (answer, coreExpressionType answer)
+   in (ready, preserve <$> lowered)
  where
   select selected current held
     | kind == CoreNeverType = (current, Just (held, kind))
-    | Just (after, dispatch) <- mapRuntimeChoice current at CoreNeverType held
-        (\ready value -> fmap (fmap fst) (select True ready value)) =
-        (after, do
-          (answer, _) <- dispatch
-          let types = contextTypes (lowerContext after)
-              result = maybe answer (\checked -> preserveRuntimeResult checked answer) (typeForSpan types at)
-          pure (result, coreExpressionType result))
+    | Just dispatch <- mapRuntimeChoice current at CoreNeverType held
+        (\ready value -> fmap (fmap fst) (select True ready value)) = dispatch
     | kind == CoreBytesType, member `elem` map fst bytesMethods =
         lowerBytesOn lower current at held member arguments
     | kind == CoreTextType = textMethod selected current held
@@ -51,7 +65,7 @@ lowerTextMethod lower fallback state at callee receiver member arguments = case 
    where
     kind = coreExpressionType held
   missing selected current held
-    | selected, Just implementation <- fallback current held = implementation
+    | Just implementation <- fallback current held = implementation
     | selected =
         let failure = missingRuntimeMember callee member held
          in (current, Just (failure, CoreNeverType))

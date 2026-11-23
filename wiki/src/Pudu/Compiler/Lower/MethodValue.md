@@ -124,3 +124,7 @@ capture for each invocation and uses a separate layout demand.
 ## Selected receiver layouts (#956)
 
 Resolved Grill Log: Reading a bound member selects the receiver carrier before building its closure. Missing members report at the member access.
+
+## Exact dynamic Int payloads
+
+Resolved Grill Log: A stored dynamic trait method retains its receiver once and invokes the same dispatch as a direct call.

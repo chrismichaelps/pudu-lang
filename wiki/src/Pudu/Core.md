@@ -547,3 +547,8 @@ Resolved Grill Log: A record carrier retains its canonical owner and declared ar
 ## Runtime layouts in sum payloads (#956)
 
 Resolved Grill Log: A sum keeps its canonical owner and declared type arguments. A reserved carrier suffix records the physical payload layouts in declaration order.
+
+## Exact range reads
+
+Resolved Grill Log: distinguish exact endpoint access from presence.
+Length and sum keep their checked Int result and overflow diagnostics.

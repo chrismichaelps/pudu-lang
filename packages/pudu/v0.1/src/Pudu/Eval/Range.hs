@@ -155,7 +155,9 @@ callRangeMethod apply spanValue method receiver arguments =
       | stride <= 0 ->
           abortAt (Just spanValue) "E7004" "a step must be positive"
             (Just "step by one or more; a range only ever counts upward")
-      | otherwise -> arrayOf . every (fromInteger stride :: Int) <$> elements "step"
+      | Just low <- lowerBound, Just high <- upperBound ->
+          pure (arrayOf [low, low + stride .. if inclusiveEnd then high else high - 1])
+      | otherwise -> arrayOf <$> elements "step"
     (RangeMap, [function]) -> do
       values <- elements "map"
       mapped <- mapM (\held -> apply spanValue function [intOf (fromIntegral held)]) values
@@ -198,13 +200,6 @@ callRangeMethod apply spanValue method receiver arguments =
         (Just "give the range a start and an end, or bound it against a value first")
 
   arrayOf values = ArrayValue (Seq.fromList (map (intOf . fromIntegral) values))
-
-  every stride = go 0
-   where
-    go _ [] = []
-    go position (held : rest)
-      | position `mod` stride == 0 = held : go (position + 1) rest
-      | otherwise = go (position + 1) rest
 
   foldMWith function carried values = case values of
     [] -> pure carried

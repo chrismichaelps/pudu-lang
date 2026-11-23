@@ -17,12 +17,12 @@ import qualified Data.Set as Set
 import Data.Text (Text)
 import qualified Data.Text as Text
 import Pudu.Compiler.Lower.State (LowerContext (..), LowerState (..), MutableSite, bindLocal, intType, refused)
-import Pudu.Compiler.Lower.Types (LowerTypes, dynamicIdentity, isDynamic, recordFields, sumVariants)
+import Pudu.Compiler.Lower.Types (LowerTypes, dynamicIdentity, isDynamic, ownerKeyOf, recordFields, sumVariants)
 import Pudu.Core
 import Pudu.Frontend.Syntax
   ( Declaration (..), Impl (..), Located (..), Module (..), Trait (..), TypeSyntax (..), moduleNameText )
 import Pudu.Frontend.Syntax.Name (ModuleName (..))
-import Pudu.IntegerLiteral (IntegerKind (PlatformSigned))
+import Pudu.IntegerLiteral (IntegerKind (ExactIntKind, PlatformSigned))
 import Pudu.Source (Span)
 import Pudu.Type.Value (NominalId (..), Type (..), nominalKey)
 
@@ -102,10 +102,14 @@ widen types expected core
   | Just alternatives <- runtimeChoiceAlternatives expected
   , Just (tag, _) <- find ((== actual) . snd) alternatives =
       runtimeBox expected tag core
-  | isDynamic expected =
-      case sumVariants types expected >>= find ((== [actual]) . map snd . coreVariantFields) of
-        Just variant -> CoreExpression at expected (CoreConstruct (coreVariantName variant) [("0", core)])
-        Nothing -> core
+  | isDynamic expected
+  , Just variant <- sumVariants types expected >>= find ((== [actual]) . map snd . coreVariantFields) =
+      CoreExpression at expected (CoreConstruct (coreVariantName variant) [("0", core)])
+  | isDynamic expected
+  , Just _ <- runtimeChoiceAlternatives actual
+  , CoreConstruct _ [("0", payload)] <- coreExpressionShape core =
+      let projected = widen types expected payload
+       in if settled projected expected then projected{coreExpressionSpan = at} else core
   | otherwise = maybe core (CoreExpression at expected) rebuilt
  where
   actual = coreExpressionType core
@@ -176,8 +180,12 @@ missingRuntimeMember :: Span -> Text -> CoreExpression -> CoreExpression
 missingRuntimeMember at member held = case coreExpressionType held of
   CoreSumType{} -> failedWithKind at ("no field or method " <> member <> " on a ") held
   CoreTupleType{} -> failedWithKind at ("cannot read " <> member <> " from a ") held
-  kind -> CoreExpression at CoreNeverType (CoreFailText "E7001" Nothing
-    (CoreExpression at CoreTextType (CoreTextLiteral ("no field or method " <> member <> " on a " <> coreTypeName kind))) Nothing)
+  kind ->
+    let owner = maybe (coreStaticRuntimeKind kind) id (ownerKeyOf kind)
+        message = CoreExpression at CoreTextType (CoreTextLiteral ("no field or method " <> member <> " on a " <> owner))
+        failure = CoreExpression at CoreNeverType (CoreFailText "E7001" Nothing message Nothing)
+        evaluated = CoreStatement (coreExpressionSpan held) (CoreEvaluate held)
+     in CoreExpression at CoreNeverType (CoreBlockValue (CoreBlock [evaluated] (Just failure)))
 
 invalidRuntimeIndex :: LowerState -> Span -> CoreExpression -> [CoreExpression] -> (LowerState, CoreExpression)
 invalidRuntimeIndex state at receiver operands =
@@ -203,6 +211,7 @@ runtimeCarriers kind = case runtimeChoiceAlternatives kind of
 
 hasRuntimeChoice :: CoreType -> Bool
 hasRuntimeChoice kind = case kind of
+  CoreIntegerType ExactIntKind -> True
   _ | Just _ <- runtimeChoiceAlternatives kind -> True
   CoreFunctionType inputs result -> any hasRuntimeChoice (result : inputs)
   CoreTupleType members -> any hasRuntimeChoice members
@@ -239,6 +248,9 @@ projectRuntimeValue types state expected core
   , runtimeCarriers actual `Set.isSubsetOf` runtimeCarriers expected
   , Just (after, Just (mapped, _)) <- mapRuntimeChoice state (coreExpressionSpan core) expected core choose ->
       (after, mapped)
+  | isDynamic expected
+  , Just (ready, Just (projected, kind)) <- mapRuntimeChoice state (coreExpressionSpan core) expected core projectMember
+  , kind `elem` [expected, CoreNeverType] = (ready, projected)
   | expected /= actual
   , hasRuntimeChoice expected
   , aggregateType expected

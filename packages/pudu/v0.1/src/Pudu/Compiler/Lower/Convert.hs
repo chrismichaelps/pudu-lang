@@ -1,9 +1,13 @@
 {-| @Pudu.Compiler.Lower.Convert — `convertInteger[T](value)`. The value runs
     into a local, then a fit test picks `Some` of the converted value or
     `None`, as `callConvertInteger` answers. -}
-module Pudu.Compiler.Lower.Convert (lowerConvertInteger, lowerCharFromCode, charFromCodeCore) where
+module Pudu.Compiler.Lower.Convert (lowerConvertInteger, lowerCharFromCode, charFromCodeArguments) where
 
-import Pudu.Compiler.Lower.Control (expressionIsPrintValued)
+import Pudu.Compiler.Lower.Arguments
+  ( ArgumentBlame (..), ArgumentSlot (IntegerSlot), argumentFailure, argumentFailureWith
+  , callWithRuntimeArguments, clampedPosition, collectArguments
+  )
+import Pudu.Compiler.Lower.Dynamic (mapRuntimeChoice)
 import Pudu.Compiler.Lower.State (LowerContext (..), LowerState (..), bindLocal, halt, intType, refused)
 import Pudu.IntegerLiteral (IntegerKind (..))
 import Pudu.Compiler.Lower.Types (typeForSpan)
@@ -19,30 +23,43 @@ lowerConvertInteger lower state at arguments = case (typeForSpan (contextTypes (
   (Just option@(CoreSumType _ [target@(CoreIntegerType kind)]), [argument]) -> case lower state argument of
     (after, Nothing) -> refused after
     (after, Just (core, CoreNeverType)) -> (after, Just (core, CoreNeverType))
-    (after, Just (core, CoreIntegerType _))
-      | expressionIsPrintValued core -> halt (locatedSpan argument) "a Result[(), Str] call argument" after
-      | otherwise ->
-          let (withHeld, held) = bindLocal after "" (coreExpressionType core)
-              expression shape kind' = CoreExpression at kind' shape
-              value = expression (CoreReadLocal held) (coreExpressionType core)
-              some = expression (CoreConstruct "Some" [("0", expression (CoreIntegerConvert kind value) target)]) option
-              none = expression (CoreConstruct "None" []) option
-              choice = expression (CoreIfValue (expression (CoreIntegerFits kind value) CoreBoolType) (CoreBlock [] (Just some)) none) option
-           in (withHeld, Just (expression (CoreBlockValue (CoreBlock [CoreStatement at (CoreDeclare held core)] (Just choice))) option, option))
-    (after, Just (_, kind')) -> halt (locatedSpan argument) ("convertInteger from a " <> coreTypeName kind') after
+    (after, Just (core, _)) -> select option target kind after core
   _ -> halt at "this convertInteger call" state
+ where
+  expression = CoreExpression at
+  select option target kind current core
+    | Just chosen <- mapRuntimeChoice current at option core
+        (\ready held -> fmap (fmap fst) (select option target kind ready held)) = chosen
+    | CoreIntegerType _ <- coreExpressionType core =
+        let (withHeld, held) = bindLocal current "" (coreExpressionType core)
+            value = expression (coreExpressionType core) (CoreReadLocal held)
+            some = expression option (CoreConstruct "Some" [("0", expression target (CoreIntegerConvert kind value))])
+            none = expression option (CoreConstruct "None" [])
+            choice = expression option (CoreIfValue (expression CoreBoolType (CoreIntegerFits kind value))
+              (CoreBlock [] (Just some)) none)
+         in (withHeld, Just (expression option (CoreBlockValue (CoreBlock [CoreStatement at (CoreDeclare held core)] (Just choice))), option))
+    | otherwise =
+        let message = expression CoreTextType (CoreBinary CoreAdd
+              (expression CoreTextType (CoreTextLiteral "convertInteger moves between integers, not from a "))
+              (expression CoreTextType (CoreRuntimeKind core)))
+            failed = argumentFailureWith AtInvocation at "E7012" Nothing message
+         in (current, Just (failed, CoreNeverType))
 
-{-| `charFromCode(code)`: Some of the Char when the code is a Unicode scalar
-    value (0 through 0x10FFFF, surrogates excluded), None otherwise. -}
+{-| The scalar range check is shared by direct and stored calls. -}
 lowerCharFromCode :: LowerExpression -> LowerState -> Span -> [Located Expression] -> (LowerState, Maybe (CoreExpression, CoreType))
-lowerCharFromCode lower state at arguments = case (typeForSpan (contextTypes (lowerContext state)) at, arguments) of
-  (Just option@(CoreSumType _ _), [argument]) -> case lower state argument of
+lowerCharFromCode lower state at arguments = case typeForSpan (contextTypes (lowerContext state)) at of
+  Just option@(CoreSumType _ _) -> case collectArguments lower state arguments of
     (after, Nothing) -> refused after
-    (after, Just (core, CoreNeverType)) -> (after, Just (core, CoreNeverType))
-    (after, Just (core, kind'))
-      | kind' /= intType || expressionIsPrintValued core -> halt (locatedSpan argument) "this charFromCode argument" after
-      | otherwise -> charFromCodeCore after at option core
+    (after, Just operands) -> charFromCodeArguments AtInvocation at option after operands
   _ -> halt at "this charFromCode call" state
+
+charFromCodeArguments :: ArgumentBlame -> Span -> CoreType -> LowerState -> [CoreExpression]
+  -> (LowerState, Maybe (CoreExpression, CoreType))
+charFromCodeArguments blame at option = callWithRuntimeArguments at failure [IntegerSlot] apply
+ where
+  failure = argumentFailure blame at "E7012" "charFromCode expects one integer"
+  apply current [value] = charFromCodeCore current at option (clampedPosition at value)
+  apply current _ = refused current
 
 {-| The body of `charFromCode` for an Int that has already been lowered. -}
 charFromCodeCore :: LowerState -> Span -> CoreType -> CoreExpression -> (LowerState, Maybe (CoreExpression, CoreType))

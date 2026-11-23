@@ -8,7 +8,7 @@ module Pudu.Compiler.Lower.FunctionBody (lowerEntryBodyWith, lowerFunctionBodyWi
 
 import Pudu.Compiler.Lower.Call (outputResult)
 import Pudu.Compiler.Lower.Control (printValued)
-import Pudu.Compiler.Lower.Dynamic (mapRuntimeChoice, projectRuntimeValue, widenTo)
+import Pudu.Compiler.Lower.Dynamic (mapRuntimeChoice, projectRuntimeValue)
 import Pudu.Compiler.Lower.Lambda (lowerTask)
 import Pudu.Compiler.Lower.Signature (functionLevelRefusal)
 import Pudu.Compiler.Lower.State
@@ -57,13 +57,14 @@ lowerEntryBodyWith lowerExpression lowerBlock located state
         | Just expected <- formedCoreTypeIn (contextTypes (lowerContext current)) input
         , nativeValueType expected -> case lowerExpression current written of
             (after, Nothing) -> refused after
-            (after, Just lowered) ->
-              let (value, kind) = widenTo (contextTypes (lowerContext after)) expected lowered
+            (after, Just (lowered, _)) ->
+              let (ready, value) = projectRuntimeValue (contextTypes (lowerContext after)) after expected lowered
+                  kind = coreExpressionType value
                   at = locatedSpan written
                in if kind == CoreNeverType
-                    then built after (CoreBlock [CoreStatement at (CoreEvaluate value)] Nothing) CoreUnitType
+                    then built ready (CoreBlock [CoreStatement at (CoreEvaluate value)] Nothing) CoreUnitType
                     else if kind == expected
-                      then let (bound, local) = bindLocal after (locatedValue (parameterName parameter)) expected
+                      then let (bound, local) = bindLocal ready (locatedValue (parameterName parameter)) expected
                                (final, entry) = defaults bound rest
                                prepend found = found
                                  { coreFunctionBody = (coreFunctionBody found)
@@ -71,7 +72,7 @@ lowerEntryBodyWith lowerExpression lowerBlock located state
                                          : coreBlockStatements (coreFunctionBody found) }
                                  }
                             in (final, prepend <$> entry)
-                      else halt at "a default outside its entry parameter type" after
+                      else halt at "a default outside its entry parameter type" ready
         | otherwise -> halt (locatedSpan (parameterName parameter)) "an entry parameter without a native representation" current
 
     entryBody current

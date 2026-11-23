@@ -13,7 +13,7 @@ import Pudu.Backend.Emit.State (cString, cStringBytes)
 import Pudu.Backend.Emit.Support (integerHelper, isBigInteger, isWideInteger)
 import Pudu.Core (CoreType (..), coreStaticRuntimeKind, coreTypeName, runtimeChoiceAlternatives)
 import Pudu.FloatLiteral (floatWidthType)
-import Pudu.IntegerLiteral (integerKindName)
+import Pudu.IntegerLiteral (IntegerKind (ExactIntKind), integerKindName)
 
 {-| Values a slot holds a reference to: the frame retains and releases them. -}
 ownedType :: CoreType -> Bool
@@ -76,6 +76,7 @@ released kind expression = case kind of
 
 mangle :: CoreType -> Text
 mangle kind = case kind of
+  CoreIntegerType ExactIntKind -> "Int_exact"
   CoreIntegerType integer -> integerKindName integer
   CoreFloatType width -> floatWidthType width
   CoreTupleType members -> "T" <> Text.pack (show (length members)) <> "_" <> Text.intercalate "_" (map mangle members) <> "_E"

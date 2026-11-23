@@ -30,3 +30,9 @@ conversion. A remaining type mismatch refuses with E6001; a Never default stops 
 ## Referenced by
 
 [[Compiler Lower]] · [[Compiler Lower Call]] · [[Compiler Lower Lambda]] · [[src/Pudu/Compiler/_MOC]]
+
+## Runtime supplied count
+
+Resolved Grill Log: the callee checks an actual missing required
+parameter in declaration order. Earlier omitted defaults execute
+before that check, and the failure points at the caller.

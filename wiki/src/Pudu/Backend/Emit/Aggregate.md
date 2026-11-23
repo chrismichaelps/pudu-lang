@@ -207,3 +207,7 @@ usual dependency closure.
 Resolved Grill Log: a dynamic tag describes a layout. Diagnostics obtain
 the held carrier's runtime label, following an ordinary sum's active
 variant or a callable's actual kind.
+
+## Exact Int layout
+
+Resolved Grill Log: Exact Int has its own ownership discriminator so both integer layouts release through their matching cell.

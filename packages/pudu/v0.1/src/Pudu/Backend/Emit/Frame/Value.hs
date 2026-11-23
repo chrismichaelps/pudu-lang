@@ -130,7 +130,7 @@ frameValue state value = case frameValueShape value of
     member <- maybe (refused "a capture without a native representation") Right (cellMember (frameValueType value))
     uncurry plain (retained (frameValueType value) (source <> "->fields[" <> textOfInt (position + 1) <> "]." <> member))
   FrameClosureIs name closure -> case Map.lookup name (emitFunctionIds state) of
-    Nothing -> refused "a closure target test for an unknown function"
+    Nothing -> done state "0" []
     Just identity -> do
       source <- slotText closure
       plain ("(" <> source <> "->fields[0].scalar == " <> textOfInt identity <> ")") []
@@ -232,12 +232,12 @@ frameValue state value = case frameValueShape value of
   FrameRangeValue low inclusive high -> do
     lowText <- traverse slotText low
     highText <- traverse slotText high
-    let end = maybe ("0, pudu_make(0, 0)") ("1, " <>)
+    let end = maybe "0, NULL" ("1, " <>)
     plain ("pudu_range_make(" <> end lowText <> ", " <> (if inclusive then "1" else "0") <> ", " <> end highText <> ")") ["range"]
   FrameRangeMethod name receiver arguments -> do
     target <- slotText receiver
     operands <- traverse slotText arguments
-    let (after, text, needs) = rangeMethodCall state (frameValueSpan value) name target operands
+    let (after, text, needs) = rangeMethodCall state (frameValueSpan value) name (frameValueType value) target operands
     Right (after, text, Set.fromList needs)
   FrameBytesMethod name receiver arguments -> do
     target <- slotText receiver

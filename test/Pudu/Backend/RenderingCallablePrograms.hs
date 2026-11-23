@@ -187,6 +187,175 @@ renderingCallableSuccessPrograms =
         , "  99", "}"
         , "fn main() -> Int { print(show(take()))\n 0 }" ])
     , "receiver\ntransfer\n7\n", "")
+  , ("stored ranges retain exact endpoints through queries and traversal", program
+      (selectedReceiverTypes <> selectedIntegerPositions <>
+        [ "fn bounds(start: Int, end: Int) -> Range[Int] { start..=end }"
+        , "fn main() -> Int {"
+        , "  let selected = choose(\"λ\".toBytes())"
+        , "  let large = selected.indexOf(\"large\")"
+        , "  let larger = selected.indexOf(\"larger\")"
+        , "  let range = bounds(large, larger)"
+        , "  print(show(range))"
+        , "  print(show(range.start()) + show(range.end()) + show(range.length()))"
+        , "  print(show(range.contains(large)) + show(range.contains(1)))"
+        , "  print(show(range.toArray()) + show(range.reverse()) + show(range.step(2)))"
+        , "  print(show((range, 0) < (larger.., 0)))"
+        , "  for value in range { print(show(value))\n break }"
+        , "  0", "}" ])
+    , "receiver\n18446744073709551616..=18446744073709551617\nSome(18446744073709551616)Some(18446744073709551617)2\ntruefalse\n[18446744073709551616, 18446744073709551617][18446744073709551617, 18446744073709551616][18446744073709551616]\ntrue\n18446744073709551616\n", "")
+  , ("stored ranges with wider in-bounds endpoints slice normally", program
+      (selectedReceiverTypes <> selectedIntegerPositions <>
+        [ "fn main() -> Int {"
+        , "  let selected = choose(\"λ\".toBytes())"
+        , "  let tail = selected.indexOf(\"small\").."
+        , "  print(\"aλz\"[tail])"
+        , "  let all = .."
+        , "  print(show([1, 2][all]))"
+        , "  0", "}" ])
+    , "receiver\nz\n[1, 2]\n", "")
+  , ("exact range members retain Int through calls and conversions", program
+      (selectedReceiverTypes <> selectedIntegerPositions <>
+        [ "fn keep(value: Int) -> Int { value }"
+        , "fn main() -> Int {"
+        , "  let source = choose(\"λ\".toBytes())"
+        , "  let large = source.indexOf(\"large\")"
+        , "  let decode = charFromCode"
+        , "  for member in large..=large {"
+        , "    let held = keep(member)"
+        , "    print(show(held))"
+        , "    print(show(convertInteger[Int](held)) + show(convertInteger[BigInt](held)))"
+        , "    print(show(decode(held)))"
+        , "    print(show(held &+ 1) + \" \" + show(held >> 1) + \" \" + show(~held))"
+        , "  }"
+        , "  0", "}" ])
+    , "receiver\n18446744073709551616\nNoneSome(18446744073709551616)\nNone\n1 -9223372036854775808 -1\n", "")
+  , ("dynamic wide Int members select the Int implementation", program
+      (selectedReceiverTypes <> selectedIntegerPositions <> selectedIntegerTrait <>
+        [ "fn main() -> Int {"
+        , "  let selected = choose(\"λ\".toBytes())"
+        , "  let large = selected.indexOf(\"large\")"
+        , "  for member in large..=large {"
+        , "    let value = box(member)"
+        , "    let kept = value.describe"
+        , "    print(kept())"
+        , "    print(describe(member))"
+        , "  }"
+        , "  0", "}" ])
+    , "receiver\nInt 18446744073709551616\nInt 18446744073709551616\n", "")
+  , ("dynamic exact and narrow Int layouts compare by value", program
+      (selectedReceiverTypes <> selectedIntegerPositions <> selectedIntegerTrait <>
+        [ "fn main() -> Int {"
+        , "  let selected = choose(\"λ\".toBytes())"
+        , "  let low = selected.indexOf(\"small\")"
+        , "  let large = selected.indexOf(\"large\")"
+        , "  let narrow = box(2)"
+        , "  for member in low..large {"
+        , "    let held: dynamic Describe = member"
+        , "    print(show(held == narrow))"
+        , "    print(show(setOf([held, narrow])))"
+        , "    print(held.describe())"
+        , "    break"
+        , "  }"
+        , "  0", "}" ])
+    , "receiver\ntrue\n#{2}\nInt 2\n", "")
+  , ("dynamic wide Int writeback selects the final layout", program
+      (selectedReceiverTypes <> selectedIntegerPositions <>
+        [ "trait Reset { fn reset(self: &mut Self) -> () }"
+        , "impl Reset for Int { fn reset(self: &mut Self) -> () { *self = 3 } }"
+        , "fn main() -> Int {"
+        , "  let large = choose(\"λ\".toBytes()).indexOf(\"large\")"
+        , "  for member in large..=large {"
+        , "    var held: dynamic Reset = member"
+        , "    held.reset()"
+        , "    print(show(held))"
+        , "  }"
+        , "  0", "}" ])
+    , "receiver\n3\n", "")
+  , ("selected collection uses the held map get result", program
+      (selectedReceiverTypes <> selectedByteConversion <> selectedCollection "Map[Int, Str]" "mapOf([(0, \"held\")])" <>
+        [ "fn main() -> Int {"
+        , "  print(show(chooseCollection(\"A\").get(0)))"
+        , "  print(show(chooseCollection(\"λ\".toBytes()).get({ print(\"key\")\n 0 })))"
+        , "  0", "}" ])
+    , "receiver\n65\nreceiver\nkey\nSome(\"held\")\n", "")
+  , ("selected collection uses the held range length and membership", program
+      (selectedReceiverTypes <> selectedByteConversion <> selectedCollection "Range[Int]" "2..=4" <>
+        [ "fn main() -> Int {"
+        , "  let range = chooseCollection(\"λ\".toBytes())"
+        , "  print(show(range.length()))"
+        , "  print(show(range.contains(4u8)))"
+        , "  0", "}" ])
+    , "receiver\n3\ntrue\n", "")
+  , ("array method positions wrap the held mathematical index", program
+      (selectedReceiverTypes <> selectedIntegerPositions <>
+        [ "fn main() -> Int {"
+        , "  let selected = choose(\"λ\".toBytes())"
+        , "  let large = selected.indexOf(\"large\")"
+        , "  let larger = selected.indexOf(\"larger\")"
+        , "  let values = [5, 10, 15]"
+        , "  let get = values.get"
+        , "  print(show(get(large)))"
+        , "  print(show(values.insert(larger, 9)))"
+        , "  print(show(values.slice(large, larger)))"
+        , "  0", "}" ])
+    , "receiver\n5\n[5, 9, 10, 15]\n[5]\n", "")
+  , ("keyed methods accept a held key outside the checked layout", program
+      (selectedReceiverTypes <>
+        [ "fn main() -> Int {"
+        , "  let key = choose(\"λ\".toBytes())"
+        , "  let initial = mapOf([(\"x\", 3)])"
+        , "  print(show(initial.get(key)))"
+        , "  print(show(initial.insert(key, 5).get(key)))"
+        , "  let values = setOf([\"x\"])"
+        , "  print(show(values.contains(key)))"
+        , "  print(show(values.insert(key).contains(key)))"
+        , "  0", "}" ])
+    , "receiver\nNone\nSome(5)\nfalse\ntrue\n", "")
+  , ("range step preserves the exact positive stride and selected cardinality", program
+      (selectedReceiverTypes <> selectedIntegerPositions <>
+        [ "fn main() -> Int {"
+        , "  let selected = choose(\"λ\".toBytes())"
+        , "  let large = selected.indexOf(\"large\")"
+        , "  let larger = selected.indexOf(\"larger\")"
+        , "  let step = (0..=larger).step"
+        , "  print(show(step(large)))"
+        , "  print(show((1..=5).step(large)))"
+        , "  print(show((5..1).step(large)))"
+        , "  0", "}" ])
+    , "receiver\n[0, 18446744073709551616]\n[1]\n[]\n", "")
+  , ("empty array and range do not attempt to invoke a held builtin callback", program
+      [ "fn main() -> Int {"
+      , "  let empty: Array[Int] = []"
+      , "  let render: fn(Int) -> Str = show"
+      , "  print(show(empty.map(render)))"
+      , "  print(show((2..2).map(render)))"
+      , "  0", "}" ]
+    , "[]\n[]\n", "")
+  , ("range filter discards held non-Boolean predicate results", program
+      (selectedReceiverTypes <> selectedPredicate <>
+        [ "fn main() -> Int {"
+        , "  print(show((1..=2).filter(checkedPredicate)))"
+        , "  let empty: Array[Int] = []"
+        , "  print(show(empty.filter(checkedPredicate)))"
+        , "  0", "}" ])
+    , "receiver\npredicate\nreceiver\npredicate\n[]\n[]\n", "")
+  , ("declared method selects the held callable result before traversal", program
+      (selectedReceiverTypes <> selectedDeclaredCallback "fn(Int) -> Str" "render" <>
+        [ "fn render(value: Int) -> Str { \"held \" + display(value) }"
+        , "fn main() -> Int {"
+        , "  print(show([2].map(choose(\"plain\").callback())))"
+        , "  print(show([2].map(choose(\"λ\".toBytes()).callback())))"
+        , "  0", "}" ])
+    , "receiver\n[3]\nreceiver\n[\"held 2\"]\n", "")
+  , ("a selected declared call can reach a held collection builtin", program
+      (selectedReceiverTypes <> selectedByteConversion <> selectedCollection "Map[Int, Str]" "mapOf([(0, \"held\")])" <>
+        [ "trait Keys { fn keys(self: &Self) -> Array[UInt8] }"
+        , "impl Keys for Array[UInt8] { fn keys(self: &Self) -> Array[UInt8] { *self } }"
+        , "fn main() -> Int {"
+        , "  print(show(chooseCollection(\"A\").keys()))"
+        , "  print(show(chooseCollection(\"λ\".toBytes()).keys()))"
+        , "  0", "}" ])
+    , "receiver\n[65]\nreceiver\n[0]\n", "")
   , ("rendering function arguments use callable rendering", program
       [ "fn main() -> Int {"
       , "  let repr: fn(fn(Int) -> Str) -> Str = show"
@@ -327,6 +496,109 @@ renderingCallableRefusalPrograms =
         , "  let selected = choose(\"λ\".toBytes())"
         , "  print(show(selected[..selected.indexOf(\"invalid\")]))"
         , "  0", "}" ]))
+  , ("stored slice reads a wide endpoint without wrapping", program
+      (selectedReceiverTypes <> selectedIntegerPositions <>
+        [ "fn main() -> Int {"
+        , "  let end = choose(\"λ\".toBytes()).indexOf(\"large\")"
+        , "  let key = ..end"
+        , "  print(show([1, 2][key]))"
+        , "  0", "}" ]))
+  , ("stored range construction keeps both effects before validating the first end", program
+      (selectedReceiverTypes <> selectedInvalidPosition <>
+        [ "fn main() -> Int {"
+        , "  let selected = choose(\"λ\".toBytes())"
+        , "  let bad = { print(\"start\")\n selected.indexOf(\"invalid\") }..{ print(\"end\")\n 1 }"
+        , "  print(show(bad))"
+        , "  0", "}" ]))
+  , ("exact stored range sum reports overflow on the final result", program
+      (selectedReceiverTypes <> selectedIntegerPositions <>
+        [ "fn main() -> Int {"
+        , "  let large = choose(\"λ\".toBytes()).indexOf(\"large\")"
+        , "  let one = large..=large"
+        , "  print(show(one.sum()))"
+        , "  0", "}" ]))
+  , ("arithmetic on a wide range member still checks Int overflow", program
+      (selectedReceiverTypes <> selectedIntegerPositions <>
+        [ "fn add(value: Int) -> Int { value + 1 }"
+        , "fn main() -> Int {"
+        , "  let large = choose(\"λ\".toBytes()).indexOf(\"large\")"
+        , "  for member in large..=large { print(show(add(member))) }"
+        , "  0", "}" ]))
+  , ("a dynamic wide Int method keeps its checked overflow", program
+      (selectedReceiverTypes <> selectedIntegerPositions <>
+        [ "trait Step { fn step(self: &Self) -> Int }"
+        , "impl Step for Int { fn step(self: &Self) -> Int { *self + 1 } }"
+        , "fn main() -> Int {"
+        , "  let large = choose(\"λ\".toBytes()).indexOf(\"large\")"
+        , "  for member in large..=large {"
+        , "    let held: dynamic Step = member"
+        , "    print(show(held.step()))"
+        , "  }"
+        , "  0", "}" ]))
+  , ("missing member on a held map stops before the argument", program
+      (selectedReceiverTypes <> selectedByteConversion <> selectedCollection "Map[Int, Str]" "mapOf([(0, \"held\")])" <>
+        [ "fn main() -> Int {"
+        , "  let selected = chooseCollection(\"λ\".toBytes())"
+        , "  print(show(selected.push({ print(\"unreached\")\n 1u8 })))"
+        , "  0", "}" ]))
+  , ("missing member on a held range stops before the argument", program
+      (selectedReceiverTypes <> selectedByteConversion <> selectedCollection "Range[Int]" "2..=4" <>
+        [ "fn main() -> Int {"
+        , "  let selected = chooseCollection(\"λ\".toBytes())"
+        , "  print(show(selected.get({ print(\"unreached\")\n 0 })))"
+        , "  0", "}" ]))
+  , ("array method wrong held position reports at the stored invocation", program
+      (selectedReceiverTypes <> selectedInvalidPosition <>
+        [ "fn main() -> Int {"
+        , "  let insert = [1, 2].insert"
+        , "  let position = choose(\"λ\".toBytes()).indexOf(\"invalid\")"
+        , "  print(show(insert(position, { print(\"item\")\n 3 })))"
+        , "  0", "}" ]))
+  , ("range step rejects a held noninteger with its method diagnostic", program
+      (selectedReceiverTypes <> selectedInvalidPosition <>
+        [ "fn main() -> Int {"
+        , "  let position = choose(\"λ\".toBytes()).indexOf(\"invalid\")"
+        , "  print(show((1..5).step(position)))"
+        , "  0", "}" ]))
+  , ("range step checks the exact sign before requiring endpoints", program
+      (selectedReceiverTypes <> selectedIntegerPositions <>
+        [ "fn main() -> Int {"
+        , "  let stride = choose(\"λ\".toBytes()).indexOf(\"negative\")"
+        , "  print(show((1..).step(stride)))"
+        , "  0", "}" ]))
+  , ("array traversal reports a held builtin when it is invoked", program
+      [ "fn main() -> Int {"
+      , "  let render: fn(Int) -> Str = show"
+      , "  let map: fn(fn(Int) -> Str) -> Array[Str] = [1].map"
+      , "  print(show(map({ print(\"callback\")\n render })))"
+      , "  0", "}" ])
+  , ("array filter reports a held non-Boolean predicate after its effects", program
+      (selectedReceiverTypes <> selectedPredicate <>
+        [ "fn main() -> Int {"
+        , "  print(show([1, 2].filter(checkedPredicate)))"
+        , "  0", "}" ]))
+  , ("array sort reports a held non-Boolean comparison at the invocation", program
+      (selectedReceiverTypes <> selectedPredicate <>
+        [ "fn compare(left: Int, right: Int) -> Bool { checkedPredicate(left) }"
+        , "fn main() -> Int {"
+        , "  let sort = [2, 1].sortBy"
+        , "  print(show(sort(compare)))"
+        , "  0", "}" ]))
+  , ("declared member missing on the held receiver stops before argument effects", program
+      (selectedReceiverTypes <>
+        [ "trait Announce { fn announce(self: &Self, label: Str) -> Str }"
+        , "impl Announce for Str { fn announce(self: &Self, label: Str) -> Str { label } }"
+        , "fn main() -> Int {"
+        , "  let selected = choose(\"λ\".toBytes())"
+        , "  print(selected.announce({ print(\"unreached\")\n \"label\" }))"
+        , "  0", "}" ]))
+  , ("selected declared callback reports its actual missing parameter", program
+      (selectedReceiverTypes <> selectedDeclaredCallback "fn(Int, Str) -> Int" "longer" <>
+        [ "fn longer(value: Int, missing: Str) -> Int { value }"
+        , "fn main() -> Int {"
+        , "  let callback = choose(\"λ\".toBytes()).callback()"
+        , "  print(show([1].map(callback)))"
+        , "  0", "}" ]))
   , ("a stored stopping builtin receives the held runtime argument", program
       [ "trait View { fn size(self: &Self) -> Int }"
       , "impl View for Bytes { fn size(self: &Self) -> Int { 0 } }"
@@ -393,6 +665,40 @@ selectedInvalidPosition :: [Text]
 selectedInvalidPosition =
   [ "trait Positions { fn indexOf(self: &Self, label: Str) -> Bool }"
   , "impl Positions for Option[Str] { fn indexOf(self: &Self, label: Str) -> Bool { false } }"
+  ]
+
+selectedIntegerTrait :: [Text]
+selectedIntegerTrait =
+  [ "trait Describe { fn describe(self: &Self) -> Str }"
+  , "impl Describe for Int { fn describe(self: &Self) -> Str { \"Int \" + display(*self) } }"
+  , "impl Describe for BigInt { fn describe(self: &Self) -> Str { \"BigInt \" + display(*self) } }"
+  , "fn box(value: Int) -> dynamic Describe { value }"
+  , "fn describe(value: dynamic Describe) -> Str { value.describe() }"
+  ]
+
+selectedCollection :: Text -> Text -> [Text]
+selectedCollection result body =
+  [ "trait CollectionView { fn toArray(self: &Self) -> " <> result <> " }"
+  , "impl CollectionView for Str { fn toArray(self: &Self) -> " <> result <> " { " <> body <> " } }"
+  , "fn chooseCollection(view: dynamic View) -> Array[UInt8] { choose(view).toBytes().toArray() }"
+  ]
+
+selectedPredicate :: [Text]
+selectedPredicate =
+  [ "trait PredicateView { fn contains(self: &Self, key: Str) -> Str }"
+  , "impl PredicateView for Option[Str] {"
+  , "  fn contains(self: &Self, key: Str) -> Str { print(\"predicate\")\n \"wrong\" }"
+  , "}"
+  , "fn checkedPredicate(value: Int) -> Bool { choose(\"λ\".toBytes()).contains(\"x\") }"
+  ]
+
+selectedDeclaredCallback :: Text -> Text -> [Text]
+selectedDeclaredCallback result callback =
+  [ "trait CheckedCallback { fn callback(self: &Self) -> fn(Int) -> Int }"
+  , "impl CheckedCallback for Str { fn callback(self: &Self) -> fn(Int) -> Int { increment } }"
+  , "trait HeldCallback { fn callback(self: &Self) -> " <> result <> " }"
+  , "impl HeldCallback for Option[Str] { fn callback(self: &Self) -> " <> result <> " { " <> callback <> " } }"
+  , "fn increment(value: Int) -> Int { value + 1 }"
   ]
 
 program :: [Text] -> Text

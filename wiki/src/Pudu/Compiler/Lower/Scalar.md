@@ -249,3 +249,13 @@ accepts a concrete value and a selected result.
 ## Runtime keyed layouts (#956)
 
 Resolved Grill Log: Set membership preserves source evaluation order while projecting the probe to the set carrier.
+
+## Exact Int layout
+
+Resolved Grill Log: Use exact operands for checked arithmetic and comparisons of extended Int values. Checked results use the source kind limits. Remainder retains the exact Int layout when its result can exceed Int.
+
+## Dynamic exact Int operands
+
+Resolved Grill Log: dispatch on the held payload before choosing
+checked exact arithmetic. Trait layout tags do not choose
+a different arithmetic kind.

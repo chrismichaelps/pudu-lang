@@ -155,3 +155,35 @@ alternate tuple receiver, the position selects its actual payload.
 Resolved Grill Log: a noninteger key produces the same receiver-kind
 failure as the evaluator. A wider out-of-range integer remains an
 index bounds failure, reported at the key.
+
+## Exact range callback inputs
+
+A range can materialize outside the ordinary Int layout. The shared
+loop converts that array after the supplied callback and seed have
+run. Its callback signature receives the retained element layout.
+
+Resolved Grill Log: ordinary array loops reuse identity conversion.
+The wide range arm specializes callbacks for exact Int elements.
+
+## Dynamic array elements
+
+Resolved Grill Log: project each element into the declared dynamic
+layout, including reads of runtime alternatives.
+
+## Held collection member selection
+
+Resolved Grill Log: Array calls consume a retained receiver supplied by member selection. Callback specialization and copy-on-write continue to use its actual element layout.
+
+## Held array method arguments
+
+Resolved Grill Log: validate held array method slots after all operand
+effects. Preserve unconstrained elements through structural widening.
+Array method positions wrap before indexing, including values beyond
+Int. An incompatible concatenation or separator keeps its specific
+runtime diagnostic.
+
+## Traversal callback failures
+
+Resolved Grill Log: [[Compiler Lower Array Loop]] owns invocation
+and predicate validation. The collection call retains its receiver
+and callback before traversal.

@@ -244,3 +244,15 @@ the value's shape requires.
 ## Stored callable dispatch (#956)
 
 Resolved Grill Log: A closure-target test uses the linked body identifier stored with the closure. It leaves captures and source-level equality untouched.
+
+## Exact range construction
+
+Resolved Grill Log: range construction consumes already evaluated
+exact integers. The new box retains both ends before operand cleanup.
+
+## Replay callback identity guards
+
+Resolved Grill Log: an identity guard from callable discovery
+can refer to a copy eliminated by later layout settlement. Such
+a guard is false because emitted values cannot hold that key.
+A closure construction still requires its emitted body.

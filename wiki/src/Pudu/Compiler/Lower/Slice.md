@@ -76,3 +76,9 @@ Resolved Grill Log: evaluate the receiver and both written expressions
 before validating endpoints. A wrong endpoint type therefore precedes
 receiver dispatch and bounds validation. Only a proven in-bounds
 inclusive end may be incremented.
+
+## Exact stored slice endpoints
+
+Resolved Grill Log: stored keys read the original endpoint magnitudes.
+After successful bounds validation the existing slice receives Int
+positions. A missing endpoint keeps its ordinary default.

@@ -294,3 +294,11 @@ Resolved Grill Log: A record layout suffix supplies field types in declaration o
 ## Runtime layouts in sum payloads (#956)
 
 Resolved Grill Log: Read the declared variants first and apply only the matching payload overrides. Preserve variant labels and declaration order.
+
+## Exact Int layout
+
+Resolved Grill Log: Exact Int is a represented integer layout. The source type name resolves to ordinary Int.
+
+## Exact dynamic Int payloads
+
+Resolved Grill Log: A dynamic trait with an Int implementation has another native variant for the exact Int layout. The variant name is internal and cannot collide with a source owner.

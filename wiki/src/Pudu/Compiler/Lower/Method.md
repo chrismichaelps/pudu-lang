@@ -274,3 +274,11 @@ its original place, record the layout demand for the next lowering pass.
 Resolved Grill Log: when a selected receiver does not supply the
 written builtin, use its nominal implementation if it declares one.
 The retained receiver is read once through its actual carrier.
+
+## Exact dynamic Int payloads
+
+Resolved Grill Log: The exact Int variant selects the Int implementation by nominal owner. A mutable final is reprojected into the dynamic trait so a changed payload layout uses the matching variant.
+
+## Held declared method receivers
+
+Resolved Grill Log: An ordinary declared call selects the held nominal receiver before lowering argument expressions. Matching owner and type arguments reuse the admitted instance. Other held values reuse the shared member dispatch.

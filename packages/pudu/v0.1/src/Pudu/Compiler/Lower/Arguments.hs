@@ -1,8 +1,8 @@
 {-| @Compiler.Lower.Arguments — slot selection after operand evaluation. -}
 module Pudu.Compiler.Lower.Arguments
   ( ArgumentBlame (..), methodArgumentBlame, argumentFailure, argumentFailureWith
-  , ArgumentSlot (..), positionSlot, collectArguments, callWithRuntimeArguments
-  , exactPosition, clampedPosition, integerComparison
+  , ArgumentSlot (..), positionSlot, collectArguments, callWithRuntimeArguments, stopped, stops
+  , exactPosition, clampedPosition, wrappedPosition, integerComparison
   ) where
 
 import Data.List (mapAccumL)
@@ -21,7 +21,7 @@ type Lowered = (LowerState, Maybe (CoreExpression, CoreType))
 data ArgumentBlame = AtInvocation | AtCaller
 
 {-| Integer slots retain the selected kind until the operation applies its bounds. -}
-data ArgumentSlot = ExactSlot !CoreType | IntegerSlot
+data ArgumentSlot = ExactSlot !CoreType | IntegerSlot | AnySlot | ShapedSlot !(CoreType -> Bool)
 
 positionSlot :: CoreType -> ArgumentSlot
 positionSlot kind
@@ -56,10 +56,8 @@ callWithRuntimeArguments :: Span -> CoreExpression -> [ArgumentSlot]
   -> (LowerState -> [CoreExpression] -> Lowered)
   -> LowerState -> [CoreExpression] -> Lowered
 callWithRuntimeArguments at failure expected invoke state inputs
-  | any ((== CoreNeverType) . coreExpressionType) inputs =
-      (state, Just (CoreExpression at CoreNeverType (CoreBlockValue (CoreBlock
-        [CoreStatement (coreExpressionSpan value) (CoreEvaluate value) | value <- inputs] Nothing)), CoreNeverType))
-  | map coreExpressionType inputs == map exactKind expected = invoke state inputs
+  | any stops inputs = (state, Just (stopped at inputs, CoreNeverType))
+  | length inputs == length expected, and (zipWith direct expected inputs) = invoke state inputs
   | otherwise =
       let (bound, locals) = mapAccumL hold state inputs
           declarations = zipWith declare locals inputs
@@ -68,6 +66,8 @@ callWithRuntimeArguments at failure expected invoke state inputs
               (ready, Just (CoreExpression at result (CoreBlockValue (CoreBlock declarations (Just answer))), result))
             (ready, Nothing) -> refused ready
  where
+  direct IntegerSlot value = coreExpressionType value == intType
+  direct slot value = accepts slot (coreExpressionType value)
   hold current value = bindLocal current "" (coreExpressionType value)
   read' local = CoreExpression at (coreLocalType local) (CoreReadLocal local)
   declare local value = CoreStatement (coreExpressionSpan value) (CoreDeclare local value)
@@ -78,14 +78,12 @@ callWithRuntimeArguments at failure expected invoke state inputs
         (\ready value -> fmap (fmap fst) (select ready done requested (value : remaining))) = selected
   select current _ _ _ = (current, Just (failure, CoreNeverType))
 
-exactKind :: ArgumentSlot -> CoreType
-exactKind (ExactSlot kind) = kind
-exactKind IntegerSlot = intType
-
 accepts :: ArgumentSlot -> CoreType -> Bool
 accepts (ExactSlot expected) actual = expected == actual
 accepts IntegerSlot (CoreIntegerType _) = True
 accepts IntegerSlot _ = False
+accepts AnySlot _ = True
+accepts (ShapedSlot predicate) actual = predicate actual
 
 exactPosition :: Span -> CoreExpression -> (CoreExpression, CoreExpression)
 exactPosition at value
@@ -108,6 +106,14 @@ clampedPosition at value
   choose condition yes no = CoreExpression at intType (CoreIfValue condition (CoreBlock [] (Just yes)) no)
   number = CoreExpression at intType . CoreIntegerLiteral PlatformSigned
 
+wrappedPosition :: Span -> CoreExpression -> CoreExpression
+wrappedPosition at value
+  | coreExpressionType value == intType = value
+  | otherwise = CoreExpression at intType (CoreBinary CoreWrapAdd narrowed zero)
+ where
+  narrowed = CoreExpression at intType (CoreIntegerConvert PlatformSigned value)
+  zero = CoreExpression at intType (CoreIntegerLiteral PlatformSigned 0)
+
 integerComparison :: Span -> CoreBinaryOperator -> CoreExpression -> CoreExpression -> CoreExpression
 integerComparison at operator left right = CoreExpression at CoreBoolType $
   if coreExpressionType left == coreExpressionType right
@@ -117,3 +123,10 @@ integerComparison at operator left right = CoreExpression at CoreBoolType $
   asBig value
     | coreExpressionType value == CoreIntegerType BigIntKind = value
     | otherwise = CoreExpression at (CoreIntegerType BigIntKind) (CoreIntegerConvert BigIntKind value)
+
+stops :: CoreExpression -> Bool
+stops core = coreExpressionType core == CoreNeverType
+
+stopped :: Span -> [CoreExpression] -> CoreExpression
+stopped at cores = CoreExpression at CoreNeverType (CoreBlockValue (CoreBlock
+  [CoreStatement (coreExpressionSpan core) (CoreEvaluate core) | core <- cores] Nothing))

@@ -110,3 +110,8 @@ and caller-attributed diagnostics.
 
 Resolved Grill Log: registration keeps the checked function shape and
 the existing builtin identity.
+
+## Stored character conversion
+
+Resolved Grill Log: specialize stored character conversion for the
+selected argument layout. Its argument diagnostic uses the caller.

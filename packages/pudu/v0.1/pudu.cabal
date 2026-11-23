@@ -305,6 +305,7 @@ library
     Pudu.Compiler.Lower.Call
     Pudu.Compiler.Lower.Arguments
     Pudu.Compiler.Lower.Array
+    Pudu.Compiler.Lower.ArrayLoop
     Pudu.Compiler.Lower.Sort
     Pudu.Compiler.Lower.Slice
     Pudu.Compiler.Lower.Convert

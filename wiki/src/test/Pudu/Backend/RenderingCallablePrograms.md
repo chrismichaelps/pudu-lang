@@ -80,3 +80,45 @@ before a lower endpoint can be validated.
 
 Resolved Grill Log: compare output before failure and the complete
 diagnostic, including the range span and bounds help.
+
+## Exact stored endpoints
+
+Resolved Grill Log: check storage independently through rendering,
+ordering, membership, length, and slicing after the range leaves its
+construction site. Include positive, negative and absent endpoints.
+
+## Exact Int identity and operations
+
+Resolved Grill Log: a wide range member sent through a named Int
+parameter keeps its value. Check narrowed conversion, wrapping,
+signed right shift and the checked Int overflow diagnostic separately.
+
+## Dynamic exact Int payloads
+
+Resolved Grill Log: a wide member selects the Int implementation,
+including through a retained method. Compare an exact and narrow
+value with equal magnitude and exercise set deduplication.
+
+## Held collection receivers
+
+Resolved Grill Log: exercise an array call held as a map or range,
+shared members with different result layouts, and an absent member
+whose argument would otherwise print.
+
+## Held collection arguments
+
+Resolved Grill Log: cover wrapped array positions, a foreign-layout
+map key, exact positive strides across a huge interval, and the
+runtime diagnostics for wrong positions and strides.
+
+## Collection traversal callback failures
+
+Resolved Grill Log: cover empty arrays and ranges with a held
+builtin callback, a nonempty invocation failure, and an alternate
+non-Boolean result from a callback that has observable effects.
+
+## Held declared method receivers
+
+Resolved Grill Log: a selected declared method can return its
+actual callback layout into traversal. The alternate callable's
+arity and a missing declared member retain runtime diagnostics.

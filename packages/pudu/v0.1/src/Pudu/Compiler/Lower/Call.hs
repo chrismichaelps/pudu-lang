@@ -12,7 +12,7 @@ import Pudu.Compiler.Lower.Scalar (eagerType)
 import Pudu.Compiler.Lower.State (CoreSignature (..), LowerContext (..), LowerState (..), bindLocal, halt, refused)
 import Pudu.Compiler.Lower.Types (nativeValueType, typeFactAt, typeForSpan)
 import Pudu.Core
-import Pudu.Compiler.Lower.Dynamic (mapRuntimeChoice, projectRuntimeValue, widen)
+import Pudu.Compiler.Lower.Dynamic (mapRuntimeChoice, projectRuntimeValue)
 import Pudu.Frontend.Syntax (Expression, Located (..))
 import Pudu.Source (Span)
 
@@ -31,10 +31,10 @@ lowerFunctionCall lower state at key callee arguments = case lookup key (context
           | not (null (signatureLoaned found)) ->
               lowerLoanedCall lower back at target found (takesSuppliedCount found) arguments
         (back, Just (target, found)) -> case collect back [] arguments of
-          (final, Just given) -> passing entry final target found
-            -- An argument of an implementing type widens to a dynamic parameter.
-            (zipWith (widen (contextTypes (lowerContext final)))
-              (map (coreLocalType . coreParameterLocal) (signatureParameters found) <> repeat CoreNeverType) given)
+          (final, Just given) ->
+            let expected = parameterKinds found <> repeat CoreNeverType
+                (ready, carried) = mapAccumL carry final (zip expected given)
+             in passing entry ready target found carried
           (final, Nothing) -> refused final
  where
   passing entry final target found cores
@@ -59,6 +59,7 @@ lowerFunctionCall lower state at key callee arguments = case lookup key (context
   collect current done [] = (current, Just (reverse done))
   collect current done (argument : rest) = case lower current argument of
     (after, Just (core, _))
+      | coreExpressionType core == CoreNeverType -> (after, Just (reverse (core : done)))
       | expressionIsPrintValued core -> halt (locatedSpan argument) "a Result[(), Str] call argument" after
       | otherwise -> collect after (core : done) rest
     (after, Nothing) -> (after, Nothing)

@@ -105,3 +105,11 @@ Byte-addressed reads yield None for out-of-range held positions.
 Resolved Grill Log: negative counts reach the same refusal as ordinary
 Int counts. A view never treats an out-of-range bound as an exact
 position, even when the clamped position is a valid boundary.
+
+## Held collection member selection
+
+Resolved Grill Log: Select the held receiver before delegating collection and nominal members. A missing member evaluates the receiver and stops before argument expressions.
+
+## Held declared method receivers
+
+Resolved Grill Log: A receiver already selected by declared-method dispatch follows the same member selection and missing-member diagnostic as a selected builtin receiver.

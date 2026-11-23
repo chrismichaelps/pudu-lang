@@ -5,6 +5,47 @@ tags: [changelog]
 
 # Changelog
 
+## 2026-11-23 — Held declared method calls (#956)
+
+- Select the held ordinary method before arguments and preserve its
+  result layout. [[Compiler Lower Method]] · [[Compiler Lower Body]]
+
+## 2026-11-23 — Traversal callback defaults (#956)
+
+- Pass the selected callback's supplied count and retain parameter
+  diagnostics. [[Compiler Lower Array Loop]] · [[Compiler Lower Default]]
+
+## 2026-11-23 — Traversal callback validation (#956)
+
+- Preserve callback invocation failures and predicate result handling
+  in array and range traversal. [[Compiler Lower Array Loop]]
+
+## 2026-11-23 — Held collection arguments and strides (#956)
+
+- Validate selected collection arguments at runtime. Preserve exact
+  positive range strides and their result count. [[Compiler Lower Arguments]] ·
+  [[Native Range Runtime]]
+
+## 2026-11-23 — Held native collection members (#956)
+
+- Select array, keyed and range methods on the retained receiver
+  before evaluating their arguments. [[Compiler Lower Body]]
+
+## 2026-11-23 — Exact dynamic Int payloads (#956)
+
+- Retain exact Int payloads through trait dispatch, bound methods and
+  mutable receiver finals. [[Compiler Lower Dynamic]] · [[Compiler Lower Method]]
+
+## 2026-11-23 — Exact native Int identity (#956)
+
+- Preserve Int runtime identity for wider range members across
+  frames, arithmetic and conversions. [[Compiler Lower Scalar]]
+
+## 2026-11-23 — Exact stored range bounds (#956)
+
+- Store original endpoint values, compute finite extents and sums
+  exactly, and stream range loops. [[Native Range Runtime]] · [[Compiler Lower For]]
+
 ## 2026-11-23 — Exact native slice bounds (#956)
 
 - Check written endpoints at their original width and share the slice

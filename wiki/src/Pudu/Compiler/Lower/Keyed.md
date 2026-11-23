@@ -76,3 +76,14 @@ ownership stay with the existing operations.
 ## Runtime keyed layouts (#956)
 
 Resolved Grill Log: Construction reads the lowered item layouts. Updates and binary operations rebuild wider carriers from the retained entries. Lookups return an Option whose payload carrier matches the stored value.
+
+## Held collection member selection
+
+Resolved Grill Log: Keyed calls consume a retained receiver, so a missing member stops before keys or values evaluate.
+
+## Held keyed method arguments
+
+Resolved Grill Log: a store validates and folds an integer key,
+whereas maps and sets accept arbitrary held keys and values. Merge
+and set algebra check the argument family after evaluation and then
+settle a shared collection layout.

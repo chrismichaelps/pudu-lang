@@ -91,3 +91,7 @@ name.
 Resolved Grill Log: display and show expose the selected payload of a
 runtime alternative. Drop, equality and comparison reuse the held
 type's existing aggregate operations.
+
+## Exact Int layout
+
+Resolved Grill Log: The exact Int layout keeps the Int runtime name and uses a distinct aggregate symbol suffix so narrow and exact payloads never share helpers.

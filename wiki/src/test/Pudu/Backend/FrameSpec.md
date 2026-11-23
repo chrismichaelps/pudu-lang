@@ -43,3 +43,9 @@ Matches `FrameFailText{}` by record syntax, so new operands don't break it.
 
 Block-target reachability lists FrameFailCaller beside FrameFailText.
 Resolved Grill Log: neither refusal has a successor block.
+
+## Traversal supplied-count frames
+
+Resolved Grill Log: exercise a callable selected after checking can
+no longer constrain its visible arity. Verify the traversal call
+supplies the hidden count and the omitted ABI slot.

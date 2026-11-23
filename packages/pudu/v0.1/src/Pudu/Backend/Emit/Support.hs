@@ -8,21 +8,21 @@ import Data.Text (Text)
 import qualified Data.Text as Text
 import Pudu.Backend.Emit.State (textOfInt)
 import Pudu.Core (CoreType (..))
-import Pudu.IntegerLiteral (IntegerKind (BigIntKind), integerKindBounds, integerKindWidth, integerKindSigned)
+import Pudu.IntegerLiteral (IntegerKind (BigIntKind, ExactIntKind), integerKindBounds, integerKindWidth, integerKindSigned)
 
 isWideInteger :: IntegerKind -> Bool
 isWideInteger kind = integerKindWidth kind == Just 128
 
 isBigInteger :: IntegerKind -> Bool
-isBigInteger = (== BigIntKind)
+isBigInteger kind = kind == BigIntKind || kind == ExactIntKind
 
 integerHelper :: CoreType -> Text -> Text
 integerHelper (CoreIntegerType kind) name | isWideInteger kind = "wide_" <> name
-integerHelper (CoreIntegerType BigIntKind) name = "big_" <> name
+integerHelper (CoreIntegerType kind) name | isBigInteger kind = "big_" <> name
 integerHelper _ name = name
 
 zeroValue :: CoreType -> Text
-zeroValue (CoreIntegerType BigIntKind) = "NULL"
+zeroValue (CoreIntegerType kind) | isBigInteger kind = "NULL"
 zeroValue (CoreIntegerType kind) = integerLiteralText kind 0
 zeroValue CoreTextType = "(pudu_text){NULL, 0, NULL}"
 zeroValue (CoreTupleType _) = "NULL"
@@ -31,7 +31,7 @@ zeroValue _ = "0"
 
 integerKindText :: IntegerKind -> Maybe Text
 integerKindText kind
-  -- A BigInt has no interval: its helpers take the descriptor and ignore it.
+  -- Exact storage helpers ignore the descriptor. Checked Int operations use a separate bounds check.
   | isBigInteger kind = Just "0"
   | isWideInteger kind = Just ("(pudu_wide_kind){" <> (if integerKindSigned kind then "1" else "0") <> "}")
   | otherwise = case (integerKindBounds kind, integerKindWidth kind) of

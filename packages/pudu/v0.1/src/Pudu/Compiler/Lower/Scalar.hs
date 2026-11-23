@@ -3,21 +3,24 @@ module Pudu.Compiler.Lower.Scalar (lowerUnary, lowerBinary, eagerType, namedFail
 
 import Data.List (mapAccumL)
 import Data.Maybe (isJust)
+import qualified Data.Set as Set
 import Data.Text (Text)
 import qualified Data.Text as Text
 import Pudu.Compiler.Lower.Control (expressionIsPrintValued)
-import Pudu.Compiler.Lower.Dynamic (widen)
+import Pudu.Compiler.Lower.Arguments (clampedPosition)
+import Pudu.Compiler.Lower.Dynamic (mapRuntimeChoice, runtimeCarriers, widen)
 import Pudu.Compiler.Lower.Keyed (setMembership)
 import Pudu.Compiler.Lower.Reference (lowerReference)
 import Pudu.Compiler.Lower.State
   ( LowerContext (..), LowerState (..), bindLocal, halt, intType, refused )
 import Pudu.Compiler.Lower.Types (LowerTypes, isDynamic, sumVariants, typeForSpan, nativeIntegerKind, nativeValueType)
 import Pudu.Core
-import Pudu.Diagnostic.Arithmetic (CheckedOperation (..), overflowCode, overflowHelp, overflowMessage)
+import Pudu.Diagnostic.Arithmetic (CheckedOperation (..), overflowCode, overflowHelp, overflowMessage
+  , shiftCode, negativeShiftMessage, negativeShiftHelp, wideShiftMessage, wideShiftHelp)
 import Pudu.Diagnostic.Evaluation
   ( cannotApplyBinaryMessage, cannotApplyUnaryMessage, operatorCode, unsupportedOperatorMessage )
 import Pudu.Frontend.Syntax (Expression (ArrayExpression, LiteralExpression), Literal (ResolvedInteger), Located (..))
-import Pudu.IntegerLiteral (IntegerKind (BigIntKind), integerKindBounds, integerKindFits, integerKindMeet)
+import Pudu.IntegerLiteral (IntegerKind (BigIntKind, ExactIntKind, PlatformSigned), integerKindBounds, integerKindFits, integerKindMeet, integerKindSigned, integerKindWidth)
 import Pudu.Source (Span)
 
 type LowerExpression = LowerState -> Located Expression -> (LowerState, Maybe (CoreExpression, CoreType))
@@ -34,6 +37,7 @@ lowerUnary lower state at operator operand
       (after, Just (core, CoreNeverType)) -> (after, Just (core, CoreNeverType))
       (after, Just (core, kind))
         | expressionIsPrintValued core -> halt at "an operator on a Result[(), Str] value" after
+        | containsExactInt kind -> exactUnary after at operator core
         | Just operation <- unaryOperation operator core -> built after at operation kind
         | isDynamic kind, settled after operand core -> dynamicUnary after at operator core
         | isJust (runtimeChoiceAlternatives kind) -> dynamicUnary after at operator core
@@ -69,10 +73,16 @@ dynamicUnary state at operator operand =
  where
   types = contextTypes (lowerContext state)
   result = if operator == "!" then CoreBoolType else coreExpressionType operand
-  lower current held = case unaryOperation operator held of
-    Nothing -> (current, Just (unaryFailure at operator held))
-    Just operation -> wrapDynamicResult types at result current
-      (CoreExpression at (coreExpressionType held) operation)
+  lower current held
+    | containsExactInt (coreExpressionType held) =
+        let (ready, value) = exactUnary current at operator held
+         in case value of
+              Just (answer, _) -> wrapDynamicResult types at result ready answer
+              Nothing -> refused ready
+    | otherwise = case unaryOperation operator held of
+        Nothing -> (current, Just (unaryFailure at operator held))
+        Just operation -> wrapDynamicResult types at result current
+          (CoreExpression at (coreExpressionType held) operation)
 
 lowerBinary :: LowerExpression -> LowerState -> Span -> Located Expression -> Text -> Located Expression -> (LowerState, Maybe (CoreExpression, CoreType))
 lowerBinary lower state at left operator right
@@ -92,6 +102,7 @@ lowerBinary lower state at left operator right
           | expressionIsPrintValued coreRight -> halt (locatedSpan right) "comparing or operating on a Result[(), Str] value" after
           | operator == "in", CoreSetType{} <- rightType ->
               setMembership after at coreLeft coreRight
+          | any containsExactInt [leftType, rightType] -> exactBinary after at operator coreLeft coreRight
           | heldAlternatives leftType || heldAlternatives rightType -> dynamicBinary after at operator coreLeft coreRight
           | Just (operation, result) <- represented operator leftType rightType ->
               built after at (CoreBinary operation coreLeft coreRight) result
@@ -124,6 +135,63 @@ lowerBinary lower state at left operator right
     ArrayExpression [] | (_, Just (_, kind@(CoreArrayType _))) <- lower state right -> lowerOperand state left (Just kind)
     _ -> lower state left
 
+containsExactInt :: CoreType -> Bool
+containsExactInt = Set.member (CoreIntegerType ExactIntKind) . runtimeCarriers
+
+exactUnary :: LowerState -> Span -> Text -> CoreExpression -> (LowerState, Maybe (CoreExpression, CoreType))
+exactUnary state at operator operand
+  | Just selected <- mapRuntimeChoice state at CoreNeverType operand
+      (\ready held -> fmap (fmap fst) (exactUnary ready at operator held)) = selected
+  | kind == CoreIntegerType ExactIntKind, operator == "-" =
+      let (ready, local) = bindLocal state "" big
+          exact = expression big (CoreNegate (expression big (CoreIntegerConvert BigIntKind operand)))
+          held = readLocal at local
+          checked = checkedIntegerResult at PlatformSigned CheckedNegate held
+       in built ready at (CoreBlockValue (CoreBlock [CoreStatement at (CoreDeclare local exact)] (Just checked))) intType
+  | kind == CoreIntegerType ExactIntKind, operator == "~" =
+      built state at (CoreComplement (expression intType (CoreIntegerConvert PlatformSigned operand))) intType
+  | Just operation <- unaryOperation operator operand = built state at operation kind
+  | otherwise = (state, Just (unaryFailure at operator operand, CoreNeverType))
+ where
+  kind = coreExpressionType operand
+  big = CoreIntegerType BigIntKind
+  expression = CoreExpression at
+
+exactBinary :: LowerState -> Span -> Text -> CoreExpression -> CoreExpression -> (LowerState, Maybe (CoreExpression, CoreType))
+exactBinary state at operator left right =
+  let (withLeft, lhs) = bindLocal state "" (coreExpressionType left)
+      (withRight, rhs) = bindLocal withLeft "" (coreExpressionType right)
+      (ready, selected) = select withRight (readLocal at lhs) (readLocal at rhs)
+      declarations = [CoreStatement at (CoreDeclare lhs left), CoreStatement at (CoreDeclare rhs right)]
+   in (ready, (\(answer, kind) -> (CoreExpression at kind (CoreBlockValue (CoreBlock declarations (Just answer))), kind)) <$> selected)
+ where
+  select current a b
+    | Just chosen <- mapRuntimeChoice current at CoreNeverType a
+        (\ready held -> fmap (fmap fst) (select ready held b)) = chosen
+    | Just chosen <- mapRuntimeChoice current at CoreNeverType b
+        (\ready held -> fmap (fmap fst) (select ready a held)) = chosen
+    | any (isDynamic . coreExpressionType) [a, b] =
+        dynamicBinary current at operator a b
+    | CoreIntegerType leftKind <- coreExpressionType a
+    , CoreIntegerType rightKind <- coreExpressionType b
+    , operator `elem` ["<<", ">>"], ExactIntKind `elem` [leftKind, rightKind] =
+        exactShift current at operator (integerKindMeet leftKind rightKind) a b
+    | CoreIntegerType leftKind <- coreExpressionType a
+    , CoreIntegerType rightKind <- coreExpressionType b
+    , ExactIntKind `elem` [leftKind, rightKind]
+    , Just (ready, answer) <- mixedInteger current at operator (integerKindMeet leftKind rightKind) a b =
+        (ready, Just (answer, coreExpressionType answer))
+    | Just (tag, kind) <- represented operator (coreExpressionType a) (coreExpressionType b) =
+        built current at (CoreBinary tag a b) kind
+    | CoreIntegerType leftKind <- coreExpressionType a
+    , CoreIntegerType rightKind <- coreExpressionType b
+    , Just (ready, answer) <- mixedInteger current at operator (integerKindMeet leftKind rightKind) a b =
+        (ready, Just (answer, coreExpressionType answer))
+    | operator `elem` ["==", "!="] = built current at (CoreBoolLiteral (operator == "!=")) CoreBoolType
+    | otherwise = namedFailure current at failure [a, b]
+  failure [a, b] = cannotApplyBinaryMessage operator a b
+  failure _ = unsupportedOperatorMessage operator
+
 dynamicPayloads :: LowerTypes -> CoreType -> Maybe [(Text, CoreType)]
 dynamicPayloads types kind = sumVariants types kind >>= traverse payloadType
  where
@@ -155,6 +223,11 @@ dynamicBinary state at operator left right
   equalityOperator = if operator == "==" then CoreEqual else CoreNotEqual
   result = if operator `elem` ["==", "!=", "<", "<=", ">", ">="] then CoreBoolType else leftType
   operation current a b
+    | all integerType [aType, bType]
+    , any containsExactInt [aType, bType] =
+        case exactBinary current at operator a b of
+          (ready, Just (value, _)) -> wrap ready value
+          (ready, Nothing) -> refused ready
     | Just (tag, kind) <- represented operator aType bType =
         wrap current (CoreExpression at kind (CoreBinary tag a b))
     | CoreIntegerType aKind <- aType, CoreIntegerType bKind <- bType
@@ -221,7 +294,10 @@ mixedInteger state at operator kind left right = do
     | Just checked <- lookup tag checkedTags = withExact state tag (checkedResult checked)
     | Just arithmetic <- lookup tag saturatingTags
     , Just (low, high) <- integerKindBounds kind = withExact state arithmetic (saturated low high)
-    | tag == CoreRemainder = (state, convert kind (exact big tag))
+    | tag == CoreRemainder =
+        let resultKind = if kind == PlatformSigned && any (containsExactInt . coreExpressionType) [left, right]
+              then ExactIntKind else kind
+         in (state, convert resultKind (exact big tag))
     | otherwise = (state, expression target (CoreBinary tag (convert kind left) (convert kind right)))
   target = CoreIntegerType kind
   big = CoreIntegerType BigIntKind
@@ -234,17 +310,50 @@ mixedInteger state at operator kind left right = do
     let (after, local) = bindLocal current "" big
         held = CoreStatement at (CoreDeclare local (exact big tag))
      in (after, expression target (CoreBlockValue (CoreBlock [held] (Just (finish (readLocal at local))))))
-  checkedResult checked held =
-    let fits = expression CoreBoolType (CoreIntegerFits kind held)
-        message = expression CoreTextType (CoreTextLiteral (overflowMessage kind checked))
-        stopped = expression CoreNeverType (CoreFailText overflowCode (Just overflowHelp) message Nothing)
-     in choose fits (convert kind held) stopped
+  checkedResult = checkedIntegerResult at kind
   saturated low high held =
     choose (bound CoreLess low) (limited low) (choose (bound CoreGreater high) (limited high) (convert kind held))
    where
     bound tag value = expression CoreBoolType (CoreBinary tag held (expression big (CoreIntegerLiteral BigIntKind value)))
     limited = expression target . CoreIntegerLiteral kind
   choose test leftValue rightValue = expression target (CoreIfValue test (CoreBlock [] (Just leftValue)) rightValue)
+
+exactShift :: LowerState -> Span -> Text -> IntegerKind -> CoreExpression -> CoreExpression
+  -> (LowerState, Maybe (CoreExpression, CoreType))
+exactShift state at operator kind left right =
+  let target = CoreIntegerType kind
+      big = CoreIntegerType BigIntKind
+      expression = CoreExpression at
+      number kind' n = expression (CoreIntegerType kind') (CoreIntegerLiteral kind' n)
+      count = clampedPosition at right
+      toBig operand = expression big (CoreIntegerConvert BigIntKind operand)
+      wrap value = expression target (CoreBinary CoreWrapAdd
+        (expression target (CoreIntegerConvert kind value)) (number kind 0))
+      input | integerKindSigned kind = toBig left
+            | otherwise = toBig (wrap left)
+      tag = if operator == "<<" then CoreShiftLeft else CoreShiftRight
+      moved = expression big (CoreBinary tag input count)
+      nonnegative = expression CoreBoolType (CoreBinary CoreGreaterOrEqual count (number PlatformSigned 0))
+      failure message help = expression CoreNeverType
+        (CoreFailText shiftCode (Just help) (expression CoreTextType (CoreTextLiteral message)) Nothing)
+      choose condition yes no = expression target (CoreIfValue condition (CoreBlock [] (Just yes)) no)
+      bounded = case integerKindWidth kind of
+        Nothing -> moved
+        Just width ->
+          let inside = expression CoreBoolType (CoreBinary CoreLess count (number PlatformSigned (toInteger width)))
+           in choose inside (wrap moved) (failure (wideShiftMessage kind) wideShiftHelp)
+      result = choose nonnegative bounded (failure negativeShiftMessage negativeShiftHelp)
+   in (state, Just (result, target))
+
+checkedIntegerResult :: Span -> IntegerKind -> CheckedOperation -> CoreExpression -> CoreExpression
+checkedIntegerResult at kind checked held =
+  let expression = CoreExpression at
+      target = CoreIntegerType kind
+      fits = expression CoreBoolType (CoreIntegerFits kind held)
+      converted = expression target (CoreIntegerConvert kind held)
+      message = expression CoreTextType (CoreTextLiteral (overflowMessage kind checked))
+      stopped = expression CoreNeverType (CoreFailText overflowCode (Just overflowHelp) message Nothing)
+   in expression target (CoreIfValue fits (CoreBlock [] (Just converted)) stopped)
 
 comparisonOnlyType :: CoreType -> Bool
 comparisonOnlyType kind =

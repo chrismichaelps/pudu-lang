@@ -283,21 +283,20 @@ data CoreArrayMethodName
   | ArrayReversed
   deriving stock (Eq, Show)
 
-{-| What the runtime does for ranges. `RangeValuesFor` lists the values and,
-    on a range missing an end, fails naming the method it serves;
-    `RangeIterated` lists them for `for`, which fails with E7001 instead. -}
+{-| Range queries and materializers. `RangeValuesFor` names its method
+    when a missing endpoint prevents materialization. -}
 data CoreRangeMethodName
   = RangeLengthOf
   | RangeIsEmptyOf
   | RangeContainsValue
   | RangeHasStart
-  | RangeStartOf
+  | RangeStartExact
   | RangeHasEnd
-  | RangeEndOf
+  | RangeEndExact
   | RangeIsInclusiveOf
   | RangeIsBoundedOf
+  | RangeMembersFitInt
   | RangeValuesFor !Text
-  | RangeIterated
   | RangeReversedOf
   | RangeStepBy
   | RangeSumOf

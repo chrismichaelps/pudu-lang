@@ -590,3 +590,15 @@ Resolved Grill Log: Initialize a mutable binding with the settled layout require
 ## Selected receiver layouts (#956)
 
 Resolved Grill Log: Pass the callee span separately from the invocation span on text and byte method calls.
+
+## Exact dynamic Int payloads
+
+Resolved Grill Log: An annotated binding projects selected payloads into the declared dynamic layout. The stored value retains its exact payload.
+
+## Held collection member selection
+
+Resolved Grill Log: Choose collection builtins from the held receiver family. The checked element or key layout still guides typed arguments when the actual receiver belongs to that same family.
+
+## Held declared method receivers
+
+Resolved Grill Log: Selected declared receivers can resolve builtins, record fields or another declared method from the held layout without replaying the source receiver.
