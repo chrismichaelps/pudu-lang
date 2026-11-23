@@ -227,6 +227,9 @@ static void (*const pudu_instruction_table[PUDU_UI_INSTRUCTIONS])(JNIEnv *, pudu
   [PUDU_UI_SENSE] = pudu_do_sense, [PUDU_UI_PICK_IMAGE] = pudu_do_pick_image,
   [PUDU_UI_LOAD] = pudu_do_load, [PUDU_UI_MEDIA] = pudu_do_media, [PUDU_UI_AUDIO] = pudu_do_audio,
   [PUDU_UI_KEYBOARD] = pudu_do_keyboard, [PUDU_UI_BACK] = pudu_do_back,
+  [PUDU_UI_PICK_CONTACT] = pudu_do_pick_contact, [PUDU_UI_PICK_DOCUMENT] = pudu_do_pick_document,
+  [PUDU_UI_TAKE_PHOTO] = pudu_do_take_photo, [PUDU_UI_RECORD] = pudu_do_record, [PUDU_UI_BADGE] = pudu_do_badge,
+  [PUDU_UI_SECURE] = pudu_do_secure, [PUDU_UI_TOAST] = pudu_do_toast,
   [PUDU_UI_OPTIONS] = pudu_do_options, [PUDU_UI_COUNT] = pudu_do_count, [PUDU_UI_MOMENT] = pudu_do_moment,
 };
 

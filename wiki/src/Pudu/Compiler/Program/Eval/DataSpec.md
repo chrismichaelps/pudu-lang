@@ -50,6 +50,10 @@ Depends on the shared runner in `Pudu.Compiler.Program.Common` and on the fixtur
 
 The fixture [[Uses Mobile Services]] (`test-fixtures/stdlib/UsesMobileServices.pudu`) expects 18 checks: the words of each of the eleven requests, the decoding of each of the seven events, and the refusal of a malformed POWERED and a malformed SENSED.
 
+## Pickers and system touches (#991)
+
+`UsesMobilePick` ([[Uses Mobile Pick]]) expects 8 checks.
+
 ## Referenced by
 
 [[Uses Mobile Memo]] · [[Uses Mobile Navigation]] · [[Uses Mobile Refresh]] · [[Uses Mobile View]] · [[Eval Data Tests]]

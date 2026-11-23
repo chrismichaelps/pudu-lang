@@ -171,6 +171,7 @@ public final class PuduActivity extends Activity {
     super.onActivityResult(code, result, data);
     PuduAuth.result(code, result == RESULT_OK);
     PuduMedia.result(code, result == RESULT_OK, data);
+    PuduPick.result(code, result == RESULT_OK, data);
   }
 
   @Override public void onRequestPermissionsResult(int code, String[] permissions, int[] results) {

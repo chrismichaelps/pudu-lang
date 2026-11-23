@@ -20,6 +20,10 @@ program selects the desktop marker. Put the staging directory on the include pat
 units and use one compiler invocation to preserve cancellation and atomic
 publication. A program on another platform selects no AppKit source.
 
+## Pickers and system touches (#991)
+
+Pick sources: `cbits/pudu_ios_pick.h` for iOS and `android/org/pudu/PuduPick.java` for Android. See [[pudu-ios-pick]] and [[PuduPick]].
+
 ## Referenced by
 
 [[src/Pudu/Backend/_MOC]] · [[Native Desktop Adapter Delivery]]

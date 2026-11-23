@@ -44,6 +44,10 @@ Depends on [[pudu_android_events.h]] for the queue, on [[pudu_android_jni.h]] fo
 - **Q:** Why is one request one answer on Android as on iOS? **A:** A program waiting on a tag must always be released. Each handler reports exactly one answer under its tag, including a cancelled prompt.
 - **Q:** Why are eleven handlers in one header? **A:** They share one bridge, one queue and one check pattern. Splitting them across headers would repeat the same JNI and refusal code eleven times.
 
+## Pickers and system touches (#991)
+
+Seven handlers register for PICK_CONTACT, PICK_DOCUMENT, TAKE_PHOTO, RECORD, BADGE, SECURE and TOAST, implemented in [[PuduPick]]. Defects: a RECORD word above 1 is refused as `set recording to`, and a SECURE word above 1 as `set secure screen to`.
+
 ## Referenced by
 
 [[src/cbits/_MOC]] · [[NATIVE-MOBILE]] · [[Std Mobile Stream]] · [[Std Mobile Events]] · [[pudu-android-routes]] · [[pudu-ios-notify]] · [[pudu-ios-media]] · [[PuduNotify]] · [[PuduAuth]] · [[PuduMedia]] · [[PuduDevice]]

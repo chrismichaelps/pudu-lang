@@ -95,6 +95,10 @@ calls), [[Native Mobile Targets]].
   can send must not be honored in a released build. _Rejected:_ trusting the intent
   extras unconditionally.
 
+## Pickers and system touches (#991)
+
+`onActivityResult` also routes its request codes to [[PuduPick]] for the contact, document, photo and recording results.
+
 ## Referenced by
 
 [[src/Pudu/Backend/Toolchain/Android]] · [[src/Pudu/Backend/_MOC]]

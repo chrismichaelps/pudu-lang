@@ -1,0 +1,79 @@
+module Picker
+
+import Std.Mobile.Host as Host
+import Std.Mobile.Permission as Permission
+import Std.Mobile.Pick as Pick
+import Std.Mobile.System as System
+import Std.Mobile.View as View
+
+/// The tags of the buttons and of the answers they ask for.
+const CONTACT: UInt32 = 1u32
+const DOCUMENT: UInt32 = 2u32
+const PHOTO: UInt32 = 3u32
+const RECORD: UInt32 = 4u32
+
+/// What each picker answered, and whether a recording is running.
+type Model = { contact: Str, document: Str, photo: Str, recording: Bool, note: Str }
+
+fn shown(found: &Option[Str]) -> Str {
+  match *found {
+    case Some(path) => path
+    case None => "cancelled"
+  }
+}
+
+fn view(model: &Model) -> View.View {
+  View.Column([
+      View.Button("Pick a contact", CONTACT),
+      View.Label("Contact: {model.contact}"),
+      View.Button("Pick a document", DOCUMENT),
+      View.Label("Document: {model.document}"),
+      View.Button("Take a photo", PHOTO),
+      View.Label("Photo: {model.photo}"),
+      View.Button(if model.recording { "Stop recording" } else { "Record a note" }, RECORD),
+      View.Label("Note: {model.note}")
+    ])
+}
+
+/// Asks for the camera and microphone, keeps the screen out of screenshots,
+/// shows a badge and a toast, and offers each picker behind a button.
+fn main() -> Int {
+  var model = Model{contact: "none", document: "none", photo: "none", recording: false, note: "none"}
+  let (first, built) = View.mount(&view(&model))
+  var mounted = first
+  Host.apply(built)
+  Host.apply(Permission.check(&[Permission.Camera, Permission.Microphone]))
+  Host.apply(System.secure(true))
+  Host.apply(System.badge(1))
+  Host.apply(System.toast("Pick something to attach"))
+  while true {
+    let event = Host.wait()
+    match event {
+      case View.Stopped => { return 0 }
+      case View.Tapped(tag) if tag == CONTACT => { Host.apply(Pick.pickContact(CONTACT)) }
+      case View.Tapped(tag) if tag == DOCUMENT => { Host.apply(Pick.pickDocument(DOCUMENT, ["application/pdf", "image/*"])) }
+      case View.Tapped(tag) if tag == PHOTO => {
+        Host.apply(Permission.request(Permission.Camera))
+        Host.apply(Pick.takePhoto(PHOTO))
+      }
+      case View.Tapped(tag) if tag == RECORD => {
+        if !model.recording {
+          Host.apply(Permission.request(Permission.Microphone))
+        }
+        Host.apply(Pick.record(RECORD, !model.recording))
+        model = Model{..model, recording: !model.recording}
+      }
+      case View.ContactPicked(_tag, found) => {
+        model = Model{..model, contact: match found { case Some(person) => person.name case None => "cancelled" }}
+      }
+      case View.Filed(tag, found) if tag == DOCUMENT => { model = Model{..model, document: shown(&found)} }
+      case View.Filed(tag, found) if tag == PHOTO => { model = Model{..model, photo: shown(&found)} }
+      case View.Filed(tag, found) if tag == RECORD => { model = Model{..model, note: shown(&found)} }
+      case _ => {}
+    }
+    let (next, changes) = View.update(&mounted, &view(&model))
+    Host.apply(changes)
+    mounted = next
+  }
+  0
+}

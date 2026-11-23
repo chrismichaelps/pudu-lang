@@ -50,6 +50,7 @@ extra-source-files: cbits/pudu_ffi_internal.h
                     cbits/pudu_ios_notify.h
                     cbits/pudu_ios_media.h
                     cbits/pudu_ios_web.h
+                    cbits/pudu_ios_pick.h
                     cbits/pudu_android_services.h
                     cbits/pudu_ios_capability_test.h
                     cbits/pudu_android_host.c
@@ -91,6 +92,7 @@ extra-source-files: cbits/pudu_ffi_internal.h
                     android/org/pudu/PuduAuth.java
                     android/org/pudu/PuduMedia.java
                     android/org/pudu/PuduWeb.java
+                    android/org/pudu/PuduPick.java
                     cbits/pudu_audio.c
                     cbits/pudu_audio_stream.c
                     cbits/pudu_audio.h

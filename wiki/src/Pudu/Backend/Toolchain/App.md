@@ -93,6 +93,10 @@ the simulator run [[iOS Simulator Run]].
   identity the machine's owner chooses; that arrives with signed store builds.
   _Rejected:_ guessing an identity.
 
+## Pickers and system touches (#991)
+
+Frameworks linked always for the pickers: ContactsUI, Contacts and UniformTypeIdentifiers, alongside AVFoundation. See [[pudu-ios-pick]].
+
 ## Referenced by
 
 [[src/Pudu/Backend/_MOC]] · [[Native App Delivery]] · [[Native App Tests]] · [[iOS Host Adapter]] · [[Native Mobile Targets]]

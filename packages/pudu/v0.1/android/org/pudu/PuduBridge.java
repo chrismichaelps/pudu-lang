@@ -350,6 +350,12 @@ public final class PuduBridge {
   static void audio(int tag, boolean playing, boolean looping, String source) { PuduWeb.audio(tag, playing, looping, source); }
   static void keyboard() { PuduWeb.keyboard(); }
   static void back(boolean on) { PuduWeb.back(on); }
+  static void pickContact(int tag) { PuduPick.contact(tag); }
+  static void pickDocument(int tag, String types) { PuduPick.document(tag, types); }
+  static void takePhoto(int tag) { PuduPick.photo(tag); }
+  static void record(int tag, boolean on) { PuduPick.record(tag, on); }
+  static void secure(boolean on) { PuduPick.secure(on); }
+  static void toast(String text) { PuduPick.toast(text); }
   static void tabs(int[] ids, String[] names, int[] counts, int[] routes, View[] bodies, boolean[] fills, String[] titles, int selected,
       boolean hasSheet, int sheet, View sheetBody, boolean sheetFills) {
     PuduTabs.show(ids, names, counts, routes, bodies, fills, titles, selected, hasSheet, sheet, sheetBody, sheetFills);

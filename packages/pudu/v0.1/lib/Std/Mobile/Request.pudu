@@ -20,6 +20,13 @@ const PICK_IMAGE: UInt32 = 73u32
 const AUDIO: UInt32 = 76u32
 const KEYBOARD: UInt32 = 77u32
 const BACK: UInt32 = 78u32
+const PICK_CONTACT: UInt32 = 79u32
+const PICK_DOCUMENT: UInt32 = 80u32
+const TAKE_PHOTO: UInt32 = 81u32
+const RECORD: UInt32 = 82u32
+const BADGE: UInt32 = 83u32
+const SECURE: UInt32 = 84u32
+const TOAST: UInt32 = 85u32
 
 /// Schedules notification `id` to show `title` and `body` after `delay` seconds.
 export fn notify(out: Array[UInt8], id: UInt32, delay: UInt32, title: Str, body: Str) -> Array[UInt8] {
@@ -69,3 +76,24 @@ export fn keyboard(out: Array[UInt8]) -> Array[UInt8] { words(out, [KEYBOARD]) }
 
 /// Receives the platform's back gesture as BACKED with 1, or returns it with 0.
 export fn back(out: Array[UInt8], on: UInt32) -> Array[UInt8] { words(out, [BACK, on]) }
+
+/// Shows the contact picker; CONTACT_PICKED with `reported` answers.
+export fn pickContact(out: Array[UInt8], reported: UInt32) -> Array[UInt8] { words(out, [PICK_CONTACT, reported]) }
+
+/// Shows the document picker for `types`, comma-separated MIME types; FILED with `reported` answers.
+export fn pickDocument(out: Array[UInt8], reported: UInt32, types: Str) -> Array[UInt8] { field(words(out, [PICK_DOCUMENT, reported]), types) }
+
+/// Shows the camera; FILED with `reported` answers.
+export fn takePhoto(out: Array[UInt8], reported: UInt32) -> Array[UInt8] { words(out, [TAKE_PHOTO, reported]) }
+
+/// Starts recording with 1 or stops it with 0; FILED with `reported` answers the stop.
+export fn record(out: Array[UInt8], reported: UInt32, on: UInt32) -> Array[UInt8] { words(out, [RECORD, reported, on]) }
+
+/// Sets the application icon's badge to `count`.
+export fn badge(out: Array[UInt8], count: UInt32) -> Array[UInt8] { words(out, [BADGE, count]) }
+
+/// Hides the screen from screenshots and recordings with 1, or shows it with 0.
+export fn secure(out: Array[UInt8], on: UInt32) -> Array[UInt8] { words(out, [SECURE, on]) }
+
+/// Shows `text` briefly over the content.
+export fn toast(out: Array[UInt8], text: Str) -> Array[UInt8] { field(words(out, [TOAST]), text) }

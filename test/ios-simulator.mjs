@@ -346,6 +346,14 @@ int main(int argc, char **argv) {
       labels: ["Loaded: true", "Backs: 0", /^Sounds ended: [01]$/u],
       layout: ["PUDU_WEB loaded yes"],
     }]);
+    // At rest, before any picker opens, every answer reads as none.
+    mobileApp(device, "Picker", [{
+      environment: { SIMCTL_CHILD_PUDU_UI_SELFTEST: "0" },
+      labels: ["Contact: none", "Document: none", "Photo: none", "Note: none"],
+    }], "pick");
+    refusedApp(device, root, "recording word 2",
+      "import Std.Mobile.Host as Host\nimport Std.Mobile.Request as Request", `  Host.apply(bytesOf(Request.record([], 1u32, 2u32)))`,
+      /pudu: a view stream set recording to 2/u);
     refusedApp(device, root, "load on a label",
       "import Std.Mobile.Host as Host\nimport Std.Mobile.Stream as Stream", `  let label = Stream.create([], 0u32, Stream.LABEL)
   Host.apply(bytesOf(Stream.load(label, 0u32, "about:blank")))`,

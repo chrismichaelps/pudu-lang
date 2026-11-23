@@ -259,6 +259,10 @@ The Viewer example, `examples/mobile/Viewer.pudu` ([[Viewer Example]]), runs wit
 
 Refusal: a LOAD sent to a label node is refused with `loaded a page into a node that is not a web view:` followed by the node id.
 
+## Pickers and system touches (#991)
+
+Picker run: [[Picker Example]] runs with no self-test interaction, and its labels are checked at rest (each answer shows its empty form, `none` or `0`). Refusal: RECORD sent with the word 2 is refused with `set recording to`.
+
 ## Services run (#989)
 
 The Toolbox example, `examples/mobile/toolbox/Toolbox.pudu` ([[Toolbox Example]]), runs with `PUDU_UI_SERVICES_TEST` set and `PUDU_UI_SELFTEST` set to `0`. The script waits for the labels `Battery: <level or unknown>`, `Authenticated: false` (the simulator has no passcode), `Spoke: true` and `Motion: none` (the simulator has no accelerometer).

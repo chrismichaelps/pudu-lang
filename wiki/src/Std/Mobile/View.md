@@ -120,6 +120,10 @@ The `Event` type gains seven constructors: `Notified(UInt32)`, `Authenticated(UI
 
 The `Event` type gains three constructors: `Loaded(UInt32, Bool)`, `Ended(UInt32)` and `Backed`. Their decoders are in [[Std Mobile Events]].
 
+## Pickers and system touches (#991)
+
+- `ContactPicked(UInt32, Option[Pick.Contact])` and `Filed(UInt32, Option[Str])` decode CONTACT_PICKED and FILED. See [[Std Mobile Pick]].
+
 ## Referenced by
  · [[Viewer Example]]
 [[src/Std/_MOC]] · [[Std Mobile Host]] · [[Std Mobile Events]] · [[Std Mobile Navigation]] · [[Std Mobile Stream]] · [[Std Mobile Theme]] · [[Native First Light Delivery]] · [[Native Controls Delivery]] · [[Native Keyed Lists Delivery]] · [[Native iOS Scrolling Delivery]] · [[Native iOS Theming Delivery]] · [[Native iOS Recycling Delivery]] · [[Native iOS Materials Delivery]] · [[Native iOS Refresh Delivery]] · [[Std Mobile Memo]] · [[Native Render Skipping]] · [[Uses Mobile Memo]] · [[Std Mobile Control]]

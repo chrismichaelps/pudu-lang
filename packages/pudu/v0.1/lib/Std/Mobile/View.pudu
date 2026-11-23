@@ -7,6 +7,7 @@ import Std.Mobile.Feedback as Feedback
 import Std.Mobile.Gesture as Gesture
 import Std.Mobile.Location as Location
 import Std.Mobile.Permission as Permission
+import Std.Mobile.Pick as Pick
 import Std.Mobile.Scene as Scene
 import Std.Mobile.Stream as Stream
 import Std.Mobile.Theme as Theme
@@ -51,8 +52,7 @@ export type View
 /// have no row.
 export type Window = { tag: UInt32, total: UInt32, first: UInt32, columns: UInt32, rows: Array[(Str, View)] }
 
-/// What the platform reported: input, a change of scene or navigation, or the
-/// answer to a request. Each payload is described in Std.Mobile.Events.
+/// What the platform reported; each payload is described in Std.Mobile.Events.
 export type Event
   = Tapped(UInt32)
   | Changed(UInt32, Str)
@@ -94,14 +94,15 @@ export type Event
   | Loaded(UInt32, Bool)
   | Ended(UInt32)
   | Backed
+  | ContactPicked(UInt32, Option[Pick.Contact])
+  | Filed(UInt32, Option[Str])
   | Stopped
 
 /// A node the platform shows: its id, the view it shows, and the nodes of
 /// its children in order.
 export type Shown = { id: UInt32, view: View, children: Array[Shown] }
 
-/// The tree the platform shows, the next id never handed out, and the ids of
-/// removed nodes, handed out again first.
+/// The tree shown, the next fresh id, and removed ids, which are reused first.
 export type Mounted = { root: Shown, next: UInt32, free: Array[UInt32] }
 
 /// What one update did: the nodes it compared, the memos it rendered, and

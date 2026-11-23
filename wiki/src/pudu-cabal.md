@@ -215,6 +215,10 @@ provides the common checked extent representation.
 
 Register [[Foreign Run Storage]] with the interpreter library so the installed compiler uses the same C layout bridge as the test executable.
 
+## Pickers and system touches (#991)
+
+The iOS pick source `cbits/pudu_ios_pick.h` and the Android source `PuduPick.java` are listed with the host sources. The frameworks ContactsUI, Contacts and UniformTypeIdentifiers are linked always.
+
 ## Referenced by
 
 The library exposes [[Resolve Canonical]] for the scoped generated-Impl resolver

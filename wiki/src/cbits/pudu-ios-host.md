@@ -98,6 +98,10 @@ Implements the four symbols of [[Std Mobile Host]]. Its streams come from [[Std 
 - Eleven dispatch rows route codes 63 to 73 to the notification, authentication, media and device handlers.
 - `PUDU_UI_SERVICES_TEST` selects the services self-test in the table of self-tests.
 
+## Pickers and system touches (#991)
+
+Includes `pudu_ios_pick.h` after the web header. Seven dispatch rows route PICK_CONTACT through TOAST (79 to 85) to [[pudu-ios-pick]].
+
 ## Referenced by
 
 [[Native Mobile Targets]] · [[Std Mobile Host]] · [[iOS Simulator Run]] · [[Backend Toolchain App]] · [[Native First Light Delivery]] · [[Native Controls Delivery]] · [[Native iOS Scrolling Delivery]] · [[Native iOS Theming Delivery]] · [[Native iOS Recycling Delivery]] · [[Native iOS Materials Delivery]] · [[Native iOS Capabilities Delivery]] · [[Native iOS Refresh Delivery]]

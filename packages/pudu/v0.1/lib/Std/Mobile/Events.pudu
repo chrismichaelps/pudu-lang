@@ -4,6 +4,7 @@ import Std.Mobile.Device as Device
 import Std.Mobile.Gesture as Gesture
 import Std.Mobile.Location as Location
 import Std.Mobile.Permission as Permission
+import Std.Mobile.Pick as Pick
 import Std.Mobile.Scene as Scene
 import Std.Mobile.View as View
 
@@ -49,6 +50,8 @@ const IMAGE_PICKED: UInt64 = 41u64
 const LOADED: UInt64 = 42u64
 const ENDED: UInt64 = 43u64
 const BACKED: UInt64 = 44u64
+const CONTACT_PICKED: UInt64 = 45u64
+const FILED: UInt64 = 46u64
 
 /// Each event kind's constructor, given the tag and the text the host holds.
 const EVENTS: Map[UInt64, fn(UInt32, Str) -> View.Event] = mapOf([
@@ -102,11 +105,12 @@ const MEASURED: Map[UInt64, fn(UInt32, UInt32, Array[Int32]) -> Option[View.Even
   ])
 
 /// Whether a host event's kind carries text the host holds for it.
-export fn carriesText(raw: UInt64) -> Bool { raw >> 32 == CHANGED || raw >> 32 == FETCHED || raw >> 32 == PASTED || raw >> 32 == LINKED || raw >> 32 == STORED || raw >> 32 == DESCRIBED || raw >> 32 == IMAGE_PICKED }
+export fn carriesText(raw: UInt64) -> Bool { raw >> 32 == CHANGED || raw >> 32 == FETCHED || raw >> 32 == PASTED || raw >> 32 == LINKED || raw >> 32 == STORED || raw >> 32 == DESCRIBED || raw >> 32 == IMAGE_PICKED || raw >> 32 == CONTACT_PICKED || raw >> 32 == FILED }
 
 /// Whether a host event's kind carries a detail word the host holds for it.
 export fn carriesDetail(raw: UInt64) -> Bool {
-  DETAILED.containsKey(raw >> 32) || MEASURED.containsKey(raw >> 32) || raw >> 32 == FETCHED || raw >> 32 == STORED || raw >> 32 == DESCRIBED || raw >> 32 == IMAGE_PICKED
+  DETAILED.containsKey(raw >> 32) || MEASURED.containsKey(raw >> 32) || raw >> 32 == FETCHED || raw >> 32 == STORED || raw >> 32 == DESCRIBED || raw >> 32 == IMAGE_PICKED || raw >> 32 == CONTACT_PICKED
+    || raw >> 32 == FILED
 }
 
 /// Whether a host event's kind carries signed words the host holds for it.
@@ -134,6 +138,8 @@ export fn eventWithWords(raw: UInt64, text: Str, detail: UInt32, values: Array[I
     case Some(reported) if raw >> 32 == STORED => stored(reported, detail, text)
     case Some(reported) if raw >> 32 == DESCRIBED => described(reported, Device.facts(text, detail))
     case Some(reported) if raw >> 32 == IMAGE_PICKED => picked(reported, detail, text)
+    case Some(reported) if raw >> 32 == FILED => filed(reported, detail, text)
+    case Some(reported) if raw >> 32 == CONTACT_PICKED => chosen(reported, detail, text)
     case Some(reported) => {
       match (MEASURED.get(raw >> 32), DETAILED.get(raw >> 32)) {
         case (Some(made), _) => orStopped(made(reported, detail, values))
@@ -236,6 +242,25 @@ fn picked(reported: UInt32, chosen: UInt32, path: Str) -> View.Event {
     View.ImagePicked(reported, None)
   } else {
     View.Stopped
+  }
+}
+
+// A file's path when the detail word is 1, nothing when it is 0 with no text.
+fn filed(reported: UInt32, done: UInt32, path: Str) -> View.Event {
+  match picked(reported, done, path) {
+    case View.ImagePicked(tag, found) => View.Filed(tag, found)
+    case other => other
+  }
+}
+
+// A shared contact when the detail word is 1, a cancellation when it is 0.
+fn chosen(reported: UInt32, done: UInt32, text: Str) -> View.Event {
+  if done == 0u32 && text.length() == 0 {
+    return View.ContactPicked(reported, None)
+  }
+  match Pick.contact(text) {
+    case Some(found) if done == 1u32 => View.ContactPicked(reported, Some(found))
+    case _ => View.Stopped
   }
 }
 

@@ -21,7 +21,8 @@ static const uint64_t PUDU_UI_TAPPED = 1, PUDU_UI_STOPPED = 2, PUDU_UI_CHANGED =
                       PUDU_UI_STORED = 31, PUDU_UI_DESCRIBED = 32, PUDU_UI_NETWORKED = 33,
                       PUDU_UI_LOCATED = 34, PUDU_UI_NOTIFIED = 35, PUDU_UI_AUTHENTICATED = 36,
                       PUDU_UI_BROWSED = 37, PUDU_UI_SPOKE = 38, PUDU_UI_POWERED = 39, PUDU_UI_SENSED = 40,
-                      PUDU_UI_IMAGE_PICKED = 41, PUDU_UI_LOADED = 42, PUDU_UI_ENDED = 43, PUDU_UI_BACKED = 44;
+                      PUDU_UI_IMAGE_PICKED = 41, PUDU_UI_LOADED = 42, PUDU_UI_ENDED = 43, PUDU_UI_BACKED = 44,
+                      PUDU_UI_CONTACT_PICKED = 45, PUDU_UI_FILED = 46;
 
 /* Run at the start of each wait, once the program has handled the event it
    was last handed; NULL until a capability needs it. */

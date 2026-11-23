@@ -5,6 +5,11 @@ tags: [changelog]
 
 # Changelog
 
+## 2026-11-23 — Contact and document pickers, camera, audio recording, badge, secure screen and toasts (#991)
+
+- Pickers: PICK_CONTACT 79, PICK_DOCUMENT 80 and TAKE_PHOTO 81 in `Std.Mobile.Request`, with CONTACT_PICKED 45 and FILED 46 decoded as `ContactPicked` and `Filed` in `Std.Mobile.View`. The new `Std.Mobile.Pick` module holds `pickContact`, `pickDocument`, `takePhoto`, `record` and the `contact` decoder. Recording: RECORD 82. System: BADGE 83, SECURE 84 and TOAST 85 through `Std.Mobile.System` (`badge`, `secure`, `toast`); the instruction bound is 86. The iOS host uses ContactsUI, UIDocumentPickerViewController, UIImagePickerController and AVAudioRecorder ([[pudu-ios-pick]]); the Android host uses the system pickers, MediaRecorder and FLAG_SECURE ([[PuduPick]]). The example is [[Picker Example]], and the fixture is [[Uses Mobile Pick]].
+  [[Std Mobile Pick]] · [[Std Mobile Request]] · [[Std Mobile System]] · [[Std Mobile Events]] · [[Std Mobile View]] · [[pudu-ios-pick]] · [[PuduPick]] · [[Picker Example]] · [[Uses Mobile Pick]] · [[NATIVE-MOBILE]]
+
 ## 2026-11-23 — Web pages, video, audio, keyboard dismissal and the back gesture (#990)
 
 - Views: `Std.Mobile.Control` gains `Web` (kind WEB 23, then LOAD 74) and `Video` (kind VIDEO 24, then MEDIA 75); the kinds sentinel is 25. Requests: AUDIO 76, KEYBOARD 77 and BACK 78 in `Std.Mobile.Request`; the instruction bound is 79. Events: LOADED 42, ENDED 43 and BACKED 44, decoded as `Loaded`, `Ended` and `Backed` in `Std.Mobile.View`. `Std.Mobile.Media` gains `play` and `stop`; `Std.Mobile.System` gains `dismissKeyboard` and `handleBack`. The iOS host uses WKWebView and AVPlayer ([[pudu-ios-web]]); the Android host uses WebView, VideoView and MediaPlayer ([[PuduWeb]]). The example is [[Viewer Example]], and the fixture is [[Uses Mobile Web]].

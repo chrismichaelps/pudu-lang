@@ -392,6 +392,11 @@ tags: [moc, module]
 - [[Uses Mobile Web]] — stdlib fixture for the web, video, audio, keyboard and back requests and their answers (#990).
 - [[Viewer Example]] — web page, looping video, sound, keyboard and back on the simulator and device (#990).
 - [[PuduWeb]] — Android web pages, video, audio, keyboard dismissal and back (#990).
+- [[Std Mobile Pick]] — contact, document and photo pickers, recording, badge, secure screen and toasts (#991).
+- [[pudu-ios-pick]] — iOS pickers, recording, badge, toast and the secure screen setting (#991).
+- [[PuduPick]] — Android pickers, recording, secure screen and toasts (#991).
+- [[Uses Mobile Pick]] — stdlib fixture for the picker, recording, badge, secure screen and toast requests (#991).
+- [[Picker Example]] — pickers, recording, badge and toast on the simulator and device (#991).
 - [[Pudu Backend Toolchain Assets]] — application asset listing, refused names and links, staging (#973).
 - [[Uses Mobile Controls]] — stdlib fixture for the value controls: build and change words, normalization and value events (#934).
 - [[Pudu Compiler Program Eval Data Spec]] — data evaluation spec, including the mobile fixture counts.

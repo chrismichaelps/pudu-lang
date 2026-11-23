@@ -1,0 +1,4 @@
+# The permissions this example asks for, each with the reason the person reads.
+[app.permissions]
+camera = "Takes a photo to attach."
+microphone = "Records a voice note."

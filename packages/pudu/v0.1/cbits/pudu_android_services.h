@@ -110,4 +110,36 @@ static void pudu_do_back(JNIEnv *env, pudu_reader *reader) {
   pudu_bridge(env, "back", "(Z)V", (jboolean)(on == 1));
 }
 
+/* PICK_CONTACT: the tag; PICK_DOCUMENT: the tag, then the MIME types;
+   TAKE_PHOTO: the tag; RECORD: the tag, then 1 or 0. */
+static void pudu_do_pick_contact(JNIEnv *env, pudu_reader *reader) { pudu_bridge(env, "pickContact", "(I)V", (jint)pudu_word(reader)); }
+
+static void pudu_do_pick_document(JNIEnv *env, pudu_reader *reader) {
+  uint32_t tag = pudu_word(reader);
+  pudu_bridge(env, "pickDocument", "(ILjava/lang/String;)V", (jint)tag, pudu_text(env, reader));
+}
+
+static void pudu_do_take_photo(JNIEnv *env, pudu_reader *reader) { pudu_bridge(env, "takePhoto", "(I)V", (jint)pudu_word(reader)); }
+
+static void pudu_do_record(JNIEnv *env, pudu_reader *reader) {
+  uint32_t tag = pudu_word(reader), on = pudu_word(reader);
+  if (on > 1) pudu_stream_defect("set recording to", on);
+  pudu_bridge(env, "record", "(IZ)V", (jint)tag, (jboolean)(on == 1));
+}
+
+/* BADGE: the count; launchers here count notifications, so it is read and ignored. */
+static void pudu_do_badge(JNIEnv *env, pudu_reader *reader) {
+  (void)env;
+  (void)pudu_word(reader);
+}
+
+/* SECURE: 1 or 0; TOAST: the text. */
+static void pudu_do_secure(JNIEnv *env, pudu_reader *reader) {
+  uint32_t on = pudu_word(reader);
+  if (on > 1) pudu_stream_defect("set secure screen to", on);
+  pudu_bridge(env, "secure", "(Z)V", (jboolean)(on == 1));
+}
+
+static void pudu_do_toast(JNIEnv *env, pudu_reader *reader) { pudu_bridge(env, "toast", "(Ljava/lang/String;)V", pudu_text(env, reader)); }
+
 #endif

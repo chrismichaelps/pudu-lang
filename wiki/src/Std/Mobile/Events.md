@@ -116,6 +116,11 @@ Malformed POWERED and SENSED shapes decode to Stopped.
 - BACKED 44: tag 0. The person used back while the program receives it. Decodes to `Backed`.
 - Malformed shapes of LOADED, ENDED and BACKED decode to `Stopped`.
 
+## Pickers and system touches (#991)
+
+- CONTACT_PICKED 45: tag. Detail 1 with text of three lines: the name, the phone numbers joined by `,`, and the email addresses joined by `,`. Detail 0 with empty text when cancelled.
+- FILED 46: tag. Detail 1 with text the path of a file in the temporary directory (a picked document, a photo, or a finished recording). Detail 0 with empty text when cancelled, unavailable or failed.
+
 ## Referenced by
  · [[Viewer Example]] · [[PuduWeb]]
 [[src/Std/_MOC]] · [[Std Mobile View]] · [[Std Mobile Host]] · [[Std Mobile Navigation]] · [[pudu_ios_navigation.h]] · [[pudu_ios_refresh.h]] · [[Std Mobile Control]] · [[pudu-ios-values]]

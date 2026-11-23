@@ -43,3 +43,20 @@ export fn dismissKeyboard() -> Bytes { bytesOf(Request.keyboard([])) }
 /// place of the platform's own back action, or returning it. A platform with
 /// no system back gesture outside navigation ignores it.
 export fn handleBack(on: Bool) -> Bytes { bytesOf(Request.back([], if on { 1u32 } else { 0u32 })) }
+
+/// A commit setting the application icon's badge; 0 or less clears it. A
+/// platform whose launcher counts notifications instead ignores it.
+export fn badge(count: Int) -> Bytes {
+  let shown = match convertInteger[UInt32](count) {
+    case Some(found) => found
+    case None => 0u32
+  }
+  bytesOf(Request.badge([], shown))
+}
+
+/// A commit hiding the screen's content from screenshots and recordings, or
+/// showing it again. A platform without that control ignores it.
+export fn secure(on: Bool) -> Bytes { bytesOf(Request.secure([], if on { 1u32 } else { 0u32 })) }
+
+/// A commit showing `text` briefly over the content; it reports nothing.
+export fn toast(text: Str) -> Bytes { bytesOf(Request.toast([], text)) }

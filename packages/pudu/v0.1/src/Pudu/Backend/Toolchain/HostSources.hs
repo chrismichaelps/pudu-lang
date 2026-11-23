@@ -77,7 +77,7 @@ loaderSourceLines = map Text.pack $(do
 {-| The iOS host and its private header, staged only for app builds. -}
 iosHostSources :: [(FilePath, String)]
 iosHostSources = $(do
-  let files = ["pudu_ios_host.m", "pudu_ios_layout.h", "pudu_ios_theme.h", "pudu_ios_events.h", "pudu_ios_list.h", "pudu_ios_controls.h", "pudu_ios_material.h", "pudu_ios_stream.h", "pudu_ios_gesture.h", "pudu_ios_feedback.h", "pudu_ios_access.h", "pudu_ios_scene.h", "pudu_ios_motion.h", "pudu_ios_nodes.h", "pudu_ios_navigation.h", "pudu_ios_tabs.h", "pudu_ios_refresh.h", "pudu_ios_fetch.h", "pudu_ios_kinds.h", "pudu_ios_values.h", "pudu_ios_image.h", "pudu_ios_system.h", "pudu_ios_permission.h", "pudu_ios_storage.h", "pudu_ios_device.h", "pudu_ios_location.h", "pudu_ios_notify.h", "pudu_ios_media.h", "pudu_ios_web.h", "pudu_ios_capability_test.h"]
+  let files = ["pudu_ios_host.m", "pudu_ios_layout.h", "pudu_ios_theme.h", "pudu_ios_events.h", "pudu_ios_list.h", "pudu_ios_controls.h", "pudu_ios_material.h", "pudu_ios_stream.h", "pudu_ios_gesture.h", "pudu_ios_feedback.h", "pudu_ios_access.h", "pudu_ios_scene.h", "pudu_ios_motion.h", "pudu_ios_nodes.h", "pudu_ios_navigation.h", "pudu_ios_tabs.h", "pudu_ios_refresh.h", "pudu_ios_fetch.h", "pudu_ios_kinds.h", "pudu_ios_values.h", "pudu_ios_image.h", "pudu_ios_system.h", "pudu_ios_permission.h", "pudu_ios_storage.h", "pudu_ios_device.h", "pudu_ios_location.h", "pudu_ios_notify.h", "pudu_ios_media.h", "pudu_ios_web.h", "pudu_ios_pick.h", "pudu_ios_capability_test.h"]
   paths <- traverse (makeRelativeToProject . ("cbits" </>)) files
   mapM_ addDependentFile paths
   contents <- runIO (traverse ByteString.readFile paths)
@@ -102,7 +102,7 @@ androidJavaSources = $(do
               , "PuduAccess.java", "PuduGestures.java", "PuduMoment.java", "PuduPages.java", "PuduWell.java", "PuduTests.java"
               , "PuduNavigator.java", "PuduRefresh.java", "PuduFetch.java", "PuduImage.java", "PuduSystem.java", "PuduPermission.java", "PuduTabs.java", "PuduStore.java"
               , "PuduDevice.java", "PuduLocation.java"
-              , "PuduNotify.java", "PuduAlarm.java", "PuduAuth.java", "PuduMedia.java", "PuduWeb.java" ]
+              , "PuduNotify.java", "PuduAlarm.java", "PuduAuth.java", "PuduMedia.java", "PuduWeb.java", "PuduPick.java" ]
   paths <- traverse (makeRelativeToProject . (("android" </> "org" </> "pudu") </>)) files
   mapM_ addDependentFile paths
   contents <- runIO (traverse ByteString.readFile paths)

@@ -344,6 +344,20 @@ A program asks for one position with LOCATE 61, answered by exactly one LOCATED 
 
 Two kinds, WEB 23 and VIDEO 24, make a web page and a video nodes of the view tree; the kinds sentinel is 25. Five instructions, LOAD 74, MEDIA 75, AUDIO 76, KEYBOARD 77 and BACK 78, load a page, set a video's flags and source, play or stop a sound, dismiss the keyboard, and hand the back gesture to the program; the instruction bound is 79. Three events report the answers: LOADED 42 for each requested load, ENDED 43 for a non-looping video or sound, and BACKED 44 for the back gesture while it is handed over. Back is opt-in, so the platform's behavior and the navigation stack stay intact by default. Pages have no script channel to the program. The program-facing modules are [[Std Mobile Control]], [[Std Mobile Media]], [[Std Mobile System]] and [[Std Mobile Request]]. The example is [[Viewer Example]].
 
+## Pickers and system touches (#991)
+
+| Instruction | Code | Host |
+|---|---|---|
+| PICK_CONTACT | 79 | [[pudu-ios-pick]], [[PuduPick]] |
+| PICK_DOCUMENT | 80 | [[pudu-ios-pick]], [[PuduPick]] |
+| TAKE_PHOTO | 81 | [[pudu-ios-pick]], [[PuduPick]] |
+| RECORD | 82 | [[pudu-ios-pick]], [[PuduPick]] |
+| BADGE | 83 | [[pudu-ios-pick]] (ignored on Android) |
+| SECURE | 84 | [[PuduPick]] (ignored on iOS) |
+| TOAST | 85 | [[pudu-ios-pick]], [[PuduPick]] |
+
+Events: CONTACT_PICKED 45 and FILED 46 ([[Std Mobile Events]]). The pickers answer with a file in the temporary directory or a contact in three lines of text; the program reads files with the file library. The instruction bound is 86.
+
 ## Device services (#989)
 
 Eleven requests (codes 63 to 73) and seven events (35 to 41) carry the notification, authentication, browser, speech, battery, screen, motion and photo picker services. The instruction bound is now 74. A notification is scheduled by a delay in seconds and replaced by its id; a tap reports NOTIFIED with that id, including the tap that launched the application. Authentication asks for device-owner confirmation, which accepts biometrics or the passcode, and answers once with AUTHENTICATED. The browser, speech and photo picker each answer once per tag. The picked image is a copy in the temporary directory, named by path. Brightness and orientation are standing settings that the platform restores when the application leaves the front. Motion reports acceleration in milli-g at the requested interval. Alarms on Android are inexact, and the iOS simulator has no passcode and no accelerometer. The program-facing modules are [[Std Mobile Notify]], [[Std Mobile Auth]], [[Std Mobile Media]], [[Std Mobile Device]] and [[Std Mobile Request]]; the window helper is [[Std Mobile Paging]]. The example is [[Toolbox Example]].

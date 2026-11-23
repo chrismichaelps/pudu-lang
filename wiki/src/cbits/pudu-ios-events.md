@@ -58,6 +58,10 @@ queues the stop. The host still delivers events in FIFO order.
 
 Events 35 to 41 (NOTIFIED, AUTHENTICATED, BROWSED, SPOKE, POWERED, SENSED and IMAGE_PICKED) are queued through the event channel. IMAGE_PICKED carries its file path on the text channel, as CHANGED and PASTED do. The decoders are in [[Std Mobile Events]].
 
+## Pickers and system touches (#991)
+
+CONTACT_PICKED (45) and FILED (46) are queued by [[pudu-ios-pick]] through [[iOS Host Events]].
+
 ## Referenced by
 
 [[src/cbits/_MOC]] · [[iOS Host Adapter]] · [[iOS Host List]] · [[Native iOS Recycling Delivery]] · [[iOS Host Refresh]]

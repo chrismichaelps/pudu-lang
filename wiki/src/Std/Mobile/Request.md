@@ -62,6 +62,10 @@ Depends on [[Std Mobile Stream]] for `field` and `words`. Consumers: [[Std Mobil
 - **Q:** Why do these codes continue the view stream's numbering? **A:** The host dispatches every instruction from one table and one bound. A second numbering would need a second dispatch.
 - **Q:** Why does every writer take the tag from the program? **A:** A program matches an answer to the request it sent. The host echoes the tag, so an answer can always be routed.
 
+## Pickers and system touches (#991)
+
+Writers for PICK_CONTACT 79, PICK_DOCUMENT 80, TAKE_PHOTO 81, RECORD 82, BADGE 83, SECURE 84 and TOAST 85. INSTRUCTIONS is 86. RECORD and SECURE words above 1 are refused as `set recording to` and `set secure screen to`. The writers for the pickers are in [[Std Mobile Pick]].
+
 ## Referenced by
  · [[Viewer Example]] · [[pudu-ios-web]] · [[PuduWeb]]
 [[src/Std/_MOC]] · [[Std Mobile Stream]] · [[Std Mobile Notify]] · [[Std Mobile Auth]] · [[Std Mobile Media]] · [[Std Mobile Device]] · [[Std Mobile Events]] · [[Uses Mobile Services]] · [[NATIVE-MOBILE]]

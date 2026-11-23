@@ -1,0 +1,52 @@
+module Std.Mobile.Pick
+
+import Std.Mobile.Request as Request
+
+/// A contact the person chose to share: the name, and every phone number
+/// and email address it holds.
+export type Contact = { name: Str, phones: Array[Str], emails: Array[Str] }
+
+/// A commit showing the platform's contact picker. `ContactPicked(tag,
+/// Some(contact))` arrives with the chosen contact, or `ContactPicked(tag,
+/// None)` when the person cancelled. No contacts permission is needed: the
+/// person chooses what is shared.
+export fn pickContact(tag: UInt32) -> Bytes { bytesOf(Request.pickContact([], tag)) }
+
+/// A commit showing the platform's document picker for files of `types`, MIME
+/// types such as "application/pdf" or "image/*"; an empty list allows any.
+/// `Filed(tag, Some(path))` names a copy in the temporary directory, or
+/// `Filed(tag, None)` arrives when the person cancelled.
+export fn pickDocument(tag: UInt32, types: Array[Str]) -> Bytes { bytesOf(Request.pickDocument([], tag, joined(&types))) }
+
+/// A commit showing the camera; `Filed(tag, Some(path))` names the photo as a
+/// JPEG file, or `Filed(tag, None)` arrives when the person cancelled or the
+/// device has no camera. The program asks for the Camera permission first.
+export fn takePhoto(tag: UInt32) -> Bytes { bytesOf(Request.takePhoto([], tag)) }
+
+/// A commit starting or stopping an audio recording. Stopping answers
+/// `Filed(tag, Some(path))` with the recording, or `Filed(tag, None)` when it
+/// failed. The program asks for the Microphone permission first.
+export fn record(tag: UInt32, on: Bool) -> Bytes { bytesOf(Request.record([], tag, if on { 1u32 } else { 0u32 })) }
+
+/// The contact CONTACT_PICKED carries: three lines, the name, the phone
+/// numbers and the email addresses, each list joined by commas. Text of any
+/// other shape is never written.
+export fn contact(text: Str) -> Option[Contact] {
+  let lines = text.split("\n")
+  if lines.length() != 3 {
+    return None
+  }
+  Some(Contact{name: lines[0], phones: listed(lines[1]), emails: listed(lines[2])})
+}
+
+// A comma-joined list; an empty line is an empty list.
+fn listed(line: Str) -> Array[Str] { if line.length() == 0 { [] } else { line.split(",") } }
+
+// Items joined by commas.
+fn joined(items: &Array[Str]) -> Str {
+  var text = ""
+  for item in *items {
+    text = if text.length() == 0 { item } else { "{text},{item}" }
+  }
+  text
+}

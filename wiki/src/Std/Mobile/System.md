@@ -61,6 +61,14 @@ Depends on [[Std Mobile Stream]] for the OPEN, SHARE, COPY, PASTE and STATUS ins
 - **Q:** Why does an unreadable URL answer false at once? **A:** The platform's opener would answer asynchronously with the same refusal. Answering at once keeps the program's pending request from waiting on a call that cannot succeed.
 - **Q:** Why is the status bar a commit and not part of a screen? **A:** The status bar belongs to the scene, not to any one screen. A setting carried by a screen would reset whenever the screen changed.
 
+## Pickers and system touches (#991)
+
+- `badge(count: Int)`: BADGE 83. A negative count is written as 0, which clears the badge. Ignored on Android.
+- `secure(on: Bool)`: SECURE 84. Blocks screenshots and recordings on Android; ignored on iOS.
+- `toast(text: Str)`: TOAST 85. Shows the text briefly over the content; reports nothing.
+
+Hosts: [[pudu-ios-pick]] and [[PuduPick]].
+
 ## Referenced by
  · [[Viewer Example]]
 [[src/Std/_MOC]] · [[Std Mobile View]] · [[Std Mobile Stream]] · [[Std Mobile Events]] · [[Std Mobile Feedback]] · [[NATIVE-MOBILE]]
