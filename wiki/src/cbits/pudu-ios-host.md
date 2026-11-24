@@ -102,6 +102,10 @@ Implements the four symbols of [[Std Mobile Host]]. Its streams come from [[Std 
 
 Includes `pudu_ios_pick.h` after the web header. Seven dispatch rows route PICK_CONTACT through TOAST (79 to 85) to [[pudu-ios-pick]].
 
+## System sheets (#994)
+
+Dispatch rows for SHARE_FILE through COMPOSE_MESSAGE (86 to 90) route to [[pudu-ios-compose]].
+
 ## Referenced by
 
 [[Native Mobile Targets]] · [[Std Mobile Host]] · [[iOS Simulator Run]] · [[Backend Toolchain App]] · [[Native First Light Delivery]] · [[Native Controls Delivery]] · [[Native iOS Scrolling Delivery]] · [[Native iOS Theming Delivery]] · [[Native iOS Recycling Delivery]] · [[Native iOS Materials Delivery]] · [[Native iOS Capabilities Delivery]] · [[Native iOS Refresh Delivery]]

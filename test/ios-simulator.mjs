@@ -365,6 +365,11 @@ int main(int argc, char **argv) {
       environment: { SIMCTL_CHILD_PUDU_UI_SELFTEST: "0" },
       labels: ["Contact: none", "Document: none", "Photo: none", "Note: none"],
     }], "pick");
+    // At rest, before any sheet opens, every answer reads as none.
+    mobileApp(device, "Outbox", [{
+      environment: { SIMCTL_CHILD_PUDU_UI_SELFTEST: "0" },
+      labels: ["Event: none", "Mail: none", "Message: none"],
+    }]);
     refusedApp(device, root, "recording word 2",
       "import Std.Mobile.Host as Host\nimport Std.Mobile.Request as Request", `  Host.apply(bytesOf(Request.record([], 1u32, 2u32)))`,
       /pudu: a view stream set recording to 2/u);

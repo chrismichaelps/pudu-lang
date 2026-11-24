@@ -19,5 +19,7 @@
       </intent-filter>
 PUDU_LINKS    </activity>
     <receiver android:name="org.pudu.PuduAlarm" android:exported="false" />
+    <provider android:name="org.pudu.PuduFiles" android:authorities="PUDU_PACKAGE.files"
+        android:exported="false" android:grantUriPermissions="true" />
   </application>
 </manifest>

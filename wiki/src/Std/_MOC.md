@@ -268,6 +268,7 @@ STARTTLS use [[Std Tls]]. [[Std Compress Gzip]] delegates to [[Eval Compress]] a
 - [[Std Mobile Auth]] — device-owner confirmation request (#989).
 - [[Std Mobile Media]] — in-app browser, speech and image picking requests (#989).
 - [[Std Mobile Pick]] — contact, document and photo pickers, audio recording and the contact decoder (#991).
+- [[Std Mobile Compose]] — calendar event, mail and message sheets, share and review requests (#994).
 - [[Std Mobile Paging]] — pure window start helper moved out of the view (#989).
 - [[Std Mobile Request]] — instruction writers for codes 63 to 73 (#989).
 - [[Std Num]] — `parseInt` and `parseIntIn`, the public integer parser shared by the standard library (#980).

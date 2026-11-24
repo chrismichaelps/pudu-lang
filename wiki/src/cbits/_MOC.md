@@ -28,6 +28,7 @@ tags: [moc, module, foreign, ffi]
 - [[pudu-ios-media]] — in-app browser, speech and photo picking, with the services self-test (#989).
 - [[pudu-ios-web]] — web pages, video, audio, keyboard dismissal and back, with the web self-test (#990).
 - [[pudu-ios-pick]] — iOS pickers, recording, badge, toast and the secure screen setting (#991).
+- [[pudu-ios-compose]] — iOS share sheet, review request, calendar editor, mail and message composers (#994).
 - [[pudu-android-services]] — Android handlers for the eleven service requests, forwarding through PuduBridge (#989).
 - [[pudu-ios-tabs]] — UIKit tab bar: a stack per tab, bar items, tab picks, the sheet and self-test (#977).
 - [[pudu-ios-values]] — UIKit value controls, their BOUNDS, OPTIONS, COUNT and MOMENT handlers, and their self-test (#934).

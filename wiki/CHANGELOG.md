@@ -5,6 +5,15 @@ tags: [changelog]
 
 # Changelog
 
+## 2026-11-23 — Share files, review prompt, calendar events, mail and messages (#994)
+
+- Instructions: SHARE_FILE 86, REVIEW 87, ADD_EVENT 88, COMPOSE_MAIL 89 and COMPOSE_MESSAGE 90 in `Std.Mobile.Request`; the bound is 91. Sharing and the review request are `shareFile` and `requestReview` in `Std.Mobile.System`; the sheets are in the new `Std.Mobile.Compose` module ([[Std Mobile Compose]]).
+- Event: COMPLETED 47, decoded as `Completed(UInt32, Bool)` in [[Std Mobile View]], answers the calendar, mail and message sheets.
+- iOS: [[pudu-ios-compose]] presents the share sheet, the StoreKit review request, the event editor and the mail and message composers; SHARED comes from [[pudu-ios-system]].
+- Android: [[PuduCompose]] starts the share, calendar insert, mailto and smsto intents. Files are shared through the read-only [[PuduFiles]] provider, limited to the cache directory.
+- Example and fixture: [[Outbox Example]] and [[Uses Mobile Compose]] (7 checks).
+  [[Std Mobile Compose]] · [[pudu-ios-compose]] · [[PuduCompose]] · [[PuduFiles]] · [[NATIVE-MOBILE]]
+
 ## 2026-11-23 — Faster iOS simulator suite (#992)
 
 - Prebuild pool: every example a run launches is built before its launch, through an `xargs` pool of up to 4 jobs that leaves one core free; `PUDU_IOS_BUILD_JOBS` overrides the size within that limit ([[iOS App Builds]]).

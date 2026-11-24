@@ -12,16 +12,13 @@ import Std.Mobile.Scene as Scene
 import Std.Mobile.Stream as Stream
 import Std.Mobile.Theme as Theme
 
-/// One platform control and what it shows. `Named` gives the control it
-/// wraps an accessible name and adds no node. `Keyed` is a column whose rows
-/// carry keys, so rows are matched by key rather than by position.
-/// `Styled` and `Painted` set the text style or color role of the control
-/// they wrap and add no node either. `Refreshing` gives the scroll or list it
-/// wraps pull to refresh: the tag a pull reports and whether the program is
-/// refreshing, which the platform indicator follows. `Memo` renders its view
-/// only when it is built or its key changes; an unchanged key reuses what is
-/// shown with no render, comparison or instruction. Std.Mobile.Memo builds it.
-/// `Control` is a value control, which Std.Mobile.Control writes and updates.
+/// One platform control and what it shows. `Named`, `Styled` and `Painted`
+/// give the control they wrap an accessible name, a text style or a color
+/// role, and add no node. `Keyed` is a column whose rows match by key, not
+/// position. `Refreshing` gives a scroll or list pull to refresh: the tag a
+/// pull reports and whether the program is refreshing. `Memo` renders only
+/// when built or when its key changes (Std.Mobile.Memo builds it). `Control`
+/// is a value control, which Std.Mobile.Control writes and updates.
 export type View
   = Label(Str)
   | Button(Str, UInt32)
@@ -96,6 +93,7 @@ export type Event
   | Backed
   | ContactPicked(UInt32, Option[Pick.Contact])
   | Filed(UInt32, Option[Str])
+  | Completed(UInt32, Bool)
   | Stopped
 
 /// A node the platform shows: its id, the view it shows, and the nodes of

@@ -97,6 +97,10 @@ the simulator run [[iOS Simulator Run]].
 
 Frameworks linked always for the pickers: ContactsUI, Contacts and UniformTypeIdentifiers, alongside AVFoundation. See [[pudu-ios-pick]].
 
+## System sheets (#994)
+
+Frameworks linked always for the sheets: StoreKit, EventKit, EventKitUI and MessageUI. See [[pudu-ios-compose]].
+
 ## Referenced by
 
 [[src/Pudu/Backend/_MOC]] · [[Native App Delivery]] · [[Native App Tests]] · [[iOS Host Adapter]] · [[Native Mobile Targets]]

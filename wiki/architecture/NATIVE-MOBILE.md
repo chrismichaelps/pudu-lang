@@ -358,6 +358,18 @@ Two kinds, WEB 23 and VIDEO 24, make a web page and a video nodes of the view tr
 
 Events: CONTACT_PICKED 45 and FILED 46 ([[Std Mobile Events]]). The pickers answer with a file in the temporary directory or a contact in three lines of text; the program reads files with the file library. The instruction bound is 86.
 
+## System sheets (#994)
+
+| Instruction | Code | Host |
+|---|---|---|
+| SHARE_FILE | 86 | [[pudu-ios-compose]], [[PuduCompose]] (file served by [[PuduFiles]]) |
+| REVIEW | 87 | [[pudu-ios-compose]] (ignored on Android) |
+| ADD_EVENT | 88 | [[pudu-ios-compose]], [[PuduCompose]] |
+| COMPOSE_MAIL | 89 | [[pudu-ios-compose]], [[PuduCompose]] |
+| COMPOSE_MESSAGE | 90 | [[pudu-ios-compose]], [[PuduCompose]] |
+
+Event: COMPLETED 47 ([[Std Mobile Events]]), decoded as `Completed` in [[Std Mobile View]]. The calendar, mail and message sheets answer with it; sharing answers with SHARED 26. The instruction bound is 91. Times are Unix seconds in two signed words. Android reports 1 once an intent opens, because it cannot see the outcome. Files leave the application only through the read-only [[PuduFiles]] provider, limited to the cache directory. The program side is [[Std Mobile Compose]]; the example is [[Outbox Example]].
+
 ## Device services (#989)
 
 Eleven requests (codes 63 to 73) and seven events (35 to 41) carry the notification, authentication, browser, speech, battery, screen, motion and photo picker services. The instruction bound is now 74. A notification is scheduled by a delay in seconds and replaced by its id; a tap reports NOTIFIED with that id, including the tap that launched the application. Authentication asks for device-owner confirmation, which accepts biometrics or the passcode, and answers once with AUTHENTICATED. The browser, speech and photo picker each answer once per tag. The picked image is a copy in the temporary directory, named by path. Brightness and orientation are standing settings that the platform restores when the application leaves the front. Motion reports acceleration in milli-g at the requested interval. Alarms on Android are inexact, and the iOS simulator has no passcode and no accelerometer. The program-facing modules are [[Std Mobile Notify]], [[Std Mobile Auth]], [[Std Mobile Media]], [[Std Mobile Device]] and [[Std Mobile Request]]; the window helper is [[Std Mobile Paging]]. The example is [[Toolbox Example]].

@@ -121,6 +121,10 @@ Malformed POWERED and SENSED shapes decode to Stopped.
 - CONTACT_PICKED 45: tag. Detail 1 with text of three lines: the name, the phone numbers joined by `,`, and the email addresses joined by `,`. Detail 0 with empty text when cancelled.
 - FILED 46: tag. Detail 1 with text the path of a file in the temporary directory (a picked document, a photo, or a finished recording). Detail 0 with empty text when cancelled, unavailable or failed.
 
+## System sheets (#994)
+
+- COMPLETED 47: tag; detail 1 when the person finished the sheet (saved the event, sent the mail or message), 0 when they cancelled or the sheet could not open. A platform that cannot see the outcome reports 1 once the sheet opens, as sharing does. Decoded as `Completed` in [[Std Mobile View]]. A detail above 1 is malformed and stops the stream.
+
 ## Referenced by
  · [[Viewer Example]] · [[PuduWeb]]
 [[src/Std/_MOC]] · [[Std Mobile View]] · [[Std Mobile Host]] · [[Std Mobile Navigation]] · [[pudu_ios_navigation.h]] · [[pudu_ios_refresh.h]] · [[Std Mobile Control]] · [[pudu-ios-values]]

@@ -66,6 +66,10 @@ Depends on [[Std Mobile Stream]] for `field` and `words`. Consumers: [[Std Mobil
 
 Writers for PICK_CONTACT 79, PICK_DOCUMENT 80, TAKE_PHOTO 81, RECORD 82, BADGE 83, SECURE 84 and TOAST 85. INSTRUCTIONS is 86. RECORD and SECURE words above 1 are refused as `set recording to` and `set secure screen to`. The writers for the pickers are in [[Std Mobile Pick]].
 
+## System sheets (#994)
+
+Writers for SHARE_FILE 86, REVIEW 87, ADD_EVENT 88, COMPOSE_MAIL 89 and COMPOSE_MESSAGE 90. INSTRUCTIONS is 91. REVIEW takes no words. The writers for the sheets are in [[Std Mobile Compose]] and [[Std Mobile System]].
+
 ## Referenced by
  · [[Viewer Example]] · [[pudu-ios-web]] · [[PuduWeb]]
 [[src/Std/_MOC]] · [[Std Mobile Stream]] · [[Std Mobile Notify]] · [[Std Mobile Auth]] · [[Std Mobile Media]] · [[Std Mobile Device]] · [[Std Mobile Events]] · [[Uses Mobile Services]] · [[NATIVE-MOBILE]]

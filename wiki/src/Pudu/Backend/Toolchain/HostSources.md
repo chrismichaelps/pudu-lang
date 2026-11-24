@@ -24,6 +24,10 @@ publication. A program on another platform selects no AppKit source.
 
 Pick sources: `cbits/pudu_ios_pick.h` for iOS and `android/org/pudu/PuduPick.java` for Android. See [[pudu-ios-pick]] and [[PuduPick]].
 
+## System sheets (#994)
+
+Sheet sources: `cbits/pudu_ios_compose.h` for iOS, and `android/org/pudu/PuduCompose.java` with the provider `android/org/pudu/PuduFiles.java` for Android. The provider is declared in the application manifest. See [[pudu-ios-compose]], [[PuduCompose]] and [[PuduFiles]].
+
 ## Referenced by
 
 [[src/Pudu/Backend/_MOC]] · [[Native Desktop Adapter Delivery]]

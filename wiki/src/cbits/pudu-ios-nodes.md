@@ -54,6 +54,10 @@ Codes 63 to 73 are the eleven requests of [[Std Mobile Request]], each with the 
 
 Instructions 79 to 85 (PICK_CONTACT through TOAST) dispatch to [[pudu-ios-pick]]. The INSTRUCTIONS bound is 86.
 
+## System sheets (#994)
+
+Instructions 86 to 90 (SHARE_FILE through COMPOSE_MESSAGE) dispatch to [[pudu-ios-compose]]. The INSTRUCTIONS bound is 91.
+
 ## Referenced by
 
 [[src/cbits/_MOC]] · [[iOS Host Adapter]] · [[iOS Host Stream]] · [[pudu_ios_navigation.h]] · [[pudu_ios_refresh.h]] · [[pudu_ios_fetch.h]] · [[Std Mobile Stream]] · [[Native iOS Navigation Delivery]] · [[Native iOS Refresh Delivery]]

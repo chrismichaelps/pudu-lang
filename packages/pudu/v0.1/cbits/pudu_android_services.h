@@ -142,4 +142,45 @@ static void pudu_do_secure(JNIEnv *env, pudu_reader *reader) {
 
 static void pudu_do_toast(JNIEnv *env, pudu_reader *reader) { pudu_bridge(env, "toast", "(Ljava/lang/String;)V", pudu_text(env, reader)); }
 
+/* Unix seconds from a high signed word and a low word. */
+static jlong pudu_seconds(pudu_reader *reader) {
+  int32_t high = (int32_t)pudu_word(reader);
+  uint32_t low = pudu_word(reader);
+  return (jlong)high * 4294967296LL + (jlong)low;
+}
+
+/* SHARE_FILE: the tag, then the path. */
+static void pudu_do_share_file(JNIEnv *env, pudu_reader *reader) {
+  uint32_t tag = pudu_word(reader);
+  pudu_bridge(env, "shareFile", "(ILjava/lang/String;)V", (jint)tag, pudu_text(env, reader));
+}
+
+/* REVIEW: no words; there is no system rating prompt here. */
+static void pudu_do_review(JNIEnv *env, pudu_reader *reader) {
+  (void)env;
+  (void)reader;
+}
+
+/* ADD_EVENT: the tag, the start and end seconds, the title, then the location. */
+static void pudu_do_add_event(JNIEnv *env, pudu_reader *reader) {
+  uint32_t tag = pudu_word(reader);
+  jlong start = pudu_seconds(reader), end = pudu_seconds(reader);
+  jstring title = pudu_text(env, reader), location = pudu_text(env, reader);
+  pudu_bridge(env, "addEvent", "(IJJLjava/lang/String;Ljava/lang/String;)V", (jint)tag, start, end, title, location);
+}
+
+/* COMPOSE_MAIL: the tag, the recipients, the subject, then the body. */
+static void pudu_do_compose_mail(JNIEnv *env, pudu_reader *reader) {
+  uint32_t tag = pudu_word(reader);
+  jstring to = pudu_text(env, reader), subject = pudu_text(env, reader), body = pudu_text(env, reader);
+  pudu_bridge(env, "composeMail", "(ILjava/lang/String;Ljava/lang/String;Ljava/lang/String;)V", (jint)tag, to, subject, body);
+}
+
+/* COMPOSE_MESSAGE: the tag, the recipients, then the body. */
+static void pudu_do_compose_message(JNIEnv *env, pudu_reader *reader) {
+  uint32_t tag = pudu_word(reader);
+  jstring to = pudu_text(env, reader), body = pudu_text(env, reader);
+  pudu_bridge(env, "composeMessage", "(ILjava/lang/String;Ljava/lang/String;)V", (jint)tag, to, body);
+}
+
 #endif

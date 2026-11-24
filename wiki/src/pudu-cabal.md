@@ -219,6 +219,10 @@ Register [[Foreign Run Storage]] with the interpreter library so the installed c
 
 The iOS pick source `cbits/pudu_ios_pick.h` and the Android source `PuduPick.java` are listed with the host sources. The frameworks ContactsUI, Contacts and UniformTypeIdentifiers are linked always.
 
+## System sheets (#994)
+
+The iOS sheet source `cbits/pudu_ios_compose.h` and the Android sources `PuduCompose.java` and `PuduFiles.java` are listed with the host sources. The frameworks StoreKit, EventKit, EventKitUI and MessageUI are linked always.
+
 ## Referenced by
 
 The library exposes [[Resolve Canonical]] for the scoped generated-Impl resolver

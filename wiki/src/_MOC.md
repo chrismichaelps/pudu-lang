@@ -398,6 +398,12 @@ tags: [moc, module]
 - [[PuduPick]] — Android pickers, recording, secure screen and toasts (#991).
 - [[Uses Mobile Pick]] — stdlib fixture for the picker, recording, badge, secure screen and toast requests (#991).
 - [[Picker Example]] — pickers, recording, badge and toast on the simulator and device (#991).
+- [[Std Mobile Compose]] — system sheets: share, review prompt, calendar event, mail and messages (#994).
+- [[pudu-ios-compose]] — iOS system sheets, with the StoreKit, EventKit and MessageUI handlers (#994).
+- [[PuduCompose]] — Android system sheets: share, calendar insert, mailto and smsto intents (#994).
+- [[PuduFiles]] — read-only provider sharing cache files with other applications (#994).
+- [[Uses Mobile Compose]] — stdlib fixture for the system sheet requests and COMPLETED answers (#994).
+- [[Outbox Example]] — share, review prompt, calendar, mail and message sheets on the simulator and device (#994).
 - [[Pudu Backend Toolchain Assets]] — application asset listing, refused names and links, staging (#973).
 - [[Uses Mobile Controls]] — stdlib fixture for the value controls: build and change words, normalization and value events (#934).
 - [[Pudu Compiler Program Eval Data Spec]] — data evaluation spec, including the mobile fixture counts.

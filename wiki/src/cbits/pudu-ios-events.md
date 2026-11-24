@@ -62,6 +62,10 @@ Events 35 to 41 (NOTIFIED, AUTHENTICATED, BROWSED, SPOKE, POWERED, SENSED and IM
 
 CONTACT_PICKED (45) and FILED (46) are queued by [[pudu-ios-pick]] through [[iOS Host Events]].
 
+## System sheets (#994)
+
+COMPLETED (47) is queued by [[pudu-ios-compose]] through [[iOS Host Events]]. SHARED (26) for the share sheet is queued by [[pudu-ios-system]].
+
 ## Referenced by
 
 [[src/cbits/_MOC]] · [[iOS Host Adapter]] · [[iOS Host List]] · [[Native iOS Recycling Delivery]] · [[iOS Host Refresh]]

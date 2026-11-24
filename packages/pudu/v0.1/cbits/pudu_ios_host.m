@@ -37,6 +37,7 @@
 #include "pudu_ios_notify.h"
 #include "pudu_ios_media.h"
 #include "pudu_ios_pick.h"
+#include "pudu_ios_compose.h"
 #include "pudu_ios_capability_test.h"
 
 /* Each node's color role from COLOR, or PUDU_ROLE_DEFAULT. */
@@ -348,6 +349,8 @@ static void (*const pudu_instruction_table[PUDU_UI_INSTRUCTIONS])(pudu_reader *)
   [PUDU_UI_PICK_CONTACT] = pudu_do_pick_contact, [PUDU_UI_PICK_DOCUMENT] = pudu_do_pick_document,
   [PUDU_UI_TAKE_PHOTO] = pudu_do_take_photo, [PUDU_UI_RECORD] = pudu_do_record, [PUDU_UI_BADGE] = pudu_do_badge,
   [PUDU_UI_SECURE] = pudu_do_secure, [PUDU_UI_TOAST] = pudu_do_toast,
+  [PUDU_UI_SHARE_FILE] = pudu_do_share_file, [PUDU_UI_REVIEW] = pudu_do_review, [PUDU_UI_ADD_EVENT] = pudu_do_add_event,
+  [PUDU_UI_COMPOSE_MAIL] = pudu_do_compose_mail, [PUDU_UI_COMPOSE_MESSAGE] = pudu_do_compose_message,
 };
 
 /* Applies one commit: every instruction in order, in one call. */

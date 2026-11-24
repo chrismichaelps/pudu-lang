@@ -1,0 +1,54 @@
+module Outbox
+
+import Std.Mobile.Compose as Compose
+import Std.Mobile.Host as Host
+import Std.Mobile.System as System
+import Std.Mobile.View as View
+
+/// The tags of the buttons and of the answers they ask for.
+const EVENT: UInt32 = 1u32
+const MAIL: UInt32 = 2u32
+const MESSAGE: UInt32 = 3u32
+const REVIEW: UInt32 = 4u32
+
+/// What each sheet answered.
+type Model = { event: Str, mail: Str, message: Str }
+
+fn view(model: &Model) -> View.View {
+  View.Column([
+      View.Button("Add to calendar", EVENT),
+      View.Label("Event: {model.event}"),
+      View.Button("Write an email", MAIL),
+      View.Label("Mail: {model.mail}"),
+      View.Button("Send a message", MESSAGE),
+      View.Label("Message: {model.message}"),
+      View.Button("Rate the app", REVIEW)
+    ])
+}
+
+/// Offers the event editor, the mail and message composers and the rating
+/// prompt behind buttons, and shows how each sheet ended.
+fn main() -> Int {
+  var model = Model{event: "none", mail: "none", message: "none"}
+  let (first, built) = View.mount(&view(&model))
+  var mounted = first
+  Host.apply(built)
+  while true {
+    let event = Host.wait()
+    match event {
+      case View.Stopped => { return 0 }
+      case View.Tapped(tag) if tag == EVENT => { Host.apply(Compose.addEvent(EVENT, "Pudu meetup", 1800000000i64, 1800003600i64, "San Juan")) }
+      case View.Tapped(tag) if tag == MAIL => { Host.apply(Compose.mail(MAIL, ["hello@example.com"], "Hello", "Sent from Pudu")) }
+      case View.Tapped(tag) if tag == MESSAGE => { Host.apply(Compose.message(MESSAGE, ["5555550100"], "Sent from Pudu")) }
+      case View.Tapped(tag) if tag == REVIEW => { Host.apply(System.requestReview()) }
+      case View.Completed(tag, done) if tag == EVENT => { model = Model{..model, event: "{done}"} }
+      case View.Completed(tag, done) if tag == MAIL => { model = Model{..model, mail: "{done}"} }
+      case View.Completed(tag, done) if tag == MESSAGE => { model = Model{..model, message: "{done}"} }
+      case _ => {}
+    }
+    let (next, changes) = View.update(&mounted, &view(&model))
+    Host.apply(changes)
+    mounted = next
+  }
+  0
+}

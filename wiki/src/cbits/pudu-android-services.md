@@ -48,6 +48,10 @@ Depends on [[pudu_android_events.h]] for the queue, on [[pudu_android_jni.h]] fo
 
 Seven handlers register for PICK_CONTACT, PICK_DOCUMENT, TAKE_PHOTO, RECORD, BADGE, SECURE and TOAST, implemented in [[PuduPick]]. Defects: a RECORD word above 1 is refused as `set recording to`, and a SECURE word above 1 as `set secure screen to`.
 
+## System sheets (#994)
+
+Five handlers register for SHARE_FILE, REVIEW, ADD_EVENT, COMPOSE_MAIL and COMPOSE_MESSAGE, implemented in [[PuduCompose]]. The shared file is served by [[PuduFiles]].
+
 ## Referenced by
 
 [[src/cbits/_MOC]] · [[NATIVE-MOBILE]] · [[Std Mobile Stream]] · [[Std Mobile Events]] · [[pudu-android-routes]] · [[pudu-ios-notify]] · [[pudu-ios-media]] · [[PuduNotify]] · [[PuduAuth]] · [[PuduMedia]] · [[PuduDevice]]

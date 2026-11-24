@@ -356,6 +356,10 @@ public final class PuduBridge {
   static void record(int tag, boolean on) { PuduPick.record(tag, on); }
   static void secure(boolean on) { PuduPick.secure(on); }
   static void toast(String text) { PuduPick.toast(text); }
+  static void shareFile(int tag, String path) { PuduCompose.shareFile(tag, path); }
+  static void addEvent(int tag, long start, long end, String title, String location) { PuduCompose.addEvent(tag, start, end, title, location); }
+  static void composeMail(int tag, String to, String subject, String body) { PuduCompose.mail(tag, to, subject, body); }
+  static void composeMessage(int tag, String to, String body) { PuduCompose.message(tag, to, body); }
   static void tabs(int[] ids, String[] names, int[] counts, int[] routes, View[] bodies, boolean[] fills, String[] titles, int selected,
       boolean hasSheet, int sheet, View sheetBody, boolean sheetFills) {
     PuduTabs.show(ids, names, counts, routes, bodies, fills, titles, selected, hasSheet, sheet, sheetBody, sheetFills);

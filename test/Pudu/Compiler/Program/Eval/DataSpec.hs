@@ -35,6 +35,7 @@ testDataEvaluation = do
   mobileServices <- runEntry "test-fixtures/stdlib/UsesMobileServices.pudu"
   mobileWeb <- runEntry "test-fixtures/stdlib/UsesMobileWeb.pudu"
   mobilePick <- runEntry "test-fixtures/stdlib/UsesMobilePick.pudu"
+  mobileCompose <- runEntry "test-fixtures/stdlib/UsesMobileCompose.pudu"
   numParse <- runEntry "test-fixtures/stdlib/UsesNumParse.pudu"
   mobileResources <- runEntry "test-fixtures/stdlib/UsesMobileResource.pudu"
   memoLambda <- codes "test-fixtures/stdlib/MemoRenderLambda.pudu"
@@ -230,6 +231,8 @@ testDataEvaluation = do
         (mobileWeb === Just "10")
     , counterexample "native pickers write their words and read contacts and files"
         (mobilePick === Just "8")
+    , counterexample "native system sheets write their words and read whether they completed"
+        (mobileCompose === Just "7")
     , counterexample "integers parse exactly across the Int range in every radix"
         (numParse === Just "11")
     {-| Golden counts: an unchanged memo is one comparison and no render, so a

@@ -54,6 +54,10 @@ The fixture [[Uses Mobile Services]] (`test-fixtures/stdlib/UsesMobileServices.p
 
 `UsesMobilePick` ([[Uses Mobile Pick]]) expects 8 checks.
 
+## System sheets (#994)
+
+`UsesMobileCompose` ([[Uses Mobile Compose]]) expects 7 checks.
+
 ## Referenced by
 
 [[Uses Mobile Memo]] · [[Uses Mobile Navigation]] · [[Uses Mobile Refresh]] · [[Uses Mobile View]] · [[Eval Data Tests]]

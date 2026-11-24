@@ -69,6 +69,13 @@ Depends on [[Std Mobile Stream]] for the OPEN, SHARE, COPY, PASTE and STATUS ins
 
 Hosts: [[pudu-ios-pick]] and [[PuduPick]].
 
+## System sheets (#994)
+
+- `shareFile(tag: UInt32, path: Str)`: SHARE_FILE 86. Shows the share sheet with the file at `path`; answered by SHARED (26). Android shares only files under the cache directory, see [[PuduFiles]].
+- `requestReview()`: REVIEW 87. Asks the platform to show its rating prompt. The platform may decline to show it and never reports; Android ignores it.
+
+Hosts for the sheets: [[pudu-ios-compose]] and [[PuduCompose]].
+
 ## Referenced by
  · [[Viewer Example]]
 [[src/Std/_MOC]] · [[Std Mobile View]] · [[Std Mobile Stream]] · [[Std Mobile Events]] · [[Std Mobile Feedback]] · [[NATIVE-MOBILE]]

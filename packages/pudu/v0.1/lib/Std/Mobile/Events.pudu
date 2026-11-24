@@ -52,6 +52,7 @@ const ENDED: UInt64 = 43u64
 const BACKED: UInt64 = 44u64
 const CONTACT_PICKED: UInt64 = 45u64
 const FILED: UInt64 = 46u64
+const COMPLETED: UInt64 = 47u64
 
 /// Each event kind's constructor, given the tag and the text the host holds.
 const EVENTS: Map[UInt64, fn(UInt32, Str) -> View.Event] = mapOf([
@@ -89,7 +90,8 @@ const DETAILED: Map[UInt64, fn(UInt32, UInt32) -> Option[View.Event]] = mapOf([
     (NETWORKED, |_reported: UInt32, code: UInt32| networked(Device.linkOf(code))),
     (AUTHENTICATED, |reported: UInt32, confirmed: UInt32| flagged(confirmed, |done: Bool| View.Authenticated(reported, done))),
     (SPOKE, |reported: UInt32, finished: UInt32| flagged(finished, |done: Bool| View.Spoke(reported, done))),
-    (LOADED, |reported: UInt32, loaded: UInt32| flagged(loaded, |done: Bool| View.Loaded(reported, done)))
+    (LOADED, |reported: UInt32, loaded: UInt32| flagged(loaded, |done: Bool| View.Loaded(reported, done))),
+    (COMPLETED, |reported: UInt32, finished: UInt32| flagged(finished, |done: Bool| View.Completed(reported, done)))
   ])
 
 /// Each measured event kind's constructor, given the tag, the detail word and

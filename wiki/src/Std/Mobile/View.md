@@ -124,6 +124,10 @@ The `Event` type gains three constructors: `Loaded(UInt32, Bool)`, `Ended(UInt32
 
 - `ContactPicked(UInt32, Option[Pick.Contact])` and `Filed(UInt32, Option[Str])` decode CONTACT_PICKED and FILED. See [[Std Mobile Pick]].
 
+## System sheets (#994)
+
+- `Completed(UInt32, Bool)` decodes COMPLETED 47 for the calendar, mail and message sheets, and answers every system sheet whose outcome is finished or not. See [[Std Mobile Compose]]. The View type doc comment is condensed; the type is at its line limit.
+
 ## Referenced by
  · [[Viewer Example]]
 [[src/Std/_MOC]] · [[Std Mobile Host]] · [[Std Mobile Events]] · [[Std Mobile Navigation]] · [[Std Mobile Stream]] · [[Std Mobile Theme]] · [[Native First Light Delivery]] · [[Native Controls Delivery]] · [[Native Keyed Lists Delivery]] · [[Native iOS Scrolling Delivery]] · [[Native iOS Theming Delivery]] · [[Native iOS Recycling Delivery]] · [[Native iOS Materials Delivery]] · [[Native iOS Refresh Delivery]] · [[Std Mobile Memo]] · [[Native Render Skipping]] · [[Uses Mobile Memo]] · [[Std Mobile Control]]
