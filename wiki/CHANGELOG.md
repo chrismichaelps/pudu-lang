@@ -5,6 +5,14 @@ tags: [changelog]
 
 # Changelog
 
+## 2026-11-23 — Faster iOS simulator suite (#992)
+
+- Prebuild pool: every example a run launches is built before its launch, through an `xargs` pool of up to 4 jobs that leaves one core free; `PUDU_IOS_BUILD_JOBS` overrides the size within that limit ([[iOS App Builds]]).
+- Content cache: apps are cached under `~/Library/Caches/pudu-ios-suite` (or `PUDU_IOS_CACHE`), keyed by a SHA-256 of the compiler, the standard library, the source, its `pudu.toml` and its assets; an unchanged example is not rebuilt ([[iOS App Builds]]).
+- Sharding: `PUDU_IOS_SHARD="i/n"` runs the parts whose name hashes to shard i, combined with `PUDU_IOS_ONLY` ([[iOS Simulator Run]]).
+- CI matrix: the iOS simulator workflow runs three shards with a 60-minute timeout, an app cache step per shard, and path triggers for the build module, the foreign apps and the examples ([[iOS Simulator CI]]).
+  [[iOS App Builds]] · [[iOS Simulator Run]] · [[iOS Simulator CI]] · [[NATIVE-MOBILE]]
+
 ## 2026-11-23 — Contact and document pickers, camera, audio recording, badge, secure screen and toasts (#991)
 
 - Pickers: PICK_CONTACT 79, PICK_DOCUMENT 80 and TAKE_PHOTO 81 in `Std.Mobile.Request`, with CONTACT_PICKED 45 and FILED 46 decoded as `ContactPicked` and `Filed` in `Std.Mobile.View`. The new `Std.Mobile.Pick` module holds `pickContact`, `pickDocument`, `takePhoto`, `record` and the `contact` decoder. Recording: RECORD 82. System: BADGE 83, SECURE 84 and TOAST 85 through `Std.Mobile.System` (`badge`, `secure`, `toast`); the instruction bound is 86. The iOS host uses ContactsUI, UIDocumentPickerViewController, UIImagePickerController and AVAudioRecorder ([[pudu-ios-pick]]); the Android host uses the system pickers, MediaRecorder and FLAG_SECURE ([[PuduPick]]). The example is [[Picker Example]], and the fixture is [[Uses Mobile Pick]].

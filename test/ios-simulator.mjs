@@ -1,10 +1,11 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { spawn, spawnSync } from "node:child_process";
-import { existsSync, mkdtempSync, mkdirSync, readFileSync, rmSync, statSync, writeFileSync, writeSync } from "node:fs";
+import { existsSync, mkdtempSync, mkdirSync, readFileSync, readdirSync, rmSync, statSync, writeFileSync, writeSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import { prebuild } from "./ios-app-builds.mjs";
 import { objectiveCSmoke, swiftSmoke } from "./ios-foreign-apps.mjs";
 
 // A cold hosted simulator can take minutes to install or launch its first app.
@@ -26,8 +27,20 @@ function say(line) {
    refused streams, and "matrix" for the device families. Unset, every part
    runs, as CI runs it. */
 const only = process.env.PUDU_IOS_ONLY ? new Set(process.env.PUDU_IOS_ONLY.split(",").map((part) => part.trim())) : null;
+
+/* PUDU_IOS_SHARD, "i/n", runs only the parts whose name hashes to shard i of
+   n, so n jobs together run the whole suite. */
+const [shard, shards] = (process.env.PUDU_IOS_SHARD || "1/1").split("/").map(Number);
+function inShard(part) {
+  let hash = 0;
+  for (const code of Buffer.from(part)) hash = (hash * 31 + code) >>> 0;
+  return hash % shards === shard - 1;
+}
+
+function wanted(part) { return (only === null || only.has(part)) && inShard(part); }
+
 function selected(part) {
-  if (only === null || only.has(part)) return true;
+  if (wanted(part)) return true;
   say(`SKIP iOS ${part}`);
   return false;
 }
@@ -50,9 +63,10 @@ function run(command, args, timeout = 120_000, env = process.env) {
 }
 
 /* Runs `body` with a local test server in its own process, since this script
-   blocks on every step; `body` gets the server's base URL and a function that
+   blocks on every step, when the example `part` is selected; `body` gets the server's base URL and a function that
    reads its request counts. */
-function withFetchServer(body) {
+function withFetchServer(part, body) {
+  if (!wanted(part)) return undefined;
   const root = mkdtempSync(join(tmpdir(), "pudu-fetch-"));
   const record = join(root, "counts.json");
   const server = spawn(process.execPath, [join(repository, "test", "fetch-server.mjs"), record], { stdio: "ignore" });
@@ -197,7 +211,7 @@ int main(int argc, char **argv) {
       objectiveCSmoke(apps, device, root, simulatorClang);
       swiftSmoke(apps, device, root, simulatorClang);
     }
-    refuseOccupiedOutput(root);
+    if (wanted("refusals")) refuseOccupiedOutput(root);
     familyApps(device, "Counter");
     mobileApp(device, "Form", [
       { environment: { SIMCTL_CHILD_PUDU_UI_SELFTEST: "0", SIMCTL_CHILD_PUDU_UI_TYPE: "Ada" }, labels: ["Hello, Ada (subscribed)"] },
@@ -255,7 +269,7 @@ int main(int argc, char **argv) {
       layout: ["PUDU_REFRESH insets reported", "PUDU_REFRESH answered pull refreshing", "PUDU_REFRESH finished by the program",
         "PUDU_REFRESH unanswered pull stopped"],
     }]);
-    withFetchServer((base, counts) => {
+    withFetchServer("Remote", (base, counts) => {
       mobileApp(device, "Remote", [{
         environment: { SIMCTL_CHILD_PUDU_UI_SELFTEST: "0", SIMCTL_CHILD_PUDU_UI_FETCH_TEST: "1", SIMCTL_CHILD_PUDU_FETCH_BASE: base },
         labels: ["Profile: 200 profile body", "Limited: 200 limited body"],
@@ -268,7 +282,7 @@ int main(int argc, char **argv) {
       assert.equal(asked.limited, 2, `limited was requested ${asked.limited} times`);
       say("PASS iOS Remote requests: profile once, limited twice");
     });
-    withFetchServer((base, counts) => {
+    withFetchServer("Gallery", (base, counts) => {
       // A bundled and a served image show at their own pixel size, a missing
       // one reports a failure, and an image moved off a slow source before it
       // answered shows its new source and never the slow one.
@@ -541,29 +555,11 @@ function refuseOccupiedOutput(scratch) {
    adapter and run once per entry of `runs`: the host feeds it input from the
    entry's environment, asks it to stop, and reports its labels, its status
    and the time from main to the first frame. */
-/* Apps already built, by example: the family matrix installs the same build
-   on every device rather than compiling it once per family. */
-const builtApps = new Map();
-process.on("exit", () => {
-  for (const root of builtApps.values()) rmSync(root, { recursive: true, force: true });
-});
-
 function mobileApp(device, example, runs, directory = "", bundle = `org.pudu.${example}`) {
   if (!selected(example)) return;
-  const key = join(directory, example);
-  const reused = builtApps.has(key);
-  const root = reused ? builtApps.get(key) : mkdtempSync(join(tmpdir(), `pudu-ios-${example.toLowerCase()}-`));
-  builtApps.set(key, root);
-  const app = join(root, `${example}.app`);
+  const app = built(join(directory, example), buildWait);
   let installed = false;
   try {
-    const build = ["build", join(repository, "examples", "mobile", directory, `${example}.pudu`),
-      "--native", "--target", "ios-simulator-arm64", "--app", "-o"];
-    // Each long step announces itself, so a slow step reads as progress in the log, not a hang.
-    if (!reused) {
-      say(`BUILD iOS ${example}`);
-      run(resolve(compiler), [...build, app], appBuildTimeout);
-    }
     const executable = join(app, example);
     run(xcrun, ["simctl", "install", device, app], simulatorTimeout);
     installed = true;
@@ -597,7 +593,7 @@ function mobileApp(device, example, runs, directory = "", bundle = `org.pudu.${e
 /* A program whose stream the host must refuse: it aborts with `refusal` and
    never reports a first frame or a clean status. */
 function refusedApp(device, scratch, what, imports, body, refusal) {
-  if (only !== null && !only.has("refusals")) return;
+  if (!wanted("refusals")) return;
   const name = `Refused${randomUUID().replaceAll("-", "")}`;
   const source = join(scratch, `${name}.pudu`);
   const app = join(scratch, `${name}.app`);
@@ -645,5 +641,27 @@ function launch(device, bundle, prefix, status, environment = {}) {
   }
   throw new Error(`${bundle} did not report:\n${failures.join("\n")}`);
 }
+
+/* Each example the run launches, named in the mobileApp calls above or in
+   the family table, with
+   its source beside the other examples or in a folder of its own; the key
+   is the folder and name mobileApp asks for. */
+function exampleEntries() {
+  const examples = join(repository, "examples", "mobile");
+  const calls = readFileSync(fileURLToPath(import.meta.url), "utf8").matchAll(/mobileApp\(device, "(\w+)"/gu);
+  const folders = ["", ...readdirSync(examples).filter((entry) => statSync(join(examples, entry)).isDirectory())];
+  const entries = [];
+  // The family runs name their examples in a table rather than in a call.
+  for (const name of new Set([...[...calls].map((call) => call[1]), ...Object.keys(familyRuns)])) {
+    if (!wanted(name)) continue;
+    const folder = folders.find((candidate) => existsSync(join(examples, candidate, `${name}.pudu`)));
+    if (folder !== undefined) entries.push({ key: join(folder, name), source: join(examples, folder, `${name}.pudu`) });
+  }
+  return entries;
+}
+
+// The longest a step waits for its app; builds queue behind one another.
+const buildWait = 1_800_000;
+const built = prebuild(repository, resolve(compiler), process.env.PUDU_LIB, exampleEntries());
 
 smoke();

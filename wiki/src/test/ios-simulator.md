@@ -32,10 +32,18 @@ Use `--require-simulator` to make an unavailable simulator a failure.
   implementation through a macOS dylib to compare interpreter output.
 - `main.m` owns `main`, calls `pudu_program_run` inside an autorelease pool,
   prints the status it returns and ends, so the launch finishes by itself.
-- Each example is built with `pudu build --native --target ios-simulator-arm64 --app`
+- Each example is built before the run's first launch by `prebuild` in [[iOS App Builds]],
+  through `pudu build --native --target ios-simulator-arm64 --app`
   ([[Backend Toolchain App]]), which compiles and links the application, writes its
-  `Info.plist` and signs it. The script no longer compiles the host or writes the bundle
-  itself.
+  `Info.plist` and signs it. The script does not compile inline.
+- `mobileApp` waits for its prebuilt app for up to 30 minutes (`buildWait`). A failed build
+  throws its log at that step.
+- `exampleEntries` finds each example named in a `mobileApp` call, as `examples/mobile/<Name>.pudu`
+  or in a folder of its own under `examples/mobile/`, and passes it to `prebuild`. It also reads the family table's names.
+- `PUDU_IOS_SHARD="i/n"` runs only the parts whose name hashes to shard `i` of `n`. The parts are
+  the example names, `foreign`, `refusals` and `matrix`; the three CI shards together cover
+  every part. `wanted(part)` combines the shard with `PUDU_IOS_ONLY`, and a part outside both is
+  printed as `SKIP iOS <part>`.
 - The script creates its own iPhone device, boots it, installs, launches with
   `--console-pty` capturing standard output, and deletes the device afterwards
   on every path. An explicit `PUDU_IOS_SIMULATOR_UDID` instead uses an already
@@ -46,9 +54,8 @@ Use `--require-simulator` to make an unavailable simulator a failure.
   status line.
 - `run` closes each step's stdin and kills a step past its timeout with SIGKILL,
   so no step waits on input and a timed-out step cannot hold the suite.
-- Each app build and launch attempt prints a `BUILD iOS <example>` or
-  `LAUNCH iOS <bundle> attempt <n>` line before it starts, so a slow step shows
-  as progress in the log.
+- Each launch attempt prints a `LAUNCH iOS <bundle> attempt <n>` line before it starts, so a
+  slow step shows as progress in the log.
 - An expected label may be a regular expression, for labels whose text depends
   on the machine (About's version, model, locale, zone and link); the count and
   order of labels must still match exactly.
@@ -56,13 +63,12 @@ Use `--require-simulator` to make an unavailable simulator a failure.
 - Every line the suite prints goes through `say`, a synchronous write to stdout.
   Each step blocks the event loop, and stdout to a pipe is otherwise written only
   when the loop runs, so a CI log would lag behind or appear stuck.
-- Each example is built once and reused: the family matrix installs the build the
-  iPhone pass made instead of compiling again per family. Built apps are removed
-  when the process exits.
+- Each example is built once per content hash and reused by every family that launches it;
+  see [[iOS App Builds]] for the cache. The matrix installs the same app on each device.
 
 ## Dependencies and consumers
 
-[[Native Mobile Targets]], [[Backend Toolchain Library]]. Run on an Apple silicon Mac with an installed iOS runtime.
+[[Native Mobile Targets]], [[Backend Toolchain Library]], [[iOS App Builds]]. Run on an Apple silicon Mac with an installed iOS runtime.
 
 ## Resolved Grill Log
 
@@ -152,7 +158,7 @@ Resolved Grill Log: the refusal belongs to the host, which alone knows the node'
 
 ## Application output collision (#916)
 
-Once per run, build a minimal Pudu program into an existing `.app` directory
+Once per run, in the `refusals` part, build a minimal Pudu program into an existing `.app` directory
 containing a marker. Require `E6006` and verify the marker bytes survive. The
 collision exercises bundle publication regardless of the view tree or device
 family. Each Counter run separately builds, installs, and boots its app.
@@ -239,7 +245,7 @@ Resolved Grill Log: the run asserts the labels as well as the lines, so a report
 
 ## Remote run
 
-The Remote example, `examples/mobile/Remote.pudu` ([[Native Remote Example]]), runs with `PUDU_UI_FETCH_TEST` set and `PUDU_UI_SELFTEST` set to `0`. The script runs `withFetchServer`, which starts [[Test Fetch Server]] and reads its request counts after the app exits. The app's base URL is passed through `PUDU_FETCH_BASE`.
+The Remote example, `examples/mobile/Remote.pudu` ([[Native Remote Example]]), runs with `PUDU_UI_FETCH_TEST` set and `PUDU_UI_SELFTEST` set to `0`. The script runs `withFetchServer`, which starts [[Test Fetch Server]] and reads its request counts after the app exits. `withFetchServer` takes the example it drives and is skipped with it. The app's base URL is passed through `PUDU_FETCH_BASE`.
 
 The labels `Profile: 200 profile body` and `Limited: 200 limited body` must appear, and the layout must print `PUDU_FETCH loaded`. The run then asserts that the profile was requested once, since two descriptions and the fresh policy share one request, and that the limited path was requested twice, once refused with 429 and once after Retry-After. The pass line is `PASS iOS Remote requests: profile once, limited twice`. The host behaviour is in [[pudu_ios_fetch.h]].
 
