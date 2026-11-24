@@ -32,10 +32,18 @@ Use `--require-simulator` to make an unavailable simulator a failure.
   implementation through a macOS dylib to compare interpreter output.
 - `main.m` owns `main`, calls `pudu_program_run` inside an autorelease pool,
   prints the status it returns and ends, so the launch finishes by itself.
-- Each example is built with `pudu build --native --target ios-simulator-arm64 --app`
+- Each example is built before the run's first launch by `prebuild` in [[iOS App Builds]],
+  through `pudu build --native --target ios-simulator-arm64 --app`
   ([[Backend Toolchain App]]), which compiles and links the application, writes its
-  `Info.plist` and signs it. The script no longer compiles the host or writes the bundle
-  itself.
+  `Info.plist` and signs it. The script does not compile inline.
+- `mobileApp` waits for its prebuilt app for up to 30 minutes (`buildWait`). A failed build
+  throws its log at that step.
+- `exampleEntries` finds each example named in a `mobileApp` call, as `examples/mobile/<Name>.pudu`
+  or in a folder of its own under `examples/mobile/`, and passes it to `prebuild`. It also reads the family table's names.
+- `PUDU_IOS_SHARD="i/n"` runs only the parts whose name hashes to shard `i` of `n`. The parts are
+  the example names, `foreign`, `refusals` and `matrix`; the three CI shards together cover
+  every part. `wanted(part)` combines the shard with `PUDU_IOS_ONLY`, and a part outside both is
+  printed as `SKIP iOS <part>`.
 - The script creates its own iPhone device, boots it, installs, launches with
   `--console-pty` capturing standard output, and deletes the device afterwards
   on every path. An explicit `PUDU_IOS_SIMULATOR_UDID` instead uses an already
@@ -44,10 +52,25 @@ Use `--require-simulator` to make an unavailable simulator a failure.
   uninstall is skipped there.
 - Passes when the captured lines equal `pudu run`'s output followed by the
   status line.
+- `run` closes each step's stdin and kills a step past its timeout with SIGKILL,
+  so no step waits on input and a timed-out step cannot hold the suite.
+- Each launch attempt prints a `LAUNCH iOS <bundle> attempt <n>` line before it starts, so a
+  slow step shows as progress in the log.
+- Every `simctl launch` passes `--terminate-running-process`, so a retried launch ends whatever an
+  earlier attempt left running and its console carries only the new process's output.
+- An expected label may be a regular expression, for labels whose text depends
+  on the machine (About's version, model, locale, zone and link); the count and
+  order of labels must still match exactly.
+- The layout filter includes `PUDU_DEVICE` and `PUDU_LOCATION` lines.
+- Every line the suite prints goes through `say`, a synchronous write to stdout.
+  Each step blocks the event loop, and stdout to a pipe is otherwise written only
+  when the loop runs, so a CI log would lag behind or appear stuck.
+- Each example is built once per content hash and reused by every family that launches it;
+  see [[iOS App Builds]] for the cache. The matrix installs the same app on each device.
 
 ## Dependencies and consumers
 
-[[Native Mobile Targets]], [[Backend Toolchain Library]]. Run on an Apple silicon Mac with an installed iOS runtime.
+[[Native Mobile Targets]], [[Backend Toolchain Library]], [[iOS App Builds]]. Run on an Apple silicon Mac with an installed iOS runtime.
 
 ## Resolved Grill Log
 
@@ -67,9 +90,17 @@ Use `--require-simulator` to make an unavailable simulator a failure.
   only make the launch wait. Where a host calls the entry is its framework's
   choice.
 
+- **Q:** Why reuse builds across families? **A:** The simulator build of an example
+  does not depend on the device it is installed on; rebuilding it per family only adds
+  compile time on a runner already running two simulators, which pushed builds past
+  their timeout. _Rejected:_ a longer build timeout, which hides the duplicate work.
 - **Q:** Does the Objective-C bridge hold on iOS? **A:** `objectiveCSmoke` builds
   pools, blocks and a delegate for the simulator and requires the interpreter's
   output.
+- **Q:** Why SIGKILL on timeout? **A:** A step that ignores the polite signal
+  would otherwise keep the suite waiting past its own timeout; a killed step
+  fails with its timeout named, which is what the log should show.
+  _Rejected:_ SIGTERM alone.
 
 ## Cold simulator timing (#899)
 
@@ -129,7 +160,7 @@ Resolved Grill Log: the refusal belongs to the host, which alone knows the node'
 
 ## Application output collision (#916)
 
-Once per run, build a minimal Pudu program into an existing `.app` directory
+Once per run, in the `refusals` part, build a minimal Pudu program into an existing `.app` directory
 containing a marker. Require `E6006` and verify the marker bytes survive. The
 collision exercises bundle publication regardless of the view tree or device
 family. Each Counter run separately builds, installs, and boots its app.
@@ -160,6 +191,16 @@ with a clean status. Two cases run through it:
 Resolved Grill Log: Q: Why test the refusal on a simulator rather than in the fixture? A: The
 refusal belongs to the host; the Pudu stream for it is well formed, so only the host can reject
 it.
+
+## Device run (#983)
+
+The script runs `examples/mobile/About.pudu` ([[About Example]]) with `PUDU_UI_DEVICE_TEST` set. The run must print `PUDU_DEVICE awake yes` and show the labels `Platform: ios`, `Scale: 100` and `Online: true`, then exit with status 0. A refused run sends a NETWORK word of 2, which must end with the stream defect `set network watching to 2`.
+
+## Location run (#986)
+
+The script runs `examples/mobile/where/Where.pudu` ([[Where Example]]) with `PUDU_UI_LOCATION_TEST` set, after a privacy grant for location and `simctl location set 18.4655,-66.1057`. The run must print the labels `Permission: Granted`, `Latitude: 184655000` and `Longitude: -661057000`, and a `Fixes:` label with a count of at least 1; it must also print a `PUDU_LOCATION` line, then exit with status 0. A run entry may carry `location`, the coordinate pair the script sets with `simctl location set` before the application starts.
+
+A second run with location revoked must print `Permission: Blocked`, `Latitude: none` and `Fixes: 0`. A refused application built with accuracy code 7 must end with the stream defect `used unknown location accuracy 7`.
 
 ## Glass material (#928)
 
@@ -206,7 +247,7 @@ Resolved Grill Log: the run asserts the labels as well as the lines, so a report
 
 ## Remote run
 
-The Remote example, `examples/mobile/Remote.pudu` ([[Native Remote Example]]), runs with `PUDU_UI_FETCH_TEST` set and `PUDU_UI_SELFTEST` set to `0`. The script runs `withFetchServer`, which starts [[Test Fetch Server]] and reads its request counts after the app exits. The app's base URL is passed through `PUDU_FETCH_BASE`.
+The Remote example, `examples/mobile/Remote.pudu` ([[Native Remote Example]]), runs with `PUDU_UI_FETCH_TEST` set and `PUDU_UI_SELFTEST` set to `0`. The script runs `withFetchServer`, which starts [[Test Fetch Server]] and reads its request counts after the app exits. `withFetchServer` takes the example it drives and is skipped with it. The app's base URL is passed through `PUDU_FETCH_BASE`.
 
 The labels `Profile: 200 profile body` and `Limited: 200 limited body` must appear, and the layout must print `PUDU_FETCH loaded`. The run then asserts that the profile was requested once, since two descriptions and the fresh policy share one request, and that the limited path was requested twice, once refused with 429 and once after Retry-After. The pass line is `PASS iOS Remote requests: profile once, limited twice`. The host behaviour is in [[pudu_ios_fetch.h]].
 
@@ -217,3 +258,27 @@ The Refresh example, `examples/mobile/Refresh.pudu` ([[Native Refresh Example]])
 Refusal: a stream whose REFRESH names a label node is refused before any controller changes. The process must abort with `pudu: refreshed a node that does not scroll: 0` for the label's node id, and no first frame may be reported.
 
 Resolved Grill Log: the refusal belongs to the host, which alone knows the node's kind, as for the list refusal above. Checking the lines alone would pass a screen whose indicator never started, so the run also compares the labels that show the pull counts and the insets.
+
+## Web run (#990)
+
+The script reads `PUDU_IOS_ONLY` to narrow a run to named parts. The accepted names are the example names, `foreign`, `refusals` and `matrix`. When it is unset, the run includes every part.
+
+The Viewer example, `examples/mobile/Viewer.pudu` ([[Viewer Example]]), runs with `PUDU_UI_WEB_TEST` set. The label must read `Loaded: true`, and the self-test must print `PUDU_WEB loaded yes`.
+
+Refusal: a LOAD sent to a label node is refused with `loaded a page into a node that is not a web view:` followed by the node id.
+
+## Pickers and system touches (#991)
+
+Picker run: [[Picker Example]] runs with no self-test interaction, and its labels are checked at rest (each answer shows its empty form, `none` or `0`). Refusal: RECORD sent with the word 2 is refused with `set recording to`.
+
+## System sheets (#994)
+
+Outbox run: [[Outbox Example]] runs with no self-test interaction, and its labels are checked at rest (each reads `none`).
+
+## Services run (#989)
+
+The Toolbox example, `examples/mobile/toolbox/Toolbox.pudu` ([[Toolbox Example]]), runs with `PUDU_UI_SERVICES_TEST` set and `PUDU_UI_SELFTEST` set to `0`. The script waits for the labels `Battery: <level or unknown>`, `Authenticated: false` (the simulator has no passcode), `Spoke: true` and `Motion: none` (the simulator has no accelerometer).
+
+The layout line `PUDU_SERVICES authenticated yes powered yes spoke yes` reports that an answer was queued for each request, whatever its value. The layout filter includes `SERVICES`.
+
+Refusals: a stream whose BRIGHTNESS word is 101 is refused with `pudu: a view stream set brightness to 101`, and an ORIENTATION code of 3 with `pudu: a view stream locked unknown orientation 3`.

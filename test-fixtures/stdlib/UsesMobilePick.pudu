@@ -1,0 +1,43 @@
+module UsesMobilePick
+
+import Std.ByteOrder {readU32LE}
+import Std.Mobile.Events as Events
+import Std.Mobile.Pick as Pick
+import Std.Mobile.System as System
+import Std.Mobile.View as View
+
+// The words at `offset` onward, read as little-endian 32-bit values.
+fn wordsAt(bytes: &Array[UInt8], offset: Int, count: Int) -> Array[UInt32] {
+  var found = []
+  for index in 0..count {
+    match readU32LE(bytes, offset + index * 4) {
+      case Some(word) => { found = found.push(word) }
+      case None => { return [] }
+    }
+  }
+  found
+}
+
+// The event a host would send: its kind above, its tag below.
+fn raw(kind: UInt64, tag: UInt64) -> UInt64 { (kind << 32) | tag }
+
+export fn main() -> Int {
+  var held = 0
+
+  // Each picker's words; document types travel as one comma-joined text.
+  if wordsAt(&Pick.pickContact(1u32).toArray(), 0, 2) == [79u32, 1u32] && wordsAt(&Pick.takePhoto(3u32).toArray(), 0, 2) == [81u32, 3u32] { held = held + 1 }
+  let documents = Pick.pickDocument(2u32, ["a/b", "c/*"]).toArray()
+  if documents.length() == 19 && wordsAt(&documents, 0, 3) == [80u32, 2u32, 7u32] && wordsAt(&Pick.pickDocument(2u32, []).toArray(), 0, 3) == [80u32, 2u32, 0u32] { held = held + 1 }
+  if wordsAt(&Pick.record(4u32, true).toArray(), 0, 3) == [82u32, 4u32, 1u32] && wordsAt(&Pick.record(4u32, false).toArray(), 0, 3) == [82u32, 4u32, 0u32] { held = held + 1 }
+
+  // The badge clamps a negative count to 0; secure and toast carry a switch and a text.
+  if wordsAt(&System.badge(-2).toArray(), 0, 2) == [83u32, 0u32] && wordsAt(&System.badge(5).toArray(), 0, 2) == [83u32, 5u32] { held = held + 1 }
+  if wordsAt(&System.secure(true).toArray(), 0, 2) == [84u32, 1u32] && wordsAt(&System.toast("hi").toArray(), 0, 2) == [85u32, 2u32] { held = held + 1 }
+
+  // CONTACT_PICKED carries three lines; FILED carries a path.
+  let ada = Pick.Contact{name: "Ada", phones: ["1", "2"], emails: []}
+  if Events.eventWithDetail(raw(45u64, 1u64), "Ada\n1,2\n", 1u32) == View.ContactPicked(1u32, Some(ada)) { held = held + 1 }
+  if Events.eventWithDetail(raw(45u64, 1u64), "", 0u32) == View.ContactPicked(1u32, None) && Events.eventWithDetail(raw(45u64, 1u64), "Ada", 1u32) == View.Stopped { held = held + 1 }
+  if Events.eventWithDetail(raw(46u64, 4u64), "/t/r.m4a", 1u32) == View.Filed(4u32, Some("/t/r.m4a")) && Events.eventWithDetail(raw(46u64, 4u64), "", 0u32) == View.Filed(4u32, None) { held = held + 1 }
+  held
+}

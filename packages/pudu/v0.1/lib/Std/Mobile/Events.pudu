@@ -1,6 +1,10 @@
 module Std.Mobile.Events
 
+import Std.Mobile.Device as Device
 import Std.Mobile.Gesture as Gesture
+import Std.Mobile.Location as Location
+import Std.Mobile.Permission as Permission
+import Std.Mobile.Pick as Pick
 import Std.Mobile.Scene as Scene
 import Std.Mobile.View as View
 
@@ -29,6 +33,26 @@ const IMAGED: UInt64 = 24u64
 const OPENED: UInt64 = 25u64
 const SHARED: UInt64 = 26u64
 const PASTED: UInt64 = 27u64
+const PERMISSIONED: UInt64 = 28u64
+const SELECTED: UInt64 = 29u64
+const LINKED: UInt64 = 30u64
+const STORED: UInt64 = 31u64
+const DESCRIBED: UInt64 = 32u64
+const NETWORKED: UInt64 = 33u64
+const LOCATED: UInt64 = 34u64
+const NOTIFIED: UInt64 = 35u64
+const AUTHENTICATED: UInt64 = 36u64
+const BROWSED: UInt64 = 37u64
+const SPOKE: UInt64 = 38u64
+const POWERED: UInt64 = 39u64
+const SENSED: UInt64 = 40u64
+const IMAGE_PICKED: UInt64 = 41u64
+const LOADED: UInt64 = 42u64
+const ENDED: UInt64 = 43u64
+const BACKED: UInt64 = 44u64
+const CONTACT_PICKED: UInt64 = 45u64
+const FILED: UInt64 = 46u64
+const COMPLETED: UInt64 = 47u64
 
 /// Each event kind's constructor, given the tag and the text the host holds.
 const EVENTS: Map[UInt64, fn(UInt32, Str) -> View.Event] = mapOf([
@@ -40,7 +64,13 @@ const EVENTS: Map[UInt64, fn(UInt32, Str) -> View.Event] = mapOf([
     (REFRESHED, |tag: UInt32, _text: Str| View.Refreshed(tag)),
     (WOKE, |_tag: UInt32, _text: Str| View.Woke),
     (MEMORY, |_tag: UInt32, _text: Str| View.MemoryLow),
-    (PASTED, |tag: UInt32, text: Str| View.Pasted(tag, text))
+    (SELECTED, |tab: UInt32, _text: Str| View.Selected(tab)),
+    (LINKED, |_tag: UInt32, url: Str| View.Linked(url)),
+    (PASTED, |tag: UInt32, text: Str| View.Pasted(tag, text)),
+    (NOTIFIED, |id: UInt32, _text: Str| View.Notified(id)),
+    (BROWSED, |tag: UInt32, _text: Str| View.Browsed(tag)),
+    (ENDED, |tag: UInt32, _text: Str| View.Ended(tag)),
+    (BACKED, |_tag: UInt32, _text: Str| View.Backed)
   ])
 
 /// Each detailed event kind's constructor, given the tag and the detail word.
@@ -55,7 +85,13 @@ const DETAILED: Map[UInt64, fn(UInt32, UInt32) -> Option[View.Event]] = mapOf([
     (COLORED, |reported: UInt32, rgba: UInt32| Some(View.Colored(reported, rgba))),
     (IMAGED, |reported: UInt32, loaded: UInt32| flagged(loaded, |done: Bool| View.Imaged(reported, done))),
     (OPENED, |reported: UInt32, opened: UInt32| flagged(opened, |done: Bool| View.Opened(reported, done))),
-    (SHARED, |reported: UInt32, shared: UInt32| flagged(shared, |done: Bool| View.Shared(reported, done)))
+    (SHARED, |reported: UInt32, shared: UInt32| flagged(shared, |done: Bool| View.Shared(reported, done))),
+    (PERMISSIONED, |kind: UInt32, state: UInt32| permissioned(Permission.kindOf(kind), Permission.stateOf(state))),
+    (NETWORKED, |_reported: UInt32, code: UInt32| networked(Device.linkOf(code))),
+    (AUTHENTICATED, |reported: UInt32, confirmed: UInt32| flagged(confirmed, |done: Bool| View.Authenticated(reported, done))),
+    (SPOKE, |reported: UInt32, finished: UInt32| flagged(finished, |done: Bool| View.Spoke(reported, done))),
+    (LOADED, |reported: UInt32, loaded: UInt32| flagged(loaded, |done: Bool| View.Loaded(reported, done))),
+    (COMPLETED, |reported: UInt32, finished: UInt32| flagged(finished, |done: Bool| View.Completed(reported, done)))
   ])
 
 /// Each measured event kind's constructor, given the tag, the detail word and
@@ -64,15 +100,19 @@ const MEASURED: Map[UInt64, fn(UInt32, UInt32, Array[Int32]) -> Option[View.Even
     (GESTURED, |reported: UInt32, bit: UInt32, values: Array[Int32]| gestured(reported, Gesture.decoded(bit, &values))),
     (RESIZED, |_reported: UInt32, _bit: UInt32, values: Array[Int32]| resized(Scene.sized(&values))),
     (INSETS, |_reported: UInt32, _bit: UInt32, values: Array[Int32]| inset(Scene.insets(&values))),
-    (DATED, |reported: UInt32, _bit: UInt32, values: Array[Int32]| dated(reported, &values))
+    (DATED, |reported: UInt32, _bit: UInt32, values: Array[Int32]| dated(reported, &values)),
+    (LOCATED, |reported: UInt32, found: UInt32, values: Array[Int32]| located(reported, Location.position(found, &values))),
+    (POWERED, |reported: UInt32, state: UInt32, values: Array[Int32]| powered(reported, Device.power(state, &values))),
+    (SENSED, |_reported: UInt32, _bit: UInt32, values: Array[Int32]| sensed(Device.motion(&values)))
   ])
 
 /// Whether a host event's kind carries text the host holds for it.
-export fn carriesText(raw: UInt64) -> Bool { raw >> 32 == CHANGED || raw >> 32 == FETCHED || raw >> 32 == PASTED }
+export fn carriesText(raw: UInt64) -> Bool { raw >> 32 == CHANGED || raw >> 32 == FETCHED || raw >> 32 == PASTED || raw >> 32 == LINKED || raw >> 32 == STORED || raw >> 32 == DESCRIBED || raw >> 32 == IMAGE_PICKED || raw >> 32 == CONTACT_PICKED || raw >> 32 == FILED }
 
 /// Whether a host event's kind carries a detail word the host holds for it.
 export fn carriesDetail(raw: UInt64) -> Bool {
-  DETAILED.containsKey(raw >> 32) || MEASURED.containsKey(raw >> 32) || raw >> 32 == FETCHED
+  DETAILED.containsKey(raw >> 32) || MEASURED.containsKey(raw >> 32) || raw >> 32 == FETCHED || raw >> 32 == STORED || raw >> 32 == DESCRIBED || raw >> 32 == IMAGE_PICKED || raw >> 32 == CONTACT_PICKED
+    || raw >> 32 == FILED
 }
 
 /// Whether a host event's kind carries signed words the host holds for it.
@@ -97,6 +137,11 @@ export fn eventWithDetail(raw: UInt64, text: Str, detail: UInt32) -> View.Event 
 export fn eventWithWords(raw: UInt64, text: Str, detail: UInt32, values: Array[Int32]) -> View.Event {
   match convertInteger[UInt32](raw & 0xffffffffu64) {
     case Some(reported) if raw >> 32 == FETCHED => fetched(reported, detail, text, &values)
+    case Some(reported) if raw >> 32 == STORED => stored(reported, detail, text)
+    case Some(reported) if raw >> 32 == DESCRIBED => described(reported, Device.facts(text, detail))
+    case Some(reported) if raw >> 32 == IMAGE_PICKED => picked(reported, detail, text)
+    case Some(reported) if raw >> 32 == FILED => filed(reported, detail, text)
+    case Some(reported) if raw >> 32 == CONTACT_PICKED => chosen(reported, detail, text)
     case Some(reported) => {
       match (MEASURED.get(raw >> 32), DETAILED.get(raw >> 32)) {
         case (Some(made), _) => orStopped(made(reported, detail, values))
@@ -156,6 +201,79 @@ fn fetched(generation: UInt32, status: UInt32, body: Str, values: &Array[Int32])
     -1
   }
   View.Fetched(generation, code, body, wait)
+}
+
+// A permission report; codes no host writes read as Stopped.
+fn permissioned(kind: Option[Permission.Kind], state: Option[Permission.State]) -> Option[View.Event] {
+  match (kind, state) {
+    case (Some(named), Some(stood)) => Some(View.Permissioned(named, stood))
+    case _ => None
+  }
+}
+
+// A store's answer: its value as text when the detail word is 1, nothing when
+// it is 0; any other word is never written.
+fn stored(reported: UInt32, present: UInt32, value: Str) -> View.Event {
+  if present == 1u32 { View.Stored(reported, Some(value)) } else if present == 0u32 { View.Stored(reported, None) } else { View.Stopped }
+}
+
+// The device's facts, or Stopped for text no host writes.
+fn described(reported: UInt32, found: Option[Device.Facts]) -> View.Event {
+  match found {
+    case Some(facts) => View.Described(reported, facts)
+    case None => View.Stopped
+  }
+}
+
+fn powered(reported: UInt32, found: Option[Device.Power]) -> Option[View.Event] {
+  let power = found ?
+  Some(View.Powered(reported, power))
+}
+
+fn sensed(found: Option[Device.Motion]) -> Option[View.Event] {
+  let motion = found ?
+  Some(View.Sensed(motion))
+}
+
+// A picked image's copy when the detail word is 1, a cancellation when it is
+// 0 with no text; any other shape is never written.
+fn picked(reported: UInt32, kept: UInt32, path: Str) -> View.Event {
+  if kept == 1u32 && path.length() > 0 {
+    View.ImagePicked(reported, Some(path))
+  } else if kept == 0u32 && path.length() == 0 {
+    View.ImagePicked(reported, None)
+  } else {
+    View.Stopped
+  }
+}
+
+// A file's path when the detail word is 1, nothing when it is 0 with no text.
+fn filed(reported: UInt32, done: UInt32, path: Str) -> View.Event {
+  match picked(reported, done, path) {
+    case View.ImagePicked(tag, found) => View.Filed(tag, found)
+    case other => other
+  }
+}
+
+// A shared contact when the detail word is 1, a cancellation when it is 0.
+fn chosen(reported: UInt32, done: UInt32, text: Str) -> View.Event {
+  if done == 0u32 && text.length() == 0 {
+    return View.ContactPicked(reported, None)
+  }
+  match Pick.contact(text) {
+    case Some(found) if done == 1u32 => View.ContactPicked(reported, Some(found))
+    case _ => View.Stopped
+  }
+}
+
+fn located(reported: UInt32, found: Option[Option[Location.Position]]) -> Option[View.Event] {
+  let position = found ?
+  Some(View.Located(reported, position))
+}
+
+fn networked(found: Option[Device.Link]) -> Option[View.Event] {
+  let link = found ?
+  Some(View.Networked(link))
 }
 
 // An event whose detail word is 1 or 0; any other word is never written.

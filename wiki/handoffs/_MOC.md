@@ -5,6 +5,7 @@ tags: [moc, handoff]
 
 # Handoff Map
 
+- [[983-device]] — device facts, network reachability and keep-awake (#983).
 - [[Native Images Delivery]] — native images and application assets (#973).
 - [[Native System Services]] — open, share, clipboard and status bar on both hosts (#974).
 - [[Android Routes Delivery]] — Android navigation, refresh, requests, wake, memory and insets (#971).
@@ -441,3 +442,12 @@ tags: [moc, handoff]
 - [[Native iOS Navigation Delivery]] — native route identity, pop completion and page sheets (#920).
 - [[Native iOS Refresh Delivery]] — pull to refresh and safe-area insets, stacked on the navigation branch (#962).
 - [[2026-11-18-render-skipping]] — memoized native subtrees and render counters, first part of render skipping (#963).
+- [[Native Permissions]] — declared, build-checked permissions and the state model (#976).
+- [[Native Tabs]] — native tab bars: TABS, SELECTED and the per-tab stacks (#977).
+- [[Native App Identity]] — application identity from the manifest and incoming links: LINKED (#978).
+- [[Native Storage]] — persistent and secure storage and public integer parsing (#980).
+- [[986-location]] — device location, one-shot and tracked fixes (#986).
+- [[989-services]] — notifications, authentication, browser, speech, image picking, battery, brightness, orientation and motion (#989).
+- [[990-web]] — web pages, video, audio, keyboard dismissal and the back gesture (#990).
+- [[991-pick]] — contact and document pickers, camera, audio recording, badge, secure screen and toasts (#991).
+- [[994-compose]] — share files, review prompt, calendar events, mail and messages (#994).

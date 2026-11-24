@@ -1,0 +1,126 @@
+module Std.Mobile.Request
+
+import Std.Mobile.Stream {field, words}
+
+/// Instruction codes of the platform requests that are not about the view:
+/// notifications, authentication, the browser, speech, the battery, the
+/// screen, motion and the photo picker. They share the view stream's code
+/// space and words.
+const NOTIFY: UInt32 = 63u32
+const UNNOTIFY: UInt32 = 64u32
+const AUTHENTICATE: UInt32 = 65u32
+const BROWSE: UInt32 = 66u32
+const SPEAK: UInt32 = 67u32
+const HUSH: UInt32 = 68u32
+const BATTERY: UInt32 = 69u32
+const BRIGHTNESS: UInt32 = 70u32
+const ORIENTATION: UInt32 = 71u32
+const SENSE: UInt32 = 72u32
+const PICK_IMAGE: UInt32 = 73u32
+const AUDIO: UInt32 = 76u32
+const KEYBOARD: UInt32 = 77u32
+const BACK: UInt32 = 78u32
+const PICK_CONTACT: UInt32 = 79u32
+const PICK_DOCUMENT: UInt32 = 80u32
+const TAKE_PHOTO: UInt32 = 81u32
+const RECORD: UInt32 = 82u32
+const BADGE: UInt32 = 83u32
+const SECURE: UInt32 = 84u32
+const TOAST: UInt32 = 85u32
+const SHARE_FILE: UInt32 = 86u32
+const REVIEW: UInt32 = 87u32
+const ADD_EVENT: UInt32 = 88u32
+const COMPOSE_MAIL: UInt32 = 89u32
+const COMPOSE_MESSAGE: UInt32 = 90u32
+
+/// Schedules notification `id` to show `title` and `body` after `delay` seconds.
+export fn notify(out: Array[UInt8], id: UInt32, delay: UInt32, title: Str, body: Str) -> Array[UInt8] {
+  field(field(words(out, [NOTIFY, id, delay]), title), body)
+}
+
+/// Cancels notification `id`, pending or shown.
+export fn unnotify(out: Array[UInt8], id: UInt32) -> Array[UInt8] { words(out, [UNNOTIFY, id]) }
+
+/// Asks the person to confirm they own the device; AUTHENTICATED with `reported` answers.
+export fn authenticate(out: Array[UInt8], reported: UInt32, reason: Str) -> Array[UInt8] { field(words(out, [AUTHENTICATE, reported]), reason) }
+
+/// Shows `url` in an in-app browser; BROWSED with `reported` answers when it closes.
+export fn browse(out: Array[UInt8], reported: UInt32, url: Str) -> Array[UInt8] { field(words(out, [BROWSE, reported]), url) }
+
+/// Speaks `text` in `language` at `rate` percent; SPOKE with `reported` answers.
+export fn speak(out: Array[UInt8], reported: UInt32, rate: UInt32, language: Str, text: Str) -> Array[UInt8] {
+  field(field(words(out, [SPEAK, reported, rate]), language), text)
+}
+
+/// Stops speech.
+export fn hush(out: Array[UInt8]) -> Array[UInt8] { words(out, [HUSH]) }
+
+/// Asks for the battery's level and charge; POWERED with `reported` answers.
+export fn battery(out: Array[UInt8], reported: UInt32) -> Array[UInt8] { words(out, [BATTERY, reported]) }
+
+/// Sets the screen's brightness to `percent`.
+export fn brightness(out: Array[UInt8], percent: UInt32) -> Array[UInt8] { words(out, [BRIGHTNESS, percent]) }
+
+/// Locks the screen to orientation `code`: 0 any, 1 portrait, 2 landscape.
+export fn orientation(out: Array[UInt8], code: UInt32) -> Array[UInt8] { words(out, [ORIENTATION, code]) }
+
+/// Starts motion reports every `interval` milliseconds with 1, or stops them with 0.
+export fn sense(out: Array[UInt8], on: UInt32, interval: UInt32) -> Array[UInt8] { words(out, [SENSE, on, interval]) }
+
+/// Shows the photo picker; IMAGE_PICKED with `reported` answers.
+export fn pickImage(out: Array[UInt8], reported: UInt32) -> Array[UInt8] { words(out, [PICK_IMAGE, reported]) }
+
+/// Plays `source` under `tag` with 1, looping with 1, or stops it with 0;
+/// ENDED with `reported` answers when it finishes without looping.
+export fn audio(out: Array[UInt8], reported: UInt32, playing: UInt32, looping: UInt32, source: Str) -> Array[UInt8] {
+  field(words(out, [AUDIO, reported, playing, looping]), source)
+}
+
+/// Dismisses the on-screen keyboard.
+export fn keyboard(out: Array[UInt8]) -> Array[UInt8] { words(out, [KEYBOARD]) }
+
+/// Receives the platform's back gesture as BACKED with 1, or returns it with 0.
+export fn back(out: Array[UInt8], on: UInt32) -> Array[UInt8] { words(out, [BACK, on]) }
+
+/// Shows the contact picker; CONTACT_PICKED with `reported` answers.
+export fn pickContact(out: Array[UInt8], reported: UInt32) -> Array[UInt8] { words(out, [PICK_CONTACT, reported]) }
+
+/// Shows the document picker for `types`, comma-separated MIME types; FILED with `reported` answers.
+export fn pickDocument(out: Array[UInt8], reported: UInt32, types: Str) -> Array[UInt8] { field(words(out, [PICK_DOCUMENT, reported]), types) }
+
+/// Shows the camera; FILED with `reported` answers.
+export fn takePhoto(out: Array[UInt8], reported: UInt32) -> Array[UInt8] { words(out, [TAKE_PHOTO, reported]) }
+
+/// Starts recording with 1 or stops it with 0; FILED with `reported` answers the stop.
+export fn record(out: Array[UInt8], reported: UInt32, on: UInt32) -> Array[UInt8] { words(out, [RECORD, reported, on]) }
+
+/// Sets the application icon's badge to `count`.
+export fn badge(out: Array[UInt8], count: UInt32) -> Array[UInt8] { words(out, [BADGE, count]) }
+
+/// Hides the screen from screenshots and recordings with 1, or shows it with 0.
+export fn secure(out: Array[UInt8], on: UInt32) -> Array[UInt8] { words(out, [SECURE, on]) }
+
+/// Shows `text` briefly over the content.
+export fn toast(out: Array[UInt8], text: Str) -> Array[UInt8] { field(words(out, [TOAST]), text) }
+
+/// Shows the share sheet for the file at `path`; SHARED with `reported` answers.
+export fn shareFile(out: Array[UInt8], reported: UInt32, path: Str) -> Array[UInt8] { field(words(out, [SHARE_FILE, reported]), path) }
+
+/// Asks the platform to show its rating prompt.
+export fn review(out: Array[UInt8]) -> Array[UInt8] { words(out, [REVIEW]) }
+
+/// Shows the event editor prefilled with `title`, the start and end as high
+/// and low words of Unix seconds, and `location`; COMPLETED answers.
+export fn addEvent(out: Array[UInt8], reported: UInt32, start: (UInt32, UInt32), end: (UInt32, UInt32), title: Str, location: Str) -> Array[UInt8] {
+  field(field(words(out, [ADD_EVENT, reported, start[0], start[1], end[0], end[1]]), title), location)
+}
+
+/// Shows the mail composer for comma-separated `to`, `subject` and `body`; COMPLETED answers.
+export fn composeMail(out: Array[UInt8], reported: UInt32, to: Str, subject: Str, body: Str) -> Array[UInt8] {
+  field(field(field(words(out, [COMPOSE_MAIL, reported]), to), subject), body)
+}
+
+/// Shows the message composer for comma-separated `to` and `body`; COMPLETED answers.
+export fn composeMessage(out: Array[UInt8], reported: UInt32, to: Str, body: Str) -> Array[UInt8] {
+  field(field(words(out, [COMPOSE_MESSAGE, reported]), to), body)
+}

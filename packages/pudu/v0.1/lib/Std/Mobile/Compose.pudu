@@ -1,0 +1,44 @@
+module Std.Mobile.Compose
+
+import Std.Mobile.Request as Request
+
+/// A commit showing the platform's event editor prefilled with `title`, a
+/// start and end in Unix seconds and `location`. `Completed(tag, true)`
+/// arrives when the person saved it, `false` when they cancelled.
+export fn addEvent(tag: UInt32, title: Str, start: Int64, end: Int64, location: Str) -> Bytes {
+  bytesOf(Request.addEvent([], tag, split(start), split(end), title, location))
+}
+
+/// A commit showing the platform's mail composer addressed to `to`.
+/// `Completed(tag, true)` arrives when the person sent it, `false` when they
+/// cancelled or the device cannot send mail.
+export fn mail(tag: UInt32, to: Array[Str], subject: Str, body: Str) -> Bytes { bytesOf(Request.composeMail([], tag, joined(&to), subject, body)) }
+
+/// A commit showing the platform's message composer addressed to `to`.
+/// `Completed(tag, true)` arrives when the person sent it, `false` when they
+/// cancelled or the device cannot send messages.
+export fn message(tag: UInt32, to: Array[Str], body: Str) -> Bytes { bytesOf(Request.composeMessage([], tag, joined(&to), body)) }
+
+// Seconds as the high word, signed, and the low word.
+fn split(seconds: Int64) -> (UInt32, UInt32) {
+  let low = ((seconds % 4294967296i64) + 4294967296i64) % 4294967296i64
+  let high = (seconds - low) / 4294967296i64
+  let wrapped = if high < 0i64 { high + 4294967296i64 } else { high }
+  (word(wrapped), word(low))
+}
+
+fn word(value: Int64) -> UInt32 {
+  match convertInteger[UInt32](value) {
+    case Some(found) => found
+    case None => 0u32
+  }
+}
+
+// Items joined by commas.
+fn joined(items: &Array[Str]) -> Str {
+  var text = ""
+  for item in *items {
+    text = if text.length() == 0 { item } else { "{text},{item}" }
+  }
+  text
+}

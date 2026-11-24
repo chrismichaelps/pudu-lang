@@ -32,6 +32,8 @@ import GHC.IO.Encoding (getFileSystemEncoding)
 import Pudu.Backend.Ledger (Finding, appleLedger, ledgerDeployment, renderRelease)
 import Pudu.Backend.Target (AppleSdk (..), NativeTarget (..), TargetPlatform (..))
 import Pudu.Backend.Toolchain.Android (androidTools, compileApk)
+import Pudu.Backend.Identity (Identity (..))
+import Pudu.Backend.Permissions (Permission, androidEntries, appleFlags, appleFrameworks, appleUsageKeys)
 import Pudu.Backend.Toolchain.Assets (assetFiles, stageAssets)
 import Pudu.Backend.Toolchain.HostSources (iosHostSources)
 import Pudu.Backend.Toolchain.Library (LibraryProducts (..), LibraryRequest (..), appleTools, compileLibrary, invoke)
@@ -50,6 +52,10 @@ data AppRequest = AppRequest
   , appIdentifier :: !Text
   , appAssets :: !(Maybe FilePath)
   -- ^ The program's asset directory, packaged under the same relative names.
+  , appIdentity :: !Identity
+  -- ^ What the application is called, its identifier, version and build, and the schemes it opens.
+  , appPermissions :: ![Permission]
+  -- ^ The declared permissions, each written into the platform's declarations.
   }
   deriving stock (Eq, Show)
 
@@ -67,7 +73,7 @@ identifierPrefix = "org.pudu."
 
 {-| The frameworks the iOS host links. -}
 hostFrameworks :: [String]
-hostFrameworks = ["UIKit", "Foundation", "CoreGraphics", "QuartzCore", "ImageIO"]
+hostFrameworks = ["UIKit", "Foundation", "CoreGraphics", "QuartzCore", "ImageIO", "Security", "Network", "LocalAuthentication", "SafariServices", "AVFoundation", "PhotosUI", "CoreMotion", "WebKit", "CoreMedia", "ContactsUI", "Contacts", "UniformTypeIdentifiers", "StoreKit", "EventKit", "EventKitUI", "MessageUI"]
 
 {-| The application at the output path, answering the tools' warnings and the
     platform ledger's findings that let the build proceed. A device
@@ -85,7 +91,7 @@ compileApp request = case nativeTargetPlatform (appTarget request) of
           Left failure -> pure (Left failure)
           Right files ->
             fmap (, []) <$> compileApk found (appSource request) (appExports request) (appName request) (appOutput request)
-              ((, files) <$> appAssets request)
+              ((, files) <$> appAssets request) (appIdentity request) (androidEntries (appPermissions request))
   _ -> pure (Left (ToolchainTargetUnbuilt (nativeTargetName (appTarget request) <> " applications, which need a signing identity,")))
 
 buildBundle :: AppRequest -> AppleSdk -> IO (Either ToolchainFailure (Text, [Finding]))
@@ -123,17 +129,25 @@ buildBundle request sdk = do
         prepared <- tryIO (do
           createDirectory bundle
           mapM_ (\(file, source) -> ByteString.writeFile (directory </> file) (ByteString.pack source)) iosHostSources
-          ByteString.writeFile (bundle </> "Info.plist") (Encoding.encodeUtf8 (infoPlist (appName request) (appIdentifier request)))
+          ByteString.writeFile (bundle </> "Info.plist") (Encoding.encodeUtf8 (infoPlist (appName request) (appIdentity request) (appleUsageKeys (appPermissions request))))
+          ByteString.writeFile (directory </> "entitlements.xcent") (Encoding.encodeUtf8 (simulatedEntitlements (identityIdentifier (appIdentity request))))
           mapM_ (\assets -> stageAssets assets files (bundle </> "assets")) (appAssets request))
         case prepared of
           Left problem -> pure (Left (ToolchainPublishFailed (problemText problem)))
           Right () -> do
-            linked <- invoke clang
+            -- The simulator reads an application's entitlements from its
+            -- executable, as XML and as DER; derq writes the DER form.
+            encoded <- invoke "/usr/bin/derq"
+              ["query", "-f", "xml", "-i", directory </> "entitlements.xcent", "-o", directory </> "entitlements.der", "--raw"] seconds
+            linked <- either (pure . Left) (const (invoke clang
               (["-target", Text.unpack (appleTriple sdk), "-isysroot", root, "-fobjc-arc", "-O2", "-I", directory, host, library]
                 <> map Text.unpack (libraryLinks products)
-                <> concat [["-framework", framework] | framework <- hostFrameworks]
+                <> map Text.unpack (appleFlags (appPermissions request))
+                <> concat [["-framework", framework] | framework <- hostFrameworks <> map Text.unpack (appleFrameworks (appPermissions request))]
+                <> concat [["-Xlinker", flag] | flag <- ["-sectcreate", "__TEXT", "__entitlements", directory </> "entitlements.xcent"]]
+                <> concat [["-Xlinker", flag] | flag <- ["-sectcreate", "__TEXT", "__ents_der", directory </> "entitlements.der"]]
                 <> ["-o", bundle </> name])
-              seconds
+              seconds)) encoded
             signed <- either (pure . Left) (\warnings -> fmap (const warnings) <$> invoke codesign ["--force", "--sign", "-", bundle] seconds) linked
             case signed of
               Left failure -> pure (Left failure)
@@ -145,6 +159,25 @@ buildBundle request sdk = do
                     | otherwise -> Left (ToolchainPublishFailed (problemText problem))
                   Right () ->
                     Right (Text.strip (Text.unlines (filter (not . Text.null) [libraryWarnings products, warnings])), libraryFindings products))
+
+{-| The entitlements a simulator application carries, embedded in its
+    executable as XML and as DER, as a device build carries them in its
+    signature; an ad-hoc signature cannot carry them, since the platform
+    refuses to launch an ad-hoc application claiming an identifier. It holds
+    only a keychain group of the application's own, without which the
+    simulator's keychain refuses the application's secure storage; claiming an
+    application identifier as well changes how the platform opens the
+    application's own links. The team
+    prefix is a placeholder; the simulator does not check it. -}
+simulatedEntitlements :: Text -> Text
+simulatedEntitlements identifier = Text.unlines
+  [ "<?xml version=\"1.0\" encoding=\"UTF-8\"?>"
+  , "<plist version=\"1.0\"><dict>"
+  , "<key>keychain-access-groups</key><array><string>" <> prefixed <> "</string></array>"
+  , "</dict></plist>"
+  ]
+ where
+  prefixed = "SIMULATOR." <> identifier
 
 {-| The program's assets, checked; none when it has no asset directory. -}
 assetsOf :: AppRequest -> IO (Either ToolchainFailure [FilePath])
@@ -181,25 +214,32 @@ bundleIdentifier name = identifierPrefix <> Text.map kept name
     | isAsciiLower c || isAsciiUpper c || isDigit c || c == '-' || c == '.' = c
     | otherwise = '-'
 
-{-| The property list of a simulator application named `name` with
-    `identifier`, its text escaped for XML. -}
-infoPlist :: Text -> Text -> Text
-infoPlist name identifier = Text.unlines
+{-| The property list of a simulator application whose executable is `name`,
+    with its `identity` and the permission `usage` keys with their reasons,
+    its text escaped for XML. -}
+infoPlist :: Text -> Identity -> [(Text, Text)] -> Text
+infoPlist name identity usage = Text.unlines $
   [ "<?xml version=\"1.0\" encoding=\"UTF-8\"?>"
   , "<plist version=\"1.0\"><dict>"
-  , entry "CFBundleIdentifier" identifier
+  , entry "CFBundleIdentifier" (identityIdentifier identity)
   , entry "CFBundleExecutable" name
   , entry "CFBundleName" name
+  , entry "CFBundleDisplayName" (identityName identity)
   , entry "CFBundlePackageType" "APPL"
-  , entry "CFBundleVersion" "1"
-  , entry "CFBundleShortVersionString" "1.0"
+  , entry "CFBundleVersion" (Text.pack (show (identityBuild identity)))
+  , entry "CFBundleShortVersionString" (identityVersion identity)
   , entry "MinimumOSVersion" minimumSystem
   , "<key>CFBundleSupportedPlatforms</key><array><string>iPhoneSimulator</string></array>"
   , "<key>UIDeviceFamily</key><array><integer>1</integer><integer>2</integer></array>"
   , "<key>UILaunchScreen</key><dict/>"
   , "<key>CADisableMinimumFrameDurationOnPhone</key><true/>"
-  , "</dict></plist>"
   ]
+  <> [entry key reason | (key, reason) <- usage]
+  <> [ "<key>CFBundleURLTypes</key><array><dict><key>CFBundleURLName</key><string>" <> escaped (identityIdentifier identity)
+         <> "</string><key>CFBundleURLSchemes</key><array>" <> Text.concat ["<string>" <> escaped scheme <> "</string>" | scheme <- identitySchemes identity]
+         <> "</array></dict></array>"
+     | not (null (identitySchemes identity)) ]
+  <> ["</dict></plist>"]
  where
   entry key value = "<key>" <> key <> "</key><string>" <> escaped value <> "</string>"
   escaped = Text.concatMap $ \c -> case c of

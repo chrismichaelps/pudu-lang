@@ -34,6 +34,7 @@ so far. Each is linear in the text: a 50,000-character trailing trim or predicat
 Padding adds whole copies of the filler until the width is reached, so a longer filler may pass it;
 `center` alternates copies starting on the left, giving the left the extra copy when the count is odd.
 `breakOnEnd` finds the last occurrence as the first occurrence in the reversed text.
+Integer reading (`wholeOf`, `countOf`) delegates to `Std.Num.parseInt` with this module's own rule: digits only, no sign.
 ## Grill Log
 - **Q:** Keep padding as a loop that appends until the width is reached? **A:** No. _Rationale:_ an
   empty filler never changes the length, so the loop never ended and the program hung. _Accepted:_ a

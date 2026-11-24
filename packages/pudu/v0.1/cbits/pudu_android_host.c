@@ -21,6 +21,7 @@
 #include "pudu_android_nodes.h"
 #include "pudu_android_capabilities.h"
 #include "pudu_android_routes.h"
+#include "pudu_android_services.h"
 #include "pudu_android_java.h"
 
 
@@ -215,7 +216,22 @@ static void (*const pudu_instruction_table[PUDU_UI_INSTRUCTIONS])(JNIEnv *, pudu
   [PUDU_UI_REFRESH] = pudu_do_refresh, [PUDU_UI_FETCH] = pudu_do_fetch, [PUDU_UI_CANCEL] = pudu_do_cancel,
   [PUDU_UI_WAKE] = pudu_do_wake, [PUDU_UI_BOUNDS] = pudu_do_bounds, [PUDU_UI_SOURCE] = pudu_do_source,
   [PUDU_UI_OPEN] = pudu_do_open, [PUDU_UI_SHARE] = pudu_do_share, [PUDU_UI_COPY] = pudu_do_copy, [PUDU_UI_PASTE] = pudu_do_paste,
-  [PUDU_UI_STATUS] = pudu_do_status,
+  [PUDU_UI_STATUS] = pudu_do_status, [PUDU_UI_PERMISSIONS] = pudu_do_permissions, [PUDU_UI_PERMISSION] = pudu_do_permission,
+  [PUDU_UI_SETTINGS] = pudu_do_settings, [PUDU_UI_TABS] = pudu_do_tabs,
+  [PUDU_UI_STORE_READ] = pudu_do_store_read, [PUDU_UI_STORE_WRITE] = pudu_do_store_write, [PUDU_UI_STORE_REMOVE] = pudu_do_store_remove,
+  [PUDU_UI_DEVICE] = pudu_do_device, [PUDU_UI_NETWORK] = pudu_do_network, [PUDU_UI_AWAKE] = pudu_do_awake,
+  [PUDU_UI_LOCATE] = pudu_do_locate, [PUDU_UI_TRACK] = pudu_do_track,
+  [PUDU_UI_NOTIFY] = pudu_do_notify, [PUDU_UI_UNNOTIFY] = pudu_do_unnotify, [PUDU_UI_AUTHENTICATE] = pudu_do_authenticate,
+  [PUDU_UI_BROWSE] = pudu_do_browse, [PUDU_UI_SPEAK] = pudu_do_speak, [PUDU_UI_HUSH] = pudu_do_hush,
+  [PUDU_UI_BATTERY] = pudu_do_battery, [PUDU_UI_BRIGHTNESS] = pudu_do_brightness, [PUDU_UI_ORIENTATION] = pudu_do_orientation,
+  [PUDU_UI_SENSE] = pudu_do_sense, [PUDU_UI_PICK_IMAGE] = pudu_do_pick_image,
+  [PUDU_UI_LOAD] = pudu_do_load, [PUDU_UI_MEDIA] = pudu_do_media, [PUDU_UI_AUDIO] = pudu_do_audio,
+  [PUDU_UI_KEYBOARD] = pudu_do_keyboard, [PUDU_UI_BACK] = pudu_do_back,
+  [PUDU_UI_PICK_CONTACT] = pudu_do_pick_contact, [PUDU_UI_PICK_DOCUMENT] = pudu_do_pick_document,
+  [PUDU_UI_TAKE_PHOTO] = pudu_do_take_photo, [PUDU_UI_RECORD] = pudu_do_record, [PUDU_UI_BADGE] = pudu_do_badge,
+  [PUDU_UI_SECURE] = pudu_do_secure, [PUDU_UI_TOAST] = pudu_do_toast,
+  [PUDU_UI_SHARE_FILE] = pudu_do_share_file, [PUDU_UI_REVIEW] = pudu_do_review, [PUDU_UI_ADD_EVENT] = pudu_do_add_event,
+  [PUDU_UI_COMPOSE_MAIL] = pudu_do_compose_mail, [PUDU_UI_COMPOSE_MESSAGE] = pudu_do_compose_message,
   [PUDU_UI_OPTIONS] = pudu_do_options, [PUDU_UI_COUNT] = pudu_do_count, [PUDU_UI_MOMENT] = pudu_do_moment,
 };
 

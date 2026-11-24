@@ -5,6 +5,69 @@ tags: [changelog]
 
 # Changelog
 
+## 2026-11-23 — Share files, review prompt, calendar events, mail and messages (#994)
+
+- Instructions: SHARE_FILE 86, REVIEW 87, ADD_EVENT 88, COMPOSE_MAIL 89 and COMPOSE_MESSAGE 90 in `Std.Mobile.Request`; the bound is 91. Sharing and the review request are `shareFile` and `requestReview` in `Std.Mobile.System`; the sheets are in the new `Std.Mobile.Compose` module ([[Std Mobile Compose]]).
+- Event: COMPLETED 47, decoded as `Completed(UInt32, Bool)` in [[Std Mobile View]], answers the calendar, mail and message sheets.
+- iOS: [[pudu-ios-compose]] presents the share sheet, the StoreKit review request, the event editor and the mail and message composers; SHARED comes from [[pudu-ios-system]].
+- Android: [[PuduCompose]] starts the share, calendar insert, mailto and smsto intents. Files are shared through the read-only [[PuduFiles]] provider, limited to the cache directory.
+- Example and fixture: [[Outbox Example]] and [[Uses Mobile Compose]] (7 checks).
+  [[Std Mobile Compose]] · [[pudu-ios-compose]] · [[PuduCompose]] · [[PuduFiles]] · [[NATIVE-MOBILE]]
+
+## 2026-11-23 — Faster iOS simulator suite (#992)
+
+- Prebuild pool: every example a run launches is built before its launch, through an `xargs` pool of up to 4 jobs that leaves one core free; `PUDU_IOS_BUILD_JOBS` overrides the size within that limit ([[iOS App Builds]]).
+- Content cache: apps are cached under `~/Library/Caches/pudu-ios-suite` (or `PUDU_IOS_CACHE`), keyed by a SHA-256 of the compiler, the standard library, the source, its `pudu.toml` and its assets; an unchanged example is not rebuilt ([[iOS App Builds]]).
+- Sharding: `PUDU_IOS_SHARD="i/n"` runs the parts whose name hashes to shard i, combined with `PUDU_IOS_ONLY` ([[iOS Simulator Run]]).
+- CI matrix: the iOS simulator workflow runs three shards with a 60-minute timeout, an app cache step per shard, and path triggers for the build module, the foreign apps and the examples ([[iOS Simulator CI]]).
+  [[iOS App Builds]] · [[iOS Simulator Run]] · [[iOS Simulator CI]] · [[NATIVE-MOBILE]]
+
+## 2026-11-23 — Contact and document pickers, camera, audio recording, badge, secure screen and toasts (#991)
+
+- Pickers: PICK_CONTACT 79, PICK_DOCUMENT 80 and TAKE_PHOTO 81 in `Std.Mobile.Request`, with CONTACT_PICKED 45 and FILED 46 decoded as `ContactPicked` and `Filed` in `Std.Mobile.View`. The new `Std.Mobile.Pick` module holds `pickContact`, `pickDocument`, `takePhoto`, `record` and the `contact` decoder. Recording: RECORD 82. System: BADGE 83, SECURE 84 and TOAST 85 through `Std.Mobile.System` (`badge`, `secure`, `toast`); the instruction bound is 86. The iOS host uses ContactsUI, UIDocumentPickerViewController, UIImagePickerController and AVAudioRecorder ([[pudu-ios-pick]]); the Android host uses the system pickers, MediaRecorder and FLAG_SECURE ([[PuduPick]]). The example is [[Picker Example]], and the fixture is [[Uses Mobile Pick]].
+  [[Std Mobile Pick]] · [[Std Mobile Request]] · [[Std Mobile System]] · [[Std Mobile Events]] · [[Std Mobile View]] · [[pudu-ios-pick]] · [[PuduPick]] · [[Picker Example]] · [[Uses Mobile Pick]] · [[NATIVE-MOBILE]]
+
+## 2026-11-23 — Web pages, video, audio, keyboard dismissal and the back gesture (#990)
+
+- Views: `Std.Mobile.Control` gains `Web` (kind WEB 23, then LOAD 74) and `Video` (kind VIDEO 24, then MEDIA 75); the kinds sentinel is 25. Requests: AUDIO 76, KEYBOARD 77 and BACK 78 in `Std.Mobile.Request`; the instruction bound is 79. Events: LOADED 42, ENDED 43 and BACKED 44, decoded as `Loaded`, `Ended` and `Backed` in `Std.Mobile.View`. `Std.Mobile.Media` gains `play` and `stop`; `Std.Mobile.System` gains `dismissKeyboard` and `handleBack`. The iOS host uses WKWebView and AVPlayer ([[pudu-ios-web]]); the Android host uses WebView, VideoView and MediaPlayer ([[PuduWeb]]). The example is [[Viewer Example]], and the fixture is [[Uses Mobile Web]].
+  [[Std Mobile Control]] · [[Std Mobile Stream]] · [[Std Mobile Request]] · [[Std Mobile Media]] · [[Std Mobile System]] · [[Std Mobile Events]] · [[Std Mobile View]] · [[pudu-ios-web]] · [[PuduWeb]] · [[Viewer Example]] · [[Uses Mobile Web]] · [[NATIVE-MOBILE]]
+
+## 2026-11-23 — Notifications, authentication, browser, speech, image picking, battery, brightness, orientation and motion (#989)
+
+- Device services: NOTIFY 63, UNNOTIFY 64, AUTHENTICATE 65, BROWSE 66, SPEAK 67, HUSH 68, BATTERY 69, BRIGHTNESS 70, ORIENTATION 71, SENSE 72 and PICK_IMAGE 73 on the iOS and Android hosts, with NOTIFIED 35, AUTHENTICATED 36, BROWSED 37, SPOKE 38, POWERED 39, SENSED 40 and IMAGE_PICKED 41 events. `Std.Mobile.Request` holds the writers. `Std.Mobile.Notify`, `Std.Mobile.Auth` and `Std.Mobile.Media` are new, and `Std.Mobile.Device` gains battery, brightness, orientation and sense. `windowStart` moves from `Std.Mobile.View` to `Std.Mobile.Paging` to keep the view under 500 lines. Refusals: brightness above 100, orientation codes above 2 and sense flags above 1. The instruction bound is now 74. The iOS host uses UNUserNotificationCenter, LocalAuthentication, SafariServices, AVFoundation, PhotosUI and CoreMotion ([[pudu-ios-notify]], [[pudu-ios-media]], [[pudu-ios-device]]); the Android host uses NotificationManager with AlarmManager, BiometricPrompt, a browser intent, TextToSpeech and SensorManager ([[PuduNotify]], [[PuduAlarm]], [[PuduAuth]], [[PuduMedia]], [[PuduDevice]]).
+  [[Std Mobile Request]] · [[Std Mobile Notify]] · [[Std Mobile Auth]] · [[Std Mobile Media]] · [[Std Mobile Paging]] · [[Std Mobile Device]] · [[Std Mobile Stream]] · [[Std Mobile Events]] · [[Std Mobile View]] · [[pudu-ios-scene]] · [[pudu-ios-host]] · [[pudu-ios-nodes]] · [[pudu-ios-events]] · [[pudu-android-services]] · [[PuduActivity]] · [[Native Toolchain Host Sources]] · [[Backend Toolchain App]] · [[Pudu Cabal Manifest]] · [[Uses Mobile Services]] · [[Toolbox Example]] · [[Uses Mobile List]] · [[Native Catalog Example]] · [[Pudu Compiler Program Eval Data Spec]] · [[iOS Simulator Run]] · [[989-services]] · [[NATIVE-MOBILE]]
+
+## 2026-11-23 — Device location, one-shot and tracking (#986)
+
+- Device location: LOCATE 61 and TRACK 62 on the iOS and Android hosts, LOCATED 34 event, `Std.Mobile.Location` with `locate`, `track`, `position` and `accuracyCode`, and refusals for an accuracy code above 2 or a TRACK flag above 1. The iOS host uses CoreLocation ([[pudu-ios-location]]); the Android host uses LocationManager under the fine or coarse location permission ([[PuduLocation]]). The instruction bound is now 63.
+  [[Std Mobile Location]] · [[Std Mobile Stream]] · [[Std Mobile Events]] · [[Std Mobile View]] · [[pudu-ios-location]] · [[pudu-ios-host]] · [[pudu-ios-nodes]] · [[pudu-ios-events]] · [[PuduLocation]] · [[pudu-android-routes]] · [[Native Toolchain Host Sources]] · [[Pudu Cabal Manifest]] · [[Uses Mobile Location]] · [[Where Example]] · [[Pudu Compiler Program Eval Data Spec]] · [[iOS Simulator Run]] · [[986-location]] · [[NATIVE-MOBILE]]
+
+## 2026-11-23 — Device facts, network reachability and keep-awake (#983)
+
+- Device facts, network reachability and keep-awake: DEVICE 58, NETWORK 59 and AWAKE 60 on the iOS and Android hosts, DESCRIBED 32 and NETWORKED 33 events, `Std.Mobile.Device` with `describe`, `watchNetwork` and `keepAwake`, and refusals for a NETWORK or AWAKE word other than 0 or 1. The iOS host uses UIKit, Foundation and a Network path monitor ([[pudu-ios-device]]); the Android host uses ConnectivityManager under the normal `ACCESS_NETWORK_STATE` permission ([[PuduDevice]]). The instruction bound is now 61.
+  [[Std Mobile Device]] · [[Std Mobile Stream]] · [[Std Mobile Events]] · [[Std Mobile View]] · [[pudu-ios-device]] · [[pudu-ios-host]] · [[pudu-ios-nodes]] · [[pudu-ios-events]] · [[PuduDevice]] · [[pudu-android-routes]] · [[Backend Toolchain App]] · [[Uses Mobile Device]] · [[About Example]] · [[NATIVE-MOBILE]]
+
+## 2026-11-19 — Persistent and secure storage, and public integer parsing (#980)
+
+- Storage: `Std.Mobile.Storage` with Plain and Secure places; STORE_READ 55, STORE_WRITE 56, STORE_REMOVE 57 and the STORED 31 answer. The iOS host uses user defaults and the keychain ([[pudu-ios-storage]]); the Android host uses SharedPreferences and AES-GCM under a Keystore key ([[PuduStore]]). The example is [[Vault Example]].
+- Public integer parsing: `Std.Num.parseInt` and `parseIntIn`, answering `None` for any text they do not accept. `Std.Text`, `Std.Cron`, `Std.Ui.Desktop` and `Std.Ui.Accessible` delegate to it. Desktop and Accessible previously capped at nine digits.
+  [[Std Mobile Storage]] · [[Std Num]] · [[Std Mobile Stream]] · [[Std Mobile Events]] · [[Std Mobile View]] · [[pudu-ios-host]] · [[pudu-ios-storage]] · [[PuduStore]] · [[Uses Mobile Storage]] · [[Uses Num Parse]] · [[Vault Example]] · [[980-storage]] · [[NATIVE-MOBILE]]
+
+## 2026-11-19 — Application identity and incoming links (#978)
+
+- Application identity and incoming links (#978): `[app]` table in the manifest (name, identifier, version, build, schemes), E6018 for values a store would refuse, Info.plist display name, version, build and URL types, Android package, version code and name, label, VIEW filters and singleTask launch, LINKED 30 event with the URL, and the link self-test on iOS.
+  [[Pudu Backend Identity]] · [[Compiler Manifest]] · [[Backend Toolchain App]] · [[Backend Toolchain Android]] · [[Native Diagnostics]] · [[Std Mobile View]] · [[Std Mobile Events]] · [[pudu-ios-system]] · [[Native Android Activity]] · [[Links Example]] · [[Identity Spec]] · [[Native App Identity]] · [[NATIVE-MOBILE]]
+
+## 2026-11-19 — Native tab bars (#977)
+
+- Native tab bars (#977): TABS 54 on the iOS and Android hosts, SELECTED 29 event, `Tab`, `Tabbed`, and `mountTabs`, `updateTabs` and `observeTabs` in Std Mobile Navigation, and refusals for tabs with no pages, repeated ids and an unshown selection.
+  [[pudu-ios-tabs]] · [[PuduTabs]] · [[pudu-android-routes]] · [[Std Mobile Navigation]] · [[Std Mobile Stream]] · [[Std Mobile Events]] · [[Std Mobile View]] · [[Tabs Example]] · [[Uses Mobile Tabs]] · [[Native Tabs]] · [[NATIVE-MOBILE]]
+
+## 2026-11-19 — Declared, build-checked permissions (#976)
+
+- Declared, build-checked permissions (#976): PERMISSIONS 51, PERMISSION 52 and SETTINGS 53 on the iOS and Android hosts, PERMISSIONED 28 event, `[app.permissions]` in the manifest, E6014, E6015, E6016 and W6017 for declarations checked against requests.
+  [[Std Mobile Permission]] · [[Pudu Backend Permissions]] · [[pudu-ios-permission]] · [[PuduPermission]] · [[Std Mobile Stream]] · [[Std Mobile Events]] · [[Std Mobile View]] · [[Compiler Manifest]] · [[Permissions Example]] · [[Uses Mobile Permission]] · [[Permissions Spec]] · [[Native Permissions]] · [[NATIVE-MOBILE]]
+
 ## 2026-11-19 — Native open, share, clipboard and status bar (#974)
 
 - Native open, share, clipboard and status bar (#974): OPEN 46, SHARE 47, COPY 48, PASTE 49 and STATUS 50 on the iOS and Android hosts, OPENED 25, SHARED 26 and PASTED 27 events, and body caps and connection timeouts for remote images and fetch requests.

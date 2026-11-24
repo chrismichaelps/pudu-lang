@@ -1,0 +1,25 @@
+module UsesNumParse
+
+import Std.Num as Num
+
+export fn main() -> Int {
+  var held = 0
+
+  // Decimal: a sign, then digits, and nothing else.
+  if Num.parseInt("42") == Some(42) && Num.parseInt("-42") == Some(-42) && Num.parseInt("+7") == Some(7) { held = held + 1 }
+  if Num.parseInt("0") == Some(0) && Num.parseInt("-0") == Some(0) && Num.parseInt("007") == Some(7) { held = held + 1 }
+  if Num.parseInt("") == None && Num.parseInt("-") == None && Num.parseInt("+") == None { held = held + 1 }
+  if Num.parseInt(" 1") == None && Num.parseInt("1 ") == None && Num.parseInt("1_000") == None && Num.parseInt("4x") == None && Num.parseInt("--1") == None { held = held + 1 }
+
+  // Every Int reads back exactly; one past either end answers nothing.
+  if Num.parseInt("9223372036854775807") == Some(9223372036854775807) && Num.parseInt("9223372036854775808") == None { held = held + 1 }
+  if Num.parseInt("-9223372036854775808") == Some(0 - 9223372036854775807 - 1) && Num.parseInt("-9223372036854775809") == None { held = held + 1 }
+  if Num.parseInt("-92233720368547758080") == None && Num.parseInt("99999999999999999999999") == None { held = held + 1 }
+
+  // Other radixes, letters in either case.
+  if Num.parseIntIn("ff", 16) == Some(255) && Num.parseIntIn("FF", 16) == Some(255) && Num.parseIntIn("-101", 2) == Some(-5) { held = held + 1 }
+  if Num.parseIntIn("z", 36) == Some(35) && Num.parseIntIn("8", 8) == None && Num.parseIntIn("g", 16) == None { held = held + 1 }
+  if Num.parseIntIn("1", 1) == None && Num.parseIntIn("1", 37) == None && Num.parseIntIn("7fffffffffffffff", 16) == Some(9223372036854775807) { held = held + 1 }
+  if Num.parseIntIn("-8000000000000000", 16) == Some(0 - 9223372036854775807 - 1) && Num.parseIntIn("8000000000000000", 16) == None { held = held + 1 }
+  held
+}

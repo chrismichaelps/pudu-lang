@@ -2,6 +2,7 @@ module UsesMobileList
 
 import Std.ByteOrder {readU32LE}
 import Std.Mobile.Events as Events
+import Std.Mobile.Paging as Paging
 import Std.Mobile.View as View
 
 // The words at `offset` onward, read as little-endian 32-bit values.
@@ -68,10 +69,10 @@ export fn main() -> Int {
   }
 
   // Windows keep the visible item a quarter in and never run past the end.
-  if View.windowStart(0u32, 100u32, 20u32) == 0u32
-    && View.windowStart(50u32, 100u32, 20u32) == 45u32
-    && View.windowStart(95u32, 100u32, 20u32) == 80u32
-    && View.windowStart(3u32, 10u32, 20u32) == 0u32 {
+  if Paging.windowStart(0u32, 100u32, 20u32) == 0u32
+    && Paging.windowStart(50u32, 100u32, 20u32) == 45u32
+    && Paging.windowStart(95u32, 100u32, 20u32) == 80u32
+    && Paging.windowStart(3u32, 10u32, 20u32) == 0u32 {
     held = held + 1
   }
 

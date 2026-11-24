@@ -136,7 +136,7 @@ which the registry gate checks.
 
 ## Platform ledger diagnostics (#926)
 
-The mobile family now runs E6007 through E6013. Each is an error or a warning of the
+The mobile family now runs E6007 through W6017. Each is an error or a warning of the
 same [[Diagnostic Model]] shape, built in this module from a [[Backend Ledger]] finding
 or a missing SDK, at the root module's span.
 
@@ -148,12 +148,18 @@ or a missing SDK, at the root module's span.
 | E6010 | error | the store rule `<store>` takes effect with Xcode `<xcode>` and SDK `<sdk>`; the selected SDK `<found>` does not meet it | device builds only; names the rule's Xcode, SDK and source |
 | W6011 | warning | the installed Xcode `<found>` is newer than the tested `<tested>`; the build proceeds | asks for the suite to run and the version to be recorded |
 | E6013 | error | the application's assets cannot be packaged: `<reason>` | names the file and the rule it breaks: a name other platforms may read differently, or a symbolic link |
+| E6014 | error | the program requests the permission `<key>`, which the manifest's `[app.permissions]` does not declare | names the key to declare with its reason |
+| E6015 | error | the manifest's `[app.permissions]` names `<key>`, which no permission kind has | names the manifest line; the keys are those of [[Std Mobile Permission]] |
+| E6016 | error | the permission `<key>` is declared with an empty reason | names the manifest line; the reason is the text the person reads |
+| W6017 | warning | the permission `<key>` is declared but the program never requests it | the build proceeds; remove the declaration or the request that was meant |
+| E6018 | error | pudu.toml line `<line>`, [app] `<key>`: `<reason>` | names the key; the reason says what a store or platform would refuse |
 | W6012 | warning | the store rule `<store>` is not met by the installed toolchain, and either takes effect within `<days>` days or is already in effect for a development (simulator) build | names the rule's Xcode, SDK and source |
 
 - A refusing `StoreRuleMissed` for a Distribution build is E6010. The same finding for a
   Development build is a W6012 warning, since only device builds are submitted.
 - `StoreRuleDue` is W6012 with the day count.
 - `XcodeBelowMinimum` is E6009 and always refuses.
+- `identityRefused` is E6018, one per `[app]` value that cannot be built. It refuses the build, names the manifest line and key, and normalizes nothing.
 - Warnings render as one line `warning[W60nn]: message` with the build output, not as
   diagnostics that stop the build.
 

@@ -20,6 +20,8 @@ The mobile entries checked by this spec:
 - `test-fixtures/stdlib/UsesMobileRefresh.pudu`: asserted to answer `9`, the number of checks in the file ([[Uses Mobile Refresh]]).
 - `test-fixtures/stdlib/UsesMobileResource.pudu`: asserted to answer `12`, the number of checks in the file ([[Uses Mobile Resource]]).
 - `test-fixtures/stdlib/UsesMobileMemo.pudu`: asserted to answer `5`, the number of checks in the file ([[Uses Mobile Memo]]).
+- `test-fixtures/stdlib/UsesMobileDevice.pudu`: asserted to answer `10`, the number of checks in the file ([[Uses Mobile Device]]).
+- `test-fixtures/stdlib/UsesMobileLocation.pudu`: asserted to answer `9`, the number of checks in the file ([[Uses Mobile Location]]).
 - `test-fixtures/stdlib/MemoRenderLambda.pudu`: asserted to be refused with exactly `E3103`, a memo render written as a lambda ([[Memo Render Lambda]]).
 - `test-fixtures/stdlib/MemoRenderLocal.pudu`: asserted to be refused with exactly `E3103`, a memo render held by a local binding and passed through an import alias ([[Memo Render Local]]).
 - `test-fixtures/stdlib/UsesMobileTheme.pudu`, `UsesMobileList.pudu`, `UsesMobileMaterial.pudu` and `UsesMobileCapabilities.pudu`, run by the same function; their expected values are in the file.
@@ -43,6 +45,18 @@ Depends on the shared runner in `Pudu.Compiler.Program.Common` and on the fixtur
 ## Resolved Grill Log
 
 - **Q:** Why one spec for every mobile fixture? **A:** The fixtures share the same runner and the same exact-count contract, so one place states the expected count of each.
+
+## Services (#989)
+
+The fixture [[Uses Mobile Services]] (`test-fixtures/stdlib/UsesMobileServices.pudu`) expects 18 checks: the words of each of the eleven requests, the decoding of each of the seven events, and the refusal of a malformed POWERED and a malformed SENSED.
+
+## Pickers and system touches (#991)
+
+`UsesMobilePick` ([[Uses Mobile Pick]]) expects 8 checks.
+
+## System sheets (#994)
+
+`UsesMobileCompose` ([[Uses Mobile Compose]]) expects 7 checks.
 
 ## Referenced by
 

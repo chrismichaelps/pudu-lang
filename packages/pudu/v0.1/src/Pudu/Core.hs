@@ -34,6 +34,7 @@ module Pudu.Core
   , coreTypeName, displayName, suppliedCountName
   ) where
 
+import Data.Data (Data)
 import Data.ByteString (ByteString)
 import Data.Map.Strict (Map)
 import Data.Text (Text)
@@ -65,7 +66,7 @@ data CoreModule = CoreModule
       in declaration order; empty for an executable. -}
   , coreModuleExports :: ![Text]
   }
-  deriving stock (Eq, Show)
+  deriving stock (Data, Eq, Show)
 
 {-| A callable's captures, displayed name and source identity. Lifted bodies
     also take the callable as a hidden first parameter. -}
@@ -79,7 +80,7 @@ data CoreClosureInfo = CoreClosureInfo
     -- is capture 0, and it takes part in equality.
   , closureMethod :: !(Maybe CoreType)
   }
-  deriving stock (Eq, Show)
+  deriving stock (Data, Eq, Show)
 
 {-| @Core.Function — a lowered function: its name, parameters, result type,
     and body. -}
@@ -89,21 +90,21 @@ data CoreFunction = CoreFunction
   , coreFunctionResult :: !CoreType
   , coreFunctionBody :: !CoreBlock
   }
-  deriving stock (Eq, Show)
+  deriving stock (Data, Eq, Show)
 
 {-| @Core.Parameter — a named, typed parameter slot. -}
 data CoreParameter = CoreParameter
   { coreParameterLocal :: !CoreLocal
   , coreParameterSpan :: !Span
   }
-  deriving stock (Eq, Show)
+  deriving stock (Data, Eq, Show)
 
 {-| @Core.Block — ordered statements and an optional trailing result. -}
 data CoreBlock = CoreBlock
   { coreBlockStatements :: ![CoreStatement]
   , coreBlockResult :: !(Maybe CoreExpression)
   }
-  deriving stock (Eq, Show)
+  deriving stock (Data, Eq, Show)
 
 {-| @Core.Local — one binding: its identity, the name it was written under,
     and its type. Shadowing is distinct identities, never distinct names. -}
@@ -112,18 +113,18 @@ data CoreLocal = CoreLocal
   , coreLocalName :: !Text
   , coreLocalType :: !CoreType
   }
-  deriving stock (Eq, Show)
+  deriving stock (Data, Eq, Show)
 
 {-| @Core.Statement — a span and its shape. -}
 data CoreStatement = CoreStatement
   { coreStatementSpan :: !Span
   , coreStatementShape :: !CoreStatementShape
   }
-  deriving stock (Eq, Show)
+  deriving stock (Data, Eq, Show)
 
 {-| Function-local loop destination; lowering resolves source labels once. -}
 newtype CoreLoopId = CoreLoopId Int
-  deriving stock (Eq, Ord, Show)
+  deriving stock (Data, Eq, Ord, Show)
 
 {-| @Core.StatementShape — the statement forms the native subset carries.
 
@@ -138,7 +139,7 @@ data CoreStatementShape
   | CoreReturn !(Maybe CoreExpression)
   | CoreBreak !CoreLoopId !(Maybe CoreExpression)
   | CoreContinue !CoreLoopId
-  deriving stock (Eq, Show)
+  deriving stock (Data, Eq, Show)
 
 {-| @Core.Expression — a span, its checked type, and its shape. The type is
     carried here, not recomputed, so the emitter never guesses and the
@@ -148,7 +149,7 @@ data CoreExpression = CoreExpression
   , coreExpressionType :: !CoreType
   , coreExpressionShape :: !CoreExpressionShape
   }
-  deriving stock (Eq, Show)
+  deriving stock (Data, Eq, Show)
 
 {-| @Core.ExpressionShape — the expression forms the native subset carries.
 
@@ -257,7 +258,7 @@ data CoreExpressionShape
   | CoreIfValue !CoreExpression !CoreBlock !CoreExpression
   | CoreWhileValue !CoreLoopId !CoreExpression !CoreBlock
   | CoreLoopValue !CoreLoopId !CoreBlock
-  deriving stock (Eq, Show)
+  deriving stock (Data, Eq, Show)
 
 {-| The array methods native implements in the runtime, named as the
     evaluator names them; map, filter and reduce lower to loops instead. -}
@@ -277,7 +278,7 @@ data CoreArrayMethodName
   | ArrayConcatWith
   | ArrayJoinWith
   | ArrayReversed
-  deriving stock (Eq, Show)
+  deriving stock (Data, Eq, Show)
 
 {-| What the runtime does for ranges. `RangeValuesFor` lists the values and,
     on a range missing an end, fails naming the method it serves;
@@ -297,7 +298,7 @@ data CoreRangeMethodName
   | RangeReversedOf
   | RangeStepBy
   | RangeSumOf
-  deriving stock (Eq, Show)
+  deriving stock (Data, Eq, Show)
 
 {-| What the runtime does for byte sequences. `BytesOfArray` and
     `BytesFromText` build one from their receiver; `BytesAtIndex` and
@@ -317,7 +318,7 @@ data CoreDecimalMethodName
   | DecimalDivideWith
   | DecimalRoundTo
   | DecimalIsZero
-  deriving stock (Eq, Show)
+  deriving stock (Data, Eq, Show)
 
 {-| A foreign function as a native call names it: the library and version it
     opens, the symbol it resolves, and the crossing types of its parameters
@@ -342,14 +343,14 @@ data CoreForeign = CoreForeign
   , coreForeignBounds :: ![ForeignBound]
   , coreForeignReturnedRun :: !(Maybe (Int, CoreType))
   }
-  deriving stock (Eq, Ord, Show)
+  deriving stock (Data, Eq, Ord, Show)
 
 data CoreCallbackOperation
   = CoreCallbackRegister !CoreCallbackSignature
   | CoreCallbackRegisterGroup !CoreCallbackSignature ![Int]
   | CoreCallbackUnregister
   | CoreDelegateNew !CoreDelegate
-  deriving stock (Eq, Ord, Show)
+  deriving stock (Data, Eq, Ord, Show)
 
 {-| An Objective-C class defined at run time: its name, the callback group
     whose token an instance carries, and each method's selector with the
@@ -359,7 +360,7 @@ data CoreDelegate = CoreDelegate
   , coreDelegateGroup :: !CoreCallbackSignature
   , coreDelegateMethods :: ![(Text, CoreCallbackSignature)]
   }
-  deriving stock (Eq, Ord, Show)
+  deriving stock (Data, Eq, Ord, Show)
 
 {-| A trampoline's type and native slot sequence. Nothing identifies its
     context argument. The fallback refers to the declared result carrier. -}
@@ -371,27 +372,27 @@ data CoreCallbackSignature = CoreCallbackSignature
   , coreCallbackByteLengths :: ![(Int, Int)]
   , coreCallbackProjection :: !(Maybe (Int, Text))
   }
-  deriving stock (Eq, Ord, Show)
+  deriving stock (Data, Eq, Ord, Show)
 
 data CoreCallbackFallback
   = CallbackFallbackUnit
   | CallbackFallbackInteger !Integer
   | CallbackFallbackFloat !Word64
   | CallbackFallbackBool !Bool
-  deriving stock (Eq, Ord, Show)
+  deriving stock (Data, Eq, Ord, Show)
 
 {-| Native argument indexes, including output slots and the callback context. -}
 data CoreCallbackSlot = CoreCallbackSlot
   { coreCallbackPlacement :: !CallbackPlacement
   , coreCallbackSignature :: !CoreCallbackSignature
   }
-  deriving stock (Eq, Ord, Show)
+  deriving stock (Data, Eq, Ord, Show)
 
 {-| A handle result is borrowed, or owned (each result its own claim, or one
     claim per reference when counted) and released by a function of the same
     library: its symbol and its result type. -}
 data CoreClaim = CoreBorrowed | CoreOwned !Bool !Text !CoreType
-  deriving stock (Eq, Ord, Show)
+  deriving stock (Data, Eq, Ord, Show)
 
 {-| @Core.BinaryOperator — the operator vocabulary, already resolved from
     source spelling; no operator text survives into the backend. -}
@@ -420,7 +421,7 @@ data CoreBinaryOperator
   | CoreNotEqual
   | CoreAnd
   | CoreOr
-  deriving stock (Eq, Show)
+  deriving stock (Data, Eq, Show)
 
 {-| Runtime types and divergence. CorePrint is effect-only; its
     surface Result must never escape as a Core unit value. -}
@@ -455,7 +456,7 @@ data CoreType
       the name it renders under. -}
   | CoreHandleType !Text !Text
   | CoreCallbackType !Text !Text
-  deriving stock (Eq, Ord, Show)
+  deriving stock (Data, Eq, Ord, Show)
 
 coreTypeName :: CoreType -> Text
 coreTypeName coreType = case coreType of
@@ -496,7 +497,7 @@ data CoreLayout
   {-| A function type's closures: every lifted function a value of it can
       run, by key, with what its box holds. -}
   | CoreClosureLayout ![(Text, CoreClosureInfo)]
-  deriving stock (Eq, Show)
+  deriving stock (Data, Eq, Show)
 
 {-| One variant: its name, payload types, and whether the payload is a
     record's fields or positions (named "0", "1", ...). -}
@@ -505,7 +506,7 @@ data CoreVariant = CoreVariant
   , coreVariantFields :: ![(Text, CoreType)]
   , coreVariantRecord :: !Bool
   }
-  deriving stock (Eq, Show)
+  deriving stock (Data, Eq, Show)
 
 {-| One `case`: its pattern, the locals the pattern binds, the guard, and the
     arm's value. -}
@@ -515,7 +516,7 @@ data CoreArm = CoreArm
   , coreArmGuard :: !(Maybe CoreExpression)
   , coreArmBody :: !CoreExpression
   }
-  deriving stock (Eq, Show)
+  deriving stock (Data, Eq, Show)
 
 {-| Patterns against the type the checker gave the subject. A variant
     pattern lists its payload in declaration order, filling unnamed record
@@ -532,7 +533,7 @@ data CorePattern
   {-| `[a, ..rest, z]`: items read from the front, then the rest (absent,
       skipped, or bound to a local), then items read from the back. -}
   | CoreArrayPattern ![CorePattern] !(Maybe (Maybe CoreLocal)) ![CorePattern]
-  deriving stock (Eq, Show)
+  deriving stock (Data, Eq, Show)
 
 {-| The trailing parameter of a function with defaults: how many arguments
     its caller wrote. No source identifier can spell it, so a backend finds

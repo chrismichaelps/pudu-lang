@@ -1,0 +1,44 @@
+module UsesMobileDevice
+
+import Std.ByteOrder {readU32LE}
+import Std.Mobile.Device as Device
+import Std.Mobile.Events as Events
+import Std.Mobile.View as View
+
+// The words at `offset` onward, read as little-endian 32-bit values.
+fn wordsAt(bytes: &Array[UInt8], offset: Int, count: Int) -> Array[UInt32] {
+  var found = []
+  for index in 0..count {
+    match readU32LE(bytes, offset + index * 4) {
+      case Some(word) => { found = found.push(word) }
+      case None => { return [] }
+    }
+  }
+  found
+}
+
+export fn main() -> Int {
+  var held = 0
+
+  // DEVICE carries the tag; NETWORK and AWAKE carry one switch word.
+  let described = Device.describe(7u32).toArray()
+  if described.length() == 8 && wordsAt(&described, 0, 2) == [58u32, 7u32] { held = held + 1 }
+  let watched = Device.watchNetwork(true).toArray()
+  if watched.length() == 8 && wordsAt(&watched, 0, 2) == [59u32, 1u32] { held = held + 1 }
+  let slept = Device.keepAwake(false).toArray()
+  if slept.length() == 8 && wordsAt(&slept, 0, 2) == [60u32, 0u32] { held = held + 1 }
+
+  // DESCRIBED carries five lines and the text scale; any other shape is never written.
+  let facts = Device.Facts{platform: Device.Ios, version: "26.4", model: "iPhone18,1", locale: "en-US", zone: "America/Puerto_Rico", textScale: 120}
+  let text = "ios\n26.4\niPhone18,1\nen-US\nAmerica/Puerto_Rico"
+  if Events.carriesText(32u64 << 32) && Events.carriesDetail(32u64 << 32) && Events.eventWithDetail((32u64 << 32) | 7u64, text, 120u32) == View.Described(7u32, facts) { held = held + 1 }
+  if Events.eventWithDetail((32u64 << 32) | 7u64, "ios\n26.4\niPhone18,1\nen-US", 100u32) == View.Stopped { held = held + 1 }
+  if Events.eventWithDetail((32u64 << 32) | 7u64, "web\n1\nm\nen\nUTC", 100u32) == View.Stopped { held = held + 1 }
+  if Device.facts("android\n16\nPixel 9\nes-PR\nUTC", 100u32) == Some(Device.Facts{platform: Device.Android, version: "16", model: "Pixel 9", locale: "es-PR", zone: "UTC", textScale: 100}) { held = held + 1 }
+
+  // NETWORKED carries the link code; codes above 3 are never written.
+  if Events.carriesDetail(33u64 << 32) && Events.eventWithDetail(33u64 << 32, "", 2u32) == View.Networked(Device.Cellular) { held = held + 1 }
+  if Events.eventWithDetail(33u64 << 32, "", 4u32) == View.Stopped { held = held + 1 }
+  if Device.linkOf(Device.linkCode(Device.Wired)) == Some(Device.Wired) && Device.linkCode(Device.Offline) == 0u32 { held = held + 1 }
+  held
+}

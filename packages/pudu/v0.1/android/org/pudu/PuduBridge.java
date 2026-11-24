@@ -301,11 +301,12 @@ public final class PuduBridge {
   /* Navigation, pull to refresh, requests and wake; the host has checked each instruction. */
   static void navigate(int[] ids, View[] bodies, boolean[] fills, String[] titles, boolean hasSheet, int sheet, View sheetBody,
       boolean sheetFills) {
+    PuduTabs.close();
     PuduNavigator.show(ids, bodies, fills, titles, hasSheet, sheet, sheetBody, sheetFills);
   }
 
   /** The body on top of a navigation, or null when none is shown. */
-  static View navigationTop() { return PuduNavigator.top(); }
+  static View navigationTop() { return PuduTabs.shown() ? PuduTabs.top() : PuduNavigator.top(); }
 
   static void refresh(ViewGroup view, int tag, boolean on) { PuduRefresh.set(view, tag, on); }
   static void settleRefresh(int[] queued) { PuduRefresh.settle(queued); }
@@ -320,6 +321,49 @@ public final class PuduBridge {
   static void copy(String text) { PuduSystem.copy(text); }
   static void paste(int tag) { PuduSystem.paste(tag); }
   static void status(int style, boolean hidden) { PuduSystem.status(style, hidden); }
+  static void permissions(int[] kinds) { PuduPermission.check(kinds); }
+  static void permission(int kind) { PuduPermission.request(kind); }
+  static void settings() { PuduPermission.settings(); }
+  static void storeRead(int tag, int place, String key) { PuduStore.read(tag, place, key); }
+  static void storeWrite(int place, String key, String value) { PuduStore.write(place, key, value); }
+  static void storeRemove(int place, String key) { PuduStore.remove(place, key); }
+  static void device(int tag) { PuduDevice.describe(tag); }
+  static void network(boolean watching) { PuduDevice.network(watching); }
+  static void awake(boolean on) { PuduDevice.awake(on); }
+  static void locate(int tag, int accuracy) { PuduLocation.locate(tag, accuracy); }
+  static void track(boolean on, int accuracy, int distance) { PuduLocation.track(on, accuracy, distance); }
+  static void notify(int id, long delay, String title, String body) { PuduNotify.schedule(id, delay, title, body); }
+  static void unnotify(int id) { PuduNotify.cancel(id); }
+  static void authenticate(int tag, String reason) { PuduAuth.authenticate(tag, reason); }
+  static void browse(int tag, String url) { PuduMedia.browse(tag, url); }
+  static void speak(int tag, int rate, String language, String text) { PuduMedia.speak(tag, rate, language, text); }
+  static void hush() { PuduMedia.hush(); }
+  static void battery(int tag) { PuduDevice.battery(tag); }
+  static void brightness(int percent) { PuduDevice.brightness(percent); }
+  static void orientation(int code) { PuduDevice.orientation(code); }
+  static void sense(boolean on, int interval) { PuduDevice.sense(on, interval); }
+  static void pickImage(int tag) { PuduMedia.pickImage(tag); }
+  static android.webkit.WebView web() { return PuduWeb.makeWeb(); }
+  static android.widget.VideoView video() { return PuduWeb.makeVideo(); }
+  static void load(android.webkit.WebView view, String url) { PuduWeb.load(view, url); }
+  static void media(android.widget.VideoView view, boolean playing, boolean looping, String source) { PuduWeb.media(view, playing, looping, source); }
+  static void audio(int tag, boolean playing, boolean looping, String source) { PuduWeb.audio(tag, playing, looping, source); }
+  static void keyboard() { PuduWeb.keyboard(); }
+  static void back(boolean on) { PuduWeb.back(on); }
+  static void pickContact(int tag) { PuduPick.contact(tag); }
+  static void pickDocument(int tag, String types) { PuduPick.document(tag, types); }
+  static void takePhoto(int tag) { PuduPick.photo(tag); }
+  static void record(int tag, boolean on) { PuduPick.record(tag, on); }
+  static void secure(boolean on) { PuduPick.secure(on); }
+  static void toast(String text) { PuduPick.toast(text); }
+  static void shareFile(int tag, String path) { PuduCompose.shareFile(tag, path); }
+  static void addEvent(int tag, long start, long end, String title, String location) { PuduCompose.addEvent(tag, start, end, title, location); }
+  static void composeMail(int tag, String to, String subject, String body) { PuduCompose.mail(tag, to, subject, body); }
+  static void composeMessage(int tag, String to, String body) { PuduCompose.message(tag, to, body); }
+  static void tabs(int[] ids, String[] names, int[] counts, int[] routes, View[] bodies, boolean[] fills, String[] titles, int selected,
+      boolean hasSheet, int sheet, View sheetBody, boolean sheetFills) {
+    PuduTabs.show(ids, names, counts, routes, bodies, fills, titles, selected, hasSheet, sheet, sheetBody, sheetFills);
+  }
   static void source(android.widget.ImageView view, int origin, int scaling, String location) {
     PuduImage.source(view, origin, scaling, location);
   }

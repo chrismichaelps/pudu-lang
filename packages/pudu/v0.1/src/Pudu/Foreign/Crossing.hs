@@ -34,6 +34,7 @@ module Pudu.Foreign.Crossing
   , foreignRecordFieldLimit
   ) where
 
+import Data.Data (Data)
 import Control.Monad (unless)
 import Data.Set (Set)
 import qualified Data.Set as Set
@@ -68,7 +69,7 @@ data ObjectiveCMethod = ObjectiveCMethod
   { objectiveCSelector :: !Text
   , objectiveCClass :: !(Maybe Text)
   }
-  deriving stock (Eq, Ord, Show)
+  deriving stock (Data, Eq, Ord, Show)
 
 objectiveCInitializer :: ObjectiveCMethod -> Bool
 objectiveCInitializer = selectorFamily "init" . objectiveCSelector

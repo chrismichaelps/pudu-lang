@@ -261,8 +261,20 @@ STARTTLS use [[Std Tls]]. [[Std Compress Gzip]] delegates to [[Eval Compress]] a
 - [[Std Mobile Access]] — accessibility traits as a mask, with hints and values (#930).
 - [[Std Mobile Feedback]] — alerts, action sheets and haptics as commands with a reported choice (#930).
 - [[Std Mobile System]] — open, share, clipboard and status bar as commands with reported answers (#974).
+- [[Std Mobile Storage]] — plain and secure key-value storage as commands with a reported read (#980).
+- [[Std Mobile Device]] — device facts, network reachability and keep-awake as commands and answers (#983).
+- [[Std Mobile Location]] — location requests and position answers, one-shot and tracked (#986).
+- [[Std Mobile Notify]] — local notification requests, scheduled by delay and cancelled by id (#989).
+- [[Std Mobile Auth]] — device-owner confirmation request (#989).
+- [[Std Mobile Media]] — in-app browser, speech and image picking requests (#989).
+- [[Std Mobile Pick]] — contact, document and photo pickers, audio recording and the contact decoder (#991).
+- [[Std Mobile Compose]] — calendar event, mail and message sheets, share and review requests (#994).
+- [[Std Mobile Paging]] — pure window start helper moved out of the view (#989).
+- [[Std Mobile Request]] — instruction writers for codes 63 to 73 (#989).
+- [[Std Num]] — `parseInt` and `parseIntIn`, the public integer parser shared by the standard library (#980).
 - [[Std Mobile Events]] — host event decoding behind the mobile wait.
 - [[Std Mobile Navigation]] — native page stack and page sheet model.
 - [[Std Mobile Resource]] — pure table of keyed network requests, retries and the commands for the host.
 - [[Std Mobile Memo]] — keyed constructor of memoized subtrees for the view stream, with a `@static_function` render type.
 - [[Std Mobile Control]] — value controls (slider through color well) as built and changed instruction words, with normalization (#934).
+- [[Std Mobile Permission]] — closed permission kinds and states, and the request commits for them (#976).

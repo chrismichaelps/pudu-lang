@@ -1,0 +1,46 @@
+module UsesMobileCompose
+
+import Std.ByteOrder {readU32LE}
+import Std.Mobile.Compose as Compose
+import Std.Mobile.Events as Events
+import Std.Mobile.System as System
+import Std.Mobile.View as View
+
+// The words at `offset` onward, read as little-endian 32-bit values.
+fn wordsAt(bytes: &Array[UInt8], offset: Int, count: Int) -> Array[UInt32] {
+  var found = []
+  for index in 0..count {
+    match readU32LE(bytes, offset + index * 4) {
+      case Some(word) => { found = found.push(word) }
+      case None => { return [] }
+    }
+  }
+  found
+}
+
+// The event a host would send: its kind above, its tag below.
+fn raw(kind: UInt64, tag: UInt64) -> UInt64 { (kind << 32) | tag }
+
+export fn main() -> Int {
+  var held = 0
+
+  // A shared file carries its path; the review request carries nothing.
+  let shared = System.shareFile(2u32, "/c/f").toArray()
+  if shared.length() == 16 && wordsAt(&shared, 0, 3) == [86u32, 2u32, 4u32] { held = held + 1 }
+  if System.requestReview().toArray().length() == 4 && wordsAt(&System.requestReview().toArray(), 0, 1) == [87u32] { held = held + 1 }
+
+  // Event times travel as a high signed word and a low word.
+  let later = Compose.addEvent(3u32, "T", 5000000000i64, 5000003600i64, "").toArray()
+  if wordsAt(&later, 0, 6) == [88u32, 3u32, 1u32, 705032704u32, 1u32, 705036304u32] { held = held + 1 }
+  let before = Compose.addEvent(3u32, "", -1i64, 0i64, "").toArray()
+  if wordsAt(&before, 0, 6) == [88u32, 3u32, 4294967295u32, 4294967295u32, 0u32, 0u32] { held = held + 1 }
+
+  // Recipients are joined by commas.
+  let mailed = Compose.mail(4u32, ["a@x", "b@y"], "S", "B").toArray()
+  if wordsAt(&mailed, 0, 3) == [89u32, 4u32, 7u32] && wordsAt(&Compose.message(5u32, ["1"], "hi").toArray(), 0, 3) == [90u32, 5u32, 1u32] { held = held + 1 }
+
+  // COMPLETED carries whether the person finished; any other word is never written.
+  if Events.eventWithDetail(raw(47u64, 4u64), "", 1u32) == View.Completed(4u32, true) && Events.eventWithDetail(raw(47u64, 4u64), "", 0u32) == View.Completed(4u32, false) { held = held + 1 }
+  if Events.eventWithDetail(raw(47u64, 4u64), "", 2u32) == View.Stopped { held = held + 1 }
+  held
+}

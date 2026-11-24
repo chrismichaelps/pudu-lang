@@ -1,0 +1,41 @@
+module UsesMobileLocation
+
+import Std.ByteOrder {readU32LE}
+import Std.Mobile.Events as Events
+import Std.Mobile.Location as Location
+import Std.Mobile.View as View
+
+// The words at `offset` onward, read as little-endian 32-bit values.
+fn wordsAt(bytes: &Array[UInt8], offset: Int, count: Int) -> Array[UInt32] {
+  var found = []
+  for index in 0..count {
+    match readU32LE(bytes, offset + index * 4) {
+      case Some(word) => { found = found.push(word) }
+      case None => { return [] }
+    }
+  }
+  found
+}
+
+export fn main() -> Int {
+  var held = 0
+
+  // LOCATE carries the tag and the accuracy; TRACK the switch, the accuracy and the distance.
+  let located = Location.locate(5u32, Location.Approximate).toArray()
+  if located.length() == 12 && wordsAt(&located, 0, 3) == [61u32, 5u32, 1u32] { held = held + 1 }
+  let tracked = Location.track(true, Location.Coarse, 50).toArray()
+  if tracked.length() == 16 && wordsAt(&tracked, 0, 4) == [62u32, 1u32, 2u32, 50u32] { held = held + 1 }
+  let negative = Location.track(false, Location.Precise, -3).toArray()
+  if wordsAt(&negative, 0, 4) == [62u32, 0u32, 0u32, 0u32] { held = held + 1 }
+
+  // LOCATED carries a position as detail 1 and four words, or no position as detail 0 and none.
+  let raw = (34u64 << 32) | 5u64
+  let here = Location.Position{latitude: 184655000, longitude: -661057000, accuracy: 5, altitude: 12}
+  if Events.eventWithWords(raw, "", 1u32, [184655000i32, -661057000i32, 5i32, 12i32]) == View.Located(5u32, Some(here)) { held = held + 1 }
+  if Events.eventWithWords(raw, "", 0u32, []) == View.Located(5u32, None) { held = held + 1 }
+  if Events.eventWithWords(raw, "", 1u32, [1i32, 2i32, 3i32]) == View.Stopped { held = held + 1 }
+  if Events.eventWithWords(raw, "", 2u32, []) == View.Stopped { held = held + 1 }
+  if Events.carriesWords(34u64 << 32) && Events.carriesDetail(34u64 << 32) { held = held + 1 }
+  if Location.accuracyCode(Location.Coarse) == 2u32 { held = held + 1 }
+  held
+}

@@ -15,7 +15,7 @@ aliases: [pudu_ios_nodes.h, iOS Host Nodes]
 The shared vocabulary of the iOS host: the instruction codes and control kinds of the view stream, and the host's node table. The header is included by [[iOS Host Adapter]] and by every capability header that handles an instruction naming a node, so each instruction's handler sits beside its capability while the codes, kinds and table stay in one place. Its codes match [[Std Mobile Stream]]; its kinds match the kind table of the host.
 
 Entry points and state:
-- `PUDU_UI_*` instruction codes, `CREATE` (1) through `WAKE` (40), with the network codes `FETCH` (38), `CANCEL` (39) and `WAKE` (40) handled by [[pudu_ios_fetch.h]]. `PUDU_UI_INSTRUCTIONS` is 41, the bound of the instruction table.
+- `PUDU_UI_*` instruction codes, `CREATE` (1) through `WAKE` (40), with the network codes `FETCH` (38), `CANCEL` (39) and `WAKE` (40) handled by [[pudu_ios_fetch.h]]. `PUDU_UI_INSTRUCTIONS` is 63, the bound of the instruction table. DEVICE (58), NETWORK (59) and AWAKE (60) follow STORE_REMOVE (57) in the same table (#983), and LOCATE (61) and TRACK (62) follow AWAKE (60) (#986).
 - `PUDU_UI_*` control kinds, `LABEL` (1) through `ACTIVITY` (11). `PUDU_UI_KINDS` is 12, the bound of the kind table. Kind 0 is unused.
 - `pudu_nodes`: the node table, an array indexed by node id. A slot holds the platform view of a live node, or `NSNull` for a removed node that CREATE may reuse.
 - `pudu_kinds`: the kind of each slot, parallel to `pudu_nodes`, boxed as `NSNumber`.
@@ -45,6 +45,18 @@ Depends on UIKit for the node types, on [[iOS Host Stream]] for the reader, `pud
 
 - **Q:** Why move the codes and node table out of the host file? **A:** Capability headers need to read node ids and kinds for their own instructions; sharing them keeps each instruction's handler beside its capability and the host file under the size limit.
 - **Q:** Why do removed slots hold `NSNull` rather than being deleted? **A:** The node id is the index a later stream names. Keeping the slot lets a reference to a removed node be refused as never created, and lets CREATE reuse the same index.
+
+## Services (#989)
+
+Codes 63 to 73 are the eleven requests of [[Std Mobile Request]], each with the word layout given there. The instruction bound is 74 (INSTRUCTIONS 74). Refusals for brightness above 100, orientation codes above 2 and sense flags above 1 are made by [[pudu-ios-device]].
+
+## Pickers and system touches (#991)
+
+Instructions 79 to 85 (PICK_CONTACT through TOAST) dispatch to [[pudu-ios-pick]]. The INSTRUCTIONS bound is 86.
+
+## System sheets (#994)
+
+Instructions 86 to 90 (SHARE_FILE through COMPOSE_MESSAGE) dispatch to [[pudu-ios-compose]]. The INSTRUCTIONS bound is 91.
 
 ## Referenced by
 

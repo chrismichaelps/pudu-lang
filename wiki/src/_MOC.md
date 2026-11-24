@@ -216,6 +216,7 @@ tags: [moc, module]
 - [[HTTP Benchmark Service]] — real three-route service with an explicit connection budget.
 
 - [[iOS Simulator CI]] — arm64 simulator FFI conformance.
+- [[iOS App Builds]] — prebuilt, content-cached app builds for the simulator suite.
 - [[Desktop Presentation Test]] · [[Desktop Presentation Gate]] · [[Desktop Presentation CI]] — native row/channel conformance.
 - [[Desktop Window Test]] · [[Desktop Configure Gate]] · [[Desktop Configure Fixture]] — window records, density, limits and full screen.
 
@@ -360,6 +361,8 @@ tags: [moc, module]
 - [[pudu_ios_navigation.h]] — UIKit navigation host and page sheet presentation.
 - [[Native Pages Example]] — navigation stack and page sheet, built only from Pudu.
 - [[Uses Mobile Navigation]] — stdlib fixture for the navigation stream, pops and dismissals.
+- [[Uses Mobile Tabs]] — stdlib fixture for the tab bar stream, picks, pops, sheets and removals (#977).
+- [[Tabs Example]] — two tabs with a pushed page and a sheet on the simulator (#977).
 - [[Native Refresh Example]] — pull to refresh and safe-area insets, built only from Pudu.
 - [[Native Remote Example]] — two keyed network resources, one request, rate-limited retry, built only from Pudu.
 - [[Test Fetch Server]] — local server and request counts for the Remote simulator run.
@@ -371,9 +374,42 @@ tags: [moc, module]
 - [[Gallery Example]] — bundled, served, missing and moved images on the iOS simulator (#973).
 - [[Uses Mobile System]] — stdlib fixture for system requests: open, share, clipboard, status bar and their answers (#974).
 - [[Services Example]] — copy and paste, an unhandled URL, a share and the light status bar on the simulator (#974).
+- [[Uses Mobile Storage]] — stdlib fixture for storage requests and the STORED answer (#980).
+- [[Uses Num Parse]] — stdlib fixture for `parseInt` and `parseIntIn` (#980).
+- [[Vault Example]] — launch count in plain storage, a secure token and a removed key on the simulator (#980).
+- [[PuduStore]] — Android SharedPreferences and Keystore-encrypted storage (#980).
+- [[Uses Mobile Device]] — stdlib fixture for device facts, reachability and keep-awake requests and answers (#983).
+- [[About Example]] — device facts, network link and keep-awake on the simulator and Android (#983).
+- [[PuduDevice]] — Android device facts, network reachability and keep-awake (#983).
+- [[Uses Mobile Location]] — stdlib fixture for location requests and LOCATED answers (#986).
+- [[Where Example]] — device position from one-shot and tracked fixes on the simulator and Android (#986).
+- [[PuduLocation]] — Android device location, one-shot and tracked fixes (#986).
+- [[Uses Mobile Services]] — stdlib fixture for the notification, authentication, browser, speech, picker, battery, brightness, orientation and motion requests and answers (#989).
+- [[Toolbox Example]] — services toolbox: reminder, battery, authentication, speech, brightness, orientation and motion (#989).
+- [[PuduNotify]] — Android local notifications, scheduled by an alarm and reported on tap (#989).
+- [[PuduAlarm]] — Android receiver that posts a scheduled notification (#989).
+- [[PuduAuth]] — Android device-owner confirmation by biometric prompt or credential prompt (#989).
+- [[PuduMedia]] — Android in-app browser, speech and image picking (#989).
+- [[Uses Mobile Web]] — stdlib fixture for the web, video, audio, keyboard and back requests and their answers (#990).
+- [[Viewer Example]] — web page, looping video, sound, keyboard and back on the simulator and device (#990).
+- [[PuduWeb]] — Android web pages, video, audio, keyboard dismissal and back (#990).
+- [[Std Mobile Pick]] — contact, document and photo pickers, recording, badge, secure screen and toasts (#991).
+- [[pudu-ios-pick]] — iOS pickers, recording, badge, toast and the secure screen setting (#991).
+- [[PuduPick]] — Android pickers, recording, secure screen and toasts (#991).
+- [[Uses Mobile Pick]] — stdlib fixture for the picker, recording, badge, secure screen and toast requests (#991).
+- [[Picker Example]] — pickers, recording, badge and toast on the simulator and device (#991).
+- [[Std Mobile Compose]] — system sheets: share, review prompt, calendar event, mail and messages (#994).
+- [[pudu-ios-compose]] — iOS system sheets, with the StoreKit, EventKit and MessageUI handlers (#994).
+- [[PuduCompose]] — Android system sheets: share, calendar insert, mailto and smsto intents (#994).
+- [[PuduFiles]] — read-only provider sharing cache files with other applications (#994).
+- [[Uses Mobile Compose]] — stdlib fixture for the system sheet requests and COMPLETED answers (#994).
+- [[Outbox Example]] — share, review prompt, calendar, mail and message sheets on the simulator and device (#994).
 - [[Pudu Backend Toolchain Assets]] — application asset listing, refused names and links, staging (#973).
 - [[Uses Mobile Controls]] — stdlib fixture for the value controls: build and change words, normalization and value events (#934).
 - [[Pudu Compiler Program Eval Data Spec]] — data evaluation spec, including the mobile fixture counts.
 - [[Uses Mobile Memo]] — stdlib fixture for memoized subtrees, render counters and site keys.
 - [[Memo Render Lambda]] · [[Memo Render Local]] — refusal fixtures: a memo render that is a lambda or a local binding is E3103.
 - [[Native Render Skipping]] — cost model and three-part plan for skipping unchanged native rendering.
+- [[Permissions Spec]] · [[Uses Mobile Permission]] · [[Permissions Example]] — permission properties, stdlib fixture and example (#976).
+- [[Pudu Backend Identity]] · [[Identity Spec]] — application identity from the `[app]` table and its platform declarations (#978).
+- [[Links Example]] — incoming links: the LINKED event and the simulator link self-test (#978).

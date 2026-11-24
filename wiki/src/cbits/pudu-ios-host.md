@@ -48,16 +48,23 @@ Entry points the program depends on:
 - The application's root controller is `PuduRootController`. It reports the scene's size and size classes as RESIZED from its layout pass, and only when they change ([[iOS Host Scene]]).
 - Lifecycle observation: the host queues LIFECYCLE for the four application notifications, in the order the platform posts them ([[iOS Host Scene]]).
 - Capability instructions GESTURES, ALERT, VALUE, HAPTIC, TRAITS, ACCESS_HINT, ACCESS_VALUE, MENU and ANIMATE dispatch to [[iOS Host Gesture]], [[iOS Host Feedback]], [[iOS Host Access]] and [[iOS Host Motion]]. An out-of-range mask, style, role, haptic code or trait mask is a stream defect.
+- Device instructions DEVICE, NETWORK and AWAKE dispatch to [[pudu-ios-device]]. The host includes `pudu_ios_device.h` with the other private headers and links the Network framework for reachability (#983).
+- Location instructions LOCATE and TRACK dispatch to [[pudu-ios-location]]. The host includes `pudu_ios_location.h` after the permission header; CoreLocation is linked only when a location permission kind is declared (#986).
+- Self-test `PUDU_UI_LOCATION_TEST` waits until a LOCATED is queued, prints `PUDU_LOCATION answered <count>` and then asks the program to stop ([[pudu-ios-location]]).
 - REFRESH (37) dispatches to `pudu_do_refresh`, which lives in [[pudu_ios_refresh.h]]. It is refused on a node that is neither a scroll nor a list, with the message `pudu: refreshed a node that does not scroll:` followed by the node id.
 - Motion: after every commit, the host runs one animation for the surface if an animated group changed in that commit. With Reduce Motion on, the change is applied at once ([[iOS Host Motion]]).
 - Self-test `PUDU_UI_REFRESH_TEST` runs the pull check of [[pudu_ios_refresh.h]], prints its `PUDU_REFRESH` lines and then asks the program to stop.
 - FETCH (38), CANCEL (39) and WAKE (40) dispatch to `pudu_do_fetch`, `pudu_do_cancel` and `pudu_do_wake` in [[pudu_ios_fetch.h]], which sends the program's requests on the platform URL session and answers them as FETCHED events.
 - A memory warning observer, `pudu_observe_memory`, is registered at launch. Each warning queues MEMORY ([[pudu_ios_fetch.h]]).
 - Self-test `PUDU_UI_FETCH_TEST` runs the wait for both Remote lines of [[Native Remote Example]] and prints `PUDU_FETCH loaded` once they show a loaded result, then asks the program to stop.
+- Self-tests dispatch through one table of environment variable and runner, so each test is one entry rather than a branch in the launch path (#980). The table includes `PUDU_UI_DEVICE_TEST` → `pudu_test_device` ([[pudu-ios-device]]). The host links Security for the keychain of [[pudu-ios-storage]].
 - Self-test `PUDU_UI_CAPABILITY_TEST` runs the sequence of [[iOS Host Capability Test]], queues a stop event after it, and after the program returns prints `PUDU_ACCESS` and `PUDU_MOTION` lines.
 - NAVIGATE (36) is read whole by `pudu_navigation_read` in [[pudu_ios_navigation.h]] before any controller changes; each route body is read through `pudu_node_id` and `pudu_node_scrolls` in [[pudu_ios_nodes.h]]. Only then is the shown root removed and the navigation shown over the root controller, which installs the platform stack on first use. Its user pop and sheet dismissal events are queued through [[iOS Host Events]].
 - Self-test `PUDU_UI_NAVIGATION_TEST` runs the stack and sheet check described in [[pudu_ios_navigation.h]] and then asks the program to stop. It prints `PUDU_NAV` lines.
 - When navigation is installed, the report walks the top page's body rather than the root's shown tree, so `PUDU_LABEL` lines name the labels the user sees.
+- Links (#978): the URL in the launch options, when the application was opened by a link, and each `application:openURL:options:` call queue LINKED (30) with the URL text. Self-test `PUDU_UI_LINK_TEST` opens the URL it names through [[pudu-ios-system]], prints `PUDU_SYSTEM link opened` or `refused`, and then asks the program to stop.
+- Stdout is set line-buffered when the application finishes launching, so every `PUDU_` report reaches the console as soon as it is written.
+- The `PUDU_PROGRAM_STATUS` line is flushed whenever the program returns, with or without a self-test, so a reader waiting on it never waits on the buffer.
 
 ## Negative Logic
 
@@ -81,6 +88,23 @@ Implements the four symbols of [[Std Mobile Host]]. Its streams come from [[Std 
 - **Q:** Why is the host hand-written? **A:** [[Pudu Native]] limits hand-written native code to the platform shim. It carries no application logic, so the same program runs on any host that implements the two symbols.
 
 - **Q:** Why one animation per commit? **A:** Placements that arrive together move together, and Reduce Motion is checked once. See [[iOS Host Motion]].
+
+- **Q:** Why line-buffer stdout rather than flush after each report? **A:** A report added later without its own flush would otherwise sit in the buffer when the console is not a terminal, and a test waiting for it would time out; line buffering covers every report at once. _Rejected:_ a flush after each print, which each new report would have to remember.
+
+## Services (#989)
+
+- Includes `pudu_ios_notify.h` and `pudu_ios_media.h`. The frameworks they use are linked by [[Backend Toolchain App]].
+- `pudu_notify_launch` runs at launch. It sets the notification delegate, so a banner shows while the application is in front and a tap queues NOTIFIED, including the tap that launched the application.
+- Eleven dispatch rows route codes 63 to 73 to the notification, authentication, media and device handlers.
+- `PUDU_UI_SERVICES_TEST` selects the services self-test in the table of self-tests.
+
+## Pickers and system touches (#991)
+
+Includes `pudu_ios_pick.h` after the web header. Seven dispatch rows route PICK_CONTACT through TOAST (79 to 85) to [[pudu-ios-pick]].
+
+## System sheets (#994)
+
+Dispatch rows for SHARE_FILE through COMPOSE_MESSAGE (86 to 90) route to [[pudu-ios-compose]].
 
 ## Referenced by
 

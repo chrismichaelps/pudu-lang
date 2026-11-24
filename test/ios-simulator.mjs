@@ -1,10 +1,11 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { spawn, spawnSync } from "node:child_process";
-import { existsSync, mkdtempSync, mkdirSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
+import { existsSync, mkdtempSync, mkdirSync, readFileSync, readdirSync, rmSync, statSync, writeFileSync, writeSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import { prebuild } from "./ios-app-builds.mjs";
 import { objectiveCSmoke, swiftSmoke } from "./ios-foreign-apps.mjs";
 
 // A cold hosted simulator can take minutes to install or launch its first app.
@@ -14,12 +15,44 @@ const bootTimeout = 600_000;
 const appBuildTimeout = 300_000;
 const launchAttempts = 2;
 
+/* A line written to stdout before the next step starts. Every step blocks the
+   event loop, and stdout to a pipe is otherwise written only when the loop
+   runs, so a log read during the run would lag behind it. */
+function say(line) {
+  writeSync(1, `${line}\n`);
+}
+
+/* PUDU_IOS_ONLY narrows a run to the named parts, comma-separated: example
+   names, "foreign" for the Objective-C and Swift smokes, "refusals" for the
+   refused streams, and "matrix" for the device families. Unset, every part
+   runs, as CI runs it. */
+const only = process.env.PUDU_IOS_ONLY ? new Set(process.env.PUDU_IOS_ONLY.split(",").map((part) => part.trim())) : null;
+
+/* PUDU_IOS_SHARD, "i/n", runs only the parts whose name hashes to shard i of
+   n, so n jobs together run the whole suite. */
+const [shard, shards] = (process.env.PUDU_IOS_SHARD || "1/1").split("/").map(Number);
+function inShard(part) {
+  let hash = 0;
+  for (const code of Buffer.from(part)) hash = (hash * 31 + code) >>> 0;
+  return hash % shards === shard - 1;
+}
+
+function wanted(part) { return (only === null || only.has(part)) && inShard(part); }
+
+function selected(part) {
+  if (wanted(part)) return true;
+  say(`SKIP iOS ${part}`);
+  return false;
+}
+
 const repository = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 // The counter imports Std.Mobile from this checkout, whichever compiler runs.
 process.env.PUDU_LIB ??= join(repository, "packages", "pudu", "v0.1", "lib");
 
+/* Runs one step to completion. Stdin is closed so no step waits on input,
+   and a step past its timeout is killed outright rather than asked to stop. */
 function run(command, args, timeout = 120_000, env = process.env) {
-  const result = spawnSync(command, args, { encoding: "utf8", timeout, env });
+  const result = spawnSync(command, args, { encoding: "utf8", timeout, env, stdio: ["ignore", "pipe", "pipe"], killSignal: "SIGKILL" });
   if (result.error) {
     throw new Error(`${command} ${args.join(" ")}: ${result.error.code ?? result.error.message} after ${timeout} ms`);
   }
@@ -30,9 +63,10 @@ function run(command, args, timeout = 120_000, env = process.env) {
 }
 
 /* Runs `body` with a local test server in its own process, since this script
-   blocks on every step; `body` gets the server's base URL and a function that
+   blocks on every step, when the example `part` is selected; `body` gets the server's base URL and a function that
    reads its request counts. */
-function withFetchServer(body) {
+function withFetchServer(part, body) {
+  if (!wanted(part)) return undefined;
   const root = mkdtempSync(join(tmpdir(), "pudu-fetch-"));
   const record = join(root, "counts.json");
   const server = spawn(process.execPath, [join(repository, "test", "fetch-server.mjs"), record], { stdio: "ignore" });
@@ -53,7 +87,7 @@ if (!compiler || (mode && mode !== "--require-simulator") || extra.length) {
 }
 function unavailable(reason) {
   if (mode === "--require-simulator") throw new Error(reason);
-  console.log(`SKIP iOS simulator smoke: ${reason}`);
+  say(`SKIP iOS simulator smoke: ${reason}`);
 }
 const xcrun = process.env.PUDU_XCRUN || "xcrun";
 const identifier = `org.pudu.MobileForeignSmoke.${randomUUID()}`;
@@ -171,11 +205,13 @@ int main(int argc, char **argv) {
     installed = true;
     const lines = launch(device, identifier, "PUDU_SMOKE", "PUDU_SMOKE_STATUS");
     assert.deepEqual(lines, [...expected.split("\n"), "PUDU_SMOKE_STATUS 0"]);
-    console.log(`${expected}\nPASS iOS simulator smoke (${device})`);
+    say(`${expected}\nPASS iOS simulator smoke (${device})`);
     const apps = { run, launch, uninstall: uninstallFromReusedDevice, xcrun, compiler, identifier, simulatorTimeout };
-    objectiveCSmoke(apps, device, root, simulatorClang);
-    swiftSmoke(apps, device, root, simulatorClang);
-    refuseOccupiedOutput(root);
+    if (selected("foreign")) {
+      objectiveCSmoke(apps, device, root, simulatorClang);
+      swiftSmoke(apps, device, root, simulatorClang);
+    }
+    if (wanted("refusals")) refuseOccupiedOutput(root);
     familyApps(device, "Counter");
     mobileApp(device, "Form", [
       { environment: { SIMCTL_CHILD_PUDU_UI_SELFTEST: "0", SIMCTL_CHILD_PUDU_UI_TYPE: "Ada" }, labels: ["Hello, Ada (subscribed)"] },
@@ -233,7 +269,7 @@ int main(int argc, char **argv) {
       layout: ["PUDU_REFRESH insets reported", "PUDU_REFRESH answered pull refreshing", "PUDU_REFRESH finished by the program",
         "PUDU_REFRESH unanswered pull stopped"],
     }]);
-    withFetchServer((base, counts) => {
+    withFetchServer("Remote", (base, counts) => {
       mobileApp(device, "Remote", [{
         environment: { SIMCTL_CHILD_PUDU_UI_SELFTEST: "0", SIMCTL_CHILD_PUDU_UI_FETCH_TEST: "1", SIMCTL_CHILD_PUDU_FETCH_BASE: base },
         labels: ["Profile: 200 profile body", "Limited: 200 limited body"],
@@ -244,9 +280,9 @@ int main(int argc, char **argv) {
       const asked = counts();
       assert.equal(asked.profile, 1, `profile was requested ${asked.profile} times`);
       assert.equal(asked.limited, 2, `limited was requested ${asked.limited} times`);
-      console.log("PASS iOS Remote requests: profile once, limited twice");
+      say("PASS iOS Remote requests: profile once, limited twice");
     });
-    withFetchServer((base, counts) => {
+    withFetchServer("Gallery", (base, counts) => {
       // A bundled and a served image show at their own pixel size, a missing
       // one reports a failure, and an image moved off a slow source before it
       // answered shows its new source and never the slow one.
@@ -257,7 +293,7 @@ int main(int argc, char **argv) {
       }]);
       const asked = counts();
       assert.equal(asked.photo, 1, `the photo was requested ${asked.photo} times`);
-      console.log("PASS iOS Gallery requests: photo once");
+      say("PASS iOS Gallery requests: photo once");
     });
     // The copied text pastes back, a URL no app handles reports false, the
     // share sheet shows and its cancellation reports false, and the status
@@ -267,6 +303,109 @@ int main(int argc, char **argv) {
       labels: ["Pasted: from Pudu", "Opened: false", "Shared: false"],
       layout: ["PUDU_SYSTEM share shown", "PUDU_SYSTEM status light shown"],
     }]);
+    // A granted camera, a refused microphone and contacts never asked report
+    // as Granted, Blocked and NotAsked; requesting the granted camera answers
+    // at once, without a prompt.
+    // The person picks the second tab and back, pushes and pops inside the
+    // first, and dismisses a sheet; each is reported once.
+    // The manifest's identity reaches the bundle, and a link in the
+    // application's own scheme comes back to it as Linked.
+    // Plain and secure values persist from one launch to the next, and a
+    // removed key reads as absent.
+    mobileApp(device, "Vault", [
+      { environment: { SIMCTL_CHILD_PUDU_UI_SELFTEST: "0" }, labels: ["Launches: 1", "Token: s3cret", "Temporary: none"] },
+      { environment: { SIMCTL_CHILD_PUDU_UI_SELFTEST: "0" }, labels: ["Launches: 2", "Token: s3cret", "Temporary: none"] },
+    ]);
+    // The device describes itself as iOS at the default text scale, reports
+    // a link the simulator reaches the network through, and keeps the screen
+    // awake while in front.
+    mobileApp(device, "About", [{
+      environment: { SIMCTL_CHILD_PUDU_UI_SELFTEST: "0", SIMCTL_CHILD_PUDU_UI_DEVICE_TEST: "1" },
+      labels: ["Platform: ios", /^Version: \d+(\.\d+)*$/u, /^Model: \S+$/u, /^Locale: [A-Za-z]{2,3}(-\w+)*$/u, /^Zone: \S+$/u,
+        "Scale: 100", "Online: true", /^Link: (Wifi|Cellular|Wired)$/u],
+      layout: ["PUDU_DEVICE awake yes"],
+    }]);
+    refusedApp(device, root, "network watching word 2",
+      "import Std.Mobile.Host as Host\nimport Std.Mobile.Stream as Stream", `  Host.apply(bytesOf(Stream.network([], 2u32)))`,
+      /pudu: a view stream set network watching to 2/u);
+    // With location allowed and set, one position arrives and shows in
+    // ten-millionths of a degree; with it revoked, the position answers as none.
+    mobileApp(device, "Where", [
+      {
+        environment: { SIMCTL_CHILD_PUDU_UI_SELFTEST: "0", SIMCTL_CHILD_PUDU_UI_LOCATION_TEST: "1" },
+        privacy: [["grant", "location"]],
+        location: "18.4655,-66.1057",
+        labels: ["Permission: Granted", "Latitude: 184655000", "Longitude: -661057000", /^Fixes: [1-9]\d*$/u],
+        layout: ["PUDU_LOCATION answered yes"],
+      },
+      {
+        environment: { SIMCTL_CHILD_PUDU_UI_SELFTEST: "0", SIMCTL_CHILD_PUDU_UI_LOCATION_TEST: "1" },
+        privacy: [["revoke", "location"]],
+        labels: ["Permission: Blocked", "Latitude: none", "Fixes: 0"],
+        layout: ["PUDU_LOCATION answered yes"],
+      },
+    ], "where");
+    // The battery, authentication and speech each answer once; the simulator
+    // has no passcode, so the person cannot be confirmed, and no accelerometer.
+    mobileApp(device, "Toolbox", [{
+      environment: { SIMCTL_CHILD_PUDU_UI_SELFTEST: "0", SIMCTL_CHILD_PUDU_UI_SERVICES_TEST: "1" },
+      labels: [/^Battery: (unknown|unplugged|charging|full|\d+% \w+)$/u, "Authenticated: false", /^Spoke: (true|false)$/u, "Motion: none",
+        "Photo: none", "Reminders tapped: 0"],
+      layout: ["PUDU_SERVICES authenticated yes powered yes spoke yes"],
+    }], "toolbox");
+    // An empty page loads and answers once; the chime and the clip are not
+    // bundled, so the chime ends at once and the clip stays blank.
+    mobileApp(device, "Viewer", [{
+      environment: { SIMCTL_CHILD_PUDU_UI_SELFTEST: "0", SIMCTL_CHILD_PUDU_UI_WEB_TEST: "1" },
+      labels: ["Loaded: true", "Backs: 0", /^Sounds ended: [01]$/u],
+      layout: ["PUDU_WEB loaded yes"],
+    }]);
+    // At rest, before any picker opens, every answer reads as none.
+    mobileApp(device, "Picker", [{
+      environment: { SIMCTL_CHILD_PUDU_UI_SELFTEST: "0" },
+      labels: ["Contact: none", "Document: none", "Photo: none", "Note: none"],
+    }], "pick");
+    // At rest, before any sheet opens, every answer reads as none.
+    mobileApp(device, "Outbox", [{
+      environment: { SIMCTL_CHILD_PUDU_UI_SELFTEST: "0" },
+      labels: ["Event: none", "Mail: none", "Message: none"],
+    }]);
+    refusedApp(device, root, "recording word 2",
+      "import Std.Mobile.Host as Host\nimport Std.Mobile.Request as Request", `  Host.apply(bytesOf(Request.record([], 1u32, 2u32)))`,
+      /pudu: a view stream set recording to 2/u);
+    refusedApp(device, root, "load on a label",
+      "import Std.Mobile.Host as Host\nimport Std.Mobile.Stream as Stream", `  let label = Stream.create([], 0u32, Stream.LABEL)
+  Host.apply(bytesOf(Stream.load(label, 0u32, "about:blank")))`,
+      /pudu: a view stream loaded a page into a node that is not a web view: 0/u);
+    refusedApp(device, root, "brightness above 100",
+      "import Std.Mobile.Host as Host\nimport Std.Mobile.Request as Request", `  Host.apply(bytesOf(Request.brightness([], 101u32)))`,
+      /pudu: a view stream set brightness to 101/u);
+    refusedApp(device, root, "unknown orientation",
+      "import Std.Mobile.Host as Host\nimport Std.Mobile.Request as Request", `  Host.apply(bytesOf(Request.orientation([], 3u32)))`,
+      /pudu: a view stream locked unknown orientation 3/u);
+    refusedApp(device, root, "unknown location accuracy",
+      "import Std.Mobile.Host as Host\nimport Std.Mobile.Stream as Stream", `  Host.apply(bytesOf(Stream.locate([], 1u32, 7u32)))`,
+      /pudu: a view stream used unknown location accuracy 7/u);
+    mobileApp(device, "Links", [{
+      environment: { SIMCTL_CHILD_PUDU_UI_SELFTEST: "0", SIMCTL_CHILD_PUDU_UI_LINK_TEST: "pudulinks://hello?from=test" },
+      labels: ["Link: pudulinks://hello?from=test"],
+      layout: ["PUDU_SYSTEM link opened"],
+    }], "links", "dev.pudu.links");
+    mobileApp(device, "Tabs", [{
+      environment: { SIMCTL_CHILD_PUDU_UI_SELFTEST: "0", SIMCTL_CHILD_PUDU_UI_TABS_TEST: "1" },
+      labels: ["Selected: 1", "Pops: 1", "Dismissals: 1"],
+      layout: ["PUDU_TABS picked", "PUDU_TABS pushed", "PUDU_TABS popped once", "PUDU_TABS sheet dismissed once"],
+    }]);
+    refusedApp(device, root, "a selected tab that is not shown",
+      "import Std.Mobile.Host as Host\nimport Std.Mobile.Stream as Stream", `  let body = Stream.create([], 0u32, Stream.LABEL)
+  Host.apply(bytesOf(Stream.tabs(body, &[(1u32, "A", "house", [(10u32, 0u32, "A")])], 2u32, None)))`,
+      /pudu: a view stream selected a tab that is not shown: 2/u);
+    mobileApp(device, "Permissions", [{
+      environment: { SIMCTL_CHILD_PUDU_UI_SELFTEST: "0", SIMCTL_CHILD_PUDU_UI_PERMISSION_TEST: "1" },
+      privacy: [["grant", "camera"], ["revoke", "microphone"], ["reset", "contacts"]],
+      labels: ["Camera: Granted", "Microphone: Blocked", "Contacts: NotAsked"],
+      layout: ["PUDU_PERMISSION 0 1", "PUDU_PERMISSION 1 5", "PUDU_PERMISSION 7 0"],
+    }], "permissions");
     refusedApp(device, root, "unknown status bar style",
       "import Std.Mobile.Host as Host\nimport Std.Mobile.Stream as Stream", `  Host.apply(bytesOf(Stream.status([], 7u32, false)))`,
       /pudu: a view stream used unknown status bar style 7/u);
@@ -282,14 +421,16 @@ int main(int argc, char **argv) {
       "import Std.Mobile.Host as Host\nimport Std.Mobile.Stream as Stream", `  let label = Stream.create([], 0u32, Stream.LABEL)
   Host.apply(bytesOf(Stream.refresh(label, 0u32, 1u32, false)))`,
       /pudu: a view stream refreshed a node that does not scroll: 0/u);
-    familyMatrix(runtime);
+    if (selected("matrix")) familyMatrix(runtime);
     mobileApp(device, "Glass", [glassRun("glass")]);
     mobileApp(device, "Showcase", [{
       environment: { SIMCTL_CHILD_PUDU_UI_SELFTEST: "0", SIMCTL_CHILD_PUDU_UI_CAPABILITY_TEST: "1" },
       labels: [
         "Gestures: press began, pan changed 12 -7, pinch changed 1500, rotation changed 785, swipe right",
         "Size: compact regular",
-        "Phases: active inactive active",
+        // The launch's own activation depends on the simulator bringing the
+        // app to the front; the resign and return the self-test posts must follow it.
+        /^Phases: (active )?inactive active$/u,
         "Picked: Delete",
         "Chose: Start",
         "Row 1",
@@ -356,7 +497,7 @@ function familyMatrix(runtime) {
     try {
       run(xcrun, ["simctl", "bootstatus", device, "-b"], bootTimeout);
       for (const example of Object.keys(familyRuns)) familyApps(device, example);
-      console.log(`PASS iOS ${family} matrix (${type.name}, ${runtime.name})`);
+      say(`PASS iOS ${family} matrix (${type.name}, ${runtime.name})`);
     } finally {
       deletePrivateDevice(device);
     }
@@ -378,7 +519,7 @@ function fallbackGlass(runtimes) {
   const older = runtimes.find((item) =>
     item.isAvailable && item.identifier.startsWith("com.apple.CoreSimulator.SimRuntime.iOS-") && Number(item.version.split(".")[0]) < 26);
   if (!older) {
-    console.log("SKIP iOS material fallback: no runtime older than iOS 26 is installed");
+    say("SKIP iOS material fallback: no runtime older than iOS 26 is installed");
     return;
   }
   const phone = older.supportedDeviceTypes.find((item) => item.productFamily === "iPhone");
@@ -387,7 +528,7 @@ function fallbackGlass(runtimes) {
   try {
     run(xcrun, ["simctl", "bootstatus", device, "-b"], bootTimeout);
     mobileApp(device, "Glass", [glassRun("blur")]);
-    console.log(`PASS iOS material fallback (${older.name})`);
+    say(`PASS iOS material fallback (${older.name})`);
   } finally {
     deletePrivateDevice(device);
   }
@@ -414,52 +555,52 @@ function refuseOccupiedOutput(scratch) {
   const build = ["build", source, "--native", "--target", "ios-simulator-arm64", "--app", "-o", occupied];
   assert.throws(() => run(resolve(compiler), build, appBuildTimeout), /E6006.*application output already exists/s);
   assert.equal(readFileSync(marker, "utf8"), "existing data");
-  console.log("PASS iOS occupied application output refused");
+  say("PASS iOS occupied application output refused");
 }
 
 /* An example from examples/mobile, built only from Pudu with the iOS host
    adapter and run once per entry of `runs`: the host feeds it input from the
    entry's environment, asks it to stop, and reports its labels, its status
    and the time from main to the first frame. */
-function mobileApp(device, example, runs) {
-  const root = mkdtempSync(join(tmpdir(), `pudu-ios-${example.toLowerCase()}-`));
-  const app = join(root, `${example}.app`);
-  const bundle = `org.pudu.${example}`;
+function mobileApp(device, example, runs, directory = "", bundle = `org.pudu.${example}`) {
+  if (!selected(example)) return;
+  const app = built(join(directory, example), buildWait);
   let installed = false;
   try {
-    const build = ["build", join(repository, "examples", "mobile", `${example}.pudu`),
-      "--native", "--target", "ios-simulator-arm64", "--app", "-o"];
-    run(resolve(compiler), [...build, app], appBuildTimeout);
     const executable = join(app, example);
     run(xcrun, ["simctl", "install", device, app], simulatorTimeout);
     installed = true;
-    for (const { environment, labels, layout } of runs) {
+    for (const { environment, labels, layout, privacy = [], location } of runs) {
+      // Each entry presets one service's answer, as the person's earlier choice would.
+      for (const [action, service] of privacy) run(xcrun, ["simctl", "privacy", device, action, service, bundle], simulatorTimeout);
+      // A simulated position, as the device would report it.
+      if (location) run(xcrun, ["simctl", "location", device, "set", location], simulatorTimeout);
       const lines = launch(device, bundle, "PUDU_", "PUDU_PROGRAM_STATUS", environment);
-      // The host reports labels in the order the screen shows them.
-      assert.deepEqual(lines.filter((line) => line.startsWith("PUDU_LABEL ")), labels.map((label) => `PUDU_LABEL ${label}`),
+      // The host reports labels in the order the screen shows them; a pattern
+      // stands for a label whose text depends on the machine.
+      const shown = lines.filter((line) => line.startsWith("PUDU_LABEL ")).map((line) => line.slice("PUDU_LABEL ".length));
+      assert.ok(shown.length === labels.length
+        && labels.every((label, index) => (label instanceof RegExp ? label.test(shown[index]) : label === shown[index])),
         `${example} did not show ${labels.join(", ")}:\n${lines.join("\n")}`);
       assert.ok(lines.includes("PUDU_PROGRAM_STATUS 0"), `${example} did not finish:\n${lines.join("\n")}`);
       if (layout) {
-        assert.deepEqual(lines.filter((line) => /^PUDU_(VIEWPORT|KEYBOARD|THEME|LIST|MATERIAL|ALERT|HAPTIC|ACCESS|MOTION|NAV|REFRESH|FETCH|IMAGE|SYSTEM) /.test(line)), layout,
+        assert.deepEqual(lines.filter((line) => /^PUDU_(VIEWPORT|KEYBOARD|THEME|LIST|MATERIAL|ALERT|HAPTIC|ACCESS|MOTION|NAV|REFRESH|FETCH|IMAGE|SYSTEM|PERMISSION|TABS|DEVICE|LOCATION|SERVICES|WEB) /.test(line)), layout,
           `${example} did not report the expected layout and theme:\n${lines.join("\n")}`);
       }
       const firstFrame = lines.find((line) => line.startsWith("PUDU_FIRST_FRAME_MS "));
       assert.ok(firstFrame, `${example} reported no first frame:\n${lines.join("\n")}`);
-      console.log(`PASS iOS ${example}: ${labels.join(", ")}, first frame ${firstFrame.split(" ")[1]} ms from main, `
+      say(`PASS iOS ${example}: ${labels.join(", ")}, first frame ${firstFrame.split(" ")[1]} ms from main, `
         + `executable ${statSync(executable).size} bytes`);
     }
   } finally {
-    try {
-      if (installed) uninstallFromReusedDevice(device, bundle);
-    } finally {
-      rmSync(root, { recursive: true, force: true });
-    }
+    if (installed) uninstallFromReusedDevice(device, bundle);
   }
 }
 
 /* A program whose stream the host must refuse: it aborts with `refusal` and
    never reports a first frame or a clean status. */
 function refusedApp(device, scratch, what, imports, body, refusal) {
+  if (!wanted("refusals")) return;
   const name = `Refused${randomUUID().replaceAll("-", "")}`;
   const source = join(scratch, `${name}.pudu`);
   const app = join(scratch, `${name}.app`);
@@ -476,13 +617,13 @@ ${body}
   run(resolve(compiler), ["build", source, "--native", "--target", "ios-simulator-arm64", "--app", "-o", app], appBuildTimeout);
   run(xcrun, ["simctl", "install", device, app], simulatorTimeout);
   try {
-    const launched = spawnSync(xcrun, ["simctl", "launch", "--console-pty", device, bundle],
+    const launched = spawnSync(xcrun, ["simctl", "launch", "--console-pty", "--terminate-running-process", device, bundle],
       { encoding: "utf8", timeout: simulatorTimeout });
     if (launched.error) throw launched.error;
     const output = launched.stdout + launched.stderr;
     assert.match(output, refusal);
     assert.doesNotMatch(output, /PUDU_FIRST_FRAME_MS|PUDU_PROGRAM_STATUS 0/u);
-    console.log(`PASS iOS ${what} refused`);
+    say(`PASS iOS ${what} refused`);
   } finally {
     uninstallFromReusedDevice(device, bundle);
   }
@@ -493,8 +634,11 @@ ${body}
 function launch(device, bundle, prefix, status, environment = {}) {
   const failures = [];
   for (let attempt = 1; attempt <= launchAttempts; attempt += 1) {
+    say(`LAUNCH iOS ${bundle} attempt ${attempt}`);
     try {
-      const output = run(xcrun, ["simctl", "launch", "--console-pty", device, bundle], simulatorTimeout,
+      // A retry ends whatever an earlier attempt left running, whose output
+      // would otherwise reach this attempt's console as well.
+      const output = run(xcrun, ["simctl", "launch", "--console-pty", "--terminate-running-process", device, bundle], simulatorTimeout,
         { ...process.env, ...environment });
       const lines = output.split(/\r?\n/u).filter((line) => line.startsWith(prefix));
       if (lines.some((line) => line.startsWith(status))) return lines;
@@ -506,5 +650,27 @@ function launch(device, bundle, prefix, status, environment = {}) {
   }
   throw new Error(`${bundle} did not report:\n${failures.join("\n")}`);
 }
+
+/* Each example the run launches, named in the mobileApp calls above or in
+   the family table, with
+   its source beside the other examples or in a folder of its own; the key
+   is the folder and name mobileApp asks for. */
+function exampleEntries() {
+  const examples = join(repository, "examples", "mobile");
+  const calls = readFileSync(fileURLToPath(import.meta.url), "utf8").matchAll(/mobileApp\(device, "(\w+)"/gu);
+  const folders = ["", ...readdirSync(examples).filter((entry) => statSync(join(examples, entry)).isDirectory())];
+  const entries = [];
+  // The family runs name their examples in a table rather than in a call.
+  for (const name of new Set([...[...calls].map((call) => call[1]), ...Object.keys(familyRuns)])) {
+    if (!wanted(name)) continue;
+    const folder = folders.find((candidate) => existsSync(join(examples, candidate, `${name}.pudu`)));
+    if (folder !== undefined) entries.push({ key: join(folder, name), source: join(examples, folder, `${name}.pudu`) });
+  }
+  return entries;
+}
+
+// The longest a step waits for its app; builds queue behind one another.
+const buildWait = 1_800_000;
+const built = prebuild(repository, resolve(compiler), process.env.PUDU_LIB, exampleEntries());
 
 smoke();

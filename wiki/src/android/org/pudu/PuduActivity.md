@@ -69,6 +69,13 @@ alone, since the activity is exported as the launcher.
 
 Back to [[Backend Toolchain Android]].
 
+## Links (#978)
+
+- `onCreate` passes the launch intent to `linked`. `onNewIntent` stores the new intent and calls `linked` again; the activity is `singleTask`, so a later link arrives there rather than in a second activity.
+- `linked` queues LINKED (30) with the intent's data URI as text, only for an `ACTION_VIEW` intent that carries data. Other intents are ignored.
+
+The link path is not gated by the self-test marker: a released package also reports links.
+
 ## Negative Logic
 
 - No self-test without a debuggable build. A released package ignores every
@@ -88,6 +95,10 @@ calls), [[Native Mobile Targets]].
   can send must not be honored in a released build. _Rejected:_ trusting the intent
   extras unconditionally.
 
+## Pickers and system touches (#991)
+
+`onActivityResult` also routes its request codes to [[PuduPick]] for the contact, document, photo and recording results.
+
 ## Referenced by
 
 [[src/Pudu/Backend/Toolchain/Android]] · [[src/Pudu/Backend/_MOC]]
@@ -99,3 +110,9 @@ calls), [[Native Mobile Targets]].
 - Back: `onBackPressed` calls `PuduNavigator.back` first. The platform's own back runs only when the navigator has nothing to pop. See [[PuduNavigator]].
 
 Resolved Grill Log: a memory event is sent for every trim level from running low upward, not only the critical level, so the program can release caches before the system has to kill the process.
+
+## Services (#989)
+
+- `onActivityResult` routes each result by request code to [[PuduAuth]] and [[PuduMedia]].
+- A launch or new intent that carries `org.pudu.notified` is reported as NOTIFIED 35 for its id.
+- The activity tells [[PuduMedia]] when it resumes, so BROWSED 37 is reported after the browser returns.

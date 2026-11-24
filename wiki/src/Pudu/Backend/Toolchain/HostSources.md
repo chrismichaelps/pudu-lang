@@ -20,6 +20,14 @@ program selects the desktop marker. Put the staging directory on the include pat
 units and use one compiler invocation to preserve cancellation and atomic
 publication. A program on another platform selects no AppKit source.
 
+## Pickers and system touches (#991)
+
+Pick sources: `cbits/pudu_ios_pick.h` for iOS and `android/org/pudu/PuduPick.java` for Android. See [[pudu-ios-pick]] and [[PuduPick]].
+
+## System sheets (#994)
+
+Sheet sources: `cbits/pudu_ios_compose.h` for iOS, and `android/org/pudu/PuduCompose.java` with the provider `android/org/pudu/PuduFiles.java` for Android. The provider is declared in the application manifest. See [[pudu-ios-compose]], [[PuduCompose]] and [[PuduFiles]].
+
 ## Referenced by
 
 [[src/Pudu/Backend/_MOC]] · [[Native Desktop Adapter Delivery]]
@@ -67,3 +75,15 @@ The iOS host sources also stage `pudu_ios_fetch.h` ([[pudu_ios_fetch.h]]) immedi
 The iOS host sources also stage `pudu_ios_nodes.h` ([[pudu_ios_nodes.h]]) between `pudu_ios_motion.h` and `pudu_ios_navigation.h`, with the host translation unit and the other private headers. It holds the instruction codes, the control kinds and the node table that the capability headers read, so it is staged before any header that includes it. The list therefore has seventeen entries in all: the host translation unit and sixteen private headers, each written unchanged before clang runs.
 
 The reader header [[iOS Host Stream]], pudu_ios_stream.h, is staged with the same private headers.
+
+## Device sources (#983)
+
+The iOS host sources stage `pudu_ios_device.h` ([[pudu-ios-device]]) with the other private headers, and the host translation unit includes it once. The Android sources stage `PuduDevice.java` ([[PuduDevice]]) with the other platform classes.
+
+## Location sources (#986)
+
+The iOS host sources stage `pudu_ios_location.h` ([[pudu-ios-location]]) with the other private headers, and the host translation unit includes it after the permission header. The Android sources stage `PuduLocation.java` ([[PuduLocation]]) with the other platform classes.
+
+## Services sources (#989)
+
+The iOS source list adds `pudu_ios_notify.h` and `pudu_ios_media.h`. The Android list adds `pudu_android_services.h` and the Java sources `PuduNotify.java`, `PuduAlarm.java`, `PuduAuth.java` and `PuduMedia.java`.

@@ -5,6 +5,9 @@ on:
       - 'packages/pudu/**'
       - 'cabal.project*'
       - 'test/ios-simulator.mjs'
+      - 'test/ios-app-builds.mjs'
+      - 'test/ios-foreign-apps.mjs'
+      - 'examples/mobile/**'
       - 'scripts/uikit-coverage.mjs'
       - 'test/uikit-coverage.test.mjs'
       - 'wiki/architecture/NATIVE-IOS-UI.md'
@@ -15,6 +18,9 @@ on:
       - 'packages/pudu/**'
       - 'cabal.project*'
       - 'test/ios-simulator.mjs'
+      - 'test/ios-app-builds.mjs'
+      - 'test/ios-foreign-apps.mjs'
+      - 'examples/mobile/**'
       - 'scripts/uikit-coverage.mjs'
       - 'test/uikit-coverage.test.mjs'
       - 'wiki/architecture/NATIVE-IOS-UI.md'
@@ -30,9 +36,14 @@ concurrency:
 jobs:
   native-ffi:
     runs-on: macos-26
-    # The simulator step boots an iPhone and an iPad and runs the full device
-    # matrix; on a contended hosted runner a single first frame can take 14 s.
-    timeout-minutes: 75
+    # The suite's parts are split across three jobs by PUDU_IOS_SHARD; one of
+    # them boots the iPad matrix. Apps are built in parallel and cached by
+    # content, so an unchanged example is not rebuilt.
+    timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2, 3]
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-node@v7
@@ -65,5 +76,16 @@ jobs:
       - run: cabal update
       - name: Build Pudu
         run: cabal build exe:pudu --ghc-options=-Werror
+      - uses: actions/cache@v4
+        with:
+          path: ~/Library/Caches/pudu-ios-suite
+          key: ios-apps-${{ matrix.shard }}-${{ github.sha }}
+          restore-keys: ios-apps-${{ matrix.shard }}-
       - name: Run native foreign calls in an iOS app
+        env:
+          PUDU_IOS_SHARD: ${{ matrix.shard }}/3
+          # A hosted runner has few cores; two builds at a time keep the
+          # simulator responsive, and the C compiler gets room to finish.
+          PUDU_IOS_BUILD_JOBS: '2'
+          PUDU_CC_TIMEOUT: '600'
         run: node test/ios-simulator.mjs "$(cabal list-bin exe:pudu --ghc-options=-Werror)" --require-simulator

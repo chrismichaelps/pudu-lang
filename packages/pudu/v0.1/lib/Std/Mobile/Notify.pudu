@@ -1,0 +1,19 @@
+module Std.Mobile.Notify
+
+import Std.Mobile.Request as Request
+
+/// A commit scheduling notification `id` to show `title` and `body` after
+/// `after` seconds; a negative delay shows it at once. A later schedule with
+/// the same id replaces it. When the person taps it, `Notified(id)` arrives,
+/// also when the tap launches the application. The program asks for the
+/// Notifications permission first; without it nothing is shown.
+export fn schedule(id: UInt32, after: Int, title: Str, body: Str) -> Bytes {
+  let delay = match convertInteger[UInt32](after) {
+    case Some(found) => found
+    case None => 0u32
+  }
+  bytesOf(Request.notify([], id, delay, title, body))
+}
+
+/// A commit cancelling notification `id`, whether waiting or shown.
+export fn cancel(id: UInt32) -> Bytes { bytesOf(Request.unnotify([], id)) }

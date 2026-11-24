@@ -1,6 +1,7 @@
 module Catalog
 
 import Std.Mobile.Host as Host
+import Std.Mobile.Paging as Paging
 import Std.Mobile.View as View
 
 /// The tag the grid's events report.
@@ -33,7 +34,7 @@ fn main() -> Int {
   while true {
     match Host.wait() {
       case View.Reached(tag, visible) if tag == GRID => {
-        first = View.windowStart(visible, TOTAL, WINDOW)
+        first = Paging.windowStart(visible, TOTAL, WINDOW)
         let (next, changes) = View.update(&mounted, &view(first))
         Host.apply(changes)
         mounted = next

@@ -215,6 +215,14 @@ provides the common checked extent representation.
 
 Register [[Foreign Run Storage]] with the interpreter library so the installed compiler uses the same C layout bridge as the test executable.
 
+## Pickers and system touches (#991)
+
+The iOS pick source `cbits/pudu_ios_pick.h` and the Android source `PuduPick.java` are listed with the host sources. The frameworks ContactsUI, Contacts and UniformTypeIdentifiers are linked always.
+
+## System sheets (#994)
+
+The iOS sheet source `cbits/pudu_ios_compose.h` and the Android sources `PuduCompose.java` and `PuduFiles.java` are listed with the host sources. The frameworks StoreKit, EventKit, EventKitUI and MessageUI are linked always.
+
 ## Referenced by
 
 The library exposes [[Resolve Canonical]] for the scoped generated-Impl resolver
@@ -800,3 +808,15 @@ Package the portable loader header so source distributions can compile the bridg
 Register [[Backend Frame Slots]] and [[Backend Frame Slot References]] with
 existing dependencies. Resolved Grill Log: keep traversal and allocation
 separate while sharing one exhaustive reference projection.
+
+## Device facts (#983)
+
+The extra-source-files list adds `cbits/pudu_ios_device.h` ([[pudu-ios-device]]) and `android/org/pudu/PuduDevice.java` ([[PuduDevice]]), so source distributions carry both. Resolved Grill Log: no added package dependency; the Network framework is a system framework.
+
+## Location (#986)
+
+The extra-source-files list adds `cbits/pudu_ios_location.h` ([[pudu-ios-location]]) and `android/org/pudu/PuduLocation.java` ([[PuduLocation]]), so source distributions carry both. Resolved Grill Log: no added package dependency; CoreLocation is a system framework, linked only when a location permission kind is declared.
+
+## Service sources (#989)
+
+The package lists the new service sources with the existing host sources: `pudu_ios_media.h`, `pudu_android_services.h`, and the Java sources `PuduNotify.java` and `PuduMedia.java`, with the other service sources of [[Native Toolchain Host Sources]].

@@ -1,0 +1,62 @@
+module UsesMobilePermission
+
+import Std.ByteOrder {readU32LE}
+import Std.Mobile.Events as Events
+import Std.Mobile.Permission as Permission
+import Std.Mobile.View as View
+
+// The words at `offset` onward, read as little-endian 32-bit values.
+fn wordsAt(bytes: &Array[UInt8], offset: Int, count: Int) -> Array[UInt32] {
+  var found = []
+  for index in 0..count {
+    match readU32LE(bytes, offset + index * 4) {
+      case Some(word) => { found = found.push(word) }
+      case None => { return [] }
+    }
+  }
+  found
+}
+
+const EVERY: Array[Permission.Kind] = [
+  Permission.Camera,
+  Permission.Microphone,
+  Permission.Photos,
+  Permission.PhotosAdd,
+  Permission.Location,
+  Permission.LocationAlways,
+  Permission.Notifications,
+  Permission.Contacts,
+  Permission.Calendar,
+  Permission.Bluetooth,
+  Permission.Motion
+]
+
+export fn main() -> Int {
+  var held = 0
+
+  // PERMISSIONS carries a count and each kind's code; PERMISSION one kind; SETTINGS nothing.
+  let checked = Permission.check(&[Permission.Camera, Permission.Contacts]).toArray()
+  if checked.length() == 16 && wordsAt(&checked, 0, 4) == [51u32, 2u32, 0u32, 7u32] { held = held + 1 }
+  if wordsAt(&Permission.request(Permission.LocationAlways).toArray(), 0, 2) == [52u32, 5u32] { held = held + 1 }
+  let opened = Permission.settings().toArray()
+  if opened.length() == 4 && wordsAt(&opened, 0, 1) == [53u32] { held = held + 1 }
+
+  // Every kind's code reads back as the kind; codes no host writes read as nothing.
+  var round = true
+  for kind in EVERY {
+    round = round && Permission.kindOf(Permission.kindCode(kind)) == Some(kind)
+  }
+  if round && Permission.kindOf(11u32) == None { held = held + 1 }
+  if Permission.stateOf(6u32) == Some(Permission.Unavailable) && Permission.stateOf(7u32) == None { held = held + 1 }
+  if Permission.key(Permission.PhotosAdd) == "photos-add" && Permission.key(Permission.LocationAlways) == "location-always" { held = held + 1 }
+
+  // The table holds the latest report per kind.
+  let table = Permission.recorded(Permission.recorded(Permission.table(), Permission.Camera, Permission.Denied), Permission.Camera, Permission.Granted)
+  if Permission.status(&table, Permission.Camera) == Some(Permission.Granted) && Permission.status(&table, Permission.Motion) == None { held = held + 1 }
+  if Permission.allows(Permission.Limited) && Permission.allows(Permission.Provisional) && !Permission.allows(Permission.Denied) && !Permission.allows(Permission.Blocked) { held = held + 1 }
+
+  // PERMISSIONED carries the kind as its tag and the state as its detail.
+  if Events.carriesDetail(28u64 << 32) && Events.eventWithDetail(28u64 << 32, "", 1u32) == View.Permissioned(Permission.Camera, Permission.Granted) { held = held + 1 }
+  if Events.eventWithDetail((28u64 << 32) | 11u64, "", 1u32) == View.Stopped && Events.eventWithDetail(28u64 << 32, "", 9u32) == View.Stopped { held = held + 1 }
+  held
+}

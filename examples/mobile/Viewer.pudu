@@ -1,0 +1,54 @@
+module Viewer
+
+import Std.Mobile.Control as Control
+import Std.Mobile.Host as Host
+import Std.Mobile.Media as Media
+import Std.Mobile.System as System
+import Std.Mobile.View as View
+
+/// The tags of the page, the video, the chime and the button.
+const PAGE: UInt32 = 1u32
+const CLIP: UInt32 = 2u32
+const CHIME: UInt32 = 3u32
+const DONE: UInt32 = 4u32
+
+/// Whether the page loaded, how many times back was used, and how many sounds ended.
+type Model = { loaded: Str, backs: Int, ended: Int }
+
+fn view(model: &Model) -> View.View {
+  View.Column([
+      View.Control(Control.Web("about:blank", PAGE)),
+      View.Label("Loaded: {model.loaded}"),
+      View.Control(Control.Video("clip.mp4", true, true, CLIP)),
+      View.Field("Notes", "", 5u32),
+      View.Button("Done", DONE),
+      View.Label("Backs: {model.backs}"),
+      View.Label("Sounds ended: {model.ended}")
+    ])
+}
+
+/// Shows a page above a looping video, plays a chime once, takes the back
+/// gesture as its own, and dismisses the keyboard when Done is tapped.
+fn main() -> Int {
+  var model = Model{loaded: "pending", backs: 0, ended: 0}
+  let (first, built) = View.mount(&view(&model))
+  var mounted = first
+  Host.apply(built)
+  Host.apply(Media.play(CHIME, "chime.m4a", false))
+  Host.apply(System.handleBack(true))
+  while true {
+    let event = Host.wait()
+    match event {
+      case View.Stopped => { return 0 }
+      case View.Loaded(tag, loaded) if tag == PAGE => { model = Model{..model, loaded: "{loaded}"} }
+      case View.Ended(tag) if tag == CHIME => { model = Model{..model, ended: model.ended + 1} }
+      case View.Backed => { model = Model{..model, backs: model.backs + 1} }
+      case View.Tapped(tag) if tag == DONE => { Host.apply(System.dismissKeyboard()) }
+      case _ => {}
+    }
+    let (next, changes) = View.update(&mounted, &view(&model))
+    Host.apply(changes)
+    mounted = next
+  }
+  0
+}

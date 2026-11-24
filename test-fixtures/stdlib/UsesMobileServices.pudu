@@ -1,0 +1,60 @@
+module UsesMobileServices
+
+import Std.ByteOrder {readU32LE}
+import Std.Mobile.Auth as Auth
+import Std.Mobile.Device as Device
+import Std.Mobile.Events as Events
+import Std.Mobile.Media as Media
+import Std.Mobile.Notify as Notify
+import Std.Mobile.View as View
+
+// The words at `offset` onward, read as little-endian 32-bit values.
+fn wordsAt(bytes: &Array[UInt8], offset: Int, count: Int) -> Array[UInt32] {
+  var found = []
+  for index in 0..count {
+    match readU32LE(bytes, offset + index * 4) {
+      case Some(word) => { found = found.push(word) }
+      case None => { return [] }
+    }
+  }
+  found
+}
+
+// The event a host would send: its kind above, its tag below.
+fn raw(kind: UInt64, tag: UInt64) -> UInt64 { (kind << 32) | tag }
+
+export fn main() -> Int {
+  var held = 0
+
+  // Each instruction's words; text fields are a byte count, then the UTF-8 bytes.
+  let notified = Notify.schedule(4u32, 60, "T", "Bo").toArray()
+  if notified.length() == 23 && wordsAt(&notified, 0, 4) == [63u32, 4u32, 60u32, 1u32] && wordsAt(&notified, 17, 1) == [2u32] { held = held + 1 }
+  let soon = Notify.schedule(4u32, -5, "", "").toArray()
+  if wordsAt(&Notify.cancel(4u32).toArray(), 0, 2) == [64u32, 4u32] && wordsAt(&soon, 0, 3) == [63u32, 4u32, 0u32] { held = held + 1 }
+  let asked = Auth.authenticate(2u32, "Unlock").toArray()
+  if asked.length() == 18 && wordsAt(&asked, 0, 3) == [65u32, 2u32, 6u32] { held = held + 1 }
+  let browsed = Media.browse(3u32, "https://a").toArray()
+  if browsed.length() == 21 && wordsAt(&browsed, 0, 3) == [66u32, 3u32, 9u32] { held = held + 1 }
+  let spoken = Media.speak(5u32, "hi", "", 120).toArray()
+  if spoken.length() == 22 && wordsAt(&spoken, 0, 4) == [67u32, 5u32, 120u32, 0u32] && wordsAt(&spoken, 16, 1) == [2u32] { held = held + 1 }
+  if wordsAt(&Media.hush().toArray(), 0, 1) == [68u32] && Media.hush().toArray().length() == 4 { held = held + 1 }
+  if wordsAt(&Device.battery(6u32).toArray(), 0, 2) == [69u32, 6u32] { held = held + 1 }
+  if wordsAt(&Device.brightness(150).toArray(), 0, 2) == [70u32, 100u32] && wordsAt(&Device.brightness(-1).toArray(), 0, 2) == [70u32, 0u32] { held = held + 1 }
+  if wordsAt(&Device.orientation(Device.Landscape).toArray(), 0, 2) == [71u32, 2u32] { held = held + 1 }
+  if wordsAt(&Device.sense(true, 50).toArray(), 0, 3) == [72u32, 1u32, 50u32] { held = held + 1 }
+  if wordsAt(&Media.pickImage(7u32).toArray(), 0, 2) == [73u32, 7u32] { held = held + 1 }
+
+  // Each event's decoding; shapes no host writes read as Stopped.
+  if Events.event(raw(35u64, 4u64), "") == View.Notified(4u32) { held = held + 1 }
+  if Events.eventWithDetail(raw(36u64, 2u64), "", 1u32) == View.Authenticated(2u32, true) && Events.eventWithDetail(raw(36u64, 2u64), "", 0u32) == View.Authenticated(2u32, false) { held = held + 1 }
+  if Events.event(raw(37u64, 3u64), "") == View.Browsed(3u32) { held = held + 1 }
+  if Events.eventWithDetail(raw(38u64, 5u64), "", 1u32) == View.Spoke(5u32, true) && Events.eventWithDetail(raw(38u64, 5u64), "", 2u32) == View.Stopped { held = held + 1 }
+  if Events.eventWithWords(raw(39u64, 6u64), "", 2u32, [80i32]) == View.Powered(6u32, Device.Power{level: 80, charge: Device.Charging})
+    && Events.eventWithWords(raw(39u64, 6u64), "", 9u32, [80i32]) == View.Stopped { held = held + 1 }
+  if Events.eventWithWords(raw(40u64, 0u64), "", 0u32, [10i32, -20i32, -1000i32]) == View.Sensed(Device.Motion{x: 10, y: -20, z: -1000})
+    && Events.eventWithWords(raw(40u64, 0u64), "", 0u32, [10i32]) == View.Stopped { held = held + 1 }
+  if Events.eventWithDetail(raw(41u64, 7u64), "/tmp/a.jpg", 1u32) == View.ImagePicked(7u32, Some("/tmp/a.jpg"))
+    && Events.eventWithDetail(raw(41u64, 7u64), "", 0u32) == View.ImagePicked(7u32, None)
+    && Events.eventWithDetail(raw(41u64, 7u64), "", 1u32) == View.Stopped { held = held + 1 }
+  held
+}

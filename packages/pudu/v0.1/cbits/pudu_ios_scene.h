@@ -30,6 +30,9 @@ static BOOL pudu_status_hidden = NO;
 @property (copy, nonatomic) NSArray<NSNumber *> *reported;
 @property (copy, nonatomic) NSArray<NSNumber *> *inset;
 @end
+/* The orientations the root controller allows; ORIENTATION narrows it. */
+static UIInterfaceOrientationMask pudu_orientation_mask = UIInterfaceOrientationMaskAll;
+
 @implementation PuduRootController
 - (void)viewDidLayoutSubviews {
   [super viewDidLayoutSubviews];
@@ -51,6 +54,7 @@ static BOOL pudu_status_hidden = NO;
   pudu_queue_words(PUDU_UI_RESIZED, 0, nil, 0, words);
 }
 - (UIStatusBarStyle)preferredStatusBarStyle { return pudu_status_style; }
+- (UIInterfaceOrientationMask)supportedInterfaceOrientations { return pudu_orientation_mask; }
 - (BOOL)prefersStatusBarHidden { return pudu_status_hidden; }
 - (UIViewController *)childViewControllerForStatusBarStyle { return nil; }
 - (UIViewController *)childViewControllerForStatusBarHidden { return nil; }

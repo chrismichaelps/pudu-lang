@@ -1,6 +1,8 @@
 {-| @Core.TextMethod — closed text method operations shared by lowering and emission. -}
 module Pudu.Core.TextMethod (CoreTextMethodName (..)) where
 
+import Data.Data (Data)
+
 {-| The Str methods native implements, named as the evaluator names them. -}
 data CoreTextMethodName
   = TextLength
@@ -41,4 +43,4 @@ data CoreTextMethodName
   | TextByteFindLast
   | TextScalarRead
   | TextScalarWidth
-  deriving stock (Eq, Show)
+  deriving stock (Data, Eq, Show)

@@ -31,6 +31,12 @@ Exports:
 - `paste` answers with the clipboard's text. When the clipboard holds no text the answer is `Pasted(tag, "")`.
 - `statusBar` is a standing setting. It holds until a later commit sets it again.
 
+## Keyboard and back (#990)
+
+- `dismissKeyboard() -> Bytes`: KEYBOARD 77 with no words. It reports nothing.
+- `handleBack(on: Bool) -> Bytes`: BACK 78. With `on` true, the platform's back gesture or button answers BACKED instead of its own action. With `on` false, the gesture returns to the platform. It reports nothing. The answer arrives as `Backed` in [[Std Mobile Events]].
+- Both are standing commits, like `statusBar`. Neither writes a node.
+
 ## Invariants
 
 - Every request that reports an answer carries a tag, and the answer carries the same tag. A program matches an answer to its request by tag.
@@ -55,6 +61,21 @@ Depends on [[Std Mobile Stream]] for the OPEN, SHARE, COPY, PASTE and STATUS ins
 - **Q:** Why does an unreadable URL answer false at once? **A:** The platform's opener would answer asynchronously with the same refusal. Answering at once keeps the program's pending request from waiting on a call that cannot succeed.
 - **Q:** Why is the status bar a commit and not part of a screen? **A:** The status bar belongs to the scene, not to any one screen. A setting carried by a screen would reset whenever the screen changed.
 
-## Referenced by
+## Pickers and system touches (#991)
 
+- `badge(count: Int)`: BADGE 83. A negative count is written as 0, which clears the badge. Ignored on Android.
+- `secure(on: Bool)`: SECURE 84. Blocks screenshots and recordings on Android; ignored on iOS.
+- `toast(text: Str)`: TOAST 85. Shows the text briefly over the content; reports nothing.
+
+Hosts: [[pudu-ios-pick]] and [[PuduPick]].
+
+## System sheets (#994)
+
+- `shareFile(tag: UInt32, path: Str)`: SHARE_FILE 86. Shows the share sheet with the file at `path`; answered by SHARED (26). Android shares only files under the cache directory, see [[PuduFiles]].
+- `requestReview()`: REVIEW 87. Asks the platform to show its rating prompt. The platform may decline to show it and never reports; Android ignores it.
+
+Hosts for the sheets: [[pudu-ios-compose]] and [[PuduCompose]].
+
+## Referenced by
+ · [[Viewer Example]]
 [[src/Std/_MOC]] · [[Std Mobile View]] · [[Std Mobile Stream]] · [[Std Mobile Events]] · [[Std Mobile Feedback]] · [[NATIVE-MOBILE]]

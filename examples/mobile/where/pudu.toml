@@ -1,0 +1,3 @@
+# The permission this example asks for, with the reason the person reads.
+[app.permissions]
+location = "Shows where you are on the screen."

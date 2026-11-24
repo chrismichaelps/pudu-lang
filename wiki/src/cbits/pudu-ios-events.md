@@ -17,6 +17,8 @@ The header provides `pudu_queue(kind, tag, text, detail)`, which appends an even
 ## Behavior
 
 - Each queued event holds its 64-bit value (kind in the high 32 bits, tag in the low 32 bits), the text it carries, its detail word, and its word channel. An event without text, detail or words stores an empty text, zero, and no words.
+- DESCRIBED (32) and NETWORKED (33) are queued by [[pudu-ios-device]]. DESCRIBED carries its five text lines and the text scale as its detail word; NETWORKED carries the link code as its detail word (#983).
+- LOCATED (34) is queued by [[pudu-ios-location]]. Its tag is the LOCATE's tag, or 0 for a TRACK report. Its detail word is 1 with four words for a position, or 0 with no words when no position is available (#986).
 - `pudu_ui_wait` runs the main run loop in the default mode until an event is queued, then hands out the oldest.
 - `pudu_ui_event_text` and `pudu_ui_event_detail` return the text and detail of the last event handed out. Both stay valid until the next wait.
 - Events are handed out in the order the controls queued them.
@@ -51,6 +53,18 @@ queues the stop. The host still delivers events in FIFO order.
 ## Resolved Grill Log
 
 - **Q:** Why a separate header? **A:** The queue is its own responsibility, and the host file must stay within its line budget as list support is added.
+
+## Services (#989)
+
+Events 35 to 41 (NOTIFIED, AUTHENTICATED, BROWSED, SPOKE, POWERED, SENSED and IMAGE_PICKED) are queued through the event channel. IMAGE_PICKED carries its file path on the text channel, as CHANGED and PASTED do. The decoders are in [[Std Mobile Events]].
+
+## Pickers and system touches (#991)
+
+CONTACT_PICKED (45) and FILED (46) are queued by [[pudu-ios-pick]] through [[iOS Host Events]].
+
+## System sheets (#994)
+
+COMPLETED (47) is queued by [[pudu-ios-compose]] through [[iOS Host Events]]. SHARED (26) for the share sheet is queued by [[pudu-ios-system]].
 
 ## Referenced by
 

@@ -1,19 +1,25 @@
 <?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
-    package="org.pudu.PUDU_PACKAGE"
-    android:versionCode="1"
-    android:versionName="1.0">
+    package="PUDU_PACKAGE"
+    android:versionCode="PUDU_BUILD"
+    android:versionName="PUDU_VERSION">
   <uses-sdk android:minSdkVersion="24" android:targetSdkVersion="37" />
   <uses-permission android:name="android.permission.INTERNET" />
+  <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+  <uses-permission android:name="android.permission.USE_BIOMETRIC" />
   <application android:label="PUDU_LABEL" android:hasCode="true" android:extractNativeLibs="false">
     <activity android:name="org.pudu.PuduActivity"
         android:exported="true"
+        android:launchMode="singleTask"
         android:windowSoftInputMode="adjustResize"
         android:configChanges="orientation|screenSize|screenLayout|smallestScreenSize|uiMode|density|fontScale|keyboardHidden">
       <intent-filter>
         <action android:name="android.intent.action.MAIN" />
         <category android:name="android.intent.category.LAUNCHER" />
       </intent-filter>
-    </activity>
+PUDU_LINKS    </activity>
+    <receiver android:name="org.pudu.PuduAlarm" android:exported="false" />
+    <provider android:name="org.pudu.PuduFiles" android:authorities="PUDU_PACKAGE.files"
+        android:exported="false" android:grantUriPermissions="true" />
   </application>
 </manifest>

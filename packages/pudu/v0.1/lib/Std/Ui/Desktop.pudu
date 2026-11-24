@@ -1,6 +1,6 @@
 module Std.Ui.Desktop
 
-import Std.Num {Integer}
+import Std.Num {Integer, parseInt}
 import Std.Ui.Accessible as Accessible
 import Std.Ui.Canvas as Canvas
 import Std.Ui.Gesture as Gesture
@@ -370,26 +370,13 @@ fn numbersOf(fields: &Array[Str]) -> Array[Int] {
   var found = []
   var index = 1
   while index < fields.length() {
-    match integer(fields[index]) {
+    match parseInt(fields[index]) {
       case Some(value) => { found = found.push(value) }
       case None => { return [] }
     }
     index = index + 1
   }
   found
-}
-
-fn integer(text: Str) -> Option[Int] {
-  let negative = text.startsWith("-")
-  let digits = if negative { text.drop(1) } else { text }
-  if digits.length() == 0 || digits.length() > 9 { return None }
-  var total = 0
-  for symbol in digits {
-    let code = symbol.code()
-    if code < 48 || code > 57 { return None }
-    total = total * 10 + code - 48
-  }
-  Some(if negative { 0 - total } else { total })
 }
 
 fn shown[S](target: &Session, screen: &Screen.Screen[S]) -> Result[(), DriveError] {

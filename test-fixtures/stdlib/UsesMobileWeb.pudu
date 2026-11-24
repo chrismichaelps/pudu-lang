@@ -1,0 +1,54 @@
+module UsesMobileWeb
+
+import Std.ByteOrder {readU32LE}
+import Std.Mobile.Control as Control
+import Std.Mobile.Events as Events
+import Std.Mobile.Media as Media
+import Std.Mobile.System as System
+import Std.Mobile.View as View
+
+// The words at `offset` onward, read as little-endian 32-bit values.
+fn wordsAt(bytes: &Array[UInt8], offset: Int, count: Int) -> Array[UInt32] {
+  var found = []
+  for index in 0..count {
+    match readU32LE(bytes, offset + index * 4) {
+      case Some(word) => { found = found.push(word) }
+      case None => { return [] }
+    }
+  }
+  found
+}
+
+// The event a host would send: its kind above, its tag below.
+fn raw(kind: UInt64, tag: UInt64) -> UInt64 { (kind << 32) | tag }
+
+export fn main() -> Int {
+  var held = 0
+  let page = Control.Web("u", 9u32)
+  let video = Control.Video("v", true, false, 8u32)
+
+  // A web page is created, tagged and loaded; a video is created, tagged and given its media.
+  let built = Control.built([], 0u32, &page)
+  if built.length() == 37 && wordsAt(&built, 0, 3) == [1u32, 0u32, 23u32] && wordsAt(&built, 12, 3) == [5u32, 0u32, 9u32] && wordsAt(&built, 24, 3) == [74u32, 0u32, 1u32] { held = held + 1 }
+  let shown = Control.built([], 0u32, &video)
+  if wordsAt(&shown, 0, 3) == [1u32, 0u32, 24u32] && wordsAt(&shown, 24, 5) == [75u32, 0u32, 1u32, 0u32, 1u32] { held = held + 1 }
+
+  // An unchanged page writes nothing, a new URL loads again, and a new tag replaces the node.
+  if Control.changed([], 0u32, &page, &page) == Some([]) { held = held + 1 }
+  match Control.changed([], 0u32, &page, &Control.Web("w", 9u32)) {
+    case Some(words) if wordsAt(&words, 0, 3) == [74u32, 0u32, 1u32] => { held = held + 1 }
+    case _ => {}
+  }
+  if Control.changed([], 0u32, &page, &Control.Web("u", 7u32)) == None { held = held + 1 }
+
+  // Sounds, keyboard dismissal and back handling are requests.
+  let played = Media.play(3u32, "s", true).toArray()
+  if played.length() == 21 && wordsAt(&played, 0, 5) == [76u32, 3u32, 1u32, 1u32, 1u32] && wordsAt(&Media.stop(3u32).toArray(), 0, 5) == [76u32, 3u32, 0u32, 0u32, 0u32] { held = held + 1 }
+  if wordsAt(&System.dismissKeyboard().toArray(), 0, 1) == [77u32] && wordsAt(&System.handleBack(true).toArray(), 0, 2) == [78u32, 1u32] { held = held + 1 }
+
+  // LOADED carries whether the page loaded; ENDED and BACKED carry nothing; other shapes are refused.
+  if Events.eventWithDetail(raw(42u64, 9u64), "", 1u32) == View.Loaded(9u32, true) && Events.eventWithDetail(raw(42u64, 9u64), "", 3u32) == View.Stopped { held = held + 1 }
+  if Events.event(raw(43u64, 8u64), "") == View.Ended(8u32) { held = held + 1 }
+  if Events.event(raw(44u64, 0u64), "") == View.Backed { held = held + 1 }
+  held
+}

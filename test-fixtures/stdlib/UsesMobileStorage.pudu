@@ -1,0 +1,36 @@
+module UsesMobileStorage
+
+import Std.ByteOrder {readU32LE}
+import Std.Mobile.Events as Events
+import Std.Mobile.Storage as Storage
+import Std.Mobile.View as View
+
+// The words at `offset` onward, read as little-endian 32-bit values.
+fn wordsAt(bytes: &Array[UInt8], offset: Int, count: Int) -> Array[UInt32] {
+  var found = []
+  for index in 0..count {
+    match readU32LE(bytes, offset + index * 4) {
+      case Some(word) => { found = found.push(word) }
+      case None => { return [] }
+    }
+  }
+  found
+}
+
+export fn main() -> Int {
+  var held = 0
+
+  // STORE_READ carries the tag, the place and the key; STORE_WRITE the place, key and value; STORE_REMOVE the place and key.
+  let read = Storage.read(4u32, Storage.Secure, "k").toArray()
+  if read.length() == 17 && wordsAt(&read, 0, 4) == [55u32, 4u32, 1u32, 1u32] && read[16] == 107u8 { held = held + 1 }
+  let written = Storage.write(Storage.Plain, "k", "vv").toArray()
+  if written.length() == 19 && wordsAt(&written, 0, 3) == [56u32, 0u32, 1u32] && wordsAt(&written, 13, 1) == [2u32] { held = held + 1 }
+  let removed = Storage.remove(Storage.Secure, "k").toArray()
+  if removed.length() == 13 && wordsAt(&removed, 0, 3) == [57u32, 1u32, 1u32] { held = held + 1 }
+
+  // STORED carries the value as text with 1, or 0 when nothing is kept; any other word is never written.
+  if Events.carriesText(31u64 << 32) && Events.carriesDetail(31u64 << 32) && Events.eventWithDetail((31u64 << 32) | 4u64, "x", 1u32) == View.Stored(4u32, Some("x")) { held = held + 1 }
+  if Events.eventWithDetail((31u64 << 32) | 4u64, "", 0u32) == View.Stored(4u32, None) { held = held + 1 }
+  if Events.eventWithDetail((31u64 << 32) | 4u64, "x", 2u32) == View.Stopped && Storage.placeCode(Storage.Secure) == 1u32 { held = held + 1 }
+  held
+}

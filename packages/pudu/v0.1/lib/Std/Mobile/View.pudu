@@ -2,22 +2,23 @@ module Std.Mobile.View
 
 import Std.Mobile.Access as Access
 import Std.Mobile.Control as Controls
+import Std.Mobile.Device as Device
 import Std.Mobile.Feedback as Feedback
 import Std.Mobile.Gesture as Gesture
+import Std.Mobile.Location as Location
+import Std.Mobile.Permission as Permission
+import Std.Mobile.Pick as Pick
 import Std.Mobile.Scene as Scene
 import Std.Mobile.Stream as Stream
 import Std.Mobile.Theme as Theme
 
-/// One platform control and what it shows. `Named` gives the control it
-/// wraps an accessible name and adds no node. `Keyed` is a column whose rows
-/// carry keys, so rows are matched by key rather than by position.
-/// `Styled` and `Painted` set the text style or color role of the control
-/// they wrap and add no node either. `Refreshing` gives the scroll or list it
-/// wraps pull to refresh: the tag a pull reports and whether the program is
-/// refreshing, which the platform indicator follows. `Memo` renders its view
-/// only when it is built or its key changes; an unchanged key reuses what is
-/// shown with no render, comparison or instruction. Std.Mobile.Memo builds it.
-/// `Control` is a value control, which Std.Mobile.Control writes and updates.
+/// One platform control and what it shows. `Named`, `Styled` and `Painted`
+/// give the control they wrap an accessible name, a text style or a color
+/// role, and add no node. `Keyed` is a column whose rows match by key, not
+/// position. `Refreshing` gives a scroll or list pull to refresh: the tag a
+/// pull reports and whether the program is refreshing. `Memo` renders only
+/// when built or when its key changes (Std.Mobile.Memo builds it). `Control`
+/// is a value control, which Std.Mobile.Control writes and updates.
 export type View
   = Label(Str)
   | Button(Str, UInt32)
@@ -48,19 +49,7 @@ export type View
 /// have no row.
 export type Window = { tag: UInt32, total: UInt32, first: UInt32, columns: UInt32, rows: Array[(Str, View)] }
 
-/// What the platform reported: a button's tag was tapped, a field's text
-/// changed, a toggle was switched, a list's visible range neared the edge of
-/// its window (its tag and first visible item), the user popped the
-/// navigation from a top route to a destination route below it, the user
-/// dismissed a sheet, the user pulled a refresh control with a tag, the
-/// screen's safe-area insets changed, a request generation answered (its
-/// status, body and Retry-After delay), a requested wake time arrived, the
-/// platform ran short of memory, a value control's value, index or page was
-/// set by the person, a color well's color or a date picker's moment was
-/// chosen, an image's source loaded or failed, a URL was opened or not, the
-/// share sheet closed, the clipboard's text arrived, or the host asked the
-/// program to stop. Std.Mobile.Events decodes
-/// them from the host's words.
+/// What the platform reported; each payload is described in Std.Mobile.Events.
 export type Event
   = Tapped(UInt32)
   | Changed(UInt32, Str)
@@ -85,14 +74,33 @@ export type Event
   | Opened(UInt32, Bool)
   | Shared(UInt32, Bool)
   | Pasted(UInt32, Str)
+  | Permissioned(Permission.Kind, Permission.State)
+  | Selected(UInt32)
+  | Linked(Str)
+  | Stored(UInt32, Option[Str])
+  | Described(UInt32, Device.Facts)
+  | Networked(Device.Link)
+  | Located(UInt32, Option[Location.Position])
+  | Notified(UInt32)
+  | Authenticated(UInt32, Bool)
+  | Browsed(UInt32)
+  | Spoke(UInt32, Bool)
+  | Powered(UInt32, Device.Power)
+  | Sensed(Device.Motion)
+  | ImagePicked(UInt32, Option[Str])
+  | Loaded(UInt32, Bool)
+  | Ended(UInt32)
+  | Backed
+  | ContactPicked(UInt32, Option[Pick.Contact])
+  | Filed(UInt32, Option[Str])
+  | Completed(UInt32, Bool)
   | Stopped
 
 /// A node the platform shows: its id, the view it shows, and the nodes of
 /// its children in order.
 export type Shown = { id: UInt32, view: View, children: Array[Shown] }
 
-/// The tree the platform shows, the next id never handed out, and the ids of
-/// removed nodes, handed out again first.
+/// The tree shown, the next fresh id, and removed ids, which are reused first.
 export type Mounted = { root: Shown, next: UInt32, free: Array[UInt32] }
 
 /// What one update did: the nodes it compared, the memos it rendered, and
@@ -104,15 +112,6 @@ type Work = { next: UInt32, free: Array[UInt32], out: Array[UInt8], compared: In
 
 // A node updated in place, or a node its parent must replace.
 type Outcome = Kept(Work, Shown) | Replaced
-
-/// The first item of a window of `size` items that places `visible` a
-/// quarter of the window from its start, clamped to the end of the list.
-export fn windowStart(visible: UInt32, total: UInt32, size: UInt32) -> UInt32 {
-  let lead = size / 4u32
-  let start = if visible > lead { visible - lead } else { 0u32 }
-  let last = if total > size { total - size } else { 0u32 }
-  if start > last { last } else { start }
-}
 
 /// The tree for `view`, and the stream that builds it and shows it.
 export fn mount(view: &View) -> (Mounted, Bytes) {

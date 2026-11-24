@@ -26,9 +26,18 @@
 #include "pudu_ios_nodes.h"
 #include "pudu_ios_kinds.h"
 #include "pudu_ios_navigation.h"
+#include "pudu_ios_tabs.h"
 #include "pudu_ios_refresh.h"
 #include "pudu_ios_fetch.h"
 #include "pudu_ios_system.h"
+#include "pudu_ios_permission.h"
+#include "pudu_ios_storage.h"
+#include "pudu_ios_device.h"
+#include "pudu_ios_location.h"
+#include "pudu_ios_notify.h"
+#include "pudu_ios_media.h"
+#include "pudu_ios_pick.h"
+#include "pudu_ios_compose.h"
 #include "pudu_ios_capability_test.h"
 
 /* Each node's color role from COLOR, or PUDU_ROLE_DEFAULT. */
@@ -297,9 +306,18 @@ static void pudu_do_animate(pudu_reader *reader) {
 /* NAVIGATE: read and checked whole, then shown over the screen in place of a ROOT. */
 static void pudu_do_navigate(pudu_reader *reader) {
   NSDictionary *desired = pudu_navigation_read(reader);
+  pudu_tabs_close();
   [pudu_shown_root removeFromSuperview];
   pudu_shown_root = nil;
   pudu_navigation_show(pudu_surface.window.rootViewController, desired);
+}
+
+/* TABS: read and checked whole, then shown over the screen in place of a ROOT or NAVIGATE. */
+static void pudu_do_tabs(pudu_reader *reader) {
+  NSDictionary *desired = pudu_tabs_read(reader);
+  [pudu_shown_root removeFromSuperview];
+  pudu_shown_root = nil;
+  pudu_tabs_show(pudu_surface.window.rootViewController, desired);
 }
 
 static void (*const pudu_instruction_table[PUDU_UI_INSTRUCTIONS])(pudu_reader *) = {
@@ -317,7 +335,22 @@ static void (*const pudu_instruction_table[PUDU_UI_INSTRUCTIONS])(pudu_reader *)
   [PUDU_UI_WAKE] = pudu_do_wake, [PUDU_UI_BOUNDS] = pudu_do_bounds, [PUDU_UI_OPTIONS] = pudu_do_options,
   [PUDU_UI_COUNT] = pudu_do_count, [PUDU_UI_MOMENT] = pudu_do_moment, [PUDU_UI_SOURCE] = pudu_do_source,
   [PUDU_UI_OPEN] = pudu_do_open, [PUDU_UI_SHARE] = pudu_do_share, [PUDU_UI_COPY] = pudu_do_copy, [PUDU_UI_PASTE] = pudu_do_paste,
-  [PUDU_UI_STATUS] = pudu_do_status,
+  [PUDU_UI_STATUS] = pudu_do_status, [PUDU_UI_PERMISSIONS] = pudu_do_permissions, [PUDU_UI_PERMISSION] = pudu_do_permission,
+  [PUDU_UI_SETTINGS] = pudu_do_settings, [PUDU_UI_TABS] = pudu_do_tabs,
+  [PUDU_UI_STORE_READ] = pudu_do_store_read, [PUDU_UI_STORE_WRITE] = pudu_do_store_write, [PUDU_UI_STORE_REMOVE] = pudu_do_store_remove,
+  [PUDU_UI_DEVICE] = pudu_do_device, [PUDU_UI_NETWORK] = pudu_do_network, [PUDU_UI_AWAKE] = pudu_do_awake,
+  [PUDU_UI_LOCATE] = pudu_do_locate, [PUDU_UI_TRACK] = pudu_do_track,
+  [PUDU_UI_NOTIFY] = pudu_do_notify, [PUDU_UI_UNNOTIFY] = pudu_do_unnotify, [PUDU_UI_AUTHENTICATE] = pudu_do_authenticate,
+  [PUDU_UI_BROWSE] = pudu_do_browse, [PUDU_UI_SPEAK] = pudu_do_speak, [PUDU_UI_HUSH] = pudu_do_hush,
+  [PUDU_UI_BATTERY] = pudu_do_battery, [PUDU_UI_BRIGHTNESS] = pudu_do_brightness, [PUDU_UI_ORIENTATION] = pudu_do_orientation,
+  [PUDU_UI_SENSE] = pudu_do_sense, [PUDU_UI_PICK_IMAGE] = pudu_do_pick_image,
+  [PUDU_UI_LOAD] = pudu_do_load, [PUDU_UI_MEDIA] = pudu_do_media, [PUDU_UI_AUDIO] = pudu_do_audio,
+  [PUDU_UI_KEYBOARD] = pudu_do_keyboard, [PUDU_UI_BACK] = pudu_do_back,
+  [PUDU_UI_PICK_CONTACT] = pudu_do_pick_contact, [PUDU_UI_PICK_DOCUMENT] = pudu_do_pick_document,
+  [PUDU_UI_TAKE_PHOTO] = pudu_do_take_photo, [PUDU_UI_RECORD] = pudu_do_record, [PUDU_UI_BADGE] = pudu_do_badge,
+  [PUDU_UI_SECURE] = pudu_do_secure, [PUDU_UI_TOAST] = pudu_do_toast,
+  [PUDU_UI_SHARE_FILE] = pudu_do_share_file, [PUDU_UI_REVIEW] = pudu_do_review, [PUDU_UI_ADD_EVENT] = pudu_do_add_event,
+  [PUDU_UI_COMPOSE_MAIL] = pudu_do_compose_mail, [PUDU_UI_COMPOSE_MESSAGE] = pudu_do_compose_message,
 };
 
 /* Applies one commit: every instruction in order, in one call. */
@@ -350,6 +383,33 @@ static void pudu_report(UIView *view) {
   }
 }
 
+/* The self-tests an environment variable selects, the first set one winning;
+   each calls `done` once the program may stop. */
+typedef struct {
+  const char *variable;
+  void (*run)(void (^done)(void));
+} pudu_self_test;
+static void pudu_run_capabilities(void (^done)(void)) { pudu_test_capabilities(pudu_nodes, done); }
+static void pudu_run_images(void (^done)(void)) { pudu_test_images([pudu_nodes copy], done); }
+static void pudu_run_controls(void (^done)(void)) { pudu_test_controls([pudu_nodes copy], [pudu_kinds copy], done); }
+static void pudu_run_fetch(void (^done)(void)) { pudu_test_fetch(pudu_surface, done); }
+static void pudu_run_refresh(void (^done)(void)) { pudu_test_refresh(pudu_surface, done); }
+static void pudu_run_material(void (^done)(void)) { pudu_test_material(pudu_nodes, done); }
+static void pudu_run_list(void (^done)(void)) { pudu_test_list(pudu_nodes, done); }
+static void pudu_run_theme(void (^done)(void)) { pudu_test_theme(pudu_surface, pudu_nodes, done); }
+static void pudu_run_keyboard(void (^done)(void)) { pudu_test_keyboard(pudu_surface, pudu_shown_root, pudu_nodes, done); }
+static const pudu_self_test pudu_self_tests[] = {
+  { "PUDU_UI_CAPABILITY_TEST", pudu_run_capabilities }, { "PUDU_UI_LINK_TEST", pudu_test_link },
+  { "PUDU_UI_TABS_TEST", pudu_test_tabs }, { "PUDU_UI_PERMISSION_TEST", pudu_test_permissions },
+  { "PUDU_UI_SYSTEM_TEST", pudu_test_system }, { "PUDU_UI_IMAGE_TEST", pudu_run_images },
+  { "PUDU_UI_CONTROLS_TEST", pudu_run_controls }, { "PUDU_UI_NAVIGATION_TEST", pudu_test_navigation },
+  { "PUDU_UI_FETCH_TEST", pudu_run_fetch }, { "PUDU_UI_REFRESH_TEST", pudu_run_refresh },
+  { "PUDU_UI_MATERIAL_TEST", pudu_run_material }, { "PUDU_UI_LIST_TEST", pudu_run_list },
+  { "PUDU_UI_THEME_TEST", pudu_run_theme }, { "PUDU_UI_KEYBOARD_TEST", pudu_run_keyboard },
+  { "PUDU_UI_LOCATION_TEST", pudu_test_location }, { "PUDU_UI_SERVICES_TEST", pudu_test_services },
+  { "PUDU_UI_WEB_TEST", pudu_test_web }, { "PUDU_UI_DEVICE_TEST", pudu_test_device },
+};
+
 @interface PuduAppDelegate : UIResponder <UIApplicationDelegate>
 @property (strong, nonatomic) UIWindow *window;
 @end
@@ -367,7 +427,11 @@ static void pudu_report(UIView *view) {
   pudu_alert_presenter = controller;
   pudu_observe_lifecycle();
   pudu_observe_memory();
+  pudu_notify_launch();
   pudu_target = [PuduTarget new];
+  /* Line-buffered output: a report reaches the console as soon as it is
+     written, so a reader waiting on a line never waits on the buffer. */
+  setvbuf(stdout, NULL, _IOLBF, 0);
   self.window = [[UIWindow alloc] initWithFrame:UIScreen.mainScreen.bounds];
   self.window.rootViewController = controller;
   [self.window makeKeyAndVisible];
@@ -376,13 +440,24 @@ static void pudu_report(UIView *view) {
      main queue does not drain while one of its blocks is running. */
   [self performSelector:@selector(run) withObject:nil afterDelay:0];
   if (getenv("PUDU_UI_SELFTEST") != NULL) [self performSelector:@selector(selfTest) withObject:nil afterDelay:0.5];
+  /* The link that launched the application, if one did, is its first report. */
+  NSURL *launched = options[UIApplicationLaunchOptionsURLKey];
+  if (launched != nil) pudu_queue(PUDU_UI_LINKED, 0, launched.absoluteString, 0);
+  return YES;
+}
+/* A link opened while the application runs. */
+- (BOOL)application:(UIApplication *)application openURL:(NSURL *)url options:(NSDictionary *)options {
+  (void)application;
+  (void)options;
+  pudu_queue(PUDU_UI_LINKED, 0, url.absoluteString, 0);
   return YES;
 }
 - (void)run {
   int status = pudu_program_run(0, NULL);
   printf("PUDU_PROGRAM_STATUS %d\n", status);
+  fflush(stdout);
   if (getenv("PUDU_UI_SELFTEST") != NULL) {
-    pudu_report(pudu_navigator != nil ? pudu_navigation_top() : pudu_shown_root);
+    pudu_report(pudu_tabs != nil ? pudu_tabs_top() : pudu_navigator != nil ? pudu_navigation_top() : pudu_shown_root);
     if (getenv("PUDU_UI_CAPABILITY_TEST") != NULL) pudu_report_capabilities(pudu_nodes);
     fflush(stdout);
     exit(status);
@@ -392,48 +467,9 @@ static void pudu_report(UIView *view) {
    is set, taps every button as many times as PUDU_UI_SELFTEST says, then asks
    the program to stop, exactly as a user's input would arrive. */
 - (void)selfTest {
-  if (getenv("PUDU_UI_CAPABILITY_TEST") != NULL) {
-    pudu_test_capabilities(pudu_nodes, ^{ pudu_queue(PUDU_UI_STOPPED, 0, nil, 0); });
-    return;
-  }
-  if (getenv("PUDU_UI_SYSTEM_TEST") != NULL) {
-    pudu_test_system(^{ pudu_queue(PUDU_UI_STOPPED, 0, nil, 0); });
-    return;
-  }
-  if (getenv("PUDU_UI_IMAGE_TEST") != NULL) {
-    pudu_test_images([pudu_nodes copy], ^{ pudu_queue(PUDU_UI_STOPPED, 0, nil, 0); });
-    return;
-  }
-  if (getenv("PUDU_UI_CONTROLS_TEST") != NULL) {
-    pudu_test_controls([pudu_nodes copy], [pudu_kinds copy], ^{ pudu_queue(PUDU_UI_STOPPED, 0, nil, 0); });
-    return;
-  }
-  if (getenv("PUDU_UI_NAVIGATION_TEST") != NULL) {
-    pudu_test_navigation(^{ pudu_queue(PUDU_UI_STOPPED, 0, nil, 0); });
-    return;
-  }
-  if (getenv("PUDU_UI_FETCH_TEST") != NULL) {
-    pudu_test_fetch(pudu_surface, ^{ pudu_queue(PUDU_UI_STOPPED, 0, nil, 0); });
-    return;
-  }
-  if (getenv("PUDU_UI_REFRESH_TEST") != NULL) {
-    pudu_test_refresh(pudu_surface, ^{ pudu_queue(PUDU_UI_STOPPED, 0, nil, 0); });
-    return;
-  }
-  if (getenv("PUDU_UI_MATERIAL_TEST") != NULL) {
-    pudu_test_material(pudu_nodes, ^{ pudu_queue(PUDU_UI_STOPPED, 0, nil, 0); });
-    return;
-  }
-  if (getenv("PUDU_UI_LIST_TEST") != NULL) {
-    pudu_test_list(pudu_nodes, ^{ pudu_queue(PUDU_UI_STOPPED, 0, nil, 0); });
-    return;
-  }
-  if (getenv("PUDU_UI_THEME_TEST") != NULL) {
-    pudu_test_theme(pudu_surface, pudu_nodes, ^{ pudu_queue(PUDU_UI_STOPPED, 0, nil, 0); });
-    return;
-  }
-  if (getenv("PUDU_UI_KEYBOARD_TEST") != NULL) {
-    pudu_test_keyboard(pudu_surface, pudu_shown_root, pudu_nodes, ^{ pudu_queue(PUDU_UI_STOPPED, 0, nil, 0); });
+  for (size_t index = 0; index < sizeof pudu_self_tests / sizeof pudu_self_tests[0]; index++) {
+    if (getenv(pudu_self_tests[index].variable) == NULL) continue;
+    pudu_self_tests[index].run(^{ pudu_queue(PUDU_UI_STOPPED, 0, nil, 0); });
     return;
   }
   int taps = atoi(getenv("PUDU_UI_SELFTEST"));

@@ -19,7 +19,7 @@ Checks:
 4. A changed total alone is one 16-byte RANGE.
 5. A changed column count alone is one 12-byte COLUMNS.
 6. A changed tag replaces the list: a new CREATE, ROOT, then REMOVE of the old id.
-7. `windowStart` places and clamps windows, with the four examples of [[Std Mobile View]].
+7. `windowStart` places and clamps windows, with the four examples of [[Std Mobile Paging]].
 8. Event kind 8 with tag 1 and detail 42 decodes to `Reached(1, 42)`, and `carriesDetail` holds only for detailed kinds.
 
 ## Invariants

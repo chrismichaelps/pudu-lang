@@ -1,0 +1,132 @@
+module Std.Mobile.Device
+
+import Std.Mobile.Request as Request
+import Std.Mobile.Stream as Stream
+
+/// The platform a program runs on.
+export type Platform = Ios | Android
+
+/// What the platform reports about the device and the person's preferences:
+/// the system version, the hardware model, the preferred language as a
+/// BCP 47 tag, the time zone as an IANA name, and the preferred text scale in
+/// percent, 100 at the platform's default.
+export type Facts = { platform: Platform, version: Str, model: Str, locale: Str, zone: Str, textScale: Int }
+
+/// The kind of path the device reaches the network through; Wired stands for
+/// a wired path and any other interface.
+export type Link = Offline | Wifi | Cellular | Wired
+
+/// How the battery stands: unknown, running on battery, charging, or full.
+export type Charge = Unknown | Unplugged | Charging | Full
+
+/// The battery's level in percent, -1 when unknown, and how it stands.
+export type Power = { level: Int, charge: Charge }
+
+/// Acceleration on each axis in thousandths of standard gravity; a device
+/// lying flat and still reads about 0, 0, -1000.
+export type Motion = { x: Int, y: Int, z: Int }
+
+/// Which way the screen may turn: any way, upright only, or sideways only.
+export type Orientation = Any | Portrait | Landscape
+
+/// Charge codes as POWERED carries them, and orientation codes as ORIENTATION does.
+const CHARGES: Map[UInt32, Charge] = mapOf([(0u32, Unknown), (1u32, Unplugged), (2u32, Charging), (3u32, Full)])
+const ORIENTATIONS: Map[Orientation, UInt32] = mapOf([(Any, 0u32), (Portrait, 1u32), (Landscape, 2u32)])
+
+/// Platform names and link codes as DESCRIBED and NETWORKED carry them.
+const PLATFORMS: Map[Str, Platform] = mapOf([("ios", Ios), ("android", Android)])
+const LINKS: Map[UInt32, Link] = mapOf([(0u32, Offline), (1u32, Wifi), (2u32, Cellular), (3u32, Wired)])
+const CODES: Map[Link, UInt32] = mapOf([(Offline, 0u32), (Wifi, 1u32), (Cellular, 2u32), (Wired, 3u32)])
+
+/// A commit asking for the device's facts; they arrive as
+/// `Described(tag, facts)`.
+export fn describe(tag: UInt32) -> Bytes { bytesOf(Stream.device([], tag)) }
+
+/// A commit starting reachability reports, or stopping them. While watching,
+/// `Networked(link)` arrives once with the current link and again whenever
+/// its kind changes.
+export fn watchNetwork(on: Bool) -> Bytes { bytesOf(Stream.network([], flag(on))) }
+
+/// A commit keeping the screen on while the application is in front, or
+/// letting it sleep again. It holds until a later commit changes it.
+export fn keepAwake(on: Bool) -> Bytes { bytesOf(Stream.awake([], flag(on))) }
+
+/// The facts DESCRIBED carries: five lines of text, platform, version, model,
+/// language and zone, with the text scale as the detail word. Text of any
+/// other shape is never written.
+export fn facts(text: Str, scale: UInt32) -> Option[Facts] {
+  let lines = text.split("\n")
+  if lines.length() != 5 {
+    return None
+  }
+  let platform = PLATFORMS.get(lines[0]) ?
+  let percent = convertInteger[Int](scale) ?
+  Some(Facts{platform: platform, version: lines[1], model: lines[2], locale: lines[3], zone: lines[4], textScale: percent})
+}
+
+/// The link a NETWORKED code names; codes above 3 are never written.
+export fn linkOf(code: UInt32) -> Option[Link] { LINKS.get(code) }
+
+/// The NETWORKED code of a link.
+export fn linkCode(link: Link) -> UInt32 {
+  match CODES.get(link) {
+    case Some(code) => code
+    case None => 0u32
+  }
+}
+
+/// A commit asking for the battery; it answers as `Powered(tag, power)`.
+export fn battery(tag: UInt32) -> Bytes { bytesOf(Request.battery([], tag)) }
+
+/// A commit setting the screen's brightness, clamped to 0 through 100
+/// percent. It holds while the application is in front.
+export fn brightness(percent: Int) -> Bytes {
+  let bounded = if percent < 0 { 0 } else if percent > 100 { 100 } else { percent }
+  bytesOf(Request.brightness([], clamped(bounded)))
+}
+
+/// A commit locking which way the screen may turn.
+export fn orientation(lock: Orientation) -> Bytes {
+  let code = match ORIENTATIONS.get(lock) {
+    case Some(found) => found
+    case None => 0u32
+  }
+  bytesOf(Request.orientation([], code))
+}
+
+/// A commit starting motion reports every `interval` milliseconds, or
+/// stopping them. While on, `Sensed(motion)` arrives at that pace; a device
+/// without an accelerometer reports nothing.
+export fn sense(on: Bool, interval: Int) -> Bytes { bytesOf(Request.sense([], flag(on), clamped(interval))) }
+
+/// The power POWERED carries: the charge code and the level as one word.
+export fn power(state: UInt32, values: &Array[Int32]) -> Option[Power] {
+  if values.length() != 1 {
+    return None
+  }
+  let charge = CHARGES.get(state) ?
+  let level = convertInteger[Int](values[0]) ?
+  Some(Power{level: level, charge: charge})
+}
+
+/// The motion SENSED carries as three words.
+export fn motion(values: &Array[Int32]) -> Option[Motion] {
+  if values.length() != 3 {
+    return None
+  }
+  let x = convertInteger[Int](values[0]) ?
+  let y = convertInteger[Int](values[1]) ?
+  let z = convertInteger[Int](values[2]) ?
+  Some(Motion{x: x, y: y, z: z})
+}
+
+// A count as a stream word; a negative count is written as 0.
+fn clamped(count: Int) -> UInt32 {
+  match convertInteger[UInt32](count) {
+    case Some(found) => found
+    case None => 0u32
+  }
+}
+
+// The stream word of a switch.
+fn flag(on: Bool) -> UInt32 { if on { 1u32 } else { 0u32 } }

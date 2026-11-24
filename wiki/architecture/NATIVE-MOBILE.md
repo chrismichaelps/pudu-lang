@@ -160,6 +160,29 @@ One stream carries each commit. It is a sequence of little-endian 32-bit words, 
 | 48 | COPY | the text as length-prefixed text |
 | 49 | PASTE | tag |
 | 50 | STATUS | style (0 automatic, 1 light text, 2 dark text), hidden flag (0 or 1) |
+| 51 | PERMISSIONS | count, then each kind code; answers with no prompt |
+| 52 | PERMISSION | kind code; asks the person when not asked |
+| 53 | SETTINGS | none; opens the application's page in settings |
+| 54 | TABS | tab count; per tab its id, title, symbol and page count; per page its route id, body node and title; selected tab id; sheet flag, then the sheet's id and body node when the flag is 1 |
+| 55 | STORE_READ | tag, place (0 plain, 1 secure), key text; answers STORED 31 |
+| 56 | STORE_WRITE | place, key text, value text; reports nothing |
+| 57 | STORE_REMOVE | place, key text; reports nothing |
+| 58 | DEVICE | tag; answers DESCRIBED 32 |
+| 59 | NETWORK | 1 to start watching reachability, 0 to stop; any other word is refused |
+| 60 | AWAKE | 1 to keep the screen on while in front, 0 to let it sleep; any other word is refused |
+| 61 | LOCATE | tag, accuracy code (0 precise, 1 approximate, 2 coarse); answers LOCATED 34; a code above 2 is refused |
+| 62 | TRACK | on flag, accuracy code, minimum distance in meters; reports LOCATED 34 under tag 0 while on; a flag above 1 is refused |
+| 63 | NOTIFY | id, delay in seconds, title text, body text |
+| 64 | UNNOTIFY | id |
+| 65 | AUTHENTICATE | tag, reason text; answers AUTHENTICATED 36 |
+| 66 | BROWSE | tag, URL text; answers BROWSED 37 when the browser closes |
+| 67 | SPEAK | tag, rate in percent, language text, text; answers SPOKE 38 |
+| 68 | HUSH | none; stops speech |
+| 69 | BATTERY | tag; answers POWERED 39 |
+| 70 | BRIGHTNESS | percent 0 to 100; above 100 is refused |
+| 71 | ORIENTATION | code 0 any, 1 portrait, 2 landscape; above 2 is refused |
+| 72 | SENSE | on flag (1 or 0), interval in milliseconds; a flag above 1 is refused |
+| 73 | PICK_IMAGE | tag; answers IMAGE_PICKED 41 |
 
 Events return through `pudu_ui_wait` as one 64-bit value: the kind in the high 32 bits, with the tag in the low 32 bits.
 
@@ -190,6 +213,19 @@ Events return through `pudu_ui_wait` as one 64-bit value: the kind in the high 3
 | 25 | opened | tag; detail 1 when the platform opened the URL, 0 when not |
 | 26 | shared | tag; detail 1 when shared (Android: chooser opened), 0 when the sheet closed |
 | 27 | pasted | tag; the clipboard text, empty when none |
+| 28 | permissioned | tag is the kind code; detail is the state code (0 not asked to 6 unavailable) |
+| 29 | selected | tab id; no detail |
+| 30 | linked | URL text; no detail |
+| 32 | described | tag; five text lines (platform, system version, model, language, zone); detail is the text scale in percent |
+| 33 | networked | tag 0; detail is the link code (0 offline, 1 Wifi, 2 cellular, 3 wired) |
+| 34 | located | tag; detail 1 with four signed words (latitude and longitude in ten-millionths of a degree, accuracy in meters, altitude in meters), or detail 0 with no words when no position is available |
+| 35 | notified | tag = the id of a tapped notification; no detail |
+| 36 | authenticated | tag; detail 1 confirmed, 0 not |
+| 37 | browsed | tag; no detail |
+| 38 | spoke | tag; detail 1 finished, 0 interrupted |
+| 39 | powered | tag; detail is the charge state (0 unknown, 1 unplugged, 2 charging, 3 full), then the level word (-1 unknown) |
+| 40 | sensed | tag 0; three signed words, acceleration in milli-g on x, y and z |
+| 41 | image picked | tag; detail 1 with the path of a copy as text, 0 with empty text when cancelled |
 
 Codes 10 to 12 only add instructions, so a stream of codes 1 to 9 means the same. The view module no longer writes RESET; the host keeps it so a stream from an earlier writer still means the same. Nodes carry stable ids handed out by the program and recycled after REMOVE (#914). Compiled views extend the stream further under ADR-0031 (compiled native execution).
 
@@ -275,3 +311,65 @@ OPEN 46, SHARE 47, COPY 48, PASTE 49 and STATUS 50 are requests with one reporte
 ## Remote bodies and timeouts (#974)
 
 Remote images are capped at 32 MB on both hosts; iOS stops the transfer while it downloads. Android fetch requests read at most 16 MB of body. Connections time out after 15 seconds to connect and 30 seconds to read on Android. iOS image requests time out after 30 seconds without data and 60 seconds for the whole resource.
+
+## Tabs (#977)
+
+TABS 54 shows a tab bar: one stack per tab, each tab's bar item title and system symbol, and at most one page sheet over the bar. A person's pick is reported as SELECTED 29 with the tab id; a pop inside a tab is reported as POPPED 14. TABS and NAVIGATE replace each other. The iOS host is [[pudu-ios-tabs]]. The Android host is [[PuduTabs]], fed by [[pudu-android-routes]], and shows titles only because Android has no system symbol set. The model is [[Std Mobile Navigation]]; the example is [[Tabs Example]].
+
+## Application identity and links (#978)
+
+The program's `pudu.toml` names the application under `[app]`: name, identifier, version, build and schemes. [[Pudu Backend Identity]] checks each value before a build, and E6018 refuses a value a store or platform would reject. The identity reaches Info.plist (display name, version, build, URL types) and the Android manifest (package, version code and name, label, one VIEW filter per scheme, singleTask launch). A link that opens the application arrives as LINKED 30 with the URL text, at launch and while it runs. The example is [[Links Example]]; the open handoff is [[Native App Identity]].
+
+## Permissions (#976)
+
+A program declares each permission it may request under `[app.permissions]` in its manifest, with the reason the person reads. The build refuses a request for an undeclared kind (E6014), a key no kind has (E6015) and an empty reason (E6016), and warns for a declaration never requested (W6017). Each declared kind writes its iOS usage keys, compile flag and framework, and its Android manifest entries.
+
+The state model is one closed set across platforms: NotAsked, Granted, Limited (partial access), Provisional (quiet notifications), Denied (may ask again), Blocked (only Settings can allow) and Unavailable. The program requests with PERMISSION 52, checks with PERMISSIONS 51 and opens Settings with SETTINGS 53. Answers arrive as PERMISSIONED 28. See [[Std Mobile Permission]], [[pudu-ios-permission]] and [[PuduPermission]].
+
+## Storage (#980)
+
+A program keeps key-value text in two places: Plain, kept with the application, and Secure, kept on this device only and out of backups. STORE_READ 55 asks for a key and is answered by STORED 31, whose text is the value and whose detail word is 1 when a value is present and 0 when it is absent. STORE_WRITE 56 and STORE_REMOVE 57 report nothing. A read answers after every earlier write and removal, because each instruction runs in stream order on the main thread. The iOS host keeps Plain in user defaults and Secure in the keychain, accessible after first unlock on this device only ([[pudu-ios-storage]]). The Android host keeps Plain in SharedPreferences and Secure as AES-GCM ciphertext under a Keystore key that is never exported ([[PuduStore]]); an entry that cannot be decrypted reads as absent and is removed. The program side is [[Std Mobile Storage]], and the example is [[Vault Example]].
+
+The integer parser that programs use on stored text is [[Std Num]]: `parseInt` and `parseIntIn` answer `None` for any text they do not accept, so a damaged value does not stop the program.
+
+## Device facts, reachability and keep-awake (#983)
+
+A program asks for the device's facts with DEVICE 58, answered by DESCRIBED 32 with the platform, system version, hardware model, preferred language, time zone and preferred text scale. NETWORK 59 starts or stops reachability reports, answered by NETWORKED 33 with the link kind, Offline, Wifi, Cellular or Wired, once when watching starts and again on each change of kind. AWAKE 60 keeps the screen on while the application is in front; it is a standing setting that holds until a later AWAKE changes it. The iOS host reads the facts from UIKit and Foundation and the link from a Network framework path monitor; the Android host reads the active network through ConnectivityManager under the normal permission `ACCESS_NETWORK_STATE`. No address, network name or location is read. The program-facing module is [[Std Mobile Device]].
+
+## Location (#986)
+
+A program asks for one position with LOCATE 61, answered by exactly one LOCATED 34 under the same tag, or starts a stream of positions with TRACK 62, which reports LOCATED 34 under tag 0 for each new position until it is turned off. Positions are integers in ten-millionths of a degree, so they are exact and identical on both hosts. Accuracy is precise, approximate (about a hundred meters) or coarse (about a kilometer). The answer carries no position, with detail 0, when the permission is not allowed, location services are off, the platform fails or no fix arrives within the timeout. A LOCATE never prompts; asking is the permission module's job. The iOS host reads CoreLocation through its own location manager and answers from that manager's last location while tracking. The Android host reads LocationManager under the fine or coarse location permission and reuses a last-known fix only when it is under sixty seconds old. The program-facing module is [[Std Mobile Location]], and the example is [[Where Example]]. Android runtime behavior is not yet exercised on a device or emulator.
+
+## Web, video and audio (#990)
+
+Two kinds, WEB 23 and VIDEO 24, make a web page and a video nodes of the view tree; the kinds sentinel is 25. Five instructions, LOAD 74, MEDIA 75, AUDIO 76, KEYBOARD 77 and BACK 78, load a page, set a video's flags and source, play or stop a sound, dismiss the keyboard, and hand the back gesture to the program; the instruction bound is 79. Three events report the answers: LOADED 42 for each requested load, ENDED 43 for a non-looping video or sound, and BACKED 44 for the back gesture while it is handed over. Back is opt-in, so the platform's behavior and the navigation stack stay intact by default. Pages have no script channel to the program. The program-facing modules are [[Std Mobile Control]], [[Std Mobile Media]], [[Std Mobile System]] and [[Std Mobile Request]]. The example is [[Viewer Example]].
+
+## Pickers and system touches (#991)
+
+| Instruction | Code | Host |
+|---|---|---|
+| PICK_CONTACT | 79 | [[pudu-ios-pick]], [[PuduPick]] |
+| PICK_DOCUMENT | 80 | [[pudu-ios-pick]], [[PuduPick]] |
+| TAKE_PHOTO | 81 | [[pudu-ios-pick]], [[PuduPick]] |
+| RECORD | 82 | [[pudu-ios-pick]], [[PuduPick]] |
+| BADGE | 83 | [[pudu-ios-pick]] (ignored on Android) |
+| SECURE | 84 | [[PuduPick]] (ignored on iOS) |
+| TOAST | 85 | [[pudu-ios-pick]], [[PuduPick]] |
+
+Events: CONTACT_PICKED 45 and FILED 46 ([[Std Mobile Events]]). The pickers answer with a file in the temporary directory or a contact in three lines of text; the program reads files with the file library. The instruction bound is 86.
+
+## System sheets (#994)
+
+| Instruction | Code | Host |
+|---|---|---|
+| SHARE_FILE | 86 | [[pudu-ios-compose]], [[PuduCompose]] (file served by [[PuduFiles]]) |
+| REVIEW | 87 | [[pudu-ios-compose]] (ignored on Android) |
+| ADD_EVENT | 88 | [[pudu-ios-compose]], [[PuduCompose]] |
+| COMPOSE_MAIL | 89 | [[pudu-ios-compose]], [[PuduCompose]] |
+| COMPOSE_MESSAGE | 90 | [[pudu-ios-compose]], [[PuduCompose]] |
+
+Event: COMPLETED 47 ([[Std Mobile Events]]), decoded as `Completed` in [[Std Mobile View]]. The calendar, mail and message sheets answer with it; sharing answers with SHARED 26. The instruction bound is 91. Times are Unix seconds in two signed words. Android reports 1 once an intent opens, because it cannot see the outcome. Files leave the application only through the read-only [[PuduFiles]] provider, limited to the cache directory. The program side is [[Std Mobile Compose]]; the example is [[Outbox Example]].
+
+## Device services (#989)
+
+Eleven requests (codes 63 to 73) and seven events (35 to 41) carry the notification, authentication, browser, speech, battery, screen, motion and photo picker services. The instruction bound is now 74. A notification is scheduled by a delay in seconds and replaced by its id; a tap reports NOTIFIED with that id, including the tap that launched the application. Authentication asks for device-owner confirmation, which accepts biometrics or the passcode, and answers once with AUTHENTICATED. The browser, speech and photo picker each answer once per tag. The picked image is a copy in the temporary directory, named by path. Brightness and orientation are standing settings that the platform restores when the application leaves the front. Motion reports acceleration in milli-g at the requested interval. Alarms on Android are inexact, and the iOS simulator has no passcode and no accelerometer. The program-facing modules are [[Std Mobile Notify]], [[Std Mobile Auth]], [[Std Mobile Media]], [[Std Mobile Device]] and [[Std Mobile Request]]; the window helper is [[Std Mobile Paging]]. The example is [[Toolbox Example]].

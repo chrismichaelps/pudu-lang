@@ -31,7 +31,7 @@ The simulator run sets `PUDU_UI_LIST_TEST` and expects these lines, as described
 
 ## Dependencies and consumers
 
-Depends on [[Std Mobile View]] for `Recycled`, `windowStart` and `Reached`, [[Std Mobile Host]] for `apply` and `wait`. Hosted by [[iOS Host Adapter]] with the list header [[iOS Host List]] and the event header [[iOS Host Events]].
+Depends on [[Std Mobile View]] for `Recycled` and `Reached`, [[Std Mobile Paging]] for `windowStart`, [[Std Mobile Host]] for `apply` and `wait`. Hosted by [[iOS Host Adapter]] with the list header [[iOS Host List]] and the event header [[iOS Host Events]].
 
 ## Resolved Grill Log
 

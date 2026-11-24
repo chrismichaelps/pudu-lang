@@ -1,5 +1,6 @@
 module Std.Mobile.System
 
+import Std.Mobile.Request as Request
 import Std.Mobile.Stream as Stream
 
 /// How the status bar draws: as the platform chooses for the current
@@ -34,3 +35,36 @@ export fn barCode(style: Bar) -> UInt32 {
     case DarkText => 2u32
   }
 }
+
+/// A commit dismissing the on-screen keyboard.
+export fn dismissKeyboard() -> Bytes { bytesOf(Request.keyboard([])) }
+
+/// A commit receiving the platform's back gesture or button as `Backed`, in
+/// place of the platform's own back action, or returning it. A platform with
+/// no system back gesture outside navigation ignores it.
+export fn handleBack(on: Bool) -> Bytes { bytesOf(Request.back([], if on { 1u32 } else { 0u32 })) }
+
+/// A commit setting the application icon's badge; 0 or less clears it. A
+/// platform whose launcher counts notifications instead ignores it.
+export fn badge(count: Int) -> Bytes {
+  let shown = match convertInteger[UInt32](count) {
+    case Some(found) => found
+    case None => 0u32
+  }
+  bytesOf(Request.badge([], shown))
+}
+
+/// A commit hiding the screen's content from screenshots and recordings, or
+/// showing it again. A platform without that control ignores it.
+export fn secure(on: Bool) -> Bytes { bytesOf(Request.secure([], if on { 1u32 } else { 0u32 })) }
+
+/// A commit showing `text` briefly over the content; it reports nothing.
+export fn toast(text: Str) -> Bytes { bytesOf(Request.toast([], text)) }
+
+/// A commit showing the share sheet for the file at `path`. `Shared(tag,
+/// done)` arrives when it closes, as for text.
+export fn shareFile(tag: UInt32, path: Str) -> Bytes { bytesOf(Request.shareFile([], tag, path)) }
+
+/// A commit asking the platform to show its rating prompt. The platform
+/// decides whether it appears and reports nothing.
+export fn requestReview() -> Bytes { bytesOf(Request.review([])) }
