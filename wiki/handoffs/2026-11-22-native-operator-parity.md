@@ -507,6 +507,13 @@ shared layout for each capture. [[Compiler Frame Match]] publishes
 the capture after the first matching alternative. [[Backend Rendering
 Callable Programs]] covers guard and enclosing-scope reads.
 
+## Type-only module qualifiers
+
+Architect → Backend Engineer. [[Type Check Rule]] and [[Type Check Pattern]]
+use recorded import qualifiers for missing exports in #993.
+[[Program Graph Spec]] covers static refusals and
+[[Backend Module Programs]] covers the valid declaring-module route.
+
 ## Next action
 
 Preserve shapes and runtime diagnostics for iteration binders when

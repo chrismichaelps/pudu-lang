@@ -5,6 +5,12 @@ tags: [changelog]
 
 # Changelog
 
+## 2026-11-23 — Type-only module qualifiers (#993)
+
+- Report missing constructor exports through modules that publish only
+  types. Keep alias types usable with their original constructors.
+  [[Type Check Rule]] · [[Type Check Pattern]] · [[Program Graph Spec]]
+
 ## 2026-11-23 — Nested alternative binding layouts (#956)
 
 - Project private captures into shared slots after structural success.

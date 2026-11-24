@@ -64,3 +64,14 @@ DEPTH 0.6 (DEEP). It crosses manifest reading, root resolution, and whole-progra
 ## Referenced by
 
 [[src/Pudu/Compiler/Program/_MOC]] · [[Compiler Manifest]]
+
+## Type-only module qualifiers (#993)
+
+Use temporary modules to check missing constructor calls, value reads,
+and positional and named patterns against a module exporting only a
+type alias. Assert the diagnostic codes and the missing qualified
+exports.
+
+Resolved Grill Log. A call, a constructor value, and a pattern can take
+separate admission paths. Cover all three and check the selected import
+alias in the message. [[Type Check Rule]] · [[Type Check Pattern]]

@@ -15,6 +15,7 @@ module Pudu.Compiler.Program.GraphSpec
   ) where
 
 import Data.List.NonEmpty (NonEmpty (..))
+import qualified Data.Text as Text
 import qualified Data.Text.IO as TextIO
 import Pudu.Compiler.Library
   ( ResolutionMetrics (..)
@@ -32,7 +33,7 @@ import Pudu.Compiler.Program
   )
 import Pudu.Compiler.Cache (disabledCache)
 import Pudu.Compiler.Program.Common (codes, runEntry)
-import Pudu.Diagnostic (diagnosticCode, diagnosticCodeText)
+import Pudu.Diagnostic (diagnosticCode, diagnosticCodeText, diagnosticMessage)
 import Pudu.Frontend.Syntax.Name (ModuleName (..), moduleNameText)
 import Pudu.Type.Interface.Graph (graphInterfaces, graphOrder)
 import qualified Data.List as List
@@ -49,6 +50,7 @@ graphProperties =
   , ("program discovery diagnoses missing and mismatched modules", testDiscoveryFailures)
   , ("program graphs preserve nominal identity and signature cycles", testGraphEdges)
   , ("program interfaces preserve ABI identity defaults and ambiguity", testInterfaceEdges)
+  , ("type-only modules diagnose missing constructor exports", testTypeOnlyModuleQualifiers)
   , ("a project reaches the code its manifest declares", testPathDependencies)
   , ("resolution setup is once per fresh invocation", testResolutionContext)
   , ("bundled resolution preserves isolated module ownership", testIsolatedResolution)
@@ -91,6 +93,44 @@ testImportFailures = do
   pure $ conjoin
     [ counterexample "a method requires its trait import" (hiddenTrait === ["E3005"])
     , counterexample "private selections are rejected at the import" (privateName === ["E2013"])
+    ]
+
+testTypeOnlyModuleQualifiers :: IO Property
+testTypeOnlyModuleQualifiers = withSystemTempDirectory "pudu-type-only-module" $ \root -> do
+  let entry = root </> "Main.pudu"
+      check linesOfSource = do
+        TextIO.writeFile entry (Text.unlines ("module Main" : linesOfSource))
+        compiled <- compileProgram entry
+        pure [(diagnosticCodeText (diagnosticCode finding), diagnosticMessage finding)
+             | finding <- programDiagnostics compiled]
+  TextIO.writeFile (root </> "A.pudu") "module A\n/// A sum.\nexport type T = X | Y(Int) | Z{value: Int}\n"
+  TextIO.writeFile (root </> "B.pudu") "module B\nimport A\n/// A type alias.\nexport type T = A.T\n"
+  positional <- check
+    [ "import A"
+    , "import B"
+    , "fn pick(t: B.T) -> Int {"
+    , "  match t {"
+    , "    case B.X => 1"
+    , "    case B.Y(n) => n"
+    , "    case A.Z{value} => value"
+    , "  }"
+    , "}"
+    , "fn main() -> Int { pick(B.Y(4)) + pick(A.X) }"
+    ]
+  retained <- check
+    [ "import B as Bridge"
+    , "fn builder() -> fn(Int) -> Bridge.T { Bridge.Y }"
+    ]
+  named <- check
+    [ "import B as Bridge"
+    , "fn pick(t: Bridge.T) -> Int {"
+    , "  if let Bridge.Z{value} = t { value } else { 0 }"
+    , "}"
+    ]
+  pure $ conjoin
+    [ positional === [("E3033", "B exports no X"), ("E3033", "B exports no Y"), ("E3033", "B exports no Y")]
+    , retained === [("E3033", "Bridge exports no Y")]
+    , named === [("E3033", "Bridge exports no Z")]
     ]
 
 {-| A dependency named by path is how the second program written in the

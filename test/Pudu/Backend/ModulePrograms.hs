@@ -132,6 +132,25 @@ modulePrograms =
         , "}"
         ]
     , "12\n10\nPoint{x: 4, y: 7}\nPoint{x: 2, y: 4}\n<tag>\n" )
+  , ( "an exported sum alias uses the declaring module's constructors"
+    , [ ("A.pudu", Text.unlines ["module A", "/// A sum.", "export type T = X | Y(Int)"])
+      , ("B.pudu", Text.unlines ["module B", "import A", "/// A type alias.", "export type T = A.T"])
+      ]
+    , program
+        [ "import A"
+        , "import B as Bridge"
+        , "fn pick(t: Bridge.T) -> Int {"
+        , "  match t {"
+        , "    case A.X => 1"
+        , "    case A.Y(n) => n"
+        , "  }"
+        , "}"
+        , "fn main() -> Int {"
+        , "  print(display(pick(A.Y(4)) + pick(A.X)))"
+        , "  0"
+        , "}"
+        ]
+    , "5\n" )
   , ( "a type named in two modules stays two types"
     , [geometry]
     , program

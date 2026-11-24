@@ -152,3 +152,13 @@ The complete module corpus includes the store success, module and refusal progra
 
 Resolved Grill Log (#873): `modulePrograms` includes the qualified foreign
 calls of [[Backend Foreign Programs]].
+
+## Sum type aliases across modules (#993)
+
+Use an imported type alias in a function signature and reach its
+constructors through their declaring module in expressions and patterns.
+The explicit output is 5.
+
+Resolved Grill Log. Exercise construction, matching, and the alias's
+canonical type through the existing whole-program conformance harness.
+[[Program Graph Spec]]
