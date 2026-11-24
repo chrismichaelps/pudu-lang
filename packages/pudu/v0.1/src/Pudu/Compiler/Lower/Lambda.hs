@@ -131,8 +131,8 @@ liftFunction lower block state at solved display lends supplied function = case 
                     (next, Just (core, _)) -> (next, Just (CoreBlock [] (Just core)))
                     (next, Nothing) -> (next, Nothing)
                   Nothing -> (current, Nothing)
-                restored context = state{lowerContext = context
-                  {contextActiveCallables = Set.delete key (contextActiveCallables context)}}
+                restored updatedContext = state{lowerContext = updatedContext
+                  {contextActiveCallables = Set.delete key (contextActiveCallables updatedContext)}}
                 context = lowerContext state
                 captureReads = [CoreExpression at (coreLocalType local) (CoreReadLocal local) | local <- captured]
                 value = CoreExpression at kind (CoreClosure key captureReads)
@@ -225,16 +225,13 @@ lowerFunctionValue = lowerFunctionValueWithInputs []
 
 lowerFunctionValueWithInputs :: [CoreType] -> LowerState -> Span -> Text -> (Text, Located Function) -> Lowered
 lowerFunctionValueWithInputs supplied state at key entry = case typeForSpan (contextTypes (lowerContext state)) at of
-  Just kind@(CoreFunctionType _ _) -> case admitCallee state key at entry of
+  Just (CoreFunctionType inputs _) -> case admitCallee state key at entry of
     (admitted, Nothing) -> refused admitted
     (admitted, Just (original, checked)) ->
       let (ready, target, signature) = maybe (admitted, original, checked) id
             (runtimeCallSignature entry admitted original checked supplied)
-          actual = case kind of
-            CoreFunctionType inputs _ ->
-              let parameters = map (coreLocalType . coreParameterLocal) (signatureParameters signature)
-               in CoreFunctionType (take (length inputs) parameters) (loanedType signature)
-            _ -> kind
+          parameters = map (coreLocalType . coreParameterLocal) (signatureParameters signature)
+          actual = CoreFunctionType (take (length inputs) parameters) (loanedType signature)
        in namedClosure ready at target actual entry signature
   _ -> halt at "a function value without a native function type" state
 

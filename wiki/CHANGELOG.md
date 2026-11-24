@@ -5,6 +5,12 @@ tags: [changelog]
 
 # Changelog
 
+## 2026-11-23 — Native callable compilation (#956)
+
+- Read the specialized signature in a lent call and remove redundant
+  callable lowering bindings. [[Compiler Lower Method]] ·
+  [[Compiler Lower Lambda]]
+
 ## 2026-11-23 — Held branch results (#956)
 
 - Join the actual returned layouts of if and match arms and project

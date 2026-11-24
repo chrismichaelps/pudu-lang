@@ -406,16 +406,16 @@ publishDynamicFinals at state declarations subject lent checked arms
 invokeLent :: [Int] -> LowerState -> Span -> Text -> Maybe Type -> Selected -> [CoreExpression] -> Lowered
 invokeLent lent state at key written selected given = case instanceTarget state at key instantiated (coreExpressionType <$> take 1 given) selected of
   (back, Nothing) -> refused back
-  (back, Just (target, signature@CoreSignature{signatureParameters, signatureLoaned}))
+  (back, Just (target, signature@CoreSignature{signatureParameters = declaredParameters, signatureLoaned}))
     | Just failure <- callArityFailure (methodArgumentBlame back) at signature (length given) ->
         failedInvocation back at given failure
     | signatureLoaned /= lent -> halt at "a dynamic call lending other places than its method's &mut parameters" back
     | otherwise ->
         let context = lowerContext back
-            layouts = map (coreLocalType . coreParameterLocal) signatureParameters
-            widenArgument index expected value
+            layouts = map (coreLocalType . coreParameterLocal) declaredParameters
+            widenArgument index admittedKind value
               | index `elem` lent = value
-              | otherwise = widen (contextTypes context) expected value
+              | otherwise = widen (contextTypes context) admittedKind value
             supplied = zipWith3 widenArgument [0 ..] layouts given
             copied = do
               found <- Map.lookup target (contextInstances context)
