@@ -143,3 +143,11 @@ A guard runs once after the first structural success.
 Resolved Grill Log. Export the structural impossibility check to
 [[Compiler Lower For]]. The same check that skips unreachable match arms
 also skips a loop body whose binder cannot match the retained element.
+
+## Canonical owner checks on held patterns
+
+Resolved Grill Log. Executable constructor and named-record paths carry
+canonical owners. Check that owner before inspecting same-label variants
+or same-named records. A named sum payload path applies only to a named
+variant. Preserve the evaluator's short-name matching for paths without
+a resolved owner. [[Backend Rendering Callable Programs]]

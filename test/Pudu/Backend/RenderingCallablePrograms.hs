@@ -1148,8 +1148,30 @@ renderingCallableModulePrograms =
       , "fn main() -> Int {"
       , "  print(display(A.renderer()(A.Token{value: 7}) == display(A.Token{value: 7})))"
       , "  print(display(B.renderer()(B.Token{value: \"x\"}) == display(B.Token{value: \"x\"})))"
-      , "  0", "}" ], "true\ntrue\n")]
+      , "  0", "}" ], "true\ntrue\n")
+  , ("same-spelling held patterns require their canonical module owners"
+    , [("First.pudu", patternTypes "First"), ("Second.pudu", patternTypes "Second")]
+    , program
+        ([ "import First as A", "import Second as B" ] <> selectedReceiverTypes <>
+          selectedIterable "(A.Token, A.Packet, A.Packet)" "(A.Token{value: 1}, A.Pos(2), A.Fields{value: 3})"
+            "(B.Token, B.Packet, B.Packet)" "(B.Token{value: 11}, B.Pos(12), B.Fields{value: 13})" <>
+          [ "fn report(view: dynamic View) -> Int {"
+          , "  let (record, positional, named) = choose(view).items()"
+          , "  if let A.Token{value} = record { print(display(value)) } else { print(\"record miss\") }"
+          , "  if let A.Pos(value) = positional { print(display(value)) } else { print(\"positional miss\") }"
+          , "  if let A.Fields{value} = named { print(display(value)) } else { print(\"named miss\") }"
+          , "  0", "}"
+          , "fn main() -> Int {"
+          , "  let first = report(\"text\")"
+          , "  let second = report(\"λ\".toBytes())"
+          , "  first + second", "}"
+          ])
+    , "receiver\nitems\n1\n2\n3\nreceiver\nitems\nrecord miss\npositional miss\nnamed miss\n")
+  ]
  where
   provider name field = Text.unlines
     [ "module " <> name, "export type Token = { value: " <> field <> " }"
     , "export fn renderer() -> fn(Token) -> Str { display }" ]
+  patternTypes name = Text.unlines
+    [ "module " <> name, "export type Token = { value: Int }"
+    , "export type Packet = Pos(Int) | Fields{value: Int}" ]

@@ -5,6 +5,12 @@ tags: [changelog]
 
 # Changelog
 
+## 2026-11-23 — Canonical pattern owners (#956)
+
+- Require the checked declaration identity for constructors and named
+  record patterns, including held values from another module.
+  [[Compiler Lower Match]]
+
 ## 2026-11-23 — Held sequence state and results (#956)
 
 - Preserve changes to cursor layout between calls and check the held

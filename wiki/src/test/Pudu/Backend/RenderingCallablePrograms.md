@@ -218,3 +218,10 @@ publishing a value.
 
 Resolved Grill Log: use an alternate capture with two held layouts
 in a guard and body. A rejected guard proceeds to the following arm.
+
+## Canonical pattern owners
+
+Resolved Grill Log. Use two modules with identical record and variant
+spellings. Check both the declared module's values and the other module's
+held values for named records, positional variants, and named variants.
+[[Compiler Lower Match]]

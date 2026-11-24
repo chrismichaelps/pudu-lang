@@ -231,17 +231,20 @@ lowerPattern lower state kind bound (Located at shape) = case shape of
   TuplePattern members -> case kind of
     CoreTupleType kinds | length kinds == length members -> sequenceOf CoreTuplePattern state bound (zip kinds members)
     _ -> done state never bound
-  ConstructorPattern written members -> case variantOf (writtenLabel written) of
-    Just variant
-      | not (coreVariantRecord variant), length (coreVariantFields variant) == length members ->
-          sequenceOf (CoreVariantPattern (coreVariantName variant)) state bound (zip (map snd (coreVariantFields variant)) members)
-    _ -> done state never bound
+  ConstructorPattern written members
+    | not (matchesOwner (constructorOwner written)) -> done state never bound
+    | otherwise -> case variantOf (writtenLabel written) of
+        Just variant
+          | not (coreVariantRecord variant), length (coreVariantFields variant) == length members ->
+              sequenceOf (CoreVariantPattern (coreVariantName variant)) state bound (zip (map snd (coreVariantFields variant)) members)
+        _ -> done state never bound
   RecordPattern path fields _ -> case (path, recordFields types kind) of
     (Nothing, Just declared) -> recordMembers CoreRecordPattern declared fields
     (Just written, Just declared)
-      | CoreRecordType name _ <- kind, displayName name == writtenLabel written -> recordMembers CoreRecordPattern declared fields
+      | CoreRecordType name _ <- kind, matchesRecord written name -> recordMembers CoreRecordPattern declared fields
     (Just written, Nothing)
-      | Just variant <- variantOf (writtenLabel written), coreVariantRecord variant ->
+      | matchesNamedVariant written
+      , Just variant <- variantOf (writtenLabel written), coreVariantRecord variant ->
           recordMembers (CoreVariantPattern (coreVariantName variant)) (coreVariantFields variant) fields
     _ -> done state never bound
   AlternativePattern alternatives ->
@@ -273,6 +276,15 @@ lowerPattern lower state kind bound (Located at shape) = case shape of
     IntegerValue text -> parsedIntegerValue <$> parseIntegerLiteral text
     _ -> Nothing
   variantOf name = sumVariants types kind >>= find ((== name) . coreVariantName)
+  matchesOwner = maybe True (\owner -> ownerKeyOf kind == Just owner)
+  matchesRecord written owner = case written of
+    ModuleName ("::sum::" :| _) -> False
+    _ | Just canonical <- canonicalPatternName written -> canonical == owner
+      | otherwise -> writtenLabel written == displayName owner
+  matchesNamedVariant written = case written of
+    ModuleName ("::sum::" :| [owner, _]) -> matchesOwner (Just owner)
+    ModuleName ("::sum::" :| _) -> False
+    _ -> canonicalPatternName written == Nothing
   narrowed variants = lowerPatternChoices lower state at bound
     [(Located at shape, payload, \inner -> CoreVariantPattern tag [inner]) | (tag, payload) <- variants]
   lowerSequence current names pairs = case sequenceOf CoreTuplePattern current names pairs of
@@ -356,9 +368,16 @@ impossiblePattern shape = case shape of
 
 nominalPatternOwner :: Pattern -> Maybe Text
 nominalPatternOwner shape = case shape of
-  ConstructorPattern written _
-    | (qualified, _) <- Text.breakOnEnd "." (pathText written)
-    , not (Text.null qualified) -> Just (Text.dropEnd 1 qualified)
+  ConstructorPattern written _ -> constructorOwner written
   RecordPattern (Just (ModuleName ("::sum::" :| [owner, _]))) _ _ -> Just owner
   RecordPattern (Just written) _ _ -> Just (pathText written)
   _ -> Nothing
+
+canonicalPatternName :: ModuleName -> Maybe Text
+canonicalPatternName (ModuleName (symbol :| []))
+  | Text.isInfixOf "." symbol = Just symbol
+canonicalPatternName _ = Nothing
+
+constructorOwner :: ModuleName -> Maybe Text
+constructorOwner written =
+  Text.dropEnd 1 . fst . Text.breakOnEnd "." <$> canonicalPatternName written

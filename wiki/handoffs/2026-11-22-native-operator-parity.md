@@ -535,10 +535,16 @@ cursor layouts and selects the retained step before binder execution.
 [[Backend For Programs]] covers a state transition across a binder skip,
 a malformed step, and a transfer.
 
+## Canonical pattern owners
+
+Architect → Backend Engineer. [[Compiler Lower Match]] checks declared
+owners on held record and sum values. [[Backend Rendering Callable
+Programs]] distinguishes same-spelling declarations across modules.
+
 ## Next action
 
-Audit canonical owner checks on ordinary constructor and named-record
-patterns against held values from another declaration.
+Lower anonymous record patterns over held named sum payloads, including
+bindings whose fields require different layouts across variants.
 
 ## Referenced by
 
