@@ -11,7 +11,7 @@ import Pudu.Compiler.Lower.Control (expressionIsPrintValued, joinType)
 import Pudu.Compiler.Lower.State (LowerContext (..), LowerState (..), bindLocal, halt, refused)
 import Pudu.Compiler.Lower.Types (ownerKeyOf, recordFields, sumVariants, typeForSpan, writtenLabel)
 import Pudu.Core
-import Pudu.Compiler.Lower.Dynamic (commonAggregateCarrier, isDynamic, normalizeAggregateValue, pathText, projectRuntimeValue, widen)
+import Pudu.Compiler.Lower.Dynamic (commonAggregateCarrier, isDynamic, mapRuntimeChoice, normalizeAggregateValue, preserveRuntimeResult, pathText, projectRuntimeValue, widen)
 import Pudu.Frontend.Syntax
   ( ArrayRest (..), Block (..), Expression (..), FieldPattern (..), Literal (..), Located (..), MatchArm (..), Pattern (..)
   , Statement (..) )
@@ -38,35 +38,48 @@ lowerMatch :: LowerExpression -> Bool -> LowerState -> Span -> Located Expressio
 lowerMatch lower discarded state at subject arms = case lowerMatchSubject lower state subject of
   (after, Nothing) -> refused after
   (after, Just (core, CoreNeverType)) -> (after, Just (core, CoreNeverType))
-  (after, Just (core, kind))
+  (after, Just (core, _))
     | expressionIsPrintValued core -> halt (locatedSpan subject) "matching a Result[(), Str] value" after
-    | otherwise -> go after kind [] arms
+    | otherwise -> fmap (fmap preserve) (select after core)
+ where
+  preserve answer | discarded = answer
+  preserve (value, _) =
+    let checked = typeForSpan (contextTypes (lowerContext state)) at
+        carried = maybe value (\expected -> preserveRuntimeResult expected value) checked
+     in (carried, coreExpressionType carried)
+  select current held
+    | Just selected <- mapRuntimeChoice current at CoreNeverType held
+        (\ready payload -> fmap (fmap fst) (select ready payload)) = selected
+    | otherwise = compileArms current held
+  compileArms initial core = go initial (coreExpressionType core) [] arms
      where
-      go current _ done [] =
+      go prior _ done [] =
         let lowered = reverse done
          in case foldr (\arm found -> found >>= joinType (coreExpressionType (coreArmBody arm))) (Just CoreNeverType) lowered of
-              Just result -> (current, Just (CoreExpression at result (CoreMatch core lowered), result))
+              Just result -> (prior, Just (CoreExpression at result (CoreMatch core lowered), result))
               Nothing
-                | Just expected <- typeForSpan (contextTypes (lowerContext current)) at
-                , let widened = [arm{coreArmBody = widen (contextTypes (lowerContext current)) expected (coreArmBody arm)} | arm <- lowered]
+                | Just expected <- typeForSpan (contextTypes (lowerContext prior)) at
+                , let widened = [arm{coreArmBody = widen (contextTypes (lowerContext prior)) expected (coreArmBody arm)} | arm <- lowered]
                 , all ((`elem` [expected, CoreNeverType]) . coreExpressionType . coreArmBody) widened ->
-                    (current, Just (CoreExpression at expected (CoreMatch core widened), expected))
-                | let types = contextTypes (lowerContext current)
+                    (prior, Just (CoreExpression at expected (CoreMatch core widened), expected))
+                | let types = contextTypes (lowerContext prior)
                 , Just checked <- typeForSpan types at
                 , Just shared <- commonAggregateCarrier types checked
                     (filter (/= CoreNeverType) (map (coreExpressionType . coreArmBody) lowered))
-                , let project prior arm =
-                        let (ready, value) = projectRuntimeValue types prior shared (coreArmBody arm)
+                , let project entered arm =
+                        let (ready, value) = projectRuntimeValue types entered shared (coreArmBody arm)
                          in (ready, arm{coreArmBody = value})
-                      (final, projected) = mapAccumL project current lowered
+                      (final, projected) = mapAccumL project prior lowered
                 , all ((`elem` [shared, CoreNeverType]) . coreExpressionType . coreArmBody) projected ->
                     (final, Just (CoreExpression at shared (CoreMatch core projected), shared))
-                | otherwise -> halt at "a match whose arms have different types" current
-      go current subjectKind done (Located armSpan (MatchArm pattern' guard' body) : rest) =
-        let opened = current{lowerScopes = [] : lowerScopes current}
+                | otherwise -> halt at "a match whose arms have different types" prior
+      go prior subjectKind done (Located armSpan (MatchArm pattern' guard' body) : rest) =
+        let opened = prior{lowerScopes = [] : lowerScopes prior}
             close next = next{lowerScopes = drop 1 (lowerScopes next)}
          in case lowerPattern lower opened subjectKind Map.empty pattern' of
               (afterPattern, Nothing) -> refused (close afterPattern)
+              (afterPattern, Just (corePattern, _))
+                | impossiblePattern corePattern -> go (close afterPattern) subjectKind done rest
               (afterPattern, Just (corePattern, _)) -> case maybe (afterPattern, Just Nothing) (fmap (fmap Just) . guardOf afterPattern) guard' of
                 (afterGuard, Nothing) -> refused (close afterGuard)
                 (afterGuard, Just coreGuard) -> case lower afterGuard body of
@@ -99,6 +112,10 @@ lowerLetElse lower state at pattern' subject fallback = case lowerMatchSubject l
         (afterFallback, Just (otherwise', CoreNeverType)) ->
           case lowerPattern lower afterFallback kind Map.empty pattern' of
             (afterPattern, Nothing) -> refused afterPattern
+            (afterPattern, Just (matched, _))
+              | impossiblePattern matched ->
+                  let statements = [CoreStatement at (CoreEvaluate core)]
+                   in evaluated afterPattern (CoreExpression at CoreNeverType (CoreBlockValue (CoreBlock statements (Just otherwise'))))
             (afterPattern, Just (matched, _)) ->
               let unit = CoreExpression at CoreUnitType (CoreBlockValue (CoreBlock [] Nothing))
                   arms = [CoreArm (locatedSpan pattern') matched Nothing unit,
@@ -122,16 +139,18 @@ lowerLetSequence lower state at pattern' subject = case lower state subject of
         (afterPattern, Nothing) -> refused afterPattern
         (afterPattern, Just (matched, _)) ->
           let here = CoreExpression (locatedSpan pattern')
-              named = case kind of
-                CoreRecordType name _ -> displayName name
-                CoreTupleType _ -> "tuple"
-                CoreArrayType _ -> "array"
-                _ -> coreTypeName kind
-              message = here CoreTextType (CoreTextLiteral ("this pattern does not match the " <> named <> " it was given"))
+              (ready, failedSubject) = bindLocal afterPattern "" kind
+              text = here CoreTextType
+              append left right = text (CoreBinary CoreAdd left right)
+              named = text (CoreRuntimeKind (here kind (CoreReadLocal failedSubject)))
+              message = append (text (CoreTextLiteral "this pattern does not match the "))
+                (append named (text (CoreTextLiteral " it was given")))
               stop = here CoreNeverType (CoreFailText "E7013" (Just "check the number of elements the pattern names against the value") message Nothing)
               unit = CoreExpression at CoreUnitType (CoreBlockValue (CoreBlock [] Nothing))
-              arms = [CoreArm (locatedSpan pattern') matched Nothing unit, CoreArm at CoreWildcardPattern Nothing stop]
-           in evaluated afterPattern (CoreExpression at CoreUnitType (CoreMatch core arms))
+              arms = [CoreArm (locatedSpan pattern') matched Nothing unit | not (impossiblePattern matched)]
+                <> [CoreArm at (CoreBindPattern failedSubject) Nothing stop]
+              result = if impossiblePattern matched then CoreNeverType else CoreUnitType
+           in evaluated ready (CoreExpression at result (CoreMatch core arms))
  where
   evaluated after core = (after, Just (CoreStatement at (CoreEvaluate core)))
 
@@ -171,7 +190,7 @@ lowerPattern lower state kind bound (Located at shape) = case shape of
   _ | isDynamic kind
     , Just owner <- nominalPatternOwner shape
     , variants@(_ : _) <-
-        [ (variant, payload)
+        [ (coreVariantName variant, payload)
         | variant <- maybe [] id (sumVariants types kind)
         , [(_, payload)] <- [coreVariantFields variant]
         , ownerKeyOf payload == Just owner ] ->
@@ -187,6 +206,8 @@ lowerPattern lower state kind bound (Located at shape) = case shape of
   -- Integers compare by value whatever their kind (sameValue), so the literal
   -- is built at the subject's kind; one the kind cannot hold never matches,
   -- and an empty alternative is a pattern that never does.
+  _ | Just variants <- runtimeChoiceAlternatives kind ->
+        narrowed state bound [] variants
   LiteralPattern literal
     | CoreIntegerType integerKind <- kind, Just number <- integerOf literal ->
         if integerKindFits integerKind number
@@ -195,9 +216,8 @@ lowerPattern lower state kind bound (Located at shape) = case shape of
   LiteralPattern literal -> case lower state (Located at (LiteralExpression literal)) of
     (after, Just (core, literalKind))
       | literalKind == kind -> done after (CoreLiteralPattern core) bound
-      -- A float of another width is never equal (Value's Eq compares widths).
-      | CoreFloatType _ <- literalKind, CoreFloatType _ <- kind -> done after never bound
-    (after, _) -> halt at "a literal pattern of another type" after
+      | otherwise -> done after never bound
+    (after, Nothing) -> refused after
   RangePattern low inclusive high
     | CoreIntegerType integerKind <- kind, Just from <- integerOf low, Just to <- integerOf high
     , Just (smallest, largest) <- integerKindBounds integerKind ->
@@ -206,18 +226,24 @@ lowerPattern lower state kind bound (Located at shape) = case shape of
          in if start > largest || end < smallest || start > end || (start == end && not closed)
               then done state never bound
               else done state (CoreRangePattern (integer integerKind start) closed (integer integerKind end)) bound
+  RangePattern low inclusive high
+    | CoreIntegerType integerKind <- kind, Just from <- integerOf low, Just to <- integerOf high
+    , Nothing <- integerKindBounds integerKind ->
+        done state (CoreRangePattern (integer integerKind from) inclusive (integer integerKind to)) bound
   RangePattern low inclusive high -> case (lower state (Located at (LiteralExpression low)), lower state (Located at (LiteralExpression high))) of
     ((_, Just (lower', lowKind)), (after, Just (upper', highKind)))
       | lowKind == kind && highKind == kind -> done after (CoreRangePattern lower' inclusive upper') bound
-    _ -> halt at "a range pattern of another type" state
+      | otherwise -> done after never bound
+    ((after, Nothing), _) -> refused after
+    (_, (after, Nothing)) -> refused after
   TuplePattern members -> case kind of
     CoreTupleType kinds | length kinds == length members -> sequenceOf CoreTuplePattern state bound (zip kinds members)
-    _ -> halt at "a tuple pattern on this value" state
+    _ -> done state never bound
   ConstructorPattern written members -> case variantOf (writtenLabel written) of
     Just variant
       | not (coreVariantRecord variant), length (coreVariantFields variant) == length members ->
           sequenceOf (CoreVariantPattern (coreVariantName variant)) state bound (zip (map snd (coreVariantFields variant)) members)
-    _ -> halt at "this constructor pattern" state
+    _ -> done state never bound
   RecordPattern path fields _ -> case (path, recordFields types kind) of
     (Nothing, Just declared) -> recordMembers CoreRecordPattern declared fields
     (Just written, Just declared)
@@ -225,7 +251,7 @@ lowerPattern lower state kind bound (Located at shape) = case shape of
     (Just written, Nothing)
       | Just variant <- variantOf (writtenLabel written), coreVariantRecord variant ->
           recordMembers (CoreVariantPattern (coreVariantName variant)) (coreVariantFields variant) fields
-    _ -> halt at "this record pattern" state
+    _ -> done state never bound
   AlternativePattern alternatives -> alternativesOf state bound [] alternatives
   ArrayPattern front rest back -> case kind of
     CoreArrayType element -> case sequenceOf CoreTuplePattern state bound [(element, member) | member <- front] of
@@ -242,7 +268,7 @@ lowerPattern lower state kind bound (Located at shape) = case shape of
               (afterBack, Just (backs, withBack)) -> done afterBack (CoreArrayPattern fronts restPattern backs) withBack
               (afterBack, Nothing) -> (afterBack, Nothing)
       (afterFront, _) -> (afterFront, Nothing)
-    _ -> halt at "a sequence pattern on this value" state
+    _ -> done state never bound
   _ -> halt at "this pattern" state
  where
   types = contextTypes (lowerContext state)
@@ -256,10 +282,11 @@ lowerPattern lower state kind bound (Located at shape) = case shape of
   variantOf name = sumVariants types kind >>= find ((== name) . coreVariantName)
   narrowed current names collected [] =
     done current (case collected of { [one] -> one; _ -> CoreAlternativePattern (reverse collected) }) names
-  narrowed current names collected ((variant, payload) : rest) =
+  narrowed current names collected ((tag, payload) : rest) =
     case lowerPattern lower current payload names (Located at shape) of
-      (after, Just (inner, bindings)) ->
-        narrowed after bindings (CoreVariantPattern (coreVariantName variant) [inner] : collected) rest
+      (after, Just (inner, bindings))
+        | impossiblePattern inner -> narrowed after{lowerScopes = lowerScopes current} names collected rest
+        | otherwise -> narrowed after bindings (CoreVariantPattern tag [inner] : collected) rest
       (after, Nothing) -> refused after
   lowerSequence current names pairs = case sequenceOf CoreTuplePattern current names pairs of
     (after, Just (CoreTuplePattern members, names')) -> (after, Just (members, names'))
@@ -280,11 +307,20 @@ lowerPattern lower state kind bound (Located at shape) = case shape of
           Just (nameSpan, inner) -> (fieldKind, maybe (Located nameSpan (BindingPattern (Located nameSpan name))) id inner)
      in if all ((`elem` map fst declared) . fst) written
           then sequenceOf build state bound (map member declared)
-          else halt at "a record pattern naming an undeclared field" state
+          else done state never bound
   alternativesOf current names collected [] = done current (CoreAlternativePattern (reverse collected)) names
   alternativesOf current names collected (alternative : rest) = case lowerPattern lower current kind names alternative of
     (next, Just (pattern', after)) -> alternativesOf next after (pattern' : collected) rest
     (next, Nothing) -> (next, Nothing)
+
+impossiblePattern :: CorePattern -> Bool
+impossiblePattern shape = case shape of
+  CoreAlternativePattern alternatives -> all impossiblePattern alternatives
+  CoreTuplePattern members -> any impossiblePattern members
+  CoreRecordPattern fields -> any impossiblePattern fields
+  CoreVariantPattern _ fields -> any impossiblePattern fields
+  CoreArrayPattern front _ back -> any impossiblePattern (front <> back)
+  _ -> False
 
 nominalPatternOwner :: Pattern -> Maybe Text
 nominalPatternOwner shape = case shape of

@@ -486,10 +486,17 @@ retained subject and projects outputs into the enclosing bindings.
 [[Backend Rendering Callable Programs]] covers a successful layout
 join, a tuple shape mismatch, and a missing field on a held record.
 
+## Held shapes in refutable patterns
+
+Architect → Backend Engineer. [[Compiler Lower Match]] selects held
+subjects and skips structurally impossible arms, with runtime kind
+diagnostics for sequence bindings. [[Backend Rendering Callable
+Programs]] covers guard ordering and a sequence subject mismatch.
+
 ## Next action
 
-Select the held subject for refutable and sequence patterns so an
-incompatible layout reaches the following arm or binding diagnostic.
+Project refutable binding slots across successful alternatives with
+different held layouts when the bindings escape to the enclosing block.
 
 ## Referenced by
 

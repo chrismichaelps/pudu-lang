@@ -194,3 +194,9 @@ reports its own bounds failure after receiver effects.
 Resolved Grill Log: cover successful bindings across held tuple and
 record layouts. Shape failures report the whole pattern and subject
 kind after evaluation and before later statements run.
+
+## Held shapes in refutable patterns
+
+Resolved Grill Log: exercise a sequence arm and guard on its matching
+layout, fall through on a different layout, and preserve a sequence
+binding diagnostic when its subject has the wrong shape.

@@ -361,6 +361,13 @@ join by binding position. Failure names the original subject's
 runtime kind at the written pattern. [[Compiler Lower Tuple]] ·
 [[Backend Rendering Callable Programs]]
 
+## Held shapes in refutable patterns (#956)
+
+Refutable patterns test the actual held layout. An impossible arm
+falls through without evaluating its guard. Sequence bindings retain
+the original pattern span and report the held subject's runtime kind.
+[[Compiler Lower Match]] · [[Backend Rendering Callable Programs]]
+
 ## Published progress (#496)
 
 The README progress bar counts **completed coverage areas**, not individual language

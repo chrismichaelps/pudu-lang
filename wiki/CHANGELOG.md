@@ -5,6 +5,12 @@ tags: [changelog]
 
 # Changelog
 
+## 2026-11-23 — Held shapes in refutable patterns (#956)
+
+- Select each held match subject before testing arms and guards.
+  Report the actual subject kind when a sequence binding fails.
+  [[Compiler Lower Match]]
+
 ## 2026-11-23 — Held destructuring subjects (#956)
 
 - Match tuple and record bindings against the retained subject.

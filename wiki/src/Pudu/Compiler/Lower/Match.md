@@ -116,3 +116,10 @@ Resolved Grill Log: Match arms with differing native product layouts project to 
 ## Runtime layouts in sum payloads (#956)
 
 Resolved Grill Log: Normalize compatible selected sum carriers before lowering source patterns. Each payload binder gets its actual slot type.
+
+## Held shapes in refutable patterns
+
+Resolved Grill Log: select the held shape before lowering match arms.
+Structurally impossible arms skip their guards and bodies. Sequence
+binding failure names the held subject, and let-else uses its fallback
+when the selected pattern is impossible.

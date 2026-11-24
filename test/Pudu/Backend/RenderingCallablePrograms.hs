@@ -546,6 +546,20 @@ renderingCallableSuccessPrograms =
         , "  read(\"λ\".toBytes())"
         , "  0", "}" ])
     , "receiver\nindexed\n\"tuple\"\nreceiver\nindexed\n8\n", "")
+  , ("a sequence pattern skips its guard when the held receiver is a tuple", program
+      (selectedReceiverTypes <> selectedSequenceSubject <>
+        [ "fn guard(value: Int) -> Bool { print(\"guard\")\n value == 7 }"
+        , "fn read(value: dynamic View) -> Int {"
+        , "  match choose(value).parts() {"
+        , "    case [item, ..] if guard(item) => item"
+        , "    case _ => 0"
+        , "  }"
+        , "}"
+        , "fn main() -> Int {"
+        , "  print(show(read(\"plain\")))"
+        , "  print(show(read(\"λ\".toBytes())))"
+        , "  0", "}" ])
+    , "receiver\nguard\n7\nreceiver\n0\n", "")
   , ("a selected declared call can reach a held collection builtin", program
       (selectedReceiverTypes <> selectedByteConversion <> selectedCollection "Map[Int, Str]" "mapOf([(0, \"held\")])" <>
         [ "trait Keys { fn keys(self: &Self) -> Array[UInt8] }"
@@ -873,6 +887,12 @@ renderingCallableRefusalPrograms =
         , "  let (first, _, _) = choose(\"λ\".toBytes()).indexed()"
         , "  print(show(first))"
         , "  0", "}" ]))
+  , ("a sequence binding reports the held tuple as its subject", program
+      (selectedReceiverTypes <> selectedSequenceSubject <>
+        [ "fn main() -> Int {"
+        , "  let [first, ..] = choose(\"λ\".toBytes()).parts()"
+        , "  print(show(first))"
+        , "  0", "}" ]))
   , ("a missing field on the held record reports its runtime kind", program
       (selectedReceiverTypes <>
         [ "type Checked = { value: Int }"
@@ -969,6 +989,14 @@ selectedIndexedReceiver held body =
   , "impl HeldIndexed for Option[Str] {"
   , "  fn indexed(self: &Self) -> " <> held <> " { print(\"indexed\")\n " <> body <> " }"
   , "}"
+  ]
+
+selectedSequenceSubject :: [Text]
+selectedSequenceSubject =
+  [ "trait CheckedParts { fn parts(self: &Self) -> Array[Int] }"
+  , "impl CheckedParts for Str { fn parts(self: &Self) -> Array[Int] { [7, 8] } }"
+  , "trait HeldParts { fn parts(self: &Self) -> (Int, Int) }"
+  , "impl HeldParts for Option[Str] { fn parts(self: &Self) -> (Int, Int) { (7, 8) } }"
   ]
 
 selectedIntegerTrait :: [Text]
