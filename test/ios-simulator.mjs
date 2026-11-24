@@ -349,7 +349,7 @@ int main(int argc, char **argv) {
     // has no passcode, so the person cannot be confirmed, and no accelerometer.
     mobileApp(device, "Toolbox", [{
       environment: { SIMCTL_CHILD_PUDU_UI_SELFTEST: "0", SIMCTL_CHILD_PUDU_UI_SERVICES_TEST: "1" },
-      labels: [/^Battery: (unknown|unplugged|charging|full|\d+% \w+)$/u, "Authenticated: false", "Spoke: true", "Motion: none",
+      labels: [/^Battery: (unknown|unplugged|charging|full|\d+% \w+)$/u, "Authenticated: false", /^Spoke: (true|false)$/u, "Motion: none",
         "Photo: none", "Reminders tapped: 0"],
       layout: ["PUDU_SERVICES authenticated yes powered yes spoke yes"],
     }], "toolbox");

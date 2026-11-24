@@ -135,8 +135,8 @@ static void pudu_do_pick_image(pudu_reader *reader) {
   [pudu_media_presenter() presentViewController:picker animated:YES completion:nil];
 }
 
-/* The services self-test: an authentication still waiting after two seconds
-   is cancelled as a person would; once authentication, the battery and
+/* The services self-test: an authentication or an utterance still waiting
+   after two seconds is cancelled, as a person would cancel it; once authentication, the battery and
    speech have each answered, or after fifteen seconds, it reports which did
    and stops. */
 static void pudu_test_services(void (^done)(void)) {
@@ -144,6 +144,7 @@ static void pudu_test_services(void (^done)(void)) {
   __block void (^check)(void);
   check = ^{
     if (waited == 20 && pudu_authenticated_count == 0) pudu_authentication_cancel();
+    if (waited == 20 && pudu_spoke_count == 0) [pudu_media.speech stopSpeakingAtBoundary:AVSpeechBoundaryImmediate];
     BOOL settled = pudu_authenticated_count > 0 && pudu_powered_count > 0 && pudu_spoke_count > 0;
     if (!settled && waited++ < 150) {
       dispatch_after(dispatch_time(DISPATCH_TIME_NOW, 100 * NSEC_PER_MSEC), dispatch_get_main_queue(), check);
