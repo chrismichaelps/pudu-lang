@@ -128,4 +128,4 @@ Iterate no longer copies its array on each push. MultiMap remains slower nativel
 
 ## Referenced by
 
-[[architecture/_MOC]] · [[Native Emission Coverage]] · [[Performance Constitution]] · [[Native Operator Parity Delivery]] · [[CHANGELOG]]
+[[architecture/_MOC]] · [[Native Emission Coverage]] · [[Performance Constitution]] · [[Native Operator Parity Delivery]] · [[CHANGELOG]] · [[NATIVE-OWNERSHIP]]

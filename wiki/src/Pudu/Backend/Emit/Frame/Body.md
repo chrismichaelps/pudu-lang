@@ -141,3 +141,7 @@ typed sequences for other carriers.
 Resolved Grill Log: selecting the text helpers per operation shortens
 repeated display and stream output sequences. Evaluation order and the
 release point remain the same.
+
+Resolved Grill Log: a transferred argument is moved into the argument area and
+its slot cleared; the call sets the transfer mask, in the call step on the heap
+path and before the direct call. [[NATIVE-OWNERSHIP]]

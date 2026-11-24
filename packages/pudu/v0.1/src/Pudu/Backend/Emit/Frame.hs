@@ -247,7 +247,8 @@ emitFrameUnit form version sources logical = do
     -- are written releases nothing; unowned slots are the body's C locals.
     stackedCall typed identity function =
       [ "static pudu_cell pudu_direct_" <> textOfInt identity <> "(const pudu_cell *arguments) {" ]
-      <> (if typed then fastEntry identity function else [])
+      -- The typed form borrows its arguments, so a moved argument takes the frame path.
+      <> (if typed then ["  if (pudu_transfer == 0) {"] <> fastEntry identity function <> ["  }"] else [])
       <> [ "  pudu_frame pudu_on_stack;"
       , "  pudu_cell pudu_cells[" <> textOfInt (frameCells function) <> "];"
       , "  pudu_cell pudu_answer;" ]

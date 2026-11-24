@@ -5,6 +5,11 @@ tags: [changelog]
 
 # Changelog
 
+## 2026-11-24 — Native ownership
+
+- Record the caller move and argument transfer design.
+  [[NATIVE-OWNERSHIP]]
+
 ## 2026-11-24 — Native dispatch and lowering parity
 
 - Keep checked trait members with their trait on held receivers.

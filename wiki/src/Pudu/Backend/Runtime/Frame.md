@@ -184,3 +184,7 @@ lifted closure's function index, enters it with the closure as its argument,
 and starts its depth from the depth the thread inherited. Resolved Grill Log:
 one dispatcher serves the main run and a started thread; thread state cannot be
 shared because two runs may execute at once.
+
+Resolved Grill Log: frame entry reads and clears the thread-local transfer mask
+and does not retain a transferred parameter; the dispatcher sets the mask from
+the call step before creating a heap frame. [[NATIVE-OWNERSHIP]]

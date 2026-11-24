@@ -3,7 +3,7 @@ module Pudu.Core.Frame
   ( FrameModule (..), FrameFunction (..), FrameBlock (..), FrameLabel (..)
   , FrameSlot (..), FrameSlotId (..), FrameInstruction (..), FrameTerminator (..)
   , FrameValue (..), FrameValueShape (..), FrameUnaryOperator (..)
-  , FrameScalarOperator, scalarOperator, coreScalarOperator, FrameFault (..)
+  , FrameScalarOperator, scalarOperator, coreScalarOperator, FrameFault (..), takenSlotName
   ) where
 
 import Data.ByteString (ByteString)
@@ -14,6 +14,11 @@ import Data.Map.Strict (Map)
 import Pudu.Core (CoreArrayMethodName, CoreBinaryOperator (..), CoreBytesMethodName, CoreDecimalMethodName, CoreClosureInfo, CoreCallbackOperation, CoreForeign, CoreKernelName, CoreKeyedMethodName, CoreLayout, CoreRangeMethodName, CoreTextMethodName, CoreType)
 import Pudu.IntegerLiteral (IntegerKind)
 import Pudu.Source (Span)
+
+{-| The slot a local move fills. A call argument held in one is transferred:
+    the caller gives up its reference and the callee does not retain it. -}
+takenSlotName :: Text
+takenSlotName = "$taken"
 
 newtype FrameLabel = FrameLabel Int deriving stock (Eq, Ord, Show)
 newtype FrameSlotId = FrameSlotId Int deriving stock (Eq, Ord, Show)

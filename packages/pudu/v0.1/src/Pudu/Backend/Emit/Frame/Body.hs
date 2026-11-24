@@ -20,7 +20,7 @@ import Pudu.Backend.Emit.Support (integerHelper, zeroValue)
 import Pudu.Core (CoreType (..))
 import Pudu.Core.Frame
   ( FrameBlock (..), FrameFault (..), FrameFunction (..), FrameInstruction (..)
-  , FrameLabel (..), FrameModule (..), FrameSlot (..), FrameSlotId (..), FrameTerminator (..) )
+  , FrameLabel (..), FrameModule (..), FrameSlot (..), FrameSlotId (..), FrameTerminator (..), takenSlotName )
 
 -- | How a body continues: suspending to the dispatcher, or running to its
 -- return as a direct function.
@@ -193,7 +193,7 @@ terminator mode callees function (state, needs) ending = case ending of
             <> ["        default: goto " <> localLabel fallback <> ";", "      }"]), needs)
   FrameCall at name arguments destination resume -> case (Map.lookup name (calleeIds callees), Map.lookup name (calleeFunctions callees)) of
     (Just callee, Just definition) | Set.member name (calleeDirect callees) -> do
-      copies <- traverse copyArgument (zip [0 ..] arguments)
+      copies <- traverse moveArgument (zip [0 ..] arguments)
       stored <- case destination of
         Nothing -> Right ["        " <> orVoid (released (frameFunctionResult definition) ("pudu_answer." <> memberOf (frameFunctionResult definition)))]
         Just slot -> do
@@ -206,6 +206,7 @@ terminator mode callees function (state, needs) ending = case ending of
             ([ "      if (pudu_frame_depth > " <> textOfInt callDepthLimit <> ") pudu_fail(&pudu_sites[" <> textOfInt index <> "]);"
              , "      pudu_frame_depth += 1;"
              , "      {"
+             , "        pudu_transfer = " <> transferMask arguments <> ";"
              , "        pudu_cell pudu_answer = pudu_direct_" <> textOfInt callee <> "(frame->arguments);" ]
              <> stored
              <> [ "      }", "      pudu_frame_depth -= 1;" ])
@@ -213,7 +214,7 @@ terminator mode callees function (state, needs) ending = case ending of
     (Just _, _) | Running <- mode -> Left (FrameFault (Just at) "a direct body calling a function on the heap path")
     (Nothing, _) -> Left (FrameFault (Just at) "an unknown generated frame callee")
     (Just callee, _) -> do
-      copies <- traverse copyArgument (zip [0 ..] arguments)
+      copies <- traverse moveArgument (zip [0 ..] arguments)
       target <- case destination of
         Nothing -> Right []
         Just slot -> do
@@ -224,6 +225,7 @@ terminator mode callees function (state, needs) ending = case ending of
           afterResume = line afterCopies ("      frame->pc = " <> labelText resume <> ";")
           result = "      return (pudu_step){.kind = PUDU_CALL, .function = " <> textOfInt callee
             <> ", .argument_count = " <> textOfInt (length arguments)
+            <> ", .transfer = " <> transferMask arguments
             <> foldMap id target <> ", .call_site = &pudu_sites[" <> textOfInt index <> "]};"
       pure (line afterResume result, Set.union needs (Set.fromList ["site", "colored", "fail"]))
   -- The dispatcher passes the closure only to a lifted body.
@@ -295,6 +297,20 @@ terminator mode callees function (state, needs) ending = case ending of
     copyArgument (index, slot) = do
       _ <- slotText slot
       pure ("      frame->arguments[" <> textOfInt index <> "] = frame->slots[" <> slotIndex slot <> "];")
+    -- A moved argument leaves the caller; its slot no longer holds the reference.
+    moveArgument (index, slot) = do
+      copied <- copyArgument (index, slot)
+      pure (if transferred index slot then copied <> " frame->slots[" <> slotIndex slot <> "].box = NULL;" else copied)
+
+{-| Moved boxed arguments, by position, as the mask callee entry reads. -}
+transferMask :: [FrameSlot] -> Text
+transferMask arguments =
+  textOfInt (sum [2 ^ index | (index, slot) <- zip [0 :: Int ..] arguments, transferred index slot] :: Int) <> "u"
+
+{-| The mask names the first 32 positions; a later moved argument is copied
+    and retained as any other. -}
+transferred :: Int -> FrameSlot -> Bool
+transferred index slot = index < 32 && frameSlotName slot == takenSlotName && cellMember (frameSlotType slot) == Just "box"
 
 slotIndex :: FrameSlot -> Text
 slotIndex slot = case frameSlotId slot of FrameSlotId identity -> textOfInt identity

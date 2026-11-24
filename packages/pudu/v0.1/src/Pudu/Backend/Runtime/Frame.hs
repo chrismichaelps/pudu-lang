@@ -49,7 +49,7 @@ frameTypes wide big decimal text boxes threads =
   , "} pudu_frame;"
   , "enum { PUDU_CALL, PUDU_RETURN, PUDU_INVALID };"
   , "typedef struct {"
-  , "  int kind; size_t function; size_t argument_count; int has_destination; int closure_call;"
+  , "  int kind; size_t function; size_t argument_count; int has_destination; int closure_call; unsigned transfer;"
   , "  size_t destination; pudu_cell result; const pudu_site *call_site;"
   , "} pudu_step;"
   , "typedef struct {"
@@ -59,6 +59,12 @@ frameTypes wide big decimal text boxes threads =
   , "} pudu_function;"
   , "static " <> local <> "pudu_frame *pudu_active_frame = NULL;"
   , "static " <> local <> "size_t pudu_frame_depth = 0;"
+  , "/* Argument positions the caller moved into the next frame; entry clears it."
+  , "   A program with no frame entry never reads it. */"
+  , "#if defined(__GNUC__) || defined(__clang__)"
+  , "__attribute__((unused))"
+  , "#endif"
+  , "static " <> local <> "unsigned pudu_transfer = 0;"
   ]
  where
   local = threadLocal threads
@@ -145,9 +151,7 @@ frameEngine owned threads stacked startupCells =
   , "  }"
   ] <> (if owned then
   [ "  /* Only parameters are set yet, so this retains exactly the arguments. */"
-  , "  for (size_t i = 0; i < definition->owned_count; ++i)"
-  , "    pudu_retain_cell(frame->slots[definition->owned[i].slot], definition->owned[i].kind);"
-  ] else []) <>
+  ] <> retainArguments else ["  pudu_transfer = 0;"]) <>
   [ "  return frame;"
   , "}"
   ] <> (if stacked then stackFrames owned else []) <>
@@ -171,6 +175,7 @@ frameEngine owned threads stacked startupCells =
   , "      size_t skipped = step.closure_call && !pudu_functions[step.function].environment ? 1 : 0;"
   , "      frame->has_destination = step.has_destination;"
   , "      frame->destination = step.destination;"
+  , "      pudu_transfer = step.transfer;"
   , "      pudu_active_frame = pudu_new_frame(step.function, frame->arguments + skipped, step.argument_count - skipped);"
   , "      /* A builtin reached through a value refuses at this call, as the interpreter does. */"
   , "      if (step.closure_call) pudu_active_frame->call_site = step.call_site;"
@@ -283,10 +288,7 @@ stackFrames owned =
   , "  frame->stacked = 1;"
   , "  for (size_t i = 0; i < definition->parameter_count; ++i)"
   , "    frame->slots[definition->parameters[i]] = arguments[i];"
-  ] <> (if owned then
-  [ "  for (size_t i = 0; i < definition->owned_count; ++i)"
-  , "    pudu_retain_cell(frame->slots[definition->owned[i].slot], definition->owned[i].kind);"
-  ] else []) <>
+  ] <> (if owned then retainArguments else ["  pudu_transfer = 0;"]) <>
   [ "  pudu_active_frame = frame;"
   , "}"
   , "static inline void pudu_stack_leave(pudu_frame *frame) {"
@@ -298,3 +300,18 @@ stackFrames owned =
 
 threadLocal :: Bool -> Text
 threadLocal threads = if threads then "_Thread_local " else ""
+
+{-| Retains each owned parameter except those the caller moved, which arrive
+    holding the only reference. Reads and clears the transfer mask. -}
+retainArguments :: [Text]
+retainArguments =
+  [ "  unsigned transfer = pudu_transfer;"
+  , "  pudu_transfer = 0;"
+  , "  for (size_t i = 0; i < definition->owned_count; ++i) {"
+  , "    size_t slot = definition->owned[i].slot;"
+  , "    int moved = 0;"
+  , "    for (size_t j = 0; transfer != 0 && j < definition->parameter_count && j < 32; ++j)"
+  , "      if (definition->parameters[j] == slot && ((transfer >> j) & 1u) != 0) moved = 1;"
+  , "    if (!moved) pudu_retain_cell(frame->slots[slot], definition->owned[i].kind);"
+  , "  }"
+  ]

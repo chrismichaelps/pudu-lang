@@ -252,8 +252,26 @@ takeReceiver local expression = case coreExpressionShape expression of
     , read' == local
     , all independent arguments ->
         expression{coreExpressionShape = CoreArrayMethod name receiver{coreExpressionShape = CoreTakeLocal local} arguments}
+  -- `x = f(&x, ...)`: the call holds the binding's only use, so it receives the value by move.
+  CoreCall name arguments
+    | movable (coreLocalType local)
+    , [(before, borrowed, after)] <- [ (take index arguments, argument, drop (index + 1) arguments)
+                                     | (index, argument) <- zip [0 ..] arguments, readsLocal argument ]
+    , all independent (before <> after) ->
+        expression{coreExpressionShape = CoreCall name (before <> [borrowed{coreExpressionShape = CoreTakeLocal local}] <> after)}
   _ -> expression
  where
+  -- Only counted aggregates gain from a move; scalars are copied either way.
+  movable kind = case kind of
+    CoreArrayType{} -> True
+    CoreMapType{} -> True
+    CoreSetType{} -> True
+    CoreStoreType{} -> True
+    CoreRecordType{} -> True
+    _ -> False
+  readsLocal operand = case coreExpressionShape operand of
+    CoreReadLocal read' -> read' == local
+    _ -> False
   independent operand = case coreExpressionShape operand of
     CoreReadLocal other -> other /= local
     CoreIntegerLiteral{} -> True
