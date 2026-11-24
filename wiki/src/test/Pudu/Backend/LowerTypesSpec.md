@@ -106,3 +106,5 @@ constant whose folding left no product lowers its written initializer in its
 declaring module. The reference cases lower Task carriers and refuse only when
 facts are removed. Resolved Grill Log: each changed expectation follows the
 documented carrier or fallback; no expectation was refreshed from output alone.
+
+Resolved Grill Log. Ranges carry exact endpoints, so only an element layout can contradict a folded constant's checked type; the malformed-product check uses an array.

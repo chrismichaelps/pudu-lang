@@ -34,3 +34,5 @@ Resolved Grill Log. Cover a changed state carrier passed to the next
 advance after a binder skip. Compare the complete runtime diagnostic
 for an advance result with a malformed payload, and preserve effects
 before a transfer from a sequence method. [[Compiler Lower For]]
+
+Resolved Grill Log. A record literal iterated directly is written in parentheses so the loop body is not read as its fields.

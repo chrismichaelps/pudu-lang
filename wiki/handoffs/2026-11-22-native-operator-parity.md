@@ -651,7 +651,7 @@ paths with allocation and ownership regressions.
 
 ## Next action
 
-Run the full native conformance properties on the parity branch and resolve any remaining interpreter differences before marking the pull request ready.
+Remove the copies on the native MultiMap add path, which runs slower than the evaluator in the benchmark snapshot of [[NATIVE-PERFORMANCE]].
 
 Architect → Backend Engineer. [[Compiler Lower Method Value]] and
 [[Compiler Lower Record]] select the actual builtin member signature.

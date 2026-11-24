@@ -21,6 +21,12 @@ tags: [changelog]
   [[Compiler Lower Place]] · [[Compiler Lower Loan]]
 - Restrict held-receiver test programs to forms evaluation accepts.
   [[Backend Rendering Callable Programs]]
+- Fold store keys into one signed word.
+  [[Compiler Lower Keyed]]
+- Name array storage by capacity so release never misses a heap buffer.
+  [[Backend Runtime Array]]
+- Repair test programs that checking or parsing rejects.
+  [[Backend Rendering Callable Programs]]
 
 ## 2026-11-24 — Held builtin member values (#956)
 

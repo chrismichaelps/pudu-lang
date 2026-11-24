@@ -91,3 +91,5 @@ Resolved Grill Log: a store validates and folds an integer key,
 whereas maps and sets accept arbitrary held keys and values. Merge
 and set algebra check the argument family after evaluation and then
 settle a shared collection layout.
+
+Resolved Grill Log: a store folds every key into one signed word before lookup, insertion and removal, an Int already beyond that word included, so its keys always read back within Int as evaluation keeps them.

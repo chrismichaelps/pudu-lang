@@ -228,8 +228,13 @@ lowerKeyedMethod lower state at checked target member arguments = case collectAr
     CoreStoreType _ -> "Buckets"
     _ -> "Set"
   indexed kind cores = case (kind, cores) of
-    (CoreStoreType _, probe : rest) -> wrappedPosition at probe : rest
+    (CoreStoreType _, probe : rest) -> storeKey probe : rest
     _ -> cores
+  -- A store folds every key into one signed word, an Int beyond it included.
+  storeKey probe
+    | coreExpressionType probe == intType =
+        CoreExpression at intType (CoreBinary CoreWrapAdd probe (CoreExpression at intType (CoreIntegerLiteral PlatformSigned 0)))
+    | otherwise = wrappedPosition at probe
   storeMethods kind value =
     [ ("size", ([], intType, plain KeyedSize))
     , ("isEmpty", ([], CoreBoolType, plain KeyedIsEmpty))

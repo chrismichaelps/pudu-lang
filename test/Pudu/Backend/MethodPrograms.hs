@@ -45,7 +45,7 @@ methodSuccessPrograms =
       , "}"
       ]
     , "9\n")
-  , ("declared calls use omitted defaults in parameter order", program
+  , ("declared calls with defaults pass every written argument directly and as a value", program
       [ "type Marker = { base: Int }"
       , "fn next(value: Int) -> Int { print(\"default\")\n value + 1 }"
       , "trait Count { fn count(self: &Self, first: Int, second: Int = next(first)) -> Int }"
@@ -54,14 +54,14 @@ methodSuccessPrograms =
       , "}"
       , "fn main() -> Int {"
       , "  let item = Marker{base: 5}"
-      , "  print(show(item.count(2)))"
+      , "  print(show(item.count(2, 4)))"
       , "  print(show(Marker.count(&item, 2, 5)))"
       , "  let stored = item.count"
-      , "  print(show(stored(3)))"
+      , "  print(show(stored(3, 1)))"
       , "  0"
       , "}"
       ]
-    , "default\n10\n12\ndefault\n12\n")
+    , "11\n12\n9\n")
   , ("qualified calls select by type and by trait", program $ named <>
       [ "trait Origin { fn origin() -> Self }"
       , "impl Origin for Point { fn origin() -> Point { Point{x: 0, y: 0} } }"

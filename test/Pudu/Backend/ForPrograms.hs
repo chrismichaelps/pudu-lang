@@ -30,6 +30,18 @@ sequenceView checked checkedBody held heldBody =
   , "impl HeldStep for Option[Str] { fn step(self: &Self) -> " <> held <> " { " <> heldBody <> " } }"
   ]
 
+{-| The checked builtin `length` has no trait provider, so a held Option[Str]
+    answers it through its own implementation. -}
+heldLength :: Text -> Text -> [Text]
+heldLength held heldBody =
+  [ "trait View { fn size(self: &Self) -> Int }"
+  , "impl View for Str { fn size(self: &Self) -> Int { self.length() } }"
+  , "impl View for Bytes { fn size(self: &Self) -> Int { 0 } }"
+  , "fn select(value: dynamic View) -> Str { value.toText() }"
+  , "trait HeldLength { fn length(self: &Self) -> " <> held <> " }"
+  , "impl HeldLength for Option[Str] { fn length(self: &Self) -> " <> held <> " { " <> heldBody <> " } }"
+  ]
+
 stateSequence :: Text -> Text -> [Text]
 stateSequence beginBody advanceBody =
   [ "trait Sequence[S, T] {"
@@ -84,8 +96,8 @@ forSuccessPrograms =
       , "  return 0", "}" ]
     , "t3\nt2\nt1\nt3 empty\n")
   , ("a sequence carries the held next state through a skipped binder", program $
-      sequenceView "Int" "1" "Str" "\"next\"" <>
-      stateSequence "self.start" "if show(state) == \"2\" { Some((select(\"λ\".toBytes()).step(), 0)) } else { None }" <>
+      heldLength "Str" "\"next\"" <>
+      stateSequence "self.start" "if show(state) == \"2\" { Some((select(\"λ\".toBytes()).length(), 0)) } else { None }" <>
       [ "fn main() -> Int {"
       , "  for 9 in (Steps{start: 2}) { print(\"unreached\") }"
       , "  print(\"done\")"

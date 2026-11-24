@@ -42,3 +42,5 @@ join checks separator and member lengths separately before adding them.
 
 the helper needs no element pointer or separator because
 operand evaluation has already finished and neither changes the outcome.
+
+Resolved Grill Log: an item buffer is inline exactly when its capacity is at most the inline cell count, and every heap buffer holds more. Release and growth read the storage from capacity, never from the buffer address, because a separate heap buffer may be placed at the address the inline cells would occupy.

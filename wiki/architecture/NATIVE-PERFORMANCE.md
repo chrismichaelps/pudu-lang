@@ -109,6 +109,23 @@ potential changes in scaling ahead of smaller per-operation costs. See
   pinned, repeatable baseline, verify the workload and choose the budget
   from that evidence.
 
+## Benchmark snapshot (2026-11-24)
+
+Native median wall time per process at -O2 on the development machine, five samples after an untimed first launch, with output checked against the expected answer.
+
+| Workload | Native (ms) | Compiled evaluator (ms) |
+|----------|-------------|-------------------------|
+| Loop | 32.3 | 201.2 |
+| Calls | 27.6 | 296.8 |
+| CallBench | 97.0 | 5382.8 |
+| Arrays | 17.9 | 588.3 |
+| Records | 49.7 | 461.9 |
+| Maps | 227.3 | 617.3 |
+| MultiMap | 3445.8 | 829.8 |
+| Iterate | 9.5 | 354.1 |
+
+Iterate no longer copies its array on each push. MultiMap remains slower natively than in the evaluator and is the next performance item.
+
 ## Referenced by
 
 [[architecture/_MOC]] · [[Native Emission Coverage]] · [[Performance Constitution]] · [[Native Operator Parity Delivery]] · [[CHANGELOG]]
