@@ -22,6 +22,8 @@ enum { PUDU_LINK_OFFLINE, PUDU_LINK_WIFI, PUDU_LINK_CELLULAR, PUDU_LINK_WIRED, P
 
 static nw_path_monitor_t pudu_network_monitor;
 static uint32_t pudu_network_link = PUDU_LINK_UNKNOWN;
+/* How many NETWORKED events were queued, for the device self-test. */
+static unsigned pudu_networked_count;
 
 /* The hardware model: the simulated device's identifier on the simulator,
    where uname names the host processor, else the machine identifier. */
@@ -70,6 +72,7 @@ static void pudu_do_network(pudu_reader *reader) {
     uint32_t link = pudu_link_of(path);
     if (link == pudu_network_link) return;
     pudu_network_link = link;
+    pudu_networked_count++;
     pudu_queue(PUDU_UI_NETWORKED, 0, nil, link);
   });
   pudu_network_monitor = monitor;
@@ -145,6 +148,22 @@ static void pudu_do_sense(pudu_reader *reader) {
     CMAcceleration a = data.acceleration;
     pudu_queue_words(PUDU_UI_SENSED, 0, nil, 0, @[ @((int32_t)lround(a.x * 1000)), @((int32_t)lround(a.y * 1000)), @((int32_t)lround(a.z * 1000)) ]);
   }];
+}
+
+/* The device self-test: once the network monitor has reported, or after ten
+   seconds, it stops; the screen then shows the reported link. */
+static void pudu_test_device(void (^done)(void)) {
+  __block int waited = 0;
+  __block void (^check)(void);
+  check = ^{
+    if (pudu_networked_count == 0 && waited++ < 100) {
+      dispatch_after(dispatch_time(DISPATCH_TIME_NOW, 100 * NSEC_PER_MSEC), dispatch_get_main_queue(), check);
+      return;
+    }
+    check = nil;
+    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, 300 * NSEC_PER_MSEC), dispatch_get_main_queue(), done);
+  };
+  dispatch_after(dispatch_time(DISPATCH_TIME_NOW, 300 * NSEC_PER_MSEC), dispatch_get_main_queue(), check);
 }
 
 #endif

@@ -404,7 +404,7 @@ static const pudu_self_test pudu_self_tests[] = {
   { "PUDU_UI_MATERIAL_TEST", pudu_run_material }, { "PUDU_UI_LIST_TEST", pudu_run_list },
   { "PUDU_UI_THEME_TEST", pudu_run_theme }, { "PUDU_UI_KEYBOARD_TEST", pudu_run_keyboard },
   { "PUDU_UI_LOCATION_TEST", pudu_test_location }, { "PUDU_UI_SERVICES_TEST", pudu_test_services },
-  { "PUDU_UI_WEB_TEST", pudu_test_web },
+  { "PUDU_UI_WEB_TEST", pudu_test_web }, { "PUDU_UI_DEVICE_TEST", pudu_test_device },
 };
 
 @interface PuduAppDelegate : UIResponder <UIApplicationDelegate>

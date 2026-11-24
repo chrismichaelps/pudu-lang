@@ -117,4 +117,4 @@ The iOS link adds the Network framework to `hostFrameworks`, for the path monito
 
 ## Service frameworks (#989)
 
-The iOS host always links LocalAuthentication, SafariServices, AVFoundation, PhotosUI and CoreMotion, in `hostFrameworks`. No program needs to request them; the host sources decide their use.
+The iOS host always links LocalAuthentication, SafariServices, AVFoundation, PhotosUI, CoreMedia and CoreMotion, in `hostFrameworks`. No program needs to request them; the host sources decide their use. CoreMedia supplies the time constants of the video and audio host code (#990).

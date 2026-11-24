@@ -386,9 +386,9 @@ export fn track(out: Array[UInt8], on: UInt32, precision: UInt32, distance: UInt
 /// Loads `url` into web node `node`.
 export fn load(out: Array[UInt8], node: UInt32, url: Str) -> Array[UInt8] { field(words(out, [LOAD, node]), url) }
 
-/// Sets video node `node` to `source`, playing or paused, looping or not.
-export fn media(out: Array[UInt8], node: UInt32, playing: UInt32, looping: UInt32, source: Str) -> Array[UInt8] {
-  field(words(out, [MEDIA, node, playing, looping]), source)
+/// Sets video node `node` to `location`, playing or paused, looping or not.
+export fn media(out: Array[UInt8], node: UInt32, playing: UInt32, looping: UInt32, location: Str) -> Array[UInt8] {
+  field(words(out, [MEDIA, node, playing, looping]), location)
 }
 
 /// Shows `node` as the screen's content.

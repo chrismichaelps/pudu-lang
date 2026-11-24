@@ -235,10 +235,10 @@ fn sensed(found: Option[Device.Motion]) -> Option[View.Event] {
 
 // A picked image's copy when the detail word is 1, a cancellation when it is
 // 0 with no text; any other shape is never written.
-fn picked(reported: UInt32, chosen: UInt32, path: Str) -> View.Event {
-  if chosen == 1u32 && path.length() > 0 {
+fn picked(reported: UInt32, kept: UInt32, path: Str) -> View.Event {
+  if kept == 1u32 && path.length() > 0 {
     View.ImagePicked(reported, Some(path))
-  } else if chosen == 0u32 && path.length() == 0 {
+  } else if kept == 0u32 && path.length() == 0 {
     View.ImagePicked(reported, None)
   } else {
     View.Stopped

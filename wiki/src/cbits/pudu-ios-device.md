@@ -31,6 +31,7 @@ static uint32_t pudu_link_code(nw_path_t path)
 - NETWORK 0 cancels the monitor. No later report is queued from it.
 - AWAKE sets `UIApplication.sharedApplication.idleTimerDisabled` to the flag. The setting is held until the next AWAKE.
 - With the environment variable `PUDU_UI_DEVICE_TEST` set, each AWAKE prints `PUDU_DEVICE awake yes` or `PUDU_DEVICE awake no` to standard output, so the simulator suite can observe the setting.
+- The self-test `pudu_test_device` waits until the monitor has queued a NETWORKED (counter `pudu_networked_count`), for up to 10 seconds, and then stops the program.
 
 ## Invariants
 
@@ -54,6 +55,7 @@ Depends on Foundation (`NSLocale`, `NSTimeZone`, `NSString`), UIKit (`UIDevice`,
 - **Q:** Why does the model come from the simulator environment on the simulator? **A:** The machine name reports the host processor when the app runs in the simulator, so a program would read the wrong hardware. The environment value names the simulated device.
 - **Q:** Why does the monitor report only on a change of link kind? **A:** Path updates for the same interface kind carry no new information for the program. Reporting them would only wake the program.
 - **Q:** Why does keep-awake hold no timer? **A:** The platform clears the idle-timer setting when the app leaves the foreground. The host sets the flag as asked and leaves the lifetime to the program.
+- **Q:** Why wait for the first network report? **A:** The monitor answers asynchronously; stopping on a fixed delay can end the program before its link is shown. _Rejected:_ a longer fixed delay.
 
 ## Services (#989)
 
