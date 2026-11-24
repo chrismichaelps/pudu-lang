@@ -571,6 +571,10 @@ entry for receivers and arguments with unchanged layouts.
 
 Resolved Grill Log: Indirect calls and array callbacks share callable adaptation. Written and stored callbacks keep their source name resolution.
 
+Resolved Grill Log: supply the open traversal specializer to collection
+dispatch along with the source callback lowerer. A saved callback uses the
+retained operands rather than re-lowering their source expressions.
+
 ## Runtime layouts in products (#956)
 
 Resolved Grill Log: An if joining different product carriers gives both branches a shared native product layout. Branch effects and transfers still run only on their original paths.

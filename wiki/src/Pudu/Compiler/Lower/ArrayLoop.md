@@ -41,3 +41,9 @@ callback's arity, including a bound method's written parameters.
 Resolved Grill Log: traversal supplies values. When the selected
 callback returns mutable finals, extract its ordinary result and
 release the finals without writing back to the collection.
+
+Resolved Grill Log: a stored open traversal used as a callback can
+specialize to the retained callback operands when the original input
+layout differs. The loop asks the same callable specialization used by
+ordinary indirect calls. It generates the specialization inside the
+visited arm, so empty traversals still make no callback call.

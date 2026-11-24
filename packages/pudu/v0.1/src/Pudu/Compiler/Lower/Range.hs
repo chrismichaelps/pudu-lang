@@ -11,6 +11,7 @@ import Pudu.Compiler.Lower.Arguments
   )
 import Pudu.Compiler.Lower.Dynamic (joinRuntimeArms, mapRuntimeChoice)
 import Pudu.Compiler.Lower.Array (LowerCallback, lowerArrayLoop, stopped, stops)
+import Pudu.Compiler.Lower.ArrayLoop (CallbackSpecializer)
 import Pudu.Compiler.Lower.State (LowerState, bindLocal, halt, intType, refused)
 import Pudu.Core
 import Pudu.Frontend.Syntax (Expression, Located (..))
@@ -72,15 +73,15 @@ selectRangeEndpoint at state endpoint consume
        in (state, Just (expression CoreNeverType (CoreFailText "E7001" Nothing message Nothing), CoreNeverType))
 
 {-| A method of a range value; Nothing when the receiver is not one. -}
-lowerRangeMethod :: LowerExpression -> LowerCallback -> LowerState -> Span -> CoreExpression -> Text
+lowerRangeMethod :: LowerExpression -> LowerCallback -> CallbackSpecializer -> LowerState -> Span -> CoreExpression -> Text
   -> [Located Expression] -> Lowered
-lowerRangeMethod lower lowerCallback state at receiver member arguments = case member of
+lowerRangeMethod lower lowerCallback specialize state at receiver member arguments = case member of
   _ | member `elem` ["map", "filter", "reduce"], length arguments /= callbackArity ->
       validated (replicate callbackArity AnySlot) (\ready _ -> refused ready)
   _ | member `elem` ["map", "filter", "reduce"] ->
       selectRangeItems at state receiver $ \ready held arrayKind ->
         let items target = CoreExpression at arrayKind (CoreRangeMethod (RangeValuesFor member) target [])
-         in lowerArrayLoop lower lowerCallback ready at held member arguments arrayKind items
+         in lowerArrayLoop lower lowerCallback specialize ready at held member arguments arrayKind items
   "start" -> optional RangeHasStart RangeStartExact
   "end" -> optional RangeHasEnd RangeEndExact
   _ -> case lookup member direct of

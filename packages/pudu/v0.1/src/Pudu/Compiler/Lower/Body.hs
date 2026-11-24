@@ -38,7 +38,7 @@ import Pudu.Compiler.Lower.Foreign
 import Pudu.Compiler.Lower.Primitive (lowerPrimitiveCall)
 import Pudu.Compiler.Lower.MethodValue (lowerMethodValue, lowerTraitMethodValue)
 import Pudu.Compiler.Lower.Stop (lowerPanic, lowerUntypedConvert)
-import Pudu.Compiler.Lower.Lambda (lowerFunctionValue, lowerFunctionValueWithInputs, lowerLambda, lowerLambdaWithInputs, lowerValueCall, specializeCallable)
+import Pudu.Compiler.Lower.Lambda (lowerFunctionValue, lowerFunctionValueWithInputs, lowerLambda, lowerLambdaWithInputs, lowerValueCall, specializeCallable, specializeOpenTraversal)
 import Pudu.Compiler.Lower.Tuple (lowerTuple, lowerTuplePattern)
 import Pudu.Compiler.Lower.Place (declareLocal, lowerPlaceAssignment)
 import Pudu.Compiler.Lower.Loan (loanedReturn)
@@ -606,14 +606,15 @@ lowerExpression state (Located spanValue expression) = case expression of
          in Just (after{lowerContext = (lowerContext after){contextTypes = types}}, result)
       collection = do
         owner <- ownerKeyOf kind
+        let specialize = specializeOpenTraversal lowerExpression lowerBlock
         if plain == "toText" || plain `notElem` builtinMethodNamesFor owner then Nothing else
           case kind of
             CoreArrayType element ->
               let input = case checked owner of
                     CoreArrayType declared -> declared
                     _ -> element
-               in Just (lowerArrayMethod lowerExpression lowerArrayCallback current spanValue input held plain arguments)
-            CoreRangeType -> Just (lowerRangeMethod lowerExpression lowerArrayCallback current spanValue held plain arguments)
+               in Just (lowerArrayMethod lowerExpression lowerArrayCallback specialize current spanValue input held plain arguments)
+            CoreRangeType -> Just (lowerRangeMethod lowerExpression lowerArrayCallback specialize current spanValue held plain arguments)
             _ | treeType kind -> Just (lowerKeyedMethod lowerExpression current spanValue (checked owner) held plain arguments)
             _ -> Nothing
     -- With no method of that name, a call reads the field and calls what it holds.

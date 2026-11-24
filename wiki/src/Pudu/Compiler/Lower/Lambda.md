@@ -124,6 +124,12 @@ Resolved Grill Log: Select a stored callable by native body identity and build a
 
 Resolved Grill Log: A selected method copy reads the original receiver capture. A selected intrinsic copy has no environment and keeps the intrinsic call-depth rule.
 
+Resolved Grill Log: a selected open traversal derives its instantiated fact
+and result carrier from the supplied callback or seed when building a copy.
+The copy keeps the captured receiver and original method identity.
+The traversal entry selects only open method templates for this adaptation.
+Other callback signatures retain the ordinary mismatch diagnostic.
+
 ## Native task result layouts (#956)
 
 Resolved Grill Log: A task retains its captures and settles its actual result. Its joiner stashes a selected failure in the exact carrier used by the scope.

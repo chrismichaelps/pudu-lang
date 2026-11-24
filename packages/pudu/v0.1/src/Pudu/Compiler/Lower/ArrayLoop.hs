@@ -1,5 +1,5 @@
 {-| @Pudu.Compiler.Lower.ArrayLoop — traversal over retained collection inputs. -}
-module Pudu.Compiler.Lower.ArrayLoop (arrayMethodWith, joinsHeldText) where
+module Pudu.Compiler.Lower.ArrayLoop (CallbackSpecializer, arrayMethodWith, joinsHeldText) where
 
 import Data.List (mapAccumL)
 import Data.Text (Text)
@@ -16,6 +16,7 @@ import Pudu.IntegerLiteral (IntegerKind (PlatformSigned))
 import Pudu.Source (Span)
 
 type Lowered = (LowerState, Maybe (CoreExpression, CoreType))
+type CallbackSpecializer = [CoreType] -> LowerState -> CoreExpression -> Maybe Lowered
 
 dynamicTextVariant :: LowerTypes -> CoreType -> Maybe CoreVariant
 dynamicTextVariant types kind
@@ -28,9 +29,9 @@ joinsHeldText types kind = case runtimeChoiceAlternatives kind of
   Just _ -> True
   Nothing -> dynamicTextVariant types kind /= Nothing
 
-arrayMethodWith :: LowerState -> Span -> Text -> Maybe ([CoreExpression], CoreExpression)
+arrayMethodWith :: CallbackSpecializer -> LowerState -> Span -> Text -> Maybe ([CoreExpression], CoreExpression)
   -> CoreType -> CoreType -> (CoreExpression -> CoreExpression) -> Lowered
-arrayMethodWith state at member operands kind element toItems = case member of
+arrayMethodWith specialize state at member operands kind element toItems = case member of
   "map" -> looped True
   "filter" -> looped False
   "reduce" -> reduced
@@ -161,9 +162,10 @@ arrayMethodWith state at member operands kind element toItems = case member of
   invalidText = expression CoreNeverType (CoreFailText "E7001" Nothing
     (expression CoreTextType (CoreTextLiteral "join expects an array of text")) Nothing)
 
-  invokeCallback current function arguments
+  invokeCallback = invoke True
+  invoke adaptable current function arguments
     | Just selected <- mapRuntimeChoice current at CoreNeverType function
-        (\ready held -> invokeCallback ready held arguments) = fmap (fmap fst) selected
+        (\ready held -> invoke adaptable ready held arguments) = fmap (fmap fst) selected
     | CoreFunctionType inputs result <- callableKind =
         invokeFunction current inputs result
     | CoreCallbackType{} <- callableKind = halt at "an array callback through a foreign token" current
@@ -191,8 +193,19 @@ arrayMethodWith state at member operands kind element toItems = case member of
               | map coreExpressionType passed == inputs
               , CoreTupleType (answer : finals) <- result, length finals == length loans =
                   expression answer (CoreTupleIndex 0 called)
-              | otherwise = argumentFailure blame at "E7001" "cannot call a function value with these arguments"
-         in (ready, Just (value, coreExpressionType value))
+              | otherwise = mismatch
+            mismatch = argumentFailure blame at "E7001" "cannot call a function value with these arguments"
+            replay = ready{lowerContext = (lowerContext ready){contextNeedsCallableReplay = True}}
+         in if map coreExpressionType passed == inputs
+              then (ready, Just (value, coreExpressionType value))
+              else if adaptable && null loans
+                then case specialize (map coreExpressionType given) replay target of
+                  Just (after, Just (selected, _)) ->
+                    let (finished, answer) = invoke False after selected given
+                     in (finished, (\held -> (held, coreExpressionType held)) <$> answer)
+                  Just (after, Nothing) -> refused after
+                  Nothing -> (replay, Just (mismatch, CoreNeverType))
+                else (ready, Just (mismatch, CoreNeverType))
 
   checkCallable function applied =
     let label = expression CoreTextType (CoreRuntimeKind function)

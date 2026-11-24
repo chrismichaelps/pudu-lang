@@ -4,7 +4,7 @@
     method on it through the same lowering a written call gets. -}
 module Pudu.Compiler.Lower.MethodValue
   ( lowerMethodValue, lowerTraitMethodValue, lowerDynamicTextCall, registerMethodValue
-  , boundMemberFact, declaredMemberType, lowerHeldMethodValue ) where
+  , boundMemberFact, declaredMemberType, lowerHeldMethodValue, openTraversal, specializeTraversalMethod ) where
 
 import Control.Applicative ((<|>))
 import qualified Data.Set as Set
@@ -23,7 +23,7 @@ import Pudu.Compiler.Lower.Generic (matchType)
 import Pudu.Compiler.Lower.Loan (closeLoaned, withLoanedParameters)
 import Pudu.Compiler.Lower.Place (holdPlace, readHeldAtKeys, storeHeld)
 import Pudu.Compiler.Lower.Text (lowerTextMethod)
-import Pudu.Compiler.Lower.Types (formedCoreTypeIn, isDynamic, loanedInputs, ownerKeyOf, recordFields, selectedMember, sumVariants, typeFactAt, typeForSpan, unformed, withFacts)
+import Pudu.Compiler.Lower.Types (formedCoreTypeIn, isDynamic, loanedInputs, nativeValueType, ownerKeyOf, recordFields, selectedMember, sumVariants, typeFactAt, typeForSpan, unformed, withFacts)
 import Pudu.Core
 import Pudu.Core.Closure (textMethodPrefix)
 import Pudu.Frontend.Syntax (Expression (..), Located (..))
@@ -85,7 +85,7 @@ builtinMemberFact at actual plain expected = evalChecker $ do
       Just (FunctionTypeRequiring _ [_, accumulator] _ _)) | settled accumulator ->
         unify at open accumulator >> zonk signature
     _ -> pure signature
-  pure (if settled lowered then Just lowered else Nothing)
+  pure (if settled lowered || openTraversal plain lowered then Just lowered else Nothing)
  where
   settled value = case value of
     VariableType{} -> False
@@ -97,6 +97,28 @@ builtinMemberFact at actual plain expected = evalChecker $ do
     RestrictedType _ target -> settled target
     AppliedType target arguments -> all settled (target : arguments)
     _ -> True
+
+openTraversal :: Text -> Type -> Bool
+openTraversal member signature = case (member, signature) of
+  ("map", FunctionTypeRequiring _ _ _ (NominalType "Array" [VariableType{}])) -> True
+  ("reduce", FunctionTypeRequiring _ _ _ VariableType{}) -> True
+  _ -> False
+
+{-| The open template keeps the receiver independently of its unit
+    instantiation. A call with a different callback or seed selects a copy. -}
+specializeTraversalMethod :: Span -> CoreType -> Text -> Type -> [CoreType] -> Maybe (CoreType, Type)
+specializeTraversalMethod at receiver member original supplied
+  | openTraversal plain original = do
+      result <- case (plain, supplied) of
+        ("map", [CoreFunctionType _ answer]) | nativeValueType answer -> Just (CoreArrayType answer)
+        ("reduce", [_, seed]) | nativeValueType seed -> Just seed
+        _ -> Nothing
+      let witness = FunctionTypeValue False (map unformed supplied) (unformed result)
+      selected <- builtinMemberFact at receiver plain (Just witness)
+      if openTraversal plain selected then Nothing else Just (result, selected)
+  | otherwise = Nothing
+ where
+  plain = snd (selectedMember member)
 
 lowerHeldMethodValue :: LowerExpression -> LowerState -> Span -> Located Expression -> Text
   -> CoreExpression -> Maybe Lowered

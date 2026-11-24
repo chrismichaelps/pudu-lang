@@ -136,6 +136,9 @@ Resolved Grill Log: traversal uses the same call shape for each
 selected callback body. Mapping keeps every reachable result layout;
 reduction projects callback results into its accumulator.
 
+Resolved Grill Log: pass the callable specializer through array and range
+traversal without changing how the written operands are evaluated.
+
 ## Runtime keyed layouts (#956)
 
 Resolved Grill Log: Keyed collections reuse the array reboxing loop for keys and entry pairs.

@@ -14,7 +14,7 @@ import Pudu.Compiler.Lower.Arguments
   ( ArgumentSlot (..), argumentFailure, builtinArityFailure
   , callWithRuntimeArguments, collectArguments, methodArgumentBlame, stopped, stops, wrappedPosition
   )
-import Pudu.Compiler.Lower.ArrayLoop (arrayMethodWith, joinsHeldText)
+import Pudu.Compiler.Lower.ArrayLoop (CallbackSpecializer, arrayMethodWith, joinsHeldText)
 import Pudu.Compiler.Lower.Control (expressionIsPrintValued)
 import Pudu.Compiler.Lower.State (LowerContext (..), LowerState (..), halt, intType, refuse, refused)
 import Pudu.Compiler.Lower.Types (LowerTypes, nativeValueType, typeFactAt, typeForSpan)
@@ -74,9 +74,9 @@ arrayAt state at members = case typeForSpan (contextTypes (lowerContext state)) 
     | otherwise -> Nothing
 
 {-| A built-in method when the receiver is an array. -}
-lowerArrayMethod :: LowerExpression -> LowerCallback -> LowerState -> Span -> CoreType -> CoreExpression -> Text
+lowerArrayMethod :: LowerExpression -> LowerCallback -> CallbackSpecializer -> LowerState -> Span -> CoreType -> CoreExpression -> Text
   -> [Located Expression] -> Lowered
-lowerArrayMethod lower lowerCallback state at declaredElement receiver member arguments
+lowerArrayMethod lower lowerCallback specialize state at declaredElement receiver member arguments
   | kind@(CoreArrayType element) <- coreExpressionType receiver =
       case arrayOperands declaredElement kind state arguments of
         (after, Nothing) -> refused after
@@ -86,7 +86,7 @@ lowerArrayMethod lower lowerCallback state at declaredElement receiver member ar
               Just (name, parameters, result) ->
                 let apply ready (held : operands)
                       | name == ArrayJoinWith, joinsHeldText types element =
-                          arrayMethodWith ready at member (Just (operands, held)) kind element id
+                          arrayMethodWith specialize ready at member (Just (operands, held)) kind element id
                       | otherwise =
                           runtime ready declaredElement element name parameters result held (positions name operands)
                     apply ready _ = refused ready
@@ -94,7 +94,7 @@ lowerArrayMethod lower lowerCallback state at declaredElement receiver member ar
                       (ExactSlot kind : slots name parameters) apply after (receiver : written)
               Nothing ->
                 let arity = if member == "reduce" then 2 else 1
-                    apply ready (held : operands) = arrayMethodWith ready at member (Just (operands, held)) kind element id
+                    apply ready (held : operands) = arrayMethodWith specialize ready at member (Just (operands, held)) kind element id
                     apply ready _ = refused ready
                  in callWithRuntimeArguments at (wrongArity arity) (ExactSlot kind : replicate arity AnySlot)
                       apply after (receiver : written)
@@ -188,9 +188,9 @@ combinedElement checked = runtimeResultType checked . Set.unions . map runtimeCa
 
 {-| `map`, `filter` and `reduce` over something that is not itself an array:
     `toItems` converts the retained receiver after all supplied operands run. -}
-lowerArrayLoop :: LowerExpression -> LowerCallback -> LowerState -> Span -> CoreExpression -> Text -> [Located Expression]
+lowerArrayLoop :: LowerExpression -> LowerCallback -> CallbackSpecializer -> LowerState -> Span -> CoreExpression -> Text -> [Located Expression]
   -> CoreType -> (CoreExpression -> CoreExpression) -> Lowered
-lowerArrayLoop lower lowerCallback state at receiver member arguments kind toItems = case kind of
+lowerArrayLoop lower lowerCallback specialize state at receiver member arguments kind toItems = case kind of
   CoreArrayType element ->
     let lowerOperands current written = case (member, written) of
           ("reduce", [callback, seed]) -> reduceOperands lower lowerCallback at intType element current callback seed
@@ -198,7 +198,7 @@ lowerArrayLoop lower lowerCallback state at receiver member arguments kind toIte
             collect (lowerCallback [element]) current [callback]
           _ -> collect lower current written
         (after, operands) = lowerOperands state arguments
-     in arrayMethodWith after at member ((\written -> (written, receiver)) <$> operands) kind element toItems
+     in arrayMethodWith specialize after at member ((\written -> (written, receiver)) <$> operands) kind element toItems
   _ -> halt at ("the method '" <> member <> "'") state
 
 reduceOperands :: LowerExpression -> LowerCallback -> Span -> CoreType -> CoreType

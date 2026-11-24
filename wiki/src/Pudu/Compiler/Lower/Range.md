@@ -7,6 +7,9 @@ aliases: [Compiler Lower Range]
 ---
 # Compiler Lower Range
 
+Resolved Grill Log: forward the stored callback specializer into the
+shared array loop when a held range supplies its items.
+
 ## Purpose and interface
 
 `lowerRangeValue` builds a range from the ends written (start first), and

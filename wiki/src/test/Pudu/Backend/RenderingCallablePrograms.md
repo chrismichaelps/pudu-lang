@@ -296,3 +296,8 @@ Resolved Grill Log. Render a field-checked member that holds a builtin,
 invoke a held builtin with a different result carrier, and keep the
 selected receiver through later assignment. Check absent members and
 caller-site diagnostics separately.
+
+Resolved Grill Log: capture open map and reduce members through scalar
+fields in a checked record. Render the open values and invoke returned
+captures through a checked callable with concrete callback and seed types.
+Use a retained map as the callback over nonempty and empty inputs.

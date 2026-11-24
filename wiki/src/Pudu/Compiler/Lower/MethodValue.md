@@ -151,8 +151,10 @@ for its own receiver. This runs after field selection and before declared
 method fallback where builtin lookup has priority. A selected traversal
 can use a checked callback result or accumulator fact to settle its open
 part, while the held element type supplies the receiver-dependent slots.
-An unsettled signature remains an emission refusal. Capture the receiver
-once and register the ordinary lifted call with the selected signature.
+When no such fact exists, keep the open traversal fact in its callable
+template. The capture and identity use the ordinary unit instantiation,
+which can itself accept unit callbacks. A different invocation derives its
+result from the actual callback or seed. The receiver is captured once.
 
 [[Native Emission Coverage]] · [[Backend Rendering Callable Programs]]
 

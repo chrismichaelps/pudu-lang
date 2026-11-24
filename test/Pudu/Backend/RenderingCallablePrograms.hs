@@ -61,6 +61,42 @@ renderingCallableSuccessPrograms =
         , "  print(show(mapping(|n| display(n))))"
         , "  0", "}" ])
     , "receiver\nitems\n[\"4\", \"7\"]\n", "")
+  , ("open traversal members can be retained and rendered", program
+      (heldOpenTraversalTypes <>
+        [ "fn main() -> Int {"
+        , "  let receiver = choose(\"λ\".toBytes()).items()"
+        , "  print(show(receiver.map))"
+        , "  print(show(receiver.reduce))"
+        , "  0", "}" ])
+    , "receiver\nitems\n<array method map>\n<array method reduce>\n", "")
+  , ("open traversals specialize against a later invocation", program
+      (heldOpenTraversalTypes <>
+        [ "fn checkedMap(run: fn(Int) -> Str) -> Array[Str] { [run(0)] }"
+        , "fn checkedReduce(run: fn(Str, Int) -> Str, seed: Str) -> Str { run(seed, 0) }"
+        , "trait Read {"
+        , "  fn readMap(self: &Self) -> fn(fn(Int) -> Str) -> Array[Str]"
+        , "  fn readReduce(self: &Self) -> fn(fn(Str, Int) -> Str, Str) -> Str"
+        , "}"
+        , "impl Read for Str {"
+        , "  fn readMap(self: &Self) -> fn(fn(Int) -> Str) -> Array[Str] { checkedMap }"
+        , "  fn readReduce(self: &Self) -> fn(fn(Str, Int) -> Str, Str) -> Str { checkedReduce }"
+        , "}"
+        , "trait ReadHeld { fn readMap(self: &Self) -> Int\n fn readReduce(self: &Self) -> Int }"
+        , "impl ReadHeld for Option[Str] {"
+        , "  fn readMap(self: &Self) -> Int { choose(\"λ\".toBytes()).items().map }"
+        , "  fn readReduce(self: &Self) -> Int { choose(\"λ\".toBytes()).items().reduce }"
+        , "}"
+        , "fn main() -> Int {"
+        , "  let mapping = choose(\"λ\".toBytes()).readMap()"
+        , "  let reducing = choose(\"λ\".toBytes()).readReduce()"
+        , "  print(show(mapping(|n| display(n))))"
+        , "  print(show(reducing(|acc, n| acc + display(n), \"seed:\")))"
+        , "  let render: fn(Int) -> Str = |n| display(n)"
+        , "  let empty: Array[fn(Int) -> Str] = []"
+        , "  print(show([render].map(mapping)))"
+        , "  print(show(empty.map(mapping)))"
+        , "  0", "}" ])
+    , "receiver\nreceiver\nitems\nreceiver\nreceiver\nitems\n[\"4\", \"7\"]\n\"seed:47\"\n[[\"4\", \"7\"]]\n[]\n", "")
   , ("aggregate constructors retain concrete held values and written effects", program
       (selectedReceiverTypes <> selectedIterable "Array[Bool]" "[true]" "Str" "\"x\"" <>
         [ "type Holder = { flag: Bool, count: Int }"
@@ -1336,6 +1372,10 @@ heldBuiltinGetProgram statements = program
     , "fn format(value: Int) -> Str { display(value) }" ] <>
     selectedIterable "Checked" "Checked{get: format}" "Array[Int]" "[4, 7]" <>
     ["fn main() -> Int {"] <> statements <> ["  0", "}"])
+
+heldOpenTraversalTypes :: [Text]
+heldOpenTraversalTypes = selectedReceiverTypes <> ["type Checked = { map: Int, reduce: Int }"] <>
+  selectedIterable "Checked" "Checked{map: 1, reduce: 2}" "Array[Int]" "[4, 7]"
 
 selectedByteConversion :: [Text]
 selectedByteConversion =

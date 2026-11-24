@@ -10,6 +10,9 @@ tags: [changelog]
 - Bind a builtin method to the selected receiver and apply its own callable
   layout and argument-count diagnostic at the saved invocation.
   [[Compiler Lower Method Value]] · [[Compiler Lower Default]]
+- Keep open traversal captures and specialize their invocation from the
+  retained callback or seed, including when they serve as traversal callbacks.
+  [[Compiler Lower Lambda]] · [[Compiler Lower Array Loop]]
 
 ## 2026-11-24 — Native emission performance
 

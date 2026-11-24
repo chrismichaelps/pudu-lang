@@ -298,6 +298,12 @@ own diagnostic follows all supplied argument effects. [[Compiler Lower
 Method Value]] · [[Compiler Lower Default]] · [[Backend Rendering
 Callable Programs]]. Native execution evidence is pending.
 
+An open `map` or `reduce` can be captured without a checked callable
+fact. A later indirect invocation, including through a traversal,
+specializes the template from the retained callback or seed while
+keeping the receiver and method identity. [[Compiler Lower Lambda]] ·
+[[Compiler Lower Method Value]] · [[Compiler Lower Array Loop]].
+
 ## Declared method argument counts (#956)
 
 Declared calls pass the selected implementation's supplied count.

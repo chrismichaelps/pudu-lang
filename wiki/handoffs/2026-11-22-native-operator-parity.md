@@ -651,14 +651,20 @@ paths with allocation and ownership regressions.
 
 ## Next action
 
-Trace an open held `map` or `reduce` member from its capture into
-callable specialization when the checked member supplies no signature.
+Audit builtin method equality across open and concrete callable layouts
+and preserve the same bound method identity across specializations.
 
 Architect → Backend Engineer. [[Compiler Lower Method Value]] and
 [[Compiler Lower Record]] select the actual builtin member signature.
 [[Compiler Lower Arguments]] and [[Compiler Lower Default]] own selected
 arity diagnostics. Backend Engineer → Test Engineer. [[Backend Rendering
 Callable Programs]] covers capture, invocation, forwarding, and failure.
+
+Architect → Backend Engineer. [[Compiler Lower Method Value]] and
+[[Compiler Lower Lambda]] own open traversal capture and specialization.
+[[Compiler Lower Array Loop]] owns invocation through a traversal.
+Backend Engineer → Test Engineer. [[Backend Rendering Callable Programs]]
+covers open captures, concrete calls, and empty and nonempty nested traversals.
 
 Shared `MultiMap.add` path copies remain in [[Native Emission Performance]].
 

@@ -3,10 +3,11 @@
     parameter is its own closure. -}
 module Pudu.Compiler.Lower.Lambda
   ( lowerLambda, lowerLambdaWithInputs, lowerTask, lowerFunctionValue, lowerFunctionValueWithInputs
-  , lowerValueCall, specializeCallable
+  , lowerValueCall, specializeCallable, specializeOpenTraversal
   ) where
 
 import Data.List (mapAccumL)
+import Data.Maybe (fromMaybe)
 import qualified Data.Map.Strict as Map
 import qualified Data.Set as Set
 import Data.Text (Text)
@@ -18,14 +19,14 @@ import Pudu.Compiler.Lower.Dynamic (joinRuntimeArms, mapRuntimeChoice, preserveR
 import Pudu.Compiler.Lower.Generic (admitCallee, runtimeCallSignature)
 import Pudu.Compiler.Lower.Intrinsic (specializeIntrinsicValue)
 import Pudu.Compiler.Lower.Loan (Callee (..), Operand (..), closeLoaned, loanedType, lowerLoanedOperands, valueSignature, withLoanedParameters)
-import Pudu.Compiler.Lower.MethodValue (registerMethodValue)
+import Pudu.Compiler.Lower.MethodValue (openTraversal, registerMethodValue, specializeTraversalMethod)
 import Pudu.Compiler.Lower.Signature (taskResultKey, taskSignatureResult)
 import Pudu.Compiler.Lower.Scalar (namedFailure)
 import Pudu.Compiler.Lower.Sum (registerConstructor)
 import Pudu.Compiler.Lower.State
   ( CallableSource (..), CallableTemplate (..), CoreSignature (..), LowerContext (..), LowerState (..), MutableSite (MutableParameterSite)
   , bindLocal, halt, lookupLocal, refused, startFunction )
-import Pudu.Compiler.Lower.Types (loanedInputs, nativeValueType, sumVariants, typeFactAt, typeForSpan, withShapesFrom)
+import Pudu.Compiler.Lower.Types (loanedInputs, nativeValueType, selectedMember, sumVariants, typeFactAt, typeForSpan, withShapesFrom)
 import Pudu.Core
 import Pudu.Eval.Capture (reachableNames)
 import Pudu.Frontend.Syntax (Block, Expression, Function (..), FunctionBody (..), Located (..), Parameter (..))
@@ -253,7 +254,27 @@ namedClosure state at target kind entry signature =
 
 {-| Select a body copy while preserving the environment stored in the value. -}
 specializeCallable :: LowerExpression -> LowerBlock -> [CoreType] -> LowerState -> CoreExpression -> Lowered
-specializeCallable lower block supplied state target
+specializeCallable = specializeAmong (const True)
+
+specializeOpenTraversal :: LowerExpression -> LowerBlock -> [CoreType] -> LowerState -> CoreExpression -> Maybe Lowered
+specializeOpenTraversal lower block supplied state target
+  | any open (matchingCallables state (coreExpressionType target)) =
+      Just (specializeAmong open lower block supplied state target)
+  | otherwise = Nothing
+ where
+  open template = case callableTemplateSource template of
+    MethodCallable _ _ _ _ member (Just _) _ fact -> openTraversal (snd (selectedMember member)) fact
+    _ -> False
+
+matchingCallables :: LowerState -> CoreType -> Map.Map Text CallableTemplate
+matchingCallables state kind = Map.filter ((== kind) . callableTemplateType)
+  (Map.union (contextObservedCallables context) (contextKnownCallables context))
+ where
+  context = lowerContext state
+
+specializeAmong :: (CallableTemplate -> Bool) -> LowerExpression -> LowerBlock -> [CoreType]
+  -> LowerState -> CoreExpression -> Lowered
+specializeAmong admitted lower block supplied state target
   | Just selected <- mapRuntimeChoice state at kind target specializeHeld = selected
   | CoreFunctionType expected _ <- kind
   , any (uncurry (/=)) (zip expected supplied)
@@ -276,9 +297,8 @@ specializeCallable lower block supplied state target
   at = coreExpressionSpan target
   kind = coreExpressionType target
   context = lowerContext state
-  candidates = Map.toAscList (Map.filter ((== kind) . callableTemplateType)
-    (Map.union (contextObservedCallables context) (contextKnownCallables context)))
-  specializeHeld current value = fmap (fmap fst) (specializeCallable lower block supplied current value)
+  candidates = Map.toAscList (Map.filter admitted (matchingCallables state kind))
+  specializeHeld current value = fmap (fmap fst) (specializeAmong admitted lower block supplied current value)
   copy held (current, arms) (key, template) =
     case specializeTarget lower block supplied current at key template held of
       (after, Just result) ->
@@ -328,10 +348,12 @@ specializeTarget lower block supplied state at key template held = case callable
               {contextTypes = withShapesFrom (contextTypes context) types, contextModule = owner}}
             (original, present) = registerMethodValue lower lexical written receiver member key bound checked fact
             name = fst (Text.breakOn "$runtime" key) <> "$runtime" <> Text.pack (show carried)
+            (selectedResult, selectedFact) = fromMaybe (result, fact)
+              (bound >>= \kind -> specializeTraversalMethod written kind member fact carried)
             (after, exact) = case present of
               Nothing -> (original, Nothing)
               Just _ -> registerMethodValue lower original written receiver member name bound
-                (CoreFunctionType carried result) fact
+                (CoreFunctionType carried selectedResult) selectedFact
             restored = state{lowerContext = (lowerContext after)
               {contextTypes = contextTypes context, contextModule = contextModule context}}
             captures = [CoreExpression at kind (CoreCapture 0 held) | Just kind <- [bound]]
