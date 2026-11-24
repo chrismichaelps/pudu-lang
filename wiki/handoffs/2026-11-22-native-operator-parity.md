@@ -577,10 +577,17 @@ returning layouts. [[Compiler Lower Body]] and [[Compiler Lower Match]]
 project the selected arm. [[Backend Rendering Callable Programs]]
 covers both arm forms.
 
+## Concrete held sum payloads
+
+Architect → Backend Engineer. [[Compiler Lower Sum]] retains
+concrete payload layouts in both constructor forms. [[Backend
+Rendering Callable Programs]] exercises nested literal and binding
+patterns against those layouts.
+
 ## Next action
 
-Audit positional and named sum pattern fields whose nested runtime
-layouts differ from their checked layouts.
+Give retained positional constructors a native callable representation
+that preserves variant identity, display and call behavior.
 
 ## Referenced by
 

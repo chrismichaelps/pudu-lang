@@ -5,6 +5,11 @@ tags: [changelog]
 
 # Changelog
 
+## 2026-11-23 — Concrete held sum payloads (#956)
+
+- Preserve the layout of a concrete held value in a positional or
+  named sum field. [[Compiler Lower Sum]]
+
 ## 2026-11-23 — Native callable compilation (#956)
 
 - Read the specialized signature in a lent call and remove redundant

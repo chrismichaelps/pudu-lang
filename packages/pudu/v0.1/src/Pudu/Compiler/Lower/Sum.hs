@@ -11,7 +11,7 @@ import Data.Text (Text)
 import qualified Data.Text as Text
 import Pudu.Compiler.Lower.Control (expressionIsPrintValued)
 import Pudu.Compiler.Lower.State (LowerContext (..), LowerState (..), halt, refused)
-import Pudu.Compiler.Lower.Types (sumVariants, typeForSpan)
+import Pudu.Compiler.Lower.Types (nativeValueType, sumVariants, typeForSpan)
 import Pudu.Core
 import Pudu.Compiler.Lower.Dynamic (hasRuntimeChoice, projectRuntimeValue, storageCarrier, sumWithPayload, widen)
 import Pudu.Frontend.Syntax (Expression, Located (..))
@@ -75,7 +75,8 @@ constructVariant state at declared name fields
  where
   types = contextTypes (lowerContext state)
   choose (label, expected) = (label, case lookup label fields of
-    Just value
-      | let actual = coreExpressionType (widen types expected value)
-      , hasRuntimeChoice actual -> storageCarrier types expected [actual]
-    _ -> expected)
+    Just value ->
+      let actual = coreExpressionType (widen types expected value)
+       in if hasRuntimeChoice actual then storageCarrier types expected [actual]
+            else if nativeValueType actual then actual else expected
+    Nothing -> expected)

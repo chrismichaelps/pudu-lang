@@ -6,6 +6,13 @@ aliases: [Backend Rendering Callable Programs]
 ---
 # Backend Rendering Callable Programs
 
+## Concrete held sum payloads
+
+Resolved Grill Log. Iterate a held text source through a Bool-checked
+binder. Store the held character in both positional and named nested
+payloads. Verify the Boolean literal does not match and a binding
+retains the character. [[Compiler Lower Sum]]
+
 ## Held runtime conditions
 
 Resolved Grill Log. Compare reached and skipped operands of both

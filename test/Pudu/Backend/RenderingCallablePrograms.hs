@@ -9,7 +9,28 @@ import Pudu.Comptime.Limits (callDepthLimit)
 renderingCallableSuccessPrograms :: [(String, Text, Text, Text)]
 renderingCallableSuccessPrograms =
   [
-    ("labelled breaks share a layout and keep the selected value", program
+    ("nested positional and named patterns read concrete held fields", program
+      (selectedReceiverTypes <>
+        [ "type Packet = Pos((Bool, Int)) | Named{pair: (Bool, Int)}" ] <>
+        selectedIterable "Array[Bool]" "[true]" "Str" "\"x\"" <>
+        [ "fn main() -> Int {"
+        , "  for item in choose(\"λ\".toBytes()).items() {"
+        , "    let positional = Pos((item, 3))"
+        , "    let named = Named{pair: (item, 4)}"
+        , "    match positional {"
+        , "      case Pos((true, _)) => print(\"checked positional\")"
+        , "      case Pos((value, number)) => print(show((value, number)))"
+        , "      case _ => print(\"unexpected variant\")"
+        , "    }"
+        , "    match named {"
+        , "      case Named{pair: (true, _)} => print(\"checked named\")"
+        , "      case Named{pair: (value, number)} => print(show((value, number)))"
+        , "      case _ => print(\"unexpected variant\")"
+        , "    }"
+        , "  }"
+        , "  0", "}" ])
+    , "receiver\nitems\n('x', 3)\n('x', 4)\n", "")
+  , ("labelled breaks share a layout and keep the selected value", program
       (selectedReceiverTypes <> selectedIterable "Bool" "true" "Str" "\"held\"" <>
         [ "fn displayBreak(early: Bool) -> Str {"
         , "  let value = @outer loop {"

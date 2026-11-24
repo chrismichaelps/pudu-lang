@@ -40,3 +40,11 @@ a Never payload still stops later payloads.
 ## Runtime layouts in sum payloads (#956)
 
 Resolved Grill Log: Positional and named constructors share payload projection. They choose the physical layout of the selected variant and preserve the other variants.
+
+## Concrete held payload fields
+
+Resolved Grill Log. A retained value with one known layout can differ
+from the checked field just as a runtime alternative can. First apply
+the declared projection where valid. Keep a different concrete native
+layout in the selected variant so nested patterns read the value that
+construction actually received. [[Compiler Lower Match]]
