@@ -16,12 +16,11 @@ import Pudu.Compiler.Lower.Arguments
   )
 import Pudu.Compiler.Lower.ArrayLoop (arrayMethodWith, joinsHeldText)
 import Pudu.Compiler.Lower.Control (expressionIsPrintValued)
-import Pudu.Compiler.Lower.State (LowerContext (..), LowerState (..), bindLocal, halt, intType, refuse, refused)
+import Pudu.Compiler.Lower.State (LowerContext (..), LowerState (..), halt, intType, refuse, refused)
 import Pudu.Compiler.Lower.Types (typeFactAt, typeForSpan)
 import Pudu.Core
 import Pudu.Compiler.Lower.Dynamic (hasRuntimeChoice, projectRuntimeValue, runtimeCarriers, runtimeResultType, widen)
 import Pudu.Frontend.Syntax (Expression (..), Located (..))
-import Pudu.IntegerLiteral (IntegerKind (..))
 import Pudu.Source (Span)
 import Pudu.Type.Value (NominalId (..), Type (..))
 
